@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Landing bot (R-0539): lands ready branches without a human in the critical path.
-# docs/project/LANDING.md, "The landing bot", is the manual; this header is the contract.
+# docs/LANDING.md, "The landing bot", is the manual; this header is the contract.
 #
 #   bot.sh [--dry-run] [tick]   one pass: resume, auto-rebase, collect, train, land (the timer's job)
 #   bot.sh [--dry-run] rebase   the auto-rebase pass only

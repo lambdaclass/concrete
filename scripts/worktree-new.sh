@@ -82,7 +82,7 @@ git worktree add "$DEST" -b "$NAME" "$BASE_SHA" || exit 1
 # go stale. The parent's copy of the script runs with --checkout, since the new worktree's base may
 # predate it. CONCRETE_LAKE_SEED=0 skips it.
 SEEDED=0
-if [ "${CONCRETE_LAKE_SEED:-1}" != "0" ] && [ -d "$ROOT_DIR/.lake/build" ]; then
+if [ "${CONCRETE_LAKE_SEED:-1}" != "0" ] && [ -d "$ROOT_DIR/.lake/build" ] && [ -f "$ROOT_DIR/scripts/dev/seed-lake.sh" ]; then
   if bash "$ROOT_DIR/scripts/dev/seed-lake.sh" --checkout "$DEST" --from "$ROOT_DIR"; then SEEDED=1
   else echo "worktree-new: no lake seed (see above); the first build will start from scratch."; fi
 fi
@@ -92,7 +92,7 @@ echo "worktree-new: ready. cd $DEST"
 echo "worktree-new: run all commands from there — do NOT cd back to $(basename "$ROOT_DIR")."
 if [ "$SEEDED" = 1 ]; then
   echo "worktree-new: .lake/build seeded from $ROOT_DIR; the first 'nix develop -c lake build' re-verifies it"
-else
+elif [ -f "$ROOT_DIR/scripts/dev/seed-lake.sh" ]; then
   echo "worktree-new: warm start: nix develop -c bash scripts/dev/seed-lake.sh --build"
   echo "             (copies the main checkout's .lake/build when toolchain, manifest and lean match; lake build still runs)"
 fi

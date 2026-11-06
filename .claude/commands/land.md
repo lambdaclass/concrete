@@ -5,8 +5,8 @@ argument-hint: "<branch or ref> [train name]"
 
 Land: $ARGUMENTS
 
-Rules: [docs/project/AGENTS.md](../../docs/project/AGENTS.md). The manual is
-[docs/project/LANDING.md](../../docs/project/LANDING.md); `scripts/land/train.sh` (header) is the
+Rules: [AGENTS.md](../../AGENTS.md). The manual is
+[docs/LANDING.md](../../docs/LANDING.md); `scripts/land/train.sh` (header) is the
 contract. Landings reach `origin` and `lambdaclass` only through it or the landing bot.
 
 **Dependency.** `scripts/land/train.sh` and `LANDING.md` are on branch `wip/landing-script` until it

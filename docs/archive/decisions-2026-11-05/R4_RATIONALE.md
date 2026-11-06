@@ -14,7 +14,7 @@ Citations are to main at `b78fff1a5`.
 
 ## F1. Allocation progress (Q1.11, Q8.7) — high
 
-Grounding: `docs/spec/decisions.md:432–439` (fallible allocation that conserves its input; the allocator stays valid), `docs/compiler/VERIFIED_PIPELINE.md:118–128` (adequacy is independent of reported success, and an always-failing allocator cannot satisfy it), `docs/compiler/A1_BOUNDARIES.md:103–116`.
+Grounding: `docs/decisions.md:432–439` (fallible allocation that conserves its input; the allocator stays valid), `docs/compiler/VERIFIED_PIPELINE.md:118–128` (adequacy is independent of reported success, and an always-failing allocator cannot satisfy it), `docs/compiler/A1_BOUNDARIES.md:103–116`.
 
 **Rule F1.0: valid layouts.** `Layout = { size : u64, align : u64 }` is valid when:
 - `align` is a power of two and at most the target's `MaxAlign` (4096 on `linux-x86_64-hosted`);
@@ -152,7 +152,7 @@ Traps follow the fatal-exit rule (OD68, OD69).
 
 ## F3. The Destroy inventory (Q2.2, Q2.3, Q9.6) — high
 
-> **Superseded 2026-11-05 (owner, row Q2.8, [decisions.md](../../spec/decisions.md#decided-2026-11-05-revisions)):** the disjunctive bound of F3.1 is not adopted. Each container has separate disjoint impls (`T: Copy` and `T: Destroy`), sixteen named impls in all (row Q2.2); coherence uses Copy/Destroy disjointness only (F3.1b, revising TRAIT-1@1). The text below is kept as history.
+> **Superseded 2026-11-05 (owner, row Q2.8, [decisions.md](../../decisions.md#decided-2026-11-05-revisions)):** the disjunctive bound of F3.1 is not adopted. Each container has separate disjoint impls (`T: Copy` and `T: Destroy`), sixteen named impls in all (row Q2.2); coherence uses Copy/Destroy disjointness only (F3.1b, revising TRAIT-1@1). The text below is kept as history.
 
 Grounding: OD28 (`decisions.md:184`: Destroy only by an impl, and Copy types are not Destroy), OD35 (`:191`), rule 9 (`:388`: Destroy requires at most `Alloc`), OD59 (`:215`: no `free`).
 
@@ -186,7 +186,7 @@ Recommendation: (a). Both (a) and (b) are checkable. (a) is one impl per contain
 
 ## F4. Text views (Q4.6) — high
 
-> **Superseded in part 2026-11-05 (owner, row Q4.7, [decisions.md](../../spec/decisions.md#decided-2026-11-05-revisions)):** F4.3's text-only `slice … else` form with a mandatory `else` is not adopted. One scoped form opens every view, `borrow [mut] source [from a until b] as view { … } [else { … }]`; without `else` an invalid range traps, and a proven invalid range without `else` is refused (OD118). The text below is kept as history.
+> **Superseded in part 2026-11-05 (owner, row Q4.7, [decisions.md](../../decisions.md#decided-2026-11-05-revisions)):** F4.3's text-only `slice … else` form with a mandatory `else` is not adopted. One scoped form opens every view, `borrow [mut] source [from a until b] as view { … } [else { … }]`; without `else` an invalid range traps, and a proven invalid range without `else` is refused (OD118). The text below is kept as history.
 
 Grounding: OD127 (`decisions.md:283`: every String is UTF-8), Q4.3 (byte length), Q3.5 (`u64`), OD36 (`decisions.md:192`: scoped `borrow … as … { }` blocks), and `decisions.md:481–487`.
 
@@ -291,7 +291,7 @@ Recommendation: (a). The default is the safe case, and the exception is visible 
 
 ## F6. The hosted target table (Q7.1–Q7.8) — high
 
-> **Superseded in part 2026-11-05 (owner, row Q7.11, [decisions.md](../../spec/decisions.md#decided-2026-11-05-revisions)):** the standard streams use the new `Console` capability, not `Device` (OPEN F6.1 is answered with option (c), revising authority rule 13). Every `with(Device)` on a `StdIn`, `StdOut` or `StdErr` operation in the table below reads `with(Console)`. The text below is kept as history.
+> **Superseded in part 2026-11-05 (owner, row Q7.11, [decisions.md](../../decisions.md#decided-2026-11-05-revisions)):** the standard streams use the new `Console` capability, not `Device` (OPEN F6.1 is answered with option (c), revising authority rule 13). Every `with(Device)` on a `StdIn`, `StdOut` or `StdErr` operation in the table below reads `with(Console)`. The text below is kept as history.
 
 Grounding:
 - `decisions.md:356–380` (rules 1–6);
@@ -554,7 +554,7 @@ Recommendation: split the row as above. OPEN — owner.
 
 **Precedence statement**, for CORE_PROPOSAL.md, PHILOSOPHY.md and the roadmap:
 
-> Recorded decisions (docs/spec/decisions.md) govern. An accepted row supersedes a recorded decision only through a revision the owner explicitly approved and marked as such (OD45/OD87 in Q5; TYPE-22's examples in F12). R4's replacements supersede the conflicting draft rows (Q1.11, Q1.12, Q2.2–2.5, Q3.6–3.10, Q4.6, Q6, Q7, Q9.1–9.4, Q9.11, Q9.14, P5–P8, P12–P18, P21) and the roadmap passages listed below. Where this document differs from those, it is superseded and will be edited.
+> Recorded decisions (docs/decisions.md) govern. An accepted row supersedes a recorded decision only through a revision the owner explicitly approved and marked as such (OD45/OD87 in Q5; TYPE-22's examples in F12). R4's replacements supersede the conflicting draft rows (Q1.11, Q1.12, Q2.2–2.5, Q3.6–3.10, Q4.6, Q6, Q7, Q9.1–9.4, Q9.11, Q9.14, P5–P8, P12–P18, P21) and the roadmap passages listed below. Where this document differs from those, it is superseded and will be edited.
 
 The passages to reconcile:
 - PHILOSOPHY.md:62 and :271 (capability inference, now never-infer);

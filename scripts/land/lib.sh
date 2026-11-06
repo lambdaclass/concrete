@@ -1,4 +1,4 @@
-# Shared helpers for scripts/land/*.sh (sourced, never run). docs/project/LANDING.md is the manual.
+# Shared helpers for scripts/land/*.sh (sourced, never run). docs/LANDING.md is the manual.
 #
 #   land_in_nix cmd...          run cmd inside `nix develop` unless already there (LAND_NO_NIX=1 never)
 #   land_assert_no_op what      die if a merge, rebase, cherry-pick or revert is in progress
@@ -13,7 +13,7 @@
 # legs' durations); the caller compares it with the wall time to record what pipelining saved.
 
 # "Already in the dev shell" means the gate shell's marker (CONCRETE_GATES_SHELL=1, which every gate
-# requires, scripts/tests/lib/gate_env.sh) AND a toolchain: an inherited IN_NIX_SHELL from some other
+# requires, scripts/checks/lib/gate_env.sh) AND a toolchain: an inherited IN_NIX_SHELL from some other
 # shell (lean on PATH, no lake) made the hook refuse to build (2026-10-22), and any other nix shell
 # would now leave every gate refusing.
 land_in_nix() {

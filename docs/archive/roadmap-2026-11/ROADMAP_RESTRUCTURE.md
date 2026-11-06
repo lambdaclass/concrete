@@ -55,7 +55,7 @@ the outside-reader test.
   2026-10-21, What is next, Phases 1 – 7, the estimates, rows 0 – 17, the Phase 1 exits with their
   bug spans, the feature prerequisites, the capacity allocation, the old release map and the
   next-release blockers. Task and exit IDs stay citable there, and it schedules nothing.
-- **The owner-decision table** is merged into [decisions.md](../../spec/decisions.md). IDs, dates and
+- **The owner-decision table** is merged into [decisions.md](../../decisions.md). IDs, dates and
   rationale are preserved, with no second copy. `spec.py`'s OD resolver, `review.sh`'s prompts,
   AGENTS.md and the roadmap-item command change with it.
 - **The bug dashboard** moves to `docs/bugs/`, generated, with views scoped by compiler. Bug records

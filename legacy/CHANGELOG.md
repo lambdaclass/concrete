@@ -1,0 +1,10637 @@
+# Changelog
+
+Status: changelog
+
+This file tracks major completed milestones for Concrete.
+
+It is intentionally milestone-oriented rather than release-oriented. The project is still evolving quickly, so the useful unit of history is “what architectural or language capability landed,” not tagged versions.
+
+For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
+
+## Major Milestones
+<!-- changelog stamp: 1c59828cd1072700043529dcce56b582 (scripts/gen/changelog.py; add a changelog.d/ fragment, never edit this file by hand) -->
+
+### Large Arrays No Longer Make Compilation or `--interp` Quadratic (bugs 027, 248, 249, 250, 2026-10-25)
+
+Natively, an array literal of n elements took time superlinear in n to compile (`[7; 80000]`:
+14 s, `[7; 200000]`: over two minutes; now under half a second): the backend searched a list of
+every pointer register for each operand, and each element became its own store, a block clang -O2
+schedules in superlinear time. A uniform literal is now filled by a loop and a literal of distinct
+constants copied from a constant. The parser appended an explicit literal's elements one at a time
+(40000 elements: 7 s to parse, now 0.03 s). Writing an element or field of a local array or struct
+in a loop copied the whole aggregate per write and made clang -O2 superlinear in its size (a
+20000-element array: 99 s to compile, now well under a second); such writes and reads now go to
+the element's address. Under `--interp`, an element write, a field write into an array and Vec
+push/set/pop copied the whole array (64.6 s for the regression program, now 5.5 s). Pinned by
+`regress_027_large_array_literals.con`, `regress_248_interp_array_write.con`,
+`regress_249_explicit_array_literal.con` and `regress_250_native_array_writes.con`.
+
+### An Import Alias Names the Imported Type (bug 223, 2026-10-25)
+
+`import m.{P as Q}` gave the importer a type `Q` with none of `P`'s methods, which a `P` returned by
+`m` did not match: Check compared named types, and every pass looked up methods, by spelling
+(`Q_mk` where the impl registered `P_mk`). Types are now compared, and their methods and trait impls
+looked up, by declaration identity (R-0492 step 3): `buildFileSummary` stamps each impl's target
+and each impl method with a `MethodKey` (the target's `TypeId` and the method name), and Resolve,
+Check and Elab select a method by that key before its spelling. Core for an aliased import is the
+Core of the same program without the alias. Pinned by `regress_223_aliased_struct_methods.con`,
+`regress_223_aliased_enum.con`, `regress_223_aliased_generic_and_bound.con` and
+`regress_223_aliased_destroy_impl.con`, native and `--interp`.
+
+### A User `enum Result` No Longer Captures the Builtin in Another Module (bug 227, 2026-10-25)
+
+A user `enum Result` in one module and the builtin `Result<T, E>` in another were one name in Core,
+so the native build of a nested module using the builtin failed in Lower (E0602: variant `Ok` not
+found) while `--interp` ran it, and between top-level modules Resolve answered the builtin with the
+user's enum (E0113). A top-level module's type namespace is now its own environment (with bug 230),
+and Core spells a user `Result` by its module (`outer_Result`, its methods with it) whenever another
+module can see the builtin, which keeps its name (R-0492 slice 6). Pinned by
+`regress_227_nested_builtin_result.con`, `regress_227_toplevel_builtin_result.con` and
+`regress_227_user_result_methods_beside_builtin.con`, natively and under `--interp`.
+
+### A Module May Write Only the Types Its Environment Holds (bug 230, 2026-10-25)
+
+Resolve checked a top-level module's written types against every module's type names, and its
+children's aliases, while Check gives the module its own declarations and its imports. A cast to
+another module's alias, or a child's, that the module never imported passed Resolve and made the
+backend panic (`unknown named type`). Every module's type namespace now comes from one definition,
+`Resolve.moduleTypeEnvironment`, plus what its imports transport (R-0492 slice 6), and the cast is
+refused with E0108. The same change lets a module use the builtin `Result` when another top-level
+module declares its own `enum Result` (the top-level half of bug 227). Pinned by
+`error_230_toplevel_foreign_alias_cast.con`, `error_230_parent_names_child_alias.con`,
+`regress_230_toplevel_type_environment.con` and `regress_227_toplevel_builtin_result.con`.
+
+### A Public Constant Can Be Imported (bug 233, 2026-10-25)
+
+MOD-2@1 lets a `pub` declaration cross a module boundary by import, but `import cfg.{BASE}` of a
+`pub const` was refused (contained since 2026-10-24 with the reason): Core named a constant by its
+spelling, and Lower inlined it from the importing module's own tree. A constant is now imported by
+its identity (R-0492 step 4): the import binds its `ConstId`, Core references it by its defining
+module (`cfg::BASE`), and Lower and the interpreter inline its initializer with the defining
+module's constants in scope. A trait import is still refused with its reason (traits are
+module-local), a constant imported beside a local constant of one spelling is E0299, and an
+imported initializer that calls or names a function is refused where it would be inlined (its
+callees are still spellings; callable identities are a later R-0492 step). Pinned by
+`regress_233_import_constant.con`, `regress_233_nested_import_constant.con`,
+`regress_233_import_constant_scope.con`, `regress_233_nested_alias_constant.con`,
+`error_233_import_constant_collides_local.con` and the project fixture, native and `--interp`.
+
+### Gate Selection Reads Map Notes as Text (bug 237, 2026-10-25)
+
+The impact selector counted a script name written in a keyed array's value (a bug-corpus note, an
+exemption reason) as a call, so a corpus note naming the docs-drift gate made the corpus runners
+look as if they read `docs/`, and a docs-only diff selected 19 gate commands in CI. A keyed
+array's values are now judged by how the script uses them: text names nothing, a file read is a
+read, anything else stays a call. Pinned by the gate-selection gate's "text is not a call"
+controls.
+
+### Four Spelling Defects Around Imports (bugs 242, 243, 245 and 246, 2026-10-25)
+
+The probes of bug 223's fix found two more cases of an import joined by spelling, both refusals of
+valid programs. A type in an imported signature is read in the importer's environment, so the
+import closure's copy of it hides the importer's own type of that spelling (bug 242, E0252); and an
+aliased newtype import binds no name (bug 243, E0106). Both are owned by R-0492/R-0514 and pinned as
+open-bug reproducers. The review of bug 233's fix
+found a third: the interpreter scopes a module constant's bare spelling program-wide, so it refuses
+two modules' private constants of one name that the binary keeps apart (bug 245). A fixture for that
+review also found an imported alias whose target is another alias of its module arriving as a
+type the importer cannot name (bug 246, fixed: the target is expanded at the import).
+
+### Bug 244: A Killed Gate Run No Longer Wedges The Repository (2026-10-25)
+
+Killing a gate run killed only the runner. Its gates, the compilers they started and the harness
+copies they worked in kept running under init, and the repository lock refused every later run
+until someone removed it by hand. A run now executes as one process group of its own session
+(`scripts/tests/lib/gate_session.py`). A signal to the runner terminates the whole group: SIGTERM,
+then SIGKILL after a grace period. The lock records the group, and a later run reclaims it
+automatically once the kernel reports the group empty. While any member, or a campaign group
+registered in the lock, is still alive, the lock still refuses. The pre-push hook forwards its
+signals to the run. Structural class 16 (artifacts at paths no run owns).
+
+### Markdown Links Checked to the Anchor, and in CI (bug 252, 2026-10-25)
+
+The Markdown-link check now checks anchors: a link to `file.md#section` must name a heading of that
+file by its GitHub slug (repeated headings take `-1`, `-2`) or an explicit `<a id>`, and same-file
+anchors are checked too. Links in `changelog.d/` fragments resolve against the repository root, where
+the fold places them (see [changelog.d/README.md](changelog.d/README.md)). The check was reached only
+from the Makefile; it is now a workflow step in the build-free job, every diff selects it before a
+push, and gate registration also enumerates Python gates. See
+[the bug record](docs/bugs/252_doc_link_check_unchecked_and_unrun.md).
+
+### Module-Level Types And Constants Are Found By Declaration Identity (R-0492 slice 6, 2026-10-25)
+
+Four bugs open when the slice started had one cause: a module-level declaration was found again by
+its spelling, in tables whose scope differed from pass to pass. The design note
+[DECLARATION_IDENTITY.md](docs/compiler/DECLARATION_IDENTITY.md) gives the fix: the `TypeId` and
+`ConstId` the front end already stamped on every declaration (defining module plus declared name,
+never changed by an import alias) are compared instead of spellings, and a module's type
+environment says which declaration a spelling denotes there. Its four steps have landed: one type environment per module (bug 230 and the top-level half of bug 227),
+Core spelling a user `Result` apart from the builtin (the rest of bug 227), Check comparing types
+and finding methods and trait impls by identity (bug 223), and an imported constant referred to by its `ConstId`
+(bug 233). Resolve now computes one type environment per module, but Check and Elab still build
+their own; constants within one module tree are still named by spelling (bug 132's refusal remains
+there); and a constant whose initializer calls or names a function is not inlined across modules.
+The design note records these limits. Each bug has its own entry. Bugs 242, 243 and 245, found while reviewing these fixes,
+stay open under R-0492/R-0514.
+
+### Bend And Roc Comparative Research Recorded (2026-10-24)
+
+Added the [Bend/Roc research record](research/meta/bend-roc-lessons.md), covering
+formal requirements versus contracts, agent/proof workflows, checking-speed
+benchmark limitations, runtime and GPU design, FFI and build-time authority,
+opportunistic mutation, compiler engineering, and proof-guided optimization.
+It includes the requested Roc video's timestamped discussion and links to the
+reviewed sources, benchmark scripts, code, and Concrete design references.
+
+The note filters every possible adaptation through Concrete's explicit ownership,
+authority, execution, and evidence philosophy. Its 27 considerations remain research
+while the owner is deciding. The roadmap ends with [open research questions](docs/archive/roadmap-2026-11/ROADMAP_BACKLOG.md#open-research-questions-bend-and-roc),
+not planned features or implementation tasks. This records completed research,
+not adopted work. The current queue and existing task requirements are unchanged;
+upstream performance measurements were not independently reproduced.
+
+### Resolve Checks Every Nested Submodule (bug 217, 2026-10-24)
+
+Resolve walked only the modules of the top-level list, so a module nested two deep, a module written
+after `main`, and every `mod x;` file of a project (std included) produced no Resolve diagnostics: a
+cast to an unknown type there reached the backend (a panic natively; `--interp` ran it), and
+undeclared names or unknown annotation types met Check's codes (E0201, E0220) instead of Resolve's
+(E0100, E0108). Resolve now walks the whole module tree, each submodule resolved against the
+environment Check gives it: its imports, its own declarations and its sibling modules' types. Found by the Codex review of bug 215.
+Pinned by the `error_217_*.con` and `regress_217_*.con` fixtures and a project leg.
+
+### The Proof Theorems Are About The Extractor The Compiler Runs (bug 219 follow-up, 2026-10-24)
+
+`cExprToPExpr` and `cStmtsToPExprK` no longer repeat the extraction arms of `cExprToPExprImpl` and
+`cStmtsToPExprKImpl`; each is a bare delegation. The copies dated from when the implementation was a
+`partial def` and the ProofSoundness theorems needed reducible arms. The implementation is an
+ordinary `def` now, so the preservation theorems unfold its equations, and every extraction rule
+exists once. `check_proofcore_callable_identity.sh` fails if a copy reappears (two controls), and
+mutation 31 is killed against the single copy.
+
+### Resolve Admits What Check Admits: Namespaces, Builtin Option, Child Newtypes (bug 229, 2026-10-24)
+
+Resolve refused three kinds of valid program: a function declared before a same-named enum made
+`E::A` "not an enum" (E0104), a user `enum Option` hid the builtin `Option<T>` (E0113) although Check
+and Elab never withhold it, and a child module's newtype was an unknown type (E0108). Type positions
+now search the type namespace only and consult aliases and enums as Check does (an enum named
+`Option` is always the builtin), and children's newtypes are known
+types. Found by the Codex reviews of bug 217's fix. Pinned by five `regress_229_*.con` fixtures.
+
+### A Bound Must Name a Declared Trait (bug 231, 2026-10-24)
+
+A generic parameter's bound naming an undeclared trait (`fn id<A: NoSuchTrait>`) was accepted: no
+pass resolved a bound's trait names, so an unused generic compiled and a call met only E0241. In a
+nested module a bound on the enclosing module's trait was satisfied by spelling at the call while
+its methods were unknown in the body. Resolve now refuses a bound that is not `Copy`, `Destroy` or
+a trait of its module (E0125, MOD-1). Found by the differential hunt; pinned by
+`error_231_unknown_bound_trait.con`, `error_231_enclosing_trait_bound.con` and
+`regress_231_bounds_name_module_traits.con`.
+
+### Discovery-Signal Controls Follow the Record (bug 232, 2026-10-24)
+
+`check_docs_drift.sh` checked the discovery signal's controls against a literal streak (1 after a
+quiet batch, 0 after a token batch), true only while the record's last counting batch was not quiet,
+so recording a quiet batch failed the gate. The controls now read the record's streak first and
+expect one more after a quiet batch and no change after a token batch.
+
+### Importing a Public Constant or Trait Is Refused With Its Reason (bug 233, 2026-10-24)
+
+`import cfg.{BASE}` of a `pub const`, or of a `pub trait`, was refused as "'BASE' is not public in
+module 'cfg'", which it is. Traits are module-local and cannot be imported; a constant cannot be
+imported yet, because Core names a constant by its spelling (bug 132). Both are now refused with
+that reason (E0126 at Resolve, E0323 / E0423 in Check and Elab). Importing constants stayed open
+(bug 233) until constants carried their declaration's identity (R-0492 slice 6, fixed 2026-10-25).
+
+### The Interpreter's Calls No Longer Cost the Call-Stack Depth (bug 234, 2026-10-24)
+
+Under `--interp` a recursion of depth n took time n² (depth 64000: 44 s): every call, branch,
+`match` arm, block and borrow read the environment's length, and the environment, one list shared by
+every frame, was walked to count it. The environment now keeps its length, and the same recursion
+takes 0.1 s. Pinned by `regress_234_interp_deep_recursion.con` (depth 100000 under `--interp` within
+20 s).
+
+### Array Literals and Array Reads Are No Longer Quadratic (bugs 235 and 236, 2026-10-24)
+
+Elab built an array literal's element list by appending one element at a time, so `[v; 40000]` took
+4 s to elaborate (and `[v; 200000]` over a minute) for the binary, `--interp` and every report; it
+now takes milliseconds. Under `--interp`, reading `a[i]` converted the array to a list and walked
+it, so each read cost the array's length (400000 reads of a 10000-element array: 35 s, now 0.6 s).
+Pinned by `regress_235_interp_array_read.con` and `regress_236_array_repeat_literal.con`.
+
+### Four Open Bugs With Owners: 114, 122, 216 And 226 (2026-10-24)
+
+These are open, each pinned by an open-bug reproducer and assigned a structural owner:
+
+- [bug 114](docs/bugs/114_submodule_intrinsic_links_c_symbol.md): an intrinsic declared in a nested
+  submodule and called by path lowers to a C call and fails to link, because an intrinsic is
+  recognized by the call's spelling rather than by the resolved declaration. Owner: R-0492.
+  Found by the examples-health pass, 2026-10-20.
+- [bug 122](docs/bugs/122_builtin_enum_canonical_layout.md), silent: the builtin `Option` and
+  `Result` are each emitted as one LLVM union sized for the largest instantiation, while the
+  compiler lays out each instantiation (and a user enum of either name) by its own size, so
+  aggregate copies can move or overrun fields. Contained by `check_enum_union_layout.sh` leg 5 until
+  R-0502 (one `Layout` authority) with R-0492. Found by bug 121's layout probe, 2026-10-20.
+- [bug 216](docs/bugs/216_field_write_non_mut_binding.md): a write into a field, a nested array
+  element or a heap cell of a binding not declared `mut` is accepted, while `&mut` of the same place
+  (E0233) and a direct element write (E0217) are refused; both backends agree. It needs the decision
+  whether OWN-10 covers such writes, then R-0499. Found by the post-R-0492 differential hunt,
+  2026-10-23.
+- [bug 226](docs/bugs/226_submodule_imports_private_function.md): a submodule (a module written
+  after `main`, any `mod x;` file, every std module) may import another module's private function or
+  `extern fn`, which MOD-2@1 and Resolve refuse from a top-level module (E0111); both backends agree.
+  The fix needs a visibility for std's internal `std.libc` imports. Owner: R-0492/R-0514. Found by
+  bug 217's fix, 2026-10-24.
+
+### The Proof Model Computes More Operators (2026-10-24)
+
+The extracted ProofCore model now has a value for more of the operators programs use, with the
+semantics that ARITH-3 and ARITH-4 state ([PROVABLE_V1.md](docs/verification/PROVABLE_V1.md)):
+
+- `div`, left shift and bitwise and at every integer width, and wrapping add at every width.
+  Division is stuck on a zero divisor and, signed, on `MIN / -1`, and a shift count that is
+  negative or at least the width is stuck, so these are stuck exactly where the runtime aborts.
+  The two forced-width cases written before them keep their earlier values: signed `i32` division
+  at `MIN / -1` and `u32` left shift by at least 32 have a model value where the runtime aborts, so
+  a proof about them is a partial-correctness claim;
+- saturating add and subtract, clamped to the type's range;
+- `&&` and `||` as conditionals, so the right operand is evaluated only when it decides the result,
+  as at runtime;
+- unary `-` (as `0 - x`, so at `MIN` the model has a value where the runtime aborts, which makes a
+  proof about it partial-correctness) and `!`.
+
+`check_model_diff.sh` gains leg O: one function per new operator class, each compared between the
+model and the interpreter, with edge cases pinned and perturbed. Landed in train 13, where the binary-operator
+preservation proof was restated to split out `&&` and `||`.
+
+### Phase 7 Workload 10: stackvm (2026-10-24)
+
+`examples/stackvm` is a bytecode stack VM with its assembler, bytecode codec and load-time
+verifier, and disassembler (`asm`, `dis`, `run`, `exec`, `check`; 13t exit codes), written over a
+23-variant instruction enum, a generic bounded `Stack<T>`, the `Encode` and `Render` traits and
+`defer` cleanup. `scripts/tests/check_stackvm_differential.sh` compares every output (assembled
+bytes, listing, program output, stderr diagnostic, exit code) byte for byte with an independent
+Python implementation (`scripts/tests/lib/stackvm_ref.py`) on the test programs, 120 generated
+programs, a mutation of each, 120 token-edge programs and 120 corrupted bytecode files; ten `@run` cases agree natively and
+under `--interp`. The workload found bugs 222, 223, 224, 225 and 228 and no miscompile; 223 stayed open until
+R-0492 slice 6 fixed it on 2026-10-25.
+`examples/stackvm/FRICTION.md` maps its friction to the open language decisions.
+
+### An Imported Enum Brings Its Impls (bug 222, 2026-10-24)
+
+The struct and newtype import paths each selected the imported type's impl blocks and trait
+impls; the enum paths (by name and through the transitive closure) did not, so every bound needing a trait impl
+on an imported enum was refused (E0241) outside its module. One helper now selects what travels
+with an imported type, for every type kind. Pinned by `regress_222_imported_enum_impls.con`.
+
+### Diagnostics: Recovered `let mut` And Refused Bounds (bugs 224 and 225, 2026-10-24)
+
+A `let mut` whose initializer failed to check was recovered as immutable, so later assignments to
+it got a false E0217; it keeps its mutability now. A refused `Copy` bound named every builtin
+type `<type>`, and no E0241 carried a position; every refused bound now names its type and points
+at the call. Pinned by `error_224_failed_let_keeps_mutability.con` and
+`error_225_bound_names_builtin_type.con`.
+
+### Interpreter Loops Are Linear In Their Iteration Count (bug 228, 2026-10-24)
+
+`--interp` carried each loop iteration's bindings into the next, so every lookup of an outer
+variable walked all earlier iterations' bindings and a loop was quadratic (stackvm's dispatch loop:
+2000 steps in 222 s, now 2.5 s). Each iteration's bindings are dropped before the next. Pinned by
+`regress_228_interp_loop_env.con` (`--interp` within 20 s).
+
+### Trait Impl Selection Is A Function: Bug 186 (2026-10-23)
+
+Trait resolution now has exactly one answer or a refusal. Before, the compiler checked that an
+impl's trait existed and that its methods matched, but nothing checked that the impl was the only
+one. The parser dropped an impl target's type arguments, so `impl Tr for Box2<i32>` implemented
+`Tr` for every `Box2`, and a `Box2<bool>` ran the `i32` body: silent wrong code, natively and under
+`--interp`. A generic impl beside a specialized one compiled to whichever body was emitted first.
+Duplicate impls, and two traits of one type that both declare a method, failed only in `llvm-as`,
+or in the interpreter by declaration order. A call through `T: A + B` took the first bound that
+declared the method.
+
+A coherence judgment (`Concrete/Check/Coherence.lean`) now runs over the whole program before any
+method table is built. It identifies traits, impl targets and methods by typed identity, never by
+spelling, and refuses duplicate impls (E0590), overlapping impls (E0591), orphan impls (E0592,
+Austral's instance locality: an impl lives with its trait or its type), impl targets that are not
+the type applied to the impl's own parameters (E0593), and one method name supplied by two impls of
+a type (E0594). Check refuses a call through bounds that more than one bound trait answers (E0595).
+The rules are TRAIT-1 to TRAIT-7 in the new spec chapter `docs/spec/traits.md`. The interpreter
+also dispatches trait calls on primitive receivers now (`impl Tr for Int`). `rule_impact.sh` found
+no changed outcome in the 2158-unit corpus. Fixtures `error_186_*` and `regress_186_*` (one program
+in two orders; binary equal to `--interp`). Follow-ups: R-0548 (method tables keyed by `MethodKey`)
+and R-0549 (qualified trait-method calls, pull-gated).
+
+### One Diagnostic Code Per Error: Bug 203 (2026-10-23)
+
+An `append()`, `print()` or `println()` argument of an unsupported type is now reported as E0421
+(TYPE-10). Check refused it with no code, and Elab's copy of the refusal used E0420, the code of a
+ghost binding read at run time (CON-4), so neither identified the rule. Pinned by
+`error_203_append_unsupported_argument.con`, `error_203_print_unsupported_argument.con` and
+`error_203_ghost_read_at_runtime.con`.
+
+### A Bound On A Primitive Type Is Checked: Bug 204 (2026-10-23)
+
+A type argument such as `Int` for a parameter bounded by a user trait now needs an impl of that
+trait (`impl Tr for i64` serves `Int` too), or the call is refused with E0241. Before, the check
+skipped primitive types: an unused bound compiled and ran, and a used one failed only in the
+backend. Pinned by `error_204_primitive_bound_unchecked.con`, `error_204_primitive_bound_unused.con`
+and `regress_204_primitive_bound_satisfied.con`.
+
+### Finite Size Through Generic Instantiations: Bug 205 (2026-10-23)
+
+A struct that holds itself by value through a generic instantiation (`struct Node { w: W<Node> }`)
+is now refused with E0583, as a direct cycle already was. Before, the check stopped at
+instantiations: the native build failed in `llvm-as` while `--interp` ran the program. Pinned by
+`error_205_recursive_through_instantiation.con` and `regress_205_instantiations_without_cycle.con`.
+
+### Every Diagnostic Has A Code: Bug 206 (2026-10-23)
+
+Over thirty compiler refusals had no diagnostic code: twenty Check errors built from a bare message,
+eleven diagnostics written without one, and every module-loading failure. Each now names the code of the rule it enforces, with
+new codes E0122 – E0124 and E0312 – E0321 and three new rules (MOD-4, module files; PAT-8, an
+enum destructuring `let` is a block statement; STMT-10, test functions). `Diagnostic.code` no longer has a default, so a code-less
+diagnostic does not typecheck, and `check_diagnostic_codes_present.sh` and the `run_err` output
+check in `run_tests.sh` keep it that way.
+
+### check_binder_refs.sh Reports A Verdict Under Every Failure (bug 207, 2026-10-23)
+
+The binder-references gate's Lean probe threw on its first failed check, so the gate stopped
+before its verdict line. Under mutation families 55 – 57 the harness therefore recorded "no
+verdict" instead of a kill. The probe now prints a FAIL line and continues. The gate counts every
+probe outcome (one that does not elaborate, emits a diagnostic, or prints fewer than its eight
+verdicts is a FAIL) and always reaches its summary line. The three families are killed again.
+
+### A Fn-Typed Local Is No Longer Renamed To A Same-Spelled Import (bug 208, 2026-10-23)
+
+Elab's import-rename pass rewrote every fn-typed identifier whose spelling an import maps, so a
+fn-typed parameter spelled like an imported function was replaced by that function when used as a
+value. The binary and `--interp` agreed on the wrong result (141 instead of 42). This was bug 050's
+recorded remaining gap. Core references now carry their binding identity (R-0492 step 3), and an
+identified local is never renamed. Pinned by `regress_208_fn_local_named_like_import.con`.
+
+### Bug 209: A Codex Review No Longer Leaves A Stale `index.lock` (2026-10-23)
+
+A `codex exec --sandbox read-only` review runs git in the caller's worktree, and its `git status`
+took the worktree's `index.lock` to refresh the index; the sandbox did not prevent it. A reviewer
+command stopped mid-refresh left the lock behind, 0 bytes, and the next commit there failed.
+`scripts/review/review.sh` and the by-hand `/creview` rounds now run Codex with
+`GIT_OPTIONAL_LOCKS=0`, so git reads the index without writing it. `check_review_tool.sh` requires
+every reviewer call to see the variable. Structural class 16 (artifacts at paths no run owns).
+
+### Arithmetic On A Struct, Enum Or Newtype Is Refused (bug 210, 2026-10-23)
+
+CoreCheck's operator rules read every named type as a type parameter and skipped TYPE-6, so `p + p`
+on a struct and `e * e` on an enum compiled and ran natively while `--interp` stopped, and a newtype
+sum ran under `--interp` while the binary failed in `llvm-as`. One predicate, `isOpaqueOperandTy`,
+now decides which types an operator or cast rule defers to the instantiation, and a declared
+struct, enum or newtype is refused with E0501. Found by the fuzz farm's mutation generator. Pinned by
+six `error_210_*.con` fixtures (two declare the type in a child module).
+
+### Generic Arithmetic Is Checked On Each Instance (bug 211, 2026-10-23)
+
+A generic `+` instantiated at a struct or enum reached the backend, because CoreCheck
+defers a type parameter's operator to the instantiation and only comparisons had a post-Mono
+re-check. `verifyOperatorTypes` now holds every monomorphized arithmetic, wrapping, saturating,
+bitwise and shift operator to TYPE-6 (E0501, post-mono). Pinned by `error_211_generic_add_struct.con`,
+`error_211_generic_mul_enum.con`, `error_211_generic_rhs_struct.con`, `error_211_generic_mixed_width.con` and `regress_211_generic_add_numeric.con`.
+
+### A Match Arm After A Catch-All Is Not Lowered (bug 213, 2026-10-23)
+
+An arm that follows an unguarded binding or `_` arm in Core order (CoreCanonicalize keeps unguarded catch-alls last, so these are further catch-alls) was lowered into a block with no predecessor,
+so the binary failed SSA verification (E0703) while `--interp` ran the program. Lower now stops at
+the first unguarded catch-all arm, since the arms after it can never be selected. Found by the fuzz
+farm's mutation generator; pinned by `regress_213_arm_after_binding_arm.con`.
+
+### An Unknown Type In A Cast Or Type-Argument List Is Refused (bug 215, 2026-10-23)
+
+Resolve checked written types in annotations, signatures and fields but not inside expressions, so
+`x as Nope` reached the backend (a panic natively; `--interp` ran it) and an unknown type in a
+type-argument list could compile. Cast targets and the type-argument lists of calls, method calls,
+static method calls, struct literals and enum literals now go through the same check (E0108). Found
+by the fuzz farm's mutation generator. Pinned by four `error_215_*.con` fixtures.
+
+### A Module Declares Each Name Once (bug 218, 2026-10-23)
+
+MOD-3's check compared a module's imports with its functions but never its declarations with each
+other, so two structs of one name compiled with the first silently winning, a struct and an enum,
+or two aliases of one name were accepted, two constants failed at `lower`, and two functions of one name
+failed in `llvm-as`. `declarationCollisions` now refuses the later declaration with E0299; callables,
+constants and types are separate namespaces. Pinned by five `error_218_*.con` fixtures and
+`regress_218_type_and_value_namespaces.con`.
+
+### Mutation 31 Mutates The Extractor The Compiler Runs (bug 219, 2026-10-23)
+
+Mutation family 31 restores bug 061 (a parameter application extracted as a definition call). Its
+anchor matched the `.applyVar` arm of `cExprToPExpr`, the non-partial wrapper that only the
+ProofSoundness theorems read, so the mutant changed nothing a gate executes and survived. The
+anchor now names the arm of `cExprToPExprImpl`, and `check_proofcore_callable_identity.sh` kills it.
+
+### A Radix Prefix Needs A Digit (bug 220, 2026-10-23)
+
+`0x`, `0b` and `0o` with no digit of their radix lexed as the literal 0, so `return 0x;` compiled and
+returned 0. The lexer now reports a lexical error (E0001). Pinned by three `error_220_*.con` fixtures
+and `regress_220_radix_literals.con`.
+
+### A Call's Type-Argument List Matches The Callee (bug 221, 2026-10-23)
+
+An explicit type-argument list at a function, method, function-pointer or trait-bound call was zipped with the callee's type
+parameters, so extra arguments were dropped silently and a short list left parameters unbound. A
+list of the wrong length is now refused with E0322 (TYPE-9). Pinned by four `error_221_*.con`
+fixtures and `regress_221_exact_type_arguments.con`.
+
+### An Unidentified Checker Names Its Cause (2026-10-23)
+
+When the Lean checker's identity cannot be established, every report now says why. Before, the
+receipts and proof-status reports printed a bare `Checker: UNIDENTIFIED` and withheld every receipt.
+On 2026-10-23 that hid a gate host whose non-login PATH lacked `shasum`, which the build digest is
+computed with, and 17 receipt, replay and checker-identity gates failed with nothing pointing at the
+missing tool.
+
+`ReplayEnvironment.checker` is now a `CheckerResolution` (`identified` or `unidentified why`) rather
+than an `Option CheckerIdentity`. The reason comes from where identification failed: `shasum` that
+cannot run, exits non-zero or prints the wrong digests; no identity line or more than one; the
+loaded-image refusals; a checker process that could not start or exited non-zero. Both refusals
+(`ReplayEvidenceRefusal.checkerUnidentified`, `IssueRefusal.checkerUnidentified`) carry it into
+`Checker:`, `Checker now:`, every withheld or refused receipt, the policy line of the consumer's
+fresh re-check, and the JSON report (`checker_unidentified_reason`; `"checker": "UNIDENTIFIED"` is
+unchanged). An unidentified checker still mints nothing and is current against nothing.
+
+`check_checker_identity.sh` asserts the named cause for each refusal stub and adds a leg with
+`shasum` stripped from PATH (17 legs). The two identity mutation families re-anchor on the new
+refusal lines and are still killed by that gate.
+
+### CI: Self-Hosted Runners Keep Their Lean Toolchain Instead Of Re-Downloading It (2026-10-23)
+
+Every CI job restored `~/.elan` from the GitHub Actions cache: a 2.3 GB archive downloaded at
+13-16 MB/s, 2-4 minutes per job (median 176 s, 48 jobs over trains 9-11, 151 runner-minutes, about a
+third of the Hetzner runner time in a train). On the self-hosted runners the runner user's home
+persists and already held those toolchains. The `Cache the Lean toolchain (~/.elan)` steps now run
+on GitHub-hosted runners only; on self-hosted runners lean-action and the 4.35 leg's
+`elan toolchain install` add a missing toolchain once. The `.lake/build` cache, which hands the Build
+job's output to every gate job, is unchanged.
+
+Branch health, which runs on every push to every branch (about 500 runs a day), moves to its own
+self-hosted pool, label `concrete-light` (two runners on concrete-ci-2). On CI's `concrete` pool those
+runs took 20-92 runner-minutes out of each train window, and labels give no priority.
+
+### The Language Specification Is One Checked Document (2026-10-23)
+
+[docs/spec/](docs/spec/README.md) is now the one written statement of the Concrete language, in
+the Austral tradition of a language that fits in one auditable document. Each area has a chapter,
+and every rule and definition has a stable, versioned ID (`REF-3@1`) that other documents, the
+website and the compiler cite instead of restating it. The normative definition is Core's
+semantics in Lean; an entry links the Lean definition it describes where one exists, and until then
+its sentence is provisional and the missing link is tracked debt. Authority moves one chapter at a
+time: a migrated chapter replaces the area's old prose home, which becomes a design record.
+
+Fifteen chapters exist. `references.md` and `scope.md` are the pilots and carry the exit 2i rules;
+`patterns`, `ffi`, `ownership`, `pipeline`, `types`, `memory`, `trusted`, `statements`,
+`arithmetic`, `contracts`, `modules`, `syntax` and `traits` are migrated from their earlier
+documents (`PIPELINE_CONTRACTS.md`'s fixtures became spec examples and its gate was retired). `ids.tsv` registers every ID ever allocated,
+append-only, and `codes.tsv` classifies every diagnostic code.
+
+`scripts/spec/spec.py` is the one parser, and `check_spec.sh` (CI) is the gate, with negative
+controls. It checks the format and the ID history (no ID removed, no sentence hash changed, states
+move only forward), runs every example as its entry states, on both consumers unless the entry
+exempts the interpreter, compares extracted scalar functions on boundary inputs between the Lean
+model and the interpreter for non-pending, non-project accepted and abort examples
+(`--report model-diff`), requires reject
+examples to pair with the rewrite they accept, classifies every code, resolves each `Enforced by:`
+and `Semantics:` site to a declaration carrying a `spec:` comment, regenerates the manifests
+(`tests/rules/exit_2i.tsv` comes from the spec), and refuses a normative sentence restated outside
+`docs/spec/`. The website's reference pages and the spec's pages with a rule index are generated
+at build time (`scripts/gen/site_reference.py`; the tracked copies had all drifted), and
+`check_site_generated.sh` keeps them generated.
+
+### The Backends Key Locals By Binding Identity (R-0492 step 4, 2026-10-23)
+
+The interpreter, Lower, Mono, CoreCheck, the post-mono reference-binding verifier and the proof
+model's extraction now find the binding a Core local denotes by its identity (`CLocal.key`: the
+`LocalId` the local walk minted, or the Core name of a compiler temporary), one backend per slice.
+`Callee.indirect` carries the binding. The `CLocal -> String` coercion is removed, and so are
+`CLocal`'s equality, hash and order on the spelling, so a consumer says `.key` or `.name`.
+ElabVerify also runs after Mono, since Lower reads post-Mono Core. Loop-boundedness matches the
+stepped variable by identity. Core, reports and interpreter output are byte-identical on the
+corpus; SSA and LLVM differ only in register numbering on seven programs (contract 5 in
+`docs/compiler/VERIFIED_PIPELINE.md`). `check_local_identity.sh` gains compile-fail legs F9 – F13.
+
+### Elab And Core Name Locals By Binding Identity (R-0492 steps 2 and 3, 2026-10-23)
+
+Step 2: Elab no longer keeps its own name-keyed scope. It resolves every local through the table
+of the one lexical walk the checker already used (R-0492 slice 1), so no front-end pass decides
+by spelling which binding a name denotes. The Core it produces is unchanged: `--emit-core` is
+identical on all 1474 corpus files, and fingerprint and subject-fact reports are identical on 111
+example entry points. One intended difference: a parameter spelled like Elab's destructure
+temporary is no longer captured by it.
+
+Step 3: Core's local binders and references are `CLocal`s, a Core name plus the walk's `LocalId`,
+and a function records its parameters' identities. `ElabVerify`, which runs inside
+`Pipeline.elaborate`, refuses Core whose identities and names disagree: a binder identity already
+visible where it is introduced, a reference whose identity and spelling name different bindings or
+that a newer binder shadows, a reference without an identity that spells a visible source binding,
+or missing parameter identities. Elab's renaming (the bug 045 / 087 class) is therefore checked on
+every compile, not only by tests. A name does not coerce to a `CLocal`, so a string-literal pattern
+on a Core binder is a type error. Step 3 also closed bug 208.
+
+`check_local_identity.sh` gains legs E (the exact Core-name profile of the edge cases) and V (Core
+identities and ElabVerify forgeries). Mutation families 99 (Elab ignores the walk's shadow fact)
+and 100 (Elab drops a reference's identity) join the inventory. The slice
+contracts are contracts 3 and 4 in [VERIFIED_PIPELINE.md](docs/compiler/VERIFIED_PIPELINE.md).
+
+### A Constant Before An `if` / `while` / `match` Block Gets An Explaining Diagnostic (bug 212, 2026-10-23)
+
+In a control-flow head an uppercase name followed by `{` is read as the start of a struct literal,
+so `if n > LIMIT { … }` with a module constant was refused with `expected }, got =`, pointing inside
+the block. The E0001 now says that `LIMIT {` was read as a struct literal and names the
+parenthesized form (`if (n > LIMIT) { … }`). The case rule, which was in neither the grammar nor
+the specification, is written into `grammar/concrete.ebnf` and SYN-1; the accepted language is
+unchanged, and whether a head should admit a struct literal is left open. Found by Phase 7
+workload 9 (`examples/lzpack`). Pinned by `error_212_const_in_{if,while,match}_head.con` and
+`regress_212_parenthesized_const_head.con`.
+
+### Each Leaking `return` Is Named In Its E0208 (bug 214, 2026-10-23)
+
+A linear binding left unconsumed by two `return`s produced two byte-identical refusals at its
+declaration, naming neither exit. Each refusal now carries a related span on its `return`
+(`'b' is still unconsumed when this `return` leaves the function`). Which programs are refused is
+unchanged. Pinned by `error_214_two_returns_leak.con`.
+
+### Phase 7 Workload 9: lzpack (2026-10-23)
+
+`examples/lzpack` is an LZSS + PackBits RLE compressor and decompressor in a CRC-checked container
+(`c [-r]`, `d`, `t`, `selftest`; 13t exit codes). `scripts/tests/check_lzpack_differential.sh`
+compares its compressed streams byte for byte with an independent Python encoder of the same
+specification (`scripts/tests/lib/lzpack_ref.py`) over real text, source, binary and synthetic
+edge inputs, decodes the reference's streams, and checks corrupt streams and exit codes (58
+checks); six `@run` cases agree natively and under `--interp`. The workload found bugs 212 and
+214 and no miscompile. `examples/lzpack/FRICTION.md` maps its friction to the open language
+decisions.
+
+### Working Rules While Validation Runs, And A Lean-Backend Research Proposal (2026-10-22)
+
+The project's [CLAUDE.md](CLAUDE.md) states how work continues while remote CI or a push hook
+runs: continue the next authorized task on a separate branch and worktree; keep the candidate under
+validation fixed; run at most two heavy runs per machine (R-0543); inspect the logs before
+diagnosing a CI failure; and record results against exact SHAs, keeping passed, failed, skipped,
+cancelled and incomplete apart.
+
+[lean-backend-architecture.md](research/compiler/lean-backend-architecture.md) is a research
+proposal for the standalone `lean-compiler-backend` project: keep full QBE 1.3 compatibility as its
+first complete milestone while establishing function isolation, explicit semantics, typed lowering
+boundaries and reproducible artifacts, with pure compile and verify operations per function and a
+checked artifact that records exactly which properties were established. It changes neither that
+project's roadmap nor Concrete's implementation.
+
+### CI Tiers, Self-Hosted Runners And A Shared Lean Build Seed (R-0540, R-0541, R-0546, 2026-10-22)
+
+The CI workflow's jobs are in two tiers. The landing tier is what a merge candidate needs and runs
+on every push to main, pull request and dispatch. The campaign tier (the mutation plan, its 24
+shards and aggregate, the nightly differential fuzz, the clean-checkout proof replay and the
+multi-kernel mutation step) runs only in a dispatch with `campaign=true`; it gates qualification,
+not merges. The language-surface job, about 80 minutes in one job, is split by measured step time
+into four jobs of about 20 minutes, so the critical path is `Build` then `Proof evidence gate`
+(about 60 minutes, from about 85). The tiers are listed in the roadmap's promotion pipeline.
+
+The Ubuntu jobs can run on the maintainers' servers. The repository variable
+`CONCRETE_SELF_HOSTED` routes the landing tier, and `CONCRETE_SELF_HOSTED_CAMPAIGN` routes the
+campaign tier separately. A `pull_request` event never runs on a self-hosted runner, whatever the
+variables say, because the repository is public. Setup, security rules and how to switch the
+routing off are in [SELF_HOSTED_RUNNERS.md](docs/project/SELF_HOSTED_RUNNERS.md).
+
+On self-hosted runners CI seeds `.lake/build` from the server's build cache
+(`scripts/dev/seed-lake.sh`). The seed key binds the toolchain, the Lake manifest, the platform
+and the `lean` executable; a seed from an interrupted build or a checkout still being written is
+refused, and `lake build` still verifies the result. `check_build_cache.sh` (CI) holds the
+controls.
+
+### CI Triage, A Flake Ledger And Nightly Qualification (2026-10-22)
+
+`scripts/ci/triage.sh <run>` classifies each failed CI job as infra, infra-defect (our tooling
+cannot build a pinned tool), known-flaky or real. It reruns the failed jobs once only when every
+failure is infra or known-flaky, never on a second attempt and never for a run cancelled as a
+whole; otherwise it writes a report with the gate, its FAIL lines, a local reproduction and the
+suspected commits. A rerun is diagnostic: qualification reads only a first attempt.
+
+`scripts/ci/flake_history.py` derives per-gate outcomes from GitHub's run records, and
+[flaky_gates.tsv](docs/project/flaky_gates.tsv) is the human-curated ledger: a known-flaky or
+quarantined gate needs an owner, a quarantine needs an expiry, and a quarantined gate still runs
+and still fails its job.
+
+`nightly.yml` dispatches CI on main with `campaign=true` every night, so each night yields a stage
+(c) verdict for main's tip. It runs on lambdaclass/concrete, and on this repository when
+`CONCRETE_NIGHTLY_QUALIFICATION` is `true`. The report job lists the verdict, the gates that newly
+failed, the triage and the mutation-coverage difference from the previous night
+(`scripts/ci/coverage_diff.py`), and is red unless the run qualified with no new failure and no
+lost coverage. CI lost its own crons, so nothing runs twice. `check_ci_triage.sh` (CI) pins the
+behaviour against the real failure logs of 2026-10-22.
+
+### A Continuous Fuzz Farm (2026-10-22)
+
+`scripts/fuzz/farm/` runs the repository's differential and linearity generators continuously on a
+server against the newest build of main, and turns what they find into deduplicated, minimized,
+reproducible findings. Three generators feed it: `diff` (`--interp` against the compiled binary),
+`lin` (the linearity generator's ground truth) and `mut` (a `diff` program with one to three token
+edits, where the compiler must not crash or hang). Findings are classed silent, crash, unsound,
+timeout or refusal. Each one is keyed by a normalized pre-signature and minimized
+(non-refusal differential findings may go through `concrete reduce` before text reduction,
+unsound linearity findings by paired minimization, the rest by text reduction), re-checked against every new main (marked fixed there, or
+reopened when it recurs), and promoted with `promote.sh`, which writes a regression fixture and the
+`scripts/gen/new_bug.sh` command. Nothing in the farm commits to the repository. It runs at idle
+CPU and I/O priority under a hard quota and pauses when other work needs the machine. The
+[README](scripts/fuzz/farm/README.md) gives the pipeline, the classes and the resource policy;
+`check_fuzz_farm.sh` (CI) drives the engine with a fake compiler and fake generators. The farm
+found bugs 176, 210, 213 and 215, and bug 216 came from re-running one of its findings.
+
+### Two Heavy Runs Per Machine, A Shared Compile Cache, And A Measured Gate Profile (R-0543, R-0546, 2026-10-22)
+
+Heavy local runs are limited to two at a time. `run_ci_gates_local.sh` (full or larger
+selections), `run_tests.sh --full`, `test_mutation.sh` and the mutation campaign take one of
+`CONCRETE_HEAVY_SLOTS` (default 2) slots, shared by every worktree and clone of one user (under
+`XDG_RUNTIME_DIR`, or `~/.cache`); different users do not share the limit; a waiter prints
+the holders, a dead holder's slot is reclaimed, and `--no-wait` exits 75 instead of waiting.
+`check_heavy_slots.sh` (CI) holds the controls. The project's
+[CLAUDE.md](CLAUDE.md) states the rule for agents.
+
+[GATE_PROFILE.md](docs/project/GATE_PROFILE.md) records where CI time went at named SHAs: the
+critical path, the 25 slowest gates and why the top ten are slow. Its fixes:
+
+- `scripts/tests/lib/compile_cache.sh` caches allowlisted pure reports, keyed by the compiler
+  binary's hash, the build identity, the argv and working directory, the input's project closure,
+  std, `proofs/` and the tools; anything the key cannot cover runs uncached, and a result is
+  published only if no covered file changed during the compile. Measured warm: `check_vc_schema`
+  356 s to 26 s, the report views 259 s to 94 s, the Phase 3 capstone 774 s to 348 s.
+  `check_compile_cache.sh` (CI) holds the controls.
+- New worktrees seed `.lake` from another checkout, and `lake build` re-verifies the seed.
+- Gates that perturb or populate the checkout now run in a private checkout
+  (`scripts/tests/lib/private_checkout.sh`), umbrella gates delegate to the gates they used to
+  re-run, independent sub-gates and fuzz cases run concurrently, and the local runner orders its
+  pool longest-first from `scripts/tests/gate_weights.tsv`. The full local set stopped scaling at
+  about 32 jobs, where the longest gate bounds it.
+
+`run_fast_surface_gates.sh` now keeps each constituent's output and prints a failing
+constituent's FAIL lines, exit code and log (2026-10-23).
+
+### One Owner Per Fact: Ledger Generators And Changelog Fragments (R-0542, 2026-10-22)
+
+The bug ledgers were kept by hand in several shared files, and every rebase conflicted on them.
+The generators and gates that give each fact one owner have landed:
+
+- `scripts/gen/bug_ledger.py` reads a ledger block in each `docs/bugs/NNN_*.md` record (summary,
+  coverage, structural classes, silent flag, exits) and generates the bug lists of
+  [docs/bugs/README.md](docs/bugs/README.md), the bugs column of the structural classes, the
+  roadmap's exit spans and the audit coverage maps;
+- changelog entries are fragments in `changelog.d/`, which `scripts/gen/changelog.py --fold` folds
+  into this file on main ([changelog.d/README.md](changelog.d/README.md)); once stamped, a hand
+  edit of this file fails the docs-drift gate;
+- `scripts/gen/refresh_generated.sh` regenerates every derived view after a conflicted rebase;
+- `check_ledgers.sh`, a docs-drift leg, runs the one-time migration on a scratch copy, with
+  negative controls.
+
+Changelog fragments have been in use since. The one-time migration itself
+(`scripts/gen/migrate_ledgers.sh`) ran on 2026-10-25: every bug record carries its ledger block, the
+views are generated, the gate count became `scripts/tests/ci_gate_inventory.txt`, this file is
+stamped, and the 61 fragments pending since 2026-10-23 were folded in.
+
+### The Pre-Push Hook Selects Gates By Impact (R-0513, 2026-10-22)
+
+The pre-push hook had picked gates by a hand-kept map from paths to gate names, and on 2026-10-22
+four failures it did not select reached CI (the stack-budget gate, the trust gate's bug-audit
+corpus, the float round-trip judge and the linear-discard gate), each costing a CI round of about
+1.5 h. `scripts/tests/select_gates.sh` now derives, from the gate scripts themselves, every workflow
+gate command a diff can break: what each gate reads, transitively through the scripts it runs;
+every compiler- or Lean-running gate for a compiler, toolchain or std change; and every gate for a
+change no rule maps. It is the hook's default; the area map remains the fallback when the selector
+fails, or on request (`CONCRETE_PREPUSH_SELECT=area`). `run_ci_gates_local.sh --impact` runs the
+selection, and the landing script calls it over an exact `--base`/`--head` range.
+`check_gate_selection.sh` (CI) replays the four misses as fixed controls. Bug 237 (map notes read as
+calls) is its first recorded defect.
+
+### Ready Branches Land In Trains, With A Landing Bot (R-0539, 2026-10-22)
+
+Ready branches now reach main together as a train: one integrated candidate, one CI run, and
+bisection by member only when that run is red. `scripts/land/train.sh` runs the cycle that had been
+done by hand: `build` (main plus each member, `--no-ff`, in order), `check` (fast surface gates,
+impact-selected gates and the remote full set, in parallel), `ci` (push `ci/<name>` and dispatch),
+`watch`, `land` (verify, then push the exact SHA to origin and lambdaclass) and `bisect`. Conflicts
+are resolved mechanically only in append-only ledgers, whole generated files and generated blocks
+whose generator the train will run; anything else stops the build. After the last merge the
+generated views are regenerated once. Each train keeps a local per-stage log, and
+`scripts/land/report.sh` reports the median time to land. The procedure is
+[LANDING.md](docs/project/LANDING.md). Main has landed through numbered trains since, through
+train 22 on 2026-10-25.
+
+Pushing to both remotes is required (the owner's decision of 2026-10-22): `push-both.sh` mirrors
+to lambdaclass by default and checks the mirror before the primary moves, and `train.sh land`
+refuses a missing mirror. A branch is ready when it is a `wip/*` branch whose head carries a clean
+review note and a passing gates note (`scripts/land/ready.sh` writes the latter).
+
+`scripts/land/bot.sh` automates the loop: it collects ready branches, orders rule-changing branches
+first, builds and dispatches the train, bisects and ejects a culprit, rebases idle ready branches
+onto a moved main, and resumes after a restart, under a lock and a kill switch. Its installer
+writes systemd user units but never enables them; running the bot is the maintainers' decision.
+`check_landing_script.sh` and `check_landing_bot.sh` (CI) test both scripts against scratch
+repositories.
+R-0539 stays open in the roadmap until its measured exit criterion holds.
+
+### The Mutation Campaign Declares Expected-Red Gates: The PENDING Disposition (2026-10-22)
+
+`check_atomic_flip_entrance.sh` was red on the clean tree, so its two mutation families scored
+INVALID (red on clean) on shards 11 and 24 of every campaign. One cause was a pin that had drifted
+as fixtures entered its scan (updated); the other is genuine pending R-0004 work (bug 083 linked
+`thesis_demo` to `proofFns` with no attestation), and the gate's FAIL line now names the pending
+tables. The campaign driver gains `expect_red <gate> <reason> <exact FAIL legs>`. A declared gate
+whose clean baseline fails with exactly the declared legs makes its families PENDING: a fifth
+disposition, never a kill, published and named on every summary, and not blocking qualification.
+Any other red is still red on clean, and a declared gate that turns green is refused until its
+declaration is removed. The shard aggregator and the campaign supervisor each check pending results
+against the plan and the shard's baseline transcript instead of trusting them.
+
+### Compiler Performance Tracking By Retired Instructions (2026-10-22)
+
+`scripts/perf/` measures main with a versioned benchmark suite (each cycle first resumes the newest
+recorded but unprocessed commit, otherwise takes the newest `origin/main` commit, so intermediate commits
+can be skipped) and keeps the
+records on the `perf-data` branch, which is never merged into main. The primary metric is retired
+user-space instructions (`perf stat -e instructions:u`), because no machine is ever quiet and
+instruction counts do not move with load: measured at load 35, they varied by at most 0.002 %
+between runs. Peak RSS is the memory metric, and wall time is recorded but never alarmed on. An
+alarm needs a value above the baseline's noise band plus a 1 % threshold and an absolute floor
+(about +1.5 % for instructions), and `perf_bisect.py` then names the culprit commit. A run that
+cannot count instructions falls back to wall time and is marked not comparable. The suite includes
+synthetic stress programs, whose growth exponents are computed, and the ten most expensive passing
+CI gates. [PERF_TRACKING.md](docs/project/PERF_TRACKING.md) describes the engine and the server provisioning
+it needs to run periodically; `check_perf_tracking.sh` (CI) gates the decision logic.
+
+### Shared Agent Playbooks And A Race-Safe Bug Scaffold (2026-10-22)
+
+Every agent session now runs the same procedures by name: `.claude/commands/` holds `/fix-bug`,
+`/roadmap-item`, `/file-bug`, `/creview`, `/rebase`, `/land` and `/cstatus`, and
+[docs/project/AGENTS.md](docs/project/AGENTS.md) owns the rules they share (structural cause and
+owner per bug, one bug or rule per branch, `wip/*` pushes, landings only through the train, at most
+two heavy runs per machine, no piped rebases).
+
+`scripts/gen/new_bug.sh "<title>" [--class N] [--silent yes|no]` files a bug. It takes the number
+above every record on origin's branches, local branches, every worktree and every reservation, and
+owns it by creating `refs/bug-reservations/NNN` on origin with an absent-lease, so two concurrent
+agents never get one number. It writes the record with its ledger block, a reproducer skeleton and a
+fragment, regenerates the ledger views and lists its fill-in placeholders, which
+`check_bug_filing_complete.sh` refuses at landing. The pre-push hook accepts a reservation (a
+parentless empty-tree commit) without gates and refuses anything else on that namespace.
+`check_new_bug.sh` tests allocation against each source, six concurrent allocations, the scaffold's
+ledger consistency, the refusals and the hook tier in a scratch repository (256 gate commands).
+
+### One Review Procedure With Delta Rounds (R-0544, 2026-10-22)
+
+Reviews had taken 8 to 34 rounds per branch, each re-reading the whole growing diff, and the
+reviewer refused whole rounds on large ownership and memory diffs. `scripts/review/review.sh` is
+now the one procedure: round 1 reviews the full diff from the merge-base, later rounds only the
+delta since the previous round; large diffs are split into pieces by file group; a refused piece is
+retried once; a round cap (default 5) stops the loop; and the verdict is recorded as a git note
+(`refs/notes/concrete-review`) on the reviewed commit, which `scripts/review/verify.sh` and the
+landing tools read. [REVIEW.md](docs/project/REVIEW.md) describes it, and `check_review_tool.sh`
+(CI) tests it.
+
+### An Agent Work Queue And A Status Page (2026-10-22)
+
+`scripts/queue/` lets agents run without a human orchestrator. Each dispatcher tick rebuilds
+`queue.json` from its sources (open bug records, the roadmap's development-throughput rows and
+execution queue, fuzz-farm findings, and explicit `tasks/*.md` files), watches the running agents,
+and starts headless agents on the next ready tasks, with priority tiers, area conflicts, budgets, a
+heartbeat and a kill switch. A finished agent leaves a branch with review and gate notes for the
+landing bot. The dispatcher never pushes to main or `ci/*`: its clone's pre-push hook
+(`push_guard.sh`) admits only `wip/*` branches and the readiness notes. [WORK_QUEUE.md](docs/archive/roadmap-2026-11/WORK_QUEUE.md) describes it.
+
+`scripts/status/status.py` generates `status.json` and a self-contained, phone-width `status.html`:
+whether both mains agree and their CI is green, trains in flight against the 40-minute target, the
+landing medians, branches, open bugs, and runner health. A sanitized public variant withholds
+infrastructure details, and `scripts/land/notify.sh` sends deduplicated notifications to ntfy,
+Slack or stdout. [STATUS_PAGE.md](docs/project/STATUS_PAGE.md) records the publishing decision.
+
+Both installers write systemd units and enable nothing by default (`scripts/status/install.sh
+--enable` starts the status services on request). `check_work_queue.sh` and
+`check_status_page.sh` (CI) test them with stub tools.
+
+### Backend And Interpreter Repairs: Bugs 108, 109, 110, 116, 119, 120, 130 And 133 (2026-10-21)
+
+The examples-health pass of 2026-10-20 found six of them; the semantics probes found bug 130 and
+the Codex review of bug 116's fix found bug 133, both on 2026-10-21. All are fixed and pinned:
+
+- [bug 108](docs/bugs/108_bool_cast_trunc.md): `bool as <int>` was emitted as `trunc i1`, which
+  LLVM rejects. A `bool` now widens with `zext`, and `<int> as bool`, which neither backend gave a
+  meaning, is refused (E0553). That refusal also closes
+  [bug 130](docs/bugs/130_int_as_bool_invalid_ir.md) (`x as bool` with `x: Int` failed in
+  `llvm-as`).
+- [bug 109](docs/bugs/109_f32_literal_invalid_ir.md): float constants were printed to LLVM with six
+  decimals, so an inexact `f32` was invalid IR and an `f64` silently lost precision. Constants are
+  now the hex of their IEEE bits.
+- [bug 110](docs/bugs/110_array_value_store.md): an array value held as a pointer to its storage was
+  stored as the aggregate (invalid IR); the element type now hints the value and the backend's casts
+  use the storage address.
+- [bug 116](docs/bugs/116_vec_push_first_field_through_ref.md): `vec_push(&mut p.v, x)` with `v` the
+  first field of a `&mut P` called an undefined `@vec_push`, because GEP-zero elimination gave the
+  call the wrong pointer type. A pointer use keeps its own type.
+- [bug 133](docs/bugs/133_deref_field_borrow_copies.md), silent: `&mut (*p).f` borrowed the field of
+  a copy of `*p`, so a write through it was lost in the binary while `--interp` performed it.
+  `*r` as a place is now the storage `r` points at.
+- [bug 119](docs/bugs/119_interp_generic_trait_method.md) and
+  [bug 120](docs/bugs/120_interp_field_borrow_through_ref.md): the interpreter could not call a
+  trait method on a type parameter, nor borrow a field through a reference parameter. Each has an
+  interpreter-against-native leg.
+
+### Verified-Pipeline Design Examples Are Machine-Checked (2026-10-20)
+
+`proofs/DesignExamples` holds the reviewed design examples that
+[VERIFIED_PIPELINE.md](docs/compiler/VERIFIED_PIPELINE.md) asks for before Core's interfaces
+freeze. Each is a small Lean model, a few hundred lines that import nothing from the compiler,
+built by `lake build` and CI:
+
+- linear move and destroy (`Linear.lean`, `LinearSound.lean`): for every program the model
+  checker accepts, no stuck state, each resource destroyed exactly once at normal and `return`
+  exits and at most once on `abort`, and an erasure theorem;
+- borrows and reborrowing (`Borrow.lean`): an exclusive borrow passed down to callees, exclusive
+  and shared reborrows, and rejected programs, most of them shown to dangle or get stuck (one, a
+  callee storing its parameter, is shown harmless in the model);
+- structured cleanup (`Cleanup.lean`): LIFO cleanup on fall-through, `return`, `break` and
+  `continue`, none on `abort`, a trapping cleanup that skips the later ones, and a static lowering
+  that agrees with the scoped meaning on every example;
+- typed-value representation in byte and provenance memory (`Repr.lean`).
+
+Every theorem is fully proved; `Axioms.lean` pins each theorem's axiom footprint (at most
+`propext`, `Classical.choice` and `Quot.sound`). These are design models, not proofs about the
+compiler. The [README](proofs/DesignExamples/README.md) lists the design questions they forced,
+each with a recommendation (owner R-0511).
+
+### Packages Declare Their Native Libraries; RocksDB Slice 1 Groundwork (2026-10-20)
+
+A package whose `extern fn`s resolve against a C library now declares that library in its
+`Concrete.toml`, in a `[native]` section with `pkg-config`, `libs` and `lib-dirs` keys.
+`concrete build`, `run` and `test` link the declared libraries of the root package and of every
+dependency package its manifest loads (transitive dependencies are not loaded), root first, and pass each library directory as `-L` and an rpath, so an
+application that depends on a binding package needs no linker flags of its own. Resolution happens
+only at the link step, so `check`, the reports and `--emit-llvm` work without the library
+installed. The manifest reader fails closed: any spelling of the section it does not read, a
+malformed or escaped value, an unreadable manifest, or a library name that spells a linker option
+stops the command with a diagnostic naming the declaring package, because a dropped library
+reappears later as an unresolved symbol. The rules are in
+[NATIVE_LIBRARIES.md](docs/platform/NATIVE_LIBRARIES.md), and `check_native_libs.sh` (CI) is the
+gate. This closes gap G1 of the RocksDB slice.
+
+`examples/rocksdb_kv` is RocksDB slice 1's groundwork: an application with a hand-written binding
+package (`[native] pkg-config = ["rocksdb"]`) whose resources are linear structs with exactly one
+consuming release each, two compile-fail fixtures (a handle never destroyed, a handle used after
+close), a release observer and the acceptance gate `check_rocksdb_slice1.sh`. Each fallible
+operation's failure and resource contract is recorded in
+[ROCKSDB_SLICE1.md](docs/platform/ROCKSDB_SLICE1.md), together with the gaps G1 – G7 found on the
+way. The slice is not accepted: R-0285's acceptance waits on exits 0b and 2i. The binding's
+declarations and ownership facts are reviewed assumptions taken from RocksDB's `c.h`, not checked
+facts.
+
+### The Verified-Compiler Plan: Vertical Slices, A Frozen Legacy Evidence Layer, And LCB As The Native Backend (2026-10-19, roadmap only)
+
+[VERIFIED_PIPELINE.md](docs/compiler/VERIFIED_PIPELINE.md) (plan v3, R-0491 – R-0509, later
+extended) retargets the structural refactor at an end-to-end verified compiler. Core is the
+language definition, with an executable semantics; references are strictly second-class; the
+authoritative checker runs on Core; Place MIR, a Memory CFG and a block-argument IR each get a
+semantics; and LLVM becomes a thin unverified printer. Part 1 builds the proof-ready pipeline and
+Part 2 proves it, and the plan states, per bug class, what "no bugs" means at the end.
+
+The plan is delivered as proved vertical slices rather than layer by layer: V1 (scalars, control,
+calls, checked arithmetic, an output event) is to be carried through every stage to native AArch64
+with its own compiler-correctness theorem, as a `verified` profile beside the existing compiler
+(R-0511), and V2 – V7 grow it. The current evidence layer receives
+soundness, compatibility and security maintenance only, with no new semantic claim mechanisms, and
+is to be retired claim by claim onto compiler-generated Core statements
+(R-0512). The native AArch64 code generation of the `verified` profile is to be the separately
+developed [Lean Compiler Backend](https://github.com/unbalancedparentheses/lean-compiler-backend), a
+Lean 4 port of QBE 1.3, used as a pinned dependency; Concrete builds no machine backend of its own
+(R-0517, coordinated with R-0505). These were planning changes; the full verified pipeline remains
+planned, though some constituent slices have since landed (R-0492, R-0497).
+
+### A Function With A Result Type Returns On Every Path (bug 194, 2026-10-23)
+
+A function whose result type is not `Unit` and whose body can reach its end without a `return` is
+now refused with E0307. Before this fix nothing checked it: the binary failed in `llvm-as` (a
+`ret void` in a non-void function) and `--interp` ran the program. A falling-through
+`let ... else` block in such a function was one way to write it; the language specification's
+patterns chapter found that case. It is pinned by three `error_194_*.con` fixtures (the `let ... else`
+shape is bug 195's).
+
+### A `let ... else` Block Diverges (bug 195, 2026-10-23)
+
+The `else` block of a `let ... else` must end every path in `return`, `break`, `continue` or a
+call that never returns, and one that can fall through is now refused with E0308. The construct is
+desugared to a `match` before checking, so the rule its design stated had no enforcing site: falling
+out of the block silently skipped the rest of the function. The language specification's patterns
+chapter (PAT-5) found it. It is pinned by `error_195_let_else_falls_through{,_unit}.con`. A `let ... else`
+over a field-less variant is not recognized yet (it binds nothing; the record says why).
+
+### A Variant Pattern Without Fields Ignores Only Copy Payloads (bug 197, 2026-10-23)
+
+A `match` arm written as a bare variant name (`E::A =>`) over an owned value whose variant carries
+a non-Copy field is now refused with E0288, as `E::A { _ }` already was. Before this fix the payload
+silently vanished: the discard rule was attached to `_` binders and CoreCheck's field count skips
+an empty list. Through a reference, and for Copy fields, a bare variant name stays legal. It is
+pinned by `error_197_variant_pattern_drops_payload.con` and `regress_197_variant_pattern_ignores_copy.con`.
+
+### A Match Arm Fits Its Scrutinee (bug 196, 2026-10-23)
+
+A match arm whose pattern does not fit the scrutinee is now refused with E0309: a variant of another
+enum, a literal or range over an enum, a variant over a non-enum, a literal of another type, and a
+range over a scrutinee that is not an integer or `char`, and a literal or range over a type
+parameter. Before this fix the checker left these to
+CoreCheck, which runs after Elab: a foreign variant made the checker panic or, when it shared a name
+with one of the scrutinee's variants, was silently taken as that variant; and a range over an enum
+failed in the SSA verifier natively while `--interp` ran it. The language specification's patterns
+chapter (PAT-3) found it. It is pinned by six `error_196_*.con` fixtures.
+
+### A Generic Type Is Named With Its Arguments (bug 200, 2026-10-23)
+
+A generic type written without its argument list (`Box1` for a `struct Box1<T>`) is now refused with
+E0113, as a list of the wrong length already was (bug 073). Before this fix a value of the bare
+type failed in `llvm-as` natively while `--interp` ran the program, and an uncalled signature naming
+it compiled. It is pinned by `error_200_bare_generic_type.con`, `error_200_bare_generic_signature.con`
+and two run controls.
+
+### Local Binder Identity In The Checker (R-0492 slice 1, bug 202, 2026-10-23)
+
+The checker no longer decides by spelling which binding a name denotes.
+`Concrete/Resolve/Locals.lean` is the one lexical walk over each desugared function body (the
+former SCOPE-1 walk of `Check.lean`). It runs inside `Pipeline.resolve`, and it does three things:
+- it mints a `LocalId` for every local binding (private constructor);
+- it records the binding each use of a local name denotes;
+- it records each SCOPE-1 collision.
+
+The checker's environment is keyed by `LocalId`. Every use resolves through the table, and the
+references between bindings are identities: borrow sources, reborrow parents, borrow-block refs
+and the roots of normalized places. A binding left in the environment after its scope closed
+cannot answer for a later use of its spelling. That is structural class 2, the class of bugs 040,
+041, 045, 087, 093, 094, 107, 124 and 176. E0301 is rendered from the same walk. The name-keyed
+guards E0292 (live shadow) and E0238's shadowed-source rule had become unreachable and are
+removed. A function or constant without a table is refused.
+
+Moving the walk into resolve found bug 202. Desugaring was a step each driver had to call, and the
+project loader, debug bundle, reducer and Lean tests skipped it. A project's `let … else` was
+therefore refused while the same file compiled standalone. Desugaring is now part of
+`Pipeline.resolve`. `check_local_identity.sh` has compile-fail, minting-site, walk-answer and
+pipeline legs, and mutation family 98 (outermost binding wins) is killed by it.
+
+### The Tightening Batch Is In The Spec, With A Gate And Eighteen Mutation Families (landing train 6, 2026-10-23)
+
+The batch's rules are now checked entries of `docs/spec`: REF-9 (binder mode), REF-10 (implicit
+`&mut` reborrow), REF-11 (loans keyed by root, version 2 stating the reborrow exception), FFI-1
+(no foreign function value), PASS-2 (binder modes carried in Core, version 2), and new entries
+FFI-3 (no reference crosses the C boundary, E0574 / E0575, folded into the specification
+chapter's FFI-3 on extern declarations), TRUST-7 (`read_owned`, E0311) and the ghost-read rule,
+which is CON-4 (E0420) in the contracts chapter. The branch had numbered the last two TRUST-4 and
+CON-2, which the specification chapters landing in the same train already use. The pending examples they close now hold on both consumers. D6 option (a)
+changes the definition of Copy, so OWN-D1 and its users move to version 2 and TYPE-14's pending
+bound-based version is retired for the declared form. `check_tightening_rules.sh` (CI language
+gates) runs every reproducer of the batch on both consumers, and the mutation inventory grows from
+141 to 159 families, one per slice, each killed by that gate.
+
+### Copy Is Declared, Not Derived From Fields (decision D6, 2026-10-23)
+
+A generic struct or enum declared `Copy` is Copy exactly when every type argument is Copy, decided
+from the declaration alone, as a derived `Copy` is; the declaration is checked once with its
+parameters taken as Copy (E0571, now for enum payloads too); a generic not declared `Copy` is never
+Copy. Mono's demotion fixpoint over specializations is removed: Copy-ness no longer depends on the
+type graph, so it is invariant under substitution. The builtin `Option` and `Result` are declared
+Copy the same way. Measured with `rule_impact.sh`: no corpus program changes. Also (D3 with REF-6):
+a destructuring `let` of a struct through a reference is refused (E0302) like the enum
+form; the one fixture that accepted it became a rejection with a field-read rewrite.
+
+### A Cast To A Type Alias Compiles (bug 199, 2026-10-23)
+
+`x as IP` with `type IP = *mut Int` crashed the compiler in the backend: Elab left the cast target
+unexpanded. It is now resolved through aliases like every other written type. Pinned by
+`regress_199_cast_to_alias.con`.
+
+### Moving Out Of Raw Memory Is Explicit (T-RAWDUP, bug 198, 2026-10-23)
+
+`*p` read by value of a non-Copy pointee through a raw pointer is refused (E0311): it copied a linear
+value the slot still owned, so a trusted helper could free one heap cell twice. The new intrinsic
+`read_owned(p)` states the transfer and leaves the slot logically uninitialized until a value is
+stored back; it needs trusted or `Unsafe` code. Place uses, Copy pointees and stores through `*p`
+are unchanged. 26 std sites (collection pops, removals, rehash and drain paths) migrated.
+
+### One Argument Mode For `&mut` (decision D1, 2026-10-23)
+
+Passing a `&mut` binding to a call is an implicit reborrow whatever made the binding: a parameter,
+a borrow-block binder or an arm binder. `inc(r); inc(r);` inside a borrow block, refused before
+(E0205: the first call consumed `r`), now runs. One checker function decides the mode for every
+call form, and a `&mut self` receiver is the same reborrow. Exclusivity still holds: two exclusive
+arguments of one call reborrowing one reference are E0293, and a deferred call holds its `&mut`
+loan until it runs (`defer inc(r); inc(r);` is E0206). MUT_REF_SEMANTICS §2 – §4 rewritten.
+
+### References Have A Variable Root: The Austral Model (decision D2, bug 182, 2026-10-23)
+
+A reference is formed only by borrowing a variable, or a string literal as a static immutable root,
+and by projecting through a reference; `&s.f` is that, spelled as sugar. A temporary is never a root,
+so `&alloc(..)` (which segfaulted) and `&int_to_string(..)` (which leaked) are refused, as are a
+literal, a field of a temporary and a temporary method receiver (E0238, REF-5@1). Loans are keyed by
+the root variable: one call may not take a mutable loan on a root and also borrow or read it in
+another argument, disjoint fields included (E0293, REF-8@1); a reborrow of a `&mut` parameter beside
+a read through it stays legal. Two std sites and three fixtures migrated, measured with
+`rule_impact.sh`. Bug 182 and gap G12 are closed.
+
+### A Binder Through A Reference Is A Reference (decision D3, bug 181, 2026-10-23)
+
+Every pattern binder that binds through a borrowed scrutinee (`match r`, `match &o`, `if let`,
+`while let`) now has reference type, Copy payloads included: `Option::Some { value } => *value`.
+Before, the mode depended on whether the payload was Copy, Check and Elab decided it separately, and
+a generic body specialized at `Int` passed the integer where a `&Int` was expected (SIGSEGV in safe
+code, bug 181). One function in `Concrete/Semantics/BindingMode.lean` now gives Check and Elab the
+binder's type; Core stores it and monomorphization preserves it; Lower binds the payload's address
+and the interpreter a reference path into the payload. Because every such binder is a reference, the
+root stays frozen while it lives (E0232), Copy roots included. Two fixtures migrated (`*x`, `*n`);
+std and the examples are unchanged.
+
+### Reference Well-Formedness Has One Judgment (exit 2i G2, G13, G15, G16, 2026-10-23)
+
+REF-1 (no function returns a reference) and REF-2 (no function type returns one) are decided by one
+judgment, `Concrete/Semantics/RefWellFormed.lean`, shared by Check, CoreCheck's FFI rule and the
+post-mono verifier. Four spellings escaped it: a trait method declaration returning `&Int` (G13), an
+`extern fn` passing or returning `*const &Int` (G15, now E0574 / E0575 under the new spec rule FFI-3), a
+reference-returning function type behind a type alias or in a field (G16), and a generic reached at
+`*const &Int` only through another generic's type parameter, which the post-mono check's weaker
+predicate passed (G2). A callback whose parameters borrow stays legal in fields and aliases. The
+sentences of REF-1 and REF-2 are unchanged; their pending spec examples now hold. Each spelling has a
+reject example or conformance row with its rewrite; extern signatures are now expanded
+through type aliases; 0 corpus programs were affected.
+
+### An Array Bound Or Passed By Value Is A Copy (bug 190, 2026-10-23)
+
+`let t = xs;`, a `match` arm binding an array, and an array passed by value no longer share the
+source's storage in the binary. Lower represents an array value by its storage's address, and
+those three sites passed the address on, so a later write to `xs` changed `t` (`--interp` copied).
+One helper, `snapshotArrayValue`, now copies at each by-value site. Found by the Codex review of
+the bug 136/137 fix; pinned by `regress_190_array_value_copy.con`.
+
+### Literals Evaluate In Source Order, A Functional-Update Base Once (bugs 136 and 137, 2026-10-23)
+
+`E::V { b: f(), a: g() }` now runs `f()` before `g()`, and `P { b: f(), ..mk() }` runs `f()` and
+then `mk()` exactly once, as evaluation-order rules 4 and 6 say, natively and under `--interp`. Elab
+walked an enum variant's declared fields, and filled each field omitted from a functional update
+with its own copy of the base expression. Both literals are now built with evaluation-order
+temporaries (`letInExpr`: a single-binder `match`, which is `let` in every consumer, until Core has
+an expression-level `let` under R-0496); a literal whose order is already the rule's, and a
+variable base, keep their Core form. Pinned by `regress_136_137_literal_eval_order.con` and both
+reproducers.
+
+### A Dereference Assignment Evaluates Its Right-Hand Side First (bug 183, 2026-10-23)
+
+`*(&mut a[i()]) = j()` now runs `j()` before `i()` in the binary, as evaluation-order rule 7 and
+the interpreter say. `Lower` lowered the destination of a dereference assignment first, unlike the
+indexed and field assignment forms. Pinned by `regress_183_deref_assign_rhs_first.con` (three
+shapes, binary equal to `--interp`) and the reproducer.
+
+### A Monomorphized Instance Keeps Its Definition's Authority (bug 185, 2026-10-23)
+
+Raw pointers compare only in trusted code or a function declaring `with(Unsafe)` (bug 140). Through
+a safe `Copy`-bounded generic, `same::<*const Int>(p, q)` compiled in safe code: Mono built each
+instance from a hand-picked field list that left out `isTrusted`, so the post-mono re-check could
+not tell an instance's authority and accepted every pointer comparison. Instances now carry
+`isTrusted` (and `trustedImplOrigin`) with their body and capabilities, and the re-check applies
+Check's predicate to them, so a safe generic at a raw pointer is E0229 while std's trusted generics
+and generics declaring `Unsafe` compile as before. Pinned by `error_185_generic_rawptr_eq_safe.con`
+and `regress_185_generic_rawptr_eq_authority.con`.
+
+### An `extern fn` Is Never A Value (bug 166, 2026-10-23)
+
+Taking an `extern fn` as a value is refused (E0588). The C calling convention and the extern's
+authority are decided at a direct call; a function type carries neither, so a call through a value
+passed a small `#[repr(C)]` struct by address (C read it as the field) and ran under the function
+type's capabilities. A Concrete function whose body calls the extern is the supported value. The
+rule is normative in FFI.md "Foreign Function Values"; the long-term form, a C function type
+`extern "C" fn(..)`, is decided and waits for a callback workload (TIGHTENING_DECISIONS D4). One
+corpus program migrated (bug 129's imported-extern value test now passes a wrapper). Pinned by four
+E0588 fixtures, the reproducer and a wrapper control.
+
+### Compiler-Generated Runtime Calls Carry The Helper's Identity (bug 165, 2026-10-23)
+
+`println`, `print` and the variadic `append` reach the runtime helpers whatever the module
+defines. Elab desugared them into calls spelled `print_int`, `print_string`, `string_append` and
+so on, and every later pass bound a call by its spelling, so a module that defined its own
+`fn print_int` had it called by each `println` (the reproducer aborted). Core now has a third
+callee form, `Callee.runtime`, built by those desugarings. CoreCheck charges the helper's
+intrinsic capability, Lower emits the helper's reserved `_C$rt.` symbol, the interpreter
+dispatches to its builtin, and none of them resolves the spelling. The call collector is one
+walk with views by callee form (the direct and indirect walks were two copies), so a runtime
+call adds no call-graph edge to a same-named definition and still explains which intrinsic
+supplies `Console`. An explicit call of the user's `print_int` still calls it. Pinned by
+`regress_165_generated_helper_call.con` (natively and under `--interp`) and the reproducer.
+
+### Test Scratch Files Are Private To The Run: Bug 191 (2026-10-23)
+
+Test programs and std's fs/io tests wrote fixed `/tmp` paths such as `/tmp/concrete_test_io.txt`.
+On a shared host the first user to run the suite owned those files, so for every other user `fopen`
+returned NULL: `file_write_read` and `file_read_basic` dereferenced it and segfaulted (rc 139), and
+`concrete test` failed. Concurrent runs by one user shared the files too. The test runner now owns
+the scratch location. `concrete test` and `--test` run the binary with `CONCRETE_TEST_TMPDIR` set to
+a directory inside the run's private directory, and `run_tests.sh` and `test_ssa.sh` set it per run
+and per job. std tests get paths from the new `std.test.scratch_path`, which has no fallback. The
+two programs check `fopen` and report an environment error by exit code (100/101/102). The
+`examples/*/bench.sh` scripts use `mktemp -d`. `check_gate_hygiene.sh` now refuses a `/tmp` string
+literal in any `.con` source, as it already did for gate scripts, and also scans the examples'
+scripts. Record: [bug 191](docs/bugs/191_test_scratch_at_fixed_tmp_paths.md).
+
+### A Block Never Confers Trust (bug 189, 2026-10-23)
+
+`trusted impl` is refused. It made every method of the block trusted whether or not the method
+declared it, so a method added to the block later was audited by nobody. Each function now
+declares `trusted fn` itself. Std and the corpus were migrated by compiling: every `trusted impl`
+became `impl`, and a method was marked `trusted fn` exactly when the compiler then refused it.
+That gave 175 of 326 methods, plus thirteen fixtures marked by hand where an intended earlier
+error hid the need. The other 151 methods were trusted only through their block. The stdlib
+surface manifest was regenerated, and 89 rows lose an inherited `trusted-boundary` class. Pinned
+by `error_189_trusted_impl_refused.con` and `check_trusted_method.sh`.
+
+### A Capability Variable Entails Only Itself (bug 188, 2026-10-23)
+
+A function generic over a capability variable could perform any effect. `capsContain` treated a
+caller holding any capability variable as covering every requirement, `Unsafe` included, because
+the variable "is resolved at instantiation", but a generic body is checked once and nothing checks
+it again when it is instantiated. So `fn f<cap C>(..) with(C)` could print, call `with(Process)`,
+call an untrusted `extern` or dereference a raw pointer, and a `main` declaring nothing ran it by
+instantiating `C := {}`. Now one entailment rule (`Capabilities.missingCaps`) serves direct calls,
+calls through function pointers, method calls, trait-bound calls and the raw-operation gate. A
+requirement is met by a concrete capability the caller declares, or by a capability variable of
+the same name. Unknown variables fail closed. A callback's `Unsafe` reaching a
+capability-polymorphic callee is decided by Check on the instantiated set, with the trusted-body
+discharge. A capability parameter may not be spelled like a capability (E0121).
+`std.ordered_set`'s `fold` and `for_each`, which relied on the hole for their raw key walk, now
+declare `trusted`. A bodiless declaration may not take capability parameters, and two
+legitimate shapes that Check refused with a false E0220 (forwarding a variable to a
+same-named parameter, a variable beside a concrete capability) now compile. The fix is pinned
+by nine witnesses, a positive control that agrees with `--interp`,
+`check_capability_judgment.sh` and five mutation families.
+
+### A Literal Gives Each Field Once (bug 193, 2026-10-23)
+
+A struct or enum literal that names a field twice is now refused with E0306. Before this fix the
+checker type-checked the first occurrence, the binary stored the last and `--interp` used the
+first, so `P { n: 1, n: 41 }` gave 41 natively and 1 in the interpreter. The specification's types
+chapter (TYPE-7, each field exactly once) led to it. It is pinned by
+`error_193_duplicate_{struct,variant}_field.con`.
+
+### An Integer Is Not A Condition (bug 192, 2026-10-23)
+
+An `if`, `while` or `for` statement whose condition is an integer is now refused with E0223, as
+the expression form already was. Before this fix the checker computed the statement condition's
+type and discarded it, and CoreCheck admitted any integer as a condition, so the binary ran the
+program with C truthiness while `--interp` stopped with a run-time error. The language
+specification's TYPE-5 example found it, because the specification's examples run on both
+consumers. CoreCheck no longer admits integer conditions, and its `if` expression reports E0541
+rather than the `while` code. A match guard had the same hole and is refused the same way. It is pinned by
+`error_192_int_{if,while,for}_condition.con` and `error_192_int_match_guard.con`.
+
+### The Interpreter Reads Standard Input When The Program Does: Bug 184 (2026-10-23)
+
+`concrete p.con --interp` read all of standard input before `main` ran, so a program that never
+reads stdin, fed by a pipe that stays open (`sleep 30 | concrete p.con --interp`), waited for the
+writer to close it while the binary returns at once. The interpreter-coverage pass (728a2a98)
+had modelled stdin as a byte snapshot the driver took up front. It is now a source
+(`Interp.StdinSource`) that the `read` builtin pulls from, `n` bytes at the moment of each
+`read(0, buf, n)`. Two `run_tests.sh` legs hold stdin open under `timeout 10` and compare with the
+binary: a program that never reads (21) and a control whose single two-byte read returns at once
+(131). Record: [bug 184](docs/bugs/184_interp_reads_stdin_up_front.md).
+
+### Language Tightening Decisions and a Rule-Impact Scanner (2026-10-23)
+
+[TIGHTENING_DECISIONS.md](docs/project/TIGHTENING_DECISIONS.md) classifies every open language
+gap that could be tightened. The gaps covered are:
+
+- G2, G9, G10, G12, G13, G15, G16, G17 and G19;
+- checked arithmetic and lossy casts;
+- the trusted raw-pointer duplication;
+- bugs 165 and 166;
+- evaluation order;
+- `main`'s exit status;
+- contract typing.
+
+Each gap is classed as a soundness hole, an undecided semantic case, or style, with a witness
+program compiled on main `185d998c`, `wip/train1` and `wip/train3`. The doc proposes a rule,
+records the gap's interaction with exit 2i, and recommends now, decide-now-implement-later or
+deferred. It ends with an ordered plan and four questions for the user (`&mut` argument modes,
+borrowed temporaries, the binding mode through a borrowed scrutinee, foreign function values).
+Holes and semantic cases are tightened; style-only rules wait for a workload.
+
+`scripts/tools/rule_impact.sh` compiles every fixture, example, project, std and inline gate program
+with two compilers and lists each unit whose accept/refuse outcome or diagnostic codes change. It
+shows what a rule breaks before the rule lands. Run as train3 against main, it found the E0301 /
+E0302 / E0305 breakages that train 1b's migration fixed by hand: 21 std sites in 6 files, 22
+standalone files and 7 inline gate probes.
+
+The witness programs found three silent defects, filed as open under exit 0b:
+
+- [bug 181](docs/bugs/181_generic_borrowed_scrutinee_binder_mode.md): a payload binder through a
+  borrowed scrutinee of generic type is `&T` to Check and `T` to Elab. The program segfaults in
+  safe code at `T := Int`.
+- [bug 182](docs/bugs/182_borrowed_call_result_temporary.md): a borrowed call result is accepted.
+  `&alloc(..)` segfaults, and `&int_to_string(..)` leaks the temporary.
+- [bug 183](docs/bugs/183_deref_assign_destination_first.md): the known dereference-assignment
+  order disagreement, now filed. The binary exits 12 and `--interp` exits 21.
+
+Each bug is pinned by `check_example_outputs.sh`'s open-bug reproducers leg.
+
+The user decided the four questions the same day ("do the best long term solution for this problem
+and every problem"):
+
+- **D1:** every `&mut` argument is an implicit reborrow, and an unused `&mut` may lapse.
+- **D2:** first "only places are borrowable", then replaced by the Austral model ("ok do the austral
+  model with `&s.f` sugar"). Only a variable or a string literal is borrowed, and a reference to a
+  part is a projection through a reference. `&s.f` is front-end sugar, and loans are keyed by root.
+  This closes bug 182; 2 std sites and 1 train3 fixture migrate.
+- **D3:** every binder through a reference scrutinee is a reference. This closes bug 181, and two
+  fixtures migrate. The count was measured with two measurement builds and `rule_impact.sh`.
+- **D4:** every foreign function value is refused now (bug 166), revised after review from an
+  aggregate-only refusal. Function types will carry calling convention, capabilities and safety
+  obligations later.
+
+A second set of decisions the same day ("the best long term solution for everything we discussed")
+adds:
+
+- a bare `T` is Any (linear-capable) and `T: Copy` stays the only kind annotation (revised from
+  "two declared kinds"), with Copy for structs declared and checked, never derived;
+- trait coherence: one impl per (trait, type), qualified calls when ambiguous, and lookup by typed
+  identity;
+- global state: immutable globals everywhere, and mutable state only as declared global cells.
+  Cells live in an unsafe-marked module and are reached through capability-requiring functions;
+  there is no `static mut`, and the compiler's own globals are inventoried as trusted base (revised
+  from "no mutable globals");
+- one file per module, with generated interface artifacts;
+- a `trusted mod` marker in source: only marked modules may hold trusted, foreign and raw code.
+  The marker never confers trust, and a gate lists every marked module (it replaces the allowlist
+  idea);
+- the Lean Core semantics as the normative specification, with `docs/spec` as its checked view;
+- disciplines for every pass and every gate.
+
+The doc's §5 orders the work: traits; then the binder, kinds, references, loans and foreign-value
+refusal; then the spec pilot; the trusted base; `read_owned`, contracts and casts; and generated
+interfaces.
+
+G17's moving shapes are closed: they are refused on main and are now rejection fixtures. Its Copy
+case is reopened by D3, which makes every binder through a reference a loan on the root. The rules are
+recorded in MEMORY_SEMANTICS, MUT_REF_SEMANTICS, FFI.md and the ROADMAP decisions, and are not
+implemented yet.
+
+### Loop Bodies Are Lexical Blocks In The Checker: Bug 176 (2026-10-22)
+
+The fuzz farm found that a `let` in a `while` body that shadowed an outer name stayed visible to
+the checker after the loop. The outer name took the inner binding's type and mutability, so valid
+code was refused (E0217, E0233), a `u8` binding held 300 natively and in `--interp`, and a checked
+program failed SSA verification. Every loop form had the defect, including `for` headers. Check's
+`while` and `for` restored only their depth and labels. `if`, `match` and borrow blocks each
+closed their scope by hand. Every block now closes through one helper (`closeBlockScope`, with
+`inBlockScope` applying the block-local consumption rule). A loop body's linear locals are
+therefore checked at the end of the body, which also catches a per-iteration leak in a
+non-terminating function. Record: [bug 176](docs/bugs/176_loop_body_shadow_leaks_in_checker.md).
+
+### CoreCheck Compares Every Binder With Its Value: Bug 177 (2026-10-22)
+
+CoreCheck is the independent re-check of elaborated Core, but it never compared a `let`'s declared
+type with its value's type. It compared call arguments by count only, and assignments, fields and
+stores not at all. Returns were compared with a helper that treats every numeric type as equal.
+So when bug 176's checker leak let `let y: u8 = <i32>` through, CoreCheck passed it too, and the
+binary printed 300 from a `u8`. One binder-agreement relation, `bindTyAgrees`, now checks every
+binder: `let`, assignment, direct and indirect call arguments, struct and variant fields, field
+stores, stores through `&mut`/`*mut`, array element stores, array literal elements and the
+branch values of a value `if` or `match` (E0510), and returns (E0560). A fn binder must also declare
+every capability of the fn value it holds. It is exact
+on scalars and on the shape of references, pointers, arrays and fn types, and defers only on
+named, generic and type-variable types, which stay Check's to decide. A `for` loop's
+step is now checked, and CoreCheck's own blocks close their scope. A pass-level test plants
+mismatched values in Core directly, so it stays meaningful after bug 176's fix. The new check also found
+that Elab gave a struct or enum literal's field value an unexpanded alias as its expected type, so
+`S { a: 1 }` with `a: Id` (`type Id = i32`) stored an `Int` literal; field hints now expand aliases. Record:
+[bug 177](docs/bugs/177_corecheck_never_compared_binder_types.md).
+
+### Browser-Hosted Compiler And Landing-Page Explorer (2026-10-22)
+
+The landing page now exposes the existing Concrete compiler as WebAssembly in a
+worker, with Core, specialized Core, SSA and LLVM views, real diagnostics,
+source-declaration selection, and downloadable results. Completed stages remain
+available on downstream failure. A redesigned responsive landing page introduces
+the language and integrates this live explorer.
+
+The compiler loads on demand with download progress, digest-versioned HTTP cache
+keys and a Wasm integrity check. Cancellation terminates the worker; editing
+source invalidates results. Compiler build identity and the actual LLVM output
+target are visible. Arithmetic, generics, structs, capabilities and a type-error
+example are included. Build instructions and native/Wasm, loader and UI checks
+live in [scripts/browser](scripts/browser/README.md); the tested asset snapshot is
+versioned for ordinary site deployment.
+
+This is a bounded single-file prototype, not a Concrete-to-Wasm backend, a program
+runner, or an independent verifier. Standard-library/file loading and full
+transformation tracing remain outside this scope. R-0275/R-0353 retain ownership
+of independent checking; successful compilation is not proof verification.
+
+
+### Each Compile Owns Its Intermediate Files (bug 179, 2026-10-22)
+
+Two compiles of the same source to different outputs no longer break each other. The compiler
+built an executable through an intermediate LLVM file at `<input>.ll` (file mode) or `<main>.ll`
+(project mode), a path shared by every compile of that source. The first compile to finish
+removed it while the other's llvm-as or clang was still reading it, and the second failed with an
+uncaught `no such file or directory`. A devshell toolchain change shifted `run_tests.sh`'s timing
+enough to expose it: bug 102's `--interp == binary` leg raced a background `run_ok` worker
+compiling the same fixture. Every compile now writes its intermediates into a temp directory it
+creates for itself and removes on every path, including failures. Test mode, `concrete run` and
+the reducer, which named temporaries after the source or a millisecond clock, also use private
+directories; test mode still keeps its IR and binary after a failure it reports, and prints where.
+`--emit-llvm` is unchanged. Pinned by concurrent-compile legs in `run_tests.sh` for both build
+paths (`regress_179_concurrent_compile.con`, `regress_179_concurrent_build`). On the previous
+compiler, 35 of 40 file-mode compiles and 9 of 12 project builds failed.
+
+### Match Lowering Is Linear Again (bug 178, 2026-10-22)
+
+A 1000-arm `match` spent 8.45 s in the `lower` stage and a 2000-arm one 78 s (about n^3). The
+cubic term was SSAVerify's dominator computation over `List String` sets and its per-block lists
+of every strict dominator's definitions; SSACleanup and Lower added quadratic list lookups and
+appends, and a deep `if` nest was also cubic in the obligation walk (`assignedScalarsS`) that runs
+on every compile. SSAVerify now answers dominance in O(1) (Cooper-Harvey-Kennedy immediate
+dominators and dominator-tree DFS times, the same relation as before including unreachable
+regions), SSACleanup uses maps for reachability, predecessors, phi sources, empty-block renames
+and replacement chains, and Lower accumulates blocks and arm lists newest first. A 2000-arm
+`match` compiles in 0.81 G instructions instead of 334 G (410x), a 2000-deep `if` nest in 2.2 G
+instead of 1555 G (703x). Emitted LLVM and SSA are byte-identical across all 1684 corpus files
+and every project. `--emit-trace-json` now reports per-stage heartbeats (`alloc_heartbeats`), and
+`check_ssa_lowering_scaling.sh` fails if the `lower` stage grows faster than n^1.3 in arms
+(heartbeats everywhere, `instructions:u` where perf counts). Structural class 17, owner R-0422.
+
+### Proof Replay Ready For Lean 4.35's Removed Native Axioms (2026-10-22)
+
+Lean 4.35 removes `Lean.ofReduceBool`, `Lean.ofReduceNat` and `Lean.trustCompiler` (lean4#14953;
+release notes and `Init/Core.lean` checked at both tags). The re-check probe in
+`Concrete/Proof/Replay.lean` named two of them as double-backtick literals, which must resolve, so on
+4.35 the probe would not compile and every theorem would read `notRun`. The pin stays at 4.34.1.
+
+- The native-trust classifier is one piece of Lean source (`nativeAxiomClassifierSrc`) spliced into
+  the probe: the legacy names as unresolved single-backtick literals, plus the `._native.` axioms
+  `Lean.Meta.nativeEqTrue` mints on both toolchains (unchanged between them). `Lean.ofReduceNat`,
+  previously unrecognised (a theorem on it was refused as a generic failure), is now classified native.
+- `check_kernel_recheck.sh` gains two legs: a scan refusing any resolved reference to a removed name
+  in Lean sources, probes held in strings included; and the classifier compiled on its own under
+  4.34.1 and under 4.35, where `native_decide`, `decide +native` and `bv_decide` proofs must read
+  native, a classical proof must not, and every axiom the toolchain declares must be classified
+  (4.35 declares exactly 4.34.1's set minus the three). CI's checker-gates job installs 4.35 and
+  requires the leg; elsewhere it SKIPs when that toolchain is absent.
+- `check_axiom_inventory.sh` lists `Lean.ofReduceNat` as native trust too; on 4.35 its legacy list
+  matches nothing. Two mutation families (134 -> 136) show the new legs kill a reintroduced resolved
+  literal and a dropped legacy name.
+
+### External Checker Pins Kept Current; con-leche Single-Threaded (2026-10-22)
+
+con-leche and nanoda, which re-check every theorem outside the Lean kernel, are trust anchors, and
+an independent checker protects us only while it is current: kernel bug lean4#14576 also got past a
+week-old nanoda. Lean 4.35.0's #15288 fixed thread-sharing undefined behaviour that its notes say
+may affect con-leche.
+
+- con-leche runs with `--jobs=1` at every call in `check_external_checker.sh`; its default was one
+  worker per hardware thread. A new leg fails if any call bypasses the flag. Cost on the dev server:
+  about 21 s of con-leche time per gate instead of about 3 s, at a third of the memory. The #15288
+  fix is already in con-leche's own toolchain (v4.35.0; v4.35.0-rc3 via backport #15306 at the
+  earlier pins), so this is defence in depth.
+- con-leche bumped `dd695ca` → `c26f793`, the revision behind the Lean Kernel Arena's published
+  results. It builds with its own toolchain (neither revision builds with Lean 4.34.1) and passes
+  the gate 22/0. The next day the Arena published a new round, the freshness check reported both
+  pins stale, and they moved again: con-leche `ae1f319` (Lean 4.35.0) and nanoda `998e0a8`, gate
+  22/0. R-0208's checker-identity gates bind the Lean kernel replay, not the external checkers, so
+  no identity row changes.
+- `check_checker_pin_freshness.sh` compares the pins with the Arena's published revisions (falling
+  back to upstream heads): a warning when landing, a finding in the nightly campaign tier, and an
+  explicit SKIP offline.
+- Recorded as KNOWN_HOLES H29 (owner R-0532); operation in
+  [EXTERNAL_CHECKER.md](docs/verification/EXTERNAL_CHECKER.md).
+
+### Sealed, Certified Pipeline Artifacts (R-0497 slice 1, bug 180, 2026-10-23)
+
+Pipeline artifacts now carry proof of their own validity. `ValidatedCore`, `MonomorphizedProgram`
+and `SSAProgram` have private constructors. Each carries an erased `Prop` stating what its producer
+established about its exact payload: CoreCheck accepted these modules, Mono produced these modules
+from that source and the post-Mono verifier is clean on them, and the SSA verifier accepts these
+modules after cleanup. Forging one, or replacing its payload with `{ a with … }`, no longer
+compiles. The `ssa-unverified` debugging view is a separate `UnverifiedSSA` that `emit` refuses.
+Modules drawn from a validated program are a `CoreSubset`, which proof extraction reads and Mono
+does not. The emitted output is unchanged. `check_pipeline_artifacts.sh` checks the forgery,
+payload-replacement and diagnostic-bypass cases by elaboration.
+
+Sealing the artifacts found bug 180. In a project, `--report mono`, `verify` and `traceability`
+replaced a `ValidatedCore`'s modules with the invoked file's modules, without `std` or other
+dependencies. They then ran Mono and lowering on that forest. wordfreq's mono report listed 0
+specializations where the build emits 61, and the verify gates called that program clean. These
+reports now run their passes on the whole validated program and list the invoked file's part of
+the result (9 wordfreq specializations). The bug is pinned by
+`regress_180_report_scope`.
+
+### Development Throughput Becomes A Priority Track (2026-10-22)
+
+The roadmap has a [development throughput](docs/archive/roadmap-2026-11/ROADMAP.md#development-throughput) track, ordered
+ahead of the next feature wave. A finished, Codex-clean branch took 6 – 10 h of wall clock to
+reach main for about 1 h of work. Several causes added to that time:
+
+- review loops of 8 – 26 rounds that re-reviewed the whole diff;
+- large branches whose rule changes broke other branches' fixtures;
+- a pre-push hook that runs about 92 of 255 gates, so failures were first seen in CI;
+- serial landing, with hand-edited ledgers that conflicted on every rebase;
+- CI queueing against a 20-job concurrency limit;
+- a laptop at load 140 – 240.
+
+New tasks R-0539 – R-0547 cover landing trains, CI tiers, self-hosted runners, generated
+ledgers, load control, review and branch discipline, build caches and stage-timestamp
+measurement. R-0513 owns impact-based pre-push selection. The promotion pipeline describes trains
+and the landing and campaign tiers with its existing passed, failed, skipped, cancelled and
+incomplete vocabulary. `docs/project/CONCURRENT_WORK.md` and `docs/compiler/TESTING.md` give the
+rules that apply now. The targets are medians: under 2 h from Codex-clean to main, ≤ 40 min of
+landing CI, ≤ 10 min of pre-push and ≤ 5 review rounds per slice. Ledger conflicts are to be zero.
+
+### Validation Rules: Golden Oracles, Incomplete Timeouts, CI Flow, Discovery Rate, Bug Dashboard (2026-10-22)
+
+Five lessons of the last days became rules with gates.
+
+A golden needs an independent check. Bug 121's `conlog` golden was recorded from a miscompiled
+binary and blessed its wrong count, because the interpreter could not run `conlog`. Every `@run`
+rule of `example_manifest.txt` now declares its oracle: `interp` (interpreter agreement, which
+needs `interp=yes`), `spec:<pointer>` (a hand derivation or a reference tool's output, recorded in
+`docs/project/GOLDEN_ORACLES.md`) or `unverified:<reason>`. `check_example_outputs.sh` fails on an
+undeclared or inconsistent oracle and on a spec pointer that does not resolve (seven new negative
+controls, plus a positive control that an unverified golden is counted), and prints the count:
+89 interpreter-checked, 14 derived (base64, verify, grep, hexdump, wordfreq, tar_list and conlog,
+checked against `base64`, `shasum`, `grep`, `xxd`, `sort | uniq -c` and `tar tf`, or by hand: the
+truncated tar archive and bug 121's conlog count) and 48 unverified, each a tracked gap of exit 2c. The rule is in the roadmap's example rule,
+exit 2c and R-0491.
+
+A timeout is incomplete, not failed and not passed. `scripts/tests/lib/bounded.sh` re-runs a
+timed-out command once alone with a larger budget; a completed re-run is judged normally and
+recorded as recovered, and a second timeout is reported `INCOMPLETE` with the partial output
+discarded, which still makes the gate exit nonzero. A command's own exit 124 is told apart from a
+timeout, and eleven controls in `check_example_outputs.sh` pin the helper. Each attempt runs under
+`scripts/tests/lib/bounded_exec.py`, which owns the command's process group and reports the outcome
+through a status file, so a command's own output can neither fake nor hide a timeout; a runner
+that reports nothing makes the run incomplete, and a cancelled runner kills the command's group. `check_example_outputs.sh` (native, interpreter and open-bug reproducer runs),
+`check_callable_values.sh`, `check_hashmap_probe_invariants.sh`, `check_model_diff.sh` and
+`run_tests.sh`'s project fixtures count incomplete results separately (the suite summary gains
+`incomplete=`); the seventeen gates with a `timeout 300`/`timeout 120` watchdog use the helper's
+watchdog form and end with `bounded_gate_status`, which fails the gate on an incomplete command even
+when its output checks were satisfied. A timed-out command's whole process group is killed (TERM,
+then KILL) before the retry. `test_ssa.sh` already worked this way. The roadmap's promotion pipeline now defines
+passed, failed, incomplete, skipped and cancelled, and a qualifying run contains no incomplete
+result.
+
+A gate's verdict no longer depends on which git runs it or on a pipe race. `check_identity_separation.sh`'s
+C6 leg read `git grep -E '...|PackageIdentity\b' ... | grep -q .` under `pipefail`. Two hazards met
+there. `\b` is a regex-library extension: it matches nothing in BSD-regex git (macOS), while in
+GNU-regex git (Linux) it is a word boundary and also matched the legitimate `noPackageIdentity`
+constructor and a history comment. And `grep -q` exits at its first match, so git grep could die of
+SIGPIPE and the pipeline's status was that death: the leg, whose job is to fail on a match, passed
+in CI's regular jobs by losing the race. Mutation shard 18 of run 39753399178 won it, so the gate went
+RED ON CLEAN and two families scored INVALID. Ubuntu 24.04's git 2.43 reproduces the match on main's
+tree. The leg now scans Lean code with a small tokenizer (`scripts/tests/lib/lean_idents.py`:
+comments, docstrings and strings skipped, `noPackageIdentity` is a different identifier), captures
+before testing, names what it found, treats a failed git grep as an error rather than "nothing
+found", and checks the tokenizer on a fixture. Two more `| grep -q` legs in the gate are captured
+too. `check_gate_hygiene.sh` refuses `\b`, `\<` and `\>` in git grep patterns and git grep piped
+into `grep -q`, on continuation-joined lines, with controls; both checks catch the old leg.
+
+The promotion pipeline also records the flow in use: a candidate branch, `wip/*` backups under the
+hook's conflict-marker tier, the pre-push hook as the fast local tier, `ci/<name>` with a dispatched
+CI run (which includes the qualification jobs), a fast-forward of main on both remotes when every
+regular job is green, and remote servers for fuzzing and campaigns when available.
+
+The reliability exit has a measure. `docs/bugs/discovery.tsv` records one row per probe batch (date,
+kind, probe, effort, bugs found, which are silent), seeded with bugs 079 – 137 by the probe that found
+them (the 2026-10-18 hunts, examples-health, RocksDB, the V1 design examples, the exit 2i
+specification, the semantics probes, CI, reviews and fix follow-ons). New Phase 1 exit 2m (R-0491)
+closes when the last three counting probe batches each found no silent bug and at most one loud one.
+
+The roadmap opens with a generated bug dashboard: open bugs by primary structural class and by
+Phase 1 exit, silent and loud, and the discovery-rate trend, generated by
+`scripts/gen/bug_dashboard.py` from the bug records, `STRUCTURAL_CLASSES.md`, the discovery record
+and the exits table. `check_docs_drift.sh` fails on a hand edit or stale inputs (section 6, with
+negative controls for stale, malformed and incomplete inputs and for token batches), and the
+generator refuses a bug record with no discovery batch or with a status outside the vocabulary
+(reading it found 027, 049, 054, 058 and 064 still open, under spellings an `OPEN`-prefix test
+missed). A quiet probe batch counts toward exit 2m only with a recorded effort of at least four
+hours or ten programs.
+
+### A Match Whose Arms All Diverge Closes Its Merge (bug 175, 2026-10-22)
+
+A `match` inside a loop whose arms all end in `break`, `continue` or `return` now compiles. Before
+this fix it was refused at SSA verification (E0708) even though `--interp` ran it. Every arm
+diverged, so no arm reached the match's merge block, but `Lower` left that block open whenever
+the match was unit-typed. The early return in the result handling made the `unreachable`
+termination dead code. The statements after the match were lowered into the unreachable block,
+and in a loop that block fed the header phi. Under an `if`, the same defect gave bug 078's E0703.
+Bug 078 fixed this for the two `if` forms, and its record wrongly said that `match` already
+handled it. The merge is now terminated as soon as no arm reaches it. The defect failed closed.
+It is pinned by `regress_175_match_arms_all_diverge.con` (five shapes, binary equal to
+`--interp`) and four `check_divergence_detection.sh` rows.
+
+### Silent Safety Defects From The Second Semantics Evaluation Closed (2026-10-21)
+
+The second semantics evaluation (EVALUATION2) found safe programs the checker accepted and the
+binary then ran wrongly. Fixed here, each with a rejection fixture and a positive control:
+
+- **Comparisons (bugs 134 and 140).** `==`, `!=`, `<`, `<=`, `>`, `>=` are defined on integers,
+  floats, `bool` and `char`, and on raw pointers in trusted or `Unsafe` code; everything else is
+  E0229. A comparison never consumes an operand (it used to move linear operands: `Heap == Heap`
+  compared addresses and leaked both cells), references have no comparison (the binary compared
+  addresses, the interpreter refused), and aggregates no longer reach `llvm-as` as an ill-typed
+  `icmp`. A `Copy`-bounded generic comparison is re-checked per instantiation after Mono. The rule
+  is [ARITHMETIC_POLICY §8a](docs/archive/design-records/ARITHMETIC_POLICY.md#8a-comparison-operators).
+  Migration: 2 sites (`examples/hexdump`, `examples/png_chunks` discarded a Copy error through
+  `error == error`).
+- **No exit inside an operand (bug 142).** `return`, `break` and `continue` may not occur inside a
+  call argument, a struct/enum/array literal element or an operator operand (E0278): a `return` in
+  a later field after an owned value was moved into the literal leaked that value. Exits stay legal
+  in statement position, in a tail and in a let initializer (the let-else idiom). The rule is in
+  [STATEMENT_EXPRESSION_MODEL](docs/archive/design-records/STATEMENT_EXPRESSION_MODEL.md#exits-in-operand-position).
+  Migration: 1 test site (bug 086's `argret`, which existed to show the extractor declines it).
+- **`defer` reserves by place (bug 143).** A deferred call's arguments are locals, borrows of
+  locals or constants (E0279). A local passed by value is reserved, a local passed by borrow is
+  pinned: neither may be moved or consumed before the deferred call runs (E0206), a later `defer`
+  included. `defer pb(&h); free(h);` was a use after free. Ownership is not taken at registration,
+  so `let f = open(); defer close(f); read(&f);` is unchanged. Arguments bind by binding identity
+  (a later shadowing `let` is a different binding, already true since bug 087). DEFER.md states the
+  rule, and no longer claims `defer obj.method();` is accepted (it is E0282). Migration: 0 sites.
+- **Heap interiors are linearity-tracked (bug 144).** A by-value read of a non-Copy field of a
+  `Heap<T>` is E0290, and `free(h)` (or `defer free(h)`) of a non-Copy pointee is E0287: `let a =
+  h.s; let b = h.s;` double-freed a `String`, and `free(h)` dropped a live linear value. The
+  heap-node destructure is `let n = *h;` plus a pattern. KNOWN_HOLES H11's "heap interiors are not
+  tracked" exclusion is withdrawn. Migration: 22 test files (19 plain-data pointees declared
+  `struct Copy`, 3 node destructures), 0 in `std` and `examples`.
+- **Found in review (bugs 145, 146).** The raw `vec_free` intrinsic dropped non-Copy elements
+  (now E0287 unless the element is Copy; `Vec::drop` is the linear form; the matching `vec_set`
+  overwrite is bug 115's fix), and `*h` loaded a heap value without freeing its cell (it
+  now frees, as MEMORY_SEMANTICS always said, and is never a place: `(*h).f` is E0290, `h.f` is the
+  spelling). A move inside an erased `assert`, `assume` or `ghost let` is E0243 (bug 147): the
+  statement is erased, so the move never ran. A move inside the right operand of `&&` / `||` is
+  E0244 (bug 148): that operand runs only when the left one does not decide the result. Loop
+  conditions are checked inside their loop, every `return` must account for each live owned
+  value, and a labelled `break`/`continue` checks every loop it exits (bug 149).
+- **Diagnostic.** E0555 (`*h = v` on a `Heap<T>`) names the type as `Heap<R>`, not the internal
+  `Concrete.Ty.heap (Concrete.Ty.named "R")` term, and says how to write through a heap cell.
+
+### Four Exit 0b Lowering And Std Repairs: Bugs 102, 105, 115 And 126 (2026-10-21)
+
+A borrow of a local is the address of its slot whatever the local's type. A local holding a raw
+pointer, a reference or a heap shell used to be "already a pointer" to `Lower`, so `&mut err as
+*mut *mut u8` passed `err`'s value (bug 102: the RocksDB error out-slot trapped) and `&h` on a
+`Heap<B>` local passed the heap pointer. Such a local is now promoted to a stack slot like any
+other. The interpreter compares pointers (two reference paths by the place they name, a path
+never equal to null), so the bug 102 program runs under `--interp` with the binary's result.
+
+Field access through `&Heap<S>` / `&mut Heap<S>` follows the MEMORY_SEMANTICS §5 one-hop rule on
+both sides (bug 126). Elab elaborates `r.f` to two dereferences, the slot and then the heap
+pointer it holds, and every caller passes the slot. A field write through a `&mut Heap<B>`
+parameter used to overwrite the caller's heap-pointer slot, and `free` then trapped.
+
+A reference-valued `if`/`match` is no longer miscompiled (bug 105). The checker's E0238 refusal
+did not cover a generic instantiated at a reference type (`if c { a } else { b }` at `T = &P`
+segfaulted). The cause was in EmitSSA: a register of reference type was stored as if it held the
+referent by pointer, copying the referent's first 8 bytes into the reference's slot. The E0238
+source restriction stays (H28).
+
+The builtin `vec_get` and `vec_set` require a Copy element (bug 115). `vec_get` copied a linear
+element out while the `Vec` kept it, so a `String` taken twice double-freed. `vec_set` overwrote
+one without returning it. Linear elements use `vec_pop` or `Vec`'s `pop`, `swap_remove`,
+`replace` and `with_at`. Two test programs that drained a `Vec<String>` with `vec_get` now use
+`vec_pop`.
+
+### Concrete Symbols Live In Their Own Namespace (bug 129, 2026-10-21)
+
+The decided foreign/symbol-name rule (FFI.md "Symbol Names") is implemented. Every
+Concrete-defined function is emitted as `_C.<module path>.<name>` (the program's `main` is
+`_C.main.main`, called by the generated C `main`; it was `user_main`), and the runtime helpers as
+`_C$rt.<name>`. No C identifier can spell either, so a safe `fn malloc` no longer becomes the
+allocator every `alloc` calls (bug 129: the binary died with SIGABRT; it now exits 42), and a
+module's `extern fn abs` binds C's `abs` even beside another module's Concrete `abs`. The
+compiler's own C calls are `SCallee.foreign`, never resolved against Concrete definitions. Two
+attributes name C symbols: `#[link_name = "sym"]` on an `extern fn` (E0118 for a spelling outside C,
+and R-0484's effectful-symbol check now judges the bound symbol), and `#[export_name = "sym"]` on a
+function with a body (E0119 unless it is a C identifier not used by the runtime, an import or
+another export, with scalar parameters and result); a C harness calls an export in run_tests.sh.
+A foreign binding may not be spelled like a compiler intrinsic or runtime helper, nor bind one name
+to two C symbols (E0118), and an import may not be renamed to an intrinsic's name (E0120): each
+would be compiled as something other than the C call. Mangling is an emission concern: Core
+names, CallableIds, proof and report identities do not move. Found on the way and filed: bug 165,
+a `println` desugared into `print_int` binds to a same-named function the module defines
+(predates mangling), and bug 166, a foreign function taken as a value is called with the
+Concrete ABI (predates it too).
+
+### A Foreign `*_destroy` Function Reaches C (bug 103 recorded fixed, 2026-10-21)
+
+Bug 103 (an `extern fn` ending in `_destroy` replaced by an empty synthesized body, a silent leak of
+every C resource it releases) was filed from the RocksDB groundwork's older base; main had already
+removed the name-suffix synthesis on 2026-10-18 (`0c507fb9`, typed destructor dispatch: the reserved
+`$destroy` callee and the argument's type decide the destructor, glue is named `$destroy$<type>`).
+Verified and recorded: the RocksDB slice-1 gate passes 33/33 (G3 closed), and a new fixture links
+`regress_103_extern_destroy.con` with a C stub that counts the destroy calls.
+
+### Every Foreign Binding Declares Its Effects At Any Module Depth (2026-10-21)
+
+R-0484 R3 (every `extern fn` declares its effects, E0116; a known effectful C symbol is not
+`with()`, E0117) was enforced only over the module Resolve was handed, so an undeclared binding
+inside `mod t { mod ffi { .. } }` was accepted and charged `Unsafe` at the call (bug 113). The check
+now walks every nested submodule. That exposed bug 112: std's modules are submodules in a project
+build, so std.mem's `#[intrinsic]` `sizeof`/`alignof` reached R3 for the first time. An intrinsic is
+implemented by the compiler, not by C, so it is not a foreign binding and R3 skips it; the
+declaration std.mem uses now also compiles outside std (`examples/snippets/sizeof_intrinsic.con`,
+`examples/snippets/vec.con` promoted to run rules).
+
+### Small Exit 0b Repairs: `main` Parameters, Struct-Literal Order, Lossless `fmt` Floats (2026-10-21)
+
+Bug 111 is fixed: `main` may no longer declare parameters. The entry wrapper calls it with no
+arguments, so `fn main(argc: i64)` read an undefined register natively and failed in the
+interpreter. Any module-level `main` with parameters is now E0310, whose hint names `std.args`
+(the decision of 2026-10-21 in MAIN_EXIT_MODEL: `fn main() -> Int`, arguments only from
+`std.args`). No program in the corpus declared one apart from the reproducer and one invalid
+fixture.
+
+Bug 127 is fixed: struct-literal initializers run in source order in the binary too. `Lower`
+reordered them into the struct's declaration order before evaluating them, so
+`P { b: tick(5), a: tick(6) }` ran `tick(6)` first natively and `tick(5)` first under `--interp`.
+Each initializer is now evaluated in the order written and stored at its declared offset. The
+order gate in `check_evidence_build.sh` gains the native leg it lacked, and
+`regress_127_struct_literal_source_order.con` checks two-field, rotated, generic, mixed-width and
+functional-update literals in both consumers. Checking the neighbouring forms filed two more
+defects, contained by open-bug reproducers for exit 0b: functional update evaluates its base once
+per omitted field (bug 136), and enum-variant literal fields run in declaration order in both
+consumers (bug 137).
+
+Bug 135 is fixed: `concrete fmt` no longer changes float literals. It printed them with Lean's
+`toString`, six decimals, so `0.0000000001` became `0.000000` and `0.123456789` became `0.123457`,
+a different program with no diagnostic. The fmt gate's fingerprint comparison did not notice,
+because the legacy fingerprint renders floats the same lossy way. One exact printer,
+`floatLiteralString`, the inverse of the lexer's correctly rounded reader, prints the canonical
+spelling: the shortest decimal that reads back to the same double, and among those the nearest
+(what Python's `repr` picks); the formatter, `--emit-core` and `--emit-ssa` use it. Formatting
+preserves every literal's value; a literal written canonically keeps its spelling, any other
+spelling becomes the canonical one (`1.50` prints as `1.5`). `check_concrete_fmt.sh` gains a
+round-trip leg over every float literal in the corpus plus 311 sampled doubles, judged by Python's
+float reader against the exact constants in the LLVM output, and a leg requiring the canonical
+spelling of each sampled double. The legacy proof fingerprint keeps its lossy float rendering, since changing it would
+move identities; floats carry no proof claims today, and the v2 identity bytes were already exact.
+
+### Workload Programs Carry Minted Proofs (2026-10-21)
+
+Three Phase 7 workloads, written for users rather than for the prover, now carry seven
+source-linked claims that reach `minted` receipts: toml's lexer character classes `is_ws`,
+`is_digit` and `is_bare_key_char` accept exactly their TOML ABNF classes, and `is_newline` exactly
+LF or CR (per character; CRLF sequencing is not covered);
+hexdump's `gutter_byte` and `line_len` implement xxd's printable-or-`.` and 16-bytes-per-line
+rules; png_chunks' `png_sig_ok` accepts exactly the PNG signature. Each theorem evaluates the
+function's extracted body and holds for every `Int` input; proofs use standard axioms only
+([proofs/Examples/Toml](proofs/Examples/Toml/Proofs.lean),
+[Hexdump](proofs/Examples/Hexdump/Proofs.lean),
+[PngChunks](proofs/Examples/PngChunks/Proofs.lean)). The claim inventory grows by seven
+rows. Getting there needed source rewrites, because the extractor refuses boolean `&&`/`||`. That
+gap, and two more (`u64` division, remainder and bitwise operators, which keep std's CRC32 step
+out of reach, and `Bytes` reads that
+extract to calls no proof table models), are recorded with their exact refusals in
+[PROOF_EXTRACTION_GAPS.md](docs/verification/PROOF_EXTRACTION_GAPS.md).
+
+### Second-Class References And One Binding Per Visible Name Are Enforced (exit 2i, 2026-10-21)
+
+The reference and lexical-binding rules of [MEMORY_SEMANTICS §15](docs/archive/design-records/MEMORY_SEMANTICS.md)
+are enforced with versioned migration diagnostics. **SCOPE-1@1** (E0301): a binder may not reuse
+the name of a visible local binding (parameters, two parameters of one function included, `let`,
+destructuring, match / `if let` / `while let` binders, `for` header binders, borrow-block reference
+and region names); sibling scopes, loop bodies and assignment are not collisions. Duplicate
+parameters used to reach `llvm-as` (bug 124, closed). **REF-6@1**: no `let` binds a reference
+(E0302) and no reference binding is ever assigned (E0303), at Check and again after
+monomorphization (a generic `let y: T = x` or `x = y` at `T := &Int`). A reference now exists only
+as a parameter, a call argument, a borrow-block binder or an arm binder through a borrowed
+scrutinee. Nested patterns rename a binder with **`Variant { value: inner }`** (also in `if let`,
+`while let` and destructuring `let`; E0304 for a field list that does not match). Every
+reference/binding diagnostic names its rule and version (`rule: REF-6@1`, `spec: ...§15`) and gives
+the mechanical rewrite in `next:`; the `--report diagnostic-codes` ledger names each code's rules;
+the front-end "may not return a reference" rejections now carry E0236. The acceptance manifest
+`tests/rules/exit_2i.tsv` (179 rows) is checked by `scripts/tests/check_rules_2i.sh`. Migration:
+std 16 binders, examples 17 sites (one a `let`-bound reference), tests about 70 fixtures (renamed,
+rewritten, or re-expecting E0301 / E0302 / E0303). Found on the way: a shared borrow-block binder over
+a `Heap` passed to `&Heap<T>` read through the slot (bug 126's third form, fixed with bug 126), and a destructuring
+`let` was desugared only at a function's top level (a nested one, or one in a method, had
+undeclared binders); it is now desugared in every nested block, `assert` / `assume` condition and
+method, keeping a value block's value (a `for` header destructure is refused explicitly).
+
+### The Interpreter Runs More Real Programs, And Found A NaN Miscompile (2026-10-21)
+
+`--interp` is the independent oracle for exit 2c, and it could not run much of the example corpus.
+This pass closes interpreter gaps so the interpreter and the binary are compared on more programs.
+Module constants work (bug 117): the initializer is evaluated at the use, in its own frame, and a
+name two modules define is refused, as Lower refuses it. A function imported from a nested module
+can be called (bug 118). A call spelling now resolves per calling module the way the backend
+resolves it, and any ambiguity is refused instead of being settled by list order. Floats are
+modelled in IEEE `f64`/`f32` (bug 128). An integer-to-float cast rounds to nearest-even, a
+float-to-integer cast is the checked conversion, and `%` is C `fmod`. `return` from a call argument
+or a struct-literal field now leaves the function, as it does natively (D4). A trapping run's
+stdout can now be compared (D13): the interpreter models the C library's stdout buffer, which
+`abort` flushes on Darwin and glibc does not, and orders `write(1, ..)` output ahead of
+still-buffered `print_*` output as the binary does. The first float programs
+exposed bug 150, silent wrong code in the binary: SSA cleanup folded `x != x` to false and
+`x == x` to true for a float `x`, because its float guard read the comparison's `bool` result type
+instead of the operand type. That fold is fixed. New differential legs in
+`check_codegen_differential.sh` (`float_semantics`, `return_in_value_position`, and
+`print_then_trap`, which compares the output before the trap). Four examples move to
+`interp=yes`: `constants`, `floats`, `import` and `project`.
+
+The interpreter now has a typed heap. It covers `alloc`/`free`/`Heap<T>`, `malloc`/`realloc`/`free`
+and raw pointers with element-sized arithmetic. A pointer cast to an integer stays a symbolic
+address: offset arithmetic works on it, and any other use is refused. `String` is the runtime's
+`{ptr, len, cap}` struct over a heap buffer, and each string builtin follows its `EmitBuiltins`
+code. A fixed table models the C functions the corpus calls: memory functions, stdio, `FILE *`
+over an in-run overlay (the host's files are read but never written), argv, stdin, `getenv` and a
+few libm functions. Any other foreign function is refused. So are uninitialized or reinterpreted
+memory, use after free and host values such as the clock: the interpreter never makes up a value
+for them. On a project's entry point, `concrete src/main.con --interp -- args` interprets the
+whole module graph `concrete build` compiles, std included, with the program's arguments and
+stdin. `check_example_outputs.sh` runs the interpreter with each case's arguments and stdin, in its
+own scratch copy of the example. Interpreter/native agreement on the example manifest went from 89
+of 151 cases to 146. The remaining five are refused for a stated reason: four read the clock, and
+one reads a union through an inactive field. Two more native defects surfaced. Bug 152 (fixed):
+`string_trim("")` returned a one-byte string holding the byte past its source. Bug 151: `a.b_f` and `a_b.f`
+flattened to one name, and the binary's `a_b::f()` ran the other function. The interpreter refused
+that call, and main's E0299 containment for bugs 097/098 now refuses the program too.
+
+### Std Consuming APIs Say Who Owns The Resource After A Failure (2026-10-21)
+
+The stdlib now applies the ownership-on-failure convention (semantics evaluation item B2): a
+consuming API that can fail either returns the resource in its error, consumes it with a documented
+reason, or only borrows it. Four `close` methods ignored the OS result, so a failed close was
+silent. `fs.File::close`, `io.TextFile::close`, `net.TcpListener::close` and
+`net.TcpStream::close` now return `Result<u64, FsError | IoError | NetError>`. The error carries
+no handle, because `fclose` releases the stream whether or not it fails and Linux releases the
+descriptor even when `close(2)` fails, so a retry could close someone else's descriptor. `FsError` and `NetError` each gain a `CloseFailed` variant. `fs.write_file`
+and `fs.append_file` now report a failed final `fclose` instead of returning `Ok`.
+`text.AsciiText::try_new` returns the rejected string (`Result<AsciiText, String>`) instead of
+freeing it behind `None`. `Vec::set_unchecked` and `MutSlice::set_unchecked` now require `T: Copy`:
+they overwrote a slot without returning or destroying the old element, silently losing a linear
+value (`Vec::replace` is the linear form). `Child::wait` and `Cli::parse` now document that they consume on failure.
+The audit table of every consuming fallible or replacing std API is in
+[STDLIB_DESIGN_PRINCIPLES.md](docs/stdlib/STDLIB_DESIGN_PRINCIPLES.md#ownership-on-failure).
+New tests cover closing an invalid descriptor, a flush-at-close failure on `/dev/full` (Linux), the
+rejected `AsciiText` input coming back byte for byte, and a same-key map insert returning the
+displaced linear value exactly once. **Breaking:** the four `close` signatures,
+`AsciiText::try_new`, the `Copy` bound on both `set_unchecked`, and exhaustive matches on
+`FsError`/`NetError` (see `examples/http`). `Child::wait` remains consume-on-failure: outside the
+supported runtime profile (a foreign signal handler without `SA_RESTART`), an `EINTR` would abandon
+the child, and telling it apart needs `errno`, which std does not bind yet.
+Found on the way and filed, not fixed here: bug 134, `==` on an enum or struct passes the checker
+and fails in `llvm-as` (`icmp eq i64` on an aggregate); pinned in `check_example_outputs.sh` for
+exit 2c.
+
+### Same-Named Types And Functions In Two Modules Are Two Definitions (bugs 096 – 098, 2026-10-21)
+
+Core identified a struct, enum or newtype by its spelling, so two modules' `P` were one type to
+Layout, Mono, Lower, EmitSSA and the interpreter: a module read another module's `P` at the wrong
+offsets (silent wrong code), a module's own enum variant was refused by Resolve, and generic
+destruction of two same-named types was refused (bug 052's E0814/E0815 containment). Elab now
+spells every type by the definition it resolved to, `<defining module path>_<name>` when two
+modules declare the name and the plain name otherwise (`Concrete/Elab/TypeSpelling.lean`), and
+Resolve searches each module's own scope first (bug 096). A function name two top-level modules
+define is spelled `<module>_<name>` in Core, so the interpreter no longer runs another module's
+private function (bug 097) and Mono no longer shares one specialization between two modules'
+generics (bug 098). Each reproducer runs natively and in the interpreter in `run_tests.sh`.
+
+### Generic Inference Reads One Argument-Type Peek; Generic `&self` Destructors Specialize (bugs 099, 100, 2026-10-21)
+
+Check and Elab each inferred a generic call's type arguments from their own argument-type peek, and
+the two drifted: Elab could not see through a field access, an index or a call, so Core
+instantiated `pick<Placeholder>` where Check had typed `pick<Inner>` (invalid LLVM IR, or bug 052's
+E0814 refusal for a `Destroy`-bounded call), and Check could not type a method-call result (a false
+E0220). Both now call one peek, `Concrete/Resolve/PeekType.lean` (bug 099). `destroy(h)` on a generic impl's `&self` destructor was left
+unspecialized (`use of undefined value '@Holder_destroy'`); Mono now matches a destructor's
+receiver through its implicit borrow and refuses (E0814) a destructor it cannot specialize
+(bug 100). Each reproducer runs natively and in the interpreter in `run_tests.sh`.
+
+### Language Semantics Decisions Written Into The Normative Docs (2026-10-21)
+
+Ten language-semantics proposals and four items of external advice were evaluated against probes of
+main, run natively and in the interpreter, and against corpus counts. Every recommendation was
+adopted, and each rule now sits in its canonical document with its status on main, its enforcing
+site (or "not yet"), the bugs it prevents and its owning roadmap exit. References exist only as
+parameters, call arguments, borrow-block binders and arm-scoped pattern binders. No `let` binds a
+reference, and no reference binding is ever assigned (MEMORY_SEMANTICS §15 REF-6; reference
+parameters are assignable today, which is how a dead slot was read). Constants are values. SCOPE-1
+is staged behind the renamed pattern binder, and the heap one-hop field rule is now a representation
+rule (exit 2i, bug 126). Evaluation is left to right in source order, literal fields included, and
+assignment evaluates its right-hand side first (STATEMENT_EXPRESSION_MODEL; exit 2j). Lossy numeric
+`as` casts become compile errors, staged: named checked, truncating, reinterpreting and rounding
+operations first, then rejection with versioned migration diagnostics, then migration
+(ARITHMETIC_POLICY §8; exit 2k). The shift rule (the count is checked, shifted-out bits are
+discarded) is stated exactly. Every Concrete function gets a mangled symbol disjoint from C, with
+`#[link_name]` and an export attribute (FFI.md). Layout is observed only through `sizeof` /
+`alignof`, through one `Layout`, and `Option` / `Result` get per-instantiation layout
+(LAYOUT_CONTRACT). Consuming fallible APIs state what they do with the resource on failure
+(ERROR_CONVENTIONS), and recoverable versus terminal failure is restated (FAILURE_STRATEGY). `main`
+keeps `-> Int` and loses parameters (bug 111). Narrowing its return type is recorded as an open
+decision. The probes found new defects, filed as bugs 127 – 131: struct-literal order (127), the
+interpreter's int → float identity (128), a safe `fn malloc` capturing the allocator (129) and
+reference-parameter re-pointing (131) in exit 0b, and the loud `as bool` failure (130) in exit 2c.
+Writing the rules found three more silent ones, recorded for exit 0b and not yet filed: a move
+under a live arm binder, dereference-assignment order and functional-update evaluation, each of
+which differs between the binary and the interpreter or reads a moved value. Stale text was corrected: NUMERIC_MODEL's wrapping-overflow section, ARITHMETIC_POLICY's
+shift and §14 contradictions, the removed `->` heap syntax, and `--report profile`'s wrap-gap line.
+`check_build_profiles.sh` now pins the corrected report text.
+
+### The Verified Compiler Is The Primary Track, With A Gated Capacity Allocation (2026-10-21)
+
+The roadmap now protects the verified compiler by capacity, not only by queue order. A new
+[capacity allocation](docs/archive/ROADMAP_LEGACY_PLAN.md#capacity-allocation) gives the verified compiler at least 55% of each
+planning cycle and two integration slots. Evidence integrity gets at least 15% and adversarial
+validation at least 10%. Interop, application, usability and release work are capped at 20% and share
+one slot. `check_roadmap_coverage.sh` gates the table with thirteen negative controls (78 checks). A
+defect disposition rule applies to new bugs. Silent defects (memory safety, wrong code, false proofs)
+are stopped at once, by repair or by fail-closed containment. Loud defects are filed with their owner
+in [STRUCTURAL_CLASSES.md](docs/bugs/STRUCTURAL_CLASSES.md) and pinned until that owner removes their
+class. This answers bugs 102 – 120 being found in about two days. Queue row 4 becomes verified-pipeline
+Part 1 for the whole language: identities, the authoritative Core checker, and also one `Layout` and
+Place MIR in the existing profile. It starts once row 0's in-flight candidates are accepted, after a
+development-speed baseline (R-0355). V1c, restricted source → checked Core correspondence, is a named
+and gated deliverable, so a Core-to-native theorem is never presented as source-to-native. Several
+existing owners gained acceptance milestones: a clean-machine package exercise with upgrade and
+roll-back (R-0285, R-0365), a shared fault-injection checkpoint (R-0030), and a practical debugging
+checkpoint that gates workload expansion (R-0515, R-0281). The first two workloads' `std` subset
+(R-0021, R-0488) and maintenance pilots (R-0515) are covered too. The ethlambda port, `std` breadth and
+tooling stay bounded until V1b. The reasons, and what was not adopted, are in the roadmap's
+"Priority decision, 2026-10-21".
+
+### Every Example Builds And Its Output Is Checked, Natively And In The Interpreter (2026-10-20)
+
+json, mal, vm and policy_engine had stopped compiling behind `skip`, and the CI smoke step only caught
+crash signals while skipping examples by name. All four are ported (privacy kept through accessors and
+constructors in the defining modules), along with 18 snippets; the obsolete `enum` snippet is removed.
+The ports fixed two example bugs the old tests could not see: json's nested containers pointed at the
+wrong slots, and mal evaluated closure arguments twice (exponential; its benchmark never finished). In
+[scripts/tests/example_manifest.txt](scripts/tests/example_manifest.txt) a `skip` must name an owning
+gate that CI runs and that references the file (two remain), library-shaped proof examples compile as
+objects (`compile-lib`), and a program blocked by an open compiler bug is `known-bug NNN` with its
+failure text. The new `check_example_outputs.sh` runs every runnable example on fixed inputs and
+compares exact stdout and exit code natively and under `--interp`; network servers are `@norun` with
+reasons. Thirteen compiler and interpreter bugs found on the way are filed as
+[108](docs/bugs/108_bool_cast_trunc.md)–[120](docs/bugs/120_interp_field_borrow_through_ref.md), each
+with a reproducer the gate keeps pinned; policy_engine also hit bug 105 (a reference-valued `if`).
+
+### One Qualification Verdict, Generated Candidate Record, Structural Bug Classes, Bug 104 (2026-10-20)
+
+Stage (c) qualification is now one verdict over every required job at one candidate SHA:
+`scripts/ci/qualification_record.py` derives the required set from every job of the CI workflow (plus
+the scheduled multi-kernel mutation step) and emits `verdict=qualified` only when all succeeded at
+that SHA; the mutation aggregate's `qualified=1` is one component and can no longer stand for the
+verdict. `check_qualification_record.sh` (CI, campaign-publisher job; gate commands 251 → 252) refuses
+cancelled, failed, skipped, missing, in-progress, other-SHA and mutation-only run records. The roadmap
+now separates starting from accepting: RocksDB slice 1, V1a and V1b may be implemented and
+experimented with now, and their prerequisite exits gate acceptance and any safety claim. The
+"Implemented, not yet accepted" table is generated from `docs/project/candidates.tsv` (candidate SHA,
+exits, stage (a)/(b)/(c) results at that SHA, what acceptance unlocks) by
+`scripts/gen/candidate_table.py`; `check_docs_drift.sh` fails on a hand-edited or stale table or a
+malformed record. Bug records from 102 on must state a structural cause and owner
+(`check_bug_filing_complete.sh`), and [docs/bugs/STRUCTURAL_CLASSES.md](docs/bugs/STRUCTURAL_CLASSES.md)
+groups bugs 039 – 106 into fifteen classes with their owning tasks. Bug 104 is filed (OPEN, exit 0b):
+a reference assigned from an inner block into an outer reference variable records no borrow, so its
+source can be freed while the reference is read; batch 2's normalized place rule rejects both
+reproducers.
+
+### Targeted Examples And Scaled Differential Fuzzing Join The Plan (2026-10-20, roadmap only)
+
+[ROADMAP.md](ROADMAP.md) gains an example rule (every example has a behaviour-asserting gate; new
+examples target a bug class, an upcoming deliverable or a workload) and four scheduled example and
+fuzzing programs, all under existing tasks. Exit 2c (R-0491) gets a finite acceptance: eight named
+adversarial examples (linear flow, generic `Destroy`, nested same-named types, import aliases, casts at
+every width, `&mut self` receivers, match guards and function pointers, statement sequencing), each with
+its own leg comparing interpreter, native and expected output and, where claims exist, the proof model;
+it stays *continues alongside*. R-0285 gains four FFI and resource companions to RocksDB slice 1
+(file handle, callback with context, resource pool, release-everything error paths) that do not block
+it. R-0511 gains five V1a target programs with `#[proof_by]` claims inside V1a's scalar subset, its
+regression set, without widening the theorem. R-0491 gains scaled interpreter/native/model fuzzing
+campaigns, at least a hundred times the nightly counts, to run first on short-lived remote build
+servers once available.
+
+### Phase 1 Closes Through Classed Exits; Features Start On Their Own Prerequisites (2026-10-20, roadmap only)
+
+Queue rows 0 – 2 of [ROADMAP.md](ROADMAP.md) now close through sixteen individually closable exits
+(0a – 0c, 1a, 2a – 2l), each with an owning task, an acceptance test and a class: *blocks features*
+(a known false-proof, unsound-claim or memory-safety defect, or a named dependency of a deliverable) or
+*continues alongside* (consolidation or prevention with a finite acceptance test). A feature-prerequisite
+table names the exits each first deliverable waits for: RocksDB slice 1 (row 5, newly defined with its
+acceptance) waits for 0b and 2i; V1a and V1b (row 3, with the programs each must compile and the
+independently checked artifact) wait for 0a, 0b, 2a, 2g, 2h, 2i and 2j. The roadmap also gains a
+promotion-pipeline section (fast affected checks, the integrated full gate set, full qualification, and
+what invalidates each recorded result), a table of fixes implemented on branches but not yet accepted, and
+an entry rule: new blocking work needs a reproducer or a named dependency of the next deliverable.
+`check_roadmap_coverage.sh` gates the exits, the prerequisite partition against the classes and queue
+rows, and that no listed bug is already recorded fixed, with eighteen new negative controls. No task's
+obligations were dropped; row 2's obligations moved into its exits.
+
+### The Roadmap Is A Scheduled Plan Plus A Backlog With Pull Rules (2026-10-19, roadmap only)
+
+ROADMAP.md now keeps the phases, the execution queue and the tasks a queue row names or an active or
+next phase schedules; the other 154 of its 527 tasks moved unchanged to
+[docs/project/ROADMAP_BACKLOG.md](docs/archive/roadmap-2026-11/ROADMAP_BACKLOG.md), each with a task-specific
+**Pull trigger:** line. The backlog defines when a task is pulled (its trigger fires, a phase needs it,
+or a release checkpoint does), a review of every backlog task at each phase entry and release, and a
+review log. ROADMAP.md opens with one entry point (aim, current state, **Active phases:** /
+**Next phases:**, what is next, where everything lives), short phase and queue-summary tables, a
+glossary, and a single Releases section for the release rhythm and milestone scopes.
+`check_roadmap_coverage.sh` now reads both files and gates one home per task, no lost ID, placement
+against the active and next phases, pull triggers, the backlog review for the current phase and the
+queue summary against the queue, each with negative controls; `check_roadmap_linear.sh` spans both files.
+This is a planning change: no task's scope, phase or obligations changed.
+
+### The Claim Inventory Replays Locally (R-0208)
+
+The frozen claim inventory was judged only by CI's checker-acceptance step, which the local gate
+runner skips because it writes a measured-build artifact. Two locally green pushes failed there: bug
+079's first CI run, and 78e6af25, whose bug 079 follow-up fixtures added five claims the reference did
+not list. The reference now lists them: they are negative fixtures, refinement-checked with every
+receipt withheld. `check_claim_inventory.sh` replays the inventory row by row against the reference
+on any platform, rejects a broken checker environment instead of reading it as a verdict, and proves
+that a dropped claim and a flipped receipt are both caught.
+
+### The Proof Model Binds Match Arms As The Program Does (bug 084)
+
+`match b { Box::Full { v } => { return v; } ... }` was 0 in the proof model and `x` in the binary: the
+model looked arm binders up by field NAME and bound 0 when none matched, while Elab, the interpreter
+and codegen bind by POSITION (`P::Mk { b, a } => b` was 100 in the model and `x` at runtime). The model
+now binds positionally and fails instead of fabricating a value. No shipped claim depended on it and
+every theorem replays unchanged; `check_model_diff.sh` leg E pins renamed, swapped and wildcard
+binders (and the compiled binary) on `tests/regressions/bug084_enum_arm_binding`.
+
+### A Discarded Statement Is Not A Value (bug 086)
+
+`fn g(x) { if x > 0 { id(x); } return 7; }` extracted to `if x > 0 then id(x) else 7`: a one-statement
+block's expression was taken as its value whether or not it was a discarded `e;`, and the continuation
+was ignored. The same extractor modeled a `return` nested in a `let` initializer as that initializer's
+value (`11` in the model, `1` at runtime). Only a value-position trailing expression is now a block's
+value; a discarded call refuses extraction; an expression at a non-tail site must not contain a
+`return`, `break` or `continue`. `check_model_diff.sh` leg T pins the shapes.
+
+### Loop Bodies Run In Order In The Proof Model (bug 085)
+
+A loop body with control flow richer than flat assignments extracted to a `while_step` whose `Cont`
+fields were all built from the pre-iteration env: `x = x + 1; x = x + 1;` stepped by 1, a `let` or
+`return` after an assignment read the old value, and a fall-through `if` ended the iteration early,
+dropping the for-loop step. Assignments now bind sequentially (`letIn` + `Cont x := x`), and branches
+continue with the rest of the body. No shipped claim's extraction changed; `check_model_diff.sh` leg S
+pins ten loop shapes to their runtime values.
+### A Call In The Proof Model Is Bound To The Function It Calls (bug 081)
+
+A specification calls by name — `.call "check_class"` is the theorem table's entry under that key —
+and the extracted body keeps a call's local spelling, import aliases included. Edges were justified by
+table CONTAINMENT, so a `validate_header` that imported `check_version as check_class` was `proved`
+against `validate_header_correct` and minted a receipt while computing a different function. The
+elaborator now records what each call spelling reaches, scoped table evidence carries each entry's key,
+and every call of a claimed body must select, by key, an entry attested to that exact callee; anything
+else is `dependency closure unjustified`, naming the call, and issues no receipt. The stale-fingerprint
+warning now prints the `v2:` value to pin (it printed a hash of the V1 fingerprint). Gate legs X in
+`check_subject_binding.sh`, fixture `tests/programs/bug081_alias_key`.
+### A Function's Name Is No Longer A Proof Claim (bug 083)
+
+A program with no proof attributes defining `fn compute_tag(key: u8, message: u8, nonce: u8) -> u8`
+was reported `proved` (origin `hardcoded`) while its binary aborts on `compute_tag(16, 16, 1)`:
+`resolveSpec` fell back to `Proof.provedFunctions`, a compiler-side table keyed by qualified name with
+v1 body-string freshness, so any `main.compute_tag`, `main.parse_byte` or `main.check_version` with a
+matching body string inherited another program's theorem. The table is deleted; a claim now requires
+an in-source `#[spec]` + `#[proof_by]` + `#[proof_fingerprint("v2:…")]`. Every file it served
+(`thesis_demo`, `crypto_verify_drifted`, nine `tests/programs/` fixtures) now links in source, with
+verdicts unchanged except `origin` and one fixture helper (`check_version`) that had been reported stale
+against the ELF example's proof. `regress_083_no_claim_by_name.con` must report no claim.
+### A Link Does Not Discharge A Postcondition (bug 089)
+
+`#[ensures_proof(No.Such.Theorem)] #[ensures(result == 42)] fn f(x: Int) -> Int { return x; }` read
+`proved_by_lean` on contracts, vcs, obligation-ledger and audit with no Lean run. Each surface decided
+from the registry entry alone, so a nonexistent theorem, an unrelated theorem, or a bare
+`#[proof_coverage(iff)]` label was enough. `check-proofs` printed ✓ for any theorem that type-checked,
+and a rejected one exited 1 under "0 failed" while its receipt minted. One verdict,
+`Report.ensuresVerdictOf`, now decides every `#[ensures]`, and every surface reads it. Until ROADMAP
+"Exact property acceptance" can check that a theorem concludes the clause, no link or coverage label
+discharges a postcondition: linked clauses read `unproven`, including `ct_compare` and `hmac.ch`.
+`check-proofs` counts a rejected ensures theorem as failed and never marks one ✓. Receipts are
+withheld when the ensures replay fails. Gated by `check_contract_negatives.sh` (bug 089 section, four
+fixtures × every surface).
+
+### The Proof Model Computes What The Program Computes For Casts (bug 080)
+
+`fn narrow(x: u64) -> u8 { return x as u8; }` was proof-eligible and its model evaluated `narrow(300)`
+to 300 while the binary returned 44: `PExpr.cast` was the identity for every cast, and the eligibility
+rule its documentation relied on did not exist. Value-changing casts now extract as `wrapCast` — the
+runtime's own two's-complement formula — and the specifications that had narrowed as the identity
+(HMAC byte and length stores, base64 `char_of`, numeric `try_from`) now prove their values fit. The
+class is now checked: `--report model-diff` evaluates the extracted model and the interpreter on
+boundary inputs of every scalar extracted function, and `check_model_diff.sh` requires zero mismatches
+across the corpus (140 functions, 5666 inputs). Restoring the old model makes it report
+`narrow(300): model=300 runtime=44`.
+### Bug 088: Literals Fit Their Type; The Folder Reads Constants At Their Width (2026-10-18)
+
+An unhinted integer literal defaulted to `Int` with no range check, so `let x = 18446744073709551615`
+was 2^64-1 in the interpreter and proof model and -1 in the binary. Every concrete type a literal
+receives now carries its range, the defaulted `Int` included (E0227). A cast operand only `Uint` can
+hold is typed `Uint`, so `0xFFFFFFFFFFFFFFFF as i64` is -1 on every path. A post-mono verifier
+range-checks literals instantiated at a type variable, and `--interp` runs it as well. The SSA folder
+reads every constant through `IntArith.wrapToType`, folds constant integer casts with the interpreter's
+wrap, and forwards identity casts normalized, so `0xFFFFFFFFFFFFFFFF as i64 < 0` no longer folds to
+false. Gated by new constant-fold and both-paths-reject sections in `check_cast_matrix.sh`; see
+[docs/bugs/088](docs/bugs/088_unchecked_default_literal_and_unnormalized_fold.md).
+### A Binder Cannot Consume The Binding It Shadows (bug 094)
+
+`let value = alloc(5); match mk(7) { Some { value } => free(value), None => free(value) }` compiled
+and leaked the outer `value` on the `Some` path: freeing the arm binder marked every binding named
+`value` consumed. Consume, use, reassignment, `defer` and the borrow-block freeze now update only
+the binding the name resolves to, by identity, so the arms disagree on the outer `value` (E0209); an
+arm binder stays arm-scoped and may shadow a live binding that is consumed after the match. A struct
+destructure binder, which stays in scope for the rest of the block, refuses to shadow a still-live
+non-Copy binding (E0292, as `let` already did). Fixtures `error_094_*.con` (three binder kinds) and
+positive controls `regress_094_shadowing_binders.con`, `regress_094_shadow_state_by_identity.con`.
+
+### Checker Bindings Have An Identity, Not Just A Name (bug 093)
+
+The scope-exit check for a block or match arm treated any binding whose NAME existed before the block
+as pre-existing, so `free(r); if c { let r = alloc(..); }` or a match binder `value` over a consumed
+outer `value` leaked silently (20000 iterations of a 32 KiB allocation in the probe). Every checker
+binding now carries a `uid`; block-local, return-path, branch/arm merge and function scope-exit
+checks match bindings by it. Fixtures `error_093_shadowing_block_local_leak.con`,
+`error_093_shadowing_match_binder_leak.con`, positive control
+`regress_093_shadowing_locals_consumed.con`.
+
+### References Are Never Stored In An Aggregate (bug 092)
+
+Only a bare `let r = &s` froze `s`; a reference parked in a struct field, enum payload or array did
+not, so `let w = W { t: &s }; s.drop(); let W { t } = w; t.len()` compiled and read freed memory.
+The documented rule (VALUE_MODEL, BYTE_VIEW: references are second-class, never stored in an
+aggregate) is now enforced: a struct/enum field type, struct/enum/array literal, binding or parameter
+that holds a reference inside an array, `Heap`, generic argument or field is rejected with E0239.
+Fn-pointer types with reference parameters, bare borrows and reference arguments stay legal.
+`error_escape_field.con` (which declared a `&Int` field) now stops at the declaration. Fixtures
+`error_092_ref_struct_field.con`, `error_092_ref_in_option.con`, `error_092_ref_in_array.con`,
+positive control `regress_092_refs_flow_down.con`.
+
+### Match Guards Are Read-Only (bug 090)
+
+A match guard runs before its arm commits, and a false guard falls through to the next arm. The
+checker recorded a move inside a guard as that arm's move, so `1 if take(h) == 99 => …,
+_ => take(h)` compiled and freed `h` twice (the probe binary printed a freed allocation). A guard
+that moves a non-Copy value, an outer binding or the arm's own payload binder, is now rejected with
+E0300; reading through a borrow stays legal. Fixtures `error_090_guard_moves_linear.con`,
+`error_090_guard_moves_binder.con`, positive control `regress_090_guard_reads.con`.
+
+### Stack Budgets Fail Closed (bug 065, 2026-10-18)
+
+`--report stack-depth`'s `Max stack bound:` maximised over the bounded functions only, so a
+program with recursion still printed a number (`20 bytes (leaf)` while `main` recursed), and the
+`[policy] max_stack_bytes` gate, the `[allocation] stack_max_bytes` gate and the release bundle's
+`evidence.max_stack_bytes` each scraped it: a budget passed an unbounded stack. The line now reads
+`unbounded` whenever any listed function is, and all three consumers parse it through
+`scripts/tests/lib/stack_bound.sh`, which refuses it (the bundle publishes `"unbounded"`). Two
+invalid-JSON paths in the bundle manifest were fixed on the way. Gated by
+`check_stack_budget.sh` with a recursive budgeted fixture and a bounded positive control.
+
+### Import Aliases Bind Their Name (bug 082, 2026-10-18)
+
+`import a.{check_version as check_class}` beside another module's `check_class` ran that other
+function on both backends: the alias spelling went into Core, and every consumer resolved it against
+the whole program before any alias table. Elab now spells a call, function value or `fnRef` through
+an import by the definition it names (`<sub>_<orig>`, the prefixed path, or `<module>_<orig>` for a
+sibling top-level module, which is also used unaliased when several top-level modules define the
+name). CoreCheck records the import's capabilities under that spelling. The interpreter reaches
+top-level functions under `<module>_<fn>`, so `module::fn` and aliased calls run under `--interp`. A
+module that binds one name twice (an import and a local function, or two imports of different
+definitions) is refused with E0299. Elab's cross-module rename no longer rewrites a name the body's
+module imports from elsewhere: a submodule's `std.math.abs` was being sent to a sibling's `abs`. A
+project's aliased import from a sibling submodule now builds (bug 055).
+Regression: `tests/codegen/import_alias_binding.con` (differential, pinned 77324; previous compiler
+12814), the project test `regress_082_project_alias_binding`, and two `run_err E0299` fixtures. See [docs/bugs/082](docs/bugs/082_import_alias_loses_to_same_named_definition.md).
+
+### Block-Scoped `let` Shadowing Is Lexical (bug 087)
+
+A `let` inside an `if`/`else`, value-`if`, loop body, `for` header or borrow block that shadowed an
+outer name used to share that name in Core. Lower read the inner slot after the block closed, the
+interpreter leaked loop-body bindings, and the extracted proof model let a branch binding scope over the
+rest of the function. As a result, `shadow_if` returned 1 in the interpreter and 100 in the binary, and
+a borrow-block shadow read a dropped `String`, which is a heap use-after-free. Elab now alpha-renames
+shadowing block binders (`x` → `x.bN`, as bug 045 did for match binders) and closes every block.
+Evidence binders keep their positions, so no shipped fingerprint moved. The proof normalizer strips
+`.bN` only where the result is injective, which removes a capture that had dead-let-eliminated a loop
+body's `let`. Regressions: `regress_087_let_block_shadow.con` (interp, binary and model all lexical),
+the `regress_087_borrow_shadow_uaf` project, and a shadowing shape in `fuzz_differential.py`.
+
+### Trait Impl Conformance Closes A Capability-Smuggling Hole (Bug 091, 2026-10-18)
+
+An impl method could declare more capabilities than its trait method. A call through a
+`T: Trait` bound was checked against the trait's signature, then specialized to the impl's body
+without being checked again. So `impl Act for Loud { fn act(&self) with(Std) .. println .. }`
+printed under a chain of functions that declared no capabilities. Three changes close it:
+
+- An impl method's capabilities must be a subset of its trait method's declared set (E0586). This
+  fails closed: a trait method without `with(..)` admits only impls without one. `Destroy` keeps
+  its `Alloc` fence (E0584).
+- The rest of the signature must also conform (E0587): receiver form, parameter types, and no
+  method-level type or capability parameters.
+- A call through a trait bound costs the caller the trait method's capabilities (E0240).
+
+Generic trait methods, whose type parameters were silently dropped, are refused at parse. A new
+post-mono verifier (`verifyCapsPostMono`) re-checks the specialized call graph. With E0586 disabled
+it still refuses the reproducer.
+
+The trait-bound charge found two instances of the same shape in std. `HashMap::remove` and
+`OrderedMap::remove` destroyed the removed key through `K: Destroy` without declaring `Alloc`.
+Both now declare `with(Alloc)`, and so does `OrderedSet::remove`. See
+[docs/bugs/091](docs/bugs/091_trait_impl_capabilities_hidden_by_generic_dispatch.md).
+
+Round 3: `Destroy::destroy` consumes its receiver whichever form the impl declares. A borrowed
+`x.destroy()` (generic or concrete) had run an owner's destructor while the owner stayed live,
+so it was destroyed twice; it is now E0290 outside trusted drop glue, and an owned
+`t.destroy()` moves `t`. A `&mut self` method called through a shared reference is E0237 (Elab had
+built a `&mut &T` and the callee wrote out of bounds), and an implicit receiver borrow obeys
+the explicit borrow's mutability (E0233) and aliasing (E0232/E0231) rules. Bug 052's destructor
+dispatch (and ordinary `T$m` dispatch) no longer picks between two modules' same-named types:
+a top-level `Tracked`'s destructor had run for a nested `Tracked`. Both backends refuse an
+ambiguous type name or impl set (E0814/E0815) until type identity survives into Core. The receiver, borrow, argument,
+provenance and overlap checks now share ONE normalized place rule (`(*r).p` and `r.p` are one
+place); an expression it cannot trace is E0238 — a deliberate, documented restriction (KNOWN_HOLES
+H28, owned by R-0499) that rejects e.g. `if`-produced references and temporaries as `&mut self`
+receivers. It fixes bug 104 (a reference re-pointed by assignment at block-local
+storage is refused) and bug 107 (shadowing a binding a live reference borrows is refused); bug 105
+(a reference-valued `if` miscompiles) is contained at the checker and bug 106 (a hung model-diff
+report the gate swallowed) is fixed. Bug 123 is fixed with it: a module constant of reference type
+is refused at the declaration (E0239), and a borrow rooted at a module constant (`&X`, `&K.v`,
+`&A[i]`, the implicit `&self` of `K.get()`), which read a stack slot nothing initialized, is
+E0238; copy the constant into a local first. The review also refused writing a reference through
+a reference (`*slot = &local`), which left the caller a dangling reference on `main`.
+Bug 131 (a reference parameter re-pointed at a block-local value) is refused by the same
+re-pointing rule as 104. Bug 132, found by the 123 review: two modules' constants of one name were
+one constant to Lower (a submodule read another module's `A`, silent wrong code on `main`); a use
+of such a name is refused (E0602) until constants carry their module.
+
+### Claims Root Across Package Edges (R-0482 P1, manifestful projects)
+
+A claim whose body calls into std or a dependency package used to refuse its root as `unscopedEdge`:
+the report path's ProofCore held only the user's modules, and a cross-package call is spelled by the
+caller (`BoundView_len`) rather than the definition (`numeric_BoundView_len`). The report path now reads
+the loader's whole-program ProofCore through a scoped view, so closures, correspondence and edge typing
+see the program while every listing stays the user's; the call graph resolves such a callee through
+the program's linker aliases when exactly one definition answers. Rooting is not evidence: a closure of
+only trusted std methods roots and carries trust, and a claim reaching an unproven, unsupported or
+unattested dependency function is still not proved. Carries the cross-package half of the migration's
+S control, deferred at `ab01f856`. Gate legs X1–X5 in `check_identity_separation.sh`; family
+`p1-closure-reads-program` (inventory 131).
+
+### Sparkle Analysis And Emitted-Code Validation Plan (2026-10-18)
+
+Added a [source-based analysis](research/compiler/sparkle-emitted-code-validation.md)
+of Sparkle at `1614cee`, compared with Concrete at `f5b201af`. It records emitted
+output validation, exact refactor/replacement claims, proof dependency separation,
+fresh downstream CI and counterexample-first proof work, with remaining trust
+boundaries and source references.
+
+R-0299/R-0300 now explicitly plan a separate relation from checked SSA or validated
+BackendIR to the actual emitted LLVM text, starting with `u8` checked increment,
+its real overflow helper and rejecting mutations. Their existing BackendIR V1
+scope stays separate. R-0297/R-0413 retain a bounded comparison of Lean 4 and
+Concrete implementations of a possible small native backend, including ISA/ABI,
+encoding and assembler/linker trust. This is a completed documentation/planning
+milestone; no semantic checker, native backend or machine-code proof shipped here,
+and the current implementation queue is unchanged.
+
+### A Claim Is Proved Only When Its Body Is What Its Theorem Is About (bug 079)
+
+On `b87152ba`, `fn always_seven(x: Int) -> Int { return 7; }` linked to `check_nonce_correct` was
+`proved` and minted a receipt that read back current. A body was compared with a specification only
+when the function's SOURCE NAME keyed a side table (`Concrete.Proof.specs`); otherwise the claimed
+`#[spec]` — the author's choice — was all issuance checked. One subject binding (`subjectBindingOf`)
+now governs the proved status, receipt issuance and receipt consumption: the extracted body's
+canonical digest and the function's parameters must be a specification VALUE the theorem's statement
+evaluates, with the parameters its `PFnDef` or `SpecDecl` declares. The values are computed in the
+theorem's own environment and checked in with the classification table, freshness-gated. The name
+table is removed. New status `spec_unbound` (E0813). Of the ten proved claims that were not
+drift-covered, nine bind; `loop_invariant.count_up` does not (its theorem evaluates no
+specification). Gate `check_subject_binding.sh` (12 legs, including rejection of the receipt
+`b87152ba` issued), three mutation families (inventory 130).
+
+### Every Theorem Re-Checked Outside The Lean Kernel (con-leche, nanoda)
+
+Every theorem Concrete's Lean sources declare — 3869 at `ab01f856`, read from the elaborated
+environment, 48 of them `#[proof_by]` evidence — is exported with lean4export (format 3.1.0, Lean
+4.34.1) and re-checked outside the Lean kernel. The 3834 on the three standard axioms are accepted by
+con-leche `--verified`, whose acceptance implies a set-theoretic model (no proof of `False` is
+accepted), and by nanoda, an independent Rust checker. The 35 resting on native trust, HMAC/SHA-256
+among them, are declined by con-leche and accepted by nanoda with exactly their six native axioms
+permitted. Every exported statement equals Lean's own in the kernel's view (lean4export shares
+expressions modulo binder names and the `let` `nondep` flag, so those are erased before comparing).
+Gate `check_external_checker.sh` (20 legs), CI job `External proof re-check`, three tools pinned,
+four mutation families (inventory 127). The hostile control hands one theorem another's proof and
+requires the specific rejection — a first draft was green on a malformed stream.
+
+Found on the way: the drat-trim corroboration of `bv_decide` checked only sample goals.
+`check_bv_certificates.sh` now captures the project's own SAT problems (six, one per native axiom)
+and measured all six trivial — one variable, two clauses — so the native trust lies in the compiled
+bit-blasting, which no certificate check reaches. `docs/verification/AXIOMS.md` now says so, names
+the four lemmas that own the native axioms (`axiom_native_owners.txt`), and records the pin-update
+procedure.
+
+### R-0482 Identity Separation: Freeze, Ratification And Atomic Migration
+
+Step 0 (2026-10-13, `1c013c7d`, `78d19e30`): canonical identity rows frozen — 323 normalized rows plus
+a raw-byte baseline tied to `61b2a261` — and definitions D1–D7 ratified with tagged scope origins
+(`docs/verification/IDENTITY_SEPARATION.md`).
+
+Migration (plan `docs/verification/IDENTITY_MIGRATION_PLAN.md`, P1–P4 accepted 2026-10-13): the single
+over-bound `PackageIdentity` — which hashed every source in the build, std included — is deleted and
+replaced by three identities, each with one producer and a private constructor:
+
+- `PackageScopeIdentity` — a tagged origin (`declared` namespace claim | `undeclared` | `standalone`
+  over the package's own artifact | `toolchain`, reserved for the bundled std) plus the declared
+  name. Never version, dependencies, std or content (except the stated standalone case).
+- `PackageArtifactIdentity` — sorted, PAIRED (module, content) records of the package's own files;
+  swapping two modules' bodies now moves it.
+- `ResolutionContextIdentity` — each resolved dependency's (binding, scope, artifact), std included.
+
+`DefinitionIdentity` is now `defIdV2`, scoped by its OWNER's scope (std's definitions under std's
+scope, not the project's); dependency roots render `depRootPreimageV3`; receipts are `receiptV3`
+with `scope` + `context` in place of `workspace`, derived from the ProofCore rather than supplied by
+the caller. A not-current receipt now names its repair: a moved root reads "re-establish", a
+context-only move reads "re-validate under policy". The resolver refuses an unidentifiable
+dependency, a dependency name bound twice, and two different undeclared packages sharing one name
+(D1, also refused at the attestation surface); the reference generator refuses 8-hex scope-prefix
+and symbol collisions (D5); the four manifestless producers are one (D6). The receipt decoder now
+reads the schema before refusing unknown keys, so an old envelope is `schema_unreadable` rather
+than a forgery.
+
+Measured: the old-to-new map (`identity-migration-map-r0482.tsv`) is total — 323 of 323 baseline
+rows mapped, 0 shared, 0 refused, no implementation digest changed — and the normalized freeze is
+byte-identical. An unused std edit now renames 0 symbols and moves 0 of 21 scopes (was 42 symbols
+in 7 packages); a sibling edit moves the artifact, not the scope; editing `check_nonce` moves
+exactly the roots of `check_nonce` and `verify_message`. New gate `check_identity_separation.sh`;
+`check_identity_overbinding.sh` and `check_identity_rows.sh` converted to their positive forms;
+8 mutation families (inventory 123).
+
+Deferred by decision (P1): claims whose closure reaches std or another package stay fail-closed;
+admitting them, with the reachable-std and cross-package sensitivity controls, is its own slice.
+
+### R-0208 CLOSED: Lean #14576 Fire Drill, Checker Identity And Advisory Policy
+
+Closed 2026-10-13 at `2b570c5a` (push CI 38327442096 green; 116-family campaign 38327460557
+qualified: 116 killed, 0 invalid, 0 survived, 0 could-not-apply, `completed=1`, `integrity_ok=1`,
+`qualified=1`). Lean issue #14576 (an axiom-free proof of `False` through wrong-structure
+projections) is accepted by lean 4.28.0, the checker this repository pinned, and rejected by 4.34.1;
+the retained upstream reproducer runs isolated in CI and must be rejected.
+
+What landed: receipts bind the checker that actually ran — version, commit, platform and a digest of
+the images the replay process loaded — beside the compiler identity (receiptV2, readable identity
+re-hashed on decode); issuance and consumption re-check every theorem's workspace constant closure
+in the kernel, with axioms allow-listed; a compiled advisory register (policy v4) decides
+revoked > affected > accepted > unknown at read time, accepting only measured builds — macOS aarch64
+`137d3402…` (shared by Nix and elan) and Linux x86_64 `3eb21141…`, each with self-contained evidence
+re-running the hostile controls on that exact build; ACCEPTED NOW requires an accepted build and this
+run's own re-check, so editing metadata or forging a consistent receipt never restores acceptance.
+The toolchain moved to Lean v4.34.1 (Nix, elan and CI aligned) against a frozen 71-claim inventory
+that replays identically; every source and evidence change is classified. The 31 receipts minted
+under 4.28.0 are named in `docs/verification/R-0208-closure.md`, which maps each criterion to its
+evidence and gate. The first campaign on the upgrade (`9204684d`) was UNQUALIFIED — one survivor where
+no Linux build was registered — and was repaired before closure.
+
+Remaining by decision: native-trust (`bv_decide`) receipts are withheld, a deferred feature; rollback
+protection is limited (a minimum `policyVersion`, not a signed register); the checker's self-report is
+nonce-correlated, not authenticated; toolchain `.olean` data is trusted via the build identity.
+
+### Post-R-0004 Mutation Campaign Qualified
+
+On 2026-10-11 the full 95-family gate-mutation campaign qualified on the published `670ec85a`
+(run 38104755470): every family's mutation was killed by its intended gate or by a declared build
+failure, with 0 invalid, 0 survived and 0 could-not-apply, every clean-tree baseline green, and
+`completed=1`, `integrity_ok=1`, `qualified=1`.
+
+What it took: the single 6-hour campaign job became 24 hash-assigned shards with a fail-closed
+aggregator; report-path SHA-256 moved to a fast implementation with byte-identical digests (its
+build-time guards are equivalence tests on fixed inputs, not a proof); campaign gates stopped
+inheriting the driver's snapshot environment, which had made the supervisor gate red on every clean
+tree; `divergence-detection` got its own gate, which found and fixed bug 078; and the two
+`freshFactsFor` survivors from the 81-family census were closed in `check_receipt_consumption.sh` by
+a status-only stale claim and a live trusted-boundary receipt. The first complete sharded run
+(`1f2fe0f1`, 93 killed, 2 survived) is what exposed that last gap.
+
+### R-0483 CLOSED: Owner-Bound Views For Zero-Copy Parsing
+
+_Library repair, closed 2026-10-09 at `4f005715` (main CI 37917463687)._
+
+The 2026-09-16 repair made views pointer-free coordinates, which left one gap: a
+`ByteView` built from one buffer could be applied to another of sufficient length, and the
+call site would not show it. `std.numeric.BoundView` closes the gap without a new language
+feature. The view owns the `Bytes` it describes, `byte(i)` takes no buffer argument, so a
+read against another buffer cannot be written (E0262). The owner is a private field (E0298),
+and the view is linear (E0208), so the owner cannot be mutated, reallocated or dropped while
+bound. `examples/packet` reads its payload in place with no copy and no `Alloc`, and its
+predictable profile stays at one failure (`main`, for I/O).
+
+Gated by `check_view_lifetime.sh` (28 checks), with positive controls for zero-copy reads,
+moved owners, cross-package use and rebinding after release. **Limit:** binding checks
+coordinates against the owner's bounds, not where they came from; `ByteView` remains
+reusable coordinates by contract.
+
+### R-0484 CLOSED: `with(...)` Lists A Function's External Authority
+
+_Language and report semantics, closed 2026-10-08 at `245cd51c` (main CI 37771982899)._
+
+A function's header now states the external authority it can reach, through handles,
+`trusted` bodies, foreign bindings and dependencies. Handles carry their capability in
+their type (`Writer<C>`, `Reader<C>`) and using one requires `with(C)`. `trusted` absorbs
+only `Unsafe`. Every `extern` declares its effects (E0116/E0117). Proof admission reads the
+same package-scoped assumption summary as the reports. Foreign effect declarations, trusted
+memory safety and descriptor classification are reported as named human assumptions, and
+indirect calls and unloaded callees are reported as incomplete coverage, not as
+"no external authority". JSON API v2 replaced `is_pure` with `no_external_authority`.
+
+**Accepted limits, each gated:** single-file mode and `--query` do not analyse
+dependencies and say so; bug 077 is contained by refusal; descriptor classification rests on
+the construction/caller audit; bodiless user declarations cannot carry `with(...)`; reports
+still compute the older opacity analysis beside the summary.
+
+**Not qualified:** the full mutation campaign was cancelled at GitHub's 6-hour job limit on
+both dispatched closure-candidate runs. That is recorded as incomplete qualification, not a
+pass. The campaign qualified later, on `670ec85a` (see the milestone above).
+
+### Proof Admission Separated From Proof Maintenance
+
+_Evidence-semantics repair, landed 2026-09-26 (R-0484)._
+
+The compiler refuses proof admission to a function whose effects may enter through an indirect
+call — a higher-order function receiving a handle carries authority that its header does not
+show. The rule was written, shown to work, and then left **inert for a release**, because
+enabling it appeared to drop three `pureCoreFns` links out of drift coverage (11 → 8) and out of
+replay entirely. That looked like the rule being too expensive.
+
+It was not the rule. It was a **coupling**: obligation status was derived from the admission
+predicate through a parameter merely named `eligible`, so refusing admission also withdrew the
+obligation, and withdrawing the obligation removed the function from maintenance. One predicate
+was answering four different questions:
+
+| question | holds when |
+|---|---|
+| extractable | the extraction rules permit an obligation |
+| admissible  | extractable **and** every semantic admission gate passes |
+| replayable  | extractable **and** a claim/evidence link exists |
+| proved      | replay passed **and** admissible **and** correspondence/dependency rules pass |
+
+Status now derives from *extractable* and admission is carried beside it. The rule is live, drift
+coverage stays at **11**, registered claims remain replay targets, and extraction is untouched —
+a refused function still produces subject facts, so higher-order programs do not become
+dependency-free by being refused.
+
+**An admission failure must not erase an artifact from maintenance.** Otherwise reclassifying an
+effect silently removes claims from replay and drift detection while every report still reads
+green. Both directions of the recoupling are pinned by mutations.
+
+The report wording was a contradiction of the same kind: it said a function *"is eligible for
+proof"* directly above `admission: REFUSED`. Internally `eligible` had come to mean "an obligation
+can be extracted", but a reader takes "eligible for proof" to mean admissible — exactly the two
+facts this work separated. It now renders `obligation: extractable` / `registered proof: none` /
+`admission: REFUSED — <reason>`, and the consequence sentence depends on whether an artifact
+exists rather than asserting one that may not.
+
+Gated by `scripts/tests/check_effect_opacity.sh` (18 checks), which asserts the refusal, its
+transitivity, its narrowness (effect-free code stays admitted), and that every rendered state —
+including `proved` — reports its admission verdict.
+
+**Still open, and worth stating:** this is the conservative repair, not the full model. Becoming
+*opaque* is not the same as reporting what a function does. `print_bytes` must ultimately declare
+that it **performs** output, rather than merely failing to be known pure. That needs the
+`requires` / `carries` / `performs` split, and the `carries` leg needs effect-polymorphic handle
+types (`Writer<E>`), which the language cannot express today.
+
+### Capability Headers Now Bind Across a Sibling Submodule
+
+_Capability enforcement repair, landed 2026-09-20._
+
+A function declaring no capabilities, not marked `trusted`, could call a `with(Console)` function in
+a sibling submodule and print. The program compiled clean and ran. The same gap dropped `Unsafe`
+from an `extern` reached across a submodule — the one capability the language promises `extern`
+costs — while a call to that same extern from inside its own module had been refused correctly the
+whole time. Both programs are kept as fixtures under `tests/regressions/cap_sibling_module/`.
+
+CoreCheck built its function-signature table from one module's own functions, so a call into a
+sibling found no entry, and the lookup's `none` was read as *"this call requires nothing"* rather
+than *"I do not know what this requires"*. The `collectAllStructs`/`collectAllEnums` pair on the
+lines directly above already threaded types across the whole module tree; signatures were never
+given the same treatment. Submodule externs are now recorded under both spellings, because
+`prefixModuleFnNames` deliberately leaves extern names alone (they name real C symbols) while the
+call site still emits the prefixed form — the first fix closed the function path and left the extern
+path open, which only a separate program showed.
+
+**`capsContain` also under-approximated a union caller,** a separate pre-existing defect the repair
+exposed: it asked whether either side covered the whole requirement, so `Alloc ∪ Unsafe` did not
+cover `Alloc, Unsafe`. That disagreed with `missingCaps`, which has always normalized, letting
+`decideCall` report unsatisfied with nothing missing and render the self-refuting *"requires Alloc,
+Unsafe but caller has Alloc + Unsafe"*.
+
+**What was deliberately NOT changed.** Closing the hole made it tempting to let `trusted` confer
+`Unsafe` on extern calls, the way it already does for raw-pointer operations. Two fixtures older
+than this repair — `error_trusted_extern_needs_unsafe.con` and `error_trusted_no_extern.con`, the
+second named for the rule — say a `trusted` wrapper must still declare `with(Unsafe)` to call an
+extern. Uniformity was the wrong instinct, and a checker repair is not the place to retire a tested
+language decision. std reaches libc through `trusted extern fn` instead, which is the mechanism the
+language already had and `examples/elf_header` had been using all along; without it `String::eq`
+calls `memcmp`, and every string comparison in every user program would have had to declare
+`with(Unsafe)`.
+
+**The cost was honest.** 321 std signatures now declare what their bodies require (84 of them
+public), and 54 libc/alloc externs are explicitly `trusted extern`. Every declaration was added by
+iterating the checker to a fixpoint, so each function states the union of what its own call sites
+require and nothing more. Not one was a design problem: `println` really does deallocate a `String`,
+the `test.con` assertion helpers really do build them, and 131 of std's own test functions really do
+call those helpers. All 100 non-std packages check clean without modification.
+
+**A parser bug surfaced only because the requirement finally bound.** The body-less `fn` branch
+carried `isPublic` onto the declaration and dropped `isTrusted`, so `pub trusted fn sizeof<T>() ->
+u64;` reached `externFnRequiredCaps` as untrusted and was charged `Unsafe`. Nothing was computed
+wrong — the modifier was parsed and simply not recorded, and the consumer then read a structure
+default as an authorial decision. It was invisible while cross-module requirements did not bind;
+`check_std_compiled_coverage.sh` compiles one probe per std module under the full `Std` capability
+set, which by construction excludes `Unsafe`, and the `mem` probe stopped compiling. `sizeof` and
+`alignof` are now `pub trusted fn` — the compiler answers them at compile time from a type, so
+charging `Unsafe` for a size query was an artifact of how they are spelled, not a fact about what
+they do. Both fixtures for this are check-only: `#[intrinsic]` resolves by the compiler's own name
+table, so a renamed copy has no symbol to link.
+
+**The attestation identities moved, and were migrated rather than re-attested.** Changing std
+signatures changes package-scope identity, so 7 of 21 scopes produced new digests and 42 generated
+references were renamed. The old and new scopes were matched by the SET of `(module, function,
+body digest)` each contains — body digests are unchanged, since no function body changed — and every
+one of the 7 matched a single candidate, so nothing was paired by guesswork. Every reference was
+rewritten to match, in `Proof.lean`, `proofs/Examples/HmacSha256/Proofs.lean`, **and the
+mutation-anchor table** — the anchors embed attestation identities verbatim, so six mutation
+families had gone silently inert and `check_mutation_anchors.sh` is what said so.
+`crypto_verify` returns to 4 proved / 36 facts and `elf_header` to 5 proved, both 0 stale and
+0 closure-unjustified — the same baseline as before the repair. No proof was re-established, no
+claim was widened, and R-0208 is untouched.
+
+**A third hole in the same family is still open and is now a committed reproducer.** A cross-package
+*method* call is not capability-checked at all: a function declaring nothing can call `String::clone`
+and `String::drop`, which require `with(Alloc, Unsafe)`. Free functions from a dependency are checked
+correctly, and methods in the same module are checked correctly — only the intersection falls
+through. `tests/regressions/cap_sibling_module/known_hole_cross_package_method/` checks clean today
+and the gate asserts that it does, so the day it closes the gate fails and says so. It is also why
+the std declarations above cost consumers nothing yet.
+
+This corrects the *checker*, not the evidence semantics: it makes `with(...)` mean what it always
+claimed for required authority. The separation R-0484 is about — required versus carried versus
+performed authority — is untouched, and no proof or receipt depended on the gap.
+
+### Postfix `?` Removed; Explicit Result Propagation Is Permanent
+
+_Language surface and trust-story reconciliation, landed 2026-09-13 at `4fcc6a79`, `303f7223`,
+`8f9750fc`._
+
+Concrete no longer accepts postfix `?`. Recoverable failure still uses `Result<T, E>`, but a caller
+must match it exhaustively and write the returning error arm. The lexer retains `?` only to produce
+a targeted migration diagnostic; the surface AST, checker, Core IR, monomorphizer, interpreter,
+lowering, proof extractor and evidence identity have no propagation-specific node or rule.
+
+Positive Result/defer fixtures now use the explicit form, the removed syntax has a permanent
+negative fixture, and the surface-simplification gate rejects both parser re-admission and a
+propagation node surviving below the parser. Historical entries below still describe the period in
+which the operator existed; diagnostic codes E0275-E0277 remain reserved and are not reassigned.
+
+**Two derived artifacts were left behind, and that is the part worth remembering.** Dropping the
+propagation tag from `exprBytes` moves every identity computed over the evidence encoding, and three
+checked-in files are derived from those identities. The first commit regenerated
+`GeneratedAttestations.lean` and missed both `ClassificationTable.lean` (`303f7223`, which also
+refreshes `BuildIdentity.lean`, since the table is in the build-identity inventory) and
+`campaign-summary.golden` (`8f9750fc`, whose driver digest moved because the mutation anchors name
+attestation symbols that had been renamed). Zero body digests moved in either repair, which is the
+expected result: no proved body used the operator, so a moving body digest would have meant the
+encoding change reached further than intended.
+
+Each omission had a freshness gate, each gate lives in a different CI job, and they therefore
+reported hours apart rather than together. A green local build and a green `--full` suite did not
+predict any of it, because those gates are not in the suite. Final state is all fifteen CI jobs
+green, the campaign golden verified byte-identical from a clean tree, and the lesson recorded as
+checklist items in [ROADMAP.md](ROADMAP.md): a change that moves a digest must be treated as a
+change to everything derived from it.
+
+The roadmap's end-state wording was tightened at the same boundary. Concrete is an
+**evidence-bearing sequential-language core with stated, bounded trust assumptions and an explicit,
+shrinking TCB**, not a verified compiler. The word "verified" waits on H19-H21. Model
+correspondence is named separately as R-0482's philosophical-core gap: exact identity prevents
+substitution but does not prove that a Lean model describes the implementation. Scheduled package,
+tooling and resource work is separated from unowned trust holes; typestate remains workload-pulled
+by the protocol flagship rather than pre-admitted.
+
+### What A Record Says Versus What Anyone Checked
+
+_Campaign supervision, 2026-09-08. Landed at `591224f2`, `c7c6cd45`, `b7b7c2cf`, `9ea22652`,
+`738a99a2`, `dbf00d0c`._
+
+The macOS residue of the lock repair was one line. Shell-instance identity fell back to
+`sh -c 'echo $PPID'` inside a command substitution, which reports the substitution subshell's parent
+— stable on bash 5 because it elides the fork, unstable on the bash 3.2 macOS ships. The fix is
+`exec sh -c` plus a stability check at arm time. It was found only after the macOS smoke batch was
+made to retain each constituent's command, exit status, stdout and stderr separately; the previous
+batch reported that ten gates failed and nothing about why. All thirteen CI jobs are green.
+
+Nine identity fields in the campaign artifact were checked for SHAPE and described as provenance.
+Four driver and inventory digests are now compared against values the supervisor computes itself,
+and three workspace fields must reconcile with observations it already took. Two cannot be observed
+at all: `baseline_compiler_sha` names a compiler that existed only inside a disposable workspace the
+supervisor never enters, deleted before reconciliation. A well-formed digest there does not say
+which compiler ran. Rather than imply otherwise, both are declared NON-AUTHORITATIVE, every one of
+the 45 published fields is partitioned by authority status, and the partition is asserted exact — a
+field cannot be added without someone deciding what its status is. The load-bearing control is that
+qualification does not move when those two fields do.
+
+An OBSERVED comparison whose expected value was empty used to be skipped, so a hashing failure
+silently disabled it: both snapshots empty, in agreement, schema satisfied, nothing compared. That
+is the fail-open the tier exists to remove, and it was introduced by the change removing it.
+
+The decisions were well controlled; the asking was not. The 350 lines that decode the launcher
+report, reconcile the candidate and install or refuse the artifact lived inside an
+`if [ role = supervisor ]` no gate could enter, so deleting a refusal's CALL SITE left every
+helper-level control green. They now live in the decision library, driven by thirteen controls that
+run the real publication path against a sandbox, and six mutation families sever one call site each
+while leaving the decision intact — measured pristine-green then mutated-red, red on the control
+naming that call site.
+
+Moving the code exposed a dependency it had hidden: the body found its inventory through `$0`,
+correct only for as long as it lived in the driver. The first gate to call it read its own path and
+reported an inventory of zero families — a refusal about the harness wearing the words of a refusal
+about the campaign. The driver names itself now, and an unnamed inventory is a refusal rather than a
+fallback.
+
+Two control expectations written here were wrong and the body was right: an unusable launcher report
+is fatal and publishes nothing, and a surviving process group refuses qualification while still
+writing a record that names the refusal. The controls were corrected, not the code.
+
+The mutation inventory is 91 families, not 85. No qualifying campaign is claimed.
+
+### The Repository Lock Had No Lifetime
+
+_Gate infrastructure, 2026-09-05. Landed at `a6e4ab68`, `f6bc158b`, `be924d68`, `f90cb4be`._
+
+CI had been red on `main` since 2026-08-23 across six job families. The cause was one defect:
+`_gate_lock_acquire` took the repository lock and nothing gave it back. Release was explicit only,
+on the stated theory that gates set their own trap — of the 167 gates that take the lock, 137
+install no trap at all. The first gate in a run that rebuilt kept the lock, every later lock-taking
+gate was refused, and aggregators counted each refusal as a failure. The gates were never broken:
+each passed standalone, and all eleven of a failing aggregate passed once the lock was cleared
+between them.
+
+The repair is a lifetime, not a cleanup call. The lock is armed for release at the moment of
+creation so it covers the whole run — releasing it when the rebuild finishes would reopen the
+window while a gate is still collecting evidence about the binary it just verified. Only the
+creating shell instance arms and releases, so a re-entrant child cannot release its parent's lock.
+`trap` is wrapped so a later gate trap composes with the release instead of replacing it: 29 gates
+install theirs after acquiring and would have silently lost it.
+
+Two adversarial reviews found ten further defects in that repair, each reproduced before being
+fixed: a plain subshell deleted its parent's lock (`$$` is shared, `BASHPID` is not); the macOS
+shell has no `BASHPID`, so the fallback silently reinstated that bug on the platform with an active
+job; a terminating signal released the lock and then let the gate keep running unlocked; the CI
+runner's deliberate fail-closed retention on interruption was reversed by composition; a failed
+release exited 0, because returning non-zero from an EXIT trap does not change the status; and
+composing with `;` let a cleanup ending in a comment comment out the release.
+
+`check_gate_lock` grew from 4 verdicts to 45. Reverting the library to the stranded implementation
+turns 14 of them red.
+
+With the leak gone, CI surfaced a genuine failure it had been masking. A portability gate reported
+"the binary still references /proc/self/exe — receipt issuance would refuse on macOS"; that
+conclusion about Concrete came from a fact about `libuv`, which Lean links — shared locally, static
+in CI. Concrete's own sources contain the string once, inside the docstring recording why it was
+removed. The check now tests Concrete's sources with controls in both directions.
+
+Also recorded: `grep -q` at the end of a pipeline is a false negative under `pipefail` — grep exits
+at the first match, the producer dies of SIGPIPE, and a successful match reads as a failed
+pipeline. It bit twice while writing these controls. 64 files under `scripts/tests` contain the
+pattern; a canonical sweep is carried as follow-up.
+
+Result: six failing CI job families reduced to zero. The macOS residue that survived this fix is
+recorded below
+whose evidence the smoke batch had been discarding.
+
+### Generated Evidence Freshness And Dormant-Gate Repair
+
+_Compiler evidence and CI gates, 2026-09-02._
+
+Classification refresh now owns the complete generated surface it advertises: the source-linked
+theorem inventory, classification rows, external table rows and scoped external rows are derived by
+one command before either file is installed, and are reproducible under `--check`. The classification
+freshness gate uses that same producer instead of naming a partial remedy. This refreshed stale package/table
+bindings without deleting the five live theorem links that an earlier truncated diff had appeared to
+blame.
+
+The stricter CI-reachability analysis then exposed two genuinely dormant gates. Classification
+freshness and the migration manifest are now direct workflow steps. The latter was red: it retained
+two conflicting exact-join implementations, parsed an obsolete V2 report phrase, pinned the retired
+44-link count locally, and printed `CLOSED 44/44` while measuring 43. It now consumes the same
+43-link population pin as the V1 golden gate and reports `MIGRATION-MANIFEST: PASS=12 FAIL=0` with
+43/43 links, 52/52 subjects accounted, and zero unowned, subject-less or nondeterministic rows.
+
+The attestation-manifest injection control also stopped using pre-existing Git dirtiness as evidence
+that an injection escaped. It now compares the actual root targets byte-for-byte from the start and
+end of the injection, retaining the escape check while allowing an intentional generated-table
+refresh to be validated before commit.
+
+### Post-R-0004 Mutation Harness Hardening And Diagnostic Census
+
+_Harness and documentation, 2026-08-21/22. Causal harness landed at `898d9a7b`; typed campaign
+accounting landed at `98dee5e3`. No qualifying current-inventory result is claimed; the inventory is now 91 families, not 85._
+
+The mutation harness now distinguishes “a gate went red” from “this mutation made its intended
+rule go red.” A scored kill requires a green pristine gate, a pristine build, an exact unique
+anchor, an authenticated gate completion, then restore/rebuild/re-run green and
+reapply/rebuild/re-run red. Mutations execute in disposable workspaces and every launched unit must
+report back; missing or empty results cannot become success.
+
+This work withdraws earlier 15/15 and applicability claims that were based on weaker checks.
+Independent review repeatedly found the same infrastructure defect class: one fact had multiple
+producers with different acceptance rules—tree state, anchor matching, kill attribution, locks and
+completion artifacts. The canonical producer/consumer was repaired rather than adding another
+summary-side check.
+
+The complete diagnostic campaign against `898d9a7b` executed and reported all 81 families:
+
+```text
+73 killed by their named gate, each reproduced red -> green -> red
+ 6 invalid experiments
+ 2 survived
+ 0 could_not_apply
+```
+
+The artifact and 173-line trace are preserved as `mutation-campaign-summary.898d9a7b` and
+`campaign_full.898d9a7b.log`. The two survivors are
+`freshfacts-requires-proved-status` and `freshfacts-carries-trusted-boundaries`; the production
+receipt-consumption gate lacks the live trusted-boundary receipt needed to distinguish their
+intended path from a material mismatch. The six invalid experiments are retained as findings, not
+counted as kills: four produced unattributable build failures, one only an unused-binding lint, and
+one never produced an authenticated gate verdict.
+
+The historical artifact says `completed=0` despite reporting all 81 families. Its schema had folded
+“zero unresolved families” into “the run reached reconciliation.” It also correctly refused global
+qualification because the control checkout's HEAD moved from `898d9a7b` to documentation commit
+`89a2bcb1` during the run, although the immutable tested workspace and all tree digests remained
+bound to `898d9a7b`. The artifact is not rewritten: under the later semantics it represents
+`completed=1`, `qualified=0`.
+
+Commit `98dee5e3` separates the facts. Artifacts now record mode, discovered/selected/executed/
+reported populations, killed/invalid/survived/could-not-apply dispositions, integrity, completion
+and qualification. Single-family probes can complete and succeed or fail on their selected result,
+but can never claim campaign qualification. Failure logs are retained so an invalid or survivor can
+be diagnosed instead of disappearing with the disposable workspace. Live controls demonstrate both
+a killed and a surviving single-family result.
+
+R-0004 remains closed by its protected 205/205 production-gate run. This campaign is stronger
+post-closure qualification, and the eight unresolved experiments plus acceleration/hostile-control
+work remain ahead of R-0208 and R-0482.
+
+Roadmap status was consolidated in the same documentation pass: the August 1 red dashboard and
+old “next 20” queue are historical, Slice 8 is shipped rather than pending, the current strict path
+starts with mutation qualification and R-0208 before R-0482, and a second kernel is research-gated
+rather than a product-path dependency. The detailed chronology is indexed in
+[docs/archive/R-0004_EXECUTION_HISTORY.md](docs/archive/R-0004_EXECUTION_HISTORY.md).
+
+### R-0004 CLOSED: Trustworthy `proved`
+
+_Compiler, gates and harness, 2026-08-20._
+
+Closed on a protected serial run rather than on a claim. `.ci-gates-summary` at `a839d519`:
+`completed=1 mode=closure jobs=1 discovered=205 executed=205 passed=205 failed=0`, no refusals,
+clean tree, `HEAD == origin/main`.
+
+**What the verdict now requires.** A friendly `proved` needs a current exact subject, a complete
+dependency root, explicit trust and assumptions, and a receipt only a successful kernel replay can
+mint. `ProofEvidenceReceipt` has no total constructor, so "unchecked facts became a receipt" fails
+to typecheck rather than failing a test.
+
+**Bugs 059 and 060 are closed** and verified behaviourally: a whole-signature `i32 -> u32` change
+and an added `#[ensures]` both stale the claim. Their tripwires — legs asserting the wrong verdict
+on purpose while the defects were open — fired, and were inverted rather than deleted.
+
+**A misattributed proof link was found and deleted.** `proof_pressure.validate_header` was linked to
+a theorem about `elf_header`'s `validate_header`: same qualified name, nothing else in common, and
+it survived every name-based check for months. Correspondence caught it. Repaired by removing the
+claim, because no theorem proves that body — so the population is genuinely one smaller (44 → 43
+stored links) and every denominator that counted it was corrected.
+
+**The evidence path was not in CI.** Fifteen gates were unreachable from the workflow the runner
+derives its list from, including all eight R-0004 evidence gates and the two meta-gates enforcing
+single-producer authority and non-vacuity. A gate nobody runs is indistinguishable from one that
+does not exist, so `check_gate_registration.sh` now enforces reachability as a transitive fixpoint.
+
+**Harness integrity became a closure requirement, because the completion evidence depends on it.**
+The runner gained a closure mode that forces serial execution (the default was cores−2, so "serial"
+silently ran four-wide), start/end reconciliation with ten named refusal causes, and preserved
+output for failing gates. Mutations now run in a disposable copy: a `kill -9` had previously left a
+compiler source mutated in the working tree, and no trap can prevent that.
+
+**One gate was a syntax error hidden behind its own early exit.** `check_clean_checkout` reported
+`PASS=11 FAIL=0` while exiting 1, because a stray `exit 1` sat immediately before an orphan `fi`
+that bash therefore never parsed. Seventeen of its thirty-seven assertions had never run. It is now
+17/0 with summary and exit status in agreement.
+
+**Recorded, not resolved:** PackageIdentity over-binds — a two-line std edit moved 7 of 21 measured
+package identities — and post-build executable bytes are unclaimed, since the identity is
+computed at build time over an explicit 96-file source inventory. Both are fail-safe: the failure
+mode is demotion, never a proof credited to a body it does not describe.
+
+### R-0004: V2 Activation, Portable Compiler Provenance, And Slice 8
+
+_Compiler and gates, 2026-08-17/18._
+
+**V2 subject digests are ACTIVE.** The live freshness verdict compares the V2 subject digest — which
+binds signature, contracts, capabilities and constant environment as well as the body. The corpus
+census is unchanged before and after (35 proved, 5 stale, 4 dependency-not-current, 15 unbound, 15
+ineligible, 32 no-proof, 9 trusted, 1 blocked), which is the point of migrating first: activation
+without migration turns 43 links `needs_recheck` in a single commit. Atomic by necessity — storing v2
+values while the comparison is still v1 marks every migrated link stale — so the rewrite, the deriver
+flip, the regenerated attestations and the regenerated classification table are one change.
+
+Nothing was given a manufactured value. A stale link is pinned to a body that no longer exists, so no
+honest v2 value exists for it; the drift fixture keeps demonstrating real staleness because its links
+were pinned to measured pre-drift digests.
+
+**The compiler identity now travels with the binary.** Three earlier versions named something else:
+`git status` (any untracked file invalidated every receipt), `git rev-parse HEAD` (a binary built from
+one commit claimed another once the checkout moved), and `sha256sum /proc/self/exe` — which named the
+right object and made receipt issuance REFUSE on macOS, an active CI platform. It is now a 128-bit
+build-time constant over the compiler's own sources, portable and free at run time, with a freshness
+gate that compares what the binary reports against what the sources produce.
+
+**Clean-checkout reproducibility**, including the control that was missing: a receipt minted in one
+checkout consumed against another checkout's sources at a different absolute path. An unbuilt checkout
+issues nothing rather than issuing unverified receipts.
+
+**Slice 8 attack suite** (24/0 after the independent packet): substitution between claims,
+packages and programs; trust deletion, laundering and fabrication; partial decoding, schema
+confusion, duplicate and unknown fields,
+truncated digests; forged roots, artifacts and table bindings. Every attack modifies one record in a
+store of five genuine receipts and asserts BOTH that the attacked record is rejected AND that the rest
+stay current, so neither deny-all nor accept-all can pass. It found one real defect: a store holding
+two contradictory records for one subject reported one current and one not, letting a reader conclude
+a claim was receipt-backed from a store that disagrees with itself. Both are now refused.
+
+**Defects found by independent review**, all fixed: the macOS breakage above; a 64-bit truncated
+identity; a compiler-identity control that only grepped for strings and never made identification
+fail; module enumeration that could visit one file twice under two path spellings; and a 64-ancestor
+depth cap in project discovery that returned a silent `none`, reproducing the location-dependent
+authority bug at a different depth.
+
+### R-0004 Package 3: Receipts Become Production Evidence — Issued, Stored, Re-checked
+
+_Compiler and gates, 2026-08-16. `--report receipts` is new; no existing verdict changed._
+
+**The vertical slice closes.** `--report receipts --out <path>` mints from real kernel replay and
+writes; `--report proof-status --receipts <path>` reads back and RE-CHECKS. On `examples/elf_header`:
+5 issued, 0 withheld, then 5 current. Issuance derives none of its four inputs itself — kernel
+acceptance, theorem classification, subject digest, dependency root each come from the single
+producer that already answers that question — and every withholding names its cause.
+
+**A receipt read back from a file is not evidence.** `StoredReceipt` is a deliberately different type
+from `ProofEvidenceReceipt`, with no minting path and no function from one to the other. All it can do
+is agree or disagree with material computed fresh from the program right now. The storage key is
+untrusted: swapping two receipts under each other's names moves exactly those two. Decoding refuses
+rather than repairs — missing, duplicate and unknown fields, unreadable schema, malformed value — so
+partial decoding, schema confusion and receipt/claim substitution are all closed at the boundary.
+
+**Two bugs the corpus caught that unit probes did not.** Issuance minted receipts for `stale` claims
+on the drift fixture: the token says the kernel accepted a THEOREM, not that the theorem still proves
+THIS body. And every receipt disagreed with itself the instant it was written, because a `Name`
+containing dots serialized in display form as `«Concrete.Proof.elfFns»` and decoded back with the
+guillemets — the round-trip probe used table `A`, too simple to expose it.
+
+**Contract-witness precision is deferred, with a tripwire.** Measured: the entire proof-linked corpus
+has 45 body dependency edges, 1 trusted, and ZERO contract edges, and a contract edge is currently
+witnessed as a body edge — strictly stronger, so nothing is unsound. Deferred to the typed-contract
+milestone on this project's own dependency order, which freezes evidence-affecting changes until
+Slice 8 closes and refuses to freeze an incomplete internal representation. `check_dependency_edges.sh`
+now measures the premise and goes red if a contract edge ever appears.
+
+**The ninth table's blocker is identified rather than asserted**, and R-0004 is therefore NOT formally
+complete: `packet.decode_header` needs cursor state threaded through `PExpr`, which has no
+representation for a call returning a value alongside a new state.
+
+### R-0004 Package 3: Kernel Replay Becomes A Service, And Minting Requires It
+
+_Compiler and gates, 2026-08-16. No production verdict changed._
+
+**"Did the kernel accept this?" now has an answerer.** The check lived inline in `compileAndReport`,
+entangled with that function's JSON parameter, and every failure path printed and returned an exit
+code — so nothing else could ask it. It is now one producer,
+`ReplayRequest -> IO (Except ReplayRefusal ReplayResult)`: typed inputs, every failure class returned
+as a value, the environment retained alongside the verdict, and no evidence side effects. An empty
+request REFUSES rather than reporting a vacuous success, because `List.all` is true over an empty
+list and a vacuous "everything was accepted" is the one answer a minting authority must never get.
+`make test-replay-producer`, 23/0.
+
+**Minting a receipt without a replay no longer typechecks.** `mint?` took the theorem artifact and
+the toolchain as plain strings, so any caller could name a theorem nobody had replayed, under a
+toolchain nothing had run, and get a well-formed receipt. The rule is now a construction chain rather
+than a predicate — `replay` is the only producer of `ReplayResult`, which is the only source of
+`SuccessfulReplay`, which `mint` requires — and the artifact and toolchain are taken from the run
+rather than from parameters. Validation split out as pure `ReceiptMaterial.of?`, so the 36 existing
+receipt probes stayed cheap; the ones that genuinely exercise a receipt now replay a theorem first.
+
+Four ways a completed run still witnesses nothing: a verdict that was not `accepted` (an
+accepted-but-unbound claim records freshness against nothing), an interrupted run, a theorem absent
+from the request, and a workspace resolved from the caller's directory rather than the input.
+
+**This is authority, not issuance.** Nothing in the production pipeline mints, so no stored receipt
+affects any status. Ten mutation families cover the extraction step; the chain itself cannot be
+mutation-tested, because a mutation that opens it stops compiling.
+
+**A defect the extraction surfaced.** `generalFailure` was computed after the fallback that marked
+every target failed, so it was unreachably false: the `env_failure` status and the transcript
+disclosure were dead code, and a file that did not compile was reported as every theorem
+individually "not found" — the same misdiagnosis the workspace-resolution fix exists to prevent.
+
+**A gap it did not fix.** A package whose entry point is `src/lib.con` cannot be loaded as a project,
+so it has no package identity and no scoped evidence. `std` is that shape; nine of its proof links
+read as unjustified, and `check_purecore_proofs.sh` is red at 19/20. Verified as pre-existing against
+a build without this session's changes. An entry-point fallback was implemented and reverted for
+turning a loud error into a silent zero-function success.
+
+### R-0004 Package 3 Opening: Receipts Bind The Closure, Evidence Is Reproducible
+
+_Compiler and gates, 2026-08-16. No production verdict changed._
+
+**The replay receipt binds what it claims to.** The envelope named four of the seven things the
+authority criterion requires; it now binds the dependency ROOT (as the validated root preimage's
+digest), the THEOREM ARTIFACT, and TRUST as a flag plus the boundaries by name. Without the root a
+receipt bound the tables a theorem mentions and said nothing about the closure the claim rests on;
+without the artifact it survived a proof being replaced by a weaker one that happens to typecheck.
+Every new field participates in the currency comparison — a field in the envelope and absent from the
+comparison reads as bound while binding nothing.
+
+**Evidence is reproducible, measured rather than argued.** The same program compiled from a different
+absolute path and a different directory name yields byte-identical attestation join, dependency roots
+and correspondence, with a one-byte body mutation as the non-vacuity control and a determinism check
+beside it. `make test-evidence-reproducibility`, 5/0.
+
+**The first eligibility-denominated coverage baseline:** 35 of 91 eligible claims proved, with the
+remainder named exactly — 31 no-proof, 15 unbound, 5 stale, 4 dependency-not-current, 1 blocked, 0
+unjustified — over a denominator that reconciles against the reported lines. 15 ineligible and 9
+trusted are excluded, being outside the provable subset and a declared boundary respectively. The
+gate also asserts the report still discloses that it does NOT run the kernel, so the number cannot be
+read as replay coverage. `make test-coverage-baseline`, 5/0.
+
+**Trust travels the whole closure, and says so at every status.** The assumption line used to appear
+only under `proved` — but a trusted boundary is a property of the closure, not of the verdict, so a
+`stale` claim resting on one disclosed nothing until it turned green. Now reported wherever it holds,
+from one producer. A new two-hop fixture (`composition_deep_trust`) shows a subject whose own body
+mentions no trusted function still disclosing the boundary two hops away; the mutation that narrows
+the computation to direct callees dies against it.
+
+**Still open, stated plainly:** nothing mints a receipt. Kernel replay works and already separates
+theorems whose claims have no stored subject from those that do, but the invocation is inline in
+`compileAndReport` and its failure paths print rather than return; extracting one replay producer is
+the next piece. The 44-link migration, repository-root/clean-checkout reproducibility, and adversarial
+closure remain untouched.
+
+### R-0004 Packages 1–2: Scoped Definition Identity Becomes Authoritative
+
+_Compiler, gates and corpus, 2026-08-15/16. **Production `proved` verdicts changed.**_
+
+Proof-table membership and the per-edge correspondence join no longer key on a source NAME. Every
+evidence boundary — requested edges, witnesses, table membership, dependency roots — keys on
+`DefinitionIdentity`: package, module, declaration and implementation together, with no name-keyed
+fallback anywhere in the path.
+
+**Attestation.** All nine proof tables are converted. A table binds each of its models to a
+GENERATED reference emitted from compiler facts; nobody transcribes a package identity or a digest.
+The manifest carries two populations kept apart by `binding_role` — SUBJECT rows (a declaration some
+fixture links a proof to, frozen at 86 = 0 + 39 + 47) and DEPENDENCY rows (one exact implementation
+per requested body-edge callee, 41 requests all attested). References are deduped on (table, package,
+module, declaration, implementation) and every one is either bound at a table site, a NAMED
+exclusion, or a declaration the table holds no model of.
+
+**Authority.** A claim may be `proved` only if every compiler edge in its dependency closure is
+witnessed exactly once by an entry naming that exact implementation, AND the closure computes.
+`correspondence_unjustified` is a distinct status through every surface — canonical string, currency
+predicate, diagnostics, report rendering, traceability, obligation ledger and release policy — and is
+not current for dependents, so an unjustified closure cannot become the foundation of another.
+
+**Measured at closure:** 35 proved / 0 unjustified across the fixture corpus; 13 subject roots refuse,
+none of them proved; `tests/programs/proof_decode_header.con` is the live control, its hardcoded link
+naming a table with zero canonical entries.
+
+**Defects this work found in itself,** each fixed and controlled:
+
+- Four CLI paths built package identity independently; one dropped the project's own identity and
+  synthesized one from the invoked file's text, so the same program reported 5 proved through one
+  command and 4 through another.
+- Two drift fixtures sat beside `main.con` in one package, both resolving to module `main`, so the
+  loader picked `main.con` and **their drifted bodies were never analyzed** — reports printed one
+  file's line numbers with another file's semantics. Both now have their own packages and report
+  exactly the stale functions their headers always claimed.
+- The authority downgrade ran after diagnostics and did not propagate, so a caller could stay
+  `proved` over a callee that had just stopped being current.
+- `correspondence_unjustified` was missing from six supposedly exhaustive surfaces, including the
+  `concrete check` exit code — a false green in the command a release gate runs.
+- The classification generator serialized raw attestations, skipping every check that makes the
+  scoped path trustworthy, and freshness regenerates through that same producer.
+- `PackageIdentity` prefix-matched manifest keys (`namespace` answered `name`) and exempted
+  `contentRoot` from the location-dependence check.
+
+**And three checks that could not fail.** A tripwire grepped a symbol renamed two weeks earlier; a
+`grep -q` pipeline raced with SIGPIPE under `pipefail` and failed about one run in three; and the
+test suite, dying mid-run under `set -e`, produced no summary — which reads identically to a clean
+grep. The suite now writes a machine-readable summary file and exits **97** with a banner if it ends
+without one.
+
+### R-0004 Dependency-Root Status And Refusal Gate Reconciled
+
+_Roadmap and gate only, 2026-08-09. No proof verdict or production consumer changed._
+
+Compacted every canonical R-0004 status surface to the current shadow measurement: 62 of 64
+subjects root and two refuse explicitly. The remaining classification-evidence, per-edge
+correspondence, trusted-boundary and production-consumer requirements are stated at each summary
+instead of being visible only in the investigation transcript.
+
+Strengthened the corpus refusal check from “at least one refusal has an actionable explanation”
+to exact correspondence: every refusal must match a typed root-error shape that names the
+responsible identity or edge. The gate also refuses an empty corpus, so zero refusals cannot pass
+vacuously.
+
+### Roadmap Governance And Verification Direction Clarified
+
+_Roadmap only, 2026-08-09. No compiler, language, proof status, or release claim changed._
+
+Added a concern-based area index, one authority order for conflicting roadmap text, and precise
+stage vocabulary distinguishing representation, shadow measurement, production consumption,
+corpus migration and closure. The current execution queue now explicitly owns sequencing; phase
+position is topical organization, and task-state compaction prevents superseded investigations
+from remaining as competing present-tense status reports. Canonical schema ownership is also a
+roadmap invariant so later package, editor and audit work consumes rather than forks the evidence
+model.
+
+Reframed the proof-support north star around compositional, fail-visible verification. Meaningful
+behavior must cross the complete source/contract → subject/claim → obligation → dependency/trust
+closure → replay receipt → caller/package-policy chain. Multi-kernel replay remains a defining
+evidence dimension, but kernel or construct count is no longer phrased as the product objective.
+The corrected inventory separates termination from general liveness, treats useful termination
+inference as possible despite undecidability in general, represents evidence as a vector, and
+describes backend-surface fidelity as not formally established today rather than inherently
+unprovable.
+
+Synchronized R-0004's canonical status with its shared shadow dependency-root producer: 53 of 64
+subjects currently root and 11 refuse explicitly, while no production status consumes the root.
+The next transition is exact classification completion, no dropped edge, production-consumer
+enforcement and a killed omission mutation—not receipt issuance merely because the helper can
+compute or mint an intermediate value.
+
+### Roadmap Organized Around Capability Unlocks
+
+_Roadmap only, 2026-08-09. No compiler, language, or proof verdict changed._
+
+Added a stable capability-unlock layer above the 470-task topical catalog. It groups tasks by the
+user-visible boundary they jointly create—trustworthy replay-bound `proved`, typed compositional
+contracts, one faithful verification pipeline, portable multi-kernel evidence, practical proof
+authoring, auditable safety/resources, independently checkable artifacts, proof-aware local
+packages, release, ecosystem tooling, and research-gated extensions—without renumbering or
+physically reordering task bodies.
+
+Every major unlock now shares a graduation contract: positive/negative/non-vacuous controls,
+class-level regression, production-consumer mutation, exact denominator and named holes,
+reproducibility, independent hostile review, claim/document convergence, and explicit deletion of
+the weaker path. Progress is staged as representation → shadow → production → migration → red
+team, so helper code cannot be mistaken for a shipped guarantee.
+
+The roadmap also records one cross-phase forcing artifact, distinguishes ordinary contracts from
+future paired-execution relational verification, pulls only the minimal local package/evidence
+boundary before beta, and pulls only the minimal incremental proof-diagnostic/editor consumer
+before release. Public registry, remote cache, advanced IDE breadth, concurrency and relational
+verification remain later or workload-gated rather than becoming accidental release blockers.
+
+### R-0004 Adversarial Validation Made A Completion Slice
+
+_Roadmap only, 2026-08-09. No compiler or proof verdict changed._
+
+R-0004 now has eight explicit slices. Slice 8 is a mandatory hostile validation pass over the
+authoritative, migrated evidence pipeline produced by Slice 7, not optional follow-up hardening.
+It attacks subject and claim binding, link ownership, direct/transitive/recursive dependencies,
+trust and assumptions, receipts and environment identity, replay, schema migration, caches,
+cross-project copying, reproducibility, and presentation downgrades.
+
+Closure requires production-consumer weakening mutations, permanent adversarial fixtures, one
+end-to-end hostile multi-module project, and at least one attack packet designed by a non-author.
+No stale, incomplete, context-dependent, misbound, dependency-incomplete, unreplayed,
+trust-widened, schema-confused, partially migrated, or cross-project evidence may retain a
+friendly `proved` verdict.
+
+### Verification Capability Map And Documentation Boundaries
+
+_Branch `main`, 2026-08-07._
+
+Added `docs/verification/VERIFICATION_STATUS.md` as the canonical cross-axis answer to what Concrete can
+prove or enforce, what remains unsupported, and what exists only on experimental branches. The
+map separates language constructs, property classes, proof subjects, evidence mechanisms,
+composition scope, and support state, so a statement such as “arrays are supported” no longer
+quietly conflates language support, ProofCore extraction, bounds VCs, heap specifications, and
+multi-kernel replay.
+
+Corrected three stale present-tense accounts at the same time:
+
+- `CLAIMS_TODAY.md` no longer presents closed H23/H24 incidents as live caveats overriding
+  current proof results; it records their retained regression fixtures and names H19 as the
+  broader open bridge boundary.
+- `PROVABLE_V1.md` no longer claims source contracts do not exist; the non-claim is now the
+  missing automatic, complete compositional verification those contracts do not yet provide.
+- `PROOF_LADDER.md` now labels contracts, generated VC families, discharge routing, and gradual
+  paths by their shipped boundaries instead of describing contract syntax as future work.
+
+The ROADMAP now makes documentation convergence part of feature graduation: capability matrix,
+public claim, known-hole disposition, and shipped/experimental label must land together. It also
+records the missing automation—closed holes must not remain live warnings, shipped syntax must
+not remain described as absent, and experimental branch results must not become `main` claims
+before their code, negative controls, policy, and documentation graduate together.
+
+### Obligation Discovery: Two Certified-False Claims Removed
+
+_Branch `spike/multi-prover-evidence`, 2026-08-05._
+
+Registers A, B and C all begin *after* an obligation exists. None can observe an obligation that
+was never **generated**: a missed check produces no failed proof and no `unproven` marker, just a
+green report. Making the four discovery walkers total (they were `partial`, so no theorem could
+mention them) allowed the first statements about that prior question — and writing the
+completeness predicates forced the question *"which constructs actually reach an obligation?"*,
+which found seven defects. **Two were unsound.**
+
+**A shadowed array was sized from the wrong binding:**
+
+```
+let a: [i32; 16] = [0; 16];
+let a: [i32; 4]  = [7; 4];
+return a[10];              // generated: 0 ≤ 10 ∧ 10 < 16  →  PROVED
+```
+
+`10 < 16` is true, so the kernel proved it and `--report vcs` read `2 proved, 0 outstanding` for a
+program that traps. **A shadowed variable did the same to shift widths:** `x << 40` where
+`x : i8` took width 64 from an earlier `x : i64`, giving `40 < 64` — also proved. Both are now
+correctly sized and **refuted**.
+
+Memory safety was never affected: codegen bounds-checks and traps at every access regardless.
+What was false was the *proof report* — and a release gate demanding all VCs proved would have
+passed both programs.
+
+Five further defects were missing obligations rather than wrong ones: `(a)[i]`,
+`let a = [0; 16]` (unannotated), an array declared in a nested block, `b.data[i]` (field-rooted),
+and an `#[overflow_checked]` addition under shadowing. All fixed by threading declared types and
+array lengths **per scope** instead of resolving them in a flat, function-wide, name-keyed map.
+
+**The corpus covered none of it.** `make test` was 1702/0 before and after every fix — no fixture
+used a parenthesised access, a shadowed array, an unannotated array literal, or a nested
+declaration. Every regression guard is therefore end-to-end (compile a program, count VCs) rather
+than a `rfl` lock: a lock only protects code someone thought to exercise.
+
+### Predictable Profile: Three Fail-Open Gates Closed
+
+_Branch `spike/multi-prover-evidence`, 2026-08-05._
+
+`--check predictable` advertises bounded iteration and no recursion as compiler-enforced. Three
+of its analyses reported that a property held when they could not establish it.
+
+- **Non-terminating loops were `bounded`.** The rule asked "is the condition a comparison?" and
+  "is the step list non-empty?" and tied them to nothing, so `for (…; i < n; z = z + 1)` and
+  `for (…; i < n; i = i - 1)` both passed and the report said `0 unbounded loops`.
+- **Recursion through a function pointer was invisible** — no call-graph edge, so SCC found no
+  cycle.
+- **`--report stack-depth` stated `Max stack bound: 32 bytes`** for arbitrarily deep recursion,
+  and recursive callees were filtered out of every chain so a caller of an unbounded function kept
+  a finite bound. A false number is worse than a missing one: it is quotable.
+
+**These are liveness claims, which is why no obligation could have caught them.** Every proof
+obligation rules out a bad *event*; a program that hangs or overflows the stack performs no bad
+event.
+
+Admission is now transitive across all five gates — alloc and blocking already were, via
+`E0520: requires Alloc but caller has (none)`, and a fn-pointer type carries its capset so a
+combinator cannot launder one. **Reclassification, measured:** loop classifier zero, FFI 3
+examples, recursion transitivity 14 functions across 10 examples — all true positives. Nothing
+stops compiling; these are admission and label changes.
+
+Separately, "passes the predictable profile" was naming two different properties once admission
+became transitive, and `--check predictable` and `--report proof-status` printed opposite claims
+about the same function. Proof eligibility stays **per-body** deliberately — a caller's own
+overflow obligation is provable whether or not its callee terminates — so the fix was vocabulary,
+not logic.
+
+
+### Test Harness: `lli` Is Probed For Function, Not Just Presence
+
+_Branch `spike/multi-prover-evidence`, 2026-08-04._
+
+`make test` reported **1653 passed / 49 failed** on affected machines. All 49 were the same
+LLVM/ORC fault, not compiler bugs:
+
+```
+lli: Symbol "orc_rt_alt_UnwindInfoManager_register" not found in bootstrap symbols map
+```
+
+`lli` runs a trivial hand-written module fine, so a `command -v lli` check passes, but it
+cannot execute the IR this compiler emits. The harness discarded lli's stderr, so every
+affected test surfaced as the generic `expected printed '...', got rc 1 ''`.
+
+Confirmed environmental, not ours: `origin/main` built in a clean worktree emits
+**byte-identical IR** (45620 bytes) and fails identically, with the same 1653/49/2 split.
+
+The harness now probes `lli` on real emitted IR at startup and, on this failure, falls back
+to the native-clang path it already had for when `lli` is absent — printing what happened
+and why. **Result on an affected machine: 1702 passed, 0 failed.**
+
+The reason this mattered more than a confusing error message: the fallback existed, so a
+broken `lli` silently converted 49 real tests into 49 that checked nothing, while still
+reporting a failure count stable enough to be mistaken for a baseline. It was — repeatedly,
+in this session, by me. A test that cannot run should not be indistinguishable from a test
+that runs and fails.
+
+### Independent-Kernel Evidence (Rocq + Isabelle), Certificate Replay, And The VC-Bridge Register
+
+_Branch `spike/multi-prover-evidence`, 2026-07-31. Opt-in: nothing in the default
+dev shell or the default report changes._
+
+A runtime-safety obligation in the linear-integer fragment can now be discharged by
+kernels other than Lean's, and the resulting claim states precisely which axes of
+independence it spans. `proved_by_two_kernels` / `proved_by_multi_kernel` are
+**composed from per-kernel receipts** — each carrying kernel, exact tool version,
+verdict, whether its lowering was validated, and the command to re-derive it — rather
+than decided by a coordinator, so the class cannot drift from its evidence. A stored
+claim is therefore re-auditable, and invalidatable when a prover release is found
+buggy. Independence is recorded structurally (`independent_of`), not in prose.
+
+Five report surfaces, each answering a different question:
+
+- `--report multi-kernel` — which kernels closed this obligation (Rocq `lia`,
+  Isabelle `presburger`), with three-valued cells that keep `refused` (the kernel
+  said no) distinct from `error` (our emitted script broke) and `not-asked` (outside
+  the fragment).
+- `--report lowering-agreement` — does each kernel's *rendering* actually denote the
+  obligation? Pins the driver's own output to concrete assignments, makes the prover
+  decide it, and compares against an independent evaluator. The badge and the release
+  gate consume this: a kernel whose lowering disagrees is excluded and named.
+- `--report solver-cert` — `solver_checked` (an independent decision procedure
+  corroborated the solver's verdict) and the strictly stronger `solver_replayed` (the
+  solver's proof reconstructed in a kernel, asserted oracle-free).
+- `--report core-semantics-diff` — differential test of Core's semantics against a
+  Rocq/Gallina extraction, evaluated by Rocq's kernel against Concrete's interpreter.
+  Catches semantic modelling errors no amount of kernel agreement can, because every
+  kernel would agree on a consistently mis-lowered obligation.
+- `--report bridge-check` — fuzzes concrete inputs against a *proved* obligation.
+
+Release stance: `[policy] require-two-kernels = true` (E0616). It **fails closed** —
+if no external kernel can run, the requirement is unverified, and unverified is not
+satisfied.
+
+The bit-blasting path's certificate check is now corroborated by an independently
+implemented checker: `make test-bv-certificates` captures the CNF `bv_decide`
+bit-blasted, re-solves it, and verifies a DRAT certificate with drat-trim.
+
+Most importantly, the honest boundary is now enumerated rather than disclaimed.
+[VC_BRIDGE_REGISTER.md](docs/verification/VC_BRIDGE_REGISTER.md) inventories the Core→obligation
+lowering rule by rule — what each emits, assumes, rejects, and the theorem that will
+discharge it — because that bridge is shared by every kernel and so cannot be checked
+by adding more of them. **0 of 4 rows are discharged** *(as of this entry, 2026-07-31; see
+VC_BRIDGE_REGISTER.md for the current count — 4 of 5 rows had their semantics half proved on
+2026-08-04, and the row total was corrected to five)*; the register is gated so a new
+obligation family cannot ship unregistered. Holes H19–H22 in
+[KNOWN_HOLES.md](docs/verification/KNOWN_HOLES.md) record the unproven bridge, the native-code
+certificate check, and the linear-only reconstruction ceiling. **H22 is CLOSED.** It recorded a pre-existing
+decorative gate — `check_checked_arith.sh` could not detect removal of the
+checked-arithmetic trap it guards, because a wrap sentinel satisfied its `exit != 0`
+assertion — fixed by requiring death by signal, and confirmed 2026-07-31 by the harness
+that found it: `check_gate_mutation_coverage.sh` now reports `checked-arith-trap KILLED`
+where it previously reported SURVIVED.
+
+Worth recording what closing it revealed. The confirmation had to be run by hand: the
+scheduled jobs are pinned to `github.repository == 'lambdaclass/concrete'` and this is a
+different repository, so the nightly can never fire here — the entry would have sat open
+forever while reading as merely pending (R-0468). And only 2 of the 10 mutation families
+have now been run here at all. H22's closure says that one gate is load-bearing; it says
+nothing about the other eight, and the gate that would answer that is precisely the one
+whose absence is self-concealing.
+
+Provers are an opt-in shell (`nix develop .#provers`); the evidence gate is
+skip-if-absent, so no contributor pays the Isabelle closure for a flagged-off feature.
+
+**Register C — evidence composition soundness — is DISCHARGED.** The first discharged
+soundness register in the project, and the answer to H23 below. `Evidence`
+(`Concrete/Report/Evidence.lean`) carries the assumption set a claim rests on; the only
+combining operation takes the union; `proved` is *defined* as the set being empty. Six
+compile-time theorems, so a green build is the proof rather than a test passing: a
+combination is proved iff every part is (C2), a claim folded with its hypotheses is proved
+iff none carry debt (C2′ — the exact statement H23 violated), a claim with outstanding
+assumptions presents as exactly `assumed` and never a `proved_*` class (C3), discharge is
+the only operation that shrinks an assumption set (C4), and guards and `#[requires]` never
+cap a claim (C5 — the modularity guarantee, load-bearing in the opposite direction).
+
+Registers A and B are about program semantics and are years of work; C is about the
+evidence data structure, which is why it was reachable in a day. It is the de Bruijn
+discipline the project already applied to other people's proofs and not to its own — the
+emitted Rocq scripts run `Print Assumptions`, and now Concrete's own claims carry their
+assumption set too.
+
+The multi-kernel report, the ledger fold and the `require-two-kernels` release policy now
+share ONE derivation (`multiKernelVerdict`), so they cannot disagree about an obligation —
+gated by asserting each badge string has exactly one construction site. That closes a
+divergence introduced days earlier, where `kernel_disagreement` existed in the report and
+not in the stored artifact. The ledger stores a canonical vocabulary word while the
+parenthetical stays display-only, per R-0440.
+
+**A second defect, H24 — and the one that says most about the architecture.** `IntArith`
+is the single-source trap semantics and is consumed by the interpreter, `EmitSSA`,
+`SSAVerify`, `SSACleanup` and `TypeJudgment`. Obligation generation imports it for range
+constants and then states its **own**, weaker trap conditions. So a division reports
+`proved_by_kernel_decision` under `divisor ≠ 0` and aborts on signed `MIN / -1`, and an
+over-width shift generates **no obligation at all** and aborts — the sufficiency and
+applicability failure modes [VC_BRIDGE_REGISTER.md](docs/verification/VC_BRIDGE_REGISTER.md) names, both
+live. Reproduced in `examples/trap_semantics_gap/`.
+
+It also forced a correction to this project's own claims: the register said the
+differential surfaces "probe sufficiency". They do not. `bridge-check` evaluates the
+obligation against an evaluator of the *same* obligation, so on the aborting function it
+reports `ok — proved; 9 inputs checked, no counterexample`. It tests lowering fidelity;
+sufficiency needs the theorems (R-0460) or the artifact (R-0462). H24 is consequently the
+clearest argument for R-0462: **every** static surface reports success on that fixture and
+the binary aborts on the first run.
+
+Both holes now have a `check_known_wrong_corpus.sh` gate asserting their fixtures still
+reproduce — a counterexample that silently stops demonstrating its hole is worse than
+none, and these were `skip` in the example manifest precisely because they are meant to
+fail. Its assertions are written to be inverted when the fixes land.
+
+**The audit's most important result is a defect, not a feature: H23.** An obligation
+inside a loop may assume that loop's `#[invariant]` whether or not the invariant's
+preservation VC is discharged, and nothing composes the two statuses. A guaranteed
+out-of-bounds access therefore reports `proved_by_multi_kernel (3: lean, rocq, isabelle)`,
+`[policy] require-two-kernels = true` builds it with exit 0, and the compiled binary
+aborts on the access reported safe. Reproduced in `examples/unsound_hypothesis/`; owned by
+R-0461, which blocks graduation (R-0448). Nothing in this milestone should be read as
+sound for a function containing a loop until that lands. It is also the sharpest evidence
+for the point below: three kernels across two logics agreed, because all three were handed
+the same unsound hypothesis.
+
+Audited 2026-07-31 by running the evidence rather than reading it, and the audit is
+recorded where it changes decisions. Two further conclusions worth carrying forward. First, the
+`require-two-kernels` fail-closed path had no assertion anywhere — every policy check sat
+inside the isabelle-present branch, so the direction that matters was untested in both
+shells; it is now gated in the prover-absent branch. Second, kernel agreement has surfaced
+no real defects on this arc, while the one real fault (`Z.div` vs `Z.quot` at `(-7)/2`)
+came from `--report core-semantics-diff`, a differential test. Kernel diversity is
+therefore recorded throughout as a *portability* property for auditors, not a bug-finding
+strategy, and the differential surfaces plus
+[VC_BRIDGE_REGISTER.md](docs/verification/VC_BRIDGE_REGISTER.md)'s rows are sequenced ahead of a third
+kernel. As-built-versus-as-specified for the whole layer is tabulated in
+[PROVER_NEUTRAL_OBLIGATIONS.md](docs/verification/PROVER_NEUTRAL_OBLIGATIONS.md).
+
+### Early Source-Resource Certificate Sequencing
+
+_Docs/roadmap only, 2026-07-25. No compiler, report, or language behavior
+changed in this slice._
+
+R-0445 now pulls a conservative compile-time source-resource certificate ahead
+of broad stdlib expansion. It will report symbolic source steps, call depth,
+source-model stack, allocation count/bytes, and explicit unknown boundaries,
+with the numeric/PNG/ELF parser work as its first forcing corpus. One focused
+non-author session pressures the report and diagnostics without replacing the
+later three-user validation trial.
+
+The roadmap now keeps one resource model: R-0178 stabilizes the early schema,
+R-0220 applies predictable policy, R-0244 adds proof obligations, R-0224/R-0248
+bridge and enforce target stack, R-0416–R-0419 measure generated code, and
+R-0405 retains hardware WCET. Source bounds are not timing claims. R-0007 owns
+the strict alpha-invariance/hostile-collision contract and fixed regression
+legs; R-0272 later scales that oracle across generated programs, turning
+semantic-identity principle #12 into a direct regression class.
+
+### Proof Subject And Replay-Evidence Design Split
+
+_Docs/roadmap only, 2026-07-25. No compiler or proof verdict changed in this
+slice._
+
+R-0004 now lands dependency containment before its structural migration and
+separates the versioned semantic `ProofSubjectDigest` from the
+`ProofEvidenceReceipt` that binds theorem, toolchain, workspace, and kernel
+replay to that subject. The final receipt also binds a deterministic transitive
+dependency root. Legacy schema/toolchain evidence becomes `needs_recheck`;
+semantic subject drift remains `stale`.
+
+The proof workflow now states the shipped defect precisely: `staleDeps` is an
+advisory direct-edge field filled after status derivation, so it neither
+downgrades a caller nor propagates through a dependency chain. R-0439 also
+gives the narrow pre-push gate a measured runtime budget while retaining the
+full gate set in CI.
+
+### Whole-Program Evidence Direction And Proof Vocabulary Cleanup
+
+_Docs/roadmap only, 2026-07-25. No compiler or language behavior changed in
+this slice._
+
+R-0443 now owns the first independently checked whole-program
+authority-property certificate: a conservative call-graph predicate such as
+“no path from `main` reaches `Network` except through `send_report`,” with
+indirect targets, trusted/extern completeness boundaries, artifact binding, and
+claim scope stated explicitly. R-0184 supplies the canonical reachability
+witness; R-0275 supplies the independent checker boundary. The task does not
+claim effectful functional correctness, path-value properties, termination, or
+native behavior.
+
+Existing owners absorbed the smaller findings instead of multiplying tasks:
+R-0178/R-0180/R-0182 aggregate direct and transitive runtime-trap reachability,
+and R-0137 recruits three non-authors while retaining one completed workflow as
+the alpha gate. Failed or abandoned sessions remain evidence.
+
+The stable proof documents no longer freeze a theorem count or equate an empty
+capability set with purity/proof. They now say `authority-free`, keep eligibility
+separate from attached evidence, defer exact construct/theorem coverage to
+`PROVABLE_V1.md` and generated reports, and describe evidence using R-0440’s
+orthogonal scope/method/status/trust dimensions.
+
+### Documentation Truth Alignment
+
+_Docs-only resynchronization, 2026-07-25. No compiler or language behavior
+changed in this slice._
+
+The canonical claims now describe checked ordinary arithmetic and safe indexing,
+the implemented linear-rebind rule, the actual `ProvableV1` aggregate/loop/state
+surface, and the interpreter as a second semantics used for differential
+divergence hunting rather than a tiny privileged oracle. The proof contract
+distinguishes attachment freshness from kernel replay and records R-0004's
+remaining full-subject and replay-context gaps.
+
+Documentation ownership was narrowed to reduce future drift:
+
+- `ARITHMETIC_POLICY.md` owns arithmetic behavior; guarantee/profile documents
+  summarize and link to it.
+- `PROVABLE_V1.md` owns the admitted proof surface; explanatory proof documents
+  no longer maintain obsolete constructor lists.
+- `docs/bugs/README.md` owns numbered defect status, while
+  `KNOWN_HOLES.md` is a curated legacy/cross-cutting index and `ROADMAP.md` owns
+  implementation work.
+- `PROOF_STORY_MATRIX.md` has immediate manual rows for previously dark language
+  families; R-0438 still owns generated claim records and recurrence prevention.
+
+The roadmap preserves the findings without duplicating tasks: trap-semantics
+centralization stays in R-0005, fuzzer breadth in R-0272/R-0095/R-0096,
+performance evidence in R-0416–R-0419, abort profiles in R-0223/R-0322, and
+stored/derived callback inference in R-0016. The unmerged H18 worktree and
+`.audit_me/` probes now have explicit salvage/promote-or-delete owners instead
+of being treated as ambient backlog.
+
+### Completed Task R-0470
+
+_Capability inference for derived function-pointer arguments (bug 063). Closed 2026-09-20._
+
+**Status (2026-09-20): DONE — both sites fixed and gated.**
+`check_cap_inference.sh` 10/0. The first fix (2026-09-19) closed only
+`Check.lean`'s function-call path; `CheckHelpers.lean`'s method-call path carried
+a byte-identical copy and was found by the sweep that became
+`docs/project/ABSENCE_IS_NOT_A_FACT.md`. The method path is the one real callers
+reach, because std's capability-polymorphic combinators (`Set::fold`,
+`for_each`, `with_value`) are METHODS. Fixtures exist for both — the four derived
+argument forms and a generic-return E0242 control, per path — which retires the
+"no fixture yet" note below.
+
+**Objective:** Fix bug 063 — capability-variable inference reads "unknown
+argument type" as "no capabilities", so a stored or derived function pointer
+cannot reach a `cap C` parameter.
+
+Filed 2026-07-27 and reproduced on four derived argument forms; it had no roadmap
+owner until now, which is why it is here rather than later. A
+capability-polymorphic combinator accepts a function pointer written as a bare
+name or an annotated local, but rejects `apply(ops.op, 4)` — a fn pointer read
+from a struct field, a call result, or an array element — as an E0220 type
+mismatch against a `with()` the program never wrote.
+
+This is a rejected-valid-program defect today, not wrong code. It is scheduled
+early anyway because of what the repro shows about the mechanism: the authority
+check already passes on the fabricated empty capability set, and only `expectTy`
+stops the program. Authority visibility in the signature is a load-bearing pillar
+claim, so an inference path that silently manufactures an empty capset is worth
+closing while it is still merely a false rejection. See the repro table in
+[the bug](docs/bugs/063_cap_inference_defaults_derived_fnptr_to_empty.md). The
+four derived forms were the negative corpus; they are now positive fixtures on
+both paths (`tests/regressions/cap_inference/`), asserting E0242 and the ABSENCE
+of E0220 — a gate that only checked "does it fail" would pass either way, and
+would keep passing after fn-type comparison is relaxed to subsetting.
+
+### Completed Task R-0467
+
+_The multi-kernel evidence job runs on merges to `main`. Moved 2026-10-19._
+
+**Objective:** Run the multi-kernel evidence job on merges to `main`, not only on
+dispatch, schedule, or a PR label.
+
+`.github/workflows/lean_action_ci.yml`'s `multi-kernel` job is gated on
+`workflow_dispatch || schedule || contains(labels, 'multi-kernel')`. Everything the
+multi-kernel arc built — the badge classes, lowering agreement, certificate replay, the
+release-gate composition, `kernel_disagreement` — is therefore unverified on the commit
+that actually lands. A regression merges green and is discovered whenever someone next
+remembers to dispatch the job.
+
+This is the pinning that let H22 survive: `check_gate_mutation_coverage.sh` was
+nightly-only, so a gate that could not detect removal of the property it guarded stayed
+green for months. Same shape, newer subsystem.
+
+The cost is real and is why this is a task rather than a one-line edit: the job installs a
+multi-gigabyte Isabelle closure and cold proof runs cost roughly 30s per goal, with a
+90-minute timeout. Options, cheapest first:
+
+1. `push: branches: [main]` only — pays the cost once per merge, not per PR push. The
+   recommended default; merges are rare relative to pushes.
+2. Split the job — the Rocq half (`coqc` is a small closure) on every PR, the Isabelle
+   half on merge. Most of the evidence surface at a fraction of the cost.
+3. Keep opt-in but make the label mandatory for PRs touching
+   `Concrete/Report/Evidence.lean`, `ReportObligations.lean` or the multi-kernel gate —
+   enforceable with a path filter, and it fails closed rather than relying on memory.
+
+Whichever is chosen, record it: an evidence gate that does not run on the merge commit
+should say so where readers of the evidence will see it, not only in the workflow file.
+
+### Completed Task R-0442
+
+_Bug 061 — the proof model spelled a parameter application and a definition call
+the same way. 2026-07-28._
+
+`PExpr.call "f" args` meant both "call the definition `f`" and "apply the
+fn-typed parameter `f`", and `eval` resolved both through the global `FnTable`.
+In the one place this project makes soundness claims, a parameter and a
+definition of the same spelling were the same thing.
+
+The bug was filed as latent, with "no reachable witness in std today". That was
+wrong, and the correction is the interesting part: the witness was already in the
+repository. `pureCoreFns` bound the representative callback `f` as a **global**,
+because the HOF specs applied their parameter as `.call "f"` — so
+`option_map_correct`, `result_map_correct` and `result_map_err_correct` were
+discharged by resolving a parameter application against a definition. The
+conflation was load-bearing in three shipped theorems. They remain true, and
+their scope was always recorded as `proof_coverage(representative)`; the
+mechanism by which Lean accepted them was the defect.
+
+Two identities, two namespaces: `PExpr.call fn` is answered by `FnTable.globals`
+only, `PExpr.applyVar binding` by `FnTable.callables` only. `FnTable` became a
+structure carrying both, and stayed *named* `FnTable` so ~96 annotations and ~166
+`eval fns …` call sites kept their meaning — only the three places that APPLY a
+table had to choose a namespace, which is where the choice belongs. No
+`CoeFun FnTable`: an implicit application would resolve to `globals`, silently
+reinstating the conflation. (The same reasoning retired `Coe String SCallee` in
+R-0436.)
+
+Carried through the whole list the task named: extraction (both sites, mapping
+indirect callees to `.applyVar` rather than refusing them — refusing cost three
+real proofs), evaluation, fingerprints (`call` vs `callptr`, now gated rather
+than inspected), preservation statements (`eval_apply_var_reduces`, plus
+`apply_var_ignores_globals` proving an applied local is stuck under any global
+table), reports (`&binding(...)`, `.applyVar`, and both scaffold generators
+emitting a documented two-namespace table), proof dependencies (an applied
+parameter contributes no edge), and per-form table completeness
+(`pexprApplies`/`callableTableComplete` beside `pexprCalls`/`fnTableComplete` —
+two collectors, because one tagged list is what let a single predicate check a
+parameter against the global namespace). Kernel-checked `example`s assert the
+three HOF specs' callable namespace is complete AND that their global namespace
+is empty; the latter is what makes a regression visible.
+
+Evidence: `scripts/tests/check_proofcore_callable_identity.sh` (29 checks),
+including the source-level witness that was said not to exist — one program
+where `f` is both a definition and a parameter name, extracting to `.call "f"`
+and `.applyVar "f"` respectively.
+
+Mutations #31-#33. The two that rebind resolution are killed by the Lean
+**kernel**, not the gate: the three map theorems reduce to `⊢ False` when the
+callback sits in the wrong namespace. The proofs are themselves evidence for the
+separation, which is a better outcome than the gate alone.
+
+### Completed Task R-0436
+
+_Bug 056 — a function reference was a register name, and a call target was a
+string. 2026-07-28._
+
+Rebinding a fn-pointer local across an `if`, or in a loop, could not compile:
+the merge built a phi over `@fnref.<name>`, a register no block defines, and
+SSAVerify refused it with E0709. The interpreter ran the same programs
+correctly, which is the signature of a representation problem rather than a
+semantics one.
+
+Two string encodings were involved, and fixing the first exposed the second
+within minutes:
+
+- `SVal.reg "@fnref.<name>"` spelled a statically-known function as a register
+  whose name encoded the function. Three passes carried a `startsWith
+  "@fnref."` exemption so they would not mistake it for a real register. It is
+  now `SVal.fnRef name ty`; `svalRegs` answers `[]` for it through its ordinary
+  catch-all, so all three exemptions were **deleted** rather than joined by a
+  fourth.
+- `SInst.call`'s `fn : String` meant a direct call when bare and an indirect
+  call when `%`-prefixed. `replaceRegInInst` could rewrite that string only into
+  another register, so folding a fn-pointer phi down to a known function left a
+  dangling `%if.phi.N` in the emitted call. Worse, SSAVerify's `instUses` could
+  not see a call target hidden in a string at all — an indirect call through an
+  undefined register passed our verifier and was caught by `llvm-as`. It is now
+  `SCallee.direct` / `SCallee.indirect`, with deliberately **no** `Coe String
+  SCallee`: an implicit coercion would let the bare-string form compile again
+  silently, which is how it survived this long. Removing it is what surfaced the
+  four runtime-symbol call sites that had been relying on it.
+
+This is the Lower-side instance of what R-0002 removed from Core, and the same
+class as bugs 050, 057 and the restated vocabularies: identity kept in a string
+that a later pass re-interprets (PRINCIPLES 12).
+
+Evidence: `scripts/tests/check_fnptr_values.sh` (17 checks) — rebinding across
+`if`/`else`, across a constant-folded `if`, and in a loop; a phi mixing a
+loaded register with a known global; compiled/interpreter agreement on each;
+devirtualization preserved (the straight-line case still emits `call @a`, a
+folded phi still devirtualizes, no reference to the eliminated phi survives);
+the verifier still refusing an undefined phi operand AND an undefined indirect
+call target while accepting well-formed ones; and structural checks that neither
+string convention exists anywhere in the compiler.
+
+Mutations #28-#30 are each killed by that gate. Two earlier candidates were
+discarded for proving nothing: one was killed only by Lean's unused-binder
+linter, and one — removing Lower's devirtualization — left the emitted IR
+byte-identical, because `.indirect (.fnRef f)` and `.direct f` both resolve to a
+global in `svalToOperand`. EmitSSA, not Lower, is what decides the emitted
+operand; Lower's `.direct` conversion still matters only to passes that key on a
+direct callee.
+
+### Completed Task R-0005
+
+_Bug 053 — a discarded checked negation was deleted, and its documented trap
+with it. 2026-07-27._
+
+Per ARITHMETIC_POLICY, `-x` traps at the type's MIN exactly as checked `0 - x`
+does. It did not: with `x: i8 = -128`, `discard(-x)` exited 0 and the emitted
+`user_main` contained no checked-negation call, while the interpreter aborted
+with `arithmetic overflow (checked negation)`. Wrong code, not a rejected
+program — the abort the language promises simply did not happen.
+
+Dead-code elimination had no `.unaryOp` case at all, so a discarded negation
+fell into a catch-all meaning "harmless". The one-line fix is to add the arm.
+That is not what shipped, because the missing arm was a symptom: **four**
+consumers each decided independently whether `-x` can trap — the interpreter,
+`foldConstants`, EmitSSA, and DCE. Three agreed, one never asked, and the
+folder's comment saying neg must stay live *to trap* sat one screen above the
+arm that deleted it. A fifth local answer restores agreement without removing
+what let them disagree.
+
+`Concrete/Semantics/IntArith.lean` now owns the unary trap inventory, the same
+single-source treatment `evalIntBinOp` already gave the binary family:
+`evalIntUnaryOp` answers WHAT an operation yields (`.value` / `.trap` /
+`.notApplicable`), `unaryOpCanTrap` answers WHETHER it can trap. DCE reads
+`unaryOpCanTrap`, then refines with `evalIntUnaryOp` for constant operands so a
+provably-safe discarded negation stays deletable; the interpreter evaluates
+through `evalIntUnaryOp`. Blanket-preserving every discarded unary op would
+have passed a trap regression while quietly costing dead work at every site.
+
+Evidence: `scripts/tests/check_trap_inventory.sh` (12 checks). Discarded `-x`
+at MIN aborts on compiled AND interp at i8/i16/i32/Int; the used-result shape
+still traps, proving the gate observes *discard* rather than negation in
+general; non-trapping discards (small constant, `~x`, float neg) stay
+removable; `__cc_ssub` survives into the emitted `user_main`. Three checks are
+structural — every consumer must read `IntArith` — because the value checks
+pass for any fix, including four consumers that agree today and drift tomorrow.
+
+Mutations #25-#27 are each KILLED by that gate: DCE ignoring the inventory, the
+inventory's answer inverted, and checked negation wrapping at MIN instead of
+trapping. The harness gained per-mutation gate binding (`gate_for_last`) to
+make those kills real: its killer is the fast suite, which runs no `check_*.sh`
+gate, so a gate-backed mutation would have been reported as a surviving test
+gap. A first attempt at #26 (`| .neg => false`) was discarded for reporting
+`KILLED (build)` — Lean's unused-variable linter rejecting the file says
+nothing about whether any test can observe the semantics.
+
+The task said not to descope to the single DCE witness, and this does not: the
+recurrence mechanism, not the missing arm, is what changed. It is also not the
+whole task. R-0005 asked for a *generated* inventory consumed by fuzz
+generation and the capability matrix too; what shipped is hand-written, and QBE
+is covered only because it reaches the same checked helpers through EmitSSA.
+Generation, and those two remaining consumers, continue as **R-0446** rather
+than being absorbed into this entry — a hand-written inventory still depends on
+someone remembering to extend it.
+
+### Completed Task R-0003
+
+_HashMap probe and occupancy invariants — bugs 047 (duplicate past a tombstone)
+and 048 (missing-key lookup hangs) fixed as one slice. Shipped 2026-07-25._
+
+Both defects lived in the same open-addressing probe, so they are one change.
+
+`insert` stopped at the first empty-OR-tombstone slot and wrote there without
+finishing the chain, so a key living past a tombstone got a SECOND live slot:
+`len()` overcounted, `get` returned the duplicate, and one `remove` left the
+other copy behind. It now remembers the first tombstone but keeps probing for a
+live equal key, taking the tombstone only at chain end.
+
+The load factor counted only LIVE entries, so tombstones accumulated until no
+empty slot remained, and a lookup that terminated only on empty-or-match then
+wrapped forever. Occupancy is now `len + tombstones`; when the pressure is all
+tombstones the table rehashes at the SAME capacity rather than doubling a map
+that is not holding more. The probe is additionally bounded by `cap`, so a
+wedged table returns "absent" instead of hanging. `find_slot` became
+`find_live -> Option<u64>`: the old signature had to return a slot even when
+there was no answer, which is what made "absent" unrepresentable.
+
+HashSet is a thin wrapper over HashMap and inherits both fixes.
+
+Evidence: `scripts/tests/check_hashmap_probe_invariants.sh` (6 checks — both
+witnesses, 10k-operation churn under a low-entropy hash, full-table/clear/reuse,
+linear `Destroy` keys counted exactly once through remove/overwrite/drop, and a
+reference-map oracle: a key-indexed model with no hashing, probing or tombstones
+driven through 600 pseudo-random operations with agreement checked after each
+one). Every leg runs under a watchdog because 048's failure mode is a hang.
+Fixture `tests/programs/regress_047_048_hashmap_probe/`. Mutations #22
+(reuse the first tombstone), #23 (unbounded probe) and #24 (load factor ignores
+tombstones) are each KILLED independently, so the two halves of 048 are gated
+separately rather than by one catch-all.
+
+Two items from the task's gate list are NOT covered, and the gate does not
+pretend otherwise. Linear **values** are unchecked — only linear keys are counted
+(through remove, overwrite and drop) — and there is no interpreter/native
+agreement leg, because the interpreter does not implement the `Alloc` and
+raw-pointer intrinsics HashMap is built on. That is the same limitation that made
+`vec_pop` compiled-only in R-0002's gate; the reference-map oracle stands in for
+the missing second implementation.
+
+Two things this slice uncovered, both fixed here:
+
+- **Bug 057** — `Builtin.hashmapSize` was 40 ("ptr + ptr + ptr + i64 + i64")
+  while std declared seven fields (56 bytes): the two fn pointers were never
+  counted. Field offsets come from the declaration but aggregate copies are
+  sized from that constant, so a by-value `HashMap` lost `hash_fn`/`eq_fn` —
+  calling `get` on one **segfaults**, verified by reverting the constant. It
+  went unnoticed because no by-value path read past offset 40 until the new
+  `tombstones` field pushed `cap` there, at which point `drop` (also by value)
+  read an uncopied `cap`, destroyed nothing, and leaked every entry silently.
+  `check_builtin_layout_sizes.sh` now derives these sizes from std and fails on
+  drift in either direction.
+- **`run_tests.sh` had no timeout anywhere.** A hanging fixture — precisely bug
+  048's shape — would have stalled the suite and the CI job rather than failing.
+  The project-fixture loop now runs under a 60s watchdog reporting timeouts as a
+  distinct failure, degrading with a warning where `timeout` is unavailable.
+
+### Superseded decision record: R-0435
+
+_A docs-only decision briefly closed this task on 2026-07-25; it was superseded
+the same day after the intended language preference was clarified. R-0435 is
+reopened in the roadmap under the same identity._
+
+The first decision kept shadowing legal because bug 045 was a name-resolution
+defect fixed by Elab alpha-renaming, not an inherent soundness failure. That
+technical diagnosis remains correct, but it answered the wrong design question.
+The superseding decision bans lexical value shadowing for audit clarity while
+retaining compiler-owned identity as defense in depth.
+
+The decided distinction is binding versus assignment. A new lexical value
+binding must use a fresh visible name; explicit assignment evolves one binding.
+Thus `let s = transform(s)` will reject once R-0435 lands, while
+`acc = f(acc, x)` remains legal when the old linear value is consumed before the
+new one is installed. Pattern-binder renaming is a prerequisite so nested
+`Option`/`Result` patterns remain expressible.
+
+The review also exposed a separate documentation defect:
+`LANGUAGE_SHAPE.md` and `OWNERSHIP_MODEL.md` correctly describe the implemented
+linear-rebind rule, while older guarantee documents still said reassignment was
+unconditionally forbidden. Those current-truth documents were aligned with the
+checker as part of the decision correction.
+
+
+### Completed Task R-0002
+
+_A callee value is resolved by identity, not by global name — bug 050 (indirect
+fn-pointer call hijack) fixed. Shipped 2026-07-25._
+
+Elab emitted a call through a fn-typed local as `.call name args`, the same Core
+shape as a direct call, so every later pass had to re-derive whether the callee
+was a local. Lower and Interp each probed their own variable scope and got it
+right; Mono had no scope and resolved the name against the global fn map plus the
+linker-alias pool, rewriting a local fn-pointer call into a direct call of a
+same-named generic. Two consequences: silent wrong code (`pick(21)` returning the
+identity generic's 21 while the interpreter returned 42), and unbuildable
+projects — std.io's `Writer::write_raw` binds its target as a local literally
+named `f`, so any program defining `fn f<T: Copy>` died in SSAVerify with E0711.
+
+`CExpr.call`'s callee is now a `Callee` sum (`direct` / `indirect`), decided in
+Elab where the scope is still known. The migration technique is worth reusing: a
+`Coe String Callee` keeps existing construction sites meaning `direct` — which
+every one of them is — so the compile errors land only where code CONSUMES a
+callee as a name. That was 23 sites, each a real decision, instead of 288
+mechanical edits. Adding a constructor was rejected for the opposite reason: the
+new form would have fallen silently into 160+ catch-all arms in Check's linearity
+walker, Interp, and Lower.
+
+Lower and Interp got SMALLER — both deleted their scope-probing re-derivation.
+Three passes were wrong in the same way and had not been filed: Elab's submodule
+prefixing renamed any matching callee; Mono's `injectTypeArgsExpr` would hand a
+local fn-pointer a generic's type arguments; and CoreCheck picked capability and
+arity checks by whichever lookup succeeded, so an indirect call whose binding
+matched a global was checked against that global's contract instead of its own
+pointer type. In ProofCore the fingerprint uses a `callptr` prefix, so a direct
+call and an indirect call through a same-named local cannot share a proof
+subject, and the call graph gains no edge for an indirect callee — the
+capability-chain report therefore no longer follows fn pointers, which is
+accurate: authority for those is enforced at the pointer TYPE, by the CoreCheck
+rule above.
+
+CORRECTION (2026-07-25, commit 139b7209): this entry originally also said
+extraction returns `none` (blocked) for an indirect callee. That was wrong and is
+no longer the behaviour. Refusing to extract inverted principle 12 — a parameter
+IS a semantic entity whose identity is its binding — and it silently blocked
+three real std proofs (`Option::map`, `Result::map`, `Result::map_err`) whose
+statements hold for ANY `f` precisely because `f` is opaque. Indirect callees
+extract as an uninterpreted application of the binding. CI's Language-surface
+job is what caught it.
+
+Evidence: `scripts/tests/check_indirect_call_identity.sh` (10 checks — dispatch
+through the local for generic, non-generic, intrinsic, fn-parameter and
+renamed-import collisions, all with interpreter agreement; the emitted IR
+contains no specialization of the shadowed generic and targets the function the
+local holds; std.io builds under a generic named `f`);
+`tests/programs/regress_050_indirect_call_shadow.con` (42, was 21) and the
+project `tests/programs/regress_050_generic_f_std_io/`; mutation
+`test_mutation.sh` #21 re-emits the indirect call as direct and is KILLED.
+
+Left open deliberately: `.ident name (.fn_ ..)` in the same rename pass has the
+identical hazard and Core carries no marker for it, so closing it needs the same
+Elab-time treatment (comment at the site, recorded in the bug doc). Building the
+gate also surfaced **bug 056** — Lower represents a fn reference as a register
+NAME (`@fnref.<fn>`), the same identity-in-a-string anti-pattern one layer down,
+which makes reassigning a fn pointer across a branch fail SSAVerify. Filed as
+R-0436, confirmed pre-existing on `e1b3844e`.
+
+The mutation harness now rebuilds after restoring a mutation. Restoring only the
+source left `.lake/build/bin/concrete` built from the mutation, so gates and
+probes run afterwards silently measured the mutated compiler against clean
+source — which produced two false findings during this task before being spotted.
+
+### Completed Task R-0001
+
+_Per-instantiation generic-enum monomorphization — bug 051 (user generic-enum
+memory corruption) fixed. Shipped 2026-07-24._
+
+A user generic enum kept ONE declaration for every instantiation: EmitSSA emitted
+one LLVM type per enum NAME, sized from whichever instantiation it found first,
+while Lower computed payload offsets from each instantiation's real type
+arguments. Instantiations differing in size or alignment therefore wrote outside
+the emitted aggregate. Slice 1 (2026-07-18) contained this by refusing every user
+generic enum with E0808; this completes the root fix and lifts the restriction.
+
+`monoStructsInProgram` became `monoTypesInProgram`, specializing structs and enums
+through ONE instance set and ONE mangled-name mapping (they nest in each other, so
+`Wrap<Point>` and `Holder { w: Wrap<i32> }` are only resolvable together). Three
+parts were not in the struct pass:
+
+- **Enum identity at use sites.** Lower resolves variant index and payload layout
+  by NAME, so `enumLit`/`enumArm` are rewritten to the specialization name. Arms
+  carry no type of their own, so the instantiation is read from the scrutinee type
+  — the same place Lower reads it.
+- **Every type-bearing declaration is rewritten**, not only function signatures
+  and bodies. A non-generic `struct Holder { w: Wrap<i32> }` kept a `Ty.generic`
+  field that Layout then sized from the unsubstituted declaration: the same
+  wrong-layout path reached through a field instead of a local.
+- **The instance set is a transitive closure** over definition bodies, since
+  `Wrap<Box<i32>>` names `Box<i32>` only inside Wrap's variant payload.
+
+Two boundary decisions worth keeping: `Option`/`Result` are excluded by NAME as
+well as by `builtinId`, because the name is the reserved identity every other pass
+uses (Elab types `vec_pop` as `.generic Option [elem]`) — specializing a
+user-written `enum Option<T>` desynchronizes it from the intrinsics that produce
+its values. And a specialization whose mangled name is already declared now fails
+closed with **E0809**: a declaration spelled `Wrap_Int` occupies the name
+`Wrap<Int>` mangles to, and if the user's is narrower the specialization writes
+past its end. That path was unreachable while E0808 refused all user generic enums,
+so the fix closes it rather than inheriting it (injective, unforgeable mangling
+remains R-0007's subject).
+
+Evidence: `scripts/tests/check_generic_enum_mono.sh` (20 checks — values with
+interpreter agreement across mixed size/alignment/array/struct/nested/enum-in-array
+/cross-module, layout footprints, linear-payload destroy-once and leak rejection,
+builtin non-interference, E0809 forged names, E0808 backstop);
+`tests/programs/regress_generic_enum_051.con` (43) and
+`adversarial_mono_generic_enum.con` (42), both flipped from E0808 rejection to
+positive coverage; `test_mutation.sh` #19 disables specialization and is KILLED.
+
+Two measurement lessons are recorded in the gate and the bug doc: a value check
+alone is not sufficient (under the mutation, cases where the WIDER instantiation is
+emitted first still return correct results, which is why the layout assertion
+exists), and guard locals do not detect the clobber (scalar locals live in SSA
+registers, not adjacent stack slots). The remaining criterion-7 item — a verifier
+proving for ALL programs that a payload write fits its declaration — is R-0434.
+
+Also fixed in passing: `test_mutation.sh` hardcoded `~/.elan/bin/lake`, so inside
+`nix develop` every mutation reported "KILLED (build)" and the run claimed perfect
+coverage while testing nothing. It now resolves `lake` from PATH and preflights a
+build of the pristine tree, refusing to report verdicts if that build fails.
+
+### Completed Task R-0022
+
+_Fast fail-closed surface-gate unification. Shipped 2026-07-18 (tip b31c103b): one executable checklist (`scripts/tests/run_fast_surface_gates.sh` / `make test-fast-surface-gates`) run identically by the pre-push routine and CI's Language-surface job; prints the exact failing constituent; mutation self-test (`--mutate`) proves the aggregate goes red when a representative inventory row is removed. Original objective below._
+
+
+**Objective:** Unify every fast fail-closed surface gate locally and in CI Add one documented target, `make test-fast-surface-gates`, used unchanged by the pre-push routine and CI's Language-surface job. It owns diagnostic-code completeness, quadratic-append baselines, public API/interface inventory, capability/trust/ownership manifest truth, construction and consumer coverage, generated-file drift, import firewalls, and visibility/construction fixtures.
+
+
+Adding an E-code, public item, IR constructor, manifest fact, generated file, or
+counted append pattern must fail locally exactly as it fails remotely. The
+target prints the exact constituent command on failure; CI may not maintain a
+hidden second checklist. Gate the gate by removing one representative row from
+each inventory family and proving the aggregate target fails for the intended
+reason.
+
+### Roadmap stable task identity (2026-07-18)
+
+The active roadmap now has one file-ordered sequence with immutable `R-NNNN`
+task identities. IDs no longer encode priority and are never renumbered or
+reused; urgent work receives the next unused ID and moves to its honest file
+position. The first application moved the existing fast-surface-gate task
+`R-0022` ahead of the defect fixes without changing any other task's identity.
+`check_roadmap_linear.sh`, included in the docs-drift gate, rejects duplicate or
+dangling IDs, legacy positional task references, malformed headings, and
+parallel queue/task-list headings.
+
+### Phase 7 ownership/manifest/construction hardening (2026-07-18)
+
+Three pre-freeze boundary corrections landed before the remaining Phase 7
+privacy and stdlib work:
+
+- **Bug 046 — collection extraction ownership.** `HashMap::keys`,
+  `HashMap::values`, and `HashSet::elements` previously copied unconstrained
+  non-Copy payloads out of trusted pointer storage while the collection retained
+  ownership, enabling double-free/use-after-free. The APIs are now gated by the
+  corresponding `Copy` bound; scoped folds/iteration remain available for
+  linear values. Negative linear-payload and positive Copy fixtures pin the
+  public surface (commit `25510e5e`).
+- **Truthful stdlib-manifest derivation.** The single-regex generator truncated
+  nested function-pointer signatures, missed trusted extern forms, and ignored
+  enclosing trusted impl context. A balanced scanner now blanks comments and
+  strings, tracks braces/impl trust, handles nested parameter/generic syntax,
+  and recognizes extern forms. Its self-test covers the formerly misparsed
+  shapes; the generated inventory grew from 426 to 434 truthful rows (commit
+  `8254bfa5`). Compiler-derived interface facts remain the planned permanent
+  replacement.
+- **Construction rights slice 1.** Direct newtype construction is private to
+  the defining module. External `N(v)` now reports E0296 and clients use the
+  module's public checked constructor, closing the reproduced
+  `NonZeroU32(0)` bypass. E0296 is registered in the diagnostic ledger and the
+  cross-module negative fixture is gated (commits `da31a663`, `3a81b720`).
+- **Construction rights slice 2.** Struct fields are private to their defining
+  module unless individually marked `pub`. Cross-module private-field literals
+  report E0297; reads and writes report E0298. The stdlib and examples migrated
+  to public accessors or explicitly audited `from_raw_unchecked` constructors;
+  intentionally transparent/raw-parts records expose only their selected
+  fields. `check_construction_rights.sh` pins negative literal/read/write cases
+  and the positive public-record path, the diagnostics are registered, and the
+  local parallel surface runner includes the gate (commits `dde1aa0f`,
+  `0529a28e`, `4956a76e`). The complete one-keyword design and closure rules
+  remain documented in `docs/language/CONSTRUCTION_RIGHTS.md`.
+
+These completions do not close enum-variant visibility, raw newtype payload
+projection, or trusted raw-pointer dereference duplication; those remain
+globally ordered roadmap tasks.
+
+### Phase 7 workload/compiled-coverage arc — workloads 5–6 and bugs 039–044 (2026-07-17/18)
+
+Phase 7's fifth and sixth workloads, a fail-closed compiled stdlib inventory,
+and six compiler/runtime boundary defects landed as one evidence-driven arc.
+
+**Workload 5 — `envcfg`.** `examples/envcfg` parses `KEY=VALUE` configuration
+files with environment override and became the first real compiled consumer of
+`std.env`. Its first run found bug 039: a module's bare imported call name was
+resolved through a program-wide first-match alias pool, so
+`import std.env.{get}` could compile as `std.args.get` and segfault. EmitSSA now
+applies the importing module's aliases before the program-wide pool;
+`regress_039_import_alias_collision` and the environment-override legs pin the
+fix. The same workload pulled `Bytes::index_of`/`Bytes::slice` and exposed bug
+040, where CoreCheck's append-only function environment let same-named binders
+from different match arms reuse the wrong scalar type. Match binders are now
+arm-scoped and post-match merging rebuilds from the pre-match environment;
+Lower and the interpreter were already correct.
+
+**Compiled stdlib coverage.** `check_std_compiled_coverage.sh` derives the
+public-module inventory from `std/src/*.con` and requires one compiled-and-run
+behavioral fixture per module or a reasoned exemption. It landed with 37
+fixtures and now reports 39/39 after the dependency and import regressions.
+Exemptions are explicit: `lib` is the umbrella, `libc` has no public surface,
+and `slice` has no public constructor yet. Adding a module without coverage or
+an exemption fails CI. Its first runs found:
+
+- bug 041: Check's post-match merge kept arm binders alive, allowing a stale
+  Copy binder named `value` to poison a later linear binder's consumed state;
+- bug 042: Resolve dropped imported public newtypes and type aliases, producing
+  E0108 at first use;
+- bug 043: hosted C-string APIs received `String.ptr` even though Concrete
+  Strings are not NUL-terminated. Allocation slack hid the bug on macOS while
+  exact-capacity slices failed on glibc. `String::to_cstr` now owns the boundary
+  and all 13 environment/fs/io/process/net C-string sites use it; affected APIs
+  expose `Alloc` explicitly;
+- bug 044: renamed generic imports were not monomorphized. Mono now tries every
+  alias orientation and mints specializations under the resolved definition's
+  canonical name, so direct and renamed calls share one specialization;
+- project-mode dependency checking: Project filtered dependency modules out of
+  frontend Check after the old std exemption was obsolete. Dependencies and
+  user modules now traverse the same Check path; a type-broken local dependency
+  must fail its consumer with E0220.
+
+`std.env.get` also now validates copied environment bytes before constructing a
+`String`; invalid UTF-8 returns `None`. The envcfg gate injects an invalid
+`DB_HOST` byte sequence and proves the file value wins, with a mutation check
+showing the validation branch is load-bearing. STRING_TEXT_CONTRACT, BYTE_VIEW,
+and STDLIB_API_REVIEW were refreshed to match shipped argv/environment
+validation, `from_raw_unchecked`, and the merged `std.io.Writer` surface.
+
+**Workload 6 — `wordfreq`.** `examples/wordfreq` is the first collection
+workload at data scale: `OrderedMap<String,u64>` insertion/update and in-order
+traversal are byte-identical to a C-locale `tr | sort | uniq -c` oracle over
+real text (10,109 distinct words) and a 200k-word stress case. It found no
+collection correctness defect: H18 stored-key destruction, non-Copy String
+keys, and capability-threaded traversal held. Its friction log records
+`String::cmp` and ownership-aware upsert as first asks below the pull threshold.
+
+The arc also completed the Phase 7 H1–H5 hardening class gates: all radix
+parsers return `None` on overflow; additive bounds guards are linted out; IO
+surfaces read/write/flush/close failures; ordered traversal accepts borrowed
+non-Copy values; and base64 rejects non-canonical padding bits. The Makefile and
+CI carry the compiled-coverage, workload, hardening, and regression gates.
+
+Representative final local battery at `640e1716`: `run_tests` 1687/0,
+examples 139/0, compiled std coverage 39/39, differential 34/0, fuzz 1500/0,
+plus all workload gates. Detailed bug records live under `docs/bugs/039_*`
+through `docs/bugs/044_*`; workload friction and oracle details live with the
+examples.
+
+### Merge loops unified — the 029/031/033/038 family is one function now (2026-07-16)
+
+ROADMAP 1a's Lower branch-site consolidation landed. The three branch merge
+loops (statement-if, if-expr, match) — each of which had shipped at least one
+"one site missed one invariant" miscompile (029 arrays, 031 pre-promotion,
+033 aggregate phi, 038 promoted-aggregate clobber) — now call a single
+`reconcileBranchVars`. The promoted-skip invariant (031/038), the
+aggregate-no-phi rule (033/E0714), and the array-address rebind (029) live
+in exactly one place. The four genuine semantic differences between sites
+(the statement-if void rule, the match loop's array-load binding, the
+unit-phi guard, the single-incoming rebind) are explicit fields of
+`BranchMergeRules` with "do not simplify without a full battery" warnings —
+byte-identical IR preserved, verified: fast suite 1680/0, SSA 531/0, all
+five merge-bug regression fixtures exact, fuzz seeds 1+3 clean, cli gate
+14/14. The &&/|| short-circuit site keeps its own minimal shape.
+
+### Bugs 037+038, fuzzer grammar extension, dark-gate CI wiring (2026-07-16)
+
+**Bug 038 (found by the new fuzzer grammar).** The statement-if, if-expr, and
+match merge loops skipped reconciliation only for promoted SCALARS; a promoted
+AGGREGATE (e.g. a String mutated via `&mut` in an if-arm) was reconciled from
+the var-table snapshot — the stale pre-if value — and the merge stored it back
+over the promoted alloca, silently erasing the mutation
+(`if true { string_push_char(&mut str0, 109); }` printed "q" compiled, "qm"
+interpreted). All promoted variables now skip the merge at all three sites —
+fourth instance of the 029/031/033/034 family; unifying the four branch sites
+(ROADMAP 1a) is now overdue. Found by extending `fuzz_differential.py` to the
+shapes the grammar could not generate: aggregate value-ifs, `&mut`-self
+method borrows inside BOTH branch arms (the exact 031 shape), and a non-Copy
+String with push/read/print/drop. Prerequisites landed in the interpreter:
+`string_length` now returns BYTES (was codepoints — drifted on non-ASCII),
+and `string_push_char`/`string_append` were implemented (ASCII-exact;
+c >= 128 byte-truncation named as a residual). 600 fresh programs, 0
+mismatches post-fix.
+
+**Bug 037 (fail-closed).** `repr(align(N))` with N greater than the struct's
+natural alignment changed Layout but not the declared LLVM type (`{ i32 }`
+for an align-16 struct) — every alloca, containing-struct offset, and enum
+payload silently disagreed. Now rejected at CoreCheck with E0585
+(`reprAlignExceedsNatural`) until declarations carry explicit alignment; the
+no-op case (N ≤ natural) stays legal, and `repr_align.con` moved to it.
+Ledger entry + diagnostic-codes row included.
+
+**Dark gates wired.** `test_wrong_code` was already silently red when wired
+(WC-0005's expectation predated the exit-model migration) — exactly the
+failure mode "Makefile target, no CI" hides. New `extra-gates` CI job runs
+catches, showcase, wrong-code, reducer smoke, release bundle, and the three
+audit gates (float literals, enum union layout, string_char_at differential).
+
+### Audit batch 2026-07-16 (second pass): exact float literals, enum-union ABI, oracle drift, evidence-doc gates (2026-07-16)
+
+The remaining audit items from the 2026-07-16 external review, each with a
+class-level gate.
+
+**Float literals are now exactly rounded.** The audit's 1/3 fix (Nat mantissa
++ `Float.ofScientific`) was insufficient: `ofScientific` keeps only ~11 guard
+bits after dividing out `5^exp10` and still mis-rounds rare literals one ulp
+(corpus: `16.3633343`, `932183.9385014` — Lean's own literal path shares the
+flaw). New `floatOfDecimalMantissa` converts decimal→binary64 with exact
+big-Nat arithmetic (exact floor-log2 comparison, round-half-even with full
+sticky information, subnormal and overflow edges). Gate:
+`check_float_literals.sh` — 8022 fixed+LCG cases comparing both the exported
+function and the end-to-end lexer path bit-for-bit against CPython `float()`.
+
+**Canonical enum union covers the worst alignment-aware footprint; enum
+allocas carry `align 8` when payloads need it.** Audit item #3 grew two roots
+when pulled. (a) `scanBuiltinEnumArgs` picked the canonical Option/Result
+payload by max `tySize` only; a smaller high-alignment instantiation writes
+at `alignUp 4 align` and could run past the declared alloca
+(`Option<[i64;3]>` end 32 vs `Option<[u8;24]>` canonical 28). Selection is now
+by footprint and the declared union covers the program-wide worst end offset.
+(b) The union's `{ i32, [N x i8] }` declaration caps alloca alignment at 4
+while payload loads/stores assume natural alignment — `string_to_int` shipped
+exactly this (i64 store at offset 8 into a 4-aligned alloca). A first attempt
+(i64-array storage) was caught by its own fixture: aggregate load/store of a
+partially-initialized union is poison-safe only at byte granularity (lli=12,
+clang-O2=0, expected=7 on one program). Final design: byte-array storage +
+a single `emitAllocaTy` choke point attaching `align 8` to every enum alloca
+whose payload needs it (including `string_to_int`/`vec_pop` and the
+no-instantiation i64 fallback). Regression:
+`tests/programs/regress_enum_canonical_align.con` (run_ok 42007); class gate
+`check_enum_union_layout.sh`.
+
+**`string_char_at` oracle drift closed.** The interpreter indexed codepoints
+and returned 0 out-of-range; compiled code indexes bytes and returns -1 — any
+non-ASCII string or OOB index made the differential oracle disagree with
+codegen. Interp now matches the backend exactly; `check_string_char_at.sh`
+pins ASCII / non-ASCII / OOB / negative agreement.
+
+**Evidence-doc arithmetic fields enforced.** All five examples declared
+`overflow="wrapping"` (and `shift_oversize="wrap"`) months after the language
+started trapping, and `check_assumptions.sh` never read the section. Files
+corrected, the gate now asserts the frozen checked/trapping policy and
+cross-checks `--report arithmetic`, and `docs/verification/ASSUMPTION_FILES.md`'s stale
+template and "not yet enforced" note are fixed.
+
+**Phantom `concrete new` scrubbed.** The compiler's std-import hint and the
+book/site project pages directed users to a command that does not exist; all
+three now describe the real flow (`Concrete.toml` + `src/main.con`).
+
+**CI plumbing.** `run_ci_gates_local.sh` extraction rewritten (bare
+`./scripts/...` invocations included — the two biggest CI gates were silently
+omitted from the pre-push ritual — arguments preserved, tree-mutating nightly
+mutation gate excluded); `run_tests.sh` passlevel is fail-closed on an
+unparseable pipeline-test summary; CI retry loops emit `::warning` on failed
+attempts instead of masking flakes; `ideas.org` carries a SUPERSEDED banner.
+
+### Builtin semantics single-sourced by detection + stage-2 completion corrections (2026-07-17)
+
+Builtin single-sourcing (audit follow-up): signatures were already one
+table (Resolve/BuiltinSigs.lean, shared by Check + Elab — "can never
+silently diverge"); behavior is now pinned the same way DETECTION-side:
+`check_builtin_semantics.sh` (Makefile + CI) runs an edge-heavy fixture
+per shared builtin (empty/non-ASCII/OOB/negative/wide inputs) under the
+interpreter and as a compiled binary and requires BYTE-EQUAL output, and
+pins the interp-PENDING inventory as an explicit 11-name list so a new
+backend builtin must land on both sides or extend the pin deliberately.
+A body-generation DSL is recorded as not-now: detection kills the drift
+class (the string_char_at 0-vs--1 class) without the machinery.
+
+Stage-2 completion CORRECTIONS (review findings on e8105359 — the
+"grep returns zero hits" claim was overstated): check_exit_codes.sh's
+knob case now pins the env var IGNORED (rc=1000&255=232, clean stdout)
+instead of asserting the deleted echo; the dead unsets and no-op
+`CONCRETE_ECHO_RESULT= ` env prefixes are swept from run_tests/test_ssa/
+selfprint/defer/module_visibility/enum_union/fixed-point oracle; and the
+stale prose in EXECUTION_MODEL (docs + site), MAIN_EXIT_MODEL's stage-1
+section, the Makefile target line, and ROADMAP item 1 now state the
+knob's deletion. The one remaining reference is check_exit_codes.sh's
+deliberate ignored-env pin.
+
+### MAIN_EXIT_MODEL stage 2 COMPLETE — the echo knob is deleted (2026-07-17)
+
+Every consumer of the legacy result echo is converted and the knob is
+GONE: Main.echoResultEnv, Pipeline.emit's echoResult parameter, and
+EmitSSA's echo main-wrapper arms are deleted — exit-code semantics are
+the only main-wrapper behavior. The last 30 marker files fell in three
+slices: the mechanical gates (self-printing wrapper on the compiled
+side), the oracle-harness class (fixed_point_filter generates
+self-printing drivers; test_wrong_code wraps repros; both reducer
+predicates wrap candidates), the fuzz wrapper, and the meta-runners
+(mutation, ci-gates, triage, minimize, captures) whose exports were
+vestigial once every gate became knob-proof. run_tests.sh's own global
+export was the final flip, verified by the FULL suite before and after
+the compiler-side deletion.
+
+The wrapper (scripts/tests/lib/selfprint.sh) hardened along the way:
+inherits the wrapped main's capabilities, dedupes Console, passes unit
+mains through untouched (they already self-report), and is set-e-safe.
+The flip also exposed dark-runner rot fixed en route: test_fuzz's
+valid-program generator still emitted the removed `Shape#`/`Color#`/
+`Tag#` variant syntax (10 sites), and nested_field_write's canonical
+check read the test's own status on empty output.
+
+### Intrinsic identity threaded to call sites — name-hijack class closed (2026-07-16)
+
+Audit item #2: Elab and Lower intercepted intrinsics by RAW NAME, so a
+user function named `wrapping_add` silently evaluated as the builtin
+(verified: user body `a*1000+b` returned 5, not 2003) and a user `sizeof`
+had its argument list dropped (nonsense E0522 downstream). Check already
+guarded with userFnNames (Check.lean:302); Elab and Lower now apply the
+same identity-by-resolution rule — Elab consults `lookupFnSig` before
+`resolveIntrinsic` (the vestigial `_sizeof` suffix hijack is user-guarded
+too), and Lower carries the program's defined-fn names in LowerState and
+never intercepts a defined function. No Core-name churn: unshadowed
+programs elaborate identically (proof fingerprints stable, purecore
+32/32). Regression: `tests/programs/regress_intrinsic_shadowing.con`
+(run_ok 31). Residual noted: Check-side divergence/capability
+CLASSIFIERS (exprIsAbort, .free checks) still match raw Core names — a
+user fn named `abort` can be misclassified as diverging (conservative
+direction); folds into the #13b typing-truth work.
+
+### Workload 4: tar_list — ustar lister, tar-differential (2026-07-16)
+
+`examples/tar_list` lists ustar archives byte-identical to `tar -tf`
+(size edges 0/511/512/513, directories, >100-char paths via the ustar
+prefix/name join), gated by `check_tar_list_differential.sh` (8 checks,
+Makefile + CI; system tar is the oracle). First workload written WITH
+std.cli from the start — zero arg-parsing friction, as designed. 13t exit
+codes throughout; a truncated-archive u64 underflow in the first draft was
+caught by the checked-subtraction trap on the first test run and fixed to
+the H2 overflow-safe shape (the trap contract working as promised —
+recorded as positive friction). Pull candidates held at one ask:
+bytes-until-NUL field extraction, numeral parsing over &Bytes+offset,
+String::push_str. Not pulled: pax/GNU long names, -tvf verbose rows,
+streaming reads.
+
+### Bugs 035 + 036 fixed — layout is program-wide, type metadata travels with the type (2026-07-16)
+
+The two bugs std.cli's first contact filed are closed same-day. **035**:
+`lowerModule` collected struct/enum/newtype defs only from its own module
+tree, so a user module constructing an imported enum whose payload
+mentions another module's generic struct (CliResult's Vec<String>)
+panicked in Layout.fieldOffset. The pipeline now passes all mono modules
+and lowerModule appends their defs AFTER its own — own-module lookup
+priority means nothing that resolved before resolves differently;
+external defs only fill names that would otherwise panic. **036**:
+`resolveImports` now runs a bounded closure — public types of the
+imported modules REACHABLE through imported signatures (enum payloads,
+struct fields, param/return types, newtype inners) arrive with their
+Copy markers, impls, and method sigs, killing the false E0295/E0264 that
+forced consumers to import payload types by hand. Regression projects
+`tests/programs/enum_generic_payload_layout` and
+`import_closure_metadata` (auto-discovered project tests); corpus audit
+remapped. Wide battery: affected 1636/0, trust-gate 1463/0, examples
+136/0, codegen differential 34/34, quick fuzz 40/40, all ritual gates.
+
+### std.cli v1 shipped — both consumers switched, one compiler bug fixed, two filed (2026-07-16)
+
+`std.cli` landed per its design note: declare-then-parse (presence + u64
+value flags, positional arity, unknown-flag rejection, one 13t bucket →
+exit 2, parse result owns its Strings). hexdump AND base64_cli switched
+over in the same stack — hand loops deleted, base64_cli's usage errors
+standardized to exit 2 — and examples/cli_tool + check_cli_helpers.sh (14
+checks, Makefile + CI) drive the full input matrix. String-valued flags
+stay append-only (no consumer). The H2 lint caught the new module's own
+additive guard — fixed to the class form.
+
+First contact found three compiler bugs (docs/bugs/): **034 FIXED** —
+the short-circuit `&&`/`||` lowering missed bug-031's pre-promotion, so an
+RHS receiver-borrow inside a loop silently corrupted an adjacent local
+(std.cli's positionals Vec); the fix mirrors the ifElse/ifExpr/match
+sites, and check_cli_helpers.sh's "two positionals" leg is the verified
+load-bearing regression (pre-fix compiler: rc 134). **035 OPEN** —
+Layout.fieldOffset panics on a user-module enum construction whose other
+variant carries a generic-container struct payload. **036 OPEN** —
+a cross-module type's Copy-ness and methods are visible only when the
+type is named in the import list (false E0295/E0264).
+
+### Hex-fmt pull shipped + std.cli v1 design resolved (2026-07-16)
+
+Workload 3's two pulls landed the same day. (1) `fmt.hex_digit` made pub +
+`fmt.push_hex(s, value, width)` (fixed-width, prefix-free, zero-padded,
+buffer-appending, %0*x growth semantics) — hexdump switched over as
+proof-of-pull and stays byte-identical to xxd; the two new constant-divisor
+divisions are kernel-discharged (div trio 35→38, determined then regen).
+(2) `research/stdlib/cli.md` resolves the std.cli v1 design:
+declare-then-parse over std.args (presence + value flags, space-separated
+only, unknown flags are errors, one 13t error bucket → exit 2, result owns
+its Strings, explicit positional arity); subcommands/aliases/auto-help are
+append-only extensions. Exit criterion: v1 ships only when a workload
+switch-over deletes the hand loops.
+
+### Workload 3: hexdump — CLI-shaped, xxd-differential (2026-07-16)
+
+`examples/hexdump` is the third Phase 7 workload (first CLI-flag-shaped
+one): an xxd-compatible dumper (`[-s skip] [-n len] <file>`) proven
+byte-identical to the system `xxd` across default/flag/edge cases
+(`check_hexdump_differential.sh`, Makefile + CI; xxd is the differential
+oracle, skipped loudly if absent) with 13t exit codes. Pull evidence
+recorded in its FRICTION.md: hex formatting hit its SECOND ask
+(fixed-width, no-prefix, buffer-appending — `format_hex` is 0x-prefixed
+minimal-width per-call-alloc), and hand-rolled flag parsing (~45 lines for
+two value flags + one positional) is the measured case ROADMAP item 2
+(`std.cli`) asked for. Held at one ask: `&String == literal` ergonomics,
+stdin reader, streaming dump.
+
+### Pure-core proof arc: seed planted, paused by the selective rule (2026-07-16)
+
+The Phase 7 exit obligation (item 4) opened contract-first
+(docs/verification/PURE_CORE_PROOF_ARC.md: Lean kernel = judge, SMT = worker with a
+separate `solver_checked` class, five-point DoD incl. mutation-sensitivity)
+and shipped its seed: **11 kernel-backed stdlib proof links** — Option
+unwrap_or/map, Result map/map_err, NonZeroU32/U64/Port try_new,
+try_from_u64/try_from_u32, and the base64 alphabet pair char_of/val_of with
+the encode-decode roundtrip corollary. Every link is fingerprint-fresh,
+spec-drift-covered, kernel-verified through the Examples import, and
+mutation-flips-stale (check_purecore_proofs.sh, 32 checks).
+
+Machinery hardened en route: proof attributes parse on impl methods;
+source-link synthesis resolves impl-method AND free-fn names in nested std
+submodules (Core mangling matched via the fingerprint table, skip-not-
+fabricate in dependency pipelines); spec-drift coverage is keyed by
+qualified name and now RENDERED per entry ("spec: drift-checked / NOT
+drift-covered") with the fabricated_proof fixture visibly uncovered;
+trusted fns (Bytes.view) and step lemmas (parse_hex H1 guard) are refused
+links by the registry — their kernel theorems ride source comments until
+the #[model_refined_by] partial-evidence class lands.
+
+The arc then PAUSED by the pinned selective rule: prove the stable
+algebraic core + workload-pulled APIs only; broad/unstable surfaces keep
+lighter evidence; crc32 stays oracle-tested. "Everything has an evidence
+class" > "everything is proved."
+
+### Stdlib API snapshot/diff gate current (ROADMAP 22a, 2026-07-16)
+
+The five-fact manifest grew into the full API snapshot: every public stdlib
+item's row now also carries its **canonical signature** and its **evidence
+class** (`proved` derived from the actual `#[proof_by]` attribute — exactly
+the 9 kernel-linked public APIs, pinned; everything else `gated`). The gate
+(check_stdlib_manifest.sh, 12 checks) fails on add/remove, signature change,
+capability widening, allocation/failure-profile change, or evidence-class
+change until docs/stdlib/STDLIB_SURFACE_MANIFEST.tsv is regenerated —
+both new negatives mutation-verified. Deprecation/doc-link columns are
+deliberately absent until those mechanisms exist (no decorative facts).
+
+### H18 closed — owned-resource collections destroy their elements (2026-07-16)
+
+The linear-language-specific stdlib gap (ROADMAP Phase 7 item 1) is closed:
+every shipped container destroys its live non-Copy elements exactly once on
+drop/clear, via compiler drop-glue — no `drop_with`, no stored destructor
+pointers, exactly the pinned design (RUNTIME_COLLECTIONS.md "Drop-glue rules").
+
+- The `Destroy` BOUND means destroyable: Copy passes trivially (calls elided
+  at monomorphization), an explicit `impl Destroy` runs, and a non-Copy type
+  without `Destroy` makes drop/clear uncallable (E0241 → drain-and-close).
+- Conditional trait impls landed (`impl<T: Destroy> Destroy for Vec<T>` — new
+  parser/AST/judgment support), so containers compose recursively at any
+  nesting depth.
+- Overwrite paths are honest: same-key map inserts destroy the displaced key;
+  `Vec.replace(at, v) -> T` returns the displaced element.
+- v1 capability fence (E0584): a `Destroy` impl may require at most `Alloc`,
+  so "glue capabilities are derived and visible" holds by construction.
+- Proven by destruction-count std tests (exactly-once, live-slots-only,
+  pop/remove transfer out) and the 25-check COLLECTIONS-DROP-GLUE gate
+  (flipped deliberately from the old leak-pinning form).
+- Compiler fixes en route: method receivers/cast targets naming type params
+  normalized to typeVars; mono no-op synthesis for elided destroys; interp
+  dynamic `*_destroy` dispatch; decl-level core-check diagnostics now carry
+  their E-codes.
+
+### Phase 7 workload 1 (base64_cli) + exit-code semantics + three compiler fixes (2026-07-14/15)
+
+The first workload program shipped and immediately paid rent: build first,
+record friction, implement only what is pulled.
+
+- `examples/base64_cli`: encode/decode verified against system `base64`
+  (fixed vectors + random round-trips), recoverable errors per the 13t
+  buckets, friction log with a ranked pull list (`examples/base64_cli/FRICTION.md`).
+- **Bug 031** (found by the workload): lazy address-of promotion inside a
+  branch left the promotion alloca uninitialized on sibling paths — a non-Copy
+  local borrowed (incl. method-call autoborrows) in more than one branch of
+  if/else, value-if, or match read garbage. Fixed with dominating
+  pre-promotion at all three lowering sites; three regression fixtures.
+- **Bug 032** (found by pull 2's UTF-8 test): multibyte string literals
+  miscompiled — `.ll` globals sized by char count with codepoint-hex escapes;
+  `llvm-as` rejected any compiled program containing a non-ASCII literal.
+  Emission is now UTF-8 byte based.
+- **Pull 2 shipped**: `Bytes::from_string` (the always-safe text→bytes
+  crossing); the workload uses it; manifest regenerated.
+- **Pull 1 stage 1 shipped (MAIN_EXIT_MODEL)**: compiled `main`'s return value
+  is now the process exit code (8-bit masked; Unit exits 0) and the runtime
+  writes nothing to stdout — compiled programs are real CLI citizens (clean
+  pipes, `set -e` works). Legacy full-width echo survives only behind the
+  `CONCRETE_ECHO_RESULT=1` harness knob, exported one-line-per-script across
+  the test harness until the stage-2 fixture migration deletes it. Gated by
+  `check_exit_codes.sh`; decision record in `docs/platform/MAIN_EXIT_MODEL.md`
+  (end state: `fn main() -> u8 | Unit`, Zig-shaped; deliberately no
+  `process.exit()` in a linear language).
+- **Pulls 3 and 4 shipped**: `std.base64` landed with RFC 4648 vectors and
+  strict `Option`-failing decode (including padding-edge rejection), and
+  `examples/base64_cli` now imports it instead of carrying inline codec logic.
+  The standalone-import diagnostic now points first-contact users toward project
+  mode instead of leaving them at a dead end.
+
+### Phase 7 foundation tier — stdlib manifest, IO spine, boundaries, and first breadth slices (2026-07-14)
+
+The first Phase 7 foundation tier is complete and gated. The active roadmap now
+keeps the remaining stdlib frontier only; the shipped foundation details live here.
+
+- Public stdlib five-fact manifest (`docs/stdlib/STDLIB_SURFACE_MANIFEST.tsv`)
+  is generated from signatures and checked by `check_stdlib_manifest.sh`: every
+  public item records allocation, ownership/consume behavior, failure shape,
+  capability set, and proof/evidence class. The same gate enforces the
+  method-canonical naming rule and domain-capability visibility for hosted APIs.
+- `std.option` / `std.result` helper surface landed: `is_*`, `unwrap_or`,
+  `ok`/`err`/`ok_or`, `map`, `map_err`, `and_then`, and conditional-`Copy`
+  behavior for `Option<T>` / `Result<T,E>` when their payloads are `Copy`.
+- Raw bytes / text / path boundaries are pinned: `Bytes::to_string` is checked,
+  `_unchecked` names caller obligations, `String`/`Text` are valid UTF-8 only,
+  ASCII helpers stay ASCII-only, Unicode normalization/case-folding/display
+  width are v1 non-goals, and `PathBuf` remains raw OS bytes with checked display.
+- `std.io.Reader` / `std.io.Writer` is the single IO spine: fn-pointer handles,
+  authority at acquisition (`File`, `Console`, or `Unsafe` for fixed buffers),
+  capability-free read/write/flush/close methods, fixed-buffer no-Alloc paths,
+  and no public `std.writer` sink surface.
+- Core value-rendering uses the Writer path: built-ins and a user-struct
+  `write_to` convention render through the same sink, with allocation/capability
+  behavior visible in reports.
+- `std.test` has the small oracle layer: `expect_ok`/`expect_err`,
+  `expect_some`/`expect_none`, sink matching, stable assertion shapes, and no
+  xUnit framework surface.
+- First breadth slices landed: bytes/slice `view` and `cmp`; Unicode policy doc
+  and gate; path checked conversion triad; OrderedMap/OrderedSet traversal; BitSet
+  canonical aliases.
+- The 13t error-convention gate is complete: recoverable (`Result`/`Option` and
+  ignored-result rejection), fatal (`trap_sites` telemetry), and policy-gated
+  (`--report caps`) buckets are all proven through compiler surfaces.
+- Audit fixes landed around the foundation: hosted domain capabilities are
+  re-exposed for `File`/`Env`/`Time`; parse overflow, rand range division by zero,
+  HashMap allocation facts, UTF-8/hex option returns, duplicate writer surface,
+  bug 029, and bug 030 were fixed and regression-locked. H18 remains open and
+  disclosed for non-`Copy` collection element destruction.
+
+### Roadmap refactor — active roadmap starts at Phase 7 (2026-07-14)
+
+Collapsed the old pre-Phase-7 roadmap bulk into a compact active index. Detailed
+Phase 1-6 task bodies remain historical record in this changelog and linked audit
+docs; `ROADMAP.md` now keeps only active future work, cross-cutting constraints,
+and pull-gated tails that still affect later phases.
+
+Kept visible in the roadmap because they still matter: 6C V1 telemetry/hash/shadow
+hardening when pulled by workloads; ProofCore partial-def reduction in Phase 14;
+CompilerDB/interned fact store in Phase 8.5; consume-then-break linear restoration
+if a workload needs it; build-output convention; and future usability/tooling
+surfaces such as qualified names, FFI, target-profile roots, lint/vet, doc, bench,
+trace/debug, eval/inspect, and LSP. Fully done Phase 6B/6C/6D/6E details stay here
+in CHANGELOG instead of cluttering the active roadmap.
+
+### Pre-Phase-7 trio — error conventions, allocator decision, doc-snippet gate (2026-07-14)
+
+13t: `docs/language/ERROR_CONVENTIONS.md` (normative recoverable/fatal/policy-gated split
++ classification checklist) with `examples/error_conventions` fixture. 13s:
+`research/stdlib/allocator-as-value.md` — GO two-tier: `with(Alloc)` stays
+authority, allocator identity is an explicit first-param `&mut` value; tier-1
+defaults unchanged against a named Global, tier-2 `*_in` monomorphic over
+`A: Alloc` (additive, retrofit-safe). 13r: `check_doc_snippets.sh` (CI) — every
+con/concrete doc fence compiles, rejects as declared, or is marked pseudocode;
+triage found 22 compiling, 58 fragments, zero rot; mutation-tested. With Phase
+6E's CLI coherence gate, every roadmap prerequisite for Phase 7 stdlib is met.
+
+
+### Phase 6E — CLI coherence: help never throws, daily aliases, coherence gate (2026-07-14)
+
+Before 6E, `concrete --help` was an UNCAUGHT EXCEPTION (parsed as a filename),
+`concrete help` errored, and `concrete test --help` demanded a project before
+printing anything. Now: help is handled first in main — `--help`/`-h`/`help`/
+`<cmd> --help` print a grouped, context-free page (DAILY build/run/test/fmt;
+REPORTS & EVIDENCE; DEBUGGING trace/reduce/debug-bundle; INTERNALS/COMPAT) from
+any directory. Daily aliases `concrete report <kind> <file>` and `concrete trace
+<file> [--json]` are an args REWRITE to the legacy spellings, so they are
+byte-identical by construction; every legacy flag keeps working.
+`check_cli_coherence.sh` (28/0, CI + make test-cli-coherence) is the Phase 7
+exit criterion: context-free help, alias identity, legacy compat, structured
+errors, taxonomy completeness. README leads with the daily workflow.
+
+
+### Phase 6D complete — capstone gate; `fn name!` removal recorded (2026-07-14)
+
+Phase 6D closed: item #1 (`fn name!` dead grammar) was removed earlier
+(64050c86; negative fixture `error_fn_bang_removed.con`, E0001); #4/#5 are
+deliberate keep-decisions; the #6 capstone
+`check_phase6d_surface_simplification.sh` (12/0; CI + `make test-phase6d`)
+locks LL(1) + removed-form negatives + migrated-form behavior + 6B
+ownership/agreement gates + capability-visible unsafe. The full item texts
+moved out of ROADMAP (this changelog is the record); the consume-then-break
+E0207 follow-up stays tracked in ROADMAP.
+
+### Phase 6D item 3 — postfix `p->field` removed; `.` auto-derefs one layer (2026-07-14)
+
+Three slices, each full-battery green. **A** (`64b75835`): `.field` read/write on
+Heap<T>/HeapArray<T>/&Heap<T>/&mut Heap<T> auto-derefs with exactly the old `->`
+semantics — including skipping the H11 non-Copy projection rule for heap-shell
+access, so the blessed `h.next` + `free(h)` heap-node destructure carries over;
+proven by an arrow-vs-dot parity sweep over the real heap corpus (positives AND
+negatives). **B** (`cdd7709a`): 24 fixtures migrated mechanically. **C**
+(`a56d6882` + constructor removal): the member token is rejected with a migration
+hint, `Expr.arrowAccess`/`Stmt.arrowAssign` and the arrow*/E0255 diagnostics are
+deleted (~30 sites; Lower/Interp/Mono never saw arrows — Elab desugared them),
+EBNF postfix_op drops the arrow (LL(1) green). Function return `-> T` is
+unchanged. Unsafe/raw access remains visible through capabilities (raw deref
+still requires Unsafe, E0521) and trust reports — not a second member token.
+
+
+### Phase 6D item 2 — value `while … else` removed; `while` is statement-only (2026-07-13)
+
+The oddest position-sensitive control form is gone. The parser rejects `while` in
+expression position with a structured migration hint (declare a mutable result,
+assign in the body, `break;`), and the `Expr.whileExpr` / `CExpr.whileExpr`
+constructors are deleted pipeline-wide (~39 handling sites across 18 files —
+parser, formatter, resolve, check, elab, canonicalize, corecheck, mono, lower,
+interp, proof-core, reports, telemetry counters). EBNF + LL(1) checkers stay
+green; `docs/language/STATEMENT_EXPRESSION_MODEL.md` updated.
+
+Fixture surface migrated to statement-form equivalents with identical behavior
+(`loop_break_result_*`, `loop_result_*`; oracle vector repointed) plus
+removed-syntax negatives pinning the parse error + hint. Design consequence,
+recorded in ROADMAP: break-VALUES went with the form, so the H14 break-value
+consume exemption has no surface expression — consume-then-break on an outer
+linear is E0207 today (pinned by the linear-conservation gate); a sound
+consume-then-break exemption is the natural follow-up if a workload pulls it.
+
+Verified: fast suite 1634/0, examples 130/0, oracle 70/0, golden 54/0,
+differential fuzz 60/0, loop-control/linear-conservation/ownership/
+pipeline-contract/ssa-verify/trailing-value gates green.
+
+
+### Phase 6C observability — full gate surface landed (V1); #1/#6/#7 have tracked follow-ups (2026-07-13)
+
+All eight Phase 6C items now have working, gated tooling, but three are deliberate
+V1s that do not yet meet the full field/coverage spec (tracked as remaining 6C
+hardening in ROADMAP): **#1** telemetry emits structural counts only (per-pass
+timing, peak memory/RSS, alloc/output size, AST node counts, mono-instantiation /
+obligation / runtime-trap counts, report size still to add); **#6** hashes 4 stages
+(core, ssa, fingerprints, obligations — AST/post-mono-Core/CoreCheck-facts/traps/
+report-facts still to add); **#7** is a conservative function-granularity shadow
+(the full typed-query manifest fields and the wider edit corpus remain). **#4** and
+**#8** landed their mechanisms (2 of #4's 4 classes reduce a live failure, the other
+two are detector/representative; #8 runs the suite + census but does not yet publish
+the formal handoff manifest). **#2** complexity guard, **#3** `--trace-pipeline`, and
+**#5** mutation-testing are fully to spec.
+
+#2 (complexity guard), #3 (trace) landed earlier; this milestone adds #4–#8:
+
+- **#4 counterexample-first debugging** (`check_counterexample_reduction.sh`): any
+  pipeline failure reduces to a minimized `.con` fixture + replay command, saveable
+  as a regression. Reuses the existing reducer; covers the error→diagnostic, trap-
+  preservation (new `scripts/reduce/expect-trap.sh`), report-finding, and oracle-
+  mismatch (detector + reducer-refusal) paths.
+- **#5 gate mutation-testing** (`check_gate_mutation_coverage.sh`): proves the gates
+  are load-bearing — one source mutation per rule family, each caught by its SPECIFIC
+  gate. Full sweep 10/10 KILLED (corecheck-boundary, copy-judgment, checked-arith,
+  capability-judgment, constructor-coverage, source-maps, mono-name-collision,
+  diagnostics-quality, scoped-collector, vc-schema). Heavy (rebuild per mutation) →
+  nightly `make test-gate-mutation-coverage`.
+- **#6 pass-output replay hashes** (`check_pass_hashes.sh`): per-stage summary hash
+  manifest + replay commands over the deterministic renderings; determinism +
+  comment/span invariance for position-free stages (core, fingerprints) vs the
+  documented position-bearing shift for ssa/obligations + structural sensitivity.
+- **#7 cache-free incremental shadow** (`check_incremental_shadow.sh`): per-query
+  reuse-key (input + dependency digests) + output digest over an edit corpus, always
+  recomputing; a FALSE REUSE (predicted-reuse whose output changed = a missing
+  dependency edge) is a hard failure — demonstrated by injecting a dropped edge.
+- **#8 capstone** (`check_phase6c_observability.sh`): runs the suite (7/7) and
+  publishes a component census; no caching enabled, no new semantic truth source.
+
+### Example proofs moved out of the compiler library (2026-07-12)
+
+The 8 flagship/example correctness proofs (`HmacSha256`, `CryptoVerify`,
+`ElfHeader`, `FixedCapacity`, `LoopInvariant`, `ParseValidate`, `ConstantTimeTag`,
+`ProofPatterns`) were imported directly by the compiler aggregator
+(`Concrete.lean`), so they counted as compiler implementation — the 2610-LOC HMAC
+proof was the second-largest file under `Concrete/`, inflating the compiler's size,
+module graph, and trusted surface.
+
+They are now a separate **`Examples` Lake library** (`srcDir = proofs/`, root
+`proofs/Examples.lean`, modules + namespaces `Examples.<Ex>.Proofs`). The compiler
+no longer imports example proof code; `Concrete.Proof` still references their
+theorems by name/fingerprint (a string boundary, not a code dependency). The lib
+stays in `defaultTargets`, so `lake build` still kernel-checks every proof. The one
+place that legitimately imports the example proofs is the proof-check target:
+`concrete --report check-proofs` and `concrete prove --check` generate a Lean file
+that does `import Concrete` + `import Examples` and `#check`s each linked theorem.
+
+`srcDir = proofs/` was chosen deliberately: a top-level `Examples/` dir would
+case-collide with the existing `.con` `examples/` tree and break on case-sensitive
+Linux CI. Boundary discipline is enforced by `check_proof_namespace.sh` (example
+theorems live only under `Examples.*`; `Concrete.Proof` keeps only allowlisted
+infrastructure). Follow-up recorded in ROADMAP: the proofs left, but their spec
+PExprs / registration tables still live in `Proof.lean` (extract when the
+proof-registry boundary is clearer).
+
+### Phase 6C #2 — complexity guard exposed a family of pipeline O(N²) bugs (2026-07-12)
+
+The anti-superlinear complexity guard (`scripts/tests/check_compiler_complexity.sh`)
+found a real pre-existing bug on its first run: compiling wide `match` chains was
+super-linear (8× arms → ~38× time; 800 arms = 17.5s). Isolation (`--emit-core`
+linear, `--emit-ssa-unverified` linear, `--emit-ssa` explodes) pinned it to
+**SSAVerify's dominator/predecessor computation** (the wide match lowers to a long
+block chain). Root cause: `computeDominators` used *Jacobi*
+iterative dataflow (each pass reads only the prior pass), so dominator info
+advanced one block per pass → ~N passes over a long block chain, each O(N) over
+assoc-list/list-set structures = O(N³–N⁴); and SSAVerify runs twice per compile.
+
+Fix: switch to **Gauss-Seidel** convergence (read predecessors' dom sets already
+updated this pass). Dominators are a monotone framework, so this reaches the
+identical least fixpoint (same dom sets, same verdicts) but converges in ~2 passes
+for forward/RPO block order — 800 arms 17.5s → 1.3s (13×). Shipped with a
+**behavior-preservation gate** (`check_ssa_verify_agreement.sh`): a trust pass must
+keep its verdicts, so valid complex CFGs (deep if/else chains, wide match, nested
+loops, diamonds, value while-expr) must still accept and stay codegen-correct
+(interp==compiled). SSA suite 806/0, examples 130/0, invalid-SSA mutation still
+caught. Both gates wired into CI + Makefile.
+
+Continuing the hunt (the guard is now a live detector) surfaced that this was not
+one bug but a **family of independent O(N²) hot spots** — all the same shape
+(association-list / list-set operations where a map/set was needed) in different
+stages. Fixed, each behavior-preserving (SSA suite 806/0, examples 130/0,
+`check_ssa_verify_agreement` 5/0, main suite 1635/0):
+
+- **SSAVerify dominators** (wide match → long block chain): Jacobi → Gauss-Seidel
+  (above). 800 arms 17.5s → 1.3s.
+- **SSACleanup `collectAllUses`** (large arrays → many instructions in one block):
+  was built with `acc ++ instUses` per instruction (O(N²)) AND membership-checked
+  per instruction in dead-code elimination (O(N²)) → `Std.HashSet`. This was the
+  dominant verify/cleanup array cost: `--emit-ssa` delta over lower-only went
+  2110ms → ~0 at n=8000; array `--emit-ssa` n=8000 2757ms → 647ms (4.3×).
+- **`Lower.emit`**: `currentInsts ++ [inst]` → O(1) reverse-accumulate + reverse
+  at `terminateBlock` (universal block-building win).
+- **SSAVerify `running`/`seen` memberships** and **`Mono.lookupFn`** call
+  resolution (`allFns.find?` per call) → `Std.HashSet` / name→def `HashMap`
+  (defensive: real O(N²) in the verify and generic-call-resolution paths).
+
+Bug-027 re-attributed and refined: it was filed as "EmitSSA O(n²)"; the isolation
+shows EmitSSA/emit is negligible — the array cost was cleanup+verify+emit-block
+building, now fixed above.
+
+Then the frontend O(N²) itself (many mutually-calling functions, `--emit-core`
+alone ~9s at 4000 fns) was chased down — and it was **NOT check/resolve call
+resolution** (an earlier hypothesis, since disproven): coarse stage-isolation was
+misleading because the dominant cost is BEFORE all later stages, in the **lexer**.
+`Lexer.tokenize` built its token list with `acc ++ [tok]` per token = O(tokens²).
+Fix: reverse-accumulate + reverse once (token order preserved). **4000 functions
+`--emit-core` 9698ms → 241ms (40×); large arrays now linear.** Two same-shape
+masked hot spots fixed alongside: `Parser.parseModuleBody` decl accumulation
+(`fns ++ [x]` → reverse-accumulate) and Resolve global-symbol lookup
+(`globalScope.symbols` scan per reference → build-once `Scope.symbolMap` HashMap).
+
+- **Reassignment chains** (many `x = x + k` → many SSA versions of one register in
+  one block; realistic in accumulation loops, unrolled arithmetic, state machines)
+  were O(N²)/cubic in SSACleanup, unmasked by the lexer fix (statements `--emit-ssa`
+  ~19s at 4000). Fixed: `applyReplacements` → resolved replacement HashMap;
+  `foldConstants` build/apply de-quadratified; and **forward constant propagation**
+  (a reg→const env resolving operands before folding) so a chain folds in ONE pass
+  instead of one fold-level per cleanup-fixpoint iteration. **19391ms → 125ms
+  (155×), near-linear.** Behavior-preserving (const-fold is semantics-critical):
+  fuzz 200/0, differential 30/0, agreement 5/0.
+
+**O(N²) family closed** on the principle *fix residuals that hit realistic code;
+track the synthetic-only ones.* Every realistic hot spot the guard exposed is now
+near-linear (lexer, block-building, dead-code, dominators, cleanup chains). The
+one remaining residual is **synthetic-only and tracked, not chased**:
+- **SSAVerify dominance** stays ~O(N²) in block count at *very large N* (dom *sets*
+  are inherently O(N²) for a long block chain — needs a function with hundreds of
+  blocks, e.g. an 800-arm match, not real code). The idom/Cooper-Harvey-Kennedy +
+  dense-ID-array near-linear rewrite is the tracked follow-up (behavior gate as its
+  safety net); the complexity guard tracks it but doesn't obligate the rewrite. The
+  guard's job is detection, not an infinite perf sweep.
+
+### Phase 6C #1 — pipeline telemetry trace (2026-07-12)
+
+`concrete <file> --emit-trace-json` emits a stable-schema JSON trace of per-stage
+structural counts for an accepted program: Core (modules/functions/enums/structs),
+post-mono (modules/functions), and SSA (modules/functions/blocks/instructions),
+plus the opaque compiler identity and the diagnostic count. Built in
+`Pipeline.telemetryJson` (with `countCore`/`countSSA`, recursing through
+submodules); wired into Main as the `--emit-trace-json` emit flag. This is
+deliberately **not** a performance claim — per-pass timing and RSS are omitted
+from v1 (platform-specific; benchmarking is Phase 17). The gate
+(`scripts/tests/check_pipeline_telemetry.sh`, 17 rows, CI + Makefile) pins exactly
+what the roadmap says to: schema stability, counts present and varying with
+program size, and no private absolute paths leaking into the trace. Foundation for
+the 6C complexity guard / trace / replay-hash items, which consume these per-stage
+summaries.
+
+### Phase 6B closed — capstone validation artifact + control-flow builder (2026-07-12)
+
+The compiler-pipeline refactor phase reaches its exit criterion.
+
+- **Item 32 — Phase 6B validation artifact.** `scripts/tests/check_pipeline_refactor_contract.sh`
+  is the capstone contract: a compact corpus proving the *composed* pipeline is
+  (A) **behavior-preserving for accepted programs** — interp (the reference
+  semantics) and the compiled binary produce the same value or trap together,
+  across arithmetic, mixed-width casts, Copy duplication, value/unit-bearing
+  if/while, and the discard escape — and (B) **fail-closed for malformed
+  programs** — each axis violation (mixed-width E0228, use-after-move E0205,
+  unconsumed-linear E0208, pure-discard E0294, returned-reference, missing
+  capability) is rejected before Lower, never miscompiled. 16 rows, wired into
+  CI and `make test-pipeline-refactor-contract`.
+- **Item 30 — control-flow builder, acceptance met.** The result-materialization
+  path (unit/void slot guard, branch-value store, merge load) is unified behind
+  `freshResultSlot` / `storeBranchResult` / `loadResult` in `Concrete/IR/Lower.lean`,
+  removing the duplicated store/load bookkeeping where the void-store and
+  wrong-width-store bug classes lived, and closing the surface-reachable unit
+  if/while-expr `alloca void` hole. Item 30's acceptance gate is satisfied:
+  control-flow fixtures stay green and a mutation dropping the while-exit
+  scope-local variable filtering is caught (invalid SSA, via
+  `regress_while_expr_unit_slot.con`). Full consolidation of the remaining
+  terminator sites is not bug-pulled and left as optional follow-up.
+- **Item 31 — ProofCore partial-def reduction: deferred by its own criteria.**
+  The item scopes itself to "only constructs pulled by Phase 12/14 preservation
+  proofs; do not chase a full rewrite." Phase 12/14 are not active, so this
+  stays deferred rather than becoming a speculative rewrite.
+
+### Interpreter oracle grows `defer` — 36 fixtures differential-testable (2026-07-12)
+
+`--interp` previously refused `defer` (`interp: defer not yet supported`), so
+~36 defer fixtures were oracle-blind (interp couldn't cross-check the compiled
+runtime). The interpreter now runs deferred bodies at block exit in LIFO order.
+The implementation reuses Flow propagation as scope unwinding: `evalStmtsD` tracks
+the deferrals collected in a block and runs them (newest-first) on ANY exit —
+fall-through, `return`, `break`, `continue` — before the flow propagates. Because
+`break`/`continue` are caught by the enclosing loop (`evalWhile`) and `return`
+propagates through to the function body, this composes to the correct semantics
+for free: `return` runs every enclosing scope's defers, `break`/`continue` run
+only those up to the loop (mirroring Lower's `emitAllDeferredCalls` vs
+`emitDeferredUntilLoop`). Verified: all 36 defer fixtures now agree interp ==
+compiled with zero divergences; four cases (LIFO, on-return, per-iteration,
+break-vs-function-scope) are pinned in `scripts/tests/check_differential_positions.sh`.
+(Remaining interp gaps in defer-using fixtures are unrelated: heap `alloc`,
+`vec_pop`.)
+
+### Structured control-flow builder, slice 1 — `alloca void` hole closed (2026-07-12)
+
+First slice of the Lower/SSA structured control-flow builder (ROADMAP #5),
+bug-class-pulled. A unit/never-typed **if-expression or while-expression in value
+position** — e.g. `let u = if c { acc = 5; } else { acc = 9; };` — emitted
+`%ifslot = alloca void` (illegal LLVM IR) and failed codegen. The 2026-06-18
+changelog entry "fixed" this only in Elab (inferring a hintless if's type from its
+branches so a unit-typed if wouldn't *reach* Lower); the structural hole in Lower
+survived and stayed reachable (any value-position if/while-expr whose branches are
+statements is unit-typed). `match_` already guarded it; if/while-expr did not.
+
+The fix introduces `freshResultSlot` in `Concrete/IR/Lower.lean` — the single
+unit/void guard for slot-based result materialization (returns `none` for
+`unit`/`never`, so callers skip the per-branch store and the merge load). Both
+`lowerExpr.ifExpr` and `lowerExpr.whileExpr` now route their result slot through
+it (`LoopInfo.resultSlot` was already `Option`, and the break arm already guarded
+it). This is the first shared piece of the builder — consolidating the three
+inconsistent result-materialization idioms (alloca-slot for if/while/short-circuit,
+phi for match) is future work, pulled incrementally by bugs rather than a big-bang
+rewrite. Regressions: `tests/programs/regress_{if,while}_expr_unit_slot.con`.
+
+### Phase 6B completed semantic-axis items moved out of the active roadmap (2026-07-11)
+
+The fully completed Phase 6B / 6.5 compiler-pipeline items were moved from
+`ROADMAP.md` into this changelog so the active roadmap only tracks remaining
+pipeline hardening work.
+
+Completed Phase 6B semantic-axis items:
+
+- **Integer/arithmetic semantics unified in `Concrete/Semantics/IntArith.lean`.**
+  Integer width, signedness, ranges, checked/wrapping/saturating behavior,
+  cast normalization, div/rem behavior, shift-range predicates, trap predicates,
+  and optimizer foldability now have one source of truth. `Interp`,
+  `SSACleanup`, `SSAVerify`, `EmitSSA`, report obligations, and range
+  diagnostics read from the same arithmetic policy instead of maintaining
+  parallel implementations. The arithmetic gate proves
+  `interpret == fold-then-interpret == compiled` over the integer matrix and
+  carries trap-preservation red-team cases.
+- **Check/Elab source typing unified through `TypeJudgment`.** Core `CExpr` was
+  already the typed carrier; the drift bug was Check and Elab computing source
+  expression types independently. `Concrete/Semantics/TypeJudgment.lean` now
+  owns the source-type decisions that matter: literal/defaulting records,
+  flexible-literal binop operand order, and the context-hint policy used by
+  calls, aggregates, index expressions, patterns, and control-flow values.
+  Elab's divergent re-elaborate repair path was deleted, and Check/Elab share
+  the same decision for migrated families.
+- **E0228/E0715-style typing drift closed for the covered surface.** Literal,
+  binop, call/argument, aggregate, index, pattern, if, and match value typing now
+  agree by construction or by verified policy. The work also fixed the
+  control-flow overflow soundness bug where branch bodies ignored the enclosing
+  value hint, causing interpreter and compiled behavior to diverge.
+- **Type-agreement regression gate landed.** `scripts/tests/check_type_agreement.sh`
+  carries the red-team rows for the historical Check/Elab disagreement class and
+  includes regression coverage for the context-hint families that were verified
+  to agree by construction.
+- **Copy judgment single-sourced (`Layout.isCopyTyGeneric`).** The two Copy
+  recursions (front-end monadic over `StructDef`/`EnumDef`/`NewtypeDef`, and the
+  pure Core version) that drifted on `typeVar` (bounds vs flag) and `newtype`
+  (recurse vs absent) now delegate to one lookup-parameterized judgment.
+  `scripts/tests/check_copy_judgment.sh` adds the consistency-under-refinement
+  gate: a conditional-Copy generic refines to the concrete Copy-ness of its
+  instantiation (`Wrap<i32>`/`Option<i32>` Copy, `Wrap<String>`/`Option<String>`
+  linear), with Check pre-mono and Verify post-mono agreeing. The full "why-Copy"
+  decision record is deferred until a report/audit/Ownership consumer pulls it.
+- **Type-argument inference single-sourced (`Shared.unifyTypes`).** The
+  `InstantiationJudgment` slice: the verbatim-duplicated `unifyTypes` (Elab +
+  CheckHelpers) is now one shared algorithm.
+- **Capability decision family unified in `Concrete/Semantics/Capabilities.lean`.**
+  Beyond the `capsContain`/Unsafe/extern facts (Phase 6.5 #5), the direct-call
+  decision (`decideCall`/`missingCaps`), report membership (`capSetHas`),
+  through-pointer anti-smuggling (`missingCapsThroughPtr`), and cap-polymorphic
+  callback resolution (`resolveCaps`) are single-sourced; Check, CoreCheck, and
+  reports read one decision. `scripts/tests/check_capability_judgment.sh`
+  (mutation-tested).
+- **CapabilityJudgment slice 5 — pure non-`Unit` discard (`discard`/E0294).**
+  `expr;` over a pure, trap-free, non-`Unit` **Copy** value (a dead computation:
+  `2 + 3;`, `x;`, `a + b;`) is now rejected (**E0294**, `discardedPureValue`), with
+  a new `discard(expr)` intrinsic as the explicit acknowledgement escape. The
+  purity predicate (`exprPureDiscardable`) is deliberately conservative — it flags
+  only locally-provable-pure forms (literals, variable/field reads, pure operators)
+  and excludes trap-assertions (`/`, `%`). **Calls are not flagged**: the corpus
+  proved empty capabilities ≠ pure for a call, because the capability model does
+  not track mutation through `&mut` params or `trusted`/`extern` FFI as an effect
+  (`env_assign(&mut e, …)`, `fclose(fp)`); pure-call flagging is deferred to an
+  effect model that tracks mutation. `discard` is Copy-only — a non-`Copy` resource
+  must be consumed or `destroy()`d (**E0295**, `discardNonCopy`), keeping the two
+  verbs distinct (`destroy` = linear destructor, `discard` = acknowledge a trivial
+  Copy drop). Rows in `scripts/tests/check_capability_judgment.sh` (mutation-tested
+  load-bearing); this closes the last CapabilityJudgment slice.
+- **Ownership agreement matrix (`scripts/tests/check_ownership_judgment.sh`).**
+  Proves Check accept/reject ≡ Lower move/drop plan ≡ interpreter consumption
+  across the linearity matrix (move, Copy-dup, branch/match consume agreement,
+  return/param consume, borrow-no-consume, assignment overwrite, break-value;
+  and the reject cases). No drift found, so no shared ownership record was built.
+- **Totality matrix (`scripts/tests/check_totality_judgment.sh`).** Audit found
+  the trap/divergence facts already single-sourced (divergence in `CheckHelpers`,
+  arithmetic-trap in `IntArith` with the const folder routing through it,
+  cast-trap in `checkedToType`, bounds in `Lower`); the gate proves total/partial
+  classification agrees interp==compiled. Gate-only, no new helper or record.
+- **CoreCheck / pre-Lower boundary audit + gate.** `docs/compiler/COMPILER_BOUNDARY.md`
+  maps the constructor-guarded `ValidatedCore`/`MonomorphizedProgram` tokens and
+  which stage rejects each frontend/mono/type-policy residue class;
+  `scripts/tests/check_corecheck_boundary.sh` proves every class is rejected
+  before Lower.
+- **References made strictly second-class (Option A) + returned-reference boundary
+  verifier.** The long-term policy is now the strictest form: **no function returns
+  `&T` / `&mut T`** — not safe, not trusted — directly or nested in any
+  aggregate/alias/generic instantiation. Borrowed access in safe code goes through
+  scoped accessors (`with_value` / `with_value_mut` / `modify`); `Copy` data returns
+  by value; trusted low-level code that must hand back a borrow uses a raw pointer
+  (`*const T` / `*mut T`), the sole escape and not a reference type. Enforced in
+  Check at the front end and **re-asserted structurally at the post-mono boundary**
+  by `verifyNoReturnedRefs` (E0236) in `Concrete/Check/Verify.lean` — it walks each
+  monomorphized function's fully substituted return type via `tyExposesRef`
+  (descending through `.ref`/`.refMut`, `.generic` args, `.array` elements) with no
+  trust/safety exemption, wired into `verifyPostMono` and gated by
+  `check_corecheck_boundary.sh`, confirmed load-bearing by mutation testing. This
+  closes residue class 6 in `docs/compiler/COMPILER_BOUNDARY.md` (no class is caught only in
+  Check) and resolves returned-reference provenance (H1) by subtraction. The
+  `from(param)` escape valve remains deeply deferred and evidence-gated. See
+  `docs/archive/design-records/VALUE_MODEL.md`.
+- **Differential-sweep soundness/parity fixes.** Interpreter signed left-shift
+  now truncates to width; labeled `break`/`continue` now dispatch to the targeted
+  loop; `--interp` prints `main`'s return value only for a value-returning `main`.
+  Each with a permanent gate row.
+- **Differential oracle grown (`scripts/tests/check_differential_positions.sh`).**
+  The interpreter gained the pure string library, `Vec`, and function pointers,
+  turning ~45 previously-PENDING corpus programs into real interp==compiled
+  differential tests (corpus divergences 174 → 129; the remainder are documented
+  loud interp-coverage gaps, not miscompiles).
+
+Method note: the later audits (Instantiation, Capability boundaries, Ownership,
+Totality) repeatedly found the facts already single-sourced, so the deliverable
+was an agreement gate, not a new data model. Abstractions were built only where a
+consumer or a failing gate pulled them; speculative records were deferred.
+
+### Phase 6 completed language/usability core moved out of the active roadmap (2026-07-10)
+
+The fully completed and gated Phase 6 items were moved from `ROADMAP.md` into
+the changelog so the active roadmap contains only deferred, conditional, or
+not-yet-done work.
+
+Completed Phase 6 language/tooling items:
+
+- `concrete fmt` subcommand with semantics-preserving formatting.
+- Canonical LL(1) grammar and grammar docs, including `as` precedence and
+  escape/literal lexing fixes.
+- Transparent type aliases.
+- Loop control: `break`, `continue`, labels, while-expression values, and
+  linear cleanup.
+- Pattern ergonomics: ranges, `if let`/`while let`, guards, OR-patterns,
+  match-on-reference, struct update, and wildcard destructuring; anonymous
+  tuples and nested patterns remain workload-gated, not active debt.
+- Numeric model: out-of-range literal rejection, mixed-width binop rejection,
+  and sibling-width inference for literal-only operands.
+- `defer` with LIFO cleanup on every exit path.
+- Build profiles and checked arithmetic with trapping checked ops,
+  wrapping/saturating intrinsics, float-to-int H2 closure, and arithmetic
+  reports.
+- Permanent no-v1-macros stance.
+- Ignored-result diagnostics for discarded `Result`/`Option` values, aligned
+  with the later linear discard rules.
+- Style guide, iteration protocol, stdlib handoff, and memory model.
+- Semantic-darkness red-team gate and differential oracle bug-hunt.
+- Statement-vs-trailing-expression model with `isValue` on source/Core
+  expression statements.
+- Sub-file diagnostics now name the correct file: `Module.sourceFile` is
+  stamped by the project loader and threaded through Check/Elab/CoreCheck, so
+  diagnostics from `mod x;` files render the sub-file path and snippet rather
+  than the main file.
+
+Completed Phase 6 value-flow / linearity hardening:
+
+- H9/wildcard/nested-scope discard closure: `_` may ignore only `Copy`, `let _`
+  removed, nested-scope locals must discharge correctly, and unreachable block
+  ends do not produce false leaks.
+- H11 closure: by-value projection of a non-`Copy` subplace rejects; projection
+  bases, borrow targets, assignment targets, and auto-borrowed receivers are
+  checked as places.
+- Value-flow spec and constructor-coverage gate: every source construct states
+  whether it copies, moves, borrows, consumes, overwrites, rejects, or diverges.
+- Full front-end checker coverage for every source body, including submodules
+  and `std`.
+- H13-H17 conservation/discharge sweep: rebind consumes RHS, `break value`
+  consumes, non-`Copy` overwrites reject, live-linear shadowing rejects, and
+  by-value params are owned locals that must be consumed.
+- Linearity fuzzer (`fuzz_linearity.py`) as the ownership analogue of the
+  differential fuzzer.
+- Explicit expression checking modes (`value`, `callArg`, `place`) so ownership
+  transfer and projection behavior are centralized instead of per-handler.
+
+### #35 validation project (conlog) — first workload; two checker/codegen bugs fixed (2026-07-07)
+
+Started the log-analyzer validation project (`examples/conlog`) — the first
+real workload driving the language/tooling slab. Within the first pipeline it
+surfaced two genuine compiler bugs, both now fixed with regression tests
+(bug ledger 022, 023):
+
+- **Bug 022 (checker):** declaring a sibling submodule (`mod x;`) broke the
+  PARENT module's linear-consumption analysis — impl-method signatures
+  (`String_drop`, …) were indexed past the submodule sigs in `checkModule`,
+  so `s.drop()` stopped counting as a by-value-`self` consume and every owned
+  linear was falsely E0208. This blocked essentially every multi-module
+  project that owns a linear value; `std` escaped only because its parent
+  `lib.con` never calls such a method in its own body. Fix: `implOffset`
+  now includes `submoduleSigs.length`. Regression:
+  `tests/programs/submodule_linear_consume/`.
+- **Bug 023 (codegen):** short-circuit `&&`/`||` lowering emitted a `phi` of
+  an aggregate type (`String`) at the scand/scor merge when a promoted
+  aggregate was in scope — invalid IR (E0714). Fix: never phi promoted vars
+  or aggregates at the merge (aggregates merge through memory, like the
+  if/match merges — cf. bug 008). Regression:
+  `tests/programs/scand_aggregate_in_scope/`.
+
+Also recorded ergonomic findings in `examples/conlog/FINDINGS.md` (the
+cross-module String surface is the builtin free-functions, not the methods;
+no `String::split`/`lines()`) — deferred to Phase 7 std work per the
+deferral discipline.
+
+
+### #18 callable values: scoped mutation + context combinator surface (2026-07-06)
+
+With E0293 enforcing container-not-in-context, the deferred scoped-mutable
+tier landed: `HashMap::with_value_mut`/`modify`, `OrderedMap::with_value`/
+`with_value_mut`/`modify`, `Vec::with_at_mut` — in-place `&mut V` access
+confined to the callback, results returned by value, references never
+escaping. The context-combinator surface is now two-mode per the design doc:
+`for_each_with` (shared `&Ctx`) and `for_each_ctx` (mutable `&mut Ctx`,
+reborrowed per call) on Vec and HashMap. Consuming one-shot combinators and
+OrderedMap iteration stay workload-gated. This closes the H1 tail completely:
+the accessor model is scoped shared reads + scoped in-place mutation +
+move-out — no returned references anywhere.
+
+
+### E0293: container-not-in-context is enforced, not aspirational (2026-07-06)
+
+First tranche of #18 (callable values). The design doc claimed the borrow
+checker already rejected a scoped callback whose context re-borrows the
+container — probing showed it accepted `f(&mut x, &mut x)`,
+`mix(&x, &mut x)`, and the real attack `m.scoped(&mut m, cb)`. New rule:
+within ONE call's arguments (auto-borrowed method receiver included), a
+variable may be borrowed at most once when any of its borrows is `&mut`
+(**E0293** `conflictingCallBorrows`; shared+shared stays legal). The check
+is PATH-BASED: overlap is prefix-of on (root, projections), so `&mut w` vs
+`&mut w.f` conflicts while disjoint `&mut w.a` + `&mut w.b` stays legal; an
+ident argument that is a live borrow counts as a borrow of its tracked root
+(single-hop aliases like `let r = &mut c; c.scoped(r, cb)` reject). This is
+the soundness keystone `with_value_mut`/`modify` were deferred on — they are
+now unblocked. Gated in `check_callable_values.sh` (9 rows incl. the
+receiver-alias, alias-through-binding, and projection attacks). Known
+residual: multi-hop alias chains lose the tracked root (filed with 13k).
+
+
+### H13–H17 CLOSED: the value-flow discharge sweep (2026-07-06)
+
+Re-running the H11 audit over every *discharge* site found five more holes —
+two duplications (`a = b` rebind and `break f;` never consumed the moved
+value) and three leaks (`arr[i] = v` / `*r = v` through `&mut` dropped the
+overwritten value; same-scope shadowing dropped the shadowed binding; linear
+params including by-value `self` had NO consume obligation — `fn drop_it(f:
+File) {}` was a universal silent-drop escape). All disclosed first, then
+fixed: rebind/break consume (E0205 on reuse), non-Copy overwrite rejects
+(**E0291**), live-linear shadowing rejects (**E0292**), and — the big ruling —
+**params are owned locals and must be consumed** (`&mut T` params are borrows
+and exempt; no terminal parameter sinks, including `Destroy` impl bodies).
+The burn-down covered 16 std sites, ~95 fixtures, and 3 examples, and
+surfaced two real by-products: **`Vec::swap_remove`** (std lacked the
+linear-safe O(1) removal — `examples/kvstore` was hand-rolling it with a
+leak and a forget-escape) and a **`checkTraitBounds` fix** (a caller's own
+type param as a turbofish argument failed its own Copy bound, and non-Copy
+trait bounds on type-var arguments were silently skipped). An owned
+`[linear; N]` is now a disclosed expressiveness gap that fails closed
+(E0208) until array destructure patterns land.
+
+The prevention program landed with it: `docs/language/VALUE_FLOW_SPEC.md` (a
+normative value-flow row for every AST constructor) enforced by
+`check_value_flow_spec.sh` in CI (a new constructor fails until it declares
+its flow), and `scripts/tests/fuzz_linearity.py` — a ground-truth
+conservation fuzzer (consume-once must compile; leak/dup/shadow/param-sink
+must reject) running as a CI smoke and a nightly rotating campaign. Its
+first run found a real checker bug: if-EXPRESSION arms shared one env, so
+`if c { v } else { v }` was a spurious E0205 — ifExpr now mirrors the
+statement branch-merge machinery.
+
+### Mode-based expression checking (2026-07-06)
+
+The structural fix behind the whole H13–H17 family: `checkExpr` now takes a
+`UseMode` (`value` / `callArg` / `place`) and VALUE-POSITION IDENT READS
+AUTO-CONSUME in one place — ~25 scattered per-handler "remember to consume
+the ident" blocks were deleted. `callArg` (arguments only: consumption is
+parameter-type-directed — `&T` never, `&mut T` only borrow-block refs, owned
+always) is pinned to its 18 use sites by the value-flow gate so it can never
+become a general escape hatch; `place` covers projection bases, borrow and
+assignment targets, `..base`, and deref inners. Forgetting a mode on new
+syntax now OVER-REJECTS instead of silently leaking — the
+forgot-to-consume-in-one-AST-handler bug class is structurally closed.
+Verified by the linearity fuzzer (2,400 cases, 6 seeds), the linearity gate
+trio, and the full suite.
+
+### Conditional Copy for generic instantiations (2026-07-05)
+
+`Option<T>` / `Result<T, E>` / `struct Copy Box<T>` are now Copy **iff** every
+substituted field/payload is Copy: `Option<i32>` is reusable, `_`-ignorable,
+and `if let`-able for the right reason; `Option<String>` stays linear. A
+non-qualifying instantiation of a Copy-marked generic is **demoted to linear,
+not an error** (Mono demotes specializations to a fixpoint;
+`verifyCopyFieldsPostMono` keeps the machine-wide invariant "isCopy ⇒ all
+fields Copy"). Must-use was re-keyed on fallibility, not linearity: discarding
+a Copy `Result`/`Option` still flags **E0286**. This closes the second
+pre-trial prerequisite for the external-validation gate (Phase 7 #3).
+
+### H11 CLOSED: non-Copy sub-place reads by value are rejected (2026-07-05)
+
+The last open conservation hole. `let g = w.f;` / `let x = arr[i];` over a
+non-Copy field/element used to COPY the value out while the place kept owning
+it — a duplication (double-free once both were consumed). `checkExpr` now
+carries an `asPlace` position flag: projection bases, borrow targets,
+assignment targets, and auto-borrowed method receivers evaluate as places, so
+`&w.f`, `w.f.g`, `arr[i] = v`, and `&self` calls stay legal while bare
+by-value non-Copy projections reject (**E0290**). `p->f` heap reads are
+excluded (the heap-shell destructure idiom; `Heap<T>` interiors are not
+linearity-tracked — disclosed). Owned arrays of linear values now have no
+whole-owner move-out; array destructure patterns are the workload-gated
+follow-up. KNOWN_HOLES' OPEN section is empty.
+
+### H12 CLOSED: std fully front-end checked; four more checker fixes (2026-07-02)
+
+Tranche 3 finished the same-day burn-down (384 violations → 0) and DELETED the
+exemption machinery — std is now checked like any other code, pinned at zero
+by the gate. With H12 closed, the known-holes index is back to one open hole:
+H11 (the narrow non-Copy sub-place projection conservation gap). Four more
+checker gaps surfaced and fixed:
+
+- **Stores consume (conservation):** `*p = v` and `arr[i] = v` MOVE a linear
+  `v` into the slot — the trusted collection idiom (`*val_ptr = value`) no
+  longer re-flags the stored value as unconsumed.
+- **Linear rebind:** `acc = f(acc, x)` is legal — a linear variable may be
+  reassigned once its OLD value is consumed (the fold/accumulate pattern),
+  including inside loops (the RHS-of-self-assignment is exempt from E0207;
+  the binding is restored within the same statement). Overwriting a
+  still-live linear value stays E0219.
+- **Payload borrows:** matching an enum THROUGH a reference binds non-Copy
+  payloads as borrowed views (`&T`, Copy, droppable) instead of moving them
+  out of the borrow; `_` may ignore any payload behind a reference.
+- **Outermost-binding merges:** consumption merges resolved bindings by NAME
+  from the head of a flat env, so a nested match's mandatory field-named
+  `value` binding masked the outer `value` (spurious E0209/E0208 in
+  nested-Result code). Merges now resolve the outermost binding.
+
+std API decisions the model forced: value-selecting helpers behind `T: Copy`
+(`Option/Result.unwrap_or/ok/err` join `math.max/min`); `Child.wait(self)`
+consumes (a process is waited on exactly once); value-view types are `Copy`
+(`Slice`, `MutSlice`, `Cursor`, `Duration`, `Instant`, payload-free error
+enums); `std.test.ignore_opt/ignore_res` are the blessed consume-and-ignore
+for fallible results in tests; fork children close their inherited listener
+(`libc_exit` never returns, but the checker cannot know — and it is correct
+Unix hygiene anyway).
+
+### H12 tranche 1, divergence-aware linearity merges, interp print, sub-file diagnostics (2026-07-02)
+
+The "do the backlog" batch: implementation work on the four highest-leverage
+items plus the checker fixes the std migration immediately forced.
+
+- **Divergence-aware consumption merges (checker fix).** A branch or match arm
+  that DIVERGES (return/break/continue/abort) never reaches the merge point,
+  so it cannot disagree with the other branches and contributes nothing to the
+  merged state. The old merge ignored divergence and mis-fired E0209/E0212 on
+  sound code (`Some{v} => { … }, None => { drop(x); return 1 }`), and an
+  if-without-else with a diverging consuming branch leaked the consumed state
+  into the fall-through path (spurious E0205). ~63 spurious errors in std
+  alone. All-diverging matches fall back to the first arm's state (the code
+  after is unreachable).
+- **Return-path consumption rule (checker fix, closes a never-checked leak
+  class).** The divergence exemption above surfaced its own dual: a branch or
+  arm that exits the FUNCTION must have consumed every live linear value —
+  `if c { return 0; } … drop(s);` leaks `s` on the early-return path, and
+  nothing had ever checked it (the old E0212 merge caught one shape by
+  accident). `blockExitsFunction` (returns only — break/continue keep values
+  live at the loop boundary; abort/infinite-loop stay exempt like H9) +
+  `checkReturnPathConsumed` at all four branch/arm sites, aware of `defer`
+  reservations and exempting borrows (&/&mut are aliasing-exclusive, not
+  consumption obligations). Fallout fixed honestly: `math.max/min/clamp` and
+  the `std.test` assert helpers now require `T: Copy` (returning one of two
+  linear values always leaked the other), and the `option_heap` fixture
+  destructures its node and moves out of the heap box instead of leaking every
+  node.
+- **Field assignment on generic-struct and std-String receivers (checker
+  fix).** `self.len = …` inside `impl<T> Vec<T>` (or std's `impl String`)
+  threw a wrong E0254 "field access on non-struct type": the field-ASSIGN path
+  matched only `.named`, while the field-READ path already handled `.generic`
+  (with type-arg substitution) and `.string`. Now mirrored (~45 errors).
+- **Consume-then-exit exemption for E0207 (tranche 2).** Consuming an outer
+  linear inside a loop is legal inside a branch that EXITS THE FUNCTION —
+  no iteration follows a return, and the return-path rule guarantees the
+  branch consumed everything. A loop nested inside the exiting branch resets
+  the exemption (it iterates before the return; fixture pair pins both
+  sides). This erased the whole E0207 class in std (21 sites) and, with
+  per-site fixes (args/hex/set/text/numeric), brought the burn-down to
+  **23/30 modules migrated, 155 violations remaining**.
+- **H12 tranche 1: std burn-down 384 -> 145; 17 of ~30 modules migrated.** The
+  all-of-std exemption became a `stdMigratedSubmodules` burn-down list (only
+  grows; gate-pinned). Mechanical fixes: 115 `let` -> `let mut` declarations.
+  Remaining 145 are semantic (E0286 discarded fallible results in tests, E0208
+  leaks in error paths, E0207 consume-inside-loop shapes).
+- **Sub-file diagnostics name the right file (#24a).** `Module.sourceFile` is
+  stamped by the project loader (incl. dependencies) and threaded through
+  Check/Elab/CoreCheck via `Diagnostics.stampFile`; the renderer already keyed
+  location AND snippet off `Diagnostic.file`. An error in `src/helper.con:4`
+  now says so, instead of quoting `src/main.con`'s line 4.
+- **Interpreter print support.** print_string/print_int/print_char/print_bool
+  append to a reserved stdout buffer (seeded at the env bottom, surviving
+  call-frame drops); `--interp` prints it before the return value,
+  byte-matching the compiled binary. Printing programs — i.e. realistic
+  examples — are now differential-testable instead of PENDING.
+- **CI:** nightly fuzz campaign with a date-derived rotating seed (2000 cases
+  depth 3 + 500 depth 4, failing case uploaded as artifact); the weekly
+  clean-checkout proof replay is guarded to its own cron. The fast suite
+  gained a gate-smoke section (lex escapes, mixed-width, trailing values).
+
+### Submodule bodies are now front-end checked; std exempted and disclosed (H12) (2026-07-02)
+
+`checkProgram` consumed submodule *signatures* but never checked their function
+*bodies*: every `mod x;` file in a multi-file project — user code and the whole
+stdlib — compiled with the Check pass silently skipped. Type errors, immutable
+assignments, and linearity violations in sub-files were accepted (an
+`i = i + 1` on a non-`mut` binding in a sub-file compiled and ran); only
+CoreCheck's coarser Core-level rules applied. Found while chasing a diagnostics
+misattribution during the front-end/back-end agreement sweep.
+
+- **Fixed for user code**: `checkSubmodules` recurses into submodules mirroring
+  Elab's context (sibling types injected, imports resolved against the global
+  table). User sub-files now get the full front-end: types, linearity, borrows,
+  mutability. Gate: `check_submodule_check_coverage.sh`.
+- **`std` is exempted and disclosed as KNOWN_HOLES H12**: checking it surfaces
+  ~384 accumulated violations (real bugs and possible checker limitations on
+  its generic/pointer-heavy shapes). Migration is ROADMAP Phase 7 #38b with a
+  countable burn-down; the gate fails loudly if the exemption outlives its
+  disclosure.
+
+### CI re-greened: stale SSA goldens, &T match binding, if-let linearity decision (2026-07-01)
+
+CI had been red for 15 pushes (since 2026-06-27) on two accumulated failures;
+both resolved:
+
+- **Stale SSA goldens** (`ssa/array_basic`, `ssa/borrow_mut`, `ssa/defer_basic`)
+  regenerated: the diffs were Lower register renames plus the linear-conservation
+  aggregate-alloca changes, all behavior-verified by the execution, differential,
+  and example gates.
+- **`match` over `&T` bound variable arms as `&T`** instead of the deref'd value
+  (`match x { n => n + 1000 }` with `x: &i32` typed `n` as `&i32`, contradicting
+  the runtime, which loads through the ref). A variable arm over a reference now
+  binds the VALUE when the inner type is Copy; non-Copy inner types keep the
+  reference (binding a non-Copy out from behind a ref would duplicate it).
+- **if-let/while-let over non-Copy enums: rejected by design (E0288).** Same
+  rule as let-else — the desugared catch-all `_` arm may discard only Copy data,
+  keyed on the type, not the uncovered variants' contents ("always linear").
+  The pattern fixtures now use a `Copy` enum for the positive cases and pin the
+  `Option<i32>` rejection (`neg_if_let_noncopy`). Conditional Copy for generic
+  instantiations would restore these shapes for Copy payloads without bending
+  the rule, if ever adopted.
+
+### Front-end/back-end agreement sweep: mixed widths, value blocks, cast semantics, lexer escapes (2026-07-01)
+
+An audit pass over "the front-end and the back-end must accept the same
+language" turned up five issues; all fixed and gated.
+
+- **Mixed-width numeric binops are now E0228 at check time.** `typesCompatible`
+  treated any two numeric types as compatible, so `i8 < i32`, `u8 & i64`, etc.
+  passed check and ran under `--interp` — then died at SSA-verify (E0715, an
+  internal-error class) because a mixed pair has no single-width lowering.
+  Check now requires exact width+signedness agreement per operand (cast one
+  side explicitly); CoreCheck's binop rules use the same strict predicate as a
+  post-mono backstop (bitwise ops previously had NO agreement check at all).
+  Gate: `check_mixed_width_binops.sh`.
+- **Literal operands unify with the sibling operand, matching Elab.**
+  Check used to type a literal from the surrounding hint, so `inner[64 + i]`
+  (i: i32) typed `64` as `Int` from the index hint and spuriously mismatched;
+  Elab typed the same literal `i32`. Check now types the non-literal side
+  first and hints the literal side (covers literal-only subtrees like
+  `(8 + 9) % 1000`). This also removed the i64-vs-i32 E0224/E0225 class that
+  rejected ~33% of differential-fuzzer programs.
+- **`if`/`match` as trailing values of value blocks.** In an if-expression
+  branch, while-else, or match-arm block, a trailing `match`/`if-else` whose
+  arms end with values is now the block's value:
+  `let v = if c { match x { .. } } else { 0 };` parses and evaluates instead
+  of E0224-with-`()`-branch or "expected ';', got }". All-statement trailing
+  forms stay statements (no SSA change for existing programs). Gate:
+  `check_trailing_value_blocks.sh`.
+- **The interpreter normalizes `as`-cast values.** `evalCast` retagged the
+  type but kept the mathematical value, so `(-11) as u32` stayed −11 inside
+  the interpreter: later unsigned arithmetic spuriously trapped (checked +) or
+  produced wrong `%` results while the compiled binary was correct. Casts now
+  wrap into the target range (the documented silent-truncation semantics).
+  Found by the width-extended differential fuzzer on its second case.
+- **Unknown string/char escapes are lex errors.** `"test\x"` silently lexed
+  as `testx` (dropped backslash — silent data corruption); unterminated
+  literals were silently accepted too. Both are now E0001 with the valid
+  escape set named. Gate: `check_lex_escapes.sh`.
+
+Supporting changes: the differential fuzzer now generates programs across the
+full integer width lattice (i8..i64/u8..u32) with explicit casts at width
+boundaries — its compile-reject rate dropped from 61% to 0%, and every reject
+class it had was one of the bugs above. The EBNF was aligned with the
+implemented `as`-cast precedence (`-x as i32` is `(-x) as i32`; postfix >
+unary > `as` > binops), the unimplemented `match_stmt_tail` rule was removed,
+and `vec_len`-vs-`u64` counter mismatches in std's own tests (never
+front-end-checked; caught by the new CoreCheck backstop) were fixed.
+
+### Linear conservation: fix array-literal duplication + linear struct destructure (2026-07-01)
+
+A systematic audit of every value-flow site (does each one *move* a linear value
+exactly once?) turned up three issues; fixed with a standing conservation gate so the
+class can't recur.
+
+- **Array literals duplicated linear elements (soundness hole).** `let arr = [a, b];`
+  did not consume `a`/`b`, so they stayed live — you could `destroy(a)` *and* have the
+  array own it: a double-free. Now an array literal moves each element in (reuse is
+  **E0205**). This was a real duplication hole, not an over-rejection.
+- **Linear struct destructure was broken (fail-closed over-rejection).**
+  `let Wrap { f } = w;` desugared to a hidden `let __destr = w; let f = __destr.f`,
+  whose temp was never consumed → spurious **E0208** on `__destr_Wrap`. It now works as
+  a proper move-destructure: the source is consumed, each named field becomes an owned
+  binding (checked natively in `Check`; expanded to the temp+field form only at `Elab`,
+  past the linear checker). Errors now name the real binding, not the temp.
+- **let-else over a non-Copy enum stays rejected — by design.** `let E::A { f } = e
+  else { … }` desugars to a catch-all `_` arm, illegal under the linear `_` rule. Kept
+  consistent (no variant-sensitive weakening); for a non-Copy enum, use a full `match`.
+
+New gate `scripts/tests/check_linear_conservation.sh` (Makefile `test-linear-conservation`
++ CI) walks every value-flow site and asserts move-exactly-once. Full suite 3032/0.
+
+A follow-on sweep with the same gate found and fixed two more duplication holes, and
+disclosed one:
+
+- **Field assignment over a non-Copy field** (`b.f = n`) neither consumed the RHS nor
+  released the old value — a duplication *and* a leak. Now rejected (**E0219**): you
+  cannot overwrite a linear field (destructure and rebuild, or make the field `Copy`).
+- **Functional update `S { ..base }`** copied every non-overridden field from `base`,
+  duplicating a non-Copy field between `base` and the result. Copying a non-Copy field
+  via `..base` is now rejected (**E0220**); set it explicitly.
+- **H11 (open, disclosed):** projecting a non-Copy value out of a place *by value*
+  (`let g = w.f;` / `let g = arr[i];`) still copies instead of moving — a double-free.
+  Latent (no corpus use); the fix is context-sensitive (`&w.f` must stay legal), so it
+  is tracked in KNOWN_HOLES rather than rushed. See `docs/language/OWNERSHIP_MODEL.md`.
+
+### Concrete is linear, not affine: `_` may ignore only Copy values (2026-07-01)
+
+Closed the last incoherence in the ownership model. Two predicates had been
+deciding "may this disappear": named bindings used `!isCopy` (linear), but the `_`
+wildcard used `ownsResource` (affine) — so a non-Copy value that owned no resource
+(`Option<i32>`, a plain view struct) could be silently dropped by `match e { _ => {} }`
+while the *same* value bound to a name required consumption. That middle band made
+the language affine in one corner and linear everywhere else.
+
+Resolved by making the whole discipline **linear**, with one law: **a non-Copy value
+never silently disappears.**
+
+- **`_` gating tightened from `ownsResource` to `isCopy`** (`Concrete/Check/Check.lean`).
+  A wildcard arm (`match e { _ => {} }`) or `_` payload field over a **non-Copy**
+  value is now rejected (**E0288**, renamed `wildcardDiscardsNonCopy`) — including
+  resource-free non-Copy values like `Option<i32>`. `_` may ignore only a `Copy`
+  value (or a Copy payload inside an exhaustive match).
+- **The catch-all discard escape is gone.** To get rid of a non-Copy value you
+  account for it: destructure exhaustively and consume/hand off the parts; a `_` on a
+  *Copy* payload is fine (`match opt { Some { _ } => {}, None => {} }`). Migrated the
+  ~4 `match x { _ => {} }`-over-non-Copy sites (std `numeric`, a data-structures test,
+  two ignored-result fixtures) to exhaustive form.
+- **Model, stated once:** `Copy` = may duplicate (and therefore may ignore);
+  non-Copy = **linear**, must be used exactly once (consumed, moved, returned, handed
+  off); `Destroy` = a possible explicit consuming cleanup for resource owners. This
+  keeps affine-but-resourceless *tokens* (permits, witnesses) expressible — they are
+  simply linear values that own nothing and must be handed off, never dropped.
+
+Deliberately kept: conditional `Copy` for generic containers (so `Option<i32>` could
+become genuinely `Copy` and a catch-all `_` would be valid *for the right reason*) is
+a separate future convenience, not a foundation. Gate: `check_linear_discard.sh`
+(now locks the linear rule). Full suite 3032/0.
+
+### Close H9: a linear value left unconsumed in a nested scope no longer leaks (2026-06-28)
+
+Closed the last tracked soundness hole (KNOWN_HOLES H9, ROADMAP #13a): a non-Copy
+value bound to a NAMED binding inside an `if`/`else` branch or a match arm and not
+consumed before that block exited used to leak — the branch/arm merge dropped the
+local before the function-level scope-exit check could see it. Fixed in
+`Concrete/Check/Check.lean` with the three pieces the H6 thread always pointed at:
+
+- **Move-through-let.** `let g = f;` over a linear `f` now MOVES it (`f` is consumed;
+  no-op for Copy sources incl. `&T`). A bare-ident let-RHS previously only marked the
+  source *used*, so `let local = payload;` stranded the payload — the precise
+  false-positive that sank an earlier naive attempt. (Also closed use-after-move via
+  `let`: `let g = f; … use f` is now E0205.)
+- **Per-block scope-exit.** A linear value declared in a branch or arm (a payload
+  binding or arm-body `let`) must be consumed before the block exits → **E0208**,
+  including on `return`/`break` paths (control leaves the scope, so a resource owned
+  there genuinely leaks). `return value;` inside an arm now consumes the returned
+  payload — a latent bug the check surfaced and fixed.
+- **Divergence exemption.** A block whose end is unreachable — a non-terminating
+  `while true {}` (no break) or `abort()` — is exempt (`blockNonTerminating`), so a
+  server's accept loop may hold a resource live forever. `return`/`break`/`continue`
+  do NOT exempt; the function-level check honours the same exemption.
+
+Two value-view types the hole had been masking were corrected to `Copy` (std `Text`,
+structurally a `ByteView`; example `Header`/`Tlv`), and `Bytes::into_raw_parts(self)`
+was added as the explicit consume-and-take-the-buffer escape for trusted ownership
+transfer (the wrapper's destructor is deliberately skipped without a silent forget).
+**No tracked soundness holes remain open.** Gate `check_linear_nested_scope.sh`
+(Makefile `test-linear-nested-scope` + CI). Full suite 3032/0, examples 129/0.
+
+### `_` can never silently consume a resource owner; `let _` removed (2026-06-28)
+
+Made the linearity rule for `_` honest and complete, and retired the deceptive
+`let _ = e;` form. The leak found earlier (`let _ = Wrapper{File}`) was never a
+property of `let _` — it was `_` silently consuming a value that transitively owns
+a resource, and that survived at other `_` sites (`match x { _ => {} }`,
+`E::Has { _ }`). So:
+
+- **Transitive `_`-resource rule (the soundness fix, `Concrete/Check/Check.lean`).** A new
+  `ownsResource` predicate (Destroy impl, heap builtin — String/Vec/HashMap/Heap/…
+  — or any struct/enum/array component that owns one) now gates every `_` site: a
+  wildcard arm or `_` payload field over a resource owner is rejected (**E0288**),
+  transitively (so `match opt { _ => {} }` is fine for `Option<i32>` but rejected
+  for `Option<String>`). A `_` may ignore a component only while you consume the
+  whole; it can never make a resource owner vanish.
+- **`let _ = e;` removed (E0289).** `_` collapses back to one honest meaning — a
+  pattern wildcard, never a discard device. Bare non-Copy discards and deferred
+  linear returns remain **E0287**. Migrated ~20 `let _` sites across
+  std/examples/tests/fixtures. *(This entry's `_` rule was initially gated on
+  `ownsResource`; it was tightened to `isCopy` on 2026-07-01 — see the linear-not-affine
+  milestone above.)*
+- **Honest scope correction.** The previous commit's per-branch/per-arm
+  "block-locals must be consumed" check (E0208) was **reverted** — it false-positived
+  on real code (a payload moved into a local; a resource held across a
+  non-terminating loop). That residual — a *named* linear bound in a nested scope
+  and left unconsumed — is now tracked as **KNOWN_HOLES H9** (needs the exit-mode /
+  divergence scope refactor), rather than masked. The `_`/discard half stays closed.
+
+### Close the last two holes: H6 (silent linear discard) and H7 (loop-SSA) (2026-06-28)
+
+With these, **no soundness or codegen holes remain open** in KNOWN_HOLES.
+
+- **H7 — loop after a loop-bearing `if`-branch produced invalid SSA (E0708).** A
+  loop counter declared inside an `if`/`else` branch leaked into the env, so the
+  *next* loop's header phi referenced the first loop's counter from a
+  non-dominating block. Found by the differential fuzzer. Fix (`Concrete/IR/Lower.lean`):
+  after an if-statement merges, restrict the live variable set to the names that
+  existed before the `if` (the scope cleanup the `match` lowering already did). The
+  fuzzer now runs **with loops re-enabled** and is clean. Regression:
+  `loop_after_branch_loop.con`.
+- **H6 — silent discard of a linear (non-Copy) value.** A non-Copy value dropped
+  without being consumed silently vanished, contradicting the linearity guarantee.
+  Closed across every discard site (`Concrete/Check/Check.lean`): a bare statement value
+  / discarded call result → **E0287**; a branch-local declared in an `if`/`else`
+  branch and left unconsumed → **E0208** (new `checkBlockLocalsConsumed`); an
+  unconsumed match-arm payload → **E0208**; a deferred call returning a linear
+  value → **E0287**. `free(box);` is exempt (it *is* the consumption); `let _ =
+  expr;` remains the intended explicit discard (Destroy-gated, so resources can't
+  be silenced). Gate: `scripts/tests/check_linear_discard.sh`.
+- **Bonus regression fix.** Investigating the examples gate surfaced that the H8
+  struct-promotion used `emit (.alloca)` (current block) instead of
+  `emitEntryAlloca`, so a promoted `let mut <struct>` inside a branch produced a
+  non-dominating alloca (E0703 in `lox`). Hoisted to the entry block (also avoids
+  per-iteration stack growth in loops); examples gate back to 129/0.
+
+### Array indexing is now runtime bounds-checked — closes memory-safety hole H8 (2026-06-28)
+
+Raw `a[i]` / `a[i] = v` on a fixed array previously lowered to a raw `gep` with no
+bounds guard, so a dynamic out-of-bounds index **silently read or wrote
+out-of-bounds memory** in compiled code (the interpreter trapped) — a real
+memory-safety hole, and the one runtime-safety obligation left unenforced while
+overflow/div-zero/shift/`MIN`-neg/float-cast all trap. Now closed:
+
+- **Checked by default** (`Concrete/IR/Lower.lean` + `Concrete/Backend/EmitSSA.lean`): every
+  array GEP — read (`arrayIndex`), write (`storeToPlace`), and borrow/place
+  (`placeAddr`, covering `&a[i]`/`&mut a[i]` and nested `m[i][j]` / `a[i].f`) —
+  emits a call to a shared `@__cc_bounds_check` helper. A single unsigned compare
+  `(u64)i < len` catches both negative and `>= len`; on failure it `@abort()`s, the
+  same exit-134 trap as checked arithmetic, so compiled code and the interpreter now
+  agree (both abort) on out-of-bounds. LLVM folds the check away when the index is
+  provably in range; constant OOB stays a hard compile error (C7).
+- **Fail-closed**: safety does not depend on the obligation engine. Static
+  bounds-obligation elision and a named `get_unchecked` opt-out (behind
+  trusted/Unsafe, parallel to `wrapping_*`) are future follow-ups, not preconditions.
+- **Regression-gated**: `scripts/tests/check_array_bounds.sh` (Makefile
+  `test-array-bounds` + CI) asserts in-bounds works and OOB read/write/negative/
+  nested/`&mut` all trap; `array_bounds_inbounds.con` is an oracle vector; and the
+  differential fuzzer (`fuzz_differential.py`) now generates dynamic/out-of-range
+  indices and asserts interp-trap ⟺ compiled-trap, so the hole can't silently reopen.
+
+Full suite 3028/0.
+
+### Fuzzer hardening: enums/nested-match + SSA-error detection, two more codegen fixes (2026-06-28)
+
+Extended the differential fuzzer (`scripts/tests/fuzz_differential.py`) to generate
+Copy enums + `match`-on-enum + nested `if`/`match`-as-value, and to treat a
+compiler-internal failure on a generated program (SSA-verify error, panic, crash)
+as a bug regardless of the interpreter — an **oracle-free** signal. It immediately
+found two more codegen bugs, now fixed (regression vectors in
+`tests/oracle/vectors.txt`):
+
+- **`(8 + 5) + v1` — compound-literal binop not coerced** (`Concrete/Elab/Elab.lean`).
+  Only a *bare* integer literal adapted to the other operand's concrete width; a
+  literal-only *sub-expression* stayed `int`/i64, so `int + i32` was accepted by the
+  checker but emitted a mismatched-operand binop (E0715). The adaptation now applies
+  to any `int`-typed operand, guarded so a genuine `Int` value is unaffected.
+  Fixtures: `binop_literal_width.con`.
+- **`__last_expr` pseudo-variable leaked into merge/loop phis** (`Concrete/IR/Lower.lean`).
+  The internal trailing-value variable (`.expr` lowering) was included in
+  `snapshotVars`, so a value-bearing `if`/`match` block's `__last_expr` leaked into a
+  later construct's merge/loop-header phi reconciliation, building a spurious,
+  mistyped, or non-dominated phi (E0708/E0710/E0715) — e.g. any `match` after an
+  if-expression came out `i64`. Fixed at the single root by dropping `__last_expr`
+  from `snapshotVars`. Fixtures: `value_block_then_match.con`.
+
+Also filed **KNOWN_HOLES H7** (found by the fuzzer, not yet fixed): a `while`-loop
+reached via the merge of an `if` whose branch contains another loop produces invalid
+SSA (E0708) — a compile-time codegen bug (valid program rejected), not a silent
+miscompile. The fuzzer gate runs `--no-loops` until it's fixed; loop generation
+stays available for hunting it.
+
+### Differential bug-hunt: seven interp/compiler fixes + a random fuzzer (2026-06-27)
+
+A workload-driven differential pass (writing programs, comparing `--interp` vs
+compiled output, minimizing each divergence) surfaced and fixed seven bugs —
+**three silent miscompiles** in *compiled* code. The last one was found by a new
+**random differential fuzzer** (`scripts/tests/fuzz_differential.py`, Makefile
+`test-fuzz-differential`) that auto-generates well-typed Copy-only programs over
+the bug-prone shapes and flags any interp-vs-compiled divergence — the automated
+form of the hand-written probes (ROADMAP Phase 14 #13, v1). Each fix carries a
+permanent regression vector in `tests/oracle/vectors.txt`.
+
+- **Miscompile — `&mut o.f` inside a conditional branch applied on the wrong path**
+  (`Concrete/IR/Lower.lean`; found by the fuzzer). A mutable struct local wasn't
+  promoted to stable storage at declaration, so a field borrow inside an `if`
+  branch forced an unsound mid-branch promotion; the post-merge read saw the
+  write applied even when that branch wasn't taken. Mutable value aggregates
+  (arrays — already — plus user structs/enums) are now promoted to a stable alloca
+  at declaration. Fixtures: `mut_ref_field_in_branch.con`.
+
+- **Miscompile — `&mut <place>` aliased a copy, not storage** (`Concrete/IR/Lower.lean`).
+  Passing `&mut a[i]` (array element) or `&mut o.f` (struct field) to a function
+  GEP'd into a *loaded value* (a throwaway copy), so the callee's write was
+  silently lost — the array/struct was unchanged on return. Now a new `placeAddr`
+  computes a stable base address (promoted local / pointer) and GEPs into it;
+  `borrow`/`borrowMut` and the call-argument path both route through it, including
+  nested places (`&mut a[i].f`, `&mut grid[i][j]`). The old `&mut field` call-arg
+  special case (the source of the copy) is gone. Fixtures: `mut_ref_place.con`.
+- **Miscompile — nested `match`-expression produced invalid SSA** (`Concrete/Elab/Elab.lean`).
+  A `match` used as another match's arm value got result type `unit` (the type was
+  read only from a hint, defaulting to unit), so its arm literals were cast to
+  `void` and the outer match collapsed to a single value from a non-dominating
+  block (`E0703`). Match result type is now inferred from the arm bodies when no
+  hint is present. Fixtures: `nested_match_value.con`.
+- **Interp — value-bearing `if`/`match` blocks evaluated to unit** (`Concrete/Interp/Interp.lean`).
+  `evalStmts` discarded the final statement's value and `evalStmt`'s `.expr` arm
+  ignored `isValue`, so a value-bearing `if`/`match` block returned unit (the cast
+  then failed, or a downstream `unit + unit` errored). Both now propagate the
+  trailing value (#36 semantics). Fixtures: `if_expr_value.con`, `match_expr_value.con`.
+- **Interp — `while`-expression as a value was unsupported.** `Flow.brk` now
+  carries an optional value, `break v` yields it, and a new `evalWhileExpr`
+  evaluates the loop/`else` value. Fixtures: `while_expr_value.con`.
+- **Parser — `else if` chains rejected in value position** (`Concrete/Frontend/Parser.lean`).
+  The if-expression parser required `else {`; a trailing `else if` now parses as
+  the else block's value. Fixtures: `else_if_chain.con`.
+- **Interp — bitwise `& | ^` wrong on negative operands** (`Concrete/Interp/Interp.lean`).
+  `Int.toNat` clamps negatives to 0, so `-1 & 255` gave 0 instead of 255. Now
+  computed on the two's-complement bit pattern at the operand width. Fixtures:
+  `bitops_negative.con`.
+
+Still open (documented-deferred, not a silent bug): a block-expression
+(`if`/`match`/`while`) as the *trailing value* of a `{ }` block (e.g.
+`if c { match e { … } } else { … }`) is rejected — the "block-as-value" parser
+work. Workarounds: `else if`, or `let x = …; x`.
+
+### Ignored-result diagnostics — discarding a fallible result is an error (2026-06-27)
+
+Phase 6 #13 (`docs/language/IGNORED_RESULT.md`). A `;`-terminated statement expression
+whose value is a fallible result — `Result<…>` or `Option<…>` — silently threw
+the value away, ignoring a possible failure/absence. That discard is now
+rejected with **E0286** unless explicitly acknowledged.
+
+- **The rule** (`Concrete/Check/Check.lean`): `mustUseEnumName?` marks `Result`/`Option`
+  as must-use; `checkStmt`'s `Stmt.expr` case emits E0286 when such a value is
+  discarded (`isValue := false`). A trailing value expression (no `;`) flows out
+  as the block's value and is never flagged. This closes the daily-workflow twin
+  of linearity: the linear checker already caught a *named* value never consumed
+  (E0208); the gap was an *unnamed temporary* from a call, dropped on the floor.
+- **The acknowledgement**: `let _ = expr;` — explicit, greppable, auditable.
+  Implemented in the `letDecl` case: binding to `_` drops the value without a
+  live linear obligation, **except** for a `Destroy` type, which must still be
+  released with `destroy(…)` (so `let _ =` can never silence a leaked resource —
+  `let _ = open();` still errors E0208). `let _ = v;` also consumes an existing
+  linear `v`, so it is a true drop, not a dangling binding.
+- **Found real discards**: the sweep caught `vec_pop` results dropped on purpose
+  in `examples/vm/main.con` (the VM's POP/ADD/… opcodes) and a `truncate` loop in
+  `tests/programs/integration_data_structures.con` — all fixed to `let _ = …`.
+- **Gate**: `scripts/tests/check_ignored_result.sh` (Makefile `test-ignored-result`
+  + CI) over `tests/programs/ignored_result/` — discard rejected (E0286),
+  acknowledged/handled/non-must-use/value-position accepted, and the soundness
+  guard that `let _ =` does not silence a `Destroy` resource (E0208).
+
+With this, the Phase 6 roadmap's fully-shipped items (#1–#7, #10, #11, #13, #16,
+#17, #19, #33, #35a, #35b, #36) are folded out of the active list into a one-line
+index at the top of the phase; only deferred-with-pull-condition decisions and
+unbuilt tooling remain.
+
+### Phase 6 Tier A sweep: style guide, memory model, target-conditional (2026-06-27)
+
+Three roadmap items closed by decision/doc/gate, shrinking Phase 6 without
+implementation churn:
+
+- **#16 source style guide** (`docs/project/STYLE.md`): naming, function/module
+  structure, pattern/error-handling idioms, arithmetic spelling, proof-bearing
+  layout. Mechanical layout stays owned by `concrete fmt`; STYLE.md is the
+  advisory rest.
+- **#33 memory model** (`docs/language/MEMORY_MODEL.md` + `check_memory_model.sh`): a
+  user-facing narrative tying together the canonical references. The audit found
+  that **"no uninitialized reads" is a grammar-level guarantee, not a dataflow
+  result** — `let` requires an initializer (`let x: T;` is a parse error), so
+  uninitialized state is unrepresentable. Stated as an explicit invariant in
+  MEMORY_SEMANTICS.md §1 and backed by a gate (declares-without-value rejected;
+  declare-with-value + mutate-after-init still work).
+- **#26 target-conditional** (`docs/platform/TARGET_CONDITIONAL.md`): decided — prefer
+  profile/target-selected source roots in `Concrete.toml` (a build/audit fact,
+  not preprocessor state) over in-source conditionals; a narrow `cfg`-style
+  attribute is deferred (LL(1)-safe, target/profile-only, audit-reported if ever
+  added). No `cfg` in the language until a workload pulls it.
+
+And three forks closed as **decide-and-defer** (no premature architecture):
+
+- **#9 C/ABI glue UX** (`docs/platform/FFI_GLUE.md`): eventual shape is a narrow
+  `concrete ffi`/`bindgen` emitting/importing *auditable* glue (ABI/layout/
+  ownership/capability/trust facts, source spans, reproducible). Blocked on the
+  FFI surface (#8); not built before it.
+- **#15 units-of-measure** (`docs/language/UNITS_OF_MEASURE.md`): evaluated → no units in
+  v1 (a type-system feature with proof/report implications). Units live in names
+  (`len_bytes`) per STYLE.md today; research/workload-gated otherwise.
+- **#27 target constants** (`docs/platform/TARGET_CONSTANTS.md`): decided — typed,
+  resolved audit facts (not preprocessor magic), recorded in reports/bundles;
+  implementation deferred until target-profile machinery needs it.
+
+### Phase 6 #10 complete: `--report arithmetic` audit surface (2026-06-26)
+
+`concrete <file> --report arithmetic` classifies every arithmetic site, per
+function, into exactly one of the ARITHMETIC_POLICY §3.2 classes:
+**runtime-checked** (`+ - * / % << >>`, unary `-`, checked float→int cast),
+**explicit-wrapping** (`wrapping_*`), **explicit-saturating** (`saturating_*`),
+or **proved**. It prints per-function counts + per-site detail and a grand
+total. Comparisons, logical ops, pure bitwise `& | ^`, and float `+ - * /`
+(IEEE, not the integer trap) are correctly excluded. `proved` is currently
+always 0 — the proof model discharges refinement against unbounded-`Int` specs
+with an implicit no-overflow assumption rather than discharging overflow
+obligations; it becomes non-zero when overflow proofs land (then the redundant
+runtime check may be elided). On the proof-carrying SHA-256 example it reports
+26 explicit-wrapping sites (exactly the mod-2³² migration) + 108 runtime-checked.
+Gate `scripts/tests/check_report_arithmetic.sh` (Makefile + CI). **This was the
+last open item of ROADMAP #10 — the arithmetic model is now complete:** checked
+integer arithmetic, unary negation, division/shift, float→int casts, explicit
+wrapping/saturating, and a full audit surface, with no semantically-dark
+constructs remaining.
+
+### Phase 6 #10: arithmetic red-team sweep — four bugs found and fixed (2026-06-25)
+
+A red-team pass over everything the checked-arithmetic flip touched (plus the
+formatter) found four real bugs, all fixed and locked down by a new gate
+`scripts/tests/check_arith_redteam.sh` (35 checks, wired into Makefile + CI):
+
+- **Unary `-(MIN)` was unchecked.** The flip covered binops but missed unary
+  negation: `-(i32::MIN)` silently wrapped in codegen and produced an
+  out-of-range value in the interpreter (`128` for `-(i8::MIN)`). Now `-x`
+  routes through the checked subtract helper (codegen) and `checkedToType`
+  (interp), so it traps — matching `0 - x`.
+- **Signed `/` and `%` used floored division.** The interpreter (Lean's `/`/`%`)
+  and the SSACleanup constant folder both floored, while the backend `sdiv`/
+  `srem` and the proof model (`BitVec.sdiv`/`srem`) truncate toward zero. They
+  disagreed on every negative operand (`-17 / 5` was `-4` vs `-3`; `-17 % 5` was
+  `3` vs `-2`). The algebraic div/mod-identity test missed it because the
+  identity holds under either convention. Interp and the folder now use
+  `Int.tdiv`/`Int.tmod`.
+- **Signed `MIN % -1` did not trap in the interpreter.** The compiled srem
+  helper aborts (the implied division overflows, LLVM UB); interp returned `0`.
+  Interp now traps via the same quotient-overflow condition as `/`.
+- **The formatter did not re-escape string/char literals.** `"a\"b"` formatted
+  to `"a"b"`, which the parser then rejects — so `--fmt` was not idempotent on
+  any program with an embedded quote, tab, newline, or backslash (e.g. the
+  hmac_sha256 example). `Format.escapeStrLit`/`escapeCharLit` now mirror the
+  lexer's unescaping exactly.
+
+The new gate's strong oracle is value agreement (interp stdout == compiled
+stdout), which is what surfaced the div/mod divergence; it also asserts
+trap-on-both-sides for overflow/neg/div0/MIN-`-1`/over-width-shift and fmt
+round-trip. Full suite 3008/0, golden green, proof gate 20/20.
+
+The sweep also surfaced float→int cast overflow (`f as iN` lowered to a raw
+`fptosi`/`fptoui`, so an out-of-range float yielded LLVM poison instead of
+trapping). Initially filed as KNOWN_HOLES H2; **fixed and closed 2026-06-26**:
+`f as iN` is now a CHECKED conversion (profile-invariant) — NaN, ±inf, or
+out-of-range aborts; in-range truncates toward zero. Mechanism: per-(float,int)
+helpers `@__cc_{f32,f64}_to_{i,u}W` (a single ordered range test on power-of-2
+bounds rejects NaN/±inf/out-of-range at once). Saturating/wrapping float→int, if
+ever needed, must be an explicit helper — never `as`. Gate
+`scripts/tests/check_float_cast.sh` (compiled-only: the interpreter has no
+float-literal support yet, so there is no interp==compiled oracle as for integer
+arithmetic — documented, to be upgraded when float interp lands). With this,
+**no semantically-dark arithmetic constructs remain.**
+
+### Phase 6 #10: checked-arithmetic soundness fixes — constant folding, strength reduction, and the proof model (2026-06-24)
+
+Three holes the checked flip opened, all closed and gated:
+
+- **Constant folding bypassed the trap.** `SSACleanup.foldBinOpConst` folded
+  constant `add/sub/mul/div` *without* an overflow check, so `let x: i32 = MAX;
+  x + 1` folded to a wrapped constant instead of trapping — interp trapped,
+  compiled wrapped. `foldBinOpConst` now folds only when the result fits the
+  type (`fitsType`); an overflowing constant op is left live so EmitSSA lowers
+  it to the checked helper that traps at runtime.
+- **`mul → shl` strength reduction was unsound.** `x * 2` was rewritten to
+  `x << 1`, but the checked shift helper validates only the shift *amount*, not
+  value overflow — so the rewrite silently dropped the trap (`i64::MAX * 2`
+  wrapped to `-2`). Removed the `mul → shl` reduction; the checked `smul`/`umul`
+  helper is correct, and LLVM still strength-reduces its internal
+  `*.with.overflow` when it can prove no overflow. (Unsigned `div → shr` is kept;
+  it is sound — the quotient always fits.)
+- **The proof model falsely modeled checked `+` as wrapping.** `binOpToPBinOp`
+  mapped `u32 +` to `addw 32` (mod 2³²), but checked `+` traps — the proof would
+  have certified wrapping the runtime never performs. Moved the `addw 32` mapping
+  from `.add` to `.wrappingAdd`: `wrapping_add` on `u32` is now the (only)
+  provable mod-2³² operator, and ordinary `+` extracts to mathematical `add`
+  (sound in its non-trapping domain). The proof-carrying SHA-256 example
+  (`examples/hmac_sha256`) is migrated to `wrapping_add` throughout — all six
+  refinement proofs still verify (identical extracted `addw 32` PExpr), the
+  binary matches FIPS 180-4 / RFC 4231, and the randomized oracle is 200/0.
+
+Gates updated: `check_codegen_differential.sh` (new `EXPECTED_TRAP` class:
+overflow agrees by both sides trapping, not by both wrapping),
+`check_codegen_execution.sh` (`expect_trap` for the overflow fixtures), hmac
+snapshots regenerated. Docs: `ARITHMETIC_POLICY.md` §3/§10.2 and
+`PROOF_SEMANTICS_BOUNDARY.md` corrected (proof model HAS `addw 32`; runtime
+aborts rather than wraps silently).
+
+### Phase 6 #10 Stage 2.4/2.5: div/mod-by-zero and shift-range checks (2026-06-24)
+
+Division/modulo by zero (previously UB → SIGFPE) and over-width shifts
+(previously LLVM poison/UB) now **abort**, via per-type `@__cc_{sdiv,udiv,srem,urem}`
+helpers (signed div/rem also check the `MIN / -1` overflow) and
+`@__cc_{shl,ashr,lshr}` helpers (abort when the shift amount ≥ the bit width). The
+interpreter traps to match. With this, **all integer-arithmetic undefined behavior
+in Concrete is now a defined abort** — overflow (`+ - *`), divide-by-zero, and
+over-width shifts. `check_checked_arith.sh` extended to 10 checks. Remaining #10
+item: the per-site report/audit classification (2.6).
+
+### Phase 6 #10 Stage 2.3b/c: checked `-` and `*` LANDED — all `+ - *` now checked (2026-06-24)
+
+Flipped ordinary `-` and `*` to checked (same per-type `*.with.overflow`→abort
+helper + interp `checkedToType` mechanism as `+`). **All ordinary integer
+arithmetic now traps on overflow.** `-` needed no migration; `*` surfaced more
+genuine intentional-modular code, all migrated to `wrapping_mul`: `std/src/hash.con`
+(FNV-1a hashing and the Fibonacci/splitmix multiplicative hashes) and
+`tests/programs/test_generic_fnptr_map.con` (its inline multiplicative hash). Green
+throughout: std 265/0, fast suite 1576/0, golden 54/0. `scripts/tests/check_checked_arith.sh`
+now covers `+`/`-`/`*` traps plus the modular-wrap regression, and
+`PREDICTABLE_BOUNDARIES.md` is updated (integer overflow: silent-wrap → trap).
+Remaining #10 items: div/mod-by-zero traps (2.4), shift-amount checks (2.5), and
+the per-site report/audit classification (2.6).
+
+### Phase 6 #10 Stage 2.3a: checked `+` LANDED (overflow traps) (2026-06-24)
+
+Ordinary `+` is now **checked**: it traps (abort) on overflow in every profile,
+while intentional modular arithmetic uses the explicit `wrapping_add`. Codegen
+emits per-type `internal` runtime helpers (`*.with.overflow` + `condBr`→abort, raw
+IR in the module header); ordinary `+` becomes a single-value call to the helper —
+no mid-expression block split — and the blast radius is user `+` only (internal
+index/offset arithmetic uses GEP). The interpreter traps via `checkedToType`, so
+interp == compiled.
+
+Landing it was a **migration**, exactly as the thesis intends: the flip first
+appeared to fail ~127 std system-module tests, but that was a **cascade from a
+single root cause** — SHA-256's intentional mod-2³² additions
+(`std/src/sha256.con`) aborting the std test binary. Migrating those to
+`wrapping_add` (the correct explicit spelling — SHA-256 *is* modular arithmetic)
+turned everything green: std 265/0, fast suite 1576/0, golden 54/0. The check did
+its job: it surfaced real intentional-wrap that had been relying on silence, and we
+made the intent explicit rather than papering over it. Gated by
+`scripts/tests/check_checked_arith.sh` (overflow traps + a modular-wrap regression).
+`-` and `*` flip next, each behind the same per-family audit.
+
+### Phase 6 #10 Stage 2.2: explicit saturating arithmetic (add/sub) (2026-06-24)
+
+Added `saturating_add` / `saturating_sub` — the explicit spelling for intentional
+clamp-to-range arithmetic (ARITHMETIC_POLICY.md §13 step 2). Modeled as
+`BinOp.saturatingAdd/Sub` (same intrinsic→BinOp→type-check→elaborate→lower path as
+the wrapping ops) that lower to the LLVM `llvm.{s,u}{add,sub}.sat.iW` intrinsics —
+signedness/width-mangled and statically declared (following the existing
+`llvm.memcpy` declaration precedent). Integer-only with same-type operands; the
+interpreter clamps to the type's range so interp == compiled. Gated by
+`scripts/tests/check_saturating_arith.sh` (`make test-saturating-arith` + CI).
+
+`saturating_mul` (Stage 2.2b) followed, on the shared `*.with.overflow`
+infrastructure: the struct-returning `{iW,i1}` intrinsic + `extractvalue` are
+emitted as raw LLVM IR (LLVM auto-declares the intrinsic), then a branchless
+clamp `select` (unsigned → MAX; signed → MIN/MAX by the sign of the true
+product). Validated interp==compiled across signed/unsigned boundaries. This is
+the **same overflow infrastructure the checked-`+` flip (Stage 2.3) reuses** —
+swapping the clamp select for a `condBr`→abort. The headline goal remains making
+ordinary `+ - *` checked; the explicit wrap/clamp spellings now all exist.
+
+### Phase 6 #10 Stage 2.1: explicit wrapping arithmetic (2026-06-24)
+
+Added `wrapping_add` / `wrapping_sub` / `wrapping_mul` — the explicit, visible
+spelling for intentional two's-complement modular arithmetic
+(ARITHMETIC_POLICY.md §13 step 1). Modeled as distinct `BinOp.wrappingAdd/Sub/Mul`
+variants (resolved from the intrinsic names in `Intrinsic.lean`, type-checked in
+`Check.lean`, elaborated in `Elab.lean`) that lower in `EmitSSA.lean` to the SAME
+plain LLVM `add`/`sub`/`mul` ordinary `+ - *` emit today — **behavior-preserving**.
+They are integer-only with same-type operands (float/bool/mixed-width rejected),
+and the interpreter wraps both signed and unsigned to match compiled output
+(interp == compiled). Gated by `scripts/tests/check_wrapping_arith.sh`
+(`make test-wrapping-arith` + CI step).
+
+This is the prerequisite for the later flip: keeping them distinct from
+`BinOp.add/sub/mul` means that when ordinary `+ - *` become checked/trapping
+(Stage 2.3), the wrapping forms keep their plain semantics — so intentional
+modular code has a spelling that never silently changes meaning.
+
+### Phase 6 #17: iteration protocol (audit + gate) (2026-06-24)
+
+Documented Concrete's traversal story as a fixed hierarchy in
+`docs/project/ITERATION_PROTOCOL.md` — there is no `Iterator` trait, no closures, no
+trait-object iterators. Pick the first form that fits: `for`/indexed loop
+(simple bounded), cursor structs (`ByteCursor`, for parsers/readers),
+capability-polymorphic `for_each`/`fold`/`map` (collections), and explicit
+`for_each_ctx` context threading for stateful callbacks. Authority and
+allocation stay visible in the signature (`for_each`/`fold` are `Alloc`-free;
+`map` carries `Alloc`). Gated by `scripts/tests/check_iteration_protocol.sh`
+(`make test-iteration-protocol` + CI step): the `for` loop runs (interp ==
+compiled), the cap-polymorphic forms exist with the right shapes, allocation
+visibility holds, and the exclusions are enforced (no `Iterator` trait, no `dyn`
+in std). With the protocol written and gated, the `iteration` surface was
+promoted from `provisional_with_gate` to `stable_for_stdlib` in the stdlib
+handoff contract.
+
+### Phase 6 #10 Stage 1: build-profile mechanism (2026-06-24)
+
+First stage of build profiles — the *mechanism* only, no codegen or semantic
+change. `Concrete/Report/Profile.lean` defines the profiles (debug/release/predictable/
+proof/high-integrity); `--profile <name>` (CLI), `[profile] name = "..."` in
+Concrete.toml, and `--report profile` are wired in `Main.lean` with precedence
+CLI > manifest > default (debug). The report shows the active profile, its
+selection source, and the policy bundle (runtime-check / diagnostics /
+optimization / evidence). Gated by `scripts/tests/check_build_profiles.sh`
+(`make test-build-profiles` + CI step).
+
+Governing principle, enforced by the gate: **a build profile is a policy bundle,
+never an arithmetic mode.** The `arithmetic:` line is identical across profiles
+(semantics are profile-invariant) and states the current implementation gap
+explicitly — `+ - *` are *checked semantics* but still *lower to silent wrapping*
+until #10 Stage 2. A reviewer never needs the build mode to know whether `a + b`
+wraps. Arithmetic-lowering changes (the ARITHMETIC_POLICY.md §13 sequence) are
+deliberately separate, later stages.
+
+### Phase 6 #19: stdlib handoff contract (2026-06-24)
+
+Added `docs/stdlib/STDLIB_HANDOFF.md` + `scripts/tests/check_stdlib_handoff.sh`
+(`make test-stdlib-handoff` + CI step) — the contract between the language phases
+and Phase 7. Each of the 12 required language surfaces the stdlib depends on
+carries a status (`stable_for_stdlib` / `provisional_with_gate` / `blocked`) tied
+to a backing CI gate or design doc, so "the stdlib can rely on X" is a checked
+claim. Current state: 9 stable, 3 provisional (const-generics #6a, iteration #17,
+build-profiles #10 — each usable within documented bounds), **0 blocked**, so
+Phase 7 is not gate-blocked. The gate parses the contract table, rejects an
+invalid/absent status or a missing backing artifact, fails if a required surface
+is dropped, and enforces the policy that Phase 7 may not start while any required
+surface is `blocked`.
+
+### Phase 6 #35a: red-team hardening gate (2026-06-24)
+
+With the resurrected CI suite green, added `scripts/tests/check_phase6_redteam.sh`
+(`make test-phase6-redteam` + CI step) — targeted coverage for exactly the failure
+classes the dead-CI window hid: parser recovery + duplicate proof-link attributes
+(precise diagnostic, no `unexpected token` cascade), match linear-consumption
+agreement across range/guard/OR/wildcard arms, match lowering correctness as
+interp-vs-compiled execution oracles (match-on-`&T`, guards, OR desugaring, range
+arms, width coercion), ProofCore fingerprint stability (semantic change ⇒ new
+fingerprint; formatting-only ⇒ same), and the deliberately-stale trust fixture
+staying stale. It doubles as the reusable "new syntax feature red-team checklist".
+
+Writing the gate immediately found a **real interp/compiled disagreement**: the
+interpreter did not dereference a `&T` match scrutinee, so a var/guard arm bound
+the reference instead of the pointee (e.g. `match p { n if n > 5 => .. }` on
+`p : &Int` errored `unsupported binop`, and `match p { n => return n }` returned
+the wrong value) — while the compiled path already derefed via the E0715 fix.
+Fixed in `Concrete/Interp/Interp.lean` by `autoDeref`-ing the match scrutinee. 11/11 green.
+
+### CI-fallout triage: green the resurrected gate suite (2026-06-24)
+
+Resurrecting CI (the backtick-YAML fix below) exposed gate failures that had
+accumulated unseen across 40+ dead-CI pushes. Triaged each as a real regression
+vs. a stale test, fixed the regressions, and updated stale expectations only
+after verifying the new behavior is semantically correct.
+
+Real regressions fixed (compiler):
+- **ProofCore self-consistency** — when struct-literal / match / if-without-else
+  became proof-extractable (e2ab5eef), `identifyUnsupported` started returning
+  empty for functions the extractor still rejects in statement / nested-mutation
+  position, so they reported "eligible, no extraction, *no reason*" — a
+  consistency violation. Added an invariant guard at the extraction-pairing point
+  so an eligible-but-unextracted function always discloses a reason.
+- **Parser error recovery** — error-tolerant parsing (#12c, 2026-06-08) emitted a
+  spurious second "unexpected token }" after a real error, because recovery
+  force-advanced past valid item-starts and mistook a nested block's `}` for the
+  enclosing `mod`'s stop brace. Recovery is now brace-depth aware and only stops
+  at a same-level boundary; genuine multi-error recovery is preserved.
+
+Stale tests/fixtures updated to verified-correct reality (no compiler change):
+- enum-match heredoc migrated `#` → `::`; check_nonce form + classify_range
+  blocker + e2e-lean proof name realigned to the 8a53c3db fixture fix and the
+  proof-namespace migration; blocked-pressure fixture repointed at durably
+  unsupported constructs (division / field-assignment / deref) to keep five
+  named-blocker cases; fixedcap / parsevalidate expectations updated (extracted ⊃
+  eligible, gaps closed, 10 pure functions); `predictable = true` greps made
+  whitespace-tolerant.
+- Hardened the diagnostics-json "envelope" check to validate by *parsing* the
+  JSON rather than grepping for leading/trailing braces (the grep was fragile to
+  whitespace / line endings and failed nondeterministically on the macOS runner).
+
+Result: trust-gate, phase1-contracts, rich-diagnostics, wrong-code, golden, and
+the full fast suite (1576/0) all green locally.
+
+### Fix: CI was silently dead — backtick in workflow YAML (2026-06-23)
+
+- `lean_action_ci.yml` had been reporting a 0-second "completed failure" with no
+  logs for **40+ consecutive pushes**: not a test failure but a *parse* failure,
+  so the entire gate suite (proof gate, SMT gates, contract gates, every
+  `check_*.sh`) never ran. Cause: two `name:` values began with a backtick
+  (`` `concrete test` gate `` / `` `concrete fmt` gate ``) — `` ` `` is a reserved
+  YAML indicator and cannot start a plain scalar, so GitHub rejected the file
+  before running any job. Quoted both. Added a **workflow-YAML gate**
+  (`scripts/tests/check_workflow_yaml.sh`, `make test-workflow-yaml`, plus an
+  early CI step) that parses every workflow file with PyYAML/psych so a malformed
+  workflow is caught locally instead of leaving CI dark. This is the same
+  "no silent failures" discipline applied to CI config itself.
+
+### Fix: re-stale the proof-staleness fixture (2026-06-23)
+
+- The `compute_checksum` fixture in `examples/proof_pressure/src/main.con` is a
+  *deliberately stale* proof — its `#[proof_fingerprint]` is meant to be the hash
+  of the ORIGINAL body while the body itself carries a `+ 1` shift, so the
+  staleness machinery must flag it. A prior blanket fingerprint regeneration
+  (the truncated-SHA-256 migration) had silently rewritten the stored digest to
+  match the *current* (`+ 1`) body, un-staling the fixture: `proof-status`
+  reported "matches current body", `proof_gate.sh` failed 2/20 (`expected at
+  least 1 stale proof, got 0`), and `test_prove_cli.sh`'s `exit stale=3` no
+  longer held. Restored the digest to the original body's hash
+  (`243d15e5…`) and pinned a comment warning against blanket regeneration.
+  Stale *detection* was never broken — only the fixture. Proof gate back to
+  20/20, prove-CLI 68/0.
+
+### Grammar reference re-synced + GRAMMAR.md (2026-06-23)
+
+- Phase 6 #2. The canonical grammar `grammar/concrete.ebnf` had drifted behind
+  this session's parser work; brought back in sync (and kept LL(1), verified by
+  all three checkers `scripts/check_ll1.{py,c,rs}`): match arms now model OR
+  patterns (`A | B`), guards (`pat if cond`), and integer ranges
+  (`lo..hi`/`lo..=hi`) incl. negative and bool patterns; `if`/`while` model the
+  `let` destructuring forms; struct literals model field punning and the `..base`
+  functional update. (Two pre-existing omissions — bool patterns, field punning —
+  were filled in too.)
+- Added `docs/language/GRAMMAR.md` as the reference page: points at the canonical EBNF and
+  indexes reserved keywords, attribute syntax (fixed compiler set, no user
+  attrs/macros), contract/`ghost`/`assert`/`assume` syntax, and the
+  negative-parser-fixture gates. The stmt-vs-trailing-expression distinction
+  folded into #2 is already implemented (#36). 60 grammar rules, all LL(1).
+
+### Macro/metaprogramming stance decided — permanent non-goal (2026-06-23)
+
+- Phase 6 #11. Concrete has **no language macro system** — permanently, not a v1
+  omission: no `macro`/`macro_rules`, procedural/syntax macros, `foo!()`
+  bang-invocation, `#[derive(...)]`, in-language source generation, or `comptime`
+  codegen. Hidden expansion would defeat the audit model (spans, capabilities,
+  obligations, evidence all assume the code in the file is the code that runs).
+- Repetition uses ordinary functions, monomorphized generics, explicit stdlib
+  APIs, and — when codegen is genuinely needed — external build-time generators
+  whose output is checked in and audited as ordinary source. Recorded in
+  `docs/language/MACRO_STANCE.md`; pinned by `scripts/tests/check_no_macros.sh` (Makefile
+  `test-no-macros` + CI): macro definitions, bang invocations, and derive
+  attributes all stay clean parse errors.
+
+### Phase 6 #7 (`defer` / cleanup) core-complete (2026-06-23)
+
+- `defer <call>;` is documented (`docs/language/DEFER.md`) and gated
+  (`scripts/tests/check_defer.sh` + `examples/defer/cleanup_order/`). The core
+  cleanup semantics — already implemented in lowering — are now locked: deferred
+  calls run **LIFO**, at scope exit, on **every exit path** (fall-through, early
+  `return`, `break`/`continue`, `?`/`Err`), per scope inner-to-outer. The example
+  asserts the exact output order across early-return and fall-through paths.
+- V1 boundaries documented: the defer body must be a **call** (block form
+  `defer { … }` rejected, pinned by the gate), and a deferred call doesn't apply
+  the literal/auto-borrow argument coercion a normal call does (defer a no-arg
+  cleanup fn). Deferred design — failure-during-cleanup, move-after-defer/linear
+  interaction, explicit-vs-implicit-drop ordering — recorded for a later pass.
+  Full suite 1576/0; examples 129/0; all gates green.
+
+### Phase 6 #6 (numeric literal/cast rules) core-complete (2026-06-23)
+
+- The numeric model is now documented (`docs/language/NUMERIC_MODEL.md`) and gated
+  (`scripts/tests/check_numeric_literals.sh`, 8 checks): default integer type is
+  `Int`/i64; hex/binary literal bases; comparison signedness is type-driven
+  (`u8` compares unsigned); conversion is explicit-`as`-only (no implicit
+  widen/narrow, E0220); out-of-range literals are rejected (E0227, positive and
+  negative); `as` is the opt-in lossy/truncating path.
+- The one numeric *soundness* gap — silent out-of-range literal truncation — is
+  closed (see prior entry). The remaining #6 sub-parts are features/decisions,
+  routed to their natural homes rather than left as hidden gaps: overflow runtime
+  profiles + `wrapping_*`/`saturating_*` helpers + proven-overflow folder
+  completion → **#10** (build profiles); lossy-cast and same-width mixed-sign
+  comparison lints → **#21** (lint/vet); literal suffixes deferred (workload-gated,
+  annotations cover the need). Overflow obligations already exist and proven
+  overflow is an E0900 hard error (folding partial); unproven overflow wraps,
+  consistent with unproven bounds/division. Full suite 1576/0; all gates green.
+
+### Out-of-range integer literals rejected (2026-06-23)
+
+- Phase 6 #6, first sub-fix. An integer literal that cannot fit its annotated
+  type is now a hard error instead of a silent truncation: `let a: u8 = 300;`
+  was running as `44` — a "semantically dark construct" (a literal silently
+  becoming a different value). Now **E0227** (`integer literal 300 is out of
+  range for type 'u8' (0..=255)`), checked in `Concrete/Check/Check.lean` at the
+  literal's typed position for i8/i16/i32/Int and u8/u16/u32/Uint.
+- In-range literals at every width still compile (incl. hex/binary bases and the
+  i64 default for un-annotated literals); explicit `as` casts may still truncate
+  (the intentional, opt-in lossy path). Gated by
+  `scripts/tests/check_numeric_literals.sh` over `tests/programs/numeric/`. Full
+  suite 1576/0; examples 128/0; golden 54/0; snapshots 95/0.
+- Negative literals are covered too (`let a: u8 = -1` / `let a: i8 = -129`
+  rejected): the `unaryOp neg` case range-checks the *negated* value `-N` against
+  the target, so the signed minimum `i8 = -128` still compiles even though its
+  inner literal 128 exceeds i8's positive max. The shared `intTyRange` helper
+  (`Concrete/Resolve/Shared.lean`) backs both checks.
+
+### Phase 6 #5 (pattern ergonomics) closed; nested patterns deferred (2026-06-22)
+
+- The compound pattern-ergonomics block is complete. Built + gated across this
+  session: integer range patterns, `if let` / `while let`, match guards, OR
+  patterns, match on `&T`, struct functional update `..base`, and `_`-wildcard
+  destructuring. Decided (workload-gated): no anonymous tuples (`docs/language/TUPLES.md`).
+- Nested patterns (`E::W { P { x, y } }`, `Some(Some(n))`) are the one remaining
+  item, now **deferred** (`docs/language/NESTED_PATTERNS.md`): a match arm destructures one
+  level; deeper nesting stays a clean parse error. It is fully expressive via the
+  one-level + field-access / nested-`match` workaround. A recursive `Pattern` type
+  is a large pipeline refactor for pure sugar with no forcing workload — the same
+  workload-driven call made for const generics and tuples. Gated by
+  `scripts/tests/check_nested_patterns.sh` (rejection + both workarounds).
+- The pattern language is now complete for decoder / parser / interpreter work.
+
+### `_` wildcard in destructuring bindings (2026-06-22)
+
+- Phase 6 #5. A field binding named `_` in an enum-variant (or `let`-)
+  destructure is now a true wildcard: it holds its field position (so the other
+  fields still bind correctly) but is not added to scope. Reading `_` is now
+  E0100 (was wrongly accepted, returning the field value), and the `_` field is
+  not even loaded in codegen.
+- Fixed in Resolve / Check / Elab / Lower by skipping the bind for a `_` field
+  while keeping it in the positional binding list. Verified positional binding,
+  all-`_`, and the read-rejection. Fixtures + `_ wildcard in destructuring`
+  section of `scripts/tests/check_pattern_ergonomics.sh` (19/19). Full suite
+  1576/0; golden 54/0; snapshots 95/0; examples 128/0.
+
+### No-tuples decision (V1) (2026-06-22)
+
+- Phase 6 #5. Decided: Concrete V1 has no anonymous tuples — the named `struct`
+  is the one product type; a multiple-value return is a small `struct Copy` with
+  named fields. Rationale in `docs/language/TUPLES.md`: field names flow into evidence /
+  reports / proofs (`result.remainder`, not `result.1`), one product type instead
+  of two, consistency with the language's named/explicit style, and no current
+  workload needs tuples (workload-driven, cf. the const-generics decision).
+- No compiler change: tuple type/literal/index syntax was already a clean parse
+  error. `scripts/tests/check_no_tuples.sh` pins that it stays rejected (never
+  silently half-accepted), that the named-struct replacement compiles, and that
+  newtype `.0` extraction (a named wrapper, not a tuple) is unaffected.
+
+### Struct functional update `..base` (2026-06-22)
+
+- Phase 6 #5, increment 6. `S { f: x, ..base }` builds a struct value taking the
+  listed fields from the literal and every other field from `base` (same struct
+  type required, else E0220). `S { ..base }` copies all fields.
+- Optional `base : Option Expr` on `AST.structLit` (Core/lowering unchanged);
+  parsed by `parseStructLitFields` (`..` introduces the base); desugared in Elab
+  to `base.field` for each omitted field. Base should be a variable/simple place
+  — a complex base expression is re-read once per copied field.
+- Verified: override-some-copy-rest, all-from-base, and wrong-type-base
+  rejection. Fixtures + `scripts/tests/check_struct_update.sh` (3/3). Full suite
+  1576/0; golden 54/0; snapshots 95/0; examples 128/0.
+
+### Pattern ergonomics: match on a reference scrutinee (2026-06-22)
+
+- Phase 6 #5, increment 5. `match` auto-derefs a `&T` / `&mut T` scrutinee so the
+  pointee is matched directly. Enum-behind-`&E` already read the tag and payload
+  through the pointer; the fix makes the **scalar** path work too.
+- Bug fixed (`Concrete/IR/Lower.lean`, value-pattern branch): matching a `&scalar`
+  against a literal emitted a pointer-vs-int comparison (E0715 ssa-verify). The
+  branch now derefs a reference scrutinee once before literal/range comparisons
+  and variable bindings, so `match x { 0 => …, 1..=9 => …, n => … }` on `x: &i32`
+  compares and binds the value. Mirrors Check's auto-deref of the scrutinee type.
+- A borrowed non-`Copy` value remains linear (read, not consumed — unconsumed is
+  the normal E0208). Verified for `&i32` (literal/range/var) and `&E`
+  (tag+payload). Fixtures + `match on &T` section of
+  `scripts/tests/check_pattern_ergonomics.sh` (17/17). Full suite 1576/0.
+
+### Pattern ergonomics: OR patterns (2026-06-22)
+
+- Phase 6 #5, increment 4. A match arm may list alternatives separated by `|`:
+  `48..=57 | 97..=102 => …`, `1 | 2 | 3 => …`, `E::A | E::B => …`. An optional
+  guard applies to the whole arm.
+- Implemented as a parse-time desugar (`Concrete/Frontend/Parser.lean`): `parsePatternHead`
+  parses one pattern and returns an arm-builder; `parseMatchArm` collects
+  `|`-separated heads and emits one ordinary `MatchArm` per alternative, all
+  sharing the guard and body. No new AST/Core/lowering — every alternative reuses
+  the existing arm machinery. Standard OR rule: all alternatives must bind the
+  names the body uses.
+- Verified for literals, ranges, mixed lit|range, enum variants, with guards, and
+  value position. Fixtures + `OR patterns` section of
+  `scripts/tests/check_pattern_ergonomics.sh` (15/15). Full suite 1576/0;
+  examples 128/0; snapshots 95/0; golden 54/0.
+
+### Pattern ergonomics: match guards (2026-06-22)
+
+- Phase 6 #5, increment 3. Any match arm may carry a guard — `pattern if cond
+  => …` — tested after the pattern matches (with its bindings in scope); a false
+  guard falls through to the next arm.
+- `guard : Option Expr` on every `MatchArm` / `Option CExpr` on every `CMatchArm`,
+  threaded through the full pipeline (parse, resolve, check, elab, mono,
+  corecheck, lower, interp, format, report, proofcore). Lowered as a test
+  inserted after the pattern's bindings and before the body, branching to the
+  next arm's check on failure (`Concrete/IR/Lower.lean`, `finishMatchArmBody`).
+- Exhaustiveness is sound: a guarded arm is not a catch-all — a guarded var arm
+  is not a wildcard, and a guarded enum arm neither covers its variant nor counts
+  as a duplicate (`Concrete/Check/CoreCheck.lean`, `CoreCanonicalize.lean`). Guards are
+  disclosed as an unsupported construct (`match guard`) in the proof path rather
+  than mis-modelled.
+- Verified for var/enum/literal/range arms and value position. Fixtures +
+  `match guards` section of `scripts/tests/check_pattern_ergonomics.sh` (12/12).
+  Full suite 1576/0; examples 128/0; snapshots 95/0; golden 54/0.
+
+### Production-readiness slice and example-refresh cadence added (2026-06-22)
+
+- ROADMAP Phase 8 now spells out the concrete "solid enough to show" artifact:
+  a no-alloc protocol parser/verifier credibility slice with fixed buffers,
+  `Bytes`/`ByteView`, arrays, `Result`, pattern matching, explicit capabilities,
+  runtime-safety obligations, source contracts, a Lean proof, a
+  `proved_by_kernel_decision` discharge, oracle/differential checks, and an
+  audit/release bundle.
+- Phase 8 also now requires example-refresh checkpoints at phase closure and
+  after every two substantial Phase-6/7 usability increments, so tutorials,
+  showcase examples, and release-facing docs do not keep teaching stale
+  surfaces after features land.
+
+### Operational VC auto-discharge forcing probe gated — verdict GO (2026-06-22)
+
+- Ran and locked the Phase 9 #16a forcing probe. A fixed mechanical tactic over
+  six real hand-proof-shaped VCs closes 4/6 today: HMAC/SHA `ch` and `maj`
+  bitvector refinements via `bv_decide`, `count_up` invariant preservation via
+  `omega`, and a branching parser postcondition once the guard is split.
+- Added `scripts/tests/check_operational_vc_auto_discharge.sh` plus Lean
+  fixtures under `scripts/tests/fixtures/operational_vc_autodischarge/` and
+  wired the gate into Makefile/CI. The positive file must close; the boundary
+  file must continue failing until V1 cast-normalization / guard-splitting work
+  lands.
+- ROADMAP #16a and the research note now name the V1 core precisely:
+  symbolically execute a narrow Core/ProofCore fragment, split conjunctions and
+  guards, normalize `Int`/`Nat`/`BitVec` casts, route arithmetic leaves to
+  `omega`, route bitvector leaves to `bv_decide`, and report surviving leaves as
+  `needs_lean` / `not_supported`.
+
+### Pattern ergonomics: `if let` / `while let` (2026-06-22)
+
+- Phase 6 #5, increment 2. Conditional destructuring, desugared to a `match` at
+  parse time (`parseIfLet` / `parseWhileLet` in `Concrete/Frontend/Parser.lean`) — no new
+  AST/Core/lowering, reusing all match machinery (binding, exhaustiveness,
+  linear-cleanup, codegen).
+- `if let Enum::Variant { binds } = e { … } [else { … }]` →
+  `match e { Variant { binds } => …, _ => … }` (no-else ⇒ `_ => {}`).
+  `while let … = e { … }` → `while true { match e { Variant { binds } => …,
+  _ => break; } }`, re-evaluating the scrutinee each iteration.
+- Verified for Option and Result, with/without else. Fixtures in
+  `tests/programs/patterns/` and a new section of
+  `scripts/tests/check_pattern_ergonomics.sh` (9/9). Full suite 1576/0.
+
+### Proof automation trust-upgrade firewall recorded (2026-06-22)
+
+- ROADMAP Phase 9 now has item #16b: every proof automation path must preserve
+  the evidence class, name the closing engine, emit a replayable artifact, and
+  include a negative gate proving unsupported / stale / trusted /
+  out-of-fragment obligations do not become green. This explicitly prevents
+  automation from becoming a hidden trust upgrade.
+
+### Operational VC auto-discharge recorded as proof-automation lever (2026-06-22)
+
+- Added `research/proof-evidence/operational-vc-auto-discharge.md`, defining
+  the missing automation tier between local syntactic discharge and hand Lean:
+  generate operational VCs from Core / ProofCore for a narrow fragment, route
+  decidable integer/bitvector leaves through `omega` / `bv_decide`, and report
+  unsupported cases honestly as `needs_lean` / `not_supported`.
+- ROADMAP Phase 9 now has item #16a with a forcing probe over three existing
+  proof-heavy shapes: the `examples/loop_invariant` operational step, one
+  HMAC/SHA bitvector identity, and one bounded parser/codec/fixed-buffer
+  postcondition. This records the evidence-cost problem explicitly before
+  committing to a verifier build.
+
+### Pattern ergonomics: integer range patterns (2026-06-22)
+
+- Phase 6 #5, first increment. Match arms can match an integer/`u8` against a
+  range: `lo..=hi` (inclusive) and `lo..hi` (exclusive). This is the
+  decoder/parser shape that previously required `if x >= lo && x <= hi` chains.
+- New lexer tokens `..` / `..=`; `MatchArm.rangeArm` / `CMatchArm.rangeArm`
+  threaded through the full pipeline (parse, resolve, check, elab, mono,
+  corecheck, lower, interp, format, report). Lowered to a `lo <= scr && scr (<=|<)
+  hi` comparison-branch (`Concrete/IR/Lower.lean`), with comparison signedness
+  following the scrutinee type — a `u8` scrutinee compares unsigned, so
+  `200..=255` works.
+- Endpoints, high-endpoint exclusion, value-position (match-as-expression) arms,
+  negative bounds, and the exhaustiveness rule (a range is not a catch-all — a
+  range-only match still requires `_`, E0534) are documented in
+  `docs/language/PATTERN_ERGONOMICS.md` and locked by
+  `scripts/tests/check_pattern_ergonomics.sh` over `tests/programs/patterns/` +
+  `examples/patterns/byte_ranges/`.
+- Range patterns are not yet modelled in the proof path: a proof/`predictable`
+  function using one is reported as having an unsupported construct
+  (`range pattern`), not silently mis-modelled. Full suite 1576/0; examples
+  127/0; snapshots 95/0.
+
+### SPARK-class assurance target and AI agent guide recorded (2026-06-22)
+
+- Added `docs/verification/SPARK_CLASS_ASSURANCE.md` as the stable design-target guide for
+  SPARK-class assurance in Concrete: contracts, loop invariants/variants,
+  frame/read/write facts, dependency-flow facts, ghost/spec code, package/import
+  evidence, and certification-style bundles.
+- The doc is explicitly AI-facing: Claude/Codex-style agents should use it to
+  distinguish implemented annotations from future-only suggestions, preserve
+  honest evidence classes, and attach replay commands before claiming proof.
+- ROADMAP hooks were added in the phases that own the work: Phase 9 agent proof
+  guidance, Phase 12 contract-layer design, Phase 13 runtime obligations using
+  loop/frame facts, Phase 17 assurance bundles, Phase 18 package assurance
+  summaries, and Phase 19 editor/agent diagnostics.
+
+### Type aliases documented + gated; four transparency gaps fixed (2026-06-22)
+
+- Phase 6 #3. Type aliases (`type Digest = [u8; 32]`) were parsed/resolved but
+  undocumented, ungated, and only shallowly transparent. Now documented
+  (`docs/language/TYPE_ALIASES.md`) and locked by `scripts/tests/check_type_alias.sh` over
+  `tests/programs/type_alias/`: aliases are transparent over arrays / structs /
+  generic instantiations / function signatures, both directions, and the gate
+  proves `--report layout` + `--report fingerprints` are byte-identical to the
+  underlying type — an alias creates no new layout or proof identity.
+- The audit found and fixed four real transparency bugs:
+  - **Unknown alias target silently accepted** — `type A = Nope;` compiled (the
+    target was never validated). Alias targets now go through `checkTyDeep`;
+    unknown targets are rejected with **E0108** at the declaration
+    (`Concrete/Resolve/Resolve.lean`).
+  - **Recursive aliases gave a confusing error** — `type A = A;` (and mutual
+    cycles) produced a misdirected downstream type-mismatch. Now detected during
+    resolution and rejected with a dedicated **E0112** (`recursive type alias`).
+  - **Alias chains / nested aliases expanded only one level** — `type C = B;
+    type B = A; type A = i32` and `type Arr = [E; 3]` did not fully resolve. The
+    alias map is now transitively + deeply closed (`closeAliasMap` /
+    `expandAliasDeep` in `Concrete/Frontend/AST.lean`) before Check/Elab use it.
+  - **`Copy` struct field typed by a Copy alias rejected** — `type Id = i32;
+    struct Copy S { a: Id }` failed CoreCheck's Copy/repr check because the field
+    type wasn't alias-expanded. Field types are now alias-expanded alongside
+    newtype-erasure at module build (`Concrete/Elab/Elab.lean`).
+- Full suite 1576/0; examples 127/0; snapshots 95/0.
+
+### Loop control documented + gated; while-expression width miscompile fixed (2026-06-21)
+
+- Phase 6 #4. `break`/`continue`/labeled loops/while-as-expression were already
+  implemented; their behavior is now documented (`docs/language/LOOP_CONTROL.md`) and
+  locked by `scripts/tests/check_loop_control.sh` over
+  `tests/programs/loop_control/`: innermost-by-default break/continue, labeled
+  `break 'l`/`continue 'l`, `for` break+continue, while-expression value via
+  `break <v>` / `else { v }` (type agreement E0222), and linear-cleanup safety —
+  a break/continue that would skip an unconsumed linear value is rejected
+  (E0210/E0211).
+- The audit FOUND AND FIXED a real miscompile (`Concrete/IR/Lower.lean`): a
+  while-as-expression's `break <value>` and `else` value at a non-i64 width were
+  stored as i64 into a narrower result slot — e.g. `let v: i32 = while … { break
+  7; } else { 0 }` emitted `store i64 7, ptr %wslot` into an `alloca i32` and read
+  back `0`. The value is now coerced to the result type before the store
+  (`trunc`/`sext`), mirroring the `if`-expression value path. Regressions:
+  `tests/programs/loop_control/while_expr_{break_value,else_value}_i32.con`. Full
+  suite 1576/0; examples 127/0; snapshots 95/0.
+
+### Phase 5 core language slab closed (2026-06-21)
+
+- Phase 5 is CLOSED under the same core-complete model used for Phases 3/4. The
+  active roadmap now begins at Phase 6; the detailed Phase 5 completion record
+  has moved out of `ROADMAP.md`.
+- Gated completed items:
+  - modules/imports/visibility — `scripts/tests/check_module_visibility.sh`
+  - project model / `Concrete.toml` — `scripts/tests/check_project_model.sh`
+  - `concrete test` project-mode runner — `scripts/tests/check_concrete_test.sh`
+  - diagnostics span floor — `scripts/tests/check_diagnostics_quality.sh`
+  - bytes/text/path + `ByteView` + UTF-8 `Text` conversion —
+    `scripts/tests/check_byte_view.sh`
+  - collections / H1-clean value-operation surface —
+    `scripts/tests/check_collections.sh`
+- Defects fixed during the Phase 5 closure pass included the project-mode
+  `concrete test` duplicate `@__concrete_argc` global, spanless E0208
+  unconsumed-linear diagnostics, and the ByteView/Text UTF-8 validation gap.
+- Narrow const generics are DESIGN DECIDED / BUILD DEFERRED, not a hidden Phase
+  5 hole. `docs/language/CONST_GENERICS_V1.md` records the V1 boundary, rejected forms,
+  difficulty/risk assessment, staged implementation plan, forcing triggers, and
+  evidence that current workloads do not pull the feature. Implementation is now
+  tracked as a workload-triggered Phase 7 stdlib/fixed-capacity item.
+
+### `ByteView` → `Text`: explicit UTF-8-validated raw-bytes-to-text step (2026-06-21)
+
+- Closes the byte/text split for stored zero-copy views (Phase 5 #5a follow-up;
+  Phase 5 #5 is now fully done). A `ByteView` is raw bytes; turning a region into
+  a `Text` (validated UTF-8 view) is an explicit step that can fail.
+- `std.text` gained `Text::from_raw(ptr, len)` (trusted, unchecked) and
+  `Text::try_from_raw(ptr, len)` (validated), backed by a `validate_utf8`
+  well-formedness checker implementing RFC 3629 / Unicode Table 3-7 — it rejects
+  overlong encodings, surrogates (U+D800..U+DFFF), and code points above U+10FFFF
+  via per-leading-byte continuation ranges.
+- `ByteView::try_text(&self, buf: &Bytes) -> Option<Text>` composes the view's
+  describe-checks (overflow/bounds/brand) with UTF-8 validation: `Some(Text)` only
+  when the region validly describes the buffer AND is well-formed UTF-8, else
+  `None`. No implicit lossy conversion — raw bytes stay bytes until validated.
+- `examples/byte_view/utf8_text_slice/` shows a valid "café" region validating and
+  a view that cuts a multi-byte code point in half being rejected. The ByteView
+  gate now also locks the `try_text` / `try_from_raw` / `validate_utf8` surface.
+  Full suite 1576/0; examples 127/0.
+
+### `ByteView` — owned, reference-free, stored zero-copy byte views (2026-06-20)
+
+- Phase 5 #5a core. Concrete has no lifetimes and references are second-class
+  (never stored, never returned from safe code), so a stored `&[u8]` parser-result
+  field is not expressible. `ByteView` is the value-model-clean substitute: an
+  owned `pub struct Copy ByteView { off, len, buf_len }` in `std.numeric` — pure
+  coordinates, no pointer, freely storable in struct fields and returnable.
+- Access goes back through an explicit buffer and never yields a reference:
+  `cursor(&self, buf: &Bytes) -> Option<ByteCursor>`, `byte(&self, buf, i) ->
+  Option<u8>`, plus `new`/`of_cursor` (the parser capture idiom) and
+  `off`/`len`/`is_empty`. Every access enforces, returning `None` on failure:
+  no `off+len` u64 overflow, `off+len <= buf.len()`, and a buffer-length brand
+  (`buf.len() == buf_len`) that rejects applying a view to a different-length
+  buffer.
+- `docs/language/BYTE_VIEW.md` is the design. `examples/byte_view/{http_header_view,
+  tlv_packet_view,wrong_buffer}/` store views in result structs, reach the bytes
+  back through the buffer, and self-verify that wrong-buffer / out-of-bounds /
+  overflow uses return `None`. Gated by `scripts/tests/check_byte_view.sh`
+  (Makefile `test-byte-view` + CI), which locks the reference-free value model,
+  the Option-returning access surface, and the running guards.
+- The region→`Text` path (`try_text` + `utf8_text_slice` example) was split into
+  its own increment and landed the next day — see the 2026-06-21 entry above.
+  At this commit: full suite 1569/0; examples 126/0.
+
+### Diagnostics-quality: E0208 (unconsumed linear variable) now has a source span (2026-06-20)
+
+- Found by a Phase 5 #4 audit. E0208 ("linear variable 'x' was never consumed")
+  was location-less — it printed the file but no `line:col`, the worst diagnostic
+  failure. `VarInfo` gained a `declSpan` populated at the `let` declaration, and
+  `checkScopeExit` now points the diagnostic at the variable's declaration. Gated
+  by `scripts/tests/check_diagnostics_quality.sh` (Phase 5 #4 span floor), which
+  also asserts parser/resolver/type/linearity/capability diagnostics all carry a
+  span. (Reason/next-action enrichment on the remaining codes is the tracked #4
+  content work.) Full suite 1564/0; snapshots green.
+
+### `concrete test` (project mode) miscompile fixed — duplicate `@__concrete_argc` (2026-06-20)
+
+- Found by a Phase 5 #3 audit of `concrete test`. Project-mode `concrete test`
+  emitted a duplicate `@__concrete_argc` global and llvm-as rejected the test
+  binary ("redefinition of global"); the single-file `--test` flag (what the suite
+  used) was unaffected. Root cause: the test-mode argc/argv stubs were emitted
+  per module in `emitSModule`, so any multi-module test build — and every project
+  build pulls in the std dependency — emitted the global N times. Fixed by
+  emitting the stubs once in `emitTestRunner` (which already runs once at program
+  level). `concrete test` now builds, runs `#[test]`s across the project, reports
+  PASS/FAIL, exits nonzero on failure, and `--module` scopes correctly. Locked by
+  `scripts/tests/check_concrete_test.sh` (Phase 5 #3 gate). Full suite 1564/0.
+
+### Statement vs trailing-expression distinction — fixes the E0225 match-arm class (2026-06-20)
+
+- The AST collapsed `expr;` (a discarded statement → `Unit`) and a trailing `expr`
+  (a block/arm value) into one `Stmt.expr` with no record of the `;`, so a
+  statement-position match arm `=> { side(); }` was typed by `side()` and rejected
+  with a spurious **E0225** ("match arm type … does not match first arm type"). The
+  dual gap: a block had no trailing-expression value. (ROADMAP #36 / LANGUAGE_GAPS
+  #12, found by the CLI/config workload pass; design in
+  `docs/language/STATEMENT_EXPRESSION_MODEL.md`.)
+- Fixed by modeling the distinction (Option A): `AST.Stmt.expr` and `Core.CStmt.expr`
+  carry an `isValue : Bool` flag — a trailing expression with no `;` is the value,
+  a `;`-terminated one is a discarded statement (`Unit`). The parser sets it
+  (`parseExprBlock`, the direct `=> expr` arm, and the while-expression `else`
+  branch, made value-bearing); the checker, elaborator, lowering, and formatter all
+  respect it. Implemented in three staged, each-full-suite-green commits: flag
+  threading (behavior-preserving) → semantics flip → formatter.
+- Effect: `=> { side(); }` is now `Unit` and agrees with a unit arm; value arms
+  (`=> expr`, `=> if c {..} else {..}`, trailing `=> { …; v }`) and let-RHS
+  if-expressions are unchanged. Locked by
+  `tests/programs/regress_stmt_match_arm_unit.con` (= 42). Full suite 1564/0;
+  examples 123/0; `--full` baseline unchanged (29).
+- Deferred follow-ups (kept out per bounded scope): braced block-as-value in
+  arbitrary expression position (`let x = { …; v }`), implicit trailing-`return`
+  function bodies, and a formatter fix to render single-value-expr arms directly
+  (it block-wraps `=> if …`, so that one construct doesn't round-trip).
+
+### Unary-prefix vs postfix precedence fixed — `!x.method()` (2026-06-18)
+
+- Found by a CLI/config workload pass (the natural `while !cur.is_eof()`). Unary
+  prefix operators (`!`, `-`, `~`) bound TIGHTER than postfix (`.field` /
+  `.method()` / `[i]`), so `!c.is_zero()` parsed as `(!c).is_zero()` (E0264 "no
+  method on Bool"), `-c.n` as `(-c).n`, `!c.arr[0]` as `(!c).arr[0]`. The
+  ubiquitous `!x.method()` form required parentheses; free-function calls `!f(x)`
+  were unaffected (a call is a primary). Fail-closed (type error, not miscompile),
+  but pervasive ergonomic friction.
+- Fix in `Parser`: unary `neg`/`not_`/`bitnot` now parse their operand's postfix
+  chain (`parsePrimary >>= parsePostfixNoAs`), exactly as borrow/deref (`&`/`&mut`/
+  `*`) already did — so `!c.m()` is `!(c.m())`, with `as` still binding loosest.
+  Locked by `tests/programs/regress_unary_postfix_precedence.con` (= 42). Full
+  suite 1563/0; examples 123/0; `--full` baseline unchanged (29).
+
+### `&mut [T; N]` element-write miscompile fixed — wrong element stride (2026-06-18)
+
+- Found by a fixed-buffer/no-alloc workload pass. Assigning `a[i] = v` through a
+  `&mut [T; N]` parameter (an array reached via a reference) used the WRONG element
+  type and **silently corrupted memory** — not fail-closed. `fill(a: &mut [i32;4])`
+  doing `a[0]=11; a[1]=33; a[2]=44; a[3]=22` read back as `[11, 0, 33, 0]`: the
+  stores landed at the wrong offsets and clobbered adjacent slots.
+- Root cause in `Lower` (`storeToPlace .arrayIndex`): the element type was resolved
+  only from a bare `.array`, so for `arr.ty = .refMut (.array T N)` it fell back to
+  the stored value's type — i64 for an int literal — emitting an i64-strided
+  `getelementptr` and a clobbering `store i64` into an `[i32]`/`[u8]` array. This is
+  the write-path analogue of C10 (which fixed array READS through a reference). Fix:
+  resolve the element type through one ref/ptr/heap layer.
+- Affected any element write through a `&mut`/`*mut` array with a non-i64 element
+  type (buffer fills, in-place transforms, mask/unmask loops). Locked by
+  `tests/programs/regress_mut_array_elem_writeback.con` (= 26741, position-weighted
+  so any mis-stride fails). Full suite 1562/0; examples 123/0; `--full` baseline
+  unchanged (29). The no-alloc array surface is otherwise sound: local `[T; N]`
+  read/write, 2D arrays, array-of-structs element mutation, nested struct-with-array
+  deep mutation, and Copy-struct-with-array return-by-value all codegen correctly.
+
+### if-expression-as-value miscompile fixed — `alloca void` result slot (2026-06-18)
+
+- Found by a workload-driven pass (building a WebSocket frame decoder against the
+  real stdlib): an `if`-expression used as a **match-arm value** — e.g.
+  `match decode(c) { Result::Ok { v } => if v.opcode == 1 { 0 } else { 1 }, .. }` —
+  crashed codegen with `alloca void` (`void type only allowed for function
+  results`). Reachable from entirely idiomatic code; `let x: T = if …` was fine
+  because it carried a type hint.
+- Root cause in `Elab`: an if-expression's result type was `hint ?? .unit`, so a
+  hintless value position (a match arm) defaulted the type to Unit, and `Lower`
+  faithfully emitted `alloca void` for the result slot. Fix: a hintless
+  if-expression now infers its result type from its branches' trailing expression
+  (an if-expression's type *is* its branch type — which the existing code comment
+  already claimed but didn't do). The let-RHS path (with a hint) is unchanged.
+- A follow-up probe of the expression-position family (codegen bugs cluster) found
+  a SECOND, distinct void bug: an if-expression in value position whose one branch
+  **diverges** (e.g. `if c { return .. } else { 8 }`) emitted `store void undef`
+  into the result slot from the diverging branch. Root cause in `Lower`: the
+  branch-value store was emitted unconditionally, before checking whether the
+  branch had terminated. Fix: only a live (non-terminated) branch writes the slot.
+  Locked by `tests/programs/regress_if_expr_divergent_branch.con` (= 8). (The
+  degenerate both-branches-diverge case — `let r = if c { return 1 } else { return 2 }`
+  — is fail-closed: rejected by SSA-verify E0703, never miscompiled.)
+- Locked by `tests/programs/regress_if_expr_match_arm.con` (= 42). Full suite
+  1561/0; examples 123/0; `--full` baseline unchanged (29 pre-existing). The
+  workload also confirmed the byte/cursor decoder surface is otherwise sound —
+  bitfield extraction, big-endian multi-byte reads, variable-length (7/16/64-bit),
+  and nested Result/enum matching all codegen correctly.
+
+### Unit-payload enum miscompile fixed — void-returning scoped callbacks (2026-06-14)
+
+- The external-workload friction pass found a real miscompile: a callback that
+  returns nothing (Unit) passed to a scoped combinator like `HashMap.with_value`
+  makes the result `Option<Unit>`, and constructing `Option::<Unit>::Some { .. }`
+  crashed codegen. Two distinct lowerings emitted illegal `void`:
+  1. **Type definition** — the variant was emitted as
+     `%variant.Option.Some = type { void }`; LLVM rejects `void` as an aggregate
+     member ("void type only allowed for function results"). Fixed in
+     `Layout.fieldTyToLLVM`: a Unit/`never` struct-or-variant field is now a
+     zero-size member (`[0 x i8]`), not `void`. Field access is byte-offset GEP
+     (Unit has size 0, align 1), so a zero-size member is correct and keeps field
+     indices stable.
+  2. **Construction** — building the variant emitted `store void undef`. Fixed in
+     `Lower`'s enum-lit lowering: the field expression is still evaluated (side
+     effects preserved) but the store is skipped when the field type is Unit.
+- Unit payloads are reachable only through inference (you cannot spell `()` as a
+  type annotation), so this only ever hit the built-in `Option`/`Result` enums —
+  exactly the scoped-callback surface (`with_value`, `with_at`) the value model
+  relies on. Verified end-to-end: `HashMap.with_value(&k, &ctx, nop)` with a
+  Unit-returning `nop` now compiles and runs. Locked by
+  `tests/programs/regress_unit_payload_enum.con` (= 7). Full suite 1559/0;
+  examples 123/0.
+
+### C10 fixed — array indexing through a reference (2026-06-14)
+
+- Indexing an array reached through a `&[T; N]` / `&mut [T; N]` (`arr[i]`,
+  `&arr[i]`, `arr[i] = v`) used to resolve the element type to `<unknown>`
+  (E0220 / E0552 / E0501) — indexing did not auto-deref a reference to the array.
+  Fail-closed (rejected, never miscompiled), but it blocked the ergonomic
+  `&arr[i]` element-borrow form. Fixed by resolving the element type through one
+  ref/ptr/heap layer in `Check`, `CoreCheck`, and `Elab`; lowering unchanged (a
+  `&[T; N]` is already the array base pointer). Locked by
+  `tests/programs/regress_index_through_ref.con` (= 78). Closes ROADMAP #6c
+  (C9 + C10 both fixed). Full suite 1557/0; examples 123/0.
+
+### Phase 6 HOF surface: capability-polymorphic fold/for_each/map (2026-06-14)
+
+- The stdlib higher-order combinators are now **capability-polymorphic**
+  (`CALLABLE_VALUES §6`): each carries whatever its callback carries (`cap C`),
+  so a pure callback keeps the combinator pure and an effectful one (printing,
+  allocating) requires the callback's capabilities at the call site — no
+  combinatorial `map`/`map_io`/`map_alloc` split. Upgraded `Vec::fold`/`for_each`,
+  `HashMap::fold`/`for_each`/`keys_fold`/`values_fold`/`keys_for_each`/
+  `values_for_each`, and `HashSet::fold`/`for_each`. Backward-compatible: existing
+  pure callers infer `C = {}`.
+- New `Vec` combinators: `map<U, cap C>(f) with(C, Alloc) -> Vec<U>` (transform
+  into a fresh Vec) and `for_each_ctx<Ctx, cap C>(&mut ctx, f)` — the Borrow-cell
+  iterator that threads a caller-owned mutable sink and reborrows it per call
+  (the element borrow stays confined; no value returned). This is what the
+  earlier integrity/kvstore migrations wanted and is now a first-class API.
+- Gated by new `std.vec` `#[test]`s (`test_vec_fold_cap`, `test_vec_for_each_ctx`
+  with an `Alloc`-requiring sink callback, `test_vec_map`). Full suite 1557/0;
+  examples 123/0; no new `--full` failures vs baseline.
+
+### C9 fixed — silent infinite-loop miscompile on address-taken loop variables (2026-06-13)
+
+- A loop variable that was both loop-carried and address-taken (`&i` inside a
+  mutating `while`) miscompiled into a **silent infinite loop**: it got both a
+  promoted alloca (from `&i`) and an SSA phi, the two diverged, the init `store`
+  landed inside the body (resetting the counter), and the loop condition
+  vanished. Fixed in `Concrete/IR/Lower.lean`:
+  - a scalar whose address is taken anywhere in the loop body is promoted to a
+    stable alloca **before** the loop (memory-backed, driven through load/store
+    like aggregates) instead of being phi-carried;
+  - promoted **scalars** are excluded from loop / `if` / `match` value
+    reconciliation (else the merge re-stores a stale pre-branch snapshot — which
+    surfaced as `sp` being reset to 0 every iteration in the stack-machine
+    examples); promoted aggregates keep their existing merge path (so `defer`
+    over strings is unaffected);
+  - a `&mut promotedVar` call argument now passes the alloca directly (no
+    copy/write-back that would desync from the alloca).
+- Locked by `tests/programs/regress_loop_addr_taken_var.con` (= 3). Full suite
+  1553/0; examples 123/0; no new `--full` failures vs baseline. (C10 — `&arr[i]`
+  through `&[T; N]` — remains open, tracked at ROADMAP #6c.)
+
+### H1 CLOSED — returned-reference provenance resolved by subtraction (2026-06-13)
+
+- The returned-reference-provenance hole (H1) is **closed**. The checker now
+  rejects any safe-callable function or function *type* that returns a reference
+  — directly (`fn f() -> &T`), nested in an aggregate (`-> Option<&T>`), or via
+  generic instantiation (`R = &V` in return position). Implemented as: a blanket
+  signature rule in `checkFn`, the fn-pointer-type rule in `resolveType`, and the
+  generic-instantiation rule at call sites. The original segfault repro
+  (`fn make() -> &i64 { return &local; }`) is now ill-formed.
+- The entire stdlib accessor surface was migrated to the **value model**:
+  `get -> Option<V>` (Copy cell, `Copy`-bounded); `with_value`/`Vec::with_at` to
+  borrow (Borrow cell — the `&V` is confined to a scoped callback and never
+  returned); `remove`/`pop` to move out (Move cell); raw pointers (`*const`/`*mut`)
+  for low-level/unsafe access (`get_unchecked`, `get_mut`). No lifetimes, no
+  regions, no `from()`.
+- `scripts/tests/check_returned_ref_provenance.sh` flipped from
+  contained/frozen to **expected-reject** (10 closure assertions). The two
+  hole-repro examples no longer compile (their returned-ref reads are rejected).
+  `from(param)` stays deferred/evidence-gated (#8a1); `with_value_mut`/`modify`
+  deferred (separate container-not-in-context obligation).
+- Full suite 1553/0; examples 123/0; no new `--full` failures vs baseline.
+
+### Impl-block bounds enforced + HashMap `get` migrated to the value model (2026-06-13)
+
+- **Closed a latent soundness gap:** impl-block trait/`Copy` bounds
+  (`impl<V: Copy> Foo<V>`) were *decorative* — parsed then discarded, never
+  checked at method-call sites, so an `impl<V: Copy>` method was callable on a
+  `Foo<NonCopy>`. Now enforced: `ImplBlock` carries `typeBounds` (parser →
+  AST → method summaries), and the method-call path runs `checkTraitBounds`
+  against the receiver's type args. `checkTraitBounds` now resolves `Copy` via
+  `isCopyType` (so Copy structs and primitives both satisfy it, not just
+  whatever is in `traitImpls`).
+- **Fixed a capset-comparison bug** surfaced by capability-polymorphic
+  callbacks: `normalizeTyForCmp` compared fn-type capsets order-sensitively, so
+  two `with(Std)`-expanded sets in different order mismatched. Capsets are now
+  canonicalized (sorted) before comparison.
+- **Migrated `HashMap::get` to the value model** (begins the accessor migration
+  that completes "references are second-class"): `get -> Option<&V>` is replaced
+  by a `Copy`-bounded value reader `get -> Option<V>` (the Copy cell — sound now
+  that the bound is enforced: uncallable on non-Copy maps). Non-Copy reads use
+  `with_value` (Borrow) or `remove` (Move). Migrated consumers: map `#[test]`s
+  (Copy `i32` → value), `kvstore` `cmd_get` and `integrity`'s hash compare
+  (`String` → `with_value`). Full suite 1553/0; examples 123/0.
+- Remaining (tracked): `OrderedMap`/`OrderedSet`/`Vec`/`Slice`/`Deque`/`heap`
+  accessors, `get_unchecked -> &T` → raw pointer (~139 sites), then flip the
+  blanket `-> &T` definition-signature rejection + gate. H1 not fully closed
+  until that lands.
+
+### References are second-class — never returned (H1 closure foundation) + immutable `with_value` (2026-06-13)
+
+- Adopted a language invariant: **references (`&T`/`&mut T`) are scoped access,
+  not values you return.** They flow *downward* (into calls, callback params,
+  borrow blocks) but a safe-callable function or function *type* may not *return*
+  a reference — directly, nested in an aggregate, or via generic instantiation.
+  This closes the returned-reference-provenance hole (H1) *by subtraction* — no
+  lifetimes, no regions, no `from()`. The no-aggregate-ref ban becomes a
+  corollary. (`docs/archive/design-records/VALUE_MODEL.md`.)
+- Discovered during this work: returning a reference computed from a reference
+  *identifier* or `&place` was a silent miscompile (spurious load → wrong
+  pointer → segfault even with a live referent), and `with_value`'s generic `R`
+  could be instantiated to `&V`, re-creating `Option<&V>` (the exact H1 shape)
+  through a generic backdoor. Both are now ill-formed by the invariant.
+- Implemented the two suite-green enforcement points in `Concrete/Check/Check.lean`:
+  (a) `resolveType` rejects a **function-pointer type** whose return contains a
+  reference (so a ref-returning callback is unconstructable — this is what makes
+  scoped callbacks sound); (b) generic call/method/static-call sites reject a
+  **type parameter instantiated to a reference that occurs in the return type**
+  (closes `wrap<R>->Option<R>` at `R=&V`). Neither breaks existing code:
+  grandfathered accessors like `get -> Option<&V>` instantiate `V` to a non-ref
+  (the `&` is declared, not introduced by instantiation). Full suite 1554/0; no
+  new `--full` failures.
+- Landed **immutable `HashMap::with_value(key, ctx, f) -> Option<R>`** — now
+  sound (the backdoor is closed, so `R` can't be `&V`); the borrowed `&V` flows
+  *into* the callback via the cast idiom and never escapes. Gated by
+  `scripts/tests/check_callable_values.sh` (fn-type / callback / generic
+  backdoors all rejected; value callback works) and `test_map_with_value`.
+- **Deferred** (tracked): blanket rejection of bare `-> &T` *definition
+  signatures* (needs the existing accessor migration first), the accessor
+  migration itself (`get`/`peek`/`get_unchecked`/`get_mut`/`min`/`max` →
+  value/`with_value`/raw-pointer), `with_value_mut`/`modify` (separate
+  container-not-in-context obligation), and the codegen ref-return fix
+  (defense-in-depth, now unreachable from safe code).
+
+### Bound-callback context threading + `&mut *` reborrow fix (#24 step 1) (2026-06-12)
+
+- Implemented the three context modes from the callable-values design
+  (`docs/language/CALLABLE_VALUES_AND_CAPABILITIES.md` §3): shared `&Ctx`, mutable
+  `&mut Ctx`, and consuming `Ctx`, all generic over `Ctx` and capability-
+  polymorphic over `cap C`. A bound callback is an explicit function pointer +
+  context — no closures, no captures.
+- The mutable mode needs to thread a `&mut Ctx` across repeated callback calls;
+  since `&mut` is linear, each call REBORROWS (`&mut *ctx`). Implementing this
+  surfaced a **silent miscompile**: `&mut *e` / `&*e` lowered to "load the
+  pointee into a fresh alloca and take *that* address," so a reborrowed
+  `&mut Ctx` aliased a throwaway copy and the callback's mutations were lost (a
+  combinator accumulating into a context returned 0 instead of the real sum).
+  Fixed in `Concrete/IR/Lower.lean`: `&(*e)` / `&mut (*e)` now lower to the pointer
+  `e` itself — a true reborrow, no copy. Verified in IR (the reborrow call now
+  passes the context pointer directly, no `alloca`) and by execution.
+- Gated by `scripts/tests/check_callable_values.sh` (three modes thread
+  correctly; reborrow aliases and has no temp alloca; callback capabilities are
+  not erased) — wired into the Makefile (`test-callable-values`) and CI — plus
+  `tests/programs/callback_context_modes.con` (= 245) in the main suite. Full
+  suite 1551/0.
+- Filed two reference-handling bugs discovered during this work (neither on the
+  H1/callable-values path): **C9** — an address-taken, loop-carried variable
+  (`&i` in a mutating loop) miscompiles to a silent infinite loop (HIGH); **C10**
+  — `&arr[i]` through a `&[T; N]` resolves to `&<unknown>` (fail-closed). Repros
+  under `tests/known_bugs/`, tracked in `docs/verification/KNOWN_HOLES.md` and ROADMAP #6c.
+
+### Callable-values + capability-polymorphic callbacks design checkpoint (#24) (2026-06-12)
+
+- Wrote `docs/language/CALLABLE_VALUES_AND_CAPABILITIES.md`, the keystone design doc that
+  gated the Phase 6 HOF/iteration surface, scoped collection callbacks, and the
+  V1.1 immutable-read withdrawal (the last open half of H1). Decided model:
+  - **Bound callbacks are an explicit function pointer + context** — no closures,
+    no hidden captures. The "binding" is the combinator taking the context as its
+    own parameter and forwarding it.
+  - **Three context modes**: shared `&Ctx`, mutable `&mut Ctx`, consuming `Ctx`
+    (the last is one-shot, enforced by ordinary linearity).
+  - **Capabilities live on the callback fn type and are required at the call
+    site** — never erased by passing a function through a combinator.
+  - **Representation is use-site binding** (`cap C` + `fn(T) with(C) -> R`),
+    which the language already implements — *not* a first-class `BoundFn<…>`
+    value (deferred until a storage workload needs it).
+  - **Scoped collection callbacks** (`with_value`/`with_value_mut`/`modify`)
+    return owned values only and yield a borrow *into* the callback; sound via
+    the **container-not-in-context invariant**, which is largely a theorem about
+    the existing no-aggregate-ref ban plus the live receiver borrow, backed by a
+    residual gate check.
+  - **`for x in …` lowers to a direct loop, not a callback**; bound callbacks are
+    the explicit composable HOF surface.
+  - **Proof granularity**: generic contract + per-instance `proved_for_instance`.
+  - **`from(param)` stays deferred** — not this design's job, not the H1 fix.
+- The base machinery (`cap C`, fn-type capsets, call-site subset check,
+  fn-pointer capability requirement / smuggle rejection) was already implemented;
+  the doc builds on it. `check_capability_polymorphism_design.sh` now reports the
+  doc exists → the HOF freeze is lifted (the doc governs new surface), while the
+  smuggle fixture stays permanently rejected.
+- Remaining work is implementation, per the doc's §11 build order: context
+  threading, scoped callbacks + their gate, the immutable-read withdrawal, then
+  the capability-polymorphic HOF stdlib surface.
+
+### Generic type inference sees through references (#6b) (2026-06-11)
+
+- Fixed generic type-argument inference through `&`/`&mut`. Before, `fn
+  id<T>(x: &T)` called as `id(&w)` failed and forced an explicit `id::<W>(&w)`,
+  even though the by-value form `id<T>(x: T)` inferred fine. The root cause was
+  not `unifyTypes` (it already recursed through references) but `peekExprType`,
+  the side-effect-free type peek used during inference: it lacked
+  `.borrow`/`.borrowMut`/`.deref` cases and fell through to `.placeholder`, so
+  `&w` peeked as nothing and `unifyTypes(&T, .placeholder)` learned no binding.
+- The peek lives in BOTH `Check.lean` (validation) and `Elab.lean` (which
+  stamps inferred type args onto the `CExpr.call` node Mono consumes). Fixing
+  only Check left Elab stamping the *formal* type var, which Mono "specialized"
+  to `id_for_TV_T` — leaking `Ty.typeVar` into the body and tripping post-mono
+  verify (E0601). Fixed in both: `&e : &(peek e)`, `&mut e : &mut (peek e)`,
+  `*e` strips one ref/ptr/heap layer.
+- Now `id(&w)`, `set(&mut m, v)`, and trait-bound `dup(&b)` (the `Clone`
+  motivator) infer without turbofish. Genuinely ambiguous cases (a type param
+  only in return position) still stay un-inferable and are rejected with E0220
+  rather than miscompiled. Regressions:
+  `tests/programs/generic_infer_through_ref.con` (positive, 42) and
+  `tests/programs/error_generic_infer_ambiguous.con` (negative), both gated by
+  the main suite. Unblocks `Clone` (#8a2) and ergonomic HOF/iteration APIs that
+  take `&T`/`&K`/`&V` (#23/#24). Full suite 1550/0.
+
+### H1 mutable half closed: get_mut withdrawn, replaced by update (2026-06-11)
+
+- Withdrew `HashMap::get_mut` and `OrderedMap::get_mut` (`-> Option<&mut V>`) —
+  the actual use-after-realloc WRITE vector of H1 — and replaced them with
+  `update(k, f: fn(V) -> V) -> bool`, which moves the value out of the slot,
+  applies `f`, and moves the result back, so no `&mut V` escapes into caller
+  code and the container cannot be reallocated while a borrow is held. Pure
+  stdlib refactor: no compiler change, no Clone, no callbacks, today's
+  fn-pointers. No real callers existed; the map `#[test]`s migrated to
+  `update`. Full suite 1548/0; examples 123/0.
+- `check_returned_ref_provenance.sh` rewritten for the danger-staged state: it
+  now asserts NO `pub fn -> Option<&mut` exists in std (mutable half gone) and
+  that `update` is present, while still reproducing and baseline-freezing the
+  CONTAINED immutable read accessors (`get -> Option<&V>`, `peek`, `min`/`max`/
+  `min_key`/`max_key`) that wait for V1.1 scoped callbacks. The `_map`
+  known-hole fixture migrated from `get_mut` to the immutable `get`.
+- ROADMAP #8a step 1 marked done; KNOWN_HOLES H1 state updated.
+
+
+### H1 refined: Clone decoupled from the fix; withdrawal staged by danger (2026-06-11, design)
+
+- Sharpened the H1 resolution: **do not make `Clone` the H1 patch.** H1 closes
+  by API design, independent of `Clone`. The withdrawal is staged by danger:
+  - **Now (library-only, no Clone, no callbacks):** withdraw the MUTABLE
+    aggregate-refs (`get_mut`, `peek`, `min_key`/`max_key`, `min`/`max`) — the
+    actual use-after-realloc vector — and replace with operation APIs
+    (`contains`/`insert`/`remove`/`replace`/`update`) + value-`get` for Copy.
+    Eliminates the memory-corrupting half as a pure stdlib refactor.
+  - **Contained until V1.1:** the immutable `get -> Option<&V>` (real uses are
+    scoped non-escaping reads; no Clone-free/callback-free replacement for
+    non-Copy reads) — disclosed and frozen, withdrawn when scoped callbacks
+    (`with_value`, callable-values doc #24) land.
+- `Clone` recorded as a SEPARATE, deliberate value-model design item, not a
+  soundness patch. Added the four-cell model to `docs/archive/design-records/VALUE_MODEL.md`: Copy
+  (implicit bit-dup), Move (default ownership transfer), Borrow (scoped),
+  Clone (explicit, `Alloc`-visible, audit-visible, library-expressible via a
+  stdlib trait — not yet built). Sibling `move`/`take` = `swap(i, new) -> V`
+  for indexed ownership-out; build when a workload needs it. #6b is the
+  prerequisite for ergonomic `Clone` call sites, no longer on the H1 path.
+- Updated ROADMAP #8a (danger-staged) / #8a2 (Clone value-model item) / #6b
+  note, KNOWN_HOLES H1, VALUE_MODEL.md, CLAIMS_TODAY. No code changed.
+
+
+### H1 tier-1 implementation scoping: Clone is library-only, gated on #6b (2026-06-11, design)
+
+- De-risked the tier-1 stdlib refactor before writing it. Key finding: the
+  `get_cloned(k) -> Option<V>` accessor needed for non-Copy value reads is
+  **library-only** — a stdlib `trait Clone { fn clone(&self) -> Self }` rides
+  the existing trait-bound dispatch (verified: `dup::<Box>(&b)` returns 42), so
+  no builtin trait or compiler change is required.
+- Two prerequisites surfaced: (a) #6b inference-through-references — without it
+  `map.get_cloned(&k)` needs explicit turbofish; (b) `impl Clone for String`
+  must resolve the type's inherent `clone` from inside the impl. Recorded the
+  sequencing (#6b → Clone trait + impls + get_cloned → withdraw + migrate +
+  flip gate) and a sibling `move`/`take` value-access primitive in ROADMAP
+  #8a2 / #6b. No code changed yet — investigation chose the safe order over a
+  rushed multi-system change.
+
+
+### H1 resolution decided + validated against workloads (2026-06-11, design)
+
+- Decided to fix H1 (returned-ref provenance) **by subtraction** — withdraw the
+  aggregate-ref APIs (`Option<&T>` / `Option<&mut T>`) and replace with three
+  API tiers (operation/value APIs → owned `ByteView` → scoped callbacks), with
+  scalar `from(param)` deferred as an evidence-driven escape valve. Rationale:
+  keeps the language smaller and avoids inventing a lifetime system under
+  another name; tier 1 needs no new language feature (`update(k, fn(V) -> V)`
+  moves the value, works for non-Copy, uses today's fn-pointers), decoupling
+  the soundness fix from the harder callable-values design.
+- **Validated the bet against real workloads** (the validation gate the
+  decision required): `lox` uses no map accessors; `kvstore` is already 100%
+  tier-1 (`contains`/`insert`/`remove`/`fold`, zero migration); `integrity` has
+  the single aggregate-ref call site in the examples — one `get -> Option<&String>`
+  for a hash compare inside a `match` arm where the `&String` never escapes
+  (the scoped-read case). No workload needs a borrowed reference to escape a
+  scope, so `from()` deferral is empirically justified. Recorded in ROADMAP
+  #8a/#8a1/#24, KNOWN_HOLES H1, CLAIMS_TODAY.
+
+### Interpreter-vs-compiled differential gate + interpreter fixes (2026-06-11)
+
+- **`scripts/tests/check_codegen_differential.sh`** (#44f, precursor to #18):
+  runs every `tests/codegen/*.con` through BOTH the interpreter (`--interp`)
+  and the compiled binary and asserts agreement. The interpreter is an
+  independent oracle, so a divergence means one side is wrong — mechanizing the
+  manual sweep that found C4/C5/C6. Two gate-enforced (never silent) exclusion
+  lists: EXPECTED_DIVERGE (unbounded-Int interpreter vs fixed-width compiled —
+  casts/overflow) and INTERP_UNSUPPORTED (function pointers). 32 agree.
+- **Interpreter nested-place assignment** (the twin of C5): `Interp.lean` only
+  handled single-level field/array assignment (`interp: field assign on
+  non-ident expression`); now a `resolvePlaceSteps` helper handles `o.i.v`,
+  `a[i].x`, `m[i][j]` via `updateAt`, so the interpreter matches the compiled
+  semantics fixed in #44c.
+- **Interpreter short-circuit `&&`/`||`**: the interpreter evaluated both
+  operands eagerly, so `x != 0 && (10 / x) > 0` errored on `x == 0` where the
+  compiled code short-circuits. Now `.and_`/`.or_` short-circuit before the
+  RHS, matching compiled semantics.
+- Remaining for #44f: a random program generator over the bug-prone shapes
+  (same interp==compiled oracle), an interpreter fixed-width mode (to empty
+  EXPECTED_DIVERGE), and interpreter support for the unsupported shapes.
+
+### Address-of-local now aliases the local (2026-06-11)
+
+- **C8 CLOSED (was H5)**: `&mut x` / `&x` / `*mut x` of a local used to point at
+  a COPY — local scalars were lowered as SSA register values, not addressable
+  stack slots, so a store through the pointer never reached `x`. This was the
+  architectural root the nested-place fix (C5) worked around. Fixed:
+  `addrOfLocal` (`Concrete/IR/Lower.lean`) promotes a local to a stable stack
+  alloca on first address-take; reads/writes of the local route through the
+  alloca, so the pointer aliases the variable and writes before/after the
+  address-take compose correctly.
+- Locked by `scripts/tests/check_raw_ptr_to_local.sh` (now a 6-oracle
+  regression gate; the former known-hole fixture returns 99). Full suite
+  1548/0; codegen / nested-write / struct-layout gates unaffected. ROADMAP
+  Phase 4 #44d.
+
+### Runtime-safety hardening: proven violations are hard errors (2026-06-11)
+
+- **H2 CLOSED**: safe code with a runtime-safety obligation classified as
+  `violation` now fails the build with E0900. Constant OOB (`a[5]` on
+  `[i64; 3]`) and literal div-zero (`10 / 0`) are compile-time proofs that the
+  program is wrong, not ordinary `unproven` obligations.
+- `trusted` / `with(Unsafe)` code remains an explicit audit-responsibility
+  escape hatch, and the regression gate proves both exemptions plus the fact
+  that `unproven` obligations are not swept into the hard-error path.
+- Locked by `scripts/tests/check_proven_violation_enforcement.sh`; the former
+  known-hole fixtures are now expected-error regression cases.
+
+### Trust hardening sweep: capability hole closed, fingerprints cryptographic, axioms audited (2026-06-09/10)
+
+A full-project audit pass turned several silent gaps into shipped fixes or
+tracked, gated holes:
+
+- **fn-pointer capability escalation CLOSED** (soundness fix): calling through
+  `f: fn(T) with(C) -> R` now requires the caller to hold `C`, enforced in
+  both Check (E0240) and CoreCheck (E0520). Previously a function with no
+  `with(...)` could accept and call a `with(Network)` callback — authority
+  smuggling that contradicted the claims doc. Locked by
+  `adversarial_neg_cap_fnptr_smuggle.con` and the
+  `check_capability_polymorphism_design.sh` gate, which also freezes the
+  stdlib HOF surface until the callable-values design doc exists.
+- **`#[proof_fingerprint]` digests are truncated SHA-256** (was 64-bit
+  non-cryptographic `String.hash`, craftable into a silent stale→proved
+  upgrade). Reuses the in-repo FIPS 180-4 spec; all fresh fingerprints
+  migrated, deliberately-stale fixtures preserved.
+- **Axiom-inventory gate** (`check_axiom_inventory.sh`, `docs/verification/AXIOMS.md`,
+  `make test-axiom-inventory`): `#print axioms` over every `#[proof_by]`
+  theorem; kernel allowlist only; `sorryAx` fails hard; native-code trust
+  (`Lean.ofReduceBool`/`trustCompiler`) must be declared per-theorem. First
+  run surfaced and documented that the six HMAC/SHA-256 flagship theorems
+  carry native trust via `bv_decide`'s compiled LRAT checker.
+- **Declaration/SSA/import diagnostics carry real source spans**: parser now
+  records struct/enum/trait/impl decl spans; core-check decl errors,
+  ssa-verify errors, and unknown-import errors point at source instead of
+  `0:0`/nothing. Extended `check_source_maps.sh` (17 checks). Deferred
+  remainders (extern-fn decls, module-file-not-found) recorded as ROADMAP
+  Phase 4 13e.
+- **Returned-reference provenance hole tracked and contained** (NOT fixed):
+  stdlib `get`/`get_mut`-style APIs return refs inside `Option`, the owner is
+  not frozen, and a saved ref can survive a rehash — use-after-realloc that
+  compiles. Known-hole fixtures (`examples/known_holes/`), a baseline-freeze
+  gate (`check_returned_ref_provenance.sh`) blocking any new public
+  aggregate-ref API, a `CLAIMS_TODAY.md` disclosure narrowing "no dangling
+  safe reference" to borrow-block refs, and a collections-freeze release
+  blocker. The fix is the scalar `from(param)` provenance design in the
+  callable-values roadmap item.
+- **CI/build hardening**: golden tests wired into make/CI (baselines had
+  silently drifted); all `examples/` files driven by a coverage manifest that
+  fails on unlisted files; macOS job; weekly clean-checkout proof-replay job
+  (no caches — stale-cache false greens become visible); `make help` over
+  ~75 annotated targets.
+- **Docs reconciled with code**: pattern destructuring marked implemented,
+  one consistent reborrow rule across the MUT_REF docs, `defer`'s proof
+  story stated in OBLIGATION_CORE, `PHASE_EXIT_CHECKLISTS.md` re-keyed to
+  the current phase structure (its old numbering claimed 0/12 tooling done
+  while the formatter, fuzzers, wrong-code corpus, and reducer had shipped).
+- **Roadmap design-debt sweep**: callable-values/capability design knot
+  (bound callbacks, three context modes, `from(param)` scalar returned refs,
+  deferred view-structs), owned `ByteView` zero-copy idiom, narrow const
+  generics, dictionary coherence, arena/index safety, contract-guided
+  property fuzzing, newtype-invariant obligations, arithmetic profiles,
+  evidence-typed imports, docs-drift gate, security/CVE + proof-revocation +
+  supply-chain/license + deprecation release policies, and the
+  external-contributor surface — each with a named gate.
+- **Explicit enum discriminants rejected instead of silently discarded**
+  (language behavior change): `enum Op { Get = 0x01, Set = 0x02 }` used to
+  parse the values and throw them away, assigning positional tags 0/1
+  regardless — a semantically dark construct that would corrupt any
+  FFI/protocol enum (and let duplicate discriminants "compile" because both
+  were discarded). Now a parse error (E0001) with a hint; honoring the values
+  at the repr/ABI boundary is ROADMAP Phase 12 #7a. Nothing real used the old
+  behavior. Regression: `tests/programs/error_enum_explicit_discriminant.con`.
+- **Unknown attributes rejected instead of silently ignored** (language
+  behavior change): `#[notreal]`, `#[trustedz(...)]`, and any unrecognized
+  attribute used to be parsed and dropped, so a typo in a
+  proof/capability/test attribute (`#[overflow_checkd]`, `#[tes]`) silently
+  lost its meaning — several failing *open* (a typo'd `#[test]` silently
+  doesn't run; a typo'd `#[overflow_checked]` silently drops overflow
+  obligations). `parseAttribute` now validates against a complete allowlist
+  (repr, test, overflow_checked, spec, proof_by, ensures_proof,
+  proof_coverage, proof_fingerprint, requires, ensures, invariant, variant,
+  intrinsic, langitem) and rejects unknowns (E0001) with the known list as a
+  hint. Regression: `tests/programs/error_unknown_attribute.con`.
+- **Proven-violation enforcement hole tracked** (NOT fixed): obligations the
+  compiler discharges to `violation` — a constant index proven out of bounds
+  (`a[5]` on `[i64; 3]`), a literal `10 / 0` — are reported but still build
+  and ship UB in safe code, conflating `violation` (proof of a bug) with
+  `unproven` (undischarged). Known-hole fixtures
+  (`examples/known_holes/proven_{oob_index,div_zero}/`), gate
+  (`check_proven_violation_enforcement.sh`: reproduces the hole AND asserts
+  both are classified VIOLATION, so only enforcement is missing),
+  `CLAIMS_TODAY.md` disclosure, and ROADMAP Phase 12 #0 (proven violations
+  become hard errors by default in safe code, pulled to the front of the
+  phase).
+- **Monomorphization name-collision miscompile FIXED** (most severe finding
+  of the audit — a silent miscompile): mono mangled a specialization by the
+  HEAD constructor of the type argument and discarded nested args, so
+  `tag<Hold<Pair<i64>>>` and `tag<Hold<Pair<bool>>>` collapsed into one
+  `tag_for_Pair` / one `%Hold_Pair` struct type despite different layouts
+  (16B vs 2B inner) — ABI corruption when a field is touched; arrays, refs,
+  pointers, and fn-types fell through to `"unknown"`, collapsing even more.
+  `tyToSuffix` (`Concrete/IR/Mono.lean`) is now total and keys on the FULL type
+  with bracketed nested args (`Hold_T_Pair_T_Int_E_E`); both the function-name
+  and struct-name manglers route through it, so symbols and struct layouts
+  stay consistent and distinct. Full suite stayed 1548/0 across the
+  mangling-format change. Regression-locked by
+  `scripts/tests/check_mono_name_collision.sh` (now a positive gate: distinct
+  specializations, array type-args distinct, and an execution oracle proving a
+  field-touching body over both layouts returns the right value). ROADMAP
+  Phase 4 #44a. Adjacent, still open: the `mod`-wrapped form trips a separate
+  fail-closed E0602 in nested-generic struct lowering (#44b).
+- **Adversarial codegen sweep (execution oracles)** — ~50 compile-run-assert
+  fixtures over casts, wrapping, shifts, bitwise, short-circuit, division/
+  modulo (incl. negative), precedence, generics (post-H3), ghost erasure,
+  recursion (incl. mutual), loops, match (multi-field payloads), arrays
+  (args, computed index, 2D, copy isolation), struct return/copy isolation,
+  large structs. All correct except one root cause with two faces:
+  - **Nested place-write miscompile FIXED** (safe code, #44c): `o.inner.v = x`,
+    `a[i].x`, `m[i][j]`, `b.data[i]`, triple-nest, and nested-via-`&mut` were
+    silently dropped — Lower handled only single-level assignment targets, and
+    a compound base was lowered as a value copy whose mutation was discarded.
+    Proximate root: no unified lvalue lowering. Deeper root: locals are SSA
+    register values, not addressable slots, so single-level workarounds didn't
+    compose. Fixed by a unified `storeToPlace` (value-writeback up the place
+    chain). Regression gate: 9 execution oracles. Suite 1548/0.
+  - **Raw-pointer-to-local hole filed** (H5, unsafe path, #44d): `&mut x as
+    *mut i64` points at a copy of the local (same addressability root), so a
+    store through it doesn't reach `x`. Requires trusted + raw pointers
+    (audit-responsibility). `examples/known_holes/raw_ptr_to_local/`,
+    `scripts/tests/check_raw_ptr_to_local.sh`.
+  - **Struct mixed-width field-layout miscompile FIXED** (safe code, #44e):
+    the struct-literal store packed fields tightly while field reads used
+    aligned `Layout.fieldOffset`, so any struct with a sub-word field before a
+    wider one read garbage (`{a: u8, b: i64}` stored `b` at offset 1, read it
+    from offset 8) — a silent miscompile in a very common construct.
+    `.structLit` now stores at the same aligned offsets reads use. Regression
+    gate: 6 execution oracles. Suite 1548/0.
+  - Verified-correct design choice: signed floor division (interpreter and
+    compiled agree, −7/3 = −3, identity `(a/b)*b + a%b == a` holds).
+  - Also verified correct: enum struct/nested payloads, fn-pointer calls,
+    i64 multiplication-overflow wrap, returned arrays, unsigned comparison,
+    repr(C) layout, struct-with-array by value, recursion returning structs,
+    all comparison operators, chained field on returned struct, strings (via
+    grep/lox builds). Sweep CONVERGED — final batches found no new
+    miscompiles; all non-passes were fixture syntax or fail-closed linearity
+    rules (heap-deref consumes, raw-ptr-to-local = H5).
+  - **`scripts/tests/check_codegen_execution.sh`** (new standing gate): 30
+    compile-run-assert-value fixtures under `tests/codegen/`, making the
+    sweep's coverage permanent and replayable. The existing suite mostly
+    checks compile/reject/diagnostic and was blind to miscompiles (the class
+    behind H3/C5/C6); this gate runs each program and asserts its result. A
+    lightweight precursor to the full interpreter-vs-compiled differential
+    harness (ROADMAP Phase 4 #18). Later grown to 33 fixtures, adding
+    mod-wrapped nested-generic cases that confirm #44b (the E0602
+    `Hold_Pair not found` lowering error) was the same head-only mangling
+    collision as #44a and is resolved by it.
+- **`docs/verification/KNOWN_HOLES.md`**: single canonical index of every tracked
+  soundness/dark-construct gap — state (OPEN/CLOSED), reproducing fixture,
+  locking gate, scheduled fix — replacing the scatter across claims
+  disclosures, gate scripts, and roadmap items. Linked from ROADMAP and
+  CLAIMS_TODAY.
+
+### Phase 2 VC and SMT core completed through teaching examples (2026-06-07)
+
+Phase 2's completed VC/SMT foundation moved out of the active roadmap. The
+shipped core now includes:
+
+- VC schema v1 for source contracts, runtime-safety obligations, loop
+  invariants, preconditions, postconditions, dependencies, arithmetic profile,
+  expected discharge, status, and engine.
+- Kernel-first discharge through `omega` and `bv_decide`, with
+  `proved_by_kernel_decision` kept separate from Lean theorem evidence and
+  external solver evidence.
+- `Concrete.ProofKit.Arith`, centralizing the reusable Int/Nat/BitVec bridge
+  lemmas that had been private HMAC proof scaffolding.
+- External SMT as an explicit opt-in path for the narrow nonlinear overflow
+  fragment, with Z3 results classified as `solver_trusted`,
+  `counterexample`, `unknown`, `timeout`, or `solver_error` rather than
+  kernel evidence.
+- Source-level SMT counterexamples, solver provenance, deterministic replay
+  metadata, release-policy gates for solver evidence, Lean replay artifacts,
+  and negative examples proving non-proof solver outcomes stay non-proofs.
+- Compact examples under `examples/vc_discharge/` and SMT teaching examples
+  under `examples/smt/teaching/`, including the `kernel_preferred` anti-example
+  and the out-of-fragment unsupported-theory case.
+- Sound division/modulo lowering for VC goals: `/` and `%` lower only when
+  Concrete and Lean integer semantics agree, namely a provably non-negative
+  dividend and positive-literal divisor. `range_block_count` is now a real
+  `proved_by_kernel_decision (omega)` example, while negative-division cases
+  remain unlowered rather than mis-proved.
+- Branch/path facts now feed `assert` VCs. `scopedAssertsS` /
+  `scopedAssertsB` thread branch guards, negated fall-through facts, and loop
+  invariants into assertion obligations, using the same stale-hypothesis
+  discipline as the call-site and runtime-safety walkers. The
+  `path_feasibility` teaching example now shows a clamp safety assertion proved
+  by `omega` with no SMT query, while the `over_claim` negative remains
+  unproven instead of being mis-proved.
+- Audit reports now include a compact VC evidence summary. `--report audit`
+  shows counts for kernel-discovered VC evidence, Lean evidence, replayed Lean
+  evidence, arithmetic-only closures, solver-trusted evidence, counterexamples,
+  and outstanding obligations. The default audit path does not invoke external
+  SMT; solver evidence remains opt-in through `--report vcs --smt`.
+
+The Phase 2 closure work also landed and is no longer active roadmap work:
+
+- release-bundle capture now includes `reports/vcs.txt`, `reports/audit.txt`,
+  and `reports/contracts.txt`, so VC evidence ships beside assumptions,
+  runtime-safety facts, proof status, and audit output;
+- [docs/verification/SMT_SOUNDNESS.md](docs/verification/SMT_SOUNDNESS.md) records the trusted solver
+  binary, encoding assumptions, unsupported theories, replay boundary, policy
+  behavior, and blast radius of solver bugs;
+- `check_phase2_vc.sh` is the umbrella validation gate over the VC schema,
+  discharge matrix, SMT path, SMT negatives, SMT policy, SMT replay, SMT
+  teaching examples, SMT red-team checks, and end-of-phase VC examples;
+- `check_smt_redteam.sh` pins fake, garbage, and lying solver behavior,
+  negative-division lowering, stale facts, unsupported lowering, and reassigned
+  guards as non-proofs or honest diagnostics;
+- `examples/vc_suite/` supplies the end-of-phase examples:
+  `packet_window`, `fixed_point_filter`, `chunked_hash_padding`,
+  `rate_limiter`, and `ring_buffer_indices`, including the fixed-point filter
+  oracle over sample vectors.
+
+### Phase 1 source contracts completed (2026-06-06)
+
+Phase 1 is complete and no longer appears as active roadmap work. It delivered
+the source-contract hardening gate:
+
+- negative contract examples for unmet preconditions, missing/weakened
+  postconditions, invalid invariants, invalid contract expressions, duplicate
+  links, malformed attributes, and fabricated theorem names;
+- vacuity/satisfiability reporting and policy rejection for vacuous contracts;
+- spec/ghost purity checks for contract expressions;
+- first-class `assert(e);` and `assume(e);` with assert obligations,
+  audit-loud assume taint, and the `forbid-assume` policy gate;
+- contract diagnostics taxonomy and a positive resolver fixture proving legal
+  names in complex contracts are not over-rejected;
+- contract API stability facts and `concrete diff` classification for
+  strengthened preconditions, weakened guarantees, and invariant drift;
+- source-contract soundness bridge facts R-22..R-28 in
+  `Concrete/Proof/ProofSoundness.lean`;
+- an HMAC source-contract retrofit that proves symbolic call-site bounds where
+  the current arithmetic can support them and reports the remaining
+  division-shaped call-site gap honestly;
+- `check_phase1_contracts.sh`, the Phase 1 umbrella gate over per-class report
+  snapshots, negative fixtures, stability fixtures, and documentation.
+
+### Contract-negatives suite completed (2026-06-06)
+
+The Phase 1 source-contract negative suite is now a real regression gate:
+`examples/contract_negatives/` plus
+`scripts/tests/check_contract_negatives.sh` / `make test-contract-negatives`.
+It covers the contract states that could otherwise create a misleading green
+claim:
+
+- unmet callee precondition at a call site;
+- missing postcondition proof;
+- weakened / one-direction postcondition proof (`partial`, not full proof);
+- invalid invariant preservation;
+- invalid contract expression (`invalid_contract_expression`, e.g. unknown
+  identifier);
+- duplicate/conflicting proof-link attributes;
+- fabricated theorem name caught by `concrete prove --check`.
+
+The invalid-expression check is report-side and conservative: contract
+expressions are checked against parameters, `result`, locals/ghosts/loop
+counters, constants, functions, specs, and externs (bare and qualified), so the
+flagship contracts remain valid while typos such as
+`#[requires(0 < nonexistent)]` report an explicit invalid contract expression.
+
+### Call-site precondition checking (source-contract hardening) (2026-06-06)
+
+A callee's `#[requires]` is now verified at every call site, closing a gap where
+a caller could violate a precondition with no diagnostic (a "green proof that's
+misleading"). `callSiteObligations` substitutes the call's arguments into the
+callee's precondition and a scoped walker (`scopedCallsB`) threads the caller's
+in-scope facts to the call: its own `#[requires]`, enclosing `if`-guards
+(then-branch), and loop invariants, with `dropStaleHyps` invalidating a
+hypothesis once its variable is reassigned. `--report contracts` classifies each
+call site:
+
+- constant argument violates it          → `failed_at_callsite`
+- caller's `#[requires]` / guard implies it → `proved_by_kernel_decision (omega)`
+  (`callPrecondGoals` builds `∀ vars, (hyps) → precondition`, discharged by the
+  same omega backend as the bounds/div goals)
+- closed after let-const subst           → `bv_decide`
+- nothing in scope establishes it        → `unproven_at_callsite` (honest gap)
+
+First case of the Phase 1 contract-negatives suite: `examples/contract_negatives/
+precondition_callsite/` (proved-via-requires, proved-via-guard, constant
+violation, honest gap) + gate `scripts/tests/check_contract_negatives.sh` (CI +
+`make test-contract-negatives`). The per-function `#[requires]` line in the
+report now reads "each call site checked separately." No regressions: snapshots
+95/0 (4 reworded), default suite 1544/0.
+
+### Example proofs moved out of the `Concrete.Proof` compiler namespace (2026-06-06)
+
+All seven flagship/example proof developments moved out of the `Concrete.Proof`
+compiler namespace into per-example modules `Concrete.Examples.<Ex>.Proofs`
+(namespace `Examples.<Ex>.Proofs`): `loop_invariant`, `parse_validate`,
+`crypto_verify`, `fixed_capacity`, `constant_time_tag`, `elf_header`, and
+`hmac_sha256` (the whole `Sha256Refine.lean`, relocated). Source links retargeted
+accordingly: `#[proof_by]` / `#[ensures_proof]` now name the example namespace,
+while `#[spec]` keeps `Concrete.Proof.` because the registered spec PExprs are the
+compiler's spec-drift oracle (consumed by `Concrete.Proof.specs`) and stay put —
+together with the eval scaffolding and the `specs` / `provedFunctions` tables.
+The audited "spec-drift-tied" claim is preserved.
+
+The migration is held in place by a namespace guard
+(`scripts/tests/check_proof_namespace.sh`, in CI and `make test-proof-namespace`):
+no `Concrete/Examples/` file may declare `namespace Concrete.Proof`; every
+theorem/lemma in `Concrete/Proof/Proof.lean` must be on an allowlist (a new one must be
+moved to an example module or explicitly justified as infrastructure); and the
+migrated theorem names may not reappear in a `Concrete.Proof` file.
+
+Deferred (not blocking): a lower-layer `Concrete.ProofModel` / `Concrete.SpecRegistry`
+split that would also let the registered spec PExprs move without a circular
+import. The current spec-drift setup is sound; this is later architecture work.
+
+### Binary-first `concrete prove` agent surface (2026-06-05)
+
+`concrete prove` became a self-describing, machine-drivable surface so an agent
+can author and verify a proof against an installed binary it can't read the repo
+for. The JSON proof-registry side-channel was already retired (source links are
+the only proof model); this milestone is the agent-facing tooling on top of it.
+
+- Discovery: `--help=agent` (workflow + exit-code taxonomy 0/1/2/3/4/5/6),
+  `--capabilities` (JSON feature/obligation/evidence catalogue + schema version),
+  `--schema` (schema for `--json`).
+- Structured context: `--json` — function, eligibility, body fingerprint, proof
+  link, status, evidence class, obligations with stable ids
+  (`<qual>@<line>#<Ox>`, the same key across `--report contracts`/`--replay`) +
+  source line / hypotheses / conclusion, replay command, ProofKit imports,
+  suggested theorems, and `next_actions` on every response. Process exit follows
+  the taxonomy (0 proved · 2 missing · 3 stale).
+- JSON modes for the human subcommands: `--show-obligation <id> --json`,
+  `--replay --json` (per-obligation closes; exit 4 on regression),
+  `--emit-link --json`, and `--nearest-lemmas [<id>] --json` (recipe per
+  obligation kind + feature lemma families; scopable to one obligation).
+- Generators: `--emit-lean` (compilable single-function stub ending in `sorry`,
+  verified to typecheck; `--out`/`--force`/`--stdout`); `--emit-artifacts`
+  (one reproducible bundle per UNPROVED obligation under `.build/prove/…` —
+  context.json/failed.lean/command.txt/README.txt); `--workspace [dir]` (the
+  all-in-one: manifest/context/obligations JSON + stub + link block + check/
+  replay scripts + README, a disposable build output, never a proof registry).
+- The closed loop: `--check [--json]` runs the Lean kernel on a function's linked
+  theorem(s) and maps the result back to obligation id / theorem / source line /
+  Lean error with stable statuses (checked / failed / missing_theorem / stale /
+  env_failure); whole-file `--report check-proofs --json` is the project-wide
+  twin. Agents read structured status, not raw `lake env lean` stderr.
+- Gate: `scripts/tests/test_prove_cli.sh` (68 assertions, lake-guarded for the
+  kernel checks). Remaining agent-tooling items (docs, MCP, minimize) stay in
+  ROADMAP Phase 3.
+
+### Proof-pattern corpus (2026-06-06)
+
+`examples/proof_patterns/` landed as a bounded proof-authoring corpus: small
+source-linked examples that teach and regression-test the common proof shapes
+without forcing users to learn from the large flagships first.
+
+The corpus covers:
+- `straight_line` — `add_three = x + 3` (`iff` coverage).
+- `array_update` — write index 1 and frame the rest (`point` coverage).
+- `loop_copy` — fixed two-byte copy proof.
+- `fold` — fixed four-element sum proof.
+- `composition` — function composition through a FnTable/callee proof chain
+  (`iff` coverage).
+- `runtime_safety` — bounds/div/overflow obligations discharged by
+  `omega`/`bv_decide`, plus a negative unchecked variant.
+- `stale_missing_partial` — the three intentional non-green states.
+- `workspace` — `concrete prove --workspace` fixture with no
+  `proof-registry.json`.
+- `repair` — `concrete prove --check --json` maps a missing proof back to an
+  obligation id.
+
+All examples use source-linked proofs only. The gate
+`scripts/tests/check_proof_patterns.sh` is wired into CI and `make
+test-proof-patterns`; it checks proof status, kernel proof checks where
+applicable, stable obligation ids, emitted-stub typechecking, absence of
+`proof-registry.json` in generated workspaces, and intended negative behavior.
+
+### Loop-derived and nonlinear runtime-safety obligations (2026-06-04)
+
+Runtime-safety obligations stopped relying only on entry preconditions/constants.
+
+- Bounds / division / overflow obligations now fold the enclosing loop's
+  `#[invariant]` + guard into the omega goal (`scopedBounds`/`scopedDiv`/
+  `scopedArith` thread an in-scope hypothesis list). Sound by construction: the
+  ordered walk drops a hypothesis the moment the body mutates a variable it
+  mentions, so a mid-body index mutation reverts the obligation to `unproven`
+  rather than proving a false bound. Shown in `evidence_classes/runtime_checked`
+  (`sum_loop` proved, `sum_loop_unsound` unproven) and `constant_time_tag`
+  (`a[i]`/`b[i]` omega-proved from the invariant).
+- Nonlinear / bitvector overflow tier: when every operand of a `+`/`*` has a
+  non-negative bounded range, `exprIntervalMax` computes the result range and, if
+  it fits the type, `overflowBVGoal` emits a widened unsigned `bv_decide` goal
+  (`Main.bvDischargeOverflow`) so the no-overflow fact is kernel-checked
+  (`proved_by_kernel_decision (bv_decide)`). Sound by gating (non-negative
+  operands, `+`/`*` only, wrap-free width). `fixed_point.scale_clamp`'s
+  `sample * gain` moves unproven → proved; weakening the operand bounds reverts
+  it to `unproven` — never a false green.
+
+### Source contracts become a real proof-authoring surface (2026-06-04)
+
+Source contracts moved from reported metadata to an end-to-end authoring path.
+The language now supports `spec fn`, `#[requires]`, `#[ensures]`,
+`#[invariant]`, `#[variant]`, `ghost`, call-site obligations, kernel-decision
+discharge (`omega` / `bv_decide`), loop VC generation, and `concrete prove`
+as the proof scaffold CLI.
+
+`constant_time_tag` is the first source-contract-primary flagship:
+`ct_compare` carries its functional postcondition in source, links the Lean
+proofs from source attributes, and the full value-semantics contract is
+`proved_by_lean`. Its constant-time source shape remains a separate
+enforced/reported claim, while machine-level timing remains assumed/trusted.
+This is the intended layered evidence model: value semantics, structural
+security shape, and machine assumptions are not collapsed into one badge.
+
+`concrete prove` v1/v1.1 landed as a conservative authoring tool: it prints the
+extracted body, fingerprint, VC list, ProofKit hints, theorem shape, and next
+obligation; `--emit-link` prints source proof-link attributes;
+`--show-obligation` expands one obligation; and `--replay` rechecks
+kernel-decision obligations. The first source proof link moved out of
+`proof-registry.json`: `constant_time_tag.ct_compare` now uses
+`#[spec]`, `#[proof_by]`, `#[ensures_proof]`, and `#[proof_coverage]` in
+source, with the compiler synthesizing the registry entry and computed
+fingerprint.
+
+The first evidence-class corpus landed under `examples/evidence_classes/`.
+It gives one small, snapshot-backed reference per shipped class:
+`proved_by_lean`, `proved_by_kernel_decision_omega`,
+`proved_by_kernel_decision_bv`, `partial_contract`, `stale_proof`,
+`assumed_boundary`, and `trusted_boundary`. The catalog in
+`docs/verification/EVIDENCE_CLASSES.md` keeps the classes visible without using a flagship
+as the only example.
+
+The `tested_by_oracle` evidence example also has its standalone corpus shape:
+`evidence_classes/tested_by_oracle` uses a tiny clamp program plus
+`oracle/run_oracle.sh` and `reference.py`, so oracle evidence is no longer only
+a flagship harness.
+
+The `runtime_checked` evidence example completed the corpus at 9/9. Array
+bounds are the first runtime-error obligation kind: fixed-array `arr[idx]`
+accesses generate `0 <= idx < N`, and `--report contracts` reports whether the
+access is proved by `omega`, checked as a constant in-bounds access, flagged as
+a constant violation, or still unproven.
+
+Runtime-safety obligations also gained div/mod nonzero coverage. `/` and `%`
+now emit a `divisor != 0` obligation with the same disposition model as array
+bounds: kernel-decision proof when preconditions establish safety, checked for
+constant nonzero divisors, violation for constant zero divisors, or unproven
+when the tool lacks enough facts.
+
+Overflow obligations landed as an opt-in runtime-safety surface.
+`#[overflow_checked]` is erased metadata, not an arithmetic-mode switch: inside
+an annotated function, fixed-width integer `+`, `-`, and `*` generate
+no-overflow obligations, while unannotated arithmetic does not flood reports
+with unrequested missing claims. The report uses the same evidence ladder as
+other runtime-safety obligations: kernel-decision proof when preconditions bound
+the operands, checked/violation for constants, and unproven when the tool lacks
+enough facts.
+
+The source-contract path now has dedicated regression gates in CI. The
+`check_evidence_corpus.sh` gate re-derives the load-bearing fact each evidence
+class demonstrates, including kernel-checking the linked Lean proof, detecting
+the stale-proof negative case, and checking oracle vector generation. The
+`test_prove_cli.sh` gate pins the `concrete prove` authoring subcommands.
+
+### HMAC-SHA256 graduates with exact-extraction refinement (2026-06-02)
+
+`hmac_sha256` graduated as the fifth flagship with the full SHA-256/HMAC
+composition chain kernel-verified and tied to the exact extracted source through
+the spec-drift gate. `hmac_sha256_refines_spec` proves that the extracted body
+computes `Sha256Spec.hmac` for the documented input bounds. The registered
+chain includes `block_to_words(_at)`, `sha256_schedule`, `sha256_round`,
+`sha256_compress(_at)`, `state_to_bytes`, `sha256_hash`, and `hmac_sha256`,
+plus the earlier point proofs; source edits make the registered claims stale.
+
+The proof also produced reusable infrastructure: fuel monotonicity, bounded
+counter-loop induction, array/frame lemmas, BitVec bridge lemmas, call/FnTable
+helpers, copy/xor/multi-store loop templates, and refinement theorem patterns.
+That infrastructure was harvested into `Concrete/ProofKit/*` and documented in
+`docs/verification/PROOFKIT_GUIDE.md`.
+
+### Unprofiled floating point excluded from proof eligibility (2026-06-03)
+
+A soundness/honesty gap around floats was closed. A function such as
+`fn fadd(x: f64, y: f64) -> f64 { x + y }` previously risked entering the
+proof pipeline with float `+` modeled as integer `.add`. Float-typed
+parameters, returns, literals, casts, and operations are now audit-loud and
+excluded from ProofCore until an explicit `ProvableFloatV1` profile exists.
+
+The report surface names the status directly: float semantics are unprofiled,
+proof eligibility is excluded, and the reason is that floating-point arithmetic
+has no active proof profile.
+
+### Proof-story matrix defines the no-dark-constructs contract
+
+`docs/verification/PROOF_STORY_MATRIX.md` records the language-level proof/evidence story:
+every construct must be classified as proved, enforced, reported, assumed,
+trusted, or explicitly open with a named gap.
+
+This reframes the long-term goal from "everything is in ProvableV1" to "nothing
+is semantically dark." Pure value code can move through `ProvableV1`; capability
+code, allocation, FFI, raw pointers, backend behavior, constant-time behavior,
+and future concurrency each get their own proof/evidence story instead of being
+silently ignored.
+
+The roadmap now makes the matrix an operating rule, and the future
+`concrete audit` command is defined as the per-program rendering of this
+matrix.
+
+### Proof coverage classification lands in proof-status reports
+
+Proof registry entries now carry an explicit coverage class, and
+`--report proof-status` surfaces that class so a reviewer can distinguish a
+point proof from a one-direction theorem, an iff theorem, an invariant theorem,
+a runtime-error proof, or a full contract proof.
+
+All existing production flagship proofs were classified. The showcase manifest
+also records the per-flagship coverage table, so "green" proof evidence no
+longer hides whether the theorem is a concrete-input regression, a universal
+one-direction statement, or a fuller functional specification.
+
+This closes the Phase 1 coverage-classification items and the first "no hidden
+green" pass for proof evidence. Remaining Phase 1 work is now about dependency
+tracking, provenance, monotonicity, assumption lifecycle, and trust-boundary
+inventory.
+
+### ProvableV1 defined as the first named provable subset
+
+`docs/verification/PROVABLE_V1.md` defines the first release-facing proof subset contract:
+which functions, types, expressions, state forms, loops, effects, trusted
+boundaries, runtime failures, and proof attachment requirements are inside the
+subset.
+
+The contract turns the current flagship proof surface into a named target:
+pure, non-trusted, non-entry functions whose validated Core extracts to
+ProofCore, whose registered specs match current source extraction, whose
+FnTable callees resolve, and whose theorem coverage is explicitly classified.
+
+This closes the first Phase 2 item. The active roadmap now moves on to
+`PredictableV1` and the runtime/profile pieces that sit beside the provable
+subset.
+
+### constant_time_tag graduates to Phase 7 (fourth flagship; first real-crypto)
+
+constant_time_tag closes all 10 graduation bars and lands
+as the fourth entry in `tests/showcase/manifest.toml`.  The
+first real-crypto flagship per the explicit slot
+crypto_verify's toy-MAC graduation reserved.  The Phase 7
+corpus now demonstrates four distinct systems domains:
+parsing (parse_validate), auth scaffolding (crypto_verify
+toy), bounded mutable state (fixed_capacity), and now
+real-crypto-adjacent code (constant_time_tag).
+
+What this graduation demonstrates
+---------------------------------
+The smallest real-crypto artifact that forces the exact
+distinction Concrete should be good at: **the code is
+simple, but the claim is subtle**.  Six-line OR-accumulate
+over `[u8; 16]` arrays.  Two attached theorems:
+
+- `ct_compare_equal_zeros_correct` — concrete zeros case.
+- `ct_compare_same_tag_correct` — UNIVERSAL: for any
+  16-byte tag, `ct_compare(a, a) = 1`.  Closes both bar
+  #1 (first theorem) and bar #2 (composition / universal
+  property).  Exercises u8 bitxor + u8 bitor + bounded
+  16-iteration while_ end-to-end under the Lean kernel.
+
+The proof closes by a single `simp` invocation chaining
+`BitVec.xor_self` and `BitVec.zero_or` through 16 unrolled
+iterations.  No induction over byte values required
+because the invariant — `diff` stays 0 — is uniform.
+
+Honest gaps named in three places
+---------------------------------
+The full iff direction (`ct_compare a b = 1 ⟹ a = b`) is
+NOT proved.  The oracle closes it empirically (152 of 200
+cases per seed × 3 seeds exercise the negative direction).
+Future stretch theorem; helpers landed.
+
+Machine-level constant time is NOT proved (no Phase 3
+constant_time profile exists; LLVM may rewrite the
+branch-free idiom; CPUs leak through cache).  Named as
+load-bearing assumed_not_proved in three places:
+`assumptions.toml`'s `[claims.machine_level_constant_time]`,
+`CATCHES.md`'s "What's NOT (yet) in this negative pair"
+section, and the manifest's
+`[flagship.limits].constant_time` block.
+
+The 10 bars closed
+------------------
+- #1 ct_compare_equal_zeros_correct + ct_compare_same_tag_correct
+- #2 the universal same-tag theorem (covers both directions)
+- #3 assumptions.toml with 4 explicit [claims.*] entries
+- #4 stricter [policy] than other flagships
+- #5 600 differential cases × 3 seeds via make test-ct-oracle
+- #6 alloc-in-compare-core catch + named timing gap
+- #7 release bundle captures cleanly
+- #8 honest README
+- #9 16 report snapshots baselined
+- #10 [[flagship]] entry with load-bearing
+  [flagship.limits].constant_time block
+
+Forced extensions documented
+----------------------------
+R-17 (bitxor) extended to u8; R-21 (bitor) NEW row.  Both
+append-only against the typed-PBinOp shape from 28b1f2a.
+
+Status as of HEAD
+-----------------
+Four graduated Phase 7 flagships:
+  parse_validate     (2026-05-22) — parsing
+  crypto_verify      (2026-05-23) — auth scaffolding (toy)
+  fixed_capacity     (2026-05-28) — bounded systems state
+  constant_time_tag  (2026-05-30) — real-crypto (narrow)
+
+Numbers
+-------
+make test:             1575/0
+make test-showcase:    4/0   (was 3/0)
+make test-snapshots:   64/0
+make test-catches:     4/0
+make test-ct-oracle:   600/0
+
+### fixed_capacity graduates to Phase 7 (third flagship)
+
+fixed_capacity closes all 10 graduation bars and lands as the
+third entry in `tests/showcase/manifest.toml`.  The bounded /
+no-allocation systems flagship the Phase 7 corpus was missing
+alongside parse_validate (parsing) and crypto_verify
+(authentication scaffolding).
+
+What makes this graduation substantive: bar #2 is closed by
+`ring_push_then_contains_correct`, the project's first
+iteration-counted composition theorem.  It proves "push v into
+empty ring; ring_contains(v) = 1" through one Break iteration
+of `while_step` over the full state-model surface (arraySet,
+LoopStep enum, BitVec mod at i32 width).  This is the
+strongest substantive proof-side claim in the Phase 7 corpus
+to date — a 2-function chain over bounded mutable state,
+kernel-checked.
+
+The 10 bars in one batch
+------------------------
+- #5 Oracle: Python reference (`oracle/reference.py`) mirrors
+  the spec exactly.  `oracle/run_oracle.sh` generates 200
+  seeded cases per seed, builds a Concrete driver per case
+  with case-specific MsgBuf bytes via a `trusted`
+  `driver_buf()` constructor, runs both sides, asserts agreement.
+  600 cases across seeds 0/42/999 — all pass.  `make
+  test-fc-oracle` wired into Makefile.
+- #6 Catches: `catches/01_alloc_in_bounded_core.con` — same
+  `ring_push` shape with an `audit_log` helper declared
+  `with(Alloc)`.  Capability check rejects with E0520.
+  `make test-catches` 3/0.
+- #7 Release bundle: captures cleanly via
+  `scripts/tests/capture_release_bundle.sh`.  All required
+  artifacts present.
+- #8 README: full honest-framing doc following parse_validate
+  / crypto_verify template.  Names what is proved, what is
+  NOT yet proved, what is statically enforced, what is
+  assumed.
+- #10 Showcase manifest entry: 10/10 bars marked, evidence
+  pointers, CI gates, limits explicitly named.
+
+Previously-met bars
+-------------------
+- #1: 4 attached theorems (ring_new, compute_tag_zero,
+  ring_push_zero, ring_push_then_contains)
+- #2: composition theorem (this commit's predecessor)
+- #3: assumption file
+- #4: policy file
+- #9: 16 report snapshots baselined
+
+Pull-through evidence
+---------------------
+`make test-showcase` goes from 2/0 to 3/0 (fixed_capacity
+joins).  All CI gates remain green.
+
+Status as of HEAD
+-----------------
+Three graduated Phase 7 flagships:
+- parse_validate (2026-05-22) — parsing
+- crypto_verify (2026-05-23) — auth scaffolding (toy)
+- fixed_capacity (2026-05-28) — bounded systems state
+
+Phase 7's core thesis is now demonstrated by all three
+flagships agreeing on what proof + evidence + policy +
+catches + drift detection look like for different systems
+domains.  The next flagship candidate (real cryptography,
+ELF, etc.) follows from the ROADMAP ladder.
+
+Numbers
+-------
+make test:             1572/0
+make test-showcase:    3/0  (was 2/0)
+make test-snapshots:   48/0
+make test-catches:     3/0  (was 2/0)
+make test-fc-oracle:   600/0 (new gate, 3 seeds × 200 cases)
+
+### Iteration-counted composition: ring_push then ring_contains finds the value
+
+The substantive proof-side claim for fixed_capacity:
+pushing `v` into the canonical empty RingBuf, then looking
+it up, returns `1`. Two functions, one chain, kernel-checked.
+Closes AUDIT bar #2.
+
+The composition is iteration-counted in the proof-engineering
+sense: the while_step takes exactly one iteration (the cond
+fires true on `i = 0 < scan = 1`, the step produces
+`LoopStep::Break { value: 1 }`, and the break value short-
+circuits the loop and `cont`). The proof exercises the full
+state-model surface — `arraySet` (from ring_push's
+post-condition shape), `while_step` (from ring_contains's
+loop), `LoopStep` enum dispatch, BitVec mod at i32 width,
+field access, array indexing, and the BEq match.
+
+Eval refactor: extracted `evalWhileStep` into eval's `where` block
+-----------------------------------------------------------------
+The composition proof initially fought simp — the step
+counter exploded on the multi-letIn + while_step + nested
+arithmetic chain. The fix that unstuck it: factor the
+`.while_step` arm of `eval` into a separate
+`eval.evalWhileStep` helper. This gives proofs a stable
+lemma surface:
+
+  `eval_while_step_unfold`:
+    `eval ... .while_step = eval.evalWhileStep ...` (by `simp [eval]`)
+
+  `while_step_break`: cond true + step→Break v → return v
+  `while_step_cont`:  cond true + step→Cont updates → recurse
+  `while_step_exit`:  cond false → fall through to cont
+
+Each lemma has a 3-line proof: `rw [eval_while_step_unfold];
+unfold eval.evalWhileStep; rw [h_cond, h_step]`. The composition
+theorem itself closes with one `simp` call (with `maxSteps :=
+1000000`) using `eval.evalWhileStep` and `eval.evalFields`
+in the simp set.
+
+This is the durable proof surface for future while_step
+work — any later loop theorem will use the same three
+lemmas. Phase 12 preservation arguments will state their
+obligations in terms of `eval.evalWhileStep` rather than
+the monolithic `eval`.
+
+What landed
+-----------
+- `eval.evalWhileStep` factored out of `eval`'s `.while_step`
+  arm. Eval's case is now a 2-line forwarding call. Semantics
+  unchanged.
+- 4 lemmas on the new surface (`eval_while_step_unfold` +
+  3 specialized cases).
+- `ring_push_then_contains_correct`: composition theorem
+  for the 1-element-ring case. Parameterized over
+  `data_tail` (universally quantified — only `data[0]`
+  matters). Fixed v=0; a fully-parametric v requires a
+  small BEq-PVal lemma not yet ergonomic via simp.
+- Registry entry for `ring_contains` now points at
+  `ring_push_then_contains_correct` (the stronger claim).
+  `ring_contains_empty_correct` remains kernel-checked
+  in the source — it's the empty-ring corollary, useful
+  as documentation and a sanity check.
+- AUDIT bar #2 closed.
+
+Pull-through evidence
+---------------------
+fixed_capacity proof-status totals unchanged at
+`4 proved / 10 unproved / 0 blocked / 2 inel / 4 trusted`
+— the function count doesn't move, but the registered
+proof on `ring_contains` is now the substantive
+composition rather than the weaker empty-case theorem.
+
+AUDIT moves from 4/10 to 5/10 bars (#1 ✅, #2 ✅, #3, #4,
+#9). Remaining: content bars (#5 oracle, #6 catches, #7
+bundle, #8 README, #10 manifest).
+
+Numbers
+-------
+make test:             1572/0
+make test-showcase:    2/0
+make test-snapshots:   48/0
+
+### Phase 4 while_step: ring_contains extracts and proves; zero blockers in fixed_capacity
+
+Second piece of the state-model implementation from
+`docs/verification/PROOF_STATE_MODEL.md`.  Bounded while loops with bodies
+richer than flat assignments — nested `let`s, `if`s with
+early `return`s, and assignments to loop-carried variables —
+now extract into `PExpr.while_step` with a `LoopStep` enum
+that distinguishes Cont (continue with updated carried state)
+from Break (early return with value).
+
+This closes the last extraction blocker in `fixed_capacity`.
+Every eligible function in the active candidate now extracts.
+
+What landed
+-----------
+- `PExpr.while_step cond carried step cont`: the step
+  expression evaluates to a `PVal.enum_ "LoopStep" variant`
+  per iteration.  Cont reads `(name, value)` updates and
+  rebinds them in the env before re-testing the cond.  Break
+  carries a value and exits the loop immediately, with that
+  value becoming the whole expression's result (cont is
+  skipped — Break is a function-level return).
+- `eval` rule unwraps the LoopStep enum and threads
+  accordingly; falls through to `cont` when `cond` is false.
+- `cStmtsToStepExpr`: walks a CStmt list bottom-up, producing
+  a step PExpr.  Supports `letDecl`, `assign` (carried),
+  `return_ (some e)` (Break), and `ifElse cond thenBr none`
+  (if-without-else).  Any other shape returns `none` and
+  surfaces as "while loop body shape" via the unsupported
+  diagnostic.
+- `extractCarried`: scans the body for `assign` names,
+  populates the `carried` informational field used by Phase
+  12 preservation arguments.
+- `cStmtsToPExprK`'s while case now tries flat-assign first
+  (existing `PExpr.while_`); falls back to while_step when
+  the body has richer control flow.  Both shapes coexist.
+- `identifyUnsupportedStmt`'s while case mirrors the new
+  acceptance criteria: only complain about body shape when
+  neither flat-assign nor while_step can fit.
+- normalize / pexprFreeIn / renderPExpr / renderPExprAsLean
+  all gained while_step cases.
+
+Pull-through evidence
+---------------------
+fixed_capacity proof-status:
+
+    before: 3 proved / 10 unproved / 1 blocked / 2 inel / 4 trusted
+    after:  4 proved / 10 unproved / 0 blocked / 2 inel / 4 trusted
+
+Every fixed_capacity function now either extracts or is
+structurally ineligible (entry-point / trusted).  The
+candidate is one composition theorem away from the proof
+side of graduation.
+
+First while_step theorem
+------------------------
+`ring_contains_empty_correct`: when ring_contains is called
+on a ring with `count = 0`, the result is `.int 0` for any
+val.  `scan = min(count, cap) = 0`, the while_step's cond
+`i < scan` is `0 < 0 = false` on the first check, and
+control falls through to `cont = .lit (.int 0)`.  The body
+never runs.  One-simp proof; no iteration counting required.
+
+Modest by design — the empty-ring case is the cheapest
+while_step instance (zero iterations) and shows the cond/cont
+path works end-to-end.  Theorems about non-empty rings (e.g.
+"ring contains the value we just pushed") need iteration
+counting and are a Phase 4 follow-up.
+
+AUDIT bar #1 now backed by 4 theorems
+(`ring_new_correct`, `compute_tag_zero_correct`,
+`ring_push_zero_correct`, `ring_contains_empty_correct`).
+
+Numbers
+-------
+make test:             1572/0
+make test-showcase:    2/0
+make test-snapshots:   48/0
+
+### Phase 4 arraySet: ring_push extracts and proves
+
+First implementation of the state-model design from
+`docs/verification/PROOF_STATE_MODEL.md`.  Source-level mutation
+(`arr[i] = v`) extracts as a shadowing `letIn` that rebinds
+the array name to a functional update — no in-place
+mutation in PExpr, just new arrays produced by `arraySet`.
+The encoding matches the state-model § 2 contract.
+
+What landed
+-----------
+- `PExpr.arraySet arr idx val` evaluates each subexpression,
+  asserts `idx` is a non-negative integer in bounds, and
+  returns `.array_ (elems.set i.toNat v)` — Lean's
+  bounds-safe `List.set` produces the new array.
+  Out-of-bounds (`i < 0` or `i ≥ length`) is stuck (`none`),
+  per the state-model decision that OOB is undefined
+  territory; theorems pass hypotheses to rule it out.
+- `cStmtsToPExprK` case for `CStmt.arrayIndexAssign`:
+  source `arr[i] = v` extracts to `letIn name (arraySet
+  (var name) idx val) rest` when `arr` is a simple
+  identifier.  Complex `arr` (e.g. `obj.field[i] = v`)
+  needs `structSet` first and is deferred.
+- `identifyUnsupportedStmt` refined: top-level
+  `arrayIndexAssign` on a simple ident is supported (not
+  flagged); complex receivers surface
+  `"array index assignment (complex receiver)"`.
+- `normalizePExpr`, `pexprFreeIn`, `Report.renderPExpr`,
+  `Report.renderPExprAsLean` all gained `arraySet` cases.
+
+Pull-through evidence
+---------------------
+fixed_capacity proof-status:
+
+    before: 2 proved / 10 unproved / 2 blocked / 2 inel / 4 trusted
+    after:  3 proved / 10 unproved / 1 blocked / 2 inel / 4 trusted
+
+ring_push now extracts (was blocked on `array index
+assignment` + `mod`; the mod blocker fell with the prior
+commit).  Only one fixed_capacity blocker remains:
+`ring_contains`, waiting on `while_step` (rich loop bodies).
+
+First arraySet theorem
+----------------------
+`ring_push_zero_correct`: when ring_push is called on the
+canonical empty RingBuf (head=0, count=0, data all zeros)
+with value `v`, the result is the RingBuf with `.int v`
+at data index 0 (rest zeros), head=1, count=1.  This is
+the first proof exercising functional array update under
+the kernel.  Proof is one `simp` invocation; the BitVec
+arithmetic for `0 % 16 = 0` and `(1 + 0) % 16 = 1`
+reduces cleanly under decide+simp.
+
+The spec uses normalized form: `(rb.head + 1)` appears as
+`(1 + rb.head)` (operands sorted commutatively, per
+`normalizePExpr`).  The spec-drift gate from commit
+`f371cc1` verifies at build time that the registered
+spec matches the source-extracted PExpr; this was
+non-trivial to get right by hand (operand ordering matters)
+and the gate caught the discrepancy as expected during
+authoring.
+
+AUDIT bar #1 now backed by 3 theorems
+(`ring_new_correct`, `compute_tag_zero_correct`,
+`ring_push_zero_correct`).
+
+Numbers
+-------
+make test:             1572/0
+make test-showcase:    2/0
+make test-snapshots:   48/0
+
+### BitVec-backed bitxor + mod; first while-loop theorem (compute_tag)
+
+The fixed-width integer model the prior commit said had to be
+decided before `bitxor` / `mod` could land: **decided as BitVec
+round-trip at i32 width** (hardcoded for now; multi-width is the
+explicit Phase 4 follow-up). The implementation commits to one
+principled coupling — Concrete's surface ops are evaluated by
+converting `Int` operands to `BitVec 32`, running the BitVec
+operation, and reinterpreting via `BitVec.toInt`:
+
+    evalBinOp .bitxor (.int a) (.int b) =
+      some (.int (BitVec.toInt (BitVec.ofInt 32 a ^^^ BitVec.ofInt 32 b)))
+
+    evalBinOp .mod (.int a) (.int b) =
+      some (.int (BitVec.toInt
+        (BitVec.srem (BitVec.ofInt 32 a) (BitVec.ofInt 32 b))))
+
+For `mod`, `BitVec.srem` matches what `EmitSSA.lean` emits for
+signed `.mod` (LLVM `srem` — result has sign of dividend). For
+unsigned types, the lowering uses `urem`; PExpr's i32-only
+hardcoding doesn't distinguish yet, which is the known limit
+named below.
+
+This replaces the toy non-negative-only `Int.ofNat (a.toNat ^^^
+b.toNat)` and `Int.emod` semantics that an earlier draft of this
+commit shipped. The toy versions matched the value-level
+behaviour on the inputs we actually prove about (compute_tag's
+byte XOR-fold), but they weren't faithful to Concrete's i32
+surface — a proof of a property involving negative inputs or
+high-bit-set bytes would have used the wrong semantics. The
+BitVec round-trip is faithful: anything provable in PExpr is
+provable in `i32` at the source.
+
+Known limit (named, not hidden)
+-------------------------------
+Width is currently hardcoded to 32. PExpr ops don't carry a `Ty`;
+extraction would need to thread it through. None of today's
+flagship targets are non-i32, so this is not blocking. A future
+commit will widen `PExpr.binOp` to carry an operand-width tag
+(or split into `binOp32`, `binOp64`, …), at which point u8 /
+i64 / etc. become available. Until then, attempting to attach a
+proof on a u32 `bitxor` would extract correctly but the proof
+would have to acknowledge the width mismatch.
+
+The active candidate
+--------------------
+With BitVec semantics in place, `compute_tag_zero_correct` is
+the first theorem in the project that exercises a bounded while
+loop end-to-end under the Lean kernel. Statement: when the input
+buffer's first 6 data bytes are `.int 0`, `compute_tag` returns
+`.int 0` (any tail is ignored). Proof is one `simp` invocation
+that unfolds the spec, evaluator, `evalAssigns`, lookup helpers,
+`evalBinOp`, and `List.replicate`; the kernel walks 6
+iterations, each producing `BitVec.toInt (0 ^^^ 0) = 0`, then
+takes the fall-through branch when `i = 6`.
+
+Bug fix found by writing the theorem
+------------------------------------
+While inspecting `compute_tag`'s extracted PExpr, I noticed the
+loop body had `i = i + 1` TWICE per iteration. Cause: the
+for-loop desugar in `Concrete/Elab/Elab.lean:1087` concatenates step
+into the while body (`whileBody := cBody ++ cStep`) AND stores
+step separately in `CStmt.while_`'s `step` field. The prior
+extraction commit iterated `body ++ step` and double-stepped
+every for-desugared loop. Fix: walk `body` only at extraction
+(it already contains step); the `step` field exists for other
+consumers like continue-target lowering. The previous commit's
+while extraction was wrong on every for-loop; the theorem
+caught it.
+
+Pull-through evidence
+---------------------
+parse_validate: `compute_checksum` moves from
+`blocked: bitxor` to `no proof` (extracts; no theorem yet —
+needs the multi-iteration data dependency, which is a different
+proof shape from compute_tag_zero).
+fixed_capacity:
+  before: 1 proved / 11 unproved / 2 blocked / 2 inel / 4 trusted
+  after:  2 proved / 10 unproved / 2 blocked / 2 inel / 4 trusted
+ring_push's blocker narrows from
+`array index assignment, unsupported operator: mod`
+to just `array index assignment`.
+
+AUDIT bar #1 now backed by 2 theorems (`ring_new_correct`,
+`compute_tag_zero_correct`).
+
+Numbers
+-------
+make test:             1572/0
+make test-showcase:    2/0
+make test-snapshots:   48/0 (5 snapshots refreshed)
+
+### Proof roadmap realigned around state, bitvectors, and reusable lemmas
+
+After array literals, `ring_new_correct`, casts, match extraction, and
+flat-assign bounded while extraction landed, the active Phase 4 list
+was updated to stop treating completed construct support as future
+work. The next proof-track priorities are now explicit:
+
+- decide the fixed-width integer / `BitVec` model before adding
+  `bitxor`, `mod`, and crypto/checksum claims;
+- design one coherent ProofCore state model for assignment, array
+  updates, field updates, and loop-carried variables;
+- lift while bodies beyond flat assignment lists through proof-level
+  step functions;
+- improve generated proof stubs for arrays, structs, enums,
+  fixed-capacity buffers, and `Result`/`Option`;
+- build reusable lemmas for arrays, loop state, struct fields,
+  enum/match reasoning, `Result`, and bounded buffers;
+- keep Phase 12 extraction-soundness obligations attached to every
+  Phase 4 extraction rule.
+
+`docs/verification/PROOF_AUDIT_PIPELINE.md` now records the same direction so the
+roadmap and target architecture agree: direct ProofCore extension can
+continue, but mutation and byte-level arithmetic need principled
+semantics rather than one-off evaluator patches.
+
+### Phase 4 ProofCore extracts bounded while loops (flat-assign body)
+
+`PExpr.while_ cond assigns cont` is a new shape: each iteration
+re-evaluates `cond`; when true, every `(name, expr)` in `assigns`
+is evaluated in order with later assigns seeing earlier updates
+in the same iteration; when false, control falls through to
+`cont`. Termination is by fuel — each iteration consumes one
+unit. The eligibility profile's existing bounded-loop
+classification is what guarantees only bounded loops reach
+extraction; PExpr itself carries no static iteration bound.
+
+This is the largest architectural Phase 4 addition so far — every
+prior extension (struct/enum/match/cast/array lit/array index)
+was a single shape with no env-threading. While loops thread
+updated bindings through the iteration, and that's the first
+piece of machinery in PExpr that models mutation.
+
+Scope honestly named
+--------------------
+Extraction restricts the loop body + step to flat
+`CStmt.assign` statements. Nested `let`, `if`, or `return`
+inside the loop body falls back to a precise blocker:
+`while loop body shape (only flat assigns supported)`. This
+matches the `compute_checksum` and `compute_tag` shape; it
+does NOT match `ring_contains` (which has `let idx = ...; if
+... return 1`). A later commit can lift the body into a
+step-function PExpr to cover that shape; nothing forces it
+yet.
+
+`bitxor` is also not modeled. Lean core has no `HXor Int Int`
+instance, and defining one (via `BitVec` or sign-handling) is
+a semantic decision worth deferring. So both `compute_checksum`
+and `compute_tag` still surface as blocked — but the precise
+reason changes from `while loop` (catch-all) to
+`unsupported operator: Concrete.BinOp.bitxor`.
+
+Pull-through evidence
+---------------------
+`examples/parse_validate/src/main.con` proof-status:
+
+    before: compute_checksum blocked: "while loop"
+    after:  compute_checksum blocked: "unsupported operator: bitxor"
+
+`examples/fixed_capacity/src/main.con` proof-status:
+
+    before: compute_tag blocked: "while loop"
+            ring_contains blocked: "while loop"
+    after:  compute_tag blocked: "unsupported operator: bitxor"
+            ring_contains blocked: "while loop body shape (only flat
+                          assigns supported)"
+
+Function totals are unchanged on both flagships — the
+structural piece works, but operator + body-shape gaps still
+bar full extraction. The failure surface is now load-bearing:
+a follow-up "add bitxor" commit unblocks two functions; a
+"lift nested control flow inside while" commit unblocks
+`ring_contains`.
+
+What landed
+-----------
+- `PExpr.while_` + `eval`/`evalAssigns` rule (env threading).
+- `cStmtsToPExprK` case for `(.while_ cond body _ step) :: rest`.
+  Body + step are concatenated into a single update list; each
+  member must be `CStmt.assign` or extraction returns `none`.
+- `identifyUnsupportedStmt` `.while_` case recurses into cond
+  and each assign expr to surface inner blockers (operator,
+  cast, etc.); reports `while loop body shape (only flat assigns
+  supported)` if any non-assign appears.
+- Top-level `identifyUnsupported` no longer flags `.while_` as a
+  catch-all; precise reasons come through the stmt walker above.
+- `pexprFreeIn` / `normalizePExpr` / `renderPExpr` /
+  `renderPExprAsLean` all gained while_ cases.  Note that
+  assigns do NOT shadow names — the variable pre-existed before
+  the loop — so `pexprFreeIn` walks all assign right-hand sides
+  and the continuation.
+
+Numbers
+-------
+make test:             1572/0
+make test-showcase:    2/0
+make test-snapshots:   48/0 (2 proof-status snapshots refreshed:
+                       parse_validate, fixed_capacity)
+
+### fixed_capacity gains its first Lean theorem (ring_new)
+
+`ring_new_correct` proves that `fn ring_new() -> RingBuf` evaluates
+to the canonical empty buffer: `data` is a 16-element array of
+zeros, `head` is 0, `count` is 0. This is bar #1 for the active
+pull-through candidate — and the first proof in the project that
+composes `arrayLit` + `structLit` + `letIn` under the Lean kernel.
+parse_validate and crypto_verify both stay inside pure-int code,
+so neither flagship exercised this extraction path end-to-end.
+
+Why this matters
+----------------
+Five consecutive Phase 4 extension commits (struct lit, enum lit,
+match, cast, array lit) had landed with zero new attached proofs.
+The active candidate `fixed_capacity` was at 3/10 bars and 0
+theorems attached. Adding extraction capability without
+proof-of-use widens the "claimed vs evidenced" gap. This commit
+demonstrates the workflow generalizes beyond parse_validate's
+shape: extraction → spec → registered proof → drift-detection
+all compose on a struct-carrying function with an array field.
+
+What landed
+-----------
+- `Concrete.Proof.ringNewExpr` — the PExpr spec: a `letIn` binding
+  `data` to an `arrayLit` of 16 `(.lit (.int 0))` items, then a
+  `structLit` building `RingBuf { data, head: 0, count: 0 }`.
+- `Concrete.Proof.fixedCapacityFns` — minimal `FnTable` carrying
+  only `ring_new`; future fixed_capacity proofs extend it.
+- `Concrete.Proof.ring_new_correct` — the theorem.  Proof is a
+  single `simp` invocation that unfolds the spec, evaluator,
+  `evalElems`, `evalFields`, `List.replicate`, and the env binder.
+- `examples/fixed_capacity/src/proof-registry.json` — new
+  per-example registry. fixed_capacity now uses the same loading
+  path as parse_validate and crypto_verify.
+
+Pull-through evidence
+---------------------
+`examples/fixed_capacity/src/main.con` proof-status:
+
+    before: 0 proved / 11 unproved / 3 blocked / 2 ineligible / 4 trusted
+    after:  1 proved / 10 unproved / 3 blocked / 2 ineligible / 4 trusted
+
+AUDIT bar count: 3/10 → 4/10 (bar #1 closed; #3, #4, #9
+already met; remaining #2 composition + #5 oracle + #6 catches +
+#7 bundle + #8 README + #10 manifest).
+
+Numbers
+-------
+make test:             1572/0
+make test-showcase:    2/0
+make test-snapshots:   48/0 (3 fixed_capacity snapshots refreshed:
+                       proof-status, obligations, effects)
+
+### Phase 4 ProofCore extracts array literals
+
+`PExpr.arrayLit elems` is a new shape: evaluates each element
+left-to-right, returns a `PVal.array_` carrying the values in
+the same order. Element type is not modeled (PVal is dynamically
+shaped); Check ensures elements share a type at source level.
+
+Pull-through evidence
+---------------------
+`examples/fixed_capacity/src/main.con` proof-status:
+
+    before: 0 proved / 10 unproved / 4 blocked / 2 ineligible / 4 trusted
+    after:  0 proved / 11 unproved / 3 blocked / 2 ineligible / 4 trusted
+
+`ring_new` (zero-initialized 16-element RingBuf) now extracts.
+Remaining fixed_capacity blockers: `ring_contains` (while loop),
+`ring_push` (array index assignment + mod), `compute_tag`
+(while loop).
+
+`identifyUnsupportedExpr`'s `.arrayLit` arm now recurses into
+elements so any unsupported construct inside still surfaces.
+`pexprFreeIn`, `normalizePExpr`, `renderPExpr`, and
+`renderPExprAsLean` all gained array-literal cases.
+
+Numbers
+-------
+make test:             1572/0
+make test-snapshots:   48/0 (2 fixed_capacity snapshots refreshed)
+
+### Phase 4 ProofCore extracts width-changing casts
+
+`PExpr.cast inner` is a new identity-on-value shape: evaluation
+unwraps the cast and returns the inner expression's value. This
+is sound for widening (`u8 as i32`, `i32 as i64`) because
+`PVal.int` is mathematical `Int` with no width. It is NOT sound
+for narrowing — a proof that assumes `(x : u32) as u8`
+truncates would be wrong here. The eligibility profile is
+expected to keep narrowing casts out of proof-eligible code
+(or to add an explicit narrow_int side-condition that the
+extractor preserves).
+
+Pull-through evidence
+---------------------
+`examples/fixed_capacity/src/main.con` proof-status:
+
+    before: 0 proved / 8 unproved / 6 blocked / 2 ineligible / 4 trusted
+    after:  0 proved / 10 unproved / 4 blocked / 2 ineligible / 4 trusted
+
+Two functions newly extract: `read_u8` (single widening cast)
+and `read_u16_be` (two widening casts + arithmetic).
+Remaining fixed_capacity blockers: `ring_new` (array literal),
+`ring_contains` (while loop), `ring_push` (array index
+assignment + mod operator), `compute_tag` (while loop).
+
+`identifyUnsupportedExpr`'s `.cast` arm no longer flags cast
+itself; it recurses into the cast operand so any unsupported
+construct inside still surfaces precisely. `pexprFreeIn`,
+`normalizePExpr`, `renderPExpr`, and `renderPExprAsLean` all
+gained cast cases (transparent on the inner expression).
+
+Numbers
+-------
+make test:             1572/0
+make test-showcase:    2/0
+make test-snapshots:   48/0 (2 fixed_capacity snapshots refreshed)
+
+### Phase 4 ProofCore extracts match expressions
+
+`match` is now a first-class shape in `Concrete.Proof.PExpr`.
+Source-level match-arm constructs (`enum::Variant`, literal,
+variable/wildcard patterns) extract into a `(pattern, body)` arm
+list and evaluate under a small operational rule.
+
+This is the largest remaining Phase 4 subgoal: every parse_validate
+function except `compute_checksum` (still blocked on while-loop
+extraction) now extracts into ProofCore. The pull-through example
+is `parse_validate.error_code`, which dispatches a `ParseError`
+variant to a numeric code — previously surfaced as
+`blocked: match expression`, now surfaces as `no proof` with a
+real fingerprint over the new `match` shape.
+
+What landed
+-----------
+- `PMatchPat` (non-recursive): `enumPat`, `litPat`, `varPat`.
+- `PExpr.match_ scrutinee arms` where `arms : List (PMatchPat × PExpr)`.
+- `eval` rule: evaluate scrutinee, walk arms in order, first
+  pattern that matches wins. enumPat binds variant fields by name;
+  litPat checks equality; varPat binds (or wildcards on `"_"`).
+- `cExprToPExpr` for `CExpr.match_`, dispatching per-arm via
+  `cMatchArmToP`. enumArm bindings drop their declared types
+  (PVal carries dynamic shape); litArm narrows to int/bool values
+  via the existing `cExprToPExpr`.
+- `identifyUnsupportedExpr` no longer flags `match`; it now
+  recurses into scrutinee + arm bodies so any nested unsupported
+  construct is reported precisely.
+- `pexprFreeIn` / `normalizePExpr` / `renderPExpr` / `renderPExprAsLean`
+  all gained match cases. Pattern bindings shadow free occurrences
+  in arm bodies (`pexprFreeIn` filters them out).
+
+Pull-through evidence
+---------------------
+`examples/parse_validate/src/main.con` proof-status:
+
+    before: 3 proved / 4 unproved / 2 blocked / 1 ineligible
+    after:  3 proved / 5 unproved / 1 blocked / 1 ineligible
+
+`error_code` moved from `blocked` to `no proof` with this
+fingerprint:
+
+    [(match (var e)
+        (arm ParseError::TooShort [] [(ret (int 1))])
+        (arm ParseError::BadVersion [] [(ret (int 2))])
+        ...)]
+
+The only remaining blocker in parse_validate is `compute_checksum`
+(while loop). Every other function now extracts.
+
+Side effects of recursing into match arms
+-----------------------------------------
+Three stale tests in `scripts/tests/run_tests.sh` and one stale
+docstring in `tests/programs/adversarial_proofcore_extraction.con`
+were updated to assert the new (correct) behavior:
+
+- `proofcore-extraction: match expression should extract` (was
+  `should block extraction`).
+- `proofcore-extraction: summary totals` now reads
+  `3 extracted, 1 eligible but not extractable, 2 excluded`.
+- `extraction: color_value extracts` (was `should fail on match
+  expression`).
+- Also caught and updated stale crypto_verify count tests from
+  earlier Phase 4 extensions: `verify_message` extracts +
+  proves, so `total_functions=5`, `proved=4`, `extracted=4`,
+  `facts=36`, and the named-specs check now includes
+  `Concrete.Proof.verifyMessageExpr`. The
+  `verify_tag not weakened` test was tightened from substring
+  grep to a JSON `function` field check (the rendered
+  fingerprint of `main`'s body mentions `(call verify_tag ...)`
+  and would have false-positived).
+- Also caught a stale `uses_struct` and `make_point` test from
+  the earlier struct-literal commit (e2ab5ee). Updated to assert
+  extraction.
+
+Numbers
+-------
+make test:             1572/0 (12 stale tests updated)
+make test-showcase:    2/0
+make test-snapshots:   48/0
+
+### parse_header gains four sibling failure-path theorems
+
+Mechanical follow-up to `parse_header_too_short` (4a36107). Each
+theorem proves that `parse_header` returns the right `Err`
+variant when one specific structural precondition fails. The
+five together cover every failure path that bails before
+`compute_checksum` (the remaining checksum + success-direction
+theorems wait on while-loop extraction or a hand-modeled
+checksum convention).
+
+New theorems
+------------
+- `parse_header_bad_version`: `len ≥ 5 ∧ data[0] ≠ 1` → `Err(BadVersion)`
+- `parse_header_bad_type`: `len ≥ 5 ∧ data[0] = 1 ∧ (data[1] < 1 ∨ data[1] > 4)` → `Err(BadType)`
+- `parse_header_payload_too_big`: prior checks pass, `data[2] < 0 ∨ data[2] > 240` → `Err(PayloadTooBig)`
+- `parse_header_truncated`: prior checks pass, `len < 4 + data[2]` → `Err(Truncated)`
+
+Each theorem binds `data` to a concrete `PVal.array_` constructed
+from `[.int v, .int t, .int plen, ...] ++ rest` with enough
+elements to make the relevant `validate_*` calls compute. The
+`rest` parameter is universally quantified — the theorems
+don't care what the rest of the array carries; the validator
+under test only reads a fixed prefix.
+
+The proofs are uniformly: bind `decide`-form hypotheses for the
+boundary conditions, then a single `simp` with the relevant
+`validate_*Fn` + `validate_*Expr` unfoldings. The bad_type and
+payload_too_big proofs need an `rcases` to split on the
+disjunction (low vs high boundary violation), but the structure
+is otherwise identical.
+
+What's left
+-----------
+- `parse_header_bad_checksum`: needs a Lean-side model of
+  `compute_checksum` (while loop + XOR fold). Future Phase 4
+  while-loop work or a stub convention.
+- `parse_header_success` (well-formed input → `Ok(Header{...})`):
+  same dependency. Both come together.
+- `error_code` proof: needs Phase 4 match expression extraction.
+
+`--report proof-status` for parse_validate:
+
+  before: 3 proved / 4 unproved / 2 blocked
+  after:  3 proved / 4 unproved / 2 blocked (unchanged — these
+          new theorems all attach to parse_header, which is
+          already in the "proved" column from the prior commit)
+
+The Lean kernel now checks 5 theorems on parse_header. The
+proof-registry still references only one (`parse_header_too_short`)
+since registering multiple theorems per function isn't a
+supported pattern — the others are reachable from
+`Concrete.Proof.*` for review.
+
+Numbers
+-------
+make test-showcase:     2/0
+make test-snapshots:   48/0
+make test-verify-gates:78/0
+
+### parse_header carries its first Lean theorem
+
+The actual Result-returning `parse_header` (not the scalar
+scaffold `validate_header_fields`) now has a registered, kernel-
+checked Lean theorem. parse_validate's proof-status goes from 2
+proved to **3 proved**.
+
+The theorem is `parse_header_too_short`: when `len < 5`,
+`parse_header` returns `Err(TooShort)`. Failure-direction path,
+honest scope — it bails before reaching `compute_checksum`
+(blocked on while-loop extraction), so this theorem is provable
+today without modelling the XOR fold in Lean.
+
+Why this matters
+----------------
+Before this commit, parse_header was the canonical "we can almost
+prove it" function — discussed in pilot docs and roadmap. The
+scalar scaffold `validate_header_fields` carried the composition
+story but called itself a scaffold. After this commit, the actual
+function on the array input has a real attached theorem.
+
+What's still missing
+--------------------
+- **Success-direction theorem** (`parse_header_well_formed →
+  Ok(Header{...})`). Needs either bounded-while-loop extraction
+  for `compute_checksum`, or a Lean-side hand-modeled
+  `computeChecksumFn` plus a bitxor PBinOp variant. Both are
+  separate commits.
+- **Per-failure theorems** for the other error variants
+  (BadVersion, BadType, PayloadTooBig, Truncated, BadChecksum).
+  Each follows the same shape as `parse_header_too_short` — a
+  small targeted hypothesis triggers the corresponding `Err`
+  return. Mechanical follow-up.
+
+What changed
+------------
+- `Concrete/Proof/Proof.lean`: `parseHeaderExpr` PExpr matching the
+  exact body fingerprint emitted by `--report fingerprints`.
+  Uses array index, struct literal, and enum literal — all
+  supported by ProofCore as of the prior three commits.
+  `parseHeaderFn` + entry in `parseValidateFns` table.
+  `errResultExpr` / `okHeaderExpr` helpers for readability.
+- `parse_header_too_short` theorem with `len < 5` hypothesis.
+  Proof is a single targeted `simp` with the right unfoldings
+  + a `decide_eq_false` for the boundary comparison.
+- `examples/parse_validate/src/proof-registry.json`: entry
+  added; proof = `Concrete.Proof.parse_header_too_short`,
+  spec = `Concrete.Proof.parseHeaderExpr`.
+
+`--report proof-status` for parse_validate:
+
+  before: 2 proved / 5 unproved / 2 blocked / 1 ineligible
+  after:  3 proved / 4 unproved / 2 blocked / 1 ineligible
+
+Snapshots refreshed: 48/48 byte-identical.
+
+Numbers
+-------
+make test-showcase:     2/0
+make test-snapshots:   48/0
+make test-policy:       4/0
+make test-assumptions:  3/0
+make test-catches:      2/0
+make test-verify-gates:78/0
+
+### Phase 4: ProofCore extracts array index (read)
+
+Third Phase 4 extension forced by parse_validate's `parse_header`,
+which was the only remaining blocker for the actual Result-returning
+function (not the scalar-parameter scaffold from earlier). Closes
+the array-index subgoal in Phase 4 item 2.
+
+What changed
+------------
+- `PVal` gains `array_ (elems : List PVal)` — array values as
+  ordered element lists. Used as the result of evaluating an array
+  expression and as the input shape for parameters typed `[T; N]`.
+- `PExpr` gains `arrayIndex (arr idx : PExpr)` — read at a
+  computed index. eval looks up by `Nat`-coerced index, returns
+  `none` for negative or out-of-bounds. Bounds-violation in proofs
+  is exactly the gap a proof would have to address; the
+  Option-typed return is the honest representation.
+- `lookupIndex` helper added in `eval`'s `where` block alongside
+  `lookupField`.
+- `cExprToPExpr` translates `CExpr.arrayIndex`. ProofCore drops
+  `array index` from its unsupported list.
+
+Scope is **read only**. `arrayIndexAssign` (write at index) stays
+unsupported; that's a separate commit in the fixed_capacity track
+(ring_record is its forcing function). `arrayLit` (literal
+construction) also stays unsupported — proof-writers construct
+array PVals directly via `.array_` for now.
+
+parse_validate breakthrough
+---------------------------
+`parse_header` was previously blocked on `array index`. After this
+commit it extracts cleanly. proof-status totals went from:
+
+  2 proved / 4 unproved / 3 blocked / 1 ineligible
+to:
+  2 proved / 5 unproved / 2 blocked / 1 ineligible
+
+`parse_header` is now in the "no proof" column — extracts cleanly,
+ready for a theorem attachment. That's a separate commit; this
+commit lands only the extractor extension.
+
+`error_code` remains blocked on `match expression` (next gap).
+
+fixed_capacity unchanged
+------------------------
+fixed_capacity's 6 blocked functions use cast / array literal /
+while loop / mutation — none of them are blocked on array index
+alone. Totals stay at 8 unproved / 6 blocked.
+
+Snapshots refreshed (UPDATE_SNAPSHOTS=1). 48/48 byte-identical.
+
+Numbers
+-------
+make test-showcase:     2/0
+make test-snapshots:   48/0
+make test-policy:       4/0
+make test-assumptions:  3/0
+make test-catches:      2/0
+make test-verify-gates:78/0
+make test-wrong-code:  22/0
+
+### Phase 4: ProofCore extracts enum literals (49760d2)
+
+Second Phase 4 extension forced by `fixed_capacity` (after struct
+literal + field access in e2ab5ee). Closes one of the five Phase 4
+item 2 named subgoals.
+
+Scope is **enum value construction only** — pattern matching is a
+deliberate separate commit. Same shape as struct literal: `PVal`
+gains `enum_`, `PExpr` gains `enumLit`, `eval` mirrors struct
+construction. `fieldAccess` now also reads from `enum_` values
+so `result.value` after a match arm extracts.
+
+parse_validate's `parse_header` blocker list went from 3
+constructs (enum literal, if without else, array index) to 1
+(array index — the next gap). `error_code` still blocked on
+match.
+
+Match expressions and array indexing are the next two extension
+commits.
+
+### Phase 4: ProofCore extracts struct literals + field access
+
+First real Phase 4 ProofCore extractor extension forced by the
+`fixed_capacity` pull-through candidate. ROADMAP Phase 4 item 2
+listed five named subgoals for the extractor; this commit closes
+the first two (struct literal + field access).
+
+What changed
+------------
+- `Concrete/Proof/Proof.lean`: `PVal` gains a `struct_ (name, fields)`
+  constructor carrying the struct name plus a `List (String × PVal)`
+  of field values. `PExpr` gains `structLit` (construction by
+  name+fields) and `fieldAccess` (obj.field). `eval` learns both,
+  with helper `evalFields` and `lookupField` in the `where` block.
+- `Concrete/Proof/ProofCore.lean`: `cExprToPExpr` translates
+  `CExpr.structLit` and `CExpr.fieldAccess`; recurses into field
+  expressions so a struct of supported things extracts. The stale
+  "if without else" diagnostic in `identifyUnsupportedStmt` is
+  dropped — `cStmtsToPExprK` has supported early-return-with-fall-
+  through since the parse_validate pilot.
+- `Concrete/Proof/ProofCore.lean`: `normalizePExpr` extended for the new
+  PExpr variants. `pexprFreeIn` recurses into struct fields and
+  field-access objects.
+- `Concrete/Report/Report.lean`: `renderPExpr` and `renderPExprAsLean`
+  handle the new variants. Both made `partial` (the recursion
+  through `List.map` doesn't satisfy Lean's structural-termination
+  checker without it).
+
+Existing #eval-style theorems (`abs_positive`, `parse_byte_10_3`,
+`check_length_short`, etc.) used `native_decide` which requires
+`DecidableEq PVal`. With `struct_` carrying a `List`-of-`PVal`,
+auto-derivation fails. Switched them to `simp`-based unfoldings
+that don't need `DecidableEq`. No proof content lost.
+
+Result: fixed_capacity unblocks 3 functions
+-------------------------------------------
+proof-status totals on `examples/fixed_capacity/src/main.con`:
+
+  before: 5 unproved,  9 blocked
+  after:  8 unproved,  6 blocked
+
+The three newly-extracting functions are:
+  - `err_result(code) -> ValidateResult` — struct literal
+  - `ok_result(msg_type, seq, plen) -> ValidateResult` — struct literal
+  - `ring_new() -> RingBuf` — struct literal + array literal
+    blocks elsewhere (this one still extracts; the array-literal
+    blocker is in `validate_payload`)
+
+Remaining 6 blocked functions surface the next Phase 4 subgoals:
+cast, array literal, while loop, array index assignment, mod
+operator. Each is a separate extension commit.
+
+parse_validate's `parse_header` is still blocked — it needs
+`enum literal` and `array index` extraction (Phase 4 subgoals
+(d) and (e)). The struct-literal extension alone doesn't unblock
+it; this is expected.
+
+Snapshots refreshed (UPDATE_SNAPSHOTS=1) — proof-status output
+for parse_validate / crypto_verify / fixed_capacity reflects the
+new extractor coverage. 48/48 green.
+
+Numbers
+-------
+make test-snapshots:    48/0  (16 × 3 candidates)
+make test-policy:        4/0
+make test-assumptions:   3/0
+make test-catches:       2/0
+make test-showcase:      2/0
+make test-verify-gates: 78/0/0  (2 warnings)
+
+### fixed_capacity candidate audit + baseline gates (bars #3, #4, #9)
+
+Third pull-through candidate. Bounded / no-allocation predictable
+subset on a realistic message processor — Phase 7 item 6 names
+this category. Strategically chosen: this example surfaces every
+Phase 4 ProofCore extractor gap the real-cryptography flagship
+slot is gated on.
+
+**Phase 4 surface mapping** — fixed_capacity's 9 extraction-blocked
+functions name every Phase 4 item 2 subgoal in concrete code:
+
+| ProofCore gap | Blocked functions |
+|---|---|
+| struct literal | `err_result`, `ok_result`, `ring_new`, `validate_payload` |
+| field access | `process_packet`, `ring_contains`, `ring_record` |
+| cast | `validate_payload`, `process_packet` |
+| while loop | `compute_tag`, `ring_record` |
+| array literal | `validate_payload` |
+| array index assignment | `ring_record` |
+| `mod` operator | `ring_record` |
+
+This is the bridge candidate — closing these gaps in Phase 4
+unlocks fixed_capacity's graduation AND the deferred real-crypto
+flagship slot in one stroke.
+
+**Cheap baseline batch closed** (same shape as crypto_verify's
+first batch):
+
+- `examples/fixed_capacity/AUDIT.md` — 10-bar contract, with §8
+  naming the strategic Phase 4 forcing value explicitly.
+- `examples/fixed_capacity/assumptions.toml` — full schema with
+  declared trusted list (4 names matching the actual `--report
+  unsafe` output).
+- `examples/fixed_capacity/Concrete.toml [policy]` — 6 enforced
+  fields. Omits `no_unsafe` / `no_trusted` because this example
+  has 4 deliberate trusted shells for adversarial test-packet
+  construction. The trusted list is enumerated in assumptions to
+  catch drift.
+- `examples/fixed_capacity/snapshot/` — 16 baselined reports.
+  `make test-snapshots` now 48/0 across all three candidates.
+
+**Trusted-list drift detection added.** The assumptions gate
+previously only handled empty-trusted; extended to assert that a
+declared non-empty trusted list matches the actual `trusted fn
+<name>` entries in `--report unsafe`. A new or removed trusted
+shell now fails the gate.
+
+**Allowed-capability widening.** fixed_capacity is the first
+candidate with `allowed_capabilities = ["Std"]` rather than `[]`.
+Entry points (`main`, `run_test`) print test output; the
+validation core itself remains pure. Documented in the policy
+comment.
+
+**Bars closed today**: #3 (assumptions), #4 (policy), #9
+(snapshots). 3 of 10 met. Bar #1 (Lean theorem on a single
+validator) is mechanically trivial and waits with #2 for a small
+follow-up commit.
+
+**Phase 4 work track now active in parallel.** The candidate
+serves as the forcing function; subsequent commits will attack
+the ProofCore extractor extensions one at a time, with each
+extension unblocking both fixed_capacity's progress and the
+deferred real-crypto flagship slot.
+
+### crypto_verify graduates to Phase 7 (second flagship, honestly-framed toy)
+
+The second flagship enters the curated showcase. `crypto_verify` is
+the **toy authenticated-tag** companion to parse_validate — a
+demonstrator of the proof-composition pattern for authentication
+code, NOT a real cryptographic primitive. The manifest entry's
+`limits.algorithm` field states this directly. The graduation is
+of the proof scaffolding, not the algorithm.
+
+- **2 graduated flagships** now in `tests/showcase/manifest.toml`:
+  parse_validate (parsing/validation, 2026-05-22) and crypto_verify
+  (toy MAC, 2026-05-23). `make test-showcase` enforces both.
+- **All 10 bars met on crypto_verify** with the same drift-enforced
+  CI gates parse_validate established: 4 Lean theorems
+  (compute_tag, verify_tag, check_nonce, verify_message
+  composition), assumption file, 8-field policy, oracle (600
+  differential cases across 3 seeds), negative pair
+  (alloc-in-pure-core), snapshot baseline, honest README.
+- **Toy-not-real framing is the central honesty discipline.** The
+  Phase 7 entry registers the scaffolding so a future real
+  HMAC-SHA256 / Ed25519 / constant-time flagship can be a sibling
+  entry, not a replacement. Both the manifest and the AUDIT name
+  what is and is not claimed.
+- **Real-crypto flagship deferred to Phase 4 ProofCore
+  extensions.** ROADMAP Phase 7 item 7 now states the gate
+  explicitly: a real cryptography flagship lands only after Phase
+  4 extracts (a) array indexing, (b) bounded while loops, (c)
+  struct construction. Phase 4 item 2 enumerates the named
+  subgoals.
+- **Reusable infrastructure paid back at scale.** crypto_verify
+  graduated in ~one session of work because the patterns
+  parse_validate established — assumption file schema, policy
+  schema, snapshot baseline, oracle differential, negative pair,
+  release bundle, showcase manifest — all worked unchanged on the
+  second flagship. The cost of the second graduation is
+  qualitatively less than the first.
+- **Pull-through pilot slot now open.** Per Active Dependency
+  Order rule 2, the next candidate can start. Suggested:
+  `fixed_capacity` — its bounded loops + array indexing + struct
+  construction surface is precisely the Phase 4 forcing function
+  required to enable a real-crypto flagship later. See ROADMAP
+  Phase 7 item 6 + Phase 4 item 2.
+
+### parse_validate graduates to Phase 7 — bars #2, #5, #7, #9, #10 closed
+
+The pull-through pilot is done. parse_validate is now the **first
+graduated Phase 7 flagship**. All 10 bars in
+`examples/parse_validate/AUDIT.md` are met; the example is
+registered in `tests/showcase/manifest.toml`; the entire pilot
+contract is enforced by drift-detecting CI gates.
+
+The five bars closed in this batch:
+
+- **Bar #9 (snapshot/diff baseline)** — `examples/parse_validate/
+  snapshot/` captures 16 reports as byte-identical baselines.
+  `make test-snapshots` walks every `examples/*/snapshot/`,
+  re-runs the report, and fails on drift. `UPDATE_SNAPSHOTS=1`
+  intentionally refreshes the baseline.
+- **Bar #5 (oracle beyond hand-written tests)** — independent
+  Python reference (`oracle/reference.py`) reimplements the
+  parse_header spec from scratch. `oracle/run_oracle.sh` runs 200
+  seeded random cases through the Concrete binary AND the
+  reference; both must agree. `make test-pv-oracle` runs three
+  seeds (0, 42, 999) = 600 cases. Today: 600/600 agree.
+- **Bar #2 (composition theorem)** — `validate_header_fields_success`
+  proves the success direction of the 6-validator composition.
+  Lean kernel-checked. The `parse_header` Result-returning
+  function itself is blocked on Phase 4 ProofCore extensions
+  (array indexing, enum construction, struct construction); the
+  scalar helper `validate_header_fields` is the honest scaffold.
+  Per-failure theorems for the failure direction are small
+  follow-ups (256-branch case split exhausts heartbeats as one
+  theorem).
+- **Bar #7 (release evidence bundle)** —
+  `scripts/tests/capture_release_bundle.sh` is the showcase sibling
+  of `capture_wrong_code_bundle.sh`. Refuses to capture on broken
+  examples. Produces a stable directory with source, full report
+  set, proof-registry, assumption/policy/AUDIT/CATCHES/README,
+  snapshots, runtime stdout, compiler version, and a manifest.
+  `make test-release-bundle` verifies the capture script (29/0).
+- **Bar #10 (curated Phase 7 manifest)** —
+  `tests/showcase/manifest.toml` is the registry of graduated
+  flagships. parse_validate is the first entry. Every claim it
+  makes points at a CI gate that enforces it. `make test-showcase`
+  walks the manifest, verifies every artifact exists, and asserts
+  the release bundle still captures cleanly.
+
+Pull-through pilot rule status: parse_validate occupied the slot
+from its audit landing through 2026-05-22. The next bounded
+flagship can now start under the same rule.
+
+Reusable infrastructure landed by this pilot (all schema-level,
+sized for one flagship but applicable to every future one):
+- ProofCore early-return if-without-else extractor extension.
+- Per-example `proof-registry.json` + `Concrete.Proof.*_correct`
+  attachment pattern.
+- `docs/verification/ASSUMPTION_FILES.md` + `assumptions.toml` schema v1.
+- `docs/project/POLICY_FILES.md` + `Concrete.toml` `[policy]` schema.
+- `docs/project/RELEASE_BUNDLE.md` + capture-bundle script.
+- Negative pair pattern (`catches/` directory + `CATCHES.md` + CI
+  gate).
+- Snapshot baseline gate (`snapshot/` + `check_snapshots.sh`).
+- Differential oracle pattern (independent reference + seeded
+  random cases).
+- Phase 7 showcase manifest (registry + walk-gate).
+
+### parse_validate pilot — bar #8 closed (honest README)
+
+The pull-through pilot now has its README. The doc is structured
+as the **template for future pilot/flagship docs**: every section
+states a category (proved, enforced statically, enforced by CI,
+reported, assumed, trusted, missing, negative pair) and answers it
+from facts on the ground today, not aspiration.
+
+- **Up-front "What is NOT yet done" section** names every remaining
+  graduation bar by number. No oversell: parse_validate is a
+  pilot, not a public flagship. The pilot rule says one bounded
+  example at a time; this README is the doc that makes that clear.
+- **Three-layer trust boundary** explicit: (1) Lean kernel checks
+  the theorem; (2) Concrete compiler extracts and reports — trusted
+  but not yet Lean-verified; (3) toolchain + runtime preserves at
+  runtime — not verified, recorded in `assumptions.toml`.
+- **Pointer doc, not standalone doc**: AUDIT.md is the
+  graduation-bar tracker, CATCHES.md is the negative-pair
+  narrative, assumptions.toml + Concrete.toml [policy] are the
+  enforced surface, proof-registry.json + Concrete.Proof.* are the
+  theorem. README ties them together and points outward.
+
+Audit status: 5 of 10 graduation bars now met (bars #1, #3, #4,
+#6, #8).
+
+### parse_validate pilot — bar #6 closed ("Concrete catches this")
+
+First negative pair on file for the pull-through pilot. The
+shipped `examples/parse_validate` is the accepted example; the new
+companion under `examples/parse_validate/catches/` is the rejected
+one. Phase 1 D.22 + Phase 7.15 surface.
+
+- **First case**: `examples/parse_validate/catches/01_authority_widening.con`
+  is parse_validate with a single line — `print_string(&"validating");`
+  — inserted into `parse_header`. The signature still claims
+  `fn parse_header(...) -> Result<...>` (no `with(...)` clause). The
+  compiler rejects with `E0520 — function 'print_string' requires
+  Console but caller has (none)`. The diagnostic-substring contract
+  in the file header pins what the user-visible rejection must say.
+- **Narrative** (`examples/parse_validate/CATCHES.md`): explains why
+  a negative pair matters — the accepted example proves the
+  language can express the property; the rejected companion proves
+  the language refuses the violation. Without the negative,
+  parse_validate is just "a program that happens to be pure;" with
+  it, "a program that Concrete proves to be pure and stays pure
+  under hostile editing."
+- **CI gate** (`scripts/tests/check_catches.sh`, `make test-catches`):
+  walks every `examples/*/catches/*.con` and asserts each
+  compile-fails with the diagnostic substring declared in its
+  header. Drift in either direction — a case that suddenly
+  compiles, or one that fails with the wrong message — fails the
+  gate. First run: 1 PASS / 0 FAIL. Drift-tested both directions.
+
+Audit status: 4 of 10 graduation bars now met (bars #1, #3, #4, #6).
+
+### parse_validate pilot — bar #4 closed (policy files)
+
+The Phase 2 E.25 policy-file surface lands as a schema-extension to
+the existing `Concrete.toml` `[policy]` convention plus a
+drift-enforced CI gate.
+
+- **Contract** (`docs/project/POLICY_FILES.md`): schema v1 covering
+  `predictable`, `no_alloc`, `no_unsafe`, `no_trusted`,
+  `no_externs`, `max_stack_bytes`, `forbidden_capabilities`,
+  `allowed_capabilities`. Documents the distinction from assumption
+  files (prescriptive budgets vs descriptive trust surface).
+- **First instance** — `examples/parse_validate/Concrete.toml` now
+  carries the full `[policy]` section with 8 enforced fields.
+- **CI gate** (`scripts/tests/check_policy.sh`, `make test-policy`):
+  walks every `examples/*/Concrete.toml`, runs the audit reports,
+  asserts each policy field is met. Drift fails the gate.
+- **First run**: 4 PASS / 0 FAIL across the examples that carry a
+  `[policy]` section. parse_validate runs all 8 enforcement points
+  green. Drift-tested: tightening `max_stack_bytes` below the
+  actual max correctly raises FAIL.
+
+3 of 10 graduation bars now met (bars #1, #3, #4).
+
+### parse_validate pilot — bars #1 + #3 closed
+
+Two graduation bars from `examples/parse_validate/AUDIT.md` are met,
+forcing two reusable infrastructure pieces into existence.
+
+- **Bar #1 (`bdc9caa`, `2673244`, `7081139`) — first Lean-backed
+  property.** The ProofCore extractor learned the early-return
+  if-without-else shape via a continuation-threading refactor of
+  `cStmtsToPExpr` (Phase 4); 5 of 8 eligible validators in
+  parse_validate now extract. `validate_version` carries the first
+  attached theorem (`Concrete.Proof.validate_version_correct`)
+  registered via the per-example `proof-registry.json` pattern.
+  Surfaces as `proved` in `--report proof-status`.
+- **Bar #3 — first assumption file format.** The Phase 2 E.24
+  surface lands with `docs/verification/ASSUMPTION_FILES.md` (TOML schema v1
+  covering target, arithmetic, allocation, authority, ffi, trusted,
+  proof sections), `examples/parse_validate/assumptions.toml`
+  (first instance), and `scripts/tests/check_assumptions.sh` +
+  `make test-assumptions` (drift-enforced CI gate). Five
+  enforcement points active: heap allocation match,
+  stack-max-bytes budget, capability subset / forbidden,
+  FFI externs match, trusted-region match. Drift fails the gate.
+- **Pilot AUDIT updated** to mark bars #1 and #3 met, with
+  pointers to the closing commits. 8 bars remain.
+
+The two pieces of infrastructure (the early-return ProofCore rule
+and the assumption-file schema + CI gate) are sized for parse_validate
+but reusable by every future flagship.
+
+### Roadmap reorganized: phases renumbered 1-13, items renamed and resorted
+
+The active roadmap is fully reorganized. Phase letters D-N are gone;
+phases are now numbered 1-13 in execution-dependency order. Two
+historically-mixed phases are split, several items are moved to
+where they actually belong, and all items are renamed to tighter
+imperative form. Item count preserved (218 items); no deletions.
+
+- **Renumbered**. Old D → 1 Hardening; E → 2 Artifacts + 6
+  Performance (split); F → 7 Flagships + 8 Release (split); G → 4
+  Proof + flagship items pushed into Phase 7; H → 5 Backend; I → 12
+  Verification; J → 9 Packages; K → 10 Editor; L → 3 Runtime; M →
+  11 Governance + items distributed into 1/2/6; N → 13 Research.
+- **Split rationale**. Old E mixed contract hardening with
+  performance budgeting — different gating relationships to a
+  flagship, so they are now separate phases. Old F mixed flagship
+  *content* with release *plumbing* (distribution, supply chain,
+  release criteria) — same reason.
+- **Cross-phase moves**. Old G.1–G.6 (the flagship examples) were
+  structurally misplaced in Proof; moved to Phase 7. Old F.1–F.2
+  (packaging artifacts) moved to Phase 9. Old M.1 (memory/layout
+  audit reports) moved to Phase 2; old M.2 (coverage tooling) moved
+  to Phase 1; old M.3 (memory-profiler integration) moved to Phase
+  6.
+- **Active Dependency Order updated** with the pull-through pilot
+  rule: one bounded flagship may run early in parallel with Phases
+  1–4, but cannot paper over gaps; gaps it exposes become normal
+  phase work.
+- **Item renaming**. All 218 items rewritten as imperative-form
+  one-liners (most ≤ 2 lines); verbose status footnotes trimmed
+  where the relevant work is already in the changelog. Terse
+  "(live; ongoing)" markers retained where work continues.
+
+### Active roadmap cleanup: Phases A-C closed and deferred work moved later
+
+The active roadmap now starts at Phase D. Completed or closed early
+language-stabilization work was removed from the active list instead
+of being kept as empty or follow-up-only phases.
+
+- **Phase A closed**: the value-return semantic oracle remains the
+  closed Phase A result (56 PASS / 0 FAIL / 1 PENDING across 57
+  vectors at close-out). The single remaining PENDING
+  (`examples/fixed_capacity`) is print/IO stdout-contract widening,
+  not a Phase A value-oracle gap, and now lives under Phase D as a
+  later harness-widening task only if a flagship demands it.
+- **Phase B removed from the active roadmap**: pre-stdlib pressure
+  workloads already had no active tasks; their evidence remains
+  recorded in prior changelog entries.
+- **Phase C removed from the active roadmap**: the stdlib/syntax
+  freeze is closed. Its follow-up items were moved to the later
+  phases where they belong operationally: arithmetic-policy
+  visibility moved to Phase E artifact/report hardening, Result /
+  Option helper expansion moved to Phase K stdlib quality gates, and
+  LL(1)-preserving syntax relief moved to Phase M language evolution
+  policy.
+- **Priority map and dependency order updated**: the active roadmap
+  now reflects the real center of gravity: Phase D/E/L hardening,
+  then Phase G/H proof/backend expansion, then Phase F/J/K/M public
+  packaging and user-facing work on top of stable evidence.
+
+### Phase E pass-by-pass verify gates
+
+The four downstream pipeline boundaries — post-elab, post-mono,
+post-lower, post-cleanup — are now wired through a single
+`Pipeline.runVerifyGates` entry point and exposed both as a per-
+program report (`concrete <file> --report verify`) and a corpus-wide
+make target (`make test-verify-gates`). Roadmap reference: Phase
+E.11.
+
+- **Contract** (`docs/verification/VERIFY_GATES.md`): named boundaries, structural
+  invariant per boundary, severity, surface, the documented `try_`
+  and `defer` placeholder exceptions for the post-elab gate, and the
+  never-delete rule.
+- **Plumbing** (`Concrete/Pipeline/Pipeline.lean`): new `VerifyReport`
+  structure carrying per-gate diagnostic lists, with helpers
+  `isClean` / `errorCount` / `warningCount` / `allDiagnostics`. New
+  `runVerifyGates : ValidatedCore → VerifyReport` runs every gate
+  and short-circuits cleanly when a downstream pass refuses to even
+  produce its artifact (mono error → post-mono diags; lower error →
+  post-lower diags; etc.).
+- **Renderer** (`Concrete/Check/Verify.lean`): `renderVerifyGates`
+  produces a human-readable per-gate banner with `ok` / `warn` /
+  `FAIL` status and indented detail per non-clean gate.
+- **Single-program surface**: `concrete <file> --report verify`
+  replaces the previous post-elab + post-mono-only output with the
+  full four-gate report. Exits non-zero only on errors.
+- **Corpus surface** (`make test-verify-gates`,
+  `scripts/tests/test_verify_gates.sh`): runs the gates across the
+  oracle vectors (`tests/oracle/vectors.txt`) and the wrong-code
+  corpus's `kind = "runtime"` entries. Asserts zero errors. First
+  landing: 78 PASS / 0 FAIL / 0 SKIP, 2 warnings — both the
+  documented `try_` placeholder leak in `result_ok.con` and
+  `result_err.con`.
+- **Discipline**: WC-0004 is the canonical wrong-code case for this
+  pipeline pattern (post-lower SSAVerify caught a Lower bug before
+  it could miscompile). Future verify-gate failures across the
+  corpora will register in the wrong-code corpus under the
+  `verifier-trigger` category with bundle capture per
+  `docs/project/BUG_BUNDLE.md`.
+
+### Phase D bug bundle export
+
+The reducer's natural companion. Closes the gap between "I have a
+minimized repro" and "I have a manifest case landed in
+`tests/wrong-code/`." Roadmap reference: Phase D.12.
+
+- **Contract** (`docs/project/BUG_BUNDLE.md`): bundle purpose, required
+  layout, what is always included, what is included only if
+  available, and how bundles relate to
+  `tests/wrong-code/manifest.toml`.
+- **Bundler** (`scripts/tests/capture_wrong_code_bundle.sh`): wraps
+  the existing `concrete debug-bundle` for the structural
+  pipeline-state skeleton (manifest.json, source/, diagnostics.txt,
+  IR dumps via `--emit-core` / `--emit-ssa` / `--emit-llvm`) and
+  layers on corpus-specific overlay files: `command.txt`,
+  `predicate.txt`, `compiler-version.txt`, separated `stdout.txt` /
+  `stderr.txt` capture, and a `reports/` directory of any reports
+  that ran cleanly. Adds a sibling `bundle.json` recording the case
+  id, predicate, source basename, and line count. Also captures
+  `ssa-unverified.txt` opportunistically (useful for verifier-
+  rejection bugs like WC-0004).
+- **Reducer integration** (`scripts/tests/minimize_wrong_code.sh
+  --bundle <dir>`): after a successful reduction, captures a bundle
+  of the reduced output. Case id is the bundle directory's
+  basename; predicate is recorded verbatim. The full pipeline now
+  flows: `new bug → reduce → bundle → manifest entry → permanent
+  regression`.
+- **Smoke test** (`make test-bundle-smoke`): 29 checks. Captures
+  bundles on both a failing source (E0209 rejection) and a passing
+  source (fib), asserts every always-included file is present plus
+  the appropriate stage-conditional files (diagnostics.txt for the
+  failing case; core/ssa/llvm + reports for the passing case).
+  Validates argument plumbing rejects missing required flags. Does
+  not run a long reduction.
+
+### Phase D reducer / minimizer workflow
+
+The wrong-code corpus pipeline now closes the loop from "I just hit a
+compiler bug" to "the bug is a manifest entry." Roadmap reference:
+Phase D.14.
+
+- **Contract** (`docs/compiler/REDUCER_WORKFLOW.md`): when to reduce, what
+  counts as a good minimized repro, when not to over-minimize, how
+  to preserve expected behavior with a correctly-stated predicate,
+  and how reduced cases enter `tests/wrong-code/manifest.toml`.
+- **Predicate scripts** (`scripts/reduce/expect-*.sh`): four
+  user-facing predicates — `expect-error-code.sh`,
+  `expect-runtime-output.sh`, `expect-oracle-mismatch.sh`,
+  `expect-report-contains.sh`. Each takes the candidate path as the
+  final argument and returns 0 (still triggers) or 1 (no longer
+  triggers). They're standalone tools — usable from a terminal, the
+  reducer, or anywhere a predicate makes sense.
+- **Wrapper** (`scripts/tests/minimize_wrong_code.sh`): translates a
+  high-level predicate (`error-code:E####`, `runtime-output:V`,
+  `oracle-mismatch`, `report-contains:KIND:SUB`) into a `concrete
+  reduce --predicate external:<scripts/reduce/...>` invocation.
+  Verifies the predicate holds on the original source before
+  starting (refuses to reduce a passing program).
+- **Reducer extension** (`Concrete/Report/Reduce.lean`): new
+  `Predicate.external (cmd : String)` constructor. Writes the
+  candidate to a temp file, shells out to the command (split on
+  whitespace, candidate path appended), returns true iff exit 0.
+  All four high-level predicates now funnel through the same
+  syntax-aware shrinker.
+- **Smoke test** (`make test-reducer-smoke`): 13 checks covering
+  predicate parsing, compiler invocation, pass/fail discrimination,
+  and wrapper argument plumbing. Does NOT run a long minimization;
+  the engine is exercised indirectly by `make test-wrong-code`.
+- **Real-case demo**: ran on WC-0015 (`bug_int_match_disagree.con`,
+  the int-match consumption-disagreement rejection). 27 lines → 20
+  lines, predicate `error-code:E0209` preserved through the
+  reduction. The case's notes file now carries a Reduction block
+  with the replay command. Use this as the canonical example when
+  writing new corpus entries.
+
+The full pipeline is now: **new bug → reduce → manifest entry →
+permanent wrong-code regression**.
+
+### Wrong-code corpus bulk import (WC-0005 .. WC-0022)
+
+The Phase D wrong-code corpus is bulk-registered with all existing
+`tests/programs/bug_*.con` cases plus a curated selection of high-risk
+adversarial cases. The corpus now sits at **22 PASS / 0 FAIL / 0 OPEN**.
+
+- **bug_*.con bulk import**: 14 new entries (`WC-0005` through
+  `WC-0018`), one per existing `bug_*.con` outside the four already
+  registered. Per the contract, each entry references the existing
+  repro path — no files were moved. Per-case notes capture the
+  symptom, expected behavior, regression command, and known
+  historical context (commit / bug-number when available).
+- **Adversarial selective import**: 4 new entries (`WC-0019` through
+  `WC-0022`) drawn from `tests/programs/adversarial/<area>/` — only
+  cases that exercise high-risk compiler boundaries already known to
+  produce real bugs. `newtype/heap_pattern.con` and
+  `newtype/in_option_chain.con` cover the same enum-payload + heap
+  layout surface as the older newtype-in-enum-payload codegen bug;
+  `borrow/mut_borrow_through_match.con` is adjacent to WC-0004's
+  match+borrow class; `trait_dispatch/trait_method_via_bound.con` is
+  recently-shipped feature surface. Generic adversarial coverage
+  stays under `tests/programs/adversarial/<area>/` without a manifest
+  entry, per the curated-not-exhaustive rule.
+- **Manifest schema**: handles both `kind = "runtime"` (21 cases) and
+  `kind = "compile-error"` (1 case — `WC-0015`, the int-match
+  consumption-disagreement rejection that must surface as `E0209`).
+  Multi-line `expected` values now use TOML `\n` escapes; the harness
+  parser unescapes them through TSV transport.
+- **Categories**:
+  - `miscompile` — 19 cases (the bulk: layout, codegen, intrinsic,
+    field-assign, cross-module borrow / field bugs)
+  - `error-regression` — 3 cases (WC-0013 if-expr, WC-0014 int-match
+    propagate, WC-0015 int-match disagree)
+- **Run state**: all 22 entries pass under `make test-wrong-code`.
+
+### WC-0004 fixed — match arm-local bindings leaked into next match's var-table
+
+The first wrong-code corpus case to be driven from `open` to `fixed`
+through the corpus's own workflow. Confirmed the contract works on
+real bugs, not just historical fixed ones.
+
+- **Symptom**: two or more sequential `match` expressions over an enum
+  with a payload-binding variant (e.g. `Check::Fail { code }`), plus a
+  mutable accumulator shared across the matches, triggered
+  `SSAVerify` E0708 (phi operand not dominated by def block).
+  `parse_validate`'s phase-3 work hit this in accumulator style and
+  was rewritten to early-return form to ship; the original symptom
+  cited E0703 (a sibling dominator code that may have been the
+  diagnostic before a verifier refactor).
+- **Root cause**: `Concrete/IR/Lower.lean`'s match lowering calls
+  `setVar` for enum-payload arm bindings, mutating the global var-
+  table. Before each arm the lowering correctly restores `vars :=
+  preMatchVars`, but at the END of the match the var-table still
+  held whatever bindings the last arm introduced. The next match's
+  `snapshotVars` then captured those leaked bindings into its
+  `preMatchVars`. The next match's merge iterated over those leaked
+  names and emitted a phi across arms that didn't all bind them —
+  the `Pass` arm carried over the previous match's `Fail`-arm
+  register, producing a phi like `[%t9, %arm06], [%t21, %arm18]`
+  where `%t9` was defined inside an arm that doesn't dominate
+  `arm06`.
+- **Fix**: in all three exit paths of `.match_` lowering (multi-arm
+  merge, single-arm merge, all-arms-terminated), restrict the var-
+  table back to the names that existed in `preMatchVars`. The merge
+  has already written the phi registers for the merged variables;
+  the leaked arm-local bindings just need to be dropped.
+- **Diagnostic plumbing added**: `concrete <file>
+  --emit-ssa-unverified` and `Pipeline.lowerUnverified` skip both
+  the verifier and the cleanup pass to print raw Lower output.
+  Debugging infrastructure for the wrong-code workflow per
+  `docs/verification/WRONG_CODE_CORPUS.md`; not on the production compile path.
+- **Regression coverage**: `tests/wrong-code/cases/WC-0004/
+  program.con` is now a permanent runtime regression in the corpus.
+  WC-0004 in `tests/wrong-code/manifest.toml` flips from `open` to
+  `fixed`. The full test suite (1572 positive tests, fast tier) is
+  green.
+
+### Phase D wrong-code corpus contract + seed
+
+The Phase D.16 named regression corpus has a contract, a CI entry point, and the first four seeded cases.
+
+- **Contract** (`docs/verification/WRONG_CODE_CORPUS.md`): defines what qualifies as a wrong-code regression (miscompile, codegen-divergence, verifier-trigger, fact-report-mismatch, proof-evidence-regression, crash, error-regression), the per-case manifest schema (id, category, status, repro, kind, expected, discovered, fixed, notes), the minimization rule ("smallest input that triggers the bug"), the artifact bundle (the per-case directory under `tests/wrong-code/cases/<id>/`), and the lifecycle (cases never deleted; growth is monotonic).
+- **Registry** (`tests/wrong-code/manifest.toml`): the corpus is a registry, not a relocation. Existing repros under `tests/programs/bug_*.con` and `tests/programs/adversarial/<area>/` keep their wiring; the manifest references them by path. New repros that have no other home land under `tests/wrong-code/cases/<id>/`.
+- **CI** (`make test-wrong-code`, `scripts/tests/test_wrong_code.sh`): runs every `status = "fixed"` case and asserts expected behavior. `--include-open` additionally probes open cases and reports when an open bug becomes fixed (so a manifest update isn't missed). The script also enforces manifest invariants (every `repro` and `notes` path exists).
+- **Seeded cases**:
+  - WC-0001 — chained newtypes broke the cast-validity exemption (fixed in `66d8736`, repro `tests/programs/adversarial/newtype/chained.con`)
+  - WC-0002 — `.0` on a borrowed newtype produced `&Newtype → Inner` (fixed in `66d8736`, repro `tests/programs/adversarial/newtype/borrow.con`)
+  - WC-0003 — narrow-int field assign elaborated the RHS as `Int` (fixed in `66d8736`, repro `tests/programs/bug_field_assign_narrow_field.con`)
+  - WC-0004 — accumulator-style match with mut-counter triggers SSA-verify dominator violation (status `open`; current code `E0708`, originally reported as `E0703`; the candidate minimized repro lives under `tests/wrong-code/cases/WC-0004/program.con` and confirms the bug is still reproducible)
+- **First run**: 3 fixed cases pass; 1 open case still fails as expected. `make test-wrong-code` exits 0; `--include-open` adds the open-case report without changing exit status.
+
+### Phase A close-out: value-return semantic oracle is effectively closed
+
+The Phase A.1 differential harness has reached its useful steady state. 56 PASS / 0 FAIL / 1 PENDING across 57 vectors cover the predictable-core surface: int/bool/struct/enum/array, linearity + borrows + named borrow regions + deref-assign, generics, Result/Option/`?`, string literals plus `string_length` / `drop_string`, and the canonical `parse_validate` / `service_errors` examples — every supported program is now a live differential check between compiled output and `--interp` output.
+
+- **Closed gaps**: borrow / `borrowIn` / `?` / string literals all flipped from PENDING to PASS via interpreter additions (`9de6ae0`, `f4a7539`, `764ddd4`).
+- **Single remaining PENDING**: `examples/fixed_capacity/src/main.con` is blocked on print/IO intrinsics. The interpreter cannot reproduce stdout side effects, so any program that interleaves `print` / `println` with its return value is intentionally outside the harness contract. This is a *contract widening* concern (compare interleaved stdout, not just the int return), not a Phase A interpreter gap. Modeling print/IO is deferred until a flagship example forces it.
+- **Trust boundary**: `docs/verification/INTERPRETER_TRUST.md` documents the supported subset, the path-with-frame borrow model, the `?` lowering equivalence, the materialize-into-env handling for borrows of literals, and the explicit "interp: print/IO intrinsic ... not yet supported" diagnostic for I/O calls.
+
+### Semantic-oracle differential harness lands as a regression surface
+
+Phase A.1 + A.2 close: the source-level interpreter (`Concrete/Interp/Interp.lean`, `--interp`) is now driven by a corpus harness that compiles every vector to a native binary, runs `--interp`, and compares trimmed stdout. Mismatches are fail-the-build regressions; explicit `interp: ...` skips are recorded as PENDING entries pointing at named interpreter gaps. The companion trust-boundary doc enumerates the interpreter's supported subset and the assumptions that make it a defensible oracle.
+
+- **Harness**: `scripts/tests/test_oracle.sh` reads `tests/oracle/vectors.txt` and produces `ORACLE: PASS=N FAIL=N PENDING=N TOTAL=N`. Compiled and `--interp` paths share the same `<value>\n` contract for `fn main() -> Int` because the SSA wrapper formats the int return as `%lld\n` and `Main.lean`'s `interpProgram` `IO.println`s the int return.
+- **Corpus**: 39 vectors covering fib/arithmetic/recursion, structs, arrays, enums, match, linearity (non-borrow), generics, plus the canonical roadmap examples `parse_validate` and `service_errors`. Initial state: 32 PASS, 0 FAIL, 7 PENDING — borrow/try/string-literal cases (`fixed_capacity`, `result_ok`, `borrow_read`, `string_basic`, `impl_method`).
+- **Wired into normal flow**: `make test-oracle` runs standalone; `make test-full` runs the harness as the tail of the existing `interp` section in `scripts/tests/run_tests.sh`. The `full` mode includes `interp` (it didn't before this change).
+- **Trust-boundary doc**: `docs/verification/INTERPRETER_TRUST.md` enumerates supported expressions/statements, the explicit `interp: ...` rejection contract for unsupported constructs, the value-passing-no-aliasing memory model, the arbitrary-precision-integer arithmetic stance (no wrapping — programs that need it are outside the predictable subset, not interpreter bugs), the 10M-iteration loop fuel, and the four reasons the interpreter is intentionally smaller and more trustworthy than the full compiler (small single file, no transformation passes, no platform dependence, no silent approximations).
+- **Oracle README**: `tests/oracle/README.md` documents the harness contract, the PENDING-vs-FAIL split, and the rule that a PENDING is a Phase A.3 work item, not a permanent skip.
+
+### Completed roadmap tasks moved out of the active roadmap
+
+The active roadmap now lists remaining work only. Completed Phase A/B/C task lines were removed from `ROADMAP.md`, summarized here, and the remaining phase task numbers were renumbered.
+
+- **Predictable-core foundation**: fixed-capacity examples, safe fixed-array Copy support, stack-depth reporting, predictable-boundary docs, failure strategy, failure-only discipline, parse/validate and service-style error-flow examples, the first predictable/core interpreter, diagnostic UX standards, trusted-boundary guide, freestanding split, standalone/project UX notes, project bootstrap design, example inventory/lifecycle/no-duplicate policy, and phase exit checklists are treated as completed history.
+- **Pre-stdlib pressure workloads**: parser/decoder, ownership-heavy structure, borrow/aliasing, trusted-wrapper/FFI, fixed-capacity/no-alloc, and cleanup/leak-boundary pressure sets are complete and now live as historical evidence rather than active roadmap tasks.
+- **Stdlib and syntax freeze history**: string/text/bytes contracts, stdlib target/audit/surface freeze, design principles, checked indexing, foundational modules, runtime collections, hosted/core split, anti-features, arithmetic policy, formatting/output, Result/error-flow ergonomics, module layout polish, docs/examples, workload-backed freeze evidence, LL(1) pattern cleanup, validated wrappers/newtypes, visibility/module hygiene, endian byte cursor APIs, layout contract, syntax review, and first-release surface freeze are now recorded as completed milestones instead of active tasks.
+
+### Concurrency research direction and lettered roadmap land
+
+The roadmap now uses lettered phases (`A`-`N`) with task numbering restarting inside each phase, and the concurrency/parallelism direction is documented as research rather than shipped behavior.
+
+- **Evidence-bearing concurrency direction**: `research/stdlib/async-concurrency-evidence.md` defines the long-term target: capability-gated structured concurrency, optional-overlap versus required concurrent progress, linear task handles, bounded channels, deterministic simulation, and concurrency evidence reports. README links the direction while explicitly saying async/concurrency is not implemented.
+- **Supporting research notes**: added focused notes for permission-set polymorphism (`research/language/capability-polymorphism.md`), bounded channels (`research/stdlib/channel-model.md`), FFI/cancellation boundaries (`research/stdlib/ffi-cancellation-boundary.md`), per-task stack analysis (`research/predictable-execution/concurrent-stack-analysis.md`), a concurrency formal model (`research/proof-evidence/concurrency-formal-model.md`), and a worked `--report concurrency` example (`research/proof-evidence/concurrency-evidence-example.md`).
+- **Gated capability framing**: capability polymorphism is now framed as static permission-set polymorphism, not effect-row polymorphism. Capabilities are documented as permission gates checked at call sites, with no handlers, resume semantics, continuation capture, or runtime capability values.
+- **Roadmap cleanup**: `ROADMAP.md` now has Phases `A`-`N`, per-phase task numbering, and a linear Phase L concurrency track. The active concurrency work starts with a pressure-test suite and v1 design freeze before any compiler implementation.
+
+### Adversarial test sweep across language features finds three compiler bugs
+
+A breadth-first set of adversarial tests organised under `tests/programs/adversarial/<area>/` (newtype, enum_match, borrow, defer, generic, linear, trait_dispatch) exposed three unrelated compiler bugs. Each bug ships with a named regression test under either the area folder or `tests/programs/bug_*.con`, all wired into `make test`.
+
+- **Bug 1 — chained newtypes broke the cast-validity exemption.** `Outer = Middle = Inner = i32` rejected `Middle(Inner(...))` at E0553 because the exemption used `Layout.resolveNewtype` (recurses to the primitive) instead of one-step unwrapping. The constructor wraps one step at a time, so the inner-vs-resolved comparison must be one-step too. Fix in `Concrete/Check/CoreCheck.lean`: replaced the recursing check with a `oneStepInner` helper that finds the immediate inner type only, and try both wrap and unwrap directions independently. `Layout.ntSubstTy` was also promoted from `private` so CoreCheck can reuse it for generic newtypes. Regression: `tests/programs/adversarial/newtype/chained.con`.
+- **Bug 2 — `.0` on a borrowed newtype produced `&Newtype → Inner`.** `&self.0` (and `&mut self.0`) in an inherent impl method emitted a `.cast` from `.ref Newtype` to the inner primitive. CoreCheck's exemption (matching only direct `Newtype ↔ Inner` pairs) rejected it, and codegen would have mishandled the ref→value transition. Fix in `Concrete/Elab/Elab.lean`'s field-access path: when the receiver is a ref/refMut, emit `.deref cObj newtypeTy` first so the rebrand cast is `Newtype → Inner` as expected. Regression: `tests/programs/adversarial/newtype/borrow.con`.
+- **Bug 3 — narrow-int field assign elaborated the RHS as `Int`.** `c.n = 100` where `n: i32` elaborated `100` as `Int` (i64) because `elabExpr value` was called with no type hint. Codegen emitted `store i64 100` to a 4-byte field — undefined behaviour that the LLVM optimiser deletes at `-O2`. The bug masked itself under `lli` (which honours the low 4 bytes) and only surfaced when reading back via the native binary. Fix in `Concrete/Elab/Elab.lean`'s `.fieldAssign` path: look up the field's declared type from the struct definition and pass it as the value hint, so `100` is elaborated as `i32` directly. Regression: `tests/programs/bug_field_assign_narrow_field.con`.
+
+Coverage added: 15 new adversarial tests across newtype (9), enum_match, borrow, defer, generic, linear, trait_dispatch (1 each), plus the dedicated bug regression. `make test` 771 → 787 pass / 0 fail.
+
+### Phase 3 stdlib and syntax freeze closes
+
+The canonical Phase 3 exit checklist is now 19/19 complete. The first-release stdlib/syntax surface is treated as freeze-ready on current evidence rather than on aspirational follow-up rewrites.
+
+- **Runtime-collection close-out**: `docs/language/RUNTIME_COLLECTIONS.md` and `docs/stdlib/STDLIB_FREEZE_LEDGER.md` now treat the shipped map/deque surface as sufficient for freeze. `HashMap::get_mut`, displaced-value `insert`, and `OrderedMap::get_mut` are all landed. `lox` runs end-to-end against the frozen surface; rewriting it onto the canonical `HashMap<String, Value>` + `Vec<Frame>` shape remains useful follow-up evidence, not a blocker.
+- **Validated-wrapper close-out**: the local wrapper docs now match the actual compiler state. The freeze-ready surface is the shipped stdlib wrappers (`NonZeroU32`, `NonZeroU64`, `Port`, `AsciiText`) plus the four resolved compiler gaps: native/SSA layout on enum-payload newtypes, cross-module identity, instance-method dispatch on wrappers, and narrowed wrap/unwrap-only cast exemption.
+- **Roadmap/docs alignment**: ROADMAP items 57, 67, 72, and 79 now agree with the changelog and local freeze ledgers; `docs/stdlib/STDLIB_VALIDATION_PLAN.md` and `docs/stdlib/STDLIB_SURFACE_FREEZE.md` were also updated to stop advertising stale Phase 3 item metadata.
+- **Post-freeze cleanup**: the remaining Phase 3 roadmap entries were either closed with explicit rationale or reworded as post-freeze follow-up polish, the stale layout freeze checklist was converted into a close-out note, and the last golden `#` syntax files were migrated to `::` so the frozen syntax record matches the corpus again.
+
+### Newtype-cast exemption narrowed to wrap/unwrap pairs
+
+The first cut of the instance-method-dispatch fix exempted *any* `.cast` where either side named a newtype from CoreCheck's cast-validity table. Reviewer caught the regression: `let x: bool = p as bool` and `let p: Port = b as Port` both compiled, bypassing the validated-wrapper contract in `docs/language/VALIDATED_WRAPPERS.md §2`. This narrows the exemption to the exact pattern Elab actually inserts: one side is a newtype `N`, and the other side equals `N`'s resolved inner type (after generic-arg substitution). Anything else falls through to the standard validity table and gets E0553 if it's not a legitimate cast on its own.
+
+- **Precise wrapper-pair check**: `Concrete/Check/CoreCheck.lean` builds a `Layout.Ctx` from its newtypes list and uses `Layout.resolveNewtype` to compute the inner type for either side; the cast is exempt only when one resolved side equals the other side. Direction-symmetric (covers both wrap and unwrap).
+- **`hasTypeVar` loophole closed**: the cast-validity skip on type variables also matched any `.named _`, including newtypes. Now `.named n` is treated as a type parameter only when `n` is *not* a known struct, enum, or newtype. This was a pre-existing overbroad skip that the dispatch fix surfaced.
+- **Negative regressions**: `tests/programs/error_newtype_cast_to_unrelated.con` (Port→bool) and `tests/programs/error_newtype_cast_from_unrelated.con` (bool→Port) now reject at E0553. All 11 positive newtype programs still compile and run; all 5 newtype error tests reject; std/pipeline-test/full-suite baselines unchanged.
+
+### Newtype instance-method dispatch resolves against the wrapper
+
+Calling an instance method on a newtype now resolves against the newtype's inherent impl, not the inner type. This closes the last documented gap in `docs/language/VALIDATED_WRAPPERS.md §8` and means the static-only `T::try_new(...)` convention is now a stylistic preference rather than a workaround.
+
+- **Type identity flows through elaboration**: `resolveTypeE` no longer erases newtype names. A `let p: Port = ...` binding now keeps `p` typed as `.named "Port"` through the rest of Elab, so `p.value()` mangles to `Port_value` and finds the inherent impl. Layout already resolves named types through `Layout.Ctx.newtypes`, so codegen still sees the right size/alignment.
+- **Constructor and `.0` carry the wrapper**: `Port(8080)` now produces a CExpr with type `.named "Port"` (via a representation no-op `.cast`); `p.0` unwraps back to the inner type. For generic newtypes, type args flow from explicit `::<T>` first, otherwise from the call hint (`let w: Wrapper<Int> = Wrapper(100);`).
+- **CoreCheck cast policy newtype-aware**: the cast-validity check in `Concrete/Check/CoreCheck.lean` previously rejected `Int → Wrapper<Int>` at E0553. It now skips validation when either side names a newtype — Layout makes the cast a representation no-op, so the cast-policy table doesn't need to enumerate newtype-vs-inner combinations.
+- **Aggregate same-type cast lowering**: surfaced as a regression once newtype-over-`String` (`AsciiText`) started flowing through casts. EmitSSA's same-LLVM-type alias path was emitting `add %struct.X, 0` (invalid LLVM) for first-class aggregates. The same-type case now matches on LLVM kind and round-trips structs/arrays/enums through a stack slot.
+- **Test**: `tests/programs/newtype_method_dispatch.con` exercises both `p.value()` and `p.is_privileged()` on a `Port`. All 11 newtype regression programs (basic, copy, enum_payload, generic, linear, struct_copy_field, validated, adversarial_consume, module_across, summary_import, method_dispatch) compile and run with correct output. All 3 newtype error tests still reject as expected.
+
+### Cross-module newtype import preserves identity end-to-end
+
+Newtypes now cross module boundaries cleanly, with no inner-type erasure and no special-casing required from callers. This closes the second of the two boundary gaps tracked against `docs/language/VALIDATED_WRAPPERS.md` (only the inherent-method-dispatch gap remains).
+
+- **Public newtypes are importable**: `pub newtype Port = u16;` now lands in the exporting module's `publicNames` (`Concrete/Resolve/FileSummary.lean`); `import Wrap.{Port};` resolves and brings inherent impl methods along, mirroring the struct path.
+- **No erasure at the boundary**: `resolveImports` previously fed newtypes into the alias map alongside type aliases, which substituted the inner type into every imported signature — so a downstream `Port::try_new` returned `Option<u16>` instead of `Option<Port>`. The alias map is now type-aliases-only; newtype identity is preserved across the boundary, and Layout resolves through `Layout.Ctx.newtypes` natively (the 2026-04-24 fix).
+- **Imported newtypes reach Layout**: `ResolvedImports` gains a `newtypes` field; Check, Elab, and the elaborated `CModule.newtypes` all consume it. EmitSSA's `tyToLLVMTy` (a separate path from `Layout.tyToLLVM`) also resolves through newtypes now, fixing a panic that surfaced once the boundary stopped erasing.
+- **Test identity preserved**: `tests/programs/adversarial_module_newtype_across.con` exercises the full path (cross-module `Port::try_new`, `Option<Port>` pattern match, `.0` extraction); `tests/programs/summary_import_pub_newtype.con` (previously dead) now runs and returns 42; a new negative repro confirms passing a bare `u16` where `Port` is expected still fails type-check across the boundary.
+
+### Validated wrappers land in stdlib; newtype layout threads through codegen
+
+The newtype surface designed in `docs/language/VALIDATED_WRAPPERS.md` is now usable on the native/SSA path, and the first canonical wrappers ship in stdlib.
+
+- **Stdlib wrappers**: `std.numeric.NonZeroU32`, `std.numeric.NonZeroU64`, `std.numeric.Port`, and `std.text.AsciiText` land as canonical validated wrappers. Each exposes static-only `try_new` / `try_from_<src>` constructors returning `Option<T>` and preserves the zero-cost `.0` extraction contract. `AsciiText` wraps `String` with the invariant that every byte is in `0..=127`, validated once in `try_new`. 3 new `AsciiText` tests (happy path, empty-OK, reject non-ASCII).
+- **Newtype layout fix (native/SSA)**: `Layout.tySize` / `Layout.tyAlign` / `Layout.isPassByPtr` / `Layout.tyToLLVM` previously panicked with `unknown named type 'Port'` whenever a newtype survived Elab's struct/enum-field erasure — for example as the payload of `Option<Port>` or `Option<AsciiText>`. `Layout.Ctx` now carries a `newtypes` list and resolves named/generic types through `resolveNewtype` before querying layout; recurses to handle newtype-of-newtype and substitutes generic args. `CModule` gains a `newtypes : List NewtypeDef` field populated by Elab; `SModule` carries the same, collected across submodules in Lower; EmitSSA state threads newtypes into the Layout context used by `scanBuiltinEnumArgs` and the rest of codegen. `CoreCheck` and `Report` build Layout.Ctx with newtypes too. Check.lean and FileSummary.lean are intentionally untouched — the type-check layer still rejects `Port` vs `u16` without implicit coercion (`tests/programs/error_newtype_no_implicit.con` still rejects).
+- **Inherent-impl path now native-clean**: the note in `tests/programs/newtype_validated.con` flagged `impl Port { fn try_new ... }` returning `Option<Port>` as a known layout-bug trigger. That path now lowers, links, and runs; it is the shape the stdlib wrappers use.
+- **`std.ordered_map` gains `get_mut`**: paired with the wrapper work because both are part of the Phase 3 stdlib-freeze checklist for runtime collections.
+- **Regression coverage**: `std/src/lib.con --test` runs 248/248 including the new `AsciiText` tests; `pipeline-test` 32/32 layout/ABI cases still green; 8 newtype `.con` test programs compile and run; 3 error-path tests (`error_newtype_no_implicit`, `error_newtype_double_unwrap`, `error_newtype_wrong_inner`) still reject as expected.
+- **Freeze-ledger update**: `docs/stdlib/STDLIB_FREEZE_LEDGER.md` validated-wrapper row flips from "Partial — newtype mechanism works at interp; native/SSA layout bug on enum-payload newtypes" to "Complete"; `docs/language/VALIDATED_WRAPPERS.md §8` drops the `Layout.tySize`/`Layout.tyAlign` gap (the instance-method-dispatch gap remains, by design).
+
+### Canonical Result/Option surface and `Type::Variant` qualification
+
+Concrete now has one public `Result`/`Option` story and one enum/static qualification syntax:
+
+- **Canonical builtins**: `Result<T, E>` and `Option<T>` are the language-level builtins; `std.result` and `std.option` now provide helper impls on those builtins instead of redefining duplicate public enums
+- **Canonical `Result` shape**: builtin `Result` now uses `Ok { value }` and `Err { error }` everywhere, matching the stdlib helper surface and the `?` operator
+- **Canonical qualification syntax**: enum construction, enum patterns, and static method calls now use `Type::Variant` / `Type::method(...)`; the compiler, formatter, interpreter pretty-printer, examples, stdlib, tests, and docs were migrated off `#`
+- **Canonical examples updated**: `parse_validate` and `service_errors` now use builtin `Result` directly; the old `ParseResult`, `ValidateResult`, `AuthResult`, `RateResult`, and `ServiceResult` surfaces are gone from the shipped examples
+- **Follow-on roadmap honesty**: the roadmap and phase checklist now track only the remaining syntax work honestly — field punning, ignore/rest patterns, and destructuring forms are still pending
+
+### Source-level interpreter / semantic oracle (Phase 1, item 31)
+
+`Concrete/Interp/Interp.lean` — source-level interpreter operating on validated Core IR. CLI: `concrete <file.con> --interp`. Evaluates the predictable/core subset without codegen (no LLVM, no clang).
+
+- **Supported**: integer/bool, let/assign, if/else, function calls, structs (creation + field access + field assign), enums (creation + match with field bindings), arrays (literal + indexing + index assign), bounded for/while loops, cast, binary ops (arithmetic + comparison + bitwise XOR/AND/OR), unary ops, break/continue
+- **Unsupported (explicit diagnostics)**: borrow, deref, float, string, char, defer, try, alloc, whileExpr, fnRef
+- **First target**: `examples/parse_validate/` — all 8 tests pass, exit code matches compiled binary
+- **Trust-gate**: 12 interp tests (parse_validate, function calls, array loops, structs, enum match, XOR bitwise, unsupported diagnostic, compiled-vs-interpreted comparison, scope isolation, negative index, observable contract, match-arm mutation). Total trust-gate: 1404 checks
+- **Key design**: fuel-based evaluation with explicit control flow propagation (return/break/continue as `Flow` inductive). For-loop step field only runs on `continue` (step already appended to body by desugaring)
+
+### Interpreter semantic fixes (3 bugs)
+
+- **Scope isolation**: if-branches and else-branches now restore outer scope after evaluation — block-local `let` bindings no longer leak. Fix: trim env back to outer length after branch (`Interp.lean:376`).
+- **Negative array index**: `arrayIndexAssign` now checks `i < 0` before `toNat` conversion, producing "negative array index" error instead of silently writing element 0 (`Interp.lean:404`).
+- **Observable contract**: `--interp` now prints the return value to stdout and exits 0, matching compiled binary behavior. Previously it returned the value as a process exit code and printed nothing (`Main.lean:203`).
+- **Match-arm mutation**: statement-level match now propagates outer-variable mutations via `evalMatchStmt`. Block-local and arm bindings are still trimmed. Previously `evalMatchBody` discarded the env entirely (`Interp.lean:337`).
+
+### No-std split, standalone UX, project bootstrap (Phase 1, items 34-36)
+
+Three design documents defining developer-facing UX for different project shapes:
+
+- **`docs/platform/FREESTANDING_SPLIT.md`** (item 34): freestanding vs hosted execution targets. Freestanding = no stdlib, no capabilities, no libc, pure computation. Hosted = full stdlib, main entry point, all capabilities. Feature table (18 items), concrete examples from fixed_capacity (freestanding-ready) and parse_validate (hosted). Freestanding is a strict subset of predictable.
+- **`docs/project/STANDALONE_VS_PROJECT.md`** (item 35): standalone file (`concrete myfile.con`) vs project (`concrete build` with Concrete.toml). Standalone for scripts/snippets, project for stdlib/policy/modules. Proposed `--stdlib` flag bridge. Migration path from standalone to project.
+- **`docs/project/PROJECT_BOOTSTRAP.md`** (item 36): `concrete new` command design with 3 templates (predictable, library, ffi), standard layout conventions, Concrete.toml field reference, first outsider workflow.
+
+Phase 1 (Predictable Core) now has 17/18 items done. Only item 31 (interpreter) remains.
+
+### Per-phase exit checklists (Phase 1, item 40)
+
+`docs/compiler/PHASE_EXIT_CHECKLISTS.md` — exit criteria for phases 1-7:
+
+- **Phase 1 (Predictable Core)**: 10 criteria — canonical examples trust-gate tested, boundaries documented, stack-depth working, error propagation patterned, example governance, diagnostic UX designed, trusted boundary guide, no-std split, interpreter. Current: 14/18 items done
+- **Phases 2-7**: concrete exit criteria tied to specific outputs (pressure examples, stdlib freeze, tooling, benchmarks, showcase, proof expansion)
+- **Phases 8-14**: deferred until earlier phases approach completion
+- **Update protocol**: check boxes as criteria are met, add commit hash, close phase when all checked
+
+### Diagnostic UX and trusted boundary guide (Phase 1, items 32-33)
+
+Two design documents establishing quality standards:
+
+- **`docs/compiler/DIAGNOSTIC_UX.md`** (item 32): diagnostic quality tiers (good / missing "why" / bare), target format (rule + location + why + hint), 4 priority categories (policy violations, extraction blockers with per-construct explanations, ownership/linearity, stale proof repair). No new Lean types needed — existing Diagnostic fields sufficient
+- **`docs/verification/TRUSTED_BOUNDARY_GUIDE.md`** (item 33): 4 canonical wrapper patterns (raw pointer reads, FFI shell, safe alternative, multi-layer orchestration), audit checklists for trusted fn (7 items) and trusted extern fn (4 items), report/evidence material references
+
+### Example inventory, lifecycle, and no-duplicate rule (Phase 1, items 37-39)
+
+Three documentation items establishing governance for the example set:
+
+- **`docs/project/EXAMPLE_INVENTORY.md`** (item 37): canonical inventory of all 20 named examples — 3 flagship (crypto_verify, elf_header, proof_pressure), 5 canonical (fixed_capacity, parse_validate, service_errors, thesis_demo, packet), 10 pressure (grep, http, integrity, json, kvstore, lox, mal, policy_engine, toml, verify), 2 supporting (project, snippets). Each entry records path, owning phase, claim, oracle strategy, test gates, and promotion status. Multi-phase ownership table. Promotion log.
+- **`docs/project/EXAMPLE_LIFECYCLE.md`** (item 38): 4 promotion levels (pressure → canonical → flagship → permanent regression target) with explicit bars, promotion path, anti-patterns (unnamed workload, test-free canonical, duplicate workload, phantom flagship), and new-example checklist.
+- **`docs/project/EXAMPLE_NO_DUPLICATES.md`** (item 39): rule against creating near-duplicate examples; reuse with multi-phase ownership. When-to-reuse vs when-to-create criteria. Current near-duplicates to watch.
+
+### Service-style error propagation example (Phase 1, item 30)
+
+`examples/service_errors/` — 4-stage service-style request handler for the predictable subset:
+
+- **4-stage pipeline**: validate → authorize → rate-limit → process, each with its own error enum
+- **3 stage-specific error enums**: `ValidateError` (BadUserId, BadAction, PayloadTooLarge), `AuthError` (InvalidToken, InsufficientPermission), `RateLimitError` (QuotaExceeded), plus unified `ServiceError` with deterministic error codes (101-103, 201-202, 301)
+- **Public surface**: `Request` struct, `Response` struct, stage-specific error enums, unified `ServiceError`, and builtin `Result<T, E>` for every stage/pipeline return
+- **Pure functions**: 12 functions, all `caps: (pure)`, `evidence: enforced`, zero trusted, zero allocation
+- **Policy enforced**: `predictable = true` in Concrete.toml, all functions pass `--check predictable`
+- **9 runtime tests**: success path, 3 validation failures, 2 auth failures, 1 rate limit, admin action, action-2 path
+- **4 pipeline adversarial programs**: stage conversion with unified AppError, severity classification with is_fatal/is_retriable, partial success with intermediate state preservation, fan-in first-failure reporting
+- **Known lli bug**: `adversarial_pipeline_partial_success.con` crashes lli (LLVM 21.1.8 JIT) on complex enum variant with struct+enum payload; native compilation works correctly — interpreter-only issue, not a Concrete codegen bug
+- **10 trust-gate serviceerrors tests**: build, run, predictable check, effects, trusted count, allocation, error code functions, pipeline handlers, policy, purity
+- **Trust-gate total**: 1358 checks
+
+### Canonical parse/validate error-flow example (Phase 1, item 29)
+
+`examples/parse_validate/` — canonical error-flow example for the predictable subset:
+
+- **Public surface**: `enum Copy ParseError` (6 categories: TooShort, BadVersion, BadType, PayloadTooBig, Truncated, BadChecksum), `struct Copy Header`, and builtin `Result<Header, ParseError>`
+- **Explicit propagation**: match-based error handling, every error path visible in source, no hidden control flow
+- **Pure functions**: 9 functions, all `caps: (pure)`, `evidence: enforced`, zero trusted, zero allocation
+- **Bounded**: `compute_checksum` XOR fold over fixed-size array with bounded loop; all others loop-free
+- **Policy enforced**: `predictable = true` in Concrete.toml, all functions pass `--check predictable`
+- **8 runtime tests**: valid header, bad version, bad type, too short, payload overflow, bad checksum, valid with payload, truncated — all pass (exit 0)
+- **SSA-verify bug discovered**: accumulator-style match (many sequential `match` + mutable counter) triggers E0703 dominator violation; early-return style works correctly
+- **10 trust-gate parsevalidate tests**: build, run, predictable check, effects, trusted count, allocation, enum compilation, bounded loop, policy, purity
+
+### Predictable failure discipline (Phase 3, item 28)
+
+`docs/platform/PREDICTABLE_FAILURE_DISCIPLINE.md` — failure-only discipline for predictable-profile code:
+
+- **Allowed**: explicit `Result<T, E>` return, error codes (`i32`, enum), sentinel values, `?` propagation
+- **Excluded**: abort, OOM, panic, unwinding, exceptions, blocking I/O failure, FFI failure, `longjmp` — all blocked by the five predictable gates
+- **Remaining gaps**: integer overflow (silent wrap) and array OOB (UB) — neither is hidden control flow
+- **Verification**: `--check predictable` + `--report effects` + `--report stack-depth`
+- **PROFILES.md updated**: stack-depth and failure discipline rows now show "Working"/"Defined"
+
+### Failure strategy (Phase 3, item 27)
+
+`docs/language/FAILURE_STRATEGY.md` — definitive failure/panic strategy:
+
+- **Abort-only**: no panic, no unwinding, no catch — permanent design commitment
+- **Cleanup guarantees**: defer runs LIFO on all normal exits (return, `?`, break, scope exit); skipped on abort/signal
+- **No-leak on normal paths**: linear ownership + defer; leak-on-abort acceptable (OS reclaims)
+- **Failure taxonomy**: explicit errors (`Result`), abort (OOM/user/stdlib), hardware traps (SIGSEGV/SIGFPE), undefined behavior (array OOB, integer overflow)
+- **FFI consequences**: trust-based contracts, `longjmp` is UB, no cleanup for extern-triggered abort
+- **Proof assumptions**: proved code avoids all failure sources by construction; integer overflow and array OOB are known gaps between proof model and runtime
+- **8 summary commitments** for the failure model
+
+### Predictable/proved boundary classification (Phase 3, item 26)
+
+`docs/platform/PREDICTABLE_BOUNDARIES.md` — comprehensive classification of runtime boundaries for predictable and proved code:
+
+- **Host calls**: only `write(2)` reachable from predictable code (Console); all heap, string, Vec, FFI, and blocking operations excluded by five gates
+- **Cleanup paths**: defer runs LIFO on normal return/scope exit; abort/OOM/signals not reachable; all data stack-only
+- **Determinism**: source-level shape deterministic (bounded loops, acyclic calls); timing, binary layout, cache behavior explicitly not claimed
+- **Failure paths**: integer overflow wraps silently (LLVM default), array OOB is UB (no runtime check), stack overflow via OS guard page; OOM and abort not reachable
+- **Memory/UB boundaries**: ownership enforcement prevents UAF/double-free/null-deref/dangling-ref in safe code; array OOB, overflow, division by zero remain as UB sources
+- **Proved functions**: Lean theorem over PExpr, not binary; unbounded integer gap; per-function scope; no composition theorem
+- **Profile interaction**: summary table showing safe × predictable × proved property matrix
+- **Verification commands**: 8 CLI commands mapped to specific audit questions
+
+### Stack-depth reporting (Phase 3, item 25)
+
+`--report stack-depth` for functions that pass the no-recursion profile:
+
+- **Per-function analysis**: frame size (bytes) from params + locals via `Layout.tySize`, max call depth from acyclic call graph, worst-case stack bound (sum of frame sizes along deepest chain)
+- **Recursive handling**: recursive functions shown as "unbounded" — only non-recursive functions get numeric bounds
+- **Implementation**: `stackDepthReport` in Report.lean, `collectLocalTys` collects all local variable types from function bodies (recursive into nested scopes), `computeCallDepths` does memoized DFS on the call graph
+- **Wired**: `--report stack-depth` dispatch in Main.lean, added to usage string
+- **12 trust-gate stackdepth tests**: report structure, frame bytes, call depth, stack bounds, leaf vs caller depth, bound >= frame invariant, totals, max stack, fixed_capacity 0 recursive, source locations
+
+### Copy struct array fix + safe-indexing rewrite (Phase 3, item 24)
+
+Compiler bug fix + example rewrite eliminating most trusted code from `examples/fixed_capacity/`:
+
+- **Compiler fix**: `isCopyTy` (CoreCheck.lean) and `isCopyTyPostMono` (Verify.lean) both had missing `.array` case — Copy structs with fixed-array fields were rejected. Added recursive array element Copy checking to both functions.
+- **Safe-indexing rewrite**: example now uses `struct Copy MsgBuf { data: [u8; 256], len: i32 }` and `struct Copy RingBuf { data: [i32; 16], head: i32, count: i32 }` with safe `arr[i]` syntax — no pointer arithmetic needed
+- **Trust boundary shrunk**: 16 functions now `trusted: no, evidence: enforced` (was: 13 trusted); only 4 test-packet builders remain trusted
+- **20 functions** total, predictable profile passes, zero allocation, 8 runtime tests pass
+- **Trust-gate tests updated** for new function signatures (validation core not trusted, only builders trusted)
+
+### Fixed-capacity validation (Phase 3, item 23)
+
+`examples/fixed_capacity/` — bounded message validator with ring buffer for replay detection:
+
+- **20 functions**, all pass `--check predictable`, `predictable = true` policy enforced
+- **Ring buffer**: `struct Copy RingBuf { data: [i32; 16], head: i32, count: i32 }` with safe array indexing — replay detection for recent sequence numbers
+- **Message validator**: 8-byte fixed header (version, type, seq, payload_len, XOR tag), 5 pure validation functions, bounded tag computation
+- **Trust boundary**: only 4 test-packet builders are trusted; 16 functions (validators, ring buffer, byte readers) are fully safe with `evidence: enforced`
+- **8 runtime tests**: valid data/heartbeat/reset, replay rejection, too_short, bad_version, bad_type, payload_overflow
+- **Validated findings**: fixed arrays + safe `arr[i]` indexing + Copy structs + bounded for loops = practical no-alloc pattern for real bounded-state processing
+- **12 trust-gate fixedcap tests**: build, run, predictable pass, evidence levels, trust classification, bounded loops, zero allocation, proof eligibility, extraction gaps, policy declaration, capability-free validation core
+
+### Active roadmap reset after former phases 1-2
+
+Completed former roadmap Phases 1 and 2 are now treated as historical milestones rather than active plan items:
+
+- Former **Phase 1** compiler-integrity work and former **Phase 2** proof-workflow work remain recorded in this changelog
+- The active roadmap now starts at former Phase 3, renumbered as active **Phase 1**
+- Task numbering did not restart; active work still begins at item `23`
+- This is a roadmap cleanup, not a semantic change in project scope
+- The remaining roadmap now has **14 active phases**
+
+### Trusted-computing-base accounting (Phase 2, item 22)
+
+`docs/verification/TRUSTED_COMPUTING_BASE.md` rewritten as canonical TCB reference:
+
+- **6 TCB layers**: Concrete checker/compiler, Lean kernel, proof registry/fingerprint machinery, backend/toolchain, runtime/target/OS, trusted/foreign code boundaries
+- Each layer specifies: what is trusted, what is actively verified, what is not claimed
+- **Profile-specific TCB**: new section maps each profile (safe, predictable, provable, high-integrity) to its TCB dependencies with explicit weights (critical/assumed/gap/boundary)
+- **4 strongest-claim breakdowns**: safe-code guarantees, theorem claims, predictable claims, workflow determinism — each with per-layer status
+- References proof-bundle assumptions, CI proof gate, adversarial test coverage, fingerprint determinism, registry validation
+- Remaining trust surfaces explicit: checker soundness, PExpr extraction fidelity, eval soundness, integer-representation gap
+- Docs-only change — no new code, no test changes
+
+### Named user-facing profiles (Phase 2, item 21)
+
+`docs/platform/PROFILES.md` rewritten as canonical profile reference:
+
+- **4 profiles** with per-profile gate/report/evidence tables
+- **Safe**: 7 enforced gates, 5 report commands, evidence artifacts; explicit non-coverage (bounds, overflow, stack, termination, checker soundness)
+- **Predictable**: 5 gates (recursion, loops, allocation, blocking, FFI) with advisory and policy-enforced modes; JSON violation facts; explicit today-vs-remaining table
+- **Provable**: 10 eligibility gates, 6 obligation states, 3 theorem shapes, 10 report commands; evidence bundle + CI gate; precise "proved" semantics and non-claims
+- **High-integrity**: named direction with intended restrictions; nothing profile-specific implemented yet
+- **Relationship diagram** showing profiles overlap without being strict subsets
+- Each profile carries explicit status (real/partial/future) and claim class
+- Docs-only change — no new code, no test changes
+
+### Canonical "claims today" surface (Phase 2, item 20)
+
+`docs/verification/CLAIMS_TODAY.md` rewritten as the canonical short public statement of current guarantees:
+
+- **9 sections**: compiler-enforced guarantees, proof-backed guarantees, proof workflow and evidence pipeline, compiler-reported analysis, profile status, explicit non-claims, trusted computing base, vocabulary rules, machine-readable evidence
+- **Compiler-enforced**: 12 properties (ownership, linearity, borrows, capabilities, cleanup, control flow) with mechanisms; explicit non-coverage (bounds, overflow, stack, termination, checker soundness)
+- **Proof-backed**: eligibility gates, 3 theorem shapes (concrete test, boundary, full contract), 6 obligation states, precise meaning of "proved" (PExpr + unbounded Int + fingerprint match), 5 explicit non-claims (binary correctness, checker soundness, composition, coverage, all-properties)
+- **Proof workflow**: 10 working capabilities (extraction, lean-stubs, registry, kernel verification, proof-status, diagnostics with E0800–E0807, dependency graph, evidence bundle, `concrete check`, CI proof gate); rename and stale detection
+- **Profiles**: safe (real, enforced), predictable (partially real), provable (real for current subset), high-integrity (named direction)
+- **TCB**: 6 layers (compiler, Lean kernel, registry/fingerprint, backend/toolchain, runtime/target/OS, trusted/foreign boundaries)
+- **Machine-readable**: JSON facts for proof_status, obligation, evidence, eligibility, proof-bundle, diagnostics-json
+- Every claim carries its taxonomy class; cross-references 8 detailed documents
+- Docs-only change — no new code, no test changes
+
+### Proof evidence CI gate (Phase 2, item 19)
+
+`scripts/ci/proof_gate.sh` runs the complete proof workflow as one CI gate:
+
+- **20 checks across 8 sections**: extraction (4), registry validation (2), proof-status consistency (3), proof diagnostics (3), proof dependencies (2), evidence bundle (2), determinism (2), Lean theorem checking (2)
+- Runs against the proof pressure set (`examples/proof_pressure/`)
+- One exit code: 0 if all pass, 1 if any fail
+- Wired as `proof-gate` job in GitHub Actions CI (`.github/workflows/lean_action_ci.yml`), runs in parallel with trust-gate
+- `make test-proof-gate` Makefile target for local use
+- 7 trust-gate tests verify: script exists/executable, passes on pressure set, runs all 20 checks, covers all 8 sections, shows compiler identity, CI workflow wired, Makefile target present
+
+### Proof evidence bundle (Phase 2, item 18)
+
+`--report proof-bundle` produces a single JSON evidence bundle for review, CI, and release evidence:
+
+- **Metadata**: source path, timestamp, compiler identity (version + git commit + Lean toolchain)
+- **Summary**: obligation counts by status (proved/stale/missing/blocked/ineligible/trusted), extraction counts, diagnostic severity breakdown, dependency stats
+- **Assumptions**: explicit section documenting proof model (PExpr + unbounded Int), unverified compilation chain, integer model gap, per-function composition limitation, checker soundness assumption, fingerprint stability
+- **Registry**: full proof-registry.json entries with function, fingerprint, proof name, spec name
+- **Dependency graph**: proved and stale dependency edges between functions
+- **Facts**: all proof-related facts (proof_status, obligation, extraction, proof_diagnostic, eligibility) — non-proof facts excluded
+- 15 trust-gate tests verify: schema version/kind, source/compiler/timestamp metadata, summary obligation counts, extraction counts, diagnostic severity counts, assumptions fields, registry entries, dependency graph edges (proved and stale), all 5 fact kinds present, fact_count consistency, clean-file baseline, exit codes, non-proof fact exclusion
+
+### "How to Prove a Concrete Function" tutorial (Phase 2, item 17)
+
+Canonical outsider-facing tutorial added to the book (`docs/book/src/proving.md`):
+
+- Step-by-step walkthrough proving `clamp_value` from the proof pressure set
+- Real compiler output at every step: extraction, proof-status, lean-stubs, check-proofs, proof-diagnostics, proof-deps
+- Explicit claim scope section: what is proved (Lean-kernel-checked PExpr property) and what is NOT (binary correctness, overflow, safety, composition)
+- Recovery guide: stale proofs, ineligible functions, blocked extraction, detailed diagnostics
+- Maintenance: dependency tracking, refactor survival table, rename detection, daily `concrete check` workflow
+- Quick-reference command table for all proof-related commands
+- Added to book SUMMARY.md table of contents
+
+### Proof-authoring and maintenance workflow (Phase 2, item 16)
+
+Complete user-facing proof workflow defined and tested:
+
+- `docs/verification/PROOF_WORKFLOW.md` — 12-step canonical workflow document covering: function eligibility, stub generation, proof writing, registry attachment, verification (`concrete check`, `check-proofs`), failure diagnosis (8 diagnostic kinds), stale repair, dependency fallout review, and proof-preserving refactors
+- Command reference table for all 9 proof-related CLI commands
+- End-to-end example: proving `clamp_value` from the pressure set
+- Rename detection workflow: orphaned registry entries matched by fingerprint
+- Refactor checklist: which changes preserve proofs, which invalidate, and how to recover
+- 15 trust-gate workflow tests: extraction reports, lean-stubs generation, proof-status states, proof-diagnostics classes, proof-deps edges, fingerprint consistency, stale repair cycles, rename detection, obligation totals, and diagnostic-codes coverage
+
+### Refined proof failure taxonomy (Phase 2, item 15)
+
+Proof diagnostics now carry fine-grained failure and repair classifications covering the full proof pipeline:
+
+- **8 diagnostic kinds**: staleProof (E0800), missingProof (E0801), ineligible (E0802), unsupportedConstruct (E0803), trusted (E0804), attachmentIntegrity (E0805), theoremLookup (E0806), leanCheckFailure (E0807)
+- **10 failure classes**: `stale_proof`, `missing_proof`, `unsupported_construct`, `effect_boundary`, `structural_gate`, `entry_point`, `trusted_boundary`, `attachment_integrity`, `theorem_lookup`, `lean_check_failure`
+- **6 repair classes**: `theorem_update`, `add_proof`, `code_rewrite`, `policy_change`, `registry_update`, `none`
+- `IneligibleCategory` enum for typed sub-classification (replaces brittle substring checks)
+- `registryIssuesToDiagnostics` converts all RegistryIssue variants into attachment_integrity diagnostics, wired into `extractProofCore`
+- `checkProofResultsToDiagnostics` converts check-proofs failures into theorem_lookup/lean_check_failure diagnostics
+- `concrete diff` disambiguates multiple diagnostics per function using `diagnostic_kind` as suffix key
+- Text rendering shows `failure:` and `repair:` lines; JSON includes `failure_class` and `repair_class`; schema updated
+- 15 adversarial taxonomy tests verify all failure/repair classes in text and JSON, attachment_integrity generation from stale registry, E0805-E0807 in diagnostic-codes, and diff deduplication
+
+### Proof dependency and composition semantics (Phase 2, item 14)
+
+Proof dependencies are now explicit and propagated:
+
+- `staleDeps` field on obligations tracks which proved callees have gone stale
+- `--report proof-deps` shows the full dependency graph:
+  ```
+  main.validate_header [proved]
+    → main.check_nonce (proved)
+
+  main.main [ineligible]
+    → main.validate_header (proved)
+    → main.compute_checksum (stale)
+  ```
+- Obligations report renders `stale deps:` inline when present
+- JSON `diagnostics-json` includes `stale_deps` array on obligation facts
+- INV-14 consistency check validates staleDeps correctness
+- 11 adversarial tests cover dependency graph output, stale propagation, JSON fields
+
+### Proof attachment stability under refactors (Phase 2, item 13)
+
+Proof attachment rules are now explicit and tested. The stability semantics:
+
+- **Proof survives**: qualified name unchanged + body fingerprint unchanged (comments, whitespace, adding sibling functions don't affect it)
+- **Proof goes stale**: body changes (operator change, variable rename, helper extraction, added/removed statements)
+- **Proof lost (rename detected)**: function renamed but body unchanged — registry validation now detects this via fingerprint matching and reports "appears renamed to 'new.name'" with an update hint
+- **Proof lost (removed)**: function deleted entirely — reported as "unknown function (removed or renamed)"
+
+10 adversarial stability tests cover all scenarios.
+
+### User-package proof scoping (Phase 2, item 12)
+
+Proof reporting and policy enforcement now scope to user/package modules only. Stdlib and dependency obligations are filtered out of all output surfaces:
+
+- `concrete build` summary counts only user functions: `Proofs: 2 proved, 1 stale, 1 missing, 1 blocked`
+- `concrete check` report shows only user functions with a footer: `(324 dependency obligations hidden)`
+- `require-proofs = true` enforces only on user-package obligations
+- Exit codes based on user obligations only — stdlib blocked/missing won't fail your build
+- `ProofCore.scopeToUser` utility filters by qualified-name prefix against `depNames`
+
+### Coherent build / check / prove workflow (Phase 2, item 11)
+
+`concrete build` now shows a proof summary line after every successful build:
+```
+Built myproject
+Proofs: 2 proved, 1 stale, 7 missing, 53 blocked
+```
+
+`concrete check` is a new project-level command that runs the frontend and proof pipeline without codegen:
+- Prints the full proof-status report (same as `--report proof-status`)
+- Shows prioritized "Next steps" (stale first, then missing, then blocked — at most 3 items)
+- Exits 0 if all eligible functions proved, exits 1 if any stale/missing/blocked
+- Build exit code is NOT affected by proof status (only policy violations cause non-zero)
+
+Internal refactor: `loadProject` shared function eliminates 60-line duplication between `compileBuild`, `compileTestBuild`, and the new `compileCheck`.
+
+10 new workflow tests: build summary presence/content, build exit code (0 despite stale), check report/next-steps/exit-code/totals/error-handling.
+
+Trust-gate: 1189 pass, 0 fail.
+
+### Blocked/ineligible proof pressure tests (Phase 2, item 10)
+
+Blocked and ineligible proof diagnostics now explain exactly why a function cannot be proved:
+
+- **Blocked diagnostics** list specific unsupported constructs: struct literal, match expression, mutable assignment, string literal, if-without-else. Previously said only "unsupported constructs" without detail.
+- **Ineligible diagnostics** list specific reasons: capabilities (File, Network, Process, Unsafe, Alloc), recursion (direct, mutual), FFI, allocation, blocking I/O, entry point, trusted. Previously suggested "Remove is entry point (main)" — now says "Address these constraints."
+- **JSON output** (`diagnostics-json`) includes `unsupported` array for blocked and `profile_gates` array for ineligible functions.
+- **Registry validation** rejects entries targeting blocked functions (extraction-blocked error) and ineligible functions (ineligible function error).
+
+29 new adversarial pressure tests: 14 ineligible-reason coverage (each capability, recursion type, FFI, allocation, combo, entry point, trusted, boundary), 8 blocked-construct coverage (each unsupported construct type, boundary), 7 boundary tests (registry-targeting errors, combined reasons, consistency invariants, JSON fields).
+
+Trust-gate: 1179 pass, 0 fail.
+
+### Lean kernel checking and stale-proof repair (Phase 2, items 7-9)
+
+`--report check-proofs` invokes the Lean kernel to verify that proof theorems referenced in the registry or hardcoded list actually exist and type-check:
+- Generates a temporary Lean file with `#check @TheoremName` for each proved/stale obligation
+- Invokes `lake env lean` using the project's pinned toolchain
+- Reports per-theorem results: verified or failed (with exit code 1 on any failure)
+- Shows Lean toolchain version for reproducibility
+
+`provedFunctions` extended from `(name, fingerprint)` pairs to `(name, fingerprint, theoremName)` triples — hardcoded proofs now carry explicit Lean theorem references instead of generated `_correct` suffixes.
+
+End-to-end Lean attachment tests verify consistency across proof-status, obligations, extraction, and check-proofs reports. Stale-proof repair tests cover the full cycle: proved → mutate → stale (with fingerprint drift) → update registry → proved again → kernel check passes.
+
+Trust-gate: 1147 pass, 0 fail.
+
+### Registry integrity validation (Phase 2, item 6)
+
+`validateRegistry` checks proof-registry.json entries against ProofCore state:
+- **Unknown function**: registry names a function not in the compiled module (error)
+- **Ineligible target**: registry targets a function that fails the predictable profile (error)
+- **Extraction blocked**: registry targets a function with unsupported constructs (error)
+- **Empty proof/spec name**: registry entry has blank proof or spec identifier (error)
+- **Duplicate/conflicting entries**: multiple entries for the same function (warning/error)
+- **Stale fingerprint**: body changed since proof was registered (warning)
+
+`RegistryIssue.isError` distinguishes errors from warnings. Proof-sensitive reports (`proof-status`, `obligations`) return exit code 1 when registry errors are present. Hardcoded proofs (from `Proof.provedFunctions`) bypass extraction gate — proved status is correct even when extraction fails for hardcoded entries.
+
+Adversarial test files in `tests/programs/adversarial_registry/` with 6 trust-gate assertions. Trust-gate: 1131 pass, 0 fail.
+
+### Canonical theorem shapes (Phase 2, items 3 and 5)
+
+`docs/verification/PROOF_THEOREM_SHAPES.md` defines the canonical proof-spec and theorem shapes:
+- 3 theorem categories: concrete tests (`native_decide`), universal boundary, full contract
+- Naming rules: `<fn>Expr`, `<fn>Fn`, `eval_<fn>`, `<fn>_correct`, `<fn>_rejects_<X>`
+- Allowed property forms: total input-output, branch coverage, compositional
+- Explicit non-goals: loop invariants, effect proofs, refinement types, temporal/liveness, float/string
+- Fuel convention, proof tactics, readability standards
+
+### Lean theorem stub generation (Phase 2, item 4)
+
+`--report lean-stubs` generates ready-to-use Lean source from ProofCore extraction:
+
+- **PExpr definitions**: Each extracted function gets a `fooExpr : PExpr` definition with Lean constructors matching the extracted form
+- **PFnDef entries**: Name, parameter list, and body reference
+- **Function table**: `generatedFns : FnTable` with all extracted functions
+- **Eval helpers**: `eval_foo` wrappers binding parameters to the function table
+- **Theorem stubs**: `theorem foo_correct ... = sorry` with correct parameter signatures, env bindings, and ProofCore docstring
+
+Only extractable functions appear — excluded (capabilities) and blocked (unsupported constructs) are omitted. 10 new trust-gate assertions. Trust-gate: 1125 pass, 0 fail.
+
+### Proof pressure set inspectable end-to-end (Phase 2, item 2)
+
+Fixed effects report evidence discrepancy: `--report effects` was computing evidence from hardcoded `Proof.provedFunctions` instead of using `pc.obligations` (the single source of truth that includes registry proofs). `check_nonce` and `validate_header` now correctly show `evidence: proved` instead of `evidence: enforced (proof stale: body changed)`.
+
+24 trust-gate assertions verify the pressure set across all report modes:
+- **Extraction** (6): ProofCore forms for `check_nonce`/`clamp_value`, extraction failure for `classify_range` with field-access blocker, Console exclusion for `format_result`, totals (4/1/2)
+- **Obligations** (4): dependency tracking (`validate_header` → `check_nonce`), registry source, missing spec, totals match proof-status
+- **Eligibility** (2): totals (5/2), entry-point exclusion
+- **Effects/evidence** (3): proved evidence for registry-backed proofs, stale annotation, totals (2 proved)
+- **Determinism** (2): fingerprints and extraction stable across runs
+
+Trust-gate: 1115 pass, 0 fail.
+
+### Proof pressure set defined (Phase 2, item 1)
+
+6-function proof pressure set in `examples/proof_pressure/` exercising all proof obligation states:
+
+- **`check_nonce`** (proved) — conditional-heavy validator with correct registry fingerprint
+- **`validate_header`** (proved) — helper-composition, calls `check_nonce`, correct fingerprint
+- **`compute_checksum`** (stale) — registry has old fingerprint from before `+ 1` body edit
+- **`format_result`** (ineligible) — has `Console` capability, outside proof boundary by design
+- **`clamp_value`** (missing) — pure, extractable, no registry entry yet
+- **`classify_range`** (blocked) — pure, eligible, but uses struct field access (unsupported in extraction)
+
+Design doc: `docs/verification/PROOF_PRESSURE_SET.md`. Registry: `examples/proof_pressure/src/proof-registry.json`. 7 new trust-gate regression assertions verify all states + totals. Trust-gate: 1098 pass, 0 fail.
+
+### Stable diagnostic and error-code taxonomy
+
+All compiler diagnostics now carry stable error codes, documented with machine-readable listings.
+
+- **172 error codes** assigned across all 10 compiler passes: parse (E0001), resolve (E0100–E0111), check (E0200–E0285), elab (E0400–E0419), core-check (E0500–E0582), verify (E0600–E0601), lower (E0602), policy (E0610–E0612), ssa-verify (E0700–E0715), proof (E0800–E0804)
+- **`code` field** added to `Diagnostic` structure; rendered in human-readable output as `error[pass]: (E0XXX) message`
+- **Proof diagnostic JSON** facts include `code` field for machine consumers
+- **`--report diagnostic-codes`** produces machine-readable JSON listing all codes with pass, severity, description, severity meanings, and compatibility rules
+- **Compatibility contract**: codes are stable identifiers; never reassigned; new codes may be added; retired codes never reused; consumers should tolerate unknown codes
+- 7 new error-code trust-gate tests; full suite: 2575 pass, 0 fail; trust-gate: 1074 pass, 0 fail
+
+### Fact/query JSON API versioning
+
+All machine-readable JSON output is now versioned with stable schema contracts.
+
+- **Versioned envelope**: `diagnostics-json` and all fact-filter queries wrap results in `{schema_version, schema_kind, fact_kinds, fact_count, facts}` instead of bare arrays
+- **Query answers versioned**: all `query_answer` objects include `schema_version` field
+- **Snapshot versioned**: `concrete snapshot` output includes `schema_version` alongside existing `version` field
+- **Schema report**: `--report schema` produces a machine-readable JSON schema definition documenting all 11 fact kinds, 7 query kinds, required/optional fields per kind, location encoding, envelope shapes, and compatibility rules
+- **Policies documented**: empty-result returns envelope with `fact_count: 0` (not an error); malformed queries return plain-text error on stderr; consumers should ignore unknown fields for forward-compatibility; adding optional fields does not bump `schema_version`
+- 9 new api-versioning trust-gate tests; full suite: 2568 pass, 0 fail; trust-gate: 1067 pass, 0 fail
+
+### Canonical qualified function identity across all fact families
+
+All machine-readable fact kinds now use consistent qualified function names (e.g. `"main.parse_byte"` instead of `"parse_byte"`).
+
+- **Previously inconsistent**: `effects`, `capability`, `unsafe`, `alloc`, `predictable_violation` used bare names while `proof_status`, `obligation`, `extraction`, `traceability`, `eligibility`, `proof_diagnostic` used qualified names
+- **Now**: every `"function"` field in every fact kind uses the fully qualified `module.name` form
+- **FnEffects** and **ProfileViolation** structures now carry both `name` (bare, for display) and `qualName` (qualified, for facts)
+- **Query matching**: `fn:FUNCTION` and per-kind queries accept both bare and qualified names via suffix matching
+- **Fact generators updated**: `effectsForModule`, `capToFact`, `collectUnsafeFactsModule`, `allocToFact`, `violationToFact` all thread module path for qualification
+- Full test suite: 2559 pass, 0 fail
+
+### Phase 1 infrastructure closure: miscompile workflow and regression promotion
+
+The initial compiler-integrity workflow that used to live at the top of Phase 1 is now historical rather than active roadmap work:
+
+- **Miscompile-hunting workflow infrastructure**: the repo now has the basic machinery for reducing, capturing, and preserving compiler failures as named artifacts instead of tribal memory. The key pieces are `concrete reduce`, `concrete debug-bundle`, the numbered bug ledger in `docs/bugs/`, and the adversarial/wrong-code regression corpus.
+- **Crash/miscompile-to-regression promotion policy**: every numbered bug is required to have named regression coverage, enforced by CI via the bug-corpus audit gate.
+
+This closes the workflow/promotion half of the original roadmap item. Full oracle-based wrong-code discovery remains deferred to the later reference-interpreter / semantic-oracle work.
+
+### Compiler-as-a-contract cleanup
+
+Systematic removal of silent fallbacks, implicit downgrades, and "best effort" behavior across the report, proof, and codegen layers.
+
+- **Report.lean fact comparison**: missing JSON fields now show as `<missing>` instead of empty string; `compareFacts` and `classifyNewFact` distinguish missing data from real values
+- **Report.lean drift classification**: unknown fact kinds in new facts classified as `weakened` (not silently `neutral`); unknown extraction statuses ranked at 0 (not collapsed into `excluded`)
+- **Report.lean proof state**: missing proof entries now report `missing` instead of `unknown`; missing fingerprints report `<missing>` instead of empty string
+- **ProofCore.lean registry parsing**: replaced `head!` crash with safe extraction; `extractStr` returns `Option` — missing JSON fields produce per-field warnings instead of silent empty strings; empty function values explicitly warned
+- **ProofCore.lean recursion classification**: functions missing from SCC analysis classified as `unclassified` (not silently `none`)
+- **Main.lean snapshot**: mono/lower pipeline failures now emit explicit `warning: snapshot incomplete` diagnostic instead of silently dropping traceability facts
+- **EmitSSA.lean string constants**: missing string-length lookups now `panic!` with internal error instead of silently producing zero-length buffers
+- Trust-gate: 1058 checks, 4 new compiler-contract regression tests
+
+### Invalid-query diagnostics
+
+`queryFacts` now returns `Except String String` — malformed/unknown queries produce explicit errors instead of silent empty arrays.
+
+- **Empty query**: explicit error with usage hint and known-kinds list
+- **Unknown kind** (single-word or two-part): error naming the unknown kind and listing all valid semantic and fact-filter kinds
+- **Empty segments** (leading/trailing/double colons): error identifying the malformed segment
+- **Unknown three-part kind**: error explaining only `why-capability:FN:CAP` uses three parts
+- **Too many separators**: error with max-separator guidance
+- **Kind validation**: single-word and `KIND:FUNCTION` filters validate against the 11 known fact kinds; unknown kinds produce errors instead of empty arrays
+
+`compileAndQuery` surfaces errors to stderr with nonzero exit. 11 regression tests wired into trust-gate. Trust-gate: 1054 pass, 0 fail.
+
+### State-desynchronization attack tests and cross-artifact validation
+
+13 adversarial tests that try to force disagreement between artifact families:
+
+- **Registry vs fingerprint**: stale fingerprint detected, proved status never granted
+- **Registry vs function identity**: unknown function warning surfaced via `validateRegistry`
+- **Registry conflicting specs**: duplicate/conflicting entries produce explicit warnings
+- **Obligations vs diagnostics**: stale obligation status matches stale diagnostic kind; all 13 selfCheck invariants hold under desync scenarios
+- **Snapshot drift**: doctored fact values detected as drift; snapshot-then-edit catches body changes via fingerprint diff
+- **Traceability vs proof identity**: traceability report covers all obligation function identities
+- **Trusted/ineligible bypass**: registry entry for trusted function never grants proved status
+
+Wired `validateRegistry` into `compileAndReport` so registry-level issues (unknown functions, stale fingerprints, conflicting specs) surface as stderr warnings on every report command. Trust-gate: 1039 pass, 0 fail.
+
+### Artifact validation hardening (bundle types, empty registry, diff diagnostics, warning dedup)
+
+Four follow-up fixes to close shallow-validation gaps found in review:
+
+- **Bundle type validation**: `validateBundle` now checks manifest field types — `version` must be numeric, `source_path` must be a string, `failed_at` must be a string or null, artifact flags must be booleans. Previously only checked substring presence.
+- **Valid empty registry**: `parseRegistryJson` no longer warns on `[]` or `{"version":1,"proofs":[]}` — an empty registry is a legitimate "no proofs yet" state, not malformed.
+- **Warning dedup**: removed duplicate `loadRegistryWarn` calls in `compileAndReport` — report branches now reuse the registry already loaded before ProofCore construction.
+- **Diff missing-file diagnostic**: `concrete diff` now checks file existence before reading, producing `error: file not found: <path>` instead of an uncaught IO exception.
+
+4 new regression tests (malformed tests 19-22). Trust-gate: 1043 pass, 0 fail.
+
+### Malformed-artifact attack tests and explicit diagnostics
+
+Eliminated silent fallback/empty-success paths for all artifact families:
+
+- **Proof-registry**: `parseRegistryJson` returns warnings for malformed JSON, empty files, duplicate entries, and empty fingerprints. `loadRegistry` surfaces warnings to stderr instead of silently returning an empty list.
+- **Snapshot/diff**: `parseFactsWarn` validates fact schema — flags missing `kind`/`function` fields. Non-array JSON, duplicate fact keys, and truncated JSON all produce explicit errors.
+- **Concrete.toml**: `parseDependencies` warns on unparseable dependency lines. `parsePolicy` warns on unrecognized keys. `validateToml` warns on missing `[package]` section, missing `name` field, and unknown top-level sections.
+- **Debug bundles**: `concrete validate-bundle` command validates manifest.json structure: required fields (`version`, `source_path`, `failed_at`, `artifacts`), artifact sub-fields, and source directory presence. Corrupted/partial/missing manifests produce explicit errors or warnings.
+
+19 malformed-artifact attack tests wired into `--trust-gate` and `--full` modes. Trust-gate: 1026 pass, 0 fail.
+
+### Bug-to-regression audit gate and failure triage
+
+CI-gated corpus audit (`audit_bug_corpus.sh`) enforces every numbered bug in `docs/bugs/` has a mapped regression test. Failure triage script (`triage_failure.sh`) wires `concrete reduce` and `concrete debug-bundle` into a single command. 21 numbered bugs, 16 mapped, 5 skipped with justification.
+
+### Fix: LLVM IR function name mangling collision
+
+Same-name functions in different modules produced duplicate LLVM definitions. Fixed in `EmitSSA.lean`: collision detection uses `f.modulePath` (not just `m.name`) to handle flattened submodules. Colliding names are qualified with module path in emitted IR. Call resolution chains through local aliases after linker alias resolution, and skips aliases when the call target already matches a defined function. 4 regression tests.
+
+### Fix: Generic Copy struct core-check failure
+
+`struct Copy Box<T> { val: T }` was rejected because field type `.named "T"` wasn't recognized as a type parameter. Fixed in two places: `CoreCheck.lean` skips field Copy check when the type name matches a struct `typeParam`; `Verify.lean` adds post-mono Copy validation (`verifyCopyFieldsPostMono`) that rejects `Box<NonCopy>` instantiations as a compile error. 5 positive regression tests + 1 negative test (`error_copy_generic_non_copy_instantiation`).
+
+### Fix: Top-level main alongside inline modules
+
+`pub fn main()` after `mod` blocks was silently dropped by the parser. `parseProgram` returned after collecting inline modules without parsing remaining items. Fixed in `Parser.lean`: after the mod-parsing loop, remaining tokens are parsed as a sibling "main" module. 2 regression tests.
+
+### Adversarial compiler-hardening corpus
+
+45 hostile test programs across 6 categories (parser, lowering, monomorphization, module, proof/report, scaling). All 47 registered in `run_tests.sh` (45 original + 2 previously missing).
+
+### Attacker-style drift demo and threat model
+
+**Thesis threat/accident model** defined in `docs/verification/THREAT_MODEL.md`, covering six threat categories: proof semantic drift, authority escalation, validation weakening, resource drift, trust boundary erosion, and specification mismatch. Each threat maps to the compiler mechanism that catches it.
+
+Three end-to-end drift demos with drifted variants:
+- **`crypto_verify`**: `compute_tag` changes `+` to `-` (proof drift), `check_nonce` changes `>` to `>=` (validation weakening)
+- **`elf_header`**: `check_magic` first byte `127` → `0` (proof drift), `check_version` accepts `0` (validation weakening)
+- **`thesis_demo`**: `parse_byte` changes `+` to `-` (proof drift), `validate` gains `with(File)` + unbounded `while` (authority escalation + resource drift)
+
+All three demos verified via `concrete snapshot` + `concrete diff` pipeline, producing exit code 1 on trust weakening. 8 new drift-detection gates added to CI evidence section. Trust-gate now runs 960 checks (up from 952).
+
+### Package-level policy enforcement
+
+**`[policy]` section in Concrete.toml** makes thesis properties enforceable at the package level as compile errors, not just report-side analysis.
+
+Three policy constraints:
+- **`predictable = true`**: enforces the predictable-execution profile (no recursion, alloc, FFI, blocking I/O) — violations are compile errors
+- **`deny = ["Unsafe", ...]`**: forbids specific capabilities — any function declaring a denied capability fails compilation
+- **`require-proofs = true`**: all proof-eligible functions must have registered proofs (missing, stale, or blocked = compile error)
+
+Policy runs after CoreCheck, before monomorphization. Only project modules are checked (dependencies are excluded). `crypto_verify` example now uses `[policy] predictable = true, deny = ["Unsafe"]` as a demonstration.
+
+Implemented in `Concrete/Check/Policy.lean` with `parsePolicy` (TOML parsing) and `enforcePolicy` (constraint checking). Wired into both `compileBuild` and `compileTests` in Main.lean.
+
+### Error context chains
+
+Compiler diagnostics now carry a `context : List String` field that accumulates human-readable frames as errors propagate up the call stack. Example output:
+
+```
+test.con:2:5: error[check]: type mismatch in let binding 'x': expected i64, got String
+ 2 |     let x: Int = "hello";
+   |     ^
+  = while checking module 'main'
+  = while checking function 'foo'
+```
+
+**Infrastructure** (`Concrete/Report/Diagnostic.lean`):
+- `Diagnostic.addContext` / `Diagnostics.addContext` — prepend a context frame
+- `withContext` — monadic combinator for `ExceptT Diagnostics m`
+- `Except.addContext` — pure combinator for `Except Diagnostics`
+- Rendering shows context as `= while ...` lines after the snippet
+
+**Annotated sites**: Check (per-module, per-function), Elab (per-module, per-function), Lower (per-function). Replaces the ad-hoc message-prepending in `lowerModule`.
+
+### CI/CD evidence gates
+
+**10 new evidence gates** in the trust-gate CI job verify proof, predictable, and report correctness:
+
+- **Predictable check**: `crypto_verify` must pass, `thesis_demo` must fail (has I/O)
+- **Stale-proof check**: no proof-bearing example has stale proofs (runs `--report proof-status`)
+- **Proof-obligation status**: `thesis_demo` has at least one proved obligation
+- **Report artifact generation**: all 18 `--report` modes produce non-empty output on `thesis_demo`
+- **Trust-drift check**: consistency and fingerprints pass on all proof-bearing examples
+
+Trust-gate now runs 5 contract sections: determinism, consistency, terminology, verify, evidence.
+
+### Uniform diagnostic engine
+
+The core compiler pipeline now emits the same structured `Diagnostic` shape (`severity`, `message`, `pass`, `span`, `hint`, `file`) end-to-end. Previously, Parser returned plain strings, Mono/Lower used `ExceptT String`, and Pipeline wrapped them with `liftStringError`. Now:
+
+- **Parser**: `ParseM` uses `ExceptT Diagnostics`, `throwParse` creates structured diagnostics with source spans
+- **Mono**: `MonoM` uses `ExceptT Diagnostics`, `monoProgram` returns `Except Diagnostics`
+- **Lower**: `LowerM` uses `ExceptT Diagnostics`, `throwLower` creates structured diagnostics, `lowerModule`/`lowerFn` return `Except Diagnostics`
+- **Pipeline**: removed all `liftStringError` wrappers
+- **FileSummary**: `resolveImports` returns `Except Diagnostics` directly with a `pass` parameter
+- **Check/Elab**: import resolution errors now structured diagnostics without `liftStringError`
+
+`liftStringError` is removed entirely — it no longer exists in the codebase. All core phases (Parse, Resolve, Check, Elab, CoreCheck, Mono, Lower, SSAVerify) now emit structured `Diagnostics` natively.
+
+### Testcase reducer
+
+**New CLI command:** `concrete reduce <file.con> --predicate <pred> [-o output] [--verbose]` shrinks failing programs while preserving the failure, using syntax-aware shrinking in a fixpoint loop.
+
+**Shrinking passes** (coarsest to finest):
+1. Remove entire top-level items (functions, structs, enums, impl blocks, traits, constants, etc.)
+2. Remove statements from function bodies
+3. Remove match arms (keeping at least one)
+4. Remove else branches from if statements
+
+**Predicates:** `parse-error`, `resolve-error`, `check-error`, `elab-error`, `core-check-error`, `mono-error`, `lower-error`, `consistency-violation`, `verify-warning`, `crash`. Substring matching via colon: `check-error:expected Int`.
+
+For programs that don't parse (parse-error predicate), falls back to line-based reduction. Implemented in `Concrete/Report/Reduce.lean`.
+
+### Compiler identity in debug bundles
+
+Debug bundle manifests now record real compiler identity instead of `concrete-dev`: version (`0.1.0`), git commit hash (with `-dirty` suffix for uncommitted changes), and Lean toolchain version. Example: `concrete 0.1.0 (abc1234) [leanprover/lean4:v4.28.0]`. Also adds `concrete --version` CLI flag.
+
+### Minimal CI trust gate
+
+**Four correctness contracts now run automatically in CI** via a dedicated `trust-gate` job:
+
+- **Determinism regression** (`test_determinism.sh --quick`): verifies identical output across two compilations for 18 report modes, 6 query kinds, 3 IR emit modes, and snapshot comparison (excluding timestamp).
+- **Self-consistency** (`--report consistency`): runs ProofCore self-check (15 invariants) on all 468 compilable programs.
+- **Terminology gate** (`test_terminology_gate.sh`): enforces canonical proof/obligation status terms (`proved|stale|missing|blocked|ineligible|trusted`), rejects non-canonical variants.
+- **Verifier passes** (`--report verify`): runs post-Elab placeholder check and post-Mono typeVar check on all 385 non-error programs.
+
+**New CLI mode:** `./scripts/tests/run_tests.sh --trust-gate` runs only these four sections. Also available as `make test-trust-gate`.
+
+### Debug bundle for compiler failure reproduction
+
+**New CLI command:** `concrete debug-bundle <file.con> [-o dir]` runs the full pipeline, capturing every available artifact at the point of failure (or completion), and writes a stable directory layout for reproduction.
+
+**Bundle layout:**
+- `manifest.json` — compiler version, source path, failure stage, artifact availability
+- `source/` — original source files (main + submodules)
+- `diagnostics.txt` — rendered diagnostics at failure point
+- `core.txt` — Core IR dump (if elaboration succeeded)
+- `ssa.txt` — SSA IR dump (if lowering succeeded)
+- `llvm.ll` — LLVM IR (if emission succeeded)
+- `consistency.txt` — ProofCore self-check results (if available)
+- `verify.txt` — post-Elab verifier results (if available)
+
+The capture pipeline tracks 9 stages (parse, resolve, check, elaborate, coreCheck, mono, lower, emit, complete) and records which stage failed. Returns exit code 1 on pipeline failure, 0 on success.
+
+### Determinism contract and nondeterminism audit closed
+
+**Determinism is now the default compiler contract.** Same source + same compiler binary + same toolchain = identical output for all report modes, query modes, IR emission, and snapshot content (excluding the documented `timestamp` metadata field).
+
+**Nondeterminism source audit:** the compiler uses no HashMap/HashSet data structures (all collections are `List`-based), no random values, no PID/hostname access, stable `mergeSort` for all sorting, and deterministic register/fingerprint naming. The only nondeterministic sources are: (1) snapshot `timestamp` field (intentional wall-clock metadata), (2) temp file paths in `--test` mode (internal, not in output artifacts), (3) `CONCRETE_STD` environment variable (configuration, not output).
+
+**Verification:** `test_determinism.sh` runs in full test suite, covering all 20 report modes, query modes, IR emission, and snapshot comparison (excluding timestamp). Compiled binary reproducibility is explicitly not tested (depends on LLVM/clang, outside compiler scope).
+
+### Verifier passes for compiler boundaries
+
+**Three verifier passes added** that catch internal compiler invariant violations before bad state leaks downstream:
+
+- **Post-Elab verifier** (`verifyNoPlaceholders`): detects `Ty.placeholder` surviving elaboration. Available only via `--report verify` (not wired into the pipeline gate). 14 programs with try/defer expressions retain placeholder types — documented intentional exception, resolved during lowering.
+- **Post-Mono verifier** (`verifyNoTypeVars`): hard gate — detects `Ty.typeVar` surviving monomorphization. Blocks compilation if generic type variables leak into lowering. Skips generic definitions (only checks monomorphized copies).
+- **LLVM IR validation** (`validateLLVMIR`): runs `llvm-as` on emitted `.ll` files before clang. Gracefully skips if llvm-as not on PATH. Wired into all four compilation paths (compileSSA, compileTest, compileBuild, compileTestBuild).
+
+**New CLI mode:** `--report verify` runs both post-Elab (warnings) and post-Mono (errors) verifiers.
+
+**New file:** `Concrete/Check/Verify.lean` — recursive IR walker that checks type predicates across all CExpr/CStmt/CMatchArm nodes, struct/enum fields, extern fn signatures, and constants.
+
+### Pass invariants and contracts completed
+
+**PASSES.md now covers all 12 pipeline stages** with explicit signatures, preconditions, postconditions, error conditions, and invariants. Three sections added:
+
+- **ProofCore extraction (§7b):** full contract with the 13 selfCheck invariants mapped in a table, failure modes, and non-guarantees (extraction faithfulness, fingerprint stability, proof soundness).
+- **Verifier-Pass Readiness table:** maps each of the 11 pass boundaries to what is machine-checked today (SSAVerify, ProofCore.selfCheck, ValidatedCore opaque constructor) vs what a future verifier pass would add (Core IR well-formedness, post-Mono type-variable absence, LLVM IR validation, parse span coverage).
+- **Failure Modes table:** documents what happens when each pass receives input violating its preconditions — identifying the weak boundaries (Check→Elab, Elab→CoreCheck) where violations propagate silently vs strong boundaries with type-system enforcement.
+
+Cross-pass invariant table updated with ProofCore self-consistency and canonical terminology rows.
+
+### Proof/guarantee terminology gate
+
+**Canonical status terminology unified across all output surfaces.** The six proof/obligation status terms (`proved`, `stale`, `missing`, `blocked`, `ineligible`, `trusted`) are now defined once in `ObligationStatus.canonical` and used consistently across JSON facts, CLI reports, human-readable summaries, and documentation.
+
+**Three terminology drifts fixed:**
+- no\_proof / missing\_proof / not\_proved → `"missing"` (obligation and proof\_status JSON)
+- not\_eligible → `"ineligible"` (obligation and proof\_status JSON, summary text)
+- CLAIM_TAXONOMY.md table corrected to match actual emitted values
+
+**Terminology gate:** `scripts/tests/test_terminology_gate.sh` greps the codebase for banned non-canonical terms in quoted string contexts. Integrated into `--full` test mode. Prevents future drift by failing CI if old terms reappear.
+
+**`ProofState.canonical` and `ProofDiagnosticKind.canonical`** added alongside `ObligationStatus.canonical` — all renderers delegate to these functions instead of inline match expressions.
+
+See [docs/verification/CLAIM_TAXONOMY.md](docs/verification/CLAIM_TAXONOMY.md) §7.6 for the canonical terminology table.
+
+### ProofCore self-consistency checks and `--report consistency`
+
+**13 cross-family invariants** verify that proof obligations, diagnostics, extraction results, fingerprints, and eligibility data agree with each other inside the `ProofCore` artifact. The checks are wired into the compiler as `--report consistency` and run over all 468 compilable test programs with zero violations.
+
+**Invariants checked:** OBL-KNOWN (obligations reference known functions), OBL-STATUS (obligation status agrees with re-derivation), PROVED-EXTRACTED/FP/SPEC (proved status requires extraction + matching fingerprint + spec), STALE-FP/SPEC (stale status requires spec with mismatched fingerprint), ENTRY-FP (entry/obligation fingerprint agreement), EXTRACT-UNSUP (extraction ↔ unsupported list consistency), BLOCKED-UNSUP (eligible + no extraction → non-empty unsupported list), DEP-PROVED (dependencies only reference proved obligations), DUP-NAME (no duplicate function names), DIAG-STATUS (diagnostic kinds agree with obligation status).
+
+**Extraction pipeline fix:** `identifyUnsupported` now recurses into binOp/call/ifExpr children and detects empty-body, void-return, and no-return-statement patterns. Previously, functions with field access inside arithmetic (e.g., `p.first + p.second`) would fail extraction without recording the unsupported construct.
+
+**Test integration:** consistency checks run over all programs in `--full` mode. Determinism suite updated to include the `consistency` report mode.
+
+### Compiler determinism verified and regression suite added
+
+**All compiler output paths are deterministic:** a comprehensive audit verified that all 17 report modes, all query modes, all IR emit modes (LLVM, SSA, Core), compiled binaries, and snapshot JSON (excluding the intentional timestamp field) produce byte-for-byte identical output across consecutive runs.
+
+**Why it works:** the compiler uses `List`-based collections throughout (no HashMap iteration in output paths), explicit sorting where needed (`CapSet.normalize`), deterministic register naming via monotonic counters, and no environment-dependent data in artifacts.
+
+**Deterministic artifact regression suite:** `scripts/tests/test_determinism.sh` verifies reproducibility across 12 representative programs × 27 output modes = 324 checks. Integrated into `run_tests.sh --full` as a quick 81-check gate.
+
+**Single known non-deterministic field:** the `timestamp` in snapshot JSON, which is intentional metadata. All tooling (`concrete diff`, the regression suite) strips it before comparison.
+
+See [docs/compiler/DETERMINISM.md](docs/compiler/DETERMINISM.md) for the full guarantee, verification methodology, and cross-version caveats.
+
+### Unreachable checker error kinds audited and removed
+
+**Six dead error kinds pruned from Check.lean:** a checker audit determined that `breakInDefer`, `continueInDefer`, `assignToBorrowed`, `variableAlreadyMutBorrowed`, `cannotMutBorrowAlreadyMutBorrowed`, and `cannotImmBorrowMutBorrowed` were all structurally unreachable under the current language model:
+
+- `breakInDefer` / `continueInDefer`: `defer` takes a single call expression (not a block), so `break`/`continue` cannot appear syntactically. The `inDeferBody` flag was never set to `true`.
+- `assignToBorrowed`: shadowed by `assignToFrozen` — borrow refs only exist while the owner is frozen.
+- `variableAlreadyMutBorrowed`, `cannotMutBorrowAlreadyMutBorrowed`, `cannotImmBorrowMutBorrowed`: `mutBorrowed` was never set to `true` anywhere.
+
+Also removed: `inDeferBody` field from `TypeEnv`, `mutBorrowed` field from `VarInfo`.
+
+**Why this matters:** dead checker branches make the language claim less precise. The checker surface now matches reality — every remaining error kind is reachable and tested.
+
+### Memory-model, borrow/aliasing, and cleanup/leak-boundary pressure test sets land
+
+**19 dedicated pressure tests covering three categories:** the project now has focused pressure tests that exercise the checker and docs against hard cases:
+
+- **Memory-model (5 tests):** fresh borrow per loop iteration, interleaved linear variables, nested linear struct consumption, branch-scoped linear creation/consumption, match arms consuming pre-existing linear values
+- **Borrow/aliasing (3 tests):** sequential deref read/write then call on borrow-block `&mut T`, parameter `&mut T` ref across multiple function calls, borrow-for-inspection then consume after unfreeze
+- **Cleanup/leak-boundary (11 tests, 6 positive + 5 negative):** nested defer LIFO ordering, defer in loop-called functions, defer combined with borrow blocks, Destroy-trait consumption, multi-hop helper consumption chains, heap alloc with deferred free, plus error cases for move-after-defer, heap leak, linear leak, use-after-destroy, and branch-disagree leak
+
+**Both positive and negative tests:** the cleanup/leak-boundary set includes error cases that prove the checker catches cleanup/leak mistakes, not just happy-path programs.
+
+**MEMORY_REGRESSION_CHECKLIST.md updated:** all eight checklist categories now reference the new pressure tests in their test inventories.
+
+### Memory/reference semantics, `&mut T` closure, and the first explicit no-leak boundary land
+
+**The safe-memory claim is now centralized and checker-matching:** Concrete now has a canonical memory/reference semantics document in [docs/language/MEMORY_SEMANTICS.md](docs/archive/design-records/MEMORY_SEMANTICS.md), an explicit public guarantee statement in [docs/language/MEMORY_GUARANTEES.md](docs/verification/MEMORY_GUARANTEES.md), and a dedicated `&mut T` closure tracker in docs/language/MUT_REF_CLOSURE.md (absorbed into [REF-10](docs/spec/references.md#REF-10)). This is the point where the memory story stopped being scattered invariants and became one checked claim surface.
+
+**`&mut T` soundness-critical closure landed:** the compiler now distinguishes two real `&mut T` modes:
+
+- borrow-block `&mut T` refs are scoped linear views and are consumed on function call / return
+- function-parameter `&mut T` refs are reborrowable and not consumed on ordinary call use
+
+This closes the earlier checker/codegen mismatch where borrow-block `&mut T` refs could be reused in ways that later broke lowering/codegen.
+
+**Checker/codegen agreement was hardened, not just documented:** this arc included:
+
+- checker enforcement for borrow-block `&mut T` consumption
+- lowering fixes for reference-typed borrow variables instead of value-typed temporaries
+- the early-return-inside-borrow-block codegen fix
+- adversarial `&mut T` coverage for call-use, branch agreement, loop behavior, deref-vs-consume behavior, nested borrow blocks, method-call behavior, and return-in-borrow paths
+
+This is the point where the compiler can honestly say safe-subset ownership mistakes must fail early with diagnostics rather than survive checking and crash later in codegen.
+
+**The first explicit strong no-leak boundary is now stated:** Concrete now makes a real compile-time no-leak claim for the strong safe subset:
+
+- linear values must be consumed or reserved by scope exit
+- `defer` reserves cleanup in a way the checker tracks explicitly
+- the docs now separate this strong guarantee from weaker future audit/reporting around trusted, FFI, arena, and raw-pointer boundaries
+
+**What changed strategically:** the next work is no longer “finish the basic safe-memory story.” It is:
+
+- make effect/trust proof boundaries explicit
+- write the precise theorem/guarantee statement
+- define the language-semantics vs proof-semantics boundary
+- define the user-facing proof contract
+
+### First proof-foundation arc lands end-to-end
+
+**Two real proof-backed flagship examples:** the project now has two honest proof-backed examples that exercise different parts of the thesis:
+
+- a crypto-adjacent authenticated-tag core used as a second proof-backed domain
+- an ELF header validator with a real file-I/O shell, trusted POSIX boundary, and proved pure validation core
+
+These examples are not just demos. They carry snapshots, drift detection, registry-backed proof names, and adversarial tests, so they function as regression targets for the proof story.
+
+**Eligibility-first proof pipeline:** proof processing no longer starts from ad hoc report/extraction logic. The compiler now:
+
+1. determines proof eligibility first
+2. explains source and profile exclusions explicitly
+3. lowers only the resulting proof-facing fragment into `ProofCore`
+
+That closes the gap between “report what looks extractable” and “have an explicit provable subset.”
+
+**Explicit `Core -> ProofCore` compiler boundary:** `ProofCore` is now a real pass and the architectural owner of:
+
+- proof eligibility
+- extracted and normalized proof terms
+- unsupported-construct classification
+- raw body fingerprints
+- call graph and recursion analysis
+- spec attachment
+- proof obligations
+
+`Report.lean` is now a consumer of those artifacts rather than a shadow owner of proof semantics.
+
+**Normalized proof target + typed proof identity:** the proof pipeline now has:
+
+- normalized `PExpr` proof targets
+- typed `FunctionIdentity`
+- typed `SpecIdentity`
+- typed `SpecAttachment`
+- registry ownership and validation inside the proof pipeline
+
+This separates proof attachment *identity* from proof *status*, which is the right foundation for later diagnostics, compatibility guarantees, and proof maintenance tooling.
+
+**Mechanical obligations land as first-class artifacts:** proof obligations are now generated inside `ProofCore` rather than being mostly reconstructed in report code. The pipeline now carries:
+
+- stable obligation identity
+- mechanically derived obligation status
+- dependency tracking from the qualified call graph
+- read-only report/fact/query consumption of obligation artifacts
+
+This is the point where the proof system stops being “proof names plus reports” and becomes a real artifact-producing compiler workflow.
+
+**What changed strategically:** Concrete now has a serious Lean 4 proof architecture for a narrow but real subset. The next work is not “invent the proof pipeline” anymore. It is:
+
+- close the remaining first-slice obligation-model correctness gaps
+- make proof-oriented diagnostics first-class
+- make memory/reference and effect/trust proof boundaries explicit enough to broaden the provable subset honestly
+
+### Stable attached spec identities land as a real proof-pipeline layer
+
+**Typed proof attachment model:** proof/spec attachment is no longer just free strings reconstructed in multiple report paths. The proof pipeline now has explicit identity types for:
+
+- function identity
+- spec identity
+- spec attachment source
+
+This separates *identity* from *status*: the compiler can now carry what proof/spec is attached to a function without collapsing that into `proved` / `stale` / `unproved` too early.
+
+**Centralized spec resolution:** the old scattered lookup logic has been replaced by one proof-pipeline path. Registry ownership moved out of report code and into the proof pipeline, so report/fact surfaces consume resolved attachments instead of re-deriving them independently.
+
+**Registry validation:** registry loading now has real consistency checks instead of silently accepting arbitrary entries. Validation distinguishes:
+
+- unknown function
+- duplicate entry
+- conflicting entry
+- stale fingerprint
+
+That makes the registry more honest as a proof artifact and prepares the transition from raw fingerprint-only attachment toward richer proof-target-aware identities.
+
+**What changed strategically:** the next step is no longer "attach strings to functions." Concrete now has a real identity layer between ProofCore and obligations. That is the right foundation for mechanical obligation generation and proof-oriented diagnostics.
+
+### ProofCore normalization lands as a canonical proof-target layer
+
+**Normalized proof target:** extracted `PExpr` terms are now normalized before they are exposed as the proof target. The normalization pass applies a deliberately small rewrite set:
+
+- algebraic identities (`x + 0`, `x * 1`, `x * 0`, `x - 0`)
+- commutative operand ordering for proof-facing expressions
+- dead-let elimination
+- let flattening
+- boolean short-circuiting for literal conditions
+
+This gives the proof pipeline a cleaner canonical target without pretending every source refactor should collapse to the same proof identity.
+
+**Architectural split preserved:** raw Core fingerprints remain the current proof attachment identity, while normalized `PExpr` is the canonical proof-facing term. That means:
+
+- proof maintenance and stale detection still use raw body fingerprints
+- proof extraction, traceability, and `proof_core` output now show a more canonical form
+- the compiler is ready for a later identity-model upgrade without forcing it into the normalization landing
+
+This is an important constraint because it keeps the current registry/proof workflow stable while improving the proof target itself.
+
+**Regression coverage:** adversarial tests now pin both the normalization rewrites and the qualified call-graph path, so the canonical proof target is not just an implementation detail. The proof pipeline now has explicit coverage for normalization behavior rather than only indirect extraction tests.
+
+**What changed strategically:** ProofCore is now not only an explicit pass, but also a more canonical proof target. The next architectural step is no longer “how do we normalize proof terms?” It is “what is the stable typed identity model for functions/specs/proofs that will sit on top of this normalized target?”
+
+### ProofCore becomes the real proof-pipeline boundary
+
+**Explicit `Core -> ProofCore` pass:** `ProofCore.lean` now owns the proof-oriented compiler boundary instead of leaving proof extraction as mostly report-side logic. The pass computes and carries:
+
+- proof eligibility
+- extracted `PExpr` forms
+- unsupported-construct classification
+- body fingerprints
+- call graph
+- recursion classification
+- loop analysis
+- extern-name context
+
+This turns ProofCore from a reporting helper into a real compiler artifact that the rest of the proof/evidence pipeline can consume.
+
+**Report consolidation:** the remaining shadow extraction pipeline in `Report.lean` is gone. Extraction report, extraction JSON facts, and traceability now read from `ProofCore` entries directly instead of recomputing extraction/eligibility from raw `CModule` functions. That makes report code presentation-only again and removes a serious risk of proof-pipeline drift.
+
+**Qualified proof identity:** proof-pipeline analysis now uses canonical qualified function names across the call graph and recursion machinery, so same-name functions in different modules no longer collide. This closes a real correctness gap that would have weakened the proof story in multi-module programs.
+
+**Compile-time result:** the new pass adds negligible overhead in practice. On current examples, compile-only versus compile-plus-proof-reporting remains within noise, and even larger examples remain frontend-dominated rather than ProofCore-dominated. That matters because the proof/evidence architecture is now getting stronger without making the compiler obviously heavier.
+
+**What changed strategically:** the proof architecture is no longer just "real enough to demo". The compiler now has a much cleaner proof boundary:
+
+1. validated Core
+2. explicit ProofCore artifact
+3. reports/facts/queries consuming that artifact
+
+That clears the way for the next real architectural step: normalize ProofCore before Lean attachment so proofs and fingerprints target a canonical proof form rather than incidental extracted structure.
+
+### ELF file-I/O flagship closes cleanly; proof pipeline becomes eligibility-first
+
+**ELF file-I/O flagship cleanup:** the ELF example now fully closes the gap between "systems-shaped validator" and "real project-mode example". Runtime coverage exercises all shipped binary fixtures, including the bad-class path, and generated example binaries are kept out of the worktree so the flagship stays clean as a regression target.
+
+**Trusted shell + proved core split:** the example now demonstrates the intended Concrete evidence layering cleanly:
+
+- proved pure validator core
+- trusted low-level file/pointer boundary
+- reported entrypoint shell
+
+That makes the flagship a stronger thesis example than the earlier field-only validator, because it now has real file I/O while keeping the Lean-backed core unchanged and honest.
+
+**Eligibility-first proof pipeline:** proof processing no longer starts from extraction/report surfaces alone. The compiler now computes proof eligibility first and threads that result through the rest of the proof/evidence workflow.
+
+What is now real:
+
+- `--report eligibility`
+- eligibility facts in snapshots
+- eligibility-first proof-status / obligation accounting
+- updated fact counts and summary expectations across the examples
+
+**What changed strategically:** Concrete's proof story is no longer "report what seems extractable" first. It now has a clearer front door:
+
+1. determine whether a function is in the provable subset
+2. explain exclusions explicitly
+3. only then lower eligible functions into the proof pipeline
+
+That closes the next architectural gap after the ELF flagship and makes the following roadmap step much sharper: promote `Core -> ProofCore` into an explicit compiler phase rather than leaving proof extraction as a mostly report-side boundary.
+
+### Fact artifact snapshots land as first-class workflow output
+
+**`concrete snapshot`:** Added a project-facing fact artifact command:
+
+```bash
+concrete snapshot <file.con> [-o output.json]
+```
+
+It writes a versioned JSON snapshot containing:
+
+- source path
+- timestamp
+- fact count
+- summary counts
+- the full fact array
+
+The snapshot bundles the existing evidence workflow into one machine-readable artifact surface:
+
+- effects
+- capability
+- unsafe / trust
+- allocation
+- proof status
+- obligations
+- extraction
+- traceability
+- predictable violations
+
+**Default artifact path:** when `-o` is omitted, the compiler writes `<file>.facts.json` next to the source file.
+
+**Diff interop:** `concrete diff` now accepts both raw fact arrays and snapshot objects by reading the `"facts"` field from the snapshot object. That means the intended workflow is now real:
+
+1. generate a baseline snapshot
+2. commit it or archive it in CI
+3. diff later snapshots against it
+
+**What changed strategically:** the evidence story is no longer spread across many reports only. Concrete now has a stable, versioned artifact that CI, tooling, and future MCP/AI integrations can consume directly. This closes the first item in the current thesis-validation roadmap and makes the next priorities clearer: a stronger second flagship example, ProofCore pressure from that example, policy enforcement, and CI evidence gates.
+
+### Phase H cleanup: zero-alloc borrowed string literals, String.append method, example modernization
+
+**Zero-alloc borrowed string literals:** `&"literal"` now points directly at the global constant — no malloc, no memcpy. Previously, every string literal materialization heap-allocated a copy even when only borrowed. The compiler adds a new `strConstRef` SSA variant that Lower emits for `borrow(strLit)` and EmitSSA translates to a stack-only `%struct.String` referencing the global, with `cap = 0` to signal non-owned.
+
+**String.append and String.append_int methods:** `String` now has `append(&mut self, other: &String)` and `append_int(&mut self, n: Int)` methods in the stdlib. Combined with zero-alloc borrowed literals, string building no longer requires temporary owned strings:
+
+```concrete
+// Before: 3 lines per literal append
+let mut suffix: String = " ok, ";
+string_append(&mut sum, &suffix);
+drop_string(suffix);
+
+// After: 1 line, no temp, no drop
+sum.append(&" ok, ");
+```
+
+**Example modernization:** integrity example went from 38 → 0 `drop_string` calls, verify from 15 → 0. All eliminated drops were cleaning up temporaries forced by the old API. Real owned-value drops remain explicit via `.drop()`.
+
+**Stdlib additions:** `std.sha256` (SHA-256 hashing), `std.hex` (hex encode/decode), `std.ascii` (char classification). `String` gained `starts_with`, `ends_with`, `contains`, `to_lower`, `to_upper`, `clone`, `eq` methods.
+
+**What changed strategically:** the main collection/string ergonomics pain point from Phase H is now addressed at the right level — by eliminating unnecessary ownership churn rather than hiding cleanup. Examples now reflect the intended Concrete style: explicit drops for real ownership, zero-cost borrows for literals.
+
+### Phase H cleanup: match on integers and bools lands as validated language feature
+
+**Integer and bool literal match patterns:** match on integer and bool values now has parser support for negative integer literals (`-1 => ...`) and bool literals (`true => ...`, `false => ...`). Integer match codegen already worked; this change adds the missing semantic validation layer.
+
+**Non-enum exhaustiveness checking:** CoreCheck now requires a default `_` arm for non-enum matches (integer, char, etc.). Bool matches are exempt when both `true` and `false` arms are present. Previously, missing a default arm compiled silently and fell through to `unreachable` at runtime.
+
+**Regression coverage:** added `match_int_basic.con`, `match_int_default.con`, `match_int_negative.con`, `match_bool.con` (positive), and `error_match_int_no_default.con`, `error_match_bool_no_false.con` (negative).
+
+**What changed strategically:** "match on integers" moves from roadmap cleanup to landed feature. The remaining literal-pattern scope (char, float, string) stays out of scope until evidence demands it.
+
+### Phase H cleanup: impl-method visibility hardened, paper workflow added, remaining cleanup narrowed
+
+**Impl-method visibility fix:** private impl methods and private trait-impl methods are no longer callable across module boundaries via method syntax and no longer leak through imports. Four summary/resolution/elaboration paths now consistently respect `isPublic`: `buildFileSummary` public-name construction, `resolveImports` struct-method exposure, sibling impl-signature injection in Elab, and submodule impl-signature injection in Resolve.
+
+**Regression coverage:** added `error_private_impl_method.con`, `error_private_trait_impl_method.con`, and `pub_impl_method.con` so the privacy boundary is exercised in both negative and positive form.
+
+**Paper workflow:** added a nix-backed Typst paper flow under `paper/`, including `make paper`, dev-shell Typst support, generated-PDF ignore rules, and an initial serious project paper draft. This does not change compiler semantics, but it does turn the paper into a reproducible artifact in the repo instead of a side document.
+
+**What changed strategically:** one more concrete Phase H cleanup bug is now closed, and the remaining cleanup tail is narrower and clearer. The next cheap semantic win is not “add match on integers from scratch,” but finish literal-pattern validation and exhaustiveness policy for the already partially working integer-match path.
+
+### Phase H hardening: Bug 018 fixed, method-level generics land, project examples modernized
+
+**Bug 018 fixed:** stack-array borrows used for writable FFI paths no longer create stale-copy behavior. Array borrows now retype directly instead of going through the cast path that triggered redundant alloca+store emission. `std.net` and the HTTP example can use stack arrays again instead of heap-buffer workarounds.
+
+**Promoted alloca handling:** lowered array locals now skip the invalid load path in loop/promoted-allocation cases, which closes the remaining stack-array correctness path exposed during the HTTP/server work.
+
+**Method-level generics:** generic methods now work end-to-end, including correct generic `Self<T...>` handling and distinct LLVM struct emission per concrete instantiation. This unlocked `fold<A>` on `Vec`, `HashMap`, and `HashSet` as ordinary stdlib methods rather than one-off APIs.
+
+**Project example modernization:** the project-based examples (`integrity`, `verify`, `kvstore`, `lox`, `toml`) were migrated from the old free-function `vec_*` style to the `Vec` method API where the semantics are a clean fit. `kvstore` intentionally keeps `vec_get` / `vec_set` in the swap-remove path because it still relies on the current shallow-copy behavior there for linear `String` values.
+
+**What changed strategically:** Bug 018 was the last remaining open correctness bug directly carried forward from Phase H. The remaining open work is no longer “fix the language enough for real programs,” but Phase J package/workspace maturity, testing/tooling refinement, and evidence-gated follow-up questions.
+
+### Phase H findings closure: buffered I/O, std.args, collection iteration
+
+**Buffered I/O for compiler print builtins:** Switched the compiler's print builtins (`print_string`, `print_int`, `print_char`, `print_bool`) from raw `write()` syscalls to buffered libc I/O (`printf`/`putchar`). Lower-level stdlib I/O helpers in `std.io` still expose direct/unbuffered `libc_write`-based behavior where appropriate. The grep case-insensitive benchmark gap dropped from 2.8x to 1.7x vs C. Remaining grep gap is per-character `to_lower` cost, not I/O overhead.
+
+**`std.args` module:** Added `std.args` with `count() -> Int` and `get(idx: Int) -> String` for process argument access. `cgrep` and `conhash` examples converted from raw extern fn declarations to stdlib imports. Test-mode stubs emit `__concrete_get_argc` (returns 0) and `__concrete_get_argv` (returns null) so stdlib tests compile without the main wrapper.
+
+**HashMap iteration:** Added `for_each(&self, f: fn(&K, &V))`, `keys(&self) -> Vec<K>`, and `values(&self) -> Vec<V>` methods to `HashMap` with stdlib test coverage (`test_map_for_each`).
+
+**Text/interpolation decision:** Six Phase H programs written without string interpolation. `print`/`println` plus builder APIs are sufficient for current needs. Interpolation deferred until sustained evidence from larger programs justifies it.
+
+**What changed strategically:** Three of the five remaining open Phase H items are now closed (grep I/O bottleneck, runtime argument surface, text/interpolation decision). Collection iteration is in progress. The center of gravity is now moving toward Phase J package/workspace maturity.
+
+### Qualified module access fully closed
+
+**Same-name collision fix:** Submodule function definitions are now renamed at elaboration time via `prefixModuleFnNames` (e.g., `add` in `math` → `math_add`), with cross-module call site rewriting via `crossModuleRenames`. This is consistent across all downstream passes (mono, lower, emit). Ambiguity detection ensures that two submodules defining the same leaf name require qualified access (`math::add` / `util::add`) rather than silently colliding.
+
+**Inline sibling `::` access:** `mod A {} mod B {}` can now use `A::fn()` from `B` without explicit `import` statements. Sibling module function signatures are injected consistently through Resolve, Check, and Elab passes, with linker aliases bridging qualified call names to bare definitions.
+
+**What changed strategically:** The two remaining qualified-access limitations (same-name collisions and inline sibling `::`) were the last namespace gaps blocking multi-module code from feeling natural. Both are now closed. The remaining open findings are narrower: text construction/interpolation, runtime-oriented collections, runtime argument surface, and runtime/stack-pressure classification.
+
+### Phase J groundwork: package/project workflow hardening lands
+
+**Builtin std resolution:** std is now resolved automatically relative to the compiler binary instead of requiring repo-relative path dependencies in user manifests. `CONCRETE_STD` provides an override for unusual setups. Example `Concrete.toml` files no longer need `std = { path = ... }`.
+
+**`concrete run`:** Added a first clean project-facing run flow. It builds to a temporary binary, executes it with inherited stdio, forwards `-- args...`, and cleans up without extra “built” noise.
+
+**`concrete test`:** Added a package-aware test flow with builtin std resolution, dependency loading, test binary execution, cleanup, and `--module` filtering.
+
+**Workflow diagnostics:** Missing `Concrete.toml`, missing `src/main.con`, and bad dependency paths now produce more actionable package/workflow errors instead of vague failures. Missing builtin std now produces a clearer warning with a hint about `CONCRETE_STD` or an explicit dependency path.
+
+**What changed strategically:** Package mode is now a real workflow, not just a roadmap intention. The next priorities move to text/output direction, verifier polish, testing-tooling refinement, workspace support, and incremental/package graph work.
+
+### Phase H: vec builtin inlining removes the VM gap to C
+
+**VM hot-path investigation:** The first bytecode VM benchmark initially showed Concrete about 3.4x slower than the comparable C heap-`Vec` implementation. Investigation found the main cause was not bounds checking or an inherent safe-collection tax, but missing inlining on tiny vec builtins in the hot dispatch loop.
+
+**LLVM alwaysinline support:** Added `alwaysInline` to `LLVMFnDef`, taught `EmitLLVM.lean` to emit the `alwaysinline` attribute, and marked vec builtins accordingly. This lets LLVM optimize across repeated `vec_get`, `vec_set`, `vec_push`, `vec_pop`, and `vec_len` calls in runtime-heavy loops.
+
+**Benchmark result:** On the VM `fib(35)` workload, Concrete improved from ~785ms to ~257ms after the inlining fix, matching the comparable C heap-`Vec` implementation at ~260ms and remaining far faster than Python.
+
+**What changed strategically:** The VM result no longer supports the claim that Concrete currently pays a large unavoidable abstraction cost for safe collections. The first major runtime-heavy performance cliff was a backend/codegen policy issue, and fixing it materially strengthened the Phase H performance story.
+
+### Phase H: cgrep proves JSON was not a one-off performance result
+
+**`cgrep` example:** Added `examples/grep/main.con`, a ~220-line grep-like tool supporting `-n`, `-c`, `-v`, `-i`, multiple files, filename prefixes, and error reporting for missing files.
+
+**Runtime argv support:** Added runtime access to process arguments through `__concrete_get_argc()` / `__concrete_get_argv(idx)` with globals populated from the generated C `main`. This required mutable LLVM globals support (`LLVMGlobal.mutable`) so user code can consume command-line arguments without handwritten C shims.
+
+**Benchmark result:** On a 13MB, 200k-line text workload searching for `error`, Concrete `cgrep` is competitive with mainstream tools:
+
+- Concrete count-only: ~35ms
+- Python count-only: ~34ms
+- macOS grep count-only: ~83ms
+- Concrete with output: ~95ms
+- macOS grep with output: ~88ms
+
+The important result is not the exact ranking. It is that the earlier JSON parser win at `-O2` generalizes to a structurally different text/streaming workload rather than being a parser-specific accident.
+
+Later rebuilds after the mixed-arg `print` / `println` work exposed a more nuanced picture:
+
+- verify, JSON, VM, and policy-engine style workloads still sit roughly in the same performance class as the comparable C baselines on the current measurements
+- `cgrep` is now slower than the native C comparison on rebuilt runs, pointing to string/output handling as the current bottleneck rather than a broad backend regression
+
+That makes grep a useful continuing pressure test for text/output and string-I/O costs even though the overall Phase H performance story remains strong.
+
+### Phase H: codegen fixes, -O2 default, JSON benchmark proves competitive performance
+
+**Alloca hoisting (Bug 013):** All `alloca` instructions now emitted in function entry block via `entryAllocas` field in EmitSSAState. Previously, allocas inside loop bodies grew the stack every iteration, causing stack overflow at ~130k iterations in recursive parsers.
+
+**String literal in loop (Bug 014):** Added `.strConst` case to `ensureValAsPtr` in EmitSSA.lean. String literal assignment inside loops previously generated invalid LLVM IR (global symbol used as struct value).
+
+**-O2 default (Bug 015):** Clang invocations now pass `-O2` for both regular and test compilation. This is a 3.6x parse speedup on the JSON benchmark (145ms → 40ms) because LLVM inlines per-character builtins like `string_char_at` and `string_push_char`.
+
+**`string_reserve` builtin:** Added `string_reserve(&mut String, cap)` across all compiler passes. Pre-allocates string capacity to avoid repeated reallocs during bulk construction.
+
+**`Bytes.to_string()`:** Zero-copy ownership transfer from Bytes to String in std/src/bytes.con (identical struct layout, no copy needed).
+
+**JSON benchmark result:** Concrete parses 9.3MB JSON in 40ms at -O2, matching or slightly beating Python's `json.loads` (46ms). Earlier 185ms measurements were -O0 artifacts. Full breakdown in `research/workloads/phase-h-findings.md`.
+
+### Phase H: scope-aware defer semantics and control-flow cleanup coverage
+
+**Scoped defer semantics:** `defer` now lowers as true scope-exit cleanup rather than a flat function-scoped approximation. Deferred calls run at block exit, loop-iteration exit, `break`, `continue`, early return, and implicit function end.
+
+**Checker fix:** deferred calls now reserve consumed variables generally instead of handling only `destroy(...)`. This lets any consuming call used in a `defer` body reserve its arguments until the deferred execution point.
+
+**Regression coverage:** added control-flow tests for block scope, loop iteration, `break`, `continue`, consuming-call LIFO behavior, and linear-reuse errors under `defer`.
+
+**Current tradeoff:** cleanup code is emitted independently at exit sites. This is intentionally simple and correct; if real programs later show meaningful IR bloat, cleanup outlining into shared blocks can be revisited as a backend optimization.
+
+### Phase H: builder builtins, JSON parser, cleanup ergonomics, future feature research
+
+**Builder builtins:** Added `string_append_int(&mut String, Int)` and `string_append_bool(&mut String, bool)` builtins for zero-grammar-cost mixed-type string building. These avoid intermediate allocations and interpolation syntax while keeping capabilities explicit. Design rationale in `research/stdlib/text-and-output-design.md`.
+
+**Bug 010 semantics fix:** `string_substr(s, start, len)` was previously aliased to `string_slice(s, start, end)` despite different contracts. Now has its own intrinsic ID and LLVM implementation that computes `end = start + len` before delegating to `string_slice`.
+
+**JSON parser:** Added `examples/json/main.con` — ~450-line recursive-descent JSON parser + validator. Covers objects, arrays, strings (with escapes), integers, booleans, null. Includes comprehensive test harness: primitives, whitespace handling, nested structures, invalid input rejection. Passes at O0 and O2. First sustained pressure test of the builder builtins approach and linear string ownership at scale.
+
+**Cleanup ergonomics design:** Documented 5 options for reducing linear ownership friction in `research/language/cleanup-ergonomics.md`. Immediate priorities: (1) `defer` statement for scope-end cleanup, (2) additional mutation-oriented string APIs. Deferred: Destroy trait, scoped helpers, borrowed slices. Roadmap updated with all items and revisit triggers.
+
+**Future feature research:** Six research notes analyzing difficulty and design for features that multiply Concrete's value beyond capabilities:
+- `research/stdlib/allocation-budgets.md` — NoAlloc/BoundedAlloc sub-capabilities; report-only classification (1-2 days) → enforcement (1-2 weeks) → byte-level budgets (3-4 weeks)
+- `research/stdlib/arena-allocation.md` — bump-pointer arenas replacing manual Vec pools; ~1 week; simpler than Vec (no realloc)
+- `research/stdlib/execution-cost-tracking.md` — structural boundedness reports (1-2 days) → abstract cost counting (2-3 weeks) → WCET (external tool)
+- `research/language/typestate.md` — ownership-based two-state works today; phantom types for multi-state (2-3 weeks) deferred pending evidence
+- `research/packages-tooling/authority-budgets.md` — updated with module-level `#[authority(...)]` path (~1 week); package-level deferred to Phase J
+- `research/stdlib/layout-reports.md` — padding visualization, enum layout, ABI flags; 3-4 days; pure report formatting
+
+### Phase H bug fixes: Bug 005, 008, 009 fixed; if-expression, const lowering, enum-in-struct
+
+**Bug 008 — If-else expression:** If-else now works as an expression (`let x: i32 = if cond { 10 } else { 20 };`). Added `ifExpr` to AST/Core, `parseExprBlock` in parser, elaboration with hint propagation, and lowering using alloca+condBr+store+load with type casts. Changes across 10 files (AST, Core, Parser, Elab, Check, Lower, Format, Resolve, CoreCanonicalize, Mono, CoreCheck).
+
+**Bug 009 — Const lowering:** Constants now inline correctly. Added `constants` field to `LowerState`, `collectAllConstants` helper, and constant lookup in `lowerExpr` `.ident` handler. `examples/constants.con` now compiles.
+
+**Bug 005 — Enum-in-struct:** Confirmed fixed (layout engine handles enum fields in structs correctly).
+
+**Bug 007 — Standalone print:** Added `print_string(&String)`, `print_int(Int)`, `print_char(Int)` as compiler builtins requiring `Console` capability. Uses `write(2)` syscall. User-defined functions with the same names take precedence.
+
+**Bug 010 — Substring extraction:** `string_slice(s, start, end)` and `string_substr(s, start, len)` now exist as distinct operations with correct semantics. `string_substr` computes `end = start + len` and delegates to `string_slice`.
+
+**Bug 011 — Loop string building:** Added `string_push_char(&mut String, Int)` and `string_append(&mut String, &String)` builtins with in-place mutation via `&mut`, analogous to `vec_push`. Works naturally in loops without fighting linearity.
+
+**Bug 012 — Standalone timing:** Added `clock_monotonic_ns() -> Int` builtin requiring `Clock` capability. Returns nanoseconds from monotonic clock via `clock_gettime`.
+
+**Builtin deduplication:** Builtin LLVM function definitions and declarations now skip names already defined by user code or extern declarations, preventing redefinition errors.
+
+**MAL interpreter:** ~1150-line Make A Lisp interpreter (`examples/mal/main.con`) with linked-list environment (O(n) lookup), symbol interning, cons cell pool. Benchmarks show Concrete MAL is ~73x faster than Python MAL at -O2. Includes comparison benchmarks against Python native and C native.
+
+### By-value repr(C) struct FFI and testing infrastructure: 891 tests, 0 failures
+
+**Compiler fix — struct FFI ABI flattening:** `#[repr(C)]` struct parameters in extern fn calls are now flattened to integer registers per the ARM64 C ABI (≤8 bytes → i64, 9-16 bytes → two i64s), matching clang's calling convention. Target triple and datalayout emitted in LLVM IR. Previously, small structs were passed as LLVM aggregates, which didn't match the C register-passing convention across FFI boundaries.
+
+**Bug 004 fixed:** `arr[i] = val` with runtime variable index used the value's type instead of the array element type for GEP/store, causing wrong offsets and store widths. One-line fix in Lower.lean.
+
+**Testing infrastructure:**
+- Cross-target IR verification: 25 programs verified to compile for x86_64 via `clang --target`
+- Mutation testing (`test_mutation.sh`): 18 targeted mutations across 7 compiler files (Layout, Shared, Check, CoreCheck, Lower, EmitSSA, SSAVerify) — apply, rebuild, test, measure gap
+- Fuzz testing expanded: 7 new generators (enum/match, nested struct, fn pointer, borrow, defer, non-exhaustive match, missing capability)
+- Performance regression check integrated into `run_tests.sh --full`
+
+### Phase 3 system-level testing
+
+Added ~100 new tests (Phase 3) on top of Phase 2's 766.
+
+**Wave 1 — Type system, codegen, capabilities, modules (44 tests):**
+- Type system soundness: generic chains, recursive enums, nested match exhaustiveness, linearity branch agreement, trait multi-bound, defer linearity
+- Codegen edge cases: integer overflow wrap, nested struct access, nested loops, large struct pass, cast chains, early return from loops, many locals, recursive fibonacci
+- Capability/trusted: capability subset chains, capability polymorphism, trusted impl methods, trusted extern calls, and 5 error tests for capability violations
+- Cross-module/parser: nested modules, struct methods across modules, enum match across modules, reexport types, deeply nested expressions
+
+**Wave 2 — ABI/FFI, proof boundary, optimization (19 tests):**
+- ABI/FFI: repr(C) nested structs, function pointer call chains, function pointers in structs, sizeof basic types, array bounds, pointer round-trips, and 2 error tests
+- Proof boundary: 11 `check_report` assertions verifying exact `--report proof` output — eligible function marking, exclusion reasons (capabilities, trusted boundary), and totals
+- Optimization: dead code after return, unused variables, constant folding, branch same value, loop invariant, deeply nested return, zero/single iteration loops
+- O2 regression: 8 new `-O2` variants for optimization-sensitive tests
+
+### Phase G complete: Language Discipline, Design Policy, and Provable Subset
+
+All six Phase G items complete. Concrete now has explicit feature-admission criteria, recorded language decisions, documented long-term shape commitments, and a defined provable subset.
+
+**Item 6 — Provable subset definition**: Created `docs/verification/PROVABLE_SUBSET.md` as the standing reference. Defines the current ProofCore extraction boundary for proof-eligible functions (empty capability set, not trusted, not entry point, no trusted impl origin) and types (no repr(C)/packed, no builtin override), and distinguishes it from the stricter `--report proof` heuristic that also flags extern calls and raw-pointer operations. Documents pipeline position (extract from ValidatedCore after CoreCheck), current proof coverage (17 theorems over integers/booleans/arithmetic/conditionals), relationship to the high-integrity profile, and how permanent language decisions (no closures, no trait objects, static dispatch) make the subset boundary clean.
+
+**Item 1 — Feature admission criteria**: Created `docs/project/DESIGN_POLICY.md` as standing policy. 10-point admission checklist (simple invariant, visibility, phase separation, declaration-level dependencies, static dispatch, predictable codegen, diagnostics ownership, single-pass ownership, proof story, benefit for audited code). Quick decision rule and one-line test. Promoted from `research/meta/design-filters.md`.
+
+**Item 2 — "No" and "not yet" decisions**: Created `docs/project/DECISIONS.md` as a decisions registry. Six permanent decisions: no closures, no trait objects, no source-generating macros, no hidden dynamic dispatch, no inference-heavy abstraction, trusted = pointer containment only. Six deferred decisions with explicit prerequisites: freestanding mode, capability hiding, concurrency, pre/post conditions, derived equality, package model.
+
+**Item 5 — Long-term language shape**: Created `docs/language/LANGUAGE_SHAPE.md` documenting six structural commitments (static/explicit dispatch, capabilities in signatures, three-way trust split, linear ownership, whole-program monomorphization, phase separation), five "will not become" constraints, and a table of what may change with evidence. Synthesizes IDENTITY.md, DESIGN_POLICY.md, DECISIONS.md, and SAFETY.md.
+
+### Phase G items 3–4: Language Surface Simplification and Trusted Narrowing
+
+Two Phase G items landed, simplifying the language surface and tightening the trusted model.
+
+**Item 3 — Syntax simplification**:
+- Removed `main!()` / `fn name!()` bang sugar entirely: parser no longer accepts `!` after function names, `hasBang` field removed from `FnDef` in AST.lean, Format.lean no longer emits `!`. 70+ `.con` files migrated to explicit `with(Std)` or `with(Alloc)`.
+- Fixed 5 pre-existing test failures (`complex_recursive_list`, `complex_recursive_tree`, `complex_recursive_mutual`, `heap_deref_recursive`, `option_heap`) that still used `fn name!()` syntax.
+- Added `union_basic.con` test exercising union creation and trusted field access.
+
+**Item 4 — Trusted narrowing**:
+- Removed the loop-linear exception from `trusted`. Previously, `isTrustedFn` in Check.lean's TypeEnv let trusted functions consume linear variables inside loops, bypassing the loop-depth check. This was the only non-pointer-related privilege `trusted` granted, and it muddied the semantics.
+- `trusted` now means exactly one thing: **audited pointer-level containment**. The four operations it permits (pointer arithmetic, raw pointer dereference, raw pointer assignment, pointer casts) all relate to pointer safety. No linearity, no capabilities, no other special treatment.
+- The three-way model is now sharper: `with(Cap)` = semantic effects, `with(Unsafe)` = foreign boundary authority, `trusted` = reviewed pointer containment.
+
+What changed:
+- `Concrete/Frontend/AST.lean`: removed `hasBang` field from `FnDef`
+- `Concrete/Frontend/Parser.lean`: removed `!` sugar parsing from `parseFnDef` and `parseFnDefOrDecl`
+- `Concrete/Frontend/Format.lean`: removed `bangStr` emission
+- `Concrete/Check/Check.lean`: removed `isTrustedFn` from TypeEnv, loop-depth check now applies uniformly
+
+Test suite: 766 tests passing, 0 failures.
+
+### Phase F items 1–3, 7 complete: Capability and Safety Productization
+
+Four Phase F items landed, covering capability ergonomics, reporting, aliases, and error recovery.
+
+**Item 1 — Capability error hints**: All capability-related errors in `Check.lean` and `CoreCheck.lean` now include actionable `hint:` text. `missingCapability` suggests `with(Cap)` on the calling function or a trusted wrapper. `insufficientCapabilities` suggests the same. `cannotInferCapVariable` explains explicit capability binding. Pointer/alloc operation errors suggest specific capabilities (`with(Unsafe)`, `with(Alloc)`).
+
+**Item 2 — Authority and proof reports**: Two new `--report` modes implemented in `Report.lean`:
+- `--report authority`: transitive authority analysis per capability with BFS call-chain traces through the call graph
+- `--report proof`: ProofCore eligibility analysis — marks each function as eligible or excluded with specific reasons (capabilities, trusted, extern calls, raw pointers)
+15 semantic assertions in `run_tests.sh`. Total report modes: 8 with 59 assertions.
+
+**Item 3 — Capability aliases**: New `cap IO = File + Console;` syntax at module level. Parsed by the parser, expanded at parse time via `Module.expandCapAliases`, transparent to Check/Elab/CoreCheck. Validates cap names at definition time; supports `Std` macro and `pub cap`. Authority wrapper patterns documented in `docs/platform/FFI.md` with stdlib examples.
+
+**Item 7 — Bounded semantic error recovery**: `checkStmts` (Check.lean) and `elabStmts` (Elab.lean) now catch per-statement errors, restore the type environment on failure, and add placeholder types for failed let-declarations to prevent cascading errors. All accumulated diagnostics are thrown together. Statement-level granularity avoids guessing at expression-level placeholders while catching independent errors.
+
+What changed:
+- `Concrete/Frontend/AST.lean`: `CapAlias` structure, `CapSet.expandAliases`, `Module.expandCapAliases`
+- `Concrete/Frontend/Parser.lean`: `cap Name = Cap1 + Cap2;` parsing at module level
+- `Concrete/Pipeline/Pipeline.lean`: alias expansion in `Pipeline.parse`
+- `Concrete/Check/Check.lean`: per-statement error recovery in `checkStmts`; consumes `ResolvedProgram`; capability error hints
+- `Concrete/Elab/Elab.lean`: per-statement error recovery in `elabStmts`; consumes `ResolvedProgram`
+- `Concrete/Check/CoreCheck.lean`: capability error hints
+- `Concrete/Report/Report.lean`: `authorityReport` and `proofReport` functions
+- `Main.lean`: authority/proof report dispatch
+- `docs/platform/FFI.md`: authority wrapper patterns, capability aliases
+- `docs/compiler/PASSES.md`: error accumulation, cap alias expansion, pipeline signature fixes
+- `docs/compiler/DIAGNOSTICS.md`: statement-level accumulation policy
+- `docs/compiler/ARCHITECTURE.md`: Parse cap alias expansion, Check error accumulation
+
+Test suite: 685 tests passing (7 new: 4 error recovery, 3 capability alias).
+
+### Phase F items 4–6 complete: Coherent Safety Story and High-Integrity Profile
+
+**Item 4 — Safety usability**: Covered by the combination of capability aliases (item 3), error recovery (item 7), actionable error hints (item 1), and wrapper pattern documentation. Safety features are now easier to use correctly without weakening honesty.
+
+**Item 5 — Coherent safety story**: Created `docs/language/SAFETY.md` as the central safety reference. Defines the three-way split (capabilities / trusted / `with(Unsafe)`), documents all 8 report modes with what each shows, explains the error model with accumulation policy, describes the proof boundary and ProofCore eligibility, and introduces the high-integrity profile direction. Cross-references added from all existing docs: VALUE_MODEL.md, STDLIB.md, IDENTITY.md, DIAGNOSTICS.md, EXECUTION_MODEL.md, ARCHITECTURE.md, FFI.md, PASSES.md. Stale `ABI_LAYOUT.md` references replaced with `ABI.md`.
+
+**Item 6 — High-integrity safety profile**: `docs/language/SAFETY.md` defines the profile direction: same language under stricter restrictions (no Unsafe, no unrestricted FFI, no/bounded allocation, no ambient authority growth, analyzable concurrency, stronger evidence). Documents what the compiler must provide (profile-recognized restrictions, profile-aware reports, package visibility, proof relation). Connects profile restrictions to existing features (capabilities gate authority, trusted contains unsafety, linearity ensures resource safety, ProofCore extracts the provable fragment, reports make boundaries visible).
+
+Phase F is now complete. All 7 items done.
+
+### Phase E complete: Runtime and Execution Model
+
+Phase E is done. All 11 items are complete. `docs/language/EXECUTION_MODEL.md` is the central reference.
+
+**Items 6–11 (new this milestone):**
+
+- **Item 6 — Target/platform support policy**: Three-tier support model (Tier 1: x86_64-linux, aarch64-darwin; Tier 2: x86_64-darwin; Experimental: everything else). Documents what "supported" means, what is target-dependent, and what is not yet validated empirically.
+- **Item 7 — Stdlib execution model alignment**: Full module-to-layer mapping (Core/Alloc/Hosted) with capabilities and host dependencies for all 24 stdlib modules. `docs/stdlib/STDLIB.md` updated with execution model alignment section.
+- **Item 8 — Execution profiles**: Documents planned profiles (`no_alloc`, `bounded_alloc`, `no_unsafe`, `no_ffi`, `high_integrity`), how they map to the existing capability system, and their relationship to `ProofCore` eligibility.
+- **Item 9 — Performance validation direction**: Documents principles (representative workloads, compilation time matters, observability over cleverness), metrics, regression thresholds, and future CI integration.
+- **Item 10 — Verified FFI envelopes and structural boundedness**: Documents FFI envelope direction (mechanical checking of extern fn contracts), structural boundedness properties (allocation-free, stack-bounded, terminating), and how they connect to existing report infrastructure.
+- **Item 11 — Concurrency direction**: Documents design principles (explicit, structured, threads-first, capability-gated), the first concurrency model (OS threads, spawn/join, channels, move ownership), 5-stage plan, and what to avoid (Rust-style async fragmentation, hidden executors).
+
+### Phase E items 4–5: FFI ownership boundary and ABI calling convention
+
+**Item 4 — FFI/runtime ownership boundary**: `docs/language/EXECUTION_MODEL.md` now documents how ownership, capabilities, and resource tracking interact at the FFI boundary. Extern functions require `Unsafe`; `trusted fn` wrappers hide `Unsafe` behind safe APIs. Linear types consumed by-value in extern calls; references borrow without consuming; raw pointers are Copy with no tracking. Known gaps documented: raw pointer leaks, no verified FFI envelopes, no cross-language ownership protocol.
+
+**Item 5 — FFI/ABI calling convention fix**: `EmitSSA.lean` now distinguishes extern fn calls from internal calls. `#[repr(C)]` struct arguments in extern fn calls are passed by value per the C ABI instead of always by pointer. New helpers: `externParamTyToLLVMTy` and `isReprCStruct` detect repr(C) structs and emit by-value passing for extern calls while preserving pointer-based passing for internal calls.
+
+### Phase E items 1–3: execution model and abort-on-OOM
+
+`docs/language/EXECUTION_MODEL.md` defines Concrete's execution model covering three Phase E items:
+
+**Item 1 — Hosted vs freestanding model**: Concrete targets hosted (POSIX + libc) only. The stdlib is classified into three layers by host dependency: core (pure computation, no libc), alloc (malloc/realloc/free only), and hosted (full POSIX libc). Freestanding mode is a future milestone — the hosted boundary is now explicit so the split is straightforward when needed.
+
+**Item 2 — Runtime boundary**: There is no Concrete runtime. No global constructors, no GC, no module init, no thread-local setup. Programs start in a compiler-generated `main` that calls `user_main`, optionally print the result, and return 0. Failure is explicit through return types — no panic, no unwind. All external symbol dependencies are enumerated (always-required: malloc/free/printf/memcpy/etc.; conditionally-required: fs/net/process symbols from stdlib imports).
+
+**Item 3 — Memory/allocation strategy**: All heap allocation goes through libc malloc/realloc/free. Allocation is capability-tracked via `Alloc`. Deallocation is explicit via linear ownership + `defer`. **Abort-on-OOM is implemented** at both layers: compiler builtins pipe all malloc/realloc through `__concrete_check_oom` (null-check + abort), and stdlib wrappers in `std/src/alloc.con` (`heap_new`, `grow`) null-check and call `abort()` on failure. Future directions: bounded allocation profiles, allocator parameters (Zig-style), no-alloc mode for freestanding.
+
+### Runtime/concurrency roadmap split clarified
+
+The roadmap now separates:
+
+- **Phase E**: the first explicit runtime/execution model and initial thread/channel concurrency stance
+- **Phase J**: the later long-term concurrency phase for structured concurrency, threads-plus-message-passing as the base model, and evented I/O as a specialized later runtime
+
+Research notes now include:
+
+- `research/stdlib/concurrency.md` for the near-term Phase E direction
+- `research/stdlib/long-term-concurrency.md` for the long-horizon layered concurrency target
+
+This makes the sequencing explicit: define the runtime boundary first, then broaden concurrency only after runtime, safety, package, and operational foundations are stable enough to support it well.
+
+### Compiler improvement checklist items 4 & 5 complete
+
+The final two partial checklist items are now done, completing the compiler improvement checklist (all 6 items except backend plurality, which is Phase E+ work).
+
+**Item 4 — Post-cleanup SSA verification**: `Pipeline.lower` now runs `ssaVerifyProgram` both before and after `ssaCleanupProgram`. This mechanically guarantees that cleanup transformations (dead block elimination, trivial phi folding, empty block folding, constant folding, strength reduction, store-load forwarding) preserve all 8 SSA invariants (dominance, phi correctness, no aggregate phis, branch safety, unique defs, call arity, return coverage, type consistency). Previously verification ran only pre-cleanup — cleanup output was trusted by construction but not mechanically checked.
+
+What changed:
+- `Concrete/Pipeline/Pipeline.lean`: second `ssaVerifyProgram` call after cleanup
+- `Concrete/IR/SSAVerify.lean`: module docstring updated to document dual verification; `isAggregateType` comment explains why generic heap types (Vec, HashMap, etc.) are excluded from the aggregate check
+- `docs/compiler/PASSES.md`: pipeline diagram, SSAVerify section, and invariant chain updated to reflect post-cleanup verification
+
+**Item 5 — Builtin extraction from EmitSSA**: 568 lines of builtin LLVM IR generation extracted from `EmitSSA.lean` into `Concrete/Backend/EmitBuiltins.lean`. The new module exports `getBuiltinFns` (string ops, conversion ops) and `getVecBuiltinFns` (vec ops per element size) and imports only `Concrete.LLVM` and `Concrete.Layout` — no dependency on SSA IR, Core IR, or `EmitSSAState`. This proves the builtins are structurally decoupled from the SSA→LLVM translation. `EmitSSA.lean` shrinks from 1642 to 1099 lines.
+
+Test suite: 663 tests passing, 0 failures.
+
+### Compiler hardening pass complete (all 5 items)
+
+- **Lower.lean hard errors**: 6 silent defaults converted to `throw` — `lookupStructFields`, `fieldIndex`, `variantIndex`, `variantFields`, `structNameFromTy` propagate errors through `LowerM`. `lowerModule` returns `Except String SModule` — failed function lowering is now a compile error, not silently dropped.
+- **Layout.lean/EmitSSA.lean hard errors**: all 7 `dbg_trace` fallback defaults converted to `panic!` (6 in Layout, 1 in EmitSSA). Root cause fixed: generic struct/enum definitions survived monomorphization with unsubstituted type variables. Fix: `substStructTypeArgs` added to Layout (parallel to existing `substEnumTypeArgs`), applied in `tySize`, `tyAlign`, `fieldOffset`. `enumPayloadOffset` now accepts `typeArgs`; concrete args threaded from Lower.lean. `variantFields` substitutes type args before returning fields. EmitSSA scans function types for concrete instantiations and emits substituted type defs instead of skipping generic defs. Newtypes erased in imported function signatures at module boundaries.
+- **Integer inference**: vec intrinsic hint propagation + SSAVerify `intBitWidth` check catches `i32 + i64` mismatches at the backend gate.
+- **Borrow checker audit**: multiple shared borrows, sequential &mut, borrow-of-field all verified working.
+- **Cross-module type aliases and newtypes**: fixed pre-existing bug — type alias names leaked through function signatures. `buildFileSummary` now resolves aliases in fn/extern/impl signatures. `resolveImports` resolves aliases and erases newtypes in imported signatures. `Elab.elabFn` resolves aliases in function parameter types.
+
+5 hardening tests added. Test suite: 663 tests (184 stdlib). All hardening items complete — no remaining silent fallback defaults in the compiler pipeline.
+
+### 3 compiler bugs fixed
+
+Three bugs discovered during integration test writing, now fixed with regression tests and documentation in `docs/bugs/`:
+
+- **Bug 001 — cross-module struct field offset** (`Elab.lean`): all fields of a struct defined in another module read as offset 0. Imported struct definitions were excluded from `CModule` output, so `Layout.fieldOffset` couldn't find them and silently returned 0. Fix: include imported structs in CModule.
+- **Bug 002 — i32 literal type mismatch** (`Elab.lean`): `0 - a` where `a: i32` generated `sub i64 0, %i32_val`. Integer literals defaulted to i64 regardless of the other operand's type. Fix: when one operand is a default-typed literal and the other has a concrete smaller integer type, re-elaborate the literal with the concrete type.
+- **Bug 003 — cross-module &mut borrow consumed as move** (`Check.lean`): passing `&mut Vec<T>` to a function consumed the variable, preventing reuse. The checker didn't distinguish owned from reference parameters when consuming arguments. Fix: skip consumption for `&T`/`&mut T` parameter types.
+
+Test suite: 658 tests at time of fix (32 pass-level, 15 integration/regression, 44 report assertions).
+
+### Phase D complete: all items done
+
+Phase D (testing, backend, and trust multipliers) is fully complete. Final items landed:
+
+- **Item 5 — real-program corpus growth**: 4 new integration programs (calculator 200 lines, type registry 248 lines, pipeline processor 223 lines, stress bytecode interpreter 280 lines). Integration corpus now 12 programs. Stress workload exercises 11-variant enum, multiple Vec instances, 21-instruction execution loop, cross-module types/functions.
+- **Item 7 — deferred audit reports**: next report modes named in `docs/compiler/PASSES.md` (`--report authority`, `--report proof`, `--report high-integrity` deferred to Phase E). All 6 existing modes regression-tested with 44 stable semantic assertions.
+
+### Phase D item 4 complete: FFI/ABI maturity
+
+`docs/platform/ABI.md` documents what's stable (FFI-safe scalars, repr(C)/packed/align layout, extern fn), what's intentionally unstable (non-repr struct layout, enum representation, pass-by-ptr convention, symbol naming), platform assumptions (64-bit only, hardcoded sizes), the FFI safety model, and a cross-platform verification matrix. 4 layout verification tests added to `Concrete/Pipeline/PipelineTest.lean` (scalar sizes, builtin sizes, repr(C) layout, pass-by-ptr decisions). Test suite: 651 tests (32 pass-level).
+
+### Phase D2 complete: backend contract, ValidatedCore, and proof workflow
+
+Phase D2 is done. The compiler now has explicit artifact boundaries with a proof-oriented pipeline, formal evaluation semantics with proven properties, and a documented SSA backend contract.
+
+What landed:
+- **`ValidatedCore` artifact** (`Concrete/Pipeline/Pipeline.lean`): explicit pipeline type. `Pipeline.coreCheck` is the only constructor; `Pipeline.monomorphize` takes `ValidatedCore`. `Pipeline.elaborate` returns `ElaboratedProgram` (elab + canonicalize only), `Pipeline.coreCheck` validates it.
+- **`ProofCore` extraction** (`Concrete/Proof/ProofCore.lean`): filters `ValidatedCore` into the pure, proof-eligible fragment — pure functions (empty capability set, not trusted), safe structs (no repr(C)/packed), safe enums (no builtin overrides). Reports inclusion/exclusion counts.
+- **Formal proof workflow** (`Concrete/Proof/Proof.lean`): evaluation semantics for a pure Core fragment (integers, booleans, arithmetic, let bindings, conditionals, function calls). Embeds abs, max, clamp. 17 proven theorems: concrete correctness (9), structural lemmas (3), conditional reduction (2), arithmetic (3).
+- **SSA backend contract** (`docs/compiler/PASSES.md`): documents SSAVerify guarantees (8 invariants), SSACleanup guarantees (8 postconditions), EmitSSA assumptions (5 preconditions), and the invariant chain.
+
+### Phase D1 complete: testing infrastructure
+
+Phase D1 is done — all "done means" criteria met. Testing is now a first-class compiler subsystem with dependency-aware selection, pass-level coverage for all compiler passes, and a documented coverage matrix.
+
+What landed:
+- **Pass-level Lean tests** (`Concrete/Pipeline/PipelineTest.lean`, 28 tests): parse (4), frontend/check/elab (8), monomorphize (2), SSA lowering (2), SSA verify (3), SSA cleanup (2), SSA emit (2), full pipeline (5). Each pass tested in isolation on in-memory source strings — no clang, no file I/O, <1s total. Tests both success and error paths.
+- **Test metadata**: `test_manifest.toml` provides per-test reference metadata (category, kind, passes, profile, owner_pass — not consumed by the runner, serves as documentation and future tooling source). `test_dep_map.toml` maps 27 compiler source files to affected test sections and categories (consumed by `run_tests.sh --affected`).
+- **Dependency-aware selection**: `run_tests.sh --affected` auto-detects changed files via `git diff` and runs only affected test sections. Conservative mapping: `--affected Concrete/Report/Report.lean` runs 72 tests (report + passlevel); `--affected Concrete/IR/Lower.lean` runs 248 tests (positive + codegen + O2 + passlevel). Unknown files fall back to the full suite.
+- **Coverage matrix and determinism policy** (`docs/compiler/TESTING.md`): full coverage matrix by failure mode (17 categories) and by compiler pass (12 passes), determinism rules (fixed seeds, no wall-clock dependence, 3 timeout tiers, network isolation by default, parallel safety, quarantine/repair policy), compile-time baselines, and failure isolation documentation.
+- **Compiler output cache**: file-keyed cache, 26/57 hits per fast run, avoids redundant recompilation for multi-assertion report tests.
+- **Failure artifact preservation**: `.test-failures/` with timestamped output and exact rerun commands.
+- **Manifest listing**: `run_tests.sh --manifest` now emits the full runner-known test inventory with category/kind/file metadata, so the documented manifest view is a real tool instead of a missing feature.
+- **Dependency gates**: `compile_gate()` skips downstream assertions when compilation fails.
+- **Real-program corpus**: 8 integration tests including 5 multi-feature programs (150-250 lines each): generic pipeline (5-layer borrow chain, trait dispatch), state machine (4×5 nested match), compiler stress (deep generic dispatch, 5-variant enum, while-loop accumulation), multi-module (cross-module types/traits/enums with imports), recursive structures (expression evaluator + stack machine with 6-variant enum).
+- **Failure-path stdlib tests**: fs (read past EOF, seek past end, read empty file), net (bind empty address, write to refused connection, read from unconnected socket, bind duplicate port), process (kill invalid signal, wait invalid PID, kill PID zero).
+
+Test suite: 647 tests passing (189 stdlib), including 28 pass-level Lean tests, 44 report assertions, 8 integration tests, and 16 collections verified.
+
+### Structured LLVM backend completed
+
+The LLVM backend no longer relies on raw LLVM string emission. `LLVMModule` is now the single source of truth for backend construction, and all emitted LLVM IR flows through structured types before printing.
+
+What landed:
+- user function codegen emits through structured LLVM module fields
+- extern declarations emit through structured LLVM module fields
+- type definitions emit through structured LLVM module fields
+- globals emit through structured LLVM module fields
+- the main wrapper, test runner, and vec builtins were converted from prebuilt text blobs into structured module output
+- string/conversion builtins were rewritten into structured `LLVMFnDef` / `LLVMGlobal` / `LLVMFnDecl` output
+- the `rawSections` escape hatch was deleted
+- the legacy `Concrete/Codegen/` backend path was deleted
+
+This is a major Phase D milestone because the backend is now structurally unified: every emitted LLVM construct is represented in structured data before the final printer turns it into text.
+
+### Phase C complete: tooling and stdlib hardening
+
+Phase C is done with all 8 items complete. This phase turned syntax guardrails, diagnostics, stdlib testing, and audit reports into durable infrastructure.
+
+What landed:
+- **Module-targeted stdlib testing**: `--stdlib-module <name>` in `run_tests.sh` runs tests for a single stdlib module (e.g., `--stdlib-module map`, `--stdlib-module string`) using `--test --module std.<name>`. Developers can iterate on one module without bootstrapping the whole tree.
+- **Diagnostics/formatter polish**: fixed empty `{}` edge case in formatter (enum literals need braces to avoid parser ambiguity), fixed `String.trimLeft` deprecation, eliminated compiler warnings in `Check.lean`.
+- **Integration testing deepened**: added `report_integration.con` (exercises all 6 report modes with caps/unsafe/alloc/layout/interface/mono) and `integration_collection_pipeline.con` (multi-collection pipeline with Vec, generics, enums, structs, mixed allocation patterns).
+- **Report assertions hardened**: 44 report tests with content checks across all 6 modes, replacing crash-only checks with assertions that verify specific output content (struct sizes, public API exports, capability traces, allocation patterns, specialization details).
+- **Reports as audit product**: 6 report modes (`caps`, `unsafe`, `layout`, `interface`, `mono`, `alloc`) with:
+  - capability "why" traces showing which callees contribute each capability with `(intrinsic)`/`(extern)` tags
+  - trust boundary analysis showing what unsafe operations trusted functions wrap (extern calls, pointer dereference, memory management)
+  - allocation/cleanup summaries tracking alloc/free/defer patterns with leak warnings for functions that allocate without cleanup
+  - summary totals and aligned columns across all reports
+- **Formatter golden tests**: 4 formatter-specific golden tests with idempotency checking
+- **LL(1) grammar checker in CI** (completed earlier in Phase C)
+- **Linearity checker fixes** (completed earlier in Phase C)
+- **Builtin HashMap retirement** (completed earlier in Phase C)
+
+Test suite: 600 tests passing (189 stdlib), including 44 report assertions, 46 golden tests, and 16 collections verified.
+
+### Builtin HashMap interception retired
+
+Deleted ~1,400 lines of compiler-internal HashMap machinery across 6 Lean files. HashMap is now an ordinary stdlib type compiled through the normal generic struct path — no compiler interception, no hardcoded layout, no hand-written LLVM IR runtime.
+
+What was removed:
+- 7 intrinsic IDs (`mapNew`..`mapFree`) and their resolution/capability mappings from `Intrinsic.lean`
+- ~106 lines of type checking intercepts from `Check.lean`
+- ~74 lines of elaboration intercepts from `Elab.lean`
+- ~75 lines of LLVM wrapper functions from `EmitSSA.lean`
+- ~636 lines of hand-written LLVM IR runtime from `Codegen/Builtins.lean` (hash, probe, insert, get, contains, remove, grow — for both int and string key variants)
+- Hardcoded 5-field `%struct.HashMap` type definition from `Layout.lean`
+- `HashMap` removed from `builtinTypeNames` (it is now resolved through normal imports)
+
+What replaced it: the stdlib `HashMap<K, V>` in `std/src/map.con` (a 7-field struct with fn pointer fields for hash/eq) compiles natively through monomorphization, the same path as any user-defined generic struct. 6 new stdlib tests (4 HashMap, 2 HashSet) provide collection verification coverage.
+
+This was enabled by the linearity checker fixes in the previous milestone.
+
+### Linearity checker: generic types, self-consumption, and divergence
+
+Four fixes to the type checker's linearity analysis (`Check.lean`) that together unblock user-defined generic collections with function pointer fields — the same pattern as `HashMap`:
+
+1. **`isCopyType` for generic and type-variable types** — `.generic` types now look up the struct's `isCopy` flag instead of returning `false`; `.typeVar` types check whether their bounds include `Copy`. Previously all generic instantiations were treated as linear.
+2. ~~**Trusted function loop-consumption relaxation**~~ — removed in Phase G. `trusted` no longer relaxes linearity rules; it is now strictly about pointer-level containment.
+3. **Self-consuming method calls** — methods that take `self` by value (not `&self`/`&mut self`) now mark the receiver variable as consumed. Previously `f.drop()` left `f` unconsumed.
+4. **If-without-else divergence** — consuming a linear variable inside an if-then that unconditionally returns is now allowed. The checker detects that the then-branch diverges and skips the branch-consumption check, enabling the common `if bad { x.drop(); return err; }` guard pattern.
+
+Validated by four independent regression tests and a full IntMap (user-defined hash map with fn pointer fields for hash/eq) that compiles and runs end-to-end. 544 tests passing, 0 failures.
+
+### Phase A completion: fast feedback and aggregate-lowering hardening
+
+- Hardened mutable aggregate lowering so aggregate state no longer flows accidentally through whole-aggregate phi nodes:
+  - loop-carried aggregate variables are promoted to stable entry-block allocas instead of being transported as aggregate phi values
+  - aggregate merges in `if`/`else` and `match` now lower through alloca+store/load patterns instead of `phi %Struct`
+  - void-typed match results are filtered out of phi/store paths
+- Added mechanical SSA protection for this architecture:
+  - `SSAVerify` now rejects aggregate phi nodes (`struct`, `enum`, `string`, `array`) with a hard error instead of relying only on regression coverage
+  - lowering phi-emission sites were audited so aggregate transport is intentionally blocked rather than incidentally absent
+- Strengthened regression coverage around the new lowering path:
+  - added `-O2` regressions for struct-loop lowering patterns
+  - added SSA-shape verification for aggregate-merge cases so aggregate phi nodes are caught close to the source
+- Upgraded the main test runner into a practical fast-feedback workflow:
+  - `run_tests.sh` now defaults to parallel execution on available cores
+  - added `--fast` (default), `--full`, `--filter`, `--stdlib`, `--O2`, `--codegen`, and `--report` modes
+  - partial runs now report mode/filter/skip information clearly
+  - documented `--fast` as the standard developer loop and `--full` as the pre-merge check
+- This completed Phase A well enough for the roadmap to shift primary attention to Phase B semantic cleanup while leaving deeper testing architecture work for later phases.
+
+### Stdlib test-runner activation and compiler fixes
+
+- The stdlib test corpus now runs through the real compiler path via `concrete std/src/lib.con --test`, so module-local `#[test]` coverage in `std/src` is active CI protection instead of latent coverage.
+- Fixed parser precedence around unary `*` / `&` with postfix field access so expressions like `*self.data` and `&self.field` bind correctly.
+- Fixed lowering/codegen issues exposed by stdlib execution:
+  - built-in `String` field access now lowers through a synthetic `String` struct definition so field offsets are computed correctly
+  - `&mut` field method chains now write back into the parent struct instead of mutating a temporary copy
+  - reference/pointer-typed values are no longer incorrectly spilled to allocas by `ensurePtr`
+  - `char` / `bool` integer casts now use the proper integer-extension path instead of the old alloca/store/load fallback
+- This brought the project to 488 passing tests in the main suite, including active stdlib-module coverage.
+
+### Stdlib API cleanup and new collections
+
+- Unified get/set convention across `String`, `Vec`, `Bytes`:
+  - `get` is now checked (returns `Option`), `get_unchecked` is the raw fast path
+  - `set` is now checked (returns `bool`), `set_unchecked` is the raw fast path
+  - `Vec::pop` now returns `Option<T>` instead of unchecked raw access
+- Fixed `std.io` print semantics:
+  - Removed type-suffixed names (`print_int`, `print_bool`, `print_char`, `print_string`, `eprint_string`)
+  - `print` now uses `write(1, ...)` (no trailing newline), `println` writes + newline, added `eprintln` for stderr
+  - `read_line` annotated with `with(Alloc)`
+- Converted `Text` and `Slice` to use `impl` method syntax (from C-style free functions)
+- Fixed `test.con` to properly drop owned `String` messages on all code paths
+- Updated all internal callers (`parse.con`, `fmt.con`, `hash.con`, `test.con`) to use new accessor names
+- Added 5 new collections to the stdlib (33 modules total):
+  - `std.deque.Deque<T>` — ring buffer with power-of-2 masking, push/pop front/back, checked/unchecked access
+  - `std.heap.BinaryHeap<T>` — binary heap with fn-pointer comparator (works as min-heap or max-heap)
+  - `std.ordered_map.OrderedMap<K, V>` — sorted array with binary search, fn-pointer comparator
+  - `std.ordered_set.OrderedSet<K>` — thin wrapper over `OrderedMap<K, u8>`
+  - `std.bitset.BitSet` — u64-word-backed bitset with set/unset/test, popcount, union, intersect
+- All new collections have inline `#[test]` functions covering basic operations, edge cases, and stress tests
+
+### Testing strategy expansion
+
+- Added parser fuzzing infrastructure (`test_parser_fuzz.sh`): generates random/malformed inputs and verifies the parser never crashes or hangs
+- Added `fmt`/`parse` round-trip property tests (`fmt_parse_roundtrip.con`): verifies `parse(format(x)) == x` across ranges, powers, and edge values
+- Added `Vec` trace tests (`vec_trace.con`): push/get/set/length invariants, growth preservation, interleaved operations
+- Added `HashMap` trace tests (`hashmap_trace.con`): insert/get/remove/overwrite invariants, tombstone recovery, growth stress
+- Added report consistency tests:
+  - capability reports (`report_caps_check.con`)
+  - unsafe / trusted-boundary reports (`report_unsafe_rawptr.con`)
+  - layout reports with runtime cross-validation (`report_layout_check.con`)
+  - interface visibility reports (`report_interface_check.con`)
+  - monomorphization reports (`report_mono_check.con`)
+- Added codegen differential tests (16 assertions across `--emit-ssa`, `--emit-llvm`, `--emit-core`):
+  - SSA optimization verification: constant folding (`2+3→5`), strength reduction (`*8→shl 3`), absence of un-optimized ops
+  - Codegen structure: struct GEP offsets, enum tag load/compare, monomorphization naming, LLVM struct type definitions, mutable borrow stores
+  - Cross-representation consistency: packed struct syntax in LLVM matches `--report layout`, enum payload size agreement, Core→SSA function signature mapping
+- This completed the first planned testing-strategy expansion: parser fuzzing, property tests, trace tests, report consistency tests, and selected differential tests are now permanent coverage in the main suite
+
+### Builtin / stdlib boundary cleanup
+
+- Introduced `IntrinsicId` as the compiler-internal identity for builtins, replacing raw string matching in compiler dispatch paths
+- Removed the ad hoc builtin `abs` special case; `abs` now lives in the stdlib as a trait method (`Numeric::abs`) resolved through normal trait dispatch + monomorphization
+- Migrated the remaining monomorphic math wrappers (`sqrt`, `sin`, `cos`, `tan`, `pow`, `log`, `exp`, `floor`, `ceil`) out of compiler intrinsics and into `std.math` as `trusted extern fn`
+- Added `trusted extern fn` as an explicit audited foreign-binding category:
+  - ordinary `extern fn` still requires `with(Unsafe)`
+  - `trusted extern fn` exposes narrow trusted foreign symbols without leaking `Unsafe` to callers
+  - audit reports now distinguish trusted extern functions from ordinary extern functions
+- Removed dead intrinsic entries and then removed 17 I/O / File / Network / Process / Env intrinsics by migrating them to stdlib wrappers
+- Deleted large hand-written LLVM builtin/codegen paths that were no longer needed after the stdlib/trusted-extern migration
+- Tightened the public stdlib surface so more operations now route through ordinary stdlib APIs instead of compiler-known names
+
+### LL(1) parser cleanup
+
+- Removed all remaining parser save/restore backtracking sites
+- Left-factored top-level `mod` parsing
+- Removed retry-based parsing around `&self` / `&mut self`
+- Tightened turbofish/type-position parsing so `::` commits instead of rewinding
+- Moved enum-dot fallback handling into postfix parsing instead of speculative rewind
+- Parser implementation now matches the language’s strict LL(1) design goal much more closely
+
+### Lowering bug fixes (string dedup + variable scoping)
+
+- Fixed string constant naming collision: multiple functions with string literals independently generated `str.0`, `str.1`, etc. The second lowering pass concatenated per-function lists, producing duplicate LLVM globals. Fix: `lowerFn` now returns string literals alongside the function definition; `lowerModule` collects, deduplicates by value, and renames references per-function. The redundant second lowering pass is removed.
+- Fixed SSA domination error in if/else with while loops: restoring pre-if variable state before the else-branch only overwrote existing variables, leaving then-branch locals (loop body registers) visible in the else-branch scope. Fix: replace the per-variable restore with a full variable map replacement so the else-branch starts with exactly the pre-if variable set.
+- Fixed the same variable leakage bug in while loop exits: body-local variables leaked into subsequent code after the loop. Fix: replace the per-variable phi restore at all four while-loop exit points with full variable map replacement.
+- Added regression tests: `string_multi_fn.con`, `if_else_while.con`
+
+### Trusted boundaries
+
+- Added `trusted fn` and `trusted impl` to the language surface
+- Propagated trusted boundaries through AST, Core, lowering metadata, and audit reporting
+- `CoreCheck` now relaxes raw pointer dereference, raw pointer assignment, and pointer-cast checks inside trusted code
+- Kept `extern fn` calls under `with(Unsafe)` even inside `trusted`
+- Added tests for trusted functions, trusted impls, trusted pointer operations, and invalid trusted usage
+- Added trusted trait-impl support and grouped trusted boundary reporting at the source level
+- Migrated builtins, stdlib, and user code to one explicit trust/effect model with honest capability annotations
+- Fixed trusted pointer arithmetic end-to-end by teaching SSA verification and codegen how to handle pointer + integer lowering
+
+### Stdlib collections: HashMap and HashSet
+
+- Added `std.map.HashMap<K, V>` — open-addressing hash map with linear probing, fn-pointer hash/eq (Zig-style)
+- Added `std.set.HashSet<K>` — thin wrapper around `HashMap<K, u8>`
+- Added hash/eq helper functions in `std.hash`: `hash_u64`, `hash_i32`, `hash_i64`, `hash_string`, `eq_u64`, `eq_i32`, `eq_i64`, `eq_string`
+- Fixed compiler bug: function pointers loaded from struct fields were emitted as direct calls (`@name`) instead of indirect calls (`%name`), causing linker errors. Fix spans Lower, SSACleanup, and EmitSSA.
+
+### Test framework
+
+- Added `--test` CLI flag: `concrete file.con --test` compiles and runs all `#[test]` functions
+- `#[test]` attribute tracked through the full IR pipeline (AST → Core → Mono → SSA)
+- Generated test runner calls each test, prints `PASS: <name>` / `FAIL: <name>`, exits 0/1
+- Test collection is recursive through submodules
+- Validation: `#[test]` functions must have no parameters, not be generic, and return `i32`
+- Validation: `#[test]` on non-function declarations is a parse error
+
+### Compiler architecture
+
+- Replaced the old direct AST backend with the full pipeline:
+  `Parse -> Resolve -> Check -> Elab -> CoreCanonicalize -> CoreCheck -> Mono -> Lower -> SSAVerify -> SSACleanup -> EmitSSA -> clang`
+- Added explicit Core IR, elaboration, monomorphization, SSA lowering, SSA verification, SSA cleanup, and SSA-consuming codegen
+- Removed the legacy AST backend and `--compile-legacy`
+- Added `Concrete/Pipeline/Pipeline.lean` with explicit artifact types:
+  - `ParsedProgram`
+  - `SummaryTable`
+  - `ResolvedProgram`
+  - `ElaboratedProgram`
+  - `MonomorphizedProgram`
+  - `SSAProgram`
+- Introduced `IntrinsicId` so the remaining compiler-known operations are identified internally instead of by raw string names
+
+### Frontend and semantic boundaries
+
+- Established the summary-based frontend with `FileSummary` and `ResolvedImports`
+- Split `Resolve` into shallow/interface resolution and body-level name resolution
+- Moved most post-elaboration legality checks out of `Check.lean` and into `CoreCheck.lean`
+- Made `CoreCheck` the main post-elaboration semantic authority
+- Centralized `Self` type resolution via shared helpers
+
+### Diagnostics
+
+- Added structured diagnostic types across semantic passes:
+  - `ResolveError`
+  - `CheckError`
+  - `ElabError`
+  - `CoreCheckError`
+  - `SSAVerifyError`
+- Threaded source spans through the AST/parser
+- Moved the main semantic pipeline to native `Diagnostics` transport instead of mostly string-based bridging
+- Added range-capable spans, hint text, and broader error accumulation across functions/modules in `Check` and `Elab`
+- Added report/inspection modes:
+  - `--report caps`
+  - `--report unsafe`
+  - `--report layout`
+  - `--report interface`
+  - `--report mono`
+- Added report consistency coverage so capability, unsafe/trusted, layout, interface, and monomorphization reports are now regression-tested against real semantics and emitted LLVM
+
+### ABI / layout / low-level semantics
+
+- Added `#[repr(C)]` for structs
+- Added `#[repr(packed)]` and `#[repr(align(N))]`
+- Added `sizeof::<T>()` and `alignof::<T>()`
+- Centralized layout logic in `Concrete/Check/Layout.lean`
+- Unified FFI-safety checks and LLVM type-definition generation through `Layout`
+- Fixed aligned struct/enum layout and enum payload offset handling
+- Fixed builtin `Option` / `Result` layout to size payloads from actual instantiations instead of hardcoded `i64` assumptions
+
+### Language capabilities
+
+- Capabilities and capability polymorphism
+- Function pointers (closures intentionally omitted)
+- Borrow regions
+- Linear ownership tracking
+- `defer`, `Destroy`, and `Copy`
+- Monomorphized trait dispatch
+- Multi-file modules and `Self`
+- `newtype`
+- Raw-pointer `Unsafe` gating for dereference, assignment, and pointer-involving casts
+
+### Runtime-facing builtins
+
+- String builtins
+- File I/O builtins
+- Networking builtins
+- `Vec<T>` and `HashMap<K, V>` builtin/runtime-backed support
+
+### Standard library foundation
+
+- Hardened the early `vec`, `string`, and `io` modules with correctness and completeness fixes
+- Added:
+  - `std.bytes`
+  - `std.slice`
+  - `std.text`
+  - `std.path`
+  - `std.fs`
+- Expanded libc/math/test support to better support the growing stdlib surface
+
+### Standard library systems layer
+
+- Added `std.env` — environment variable access (get/set/unset)
+- Added `std.process` — Unix process control (exit, getpid, fork, kill, Child with wait)
+- Added `std.net` — TCP networking (TcpListener with bind/accept/close, TcpStream with connect/read/write/close)
+- Extended `std.libc` with process (setenv, unsetenv, getpid, fork, execvp, waitpid, kill) and networking (socket, bind, listen, accept, connect, close, send, recv, htons, htonl, inet_pton, setsockopt) declarations
+- Added module-level `#[test]` functions to `bytes` and `path`
+
+### Stdlib hardening — typed error surfaces
+
+- Added typed error enums to `std.fs`: `FsError`, `FileResult`, `ReadResult`, `WriteResult` — all `fopen` calls are now null-checked, `write_file` returns typed `WriteResult`
+- Added typed error enums to `std.net`: `NetError` (including `SetsockoptFailed`, `AddressFailed`), `ListenResult`, `StreamResult` — all syscall returns checked including `setsockopt` and `inet_pton`
+- Added typed wrappers to `std.process`: `ForkResult`, `KillResult`, `WaitResult`, `ExitStatus`, `ProcessError` — `fork`/`kill`/`wait` return typed results with POSIX wait-status interpretation
+- Changed `std.env::get()` to return `Option<String>` — distinguishes absent vars from empty ones
+- Made `Bytes` accessors explicit: `get`/`set` are now bounds-checked (returning `Option<u8>`/`bool`), `get_unchecked`/`set_unchecked` are the raw fast paths
+- Made `Option<T>` pub for cross-module use
+- Added failure-path `#[test]` functions across stdlib modules:
+  - `bytes`: checked get/set in-bounds and out-of-bounds
+  - `fs`: open/create/read/write on nonexistent paths
+  - `env`: get absent var, set-then-get round-trip
+  - `net`: connect and bind with invalid addresses
+  - `process`: kill invalid pid, fork-wait typed round-trip
+
+### Stdlib deepening — fmt, time, rand, hash + io hardening
+
+- Added `std.fmt` — pure-Concrete formatting: `format_int`, `format_uint`, `format_hex`, `format_bin`, `format_oct`, `format_bool`, `pad_left`, `pad_right`
+- Added `std.hash` — FNV-1a hash: `fnv1a_bytes`, `fnv1a_string` (pure Concrete, no libc dependency)
+- Added `std.rand` — deterministic random: `seed`, `random_int`, `random_range` (wraps libc rand/srand)
+- Added `std.time` — monotonic clock and sleep: `Duration` (from_secs/from_millis/from_nanos), `Instant` (now/elapsed), `sleep`, `unix_timestamp` (wraps clock_gettime/nanosleep/time)
+- Hardened `std.io`: `File::create` and `File::open` now return `OpenResult` with null-checked fopen (added `IoError`, `OpenResult` enums)
+- Extended `std.libc` with time (time, clock_gettime, nanosleep) and random (rand, srand) declarations
+- Added failure-path tests: `fs::test_write_to_readonly`, `net::test_connect_refused`, `process::test_wait_invalid_pid`
+- Added module-level `#[test]` functions across all four new modules
+
+### Stdlib uniformity + deepening + parse
+
+- Made `Result<T, E>` pub for cross-module use as a generic error container
+- Patched `Check.lean` `?` operator to support generic enums (e.g. `Result<File, FsError>`) with type substitution, not just named enums
+- Unified error/result types across stdlib: removed module-specific result enums (`OpenResult`, `FileResult`, `ReadResult`, `WriteResult`, `ListenResult`, `StreamResult`, `KillResult`, `WaitResult`), replaced with `Result<T, ModuleError>` everywhere
+- `std.io`: `File::create`/`File::open` return `Result<File, IoError>`
+- `std.fs`: `File::open`/`File::create` return `Result<File, FsError>`, `read_file` returns `Result<Bytes, FsError>`, `write_file` returns `Result<u64, FsError>` (now reports bytes written)
+- `std.net`: `TcpListener::bind` returns `Result<TcpListener, NetError>`, `TcpStream::connect` returns `Result<TcpStream, NetError>`, `TcpListener::accept` returns `Result<TcpStream, NetError>`
+- `std.process`: `kill` returns `Result<bool, ProcessError>`, `Child::wait` returns `Result<ExitStatus, ProcessError>`, `ForkResult` kept as 3-variant union
+- Added `std.parse` — inverse of `fmt`: `parse_int`, `parse_uint`, `parse_hex`, `parse_bin`, `parse_oct`, `parse_bool` (all return `Option<T>`), plus `Cursor` struct for structured input parsing (`peek`, `advance`, `skip_whitespace`, `expect_char`)
+- Added checked accessors: `String::get` returns `Option<char>`, `Vec::get` returns `Option<&T>` (reference-in-generic monomorphizes correctly)
+- Systems deepening:
+  - `std.fs`: `append_file`, `file_exists`, `read_to_string`, write-then-read roundtrip test
+  - `std.net`: `TcpStream::write_all` (loop until all sent), `TcpStream::read_all` (read until EOF into Bytes)
+  - `std.process`: signal constants (`sig_int`, `sig_kill`, `sig_term`), `spawn` (fork+execvp), `SpawnFailed` error variant
+
+### Stdlib test deepening
+
+- Deepened `std.test`: added `assert_gt`, `assert_lt`, `assert_ge`, `assert_le`, `str_eq`, `assert_str_eq`
+- Added `std.net` integration tests: `test_tcp_roundtrip` (fork-based listener/client pair), `test_tcp_write_all_read_all` (write_all + read_all with Bytes)
+- Added standalone `net_tcp_roundtrip.con` lean_test using builtins (`tcp_listen`, `tcp_accept`, `tcp_connect`, `socket_send`, `socket_recv`, `socket_close`)
+
+### Testing / status milestones
+
+- End-to-end main suite has continued to grow through the milestones above; current suite size and latest status live in `README.md` and `ROADMAP.md`, not here
+- SSA-specific suite passing
+- Golden SSA/IR testing integrated
+- CI updated to exercise SSA-specific coverage as well as the main path
+- Added stronger stdlib failure-path and integration coverage, including socket round-trip tests and parser/process edge cases

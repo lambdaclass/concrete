@@ -1,0 +1,2724 @@
+name: CI
+# A train's dispatch names its base (below): the run's title then says which base its base-sensitive
+# checks used, and main's Landing record accepts a run only for the base main had before the push.
+# Every other run keeps GitHub's default title (an empty run-name).
+run-name: ${{ github.event_name == 'workflow_dispatch' && inputs.base != '' && format('{0} at base {1}', github.ref_name, inputs.base) || '' }}
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      campaign:
+        # The CAMPAIGN TIER (docs/project/PROMOTION_PIPELINE.md, stage (c)): the gate-mutation campaign
+        # (plan, 24 shards, aggregate), the differential fuzz campaigns, the clean-checkout proof
+        # replay and the multi-kernel mutation coverage. Off by default, so a dispatch of a
+        # candidate branch runs the LANDING TIER only. A qualification run sets it:
+        #   gh workflow run CI --ref <branch> -f campaign=true
+        description: "Also run the campaign tier (mutation campaign, fuzz, proof replay, multi-kernel mutation): stage (c) qualification"
+        type: boolean
+        required: false
+        default: false
+      base:
+        # THE BASE OF A TRAIN'S CANDIDATE, passed by the landing script's ci command: the main SHA
+        # the train was built on. The base-sensitive checks (LL1_BASE, TOTALITY_BASE, CONFORMANCE_BASE,
+        # SPEC_BASE) compare with it exactly as a push to main compares with github.event.before, and
+        # the run's title records it, so main's Landing record (R-0570) can require that the run it
+        # accepts checked the very base main had before the landing. Empty: those checks find their
+        # base themselves (the merge base with origin/main).
+        description: "Base SHA for the base-sensitive checks (a train's base; empty = merge base with origin/main)"
+        type: string
+        required: false
+        default: ""
+  # NO SCHEDULE HERE. The nightly run is .github/workflows/nightly.yml, which dispatches this
+  # workflow on main with campaign=true: every job below, campaign tier included, in ONE run that
+  # the qualification_record tool under the CI scripts can qualify. The weekly and nightly crons that used to live
+  # here ran subsets of the same jobs (and could never qualify, scheduled runs being partial), so
+  # keeping them beside the dispatch would run the campaign twice.
+
+# Cancel a superseded push/PR run when a newer commit arrives — faster
+# feedback and less runner contention. NEVER cancel a dispatched run: the nightly campaign
+# must always complete.
+# A campaign dispatch gets its own group, so a landing-tier dispatch of the same ref neither waits
+# behind a multi-hour campaign run nor displaces a queued one.
+concurrency:
+  group: ci-${{ github.ref }}-${{ github.event_name }}${{ inputs.campaign && '-campaign' || '' }}
+  cancel-in-progress: ${{ github.event_name == 'push' || github.event_name == 'pull_request' }}
+
+# EVERY RUN STEP EXECUTES IN THE GATE USERLAND. Gates used to take coreutils, sed, grep, python and
+# the rest from whatever runner they landed on (GNU on Linux, BSD on macOS, where `timeout` does not
+# exist). `nix develop .#gates` (flake.nix) supplies one pinned set to every job, the dev shell
+# included, and marks itself with CONCRETE_GATES_SHELL=1, without which every gate refuses (the
+# gate_env.sh guard each one sources first). It contains NO Lean: elan's toolchain
+# (lean-action below) stays the one on PATH, so the checker identity CI records (R-0208) does not
+# change. Self-hosted runners have Nix; each job installs it on a GitHub-hosted runner as its first
+# step, before any run step. A job that needs another shell says so.
+defaults:
+  run:
+    shell: "nix develop .#gates --command bash --noprofile --norc -eo pipefail {0}"
+
+jobs:
+  # MAIN'S RUN NAMES THE RUN THAT QUALIFIED ITS EXACT SHA (ROADMAP R-0570). A landing pushes main to a
+  # SHA that the train's run on ci/<name> already passed. On that push this job looks the run up with
+  # the landing script's record command: a completed run of THIS workflow at exactly this SHA, every
+  # landing-tier and every required job succeeded, the required set computed from the SHA main had
+  # before the push. When it is found, the jobs that run already passed are skipped here and main's
+  # run concludes success, its summary linking the qualifying run. When it is not (a push not made
+  # by a train, a run at another SHA, a skipped, cancelled or failed job, an unreadable API),
+  # nothing is skipped and every job runs here. On any other event the job runs no step and every
+  # job runs. Every job without a `needs` carries the gate below and the rest follow `build`;
+  # check_landing_script.sh holds both. The mirror's runs read the record from the train's
+  # repository (unbalancedparentheses/concrete2; both are public and a SHA names the same tree in
+  # both).
+  landing-record:
+    name: Landing record
+    runs-on: ${{ (github.event_name != 'pull_request' && vars.CONCRETE_SELF_HOSTED == 'true') && fromJSON('["self-hosted","linux","x64","concrete"]') || 'ubuntu-latest' }}
+    timeout-minutes: 15
+    permissions:
+      actions: read
+      contents: read
+    outputs:
+      recorded: ${{ steps.record.outputs.recorded }}
+    steps:
+      - uses: actions/checkout@v4
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+      - name: Install Nix (GitHub-hosted only)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && runner.environment != 'self-hosted'
+        uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
+      - name: "Look up the run that qualified this exact SHA (none found: every job runs here)"
+        id: record
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BEFORE: ${{ github.event.before }}
+          HEAD_SHA: ${{ github.sha }}
+          LAND_REPO: unbalancedparentheses/concrete2
+          LAND_NO_NIX: "1"
+        run: |
+          recorded=false run=""
+          if out="$(git fetch -q --depth=1 origin "$BEFORE" 2>&1 \
+                    && bash scripts/land/train.sh record "$HEAD_SHA" --base "$BEFORE" --exclude-run "$GITHUB_RUN_ID" 2>&1)"; then
+            run="$(printf '%s\n' "$out" | sed -n 's/^qualifying_run=\([0-9][0-9]*\)$/\1/p' | tail -1)"
+          fi
+          printf '%s\n' "$out"
+          if [ -n "$run" ]; then
+            recorded=true
+            { echo "### Landing record"
+              echo "Run [$run](https://github.com/$LAND_REPO/actions/runs/$run) passed every landing-tier and required job at exactly \`$HEAD_SHA\`."
+              echo "This run skips those jobs: that run is the result for this SHA."; } >> "$GITHUB_STEP_SUMMARY"
+          else
+            { echo "### No landing record"
+              echo "No run qualifies \`$HEAD_SHA\`, so every job runs here:"
+              printf '\n```\n%s\n```\n' "$out"; } >> "$GITHUB_STEP_SUMMARY"
+          fi
+          echo "recorded=$recorded" >> "$GITHUB_OUTPUT"
+
+  # THE NEW ROOT'S CI, run beside the old jobs until the legacy/ move (P7, T0). Everything here reads
+  # only what the day-one root keeps (RETENTION.tsv "retained" rows): the landing tooling, the
+  # retention manifest, the issue record and the required-check transition rule. At the move this
+  # job is what remains of the workflow, joined by the slice jobs; every old job is then dropped
+  # through a required-checks-transition.tsv row (replaced or retired), never silently.
+  root-checks:
+    name: Root checks
+    needs: landing-record
+    if: ${{ !cancelled() && needs.landing-record.outputs.recorded != 'true' }}
+    runs-on: ${{ (github.event_name != 'pull_request' && vars.CONCRETE_SELF_HOSTED == 'true') && fromJSON('["self-hosted","linux","x64","concrete"]') || 'ubuntu-latest' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Nix (GitHub-hosted only)
+        if: runner.environment != 'self-hosted'
+        uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
+      - name: "Retention manifest (every tracked file has one governing row; negative controls)"
+        run: bash scripts/tests/check_retention_manifest.sh
+
+      - name: "Issue record (ISSUES.tsv well-formed; negative controls)"
+        run: bash scripts/tests/check_issues.sh
+
+      - name: "Landing script (required checks and their transitions; refusals hold)"
+        run: bash scripts/tests/check_landing_script.sh
+
+      - name: "Oracle publish (release tag at the locked commit; refusals hold)"
+        run: bash scripts/tests/check_oracle_publish.sh
+
+  # THE ORACLE ON A GITHUB-HOSTED RUNNER (ISS-0001, ISS-0005; P13; ROADMAP R-0564). Always
+  # ubuntu-latest, never the self-hosted pool, whatever CONCRETE_SELF_HOSTED says: every run shows
+  # that a runner without concrete-ci-2's ~/oracle cache gets a verified oracle from the published
+  # release alone (fetch.sh in the oracle directory), and that it runs (smoke.con exits 42). No published
+  # artifact, a failed download, a digest or manifest mismatch or an install that fails verification
+  # makes ci_check.sh exit 3 (INCOMPLETE) and the job fail: it is never reported as passed.
+  # It is a GitHub-hosted job, so a pull_request may run it (no self-hosted runner is involved).
+  oracle-hosted:
+    name: Oracle (GitHub-hosted fetch + smoke)
+    needs: landing-record
+    if: ${{ !cancelled() && needs.landing-record.outputs.recorded != 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
+      - name: "Oracle fetch (missing, corrupt or unverifiable artifact is INCOMPLETE; negative controls)"
+        run: bash scripts/tests/check_oracle_fetch.sh
+
+      - name: "Fetch the published oracle, verify it, run smoke.con through it (exit 42)"
+        run: bash scripts/oracle/ci_check.sh
+
+  grammar:
+    name: LL(1) grammar check
+    needs: landing-record
+    if: ${{ !cancelled() && needs.landing-record.outputs.recorded != 'true' }}
+    runs-on: ${{ (github.event_name != 'pull_request' && vars.CONCRETE_SELF_HOSTED == 'true') && fromJSON('["self-hosted","linux","x64","concrete"]') || 'ubuntu-latest' }}
+    steps:
+      # Full history: check_grammar_ll1.sh compares the known-conflict list with the base revision
+      # (bug 329), and a shallow clone has neither the merge-base nor the push's before-revision.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Nix (GitHub-hosted only)
+        if: runner.environment != 'self-hosted'
+        uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
+      - name: Workflow-YAML gate (every workflow file parses)
+        run: bash scripts/tests/check_workflow_yaml.sh
+
+      - name: Gate-hygiene gate (every gate is pipe-safe and fails loudly)
+        run: bash scripts/tests/check_gate_hygiene.sh
+
+      # Build-free (bug 252): any change selects it, a docs-only one included.
+      - name: "Markdown links (every local link resolves; an anchor names a heading or id of its target)"
+        run: bash scripts/tests/check_doc_links.sh
+
+      # Build-free: drives the landing script against a throwaway repository with a fake gh.
+      - name: "Landing script (trains resolve only generated views and ledgers; refusals hold)"
+        run: bash scripts/tests/check_landing_script.sh
+
+      # Build-free: drives the landing bot (and the train script under it) against a throwaway repository.
+      - name: "Landing bot (ready = clean review + passing gates at the head; rule-first order; red member ejected)"
+        run: bash scripts/tests/check_landing_bot.sh
+
+      - name: "Review tool (R-0544 — review.sh delta/split/refusal-retry/cap/notes, verify.sh; fake reviewer)"
+        run: bash scripts/tests/check_review_tool.sh
+
+      # Source-level (reads gate scripts and fixed diff lists; no build), so it sits in this
+      # build-free job rather than the long language-surface job.
+      - name: "Impact gate selection (R-0513: pre-push selection replays the 2026-10-22 CI-only failures)"
+        run: bash scripts/tests/check_gate_selection.sh
+
+      - name: Build-cache gate (seeding refuses a key mismatch and never replaces lake build)
+        run: bash scripts/tests/check_build_cache.sh
+
+      # Build-free: the CI triage classifier, flake history and coverage diff (the triage, flake_history
+      # and coverage_diff tools under the CI scripts, and nightly.yml) against fixture logs and a stub gh.
+      - name: CI triage gate (failure classes, rerun once, flake ledger, quarantine, coverage diff)
+        run: |
+          python3 -I -c 'import yaml' 2>/dev/null || { sudo apt-get update && sudo apt-get install -y python3-yaml; }
+          bash scripts/tests/check_ci_triage.sh
+
+      # Build-free: drives the status page generator, its sanitizer and the notifier with a fake gh.
+      - name: "Status page (generation from fixtures, public variant sanitized, notify dedup)"
+        run: bash scripts/tests/check_status_page.sh
+
+      # Build-free: drives the work-queue dispatcher against a throwaway repository with stub agents.
+      - name: "Work queue (priority, area conflicts, budgets, slot rotation, stuck release, kill switch)"
+        run: bash scripts/tests/check_work_queue.sh
+
+      - name: VC-bridge register gate (every obligation family is registered)
+        run: bash scripts/tests/check_vc_bridge_register.sh
+
+      # Source-level only (greps modules and gate scripts), so it belongs in this
+      # build-free job. check_known_wrong_corpus.sh does NOT belong here — it needs the
+      # compiled binary and lives in `extra-gates` alongside the other corpus gates.
+      - name: Register C gate (evidence is never stronger than its inputs)
+        run: bash scripts/tests/check_evidence_algebra.sh
+
+      # Source-level too: compares hole status across documents and against the corpus
+      # gate's fixture list. No build needed.
+      - name: Hole-status consistency (no document contradicts KNOWN_HOLES)
+        run: bash scripts/tests/check_hole_status_consistency.sh
+
+      # Build-free: drives scripts/fuzz/farm/ with a fake compiler and fake generators
+      # (classification, dedup, minimizer, re-check, promote, drift alert, status JSON).
+      - name: Fuzz-farm gate (the server farm's findings pipeline)
+        run: bash scripts/tests/check_fuzz_farm.sh
+
+      # Build-free: the perf tracker's decision logic (record format, noise-band
+      # detection, bisect selection, data-branch layout) runs on fixtures, not timings.
+      - name: Perf-tracking harness (no alarm on noise, alarm on a planted 2x)
+        run: bash scripts/tests/check_perf_tracking.sh
+
+      # Build-free: the leanprof profile job (R-0551) on synthetic reports, a fake leanprof and a
+      # local origin: no finding on noise or a uniform slowdown, a finding on a planted quadratic.
+      - name: Compiler-profile harness (finding on a planted hot spot, none on noise)
+        run: bash scripts/tests/check_leanprof_profile.sh
+
+      # The three independent LL(1) checkers (py, c, rs) must agree byte-for-byte on every
+      # rule's FIRST set and nullability, report no conflict, and all refuse the planted grammars.
+      - name: LL(1) grammar (three independent checkers agree)
+        env:
+          # A push is compared with the revision before ALL of its commits (the known-conflict list only shrinks).
+          LL1_BASE: ${{ github.event_name == 'push' && github.event.before || inputs.base || '' }}
+        run: bash scripts/tests/check_grammar_ll1.sh
+
+  build:
+    name: Build
+    needs: landing-record
+    if: ${{ !cancelled() && needs.landing-record.outputs.recorded != 'true' }}
+    runs-on: ${{ (github.event_name != 'pull_request' && vars.CONCRETE_SELF_HOSTED == 'true') && fromJSON('["self-hosted","linux","x64","concrete"]') || 'ubuntu-latest' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Nix (GitHub-hosted only)
+        if: runner.environment != 'self-hosted'
+        uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
+      - name: Cache Lean build (.lake/build shared across jobs)
+        uses: actions/cache@v4
+        with:
+          path: .lake/build
+          key: ${{ runner.os }}-${{ runner.arch }}-lakebuild-${{ hashFiles('Concrete/**', 'Concrete.lean', 'proofs/**', 'Main.lean', 'Browser.lean', 'lakefile.toml', 'lean-toolchain', 'lake-manifest.json') }}
+
+      # GitHub-hosted only. A self-hosted runner's ~/.elan persists between jobs and already
+      # holds the toolchains; restoring the 2.3 GB archive over it took 2-4 min per job.
+      - name: Cache the Lean toolchain (~/.elan)
+        if: runner.environment != 'self-hosted'
+        uses: actions/cache@v4
+        with:
+          path: ~/.elan
+          key: ${{ runner.os }}-${{ runner.arch }}-elan-${{ hashFiles('lean-toolchain') }}
+
+      # Self-hosted only: start from the server's published build of main (R-0546). The cache is
+      # written by the server's lakecache user alone, and lake build below still re-checks every
+      # module, so this changes how long the build takes, never whether it runs. A miss or a
+      # toolchain/manifest/lean-binary mismatch leaves today's path (GitHub cache, then build).
+      - name: Seed .lake from the server build cache (self-hosted only)
+        id: lake_seed
+        if: runner.environment == 'self-hosted'
+        run: if bash scripts/dev/seed-lake.sh --elan --cache-root /var/cache/concrete-lake; then echo "seeded=true" >> "$GITHUB_OUTPUT"; fi
+
+      - name: Install Lean (via lean-action)
+        id: lean_install
+        # A toolchain download can fail on a dropped connection; one paused retry
+        # keeps a network blip from failing (and hiding) the whole run.
+        continue-on-error: true
+        uses: leanprover/lean-action@v1
+        with:
+          use-github-cache: ${{ steps.lake_seed.outputs.seeded != 'true' }}
+          build-args: "--log-level=warning"
+
+      - name: Wait before retrying the Lean install
+        if: steps.lean_install.outcome == 'failure'
+        run: sleep 60
+
+      - name: Install Lean (via lean-action) (retry)
+        if: steps.lean_install.outcome == 'failure'
+        uses: leanprover/lean-action@v1
+        with:
+          use-github-cache: ${{ steps.lake_seed.outputs.seeded != 'true' }}
+          build-args: "--log-level=warning"
+
+      - name: Check for build warnings
+        run: |
+          OUTPUT=$(lake build 2>&1)
+          if echo "$OUTPUT" | grep -i "warning"; then
+            echo "::error::Build produced warnings"
+            echo "$OUTPUT"
+            exit 1
+          fi
+
+      - name: Install clang
+        run: if [ "$RUNNER_ENVIRONMENT" = self-hosted ] && command -v clang >/dev/null; then echo "self-hosted runner, using preinstalled clang"; else sudo apt-get update && sudo apt-get install -y clang; fi
+
+  main-tests:
+    name: Main test suite
+    runs-on: ${{ (github.event_name != 'pull_request' && vars.CONCRETE_SELF_HOSTED == 'true') && fromJSON('["self-hosted","linux","x64","concrete"]') || 'ubuntu-latest' }}
+    needs: build
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Nix (GitHub-hosted only)
+        if: runner.environment != 'self-hosted'
+        uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
+      - name: Cache Lean build (.lake/build shared across jobs)
+        uses: actions/cache@v4
+        with:
+          path: .lake/build
+          key: ${{ runner.os }}-${{ runner.arch }}-lakebuild-${{ hashFiles('Concrete/**', 'Concrete.lean', 'proofs/**', 'Main.lean', 'Browser.lean', 'lakefile.toml', 'lean-toolchain', 'lake-manifest.json') }}
+
+      # GitHub-hosted only. A self-hosted runner's ~/.elan persists between jobs and already
+      # holds the toolchains; restoring the 2.3 GB archive over it took 2-4 min per job.
+      - name: Cache the Lean toolchain (~/.elan)
+        if: runner.environment != 'self-hosted'
+        uses: actions/cache@v4
+        with:
+          path: ~/.elan
+          key: ${{ runner.os }}-${{ runner.arch }}-elan-${{ hashFiles('lean-toolchain') }}
+
+      # Self-hosted only: start from the server's published build of main (R-0546). The cache is
+      # written by the server's lakecache user alone, and lake build below still re-checks every
+      # module, so this changes how long the build takes, never whether it runs. A miss or a
+      # toolchain/manifest/lean-binary mismatch leaves today's path (GitHub cache, then build).
+      - name: Seed .lake from the server build cache (self-hosted only)
+        id: lake_seed
+        if: runner.environment == 'self-hosted'
+        run: if bash scripts/dev/seed-lake.sh --elan --cache-root /var/cache/concrete-lake; then echo "seeded=true" >> "$GITHUB_OUTPUT"; fi
+
+      - name: Install Lean (via lean-action)
+        id: lean_install
+        # A toolchain download can fail on a dropped connection; one paused retry
+        # keeps a network blip from failing (and hiding) the whole run.
+        continue-on-error: true
+        uses: leanprover/lean-action@v1
+        with:
+          use-github-cache: ${{ steps.lake_seed.outputs.seeded != 'true' }}
+          build-args: "--log-level=warning"
+
+      - name: Wait before retrying the Lean install
+        if: steps.lean_install.outcome == 'failure'
+        run: sleep 60
+
+      - name: Install Lean (via lean-action) (retry)
+        if: steps.lean_install.outcome == 'failure'
+        uses: leanprover/lean-action@v1
+        with:
+          use-github-cache: ${{ steps.lake_seed.outputs.seeded != 'true' }}
+          build-args: "--log-level=warning"
+
+      - name: Install clang
+        run: if [ "$RUNNER_ENVIRONMENT" = self-hosted ] && command -v clang >/dev/null; then echo "self-hosted runner, using preinstalled clang"; else sudo apt-get update && sudo apt-get install -y clang; fi
+
+      - name: Run main test suite
+        run: |
+          for attempt in 1 2 3; do
+            if ./scripts/tests/run_tests.sh; then
+              exit 0
+            fi
+            echo "::warning file=run_tests::Main test suite failed on attempt $attempt of 3"
+          done
+          exit 1
+
+      - name: Run golden tests (--emit-core / --emit-ssa / --fmt baselines)
+        run: bash ./scripts/tests/test_golden.sh
+
+  macos:
+    name: Build + main tests (macOS)
+    needs: landing-record
+    if: ${{ !cancelled() && needs.landing-record.outputs.recorded != 'true' }}
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Nix (GitHub-hosted only)
+        if: runner.environment != 'self-hosted'
+        uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
+      - name: Cache Lean build (.lake/build shared across jobs)
+        uses: actions/cache@v4
+        with:
+          path: .lake/build
+          key: ${{ runner.os }}-${{ runner.arch }}-lakebuild-${{ hashFiles('Concrete/**', 'Concrete.lean', 'proofs/**', 'Main.lean', 'Browser.lean', 'lakefile.toml', 'lean-toolchain', 'lake-manifest.json') }}
+
+      # GitHub-hosted only. A self-hosted runner's ~/.elan persists between jobs and already
+      # holds the toolchains; restoring the 2.3 GB archive over it took 2-4 min per job.
+      - name: Cache the Lean toolchain (~/.elan)
+        if: runner.environment != 'self-hosted'
+        uses: actions/cache@v4
+        with:
+          path: ~/.elan
+          key: ${{ runner.os }}-${{ runner.arch }}-elan-${{ hashFiles('lean-toolchain') }}
+
+      # Self-hosted only: start from the server's published build of main (R-0546). The cache is
+      # written by the server's lakecache user alone, and lake build below still re-checks every
+      # module, so this changes how long the build takes, never whether it runs. A miss or a
+      # toolchain/manifest/lean-binary mismatch leaves today's path (GitHub cache, then build).
+      - name: Seed .lake from the server build cache (self-hosted only)
+        id: lake_seed
+        if: runner.environment == 'self-hosted'
+        run: if bash scripts/dev/seed-lake.sh --elan --cache-root /var/cache/concrete-lake; then echo "seeded=true" >> "$GITHUB_OUTPUT"; fi
+
+      - name: Install Lean (via lean-action)
+        id: lean_install
+        # A toolchain download can fail on a dropped connection; one paused retry
+        # keeps a network blip from failing (and hiding) the whole run.
+        continue-on-error: true
+        uses: leanprover/lean-action@v1
+        with:
+          use-github-cache: ${{ steps.lake_seed.outputs.seeded != 'true' }}
+          build-args: "--log-level=warning"
+
+      - name: Wait before retrying the Lean install
+        if: steps.lean_install.outcome == 'failure'
+        run: sleep 60
+
+      - name: Install Lean (via lean-action) (retry)
+        if: steps.lean_install.outcome == 'failure'
+        uses: leanprover/lean-action@v1
+        with:
+          use-github-cache: ${{ steps.lake_seed.outputs.seeded != 'true' }}
+          build-args: "--log-level=warning"
+
+      - name: Run main test suite
+        run: |
+          for attempt in 1 2 3; do
+            if ./scripts/tests/run_tests.sh; then
+              exit 0
+            fi
+            echo "::warning file=run_tests::Main test suite failed on attempt $attempt of 3 (macOS)"
+          done
+          exit 1
+
+  proof-replay:
+    name: Weekly clean-checkout proof replay
+    # Fresh checkout with no build caches: rebuild everything and re-run the
+    # proof/theorem gates so a stale cache can never produce a false green.
+    # CAMPAIGN TIER: a dispatch with campaign=true (nightly.yml dispatches one on main every night).
+    if: github.event_name == 'workflow_dispatch' && inputs.campaign
+    runs-on: ${{ (github.event_name != 'pull_request' && vars.CONCRETE_SELF_HOSTED_CAMPAIGN == 'true') && fromJSON('["self-hosted","linux","x64","concrete"]') || 'ubuntu-latest' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Nix (GitHub-hosted only)
+        if: runner.environment != 'self-hosted'
+        uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
+      - name: Install Lean (via lean-action, caches disabled)
+        id: lean_install
+        # A toolchain download can fail on a dropped connection; one paused retry
+        # keeps a network blip from failing (and hiding) the whole run.
+        continue-on-error: true
+        uses: leanprover/lean-action@v1
+        with:
+          build-args: "--log-level=warning"
+          use-github-cache: false
+
+      - name: Wait before retrying the Lean install
+        if: steps.lean_install.outcome == 'failure'
+        run: sleep 60
+
+      - name: Install Lean (via lean-action, caches disabled) (retry)
+        if: steps.lean_install.outcome == 'failure'
+        uses: leanprover/lean-action@v1
+        with:
+          build-args: "--log-level=warning"
+          use-github-cache: false
+
+      - name: Install clang
+        run: if [ "$RUNNER_ENVIRONMENT" = self-hosted ] && command -v clang >/dev/null; then echo "self-hosted runner, using preinstalled clang"; else sudo apt-get update && sudo apt-get install -y clang; fi
+
+      - name: Run proof evidence gate (Lean kernel theorem checking)
+        run: bash scripts/ci/proof_gate.sh
+
+      - name: Lean-replay gate (SMT -> kernel upgrade artifact)
+        run: bash scripts/tests/check_smt_replay.sh
+
+      - name: Proof-patterns corpus gate
+        run: bash scripts/tests/check_proof_patterns.sh
+
+  external-checker:
+    name: External proof re-check (con-leche)
+    # The proof evidence re-checked by con-leche, an external Lean checker with a machine-checked
+    # consistency proof, and by nanoda, an independent Rust checker, from a lean4export of this
+    # toolchain.
+    runs-on: ${{ (github.event_name != 'pull_request' && vars.CONCRETE_SELF_HOSTED == 'true') && fromJSON('["self-hosted","linux","x64","concrete"]') || 'ubuntu-latest' }}
+    needs: build
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Nix (GitHub-hosted only)
+        if: runner.environment != 'self-hosted'
+        uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
+      - name: Cache Lean build (.lake/build shared across jobs)
+        uses: actions/cache@v4
+        with:
+          path: .lake/build
+          key: ${{ runner.os }}-${{ runner.arch }}-lakebuild-${{ hashFiles('Concrete/**', 'Concrete.lean', 'proofs/**', 'Main.lean', 'Browser.lean', 'lakefile.toml', 'lean-toolchain', 'lake-manifest.json') }}
+
+      - name: Cache pinned external tools (lean4export, con-leche, nanoda)
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/concrete-ext
+          key: ${{ runner.os }}-concrete-ext-${{ hashFiles('scripts/tests/external_checker.pins', 'lean-toolchain') }}
+
+      # GitHub-hosted only. A self-hosted runner's ~/.elan persists between jobs and already
+      # holds the toolchains; restoring the 2.3 GB archive over it took 2-4 min per job.
+      - name: Cache the Lean toolchain (~/.elan)
+        if: runner.environment != 'self-hosted'
+        uses: actions/cache@v4
+        with:
+          path: ~/.elan
+          key: ${{ runner.os }}-${{ runner.arch }}-elan-${{ hashFiles('lean-toolchain') }}
+
+      # Self-hosted only: start from the server's published build of main (R-0546). The cache is
+      # written by the server's lakecache user alone, and lake build below still re-checks every
+      # module, so this changes how long the build takes, never whether it runs. A miss or a
+      # toolchain/manifest/lean-binary mismatch leaves today's path (GitHub cache, then build).
+      - name: Seed .lake from the server build cache (self-hosted only)
+        id: lake_seed
+        if: runner.environment == 'self-hosted'
+        run: if bash scripts/dev/seed-lake.sh --elan --cache-root /var/cache/concrete-lake; then echo "seeded=true" >> "$GITHUB_OUTPUT"; fi
+
+      - name: Install Lean (via lean-action)
+        id: lean_install
+        # A toolchain download can fail on a dropped connection; one paused retry
+        # keeps a network blip from failing (and hiding) the whole run.
+        continue-on-error: true
+        uses: leanprover/lean-action@v1
+        with:
+          use-github-cache: ${{ steps.lake_seed.outputs.seeded != 'true' }}
+          build-args: "--log-level=warning"
+
+      - name: Wait before retrying the Lean install
+        if: steps.lean_install.outcome == 'failure'
+        run: sleep 60
+
+      - name: Install Lean (via lean-action) (retry)
+        if: steps.lean_install.outcome == 'failure'
+        uses: leanprover/lean-action@v1
+        with:
+          use-github-cache: ${{ steps.lake_seed.outputs.seeded != 'true' }}
+          build-args: "--log-level=warning"
+
+      - name: External-checker gate (proof evidence re-checked by con-leche)
+        run: bash scripts/tests/check_external_checker.sh
+
+      # LANDING TIER: a pin behind the revision the Lean Kernel Arena evaluates is a warning
+      # annotation, never a failure (landings stay reproducible). Offline, it prints SKIP.
+      - name: Checker pin freshness (warns when a pin lags the Lean Kernel Arena)
+        run: bash scripts/tests/check_checker_pin_freshness.sh --tier landing
+
+  checker-pin-freshness:
+    name: Checker pin freshness (campaign finding)
+    # CAMPAIGN TIER: the nightly cron on main of the canonical repo, or a dispatch with campaign=true.
+    # A con-leche or nanoda pin that differs from the revision the Lean Kernel Arena currently
+    # evaluates fails this job: a finding to act on (docs/verification/EXTERNAL_CHECKER.md), not a
+    # merge blocker. Needs only network access, no build.
+    if: ((github.event_name == 'schedule' && github.event.schedule == '23 3 * * *') && github.repository == 'lambdaclass/concrete' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && inputs.campaign)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Nix (GitHub-hosted only)
+        if: runner.environment != 'self-hosted'
+        uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
+      - name: Checker pins vs the Lean Kernel Arena (stale pin = finding)
+        run: bash scripts/tests/check_checker_pin_freshness.sh --tier campaign
+
+  fuzz-campaign:
+    name: Nightly differential fuzz (rotating seed)
+    # CAMPAIGN TIER: a dispatch with campaign=true (nightly.yml dispatches one on main every night).
+    if: github.event_name == 'workflow_dispatch' && inputs.campaign
+    runs-on: ${{ (github.event_name != 'pull_request' && vars.CONCRETE_SELF_HOSTED_CAMPAIGN == 'true') && fromJSON('["self-hosted","linux","x64","concrete"]') || 'ubuntu-latest' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Nix (GitHub-hosted only)
+        if: runner.environment != 'self-hosted'
+        uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
+      - name: Cache Lean build (.lake/build shared across jobs)
+        uses: actions/cache@v4
+        with:
+          path: .lake/build
+          key: ${{ runner.os }}-${{ runner.arch }}-lakebuild-${{ hashFiles('Concrete/**', 'Concrete.lean', 'proofs/**', 'Main.lean', 'Browser.lean', 'lakefile.toml', 'lean-toolchain', 'lake-manifest.json') }}
+
+      # GitHub-hosted only. A self-hosted runner's ~/.elan persists between jobs and already
+      # holds the toolchains; restoring the 2.3 GB archive over it took 2-4 min per job.
+      - name: Cache the Lean toolchain (~/.elan)
+        if: runner.environment != 'self-hosted'
+        uses: actions/cache@v4
+        with:
+          path: ~/.elan
+          key: ${{ runner.os }}-${{ runner.arch }}-elan-${{ hashFiles('lean-toolchain') }}
+
+      # Self-hosted only: start from the server's published build of main (R-0546). The cache is
+      # written by the server's lakecache user alone, and lake build below still re-checks every
+      # module, so this changes how long the build takes, never whether it runs. A miss or a
+      # toolchain/manifest/lean-binary mismatch leaves today's path (GitHub cache, then build).
+      - name: Seed .lake from the server build cache (self-hosted only)
+        id: lake_seed
+        if: runner.environment == 'self-hosted'
+        run: if bash scripts/dev/seed-lake.sh --elan --cache-root /var/cache/concrete-lake; then echo "seeded=true" >> "$GITHUB_OUTPUT"; fi
+
+      - name: Install Lean (via lean-action)
+        id: lean_install
+        # A toolchain download can fail on a dropped connection; one paused retry
+        # keeps a network blip from failing (and hiding) the whole run.
+        continue-on-error: true
+        uses: leanprover/lean-action@v1
+        with:
+          use-github-cache: ${{ steps.lake_seed.outputs.seeded != 'true' }}
+          build-args: "--log-level=warning"
+
+      - name: Wait before retrying the Lean install
+        if: steps.lean_install.outcome == 'failure'
+        run: sleep 60
+
+      - name: Install Lean (via lean-action) (retry)
+        if: steps.lean_install.outcome == 'failure'
+        uses: leanprover/lean-action@v1
+        with:
+          use-github-cache: ${{ steps.lake_seed.outputs.seeded != 'true' }}
+          build-args: "--log-level=warning"
+
+      - name: Install clang
+        run: if [ "$RUNNER_ENVIRONMENT" = self-hosted ] && command -v clang >/dev/null; then echo "self-hosted runner, using preinstalled clang"; else sudo apt-get update && sudo apt-get install -y clang; fi
+
+      - name: Fuzz campaign (date-derived seed, depth 3 + depth 4, borrow mode)
+        run: |
+          SEED=$(date -u +%Y%m%d)
+          echo "seed: $SEED"
+          python3 scripts/tests/fuzz_differential.py --n 2000 --seed "$SEED" --depth 3
+          python3 scripts/tests/fuzz_differential.py --n 500 --seed "$SEED" --depth 4
+          python3 scripts/tests/fuzz_differential.py --mode borrow --n 200 --seed "$SEED" --depth 3
+
+      - name: Linearity fuzz campaign (ground-truth conservation oracle, rotating seed)
+        run: |
+          SEED=$(date -u +%Y%m%d)
+          python3 scripts/tests/fuzz_linearity.py --n 400 --seed "$SEED"
+
+      - name: Upload failing case (if any)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-fail-${{ github.run_id }}
+          path: fuzz_fail.con
+          if-no-files-found: ignore
+
+  # GATE MUTATION COVERAGE (Phase 6C #5), SHARDED. The whole campaign ran as one step of the fuzz job
+  # and was cancelled at GitHub's 6-hour limit at family 30-31 of 95 (8187a2f7, 245cd51c): ~2h of
+  # clean-gate baseline, then ~7 min per family on average, ~1h for each check_dependency_edges.sh
+  # family. So: one PLAN computes the inventory once, N SHARDS each run the families the plan assigns
+  # them (membership is a hash of the family name, never a position), and AGGREGATE reconciles every
+  # shard against the plan. Only the aggregate can say qualified=1; a missing, cancelled, timed-out,
+  # foreign or overlapping shard makes it completed=0 and fails the job.
+  mutation-plan:
+    name: Gate mutation plan (inventory, once)
+    # CAMPAIGN TIER: a dispatch with campaign=true (nightly.yml dispatches one on main every night).
+    if: github.event_name == 'workflow_dispatch' && inputs.campaign
+    runs-on: ${{ (github.event_name != 'pull_request' && vars.CONCRETE_SELF_HOSTED_CAMPAIGN == 'true') && fromJSON('["self-hosted","linux","x64","concrete"]') || 'ubuntu-latest' }}
+    env:
+      # THE ONE PLACE THE SHARD COUNT IS SET. The matrix below is derived from it.
+      MUTATION_SHARDS: 24
+    outputs:
+      shards: ${{ steps.plan.outputs.shards }}
+      count: ${{ steps.plan.outputs.count }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Nix (GitHub-hosted only)
+        if: runner.environment != 'self-hosted'
+        uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
+      - name: Shard plan
+        id: plan
+        run: |
+          mkdir -p "$RUNNER_TEMP/plan"
+          bash scripts/tests/check_gate_mutation_coverage.sh --shard-plan "$MUTATION_SHARDS" > "$RUNNER_TEMP/plan/plan.txt"
+          grep -c '^family=' "$RUNNER_TEMP/plan/plan.txt"
+          echo "count=$MUTATION_SHARDS" >> "$GITHUB_OUTPUT"
+          echo "shards=$(seq -s, 1 "$MUTATION_SHARDS" | sed 's/^/[/; s/$/]/')" >> "$GITHUB_OUTPUT"
+
+      - name: Upload plan
+        uses: actions/upload-artifact@v4
+        with:
+          name: mutation-plan
+          path: ${{ runner.temp }}/plan/plan.txt
+          if-no-files-found: error
+
+  mutation-shard:
+    name: Gate mutation shard ${{ matrix.shard }}
+    needs: mutation-plan
+    runs-on: ${{ (github.event_name != 'pull_request' && vars.CONCRETE_SELF_HOSTED_CAMPAIGN == 'true') && fromJSON('["self-hosted","linux","x64","concrete"]') || 'ubuntu-latest' }}
+    # Below GitHub's 360 so the status and evidence upload still run inside the job.
+    timeout-minutes: 345
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: ${{ fromJSON(needs.mutation-plan.outputs.shards) }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Nix (GitHub-hosted only)
+        if: runner.environment != 'self-hosted'
+        uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
+      - name: Cache Lean build (.lake/build shared across jobs)
+        uses: actions/cache@v4
+        with:
+          path: .lake/build
+          key: ${{ runner.os }}-${{ runner.arch }}-lakebuild-${{ hashFiles('Concrete/**', 'Concrete.lean', 'proofs/**', 'Main.lean', 'Browser.lean', 'lakefile.toml', 'lean-toolchain', 'lake-manifest.json') }}
+
+      # GitHub-hosted only. A self-hosted runner's ~/.elan persists between jobs and already
+      # holds the toolchains; restoring the 2.3 GB archive over it took 2-4 min per job.
+      - name: Cache the Lean toolchain (~/.elan)
+        if: runner.environment != 'self-hosted'
+        uses: actions/cache@v4
+        with:
+          path: ~/.elan
+          key: ${{ runner.os }}-${{ runner.arch }}-elan-${{ hashFiles('lean-toolchain') }}
+
+      # Self-hosted only: start from the server's published build of main (R-0546). The cache is
+      # written by the server's lakecache user alone, and lake build below still re-checks every
+      # module, so this changes how long the build takes, never whether it runs. A miss or a
+      # toolchain/manifest/lean-binary mismatch leaves today's path (GitHub cache, then build).
+      - name: Seed .lake from the server build cache (self-hosted only)
+        id: lake_seed
+        if: runner.environment == 'self-hosted'
+        run: if bash scripts/dev/seed-lake.sh --elan --cache-root /var/cache/concrete-lake; then echo "seeded=true" >> "$GITHUB_OUTPUT"; fi
+
+      - name: Install Lean (via lean-action)
+        id: lean_install
+        # A toolchain download can fail on a dropped connection; one paused retry
+        # keeps a network blip from failing (and hiding) the whole run.
+        continue-on-error: true
+        uses: leanprover/lean-action@v1
+        with:
+          use-github-cache: ${{ steps.lake_seed.outputs.seeded != 'true' }}
+          build-args: "--log-level=warning"
+
+      - name: Wait before retrying the Lean install
+        if: steps.lean_install.outcome == 'failure'
+        run: sleep 60
+
+      - name: Install Lean (via lean-action) (retry)
+        if: steps.lean_install.outcome == 'failure'
+        uses: leanprover/lean-action@v1
+        with:
+          use-github-cache: ${{ steps.lake_seed.outputs.seeded != 'true' }}
+          build-args: "--log-level=warning"
+
+      - name: Install clang
+        run: if [ "$RUNNER_ENVIRONMENT" = self-hosted ] && command -v clang >/dev/null; then echo "self-hosted runner, using preinstalled clang"; else sudo apt-get update && sudo apt-get install -y clang; fi
+
+      # The external re-check families run check_external_checker.sh, which builds the pinned tools
+      # into this directory when they are absent.
+      - name: Cache pinned external tools (lean4export, con-leche, nanoda)
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/concrete-ext
+          key: ${{ runner.os }}-concrete-ext-${{ hashFiles('scripts/tests/external_checker.pins', 'lean-toolchain') }}
+
+      - name: Gate mutation coverage shard (heavy; rebuilds per mutation)
+        run: SHARD="${{ matrix.shard }}/${{ needs.mutation-plan.outputs.count }}" bash scripts/tests/check_gate_mutation_coverage.sh
+
+      # ALWAYS, so a failed or cancelled shard still reports WHAT it was: the aggregator refuses a
+      # shard whose status is not success/failure, and one whose artifact never arrived. Staged under
+      # non-hidden names because upload-artifact skips dotfiles.
+      - name: Stage shard record
+        if: always()
+        run: |
+          out="$RUNNER_TEMP/shard-out"; mkdir -p "$out"
+          printf 'shard=%s/%s\njob_status=%s\n' "${{ matrix.shard }}" "${{ needs.mutation-plan.outputs.count }}" "${{ job.status }}" > "$out/status.txt"
+          [ ! -f .mutation-campaign-summary.partial ] || cp .mutation-campaign-summary.partial "$out/summary.txt"
+          run_id="$(sed -n 's/^run_id=//p' "$out/summary.txt" 2>/dev/null | head -1)"
+          [ -z "$run_id" ] || [ ! -d ".mutation-evidence/$run_id" ] || cp -R ".mutation-evidence/$run_id" "$out/evidence"
+          # A shard cancelled before its summary still leaves baseline logs, and those are the
+          # runner-specific evidence (a gate red on the clean tree) that cannot be reproduced locally.
+          # Kept for diagnosis only; the aggregator reads summary.txt and never this directory.
+          if [ -z "$run_id" ] && [ -d .mutation-evidence ]; then
+            cp -R .mutation-evidence "$out/evidence-unsummarized"
+          fi
+
+      - name: Upload shard record
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mutation-shard-${{ matrix.shard }}
+          path: ${{ runner.temp }}/shard-out
+          if-no-files-found: error
+
+  mutation-aggregate:
+    name: Gate mutation coverage (aggregate verdict)
+    needs: [mutation-plan, mutation-shard]
+    # ALWAYS: a cancelled or failed shard must produce a REFUSED verdict, not a skipped job that
+    # reads as nothing to report.
+    if: always() && needs.mutation-plan.result != 'skipped'
+    runs-on: ${{ (github.event_name != 'pull_request' && vars.CONCRETE_SELF_HOSTED_CAMPAIGN == 'true') && fromJSON('["self-hosted","linux","x64","concrete"]') || 'ubuntu-latest' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Nix (GitHub-hosted only)
+        if: runner.environment != 'self-hosted'
+        uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
+      - name: Download plan and shard records
+        uses: actions/download-artifact@v4
+        with:
+          path: ${{ runner.temp }}/mutation
+
+      - name: Aggregate (fails closed; exit 0 only when qualified)
+        run: |
+          mkdir -p "$RUNNER_TEMP/mutation-shards"
+          for d in "$RUNNER_TEMP"/mutation/mutation-shard-*; do [ ! -d "$d" ] || mv "$d" "$RUNNER_TEMP/mutation-shards/"; done
+          python3 -I scripts/tests/lib/aggregate_mutation_shards.py \
+            --plan "$RUNNER_TEMP/mutation/mutation-plan/plan.txt" \
+            --shards-dir "$RUNNER_TEMP/mutation-shards" \
+            --expect-head "${{ github.sha }}" \
+            --out "$RUNNER_TEMP/mutation-campaign-summary.txt"
+
+      - name: Upload campaign verdict
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mutation-campaign-summary
+          path: ${{ runner.temp }}/mutation-campaign-summary.txt
+          if-no-files-found: warn
+
+  ssa-tests:
+    name: SSA test suite
+    runs-on: ${{ (github.event_name != 'pull_request' && vars.CONCRETE_SELF_HOSTED == 'true') && fromJSON('["self-hosted","linux","x64","concrete"]') || 'ubuntu-latest' }}
+    needs: build
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Nix (GitHub-hosted only)
+        if: runner.environment != 'self-hosted'
+        uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
+      - name: Cache Lean build (.lake/build shared across jobs)
+        uses: actions/cache@v4
+        with:
+          path: .lake/build
+          key: ${{ runner.os }}-${{ runner.arch }}-lakebuild-${{ hashFiles('Concrete/**', 'Concrete.lean', 'proofs/**', 'Main.lean', 'Browser.lean', 'lakefile.toml', 'lean-toolchain', 'lake-manifest.json') }}
+
+      # GitHub-hosted only. A self-hosted runner's ~/.elan persists between jobs and already
+      # holds the toolchains; restoring the 2.3 GB archive over it took 2-4 min per job.
+      - name: Cache the Lean toolchain (~/.elan)
+        if: runner.environment != 'self-hosted'
+        uses: actions/cache@v4
+        with:
+          path: ~/.elan
+          key: ${{ runner.os }}-${{ runner.arch }}-elan-${{ hashFiles('lean-toolchain') }}
+
+      # Self-hosted only: start from the server's published build of main (R-0546). The cache is
+      # written by the server's lakecache user alone, and lake build below still re-checks every
+      # module, so this changes how long the build takes, never whether it runs. A miss or a
+      # toolchain/manifest/lean-binary mismatch leaves today's path (GitHub cache, then build).
+      - name: Seed .lake from the server build cache (self-hosted only)
+        id: lake_seed
+        if: runner.environment == 'self-hosted'
+        run: if bash scripts/dev/seed-lake.sh --elan --cache-root /var/cache/concrete-lake; then echo "seeded=true" >> "$GITHUB_OUTPUT"; fi
+
+      - name: Install Lean (via lean-action)
+        id: lean_install
+        # A toolchain download can fail on a dropped connection; one paused retry
+        # keeps a network blip from failing (and hiding) the whole run.
+        continue-on-error: true
+        uses: leanprover/lean-action@v1
+        with:
+          use-github-cache: ${{ steps.lake_seed.outputs.seeded != 'true' }}
+          build-args: "--log-level=warning"
+
+      - name: Wait before retrying the Lean install
+        if: steps.lean_install.outcome == 'failure'
+        run: sleep 60
+
+      - name: Install Lean (via lean-action) (retry)
+        if: steps.lean_install.outcome == 'failure'
+        uses: leanprover/lean-action@v1
+        with:
+          use-github-cache: ${{ steps.lake_seed.outputs.seeded != 'true' }}
+          build-args: "--log-level=warning"
+
+      - name: Install clang
+        run: if [ "$RUNNER_ENVIRONMENT" = self-hosted ] && command -v clang >/dev/null; then echo "self-hosted runner, using preinstalled clang"; else sudo apt-get update && sudo apt-get install -y clang; fi
+
+      - name: Run SSA test suite
+        run: bash ./scripts/tests/test_ssa.sh
+
+  trust-gate:
+    name: Trust gate (correctness contracts)
+    runs-on: ${{ (github.event_name != 'pull_request' && vars.CONCRETE_SELF_HOSTED == 'true') && fromJSON('["self-hosted","linux","x64","concrete"]') || 'ubuntu-latest' }}
+    needs: build
+    # A cap so a hung run releases the runner instead of burning the job's
+    # full budget (this job has flaked with a bare exit — see the log
+    # capture below).
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Nix (GitHub-hosted only)
+        if: runner.environment != 'self-hosted'
+        uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
+      - name: Cache Lean build (.lake/build shared across jobs)
+        uses: actions/cache@v4
+        with:
+          path: .lake/build
+          key: ${{ runner.os }}-${{ runner.arch }}-lakebuild-${{ hashFiles('Concrete/**', 'Concrete.lean', 'proofs/**', 'Main.lean', 'Browser.lean', 'lakefile.toml', 'lean-toolchain', 'lake-manifest.json') }}
+
+      # GitHub-hosted only. A self-hosted runner's ~/.elan persists between jobs and already
+      # holds the toolchains; restoring the 2.3 GB archive over it took 2-4 min per job.
+      - name: Cache the Lean toolchain (~/.elan)
+        if: runner.environment != 'self-hosted'
+        uses: actions/cache@v4
+        with:
+          path: ~/.elan
+          key: ${{ runner.os }}-${{ runner.arch }}-elan-${{ hashFiles('lean-toolchain') }}
+
+      # Self-hosted only: start from the server's published build of main (R-0546). The cache is
+      # written by the server's lakecache user alone, and lake build below still re-checks every
+      # module, so this changes how long the build takes, never whether it runs. A miss or a
+      # toolchain/manifest/lean-binary mismatch leaves today's path (GitHub cache, then build).
+      - name: Seed .lake from the server build cache (self-hosted only)
+        id: lake_seed
+        if: runner.environment == 'self-hosted'
+        run: if bash scripts/dev/seed-lake.sh --elan --cache-root /var/cache/concrete-lake; then echo "seeded=true" >> "$GITHUB_OUTPUT"; fi
+
+      - name: Install Lean (via lean-action)
+        id: lean_install
+        # A toolchain download can fail on a dropped connection; one paused retry
+        # keeps a network blip from failing (and hiding) the whole run.
+        continue-on-error: true
+        uses: leanprover/lean-action@v1
+        with:
+          use-github-cache: ${{ steps.lake_seed.outputs.seeded != 'true' }}
+          build-args: "--log-level=warning"
+
+      - name: Wait before retrying the Lean install
+        if: steps.lean_install.outcome == 'failure'
+        run: sleep 60
+
+      - name: Install Lean (via lean-action) (retry)
+        if: steps.lean_install.outcome == 'failure'
+        uses: leanprover/lean-action@v1
+        with:
+          use-github-cache: ${{ steps.lake_seed.outputs.seeded != 'true' }}
+          build-args: "--log-level=warning"
+
+      - name: Install clang
+        run: if [ "$RUNNER_ENVIRONMENT" = self-hosted ] && command -v clang >/dev/null; then echo "self-hosted runner, using preinstalled clang"; else sudo apt-get update && sudo apt-get install -y clang; fi
+
+      - name: Run trust gate
+        # Tee the full output so a flaky bare-exit failure leaves a diagnosable
+        # log (the raw step log has been truncated on past flakes).
+        run: |
+          set -o pipefail
+          ./scripts/tests/run_tests.sh --trust-gate 2>&1 | tee "$RUNNER_TEMP/trust-gate.log"
+
+      - name: Upload trust-gate log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trust-gate-log
+          path: ${{ runner.temp }}/trust-gate.log
+          if-no-files-found: ignore
+
+  proof-gate:
+    name: Proof evidence gate
+    runs-on: ${{ (github.event_name != 'pull_request' && vars.CONCRETE_SELF_HOSTED == 'true') && fromJSON('["self-hosted","linux","x64","concrete"]') || 'ubuntu-latest' }}
+    needs: build
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Nix (GitHub-hosted only)
+        if: runner.environment != 'self-hosted'
+        uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
+      - name: Cache Lean build (.lake/build shared across jobs)
+        uses: actions/cache@v4
+        with:
+          path: .lake/build
+          key: ${{ runner.os }}-${{ runner.arch }}-lakebuild-${{ hashFiles('Concrete/**', 'Concrete.lean', 'proofs/**', 'Main.lean', 'Browser.lean', 'lakefile.toml', 'lean-toolchain', 'lake-manifest.json') }}
+
+      # GitHub-hosted only. A self-hosted runner's ~/.elan persists between jobs and already
+      # holds the toolchains; restoring the 2.3 GB archive over it took 2-4 min per job.
+      - name: Cache the Lean toolchain (~/.elan)
+        if: runner.environment != 'self-hosted'
+        uses: actions/cache@v4
+        with:
+          path: ~/.elan
+          key: ${{ runner.os }}-${{ runner.arch }}-elan-${{ hashFiles('lean-toolchain') }}
+
+      # Self-hosted only: start from the server's published build of main (R-0546). The cache is
+      # written by the server's lakecache user alone, and lake build below still re-checks every
+      # module, so this changes how long the build takes, never whether it runs. A miss or a
+      # toolchain/manifest/lean-binary mismatch leaves today's path (GitHub cache, then build).
+      - name: Seed .lake from the server build cache (self-hosted only)
+        id: lake_seed
+        if: runner.environment == 'self-hosted'
+        run: if bash scripts/dev/seed-lake.sh --elan --cache-root /var/cache/concrete-lake; then echo "seeded=true" >> "$GITHUB_OUTPUT"; fi
+
+      - name: Install Lean (via lean-action)
+        id: lean_install
+        # A toolchain download can fail on a dropped connection; one paused retry
+        # keeps a network blip from failing (and hiding) the whole run.
+        continue-on-error: true
+        uses: leanprover/lean-action@v1
+        with:
+          use-github-cache: ${{ steps.lake_seed.outputs.seeded != 'true' }}
+          build-args: "--log-level=warning"
+
+      - name: Wait before retrying the Lean install
+        if: steps.lean_install.outcome == 'failure'
+        run: sleep 60
+
+      - name: Install Lean (via lean-action) (retry)
+        if: steps.lean_install.outcome == 'failure'
+        uses: leanprover/lean-action@v1
+        with:
+          use-github-cache: ${{ steps.lake_seed.outputs.seeded != 'true' }}
+          build-args: "--log-level=warning"
+
+      - name: Install clang
+        run: if [ "$RUNNER_ENVIRONMENT" = self-hosted ] && command -v clang >/dev/null; then echo "self-hosted runner, using preinstalled clang"; else sudo apt-get update && sudo apt-get install -y clang; fi
+
+      - name: Run proof evidence gate
+        run: bash scripts/ci/proof_gate.sh
+
+      - name: Evidence-class corpus integrity gate
+        run: bash scripts/tests/check_evidence_corpus.sh
+
+      - name: Registry-retirement gate (examples are source-linked, no JSON)
+        run: bash scripts/tests/check_no_example_registries.sh
+
+      - name: Proof-namespace guard (example proofs stay under Examples.*)
+        run: bash scripts/tests/check_proof_namespace.sh
+
+      - name: Proof-patterns corpus gate
+        run: bash scripts/tests/check_proof_patterns.sh
+
+      - name: Contract-negatives gate (source-contract hardening)
+        run: bash scripts/tests/check_contract_negatives.sh
+
+      - name: Contract-stability gate (contract API drift)
+        run: bash scripts/tests/check_contract_stability.sh
+
+      - name: Phase 1 contracts validation artifact (umbrella + snapshots)
+        run: bash scripts/tests/check_phase1_contracts.sh
+
+      - name: VC schema v1 gate (Phase 2 foundation)
+        run: bash scripts/tests/check_vc_schema.sh
+
+      - name: ProofKit arithmetic-bridge gate (Phase 2 library)
+        run: bash scripts/tests/check_proofkit_arith.sh
+
+      - name: External-SMT path gate (Phase 2 trust boundary)
+        run: bash scripts/tests/check_smt_path.sh
+
+      - name: SMT release-policy gate (Phase 2 evidence governance)
+        run: bash scripts/tests/check_smt_policy.sh
+
+      - name: Lean-replay gate (Phase 2 SMT→kernel upgrade artifact)
+        run: bash scripts/tests/check_smt_replay.sh
+
+      - name: SMT negatives gate (Phase 2 honesty boundaries)
+        run: bash scripts/tests/check_smt_negatives.sh
+
+      - name: VC/discharge example matrix gate (Phase 2 status references)
+        run: bash scripts/tests/check_vc_discharge_examples.sh
+
+      - name: External-SMT teaching group gate (Phase 2 when-useful/when-refused)
+        run: bash scripts/tests/check_smt_examples.sh
+
+      - name: Red-team VC/SMT gate (Phase 2 adversarial)
+        run: bash scripts/tests/check_smt_redteam.sh
+
+      - name: End-of-Phase-2 VC/SMT examples gate
+        run: bash scripts/tests/check_vc_examples.sh
+
+      - name: Operational-VC-auto-discharge forcing-probe gate (Phase 9 #16a)
+        run: bash scripts/tests/check_operational_vc_auto_discharge.sh
+
+      - name: Phase 2 VC/discharge validation artifact (umbrella)
+        run: bash scripts/tests/check_phase2_vc.sh
+
+      - name: ObligationCore ledger gate (Phase 3 schema + vocabulary)
+        run: bash scripts/tests/check_obligation_core.sh
+
+      - name: Unified scoped-collector gate (Phase 3 #3 adversarial)
+        run: bash scripts/tests/check_scoped_collector.sh
+
+      - name: Call-site precondition migration gate (Phase 3 #4 parity+improvement)
+        run: bash scripts/tests/check_call_site_migration.sh
+
+      - name: Array-bounds migration gate (Phase 3 #5 parity+improvement)
+        run: bash scripts/tests/check_bounds_migration.sh
+
+      - name: Div/mod + sound-lowering migration gate (Phase 3 #6 parity+improvement)
+        run: bash scripts/tests/check_div_migration.sh
+
+      - name: Overflow migration gate (Phase 3 #7 three-route parity+trust-boundary)
+        run: bash scripts/tests/check_overflow_migration.sh
+
+      - name: Assert/assume migration gate (Phase 3 #8 ledger fact + no-laundering)
+        run: bash scripts/tests/check_assume_migration.sh
+
+      - name: Loop-obligation migration gate (Phase 3 #9 O1-O5 scoped + split status)
+        run: bash scripts/tests/check_loop_migration.sh
+
+      - name: Contract-clause migration gate (Phase 3 #10 ledger diagnostics + partial)
+        run: bash scripts/tests/check_contract_clause_migration.sh
+
+      - name: Proof-link freshness migration gate (Phase 3 #11 proof-status in the ledger)
+        run: bash scripts/tests/check_proof_link_migration.sh
+
+      - name: Obligation-expression lowering gate (Phase 3 #12 shared lowering layer)
+        run: bash scripts/tests/check_obligation_lowering.sh
+
+      - name: Backend discharge-adapter gate (Phase 3 #13 evidence-class firewall)
+        run: bash scripts/tests/check_discharge_adapters.sh
+
+      - name: Reports-as-views gate (Phase 3 #15 ledger consistency)
+        run: bash scripts/tests/check_obligation_report_views.sh
+
+      - name: Contracts↔ledger parity gate (Phase 3 #15/#18e)
+        run: bash scripts/tests/check_contracts_ledger_parity.sh
+
+      - name: No-duplicate-obligation-walkers guard (Phase 3 #18d)
+        run: bash scripts/tests/check_no_duplicate_obligation_walkers.sh
+
+      - name: Single-truth-source guard (Phase 3 #18d step 5)
+        run: bash scripts/tests/check_obligation_single_truth_source.sh
+
+      - name: Policy-as-ledger-view gate (Phase 3 #14)
+        run: bash scripts/tests/check_obligation_policy_views.sh
+
+      - name: prove-as-ledger-view gate (Phase 3 #16)
+        run: bash scripts/tests/check_obligation_prove_views.sh
+
+      - name: Phase 3 capstone — ObligationCore single truth source (umbrella)
+        run: bash scripts/tests/check_phase3_obligation_core.sh
+
+      - name: ObligationCore red-team gate (Phase 3 hardening)
+        run: bash scripts/tests/check_obligation_redteam.sh
+
+  # LANGUAGE-SURFACE GATES, SPLIT FOUR WAYS. One job ran every gate below in sequence and took ~80
+  # minutes (run 39775852735), the longest job of the landing tier. The four jobs below each take
+  # ~20 minutes of gate time (measured per step on that run), and run in parallel after the build.
+  # Each is independent: no gate reads another gate's output, and the checker acceptance evidence
+  # step keeps its upload step in the same job. A job stops at its first failing gate, so a red gate
+  # in one split never hides the others.
+  language-gates:
+    name: Language-surface gates (Phase 5-6)
+    runs-on: ${{ (github.event_name != 'pull_request' && vars.CONCRETE_SELF_HOSTED == 'true') && fromJSON('["self-hosted","linux","x64","concrete"]') || 'ubuntu-latest' }}
+    needs: build
+    steps:
+      # Full history: docs/bugs/AREAS.md (checked by the fast surface gates' docs-drift leg) derives
+      # each bug's area from its fix commits, and the ledger generator refuses a shallow clone.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Nix (GitHub-hosted only)
+        if: runner.environment != 'self-hosted'
+        uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
+      - name: Cache Lean build (.lake/build shared across jobs)
+        uses: actions/cache@v4
+        with:
+          path: .lake/build
+          key: ${{ runner.os }}-${{ runner.arch }}-lakebuild-${{ hashFiles('Concrete/**', 'Concrete.lean', 'proofs/**', 'Main.lean', 'Browser.lean', 'lakefile.toml', 'lean-toolchain', 'lake-manifest.json') }}
+
+      # GitHub-hosted only. A self-hosted runner's ~/.elan persists between jobs and already
+      # holds the toolchains; restoring the 2.3 GB archive over it took 2-4 min per job.
+      - name: Cache the Lean toolchain (~/.elan)
+        if: runner.environment != 'self-hosted'
+        uses: actions/cache@v4
+        with:
+          path: ~/.elan
+          key: ${{ runner.os }}-${{ runner.arch }}-elan-${{ hashFiles('lean-toolchain') }}
+
+      # Self-hosted only: start from the server's published build of main (R-0546). The cache is
+      # written by the server's lakecache user alone, and lake build below still re-checks every
+      # module, so this changes how long the build takes, never whether it runs. A miss or a
+      # toolchain/manifest/lean-binary mismatch leaves today's path (GitHub cache, then build).
+      - name: Seed .lake from the server build cache (self-hosted only)
+        id: lake_seed
+        if: runner.environment == 'self-hosted'
+        run: if bash scripts/dev/seed-lake.sh --elan --cache-root /var/cache/concrete-lake; then echo "seeded=true" >> "$GITHUB_OUTPUT"; fi
+
+      - name: Install Lean (via lean-action)
+        id: lean_install
+        # A toolchain download can fail on a dropped connection; one paused retry
+        # keeps a network blip from failing (and hiding) the whole run.
+        continue-on-error: true
+        uses: leanprover/lean-action@v1
+        with:
+          use-github-cache: ${{ steps.lake_seed.outputs.seeded != 'true' }}
+          build-args: "--log-level=warning"
+
+      - name: Wait before retrying the Lean install
+        if: steps.lean_install.outcome == 'failure'
+        run: sleep 60
+
+      - name: Install Lean (via lean-action) (retry)
+        if: steps.lean_install.outcome == 'failure'
+        uses: leanprover/lean-action@v1
+        with:
+          use-github-cache: ${{ steps.lake_seed.outputs.seeded != 'true' }}
+          build-args: "--log-level=warning"
+
+      # The totality ratchet (R-0506): no NEW non-total compiler declaration, a baseline that only
+      # shrinks against the base revision (hence this job: it checks out full history), no sorry and
+      # no unregistered axiom in a compiler declaration.
+      - name: Totality ratchet (no new partial/unsafe/opaque compiler declarations)
+        env:
+          # A push is compared with the revision before ALL of its commits, not with the tip's parent.
+          TOTALITY_BASE: ${{ github.event_name == 'push' && github.event.before || inputs.base || '' }}
+        run: bash scripts/tests/check_totality_ratchet.sh
+
+      # SYN-1's other half: the parser accepts exactly the grammar. Generated derivations must
+      # parse, grammar-rejected one-token mutants must not, the parser decides with one token, and
+      # every listed difference may only disappear (grammar/conformance_known.tsv).
+      - name: Grammar conformance (the parser accepts exactly the grammar)
+        env:
+          CONFORMANCE_BASE: ${{ github.event_name == 'push' && github.event.before || inputs.base || '' }}
+        run: bash scripts/tests/check_grammar_conformance.sh
+
+      # Bug 316: the browser compiler's root, built and run on the parity cases natively.
+      - name: Browser compiler root (builds; native adapter answers the parity cases)
+        run: bash scripts/tests/check_browser_native.sh
+
+      - name: Install clang
+        run: if [ "$RUNNER_ENVIRONMENT" = self-hosted ] && command -v clang >/dev/null; then echo "self-hosted runner, using preinstalled clang"; else sudo apt-get update && sudo apt-get install -y clang; fi
+
+      - name: "Fast fail-closed surface gates (R-0022 — the single local/CI checklist; prints the exact failing constituent)"
+        run: bash scripts/tests/run_fast_surface_gates.sh
+
+      - name: "Fast-surface gate-the-gate (R-0022 — removing a representative inventory row turns the aggregate RED)"
+        run: bash scripts/tests/run_fast_surface_gates.sh --mutate
+
+      - name: "Generic-enum monomorphization (R-0001 / bug 051 — one declaration per instantiation; values, neighbours, layout; builtins keep the canonical union)"
+        run: bash scripts/tests/check_generic_enum_mono.sh
+
+      - name: "Indirect-call identity (R-0002 / bug 050 — a callee VALUE is never resolved by global name; dispatch, interp agreement, no rewrite, std.io)"
+        run: bash scripts/tests/check_indirect_call_identity.sh
+
+      # AND THE RULE THAT KEEPS THIS FROM RECURRING. Every check_*.sh must be reachable from CI or
+      # explicitly declared as a skip with a reason. A gate nobody runs is indistinguishable from a
+      # gate that does not exist, and its absence is quieter than a failure: the pass count keeps
+      # rising while coverage does not.
+      - name: "Gate registration (every gate is reachable from CI or explicitly skipped)"
+        run: bash scripts/tests/check_gate_registration.sh
+
+      - name: "Gate lock (a lock is refused, never reclaimed on a dead creator PID)"
+        run: bash scripts/tests/check_gate_lock.sh
+
+      - name: "Heavy slots (R-0543: at most N heavy runs per machine; a third waits; a dead holder is reclaimed)"
+        run: bash scripts/tests/check_heavy_slots.sh
+
+      - name: "Compile cache (R-0546: a hit equals a fresh compile; every covered input invalidates)"
+        run: bash scripts/tests/check_compile_cache.sh
+
+      - name: "Pre-push validation record (reused only when every bound input matches)"
+        run: bash scripts/tests/check_prepush_record.sh
+
+      - name: "Builtin enum ownership (one owner computes the list and the result flag)"
+        run: bash scripts/tests/check_builtin_enum_owner.sh
+
+      - name: "Policy enforcement (the [policy] surface is gated, not merely documented)"
+        run: bash scripts/tests/check_policy.sh
+
+      - name: "Stack budget fails closed (an unbounded stack is never a number; bug 065)"
+        run: bash scripts/tests/check_stack_budget.sh
+
+      - name: Project-model gate (Phase 5 #2 — Concrete.toml structure)
+        run: bash scripts/tests/check_project_model.sh
+
+      - name: "Native libraries (G1 — Concrete.toml [native] links, propagates, fails closed, is a listed trust dependency)"
+        run: bash scripts/tests/check_native_libs.sh
+
+      - name: "`concrete test` gate (Phase 5 #3 — project test runner)"
+        run: bash scripts/tests/check_concrete_test.sh
+
+      - name: Diagnostics-quality gate (Phase 5 #4 — span floor)
+        run: bash scripts/tests/check_diagnostics_quality.sh
+
+      - name: ByteView gate (Phase 5 #5a — owned stored zero-copy view)
+        run: bash scripts/tests/check_byte_view.sh
+
+      - name: Collections gate (Phase 5 #6 — H1-clean collection surface)
+        run: bash scripts/tests/check_collections.sh
+
+      - name: "`concrete fmt` gate (Phase 6 #1 — subcommand + semantics-preserving)"
+        run: bash scripts/tests/check_concrete_fmt.sh
+
+      - name: Loop-control gate (Phase 6 #4 — break/continue/while-expr + linear cleanup)
+        run: bash scripts/tests/check_loop_control.sh
+
+      - name: Type-alias gate (Phase 6 #3 — transparency + no-new-identity)
+        run: bash scripts/tests/check_type_alias.sh
+
+      - name: Pattern-ergonomics gate (Phase 6 #5 — range patterns)
+        run: bash scripts/tests/check_pattern_ergonomics.sh
+
+      - name: Lex-escapes gate (unknown escapes are E0001, never silently mangled)
+        run: bash scripts/tests/check_lex_escapes.sh
+
+      - name: Mixed-width binop gate (E0228 + flexible literals + interp cast normalization)
+        run: bash scripts/tests/check_mixed_width_binops.sh
+
+      - name: Type-agreement gate (Phase 6.5 #9 — Check/Elab type through one TypeJudgment)
+        run: bash scripts/tests/check_type_agreement.sh
+
+      - name: "Differential-position gate (flexible overflow / signed shift, interp == compiled)"
+        run: bash scripts/tests/check_differential_positions.sh
+
+      - name: "Copy-judgment gate (Phase 6.5 — one Copy judgment shared by Check and Core)"
+        run: bash scripts/tests/check_copy_judgment.sh
+
+      - name: "Ownership-judgment matrix (Check == Lower move/drop == interp consumption)"
+        run: bash scripts/tests/check_ownership_judgment.sh
+
+      - name: "Totality-judgment matrix (trap/divergence facts agree interp == compiled)"
+        run: bash scripts/tests/check_totality_judgment.sh
+
+      - name: "Trap inventory (R-0005 / bug 053 — one source says which unary ops can trap; DCE may not delete one)"
+        run: bash scripts/tests/check_trap_inventory.sh
+
+      - name: "CoreCheck boundary gate (residue classes rejected before Lower)"
+        run: bash scripts/tests/check_corecheck_boundary.sh
+
+      - name: "Divergence-detection gate (each diverging arm lifts E0213; bug 078 lowering)"
+        run: bash scripts/tests/check_divergence_detection.sh
+
+      - name: "Capability-judgment gate (Phase 6.5 — one direct-call capability decision)"
+        run: bash scripts/tests/check_capability_judgment.sh
+
+      - name: "Pipeline-refactor contract (Phase 6B capstone — behavior-preserving + fail-closed)"
+        run: bash scripts/tests/check_pipeline_refactor_contract.sh
+
+      - name: "Pipeline telemetry trace (Phase 6C #1 — stable-schema JSON, no private paths)"
+        run: bash scripts/tests/check_pipeline_telemetry.sh
+
+      - name: "SSA-verify behavior preservation (trust pass keeps its verdicts on complex CFGs)"
+        run: bash scripts/tests/check_ssa_verify_agreement.sh
+
+      - name: "Compiler complexity guard (Phase 6C #2 — no super-linear pass on scaling corpus)"
+        run: bash scripts/tests/check_compiler_complexity.sh
+
+      - name: "Match lowering scaling (bug 178 — lower stage near-linear in match arms, by heartbeats and instructions)"
+        run: bash scripts/tests/check_ssa_lowering_scaling.sh
+
+      - name: "Compile-time scaling (R-0550, exit 2o — per-stage budgets and near-linear growth on generated 10^4 – 10^5-element programs; bugs 027, 248 – 250, 255 – 261)"
+        run: bash scripts/tests/check_compile_scaling.sh
+
+      - name: "Pipeline trace (Phase 6C #3 — per-stage --trace-pipeline names the first failing phase)"
+        run: bash scripts/tests/check_trace_pipeline.sh
+
+      - name: "Counterexample reduction (Phase 6C #4 — failures reduce to a minimized fixture + replay)"
+        run: bash scripts/tests/check_counterexample_reduction.sh
+
+      - name: "Phase 6D capstone (surface simplified, semantics unweakened)"
+        run: bash scripts/tests/check_phase6d_surface_simplification.sh
+
+      - name: "View lifetime (R-0483 — borrowed access cannot outlive its owner, and validation cannot outlive its bytes)"
+        run: bash scripts/tests/check_view_lifetime.sh
+
+      - name: "Exit 2i rules (MEMORY_SEMANTICS §15 — second-class references and one binding per visible name, with versioned migration diagnostics)"
+        run: bash scripts/tests/check_rules_2i.sh
+
+      - name: "Tightening batch (landing train 6 — bugs 136/137/165/166/183/185/190/198/199, D1/D2/D3/D6, G13/G15/G16)"
+        run: bash scripts/tests/check_tightening_rules.sh
+
+      - name: Install Zola for the spec gate's site build (pinned, the version book.yml publishes with)
+        run: |
+          if command -v zola >/dev/null; then zola --version; else
+            tag="v0.19.2"
+            mkdir -p "$RUNNER_TEMP/zola"
+            curl -fsSL "https://github.com/getzola/zola/releases/download/${tag}/zola-${tag}-x86_64-unknown-linux-gnu.tar.gz" | tar -xz --directory="$RUNNER_TEMP/zola"
+            echo "$RUNNER_TEMP/zola" >> "$GITHUB_PATH"
+          fi
+
+      - name: "Language specification (docs/spec — one normative statement; examples run natively and with --interp, codes, enforcing sites, Lean names, generated manifest and site, no restated rules)"
+        # S3 compares the spec's registries with a base revision: fetch the parent and main so the
+        # merge base (or HEAD~1) resolves in the shallow checkout, and the explicit base (a push's
+        # previous main, a train's base) when there is one. A missing base fails the gate.
+        env:
+          SPEC_BASE: ${{ github.event_name == 'push' && github.event.before || inputs.base || '' }}
+        run: |
+          git fetch --no-tags --deepen=1 origin || true
+          git fetch --no-tags --depth=50 origin main:refs/remotes/origin/main || true
+          if [ -n "$SPEC_BASE" ]; then git fetch --no-tags --depth=1 origin "$SPEC_BASE" || true; fi
+          bash scripts/tests/check_spec.sh
+
+      - name: "Effect opacity (R-0484 — an empty capability set is not a claim of purity)"
+        run: bash scripts/tests/check_effect_opacity.sh
+
+      - name: "Spawn exec failure (bug 072 — a child that fails to exec must not flush the parent's buffers)"
+        run: bash scripts/tests/check_spawn_exit.sh
+
+      - name: "Capability parameters across packages (R-0484 — Sink<cap C> imported from another package keeps its authority)"
+        run: bash scripts/tests/check_cap_struct_cross_package.sh
+
+      - name: "Inherited foreign assumptions (R-0484 R10 — a report names the dependency bindings a program relies on)"
+        run: bash scripts/tests/check_foreign_assumptions_report.sh
+
+      - name: "Assumption summaries (R-0484 R10 — what each function may reach, with provenance and explicit completeness)"
+        run: bash scripts/tests/check_assumption_summary.sh
+
+      - name: "Proof admission (R-0484 R10 — admission reads the shared assumption summary; unknown never admits)"
+        run: bash scripts/tests/check_proof_admission.sh
+
+      - name: "Trusted boundaries (R-0484 R10 — each trusted memory-safety boundary named, with its absorbed obligation and dependents)"
+        run: bash scripts/tests/check_trusted_boundaries.sh
+
+      - name: "Descriptor coverage (R-0484 R10/R5 — descriptor classification is unchecked; each binding's audit coverage is explicit)"
+        run: bash scripts/tests/check_descriptor_coverage.sh
+
+      - name: "Capability explanations (R-0484 R10 — explanations follow dependency summaries and name the dependency callee)"
+        run: bash scripts/tests/check_capability_explanations.sh
+
+      - name: "Bug 077 contained (OPEN — the build refuses it, reports stay complete-or-honest, no R-0484 case depends on it)"
+        run: bash scripts/tests/check_bug077_contained.sh
+
+      - name: "Diff-to-gate mapping (the selector still names the gates a known change breaks)"
+        run: bash scripts/tests/check_gates_for_diff.sh
+
+      - name: "Cap-variable inference (bug 063 — an unknown argument type is not an empty capability set)"
+        run: bash scripts/tests/check_cap_inference.sh
+
+      - name: "Absence is not a fact (unknown must not default to empty/pure/safe)"
+        run: bash scripts/tests/check_absence_not_fact.sh
+
+      - name: "Capability headers bind across a sibling submodule (authority laundering)"
+        run: bash scripts/tests/check_cap_sibling_module.sh
+
+      - name: "Cross-package capability enforcement (bug 071, intermediate repair)"
+        run: bash scripts/tests/check_cross_package_caps.sh
+
+      - name: "Per-method trusted, and the two safety axes it keeps apart"
+        run: bash scripts/tests/check_trusted_method.sh
+
+      - name: "CLI coherence (Phase 6E — context-free help, alias identity, legacy compat)"
+        run: bash scripts/tests/check_cli_coherence.sh
+
+      - name: "Doc snippets compile (13r — con/concrete fences compile, reject as declared, or marked pseudocode)"
+        run: bash scripts/tests/check_doc_snippets.sh
+
+      - name: "IO Writer spine (P7 14a — fn-ptr handle; acquisition authority; no-Alloc fixed sink; one shape)"
+        run: bash scripts/tests/check_io_writer.sh
+
+      - name: "Collections Copy-only status quo (H18 — non-Copy element destruction pinned as disclosed hole)"
+        run: bash scripts/tests/check_collections_copy_only.sh
+
+      - name: "std.test oracle layer (P7 step 5 — silent/cap-free expects, Console-visible asserts, stable messages, no xUnit)"
+        run: bash scripts/tests/check_std_test.sh
+
+      - name: "Bytes/Text boundary (P7 #4 — raw bytes vs validated UTF-8; checked or named-unchecked crossings only)"
+        run: bash scripts/tests/check_bytes_text_boundary.sh
+
+      - name: "Error conventions (13t — the three buckets report-visible: E0286 / trap_sites / caps)"
+        run: bash scripts/tests/check_error_conventions.sh
+
+      - name: "Exit codes (MAIN_EXIT_MODEL stage 1 — main return = process status, clean stdout; echo only behind the harness knob)"
+        run: bash scripts/tests/check_exit_codes.sh
+
+      - name: "Stdlib hardening (P7 item 0, H1-H5 class gates + unproven-content check)"
+        run: bash scripts/tests/check_std_hardening.sh
+
+      - name: "Pure-core proofs (slice 1 — kernel-verified stdlib proof link, mutation-sensitive)"
+        run: bash scripts/tests/check_purecore_proofs.sh
+
+      - name: "ProofCore callable identity (R-0442 / bug 061 — a locally bound callable is not a global name; two namespaces)"
+        run: bash scripts/tests/check_proofcore_callable_identity.sh
+
+      - name: "Proof freshness witnesses (R-0004 slice 1 — executable reproducers for bugs 058/059/060/062 + controls; TRIPWIRE: gap legs fail when fixed)"
+        run: bash scripts/tests/check_proof_freshness.sh
+
+      - name: "Workload 3: hexdump differential vs xxd + exit codes"
+        run: bash scripts/tests/check_hexdump_differential.sh
+
+      - name: "std.cli v1: cli_tool matrix + bug-034 regression + proof-of-pull"
+        run: bash scripts/tests/check_cli_helpers.sh
+
+      - name: "Workload 4: tar_list differential vs tar -tf + exit codes"
+        run: bash scripts/tests/check_tar_list_differential.sh
+
+      - name: "Builtin semantics: interp == compiled per builtin + inventory pin"
+        run: bash scripts/tests/check_builtin_semantics.sh
+
+      - name: "Workload 5: envcfg env-override matrix + exit codes + bug-039 leg"
+        run: bash scripts/tests/check_envcfg.sh
+
+      - name: "std compiled coverage: one compiled behavioral fixture per std module (fail-closed inventory)"
+        run: bash scripts/tests/check_std_compiled_coverage.sh
+
+      - name: "Workload 6: wordfreq differential vs C-locale sort|uniq -c + exit codes"
+        run: bash scripts/tests/check_wordfreq_differential.sh
+
+      - name: "Workload 7: httpget loopback TCP differential (text+binary+curl) + exit codes"
+        run: bash scripts/tests/check_httpget_differential.sh
+
+      - name: "Workload 8: tcpserve single-connection server (accept path, failure classification)"
+        run: bash scripts/tests/check_tcpserve.sh
+
+      - name: "Workload 9: lzpack streams byte-identical to an independent encoder + cross-decode + corrupt streams + exit codes"
+        run: bash scripts/tests/check_lzpack_differential.sh
+
+      - name: "Workload 10: stackvm agrees byte for byte with an independent Python implementation (test, generated, mutated, corrupted programs) + exit codes"
+        run: bash scripts/tests/check_stackvm_differential.sh
+
+      - name: "Pass-output hashes (Phase 6C #6 — per-stage replay manifest; determinism + position-free vs position-bearing)"
+        run: bash scripts/tests/check_pass_hashes.sh
+
+      - name: "Incremental shadow (Phase 6C #7 — reuse/invalidate prediction + no-false-reuse over an edit corpus)"
+        run: bash scripts/tests/check_incremental_shadow.sh
+
+      - name: "Phase 6C observability capstone (#8 — telemetry, complexity, trace, reduction, mutation sample, hashes, shadow)"
+        run: bash scripts/tests/check_phase6c_observability.sh
+
+      - name: Trailing-value gate (if/match as value-block trailing values)
+        run: bash scripts/tests/check_trailing_value_blocks.sh
+
+      - name: Submodule-checking gate (KNOWN_HOLES H12 — user sub-file bodies checked; std exemption disclosed)
+        run: bash scripts/tests/check_submodule_check_coverage.sh
+
+      - name: Struct-update gate (Phase 6 #5 — S { ..base })
+        run: bash scripts/tests/check_struct_update.sh
+
+      - name: No-tuples decision gate (Phase 6 #5 — tuple syntax stays rejected)
+        run: bash scripts/tests/check_no_tuples.sh
+
+      - name: Nested-patterns decision gate (Phase 6 #5 — one level/arm + workarounds)
+        run: bash scripts/tests/check_nested_patterns.sh
+
+      - name: Numeric-literals gate (Phase 6 #6 — out-of-range literals rejected)
+        run: bash scripts/tests/check_numeric_literals.sh
+
+      - name: defer gate (Phase 6 #7 — LIFO cleanup on every exit path)
+        run: bash scripts/tests/check_defer.sh
+
+      - name: Ignored-result gate (Phase 6 #13 — discarded Result/Option rejected unless acknowledged)
+        run: bash scripts/tests/check_ignored_result.sh
+
+      - name: Array-bounds gate (KNOWN_HOLES H8 — raw a[i] runtime-checked; OOB read/write/negative/nested/&mut trap)
+        run: bash scripts/tests/check_array_bounds.sh
+
+      - name: Error-leak gate (bug 024 — recursive/edge inputs give a clean diagnostic, not an llvm-as/ld/panic leak)
+        run: bash scripts/tests/check_error_leaks.sh
+
+      - name: Source-span gate (every pass anchors its diagnostic to the original source line)
+        run: bash scripts/tests/check_source_spans.sh
+
+      - name: Linear-discard gate (KNOWN_HOLES H6 — silent discard of a non-Copy value rejected; let _/free/consumed compile)
+        run: bash scripts/tests/check_linear_discard.sh
+
+      - name: Nested-scope linearity gate (KNOWN_HOLES H9 — branch/arm local must be consumed; move-through-let; while-true/abort exempt)
+        run: bash scripts/tests/check_linear_nested_scope.sh
+
+      - name: Linear-conservation gate (every value-flow site moves a linear value exactly once — array-lit/struct-lit/destructure/arg/return/match; no duplication)
+        run: bash scripts/tests/check_linear_conservation.sh
+
+      - name: Linearity fuzz smoke (deterministic seed — consume-once compiles, leak/dup/shadow/param-sink reject)
+        run: python3 scripts/tests/fuzz_linearity.py --n 40 --seed 20260706
+
+      - name: Macro-stance gate (Phase 6 #11 — no v1 macros)
+        run: bash scripts/tests/check_no_macros.sh
+
+      - name: Red-team gate (Phase 6 #35a — recovery / match / fingerprint / stale fixtures)
+        run: bash scripts/tests/check_phase6_redteam.sh
+
+      - name: Stdlib handoff gate (Phase 6 #19 — required surfaces stable/provisional, none blocked)
+        run: bash scripts/tests/check_stdlib_handoff.sh
+
+      - name: Build-profiles gate (Phase 6 #10 Stage 1 — profile mechanism + reporting, no codegen)
+        run: bash scripts/tests/check_build_profiles.sh
+
+      - name: Iteration-protocol gate (Phase 6 #17 — blessed traversal forms; no Iterator trait)
+        run: bash scripts/tests/check_iteration_protocol.sh
+
+      - name: Wrapping-arith gate (Phase 6 #10 Stage 2.1 — wrapping_* wrap correctly, integer-only)
+        run: bash scripts/tests/check_wrapping_arith.sh
+
+      - name: Saturating-arith gate (Phase 6 #10 Stage 2.2 — saturating_add/sub clamp, integer-only)
+        run: bash scripts/tests/check_saturating_arith.sh
+
+      - name: Checked-arith gate (Phase 6 #10 Stage 2.3 — ordinary + traps on overflow; wrapping_* escapes)
+        run: bash scripts/tests/check_checked_arith.sh
+
+      - name: Int-arith semantics gate (Phase 6.5 #1 — interpret == fold-then-interpret == compiled; trap preservation under folding)
+        run: bash scripts/tests/check_int_arith_semantics.sh
+
+      - name: Arithmetic red-team gate (Phase 6 #10 — overflow/neg/div-mod/shift traps + interp==compiled value agreement)
+        run: bash scripts/tests/check_arith_redteam.sh
+
+      - name: "Report-arithmetic gate (Phase 6 #10 §3.2 — per-site classification: checked/proved/wrapping/saturating)"
+        run: bash scripts/tests/check_report_arithmetic.sh
+
+      - name: Memory-model gate (Phase 6 #33 — no uninitialized reads by construction)
+        run: bash scripts/tests/check_memory_model.sh
+
+  receipt-gates:
+    name: Receipt-path gates (R-0004 replay, receipts, attestation)
+    runs-on: ${{ (github.event_name != 'pull_request' && vars.CONCRETE_SELF_HOSTED == 'true') && fromJSON('["self-hosted","linux","x64","concrete"]') || 'ubuntu-latest' }}
+    needs: build
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Nix (GitHub-hosted only)
+        if: runner.environment != 'self-hosted'
+        uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
+      - name: Cache Lean build (.lake/build shared across jobs)
+        uses: actions/cache@v4
+        with:
+          path: .lake/build
+          key: ${{ runner.os }}-${{ runner.arch }}-lakebuild-${{ hashFiles('Concrete/**', 'Concrete.lean', 'proofs/**', 'Main.lean', 'Browser.lean', 'lakefile.toml', 'lean-toolchain', 'lake-manifest.json') }}
+
+      # GitHub-hosted only. A self-hosted runner's ~/.elan persists between jobs and already
+      # holds the toolchains; restoring the 2.3 GB archive over it took 2-4 min per job.
+      - name: Cache the Lean toolchain (~/.elan)
+        if: runner.environment != 'self-hosted'
+        uses: actions/cache@v4
+        with:
+          path: ~/.elan
+          key: ${{ runner.os }}-${{ runner.arch }}-elan-${{ hashFiles('lean-toolchain') }}
+
+      # Self-hosted only: start from the server's published build of main (R-0546). The cache is
+      # written by the server's lakecache user alone, and lake build below still re-checks every
+      # module, so this changes how long the build takes, never whether it runs. A miss or a
+      # toolchain/manifest/lean-binary mismatch leaves today's path (GitHub cache, then build).
+      - name: Seed .lake from the server build cache (self-hosted only)
+        id: lake_seed
+        if: runner.environment == 'self-hosted'
+        run: if bash scripts/dev/seed-lake.sh --elan --cache-root /var/cache/concrete-lake; then echo "seeded=true" >> "$GITHUB_OUTPUT"; fi
+
+      - name: Install Lean (via lean-action)
+        id: lean_install
+        # A toolchain download can fail on a dropped connection; one paused retry
+        # keeps a network blip from failing (and hiding) the whole run.
+        continue-on-error: true
+        uses: leanprover/lean-action@v1
+        with:
+          use-github-cache: ${{ steps.lake_seed.outputs.seeded != 'true' }}
+          build-args: "--log-level=warning"
+
+      - name: Wait before retrying the Lean install
+        if: steps.lean_install.outcome == 'failure'
+        run: sleep 60
+
+      - name: Install Lean (via lean-action) (retry)
+        if: steps.lean_install.outcome == 'failure'
+        uses: leanprover/lean-action@v1
+        with:
+          use-github-cache: ${{ steps.lake_seed.outputs.seeded != 'true' }}
+          build-args: "--log-level=warning"
+
+      - name: Install clang
+        run: if [ "$RUNNER_ENVIRONMENT" = self-hosted ] && command -v clang >/dev/null; then echo "self-hosted runner, using preinstalled clang"; else sudo apt-get update && sudo apt-get install -y clang; fi
+
+      - name: "Callable identity (R-0004 step 1 — CallableId is constructed from a resolved declaration, never recovered from text)"
+        run: bash scripts/tests/check_callable_identity.sh
+
+      # R-0004 EVIDENCE GATES. These were written alongside the scoped-identity work and every one of
+      # them was absent from this workflow, which is where the local runner derives its gate list —
+      # so the whole R-0004 evidence path was verified only by hand, and a fully green CI pass proved
+      # nothing about it. A gate nobody runs is indistinguishable from a gate that does not exist, and
+      # the absence is worse than a failure: the pass count keeps rising while coverage does not.
+      - name: "Replay producer (R-0004 — kernel replay is a typed producer; refusals are values, not exit codes)"
+        run: bash scripts/tests/check_replay_producer.sh
+
+      - name: "Receipt issuance (R-0004 — a successful replay is the ONLY authority that can mint a receipt)"
+        run: bash scripts/tests/check_receipt_issuance.sh
+
+      - name: "Receipt consumption (R-0004 — a stored receipt is untrusted input, re-checked against current facts)"
+        run: bash scripts/tests/check_receipt_consumption.sh
+
+      - name: "V2 migration plan (R-0004 — every stored link is classified before any is rewritten)"
+        run: bash scripts/tests/check_v2_migration_plan.sh
+
+      - name: "Clean-checkout reproducibility (R-0004 — evidence does not depend on the working tree or the invocation directory)"
+        run: bash scripts/tests/check_clean_checkout.sh
+
+      - name: "Build identity freshness (R-0004 — the embedded compiler identity matches what the sources produce)"
+        run: bash scripts/tests/check_build_identity_freshness.sh
+
+      - name: "Slice 8 adversarial (R-0004 — every registered attack on the receipt path, each paired with a positive control)"
+        run: bash scripts/tests/check_slice8_adversarial.sh
+
+      - name: "Attestation manifest + generated-reference freshness (R-0004 — the tracked generated surface is re-derived and compared)"
+        run: bash scripts/tests/check_attestation_manifest.sh
+
+      - name: "Attestation reference order (the byte-for-byte comparison above is a function of content, not of enumeration order)"
+        run: bash scripts/tests/check_attestation_refs_order.sh
+
+      # PRE-EXISTING GATES THAT WERE ALSO MISSING. `check_snapshots.sh` was reachable only from the
+      # Makefile and as an opaque nested sub-result of two obligation-view gates, so its 11 real
+      # drifts surfaced as a one-line "snapshot gate failed" with the diff written to /tmp.
+      # `check_v1_fingerprint_golden.sh` was invoked only by the convergence inventory, which
+      # discarded its stderr and read its silence as "inconclusive".
+      - name: "Snapshot baselines (every examples/*/snapshot/ report is byte-identical)"
+        run: bash scripts/tests/check_snapshots.sh
+
+      - name: "V1 fingerprint golden (the frozen V1 body-fingerprint corpus does not move under V2)"
+        run: bash scripts/tests/check_v1_fingerprint_golden.sh
+
+  checker-gates:
+    name: Checker-identity gates (R-0208)
+    runs-on: ${{ (github.event_name != 'pull_request' && vars.CONCRETE_SELF_HOSTED == 'true') && fromJSON('["self-hosted","linux","x64","concrete"]') || 'ubuntu-latest' }}
+    needs: build
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Nix (GitHub-hosted only)
+        if: runner.environment != 'self-hosted'
+        uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
+      - name: Cache Lean build (.lake/build shared across jobs)
+        uses: actions/cache@v4
+        with:
+          path: .lake/build
+          key: ${{ runner.os }}-${{ runner.arch }}-lakebuild-${{ hashFiles('Concrete/**', 'Concrete.lean', 'proofs/**', 'Main.lean', 'Browser.lean', 'lakefile.toml', 'lean-toolchain', 'lake-manifest.json') }}
+
+      # GitHub-hosted only. A self-hosted runner's ~/.elan persists between jobs and already
+      # holds the toolchains; restoring the 2.3 GB archive over it took 2-4 min per job.
+      - name: Cache the Lean toolchain (~/.elan)
+        if: runner.environment != 'self-hosted'
+        uses: actions/cache@v4
+        with:
+          path: ~/.elan
+          key: ${{ runner.os }}-${{ runner.arch }}-elan-${{ hashFiles('lean-toolchain') }}
+
+      # Self-hosted only: start from the server's published build of main (R-0546). The cache is
+      # written by the server's lakecache user alone, and lake build below still re-checks every
+      # module, so this changes how long the build takes, never whether it runs. A miss or a
+      # toolchain/manifest/lean-binary mismatch leaves today's path (GitHub cache, then build).
+      - name: Seed .lake from the server build cache (self-hosted only)
+        id: lake_seed
+        if: runner.environment == 'self-hosted'
+        run: if bash scripts/dev/seed-lake.sh --elan --cache-root /var/cache/concrete-lake; then echo "seeded=true" >> "$GITHUB_OUTPUT"; fi
+
+      - name: Install Lean (via lean-action)
+        id: lean_install
+        # A toolchain download can fail on a dropped connection; one paused retry
+        # keeps a network blip from failing (and hiding) the whole run.
+        continue-on-error: true
+        uses: leanprover/lean-action@v1
+        with:
+          use-github-cache: ${{ steps.lake_seed.outputs.seeded != 'true' }}
+          build-args: "--log-level=warning"
+
+      - name: Wait before retrying the Lean install
+        if: steps.lean_install.outcome == 'failure'
+        run: sleep 60
+
+      - name: Install Lean (via lean-action) (retry)
+        if: steps.lean_install.outcome == 'failure'
+        uses: leanprover/lean-action@v1
+        with:
+          use-github-cache: ${{ steps.lake_seed.outputs.seeded != 'true' }}
+          build-args: "--log-level=warning"
+
+      - name: Install clang
+        run: if [ "$RUNNER_ENVIRONMENT" = self-hosted ] && command -v clang >/dev/null; then echo "self-hosted runner, using preinstalled clang"; else sudo apt-get update && sudo apt-get install -y clang; fi
+
+      - name: "Lean #14576 reproducer (R-0208 — the retained upstream exploit, isolated, must be rejected by the pinned checker)"
+        run: bash scripts/tests/check_lean14576_reproducer.sh
+
+      # The evidence a measured checker build needs before its digest may be registered (R-0208),
+      # SELF-CONTAINED: the identity, the hostile controls with their logs (and tied to that
+      # identity), the axiom inventory and a row-by-row replay of the frozen claim inventory.
+      # THIS STEP IS THE ONLY RUN of check_checker_identity, check_kernel_recheck,
+      # check_checker_policy, check_axiom_inventory and check_claim_inventory (R-0546): they used to
+      # be steps of their own as well, so each assertion ran twice per workflow run.
+      # check_kernel_recheck (run inside this step) also compiles the replay probe's native-trust
+      # classifier under Lean 4.35, which removes Lean.ofReduceBool/ofReduceNat/trustCompiler; here
+      # that leg is required, not skipped. Only the toolchain is installed; this repository still
+      # builds with its own pin.
+      - name: Install the Lean 4.35 toolchain (classifier compatibility leg only)
+        run: elan toolchain install leanprover/lean4:v4.35.0
+
+      - name: "Checker acceptance evidence (R-0208 — capture this build's digest and its validation)"
+        env:
+          CONCRETE_REQUIRE_LEAN435: "1"
+        run: bash scripts/tools/checker_acceptance_evidence.sh "$RUNNER_TEMP/checker-acceptance"
+
+      - name: "Upload checker acceptance evidence"
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: checker-acceptance-${{ runner.os }}
+          path: ${{ runner.temp }}/checker-acceptance
+          if-no-files-found: warn
+
+  evidence-gates:
+    name: Evidence-identity gates (R-0004 / R-0482)
+    runs-on: ${{ (github.event_name != 'pull_request' && vars.CONCRETE_SELF_HOSTED == 'true') && fromJSON('["self-hosted","linux","x64","concrete"]') || 'ubuntu-latest' }}
+    needs: build
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Nix (GitHub-hosted only)
+        if: runner.environment != 'self-hosted'
+        uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
+      - name: Cache Lean build (.lake/build shared across jobs)
+        uses: actions/cache@v4
+        with:
+          path: .lake/build
+          key: ${{ runner.os }}-${{ runner.arch }}-lakebuild-${{ hashFiles('Concrete/**', 'Concrete.lean', 'proofs/**', 'Main.lean', 'Browser.lean', 'lakefile.toml', 'lean-toolchain', 'lake-manifest.json') }}
+
+      # GitHub-hosted only. A self-hosted runner's ~/.elan persists between jobs and already
+      # holds the toolchains; restoring the 2.3 GB archive over it took 2-4 min per job.
+      - name: Cache the Lean toolchain (~/.elan)
+        if: runner.environment != 'self-hosted'
+        uses: actions/cache@v4
+        with:
+          path: ~/.elan
+          key: ${{ runner.os }}-${{ runner.arch }}-elan-${{ hashFiles('lean-toolchain') }}
+
+      # Self-hosted only: start from the server's published build of main (R-0546). The cache is
+      # written by the server's lakecache user alone, and lake build below still re-checks every
+      # module, so this changes how long the build takes, never whether it runs. A miss or a
+      # toolchain/manifest/lean-binary mismatch leaves today's path (GitHub cache, then build).
+      - name: Seed .lake from the server build cache (self-hosted only)
+        id: lake_seed
+        if: runner.environment == 'self-hosted'
+        run: if bash scripts/dev/seed-lake.sh --elan --cache-root /var/cache/concrete-lake; then echo "seeded=true" >> "$GITHUB_OUTPUT"; fi
+
+      - name: Install Lean (via lean-action)
+        id: lean_install
+        # A toolchain download can fail on a dropped connection; one paused retry
+        # keeps a network blip from failing (and hiding) the whole run.
+        continue-on-error: true
+        uses: leanprover/lean-action@v1
+        with:
+          use-github-cache: ${{ steps.lake_seed.outputs.seeded != 'true' }}
+          build-args: "--log-level=warning"
+
+      - name: Wait before retrying the Lean install
+        if: steps.lean_install.outcome == 'failure'
+        run: sleep 60
+
+      - name: Install Lean (via lean-action) (retry)
+        if: steps.lean_install.outcome == 'failure'
+        uses: leanprover/lean-action@v1
+        with:
+          use-github-cache: ${{ steps.lake_seed.outputs.seeded != 'true' }}
+          build-args: "--log-level=warning"
+
+      - name: Install clang
+        run: if [ "$RUNNER_ENVIRONMENT" = self-hosted ] && command -v clang >/dev/null; then echo "self-hosted runner, using preinstalled clang"; else sudo apt-get update && sudo apt-get install -y clang; fi
+
+      # GATES THAT NOTHING RAN. Three of these appeared in the Makefile only, and three were
+      # referenced by nothing anywhere in the repository — not the workflow, not the Makefile, not
+      # another gate. The two that matter most are the meta-gates: check_one_producer enforces that
+      # a fact has a single authoritative producer, and check_gate_vacuity catches assertions that
+      # pass because they measure nothing. Both encode the discipline the rest of this suite is
+      # written to, and neither was running.
+      - name: "One producer (a fact has one authoritative producer; reconciliation copies are the defect)"
+        run: bash scripts/tests/check_one_producer.sh
+
+      - name: "Gate vacuity (an assertion that passes because it measures nothing is not a gate)"
+        run: bash scripts/tests/check_gate_vacuity.sh
+
+      - name: "Coverage baseline (proved/eligible and the exact unproved dispositions, pinned)"
+        run: bash scripts/tests/check_coverage_baseline.sh
+
+      - name: "Bool kernel (boolean decision procedure agreement)"
+        run: bash scripts/tests/check_bool_kernel.sh
+
+      - name: "Table migration (proof tables convert without changing what they attest)"
+        run: bash scripts/tests/check_table_migration.sh
+
+      - name: "VCgen diff (verification-condition generation is stable across the refactor)"
+        run: bash scripts/tests/check_vcgen_diff.sh
+
+      - name: "Dependency edges (per-edge justification, scoped joins, and the classification vocabulary)"
+        run: bash scripts/tests/check_dependency_edges.sh
+
+      # REGISTERED 2026-09-02. These gates existed, passed, and were run by nothing. The registration
+      # gate reported them reachable because their names appeared somewhere in a file CI runs — for
+      # check_classification_freshness.sh, inside a comment saying the gate runs elsewhere.
+      - name: "Classification freshness (the checked-in theorem inventory and table match their canonical producer)"
+        run: bash scripts/tests/check_classification_freshness.sh
+
+      - name: "Migration manifest (every source proof link has one owned, deterministic migration row)"
+        run: bash scripts/tests/check_migration_manifest.sh
+
+      - name: "Assumptions ledger (declared assumptions match the recorded set)"
+        run: bash scripts/tests/check_assumptions.sh
+
+      - name: "Evidence reproducibility (retained evidence regenerates to the same digests)"
+        run: bash scripts/tests/check_evidence_reproducibility.sh
+
+      - name: "Subject facts (identity-threaded facts; v1 values become needs_recheck)"
+        run: bash scripts/tests/check_subject_facts.sh
+
+      - name: "Identity freeze (the pre-migration attestation population is pinned)"
+        run: bash scripts/tests/check_identity_freeze.sh
+
+      - name: "Identity over-binding (R-0482 positive controls: std/sibling edits move artifact or context, never scope)"
+        run: bash scripts/tests/check_identity_overbinding.sh
+
+      - name: "Identity rows (R-0482 — the canonical rows the migration reproduced; unused std edits rename nothing)"
+        run: bash scripts/tests/check_identity_rows.sh
+
+      - name: "Identity separation (R-0482 — reachable vs context edits, tagged origins, D1/D5/D6, the map, old bytes)"
+        run: bash scripts/tests/check_identity_separation.sh
+
+      - name: "Subject binding (bug 079 — a claim is proved only when its body and parameters ARE its theorem's specification)"
+        run: bash scripts/tests/check_subject_binding.sh
+
+      - name: "Model vs runtime (bug 080 — the extracted proof model and the interpreter compute the same values)"
+        run: bash scripts/tests/check_model_diff.sh
+
+      - name: "Match guard effects (bug 066 — a guard's effects are observable and identical under interp and compiled)"
+        run: bash scripts/tests/check_match_guard_effects.sh
+
+      - name: "Convergence inventory (every recorded R-0004 / multi-prover gap, machine-checked)"
+        run: bash scripts/tests/check_convergence_inventory.sh
+
+      - name: "Bug filing completeness (a bug needs a document, a corpus entry, and coverage)"
+        run: bash scripts/tests/check_bug_filing_complete.sh
+
+      - name: "Bug scaffold (new_bug.sh allocates race-safely, writes a ledger-consistent record; hook reservation tier)"
+        run: bash scripts/tests/check_new_bug.sh
+
+      - name: "Evidence builders (R-0004 — semantic decisions tested before the producer cutover)"
+        run: bash scripts/tests/check_evidence_build.sh
+
+      - name: "Evidence tree (R-0004 — typed evidence IR: nesting representable, gaps mandatory, no bound names)"
+        run: bash scripts/tests/check_evidence_tree.sh
+
+      - name: "Identity-use bytes (R-0004 — flat typed-use serialization; NOT the body canonical form)"
+        run: bash scripts/tests/check_identity_use_bytes.sh
+
+      - name: "Shadow body V2 (R-0004 — structural body digest reaches the report and nothing authoritative; coverage ratchet)"
+        run: bash scripts/tests/check_shadow_body_v2.sh
+
+      - name: "Mutation anchors (every MUT_OLD still exists in its file — the harness itself is not run in CI)"
+        run: bash scripts/tests/check_mutation_anchors.sh
+
+      - name: "Wired definitions (evidence-layer code with no consumer is a fact nobody checks)"
+        run: bash scripts/tests/check_wired_definitions.sh
+
+      - name: "Binder refs (R-0004 — elaboration emits relative lexical positions; empty scopes, binding timing, uncovered fallback)"
+        run: bash scripts/tests/check_binder_refs.sh
+
+      - name: "Body scope (R-0004 — scoped lexical binder frames: relative positions, shadowing, refusal)"
+        run: bash scripts/tests/check_body_scope.sh
+
+      - name: "Subject coverage (R-0004 — corpus inventory of which declarations can produce a subject digest, grouped by cause)"
+        run: bash scripts/tests/check_subject_coverage.sh
+
+      - name: "Type identity (R-0004 V2 input — aliases, transport, nesting, builtins, and Elab use sites)"
+        run: bash scripts/tests/check_type_identity.sh
+
+      - name: "Pipeline artifacts (R-0497 slice 1 / bug 180 — sealed, certified ValidatedCore/Mono/SSA; forgery, mutation reuse and diagnostic bypass do not elaborate)"
+        run: bash scripts/tests/check_pipeline_artifacts.sh
+
+      - name: "Local binder identity (R-0492 slice 1 / bug 202 — the checker's environment is keyed by LocalId minted by the one lexical walk; no lookup by spelling)"
+        run: bash scripts/tests/check_local_identity.sh
+
+      - name: "Fn-pointer values (R-0436 / bug 056 — a function reference is a value; rebindable across control flow; devirtualization preserved)"
+        run: bash scripts/tests/check_fnptr_values.sh
+
+      - name: "HashMap probe invariants (R-0003 / bugs 047+048 — no duplicate past a tombstone; missing-key lookup always terminates; reference-map oracle)"
+        run: bash scripts/tests/check_hashmap_probe_invariants.sh
+
+      - name: "Builtin layout sizes (bug 057 — hardcoded sizes match the std declarations they describe)"
+        run: bash scripts/tests/check_builtin_layout_sizes.sh
+
+      - name: "Generic-enum fixture inventory (R-0001 — every user-generic-enum fixture classified: positive mono or E0808 containment)"
+        run: bash scripts/tests/check_generic_enum_inventory.sh
+  infra-gates:
+    name: Compiler-infra gates (ledger, diagnostics, codegen, CLI, known holes)
+    runs-on: ${{ (github.event_name != 'pull_request' && vars.CONCRETE_SELF_HOSTED == 'true') && fromJSON('["self-hosted","linux","x64","concrete"]') || 'ubuntu-latest' }}
+    needs: build
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Nix (GitHub-hosted only)
+        if: runner.environment != 'self-hosted'
+        uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
+      - name: Cache Lean build (.lake/build shared across jobs)
+        uses: actions/cache@v4
+        with:
+          path: .lake/build
+          key: ${{ runner.os }}-${{ runner.arch }}-lakebuild-${{ hashFiles('Concrete/**', 'Concrete.lean', 'proofs/**', 'Main.lean', 'Browser.lean', 'lakefile.toml', 'lean-toolchain', 'lake-manifest.json') }}
+
+      # GitHub-hosted only. A self-hosted runner's ~/.elan persists between jobs and already
+      # holds the toolchains; restoring the 2.3 GB archive over it took 2-4 min per job.
+      - name: Cache the Lean toolchain (~/.elan)
+        if: runner.environment != 'self-hosted'
+        uses: actions/cache@v4
+        with:
+          path: ~/.elan
+          key: ${{ runner.os }}-${{ runner.arch }}-elan-${{ hashFiles('lean-toolchain') }}
+
+      # Self-hosted only: start from the server's published build of main (R-0546). The cache is
+      # written by the server's lakecache user alone, and lake build below still re-checks every
+      # module, so this changes how long the build takes, never whether it runs. A miss or a
+      # toolchain/manifest/lean-binary mismatch leaves today's path (GitHub cache, then build).
+      - name: Seed .lake from the server build cache (self-hosted only)
+        id: lake_seed
+        if: runner.environment == 'self-hosted'
+        run: if bash scripts/dev/seed-lake.sh --elan --cache-root /var/cache/concrete-lake; then echo "seeded=true" >> "$GITHUB_OUTPUT"; fi
+
+      - name: Install Lean (via lean-action)
+        id: lean_install
+        # A toolchain download can fail on a dropped connection; one paused retry
+        # keeps a network blip from failing (and hiding) the whole run.
+        continue-on-error: true
+        uses: leanprover/lean-action@v1
+        with:
+          use-github-cache: ${{ steps.lake_seed.outputs.seeded != 'true' }}
+          build-args: "--log-level=warning"
+
+      - name: Wait before retrying the Lean install
+        if: steps.lean_install.outcome == 'failure'
+        run: sleep 60
+
+      - name: Install Lean (via lean-action) (retry)
+        if: steps.lean_install.outcome == 'failure'
+        uses: leanprover/lean-action@v1
+        with:
+          use-github-cache: ${{ steps.lake_seed.outputs.seeded != 'true' }}
+          build-args: "--log-level=warning"
+
+      - name: Install clang
+        run: if [ "$RUNNER_ENVIRONMENT" = self-hosted ] && command -v clang >/dev/null; then echo "self-hosted runner, using preinstalled clang"; else sudo apt-get update && sudo apt-get install -y clang; fi
+
+      - name: CompilerLedger gate (Phase 4 #2 — non-proof fact store)
+        run: bash scripts/tests/check_compiler_ledger.sh
+
+      - name: Rich-diagnostics gate (Phase 4 #4 — human/JSON from one record)
+        run: bash scripts/tests/check_rich_diagnostics.sh
+
+      - name: Partial-facts gate (Phase 4 #12a — error-tolerant diagnostics)
+        run: bash scripts/tests/check_partial_facts.sh
+
+      - name: Source-maps gate (Phase 4 #13a — spans survive AST→Core)
+        run: bash scripts/tests/check_source_maps.sh
+
+      - name: Callable-values/capability design gate (Phase 5 #24a — fn-ptr smuggling closed, HOF freeze)
+        run: bash scripts/tests/check_capability_polymorphism_design.sh
+
+      - name: Callable-values gate (Phase 5 #24 step 1 — context modes; &mut *ctx reborrow aliases)
+        run: bash scripts/tests/check_callable_values.sh
+
+      - name: Returned-ref provenance known-hole gate (aggregate-ref public API freeze)
+        run: bash scripts/tests/check_returned_ref_provenance.sh
+
+      - name: Proven-violation enforcement known-hole gate (constant OOB / div-zero)
+        run: bash scripts/tests/check_proven_violation_enforcement.sh
+
+      - name: "Checked float-cast gate (float->int NaN/inf/out-of-range abort, in-range truncates — closes H2)"
+        run: bash scripts/tests/check_float_cast.sh
+
+      - name: Mono name-collision known-hole gate (nested-generic specialization merge)
+        run: bash scripts/tests/check_mono_name_collision.sh
+
+      - name: Nested place-write regression gate (compound assignment targets)
+        run: bash scripts/tests/check_nested_field_write.sh
+
+      - name: Raw-ptr-to-local known-hole gate (&mut x does not alias local)
+        run: bash scripts/tests/check_raw_ptr_to_local.sh
+
+      - name: Struct field-layout regression gate (mixed-width store/read agree)
+        run: bash scripts/tests/check_struct_field_layout.sh
+
+      - name: Codegen execution-oracle gate (compile-run-assert value)
+        run: bash scripts/tests/check_codegen_execution.sh
+
+      - name: Codegen differential gate (interpreter vs compiled agreement)
+        run: bash scripts/tests/check_codegen_differential.sh
+
+      - name: Cast-matrix differential gate (every width pair x edge value, interp == compiled)
+        run: bash scripts/tests/check_cast_matrix.sh
+
+      - name: CLI-plumbing gate (Phase 4 #14a — shared prologue + exit-code taxonomy)
+        run: bash scripts/tests/check_cli_plumbing.sh
+
+      - name: CLI-contract gate (Phase 4 #15 — golden command behavior matrix)
+        run: bash scripts/tests/check_cli_contract.sh
+
+      - name: Campaign-supervisor gate (only a supervisor may publish qualification)
+        run: bash scripts/tests/check_campaign_supervisor.sh
+
+      - name: Child process-group liveness (publication waits for an empty group)
+        run: bash scripts/tests/check_child_process_group.sh
+
+      - name: concrete prove CLI gate
+        run: bash scripts/tests/test_prove_cli.sh
+
+  # Split out of infra-gates (2026-10-10): each of these re-runs report-heavy gates many
+  # times, and after the R-0484 assumption summaries roughly doubled the report path's cost,
+  # infra-gates took 5.7-6.0h and GitHub cancelled it at its 6-hour job limit
+  # (runs 37765122450, 37919034661). Separate jobs give each its own budget; all stay required.
+  campaign-mint-batch:
+    name: Campaign gates (mint-batch accounting)
+    runs-on: ${{ (github.event_name != 'pull_request' && vars.CONCRETE_SELF_HOSTED == 'true') && fromJSON('["self-hosted","linux","x64","concrete"]') || 'ubuntu-latest' }}
+    needs: build
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Nix (GitHub-hosted only)
+        if: runner.environment != 'self-hosted'
+        uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
+      - name: Cache Lean build (.lake/build shared across jobs)
+        uses: actions/cache@v4
+        with:
+          path: .lake/build
+          key: ${{ runner.os }}-${{ runner.arch }}-lakebuild-${{ hashFiles('Concrete/**', 'Concrete.lean', 'proofs/**', 'Main.lean', 'Browser.lean', 'lakefile.toml', 'lean-toolchain', 'lake-manifest.json') }}
+
+      # GitHub-hosted only. A self-hosted runner's ~/.elan persists between jobs and already
+      # holds the toolchains; restoring the 2.3 GB archive over it took 2-4 min per job.
+      - name: Cache the Lean toolchain (~/.elan)
+        if: runner.environment != 'self-hosted'
+        uses: actions/cache@v4
+        with:
+          path: ~/.elan
+          key: ${{ runner.os }}-${{ runner.arch }}-elan-${{ hashFiles('lean-toolchain') }}
+
+      # Self-hosted only: start from the server's published build of main (R-0546). The cache is
+      # written by the server's lakecache user alone, and lake build below still re-checks every
+      # module, so this changes how long the build takes, never whether it runs. A miss or a
+      # toolchain/manifest/lean-binary mismatch leaves today's path (GitHub cache, then build).
+      - name: Seed .lake from the server build cache (self-hosted only)
+        id: lake_seed
+        if: runner.environment == 'self-hosted'
+        run: if bash scripts/dev/seed-lake.sh --elan --cache-root /var/cache/concrete-lake; then echo "seeded=true" >> "$GITHUB_OUTPUT"; fi
+
+      - name: Install Lean (via lean-action)
+        id: lean_install
+        # A toolchain download can fail on a dropped connection; one paused retry
+        # keeps a network blip from failing (and hiding) the whole run.
+        continue-on-error: true
+        uses: leanprover/lean-action@v1
+        with:
+          use-github-cache: ${{ steps.lake_seed.outputs.seeded != 'true' }}
+          build-args: "--log-level=warning"
+
+      - name: Wait before retrying the Lean install
+        if: steps.lean_install.outcome == 'failure'
+        run: sleep 60
+
+      - name: Install Lean (via lean-action) (retry)
+        if: steps.lean_install.outcome == 'failure'
+        uses: leanprover/lean-action@v1
+        with:
+          use-github-cache: ${{ steps.lake_seed.outputs.seeded != 'true' }}
+          build-args: "--log-level=warning"
+
+      - name: Install clang
+        run: if [ "$RUNNER_ENVIRONMENT" = self-hosted ] && command -v clang >/dev/null; then echo "self-hosted runner, using preinstalled clang"; else sudo apt-get update && sudo apt-get install -y clang; fi
+
+      - name: Mint-batch accounting gate (the batch reconciliation controls, actually run)
+        run: bash scripts/tests/check_mint_batch_accounting.sh
+
+  campaign-publisher:
+    name: Campaign gates (missing-result refusal, summary golden)
+    runs-on: ${{ (github.event_name != 'pull_request' && vars.CONCRETE_SELF_HOSTED == 'true') && fromJSON('["self-hosted","linux","x64","concrete"]') || 'ubuntu-latest' }}
+    needs: build
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Nix (GitHub-hosted only)
+        if: runner.environment != 'self-hosted'
+        uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
+      - name: Cache Lean build (.lake/build shared across jobs)
+        uses: actions/cache@v4
+        with:
+          path: .lake/build
+          key: ${{ runner.os }}-${{ runner.arch }}-lakebuild-${{ hashFiles('Concrete/**', 'Concrete.lean', 'proofs/**', 'Main.lean', 'Browser.lean', 'lakefile.toml', 'lean-toolchain', 'lake-manifest.json') }}
+
+      # GitHub-hosted only. A self-hosted runner's ~/.elan persists between jobs and already
+      # holds the toolchains; restoring the 2.3 GB archive over it took 2-4 min per job.
+      - name: Cache the Lean toolchain (~/.elan)
+        if: runner.environment != 'self-hosted'
+        uses: actions/cache@v4
+        with:
+          path: ~/.elan
+          key: ${{ runner.os }}-${{ runner.arch }}-elan-${{ hashFiles('lean-toolchain') }}
+
+      # Self-hosted only: start from the server's published build of main (R-0546). The cache is
+      # written by the server's lakecache user alone, and lake build below still re-checks every
+      # module, so this changes how long the build takes, never whether it runs. A miss or a
+      # toolchain/manifest/lean-binary mismatch leaves today's path (GitHub cache, then build).
+      - name: Seed .lake from the server build cache (self-hosted only)
+        id: lake_seed
+        if: runner.environment == 'self-hosted'
+        run: if bash scripts/dev/seed-lake.sh --elan --cache-root /var/cache/concrete-lake; then echo "seeded=true" >> "$GITHUB_OUTPUT"; fi
+
+      - name: Install Lean (via lean-action)
+        id: lean_install
+        # A toolchain download can fail on a dropped connection; one paused retry
+        # keeps a network blip from failing (and hiding) the whole run.
+        continue-on-error: true
+        uses: leanprover/lean-action@v1
+        with:
+          use-github-cache: ${{ steps.lake_seed.outputs.seeded != 'true' }}
+          build-args: "--log-level=warning"
+
+      - name: Wait before retrying the Lean install
+        if: steps.lean_install.outcome == 'failure'
+        run: sleep 60
+
+      - name: Install Lean (via lean-action) (retry)
+        if: steps.lean_install.outcome == 'failure'
+        uses: leanprover/lean-action@v1
+        with:
+          use-github-cache: ${{ steps.lake_seed.outputs.seeded != 'true' }}
+          build-args: "--log-level=warning"
+
+      - name: Install clang
+        run: if [ "$RUNNER_ENVIRONMENT" = self-hosted ] && command -v clang >/dev/null; then echo "self-hosted runner, using preinstalled clang"; else sudo apt-get update && sudo apt-get install -y clang; fi
+
+      - name: Mint missing-result refusal (the single case the mutation family covers)
+        run: bash scripts/tests/check_mint_missing_result.sh
+
+      - name: Campaign summary golden (regenerated by the publisher, compared byte-for-byte)
+        run: bash scripts/tests/check_campaign_summary_golden.sh
+
+      - name: Sharded mutation campaign aggregator (hostile shard sets fail closed)
+        run: bash scripts/tests/check_mutation_shard_aggregate.sh
+
+      # Stage (c)'s verdict is one record over EVERY job of this workflow at one SHA
+      # (the qualification_record tool under the CI scripts); the mutation aggregate above is one component.
+      - name: Qualification record (one verdict over every required job; hostile run records fail closed)
+        run: |
+          python3 -I -c 'import yaml' 2>/dev/null || { sudo apt-get update && sudo apt-get install -y python3-yaml; }
+          bash scripts/tests/check_qualification_record.sh
+
+  thesis-evidence:
+    name: Thesis evidence smoke test
+    runs-on: ${{ (github.event_name != 'pull_request' && vars.CONCRETE_SELF_HOSTED == 'true') && fromJSON('["self-hosted","linux","x64","concrete"]') || 'ubuntu-latest' }}
+    needs: build
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Nix (GitHub-hosted only)
+        if: runner.environment != 'self-hosted'
+        uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
+      - name: Cache Lean build (.lake/build shared across jobs)
+        uses: actions/cache@v4
+        with:
+          path: .lake/build
+          key: ${{ runner.os }}-${{ runner.arch }}-lakebuild-${{ hashFiles('Concrete/**', 'Concrete.lean', 'proofs/**', 'Main.lean', 'Browser.lean', 'lakefile.toml', 'lean-toolchain', 'lake-manifest.json') }}
+
+      # GitHub-hosted only. A self-hosted runner's ~/.elan persists between jobs and already
+      # holds the toolchains; restoring the 2.3 GB archive over it took 2-4 min per job.
+      - name: Cache the Lean toolchain (~/.elan)
+        if: runner.environment != 'self-hosted'
+        uses: actions/cache@v4
+        with:
+          path: ~/.elan
+          key: ${{ runner.os }}-${{ runner.arch }}-elan-${{ hashFiles('lean-toolchain') }}
+
+      # Self-hosted only: start from the server's published build of main (R-0546). The cache is
+      # written by the server's lakecache user alone, and lake build below still re-checks every
+      # module, so this changes how long the build takes, never whether it runs. A miss or a
+      # toolchain/manifest/lean-binary mismatch leaves today's path (GitHub cache, then build).
+      - name: Seed .lake from the server build cache (self-hosted only)
+        id: lake_seed
+        if: runner.environment == 'self-hosted'
+        run: if bash scripts/dev/seed-lake.sh --elan --cache-root /var/cache/concrete-lake; then echo "seeded=true" >> "$GITHUB_OUTPUT"; fi
+
+      - name: Install Lean (via lean-action)
+        id: lean_install
+        # A toolchain download can fail on a dropped connection; one paused retry
+        # keeps a network blip from failing (and hiding) the whole run.
+        continue-on-error: true
+        uses: leanprover/lean-action@v1
+        with:
+          use-github-cache: ${{ steps.lake_seed.outputs.seeded != 'true' }}
+          build-args: "--log-level=warning"
+
+      - name: Wait before retrying the Lean install
+        if: steps.lean_install.outcome == 'failure'
+        run: sleep 60
+
+      - name: Install Lean (via lean-action) (retry)
+        if: steps.lean_install.outcome == 'failure'
+        uses: leanprover/lean-action@v1
+        with:
+          use-github-cache: ${{ steps.lake_seed.outputs.seeded != 'true' }}
+          build-args: "--log-level=warning"
+
+      - name: Install clang
+        run: if [ "$RUNNER_ENVIRONMENT" = self-hosted ] && command -v clang >/dev/null; then echo "self-hosted runner, using preinstalled clang"; else sudo apt-get update && sudo apt-get install -y clang; fi
+
+      - name: Check thesis demo reports
+        run: |
+          BIN=".lake/build/bin/concrete"
+
+          "$BIN" examples/thesis_demo/src/main.con --report effects | tee "$RUNNER_TEMP/effects.txt"
+          grep -q 'Evidence: 2 proved' "$RUNNER_TEMP/effects.txt"
+          grep -q 'evidence: proved' "$RUNNER_TEMP/effects.txt"
+
+          "$BIN" examples/thesis_demo/src/main.con --report proof-status | tee "$RUNNER_TEMP/proof-status.txt"
+          grep -q '2 proved' "$RUNNER_TEMP/proof-status.txt"
+          grep -q 'proof matches current body' "$RUNNER_TEMP/proof-status.txt"
+
+          # The thesis demo intentionally has a predictable core and an I/O entrypoint.
+          set +e
+          "$BIN" examples/thesis_demo/src/main.con --check predictable > "$RUNNER_TEMP/predictable.txt"
+          rc=$?
+          set -e
+          test "$rc" -eq 1
+          grep -q 'predictable profile: FAIL' "$RUNNER_TEMP/predictable.txt"
+          grep -q 'may block' "$RUNNER_TEMP/predictable.txt"
+
+  examples:
+    name: Examples (manifest coverage)
+    runs-on: ${{ (github.event_name != 'pull_request' && vars.CONCRETE_SELF_HOSTED == 'true') && fromJSON('["self-hosted","linux","x64","concrete"]') || 'ubuntu-latest' }}
+    needs: build
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Nix (GitHub-hosted only)
+        if: runner.environment != 'self-hosted'
+        uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
+      - name: Cache Lean build (.lake/build shared across jobs)
+        uses: actions/cache@v4
+        with:
+          path: .lake/build
+          key: ${{ runner.os }}-${{ runner.arch }}-lakebuild-${{ hashFiles('Concrete/**', 'Concrete.lean', 'proofs/**', 'Main.lean', 'Browser.lean', 'lakefile.toml', 'lean-toolchain', 'lake-manifest.json') }}
+
+      # GitHub-hosted only. A self-hosted runner's ~/.elan persists between jobs and already
+      # holds the toolchains; restoring the 2.3 GB archive over it took 2-4 min per job.
+      - name: Cache the Lean toolchain (~/.elan)
+        if: runner.environment != 'self-hosted'
+        uses: actions/cache@v4
+        with:
+          path: ~/.elan
+          key: ${{ runner.os }}-${{ runner.arch }}-elan-${{ hashFiles('lean-toolchain') }}
+
+      # Self-hosted only: start from the server's published build of main (R-0546). The cache is
+      # written by the server's lakecache user alone, and lake build below still re-checks every
+      # module, so this changes how long the build takes, never whether it runs. A miss or a
+      # toolchain/manifest/lean-binary mismatch leaves today's path (GitHub cache, then build).
+      - name: Seed .lake from the server build cache (self-hosted only)
+        id: lake_seed
+        if: runner.environment == 'self-hosted'
+        run: if bash scripts/dev/seed-lake.sh --elan --cache-root /var/cache/concrete-lake; then echo "seeded=true" >> "$GITHUB_OUTPUT"; fi
+
+      - name: Install Lean (via lean-action)
+        id: lean_install
+        # A toolchain download can fail on a dropped connection; one paused retry
+        # keeps a network blip from failing (and hiding) the whole run.
+        continue-on-error: true
+        uses: leanprover/lean-action@v1
+        with:
+          use-github-cache: ${{ steps.lake_seed.outputs.seeded != 'true' }}
+          build-args: "--log-level=warning"
+
+      - name: Wait before retrying the Lean install
+        if: steps.lean_install.outcome == 'failure'
+        run: sleep 60
+
+      - name: Install Lean (via lean-action) (retry)
+        if: steps.lean_install.outcome == 'failure'
+        uses: leanprover/lean-action@v1
+        with:
+          use-github-cache: ${{ steps.lake_seed.outputs.seeded != 'true' }}
+          build-args: "--log-level=warning"
+
+      - name: Install clang and valgrind
+        run: if [ "$RUNNER_ENVIRONMENT" = self-hosted ] && command -v clang >/dev/null && command -v valgrind >/dev/null; then echo "self-hosted runner, using preinstalled clang valgrind"; else sudo apt-get update && sudo apt-get install -y clang valgrind; fi
+
+      - name: Install PyYAML (check_examples.sh reads the workflow to verify skip owners)
+        run: python3 -I -c 'import yaml' 2>/dev/null || { sudo apt-get update && sudo apt-get install -y python3-yaml; }
+
+      - name: Check example coverage manifest
+        # Every .con under examples/ must be listed in
+        # scripts/tests/example_manifest.txt with its expected outcome
+        # (compile / compile-lib / project-build / expected-error / known-bug /
+        # skip). A skip must name an owning gate CI runs that references the
+        # file, and a reason; the gate's negative controls prove an unowned skip
+        # and an unlisted .con both fail.
+        run: bash ./scripts/tests/check_examples.sh
+
+      - name: Check example outputs (native and interpreter)
+        # Replaces the old smoke step, which ran binaries with no input, failed
+        # only on crash signals and skipped *net*|*tcp*|*http*|*grep*|*toml*|
+        # *lox*|*project* by name. Every runnable example now has explicit @run
+        # rules (fixed args/stdin/fixtures, exact stdout + exit code, and the
+        # interpreter's result) or an @norun with a reason, in the manifest.
+        # EXAMPLE_VALGRIND=1: every native run is under valgrind memcheck, so a
+        # memory error fails deterministically instead of crashing on some runs
+        # only (bug 121: conlog's invalid free segfaulted on one CI run in several).
+        run: EXAMPLE_VALGRIND=1 bash ./scripts/tests/check_example_outputs.sh
+
+  extra-gates:
+    name: Extra gates (dark-gate wiring, audit 2026-07-16)
+    runs-on: ${{ (github.event_name != 'pull_request' && vars.CONCRETE_SELF_HOSTED == 'true') && fromJSON('["self-hosted","linux","x64","concrete"]') || 'ubuntu-latest' }}
+    needs: build
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Nix (GitHub-hosted only)
+        if: runner.environment != 'self-hosted'
+        uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
+      - name: Cache Lean build (.lake/build shared across jobs)
+        uses: actions/cache@v4
+        with:
+          path: .lake/build
+          key: ${{ runner.os }}-${{ runner.arch }}-lakebuild-${{ hashFiles('Concrete/**', 'Concrete.lean', 'proofs/**', 'Main.lean', 'Browser.lean', 'lakefile.toml', 'lean-toolchain', 'lake-manifest.json') }}
+
+      # GitHub-hosted only. A self-hosted runner's ~/.elan persists between jobs and already
+      # holds the toolchains; restoring the 2.3 GB archive over it took 2-4 min per job.
+      - name: Cache the Lean toolchain (~/.elan)
+        if: runner.environment != 'self-hosted'
+        uses: actions/cache@v4
+        with:
+          path: ~/.elan
+          key: ${{ runner.os }}-${{ runner.arch }}-elan-${{ hashFiles('lean-toolchain') }}
+
+      # Self-hosted only: start from the server's published build of main (R-0546). The cache is
+      # written by the server's lakecache user alone, and lake build below still re-checks every
+      # module, so this changes how long the build takes, never whether it runs. A miss or a
+      # toolchain/manifest/lean-binary mismatch leaves today's path (GitHub cache, then build).
+      - name: Seed .lake from the server build cache (self-hosted only)
+        id: lake_seed
+        if: runner.environment == 'self-hosted'
+        run: if bash scripts/dev/seed-lake.sh --elan --cache-root /var/cache/concrete-lake; then echo "seeded=true" >> "$GITHUB_OUTPUT"; fi
+
+      - name: Install Lean (via lean-action)
+        id: lean_install
+        # A toolchain download can fail on a dropped connection; one paused retry
+        # keeps a network blip from failing (and hiding) the whole run.
+        continue-on-error: true
+        uses: leanprover/lean-action@v1
+        with:
+          use-github-cache: ${{ steps.lake_seed.outputs.seeded != 'true' }}
+          build-args: "--log-level=warning"
+
+      - name: Wait before retrying the Lean install
+        if: steps.lean_install.outcome == 'failure'
+        run: sleep 60
+
+      - name: Install Lean (via lean-action) (retry)
+        if: steps.lean_install.outcome == 'failure'
+        uses: leanprover/lean-action@v1
+        with:
+          use-github-cache: ${{ steps.lake_seed.outputs.seeded != 'true' }}
+          build-args: "--log-level=warning"
+
+      - name: Install clang
+        run: if [ "$RUNNER_ENVIRONMENT" = self-hosted ] && command -v clang >/dev/null; then echo "self-hosted runner, using preinstalled clang"; else sudo apt-get update && sudo apt-get install -y clang; fi
+
+      # These gates had Makefile targets but zero CI coverage ("dark gates") —
+      # test_wrong_code was already silently red (WC-0005's stale expectation)
+      # when wired here. One job, fail-fast per step.
+      - name: Catches (negative corpus)
+        run: bash ./scripts/tests/check_catches.sh
+
+      - name: Showcase corpus
+        run: bash ./scripts/tests/check_showcase.sh
+
+      - name: Wrong-code corpus
+        run: bash ./scripts/tests/test_wrong_code.sh
+
+      # Counterexample fixtures for OPEN holes (H23, H24). Here rather than in the
+      # build-free `grammar` job because it compiles and RUNS the fixtures to assert they
+      # still trap. A red result usually means a hole got fixed — see the script header.
+      - name: Known-wrong corpus (open holes still reproduce)
+        run: bash ./scripts/tests/check_known_wrong_corpus.sh
+
+      # R-0462: run the compiled BINARY against the safety claims. Here, not in the
+      # build-free job, because it compiles and executes generated drivers — that is the
+      # point: it crosses surface -> Core -> SSA -> LLVM, which no register row covers.
+      - name: Artifact fuzz (the binary vs the safety claims)
+        run: bash ./scripts/tests/check_artifact_fuzz.sh
+
+      # R-0455 Register B: transformation soundness. Cheap (grep + the build is the proof),
+      # but it lives here rather than in the build-free job because it asserts theorems exist
+      # in a compiled module.
+      - name: Transformation register (Register B rows)
+        run: bash ./scripts/tests/check_transform_register.sh
+
+      - name: Reducer smoke
+        run: bash ./scripts/tests/test_reducer_smoke.sh
+
+      - name: Release bundle
+        run: bash ./scripts/tests/test_release_bundle.sh
+
+      - name: Float-literal rounding corpus
+        run: bash ./scripts/tests/check_float_literals.sh
+
+      - name: Enum union layout
+        run: bash ./scripts/tests/check_enum_union_layout.sh
+
+      - name: string_char_at differential
+        run: bash ./scripts/tests/check_string_char_at.sh
+
+  # Independent-kernel evidence (Rocq + Isabelle). Deliberately NOT on every PR:
+  # Isabelle is a multi-GB closure and cold proof runs cost ~30s/goal, so this job
+  # is opt-in — on demand, on the nightly dispatch, or on a PR labelled
+  # `multi-kernel`. Everything it checks is skip-if-absent in the default shell, so
+  # the ordinary jobs stay fast and green without these tools.
+  #
+  # Nix is used because the prover toolchain is pinned in flake.nix (Rocq 9.0.1,
+  # Isabelle2025-2, veriT, cvc5, drat-trim); reproducing that with apt would fork the
+  # definition of "which kernels attested this".
+  multi-kernel:
+    name: Multi-kernel evidence (Rocq + Isabelle)
+    # R-0467: runs on MERGES TO MAIN, not only on dispatch/schedule/label.
+    #
+    # Everything the multi-kernel arc built — the badge classes, the discharge-adapter
+    # firewall, lowering agreement, certificate replay, the release-gate composition,
+    # kernel_disagreement — was verified only when someone remembered to ask for it. A
+    # label-gated job does not protect main; it protects the PRs whose authors already
+    # suspected they needed it. The 78 prover assertions were green all session and would
+    # have stayed green through a merge that broke them.
+    #
+    # `push` here means post-merge on main (see the `on:` block). PRs still need the label,
+    # which keeps a 90-minute Rocq+Isabelle job off every unrelated pull request while
+    # guaranteeing main is never left unverified: a train's dispatch runs it at the exact SHA that
+    # lands, and main's push run skips it only on that record (landing-record above).
+    needs: landing-record
+    if: >-
+      !cancelled() && needs.landing-record.outputs.recorded != 'true' && (
+      github.event_name == 'push' ||
+      github.event_name == 'workflow_dispatch' ||
+      contains(github.event.pull_request.labels.*.name, 'multi-kernel'))
+    runs-on: ${{ (github.event_name != 'pull_request' && vars.CONCRETE_SELF_HOSTED == 'true') && fromJSON('["self-hosted","linux","x64","concrete"]') || 'ubuntu-latest' }}
+    timeout-minutes: 90
+    # Every step here enters `.#provers` itself (a superset of the gate userland), so the job runs
+    # its steps in plain bash rather than nesting that shell inside `.#gates`.
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@v27
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
+      # No /nix/store cache here on purpose: actions/cache cannot round-trip
+      # root-owned store paths reliably, and cache.nixos.org already serves these
+      # closures. Expect a few minutes of substitution on a cold run.
+      - name: Build the compiler in the provers shell
+        run: nix develop .#provers --command lake build
+
+      - name: Report which kernels are actually present
+        run: |
+          nix develop .#provers --command bash -c '
+            echo "coqc:     $(coqc --version 2>/dev/null | head -1)"
+            echo "isabelle: $(isabelle version 2>/dev/null)"
+            echo "z3:       $(z3 --version 2>/dev/null)"
+            echo "cvc5:     $(cvc5 --version 2>/dev/null | head -1)"
+            # NOT $VERIT_SOLVER: that variable is empty in this shell even though
+            # veriT is present and used for certificate replay, so printing it
+            # reports ABSENT for a working prover. Isabelle bundles veriT as a
+            # COMPONENT, readable only from inside its own settings environment.
+            echo "veriT:    $(isabelle getenv -b ISABELLE_VERIT 2>/dev/null || echo ABSENT)"'
+
+      # The full gate: multi-kernel classes, the release gate, lowering agreement,
+      # bridge diversity (Core->Rocq extraction vs the interpreter), certificate
+      # replay, and the flagship (elf_header) carrying every surface at once.
+      - name: Multi-kernel evidence gate
+        run: nix develop .#provers --command bash ./scripts/tests/check_multi_kernel.sh
+
+      # The composition assertions — a lowering that DISAGREES must not earn the badge and
+      # must not pass the release gate — are the strongest thing this suite checks, and they
+      # were the least often run: MULTI_KERNEL_MUTATE=1 is opt-in because it mutates tracked
+      # source and needs two extra rebuilds. Opt-in plus label-gated meant approximately
+      # never. Campaign runs can afford it, so that is where it lives (the nightly dispatch included).
+      # The step keeps its name: the qualification_record tool pins it as required.
+      - name: Multi-kernel mutation coverage (scheduled only — mutates source, 2 rebuilds)
+        if: github.event_name == 'workflow_dispatch' && inputs.campaign
+        env:
+          MULTI_KERNEL_MUTATE: "1"
+        run: nix develop .#provers --command bash ./scripts/tests/check_multi_kernel.sh
+
+      # Corroborates the Tier-1 native-trust step recorded in docs/verification/AXIOMS.md:
+      # bv_decide's LRAT checker runs as compiled Lean, so this re-checks the same
+      # bit-blasting with an independently implemented checker (drat-trim).
+      - name: Independent DRAT check of bv_decide bit-blasting
+        run: nix develop .#provers --command bash ./scripts/tests/check_bv_certificates.sh

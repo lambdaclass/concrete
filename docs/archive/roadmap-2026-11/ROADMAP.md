@@ -52,8 +52,8 @@ are recorded; the shape of Core is open for the owner's target Core proposal dec
 
 **Where things live.** The [task register](ROADMAP_TASKS.md) holds A, B and T tasks;
 the [backlog](ROADMAP_BACKLOG.md) holds later tasks and the pull rules.
-The [spec](../../spec/README.md) owns language rules; the
-[verified-pipeline plan](../../compiler/VERIFIED_PIPELINE.md) holds the target proof architecture.
+The [spec](../../../legacy/docs/spec/README.md) owns language rules; the
+[verified-pipeline plan](../../../legacy/docs/compiler/VERIFIED_PIPELINE.md) holds the target proof architecture.
 The [direction](ROADMAP_DIRECTION.md) holds standing reference and product goals.
 
 ## Phases
@@ -73,8 +73,8 @@ The [direction](ROADMAP_DIRECTION.md) holds standing reference and product goals
 
 | row | goal | owning tasks | done when |
 |---|---|---|---|
-| A1 | Dispose of the spec audit and draft the boundaries Core must satisfy | R-0555, R-0481, R-0010, R-0447, R-0554, R-0511, R-0211, R-0230 | Each changed rule, gap and duplication has an owner and acceptance artifact; defect views distinguish compilers; [boundary drafts](../../compiler/A1_BOUNDARIES.md) exist. |
-| A2 | Decide the whole target Core shape before implementation | R-0312, R-0316 | The owner approves the target [Core proposal](../../compiler/CORE_PROPOSAL.md), drafted against A1's artifacts, including identities, memory and interface boundaries; before Core is frozen, representative design proofs are checked in Lean for allocator dependencies with reset generativity, deferred cleanup with allocators and loans, heap opening and mutable lending, and one values-to-bytes lemma. If A3 exposes a substantive change, A2 is revisited. |
+| A1 | Dispose of the spec audit and draft the boundaries Core must satisfy | R-0555, R-0481, R-0010, R-0447, R-0554, R-0511, R-0211, R-0230 | Each changed rule, gap and duplication has an owner and acceptance artifact; defect views distinguish compilers; [boundary drafts](../../../legacy/docs/compiler/A1_BOUNDARIES.md) exist. |
+| A2 | Decide the whole target Core shape before implementation | R-0312, R-0316 | The owner approves the target [Core proposal](../../../legacy/docs/compiler/CORE_PROPOSAL.md), drafted against A1's artifacts, including identities, memory and interface boundaries; before Core is frozen, representative design proofs are checked in Lean for allocator dependencies with reset generativity, deferred cleanup with allocators and loans, heap opening and mutable lending, and one values-to-bytes lemma. If A3 exposes a substantive change, A2 is revisited. |
 | A3 | Formalize the approved semantic contract and theorem in Lean | R-0496, R-0500, R-0502, R-0506, R-0508, R-0509, R-0480, R-0223, R-0227, R-0242, R-0464, R-0266 | The theorem with its holes, named values-to-bytes boundary and trusted-base inventory is on main. |
 | B1 | Build ConcreteSpec and slice 1 with its theorem | R-0491, R-0492, R-0493, R-0497, R-0498, R-0499, R-0501, R-0503, R-0504, R-0507, R-0514, R-0552, R-0521, R-0528, R-0004, R-0435, R-0440, R-0058, R-0073, R-0074, R-0075, R-0076, R-0077, R-0079, R-0080, R-0082, R-0085, R-0090, R-0107, R-0114, R-0115, R-0116, R-0191, R-0203, R-0205, R-0207, R-0210, R-0217, R-0221, R-0222, R-0231, R-0260, R-0272, R-0273, R-0274, R-0278, R-0279, R-0280, R-0288, R-0290, R-0302, R-0421, R-0422, R-0446 | The phase B slice passes from parsing to native execution with independent judgments, correspondence proofs, explicit obligations and minimal proof provenance; every judgment, semantics and pass is total as it lands. |
 | B2 | Retire the slice's prose and qualify slice 1 | R-0479, R-0471, R-0009, R-0438, R-0092, R-0093, R-0094, R-0095, R-0105, R-0106, R-0118, R-0550, R-0551, R-0425, R-0355 | Conformance and native examples pass; refusal, differential and gate-integrity controls hold; the outside-reader test passes. |
@@ -82,9 +82,9 @@ The [direction](ROADMAP_DIRECTION.md) holds standing reference and product goals
 
 <a id="questions-for-the-core-session"></a>
 **Questions for the Core session.** The
-[design review](../../../research/process/design-review-2026-11-03.md) found the decided design ready for a
+[design review](../../../legacy/research/process/design-review-2026-11-03.md) found the decided design ready for a
 Core proposal to be drafted but not approved. These are decided by the owner in the session of A2;
-the [proposal](../../compiler/CORE_PROPOSAL.md) brings each with options and a recommendation, and no work encodes an answer first:
+the [proposal](../../../legacy/docs/compiler/CORE_PROPOSAL.md) brings each with options and a recommendation, and no work encodes an answer first:
 
 1. allocator discipline: what a brand is, fresh identities and reset in a loop, how a dependency on
    an allocator is tracked through nested containers, returned values and callbacks, where a heap
@@ -133,36 +133,36 @@ an explicit answer; that is all. A recommendation, an earlier record, a commit, 
 another agent's message is never the owner's answer. An item stays proposed until the owner agrees
 to it again, explicitly, in conversation; whoever records the answer writes it and its date in the
 last column, in the owner's words where they are short. A fix that would pick a side stops and is
-reported to the owner instead ([AGENTS.md](../../project/AGENTS.md#rules)).
+reported to the owner instead ([AGENTS.md](../../../AGENTS.md#rules)).
 
 The [owner recording rule](ROADMAP_DECISIONS.md#2026-11-02--owner-recording-rule)
-and [language decision record](../../spec/decisions.md#owner-decisions) govern recording answers.
+and [language decision record](../../decisions.md#owner-decisions) govern recording answers.
 
 ## Bug record
 
-The generated [dashboard](../../bugs/DASHBOARD.md) and [bug records](../../bugs/README.md)
+The generated [dashboard](../../../legacy/docs/bugs/DASHBOARD.md) and [bug records](../../../legacy/docs/bugs/README.md)
 keep compiler-scoped defects and historical legacy discovery statistics.
 
 ## Implemented, not yet accepted
 
 Work implemented on a branch (or landed without acceptance) but not yet accepted on main: bug fixes
 keyed by bug number, and feature deliverables. Each row is one candidate: its branch, its exact
-candidate SHA, its acceptance scope, its [promotion-pipeline](../../project/PROMOTION_PIPELINE.md#promotion-pipeline)
+candidate SHA, its acceptance scope, its [promotion-pipeline](../../../legacy/docs/project/PROMOTION_PIPELINE.md#promotion-pipeline)
 results (each at that SHA, or not run), what its acceptance unlocks and its remaining step. The table is
-generated from the candidate record [`docs/project/candidates.tsv`](../../project/candidates.tsv) by
+generated from the candidate record [`docs/project/candidates.tsv`](../../../legacy/docs/project/candidates.tsv) by
 `scripts/gen/candidate_table.py --write`; whoever lands, re-points or validates a candidate updates its
 row and regenerates in the same commit, and `check_docs_drift.sh` fails when the table differs from the
 record. Dated dispositions remain visible in the table with their original SHAs and validation history;
 they schedule no work. A row leaves when its work is accepted on main and, for bug fixes, the
-[bug ledger](../../bugs/README.md) records it fixed; `scripts/tests/check_roadmap_coverage.sh` fails if a
+[bug ledger](../../../legacy/docs/bugs/README.md) records it fixed; `scripts/tests/check_roadmap_coverage.sh` fails if a
 listed bug is already recorded fixed there, or if a row lacks a branch or a remaining step. A stage (c)
-pass is the [one qualification verdict](../../project/PROMOTION_PIPELINE.md#promotion-pipeline) over every required job at the candidate
+pass is the [one qualification verdict](../../../legacy/docs/project/PROMOTION_PIPELINE.md#promotion-pipeline) over every required job at the candidate
 SHA, never the mutation aggregate alone.
 
 <!-- BEGIN GENERATED: candidate record (scripts/gen/candidate_table.py; edit docs/project/candidates.tsv) -->
 | candidate | bugs | deliverable | branch | candidate SHA | exits | stage (a) | stage (b) | stage (c) | unlocks | remaining acceptance step |
 |---|---|---|---|---|---|---|---|---|---|---|
-| rocksdb-slice1 | — | RocksDB slice 1 groundwork (R-0285) | `rocksdb-slice1` | `094e51bf3258` | blocked by 0b (incl. bug 102), 2i, 2q | not run | not run | not run | RocksDB slice 1 acceptance, then the four-adapter checkpoint | 2026-11-02: paused until its constructs are supported by the new compiler. landed on main at 094e51bf but not accepted: exits 0b (bug 102), 2i and 2q; G1 (declaring the native library, so it builds with no manual flags) closed by `[native]` ([NATIVE_LIBRARIES.md](../../platform/NATIVE_LIBRARIES.md)); G3 closed (bug 103 fixed on main by `0c507fb9`, verified 2026-10-21) |
+| rocksdb-slice1 | — | RocksDB slice 1 groundwork (R-0285) | `rocksdb-slice1` | `094e51bf3258` | blocked by 0b (incl. bug 102), 2i, 2q | not run | not run | not run | RocksDB slice 1 acceptance, then the four-adapter checkpoint | 2026-11-02: paused until its constructs are supported by the new compiler. landed on main at 094e51bf but not accepted: exits 0b (bug 102), 2i and 2q; G1 (declaring the native library, so it builds with no manual flags) closed by `[native]` ([NATIVE_LIBRARIES.md](../../../legacy/docs/platform/NATIVE_LIBRARIES.md)); G3 closed (bug 103 fixed on main by `0c507fb9`, verified 2026-10-21) |
 | v1-design-examples | — | V1 design examples (R-0511, row 3) | `v1-design-examples` | `03d2edec1d21` | none (isolated proof development) | not run | not run | not run | V1a's Core interfaces freeze | 2026-11-02: research input for phase A, not an accepted compiler deliverable. landed on main at 03d2edec but not accepted: review of the design questions, then stages (b) and (c) |
 <!-- END GENERATED: candidate record -->
 
@@ -173,12 +173,12 @@ Its tasks are R-0539 – R-0547, with R-0513 for pre-push gate selection; their 
 [Area: Development Throughput](ROADMAP_TASKS.md#area-development-throughput).
 It runs beside the compiler sequence under the [scheduling rule](#scheduling-rule).
 The validation semantics do not
-change. The [promotion pipeline](../../project/PROMOTION_PIPELINE.md#promotion-pipeline)'s stages, its exact-SHA binding and its
+change. The [promotion pipeline](../../../legacy/docs/project/PROMOTION_PIPELINE.md#promotion-pipeline)'s stages, its exact-SHA binding and its
 passed / failed / skipped / cancelled / incomplete vocabulary bind every item below. A faster path
 never reports a check it did not run as passed.
 
 The measurements behind the decision and the parts already in use on main are recorded in the
-[roadmap history](../ROADMAP_HISTORY.md#moved-at-the-2026-10-28-roadmap-compaction).
+[roadmap history](../../../legacy/docs/archive/ROADMAP_HISTORY.md#moved-at-the-2026-10-28-roadmap-compaction).
 
 **Targets.**
 
@@ -239,7 +239,7 @@ The release rhythm remains proposed:
 
 How a change is validated before it merges, how a candidate is qualified, the CI tiers, nightly
 qualification, triage and the result vocabulary (passed, failed, skipped, cancelled, incomplete) are
-in [Validation and promotion](../../project/PROMOTION_PIPELINE.md#promotion-pipeline). Its stages (a),
+in [Validation and promotion](../../../legacy/docs/project/PROMOTION_PIPELINE.md#promotion-pipeline). Its stages (a),
 (b) and (c) are the ones the exits, the candidate table and the release checklists name.
 
 ### Release map
@@ -297,7 +297,7 @@ The [backlog](ROADMAP_BACKLOG.md#pull-rules) is the one home of pull rules and p
 The dated decisions that shape this queue (priority, semantics, tightening, owner-decision, delivery,
 soundness, verified-compiler, usability, vertical-slice and behavioural-contract decisions) are in the
 [decision log](ROADMAP_DECISIONS.md#decisions). The language rules the project owner
-reserved are not decided there: they are the [owner decisions](../../spec/decisions.md#owner-decisions).
+reserved are not decided there: they are the [owner decisions](../../decisions.md#owner-decisions).
 
 ## Reconciliation record
 
@@ -311,11 +311,11 @@ acceptance obligations survive unless explicitly retired with a reason.
 
 ## Archived history
 
-The [legacy execution plan](../ROADMAP_LEGACY_PLAN.md) preserves the old phases, queue,
+The [legacy execution plan](../../../legacy/docs/archive/ROADMAP_LEGACY_PLAN.md) preserves the old phases, queue,
 exits, estimates, capacity and release map; it schedules nothing.
 
-Historical execution records and completed snapshots live in [roadmap history](../ROADMAP_HISTORY.md).
-Retired task bodies live in [retired tasks](../ROADMAP_RETIRED_TASKS.md), with phase and
+Historical execution records and completed snapshots live in [roadmap history](../../../legacy/docs/archive/ROADMAP_HISTORY.md).
+Retired task bodies live in [retired tasks](../../../legacy/docs/archive/ROADMAP_RETIRED_TASKS.md), with phase and
 disposition stubs in their areas. Neither archive schedules work.
 
 <a id="open-research-questions-bend-and-roc"></a>
@@ -323,7 +323,7 @@ disposition stubs in their areas. Neither archive schedules work.
 Historical research and proof-authoring references resolve through the [backlog](ROADMAP_BACKLOG.md).
 
 <a id="bug-dashboard"></a>
-The [bug dashboard](../../bugs/DASHBOARD.md) owns compiler-scoped defect views.
+The [bug dashboard](../../../legacy/docs/bugs/DASHBOARD.md) owns compiler-scoped defect views.
 
 <a id="the-current-execution-queue"></a>
 The current execution queue is [the queue above](#the-queue).

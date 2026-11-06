@@ -36,4 +36,4 @@ block independent development on other branches.
 Progress updates should identify the candidate being validated, the independent
 work advancing alongside it, and the checks that still block merge or closure.
 
-Design questions are decided by docs/project/PHILOSOPHY.md.
+Design questions are decided by docs/PHILOSOPHY.md.
