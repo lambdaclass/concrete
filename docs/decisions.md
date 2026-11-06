@@ -364,7 +364,7 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
   train. `legacy/` is a byte-frozen snapshot of main's tree at the move commit, never patched and
   never run; one root check refuses any change under it except a deletion its retention row allows,
   and no legacy gate runs (P5). Every legacy asset has a row in the root `RETENTION.tsv` with a
-  destination and deletion condition (P6). Revised 2026-11-06 by the owner: `legacy/` is kept much
+  destination and deletion condition (P6). Revised 2026-11-06 by the owner ("i would delete legacy way later, we want to check it to see if we forgot any idea"): `legacy/` is kept much
   longer, as the reference for ideas the new design may have forgotten. Nothing is deleted after
   slice 1 (B3 keeps only the totality audit and the retirement of legacy defects); each of phases C,
   D and E starts with a short ideas sweep of `legacy/` for its area (R-0591, R-0597, R-0598); `legacy/`, the old
@@ -754,7 +754,8 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
   confirm the exact bytes a claim is about. This moves the reproducibility half of R-0104 (merged
   into R-0149 in phase G) to B1; R-0149 keeps incremental-build equivalence.
 - <a id="decided-project-concrete-toml"></a>**Policies and declared assumptions live in
-  `Concrete.toml`** (owner, 2026-11-06). A project's policies, such as the
+  `Concrete.toml`** (owner, 2026-11-06: "concrete.toml is fine", in place of a separate policy
+  file). A project's policies, such as the
   [predictable policy](#decided-project-predictable-policy), and its declared assumptions (target,
   heap, stack, foreign functions and the trusted surface) are written in the project's
   `Concrete.toml`. There is no separate policy or assumptions file.
@@ -769,7 +770,7 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
   - *Tables* (owner, 2026-11-06: "ok do everything", after Claude, Codex, agy and Kimi chose unanimously). The sections are the typed, versioned `[policy]` and `[assumptions]` tables;
     an unknown key or version is refused. Slices 7 and 19 extend them.
 - <a id="decided-project-os-sandboxing"></a>**OS-level sandboxing is outside the compiler's scope**
-  (owner, 2026-11-06: "that's something the user can decide"). OS-level sandboxing
+  (owner, 2026-11-06: "shouldn't be even part of a compiler, that's something the user can decide"). OS-level sandboxing
   (seccomp/landlock, Capsicum, pledge/unveil) is outside the compiler's scope; users may apply it
   themselves. No task or option covers it.
 - <a id="decided-project-diagnostics-2026-11-06"></a>**Diagnostics are checker outputs** (owner,
