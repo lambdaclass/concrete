@@ -1,0 +1,10 @@
+[piece 5 of 12: scripts]
+- ConcreteSpec/Spec/Borrow.lean:222: `RangeOk` accepts ranges without `else` whenever they are not provably invalid, including unknown bounds that can fail at runtime. The accompanying comment explicitly records the owner’s newer requirement that this form needs evidence of validity. Implementing the superseded rule permits hidden traps and contradicts that owner decision; deferring its replacement to A2i does not make this acceptance rule correct.
+[piece 6 of 12: scripts]
+- ConcreteSpec/Spec/Cleanup.lean:101: `break` and `continue` search past `.fnBody` frames. For example, `unwound (.brk 1) [⟨.fnBody, []⟩, ⟨.loopBody 1, []⟩]` succeeds and unwinds both frames, allowing an exit to target another function’s loop. `Reg.enter` permits this stack; loop-target searches need to stop at a function boundary.
+
+Owner-decision verification remains incomplete: repository reads failed, preventing inspection of `docs/decisions.md`.
+[piece 10 of 12: scripts]
+- scripts/proofs/lean_lex.py:147: The example rewriter matches inside string literals and quoted identifiers, which `lex()` preserves. Valid code such as `def label : String := "example"` therefore raises `LexError` and fails the trust gate despite containing no example command. Match command tokens outside literals and quoted names.
+[piece 11 of 12: scripts]
+- scripts/spec/lean_site.py:199: Identifier links ignore Lean scope: `here` is unused, and every token matching a globally unique declaration suffix is linked to that declaration. A local variable or parameter shadowing that name therefore links to an unrelated declaration, misrepresenting the source’s meaning. The link check accepts these incorrect links because their targets exist.
