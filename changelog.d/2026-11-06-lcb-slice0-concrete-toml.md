@@ -38,3 +38,4 @@ The documents now point readers to the decisions and the open work:
 - `docs/proposals/` holds the legacy ideas sweep and the pipeline review.
 - README gains a "Where to read" section.
 - The slice-0 surface: `concrete build` and `concrete facts`; a distinct "not supported in this slice" refusal; leading-zero integer literals refused; the reported trap site is a named premise until proved.
+- **Thin vertical slices, integers first, capabilities early:** each slice is fully proven before the next, and LP0 lands before the language grows large. The slice order will come from the agreed slice plan. The former slice 1's ownership obligations arrive with the ownership slice.

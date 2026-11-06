@@ -49,6 +49,7 @@ Each row records a decision and its reason. A language rule itself is its Lean d
 - Heap facts and memory policies ([row](#decided-project-memory-2026-11-06)).
 - Secrets, noninterference and constant time ([row](#decided-project-infoflow-2026-11-06)).
 - The new compiler pipeline ([row](#decided-project-pipeline-2026-11-06)).
+- Thin vertical slices, integers first ([row](#decided-project-vertical-slices-2026-11-06)).
 - The slice-0 surface: `concrete build`, `concrete facts`, unsupported-form refusals, leading zeros ([row](#decided-slice0-surface-2026-11-06)).
 
 <a id="rules-a-decision-changed"></a>
@@ -238,7 +239,7 @@ The owner answered every row of the 2026-11-05 decision page, in the terminal. T
 - **Q7.10** Do you approve the linux-x86_64-hosted grant table? — Approve R4 F6's complete grant table below as part of this row: every launch configuration, operation signature, permission, narrowing rule and ending contract. Standard-stream operations require Console (Q7.11), not Device; where the R4 F6 table says with(Device) for StdIn/StdOut/StdErr, read with(Console). A missing configured grant refuses startup with exit 125; a trap exits 134. *Revises or adds: New target contract: owner decision.* *Extended 2026-11-06 by [no hidden traps](#decided-project-no-hidden-traps): the stack target contract (adequate stack excludes exhaustion, launch refusal 125 when the reservation is smaller than the bound; then a defined outcome for inadequate stack) is a future target-contract obligation, not a current guarantee.*
 - **Q7.11** Which permission do the standard streams use? — Add a Console capability for StdIn/StdOut/StdErr operations; keep Device for device grants. *Revises or adds: Authority rule 13 (adds Console); rules 5 and 7 lists include it.*
 - **Q8.1** What is the first proof endpoint? — Proved source→BIR; qualified native; conditional image claim.
-- **Q8.2** What exact source subset is admitted? — A1 minimal `u8`/linear-struct component subset.
+- **Q8.2** What exact source subset is admitted? — A1 minimal `u8`/linear-struct component subset. <a id="q8-2-revision"></a>Revised 2026-11-06 by [vertical slices](#decided-project-vertical-slices-2026-11-06): this linear-struct component subset arrives with the ownership slice, after the integer slices.
 - **Q8.3** What establishes frontend correspondence? — Independent byte-to-Core correspondence judgments.
 - **Q8.4** Does the first artifact qualify as a complete executable? — Component plus bound launcher first.
 - **Q8.5** What launcher ABI and observations are fixed? — Pinned launcher ABI, inputs, startup and trap mapping. *Extended 2026-11-06 by [no hidden traps](#decided-project-no-hidden-traps): the stack target contract (adequate stack excludes exhaustion, launch refusal 125 when the reservation is smaller than the bound; then a defined outcome for inadequate stack) is a future target-contract obligation, not a current guarantee.*
@@ -833,6 +834,15 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
   confused. An integer literal with a leading zero (such as `007`) is refused, so no literal reads as
   octal. The trap site an executable reports is a named premise of the theorem until it is proved
   (spec obligation O4).
+- <a id="decided-project-vertical-slices-2026-11-06"></a>**Thin vertical slices, integers first**
+  (owner, 2026-11-06). The language grows in thin vertical slices, each fully proven end to end
+  (source, every stage, BIR, both backends, facts and diagnostics, conformance examples) before
+  the next starts, so every construct is proven on the whole path as soon as it lands and no stage
+  runs ahead of its proofs. Integers come first and capabilities early; LP0 lands before the
+  language grows large. The order is to be filled from the agreed slice plan (Claude, Codex, Kimi
+  and agy, for the owner). The common acceptance shape is in the
+  [roadmap](../ROADMAP.md#vertical-slices). This splits the former slice 1: its linear component
+  and launcher obligations arrive with the ownership slice (revising [Q8.2](#q8-2-revision)).
 - <a id="decided-project-outside-readers"></a>**The outside readers** (owner, 2026-11-06: "me but also
   agy and codex and kimi if it's available"). The outside-reader pass (R-0559) is done by the owner and
   independent models: agy (Gemini), Codex, and Kimi when available (its absence is recorded, not
