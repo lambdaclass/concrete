@@ -71,7 +71,7 @@ observed behaviour  →  observation (exit status 0–255 / 125 startup refusal 
 
 There's no Mono Core, since slice 0 has no generics. When Mono exists, the admission check runs again on its output: substitution can expose new constants and cycles (row Q6.3).
 
-**CheckedCore is the single admission point.** Trap admission, termination and fact derivation run there, and nowhere else. The checker also emits one **discharged-evidence token** per operation it proved safe; in slice 0 that is `known (v)` for a `+` whose value is statically known. Tokens are carried through MIR, Memory CFG and BIR. A token is validated (`token_valid`, derived from `knownExpr_u8`), and only a validated token lets a pass omit a check. No pass removes a check without evidence (PASS-9).
+**CheckedCore is the single admission point.** Trap admission, termination and fact derivation run there, and nowhere else. The checker also emits one **discharged-evidence token** per operation it proved safe; in slice 0 that is `known (v)` for a `+` whose value is statically known. Tokens are carried through MIR, Memory CFG and BIR. A token is validated (`token_valid`). Its soundness connects the checker's known value to the run-time operands through `knownExpr_sound`, because `knownExpr_u8` alone establishes only static knowledge., and only a validated token lets a pass omit a check. No pass removes a check without evidence (PASS-9).
 
 **Place MIR** is where later slices put evaluation order, cleanup edges and the expansion of residual checks. In slice 0, an add with no valid token becomes an explicit `add.ovf` plus a branch to a trap site, and an add with a valid token becomes a plain add. Every accepted slice-0 program has tokens on all its adds, so its executables contain no trap path. Unchecked well-scoped programs, such as `200 + 56` in gate 6, have no tokens, so the check-and-trap path is still proved and tested.
 
@@ -124,7 +124,7 @@ LCB is a pinned lake dependency (`require` with an exact rev, LCB's upstream loc
 
 Each backend emits `main`'s body as a function `concrete_body() -> w`, a 32-bit word, whose return value **encodes** the behaviour:
 - `exited c` returns `c` (0–255);
-- `trapped k` returns `256 + idx k`.
+- a trap at site `s` returns `256 + s.idx`. The runtime's site table maps the index to the trap's kind, typed `SiteId` and span.
 
 This fits LCB's verified source profile (`ssa-int-v1`, `LeanCompilerBackend/Verified/Source.lean`), which has integer operations, compares, branches, phis, a return or divergence, and no calls, traps or memory. It is also what lets the adapter be proved against LCB's semantics as it stands.
 
@@ -227,10 +227,13 @@ These are new files only. No existing spec file changes, so there is no conflict
 
 ## Behaviours: the fuel-free semantic interface
 
-Every level (Core, MIR, BIR) exposes a **maximal behaviour** derived from its fuel-indexed evaluator:
+Every level (Core, MIR, Memory CFG (`Mem`), BIR) exposes a **maximal behaviour** derived from its fuel-indexed evaluator:
 
 ```lean
 inductive Behaviour | exited (c : Nat) | trapped (k : Trap) | diverges | stuck | refused | killed
+-- `Behaviour` carries the trap KIND only, matching Core. The trap SITE is tracked separately, as
+-- the `SiteId` of the trapping instruction, and `trap_site_correct` relates it to the
+-- origin of the add in `out.sites`.
 def X.behaviour (p) : Behaviour   -- exited/trapped/stuck if some fuel reaches it, else diverges
 ```
 
@@ -262,17 +265,17 @@ structure TargetProfile where
 /-- What the body function produces: a 32-bit result word, or divergence. -/
 inductive BodyResult | returns (w : BitVec 32) | diverges | stuck
 
-/-- The encoding (one definition, shared by both backends and the runtime):
-    `exited c` (c < 256) ↦ c,  `trapped k s` ↦ 256 + s.idx, where s is the trap site; the runtime's
-    site table (emitted by Runtime.lean, typed `SiteId`, kind, span) gives the kind and location for
-    the fd-2 line (`siteIdx` injective, < 2^31 − 256; the Core comparison projects to the kind).
-    `decode` maps a word below 256 to `exited`, a word 256 + i with i a trap index to `trapped`, and
-    every other word to `stuck` (invalid). Proved: `decode_encode` for every encodable behaviour, and
-    `emit_encodes`: the body of a WF BIR returns only valid words. -/
-def encode : Behaviour → Option (BitVec 32) := ...
-def decode : BitVec 32 → Behaviour := ...
-def BodyResult.behaviour : BodyResult → Behaviour
-  | .returns w => decode w | .diverges => .diverges | .stuck => .stuck
+/-- The encoding, parameterized by the program's trap-site table `tbl` (one definition, shared by
+    both backends and the runtime). `exited c` (c < 256) ↦ c; a trap at site index i ↦ 256 + i.
+    `tbl` is emitted by Runtime.lean and maps i to (kind, `SiteId`, span); i < tbl.size < 2^31 − 256.
+    `decode tbl` maps a word below 256 to `exited`, a word 256 + i with i < tbl.size to
+    `trapped (tbl.kind i)`, and every other word to `stuck` (invalid). Proved: `decode_encode` for
+    every encodable behaviour, and `emit_encodes`: the body of a WF BIR returns only valid words. -/
+def encode (tbl : SiteTable) : BIR.Outcome → Option (BitVec 32) := ...
+def decode (tbl : SiteTable) : BitVec 32 → Behaviour := ...
+def BodyResult.behaviour (tbl : SiteTable) : BodyResult → Behaviour
+  | .returns w => decode tbl w | .diverges => .diverges | .stuck => .stuck
+-- Everywhere below, `r.behaviour` abbreviates `r.behaviour b.sites` for the BIR `b` concerned.
 
 /-- A backend: the total Lean function from BIR to the body text a native toolchain consumes, and
     what that text means as a `BodyResult`. For LCB, `Means` is DEFINED from LCB's imported
@@ -430,11 +433,14 @@ The driver emits `Cert_<digest>.lean`, which the kernel checks (`lake env lean`,
 
 ```lean
 def srcBytes : ByteArray := ...      -- the exact input
-def expected : Output := ...         -- the exact q, mir, bir, ll, lcb
-theorem cert_compile : compile T₀ srcBytes = .ok expected := by decide
-def toks : List Token := ...         -- witnesses emitted by the driver
-def ast : Surface.Program := ...
-theorem cert_denotes : Surface0.lexesB srcBytes toks && Surface0.derivesB toks ast &&
+def expected : Output := ...         -- the exact q, sites, tokens, mir, mem, bir, ll, lcb
+-- one entry per edge, each checked by `decide` on that ONE stage function:
+theorem e_lex   : Lex.lex srcBytes = .ok expected.toks := by decide
+theorem e_parse : Parse.parse expected.toks = .ok expected.ast := by decide
+-- … e_elab, e_admit, e_lower, e_memory, e_ssa, e_llvm, e_lcb
+theorem cert_compile : compile T₀ srcBytes = .ok expected :=
+  compile_of_edges e_lex e_parse e_elab e_admit e_lower e_memory e_ssa e_llvm e_lcb
+theorem cert_denotes : Surface0.lexesB srcBytes expected.toks && Surface0.derivesB expected.toks expected.ast &&
     Surface0.elabB ast expected.q = true := by decide
 ```
 
@@ -449,7 +455,7 @@ A **refusal certificate** proves `compile T₀ src = .error r` for each refused 
 
 **Budget, and the per-pass design.** The time and size of each certificate are measured and gated. The LL(1) table is a precomputed constant.
 
-Whole-compiler `by decide` is accepted for **slice 0 only**. The certificate format is already a **list of per-edge entries**: source → tokens → AST → `q` → MIR → Memory CFG → BIR → backend inputs. Slice 0 fills each edge by `decide` on that one stage function. Later, each edge carries a witness that is small and linear in program size: a name-binding map, an ANF map, an SSA dominance witness, or a register assignment. A proved validator checks the witness, and the universal pass theorem composes with it. So the kernel never re-runs the whole compiler (R-0552/R-0521).
+The certificate format is a **list of per-edge entries**, composed by the proved `compile_of_edges` (above). In slice 0, each edge is still checked by `decide` running that stage in the kernel, so in total the kernel does run the whole compiler. That is accepted for **slice 0 only**. Later, each edge carries a witness that is small and linear in program size: a name-binding map, an ANF map, an SSA dominance witness, or a register assignment. A proved validator checks the witness, and the universal pass theorem composes with it. From then on, the kernel never re-runs the whole compiler (R-0552/R-0521).
 
 ## Stage registry (`Concrete/Stages.lean`)
 
@@ -457,9 +463,11 @@ Whole-compiler `by decide` is accepted for **slice 0 only**. The certificate for
 
 ```lean
 /-- The contracts are fixed per stage in ONE table and stated about the stage function itself. -/
-def lowerContract (f : Slice0.Program → Except Refusal MIR.Program) : Prop :=
-  ∀ q m, WellScoped q → f q = .ok m → m.WF ∧ MIR.behaviour m = Core.behaviour (toCore q)
--- … one per stage: lex, parse, elab, check, lower, ssa, and the two backend emits
+def lowerContract (f : Slice0.Program × Tokens → Except Refusal MIR.Program) : Prop :=
+  ∀ q t m, WellScoped q → TokensValid q t → f (q, t) = .ok m →
+    m.WF ∧ MIR.behaviour m = Core.behaviour (toCore q)
+-- … one per stage: lex, parse, elab, admit (check + tokens), lower, memory, ssa,
+--   and the two backend emits
 
 inductive Evidence (C : Prop) where
   | proof (h : C)
@@ -508,7 +516,8 @@ Human output, JSON and future policies all render the same `Report`.
 | Allocation (artifact) | `notEstablished`: crt/startup are not modeled. |
 | Memory reads/writes (source) | `established`: own locals only. |
 | Implicit trap sites (source) | One per `+`, with a typed `SiteId` and a span. Each is `established` as "cannot trap", by its validated `known(v)` discharge token (`token_valid`, `slice0_never_traps`), so its check is omitted. |
-| Trap sites (artifact) | `conditional` on the backend premises: none in the emitted body. |
+| Trapping (artifact, behavioural) | `conditional` on the backend premises: no run traps. |
+| Trap code present (artifact, structural) | `notEstablished`: no artifact inspection yet. Behavioural premises allow unreachable trap code in an observationally equivalent image. |
 | `Result` errors, abort, allocation failure, foreign failure | `notApplicable`. |
 | Trusted / FFI / opaque (source) | `established`: none. |
 | Trusted / FFI / opaque (artifact) | `notEstablished`: no link-map or symbol-inventory evidence yet. Behavioural premises can't establish this, because an observationally equal image may still contain foreign code. |
@@ -554,7 +563,8 @@ The **CLI spellings are placeholders** (`concrete facts FILE [FN]`, `concrete bu
 
    **Refused examples have their own leg.** The Lean `check` result, the compiler's refusal (with its rule) and the refusal certificate must agree with `.expect`. No executable exists for a refused example. A separate supported-subset coverage report lists every grammar production and Core form that the corpus exercises. A reject-all compiler fails, because every accepted example must exit with its status.
 5. **Differential at the source:** generated accepted programs, with replayable seeds; native exit = Lean `run`.
-6. **Differential at BIR → native, both backends:** this covers overflow. Generated BIR programs over **arbitrary** `u8` operands, including `200 + 56`, go through `BIR.behaviour`, through the LLVM path and through the LCB path. Overflow must give exit 134 and the trap line on fd 2 for both.
+6. **Differential through the token-free lowering, both backends.** This covers overflow. Generated **well-scoped, unchecked** slice-0 programs over **arbitrary** `u8` operands, including `200 + 56`, take `lower q ∅ → memory → ssa`, so they have no tokens and no checker. Their Core `run` is compared with the LLVM path and the LCB path. Overflow must give exit 134 and the right site's trap line on fd 2, for both backends. This exercises token-aware lowering, Memory CFG and SSA, not only the backends.
+   A second leg compares generated BIR directly with both backends, to cover BIR shapes that lowering does not produce.
 
    An in-process leg also compares `BIR.behaviour b` with LCB's own evaluator on `adapt b`. That is the executable shadow of `adapter_correct` until it is proved.
 6a. **AArch64:** a GitHub-hosted `ubuntu-24.04-arm` job builds the LCB output for `aarch64-linux`, runs gates 4 and 6 there natively, and compares against Lean. LLVM-native also runs there, as a third cross-check. Gates 4 and 6 for x86-64 run on concrete-ci-2.
