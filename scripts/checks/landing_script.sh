@@ -72,10 +72,10 @@ cat > "$GIT_CONFIG_GLOBAL" <<EOF
 EOF
 mkdir -p "$TMP/nohooks"
 # train.sh runs only with the repository's pre-push hook enabled (ISS-0015): it asks the hook git
-# would run who it is (CONCRETE_PREPUSH_IDENTIFY=1). The sandbox's global hooksPath holds this
+# would run who it is (its single argument --concrete-identify). The sandbox's global hooksPath holds this
 # stand-in, which runs no gate and answers as the repository's .githooks/pre-push would: a test
 # fixture impersonating the hook on purpose.
-IDENTIFY='[ "${CONCRETE_PREPUSH_IDENTIFY:-0}" = 1 ] && { echo "concrete-pre-push $(cd "$(git rev-parse --show-toplevel)" && pwd -P)/.githooks/pre-push"; exit 0; }'
+IDENTIFY='[ "$#" = 1 ] && [ "$1" = --concrete-identify ] && { echo "concrete-pre-push $(cd "$(git rev-parse --show-toplevel)" && pwd -P)/.githooks/pre-push"; exit 0; }'
 standin_hook() {
   printf '#!/usr/bin/env bash\n%s\nexit 0\n' "$IDENTIFY" > "$TMP/nohooks/pre-push"
   chmod +x "$TMP/nohooks/pre-push"
@@ -1192,9 +1192,14 @@ out="$(bash "$TRAIN" build tnh --no-fetch b1 2>&1)"; rc=$?
 printf '#!/usr/bin/env bash\n# runs .githooks/pre-push (it does not)\nexit 0\n' > "$TMP/nohooks/pre-push"
 out="$(bash "$TRAIN" build tnh --no-fetch b1 2>&1)"; rc=$?
 [ "$rc" != 0 ] && has "$out" "is not the repository's .githooks/pre-push" && ok "train.sh refuses a hook that only mentions .githooks/pre-push" || { no "train with a hook naming the file: exit $rc"; echo "$out" | sed 's/^/      /'; }
-out="$(cd "$W" && CONCRETE_PREPUSH_IDENTIFY=1 bash "$ROOT_DIR/.githooks/pre-push" origin x < /dev/null 2>&1)"; rc=$?
+out="$(cd "$W" && bash "$ROOT_DIR/.githooks/pre-push" --concrete-identify < /dev/null 2>&1)"; rc=$?
 [ "$rc" = 0 ] && [ "$out" = "concrete-pre-push $(cd "$ROOT_DIR" && pwd -P)/.githooks/pre-push" ] \
   && ok "the repository hook answers who it is with its real path and runs nothing" || { no "hook identify: exit $rc, '$out'"; }
+# (the wip tier, so the hook runs nothing heavy and never re-enters these checks)
+out="$(cd "$W" && printf 'refs/heads/x %s refs/heads/wip/idn %s\n' "$(git rev-parse main)" 0000000000000000000000000000000000000000 \
+  | CONCRETE_PREPUSH_IDENTIFY=1 bash "$ROOT_DIR/.githooks/pre-push" origin "$TMP/origin.git" 2>&1)"; rc=$?
+! has "$out" "concrete-pre-push /" && has "$out" "wip/* backup push" \
+  && ok "a real push never takes the identify answer (no environment switch exists)" || { no "identify leaked into a push: $out"; }
 standin_hook
 [ ! -e "$TMP/state/tnh" ] && ok "no refused run left train state behind" || no "a refused run left state"
 

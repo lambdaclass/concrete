@@ -17,10 +17,12 @@
 # Deliberate bypass:  CONCRETE_SKIP_GATES=1 git push   (you then own the CI result)
 set -uo pipefail
 HOOK_SELF="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")"
-# train.sh asks the hook git would run which hook it is (ISS-0015): this one answers with its real
-# path and runs nothing. A wrapper that passes its environment on to it (acceptance.sh's guard)
-# gets the same answer; a hook that never runs this one gives none.
-if [ "${CONCRETE_PREPUSH_IDENTIFY:-0}" = 1 ]; then
+# train.sh asks the hook git would run which hook it is (ISS-0015): called with the single argument
+# --concrete-identify (git always passes a remote name and URL, never this), this one answers with
+# its real path and runs nothing. A wrapper that passes its arguments on to it (acceptance.sh's
+# guard) gets the same answer; a hook that never runs this one gives none. An argument, not an
+# environment variable, so nothing a push inherits can turn the gates off.
+if [ "$#" = 1 ] && [ "$1" = --concrete-identify ]; then
   echo "concrete-pre-push $(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)/$(basename "${BASH_SOURCE[0]}")"
   exit 0
 fi

@@ -134,6 +134,8 @@ probe() { # label script expect-change [completion-marker]
     if cmp -s "$d/before" "$d/after"; then ok "$label: the caller's refs, notes, config and upstream are unchanged"
     else no "$label: the caller changed"; diff "$d/before" "$d/after" | sed 's/^/      /' | head -20; fi
   else
+    [ "$rc" = 125 ] && { no "$label: INCOMPLETE: no task and memory bound available, so it was not run"; return; }
+    bounded_is_incomplete "$rc" && { no "$label: INCOMPLETE: timed out twice"; return; }
     grep -q 'refs/notes/' "$d/after" && ! cmp -s "$d/before" "$d/after" \
       && ok "$label: the harness sees a write through the inherited GIT_DIR" \
       || no "$label: a leaking script left the caller unchanged; the harness is blind"

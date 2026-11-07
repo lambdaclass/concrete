@@ -260,8 +260,12 @@ scratch_clone() { # dir sha: a local clone of this clone, detached at sha, with 
   git clone -q --local --no-checkout "$ROOT" "$d"
   git -C "$d" fetch -q "$ROOT" "+refs/remotes/*:refs/remotes/*" "+refs/notes/*:refs/notes/*"
   for r in $(git remote); do
-    if git -C "$d" remote get-url "$r" >/dev/null 2>&1; then git -C "$d" remote set-url "$r" "$(git remote get-url "$r")"
-    else git -C "$d" remote add "$r" "$(git remote get-url "$r")"; fi
+    # every url of the remote, in order (a remote with several pushes to all of them)
+    git -C "$d" config --unset-all "remote.$r.url" 2>/dev/null || true
+    git -C "$d" config "remote.$r.fetch" >/dev/null 2>&1 || git -C "$d" config "remote.$r.fetch" "+refs/heads/*:refs/remotes/$r/*"
+    while IFS= read -r v; do
+      [ -n "$v" ] && git -C "$d" config --add "remote.$r.url" "$v"
+    done <<< "$(git config --get-all "remote.$r.url" 2>/dev/null || true)"
   done
   git -C "$d" config core.hooksPath "$(git config core.hooksPath || echo .githooks)"
   for k in user.name user.email user.useConfigOnly; do

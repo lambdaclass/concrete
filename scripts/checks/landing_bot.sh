@@ -50,10 +50,10 @@ cat > "$GIT_CONFIG_GLOBAL" <<EOF
 EOF
 mkdir -p "$TMP/nohooks" "$TMP/gh"
 # train.sh runs only with the repository's pre-push hook enabled (ISS-0015): it asks the hook git
-# would run who it is (CONCRETE_PREPUSH_IDENTIFY=1). The sandbox's global hooksPath holds this
+# would run who it is (its single argument --concrete-identify). The sandbox's global hooksPath holds this
 # stand-in, which runs no gate and answers as the repository's .githooks/pre-push would: a test
 # fixture impersonating the hook on purpose.
-IDENTIFY='[ "${CONCRETE_PREPUSH_IDENTIFY:-0}" = 1 ] && { echo "concrete-pre-push $(cd "$(git rev-parse --show-toplevel)" && pwd -P)/.githooks/pre-push"; exit 0; }'
+IDENTIFY='[ "$#" = 1 ] && [ "$1" = --concrete-identify ] && { echo "concrete-pre-push $(cd "$(git rev-parse --show-toplevel)" && pwd -P)/.githooks/pre-push"; exit 0; }'
 standin_hook() {
   printf '#!/usr/bin/env bash\n%s\nexit 0\n' "$IDENTIFY" > "$TMP/nohooks/pre-push"
   chmod +x "$TMP/nohooks/pre-push"

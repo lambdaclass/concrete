@@ -21,7 +21,7 @@
 #   * (2026-11-06, ISS-0015) a train runs only from a FULL clone whose pre-push hook is the
 #     repository's (core.hooksPath .githooks, or a wrapper that runs it): a linked worktree hands its
 #     hook GIT_DIR, which once turned a test check into writes on a real clone and GitHub (where_ok;
-#     `status` only reads and runs anywhere).
+#     `status` and `record` push nothing and run anywhere).
 #   * (2026-11-06) review fails closed: `check` with no review command fails rather than skipping the
 #     leg, and a train lands only with review provenance (review_provenance: a verified clean review
 #     note at its head, or, when the head has none, on every member at its exact SHA).
@@ -74,7 +74,7 @@ COMMON="$(cd "$(git rev-parse --git-common-dir)" && pwd)"
 # repository's pre-push hook enabled: train.sh pushes ci/* and main, and with the hook off (no
 # core.hooksPath, or one pointing elsewhere) those pushes would run no gate. The hook git runs is
 # `git rev-parse --git-path hooks/pre-push` (core.hooksPath honoured). It is asked who it is: run
-# with CONCRETE_PREPUSH_IDENTIFY=1 and no input, the repository's .githooks/pre-push prints
+# with the single argument --concrete-identify and no input, the repository's .githooks/pre-push prints
 # `concrete-pre-push <its real path>` and runs nothing, and so does a wrapper that runs it
 # (acceptance.sh's guard hook). Any other answer, or none, is refused; a hook that merely mentions
 # the file is not enough. `status` and `record` push nothing (record runs in CI's Landing record
@@ -89,7 +89,7 @@ where_ok() {
   [ -f "$hook" ] && [ -x "$hook" ] \
     || die "refusing to run: this clone has no enabled pre-push hook ($hook is missing or not executable); enable the repository's: git config core.hooksPath .githooks"
   want="concrete-pre-push $(cd "$ROOT" && pwd -P)/.githooks/pre-push"
-  got="$(CONCRETE_PREPUSH_IDENTIFY=1 "$hook" "$REMOTE" "$(git remote get-url "$REMOTE" 2>/dev/null || echo "$REMOTE")" < /dev/null 2>/dev/null | tail -n 1)"
+  got="$("$hook" --concrete-identify < /dev/null 2>/dev/null | tail -n 1)"
   [ "$got" = "$want" ] \
     || die "refusing to run: the enabled pre-push hook $hook is not the repository's .githooks/pre-push and does not run it (asked who it is, it answered '${got}'); enable it: git config core.hooksPath .githooks"
 }
