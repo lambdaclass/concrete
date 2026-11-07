@@ -1,0 +1,4 @@
+[piece 1 of 2: scripts]
+- scripts/checks/sandbox_isolation.sh:86: The previous containment finding remains open. Lowering `ulimit -v` to 2 GiB still limits each process independently; hundreds of children can collectively exhaust host memory. Updating the comments does not provide containment. Require an aggregate memory limit or report INCOMPLETE without running the probe when one is unavailable.
+[piece 2 of 2: docs]
+- scripts/checks/sandbox_isolation.sh:82: The previous containment finding remains unresolved by this documentation change: a per-process memory limit allows recursive children collectively to exhaust host memory. Describing that limitation does not fix it; enforce an aggregate limit or report INCOMPLETE when unavailable. Repository access failed, so this assessment is limited to the supplied diff and previous finding.
