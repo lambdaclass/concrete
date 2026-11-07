@@ -6,6 +6,7 @@
 #   legs_wait                   wait for every leg; sets LEGS_FAILED, LEGS_SUM, LEGS_REPORT
 #   MOVE_GATE_MARKER            the line train.sh's dry-run land prints when only the move gate refused
 #   dryland_only_move_gate rc out   0 iff a dry-run land exited 5 with MOVE_GATE_MARKER as a whole line
+#   land_remote_bad remote repo     print why <remote> is not <repo> (owner/name) and return 1, else 0
 #
 # A LEG is one independent validation (impact gates, remote full gates, Codex review). Legs of one
 # candidate run at the same time and are all collected: one failing leg fails the whole, and no
@@ -71,4 +72,27 @@ dryland_only_move_gate() { # rc out
   local l
   while IFS= read -r l; do [ "$l" = "$MOVE_GATE_MARKER" ] && return 0; done <<< "$2"
   return 1
+}
+
+# THE ONE REPOSITORY (owner, 2026-11-06: lambdaclass/concrete). Every URL git would use for <remote>,
+# fetch and push alike (`get-url --all` and `get-url --push --all`, insteadOf and pushurl applied), that
+# is a GitHub URL must name <repo>; a fetch URL at lambdaclass with a pushurl still at the archived
+# concrete2 would otherwise pass a fetch-only check and publish there. A URL that is not GitHub (the
+# test fixtures' bare repositories) passes. Prints the first offending URL and returns 1.
+land_remote_bad() { # remote repo
+  local r="$1" want u path urls
+  want="$(printf '%s' "$2" | tr 'A-Z' 'a-z')"
+  urls="$(git remote get-url --all "$r" 2>/dev/null)" || { echo "the remote '$r' is not configured"; return 1; }
+  urls="$urls"$'\n'"$(git remote get-url --push --all "$r" 2>/dev/null)"
+  while IFS= read -r u; do
+    case "$u" in
+      *github.com[:/]*)
+        path="${u#*github.com[:/]}"; path="${path%/}"; path="${path%.git}"
+        if [ "$(printf '%s' "$path" | tr 'A-Z' 'a-z')" != "$want" ]; then
+          echo "$r uses $u, not github.com/$2: this clone points at another repository. Repoint it: git remote set-url $r https://github.com/$2.git (and drop any other url or pushurl of $r)"
+          return 1
+        fi ;;
+    esac
+  done <<< "$urls"
+  return 0
 }
