@@ -1,4 +1,5 @@
 import Concrete.Backend.Runtime
+import Concrete.BIR.Progress
 import LeanCompilerBackend.Verified.Job
 import LeanCompilerBackend.AMD64
 import LeanCompilerBackend.AArch64
@@ -225,6 +226,17 @@ def assemble (target : Target) (f : Source.Function) : Except String String :=
 The first layer of the adapter proof: each BIR instruction's expansion computes, in LCB's 32-bit
 words, the encoding of the BIR result. `enc` is the value representation; `wrap_word` and
 `flag_word` are the two facts the instruction expansions rest on. -/
+
+/-- What the adapted body produces, from LCB's own source semantics with no arguments: `returns w`
+iff `Source.HasBehavior f #[] (.returned (.word w))`, `diverges` iff
+`Source.HasBehavior f #[] .diverges`, and `stuck` when neither holds (an `initial` fault, a `.long`
+return, a stuck fault). LCB's behaviour is unique (`Proof.hasBehavior_unique`), so exactly one
+holds. -/
+def bodyResult (f : Source.Function) : BodyResult → Prop
+  | .returns w => Source.HasBehavior f #[] (.returned (.word w))
+  | .diverges => Source.HasBehavior f #[] .diverges
+  | .stuck => (∀ w, ¬ Source.HasBehavior f #[] (.returned (.word w))) ∧
+      ¬ Source.HasBehavior f #[] .diverges
 
 namespace Proof
 
@@ -1844,6 +1856,142 @@ theorem adapter_correct_run {p : Program} (hwf : WF p) {f : Source.Function}
       rw [hn] at this
       obtain ⟨k, s, hk, hs⟩ := this
       exact steps_prefix hs n hk
+
+/-! ### LCB's behaviour is unique -/
+
+/-- Determinism: the state `n` steps reach is the prefix of any longer run. -/
+theorem steps_split {f : Source.Function} :
+    ∀ {n m : Nat} {s t u : Source.State}, Source.Steps f n s t → Source.Steps f (n + m) s u →
+      Source.Steps f m t u
+  | 0, _, _, _, _, .zero _, h => by simpa using h
+  | n + 1, m, _, _, _, .succ h₁ h₂, h => by
+    rw [show n + 1 + m = (n + m) + 1 by omega] at h
+    cases h with
+    | succ h₁' h₂' =>
+      cases Source.step_deterministic f _ _ _ h₁ h₁'
+      exact steps_split h₂ h₂'
+
+theorem returned_not_step {f : Source.Function} {t u : Source.State} {v : Source.Value}
+    (hr : Source.step f t = .ok (.returned v)) (hs : Source.Step f t u) : False := by
+  unfold Source.Step at hs
+  rw [hr] at hs
+  cases hs
+
+theorem returns_le {f : Source.Function} {s t₁ t₂ : Source.State} {v₁ v₂ : Source.Value}
+    {n k : Nat} (h₁ : Source.Steps f n s t₁) (r₁ : Source.step f t₁ = .ok (.returned v₁))
+    (h₂ : Source.Steps f (n + k) s t₂) (r₂ : Source.step f t₂ = .ok (.returned v₂)) :
+    v₁ = v₂ := by
+  have h := steps_split h₁ h₂
+  cases k with
+  | zero =>
+    cases h
+    rw [r₁] at r₂
+    cases r₂
+    rfl
+  | succ k =>
+    cases h with
+    | succ hs _ => exact (returned_not_step r₁ hs).elim
+
+theorem returns_unique {f : Source.Function} {s : Source.State} {v₁ v₂ : Source.Value}
+    (h₁ : Source.Returns f s v₁) (h₂ : Source.Returns f s v₂) : v₁ = v₂ := by
+  obtain ⟨n₁, t₁, s₁, r₁⟩ := h₁
+  obtain ⟨n₂, t₂, s₂, r₂⟩ := h₂
+  rcases Nat.le_total n₁ n₂ with h | h
+  · obtain ⟨k, rfl⟩ := Nat.exists_eq_add_of_le h
+    exact returns_le s₁ r₁ s₂ r₂
+  · obtain ⟨k, rfl⟩ := Nat.exists_eq_add_of_le h
+    exact (returns_le s₂ r₂ s₁ r₁).symm
+
+theorem returns_not_diverges {f : Source.Function} {s : Source.State} {v : Source.Value}
+    (hr : Source.Returns f s v) (hd : Source.Diverges f s) : False := by
+  obtain ⟨n, t, hs, ht⟩ := hr
+  obtain ⟨u, hu⟩ := hd (n + 1)
+  cases steps_split hs hu with
+  | succ h _ => exact returned_not_step ht h
+
+/-- LCB's behaviour of a function on given arguments is unique. -/
+theorem hasBehavior_unique {f : Source.Function} {args : Array Source.Value}
+    {b₁ b₂ : Source.Behavior} (h₁ : Source.HasBehavior f args b₁)
+    (h₂ : Source.HasBehavior f args b₂) : b₁ = b₂ := by
+  obtain ⟨s₁, i₁, h₁⟩ := h₁
+  obtain ⟨s₂, i₂, h₂⟩ := h₂
+  rw [i₁] at i₂
+  cases i₂
+  cases b₁ with
+  | returned v₁ =>
+    cases b₂ with
+    | returned v₂ => rw [returns_unique h₁ h₂]
+    | diverges => exact (returns_not_diverges h₁ h₂).elim
+  | diverges =>
+    cases b₂ with
+    | returned v₂ => exact (returns_not_diverges h₂ h₁).elim
+    | diverges => rfl
+
+/-! ### `adapter_correct` -/
+
+theorem word_nat (n : Nat) : word (n : Int) = .word (BitVec.ofNat 32 n) := by
+  simp [word]
+
+/-- The adapted body has a behaviour, and it decodes to BIR's: a return of the word that BIR's
+outcome encodes, or divergence exactly when BIR diverges. -/
+theorem adapter_correct_behaviour {p : Program} (hwf : WF p) {f : Source.Function}
+    (hf : adapt p = .ok f) :
+    (∃ w, Source.HasBehavior f #[] (.returned (.word w)) ∧ behaviour p = decode p.sites w) ∨
+    (Source.HasBehavior f #[] .diverges ∧ behaviour p = .diverges) := by
+  obtain ⟨hexit, htrap, hdiv⟩ := adapter_correct_run hwf hf
+  by_cases hex : ∃ n, (run p n).final = true
+  · obtain ⟨n, hn⟩ := hex
+    have hb := behaviour_of_run hn
+    have henc : (run p n).Encodable p.sites := by
+      rcases run_progress hwf n with h | h
+      · exact h
+      · rw [h] at hn
+        cases hn
+    cases hr : run p n with
+    | exited c =>
+      rw [hr] at hb henc
+      refine .inl ⟨BitVec.ofNat 32 c, ?_, ?_⟩
+      · rw [← word_nat]
+        exact hexit n c hr
+      · rw [hb, decode_encode p.sites _ c rfl henc]
+    | trapped st =>
+      rw [hr] at hb henc
+      refine .inl ⟨BitVec.ofNat 32 (256 + st), ?_, ?_⟩
+      · rw [← word_nat, show (((256 + st : Nat)) : Int) = 256 + (st : Int) by omega]
+        exact htrap n st hr
+      · rw [hb, decode_encode p.sites _ (256 + st) rfl henc]
+    | stuck =>
+      rw [hr] at henc
+      exact henc.elim
+    | outOfFuel =>
+      rw [hr] at hn
+      cases hn
+  · have hall : ∀ fuel, run p fuel = .outOfFuel := by
+      intro fuel
+      cases hr : run p fuel with
+      | outOfFuel => rfl
+      | _ => exact absurd ⟨fuel, by simp [hr, Outcome.final]⟩ hex
+    exact .inr ⟨hdiv hall, (behaviour_diverges_iff p).mpr hall⟩
+
+/-- **`adapter_correct`.** For a well-formed BIR program that the adapter accepts, whatever result
+the adapted body produces under LCB's own semantics (`bodyResult`, from `Source.HasBehavior`,
+imported and never restated) decodes, with the program's site table, to the BIR behaviour. -/
+theorem adapter_correct {p : Program} (hwf : WF p) {f : Source.Function}
+    (hf : adapt p = .ok f) (r : BodyResult) (hr : bodyResult f r) :
+    r.behaviour p.sites = behaviour p := by
+  rcases adapter_correct_behaviour hwf hf with ⟨w, hw, hb⟩ | ⟨hd, hb⟩
+  · cases r with
+    | returns w' =>
+      have := hasBehavior_unique (by unfold bodyResult at hr; exact hr) hw
+      simp only [Source.Behavior.returned.injEq, Source.Value.word.injEq] at this
+      subst this
+      exact hb.symm
+    | diverges => cases hasBehavior_unique (by unfold bodyResult at hr; exact hr) hw
+    | stuck => exact (hr.1 w hw).elim
+  · cases r with
+    | returns w' => cases hasBehavior_unique (by unfold bodyResult at hr; exact hr) hd
+    | diverges => exact hb.symm
+    | stuck => exact (hr.2 hd).elim
 
 end Proof
 
