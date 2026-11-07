@@ -1,0 +1,2 @@
+[piece 1 of 2: scripts]
+- scripts/checks/run.sh:12: Making `sandbox_isolation` mandatory breaks the full check set on macOS. Its resource-bound detection requires either systemd or Linux cgroup files; on macOS neither exists, so all three probes fail as INCOMPLETE and the check exits nonzero. Consequently, gated pushes from otherwise valid full clones on macOS are blocked. Provide a supported resource-bound mechanism for macOS or dispatch these probes to a supported host.
