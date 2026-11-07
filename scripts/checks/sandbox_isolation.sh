@@ -22,7 +22,10 @@
 # scope with TasksMax=512 and MemoryMax=8G (fede-256gb, concrete-ci-2 logins), or, where there is
 # none (a CI runner service), the cgroup the check already runs in when it has a finite memory.max
 # (concrete-ci-2's runners: 28G per runner) plus `ulimit -u` of 512 more processes. With neither, the
-# live probes do not run and the check fails as INCOMPLETE: never an unbounded run. The 2026-11-06
+# live probes do not run and the check fails as INCOMPLETE: never an unbounded run. macOS has
+# neither (no unprivileged aggregate memory limit), so there the root checks are INCOMPLETE by design:
+# a candidate is checked on a gate host (land.gatesHost, `train.sh check`) or in CI, both Linux
+# with a bound, and the hook reuses that host's attestation for the exact push. The 2026-11-06
 # reproducer had no such bound, recursed through a test hook and exhausted the machine.
 set -uo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh" || exit 2
@@ -88,7 +91,7 @@ elif CGMEM="$(cgroup_memory_max)"; then BOUND=cgroup; fi
 case "$BOUND" in
   scope)  echo "bound: a systemd user scope, TasksMax=512, MemoryMax=8G" ;;
   cgroup) echo "bound: this cgroup's memory.max ($CGMEM bytes, aggregate) and ulimit -u (512 more processes)" ;;
-  none)   echo "bound: none available (no systemd user scope, no finite cgroup memory.max): the live probes will not run" ;;
+  none)   echo "bound: none available (no systemd user scope, no finite cgroup memory.max; macOS has neither): the live probes will not run; check on a gate host (land.gatesHost, train.sh check) or in CI" ;;
 esac
 bounded() {
   case "$BOUND" in
