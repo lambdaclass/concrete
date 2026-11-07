@@ -1347,6 +1347,272 @@ theorem incoming_filter {p : Program} {j t : Nat} {bj : Block} (hbj : p.blocks[j
   simp only [Nat.sub_zero, hbj, Nat.zero_le, ↓reduceIte] at this
   exact this
 
+/-- A first-component-preserving `mapM` commutes with filtering on the first component. -/
+theorem mapM_filter_fst {α β γ ε : Type} [BEq α] {G : α × β → Except ε (α × γ)}
+    (hG : ∀ x y, G x = .ok y → y.1 = x.1) (j : α) :
+    ∀ {l : List (α × β)} {l' : List (α × γ)}, l.mapM G = .ok l' →
+      (l.filter (·.1 == j)).mapM G = .ok (l'.filter (·.1 == j))
+  | [], l', h => by simp only [List.mapM_nil, pure, Except.pure, Except.ok.injEq] at h; subst h; rfl
+  | x :: l, l', h => by
+    simp only [List.mapM_cons, bind, Except.bind] at h
+    cases hx : G x with
+    | error e => simp [hx] at h
+    | ok y =>
+      cases hl : l.mapM G with
+      | error e => simp [hx, hl] at h
+      | ok ys =>
+        simp only [hx, hl, pure, Except.pure, Except.ok.injEq] at h
+        subst h
+        have ih := mapM_filter_fst hG j hl
+        have hy := hG x y hx
+        simp only [List.filter_cons, hy]
+        split
+        · simp [List.mapM_cons, hx, ih, bind, Except.bind, pure, Except.pure]
+        · exact ih
+
+/-- What a successful `adaptPhi` is. -/
+theorem adaptPhi_ok {p : Program} {t k : Nat} {phi : Source.Phi} (h : adaptPhi p t k = .ok phi) :
+    ∃ arms, (incoming p t).mapM (fun (pa : Nat × List Operand) => (do
+        let a ← match pa.2[k]? with
+          | some a => operand p a
+          | none => throw s!"block {pa.1} passes too few arguments to block {t}"
+        pure (pa.1, a) : Except String (Nat × Source.Operand))) = .ok arms ∧
+      phi = { destination := blockBase p t + k, width := .word, incoming := arms.toArray } := by
+  unfold adaptPhi at h
+  cases ha : (incoming p t).mapM (fun (pa : Nat × List Operand) => (do
+        let a ← match pa.2[k]? with
+          | some a => operand p a
+          | none => throw s!"block {pa.1} passes too few arguments to block {t}"
+        pure (pa.1, a) : Except String (Nat × Source.Operand))) <;>
+    simp_all [bind, Except.bind, pure, Except.pure]
+
+/-- An adapted phi has exactly one arm from a predecessor with exactly one edge into its block:
+the translated `k`-th argument of that edge. -/
+theorem phi_arm {p : Program} {t k j : Nat} {phi : Source.Phi} (h : adaptPhi p t k = .ok phi)
+    {bj : Block} (hbj : p.blocks[j]? = some bj) {args : List Operand}
+    (hedge : edgesTo t j bj.term = [(j, args)]) {a : Operand} (ha : args[k]? = some a) :
+    ∃ a', operand p a = .ok a' ∧ phi.incoming.filter (·.1 == j) = #[(j, a')] := by
+  obtain ⟨arms, harms, rfl⟩ := adaptPhi_ok h
+  have hG : ∀ (x : Nat × List Operand) (y : Nat × Source.Operand), (do
+        let a ← match x.2[k]? with
+          | some a => operand p a
+          | none => throw s!"block {x.1} passes too few arguments to block {t}"
+        pure (x.1, a) : Except String (Nat × Source.Operand)) = .ok y → y.1 = x.1 := by
+    intro x y hy
+    cases hx : x.2[k]? with
+    | none => simp [hx, bind, Except.bind, throw, throwThe, MonadExceptOf.throw] at hy
+    | some a =>
+      cases hop : operand p a with
+      | error e => simp [hx, hop, bind, Except.bind] at hy
+      | ok a'' =>
+        simp only [hx, hop, bind, Except.bind, pure, Except.pure, Except.ok.injEq] at hy
+        rw [← hy]
+  have hf := mapM_filter_fst hG j harms
+  rw [incoming_filter hbj, hedge] at hf
+  cases ha' : operand p a with
+  | error e => simp [List.mapM_cons, ha, ha', bind, Except.bind] at hf
+  | ok a' =>
+    refine ⟨a', rfl, ?_⟩
+    simp only [List.mapM_cons, List.mapM_nil, ha, ha', bind, Except.bind, pure, Except.pure,
+      Except.ok.injEq] at hf
+    simp only [List.filter_toArray, ← hf]
+
+theorem getElem?_foldl_set_other {α : Type} (g : α → Nat) (v : α → Option Source.Value) {m : Nat} :
+    ∀ (l : List α) (e : Source.Environment), (∀ x ∈ l, g x ≠ m) →
+      (l.foldl (fun u x => u.set! (g x) (v x)) e)[m]? = e[m]?
+  | [], _, _ => rfl
+  | x :: l, e, h => by
+    simp only [List.foldl_cons]
+    rw [getElem?_foldl_set_other g v l _ (fun y hy => h y (by simp [hy])),
+      Array.set!_eq_setIfInBounds, Array.getElem?_setIfInBounds_ne (h x (by simp))]
+
+theorem getElem?_foldl_set_mem {α : Type} (g : α → Nat) (v : α → Option Source.Value) :
+    ∀ (l : List α) (e : Source.Environment), (l.map g).Nodup → ∀ x ∈ l, g x < e.size →
+      (l.foldl (fun u x => u.set! (g x) (v x)) e)[g x]? = some (v x)
+  | [], _, _, _, hx, _ => by simp at hx
+  | y :: l, e, hn, x, hx, hs => by
+    simp only [List.map_cons, List.nodup_cons, List.mem_map] at hn
+    simp only [List.foldl_cons]
+    rcases List.mem_cons.mp hx with rfl | hx
+    · rw [getElem?_foldl_set_other g v l _ (fun z hz he => hn.1 ⟨z, hz, he⟩)]
+      simp [Array.set!_eq_setIfInBounds, hs]
+    · exact getElem?_foldl_set_mem g v l _ hn.2 x hx (by rw [size_set!]; exact hs)
+
+theorem lookup_append {l₁ l₂ : Env} {r : Reg} :
+    lookup (l₁ ++ l₂) r = match lookup l₁ r with | some v => some v | none => lookup l₂ r := by
+  induction l₁ with
+  | nil => rfl
+  | cons x l ih =>
+    obtain ⟨r', v'⟩ := x
+    simp only [List.cons_append, lookup]
+    split <;> simp_all
+
+theorem lookup_zip {r : Reg} : ∀ {ps : List Reg} {vs : List Val}, ps.length = vs.length →
+    (∀ v, lookup (ps.zip vs) r = some v → ∃ i : Nat, ps[i]? = some r ∧ vs[i]? = some v) ∧
+    (lookup (ps.zip vs) r = none → r ∉ ps)
+  | [], [], _ => by simp [lookup]
+  | [], _ :: _, h => by simp at h
+  | _ :: _, [], h => by simp at h
+  | q :: ps, w :: vs, h => by
+    simp only [List.length_cons, Nat.add_right_cancel_iff] at h
+    obtain ⟨ih₁, ih₂⟩ := lookup_zip (r := r) h
+    simp only [List.zip_cons_cons, lookup]
+    by_cases hq : q = r
+    · subst hq
+      simp only [↓reduceIte, Option.some.injEq, reduceCtorEq, false_implies, and_true]
+      intro v hv
+      exact ⟨0, rfl, by simp [hv]⟩
+    · simp only [hq, ↓reduceIte]
+      refine ⟨fun v hv => ?_, fun hn => ?_⟩
+      · obtain ⟨i, h1, h2⟩ := ih₁ v hv
+        exact ⟨i + 1, by simpa using h1, by simpa using h2⟩
+      · simp only [List.mem_cons, not_or]
+        exact ⟨fun e => hq e.symm, ih₂ hn⟩
+
+theorem optionMapM_ok {α β : Type} {g : α → Option β} :
+    ∀ {l : List α} {l' : List β}, l.mapM g = some l' →
+      l'.length = l.length ∧ ∀ (i : Nat) (x : α), l[i]? = some x → ∃ y, g x = some y ∧ l'[i]? = some y
+  | [], l', h => by
+    simp only [List.mapM_nil, pure, Option.some.injEq] at h
+    subst h; exact ⟨rfl, fun i x hx => by simp at hx⟩
+  | a :: l, l', h => by
+    simp only [List.mapM_cons, bind, Option.bind] at h
+    cases ha : g a with
+    | none => simp [ha] at h
+    | some b =>
+      cases hl : l.mapM g with
+      | none => simp [ha, hl] at h
+      | some bs =>
+        simp only [ha, hl, pure, Option.some.injEq] at h
+        subst h
+        obtain ⟨hlen, hel⟩ := optionMapM_ok hl
+        refine ⟨by simp [hlen], fun i x hx => ?_⟩
+        cases i with
+        | zero => simp at hx; subst hx; exact ⟨b, ha, rfl⟩
+        | succ i => simpa using hel i x (by simpa using hx)
+
+/-- One BIR edge `j → t` with arguments `args`, the only edge from `j` into `t`: LCB's `transfer`
+lands at `t`'s first position with the invariant for BIR's `enter`. -/
+theorem edge_sim {p : Program} (hok : numberingOk p = true) {f : Source.Function}
+    (hf : adapt p = .ok f) {j t : Nat} {bj : Block} (hbj : p.blocks[j]? = some bj)
+    {args : List Operand} (hedge : edgesTo t j bj.term = [(j, args)])
+    {benv benv' : Env} {env : Source.Environment} (hen : enter p t args benv = some benv')
+    (hsz : env.size = valueCount p) (hag : Agrees p benv env) (hr : InRange benv) :
+    ∃ env', Source.transfer f j t env = .ok ⟨t, 0, env'⟩ ∧ env'.size = valueCount p ∧
+      Agrees p benv' env' ∧ InRange benv' := by
+  simp only [enter] at hen
+  cases hbt : p.blocks[t]? with
+  | none => simp [hbt] at hen
+  | some bt =>
+  by_cases hl : bt.params.length ≠ args.length
+  · simp [hbt, hl] at hen
+  cases hvals : args.mapM (evalOp benv) with
+  | none => simp [hbt, hvals] at hen
+  | some vals =>
+  simp only [hbt, hl, hvals, Option.bind_some, ↓reduceIte, Option.pure_def, Option.bind_eq_bind,
+    Option.some.injEq] at hen
+  subst hen
+  simp only [ne_eq, Decidable.not_not] at hl
+  obtain ⟨hvlen, hvel⟩ := optionMapM_ok hvals
+  obtain ⟨tb, hfb, htb⟩ := adapt_block hf hbt
+  obtain ⟨phis, xss, tm, hphis, -, -, rfl⟩ := adaptBlock_ok htb
+  obtain ⟨hplen, hpel⟩ := mapM_ok hphis
+  rw [length_indexed] at hplen
+  -- phi `i` is `adaptPhi p t i`, for parameter `i`
+  have hphi_i : ∀ i (hi : i < phis.length), adaptPhi p t i = .ok phis[i] := by
+    intro i hi
+    have hpi : bt.params[i]? = some bt.params[i] := List.getElem?_eq_getElem (by omega)
+    obtain ⟨y, hy, hyi⟩ := hpel i (i, bt.params[i]) (by simp [Runtime.getElem?_indexed, hpi])
+    rw [List.getElem?_eq_getElem hi, Option.some.injEq] at hyi
+    rw [hyi]; exact hy
+  have hdest : ∀ i (hi : i < phis.length), phis[i].destination = blockBase p t + i := by
+    intro i hi
+    obtain ⟨arms, -, he⟩ := adaptPhi_ok (hphi_i i hi)
+    rw [he]
+  have hreg : ∀ i (hi : i < phis.length), regId p (bt.params[i]'(by omega)).1 = some (blockBase p t + i) :=
+    fun i hi => regId_param (ids_nodup hok) hbt (List.getElem?_eq_getElem (by omega))
+  let w : Source.Phi → Source.Value := fun phi =>
+    match vals[phi.destination - blockBase p t]? with
+    | some v => enc v
+    | none => word 0
+  have hw : ∀ i (hi : i < phis.length), w phis[i] = enc (vals[i]'(by omega)) := by
+    intro i hi
+    simp only [w, hdest i hi, Nat.add_sub_cancel_left, List.getElem?_eq_getElem (show i < vals.length by omega)]
+  have hev : ∀ i (hi : i < phis.length), evalOp benv (args[i]'(by omega)) = some (vals[i]'(by omega)) := by
+    intro i hi
+    obtain ⟨y, hy, hyi⟩ := hvel i (args[i]'(by omega)) (List.getElem?_eq_getElem (by omega))
+    rw [List.getElem?_eq_getElem (show i < vals.length by omega), Option.some.injEq] at hyi
+    rw [hyi]; exact hy
+  have hnodup : (phis.map (·.destination)).Nodup := by
+    have : phis.map (·.destination) = (List.range phis.length).map (blockBase p t + ·) := by
+      apply List.ext_getElem (by simp)
+      intro i h1 h2
+      simp [hdest i (by simpa using h1)]
+    rw [this]
+    exact List.pairwise_map.mpr (List.nodup_range.imp fun h e => h (Nat.add_left_cancel e))
+  have htr := transfer_ok (pred := j) (env := env) hfb w
+    (fun i hi => by
+      simp only [List.toList_toArray] at hi ⊢
+      obtain ⟨a', hop, hfil⟩ := phi_arm (hphi_i i hi) hbj hedge
+        (List.getElem?_eq_getElem (show i < args.length by omega))
+      refine ⟨j, a', hfil, ?_⟩
+      obtain ⟨arms, -, he⟩ := adaptPhi_ok (hphi_i i hi)
+      rw [hw i hi, show phis[i].width = .word by rw [he]]
+      exact read_operand hag hop (hev i hi))
+    (by simpa using hnodup)
+    (fun phi hm => by
+      obtain ⟨i, hi, rfl⟩ := List.mem_iff_getElem.mp hm
+      have hlt := regId_lt hok (hreg i hi)
+      rw [hdest i hi]
+      exact ⟨adapt_widths hf _ hlt, by rw [hsz]; exact hlt, by rw [hw i hi]; exact enc_width _⟩)
+  refine ⟨_, htr, by rw [size_foldl_set]; exact hsz, ?_, ?_⟩
+  · intro r v hv
+    rw [lookup_append] at hv
+    have hz := lookup_zip (r := r) (show (bt.params.map Prod.fst).length = vals.length by simp; omega)
+    cases hlz : lookup ((bt.params.map Prod.fst).zip vals) r with
+    | none =>
+      simp only [hlz] at hv
+      have hnot := hz.2 hlz
+      obtain ⟨n, hn, hl⟩ := hag r v hv
+      refine ⟨n, hn, ?_⟩
+      rw [getElem?_foldl_set_other (·.destination) (fun phi => some (w phi)) phis env ?_]
+      · exact hl
+      · intro phi hm hdn
+        obtain ⟨i, hi, rfl⟩ := List.mem_iff_getElem.mp hm
+        rw [hdest i hi] at hdn
+        subst hdn
+        have := regId_injective hok hn (hreg i hi)
+        exact hnot (this ▸ List.mem_map.mpr ⟨_, List.getElem_mem _, rfl⟩)
+    | some v' =>
+      simp only [hlz, Option.some.injEq] at hv
+      subst hv
+      obtain ⟨i, hpi, hvi⟩ := hz.1 v' hlz
+      have hi : i < phis.length := by
+        have := (List.getElem?_eq_some_iff.mp hpi).1; simp at this; omega
+      have hr' : r = (bt.params[i]'(by omega)).1 := by
+        simp [List.getElem?_map, List.getElem?_eq_getElem (show i < bt.params.length by omega)] at hpi
+        exact hpi.symm
+      refine ⟨blockBase p t + i, hr' ▸ hreg i hi, ?_⟩
+      have hmem := getElem?_foldl_set_mem (·.destination) (fun phi => some (w phi)) phis env hnodup
+        phis[i] (List.getElem_mem hi) (by rw [hdest i hi, hsz]; exact regId_lt hok (hreg i hi))
+      simp only [hdest i hi] at hmem
+      rw [hmem, hw i hi]
+      rw [List.getElem?_eq_getElem (show i < vals.length by omega), Option.some.injEq] at hvi
+      rw [hvi]
+  · intro r t' x hv
+    rw [lookup_append] at hv
+    have hz := lookup_zip (r := r) (show (bt.params.map Prod.fst).length = vals.length by simp; omega)
+    cases hlz : lookup ((bt.params.map Prod.fst).zip vals) r with
+    | none => simp only [hlz] at hv; exact hr r t' x hv
+    | some v' =>
+      simp only [hlz, Option.some.injEq] at hv
+      subst hv
+      obtain ⟨i, hpi, hvi⟩ := hz.1 _ hlz
+      have hi : i < phis.length := by
+        have := (List.getElem?_eq_some_iff.mp hpi).1; simp at this; omega
+      rw [List.getElem?_eq_getElem (show i < vals.length by omega), Option.some.injEq] at hvi
+      exact evalOp_inRange hr (hvi ▸ hev i hi)
+
 end Proof
 
 /-! ## The QBE debug dump (not on the build path) -/
