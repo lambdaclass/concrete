@@ -28,7 +28,7 @@ The claim columns below are proposed wording; the showcases and their slices are
 | Encrypted tunnel (Noise + ChaCha20-Poly1305) | 7 → 15: ChaCha20, Poly1305, X25519 as the `Secret<T>` flagship; 18: file encryptor | after 28: the tunnel, after the randomness/nonce audit | crypto correct; secrets never reach output | constant time at the source level | one network grant | as for `grep`, plus the backend constant-time premise |
 | Static web server serving the Concrete website | 27: one connection at a time, reading `./site` | after 28: concurrent version | no crash on any input | per-request memory bound | reads only `./site`; one network grant | as for `grep` |
 
-Proposed growing flagships (not among the seven adopted showcases): sha256sum (2 to 19), the ChaCha20 constant-time encryptor (7 to 18), and a calc
+Proposed growing flagships (not among the seven adopted showcases): sha256sum (2 to 19) and a calc
 tokenizer, parser and stack VM (3 to 19).
 
 ## Per-slice draft (Claude, reviewed once)

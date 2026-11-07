@@ -780,7 +780,7 @@ step cites the row once it is on main; a step that needs a row not yet on main w
 | D12 | The leakage-trace interface (R-0592): `Secret<T>`, `classify`, `declassify`, `ct_select`, `ct_eq` | `Types`, `Primitives`, `Semantics` | leakage records in the ghost log and a variable-time flag per primitive at B (with examples); `Secret<T>` on scalars, `classify` (the pure classify of a value passed in, no wrapper duplicating it), the entropy capability's `Secret<T>` output from slice 7 ([decision](../decisions.md#decided-2026-11-07-stack-randomness)), `declassify(x, "reason")`, `ct_select`, the closed CT operation table and the Q2.2-revised scalar Copy rule at 7; fill-bytes from entropy at 15; grant-backed sources at 16, 18, 27 | B, 6, 7, 15 |
 | D13 | Q4.6 and Q4.7 revised | `Primitives`, `Borrow`, `Evidence` | `byte_at` needs an in-range offset; a range without `else` needs evidence of validity | 15, 16 |
 | D14 | Closed evidence (Q9.11, OD125 qualified, CON-2); `assume` never admits safety (OD80, CON-6); vacuous preconditions (OD120) | `Evidence`, `Obligations`, `Admission` | evidence sources; `assume` excluded; vacuity refusal | 5, 8 |
-| D15 | Policies and `Concrete.toml` | not Core | compiler data over `Facts`; the spec defines only `Fact.Holds` | — |
+| D15 | Policies and `Concrete.toml` | not Core, except the stack budget | compiler data over `Facts`; the spec defines `Fact.Holds` and the mandatory stack-budget refusal (D32) | — |
 | D16 | The semantic contract (R-0496) | `Contract` | 2.1 item 9, stated before `Semantics` (step 10) and refined per slice | B |
 | D17 | Q6.7, Q9.9, Q9.10 | `Semantics` | 1.6, 1.8, 1.9 | B |
 | D18 | Q9.4 flat data and matches; Q9.5 heap open; Q1.3 pack and unpack; Q9.7 one inventory | `Types`, `Syntax`, `Primitives` | 1.3, 1.5, 1.11 | 9, 10, 19 |
@@ -794,7 +794,9 @@ step cites the row once it is on main; a step that needs a row not yet on main w
 | D26 | `#[invariant(...)]` on a struct with private fields holds at every exposure ([SPARK row](../decisions.md#decided-project-spark-2026-11-06)) | `Syntax`, `Obligations`, `Admission` | the struct invariant and its obligations (established at construction, preserved by field writes inside the declaring module, assumed at every exposure outside it); defined in A2i | spec in A2i; source feature at 17 (S2) |
 | D27 | `assert(e) by thm(...)`, an extension of OD79 ([SPARK row](../decisions.md#decided-project-spark-2026-11-06)) | `Syntax`, `Obligations`, `EvidenceSem` | one fact at one point, the theorem's hypotheses fully discharged; a role kept separate from `#[proof]` (which discharges the function's obligations) | 8 |
 | D29 | `#[overflow_checked]` (ARITH-9) retired | `Grammar` | no production; the attribute is refused as unknown | 0 |
-| D30 | `Concrete.toml`: typed, versioned `[policy]` and `[assumptions]` tables, unknown keys and versions refused | not Core | compiler data; the spec defines the facts a policy reads | — |
+| D30 | `Concrete.toml`: typed, versioned `[policy]` and `[assumptions]` tables, unknown keys and versions refused | not Core, except the stack budget (D32) | compiler data; the spec defines the facts a policy reads | — |
+| D32 | Stack bounds ([decision](../decisions.md#decided-2026-11-07-stack-randomness)) | `Facts`, `Admission` | each program's maximum stack use, measured from the final binary on both backends, as a fact; an unknown bound or one over the `Concrete.toml` stack budget refused; proven bounds for recursion at 5 | 0, 5 |
+| D33 | Step bounds ([decision](../decisions.md#decided-2026-11-07-step-bounds)) | `Semantics`, `Facts` | a step-counting cost model in abstract operations over input and pattern size, built with loops and extended through calls; step-bound proofs; wall-clock claims stay with separate backend evidence | 4, 5, 8 |
 | D31 | R-0595 heap bounds at the allocation slice; RocksDB and ethlambda programs audited before acceptance (R-0604) | not Core | the facts kinds D9 already holds | 19, 25, after 28 ([decision](../decisions.md#decided-2026-11-07-final-slices)) |
 | D28 | One Core syntax; slice 0 by fragment predicates (I3, decided internally 2026-11-06) | `Syntax`, `Fragments` | `Spec/Slice0.lean`'s syntax and `toCore` deleted at step 12, when the new admission and semantics can carry the slice-0 theorems | B (step 12) |
 
@@ -820,7 +822,7 @@ yes then as you said right"), and the SPARK row records the revision.
 
 **S3. the slice plan's owner questions.** All six recommended answers are approved ("ok do everything",
 2026-11-06) and recorded on `wip/decisions-followup` a0e588f59: the pure `classify` is slice 7's
-secret source (D12); ARITH-9 `#[overflow_checked]` is retired (D29); `Concrete.toml` has typed,
+secret source (D12; since 2026-11-07 the entropy output is a second source); ARITH-9 `#[overflow_checked]` is retired (D29); `Concrete.toml` has typed,
 versioned `[policy]` and `[assumptions]` tables (D30); R-0595 lands at slice 19 (D31); RocksDB and
 ethlambda are audited before acceptance (D31); `abort()` is in slice 1 (D21).
 
@@ -944,7 +946,7 @@ check that every `Rule` constructor's `Rule.id` names a registered rule.
 12. Slice 1's semantics and theorems (Q8.2): the zero-sized empty struct, move, explicit `abort()`
     with the trap line (D5, D21), `checked_never_stuck`, `checked_no_implicit_traps`,
     `checked_exits`, over the new admission and semantics. The slice-0 theorems over
-    `Fragment.core s0`. The old kernel (`Slice1Syntax`, `Statics`, `Slice1Semantics`, `Slice1Checker`,
+    `Fragment.core s0`, and the slice-0 stack fact and its budget refusal (D32). The old kernel (`Slice1Syntax`, `Statics`, `Slice1Semantics`, `Slice1Checker`,
     `Slice1Ownership`, `Slice0`, `Observation`) and every bridge lemma are deleted;
     the observation theorems are restated over the new `observe` in the same commit. The old kernel's struct-field
     rules stay in Core, outside `Fragment.core s1` until slice 9.
@@ -975,11 +977,11 @@ dropped and no source feature arrives early. `Borrow` is the one fragment ported
     may-abort fact.
 15. Slice 4: `while`, `for … from … until`, labels, `break`, `continue`, `#[invariant]`,
     `#[variant]`, `#[may_not_terminate("r")]` on loops; the loop rule (D3); `Termination` and
-    `checked_terminates` (D4).
+    `checked_terminates` (D4); the step-counting cost model for loops (D33).
 16. Slice 5: functions, parameters, calls, recursion with one `#[variant]` or permission per
     recursive component, `#[requires]` and `#[ensures]` with call-site obligation schemas, closed
     call evidence (D14); the always-aborts fact and path pruning after an always-aborting call
-    (R-0600).
+    (R-0600); proven stack bounds for recursion (D32) and the cost model through calls (D33).
 17. Slice 6: authority. Port `Authority` whole (calls exist): `with(...)`, inclusion, the primitive
     effect table, `main`'s grant parameters, launcher minting, startup refusal 125, Start/Exit
     events, and the entropy capability granted to `main` with its source as a named trusted
@@ -990,7 +992,8 @@ dropped and no source feature arrives early. `Borrow` is the one fragment ported
 18. Slice 7: `Secret<T>` on scalars and the leakage semantics (D12), with entropy output as
     `Secret<T>`; the wipe event kind (R-0602).
 19. Slice 8: `assert`, `assume`, `ghost let`, `spec fn`, `#[proof(path)]` (D7),
-    `assert(e) by thm(...)` (D27), vacuity refusal and strength labels, `#[test]`.
+    `assert(e) by thm(...)` (D27), vacuity refusal and strength labels, `#[test]`; step-bound
+    proofs (D33).
 20. Slice 9: structs with named fields of any type, declared `Copy`, field access and writes,
     destructuring, field facts, type aliases. The struct-invariant definition and its obligations
     (D26) are written here, with every field treated as module-private; the source feature is
