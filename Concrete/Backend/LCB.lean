@@ -158,20 +158,30 @@ def term (p : Program) : Term → Except String Source.Terminator
   | .br t _ => return .jump t
   | .condbr c t _ e _ => return .branch (.local (← idOf p c)) t e
 
+/-- Block `j`'s phi for its parameter `k`: one arm per incoming edge, by predecessor. -/
+def adaptPhi (p : Program) (j k : Nat) : Except String Source.Phi := do
+  let arms ← (incoming p j).mapM fun (pred, args) => do
+    let a ← match args[k]? with
+      | some a => operand p a
+      | none => throw s!"block {pred} passes too few arguments to block {j}"
+    pure (pred, a)
+  pure { destination := blockBase p j + k, width := .word, incoming := arms.toArray }
+
+/-- Instruction `i` of block `j`, numbered from its slot. -/
+def adaptInst (p : Program) (j : Nat) (b : Block) : Nat × Inst → Except String (List Source.Instruction)
+  | (i, ins) => inst p (blockBase p j + instBase b i) ins
+
+/-- Block `j`: its phis, its instructions' expansions in order, its terminator. -/
+def adaptBlock (p : Program) : Nat × Block → Except String Source.Block
+  | (j, b) => do
+    let phis ← (indexed b.params).mapM fun (k, _) => adaptPhi p j k
+    let insts ← (indexed b.insts).mapM (adaptInst p j b)
+    pure { phis := phis.toArray, instructions := insts.flatten.toArray, terminator := ← term p b.term }
+
 /-- `main`'s body as a function of LCB's verified source profile. -/
 def adapt (p : Program) : Except String Source.Function := do
   unless numberingOk p do throw "the numbering is not injective (a register defined twice?)"
-  let blocks ← (indexed p.blocks).mapM fun (j, b) => do
-    let phis ← (indexed b.params).mapM fun (k, (_, _)) => do
-      let arms ← (incoming p j).mapM fun (pred, args) => do
-        let a ← match args[k]? with
-          | some a => operand p a
-          | none => throw s!"block {pred} passes too few arguments to block {j}"
-        pure (pred, a)
-      pure ({ destination := blockBase p j + k, width := .word, incoming := arms.toArray } : Source.Phi)
-    let insts ← (indexed b.insts).mapM fun (i, ins) => inst p (blockBase p j + instBase b i) ins
-    pure ({ phis := phis.toArray, instructions := insts.flatten.toArray,
-            terminator := ← term p b.term } : Source.Block)
+  let blocks ← (indexed p.blocks).mapM (adaptBlock p)
   return { resultWidth := .word, parameters := #[],
            valueWidths := Array.replicate (valueCount p) .word, blocks := blocks.toArray }
 
@@ -970,6 +980,130 @@ theorem inst_sim {p : Program} (hok : numberingOk p = true) {f : Source.Function
   | bin => exact bin_sim hok hbj hi hx hb hq hW hsz hag hr he
   | binOvf => exact binOvf_sim hok hbj hi hx hb hq hW hsz hag hr he
   | trunc => exact trunc_sim hok hbj hi hx hb hq hW hsz hag hr he
+
+/-! ## `adapter_correct`, the shape of the adapted body -/
+
+/-- Where instruction `i`'s expansion starts in its LCB block. -/
+def instPos (b : Block) (i : Nat) : Nat := ((b.insts.take i).map Inst.width).sum
+
+theorem getElem?_flatten_at {α : Type} : ∀ (xss : List (List α)) (i k : Nat) (xs : List α),
+    xss[i]? = some xs → k < xs.length →
+      xss.flatten[((xss.take i).map List.length).sum + k]? = xs[k]?
+  | [], _, _, _, h, _ => by simp at h
+  | ys :: xss, 0, k, xs, h, hk => by
+    simp only [List.getElem?_cons_zero, Option.some.injEq] at h
+    subst h
+    simp [List.getElem?_append_left hk]
+  | ys :: xss, i + 1, k, xs, h, hk => by
+    simp only [List.getElem?_cons_succ] at h
+    rw [List.flatten_cons, List.take_succ_cons, List.map_cons, List.sum_cons,
+      List.getElem?_append_right (by omega)]
+    rw [show ys.length + ((xss.take i).map List.length).sum + k - ys.length =
+      ((xss.take i).map List.length).sum + k by omega]
+    exact getElem?_flatten_at xss i k xs h hk
+
+theorem mapM_ok_ok {α β ε : Type} {g : α → Except ε β} {l : List α} {l' : List β}
+    (h : l.mapM g = .ok l') {i : Nat} {x : α} (hx : l[i]? = some x) :
+    ∃ y, g x = .ok y ∧ l'[i]? = some y := (mapM_ok h).2 i x hx
+
+theorem length_indexedFrom {α : Type} : ∀ (n : Nat) (l : List α), (Runtime.indexedFrom n l).length = l.length
+  | _, [] => rfl
+  | n, _ :: l => by simp [Runtime.indexedFrom, length_indexedFrom (n + 1) l]
+
+theorem length_indexed {α : Type} (l : List α) : (indexed l).length = l.length :=
+  length_indexedFrom 0 l
+
+/-- What a successful `adapt` is. -/
+theorem adapt_ok {p : Program} {f : Source.Function} (h : adapt p = .ok f) :
+    numberingOk p = true ∧ ∃ bs, (indexed p.blocks).mapM (adaptBlock p) = .ok bs ∧
+      f = { resultWidth := .word, parameters := #[],
+            valueWidths := Array.replicate (valueCount p) .word, blocks := bs.toArray } := by
+  unfold adapt at h
+  cases hn : numberingOk p <;> cases hb : (indexed p.blocks).mapM (adaptBlock p) <;>
+    simp_all [bind, Except.bind, pure, Except.pure]
+
+/-- What a successful `adaptBlock` is. -/
+theorem adaptBlock_ok {p : Program} {j : Nat} {b : Block} {lb : Source.Block}
+    (h : adaptBlock p (j, b) = .ok lb) :
+    ∃ phis xss tm, (indexed b.params).mapM (fun (k, _) => adaptPhi p j k) = .ok phis ∧
+      (indexed b.insts).mapM (adaptInst p j b) = .ok xss ∧ term p b.term = .ok tm ∧
+      lb = { phis := phis.toArray, instructions := xss.flatten.toArray, terminator := tm } := by
+  unfold adaptBlock at h
+  cases hp : (indexed b.params).mapM (fun (k, _) => adaptPhi p j k) <;>
+    cases hi : (indexed b.insts).mapM (adaptInst p j b) <;> cases ht : term p b.term <;>
+    simp_all [bind, Except.bind, pure, Except.pure]
+
+/-- In an adapted block, instruction `i`'s expansion sits at `instPos b i`. -/
+theorem block_insts {p : Program} {j : Nat} {b : Block} {lb : Source.Block}
+    (h : adaptBlock p (j, b) = .ok lb) {i : Nat} {ins : Inst} (hi : b.insts[i]? = some ins) :
+    ∃ xs, inst p (blockBase p j + instBase b i) ins = .ok xs ∧
+      ∀ k, k < Inst.width ins → lb.instructions[instPos b i + k]? = xs[k]? := by
+  obtain ⟨phis, xss, tm, -, hx, -, rfl⟩ := adaptBlock_ok h
+  have hlen := (mapM_ok hx).1
+  rw [length_indexed] at hlen
+  obtain ⟨xs, hxs, hxi⟩ := mapM_ok_ok hx (i := i) (x := (i, ins)) (by simp [Runtime.getElem?_indexed, hi])
+  refine ⟨xs, hxs, fun k hk => ?_⟩
+  have hw : xss.map List.length = b.insts.map Inst.width := by
+    apply List.ext_getElem?
+    intro m
+    simp only [List.getElem?_map]
+    cases hm : b.insts[m]? with
+    | none =>
+      have : xss.length ≤ m := by
+        have := List.getElem?_eq_none_iff.mp hm; omega
+      simp [List.getElem?_eq_none this]
+    | some ins' =>
+      obtain ⟨ys, hys, hym⟩ := mapM_ok_ok hx (i := m) (x := (m, ins'))
+        (by simp [Runtime.getElem?_indexed, hm])
+      simp [hym, inst_length (show inst p _ ins' = .ok ys from hys)]
+  have hpos : instPos b i = ((xss.take i).map List.length).sum := by
+    simp only [instPos, ← hw, List.map_take]
+  simp only [List.getElem?_toArray]
+  rw [hpos, getElem?_flatten_at xss i k xs hxi (by rw [inst_length hxs]; exact hk)]
+
+theorem instPos_succ {b : Block} {i : Nat} {ins : Inst} (hi : b.insts[i]? = some ins) :
+    instPos b (i + 1) = instPos b i + Inst.width ins := by
+  simp [instPos, List.take_add_one, hi, List.sum_append]
+
+/-! ## `adapter_correct`, blocks -/
+
+/-- A block's instructions from the `i`-th on: the LCB steps from `instPos b i` keep the
+invariant through all of them, as BIR's `execInsts` does. -/
+theorem body_sim {p : Program} (hok : numberingOk p = true) {f : Source.Function}
+    (hW : ∀ m, m < valueCount p → f.valueWidths[m]? = some .word)
+    {j : Nat} {b : Block} {lb : Source.Block} (hbj : p.blocks[j]? = some b)
+    (hlb : adaptBlock p (j, b) = .ok lb) (hfb : f.blocks[j]? = some lb) :
+    ∀ (l : List Inst) (i : Nat) (benv benv' : Env) (env : Source.Environment),
+      b.insts.drop i = l → execInsts benv l = some benv' → env.size = valueCount p →
+      Agrees p benv env → InRange benv →
+      ∃ env', Source.Steps f (l.map Inst.width).sum ⟨j, instPos b i, env⟩
+          ⟨j, instPos b i + (l.map Inst.width).sum, env'⟩ ∧
+        env'.size = valueCount p ∧ Agrees p benv' env' ∧ InRange benv'
+  | [], _, benv, benv', env, _, he, hsz, hag, hr => by
+    simp only [execInsts, Option.some.injEq] at he
+    subst he
+    exact ⟨env, .zero _, hsz, hag, hr⟩
+  | ins :: rest, i, benv, benv', env, hd, he, hsz, hag, hr => by
+    have hi : b.insts[i]? = some ins := by
+      have := congrArg (·[0]?) hd
+      simpa [List.getElem?_drop] using this
+    have hd' : b.insts.drop (i + 1) = rest := by
+      rw [← List.tail_drop, hd]; rfl
+    simp only [execInsts] at he
+    split at he
+    · rename_i benv₁ he₁
+      obtain ⟨xs, hxs, hq⟩ := block_insts hlb hi
+      obtain ⟨env₁, hst, hsz₁, hag₁, hr₁⟩ := inst_sim (s := ⟨j, instPos b i, env⟩) hok hbj hi hxs hfb
+        hq (fun m hm => hW m (hsz ▸ hm)) hsz hag hr he₁
+      obtain ⟨env', hst', hsz', hag', hr'⟩ := body_sim hok hW hbj hlb hfb rest (i + 1) benv₁ benv'
+        env₁ hd' he hsz₁ hag₁ hr₁
+      rw [instPos_succ hi] at hst'
+      refine ⟨env', ?_, hsz', hag', hr'⟩
+      simp only [List.map_cons, List.sum_cons]
+      have h := steps_append hst hst'
+      rw [Nat.add_comm (List.map Inst.width rest).sum, Nat.add_assoc] at h
+      exact h
+    · cases he
 
 end Proof
 
