@@ -1,27 +1,29 @@
-# Examples per slice (proposal, 2026-11-06)
+# Examples per slice (proposal, 2026-11-06; showcases adopted 2026-11-07)
 
-Status: proposal. Codex, agy and Kimi reviewed the per-slice draft below, and all three said
-"agree with changes". Their changes and the showcase placement still need a second review round and
-the owner's decision. Once accepted, the examples live as files next to each slice, and this file is
-retired.
+Status: the per-slice draft is a proposal; the showcases are adopted
+([decision](../decisions.md#decided-2026-11-07-showcases)). Codex, agy and Kimi reviewed the
+per-slice draft below, and all three said "agree with changes". Their changes still need a second
+review round. Once accepted, the examples live as files next to each slice, and this file is retired.
 
 Every example runs on the Lean evaluator, LLVM and LCB, and each claim is a Lean theorem or a
 `concrete facts` line.
 
 ## Showcases
 
-The owner asked for examples that are more show-off and more useful. Each pairs a program people
-already use with what Concrete proves about it.
+Status: adopted by the owner on 2026-11-07
+([decision](../decisions.md#decided-2026-11-07-showcases)). The owner asked for examples that are
+more show-off and more useful. Each pairs a program people already use with what Concrete proves
+about it, and states its functional, resource, authority and backend claims separately.
 
 | Showcase | First version | Full version | What Concrete proves |
 |---|---|---|---|
-| `grep` with a linear-time regex | 16: stdin, a pattern given in the source, fixed buffers | 18: `grep PATTERN FILE` | matching terminates and agrees with the regex semantics; linear time needs step bounds (open question 1) |
-| Image decoder | 19: QOI | 21–22: PNG with DEFLATE | any input decodes or is refused with a typed error; memory bounded from the header; no hidden traps |
-| EVM interpreter | 15: u256 arithmetic and the opcode set | 21: growable memory, gas, Keccak | each opcode against the EVM spec; gas-bounded; no trap on any bytecode |
+| `grep` with a linear-time regex | 16: stdin, a pattern given in the source, fixed buffers | 18: `grep PATTERN FILE`; 22: dynamic patterns | matching terminates and agrees with the regex semantics; linear time through the step model at 4–5 and step-bound proofs at 8 ([decision](../decisions.md#decided-2026-11-07-step-bounds)) |
+| Image decoder | 19 → 21: QOI | 21–22: PNG with DEFLATE | any input decodes or is refused with a typed error; memory bounded from the header; no hidden traps |
+| EVM interpreter | 15: u256 arithmetic and the opcode set | 21 → 23: growable memory, gas, Keccak | each opcode against the EVM spec; gas-bounded; no trap on any bytecode |
 | Embedded key-value store | 23: in-memory index plus an append-only log | 23, with RocksDB at 25 for comparison | bounded memory and correct contents; durability "not established" (crash model not planned) |
-| WebAssembly sandbox | 21: interpreter with fuel and linear memory | 23: host imports, capability-limited host calls | memory safety, fuel-bounded termination, host calls limited by capabilities |
-| Encrypted tunnel (Noise + ChaCha20-Poly1305) | 7–15: ChaCha20, Poly1305, X25519 as the `Secret<T>` flagship; 18: file encryptor | 27: the tunnel | crypto correct and constant time; secrets never reach output; one network grant |
-| Static web server serving the Concrete website | 27: one connection at a time, reading `./site` | needs a concurrency design (open question 3) | reads only `./site`; per-request memory bound; no crash on any input |
+| WebAssembly sandbox | 21: interpreter with fuel and linear memory | 23 → 26: host imports, capability-limited host calls | memory safety, fuel-bounded termination, host calls limited by capabilities |
+| Encrypted tunnel (Noise + ChaCha20-Poly1305) | 7 → 15: ChaCha20, Poly1305, X25519 as the `Secret<T>` flagship; 18: file encryptor | after 28: the tunnel, after the randomness/nonce audit | crypto correct and constant time; secrets never reach output; one network grant |
+| Static web server serving the Concrete website | 27: one connection at a time, reading `./site` | after 28: concurrent version | reads only `./site`; per-request memory bound; no crash on any input |
 
 Growing flagships: sha256sum (2 to 19), the ChaCha20 constant-time encryptor (7 to 18), and a calc
 tokenizer, parser and stack VM (3 to 19).
@@ -62,7 +64,8 @@ Every example runs on the Lean evaluator, LLVM and LCB.
 | 24 raw/unsafe | **F:** a ring buffer and memcpy in a `trusted fn` behind a proven safe API. **R:** raw pointer use outside `with(Unsafe)`. |
 | 25 FFI → RocksDB | **F:** libc `write` via extern; the RocksDB slice-1 acceptance. **R:** a foreign call without its declared premise. |
 | 26 floats | **F:** mean/variance with IEEE semantics. **R:** a float used where exact integers are required. |
-| 27 network → ethlambda | **F:** httpget, tcpserve (legacy workloads 7–8), then ethlambda. **R:** a network call without its grant. |
+| 27 network | **F:** httpget, tcpserve (legacy workloads 7–8), and the sequential static web server. **R:** a network call without its grant. |
+| 28 concurrency → ethlambda and the encrypted tunnel | **F:** concurrency examples once its model is decided, then ethlambda and the encrypted tunnel after the randomness/nonce audit. |
 
 ## Reviewer changes (round 1: all three agree with changes)
 
@@ -77,10 +80,3 @@ Every example runs on the Lean evaluator, LLVM and LCB.
   conversion errors.
 - Every slice adds an adversarial X case and states its facts claim separately from its theorem.
 - RocksDB and ethlambda need their dependency audit (R-0604) before they are accepted.
-
-## Open questions for the owner
-
-1. Step and time bounds before slice 16, so `grep` can claim linear time.
-2. Which showcases to adopt.
-3. Concurrency: it is refused until R-0399's trigger, but ethrex-size programs and a concurrent web
-   server need it.
