@@ -20,11 +20,9 @@ The shape of Core was approved provisionally on 2026-11-05 ([stage A2a](#decided
 Links only; each item's text lives where it is linked.
 
 1. The spec read and the Core freeze, A2c ([queue](../ROADMAP.md#the-queue)).
-2. The items the reviews leave open until they are fully dispositioned: quantitative step and time
-   bounds ([legacy ideas sweep](proposals/IDEAS.md), [pipeline review](proposals/MERGED.md)), and
-   SPARK review items 4(b) and 4(c) ([SPARK review](proposals/SPARK.md)).
-3. The outside readers' ordering: models first, unclear points resolved before the owner reads
-   ([proposal](#outside-readers-ordering)).
+2. The items the reviews leave open until they are fully dispositioned: SPARK review items 4(b) and
+   4(c) ([SPARK review](proposals/SPARK.md)). Quantitative step and time bounds were decided on
+   2026-11-07 ([row](#decided-2026-11-07-step-bounds)); the reviews' remaining disposition is unchanged.
 
 A decided proposal moves to `docs/archive/<topic>-<date>/`.
 
@@ -55,6 +53,14 @@ Each row records a decision and its reason. A language rule itself is its Lean d
 - What Concrete takes from SPARK ([row](#decided-project-spark-2026-11-06)).
 - Trap line, default layout and spec version ([row](#decided-project-runtime-2026-11-06)).
 - The slice-0 surface: `concrete build`, `concrete facts`, unsupported-form refusals, leading zeros ([row](#decided-slice0-surface-2026-11-06)).
+- The outside readers' model-first ordering ([row](#decided-project-outside-readers)).
+- Step bounds: the model at slices 4–5 and proofs at slice 8 ([row](#decided-2026-11-07-step-bounds)).
+- All seven showcases and their slices ([row](#decided-2026-11-07-showcases)).
+- Concurrency at final slice 28, then ethlambda and the encrypted tunnel ([row](#decided-2026-11-07-final-slices)).
+- Struct invariants in source at slice 17 ([revision](#decided-project-spark-2026-11-06)).
+- Test runner at slice 8, formatter at 17, LSP later ([row](#decided-2026-11-07-tools)).
+- Flagship and compiler speed tracking ([row](#decided-2026-11-07-performance)).
+- The documentation and tooling cleanup is approved, not performed by that record ([row](#decided-2026-11-07-cleanup)).
 
 <a id="rules-a-decision-changed"></a>
 ## Rules a decision has changed
@@ -881,6 +887,64 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
   `classify` of a value passed in, with no wrapper duplicating it; grant-backed sources come with
   the console, files and network. Before RocksDB and ethlambda are accepted, their programs are
   audited, and a real need for concurrency or foreign function values goes to the owner (R-0604).
+  Revised 2026-11-07 by the [final-slice decision](#decided-2026-11-07-final-slices): the approved
+  order gains slice 28 for concurrency, with ethlambda and the encrypted tunnel after it. Slice 27
+  keeps httpget, tcpserve and the sequential web server.
+- <a id="decided-2026-11-07-step-bounds"></a>**Step and time bounds** (owner, 2026-11-07: "ok go
+  ahead all yes then as you said right", approving the recorded recommendation). This answers when
+  quantitative bounds arrive and what they mean. The step-counting cost model is built with loops at
+  slice 4 and extended through calls at slice 5; proofs of step bounds are available at slice 8.
+  Bounds count abstract operations in input and pattern size. A wall-clock claim needs separate
+  backend evidence; a step bound is not a wall-clock deadline.
+- <a id="decided-2026-11-07-showcases"></a>**All seven showcases** (owner, 2026-11-07: "showcase i
+  would like everything right?"). This answers which of the proposed showcases to adopt: all seven,
+  with the Codex/Kimi placements recorded in the [showcase plan](proposals/EXAMPLES.md#showcases):
+  - `grep`: slices 16 → 18 → 22 for dynamic patterns;
+  - image decoding: QOI at slices 19 → 21, PNG with DEFLATE at slices 21–22;
+  - the EVM interpreter: slices 15 → 21 → 23;
+  - the embedded key-value store: slice 23, with durability "not established" and the RocksDB
+    comparison at slice 25;
+  - the WebAssembly sandbox: slices 21 → 23 → 26;
+  - the crypto flagship: slices 7 → 15 → the file encryptor at 18, then the encrypted tunnel after
+    slice 28 and the randomness/nonce audit;
+  - the static web server: sequential at slice 27, with its concurrent version after slice 28.
+  Each showcase states its functional, resource, authority and backend claims separately. Codex and
+  Kimi recommended all seven; agy recommended grep, QOI, EVM and the tunnel.
+- <a id="decided-2026-11-07-final-slices"></a>**Concurrency is the final slice; ethlambda and the
+  encrypted tunnel follow it** (owner, 2026-11-07: "concurrency i want to leave at the last task"
+  and "ethlambda can't be done before conccurency"; the tunnel placement was approved with "ok go
+  ahead all yes then as you said right"). This answers the concurrency and ethlambda scheduling
+  questions and the follow-up about the tunnel. Slice 27 is clock, network and devices and keeps
+  httpget, tcpserve and the sequential web server. Slice 28 is concurrency, the last language slice;
+  ethlambda acceptance and the encrypted tunnel come after it, the tunnel after the
+  randomness/nonce audit. The file encryptor at slice 18 is the encryption showcase until then.
+  RocksDB after slice 25 needs no concurrency and remains the earliest full real program for the
+  legacy-deletion trigger. The reviewers' suggested structured/scoped spawn-join model with linear
+  ownership transfer and no shared mutable state is not an owner decision; the concurrency model
+  remains to be decided when slice 28 comes.
+- <a id="decided-2026-11-07-tools"></a>**Developer tools** (owner, 2026-11-07: "ok go ahead all yes
+  then as you said right", approving the recorded recommendation). This answers when the tools
+  arrive: the test runner lands at slice 8 with `#[test]`, extends to modules at slice 17, and the
+  formatter lands at slice 17. The LSP comes later.
+- <a id="decided-2026-11-07-performance"></a>**Speed tracking** (owner, 2026-11-07: "ok go ahead all
+  yes then as you said right", approving the recorded recommendation). This answers when performance
+  is measured and how it is reported. Flagship runtime is tracked from slice 2. Compiler wall time,
+  per-stage time and memory are tracked from slice 0. Every measurement is recorded by exact SHA,
+  backend and target, and is report-only until the noise is understood.
+- <a id="decided-2026-11-07-cleanup"></a>**The documentation and tooling cleanup** (owner,
+  2026-11-07: "ok go ahead all yes then as you said right", approving the Codex/Kimi cleanup list).
+  This answers whether that cleanup may proceed; it does not perform it. The approved scope is:
+  simplify `AGENTS.md` by dropping the legacy-only `/file-bug`, `/fix-bug`, ledgers and campaigns;
+  make `CLAUDE.md` a one-line import of `AGENTS.md`; simplify `SELF_HOSTED_RUNNERS.md`, `LANDING.md`,
+  `ConcreteSpec/README.md`, `README.md`, `ROADMAP.md` (the dead `check_roadmap.sh` reference and
+  "when wip/philosophy lands") and the `PHILOSOPHY.md` opening link; remove legacy handling from
+  `train.sh`, `bot.sh`, `resolve_conflicts.py` and `gates_remote.sh`, including the false reuse
+  claim; fix the stale parts of `.claude/commands/land.md` and `creview.md`; refresh proposals
+  `IDEAS.md`, `MERGED.md` and `SPARK.md`; fix
+  `changelog.d/2026-11-06-facts-report-readers.md` now that model-first reading is decided; remove
+  the dead `prepush_record.sh` and `treestate.sh`; delete `scripts/land/legacy_move.sh` and
+  `move_prereqs.py`, leaving them in git history, and the empty `required-checks-transition.tsv`,
+  updating the inventory, retention and `legacy_frozen` diagnostics.
 - <a id="decided-project-spark-2026-11-06"></a>**What Concrete takes from SPARK** (owner, 2026-11-06: "ok do everything", after Claude, Codex, agy and Kimi chose unanimously; the
   [review](proposals/SPARK.md) items 1, 2, 3, 6, 7, 9 and 10).
   - *Function values with safety preconditions.* A function whose `#[requires]` is a safety
@@ -889,7 +953,10 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
     accepting slice 20 (function values), or earlier if a workload pulls it (R-0601); it is never
     broadened to non-safety contracts.
   - *Struct invariants.* `#[invariant(...)]` on a struct with private fields holds at every
-    exposure; it lands with the structs slice (slice 9).
+    exposure. The definition is written in the spec before the freeze. Revised 2026-11-07 (owner:
+    "ok go ahead all yes then as you said right", approving the recorded recommendation): the source
+    feature moves from the structs slice (slice 9) to the modules slice (slice 17), where field
+    privacy exists.
   - *Facts at a point.* `assert(e) by thm(...)` extends [OD79](#od79). Its role is strictly
     separate from `#[proof]`: `#[proof]` discharges the function's obligations, `assert(e) by
     thm(...)` establishes one fact at one point, and the theorem's hypotheses are fully discharged.
@@ -921,11 +988,11 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
   agy and codex and kimi if it's available"). The outside-reader pass (R-0559) is done by the owner and
   independent models: agy (Gemini), Codex, and Kimi when available. They read the browsable owner view of the
   integrated spec. The pass runs before the freeze (A2c) and again for each feature
-  ([long-term changes](#decided-project-long-term-2026-11-06)). <a id="outside-readers-ordering"></a>*Proposed, waiting for the
-  owner:* the participating models read first, and every point one of them finds unclear is
-  recorded and resolved before the owner reads; each confusion is resolved before the freeze; and
-  Kimi's absence, when it is unavailable, is recorded rather than waited on. The owner's answer
-  names who reads, not these.
+  ([long-term changes](#decided-project-long-term-2026-11-06)). <a id="outside-readers-ordering"></a>*Reading
+  order* (owner, 2026-11-07: "ok go ahead all yes then as you said right", approving the recorded
+  recommendation): Codex, agy and Kimi read first; every point one of them finds unclear is recorded
+  and resolved before the owner's formal read and before the freeze. A real design question still
+  goes to the owner. Kimi's absence, when it is unavailable, is recorded rather than waited on.
 - <a id="decided-project-contracts"></a>**Contracts and termination in verified growth** (row P18,
   2026-11-05). No source `old`, quantifier, implication or snapshot construct (OD117); entry, exit and
   frame properties are stated as Lean theorems (a source frame clause would be a new owner decision);
