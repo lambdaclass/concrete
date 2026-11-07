@@ -1,7 +1,7 @@
 # Roadmap Decision Log
 
 Status: reference — the dated decisions that shape [the current execution
-queue](ROADMAP.md#the-queue). None creates another queue. Decisions on the
+queue](../../../legacy/docs/archive/roadmap-2026-11/ROADMAP.md#the-queue). None creates another queue. Decisions on the
 language rules that the project owner reserved are listed under
 [owner decisions](../../decisions.md#owner-decisions) in ROADMAP.md and recorded in
 [decisions.md](../../decisions.md); nothing here answers one of them.
@@ -89,7 +89,7 @@ protected track. Separately, point repairs are not converging: probes found bugs
 two days, nearly all of them new instances of [structural classes](../../../legacy/docs/bugs/STRUCTURAL_CLASSES.md)
 whose owners are verified-pipeline Part 1 stages. Adopted: the capacity table (verified compiler at
 least 55%, evidence integrity at least 15%, adversarial validation at least 10%, features at most 20%
-in a single slot); the [defect disposition rule](ROADMAP.md#the-queue); Part 1's structure as
+in a single slot); the [defect disposition rule](../../../legacy/docs/archive/roadmap-2026-11/ROADMAP.md#the-queue); Part 1's structure as
 row 4's migration track once row 0's in-flight candidates are accepted, extended from identities and
 the checker to one `Layout` (R-0502) and Place MIR (R-0501) in the existing profile, because classes 8
 and 12 produce wrong code in the profile users run today; V1c as a named deliverable, so that a
