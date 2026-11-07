@@ -1,8 +1,21 @@
-### Owner decisions: bounds, showcases, final slices, tools and speed tracking (2026-11-07)
+### Owner decisions: early evidence, bounds, showcases, final slices and tools (2026-11-07)
 
 `docs/decisions.md` records the owner's verbatim answers and the approved recommendations, with the
 schedule applied in `ROADMAP.md` and `docs/proposals/EXAMPLES.md`:
 
+- **Reproducible builds:** moved from slice 1 to slice 0 and requested as soon as possible. The same
+  source, compiler revision, toolchain pin and target must produce byte-identical BIR, LLVM IR text,
+  LCB job and output, and final binary. CI compares builds from different directories and from a
+  GitHub runner and concrete-ci-2; `concrete facts` carries the build identity.
+- **Early stack bounds and randomness:** the owner said "1 and 2 should be done early too" without
+  naming slices. The roadmap records the coordinator's proposed placements, approved in spirit:
+  final-artifact stack facts at slice 0 and measure-based recursion bounds at 5; entropy as a
+  capability at 6, `Secret<T>` output at 7 and fill-bytes at 15, with its source a named trusted
+  premise.
+- **Five cheap early items:** a trusted-base statement in `concrete facts`, a random-program
+  differential fuzzer against the Lean evaluator, ASan/UBSan runs and report-only binary-size
+  tracking start at slice 0; the fuzzer grows one feature per slice, and a frozen, versioned JSON
+  schema for diagnostics and facts starts with the first front-end output, with golden tests.
 - **Step and time bounds:** the step-counting model starts with loops at slice 4 and extends through
   calls at 5; step-bound proofs arrive at 8. Bounds count abstract operations in input and pattern
   size; wall-clock claims need separate backend evidence.
