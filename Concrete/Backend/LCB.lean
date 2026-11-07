@@ -491,6 +491,31 @@ theorem inst_bin {p : Program} {n : Nat} {op : BinOp} {t : IntTy} {d : Reg} {a b
   cases hp : inProfile t <;> cases ha : operand p a <;> cases hb : operand p b <;>
     simp_all [bind, Except.bind, pure, Except.pure]
 
+/-- What a successful `binOvf` expansion is. -/
+theorem inst_binOvf {p : Program} {n : Nat} {op : BinOp} {t : IntTy} {d fl : Reg} {a b : Operand}
+    {xs : List Source.Instruction} (h : inst p n (.binOvf op t d fl a b) = .ok xs) :
+    inProfile t = true ∧ ∃ a' b', operand p a = .ok a' ∧ operand p b = .ok b' ∧
+      xs = [ins n (.binary (opBinary op) a' b'),
+        ins (n + 1) (.binary .sub (.local n) (.literal (word t.min))),
+        ins (n + 2) (.binary .andBits (.local (n + 1)) (.literal (word (2 ^ t.bits - 1)))),
+        ins (n + 3) (.binary .add (.local (n + 2)) (.literal (word t.min))),
+        ins (n + 4) (.compare .unsignedLT .word (.local (n + 1)) (.literal (word (2 ^ t.bits)))),
+        ins (n + 5) (.compare .eq .word (.local (n + 4)) (.literal (word 0)))] := by
+  unfold inst at h
+  cases hp : inProfile t <;> cases ha : operand p a <;> cases hb : operand p b <;>
+    simp_all [bind, Except.bind, pure, Except.pure]
+
+/-- What a successful `trunc` expansion is. -/
+theorem inst_trunc {p : Program} {n : Nat} {fr to : IntTy} {d : Reg} {a : Operand}
+    {xs : List Source.Instruction} (h : inst p n (.trunc fr to d a) = .ok xs) :
+    inProfile to = true ∧ ∃ a', operand p a = .ok a' ∧
+      xs = [ins n (.binary .sub a' (.literal (word to.min))),
+        ins (n + 1) (.binary .andBits (.local n) (.literal (word (2 ^ to.bits - 1)))),
+        ins (n + 2) (.binary .add (.local (n + 1)) (.literal (word to.min)))] := by
+  unfold inst at h
+  cases hp : inProfile fr <;> cases hq : inProfile to <;> cases ha : operand p a <;>
+    simp_all [bind, Except.bind, pure, Except.pure]
+
 /-- Reading a slot just written. -/
 theorem read_set_self {env : Source.Environment} {n : Nat} {v : Source.Value} (hs : n < env.size)
     (hv : v.width = .word) : Source.read (env.set! n (some v)) .word (.local n) = .ok v := by
@@ -743,6 +768,208 @@ theorem trunc_steps {f : Source.Function} {s : Source.State} {lb : Source.Block}
     (eval_bin (d := n + 2) (op := .add) (read_set_self (by omega) rfl) (read_literal _ to.min))
     (write_ok (n := n + 2) (hW (n + 2) (by omega)) (by first | omega | (dsimp only; omega)) rfl)
   exact .succ s₀ (.succ s₁ (.succ s₂ (.zero _)))
+
+/-! ## `adapter_correct`, the invariant through one instruction -/
+
+/-- Every integer a BIR environment binds is in its type's range (immediates are, by WF; results
+are, by `wrap_inRange`). `binOvf_steps` needs it: agreement alone would let a `.u8` register hold
+`2 ^ 32`, whose word is `0`. -/
+def InRange (benv : Env) : Prop := ∀ r t x, lookup benv r = some (.int t x) → t.inRange x = true
+
+theorem inRange_cons {benv : Env} {d : Reg} {v : Val} (hr : InRange benv)
+    (hv : ∀ t x, v = .int t x → t.inRange x = true) : InRange ((d, v) :: benv) := by
+  intro r t x h
+  simp only [lookup] at h
+  by_cases hdr : d = r
+  · simp [hdr] at h; exact hv t x h
+  · simp [hdr] at h; exact hr r t x h
+
+theorem evalOp_inRange {benv : Env} {a : Operand} {t : IntTy} {x : Int} (hr : InRange benv)
+    (h : evalOp benv a = some (.int t x)) : t.inRange x = true := by
+  cases a with
+  | reg r => exact hr r t x h
+  | imm t' v =>
+    simp only [evalOp] at h
+    split at h
+    · cases h; assumption
+    · cases h
+
+theorem intArgs_ok {benv : Env} {t : IntTy} {a b : Operand} {x y : Int}
+    (h : intArgs benv t a b = some (x, y)) :
+    evalOp benv a = some (.int t x) ∧ evalOp benv b = some (.int t y) := by
+  unfold intArgs at h
+  split at h
+  · rename_i ta x' tb y' ha hb
+    split at h
+    · rename_i hab
+      obtain ⟨rfl, rfl⟩ := hab
+      cases h
+      exact ⟨ha, hb⟩
+    · cases h
+  · cases h
+
+/-- A register's id is a slot below `valueCount`. -/
+theorem regId_lt {p : Program} (hok : numberingOk p = true) {r : Reg} {n : Nat}
+    (h : regId p r = some n) : n < valueCount p := by
+  simp only [numberingOk, Bool.and_eq_true, decide_eq_true_eq, List.all_eq_true] at hok
+  exact hok.1.1.2 n (List.mem_map.mpr ⟨(r, n), mem_of_lookup h, rfl⟩)
+
+theorem ids_nodup {p : Program} (hok : numberingOk p = true) : ((ids p).map Prod.fst).Nodup := by
+  simp only [numberingOk, Bool.and_eq_true, decide_eq_true_eq] at hok
+  exact hok.1.1.1.1
+
+theorem inter_mem {p : Program} {j i off : Nat} {b : Block} {ins : Inst}
+    (hb : p.blocks[j]? = some b) (hi : b.insts[i]? = some ins) (ho : off ∈ interOffsets ins) :
+    blockBase p j + instBase b i + off ∈ intermediates p := by
+  simp only [intermediates, List.mem_flatMap, List.mem_map]
+  exact ⟨(j, b), Runtime.mem_indexed hb, (i, ins), Runtime.mem_indexed hi, off, ho, rfl⟩
+
+/-- No register has an intermediate's id. -/
+theorem inter_not_reg {p : Program} (hok : numberingOk p = true) {m : Nat}
+    (hm : m ∈ intermediates p) : ∀ r n, regId p r = some n → n ≠ m := by
+  intro r n hr heq
+  subst heq
+  simp only [numberingOk, Bool.and_eq_true, decide_eq_true_eq, List.all_eq_true] at hok
+  have h := hok.2 n hm
+  have hmem : n ∈ (ids p).map Prod.snd := List.mem_map.mpr ⟨(r, n), mem_of_lookup hr, rfl⟩
+  simp [hmem] at h
+
+theorem size_set4 (e : Source.Environment) (n : Nat) (u₀ u₁ u₂ v : Option Source.Value) :
+    (set4 e n u₀ u₁ u₂ v).size = e.size := by
+  simp only [set4, size_set!]
+
+/-- One `bin` instruction: its four LCB steps keep agreement, range and size, with the result
+bound. -/
+theorem bin_sim {p : Program} (hok : numberingOk p = true) {f : Source.Function}
+    {j i : Nat} {b : Block} {op : BinOp} {t : IntTy} {d : Reg} {a c : Operand}
+    {xs : List Source.Instruction} {s : Source.State} {lb : Source.Block} {benv benv' : Env}
+    (hbj : p.blocks[j]? = some b) (hi : b.insts[i]? = some (.bin op t d a c))
+    (hx : inst p (blockBase p j + instBase b i) (.bin op t d a c) = .ok xs)
+    (hb : f.blocks[s.block]? = some lb)
+    (hq : ∀ k, k < 4 → lb.instructions[s.position + k]? = xs[k]?)
+    (hW : ∀ m, m < s.environment.size → f.valueWidths[m]? = some .word)
+    (hsz : s.environment.size = valueCount p)
+    (hag : Agrees p benv s.environment) (hr : InRange benv)
+    (he : execInst benv (.bin op t d a c) = some benv') :
+    ∃ env', Source.Steps f 4 s ⟨s.block, s.position + 4, env'⟩ ∧ env'.size = valueCount p ∧
+      Agrees p benv' env' ∧ InRange benv' := by
+  obtain ⟨ht, a', c', ha', hc', rfl⟩ := inst_bin hx
+  simp only [execInst, bind, Option.bind] at he
+  split at he
+  · cases he
+  · rename_i xy hxy
+    obtain ⟨x, y⟩ := xy
+    cases he
+    obtain ⟨hax, hcy⟩ := intArgs_ok hxy
+    let n := blockBase p j + instBase b i
+    have hd : regId p d = some (n + 3) := regId_inst (ids_nodup hok) hbj hi (by simp [instDefs])
+    have hn3 : n + 3 < s.environment.size := hsz ▸ regId_lt hok hd
+    have hst := bin_steps (s := s) (n := n) ht hb hq (read_operand hag ha' hax)
+      (read_operand hag hc' hcy) hW hn3
+    refine ⟨_, hst, by rw [size_set4]; exact hsz, ?_, ?_⟩
+    · have m₀ := inter_not_reg hok (inter_mem (off := 0) hbj hi (by simp [interOffsets]))
+      have m₁ := inter_not_reg hok (inter_mem (off := 1) hbj hi (by simp [interOffsets]))
+      have m₂ := inter_not_reg hok (inter_mem (off := 2) hbj hi (by simp [interOffsets]))
+      exact agrees_define hok (agrees_set_other (agrees_set_other (agrees_set_other hag m₀) m₁) m₂)
+        hd (by simp only [size_set!]; omega)
+    · exact inRange_cons hr (fun t' x' h => by cases h; exact wrap_inRange _ _)
+
+/-- One `binOvf` instruction: its six LCB steps keep agreement, range and size, with the result
+and the flag bound. -/
+theorem binOvf_sim {p : Program} (hok : numberingOk p = true) {f : Source.Function}
+    {j i : Nat} {b : Block} {op : BinOp} {t : IntTy} {d fl : Reg} {a c : Operand}
+    {xs : List Source.Instruction} {s : Source.State} {lb : Source.Block} {benv benv' : Env}
+    (hbj : p.blocks[j]? = some b) (hi : b.insts[i]? = some (.binOvf op t d fl a c))
+    (hx : inst p (blockBase p j + instBase b i) (.binOvf op t d fl a c) = .ok xs)
+    (hb : f.blocks[s.block]? = some lb)
+    (hq : ∀ k, k < 6 → lb.instructions[s.position + k]? = xs[k]?)
+    (hW : ∀ m, m < s.environment.size → f.valueWidths[m]? = some .word)
+    (hsz : s.environment.size = valueCount p)
+    (hag : Agrees p benv s.environment) (hr : InRange benv)
+    (he : execInst benv (.binOvf op t d fl a c) = some benv') :
+    ∃ env', Source.Steps f 6 s ⟨s.block, s.position + 6, env'⟩ ∧ env'.size = valueCount p ∧
+      Agrees p benv' env' ∧ InRange benv' := by
+  obtain ⟨ht, a', c', ha', hc', rfl⟩ := inst_binOvf hx
+  simp only [execInst, bind, Option.bind] at he
+  split at he
+  · cases he
+  · rename_i xy hxy
+    obtain ⟨x, y⟩ := xy
+    cases he
+    obtain ⟨hax, hcy⟩ := intArgs_ok hxy
+    let n := blockBase p j + instBase b i
+    have hd : regId p d = some (n + 3) := regId_inst (ids_nodup hok) hbj hi (by simp [instDefs])
+    have hf : regId p fl = some (n + 5) := regId_inst (ids_nodup hok) hbj hi (by simp [instDefs])
+    have hn5 : n + 5 < s.environment.size := hsz ▸ regId_lt hok hf
+    obtain ⟨u₄, hst⟩ := binOvf_steps (s := s) (n := n) ht (evalOp_inRange hr hax)
+      (evalOp_inRange hr hcy) hb hq (read_operand hag ha' hax) (read_operand hag hc' hcy) hW hn5
+    refine ⟨_, hst, by simp only [size_set!, size_set4]; exact hsz, ?_, ?_⟩
+    · have m₀ := inter_not_reg hok (inter_mem (off := 0) hbj hi (by simp [interOffsets]))
+      have m₁ := inter_not_reg hok (inter_mem (off := 1) hbj hi (by simp [interOffsets]))
+      have m₂ := inter_not_reg hok (inter_mem (off := 2) hbj hi (by simp [interOffsets]))
+      have m₄ := inter_not_reg hok (inter_mem (off := 4) hbj hi (by simp [interOffsets]))
+      have hdef : Agrees p ((d, .int t (wrap t (op.exact x y))) :: benv)
+          (set4 s.environment n (some (.word (raw op x y))) (some (.word (biased t (raw op x y))))
+            (some (.word (masked t (biased t (raw op x y))))) (some (word (wrap t (op.exact x y))))) :=
+        agrees_define hok (agrees_set_other (agrees_set_other (agrees_set_other hag m₀) m₁) m₂) hd
+          (by simp only [size_set!]; omega)
+      exact agrees_define hok (agrees_set_other (x := u₄) hdef m₄) hf
+        (by simp only [size_set!, size_set4]; omega)
+    · exact inRange_cons (inRange_cons hr (fun t' x' h => by cases h; exact wrap_inRange _ _))
+        (fun t' x' h => by cases h)
+
+/-- One `trunc` instruction: its three LCB steps keep agreement, range and size, with the result
+bound. -/
+theorem trunc_sim {p : Program} (hok : numberingOk p = true) {f : Source.Function}
+    {j i : Nat} {b : Block} {fr to : IntTy} {d : Reg} {a : Operand}
+    {xs : List Source.Instruction} {s : Source.State} {lb : Source.Block} {benv benv' : Env}
+    (hbj : p.blocks[j]? = some b) (hi : b.insts[i]? = some (.trunc fr to d a))
+    (hx : inst p (blockBase p j + instBase b i) (.trunc fr to d a) = .ok xs)
+    (hb : f.blocks[s.block]? = some lb)
+    (hq : ∀ k, k < 3 → lb.instructions[s.position + k]? = xs[k]?)
+    (hW : ∀ m, m < s.environment.size → f.valueWidths[m]? = some .word)
+    (hsz : s.environment.size = valueCount p)
+    (hag : Agrees p benv s.environment) (hr : InRange benv)
+    (he : execInst benv (.trunc fr to d a) = some benv') :
+    ∃ env', Source.Steps f 3 s ⟨s.block, s.position + 3, env'⟩ ∧ env'.size = valueCount p ∧
+      Agrees p benv' env' ∧ InRange benv' := by
+  obtain ⟨ht, a', ha', rfl⟩ := inst_trunc hx
+  simp only [execInst] at he
+  split at he
+  · rename_i t x hax
+    split at he
+    · cases he
+      let n := blockBase p j + instBase b i
+      have hd : regId p d = some (n + 2) := regId_inst (ids_nodup hok) hbj hi (by simp [instDefs])
+      have hn2 : n + 2 < s.environment.size := hsz ▸ regId_lt hok hd
+      have hst := trunc_steps (s := s) (n := n) ht hb hq (read_operand hag ha' hax) hW hn2
+      refine ⟨_, hst, by simp only [size_set!]; exact hsz, ?_, ?_⟩
+      · have m₀ := inter_not_reg hok (inter_mem (off := 0) hbj hi (by simp [interOffsets]))
+        have m₁ := inter_not_reg hok (inter_mem (off := 1) hbj hi (by simp [interOffsets]))
+        exact agrees_define hok (agrees_set_other (agrees_set_other hag m₀) m₁) hd
+          (by simp only [size_set!]; omega)
+      · exact inRange_cons hr (fun t' x' h => by cases h; exact wrap_inRange _ _)
+    · cases he
+  · cases he
+
+/-- One instruction, whichever it is: its `width` LCB steps keep agreement, range and size. -/
+theorem inst_sim {p : Program} (hok : numberingOk p = true) {f : Source.Function}
+    {j i : Nat} {b : Block} {ins : Inst}
+    {xs : List Source.Instruction} {s : Source.State} {lb : Source.Block} {benv benv' : Env}
+    (hbj : p.blocks[j]? = some b) (hi : b.insts[i]? = some ins)
+    (hx : inst p (blockBase p j + instBase b i) ins = .ok xs)
+    (hb : f.blocks[s.block]? = some lb)
+    (hq : ∀ k, k < (Inst.width ins) → lb.instructions[s.position + k]? = xs[k]?)
+    (hW : ∀ m, m < s.environment.size → f.valueWidths[m]? = some .word)
+    (hsz : s.environment.size = valueCount p)
+    (hag : Agrees p benv s.environment) (hr : InRange benv)
+    (he : execInst benv ins = some benv') :
+    ∃ env', Source.Steps f (Inst.width ins) s ⟨s.block, s.position + (Inst.width ins), env'⟩ ∧
+      env'.size = valueCount p ∧ Agrees p benv' env' ∧ InRange benv' := by
+  cases ins with
+  | bin => exact bin_sim hok hbj hi hx hb hq hW hsz hag hr he
+  | binOvf => exact binOvf_sim hok hbj hi hx hb hq hW hsz hag hr he
+  | trunc => exact trunc_sim hok hbj hi hx hb hq hW hsz hag hr he
 
 end Proof
 
