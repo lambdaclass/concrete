@@ -2,12 +2,12 @@
 
 This file holds the full text of every roadmap task that a queue row names or whose **Phase:** line
 includes an active or next phase, or T. [ROADMAP.md](../../../ROADMAP.md) itself keeps only the control plane:
-the phases, [the queue](ROADMAP.md#the-queue), scheduling and defect rules,
+the phases, [the queue](../../../legacy/docs/archive/roadmap-2026-11/ROADMAP.md#the-queue), scheduling and defect rules,
 owner-decision pointers, candidate records and release acceptance. A
 task's position here is topical filing under its **area**; it schedules nothing. The queue and the
 active and next phases named in ROADMAP.md decide what happens next.
 
-Every other task lives in the [roadmap backlog](ROADMAP_BACKLOG.md) with its pull trigger. The bodies
+Every other task lives in the [roadmap backlog](../../../legacy/docs/archive/roadmap-2026-11/ROADMAP_BACKLOG.md) with its pull trigger. The bodies
 of done, superseded, merged, retired and delegated tasks are archived in
 [ROADMAP_RETIRED_TASKS.md](../../../legacy/docs/archive/ROADMAP_RETIRED_TASKS.md); each keeps a stub here or in the
 backlog. Completed tasks are in [CHANGELOG.md](../../../legacy/CHANGELOG.md) under `### Completed Task R-NNNN`.
@@ -50,7 +50,7 @@ preserves the former counts and scheduling map.
 
 ## Area: Development Throughput
 
-These tasks carry the [development throughput](ROADMAP.md#development-throughput) track, which was decided on
+These tasks carry the [development throughput](../../../legacy/docs/archive/roadmap-2026-11/ROADMAP.md#development-throughput) track, which was decided on
 2026-10-22. The measurements behind them, the targets and the dependency order are in that section.
 Pre-push gate selection belongs to R-0513, so it is not restated here. None of these tasks
 changes what a validation result means. Every result stays bound to its exact SHA under the
@@ -228,7 +228,7 @@ landed) and show median time to land on this roadmap.
 - review rounds per slice and the place each gate failure was first seen (pre-push or CI) are recorded
   with the timestamps;
 - a generated median time to land next to the candidate table under
-  [Implemented, not yet accepted](ROADMAP.md#implemented-not-yet-accepted), regenerated like that table.
+  [Implemented, not yet accepted](../../../legacy/docs/archive/roadmap-2026-11/ROADMAP.md#implemented-not-yet-accepted), regenerated like that table.
 
 **Exit:** every branch landed after the recorder exists has all four timestamps. The generated median
 covers them, and `check_docs_drift.sh` fails when the median is stale.
@@ -1038,7 +1038,7 @@ nightly; semantic, checker, evidence and trusted-base changes run their complete
 regression closure; remote runners for the full tier with local reproduction kept; the Linux-only
 claim-inventory step in the local full tier.
 
-**Impact-based selection (2026-10-22, [development throughput](ROADMAP.md#development-throughput) item 9).** Today the
+**Impact-based selection (2026-10-22, [development throughput](../../../legacy/docs/archive/roadmap-2026-11/ROADMAP.md#development-throughput) item 9).** Today the
 pre-push hook selects about 92 of 255 gates by area name, and stack-budget, trust-gate, float
 round-trip and linear-discard failures were first seen in CI. The fast tier is to select by an
 impact map from source files and fixtures to the gates that exercise them, so a change runs every
@@ -1248,7 +1248,7 @@ weaken the complete task exit.
 **Deliverables and acceptance:**
 
 Owners: the cleanup agent (`wip/cleanup-*`) and spec agent (`wip/spec`). It is scheduled by its queue
-row under the [scheduling rule](ROADMAP.md#scheduling-rule), with no independent early-phase exit.
+row under the [scheduling rule](../../../legacy/docs/archive/roadmap-2026-11/ROADMAP.md#scheduling-rule), with no independent early-phase exit.
 Each sub-item lands independently, never preempts defect work or weakens an exit, and chooses no owner
 language decision.
 
@@ -1291,7 +1291,7 @@ weaken the complete task exit.
 
 Owner: spec agent (`wip/spec`) for specification completion; a separate agent owns bug-rule
 integration and backfill. It is scheduled by its queue row under the
-[scheduling rule](ROADMAP.md#scheduling-rule). Work is paused for soundness repairs and never
+[scheduling rule](../../../legacy/docs/archive/roadmap-2026-11/ROADMAP.md#scheduling-rule). Work is paused for soundness repairs and never
 becomes a predecessor for unrelated work.
 No workstream answers an owner question: unresolved behaviour becomes an `open` decision entry.
 
@@ -3621,7 +3621,7 @@ after the source-contract/proof-link path is usable outside flagship hero work;
 it reaches **beta/release** only after ordinary project workflow and external
 validation are in place.
 
-The [release map](ROADMAP.md#release-map) separates the systems preview, verified-component
+The [release map](../../../legacy/docs/archive/roadmap-2026-11/ROADMAP.md#release-map) separates the systems preview, verified-component
 alpha, project beta and stable supported subset. The preview makes no alpha
 claim; the alpha and beta bars below remain required for their respective scopes.
 Stable release additionally requires the named compatibility and maintenance bars.

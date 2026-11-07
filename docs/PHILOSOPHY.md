@@ -266,8 +266,8 @@ refusal that is a decided language rule is an owner decision, recorded in
 
 Some former "not yet" entries are planned work, not refusals, and live in the roadmap: freestanding
 targets (the [allocation decision](decisions.md#decided-2026-11-02-allocation) already
-covers their allocators; [R-0323](archive/roadmap-2026-11/ROADMAP_BACKLOG.md#task-r-0323) and
-[R-0324](archive/roadmap-2026-11/ROADMAP_BACKLOG.md#task-r-0324) split std and its capabilities), package management
+covers their allocators; [R-0323](../legacy/docs/archive/roadmap-2026-11/ROADMAP_BACKLOG.md#task-r-0323) and
+[R-0324](../legacy/docs/archive/roadmap-2026-11/ROADMAP_BACKLOG.md#task-r-0324) split std and its capabilities), package management
 (decided 2026-10-17, in the [task register](archive/roadmap-2026-11/ROADMAP_TASKS.md)), and the richer contract layer
 (dependency-flow contracts, mature loop invariant and variant authoring, the specification
 library, and package and release evidence summaries, phase E of the
@@ -287,7 +287,7 @@ and per-function termination theorems for ordinary functions.
   reclaimed and whether a call allocates; linear ownership and explicit cleanup replace them.
 - **A hidden async runtime, executor or scheduler, and function colouring.** Permanent. They hide
   concurrency and scheduling behind calls that look ordinary.
-- **Explicit structured concurrency.** Reopens when [R-0399](archive/roadmap-2026-11/ROADMAP_BACKLOG.md#task-r-0399)'s pull
+- **Explicit structured concurrency.** Reopens when [R-0399](../legacy/docs/archive/roadmap-2026-11/ROADMAP_BACKLOG.md#task-r-0399)'s pull
   trigger holds: a workload needs concurrency after the new compiler's v1 surface is frozen. Any
   design keeps authority in `with(...)` and handles as linear values; single-threaded execution
   until then.
@@ -349,7 +349,7 @@ and per-function termination theorems for ordinary functions.
 - **Foreign function values.** Refused ([OD4](decisions.md#od4)). Reopens when the owner
   admits typed `extern "C" fn` types, which OD4 leaves for later, with the permissions of foreign
   callbacks decided at that point ([authority rule 4](decisions.md#decided-2026-11-02-authority));
-  [R-0283](archive/roadmap-2026-11/ROADMAP_BACKLOG.md#task-r-0283) reviews the C interop requirements when phase C becomes
+  [R-0283](../legacy/docs/archive/roadmap-2026-11/ROADMAP_BACKLOG.md#task-r-0283) reviews the C interop requirements when phase C becomes
   active or next.
 
 **Generation and metaprogramming**
@@ -367,7 +367,7 @@ and per-function termination theorems for ordinary functions.
   authority and target assumptions behind build configuration. Target-specific code is selected by
   module and file per target profile in `Concrete.toml`, and audit output names what was selected
   and excluded. Reopens when, with the project model, target profiles and the hosted/freestanding
-  std split ([R-0323](archive/roadmap-2026-11/ROADMAP_BACKLOG.md#task-r-0323)) in place, a workload under the pull rules
+  std split ([R-0323](../legacy/docs/archive/roadmap-2026-11/ROADMAP_BACKLOG.md#task-r-0323)) in place, a workload under the pull rules
   shows that module and file selection is not enough; any form is narrow and appears in audit
   output.
 
