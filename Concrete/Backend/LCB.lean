@@ -144,13 +144,15 @@ def inst (p : Program) (n : Nat) : Inst → Except String (List Source.Instructi
       ins (n + 1) (.binary .andBits (.local n) (.literal (word (2 ^ to.bits - 1)))),
       ins (n + 2) (.binary .add (.local (n + 1)) (.literal (word to.min)))]
 
+/-- The edges into block `j` from block `k`, whose terminator is `term`: (k, arguments). -/
+def edgesTo (j k : Nat) : Term → List (Nat × List Operand)
+  | .br t args => if t = j then [(k, args)] else []
+  | .condbr _ t ta e ea => (if t = j then [(k, ta)] else []) ++ (if e = j then [(k, ea)] else [])
+  | _ => []
+
 /-- The edges into block `j`: (predecessor, arguments), by predecessor. -/
 def incoming (p : Program) (j : Nat) : List (Nat × List Operand) :=
-  (indexed p.blocks).flatMap fun (k, b) =>
-    match b.term with
-    | .br t args => if t = j then [(k, args)] else []
-    | .condbr _ t ta e ea => (if t = j then [(k, ta)] else []) ++ (if e = j then [(k, ea)] else [])
-    | _ => []
+  (indexed p.blocks).flatMap fun (k, b) => edgesTo j k b.term
 
 def term (p : Program) : Term → Except String Source.Terminator
   | .ret a => return .ret (← operand p a)
@@ -1292,6 +1294,58 @@ theorem transfer_ok {f : Source.Function} {pred target : Nat} {env : Source.Envi
     have h0 : (#[(x, op)] : Array (Source.BlockId × Source.Operand))[0]? = some (x, op) := rfl
     simp only [hf, hany, h1, h0, Bool.false_eq_true, ↓reduceIte, hr, bind, Except.bind, pure,
       Except.pure]
+
+/-! ## `adapter_correct`, edges: the adapter's phis -/
+
+theorem edgesTo_fst {j k : Nat} {term : Term} : ∀ x ∈ edgesTo j k term, x.1 = k := by
+  intro x hx
+  cases term <;> simp only [edgesTo] at hx <;> (try split at hx) <;> (try split at hx) <;>
+    simp at hx <;> (try rcases hx with rfl | rfl) <;> (try subst hx) <;> rfl
+
+/-- Picking one index out of an indexed flatMap. -/
+theorem flatMap_indexedFrom_pick {α β : Type} (F : Nat → α → List β) (j : Nat) :
+    ∀ (n : Nat) (l : List α), (Runtime.indexedFrom n l).flatMap
+      (fun (kx : Nat × α) => if kx.1 = j then F kx.1 kx.2 else []) =
+      if n ≤ j then (match l[j - n]? with | some x => F j x | none => []) else []
+  | n, [] => by simp [Runtime.indexedFrom]
+  | n, x :: l => by
+    simp only [Runtime.indexedFrom, List.flatMap_cons]
+    rw [flatMap_indexedFrom_pick F j (n + 1) l]
+    rcases Nat.lt_trichotomy n j with h | h | h
+    · have h1 : j - n = (j - (n + 1)) + 1 := by omega
+      have h2 : n ≠ j := by omega
+      simp only [h2, ↓reduceIte, List.nil_append, h1, List.getElem?_cons_succ,
+        show n + 1 ≤ j by omega, show n ≤ j by omega]
+    · subst h
+      simp only [↓reduceIte, Nat.sub_self, List.getElem?_cons_zero, Nat.le_refl,
+        show ¬ n + 1 ≤ n by omega, List.append_nil]
+    · have h2 : n ≠ j := by omega
+      simp only [h2, ↓reduceIte, List.nil_append, show ¬ n + 1 ≤ j by omega,
+        show ¬ n ≤ j by omega]
+
+/-- The edges into `t` from block `j` are exactly `j`'s own. -/
+theorem incoming_filter {p : Program} {j t : Nat} {bj : Block} (hbj : p.blocks[j]? = some bj) :
+    (incoming p t).filter (·.1 == j) = edgesTo t j bj.term := by
+  unfold incoming
+  rw [List.filter_flatMap]
+  have hc : (fun (kx : Nat × Block) => (match kx with | (k, b) => edgesTo t k b.term).filter
+      (·.1 == j)) = (fun (kx : Nat × Block) => if kx.1 = j then edgesTo t kx.1 kx.2.term else []) := by
+    funext kx
+    obtain ⟨k, b⟩ := kx
+    simp only
+    by_cases h : k = j
+    · simp only [h, ↓reduceIte]
+      apply List.filter_eq_self.mpr
+      intro x hx
+      simp [edgesTo_fst x hx]
+    · simp only [h, ↓reduceIte]
+      apply List.filter_eq_nil_iff.mpr
+      intro x hx
+      simp [edgesTo_fst x hx, h]
+  rw [hc]
+  have := flatMap_indexedFrom_pick (fun k (b : Block) => edgesTo t k b.term) j 0 p.blocks
+  simp only [Nat.sub_zero, hbj, Nat.zero_le, ↓reduceIte] at this
+  exact this
 
 end Proof
 
