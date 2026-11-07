@@ -647,6 +647,109 @@ ConcreteSpec.Core.AList.update.eq_1
 ConcreteSpec.Core.AList.update.eq_2	
 ConcreteSpec.Core.AList.update.eq_def	
 ConcreteSpec.Core.AList.update_cons	
+ConcreteSpec.Core.BlockId.mk.inj	
+ConcreteSpec.Core.BlockId.mk.injEq	propext
+ConcreteSpec.Core.BlockId.mk.sizeOf_spec	
+ConcreteSpec.Core.BrandId.mk.inj	
+ConcreteSpec.Core.BrandId.mk.injEq	propext
+ConcreteSpec.Core.BrandId.mk.sizeOf_spec	
+ConcreteSpec.Core.CapVarId.mk.inj	
+ConcreteSpec.Core.CapVarId.mk.injEq	propext
+ConcreteSpec.Core.CapVarId.mk.sizeOf_spec	
+ConcreteSpec.Core.DeclId.mk.inj	
+ConcreteSpec.Core.DeclId.mk.injEq	propext
+ConcreteSpec.Core.DeclId.mk.sizeOf_spec	
+ConcreteSpec.Core.FieldId.mk.inj	
+ConcreteSpec.Core.FieldId.mk.injEq	propext
+ConcreteSpec.Core.FieldId.mk.sizeOf_spec	
+ConcreteSpec.Core.FnId.mk.inj	
+ConcreteSpec.Core.FnId.mk.injEq	propext
+ConcreteSpec.Core.FnId.mk.sizeOf_spec	
+ConcreteSpec.Core.GrantId.mk.inj	
+ConcreteSpec.Core.GrantId.mk.injEq	propext
+ConcreteSpec.Core.GrantId.mk.sizeOf_spec	
+ConcreteSpec.Core.InstanceId.mk.inj	
+ConcreteSpec.Core.InstanceId.mk.injEq	propext
+ConcreteSpec.Core.InstanceId.mk.sizeOf_spec	
+ConcreteSpec.Core.LineageId.mk.inj	
+ConcreteSpec.Core.LineageId.mk.injEq	propext
+ConcreteSpec.Core.LineageId.mk.sizeOf_spec	
+ConcreteSpec.Core.LoanId.mk.inj	
+ConcreteSpec.Core.LoanId.mk.injEq	propext
+ConcreteSpec.Core.LoanId.mk.sizeOf_spec	
+ConcreteSpec.Core.LoopId.mk.inj	
+ConcreteSpec.Core.LoopId.mk.injEq	propext
+ConcreteSpec.Core.LoopId.mk.sizeOf_spec	
+ConcreteSpec.Core.ModuleId.mk.inj	
+ConcreteSpec.Core.ModuleId.mk.injEq	propext
+ConcreteSpec.Core.ModuleId.mk.sizeOf_spec	
+ConcreteSpec.Core.RuleId.mk.inj	
+ConcreteSpec.Core.RuleId.mk.injEq	propext
+ConcreteSpec.Core.RuleId.mk.sizeOf_spec	
+ConcreteSpec.Core.SiteId.mk.inj	
+ConcreteSpec.Core.SiteId.mk.injEq	propext
+ConcreteSpec.Core.SiteId.mk.sizeOf_spec	
+ConcreteSpec.Core.SliceId.mk.inj	
+ConcreteSpec.Core.SliceId.mk.injEq	propext
+ConcreteSpec.Core.SliceId.mk.sizeOf_spec	
+ConcreteSpec.Core.Span.mk.inj	
+ConcreteSpec.Core.Span.mk.injEq	propext
+ConcreteSpec.Core.Span.mk.sizeOf_spec	
+ConcreteSpec.Core.SpecVersion.mk.inj	
+ConcreteSpec.Core.SpecVersion.mk.injEq	propext
+ConcreteSpec.Core.SpecVersion.mk.sizeOf_spec	
+ConcreteSpec.Core.TheoremId.mk.inj	
+ConcreteSpec.Core.TheoremId.mk.injEq	propext
+ConcreteSpec.Core.TheoremId.mk.sizeOf_spec	
+ConcreteSpec.Core.Var.mk.inj	
+ConcreteSpec.Core.Var.mk.injEq	propext
+ConcreteSpec.Core.Var.mk.sizeOf_spec	
+ConcreteSpec.Core.instDecidableEqBlockId.decEq._proof_1	
+ConcreteSpec.Core.instDecidableEqBlockId.decEq._proof_2	
+ConcreteSpec.Core.instDecidableEqBrandId.decEq._proof_1	
+ConcreteSpec.Core.instDecidableEqBrandId.decEq._proof_2	
+ConcreteSpec.Core.instDecidableEqCapVarId.decEq._proof_1	
+ConcreteSpec.Core.instDecidableEqCapVarId.decEq._proof_2	
+ConcreteSpec.Core.instDecidableEqDeclId.decEq._proof_1	
+ConcreteSpec.Core.instDecidableEqDeclId.decEq._proof_2	
+ConcreteSpec.Core.instDecidableEqDeclId.decEq._proof_3	
+ConcreteSpec.Core.instDecidableEqFieldId.decEq._proof_1	
+ConcreteSpec.Core.instDecidableEqFieldId.decEq._proof_2	
+ConcreteSpec.Core.instDecidableEqFieldId.decEq._proof_3	
+ConcreteSpec.Core.instDecidableEqFnId.decEq._proof_1	
+ConcreteSpec.Core.instDecidableEqFnId.decEq._proof_2	
+ConcreteSpec.Core.instDecidableEqFnId.decEq._proof_3	
+ConcreteSpec.Core.instDecidableEqGrantId.decEq._proof_1	
+ConcreteSpec.Core.instDecidableEqGrantId.decEq._proof_2	
+ConcreteSpec.Core.instDecidableEqInstanceId.decEq._proof_1	
+ConcreteSpec.Core.instDecidableEqInstanceId.decEq._proof_2	
+ConcreteSpec.Core.instDecidableEqLineageId.decEq._proof_1	
+ConcreteSpec.Core.instDecidableEqLineageId.decEq._proof_2	
+ConcreteSpec.Core.instDecidableEqLoanId.decEq._proof_1	
+ConcreteSpec.Core.instDecidableEqLoanId.decEq._proof_2	
+ConcreteSpec.Core.instDecidableEqLoopId.decEq._proof_1	
+ConcreteSpec.Core.instDecidableEqLoopId.decEq._proof_2	
+ConcreteSpec.Core.instDecidableEqModuleId.decEq._proof_1	
+ConcreteSpec.Core.instDecidableEqModuleId.decEq._proof_2	
+ConcreteSpec.Core.instDecidableEqRuleId.decEq._proof_1	
+ConcreteSpec.Core.instDecidableEqRuleId.decEq._proof_2	
+ConcreteSpec.Core.instDecidableEqRuleId.decEq._proof_3	
+ConcreteSpec.Core.instDecidableEqSiteId.decEq._proof_1	
+ConcreteSpec.Core.instDecidableEqSiteId.decEq._proof_2	
+ConcreteSpec.Core.instDecidableEqSliceId.decEq._proof_1	
+ConcreteSpec.Core.instDecidableEqSliceId.decEq._proof_2	
+ConcreteSpec.Core.instDecidableEqSpan.decEq._proof_1	
+ConcreteSpec.Core.instDecidableEqSpan.decEq._proof_2	
+ConcreteSpec.Core.instDecidableEqSpan.decEq._proof_3	
+ConcreteSpec.Core.instDecidableEqSpan.decEq._proof_4	
+ConcreteSpec.Core.instDecidableEqSpecVersion.decEq._proof_1	
+ConcreteSpec.Core.instDecidableEqSpecVersion.decEq._proof_2	
+ConcreteSpec.Core.instDecidableEqSpecVersion.decEq._proof_3	
+ConcreteSpec.Core.instDecidableEqTheoremId.decEq._proof_1	
+ConcreteSpec.Core.instDecidableEqTheoremId.decEq._proof_2	
+ConcreteSpec.Core.instDecidableEqVar.decEq._proof_1	
+ConcreteSpec.Core.instDecidableEqVar.decEq._proof_2	
+ConcreteSpec.Core.instDecidableEqVar.decEq._proof_3	
 ConcreteSpec.Corr.brecOn	
 ConcreteSpec.Entry.mk.inj	
 ConcreteSpec.Entry.mk.injEq	propext
