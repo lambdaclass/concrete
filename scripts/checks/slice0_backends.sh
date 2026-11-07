@@ -52,9 +52,7 @@ examples=0
 # check NAME DIR SECS RETRY: build both backends in DIR, run them and judge them.
 check() {
   local name=$1 d=$2 backend
-  build "$name" "$d/build.log" clang -O0 -w "$d/llvm.ll" -o "$d/llvm.exe"
-  build "$name" "$d/build.log" "$lcb" -t "$target" "$d/lcb_rt.ssa" -o "$d/lcb_rt.s"
-  build "$name" "$d/build.log" cc "$d/lcb_body.s" "$d/lcb_rt.s" -o "$d/lcb.exe"
+  build "$name" "$d/build.log" bash "$root/scripts/checks/slice0_native.sh" "$d" "$lcb"
   for backend in llvm lcb; do
     observe "$d/$backend.exe" "$d/$backend" "$3" "$4"
     count=$((count + 1))

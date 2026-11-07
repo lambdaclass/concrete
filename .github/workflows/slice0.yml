@@ -38,3 +38,44 @@ jobs:
         uses: cachix/install-nix-action@v31
       - name: Backend gate (LLVM and LCB, native)
         run: nix develop --command bash scripts/checks/slice0_backends.sh
+
+  reproducibility:
+    name: Reproducibility (${{ matrix.id }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - id: linux-first
+            runner: ubuntu-24.04
+          - id: linux-independent
+            runner: ubuntu-24.04
+          - id: macos
+            runner: macos-15
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cachix/install-nix-action@v31
+      - name: Compare every stage in distinct build directories
+        run: nix develop --command timeout 3600 bash scripts/checks/slice0_repro.sh manifest.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: reproducibility-${{ matrix.id }}
+          path: manifest.txt
+          if-no-files-found: error
+
+  compare-linux:
+    name: Cross-machine reproducibility (x86-64 Linux)
+    needs: reproducibility
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: reproducibility-linux-*
+          path: manifests
+      - name: Compare like targets, including compiler and toolchain identity
+        run: diff -u manifests/reproducibility-linux-first/manifest.txt manifests/reproducibility-linux-independent/manifest.txt

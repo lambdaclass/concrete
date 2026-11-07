@@ -670,3 +670,23 @@ LCB is our own project; these are tasks for it, not premises to keep. Checked ag
 - The LP0 proven path: LCB's own theorems composed with `adapter_correct`, replacing `P_toolchain[lcb]`. It comes right after the functions-and-calls slice (slice 4 in the earlier numbering, slice 5 now). In slice 0 LCB already runs, unverified, with the adapter proof first.
 - An LLVM-IR semantics. The LLVM meaning `M` stays a premise parameter until one exists, and then `P_print` becomes a theorem.
 - The information-flow and constant-time analysis. The surface and the observer are decided; slice 0 has only the fact fields.
+
+## Reproducible builds (owner, 2026-11-07)
+
+The same source, compiler revision, toolchain pins and target must produce byte-identical BIR,
+LLVM text, LCB input/output and executables. `nix develop --command bash
+scripts/checks/build_identity.sh` prints the canonical identity (compiler commit, Lean, clang/LLVM,
+Nix inputs, LCB revision and target); the planned `concrete facts` command will print this identity.
+`scripts/checks/slice0_repro.sh [MANIFEST]` checks every hand-written BIR example twice from
+separate source directories and TMPDIRs, hashes the BIR and adapted LCB value dumps, both text
+formats, both LCB assembly outputs, all objects and both executables. The slice-0 frontend is
+not implemented yet, so this gate starts at the hand-written BIR contract.
+
+Both native gates use `slice0_native.sh`: Nix-pinned clang 21, a clean compiler environment,
+fixed relative object names and link order, epoch 1, UTC/C locale, no debug information, path
+prefix maps, and no ELF build ID or Mach-O UUID (`ZERO_AR_DATE=1` on both paths). The printers
+traverse ordered lists/arrays (including stable first-occurrence intrinsic deduplication);
+site paths are project-relative source data. They emit no clock, hostname or temporary path.
+CI repeats this on x86-64 Linux and AArch64 macOS and compares the complete Linux manifests
+from two independent runners. Different targets are never compared. Changes to these pins
+change the build identity; no reproducibility claim spans different toolchains or targets.
