@@ -2,26 +2,26 @@
 
 Status: proposal, accepted by Codex and Kimi in review round 3 (agy accepted round 2; its round-3 rerun on this text is pending); the spec worker carries it out as stage A2i (R-0571). The Lean spec stays the only home of the rules: this file is the work plan and is retired when A2i is done. Draft 3 folds in
 the Codex, agy and Kimi delta reviews of draft 2 (section 7), the agreed slice order
-(`slices/FINAL.md`, all four reviewers, 2026-11-06) and the owner decisions of 2026-11-06 relayed by
+(the [vertical slices](../../ROADMAP.md#vertical-slices), all four reviewers, 2026-11-06) and the owner decisions of 2026-11-06 relayed by
 the coordinator (section 4), and the coordinator's answers to draft 3's questions S1–S3 (section
-5.1). Drafts 1 and 2 are kept as `PLAN-draft1.md` and `PLAN-draft2.md`. I
-checked each kept reviewer claim against the files.
+5.1). Drafts 1 and 2, the archive copies of the inputs and the raw review outputs are not kept in
+the repository; the exact revisions below are the inputs. I checked each kept reviewer claim against the files.
 
 **Inputs read (exact revisions):**
 
-- `origin/wip/spec-root` 6f80b9c9d0: `ConcreteSpec.lean`, `ConcreteSpec/Spec.lean`, `ConcreteSpec/Spec/*.lean`, `ConcreteSpec/Proofs/*.lean`, `ConcreteSpec/README.md`. An archive copy is in `src/` next to this file.
+- `origin/wip/spec-root` 6f80b9c9d0: `ConcreteSpec.lean`, `ConcreteSpec/Spec.lean`, `ConcreteSpec/Spec/*.lean`, `ConcreteSpec/Proofs/*.lean`, `ConcreteSpec/README.md`.
 - `origin/wip/spec-nht` a5e982a6c4: A2i no-hidden-traps M1 (`atomBounds`, `admitted`, `checked_no_implicit_traps`, `add100` refused, `add0` accepted).
-- `origin/main` ab537833d7 and `origin/wip/decisions-followup` 4e75883d91: `docs/decisions.md` and `ROADMAP.md`. The three decided proposals in `docs/archive/crucial-2026-11-06/` are copied to `crucial/`.
+- `origin/main` ab537833d7 and `origin/wip/decisions-followup` 4e75883d91: `docs/decisions.md` and `ROADMAP.md`. The three decided proposals are in [`docs/archive/crucial-2026-11-06/`](../archive/crucial-2026-11-06/).
 - `origin/wip/slice0` 53f9a21798: `Concrete/README.md`, the compiler's view of the spec. It records the owner's slice order of 2026-11-06 at lines 612-622.
-- The pipeline review `../pipeline-review/MERGED.md` (item 11).
+- The pipeline review [`MERGED.md`](MERGED.md) (item 11).
 
-**Path conventions.** A file:line reference is to `origin/wip/spec-root` 6f80b9c9d0 (the copy in
-`src/`) unless it is marked `nht:`. The declaration name next to each line number is the anchor: the
+**Path conventions.** A file:line reference is to `origin/wip/spec-root` 6f80b9c9d0
+unless it is marked `nht:`. The declaration name next to each line number is the anchor: the
 spec-root head that lands (3968ada60c) moved lines in `Borrow`, `Cleanup` and the scripts, so the
 implementation finds each item by name, never by line.
 `Spec/X.lean` means `ConcreteSpec/Spec/X.lean`, and `Proofs/X.lean` means `ConcreteSpec/Proofs/X.lean`.
 `dec:N` is line N of `decisions.md` and `RM:N` is line N of `ROADMAP.md`, both at
-`decisions-followup` 4e75883d91 (copies in `rev/`).
+`decisions-followup` 4e75883d91.
 
 ---
 
@@ -67,7 +67,7 @@ Nothing joins these fragments:
 The four design theorems keep their names and their full conclusions.
 
 **Build order.** Foundations first, with no change of meaning (phase A). Then the Core grows slice
-by slice in the agreed order of `slices/FINAL.md` (vertical slices,
+by slice in the agreed order of the [vertical slices](../../ROADMAP.md#vertical-slices) (
 [row](../decisions.md#decided-project-vertical-slices-2026-11-06)): slice 0, slice 1 (the Q8.2 linear
 empty struct, with explicit `abort()` and the refused `200 + 56` control), slice 2 (all integers),
 slice 3 (bool, `if`, `let mut`, the octagon checker), slice 4 (loops and termination), slice 5
@@ -78,10 +78,12 @@ after every commit.
 
 **A2i integrates the whole decided Core before the A2c freeze** (the decided A2i/A2c rule). The
 slice order governs the order of the spec work inside A2i and the compiler's implementation order;
-it does not let any fragment stay unintegrated. Every slice's spec side, 0 to 27, and every old
-fragment are in the one Core before A2c. None remains "not yet integrated" at the freeze.
+it does not let any fragment stay unintegrated. Proposed (the coordinator's S1 answer, not an owner decision, and wider
+than the A2i acceptance in ROADMAP.md, so it needs the owner's approval): every slice's spec side, 0 to
+27, and every old fragment are in the one Core before A2c; slice 28's concurrency model is not yet
+decided. None remains "not yet integrated" at the freeze.
 
-The owner questions of draft 2 (layout, rule-ID spelling, spec version) and FINAL.md's owner
+The owner questions of draft 2 (layout, rule-ID spelling, spec version) and the slice plan's owner
 questions are decided (sections 4 and 5.1).
 
 ---
@@ -351,7 +353,7 @@ of the log:
 - peak above a call's entry baseline;
 - signed net change per call frame.
 
-A single source then answers the memory decision's quantities (`crucial/MEMORY.md:19-31`).
+A single source then answers the memory decision's quantities (`../archive/crucial-2026-11-06/MEMORY.md:19-31`).
 Leakage records are branch decision, address, allocation size, loop count and variable-time
 operand, each with its `SiteId`.
 
@@ -382,7 +384,7 @@ defined in `Checker`. Every premise is named, because the rule ID is the Lean ru
 rule's own revision (1.10). Feature modules define auxiliary predicates; the admission judgment
 is the one authority.
 
-`Spec/Checker.lean` holds the checker, following `crucial/DIAGNOSTICS.md:13-27`:
+`Spec/Checker.lean` holds the checker, following `../archive/crucial-2026-11-06/DIAGNOSTICS.md:13-27`:
 
 ```
 -- in Ident (phase A step 2), with no dependency on any rule's module:
@@ -666,7 +668,7 @@ The import rules:
 - `ConcreteSpec/Spec.lean` remains the public import (R-0560).
 
 These are 26 modules, replacing 13. agy recommended about 17; the plan keeps one module per concept
-the owner reads, and the owner's front-end-first order (section 6, phase A) names `Ident`, `Outcome`
+the owner reads, and the proposed front-end-first order (section 6, phase A) names `Ident`, `Outcome`
 and `Lexical` as their own steps, so they stay separate modules. Folded: `Layout` into `Values`,
 observation into `Contract`.
 
@@ -715,7 +717,7 @@ observation into `Contract`.
    The analysis theorems (`heap_peak_sound` and the rest) belong to R-0595.
 10. **Termination under evidence** (`checked_terminates`). A function whose termination fact is
     established reaches a non-`outOfFuel` outcome for some fuel. It promises no fuel bound:
-    quantitative bounds are separate facts (`crucial/MEMORY.md:56`). A permission is named in the
+    quantitative bounds are separate facts (`../archive/crucial-2026-11-06/MEMORY.md:56`). A permission is named in the
     fact.
 11. **Checker theorems:** `check_correspond` and `check_refused` (1.10), and `ll1_sound` for the
     grammar.
@@ -756,7 +758,7 @@ observation into `Contract`.
 Every decision is recorded once, as a row in `docs/decisions.md`. The spec cites the row in the doc
 comment of the definition it governs; the README and `Spec.lean` cite nothing and restate nothing.
 The rows of 2026-11-06 are recorded on `wip/decisions-followup` a0e588f59: [vertical
-slices](../decisions.md#decided-project-vertical-slices-2026-11-06) (with FINAL.md's six owner
+slices](../decisions.md#decided-project-vertical-slices-2026-11-06) (with the slice plan's six owner
 answers), [SPARK](../decisions.md#decided-project-spark-2026-11-06) (function values, struct
 invariants, `assert … by thm`, observable events) and [trap line, layout and spec
 version](../decisions.md#decided-project-runtime-2026-11-06); rule revisions are in R-0593/R-0603. A
@@ -767,9 +769,9 @@ step cites the row once it is on main; a step that needs a row not yet on main w
 | D1 | No hidden traps (Q1; OD10, ARITH-3, MEM-6, OD118 revised) | `Primitives`, `Evidence`, `Admission` | failure condition per primitive; evidence premise per operation; an executable checker with `check_correspond`; `checked_no_implicit_traps` | 0, extended per slice |
 | D2 | The octagon checker, its limits and closed evidence (Q2, Q4, Q7–Q9) | `Evidence` | fact language, transfers, limits as spec constants, evidence sources, evidence graph; a fact not established at a site is a refusal of kind `notEstablished` | intervals at 0; octagons at 3 |
 | D3 | Loops (Q5; OD47–49, OD105) | `Admission`, `Evidence` | footprint forgotten at the head, bounds snapshot, invariant before the loop and after every iteration, exit join | 4 |
-| D4 | Termination (Q11–Q13; OD82 extended) | `Syntax`, `Termination`, `Obligations` | `#[variant]` on loops and functions (one measure per recursive cycle); `#[may_not_terminate("reason")]` with a non-empty reason, on loops at 4, on recursive components at 5, as an expression prefix on indirect calls at 20; `checked_terminates`; termination facts | 4, 5, 20 |
+| D4 | Termination (Q11–Q13; OD82 extended) | `Syntax`, `Termination`, `Obligations` | `#[variant]` on loops and functions (one measure per recursive cycle); `#[may_not_terminate("reason")]` with a non-empty reason, on loops at 4, on one designated function per recursive component at 5, on extern and blocking declarations at the slices that introduce them, as an expression prefix on indirect calls at 20; `checked_terminates`; termination facts | 4, 5, 20 |
 | D5 | Trap sites and the trap line ([row](../decisions.md#decided-project-runtime-2026-11-06); R-0496: `concrete: trap: <kind> at <path>:<line>:<col> (site <id>)`, path relative to the project root with forward slashes, 1-based) | `Semantics`, `Contract` | `Outcome.trap k site`; the trap line as a function of kind and span; closes README O4 | 1 |
-| D6 | `checked_*` with `ArithmeticError` | `Types`, `Primitives` | `ArithmeticError` from phase A (it is also the `arith` trap payload); the `checked_*` operations returning `Result<T, ArithmeticError>`; `MIN / -1` gives `Overflow` | type at A; operations at 12 |
+| D6 | `checked_*` with `ArithmeticError` | `Types`, `Primitives` | `ArithmeticError` from phase A (it is also the `arith` trap payload); the `checked_*` operations returning `Result<T, ArithmeticError>`; signed `MIN / -1` and `MIN % -1` give `Overflow` | type at A; operations at 12 |
 | D7 | `#[proof(path)]`, four roles | `Syntax`, `Obligations`, `Admission`, `EvidenceSem` | a `TheoremId`; obligation schemas generated before admission; roles (a), (b), (d) are admission discharges and refusals, role (c) a fact; one discharge edge per obligation | 8 |
 | D8 | The attribute-prefix production, LL(1) (R-0574) | `Grammar`, `Syntax` | the production in the grammar data; `ll1_sound`; attachment by kind (OD82) | 0 (grammar), used from 4 |
 | D9 | Facts vocabulary, statuses, coverage, strength, vacuity, dependency flow (facts decision; R-0585) | `Facts` | 2.1 item 8; every kind present from phase B, `notApplicable` until its slice | B |
@@ -783,12 +785,12 @@ step cites the row once it is on main; a step that needs a row not yet on main w
 | D17 | Q6.7, Q9.9, Q9.10 | `Semantics` | 1.6, 1.8, 1.9 | B |
 | D18 | Q9.4 flat data and matches; Q9.5 heap open; Q1.3 pack and unpack; Q9.7 one inventory | `Types`, `Syntax`, `Primitives` | 1.3, 1.5, 1.11 | 9, 10, 19 |
 | D19 | Slice-0 surface: a distinct "not supported in this slice" refusal; leading zeros refused | `Lexical`, `Grammar`, `Fragments` | `Rule.fragment`, kind `unsupported`; the lexical rule | A (steps 6, 7) |
-| D20 | Thin vertical slices, integers first ([row](../decisions.md#decided-project-vertical-slices-2026-11-06)); the agreed order `slices/FINAL.md` | `Fragments`; the step order (6) | one `SliceId` per slice; each slice a pair of fragment predicates | all |
-| D21 | Abort is the same terminal trap (`dec:1224`); may-abort is a separate fact | `Semantics`, `Facts` | `TrapKind.abort`, not `implicit`; explicit `abort()` in slice 1 (FINAL.md owner question 6) | 1 |
+| D20 | Thin vertical slices, integers first ([row](../decisions.md#decided-project-vertical-slices-2026-11-06)); the agreed order ([vertical slices](../../ROADMAP.md#vertical-slices)) | `Fragments`; the step order (6) | one `SliceId` per slice; each slice a pair of fragment predicates | all |
+| D21 | Abort is the same terminal trap (`dec:1224`); may-abort is a separate fact | `Semantics`, `Facts` | `TrapKind.abort`, not `implicit`; explicit `abort()` in slice 1 (slice plan owner question 6) | 1 |
 | D22 | Allocation failure is a value (Q1.8, Q1.9) | `Primitives` | `AllocFailure<T>`; `exhausted` is target-only | 19 |
 | D23 | Default struct layout (SPARK or runtime row, 2026-11-06): declaration order, natural alignment, size rounded up to the alignment, a zero-sized type has no bytes | `Values` (`Layout`) | `Layout.size`, `Layout.align`, field offsets; the empty struct of slice 1 has size 0 | 1 (ZST), 9 |
 | D24 | An extensible observable-event kind in Core ([SPARK row](../decisions.md#decided-project-spark-2026-11-06); R-0602: it also protects secret wipes) | `Semantics`, `Contract` | `Event.kind`; only these feed `observe` (1.7); wipe events made observable-protected at 7 | B |
-| D25 | A function whose `#[requires]` is a safety precondition is refused as a function value, including through wrappers and specialization ([SPARK row](../decisions.md#decided-project-spark-2026-11-06); R-0601: the function-type-contract design, trait methods included, is a prerequisite for accepting slice 20) | `Admission` | an admission premise on function-value formation, re-checked after Mono | 20, after R-0601 |
+| D25 | A function whose `#[requires]` is a safety precondition is refused as a function value, including through wrappers and specialization ([SPARK row](../decisions.md#decided-project-spark-2026-11-06); R-0601: the function-type-contract design, trait methods included, is a prerequisite for accepting slice 20; under that design, a function value with a matching function-type contract is accepted) | `Admission` | an admission premise on function-value formation without a matching function-type contract, re-checked after Mono | 20, after R-0601 |
 | D26 | `#[invariant(...)]` on a struct with private fields holds at every exposure ([SPARK row](../decisions.md#decided-project-spark-2026-11-06)) | `Syntax`, `Obligations`, `Admission` | the struct invariant and its obligations (established at construction, preserved by field writes inside the declaring module, assumed at every exposure outside it); defined in A2i | spec in A2i; source feature at 17 (S2) |
 | D27 | `assert(e) by thm(...)`, an extension of OD79 ([SPARK row](../decisions.md#decided-project-spark-2026-11-06)) | `Syntax`, `Obligations`, `EvidenceSem` | one fact at one point, the theorem's hypotheses fully discharged; a role kept separate from `#[proof]` (which discharges the function's obligations) | 8 |
 | D29 | `#[overflow_checked]` (ARITH-9) retired | `Grammar` | no production; the attribute is refused as unknown | 0 |
@@ -807,16 +809,16 @@ questions were answered by the coordinator:
 
 **S1. When A2i closes.** A2i integrates the whole decided Core before the A2c freeze. Inside A2i,
 fragments are ported in slice order, but every old fragment is folded into the one Core, and every
-slice's spec side (0–27) is written, before A2c. Step 29 is the gate: no old fragment module
+slice's spec side (0–27) is written, before A2c. This is a proposal waiting for the owner, since
+it widens A2i beyond its ROADMAP acceptance. Step 29 is the gate: no old fragment module
 remains.
 
 **S2. D26 and visibility.** `#[invariant]` on private-field structs needs field privacy, which
 arrives with modules. The spec definition is written in A2i, with the structs (step 20); the source
-feature is scheduled at slice 17 (modules), not slice 9 as the SPARK row says. The coordinator tells
-the owner of this departure from the row; until the owner confirms, the slice-17 placement is a
-proposal and the row is not edited by this branch.
+feature is scheduled at slice 17 (modules). The owner approved this on 2026-11-07 ("ok go ahead all
+yes then as you said right"), and the SPARK row records the revision.
 
-**S3. FINAL.md's owner questions.** All six recommended answers are approved ("ok do everything",
+**S3. the slice plan's owner questions.** All six recommended answers are approved ("ok do everything",
 2026-11-06) and recorded on `wip/decisions-followup` a0e588f59: the pure `classify` is slice 7's
 secret source (D12); ARITH-9 `#[overflow_checked]` is retired (D29); `Concrete.toml` has typed,
 versioned `[policy]` and `[assumptions]` tables (D30); R-0595 lands at slice 19 (D31); RocksDB and
@@ -866,9 +868,9 @@ One concept changes per commit. An old definition is deleted in the commit that 
 user, together with a correspondence lemma when an evaluator moves (1.8). Steps that edit shared
 foundations are sequential.
 
-**Phase A: slice 0's front end first, each step landed on main (owner, 2026-11-06)**
+**Phase A: slice 0's front end first, each step landed on main**
 
-"Unify before going forward": what slice 0's front end needs lands first, as its own early steps,
+The owner asked to unify first (owner, 2026-11-06: "yes let's make the spec the best and unify things we have to unify" and "we should unifyt things before going forward right?"). This plan's proposed order for that: what slice 0's front end needs lands first, as its own early steps,
 each landed on main through the train (review leg on) as soon as it passes, so the slice-0 worker
 builds elaboration and admission against them.
 
@@ -956,7 +958,7 @@ direction: every integrated run determines an oracle (its actual condition outco
 results) under which the old run agrees with it. The old theorems, which hold for every oracle, then
 apply to the integrated run, and are restated without the oracle in the same commit.
 
-**Phase C: slices, in the agreed order (FINAL.md)**
+**Phase C: slices, in the agreed order ([vertical slices](../../ROADMAP.md#vertical-slices))**
 
 Each step adds the slice's syntax, premises, semantics, facts and examples, and ports any old
 fragment whose feature the slice introduces, deleting it in the same commit. Where an old fragment
@@ -1031,7 +1033,7 @@ dropped and no source feature arrives early. `Borrow` is the one fragment ported
 
 ## 7. Delta reviews of draft 2
 
-Codex: ACCEPT-WITH-CHANGES. agy: ACCEPT-WITH-CHANGES. Kimi: REVISE. Raw outputs in `delta2/`.
+Codex: ACCEPT-WITH-CHANGES. agy: ACCEPT-WITH-CHANGES. Kimi: REVISE. The raw outputs are not kept in the repository.
 Every finding below was checked against the files.
 
 **Accepted and fixed.**
@@ -1077,15 +1079,15 @@ Every finding below was checked against the files.
 - Duplicate conformance examples across `Spec/Cleanup.lean`, `Spec/Brand.lean` and
   `Proofs/Examples.lean` (agy) are consolidated as each fragment is ported, not in a separate step.
 
-**Owner ordering folded in** (2026-11-06, "unify before going forward"): phase A lands slice 0's
+**Owner request folded in** (owner, 2026-11-06: "yes let's make the spec the best and unify things we have to unify" and "we should unifyt things before going forward right?"): the plan proposes that phase A land slice 0's
 front-end prerequisites first, each on main as soon as it passes (section 6).
 
 **Coordinator answers folded in** (S1–S3, section 5.1): whole-Core integration before A2c, D26's
-source feature at slice 17 with the spec in A2i, all FINAL.md owner answers (D12, D21, D29–D31).
+source feature at slice 17 with the spec in A2i, all slice-plan owner answers (D12, D21, D29–D31).
 
 ### 7.1 First review round of draft 3
 
-Codex: REVISE. agy: ACCEPT-WITH-CHANGES. Kimi: REVISE. Raw outputs in `delta3/`. All three
+Codex: REVISE. agy: ACCEPT-WITH-CHANGES. Kimi: REVISE. The raw outputs are not kept in the repository. All three
 confirmed S1–S3 are folded in. Fixed, after checking each against the files:
 
 - `Rule` in `Ident` was a cycle (all three): `Ident` holds only `RuleId` (a Lean name and a

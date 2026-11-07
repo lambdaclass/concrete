@@ -7,9 +7,10 @@ schedule applied in `ROADMAP.md` and `docs/proposals/EXAMPLES.md`:
   source, compiler revision, toolchain pin and target must produce byte-identical BIR, LLVM IR text,
   LCB job and output, and final binary. CI compares builds from different directories and from a
   GitHub runner and concrete-ci-2; `concrete facts` carries the build identity.
-- **Early stack bounds and randomness:** the owner said "1 and 2 should be done early too" without
-  naming slices. The roadmap records the coordinator's proposed placements, approved in spirit:
-  final-artifact stack facts at slice 0 and measure-based recursion bounds at 5; entropy as a
+- **Early stack bounds and randomness:** the owner said "1 and 2 should be done early too", then
+  approved the exact slices ("ok let's add it"): each program's maximum stack use, measured from the
+  final binary on both backends, from slice 0, with unknown or over-budget bounds refused and proven
+  bounds for recursion at 5; entropy as a
   capability at 6, `Secret<T>` output at 7 and fill-bytes at 15, with its source a named trusted
   premise.
 - **Five cheap early items:** a trusted-base statement in `concrete facts`, a random-program
@@ -38,3 +39,7 @@ schedule applied in `ROADMAP.md` and `docs/proposals/EXAMPLES.md`:
   understood.
 - **Cleanup:** the Codex/Kimi documentation and tooling cleanup list is approved and recorded in the
   decision row. This change only records that approval; it does not perform the cleanup.
+- **Tracking:** one home per fact. `docs/decisions.md` holds the decision and its quote, `ROADMAP.md`
+  the work, its slice, and each item's home (spec or tooling) and gate, `changelog.d/` what landed, the
+  Lean spec the language meaning, and `Concrete/README.md` with `required-checks.txt` the gate list.
+  The new gates join `required-checks.txt` when the compiler lands on main.

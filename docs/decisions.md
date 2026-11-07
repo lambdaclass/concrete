@@ -60,7 +60,8 @@ Each row records a decision and its reason. A language rule itself is its Lean d
 - Struct invariants in source at slice 17 ([revision](#decided-project-spark-2026-11-06)).
 - Test runner at slice 8, formatter at 17, LSP later ([row](#decided-2026-11-07-tools)).
 - Flagship and compiler speed tracking ([row](#decided-2026-11-07-performance)).
-- Stack bounds and randomness early; their slice numbers are coordinator proposals approved in spirit ([row](#decided-2026-11-07-stack-randomness)).
+- Stack bounds from slice 0 and randomness from slice 6 ([row](#decided-2026-11-07-stack-randomness)).
+- Where the decisions and their work are tracked, with a home and a gate per item ([row](#decided-2026-11-07-tracking)).
 - The trusted-base statement, differential fuzzer, sanitizers, binary-size tracking and frozen JSON schema ([row](#decided-2026-11-07-early-evidence)).
 - The documentation and tooling cleanup is approved, not performed by that record ([row](#decided-2026-11-07-cleanup)).
 
@@ -843,8 +844,7 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
   interface is fixed in A2i (R-0592); `Secret<T>` lands as its own slice with its proofs (R-0596).
   Its sources include the pure `classify` of a value passed in; grant-backed sources come with the
   console, files and network ([vertical slices](#decided-project-vertical-slices-2026-11-06)).
-  Revised 2026-11-07 by the [randomness placement](#decided-2026-11-07-stack-randomness), a
-  coordinator proposal approved in spirit: the entropy capability arrives at slice 6, yields
+  Revised 2026-11-07 by the [randomness decision](#decided-2026-11-07-stack-randomness): the entropy capability arrives at slice 6, yields
   `Secret<T>` at slice 7 and gains fill-bytes at slice 15, with its source named as a trusted premise
   in facts.
 - <a id="decided-project-pipeline-2026-11-06"></a>**The new compiler pipeline** (owner, 2026-11-06,
@@ -901,7 +901,7 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
   slice 2, authority comes at slice 6 and secrets at slice 7, file-copy and 0.1 at slice 18,
   RocksDB after slice 25 and ethlambda after slice 27. Slice 7's secret sources include the pure
   `classify` of a value passed in, with no wrapper duplicating it, and the entropy capability's
-  `Secret<T>` output under the [coordinator-proposed randomness placement](#decided-2026-11-07-stack-randomness);
+  `Secret<T>` output under the [randomness decision](#decided-2026-11-07-stack-randomness);
   grant-backed sources come with the console, files and network. Before RocksDB and ethlambda are accepted, their programs are
   audited, and a real need for concurrency or foreign function values goes to the owner (R-0604).
   Revised 2026-11-07 by the [final-slice decision](#decided-2026-11-07-final-slices): the approved
@@ -950,14 +950,12 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
   backend and target, and is report-only until the noise is understood.
 - <a id="decided-2026-11-07-stack-randomness"></a>**Early stack bounds and randomness** (owner,
   2026-11-07: "1 and 2 should be done early too", referring to stack-overflow bounds and randomness
-  in the coordinator's "what are we forgetting" list). The owner asked for both early without naming
-  slices. The following slice placements are the coordinator's proposals, approved in spirit by
-  "should be done early", not exact slices chosen by the owner:
-  - *Stack bounds.* From slice 0, `concrete facts` reports a proven or measured maximum stack use
-    per function and per program, taken from the final artifact for both backends. Under the policy,
-    a program whose bound is unknown or exceeds its `Concrete.toml` stack budget is refused, so stack
-    overflow is never a hidden trap. Slice 5 extends this with measure-based bounds for recursion;
-    unbounded recursion needs termination/step evidence or is refused.
+  in the coordinator's "what are we forgetting" list; then "ok let's add it", approving the
+  coordinator's exact slices):
+  - *Stack bounds.* From slice 0, `concrete facts` reports each program's maximum stack use,
+    measured from the final binary on both backends. An unknown bound, or one over the
+    `Concrete.toml` stack budget, is refused, so stack overflow is never a hidden trap. Slice 5
+    (recursion) extends it with proven bounds.
   - *Randomness.* An explicit entropy capability, granted to `main` like the other grants, arrives
     with capabilities at slice 6. Its output is `Secret<T>` at slice 7, and fill-bytes arrives with
     arrays at slice 15. Its source (for example `getrandom`) is a named trusted premise in facts.
@@ -973,6 +971,23 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
     tracking, report-only.
   - *JSON schema.* A frozen, versioned JSON schema for diagnostics and facts output, with golden
     tests, starts with the first front-end output.
+- <a id="decided-2026-11-07-tracking"></a>**Where these decisions and their work are tracked** (owner,
+  2026-11-07: "ok let's add all this right? where is the best place? should we track also in docs and roadmap or changelog?", after the coordinator's table of a home and a gate for each item). One home per
+  fact, and no new documents:
+  - `docs/decisions.md` holds the decision and the owner's quote;
+  - `ROADMAP.md` holds the work and its slice and, for each item, its home (spec or tooling) and its
+    gate;
+  - `changelog.d/` holds what landed, written at landing time;
+  - the Lean spec holds the language meaning: the stack-bound claim and the budget refusal, the
+    entropy capability and its premise, the trusted-premise list, and the diagnostics and facts
+    types as the source of the JSON schema;
+  - `Concrete/README.md` and `required-checks.txt` hold the gate list, and the check scripts and CI
+    enforce it.
+  The gates are: reproducibility (two directories, two machines, hashes compared); stack (the
+  final-artifact bound against the claim); a trusted-base golden; the fuzzer (short in CI, long
+  nightly on concrete-ci-2); ASan and UBSan; speed and size, report-only; and the JSON schema
+  generated from the Lean types, with goldens. All of them join `required-checks.txt` when the
+  compiler lands on main.
 - <a id="decided-2026-11-07-cleanup"></a>**The documentation and tooling cleanup** (owner,
   2026-11-07: "ok go ahead all yes then as you said right", approving the Codex/Kimi cleanup list).
   This answers whether that cleanup may proceed; it does not perform it. The approved scope is:
