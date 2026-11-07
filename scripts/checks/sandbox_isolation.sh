@@ -18,13 +18,12 @@
 #               unfixed review_tool.sh did) must report the change, so the live leg cannot pass by
 #               not looking.
 #
-# Every run is bounded: 120 s per attempt (bounded_run), and at most 512 tasks and 8G of memory in
-# all where a systemd user scope exists (fede-256gb, concrete-ci-2). Elsewhere (a GitHub-hosted
-# runner, macOS) the bound is `ulimit -u` (512 more processes) and `ulimit -v` (2G per process),
-# which caps the process count, the failure of the 2026-11-06 run, but not memory in aggregate; with
-# neither the probe does not run and
-# the check fails as incomplete). The
-# 2026-11-06 reproducer had no such bound, recursed through a test hook and exhausted the machine.
+# Every run is bounded in time (120 s per attempt, bounded_run) and in aggregate: a systemd user
+# scope with TasksMax=512 and MemoryMax=8G (fede-256gb, concrete-ci-2 logins), or, where there is
+# none (a CI runner service), the cgroup the check already runs in when it has a finite memory.max
+# (concrete-ci-2's runners: 28G per runner) plus `ulimit -u` of 512 more processes. With neither, the
+# live probes do not run and the check fails as INCOMPLETE: never an unbounded run. The 2026-11-06
+# reproducer had no such bound, recursed through a test hook and exhausted the machine.
 set -uo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh" || exit 2
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -70,23 +69,36 @@ printf '[user]\n\tname = isolation gate\n\temail = isolation@example.invalid\n[i
 BOUNDED_PARENT="$TMP"
 source "$ROOT_DIR/scripts/checks/lib/bounded.sh" || exit 2
 # bounded <cmd...>: at most 120 s per attempt (the portable bounded_run: its own watchdog kills the
-# whole process group; one re-run). Tasks and memory: a systemd user scope (TasksMax=512, MemoryMax=8G
-# in aggregate) where one is available, else BOTH `ulimit -u` (this user's current process count +
-# 512) and `ulimit -v` (2G per process: ulimit has no aggregate memory limit, so this one bounds a
-# single runaway process and the count bounds a fork storm); when they cannot be set the command does not run at all and
-# the result is 125, never an unbounded run.
-SCOPE=0
+# whole process group; one re-run), inside an aggregate task and memory bound (above). Without one
+# the command does not run and the result is 125.
+cgroup_memory_max() { # the finite memory.max of this process's cgroup v2 or an ancestor, else fails
+  local cg f
+  cg="$(sed -n 's/^0:://p' /proc/self/cgroup 2>/dev/null)"; [ -n "$cg" ] || return 1
+  while :; do
+    f="/sys/fs/cgroup$cg/memory.max"
+    if [ -r "$f" ] && [ "$(cat "$f")" != max ]; then cat "$f"; return 0; fi
+    [ "$cg" = / ] && return 1
+    cg="$(dirname "$cg")"
+  done
+}
+BOUND=none
 if command -v systemd-run >/dev/null 2>&1 \
-   && systemd-run --user --scope -q -p TasksMax=512 -p MemoryMax=8G true >/dev/null 2>&1; then SCOPE=1; fi
+   && systemd-run --user --scope -q -p TasksMax=512 -p MemoryMax=8G true >/dev/null 2>&1; then BOUND=scope
+elif CGMEM="$(cgroup_memory_max)"; then BOUND=cgroup; fi
+case "$BOUND" in
+  scope)  echo "bound: a systemd user scope, TasksMax=512, MemoryMax=8G" ;;
+  cgroup) echo "bound: this cgroup's memory.max ($CGMEM bytes, aggregate) and ulimit -u (512 more processes)" ;;
+  none)   echo "bound: none available (no systemd user scope, no finite cgroup memory.max): the live probes will not run" ;;
+esac
 bounded() {
-  if [ "$SCOPE" = 1 ]; then
-    bounded_run -i /dev/null -r 120 120 -- systemd-run --user --scope -q -p TasksMax=512 -p MemoryMax=8G "$@"
-  else
-    local n; n="$(ps -o pid= -U "$(id -u)" 2>/dev/null | wc -l | tr -d ' ')"
-    ( ulimit -u $(( ${n:-0} + 512 )) 2>/dev/null && ulimit -v $(( 2 * 1024 * 1024 )) 2>/dev/null || {
-        echo "sandbox_isolation: cannot bound tasks and memory here (no systemd user scope; ulimit -u/-v refused); not running $*"; exit 125; }
-      bounded_run -i /dev/null -r 120 120 -- "$@" )
-  fi
+  case "$BOUND" in
+    scope) bounded_run -i /dev/null -r 120 120 -- systemd-run --user --scope -q -p TasksMax=512 -p MemoryMax=8G "$@" ;;
+    cgroup)
+      local n; n="$(ps -o pid= -U "$(id -u)" 2>/dev/null | wc -l | tr -d ' ')"
+      ( ulimit -u $(( ${n:-0} + 512 )) 2>/dev/null || { echo "sandbox_isolation: ulimit -u refused; not running $*"; exit 125; }
+        bounded_run -i /dev/null -r 120 120 -- "$@" ) ;;
+    *) echo "sandbox_isolation: no aggregate task and memory bound here; not running $*"; return 125 ;;
+  esac
 }
 
 # A caller: bare upstream, a full clone of this checkout's HEAD, a linked worktree of it, with this
