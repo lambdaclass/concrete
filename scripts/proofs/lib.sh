@@ -35,7 +35,11 @@ spec_modules() {
 }
 prune_orphans() {
   local build="${1:-.lake/build}" d f rel m
-  spec_modules > "$TMP/prune-modules.txt"
+  # Deletion keys on this list, so a partial list must stop the prune before anything is removed:
+  # the enumeration must succeed, include the root module, and name only modules whose source exists.
+  spec_modules > "$TMP/prune-modules.txt" || { echo "prune_orphans: listing the source modules failed" >&2; return 1; }
+  grep -qxF ConcreteSpec "$TMP/prune-modules.txt" || { echo "prune_orphans: the source list lacks ConcreteSpec" >&2; return 1; }
+  while read -r m; do [ -f "${m//.//}.lean" ] || { echo "prune_orphans: listed module $m has no source" >&2; return 1; }; done < "$TMP/prune-modules.txt"
   for d in "$build/lib/lean" "$build/ir"; do
     [ -d "$d" ] || continue
     find "$d" -type f \( -path "$d/ConcreteSpec/*" -o -name 'ConcreteSpec.*' \) | while read -r f; do
@@ -44,7 +48,7 @@ prune_orphans() {
     done
   done
 }
-prune_orphans >&2
+prune_orphans >&2 || { echo "error: $CHECK_NAME: pruning orphaned build files failed" >&2; exit 2; }
 "$LAKE" build ConcreteSpec > "$TMP/lake-build.log" 2>&1 \
   || { tail -20 "$TMP/lake-build.log" >&2; echo "error: $CHECK_NAME: lake build ConcreteSpec failed" >&2; exit 2; }
 

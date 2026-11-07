@@ -150,6 +150,14 @@ if (cd "$C" && "$LAKE" build ReplayGood ReplayBad > build.out 2>&1); then
   [ -z "$left" ] && [ -z "$kept" ] && [ "$(grep -c '^pruned orphan' <<< "$pout")" = 5 ] \
     && ok "control: prune_orphans removes the 5 planted orphan files and keeps every source module's .olean" \
     || no "control: prune_orphans left '$left', lost '$kept', said: $(echo $pout)"
+  PF="$TMP/prune-failclosed"; mkdir -p "$PF/lib"; cp -a "$PKG_LIB" "$PF/lib/lean"
+  before="$(find "$PF" -type f | wc -l)"
+  for bad in 'echo ConcreteSpec.Spec.Basics' 'printf "ConcreteSpec\nConcreteSpec.Spec.NoSource\n"' 'false'; do
+    ( spec_modules() { eval "$bad"; }; prune_orphans "$PF" ) > /dev/null 2>&1; rp=$?
+    [ "$rp" != 0 ] && [ "$(find "$PF" -type f | wc -l)" = "$before" ] \
+      && ok "control: prune_orphans refuses a bad source list ($bad) and deletes nothing" \
+      || no "control: prune_orphans with a bad source list ($bad): rc=$rp, files $before -> $(find "$PF" -type f | wc -l)"
+  done
   { cat "$TMP/modules.txt"; echo ConcreteSpec.Spec.NoSuchModule; } | sort > "$TMP/modules-plus.txt"
   out="$(stage_lib "$PKG_LIB" "$TMP/missing-stage" < "$TMP/modules-plus.txt")"
   has_match -F "no .olean for source module ConcreteSpec.Spec.NoSuchModule" <<< "$out" \
