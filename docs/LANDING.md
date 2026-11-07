@@ -13,7 +13,7 @@ scripts/land/train.sh build  <name> <ref>...   # train/<name> = origin/main + ea
 scripts/land/train.sh check  <name>            # fast surface + impact-selected gates on the gate host (+ remote full set)
 scripts/land/train.sh ci     <name>            # push ci/<name>, dispatch CI, record the run id
 scripts/land/train.sh watch  <name>            # poll to a verdict; failing jobs' log tails
-scripts/land/train.sh land   <name>            # verify, then push the exact SHA to origin and lambdaclass
+scripts/land/train.sh land   <name>            # verify, then push the exact SHA to origin main
 scripts/land/report.sh                         # median time to land, per-stage medians
 ```
 
@@ -114,7 +114,7 @@ verdict; any failing leg fails the check (see [Pipelining](#pipelining)).
 
   Without the first step, a new branch has no remote base and the hook would select gates by
   diffing the whole tree.
-- Dispatches `gh workflow run CI -R unbalancedparentheses/concrete2 --ref ci/<name> -f
+- Dispatches `gh workflow run CI -R lambdaclass/concrete --ref ci/<name> -f
   base=<base>`. The base-sensitive checks compare with the train's base, and the run's title records
   it (`ci/<name> at base <sha>`), which main's Landing record requires (see `land`). It finds the
   run whose head SHA is the train's, records the run id and prints the run URL.
@@ -141,7 +141,6 @@ before anything is pushed:
 - the CI run's `headSha` is the local HEAD, and the run is completed;
 - every landing-tier job concluded `success`, and a run with no landing-tier jobs is refused;
 - `origin/main`, read with `ls-remote`, is still the train's base;
-- the mirror's main is an ancestor of the train, so no half-landing happens;
 - the train has review provenance (as in `check`'s review leg), read again from origin's notes
   rather than trusted from `check`: a check run with `--no-review` lands only on a clean note at the
   train head or, when the head has none, clean notes on every member;
@@ -159,16 +158,10 @@ The push sequence:
    is **never force-pushed**, not even with a lease. A plain push is a fast-forward or a refusal,
    so a publisher that moved main without taking the lock makes the push fail. Nothing it pushed
    is undone.
-2. Pushes the same SHA to `lambdaclass main`. The mirror's main was checked to be an ancestor of
-   the train, so the push is a fast-forward. Both remotes are required (the owner's decision of
-   2026-10-22, which supersedes the 2026-07-31 "stop pushing to lambdaclass" note in
-   `push-both.sh`): a missing `lambdaclass` remote is refused before anything is pushed. Following
-   `push-both.sh` policy, this push runs with the hook
-   skipped, because the identical commit was just accepted by the primary's hook. If it fails after
-   the primary landed, the command says so and exits non-zero.
-3. Checks both remotes with `ls-remote` once more; the landing is complete only when both are at
-   the head.
-4. Cancels nothing. The push to main starts CI on main at the landed SHA, and that run's first job,
+2. Checks `origin/main` with `ls-remote` once more; the landing is complete only when it is at the
+   head. There is no mirror: since 2026-11-06 lambdaclass/concrete is the one repository
+   ([decision](decisions.md#decided-project-repository)), and `origin` is it in every clone.
+3. Cancels nothing. The push to main starts CI on main at the landed SHA, and that run's first job,
    **Landing record**, runs `train.sh record <head> --base <before>` (R-0570). It finds the newest
    completed `workflow_dispatch` run of CI at exactly that SHA whose title says it ran at base
    `<before>`: `ci` dispatches with `-f base=<train base>`, the workflow's `run-name` writes
@@ -180,22 +173,23 @@ The push sequence:
    its summary links the qualifying run. When it does not (a hand push, a run at another SHA, a
    skipped, cancelled or failed job, an unreadable API), nothing is skipped and main's run runs
    every job itself. So main shows green only on a result at its exact SHA, and a landing still
-   costs one full run. The mirror's CI reads the record from this repository, which both remotes
-   share commit for commit. Confirm with `gh run list --workflow CI --branch main`.
+   costs one full run. Confirm with `gh run list --workflow CI --branch main`.
 
 #### Verified pushes
 
 A push's exit status is not its result. GitHub drops the connection during a long pre-push hook, so
-a push can fail after the remote moved, or before. The train's push to `ci/<name>` and both pushes
+a push can fail after the remote moved, or before. The train's push to `ci/<name>` and the push
 of `land` are followed by an `ls-remote` of the ref: at the head, it is done, whatever git reported; still at its old value, it is
 retried (`LAND_PUSH_ATTEMPTS`, default 3, `LAND_PUSH_RETRY_SLEEP` seconds apart); moved to anything
 else, it stops at once. A retry to main is still a plain push, a fast-forward or a refusal, and the
 hook runs the full root set again. The reset of `ci/<name>` to the base skips the hook and is
 not retried; a failure there stops `ci` before anything is dispatched.
 
-A remote named `fork` is refused as primary or mirror. `--no-mirror` (or `LAND_MIRROR=`) lands on
-origin only. That is a deliberate exception, and the landing is not complete until the same SHA
-reaches `lambdaclass`. `push-both.sh` follows the same rule: it mirrors to `lambdaclass` by default.
+A remote named `fork` is refused. `build`, `ci` and `land` also refuse a remote whose URL is a
+GitHub repository other than `LAND_REPO` (lambdaclass/concrete), above all the archived
+unbalancedparentheses/concrete2, before anything is pushed: a clone that still points there is
+repointed with `git remote set-url origin https://github.com/lambdaclass/concrete.git`.
+`push-both.sh`, the by-hand publisher, applies the same two refusals and pushes only that remote.
 
 ### bisect
 
@@ -224,7 +218,7 @@ With a gate host, `check`'s impact leg is `scripts/land/gates_remote.sh`:
 2. The transport (`scripts/land/gates_transport_ssh.sh`) copies one directory to the host: the
    bundle, this checkout's `run-at-ref.sh`, and a script that quotes the command for bash. The
    host's login shell sees only `bash land-remote-<id>/run.sh`. That script runs `git fetch origin`
-   in the host's gate clone (`~/concrete2`), runs `run-at-ref.sh` on the bundle, and removes the
+   in the host's gate clone (`~/concrete2`, a path name only: its origin is lambdaclass/concrete), runs `run-at-ref.sh` on the bundle, and removes the
    directory. The host therefore needs no GitHub credentials and no copy of the landing scripts.
 3. In a fresh clone of exactly the head, the host runs `impact_gates.sh`: the same hook, with the
    same input line the `ci` push will present. The command first unsets `CONCRETE_SKIP_GATES`
@@ -368,7 +362,7 @@ it every 10 minutes after the previous tick ends (`scripts/land/systemd/`).
    Rule changes land first and small, so they break other branches' fixtures before those
    branches land rather than after.
 4. **Train.** The bot pins each member's SHA (`refs/bot/<branch>`) and runs
-   `train.sh build` → `check` → `ci` → `watch` → `land`. Landing pushes to origin and lambdaclass
+   `train.sh build` → `check` → `ci` → `watch` → `land`. Landing pushes to origin (lambdaclass/concrete)
    and never to a remote named `fork`.
 5. **Red train.** It bisects and ejects the culprit:
    - a build conflict ejects the member that conflicted;
@@ -502,9 +496,8 @@ publishing decision are in docs/project/STATUS_PAGE.md.
 ## Configuration
 | variable | default | meaning |
 |---|---|---|
-| `LAND_REPO` | `unbalancedparentheses/concrete2` | repository for `gh` |
+| `LAND_REPO` | `lambdaclass/concrete` | repository for `gh`; a GitHub `origin` must be it |
 | `LAND_REMOTE` | `origin` | primary remote |
-| `LAND_MIRROR` | `lambdaclass` | required mirror, pushed after the primary; a missing remote is refused; empty (or `--no-mirror`) skips it deliberately |
 | `LAND_CAMPAIGN_JOBS` | `^(Gate mutation\|Weekly clean-checkout proof replay\|Nightly differential fuzz\|Checker pin freshness \(campaign finding\))` | job names in the campaign tier; the default must match exactly the workflow's campaign jobs (`check_landing_script.sh`) |
 | `LAND_STATE_DIR`, `LAND_LOG_DIR` | under the git common directory | state and log location |
 | `LAND_NO_NIX` | unset | `1` never re-enters `nix develop` |
@@ -548,7 +541,7 @@ script against a throwaway repository with bare-repo remotes and a fake `gh`. It
 - the report.
 
 `scripts/checks/landing_bot.sh` runs in the same job. It drives the real bot, and `train.sh`
-under it, against a throwaway repository with bare-repo origin, lambdaclass and fork remotes. Its
+under it, against a throwaway repository with bare-repo origin and fork remotes. Its
 fake `gh` reports CI red exactly when the candidate contains `CIRED`, and its fake hook fails
 exactly when the checkout contains `BAD`. It covers:
 
@@ -561,7 +554,7 @@ exactly when the checkout contains `BAD`. It covers:
   next tick run;
 - the remote leg on a per-run `wip/land-*` ref that is gone afterwards (with a control that the
   probe sees a planted ref), and an existing ref at the same SHA that is refused, not adopted;
-- a four-member train landing in order on both remotes, with fork untouched;
+- a four-member train landing in order on main, with fork untouched;
 - red-check and red-CI bisection that ejects exactly the culprit and lands the rest;
 - the kill switch stopping a bisection before it starts, during a halving probe, during the red
   culprit probe, and between a `--ci` probe's check and its dispatch; a culprit-less bisection blocking the bot until `reset`;

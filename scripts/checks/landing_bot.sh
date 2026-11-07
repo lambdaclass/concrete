@@ -2,7 +2,7 @@
 # THE LANDING BOT LANDS ONLY READY HEADS, IN RULE-FIRST ORDER, AND STOPS WHEN TOLD (R-0539).
 #
 # scripts/land/bot.sh takes the orchestrator out of the landing loop: it collects ready branches,
-# builds one train, checks it, runs CI, lands it on both remotes, bisects and ejects a red member,
+# builds one train, checks it, runs CI, lands it on main, bisects and ejects a red member,
 # and rebases ready branches onto a moved main. Each leg below drives the real bot (and the real
 # train.sh under it) against a THROWAWAY repository with bare-repo remotes, a fake `gh` whose CI is
 # red exactly when the candidate contains a file named CIRED, and a fake pre-push hook that fails
@@ -15,7 +15,7 @@
 #   dry-run    prints the train and changes nothing
 #   kill switch, lock   a pause file or a live lock holder stops the tick; a dead holder's lock is
 #              taken over
-#   train      the tick lands every ready branch in order on origin AND lambdaclass; fork untouched
+#   train      the tick lands every ready branch in order on origin; fork untouched
 #   bisect     a red check or a red CI ejects exactly the culprit, publishes `gates: fail` at its
 #              SHA, notifies, and lands the rest
 #   resume     a restart while a train is in CI watches it instead of dispatching again
@@ -130,20 +130,20 @@ echo "[concrete-remote] ref=$1 sha=$sha"
 EOF
 chmod +x "$TMP/fake-gh" "$TMP/hook" "$TMP/notify.sh" "$TMP/train-nobisect.sh" "$TMP/fake-runner"
 
-for r in origin lambdaclass fork; do git init -q --bare "$TMP/$r.git"; done
+for r in origin fork; do git init -q --bare "$TMP/$r.git"; done
 A="$TMP/agent"; W="$TMP/bot"
 git init -q "$A"; cd "$A" || exit 2
-for r in origin lambdaclass fork; do git remote add "$r" "$TMP/$r.git"; done
+for r in origin fork; do git remote add "$r" "$TMP/$r.git"; done
 mkdir -p Concrete/Check Concrete/Elab src
 printf 'def e := "E0001 existing"\n' > Concrete/Check/Check.lean
 printf 'def x := 1\n' > Concrete/Elab/Elab.lean
 printf 'x\n' > conflict.txt
 printf 'Build\n' > required-checks.txt  # train.sh refuses a landing with no required-checks.txt
 git add -A && git commit -qm base
-for r in origin lambdaclass fork; do git push -q "$r" main; done
+for r in origin fork; do git push -q "$r" main; done
 BASE="$(git rev-parse HEAD)"
 git clone -q "$TMP/origin.git" "$W"
-( cd "$W" && git remote add lambdaclass "$TMP/lambdaclass.git" && git remote add fork "$TMP/fork.git" )
+( cd "$W" && git remote add fork "$TMP/fork.git" )
 
 # mk <branch> <commit-message> <file> <content> [from]: one commit on <from> (default main), pushed.
 mk(){ ( cd "$A" && git fetch -q origin && git checkout -q -B "$1" "${5:-origin/main}" && mkdir -p "$(dirname "$3")" \
@@ -217,12 +217,11 @@ git --git-dir="$TMP/origin.git" update-ref refs/heads/wip/land-control "$BASE"
 [ -n "$(land_refs)" ] && ok "CONTROL: the leaked-ref probe sees a planted wip/land-* ref" || no "the leaked-ref probe is blind"
 git --git-dir="$TMP/origin.git" update-ref -d refs/heads/wip/land-control
 
-echo "=== train: the tick lands every ready branch, in order, on both remotes ==="
+echo "=== train: the tick lands every ready branch, in order, on main ==="
 out="$(bot tick)"; rc=$?
 [ "$rc" = 0 ] && ok "once the holder lets go, the next tick takes the lock and runs" || { no "tick after release: exit $rc"; echo "$out" | sed 's/^/      /'; }
 all=1; for b in wip/explicit wip/late wip/rule wip/a wip/checkonly; do in_main "$(sha_of "$b")" || all=0; done
 [ "$all" = 1 ] && ok "all five ready branches are in origin/main" || { no "a ready branch did not land"; echo "$out" | sed 's/^/      /'; }
-[ "$(main_sha origin)" = "$(main_sha lambdaclass)" ] && ok "lambdaclass/main equals origin/main" || no "mirror differs"
 [ "$(main_sha fork)" = "$BASE" ] && ok "fork untouched" || no "fork was pushed"
 for b in wip/nogates wip/findings wip/gatefail wip/stale; do in_main "$(sha_of "$b")" && no "$b landed"; done
 merges="$(git --git-dir="$TMP/origin.git" log --first-parent --reverse --format=%s "$BASE..refs/heads/main" | sed -n 's/.*merge refs\/bot\/\([^ ]*\) .*/\1/p' | tr '\n' ' ')"

@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # Landing trains (ROADMAP R-0539): integrate every ready branch into ONE candidate, validate it once,
-# and land it on both remotes. Stage timestamps go to the landing log (R-0547). docs/LANDING.md
+# and land it on main. Stage timestamps go to the landing log (R-0547). docs/LANDING.md
 # is the manual; this header is the contract.
 #
 #   train.sh [--dry-run] build  <name> [--force] [--no-fetch] <ref>...
 #   train.sh [--dry-run] check  <name> [--no-remote] [--no-review] [--local-gates]
 #   train.sh [--dry-run] ci     <name> [--skip-check]
 #   train.sh             watch  <name> [--interval S] [--timeout S]
-#   train.sh [--dry-run] land   <name> [--no-mirror]
+#   train.sh [--dry-run] land   <name>
 #   train.sh             bisect <name> (--test '<cmd>' | --ci)
 #   train.sh             status <name>
 #   train.sh             record <head> --base <sha> [--exclude-run <id>]   (main's CI, R-0570)
@@ -36,14 +36,16 @@
 #     refused only by that gate exits 5.
 #   * pushes name the exact SHA, never `HEAD` (push-both.sh: HEAD can move during a wait), and a
 #     remote named `fork` is refused outright.
+#   * (2026-11-06, the owner's decision: one repository, lambdaclass/concrete) there is no mirror.
+#     $REMOTE must be the repository gh reads ($REPO) whenever it is a GitHub URL: a clone still
+#     pointing at the archived unbalancedparentheses/concrete2 is refused before anything is pushed.
 #   * (2026-10-25) a push's exit status is not its result: GitHub drops the connection during a long
 #     hook, so a push can fail after the remote moved, or before. The train's push to ci/<name> and
-#     both pushes of `land` are followed by an `ls-remote` of the ref, and one that did not move it
+#     the push of `land` are followed by an `ls-remote` of the ref, and one that did not move it
 #     is retried (LAND_PUSH_ATTEMPTS). The ci/<name> reset to the base skips the hook; not retried.
 #
 # ENVIRONMENT (test seams and overrides): LAND_REPO (owner/name for gh, default
-# unbalancedparentheses/concrete2), LAND_GH (gh binary), LAND_REMOTE (primary, default origin),
-# LAND_MIRROR (default lambdaclass, required: a missing remote is refused; empty or --no-mirror skips),
+# lambdaclass/concrete), LAND_GH (gh binary), LAND_REMOTE (the repository's remote, default origin),
 # LAND_STATE_DIR (default <git common dir>/concrete-landing), LAND_LOG_DIR (default
 # $LAND_STATE_DIR/log), LAND_NO_NIX=1 (never re-enter `nix develop`), LAND_CAMPAIGN_JOBS (regex of
 # campaign-tier job names), LAND_HOOK (pre-push hook path, default .githooks/pre-push),
@@ -95,10 +97,9 @@ where_ok() {
 }
 STATE_ROOT="${LAND_STATE_DIR:-$COMMON/concrete-landing}"
 LOG_DIR="${LAND_LOG_DIR:-$STATE_ROOT/log}"
-REPO="${LAND_REPO:-unbalancedparentheses/concrete2}"
+REPO="${LAND_REPO:-lambdaclass/concrete}"
 GH="${LAND_GH:-gh}"
 REMOTE="${LAND_REMOTE:-origin}"
-MIRROR="${LAND_MIRROR-lambdaclass}"
 HOOK="${LAND_HOOK:-.githooks/pre-push}"
 # Must name exactly the workflow's campaign jobs (an `if:` on `inputs.campaign`, and the jobs that `needs:`
 # one): check_landing_script.sh derives that set from lean_action_ci.yml and fails on any difference.
@@ -127,6 +128,21 @@ assert_clean() {
 refuse_fork() {
   case "$1" in
     fork) die "refusing to push to the remote named 'fork' (it is a divergent repository)" ;;
+  esac
+}
+
+# The remote is the repository gh reads (one repository since 2026-11-06). A GitHub URL that names
+# another repository, above all the archived unbalancedparentheses/concrete2, is refused; a local
+# path (the test fixtures' bare repositories) is not a GitHub URL and passes.
+require_remote_repo() {
+  local url path
+  url="$(git remote get-url "$REMOTE" 2>/dev/null)" || die "the remote '$REMOTE' is not configured"
+  case "$url" in
+    *github.com[:/]*)
+      path="${url#*github.com[:/]}"; path="${path%/}"; path="${path%.git}"
+      if [ "$(printf '%s' "$path" | tr 'A-Z' 'a-z')" != "$(printf '%s' "$REPO" | tr 'A-Z' 'a-z')" ]; then
+        die "$REMOTE is $url, not github.com/$REPO. This clone points at another repository; repoint it: git remote set-url $REMOTE https://github.com/$REPO.git"
+      fi ;;
   esac
 }
 
@@ -282,6 +298,7 @@ cmd_build() {
     esac
     shift
   done
+  require_remote_repo
   valid_name "$name"
   [ "${#refs[@]}" -ge 1 ] || die "build: name at least one ref to merge"
   stage_start
@@ -588,6 +605,7 @@ cmd_ci() {
   valid_name "$name"
   require_train_checkout "$name"
   refuse_fork "$REMOTE"
+  require_remote_repo
   stage_start
   local base head; base="$(state_get "$name" base)"; head="$(git rev-parse HEAD)"
   if [ "$(state_get_soft "$name" checked)" != "$head" ]; then
@@ -773,8 +791,7 @@ cmd_watch() {
 # When it does not hold, nothing is skipped: main's run runs every job itself. So main is green
 # only on a result obtained AT ITS EXACT SHA, by this workflow, under land's own rule:
 #   * the NEWEST completed workflow_dispatch run of .github/workflows/lean_action_ci.yml in $REPO
-#     (the train's repository, read by the mirror's CI too: both are public and a SHA names the same
-#     tree in both) whose head SHA is exactly <head> and whose title says it ran at base <base>
+#     (the train's repository, the one CI runs in) whose head SHA is exactly <head> and whose title says it ran at base <base>
 #     (`<ref> at base <sha>`, written by the workflow's run-name from the `base` input `train.sh ci`
 #     passes), other than the asking run. The base binds the base-sensitive checks (LL1_BASE,
 #     TOTALITY_BASE, CONFORMANCE_BASE, SPEC_BASE) to the very base main had before the push, as a
@@ -910,10 +927,9 @@ require_rehearsal() { # name base head
 }
 
 cmd_land() {
-  local name="" mirror_on=1
+  local name=""
   while [ $# -gt 0 ]; do
     case "$1" in
-      --no-mirror) mirror_on=0 ;;
       -*) die "land: unknown option $1" ;;
       *) name="$1" ;;
     esac; shift
@@ -921,6 +937,7 @@ cmd_land() {
   valid_name "$name"
   require_train_checkout "$name"
   refuse_fork "$REMOTE"
+  require_remote_repo
   stage_start
   local base head id; base="$(state_get "$name" base)"; head="$(git rev-parse HEAD)"
   id="$(state_get "$name" run_id)"
@@ -969,20 +986,6 @@ cmd_land() {
   fi
   git merge-base --is-ancestor "$base" "$head" || die "land: the train does not descend from its base"
 
-  local mirror="" mmain=""
-  # Both remotes are required (owner's decision, 2026-10-22): a missing mirror remote is a refusal
-  # before anything is pushed, not a silent origin-only landing. --no-mirror is the explicit opt-out.
-  if [ "$mirror_on" = 1 ] && [ -n "$MIRROR" ]; then
-    refuse_fork "$MIRROR"
-    git remote get-url "$MIRROR" >/dev/null 2>&1 \
-      || die "land: mirror remote '$MIRROR' is not configured; both remotes are required (add it, or pass --no-mirror deliberately)"
-    mirror="$MIRROR"
-    mmain="$(git ls-remote "$mirror" refs/heads/main | cut -f1)"
-    if [ -n "$mmain" ] && ! git merge-base --is-ancestor "$mmain" "$head" 2>/dev/null; then
-      die "land: $mirror/main (${mmain:0:10}) is not an ancestor of the train; reconcile the mirror first (nothing pushed)"
-    fi
-  fi
-
   # Review provenance, read now and not trusted from `check`: a check run with --no-review, or a
   # reviewer that wrote no clean note, leaves none, and nothing lands without it.
   local prov
@@ -1004,22 +1007,12 @@ cmd_land() {
   if [ "$DRY" = 0 ]; then
     [ "$(remote_main)" = "$head" ] || die "land: $REMOTE/main is not at ${head:0:10} after the push"
   fi
-  if [ -n "$mirror" ]; then
-    # The mirror receives exactly the commit the primary's hook just accepted (push-both.sh policy).
-    ( push_verified "$mirror" "$head" main CONCRETE_SKIP_GATES=1 ) || {
-      log_row "$name" land failed "mirror $mirror not at head"
-      die "land: $REMOTE landed, but $mirror/main is not at ${head:0:10}"
-    }
-  fi
   [ "$DRY" = 1 ] && return 0
-  # Both remotes, read back once more: the landing is complete only when each is at the head.
+  # Read back once more: the landing is complete only when main is at the head.
   [ "$(remote_main)" = "$head" ] || die "land: $REMOTE/main is not at ${head:0:10}"
-  if [ -n "$mirror" ] && [ "$(git ls-remote "$mirror" refs/heads/main | cut -f1)" != "$head" ]; then
-    die "land: $mirror/main is not at ${head:0:10}"
-  fi
   state_set "$name" landed_utc "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-  log_row "$name" land passed "$REMOTE${mirror:+ + $mirror}"
-  note "landed ${head:0:10} on $REMOTE/main${mirror:+ and $mirror/main}. Members (result: CI run $id at ${head:0:10}):"
+  log_row "$name" land passed "$REMOTE"
+  note "landed ${head:0:10} on $REMOTE/main. Members (result: CI run $id at ${head:0:10}):"
   state_get "$name" members | tr ',' '\n' | sed 's/^/    /'
   note "main's own CI run at ${head:0:10} records run $id in its Landing record job (train.sh record) and"
   note "skips the jobs that run already passed; confirm: gh run list --workflow CI --branch main -R $REPO"

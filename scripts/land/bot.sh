@@ -19,7 +19,7 @@
 # SAFETY: one instance (a kernel flock, via flock(1) or Python fcntl); state in a file, so a restart resumes a
 # train that is in CI instead of dispatching again; `touch ~/.concrete-bot-paused` stops it before
 # the next stage; --dry-run changes nothing; main is pushed only by train.sh land (fast-forward,
-# never forced) to the primary and the mirror; a remote named `fork` is refused; every git
+# never forced) to the one repository's main; a remote named `fork` is refused; every git
 # operation is followed by an in-progress check, and `git rebase` is never piped.
 #
 # ENV: BOT_STATE_DIR (default <git-common-dir>/concrete-landing/bot), BOT_PAUSE_FILE
@@ -57,7 +57,6 @@ NOTES="$SELF_DIR/notes.sh"
 IMPACT="$SELF_DIR/impact_gates.sh"
 NOTIFY="${BOT_NOTIFY:-$SELF_DIR/notify.sh}"
 REMOTE="${LAND_REMOTE:-origin}"
-MIRROR="${LAND_MIRROR-lambdaclass}"
 PREFIX="${BOT_BRANCH_PREFIX:-wip/}"; PREFIX="${PREFIX%/}/"
 PAUSE="${BOT_PAUSE_FILE:-$HOME/.concrete-bot-paused}"
 ACTIVE="${BOT_ACTIVE_SECONDS:-600}"
@@ -70,8 +69,7 @@ CHECK_ARGS=()
 now() { echo "${BOT_NOW:-$(date +%s)}"; }
 TRAIN_SEQ=0
 
-[ "$REMOTE" != fork ] || die "refusing the remote named 'fork' as primary"
-[ "$MIRROR" != fork ] || die "refusing the remote named 'fork' as mirror"
+[ "$REMOTE" != fork ] || die "refusing the remote named 'fork'"
 
 # --- state, events, notification -----------------------------------------------------------------
 
@@ -393,7 +391,7 @@ reconcile_run() { # train
   if [ -n "$id" ]; then echo "$id"; return 0; fi
   head="$(train_get "$name" head)"
   [ -n "$head" ] || return 0
-  out="$("${LAND_GH:-gh}" run list -R "${LAND_REPO:-unbalancedparentheses/concrete2}" --workflow CI --branch "ci/$name" \
+  out="$("${LAND_GH:-gh}" run list -R "${LAND_REPO:-lambdaclass/concrete}" --workflow CI --branch "ci/$name" \
       --event workflow_dispatch -L 20 --json databaseId,headSha 2>/dev/null)" || return 2
   printf '%s' "$out" | python3 -I -c '
 import json, sys
