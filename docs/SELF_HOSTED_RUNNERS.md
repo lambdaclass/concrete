@@ -100,6 +100,13 @@ runs you dispatch with `-f campaign=true`.
 GitHub's own guidance is that self-hosted runners should not be used with public repositories,
 because a pull request can run arbitrary code on them. We use them anyway, under these rules:
 
+**Who can reach the runners at all** (owner, 2026-11-06, "A";
+[decisions](decisions.md#decided-project-runner-exposure)). On lambdaclass/concrete every org member
+has push: 44 accounts. A push of any branch, or a `workflow_dispatch`, runs the workflow file of that
+branch, so any of them can put a job on these runners with no approval; the rules below do not
+change that. The owner accepted this exposure, as for stabileo's runners. On concrete2 one account
+had push.
+
 1. **No `pull_request` event runs on a self-hosted runner.** The `runs-on` expression enforces this
    for the workflow as written. But a pull request runs the workflow file **from the PR branch**, so
    a fork PR can rewrite `runs-on` to `[self-hosted]` and the guard is gone. The guard prevents
