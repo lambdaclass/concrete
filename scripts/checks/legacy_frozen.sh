@@ -51,6 +51,9 @@ for line in sys.stdin:
 }
 
 echo "=== negative controls ==="
+# The controls build a throwaway repository: none of git's repository variables may reach it (ISS-0015).
+source "$ROOT_DIR/scripts/checks/lib/git_sandbox.sh" || exit 2
+git_sandbox || exit 2
 TMP="$(mktemp -d)" || exit 2
 trap 'rm -rf "$TMP"' EXIT
 (

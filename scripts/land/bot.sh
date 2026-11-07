@@ -34,6 +34,10 @@ set -euo pipefail
 SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=scripts/land/lib.sh
 . "$SELF_DIR/lib.sh"
+# The bot's clone is found from the working directory, never from an inherited GIT_DIR (ISS-0015);
+# its scratch clones are sandboxes made from it.
+. "$SELF_DIR/../checks/lib/git_sandbox.sh"
+git_sandbox
 DRY=0
 if [ "${1:-}" = "--dry-run" ]; then DRY=1; shift; fi
 SUB="${1:-tick}"
@@ -207,7 +211,7 @@ last_activity() { # branch sha
   echo "$t"
 }
 
-rebase_in_scratch() { # branch sha main log — runs inside the scratch worktree
+rebase_in_scratch() { # branch sha main log — runs inside the scratch clone
   local b="$1" sha="$2" main="$3" log="$4" rc=0 files new sel
   git rebase "$main" > "$log" 2>&1 || rc=$?   # never piped: a piped rebase hides its stop
   local stopped=0 p
@@ -250,6 +254,35 @@ rebase_in_scratch() { # branch sha main log — runs inside the scratch worktree
   event rebased "$b ${sha:0:10} -> ${new:0:10} onto main ${main:0:10}"
 }
 
+scratch_clone() { # dir sha: a local clone of this clone, detached at sha, with its remotes, hook
+  # and commit identity (what a worktree shared with it through the common config)
+  local d="$1" r k v
+  git clone -q --local --no-checkout "$ROOT" "$d"
+  git -C "$d" fetch -q "$ROOT" "+refs/remotes/*:refs/remotes/*" "+refs/notes/*:refs/notes/*"
+  for r in $(git remote); do
+    # every url of the remote, in order (a remote with several pushes to all of them)
+    git -C "$d" config --unset-all "remote.$r.url" 2>/dev/null || true
+    git -C "$d" config "remote.$r.fetch" >/dev/null 2>&1 || git -C "$d" config "remote.$r.fetch" "+refs/heads/*:refs/remotes/$r/*"
+    while IFS= read -r v; do
+      if [ -n "$v" ]; then git -C "$d" config --add "remote.$r.url" "$v"; fi
+    done <<< "$(git remote get-url --all "$r" 2>/dev/null || true)"   # insteadOf expanded, as git uses it
+  done
+  git -C "$d" config core.hooksPath "$(git config core.hooksPath || echo .githooks)"
+  for k in user.name user.email user.useConfigOnly; do
+    if v="$(git config --local "$k")"; then git -C "$d" config "$k" "$v"; fi
+  done
+  for r in $(git remote); do
+    # the push URLs exactly as git resolves them here (pushurl, insteadOf and pushInsteadOf applied),
+    # written explicitly, so the scratch clone pushes where this clone would
+    git -C "$d" config --unset-all "remote.$r.pushurl" 2>/dev/null || true
+    while IFS= read -r v; do
+      if [ -n "$v" ]; then git -C "$d" config --add "remote.$r.pushurl" "$v"; fi
+    done <<< "$(git remote get-url --push --all "$r" 2>/dev/null || true)"
+  done
+  git -C "$d" checkout -q --detach "$sha"
+  if [ -d "$ROOT/.lake" ] && [ ! -e "$d/.lake" ]; then cp -a "$ROOT/.lake" "$d/.lake"; fi
+}
+
 rebase_pass() {
   local main b sha age key slug wt rrc
   main="$(git rev-parse "$REMOTE/main")"
@@ -266,13 +299,13 @@ rebase_pass() {
     if [ "$DRY" = 1 ]; then say "(dry-run) would rebase $b (${sha:0:10}) onto main ${main:0:10}"; continue; fi
     wt="$STATE_DIR/scratch/$slug"
     mkdir -p "$STATE_DIR/scratch"
-    git worktree remove --force "$wt" >/dev/null 2>&1 || rm -rf "$wt"
-    git worktree prune
-    git worktree add -q --detach "$wt" "$sha"
-    if [ -d "$ROOT/.lake" ] && [ ! -e "$wt/.lake" ]; then cp -a "$ROOT/.lake" "$wt/.lake"; fi
+    rm -rf "$wt"
+    # A scratch CLONE, not a worktree: the pre-push hook (run by the impact gates) refuses a linked
+    # worktree (ISS-0015). It gets this clone's remotes and hook, so its pushes and notes go where a
+    # worktree's would.
+    scratch_clone "$wt" "$sha"
     rrc=0; ( cd "$wt" && rebase_in_scratch "$b" "$sha" "$main" "$wt.log" ) || rrc=$?
-    git worktree remove --force "$wt" >/dev/null 2>&1 || rm -rf "$wt"
-    git worktree prune
+    rm -rf "$wt"
     land_assert_no_op "scratch cleanup"
     # A pass stopped by the kill switch (exit 2) is not a try: the pair is retried after a resume.
     [ "$rrc" = 2 ] || st_set "rebased_$slug" "$key"
