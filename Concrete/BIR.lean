@@ -430,8 +430,8 @@ theorem wrap_inRange (t : IntTy) (n : Int) : t.inRange (wrap t n) = true := by
 A decidable check of the program's shape. Values cross blocks only as block arguments: an operand
 must be defined EARLIER IN ITS OWN BLOCK (a block parameter or an earlier instruction's result), so
 every use is dominated by its definition by construction (what LLVM's verifier demands), and a
-well-formed program never reads an undefined register (a lemma still to prove; see the README's
-follow-ups). Beyond that: types, arities, targets (never the entry), every non-entry block
+well-formed program never reads an undefined register (`run_progress`, in
+`Concrete/BIR/Progress.lean`). Beyond that: types, arities, targets (never the entry), every non-entry block
 has a predecessor, trap sites exist, and every register is defined once. -/
 
 def lookupTy (types : List (Reg × Ty)) (r : Reg) : Option Ty :=
