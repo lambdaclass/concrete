@@ -409,6 +409,23 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
   separate pools with per-pool CPU and memory limits and at most two heavy runs per machine. A check
   neither pool can run is incomplete and blocks landing; it is never reported as passed. Self-hosted
   runners never run pull-request jobs.
+- <a id="decided-project-repository"></a>**One repository: lambdaclass/concrete** (owner, 2026-11-06).
+  The owner approved "the plan of migrating everything to lambdaclass/concrete": the concrete-ci-2
+  runners, the review notes, the landing train's CI dispatch and watch, and the hooks and docs move
+  there; one full landing runs entirely on lambdaclass/concrete; then unbalancedparentheses/concrete2
+  is archived, never deleted, because records cite its CI run IDs as evidence. The owner then
+  authorized the whole move, archiving included ("do the whole movement").
+- <a id="decided-project-runner-exposure"></a>**Who reaches the self-hosted runners** (owner,
+  2026-11-06). Asked whether to accept that lambdaclass org members with write access can reach the
+  concrete-ci-2 runners, as for stabileo, or to restrict them with (b) a ruleset that lets only
+  admins push `ci/*` plus workflow-restricted runner access, or (c) ephemeral runners in throwaway
+  VMs, the owner answered "A": accept it. The exposure, stated plainly: on lambdaclass/concrete 44
+  accounts have push (the org's base permission is write), and a push of any branch, or a
+  `workflow_dispatch`, by any of them reaches the self-hosted runners with no approval, because
+  the workflow file comes from the pushed branch. On concrete2 one account had push. The
+  `pull_request` guard in every self-hosted `runs-on` stays, and fork pull requests from outside
+  collaborators still need approval
+  ([SELF_HOSTED_RUNNERS.md](SELF_HOSTED_RUNNERS.md#security-rules-public-repository)).
 - <a id="decided-project-bugs"></a>**Bugs across the restart** (rows P10–P12, 2026-11-05). Old-compiler
   defects are retired with the old implementation, never marked fixed; each keeps its reproducer,
   ruling and structural class, and the reproducers feed the oracle comparisons (P10). Std defects
