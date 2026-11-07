@@ -57,8 +57,8 @@ no(){ echo "  FAIL $1"; FAIL=$((FAIL+1)); }
 
 # Isolation: no inherited repository (the hook leaks GIT_DIR), no user or system git config (hooks
 # path, conflict style, signing), no toolchain re-entry.
-unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY
-export GIT_CONFIG_GLOBAL="$TMP/gitconfig" GIT_CONFIG_NOSYSTEM=1
+source "$ROOT_DIR/scripts/checks/lib/git_sandbox.sh" || exit 2
+git_sandbox "$TMP/gitconfig" || exit 2
 cat > "$GIT_CONFIG_GLOBAL" <<EOF
 [user]
 	name = landing gate
@@ -71,6 +71,16 @@ cat > "$GIT_CONFIG_GLOBAL" <<EOF
 	conflictStyle = diff3
 EOF
 mkdir -p "$TMP/nohooks"
+# train.sh runs only with the repository's pre-push hook enabled (ISS-0015): it asks the hook git
+# would run who it is (its single argument --concrete-identify). The sandbox's global hooksPath holds this
+# stand-in, which runs no gate and answers as the repository's .githooks/pre-push would: a test
+# fixture impersonating the hook on purpose.
+IDENTIFY='[ "$#" = 1 ] && [ "$1" = --concrete-identify ] && { echo "concrete-pre-push $(cd "$(git rev-parse --show-toplevel)" && pwd -P)/.githooks/pre-push"; exit 0; }'
+standin_hook() {
+  printf '#!/usr/bin/env bash\n%s\nexit 0\n' "$IDENTIFY" > "$TMP/nohooks/pre-push"
+  chmod +x "$TMP/nohooks/pre-push"
+}
+standin_hook
 export LAND_NO_NIX=1 LAND_STATE_DIR="$TMP/state" LAND_GH="$TMP/fake-gh" LAND_REPO=test/repo
 export LAND_PUSH_RETRY_SLEEP=0
 unset LAND_GATES_HOST LAND_GATES_TRANSPORT CONCRETE_PREPUSH_NO_REUSE
@@ -626,8 +636,8 @@ echo "=== dropped: a push's result is read from the remote, and a failed push is
 # The pre-push hook stands in for GitHub dropping the connection: drop.always fails every push
 # before the remote moves; drop.before fails one push before it moves; drop.after updates the
 # remote itself and then fails, as a push does whose connection drops after the update.
-cat > "$TMP/nohooks/pre-push" <<'EOF'
-#!/usr/bin/env bash
+{ echo '#!/usr/bin/env bash'; echo "$IDENTIFY"; } > "$TMP/nohooks/pre-push"
+cat >> "$TMP/nohooks/pre-push" <<'EOF'
 # Like the real hook, a push that skips the gates (the ci base reset, the mirror) runs nothing.
 [ "${CONCRETE_SKIP_GATES:-0}" = 1 ] && exit 0
 [ -f "$FAKE_GH_DIR/drop.always" ] && exit 1
@@ -665,7 +675,7 @@ out="$(bash "$TRAIN" land t8 2>&1)"; rc=$?
   && [ "$(git ls-remote origin refs/heads/main | cut -f1)" = "$HEAD8" ] && [ "$(git ls-remote lambdaclass refs/heads/main | cut -f1)" = "$HEAD8" ] \
   && ok "land retries a push dropped before the update, accepts one dropped after it, and both remotes reach the head" || { no "dropped land: exit $rc"; echo "$out" | sed 's/^/      /'; }
 [ ! -f "$FAKE_GH_DIR/drop.before" ] && [ ! -f "$FAKE_GH_DIR/drop.after" ] && ok "both dropped-connection seams fired" || no "a dropped-connection seam never fired (vacuous leg)"
-rm -f "$TMP/nohooks/pre-push"
+standin_hook
 
 echo "=== bisect: halving finds the seeded red member ==="
 git checkout -q main
@@ -1148,6 +1158,50 @@ bash "$TMP/put-review" "$HR" none; bash "$TMP/put-review" "$R1" clean; bash "$TM
 out="$(bash "$TRAIN" check trv --no-remote 2>&1)"; rc=$?
 [ "$rc" = 0 ] && [ ! -s "$FAKE_GH_DIR/review.log" ] \
   && ok "check over members reviewed clean passes the review leg without running the reviewer" || { no "check over reviewed members: exit $rc, reviewer calls '$(cat "$FAKE_GH_DIR/review.log")'"; echo "$out" | sed 's/^/      /'; }
+
+echo "=== where a train runs: a full clone with the repository hook (ISS-0015) ==="
+cd "$W" || exit 2
+git checkout -q -f main
+git worktree add -q --detach "$TMP/linked-wt" main
+out="$(cd "$TMP/linked-wt" && bash "$TRAIN" build twt --no-fetch b1 2>&1)"; rc=$?
+[ "$rc" != 0 ] && has "$out" "refusing to run in a linked worktree" && [ ! -e "$TMP/state/twt" ] \
+  && ok "train.sh refuses a linked worktree before doing anything" || { no "train in a linked worktree: exit $rc"; echo "$out" | sed 's/^/      /'; }
+out="$(cd "$TMP/linked-wt" && bash "$TRAIN" status 2>&1)"; rc=$?
+! has "$out" "refusing" && ok "train.sh status (read-only) still runs in a linked worktree" || no "status refused in a worktree: $out"
+hook="$ROOT_DIR/.githooks/pre-push"
+Z=0000000000000000000000000000000000000000
+mh="$(git rev-parse main)"
+out="$(cd "$TMP/linked-wt" && printf 'refs/heads/main %s refs/heads/ci/twt %s\n' "$mh" "$Z" | CONCRETE_GATES_SHELL= bash "$hook" origin "$TMP/origin.git" 2>&1)"; rc=$?
+[ "$rc" = 1 ] && has "$out" "is a linked worktree; push it from a full clone" \
+  && ok "the pre-push hook refuses a gated push from a linked worktree (before any check runs)" || { no "hook in a linked worktree: exit $rc"; echo "$out" | sed 's/^/      /'; }
+out="$(cd "$TMP/linked-wt" && printf 'refs/heads/x %s refs/heads/wip/twt %s\n' "$mh" "$Z" | bash "$hook" origin "$TMP/origin.git" 2>&1)"; rc=$?
+[ "$rc" = 0 ] && has "$out" "wip/* backup push" && ok "a wip/* backup push from a linked worktree still passes (it runs nothing)" || { no "wip push from a worktree: exit $rc"; echo "$out" | sed 's/^/      /'; }
+git worktree remove --force "$TMP/linked-wt"
+# hook off: not executable, missing, or some other hook that does not run the repository's.
+chmod -x "$TMP/nohooks/pre-push"
+out="$(bash "$TRAIN" record "$(git rev-parse main)" --base "$(git rev-parse main)" 2>&1)"
+! has "$out" "refusing to run" && ok "train.sh record (CI's Landing record job: no hook there) is not refused for the hook" || { no "record refused without a hook"; echo "$out" | sed 's/^/      /'; }
+out="$(bash "$TRAIN" build tnh --no-fetch b1 2>&1)"; rc=$?
+[ "$rc" != 0 ] && has "$out" "no enabled pre-push hook" && ok "train.sh refuses when the pre-push hook is not executable" || { no "train with a disabled hook: exit $rc"; echo "$out" | sed 's/^/      /'; }
+mkdir -p "$TMP/empty-hooks"
+out="$(GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.hooksPath GIT_CONFIG_VALUE_0="$TMP/empty-hooks" bash "$TRAIN" build tnh --no-fetch b1 2>&1)"; rc=$?
+[ "$rc" != 0 ] && has "$out" "no enabled pre-push hook" && ok "train.sh refuses when core.hooksPath names a directory with no pre-push" || { no "train with an empty hooks dir: exit $rc"; echo "$out" | sed 's/^/      /'; }
+printf '#!/usr/bin/env bash\nexit 0\n' > "$TMP/nohooks/pre-push"; chmod +x "$TMP/nohooks/pre-push"
+out="$(bash "$TRAIN" build tnh --no-fetch b1 2>&1)"; rc=$?
+[ "$rc" != 0 ] && has "$out" "is not the repository's .githooks/pre-push" && ok "train.sh refuses a pre-push hook that does not run the repository's" || { no "train with a foreign hook: exit $rc"; echo "$out" | sed 's/^/      /'; }
+printf '#!/usr/bin/env bash\n# runs .githooks/pre-push (it does not)\nexit 0\n' > "$TMP/nohooks/pre-push"
+out="$(bash "$TRAIN" build tnh --no-fetch b1 2>&1)"; rc=$?
+[ "$rc" != 0 ] && has "$out" "is not the repository's .githooks/pre-push" && ok "train.sh refuses a hook that only mentions .githooks/pre-push" || { no "train with a hook naming the file: exit $rc"; echo "$out" | sed 's/^/      /'; }
+out="$(cd "$W" && bash "$ROOT_DIR/.githooks/pre-push" --concrete-identify < /dev/null 2>&1)"; rc=$?
+[ "$rc" = 0 ] && [ "$out" = "concrete-pre-push $(cd "$ROOT_DIR" && pwd -P)/.githooks/pre-push" ] \
+  && ok "the repository hook answers who it is with its real path and runs nothing" || { no "hook identify: exit $rc, '$out'"; }
+# (the wip tier, so the hook runs nothing heavy and never re-enters these checks)
+out="$(cd "$W" && printf 'refs/heads/x %s refs/heads/wip/idn %s\n' "$(git rev-parse main)" 0000000000000000000000000000000000000000 \
+  | CONCRETE_PREPUSH_IDENTIFY=1 bash "$ROOT_DIR/.githooks/pre-push" origin "$TMP/origin.git" 2>&1)"; rc=$?
+! has "$out" "concrete-pre-push /" && has "$out" "wip/* backup push" \
+  && ok "a real push never takes the identify answer (no environment switch exists)" || { no "identify leaked into a push: $out"; }
+standin_hook
+[ ! -e "$TMP/state/tnh" ] && ok "no refused run left train state behind" || no "a refused run left state"
 
 echo
 echo "check_landing_script: PASS=$PASS FAIL=$FAIL"
