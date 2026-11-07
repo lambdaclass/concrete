@@ -572,6 +572,13 @@ The CLI is `concrete facts FILE [FN]` and `concrete build FILE -o OUT` (owner, 2
    An in-process leg also compares `BIR.behaviour b` with LCB's own evaluator on `adapt b`. That is the executable shadow of `adapter_correct` until it is proved.
 6a. **AArch64:** a GitHub-hosted AArch64 macOS job (`macos-15`) builds the LCB output for `aarch64-macos`, runs gates 4 and 6 there natively, and compares against Lean. LLVM-native also runs there, as a third cross-check. Gates 4 and 6 for x86-64 run on concrete-ci-2.
 7. **Certificates:** the kernel checks every acceptance and refusal certificate, with measured budgets.
+8. **Reproducibility** (implemented, `scripts/checks/slice0_repro.sh`): two independent builds give byte-identical outputs at every stage, on each target, and two independent Linux runners give identical manifests. See [Reproducible builds](#reproducible-builds-owner-2026-11-07).
+9. **Trusted base** (owner, 2026-11-07): a golden test that `concrete facts` prints exactly the spec's premise list, so a premise added, removed or reworded anywhere fails until the golden is updated with it.
+10. **Sanitizers** (owner, 2026-11-07): every LLVM example also runs built with ASan and UBSan in CI, and must give the same observation with no sanitizer report.
+11. **Binary size** (owner, 2026-11-07): the size of each example's executable, per backend and target, is recorded per run. Report-only: it never fails a run.
+12. **Stack bound** (owner, 2026-11-07): a stack-bound fact for each example, derived from the final artifact (the linked executable, not the IR) for both backends, and checked against a run.
+
+With the front end (owner, 2026-11-07): gate 5's random-program fuzzer compares the native executables with the Lean evaluator, and a JSON schema generated from the Lean types of the `facts` output has goldens. Each gate joins `required-checks.txt` when the compiler lands.
 
 **Negative controls**, each a mutation the matching gate must refuse:
 - a deleted pass theorem;
@@ -674,19 +681,35 @@ LCB is our own project; these are tasks for it, not premises to keep. Checked ag
 ## Reproducible builds (owner, 2026-11-07)
 
 The same source, compiler revision, toolchain pins and target must produce byte-identical BIR,
-LLVM text, LCB input/output and executables. `nix develop --command bash
-scripts/checks/build_identity.sh` prints the canonical identity (compiler commit, Lean, clang/LLVM,
-Nix inputs, LCB revision and target); the planned `concrete facts` command will print this identity.
-`scripts/checks/slice0_repro.sh [MANIFEST]` checks every hand-written BIR example twice from
-separate source directories and TMPDIRs, hashes the BIR and adapted LCB value dumps, both text
-formats, both LCB assembly outputs, all objects and both executables. The slice-0 frontend is
-not implemented yet, so this gate starts at the hand-written BIR contract.
+LLVM text, LCB input and output, objects and executables. `nix develop --command bash
+scripts/checks/build_identity.sh` prints the canonical identity: the compiler commit, a digest of
+the working-tree content of every tracked input with `source_tree=clean|dirty` (so a local edit never
+reports a committed identity), Lean, clang/LLVM, the Nix inputs, the LCB revision and the target. It
+fails unless every dependency checkout is clean and at the revision `lake-manifest.json` pins. The
+planned `concrete facts` command will print this identity.
 
-Both native gates use `slice0_native.sh`: Nix-pinned clang 21, a clean compiler environment,
-fixed relative object names and link order, epoch 1, UTC/C locale, no debug information, path
-prefix maps, and no ELF build ID or Mach-O UUID (`ZERO_AR_DATE=1` on both paths). The printers
-traverse ordered lists/arrays (including stable first-occurrence intrinsic deduplication);
-site paths are project-relative source data. They emit no clock, hostname or temporary path.
-CI repeats this on x86-64 Linux and AArch64 macOS and compares the complete Linux manifests
-from two independent runners. Different targets are never compared. Changes to these pins
-change the build identity; no reproducibility claim spans different toolchains or targets.
+`scripts/checks/slice0_repro.sh [MANIFEST]` makes two independent builds: two source copies at
+different paths with different TMPDIRs, each compiling the compiler, its dependencies and the `lcb`
+executable itself. They share only the pinned Lean toolchain and the dependency sources. Each side
+emits every hand-written BIR example and builds it natively, and every stage is compared without
+normalization: the BIR and adapted LCB value dumps, both text formats, both LCB assembly outputs,
+all objects and both executables. Negative controls check that the comparator refuses a flipped
+byte, a missing artifact and a differing inventory. The slice-0 front end is not implemented yet, so
+this gate starts at the hand-written BIR contract.
+
+Both native gates use `slice0_native.sh`: the Nix-pinned clang 21 (`CONCRETE_SLICE0_CLANG`; the
+shell's general `clang` is unchanged), an environment reduced to `PATH`, `HOME` and `TMPDIR`
+(reduced, not hermetic), fixed relative object names and link order, epoch 1, UTC/C locale, no
+debug information, path prefix maps, and no ELF build ID or Mach-O UUID (`ZERO_AR_DATE=1` on
+both paths). The printers traverse ordered lists/arrays (including stable first-occurrence
+intrinsic deduplication); site paths are project-relative source data. They emit no clock,
+hostname or temporary path. CI repeats this on x86-64 Linux and AArch64 macOS and compares the
+complete Linux manifests from two independent runners. Different targets are never compared.
+Changes to these pins change the build identity; no reproducibility claim spans different
+toolchains or targets.
+
+Every slice-0 gate runs under `scripts/checks/lib/limits.sh` (per-process address space 64 GiB on
+Linux, since Lake reserves far more than it uses; at most 40000 processes for the user), with
+`timeout -k` on every build and emitter call. Every executable under test runs under `bounded_run`
+(time, and its whole process group killed) and `lib/limited_exec.sh` (1 GiB address space, no core
+file). Darwin does not enforce an address-space limit, so there the CI job's memory is the bound.

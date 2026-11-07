@@ -112,7 +112,7 @@
             # release ships its own clang without C headers (stddef.h not found), so with Lean first
             # every C link step that uses PATH's clang (run_tests phase3_abi_interop, regress_103)
             # failed in this shell while passing on CI, whose elan puts no clang on PATH.
-            llvmPackages_21.clang
+            clang
             leanRelease
           ] ++ gatesUserland;
         in {
@@ -122,6 +122,8 @@
           # pays for them unless they run `--report multi-kernel`.
           default = pkgs.mkShell ({
             packages = base;
+            # Slice-0 native builds name their compiler explicitly (scripts/checks/slice0_native.sh),
+            # pinned here so the shell's general clang can move without changing their identity.
             CONCRETE_SLICE0_CLANG = "${pkgs.llvmPackages_21.clang}/bin/clang";
           } // gatesMarker);
 

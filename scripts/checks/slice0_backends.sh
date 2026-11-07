@@ -19,7 +19,10 @@ BOUNDED_PARENT="$work"
 # shellcheck source=scripts/checks/lib/bounded.sh
 source scripts/checks/lib/bounded.sh
 [ "$BOUNDED_HAVE_WATCHDOG" = 1 ] || { echo "slice0_backends: python3 is required for bounded runs" >&2; exit 2; }
-lake build Concrete lean-compiler-backend/lcb >/dev/null
+# shellcheck source=scripts/checks/lib/limits.sh
+source scripts/checks/lib/limits.sh
+gate_limits 64 40000
+timeout -k 30 1800 lake build Concrete lean-compiler-backend/lcb >/dev/null
 lcb="$root/.lake/packages/lean-compiler-backend/.lake/build/bin/lcb"
 case "$(uname -s)-$(uname -m)" in
   Linux-x86_64) target=x86_64-linux ;;
@@ -27,12 +30,13 @@ case "$(uname -s)-$(uname -m)" in
   Darwin-arm64) target=aarch64-macos ;;
   *) echo "slice0_backends: unsupported host $(uname -s)-$(uname -m)" >&2; exit 2 ;;
 esac
-emitter=(lake env lean --run scripts/checks/slice0_bir.lean)
+emitter=(timeout -k 10 120 lake env lean --run scripts/checks/slice0_bir.lean)
 
 # observe EXE OUT SECS RETRY: OUT.status (status or "incomplete"), OUT.stdout, OUT.stderr.
 observe() {
   local rc=0
-  bounded_run -i /dev/null -r "$4" "$3" -- "$1" >"$2.stdout" 2>"$2.stderr" || rc=$?
+  bounded_run -i /dev/null -r "$4" "$3" -- bash "$root/scripts/checks/lib/limited_exec.sh" 1024 "$1" \
+    >"$2.stdout" 2>"$2.stderr" || rc=$?
   if bounded_is_incomplete "$rc"; then echo incomplete >"$2.status"; else echo "$rc" >"$2.status"; fi
 }
 
@@ -52,7 +56,7 @@ examples=0
 # check NAME DIR SECS RETRY: build both backends in DIR, run them and judge them.
 check() {
   local name=$1 d=$2 backend
-  build "$name" "$d/build.log" bash "$root/scripts/checks/slice0_native.sh" "$d" "$lcb"
+  build "$name" "$d/build.log" timeout -k 10 300 bash "$root/scripts/checks/slice0_native.sh" "$d" "$lcb"
   for backend in llvm lcb; do
     observe "$d/$backend.exe" "$d/$backend" "$3" "$4"
     count=$((count + 1))
