@@ -157,7 +157,7 @@ and owned by the task that removes its structural class.
 | A. Core and theorem | Dispose of the spec audit. The owner decides the whole Core shape before implementation, in four stages: provisional approval (A2a), a proposed `Spec.lean` with four checked design theorems (A2b), integration of its parts with their interaction proofs, the modular layout and the browsable owner view (A2i), and the owner's freeze of the integrated scopes (A2c). State the semantic contract and the end-to-end theorem in Lean, and list the trusted base. | Core frozen by the owner after the four design theorems and the integration proofs are kernel-checked. The theorem, its holes and the trusted base on main. |
 | B. Cumulative slices 0 and 1, then LP0 | Slice 0 establishes the running proof infrastructure: a closed `u8` arithmetic subset through every used IR to two unverified native builds, with per-lowering proofs and the composed conditional theorem. Then `ConcreteSpec` and the new compiler for slice 1 (the approved linear component, row Q8.2), on the same path; then LP0. See [vertical slices](#vertical-slices). | Each slice meets the [slice shape](#vertical-slices). Every judgment, semantics and pass is total. Fuel exhaustion is distinct from divergence. The native builds are qualified by tests, not proved: the LLVM output is labelled unverified, and its assumptions are listed with the lexer, model-translation and native-image obligations; a native-image claim, if any, is stated separately as conditional on those assumptions. Minimal provenance accompanies the first authoritative proof claims. The outside-reader test passes on the Lean rules. Phase B closes after slice 1, LP0 and B2/B3 acceptance; `legacy/` stays until LD. |
 | C. File-copy | Workloads grow from simple proved examples to file-copy and then supported real programs; each records program correctness, authority, failure behaviour and residual assumptions. [Vertical slices](#vertical-slices) 2 to 18, each meeting the slice shape: integers, control flow, loops, functions, authority, secrets, the proof surface, structs, enums, generics, `Option`/`Result`, references, traits and `defer`, arrays, text and the console, modules, and files, ending at file-copy. Std, examples and tests come back as their constructs land. | The file-copy program, failure paths included, builds natively with its theorems. **0.1 is cut** at slice 18 with the supported subset, the unsupported constructs, the LLVM assumptions and the proven zero-heap facts stated. |
-| D. Whole language | [Vertical slices](#vertical-slices) 19 to 27: allocation, function values, heap arrays, `Vec` and `String`, maps, raw pointers, FFI (then RocksDB slice 1), floats, and clock, network and devices (then ethlambda). | Every construct of the decided language is a slice with Lean rules, and the conformance suite is complete. |
+| D. Whole language | [Vertical slices](#vertical-slices) 19 to 28: allocation, function values, heap arrays, `Vec` and `String`, maps, raw pointers, FFI (then RocksDB slice 1), floats, clock, network and devices, and concurrency as the final slice (then ethlambda and the encrypted tunnel). | Every construct of the decided language is a slice with Lean rules, and the conformance suite is complete. |
 | E. Verified growth | Proof-order items 4–8, the Lean Compiler Backend native path, the verified parser, typed contracts, frame reasoning, termination proofs and the proof library. Earlier slices already contain example-specific program theorems; E expands reusable models and proof support. Contracts have no source `old` and no snapshot construct (OD117): a postcondition reaches the entry state only through an explicit Lean theorem. Spec functions are total (OD115). An ordinary function can get its own termination proof, and there is no total-function category (OD116). | Each item's theorem holds, with its residual assumptions stated. |
 | F. Evidence as a product | Provenance, the canonical verification task, receipts and an independent consumer, all on the new Core. | Receipt v1 frozen. |
 | G. Release and ecosystem | External users, flagships, packages, editor, incremental builds, 1.0. | External-user acceptance, package evidence, conformance, compatibility and maintenance commitments hold for the released subset. |
@@ -198,10 +198,11 @@ composed theorem covers the slice under named premises, LLVM and LCB premises se
 report and diagnostics cover its constructs; its examples pass on the Lean semantics and on both
 backends, and CI compares their full observations.
 
-**The order** (agreed unanimously by Claude, Codex, Kimi and agy; owner-approved 2026-11-06). Later
-slices extend earlier constructs without reintroducing them. Not scheduled: `free` (OD59), `trusted
-mod` (OD61), mutable global cells (OD8), `process_exit` (OD136), process spawning (Q7.4),
-concurrency (R-0399), foreign function values (OD4).
+**The order** (agreed unanimously by Claude, Codex, Kimi and agy; owner-approved 2026-11-06,
+revised 2026-11-07). Later slices extend earlier constructs without reintroducing them. Not
+scheduled: `free` (OD59), `trusted mod` (OD61), mutable global cells (OD8), `process_exit` (OD136),
+process spawning (Q7.4), foreign function values (OD4). Concurrency is the final language slice;
+its model remains to be decided when that slice comes.
 
 | slice | adds | phase |
 |---|---|---|
@@ -210,12 +211,12 @@ concurrency (R-0399), foreign function values (OD4).
 | LP0 | BIR → LCB → native proof for slices 0 and 1 (R-0572); no syntax | LP0 |
 | 2 | all integer widths, literal forms, unary `-`, `- * / %`, bitwise operations, shifts, lossless `as`, `wrapping_*`, `saturating_*`, the named lossy conversions (OD99); all values known | C |
 | 3 | `bool`, comparisons (OD42), `&&`, `\|\|`, `!` (Q6.5), `Unit`, value `if`/`else`, trailing value expressions and the Unit statement rule (OD29), the head rule (OD16, OD34), `let mut`, assignment, no shadowing (OD67), `discard` (OD62); the octagon checker through branches and joins; `checked_no_implicit_traps`; the may-abort fact | C |
-| 4 | `while`, `for i from a until b` (OD47–OD49), labels, `break`, `continue`, `#[invariant]`, `#[variant]`, `#[may_not_terminate("reason")]` on loops; the loop rule; termination facts | C |
-| 5 | functions, parameters, calls, recursion with one function `#[variant]` or permission per recursive component (OD82), `#[requires]`, `#[ensures]`, literal expected types (OD31, OD138); closed call evidence; stack and depth facts from final artifacts | C |
+| 4 | `while`, `for i from a until b` (OD47–OD49), labels, `break`, `continue`, `#[invariant]`, `#[variant]`, `#[may_not_terminate("reason")]` on loops; the loop rule; termination facts; the step-counting cost model for loops | C |
+| 5 | functions, parameters, calls, recursion with one function `#[variant]` or permission per recursive component (OD82), `#[requires]`, `#[ensures]`, literal expected types (OD31, OD138); closed call evidence; stack and depth facts from final artifacts; the step-counting cost model extended through calls | C |
 | 6 | authority: `with(...)` over the reserved set (no spawning), the inclusion judgment (TRUST-4), the primitive effect table, `main` grant parameters, `give_up` and `close_dir`, launcher minting, startup refusal 125, the start and exit trace; capability and reachable-grant facts | C |
 | 7 | `Secret<T>` on scalars: `classify` (of a value passed in), `declassify(x, "reason")`, `ct_select`, secret comparisons giving `Secret<bool>`, the closed constant-time operation table; plain arithmetic, secret control flow, divisors and shift counts refused; noninterference and source constant-time theorems; release sites traced; secret policies; backend constant time and wiping as named premises | C |
-| 8 | the proof surface: `assert`, `assert(e) by thm(...)`, `assume` (never admits safety), `ghost let`, total `spec fn`, `#[proof(path)]`, vacuity refusal and strength labels (OD120, R-0585), `#[test]` | C |
-| 9 | structs with named fields, declared `Copy`, `e.f`, field writes on `mut`, destructuring, field-wise known values, type aliases; `#[invariant(...)]` on structs with private fields | C |
+| 8 | the proof surface: `assert`, `assert(e) by thm(...)`, `assume` (never admits safety), `ghost let`, total `spec fn`, `#[proof(path)]`, vacuity refusal and strength labels (OD120, R-0585), `#[test]`; proofs of step bounds; the test runner | C |
+| 9 | structs with named fields, declared `Copy`, `e.f`, field writes on `mut`, destructuring, field-wise known values, type aliases | C |
 | 10 | enums, `match` (first arm wins, exhaustive, unreachable arms refused, OD41), kept patterns | C |
 | 11 | generics, `T: Copy`, type-argument inference (OD46, OD129), capability parameters and arguments (Q5.1–Q5.4), OD132; Mono Core, its validator and re-admission (Q6.3) | C |
 | 12 | builtin `Option` and `Result`, `checked_*` with `ArithmeticError`, `try_convert` with `OutOfRange` | C |
@@ -223,7 +224,7 @@ concurrency (R-0399), foreign function values (OD4).
 | 14 | traits, impls, inherent methods (OD32), qualified calls, `Destroy`, `defer` (OD69, OD140) | C |
 | 15 | arrays, indexing with evidence, range views, `swap_at`, array `Destroy`; `ct_eq` on arrays and views; linear secret arrays wiped on destroy | C |
 | 16 | `StaticStr`, `char` (OD137), UTF-8 text views, `byte_at`; the console streams; integers printed by user code; grant-backed secret sources from the console | C |
-| 17 | modules, `pub`, imports, paths (OD43, OD21), constants (Q6.4), generated interfaces and their diff gate (R-0556), DWARF on LLVM (R-0587) | C |
+| 17 | modules, `pub`, imports, paths (OD43, OD21), constants (Q6.4), generated interfaces and their diff gate (R-0556), DWARF on LLVM (R-0587); `#[invariant(...)]` on structs with private fields; the test runner extended to modules; the formatter | C |
 | 18 | files and directories (`Fs`), narrowing, typed errors, failure-path handle conservation, environment reads; grant-backed secret sources from files; **file-copy and 0.1** (zero heap) | C |
 | 19 | allocation: brands, `Allocator<A>`, arenas, reset, `Heap<T, A>`, fallible `alloc`, heap borrows (OD36), `AllocFailure<T>`; heap facts and memory policies (R-0595); heap secrets wiped | D |
 | 20 | function values (function pointer plus explicit context, exact capability sets), indirect calls, the `#[may_not_terminate]` expression prefix; accepted only with function-type contracts (R-0601) | D |
@@ -233,11 +234,35 @@ concurrency (R-0399), foreign function values (OD4).
 | 24 | raw pointers and the raw memory model (Q3.7–Q3.11), `trusted fn`, `with(Unsafe)` (OD64, OD98) | D |
 | 25 | FFI: `extern fn`, `#[link_name]`, `repr` forms (OD147), `Kept<H>`; then **RocksDB slice 1** as an acceptance workload (R-0604) | D |
 | 26 | `f32` and `f64` (OD63), float conversions (OD99, OD107) | D |
-| 27 | clock and time, network grants with `with(Network)`, device grants; grant-backed secret sources from the network; then **ethlambda** (R-0604) | D |
+| 27 | clock and time, network grants with `with(Network)`, device grants; grant-backed secret sources from the network; **httpget, tcpserve and the sequential static web server** | D |
+| 28 | concurrency (R-0399), the final language slice; then **ethlambda** (R-0604) and the encrypted tunnel after the randomness/nonce audit | D |
 
-Phase-E proof items (functional models, frames, the verified parser, LCB native closure, the
-direct-syscall launcher) are tasks beside these slices, not language slices. Lexicographic measures
-for `#[variant]` come when a workload needs them (R-0605).
+Step bounds count abstract operations in input and pattern size. Their model starts with loops at
+slice 4 and calls at slice 5, and their proofs are available at slice 8; wall-clock claims need
+separate backend evidence ([decision](docs/decisions.md#decided-2026-11-07-step-bounds)). The test
+runner starts at slice 8 and extends to modules at 17, the formatter lands at 17, and the LSP comes
+later ([decision](docs/decisions.md#decided-2026-11-07-tools)). Flagship runtime is tracked from
+slice 2, and compiler wall time, per-stage time and memory from slice 0. Measurements are recorded
+by exact SHA, backend and target and are report-only until their noise is understood
+([decision](docs/decisions.md#decided-2026-11-07-performance)).
+
+**Showcases** (all seven adopted by the owner on 2026-11-07;
+[decision](docs/decisions.md#decided-2026-11-07-showcases)):
+
+| showcase | slices |
+|---|---|
+| `grep` with a linear-time regex | 16 → 18 → 22 for dynamic patterns |
+| image decoder | QOI at 19 → 21; PNG with DEFLATE at 21–22 |
+| EVM interpreter | 15 → 21 → 23 |
+| embedded key-value store | 23, with durability "not established"; RocksDB comparison at 25 |
+| WebAssembly sandbox | 21 → 23 → 26 |
+| crypto | 7 → 15 → 18 file encryptor; encrypted tunnel after 28 and the randomness/nonce audit |
+| static web server | sequential at 27; concurrent version after 28 |
+
+Each showcase states its functional, resource, authority and backend claims separately. Phase-E
+proof items (functional models, frames, the verified parser, LCB native closure, the direct-syscall
+launcher) are tasks beside these slices, not language slices. Lexicographic measures for
+`#[variant]` come when a workload needs them (R-0605).
 
 <a id="questions-for-the-core-session"></a>
 ### Questions for the Core session
@@ -313,7 +338,7 @@ archive. Rows for C–G are summaries. Each is refined when its phase becomes ne
 | R-0555 | Dispose of the 2026-11-02 spec audit, then keep one normative spec in Lean with independent judgments and rule-indexed conformance | every audit row has an owner; each slice's Lean rules replace the prose they cover, and bug-to-rule references resolve; a browsable rendering of the Lean rules and a rule-by-rule coverage report exist, and no prose chapter is retired before the report shows each of its rules in Lean; the browsable owner view (each rule's English doc comment, examples, dependencies and proof links, generated from the same sources and stating no rule of its own) exists before the freeze (A2c, revised 2026-11-06) | — |
 | R-0312 | The unsafe-surface and raw-memory taxonomy: validity, provenance, aliasing, ownership transfer | taxonomy decided in the Core session (question 3) and stated in Lean | R-0555 |
 | R-0316 | An unsafe-aliasing policy without hidden reference UB | the policy is part of the approved Core | R-0312 |
-| R-0559 | Outside-reader pass on the approved Core design, then on each feature ([readers](docs/decisions.md#decided-project-outside-readers)) | the owner and independent models (agy, Codex, and Kimi when available) read the decided rows and the integrated spec through the browsable owner view; the pass runs before the freeze (A2c); whether the models read first, their unclear points and every confusion are resolved before the owner reads and before the freeze, and Kimi's absence is recorded, is a [proposal waiting for the owner](docs/decisions.md#outside-readers-ordering); the check repeats for each feature as it lands | R-0555, R-0571, R-0496, R-0560, R-0574 |
+| R-0559 | Outside-reader pass on the approved Core design, then on each feature ([readers](docs/decisions.md#decided-project-outside-readers)) | Codex, agy and Kimi read the decided rows and the integrated spec through the browsable owner view first; every unclear point and confusion is resolved before the owner's formal read and before the freeze (A2c), while real design questions still go to the owner; Kimi's absence is recorded, not waited on; the check repeats for each feature as it lands ([reading order](docs/decisions.md#outside-readers-ordering), owner, 2026-11-07) | R-0555, R-0571, R-0496, R-0560, R-0574 |
 | R-0511 | Representative design proofs before Core freezes, then cumulative slices with honest theorem scopes | the four A2b theorems are kernel-checked against the proposed `Spec.lean`, without `native_decide`, with their full obligations (decision row Q9.14): `reset_fresh` (a reset gives a brand distinct from every live brand, resets in a loop give pairwise-distinct brands, and the new allocator's operations refuse values of an old brand); `defer_cleanup_releases` (every structured exit runs the deferred calls in reverse registration order, releases each held loan after its call, and preserves the allocator-dependency check); `open_mut_freezes_root` (a mutable heap open excludes every other access to its root, and a shared open never grants a write); `rep_roundtrip` (encode then decode is the identity for `u8` to `u64`, `bool` and the empty struct); each later slice states its theorem scope (A2a was approved 2026-11-05) | — |
 | R-0567 | Core freeze (A2c) | the owner approves the freeze of the integrated scopes after A2i's complete acceptance (the four A2b theorems, the integration proofs, the semantic contract, the modular layout, the browsable owner view and the outside-reader pass); PROPOSED is removed from its header in the freeze change | R-0571, R-0574, R-0496, R-0560, R-0555, R-0559 |
 | R-0566 | One live home for binding decisions (decision row P20, approved 2026-11-05; the decisions are [recorded](docs/decisions.md#decided-project) in `docs/decisions.md`, which the move places at `docs/decisions.md`) | the still-binding architecture and process decisions of the archived roadmap log (new compiler and retention contract, authority, allocation, Lean as the specification, the owner-recording rule) are in `docs/decisions.md` with their dates and revision links; the owner-approved revisions (OD45/OD87, TYPE-22, TRAIT-1 and any other accepted row) are recorded there; ROADMAP.md, PHILOSOPHY.md and AGENTS.md cite it and restate nothing; a gate refuses a roadmap rule link into the archived log once the move lands | — |
@@ -370,7 +395,7 @@ archive. Rows for C–G are summaries. Each is refined when its phase becomes ne
 | R-0491 | The defect inventory and the classified differential (Lean semantics, native build, legacy oracle) | comparisons are classified and campaigns are non-vacuous; its check refuses any expected outcome recorded from compiler output (I/O expectations come from the Lean evaluator's driver, R-0586) | R-0425, R-0564, R-0586 |
 | R-0498 | Every enforcement claim maps to its gate leg and a targeted mutation | an unmapped claim fails; shape checks are labelled unproved; B0 includes pipeline-edge coverage and controls for missing proofs, unregistered premises, wrong artifact substitution and reject-all compilation | R-0118 |
 | R-0272 | Restart fuzzing against the new compiler on concrete-ci-2, seeded from the regressions and examples that survive in the repository and from newly generated programs (the ci-3 corpus and findings were not copied before the handover, decision row P14, and are lost), with reduction and counterexample-to-regression persistence | the generators emit slice-supported programs, the oracle is Lean semantics against native code, and findings become regressions; legacy fuzzing stopped at the move | B1 |
-| R-0550 | Compiler scaling and speed baselines at exact SHAs | scaling gates hold for each stage, and a planted regression is caught | B1 |
+| R-0550 | Compiler speed and scaling tracking from slice 0 ([decision](docs/decisions.md#decided-2026-11-07-performance)) | wall time, per-stage time and memory are recorded by exact SHA, backend and target from slice 0; measurements are report-only until their noise is understood, then scaling gates hold for each stage and a planted regression is caught | B1 |
 | R-0553 | Totality audit: every semantics, checker, validator and pass is total and runs as proved | no partial definition; opaque execution gaps controlled; totality and execution-gap checks apply from B0; B3 performs the cumulative audit after B2 | R-0501 |
 | R-0562 | The retention manifest `RETENTION.tsv` at the root, written before the move and checked before any deletion under `legacy/` | every legacy asset (corpora, regressions, examples, std, the bug ledger, the site, docs and the archived services) has a row with a destination and a deletion condition; deleting a path under `legacy/` whose row is unresolved is refused (control); the manifest and the task disposition table stay at the root and survive the deletion of `legacy/` (LD) | — |
 | R-0561 | Bug ledger by compiler | legacy defects are marked retired with the old implementation, never fixed, each keeping its reproducer, ruling and structural class; std defects move with std as contracts and regressions; every legacy ruling that states language behaviour becomes a conformance example or a recorded owner question; the minimal issue record of the day-one root becomes the new ledger with the first slice | R-0425 |
@@ -408,12 +433,12 @@ archive. Rows for C–G are summaries. Each is refined when its phase becomes ne
 | R-0137 | Workload validation: each workload records its attempts, diagnostics and measurements | the dashboard covers every supported workload; workloads grow from simple proved examples to file-copy and then supported real programs, each recording program correctness, authority, failure behaviour and residual assumptions; every port ships paired rejected-violation examples showing what Concrete refuses | C |
 | R-0321 | The unsafe and trusted profile, with its VM pressure workload | the workload runs in the normal and checked profiles | C |
 | R-0285 | RocksDB slice 1 (paused) | open, read, write and close with linear handles and typed errors; accepted only after slice 25 (FFI) and the audit of its program (R-0604) | C, R-0604 |
-| R-0490 | The ethlambda port (paused) | runs with its interop checkpoint; accepted only after slice 27 and the audit of its program (R-0604) | R-0285, R-0604 |
+| R-0490 | The ethlambda port (paused) | runs with its interop checkpoint; accepted only after slice 28 (concurrency) and the audit of its program (R-0604), as revised by the [2026-11-07 decision](docs/decisions.md#decided-2026-11-07-final-slices) | R-0285, R-0604 |
 | R-0515 | The usability track (paused): non-author pilots and legibility measures | a non-author pilot builds a project | C |
 | R-0597 | A short ideas sweep of `legacy/` for phase D's area, at the latest at D's start (owner, 2026-11-06) | as R-0591, for D's area, at the latest before D's first slice lands (it may run earlier) | R-0591 |
 | R-0595 | Heap bounds with the allocation slice (slice 19) ([decision](docs/decisions.md#decided-project-memory-2026-11-06)) | when allocation lands, each function reports requested, net and peak logical bytes and footprint per allocator lineage as polynomial bounds with `max`, or "not established"; std containers state per-operation growth bounds; budgets in `Concrete.toml` policies are enforced; "allocation cannot fail" is established only from an allocator success theorem; acceptance examples: a counted push loop into a reserved `Vec` with an exact bound, an arena parser proved infallible, an unbounded `while` giving "not established", branching recursion with only a depth bound giving "not established" for requested bytes, a reset loop accounted by lineage | R-0594, R-0589 |
 | R-0601 | Function-type contracts, including trait methods (owner, 2026-11-06) | a binding design lets a function whose `#[requires]` is a safety precondition become a function value only under a matching function-type contract; until then such functions are refused as function values, including through wrappers and specialization; it never broadens to non-safety contracts; a prerequisite for accepting slice 20, or earlier if a workload pulls it | R-0571 |
-| R-0604 | Audit the RocksDB and ethlambda acceptance programs before accepting them (owner, 2026-11-06) | each program's needs are listed against the decided language; concurrency (R-0399) and foreign function values (OD4) stay refused, and any real need goes to the owner before acceptance | — |
+| R-0604 | Audit the RocksDB and ethlambda acceptance programs before accepting them (owner, 2026-11-06; revised 2026-11-07) | each program's needs are listed against the decided language; concurrency is now final slice 28, with its model still to be decided, and ethlambda follows it ([decision](docs/decisions.md#decided-2026-11-07-final-slices)); foreign function values (OD4) stay refused, and any real need for them goes to the owner before acceptance | — |
 
 ### LD. Delete `legacy/` once a full real program runs
 
@@ -438,7 +463,7 @@ archive. Rows for C–G are summaries. Each is refined when its phase becomes ne
 | R-0517 | The Lean Compiler Backend as the native backend | the native path holds its theorem with residual assumptions | R-0572 |
 | R-0505 | The native AArch64 profile: linking and final-image validation | the image theorem holds; the final image's bytes, relocations, entry state and startup are validated against LCB's ISA model and the recorded adapter output, so assembler, linker and loader behaviour leaves the trusted base except where named in the profile | R-0517 |
 | R-0584 | A minimal direct-syscall launcher written in Concrete | the launcher that mints `main`'s grants is a small Concrete program compiled through the verified path and making system calls directly, so no C runtime or libc start-up stays in the trusted base; OS-level sandboxing (seccomp/landlock, Capsicum, pledge/unveil) is outside the compiler's scope; users may apply it themselves. | R-0505 |
-| R-0424 | Performance evidence: corpus, codegen quality, fair comparisons, optimization ownership | the mixed corpus runs on LLVM and LCB-native | R-0517 |
+| R-0424 | Performance evidence: flagship runtime tracking from slice 2, then corpus, codegen quality, fair comparisons and optimization ownership ([early tracking decision](docs/decisions.md#decided-2026-11-07-performance)) | flagship runtime is recorded by exact SHA, backend and target from slice 2 and is report-only until its noise is understood; the mixed corpus runs on LLVM and LCB-native | R-0517 |
 | R-0598 | A short ideas sweep of `legacy/` for phase E's area, at the latest at E's start (owner, 2026-11-06) | as R-0591, for E's area, at the latest before E's first item lands (it may run earlier) | R-0591 |
 | R-0605 | Lexicographic measures for `#[variant]` | added when a workload needs one, with its proofs | workload |
 
@@ -461,7 +486,7 @@ archive. Rows for C–G are summaries. Each is refined when its phase becomes ne
 | R-0119 | Exactly three public flagships with their evidence | graduated and maintained | F |
 | R-0383 | Packages: manifest, resolution, interfaces, provenance, trust policy | the multi-package workspace passes | F |
 | R-0149 | Incremental builds equivalent to clean builds | the edit, corruption and substitution matrix passes | R-0383 |
-| R-0398 | Editor service over the shared session | the editor validation passes | R-0149 |
+| R-0398 | LSP and editor service later, over the shared session ([timing decision](docs/decisions.md#decided-2026-11-07-tools)) | the editor validation passes | R-0149 |
 
 ### T. Development throughput
 
