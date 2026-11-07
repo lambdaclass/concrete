@@ -1,6 +1,6 @@
 # The Concrete Programming Language
 
-[![CI](https://github.com/unbalancedparentheses/concrete2/actions/workflows/lean_action_ci.yml/badge.svg)](https://github.com/unbalancedparentheses/concrete2/actions/workflows/lean_action_ci.yml)
+[![CI](https://github.com/lambdaclass/concrete/actions/workflows/lean_action_ci.yml/badge.svg)](https://github.com/lambdaclass/concrete/actions/workflows/lean_action_ci.yml)
 [![license](https://img.shields.io/github/license/lambdaclass/concrete)](LICENSE)
 
 **Concrete is a fully proven systems programming language with no garbage collector, where you can

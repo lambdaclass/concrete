@@ -7,7 +7,8 @@
 # --ssh runs this script on that host (key: CONCRETE_REMOTE_KEY, default ~/.ssh/concrete_ci).
 # On the host it:
 #   1. makes a DEDICATED clone (default ~/concrete-bot): the bot checks out trains there, so no human
-#      or agent may work in it. Remotes: origin and lambdaclass; core.hooksPath=.githooks.
+#      or agent may work in it. Remote: origin = lambdaclass/concrete (the one repository since
+#      2026-11-06; an existing clone is repointed); core.hooksPath=.githooks.
 #   2. writes ~/.local/libexec/concrete-landing-bot, which fetches, extracts scripts/land from
 #      <source-ref> into an immutable snapshot (keyed by commit) and runs the bot from there, so a
 #      train checkout never rewrites the running script. Full gates run locally through
@@ -30,8 +31,7 @@ while [ $# -gt 0 ]; do
 done
 say() { echo "install-bot: $*"; }
 [ "$(id -un)" = dev ] || say "WARNING: running as $(id -un), not dev"
-ORIGIN_URL="${INSTALL_ORIGIN_URL:-$(git -C "$HOME/concrete2" remote get-url origin 2>/dev/null || echo git@github.com:unbalancedparentheses/concrete2.git)}"
-MIRROR_URL="${INSTALL_MIRROR_URL:-git@github.com:lambdaclass/concrete.git}"
+ORIGIN_URL="${INSTALL_ORIGIN_URL:-git@github.com:lambdaclass/concrete.git}"
 
 # 1. the dedicated clone
 if [ ! -d "$CLONE/.git" ]; then
@@ -39,7 +39,10 @@ if [ ! -d "$CLONE/.git" ]; then
   git clone -q "$ORIGIN_URL" "$CLONE"
 fi
 cd "$CLONE"
-git remote get-url lambdaclass >/dev/null 2>&1 || git remote add lambdaclass "$MIRROR_URL"
+if [ "$(git remote get-url origin)" != "$ORIGIN_URL" ]; then
+  say "repointing origin from $(git remote get-url origin) to $ORIGIN_URL"; git remote set-url origin "$ORIGIN_URL"
+fi
+if git remote get-url lambdaclass >/dev/null 2>&1; then say "removing the old mirror remote 'lambdaclass' (origin is that repository now)"; git remote remove lambdaclass; fi
 if git remote get-url fork >/dev/null 2>&1; then say "the clone has a remote named 'fork'; the bot refuses it, removing it"; git remote remove fork; fi
 git config core.hooksPath .githooks
 git config user.name >/dev/null || git config user.name "Concrete landing bot"
@@ -81,13 +84,16 @@ if [ ! -f "$ENVF" ]; then
 # Landing bot environment (systemd EnvironmentFile; plain KEY=value lines).
 BOT_SOURCE_REF=$REF
 PATH=$HOME/.nix-profile/bin:/nix/var/nix/profiles/default/bin:/usr/local/bin:/usr/bin:/bin
-LAND_REPO=unbalancedparentheses/concrete2
+LAND_REPO=lambdaclass/concrete
 BOT_WATCH_INTERVAL=60
 BOT_MAX_TRAINS=4
 EOF
   say "wrote $ENVF"
 else
   say "kept the existing $ENVF"
+  if grep -q '^LAND_REPO=' "$ENVF" && ! grep -qx 'LAND_REPO=lambdaclass/concrete' "$ENVF"; then
+    say "WARNING: $ENVF sets $(grep '^LAND_REPO=' "$ENVF"); train.sh refuses a remote that is not that repository. Set LAND_REPO=lambdaclass/concrete."
+  fi
 fi
 for u in concrete-landing-bot.service concrete-landing-bot.timer; do
   git show "$SHA:scripts/land/systemd/$u" > "$HOME/.config/systemd/user/$u"
@@ -99,8 +105,8 @@ gh auth status >/dev/null 2>&1 && say "gh: authenticated" || say "MISSING: gh is
 # ssh -T exits 1 even when it authenticates, so read its words, not its status.
 gh_ssh="$(ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new -T git@github.com 2>&1 || true)"
 case "$gh_ssh" in
-  *"successfully authenticated"*) say "github ssh: authenticated (it still needs WRITE access to both repositories)" ;;
-  *) say "MISSING: no GitHub SSH identity for $(id -un); the bot pushes main to origin and lambdaclass, ci/* and notes to origin" ;;
+  *"successfully authenticated"*) say "github ssh: authenticated (it still needs WRITE access to lambdaclass/concrete)" ;;
+  *) say "MISSING: no GitHub SSH identity for $(id -un); the bot pushes main, ci/* and notes to origin" ;;
 esac
 
 say "installed at $SHA ($REF); NOT enabled. To turn it on:"

@@ -395,7 +395,8 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
   overrides the Lean semantics.
 - <a id="decided-project-oracle-release"></a>**The oracle release** (owner-approved, 2026-11-05). The
   oracle is published as the GitHub release
-  [oracle-legacy-compiler-final](https://github.com/unbalancedparentheses/concrete2/releases/tag/oracle-legacy-compiler-final):
+  [oracle-legacy-compiler-final](https://github.com/lambdaclass/concrete/releases/tag/oracle-legacy-compiler-final)
+  (republished there on 2026-11-07 with the same asset; first published on the now archived concrete2):
   the frozen compiler at tag `legacy-compiler-final` (commit `066c9d9b8836a2b176aa37f6c8313195a4b4ee29`),
   asset `oracle-legacy-compiler-final-x86_64-linux.tar.gz` with SHA-256
   `74d8f1e3b5214d9c64c25736a24c19458736a2dacc7977ff784506839b9f26a2`. It predates the decisions of 2026-10-29 to 2026-11-05 and is

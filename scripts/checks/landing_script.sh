@@ -16,7 +16,8 @@
 #   pipeline    check feeds the hook exactly base..head on ci/<name>; ci pushes and records the run
 #   watch       a campaign-only failure is reported as such; a landing failure fetches log tails
 #   land        refused on a head-SHA mismatch, a red landing job, a moved main, a remote named fork;
-#               dry-run pushes nothing; a real land puts both remotes at the train head and cancels
+#               a remote that is a GitHub URL for another repository (the archived concrete2); dry-run
+#               pushes nothing; a real land puts main at the train head and cancels
 #               no run (main's own run records the train's, R-0570)
 #   record      (2026-11-06, R-0570) main's run names the run that qualified its exact SHA only when
 #               the newest completed dispatch of the CI workflow at that SHA AND at that base (its
@@ -136,10 +137,12 @@ EOF
 export LAND_REVIEW_CMD="bash $TMP/fake-review"
 
 W="$TMP/work"
-for r in origin lambdaclass fork; do git init -q --bare "$TMP/$r.git"; done
+for r in origin fork; do git init -q --bare "$TMP/$r.git"; done
 git init -q "$W"
 cd "$W" || exit 2
-for r in origin lambdaclass fork; do git remote add "$r" "$TMP/$r.git"; done
+for r in origin fork; do git remote add "$r" "$TMP/$r.git"; done
+# A remote that names another GitHub repository: every command must refuse it before any network use.
+git remote add gh-stale https://github.com/unbalancedparentheses/concrete2.git
 
 # --- the toy repository: a ledger, a corpus map, a generated block, a generated file ---------------
 mkdir -p scripts/gen scripts/tests docs/project src Concrete
@@ -182,7 +185,7 @@ printf '# required\nBuild\n' > required-checks.txt
 regen(){ python3 -I scripts/gen/candidate_table.py && bash scripts/gen/build_identity.sh; }
 regen
 git add -A && git commit -qm base
-git push -q origin main && git push -q lambdaclass main && git push -q fork main
+git push -q origin main && git push -q fork main
 BASE="$(git rev-parse HEAD)"
 
 branch(){ git checkout -q -b "$1" "$BASE"; }
@@ -607,11 +610,13 @@ out="$(bash "$TRAIN" land t1 2>&1)"; rc=$?
 runjson "$HEAD1" success failure
 out="$(LAND_REMOTE=fork bash "$TRAIN" land t1 2>&1)"; rc=$?
 [ "$rc" != 0 ] && has "$out" "named 'fork'" && ok "land refuses the remote named fork as primary" || no "fork accepted as primary (exit $rc)"
-out="$(LAND_MIRROR=fork bash "$TRAIN" land t1 2>&1)"; rc=$?
-[ "$rc" != 0 ] && has "$out" "named 'fork'" && ok "land refuses the remote named fork as mirror" || no "fork accepted as mirror (exit $rc)"
-out="$(LAND_MIRROR=nosuch bash "$TRAIN" land t1 2>&1)"; rc=$?
-[ "$rc" != 0 ] && has "$out" "both remotes are required" && [ "$(git ls-remote origin refs/heads/main | cut -f1)" = "$BASE" ] \
-  && ok "land refuses a missing mirror remote before pushing anything" || no "missing mirror remote: exit $rc"
+out="$(LAND_REMOTE=gh-stale bash "$TRAIN" land t1 2>&1)"; rc=$?
+[ "$rc" != 0 ] && has "$out" "points at another repository" && [ "$(git ls-remote origin refs/heads/main | cut -f1)" = "$BASE" ] \
+  && ok "land refuses a remote that is another GitHub repository, before pushing anything" || no "land accepted a stale GitHub remote (exit $rc)"
+out="$(LAND_REMOTE=gh-stale bash "$TRAIN" ci t1 2>&1)"; rc=$?
+[ "$rc" != 0 ] && has "$out" "points at another repository" && ok "ci refuses a remote that is another GitHub repository" || no "ci accepted a stale GitHub remote (exit $rc)"
+out="$(LAND_REMOTE=gh-stale bash "$TRAIN" --dry-run build tstale --no-fetch b1 2>&1)"; rc=$?
+[ "$rc" != 0 ] && has "$out" "points at another repository" && ok "build refuses a remote that is another GitHub repository" || no "build accepted a stale GitHub remote (exit $rc)"
 [ "$(git ls-remote fork refs/heads/main | cut -f1)" = "$BASE" ] && ok "fork untouched" || no "fork was pushed"
 out="$(bash "$TRAIN" --dry-run land t1 2>&1)"; rc=$?
 [ "$rc" = 0 ] && has "$out" "would run" && [ "$(git ls-remote origin refs/heads/main | cut -f1)" = "$BASE" ] \
@@ -624,8 +629,8 @@ out="$(bash "$TRAIN" land t1 2>&1)"; rc=$?
 [ "$rc" = 4 ] && has "$out" "moved from" && has "$out" "build t1 --force b1 b2" && ok "land refuses a moved main and prints the rebuild" || { no "moved main: exit $rc"; echo "$out" | sed 's/^/      /'; }
 ( cd "$TMP/other" && git push -q --force origin "$BASE:main" )
 out="$(bash "$TRAIN" land t1 2>&1)"; rc=$?
-[ "$rc" = 0 ] && [ "$(git ls-remote origin refs/heads/main | cut -f1)" = "$HEAD1" ] && [ "$(git ls-remote lambdaclass refs/heads/main | cut -f1)" = "$HEAD1" ] \
-  && ok "land puts origin/main and lambdaclass/main at the train head" || { no "land: exit $rc"; echo "$out" | sed 's/^/      /'; }
+[ "$rc" = 0 ] && [ "$(git ls-remote origin refs/heads/main | cut -f1)" = "$HEAD1" ] \
+  && ok "land puts origin/main at the train head" || { no "land: exit $rc"; echo "$out" | sed 's/^/      /'; }
 [ "$(git ls-remote fork refs/heads/main | cut -f1)" = "$BASE" ] && ok "fork still untouched after landing" || no "fork was pushed"
 [ ! -d "$(git rev-parse --git-common-dir)/concrete-push-both.lock" ] && ok "publish lock released" || no "publish lock left behind"
 calls="$(cat "$FAKE_GH_DIR/calls.log")"
@@ -638,7 +643,7 @@ echo "=== dropped: a push's result is read from the remote, and a failed push is
 # remote itself and then fails, as a push does whose connection drops after the update.
 { echo '#!/usr/bin/env bash'; echo "$IDENTIFY"; } > "$TMP/nohooks/pre-push"
 cat >> "$TMP/nohooks/pre-push" <<'EOF'
-# Like the real hook, a push that skips the gates (the ci base reset, the mirror) runs nothing.
+# Like the real hook, a push that skips the gates (the ci base reset) runs nothing.
 [ "${CONCRETE_SKIP_GATES:-0}" = 1 ] && exit 0
 [ -f "$FAKE_GH_DIR/drop.always" ] && exit 1
 if [ -f "$FAKE_GH_DIR/drop.before" ]; then rm -f "$FAKE_GH_DIR/drop.before"; exit 1; fi
@@ -672,8 +677,8 @@ rm -f "$FAKE_GH_DIR/drop.always"
 touch "$FAKE_GH_DIR/drop.before" "$FAKE_GH_DIR/drop.after"
 out="$(bash "$TRAIN" land t8 2>&1)"; rc=$?
 [ "$rc" = 0 ] && has "$out" "retrying (1 of 3)" && has "$out" "the connection dropped after the update" \
-  && [ "$(git ls-remote origin refs/heads/main | cut -f1)" = "$HEAD8" ] && [ "$(git ls-remote lambdaclass refs/heads/main | cut -f1)" = "$HEAD8" ] \
-  && ok "land retries a push dropped before the update, accepts one dropped after it, and both remotes reach the head" || { no "dropped land: exit $rc"; echo "$out" | sed 's/^/      /'; }
+  && [ "$(git ls-remote origin refs/heads/main | cut -f1)" = "$HEAD8" ] \
+  && ok "land retries a push dropped before the update, accepts one dropped after it, and main reaches the head" || { no "dropped land: exit $rc"; echo "$out" | sed 's/^/      /'; }
 [ ! -f "$FAKE_GH_DIR/drop.before" ] && [ ! -f "$FAKE_GH_DIR/drop.after" ] && ok "both dropped-connection seams fired" || no "a dropped-connection seam never fired (vacuous leg)"
 standin_hook
 
@@ -684,15 +689,15 @@ out="$(bash "$TRAIN" bisect t7 --test '! test -e BAD' 2>&1)"; rc=$?
 [ "$rc" = 0 ] && has "$out" "culprit: b8" && has "$out" "build t7 --force b9 b4" && ok "bisect attributes b8 and prints the rebuild without it" || { no "bisect: exit $rc"; echo "$out" | sed 's/^/      /'; }
 no_op_left && [ -z "$(git status --porcelain --untracked-files=no)" ] && ok "bisect leaves the checkout clean" || no "bisect left state behind"
 
-echo "=== push-both.sh: both remotes required, refusals before anything is pushed ==="
+echo "=== push-both.sh: one repository, refusals before anything is pushed ==="
 cp "$ROOT_DIR/scripts/push-both.sh" scripts/push-both.sh
 before="$(git ls-remote origin refs/heads/main | cut -f1)"
-out="$(PRIMARY=fork bash scripts/push-both.sh 2>&1)"; rc=$?
-[ "$rc" = 2 ] && has "$out" "remote named fork" && ok "push-both refuses PRIMARY=fork" || no "push-both PRIMARY=fork: exit $rc"
-out="$(MIRROR=fork bash scripts/push-both.sh 2>&1)"; rc=$?
-[ "$rc" = 2 ] && has "$out" "remote named fork" && ok "push-both refuses MIRROR=fork" || no "push-both MIRROR=fork: exit $rc"
-out="$(MIRROR=nosuch bash scripts/push-both.sh 2>&1)"; rc=$?
-[ "$rc" = 1 ] && has "$out" "both remotes are required" && ok "push-both refuses a missing mirror remote" || no "push-both missing mirror: exit $rc"
+out="$(PUSH_REMOTE=fork bash scripts/push-both.sh 2>&1)"; rc=$?
+[ "$rc" = 2 ] && has "$out" "remote named fork" && ok "push-both refuses the remote named fork" || no "push-both PUSH_REMOTE=fork: exit $rc"
+out="$(PUSH_REMOTE=nosuch bash scripts/push-both.sh 2>&1)"; rc=$?
+[ "$rc" = 1 ] && has "$out" "is not configured" && ok "push-both refuses a missing remote" || no "push-both missing remote: exit $rc"
+out="$(PUSH_REMOTE=gh-stale bash scripts/push-both.sh 2>&1)"; rc=$?
+[ "$rc" = 1 ] && has "$out" "points at another repository" && ok "push-both refuses a remote that is another GitHub repository" || no "push-both stale GitHub remote: exit $rc"
 [ "$(git ls-remote origin refs/heads/main | cut -f1)" = "$before" ] && [ "$(git ls-remote fork refs/heads/main | cut -f1)" = "$BASE" ] \
   && ok "no refused push-both moved origin or fork" || no "a refused push-both pushed something"
 rm -f scripts/push-both.sh
