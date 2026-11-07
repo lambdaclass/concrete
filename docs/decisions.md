@@ -20,11 +20,9 @@ The shape of Core was approved provisionally on 2026-11-05 ([stage A2a](#decided
 Links only; each item's text lives where it is linked.
 
 1. The spec read and the Core freeze, A2c ([queue](../ROADMAP.md#the-queue)).
-2. The items the reviews leave open until they are fully dispositioned: quantitative step and time
-   bounds ([legacy ideas sweep](proposals/IDEAS.md), [pipeline review](proposals/MERGED.md)), and
-   SPARK review items 4(b) and 4(c) ([SPARK review](proposals/SPARK.md)).
-3. The outside readers' ordering: models first, unclear points resolved before the owner reads
-   ([proposal](#outside-readers-ordering)).
+2. The items the reviews leave open until they are fully dispositioned: SPARK review items 4(b) and
+   4(c) ([SPARK review](proposals/SPARK.md)). Quantitative step and time bounds were decided on
+   2026-11-07 ([row](#decided-2026-11-07-step-bounds)); the reviews' remaining disposition is unchanged.
 
 A decided proposal moves to `docs/archive/<topic>-<date>/`.
 
@@ -40,7 +38,7 @@ Each row records a decision and its reason. A language rule itself is its Lean d
 - The `checked_*`, `#[proof]` and `#[may_not_terminate]` spellings ([row](#decided-project-no-hidden-traps)).
 - The per-function facts report and query ([row](#decided-project-facts-report)).
 - The predictable policy ([row](#decided-project-predictable-policy)).
-- Reproducible builds from B1 ([row](#decided-project-reproducible-builds)).
+- Reproducible builds from slice 0 ([row](#decided-project-reproducible-builds)).
 - The spec layout: one library in modules ([row](#decided-project-long-term-2026-11-06)).
 - A minimal root ([row](#decided-project-lean-root)).
 - The LCB joins slice 0 ([row](#decided-project-proof-infrastructure)).
@@ -55,6 +53,17 @@ Each row records a decision and its reason. A language rule itself is its Lean d
 - What Concrete takes from SPARK ([row](#decided-project-spark-2026-11-06)).
 - Trap line, default layout and spec version ([row](#decided-project-runtime-2026-11-06)).
 - The slice-0 surface: `concrete build`, `concrete facts`, unsupported-form refusals, leading zeros ([row](#decided-slice0-surface-2026-11-06)).
+- The outside readers' model-first ordering ([row](#decided-project-outside-readers)).
+- Step bounds: the model at slices 4–5 and proofs at slice 8 ([row](#decided-2026-11-07-step-bounds)).
+- All seven showcases and their slices ([row](#decided-2026-11-07-showcases)).
+- Concurrency at final slice 28, then ethlambda and the encrypted tunnel ([row](#decided-2026-11-07-final-slices)).
+- Struct invariants in source at slice 17 ([revision](#decided-project-spark-2026-11-06)).
+- Test runner at slice 8, formatter at 17, LSP later ([row](#decided-2026-11-07-tools)).
+- Flagship and compiler speed tracking ([row](#decided-2026-11-07-performance)).
+- Stack bounds from slice 0 and randomness from slice 6 ([row](#decided-2026-11-07-stack-randomness)).
+- Where the decisions and their work are tracked, with a home and a gate per item ([row](#decided-2026-11-07-tracking)).
+- The trusted-base statement, differential fuzzer, sanitizers, binary-size tracking and frozen JSON schema ([row](#decided-2026-11-07-early-evidence)).
+- The documentation and tooling cleanup is approved, not performed by that record ([row](#decided-2026-11-07-cleanup)).
 
 <a id="rules-a-decision-changed"></a>
 ## Rules a decision has changed
@@ -711,9 +720,11 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
   can do, allocate, etc"): asked about one function or module, it returns that function's facts,
   each with its reason and evidence, both as readable text and in the versioned machine format. The
   report and the query are one fact source, not two implementations. Slice 0's facts are small, but
-  the machinery exists from the first commit and grows with each feature; R-0178 freezes the
-  versioned schema R-0575 introduces, R-0494 grows this fact source into the single verdict authority,
-  and R-0201 builds the audit commands (`audit`, `explain`, `why`, `diff`) on the query. The query's
+  the machinery exists from the first commit and grows with each feature. Revised 2026-11-07 by the
+  [early-evidence decision](#decided-2026-11-07-early-evidence): the JSON schema for diagnostics and
+  facts is frozen and versioned from the first front-end output, with golden tests; R-0178 keeps its
+  compatibility policy. R-0494 grows this fact source into the single verdict authority, and R-0201
+  builds the audit commands (`audit`, `explain`, `why`, `diff`) on the query. The query's
   command is `concrete facts` ([slice-0 surface](#decided-slice0-surface-2026-11-06)). It continues the legacy compiler's `--report` family (effects, caps, alloc, recursion,
   stack-depth), re-derived from the new rules. The design, checked by Codex, agy and Kimi (each
   ACCEPT-WITH-CHANGES, converging on the points below, recorded under the owner's rule that what
@@ -762,11 +773,19 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
   trigger by this decision; unlike R-0220's draft it admits no allocation at all, bounded or not.
   It is a policy over reported facts, not a function category (OD116) and not a build profile that
   changes behaviour (OD124).
-- <a id="decided-project-reproducible-builds"></a>**Reproducible builds from slice 1** (owner,
-  2026-11-06: "yes to this too"). From slice 1, CI checks that the same source built by the same
-  pinned compiler and toolchain gives the same executable bytes (R-0577), so anyone can rebuild and
-  confirm the exact bytes a claim is about. This moves the reproducibility half of R-0104 (merged
-  into R-0149 in phase G) to B1; R-0149 keeps incremental-build equivalence.
+- <a id="decided-project-reproducible-builds"></a>**Reproducible builds from slice 0** (owner,
+  2026-11-06: "yes to this too"; revised 2026-11-07: "can we have reproducible builds since the
+  beginning right?" and "ok add the reproducible asap"). From slice 0, the same source, compiler
+  revision, toolchain pin and target give byte-identical output: the BIR, LLVM IR text, LCB job and
+  output, and final binary (R-0577). The toolchain pin covers the nix flake, LCB revision and
+  LLVM/clang version. Artifacts contain no timestamps, absolute paths or host names
+  (`-ffile-prefix-map`, `SOURCE_DATE_EPOCH`, deterministic link order), and compiler output never
+  depends on hash-map iteration order. CI builds every slice-0 example twice in different
+  directories and on two machines (a GitHub runner and concrete-ci-2), compares SHA-256 and fails on
+  any difference. `concrete facts` carries the build identity: compiler SHA, toolchain pins and
+  target. This moves the reproducibility half of R-0104 (merged into R-0149 in phase G) to B0;
+  R-0149 keeps incremental-build equivalence. The slice-0 worker owns the work on `wip/slice0` when
+  Claude capacity returns; work started on `wip/slice0-repro`.
 - <a id="decided-project-concrete-toml"></a>**Policies and declared assumptions live in
   `Concrete.toml`** (owner, 2026-11-06: "concrete.toml is fine", in place of a separate policy
   file). A project's policies, such as the
@@ -824,8 +843,11 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
   [Q2.2](#q2-2-revision). The observer model is the baseline constant-time model (branches, exact
   addresses, variable-time operations); speculative leakage is not covered. The leakage-trace
   interface is fixed in A2i (R-0592); `Secret<T>` lands as its own slice with its proofs (R-0596).
-  Its first secret source is the pure `classify` of a value passed in; grant-backed sources come
-  with the console, files and network ([vertical slices](#decided-project-vertical-slices-2026-11-06)).
+  Its sources include the pure `classify` of a value passed in; grant-backed sources come with the
+  console, files and network ([vertical slices](#decided-project-vertical-slices-2026-11-06)).
+  Revised 2026-11-07 by the [randomness decision](#decided-2026-11-07-stack-randomness): the entropy capability arrives at slice 6, yields
+  `Secret<T>` at slice 7 and gains fill-bytes at slice 15, with its source named as a trusted premise
+  in facts.
 - <a id="decided-project-pipeline-2026-11-06"></a>**The new compiler pipeline** (owner, 2026-11-06,
   relayed by the orchestrator from the owner session: the owner asked "is there any way to improve the full compiler design or pipeline?"; after
   the Codex, agy and Kimi pipeline review was reported, "did we also log that we will have the new
@@ -878,10 +900,109 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
   the common acceptance shape: slice 1 stays row [Q8.2](#q8-2-revision) and gains the explicit
   `abort()` (moved from slice 3), LP0 follows slice 1 before any growth, integers are complete at
   slice 2, authority comes at slice 6 and secrets at slice 7, file-copy and 0.1 at slice 18,
-  RocksDB after slice 25 and ethlambda after slice 27. Slice 7's secret source is the pure
-  `classify` of a value passed in, with no wrapper duplicating it; grant-backed sources come with
-  the console, files and network. Before RocksDB and ethlambda are accepted, their programs are
+  RocksDB after slice 25 and ethlambda after slice 27. Slice 7's secret sources include the pure
+  `classify` of a value passed in, with no wrapper duplicating it, and the entropy capability's
+  `Secret<T>` output under the [randomness decision](#decided-2026-11-07-stack-randomness);
+  grant-backed sources come with the console, files and network. Before RocksDB and ethlambda are accepted, their programs are
   audited, and a real need for concurrency or foreign function values goes to the owner (R-0604).
+  Revised 2026-11-07 by the [final-slice decision](#decided-2026-11-07-final-slices): the approved
+  order gains slice 28 for concurrency, with ethlambda and the encrypted tunnel after it. Slice 27
+  keeps httpget, tcpserve and the sequential web server.
+- <a id="decided-2026-11-07-step-bounds"></a>**Step and time bounds** (owner, 2026-11-07: "ok go
+  ahead all yes then as you said right", approving the recorded recommendation). This answers when
+  quantitative bounds arrive and what they mean. The step-counting cost model is built with loops at
+  slice 4 and extended through calls at slice 5; proofs of step bounds are available at slice 8.
+  Bounds count abstract operations in input and pattern size. A wall-clock claim needs separate
+  backend evidence; a step bound is not a wall-clock deadline.
+- <a id="decided-2026-11-07-showcases"></a>**All seven showcases** (owner, 2026-11-07: "showcase i
+  would like everything right?"). This answers which of the proposed showcases to adopt: all seven,
+  with the Codex/Kimi placements recorded in the [showcase plan](proposals/EXAMPLES.md#showcases):
+  - `grep`: slices 16 → 18 → 22 for dynamic patterns;
+  - image decoding: QOI at slices 19 → 21, PNG with DEFLATE at slices 21–22;
+  - the EVM interpreter: slices 15 → 21 → 23;
+  - the embedded key-value store: slice 23, with durability "not established" and the RocksDB
+    comparison at slice 25;
+  - the WebAssembly sandbox: slices 21 → 23 → 26;
+  - the crypto flagship: slices 7 → 15 → the file encryptor at 18, then the encrypted tunnel after
+    slice 28 and the randomness/nonce audit;
+  - the static web server: sequential at slice 27, with its concurrent version after slice 28.
+  Each showcase states its functional, resource, authority and backend claims separately. Codex and
+  Kimi recommended all seven; agy recommended grep, QOI, EVM and the tunnel.
+- <a id="decided-2026-11-07-final-slices"></a>**Concurrency is the final slice; ethlambda and the
+  encrypted tunnel follow it** (owner, 2026-11-07: "concurrency i want to leave at the last task"
+  and "ethlambda can't be done before conccurency"; the tunnel placement was approved with "ok go
+  ahead all yes then as you said right"). This answers the concurrency and ethlambda scheduling
+  questions and the follow-up about the tunnel. Slice 27 is clock, network and devices and keeps
+  httpget, tcpserve and the sequential web server. Slice 28 is concurrency, the last language slice;
+  ethlambda acceptance and the encrypted tunnel come after it, the tunnel after the
+  randomness/nonce audit. The file encryptor at slice 18 is the encryption showcase until then.
+  RocksDB after slice 25 needs no concurrency and remains the earliest full real program for the
+  legacy-deletion trigger. The reviewers' suggested structured/scoped spawn-join model with linear
+  ownership transfer and no shared mutable state is not an owner decision; the concurrency model
+  remains to be decided when slice 28 comes.
+- <a id="decided-2026-11-07-tools"></a>**Developer tools** (owner, 2026-11-07: "ok go ahead all yes
+  then as you said right", approving the recorded recommendation). This answers when the tools
+  arrive: the test runner lands at slice 8 with `#[test]`, extends to modules at slice 17, and the
+  formatter lands at slice 17. The LSP comes later.
+- <a id="decided-2026-11-07-performance"></a>**Speed tracking** (owner, 2026-11-07: "ok go ahead all
+  yes then as you said right", approving the recorded recommendation). This answers when performance
+  is measured and how it is reported. Flagship runtime is tracked from slice 2. Compiler wall time,
+  per-stage time and memory are tracked from slice 0. Every measurement is recorded by exact SHA,
+  backend and target, and is report-only until the noise is understood.
+- <a id="decided-2026-11-07-stack-randomness"></a>**Early stack bounds and randomness** (owner,
+  2026-11-07: "1 and 2 should be done early too", referring to stack-overflow bounds and randomness
+  in the coordinator's "what are we forgetting" list; then "ok let's add it", approving the
+  coordinator's exact slices):
+  - *Stack bounds.* From slice 0, `concrete facts` reports each program's maximum stack use,
+    measured from the final binary on both backends. An unknown bound, or one over the
+    `Concrete.toml` stack budget, is refused, so stack overflow is never a hidden trap. Slice 5
+    (recursion) extends it with proven bounds.
+  - *Randomness.* An explicit entropy capability, granted to `main` like the other grants, arrives
+    with capabilities at slice 6. Its output is `Secret<T>` at slice 7, and fill-bytes arrives with
+    arrays at slice 15. Its source (for example `getrandom`) is a named trusted premise in facts.
+- <a id="decided-2026-11-07-early-evidence"></a>**Five cheap early items** (owner, 2026-11-07:
+  "ok let's do 1, 2, 3, 4, 5", approving the coordinator's list):
+  - *Trusted-base statement.* From slice 0, `concrete facts` states what is not proven: the Lean
+    kernel, LLVM printer and LLVM, LCB's MIR→assembly step, linker, OS and named runtime premises.
+  - *Differential fuzzer.* A random-program fuzzer runs against the Lean evaluator, starting with
+    the slice-0 front end and growing one feature per slice. It runs on concrete-ci-2.
+  - *Sanitizers.* From slice 0, every example's LLVM output is also built and run under
+    AddressSanitizer and UndefinedBehaviorSanitizer in CI.
+  - *Binary size.* From slice 0, binary size is tracked per example per commit next to speed
+    tracking, report-only.
+  - *JSON schema.* A frozen, versioned JSON schema for diagnostics and facts output, with golden
+    tests, starts with the first front-end output.
+- <a id="decided-2026-11-07-tracking"></a>**Where these decisions and their work are tracked** (owner,
+  2026-11-07: "ok let's add all this right? where is the best place? should we track also in docs and roadmap or changelog?", after the coordinator's table of a home and a gate for each item). One home per
+  fact, and no new documents:
+  - `docs/decisions.md` holds the decision and the owner's quote;
+  - `ROADMAP.md` holds the work and its slice and, for each item, its home (spec or tooling) and its
+    gate;
+  - `changelog.d/` holds what landed, written at landing time;
+  - the Lean spec holds the language meaning: the stack-bound claim and the budget refusal, the
+    entropy capability and its premise, the trusted-premise list, and the diagnostics and facts
+    types as the source of the JSON schema;
+  - `Concrete/README.md` and `required-checks.txt` hold the gate list, and the check scripts and CI
+    enforce it.
+  The gates are: reproducibility (two directories, two machines, hashes compared); stack (the
+  final-artifact bound against the claim); a trusted-base golden; the fuzzer (short in CI, long
+  nightly on concrete-ci-2); ASan and UBSan; speed and size, report-only; and the JSON schema
+  generated from the Lean types, with goldens. All of them join `required-checks.txt` when the
+  compiler lands on main.
+- <a id="decided-2026-11-07-cleanup"></a>**The documentation and tooling cleanup** (owner,
+  2026-11-07: "ok go ahead all yes then as you said right", approving the Codex/Kimi cleanup list).
+  This answers whether that cleanup may proceed; it does not perform it. The approved scope is:
+  simplify `AGENTS.md` by dropping the legacy-only `/file-bug`, `/fix-bug`, ledgers and campaigns;
+  make `CLAUDE.md` a one-line import of `AGENTS.md`; simplify `SELF_HOSTED_RUNNERS.md`, `LANDING.md`,
+  `ConcreteSpec/README.md`, `README.md`, `ROADMAP.md` (the dead `check_roadmap.sh` reference and
+  "when wip/philosophy lands") and the `PHILOSOPHY.md` opening link; remove legacy handling from
+  `train.sh`, `bot.sh`, `resolve_conflicts.py` and `gates_remote.sh`, including the false reuse
+  claim; fix the stale parts of `.claude/commands/land.md` and `creview.md`; refresh proposals
+  `IDEAS.md`, `MERGED.md` and `SPARK.md`; fix
+  `changelog.d/2026-11-06-facts-report-readers.md` now that model-first reading is decided; remove
+  the dead `prepush_record.sh` and `treestate.sh`; delete `scripts/land/legacy_move.sh` and
+  `move_prereqs.py`, leaving them in git history, and the empty `required-checks-transition.tsv`,
+  updating the inventory, retention and `legacy_frozen` diagnostics.
 - <a id="decided-project-spark-2026-11-06"></a>**What Concrete takes from SPARK** (owner, 2026-11-06: "ok do everything", after Claude, Codex, agy and Kimi chose unanimously; the
   [review](proposals/SPARK.md) items 1, 2, 3, 6, 7, 9 and 10).
   - *Function values with safety preconditions.* A function whose `#[requires]` is a safety
@@ -890,7 +1011,10 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
     accepting slice 20 (function values), or earlier if a workload pulls it (R-0601); it is never
     broadened to non-safety contracts.
   - *Struct invariants.* `#[invariant(...)]` on a struct with private fields holds at every
-    exposure; it lands with the structs slice (slice 9).
+    exposure. The definition is written in the spec before the freeze. Revised 2026-11-07 (owner:
+    "ok go ahead all yes then as you said right", approving the recorded recommendation): the source
+    feature moves from the structs slice (slice 9) to the modules slice (slice 17), where field
+    privacy exists.
   - *Facts at a point.* `assert(e) by thm(...)` extends [OD79](#od79). Its role is strictly
     separate from `#[proof]`: `#[proof]` discharges the function's obligations, `assert(e) by
     thm(...)` establishes one fact at one point, and the theorem's hypotheses are fully discharged.
@@ -922,11 +1046,11 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
   agy and codex and kimi if it's available"). The outside-reader pass (R-0559) is done by the owner and
   independent models: agy (Gemini), Codex, and Kimi when available. They read the browsable owner view of the
   integrated spec. The pass runs before the freeze (A2c) and again for each feature
-  ([long-term changes](#decided-project-long-term-2026-11-06)). <a id="outside-readers-ordering"></a>*Proposed, waiting for the
-  owner:* the participating models read first, and every point one of them finds unclear is
-  recorded and resolved before the owner reads; each confusion is resolved before the freeze; and
-  Kimi's absence, when it is unavailable, is recorded rather than waited on. The owner's answer
-  names who reads, not these.
+  ([long-term changes](#decided-project-long-term-2026-11-06)). <a id="outside-readers-ordering"></a>*Reading
+  order* (owner, 2026-11-07: "ok go ahead all yes then as you said right", approving the recorded
+  recommendation): Codex, agy and Kimi read first; every point one of them finds unclear is recorded
+  and resolved before the owner's formal read and before the freeze. A real design question still
+  goes to the owner. Kimi's absence, when it is unavailable, is recorded rather than waited on.
 - <a id="decided-project-contracts"></a>**Contracts and termination in verified growth** (row P18,
   2026-11-05). No source `old`, quantifier, implication or snapshot construct (OD117); entry, exit and
   frame properties are stated as Lean theorems (a source frame clause would be a new owner decision);
