@@ -112,7 +112,7 @@
             # release ships its own clang without C headers (stddef.h not found), so with Lean first
             # every C link step that uses PATH's clang (run_tests phase3_abi_interop, regress_103)
             # failed in this shell while passing on CI, whose elan puts no clang on PATH.
-            clang
+            llvmPackages_21.clang
             leanRelease
           ] ++ gatesUserland;
         in {
@@ -120,7 +120,10 @@
           # second-kernel drivers (Rocq, Isabelle) are an opt-in spike and Isabelle
           # is a multi-GB closure, so they live in a separate shell — no contributor
           # pays for them unless they run `--report multi-kernel`.
-          default = pkgs.mkShell ({ packages = base; } // gatesMarker);
+          default = pkgs.mkShell ({
+            packages = base;
+            CONCRETE_SLICE0_CLANG = "${pkgs.llvmPackages_21.clang}/bin/clang";
+          } // gatesMarker);
 
           # `nix develop .#gates` — what CI runs every gate step in: the gate userland, the marker,
           # and no compiler toolchain (mkShellNoCC, so not even stdenv's cc). Lean and the C

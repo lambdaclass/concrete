@@ -27,6 +27,12 @@ def writeExpected (dir : System.FilePath) (status : String) (stderr : String) : 
 def writeLcb (dir : System.FilePath) (target : LCB.Target) (sites : SiteTable)
     (f : LeanCompilerBackend.Verified.Source.Function) : IO Bool := do
   IO.FS.createDirAll dir
+  IO.FS.writeFile (dir / "lcb_source.txt") (reprStr f ++ "\n")
+  let job : LeanCompilerBackend.Verified.FunctionJob :=
+    { code := { symbol := LCB.bodySymbol, body := f,
+                abi := LeanCompilerBackend.Verified.planAbi f,
+                layout := LeanCompilerBackend.Verified.planFrame f } }
+  IO.FS.writeFile (dir / "lcb_job.txt") (reprStr job ++ "\n")
   -- On every host, LCB's verified first path (the `aarch64-macos` target) must admit the body.
   if let .error msg := LCB.assemble .aarch64Macos f then
     IO.eprintln s!"{dir}: LCB first path: {msg}"; return false
@@ -41,6 +47,7 @@ def writeLcb (dir : System.FilePath) (target : LCB.Target) (sites : SiteTable)
 def writeBackends (dir : System.FilePath) (target : LCB.Target) (p : Program)
     (f : LeanCompilerBackend.Verified.Source.Function) : IO Bool := do
   IO.FS.createDirAll dir
+  IO.FS.writeFile (dir / "bir.txt") (reprStr p ++ "\n")
   IO.FS.writeFile (dir / "llvm.ll") (LLVM.module p)
   writeLcb dir target p.sites f
 
