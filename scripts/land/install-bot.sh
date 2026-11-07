@@ -63,7 +63,7 @@ snaps="\$HOME/.local/state/concrete-landing-bot/snap"
 snap="\$snaps/\$sha"
 if [ ! -f "\$snap/scripts/land/bot.sh" ]; then
   rm -rf "\$snap.tmp"; mkdir -p "\$snap.tmp"
-  git archive "\$sha" scripts/land | tar -x -C "\$snap.tmp"
+  git archive "\$sha" scripts/land scripts/checks/lib/git_sandbox.sh | tar -x -C "\$snap.tmp"
   mv "\$snap.tmp" "\$snap"
   ls -1t "\$snaps" | tail -n +6 | while read -r old; do rm -rf "\${snaps:?}/\$old"; done
 fi

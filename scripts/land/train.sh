@@ -18,6 +18,10 @@
 #     operation is a stop, never a warning.
 #   * only generated views and append-only ledgers are resolved mechanically
 #     (scripts/land/resolve_conflicts.py); any other conflict aborts the merge and names the files.
+#   * (2026-11-06, ISS-0015) a train runs only from a FULL clone whose pre-push hook is the
+#     repository's (core.hooksPath .githooks, or a wrapper that runs it): a linked worktree hands its
+#     hook GIT_DIR, which once turned a test check into writes on a real clone and GitHub (where_ok;
+#     `status` and `record` push nothing and run anywhere).
 #   * (2026-11-06) review fails closed: `check` with no review command fails rather than skipping the
 #     leg, and a train lands only with review provenance (review_provenance: a verified clean review
 #     note at its head, or, when the head has none, on every member at its exact SHA).
@@ -63,6 +67,32 @@ note() { echo "train: $*"; }
 ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || die "not inside a git work tree"
 cd "$ROOT"
 COMMON="$(cd "$(git rev-parse --git-common-dir)" && pwd)"
+
+# Where a train may run (ISS-0015). Only from a FULL clone: in a linked worktree git hands its hooks
+# GIT_DIR=<repo>/.git/worktrees/<name>, which is how the 2026-11-06 hook run wrote test notes into a
+# real clone and onto GitHub; a long hook in a worktree also drops the push. And only with the
+# repository's pre-push hook enabled: train.sh pushes ci/* and main, and with the hook off (no
+# core.hooksPath, or one pointing elsewhere) those pushes would run no gate. The hook git runs is
+# `git rev-parse --git-path hooks/pre-push` (core.hooksPath honoured). It is asked who it is: run
+# with the single argument --concrete-identify and no input, the repository's .githooks/pre-push prints
+# `concrete-pre-push <its real path>` and runs nothing, and so does a wrapper that runs it
+# (acceptance.sh's guard hook). Any other answer, or none, is refused; a hook that merely mentions
+# the file is not enough. `status` and `record` push nothing (record runs in CI's Landing record
+# job, in a checkout with no hook enabled), so they run anywhere.
+where_ok() {
+  local gd hook want got
+  gd="$(cd "$(git rev-parse --git-dir)" && pwd -P)"
+  [ "$gd" = "$(cd "$COMMON" && pwd -P)" ] \
+    || die "refusing to run in a linked worktree ($ROOT; its git dir is $gd): run train.sh from a full clone, never a worktree"
+  hook="$(git rev-parse --git-path hooks/pre-push)"
+  case "$hook" in /*) ;; *) hook="$ROOT/$hook" ;; esac
+  [ -f "$hook" ] && [ -x "$hook" ] \
+    || die "refusing to run: this clone has no enabled pre-push hook ($hook is missing or not executable); enable the repository's: git config core.hooksPath .githooks"
+  want="concrete-pre-push $(cd "$ROOT" && pwd -P)/.githooks/pre-push"
+  got="$("$hook" --concrete-identify < /dev/null 2>/dev/null | tail -n 1)"
+  [ "$got" = "$want" ] \
+    || die "refusing to run: the enabled pre-push hook $hook is not the repository's .githooks/pre-push and does not run it (asked who it is, it answered '${got}'); enable it: git config core.hooksPath .githooks"
+}
 STATE_ROOT="${LAND_STATE_DIR:-$COMMON/concrete-landing}"
 LOG_DIR="${LAND_LOG_DIR:-$STATE_ROOT/log}"
 REPO="${LAND_REPO:-unbalancedparentheses/concrete2}"
@@ -1103,6 +1133,7 @@ cmd_status() {
 usage() { sed -n '2,14p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
 
 sub="${1:-}"; [ $# -gt 0 ] && shift
+case "$sub" in status|record|""|-h|--help) ;; *) where_ok ;; esac
 case "$sub" in
   build) cmd_build "$@" ;;
   check) cmd_check "$@" ;;

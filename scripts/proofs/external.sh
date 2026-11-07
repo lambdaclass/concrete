@@ -40,8 +40,10 @@ cd "$ROOT_DIR"
 CHECK_NAME=PROOF-EXTERNAL
 source scripts/proofs/lib.sh
 # A pre-push hook in a linked worktree exports repository-local Git variables; without clearing
-# them, `git -C "$tool" rev-parse HEAD` reads this repository's HEAD instead of the tool's.
-for git_local_var in $(git rev-parse --local-env-vars); do unset "$git_local_var"; done
+# them, `git -C "$tool" rev-parse HEAD` reads this repository's HEAD instead of the tool's
+# (the sandbox helper, ISS-0015).
+source scripts/checks/lib/git_sandbox.sh || exit 2
+git_sandbox || exit 2
 
 # shellcheck source=external.pins
 . scripts/proofs/external.pins

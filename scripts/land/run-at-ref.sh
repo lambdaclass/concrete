@@ -15,7 +15,11 @@
 #      unpublished train SHA can run), RUN_AT_REF_KEEP=1, RUN_AT_REF_NO_NIX=1 (run the command
 #      without `nix develop`: the landing gate's sandbox only).
 set -euo pipefail
-if [ $# -lt 2 ]; then sed -n '2,14p' "$0"; exit 2; fi
+# The clone below is a sandbox: no repository variable of the caller may reach it (ISS-0015). The
+# transport stages the helper beside this script at the same relative path.
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../checks/lib/git_sandbox.sh"
+git_sandbox
+if [ $# -lt 2 ]; then sed -n '2,16p' "$0"; exit 2; fi
 REF="$1"; shift
 CMD="$*"
 REPO="${RUN_AT_REF_REPO:-$HOME/concrete2}"

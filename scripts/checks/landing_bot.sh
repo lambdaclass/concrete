@@ -19,7 +19,7 @@
 #   bisect     a red check or a red CI ejects exactly the culprit, publishes `gates: fail` at its
 #              SHA, notifies, and lands the rest
 #   resume     a restart while a train is in CI watches it instead of dispatching again
-#   rebase     heads with recent activity are skipped; a quiet head is rebased in a scratch worktree,
+#   rebase     heads with recent activity are skipped; a quiet head is rebased in a scratch clone,
 #              re-gated, pushed with refreshed notes; a conflict is notified with its files and
 #              leaves the branch and the clone untouched; a tried pair is not retried
 #   main       no script under scripts/land force-pushes main
@@ -37,8 +37,8 @@ ok(){ echo "  ok   $1"; PASS=$((PASS+1)); }
 no(){ echo "  FAIL $1"; FAIL=$((FAIL+1)); }
 has(){ case "$1" in *"$2"*) return 0 ;; esac; return 1; }
 
-unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY
-export GIT_CONFIG_GLOBAL="$TMP/gitconfig" GIT_CONFIG_NOSYSTEM=1
+source "$ROOT_DIR/scripts/checks/lib/git_sandbox.sh" || exit 2
+git_sandbox "$TMP/gitconfig" || exit 2
 cat > "$GIT_CONFIG_GLOBAL" <<EOF
 [user]
 	name = bot gate
@@ -49,6 +49,16 @@ cat > "$GIT_CONFIG_GLOBAL" <<EOF
 	hooksPath = $TMP/nohooks
 EOF
 mkdir -p "$TMP/nohooks" "$TMP/gh"
+# train.sh runs only with the repository's pre-push hook enabled (ISS-0015): it asks the hook git
+# would run who it is (its single argument --concrete-identify). The sandbox's global hooksPath holds this
+# stand-in, which runs no gate and answers as the repository's .githooks/pre-push would: a test
+# fixture impersonating the hook on purpose.
+IDENTIFY='[ "$#" = 1 ] && [ "$1" = --concrete-identify ] && { echo "concrete-pre-push $(cd "$(git rev-parse --show-toplevel)" && pwd -P)/.githooks/pre-push"; exit 0; }'
+standin_hook() {
+  printf '#!/usr/bin/env bash\n%s\nexit 0\n' "$IDENTIFY" > "$TMP/nohooks/pre-push"
+  chmod +x "$TMP/nohooks/pre-push"
+}
+standin_hook
 export LAND_PUSH_RETRY_SLEEP=0
 export LAND_NO_NIX=1 LAND_STATE_DIR="$TMP/landstate" LAND_GH="$TMP/fake-gh" LAND_REPO=test/repo
 export LAND_HOOK="$TMP/hook" LAND_REMOTE_RUNNER="$TMP/fake-runner" FAKE_GH_DIR="$TMP/gh" ORIGIN_GIT="$TMP/origin.git"
@@ -352,7 +362,7 @@ after="$(grep -c 'workflow run' "$TMP/gh/calls.log")"
 has "$out" "before the restart; watching it" && in_main "$(sha_of wip/d1)" && [ "$after" = "$before" ] \
   && ok "the run was found by its head SHA and landed with no second dispatch" || { no "reconcile: dispatches $((after-before))"; echo "$out" | sed 's/^/      /'; }
 
-echo "=== auto-rebase: skip rules, scratch worktree, refreshed notes, conflicts ==="
+echo "=== auto-rebase: skip rules, scratch clone, refreshed notes, conflicts ==="
 mk wip/r1 r1 src/r1.txt r1; mark wip/r1
 mk wip/rc rc conflict.txt rc; mark wip/rc
 R1="$(sha_of wip/r1)"; RC="$(sha_of wip/rc)"
@@ -368,7 +378,8 @@ out="$(bot rebase)"; rc=$?
 N1="$(sha_of wip/r1)"
 [ "$N1" != "$R1" ] && git --git-dir="$TMP/origin.git" merge-base --is-ancestor "$NEWMAIN" "$N1" && has "$out" "[rebased] wip/r1" \
   && ok "a quiet ready head is rebased onto the new main and pushed" || { no "rebase r1"; echo "$out" | sed 's/^/      /'; }
-rv="$(cd "$W" && bash "$NOTES" get review "$N1")"
+# The scratch is a clone, so its notes reach this clone through the remote, as they reach anyone.
+rv="$(cd "$W" && bash "$NOTES" fetch >/dev/null && bash "$NOTES" get review "$N1")"
 has "$rv" "verdict: clean" && has "$rv" "carried-from: $R1" && [ "$(cd "$W" && bash "$NOTES" get gates "$N1" gates)" = pass ] \
   && ok "the rebased head carries the review verdict (naming the reviewed SHA) and a fresh gates note" || no "notes on rebased head: $rv"
 has "$out" "[rebase-conflict] wip/rc" && has "$out" "conflicts in: conflict.txt" && [ "$(sha_of wip/rc)" = "$RC" ] \
@@ -376,7 +387,7 @@ has "$out" "[rebase-conflict] wip/rc" && has "$out" "conflicts in: conflict.txt"
 has "$(cat "$TMP/gh/notify.log")" "rebase-conflict|wip/rc" && ok "the conflict was notified" || no "no conflict notification"
 inprog=0; for p in rebase-merge rebase-apply MERGE_HEAD; do [ -e "$W/.git/$p" ] && inprog=1; done
 [ "$inprog" = 0 ] && [ "$(cd "$W" && git worktree list | wc -l | tr -d ' ')" = 1 ] && [ -z "$(cd "$W" && git status --porcelain --untracked-files=no)" ] \
-  && ok "no rebase left in progress, scratch worktrees removed, clone clean" || no "rebase left state behind"
+  && ok "no rebase left in progress, no worktree, scratch clones removed, clone clean" || no "rebase left state behind"
 out="$(bot rebase)"
 has "$out" "rebase-conflict" && no "the same conflict was retried" || ok "a tried (head, main) pair is not retried"
 unset BOT_NOW

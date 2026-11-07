@@ -4,7 +4,8 @@
 #   gates_transport_ssh.sh <host> <bundle> <ref> <command>
 #
 # Copies ONE directory to <host> (any ssh destination, e.g. an ~/.ssh/config alias): the bundle, this
-# checkout's scripts/land/run-at-ref.sh, and a bash script that brings the host's gate clone up to
+# checkout's scripts/land/run-at-ref.sh with the sandbox helper it sources (scripts/checks/lib/
+# git_sandbox.sh, staged at the same relative paths), and a bash script that brings the host's gate clone up to
 # date with its origin (so base, which is on main, is there) and runs run-at-ref.sh with
 # RUN_AT_REF_SOURCE=<the bundle>, <ref> and <command>. The ref and command are quoted for bash HERE,
 # into that file, so the host's login shell only ever sees `bash land-remote-<id>/run.sh`, whatever
@@ -22,15 +23,16 @@ read -r -a SCP <<< "${LAND_GATES_SCP:-scp -q -r -o BatchMode=yes}"
 id="land-remote-$(date -u +%Y%m%dT%H%M%S)-$$-$RANDOM"
 tmp="$(mktemp -d)" || { echo "transport: cannot create a temp directory" >&2; exit 255; }
 trap 'rm -rf "$tmp"' EXIT
-mkdir "$tmp/$id"
-cp "$bundle" "$tmp/$id/c.bundle" && cp "$SELF_DIR/run-at-ref.sh" "$tmp/$id/run-at-ref.sh" \
+mkdir -p "$tmp/$id/scripts/land" "$tmp/$id/scripts/checks/lib"
+cp "$bundle" "$tmp/$id/c.bundle" && cp "$SELF_DIR/run-at-ref.sh" "$tmp/$id/scripts/land/run-at-ref.sh" \
+  && cp "$SELF_DIR/../checks/lib/git_sandbox.sh" "$tmp/$id/scripts/checks/lib/git_sandbox.sh" \
   || { echo "transport: cannot stage the bundle" >&2; exit 255; }
 {
   echo '#!/usr/bin/env bash'
   echo 'dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"'
   echo 'trap '\''rm -rf "$dir"'\'' EXIT'
   echo 'git -C "${RUN_AT_REF_REPO:-$HOME/concrete2}" fetch -q origin || { echo "transport: fetch in the gate clone failed" >&2; exit 255; }'
-  printf 'RUN_AT_REF_SOURCE="$dir/c.bundle" bash "$dir/run-at-ref.sh" %q %q\n' "$ref" "$cmd"
+  printf 'RUN_AT_REF_SOURCE="$dir/c.bundle" bash "$dir/scripts/land/run-at-ref.sh" %q %q\n' "$ref" "$cmd"
 } > "$tmp/$id/run.sh"
 "${SCP[@]}" "$tmp/$id" "$host:$id" || { echo "transport: copying to $host failed" >&2; exit 255; }
 rc=0
