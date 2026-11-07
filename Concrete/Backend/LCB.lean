@@ -1033,29 +1033,54 @@ theorem adaptBlock_ok {p : Program} {j : Nat} {b : Block} {lb : Source.Block}
     cases hi : (indexed b.insts).mapM (adaptInst p j b) <;> cases ht : term p b.term <;>
     simp_all [bind, Except.bind, pure, Except.pure]
 
+/-- The expansions of a block's instructions have the instructions' widths. -/
+theorem insts_lengths {p : Program} {j : Nat} {b : Block} {xss : List (List Source.Instruction)}
+    (hx : (indexed b.insts).mapM (adaptInst p j b) = .ok xss) :
+    xss.map List.length = b.insts.map Inst.width := by
+  have hlen := (mapM_ok hx).1
+  rw [length_indexed] at hlen
+  apply List.ext_getElem?
+  intro m
+  simp only [List.getElem?_map]
+  cases hm : b.insts[m]? with
+  | none =>
+    have : xss.length ≤ m := by
+      have := List.getElem?_eq_none_iff.mp hm; omega
+    simp [List.getElem?_eq_none this]
+  | some ins' =>
+    obtain ⟨ys, hys, hym⟩ := mapM_ok_ok hx (i := m) (x := (m, ins'))
+      (by simp [Runtime.getElem?_indexed, hm])
+    simp [hym, inst_length (show inst p _ ins' = .ok ys from hys)]
+
+/-- An adapted block has exactly its instructions' expansions: the terminator follows them. -/
+theorem block_size {p : Program} {j : Nat} {b : Block} {lb : Source.Block}
+    (h : adaptBlock p (j, b) = .ok lb) : lb.instructions.size = (b.insts.map Inst.width).sum := by
+  obtain ⟨phis, xss, tm, -, hx, -, rfl⟩ := adaptBlock_ok h
+  simp only [List.size_toArray, List.length_flatten, insts_lengths hx]
+
+/-- In an adapted body, block `j` is `adaptBlock` of BIR block `j`, and every slot is a word. -/
+theorem adapt_block {p : Program} {f : Source.Function} (h : adapt p = .ok f) {j : Nat} {b : Block}
+    (hbj : p.blocks[j]? = some b) :
+    ∃ lb, f.blocks[j]? = some lb ∧ adaptBlock p (j, b) = .ok lb := by
+  obtain ⟨-, bs, hbs, rfl⟩ := adapt_ok h
+  obtain ⟨lb, hlb, hi⟩ := mapM_ok_ok hbs (i := j) (x := (j, b)) (by simp [Runtime.getElem?_indexed, hbj])
+  exact ⟨lb, by simpa using hi, hlb⟩
+
+theorem adapt_widths {p : Program} {f : Source.Function} (h : adapt p = .ok f) :
+    ∀ m, m < valueCount p → f.valueWidths[m]? = some .word := by
+  obtain ⟨-, bs, -, rfl⟩ := adapt_ok h
+  intro m hm
+  simp [hm]
+
 /-- In an adapted block, instruction `i`'s expansion sits at `instPos b i`. -/
 theorem block_insts {p : Program} {j : Nat} {b : Block} {lb : Source.Block}
     (h : adaptBlock p (j, b) = .ok lb) {i : Nat} {ins : Inst} (hi : b.insts[i]? = some ins) :
     ∃ xs, inst p (blockBase p j + instBase b i) ins = .ok xs ∧
       ∀ k, k < Inst.width ins → lb.instructions[instPos b i + k]? = xs[k]? := by
   obtain ⟨phis, xss, tm, -, hx, -, rfl⟩ := adaptBlock_ok h
-  have hlen := (mapM_ok hx).1
-  rw [length_indexed] at hlen
   obtain ⟨xs, hxs, hxi⟩ := mapM_ok_ok hx (i := i) (x := (i, ins)) (by simp [Runtime.getElem?_indexed, hi])
   refine ⟨xs, hxs, fun k hk => ?_⟩
-  have hw : xss.map List.length = b.insts.map Inst.width := by
-    apply List.ext_getElem?
-    intro m
-    simp only [List.getElem?_map]
-    cases hm : b.insts[m]? with
-    | none =>
-      have : xss.length ≤ m := by
-        have := List.getElem?_eq_none_iff.mp hm; omega
-      simp [List.getElem?_eq_none this]
-    | some ins' =>
-      obtain ⟨ys, hys, hym⟩ := mapM_ok_ok hx (i := m) (x := (m, ins'))
-        (by simp [Runtime.getElem?_indexed, hm])
-      simp [hym, inst_length (show inst p _ ins' = .ok ys from hys)]
+  have hw := insts_lengths hx
   have hpos : instPos b i = ((xss.take i).map List.length).sum := by
     simp only [instPos, ← hw, List.map_take]
   simp only [List.getElem?_toArray]
