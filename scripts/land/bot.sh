@@ -264,8 +264,8 @@ scratch_clone() { # dir sha: a local clone of this clone, detached at sha, with 
     git -C "$d" config --unset-all "remote.$r.url" 2>/dev/null || true
     git -C "$d" config "remote.$r.fetch" >/dev/null 2>&1 || git -C "$d" config "remote.$r.fetch" "+refs/heads/*:refs/remotes/$r/*"
     while IFS= read -r v; do
-      [ -n "$v" ] && git -C "$d" config --add "remote.$r.url" "$v"
-    done <<< "$(git config --get-all "remote.$r.url" 2>/dev/null || true)"
+      if [ -n "$v" ]; then git -C "$d" config --add "remote.$r.url" "$v"; fi
+    done <<< "$(git remote get-url --all "$r" 2>/dev/null || true)"   # insteadOf expanded, as git uses it
   done
   git -C "$d" config core.hooksPath "$(git config core.hooksPath || echo .githooks)"
   for k in user.name user.email user.useConfigOnly; do
@@ -275,8 +275,8 @@ scratch_clone() { # dir sha: a local clone of this clone, detached at sha, with 
     git -C "$d" config --unset-all "remote.$r.pushurl" 2>/dev/null || true
     # (no push URL is the common case: --get-all then exits 1, which must not stop the bot)
     while IFS= read -r v; do
-      [ -n "$v" ] && git -C "$d" config --add "remote.$r.pushurl" "$v"
-    done <<< "$(git config --local --get-all "remote.$r.pushurl" 2>/dev/null || true)"
+      if [ -n "$v" ]; then git -C "$d" config --add "remote.$r.pushurl" "$v"; fi
+    done <<< "$(git config --local --get-all "remote.$r.pushurl" >/dev/null 2>&1 && git remote get-url --push --all "$r" 2>/dev/null || true)"
   done
   git -C "$d" checkout -q --detach "$sha"
   if [ -d "$ROOT/.lake" ] && [ ! -e "$d/.lake" ]; then cp -a "$ROOT/.lake" "$d/.lake"; fi
