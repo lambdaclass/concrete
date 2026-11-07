@@ -777,7 +777,7 @@ step cites the row once it is on main; a step that needs a row not yet on main w
 | D9 | Facts vocabulary, statuses, coverage, strength, vacuity, dependency flow (facts decision; R-0585) | `Facts` | 2.1 item 8; every kind present from phase B, `notApplicable` until its slice | B |
 | D10 | Diagnostics are typed checker results; rule ID = Lean rule name plus that rule's own revision (R-0593, R-0603); one `spec_version` per output, 0.x before the freeze and 1.0 at A2c ([runtime row](../decisions.md#decided-project-runtime-2026-11-06)) | `Ident`, `Checker` | `RuleId` and `spec_version` (step 2); `Rule`, `Subject`, `CheckResult`, the retired-ID registry and the lifecycle checks (1.10) with `incomplete`, `check_correspond`, `check_refused` | A (steps 2, 9) |
 | D11 | Byte accounting (R-0592) | `Ident`, `Values`, `Semantics` | `LineageId`, the ghost-log alloc and destroy records, the derived quantities, with examples over hand-written logs at B; the semantics and `ghost_log_adequate` at 19 | B, 19 |
-| D12 | The leakage-trace interface (R-0592): `Secret<T>`, `classify`, `declassify`, `ct_select`, `ct_eq` | `Types`, `Primitives`, `Semantics` | leakage records in the ghost log and a variable-time flag per primitive at B (with examples); `Secret<T>` on scalars, `classify` (the pure classify of a value passed in is slice 7's only secret source, no wrapper duplicating it), `declassify(x, "reason")`, `ct_select`, the closed CT operation table and the Q2.2-revised scalar Copy rule at 7; grant-backed sources at 16, 18, 27 | B, 7 |
+| D12 | The leakage-trace interface (R-0592): `Secret<T>`, `classify`, `declassify`, `ct_select`, `ct_eq` | `Types`, `Primitives`, `Semantics` | leakage records in the ghost log and a variable-time flag per primitive at B (with examples); `Secret<T>` on scalars, `classify` (the pure classify of a value passed in, no wrapper duplicating it), the entropy capability's `Secret<T>` output from slice 7 ([decision](../decisions.md#decided-2026-11-07-stack-randomness)), `declassify(x, "reason")`, `ct_select`, the closed CT operation table and the Q2.2-revised scalar Copy rule at 7; fill-bytes from entropy at 15; grant-backed sources at 16, 18, 27 | B, 6, 7, 15 |
 | D13 | Q4.6 and Q4.7 revised | `Primitives`, `Borrow`, `Evidence` | `byte_at` needs an in-range offset; a range without `else` needs evidence of validity | 15, 16 |
 | D14 | Closed evidence (Q9.11, OD125 qualified, CON-2); `assume` never admits safety (OD80, CON-6); vacuous preconditions (OD120) | `Evidence`, `Obligations`, `Admission` | evidence sources; `assume` excluded; vacuity refusal | 5, 8 |
 | D15 | Policies and `Concrete.toml` | not Core | compiler data over `Facts`; the spec defines only `Fact.Holds` | — |
@@ -795,7 +795,7 @@ step cites the row once it is on main; a step that needs a row not yet on main w
 | D27 | `assert(e) by thm(...)`, an extension of OD79 ([SPARK row](../decisions.md#decided-project-spark-2026-11-06)) | `Syntax`, `Obligations`, `EvidenceSem` | one fact at one point, the theorem's hypotheses fully discharged; a role kept separate from `#[proof]` (which discharges the function's obligations) | 8 |
 | D29 | `#[overflow_checked]` (ARITH-9) retired | `Grammar` | no production; the attribute is refused as unknown | 0 |
 | D30 | `Concrete.toml`: typed, versioned `[policy]` and `[assumptions]` tables, unknown keys and versions refused | not Core | compiler data; the spec defines the facts a policy reads | — |
-| D31 | R-0595 heap bounds at the allocation slice; RocksDB and ethlambda programs audited before acceptance (R-0604) | not Core | the facts kinds D9 already holds | 19, 25, 27 |
+| D31 | R-0595 heap bounds at the allocation slice; RocksDB and ethlambda programs audited before acceptance (R-0604) | not Core | the facts kinds D9 already holds | 19, 25, after 28 ([decision](../decisions.md#decided-2026-11-07-final-slices)) |
 | D28 | One Core syntax; slice 0 by fragment predicates (I3, decided internally 2026-11-06) | `Syntax`, `Fragments` | `Spec/Slice0.lean`'s syntax and `toCore` deleted at step 12, when the new admission and semantics can carry the slice-0 theorems | B (step 12) |
 
 ---
@@ -982,11 +982,13 @@ dropped and no source feature arrives early. `Borrow` is the one fragment ported
     (R-0600).
 17. Slice 6: authority. Port `Authority` whole (calls exist): `with(...)`, inclusion, the primitive
     effect table, `main`'s grant parameters, launcher minting, startup refusal 125, Start/Exit
-    events. `authority_contained` with grant provenance; `sub_iff` and `equiv_iff` move unchanged.
+    events, and the entropy capability granted to `main` with its source as a named trusted
+    premise ([decision](../decisions.md#decided-2026-11-07-stack-randomness)). `authority_contained` with grant provenance; `sub_iff` and `equiv_iff` move unchanged.
     The old fragment's explicit capability arguments and capability-variable substitution come into
     Core here, ahead of slice 11, with the source forms outside `Fragment.surface` until slice 11.
     Delete `Authority.*`.
-18. Slice 7: `Secret<T>` on scalars and the leakage semantics (D12); the wipe event kind (R-0602).
+18. Slice 7: `Secret<T>` on scalars and the leakage semantics (D12), with entropy output as
+    `Secret<T>`; the wipe event kind (R-0602).
 19. Slice 8: `assert`, `assume`, `ghost let`, `spec fn`, `#[proof(path)]` (D7),
     `assert(e) by thm(...)` (D27), vacuity refusal and strength labels, `#[test]`.
 20. Slice 9: structs with named fields of any type, declared `Copy`, field access and writes,
@@ -1003,7 +1005,7 @@ dropped and no source feature arrives early. `Borrow` is the one fragment ported
     unwinding in the run; `defer_cleanup_releases` with all five conclusions (its dependency order
     uses `Ty.brands`, present since step 3), `abort_no_cleanup`; 3.1.1, 3.1.7, 3.1.3 for cleanup
     (O7), O8. Delete `Cleanup.*`.
-24. Slice 15: arrays and range views. Port the view half of `Borrow` (`VStmt`, `vrun` deleted);
+24. Slice 15: arrays and range views, with entropy fill-bytes (D12). Port the view half of `Borrow` (`VStmt`, `vrun` deleted);
     3.1.4 (O9); D13. Text sources and views come into Core here, ahead of slice 16 (surface
     excluded), and `utf8_split` and `text_view_utf8` move to `Proofs/` beside them. Delete
     `Borrow.*`.

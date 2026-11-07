@@ -16,17 +16,19 @@ more show-off and useful (2026-11-06: "this is great but i think we should build
 examples" and "amzing, but i would laso want something that is more show of and useful"). Each pairs a program people already use with what Concrete proves
 about it, and states its functional, resource, authority and backend claims separately.
 
-| Showcase | First version | Full version | What Concrete proves |
-|---|---|---|---|
-| `grep` with a linear-time regex | 16: stdin, a pattern given in the source, fixed buffers | 18: `grep PATTERN FILE`; 22: dynamic patterns | matching terminates and agrees with the regex semantics; linear time through the step model at 4–5 and step-bound proofs at 8 ([decision](../decisions.md#decided-2026-11-07-step-bounds)) |
-| Image decoder | 19 → 21: QOI | 21–22: PNG with DEFLATE | any input decodes or is refused with a typed error; memory bounded from the header; no hidden traps |
-| EVM interpreter | 15: u256 arithmetic and the opcode set | 21 → 23: growable memory, gas, Keccak | each opcode against the EVM spec; gas-bounded; no trap on any bytecode |
-| Embedded key-value store | 23: in-memory index plus an append-only log | 23, with RocksDB at 25 for comparison | bounded memory and correct contents; durability "not established" (crash model not planned) |
-| WebAssembly sandbox | 21: interpreter with fuel and linear memory | 23 → 26: host imports, capability-limited host calls | memory safety, fuel-bounded termination, host calls limited by capabilities |
-| Encrypted tunnel (Noise + ChaCha20-Poly1305) | 7 → 15: ChaCha20, Poly1305, X25519 as the `Secret<T>` flagship; 18: file encryptor | after 28: the tunnel, after the randomness/nonce audit | crypto correct and constant time; secrets never reach output; one network grant |
-| Static web server serving the Concrete website | 27: one connection at a time, reading `./site` | after 28: concurrent version | reads only `./site`; per-request memory bound; no crash on any input |
+The claim columns below are proposed wording; the showcases and their slices are adopted.
 
-Growing flagships: sha256sum (2 to 19), the ChaCha20 constant-time encryptor (7 to 18), and a calc
+| Showcase | First version | Full version | Functional | Resource | Authority | Backend |
+|---|---|---|---|---|---|---|
+| `grep` with a linear-time regex | 16: stdin, a pattern given in the source, fixed buffers | 18: `grep PATTERN FILE`; 22: dynamic patterns | matching terminates and agrees with the regex semantics | linear time through the step model at 4–5 and step-bound proofs at 8 ([decision](../decisions.md#decided-2026-11-07-step-bounds)) | Console, then one Fs read grant | Lean evaluator, LLVM and LCB agree; native claims rest on the named backend premises |
+| Image decoder | 19 → 21: QOI | 21–22: PNG with DEFLATE | any input decodes or is refused with a typed error; no hidden traps | memory bounded from the header | the input it is given only | as for `grep` |
+| EVM interpreter | 15: u256 arithmetic and the opcode set | 21 → 23: growable memory, gas, Keccak | each opcode against the EVM spec; no trap on any bytecode | gas-bounded | none | as for `grep` |
+| Embedded key-value store | 23: in-memory index plus an append-only log | 23, with RocksDB at 25 for comparison | correct contents | bounded memory | one Fs grant for its log | as for `grep`; durability "not established" (crash model not planned) |
+| WebAssembly sandbox | 21: interpreter with fuel and linear memory | 23 → 26: host imports, capability-limited host calls | memory safety | fuel-bounded termination | host calls limited by capabilities | as for `grep` |
+| Encrypted tunnel (Noise + ChaCha20-Poly1305) | 7 → 15: ChaCha20, Poly1305, X25519 as the `Secret<T>` flagship; 18: file encryptor | after 28: the tunnel, after the randomness/nonce audit | crypto correct; secrets never reach output | constant time at the source level | one network grant | as for `grep`, plus the backend constant-time premise |
+| Static web server serving the Concrete website | 27: one connection at a time, reading `./site` | after 28: concurrent version | no crash on any input | per-request memory bound | reads only `./site`; one network grant | as for `grep` |
+
+Proposed growing flagships (not among the seven adopted showcases): sha256sum (2 to 19), the ChaCha20 constant-time encryptor (7 to 18), and a calc
 tokenizer, parser and stack VM (3 to 19).
 
 ## Per-slice draft (Claude, reviewed once)
