@@ -515,6 +515,19 @@ theorem size_set! (e : Source.Environment) (m : Nat) (u : Option Source.Value) :
     (e.set! m u).size = e.size := by
   simp [Array.set!_eq_setIfInBounds]
 
+/-- The intermediate words of a `bin`/`binOvf` expansion: the raw result, minus `t.min`, masked. -/
+def raw (op : BinOp) (x y : Int) : BitVec 32 :=
+  Source.binaryBits (opBinary op) (BitVec.ofInt 32 x) (BitVec.ofInt 32 y)
+def biased (t : IntTy) (z : BitVec 32) : BitVec 32 := Source.binaryBits .sub z (BitVec.ofInt 32 t.min)
+def masked (t : IntTy) (z : BitVec 32) : BitVec 32 :=
+  Source.binaryBits .andBits z (BitVec.ofInt 32 (2 ^ t.bits - 1))
+
+/-- `Steps` compose. -/
+theorem steps_append {f : Source.Function} {m k : Nat} {s t u : Source.State} :
+    Source.Steps f m s t → Source.Steps f k t u → Source.Steps f (k + m) s u
+  | .zero _, h => h
+  | .succ h₁ h₂, h => .succ h₁ (steps_append h₂ h)
+
 /-- The four steps of a `bin` expansion compute the word of `wrap t (a op b)` at slot `n + 3`. -/
 theorem bin_steps {f : Source.Function} {s : Source.State} {lb : Source.Block} {n : Nat}
     {op : BinOp} {t : IntTy} {a' b' : Source.Operand} {x y : Int} (ht : inProfile t = true)
@@ -528,13 +541,14 @@ theorem bin_steps {f : Source.Function} {s : Source.State} {lb : Source.Block} {
     (hB : Source.read s.environment .word b' = .ok (word y))
     (hW : ∀ m, m < s.environment.size → f.valueWidths[m]? = some .word)
     (hs : n + 3 < s.environment.size) :
-    ∃ u₀ u₁ u₂, Source.Steps f 4 s ⟨s.block, s.position + 4,
-      set4 s.environment n u₀ u₁ u₂ (some (word (wrap t (op.exact x y))))⟩ := by
+    Source.Steps f 4 s ⟨s.block, s.position + 4,
+      set4 s.environment n (some (.word (raw op x y))) (some (.word (biased t (raw op x y))))
+        (some (.word (masked t (biased t (raw op x y))))) (some (word (wrap t (op.exact x y))))⟩ := by
   obtain ⟨blk, pos, env⟩ := s
   simp only at hb hq hA hB hW hs ⊢
-  let p₀ := Source.binaryBits (opBinary op) (BitVec.ofInt 32 x) (BitVec.ofInt 32 y)
-  let p₁ := Source.binaryBits .sub p₀ (BitVec.ofInt 32 t.min)
-  let p₂ := Source.binaryBits .andBits p₁ (BitVec.ofInt 32 (2 ^ t.bits - 1))
+  let p₀ := raw op x y
+  let p₁ := biased t p₀
+  let p₂ := masked t p₁
   let p₃ := Source.binaryBits .add p₂ (BitVec.ofInt 32 t.min)
   let e₁ := env.set! n (some (.word p₀))
   let e₂ := e₁.set! (n + 1) (some (.word p₁))
@@ -549,25 +563,186 @@ theorem bin_steps {f : Source.Function} {s : Source.State} {lb : Source.Block} {
     show word _ = Source.Value.word ((BitVec.ofInt 32 (op.exact x y) - BitVec.ofInt 32 t.min &&&
       BitVec.ofInt 32 (2 ^ t.bits - 1)) + BitVec.ofInt 32 t.min)
     rw [wrap_word ht]; rfl
-  refine ⟨some (.word p₀), some (.word p₁), some (.word p₂), ?_⟩
   show Source.Steps f 4 ⟨blk, pos, env⟩ ⟨blk, pos + 4, e₃.set! (n + 3) (some (word _))⟩
   rw [hv₃]
   have s₀ := step_body (s := ⟨blk, pos, env⟩) hb (by simpa using hq 0 (by omega))
     (eval_bin (d := n) (op := opBinary op) hA hB)
     (write_ok (n := n) (hW n (by omega)) (by first | omega | (dsimp only; omega)) rfl)
   have s₁ := step_body (s := ⟨blk, pos + 1, e₁⟩) hb (by simpa [Nat.add_assoc] using hq 1 (by omega))
-    (eval_bin (d := n + 1) (op := .sub) (read_set_self (by first | omega | (dsimp only; omega)) rfl) (read_literal _ t.min))
+    (eval_bin (d := n + 1) (op := .sub) (read_set_self (by omega) rfl) (read_literal _ t.min))
     (write_ok (n := n + 1) (hW (n + 1) (by omega)) (by first | omega | (dsimp only; omega)) rfl)
   have s₂ := step_body (s := ⟨blk, pos + 1 + 1, e₂⟩) hb
     (by simpa [Nat.add_assoc] using hq 2 (by omega))
-    (eval_bin (d := n + 2) (op := .andBits) (read_set_self (by first | omega | (dsimp only; omega)) rfl)
+    (eval_bin (d := n + 2) (op := .andBits) (read_set_self (by omega) rfl)
       (read_literal _ (2 ^ t.bits - 1)))
     (write_ok (n := n + 2) (hW (n + 2) (by omega)) (by first | omega | (dsimp only; omega)) rfl)
   have s₃ := step_body (s := ⟨blk, pos + 1 + 1 + 1, e₃⟩) hb
     (by simpa [Nat.add_assoc] using hq 3 (by omega))
-    (eval_bin (d := n + 3) (op := .add) (read_set_self (by first | omega | (dsimp only; omega)) rfl) (read_literal _ t.min))
+    (eval_bin (d := n + 3) (op := .add) (read_set_self (by omega) rfl) (read_literal _ t.min))
     (write_ok (n := n + 3) (hW (n + 3) (by omega)) (by first | omega | (dsimp only; omega)) rfl)
   exact .succ s₀ (.succ s₁ (.succ s₂ (.succ s₃ (.zero _))))
+
+/-- Reading a slot past a write to another slot. -/
+theorem read_set_other {env : Source.Environment} {m k : Nat} {u : Option Source.Value} {w : Width}
+    (h : m ≠ k) : Source.read (env.set! m u) w (.local k) = Source.read env w (.local k) := by
+  simp [Source.read, Array.set!_eq_setIfInBounds, Array.getElem?_setIfInBounds_ne h]
+
+/-- Evaluating an expansion comparison on two word reads. -/
+theorem eval_cmp {env : Source.Environment} {d : Nat} {op : Source.Comparison}
+    {a b : Source.Operand} {p q : BitVec 32} (ha : Source.read env .word a = .ok (.word p))
+    (hb : Source.read env .word b = .ok (.word q)) :
+    Source.evaluate env (ins d (.compare op .word a b)) =
+      Source.evaluateComparison op (.word p) (.word q) := by
+  simp [Source.evaluate, ins, ha, hb, word_bne, bind, Except.bind]
+
+/-- The words LCB's comparisons give. Named, so that unification never evaluates them. -/
+def ultBit (p q : BitVec 32) : BitVec 32 := if p.toNat < q.toNat then 1 else 0
+def eqBit (p q : BitVec 32) : BitVec 32 := if p.toNat = q.toNat then 1 else 0
+
+theorem cmp_ult (p q : BitVec 32) : Source.evaluateComparison .unsignedLT (.word p) (.word q) =
+    .ok (.word (ultBit p q)) := by
+  by_cases h : p.toNat < q.toNat <;>
+    simp [Source.evaluateComparison, Source.Value.width, Source.Value.toNat, word_bne, pure,
+      Except.pure, ultBit, h]
+
+theorem cmp_eq (p q : BitVec 32) : Source.evaluateComparison .eq (.word p) (.word q) =
+    .ok (.word (eqBit p q)) := by
+  by_cases h : p.toNat = q.toNat <;>
+    simp [Source.evaluateComparison, Source.Value.width, Source.Value.toNat, word_bne, pure,
+      Except.pure, eqBit, h]
+
+theorem pow_bits_toNat {t : IntTy} (ht : inProfile t = true) :
+    (BitVec.ofInt 32 (2 ^ t.bits)).toNat = 2 ^ t.bits := by
+  rcases inProfile_cases ht with rfl | rfl | rfl | rfl <;> decide
+
+/-- The overflow flag word: `1` exactly when the result is outside `t`. -/
+theorem flag_value {t : IntTy} (ht : inProfile t = true) (op : BinOp) {x y : Int}
+    (hx : t.inRange x = true) (hy : t.inRange y = true) :
+    eqBit (ultBit (biased t (raw op x y)) (BitVec.ofInt 32 (2 ^ t.bits))) (BitVec.ofInt 32 0) =
+      BitVec.ofInt 32 (if !t.inRange (op.exact x y) then 1 else 0) := by
+  unfold eqBit ultBit
+  have hf := flag_word ht op hx hy
+  have hr : biased t (raw op x y) = BitVec.ofInt 32 (op.exact x y) - BitVec.ofInt 32 t.min := by
+    simp only [biased, raw, binaryBits_exact]; rfl
+  rw [hr, pow_bits_toNat ht]
+  revert hf
+  generalize (BitVec.ofInt 32 (op.exact x y) - BitVec.ofInt 32 t.min).toNat = v
+  intro hf
+  cases h : t.inRange (op.exact x y)
+  · have hv : ¬ v < 2 ^ t.bits := by simpa [h] using hf
+    simp [hv]
+  · have hv : v < 2 ^ t.bits := by simpa [h] using hf
+    simp [hv]
+
+/-- The two flag steps of a `binOvf` expansion, from any slot `n + 1` holding the word `p`. -/
+theorem flag_steps {f : Source.Function} {lb : Source.Block} {blk : Source.BlockId} {pos n : Nat}
+    {E : Source.Environment} {p Q : BitVec 32} (hb : f.blocks[blk]? = some lb)
+    (hi₄ : lb.instructions[pos]? = some (ins (n + 4) (.compare .unsignedLT .word (.local (n + 1))
+      (.literal (.word Q)))))
+    (hi₅ : lb.instructions[pos + 1]? = some (ins (n + 5) (.compare .eq .word (.local (n + 4))
+      (.literal (word 0)))))
+    (r₁ : Source.read E .word (.local (n + 1)) = .ok (.word p))
+    (hW₄ : f.valueWidths[n + 4]? = some .word) (hW₅ : f.valueWidths[n + 5]? = some .word)
+    (hs : n + 5 < E.size) :
+    Source.Steps f 2 ⟨blk, pos, E⟩ ⟨blk, pos + 1 + 1,
+      (E.set! (n + 4) (some (.word (ultBit p Q)))).set! (n + 5)
+        (some (.word (eqBit (ultBit p Q) (BitVec.ofInt 32 0))))⟩ := by
+  have rQ : Source.read E .word (.literal (.word Q)) = .ok (.word Q) := by
+    simp [Source.read, Source.Value.width, word_bne, bind, Except.bind, pure, Except.pure]
+  have s₄ := step_body (s := ⟨blk, pos, E⟩) hb hi₄
+    ((eval_cmp (d := n + 4) r₁ rQ).trans (cmp_ult _ _))
+    (write_ok (n := n + 4) hW₄ (by show n + 4 < E.size; omega) rfl)
+  have r₄ := read_set_self (env := E) (n := n + 4) (v := .word (ultBit p Q)) (by omega) rfl
+  have s₅ := step_body (s := ⟨blk, pos + 1, E.set! (n + 4) (some (.word (ultBit p Q)))⟩) hb hi₅
+    ((eval_cmp (d := n + 5) r₄ (read_literal _ 0)).trans (cmp_eq _ _))
+    (write_ok (n := n + 5) hW₅ (by show n + 5 < (E.set! _ _).size; rw [size_set!]; omega) rfl)
+  exact .succ s₄ (.succ s₅ (.zero _))
+
+/-- The six steps of a `binOvf` expansion: the wrapped result at slot `n + 3` and the overflow flag
+at slot `n + 5`, both as `enc` gives them. -/
+theorem binOvf_steps {f : Source.Function} {s : Source.State} {lb : Source.Block} {n : Nat}
+    {op : BinOp} {t : IntTy} {a' b' : Source.Operand} {x y : Int} (ht : inProfile t = true)
+    (hx : t.inRange x = true) (hy : t.inRange y = true)
+    (hb : f.blocks[s.block]? = some lb)
+    (hq : ∀ k, k < 6 → lb.instructions[s.position + k]? =
+      [ins n (.binary (opBinary op) a' b'),
+        ins (n + 1) (.binary .sub (.local n) (.literal (word t.min))),
+        ins (n + 2) (.binary .andBits (.local (n + 1)) (.literal (word (2 ^ t.bits - 1)))),
+        ins (n + 3) (.binary .add (.local (n + 2)) (.literal (word t.min))),
+        ins (n + 4) (.compare .unsignedLT .word (.local (n + 1)) (.literal (word (2 ^ t.bits)))),
+        ins (n + 5) (.compare .eq .word (.local (n + 4)) (.literal (word 0)))][k]?)
+    (hA : Source.read s.environment .word a' = .ok (word x))
+    (hB : Source.read s.environment .word b' = .ok (word y))
+    (hW : ∀ m, m < s.environment.size → f.valueWidths[m]? = some .word)
+    (hs : n + 5 < s.environment.size) :
+    ∃ u₄, Source.Steps f 6 s ⟨s.block, s.position + 6,
+      ((set4 s.environment n (some (.word (raw op x y))) (some (.word (biased t (raw op x y))))
+        (some (.word (masked t (biased t (raw op x y))))) (some (word (wrap t (op.exact x y))))).set!
+        (n + 4) u₄).set! (n + 5) (some (enc (.bool (!t.inRange (op.exact x y)))))⟩ := by
+  obtain ⟨blk, pos, env⟩ := s
+  simp only at hb hq hA hB hW hs ⊢
+  let E := set4 env n (some (.word (raw op x y))) (some (.word (biased t (raw op x y))))
+    (some (.word (masked t (biased t (raw op x y))))) (some (word (wrap t (op.exact x y))))
+  have h4 : Source.Steps f 4 ⟨blk, pos, env⟩ ⟨blk, pos + 4, E⟩ :=
+    bin_steps (s := ⟨blk, pos, env⟩) ht hb (fun k hk => by
+      rw [hq k (by omega)]; rcases k with _ | _ | _ | _ | k <;> first | rfl | omega)
+      hA hB hW (by first | omega | (dsimp only; omega))
+  have zE : E.size = env.size := by simp only [E, set4, size_set!]
+  have r₁ : Source.read E .word (.local (n + 1)) = .ok (.word (biased t (raw op x y))) := by
+    simp only [E, set4]
+    rw [read_set_other (by omega), read_set_other (by omega)]
+    exact read_set_self (by simp only [size_set!]; omega) rfl
+  have h2 := flag_steps (E := E) (pos := pos + 4) (Q := BitVec.ofInt 32 (2 ^ t.bits)) hb
+    (hq 4 (by omega)) (by simpa [Nat.add_assoc] using hq 5 (by omega)) r₁
+    (hW (n + 4) (by omega)) (hW (n + 5) (by omega)) (by omega)
+  refine ⟨some (.word (ultBit (biased t (raw op x y)) (BitVec.ofInt 32 (2 ^ t.bits)))), ?_⟩
+  have hflag : enc (.bool (!t.inRange (op.exact x y))) = .word (eqBit (ultBit (biased t
+      (raw op x y)) (BitVec.ofInt 32 (2 ^ t.bits))) (BitVec.ofInt 32 0)) := by
+    simp only [enc, word]; rw [flag_value ht op hx hy]
+  rw [hflag, show pos + 6 = pos + 4 + 1 + 1 from rfl]
+  exact steps_append h4 h2
+
+/-- The three steps of a `trunc` expansion compute the word of `wrap to x` at slot `n + 2`. -/
+theorem trunc_steps {f : Source.Function} {s : Source.State} {lb : Source.Block} {n : Nat}
+    {to : IntTy} {a' : Source.Operand} {x : Int} (ht : inProfile to = true)
+    (hb : f.blocks[s.block]? = some lb)
+    (hq : ∀ k, k < 3 → lb.instructions[s.position + k]? =
+      [ins n (.binary .sub a' (.literal (word to.min))),
+        ins (n + 1) (.binary .andBits (.local n) (.literal (word (2 ^ to.bits - 1)))),
+        ins (n + 2) (.binary .add (.local (n + 1)) (.literal (word to.min)))][k]?)
+    (hA : Source.read s.environment .word a' = .ok (word x))
+    (hW : ∀ m, m < s.environment.size → f.valueWidths[m]? = some .word)
+    (hs : n + 2 < s.environment.size) :
+    Source.Steps f 3 s ⟨s.block, s.position + 3,
+      ((s.environment.set! n (some (.word (biased to (BitVec.ofInt 32 x))))).set! (n + 1)
+        (some (.word (masked to (biased to (BitVec.ofInt 32 x)))))).set! (n + 2)
+        (some (word (wrap to x)))⟩ := by
+  obtain ⟨blk, pos, env⟩ := s
+  simp only at hb hq hA hW hs ⊢
+  let p₀ := biased to (BitVec.ofInt 32 x)
+  let p₁ := masked to p₀
+  let e₁ := env.set! n (some (.word p₀))
+  let e₂ := e₁.set! (n + 1) (some (.word p₁))
+  have z₁ : e₁.size = env.size := size_set! ..
+  have z₂ : e₂.size = env.size := (size_set! ..).trans z₁
+  have hv : word (wrap to x) = .word (Source.binaryBits .add p₁ (BitVec.ofInt 32 to.min)) := by
+    show word _ = Source.Value.word ((BitVec.ofInt 32 x - BitVec.ofInt 32 to.min &&&
+      BitVec.ofInt 32 (2 ^ to.bits - 1)) + BitVec.ofInt 32 to.min)
+    rw [wrap_word ht]; rfl
+  show Source.Steps f 3 ⟨blk, pos, env⟩ ⟨blk, pos + 3, e₂.set! (n + 2) (some (word _))⟩
+  rw [hv]
+  have s₀ := step_body (s := ⟨blk, pos, env⟩) hb (by simpa using hq 0 (by omega))
+    (eval_bin (d := n) (op := .sub) hA (read_literal _ to.min))
+    (write_ok (n := n) (hW n (by omega)) (by first | omega | (dsimp only; omega)) rfl)
+  have s₁ := step_body (s := ⟨blk, pos + 1, e₁⟩) hb (by simpa [Nat.add_assoc] using hq 1 (by omega))
+    (eval_bin (d := n + 1) (op := .andBits) (read_set_self (by omega) rfl)
+      (read_literal _ (2 ^ to.bits - 1)))
+    (write_ok (n := n + 1) (hW (n + 1) (by omega)) (by first | omega | (dsimp only; omega)) rfl)
+  have s₂ := step_body (s := ⟨blk, pos + 1 + 1, e₂⟩) hb
+    (by simpa [Nat.add_assoc] using hq 2 (by omega))
+    (eval_bin (d := n + 2) (op := .add) (read_set_self (by omega) rfl) (read_literal _ to.min))
+    (write_ok (n := n + 2) (hW (n + 2) (by omega)) (by first | omega | (dsimp only; omega)) rfl)
+  exact .succ s₀ (.succ s₁ (.succ s₂ (.zero _)))
 
 end Proof
 
