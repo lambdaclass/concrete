@@ -1130,6 +1130,72 @@ theorem body_sim {p : Program} (hok : numberingOk p = true) {f : Source.Function
       exact h
     · cases he
 
+/-! ## `adapter_correct`, terminators -/
+
+/-- LCB's step at a block's terminator position, one lemma per terminator. -/
+theorem step_ret {f : Source.Function} {s : Source.State} {lb : Source.Block}
+    (hb : f.blocks[s.block]? = some lb) (hp : s.position = lb.instructions.size)
+    {a : Source.Operand} (ht : lb.terminator = .ret a) {v : Source.Value}
+    (hr : Source.read s.environment f.resultWidth a = .ok v) :
+    Source.step f s = .ok (.returned v) := by
+  simp [Source.step, hb, hp, ht, hr, bind, Except.bind, pure, Except.pure]
+
+theorem step_jump {f : Source.Function} {s : Source.State} {lb : Source.Block}
+    (hb : f.blocks[s.block]? = some lb) (hp : s.position = lb.instructions.size)
+    {t : Nat} (ht : lb.terminator = .jump t) {s' : Source.State}
+    (htr : Source.transfer f s.block t s.environment = .ok s') :
+    Source.step f s = .ok (.next s') := by
+  simp [Source.step, hb, hp, ht, htr, Functor.map, Except.map]
+
+theorem step_branch {f : Source.Function} {s : Source.State} {lb : Source.Block}
+    (hb : f.blocks[s.block]? = some lb) (hp : s.position = lb.instructions.size)
+    {c : Source.Operand} {y n : Nat} (ht : lb.terminator = .branch c y n) {cv : Source.Value}
+    (hc : Source.read s.environment .word c = .ok cv) {s' : Source.State}
+    (htr : Source.transfer f s.block (if cv.toNat != 0 then y else n) s.environment = .ok s') :
+    Source.step f s = .ok (.next s') := by
+  simp only [Source.step, hb, hp, Nat.lt_irrefl, ↓reduceIte, beq_self_eq_true, ht, hc, bind,
+    Except.bind]
+  rw [htr]; rfl
+
+theorem adapt_result {p : Program} {f : Source.Function} (h : adapt p = .ok f) :
+    f.resultWidth = .word := by
+  obtain ⟨-, bs, -, rfl⟩ := adapt_ok h
+  rfl
+
+theorem block_term {p : Program} {j : Nat} {b : Block} {lb : Source.Block}
+    (h : adaptBlock p (j, b) = .ok lb) : term p b.term = .ok lb.terminator := by
+  obtain ⟨phis, xss, tm, -, -, ht, rfl⟩ := adaptBlock_ok h
+  exact ht
+
+/-- `ret a`: LCB returns the encoded value of `a`. -/
+theorem ret_sim {p : Program} {f : Source.Function} (hf : adapt p = .ok f) {j : Nat} {b : Block}
+    {lb : Source.Block} (hfb : f.blocks[j]? = some lb) (hlb : adaptBlock p (j, b) = .ok lb)
+    {a : Operand} (ht : b.term = .ret a) {benv : Env} {env : Source.Environment} {v : Val}
+    (hag : Agrees p benv env) (hv : evalOp benv a = some v) :
+    Source.step f ⟨j, (b.insts.map Inst.width).sum, env⟩ = .ok (.returned (enc v)) := by
+  have hterm := block_term hlb
+  rw [ht] at hterm
+  simp only [term, bind, Except.bind, pure, Except.pure] at hterm
+  cases ha : operand p a with
+  | error e => simp [ha] at hterm
+  | ok a' =>
+    simp only [ha] at hterm
+    injection hterm with hterm
+    exact step_ret hfb (block_size hlb).symm hterm.symm
+      (by rw [adapt_result hf]; exact read_operand hag ha hv)
+
+/-- `trap s`: LCB returns the word `256 + s`. -/
+theorem trap_sim {p : Program} {f : Source.Function} (hf : adapt p = .ok f) {j : Nat} {b : Block}
+    {lb : Source.Block} (hfb : f.blocks[j]? = some lb) (hlb : adaptBlock p (j, b) = .ok lb)
+    {st : Nat} (ht : b.term = .trap st) (env : Source.Environment) :
+    Source.step f ⟨j, (b.insts.map Inst.width).sum, env⟩ = .ok (.returned (word (256 + st))) := by
+  have hterm := block_term hlb
+  rw [ht] at hterm
+  simp only [term, pure, Except.pure] at hterm
+  injection hterm with hterm
+  exact step_ret hfb (block_size hlb).symm hterm.symm
+    (by rw [adapt_result hf]; exact read_literal _ _)
+
 end Proof
 
 /-! ## The QBE debug dump (not on the build path) -/
