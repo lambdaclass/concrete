@@ -1196,6 +1196,103 @@ theorem trap_sim {p : Program} {f : Source.Function} (hf : adapt p = .ok f) {j :
   exact step_ret hfb (block_size hlb).symm hterm.symm
     (by rw [adapt_result hf]; exact read_literal _ _)
 
+/-! ## `adapter_correct`, edges: LCB's `transfer` -/
+
+/-- A `forIn` whose body yields `g a s` at every element, from the state the earlier elements
+left, folds `g`. -/
+theorem forIn_yields {ε σ α : Type} (F : α → σ → Except ε (ForInStep σ)) (g : α → σ → σ) :
+    ∀ (l : List α) (init : σ),
+      (∀ i (h : i < l.length), F l[i] ((l.take i).foldl (fun s a => g a s) init) =
+        .ok (.yield (g l[i] ((l.take i).foldl (fun s a => g a s) init)))) →
+      forIn l init F = .ok (l.foldl (fun s a => g a s) init)
+  | [], _, _ => rfl
+  | a :: l, init, h => by
+    rw [List.forIn_cons]
+    have h0 := h 0 (by simp)
+    simp only [List.getElem_cons_zero, List.take_zero, List.foldl_nil] at h0
+    simp only [h0, bind, Except.bind, List.foldl_cons]
+    exact forIn_yields F g l (g a init) fun i hi => by
+      have := h (i + 1) (by simp; omega)
+      simpa only [List.getElem_cons_succ, List.take_succ_cons, List.foldl_cons] using this
+
+theorem size_foldl_set {α : Type} (g : α → Nat) (v : α → Option Source.Value) :
+    ∀ (l : List α) (e : Source.Environment), (l.foldl (fun u x => u.set! (g x) (v x)) e).size = e.size
+  | [], _ => rfl
+  | x :: l, e => by simp only [List.foldl_cons, size_foldl_set g v l, size_set!]
+
+theorem foldl_push_toList {α β : Type} (h : α → β) :
+    ∀ (l : List α) (acc : Array β), (l.foldl (fun pd a => pd.push (h a)) acc).toList =
+      acc.toList ++ l.map h
+  | [], acc => by simp
+  | a :: l, acc => by simp
+
+theorem not_mem_take_of_nodup {α β : Type} (f : α → β) {l : List α} (hn : (l.map f).Nodup)
+    {i : Nat} (hi : i < l.length) : f l[i] ∉ (l.take i).map f := by
+  intro hm
+  have hl : l = l.take i ++ l[i] :: l.drop (i + 1) := by simp
+  rw [hl, List.map_append, List.map_cons] at hn
+  exact (List.nodup_append.mp hn).2.2 _ hm _ (by simp) rfl
+
+/-- LCB's `transfer` along an edge whose every phi has exactly one arm from the predecessor,
+reading `w phi`: all phis are read from the old environment, then written. -/
+theorem transfer_ok {f : Source.Function} {pred target : Nat} {env : Source.Environment}
+    {tb : Source.Block} (htb : f.blocks[target]? = some tb) (w : Source.Phi → Source.Value)
+    (hphi : ∀ i (h : i < tb.phis.toList.length), ∃ x op,
+      tb.phis.toList[i].incoming.filter (·.1 == pred) = #[(x, op)] ∧
+      Source.read env tb.phis.toList[i].width op = .ok (w tb.phis.toList[i]))
+    (hdist : (tb.phis.toList.map (·.destination)).Nodup)
+    (hW : ∀ phi ∈ tb.phis.toList, f.valueWidths[phi.destination]? = some .word ∧
+      phi.destination < env.size ∧ (w phi).width = .word) :
+    Source.transfer f pred target env = .ok ⟨target, 0,
+      tb.phis.toList.foldl (fun u phi => u.set! phi.destination (some (w phi))) env⟩ := by
+  unfold Source.transfer
+  simp only [htb]
+  rw [← Array.forIn_toList, forIn_yields _
+    (fun phi (pd : Array (Source.ValueId × Source.Value)) => pd.push (phi.destination, w phi)) _ _
+    ?loop]
+  · simp only [bind, Except.bind]
+    rw [← Array.forIn_toList, foldl_push_toList (fun phi => (phi.destination, w phi))]
+    simp only [List.nil_append]
+    rw [forIn_yields _ (fun (x : Source.ValueId × Source.Value) (u : Source.Environment) =>
+      u.set! x.1 (some x.2)) _ _ ?writes]
+    · simp [List.foldl_map, pure, Except.pure]
+    case writes =>
+      intro i hi
+      have hm : (tb.phis.toList.map fun phi => (phi.destination, w phi))[i] ∈
+          tb.phis.toList.map fun phi => (phi.destination, w phi) := List.getElem_mem hi
+      obtain ⟨phi, hphm, he⟩ := List.mem_map.mp hm
+      obtain ⟨hw, hs, hv⟩ := hW phi hphm
+      rw [← he]
+      have hsz := size_foldl_set (fun (x : Source.ValueId × Source.Value) => x.1)
+        (fun x => some x.2) ((tb.phis.toList.map fun phi => (phi.destination, w phi)).take i) env
+      simp only [write_ok hw (by rw [hsz]; exact hs) hv, pure, Except.pure]
+  case loop =>
+    intro i hi
+    obtain ⟨x, op, hf, hr⟩ := hphi i hi
+    have hany : ((tb.phis.toList.take i).foldl
+        (fun (pd : Array (Source.ValueId × Source.Value)) phi => pd.push (phi.destination, w phi))
+          #[]).any
+        (fun y => y.fst == tb.phis.toList[i].destination) = false := by
+      rw [Array.any_eq_false]
+      intro k hk
+      have hl := foldl_push_toList (fun phi => (phi.destination, w phi)) (tb.phis.toList.take i) #[]
+      simp only [List.nil_append] at hl
+      have hmem : (((tb.phis.toList.take i).foldl
+          (fun (pd : Array (Source.ValueId × Source.Value)) phi => pd.push (phi.destination, w phi))
+            #[])[k]).1 ∈
+          (tb.phis.toList.take i).map (·.destination) := by
+        have := Array.getElem_mem_toList hk
+        rw [hl] at this
+        obtain ⟨phi, hm, he⟩ := List.mem_map.mp this
+        exact List.mem_map.mpr ⟨phi, hm, by rw [← he]⟩
+      intro he
+      exact not_mem_take_of_nodup (·.destination) hdist hi (by
+        rw [beq_iff_eq] at he; rw [← he]; exact hmem)
+    have h1 : (#[(x, op)].size != 1 || false) = false := rfl
+    have h0 : (#[(x, op)] : Array (Source.BlockId × Source.Operand))[0]? = some (x, op) := rfl
+    simp only [hf, hany, h1, h0, Bool.false_eq_true, ↓reduceIte, hr, bind, Except.bind, pure,
+      Except.pure]
+
 end Proof
 
 /-! ## The QBE debug dump (not on the build path) -/
