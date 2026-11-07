@@ -56,19 +56,14 @@ if [ "$REMOTE" = "fork" ]; then
   echo "push-both: refusing the remote named fork (a divergent repository)" >&2
   exit 2
 fi
-if ! URL="$(git remote get-url "$REMOTE" 2>/dev/null)"; then
-  echo "push-both: the remote '$REMOTE' is not configured. Nothing was pushed." >&2
+# shellcheck source=scripts/land/lib.sh
+. "$ROOT_DIR/scripts/land/lib.sh"
+# Every fetch and push URL of the remote that is GitHub must be the one repository (lib.sh).
+if ! why="$(land_remote_bad "$REMOTE" "$REPO")"; then
+  echo "push-both: $why. Nothing was pushed." >&2
   exit 1
 fi
-case "$URL" in
-  *github.com[:/]*)
-    path="${URL#*github.com[:/]}"; path="${path%/}"; path="${path%.git}"
-    if [ "$(printf '%s' "$path" | tr 'A-Z' 'a-z')" != "$(printf '%s' "$REPO" | tr 'A-Z' 'a-z')" ]; then
-      echo "push-both: $REMOTE is $URL, not github.com/$REPO. This clone points at another repository;" >&2
-      echo "push-both: repoint it (git remote set-url $REMOTE https://github.com/$REPO.git). Nothing was pushed." >&2
-      exit 1
-    fi ;;
-esac
+URL="$(git remote get-url --push "$REMOTE")"
 BRANCH="${BRANCH:-main}"
 LOCAL="$(git rev-parse HEAD)"
 CI_WAIT=0

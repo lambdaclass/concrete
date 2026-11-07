@@ -131,19 +131,11 @@ refuse_fork() {
   esac
 }
 
-# The remote is the repository gh reads (one repository since 2026-11-06). A GitHub URL that names
-# another repository, above all the archived unbalancedparentheses/concrete2, is refused; a local
-# path (the test fixtures' bare repositories) is not a GitHub URL and passes.
+# The remote is the repository gh reads (one repository since 2026-11-06): every fetch and push URL
+# that is GitHub must name $REPO (land_remote_bad, lib.sh).
 require_remote_repo() {
-  local url path
-  url="$(git remote get-url "$REMOTE" 2>/dev/null)" || die "the remote '$REMOTE' is not configured"
-  case "$url" in
-    *github.com[:/]*)
-      path="${url#*github.com[:/]}"; path="${path%/}"; path="${path%.git}"
-      if [ "$(printf '%s' "$path" | tr 'A-Z' 'a-z')" != "$(printf '%s' "$REPO" | tr 'A-Z' 'a-z')" ]; then
-        die "$REMOTE is $url, not github.com/$REPO. This clone points at another repository; repoint it: git remote set-url $REMOTE https://github.com/$REPO.git"
-      fi ;;
-  esac
+  local why
+  why="$(land_remote_bad "$REMOTE" "$REPO")" || die "$why"
 }
 
 valid_name() {

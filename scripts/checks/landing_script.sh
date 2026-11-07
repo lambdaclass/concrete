@@ -143,6 +143,9 @@ cd "$W" || exit 2
 for r in origin fork; do git remote add "$r" "$TMP/$r.git"; done
 # A remote that names another GitHub repository: every command must refuse it before any network use.
 git remote add gh-stale https://github.com/unbalancedparentheses/concrete2.git
+# Fetches from the local origin but would push to the archived repository: the guard reads push URLs.
+git remote add gh-push "$TMP/origin.git"
+git remote set-url --push gh-push https://github.com/unbalancedparentheses/concrete2.git
 
 # --- the toy repository: a ledger, a corpus map, a generated block, a generated file ---------------
 mkdir -p scripts/gen scripts/tests docs/project src Concrete
@@ -613,6 +616,9 @@ out="$(LAND_REMOTE=fork bash "$TRAIN" land t1 2>&1)"; rc=$?
 out="$(LAND_REMOTE=gh-stale bash "$TRAIN" land t1 2>&1)"; rc=$?
 [ "$rc" != 0 ] && has "$out" "points at another repository" && [ "$(git ls-remote origin refs/heads/main | cut -f1)" = "$BASE" ] \
   && ok "land refuses a remote that is another GitHub repository, before pushing anything" || no "land accepted a stale GitHub remote (exit $rc)"
+out="$(LAND_REMOTE=gh-push bash "$TRAIN" land t1 2>&1)"; rc=$?
+[ "$rc" != 0 ] && has "$out" "points at another repository" && [ "$(git ls-remote origin refs/heads/main | cut -f1)" = "$BASE" ] \
+  && ok "land refuses a remote whose push URL is another GitHub repository" || no "land accepted a stale push URL (exit $rc)"
 out="$(LAND_REMOTE=gh-stale bash "$TRAIN" ci t1 2>&1)"; rc=$?
 [ "$rc" != 0 ] && has "$out" "points at another repository" && ok "ci refuses a remote that is another GitHub repository" || no "ci accepted a stale GitHub remote (exit $rc)"
 out="$(LAND_REMOTE=gh-stale bash "$TRAIN" --dry-run build tstale --no-fetch b1 2>&1)"; rc=$?
@@ -691,6 +697,8 @@ no_op_left && [ -z "$(git status --porcelain --untracked-files=no)" ] && ok "bis
 
 echo "=== push-both.sh: one repository, refusals before anything is pushed ==="
 cp "$ROOT_DIR/scripts/push-both.sh" scripts/push-both.sh
+had_land=0; [ -d scripts/land ] && had_land=1
+mkdir -p scripts/land && cp "$ROOT_DIR/scripts/land/lib.sh" scripts/land/lib.sh   # push-both sources it
 before="$(git ls-remote origin refs/heads/main | cut -f1)"
 out="$(PUSH_REMOTE=fork bash scripts/push-both.sh 2>&1)"; rc=$?
 [ "$rc" = 2 ] && has "$out" "remote named fork" && ok "push-both refuses the remote named fork" || no "push-both PUSH_REMOTE=fork: exit $rc"
@@ -698,9 +706,12 @@ out="$(PUSH_REMOTE=nosuch bash scripts/push-both.sh 2>&1)"; rc=$?
 [ "$rc" = 1 ] && has "$out" "is not configured" && ok "push-both refuses a missing remote" || no "push-both missing remote: exit $rc"
 out="$(PUSH_REMOTE=gh-stale bash scripts/push-both.sh 2>&1)"; rc=$?
 [ "$rc" = 1 ] && has "$out" "points at another repository" && ok "push-both refuses a remote that is another GitHub repository" || no "push-both stale GitHub remote: exit $rc"
+out="$(PUSH_REMOTE=gh-push bash scripts/push-both.sh 2>&1)"; rc=$?
+[ "$rc" = 1 ] && has "$out" "points at another repository" && ok "push-both refuses a remote whose push URL is another GitHub repository" || no "push-both stale push URL: exit $rc"
 [ "$(git ls-remote origin refs/heads/main | cut -f1)" = "$before" ] && [ "$(git ls-remote fork refs/heads/main | cut -f1)" = "$BASE" ] \
   && ok "no refused push-both moved origin or fork" || no "a refused push-both pushed something"
-rm -f scripts/push-both.sh
+rm -f scripts/push-both.sh scripts/land/lib.sh
+[ "$had_land" = 1 ] || rmdir scripts/land 2>/dev/null || true
 
 echo "=== report ==="
 out="$(bash "$REPORT" 2>&1)"; rc=$?
