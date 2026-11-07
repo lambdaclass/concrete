@@ -686,7 +686,7 @@ scripts/checks/build_identity.sh` prints the canonical identity: the compiler co
 the working-tree content of every tracked input with `source_tree=clean|dirty` (so a local edit never
 reports a committed identity), Lean, clang/LLVM, the Nix inputs, the LCB revision and the target. It
 fails unless every dependency checkout is at the revision `lake-manifest.json` pins with no
-modified or untracked file. The
+modified or untracked (not ignored) file. The
 planned `concrete facts` command will print this identity.
 
 `scripts/checks/slice0_repro.sh [MANIFEST]` makes two independent builds: two source copies at
