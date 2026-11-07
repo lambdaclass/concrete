@@ -89,7 +89,7 @@ where_ok() {
   [ -f "$hook" ] && [ -x "$hook" ] \
     || die "refusing to run: this clone has no enabled pre-push hook ($hook is missing or not executable); enable the repository's: git config core.hooksPath .githooks"
   want="concrete-pre-push $(cd "$ROOT" && pwd -P)/.githooks/pre-push"
-  got="$("$hook" --concrete-identify < /dev/null 2>/dev/null | tail -n 1)"
+  got="$("$hook" --concrete-identify < /dev/null 2>/dev/null | tail -n 1 || true)"   # a failing hook is an answer too
   [ "$got" = "$want" ] \
     || die "refusing to run: the enabled pre-push hook $hook is not the repository's .githooks/pre-push and does not run it (asked who it is, it answered '${got}'); enable it: git config core.hooksPath .githooks"
 }

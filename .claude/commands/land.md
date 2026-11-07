@@ -11,8 +11,9 @@ contract. Landings reach `origin` and `lambdaclass` only through it or the landi
 
 **Where.** Run `train.sh` from a full clone with the repository hook enabled (`git clone`, then
 `git config core.hooksPath .githooks`), never from a linked worktree: it refuses both a worktree and
-a clone with the hook off (ISS-0015, LANDING.md "Where a train runs"). Use a fresh clone for each
-push. If you cannot, do not land: report the evidence below to the orchestrator. Never fall back to
+a clone with the hook off (ISS-0015, LANDING.md "Where a train runs"). Use one clone per train, from
+`build` through `land` (the train's state lives in that clone's git directory), and no other push
+from it while the train runs. If you cannot, do not land: report the evidence below to the orchestrator. Never fall back to
 pushing `main` by hand.
 
 **Preconditions** (stop and report the missing one):
