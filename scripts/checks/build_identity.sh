@@ -3,7 +3,9 @@
 # The compiler sources are identified by commit AND by a digest of the working-tree content of
 # every tracked input (lib/slice0_sources.sh), with `source_tree=dirty` when they differ from the
 # commit, so a local edit never reports a committed identity. Every dependency checkout must be
-# clean and at the revision lake-manifest.json pins; otherwise this script fails.
+# at the revision lake-manifest.json pins with no modified or untracked file (its ignored `.lake`
+# build directory aside); otherwise this script fails. slice0_repro.sh copies only a dependency's
+# tracked files and its `.git`, so ignored files never reach the compared builds.
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 : "${CONCRETE_SLICE0_CLANG:?run inside nix develop}"
@@ -34,10 +36,11 @@ print('nixpkgs_rev='+lock['nodes']['nixpkgs']['locked']['rev'])
 for name in ('flake.nix','flake.lock','lake-manifest.json'):
     print(name+'_sha256='+hashlib.sha256(Path(name).read_bytes()).hexdigest())
 for p in json.loads(Path('lake-manifest.json').read_text())['packages']:
-    d=Path('.lake/packages')/p['name']
+    name=p['name'].removeprefix('«').removesuffix('»')  # Lake writes escaped names, «a-b»
+    d=Path('.lake/packages')/name
     git=lambda *a: subprocess.run(['git','-C',str(d),*a],check=True,capture_output=True,text=True).stdout
     head=git('rev-parse','HEAD').strip()
-    if head != p['rev'] or git('status','--porcelain','--untracked-files=no').strip():
-        sys.exit(f"build_identity: {p['name']}: checkout {head} is not the clean pinned {p['rev']}")
-    print(p['name']+'_rev='+p['rev'])
+    if head != p['rev'] or git('status','--porcelain','--untracked-files=all').strip():
+        sys.exit(f"build_identity: {name}: checkout {head} is not the clean pinned {p['rev']}")
+    print(name+'_rev='+p['rev'])
 PY

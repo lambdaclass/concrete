@@ -685,12 +685,14 @@ LLVM text, LCB input and output, objects and executables. `nix develop --command
 scripts/checks/build_identity.sh` prints the canonical identity: the compiler commit, a digest of
 the working-tree content of every tracked input with `source_tree=clean|dirty` (so a local edit never
 reports a committed identity), Lean, clang/LLVM, the Nix inputs, the LCB revision and the target. It
-fails unless every dependency checkout is clean and at the revision `lake-manifest.json` pins. The
+fails unless every dependency checkout is at the revision `lake-manifest.json` pins with no
+modified or untracked file. The
 planned `concrete facts` command will print this identity.
 
 `scripts/checks/slice0_repro.sh [MANIFEST]` makes two independent builds: two source copies at
 different paths with different TMPDIRs, each compiling the compiler, its dependencies and the `lcb`
-executable itself. They share only the pinned Lean toolchain and the dependency sources. Each side
+executable itself, with no Lake artifact cache. They share only the pinned Lean toolchain and the
+dependency sources (tracked files only). Each side
 emits every hand-written BIR example and builds it natively, and every stage is compared without
 normalization: the BIR and adapted LCB value dumps, both text formats, both LCB assembly outputs,
 all objects and both executables. Negative controls check that the comparator refuses a flipped

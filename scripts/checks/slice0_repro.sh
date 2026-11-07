@@ -3,7 +3,7 @@
 # and of LCB, from two source copies with different paths and TMPDIRs, emit every hand-written BIR
 # example and build it natively; every stage is compared byte for byte, with no normalization.
 # The two sides share only the pinned Lean toolchain and the dependency SOURCES (each side compiles
-# them itself). The comparator is checked by negative controls: a flipped byte, a missing artifact
+# them itself, with no Lake artifact cache). The comparator is checked by negative controls: a flipped byte, a missing artifact
 # and a differing inventory must each be refused.
 #
 #   slice0_repro.sh [MANIFEST]   (inside nix develop, from the repository root)
@@ -23,8 +23,9 @@ trap 'rm -rf "${work:?}"' EXIT
 manifest=${1:-}
 [ -z "$manifest" ] || manifest=$(realpath -m "$manifest")
 compare=(python3 "$root/scripts/checks/lib/repro_compare.py")
-# The dependency checkouts must be the manifest's revisions; build_identity.sh refuses otherwise.
-timeout -k 30 1800 lake build Concrete lean-compiler-backend/lcb >/dev/null
+# Materialize the dependency checkouts (no build): they must be the manifest's clean revisions,
+# which build_identity.sh checks before anything is built.
+timeout -k 30 600 lake env true
 bash scripts/checks/build_identity.sh > "$work/identity"
 target=$(bash scripts/checks/slice0_native.sh target)
 # Working source edits are included (the identity records their digest); no build product is.
@@ -33,15 +34,18 @@ for side in first second; do
   mkdir -p "$d/.lake/packages" "$work/$side/tmp"
   git ls-files -z -- "${slice0_sources[@]}" |
     tar --null -T - -cf - | tar -xf - -C "$d"
-  # Dependency checkouts (with .git, which Lake checks against the manifest), without their builds.
+  # Dependency checkouts: tracked files and .git (which Lake checks against the manifest) only.
   for pkg in .lake/packages/*/; do
     pkg=$(basename "$pkg")
     mkdir -p "$d/.lake/packages/$pkg"
-    tar -C ".lake/packages/$pkg" --exclude=./.lake -cf - . | tar -xf - -C "$d/.lake/packages/$pkg"
+    (cd ".lake/packages/$pkg" && { git ls-files -z; printf '.git\0'; } | tar --null -T - -cf -) |
+      tar -xf - -C "$d/.lake/packages/$pkg"
   done
   (
     cd "$d"
     export TMPDIR="$work/$side/tmp" LC_ALL=C TZ=UTC SOURCE_DATE_EPOCH=1 ZERO_AR_DATE=1
+    # No Lake artifact cache: each side compiles everything it uses.
+    export LAKE_ARTIFACT_CACHE=false LAKE_CACHE_DIR="$work/$side/lake-cache"
     timeout -k 30 3000 lake build Concrete lean-compiler-backend/lcb >"$work/$side/build.log" 2>&1 ||
       { tail -50 "$work/$side/build.log" >&2; echo "slice0_repro: $side: build failed" >&2; exit 1; }
     lcb="$d/.lake/packages/lean-compiler-backend/.lake/build/bin/lcb"
