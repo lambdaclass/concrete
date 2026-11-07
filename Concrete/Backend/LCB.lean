@@ -1613,6 +1613,238 @@ theorem edge_sim {p : Program} (hok : numberingOk p = true) {f : Source.Function
       rw [List.getElem?_eq_getElem (show i < vals.length by omega), Option.some.injEq] at hvi
       exact evalOp_inRange hr (hvi ▸ hev i hi)
 
+/-! ## `adapter_correct`, runs -/
+
+theorem block_wf {p : Program} (hwf : WF p) {j : Nat} {b : Block} (hb : p.blocks[j]? = some b) :
+    Block.wf p b = true := by
+  unfold WF wf at hwf
+  simp only [Bool.and_eq_true, List.all_eq_true] at hwf
+  exact hwf.2 b (List.mem_of_getElem? hb)
+
+theorem term_wf {p : Program} (hwf : WF p) {j : Nat} {b : Block} (hb : p.blocks[j]? = some b) :
+    ∃ scope, b.term.wf p scope = true := by
+  have h := block_wf hwf hb
+  unfold Block.wf at h
+  split at h
+  rename_i ok scope _
+  simp only [Bool.and_eq_true] at h
+  exact ⟨scope, h.2⟩
+
+theorem condbr_ne {p : Program} (hwf : WF p) {j : Nat} {b : Block} (hb : p.blocks[j]? = some b)
+    {c : Reg} {t e : Nat} {ta ea : List Operand} (ht : b.term = .condbr c t ta e ea) : t ≠ e := by
+  obtain ⟨scope, h⟩ := term_wf hwf hb
+  rw [ht] at h
+  simp only [Term.wf, Bool.and_eq_true, bne_iff_ne] at h
+  exact h.1.1.2
+
+/-- Each BIR run from block `j` is matched by LCB from `⟨j, 0, env⟩`: an exit or a trap by a
+return of its encoding, running out of fuel by at least `fuel` LCB steps. -/
+theorem runBlock_sim {p : Program} (hwf : WF p) (hok : numberingOk p = true) {f : Source.Function}
+    (hf : adapt p = .ok f) :
+    ∀ (fuel j : Nat) (benv : Env) (env : Source.Environment), env.size = valueCount p →
+      Agrees p benv env → InRange benv →
+      match runBlock p fuel j benv with
+      | .exited c => ∃ n s, Source.Steps f n ⟨j, 0, env⟩ s ∧
+          Source.step f s = .ok (.returned (word c))
+      | .trapped st => ∃ n s, Source.Steps f n ⟨j, 0, env⟩ s ∧
+          Source.step f s = .ok (.returned (word (256 + st)))
+      | .outOfFuel => ∃ n s, fuel ≤ n ∧ Source.Steps f n ⟨j, 0, env⟩ s
+      | .stuck => True
+  | 0, j, benv, env, _, _, _ => by
+    simp only [runBlock]
+    exact ⟨0, _, Nat.le_refl 0, .zero _⟩
+  | fuel + 1, j, benv, env, hsz, hag, hr => by
+    simp only [runBlock]
+    cases hbj : p.blocks[j]? with
+    | none => trivial
+    | some bj =>
+    simp only
+    cases hex : execInsts benv bj.insts with
+    | none => trivial
+    | some benv₁ =>
+    simp only
+    obtain ⟨lb, hfb, hlb⟩ := adapt_block hf hbj
+    obtain ⟨env₁, hst, hsz₁, hag₁, hr₁⟩ := body_sim hok (adapt_widths hf) hbj hlb hfb bj.insts 0
+      benv benv₁ env (by simp) hex hsz hag hr
+    simp only [instPos, List.take_zero, List.map_nil, List.sum_nil, Nat.zero_add] at hst
+    -- after a jump to `tgt`, the rest of the run is the run from `tgt`
+    have cont : ∀ (tgt : Nat) (benv₂ : Env) (env₂ : Source.Environment),
+        Source.Steps f ((bj.insts.map Inst.width).sum + 1) ⟨j, 0, env⟩ ⟨tgt, 0, env₂⟩ →
+        env₂.size = valueCount p → Agrees p benv₂ env₂ → InRange benv₂ →
+        match runBlock p fuel tgt benv₂ with
+        | .exited c => ∃ n s, Source.Steps f n ⟨j, 0, env⟩ s ∧
+            Source.step f s = .ok (.returned (word c))
+        | .trapped st => ∃ n s, Source.Steps f n ⟨j, 0, env⟩ s ∧
+            Source.step f s = .ok (.returned (word (256 + st)))
+        | .outOfFuel => ∃ n s, fuel + 1 ≤ n ∧ Source.Steps f n ⟨j, 0, env⟩ s
+        | .stuck => True := by
+      intro tgt benv₂ env₂ hpre hsz₂ hag₂ hr₂
+      have ih := runBlock_sim hwf hok hf fuel tgt benv₂ env₂ hsz₂ hag₂ hr₂
+      revert ih
+      cases runBlock p fuel tgt benv₂ with
+      | exited c =>
+        rintro ⟨n, s, hs, hret⟩
+        exact ⟨_, s, steps_append hpre hs, hret⟩
+      | trapped st =>
+        rintro ⟨n, s, hs, hret⟩
+        exact ⟨_, s, steps_append hpre hs, hret⟩
+      | outOfFuel =>
+        rintro ⟨n, s, hn, hs⟩
+        exact ⟨_, s, by omega, steps_append hpre hs⟩
+      | stuck => intro; trivial
+    have pre : ∀ {tgt : Nat} {env₂ : Source.Environment},
+        Source.step f ⟨j, (bj.insts.map Inst.width).sum, env₁⟩ = .ok (.next ⟨tgt, 0, env₂⟩) →
+        Source.Steps f ((bj.insts.map Inst.width).sum + 1) ⟨j, 0, env⟩ ⟨tgt, 0, env₂⟩ := by
+      intro tgt env₂ hstep
+      have := steps_append hst (.succ hstep (.zero _))
+      rwa [Nat.add_comm] at this
+    cases htm : bj.term with
+    | ret a =>
+      cases hv : evalOp benv₁ a with
+      | none => simp only [hv]
+      | some v =>
+        rcases v with ⟨ty, c⟩ | bb
+        · cases ty
+          case u8 =>
+            simp only [hv]
+            have hc0 : 0 ≤ c := by
+              have := evalOp_inRange hr₁ hv
+              simp [IntTy.inRange, IntTy.min, IntTy.max, IntTy.signed, IntTy.bits] at this
+              omega
+            refine ⟨_, _, hst, ?_⟩
+            rw [ret_sim hf hfb hlb htm hag₁ hv]
+            simp [enc, Int.toNat_of_nonneg hc0]
+          all_goals simp only [hv]
+        · simp only [hv]
+    | trap st =>
+      by_cases hs : st < p.sites.length
+      · simp only [hs, ↓reduceIte]
+        exact ⟨_, _, hst, trap_sim hf hfb hlb htm env₁⟩
+      · simp only [hs, ↓reduceIte]
+    | br t args =>
+      simp only
+      cases hen : enter p t args benv₁ with
+      | none => trivial
+      | some benv₂ =>
+      simp only
+      have hedge : edgesTo t j bj.term = [(j, args)] := by simp [htm, edgesTo]
+      obtain ⟨env₂, htr, hsz₂, hag₂, hr₂⟩ := edge_sim hok hf hbj hedge hen hsz₁ hag₁ hr₁
+      have hterm := block_term hlb
+      rw [htm] at hterm
+      simp only [term, pure, Except.pure, Except.ok.injEq] at hterm
+      exact cont t benv₂ env₂ (pre (step_jump hfb (block_size hlb).symm hterm.symm htr)) hsz₂ hag₂ hr₂
+    | condbr c t ta e ea =>
+      have hne := condbr_ne hwf hbj htm
+      have hterm := block_term hlb
+      rw [htm] at hterm
+      simp only [term, bind, Except.bind] at hterm
+      cases hid : idOf p c with
+      | error e => simp [hid] at hterm
+      | ok nc =>
+      simp only [hid, pure, Except.pure, Except.ok.injEq] at hterm
+      cases hl : lookup benv₁ c with
+      | none => simp only [hl]
+      | some v =>
+      rcases v with ⟨ty, x⟩ | bb
+      · simp only [hl]
+      have hread : Source.read env₁ .word (.local nc) = .ok (enc (.bool bb)) :=
+        read_operand (a := .reg c) hag₁ (by simp [operand, hid, bind, Except.bind, pure, Except.pure])
+          (by simpa [evalOp] using hl)
+      cases bb with
+      | true =>
+        simp only [hl]
+        cases hen : enter p t ta benv₁ with
+        | none => simp only
+        | some benv₂ =>
+        simp only
+        have hedge : edgesTo t j bj.term = [(j, ta)] := by
+          simp [htm, edgesTo, Ne.symm hne]
+        obtain ⟨env₂, htr, hsz₂, hag₂, hr₂⟩ := edge_sim hok hf hbj hedge hen hsz₁ hag₁ hr₁
+        exact cont t benv₂ env₂ (pre (step_branch hfb (block_size hlb).symm hterm.symm hread
+          (by simpa [enc, word, Source.Value.toNat] using htr))) hsz₂ hag₂ hr₂
+      | false =>
+        simp only [hl]
+        cases hen : enter p e ea benv₁ with
+        | none => simp only
+        | some benv₂ =>
+        simp only
+        have hedge : edgesTo e j bj.term = [(j, ea)] := by
+          simp [htm, edgesTo, hne]
+        obtain ⟨env₂, htr, hsz₂, hag₂, hr₂⟩ := edge_sim hok hf hbj hedge hen hsz₁ hag₁ hr₁
+        exact cont e benv₂ env₂ (pre (step_branch hfb (block_size hlb).symm hterm.symm hread
+          (by simpa [enc, word, Source.Value.toNat] using htr))) hsz₂ hag₂ hr₂
+
+theorem steps_prefix {f : Source.Function} :
+    ∀ {k : Nat} {s u : Source.State}, Source.Steps f k s u → ∀ n, n ≤ k → ∃ t, Source.Steps f n s t
+  | _, s, _, _, 0, _ => ⟨s, .zero _⟩
+  | _, _, _, .succ h₁ h₂, n + 1, hn => by
+    obtain ⟨t, ht⟩ := steps_prefix h₂ n (by omega)
+    exact ⟨t, .succ h₁ ht⟩
+  | _, _, _, .zero _, _ + 1, hn => by omega
+
+theorem entry_params {p : Program} (hwf : WF p) {b : Block} (hb : p.blocks[0]? = some b) :
+    b.params = [] := by
+  unfold WF wf at hwf
+  simp only [Bool.and_eq_true, hb, List.isEmpty_iff] at hwf
+  exact hwf.1.1.1.1.1
+
+/-- LCB's initial state for the adapted body: the entry block, an empty environment. -/
+theorem initial_ok {p : Program} (hwf : WF p) {f : Source.Function} (hf : adapt p = .ok f)
+    {b : Block} (hb : p.blocks[0]? = some b) :
+    Source.initial f #[] = .ok ⟨0, 0, Array.replicate (valueCount p) none⟩ := by
+  obtain ⟨lb, hfb, hlb⟩ := adapt_block hf hb
+  obtain ⟨phis, xss, tm, hphis, -, -, rfl⟩ := adaptBlock_ok hlb
+  rw [entry_params hwf hb] at hphis
+  simp only [indexed, Runtime.indexedFrom, List.mapM_nil, pure, Except.pure, Except.ok.injEq] at hphis
+  subst hphis
+  have hf' := adapt_ok hf
+  obtain ⟨-, bs, -, rfl⟩ := hf'
+  simp [Source.initial, hfb, bind, Except.bind, pure, Except.pure]
+
+/-- **`adapter_correct`, over runs.** For a well-formed BIR program that the adapter accepts, under
+LCB's own semantics (`Source.HasBehavior`, imported and never restated): a BIR run that exits with
+`c` makes the adapted body return the word `c`; one that traps at site `s` makes it return the
+word `256 + s`; and a program that runs out of fuel at every fuel makes it diverge. -/
+theorem adapter_correct_run {p : Program} (hwf : WF p) {f : Source.Function}
+    (hf : adapt p = .ok f) :
+    (∀ fuel c, run p fuel = .exited c → Source.HasBehavior f #[] (.returned (word c))) ∧
+    (∀ fuel st, run p fuel = .trapped st →
+      Source.HasBehavior f #[] (.returned (word (256 + st)))) ∧
+    ((∀ fuel, run p fuel = .outOfFuel) → Source.HasBehavior f #[] .diverges) := by
+  have hok := (adapt_ok hf).1
+  have sim := fun fuel => runBlock_sim hwf hok hf fuel 0 [] (Array.replicate (valueCount p) none)
+    (by simp) (fun r v h => by simp [lookup] at h) (fun r t x h => by simp [lookup] at h)
+  refine ⟨fun fuel c h => ?_, fun fuel st h => ?_, fun h => ?_⟩
+  · unfold run at h
+    cases hb : p.blocks[0]? with
+    | none => simp [hb] at h
+    | some b =>
+      simp only [hb] at h
+      have := sim fuel
+      rw [h] at this
+      exact ⟨_, initial_ok hwf hf hb, this⟩
+  · unfold run at h
+    cases hb : p.blocks[0]? with
+    | none => simp [hb] at h
+    | some b =>
+      simp only [hb] at h
+      have := sim fuel
+      rw [h] at this
+      exact ⟨_, initial_ok hwf hf hb, this⟩
+  · have h0 := h 0
+    unfold run at h0
+    cases hb : p.blocks[0]? with
+    | none => simp [hb] at h0
+    | some b =>
+      refine ⟨_, initial_ok hwf hf hb, fun n => ?_⟩
+      have hn := h n
+      unfold run at hn
+      simp only [hb] at hn
+      have := sim n
+      rw [hn] at this
+      obtain ⟨k, s, hk, hs⟩ := this
+      exact steps_prefix hs n hk
+
 end Proof
 
 /-! ## The QBE debug dump (not on the build path) -/
