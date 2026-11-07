@@ -1,4 +1,5 @@
-import ConcreteSpec.Spec.Semantics
+import ConcreteSpec.Spec.Slice1Semantics
+import ConcreteSpec.Spec.Slice1Ownership
 
 /-!
 # The executable slice-1 checker
@@ -8,6 +9,7 @@ see `ConcreteSpec/README.md`.
 -/
 
 namespace ConcreteSpec
+open Core (AList)
 
 /-! ### The checker
 
@@ -31,27 +33,27 @@ instance (Δ : Decls) : Decidable (DeclsOk Δ) := by
 def atomTy (Γ : TyCtx) : Atom → Option STy
   | .int t n => if t.inRange n then some (.int t) else none
   | .bool _ => some .bool
-  | .copy x => match lookupF x Γ with
+  | .copy x => match AList.lookup Γ x with
     | some (.scalar st) => some st
     | _ => none
-  | .move x => match lookupF x Γ with
+  | .move x => match AList.lookup Γ x with
     | some (.scalar st) => some st
     | _ => none
 
 /-- The executable form of `FieldsTy`. -/
 def fieldsOkB (Γ : TyCtx) (d : StructDecl) (fs : List (Name × Atom)) : Bool :=
   decide ((fs.map Prod.fst).Nodup) &&
-  fs.all (fun p => match lookupF p.1 d.fields with
+  fs.all (fun p => match AList.lookup d.fields p.1 with
     | some st => atomTy Γ p.2 == some st
     | none => false) &&
-  d.fields.all (fun q => (lookupF q.1 fs).isSome)
+  d.fields.all (fun q => (AList.lookup fs q.1).isSome)
 
 /-- The type of an expression, if it has one. -/
 def tyOf (Δ : Decls) (Γ : TyCtx) : Expr → Option Ty
   | .atom (.int t n) => if t.inRange n then some (.scalar (.int t)) else none
   | .atom (.bool _) => some (.scalar .bool)
-  | .atom (.copy x) => lookupF x Γ
-  | .atom (.move x) => lookupF x Γ
+  | .atom (.copy x) => AList.lookup Γ x
+  | .atom (.move x) => AList.lookup Γ x
   | .add l r => match atomTy Γ l, atomTy Γ r with
     | some (.int t), some (.int t') => if t = t' then some (.scalar (.int t)) else none
     | _, _ => none
@@ -63,10 +65,10 @@ def tyOf (Δ : Decls) (Γ : TyCtx) : Expr → Option Ty
 def useAtom (Δ : Decls) (Γ : Ctx) : Atom → Option Ctx
   | .int _ _ => some Γ
   | .bool _ => some Γ
-  | .copy x => match ctxFind Γ x with
+  | .copy x => match AList.lookup Γ x with
     | some e => if e.live ∧ e.ty.isCopy Δ = true then some (ctxMark Γ x false) else none
     | none => none
-  | .move x => match ctxFind Γ x with
+  | .move x => match AList.lookup Γ x with
     | some e => if e.live ∧ e.ty.isCopy Δ = false then some (ctxMark Γ x true) else none
     | none => none
 
@@ -88,8 +90,8 @@ def uses (Δ : Decls) (Γ : Ctx) : Expr → Option Ctx
 /-- The executable form of `PatOk`. -/
 def patOkB (d : StructDecl) (pat : List (Name × Binder)) : Bool :=
   decide ((pat.map Prod.fst).Nodup) &&
-  pat.all (fun p => (lookupF p.1 d.fields).isSome) &&
-  d.fields.all (fun q => (lookupF q.1 pat).isSome)
+  pat.all (fun p => (AList.lookup d.fields p.1).isSome) &&
+  d.fields.all (fun q => (AList.lookup pat q.1).isSome)
 
 /-- The context after a statement, if the statement is accepted. -/
 def stmtOut (Δ : Decls) (Γ : Ctx) : Stmt → Option Ctx
@@ -97,8 +99,8 @@ def stmtOut (Δ : Decls) (Γ : Ctx) : Stmt → Option Ctx
     if tyOf Δ Γ.tys e = some t ∧ admitted Γ e = true then
       match uses Δ Γ e with
       | some Γ₁ => if Fresh Γ₁ x then
-          some ({ name := x, ty := t, live := true, used := false, known := knownExpr Γ e,
-                  kfields := knownFields Γ e } :: Γ₁)
+          some ((x, { ty := t, live := true, used := false, known := knownExpr Γ e,
+                      kfields := knownFields Γ e }) :: Γ₁)
           else none
       | none => none
     else none

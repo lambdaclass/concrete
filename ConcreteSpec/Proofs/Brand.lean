@@ -7,39 +7,12 @@ PROPOSED: not normative until the owner freezes Core (ROADMAP A2c). See `Concret
 -/
 
 namespace ConcreteSpec.Brand
-
-theorem findL_mem {α : Type} : ∀ {l : List (Nat × α)} {p : Nat} {v : α},
-    findL l p = some v → (p, v) ∈ l
-  | [], _, _, h => by simp [findL] at h
-  | (n, w) :: l, p, v, h => by
-    simp only [findL] at h
-    split at h
-    · next hn => cases h; subst hn; exact List.mem_cons_self ..
-    · exact List.mem_cons_of_mem _ (findL_mem h)
-
-theorem mem_removeL {α : Type} (p : Nat) : ∀ {l : List (Nat × α)} {e : Nat × α},
-    e ∈ removeL p l → e ∈ l
-  | [], _, h => by simp [removeL] at h
-  | (n, w) :: l, e, h => by
-    simp only [removeL] at h
-    split at h
-    · exact List.mem_cons_of_mem _ (mem_removeL p h)
-    · rcases List.mem_cons.mp h with rfl | h
-      · exact List.mem_cons_self ..
-      · exact List.mem_cons_of_mem _ (mem_removeL p h)
-
-theorem findL_removeL {α : Type} (p' : Nat) : ∀ (l : List (Nat × α)) (p : Nat),
-    findL (removeL p' l) p = if p = p' then none else findL l p
-  | [], _ => by simp [removeL, findL]
-  | (n, q) :: l, p => by
-    have ih := findL_removeL p' l p
-    by_cases hn : n = p' <;> by_cases hp : p = p' <;> by_cases hnp : n = p <;>
-      simp_all [removeL, findL] <;> omega
+open Core (AList)
 
 /-- Brand equality is nominal (Q1.4): an operation that pairs a value of one brand with an
 allocator of another is refused. -/
-theorem brand_mismatch_refused {B Γ h a β1 β2 r Γ'} (hh : findL Γ h = some (.heap β1))
-    (ha : findL Γ a = some (.alloc β2)) (hne : β1 ≠ β2) :
+theorem brand_mismatch_refused {B Γ h a β1 β2 r Γ'} (hh : AList.lookup Γ h = some (.heap β1))
+    (ha : AList.lookup Γ a = some (.alloc β2)) (hne : β1 ≠ β2) :
     ¬ Ok B Γ (.use h a :: r) Γ' ∧ ¬ Ok B Γ (.free h a :: r) Γ' := by
   refine ⟨fun hok => ?_, fun hok => ?_⟩
   · cases hok with
@@ -49,12 +22,12 @@ theorem brand_mismatch_refused {B Γ h a β1 β2 r Γ'} (hh : findL Γ h = some 
 
 /-- A checked reset leaves no value of the old brand (Q1.5): none is live at the reset. -/
 theorem reset_requires_no_old {B Γ a' a β' rest Γ' β} (h : Ok B Γ (.reset a' a β' :: rest) Γ')
-    (ha : findL Γ a = some (.alloc β)) : ∀ hv, findL Γ hv ≠ some (.heap β) := by
+    (ha : AList.lookup Γ a = some (.alloc β)) : ∀ hv, AList.lookup Γ hv ≠ some (.heap β) := by
   intro hv hh
   cases h with
   | reset ha' hno _ _ _ =>
     rw [ha] at ha'; cases ha'
-    exact hno _ (findL_mem hh) rfl
+    exact hno _ (AList.lookup_mem hh) rfl
 
 /-- **`reset_fresh`, static part** (Q1.2, Q1.4). The brand of a reset allocator differs from the
 brand of every value live before the reset, so each operation of the new allocator on such a
@@ -62,22 +35,22 @@ value (`use`, `free`) is refused. Values of the old brand cannot be live at a ch
 (`reset_requires_no_old`); one that reached the new allocator anyway would be refused by
 `brand_mismatch_refused`, and the ghost run refuses it too (`reset_fresh`, part 3). -/
 theorem reset_refuses_old {B Γ a' a β' rest Γ'} (hw : BrandsIn B Γ)
-    (h : Ok B Γ (.reset a' a β' :: rest) Γ') {hv βh} (hh : findL Γ hv = some (.heap βh)) :
+    (h : Ok B Γ (.reset a' a β' :: rest) Γ') {hv βh} (hh : AList.lookup Γ hv = some (.heap βh)) :
     βh ≠ β' ∧ ∀ r, rest = .use hv a' :: r ∨ rest = .free hv a' :: r → False := by
   cases h with
   | @reset _ _ _ _ β _ _ _ ha hno hfresh hb hrest =>
-    have hβh : βh ∈ B := hw _ (findL_mem hh) βh (Or.inr rfl)
+    have hβh : βh ∈ B := hw _ (AList.lookup_mem hh) βh (Or.inr rfl)
     have hne : βh ≠ β' := fun e => hb (e ▸ hβh)
     have hva : hv ≠ a := by
       intro e; subst e; rw [ha] at hh; cases hh
-    have hold : findL (removeL a Γ) hv = some (.heap βh) := by
-      rw [findL_removeL]; simp only [hva, ↓reduceIte]; exact hh
+    have hold : AList.lookup (AList.erase Γ a) hv = some (.heap βh) := by
+      rw [AList.lookup_erase]; simp only [hva, ↓reduceIte]; exact hh
     have hva' : hv ≠ a' := by
       intro e; subst e; rw [hold] at hfresh; cases hfresh
-    have hfind : findL ((a', STy.alloc β') :: removeL a Γ) hv = some (.heap βh) := by
-      simp only [findL, show ¬ a' = hv from fun e => hva' e.symm, ↓reduceIte]; exact hold
-    have hnew : findL ((a', STy.alloc β') :: removeL a Γ) a' = some (.alloc β') := by
-      simp [findL]
+    have hfind : AList.lookup ((a', STy.alloc β') :: AList.erase Γ a) hv = some (.heap βh) := by
+      simp only [AList.lookup, show ¬ a' = hv from fun e => hva' e.symm, ↓reduceIte]; exact hold
+    have hnew : AList.lookup ((a', STy.alloc β') :: AList.erase Γ a) a' = some (.alloc β') := by
+      simp [AList.lookup]
     refine ⟨hne, fun r hr => ?_⟩
     rcases hr with rfl | rfl
     · cases hrest with
@@ -100,7 +73,7 @@ theorem nodup_snoc : ∀ {l : List Nat} {x : Nat}, l.Nodup → x ∉ l → (l ++
     simp only [List.mem_append, List.mem_singleton, not_or]
     exact ⟨h.1, fun e => hx (by simp [e])⟩
 
-theorem inv_bind {s : State} (a : Nat) {env : List (Nat × Val)} (hi : Inv s)
+theorem inv_bind {s : State} (a : Nat) {env : AList Nat Val} (hi : Inv s)
     (henv : ∀ e ∈ env, brandOf e.2 < s.next) : Inv (s.bind a env) := by
   obtain ⟨_, hg, hn⟩ := hi
   refine ⟨?_, ?_, ?_⟩
@@ -126,12 +99,12 @@ theorem run_inv {s ss s'} (h : Run s ss s') : Inv s → Inv s' := by
     refine ih ⟨?_, hi.2.1, hi.2.2⟩
     intro e he
     rcases List.mem_cons.mp he with rfl | he
-    · have := hi.1 _ (findL_mem ha); simpa [brandOf] using this
+    · have := hi.1 _ (AList.lookup_mem ha); simpa [brandOf] using this
     · exact hi.1 e he
   | use _ _ _ ih => exact ih
-  | free _ _ _ ih => intro hi; exact ih ⟨fun e he => hi.1 e (mem_removeL _ he), hi.2.1, hi.2.2⟩
-  | release _ _ ih => intro hi; exact ih ⟨fun e he => hi.1 e (mem_removeL _ he), hi.2.1, hi.2.2⟩
-  | reset _ _ ih => intro hi; exact ih (inv_bind _ hi (fun e he => hi.1 e (mem_removeL _ he)))
+  | free _ _ _ ih => intro hi; exact ih ⟨fun e he => hi.1 e (AList.mem_of_mem_erase _ he), hi.2.1, hi.2.2⟩
+  | release _ _ ih => intro hi; exact ih ⟨fun e he => hi.1 e (AList.mem_of_mem_erase _ he), hi.2.1, hi.2.2⟩
+  | reset _ _ ih => intro hi; exact ih (inv_bind _ hi (fun e he => hi.1 e (AList.mem_of_mem_erase _ he)))
   | whileExit _ ih => exact ih
   | whileIter _ ih => exact ih
 
@@ -149,10 +122,10 @@ theorem inv_init : Inv State.init := ⟨by simp [State.init], by simp [State.ini
    allocator of any value live before the reset, of the old brand or any other, is stuck. -/
 theorem reset_fresh :
     (∀ {s a' a β' rest s'}, Inv s → Run s (.reset a' a β' :: rest) s' →
-      ∃ mid, mid.env = (a', .allocV s.next) :: removeL a s.env ∧ Run mid rest s' ∧
+      ∃ mid, mid.env = (a', .allocV s.next) :: AList.erase s.env a ∧ Run mid rest s' ∧
         ∀ e ∈ s.env, brandOf e.2 ≠ s.next) ∧
     (∀ {prog s'}, Run State.init prog s' → s'.gen.Nodup) ∧
-    (∀ {s a' a β' h r s'}, Inv s → (∃ v, findL s.env h = some v) → h ≠ a' →
+    (∀ {s a' a β' h r s'}, Inv s → (∃ v, AList.lookup s.env h = some v) → h ≠ a' →
       ¬ Run s (.reset a' a β' :: .use h a' :: r) s' ∧
       ¬ Run s (.reset a' a β' :: .free h a' :: r) s') := by
   refine ⟨?_, ?_, ?_⟩
@@ -163,13 +136,13 @@ theorem reset_fresh :
   · intro prog s' h
     exact (run_inv h inv_init).2.2
   · intro s a' a β' h r s' hi ⟨v, hv⟩ hne
-    have key : ∀ b, findL ((a', Val.allocV s.next) :: removeL a s.env) h = some (.heapV b) →
+    have key : ∀ b, AList.lookup ((a', Val.allocV s.next) :: AList.erase s.env a) h = some (.heapV b) →
         b ≠ s.next := by
       intro b hb
-      simp only [findL, show ¬ a' = h from fun e => hne e.symm, ↓reduceIte] at hb
-      exact Nat.ne_of_lt (hi.1 _ (findL_mem (α := Val) (l := removeL a s.env) hb |> mem_removeL a))
-    have hnew : findL ((a', Val.allocV s.next) :: removeL a s.env) a' = some (.allocV s.next) := by
-      simp [findL]
+      simp only [AList.lookup, show ¬ a' = h from fun e => hne e.symm, ↓reduceIte] at hb
+      exact Nat.ne_of_lt (hi.1 _ (AList.lookup_mem (α := Val) (l := AList.erase s.env a) hb |> AList.mem_of_mem_erase a))
+    have hnew : AList.lookup ((a', Val.allocV s.next) :: AList.erase s.env a) a' = some (.allocV s.next) := by
+      simp [AList.lookup]
     have _ := hv
     refine ⟨fun hrun => ?_, fun hrun => ?_⟩
     · cases hrun with
@@ -195,23 +168,23 @@ def emb (φ : Nat → Nat) : STy → Val
 
 /-- The run-time values match the static context under the brand assignment `φ`: the same
 names, and an allocator or value of brand `β` carries the run-time brand `φ β`. -/
-def Rel (φ : Nat → Nat) (Γ : Ctx) (env : List (Nat × Val)) : Prop :=
-  ∀ x, findL env x = (findL Γ x).map (emb φ)
+def Rel (φ : Nat → Nat) (Γ : Ctx) (env : AList Nat Val) : Prop :=
+  ∀ x, AList.lookup env x = (AList.lookup Γ x).map (emb φ)
 
 /-- `φ` with brand `β` assigned `v`. -/
 def upd (φ : Nat → Nat) (β v : Nat) : Nat → Nat := fun γ => if γ = β then v else φ γ
 
 theorem rel_cons {φ Γ env} (x : Nat) (t : STy) (h : Rel φ Γ env) :
     Rel φ ((x, t) :: Γ) ((x, emb φ t) :: env) := by
-  intro y; by_cases hx : x = y <;> simp [findL, hx, h y]
+  intro y; by_cases hx : x = y <;> simp [AList.lookup, hx, h y]
 
-theorem rel_removeL {φ Γ env} (p : Nat) (h : Rel φ Γ env) : Rel φ (removeL p Γ) (removeL p env) := by
-  intro y; rw [findL_removeL, findL_removeL]; by_cases hy : y = p <;> simp [hy, h y]
+theorem rel_erase {φ Γ env} (p : Nat) (h : Rel φ Γ env) : Rel φ (AList.erase Γ p) (AList.erase env p) := by
+  intro y; rw [AList.lookup_erase, AList.lookup_erase]; by_cases hy : y = p <;> simp [hy, h y]
 
 /-- Reassigning a brand no binding has changes no binding's run-time value. -/
 theorem emb_upd {B Γ} {φ : Nat → Nat} {β v x : Nat} {t : STy} (hb : BrandsIn B Γ) (hβ : β ∉ B)
-    (hf : findL Γ x = some t) : emb (upd φ β v) t = emb φ t := by
-  have hm := findL_mem hf
+    (hf : AList.lookup Γ x = some t) : emb (upd φ β v) t = emb φ t := by
+  have hm := AList.lookup_mem hf
   cases t with
   | alloc γ =>
     have : γ ≠ β := fun e => hβ (e ▸ hb _ hm γ (.inl rfl))
@@ -224,12 +197,12 @@ theorem rel_upd {φ Γ env} {B : List Nat} {β : Nat} (v : Nat) (h : Rel φ Γ e
     (hβ : β ∉ B) : Rel (upd φ β v) Γ env := by
   intro y
   rw [h y]
-  cases hf : findL Γ y with
+  cases hf : AList.lookup Γ y with
   | none => rfl
   | some t => simp [emb_upd hb hβ hf]
 
-theorem brandsIn_removeL {B Γ} (p : Nat) (h : BrandsIn B Γ) : BrandsIn B (removeL p Γ) :=
-  fun e he => h e (mem_removeL p he)
+theorem brandsIn_erase {B Γ} (p : Nat) (h : BrandsIn B Γ) : BrandsIn B (AList.erase Γ p) :=
+  fun e he => h e (AList.mem_of_mem_erase p he)
 
 theorem brandsIn_mono {B Γ} (β : Nat) (h : BrandsIn B Γ) : BrandsIn (β :: B) Γ :=
   fun e he γ hγ => List.mem_cons_of_mem _ (h e he γ hγ)
@@ -249,25 +222,25 @@ theorem brandsIn_new {B Γ} (x β : Nat) (h : BrandsIn B Γ) : BrandsIn (β :: B
 /-- Opening allocator `a`, now of brand `γ`, under the new name `β`: what each loop iteration,
 and the code after the loop, starts from (Q1.3). -/
 theorem rel_reopen {φ Γ env} {B : List Nat} {a γ β : Nat}
-    (h : Rel φ ((a, .alloc γ) :: removeL a Γ) env) (hb : BrandsIn B Γ) (hβ : β ∉ B) :
-    Rel (upd φ β (φ γ)) ((a, .alloc β) :: removeL a Γ) env := by
+    (h : Rel φ ((a, .alloc γ) :: AList.erase Γ a) env) (hb : BrandsIn B Γ) (hβ : β ∉ B) :
+    Rel (upd φ β (φ γ)) ((a, .alloc β) :: AList.erase Γ a) env := by
   intro y
   rw [h y]
   by_cases hy : a = y
-  · simp [findL, hy, emb, upd]
-  · simp only [findL, hy, ↓reduceIte]
-    cases hf : findL (removeL a Γ) y with
+  · simp [AList.lookup, hy, emb, upd]
+  · simp only [AList.lookup, hy, ↓reduceIte]
+    cases hf : AList.lookup (AList.erase Γ a) y with
     | none => rfl
-    | some t => simp [emb_upd (brandsIn_removeL a hb) hβ hf]
+    | some t => simp [emb_upd (brandsIn_erase a hb) hβ hf]
 
 /-- Entering a loop: the allocator's current binding becomes the loop's. -/
-theorem rel_split {φ Γ env} {a γ : Nat} (h : Rel φ Γ env) (ha : findL Γ a = some (.alloc γ)) :
-    Rel φ ((a, .alloc γ) :: removeL a Γ) env := by
+theorem rel_split {φ Γ env} {a γ : Nat} (h : Rel φ Γ env) (ha : AList.lookup Γ a = some (.alloc γ)) :
+    Rel φ ((a, .alloc γ) :: AList.erase Γ a) env := by
   intro y
   rw [h y]
   by_cases hy : a = y
-  · subst hy; simp [findL, ha]
-  · simp only [findL, hy, ↓reduceIte, findL_removeL, show ¬ y = a from fun e => hy e.symm]
+  · subst hy; simp [AList.lookup, ha]
+  · simp only [AList.lookup, hy, ↓reduceIte, AList.lookup_erase, show ¬ y = a from fun e => hy e.symm]
 
 /-- What a checked statement list does in the ghost run: it runs out of fuel, or finishes in a
 state that matches its final context. It never gets stuck. -/
@@ -297,18 +270,18 @@ theorem ghost_ok {σ : Nat → Bool} {B Γ ss Γ'} (h : Ok B Γ ss Γ') :
     cases n with
     | zero => exact .inl rfl
     | succ n =>
-      have hea : findL s.env a = some (.allocV (φ β)) := by rw [hr a, ha]; rfl
+      have hea : AList.lookup s.env a = some (.allocV (φ β)) := by rw [hr a, ha]; rfl
       simp only [ghost, hea]
       refine ih n k φ _ (rel_cons h (.heap β) hr) (brandsIn_cons hb (fun γ hγ => ?_))
       rcases hγ with hγ | hγ <;> cases hγ
-      exact hb _ (findL_mem ha) β (.inl rfl)
+      exact hb _ (AList.lookup_mem ha) β (.inl rfl)
   | @use B Γ h a β rest Γ' hh ha _ ih =>
     intro n k φ s hr hb
     cases n with
     | zero => exact .inl rfl
     | succ n =>
-      have heh : findL s.env h = some (.heapV (φ β)) := by rw [hr h, hh]; rfl
-      have hea : findL s.env a = some (.allocV (φ β)) := by rw [hr a, ha]; rfl
+      have heh : AList.lookup s.env h = some (.heapV (φ β)) := by rw [hr h, hh]; rfl
+      have hea : AList.lookup s.env a = some (.allocV (φ β)) := by rw [hr a, ha]; rfl
       simp only [ghost, heh, hea, ↓reduceIte]
       exact ih n k φ s hr hb
   | @free B Γ h a β rest Γ' hh ha _ ih =>
@@ -316,35 +289,35 @@ theorem ghost_ok {σ : Nat → Bool} {B Γ ss Γ'} (h : Ok B Γ ss Γ') :
     cases n with
     | zero => exact .inl rfl
     | succ n =>
-      have heh : findL s.env h = some (.heapV (φ β)) := by rw [hr h, hh]; rfl
-      have hea : findL s.env a = some (.allocV (φ β)) := by rw [hr a, ha]; rfl
+      have heh : AList.lookup s.env h = some (.heapV (φ β)) := by rw [hr h, hh]; rfl
+      have hea : AList.lookup s.env a = some (.allocV (φ β)) := by rw [hr a, ha]; rfl
       simp only [ghost, heh, hea, ↓reduceIte]
-      exact ih n k φ _ (rel_removeL h hr) (brandsIn_removeL h hb)
+      exact ih n k φ _ (rel_erase h hr) (brandsIn_erase h hb)
   | @release B Γ a β rest Γ' ha _ _ ih =>
     intro n k φ s hr hb
     cases n with
     | zero => exact .inl rfl
     | succ n =>
-      have hea : findL s.env a = some (.allocV (φ β)) := by rw [hr a, ha]; rfl
+      have hea : AList.lookup s.env a = some (.allocV (φ β)) := by rw [hr a, ha]; rfl
       simp only [ghost, hea]
-      exact ih n k φ _ (rel_removeL a hr) (brandsIn_removeL a hb)
+      exact ih n k φ _ (rel_erase a hr) (brandsIn_erase a hb)
   | @reset B Γ a' a β β' rest Γ' ha _ _ hβ' _ ih =>
     intro n k φ s hr hb
     cases n with
     | zero => exact .inl rfl
     | succ n =>
-      have hea : findL s.env a = some (.allocV (φ β)) := by rw [hr a, ha]; rfl
+      have hea : AList.lookup s.env a = some (.allocV (φ β)) := by rw [hr a, ha]; rfl
       simp only [ghost, hea]
-      refine ih n k (upd φ β' s.next) _ ?_ (brandsIn_new a' β' (brandsIn_removeL a hb))
+      refine ih n k (upd φ β' s.next) _ ?_ (brandsIn_new a' β' (brandsIn_erase a hb))
       have := rel_cons a' (.alloc β')
-        (rel_upd s.next (rel_removeL a hr) (brandsIn_removeL a hb) hβ')
+        (rel_upd s.next (rel_erase a hr) (brandsIn_erase a hb) hβ')
       simpa [State.bind, emb, upd] using this
   | @while_ B Γ a β0 β βx β'' body rest Γ' ha _ hβ hβx _ _ ihb ihr =>
     intro n₀ k₀ φ₀ s₀ hr₀ hb
     -- The loop invariant: the allocator `a` has some brand `γ`, the rest of the context is
     -- unchanged.
     have loop : ∀ (n k : Nat) (φ : Nat → Nat) (γ : Nat) (s : State),
-        Rel φ ((a, .alloc γ) :: removeL a Γ) s.env →
+        Rel φ ((a, .alloc γ) :: AList.erase Γ a) s.env →
         ghost σ n k s (.while_ a β βx body :: rest) = .outOfFuel ∨
           ∃ s' k' φ', ghost σ n k s (.while_ a β βx body :: rest) = .done s' k' ∧
             Rel φ' Γ' s'.env := by
@@ -356,10 +329,10 @@ theorem ghost_ok {σ : Nat → Bool} {B Γ ss Γ'} (h : Ok B Γ ss Γ') :
         simp only [ghost]
         split
         · rcases ihb n (k + 1) _ s (rel_reopen hr hb hβ)
-              (brandsIn_new a β (brandsIn_removeL a hb)) with h | ⟨s₁, k₁, φ₁, h, hr₁⟩
+              (brandsIn_new a β (brandsIn_erase a hb)) with h | ⟨s₁, k₁, φ₁, h, hr₁⟩
           · rw [h]; exact .inl rfl
           · rw [h]; exact ihn k₁ φ₁ β'' s₁ hr₁
-        · exact ihr n (k + 1) _ s (rel_reopen hr hb hβx) (brandsIn_new a βx (brandsIn_removeL a hb))
+        · exact ihr n (k + 1) _ s (rel_reopen hr hb hβx) (brandsIn_new a βx (brandsIn_erase a hb))
     exact loop n₀ k₀ φ₀ β0 s₀ (rel_split hr₀ ha)
 
 /-- **Checked programs pass every brand check** (Q1.1). The ghost run of a checked program never
@@ -369,22 +342,10 @@ theorem checked_passes_brand_checks {ss Γ'} (h : Ok [] [] ss Γ') (σ : Nat →
   rcases ghost_ok (σ := σ) h n 0 id State.init (fun _ => rfl) (fun _ he => nomatch he) with
     h | ⟨s', _, _, h, _⟩ <;> rw [h] <;> simp
 
-theorem findL_erase (env : List (Nat × Val)) (x : Nat) :
-    findL (eraseEnv env) x = (findL env x).map Val.erase := by
-  induction env with
-  | nil => rfl
-  | cons p env ih => by_cases h : p.1 = x <;> simp_all [eraseEnv, findL]
-
-theorem removeL_erase (p : Nat) (env : List (Nat × Val)) :
-    removeL p (eraseEnv env) = eraseEnv (removeL p env) := by
-  induction env with
-  | nil => rfl
-  | cons q env ih => by_cases h : q.1 = p <;> simp_all [eraseEnv, removeL]
-
 /-- The erased run simulates the ghost run: wherever the ghost run does not get stuck, the
 erased run does the same thing with the brands removed. -/
 theorem erased_sim {σ : Nat → Bool} : ∀ (n k : Nat) (s : State) (ss : List Stmt),
-    ghost σ n k s ss ≠ .stuck → erased σ n k (eraseEnv s.env) ss = (ghost σ n k s ss).erase := by
+    ghost σ n k s ss ≠ .stuck → erased σ n k (AList.map Val.erase s.env) ss = (ghost σ n k s ss).erase := by
   intro n
   induction n with
   | zero => intro _ _ _ _; rfl
@@ -396,11 +357,11 @@ theorem erased_sim {σ : Nat → Bool} : ∀ (n k : Nat) (s : State) (ss : List 
       simp only [ghost] at hns ⊢
       simp only [erased]
       have := ih k (s.bind a s.env) rest hns
-      simpa [State.bind, eraseEnv, Val.erase] using this
+      simpa [State.bind, AList.map, Val.erase] using this
     | .alloc h a :: rest =>
       simp only [ghost] at hns ⊢
-      simp only [erased, findL_erase]
-      cases hf : findL s.env a with
+      simp only [erased, AList.lookup_map]
+      cases hf : AList.lookup s.env a with
       | none => simp [hf] at hns
       | some v =>
         cases v with
@@ -408,14 +369,14 @@ theorem erased_sim {σ : Nat → Bool} : ∀ (n k : Nat) (s : State) (ss : List 
         | allocV b =>
           simp only [hf] at hns ⊢
           have := ih k { s with env := (h, .heapV b) :: s.env } rest hns
-          simpa [eraseEnv, Val.erase] using this
+          simpa [AList.map, Val.erase] using this
     | .use h a :: rest =>
       simp only [ghost] at hns ⊢
-      simp only [erased, findL_erase]
-      cases hf : findL s.env h with
+      simp only [erased, AList.lookup_map]
+      cases hf : AList.lookup s.env h with
       | none => simp [hf] at hns
       | some v =>
-        cases hg : findL s.env a with
+        cases hg : AList.lookup s.env a with
         | none => cases v <;> simp [hf, hg] at hns
         | some w =>
           cases v <;> cases w <;> simp only [hf, hg] at hns ⊢ <;> try (exact absurd rfl hns)
@@ -426,45 +387,45 @@ theorem erased_sim {σ : Nat → Bool} : ∀ (n k : Nat) (s : State) (ss : List 
           · simp [hbb] at hns
     | .free h a :: rest =>
       simp only [ghost] at hns ⊢
-      simp only [erased, findL_erase]
-      cases hf : findL s.env h with
+      simp only [erased, AList.lookup_map]
+      cases hf : AList.lookup s.env h with
       | none => simp [hf] at hns
       | some v =>
-        cases hg : findL s.env a with
+        cases hg : AList.lookup s.env a with
         | none => cases v <;> simp [hf, hg] at hns
         | some w =>
           cases v <;> cases w <;> simp only [hf, hg] at hns ⊢ <;> try (exact absurd rfl hns)
           rename_i b b'
           by_cases hbb : b = b'
           · simp only [hbb, ↓reduceIte] at hns ⊢
-            have := ih k { s with env := removeL h s.env } rest hns
-            simpa [Val.erase, removeL_erase] using this
+            have := ih k { s with env := AList.erase s.env h } rest hns
+            simpa [Val.erase, AList.erase_map] using this
           · simp [hbb] at hns
     | .release a :: rest =>
       simp only [ghost] at hns ⊢
-      simp only [erased, findL_erase]
-      cases hf : findL s.env a with
+      simp only [erased, AList.lookup_map]
+      cases hf : AList.lookup s.env a with
       | none => simp [hf] at hns
       | some v =>
         cases v with
         | heapV b => simp [hf] at hns
         | allocV b =>
           simp only [hf] at hns ⊢
-          have := ih k { s with env := removeL a s.env } rest hns
-          simpa [Val.erase, removeL_erase] using this
+          have := ih k { s with env := AList.erase s.env a } rest hns
+          simpa [Val.erase, AList.erase_map] using this
     | .reset a' a β' :: rest =>
       simp only [ghost] at hns ⊢
-      simp only [erased, findL_erase]
-      cases hf : findL s.env a with
+      simp only [erased, AList.lookup_map]
+      cases hf : AList.lookup s.env a with
       | none => simp [hf] at hns
       | some v =>
         cases v with
         | heapV b => simp [hf] at hns
         | allocV b =>
           simp only [hf] at hns ⊢
-          have := ih k (s.bind a' (removeL a s.env)) rest hns
-          rw [removeL_erase]
-          simpa [State.bind, eraseEnv, Val.erase] using this
+          have := ih k (s.bind a' (AList.erase s.env a)) rest hns
+          rw [AList.erase_map]
+          simpa [State.bind, AList.map, Val.erase] using this
     | .while_ a β βx body :: rest =>
       simp only [ghost] at hns ⊢
       simp only [erased]

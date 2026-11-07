@@ -8,14 +8,15 @@ see `ConcreteSpec/README.md`.
 -/
 
 namespace ConcreteSpec
+open Core (AList)
 
 /-! ### Ownership and known values -/
 
 /-- The checker's state for one binding: its type, whether it still holds its value (`live`),
 whether it has been read (`used`), its statically known value, if it has one (`known`, Q6.2), and
-the known values of its fields when it is a struct (`kfields`). -/
+the known values of its fields when it is a struct (`kfields`). The context keys it by the
+binding's identity. -/
 structure Entry where
-  name : Var
   ty : Ty
   live : Bool
   used : Bool
@@ -25,23 +26,17 @@ structure Entry where
   kfields : List (Name × Option Scalar) := []
   deriving DecidableEq, Repr
 
-/-- The ownership context, newest binding first. -/
-abbrev Ctx := List Entry
+/-- The ownership context: each binding's entry by its identity, newest first. -/
+abbrev Ctx := AList Var Entry
 
 /-- The variable types of a context. -/
-def Ctx.tys (Γ : Ctx) : TyCtx := Γ.map (fun e => (e.name, e.ty))
+def Ctx.tys (Γ : Ctx) : TyCtx := AList.map Entry.ty Γ
 
-/-- The entry of `x`. -/
-def ctxFind : Ctx → Var → Option Entry
-  | [], _ => none
-  | e :: Γ, x => if e.name = x then some e else ctxFind Γ x
+/-- The entry after a read: it is now used, and if `moved` it no longer holds its value. -/
+def Entry.read (moved : Bool) (e : Entry) : Entry := { e with used := true, live := e.live && !moved }
 
-/-- Record a read of `x`: it is now used, and if `moved` it no longer holds its value. -/
-def ctxMark : Ctx → Var → Bool → Ctx
-  | [], _, _ => []
-  | e :: Γ, x, moved =>
-    if e.name = x then { e with used := true, live := e.live && !moved } :: Γ
-    else e :: ctxMark Γ x moved
+/-- Record a read of `x` in the context. -/
+def ctxMark (Γ : Ctx) (x : Var) (moved : Bool) : Ctx := AList.update Γ x (Entry.read moved)
 
 /-- Reading an atom (OWN-1, OWN-D1, Q9.1). A literal changes nothing. `copy x` reads a live local
 of a Copy type and keeps it; `move x` reads a live local of a linear type and moves the value out.
@@ -49,9 +44,9 @@ Either read marks the local used. -/
 inductive UseAtom (Δ : Decls) : Ctx → Atom → Ctx → Prop where
   | int {Γ t n} : UseAtom Δ Γ (.int t n) Γ
   | bool {Γ b} : UseAtom Δ Γ (.bool b) Γ
-  | copy {Γ x e} : ctxFind Γ x = some e → e.live = true → e.ty.isCopy Δ = true →
+  | copy {Γ x e} : AList.lookup Γ x = some e → e.live = true → e.ty.isCopy Δ = true →
       UseAtom Δ Γ (.copy x) (ctxMark Γ x false)
-  | move {Γ x e} : ctxFind Γ x = some e → e.live = true → e.ty.isCopy Δ = false →
+  | move {Γ x e} : AList.lookup Γ x = some e → e.live = true → e.ty.isCopy Δ = false →
       UseAtom Δ Γ (.move x) (ctxMark Γ x true)
 
 /-- Reading a list of atoms left to right (STMT-4). -/
@@ -72,7 +67,7 @@ A moved struct's field facts travel with it (`knownFieldsAtom`). -/
 def knownAtom (Γ : Ctx) : Atom → Option Scalar
   | .int t n => some (.int t n)
   | .bool b => some (.bool b)
-  | .copy x => (ctxFind Γ x).bind Entry.known
+  | .copy x => (AList.lookup Γ x).bind Entry.known
   | .move _ => none
 
 /-- The statically known value of an expression (Q6.2): a known atom, or a checked `+` of two
@@ -88,7 +83,8 @@ def knownExpr (Γ : Ctx) : Expr → Option Scalar
 
 /-- The known value of field `f` in a list of field facts: `none` when the field is unknown or
 absent. -/
-def fieldFact (K : List (Name × Option Scalar)) (f : Name) : Option Scalar := (lookupF f K).bind id
+def fieldFact (K : List (Name × Option Scalar)) (f : Name) : Option Scalar :=
+  (AList.lookup K f).bind id
 
 /-- The known field values of the struct an atom reads (Q6.2): a local's recorded field facts. A
 read keeps them for the receiving binding, whether it copies or moves (an ownership transfer keeps
@@ -96,10 +92,10 @@ the facts and still consumes the source). A literal is a scalar and has none. -/
 def knownFieldsAtom (Γ : Ctx) : Atom → List (Name × Option Scalar)
   | .int _ _ => []
   | .bool _ => []
-  | .copy x => match ctxFind Γ x with
+  | .copy x => match AList.lookup Γ x with
     | some e => e.kfields
     | none => []
-  | .move x => match ctxFind Γ x with
+  | .move x => match AList.lookup Γ x with
     | some e => e.kfields
     | none => []
 
@@ -110,11 +106,11 @@ read of a local carries the local's field facts. `+` produces a scalar. -/
 def knownFields (Γ : Ctx) : Expr → List (Name × Option Scalar)
   | .atom a => knownFieldsAtom Γ a
   | .add _ _ => []
-  | .mk _ fs => fs.map (fun p => (p.1, knownAtom Γ p.2))
+  | .mk _ fs => AList.map (knownAtom Γ) fs
 
 /-- Field facts hold of a struct's field values: every known field has exactly its known value. -/
 def FieldsHold (K : List (Name × Option Scalar)) (vs : List (Name × Scalar)) : Prop :=
-  ∀ f s, fieldFact K f = some s → lookupF f vs = some s
+  ∀ f s, fieldFact K f = some s → AList.lookup vs f = some s
 
 /-! ### No hidden traps: evidence for each operation
 
@@ -136,7 +132,7 @@ a `bool` and for `move` (no scalar is moved). -/
 def atomBounds (Γ : Ctx) : Atom → Option (IntTy × Int × Int)
   | .int t n => some (t, n, n)
   | .bool _ => none
-  | .copy x => match ctxFind Γ x with
+  | .copy x => match AList.lookup Γ x with
     | some e => match e.ty, e.known with
       | .scalar (.int t), some (.int _ n) => some (t, n, n)
       | .scalar (.int t), _ => some (t, t.min, t.max)
@@ -154,15 +150,15 @@ def admitted (Γ : Ctx) : Expr → Bool
   | _ => true
 
 /-- A new binder is a fresh identity (Q9.1): no binding of the context has it, moved or not. -/
-def Fresh (Γ : Ctx) (x : Var) : Prop := ctxFind Γ x = none
+def Fresh (Γ : Ctx) (x : Var) : Prop := AList.lookup Γ x = none
 
 /-- A destructuring pattern names every field exactly once (PAT-5): no field twice, every named
 field declared, every declared field named (an ignored field written `_`). Every slice-1 field is
 a scalar, so every `_` is eligible (OWN-5). -/
 structure PatOk (d : StructDecl) (pat : List (Name × Binder)) : Prop where
   nodup : (pat.map Prod.fst).Nodup
-  declared : ∀ p ∈ pat, ∃ st, lookupF p.1 d.fields = some st
-  covers : ∀ f st, lookupF f d.fields = some st → ∃ b, lookupF f pat = some b
+  declared : ∀ p ∈ pat, ∃ st, AList.lookup d.fields p.1 = some st
+  covers : ∀ f st, AList.lookup d.fields f = some st → ∃ b, AList.lookup pat f = some b
 
 /-- The locals a pattern binds, in order. -/
 def patNames : List (Name × Binder) → List Var
@@ -178,9 +174,9 @@ def bindPat (d : StructDecl) (K : List (Name × Option Scalar)) : List (Name × 
   | [], Γ => Γ
   | (_, .wild) :: rest, Γ => bindPat d K rest Γ
   | (f, .name x) :: rest, Γ =>
-    match lookupF f d.fields with
+    match AList.lookup d.fields f with
     | some st => bindPat d K rest
-        ({ name := x, ty := .scalar st, live := true, used := false, known := fieldFact K f } :: Γ)
+        ((x, { ty := .scalar st, live := true, used := false, known := fieldFact K f }) :: Γ)
     | none => bindPat d K rest Γ
 
 /-- Every binder of a pattern is fresh, and no two binders share an identity. -/
@@ -202,8 +198,8 @@ inductive StmtOk (Δ : Decls) : Ctx → Stmt → Ctx → Prop where
   | let_ {Γ Γ₁ x t e} : HasType Δ Γ.tys e t → admitted Γ e = true → Uses Δ Γ e Γ₁ →
       Fresh Γ₁ x →
       StmtOk Δ Γ (.let_ (.name x) t e)
-        ({ name := x, ty := t, live := true, used := false, known := knownExpr Γ e,
-           kfields := knownFields Γ e } :: Γ₁)
+        ((x, { ty := t, live := true, used := false, known := knownExpr Γ e,
+               kfields := knownFields Γ e }) :: Γ₁)
   | letWild {Γ Γ₁ t e} : HasType Δ Γ.tys e t → admitted Γ e = true → t.isCopy Δ = true →
       Uses Δ Γ e Γ₁ → StmtOk Δ Γ (.let_ .wild t e) Γ₁
   | letStruct {Γ Γ₁ s d pat e} : HasType Δ Γ.tys e (.struct s) → admitted Γ e = true →
@@ -213,7 +209,7 @@ inductive StmtOk (Δ : Decls) : Ctx → Stmt → Ctx → Prop where
 /-- At `return`, every linear binding has been consumed (OWN-2) and every binding has been used
 (OWN-5). -/
 def Discharged (Δ : Decls) (Γ : Ctx) : Prop :=
-  ∀ e ∈ Γ, (e.ty.isCopy Δ = true ∨ e.live = false) ∧ e.used = true
+  ∀ b ∈ Γ, (b.2.ty.isCopy Δ = true ∨ b.2.live = false) ∧ b.2.used = true
 
 /-- A body is accepted: each statement in order, then `return a` with `a : u8` (STMT-7), after
 which nothing linear is left and every binding was used. An atom contains no operation, so the

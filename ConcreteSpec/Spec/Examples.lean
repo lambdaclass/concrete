@@ -1,4 +1,6 @@
-import ConcreteSpec.Spec.Checker
+import ConcreteSpec.Spec.Slice1Checker
+import ConcreteSpec.Spec.Rep
+import ConcreteSpec.Spec.Observation
 
 /-!
 # Slice-1 conformance examples
@@ -321,7 +323,7 @@ fn add100(x: u8) -> u8 {
 ```
 In Core the sum is bound to a temporary first (Q9.1). The guarded forms that are accepted need
 conditions, which slice 1 does not have; they come with Core `if` (ROADMAP R-0574). -/
-def inputCtx : Ctx := [{ name := x₀, ty := u8, live := true, used := false, known := none }]
+def inputCtx : Ctx := [(x₀, { ty := u8, live := true, used := false, known := none })]
 
 def inputEnv (n : Int) : Env := [(x₀, .val (.scalar (.int .u8 n)))]
 
@@ -451,5 +453,24 @@ def wrongReturnType : Program :=
   { decls, body := [], ret := .int .i64 42 }
 
 example : check wrongReturnType = false := by decide
+
+/-! ### Representation and observations of the examples -/
+
+/-- `Token` has no bytes, and decoding no bytes at type `Token` gives the empty struct (Part 2). -/
+example : Rep.encodeVal (.struct "Token" []) = [] ∧
+    Rep.decodeVal decls (.struct "Token") [] = some (.struct "Token" []) := by decide
+
+/-- `moveThenConsume` exits with status 42 (Part 7). -/
+example : (Observe.observe true (run moveThenConsume 10)).map Observe.Observation.status = some 42 := by
+  decide
+
+/-- The refused body `add100`, run anyway on input 200, traps: the trap message goes to descriptor
+2 and the status is 134. -/
+example : Observe.observe true (runBody decls 10 (inputEnv 200) add100 (.copy s₂)) =
+    some (.trapped .arithmeticOverflow) := by decide
+
+/-- A missing configured grant: status 125, and `main` does not run. -/
+example : (Observe.observe false (run moveThenConsume 10)).map Observe.Observation.status =
+    some 125 := by decide
 
 end ConcreteSpec.Examples

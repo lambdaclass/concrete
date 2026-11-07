@@ -5,48 +5,16 @@ rows Q9.15, P3: Lean is the specification). It is not normative until the owner 
 stage A2c (row Q9.19). Before that, the owner approved the Core design provisionally (A2a,
 2026-11-05), and A2b formalized it here and checked the four design theorems (row Q9.14).
 
-## What to read, in order
+## How to read it
 
-1. **[`Spec.lean`](Spec.lean)** is the specification library (row Q9.15; split into modules by
-   owner decision 2026-11-06). Its header says what the specification covers and how slice 1's
-   Core is shaped (A-normal form, fresh identities, explicit `copy`/`move`, statically known
-   values), and it imports the modules below. Every rule is a Lean definition with a plain-English
-   doc comment, followed by example programs: the surface program in a doc comment, its Core form,
-   and what the rules say about it: accepted (`check p = true`) with its outcome
-   (`run p 10 = .exit 42`), or refused (`check p = false`). You can read it without reading any
-   proof. Read the modules in this order:
+[`Spec.lean`](Spec.lean) is the specification library (row Q9.15; split into modules by owner
+decision 2026-11-06). It imports the modules under [`Spec/`](Spec/) in reading order, and each
+module's header says what it covers. Every rule is a Lean definition with a plain-English doc
+comment, followed by example programs: the surface program in a doc comment, its Core form, and
+what the rules say about it: accepted (`check p = true`) with its outcome (`run p 10 = .exit 42`),
+or refused (`check p = false`). You can read it without reading any proof.
 
-   | Module | Contents |
-   |---|---|
-   | [`Spec/Syntax.lean`](Spec/Syntax.lean) | Part 1, slice 1: types, integer ranges, Core syntax |
-   | [`Spec/Statics.lean`](Spec/Statics.lean) | slice-1 typing |
-   | [`Spec/Ownership.lean`](Spec/Ownership.lean) | ownership, known values (Q6.2), static refusal, acceptance (`Checked`) |
-   | [`Spec/Semantics.lean`](Spec/Semantics.lean) | values, the evaluator `run`, `Exec`, value typing |
-   | [`Spec/Checker.lean`](Spec/Checker.lean) | the executable checker `check` |
-   | [`Spec/Examples.lean`](Spec/Examples.lean) | slice-1 conformance examples |
-   | [`Spec/Slice0.lean`](Spec/Slice0.lean) | the slice-0 fragment the compiler targets first (`u8` literals, immutable `let`, checked `+`, `main -> u8`), embedded into slice 1 by `toCore` |
-   | [`Spec/Rep.lean`](Spec/Rep.lean) | Part 2, representation (Q3.11): byte layout and encoding |
-   | [`Spec/Cleanup.lean`](Spec/Cleanup.lean) | Part 3, structured cleanup (Q9.8): `defer`, frames, exits |
-   | [`Spec/Borrow.lean`](Spec/Borrow.lean) | Part 4, scoped borrows (Q3.3, Q3.4, Q9.5, REF-11) and range subviews (Q4.7): `borrow [mut] v from a until b as s { … } [else { … }]`, no escape, element access at run time (`vrun`), UTF-8 text views |
-   | [`Spec/Brand.lean`](Spec/Brand.lean) | Part 5, allocator brands (Q1.1–Q1.5, Q1.13), the ghost run and the erased run |
-   | [`Spec/Authority.lean`](Spec/Authority.lean) | Part 6, authority (Q5.1–Q5.4, Q7.11): capabilities, grants, Console |
-   | [`Spec/Observation.lean`](Spec/Observation.lean) | Part 7, observations (Q7.10, Q8.5): startup refusal 125, the returned code, trap 134 |
-
-2. **[`Proofs/`](Proofs/)** says why the rules hang together. Read it only to check a claim.
-
-   | File | Main results |
-   |---|---|
-   | `Proofs/Slice1.lean` | `checked_never_stuck` (an accepted program never gets stuck), `checked_no_implicit_traps` (an accepted program never traps), `checked_exits`, fuel properties of `run` |
-   | `Proofs/Checker.lean` | `check_iff`: the executable checker accepts exactly the programs the rules accept |
-   | `Proofs/Slice0.lean` | `slice0_exits` (an accepted slice-0 program exits with a `u8` status), `slice0_never_traps`, `toCore_injective` |
-   | `Proofs/Rep.lean` | `rep_roundtrip` (design theorem 1) |
-   | `Proofs/Cleanup.lean` | `defer_cleanup_releases` (design theorem 2) |
-   | `Proofs/Borrow.lean` | `open_mut_freezes_root` (design theorem 3), `shared_open_grants_no_write`; ranges: `range_never_traps` (a range accepted without `else` opens), `enter_in_bounds`, `range_open_mut_freezes_root`; no escape: `view_not_moved`, `view_not_used_after`, `root_restored`; element access: `view_in_source`, `view_get`, `view_set`, `viewsOk_enter`, `viewsOk_put`; mutation: `view_write_exact`, `range_block_frame`; text: `text_view_utf8`, `utf8_split` |
-   | `Proofs/Brand.lean` | `reset_fresh` (design theorem 4), the brand refusals, `checked_passes_brand_checks` (a checked program never fails a ghost brand check), `brand_erasure` (Q1.1: its run with brands erased does exactly what its ghost run does), `ghost_run` |
-   | `Proofs/Authority.lean` | `authority_contained` (every operation a run performs uses a grant `main` was launched with, of the right type, under a capability `main` declares, for every fuel), `sub_iff`, `equiv_iff` |
-   | `Proofs/Observe.lean` | `checked_observation`, `checked_observable` (an accepted program's observation and status), `refused_start` |
-   | `Proofs/Examples.lean` | the cleanup traces and brand refusal of the specification derived again from the general theorems (they apply, non-vacuously) |
-   | `Proofs/Basics.lean` | list lemmas |
+[`Proofs/`](Proofs/) says why the rules hang together. Read it only to check a claim.
 
 **The owner view.** `scripts/spec/lean_site.sh [OUT]` (after `lake build ConcreteSpec`) generates
 a static HTML view into `_build/spec-site/`: every module rendered from its source (doc comments as
@@ -74,32 +42,10 @@ archived prose specification [legacy/docs/spec](../legacy/docs/spec)).
   them (`check_iff`).
 - Build: `lake build ConcreteSpec`. The external checker re-checks every theorem.
 
-## Done at A2c, and what remains open
+## What remains open
 
-The seven parts are separate Core fragments, each defined only as far as its theorems need
-(R4 F8); unifying them into one Core is A3 work (R-0560).
-
-Formalized at A2c, each with rules, examples and proofs:
-
-- **Capability checking** (part 6): capability sets and their semantic equality (Q5.3),
-  substitution of capability parameters at a call, grant parameters, Console for the standard
-  streams (Q7.11), the refusals (missing capability, missing grant, `Unsafe` outside trusted code,
-  `Device`), and `authority_contained`.
-- **Brand erasure** (Q1.1, part 5): the erased run (no brands, no brand checks), and
-  `brand_erasure`: for a checked program it does what the ghost run does, which never fails a
-  brand check (`checked_passes_brand_checks`), for every outcome of the loop tests.
-- **Range subviews** (Q4.7, part 4): the range test for arrays and UTF-8 text, `else`, and the
-  evidence a range without `else` needs (no hidden traps: known valid, so it never traps).
-  Element access `v[i]` reaches exactly source element `a + i`, inside `[a, b)` and the source, or
-  traps (`view_in_source`, `view_get`, `view_set`); a write changes exactly that element
-  (`view_write_exact`), and a block that accesses only its view changes nothing outside
-  `[a, b)` (`range_block_frame`). No escape: a view never moves (so is never returned, stored,
-  passed or captured), is never named after its block, and the source's root is back with
-  exactly its earlier entries, freeze released (`view_not_moved`, `view_not_used_after`,
-  `root_restored`). A valid text range of well-formed UTF-8 is well formed (`text_view_utf8`).
-- **Trap and exit observations** (Q7.10, Q8.5, part 7): startup refusal 125, the returned code,
-  trap 134, and what each observation records.
-- **The slice-0 fragment** (part 1): a Core syntax the compiler can target, embedded into slice 1.
+The parts are separate Core fragments, each defined only as far as its theorems need (R4 F8);
+unifying them into one Core is A2i work (R-0571).
 
 Open obligations, by name:
 
@@ -119,12 +65,12 @@ Open obligations, by name:
   authority rule 11, foreign calls, trait dispatch, generic methods and generated cleanup.
 - **O7 Capabilities in the other parts**: the cleanup calls of part 3 and the allocator
   operations of part 5 need capabilities; part 6 checks capabilities in its own fragment only
-  (unification, A3).
+  (unification, A2i).
 - **O8 Part 3** abstracts each deferred call to its identity, dependencies, loans and whether it
   traps; it does not model the statements between registrations or evaluating a `return` value
   before cleanup.
 - **O9 Part 4**: the run-time fragment (`vrun`) and the access rules (`Ok`) are separate
-  fragments, not yet joined in one soundness theorem (A3); the run covers array sources (text
+  fragments, not yet joined in one soundness theorem (A2i); the run covers array sources (text
   views share the index arithmetic, and their validity is `text_view_utf8`); views of views,
   writes through text views, and text whose length is known while its bytes are not (treated as
   unknown) are not modelled; the frame theorem covers bodies that access only their view. That

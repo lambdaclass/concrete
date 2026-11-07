@@ -1,4 +1,4 @@
-import ConcreteSpec.Spec.Examples
+import ConcreteSpec.Spec.Slice1Semantics
 
 /-!
 # Part 2: representation
@@ -126,8 +126,5 @@ example : decodeVal [] (.scalar .bool) (encodeVal (.scalar (.bool true))) =
 
 example : decodeVal [] (.scalar .bool) (encodeVal (.scalar (.bool false))) =
     some (.scalar (.bool false)) := by decide
-
-example : encodeVal (.struct "Token" []) = [] ∧
-    decodeVal Examples.decls (.struct "Token") [] = some (.struct "Token" []) := by decide
 
 end ConcreteSpec.Rep

@@ -1,3 +1,5 @@
+import ConcreteSpec.Spec.Basics
+
 /-!
 # Part 4: scoped borrows and range views
 
@@ -6,6 +8,7 @@ see `ConcreteSpec/README.md`.
 -/
 
 namespace ConcreteSpec.Borrow
+open Core (AList)
 
 /-! ## Part 4. Scoped borrows (Q3.3, Q3.4, Q9.5, REF-11): `open_mut_freezes_root`
 
@@ -37,17 +40,7 @@ structure Place where
   deriving DecidableEq, Repr
 
 /-- The places in scope, by fresh identity (Q9.1). -/
-abbrev Ctx := List (Nat × Place)
-
-def find : Ctx → Nat → Option Place
-  | [], _ => none
-  | (n, q) :: Γ, p => if n = p then some q else find Γ p
-
-def mapPlaces (f : Place → Place) (Γ : Ctx) : Ctx := Γ.map fun e => (e.1, f e.2)
-
-def remove (p : Nat) : Ctx → Ctx
-  | [] => []
-  | (n, q) :: Γ => if n = p then remove p Γ else (n, q) :: remove p Γ
+abbrev Ctx := AList Nat Place
 
 /-- The lock a borrow of root `r` puts on each place: a mutable open freezes every place of the
 root; a shared open locks the free ones against writes and moves. -/
@@ -64,7 +57,7 @@ def view (m : Bool) (src : Place) : Place :=
 
 /-- The places inside `borrow [mut] src as v { … }`. -/
 def bodyCtx (m : Bool) (v : Nat) (src : Place) (Γ : Ctx) : Ctx :=
-  (v, view m src) :: mapPlaces (lockFor m src.root) Γ
+  (v, view m src) :: AList.map (lockFor m src.root) Γ
 
 inductive Stmt where
   | read (p : Nat)
@@ -74,7 +67,7 @@ inductive Stmt where
 
 /-- The outer places after a borrow block: those the block did not move, with the locks they
 had before it. The view goes out of scope with the block. -/
-def restore (Γ Γb : Ctx) : Ctx := Γ.filter fun e => (find Γb e.1).isSome
+def restore (Γ Γb : Ctx) : Ctx := Γ.filter fun e => (AList.lookup Γb e.1).isSome
 
 /-- The access rules, from the places before a statement list to the places after it. Read: not
 frozen. Write: unlocked and writable. Move: unlocked and owner; the place is gone afterwards.
@@ -82,14 +75,14 @@ Shared open: the source is not frozen. Mutable open: the source is unlocked and 
 view never upgrades, Q3.3). The view name is fresh. -/
 inductive Ok : Ctx → List Stmt → Ctx → Prop where
   | nil {Γ} : Ok Γ [] Γ
-  | read {Γ p q rest Γ'} : find Γ p = some q → q.lock ≠ .excl → Ok Γ rest Γ' →
+  | read {Γ p q rest Γ'} : AList.lookup Γ p = some q → q.lock ≠ .excl → Ok Γ rest Γ' →
       Ok Γ (.read p :: rest) Γ'
-  | write {Γ p q rest Γ'} : find Γ p = some q → q.lock = .free → q.mutable = true →
+  | write {Γ p q rest Γ'} : AList.lookup Γ p = some q → q.lock = .free → q.mutable = true →
       Ok Γ rest Γ' → Ok Γ (.write p :: rest) Γ'
-  | move {Γ p q rest Γ'} : find Γ p = some q → q.lock = .free → q.owner = true →
-      Ok (remove p Γ) rest Γ' → Ok Γ (.move p :: rest) Γ'
-  | borrow {Γ m s v q body rest Γb Γ'} : find Γ s = some q → q.lock ≠ .excl →
-      (m = true → q.lock = .free ∧ q.mutable = true) → find Γ v = none →
+  | move {Γ p q rest Γ'} : AList.lookup Γ p = some q → q.lock = .free → q.owner = true →
+      Ok (AList.erase Γ p) rest Γ' → Ok Γ (.move p :: rest) Γ'
+  | borrow {Γ m s v q body rest Γb Γ'} : AList.lookup Γ s = some q → q.lock ≠ .excl →
+      (m = true → q.lock = .free ∧ q.mutable = true) → AList.lookup Γ v = none →
       Ok (bodyCtx m v q Γ) body Γb → Ok (restore Γ Γb) rest Γ' →
       Ok Γ (.borrow m s v body :: rest) Γ'
 
@@ -105,11 +98,11 @@ inductive Touches (p : Nat) : List Stmt → Prop where
 /-- A statement list writes root `r`, or grants a write to it, at any depth: a write or move of a
 place of `r`, or a mutable open of one, with places resolved as the checker resolves them. -/
 inductive WritesRoot (r : Nat) : Ctx → List Stmt → Prop where
-  | write {Γ p q rest} : find Γ p = some q → q.root = r → WritesRoot r Γ (.write p :: rest)
-  | move {Γ p q rest} : find Γ p = some q → q.root = r → WritesRoot r Γ (.move p :: rest)
-  | mutOpen {Γ s q v body rest} : find Γ s = some q → q.root = r →
+  | write {Γ p q rest} : AList.lookup Γ p = some q → q.root = r → WritesRoot r Γ (.write p :: rest)
+  | move {Γ p q rest} : AList.lookup Γ p = some q → q.root = r → WritesRoot r Γ (.move p :: rest)
+  | mutOpen {Γ s q v body rest} : AList.lookup Γ s = some q → q.root = r →
       WritesRoot r Γ (.borrow true s v body :: rest)
-  | body {Γ m s q v body rest} : find Γ s = some q → WritesRoot r (bodyCtx m v q Γ) body →
+  | body {Γ m s q v body rest} : AList.lookup Γ s = some q → WritesRoot r (bodyCtx m v q Γ) body →
       WritesRoot r Γ (.borrow m s v body :: rest)
   | tail {Γ Γ₁ s rest} : Ok Γ [s] Γ₁ → WritesRoot r Γ₁ rest → WritesRoot r Γ (s :: rest)
 
@@ -246,57 +239,57 @@ example : ¬ ∃ Γ', Ok xy [.borrow true 0 1 [.move 5], .read 5] Γ' := by
   rintro ⟨Γ', h⟩
   cases h with
   | borrow hs _ _ _ hb hr =>
-    simp [xy, x0, find] at hs; subst hs
+    simp [xy, x0, AList.lookup] at hs; subst hs
     cases hb with
     | move _ _ _ h0 =>
       cases h0
       cases hr with
-      | read hf _ _ => simp [restore, remove, bodyCtx, mapPlaces, lockFor, view, find, xy, x0] at hf
+      | read hf _ _ => simp [restore, AList.erase, bodyCtx, AList.map, lockFor, view, AList.lookup, xy, x0] at hf
 
 /-- Reading the root inside its mutable open is refused. -/
 example : ¬ ∃ Γ', Ok x0 [.borrow true 0 1 [.read 0]] Γ' := by
   rintro ⟨Γ', h⟩
   cases h with
   | borrow hs _ _ _ hb _ =>
-    simp only [x0, find, ↓reduceIte, Option.some.injEq] at hs; subst hs
+    simp only [x0, AList.lookup, ↓reduceIte, Option.some.injEq] at hs; subst hs
     cases hb with
-    | read hf hl _ => simp [bodyCtx, find, mapPlaces, lockFor, x0, view] at hf; subst hf; simp at hl
+    | read hf hl _ => simp [bodyCtx, AList.lookup, AList.map, lockFor, x0, view] at hf; subst hf; simp at hl
 
 /-- Writing the root inside a shared open is refused. -/
 example : ¬ ∃ Γ', Ok x0 [.borrow false 0 1 [.write 0]] Γ' := by
   rintro ⟨Γ', h⟩
   cases h with
   | borrow hs _ _ _ hb _ =>
-    simp only [x0, find, ↓reduceIte, Option.some.injEq] at hs; subst hs
+    simp only [x0, AList.lookup, ↓reduceIte, Option.some.injEq] at hs; subst hs
     cases hb with
-    | write hf hl _ _ => simp [bodyCtx, find, mapPlaces, lockFor, x0, view] at hf; subst hf; simp at hl
+    | write hf hl _ _ => simp [bodyCtx, AList.lookup, AList.map, lockFor, x0, view] at hf; subst hf; simp at hl
 
 /-- Writing through a shared view is refused. -/
 example : ¬ ∃ Γ', Ok x0 [.borrow false 0 1 [.write 1]] Γ' := by
   rintro ⟨Γ', h⟩
   cases h with
   | borrow hs _ _ _ hb _ =>
-    simp only [x0, find, ↓reduceIte, Option.some.injEq] at hs; subst hs
+    simp only [x0, AList.lookup, ↓reduceIte, Option.some.injEq] at hs; subst hs
     cases hb with
-    | write hf _ hm _ => simp [bodyCtx, find, view] at hf; subst hf; simp at hm
+    | write hf _ hm _ => simp [bodyCtx, AList.lookup, view] at hf; subst hf; simp at hm
 
 /-- A shared view never upgrades to a mutable one. -/
 example : ¬ ∃ Γ', Ok x0 [.borrow false 0 1 [.borrow true 1 2 []]] Γ' := by
   rintro ⟨Γ', h⟩
   cases h with
   | borrow hs _ _ _ hb _ =>
-    simp only [x0, find, ↓reduceIte, Option.some.injEq] at hs; subst hs
+    simp only [x0, AList.lookup, ↓reduceIte, Option.some.injEq] at hs; subst hs
     cases hb with
-    | borrow hf _ hm _ _ _ => simp [bodyCtx, find, view] at hf; subst hf; have := (hm rfl).2; simp at this
+    | borrow hf _ hm _ _ _ => simp [bodyCtx, AList.lookup, view] at hf; subst hf; have := (hm rfl).2; simp at this
 
 /-- Moving the root inside its shared open is refused. -/
 example : ¬ ∃ Γ', Ok x0 [.borrow false 0 1 [.move 0]] Γ' := by
   rintro ⟨Γ', h⟩
   cases h with
   | borrow hs _ _ _ hb _ =>
-    simp only [x0, find, ↓reduceIte, Option.some.injEq] at hs; subst hs
+    simp only [x0, AList.lookup, ↓reduceIte, Option.some.injEq] at hs; subst hs
     cases hb with
-    | move hf hl _ _ => simp [bodyCtx, find, mapPlaces, lockFor, x0, view] at hf; subst hf; simp at hl
+    | move hf hl _ _ => simp [bodyCtx, AList.lookup, AList.map, lockFor, x0, view] at hf; subst hf; simp at hl
 
 /-! ### Range examples (Q4.7) -/
 
@@ -365,9 +358,9 @@ example : ¬ ∃ Γ', Ok x0 [.borrow true 0 1 [.move 1]] Γ' := by
   rintro ⟨Γ', h⟩
   cases h with
   | borrow hs _ _ _ hb _ =>
-    simp only [x0, find, ↓reduceIte, Option.some.injEq] at hs; subst hs
+    simp only [x0, AList.lookup, ↓reduceIte, Option.some.injEq] at hs; subst hs
     cases hb with
-    | move hf _ ho _ => simp [bodyCtx, find, view] at hf; subst hf; simp at ho
+    | move hf _ ho _ => simp [bodyCtx, AList.lookup, view] at hf; subst hf; simp at ho
 
 /-- Naming the view after its block is refused: `borrow mut x as v { } read(v)`. -/
 example : ¬ ∃ Γ', Ok x0 [.borrow true 0 1 [], .read 1] Γ' := by
@@ -376,7 +369,7 @@ example : ¬ ∃ Γ', Ok x0 [.borrow true 0 1 [], .read 1] Γ' := by
   | borrow hs _ _ _ hb hr =>
     cases hb
     cases hr with
-    | read hf _ _ => simp [restore, find, bodyCtx, mapPlaces, x0] at hf
+    | read hf _ _ => simp [restore, AList.lookup, bodyCtx, AList.map, x0] at hf
 
 /-! ### Range views at run time (Q4.7)
 
@@ -394,24 +387,14 @@ accesses only its view changes nothing outside `[a, b)` of its source (`range_bl
 
 This run covers array sources; a text view reads bytes with the same index arithmetic, and text
 validity is below. Views of views (opening a range of a view) are not modelled, and the run is
-not yet joined to the access rules `Ok` in one theorem (they are separate fragments, joined by A3).
+not yet joined to the access rules `Ok` in one theorem (they are separate fragments, joined in A2i).
 -/
 
-/-- The entry of `p` in a list keyed by place. -/
-def getN {α : Type} : List (Nat × α) → Nat → Option α
-  | [], _ => none
-  | (n, x) :: l, p => if n = p then some x else getN l p
-
-/-- Replace the entry of `p`. -/
-def putN {α : Type} (p : Nat) (x : α) : List (Nat × α) → List (Nat × α)
-  | [] => []
-  | (n, y) :: l => if n = p then (n, x) :: l else (n, y) :: putN p x l
-
 /-- Memory: each owner array place and its elements. -/
-abbrev Mem := List (Nat × List Nat)
+abbrev Mem := AList Nat (List Nat)
 
 /-- The element `j` of place `p`. -/
-def elem (μ : Mem) (p j : Nat) : Option Nat := (getN μ p).bind (·[j]?)
+def elem (μ : Mem) (p j : Nat) : Option Nat := (AList.lookup μ p).bind (·[j]?)
 
 /-- A view at run time: its source place, its range `[a, b)`, and whether it is mutable. -/
 structure VInfo where
@@ -421,7 +404,7 @@ structure VInfo where
   mutable : Bool
   deriving DecidableEq, Repr
 
-abbrev Views := List (Nat × VInfo)
+abbrev Views := AList Nat VInfo
 
 /-- The source index of the view's index `i`: `a + i` when `i < b - a` (Q4.7: indexed relative
 to the start), else none (the access traps). -/
@@ -454,33 +437,35 @@ after it each start with the fuel left at its open. The view is bound inside its
 def vrun : Nat → Mem → Views → List Nat → List VStmt → VR
   | 0, _, _, _, _ => .outOfFuel
   | _ + 1, μ, _, out, [] => .ok μ out
-  | n + 1, μ, V, out, .get v i :: rest => match getN V v with
+  | n + 1, μ, V, out, .get v i :: rest => match AList.lookup V v with
     | none => .stuck
     | some w => match elemIdx w i with
       | none => .trap
       | some j => match elem μ w.src j with
         | some x => vrun n μ V (out ++ [x]) rest
         | none => .stuck
-  | n + 1, μ, V, out, .set v i x :: rest => match getN V v with
+  | n + 1, μ, V, out, .set v i x :: rest => match AList.lookup V v with
     | none => .stuck
     | some w =>
       if w.mutable then
         match elemIdx w i with
         | none => .trap
-        | some j => match getN μ w.src with
-          | some xs => if j < xs.length then vrun n (putN w.src (xs.set j x) μ) V out rest
+        | some j => match AList.lookup μ w.src with
+          | some xs =>
+            if j < xs.length then vrun n (AList.update μ w.src (fun _ => xs.set j x)) V out rest
             else .stuck
           | none => .stuck
       else .stuck
-  | n + 1, μ, V, out, .getS p i :: rest => match getN μ p with
+  | n + 1, μ, V, out, .getS p i :: rest => match AList.lookup μ p with
     | none => .stuck
     | some xs => match xs[i]? with
       | some x => vrun n μ V (out ++ [x]) rest
       | none => .trap
-  | n + 1, μ, V, out, .setS p i x :: rest => match getN μ p with
+  | n + 1, μ, V, out, .setS p i x :: rest => match AList.lookup μ p with
     | none => .stuck
-    | some xs => if i < xs.length then vrun n (putN p (xs.set i x) μ) V out rest else .trap
-  | n + 1, μ, V, out, .range m p v a b body els :: rest => match getN μ p with
+    | some xs =>
+      if i < xs.length then vrun n (AList.update μ p (fun _ => xs.set i x)) V out rest else .trap
+  | n + 1, μ, V, out, .range m p v a b body els :: rest => match AList.lookup μ p with
     | none => .stuck
     | some xs => match openRange (.array xs.length) a b els.isSome with
       | .enter => match vrun n μ ((v, ⟨p, a, b, m⟩) :: V) out body with

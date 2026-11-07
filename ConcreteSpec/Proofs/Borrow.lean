@@ -7,50 +7,40 @@ PROPOSED: not normative until the owner freezes Core (ROADMAP A2c). See `Concret
 -/
 
 namespace ConcreteSpec.Borrow
+open Core (AList)
 
-theorem find_mapPlaces (f : Place → Place) : ∀ (Γ : Ctx) (p : Nat),
-    find (mapPlaces f Γ) p = (find Γ p).map f
-  | [], _ => rfl
-  | (n, q) :: Γ, p => by
-    show find ((n, f q) :: mapPlaces f Γ) p = _
-    simp only [find]
-    split
-    · rfl
-    · exact find_mapPlaces f Γ p
-
-theorem find_remove (p' : Nat) : ∀ (Γ : Ctx) (p : Nat),
-    find (remove p' Γ) p = if p = p' then none else find Γ p
-  | [], _ => by simp [remove, find]
-  | (n, q) :: Γ, p => by
-    have ih := find_remove p' Γ p
-    by_cases hn : n = p' <;> by_cases hp : p = p' <;> by_cases hnp : n = p <;>
-      simp_all [remove, find] <;> omega
-
-theorem find_bodyCtx {m v src Γ p} (hv : p ≠ v) :
-    find (bodyCtx m v src Γ) p = (find Γ p).map (lockFor m src.root) := by
-  simp only [bodyCtx, find, show ¬ v = p from fun h => hv h.symm, ↓reduceIte]
-  exact find_mapPlaces _ Γ p
+theorem lookup_bodyCtx {m v src Γ p} (hv : p ≠ v) :
+    AList.lookup (bodyCtx m v src Γ) p = (AList.lookup Γ p).map (lockFor m src.root) := by
+  simp only [bodyCtx, AList.lookup, show ¬ v = p from fun h => hv h.symm, ↓reduceIte]
+  exact AList.lookup_map _ Γ p
 
 theorem lockFor_excl {m r q} (h : q.lock = .excl) : (lockFor m r q).lock = .excl := by
   unfold lockFor; split <;> (try split) <;> (try split) <;> simp_all
 
-theorem ne_of_find {Γ p v q} (hp : find Γ p = some q) (hv : find Γ v = none) : p ≠ v := by
+theorem ne_of_lookup {Γ : Ctx} {p v : Nat} {q : Place} (hp : AList.lookup Γ p = some q) (hv : AList.lookup Γ v = none) : p ≠ v := by
   rintro rfl; rw [hp] at hv; cases hv
 
-theorem find_restore (Γb : Ctx) : ∀ (Γ : Ctx) (p : Nat),
-    find (restore Γ Γb) p = if (find Γb p).isSome then find Γ p else none
-  | [], _ => by simp [restore, find]
+theorem lookup_restore (Γb : Ctx) : ∀ (Γ : Ctx) (p : Nat),
+    AList.lookup (restore Γ Γb) p = if (AList.lookup Γb p).isSome then AList.lookup Γ p else none
+  | [], _ => by simp [restore, AList.lookup]
   | (n, q) :: Γ, p => by
-    have ih := find_restore Γb Γ p
-    simp only [restore] at ih ⊢
-    by_cases hn : (find Γb n).isSome = true <;> by_cases hnp : n = p
-    · subst hnp; simp [List.filter, hn, find]
-    · simp [List.filter, hn, find, hnp, ih]
-    · subst hnp; simp [List.filter, hn, ih]
-    · simp [List.filter, hn, find, hnp, ih]
+    have ih := lookup_restore Γb Γ p
+    unfold restore at ih ⊢
+    cases hb : (AList.lookup Γb n).isSome
+    · rw [List.filter_cons_of_neg (p := fun e : Nat × Place => (AList.lookup Γb e.1).isSome) (a := (n, q))
+        (fun h => Bool.noConfusion (hb.symm.trans h)), ih, AList.lookup_cons]
+      by_cases hnp : n = p
+      · subst hnp; rw [hb]; rfl
+      · rw [ite_eq_right hnp]
+    · rw [List.filter_cons_of_pos (p := fun e : Nat × Place => (AList.lookup Γb e.1).isSome) (a := (n, q)) hb, AList.lookup_cons,
+        AList.lookup_cons]
+      by_cases hnp : n = p
+      · subst hnp
+        rw [hb, ite_eq_left (rfl : true = true), ite_eq_left (rfl : n = n), ite_eq_left (rfl : n = n)]
+      · rw [ite_eq_right hnp, ite_eq_right hnp, ih]
 
-theorem find_restore_some {Γ Γb p q} (h : find (restore Γ Γb) p = some q) : find Γ p = some q := by
-  rw [find_restore] at h
+theorem lookup_restore_some {Γ Γb p q} (h : AList.lookup (restore Γ Γb) p = some q) : AList.lookup Γ p = some q := by
+  rw [lookup_restore] at h
   split at h
   · exact h
   · cases h
@@ -75,7 +65,7 @@ theorem ok_det {Γ ss Γ₁} (h : Ok Γ ss Γ₁) : ∀ {Γ₂}, Ok Γ ss Γ₂ 
 
 /-- A place a statement list cannot touch (locked) keeps its entry. -/
 theorem ok_keeps_locked {Γ ss Γ'} (h : Ok Γ ss Γ') :
-    ∀ {p q}, find Γ p = some q → q.lock ≠ .free → find Γ' p = some q := by
+    ∀ {p q}, AList.lookup Γ p = some q → q.lock ≠ .free → AList.lookup Γ' p = some q := by
   induction h with
   | nil => intro p q hp _; exact hp
   | read _ _ _ ih => exact ih
@@ -83,16 +73,16 @@ theorem ok_keeps_locked {Γ ss Γ'} (h : Ok Γ ss Γ') :
   | @move Γ p0 q0 rest Γ' hf hl _ _ ih =>
     intro p q hp hq
     have hne : p ≠ p0 := by rintro rfl; rw [hf] at hp; cases hp; exact hq hl
-    exact ih (by rw [find_remove]; simp only [hne, ↓reduceIte]; exact hp) hq
+    exact ih (by rw [AList.lookup_erase]; simp only [hne, ↓reduceIte]; exact hp) hq
   | @borrow Γ m s v q0 body rest Γb Γ' _ _ _ hv _ _ ihb ih =>
     intro p q hp hq
-    have hb : find Γb p = some (lockFor m q0.root q) :=
-      ihb (by rw [find_bodyCtx (ne_of_find hp hv), hp]; rfl) (lockFor_nonfree hq)
-    exact ih (by rw [find_restore, hb]; exact hp) hq
+    have hb : AList.lookup Γb p = some (lockFor m q0.root q) :=
+      ihb (by rw [lookup_bodyCtx (ne_of_lookup hp hv), hp]; rfl) (lockFor_nonfree hq)
+    exact ih (by rw [lookup_restore, hb]; exact hp) hq
 
 /-- A frozen place is never named, at any depth. -/
 theorem excl_untouched {Γ ss Γ'} (h : Ok Γ ss Γ') :
-    ∀ {p q}, find Γ p = some q → q.lock = .excl → ¬ Touches p ss := by
+    ∀ {p q}, AList.lookup Γ p = some q → q.lock = .excl → ¬ Touches p ss := by
   induction h with
   | nil => intro p q _ _ ht; cases ht
   | read hf hl _ ih =>
@@ -113,42 +103,42 @@ theorem excl_untouched {Γ ss Γ'} (h : Ok Γ ss Γ') :
     | move => exact hne rfl
     | tail ht =>
       refine ih (q := q) ?_ hq ht
-      rw [find_remove]; simp only [hne, ↓reduceIte]; exact hp
+      rw [AList.lookup_erase]; simp only [hne, ↓reduceIte]; exact hp
   | @borrow Γ m s v q0 body rest Γb Γ' hs hnex _ hv hbody _ ihb ih =>
     intro p q hp hq ht
-    have hpb : find (bodyCtx m v q0 Γ) p = some (lockFor m q0.root q) := by
-      rw [find_bodyCtx (ne_of_find hp hv), hp]; rfl
+    have hpb : AList.lookup (bodyCtx m v q0 Γ) p = some (lockFor m q0.root q) := by
+      rw [lookup_bodyCtx (ne_of_lookup hp hv), hp]; rfl
     cases ht with
     | src => rw [hs] at hp; cases hp; exact hnex hq
     | body ht => exact ihb hpb (lockFor_excl hq) ht
     | tail ht =>
       have hb := ok_keeps_locked hbody hpb (lockFor_nonfree (by rw [hq]; decide))
-      exact ih (by rw [find_restore, hb]; exact hp) hq ht
+      exact ih (by rw [lookup_restore, hb]; exact hp) hq ht
 
 /-- **`open_mut_freezes_root`** (Q9.14, Q3.3, Q3.4, REF-11). Inside an accepted
 `borrow mut src as v { body }`, no place of `src`'s root that existed before the open (the root
 itself and every view derived from it) is read, written, moved or opened again, at any depth.
 Only the new view `v` reaches the root. -/
 theorem open_mut_freezes_root {Γ s v body rest q Γ'} (h : Ok Γ (.borrow true s v body :: rest) Γ')
-    (hs : find Γ s = some q) :
-    ∀ p q', find Γ p = some q' → q'.root = q.root → ¬ Touches p body := by
+    (hs : AList.lookup Γ s = some q) :
+    ∀ p q', AList.lookup Γ p = some q' → q'.root = q.root → ¬ Touches p body := by
   intro p q' hp hr
   cases h with
   | borrow hs' _ _ hv hb _ =>
     rw [hs] at hs'; cases hs'
     refine excl_untouched hb (q := lockFor true q.root q') ?_ (by simp [lockFor, hr]) 
-    rw [find_bodyCtx (ne_of_find hp hv), hp]; rfl
+    rw [lookup_bodyCtx (ne_of_lookup hp hv), hp]; rfl
 
 /-- The places of root `r` grant no write: each is locked, or neither writable nor an owner. -/
 def NoWrite (r : Nat) (Γ : Ctx) : Prop :=
-  ∀ p q, find Γ p = some q → q.root = r → q.lock = .free → q.mutable = false ∧ q.owner = false
+  ∀ p q, AList.lookup Γ p = some q → q.root = r → q.lock = .free → q.mutable = false ∧ q.owner = false
 
 theorem noWrite_restore {r Γ Γb} (h : NoWrite r Γ) : NoWrite r (restore Γ Γb) :=
-  fun p q hp => h p q (find_restore_some hp)
+  fun p q hp => h p q (lookup_restore_some hp)
 
-theorem noWrite_remove {r Γ p'} (h : NoWrite r Γ) : NoWrite r (remove p' Γ) := by
+theorem noWrite_erase {r Γ p'} (h : NoWrite r Γ) : NoWrite r (AList.erase Γ p') := by
   intro p q hp
-  rw [find_remove] at hp
+  rw [AList.lookup_erase] at hp
   split at hp
   · cases hp
   · exact h p q hp
@@ -159,14 +149,14 @@ theorem noWrite_bodyCtx {r Γ m v q0} (h : NoWrite r Γ)
   intro p q hp hr hl
   by_cases hpv : p = v
   · subst hpv
-    simp only [bodyCtx, find, ↓reduceIte] at hp
+    simp only [bodyCtx, AList.lookup, ↓reduceIte] at hp
     cases hp
     simp only [view] at hr ⊢
     cases m with
     | false => simp
     | true => exact (hsrc hr rfl).elim
-  · rw [find_bodyCtx hpv] at hp
-    cases hq : find Γ p with
+  · rw [lookup_bodyCtx hpv] at hp
+    cases hq : AList.lookup Γ p with
     | none => rw [hq] at hp; cases hp
     | some q1 =>
       rw [hq] at hp; cases hp
@@ -193,7 +183,7 @@ theorem noWrite_sound {Γ ss Γ'} (h : Ok Γ ss Γ') : ∀ {r}, NoWrite r Γ →
     intro r hn hw
     cases hw with
     | move hf' hr => rw [hf] at hf'; cases hf'; rw [(hn _ _ hf hr hl).2] at hown; cases hown
-    | tail hs hw => cases hs with | move _ _ _ h0 => cases h0; exact ih (noWrite_remove hn) hw
+    | tail hs hw => cases hs with | move _ _ _ h0 => cases h0; exact ih (noWrite_erase hn) hw
   | @borrow Γ m s v q0 body rest Γb Γ' hs _ hm _ hb _ ihb ih =>
     intro r hn hw
     have hbad : q0.root = r → m = true → False := fun hr hmt => by
@@ -215,7 +205,7 @@ inside an accepted `borrow src as v { body }`, nothing at any depth writes, move
 opens a place of `src`'s root, whether through the root, through `v`, or through any view
 derived from either. -/
 theorem shared_open_grants_no_write {Γ s v body rest q Γ'}
-    (h : Ok Γ (.borrow false s v body :: rest) Γ') (hs : find Γ s = some q) :
+    (h : Ok Γ (.borrow false s v body :: rest) Γ') (hs : AList.lookup Γ s = some q) :
     ¬ WritesRoot q.root (bodyCtx false v q Γ) body := by
   cases h with
   | borrow hs' _ hm _ hb _ =>
@@ -223,9 +213,9 @@ theorem shared_open_grants_no_write {Γ s v body rest q Γ'}
     refine noWrite_sound hb ?_
     intro p q' hp hr hl
     by_cases hpv : p = v
-    · subst hpv; simp only [bodyCtx, find, ↓reduceIte] at hp; cases hp; exact ⟨rfl, rfl⟩
-    · rw [find_bodyCtx hpv] at hp
-      cases hq : find Γ p with
+    · subst hpv; simp only [bodyCtx, AList.lookup, ↓reduceIte] at hp; cases hp; exact ⟨rfl, rfl⟩
+    · rw [lookup_bodyCtx hpv] at hp
+      cases hq : AList.lookup Γ p with
       | none => rw [hq] at hp; cases hp
       | some q1 =>
         rw [hq] at hp; cases hp
@@ -296,8 +286,8 @@ theorem enter_in_bounds {s : Source} {a b : Nat} {e : Bool} (h : openRange s a b
 `borrow mut src from a until b as v { body } [else { … }]`, no place of `src`'s root that existed
 before the open is touched in the body: the range clause changes nothing about access (Q4.7). -/
 theorem range_open_mut_freezes_root {Γ src v k body els rest Γ' q}
-    (h : RangeOk Γ true src v k body els rest Γ') (hs : find Γ src = some q) :
-    ∀ p q', find Γ p = some q' → q'.root = q.root → ¬ Touches p body :=
+    (h : RangeOk Γ true src v k body els rest Γ') (hs : AList.lookup Γ src = some q) :
+    ∀ p q', AList.lookup Γ p = some q' → q'.root = q.root → ¬ Touches p body :=
   open_mut_freezes_root h.1 hs
 
 
@@ -308,10 +298,10 @@ passing it by value, capturing it: all moves in Core) is refused. -/
 theorem view_not_moved {m v q Γ rest Γ'} : ¬ Ok (bodyCtx m v q Γ) (.move v :: rest) Γ' := by
   intro h
   cases h with
-  | move hf _ ho _ => simp [bodyCtx, find, view] at hf; subst hf; simp at ho
+  | move hf _ ho _ => simp [bodyCtx, AList.lookup, view] at hf; subst hf; simp at ho
 
 /-- A name not in scope is never used, at any depth (except as a rebound view name). -/
-theorem fresh_not_used {Γ ss Γ'} (h : Ok Γ ss Γ') : ∀ {p}, find Γ p = none → ¬ FreeUse p ss := by
+theorem fresh_not_used {Γ ss Γ'} (h : Ok Γ ss Γ') : ∀ {p}, AList.lookup Γ p = none → ¬ FreeUse p ss := by
   induction h with
   | nil => intro p _ hu; cases hu
   | read hf _ _ ih =>
@@ -328,50 +318,42 @@ theorem fresh_not_used {Γ ss Γ'} (h : Ok Γ ss Γ') : ∀ {p}, find Γ p = non
     intro p hp hu
     cases hu with
     | move => rw [hf] at hp; cases hp
-    | tail hu => exact ih (by rw [find_remove]; split <;> simp_all) hu
+    | tail hu => exact ih (p := p) (by rw [AList.lookup_erase]; split <;> first | rfl | exact hp) hu
   | @borrow Γ m s v q0 body rest Γb Γ' hs _ _ _ _ _ ihb ih =>
     intro p hp hu
     cases hu with
     | src => rw [hs] at hp; cases hp
     | body hne hu =>
-      exact ihb (by simp only [bodyCtx, find, hne, ↓reduceIte]; rw [find_mapPlaces, hp]; rfl) hu
-    | tail hu => exact ih (by rw [find_restore, hp]; split <;> rfl) hu
+      exact ihb (by rw [lookup_bodyCtx (fun h => hne h.symm), hp]; rfl) hu
+    | tail hu => exact ih (by rw [lookup_restore, hp]; split <;> rfl) hu
 
 /-- **The view does not outlive its block.** No statement after
 `borrow [mut] src as v { body }` names `v` (until a new block rebinds the name). -/
 theorem view_not_used_after {Γ m s v body rest Γ'} (h : Ok Γ (.borrow m s v body :: rest) Γ') :
     ¬ FreeUse v rest := by
   cases h with
-  | borrow _ _ _ hv _ hr => exact fresh_not_used hr (by rw [find_restore, hv]; split <;> rfl)
+  | borrow _ _ _ hv _ hr => exact fresh_not_used hr (by rw [lookup_restore, hv]; split <;> rfl)
 
 /-- **The root is usable again exactly as before.** After `borrow [mut] src as v { body }`, the
 rest is checked with every place of `src`'s root present with exactly its entry from before the
 open, lock included: the freeze of a mutable open (and the lock of a shared one) ends with the
 block. -/
 theorem root_restored {Γ m s v body rest q Γ'} (h : Ok Γ (.borrow m s v body :: rest) Γ')
-    (hs : find Γ s = some q) :
+    (hs : AList.lookup Γ s = some q) :
     ∃ Γb, Ok (bodyCtx m v q Γ) body Γb ∧ Ok (restore Γ Γb) rest Γ' ∧
-      ∀ p q', find Γ p = some q' → q'.root = q.root → find (restore Γ Γb) p = some q' := by
+      ∀ p q', AList.lookup Γ p = some q' → q'.root = q.root → AList.lookup (restore Γ Γb) p = some q' := by
   cases h with
   | @borrow _ _ _ _ q0 _ _ Γb _ hs' _ _ hv hb hr =>
     rw [hs] at hs'; cases hs'
     refine ⟨Γb, hb, hr, fun p q' hp hroot => ?_⟩
-    have hpb : find (bodyCtx m v q Γ) p = some (lockFor m q.root q') := by
-      rw [find_bodyCtx (ne_of_find hp hv), hp]; rfl
+    have hpb : AList.lookup (bodyCtx m v q Γ) p = some (lockFor m q.root q') := by
+      rw [lookup_bodyCtx (ne_of_lookup hp hv), hp]; rfl
     have hl : (lockFor m q.root q').lock ≠ .free := by
       cases m <;> cases hq : q'.lock <;> simp [lockFor, hroot, hq]
-    rw [find_restore, ok_keeps_locked hb hpb hl]
+    rw [lookup_restore, ok_keeps_locked hb hpb hl]
     exact hp
 
 /-! ### Range views at run time -/
-
-theorem getN_putN {α : Type} (p : Nat) (x : α) : ∀ (l : List (Nat × α)) (q : Nat),
-    getN (putN p x l) q = if q = p then (getN l p).map (fun _ => x) else getN l q
-  | [], q => by simp [putN, getN]
-  | (n, y) :: l, q => by
-    have ih := getN_putN p x l q
-    by_cases hn : n = p <;> by_cases hq : q = p <;> by_cases hnq : n = q <;>
-      simp_all [putN, getN] <;> omega
 
 theorem elemIdx_some {w : VInfo} {i j : Nat} :
     elemIdx w i = some j ↔ i < w.b - w.a ∧ j = w.a + i := by
@@ -383,14 +365,14 @@ theorem elemIdx_range {w : VInfo} {i j : Nat} (h : elemIdx w i = some j) : w.a �
 
 /-- Every view in scope is a range `a ≤ b ≤ len` of a source in memory. -/
 def ViewsOk (μ : Mem) (V : Views) : Prop :=
-  ∀ v w, getN V v = some w → ∃ xs, getN μ w.src = some xs ∧ w.a ≤ w.b ∧ w.b ≤ xs.length
+  ∀ v w, AList.lookup V v = some w → ∃ xs, AList.lookup μ w.src = some xs ∧ w.a ≤ w.b ∧ w.b ≤ xs.length
 
 /-- Opening a valid range adds a view that satisfies `ViewsOk`. -/
-theorem viewsOk_enter {μ V p xs a b e v m} (hV : ViewsOk μ V) (hx : getN μ p = some xs)
+theorem viewsOk_enter {μ V p xs a b e v m} (hV : ViewsOk μ V) (hx : AList.lookup μ p = some xs)
     (ho : openRange (.array xs.length) a b e = .enter) :
     ViewsOk μ ((v, ⟨p, a, b, m⟩) :: V) := by
   intro v' w hw
-  simp only [getN] at hw
+  simp only [AList.lookup] at hw
   split at hw
   · cases hw
     obtain ⟨hab, hb, _⟩ := enter_in_bounds ho
@@ -398,11 +380,11 @@ theorem viewsOk_enter {μ V p xs a b e v m} (hV : ViewsOk μ V) (hx : getN μ p 
   · exact hV v' w hw
 
 /-- A write that keeps the source's length keeps `ViewsOk`. -/
-theorem viewsOk_put {μ V p xs ys} (hV : ViewsOk μ V) (hx : getN μ p = some xs)
-    (hl : ys.length = xs.length) : ViewsOk (putN p ys μ) V := by
+theorem viewsOk_put {μ V p xs ys} (hV : ViewsOk μ V) (hx : AList.lookup μ p = some xs)
+    (hl : ys.length = xs.length) : ViewsOk (AList.update μ p (fun _ => ys)) V := by
   intro v w hw
   obtain ⟨zs, hz, h1, h2⟩ := hV v w hw
-  rw [getN_putN]
+  rw [AList.lookup_update]
   by_cases hs : w.src = p
   · subst hs; rw [hx] at hz; cases hz; exact ⟨ys, by simp [hx], h1, by omega⟩
   · exact ⟨zs, by simp [hs, hz], h1, h2⟩
@@ -410,16 +392,16 @@ theorem viewsOk_put {μ V p xs ys} (hV : ViewsOk μ V) (hx : getN μ p = some xs
 /-- **Every access through a view stays in its range and in its source.** The index `i` of a
 view of `[a, b)` reaches the source index `a + i`, which lies in `[a, b)` and inside the source;
 an index outside the view has no source index, and the access traps. -/
-theorem view_in_source {μ V v w i j} (hV : ViewsOk μ V) (hw : getN V v = some w)
+theorem view_in_source {μ V v w i j} (hV : ViewsOk μ V) (hw : AList.lookup V v = some w)
     (hj : elemIdx w i = some j) :
-    ∃ xs, getN μ w.src = some xs ∧ j = w.a + i ∧ w.a ≤ j ∧ j < w.b ∧ j < xs.length := by
+    ∃ xs, AList.lookup μ w.src = some xs ∧ j = w.a + i ∧ w.a ≤ j ∧ j < w.b ∧ j < xs.length := by
   obtain ⟨xs, hx, h1, h2⟩ := hV v w hw
   rw [elemIdx_some] at hj
   exact ⟨xs, hx, hj.2, by omega, by omega, by omega⟩
 
 /-- **Reading `v[i]`** outputs the source element `a + i` when `i < b - a`, and traps otherwise. -/
-theorem view_get {μ V v w i n out rest} (hV : ViewsOk μ V) (hw : getN V v = some w) :
-    ∃ xs, getN μ w.src = some xs ∧
+theorem view_get {μ V v w i n out rest} (hV : ViewsOk μ V) (hw : AList.lookup V v = some w) :
+    ∃ xs, AList.lookup μ w.src = some xs ∧
       vrun (n + 1) μ V out (.get v i :: rest) =
         if i < w.b - w.a then vrun n μ V (out ++ [xs.getD (w.a + i) 0]) rest else .trap := by
   obtain ⟨xs, hx, h1, h2⟩ := hV v w hw
@@ -434,11 +416,11 @@ theorem view_get {μ V v w i n out rest} (hV : ViewsOk μ V) (hw : getN V v = so
 
 /-- **Writing `v[i] = x`** through a mutable view writes the source element `a + i` when
 `i < b - a`, and traps otherwise. -/
-theorem view_set {μ V v w i x n out rest} (hV : ViewsOk μ V) (hw : getN V v = some w)
+theorem view_set {μ V v w i x n out rest} (hV : ViewsOk μ V) (hw : AList.lookup V v = some w)
     (hm : w.mutable = true) :
-    ∃ xs, getN μ w.src = some xs ∧
+    ∃ xs, AList.lookup μ w.src = some xs ∧
       vrun (n + 1) μ V out (.set v i x :: rest) =
-        if i < w.b - w.a then vrun n (putN w.src (xs.set (w.a + i) x) μ) V out rest
+        if i < w.b - w.a then vrun n (AList.update μ w.src (fun _ => xs.set (w.a + i) x)) V out rest
         else .trap := by
   obtain ⟨xs, hx, h1, h2⟩ := hV v w hw
   refine ⟨xs, hx, ?_⟩
@@ -450,11 +432,11 @@ theorem view_set {μ V v w i x n out rest} (hV : ViewsOk μ V) (hw : getN V v = 
 
 /-- **A write changes exactly one element.** Writing `x` at index `j` of source `p` changes
 element `j` of `p` to `x` and no other element of any place. -/
-theorem view_write_exact {μ : Mem} {p xs j x} (hx : getN μ p = some xs) (hj : j < xs.length) :
-    ∀ q k, elem (putN p (xs.set j x) μ) q k = if q = p ∧ k = j then some x else elem μ q k := by
+theorem view_write_exact {μ : Mem} {p xs j x} (hx : AList.lookup μ p = some xs) (hj : j < xs.length) :
+    ∀ q k, elem (AList.update μ p (fun _ => xs.set j x)) q k = if q = p ∧ k = j then some x else elem μ q k := by
   intro q k
   unfold elem
-  rw [getN_putN]
+  rw [AList.lookup_update]
   by_cases hq : q = p
   · subst hq
     rw [hx]
@@ -464,7 +446,7 @@ theorem view_write_exact {μ : Mem} {p xs j x} (hx : getN μ p = some xs) (hj : 
   · simp [hq]
 
 /-- A body that only accesses its view changes nothing outside the view's range. -/
-theorem viewOnly_frame {V v w} (hw : getN V v = some w) {body : List VStmt} (hb : ViewOnly v body) :
+theorem viewOnly_frame {V v w} (hw : AList.lookup V v = some w) {body : List VStmt} (hb : ViewOnly v body) :
     ∀ n μ out μ' out', vrun n μ V out body = .ok μ' out' →
       ∀ q k, ¬ (q = w.src ∧ w.a ≤ k ∧ k < w.b) → elem μ' q k = elem μ q k := by
   induction hb with
@@ -523,7 +505,7 @@ theorem range_block_frame {μ V m p v a b body n out μ' out'} (hb : ViewOnly v 
           | zero => simp [vrun] at h₁
           | succ n => simp only [vrun, VR.ok.injEq] at h; exact h.1.symm
         subst hμ
-        exact viewOnly_frame (w := ⟨p, a, b, m⟩) (by simp [getN]) hb n μ out _ out₁ h₁ q k hk
+        exact viewOnly_frame (w := ⟨p, a, b, m⟩) (by simp [AList.lookup]) hb n μ out _ out₁ h₁ q k hk
       · rename_i hn; exact (hn _ _ h).elim
     · simp at h
     · cases h

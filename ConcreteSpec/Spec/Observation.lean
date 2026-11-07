@@ -1,4 +1,4 @@
-import ConcreteSpec.Spec.Examples
+import ConcreteSpec.Spec.Slice1Semantics
 
 /-!
 # Part 7: observations
@@ -62,20 +62,14 @@ def observe (configured : Bool) (o : Outcome) : Option Observation :=
 
 /-! ### Examples -/
 
-/-- `moveThenConsume` exits with status 42. -/
-example : (observe true (run Examples.moveThenConsume 10)).map Observation.status = some 42 := by
-  decide
-
-/-- The refused body `add100`, run anyway on input 200, traps: the trap message goes to descriptor
-2 and the status is 134. -/
-example : observe true (runBody Examples.decls 10 (Examples.inputEnv 200) Examples.add100
-    (.copy Examples.s₂)) = some (.trapped .arithmeticOverflow) := by decide
+/-- A run that exits with 42 is observed as status 42. The slice-1 example programs' observations
+are at the end of `Examples.lean`. -/
+example : (observe true (.exit 42)).map Observation.status = some 42 := rfl
 
 example : (Observation.trapped .arithmeticOverflow).status = 134 := rfl
 
-/-- A missing configured grant: status 125, and `main` does not run. -/
-example : (observe false (run Examples.moveThenConsume 10)).map Observation.status = some 125 := by
-  decide
+/-- A missing configured grant: status 125, whatever `main` would have done. -/
+example : (observe false (.exit 42)).map Observation.status = some 125 := rfl
 
 /-- The status of a trap and of `return 134` agree; the observations do not. -/
 example : (Observation.trapped .arithmeticOverflow).status = (Observation.exited 134).status ∧

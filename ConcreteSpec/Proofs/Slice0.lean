@@ -8,6 +8,7 @@ PROPOSED: not normative until the owner freezes Core (ROADMAP A2c). See `Concret
 
 namespace ConcreteSpec.Slice0
 open ConcreteSpec
+open ConcreteSpec.Core (AList)
 
 /-- The embedding is injective: a slice-1 program in slice 0 has exactly one slice-0 reading. -/
 theorem Atom.toCore_injective {a b : Atom} (h : a.toCore = b.toCore) : a = b := by
@@ -44,29 +45,22 @@ theorem toCore_injective {q q' : Program} (h : toCore q = toCore q') : q = q' :=
   rw [hb', Atom.toCore_injective hr]
 
 /-- Every binding of the context is a `u8` with a known value. -/
-def Known (Γ : Ctx) : Prop := ∀ e ∈ Γ, e.ty = .scalar (.int .u8) ∧ ∃ n, e.known = some (.int .u8 n)
-
-theorem ctxFind_mem {x : Var} : ∀ {Γ : Ctx} {e : Entry}, ctxFind Γ x = some e → e ∈ Γ
-  | [], _, h => by simp [ctxFind] at h
-  | e' :: Γ, e, h => by
-    simp only [ctxFind] at h
-    split at h
-    · cases h; exact List.Mem.head _
-    · exact List.Mem.tail _ (ctxFind_mem h)
+def Known (Γ : Ctx) : Prop :=
+  ∀ b ∈ Γ, b.2.ty = .scalar (.int .u8) ∧ ∃ n, b.2.known = some (.int .u8 n)
 
 theorem known_mark {x : Var} {mv : Bool} : ∀ {Γ : Ctx}, Known Γ → Known (ctxMark Γ x mv)
   | [], h => h
-  | e :: Γ, h => by
-    simp only [ctxMark]
+  | (y, e) :: Γ, h => by
+    simp only [ctxMark, AList.update]
     split
-    · intro e' he'
-      cases he' with
-      | head => exact h e (List.Mem.head _)
-      | tail _ he' => exact h e' (List.Mem.tail _ he')
-    · intro e' he'
-      cases he' with
-      | head => exact h e (List.Mem.head _)
-      | tail _ he' => exact known_mark (fun e'' h'' => h e'' (List.Mem.tail _ h'')) e' he'
+    · intro b hb
+      cases hb with
+      | head => exact h (y, e) (List.Mem.head _)
+      | tail _ hb => exact h b (List.Mem.tail _ hb)
+    · intro b hb
+      cases hb with
+      | head => exact h (y, e) (List.Mem.head _)
+      | tail _ hb => exact known_mark (Γ := Γ) (fun b' h' => h b' (List.Mem.tail _ h')) b hb
 
 theorem known_useAtom {Δ : Decls} {Γ Γ' : Ctx} {a : ConcreteSpec.Atom} (hk : Known Γ)
     (hu : UseAtom Δ Γ a Γ') : Known Γ' := by
@@ -85,7 +79,8 @@ theorem knownAtom_u8 {Δ : Decls} {Γ Γ' : Ctx} {a : Atom} (hk : Known Γ)
   | var x =>
     cases hu with
     | copy hf _ _ =>
-      obtain ⟨ht, n, hn⟩ := hk _ (ctxFind_mem hf)
+      obtain ⟨ht, n, hn⟩ : _ ∧ ∃ n, _ := hk _ (AList.lookup_mem hf)
+      simp only at ht hn
       exact ⟨n, by simp [Atom.toCore, knownAtom, hf, hn], by simp [Atom.toCore, atomBounds, hf, hn, ht]⟩
 
 /-- A checked slice-0 expression has a known `u8` value: its operands are known exactly, so the
