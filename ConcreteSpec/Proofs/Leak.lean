@@ -1598,60 +1598,51 @@ example : (∃ (l : Label (opsWith permissiveAllowed)) (c' : Config (opsWith per
   exact (by decide : (7 : Int) ≠ 8) hv
 
 /-- Instance (law `secure_ni`, case `maskedSecrets`). -/
-example : ∀ (r₁ : Run instrumentation program (start 6 1))
-    (r₂ : Run instrumentation program (start 5 2)),
-    r₁.publicObservations = r₂.publicObservations :=
+example : (secureRun 6 1).publicObservations = (secureRun 5 2).publicObservations :=
   secure_ni 6 5 1 2 ⟨rfl, trivial⟩ ⟨secureRun 6 1, secureRun 5 2, rfl, rfl⟩
+    (secureRun 6 1) (secureRun 5 2)
 
 /-- Planted (law `secure_ni`, case `maskedSecrets`, subject `start`, mutant `exposingStart`). -/
 example : LowEquivalent labelling (exposingStart 6 1) (exposingStart 5 2) ∧
     (∃ (r₁ : Run instrumentation program (exposingStart 6 1))
        (r₂ : Run instrumentation program (exposingStart 5 2)),
        r₁.choices = r₂.choices ∧ r₁.releases = r₂.releases) ∧
-    ¬ (∀ (r₁ : Run instrumentation program (exposingStart 6 1))
-         (r₂ : Run instrumentation program (exposingStart 5 2)),
-         r₁.publicObservations = r₂.publicObservations) := by
+    ¬ ((exposingRun 6 1).publicObservations = (exposingRun 5 2).publicObservations) := by
   refine ⟨⟨rfl, trivial⟩, ⟨exposingRun 6 1, exposingRun 5 2, rfl, rfl⟩, ?_⟩
   intro h
-  have hobs := h (exposingRun 6 1) (exposingRun 5 2)
+  have hobs := h
   exact (by decide : (exposingRun 6 1).publicObservations ≠ (exposingRun 5 2).publicObservations) hobs
 
 /-- Instance (law `secure_ct`, case `maskedSecrets`). -/
-example : ∀ (r₁ : Run instrumentation program (start 6 1))
-    (r₂ : Run instrumentation program (start 5 2)),
-    r₁.leakage = r₂.leakage :=
+example : (secureRun 6 1).leakage = (secureRun 5 2).leakage :=
   secure_ct 6 5 1 2 ⟨rfl, trivial⟩ ⟨secureRun 6 1, secureRun 5 2, rfl, rfl⟩
+    (secureRun 6 1) (secureRun 5 2)
 
 /-- Planted (law `secure_ct`, case `maskedSecrets`, subject `start`, mutant `exposingStart`). -/
 example : LowEquivalent labelling (exposingStart 6 1) (exposingStart 5 2) ∧
     (∃ (r₁ : Run instrumentation program (exposingStart 6 1))
        (r₂ : Run instrumentation program (exposingStart 5 2)),
        r₁.choices = r₂.choices ∧ r₁.releases = r₂.releases) ∧
-    ¬ (∀ (r₁ : Run instrumentation program (exposingStart 6 1))
-         (r₂ : Run instrumentation program (exposingStart 5 2)),
-         r₁.leakage = r₂.leakage) := by
+    ¬ ((exposingRun 6 1).leakage = (exposingRun 5 2).leakage) := by
   refine ⟨⟨rfl, trivial⟩, ⟨exposingRun 6 1, exposingRun 5 2, rfl, rfl⟩, ?_⟩
   intro h
-  have hleak := h (exposingRun 6 1) (exposingRun 5 2)
+  have hleak := h
   simp [exposingRun] at hleak
 
 /-- Instance (law `timing_ni`, case `timingStart`). -/
-example : ∀ (r₁ : Run instrumentation program (timingStart 1))
-    (r₂ : Run instrumentation program (timingStart 2)),
-    r₁.publicObservations = r₂.publicObservations :=
+example : (timingRun 1).publicObservations = (timingRun 2).publicObservations :=
   timing_ni 1 2 ⟨rfl, trivial⟩ ⟨timingRun 1, timingRun 2, rfl, rfl⟩
+    (timingRun 1) (timingRun 2)
 
 /-- Planted (law `timing_ni`, case `timingStart`, subject `timingStart`, mutant `leakyStart`). -/
 example : LowEquivalent labelling (leakyStart 1) (leakyStart 2) ∧
     (∃ (r₁ : Run instrumentation program (leakyStart 1))
        (r₂ : Run instrumentation program (leakyStart 2)),
        r₁.choices = r₂.choices ∧ r₁.releases = r₂.releases) ∧
-    ¬ (∀ (r₁ : Run instrumentation program (leakyStart 1))
-         (r₂ : Run instrumentation program (leakyStart 2)),
-         r₁.publicObservations = r₂.publicObservations) := by
+    ¬ ((leakyRun 1).publicObservations = (leakyRun 2).publicObservations) := by
   refine ⟨leaky_low 1 2, ⟨leakyRun 1, leakyRun 2, rfl, rfl⟩, ?_⟩
   intro h
-  have hobs := h (leakyRun 1) (leakyRun 2)
+  have hobs := h
   exact (by decide : (leakyRun 1).publicObservations ≠ (leakyRun 2).publicObservations) hobs
 
 /-- Instance (law `timing_not_ct`, case `timingStart`). -/
