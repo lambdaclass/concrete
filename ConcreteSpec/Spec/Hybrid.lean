@@ -15,8 +15,8 @@ Typed writes touch only the active scalar prefix, preserving padding, initializa
 fragments outside it. Struct field layout, enums, pointers in structs and the C8 padding oracle
 are left out. Pointer decoding stays exactly as in Memory; no new pointer meaning is chosen.
 
-Pointer-typed places await the whole-pointer decoding owner decision; their sizeof will take
-the target.
+Pointer-typed places remain outside this scalar slice; their sizeof will take the target.
+Raw pointer decoding follows owner decision 2026-11-08, item 20 in Memory.
 
 `State` is an `Exec.Operands.Store` shape: instantiate `Store := State`, use `read`/`write` in
 operand evaluation and `rawWrite` for authorized primitive writes; turn `none` into `Res.stuck`.

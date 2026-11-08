@@ -86,16 +86,29 @@ theorem write_read (tgt : Target) (st st' : State) (hw : st.memory.WellFormed tg
           exact rep_roundtrip tgt v hv.2
     next => simp at h
 
-/-- The low-level store frame theorem applies verbatim to a typed write's active encoding.
-In particular every padding byte, including initialization and fragments, is preserved. -/
-theorem typed_store_frame (tgt : Target) (m m' : Memory) (hw : m.WellFormed tgt)
-    (r : Range) (v : Value) (b : MemBlockId) (off i : Nat) (x : Block)
-    (ha : m.access tgt r.ptr (encode tgt v).length r.align = some (some (b, off)))
-    (hx : m.block b = some x) (h : m.store tgt r.ptr (encode tgt v) r.align = some m')
-    (hi : i < off ∨ off + sizeof v.ty ≤ i) :
-    (m'.block b).map (fun y => y.bytes[i]?) = some (x.bytes[i]?) := by
-  exact store_same_block_frame tgt m m' hw r.ptr (encode tgt v) r.align b off i x ha hx h
-    (by simpa using hi)
+/-- A typed State.write preserves every byte outside the active scalar representation,
+including padding, initialization and pointer fragments. -/
+theorem typed_store_frame (tgt : Target) (st st' : State) (hw : st.WellFormed tgt)
+    (p : Place) (t : Ty) (r : Range) (v : Value) (b : MemBlockId) (off i : Nat) (x : Block)
+    (hc : st.places p = some ⟨t, .materialized r⟩)
+    (ha : st.memory.access tgt r.ptr (sizeof t) r.align = some (some (b, off)))
+    (hx : st.memory.block b = some x) (h : st.write tgt p v = some st')
+    (hi : i < off ∨ off + sizeof t ≤ i) :
+    (st'.memory.block b).map (fun y => y.bytes[i]?) = some (x.bytes[i]?) := by
+  simp only [State.write, hc] at h
+  dsimp at h
+  split at h
+  next hv =>
+    cases hm : st.memory.store tgt r.ptr (encode tgt v) r.align with
+    | none => simp [hm] at h
+    | some m =>
+      simp [hm] at h
+      subst st'
+      apply store_same_block_frame tgt st.memory m hw.memory r.ptr (encode tgt v)
+        r.align b off i x _ hx hm
+      · simpa [encode_length, hv.1] using hi
+      · simpa [encode_length, hv.1] using ha
+  next => simp at h
 
 /-- Every successful materialization leaves the returned range as the place's sole projection. -/
 theorem materialize_projection (tgt : Target) (st st' : State) (p : Place) (s : AddrSpace)

@@ -238,14 +238,28 @@ theorem alloc_block (tgt : Target) (m : Memory) (s : AddrSpace) (base size align
   obtain ⟨_, rfl, _⟩ := alloc_result tgt m s base size align b m' h
   simp [Memory.block, AList.lookup]
 
-/-- The failure constructor contains only an error: no replacement memory. -/
+/-- Allocation rejects misalignment, a one-past address beyond the boundary, or overlap
+with an existing live block. These are geometric failure laws, independent of Fits. -/
 theorem alloc_failure (tgt : Target) (m : Memory) (s : AddrSpace) (base size align : Nat)
-    (h : ¬ m.Fits tgt (candidate s base size align)) :
-    m.alloc tgt s base size align = .error .unavailable := by simp [Memory.alloc, h]
+    (h : base % align ≠ 0 ∨ 2 ^ tgt.addrBits - 1 < base + size ∨
+      ∃ e ∈ m.blocks, e.2.live = true ∧ e.2.Overlaps (candidate s base size align)) :
+    m.alloc tgt s base size align = .error .unavailable := by
+  have hf : ¬ m.Fits tgt (candidate s base size align) := by
+    intro hf
+    rcases h with ha | hb | ⟨e, he, hl, ho⟩
+    · exact ha hf.2.1
+    · exact Nat.not_lt_of_ge hf.2.2.1 hb
+    · exact hf.2.2.2.2.2.1 e he hl ho
+  simp [Memory.alloc, hf]
 
+/-- Zero-byte loads and stores succeed exactly at aligned, non-null, target-valid addresses;
+no allocation or provenance is needed and an empty store preserves the whole memory. -/
 theorem access_zero (tgt : Target) (m : Memory) (p : Ptr) (a : Nat) :
-    m.access tgt p 0 a = if p.addr % a = 0 ∧ p.addr ≠ tgt.null ∧ p.Valid tgt then some none else none := by
-  simp [Memory.access]
+    (m.load tgt p 0 a = some [] ∧ m.store tgt p [] a = some m) ↔
+      p.addr % a = 0 ∧ p.addr ≠ tgt.null ∧ p.Valid tgt := by
+  by_cases h : p.addr % a = 0 ∧ p.addr ≠ tgt.null ∧ p.Valid tgt
+  · simp [Memory.load, Memory.store, Memory.access, h]
+  · simp [Memory.load, Memory.store, Memory.access, h]
 
 theorem access_no_provenance (tgt : Target) (m : Memory) (p : Ptr) (n a : Nat)
     (hn : n ≠ 0) (hp : p.prov = none) : m.access tgt p n a = none := by
