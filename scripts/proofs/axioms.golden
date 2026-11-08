@@ -978,6 +978,8 @@ ConcreteSpec.Core.Exec.FuelLimit.mk.sizeOf_spec	propext
 ConcreteSpec.Core.Exec.FuelLimit.prefixes	propext
 ConcreteSpec.Core.Exec.FuelLimit.toInfiniteExecution._proof_1	propext
 ConcreteSpec.Core.Exec.FuelLimit.toInfiniteExecution._proof_2	propext
+ConcreteSpec.Core.Exec.FuelLimit.toInfiniteExecution_toFuelLimit	propext
+ConcreteSpec.Core.Exec.FuelLimit.unique	Quot.sound propext
 ConcreteSpec.Core.Exec.InfiniteExecution.initial	propext
 ConcreteSpec.Core.Exec.InfiniteExecution.mk.congr_simp	propext
 ConcreteSpec.Core.Exec.InfiniteExecution.mk.inj	propext
@@ -986,6 +988,8 @@ ConcreteSpec.Core.Exec.InfiniteExecution.mk.sizeOf_spec	propext
 ConcreteSpec.Core.Exec.InfiniteExecution.not_final	propext
 ConcreteSpec.Core.Exec.InfiniteExecution.step	propext
 ConcreteSpec.Core.Exec.InfiniteExecution.toFuelLimit._proof_1	propext
+ConcreteSpec.Core.Exec.InfiniteExecution.toFuelLimit_toInfiniteExecution	propext
+ConcreteSpec.Core.Exec.InfiniteExecution.unique	Quot.sound propext
 ConcreteSpec.Core.Exec.Label.emit.inj	
 ConcreteSpec.Core.Exec.Label.emit.injEq	propext
 ConcreteSpec.Core.Exec.Label.emit.sizeOf_spec	
@@ -1010,6 +1014,7 @@ ConcreteSpec.Core.Exec.Moves.toSteps	propext
 ConcreteSpec.Core.Exec.Operands.mk.inj	
 ConcreteSpec.Core.Exec.Operands.mk.injEq	propext
 ConcreteSpec.Core.Exec.Operands.mk.sizeOf_spec	
+ConcreteSpec.Core.Exec.Oracle.toQueryOracle.eq_1	
 ConcreteSpec.Core.Exec.Out.next.inj	
 ConcreteSpec.Core.Exec.Out.next.injEq	propext
 ConcreteSpec.Core.Exec.Out.next.sizeOf_spec	
@@ -1097,7 +1102,7 @@ ConcreteSpec.Core.Exec.Stmt.seq.inj
 ConcreteSpec.Core.Exec.Stmt.seq.injEq	propext
 ConcreteSpec.Core.Exec.Stmt.seq.sizeOf_spec	
 ConcreteSpec.Core.Exec.Stmt.skip.sizeOf_spec	
-ConcreteSpec.Core.Exec.TerminationEvidence.all_allowed_runs	propext
+ConcreteSpec.Core.Exec.TerminationEvidence.all_allowed_runs	Classical.choice Quot.sound propext
 ConcreteSpec.Core.Exec.TerminationEvidence.excludes_infinite	propext
 ConcreteSpec.Core.Exec.TerminationEvidence.mk.inj	propext
 ConcreteSpec.Core.Exec.TerminationEvidence.mk.injEq	propext
@@ -1106,6 +1111,7 @@ ConcreteSpec.Core.Exec.TerminationEvidence.terminates	propext
 ConcreteSpec.Core.Exec.abort_runs_no_cleanup	propext
 ConcreteSpec.Core.Exec.answer.eq_1	
 ConcreteSpec.Core.Exec.answer_deterministic	
+ConcreteSpec.Core.Exec.answer_toQueryOracle	
 ConcreteSpec.Core.Exec.assign_refused	Quot.sound propext
 ConcreteSpec.Core.Exec.bindLife.eq_1	
 ConcreteSpec.Core.Exec.bindLife.eq_2	
@@ -1136,6 +1142,7 @@ ConcreteSpec.Core.Exec.exit_scope_runs_defers	propext
 ConcreteSpec.Core.Exec.final?_none_of_step	propext
 ConcreteSpec.Core.Exec.finite_not_infinite_events	propext
 ConcreteSpec.Core.Exec.finite_or_infinite_events	Classical.choice Quot.sound propext
+ConcreteSpec.Core.Exec.fuelLimit_states_unique	Quot.sound propext
 ConcreteSpec.Core.Exec.infinite_iff_fuelLimit	propext
 ConcreteSpec.Core.Exec.instDecidableEqExit.decEq._proof_1	
 ConcreteSpec.Core.Exec.instDecidableEqExit.decEq._proof_10	
@@ -1203,6 +1210,7 @@ ConcreteSpec.Core.Exec.mapDestroyOrder_storage._proof_1_1	Quot.sound propext
 ConcreteSpec.Core.Exec.move_of_fuel_succ	propext
 ConcreteSpec.Core.Exec.no_step_of_none	propext
 ConcreteSpec.Core.Exec.not_infinite_of_final	propext
+ConcreteSpec.Core.Exec.not_infinite_of_noAnswer	propext
 ConcreteSpec.Core.Exec.occurrenceAt.eq_1	
 ConcreteSpec.Core.Exec.onRes.eq_1	
 ConcreteSpec.Core.Exec.onRes.eq_2	
@@ -1242,14 +1250,15 @@ ConcreteSpec.Core.Exec.runFromQ_queries_from	Quot.sound propext
 ConcreteSpec.Core.Exec.runFromQ_queries_prefix	Quot.sound propext
 ConcreteSpec.Core.Exec.runFromQ_queries_prefix_le	Quot.sound propext
 ConcreteSpec.Core.Exec.runFromQ_query_fuel_independent	Quot.sound propext
-ConcreteSpec.Core.Exec.runFromQ_sound	Quot.sound propext
+ConcreteSpec.Core.Exec.runFromQ_sound	propext
 ConcreteSpec.Core.Exec.runFromQ_toReport	propext
 ConcreteSpec.Core.Exec.runFrom_complete	propext
-ConcreteSpec.Core.Exec.runFrom_events_from	Quot.sound propext
-ConcreteSpec.Core.Exec.runFrom_final_sound	Quot.sound propext
+ConcreteSpec.Core.Exec.runFrom_complete_le	Classical.choice Quot.sound propext
+ConcreteSpec.Core.Exec.runFrom_events_from	propext
+ConcreteSpec.Core.Exec.runFrom_final_sound	propext
 ConcreteSpec.Core.Exec.runFrom_mono	Classical.choice Quot.sound propext
 ConcreteSpec.Core.Exec.runFrom_mono._proof_1_6	Quot.sound propext
-ConcreteSpec.Core.Exec.runFrom_sound	Quot.sound propext
+ConcreteSpec.Core.Exec.runFrom_sound	propext
 ConcreteSpec.Core.Exec.runFrom_trace_prefix	Classical.choice Quot.sound propext
 ConcreteSpec.Core.Exec.runFrom_trace_prefix_le	Classical.choice Quot.sound propext
 ConcreteSpec.Core.Exec.runFrom_trace_prefix_le._proof_1_6	Quot.sound propext
@@ -1258,6 +1267,7 @@ ConcreteSpec.Core.Exec.scope_drop_refused	propext
 ConcreteSpec.Core.Exec.seqDestroyOrder.eq_1	
 ConcreteSpec.Core.Exec.seqDestroyOrder_elem	propext
 ConcreteSpec.Core.Exec.seqDestroyOrder_storage	Quot.sound propext
+ConcreteSpec.Core.Exec.silentDivergence_not_infiniteInteraction	Quot.sound propext
 ConcreteSpec.Core.Exec.startCleanup.eq_1	
 ConcreteSpec.Core.Exec.step.eq_1	propext
 ConcreteSpec.Core.Exec.stepExit.eq_1	propext
