@@ -642,6 +642,99 @@ theorem expose_wellFormed (tgt : Target) (m m' : Memory) (hw : m.WellFormed tgt)
   · intro y hy; exact hw.sized b y hy
   · intro y hy; exact hy
 
+/-- Geometry relevant to hybrid projections; neither byte contents nor exposure is cached. -/
+def Block.geometry (x : Block) : AddrSpace × Nat × Nat × Nat :=
+  (x.space, x.base, x.size, x.align)
+
+/-- Store does not change any block's projection geometry. -/
+theorem store_geometry (tgt : Target) (m m' : Memory) (p : Ptr) (bs : List MByte)
+    (a : Nat) (h : m.store tgt p bs a = some m') (b : MemBlockId) :
+    (m'.block b).map Block.geometry = (m.block b).map Block.geometry := by
+  unfold Memory.store at h
+  split at h
+  next => cases h; rfl
+  next c off =>
+    cases h
+    simp only [block_modify]
+    split
+    · next he =>
+      subst b
+      cases m.block _ <;> rfl
+    · rfl
+  next => cases h
+
+/-- Exposure also preserves every projection's geometry. -/
+theorem expose_geometry (m m' : Memory) (p : Ptr) (h : m.expose p = some m')
+    (b : MemBlockId) :
+    (m'.block b).map Block.geometry = (m.block b).map Block.geometry := by
+  obtain ⟨c, _, _, _, _, rfl⟩ := expose_result m m' p h
+  simp only [block_modify]
+  split
+  · next he =>
+      subst b
+      cases m.block _ <;> rfl
+  · rfl
+
+/-- Reads depend only on their provenance block, independently of every other block. -/
+theorem load_congr (tgt : Target) (m m' : Memory) (p : Ptr) (n a : Nat)
+    (h : ∀ b, p.prov = some b → m'.block b = m.block b) :
+    m'.load tgt p n a = m.load tgt p n a := by
+  by_cases hz : n = 0
+  · by_cases hv : p.addr % a = 0 ∧ p.addr ≠ tgt.null ∧ p.Valid tgt
+    all_goals simp [Memory.load, Memory.access, hz, hv]
+  · cases hp : p.prov with
+    | none => simp [Memory.load, Memory.access, hz, hp]
+    | some b =>
+      cases hx : m.block b with
+      | none => simp [Memory.load, Memory.access, hz, hp, h b hp, hx]
+      | some x =>
+        simp only [Memory.load, Memory.access, hz, ↓reduceIte, hp, h b hp, hx]
+        split <;> simp_all
+
+/-- A store frames reads using a different allocation identity. -/
+theorem store_load_other (tgt : Target) (m m' : Memory) (p q : Ptr) (bs : List MByte)
+    (a n align : Nat) (h : m.store tgt p bs a = some m') (hn : q.prov ≠ p.prov) :
+    m'.load tgt q n align = m.load tgt q n align := by
+  unfold Memory.store at h
+  cases ha : m.access tgt p bs.length a with
+  | none => simp [ha] at h
+  | some v =>
+    rw [ha] at h
+    cases v with
+    | none => cases h; rfl
+    | some pair =>
+      obtain ⟨b, off⟩ := pair
+      cases h
+      obtain ⟨_, hp, _⟩ := access_some tgt m p bs.length a b off ha
+      apply load_congr
+      intro c hc
+      have hcb : c ≠ b := by intro he; subst c; exact hn (hc.trans hp.symm)
+      simp [hcb]
+
+/-- Exposure affects provenance reconstruction, but no byte read or access check. -/
+theorem expose_load (tgt : Target) (m m' : Memory) (p q : Ptr) (n a : Nat)
+    (h : m.expose p = some m') : m'.load tgt q n a = m.load tgt q n a := by
+  obtain ⟨b, _, _, _, _, rfl⟩ := expose_result m m' p h
+  by_cases hz : n = 0
+  · by_cases hv : q.addr % a = 0 ∧ q.addr ≠ tgt.null ∧ q.Valid tgt
+    all_goals simp [Memory.load, Memory.access, hz, hv]
+  · cases hp : q.prov with
+    | none => simp [Memory.load, Memory.access, hp, hz]
+    | some c =>
+      by_cases hc : c = b
+      · subst c
+        cases hx : m.block b with
+        | none => simp [Memory.load, Memory.access, hp, hz, hx]
+        | some x =>
+          simp only [Memory.load, Memory.access, hz, ↓reduceIte, hp, block_modify, hx,
+            Option.map_some]
+          split <;> simp_all
+      · apply load_congr
+        intro d hd
+        have hd' : d = c := by rw [hp] at hd; exact (Option.some.inj hd).symm
+        subst d
+        simp [hc]
+
 /-- Releasing a block cannot permit any existing identity to be reused by the next allocation,
 even when the allocator reuses the released address. -/
 theorem free_alloc_ne_existing (tgt : Target) (m freed allocated : Memory)

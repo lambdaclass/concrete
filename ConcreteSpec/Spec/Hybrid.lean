@@ -107,6 +107,26 @@ structure State where
 /-- Lookup in the finite place map. -/
 def State.places (st : State) (p : Place) : Option Cell := AList.lookup st.cells p
 
+/-- A projection names a whole containing block, with room for the active scalar bytes.
+This slice materializes whole scalar cells; field subranges belong to the struct-layout slice. -/
+def Cell.Projected (m : Memory) (c : Cell) : Prop :=
+  match c.storage with
+  | .structured _ => True
+  | .materialized r => ∃ b x, r.ptr.prov = some b ∧ m.block b = some x ∧
+      r.ptr.space = x.space ∧ r.ptr.addr = x.base ∧ r.extent = x.size ∧
+      r.align = x.align ∧ sizeof c.ty ≤ r.extent
+
+/-- Byte memory is well-formed and every materialized scalar has a valid containing projection. -/
+structure State.WellFormed (tgt : Target) (st : State) : Prop where
+  memory : st.memory.WellFormed tgt
+  projected : ∀ p c, st.places p = some c → c.Projected st.memory
+
+/-- For this whole-cell slice, separated projections use distinct allocation identities.
+This is stronger than numeric non-overlap and permits address reuse across dead blocks. -/
+def State.Separated (st : State) (p q : Place) : Prop :=
+  ∀ c d r s, st.places p = some c → st.places q = some d →
+    c.storage = .materialized r → d.storage = .materialized s → r.ptr.prov ≠ s.ptr.prov
+
 /-- Replace a logical place without changing other entries. -/
 def State.set (st : State) (p : Place) (c : Cell) : State :=
   { st with cells := (p, c) :: st.cells }
