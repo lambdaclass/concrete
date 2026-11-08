@@ -66,8 +66,8 @@ def TrapKind.all : List TrapKind :=
   [.overflow, .divisionByZero, .invalidShift, .outOfBounds, .invalidRange, .abort]
 
 /-- The result of one step of evaluating an operand: a value, a trap of some kind, or unsafe
-stuckness (row Q6.7). An operand is evaluated without effects (Core is in A-normal form, Q9.1),
-so these are its only results. -/
+stuckness (row Q6.7). An operand has no run-time effect (Core is in A-normal form, Q9.1), so these
+are its only results; the value may come paired with an instrumentation state (C1's `eval`). -/
 inductive Res (V : Type) where
   | ok (v : V)
   | trap (k : TrapKind)

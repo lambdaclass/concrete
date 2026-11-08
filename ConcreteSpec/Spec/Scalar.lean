@@ -282,6 +282,7 @@ inductive CTerm where
   | var (x : Var)
   | machine (t : IntTy) (op : MachineOp) (a b : CTerm)
   | exact (op : WrapOp) (a b : CTerm)
+  deriving DecidableEq, Repr
 
 /-- What a contract term denotes, given the values of its variables. `none` where a machine
 operation is not defined: an operand that is not a value of its width (the runtime never sees one),

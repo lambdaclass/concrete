@@ -383,6 +383,13 @@ theorem Matches.lookup {env : AList ConstId CVal} {Γ : AList ConstId CTy} (h : 
     obtain ⟨v', hv', hty, _⟩ := h.1 c T hc
     rw [hv] at hv'; cases hv'; rw [hty]
 
+/-- Values that match their types are valid. -/
+theorem Matches.valid {env : AList ConstId CVal} {Γ : AList ConstId CTy} (h : Matches env Γ) :
+    ∀ c v, AList.lookup env c = some v → v.Valid := by
+  intro c v hv
+  obtain ⟨v', hv', _, hval⟩ := h.1 c _ (h.lookup c v hv)
+  rw [hv] at hv'; cases hv'; exact hval
+
 /-- Declarations that evaluate also type. -/
 theorem evaluates_typed (U : ConstTypes) : ∀ (ds : List (ConstDecl U)) (env env' : AList ConstId CVal)
     (Γ : AList ConstId CTy), Matches env Γ → (∀ c v, AList.lookup env c = some v → v.Valid) →

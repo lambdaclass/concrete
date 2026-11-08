@@ -94,6 +94,7 @@ inductive CExpr where
   | or (a b : CExpr)
   /-- The lossless conversion to `t`. -/
   | convert (t : IntTy) (a : CExpr)
+  deriving DecidableEq, Repr
 
 /-- Two integer operands of one type, or `none`. -/
 def sameInt : Option CVal → Option CVal → Option (IntTy × Int × Int)

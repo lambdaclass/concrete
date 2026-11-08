@@ -272,6 +272,22 @@ theorem machine_operands (ρ : Var → Option Int) (t : IntTy) (op : MachineOp) 
           Bool.or_eq_true] at hok
         exact ⟨x, y, rfl, rfl, hok.1, hok.2⟩
 
+/-- A defined machine term's value is a value of its width. -/
+theorem machine_inRange (ρ : Var → Option Int) (t : IntTy) (op : MachineOp) (a b : CTerm)
+    (r : Int) (h : (CTerm.machine t op a b).eval ρ = some r) : t.InRange r := by
+  obtain ⟨x, y, ha, hb, hx, _⟩ := machine_operands ρ t op a b r h
+  simp only [CTerm.eval, ha, hb, Option.bind_some] at h
+  split at h
+  · cases h
+  · cases op with
+    | plain o =>
+      simp only at h
+      split at h
+      · cases h; rename_i hc; exact checked_inRange t o x y r hx hc
+      · cases h
+    | wrapping o => cases h; exact wrap_inRange t _
+    | saturating o => cases h; exact saturate_inRange t _
+
 theorem exactOf?_some {op : MachineOp} {w : WrapOp} (h : op.exactOf? = some w) :
     op = .plain w.arith := by
   cases op with
