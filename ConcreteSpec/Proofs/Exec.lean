@@ -1061,7 +1061,7 @@ theorem protected_step {P : Program O} {caller : AList Var O.Val}
       | exiting e => exact False.elim (stepExit_no_request_inv locals st e _ _ _ _ _ _ h)
       | trapped kd site => simp [step] at h
 /-- A step count for a first-arrival execution, used only for induction on strict subpaths. -/
-private inductive FirstStepsN (R : Config O → Label O → Config O → Prop) (stop : Config O → Prop) :
+inductive FirstStepsN (R : Config O → Label O → Config O → Prop) (stop : Config O → Prop) :
     Config O → List O.Event → Config O → Nat → Prop where
   | stop {c} : stop c → FirstStepsN R stop c [] c 0
   | step {c l c' tr c'' n} : ¬ stop c → R c l c' → FirstStepsN R stop c' tr c'' n →
@@ -1098,8 +1098,8 @@ private theorem protected_not_return_inv {caller : AList Var O.Val} {q : List (F
   rw [hr.2] at hh
   exact Nat.lt_irrefl _ hh
 
-/-- Helper (inversion). Decomposes a raw execution using the machine stack rules (approved: PENDING). -/
-private theorem FirstStepsN.split_return_inv {P : Program O} {bound : Nat}
+/-- Law (subject `ConcreteSpec.Core.Exec.Step`). A successful path crossing a saved caller boundary first returns with the saved caller locals. -/
+theorem FirstStepsN.split_return {P : Program O} {bound : Nat}
     {c endC : Config O} {tr : List O.Event} {n : Nat}
     (h : FirstStepsN (Step P) (fun c => c.frames.length ≤ bound) c tr endC n) :
     ∀ {caller : AList Var O.Val} {q : List (Frame O)}, bound < q.length → Protected caller q c →
@@ -1166,8 +1166,8 @@ private theorem FirstStepsN.trap_impossible_inv {P : Program O} {bound : Nat}
   rw [he] at hs
   exact Nat.not_le_of_gt hq hs
 
-/-- Helper (inversion). Decomposes a raw execution using the machine stack rules (approved: PENDING). -/
-private theorem FirstStepsN.call_return_inv {P : Program O} {bound : Nat}
+/-- Law (subject `ConcreteSpec.Core.Exec.Step`). Every successful deferred call path crossing its continuation first returns with its caller locals restored. -/
+theorem FirstStepsN.call_return {P : Program O} {bound : Nat}
     {L : AList Var O.Val} {st : O.Store} {q : List (Frame O)} {d : Deferred O}
     {tr : List O.Event} {endC : Config O} {n : Nat} (hq : bound < q.length)
     (h : FirstStepsN (Step P) (fun c => c.frames.length ≤ bound) ⟨.exec d.stmt, L, st, q⟩ tr endC n) :
@@ -1185,7 +1185,7 @@ private theorem FirstStepsN.call_return_inv {P : Program O} {bound : Nat}
       rw [he] at ht
       exact False.elim (FirstStepsN.trap_impossible_inv hq ht)
     | inr hp =>
-      obtain ⟨n₁, n₂, tr₁, st₁, tr₂, hc, he, ha, hb⟩ := ht.split_return_inv hq hp
+      obtain ⟨n₁, n₂, tr₁, st₁, tr₂, hc, he, ha, hb⟩ := ht.split_return hq hp
       exact ⟨n₁ + 1, n₂, l.events ++ tr₁, st₁, tr₂, by omega,
         by simp [he, List.append_assoc], .step (by intro h; cases h.1) hs ha, hb⟩
 
@@ -1209,8 +1209,8 @@ private theorem resume_step_inv {P : Program O} {e : Exit O.Val} {L : AList Var 
     exact ⟨rfl, h.symm⟩
   | prim h _ _ => simp [step] at h
 
-/-- Helper (inversion). Decomposes a raw execution using the machine stack rules (approved: PENDING). -/
-private theorem boundary_complete_inv {P : Program O} {e : Exit O.Val} {k pre : List (Frame O)}
+/-- Law (subject `ConcreteSpec.Core.Exec.Step`). Raw first-arrival cleanup executions admit a complete dispatch segmentation. -/
+theorem boundary_complete {P : Program O} {e : Exit O.Val} {k pre : List (Frame O)}
     {L Lend : AList Var O.Val} {st stEnd : O.Store} {tr : List O.Event} {n : Nat} {endC : Config O}
     (h : FirstStepsN (Step P) (fun c => c.frames.length ≤ k.length)
       ⟨.exiting e, L, st, pre ++ k⟩ tr endC n)
@@ -1265,7 +1265,7 @@ private theorem boundary_complete_inv {P : Program O} {e : Exit O.Val} {k pre : 
             have hq : k.length < (.resume (.exit e) :: .scope b dm ds :: (pre ++ k)).length := by
               simp only [List.length_cons, List.length_append]; omega
             obtain ⟨nc, nr, trCall, stCall, trRest, hnCall, heCall, hCall, hRest⟩ :=
-              ht.call_return_inv hq
+              ht.call_return hq
             cases hRest with
             | stop hstop => simp only [List.length_cons, List.length_append] at hstop; omega
             | @step _ lab cNext trTail _ nt hnRest hsRest hTail =>
@@ -1315,7 +1315,7 @@ theorem raw_cleanup_runs_plan (P : Program O) (e : Exit O.Val) (k pre : List (Fr
     ∃ acts, BoundaryRun P (Step P) e k pre L st acts tr Lend stEnd ∧
       acts = planWith pre L ∧ Lend = unwindLocals pre L ∧ Performed P acts L st tr Lend stEnd := by
   obtain ⟨n, hn⟩ := h.sized_inv
-  obtain ⟨acts, ha⟩ := boundary_complete_inv hn rfl hp
+  obtain ⟨acts, ha⟩ := boundary_complete hn rfl hp
   obtain ⟨_, hacts, hL, hperf⟩ :=
     (cleanup_runs_exact_plan P e k pre L Lend st stEnd acts tr).mp ha
   exact ⟨acts, ha, hacts, hL, hperf⟩
@@ -2295,6 +2295,166 @@ example : Performed prog ([d 1].map (.call []) ++ [.drop [] [] []]) [] .init [1]
   cases h with
   | pass _ hs _ => exact hs.2
   | call _ hs _ _ _ => exact hs.2
+
+/-- Mutant that skips normal return: it may advance only to configurations whose control is
+not `.done`. It can cross a stack boundary without restoring the caller first. -/
+def SkipReturnStep (_P : Program O) (_c : Config O) (l : Label O) (c' : Config O) : Prop :=
+  l = .silent ∧ c'.ctrl ≠ .done
+
+/-- Helper (inversion). A shape invariant of the planted relation: no positive-length path
+can introduce `.done` (approved: PENDING). -/
+private theorem skip_no_done {P : Program O} {stop : Config O → Prop}
+    {c c' : Config O} {tr : List O.Event} {n : Nat}
+    (h : FirstStepsN (SkipReturnStep P) stop c tr c' n) : c.ctrl ≠ .done → c'.ctrl ≠ .done := by
+  induction h with
+  | stop _ => exact id
+  | step _ hs _ ih => intro _; exact ih hs.2
+
+/-- A concrete saved continuation for return-segmentation witnesses. -/
+def returnQ : List (Frame ops) := [.resume (.exit (.ret 7))]
+def savedStart : Config ops := ⟨.exec .skip, [], .init, .ret none [(x, 7)] :: returnQ⟩
+def savedEnd : Config ops := ⟨.exiting (.ret 7), [(x, 7)], .init, []⟩
+
+/-- Representation lemma. A concrete three-step return/restoration execution
+(approved: PENDING). -/
+private theorem saved_three : FirstStepsN (Step prog) (fun c => c.frames.length ≤ 0)
+    savedStart [] savedEnd 3 := by
+  refine FirstStepsN.step (O := ops) (stop := fun c => c.frames.length ≤ 0) (l := .silent) (by decide) (Step.silent (P := prog) (c' :=
+    ⟨.done, [], .init, .ret none [(x, 7)] :: returnQ⟩) rfl) ?_
+  refine FirstStepsN.step (O := ops) (stop := fun c => c.frames.length ≤ 0) (l := .silent) (by decide) (Step.silent (P := prog) (c' :=
+    ⟨.done, [(x, 7)], .init, returnQ⟩) rfl) ?_
+  exact FirstStepsN.step (O := ops) (stop := fun c => c.frames.length ≤ 0) (l := .silent) (by decide) (Step.silent (P := prog) rfl) (.stop (by decide))
+
+/-- Representation lemma. A three-step mutant path crosses the same boundary while never
+reaching the required restored return configuration (approved: PENDING). -/
+private theorem skipped_three : FirstStepsN (SkipReturnStep prog) (fun c => c.frames.length ≤ 0)
+    savedStart [] savedEnd 3 := by
+  let mid : Config ops := ⟨.exiting (.ret 7), [], .init, returnQ⟩
+  exact FirstStepsN.step (O := ops) (stop := fun c => c.frames.length ≤ 0) (l := .silent) (c' := mid) (by decide) ⟨rfl, by intro h; cases h⟩
+    (FirstStepsN.step (O := ops) (stop := fun c => c.frames.length ≤ 0) (l := .silent) (c' := mid) (by decide) ⟨rfl, by intro h; cases h⟩
+      (FirstStepsN.step (O := ops) (stop := fun c => c.frames.length ≤ 0) (l := .silent) (by decide) ⟨rfl, by intro h; cases h⟩ (.stop (by decide))))
+
+/-- Instance (law `ConcreteSpec.Core.Exec.FirstStepsN.split_return`, case `restore`). -/
+example : ∃ n₁ n₂ tr₁ st₁ tr₂, 3 = n₁ + n₂ ∧ ([] : List Int) = tr₁ ++ tr₂ ∧
+    FirstStepsN (Step prog) (fun c => c.ctrl = .done ∧ c.frames = returnQ)
+      savedStart tr₁ ⟨.done, [(x, 7)], st₁, returnQ⟩ n₁ ∧
+    FirstStepsN (Step prog) (fun c => c.frames.length ≤ 0)
+      ⟨.done, [(x, 7)], st₁, returnQ⟩ tr₂ savedEnd n₂ :=
+  FirstStepsN.split_return (P := prog) (bound := 0) (c := savedStart) (endC := savedEnd)
+    (tr := []) (n := 3) saved_three (caller := [(x, 7)]) (q := returnQ) (by decide) ⟨[], rfl⟩
+
+/-- Planted (law `ConcreteSpec.Core.Exec.FirstStepsN.split_return`, case `restore`, subject `ConcreteSpec.Core.Exec.Step`, mutant `ConcreteSpec.Core.Exec.CleanupEvidence.SkipReturnStep`). -/
+example : FirstStepsN (SkipReturnStep prog) (fun c => c.frames.length ≤ 0) savedStart [] savedEnd 3 ∧
+    0 < returnQ.length ∧ Protected (O := ops) [(x, 7)] returnQ savedStart ∧
+    ¬ (∃ n₁ n₂ tr₁ st₁ tr₂, 3 = n₁ + n₂ ∧ ([] : List Int) = tr₁ ++ tr₂ ∧
+      FirstStepsN (SkipReturnStep prog) (fun c => c.ctrl = .done ∧ c.frames = returnQ)
+        savedStart tr₁ ⟨.done, [(x, 7)], st₁, returnQ⟩ n₁ ∧
+      FirstStepsN (SkipReturnStep prog) (fun c => c.frames.length ≤ 0)
+        ⟨.done, [(x, 7)], st₁, returnQ⟩ tr₂ savedEnd n₂) := by
+  refine ⟨skipped_three, by decide, ⟨[], rfl⟩, ?_⟩
+  rintro ⟨_, _, _, _, _, _, _, first, _⟩
+  exact skip_no_done first (by intro h; cases h) rfl
+
+/-- A deferred bump and its post-boundary endpoint. -/
+def bumpD : Deferred ops := ⟨bumpF, [], s⟩
+def bumpEnd : Config ops := ⟨.exiting (.ret 7), [(x, 7)], ⟨1, []⟩, []⟩
+
+/-- Representation lemma. A complete five-step deferred bump and boundary crossing
+(approved: PENDING). -/
+private theorem bump_five : FirstStepsN (Step prog) (fun c => c.frames.length ≤ 0)
+    ⟨.exec bumpD.stmt, [(x, 7)], .init, returnQ⟩ [] bumpEnd 5 := by
+  refine FirstStepsN.step (O := ops) (stop := fun c => c.frames.length ≤ 0) (l := .silent) (by decide) (Step.silent (P := prog) (c' :=
+    ⟨.exec bumpFn.body, [], ⟨0, [[]]⟩, .scope bumpFn.block [] [] :: .ret none [(x, 7)] :: returnQ⟩) rfl) ?_
+  refine FirstStepsN.step (O := ops) (stop := fun c => c.frames.length ≤ 0) (l := .silent) (by decide) (Step.prim (P := prog) (a := (⟨none, .ok 0, ⟨1, [[]]⟩⟩ : Answer Int Int DState))
+    (c' := ⟨.done, [], ⟨1, [[]]⟩, .scope bumpFn.block [] [] :: .ret none [(x, 7)] :: returnQ⟩)
+    rfl (by simp [ops]) rfl) ?_
+  refine FirstStepsN.step (O := ops) (stop := fun c => c.frames.length ≤ 0) (l := .silent) (by decide) (Step.silent (P := prog) (c' :=
+    ⟨.done, [], ⟨1, [[]]⟩, .ret none [(x, 7)] :: returnQ⟩) rfl) ?_
+  refine FirstStepsN.step (O := ops) (stop := fun c => c.frames.length ≤ 0) (l := .silent) (by decide) (Step.silent (P := prog) (c' :=
+    ⟨.done, [(x, 7)], ⟨1, []⟩, returnQ⟩) rfl) ?_
+  exact FirstStepsN.step (O := ops) (stop := fun c => c.frames.length ≤ 0) (l := .silent) (by decide) (Step.silent (P := prog) rfl) (.stop (by decide))
+
+/-- Representation lemma. The mutant completes five steps without a restored return
+(approved: PENDING). -/
+private theorem skipped_five : FirstStepsN (SkipReturnStep prog) (fun c => c.frames.length ≤ 0)
+    ⟨.exec bumpD.stmt, [(x, 7)], .init, returnQ⟩ [] bumpEnd 5 := by
+  let mid : Config ops := ⟨.exiting (.ret 7), [], .init, returnQ⟩
+  apply FirstStepsN.step (O := ops) (stop := fun c => c.frames.length ≤ 0) (l := .silent) (c' := mid) (by decide) ⟨rfl, by intro h; cases h⟩
+  apply FirstStepsN.step (O := ops) (stop := fun c => c.frames.length ≤ 0) (l := .silent) (c' := mid) (by decide) ⟨rfl, by intro h; cases h⟩
+  apply FirstStepsN.step (O := ops) (stop := fun c => c.frames.length ≤ 0) (l := .silent) (c' := mid) (by decide) ⟨rfl, by intro h; cases h⟩
+  apply FirstStepsN.step (O := ops) (stop := fun c => c.frames.length ≤ 0) (l := .silent) (c' := mid) (by decide) ⟨rfl, by intro h; cases h⟩
+  exact FirstStepsN.step (O := ops) (stop := fun c => c.frames.length ≤ 0) (l := .silent) (by decide) ⟨rfl, by intro h; cases h⟩ (.stop (by decide))
+
+/-- Instance (law `ConcreteSpec.Core.Exec.FirstStepsN.call_return`, case `deferred_bump`). -/
+example : ∃ n₁ n₂ tr₁ st₁ tr₂, 5 = n₁ + n₂ ∧ ([] : List Int) = tr₁ ++ tr₂ ∧
+    FirstStepsN (Step prog) (fun c => c.ctrl = .done ∧ c.frames = returnQ)
+      ⟨.exec bumpD.stmt, [(x, 7)], .init, returnQ⟩ tr₁ ⟨.done, [(x, 7)], st₁, returnQ⟩ n₁ ∧
+    FirstStepsN (Step prog) (fun c => c.frames.length ≤ 0)
+      ⟨.done, [(x, 7)], st₁, returnQ⟩ tr₂ bumpEnd n₂ :=
+  FirstStepsN.call_return (P := prog) (bound := 0) (L := [(x, 7)]) (st := .init)
+    (q := returnQ) (d := bumpD) (tr := []) (endC := bumpEnd) (n := 5) (by decide) bump_five
+
+/-- Planted (law `ConcreteSpec.Core.Exec.FirstStepsN.call_return`, case `deferred_bump`, subject `ConcreteSpec.Core.Exec.Step`, mutant `ConcreteSpec.Core.Exec.CleanupEvidence.SkipReturnStep`). -/
+example : 0 < returnQ.length ∧
+    FirstStepsN (SkipReturnStep prog) (fun c => c.frames.length ≤ 0)
+      ⟨.exec bumpD.stmt, [(x, 7)], .init, returnQ⟩ [] bumpEnd 5 ∧
+    ¬ (∃ n₁ n₂ tr₁ st₁ tr₂, 5 = n₁ + n₂ ∧ ([] : List Int) = tr₁ ++ tr₂ ∧
+      FirstStepsN (SkipReturnStep prog) (fun c => c.ctrl = .done ∧ c.frames = returnQ)
+        ⟨.exec bumpD.stmt, [(x, 7)], .init, returnQ⟩ tr₁ ⟨.done, [(x, 7)], st₁, returnQ⟩ n₁ ∧
+      FirstStepsN (SkipReturnStep prog) (fun c => c.frames.length ≤ 0)
+        ⟨.done, [(x, 7)], st₁, returnQ⟩ tr₂ bumpEnd n₂) := by
+  refine ⟨by decide, skipped_five, ?_⟩
+  rintro ⟨_, _, _, _, _, _, _, first, _⟩
+  exact skip_no_done first (by intro h; cases h) rfl
+
+/-- Mutant raw execution can idle, then escape through `.done` instead of dispatching. -/
+inductive PaddedEscape (P : Program O) : Config O → Label O → Config O → Prop where
+  | skip {e L st frames k} : PaddedEscape P
+      ⟨.exiting e, L, st, frames⟩ .silent ⟨.done, L, st, .resume (.exit e) :: k⟩
+  | resume {e L st k} : PaddedEscape P
+      ⟨.done, L, st, .resume (.exit e) :: k⟩ .silent ⟨.exiting e, L, st, k⟩
+
+
+/-- Helper (inversion). The concrete two-frame boundary passes a return (approved: PENDING). -/
+private theorem two_passes : ∀ f ∈ [.seq .skip, emptyScope], Passes (O := ops) (.ret 7) f := by
+  intro f hf
+  cases hf with
+  | head => trivial
+  | tail _ hf => exact empty_passes f hf
+
+/-- Representation lemma. A concrete two-step raw exit (approved: PENDING). -/
+private theorem drop_two : FirstStepsN (Step prog) (fun c => c.frames.length ≤ 0)
+    ⟨.exiting (.ret 7), [], .init, [.seq .skip, emptyScope]⟩ [] ⟨.exiting (.ret 7), [], .init, []⟩ 2 := by
+  exact FirstStepsN.step (R := Step prog) (l := .silent) (by decide)
+    (Step.silent (P := prog) (c' := ⟨.exiting (.ret 7), [], .init, [emptyScope]⟩) rfl)
+    (FirstStepsN.step (R := Step prog) (l := .silent) (by decide) (Step.silent rfl) (.stop (by decide)))
+
+/-- Instance (law `ConcreteSpec.Core.Exec.boundary_complete`, case `raw_drop`). -/
+example : ∃ acts, BoundaryRun prog (Step prog) (.ret 7) [] [.seq .skip, emptyScope] [] .init acts [] [] .init :=
+  boundary_complete (P := prog) (e := .ret 7) (k := []) (pre := [.seq .skip, emptyScope])
+    (L := []) (Lend := []) (st := .init) (stEnd := .init) (tr := []) (n := 2)
+    (endC := ⟨.exiting (.ret 7), [], .init, []⟩) drop_two rfl two_passes
+
+/-- Planted (law `ConcreteSpec.Core.Exec.boundary_complete`, case `raw_drop`, subject `ConcreteSpec.Core.Exec.Step`, mutant `ConcreteSpec.Core.Exec.CleanupEvidence.PaddedEscape`).
+The same two-step raw first arrival takes an unexpected `.done`/resume path and cannot be
+segmented as direct frame passing or deferred dispatch. -/
+example : FirstStepsN (PaddedEscape prog) (fun c => c.frames.length ≤ 0)
+      ⟨.exiting (.ret 7), [], .init, [.seq .skip, emptyScope] ++ []⟩ []
+      ⟨.exiting (.ret 7), [], .init, []⟩ 2 ∧
+    (⟨.exiting (.ret 7), [], .init, []⟩ : Config ops) = ⟨.exiting (.ret 7), [], .init, []⟩ ∧
+    (∀ f ∈ [.seq .skip, emptyScope], Passes (O := ops) (.ret 7) f) ∧
+    ¬ (∃ acts, BoundaryRun prog (PaddedEscape prog) (.ret 7) [] [.seq .skip, emptyScope]
+      [] .init acts [] [] .init) := by
+  refine ⟨?_, rfl, two_passes, ?_⟩
+  · exact FirstStepsN.step (R := PaddedEscape prog) (l := .silent) (by decide)
+      (PaddedEscape.skip (frames := [.seq .skip, emptyScope]) (k := []))
+      (FirstStepsN.step (R := PaddedEscape prog) (l := .silent) (by decide)
+        PaddedEscape.resume (.stop (by decide)))
+  · rintro ⟨_, h⟩
+    generalize ht : ([] : List Int) = trace at h
+    cases h with
+    | pass _ hs _ => cases hs
+    | call _ hs _ _ _ => cases hs
 
 end CleanupEvidence
 
