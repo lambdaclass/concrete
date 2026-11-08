@@ -19,3 +19,4 @@ import ConcreteSpec.Proofs.ObserveReport
 import ConcreteSpec.Proofs.ObserveEnvironment
 import ConcreteSpec.Proofs.ObserveTransform
 import ConcreteSpec.Proofs.ObserveEvidence
+import ConcreteSpec.Proofs.ObserveOutput
