@@ -1,0 +1,58 @@
+Concrete is a systems language being rebuilt as a fully proven compiler in Lean. You are one of three independent reviewers (Codex, Kimi, agy). The owner will decide; you advise. DO NOT MODIFY ANY FILE.
+
+Context in this directory: docs/decisions.md (recorded decisions; rows such as OD107, Q9.1, ARITH-n), docs/PHILOSOPHY.md, ROADMAP.md, docs/proposals/SLICE1_BRIEF.md (draft slice-1 writer brief), docs/proposals/STD_COVERAGE.md, _review/GRAMMAR_REVIEW.md (grammar sheet v2; lexer in its section 2, OPEN items in section 10), _review/LANGUAGE_DECISIONS_2026-11-08.md (owner decisions of 2026-11-08, items 1-59; these are decided even though not yet in decisions.md).
+
+Ten owner questions. Options are listed; you may propose a missing option.
+
+L1. Did decision item 34 ("longest-match tokens; >> split only in generic closers", OPEN-7) approve the grammar sheet's section 2 operator/punctuation token set?
+  (a) yes: item 34 ratified OPEN-7 as recommended, which was "exactly section 2's token set"; the set is closed now.
+  (b) no: item 34 approved only the tokenization rule; the exact token inventory goes to the spelling round (item 55/59) with the other spellings.
+  (c) split: approved, except tokens whose constructs changed after it (item 6 dot calls, item 11 casts, item 15 `::` imports, item 49 labels), which are rechecked in the spelling round.
+
+L2. Item 16 removes `char`. The sheet's second escape list (`\n \t \r \0 \\ \'`) belonged to char literals; item 33 says "exactly two escape lists". Which literal, if any, owns a second list now, with what contents, and how is a `'label` told apart from a quote?
+  (a) a single-quoted ASCII byte literal (`'a'` typed u8, per item 16 "quoted ASCII literals ... migrate explicitly") keeps the second list unchanged; a quote token is `'` + one char/escape + `'`; otherwise `'ident` is a label (closing-quote priority, as the sheet says).
+  (b) no single-quoted literal at all: byte values are written as integers or via a named function on a one-byte string; only the string escape list remains (item 33 amended to "one escape list"); `'` lexes only as a label start.
+  (c) a byte-string literal (e.g. b"...") owns the second list (adds \xHH); `'` is labels only.
+
+L3. May raw control characters other than LF/CR (tab, 0x01-0x1F, 0x7F) appear inside string literals?
+  (a) no: every control character must be escaped (\t, \0 ...); raw tab refused, so the source text shows every byte that is not plainly printable.
+  (b) raw tab allowed, all other controls refused.
+  (c) all allowed except LF/CR (only item 33's "no raw line breaks").
+
+L4. Integer suffix grammar (item 41 keeps `200u8`) and base prefixes.
+  (a) suffix = one of the eight integer type names (i8..u64) directly after the digits, no separator; prefixes 0x/0b/0o lowercase only with lowercase-or-uppercase hex digits; suffix allowed after any base (0xffu8); no `_` separators; no float suffix.
+  (b) as (a) but no octal (0x and 0b only).
+  (c) suffix allowed only on decimal literals; prefixes 0x/0b/0o.
+  (d) no base prefixes at all; decimal only plus suffix.
+
+S1-scope. How slice 1 relates to the existing slice-1 spec:
+  (a) the compiler admits a stated subset of the existing slice-1 spec, given by an explicit predicate in the spec, with a proof that the subset is preserved through the passes;
+  (b) narrow the spec itself to exactly the slice.
+
+S1-move. Source text for reading a linear (non-Copy) value:
+  (a) `move t` written explicitly (Core Q9.1 form surfaces in source);
+  (b) plain `t`; the compiler elaborates it to Core's `move t` (Copy values elaborate to `copy t`).
+
+S1-abort. Where `abort()` may appear in a slice-1 body (bodies are only lets then return; Unit statements, OD29, arrive at slice 3), and abort()'s result type:
+  (a) only as `return abort();`, with abort(): never/bottom-typed (coerces to the return type, TYPE-4 divergence);
+  (b) as a let initializer or return value, typed by its expected type (bottom/never);
+  (c) bring the Unit statement form `abort();` forward into slice 1, with abort(): Unit-or-never;
+  (d) other.
+
+S1-toml. Concrete.toml [policy]/[assumptions] for slice 1: key names, version field, how the predictable policy is turned on. Option (a): top-level `version = 1` (refused if unknown); `[policy] predictable = true` (absent = off); `[assumptions]` tables keyed by the decided assumption kinds (target, heap, stack, foreign, trusted), unknown keys refused. Option (b): per-table version (`[policy] version = 1`, `[assumptions] version = 1`) and `[policy] profile = "predictable"` (named, versioned bundle). Option (c): other.
+
+R0600. Is R-0600 (derived always-aborts fact) due at slice 1 (it is listed in ROADMAP queue row B1, ~line 181) or at slice 5 (its own row, ~line 465, "due with the functions-and-calls slice")?
+  (a) slice 1 (B1 is right; abort() exists from slice 1);
+  (b) slice 5 (fix B1: remove R-0600);
+  (c) split: a trivial fact at 1 (main's every path aborts), the derived call-pruning fact at 5.
+
+F-NaN. Float NaN policy for f32/f64 (needed at slice 26, Wasm). Decided: OD107 (float-to-int on NaN is an error), OD106 (try_convert returns Result<T, OutOfRange>), ARITH rows; no hidden traps.
+  (a) NaN is a value; every NaN-producing operation yields one canonical bit pattern (deterministic across targets);
+  (b) hardware/IEEE payload propagation (platform-dependent bits);
+  (c) no NaN-producing operation without a proof or an explicit checked form (NaN only enters via explicit bit conversion);
+  (d) (c) as the surface rule (an operation that can create NaN from non-NaN operands needs a proof it will not, or a checked form returning Result) PLUS (a) as the semantics for NaN that still enters (bit reinterpretation, foreign input, Wasm guest values): every operation on or producing NaN yields the one canonical pattern.
+  The owner currently leans toward (c) or (d). Compare (c) alone against (d) explicitly, including the proof cost of tracking finiteness (inf - inf, 0 * inf, overflow to inf feeding a later NaN) and whether a separate finite-float type would be needed.
+  Also say what float `==` should mean for NaN given proofs (IEEE: NaN != NaN, not reflexive; or total/bitwise equality; or a separate named operation).
+
+For EACH question give: the option you pick, the runner-up, rows cited from docs/decisions.md and docs/PHILOSOPHY.md (and the 2026-11-08 items), a reason of at most 60 words, and any missing option. Then end with exactly one line, all ten picks:
+ANSWER: L1=<x>; L2=<x>; L3=<x>; L4=<x>; S1-scope=<x>; S1-move=<x>; S1-abort=<x>; S1-toml=<x>; R0600=<x>; F-NaN=<x>; EQ=<short>
