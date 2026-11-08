@@ -100,20 +100,36 @@ theorem decodeBool_valid (bs : List MByte) (b : Bool) (h : decodeBool bs = some 
   | [.init v f] => exact ⟨v, f, rfl, (boolOfBits_some_iff _ _).1 h⟩
   | [] | .uninit :: _ | .init _ _ :: _ :: _ => cases h
 
+/-- Representation lemma. Fragment annotations do not alter the numeric octets. -/
+private theorem octets_fragments (os : List (Fin 256)) (p : Ptr) (start : Nat) :
+    octets ((os.zipIdx start).map (fun (v, i) => MByte.init v (some (p, i)))) = some os := by
+  induction os generalizing start with
+  | nil => rfl
+  | cons v vs ih => simp [List.zipIdx_cons, octets, ih]
+
 theorem decodePtr_encodePtr (tgt : Target) (ht : tgt.WellFormed) (p : Ptr) (hpv : p.Valid tgt) :
-    decodePtr tgt (encodePtr tgt p hpv) = some p := by
+    decodePtr tgt (encodePtr tgt p) = some p := by
   have hp : 0 < tgt.ptrSize := by have := ht.1; have := ht.2.1; omega
   have hl : (ordered tgt.byteOrder (leBytes tgt.ptrSize p.addr)).length > 0 := by simpa using hp
   cases hs : ordered tgt.byteOrder (leBytes tgt.ptrSize p.addr) with
   | nil => simp [hs] at hl
   | cons v vs =>
-    have he : encodePtr tgt p hpv = .init v (some (p, 0)) ::
+    have he : encodePtr tgt p = .init v (some (p, 0)) ::
         (vs.zipIdx 1).map (fun (v, i) => .init v (some (p, i))) := by
       simp [encodePtr, hs, List.zipIdx_cons]
     rw [he]
     simp only [decodePtr]
     rw [← he]
-    simp [hpv]
+    have hb : p.addr < 256 ^ tgt.ptrSize := by
+      have hh := Nat.pow_le_pow_right (by decide : 1 ≤ 2) ht.2.1
+      have he : 256 ^ tgt.ptrSize = 2 ^ (8 * tgt.ptrSize) := by
+        rw [Nat.pow_mul]
+      rw [he]
+      exact Nat.lt_of_lt_of_le hpv.1 hh
+    simp only [ite_eq_left hpv, ↓reduceIte]
+    rw [show octets (encodePtr tgt p) = some (ordered tgt.byteOrder (leBytes tgt.ptrSize p.addr)) from
+      octets_fragments _ _ 0]
+    simp [ordered_ordered, leValue_leBytes _ _ hb]
 
 @[simp] theorem block_modify (m : Memory) (b c : MemBlockId) (f : Block → Block) :
     (m.modify b f).block c = if c = b then (m.block b).map f else m.block c := by
@@ -456,12 +472,12 @@ theorem fromExposed_none (tgt : Target) (m : Memory) (hw : m.WellFormed tgt)
     · exact False.elim (hh.1 hi)
     · exact False.elim (hh.2 hi)
 
-/-- A valid nonempty access identifies a live block and an in-bounds offset. -/
-theorem access_some (tgt : Target) (m : Memory) (p : Ptr) (n a : Nat) (b : MemBlockId)
+/-- Helper (inversion). Extract the block and bounds of a successful nonempty access. -/
+theorem access_some_inv (tgt : Target) (m : Memory) (p : Ptr) (n a : Nat) (b : MemBlockId)
     (off : Nat) (h : m.access tgt p n a = some (some (b, off))) :
     ∃ x, p.prov = some b ∧ m.block b = some x ∧ n ≠ 0 ∧ x.live = true ∧
       x.space = p.space ∧ x.base ≤ p.addr ∧ p.addr + n ≤ x.base + x.size ∧
-      p.addr % a = 0 ∧ off = p.addr - x.base ∧ p.Valid tgt := by
+      p.addr % a = 0 ∧ off = p.addr - x.base := by
   unfold Memory.access at h
   split at h
   next => split at h <;> cases h
@@ -476,30 +492,30 @@ theorem access_some (tgt : Target) (m : Memory) (p : Ptr) (n a : Nat) (b : MemBl
         simp only [hx] at h
         split at h
         next hv => cases h; exact ⟨x, rfl, hx, hn, hv.1, hv.2.1, hv.2.2.1,
-          hv.2.2.2.1, hv.2.2.2.2.1, rfl, hv.2.2.2.2.2⟩
+          hv.2.2.2.1, hv.2.2.2.2, rfl⟩
         next => cases h
 
-/-- Every successful access, including a zero-byte one, uses a target-valid pointer. -/
-theorem access_valid (tgt : Target) (m : Memory) (p : Ptr) (n a : Nat)
-    (r : Option (MemBlockId × Nat)) (h : m.access tgt p n a = some r) : p.Valid tgt := by
-  unfold Memory.access at h
-  split at h
-  · split at h
-    next hv => exact hv.2.2
-    next => cases h
-  · split at h
-    next => cases h
-    next =>
-      split at h
+/-- Nonempty access validity follows from the stored block geometry, rather than a runtime check. -/
+theorem access_valid (tgt : Target) (m : Memory) (hw : m.WellFormed tgt)
+    (p : Ptr) (n a : Nat) (r : Option (MemBlockId × Nat))
+    (h : m.access tgt p n a = some r) : p.Valid tgt := by
+  cases r with
+  | none =>
+    unfold Memory.access at h
+    split at h
+    · split at h
+      next hv => exact hv.2.2
       next => cases h
-      next =>
-        split at h
-        next hv => exact hv.2.2.2.2.2
-        next => cases h
+    · split at h <;> (try split at h) <;> (try split at h) <;> cases h
+  | some pair =>
+    obtain ⟨b, off⟩ := pair
+    obtain ⟨x, _, hx, hn, _, hs, hlo, hhi, _, _⟩ := access_some_inv tgt m p n a b off h
+    have hf := hw.fits b x hx
+    have hpos : 0 < 2 ^ tgt.addrBits := Nat.two_pow_pos tgt.addrBits
+    exact ⟨by omega, hs ▸ hw.spaces b x hx⟩
 
-/-- Every decoded whole stored pointer is target-valid. Other fragment patterns remain
-without pointer meaning in this draft. -/
-theorem decodePtr_valid (tgt : Target) (bs : List MByte) (p : Ptr)
+/-- Helper (inversion). The defensive target-validity check of pointer decoding. -/
+theorem decodePtr_valid_inv (tgt : Target) (bs : List MByte) (p : Ptr)
     (h : decodePtr tgt bs = some p) : p.Valid tgt := by
   match bs with
   | .init _ (some (q, 0)) :: _ =>
@@ -507,10 +523,46 @@ theorem decodePtr_valid (tgt : Target) (bs : List MByte) (p : Ptr)
     split at h
     next hp =>
       split at h
-      next => cases h; exact hp
+      next =>
+        split at h
+        next => split at h
+                next => cases h; exact hp
+                next => cases h
+        next => cases h
       next => cases h
     next => cases h
   | [] | .uninit :: _ | .init _ none :: _ | .init _ (some (_, Nat.succ _)) :: _ => cases h
+
+/-- Successful pointer decoding recovers exactly a whole stored representation. -/
+theorem decodePtr_some (tgt : Target) (bs : List MByte) (p : Ptr)
+    (h : decodePtr tgt bs = some p) : bs = encodePtr tgt p := by
+  match bs with
+  | .init _ (some (q, 0)) :: _ =>
+    simp only [decodePtr] at h
+    split at h
+    next =>
+      split at h
+      next he =>
+        split at h
+        next =>
+          split at h
+          next => cases h; exact he
+          next => cases h
+        next => cases h
+      next => cases h
+    next => cases h
+  | [] | .uninit :: _ | .init _ none :: _ | .init _ (some (_, Nat.succ _)) :: _ => cases h
+
+/-- Nonempty access succeeds on the independent liveness, provenance and geometry obligations.
+Together with access_valid this proves deleting the redundant target-validity guard preserves
+success on well-formed memory. -/
+theorem access_success (tgt : Target) (m : Memory) (p : Ptr) (n a : Nat)
+    (b : MemBlockId) (x : Block) (hn : n ≠ 0) (hp : p.prov = some b)
+    (hx : m.block b = some x) (hl : x.live = true) (hs : x.space = p.space)
+    (hlo : x.base ≤ p.addr) (hhi : p.addr + n ≤ x.base + x.size)
+    (ha : p.addr % a = 0) :
+    m.access tgt p n a = some (some (b, p.addr - x.base)) := by
+  simp [Memory.access, hn, hp, hx, hl, hs, hlo, hhi, ha]
 
 /-- Replacing a range reads back exactly that range. -/
 theorem splice_read (xs bs : List MByte) (off : Nat) (h : off ≤ xs.length) :
@@ -555,11 +607,11 @@ theorem store_load (tgt : Target) (m m' : Memory) (hw : m.WellFormed tgt)
     | some v =>
       obtain ⟨b, off⟩ := v
       cases h
-      obtain ⟨x, hp, hx, hn, hv, hs, hlo, hhi, hal, hoff, hpv⟩ := access_some tgt m p bs.length a b off ha
+      obtain ⟨x, hp, hx, hn, hv, hs, hlo, hhi, hal, hoff⟩ := access_some_inv tgt m p bs.length a b off ha
       have hsize := hw.sized b x hx
       have hbound : off + bs.length ≤ x.bytes.length := by omega
       have ha' : (m.modify b (fun x => { x with bytes := x.bytes.take off ++ bs ++ x.bytes.drop (off + bs.length) })).access tgt p bs.length a = some (some (b, off)) := by
-        simp [Memory.access, hn, hp, hx, hv, hs, hlo, hhi, hal, hoff, hpv]
+        simp [Memory.access, hn, hp, hx, hv, hs, hlo, hhi, hal, hoff]
       simp only [Memory.load, ha', block_modify, ↓reduceIte, hx, Option.map_some]
       congr 1
       exact splice_read _ _ _ (by omega)
@@ -584,7 +636,7 @@ theorem store_same_block_frame (tgt : Target) (m m' : Memory) (hw : m.WellFormed
   subst m'
   simp only [block_modify, ↓reduceIte, hx, Option.map_some]
   congr 1
-  obtain ⟨y, _, hy, _, _, _, hlo, hhi, _, hoff, _⟩ := access_some tgt m p bs.length a b off ha
+  obtain ⟨y, _, hy, _, _, _, hlo, hhi, _, hoff⟩ := access_some_inv tgt m p bs.length a b off ha
   rw [hx] at hy
   cases hy
   apply splice_frame _ _ _ _ _ hi
@@ -612,8 +664,8 @@ theorem store_wellFormed (tgt : Target) (m m' : Memory) (hw : m.WellFormed tgt)
     | some pair =>
       obtain ⟨b, off⟩ := pair
       cases h
-      obtain ⟨x, _, hx, _, _, _, hlo, hhi, _, hoff, _⟩ :=
-        access_some tgt m p bs.length a b off ha
+      obtain ⟨x, _, hx, _, _, _, hlo, hhi, _, hoff⟩ :=
+        access_some_inv tgt m p bs.length a b off ha
       apply modify_wellFormed tgt m hw b
       · intro y; exact ⟨rfl, rfl, rfl, rfl⟩
       · intro y hy
@@ -741,7 +793,7 @@ theorem store_load_other (tgt : Target) (m m' : Memory) (p q : Ptr) (bs : List M
     | some pair =>
       obtain ⟨b, off⟩ := pair
       cases h
-      obtain ⟨_, hp, _⟩ := access_some tgt m p bs.length a b off ha
+      obtain ⟨_, hp, _⟩ := access_some_inv tgt m p bs.length a b off ha
       apply load_congr
       intro c hc
       have hcb : c ≠ b := by intro he; subst c; exact hn (hc.trans hp.symm)
@@ -785,12 +837,12 @@ theorem load_prefix (tgt : Target) (m : Memory) (p : Ptr) (n k a : Nat) (bs : Li
         (try split at ha) <;> cases ha
     | some pair =>
       obtain ⟨b, off⟩ := pair
-      obtain ⟨x, hp, hx, _, hl, hs, hlo, hhi, hal, hoff, hpv⟩ :=
-        access_some tgt m p n a b off ha
+      obtain ⟨x, hp, hx, _, hl, hs, hlo, hhi, hal, hoff⟩ :=
+        access_some_inv tgt m p n a b off ha
       simp only [hx, Option.map_some, Option.some.injEq] at h
       subst bs
       have hb : p.addr + k ≤ x.base + x.size := by omega
-      simp [Memory.load, Memory.access, hk, hp, hx, hl, hs, hlo, hb, hal, hpv, hoff,
+      simp [Memory.load, Memory.access, hk, hp, hx, hl, hs, hlo, hb, hal, hoff,
         List.take_take, Nat.min_eq_left hkn]
 
 /-- Releasing a block cannot permit any existing identity to be reused by the next allocation,

@@ -46,9 +46,8 @@ fit in a target space is a failure, not a trap. The allocator's own availability
 profile's byte order, holding its two's-complement pattern (`toBits`); a `bool` is one byte, `0` or
 `1`. Decoding is partial: an uninitialized byte, or a `bool` byte other than `0` and `1`, has no
 value. An integer decoded from bytes that are pointer fragments is the integer the octets spell,
-without provenance (integers carry none, Q3.7). What a pointer read from bytes other than one whole
-stored pointer means is not decided (an owner question, recorded in the report); this module
-decodes only the whole-pointer case.
+without provenance (integers carry none, Q3.7). Bytes other than exactly one whole stored
+pointer have no pointer value: decoding fails (owner decision 2026-11-08, item 20).
 -/
 
 namespace ConcreteSpec.Core.Mem
@@ -186,7 +185,7 @@ def Memory.access (tgt : Target) (m : Memory) (p : Ptr) (n a : Nat) : Option (Op
       | none => none
       | some x =>
         if x.live = true ∧ x.space = p.space ∧ x.base ≤ p.addr ∧ p.addr + n ≤ x.base + x.size ∧
-            p.addr % a = 0 ∧ p.Valid tgt
+            p.addr % a = 0
         then some (some (b, p.addr - x.base)) else none
 
 /-- Read `n` bytes through `p` (aligned to `a`): the bytes, which may be uninitialized (decoding
@@ -284,16 +283,22 @@ def decodeBool : List MByte → Option Bool
   | _ => none
 
 /-- The bytes of a stored pointer: its address in the profile's order and pointer width, each byte
-a fragment of the pointer. A proof of target-relative validity is required to encode it. -/
-def encodePtr (tgt : Target) (p : Ptr) (_valid : p.Valid tgt) : List MByte :=
+a fragment of the pointer. Encoding is total; decoding checks target validity. -/
+def encodePtr (tgt : Target) (p : Ptr) : List MByte :=
   ((ordered tgt.byteOrder (leBytes tgt.ptrSize p.addr)).zipIdx).map fun (v, i) => .init v (some (p, i))
 
 /-- The pointer the bytes hold, when they are exactly one stored pointer's fragments, in order. Any
-other contents have no pointer meaning in this draft (see the module header). -/
+other contents have no pointer meaning (owner decision 2026-11-08, item 20).
+The exact encoding comparison checks length, all fragment identities and indices, and octets;
+the numeric decode independently checks the address spelled by those octets. -/
 def decodePtr (tgt : Target) (bs : List MByte) : Option Ptr :=
   match bs with
   | .init _ (some (p, 0)) :: _ =>
-    if hp : p.Valid tgt then if bs = encodePtr tgt p hp then some p else none else none
+    if p.Valid tgt then if bs = encodePtr tgt p then
+      match octets bs with
+      | some os => if leValue (ordered tgt.byteOrder os) = p.addr then some p else none
+      | none => none
+    else none else none
   | _ => none
 
 /-! ### Examples -/
@@ -371,9 +376,7 @@ address, with no provenance. -/
 example : (do
     let (b, m) ← (Memory.empty.alloc tgt ⟨0⟩ 4096 16 8).toOption
     let p : Ptr := ⟨⟨0⟩, 4100, some b⟩
-    let m ← m.store tgt ⟨⟨0⟩, 4104, some b⟩ (encodePtr tgt p (by
-      change 4100 < 2 ^ 64 ∧ (⟨0⟩ : AddrSpace) ∈ [⟨0⟩]
-      decide)) 8
+    let m ← m.store tgt ⟨⟨0⟩, 4104, some b⟩ (encodePtr tgt p) 8
     let bs ← m.load tgt ⟨⟨0⟩, 4104, some b⟩ 8 8
     pure (decodePtr tgt bs == some p, decodeInt tgt .u64 bs)) = some (true, some 4100) := by
   decide
