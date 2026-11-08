@@ -118,7 +118,31 @@ timeout under `bounded_run` (exit 124 or 137) is recorded as `blocked` at once
 without a halving retry. `GIT_OPTIONAL_LOCKS=0` remains set so a reviewer
 command cannot leave an `index.lock` behind (bug 209).
 
-### Shared reviewer-output contract (`scripts/review/output_contract.py`)
+### Shared reviewer-output collector (`scripts/review/collect_output.sh`) and contract (`scripts/review/output_contract.py`)
+
+The reader's input is strictly the reviewer's final message, never a stdout/stderr
+session log (coordinator, 2026-11-08). In particular, `codex exec` writes a
+session transcript ending with a `"tokens used"` trailer to stdout while writing
+the reviewer's final message to `-o <file>`. Neither the collector nor the
+reader strips or tolerates trailers. Instead, every tool that collects reviewer
+output (`scripts/review/review.sh`, `scripts/land/signoff.sh`, and any other
+caller) invokes `collect_reviewer_output` from
+[collect_output.sh](../scripts/review/collect_output.sh):
+
+- **Codex:** `codex exec --skip-git-repo-check -s danger-full-access --ephemeral --color never -C <tree> -o <out-file> "<prompt>" ><log-file> 2>&1 </dev/null` — the reader receives `<out-file>` (`-o`), never `<log-file>`.
+- **agy:** `(cd <tree> && agy --dangerously-skip-permissions -p "<prompt>") ><out-file> 2><log-file> </dev/null` — the final response on stdout goes to `<out-file>`, with stderr kept separate in `<log-file>`.
+- **Kimi:** `(cd <tree> && kimi -p "<prompt>") ><out-file> 2><log-file> </dev/null` — stdout goes to `<out-file>` with stderr kept separate in `<log-file>`.
+  *Recorded finding (2026-11-08):* `kimi --help` (`kimi-code` 2.4.1) offers only
+  `--output-format text` and `--output-format stream-json` for `-p` and has no
+  `-o` / `--output-last-message` or final-message-only flag (`text` renders every
+  assistant step through `PromptBlockWriter` on stdout, and `stream-json` emits
+  a JSONL event stream). Per project policy, neither `collect_output.sh` nor
+  `output_contract.py` parses or strips logs.
+- **No log fallback and structural check:** `collect_reviewer_output` refuses
+  identical `<out-file>` and `<log-file>` paths and never copies or falls back
+  from `<log-file>` to `<out-file>`. `scripts/review/collect_output.sh --check-structure`
+  verifies structurally that the collector and its callers (`review.sh`,
+  `signoff.sh`) feed the reader only `<out-file>` and never `<log-file>`.
 
 Every automated reviewer output — branch reviews (`scripts/review/review.sh`),
 owner sign-off reviewer outputs (`scripts/land/signoff.sh`), and review-evidence
@@ -160,31 +184,37 @@ a self-declared claim, or a default attribution on unstamped commits:
   `ssh-keygen -Y find-principals` and `ssh-keygen -Y verify -n git` against
   [allowed_writer_log_signers](../scripts/review/allowed_writer_log_signers).
   `scripts/review/allowed_writer_log_signers` ships tracked in the repository
-  with no key configured (comment lines only). Until the owner approves adding
-  the orchestrator's public key, every entry is unverified and provenance over
-  any range that requires a writer-log entry fails closed with a clear
-  diagnostic.
-  - *Operator steps to add the orchestrator's public key after owner approval:*
-    1. Generate a dedicated Ed25519 signing key on the orchestrator host (outside
-       any agent worktree):
-       ```sh
-       ssh-keygen -t ed25519 -N "" -C "orchestrator@concrete" -f ~/.ssh/concrete_writer_log_ed25519
-       ```
-    2. Append the authorized principal and public key to
-       `scripts/review/allowed_writer_log_signers`:
-       ```sh
-       printf 'orchestrator@concrete namespaces="git" %s\n' \
-         "$(cat ~/.ssh/concrete_writer_log_ed25519.pub)" \
-         >> scripts/review/allowed_writer_log_signers
-       ```
-    3. Configure the orchestrator environment (or git config in the orchestrator
+  with the owner-approved orchestrator signing key (approved by the project
+  owner on 2026-11-08, item 7):
+  - Authorized principal: `orchestrator@concrete`
+  - Public key (`namespaces="git"`): `ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDH7y2/5tTyKta6QRChKOmMVE3rOy0ajU/kaC2X8VOKF`
+  - Fingerprint: `SHA256:vx5cqlK2RywhQLRwaOCplg2BeBCnEBiZnxF8wn/CSLU`
+  If `allowed_writer_log_signers` holds no active key lines, every entry is
+  unverified and provenance over any range that requires a writer-log entry
+  fails closed.
+  - *Operator signing instructions on the orchestrator host:*
+    1. Keep the dedicated Ed25519 private key on the orchestrator host outside
+       any agent worktree or archive (`~/.ssh/concrete_writer_log_ed25519`).
+    2. Configure the orchestrator environment (or git config in the orchestrator
        clone) to sign writer-log entries with that key:
        ```sh
        export REVIEW_WRITER_SIGNING_KEY="$HOME/.ssh/concrete_writer_log_ed25519"
        export REVIEW_WRITER_SIGNER="orchestrator@concrete"
+       # or in git config:
+       git config --global gpg.format ssh
+       git config --global user.signingkey ~/.ssh/concrete_writer_log_ed25519
        ```
-    4. Commit `scripts/review/allowed_writer_log_signers` on a dedicated branch,
-       get independent review, and land it through `scripts/land/train.sh`.
+    3. To rotate or add a key after explicit owner approval, record the line in
+       `scripts/review/allowed_writer_log_signers` as
+       `<principal> namespaces="git" <keytype> <base64-key>`:
+       ```sh
+       printf 'orchestrator@concrete namespaces="git" %s\n' \
+         "$(awk '{print $1, $2}' ~/.ssh/concrete_writer_log_ed25519.pub)" \
+         >> scripts/review/allowed_writer_log_signers
+       ```
+    4. Stamp (`stamp-commit`) or backfill (`backfill`) the branch's writer-log
+       entries so each stanza is signed by the authorized key, and verify with
+       `python3 -I scripts/review/writer_provenance.py report --base <base> --head <head>`.
 - **Append-only log and signed corrections.** The writer log is append-only: an
   existing entry is never replaced or removed. `backfill` refuses to overwrite
   an existing entry; a correction is a new signed stanza appended to the commit's
@@ -346,35 +376,18 @@ repository: readable             # clean notes only
 ```
 
 **The format is an interface.** `verify.sh` parses it, and the train's review
-leg, `ready.sh`, and `notes.sh ready` read it through `verify.sh`. The original
-six common keys remain mandatory; new notes add `writer`. A missing writer makes
-a note legacy: it stays readable for round counting (`verify.sh` exits 1, not 2)
-but is not clean provenance. Any repeated or unknown key is malformed (exit 2).
-Keys are matched by name, not position. A clean note must carry
+leg, `ready.sh`, and `notes.sh ready` read it through `verify.sh`. All seven
+common keys (`verdict`, `rounds`, `reviewer`, `writer`, `utc`, `base`, `pieces`)
+are mandatory on every note; any missing, repeated or unknown key is malformed
+(exit 2). Keys are matched by name, not position. A clean note must also carry
 `repository: readable`, a `base` that is an ancestor-or-equal of the reviewed
 commit, and a `writer` list that matches `writer_provenance.py` over `base..HEAD`
-and excludes `reviewer`; legacy, self-reviewed, provenance-mismatched and
-non-ancestor-base clean notes exit 1. Running `review.sh` on such a `HEAD`
-performs a new round rather than short-circuiting. Change the format only
-together with `verify.sh`.
+and excludes `reviewer`; clean notes missing `repository: readable` or failing
+self-review, writer-provenance or base-coverage checks exit 1. Running
+`review.sh` on such a `HEAD` performs a new round rather than short-circuiting.
+Change the format only together with `verify.sh`.
 
-### Schema transition
-
-1. **Bootstrap of `wip/review-access`:** While `main` still carries the 6-key
-   `verify.sh` (`verdict`, `rounds`, `reviewer`, `utc`, `base`, `pieces`),
-   `wip/review-access` itself is reviewed on `concrete-ci-2` with full
-   repository access and lands on a 6-key clean note written by `main`'s
-   `review.sh` (which `main`'s `verify.sh` accepts).
-2. **After `wip/review-access` lands on `main`:** `main`'s `verify.sh` is the
-   new verifier. Every pre-existing 6-key clean note (lacking
-   `repository: readable` and `writer:`) and any self-reviewed clean note stops
-   qualifying as clean provenance (`verify.sh` exits 1, while still counting its
-   rounds for `review.sh` and `signoff.sh`).
-3. **Re-reviewing an open branch:** On any open branch whose head carries a
-   legacy 6-key clean note, run `scripts/review/review.sh [--reviewer <model>]`
-   at the branch head; `review.sh` treats the legacy note as `legacy-clean`,
-   increments the round counter, reviews the full `base..HEAD` diff in the
-   read-only archive, and writes a new 8-key note.
+> OWNER DECISION, item 5 (2026-11-08, verbatim: "item 5 no old records stayh valid, i want the new record. i don't care about the past. let's make the best long term thing"): no format versioning and no grandfathering. `verify.sh`, `signoff.sh`, `writer_provenance.py`, and `output_contract.py` accept only the current schemas and fail closed on any record or output lacking the required fields and `READ:`/`REPOSITORY: readable`/`VERDICT:` contract. Past landed commits on `main` are not re-judged: validation runs only when recording a note or sign-off and when landing the commit concerned.
 
 The `writer:` key and its `codex|kimi|agy|claude` vocabulary deliberately match
 the key owner sign-off records use, so all provenance names the branch writer in
@@ -424,17 +437,20 @@ escalate to a human reviewer, and pass on the open findings.
 The owner may then approve one exact commit (R-0618), after Codex, Kimi and agy have all reviewed
 that commit. The cap is the class of the branch's diff against its base, by path, the highest class
 present winning: docs and roadmap 2 rounds, scripts 3, compiler and spec 5 (an unclassified path
-counts as compiler and spec); it counts the rounds used, whatever their verdicts. The approval is
-recorded, from the owner's own words only, with `scripts/land/signoff.sh record <sha> --base <base>
---rounds-at <the review.sh-noted commit> --date --quote`, plus `--codex-request <request> --codex
-<output>` and the corresponding kimi and agy options. For each reviewer `r`, the recorder stores the
-verbatim request as `r-request.txt` after prepending `reviewed: <sha>`, and the output separately as
-`r.txt`. The request body must name that commit by an unambiguous prefix, and the output must pass
-`scripts/review/output_contract.py` (at least one valid `READ: <path>` from `<sha>`'s tree,
-`REPOSITORY: readable` as the penultimate non-empty line, and `VERDICT: ACCEPT` or `VERDICT: REJECT`
-as the last non-empty line). A completed REJECT is recorded and reported, not a refusal of the
-owner's sign-off; an output with no verdict line or failing the output contract does not qualify.
-Recording refuses a record that does not qualify.
+counts as compiler and spec); it counts the rounds used, whatever their verdicts. Collect each
+reviewer's final message against the commit's read-only archive with `scripts/land/signoff.sh collect
+<sha> --reviewer <codex|kimi|agy> --request <request> --out <output>` (which uses the shared
+collector in `scripts/review/collect_output.sh` so Codex writes via `-o <output>` rather than its
+stdout log). The approval is recorded, from the owner's own words only, with `scripts/land/signoff.sh
+record <sha> --base <base> --rounds-at <the review.sh-noted commit> --date --quote`, plus
+`--codex-request <request> --codex <output>` and the corresponding kimi and agy options. For each
+reviewer `r`, the recorder stores the verbatim request as `r-request.txt` after prepending
+`reviewed: <sha>`, and the output separately as `r.txt`. The request body must name that commit by an
+unambiguous prefix, and the output must pass `scripts/review/output_contract.py` (at least one valid
+`READ: <path>` from `<sha>`'s tree, `REPOSITORY: readable` as the penultimate non-empty line, and
+`VERDICT: ACCEPT` or `VERDICT: REJECT` as the last non-empty line). A completed REJECT is recorded
+and reported, not a refusal of the owner's sign-off; an output with no verdict line or failing the
+output contract does not qualify. Recording refuses a record that does not qualify.
 Push the resulting `refs/owner-signoff/<sha>` to both remotes. The landing train accepts it as that
 commit's review provenance ([LANDING.md](LANDING.md)); it approves no other commit.
 
@@ -450,18 +466,19 @@ scripts/review/verify.sh --evidence-dir <dir> <commit>        # re-check backfil
 
 It judges the exact commit. A clean note on an ancestor says nothing about the
 commits after it, so a branch that gains a commit after its clean round needs
-another round. A legacy clean note without `repository: readable` or `writer`,
-and a clean note whose reviewer equals its writer, exits 1.
+another round. A clean note without `repository: readable`, or a clean note
+whose reviewer equals its writer, exits 1; a note missing `writer` or any other
+required field is malformed and exits 2.
 
 With `--fields`, `verify.sh` validates the note's schema and prints its
 structured `key: value` fields (`commit`, `verdict`, `rounds`, `reviewer`,
 `writer`, `utc`, `base`, `pieces`, `repository`) with exit 0 on any well-formed
 note, independent of clean-provenance eligibility (including `findings`,
-`blocked`, legacy 6-key `clean` notes, and provenance-invalid `clean` notes),
-exiting 2 only when no note exists or the note is malformed. `signoff.sh` and
-`review.sh` read note fields through `verify.sh --fields` rather than scraping
-`verify.sh`'s human summary, so valid cap evidence on a legacy or
-provenance-invalid clean note is preserved.
+`blocked`, and provenance-invalid `clean` notes), exiting 2 only when no note
+exists or the note is malformed. `signoff.sh` and `review.sh` read note fields
+through `verify.sh --fields` rather than scraping `verify.sh`'s human summary,
+so valid cap evidence on a `findings`, `blocked` or provenance-invalid `clean`
+note is preserved.
 
 With `--required-base BASE`, a clean note qualifies only when its `base` is an
 ancestor of `BASE`, or `BASE` itself. Thus the note's reviewed range covers
@@ -476,13 +493,13 @@ deliberately omits this option: it counts rounds used, not landing coverage.
 repositories, with a bare repository as `origin` and fake Codex, Kimi and agy
 binaries. It needs no API key or network. It covers delta selection, splitting,
 the refusal retry, the cap, note writing and pushing (including the
-non-fast-forward merge), verdict parsing, archived-tree access for every
-reviewer, independent reviewer/writer provenance and its refusal cases, SSH
-signature verification against `allowed_writer_log_signers` (including
-fail-closed behaviour when no key is configured), append-only writer-log
-corrections and relabelling defence, backfill evidence verification,
-`verify.sh --fields`, both prompts' permanent owner rule, prompt persistence
-and hashes, blocked repository-access failures, legacy clean-note refusal, and
-required-base coverage. `scripts/checks/landing_script.sh` repeats the A→B→C
+non-fast-forward merge), verdict parsing, the single reviewer-output collector
+and its structural check, archived-tree access for every reviewer, independent
+reviewer/writer provenance and its refusal cases, SSH signature verification
+against `allowed_writer_log_signers` (including fail-closed behaviour when no
+key is configured), append-only writer-log corrections and relabelling defence,
+backfill evidence verification, `verify.sh --fields`, both prompts' permanent
+owner rule, prompt persistence and hashes, blocked repository-access failures,
+and required-base coverage. `scripts/checks/landing_script.sh` repeats the A→B→C
 reproducer through the landing train for both head and member notes and tests
-`signoff.sh` cap counting on legacy and provenance-invalid clean notes.
+`signoff.sh` cap counting and historical sign-off non-re-verification.

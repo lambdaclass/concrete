@@ -187,6 +187,7 @@ while [ $# -gt 0 ]; do
   case "$1" in -o) out="$2"; shift 2 ;; *) shift ;; esac
 done
 printf 'READ: required-checks.txt\nREPOSITORY: readable\nVERDICT: clean\n' > "$out"
+printf 'READ: required-checks.txt\nREPOSITORY: readable\nVERDICT: clean\ntokens used\n1,234\n'
 EOF
 chmod +x "$TMP/fake-codex"
 ( cd "$A" && git checkout -q -B wip/rv-default origin/main \

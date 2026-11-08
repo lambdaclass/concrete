@@ -4,6 +4,8 @@
 # approval is recorded"). A sign-off is review provenance for that one commit, as a clean
 # refs/notes/concrete-review note is (scripts/review/verify.sh); train.sh accepts either for a member.
 #
+#   signoff.sh collect <commit> --reviewer codex|kimi|agy --request FILE --out FILE
+#                      [--log FILE] [--timeout SECS]
 #   signoff.sh record <commit> --base BASE --rounds-at NOTED --date YYYY-MM-DD --quote TEXT
 #                     --codex-request FILE --codex FILE --kimi-request FILE --kimi FILE
 #                     --agy-request FILE --agy FILE
@@ -58,6 +60,7 @@ REVIEWERS="codex kimi agy"
 REVIEW_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../review" && pwd)"
 VERIFY="$REVIEW_DIR/verify.sh"
 OUTPUT_CONTRACT="$REVIEW_DIR/output_contract.py"
+source "$REVIEW_DIR/collect_output.sh" || exit 2
 
 usage() { awk 'NR > 1 { if (!/^#/) exit; sub(/^# ?/, ""); print }' "${BASH_SOURCE[0]}"; }
 die() { echo "signoff: $*" >&2; exit 2; }
@@ -171,7 +174,7 @@ check() {
   { git merge-base --is-ancestor "$at" "$sha" 2>/dev/null && ! git merge-base --is-ancestor "$at" "$base" 2>/dev/null; } \
     || bad "rounds-at ${at:0:10} is not one of ${sha:0:10}'s own commits (an ancestor or itself, not on ${base:0:10})"
   # verify.sh --fields validates the note schema as review.sh wrote it (0 any well-formed review.sh
-  # note, including findings, blocked, legacy clean and provenance-invalid clean notes; 2 no note or a
+  # note, including findings, blocked and provenance-invalid clean notes; 2 no note or a
   # malformed one) and prints its structured fields. This call needs no --required-base: rounds-at
   # counts rounds used, not landing diff coverage.
   local vout vrc=0
@@ -232,7 +235,48 @@ cmd_verify() {
   check "$sha" "$(git rev-parse "$PREFIX/$sha^{commit}")" "$base"
 }
 
+cmd_collect() {
+  [ $# -ge 1 ] || die "collect: name the commit"
+  local sha reviewer="" req="" out="" log="" timeout="${REVIEW_TIMEOUT:-1500}"
+  sha="$(git rev-parse -q --verify "$1^{commit}")" || die "collect: not a commit: $1"; shift
+  while [ $# -gt 0 ]; do
+    [ $# -ge 2 ] || die "collect: $1 needs a value"
+    case "$1" in
+      --reviewer) reviewer="$2" ;;
+      --request) req="$2" ;;
+      --out) out="$2" ;;
+      --log) log="$2" ;;
+      --timeout) timeout="$2" ;;
+      *) die "collect: unknown option $1" ;;
+    esac
+    shift 2
+  done
+  case "$reviewer" in codex|kimi|agy) ;; *) die "collect: --reviewer must be codex, kimi or agy" ;; esac
+  [ -f "$req" ] || die "collect: --request FILE is required"
+  [ -n "$out" ] || die "collect: --out FILE is required"
+  names "$sha" < "$req" || die "collect: request body does not name ${sha:0:10} (an unambiguous prefix of at least 7 hex digits)"
+  local work tree rc=0 c_out c_status c_reason
+  work="$(mktemp -d "${TMPDIR:-/tmp}/concrete-signoff-collect.XXXXXX")"
+  # shellcheck disable=SC2064
+  trap "chmod -R u+w '$work' 2>/dev/null || true; rm -rf '$work'" RETURN
+  [ -n "$log" ] || log="$work/$reviewer.log"
+  tree="$work/tree"
+  mkdir -p "$tree"
+  git archive "$sha" | tar -x -C "$tree"
+  chmod -R a-w "$tree"
+  collect_reviewer_output "$reviewer" "$tree" "$req" "$out" "$log" "$timeout" || rc=$?
+  c_out="$(python3 -I "$OUTPUT_CONTRACT" --commit "$sha" --verdicts ACCEPT,REJECT < "$out")" || die "collect: output_contract.py failed"
+  c_status="$(printf '%s\n' "$c_out" | sed -n 's/^status: //p' | head -1)"
+  c_reason="$(printf '%s\n' "$c_out" | sed -n 's/^reason: //p' | head -1)"
+  if [ "$rc" -ne 0 ] || { [ "$c_status" != ACCEPT ] && [ "$c_status" != REJECT ]; }; then
+    echo "signoff: collect ($reviewer on ${sha:0:10}) failed: status=$c_status ($c_reason, exit $rc)" >&2
+    return 1
+  fi
+  echo "signoff: collected $reviewer final message for ${sha:0:10}: VERDICT: $c_status -> $out"
+}
+
 case "${1:-}" in
+  collect) shift; cmd_collect "$@" ;;
   record) shift; cmd_record "$@" ;;
   verify) shift; cmd_verify "$@" ;;
   -h|--help) usage ;;

@@ -29,9 +29,10 @@ attribution of unstamped commits.
        -----END SSH SIGNATURE-----
      verified by `ssh-keygen -Y find-principals` and `ssh-keygen -Y verify -n git`
      against the tracked allowed-signers file
-     (`scripts/review/allowed_writer_log_signers`). Until an authorized public
-     key is added to that file after owner approval, every entry is unverified
-     and provenance over any range that needs one fails closed.
+     (`scripts/review/allowed_writer_log_signers`, which lists the owner-approved
+     `orchestrator@concrete` Ed25519 public key). If that file has no active key
+     lines, every entry is unverified and provenance over any range that needs
+     one fails closed.
    - Harness entry (written by `stamp-commit` at the end of a writer round):
        model: <codex|kimi|agy|claude>
        round: <positive integer>
@@ -41,6 +42,7 @@ attribution of unstamped commits.
        end-sha: <40-hex>
        commit: <40-hex>
        agy-diff-sha256: <64-hex>    # present iff model == agy
+       source: harness
        entry-id: <64-hex>
        signer: <principal>
        -----BEGIN SSH SIGNATURE-----
@@ -292,8 +294,7 @@ def canonical_body_keys(entry: dict[str, str]) -> list[str]:
         keys = ["model", "round", "branch", "brief-sha256", "start-sha", "end-sha", "commit"]
         if entry.get("model") == "agy":
             keys.append("agy-diff-sha256")
-        if entry.get("_explicit_harness_source") == "1":
-            keys.append("source")
+        keys.append("source")
     if "supersedes" in entry:
         keys.extend(["supersedes", "reason"])
     return keys
@@ -418,8 +419,6 @@ def parse_log_stanza(
         if not m:
             raise ProvenanceError(f"{source_desc}: malformed line '{line}'")
         k, v = m.group(1), m.group(2)
-        if k in ("log-sha256", "raw-output-sha256"):
-            k = "output-sha256"
         if k in entry:
             raise ProvenanceError(f"{source_desc}: duplicate key '{k}'")
         entry[k] = v
@@ -429,12 +428,9 @@ def parse_log_stanza(
     if model not in VALID_MODELS:
         raise ProvenanceError(f"{source_desc}: invalid model '{model}'")
 
-    explicit_source = "source" in entry
-    source = entry.get("source", "harness")
+    source = entry.get("source", "")
     if source not in ("harness", "backfill"):
-        raise ProvenanceError(f"{source_desc}: invalid source '{source}' (expected harness or backfill)")
-    if source == "harness" and explicit_source:
-        entry["_explicit_harness_source"] = "1"
+        raise ProvenanceError(f"{source_desc}: invalid or missing source '{source}' (expected harness or backfill)")
 
     has_supersedes = "supersedes" in entry
     has_reason = "reason" in entry
@@ -450,8 +446,7 @@ def parse_log_stanza(
         expected_keys = ["model", "round", "branch", "brief-sha256", "start-sha", "end-sha", "commit"]
         if model == "agy":
             expected_keys.append("agy-diff-sha256")
-        if explicit_source:
-            expected_keys.append("source")
+        expected_keys.append("source")
         if has_supersedes:
             expected_keys.extend(["supersedes", "reason"])
         if "entry-id" in entry:
@@ -1541,6 +1536,10 @@ def validate_notes_ref(
     for annotated_sha, blob_sha in sorted(new_entries.items()):
         old_blob_sha = old_entries.get(annotated_sha)
         is_changed = old_blob_sha != blob_sha
+        if not is_changed:
+            # Past landed commits are not re-judged: unchanged historical notes already present in
+            # old_notes_rev are not re-parsed or re-verified on push.
+            continue
         proc = git_run(repo, ["cat-file", "blob", blob_sha], check=True)
         new_text = proc.stdout
         stanzas = parse_multi_stanza_log(
@@ -1701,16 +1700,12 @@ def main() -> int:
         p_bf.add_argument("--brief-file", help="Path to the writer brief file (hashed and verified)")
         p_bf.add_argument(
             "--output-file",
-            "--log-file",
-            "--raw-output-file",
             dest="output_file",
             help="Path to the writer's raw output log file (hashed and verified)",
         )
         p_bf.add_argument("--brief-sha256", help="Optional expected SHA-256 of the writer brief")
         p_bf.add_argument(
             "--output-sha256",
-            "--log-sha256",
-            "--raw-output-sha256",
             dest="output_sha256",
             help="Optional expected SHA-256 of the writer's raw output log",
         )

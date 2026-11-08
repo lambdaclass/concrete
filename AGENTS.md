@@ -380,9 +380,10 @@ writer, and `.githooks/pre-push` semantically validates `refs/notes/concrete-wri
 and the reviewer must not be any writer of the branch. The note is shared through `origin`, so rounds run in another
 worktree or by another agent count toward the same cap, and the next round reviews only the delta when the prior note's base covers the branch base.
 Codex, Kimi and agy run with full access only in a read-only temporary `git archive` of the reviewed commit,
-never in the live clone, with stdin closed and the diff in the prompt, and their output is validated by
+never in the live clone, with stdin closed and the diff in the prompt; their final message is collected by
+`scripts/review/collect_output.sh` and validated by
 `scripts/review/output_contract.py` (`READ: <path>`, `REPOSITORY: readable`, `VERDICT: <value>`). Every prompt is saved under
 `.review/` with its sha256 in the raw output. A clean note carries `repository: readable` and a verified
-independent `writer`; legacy and self-reviewed clean notes are not provenance and are re-reviewed.
+independent `writer`; self-reviewed or provenance-invalid clean notes are not provenance and are re-reviewed.
 The landing train, `ready.sh` and `notes.sh ready` require the note's base to cover the branch/train base. See
 [REVIEW.md](docs/REVIEW.md).

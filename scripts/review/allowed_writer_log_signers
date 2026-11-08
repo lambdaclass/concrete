@@ -5,25 +5,28 @@
 # an OpenSSH signature (`ssh-keygen -Y sign -n git`) verified against this file
 # (`ssh-keygen -Y verify -n git`).
 #
-# Status: NO KEY CONFIGURED YET (fail-closed until owner approval).
-# While this file holds no key lines, scripts/review/writer_provenance.py
-# treats every writer-log entry as unverified and refuses provenance over any
-# range that needs one.
+# Status: active. The orchestrator signing key below (principal
+# `orchestrator@concrete`, Ed25519 fingerprint
+# SHA256:vx5cqlK2RywhQLRwaOCplg2BeBCnEBiZnxF8wn/CSLU) was approved by the
+# project owner on 2026-11-08 (item 7). The private key stays on the
+# orchestrator host outside every agent worktree and archive. If this file has
+# no active key lines, scripts/review/writer_provenance.py fails closed and
+# refuses provenance over any range that needs a writer-log entry.
 #
-# Operator steps to authorize the orchestrator's signing key after owner approval:
-#   1. Generate a dedicated Ed25519 signing key on the orchestrator host (outside
-#      any agent worktree):
-#        ssh-keygen -t ed25519 -N "" -C "orchestrator@concrete" \
-#          -f ~/.ssh/concrete_writer_log_ed25519
-#   2. Configure the orchestrator's git environment (or pass --signing-key /
+# Operator signing instructions on the orchestrator host:
+#   1. The dedicated Ed25519 signing key lives outside any agent worktree:
+#        ~/.ssh/concrete_writer_log_ed25519
+#   2. Configure the orchestrator's signing key (or pass --signing-key /
 #      REVIEW_WRITER_SIGNING_KEY):
 #        git config --global gpg.format ssh
 #        git config --global user.signingkey ~/.ssh/concrete_writer_log_ed25519
-#   3. After explicit owner approval, append one line to this file on a branch,
-#      review, and land it on main:
+#   3. To rotate or add a key after explicit owner approval, record the line in
+#      `<principal> namespaces="git" <keytype> <base64-key>` format:
 #        printf 'orchestrator@concrete namespaces="git" %s\n' \
-#          "$(cat ~/.ssh/concrete_writer_log_ed25519.pub)" \
+#          "$(awk '{print $1, $2}' ~/.ssh/concrete_writer_log_ed25519.pub)" \
 #          >> scripts/review/allowed_writer_log_signers
-#   4. Stamp or backfill the branch's writer-log entries so each stanza is
-#      signed by that key, and verify with:
+#   4. Stamp or backfill a branch's writer-log entries so each stanza is signed
+#      by the authorized key, and verify with:
 #        python3 -I scripts/review/writer_provenance.py report --base <base> --head <head>
+
+orchestrator@concrete namespaces="git" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDH7y2/5tTyKta6QRChKOmMVE3rOy0ajU/kaC2X8VOKF

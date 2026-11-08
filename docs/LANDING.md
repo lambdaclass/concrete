@@ -94,14 +94,18 @@ verdict; any failing leg fails the check (see [Pipelining](#pipelining)).
   judges origin's notes (`refs/notes/concrete-review` and `refs/notes/concrete-writer`; when origin
   has no `refs/notes/concrete-writer` ref, any stale local ref is removed, and any other fetch
   failure on `refs/notes/concrete-writer` fails closed at once in both `check` and `land`). Absent,
-  malformed, blocked, findings, legacy and self-reviewed clean notes, or notes over unstamped
+  malformed, blocked, findings, self-reviewed or provenance-invalid clean notes, or notes over unstamped
   commits without a backfilled writer-log entry,
   qualify nothing, and a non-clean head note is not overridden by the members. A member
   without a clean note qualifies instead by an **owner sign-off** at its exact SHA (R-0618: a branch
   at the review-round cap of its diff's class, approved by the owner after Codex, Kimi and agy all
   reviewed that commit; `scripts/land/signoff.sh verify --base`, on origin's `refs/owner-signoff/*`).
-  Each output's last verdict line must be `VERDICT: ACCEPT` or `VERDICT: REJECT`; a REJECT is
-  recorded and reported, while an output with no verdict line is refused. A sign-off approves that
+  Each output's final message is collected via `scripts/review/collect_output.sh` (`signoff.sh collect`)
+  and validated by `scripts/review/output_contract.py` (`READ: <path>`, penultimate
+  `REPOSITORY: readable`, and last `VERDICT: ACCEPT` or `VERDICT: REJECT`); a REJECT is
+  recorded and reported, while an output with no verdict line or failing the contract is refused.
+  Past landed commits on `main` are not re-judged (`train.sh` verifies only the members of the train
+  being landed). A sign-off approves that
   commit only, so a train with a signed-off member must be exactly the clean merge of its members
   onto its base: one conflict-free merge per member and nothing else. Otherwise
   the leg runs `LAND_REVIEW_CMD`, else `scripts/review/review.sh`, with `--base --head`; `review.sh`

@@ -14,15 +14,16 @@
 #                     or BASE itself, so its reviewed range covers BASE..commit.
 #   --fields          validate the note's schema and print its structured fields (`key: value` lines)
 #                     independent of clean-provenance eligibility (exits 0 on any well-formed note,
-#                     including findings, blocked, legacy clean and provenance-invalid clean notes;
+#                     including findings, blocked and provenance-invalid clean notes;
 #                     exits 2 when no note exists or the note is malformed).
 #   --brief-file      optional brief file (or <commit>=<path>) to re-check against backfill brief-sha256.
 #   --output-file     optional output file (or <commit>=<path>) to re-check against backfill output-sha256.
 #   --evidence-dir    optional directory of <commit>.brief and <commit>.output files for backfill checks.
 #
 # Exit codes: 0 clean provenance (or well-formed note under --fields); 1 reviewed but not clean
-#             provenance (findings, blocked, a legacy or self-reviewed clean note, or insufficient base
-#             coverage); 2 no note, a malformed note, or a usage error.
+#             provenance (findings, blocked, a clean note missing repository: readable or failing
+#             writer-provenance / self-review / base-coverage checks); 2 no note, a malformed note,
+#             or a usage error.
 
 set -euo pipefail
 
@@ -78,11 +79,11 @@ NOTE="$(git notes --ref="$NOTES_REF" show "$SHA" 2>/dev/null)" || {
   exit 2
 }
 
-# The note must carry each of review.sh's original six common fields exactly once, each well formed.
-# New notes also carry writer. A missing writer keeps a legacy note readable for round counting, but
-# it is not clean provenance. A clean note must also carry repository: readable. Any other key, a
-# repeated key, or a line that is not `key: value` makes the note malformed. Keys are matched by name,
-# not position, because notes.sh `put` appends `utc` last.
+# The note must carry each of review.sh's seven common fields (verdict, rounds, reviewer, writer,
+# utc, base, pieces) exactly once, each well formed. A clean note must also carry
+# repository: readable. Any other key, a missing required key, a repeated key, or a line that is
+# not `key: value` makes the note malformed. Keys are matched by name, not position, because
+# notes.sh `put` appends `utc` last.
 malformed() {
   echo "$SHA malformed review note${1:+ ($1)}:"
   printf '%s\n' "$NOTE" | sed 's/^/  /'
@@ -118,7 +119,7 @@ while IFS= read -r line; do
     *)            false ;;
   esac || malformed "bad $k"
 done <<< "$NOTE"
-for k in verdict rounds reviewer utc base pieces; do
+for k in verdict rounds reviewer writer utc base pieces; do
   case "$SEEN" in *" $k "*) ;; *) malformed "missing $k" ;; esac
 done
 
@@ -140,10 +141,6 @@ if [ "$VERDICT" = clean ]; then
     echo "$SHA clean review note is not clean provenance: missing repository: readable"
     exit 1
   fi
-  if [ -z "$WRITER" ]; then
-    echo "$SHA clean review note is not clean provenance: missing writer (legacy note)"
-    exit 1
-  fi
   case ",$WRITER," in
     *,"$REVIEWER",*)
       echo "$SHA clean review note is not clean provenance: reviewer $REVIEWER reviewed its own work"
@@ -163,6 +160,6 @@ if [ "$VERDICT" = clean ]; then
   fi
   PROV_SUMMARY="${prov_out//$'\n'/ }"
 fi
-echo "$SHA $VERDICT (round $(field rounds), reviewer $(field reviewer), writer ${WRITER:-legacy}, $(field utc), base $(field base), $(field pieces) piece(s)${PROV_SUMMARY:+; $PROV_SUMMARY})"
+echo "$SHA $VERDICT (round $(field rounds), reviewer $(field reviewer), writer $WRITER, $(field utc), base $(field base), $(field pieces) piece(s)${PROV_SUMMARY:+; $PROV_SUMMARY})"
 [ "$VERDICT" = clean ] && exit 0
 exit 1

@@ -111,7 +111,7 @@ GH
 chmod +x "$TMP/fake-gh"
 
 # A current review note as scripts/review/review.sh writes it (seven common keys, plus repository on
-# clean), published to origin. put-review <sha> <clean|findings|blocked|legacyclean|selfclean|malformed|none>[@rounds]
+# clean), published to origin. put-review <sha> <clean|findings|blocked|selfclean|malformed|none>[@rounds]
 # [review-base]; the base defaults to origin/main, and none removes the note.
 printf '#!/usr/bin/env bash\nWRITER_PROV=%q\nEV_DIR=%q\n' "$ROOT_DIR/scripts/review/writer_provenance.py" "$TMP/ev" > "$TMP/put-review"
 cat >> "$TMP/put-review" <<'EOF'
@@ -125,15 +125,6 @@ rounds="$(case "$2" in *@*) echo "${2#*@}" ;; *) echo 1 ;; esac)"
 case "$kind" in
   none) git notes --ref=$R remove --ignore-missing "$sha" 2>/dev/null ;;
   malformed) git notes --ref=$R add -f -m "verdict: clean" "$sha" ;;
-  legacyclean)
-    note="verdict: clean
-rounds: $rounds
-reviewer: codex
-utc: 2026-11-06T00:00:00Z
-base: $base
-pieces: 1"
-    git notes --ref=$R add -f -m "$note" "$sha"
-    ;;
   *)
     for c in $(git rev-list --reverse "$(git rev-parse origin/main)..$sha"); do
       p=($(git rev-list --parents -n 1 "$c"))
@@ -1463,18 +1454,22 @@ for c in "SS scripts 3" "SM compiler 5"; do
     && ok "verify refuses a $cls member's sign-off after 2 rounds" || { no "verify of a $cls member after 2 rounds (exit $r)"; echo "$o" | sed 's/^/      /'; }
   bash "$TMP/put-signoff" "$s" none
 done
-# The cap evidence is a well-formed review.sh note: a bare `rounds: 5` note does not count.
+# The cap evidence is a well-formed review.sh note: a bare `rounds: 5` note or an old 6-key note
+# without `writer` does not count (owner item 5, 2026-11-08: no old records stay valid).
 bash "$TMP/put-signoff" "$R2" valid
 git notes --ref=refs/notes/concrete-review add -f -m "rounds: 5" "$R2"
 o="$(bash "$ROOT_DIR/scripts/land/signoff.sh" verify "$R2" --base "$MR" 2>&1)"; r=$?
 [ "$r" = 1 ] && has "$o" "rounds-at ${R2:0:10} carries no well-formed review.sh note" \
   && ok "verify refuses cap evidence that is not a well-formed review.sh note" || { no "malformed cap note (exit $r)"; echo "$o" | sed 's/^/      /'; }
+git notes --ref=refs/notes/concrete-review add -f -m "$(printf 'verdict: clean\nrounds: 5\nreviewer: codex\nutc: 2026-11-06T00:00:00Z\nbase: %s\npieces: 1' "$MR")" "$R2"
+o="$(bash "$ROOT_DIR/scripts/land/signoff.sh" verify "$R2" --base "$MR" 2>&1)"; r=$?
+[ "$r" = 1 ] && has "$o" "malformed review note (missing writer)" \
+  && ok "verify refuses a 6-key note without writer on rounds-at (no old-format grandfathering)" || { no "6-key rounds-at note (exit $r)"; echo "$o" | sed 's/^/      /'; }
 # Cap counting uses verify.sh --fields (structured note fields independent of clean-provenance eligibility):
-# a legacy 6-key clean note (no writer, no repository: readable) or a provenance-invalid 8-key clean note
-# (self-reviewed reviewer == writer) at the round cap is valid cap evidence for signoff.sh record and verify,
-# while one below the cap is still refused for not reaching the cap.
+# a provenance-invalid 8-key clean note (self-reviewed reviewer == writer) at the round cap is valid cap
+# evidence for signoff.sh record and verify, while one below the cap is still refused.
 git checkout -q train/trv
-for cap_kind in "legacyclean legacy-6-key-clean" "selfclean provenance-invalid-clean"; do
+for cap_kind in "selfclean provenance-invalid-clean"; do
   read -r kmode klabel <<< "$cap_kind"
   o="$(SO_REVIEW_MODE="${kmode}@2" bash "$TMP/put-signoff" "$R2" valid 2>&1)"; r=$?
   [ "$r" != 0 ] && has "$o" "the review cap was not reached: a compiler change has cap 5, and ${R2:0:10} records 2 round(s)" \
@@ -1484,6 +1479,53 @@ for cap_kind in "legacyclean legacy-6-key-clean" "selfclean provenance-invalid-c
     && ok "signoff.sh record and verify accept a $klabel note at the round cap (5 rounds)" || { no "signoff record/verify with $klabel@5 (exit $r)"; echo "$o" | sed 's/^/      /'; }
   prov_leg "a member signed off at the cap with a $klabel note on rounds-at" none clean "${kmode}@5" pass "owner sign-off (1) at its exact SHA, and the head is their clean merge"
 done
+# Past landed commits are not re-judged (Task B / owner item 5): a historical pre-contract
+# refs/owner-signoff/<past-landed-sha> ref and a historical pre-contract review note on an already-landed
+# commit ($MR on main) do not break review_provenance / train.sh when landing a new train.
+HIST_PRE_BLOB="$(printf 'pre-contract output without READ or REPOSITORY\nVERDICT: ACCEPT\n' | git hash-object -w --stdin)"
+HIST_PRE_TREE="$(printf '100644 blob %s\tagy-request.txt\n100644 blob %s\tagy.txt\n100644 blob %s\tcodex-request.txt\n100644 blob %s\tcodex.txt\n100644 blob %s\tkimi-request.txt\n100644 blob %s\tkimi.txt\n100644 blob %s\trecord.txt\n' "$HIST_PRE_BLOB" "$HIST_PRE_BLOB" "$HIST_PRE_BLOB" "$HIST_PRE_BLOB" "$HIST_PRE_BLOB" "$HIST_PRE_BLOB" "$HIST_PRE_BLOB" | git mktree)"
+HIST_PRE_SO="$(git commit-tree "$HIST_PRE_TREE" -m "historical pre-contract sign-off on $MR")"
+git update-ref "refs/owner-signoff/$MR" "$HIST_PRE_SO"
+CONCRETE_SKIP_GATES=1 git push -q origin "refs/owner-signoff/$MR:refs/owner-signoff/$MR"
+git notes --ref=refs/notes/concrete-review add -f -m "verdict: clean
+rounds: 1
+reviewer: codex
+utc: 2026-10-01T00:00:00Z
+base: $MR
+pieces: 1" "$MR"
+CONCRETE_SKIP_GATES=1 git push -q -f origin refs/notes/concrete-review
+SO_REVIEW_MODE="findings@5" bash "$TMP/put-signoff" "$R2" valid >/dev/null 2>&1
+prov_leg "a historical pre-contract sign-off ref and note on a past landed commit do not break landing a new train" none clean "findings@5" pass "owner sign-off (1) at its exact SHA, and the head is their clean merge"
+bash "$TMP/put-signoff" "$MR" none
+bash "$TMP/put-review" "$MR" none
+# Task C control: signoff.sh collect uses the shared collector (codex exec -o <out>) and accepts the
+# -o final message while refusing a codex stdout log carrying the "tokens used" trailer.
+cat > "$TMP/fake-codex-so" <<'EOF'
+#!/usr/bin/env bash
+out=""
+while [ $# -gt 0 ]; do
+  case "$1" in -o) out="$2"; shift 2 ;; *) shift ;; esac
+done
+printf 'READ: rv2.txt\nREPOSITORY: readable\nVERDICT: ACCEPT\n' > "$out"
+printf 'READ: rv2.txt\nREPOSITORY: readable\nVERDICT: ACCEPT\ntokens used\n1,234\n'
+EOF
+chmod +x "$TMP/fake-codex-so"
+printf 'Review commit %s\n' "$R2" > "$TMP/so-collect-req.txt"
+o="$(REVIEW_CODEX_BIN="$TMP/fake-codex-so" bash "$ROOT_DIR/scripts/land/signoff.sh" collect "$R2" --reviewer codex --request "$TMP/so-collect-req.txt" --out "$TMP/so-collect-out.txt" --log "$TMP/so-collect-log.txt" 2>&1)"; r=$?
+[ "$r" = 0 ] && has "$o" "collected codex final message for ${R2:0:10}: VERDICT: ACCEPT" && ! grep -q "tokens used" "$TMP/so-collect-out.txt" && grep -q "tokens used" "$TMP/so-collect-log.txt" \
+  && ok "signoff.sh collect captures codex -o final message and keeps 'tokens used' stdout trailer in log" || { no "signoff.sh collect codex (exit $r)"; echo "$o" | sed 's/^/      /'; }
+o="$(bash "$ROOT_DIR/scripts/land/signoff.sh" record "$R2" --base "$MR" --rounds-at "$R2" --date 2026-11-08 --quote "approve ${R2:0:10}" \
+  --codex-request "$TMP/so-collect-req.txt" --codex "$TMP/so-collect-log.txt" \
+  --kimi-request "$TMP/so-collect-req.txt" --kimi "$TMP/so-collect-out.txt" \
+  --agy-request "$TMP/so-collect-req.txt" --agy "$TMP/so-collect-out.txt" 2>&1)"; r=$?
+[ "$r" != 0 ] && has "$o" "the codex output has no verdict (last non-empty line is not a valid VERDICT" \
+  && ok "signoff.sh record refuses a Codex stdout log carrying a 'tokens used' trailer after VERDICT" || { no "signoff.sh record with codex stdout log (exit $r)"; echo "$o" | sed 's/^/      /'; }
+o="$(bash "$ROOT_DIR/scripts/land/signoff.sh" record "$R2" --base "$MR" --rounds-at "$R2" --date 2026-11-08 --quote "approve ${R2:0:10}" \
+  --codex-request "$TMP/so-collect-req.txt" --codex "$TMP/so-collect-out.txt" \
+  --kimi-request "$TMP/so-collect-req.txt" --kimi "$TMP/so-collect-out.txt" \
+  --agy-request "$TMP/so-collect-req.txt" --agy "$TMP/so-collect-out.txt" 2>&1)"; r=$?
+[ "$r" = 0 ] && has "$o" "verdicts: codex ACCEPT, kimi ACCEPT, agy ACCEPT" \
+  && ok "signoff.sh record accepts the matching -o final-message file collected by signoff.sh collect" || { no "signoff.sh record with codex -o file (exit $r)"; echo "$o" | sed 's/^/      /'; }
 bash "$TMP/put-review" "$R2" none; bash "$TMP/put-signoff" "$R2" none
 bash "$TMP/put-signoff" "$SD" none
 git checkout -q train/trv

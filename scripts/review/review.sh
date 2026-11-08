@@ -127,6 +127,7 @@ cleanup() {
 }
 trap cleanup EXIT
 BOUNDED_PARENT="$WORK" source "$SCRIPT_DIR/../checks/lib/bounded.sh" || exit 2
+source "$SCRIPT_DIR/collect_output.sh" || exit 2
 sha256_file() { if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1" | cut -d' ' -f1; else shasum -a 256 "$1" | cut -d' ' -f1; fi; }
 
 # ---------------------------------------------------------------- notes sync
@@ -222,8 +223,8 @@ fi
 
 # Latest note on the branch (round count), and the latest note whose round
 # actually reviewed its diff (delta start). A `blocked` round reviewed only part
-# of its diff, so it does not advance the delta start. Neither does a legacy clean
-# note, a note with invalid writer provenance, or a note whose base does not cover
+# of its diff, so it does not advance the delta start. Neither does a clean or
+# findings note with invalid writer provenance or whose base does not cover
 # BASE_SHA (never widen base coverage across a delta).
 PREV_SHA="" PREV_ROUNDS=0 PREV_VERDICT="" REVIEWED_SHA="" REVIEWED_ROUNDS=0 REVIEWED_VERDICT=""
 while read -r c; do
@@ -236,11 +237,10 @@ while read -r c; do
   nw="$(note_field "$fields_out" writer)"
   if [ "$v" = clean ]; then
     if ! bash "$SCRIPT_DIR/verify.sh" --required-base "$BASE_SHA" "$c" >/dev/null 2>&1; then
-      v=legacy-clean
+      v=unverified-clean
     fi
   elif [ "$v" = findings ]; then
-    if [ -z "$nw" ] \
-      || ! git merge-base --is-ancestor "$nb" "$BASE_SHA" 2>/dev/null \
+    if ! git merge-base --is-ancestor "$nb" "$BASE_SHA" 2>/dev/null \
       || ! git merge-base --is-ancestor "$nb" "$c" 2>/dev/null \
       || ! python3 -I "$SCRIPT_DIR/writer_provenance.py" verify --repo "$ROOT" --base "$nb" --head "$c" --claimed-writer "$nw" --reviewer "$nr" >/dev/null 2>&1; then
       v=unverified-findings
@@ -256,7 +256,7 @@ if [ "$PREV_SHA" = "$HEAD_SHA" ]; then
       echo "review: HEAD $HEAD_SHA already reviewed clean (round $PREV_ROUNDS)"
       exit 0
       ;;
-    blocked|legacy-clean|unverified-findings) ;;
+    blocked|unverified-clean|unverified-findings) ;;
     *)
       if [ "$PREV_ROUNDS" -ge "$MAX_ROUNDS" ]; then
         cap_message "$PREV_ROUNDS" "$(findings_for "$PREV_SHA" "$PREV_ROUNDS")"
@@ -402,7 +402,7 @@ RUN_N=0
 # run_one <prompt-kind> <piece-file> <label> <group> <paths>; sets LAST_RESULT to
 # clean|findings|blocked|refused|noverdict|error and LAST_BODY to the reviewer's message.
 run_one() {
-  local kind="$1" piece="$2" label="$3" group="$4" paths="$5" rc=0 msg prompt_arg contract_out reason
+  local kind="$1" piece="$2" label="$3" group="$4" paths="$5" rc=0 msg contract_out reason
   RUN_N=$((RUN_N + 1))
   local out="$WORK/out.$RUN_N.txt" log="$WORK/log.$RUN_N.txt" prompt="$WORK/prompt.$RUN_N.txt"
   LAST_PROMPT="$RAW_DIR/$HEAD_SHA-$ROUND.prompt.$RUN_N.txt"
@@ -411,27 +411,10 @@ run_one() {
   cat "$piece" >>"$prompt"
   cp "$prompt" "$LAST_PROMPT"
   LAST_PROMPT_SHA="$(sha256_file "$LAST_PROMPT")"
-  # Command substitution strips trailing newlines; the sentinel preserves the exact saved bytes.
-  prompt_arg="$(cat "$prompt"; printf .)"; prompt_arg="${prompt_arg%.}"
-  : >"$out"
-  # The archive has no .git and is disposable: every reviewer reads the whole reviewed tree without
-  # access to the caller's worktree, refs or notes. agy's permission bypass is used only here. Keep
-  # stdin closed; the diff is in the prompt. Optional locks stay off in case a reviewer invokes git
-  # elsewhere (bug 209). Kimi and agy write their reply to stdout; Codex writes it to -o.
-  case "$REVIEWER" in
-    codex)
-      bounded_run -i /dev/null "$TIMEOUT" -- env GIT_OPTIONAL_LOCKS=0 "$REVIEWER_BIN" exec \
-        --skip-git-repo-check -s danger-full-access --ephemeral --color never -C "$REVIEW_TREE" -o "$out" \
-        "$prompt_arg" >"$log" 2>&1 || rc=$? ;;
-    kimi)
-      (cd "$REVIEW_TREE" && bounded_run -i /dev/null "$TIMEOUT" -- env GIT_OPTIONAL_LOCKS=0 \
-        "$REVIEWER_BIN" -p "$prompt_arg") >"$out" 2>"$log" || rc=$? ;;
-    agy)
-      (cd "$REVIEW_TREE" && bounded_run -i /dev/null "$TIMEOUT" -- env GIT_OPTIONAL_LOCKS=0 \
-        "$REVIEWER_BIN" --dangerously-skip-permissions -p "$prompt_arg") >"$out" 2>"$log" || rc=$? ;;
-  esac
+  # Collect only the reviewer's final message into $out (and diagnostic logs into $log) via the
+  # shared collector (scripts/review/collect_output.sh). Never fall back from $log to $out.
+  collect_reviewer_output "$REVIEWER" "$REVIEW_TREE" "$prompt" "$out" "$log" "$TIMEOUT" "$REVIEWER_BIN" || rc=$?
   msg="$(cat "$out")"
-  [ -n "$msg" ] || [ "$rc" -ne 0 ] || msg="$(cat "$log")"
   LAST_BODY="$msg"
   snapshot_review_tree >"$WORK/tree.after"
   if ! cmp -s "$WORK/tree.manifest" "$WORK/tree.after"; then

@@ -87,7 +87,10 @@ echo "$n $kind sandbox=$sandbox bytes=$(wc -c <"$FAKE_LOG/stdin.$n" | tr -d ' ')
 echo "$n optional_locks=${GIT_OPTIONAL_LOCKS:-unset}" >>"$FAKE_LOG/locks"
 added="$(grep '^+' "$FAKE_LOG/stdin.$n" || true)"
 has() { grep -q "$1" <<<"$added"; }
-reply() { printf '%s\n' "$1" >"$out"; }
+# Real `codex exec` writes a session transcript ending with a "tokens used" trailer to stdout, while
+# writing the agent's final message only to `-o $out`. Emulate that in fake codex so any collector
+# that reads stdout instead of `-o` fails the strict output contract.
+reply() { printf '%s\n' "$1" >"$out"; printf '%s\ntokens used\n1,234\n' "$1"; }
 if has MARK_REFUSE_ALWAYS || { has MARK_REFUSE_STANDARD && [ "$kind" = standard ]; }; then
   reply "I'm sorry, but I can't help with that request because it was flagged by our cybersecurity policy."
 elif has MARK_DOUBLE_TIMEOUT; then
@@ -234,8 +237,7 @@ for ln in lines:
     m = re.match(r"^([a-z0-9-]+): (.*)$", ln)
     if m and m.group(1) not in ("entry-id", "signer"):
         entry[m.group(1)] = m.group(2)
-if "source" in entry and entry["source"] == "harness":
-    entry["_explicit_harness_source"] = "1"
+entry.setdefault("source", "harness")
 signed = wp.sign_entry(entry, sys.argv[4], sys.argv[5])
 with open(sys.argv[3], "w", encoding="utf-8") as f:
     f.write(wp.format_log_stanza(signed) + "\n")
@@ -379,54 +381,55 @@ g notes --ref=refs/notes/concrete-review add -f -m "verdict: clean" HEAD
 (cd "$W" && bash "$VERIFY" HEAD >/dev/null 2>&1); rc=$?
 check "malformed note (verdict line alone): exit 2 (got $rc)" test "$rc" -eq 2
 B40="$(printf '%040d' 0 | tr 0 a)"
-LEGACY_NOTE="$(printf 'verdict: clean\nrounds: 2\nreviewer: codex\nbase: %s\npieces: 1\nutc: 2026-10-22T00:00:00Z' "$B40")"
-g notes --ref=refs/notes/concrete-review add -f -m "$LEGACY_NOTE" HEAD
+NO_REPO_NOTE="$(printf 'verdict: clean\nrounds: 2\nreviewer: codex\nwriter: claude\nbase: %s\npieces: 1\nutc: 2026-10-22T00:00:00Z' "$B40")"
+g notes --ref=refs/notes/concrete-review add -f -m "$NO_REPO_NOTE" HEAD
 out="$(cd "$W" && bash "$VERIFY" HEAD 2>&1)"; rc=$?
-check "a legacy clean note without repository: readable is not clean (exit 1, got $rc)" test "$rc" -eq 1
-check "the legacy-note refusal names the missing key" grep -q "missing repository: readable" <<<"$out"
-# Even with repository evidence, a note without writer is legacy, never clean provenance.
-g notes --ref=refs/notes/concrete-review add -f -m "$LEGACY_NOTE
-repository: readable" HEAD
+check "a clean note without repository: readable is not clean (exit 1, got $rc)" test "$rc" -eq 1
+check "the missing-repository refusal names the missing key" grep -q "missing repository: readable" <<<"$out"
+# A note without writer is malformed (exit 2), never grandfathered (owner item 5, 2026-11-08).
+NO_WRITER_NOTE="$(printf 'verdict: clean\nrounds: 2\nreviewer: codex\nbase: %s\npieces: 1\nutc: 2026-10-22T00:00:00Z\nrepository: readable' "$B40")"
+g notes --ref=refs/notes/concrete-review add -f -m "$NO_WRITER_NOTE" HEAD
 out="$(cd "$W" && bash "$VERIFY" HEAD 2>&1)"; rc=$?
-check "a readable clean note without writer is legacy, not clean (exit 1, got $rc)" test "$rc" -eq 1
-check "the legacy-writer refusal names the missing key" grep -q "missing writer (legacy note)" <<<"$out"
+check "a note without writer is malformed (exit 2, got $rc)" test "$rc" -eq 2
+check "the missing-writer refusal says malformed review note (missing writer)" grep -q "malformed review note (missing writer)" <<<"$out"
+f_no_writer="$(cd "$W" && bash "$VERIFY" --fields HEAD 2>&1)"; rc=$?
+check "verify.sh --fields also refuses a note without writer (exit 2, got $rc)" test "$rc" -eq 2
 # A current note notes.sh put wrote (keys in its own order, writer and repository after utc) verifies
 # when its base is an ancestor of HEAD, and is refused when its base is not an ancestor of HEAD.
 VALID_BASE="$(g rev-parse main)"
 g notes --ref=refs/notes/concrete-review add -f -m "$(printf 'verdict: clean\nrounds: 2\nreviewer: codex\nbase: %s\npieces: 1\nutc: 2026-10-22T00:00:00Z\nwriter: claude\nrepository: readable' "$VALID_BASE")" HEAD
 (cd "$W" && bash "$VERIFY" HEAD >"$T/vc" 2>&1); rc=$?
 check "a readable independent clean note with utc before writer verifies (exit 0, got $rc)" test "$rc" -eq 0
-g notes --ref=refs/notes/concrete-review add -f -m "$LEGACY_NOTE
-writer: claude
+g notes --ref=refs/notes/concrete-review add -f -m "$NO_REPO_NOTE
 repository: readable" HEAD
 out="$(cd "$W" && bash "$VERIFY" HEAD 2>&1)"; rc=$?
 check "a clean note whose base is not an ancestor of HEAD is refused without --required-base (exit 1, got $rc)" test "$rc" -eq 1
 check "non-ancestor base refusal names base and commit" grep -q "base $B40 is not an ancestor-or-equal of" <<<"$out"
-g notes --ref=refs/notes/concrete-review add -f -m "$LEGACY_NOTE" HEAD
-review >"$T/legacy-rerun" 2>&1; rc=$?
-check "review.sh re-reviews a legacy clean HEAD instead of short-circuiting (exit $rc)" \
+g notes --ref=refs/notes/concrete-review add -f -m "$NO_REPO_NOTE" HEAD
+review >"$T/unverified-rerun" 2>&1; rc=$?
+check "review.sh re-reviews an unverified clean HEAD (missing repository: readable) instead of short-circuiting (exit $rc)" \
   test "$rc" -eq 0 -a "$(field repository)" = readable -a "$(field writer)" = claude -a "$(field rounds)" = 3
 # The landing bot's keys went with it: a verdict carried across a rebase, or a landing order, is no
 # longer a key a review note may hold.
 for extra in "carried-from: $B40" "order: 1"; do
-  g notes --ref=refs/notes/concrete-review add -f -m "$(printf 'verdict: clean\nrounds: 2\nreviewer: codex\nbase: %s\npieces: 1\nutc: 2026-10-22T00:00:00Z\n%s' "$B40" "$extra")" HEAD
+  g notes --ref=refs/notes/concrete-review add -f -m "$(printf 'verdict: clean\nrounds: 2\nreviewer: codex\nwriter: claude\nbase: %s\npieces: 1\nutc: 2026-10-22T00:00:00Z\n%s' "$B40" "$extra")" HEAD
   out="$(cd "$W" && bash "$VERIFY" HEAD 2>&1)"; rc=$?
   check "a note with '${extra%%:*}' is malformed: exit 2, bad ${extra%%:*} (got $rc)" test "$rc" -eq 2 -a -n "$(printf '%s' "$out" | grep -F "malformed review note (bad ${extra%%:*})")"
 done
-g notes --ref=refs/notes/concrete-review add -f -m "$(printf 'verdict: clean\nrounds: 2\nreviewer: codex\nutc: 2026-10-22T00:00:00Z\nbase: %s\npieces: 1\nsurprise: 1' "$B40")" HEAD
+g notes --ref=refs/notes/concrete-review add -f -m "$(printf 'verdict: clean\nrounds: 2\nreviewer: codex\nwriter: claude\nutc: 2026-10-22T00:00:00Z\nbase: %s\npieces: 1\nsurprise: 1' "$B40")" HEAD
 (cd "$W" && bash "$VERIFY" HEAD >/dev/null 2>&1); rc=$?
 check "an unknown key is malformed: exit 2 (got $rc)" test "$rc" -eq 2
-g notes --ref=refs/notes/concrete-review add -f -m "$(printf 'verdict: findings\nverdict: clean\nrounds: 2\nreviewer: codex\nutc: 2026-10-22T00:00:00Z\nbase: %s\npieces: 1' "$B40")" HEAD
+g notes --ref=refs/notes/concrete-review add -f -m "$(printf 'verdict: findings\nverdict: clean\nrounds: 2\nreviewer: codex\nwriter: claude\nutc: 2026-10-22T00:00:00Z\nbase: %s\npieces: 1' "$B40")" HEAD
 (cd "$W" && bash "$VERIFY" HEAD >/dev/null 2>&1); rc=$?
 check "a repeated key is malformed: exit 2 (got $rc)" test "$rc" -eq 2
 g notes --ref=refs/notes/concrete-review remove HEAD 2>/dev/null
 f_out="$(cd "$W" && bash "$VERIFY" --fields HEAD 2>&1)"; rc=$?
 check "verify.sh --fields exits 2 when no review note is present (got $rc)" test "$rc" -eq 2
-g notes --ref=refs/notes/concrete-review add -f -m "$LEGACY_NOTE" HEAD
+g notes --ref=refs/notes/concrete-review add -f -m "$NO_REPO_NOTE" HEAD
 f_out="$(cd "$W" && bash "$VERIFY" --fields HEAD 2>&1)"; rc=$?
-check "verify.sh --fields exits 0 on a legacy 6-key clean note even though clean provenance fails (got $rc)" test "$rc" -eq 0
-check "verify.sh --fields emits validated rounds: 2 on the legacy 6-key clean note" \
-  bash -c 'grep -q "^verdict: clean$" <<<"$1" && grep -q "^rounds: 2$" <<<"$1" && grep -q "^writer: $" <<<"$1" && grep -q "^repository: $" <<<"$1"' _ "$f_out"
+check "verify.sh --fields exits 0 on a 7-key clean note missing repository: readable even though clean provenance fails (got $rc)" test "$rc" -eq 0
+check "verify.sh --fields emits validated rounds: 2 and writer: claude on the 7-key note" \
+  bash -c 'grep -q "^verdict: clean$" <<<"$1" && grep -q "^rounds: 2$" <<<"$1" && grep -q "^writer: claude$" <<<"$1" && grep -q "^repository: $" <<<"$1"' _ "$f_out"
 g notes --ref=refs/notes/concrete-review add -f -m "$(printf 'verdict: clean\nrounds: 5\nreviewer: codex\nwriter: codex\nutc: 2026-11-08T00:00:00Z\nbase: %s\npieces: 1\nrepository: readable' "$VALID_BASE")" HEAD
 (cd "$W" && bash "$VERIFY" HEAD >/dev/null 2>&1); v_rc=$?
 f_out="$(cd "$W" && bash "$VERIFY" --fields HEAD 2>&1)"; rc=$?
@@ -435,34 +438,6 @@ check "verify.sh --fields exits 0 on a provenance-invalid (self-reviewed) 8-key 
 (cd "$W" && bash "$VERIFY" --fields --required-base "$VALID_BASE" HEAD >/dev/null 2>&1); rc=$?
 check "verify.sh --fields refuses --required-base (exit 2, got $rc)" test "$rc" -eq 2
 g notes --ref=refs/notes/concrete-review remove HEAD 2>/dev/null
-
-echo "=== note schema transition: old main verify.sh vs new verify.sh ==="
-# Obtain main's pre-transition verify.sh from origin/main when available and pre-transition;
-# otherwise reconstruct main's 6-key verify.sh from legacy/scripts/review/verify.sh (identical
-# except for dropping carried-from|order per 2026-11-08-landing-shrink).
-OLD_VERIFY="$T/old-verify.sh"
-if git -C "$ROOT_DIR" show origin/main:scripts/review/verify.sh >"$OLD_VERIFY" 2>/dev/null \
-   && ! grep -q "writer_provenance" "$OLD_VERIFY"; then
-  :
-else
-  sed -e '/carried-from|order/d' "$ROOT_DIR/legacy/scripts/review/verify.sh" >"$OLD_VERIFY"
-fi
-chmod +x "$OLD_VERIFY"
-TRANS_HEAD="$(g rev-parse HEAD)"
-OLD_BOOTSTRAP_NOTE="$(printf 'verdict: clean\nrounds: 1\nreviewer: codex\nutc: 2026-11-08T00:00:00Z\nbase: %s\npieces: 1' "$VALID_BASE")"
-g notes --ref=refs/notes/concrete-review add -f -m "$OLD_BOOTSTRAP_NOTE" "$TRANS_HEAD"
-(cd "$W" && bash "$OLD_VERIFY" "$TRANS_HEAD" >/dev/null 2>&1); rc=$?
-check "transition: main's old verify.sh accepts main's 6-key clean bootstrap note (exit 0, got $rc)" test "$rc" -eq 0
-out="$(cd "$W" && bash "$VERIFY" "$TRANS_HEAD" 2>&1)"; rc=$?
-check "transition: new verify.sh refuses the 6-key note as clean provenance (exit 1, got $rc)" test "$rc" -eq 1
-check "transition: new verify.sh explains the 6-key note lacks repository: readable" grep -q "missing repository: readable" <<<"$out"
-NEW_SCHEMA_NOTE="$(printf 'verdict: clean\nrounds: 2\nreviewer: codex\nwriter: claude\nutc: 2026-11-08T00:00:00Z\nbase: %s\npieces: 1\nrepository: readable' "$VALID_BASE")"
-g notes --ref=refs/notes/concrete-review add -f -m "$NEW_SCHEMA_NOTE" "$TRANS_HEAD"
-(cd "$W" && bash "$VERIFY" "$TRANS_HEAD" >/dev/null 2>&1); rc=$?
-check "transition: new verify.sh accepts the 8-key note with writer and repository: readable (exit 0, got $rc)" test "$rc" -eq 0
-(cd "$W" && bash "$OLD_VERIFY" "$TRANS_HEAD" >/dev/null 2>&1); rc=$?
-check "transition: main's old verify.sh rejects the 8-key note (exit 2, got $rc), why bootstrap uses main's review.sh" test "$rc" -eq 2
-g notes --ref=refs/notes/concrete-review remove "$TRANS_HEAD" 2>/dev/null
 
 echo "=== verify.sh and review.sh: required base coverage & delta base-widening prevention (A -> B -> C) ==="
 COV_A="$(g rev-parse main)"
@@ -719,21 +694,77 @@ review --reviewer codex >"$T/corr-codex-ok" 2>&1; rc=$?
 check "codex is accepted as reviewer on the corrected commit and records writer: claude (exit 0, got $rc)" \
   test "$rc" -eq 0 -a "$(field writer "$CORR_SHA")" = "claude"
 
-# Shipped allowed_writer_log_signers fail-closed control:
-# Until the owner approves adding the orchestrator's public key to scripts/review/allowed_writer_log_signers,
-# that file holds no key and every provenance operation that needs a writer-log entry fails closed with a clear diagnostic.
+# Allowed signers controls (Task A / owner item 7, approved 2026-11-08):
+# 1. Entry signed by a throwaway key listed under its principal verifies (tested across BF_BASE..BF_R4).
+listed_drv="$(python3 -I "$ROOT_DIR/scripts/review/writer_provenance.py" derive --repo "$W" --base "$BF_BASE" --head "$BF_R4" 2>&1)"; rc=$?
+check "allowed_signers control 1: entry signed by a key listed under its principal verifies (exit 0, got $rc: $listed_drv)" \
+  test "$rc" -eq 0 -a "$listed_drv" = "kimi,agy"
+# 2. Entry signed by an unlisted throwaway key is refused.
+g notes --ref=refs/notes/concrete-writer show "$CORR_SHA" >"$T/corr-saved-note"
+awk '/^entry-id:/{exit} {print}' "$T/corr-saved-note" >"$T/corr-first-stanza-raw"
+sign_raw_stanza "$T/corr-first-stanza-raw" "$T/corr-unlisted-stanza" "$T/keys/unauth_ed25519" "orchestrator@concrete"
+g notes --ref=refs/notes/concrete-writer add -f -F "$T/corr-unlisted-stanza" "$CORR_SHA" 2>/dev/null
+unlisted_drv="$(python3 -I "$ROOT_DIR/scripts/review/writer_provenance.py" derive --repo "$W" --base "$CORR_BASE" --head "$CORR_SHA" 2>&1)"; rc=$?
+check "allowed_signers control 2: entry signed by an unlisted key is refused (exit 2, got $rc)" \
+  bash -c '[ "$1" -eq 2 ] && grep -q "signing key is not authorized" <<<"$2"' _ "$rc" "$unlisted_drv"
+# 3. Entry whose signature is cryptographically valid (key is listed in allowed_signers under another
+#    principal, or entry claims a principal that does not match the allowed-signers line) is refused.
+ssh-keygen -q -t ed25519 -N "" -C "other@concrete" -f "$T/keys/other_ed25519"
+printf 'orchestrator@concrete namespaces="git" %s\nother@concrete namespaces="git" %s\n' \
+  "$(cat "$T/keys/id_ed25519.pub")" "$(cat "$T/keys/other_ed25519.pub")" >"$T/keys/two_allowed_signers"
+# Sign with id_ed25519 (listed under orchestrator@concrete) while claiming signer: other@concrete:
+sign_raw_stanza "$T/corr-first-stanza-raw" "$T/corr-wrong-principal" "$T/keys/id_ed25519" "other@concrete"
+g notes --ref=refs/notes/concrete-writer add -f -F "$T/corr-wrong-principal" "$CORR_SHA" 2>/dev/null
+wrong_prin_drv="$(REVIEW_WRITER_ALLOWED_SIGNERS="$T/keys/two_allowed_signers" python3 -I "$ROOT_DIR/scripts/review/writer_provenance.py" derive --repo "$W" --base "$CORR_BASE" --head "$CORR_SHA" 2>&1)"; rc=$?
+check "allowed_signers control 3: entry with valid signature whose principal does not match its allowed-signers line is refused (exit 2, got $rc)" \
+  bash -c '[ "$1" -eq 2 ] && grep -q "signer '\''other@concrete'\'' does not match authorized principal(s) \['\''orchestrator@concrete'\''\]" <<<"$2"' _ "$rc" "$wrong_prin_drv"
+g notes --ref=refs/notes/concrete-writer add -f -F "$T/corr-saved-note" "$CORR_SHA" 2>/dev/null
+# 4. Shipped scripts/review/allowed_writer_log_signers parses, has fingerprint
+#    SHA256:vx5cqlK2RywhQLRwaOCplg2BeBCnEBiZnxF8wn/CSLU, and contains the exact principals docs/REVIEW.md lists.
 SHIPPED_SIGNERS="$ROOT_DIR/scripts/review/allowed_writer_log_signers"
-shipped_drv="$(REVIEW_WRITER_ALLOWED_SIGNERS="$SHIPPED_SIGNERS" python3 -I "$ROOT_DIR/scripts/review/writer_provenance.py" derive --repo "$W" --base "$BF_BASE" --head "$BF_R4" 2>&1)"; rc=$?
-check "with the shipped empty allowed_writer_log_signers, derive fails closed (exit 2, got $rc)" test "$rc" -eq 2
-check "shipped empty allowed_writer_log_signers diagnostic explains how to add the orchestrator's public key after owner approval" \
-  grep -q "no authorized signers configured in .*allowed_writer_log_signers.*until the orchestrator's public key is added after owner approval" <<<"$shipped_drv"
-shipped_ver="$(cd "$W" && REVIEW_WRITER_ALLOWED_SIGNERS="$SHIPPED_SIGNERS" bash "$VERIFY" "$BF_R4" 2>&1)"; rc=$?
-check "with the shipped empty allowed_writer_log_signers, verify.sh fails closed (exit 1, got $rc)" test "$rc" -eq 1
-shipped_bf="$(REVIEW_WRITER_ALLOWED_SIGNERS="$SHIPPED_SIGNERS" python3 -I "$ROOT_DIR/scripts/review/writer_provenance.py" backfill --repo "$W" \
+shipped_parse="$(python3 -I - "$SHIPPED_SIGNERS" "$ROOT_DIR/docs/REVIEW.md" <<'PY'
+import re, subprocess, sys
+signers_path, doc_path = sys.argv[1], sys.argv[2]
+active = [ln.strip() for ln in open(signers_path, encoding="utf-8") if ln.strip() and not ln.lstrip().startswith("#")]
+if not active:
+    sys.exit("no active lines in allowed_writer_log_signers")
+principals = []
+fps = []
+for ln in active:
+    m = re.match(r'^([^\s]+)\s+namespaces="git"\s+(ssh-ed25519\s+[A-Za-z0-9+/=]+)$', ln)
+    if not m:
+        sys.exit(f"malformed allowed_signers line: {ln}")
+    principals.append(m.group(1))
+    proc = subprocess.run(["ssh-keygen", "-lf", "-"], input=m.group(2) + "\n", capture_output=True, text=True)
+    if proc.returncode != 0:
+        sys.exit(f"ssh-keygen -lf failed: {proc.stderr.strip()}")
+    fps.append(proc.stdout.strip().split()[1])
+doc_text = open(doc_path, encoding="utf-8").read()
+doc_principals = re.findall(r"Authorized principal:\s*`([^`]+)`", doc_text)
+if principals != ["orchestrator@concrete"] or doc_principals != principals:
+    sys.exit(f"principals mismatch: file={principals} docs={doc_principals}")
+if fps != ["SHA256:vx5cqlK2RywhQLRwaOCplg2BeBCnEBiZnxF8wn/CSLU"]:
+    sys.exit(f"fingerprint mismatch: {fps}")
+print("ok")
+PY
+2>&1)"; rc=$?
+check "allowed_signers control 4: shipped scripts/review/allowed_writer_log_signers parses and contains exactly the principals docs/REVIEW.md lists (exit 0, got $rc: $shipped_parse)" \
+  test "$rc" -eq 0 -a "$shipped_parse" = "ok"
+shipped_unlisted="$(REVIEW_WRITER_ALLOWED_SIGNERS="$SHIPPED_SIGNERS" python3 -I "$ROOT_DIR/scripts/review/writer_provenance.py" derive --repo "$W" --base "$BF_BASE" --head "$BF_R4" 2>&1)"; rc=$?
+check "allowed_signers control 5: throwaway test key is refused by shipped allowed_writer_log_signers (exit 2, got $rc)" \
+  bash -c '[ "$1" -eq 2 ] && grep -q "signing key is not authorized" <<<"$2"' _ "$rc" "$shipped_unlisted"
+# 5. An empty allowed-signers file still fails closed.
+printf '# empty allowed signers for fail-closed control\n' >"$T/keys/empty_allowed_signers"
+empty_drv="$(REVIEW_WRITER_ALLOWED_SIGNERS="$T/keys/empty_allowed_signers" python3 -I "$ROOT_DIR/scripts/review/writer_provenance.py" derive --repo "$W" --base "$BF_BASE" --head "$BF_R4" 2>&1)"; rc=$?
+check "with an empty allowed_writer_log_signers file, derive fails closed (exit 2, got $rc)" \
+  bash -c '[ "$1" -eq 2 ] && grep -q "no authorized signers configured" <<<"$2"' _ "$rc" "$empty_drv"
+empty_ver="$(cd "$W" && REVIEW_WRITER_ALLOWED_SIGNERS="$T/keys/empty_allowed_signers" bash "$VERIFY" "$BF_R4" 2>&1)"; rc=$?
+check "with an empty allowed_writer_log_signers file, verify.sh fails closed (exit 1, got $rc)" test "$rc" -eq 1
+empty_bf="$(REVIEW_WRITER_ALLOWED_SIGNERS="$T/keys/empty_allowed_signers" python3 -I "$ROOT_DIR/scripts/review/writer_provenance.py" backfill --repo "$W" \
   --commit "$UNSTAMPED_SHA" --model claude --round 1 --branch unstamped-refused \
   --brief-file "$T/ev/dummy.brief" --output-file "$T/ev/dummy.out" \
   --start-sha "$UNSTAMPED_BASE" --end-sha "$UNSTAMPED_SHA" --evidence "should fail closed" 2>&1)"; rc=$?
-check "with the shipped empty allowed_writer_log_signers, backfill fails closed (exit 2, got $rc)" test "$rc" -eq 2
+check "with an empty allowed_writer_log_signers file, backfill fails closed (exit 2, got $rc)" test "$rc" -eq 2
 
 # Explicit claude backfill + harness-stamped codex commit -> derived writer is claude,codex
 reset_fake
@@ -863,8 +894,8 @@ check "verify refuses a clean note whose reviewer equals writer (exit 1, got $rc
 check "self-reviewed-note refusal names the rule" grep -q "agy reviewed its own work" <<<"$out"
 g notes --ref=refs/notes/concrete-review add -f -m "$(printf 'verdict: clean\nrounds: 1\nreviewer: agy\nutc: 2026-11-08T00:00:00Z\nbase: %s\npieces: 1\nrepository: readable' "$SELF_BASE")" HEAD
 out="$(cd "$W" && bash "$VERIFY" HEAD 2>&1)"; rc=$?
-check "verify refuses a clean note without writer as legacy (exit 1, got $rc)" test "$rc" -eq 1
-check "missing-writer note refusal says legacy" grep -q "missing writer (legacy note)" <<<"$out"
+check "verify refuses a clean note without writer as malformed (exit 2, got $rc)" test "$rc" -eq 2
+check "missing-writer note refusal says malformed review note (missing writer)" grep -q "malformed review note (missing writer)" <<<"$out"
 
 echo "=== verdict and reviewer-output contract parsing ==="
 parse_case() { # parse_case <marker> <want-exit> <want-verdict> <label> [reviewer]
@@ -907,6 +938,47 @@ for r in kimi agy; do
   parse_case MARK_ERROR 5 blocked "$r: nonzero exit is blocked" "$r"
   parse_case MARK_DOUBLE_TIMEOUT 5 blocked "$r: double-timeout is blocked in 1 call" "$r"
 done
+
+echo "=== reviewer output collector: final message only, never stdout log (Task C) ==="
+COLLECTOR="$ROOT_DIR/scripts/review/collect_output.sh"
+mkdir -p "$T/col-tree"
+printf 'base\n' >"$T/col-tree/README.md"
+chmod -R a-w "$T/col-tree"
+printf 'Review commit %s\n' "$SELF_BASE" >"$T/col-prompt.txt"
+bash "$COLLECTOR" collect codex --tree "$T/col-tree" --prompt "$T/col-prompt.txt" --out "$T/col-out.txt" --log "$T/col-log.txt"; rc=$?
+check "collect_output.sh collect codex succeeds (exit 0, got $rc)" test "$rc" -eq 0
+check "codex stdout log carries the 'tokens used' trailer after VERDICT" grep -q "^tokens used$" "$T/col-log.txt"
+check "codex -o final-message file omits the 'tokens used' trailer" bash -c "! grep -q 'tokens used' '$T/col-out.txt'"
+log_parse="$(python3 -I "$ROOT_DIR/scripts/review/output_contract.py" --repo "$W" --commit "$SELF_BASE" --verdicts clean,findings <"$T/col-log.txt")"
+check "a Codex stdout log carrying a 'tokens used' trailer after VERDICT is refused by output_contract.py" \
+  bash -c 'grep -q "^status: noverdict$" <<<"$1" && grep -q "last non-empty line is not a valid VERDICT" <<<"$1"' _ "$log_parse"
+out_parse="$(python3 -I "$ROOT_DIR/scripts/review/output_contract.py" --repo "$W" --commit "$SELF_BASE" --verdicts clean,findings <"$T/col-out.txt")"
+check "the matching -o final-message file is accepted by output_contract.py" \
+  grep -q "^status: clean$" <<<"$out_parse"
+same_file_out="$(bash "$COLLECTOR" collect codex --tree "$T/col-tree" --prompt "$T/col-prompt.txt" --out "$T/col-same.txt" --log "$T/col-same.txt" 2>&1)"; rc=$?
+check "collect_output.sh refuses when --out and --log point to the same file (exit 2, got $rc)" \
+  bash -c '[ "$1" -eq 2 ] && grep -q "out-file and log-file must be distinct files" <<<"$2"' _ "$rc" "$same_file_out"
+# Structural check on the shipped collector and callers (review.sh, signoff.sh), plus negative controls
+# on broken collectors/callers that pass a log instead of the final-message file.
+struct_ok="$(bash "$COLLECTOR" --check-structure 2>&1)"; rc=$?
+check "structural check accepts shipped collect_output.sh, review.sh and signoff.sh (exit 0, got $rc)" test "$rc" -eq 0
+sed 's/ -o "\$out_file"//;s/>"\$log_file" 2>&1/>"\$out_file" 2>"\$log_file"/' "$COLLECTOR" >"$T/bad-collector-stdout.sh"
+bad_c1="$(bash "$COLLECTOR" --check-structure "$T/bad-collector-stdout.sh" 2>&1)"; rc=$?
+check "structural check catches a collector that redirects codex exec stdout instead of using -o (exit 1, got $rc)" \
+  bash -c '[ "$1" -eq 1 ] && grep -q "codex exec must write the final message via -o" <<<"$2"' _ "$rc" "$bad_c1"
+sed 's/-o "\$out_file"/-o "\$log_file"/' "$COLLECTOR" >"$T/bad-collector-log.sh"
+bad_c2="$(bash "$COLLECTOR" --check-structure "$T/bad-collector-log.sh" 2>&1)"; rc=$?
+check "structural check catches a collector that writes -o to the log file (exit 1, got $rc)" \
+  bash -c '[ "$1" -eq 1 ] && grep -q "codex exec must not write -o to the log file" <<<"$2"' _ "$rc" "$bad_c2"
+sed 's/msg="\$(cat "\$out")"/msg="\$(cat "\$out")"; [ -n "\$msg" ] || msg="\$(cat "\$log")"/' "$REVIEW" >"$T/bad-caller-fallback.sh"
+bad_c3="$(bash "$COLLECTOR" --check-structure "$COLLECTOR" "$T/bad-caller-fallback.sh" 2>&1)"; rc=$?
+check "structural check catches a caller that falls back to reading \$log when \$out is empty (exit 1, got $rc)" \
+  bash -c '[ "$1" -eq 1 ] && grep -q "falls back to or copies the diagnostic log" <<<"$2"' _ "$rc" "$bad_c3"
+sed 's/collect_reviewer_output "\$REVIEWER" "\$REVIEW_TREE" "\$prompt" "\$out" "\$log"/collect_reviewer_output "\$REVIEWER" "\$REVIEW_TREE" "\$prompt" "\$log" "\$out"/' "$REVIEW" >"$T/bad-caller-swap.sh"
+bad_c4="$(bash "$COLLECTOR" --check-structure "$COLLECTOR" "$T/bad-caller-swap.sh" 2>&1)"; rc=$?
+check "structural check catches a caller that passes \$log in place of the final-message file (exit 1, got $rc)" \
+  bash -c '[ "$1" -eq 1 ] && grep -q "passes log file in place of final-message out file" <<<"$2"' _ "$rc" "$bad_c4"
+chmod -R u+w "$T/col-tree" 2>/dev/null || true
 
 echo "=== content-filter refusal: one neutral retry on smaller pieces ==="
 reset_fake
@@ -1026,6 +1098,23 @@ backfill_writer "$BF_R2" claude 2 backfill-kimi-agy "$BF_R1" "$BF_R2" "append co
 hook_out="$(wnote_hook "$(g rev-parse refs/notes/concrete-writer)" "$WRITER_NOTES_SHA")"; rc=$?
 check "hook accepts a refs/notes/concrete-writer update that appends a signed superseding entry (exit 0, got $rc)" test "$rc" -eq 0
 g notes --ref=refs/notes/concrete-writer add -f -m "$BF_R2_OLD_NOTE" "$BF_R2" 2>/dev/null
+# Historical pre-contract writer note on an already-landed commit (main base) is NOT re-judged when
+# unchanged between old_notes_rev and new_notes_rev (Task B / owner item 5).
+HIST_MAIN_SHA="$(g rev-parse main)"
+g update-ref refs/notes/concrete-writer-hist-old "$WRITER_NOTES_SHA"
+g notes --ref=refs/notes/concrete-writer-hist-old add -f -m "pre-contract historical note on landed commit" "$HIST_MAIN_SHA" 2>/dev/null
+HIST_OLD_NOTES_SHA="$(g rev-parse refs/notes/concrete-writer-hist-old)"
+g update-ref refs/notes/concrete-writer-hist-new "$HIST_OLD_NOTES_SHA"
+g notes --ref=refs/notes/concrete-writer-hist-new add -f -m "$(printf '%s\n\n%s' "$BF_R2_OLD_NOTE" "$(g notes --ref=refs/notes/concrete-writer show "$BF_R2")")" "$BF_R2" 2>/dev/null
+# Restore BF_R2 with the valid appended correction in concrete-writer-hist-new:
+backfill_writer "$BF_R2" claude 2 backfill-kimi-agy "$BF_R1" "$BF_R2" "append correction on BF_R2" \
+  "$BF_R2_EID" "audit test of append-only push"
+g notes --ref=refs/notes/concrete-writer-hist-new add -f -m "$(g notes --ref=refs/notes/concrete-writer show "$BF_R2")" "$BF_R2" 2>/dev/null
+g notes --ref=refs/notes/concrete-writer add -f -m "$BF_R2_OLD_NOTE" "$BF_R2" 2>/dev/null
+hook_out="$(wnote_hook "$(g rev-parse refs/notes/concrete-writer-hist-new)" "$HIST_OLD_NOTES_SHA")"; rc=$?
+check "hook does not re-judge an unchanged historical pre-contract writer note on a past landed commit when pushing new notes (exit 0, got $rc)" test "$rc" -eq 0
+g update-ref -d refs/notes/concrete-writer-hist-old 2>/dev/null || true
+g update-ref -d refs/notes/concrete-writer-hist-new 2>/dev/null || true
 hook_out="$(wnote_hook "$ABH_SHA" "$Z")"; rc=$?
 check "hook refuses a source commit pushed to refs/notes/concrete-writer (exit 1, got $rc)" \
   bash -c '[ "$1" -eq 1 ] && grep -q "invalid refs/notes/concrete-writer" <<<"$2"' _ "$rc" "$hook_out"
@@ -1041,15 +1130,15 @@ g update-ref -d refs/notes/concrete-writer-replace 2>/dev/null || true
 SO_BLOB="$(printf 'x\n' | g hash-object -w --stdin)"
 SO_TREE="$(printf '100644 blob %s\tagy-request.txt\n100644 blob %s\tagy.txt\n100644 blob %s\tcodex-request.txt\n100644 blob %s\tcodex.txt\n100644 blob %s\tkimi-request.txt\n100644 blob %s\tkimi.txt\n100644 blob %s\trecord.txt\n' "$SO_BLOB" "$SO_BLOB" "$SO_BLOB" "$SO_BLOB" "$SO_BLOB" "$SO_BLOB" "$SO_BLOB" | g mktree)"
 SO_REC="$(g commit-tree "$SO_TREE" -m record)"; SO_SUBJ="$(g rev-parse HEAD)"
-SO_OLD_TREE="$(printf '100644 blob %s\tagy.txt\n100644 blob %s\tcodex.txt\n100644 blob %s\tkimi.txt\n100644 blob %s\trecord.txt\n' "$SO_BLOB" "$SO_BLOB" "$SO_BLOB" "$SO_BLOB" | g mktree)"
-SO_OLD_REC="$(g commit-tree "$SO_OLD_TREE" -m old-record)"
+SO_INCOMPLETE_TREE="$(printf '100644 blob %s\tagy.txt\n100644 blob %s\tcodex.txt\n100644 blob %s\tkimi.txt\n100644 blob %s\trecord.txt\n' "$SO_BLOB" "$SO_BLOB" "$SO_BLOB" "$SO_BLOB" | g mktree)"
+SO_INCOMPLETE_REC="$(g commit-tree "$SO_INCOMPLETE_TREE" -m incomplete-record)"
 g worktree add -q --detach "$T/so-wt" HEAD
 so_hook(){ (cd "$T/so-wt" && printf '%s %s %s %s\n' "$1" "$2" "$1" "$Z" | CONCRETE_GATES_SHELL= bash "$HOOK" origin x 2>&1); }
 hook_out="$(so_hook "refs/owner-signoff/$SO_SUBJ" "$SO_REC")"; rc=$?
 check "a seven-file owner sign-off record takes the review-notes tier (exit $rc)" \
   bash -c "[ $rc -eq 0 ] && grep -q 'review-notes push' <<<'$hook_out'"
-hook_out="$(so_hook "refs/owner-signoff/$SO_SUBJ" "$SO_OLD_REC")"; rc=$?
-check "the old four-file owner sign-off shape takes the full tier (exit $rc)" \
+hook_out="$(so_hook "refs/owner-signoff/$SO_SUBJ" "$SO_INCOMPLETE_REC")"; rc=$?
+check "an incomplete sign-off tree missing request files takes the full tier (exit $rc)" \
   bash -c "[ $rc -eq 1 ] && grep -q 'is a linked worktree' <<<'$hook_out'"
 hook_out="$(so_hook "refs/owner-signoff/$SO_SUBJ" "$SO_SUBJ")"; rc=$?
 check "a source commit pushed as a sign-off takes the full tier (exit $rc)" \
