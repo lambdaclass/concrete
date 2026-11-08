@@ -4,11 +4,14 @@
 # headline theorem axioms and axiom types, the Lean toolchain and every Lake pin. The README's two
 # tables are generated views. Environment audits reject an unlisted axiom in ANY Concrete
 # declaration's closure and any unlisted extern, implemented_by, opaque, unsafe or partial
-# declaration. On Linux, strace checks every successfully exec'd program in every manifest bir:
-# emission and native build against the registry; other hosts report the tool check as not run.
+# declaration. Every source module must be imported; the proof gate's shared lexer retains examples
+# in scratch copies so their axiom closures are audited too. On Linux, strace checks an incremental
+# Lake build (a fresh build is the daily tier's job), every manifest bir: emission and every native
+# build, reconstructing split unfinished/resumed execve records; other hosts report tools not run.
 #
 # Controls cover golden and table drift, a failing printer, theorem axiom reporting, an unlisted
-# extern, an extra library axiom and its user, an unlisted objcopy and removal of clang.
+# extern, an extra library axiom and its user, split and unlisted tools, removal of clang, an
+# unimported module, a native example, a hand-written unsafe twin and duplicate/non-trusted owners.
 #
 # usage: slice0_trusted_base.sh [update]. Run inside the nix devshell, from the repository root;
 # `update` rewrites the golden (review the diff before committing it).
@@ -20,14 +23,16 @@ golden=tests/golden/slice0_trusted_base.txt
 # print_lean FILE OUT: elaborate FILE (bounded, capped) and write its stdout to OUT; fails (with
 # the bounded diagnostics) when Lean fails, times out, or prints more than 1 MiB.
 print_lean() {
-  local rc=0
+  local rc=0 cap_rc=0
+  : >"$2"
   bounded_run -i /dev/null 600 -- "${capped[@]}" lake env lean "$1" >"$2.raw" 2>"$2.err" || rc=$?
+  cap_out <"$2.raw" >"$2" || cap_rc=$?
   if [ "$rc" != 0 ]; then
     bounded_is_incomplete "$rc" && echo "slice0_trusted_base: $1: INCOMPLETE (timed out)" >&2
     head -c 20000 "$2.raw" "$2.err" >&2
     return 1
   fi
-  cap_out <"$2.raw" >"$2"
+  [ "$cap_rc" = 0 ] || return 1
 }
 
 # current OUT: the whole trusted base into OUT; fails if any step fails.
@@ -55,16 +60,7 @@ pipeline_tools() {
 # tool_names LOG OUT: basenames of successful execve calls only. Failed execs and strace's own
 # process are not compilation tools; python3 and the bounded runner sit outside the traced command.
 tool_names() {
-  bounded 30 python3 -I -c 'import os, re, sys
-names = set()
-pattern = re.compile(r"execve\(\"((?:[^\"\\]|\\.)*)\".*\)\s+=\s+0\s*$")
-with open(sys.argv[1], encoding="utf-8", errors="replace") as log:
-    for line in log:
-        match = pattern.search(line.rstrip("\n"))
-        if match:
-            names.add(os.path.basename(match.group(1)))
-for name in sorted(names):
-    print(name)' "$1" | cap_out >"$2"
+  bounded 30 python3 -I "$root/scripts/checks/lib/execve_names.py" "$1" | cap_out >"$2"
 }
 
 # check_tools LOG ALLOWED: every successfully executed program must be named by a non-gate component.
@@ -97,13 +93,77 @@ trace_native() { # trace_native DIR HELPER
 trace_all() {
   local rows name program expect d
   rows=$(manifest_rows bir) || return 1
+  : >"$work/emitter.execve"
+  : >"$work/native.execve"
   while IFS=$'\t' read -r name program expect; do
     d="$work/trace/$name"
     read -r -a expectation <<<"$expect"
     trace_emit "${program#bir:}" "$d" "${expectation[@]}" || return 1
     trace_native "$d" "$root/scripts/checks/lib/slice0_native.sh" || return 1
+    cat "$d/emit.execve" >>"$work/emitter.execve"
+    cat "$d/native.execve" >>"$work/native.execve"
     cat "$d/emit.execve" "$d/native.execve"
   done <<<"$rows"
+}
+
+trace_build() {
+  bounded 1800 strace -f -qq -s 4096 -e trace=execve -o "$work/build.execve" \
+    lake build Concrete lean-compiler-backend/lcb
+}
+
+concrete_source_files() {
+  { printf 'Concrete.lean\n'; find Concrete -name '*.lean'; } | LC_ALL=C sort
+}
+
+concrete_modules() {
+  concrete_source_files | sed -E 's#\.lean$##; s#/#.#g'
+}
+
+# check_examples ROOT OUT: rewrite examples with the proof gate's shared lexer, elaborate every
+# rewritten module, and require every retained example's axiom closure to be registered.
+check_examples() {
+  local source_root=$1 out=$2 rel count
+  local sources=()
+  while IFS= read -r rel; do sources+=("$rel"); done < <(concrete_source_files)
+  mkdir -p "$out/src"
+  count=$(bounded 60 python3 -I "$root/scripts/proofs/lean_lex.py" compiler-examples \
+    "$source_root" "$out/src" "${sources[@]}" | cap_out) || return 1
+  : >"$out/examples"
+  for rel in "${sources[@]}"; do
+    {
+      printf 'import Lean.Elab.Command\nimport Lean.Util.CollectAxioms\n'
+      cat "$out/src/$rel"
+      cat <<'EOF'
+
+open Lean Elab Command in
+#eval show CommandElabM Unit from do
+  let env ← getEnv
+  for (n, _) in env.constants.toList do
+    if let .str _ s := n then
+      if s.startsWith "⟪example⟫" then
+        let axioms := (← liftCoreM (collectAxioms n)).qsort Name.lt
+        IO.println s!"example {n} axioms: {" ".intercalate (axioms.map toString).toList}"
+EOF
+    } >"$out/src/$rel.audit"
+    mv "$out/src/$rel.audit" "$out/src/$rel"
+    print_lean "$out/src/$rel" "$out/$(basename "$rel").out" || return 1
+    grep '^example ' "$out/$(basename "$rel").out" >>"$out/examples" || true
+  done
+  print_lean scripts/checks/compiler/slice0_allowed_axioms.lean "$out/allowed" || return 1
+  bounded 30 python3 -I -c 'import sys
+allowed = {line.strip() for line in open(sys.argv[1], encoding="utf-8") if line.strip()}
+rows = [line.strip() for line in open(sys.argv[2], encoding="utf-8") if line.startswith("example ")]
+bad = False
+for row in rows:
+    name, axioms = row[len("example "):].split(" axioms: ", 1)
+    for axiom in axioms.split():
+        if axiom not in allowed:
+            print(f"FAIL unlisted example axiom {axiom} in {name}")
+            bad = True
+if len(rows) != int(sys.argv[3]):
+    print(f"FAIL examples: {sys.argv[3]} rewritten, {len(rows)} present in Lean environments")
+    bad = True
+sys.exit(1 if bad else 0)' "$out/allowed" "$out/examples" "$count" | cap_out || return 1
 }
 
 if ! current "$work/current"; then
@@ -175,6 +235,25 @@ else
   echo "FAIL environment audit found an unlisted axiom or trusted declaration:"
   head -c 20000 "$work/audit" "$work/audit.err" >&2 || true
   fail=1
+fi
+
+if print_lean scripts/checks/compiler/slice0_concrete_modules.lean "$work/imported-modules"; then
+  missing=$(concrete_modules | comm -23 - <(LC_ALL=C sort -u "$work/imported-modules"))
+  if [ -z "$missing" ]; then
+    echo "ok   every Concrete source module is in the root's import closure"
+  else
+    echo "FAIL Concrete source modules outside the root's import closure:"
+    printf '%s\n' "$missing"
+    fail=1
+  fi
+else
+  echo "FAIL listing Concrete's import closure"; fail=1
+fi
+
+if check_examples . "$work/examples-real"; then
+  echo "ok   every retained Concrete example uses only listed axioms"
+else
+  echo "FAIL Concrete example audit"; fail=1
 fi
 
 # Controls.
@@ -251,6 +330,117 @@ else
   fail=1
 fi
 
+grep -vxF 'Concrete.Backend.LCB' "$work/imported-modules" >"$work/ctl/modules-without-lcb"
+missing=$(concrete_modules | comm -23 - <(LC_ALL=C sort -u "$work/ctl/modules-without-lcb"))
+if [ "$missing" = 'Concrete.Backend.LCB' ]; then
+  echo "ok   control: an unimported Concrete module is named by the population check"
+else
+  echo "FAIL control: the population check did not name the unimported module: '$missing'"; fail=1
+fi
+
+mkdir -p "$work/ctl/native-example"
+cp Concrete.lean "$work/ctl/native-example/Concrete.lean"
+cp -r Concrete "$work/ctl/native-example/Concrete"
+python3 -I -c 'import sys
+p = sys.argv[1]
+s = open(p, encoding="utf-8").read()
+old = "by decide +kernel"
+assert old in s
+open(p, "w", encoding="utf-8").write(s.replace(old, "by decide +native", 1))' \
+  "$work/ctl/native-example/Concrete/BIR.lean"
+if check_examples "$work/ctl/native-example" "$work/ctl/native-example-out" \
+     >"$work/ctl/native-example.log" 2>&1; then
+  echo "FAIL control: the example audit accepts decide +native"; fail=1
+elif grep -q 'FAIL unlisted example axiom .* in .*Concrete/BIR.lean:542' "$work/ctl/native-example.log"; then
+  echo "ok   control: an example proved by decide +native is named"
+else
+  echo "FAIL control: the example audit did not reject decide +native for the planted reason"
+  cat "$work/ctl/native-example.log" >&2
+  fail=1
+fi
+
+cat >"$work/ctl/unsafe-twin.lean" <<'EOF'
+import Lean.Elab.Command
+import Concrete
+def Concrete.Control.f (n : Nat) : Nat := n
+unsafe def Concrete.Control.f._unsafe_rec (n : Nat) : Nat := n
+partial def Concrete.Control.p (n : Nat) : Nat := if n = 0 then 0 else Concrete.Control.p (n - 1)
+open Lean Elab Command in
+#eval show CommandElabM Unit from do
+  let errors := Concrete.Premises.trustedDeclarationErrors (← getEnv) (some `Concrete.Control)
+  for error in errors do IO.println s!"FAIL {error}"
+  unless errors.isEmpty do throwError "trusted-base control failed"
+EOF
+if print_lean "$work/ctl/unsafe-twin.lean" "$work/ctl/unsafe-twin.out"; then
+  echo "FAIL control: the trusted-code audit accepts a hand-written unsafe twin"; fail=1
+elif grep -qxF 'FAIL unlisted trusted declaration Concrete.Control.f._unsafe_rec [unsafe]' "$work/ctl/unsafe-twin.out" &&
+     grep -qxF 'FAIL unlisted trusted declaration Concrete.Control.p [partial]' "$work/ctl/unsafe-twin.out" &&
+     ! grep -q 'Concrete.Control.p._unsafe_rec' "$work/ctl/unsafe-twin.out"; then
+  echo "ok   control: a hand-written unsafe twin and partial parent are named, its genuine twin is not duplicated"
+else
+  echo "FAIL control: the unsafe-twin check did not fail for the planted reason"
+  cat "$work/ctl/unsafe-twin.out" "$work/ctl/unsafe-twin.out.err" >&2
+  fail=1
+fi
+
+cat >"$work/ctl/duplicate-id.lean" <<'EOF'
+import Lean.Elab.Command
+import Concrete
+open Lean Elab Command in
+#eval show CommandElabM Unit from do
+  let components := Concrete.Premises.components.map fun c =>
+    if c.id == "lake" then { c with id := "lean-kernel" } else c
+  let errors := Concrete.Premises.registryErrors components
+  for error in errors do IO.println s!"FAIL {error}"
+  unless errors.isEmpty do throwError "trusted-base control failed"
+EOF
+if print_lean "$work/ctl/duplicate-id.lean" "$work/ctl/duplicate-id.out"; then
+  echo "FAIL control: the registry accepts duplicate component ids"; fail=1
+elif grep -qxF 'FAIL component id lean-kernel occurs 2 times, expected exactly one' "$work/ctl/duplicate-id.out"; then
+  echo "ok   control: duplicate component ids are rejected"
+else
+  echo "FAIL control: duplicate ids did not fail for the planted reason"; fail=1
+fi
+
+cat >"$work/ctl/duplicate-match.lean" <<'EOF'
+import Lean.Elab.Command
+import Concrete
+open Lean Elab Command in
+#eval show CommandElabM Unit from do
+  let components := Concrete.Premises.components.map fun c =>
+    if c.id == "native-shell-utilities" then { c with «matches» := "git" :: c.«matches» } else c
+  let errors := Concrete.Premises.registryErrors components
+  for error in errors do IO.println s!"FAIL {error}"
+  unless errors.isEmpty do throwError "trusted-base control failed"
+EOF
+if print_lean "$work/ctl/duplicate-match.lean" "$work/ctl/duplicate-match.out"; then
+  echo "FAIL control: the registry accepts a match owned twice"; fail=1
+elif grep -qxF 'FAIL match git is owned by 2 components, expected exactly one' "$work/ctl/duplicate-match.out"; then
+  echo "ok   control: a match owned by two components is rejected"
+else
+  echo "FAIL control: duplicate match ownership did not fail for the planted reason"; fail=1
+fi
+
+cat >"$work/ctl/not-trusted-owner.lean" <<'EOF'
+import Lean.Elab.Command
+import Concrete
+@[extern "x"] opaque Concrete.Control.f : Nat → Nat
+open Lean Elab Command in
+#eval show CommandElabM Unit from do
+  let components := Concrete.Premises.components.map fun c =>
+    if c.id == "bir-lcb-adapter" then { c with «matches» := ["Concrete.Control.f"] } else c
+  let errors := Concrete.Premises.trustedDeclarationErrors (← getEnv) (some `Concrete.Control) components
+  for error in errors do IO.println s!"FAIL {error}"
+  unless errors.isEmpty do throwError "trusted-base control failed"
+EOF
+if print_lean "$work/ctl/not-trusted-owner.lean" "$work/ctl/not-trusted-owner.out"; then
+  echo "FAIL control: a non-trusted component can own a trusted declaration"; fail=1
+elif grep -qxF 'FAIL trusted declaration Concrete.Control.f belongs to non-trusted component bir-lcb-adapter' "$work/ctl/not-trusted-owner.out"; then
+  echo "ok   control: a trusted declaration cannot belong to the non-trusted adapter entry"
+else
+  echo "FAIL control: non-trusted ownership did not fail for the planted reason"; fail=1
+fi
+
 sed 's/^| P_rt | implementation | /| P_rt | toolchain | /' Concrete/README.md >"$work/ctl/readme"
 if readme_rows "$work/ctl/readme" >"$work/ctl/rows" && cmp -s "$work/rows" "$work/ctl/rows"; then
   echo "FAIL control: the table check accepts a drifted table"; fail=1
@@ -261,40 +451,65 @@ if [ "$(uname -s)" = Linux ]; then
     echo "FAIL tools: strace is required on Linux"; fail=1
   elif ! pipeline_tools "$work/pipeline-tools"; then
     echo "FAIL tools: rendering the pipeline tool list failed"; fail=1
-  elif ! trace_all >"$work/all.execve"; then
-    echo "FAIL tools: tracing the manifest's native builds failed"; fail=1
   else
-    check_tools "$work/all.execve" "$work/pipeline-tools" || fail=1
-
-    first=$(manifest_rows bir | head -n 1)
-    IFS=$'\t' read -r name program expect <<<"$first"
-    read -r -a expectation <<<"$expect"
-    d="$work/ctl/unlisted-tool"
-    cp scripts/checks/lib/slice0_native.sh "$work/ctl/native-with-objcopy.sh"
-    printf '\nobjcopy --version >/dev/null\n' >>"$work/ctl/native-with-objcopy.sh"
-    if ! trace_emit "${program#bir:}" "$d" "${expectation[@]}" ||
-       ! trace_native "$d" "$work/ctl/native-with-objcopy.sh"; then
-      echo "FAIL control: the unlisted-tool native build did not complete"; fail=1
-    elif check_tools "$d/native.execve" "$work/pipeline-tools" >"$work/ctl/unlisted-tool.log" 2>&1; then
-      echo "FAIL control: the tool audit accepts objcopy"; fail=1
-    elif grep -qF "FAIL tools: unlisted program 'objcopy'" "$work/ctl/unlisted-tool.log"; then
-      echo "ok   control: the tool audit names objcopy"
+    cat >"$work/ctl/split-execve.log" <<'EOF'
+100 execve("/nix/store/lean/bin/lean", ["lean"], 0x0) = 0
+101 execve("/usr/bin/objcopy", ["objcopy"], 0x0) <unfinished ...>
+101 <... execve resumed>) = 0
+102 execve("/missing/objcopy", ["objcopy"], 0x0) = -1 ENOENT (No such file or directory)
+EOF
+    if check_tools "$work/ctl/split-execve.log" "$work/pipeline-tools" >"$work/ctl/split-execve.out" 2>&1; then
+      echo "FAIL control: the parser accepts a split successful execve of objcopy"; fail=1
+    elif [ "$(grep -cF "FAIL tools: unlisted program 'objcopy'" "$work/ctl/split-execve.out")" = 1 ]; then
+      echo "ok   control: a split successful execve is named; failed PATH lookups are ignored"
     else
-      echo "FAIL control: the tool audit did not reject objcopy for the planted reason"
-      cat "$work/ctl/unlisted-tool.log" >&2
+      echo "FAIL control: split execve parsing did not fail for the planted reason"
+      cat "$work/ctl/split-execve.out" >&2
       fail=1
     fi
 
-    if ! pipeline_tools "$work/tools-without-clang" clang-llvm; then
-      echo "FAIL control: rendering the list without clang failed"; fail=1
-    elif check_tools "$work/all.execve" "$work/tools-without-clang" >"$work/ctl/without-clang.log" 2>&1; then
-      echo "FAIL control: the tool audit accepts a list without clang"; fail=1
-    elif grep -Eq "FAIL tools: unlisted program 'clang(-[0-9]+)?'" "$work/ctl/without-clang.log"; then
-      echo "ok   control: removing clang makes the real native-helper trace fail"
+    if ! trace_build; then
+      echo "FAIL tools: tracing the incremental Lake build failed"; fail=1
+    elif ! trace_all >"$work/manifest.execve"; then
+      echo "FAIL tools: tracing the manifest's native builds failed"; fail=1
     else
-      echo "FAIL control: removing clang did not fail for the planted reason"
-      cat "$work/ctl/without-clang.log" >&2
-      fail=1
+      cat "$work/build.execve" "$work/manifest.execve" >"$work/all.execve"
+      check_tools "$work/all.execve" "$work/pipeline-tools" || fail=1
+      for phase in build emitter native; do
+        tool_names "$work/$phase.execve" "$work/$phase.tools" || fail=1
+        echo "tools $phase: $(tr '\n' ' ' <"$work/$phase.tools")"
+      done
+
+      first=$(manifest_rows bir | head -n 1)
+      IFS=$'\t' read -r name program expect <<<"$first"
+      read -r -a expectation <<<"$expect"
+      d="$work/ctl/unlisted-tool"
+      cp scripts/checks/lib/slice0_native.sh "$work/ctl/native-with-objcopy.sh"
+      printf '\nobjcopy --version >/dev/null\n' >>"$work/ctl/native-with-objcopy.sh"
+      if ! trace_emit "${program#bir:}" "$d" "${expectation[@]}" ||
+         ! trace_native "$d" "$work/ctl/native-with-objcopy.sh"; then
+        echo "FAIL control: the unlisted-tool native build did not complete"; fail=1
+      elif check_tools "$d/native.execve" "$work/pipeline-tools" >"$work/ctl/unlisted-tool.log" 2>&1; then
+        echo "FAIL control: the tool audit accepts objcopy"; fail=1
+      elif grep -qF "FAIL tools: unlisted program 'objcopy'" "$work/ctl/unlisted-tool.log"; then
+        echo "ok   control: the tool audit names objcopy"
+      else
+        echo "FAIL control: the tool audit did not reject objcopy for the planted reason"
+        cat "$work/ctl/unlisted-tool.log" >&2
+        fail=1
+      fi
+
+      if ! pipeline_tools "$work/tools-without-clang" clang-llvm; then
+        echo "FAIL control: rendering the list without clang failed"; fail=1
+      elif check_tools "$work/all.execve" "$work/tools-without-clang" >"$work/ctl/without-clang.log" 2>&1; then
+        echo "FAIL control: the tool audit accepts a list without clang"; fail=1
+      elif grep -Eq "FAIL tools: unlisted program 'clang(-[0-9]+)?'" "$work/ctl/without-clang.log"; then
+        echo "ok   control: removing clang makes the real native-helper trace fail"
+      else
+        echo "FAIL control: removing clang did not fail for the planted reason"
+        cat "$work/ctl/without-clang.log" >&2
+        fail=1
+      fi
     fi
   fi
 else

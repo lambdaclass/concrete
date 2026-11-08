@@ -104,11 +104,11 @@ def components : List Component := [
     what := "Lean's quotient soundness axiom"
     why := "allowed logical axiom used by the proofs"
     removal := "remove its uses from the proofs and delete this entry" },
-  { id := "lean-compiler-runtime", kind := .leanRuntime, slice := "slice0", premises := [], «matches» := ["lean"]
+  { id := "lean-compiler-runtime", kind := .leanRuntime, slice := "slice0", premises := [], «matches» := ["lean", "leanc"]
     what := "the Lean compiler, runtime and interpreter executing Concrete via lake env lean --run and the compiled lean binary"
     why := "the compiler's executable behaviour is produced by Lean code outside its kernel proofs"
     removal := "not planned; per-compilation certificates attest the emitted output" },
-  { id := "lake", kind := .buildTool, slice := "slice0", premises := [], «matches» := ["lake", "git"]
+  { id := "lake", kind := .buildTool, slice := "slice0", premises := [], «matches» := ["lake", "git", "ar"]
     what := "Lake dependency resolution and builds, including the pinned lean-compiler-backend revision"
     why := "Lake selects and builds the code that the compiler and gates execute"
     removal := "not planned; replace with another pinned, reproducible dependency and build mechanism" },
@@ -192,8 +192,15 @@ def registryErrors (cs : List Component := components) : List String := Id.run d
     unless carriers == 1 do
       errors := errors ++ [s!"premise {p.id} is carried by {carriers} components, expected exactly one"]
   for c in cs do
+    let idOwners := (cs.filter (·.id == c.id)).length
+    unless idOwners == 1 do
+      errors := errors ++ [s!"component id {c.id} occurs {idOwners} times, expected exactly one"]
     for p in c.premises do
       unless all.any (·.id == p) do errors := errors ++ [s!"component {c.id} names unknown premise {p}"]
+    for m in c.«matches» do
+      let owners := cs.foldl (fun n c => n + (c.«matches».filter (· == m)).length) 0
+      unless owners == 1 do
+        errors := errors ++ [s!"match {m} is owned by {owners} components, expected exactly one"]
   for k in ComponentKind.all do
     unless cs.any (·.kind == k) do errors := errors ++ [s!"component kind {k.name} has no entry"]
   return errors
@@ -259,24 +266,29 @@ def axiomErrors (env : Environment) (localPrefix : Option Name := none)
       unless allowed.contains ax do errors := errors ++ [s!"unlisted axiom {ax} in {n}"]
   return errors
 
-def isUnsafeRecTwin (env : Environment) (n : Name) : Bool :=
+def isGeneratedPartialTwin (env : Environment) (n : Name) : Bool :=
   match n with
-  | .str _ "_unsafe_rec" => env.contains n.getPrefix
+  | .str parent "_unsafe_rec" =>
+      match env.find? n, env.find? parent with
+      | some (.defnInfo d), some (.opaqueInfo _) => d.safety == .partial
+      | some (.defnInfo d), some (.defnInfo parentVal) =>
+          d.safety == .partial && parentVal.safety == .safe && env.contains (.str parent "_f")
+      | _, _ => false
   | _ => false
 
 def trustedDeclarationKinds (env : Environment) (n : Name) (ci : ConstantInfo) : List String := Id.run do
-  if isUnsafeRecTwin env n then return []
   let mut kinds := []
   if isExtern env n then kinds := kinds ++ ["extern"]
   if (Compiler.implementedByAttr.getParam? env n).isSome then kinds := kinds ++ ["implemented_by"]
-  match ci with
-  | .opaqueInfo o =>
-      kinds := kinds ++ [if env.contains (.str n "_unsafe_rec") then "partial" else "opaque"]
-      if o.isUnsafe && !kinds.contains "unsafe" then kinds := kinds ++ ["unsafe"]
-  | .defnInfo d =>
-      if d.safety == .unsafe then kinds := kinds ++ ["unsafe"]
-      else if d.safety == .partial then kinds := kinds ++ ["partial"]
-  | _ => pure ()
+  unless isGeneratedPartialTwin env n do
+    match ci with
+    | .opaqueInfo o =>
+        kinds := kinds ++ [if isGeneratedPartialTwin env (.str n "_unsafe_rec") then "partial" else "opaque"]
+        if o.isUnsafe && !kinds.contains "unsafe" then kinds := kinds ++ ["unsafe"]
+    | .defnInfo d =>
+        if d.safety == .unsafe then kinds := kinds ++ ["unsafe"]
+        else if d.safety == .partial then kinds := kinds ++ ["partial"]
+    | _ => pure ()
   return kinds
 
 def trustedDeclarations (env : Environment) (localPrefix : Option Name := none) :
@@ -287,17 +299,22 @@ def trustedDeclarations (env : Environment) (localPrefix : Option Name := none) 
     unless kinds.isEmpty do out := out.push (n, kinds)
   return out
 
-def declarationListed (n : Name) (cs : List Component) : Bool :=
+def declarationOwners (n : Name) (cs : List Component) : List Component :=
   let user := (privateToUserName? n).getD n
-  cs.any fun c => c.«matches».contains n.toString || c.«matches».contains user.toString
+  cs.filter fun c => c.«matches».contains n.toString || c.«matches».contains user.toString
 
-/-- Every compiled escape hatch must be explicitly named by a component's matches. -/
+/-- Every compiled escape hatch must have exactly one owner, and not a non-trusted component. -/
 def trustedDeclarationErrors (env : Environment) (localPrefix : Option Name := none)
     (cs : List Component := components) : List String := Id.run do
   let mut errors := []
   for (n, kinds) in trustedDeclarations env localPrefix do
-    unless declarationListed n cs do
-      errors := errors ++ [s!"unlisted trusted declaration {n} [{", ".intercalate kinds}]"]
+    match declarationOwners n cs with
+    | [] => errors := errors ++ [s!"unlisted trusted declaration {n} [{", ".intercalate kinds}]"]
+    | [owner] =>
+        if owner.kind == .notTrusted then
+          errors := errors ++ [s!"trusted declaration {n} belongs to non-trusted component {owner.id}"]
+    | owners =>
+        errors := errors ++ [s!"trusted declaration {n} is owned by {owners.length} components, expected exactly one"]
   return errors
 
 /-- The trusted-base report: components, premises, each theorem's sorted axioms, then each axiom

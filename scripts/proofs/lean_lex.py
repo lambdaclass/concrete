@@ -24,6 +24,8 @@ Commands (exit 3 when a source cannot be read or lexed):
                            so listings split on spaces stay sound), so the kernel's view of it
                            stays in the environment; prints the count. Every
                            `example` token must start a line.
+  compiler-examples ...    the same rewrite for Concrete, whose IR printer strings may contain
+                           ordinary `{` and `}` characters. Spec scanning/rewriting is unchanged.
 """
 import os, re, sys
 
@@ -34,10 +36,11 @@ class LexError(Exception):
     pass
 
 
-def lex(src, spans=None, literals=True):
+def lex(src, spans=None, literals=True, ordinary_braces=False):
     """`src` with its comments blanked; when `spans` is a list, each top-level comment's
     (start, end) offsets are appended to it (a comment nested in another is part of that one).
-    With `literals=False`, string, character and name literals are blanked too (code tokens only)."""
+    With `literals=False`, string, character and name literals are blanked too (code tokens only).
+    `ordinary_braces` admits braces in non-interpolated strings, needed by the compiler's IR printers."""
     n, out = len(src), []
 
     def emit(text, literal=False):
@@ -68,7 +71,7 @@ def lex(src, spans=None, literals=True):
             if c == "\\": emit(src[i:i + 2], True); i += 2
             elif c == '"': emit(c, True); return i + 1
             elif c == "{" and interp: emit(c, True); i = code(i + 1, True)
-            elif c == "{":
+            elif c == "{" and not ordinary_braces:
                 line = src.count("\n", 0, i) + 1
                 raise LexError(f"line {line}: a string holding '{{' without s!, m! or f! before it")
             else: emit(c, True); i += 1
@@ -158,11 +161,11 @@ def count_examples(src):
     return len(EXAMPLE.findall(lex(src, literals=False)))
 
 
-def examples(src_dir, dst_dir, paths):
+def examples(src_dir, dst_dir, paths, ordinary_braces=False):
     count = 0
     for rel in paths:
         src = open(os.path.join(src_dir, rel), encoding="utf-8").read()
-        text = lex(src, literals=False)          # an `example` inside a literal is not a command
+        text = lex(src, literals=False, ordinary_braces=ordinary_braces)
         out, last = [], 0
         for m in EXAMPLE.finditer(text):
             line = text.count("\n", 0, m.start()) + 1
@@ -182,9 +185,10 @@ if __name__ == "__main__":
     try:
         if sys.argv[1] == "scan":
             sys.exit(scan(sys.argv[2], sys.argv[3:]))
-        if sys.argv[1] == "examples":
-            examples(sys.argv[2], sys.argv[3], sys.argv[4:]); sys.exit(0)
+        if sys.argv[1] in ("examples", "compiler-examples"):
+            examples(sys.argv[2], sys.argv[3], sys.argv[4:],
+                     ordinary_braces=sys.argv[1] == "compiler-examples"); sys.exit(0)
     except (OSError, UnicodeDecodeError, LexError) as e:
         print(f"error: {e}", file=sys.stderr); sys.exit(3)
-    print(f"usage: {sys.argv[0]} scan RE FILE... | examples SRC DST FILE...", file=sys.stderr)
+    print(f"usage: {sys.argv[0]} scan RE FILE... | (compiler-)examples SRC DST FILE...", file=sys.stderr)
     sys.exit(2)
