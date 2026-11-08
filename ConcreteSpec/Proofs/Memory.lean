@@ -97,7 +97,7 @@ theorem decodeBool_valid (bs : List MByte) (b : Bool) (h : decodeBool bs = some 
   | [.init v f] => exact ⟨v, f, rfl, (boolOfBits_some_iff _ _).1 h⟩
   | [] | .uninit :: _ | .init _ _ :: _ :: _ => cases h
 
-theorem decodePtr_encodePtr (tgt : Target) (ht : tgt.WellFormed) (p : Ptr) :
+theorem decodePtr_encodePtr (tgt : Target) (ht : tgt.WellFormed) (p : Ptr) (hpv : p.Valid tgt) :
     decodePtr tgt (encodePtr tgt p) = some p := by
   have hp : 0 < tgt.ptrSize := by have := ht.1; have := ht.2.1; omega
   have hl : (ordered tgt.byteOrder (leBytes tgt.ptrSize p.addr)).length > 0 := by simpa using hp
@@ -106,7 +106,7 @@ theorem decodePtr_encodePtr (tgt : Target) (ht : tgt.WellFormed) (p : Ptr) :
   | cons v vs =>
     have he : encodePtr tgt p = .init v (some (p, 0)) ::
         (vs.zipIdx 1).map (fun (v, i) => .init v (some (p, i))) := by
-      simp [encodePtr, hs, List.zipIdx_cons]
+      simp [encodePtr, hpv, hs, List.zipIdx_cons]
     rw [he]
     simp only [decodePtr]
     rw [← he]
@@ -146,7 +146,7 @@ theorem alloc_failure (tgt : Target) (m : Memory) (s : AddrSpace) (base size ali
     m.alloc tgt s base size align = .error .unavailable := by simp [Memory.alloc, h]
 
 theorem access_zero (tgt : Target) (m : Memory) (p : Ptr) (a : Nat) :
-    m.access tgt p 0 a = if p.addr % a = 0 ∧ p.addr ≠ tgt.null then some none else none := by
+    m.access tgt p 0 a = if p.addr % a = 0 ∧ p.addr ≠ tgt.null ∧ p.Valid tgt then some none else none := by
   simp [Memory.access]
 
 theorem access_no_provenance (tgt : Target) (m : Memory) (p : Ptr) (n a : Nat)
@@ -231,6 +231,11 @@ theorem alloc_wellFormed (tgt : Target) (m : Memory) (hw : m.WellFormed tgt)
   · intro c y hy
     rw [lookup] at hy
     split at hy
+    next => cases hy; exact hf.2.2.2.2.2.2
+    next => exact hw.spaces c y hy
+  · intro c y hy
+    rw [lookup] at hy
+    split at hy
     next => cases hy; exact ⟨hf.1, hf.2.1⟩
     next => exact hw.aligned c y hy
   · intro c y d w hy hw' hne hyl hwl
@@ -242,10 +247,10 @@ theorem alloc_wellFormed (tgt : Target) (m : Memory) (hw : m.WellFormed tgt)
       next hd => exact False.elim (hne (hc.symm.trans hd))
       next =>
         intro hov
-        exact hf.2.2.2.2.2 _ (AList.lookup_mem hw') hwl (overlaps_symm _ _ hov)
+        exact hf.2.2.2.2.2.1 _ (AList.lookup_mem hw') hwl (overlaps_symm _ _ hov)
     next =>
       split at hw'
-      next => cases hw'; exact hf.2.2.2.2.2 _ (AList.lookup_mem hy) hyl
+      next => cases hw'; exact hf.2.2.2.2.2.1 _ (AList.lookup_mem hy) hyl
       next => exact hw.disjoint c y d w hy hw' hne hyl hwl
 
 /-- Non-overlap makes the in-bounds provenance unique; no order on identities is used. -/
@@ -298,7 +303,7 @@ theorem access_some (tgt : Target) (m : Memory) (p : Ptr) (n a : Nat) (b : MemBl
     (off : Nat) (h : m.access tgt p n a = some (some (b, off))) :
     ∃ x, p.prov = some b ∧ m.block b = some x ∧ n ≠ 0 ∧ x.live = true ∧
       x.space = p.space ∧ x.base ≤ p.addr ∧ p.addr + n ≤ x.base + x.size ∧
-      p.addr % a = 0 ∧ off = p.addr - x.base := by
+      p.addr % a = 0 ∧ off = p.addr - x.base ∧ p.Valid tgt := by
   unfold Memory.access at h
   split at h
   next => split at h <;> cases h
@@ -313,7 +318,7 @@ theorem access_some (tgt : Target) (m : Memory) (p : Ptr) (n a : Nat) (b : MemBl
         simp only [hx] at h
         split at h
         next hv => cases h; exact ⟨x, rfl, hx, hn, hv.1, hv.2.1, hv.2.2.1,
-          hv.2.2.2.1, hv.2.2.2.2, rfl⟩
+          hv.2.2.2.1, hv.2.2.2.2.1, rfl, hv.2.2.2.2.2⟩
         next => cases h
 
 /-- Replacing a range reads back exactly that range. -/
@@ -359,11 +364,11 @@ theorem store_load (tgt : Target) (m m' : Memory) (hw : m.WellFormed tgt)
     | some v =>
       obtain ⟨b, off⟩ := v
       cases h
-      obtain ⟨x, hp, hx, hn, hv, hs, hlo, hhi, hal, hoff⟩ := access_some tgt m p bs.length a b off ha
+      obtain ⟨x, hp, hx, hn, hv, hs, hlo, hhi, hal, hoff, hpv⟩ := access_some tgt m p bs.length a b off ha
       have hsize := hw.sized b x hx
       have hbound : off + bs.length ≤ x.bytes.length := by omega
       have ha' : (m.modify b (fun x => { x with bytes := x.bytes.take off ++ bs ++ x.bytes.drop (off + bs.length) })).access tgt p bs.length a = some (some (b, off)) := by
-        simp [Memory.access, hn, hp, hx, hv, hs, hlo, hhi, hal, hoff]
+        simp [Memory.access, hn, hp, hx, hv, hs, hlo, hhi, hal, hoff, hpv]
       simp only [Memory.load, ha', block_modify, ↓reduceIte, hx, Option.map_some]
       congr 1
       exact splice_read _ _ _ (by omega)
@@ -388,7 +393,7 @@ theorem store_same_block_frame (tgt : Target) (m m' : Memory) (hw : m.WellFormed
   subst m'
   simp only [block_modify, ↓reduceIte, hx, Option.map_some]
   congr 1
-  obtain ⟨y, _, hy, _, _, _, hlo, hhi, _, hoff⟩ := access_some tgt m p bs.length a b off ha
+  obtain ⟨y, _, hy, _, _, _, hlo, hhi, _, hoff, _⟩ := access_some tgt m p bs.length a b off ha
   rw [hx] at hy
   cases hy
   apply splice_frame _ _ _ _ _ hi
