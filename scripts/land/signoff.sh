@@ -43,8 +43,9 @@
 # the cap was reached, and every file's sha256 is the recorded one. Each request's `reviewed:` line
 # must equal the signed commit, and its body must name that commit by an unambiguous prefix of 7+
 # hex digits; output mentions do not bind a review to a commit. Each output's last VERDICT line must
-# be `VERDICT: ACCEPT`, and an output without one is refused; request lines never count as verdicts.
-# The sign-off judges the exact commit and says nothing about any other commit.
+# be `VERDICT: ACCEPT` or `VERDICT: REJECT`; both are recorded and reported, and an output without
+# one is refused. Request lines never count as verdicts. The sign-off judges the exact commit and
+# says nothing about any other commit.
 #
 # Exit codes: 0 a valid sign-off; 1 a sign-off that does not qualify (the reason is printed);
 #             2 no sign-off, or a usage error.
@@ -174,7 +175,7 @@ check() {
   [ -n "$rounds" ] || bad "rounds-at ${at:0:10}: no round count in '$vout'"
   [ "$rounds" -ge "$cap" ] \
     || bad "the review cap was not reached: a $cls change has cap $cap, and ${at:0:10} records $rounds round(s)"
-  local r n entry file hash got reviewed verdict
+  local r n entry file hash got reviewed verdict verdicts=""
   for r in $REVIEWERS; do
     n="F_request_$r"; [ -n "${!n}" ] || bad "the record has no $r request"
     n="F_verdict_$r"; [ -n "${!n}" ] || bad "the record has no $r verdict"
@@ -200,9 +201,9 @@ check() {
     [ "$got" = "$hash" ] || bad "the sha256 of $file is $got, not the recorded $hash"
     verdict="$(git cat-file blob "$obj:$file" | grep -E '^[[:space:]]*VERDICT: (ACCEPT|REJECT)[[:space:]]*$' | tail -1 | tr -d '[:space:]')" || true
     [ -n "$verdict" ] || bad "the $r output has no verdict"
-    [ "$verdict" = "VERDICT:ACCEPT" ] || bad "the $r output's last verdict is '$verdict', not VERDICT: ACCEPT"
+    verdicts="$verdicts${verdicts:+, }$r ${verdict#VERDICT:}"
   done
-  echo "$sha signed off by the owner ($F_date; $cls change, cap $cap reached at ${at:0:10} with $rounds round(s); codex, kimi and agy accepted): \"$F_quote\""
+  echo "$sha signed off by the owner ($F_date; $cls change, cap $cap reached at ${at:0:10} with $rounds round(s); verdicts: $verdicts): \"$F_quote\""
 }
 
 cmd_verify() {
