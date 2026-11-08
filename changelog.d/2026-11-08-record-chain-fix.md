@@ -1,3 +1,12 @@
+### Record-chain fourth fix pass (2026-11-08)
+
+- Record "okay with your decisions" (15:31:59 UTC): lexer spellings (a)–(d), the permitted raw TAB in `//` comments, complementary suffixes, C9 Q1–Q3 and the approved Codex device-auth re-login for agent on concrete-ci-2. The owner explicitly approves the new refusal of raw Cc, U+2028–U+2029 and bidi controls in strings and comments.
+- Revise OD31, OD138 and Q6.2, the 29 decisions' lexer items 3–5, and language item 59. R-0625's lexer part is decided; R-0620 is no longer blocked on those questions. R-0615, R-0637 and R-0646 carry the C9 identity and premise-category decisions.
+- Make complementary suffix typing an obligation of slice 5 and R-0493: suffixes are required without an expected-type position and refused with one, with accepted and refused conformance examples.
+- Record "can you use only kimi codex and agy to code and you just review things?": Claude writes no file content at all; Kimi, Codex and agy write; Claude briefs, reviews, runs gates and does git transport. AGENTS.md and the earlier writers row carry the revision.
+
+The new durable records are [lexer spellings, C9 and Codex login](docs/decisions.md#decided-2026-11-08-okay-decisions) and [Claude reviews only](docs/decisions.md#decided-2026-11-08-claude-reviews-only), citing `docs/proposals/owner-2026-11-08/` on `wip/owner-records-2026-11-08`.
+
 ### Record-chain third fix pass (2026-11-08)
 
 - Correct the language revision register, illustrative foundation spellings and R-0625 dependencies, review caps and verdict recording, exact-SHA sign-offs, commit/push attribution and ISS-0018's gate path.

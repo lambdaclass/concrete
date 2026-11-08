@@ -79,10 +79,12 @@ as a conflict, until the owner answers; nobody extends or reverts it meanwhile.
 
 Owner rule (2026-11-08), verbatim: "ALWAYS tell the reviewrs to do the best long term thing rather than cuitting corners". Every prompt to Codex, Kimi or agy, as writer or reviewer, explicitly says to judge and fix by the best long-term design, never cutting corners for speed, a smaller diff or fewer rounds. Reviewers report shortcuts as real findings and name the long-term fix. Writers implement the structural fix, not a containment patch. If staging is unavoidable, they record the long-term design and its roadmap row ([decision](docs/decisions.md#decided-2026-11-08-long-term-reviews)).
 
+Owner rule (2026-11-08), verbatim: "can you use only kimi codex and agy to code and you just review things?": Claude writes no file content at all (code, docs, records, merge resolutions, copies, changelog fragments); Kimi, Codex and agy write; Claude briefs, reviews, runs gates and does git transport ([decision](docs/decisions.md#decided-2026-11-08-claude-reviews-only)).
+
 - Claude's quota goes to the critical path: the spec, slice 0 and the front end (owner, 2026-11-08,
   [decision](docs/decisions.md#decided-2026-11-08-eleven)). Codex, Kimi and agy implement across the
-  codebase, not only mechanical work; Claude briefs, reviews, runs the gates and lands
-  ([decision](docs/decisions.md#decided-2026-11-08-writers)).
+  codebase, not only mechanical work; Claude briefs, reviews, runs gates and does git transport
+  ([decision](docs/decisions.md#decided-2026-11-08-writers)). Revised 2026-11-08 by [Claude reviews only](docs/decisions.md#decided-2026-11-08-claude-reviews-only).
 - Writer process: each writer works in its own fresh full clone on its own `wip/` branch. The three models minus the writer cross-review each diff; a writer never reviews its own work. Revised 2026-11-08 by [item 1](docs/decisions.md#decided-2026-11-08-twenty-nine): when Codex wrote a branch, the review leg uses Kimi or agy, never Codex, and records the reviewer model in the note. On record-foundation, Codex wrote the round-2 fixes and the Codex leg ran; that overlap is recorded. Run each writer through
   `bounded_run`, never GNU `timeout`.
 - One writer edits `docs/decisions.md` and `ROADMAP.md` at a time; other workers send that writer
