@@ -11,8 +11,8 @@ These files stay here, outside `legacy/`, so they survive its deletion
 records:
 
 | file | what it is |
-| [CANDIDATES.md](CANDIDATES.md) | the historical 2026-11-02 candidate table, retired from the live roadmap; not a current readiness record |
 |---|---|
+| [CANDIDATES.md](CANDIDATES.md) | the historical 2026-11-02 candidate table, retired from the live roadmap; not a current readiness record |
 | [ROADMAP_DECISIONS.md](ROADMAP_DECISIONS.md) | the dated decision log, which docs/decisions.md and the roadmap cite |
 | [task_disposition.tsv](task_disposition.tsv) | the disposition of every archived task ID (below) |
 | [ROADMAP_TASKS.md](ROADMAP_TASKS.md) | the task register (bodies of the A, B and T tasks; it records the 2026-10-17 package-management decision) |
