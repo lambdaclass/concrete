@@ -1054,6 +1054,7 @@ ConcreteSpec.Core.Exec.QueryReport.toReport.eq_1
 ConcreteSpec.Core.Exec.Report.mk.inj	
 ConcreteSpec.Core.Exec.Report.mk.injEq	propext
 ConcreteSpec.Core.Exec.Report.mk.sizeOf_spec	
+ConcreteSpec.Core.Exec.ReportedQueries.congr_simp	propext
 ConcreteSpec.Core.Exec.RunsAll.brecOn	propext
 ConcreteSpec.Core.Exec.RunsAll.each	propext
 ConcreteSpec.Core.Exec.RunsEach.brecOn	propext
