@@ -4,10 +4,14 @@
 usage: stack_bound.py TARGET DISASM           -> prints `bound N` and one `external SYM DEPTH` per call
        stack_bound.py TARGET DISASM --ranges  -> also prints `redzone N` (the target's) and
                                                 `range SYM LO HI` per Concrete function
+       stack_bound.py --elf-tls HEADERS_JSON  -> prints `tls_memsz 0xM` from `llvm-readobj
+                                                --program-headers --elf-output-style=JSON`
 TARGET is a key of TARGETS (x86_64-linux, aarch64-macos, aarch64-linux); DISASM is
 `llvm-objdump -d --no-show-raw-insn` output of the LINKED executable (x86-64 in Intel syntax).
-For x86-64 the gate appends `tls_memsz N`, derived by llvm-readelf from the linked executable's
-PT_TLS program header (zero without one); absent, malformed or duplicate metadata is an error.
+For x86-64 the gate appends `tls_memsz 0xM`, the Variant II static-TLS reservation derived by
+`--elf-tls` from the linked executable's `llvm-readobj --program-headers --elf-output-style=JSON`
+output (requiring at least one PT_LOAD segment and at most one PT_TLS segment); absent, malformed
+or duplicate metadata is an error.
 
 The Concrete-owned code is `main` (the runtime entry), `concrete_rt_write_all` and the body
 (`concrete_body`), with or without the Mach-O underscore. Each owned function is analysed over its
@@ -22,30 +26,33 @@ addresses through the stack or frame pointer (so the red zone, used below the st
 moving it, is covered), with each owned callee's own bound added at its call, and each external
 function (libc's `write`, `_exit`, `abort`) counted at its entry depth.
 
-Why addresses cannot escape this accounting: memory is addressed only through the stack or frame
-pointer (accounted), PC-relatively within a fixed reach of the code (x86 `rip` with a displacement
-up to PC_REACH; on AArch64 a register holding an adrp/adr result within PC_REACH, plus at most one
-add immediate, on every path since the last call, with a bounded offset and no writeback) or through
-an absolute x86 `fs:` operand whose complete byte interval lies in the modelled TCB or static-TLS
-interval. `gs:` is not a thread-pointer base on x86-64 Linux and is refused outright, as is every
-register-relative segment override, every other segment override, a segment-register write and an
-instruction with two memory operands. Any other register may hold a stack address (main's argv and
-envp, a value an external function left), so no access goes through one. The analysis also refuses
-taking a stack address as a value (`lea` of one, the stack or frame pointer copied, stored or used
-in arithmetic, except the modelled frame setup), so only the frame save (`push rbp`, `stp x29, x30`)
-puts one in memory. Saved slots may be read only by the modelled restore (`pop rbp`, `leave`,
-`ldp x29, x30` with base sp). Any other stack read must be of bytes the function itself wrote, on
-every path, since its last call: so no stale value (a callee's or the caller's saved frame pointer,
-libc's scratch) is ever loaded. Accesses must lie below the entry stack pointer (never the return
-address or the caller's frame) and at most the target's red zone below the current stack pointer
-(TARGETS: 128 bytes on x86-64 System V and on Apple arm64, none under AAPCS64 on Linux; deeper
-bytes may be overwritten asynchronously, by a signal handler, so code using them has no bound),
-returns must be at depth 0 with the caller's frame pointer restored and, on AArch64, with the link
-register holding the return address.
+Why addresses cannot escape this accounting: instructions and operands are parsed by the shared
+fail-closed grammar in `stack_access.py`, which consumes every byte of every operand against an
+explicit allowlist of mnemonics and operand shapes. Memory is addressed only through the stack or
+frame pointer (accounted), PC-relatively within a fixed reach of the code (x86 `rip` with a
+displacement up to PC_REACH; on AArch64 a register holding an adrp/adr result within PC_REACH, plus
+at most one add immediate, on every path since the last call, with a bounded offset and no
+writeback) or through an absolute x86 `fs:` operand whose complete byte interval lies in the
+modelled TCB or static-TLS interval. `gs:` is not a thread-pointer base on x86-64 Linux and is
+refused outright, as is every register-relative segment override, every other segment override,
+any segment-register write or read, and any instruction with two memory operands. Any other
+register may hold a stack address (main's argv and envp, a value an external function left), so no
+access goes through one. The analysis also refuses taking a stack address as a value (`lea` of one,
+the stack or frame pointer copied, stored or used in arithmetic, except the modelled frame setup),
+so only the frame save (`push rbp`, `stp x29, x30`) puts one in memory. Saved slots may be read
+only by the modelled restore (`pop rbp`, `leave`, `ldp x29, x30` with base sp). Any other stack
+read must be of bytes the function itself wrote, on every path, since its last call: so no stale
+value (a callee's or the caller's saved frame pointer, libc's scratch) is ever loaded. Accesses
+must lie below the entry stack pointer (never the return address or the caller's frame) and at most
+the target's red zone below the current stack pointer (TARGETS: 128 bytes on x86-64 System V and on
+Apple arm64, none under AAPCS64 on Linux; deeper bytes may be overwritten asynchronously, by a
+signal handler, so code using them has no bound), returns must be at depth 0 with the caller's
+frame pointer restored and, on AArch64, with the link register holding the return address.
 
 The premises (outside the bound, listed in the gate's report): the stack lies farther than
 PC_REACH + 4095 + A64_OFF_REACH bytes from the image's code. On x86-64 Linux, let M be the linked
-ELF's PT_TLS p_memsz (zero without PT_TLS), derived by the gate from its program headers. FS.base
+ELF's Variant II static-TLS reservation below FS.base: zero without PT_TLS or when p_memsz = 0, and
+otherwise roundup(p_memsz + ((p_vaddr - p_memsz) & (a - 1)), a) with a = max(p_align, 1). FS.base
 is the Variant II thread pointer and remains fixed throughout Concrete-owned execution, including
 across external calls. Static TLS occupies offsets [-M, 0), and the x86-64 Linux TCB header through
 __private_tm occupies [0, 0x70), relative to FS.base. The runtime-separation obligation is that no
@@ -55,18 +62,43 @@ external functions' own stack use; that `_exit` and `abort` do not return (a pat
 one); and that external functions follow the ABI's callee-saved rule (the frame pointer and stack
 pointer preserved).
 
-Fail closed: an instruction outside the modelled set (X86_PLAIN, A64_PLAIN and the control
-transfers), any of the refusals above, an unmodelled stack-pointer write, an indirect branch, call
-or return, a branch leaving its function, two different states meeting, recursion, or a call to a
-function that is neither Concrete-owned nor a PLT/stub symbol is an error (exit 1), never a bound.
+Fail closed: an instruction or operand outside the modelled grammar in `stack_access.py`, any of
+the refusals above, an unmodelled stack-pointer write, an indirect branch, call or return, a branch
+leaving its function, two different states meeting, recursion, or a call to a function that is
+neither Concrete-owned nor a PLT/stub symbol is an error (exit 1), never a bound.
 """
+import json
+import os
 import re
 import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import stack_access
+from stack_access import (
+    A64_DATA_REG,
+    A64_FLAGS_ONLY,
+    A64_FP,
+    A64_LR,
+    A64_OFF_REACH,
+    A64_PLAIN,
+    A64_REGSIZE,
+    A64_SP,
+    PC_REACH,
+    TARGETS,
+    TCB_SIZE,
+    X86_FP,
+    X86_GPR64,
+    X86_PLAIN,
+    X86_SP,
+    X86_STACK,
+    byte_interval,
+)
 
 OWNED = ("main", "concrete_body", "concrete_rt_write_all")
 # External functions that do not return (part of the libc premise): a path ends at a call to one.
 NORETURN = ("exit", "_exit", "_Exit", "abort")
 ENTRY = "entry"
+TLS_MEMSZ = None
 
 
 class Refuse(Exception):
@@ -78,14 +110,59 @@ def owned_name(sym):
     return s if s in OWNED else None
 
 
+def elf_tls_line(path):
+    """Derive `tls_memsz 0xM` (the Variant II static-TLS reservation M below FS.base) from
+    `llvm-readobj --program-headers --elf-output-style=JSON` output. Requires at least one PT_LOAD
+    segment and at most one PT_TLS segment."""
+    try:
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+    except Exception as e:
+        raise Refuse(f"malformed program-header JSON: {e}") from None
+    if not isinstance(data, list) or len(data) != 1 or not isinstance(data[0], dict):
+        raise Refuse("expected a single ELF object in program-header JSON")
+    phdrs = data[0].get("ProgramHeaders")
+    if not isinstance(phdrs, list):
+        raise Refuse("missing ProgramHeaders list in JSON")
+    loads = 0
+    tls = None
+    for entry in phdrs:
+        ph = entry.get("ProgramHeader") if isinstance(entry, dict) else None
+        if not isinstance(ph, dict):
+            raise Refuse("malformed ProgramHeader entry")
+        kind = ph.get("Type", {}).get("Name") if isinstance(ph.get("Type"), dict) else None
+        if kind == "PT_LOAD":
+            loads += 1
+        elif kind == "PT_TLS":
+            if tls is not None:
+                raise Refuse("multiple PT_TLS program headers")
+            tls = ph
+    if loads < 1:
+        raise Refuse("ELF has no PT_LOAD program header")
+    if tls is None:
+        return "tls_memsz 0x0"
+    memsz, filesz = tls.get("MemSize"), tls.get("FileSize")
+    align, vaddr = tls.get("Alignment"), tls.get("VirtualAddress")
+    if not all(isinstance(x, int) and not isinstance(x, bool) for x in (memsz, filesz, align, vaddr)):
+        raise Refuse("non-integer PT_TLS program-header field")
+    if filesz < 0 or filesz > memsz:
+        raise Refuse(f"invalid PT_TLS sizes: p_filesz {filesz} > p_memsz {memsz}")
+    try:
+        res = stack_access.tls_reservation(memsz, align, vaddr)
+    except ValueError as e:
+        raise Refuse(str(e)) from None
+    return f"tls_memsz {res:#x}"
+
+
 def parse(path):
-    """Functions, stubs and the ELF PT_TLS p_memsz recorded in the disassembly.
+    """Functions, stubs and the ELF Variant II static-TLS reservation recorded in the disassembly.
 
     Functions map names to (addr, mnemonic, operands). Stubs are ELF PLT symbol names
     (`write@plt`), and Mach-O stub entries, address -> imported symbol, from `stub ADDR SYMBOL`
     lines the gate appends (from `llvm-objdump --macho --indirect-symbols`, since the Mach-O
     disassembly names only the whole `__stubs` section). On x86 the gate also appends exactly one
-    `tls_memsz N` line from the linked executable's program headers (zero with no PT_TLS)."""
+    `tls_memsz M [ALIGN VADDR]` line from the linked executable's program headers (zero with no
+    PT_TLS)."""
     funcs, cur, stubs, section = {}, None, {"names": set(), "addrs": {}}, ""
     tls_memsz = None
     head = re.compile(r"^([0-9a-f]+) <([^>]+)>:$")
@@ -94,12 +171,18 @@ def parse(path):
     for line in open(path, encoding="utf-8", errors="replace"):
         line = line.rstrip("\n")
         if line.startswith("tls_memsz"):
-            m = re.fullmatch(r"tls_memsz (0x[0-9a-f]+|\d+)", line)
+            m = re.fullmatch(
+                r"tls_memsz (0x[0-9a-f]+|\d+)(?:\s+(0x[0-9a-f]+|\d+)\s+(0x[0-9a-f]+|\d+))?",
+                line)
             if not m or tls_memsz is not None:
                 raise Refuse(f"malformed or duplicate PT_TLS metadata: {line}")
-            tls_memsz = int(m.group(1), 0)
-            if tls_memsz > (1 << 64) - 1:
-                raise Refuse(f"PT_TLS p_memsz does not fit in 64 bits: {line}")
+            memsz = int(m.group(1), 0)
+            align = int(m.group(2), 0) if m.group(2) is not None else 1
+            vaddr = int(m.group(3), 0) if m.group(3) is not None else 0
+            try:
+                tls_memsz = stack_access.tls_reservation(memsz, align, vaddr)
+            except ValueError as e:
+                raise Refuse(f"{e}: {line}") from None
             cur = None
             continue
         m = stub.match(line)
@@ -135,7 +218,10 @@ def parse(path):
 
 
 def target_of(ops):
-    m = re.search(r"0x([0-9a-f]+)\s*<([^>]+)>", ops) or re.search(r"\b([0-9a-f]+)\s*<([^>]+)>", ops)
+    m = (re.fullmatch(r"0x([0-9a-f]+)\s*<([^>]+)>", ops)
+         or re.fullmatch(r"([0-9a-f]+)\s*<([^>]+)>", ops)
+         or re.search(r"0x([0-9a-f]+)\s*<([^>]+)>", ops)
+         or re.search(r"\b([0-9a-f]+)\s*<([^>]+)>", ops))
     return (int(m.group(1), 16), m.group(2)) if m else (None, None)
 
 
@@ -209,92 +295,25 @@ def cleared(saved, lo, hi):
     return frozenset(x for x in saved if not (lo <= x[0] and x[1] <= hi))
 
 
-X86_SP = ("rsp", "esp", "sp", "spl")
-X86_FP = ("rbp", "ebp", "bp", "bpl")
-X86_STACK = X86_SP + X86_FP
-X86_SEGMENTS = ("cs", "ds", "es", "fs", "gs", "ss")
-X86_GPR64 = re.compile(r"^(r[abcd]x|r[sd]i|rbp|r(?:8|9|1[0-5]))$")
-X86_SIZE = {"byte": 1, "word": 2, "dword": 4, "qword": 8, "tbyte": 10, "xmmword": 16,
-            "ymmword": 32, "zmmword": 64}
-MEM = re.compile(r"\[([^\]]*)\]")
-MASK = (1 << 64) - 1
-
-
-# PC-relative addressing reaches at most PC_REACH bytes from the instruction (x86 rip
-# displacement; AArch64 adrp/adr target) plus, on AArch64, one add immediate (at most 4095) and
-# the access's own offset (at most A64_OFF_REACH): the premise that the stack lies farther than
-# that from the image's code makes such an access never a stack access.
-PC_REACH = 16 << 20
-# x86-64 Linux glibc's tcbhead_t through __private_tm occupies [fs:0, fs:0x70). Static TLS uses
-# Variant II: the PT_TLS p_memsz bytes end at FS.base. No other fs: interval, and no gs: access,
-# is exempt from stack accounting.
-TCB_SIZE = 0x70
-TLS_MEMSZ = None
-# TARGET -> (architecture, red zone in bytes): how far below the stack pointer code may address
-# memory without moving it. x86-64 System V ABI section 3.2.2 (128); Apple, "Writing ARM64 code for
-# Apple platforms" (128); AAPCS64 has none (0).
-TARGETS = {"x86_64-linux": ("x86_64", 128), "aarch64-macos": ("aarch64", 128),
-           "aarch64-linux": ("aarch64", 0)}
-A64_OFF_REACH = 32760
-
-
-def byte_interval(k, size):
-    """The inclusive signed offsets of an access, with its displacement reduced modulo 2^64."""
-    lo = k & MASK
-    if lo & (1 << 63):
-        lo -= 1 << 64
-    return lo, lo + size - 1
-
-
 def x86_inst(mn, ops, st, addr=0):
     """(new state, deepest byte touched or None) after a non-control x86 instruction."""
-    what = f"{mn} {ops}"
-    args = [a.strip() for a in ops.split(",")] if ops else []
-    dst = args[0] if args else ""
-    if dst in X86_SEGMENTS and mn not in ("cmp", "test"):
-        raise Refuse(f"write to a segment register: {what}")
-    memory = list(MEM.finditer(ops))
-    if len(memory) > 1:
-        raise Refuse(f"instruction with more than one memory operand: {what}")
+    what = f"{mn} {ops}".strip()
+    try:
+        parsed_ops, memory = stack_access.parse_x86_plain(mn, ops)
+    except ValueError as e:
+        raise Refuse(str(e)) from None
+
     deepest, w, saved = None, st.w, st.saved
-    for m in memory:
-        terms = re.findall(r"[+-]?\s*[^+\-\s]+", m.group(1))
-        if not terms:
-            raise Refuse(f"empty memory address: {what}")
-        regs = [t.strip(" +-") for t in terms if not re.fullmatch(r"[+-]?\s*(0x[0-9a-f]+|\d+)", t)]
-        prefix = ops[:m.start()]
-        segment_match = re.search(r"\b([cdefg]s|ss):\s*$", prefix)
-        segment = segment_match.group(1) if segment_match else None
-        if segment_match:
-            prefix = prefix[:segment_match.start()]
-        k = sum(int(t.replace(" ", ""), 0) for t in terms if t.strip(" +-") not in regs)
+    for mem_idx, segment, width, _, regs, scaled, k in memory:
         if mn == "lea":
-            # LEA accesses no bytes and has no operand width. Only its PC-relative address form is
-            # modelled; a stack address taken as a value and every segment override are refused.
-            if segment:
-                raise Refuse(f"segment override on LEA: {what}")
             if any(r in X86_STACK for r in regs):
                 raise Refuse(f"stack address taken as a value: {what}")
-            if regs != ["rip"]:
+            elif regs != ["rip"] or scaled:
                 raise Refuse(f"LEA through a register that may hold a stack address, or absolutely: {what}")
             lo, _ = byte_interval(k, 1)
             if abs(lo) > PC_REACH:
                 raise Refuse(f"PC-relative LEA beyond the premise's reach: {what}")
             continue
-        size = re.search(r"(\w+) ptr\s*$", prefix)
-        if not size or size.group(1) not in X86_SIZE:
-            raise Refuse(f"memory access of unknown size: {what}")
-        width = X86_SIZE[size.group(1)]
-
-        # Classify the override before address provenance: FS.base is part of every fs: effective
-        # address, including one that also contains rsp or rbp. Only absolute fs: operands in the
-        # target's TCB or PT_TLS intervals are modelled; gs: has no thread-pointer role on Linux.
-        if segment == "gs":
-            raise Refuse(f"gs segment override on x86_64-linux: {what}")
-        if segment and segment != "fs":
-            raise Refuse(f"unmodelled {segment} segment override: {what}")
-        if segment == "fs" and regs:
-            raise Refuse(f"thread-pointer-relative access through a register: {what}")
 
         base = [r for r in regs if r in X86_STACK]
         if not base:
@@ -303,13 +322,11 @@ def x86_inst(mn, ops, st, addr=0):
             # lie within the relevant separation premise.
             lo, hi = byte_interval(k, width)
             if segment == "fs":
-                if TLS_MEMSZ is None:
-                    raise Refuse("x86 analysis without the linked executable's PT_TLS p_memsz")
                 in_tcb = 0 <= lo and hi < TCB_SIZE
                 in_tls = -TLS_MEMSZ <= lo and hi < 0
                 if not (in_tcb or in_tls):
                     raise Refuse(f"thread-pointer-relative access beyond the premise's reach: {what}")
-            elif regs == ["rip"]:
+            elif regs == ["rip"] and not scaled:
                 if lo < -PC_REACH or hi > PC_REACH:
                     raise Refuse(f"PC-relative access beyond the premise's reach: {what}")
             else:
@@ -318,16 +335,13 @@ def x86_inst(mn, ops, st, addr=0):
             continue
         if base[0] not in ("rsp", "rbp"):
             raise Refuse(f"stack address through a partial register: {what}")
-        if len(regs) != 1:
+        if len(regs) != 1 or scaled:
             raise Refuse(f"indexed stack address: {what}")
-        if mn == "lea":
-            raise Refuse(f"stack address taken as a value: {what}")
         top = (frame_depth(st.fp, what) if base[0] == "rbp" else st.d) - k
         lo = top - width + 1
-        # The memory operand is the destination when its match starts before the operand comma:
-        # written only by mov and setcc, read and written by the others, read only by cmp and test.
-        comma = ops.find(",")
-        first = comma < 0 or m.start() < comma
+        # The memory operand is the destination when it is the first operand (mem_idx == 0):
+        # written only by mov, movabs and setcc, read and written by the others, read only by cmp and test.
+        first = mem_idx == 0
         if not first or mn in ("cmp", "test"):
             mode = "r"
         elif mn in ("mov", "movabs") or mn.startswith("set"):
@@ -338,14 +352,12 @@ def x86_inst(mn, ops, st, addr=0):
         if "w" in mode:
             saved = cleared(saved, lo, top)
         deepest = top if deepest is None else max(deepest, top)
+
     st = st.but(w=w, saved=saved)
-    outside = MEM.sub("", ops)
-    modelled = (mn, ops) in (("push", "rbp"), ("pop", "rbp"), ("mov", "rbp, rsp"),
-                             ("mov", "rsp, rbp"), ("leave", "")) or (
-        mn in ("sub", "add") and re.fullmatch(r"rsp, (0x[0-9a-f]+|\d+)", ops))
-    if not modelled and any(re.search(rf"\b{r}\b", outside) for r in X86_STACK):
-        raise Refuse(f"stack or frame pointer used as a value: {what}")
+    dst = parsed_ops[0][1] if parsed_ops and parsed_ops[0][0] == "reg" else ""
     if mn == "push":
+        if dst != "rbp" and dst in X86_STACK:
+            raise Refuse(f"stack or frame pointer used as a value: {what}")
         if not X86_GPR64.match(dst):
             raise Refuse(f"push of other than a 64-bit general register: {what}")
         d = st.d + 8
@@ -360,13 +372,18 @@ def x86_inst(mn, ops, st, addr=0):
         return x86_pop(st, dst, st.d, what), None
     if mn == "leave":
         return x86_pop(st, "rbp", frame_depth(st.fp, what), what), None
-    if mn in ("sub", "add") and dst == "rsp":
-        n = imm(args[1])
+    if (mn in ("sub", "add") and dst == "rsp" and len(parsed_ops) == 2
+            and parsed_ops[1][0] == "imm"):
+        n = parsed_ops[1][1]
         return st.but(d=st.d + n if mn == "sub" else st.d - n), deepest
     if (mn, ops) == ("mov", "rbp, rsp"):
         return st.but(fp=st.d), deepest
     if (mn, ops) == ("mov", "rsp, rbp"):
         return st.but(d=frame_depth(st.fp, what)), deepest
+    srcs = [val for kind, val in (parsed_ops if mn in ("cmp", "test") else parsed_ops[1:])
+            if kind == "reg"]
+    if any(r in X86_STACK for r in srcs):
+        raise Refuse(f"stack or frame pointer used as a value: {what}")
     if dst in X86_SP:
         raise Refuse(f"unmodelled stack-pointer write: {what}")
     if dst in X86_FP:
@@ -386,12 +403,6 @@ def x86_pop(st, dst, at, what):
     return st.but(d=at - 8, fp=slot[2][1] if slot and slot[2][0] == "fp" else None)
 
 
-A64_SP = ("sp", "wsp")
-A64_FP = ("x29", "w29")
-A64_LR = ("x30", "w30")
-A64_REGSIZE = {"x": 8, "w": 4, "q": 16, "d": 8, "s": 4, "h": 2, "b": 1}
-
-
 def a64_size(mn, data, what):
     if mn in ("ldrb", "strb", "ldrsb", "ldurb", "sturb", "ldursb"):
         return 1
@@ -407,9 +418,6 @@ def a64_size(mn, data, what):
 def a64_reg(r):
     """The 64-bit name of a general register (w8 -> x8)."""
     return "x" + r[1:] if re.fullmatch(r"w([0-9]|[12][0-9]|30)", r) else r
-
-
-A64_FLAGS_ONLY = ("cmp", "cmn", "tst", "ccmp", "ccmn", "nop")
 
 
 def a64_inst(mn, ops, st, addr=0):
@@ -441,32 +449,39 @@ def a64_inst(mn, ops, st, addr=0):
 
 def a64_core(mn, ops, st):
     """(new state, deepest byte touched or None) after a non-control AArch64 instruction."""
-    what = f"{mn} {ops}"
+    what = f"{mn} {ops}".strip()
+    if not A64_PLAIN.match(mn):
+        raise Refuse(f"unmodelled instruction: {what}")
     args = [a.strip() for a in re.split(r",(?![^\[]*\])", ops)] if ops else []
+    if any(not a for a in args):
+        raise Refuse(f"malformed operand list: {what}")
     first_mem = next((i for i, a in enumerate(args) if a.startswith("[")), len(args))
     data = args[:first_mem]
+    if any("[" in a or "]" in a for a in data):
+        raise Refuse(f"unmodelled address form: {what}")
     is_load, is_store = mn.startswith("ld"), mn.startswith("st")
     deepest = None
     record = restored = single = False
     if first_mem < len(args):
+        if first_mem + 2 < len(args) or not all(A64_DATA_REG.match(r) for r in data):
+            raise Refuse(f"unmodelled address form: {what}")
         mem = args[first_mem]
         post = args[first_mem + 1] if first_mem + 1 < len(args) else None
         m = re.fullmatch(r"\[(\w+)(?:,\s*(#?-?(?:0x)?[0-9a-f]+))?\](!?)", mem)
-        if not m:
+        if not m or (post is not None and (m.group(3) == "!" or not re.fullmatch(r"#-?(?:0x)?[0-9a-f]+", post))):
             raise Refuse(f"unmodelled address form: {what}")
-        else:
-            base, off, pre = m.group(1), m.group(2), m.group(3) == "!"
-            if base in A64_FP and (pre or post is not None):
-                raise Refuse(f"writeback on the frame pointer: {what}")
-            if base in A64_LR and (pre or post is not None):
-                raise Refuse(f"writeback on the link register: {what}")
-            if base not in ("sp", "x29") + A64_SP + A64_FP:
-                # Any other register may hold a stack address (main's argv, envp and apple
-                # vector, a value an external function left): only a PC-relative one is used.
-                if base not in {x[0] for x in st.g}:
-                    raise Refuse(f"memory addressed through a register that may hold a stack address: {what}")
-                if pre or post is not None or (off and abs(imm(off)) > A64_OFF_REACH):
-                    raise Refuse(f"PC-relative access beyond the premise's reach: {what}")
+        base, off, pre = m.group(1), m.group(2), m.group(3) == "!"
+        if base in A64_FP and (pre or post is not None):
+            raise Refuse(f"writeback on the frame pointer: {what}")
+        if base in A64_LR and (pre or post is not None):
+            raise Refuse(f"writeback on the link register: {what}")
+        if base not in ("sp", "x29") + A64_SP + A64_FP:
+            # Any other register may hold a stack address (main's argv, envp and apple
+            # vector, a value an external function left): only a PC-relative one is used.
+            if base not in {x[0] for x in st.g}:
+                raise Refuse(f"memory addressed through a register that may hold a stack address: {what}")
+            if pre or post is not None or (off and abs(imm(off)) > A64_OFF_REACH):
+                raise Refuse(f"PC-relative access beyond the premise's reach: {what}")
         if base in ("sp", "x29"):
             record = mn in ("stp", "ldp") and data == ["x29", "x30"] and base == "sp"
             size = a64_size(mn, data, what)
@@ -480,8 +495,6 @@ def a64_core(mn, ops, st):
             else:
                 top = d - k
             if post is not None:
-                if base != "sp":
-                    raise Refuse(f"unmodelled writeback: {what}")
                 top = st.d
                 d = d - imm(post)
             lo = top - size + 1
@@ -565,65 +578,21 @@ def a64_core(mn, ops, st):
     return st, None
 
 
-X86_JCC = re.compile(r"^j(?!mp$)[a-z]+$")
-A64_COND = re.compile(r"^b\.[a-z]+$")
-
-# The data-processing instructions whose only effect on the stack is what x86_inst and a64_inst
-# model (memory operands, and writes to the stack, frame and link registers). Any other
-# instruction on a reachable path is refused: an unknown one may move the stack pointer or
-# transfer control (x86 `loop`, a `rep` prefix), so the analysis never treats it as a fallthrough.
-X86_PLAIN = re.compile(
-    r"^(mov|movabs|movzx|movsx|movsxd|lea|add|sub|adc|sbb|imul|mul|and|or|xor|not|neg|inc|dec"
-    r"|cmp|test|shl|shr|sar|sal|rol|ror|cdq|cqo|cdqe|cwde|cbw|cwd|nop|endbr64"
-    r"|push|pop|leave|set[a-z]+|cmov[a-z]+)$")
-A64_PLAIN = re.compile(
-    r"^(mov|movz|movk|movn|add|adds|sub|subs|neg|negs|mul|madd|msub|mneg|smull|umull|smulh|umulh"
-    r"|smaddl|umaddl|sdiv|udiv|and|ands|orr|orn|eor|eon|bic|bics|mvn|lsl|lsr|asr|ror|lslv|lsrv"
-    r"|asrv|cmp|cmn|tst|ccmp|ccmn|cset|csetm|csel|csinc|csinv|csneg|cinc|cneg|sxtb|sxth|sxtw"
-    r"|uxtb|uxth|ubfx|sbfx|ubfm|sbfm|bfi|bfxil|extr|adr|adrp|nop"
-    r"|ldr|ldrb|ldrh|ldrsb|ldrsh|ldrsw|ldur|ldurb|ldurh|ldursb|ldursh|ldursw"
-    r"|str|strb|strh|stur|sturb|sturh|ldp|stp|ldpsw)$")
-
-
 def control(mn, ops):
-    """(kind, target) for a control instruction, or (None, None)."""
-    if ARCH == "x86_64":
-        if mn == "call":
-            return "call", ops
-        if mn == "jmp":
-            return "jmp", ops
-        if X86_JCC.match(mn):
-            return "jcc", ops
-        if mn == "ret":
-            return ("indirect", ops) if ops else ("ret", None)
-        if mn in ("ud2", "hlt", "int3"):
-            return "stop", None
-        return None, None
-    if mn == "bl":
-        return "call", ops
-    if mn == "b":
-        return "jmp", ops
-    if A64_COND.match(mn) or mn in ("cbz", "cbnz", "tbz", "tbnz"):
-        return "jcc", ops
-    if mn in ("blr", "br", "braa", "blraa", "braaz", "blraaz", "retaa", "retab"):
-        return "indirect", ops
-    if mn == "ret":
-        return ("indirect", ops) if ops else ("ret", None)
-    if mn in ("brk", "udf", "hlt"):
-        return "stop", None
-    return None, None
+    return stack_access.control(ARCH, mn, ops)
 
 
 def analyse(funcs, stubs):
     """(bound, externals, owned): main's bound, each external's deepest entry depth, both from
     main's entry, and the owned functions' names."""
+    if ARCH == "x86_64" and TLS_MEMSZ is None:
+        raise Refuse("x86 analysis without the linked executable's PT_TLS")
     owned = {owned_name(n): n for n in funcs if owned_name(n)}
     if "main" not in owned:
         raise Refuse("no main")
     memo, active = {}, set()
     ret_push = 8 if ARCH == "x86_64" else 0
     inst = x86_inst if ARCH == "x86_64" else a64_inst
-    plain = X86_PLAIN if ARCH == "x86_64" else A64_PLAIN
 
     def add_ext(ext, sub, base):
         for name, depth in sub.items():
@@ -663,8 +632,6 @@ def analyse(funcs, stubs):
             addr, mn, ops = code[i]
             kind, arg = control(mn, ops)
             if kind is None:
-                if not plain.match(mn):
-                    raise Refuse(f"{key}+{addr:#x}: unmodelled instruction: {mn} {ops}")
                 before = st.d
                 try:
                     st, touched = inst(mn, ops, st, addr)
@@ -722,7 +689,7 @@ def analyse(funcs, stubs):
                 # The callee may have written anything below the stack pointer; on AArch64, bl
                 # replaced the link register.
                 st = st.but(w=frozenset(b for b in st.w if b <= d), g=frozenset(),
-                           lr=st.lr if ARCH == "x86_64" else False)
+                            lr=st.lr if ARCH == "x86_64" else False)
                 flow(i + 1, st, addr)
                 continue
             if tgt not in index:
@@ -739,14 +706,19 @@ def analyse(funcs, stubs):
 
 
 if __name__ == "__main__":
+    if len(sys.argv) == 3 and sys.argv[1] == "--elf-tls":
+        try:
+            print(elf_tls_line(sys.argv[2]))
+        except Refuse as e:
+            print(f"refused: {e}", file=sys.stderr)
+            sys.exit(1)
+        sys.exit(0)
     if len(sys.argv) not in (3, 4) or sys.argv[1] not in TARGETS:
-        sys.exit(f"usage: stack_bound.py {'|'.join(TARGETS)} DISASM [--ranges]")
+        sys.exit(f"usage: stack_bound.py {'|'.join(TARGETS)} DISASM [--ranges] | --elf-tls HEADERS_JSON")
     TARGET = sys.argv[1]
     ARCH, RED_ZONE = TARGETS[TARGET]
     try:
         funcs, stubs, TLS_MEMSZ = parse(sys.argv[2])
-        if ARCH == "x86_64" and TLS_MEMSZ is None:
-            raise Refuse("x86 analysis without the linked executable's PT_TLS p_memsz")
         total, ext, owned = analyse(funcs, stubs)
     except Refuse as e:
         print(f"refused: {e}")

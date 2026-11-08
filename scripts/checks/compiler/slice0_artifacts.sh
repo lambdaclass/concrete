@@ -20,26 +20,31 @@
 #     calls listed with their entry depth (their own use, and that _exit and abort do not return,
 #     are premises). A run under gdb (x86-64 Linux, lib/stack_measure.py) or LLDB (aarch64-macos,
 #     lib/stack_measure_lldb.py) must stay within it (the run counts the stack pointer and every
-#     stack byte a stepped instruction addresses, lib/stack_access.py, so the red zone). Each
+#     stack byte a stepped instruction addresses, lib/stack_access.py, so the red zone). Both
+#     analyses share the fail-closed instruction and operand grammar in lib/stack_access.py. Each
 #     analysed disassembly is kept in REPORT/disassembly/. REPORT/stack.tsv. Controls: the analysis
 #     must refuse an unmodelled stack-pointer write, an indirect call, recursion, a call to an
 #     unknown function, two depths meeting, a stack pointer used as a value or written through a
-#     partial register, a partial frame-pointer write, an indexed stack address, a saved frame
-#     pointer popped into another register, a stack address taken, an overwritten return address,
-#     an AArch64 frame pointer stored, a register-directed return, a return after a call without the
-#     link register restored, a freed or restored saved slot reread, a callee's leftover saved slot
-#     reread by its caller (both architectures), a read of bytes written on one path only or never
-#     written, a store through main's argv, a PC-relative base kept across a call, walked by repeated
-#     adds or beyond the reach premise, fs intervals outside the TCB/PT_TLS bounds (every width,
-#     both signs and wrap-around), every gs or register-relative override, segment-register writes,
-#     multi-memory-operand instructions, and an absolute address; also missing PT_TLS metadata, a
-#     callee that does not restore the frame pointer, a frame record away from sp, an unmodelled
-#     instruction (x86 `loop`) and frame- or link-register writeback (AArch64). Known bounds cover
-#     x86 frame, red-zone store, two AArch64 frame-record shapes, a read written on both paths, an
-#     adrp-based load, an fs:0x28 canary load, and LCB's single link-register save with a Mach-O stub
-#     call in a loop; also refuse the link register loaded from another slot, a stub call with no
+#     partial register, a partial frame-pointer write, an indexed or partial-register stack address,
+#     a saved frame pointer popped into another register, a stack address taken, an overwritten
+#     return address, an AArch64 frame pointer stored, a register-directed return, a return after a
+#     call without the link register restored, a freed or restored saved slot reread, a callee's
+#     leftover saved slot reread by its caller (both architectures), a read of bytes written on one
+#     path only or never written, a store through main's argv, a PC-relative base kept across a
+#     call, walked by repeated adds or beyond the reach premise, fs intervals outside the TCB or
+#     Variant II aligned PT_TLS bounds (every width, both signs, wrap-around, unbracketed forms and
+#     movabs), every gs or register-relative override (including segment-before-size), segment
+#     register reads, compares and writes, multi-memory-operand instructions, unclosed brackets,
+#     duplicate-sign expressions, and an absolute address; also missing, duplicate, non-power-of-two
+#     or PT_LOAD-less PT_TLS metadata, a callee that does not restore the frame pointer, a frame
+#     record away from sp, an unmodelled instruction (x86 `loop`, AArch64 `mrs` TPIDR_EL0, string
+#     ops, `xlat`, `enter`) and frame- or link-register writeback (AArch64), with a mutation check
+#     proving each guard is load-bearing. Known bounds cover x86 frame, red-zone store, two AArch64
+#     frame-record shapes, a read written on both paths, an adrp-based load, an fs:0x28 canary load,
+#     aligned PT_TLS allocations, and LCB's single link-register save with a Mach-O stub call in a
+#     loop; also refuse the link register loaded from another slot, a stub call with no
 #     indirect-symbol entry, into a stub entry's middle or to the bare stub section. Real GDB must
-#     count both unbracketed fs forms, fail closed without fs_base, and derive a real nonzero PT_TLS;
+#     count unbracketed fs forms, fail closed without fs_base, and derive a real aligned PT_TLS;
 #     the comparison must reject a measurement
 #     above the bound; refuse an access beyond the target's red zone (x86-64, Apple arm64) and any
 #     below the stack pointer on aarch64-linux; and a linked main storing at the red zone's edge must
@@ -56,7 +61,7 @@ source scripts/checks/lib/slice0_common.sh
 : "${CONCRETE_SLICE0_LLVM:?run inside nix develop}"
 objdump=(bounded 60 "$CONCRETE_SLICE0_LLVM/llvm-objdump" -d --no-show-raw-insn)
 indirect=(bounded 60 "$CONCRETE_SLICE0_LLVM/llvm-objdump" --macho --indirect-symbols)
-readelf=(bounded 60 "$CONCRETE_SLICE0_LLVM/llvm-readelf" --program-headers --wide)
+readobj=(bounded 60 "$CONCRETE_SLICE0_LLVM/llvm-readobj" --program-headers --elf-output-style=JSON)
 case "$target" in
   x86_64-linux) arch=x86_64; objdump+=(--x86-asm-syntax=intel) ;;
   aarch64-*) arch=aarch64 ;;
@@ -119,20 +124,14 @@ measure() {
   fi
 }
 
-# append_tls EXE DIS: append the linked ELF's sole PT_TLS p_memsz, or zero without PT_TLS. The
-# analyzer never guesses this target fact; unreadable, malformed or repeated metadata fails closed.
+# append_tls EXE DIS: append the linked ELF's Variant II static-TLS reservation M (zero without
+# PT_TLS or when p_memsz = 0), derived from structured llvm-readobj JSON. Requires at least one
+# PT_LOAD segment and at most one PT_TLS segment; unreadable, malformed or repeated metadata fails
+# closed.
 append_tls() {
   local headers="$1.program-headers"
-  "${readelf[@]}" "$1" >"$headers" 2>"$headers.err" || return 1
-  awk '
-    $1 == "TLS" {
-      if (seen || NF < 8 || $6 !~ /^0x[0-9a-fA-F]+$/) bad = 1
-      else { seen = 1; memsz = $6 }
-    }
-    END {
-      if (bad) exit 1
-      print "tls_memsz", (seen ? memsz : "0x0")
-    }' "$headers" >>"$2"
+  "${readobj[@]}" "$1" >"$headers" 2>"$headers.err" || return 1
+  stack_bound --elf-tls "$headers" >>"$2" 2>>"$headers.err"
 }
 
 # stack_check NAME BACKEND EXE: derive the bound, measure a run where supported, record both.
@@ -270,100 +269,122 @@ else
   fail=1
 fi
 sed '/^tls_memsz /d' "$known" >"$work/ctl/no-tls-metadata.dis"
-if stack_bound x86_64-linux "$work/ctl/no-tls-metadata.dis" >"$work/ctl/no-tls-metadata.out"; then
-  echo "FAIL control: x86 analysis without PT_TLS metadata was accepted"; fail=1
-else
+if ! stack_bound x86_64-linux "$work/ctl/no-tls-metadata.dis" >"$work/ctl/no-tls-metadata.out" &&
+   grep -q '^refused: x86 analysis without the linked executable.s PT_TLS' "$work/ctl/no-tls-metadata.out"; then
   echo "ok   control: x86 analysis without PT_TLS metadata is refused"
+else
+  echo "FAIL control: x86 analysis without PT_TLS metadata: $(cat "$work/ctl/no-tls-metadata.out")"; fail=1
 fi
 { cat "$known"; echo 'tls_memsz 0x0'; } >"$work/ctl/duplicate-tls-metadata.dis"
-if stack_bound x86_64-linux "$work/ctl/duplicate-tls-metadata.dis" >"$work/ctl/duplicate-tls-metadata.out"; then
-  echo "FAIL control: duplicate PT_TLS metadata was accepted"; fail=1
-else
+if ! stack_bound x86_64-linux "$work/ctl/duplicate-tls-metadata.dis" >"$work/ctl/duplicate-tls-metadata.out" &&
+   grep -q '^refused: malformed or duplicate PT_TLS metadata' "$work/ctl/duplicate-tls-metadata.out"; then
   echo "ok   control: duplicate PT_TLS metadata is refused"
+else
+  echo "FAIL control: duplicate PT_TLS metadata: $(cat "$work/ctl/duplicate-tls-metadata.out")"; fail=1
 fi
-refuse() { # refuse NAME BODY [TARGET [MAIN [PT_TLS_MEMSZ]]]: BODY follows the main header
-  local f
-  f=$(ctl_dis "$1" "${5:-0x0}" <<<"$(printf "\n0000000000001010 <${4:-main}>:\n$2")")
-  if stack_bound "${3:-x86_64-linux}" "$f" >"$f.out"; then
-    echo "FAIL control: stack analysis accepts $1: $(head -c 2000 "$f.out")"; fail=1
-  else
+: >"$work/ctl/refuse_manifest.tsv"
+refuse() { # refuse NAME DIAG BODY [TARGET [MAIN [PT_TLS_MEMSZ]]]: BODY follows the main header
+  local f rc=0
+  f=$(ctl_dis "$1" "${6:-0x0}" <<<"$(printf "\n0000000000001010 <${5:-main}>:\n$3")")
+  printf '%s\t%s\t%s\t%s\n' "$1" "${4:-x86_64-linux}" "$f" "$2" >>"$work/ctl/refuse_manifest.tsv"
+  stack_bound "${4:-x86_64-linux}" "$f" >"$f.out" || rc=$?
+  if [ "$rc" -eq 1 ] && grep -Eq "^refused: .*$2" "$f.out"; then
     echo "ok   control: stack analysis refuses $1"
+  else
+    echo "FAIL control: stack analysis $1 (expected '$2'): status $rc, output $(head -c 2000 "$f.out")"; fail=1
   fi
 }
 refuse_tp() { # refuse_tp NAME BODY [PT_TLS_MEMSZ]: an fs operand gets the reach refusal
-  local f rc=0
-  f=$(ctl_dis "$1" "${3:-0x0}" <<<"$(printf "\n0000000000001010 <main>:\n$2")")
-  stack_bound x86_64-linux "$f" >"$f.out" || rc=$?
-  if [ "$rc" -eq 1 ] && grep -q '^refused: .*thread-pointer-relative access beyond the premise' "$f.out"; then
-    echo "ok   control: stack analysis refuses $1 with the reach diagnostic"
-  else
-    echo "FAIL control: $1: status $rc, output $(head -c 2000 "$f.out")"; fail=1
-  fi
+  refuse "$1" "thread-pointer-relative access beyond the premise's reach" "$2" x86_64-linux main "${3:-0x0}"
 }
-refuse dynamic-sp '    1010:\tsub\trsp, rax\n    1013:\tret\n'
-refuse indirect-call '    1010:\tcall\trax\n    1012:\tret\n'
-refuse recursion '    1010:\tpush\trbp\n    1011:\tcall\t0x1010 <main>\n    1016:\tpop\trbp\n    1017:\tret\n'
-refuse unknown-call '    1010:\tcall\t0x3000 <helper>\n    1015:\tret\n'
-refuse depths-meet '    1010:\tje\t0x1014 <main+0x4>\n    1012:\tpush\trax\n    1013:\tnop\n    1014:\tret\n'
-refuse stack-pointer-escape '    1010:\tmov\trax, rsp\n    1013:\tret\n'
-refuse indexed-stack-address '    1010:\tmov\teax, dword ptr [rsp + 4*rcx - 0x8]\n    1014:\tret\n'
-refuse partial-stack-pointer '    1010:\tpush\trax\n    1011:\tpop\tsp\n    1013:\tret\n'
-refuse partial-frame-pointer '    1010:\tpush\trbp\n    1011:\tmov\trbp, rsp\n    1014:\tmov\tbp, 0x0\n    1018:\tmov\teax, dword ptr [rbp - 0x100]\n    101e:\tpop\trbp\n    101f:\tret\n'
-refuse loop-instruction '    1010:\tmov\tecx, 0x2\n    1015:\tloop\t0x1018 <main+0x8>\n    1017:\tret\n    1018:\tsub\trsp, 0x100\n    101f:\tadd\trsp, 0x100\n    1026:\tret\n'
-refuse saved-frame-pointer-popped '    1010:\tpush\trbp\n    1011:\tmov\trbp, rsp\n    1014:\tpush\trbp\n    1015:\tpop\trax\n    1016:\tmov\tdword ptr [rax - 0x100], ecx\n    101c:\tpop\trbp\n    101d:\tret\n'
-refuse stack-address-taken '    1010:\tpush\trbp\n    1011:\tmov\trbp, rsp\n    1014:\tlea\trax, [rbp - 0x10]\n    1018:\tpop\trbp\n    1019:\tret\n'
-refuse return-address-overwrite '    1010:\tmov\tqword ptr [rsp], rax\n    1014:\tret\n'
-refuse a64-frame-pointer-stored '    1010:\tmov\tx29, sp\n    1014:\tstr\tx29, [x0]\n    1018:\tret\n' aarch64-macos _main
-refuse a64-ret-register '    1010:\tret\tx0\n' aarch64-macos _main
-refuse a64-link-register-lost '    1010:\tstp\tx29, x30, [sp, #-0x10]!\n    1014:\tbl\t0x1020 <_concrete_body>\n    1018:\tadd\tsp, sp, #0x10\n    101c:\tret\n\n0000000000001020 <_concrete_body>:\n    1020:\tret\n' aarch64-macos _main
-refuse freed-slot-reread '    1010:\tpush\trbp\n    1011:\tmov\trbp, rsp\n    1014:\tpush\trbp\n    1015:\tadd\trsp, 0x8\n    1019:\tmov\trax, qword ptr [rsp - 0x8]\n    101e:\tmov\tdword ptr [rax - 0x100], ecx\n    1024:\tpop\trbp\n    1025:\tret\n'
-refuse callee-clobbers-frame-pointer '    1010:\tpush\trbp\n    1011:\tmov\trbp, rsp\n    1014:\tcall\t0x1040 <concrete_body>\n    1019:\tmov\tdword ptr [rbp - 0x100], ecx\n    101f:\tpop\trbp\n    1020:\tret\n\n0000000000001040 <concrete_body>:\n    1040:\tsub\trsp, 0x1000\n    1047:\tmov\trbp, rsp\n    104a:\tadd\trsp, 0x1000\n    1051:\tret\n'
-refuse a64-frame-record-elsewhere '    1010:\tldp\tx29, x30, [x0]\n    1014:\tret\n' aarch64-macos _main
-refuse restored-slot-reread '    1010:\tpush\trbp\n    1011:\tmov\trbp, rsp\n    1014:\tpush\trbp\n    1015:\tpop\trbp\n    1016:\tmov\trax, qword ptr [rsp - 0x8]\n    101b:\tmov\tdword ptr [rax - 0x1000], ecx\n    1021:\tpop\trbp\n    1022:\tret\n'
-refuse a64-restored-record-reread '    1010:\tstp\tx29, x30, [sp, #-0x10]!\n    1014:\tmov\tx29, sp\n    1018:\tstp\tx29, x30, [sp, #-0x10]!\n    101c:\tldp\tx29, x30, [sp], #0x10\n    1020:\tldr\tx0, [sp, #-0x10]\n    1024:\tstr\tx1, [x0, #-0x1000]\n    1028:\tldp\tx29, x30, [sp], #0x10\n    102c:\tret\n' aarch64-macos _main
-refuse a64-w29-writeback-load '    1010:\tsub\tsp, sp, #0x10\n    1014:\tmov\tx29, sp\n    1018:\tldr\tw29, [sp], #0x10\n    101c:\tstr\tx0, [x29, #-0x100]\n    1020:\tret\n' aarch64-macos _main
-refuse a64-frame-writeback '    1010:\tmov\tx29, sp\n    1014:\tstr\tx0, [x29], #-0x100\n    1018:\tstr\tx0, [x29]\n    101c:\tadd\tx29, x29, #0x100\n    1020:\tret\n' aarch64-macos _main
-# A callee's saved frame pointer, left below the caller's stack pointer, reread by the caller.
-refuse callee-residual-reread '    1010:\tpush\trbp\n    1011:\tmov\trbp, rsp\n    1014:\tcall\t0x1040 <concrete_body>\n    1019:\tmov\trax, qword ptr [rsp - 0x10]\n    101e:\tmov\tdword ptr [rax - 0x1000], ecx\n    1024:\tpop\trbp\n    1025:\tret\n\n0000000000001040 <concrete_body>:\n    1040:\tpush\trbp\n    1041:\tpop\trbp\n    1042:\tret\n'
+refuse non-power-of-two-tls-align 'PT_TLS p_align 0x3 is not a power of two' '    1010:\tret\n' x86_64-linux main '0x8 0x3 0x0'
+refuse dynamic-sp 'unmodelled stack-pointer write' '    1010:\tsub\trsp, rax\n    1013:\tret\n'
+refuse indirect-call 'indirect call' '    1010:\tcall\trax\n    1012:\tret\n'
+refuse recursion 'recursion through main' '    1010:\tpush\trbp\n    1011:\tcall\t0x1010 <main>\n    1016:\tpop\trbp\n    1017:\tret\n'
+refuse unknown-call 'neither owned nor a stub' '    1010:\tcall\t0x3000 <helper>\n    1015:\tret\n'
+refuse depths-meet 'states .* meet' '    1010:\tje\t0x1014 <main+0x4>\n    1012:\tpush\trax\n    1013:\tnop\n    1014:\tret\n'
+refuse stack-pointer-escape 'stack or frame pointer used as a value' '    1010:\tmov\trax, rsp\n    1013:\tret\n'
+refuse indexed-stack-address 'indexed stack address' '    1010:\tmov\tdword ptr [rsp + 4*rcx - 0x8], eax\n    1014:\tret\n'
+refuse partial-stack-address 'stack address through a partial register' '    1010:\tmov\tdword ptr [esp - 0x8], eax\n    1015:\tret\n'
+refuse partial-stack-pointer 'pop of other than a 64-bit general register' '    1010:\tpush\trax\n    1011:\tpop\tsp\n    1013:\tret\n'
+refuse partial-frame-pointer 'frame-relative use of a frame pointer that is not this frame' '    1010:\tpush\trbp\n    1011:\tmov\trbp, rsp\n    1014:\tmov\tbp, 0x0\n    1018:\tmov\tdword ptr [rbp - 0x10], eax\n    101e:\tpop\trbp\n    101f:\tret\n'
+refuse loop-instruction 'unmodelled instruction: loop' '    1010:\tmov\tecx, 0x2\n    1015:\tloop\t0x1018 <main+0x8>\n    1017:\tret\n    1018:\tsub\trsp, 0x100\n    101f:\tadd\trsp, 0x100\n    1026:\tret\n'
+refuse a64-tpidr-el0 'unmodelled instruction: mrs' '    1010:\tmrs\tx8, tpidr_el0\n    1014:\tret\n' aarch64-macos _main
+refuse saved-frame-pointer-popped 'a saved frame pointer popped into rax' '    1010:\tpush\trbp\n    1011:\tmov\trbp, rsp\n    1014:\tpush\trbp\n    1015:\tpop\trax\n    1016:\tpop\trbp\n    1017:\tret\n'
+refuse stack-address-taken 'stack address taken as a value' '    1010:\tpush\trbp\n    1011:\tmov\trbp, rsp\n    1014:\tlea\trax, [rbp - 0x10]\n    1018:\tpop\trbp\n    1019:\tret\n'
+refuse x86-lea-non-rip 'LEA through a register that may hold a stack address, or absolutely' '    1010:\tlea\trax, [rsi + 0x10]\n    1014:\tret\n'
+refuse x86-lea-segment-override 'segment override on LEA' '    1010:\tlea\trax, fs:[rip + 0x10]\n    1017:\tret\n'
+refuse return-address-overwrite 'touches the return address or the caller' '    1010:\tmov\tqword ptr [rsp], rax\n    1014:\tret\n'
+refuse a64-frame-pointer-stored 'stack or frame pointer stored as a value' '    1010:\tstp\tx29, x30, [sp, #-0x10]!\n    1014:\tmov\tx29, sp\n    1018:\tadrp\tx8, 0x1000 <_main>\n    101c:\tstr\tx29, [x8]\n    1020:\tldp\tx29, x30, [sp], #0x10\n    1024:\tret\n' aarch64-macos _main
+refuse a64-ret-register 'indirect control transfer ret x0' '    1010:\tret\tx0\n' aarch64-macos _main
+refuse a64-link-register-lost 'return through a link register not restored' '    1010:\tstp\tx29, x30, [sp, #-0x10]!\n    1014:\tbl\t0x1020 <_concrete_body>\n    1018:\tadd\tsp, sp, #0x10\n    101c:\tret\n\n0000000000001020 <_concrete_body>:\n    1020:\tret\n' aarch64-macos _main
+refuse freed-slot-reread 'touches a saved frame pointer or link register' '    1010:\tpush\trbp\n    1011:\tmov\trbp, rsp\n    1014:\tpush\trbp\n    1015:\tadd\trsp, 0x8\n    1019:\tmov\trax, qword ptr [rsp - 0x8]\n    101e:\tpop\trbp\n    101f:\tret\n'
+refuse callee-clobbers-frame-pointer 'return without the caller.s frame pointer restored' '    1010:\tpush\trbp\n    1011:\tmov\trbp, rsp\n    1014:\tcall\t0x1040 <concrete_body>\n    1019:\tpop\trbp\n    101a:\tret\n\n0000000000001040 <concrete_body>:\n    1040:\tsub\trsp, 0x10\n    1044:\tmov\trbp, rsp\n    1047:\tadd\trsp, 0x10\n    104b:\tret\n'
+refuse a64-frame-record-elsewhere 'link register overwritten' '    1010:\tstp\tx29, x30, [sp, #-0x10]!\n    1014:\tadrp\tx8, 0x1000 <_main>\n    1018:\tldp\tx29, x30, [x8]\n    101c:\tldp\tx29, x30, [sp], #0x10\n    1020:\tret\n' aarch64-macos _main
+refuse restored-slot-reread 'touches a saved frame pointer or link register' '    1010:\tpush\trbp\n    1011:\tmov\trbp, rsp\n    1014:\tpush\trbp\n    1015:\tpop\trbp\n    1016:\tmov\trax, qword ptr [rsp - 0x8]\n    101b:\tpop\trbp\n    101c:\tret\n'
+refuse a64-restored-record-reread 'touches a saved frame pointer or link register' '    1010:\tstp\tx29, x30, [sp, #-0x10]!\n    1014:\tmov\tx29, sp\n    1018:\tstp\tx29, x30, [sp, #-0x10]!\n    101c:\tldp\tx29, x30, [sp], #0x10\n    1020:\tldr\tx0, [sp, #-0x10]\n    1024:\tldp\tx29, x30, [sp], #0x10\n    1028:\tret\n' aarch64-macos _main
+refuse a64-w29-writeback-load 'frame-relative use of a frame pointer that is not this frame' '    1010:\tstp\tx29, x30, [sp, #-0x20]!\n    1014:\tmov\tx29, sp\n    1018:\tstr\tx0, [sp, #0x10]\n    101c:\tldr\tw29, [sp, #0x10]\n    1020:\tstr\tx0, [x29, #-0x8]\n    1024:\tldp\tx29, x30, [sp], #0x20\n    1028:\tret\n' aarch64-macos _main
+refuse a64-frame-writeback 'writeback on the frame pointer' '    1010:\tstp\tx29, x30, [sp, #-0x10]!\n    1014:\tmov\tx29, sp\n    1018:\tstr\tx0, [x29, #-0x8]!\n    101c:\tldp\tx29, x30, [sp], #0x10\n    1020:\tret\n' aarch64-macos _main
+# Bytes below the caller's stack pointer are clobbered by a call and cannot be reread after it.
+refuse callee-residual-reread 'reads stack bytes this function has not written' '    1010:\tpush\trbp\n    1011:\tmov\trbp, rsp\n    1014:\tmov\tqword ptr [rsp - 0x10], rax\n    1019:\tcall\t0x1040 <concrete_body>\n    101e:\tmov\trax, qword ptr [rsp - 0x10]\n    1023:\tpop\trbp\n    1024:\tret\n\n0000000000001040 <concrete_body>:\n    1040:\tpush\trbp\n    1041:\tpop\trbp\n    1042:\tret\n'
 # Writeback through the link register changes the return address.
-refuse a64-link-register-writeback '    1010:\tstp\tx29, x30, [sp, #-0x10]!\n    1014:\tbl\t0x1040 <_concrete_body>\n    1018:\tldp\tx29, x30, [sp], #0x10\n    101c:\tret\n\n0000000000001040 <_concrete_body>:\n    1040:\tldr\tx0, [x30], #-0x8\n    1044:\tret\n' aarch64-macos _main
-refuse a64-link-register-store-writeback '    1010:\tstr\tx0, [x30, #0x8]!\n    1014:\tret\n' aarch64-macos _main
+refuse a64-link-register-writeback 'writeback on the link register' '    1010:\tstp\tx29, x30, [sp, #-0x10]!\n    1014:\tbl\t0x1040 <_concrete_body>\n    1018:\tldp\tx29, x30, [sp], #0x10\n    101c:\tret\n\n0000000000001040 <_concrete_body>:\n    1040:\tldr\tx0, [x30], #-0x8\n    1044:\tret\n' aarch64-macos _main
+refuse a64-link-register-store-writeback 'writeback on the link register' '    1010:\tstr\tx0, [x30, #0x8]!\n    1014:\tret\n' aarch64-macos _main
 # main's argv (rsi, x1) points into the stack: memory is not addressed through it.
-refuse argv-store '    1010:\tmov\tbyte ptr [rsi - 0x1000], 0x0\n    1017:\txor\teax, eax\n    1019:\tret\n'
-refuse a64-argv-store '    1010:\tstrb\twzr, [x1, #-0x100]\n    1014:\tret\n' aarch64-macos _main
-refuse a64-pc-relative-after-call '    1010:\tstp\tx29, x30, [sp, #-0x10]!\n    1014:\tadrp\tx8, 0x2000 <_main+0xff0>\n    1018:\tbl\t0x1040 <_concrete_body>\n    101c:\tldr\tw0, [x8, #0x10]\n    1020:\tldp\tx29, x30, [sp], #0x10\n    1024:\tret\n\n0000000000001040 <_concrete_body>:\n    1040:\tret\n' aarch64-macos _main
+refuse argv-store 'memory addressed through a register that may hold a stack address, or absolutely' '    1010:\tmov\tbyte ptr [rsi - 0x1000], 0x0\n    1017:\txor\teax, eax\n    1019:\tret\n'
+refuse a64-argv-store 'memory addressed through a register that may hold a stack address' '    1010:\tstrb\twzr, [x1, #-0x100]\n    1014:\tret\n' aarch64-macos _main
+refuse a64-pc-relative-after-call 'memory addressed through a register that may hold a stack address' '    1010:\tstp\tx29, x30, [sp, #-0x10]!\n    1014:\tadrp\tx8, 0x2000 <_main+0xff0>\n    1018:\tbl\t0x1040 <_concrete_body>\n    101c:\tldr\tw0, [x8, #0x10]\n    1020:\tldp\tx29, x30, [sp], #0x10\n    1024:\tret\n\n0000000000001040 <_concrete_body>:\n    1040:\tret\n' aarch64-macos _main
 # PC-relative provenance through repeated adds (a loop walking toward the stack).
-refuse a64-pc-relative-walk '    1010:\tadr\tx8, 0x1010 <_main>\n    1014:\tsub\tx2, x1, #0xfff\n    1018:\tadd\tx8, x8, #0x8\n    101c:\tcmp\tx8, x2\n    1020:\tb.lo\t0x1018 <_main+0x8>\n    1024:\tstrb\twzr, [x8]\n    1028:\tret\n' aarch64-macos _main
-refuse a64-pc-relative-far '    1010:\tadrp\tx8, 0x7fff0000\n    1014:\tstrb\twzr, [x8]\n    1018:\tret\n' aarch64-macos _main
-refuse absolute-address '    1010:\tmov\tbyte ptr [0x7fffffd0], 0x0\n    1018:\tret\n'
+refuse a64-pc-relative-walk 'memory addressed through a register that may hold a stack address' '    1010:\tadr\tx8, 0x1010 <_main>\n    1014:\tsub\tx2, x1, #0xfff\n    1018:\tadd\tx8, x8, #0x8\n    101c:\tcmp\tx8, x2\n    1020:\tb.lo\t0x1018 <_main+0x8>\n    1024:\tstrb\twzr, [x8]\n    1028:\tret\n' aarch64-macos _main
+refuse a64-pc-relative-far 'memory addressed through a register that may hold a stack address' '    1010:\tadrp\tx8, 0x7fff0000\n    1014:\tstrb\twzr, [x8]\n    1018:\tret\n' aarch64-macos _main
+refuse absolute-address 'memory addressed through a register that may hold a stack address, or absolutely' '    1010:\tmov\tbyte ptr [0x7fffffd0], 0x0\n    1018:\tret\n'
 refuse_tp fs-beyond-reach '    1010:\tmov\tbyte ptr fs:[0x100000], 0x0\n    1018:\tret\n'
-refuse gs-absolute '    1010:\tmov\tbyte ptr gs:[0x0], 0x0\n    1018:\tret\n'
+refuse_tp fs-unbracketed-beyond-reach '    1010:\tmov\tbyte ptr fs:0x100000, 0x0\n    1018:\tret\n'
+refuse_tp fs-movabs-beyond-reach '    1010:\tmovabs\trax, fs:0x100000\n    101a:\tret\n'
+refuse gs-absolute 'gs segment override on x86_64-linux' '    1010:\tmov\tbyte ptr gs:[0x0], 0x0\n    1018:\tret\n'
+refuse gs-unbracketed 'gs segment override on x86_64-linux' '    1010:\tmov\tbyte ptr gs:0x0, 0x0\n    1018:\tret\n'
+refuse gs-before-size-ptr 'gs segment override on x86_64-linux' '    1010:\tmov\trax, gs:qword ptr [rip + 0x10]\n    1018:\tret\n'
+refuse fs-before-size-ptr 'thread-pointer-relative access through a register' '    1010:\tmov\tfs:qword ptr [rsp - 0x8], rax\n    1018:\tret\n'
 for segment in fs gs; do
-  for base in rsp rbp rax; do
-    refuse "x86-$segment-through-$base" "    1010:\tmov\tbyte ptr $segment:[$base - 0x8], 0x0\n    1018:\tret\n"
-  done
-  refuse "x86-$segment-through-rip" "    1010:\tmov\tbyte ptr $segment:[rip + 0x10], 0x0\n    1018:\tret\n"
+  if [ "$segment" = fs ]; then
+    seg_diag='thread-pointer-relative access through a register'
+  else
+    seg_diag='gs segment override on x86_64-linux'
+  fi
+  refuse "x86-$segment-through-rsp" "$seg_diag" "    1010:\tmov\tbyte ptr $segment:[rsp - 0x8], 0x0\n    1018:\tret\n"
+  refuse "x86-$segment-through-rax" "$seg_diag" "    1010:\tmov\tbyte ptr $segment:[rax + 0x8], 0x0\n    1018:\tret\n"
+  refuse "x86-$segment-through-rbp" "$seg_diag" "    1010:\tpush\trbp\n    1011:\tmov\trbp, rsp\n    1014:\tmov\tbyte ptr $segment:[rbp - 0x8], 0x0\n    101c:\tpop\trbp\n    101d:\tret\n"
+  refuse "x86-$segment-through-rip" "$seg_diag" "    1010:\tmov\tbyte ptr $segment:[rip + 0x10], 0x0\n    1018:\tret\n"
 done
 for segment in cs ds es ss; do
-  refuse "x86-$segment-stack-override" "    1010:\tmov\tbyte ptr $segment:[rsp - 0x8], 0x0\n    1018:\tret\n"
+  refuse "x86-$segment-stack-override" "unmodelled $segment segment override" "    1010:\tmov\tbyte ptr $segment:[rsp - 0x8], 0x0\n    1018:\tret\n"
 done
 for segment in cs ds es fs gs ss; do
-  refuse "x86-segment-write-$segment" "    1010:\tmov\t$segment, eax\n    1013:\tret\n"
+  refuse "x86-segment-write-$segment" 'write to a segment register' "    1010:\tmov\t$segment, eax\n    1013:\tret\n"
+  refuse "x86-segment-read-$segment" 'segment register used as a value' "    1010:\tmov\teax, $segment\n    1013:\tret\n"
 done
-refuse x86-two-memory-operands '    1010:\tmov\tqword ptr fs:[0x28], qword ptr [rsp - 0x8]\n    1018:\tret\n'
-refuse x86-empty-fs-address '    1010:\tmov\trax, qword ptr fs:[]\n    1015:\tret\n'
-refuse x86-pc-relative-wide-beyond '    1010:\tmov\trax, qword ptr [rip + 0xfffffa]\n    1015:\tret\n'
+for segment in fs gs; do
+  refuse "x86-segment-cmp-$segment" 'segment register used as a value' "    1010:\tcmp\t$segment, eax\n    1013:\tret\n"
+done
+refuse x86-two-memory-operands 'instruction with more than one memory operand' '    1010:\tmov\tqword ptr [rsp - 0x8], qword ptr fs:[0x28]\n    1019:\tret\n'
+refuse x86-two-memory-operands-unbracketed 'instruction with more than one memory operand' '    1010:\tmov\tqword ptr [rsp - 0x8], qword ptr fs:0x28\n    1019:\tret\n'
+refuse x86-empty-fs-address 'empty memory address' '    1010:\tmov\trax, qword ptr fs:[]\n    1015:\tret\n'
+refuse x86-unclosed-bracket 'unmodelled operand' '    1010:\tmov\trax, qword ptr [0x100000\n    1015:\tret\n'
+refuse x86-duplicate-sign-address 'malformed memory address' '    1010:\tmov\trax, byte ptr fs:[- -0x100000]\n    1019:\tret\n' x86_64-linux main 0x100000
+refuse x86-signless-second-term 'malformed memory address' '    1010:\tmov\trax, byte ptr fs:[-0x100000 0x100000]\n    1019:\tret\n'
+refuse x86-pc-relative-wide-beyond 'PC-relative access beyond the premise' '    1010:\tmov\trax, qword ptr [rip + 0xfffffa]\n    1015:\tret\n'
+refuse x86-lea-pc-relative-beyond 'PC-relative LEA beyond the premise' '    1010:\tlea\trdi, [rip + 0x1000001]\n    1015:\tret\n'
 # The link register loaded from a slot that does not hold it, and a stub call with no stub entry.
-refuse a64-lr-from-other-slot '    1010:\tsub\tsp, sp, #0x20\n    1014:\tstr\tx30, [sp, #0x10]\n    1018:\tstr\tx0, [sp, #0x8]\n    101c:\tldr\tx30, [sp, #0x8]\n    1020:\tadd\tsp, sp, #0x20\n    1024:\tret\n' aarch64-macos _main
-refuse a64-unmapped-stub '    1010:\tstr\tx30, [sp, #-0x10]!\n    1014:\tbl\t0x1040 <_write+0x1040>\n    1018:\tldr\tx30, [sp], #0x10\n    101c:\tret\n' aarch64-macos _main
+refuse a64-lr-from-other-slot 'x30 loaded from other than its saved slot' '    1010:\tsub\tsp, sp, #0x20\n    1014:\tstr\tx30, [sp, #0x10]\n    1018:\tstr\tx0, [sp, #0x8]\n    101c:\tldr\tx30, [sp, #0x8]\n    1020:\tadd\tsp, sp, #0x20\n    1024:\tret\n' aarch64-macos _main
+refuse a64-unmapped-stub 'neither owned nor a stub' '    1010:\tstr\tx30, [sp, #-0x10]!\n    1014:\tbl\t0x1040 <_write+0x1040>\n    1018:\tldr\tx30, [sp], #0x10\n    101c:\tret\n' aarch64-macos _main
 # A call into the middle of a Mach-O stub entry, and to the stub section with no entry mapped.
-refuse a64-mid-stub-call '    1010:\tstr\tx30, [sp, #-0x10]!\n    1014:\tbl\t0x1044 <__stubs+0x4>\n    1018:\tldr\tx30, [sp], #0x10\n    101c:\tret\n\nDisassembly of section __TEXT,__stubs:\n\n0000000000001040 <__stubs>:\n    1040:\tadrp\tx16, 0x2000\n    1044:\tldr\tx16, [x16]\n    1048:\tbr\tx16\nstub 0x0000000000001040 _write\n' aarch64-macos _main
-refuse a64-unmapped-stub-section '    1010:\tstr\tx30, [sp, #-0x10]!\n    1014:\tbl\t0x1040 <__stubs>\n    1018:\tldr\tx30, [sp], #0x10\n    101c:\tret\n\nDisassembly of section __TEXT,__stubs:\n\n0000000000001040 <__stubs>:\n    1040:\tadrp\tx16, 0x2000\n    1044:\tldr\tx16, [x16]\n    1048:\tbr\tx16\n' aarch64-macos _main
-refuse a64-callee-residual-reread '    1010:\tstp\tx29, x30, [sp, #-0x10]!\n    1014:\tmov\tx29, sp\n    1018:\tbl\t0x1040 <_concrete_body>\n    101c:\tldr\tx0, [sp, #-0x10]\n    1020:\tstr\tx1, [x0, #-0x100]\n    1024:\tldp\tx29, x30, [sp], #0x10\n    1028:\tret\n\n0000000000001040 <_concrete_body>:\n    1040:\tstp\tx29, x30, [sp, #-0x10]!\n    1044:\tldp\tx29, x30, [sp], #0x10\n    1048:\tret\n' aarch64-macos _main
+refuse a64-mid-stub-call 'neither owned nor a stub' '    1010:\tstr\tx30, [sp, #-0x10]!\n    1014:\tbl\t0x1044 <__stubs+0x4>\n    1018:\tldr\tx30, [sp], #0x10\n    101c:\tret\n\nDisassembly of section __TEXT,__stubs:\n\n0000000000001040 <__stubs>:\n    1040:\tadrp\tx16, 0x2000\n    1044:\tldr\tx16, [x16]\n    1048:\tbr\tx16\nstub 0x0000000000001040 _write\n' aarch64-macos _main
+refuse a64-unmapped-stub-section 'neither owned nor a stub' '    1010:\tstr\tx30, [sp, #-0x10]!\n    1014:\tbl\t0x1040 <__stubs>\n    1018:\tldr\tx30, [sp], #0x10\n    101c:\tret\n\nDisassembly of section __TEXT,__stubs:\n\n0000000000001040 <__stubs>:\n    1040:\tadrp\tx16, 0x2000\n    1044:\tldr\tx16, [x16]\n    1048:\tbr\tx16\n' aarch64-macos _main
+refuse a64-callee-residual-reread 'reads stack bytes this function has not written' '    1010:\tstp\tx29, x30, [sp, #-0x10]!\n    1014:\tmov\tx29, sp\n    1018:\tstur\tx0, [sp, #-0x10]\n    101c:\tbl\t0x1040 <_concrete_body>\n    1020:\tldr\tx0, [sp, #-0x10]\n    1024:\tldp\tx29, x30, [sp], #0x10\n    1028:\tret\n\n0000000000001040 <_concrete_body>:\n    1040:\tstp\tx29, x30, [sp, #-0x10]!\n    1044:\tldp\tx29, x30, [sp], #0x10\n    1048:\tret\n' aarch64-macos _main
 # A read of a byte written on only one path into it.
-refuse one-path-write '    1010:\tpush\trbp\n    1011:\tmov\trbp, rsp\n    1014:\tje\t0x101e <main+0xe>\n    1016:\tmov\tqword ptr [rbp - 0x8], rax\n    101e:\tmov\trax, qword ptr [rbp - 0x8]\n    1022:\tpop\trbp\n    1023:\tret\n'
+refuse one-path-write 'reads stack bytes this function has not written' '    1010:\tpush\trbp\n    1011:\tmov\trbp, rsp\n    1014:\tje\t0x101e <main+0xe>\n    1016:\tmov\tqword ptr [rbp - 0x8], rax\n    101e:\tmov\trax, qword ptr [rbp - 0x8]\n    1022:\tpop\trbp\n    1023:\tret\n'
 # A read never written (stale bytes of whatever ran before).
-refuse unwritten-read '    1010:\tmov\trax, qword ptr [rsp - 0x40]\n    1015:\tret\n'
+refuse unwritten-read 'reads stack bytes this function has not written' '    1010:\tmov\trax, qword ptr [rsp - 0x40]\n    1015:\tret\n'
 # A leaf's red-zone store, below the stack pointer, is inside the bound: 8 + 0x30.
 redzone=$(ctl_dis redzone <<'D'
 
@@ -426,45 +447,128 @@ for spec in byte:1 word:2 dword:4 qword:8 tbyte:10 xmmword:16 ymmword:32 zmmword
 done
 bound_is x86-fs-wrapped-negative x86_64-linux 'bound 0' '0000000000001010 <main>:\n    1010:\tmov\trax, byte ptr fs:[0xffffffffffffffff]\n    1019:\tret\n' 0x1
 refuse_tp x86-fs-wrapped-interval-crosses-tcb '    1010:\tmov\trax, word ptr fs:[0xffffffffffffffff]\n    1019:\tret\n' 0x1
-# Parser controls use GDB's actual spellings, including its unsigned rendering of negative offsets.
+# Variant II aligned PT_TLS reservations: p_memsz=1, p_align=64, p_vaddr=0x3dc0 reserves 0x40 bytes
+# ([-0x40, 0)); p_memsz=8, p_align=16, p_vaddr=0x3dc0 reserves 0x10 bytes ([-0x10, 0)).
+bound_is x86-fs-tls-align64-memsz1-edge x86_64-linux 'bound 0' '0000000000001010 <main>:\n    1010:\tmov\trax, byte ptr fs:[-0x40]\n    1019:\tret\n' '0x1 0x40 0x3dc0'
+refuse_tp x86-fs-tls-align64-memsz1-underflow '    1010:\tmov\trax, byte ptr fs:[-0x41]\n    1019:\tret\n' '0x1 0x40 0x3dc0'
+bound_is x86-fs-tls-align16-memsz8-edge x86_64-linux 'bound 0' '0000000000001010 <main>:\n    1010:\tmov\trax, qword ptr fs:[-0x10]\n    1019:\tret\n' '0x8 0x10 0x3dc0'
+refuse_tp x86-fs-tls-align16-memsz8-underflow '    1010:\tmov\trax, byte ptr fs:[-0x11]\n    1019:\tret\n' '0x8 0x10 0x3dc0'
+# Parser controls use GDB's actual spellings, including its unsigned rendering of negative offsets,
+# and check fail-closed rejection of string ops, xlat, enter, segment overrides, segment-register
+# uses, malformed expressions, and invalid ELF program-header JSON.
 if bounded 60 python3 -I -c '
-import sys
+import json, os, sys, tempfile
 sys.path.insert(0, sys.argv[1])
-import stack_access
+import stack_access, stack_bound
 base = 0x7fff00000000
 def reg(name):
-    if name != "fs_base":
-        raise ValueError("unexpected register " + name)
-    return base
+    if name == "fs_base":
+        return base
+    if name in ("rsp", "rbp", "rax", "rbx", "rcx", "rdx", "rsi", "rdi", "sp", "x8", "x9", "x10"):
+        return 0x7fffffffe000
+    raise ValueError("unexpected register " + name)
 cases = {
-    "mov    rax,QWORD PTR fs:0x28": base + 0x28,
-    "mov    BYTE PTR fs:0x100000,0x0": base + 0x100000,
-    "mov    rax,QWORD PTR fs:0xffffffffffffffd8": (base - 0x28) & stack_access.MASK,
-    "movabs rax,fs:0x100": base + 0x100,
-    "mov    BYTE PTR ds:0x100000,0x0": 0x100000,
+    "mov    rax,QWORD PTR fs:0x28": [base + 0x28],
+    "mov    BYTE PTR fs:0x100000,0x0": [base + 0x100000],
+    "mov    rax,QWORD PTR fs:0xffffffffffffffd8": [(base - 0x28) & stack_access.MASK],
+    "movabs rax,fs:0x100": [base + 0x100],
+    "mov    rax,fs:QWORD PTR [0x28]": [base + 0x28],
+    "syscall": [],
 }
 for asm, expected in cases.items():
     addresses = stack_access.x86_addresses(asm, reg, 0)
-    assert addresses == [expected], (asm, addresses, expected)
+    assert addresses == expected, (asm, addresses, expected)
 addresses = stack_access.x86_addresses("mov BYTE PTR fs:0x100000,0x0", reg, 0)
 sp0 = base + 0x100000 + 128
 assert stack_access.lowest_stack(addresses, sp0, sp0, 128, 8 << 20) == base + 0x100000
-for asm in ("mov rax,QWORD PTR fs:bogus", "mov rax,QWORD PTR [rsp", "mov BYTE PTR ds:garbage,0x0"):
+rejected_x86 = (
+    "mov rax,QWORD PTR fs:bogus",
+    "mov rax,QWORD PTR [rsp",
+    "mov BYTE PTR ds:garbage,0x0",
+    "mov BYTE PTR ds:0x100000,0x0",
+    "mov BYTE PTR cs:[rsp-0x8],0x0",
+    "mov BYTE PTR ds:[rsp-0x8],0x0",
+    "mov BYTE PTR es:[rsp-0x8],0x0",
+    "mov BYTE PTR gs:0x0,0x0",
+    "mov BYTE PTR gs:[0x0],0x0",
+    "mov BYTE PTR ss:[rsp-0x8],0x0",
+    "mov rax,gs:QWORD PTR [rip+0x10]",
+    "mov fs:QWORD PTR [rsp-0x8],rax",
+    "mov rax,QWORD PTR fs:[rsp-0x8]",
+    "mov eax,fs",
+    "mov rax,gs",
+    "mov fs,eax",
+    "cmp fs,eax",
+    "mov rax,BYTE PTR fs:[- -0x100000]",
+    "mov rax,BYTE PTR fs:[-0x100000 0x100000]",
+    "mov QWORD PTR [rsp-0x8],QWORD PTR fs:0x28",
+    "rep movs QWORD PTR es:[rdi],QWORD PTR ds:[rsi]",
+    "rep stos BYTE PTR es:[rdi],al",
+    "movs QWORD PTR es:[rdi],QWORD PTR ds:[rsi]",
+    "stos BYTE PTR es:[rdi],al",
+    "lods BYTE PTR ds:[rsi]",
+    "cmps BYTE PTR ds:[rsi],BYTE PTR es:[rdi]",
+    "scas BYTE PTR es:[rdi]",
+    "xlat BYTE PTR ds:[rbx]",
+    "enter 0x10,0x0",
+    "loop 0x1010",
+    "call rax",
+    "ret 0x8",
+)
+for asm in rejected_x86:
     try:
         stack_access.x86_addresses(asm, reg, 0)
     except ValueError:
         pass
     else:
-        raise AssertionError("accepted unparsed memory: " + asm)
+        raise AssertionError("accepted unmodelled x86 instruction or operand: " + asm)
+for mn, ops in (("mrs", "x8, tpidr_el0"), ("ldr", "x0, [sp] [sp]"), ("ldr", "x0, [sp, #-0x8]!, #0x8")):
+    try:
+        stack_access.a64_addresses(mn, ops, reg)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError(f"accepted unmodelled a64 instruction: {mn} {ops}")
+assert stack_access.tls_reservation(1, 64, 0x3dc0) == 0x40
+assert stack_access.tls_reservation(8, 16, 0x3dc0) == 0x10
+assert stack_access.tls_reservation(0, 64, 0x3dc0) == 0
+with tempfile.TemporaryDirectory() as td:
+    for name, payload in (
+        ("empty", []),
+        ("no-load", [{"ProgramHeaders": []}]),
+        ("two-tls", [{"ProgramHeaders": [
+            {"ProgramHeader": {"Type": {"Name": "PT_LOAD"}}},
+            {"ProgramHeader": {"Type": {"Name": "PT_TLS"}, "MemSize": 8, "FileSize": 8, "Alignment": 8, "VirtualAddress": 0}},
+            {"ProgramHeader": {"Type": {"Name": "PT_TLS"}, "MemSize": 8, "FileSize": 8, "Alignment": 8, "VirtualAddress": 0}},
+        ]}]),
+        ("bad-align", [{"ProgramHeaders": [
+            {"ProgramHeader": {"Type": {"Name": "PT_LOAD"}}},
+            {"ProgramHeader": {"Type": {"Name": "PT_TLS"}, "MemSize": 8, "FileSize": 8, "Alignment": 3, "VirtualAddress": 0}},
+        ]}]),
+        ("filesz-gt-memsz", [{"ProgramHeaders": [
+            {"ProgramHeader": {"Type": {"Name": "PT_LOAD"}}},
+            {"ProgramHeader": {"Type": {"Name": "PT_TLS"}, "MemSize": 4, "FileSize": 8, "Alignment": 8, "VirtualAddress": 0}},
+        ]}]),
+    ):
+        p = os.path.join(td, name + ".json")
+        with open(p, "w", encoding="utf-8") as f:
+            json.dump(payload, f)
+        try:
+            stack_bound.elf_tls_line(p)
+        except stack_bound.Refuse:
+            pass
+        else:
+            raise AssertionError("accepted invalid program-header JSON: " + name)
 ' "$root/scripts/checks/lib"; then
-  echo "ok   control: x86 parser handles GDB absolute forms and rejects unparsed memory"
+  echo "ok   control: shared parser handles GDB/objdump forms and fails closed on unmodelled operands/headers"
 else
-  echo "FAIL control: x86 parser GDB absolute forms or fail-closed handling"; fail=1
+  echo "FAIL control: shared parser GDB/objdump forms or fail-closed handling"; fail=1
 fi
 if [ -n "$gdb" ]; then
   # Real GDB disassembly prints these absolute operands without brackets. Set FS so fs:0x100000 is
-  # exactly main_entry_sp - 128, then restore it before returning to libc. The qword canary load
-  # exercises GDB's other absolute fs form. No synthetic reg callback or analysis is involved.
+  # exactly main_entry_sp - 128, then restore it before returning to libc. After restoring FS,
+  # read the 1-byte, 64-byte-aligned .tdata variable (`tls_var@TPOFF`, relocated by the linker to
+  # fs:[-0x40]) and the qword canary at fs:0x28. No synthetic reg callback or analysis is involved.
   tp="$work/ctl/thread-pointer"; mkdir -p "$tp"
   cat >"$tp/control.s" <<'ASM'
 	.intel_syntax noprefix
@@ -487,12 +591,15 @@ main:
 	mov	eax, 158
 	mov	edi, 0x1002
 	syscall
+	mov	al, BYTE PTR fs:[tls_var@TPOFF]
 	mov	rax, QWORD PTR fs:[0x28]
 	mov	eax, 7
 	ret
 	.size	main, .-main
 	.section	.tdata,"awT",@progbits
-	.quad	0
+	.p2align 6
+tls_var:
+	.byte	1
 	.section	.note.GNU-stack,"",@progbits
 ASM
   if ! bounded "$native_secs" bash "$root/scripts/checks/lib/slice0_native.sh" control "$tp" >"$tp/build.log" 2>&1; then
@@ -509,7 +616,7 @@ ASM
       tp_analysis=$(printf 'redzone 128\nrange main %s\n' "$tp_range")
       tpm=$(measure "$tp/control.exe" "$tp_analysis" 7)
       if [ "$tpm" = "measured 128" ]; then
-        echo "ok   control: real GDB counts BYTE PTR fs:0x100000 and QWORD PTR fs:0x28"
+        echo "ok   control: real GDB counts BYTE PTR fs:0x100000, fs:[-0x40] and QWORD PTR fs:0x28"
       else
         echo "FAIL control: real GDB thread-pointer run: ${tpm:-none} $(head -c 300 "$tp/control.exe.gdb.err")"; fail=1
       fi
@@ -519,15 +626,58 @@ ASM
       else
         echo "FAIL control: unavailable fs_base gave a measurement or wrong error: ${tpm:-none}"; fail=1
       fi
+      if append_tls "$tp/control.o" "$work/ctl/relocatable-obj.dis" 2>/dev/null; then
+        echo "FAIL control: append_tls accepted a relocatable object with no PT_LOAD"; fail=1
+      else
+        echo "ok   control: append_tls refuses a relocatable object with no PT_LOAD"
+      fi
       tls_dis="$work/ctl/real-pt-tls.dis"
-      printf '\n0000000000001010 <main>:\n    1010:\tmov\trax, byte ptr fs:[-0x1]\n    1019:\tret\n' >"$tls_dis"
+      tls_under="$work/ctl/real-pt-tls-underflow.dis"
+      printf '\n0000000000001010 <main>:\n    1010:\tmov\trax, byte ptr fs:[-0x40]\n    1019:\tret\n' >"$tls_dis"
+      printf '\n0000000000001010 <main>:\n    1010:\tmov\trax, byte ptr fs:[-0x41]\n    1019:\tret\n' >"$tls_under"
       tls_memsz=0x0
       if append_tls "$tp/control.exe" "$tls_dis" &&
+         append_tls "$tp/control.exe" "$tls_under" &&
          tls_memsz=$(awk '$1 == "tls_memsz" {print $2}' "$tls_dis") &&
-         [ "$tls_memsz" != 0x0 ] && [ "$(stack_bound x86_64-linux "$tls_dis")" = "bound 0" ]; then
-        echo "ok   control: linked PT_TLS p_memsz $tls_memsz bounds a negative fs access"
+         [ "$tls_memsz" = 0x40 ] &&
+         [ "$(stack_bound x86_64-linux "$tls_dis")" = "bound 0" ] &&
+         ! stack_bound x86_64-linux "$tls_under" >/dev/null 2>&1; then
+        echo "ok   control: linked PT_TLS (p_memsz=1, p_align=64 -> $tls_memsz) accepts fs:[-0x40] and refuses fs:[-0x41]"
       else
-        echo "FAIL control: real PT_TLS metadata or negative fs bound (p_memsz $tls_memsz)"; fail=1
+        echo "FAIL control: linked PT_TLS (p_memsz=1, p_align=64) gave $tls_memsz"; fail=1
+      fi
+      tp16="$work/ctl/thread-pointer-align16"; mkdir -p "$tp16"
+      cat >"$tp16/control.s" <<'ASM16'
+	.intel_syntax noprefix
+	.text
+	.globl	main
+	.type	main,@function
+main:
+	mov	rax, QWORD PTR fs:[tls_qword@TPOFF]
+	xor	eax, eax
+	ret
+	.size	main, .-main
+	.section	.tdata,"awT",@progbits
+	.p2align 4
+tls_qword:
+	.quad	0
+	.section	.note.GNU-stack,"",@progbits
+ASM16
+      tls16_dis="$work/ctl/real-pt-tls-16.dis"
+      tls16_under="$work/ctl/real-pt-tls-16-underflow.dis"
+      printf '\n0000000000001010 <main>:\n    1010:\tmov\trax, qword ptr fs:[-0x10]\n    1019:\tret\n' >"$tls16_dis"
+      printf '\n0000000000001010 <main>:\n    1010:\tmov\trax, byte ptr fs:[-0x11]\n    1019:\tret\n' >"$tls16_under"
+      tls16_memsz=0x0
+      if bounded "$native_secs" bash "$root/scripts/checks/lib/slice0_native.sh" control "$tp16" >"$tp16/build.log" 2>&1 &&
+         append_tls "$tp16/control.exe" "$tls16_dis" &&
+         append_tls "$tp16/control.exe" "$tls16_under" &&
+         tls16_memsz=$(awk '$1 == "tls_memsz" {print $2}' "$tls16_dis") &&
+         [ "$tls16_memsz" = 0x10 ] &&
+         [ "$(stack_bound x86_64-linux "$tls16_dis")" = "bound 0" ] &&
+         ! stack_bound x86_64-linux "$tls16_under" >/dev/null 2>&1; then
+        echo "ok   control: linked PT_TLS (p_memsz=8, p_align=16 -> $tls16_memsz) accepts fs:[-0x10] and refuses fs:[-0x11]"
+      else
+        echo "FAIL control: linked PT_TLS (p_memsz=8, p_align=16) gave $tls16_memsz"; fail=1
       fi
     fi
   fi
@@ -546,11 +696,139 @@ else echo "ok   control: a measurement above the bound is rejected"; fi
 
 # The red zone (stack_bound.py TARGETS: 128 bytes on x86-64 System V and Apple arm64, none under
 # AAPCS64 on Linux): a store at its edge is in the bound, one past it is refused.
-refuse x86-beyond-red-zone '    1010:\tmov\tqword ptr [rsp - 0x88], 0x0\n    101c:\tret\n'
+refuse x86-beyond-red-zone 'beyond the 128-byte red zone' '    1010:\tmov\tqword ptr [rsp - 0x88], 0x0\n    101c:\tret\n'
 bound_is x86-red-zone-edge x86_64-linux 'bound 128' '0000000000001010 <main>:\n    1010:\tmov\tqword ptr [rsp - 0x80], 0x0\n    1019:\tret\n'
-refuse a64-beyond-red-zone '    1010:\tstur\txzr, [sp, #-0x88]\n    1014:\tret\n' aarch64-macos _main
+refuse a64-beyond-red-zone 'beyond the 128-byte red zone' '    1010:\tstur\txzr, [sp, #-0x88]\n    1014:\tret\n' aarch64-macos _main
 bound_is a64-red-zone-edge aarch64-macos 'bound 128' '0000000000001010 <_main>:\n    1010:\tstur\txzr, [sp, #-0x80]\n    1014:\tret\n'
-refuse a64-linux-no-red-zone '    1010:\tstur\txzr, [sp, #-0x8]\n    1014:\tret\n' aarch64-linux main
+refuse a64-linux-no-red-zone 'beyond the 0-byte red zone' '    1010:\tstur\txzr, [sp, #-0x8]\n    1014:\tret\n' aarch64-linux main
+# Mutation check: every guard in stack_access.py and stack_bound.py must be load-bearing. Deleting
+# or neutralizing a guard must cause its named control in refuse_manifest.tsv to fail.
+if bounded 60 python3 -I -c '
+import os, re, sys, types
+lib_dir, ctl_dir = sys.argv[1], sys.argv[2]
+with open(os.path.join(lib_dir, "stack_access.py"), encoding="utf-8") as f:
+    sa_src = f.read()
+with open(os.path.join(lib_dir, "stack_bound.py"), encoding="utf-8") as f:
+    sb_src = f.read()
+controls = {
+    "no-tls-metadata": ("x86_64-linux", os.path.join(ctl_dir, "no-tls-metadata.dis"), "x86 analysis without the linked executable.s PT_TLS"),
+    "duplicate-tls-metadata": ("x86_64-linux", os.path.join(ctl_dir, "duplicate-tls-metadata.dis"), "malformed or duplicate PT_TLS metadata"),
+}
+with open(os.path.join(ctl_dir, "refuse_manifest.tsv"), encoding="utf-8") as f:
+    for line in f:
+        name, tgt, dis, diag = line.rstrip("\n").split("\t", 3)
+        controls[name] = (tgt, dis, diag)
+
+def run_mutated(which, old, new, target, dis_path):
+    assert (sa_src if which == "stack_access.py" else sb_src).count(old) == 1, f"guard not unique in {which}: {old!r}"
+    m_sa = sa_src.replace(old, new, 1) if which == "stack_access.py" else sa_src
+    m_sb = sb_src.replace(old, new, 1) if which == "stack_bound.py" else sb_src
+    sa_mod = types.ModuleType("stack_access")
+    exec(compile(m_sa, "stack_access.py", "exec"), sa_mod.__dict__)
+    old_sa = sys.modules.get("stack_access")
+    sys.modules["stack_access"] = sa_mod
+    try:
+        sb_mod = types.ModuleType("stack_bound")
+        sb_mod.__file__ = os.path.join(lib_dir, "stack_bound.py")
+        exec(compile(m_sb, "stack_bound.py", "exec"), sb_mod.__dict__)
+        sb_mod.TARGET = target
+        sb_mod.ARCH, sb_mod.RED_ZONE = sb_mod.TARGETS[target]
+        try:
+            funcs, stubs, sb_mod.TLS_MEMSZ = sb_mod.parse(dis_path)
+            total, _, _ = sb_mod.analyse(funcs, stubs)
+            return f"bound {total}"
+        except sb_mod.Refuse as e:
+            return f"refused: {e}"
+    finally:
+        if old_sa is not None:
+            sys.modules["stack_access"] = old_sa
+
+mutations = [
+    ("stack_access.py", "if a & (a - 1):\n        raise ValueError(f\"PT_TLS p_align {align:#x} is not a power of two\")", "pass", "non-power-of-two-tls-align"),
+    ("stack_access.py", "if not inner or not inner.strip():\n        raise ValueError(f\"empty memory address: {what}\")", "if not inner or not inner.strip():\n        return [(\"imm\", None, 0)], [], False, 0", "x86-empty-fs-address"),
+    ("stack_access.py", "if not tm or (idx > 0 and tm.group(1) not in (\"+\", \"-\")):\n            raise ValueError(f\"malformed memory address: {what}\")", "if not tm:\n            break", "x86-duplicate-sign-address"),
+    ("stack_access.py", "if not tm or (idx > 0 and tm.group(1) not in (\"+\", \"-\")):\n            raise ValueError(f\"malformed memory address: {what}\")", "if not tm:\n            raise ValueError(f\"malformed memory address: {what}\")", "x86-signless-second-term"),
+    ("stack_access.py", "if not X86_PLAIN.match(mn):\n        raise ValueError(f\"unmodelled instruction: {what}\")", "if not X86_PLAIN.match(mn):\n        return [], []", "loop-instruction"),
+    ("stack_access.py", "if op in X86_SEGMENTS:\n            if i == 0 and mn not in (\"cmp\", \"test\"):\n                raise ValueError(f\"write to a segment register: {what}\")\n            raise ValueError(f\"segment register used as a value: {what}\")", "if op in X86_SEGMENTS:\n            parsed_ops.append((\"reg\", op))\n            continue", "x86-segment-write-fs"),
+    ("stack_access.py", "if i == 0 and mn not in (\"cmp\", \"test\"):\n                raise ValueError(f\"write to a segment register: {what}\")\n            raise ValueError(f\"segment register used as a value: {what}\")", "if i == 0 and mn not in (\"cmp\", \"test\"):\n                raise ValueError(f\"write to a segment register: {what}\")\n            parsed_ops.append((\"reg\", op))\n            continue", "x86-segment-read-fs"),
+    ("stack_access.py", "if i == 0 and mn not in (\"cmp\", \"test\"):\n                raise ValueError(f\"write to a segment register: {what}\")\n            raise ValueError(f\"segment register used as a value: {what}\")", "if i == 0 and mn not in (\"cmp\", \"test\"):\n                raise ValueError(f\"write to a segment register: {what}\")\n            parsed_ops.append((\"reg\", op))\n            continue", "x86-segment-cmp-fs"),
+    ("stack_access.py", "if bm is None and (am is None or not (am.group(\"seg1\") or am.group(\"seg2\"))):\n            raise ValueError(f\"unmodelled operand {op!r}: {what}\")", "if bm is None and (am is None or not (am.group(\"seg1\") or am.group(\"seg2\"))):\n            continue", "x86-unclosed-bracket"),
+    ("stack_access.py", "am = None if bm is not None else _ABS_SEG_MEM.fullmatch(op)", "am = None if bm is not None else None\n        if bm is None:\n            continue", "fs-unbracketed-beyond-reach"),
+    ("stack_access.py", "segment = seg1 or seg2", "segment = seg2", "gs-before-size-ptr"),
+    ("stack_access.py", "segment = seg1 or seg2", "segment = seg2", "fs-before-size-ptr"),
+    ("stack_access.py", "elif mn == \"movabs\" and not bracketed and len(raw_ops) == 2 and raw_ops[1 - i] in X86_ACC_SIZE:\n                width = X86_ACC_SIZE[raw_ops[1 - i]]", "elif mn == \"movabs\":\n                continue", "fs-movabs-beyond-reach"),
+    ("stack_access.py", "if segment:\n                raise ValueError(f\"segment override on LEA: {what}\")", "pass", "x86-lea-segment-override"),
+    ("stack_access.py", "if segment == \"gs\":\n                raise ValueError(f\"gs segment override on x86_64-linux: {what}\")", "if segment == \"gs\":\n                segment = \"fs\"", "gs-absolute"),
+    ("stack_access.py", "if segment == \"gs\":\n                raise ValueError(f\"gs segment override on x86_64-linux: {what}\")", "if segment == \"gs\":\n                segment = None", "x86-gs-through-rbp"),
+    ("stack_access.py", "if segment and segment != \"fs\":\n                raise ValueError(f\"unmodelled {segment} segment override: {what}\")", "pass", "x86-cs-stack-override"),
+    ("stack_access.py", "if segment == \"fs\" and regs:\n                raise ValueError(f\"thread-pointer-relative access through a register: {what}\")", "pass", "x86-fs-through-rsp"),
+    ("stack_access.py", "if segment == \"fs\" and regs:\n                raise ValueError(f\"thread-pointer-relative access through a register: {what}\")", "pass", "x86-fs-through-rbp"),
+    ("stack_access.py", "if segment == \"fs\" and regs:\n                raise ValueError(f\"thread-pointer-relative access through a register: {what}\")", "pass", "x86-fs-through-rip"),
+    ("stack_access.py", "if segment == \"fs\" and regs:\n                raise ValueError(f\"thread-pointer-relative access through a register: {what}\")", "pass", "x86-fs-through-rax"),
+    ("stack_access.py", "if len(memory) > 1:\n        raise ValueError(f\"instruction with more than one memory operand: {what}\")", "pass", "x86-two-memory-operands"),
+    ("stack_access.py", "if len(memory) > 1:\n        raise ValueError(f\"instruction with more than one memory operand: {what}\")", "pass", "x86-two-memory-operands-unbracketed"),
+    ("stack_bound.py", "if ARCH == \"x86_64\" and TLS_MEMSZ is None:\n        raise Refuse(\"x86 analysis without the linked executable'\''s PT_TLS\")", "pass", "no-tls-metadata"),
+    ("stack_bound.py", "if not m or tls_memsz is not None:\n                raise Refuse(f\"malformed or duplicate PT_TLS metadata: {line}\")", "if not m:\n                raise Refuse(f\"malformed or duplicate PT_TLS metadata: {line}\")", "duplicate-tls-metadata"),
+    ("stack_bound.py", "if not isinstance(fp, int):\n        raise Refuse(f\"frame-relative use of a frame pointer that is not this frame'\''s: {what}\")", "if not isinstance(fp, int):\n        return 8", "partial-frame-pointer"),
+    ("stack_bound.py", "if lo < 1:\n        raise Refuse(f\"touches the return address or the caller'\''s frame: {what}\")", "pass", "return-address-overwrite"),
+    ("stack_bound.py", "if \"r\" in mode or not exact:\n                raise Refuse(f\"touches a saved frame pointer or link register: {what}\")", "pass", "freed-slot-reread"),
+    ("stack_bound.py", "if \"r\" in mode or not exact:\n                raise Refuse(f\"touches a saved frame pointer or link register: {what}\")", "pass", "restored-slot-reread"),
+    ("stack_bound.py", "if \"r\" in mode or not exact:\n                raise Refuse(f\"touches a saved frame pointer or link register: {what}\")", "pass", "a64-restored-record-reread"),
+    ("stack_bound.py", "if \"r\" in mode and not all(b in st.w for b in range(lo, hi + 1)):\n        raise Refuse(f\"reads stack bytes this function has not written: {what}\")", "pass", "unwritten-read"),
+    ("stack_bound.py", "if any(r in X86_STACK for r in regs):\n                raise Refuse(f\"stack address taken as a value: {what}\")", "if any(r in X86_STACK for r in regs):\n                continue", "stack-address-taken"),
+    ("stack_bound.py", "elif regs != [\"rip\"] or scaled:\n                raise Refuse(f\"LEA through a register that may hold a stack address, or absolutely: {what}\")", "elif regs != [\"rip\"] or scaled:\n                continue", "x86-lea-non-rip"),
+    ("stack_bound.py", "if abs(lo) > PC_REACH:\n                raise Refuse(f\"PC-relative LEA beyond the premise'\''s reach: {what}\")", "pass", "x86-lea-pc-relative-beyond"),
+    ("stack_bound.py", "if not (in_tcb or in_tls):\n                    raise Refuse(f\"thread-pointer-relative access beyond the premise'\''s reach: {what}\")", "pass", "fs-beyond-reach"),
+    ("stack_bound.py", "in_tcb = 0 <= lo and hi < TCB_SIZE", "in_tcb = 0 <= lo and lo < TCB_SIZE", "x86-fs-tcb-qword-overflow"),
+    ("stack_bound.py", "in_tls = -TLS_MEMSZ <= lo and hi < 0", "in_tls = -TLS_MEMSZ <= lo and lo < 0", "x86-fs-tls-qword-crosses-tcb"),
+    ("stack_bound.py", "in_tls = -TLS_MEMSZ <= lo and hi < 0", "in_tls = -TLS_MEMSZ - 1 <= lo and hi < 0", "x86-fs-tls-align64-memsz1-underflow"),
+    ("stack_bound.py", "if lo < -PC_REACH or hi > PC_REACH:\n                    raise Refuse(f\"PC-relative access beyond the premise'\''s reach: {what}\")", "pass", "x86-pc-relative-wide-beyond"),
+    ("stack_bound.py", "else:\n                raise Refuse(f\"memory addressed through a register that may hold a stack address, \"\n                             f\"or absolutely: {what}\")", "else:\n                continue", "argv-store"),
+    ("stack_bound.py", "else:\n                raise Refuse(f\"memory addressed through a register that may hold a stack address, \"\n                             f\"or absolutely: {what}\")", "else:\n                continue", "absolute-address"),
+    ("stack_bound.py", "if base[0] not in (\"rsp\", \"rbp\"):\n            raise Refuse(f\"stack address through a partial register: {what}\")", "if base[0] not in (\"rsp\", \"rbp\", \"esp\"):\n            raise Refuse(f\"stack address through a partial register: {what}\")", "partial-stack-address"),
+    ("stack_bound.py", "if len(regs) != 1 or scaled:\n            raise Refuse(f\"indexed stack address: {what}\")", "pass", "indexed-stack-address"),
+    ("stack_bound.py", "if not X86_GPR64.match(dst):\n            raise Refuse(f\"pop of other than a 64-bit general register: {what}\")", "pass", "partial-stack-pointer"),
+    ("stack_bound.py", "if any(r in X86_STACK for r in srcs):\n        raise Refuse(f\"stack or frame pointer used as a value: {what}\")", "pass", "stack-pointer-escape"),
+    ("stack_bound.py", "if dst in X86_SP:\n        raise Refuse(f\"unmodelled stack-pointer write: {what}\")", "pass", "dynamic-sp"),
+    ("stack_bound.py", "if dst in X86_FP:\n        return st.but(fp=None), deepest", "pass", "partial-frame-pointer"),
+    ("stack_bound.py", "if slot and dst != \"rbp\":\n        raise Refuse(f\"a saved frame pointer popped into {dst}: {what}\")", "pass", "saved-frame-pointer-popped"),
+    ("stack_bound.py", "if base in A64_FP and (pre or post is not None):\n            raise Refuse(f\"writeback on the frame pointer: {what}\")", "pass", "a64-frame-writeback"),
+    ("stack_bound.py", "if base in A64_LR and (pre or post is not None):\n            raise Refuse(f\"writeback on the link register: {what}\")", "pass", "a64-link-register-writeback"),
+    ("stack_bound.py", "if base in A64_LR and (pre or post is not None):\n            raise Refuse(f\"writeback on the link register: {what}\")", "pass", "a64-link-register-store-writeback"),
+    ("stack_bound.py", "if base not in {x[0] for x in st.g}:\n                raise Refuse(f\"memory addressed through a register that may hold a stack address: {what}\")", "pass", "a64-argv-store"),
+    ("stack_bound.py", "if t and abs(int(t.group(1), 16) - addr) <= PC_REACH:", "if t:", "a64-pc-relative-far"),
+    ("stack_bound.py", "        g.add((args[0], 1))", "        g.add((args[0], 0))", "a64-pc-relative-walk"),
+    ("stack_bound.py", "if not slot or slot[2][0] != tag:\n                        raise Refuse(f\"{data[0]} loaded from other than its saved slot: {what}\")", "if not slot or slot[2][0] != tag:\n                        slot = (lo, top, (tag, True))", "a64-lr-from-other-slot"),
+    ("stack_bound.py", "if not (record or single) and any(a in A64_SP + A64_FP for a in data):\n            raise Refuse(f\"stack or frame pointer stored as a value: {what}\")", "pass", "a64-frame-pointer-stored"),
+    ("stack_bound.py", "if any(a in A64_LR for a in data) and not (record or restored):\n            raise Refuse(f\"link register overwritten: {what}\")", "pass", "a64-frame-record-elsewhere"),
+    ("stack_bound.py", "if any(a in A64_FP for a in data) and not restored:\n            st = st.but(fp=None)", "pass", "a64-w29-writeback-load"),
+    ("stack_bound.py", "if key in active:\n            raise Refuse(f\"recursion through {key}\")", "if key in active:\n            return 0, {}", "recursion"),
+    ("stack_bound.py", "if old.key() != st.key():\n                raise Refuse(f\"{key}+{addr:#x}: states {old.key()} and {st.key()} meet\")", "pass", "depths-meet"),
+    ("stack_bound.py", "if not (old.w <= st.w and old.g <= st.g and (st.lr or not old.lr)):\n                states[j] = old.but(w=old.w & st.w,", "if not (st.w <= old.w and old.g <= st.g and (st.lr or not old.lr)):\n                states[j] = old.but(w=old.w | st.w,", "one-path-write"),
+    ("stack_bound.py", "if not A64_PLAIN.match(mn):\n        raise Refuse(f\"unmodelled instruction: {what}\")", "if not A64_PLAIN.match(mn):\n        return st, None", "a64-tpidr-el0"),
+    ("stack_bound.py", "if touched is not None and touched > max(before, st.d) + RED_ZONE:\n                    raise Refuse(f\"{key}+{addr:#x}: an access {touched - max(before, st.d)} bytes below the \"\n                                 f\"stack pointer, beyond the {RED_ZONE}-byte red zone of {TARGET}: {mn} {ops}\")", "pass", "x86-beyond-red-zone"),
+    ("stack_bound.py", "if kind == \"indirect\":\n                raise Refuse(f\"{key}+{addr:#x}: indirect control transfer {mn} {ops}\")", "if kind == \"indirect\":\n                continue", "a64-ret-register"),
+    ("stack_bound.py", "if not st.lr:\n                    raise Refuse(f\"{key}+{addr:#x}: return through a link register not restored\")", "pass", "a64-link-register-lost"),
+    ("stack_bound.py", "if st.fp != ENTRY:\n                    raise Refuse(f\"{key}+{addr:#x}: return without the caller'\''s frame pointer restored\")", "pass", "callee-clobbers-frame-pointer"),
+    ("stack_bound.py", "if tgt is None:\n                raise Refuse(f\"{key}+{addr:#x}: indirect {mn} {ops}\")", "if tgt is None:\n                flow(i + 1, st, addr); continue", "indirect-call"),
+    ("stack_bound.py", "raise Refuse(f\"{key}+{addr:#x}: call to {sym}, neither owned nor a stub\")", "pass", "unknown-call"),
+    ("stack_bound.py", "w=frozenset(b for b in st.w if b <= d)", "w=st.w", "callee-residual-reread"),
+    ("stack_bound.py", "w=frozenset(b for b in st.w if b <= d)", "w=st.w", "a64-callee-residual-reread"),
+    ("stack_bound.py", "g=frozenset(),", "g=st.g,", "a64-pc-relative-after-call"),
+]
+for which, old, new, ctl_name in mutations:
+    assert ctl_name in controls, f"unknown control {ctl_name}"
+    tgt, dis_path, diag_re = controls[ctl_name]
+    out = run_mutated(which, old, new, tgt, dis_path)
+    if re.search(r"^refused: .*" + diag_re, out):
+        raise AssertionError(f"control {ctl_name} still passed when its guard in {which} was deleted: {out}")
+    if ctl_name not in ("a64-link-register-writeback", "a64-link-register-store-writeback"):
+        assert out.startswith("bound "), f"control {ctl_name} was shadowed by another guard when its guard in {which} was deleted: {out}"
+' "$root/scripts/checks/lib" "$work/ctl"; then
+  echo "ok   control: guard-mutation check verifies all 51 guards are load-bearing and unshadowed"
+else
+  echo "FAIL control: guard-mutation check found a shadowed or non-load-bearing guard"; fail=1
+fi
 if [ -n "$measuring" ]; then
   # The run check counts the bytes an instruction addresses below the stack pointer, not only the
   # stack pointer: a main that stores at the red zone's edge without moving the stack pointer
