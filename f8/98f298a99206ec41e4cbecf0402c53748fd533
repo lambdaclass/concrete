@@ -1,0 +1,2 @@
+[piece 1 of 2: scripts]
+- ConcreteSpec/Spec/Prim.lean:199: `PrimContract.Allowed` never consults `failures`, including each alternative’s `errorTy` and `holds` predicate. Changing the declared failure alternatives therefore cannot change which answers the registry accepts. Consequently, `answerOk_iff` does not establish the claimed complete contract: an ordinary value representing an undeclared typed failure can still be admitted.
