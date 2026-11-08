@@ -42,8 +42,9 @@ end ConcreteSpecDiff.Random
 /-!
 The PRNG and both generators deliberately live in this one test file: Lean 4.34.1's `lean --run`
 does not import source-only modules through LEAN_SRC_PATH without separately built oleans. Nothing
-in the Concrete library imports them. Normal commands accept no mutation option. Planted defects
-require the explicit `control-emit` command, `--mutate`, and the planted-control flag.
+in the Concrete library imports them (enforced by `scripts/checks/import_layering.sh`). Normal
+commands accept no mutation option. Planted defects require the explicit `control-*` commands and
+the planted-control flag.
 -/
 
 namespace ConcreteSpecDiff.SpecGen
@@ -69,7 +70,7 @@ def Production.name : Production → String
 
 /-- Every slice brief extends this one table. Statement and return weights are both consumed. -/
 def weightedProductions : List (Nat × Production) :=
-  [(1, .letLiteral), (4, .letCopy), (4, .addLiteral), (3, .addVariable),
+  [(2, .letLiteral), (4, .letCopy), (4, .addLiteral), (4, .addVariable),
    (1, .returnLiteral), (5, .returnVariable),
    (16, .noDefect), (1, .outOfRange), (1, .knownOverflow), (1, .unusedBinding)]
 
@@ -109,7 +110,8 @@ def previous (state : State) : Binding :=
   | b :: _ => b
   | [] => ⟨⟨"v", 0⟩, 0⟩
 
-/-- Generate statements in source order, carrying known values and unread bindings. -/
+/-- Generate statements in source order, carrying known values and unread bindings.
+`.addVariable` prioritizes compatible unread bindings so `.letLiteral` bindings are consumed. -/
 def statements (fuel : Nat) (state : State) (r : Rng) :
     (List Slice0.Stmt × State) × Rng :=
   match fuel with
@@ -118,31 +120,74 @@ def statements (fuel : Nat) (state : State) (r : Rng) :
     let (choice, r₁) := pick statementProductions r
     let production := choice.getD .addLiteral
     let prev := previous state
-    let (expr, value, unread, r₂) :=
+    let ((stmtsHere, newBindings, value, unread), r₂) :
+        (List Slice0.Stmt × List Binding × Nat × List Var) × Rng :=
       match production with
       | .letLiteral =>
-        let (a, r') := literal r₁
-        let n := match a with | .lit n => n | .var _ => 0
-        (Slice0.Expr.atom a, n, state.unread, r')
+        let (n, r') := below (256 - prev.value) r₁
+        let b : Binding := ⟨⟨"v", state.bindings.length⟩, n⟩
+        (([⟨b.var, .atom (.lit n)⟩], [b], n, state.unread ++ [b.var]), r')
       | .letCopy =>
-        (.atom (.var prev.var), prev.value, markRead prev.var state.unread, r₁)
+        let b : Binding := ⟨⟨"v", state.bindings.length⟩, prev.value⟩
+        (([⟨b.var, .atom (.var prev.var)⟩], [b], prev.value,
+          (markRead prev.var state.unread) ++ [b.var]), r₁)
       | .addVariable =>
-        let compatible := state.bindings.filter fun b => b.value ≤ 255 - prev.value
-        let (other, r') :=
-          if compatible.isEmpty then (prev, r₁) else
-            let (which, r') := below compatible.length r₁
-            (compatible.getD which prev, r')
-        let unread := markRead other.var (markRead prev.var state.unread)
-        (.add (.var prev.var) (.var other.var), prev.value + other.value, unread, r')
+        let compatibleAll := state.bindings.filter (fun (b : Binding) => b.value ≤ 255 - prev.value)
+        let compatibleUnread := compatibleAll.filter (fun (b : Binding) =>
+          b.var != prev.var && state.unread.contains b.var)
+        let pool := if compatibleUnread.isEmpty then compatibleAll else compatibleUnread
+        if pool.isEmpty then
+          let (auxVal, r') := below (256 - prev.value) r₁
+          let auxVar : Var := ⟨"v", state.bindings.length⟩
+          let sumVar : Var := ⟨"v", state.bindings.length + 1⟩
+          let sumVal := prev.value + auxVal
+          let unread := (markRead prev.var state.unread) ++ [sumVar]
+          (([⟨auxVar, .atom (.lit auxVal)⟩,
+             ⟨sumVar, .add (.var prev.var) (.var auxVar)⟩],
+            [⟨auxVar, auxVal⟩, ⟨sumVar, sumVal⟩], sumVal, unread), r')
+        else
+          let (which, r') := below pool.length r₁
+          let other := pool.getD which prev
+          let b : Binding := ⟨⟨"v", state.bindings.length⟩, prev.value + other.value⟩
+          let unread := (markRead other.var (markRead prev.var state.unread)) ++ [b.var]
+          (([⟨b.var, .add (.var prev.var) (.var other.var)⟩], [b],
+            prev.value + other.value, unread), r')
       | _ =>
         let (n, r') := below (256 - prev.value) r₁
-        (.add (.var prev.var) (.lit n), prev.value + n, markRead prev.var state.unread, r')
-    let b : Binding := ⟨⟨"v", state.bindings.length⟩, value⟩
+        let b : Binding := ⟨⟨"v", state.bindings.length⟩, prev.value + n⟩
+        let unread := (markRead prev.var state.unread) ++ [b.var]
+        (([⟨b.var, .add (.var prev.var) (.lit n)⟩], [b], prev.value + n, unread), r')
     let next : State :=
-      { bindings := state.bindings ++ [b], unread := unread ++ [b.var],
+      { bindings := state.bindings ++ newBindings, unread := unread,
         overflow := state.overflow || value > 255 }
     let ((rest, final), r₃) := statements fuel next r₂
-    ((⟨b.var, expr⟩ :: rest, final), r₃)
+    ((stmtsHere ++ rest, final), r₃)
+
+/-- Fold any remaining compatible unread bindings into the final binding so `.letLiteral`
+statements do not leave unintended unused-binding rejections on non-defect candidates. -/
+def drainUnread : List Var → State → List Slice0.Stmt × State
+  | [], state => ([], state)
+  | u :: rest, state =>
+    let last := previous state
+    if u == last.var then
+      drainUnread rest state
+    else
+      match state.bindings.find? (fun b => b.var == u) with
+      | some ub =>
+        if ub.value ≤ 255 - last.value then
+          let nextVar : Var := ⟨"v", state.bindings.length⟩
+          let nextVal := last.value + ub.value
+          let nextBinding : Binding := ⟨nextVar, nextVal⟩
+          let unread' := (markRead u (markRead last.var state.unread)) ++ [nextVar]
+          let state' : State :=
+            { bindings := state.bindings ++ [nextBinding],
+              unread := unread',
+              overflow := state.overflow || nextVal > 255 }
+          let (tailStmts, finalState) := drainUnread rest state'
+          (⟨nextVar, .add (.var last.var) (.var u)⟩ :: tailStmts, finalState)
+        else
+          drainUnread rest state
+      | none => drainUnread rest state
 
 def base (returnProduction : Production) (r : Rng) : (Slice0.Program × State) × Rng :=
   match returnProduction with
@@ -150,31 +195,31 @@ def base (returnProduction : Production) (r : Rng) : (Slice0.Program × State) �
     let (a, r') := literal r
     (({ body := [], ret := a }, ⟨[], [], false⟩), r')
   | _ =>
-    let (count, r₁) := below 5 r
+    let (count, r₁) := below 4 r
+    let count := count + 1
     let (a, r₂) := literal r₁
     let firstValue := match a with | .lit n => n | .var _ => 0
     let first : Binding := ⟨⟨"v", 0⟩, firstValue⟩
     let initial : State := ⟨[first], [first.var], false⟩
     let ((rest, state), r₃) := statements count initial r₂
-    let last := previous state
-    let unread := markRead last.var state.unread
-    (({ body := ⟨first.var, .atom a⟩ :: rest, ret := .var last.var },
-      { state with unread := unread }), r₃)
+    let (drainStmts, drainedState) := drainUnread state.unread state
+    let last := previous drainedState
+    let unread := markRead last.var drainedState.unread
+    (({ body := ⟨first.var, .atom a⟩ :: (rest ++ drainStmts), ret := .var last.var },
+      { drainedState with unread := unread }), r₃)
 
 def stmtConstructs (s : Slice0.Stmt) : List String :=
   match s.e with
   | .atom (.lit _) => ["let_literal"]
   | .atom (.var _) => ["let_copy"]
-  | .add l r =>
-    let lhs := match l with | .lit _ => ["add_literal"] | .var _ => ["add_variable"]
-    let rhs := match r with | .lit _ => ["add_literal"] | .var _ => ["add_variable"]
-    (lhs ++ rhs).eraseDups
+  | .add (.var _) (.var _) => ["add_variable"]
+  | .add _ _ => ["add_literal"]
 
 def constructs (q : Slice0.Program) : List String :=
   let body := q.body.flatMap stmtConstructs
-  match q.ret with
+  (match q.ret with
   | .lit _ => body ++ ["return_literal"]
-  | .var _ => body ++ ["return_variable"]
+  | .var _ => body ++ ["return_variable"]).eraseDups
 
 def make (q : Slice0.Program) (rejection : Option String) : Generated :=
   ⟨q, constructs q, rejection⟩
@@ -189,23 +234,70 @@ def generate (seed : String) (index : Nat) : Generated :=
   let r := forSeed seed index
   let (returnChoice, r₁) := pick returnProductions r
   let (defectChoice, r₂) := pick defectProductions r₁
-  let returnProduction := returnChoice.getD .returnVariable
-  let defect := defectChoice.getD .noDefect
-  let ((q, state), _) := base returnProduction r₂
+  let (retSlot, _) := below 6 (forSeed seed 999990)
+  let returnProduction :=
+    if index < 6 then
+      if index = retSlot then .returnLiteral else .returnVariable
+    else
+      returnChoice.getD .returnVariable
+  let (defectOffset, _) := below 3 (forSeed seed 999991)
+  let defect :=
+    if index < 24 then
+      if index % 8 = 7 then
+        match ((index / 8) + defectOffset) % 3 with
+        | 0 => .outOfRange
+        | 1 => .knownOverflow
+        | _ => .unusedBinding
+      else
+        .noDefect
+    else
+      defectChoice.getD .noDefect
+  let ((q, state), r₃) := base returnProduction r₂
   match defect with
   | .outOfRange =>
-    make { body := [⟨⟨"v", 0⟩, .atom (.lit 256)⟩], ret := .var ⟨"v", 0⟩ }
-      (some "out_of_range_literal")
+    let (extra, _) := below 744 r₃
+    let badLit := 256 + extra
+    match q.body with
+    | [] =>
+      make { body := [⟨⟨"v", 0⟩, .atom (.lit badLit)⟩], ret := .var ⟨"v", 0⟩ }
+        (some "out_of_range_literal")
+    | _ =>
+      let last := previous state
+      let x : Var := ⟨"v", q.body.length⟩
+      make { body := q.body ++ [⟨x, .add (.var last.var) (.lit badLit)⟩], ret := .var x }
+        (some "out_of_range_literal")
   | .knownOverflow =>
-    let a : Var := ⟨"v", 0⟩
-    let b : Var := ⟨"v", 1⟩
-    let c : Var := ⟨"v", 2⟩
-    make { body := [⟨a, .atom (.lit 200)⟩, ⟨b, .atom (.lit 56)⟩,
-                    ⟨c, .add (.var a) (.var b)⟩], ret := .var c }
-      (some "known_overflow")
+    let (deltaA, r₄) := below 128 r₃
+    let lhsVal := 128 + deltaA
+    let minRhs := 256 - lhsVal
+    let (deltaB, _) := below (256 - minRhs) r₄
+    let rhsVal := minRhs + deltaB
+    match q.body with
+    | [] =>
+      let a : Var := ⟨"v", 0⟩
+      let b : Var := ⟨"v", 1⟩
+      let c : Var := ⟨"v", 2⟩
+      make { body := [⟨a, .atom (.lit lhsVal)⟩, ⟨b, .atom (.lit rhsVal)⟩,
+                      ⟨c, .add (.var a) (.var b)⟩], ret := .var c }
+        (some "known_overflow")
+    | _ =>
+      let last := previous state
+      let n := q.body.length
+      let a : Var := ⟨"v", n⟩
+      let b : Var := ⟨"v", n + 1⟩
+      let c : Var := ⟨"v", n + 2⟩
+      let aInit := if last.value ≤ lhsVal then
+        Slice0.Expr.add (.var last.var) (.lit (lhsVal - last.value))
+      else
+        Slice0.Expr.add (.var last.var) (.lit 0)
+      let bVal := if last.value ≤ lhsVal then rhsVal else (256 - last.value)
+      make { body := q.body ++ [⟨a, aInit⟩, ⟨b, .atom (.lit bVal)⟩, ⟨c, .add (.var a) (.var b)⟩],
+             ret := .var c }
+        (some "known_overflow")
   | .unusedBinding =>
+    let (unusedAtom, _) := literal r₃
     let x : Var := ⟨"v", q.body.length⟩
-    make { q with body := q.body ++ [⟨x, .atom (.lit 0)⟩] } (some "unused_binding")
+    make { q with body := q.body ++ [⟨x, .atom unusedAtom⟩] } (some "unused_binding")
   | _ => make q (rejectionOf state)
 
 end ConcreteSpecDiff.SpecGen
@@ -228,7 +320,7 @@ def Production.name : Production → String
 
 /-- Every slice brief extends this one table with its new BIR shapes. -/
 def weightedProductions : List (Nat × Production) :=
-  [(4, .checked), (4, .wrapped), (2, .widening), (2, .twoSites), (3, .chain)]
+  [(4, .checked), (4, .wrapped), (3, .widening), (2, .twoSites), (3, .chain)]
 
 structure Generated where
   program : Program
@@ -280,36 +372,69 @@ def chained (op : BinOp) (t : IntTy) (a b : Int) (c : Int) : Program :=
 def generate (seed : String) (index : Nat) : Generated :=
   let r := forSeed seed index
   let (choice, r₁) := pick weightedProductions r
-  let production := choice.getD .checked
+  let (prodOffset, _) := below 5 (forSeed seed 999992)
+  let production :=
+    if index < 15 then
+      match (index + prodOffset) % 5 with
+      | 0 => .checked
+      | 1 => .wrapped
+      | 2 => .widening
+      | 3 => .twoSites
+      | _ => .chain
+    else
+      choice.getD .checked
   match production with
   | .checked =>
-    let (t, r₂) := randomTy r₁
-    let ((op, a, b), _) := binaryOperands t r₂
+    let (tyTicket, r₂) := below 4 r₁
+    let t := [IntTy.u8, .i8, .u16, .i16].getD ((index + tyTicket) % 4) .u8
+    let ((op, a, b), r₃) := binaryOperands t r₂
+    let (op, t, a, b) :=
+      if index < 5 then
+        let (smallA, r₄) := below 100 r₃
+        let (smallB, _) := below 100 r₄
+        (BinOp.add, IntTy.u8, Int.ofNat smallA, Int.ofNat smallB)
+      else if index < 10 then
+        let (bigA, r₄) := below 50 r₃
+        let (bigB, _) := below 50 r₄
+        (BinOp.add, IntTy.u8, Int.ofNat (200 + bigA), Int.ofNat (100 + bigB))
+      else
+        (op, t, a, b)
     ⟨Examples.checkedOp op t a b, production,
       [Production.name production, "binOvf", "condbr", "trap", opName op, tyName t]⟩
   | .wrapped =>
-    let (t, r₂) := randomTy r₁
-    let ((op, a, b), _) := binaryOperands t r₂
+    let (tyTicket, r₂) := below 4 r₁
+    let t := [IntTy.u8, .i8, .u16, .i16].getD ((index + tyTicket) % 4) .u8
+    let (opTicket, r₃) := below 3 r₂
+    let op := [BinOp.add, .sub, .mul].getD ((index + opTicket) % 3) .add
+    let (a, r₄) := randomValue t r₃
+    let (b, _) := randomValue t r₄
     ⟨Examples.wrapped op t a b, production,
       [Production.name production, "binOvf", "trunc", "condbr", opName op, tyName t]⟩
   | .widening =>
-    let (signed, r₂) := below 2 r₁
-    let fr : IntTy := if signed = 0 then .u8 else .i8
-    let to : IntTy := if signed = 0 then .u16 else .i16
+    let (pairTicket, r₂) := below 3 r₁
+    let (fr, to, pairTag) : IntTy × IntTy × String :=
+      match (index + pairTicket) % 3 with
+      | 0 => (.u8, .u16, "widen_u8_u16")
+      | 1 => (.i8, .i16, "widen_i8_i16")
+      | _ => (.u8, .i16, "widen_u8_i16")
     let (a, r₃) := randomValue fr r₂
     let ((op, _, b), _) := binaryOperands to r₃
     ⟨Examples.observe [.trunc fr to 0 (.imm fr a)] op to (.reg 0) (.imm to b), production,
-      [Production.name production, "binOvf", "trunc", "condbr", opName op, tyName to]⟩
+      [Production.name production, pairTag, "binOvf", "trunc", "condbr", opName op, tyName fr, tyName to]⟩
   | .twoSites =>
     let (a, r₂) := randomValue .u8 r₁
     let (b, r₃) := randomValue .u8 r₂
     let (c, _) := randomValue .u8 r₃
     ⟨Examples.twoSites a b c, production,
-      [Production.name production, "binOvf", "condbr", "trap", "multi_block", "multi_site"]⟩
+      [Production.name production, "binOvf", "condbr", "trap", "multi_block", "multi_site", "add", "u8"]⟩
   | .chain =>
-    let (t, r₂) := randomTy r₁
-    let ((op, a, b), r₃) := binaryOperands t r₂
-    let (c, _) := randomValue .u8 r₃
+    let (tyTicket, r₂) := below 4 r₁
+    let t := [IntTy.u8, .i8, .u16, .i16].getD ((index + tyTicket) % 4) .u8
+    let (opTicket, r₃) := below 3 r₂
+    let op := [BinOp.add, .sub, .mul].getD ((index + opTicket) % 3) .add
+    let (a, r₄) := randomValue t r₃
+    let (b, r₅) := randomValue t r₄
+    let (c, _) := randomValue .u8 r₅
     ⟨chained op t a b c, production,
       [Production.name production, "binOvf", "trunc", "br", "condbr", "trap", "multi_block",
        "multi_site", opName op, tyName t]⟩
@@ -355,6 +480,13 @@ def writeBackends (dir : System.FilePath) (target : LCB.Target) (p : Program)
   writeLcb dir target emitted
 
 def unwiredMessage := "no Core→BIR lowering yet (slice 1)"
+
+/-- Whether Core→BIR lowering for the supported slice-0 fragment is available (X3).
+While `false`, `compileCore` must return `.error unwiredMessage` on every candidate and the gate
+reports 0 compiled programs loudly. Once lowering lands, set `loweringAvailable := true`; every
+supported accepted candidate must then compile (`compiled = supportedAccepted = accepted`), and
+any refusal or partial compilation fails the gate. -/
+def loweringAvailable : Bool := false
 
 /-- THE integration point for the lowering branch. Its implementation must lower the spec's Core
 program to BIR; until that branch lands, the spec leg runs its generator/oracle invariants but has
@@ -409,13 +541,41 @@ def dropOverflowBir (p : Program) : Program :=
     { b with insts := insts, term := term }
   { p with blocks := blocks }
 
-def safeSeed (seed : String) : String :=
-  let cleaned := seed.toList.map fun c => if c.isAlphanum || c = '_' then c else '_'
-  let result := String.ofList cleaned
-  if result.isEmpty then "seed" else result
+def hexDigit (n : Nat) : Char :=
+  if n < 10 then Char.ofNat ('0'.toNat + n) else Char.ofNat ('a'.toNat + (n - 10))
 
-def regressionName (seed : String) (index : Nat) : String :=
-  s!"regression_{safeSeed seed}_{index}"
+def hexUInt64 (x : UInt64) : String :=
+  String.ofList <| (List.range 16).reverse.map fun i =>
+    hexDigit ((UInt64.shiftRight x (UInt64.ofNat (i * 4))).toNat % 16)
+
+/-- Collision-resistant, manifest-valid (`[a-z0-9_]+`) seed identifier combining a lowercase
+sanitized prefix with the 64-bit FNV-1a hex digest of the raw seed string. -/
+def safeSeed (seed : String) : String :=
+  let cleaned := (seed.toList.take 24).map fun c =>
+    if c.isAlpha then c.toLower
+    else if c.isDigit || c = '_' then c
+    else '_'
+  let prefixStr := String.ofList cleaned
+  let prefixStr := if prefixStr.isEmpty then "seed" else prefixStr
+  s!"{prefixStr}_{hexUInt64 (Random.seedHash seed)}"
+
+def regressionName (leg : String) (seed : String) (index : Nat) : String :=
+  s!"regression_{leg}_{safeSeed seed}_{index}"
+
+def renderAtom : ConcreteSpec.Slice0.Atom → String
+  | .lit n => toString n
+  | .var x => s!"{x.hint}_{x.id}"
+
+def renderExpr : ConcreteSpec.Slice0.Expr → String
+  | .atom a => renderAtom a
+  | .add l r => s!"{renderAtom l} + {renderAtom r}"
+
+def renderStmt (s : ConcreteSpec.Slice0.Stmt) : String :=
+  s!"    let {s.x.hint}_{s.x.id}: u8 = {renderExpr s.e};\n"
+
+def renderSlice0 (q : ConcreteSpec.Slice0.Program) : String :=
+  let body := String.join (q.body.map renderStmt)
+  s!"fn main() -> u8 \{\n{body}    return {renderAtom q.ret};\n}\n"
 
 def trapKindName : Trap → String
   | .arithmeticOverflow => "arithmeticOverflow"
@@ -454,30 +614,41 @@ def writeEvaluator (dir : System.FilePath) (f : Source.Function) (sites : SiteTa
   IO.FS.writeFile (dir / "lcb_eval.stderr") stderr
   IO.FS.writeFile (dir / "lcb_eval.stdout") ""
 
-def writeRegressionMetadata (dir : System.FilePath) (name : String) (outcome : Outcome)
-    (sites : SiteTable) : IO Unit := do
+def writeBirRegressionMetadata (dir : System.FilePath) (seed : String) (index : Nat)
+    (outcome : Outcome) (sites : SiteTable) : IO Unit := do
+  let name := regressionName "bir" seed index
   let expectation ← match outcome with
     | .exited c => pure s!"exit {c}"
     | .trapped s => match sites[s]? with
       | some e => pure s!"trap {trapKindName e.kind} site {s}"
       | none => pure "INVALID"
     | _ => pure "INVALID"
+  IO.FS.writeFile (dir / "safe-seed.txt") (safeSeed seed ++ "\n")
+  IO.FS.writeFile (dir / "regression-name.txt") (name ++ "\n")
   IO.FS.writeFile (dir / "manifest-row.txt")
     s!"{name}\tbir:{name}\t{expectation}\tslice0\n"
+
+def writeSpecRegressionMetadata (dir : System.FilePath) (seed : String) (index : Nat)
+    (q : ConcreteSpec.Slice0.Program) (exitCode : Nat) : IO Unit := do
+  let name := regressionName "spec" seed index
+  IO.FS.writeFile (dir / "safe-seed.txt") (safeSeed seed ++ "\n")
   IO.FS.writeFile (dir / "regression-name.txt") (name ++ "\n")
+  IO.FS.writeFile (dir / "program.con") (renderSlice0 q)
+  IO.FS.writeFile (dir / "manifest-row.txt")
+    s!"{name}\tcon:tests/slice0/{name}.con\texit {exitCode}\tslice0\n"
 
 /-- Emit exactly the files consumed by slice0_native.sh, plus the evaluator's observation and the
 same judge inputs as the manifest runner. The expectation is supplied separately for the spec leg. -/
 def emitArtifacts (dir : System.FilePath) (target : LCB.Target) (p : Program) (mutation : Mutation) :
     IO Bool := do
-  let backendProgram := if mutation = .lcbOffByOne then lcbOffByOne p else p
-  unless wf p && wf backendProgram do
+  let lcbProgram := if mutation = .lcbOffByOne then lcbOffByOne p else p
+  unless wf p && wf lcbProgram do
     IO.eprintln s!"{dir}: generated or control-mutated BIR is not well formed"
     return false
-  match LCB.emit backendProgram with
+  match LCB.emit lcbProgram with
   | .error msg => IO.eprintln s!"{dir}: adapter: {msg}"; return false
   | .ok (f, sites) =>
-    unless ← writeBackends dir target backendProgram (f, sites) do return false
+    unless ← writeBackends dir target p (f, sites) do return false
     if mutation = .dropOverflowLLVM then
       let original ← IO.FS.readFile (dir / "llvm.ll")
       let changed := dropOverflowLLVM original
@@ -515,7 +686,7 @@ def emitBirCandidate (seed : String) (index : Nat) (dir : System.FilePath) (targ
       | _ => IO.eprintln s!"{dir}: off-by-one control needs an exit"; return 1
     IO.FS.writeFile (dir / "program.lean.txt") (reprStr g.program ++ "\n")
     IO.FS.writeFile (dir / "constructs.txt") (String.intercalate "," g.constructs ++ "\n")
-    writeRegressionMetadata dir (regressionName seed index) outcome g.program.sites
+    writeBirRegressionMetadata dir seed index outcome g.program.sites
     IO.println s!"seed {seed} index {index}: {outcomeName outcome} {BirGen.Production.name g.production}"
     return 0
 
@@ -561,7 +732,7 @@ def genBir (seed : String) (n : Nat) (dir : System.FilePath) (target : LCB.Targe
         unless ← writeOutcome child outcome g.program.sites do return 1
         IO.FS.writeFile (child / "program.lean.txt") (reprStr g.program ++ "\n")
         IO.FS.writeFile (child / "constructs.txt") (String.intercalate "," g.constructs ++ "\n")
-        writeRegressionMetadata child (regressionName seed index) outcome g.program.sites
+        writeBirRegressionMetadata child seed index outcome g.program.sites
         accepted := accepted + 1
         constructs := addConstructs constructs g.constructs
         if outcomeName outcome = "exit" then exits := exits + 1 else traps := traps + 1
@@ -592,15 +763,21 @@ def writeSpecOutcome (dir : System.FilePath) (p : Program) (o : ConcreteSpec.Out
 def specOutcomeName : ConcreteSpec.Outcome → String
   | .exit _ => "exit" | .trap _ => "trap" | .stuck _ => "stuck" | .outOfFuel => "out_of_fuel"
 
-/-- Generate accepted slice-0 Core programs, run the spec oracle, and offer each to compileCore.
-While the fixed hook is unwired, only its exact refusal is non-fatal and no native-ready directory
-is produced. -/
-def genSpec (seed : String) (n : Nat) (dir : System.FilePath) (target : LCB.Target) : IO UInt32 := do
+/-- Generate accepted slice-0 Core programs, run the spec oracle, and enforce the lowering
+capability contract (X3):
+- When `avail = false`, `compiler` must return `.error unwiredMessage` on every accepted candidate
+  (`compiled = 0`).
+- When `avail = true`, `compiler` must succeed on every supported accepted candidate
+  (`compiled = supportedAccepted = accepted`). Partial lowering is a fatal failure. -/
+def genSpecWith (avail : Bool) (compiler : ConcreteSpec.Program → Except String Program)
+    (seed : String) (n : Nat) (dir : System.FilePath) (target : LCB.Target) : IO UInt32 := do
   IO.FS.createDirAll dir
   let mut programs := ""
   let mut rejects := ""
   let mut constructs : Counts := []
+  let mut rejections : Counts := []
   let mut accepted := 0
+  let mut supportedAccepted := 0
   let mut rejected := 0
   let mut compiled := 0
   let mut exits := 0
@@ -610,7 +787,9 @@ def genSpec (seed : String) (n : Nat) (dir : System.FilePath) (target : LCB.Targ
     let core := ConcreteSpec.Slice0.toCore g.program
     if !ConcreteSpec.check core then
       rejected := rejected + 1
-      rejects := rejects ++ s!"reject\t{index}\t{g.rejection.getD "spec_check"}\n"
+      let reason := g.rejection.getD "spec_check"
+      rejections := bump reason rejections
+      rejects := rejects ++ s!"reject\t{index}\t{reason}\n"
     else
       if g.rejection.isSome then
         IO.eprintln s!"seed {seed} index {index}: checker accepted predicted rejection {repr g.rejection}"
@@ -620,6 +799,7 @@ def genSpec (seed : String) (n : Nat) (dir : System.FilePath) (target : LCB.Targ
       | .exit c =>
         unless c < 256 do IO.eprintln s!"seed {seed} index {index}: invalid spec exit {c}"; return 1
         accepted := accepted + 1
+        supportedAccepted := supportedAccepted + 1
         exits := exits + 1
         constructs := addConstructs constructs g.constructs
         let child := dir / s!"p{index}"
@@ -627,17 +807,24 @@ def genSpec (seed : String) (n : Nat) (dir : System.FilePath) (target : LCB.Targ
         IO.FS.writeFile (child / "program.lean.txt") (reprStr g.program ++ "\n")
         IO.FS.writeFile (child / "constructs.txt") (String.intercalate "," g.constructs ++ "\n")
         IO.FS.writeFile (child / "oracle.txt") s!"exit {c}\n"
+        writeObservation child (toString c) ""
+        writeSpecRegressionMetadata child seed index g.program c
         let mut didCompile := false
-        match compileCore core with
+        match compiler core with
         | .error msg =>
+          if avail then
+            IO.eprintln s!"FAIL spec leg capability contract: loweringAvailable = true but compileCore refused supported accepted candidate (seed {seed} index {index}): {msg}"
+            return 1
           if msg != unwiredMessage then
             IO.eprintln s!"seed {seed} index {index}: compileCore: {msg}"
             return 1
         | .ok bir =>
+          if !avail then
+            IO.eprintln s!"FAIL spec leg capability contract: compileCore compiled seed {seed} index {index} while loweringAvailable = false"
+            return 1
           unless ← emitArtifacts child target bir .none do return 1
           unless ← writeSpecOutcome child bir outcome do return 1
           IO.FS.writeFile (child / "native-ready") ""
-          writeRegressionMetadata child (regressionName seed index) (.exited c) bir.sites
           compiled := compiled + 1
           didCompile := true
         programs := programs ++
@@ -651,20 +838,40 @@ def genSpec (seed : String) (n : Nat) (dir : System.FilePath) (target : LCB.Targ
         IO.eprintln s!"seed {seed} index {index}: spec oracle gives {repr outcome}"
         return 1
     IO.FS.writeFile (dir / "summary.tsv")
-      (s!"seed\t{seed}\naccepted\t{accepted}\nrejected\t{rejected}\nattempted\t{n}\ncompiled\t{compiled}\n" ++
+      (s!"seed\t{seed}\nlowering_available\t{avail}\naccepted\t{accepted}\nsupported_accepted\t{supportedAccepted}\nrejected\t{rejected}\nattempted\t{n}\ncompiled\t{compiled}\n" ++
        s!"outcome\texit\t{exits}\noutcome\ttrap\t{traps}\n" ++
-       countsLines "construct" constructs ++ programs ++ rejects)
+       countsLines "construct" constructs ++ countsLines "rejection" rejections ++ programs ++ rejects)
+  if !avail && compiled != 0 then
+    IO.eprintln s!"FAIL spec leg capability contract: compiled {compiled} != 0 while loweringAvailable = false"
+    return 1
+  if avail && (compiled != supportedAccepted || supportedAccepted != accepted) then
+    IO.eprintln s!"FAIL spec leg capability contract: partial lowering compiled {compiled} of {supportedAccepted} supported accepted candidates"
+    return 1
   IO.FS.writeFile (dir / "summary.tsv")
-    (s!"seed\t{seed}\naccepted\t{accepted}\nrejected\t{rejected}\nattempted\t{n}\ncompiled\t{compiled}\n" ++
+    (s!"seed\t{seed}\nlowering_available\t{avail}\naccepted\t{accepted}\nsupported_accepted\t{supportedAccepted}\nrejected\t{rejected}\nattempted\t{n}\ncompiled\t{compiled}\n" ++
      s!"outcome\texit\t{exits}\noutcome\ttrap\t{traps}\n" ++
-     countsLines "construct" constructs ++ programs ++ rejects)
-  IO.println s!"spec leg: {accepted} accepted, {rejected} rejected, exits {exits}, traps {traps}"
+     countsLines "construct" constructs ++ countsLines "rejection" rejections ++ programs ++ rejects)
+  IO.println s!"spec leg: {accepted} accepted ({supportedAccepted} supported), {rejected} rejected, exits {exits}, traps {traps}"
   IO.print <| countsLines "construct" constructs
+  IO.print <| countsLines "rejection" rejections
   if compiled = 0 then
     IO.println "spec leg: 0 programs compiled (no Core→BIR lowering; becomes required in the lowering branch)"
   else
     IO.println s!"spec leg: {compiled} programs compiled for native comparison"
   return 0
+
+def genSpec (seed : String) (n : Nat) (dir : System.FilePath) (target : LCB.Target) : IO UInt32 :=
+  genSpecWith loweringAvailable compileCore seed n dir target
+
+/-- Planted partial-compilation control (X3): simulates a partially wired `compileCore` that
+lowers empty-body programs (`return <lit>`) to `Examples.answer` and refuses multi-statement
+slice-0 programs with `unwiredMessage`. With `avail = true`, `genSpecWith` must reject the partial
+lowering as soon as a supported accepted candidate is refused. -/
+def controlPartialLowering (seed : String) (n : Nat) (dir : System.FilePath) (target : LCB.Target) :
+    IO UInt32 := do
+  let partialCompiler : ConcreteSpec.Program → Except String Program := fun core =>
+    if core.body.isEmpty then .ok Concrete.BIR.Examples.answer else .error unwiredMessage
+  genSpecWith true partialCompiler seed n dir target
 
 /-- Replay exactly one accepted spec candidate through compileCore. While the hook is unwired this
 writes the generated oracle inputs and refuses to claim a native comparison. -/
@@ -681,15 +888,22 @@ def replaySpec (seed : String) (index : Nat) (dir : System.FilePath) (target : L
     IO.FS.writeFile (dir / "program.lean.txt") (reprStr g.program ++ "\n")
     IO.FS.writeFile (dir / "constructs.txt") (String.intercalate "," g.constructs ++ "\n")
     IO.FS.writeFile (dir / "oracle.txt") s!"exit {c}\n"
+    writeObservation dir (toString c) ""
+    writeSpecRegressionMetadata dir seed index g.program c
     match compileCore core with
     | .error msg =>
+      if loweringAvailable then
+        IO.eprintln s!"FAIL spec leg capability contract: loweringAvailable = true but compileCore refused seed {seed} index {index}: {msg}"
+        return 1
       IO.eprintln s!"spec leg: 0 programs compiled ({msg})"
       return 4
     | .ok bir =>
+      if !loweringAvailable then
+        IO.eprintln s!"FAIL spec leg capability contract: compileCore compiled seed {seed} index {index} while loweringAvailable = false"
+        return 1
       unless ← emitArtifacts dir target bir .none do return 1
       unless ← writeSpecOutcome dir bir (.exit c) do return 1
       IO.FS.writeFile (dir / "native-ready") ""
-      writeRegressionMetadata dir (regressionName seed index) (.exited c) bir.sites
       return 0
   | o => IO.eprintln s!"seed {seed} index {index}: spec oracle gives {repr o}"; return 1
 
@@ -738,6 +952,10 @@ def main (args : List String) : IO UInt32 := do
     | _, _ => return 2
   | ["control-spec-oracle", dir, target, "--control", "SPEC_DIFF_PLANTED_CONTROL"] =>
     withTarget target (controlSpecOracle dir)
+  | ["control-partial-lowering", seed, n, dir, target,
+      "--control", "SPEC_DIFF_PLANTED_CONTROL"] => match parseNat n with
+    | some n => withTarget target (controlPartialLowering seed n dir)
+    | none => return 2
   | _ =>
-    IO.eprintln "usage: spec_diff.lean gen-spec SEED N DIR | gen-bir SEED N DIR TARGET | (replay | replay-spec) SEED INDEX DIR TARGET | control-emit --mutate NAME SEED INDEX DIR TARGET --control SPEC_DIFF_PLANTED_CONTROL | control-spec-oracle DIR TARGET --control SPEC_DIFF_PLANTED_CONTROL"
+    IO.eprintln "usage: spec_diff.lean gen-spec SEED N DIR | gen-bir SEED N DIR TARGET | (replay | replay-spec) SEED INDEX DIR TARGET | control-emit --mutate NAME SEED INDEX DIR TARGET --control SPEC_DIFF_PLANTED_CONTROL | control-spec-oracle DIR TARGET --control SPEC_DIFF_PLANTED_CONTROL | control-partial-lowering SEED N DIR TARGET --control SPEC_DIFF_PLANTED_CONTROL"
     return 2
