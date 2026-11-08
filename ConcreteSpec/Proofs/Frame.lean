@@ -470,24 +470,31 @@ example : C1Call c1Operands c1UnitFnId c1UnitProgram c1UnitEntry c1Exit := by
 
 private def c1BadExit : Exec.Config c1Operands := ⟨.done, [], (), [.ret none []]⟩
 
-/-- Refused: a configuration that still contains the call's return frame is not a completed call. -/
-example : ¬ C1Call c1Operands c1FnId c1Program c1Entry c1BadExit := by
-  intro h
-  obtain ⟨dst, result, caller, k, args, site, st, he, hctrl, hlocals, hframes⟩ :=
-    c1Call_restores_caller h
-  have hk : k = [] := (congrArg Exec.Config.frames he).symm
-  rw [hk] at hframes
-  simp [c1BadExit] at hframes
+/-- Law (subject `ConcreteSpec.Core.Frame.C1Call`).
+Complete calls restore the exact caller saved by entry, by evaluating their actual return step. -/
+theorem caller_restoration (O : Exec.Operands) (f : FnId) (P : Exec.Program O) :
+    CallerRestoration O f P := by
+  intro entry exit call
+  exact c1Call_restores_caller call
 
-/-- Refused: even with `.done` control and empty locals, an exit whose continuation differs from
-the one saved at entry fails the restoration conclusion itself. -/
-example : ¬ ∃ (dst : Option Var) (result : Nat) (caller : AList Var Nat)
-    (k : List (Exec.Frame c1Operands)) (args : List Nat) (site : SiteId) (st : Unit),
-    c1Entry = ⟨.exec (.call dst c1FnId args site), caller, st, k⟩ ∧
-    c1BadExit.ctrl = .done ∧ c1BadExit.locals = Exec.bindDst dst result caller ∧
-    c1BadExit.frames = k := by
+/-- Instance (law `ConcreteSpec.Core.Frame.caller_restoration`, case `explicit_return`). -/
+example : CallerRestoration c1Operands c1FnId c1Program :=
+  caller_restoration c1Operands c1FnId c1Program
+
+/-- A planted completion rule accepts calls before their return frame is popped. -/
+def incompleteC1Call (_O : Exec.Operands) (_f : FnId) (_P : Exec.Program _O)
+    (_entry _exit : Exec.Config _O) : Prop := True
+
+/-- Planted (law `ConcreteSpec.Core.Frame.caller_restoration`, case `explicit_return`,
+subject `ConcreteSpec.Core.Frame.C1Call`, mutant `ConcreteSpec.Core.Frame.incompleteC1Call`). -/
+example : ¬ (∀ entry exit, incompleteC1Call c1Operands c1FnId c1Program entry exit →
+    ∃ (dst : Option Var) (result : Nat) (caller : AList Var Nat)
+      (k : List (Exec.Frame c1Operands)) (args : List Nat) (site : SiteId) (st : Unit),
+      entry = ⟨.exec (.call dst c1FnId args site), caller, st, k⟩ ∧
+      exit.ctrl = .done ∧ exit.locals = Exec.bindDst dst result caller ∧ exit.frames = k) := by
   intro h
-  obtain ⟨dst, result, caller, k, args, site, st, he, hctrl, hlocals, hframes⟩ := h
+  obtain ⟨dst, result, caller, k, args, site, st, he, _ctrl, _locals, hframes⟩ :=
+    h c1Entry c1BadExit trivial
   have hk : k = [] := (congrArg Exec.Config.frames he).symm
   rw [hk] at hframes
   simp [c1BadExit] at hframes
@@ -597,7 +604,73 @@ theorem c1_call_frame {O : Exec.Operands} {f : FnId} {P : Exec.Program O}
     exact preserves_trans framedPrefix (preserves_covers (c4_effects_frame tgt _ _ _ effects) cover)
 
 
+
 namespace ABI
+
+/-- Law (subject `ConcreteSpec.Core.Frame.ABI.layoutBytes`).
+Executing a layout plan produces a size aligned to its declared positive alignment. -/
+theorem layout_aligned (plan : LayoutPlan) (_positive : 0 < plan.alignment) :
+    layoutBytes plan % plan.alignment = 0 := by
+  exact Nat.mul_mod_left _ _
+
+/-- Instance (law `ConcreteSpec.Core.Frame.ABI.layout_aligned`, case `two_slots`). -/
+example : layoutBytes ⟨8, [1, 2]⟩ % 8 = 0 :=
+  layout_aligned ⟨8, [1, 2]⟩ (by decide)
+
+/-- A planted layout forgets to include its final byte in alignment rounding. -/
+def wrongLayoutBytes (plan : LayoutPlan) : Nat := layoutBytes plan + 1
+
+/-- Planted (law `ConcreteSpec.Core.Frame.ABI.layout_aligned`, case `two_slots`,
+subject `ConcreteSpec.Core.Frame.ABI.layoutBytes`, mutant `ConcreteSpec.Core.Frame.ABI.wrongLayoutBytes`). -/
+example : 0 < (8 : Nat) ∧ ¬ wrongLayoutBytes ⟨8, [1, 2]⟩ % 8 = 0 := by decide
+
+/-- Law (subject `ConcreteSpec.Core.Frame.ABI.stackSamples`).
+The static bound covers every sample of an independently described nested stack execution. -/
+theorem stackSamples_bounded (code : StackCode) : StackSafe code := by
+  induction code with
+  | done =>
+    intro base sample hs
+    simp only [stackSamples, List.mem_cons, List.not_mem_nil, or_false] at hs
+    subst sample
+    simp [computedStackBound]
+  | seq first second ih₁ ih₂ =>
+    intro base sample hs
+    simp only [stackSamples, List.mem_append] at hs
+    rcases hs with hs | hs
+    · have h := ih₁ base sample hs
+      have hm := Nat.le_max_left (computedStackBound first) (computedStackBound second)
+      change sample ≤ base + max (computedStackBound first) (computedStackBound second)
+      omega
+    · have h := ih₂ base sample hs
+      have hm := Nat.le_max_right (computedStackBound first) (computedStackBound second)
+      change sample ≤ base + max (computedStackBound first) (computedStackBound second)
+      omega
+  | frame bytes body ih =>
+    intro base sample hs
+    simp only [stackSamples, List.mem_cons, List.mem_append, List.not_mem_nil, or_false] at hs
+    rcases hs with rfl | hs | rfl
+    · simp [computedStackBound]
+    · have h := ih (base + bytes) sample hs
+      simpa [computedStackBound, Nat.add_assoc] using h
+    · simp [computedStackBound]
+
+/-- Instance (law `ConcreteSpec.Core.Frame.ABI.stackSamples_bounded`, case `nested_call`). -/
+example : StackSafe (.frame 16 (.seq (.frame 32 .done) (.frame 8 .done))) :=
+  stackSamples_bounded (.frame 16 (.seq (.frame 32 .done) (.frame 8 .done)))
+
+/-- A planted runtime consumes an extra byte at every stack sample. -/
+def overBudgetSamples (code : StackCode) (base : Nat) : List Nat :=
+  (stackSamples code base).map (· + 1)
+
+/-- Planted (law `ConcreteSpec.Core.Frame.ABI.stackSamples_bounded`, case `nested_call`,
+subject `ConcreteSpec.Core.Frame.ABI.stackSamples`, mutant `ConcreteSpec.Core.Frame.ABI.overBudgetSamples`). -/
+example : ¬ (∀ base sample,
+    sample ∈ overBudgetSamples (.frame 16 (.seq (.frame 32 .done) (.frame 8 .done))) base →
+    sample ≤ base + computedStackBound (.frame 16 (.seq (.frame 32 .done) (.frame 8 .done)))) := by
+  intro h
+  have bad := h 0 49 (by decide)
+  contradiction
+
 
 /-- Law (subject `ConcreteSpec.Core.Frame.ABI.toyTransition`).
 The independently executed toy call satisfies the complete typed ABI contract for every base
@@ -767,22 +840,30 @@ theorem typed_result_at_return {Ty Val Reg Word : Type} {sig : Signature Ty Val 
     (h : sig.Call before after args result) : sig.result.Holds sig.encode result after :=
   h.result
 
-/-- A well-formed signature's frame size is a multiple of its positive power-of-two alignment. -/
+/-- Helper (projection). Describes the contract or its arithmetic; independent execution
+evidence must be supplied separately. (approved: PENDING)
+ A well-formed signature's frame size is a multiple of its positive power-of-two alignment. -/
 theorem frame_size_aligned {Ty Val Reg Word : Type} {sig : Signature Ty Val Reg Word}
     (h : sig.WellFormed) : IsPow2 sig.frameAlign ∧ sig.frameSize % sig.frameAlign = 0 :=
   ⟨h.1, h.2.1⟩
 
-/-- The callee's own frame is included in its final-artifact stack bound. -/
+/-- Helper (projection). Describes the contract or its arithmetic; independent execution
+evidence must be supplied separately. (approved: PENDING)
+ The callee's own frame is included in its final-artifact stack bound. -/
 theorem frame_within_stack_bound {Ty Val Reg Word : Type} {sig : Signature Ty Val Reg Word}
     (h : sig.WellFormed) : sig.frameSize ≤ sig.stackBound :=
   h.2.2.1
 
-/-- Stack accounting of a call is exactly caller frame plus callee bound. -/
+/-- Helper (projection). Describes the contract or its arithmetic; independent execution
+evidence must be supplied separately. (approved: PENDING)
+ Stack accounting of a call is exactly caller frame plus callee bound. -/
 theorem call_stack_account {Ty Val Reg Word : Type} (callerFrame : Nat)
     (sig : Signature Ty Val Reg Word) : callStack callerFrame sig = callerFrame + sig.stackBound :=
   rfl
 
-/-- Whole-artifact accounting adds launcher/runtime bytes to that same handoff. -/
+/-- Helper (projection). Describes the contract or its arithmetic; independent execution
+evidence must be supplied separately. (approved: PENDING)
+ Whole-artifact accounting adds launcher/runtime bytes to that same handoff. -/
 theorem artifact_stack_account {Ty Val Reg Word : Type} (launcherRuntime callerFrame : Nat)
     (sig : Signature Ty Val Reg Word) :
     artifactStack launcherRuntime callerFrame sig =
@@ -893,7 +974,9 @@ theorem stack_adequate {Input : Type} (bound reserved : Nat) (input : Input)
     (h : bound ≤ reserved) : stackAdmission bound reserved input = .entered input := by
   simp [stackAdmission, Nat.not_lt_of_ge h]
 
-/-- A launcher run relates its exact retained closure to the stated entry and exit observations. -/
+/-- Helper (projection). Describes the contract or its arithmetic; independent execution
+evidence must be supplied separately. (approved: PENDING)
+ A launcher run relates its exact retained closure to the stated entry and exit observations. -/
 theorem launcher_entry_exit {Artifact Input Result Observation : Type}
     {l : Launcher Artifact Input Result Observation} {artifact : Artifact} {reserved : Nat}
     {input : Input} {result : Result} {observation : Observation}
@@ -901,7 +984,9 @@ theorem launcher_entry_exit {Artifact Input Result Observation : Type}
     l.retainedClosure artifact ∧ l.entry artifact input ∧ l.exit artifact result observation :=
   ⟨run.closure, run.entry, run.exit⟩
 
-/-- Every launched run passes stack admission with its recorded reservation. -/
+/-- Helper (projection). Describes the contract or its arithmetic; independent execution
+evidence must be supplied separately. (approved: PENDING)
+ Every launched run passes stack admission with its recorded reservation. -/
 theorem launcher_run_admitted {Artifact Input Result Observation : Type}
     {l : Launcher Artifact Input Result Observation} {artifact : Artifact} {reserved : Nat}
     {input : Input} {result : Result} {observation : Observation}
@@ -909,9 +994,10 @@ theorem launcher_run_admitted {Artifact Input Result Observation : Type}
     stackAdmission (l.stackBound artifact) reserved input = .entered input :=
   stack_adequate _ _ _ run.adequateStack
 
-/-- Law (subject `ConcreteSpec.Core.Frame.ABI.checkKeptPair`).
+/-- Helper (inversion). An accepted declaration-check result meets the descriptor contract.
+(approved: PENDING)
 Declaration checking extracts a protocol whose four descriptors satisfy the specification. -/
-theorem checkKeptPair_sound {F H : Type} [DecidableEq F] [DecidableEq H]
+theorem checkKeptPair_result {F H : Type} [DecidableEq F] [DecidableEq H]
     (submit complete : F) (sp : ExternParam H) (sr cp cr : ExternType H) :
     ∀ pair, checkKeptPair submit complete sp sr cp cr = some pair →
       pair.WellFormed sp sr cp cr := by
@@ -929,6 +1015,15 @@ theorem checkKeptPair_sound {F H : Type} [DecidableEq F] [DecidableEq H]
         subst_vars
         exact ⟨hne, rfl, rfl, rfl, rfl⟩
 
+/-- Law (subject `ConcreteSpec.Core.Frame.ABI.checkKeptPair`).
+Declaration checking produces a protocol satisfying its independent descriptor contract. -/
+theorem checkKeptPair_sound {F H : Type} [DecidableEq F] [DecidableEq H]
+    (submit complete : F) (sp : ExternParam H) (sr cp cr : ExternType H) :
+    CheckedPairCorrect sp sr cp cr (checkKeptPair submit complete sp sr cp cr) := by
+  cases checked : checkKeptPair submit complete sp sr cp cr with
+  | none => trivial
+  | some pair => exact checkKeptPair_result submit complete sp sr cp cr pair checked
+
 /-- Law (subject `ConcreteSpec.Core.Frame.ABI.transferKept`).
 Executing a transfer of the tracked token follows the paired retention protocol. -/
 theorem transferKept_sound {F H : Type} (pair : KeptPair F H)
@@ -936,19 +1031,15 @@ theorem transferKept_sound {F H : Type} (pair : KeptPair F H)
     (distinct : pair.submit ≠ pair.complete)
     (tracked : before = .owned pair.handle ∨ before = .kept pair.handle) :
     TransferCorrect pair before (transferKept pair instruction before) := by
-  rcases tracked with rfl | rfl <;> cases instruction <;>
-    intro event after h <;> simp only [transferKept] at h
-  · cases h
-    exact ⟨rfl, rfl, rfl, rfl⟩
-  · contradiction
-  · contradiction
-  · cases h
-    exact ⟨rfl, distinct, rfl, rfl, rfl⟩
+  rcases tracked with rfl | rfl <;> cases instruction
+  · exact ⟨rfl, rfl, rfl, rfl⟩
+  · trivial
+  · trivial
+  · exact ⟨rfl, distinct, rfl, rfl, rfl⟩
 
 /-- Instance (law `ConcreteSpec.Core.Frame.ABI.checkKeptPair_sound`, case `paired`). -/
-example : ∀ pair, checkKeptPair (0 : Nat) 1 ⟨.owned (7 : Nat), .kept⟩
-    (.receipt 7) (.receipt 7) (.owned 7) = some pair →
-    pair.WellFormed ⟨.owned 7, .kept⟩ (.receipt 7) (.receipt 7) (.owned 7) :=
+example : CheckedPairCorrect ⟨.owned (7 : Nat), .kept⟩ (.receipt 7) (.receipt 7) (.owned 7)
+    (checkKeptPair (0 : Nat) 1 ⟨.owned 7, .kept⟩ (.receipt 7) (.receipt 7) (.owned 7)) :=
   @checkKeptPair_sound Nat Nat inferInstance inferInstance 0 1
     ⟨.owned 7, .kept⟩ (.receipt 7) (.receipt 7) (.owned 7)
 
@@ -961,12 +1052,10 @@ def wrongKeptChecker {F H : Type} [DecidableEq F] [DecidableEq H]
 
 /-- Planted (law `ConcreteSpec.Core.Frame.ABI.checkKeptPair_sound`, case `paired`,
 subject `ConcreteSpec.Core.Frame.ABI.checkKeptPair`, mutant `ConcreteSpec.Core.Frame.ABI.wrongKeptChecker`). -/
-example : ¬ (∀ pair, wrongKeptChecker 0 1 ⟨.owned 7, .kept⟩
-    (.receipt 7) (.receipt 7) (.owned 7) = some pair →
-    pair.WellFormed ⟨.owned 7, .kept⟩ (.receipt 7) (.receipt 7) (.owned 7)) := by
+example : ¬ CheckedPairCorrect ⟨.owned (7 : Nat), .kept⟩ (.receipt 7) (.receipt 7) (.owned 7)
+    (wrongKeptChecker (0 : Nat) 1 ⟨.owned 7, .kept⟩ (.receipt 7) (.receipt 7) (.owned 7)) := by
   intro h
-  have bad := (h ⟨0, 0, 7⟩ rfl).1
-  exact bad rfl
+  exact h.1 rfl
 
 /-- Instance (law `ConcreteSpec.Core.Frame.ABI.transferKept_sound`, case `completion`). -/
 example : TransferCorrect (⟨0, 1, 7⟩ : KeptPair Nat Nat) (.kept 7)
@@ -988,7 +1077,7 @@ example : (0 : Nat) ≠ 1 ∧
       (wrongKeptEndpoint ⟨0, 1, 7⟩ .complete (.kept 7)) := by
   refine ⟨by decide, Or.inr rfl, ?_⟩
   intro h
-  have bad := (h (.call 0 7) (.owned 7) rfl).1
+  have bad : (0 : Nat) = 1 := h.1
   cases bad
 
 /-- A planted transfer returns a receipt after completion instead of ownership. -/
@@ -1005,7 +1094,68 @@ example : (0 : Nat) ≠ 1 ∧
       (wrongKeptHandle ⟨0, 1, 7⟩ .complete (.kept 7)) := by
   refine ⟨by decide, Or.inr rfl, ?_⟩
   intro h
-  exact h (.call 1 7) (.kept 7) rfl
+  exact h
+
+/-- Helper (computation). The dependency-chain traversal visits every reachable module.
+(approved: PENDING) -/
+theorem retainChain_complete (root : Nat) : ∀ dependency, dependency ≤ root →
+    dependency ∈ retainChain root := by
+  induction root with
+  | zero =>
+    intro dependency h
+    have he : dependency = 0 := by omega
+    subst dependency
+    simp [retainChain]
+  | succ root ih =>
+    intro dependency h
+    by_cases he : dependency = root + 1
+    · simp [retainChain, he]
+    · have hd : dependency ≤ root := by omega
+      simp [retainChain, ih dependency hd]
+
+/-- Helper (computation). The loader's module count agrees with the independent entry contract.
+(approved: PENDING) -/
+theorem retainChain_length (root : Nat) : (retainChain root).length = root + 1 := by
+  induction root with
+  | zero => rfl
+  | succ root ih => simp [retainChain, ih]
+
+/-- Helper (computation). Repeated successor implements the exit contract's arithmetic encoding.
+(approved: PENDING) -/
+theorem encodeToyExit_correct (root result : Nat) : encodeToyExit root result = result + root := by
+  induction root with
+  | zero => simp [encodeToyExit]
+  | succ root ih => simp [encodeToyExit, ih, Nat.add_assoc]
+
+/-- Law (subject `ConcreteSpec.Core.Frame.ABI.toyLaunch`).
+Independent loading and launch execution establish the closure, entry/exit correspondence and
+stack admission contract. No resulting relation is carried as an execution premise. -/
+theorem toyLaunch_conforms (root reserved result : Nat) (adequate : 8 ≤ reserved) :
+    ToyLaunchCorrect reserved (toyLaunch root reserved result) := by
+  have hadmit : stackAdmission 8 reserved () = .entered () := stack_adequate 8 reserved () adequate
+  simp only [toyLaunch, hadmit, ToyLaunchCorrect]
+  exact ⟨retainChain_complete root, retainChain_length root,
+    encodeToyExit_correct root result, adequate⟩
+
+/-- Instance (law `ConcreteSpec.Core.Frame.ABI.toyLaunch_conforms`, case `dependency_chain`). -/
+example : ToyLaunchCorrect 8 (toyLaunch 2 8 7) := toyLaunch_conforms 2 8 7 (by decide)
+
+/-- A planted launcher appends one spurious byte to the exit encoding. -/
+def wrongToyLaunch (root reserved result : Nat) : Startup ((Nat × List Nat) × Nat × Nat × Nat) :=
+  match toyLaunch root reserved result with
+  | .refused125 => .refused125
+  | .entered (artifact, input, returned, observation) =>
+    .entered (artifact, input, returned, observation + 1)
+
+/-- Planted (law `ConcreteSpec.Core.Frame.ABI.toyLaunch_conforms`, case `dependency_chain`,
+subject `ConcreteSpec.Core.Frame.ABI.toyLaunch`, mutant `ConcreteSpec.Core.Frame.ABI.wrongToyLaunch`). -/
+example : 8 ≤ (8 : Nat) ∧ ¬ ToyLaunchCorrect 8 (wrongToyLaunch 2 8 7) := by
+  refine ⟨by decide, ?_⟩
+  intro h
+  have bad := h.exit
+  change 10 = 9 at bad
+  contradiction
+
 
 end ABI
 

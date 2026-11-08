@@ -143,6 +143,15 @@ def C1Call (O : Exec.Operands) (f : FnId) (P : Exec.Program O)
         ⟨.done, callee, stReturn, .ret dst caller :: k⟩ ∧
       Exec.step P ⟨.done, callee, stReturn, .ret dst caller :: k⟩ = some (.next exit)))
 
+/-- The full caller-restoration contract for complete C1 calls. Keeping the quantification here
+allows an incomplete-call mutant to challenge the actual operational restoration theorem. -/
+def CallerRestoration (O : Exec.Operands) (f : FnId) (P : Exec.Program O) : Prop :=
+  ∀ entry exit, C1Call O f P entry exit →
+    ∃ (dst : Option Var) (result : O.Val) (caller : AList Var O.Val)
+      (k : List (Exec.Frame O)) (args : List O.Expr) (site : SiteId) (st : O.Store),
+      entry = ⟨.exec (.call dst f args site), caller, st, k⟩ ∧
+      exit.ctrl = .done ∧ exit.locals = Exec.bindDst dst result caller ∧ exit.frames = k
+
 /-- Static inclusion of effect permissions, expressed on the protected locations. This relates
 footprints only; it asserts nothing about the states of an execution. -/
 def Footprint.Covers (outer inner : Footprint) : Prop :=
@@ -384,6 +393,40 @@ def artifactStack {Ty Val Reg Word : Type} (launcherRuntime callerFrame : Nat)
     (sig : Signature Ty Val Reg Word) : Nat :=
   launcherRuntime + callStack callerFrame sig
 
+/-- A layout plan counts alignment-sized units for each slot. It is input data, not evidence
+that a supplied frame size is aligned. -/
+structure LayoutPlan where
+  alignment : Nat
+  slotUnits : List Nat
+
+/-- Lay out slots by accumulating their unit counts, then converting units to bytes. -/
+def layoutBytes (plan : LayoutPlan) : Nat :=
+  plan.slotUnits.foldl (· + ·) 0 * plan.alignment
+
+/-- Structured stack instructions. A frame allocates before running its body and releases on
+return; sequencing reuses the released stack. -/
+inductive StackCode where
+  | done
+  | seq (first second : StackCode)
+  | frame (bytes : Nat) (body : StackCode)
+
+/-- Operational samples of stack consumption, including entry and return at each frame. -/
+def stackSamples : StackCode → Nat → List Nat
+  | .done, base => [base]
+  | .seq first second, base => stackSamples first base ++ stackSamples second base
+  | .frame bytes body, base => base :: (stackSamples body (base + bytes) ++ [base])
+
+/-- Independent static stack accounting. Sequential calls share their caller's frame, while
+nested frames add to it. There are no stack-use assertions in this computation. -/
+def computedStackBound : StackCode → Nat
+  | .done => 0
+  | .seq first second => max (computedStackBound first) (computedStackBound second)
+  | .frame bytes body => bytes + computedStackBound body
+
+/-- The stack-bound specification quantifies over all operational samples and initial depths. -/
+def StackSafe (code : StackCode) : Prop :=
+  ∀ base sample, sample ∈ stackSamples code base → sample ≤ base + computedStackBound code
+
 /-! ### Foreign validity and retention (Q3.12) -/
 
 /-- Types with a direct foreign representation: integers, floats, bool, Unit, raw pointers to values,
@@ -518,9 +561,17 @@ def transferKept {F H : Type} (pair : KeptPair F H) :
 
 /-- The returned transfer, if any, meets the retention contract. This is a specification over
 an independently executable transfer implementation. -/
-def TransferCorrect {F H : Type} (pair : KeptPair F H) (before : RetentionState H)
-    (out : Option (ForeignEvent F H × RetentionState H)) : Prop :=
-  ∀ event after, out = some (event, after) → KeptStep pair before event after
+def TransferCorrect {F H : Type} (pair : KeptPair F H) (before : RetentionState H) :
+    Option (ForeignEvent F H × RetentionState H) → Prop
+  | none => True
+  | some (event, after) => KeptStep pair before event after
+
+/-- Correctness of the protocol extracted by declaration checking. Rejection makes no validity
+claim; a returned protocol must implement the original four descriptors. -/
+def CheckedPairCorrect {F H : Type} (sp : ExternParam H) (sr cp cr : ExternType H) :
+    Option (KeptPair F H) → Prop
+  | none => True
+  | some pair => pair.WellFormed sp sr cp cr
 
 /-! ### Launcher entry and exit (Q8.5–Q8.6) -/
 
@@ -551,6 +602,43 @@ structure Launcher.Run {Artifact Input Result Observation : Type}
   entry : l.entry artifact input
   exit : l.exit artifact result observation
   adequateStack : l.stackBound artifact ≤ reserved
+
+/-- An executable closure loader for a toy chain of dependencies: module `n+1` needs module `n`.
+The implementation traverses the graph, whereas the closure specification quantifies over reachability. -/
+def retainChain : Nat → List Nat
+  | 0 => [0]
+  | n + 1 => (n + 1) :: retainChain n
+
+/-- An executable exit encoder for the toy launcher, independently related to addition by proof. -/
+def encodeToyExit : Nat → Nat → Nat
+  | 0, result => result
+  | n + 1, result => (encodeToyExit n result) + 1
+
+/-- A toy launcher contract. Module reachability is `dependency ≤ root`; entry observes the
+number of loaded modules and exit encodes the result with the root's observation prefix.
+This supplies conformance evidence without choosing a native ABI or native launcher policy. -/
+def toyLauncher : Launcher (Nat × List Nat) Nat Nat Nat where
+  retainedClosure := fun artifact => ∀ dependency, dependency ≤ artifact.1 → dependency ∈ artifact.2
+  entry := fun artifact input => input = artifact.1 + 1
+  exit := fun artifact result observation => observation = result + artifact.1
+  stackBound := fun _ => 8
+
+/-- Actual toy launch execution. Loading, input construction, and exit encoding are executable
+operations; none calls the launcher specification or re-checks its invariants. -/
+def toyLaunch (root reserved result : Nat) : Startup ((Nat × List Nat) × Nat × Nat × Nat) :=
+  match stackAdmission 8 reserved () with
+  | .refused125 => .refused125
+  | .entered _ =>
+    let loaded := retainChain root
+    .entered ((root, loaded), loaded.length, result, encodeToyExit root result)
+
+/-- Conformance of successful outputs, including exact closure, entry, exit and reservation.
+This predicate is the specification, not evidence in the executable launcher. -/
+def ToyLaunchCorrect (reserved : Nat) :
+    Startup ((Nat × List Nat) × Nat × Nat × Nat) → Prop
+  | .refused125 => True
+  | .entered (artifact, input, result, observation) =>
+    toyLauncher.Run artifact reserved input result observation
 
 /-! ### ABI examples -/
 
