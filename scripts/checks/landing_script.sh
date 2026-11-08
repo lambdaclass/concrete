@@ -1403,7 +1403,7 @@ standin_hook
 
 # The regression suite drives real index stages, reverse-order additions, conflicting IDs,
 # malformed rows, and the issues gate on the canonical resolved output.
-if bounded_run 180 -- python3 -I "$ROOT_DIR/scripts/ids/round3_controls.py"; then
+if bash "$ROOT_DIR/scripts/checks/lib/bounded.sh" 180 python3 -I "$ROOT_DIR/scripts/ids/round3_controls.py"; then
   ok "issue merge and reservation regressions"
 else no "issue merge and reservation regressions"; fi
 
