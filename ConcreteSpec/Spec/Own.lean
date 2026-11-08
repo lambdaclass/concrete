@@ -507,6 +507,45 @@ def stuck (r : Exec.Report ops) : Bool := match r.ending with
 /-- Refused: an actual C1 run gets stuck when its next operand reads a moved owner. -/
 example : stuck (runBody (.seq (.bind y (.move x) ⟨0⟩) (.ret (.read x) ⟨1⟩))) = true := by decide
 
+/-- The concrete operand instance for this example erases all permission bookkeeping.
+Reads/moves still fetch their concrete value from the same locals. -/
+def erasedEval (locals : AList Var Int) (_ : Unit) : E → Res (Int × Unit)
+  | .lit n => .ok (n, ())
+  | .read x | .move x => match AList.lookup locals x with
+    | some n => .ok (n, ())
+    | none => .stuck
+  | _ => .ok (0, ())
+
+abbrev erasedOps : Exec.Operands where
+  Val := Int
+  Expr := E
+  Ty := Unit
+  Store := Unit
+  Prim := Empty
+  Event := Empty
+  unitVal := 0
+  unitTy := ()
+  isCopy := fun _ => false
+  eval := erasedEval
+  life := fun _ s => some s
+  test := fun n => some (n != 0)
+  allows := fun p => nomatch p
+
+def erasedMoveRun : Exec.Report erasedOps :=
+  Exec.run ⟨[]⟩ (fun _ p => nomatch p) 100
+    ⟨.exec (.seq (.bind y (.move x) ⟨0⟩) (.ret (.read x) ⟨1⟩)), [(x, 7)], (), []⟩
+
+/-- A planted unsafe execution refutes unconditional equality of final classifications:
+the instrumented run is stuck, but the erased concrete run returns 7. A checker-safety
+premise or a one-way successful-execution theorem is necessary for C1 erasure. -/
+example : stuck (runBody (.seq (.bind y (.move x) ⟨0⟩) (.ret (.read x) ⟨1⟩))) = true ∧
+    (match erasedMoveRun.ending with
+      | .final (.returned n) => n == 7
+      | _ => false) = true := by decide
+example : ¬ (match erasedMoveRun.ending with
+    | .stuck _ => true
+    | _ => false) = true := by decide
+
 /-- Accepted: a C1 run lends, reborrows, ends the child, then uses its parent and ends it.
 Conditions evaluate these instrumentation-only operands without creating ordinary bindings. -/
 example : (match (runBody

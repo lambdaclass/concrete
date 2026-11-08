@@ -279,6 +279,16 @@ example : (release initial ⟨0⟩).isSome = true ∧ release dependent ⟨0⟩ 
 example : (endScope released ⟨0⟩).isSome = true ∧ endScope initial ⟨0⟩ = none := by decide
 /-- A mutated fresh rule that reuses the counter does not provide fresh generation. -/
 example : ¬ (initial.nextBrand = ({} : State).nextBrand) := by decide
+/-- A non-escaping dependent survives a different binder's successful scope exit:
+the non-escape law's dependent-membership hypothesis is inhabited. -/
+def outer : State := (fresh initial ⟨1⟩).getD {}
+def outside : Dependency := ⟨⟨3⟩, [⟨1⟩], []⟩
+def departing : State := ((depend outer outside).bind fun s => release s ⟨0⟩).getD {}
+def departed : State := (endScope departing ⟨0⟩).getD {}
+example : WellFormed departing ∧ endScope departing ⟨0⟩ = some departed ∧
+    outside ∈ departed.dependencies ∧ (BrandId.mk 0) ∉ outside.brands := by decide
+/-- Planted exit mutation lets the surviving dependent mention the exited brand. -/
+example : ¬ ((BrandId.mk 0) ∉ ({ outside with brands := [⟨0⟩] } : Dependency).brands) := by decide
 end PreservationWitnesses
 
 /-- A new/reset generation is unequal to every previously scoped brand, independently of
