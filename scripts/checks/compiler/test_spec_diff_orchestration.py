@@ -18,7 +18,7 @@ class Orchestration(unittest.TestCase):
             regressions = pathlib.Path(tmp) / 'regressions'
             work.mkdir()
             functions = '\n'.join(function(n) for n in (
-                'parse_replay', 'replay_command', 'persist_candidate_bundle',
+                'parse_replay', 'replay_command', 'register_candidate', 'register_generation', 'persist_candidate_bundle',
                 'record_candidate_failure', 'report_mismatch', 'judge_evaluator',
                 'judge_available', 'reset_observations', 'control_candidate', 'native_one', 'absorb_native_result', 'collect_available',
                 'finish_diff', 'run_control', 'run_replay', 'first_outcome_index',
@@ -75,34 +75,6 @@ record_judged() {{ :; }}
                         self.assertFalse(work.exists())
                         self.assert_bundle(regressions, 'bir', 'test', 0, 'mismatch',
                                            (diag,), (f'observed-{bad}/status', 'replay.sh'))
-                        bundle = regressions / 'bir/test-0'
-                        # Execute the saved command through the real replay parser,
-                        # verifying shell quoting and the exact candidate identity.
-                        parsed = subprocess.run(['bash', '-c', function('parse_replay') +
-                            '\nbash() { parse_replay "$SPEC_DIFF_REPLAY"; '
-                            '[ "$replay_leg:$replay_seed:$replay_index" = bir:test:0 ]; }; '
-                            'source "$1"', 'replay', str(bundle / 'replay.sh')],
-                            capture_output=True, text=True, timeout=5)
-                        self.assertEqual(parsed.returncode, 0, parsed.stderr)
-                        self.run_shell(f'''
-trap 'finish_diff $?' EXIT
-require_bounded() {{
- mkdir -p "$work/replay"
- cp -R "{bundle}/." "$work/replay/"
- rm -f "$work/replay"/*.judged "$work/replay/failure-kinds.txt" \
-       "$work/replay/failure-record.tsv" "$work/replay/diagnostics.txt"
-}}
-native_build() {{ return 0; }}
-driver=(stub); target=stub
-observe_remaining() {{
- case "$1" in
- */{bad}.exe) echo 9 >"$2.status"; return 0 ;;
- *) echo incomplete >"$2.status"; return 3 ;;
- esac
-}}
-bash() {{ replay=$SPEC_DIFF_REPLAY; run_replay; }}
-source "{bundle}/replay.sh"
-''', 1, diag)
                     invocation = ('native_one bir test 0 "$d"' if path == 'candidate'
                                   else {'wrong-result': 'control_drop_overflow',
                                         'off-by-one': 'control_lcb_off_by_one',
@@ -172,6 +144,37 @@ printf '%s\\n' "$d" >"$work/lifecycle-dirs"
 # Simulate an exit between observer completion and normal judgment.
 exit 3
 ''', 1, diag, check)
+
+    def test_generation_controls_registered_before_artifacts(self):
+        for mode in ('failure', 'mismatch'):
+            with self.subTest(mode=mode):
+                kind = 'emission' if mode == 'failure' else 'mismatch'
+                diag = ('FAIL BIR emission: seed test index 0: planted selective emission refusal'
+                        if mode == 'failure' else
+                        'FAIL bir seed test index 0 [lcb_eval]: observation mismatch')
+                def check(work, regressions):
+                    self.assertFalse(work.exists())
+                    self.assert_bundle(regressions, 'bir', 'test', 0, kind, (diag,))
+                    self.assertTrue((regressions / 'bir/test-0/control-owner').is_file())
+                plant = (f'''echo emission >"$d/failure-kinds.txt"
+printf 'emission\\tsubject\\t{diag}\\n' >"$d/failure-record.tsv"
+echo '{diag}' >"$d/diagnostics.txt"
+echo '{diag}' >&2
+''' if mode == 'failure' else 'echo 9 >"$d/lcb_eval.status"\n')
+                self.run_shell('''
+trap 'finish_diff $?' EXIT
+control_generation() {
+ register_generation env lake env lean --run scripts/checks/compiler/spec_diff.lean replay test 0 "$work/control-drop-original" stub
+ d="$work/control-drop-original"
+ [ "$(cat "$d/control-owner")" = "$control_registry" ] || exit 8
+ echo 0 >"$d/status"; : >"$d/stderr"
+ echo term >"$d/program.lean.txt"
+''' + plant + '''
+ echo 'INCOMPLETE: planted generation deadline'
+ return 3
+}
+run_control generation '^unused$' control_generation
+''', 1, (diag, 'INCOMPLETE: planted generation deadline'), check)
 
     def test_build_failure_both_loops(self):
         start = SOURCE.index('bir_accepted=$(summary_value')
