@@ -119,6 +119,15 @@ if sys.platform == 'darwin':
 else:
     tool = os.environ['CONCRETE_SLICE0_LINKER_BIN'] + '/readelf'
     headers = subprocess.check_output([tool, '-W', '-l', '-d', exe], text=True)
+    def elf_path(path, image):
+        origin = str(Path(image).resolve().parent)
+        path = re.sub(r'\$(?:\{ORIGIN\}|ORIGIN(?=/|$))', lambda _: origin, path)
+        if not path.startswith('/') or '$' in path:
+            sys.exit(f'link purity: relative, empty or unresolved runtime path in {image}: {path!r}')
+        # Do not normalize before allowed(): that would erase symlink/.. traversal.
+        # Expanded runtime paths must satisfy the same canonical closure contract.
+        allowed(path)
+
     def elf_dynamic(headers, image):
         if re.search(r'\((?:FILTER|AUXILIARY|AUDIT|DEPAUDIT)\)', headers):
             sys.exit('link purity: unsupported ELF dependency injection tag')
@@ -128,15 +137,10 @@ else:
             if not paths:
                 continue
             for path in paths.split(':'):
-                if '$ORIGIN' in path or '${ORIGIN}' in path:
-                    path = os.path.normpath(path.replace('${ORIGIN}', str(Path(image).resolve().parent))
-                                            .replace('$ORIGIN', str(Path(image).resolve().parent)))
-                if not path.startswith('/') or '$' in path:
-                    sys.exit(f'link purity: relative, empty or unresolved runtime search path in {image}: {path!r}')
-                allowed(path)
+                elf_path(path, image)
         for path in re.findall(r'\(NEEDED\).*?\[([^\]]*)\]', headers):
-            if '/' in path:
-                allowed(path)
+            if '/' in path or '$' in path:
+                elf_path(path, image)
 
     elf_dynamic(headers, exe)
     loaders = re.findall(r'Requesting program interpreter: ([^\]]+)', headers)
