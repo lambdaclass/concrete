@@ -17,6 +17,7 @@ import ConcreteSpec.Spec.Target
 import ConcreteSpec.Spec.Outcome
 import ConcreteSpec.Spec.Exec
 import ConcreteSpec.Spec.Observe
+import ConcreteSpec.Spec.Adequacy
 import ConcreteSpec.Spec.Scalar
 import ConcreteSpec.Spec.Const
 import ConcreteSpec.Spec.Memory
