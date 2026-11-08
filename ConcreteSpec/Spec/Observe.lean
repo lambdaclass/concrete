@@ -198,6 +198,14 @@ inductive Execution (S : EventSignature) where
   | blocked (steps : List (Step S)) (request : Request S)
   | infinite (steps : Nat → Step S)
 
+/-- Insert one internal step before an execution, retaining its ending and shifting every
+infinite step by one. This is an executable transformation, independent of the observation
+relations below; it does not inspect or recheck observation equivalence. -/
+def delayExecution : Execution S → Execution S
+  | .finite steps terminal => .finite (.silent :: steps) terminal
+  | .blocked steps request => .blocked (.silent :: steps) request
+  | .infinite steps => .infinite (fun n => match n with | 0 => .silent | n + 1 => steps n)
+
 /-- Any finite number of silent steps inserted anywhere in a finite execution. -/
 inductive SilentInsertion : List (Step S) → List (Step S) → Prop where
   | nil : SilentInsertion [] []
