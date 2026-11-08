@@ -501,35 +501,53 @@ example : obligation.id ≠ mismatchedObligation.id ∧
 /-- Non-trivial instance for `SafetyEvidence.obligation_mismatch`. -/
 example : ¬ evidence.Usable obligationChanged := by decide
 
-/-- Planted counter-example: comparing only obligations accepts a context with the wrong target. -/
-example : ¬ (evidence.context.obligation = targetChanged.obligation →
-    evidence.Usable targetChanged) := by decide
+/-- Planted counter-example: only the obligation changed, and a matcher omitting the obligation
+accepts it; the real law above rejects it. -/
+example : evidence.context.obligation ≠ obligationChanged.obligation ∧
+    (evidence.context.target = obligationChanged.target ∧
+     evidence.context.contract = obligationChanged.contract ∧
+     evidence.context.checker = obligationChanged.checker ∧
+     evidence.context.spec = obligationChanged.spec) := by decide
 
 /-- Non-trivial instance for `SafetyEvidence.target_mismatch`. -/
 example : ¬ evidence.Usable targetChanged := by decide
 
-/-- Planted counter-example: comparing only targets accepts a context with the wrong obligation. -/
-example : ¬ (evidence.context.target = obligationChanged.target →
-    evidence.Usable obligationChanged) := by decide
+/-- Planted counter-example: only the target changed, and a matcher omitting the target accepts it. -/
+example : evidence.context.target ≠ targetChanged.target ∧
+    (evidence.context.obligation = targetChanged.obligation ∧
+     evidence.context.contract = targetChanged.contract ∧
+     evidence.context.checker = targetChanged.checker ∧
+     evidence.context.spec = targetChanged.spec) := by decide
 
 /-- Non-trivial instance for `SafetyEvidence.contract_mismatch`. -/
 example : ¬ evidence.Usable contractChanged := by decide
 
-/-- Planted counter-example: comparing only contracts accepts a context with the wrong checker. -/
-example : ¬ (evidence.context.contract = checkerChanged.contract →
-    evidence.Usable checkerChanged) := by decide
+/-- Planted counter-example: only the contract changed, and a matcher omitting the contract accepts it. -/
+example : evidence.context.contract ≠ contractChanged.contract ∧
+    (evidence.context.obligation = contractChanged.obligation ∧
+     evidence.context.target = contractChanged.target ∧
+     evidence.context.checker = contractChanged.checker ∧
+     evidence.context.spec = contractChanged.spec) := by decide
 
 /-- Non-trivial instance for `SafetyEvidence.checker_mismatch`. -/
 example : ¬ evidence.Usable checkerChanged := by decide
 
-/-- Planted counter-example: comparing only checkers accepts a context with the wrong spec. -/
-example : ¬ (evidence.context.checker = specChanged.checker → evidence.Usable specChanged) := by decide
+/-- Planted counter-example: only the checker changed, and a matcher omitting the checker accepts it. -/
+example : evidence.context.checker ≠ checkerChanged.checker ∧
+    (evidence.context.obligation = checkerChanged.obligation ∧
+     evidence.context.target = checkerChanged.target ∧
+     evidence.context.contract = checkerChanged.contract ∧
+     evidence.context.spec = checkerChanged.spec) := by decide
 
 /-- Non-trivial instance for `SafetyEvidence.spec_mismatch`. -/
 example : ¬ evidence.Usable specChanged := by decide
 
-/-- Planted counter-example: comparing only spec versions accepts a context with the wrong contract. -/
-example : ¬ (evidence.context.spec = contractChanged.spec → evidence.Usable contractChanged) := by decide
+/-- Planted counter-example: only the specification changed, and a matcher omitting it accepts it. -/
+example : evidence.context.spec ≠ specChanged.spec ∧
+    (evidence.context.obligation = specChanged.obligation ∧
+     evidence.context.target = specChanged.target ∧
+     evidence.context.contract = specChanged.contract ∧
+     evidence.context.checker = specChanged.checker) := by decide
 
 def successAnswer : Exec.Answer Int Int Int := ⟨none, .ok 0, 7⟩
 def failureAnswer : Exec.Answer Int Int Int := ⟨none, .ok 1, 7⟩
