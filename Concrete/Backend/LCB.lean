@@ -10,8 +10,9 @@ import LeanCompilerBackend.AArch64
 PROVISIONAL (slice 0). The adapter turns `main`'s body into a function of LCB's verified source
 profile (`LeanCompilerBackend.Verified.Source`, `ssa-int-v2`: integer operations, comparisons,
 branches and phis, no calls, memory or traps), returning the result word. Its correctness against
-LCB's own semantics, `adapter_correct`, is the first backend proof target; until it is proved it is
-premise `P_adapter` (`Concrete/README.md`).
+LCB's own semantics is proved: `Proof.adapter_correct` for an accepted program, and the complete
+backend contract `Proof.emit_correct` / `Proof.artifact_correct` (a refused adaptation produces no
+artifact), which retired premise `P_adapter` (`Concrete/README.md`).
 
 Representation: an integer of type `t` is the 32-bit word `BitVec.ofInt 32 v`; a flag is the word
 0 or 1. Slice 0's profile covers the types of at most 16 bits, whose exact results fit a word:
@@ -188,6 +189,14 @@ def adapt (p : Program) : Except String Source.Function := do
   return { resultWidth := .word, parameters := #[],
            valueWidths := Array.replicate (valueCount p) .word, blocks := blocks.toArray }
 
+/-- The LCB backend's emit: the adapted body paired with the program's site table (the table that
+decodes the body's result is part of the emitted artifact), or the adapter's refusal, in which case
+no artifact exists (`artifact` and the emitter build only from `.ok`). `Proof.emit_correct` and
+`Proof.artifact_correct` are the backend contract: no premise. -/
+def emit (p : Program) : Except String (Source.Function × SiteTable) := do
+  let f ← adapt p
+  return (f, p.sites)
+
 /-! ## Assembly, in process (inside `P_toolchain[lcb]`) -/
 
 /-- The targets the gate runs LCB's output on. -/
@@ -220,6 +229,11 @@ def assemble (target : Target) (f : Source.Function) : Except String String :=
     match target with
     | .x86_64Linux => LeanCompilerBackend.AMD64.emitModuleValidated m false false
     | _ => LeanCompilerBackend.AArch64.emitModuleValidated m false false
+
+/-- The LCB body artifact for `target`: the assembly of a successful `emit`, or its refusal. -/
+def artifact (target : Target) (p : Program) : Except String String := do
+  let (f, _) ← emit p
+  assemble target f
 
 /-! ## `adapter_correct`, value level
 
@@ -1992,6 +2006,44 @@ theorem adapter_correct {p : Program} (hwf : WF p) {f : Source.Function}
     | returns w' => cases hasBehavior_unique (by unfold bodyResult at hr; exact hr) hd
     | diverges => exact hb.symm
     | stuck => exact (hr.2 hd).elim
+
+theorem emit_ok {p : Program} {f : Source.Function} {tbl : SiteTable}
+    (h : emit p = .ok (f, tbl)) : adapt p = .ok f ∧ tbl = p.sites := by
+  unfold emit at h
+  cases ha : adapt p with
+  | error e => rw [ha] at h; cases h
+  | ok g =>
+    rw [ha] at h
+    cases h
+    exact ⟨rfl, rfl⟩
+
+/-- **The LCB backend contract, complete.** A refused adaptation emits nothing (`emit` is
+`.error`); a successful one emits a body whose every result, under LCB's own semantics, decodes
+with the emitted site table to the BIR behaviour. Retires `P_adapter`. -/
+theorem emit_correct {p : Program} (hwf : WF p) {f : Source.Function} {tbl : SiteTable}
+    (h : emit p = .ok (f, tbl)) (r : BodyResult) (hr : bodyResult f r) :
+    r.behaviour tbl = behaviour p := by
+  obtain ⟨ha, rfl⟩ := emit_ok h
+  exact adapter_correct hwf ha r hr
+
+/-- An adapter refusal produces no artifact, for every target. -/
+theorem artifact_of_emit_error {p : Program} {e : String} (h : emit p = .error e) (t : Target) :
+    artifact t p = .error e := by
+  unfold artifact
+  rw [h]
+  rfl
+
+/-- Every artifact comes from a successful `emit` whose body is correct. -/
+theorem artifact_correct {p : Program} (hwf : WF p) {t : Target} {s : String}
+    (h : artifact t p = .ok s) : ∃ f tbl, emit p = .ok (f, tbl) ∧ assemble t f = .ok s ∧
+      ∀ r, bodyResult f r → r.behaviour tbl = behaviour p := by
+  unfold artifact at h
+  cases he : emit p with
+  | error e => rw [he] at h; cases h
+  | ok ft =>
+    obtain ⟨f, tbl⟩ := ft
+    rw [he] at h
+    exact ⟨f, tbl, rfl, h, emit_correct hwf he⟩
 
 end Proof
 

@@ -24,8 +24,9 @@ def writeExpected (dir : System.FilePath) (status : String) (stderr : String) : 
   IO.FS.writeFile (dir / "stderr") stderr
 
 /-- Write the LCB leg: the body assembled in process, the runtime entry as QBE text. -/
-def writeLcb (dir : System.FilePath) (target : LCB.Target) (sites : SiteTable)
-    (f : LeanCompilerBackend.Verified.Source.Function) : IO Bool := do
+def writeLcb (dir : System.FilePath) (target : LCB.Target)
+    (emitted : LeanCompilerBackend.Verified.Source.Function × SiteTable) : IO Bool := do
+  let (f, sites) := emitted
   IO.FS.createDirAll dir
   IO.FS.writeFile (dir / "lcb_source.txt") (reprStr f ++ "\n")
   let job : LeanCompilerBackend.Verified.FunctionJob :=
@@ -45,11 +46,11 @@ def writeLcb (dir : System.FilePath) (target : LCB.Target) (sites : SiteTable)
     return true
 
 def writeBackends (dir : System.FilePath) (target : LCB.Target) (p : Program)
-    (f : LeanCompilerBackend.Verified.Source.Function) : IO Bool := do
+    (emitted : LeanCompilerBackend.Verified.Source.Function × SiteTable) : IO Bool := do
   IO.FS.createDirAll dir
   IO.FS.writeFile (dir / "bir.txt") (reprStr p ++ "\n")
   IO.FS.writeFile (dir / "llvm.ll") (LLVM.module p)
-  writeLcb dir target p.sites f
+  writeLcb dir target emitted
 
 def emit (name : String) (dir : System.FilePath) (target : LCB.Target) : IO UInt32 := do
   let some (_, p, expected) := Examples.all.find? (·.1 == name)
@@ -59,15 +60,15 @@ def emit (name : String) (dir : System.FilePath) (target : LCB.Target) : IO UInt
   unless got == expected do
     IO.eprintln s!"{name}: BIR run gives {repr got}, expected {repr expected}"; return 1
   let some word := encode expected | IO.eprintln s!"{name}: no result word"; return 1
-  match LCB.adapt p with
+  match LCB.emit p with
   | .error msg => IO.eprintln s!"{name}: adapter: {msg}"; return 1
-  | .ok f =>
+  | .ok (f, tbl) =>
     match LCB.evalBody f 100000 with
     | some w =>
       unless w == word do
         IO.eprintln s!"{name}: LCB's evaluator returns {w}, BIR's result word is {word}"; return 1
     | none => IO.eprintln s!"{name}: LCB's evaluator does not return"; return 1
-    unless ← writeBackends dir target p f do return 1
+    unless ← writeBackends dir target p (f, tbl) do return 1
     match expected with
     | .exited c => writeExpected dir (toString c) ""
     | .trapped s => match p.sites[s]? with
@@ -84,11 +85,11 @@ def loopBody : Program :=
 def emitLoop (dir : System.FilePath) (target : LCB.Target) : IO UInt32 := do
   unless wf loopBody && run loopBody 1000 == .outOfFuel do
     IO.eprintln "loop: not a well-formed diverging body"; return 1
-  match LCB.adapt loopBody with
+  match LCB.emit loopBody with
   | .error msg => IO.eprintln s!"loop: adapter: {msg}"; return 1
-  | .ok f =>
+  | .ok (f, tbl) =>
     if (LCB.evalBody f 10000).isSome then IO.eprintln "loop: LCB's evaluator returns"; return 1
-    unless ← writeBackends dir target loopBody f do return 1
+    unless ← writeBackends dir target loopBody (f, tbl) do return 1
     writeExpected dir "incomplete" ""
     return 0
 
@@ -101,7 +102,7 @@ def emitInvalid (dir : System.FilePath) (target : LCB.Target) : IO UInt32 := do
   let f : LeanCompilerBackend.Verified.Source.Function :=
     { resultWidth := .word, parameters := #[], valueWidths := #[],
       blocks := #[{ phis := #[], instructions := #[], terminator := .ret (.literal (LCB.word 257)) }] }
-  unless ← writeLcb dir target tbl f do return 1
+  unless ← writeLcb dir target (f, tbl) do return 1
   writeExpected dir "134" (Runtime.invalidLine ++ "\n")
   return 0
 

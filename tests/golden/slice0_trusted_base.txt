@@ -1,7 +1,6 @@
 premise P_lex [implementation] retired-by: `lex_correct` :: every token list the lexer returns for a source is one the source lexes to
 premise P_parse [implementation] retired-by: the generic table-parser theorem :: every tree the parser returns for a token list is one the grammar derives from it
 premise P_print [implementation] retired-by: an LLVM-IR semantics; not planned for slice 0 :: the printed LLVM text of a WF BIR means at most the BIR behaviour, encoded
-premise P_adapter [implementation] retired-by: `adapter_correct` (proved for accepted programs), once `emit` represents adaptation failure (or the contract is restricted to accepted programs) and the theorem fills `NativePremises lcb` :: the adapted LCB function of a WF BIR means at most the BIR behaviour, encoded
 premise P_toolchain[llvm] [toolchain] retired-by: not planned :: every result the linked LLVM body produces is one its text means
 premise P_toolchain[lcb] [toolchain] retired-by: LCB's own proofs (C01–C03 and beyond) :: every result the linked LCB body produces is one its function means (LCB's named trust boundaries)
 premise P_rt [implementation] retired-by: a proof of the decoding entry against a libc model; not planned for slice 0 :: every launch of an image built from a WF BIR that is not killed has the behaviour of some result its body produces (decode w for a returned word w, diverges for divergence)
@@ -12,6 +11,9 @@ theorem Concrete.BIR.decode_encode axioms: propext, Quot.sound
 theorem Concrete.BIR.run_progress axioms: propext, Classical.choice, Quot.sound
 theorem Concrete.BIR.behaviour_diverges_iff axioms: propext, Classical.choice, Quot.sound
 theorem Concrete.Backend.LCB.Proof.adapter_correct axioms: propext, Classical.choice, Quot.sound
+theorem Concrete.Backend.LCB.Proof.emit_correct axioms: propext, Classical.choice, Quot.sound
+theorem Concrete.Backend.LCB.Proof.artifact_of_emit_error axioms: propext, Classical.choice, Quot.sound
+theorem Concrete.Backend.LCB.Proof.artifact_correct axioms: propext, Classical.choice, Quot.sound
 axiom propext : ∀ {a b : Prop}, (a ↔ b) → a = b
 axiom Classical.choice : {α : Sort u} → Nonempty α → α
 axiom Quot.sound : ∀ {α : Sort u} {r : α → α → Prop} {a b : α}, r a b → Quot.mk r a = Quot.mk r b

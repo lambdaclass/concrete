@@ -45,8 +45,8 @@ Memory CFG  (`out.mem`)
 BIR  (`out.bir`)  ── designed for both backends from the start
   ├───────────────────────────────────────────┐
   │ print   Backend/LLVM.lean                  │ adapt   Backend/LCB.lean
-  ▼ (unverified: premise P_print)              ▼ (first backend proof target: adapter_correct
-.ll text  (`out.ll`)                           │  against LCB's imported semantics; P_adapter until proved)
+  ▼ (unverified: premise P_print)              ▼ (proved: emit_correct against LCB's imported
+.ll text  (`out.ll`)                           │  semantics; a refused adaptation emits nothing)
   │ clang/llc, link                          LCB `Source.Function` value (`out.lcb`), handed
   │ (premise P_toolchain[llvm])                │ to LCB IN PROCESS (no text on this path);
   │                                            │ LCB lowering + assembler + link
@@ -106,7 +106,7 @@ Every BIR construct has a direct LLVM spelling (`@llvm.uadd.with.overflow.i8`) a
 
 The **LLVM printer** is unverified and stays a premise (`P_print`) until an LLVM-IR semantics exists.
 
-The **BIR → LCB-IR adapter** is the first backend proof target. `adapter_correct` states that the adapter's output, under **LCB's own semantics** (`LeanCompilerBackend.Verified.Source`, the `ssa-int-v2` profile, imported and never restated), has the BIR behaviour. It is proved (`Proof.adapter_correct`) for every WF program the adapter accepts (`adapt p = .ok f`; the adapter refuses the rest, so no artifact exists for them). It supplies semantic preservation for successful adaptation; `P_adapter` stays in the premise list until the backend contract is resolved: `lcb`'s `emit` must represent adaptation failure (`adapt` returns `Except String Source.Function`) or the contract must be restricted to accepted programs, and the theorem composed into `NativePremises lcb`. The trusted-base golden (gate 9) then records the retirement.
+The **BIR → LCB-IR adapter** is the first backend proof target. `adapter_correct` states that the adapter's output, under **LCB's own semantics** (`LeanCompilerBackend.Verified.Source`, the `ssa-int-v2` profile, imported and never restated), has the BIR behaviour. It is proved (`Proof.adapter_correct`) for every WF program the adapter accepts (`adapt p = .ok f`). The backend contract is complete (owner, 2026-11-08): `LCB.emit : Program → Except String (Source.Function × SiteTable)` represents adaptation failure, `LCB.artifact` builds only from a successful `emit`, and `Proof.emit_correct` (success implies correctness), `Proof.artifact_of_emit_error` (a refusal produces no artifact, for every target) and `Proof.artifact_correct` (every artifact comes from a correct `emit`) state it. `P_adapter` is retired; the trusted-base golden (gate 9) records it.
 
 The adapter's output is handed to LCB **in process**, as the value: on `aarch64-macos` through LCB's verified first path (`Verified.compileFunction`), on the Linux targets through LCB's compatibility backends (`Verified.reify`, then `AMD64`/`AArch64.emitModuleValidated`). No printer or importer sits between the adapter and LCB. The QBE text of the body is a debug dump only. The gate also runs the first path's admission on every example on every host.
 
@@ -117,6 +117,7 @@ The adapter's output is handed to LCB **in process**, as the value: on `aarch64-
    - *Uniqueness*: `hasBehavior_unique` (from LCB's `step_deterministic`): a function has at most one `Source.HasBehavior` on given arguments (two returns return the same value; a return excludes divergence).
    - *Bridge*: `adapter_correct_behaviour`: the adapted body returns the word `w` with `behaviour p = decode p.sites w` (by `decode_encode`, which keeps the site lookup and the trap kind), or diverges exactly when BIR diverges.
    - **`adapter_correct`**: `WF p → adapt p = .ok f → bodyResult f r → r.behaviour p.sites = behaviour p`, with `bodyResult` defined in `Backend/LCB.lean` as below. Axioms: `propext`, `Classical.choice`, `Quot.sound`.
+   - **`emit_correct`**: `WF p → emit p = .ok (f, tbl) → bodyResult f r → r.behaviour tbl = behaviour p`, with `artifact_of_emit_error` and `artifact_correct` for the artifact (no premise).
    - *Adapter domain*: WF alone does not give `adapt p = .ok f` (WF admits `i32`/`u32`/64-bit instructions, which slice 0's adapter rejects); the statement takes the adapter's acceptance as a hypothesis, and widening the domain is LCB's 32↔64 work (wire version 3).
 3. *Blocks*: `execInsts` against those steps; `ret` and `trap` against LCB's `returned`; `br`/`condbr` against `transfer`: the target exists, each phi has exactly one arm from this predecessor (WF's `t ≠ e`), destinations are distinct (distinct registers), and all arms are read from the OLD environment before any destination is written, which is BIR's `enter` (all arguments evaluated before binding), including loop-carried swaps; the new state is at position 0.
 4. *Runs*: under `WF p` and `adapt p = .ok f`, `Source.initial f #[] = .ok s₀` (entry block exists with no phis, no parameters, an empty environment of size `valueCount p`); then `run p fuel = exited c` or `trapped s` gives `HasBehavior f #[] (.returned (word (encode o)))`. Divergence: each BIR block transition is at least one LCB `Step` (BIR fuel counts blocks, LCB counts instructions and terminators), so BIR running out of fuel at every fuel gives arbitrarily long LCB prefixes, i.e. `HasBehavior f #[] .diverges`. BIR progress (a WF program never gets stuck) is needed only to make exit, trap and divergence exhaustive.
@@ -270,19 +271,20 @@ def BodyResult.behaviour (tbl : SiteTable) : BodyResult → Behaviour
   | .returns w => decode tbl w | .diverges => .diverges | .stuck => .stuck
 -- Everywhere below, `r.behaviour` abbreviates `r.behaviour b.sites` for the BIR `b` concerned.
 
-/-- A backend: the total Lean function from BIR to the body text a native toolchain consumes, and
-    what that text means as a `BodyResult`. For LCB, `Means` is DEFINED from LCB's imported
-    semantics, so the emit obligation is a theorem target. For LLVM it is a parameter (a premise). -/
+/-- A backend: the Lean function from BIR to the body text a native toolchain consumes, or its
+    refusal (then no artifact exists), and what that text means as a `BodyResult`. For LCB,
+    `Means` is DEFINED from LCB's imported semantics, so the emit obligation is a theorem
+    (`emit_correct`). For LLVM it is a parameter (a premise). -/
 structure Backend where
   Text : Type
-  emit : BIR.Program → Text
+  emit : BIR.Program → Except String Text
   Means : Text → BodyResult → Prop
 
-def llvm (M : String → BodyResult → Prop) : Backend := ⟨String, LLVM.print, M⟩
+def llvm (M : String → BodyResult → Prop) : Backend := ⟨String, fun b => .ok (LLVM.print b), M⟩
 /-- The emitted LCB text is the adapted body PAIRED with its site table, so the table that
     decodes the result is part of the emitted artifact. (The LLVM text already contains its
     table, and printer injectivity covers it.) -/
-def lcb : Backend := ⟨LCB.Source.Function × SiteTable, fun b => (LCB.adapt b, b.sites),
+def lcb : Backend := ⟨LCB.Source.Function × SiteTable, LCB.emit,
   fun (f, _) r => LCB.bodyResult f r⟩
 /-- From LCB's own source semantics (`LeanCompilerBackend.Verified.Source`, imported, never
     restated), with no arguments: `returns w` iff `Source.HasBehavior f #[] (.returned (.word w))`,
@@ -302,29 +304,28 @@ structure Native (B : Backend) where
     signals, ptrace and rlimits below `stackBytes`, and requires fd 2 to be open, writable and
     not to block forever. -/
 structure NativePremises (B : Backend) (N : Native B) (T : TargetProfile) : Prop where
-  /-- emit (implementation): the body text means at most the BIR behaviour, encoded.
-      LLVM: premise P_print. LCB: premise P_adapter until `adapter_correct` is proved, after
-      which this field is filled by the theorem and the premise is deleted. -/
-  emit : ∀ b, b.WF → ∀ r, B.Means (B.emit b) r → r.behaviour = BIR.behaviour b
+  /-- emit (implementation): an emitted body text means at most the BIR behaviour, encoded.
+      LLVM: premise P_print. LCB: filled by `emit_correct` (no premise). -/
+  emit : ∀ b, b.WF → ∀ t r, B.emit b = .ok t → B.Means t r → r.behaviour = BIR.behaviour b
   /-- P_toolchain[B] (toolchain): every result the linked body produces is one its text means.
       LCB: LCB's own importer, lowering, assembler and linker, i.e. its named trust boundaries
       (`docs/SEMANTICS.md`, "Target and environment assumptions"). -/
-  toolchain : ∀ b img r, b.WF → N.Built T (B.emit b) img → N.BodyRuns T img r → B.Means (B.emit b) r
+  toolchain : ∀ b t img r, b.WF → B.emit b = .ok t → N.Built T t img → N.BodyRuns T img r → B.Means t r
   /-- P_rt (implementation): the runtime entry decodes. A launch whose body returns `w` has the
       behaviour `decode w`: it exits with w below 256; otherwise it writes the whole trap line to
       fd 2 (looping on partial writes, ignoring write errors) and then exits 134 unconditionally.
       A body that diverges gives a launch that diverges. The trap line's presence also relies on
       the admitted-launch fd-2 condition, which belongs to P_launch, not here. -/
-  rt : ∀ b img β, b.WF → N.Built T (B.emit b) img → N.Runs T img β → β ≠ .killed →
+  rt : ∀ b t img β, b.WF → B.emit b = .ok t → N.Built T t img → N.Runs T img β → β ≠ .killed →
     ∃ r, N.BodyRuns T img r ∧ β = r.behaviour
   /-- P_launch (environment, resources): an admitted launch of an image built from a WF BIR
       within the profile's frame bound is never killed (stack, signals), and fd 2 accepts the
       trap line. -/
-  launch : ∀ b img β, b.WF → b.frameSlots ≤ T.maxSlots →
-    N.Built T (B.emit b) img → N.Runs T img β → β ≠ .killed
+  launch : ∀ b t img β, b.WF → b.frameSlots ≤ T.maxSlots →
+    B.emit b = .ok t → N.Built T t img → N.Runs T img β → β ≠ .killed
   /-- P_live (environment): an admitted launch happens and has a behaviour (maximal: a run that
       never ends has behaviour `diverges`). -/
-  live : ∀ b img, b.WF → N.Built T (B.emit b) img → ∃ β, N.Runs T img β
+  live : ∀ b t img, b.WF → B.emit b = .ok t → N.Built T t img → ∃ β, N.Runs T img β
 ```
 
 Every premise is used in the composition:
@@ -343,7 +344,6 @@ There are two target profiles: `x86_64-linux` and `aarch64-macos` (LCB's first n
 | P_lex | implementation | `lex_correct` |
 | P_parse | implementation | the generic table-parser theorem |
 | P_print | implementation | an LLVM-IR semantics; not planned for slice 0 |
-| P_adapter | implementation | `adapter_correct` (proved for accepted programs), once `emit` represents adaptation failure (or the contract is restricted to accepted programs) and the theorem fills `NativePremises lcb` |
 | P_toolchain[llvm] | toolchain | not planned |
 | P_toolchain[lcb] | toolchain | LCB's own proofs (C01–C03 and beyond) |
 | P_rt | implementation | a proof of the decoding entry against a libc model; not planned for slice 0 |
@@ -374,7 +374,7 @@ structure Output where
 /-- One theorem for both backends: `B` is `llvm _` or `lcb`. -/
 theorem compile_correct (F : FrontendPremises) {B N T} (P : NativePremises B N T)
     {src : ByteArray} {out : Output} {img : N.Image}
-    (hc : compile T src = .ok out) (hb : N.Built T (B.emit out.bir) img) :
+    (hc : compile T src = .ok out) (he : B.emit out.bir = .ok t) (hb : N.Built T t img) :
     Surface0.Denotes src out.p ∧ Fragment.core s0 out.p ∧ Checked out.p ∧
     ∃ c, c < 256 ∧ run out.p (Core.fuel out.p) = .exit c ∧
       (∃ β, N.Runs T img β) ∧ ∀ β, N.Runs T img β → β = .exited c
@@ -392,11 +392,11 @@ theorem compile_correct (F : FrontendPremises) {B N T} (P : NativePremises B N T
 5. `admit_tokens_valid : Checked p → TokensValid p (admit p)`. The empty token set is valid for any well-scoped program.
 6. `lower_wf`, and `lower_correct : WellScoped p → TokensValid p t → MIR.behaviour (lower p t) = Core.behaviour p`. This holds for every well-scoped program with valid tokens, checked or not, so `200 + 56` with no tokens preserves `trapped .arithmeticOverflow`. The trap path is real.
 7. `memory_wf` and `memory_correct : m.WF → Mem.behaviour (memory m) = MIR.behaviour m`. Then `ssa_wf` and `ssa_correct : g.WF → BIR.behaviour (ssa g) = Mem.behaviour g`.
-8. `P.launch` excludes `killed`. `P.rt` gives a body result `r` with `β = r.behaviour`. `P.toolchain` gives `B.Means (B.emit out.bir) r`, and `P.emit` gives `r.behaviour = BIR.behaviour out.bir = .exited c`. `P.live` gives existence.
+8. `P.launch` excludes `killed`. `P.rt` gives a body result `r` with `β = r.behaviour`. `P.toolchain` gives `B.Means t r`, and `P.emit` gives `r.behaviour = BIR.behaviour out.bir = .exited c`. `P.live` gives existence.
 
 **Supporting theorems:**
 - `addOvf_correct`: for arbitrary `u8` operands, the result is `(a+b) % 256` and the flag is `a+b ≥ 256`.
-- `adapter_correct : b.WF → LCB.adapt b = .ok f → LCB.bodyResult f r → r.behaviour b.sites = BIR.behaviour b` (proved, `Backend/LCB.lean`, for programs the adapter accepts; composing it into `emit` needs the contract change above). It is proved over all WF BIR the adapter accepts, overflow included, against LCB's **raw** `Source.Function` semantics (`LeanCompilerBackend/Verified/Source.lean`, imported, never restated). Once the contract change lands, it fills `NativePremises lcb`'s `emit` field.
+- `adapter_correct : b.WF → LCB.adapt b = .ok f → LCB.bodyResult f r → r.behaviour b.sites = BIR.behaviour b` (proved, `Backend/LCB.lean`), over all WF BIR the adapter accepts, overflow included, against LCB's **raw** `Source.Function` semantics (`LeanCompilerBackend/Verified/Source.lean`, imported, never restated). `emit_correct` lifts it to `LCB.emit` and fills `NativePremises lcb`'s `emit` field.
 - `adapt_admitted : compile T src = .ok out → LCB.admit (LCB.adapt out.bir) = .ok _`. It is separate from semantic preservation and uses LCB's own admission function, so it covers every profile check: SSA and dominance validation, reachability of all blocks, exact widths, supported operations only, at most 64 blocks, 480 definitions and the frame bound. It is proved, or, until then, checked for each compilation by `decide` in the certificate.
 - `lower_emits_check`: every MIR add without a valid discharged-evidence token is followed by a branch on its flag to a trap site of kind `arithmeticOverflow`, with that add's origin.
 - `denotes_behaviour_det`: two denotations of the same `src` have the same `Core.behaviour`. This is stated over behaviour, not at a fixed fuel.
@@ -405,7 +405,7 @@ theorem compile_correct (F : FrontendPremises) {B N T} (P : NativePremises B N T
 
 ```lean
 theorem answer_correct (F : FrontendPremises) (P : NativePremises B N T₀)
-    (hb : N.Built T₀ (B.emit answerOut.bir) img) : (∃ β, N.Runs T₀ img β) ∧ ∀ β, N.Runs T₀ img β → β = .exited 42
+    (he : B.emit answerOut.bir = .ok t) (hb : N.Built T₀ t img) : (∃ β, N.Runs T₀ img β) ∧ ∀ β, N.Runs T₀ img β → β = .exited 42
 ```
 
 **Non-vacuity, one witness per layer:**
@@ -425,7 +425,7 @@ theorem answer_correct (F : FrontendPremises) (P : NativePremises B N T₀)
    - `BodyRuns T (g, _) := LCB.bodyResult g`;
    - `Runs T (g, tbl) β := ∃ r, LCB.bodyResult g r ∧ β = r.behaviour tbl`.
 
-   Because `emit b = (adapt b, b.sites)`, a built image carries exactly `b.sites`, so `rt` holds by definition and no adapter injectivity is needed. `emit` is `adapter_correct`.
+   Because a successful `emit b` is `(f, b.sites)` (`Proof.emit_ok`), a built image carries exactly `b.sites`, so `rt` holds by definition and no adapter injectivity is needed. `emit` is `emit_correct`.
 
    `live` holds because LCB's step relation is deterministic, so a run returns, faults or diverges. The witness follows from `adapter_correct` and lands with it.
 3. **Frontend premises:** these are claims about fixed code, not something a model can satisfy, so no model witness applies. They are discharged per compilation (next section), and universally once `lex_correct` and `parse_correct` land.
@@ -530,7 +530,7 @@ Human output, JSON and future policies all render the same `Report`.
 | Trusted / FFI / opaque (source) | `established`: none. |
 | Trusted / FFI / opaque (artifact) | `notEstablished`: no link-map or symbol-inventory evidence yet. Behavioural premises can't establish this, because an observationally equal image may still contain foreign code. |
 | Termination (source) | `established` (`slice0_exits`). |
-| Termination (artifact) | `conditional`, on the backend's own premises: LLVM `P_print, P_toolchain[llvm], P_rt, P_launch, P_live`; LCB `P_adapter` (until `adapter_correct`), `P_toolchain[lcb], P_rt, P_launch, P_live`. |
+| Termination (artifact) | `conditional`, on the backend's own premises: LLVM `P_print, P_toolchain[llvm], P_rt, P_launch, P_live`; LCB `P_toolchain[lcb], P_rt, P_launch, P_live` (`emit` proved: `emit_correct`). |
 | Recursion depth bound | `established`: 0, since there are no calls. |
 | May block | `established`: no. |
 | BIR frame slots (IR) | `established`: *n*. Reported as slots, never as bytes. |
@@ -574,13 +574,13 @@ The CLI is `concrete facts FILE [FN]` and `concrete build FILE -o OUT` (owner, 2
 6. **Differential through the token-free lowering, both backends.** This covers overflow. Generated **well-scoped, unchecked** slice-0 programs over **arbitrary** `u8` operands, including `200 + 56`, take `lower q ∅ → memory → ssa`, so they have no tokens and no checker. Their Core `run` is compared with the LLVM path and the LCB path. Overflow must give exit 134 and the right site's trap line on fd 2, for both backends. This exercises token-aware lowering, Memory CFG and SSA, not only the backends.
    A second leg compares generated BIR directly with both backends, to cover BIR shapes that lowering does not produce.
 
-   An in-process leg also compares `BIR.behaviour b` with LCB's own evaluator on `adapt b`. That is the executable shadow of `adapter_correct` until it is proved.
+   An in-process leg also compares `BIR.behaviour b` with LCB's own evaluator on the emitted body, an executable cross-check of `emit_correct`.
 6a. **AArch64:** a GitHub-hosted AArch64 macOS job (`macos-15`) builds the LCB output for `aarch64-macos`, runs gates 4 and 6 there natively, and compares against Lean. LLVM-native also runs there, as a third cross-check. Gates 4 and 6 for x86-64 run on concrete-ci-2.
 7. **Certificates:** the kernel checks every acceptance and refusal certificate, with measured budgets.
 8. **Reproducibility** (implemented, `scripts/checks/slice0_repro.sh`): two independent builds give byte-identical outputs at every stage, on each target, and two independent Linux runners give identical manifests. See [Reproducible builds](#reproducible-builds-owner-2026-11-07).
 9. **Trusted base** (owner, 2026-11-07): a golden test that `concrete facts` prints exactly the spec's premise list, so a premise added, removed or reworded anywhere fails until the golden is updated with it. Implemented provisionally in `scripts/checks/slice0_trusted_base.sh`: until `concrete facts` exists, `scripts/checks/slice0_trusted_base.lean` prints `Premises.report`: the premise registry `Concrete/Premises.lean`, the sorted axioms of each headline theorem (`Premises.theorems`) and each axiom's type; the gate appends the Lean toolchain and the Lake pins, and the result must equal `tests/golden/slice0_trusted_base.txt` byte for byte. The README's open-premise table must equal the registry's rendering (`Premises.tableRow`). Controls cover the comparison, a failing printer, the axiom collection and a drifted table. The statements are text until `FrontendPremises` and `NativePremises` land as Lean structures; each entry then names its field.
-10. **Sanitizers** (owner, 2026-11-07; ASan implemented in `scripts/checks/slice0_artifacts.sh`, UBSan **open**): every LLVM example also runs built with ASan and UBSan in CI, and must give the same observation with no sanitizer report. ASan instruments only functions marked `sanitize_address`, which clang's C front end adds and the printed IR lacks, so the sanitizer build adds it to every definition (`slice0_native.sh sanitize`); a control body with an out-of-bounds load must be reported. UBSan's checks are inserted by clang's C front end, so on IR input it links only its runtime and checks nothing: the UBSan half of this gate is not yet met. No runtime C is compiled in slice 0, and the LLVM-level undefined behaviour of the printed IR (poison, `unreachable`) stays P_print's; how to cover it (a UBSan-equivalent check of the IR, or a scope change) is an owner decision.
-11. **Binary size** (owner, 2026-11-07; implemented, same script): the size of each example's executable (bytes and text size, pinned `llvm-size`), per backend and target, is recorded per run in `sizes.tsv`, uploaded with the job. Report-only: it never fails a run.
+10. **Sanitizers** (owner, 2026-11-07; UBSan dropped by the owner, 2026-11-08; implemented in `scripts/checks/slice0_artifacts.sh`): every LLVM example also runs built with ASan in CI, and must give the same observation with no sanitizer report. ASan instruments only functions marked `sanitize_address`, which clang's C front end adds and the printed IR lacks, so the sanitizer build adds it to every definition (`slice0_native.sh sanitize`); a control body with an out-of-bounds load must be reported. There is no UBSan leg: UBSan's checks are inserted by clang's C front end, so on LLVM IR input it checks nothing. No C is compiled in slice 0, and the LLVM-level undefined behaviour of the printed IR (poison, `unreachable`) stays P_print's.
+11. **Binary size** (owner, 2026-11-07; implemented, same script): the size of each example's executable (bytes and text size, pinned `llvm-size`), per backend and target, is recorded per run in `sizes.tsv`, uploaded with the job. Report-only: it never fails a run. **Compile time** (owner, 2026-11-08; same script, report-only): each example's emit step (the Lean emitter, Lean start-up included) and native step (clang and LCB's command line) in wall-clock milliseconds, next to its budget (the step's time bound), in `compile_times.tsv`.
 12. **Stack bound** (owner, 2026-11-07; implemented in the same script and `lib/stack_bound.py`, except the `aarch64-macos` run check, **open**): a stack-bound fact for each example, derived from the final artifact (the linked executable, not the IR) for both backends, and checked against a run. The analysis follows every path of the Concrete-owned code, instruction by instruction from an explicit set of modelled instructions, (`main`, `concrete_rt_write_all`, `concrete_body`) over the disassembly's control-flow graph, tracking the stack and frame pointers' depth below `main`'s entry and every byte addressed relative to them (so the red zone), and fails closed on anything it does not model (an instruction outside the set, another stack-pointer write, frame- or link-register writeback, an indirect branch or call, a stack pointer copied out, an indexed stack address, a stack read of bytes the function has not itself written on every path since its last call (so no stale saved frame pointer is ever loaded), a saved slot read other than by the modelled restore, two depths meeting, recursion, a call to a function neither owned nor a PLT/stub). The external calls (`write`, `_exit`, `abort`) are listed with the depth at their entry; their own use, and that `_exit` and `abort` do not return, are the libc premise. On x86-64 Linux the run check single-steps the owned code under the pinned gdb and requires the measured stack-pointer depth to be within the bound, for a complete run only (stopped first at `main`, back at each external call's return address, no signal, the expected exit status). On `aarch64-macos` the bound is derived but the run check is not yet implemented (no debugger in the pinned shell; LLDB from Xcode is the candidate). `stack.tsv` records bound, measurement and externals.
 
 With the front end (owner, 2026-11-07): gate 5's random-program fuzzer compares the native executables with the Lean evaluator, and a JSON schema generated from the Lean types of the `facts` output has goldens. Each gate joins `required-checks.txt` when the compiler lands.
@@ -624,7 +624,7 @@ These are internal. None blocks slice 0's correctness.
 - **Retire premises:**
   - `lex_correct` (P_lex);
   - the generic table-parser theorem (P_parse);
-  - `adapter_correct` (P_adapter, a slice-0 milestone);
+  - `adapter_correct` and `emit_correct` (P_adapter, retired 2026-11-08);
   - a proof of the decoding entry against a libc model (P_rt).
 - **P_toolchain[lcb]** is retired by LCB's own C01–C03 work. LCB's verified profile names Apple AArch64 as its intended target. The `x86_64-linux` executable goes through LCB's compatibility pipeline, inside P_toolchain[lcb], until LCB certifies that target.
 - **Encoded result.** It works while LCB's verified profile has no calls, memory or traps. When it gains them, revisit the encoding: an external trap call, or a multi-function encoding.

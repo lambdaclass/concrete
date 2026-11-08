@@ -40,9 +40,6 @@ def all : List Premise := [
     "every tree the parser returns for a token list is one the grammar derives from it"⟩,
   ⟨"P_print", .implementation, "an LLVM-IR semantics; not planned for slice 0",
     "the printed LLVM text of a WF BIR means at most the BIR behaviour, encoded"⟩,
-  ⟨"P_adapter", .implementation,
-    "`adapter_correct` (proved for accepted programs), once `emit` represents adaptation failure (or the contract is restricted to accepted programs) and the theorem fills `NativePremises lcb`",
-    "the adapted LCB function of a WF BIR means at most the BIR behaviour, encoded"⟩,
   ⟨"P_toolchain[llvm]", .toolchain, "not planned",
     "every result the linked LLVM body produces is one its text means"⟩,
   ⟨"P_toolchain[lcb]", .toolchain, "LCB's own proofs (C01–C03 and beyond)",
@@ -62,7 +59,10 @@ def theorems : List Lean.Name := [
   ``Concrete.BIR.decode_encode,
   ``Concrete.BIR.run_progress,
   ``Concrete.BIR.behaviour_diverges_iff,
-  ``Concrete.Backend.LCB.Proof.adapter_correct
+  ``Concrete.Backend.LCB.Proof.adapter_correct,
+  ``Concrete.Backend.LCB.Proof.emit_correct,
+  ``Concrete.Backend.LCB.Proof.artifact_of_emit_error,
+  ``Concrete.Backend.LCB.Proof.artifact_correct
 ]
 
 /-- The premise's row in Concrete/README.md's open-premise table (a generated view). -/
