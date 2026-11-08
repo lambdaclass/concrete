@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# TRUST BAN: no `sorry` and no `native_decide` anywhere in the specification (Q9.17), checked
+# TRUST BAN: no `sorry` and no `native_decide` anywhere in the specification or compiler (Q9.17), checked
 # transitively in the kernel's terms and in the sources the environment does not keep.
 #
 #   E  no constant of ANY kind the ConcreteSpec library declares (definitions, instances and
 #      generated helpers included, not only theorems) depends transitively on sorryAx, on
 #      Lean.ofReduceBool or Lean.ofReduceNat (what native_decide and `decide +native` reduce through),
 #      on Lean.trustCompiler, or on a generated `._native.` axiom;
-#   D  the library declares no axiom of its own;
+#   D  neither library declares an axiom of its own;
 #   X  every `example`, which the kernel checks and Lean then discards (so E and D never see it),
 #      depends only on the standard axioms: in a copy of the library each `example` becomes a
 #      named declaration (scripts/proofs/lean_lex.py), the copy is built, and its axioms are
@@ -108,7 +108,7 @@ GAP=$(comm -23 "$TMP/compiler-modules.txt" <(sort -u "$TMP/compiler-imported.txt
 # under the same key allow-list. A dependency is a `require` of a git URL pinned to a full commit,
 # which lake-manifest.json (beside the lakefile) records at the same URL and commit: the spec may
 # import nothing outside itself (S), so a dependency reaches only the compiler. This ban's scope is
-# the specification; the compiler's trust gate is Concrete/README.md gate 2.
+# both libraries; the compiler's imports additionally include Lean and its pinned backend.
 lake_options() {
   python3 - "$1" <<'EOF'
 import sys, tomllib
@@ -166,11 +166,12 @@ EX="$TMP/ex"; mkdir -p "$EX"
 cp lakefile.toml lean-toolchain lake-manifest.json "$EX"/ || { no "could not copy the Lake files"; finish; }
 [ -d .lake/build ] && mkdir -p "$EX/.lake" && cp -r .lake/build "$EX/.lake/"
 sed -i 's/^warningAsError = true$/warningAsError = false/' "$EX/lakefile.toml"
-NEX=$(python3 "$PROOFS_DIR/lean_lex.py" examples . "$EX" "${SRC[@]}") \
+sed '/^import ConcreteSpec$/a import Concrete' "$ENUMERATOR" > "$TMP/examples-enumerator.lean"
+NEX=$(python3 "$PROOFS_DIR/lean_lex.py" examples . "$EX" "${SRC[@]}" "${COMPILER_SRC[@]}") \
   || { no "the examples could not be rewritten: $NEX"; finish; }
-(cd "$EX" && "$LAKE" build ConcreteSpec) > "$TMP/ex-build.log" 2>&1 \
+(cd "$EX" && "$LAKE" build ConcreteSpec Concrete) > "$TMP/ex-build.log" 2>&1 \
   || { no "the library with its examples as declarations does not build: $(grep -m3 error "$TMP/ex-build.log" | tr '\n' ' ')"; finish; }
-(cd "$EX" && PROOF_MODE=examples "$LAKE" env lean "$ENUMERATOR") > "$TMP/examples.out" 2> "$TMP/examples.err" \
+(cd "$EX" && PROOF_MODE=examples "$LAKE" env lean "$TMP/examples-enumerator.lean") > "$TMP/examples.out" 2> "$TMP/examples.err" \
   || { no "PROOF_MODE=examples failed: $(head -2 "$TMP/examples.err" | tr '\n' ' ')"; finish; }
 grep -P '\t' "$TMP/examples.out" > "$TMP/examples.tsv"
 # nonstandard FILE → `<name> (<axiom>)` for every row whose axioms are not among the standard three
@@ -180,7 +181,7 @@ nonstandard() {
 }
 NE=$(grep -c . "$TMP/examples.tsv"); X=$(nonstandard "$TMP/examples.tsv")
 [ "$NEX" -ge 100 ] && [ "$NE" = "$NEX" ] && [ -z "$X" ] \
-  && ok "all $NEX examples, kept as declarations, depend only on the standard axioms" \
+  && ok "all $NEX spec and compiler examples, kept as declarations, depend only on the standard axioms" \
   || no "examples: $NEX rewritten, $NE in the environment; on other axioms: $(echo $X | cut -c1-300)"
 
 echo "=== negative controls ==="

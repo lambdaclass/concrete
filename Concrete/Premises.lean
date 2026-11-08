@@ -57,6 +57,18 @@ def all : List Premise := [
 
 /-- The headline theorems, whose axioms the golden records. -/
 def theorems : List Lean.Name := [
+  ``Concrete.Lex.decodeStep_complete,
+  ``Concrete.Lex.decodeStep_error_first,
+  ``Concrete.Lex.decodeLoop_sound,
+  ``Concrete.Lex.decodeLoop_complete,
+  ``Concrete.Lex.decodeLoop_error_first,
+  ``Concrete.Lex.decode_error_first,
+  ``Concrete.Lex.decode_error_offset_iff,
+  ``Concrete.Lex.decode_error_complete,
+  ``Concrete.Lex.decode_error_iff,
+  ``Concrete.Lex.sourceLoop_error_first,
+  ``Concrete.Lex.checkSource_error_first,
+  ``Concrete.Lex.checkSource_error_not_sourceOk,
   ``Concrete.Lex.decodeAt_sound,
   ``Concrete.Lex.decodeAt_complete,
   ``Concrete.Lex.decodeUtf8_sound,

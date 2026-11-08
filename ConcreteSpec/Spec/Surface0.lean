@@ -3,13 +3,14 @@ import ConcreteSpec.Spec.Borrow
 /-!
 # Settled pieces of the slice-0 surface
 
-PROPOSED: not normative until the owner freezes Core (ROADMAP A2c).
+**PROPOSED: not normative until the owner freezes Core (ROADMAP A2c).**
 Part of ConcreteSpec.Spec; see ConcreteSpec/README.md.
 
 Authority: docs/decisions.md, owner-approved language list item 30 (OPEN-1),
 SYN-5@3 and SYN-6@3. Core Q4.2 permits embedded NUL in static text VALUES
 (e.g. through the `\0` escape), not in raw source bytes. Item 30 says no BOM;
-together with the owner’s no-hidden-surprises rule this excludes U+FEFF anywhere,
+together with the owner’s no-hidden-surprises ruling (2026-11-08; see also
+docs/PHILOSOPHY.md, principle 3, transparency) this excludes U+FEFF anywhere,
 including inside comments and literals. Item 30 also makes bare CR end a comment.
 
 Only UTF-8 source validity, NUL/BOM refusal, ASCII identifier characters and line comments
@@ -56,6 +57,40 @@ inductive Decodes : List UInt8 → List Nat → Prop
       Encodes s chunk → Decodes bs cs → Decodes (chunk ++ bs) (s :: cs)
 
 end Utf8
+
+/-- Decision: item 30 (OPEN-1), SYN-5@3. A partial scalar admits a
+well-formed continuation exactly when it is a prefix of an encoding. -/
+def ScalarPrefix (bytes : List UInt8) : Prop :=
+  ∃ suffix value, Utf8.Encodes value (bytes ++ suffix)
+
+/-- Decision: item 30 (OPEN-1), SYN-5@3. A local first failure: all shorter
+prefixes can still become one scalar, and the prefix before failure is unfinished.
+At EOF the scalar is unfinished; otherwise
+the byte at `offset` makes any well-formed continuation impossible. -/
+def ScalarFailure (bytes : List UInt8) (offset : Nat) : Prop :=
+  (∀ j ≤ offset, ScalarPrefix (bytes.take j)) ∧
+  (¬ ∃ value, Utf8.Encodes value (bytes.take offset)) ∧
+  ((offset < bytes.length ∧ ¬ ScalarPrefix (bytes.take (offset + 1))) ∨
+   (offset = bytes.length ∧ ¬ ∃ value, Utf8.Encodes value bytes))
+
+/-- Decision: item 30 (OPEN-1), SYN-5@3. The first failed scalar follows a
+well-formed byte prefix. The offset is the first byte where no scalar continuation
+exists, or EOF when an otherwise extendible scalar is incomplete. -/
+def FirstError (bytes : List UInt8) (offset : Nat) : Prop :=
+  ∃ pre rest cs localOffset,
+    bytes = pre ++ rest ∧ Utf8.Decodes pre cs ∧
+    ScalarFailure rest localOffset ∧ rest ≠ [] ∧ offset = pre.length + localOffset
+
+/-- Decision: item 30 (OPEN-1), SYN-5@3. The first raw-source failure:
+an invalid scalar, NUL, or U+FEFF, following only permitted complete scalars.
+NUL/BOM offsets name the start of the refused scalar. -/
+inductive SourceFailure : List UInt8 → Nat → Prop
+  | utf8 {bytes : List UInt8} {k : Nat} : bytes ≠ [] → ScalarFailure bytes k → SourceFailure bytes k
+  | nul {chunk rest : List UInt8} : Utf8.Encodes 0 chunk → SourceFailure (chunk ++ rest) 0
+  | bom {chunk rest : List UInt8} : Utf8.Encodes 0xFEFF chunk → SourceFailure (chunk ++ rest) 0
+  | cons {c : Nat} {chunk rest : List UInt8} {k : Nat} :
+      Utf8.Encodes c chunk → c ≠ 0 → c ≠ 0xFEFF → SourceFailure rest k →
+      SourceFailure (chunk ++ rest) (chunk.length + k)
 
 /-- Decision: owner-approved language list item 30 (OPEN-1), SYN-5@3 / SYN-6@3.
  A source has a decoding with neither NUL nor BOM anywhere. -/

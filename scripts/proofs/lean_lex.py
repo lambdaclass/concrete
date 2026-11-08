@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""A lexer for the Lean sources of ConcreteSpec, shared by the proof-integrity checks.
+"""A lexer for Lean sources, shared by the specification and compiler trust checks.
 
 `lex(src)` returns `src` with every comment (nested `/- -/`, `--`) blanked to spaces, newlines kept,
 so offsets and line numbers are the source's. Everything else is kept, string literals included.
