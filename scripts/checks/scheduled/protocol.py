@@ -2,6 +2,7 @@
 import datetime as dt
 import importlib.util
 import json
+import os
 import re
 import subprocess
 from pathlib import Path
@@ -16,9 +17,12 @@ def require(ok, message):
     if not ok:
         raise EvidenceError(message)
 
+def clean_env():
+    return {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
+
 def git(*args):
     return subprocess.run(["git", *args], check=True, capture_output=True,
-                          text=True, timeout=60).stdout.strip()
+                          text=True, timeout=60, env=clean_env()).stdout.strip()
 
 def timestamp(value):
     try:
@@ -37,12 +41,14 @@ def inventory():
     spec.loader.exec_module(module)
     return module.read_inventory()
 
-def validate(record, sha, tier, runners):
+def validate(record, sha, tier, runners, repository=None):
     require(re.fullmatch(r"[0-9a-f]{40}", sha) is not None, "invalid full SHA")
     require(record.get("sha") == sha, "wrong SHA")
     require(record.get("tier") == tier and tier in WINDOWS, "wrong tier")
-    require(record.get("runner_environment") == "self-hosted" and
-            record.get("runner_name") in runners.get(record.get("repository"), set()),
+    require(record.get("repository") == (repository or os.environ.get("GITHUB_REPOSITORY") or record.get("repository")), "wrong repository")
+    missing = record.get("status") == "MISSING"
+    require(missing or (record.get("runner_environment") == "self-hosted" and
+            record.get("runner_name") in runners.get(record.get("repository"), set())),
             "forged runner: not inventoried concrete-ci-2")
     require(re.fullmatch(r"[0-9]+/[0-9]+", record.get("attempt", "")) is not None,
             "invalid attempt identity")
@@ -53,18 +59,23 @@ def validate(record, sha, tier, runners):
     start, end = timestamp(record["started"]), timestamp(record["completed"])
     require(start <= end, "completion precedes start")
     require(record.get("occurrence"), "missing occurrence")
-    require(record.get("artifact"), "missing result-index artifact")
-    require(record.get("gate_revision") == sha, "wrong gate revision")
+    require(missing or record.get("artifact"), "missing result-index artifact")
+    require(missing or record.get("gate_revision") == sha, "wrong gate revision")
     gates = record.get("gates")
-    require(isinstance(gates, list) and gates, "missing gate evidence")
+    require(isinstance(gates, list) and (missing or gates), "missing gate evidence")
     require(len({g["id"] for g in gates}) == len(gates), "duplicate gate evidence")
     for gate in gates:
         require(gate.get("status") in STATUSES, "invalid gate status")
         require(all(k in gate for k in ("command", "tools", "seed", "resources", "controls", "log")), "missing gate metadata")
         if gate["status"] == "PASS":
             require(gate["controls"] and all(c.get("status") == "PASS" for c in gate["controls"]), "missing/pending control evidence")
-    if record["status"] == "PASS":
-        require(record["conclusion"] == "success" and all(g["status"] == "PASS" for g in gates), "PASS contradicts evidence")
+    statuses = {g["status"] for g in gates}
+    expected = ("MISSING" if record["conclusion"] in {"cancelled", "skipped", "queued-too-long", "absent"}
+                else "FAIL" if "FAIL" in statuses else "INCOMPLETE" if "INCOMPLETE" in statuses
+                else "PASS" if gates and statuses == {"PASS"} else None)
+    conclusions = {"PASS": "success", "FAIL": "failure", "INCOMPLETE": "incomplete"}
+    require(record["status"] == expected and
+            (missing or record["conclusion"] == conclusions.get(expected)), "status/conclusion contradicts evidence")
     return record
 
 def append(history, record, sha, tier, runners):
@@ -81,6 +92,7 @@ def observe(history, sha, tier, now, runners):
         validate(record, sha, tier, runners)
         require(timestamp(record["completed"]) <= now, "future completion")
     require(len({r["attempt"] for r in history}) == len(history), "replay would overwrite attempt")
+    require(not any(r["status"] == "FAIL" for r in history), f"FAIL {tier} {sha}: recorded attempt")
     recent = [r for r in history if now - timestamp(r["completed"]) <= WINDOWS[tier]]
     require(recent, f"STALE {tier} {sha}: no fresh PASS")
     # G2: a retry never erases disagreement in a fresh window.

@@ -38,10 +38,10 @@ class Controls(unittest.TestCase):
         self.rejected("wrong SHA", lambda: observe([r], SHA, "daily", NOW, RUNNERS))
 
     def test_cancelled(self):
-        r = record(); r.update(status="MISSING", conclusion="cancelled")
+        r = record(); r.update(status="MISSING", conclusion="cancelled", gates=[], artifact=None, runner_name=None)
         self.rejected("MISSING daily " + SHA + ": recorded attempt",
                       lambda: observe([r], SHA, "daily", NOW, RUNNERS))
-        r["status"] = "PASS"
+        r = record(); r["conclusion"] = "cancelled"
         self.rejected("cancelled/skipped/overdue/absent must be MISSING",
                       lambda: observe([r], SHA, "daily", NOW, RUNNERS))
 
@@ -64,20 +64,30 @@ class Controls(unittest.TestCase):
 
     def test_failed_and_incomplete(self):
         for status, conclusion in (("FAIL", "failure"), ("INCOMPLETE", "incomplete")):
-            r = record(); r.update(status=status, conclusion=conclusion)
+            r = record(); r.update(status=status, conclusion=conclusion); r["gates"][0]["status"] = status
             self.rejected(status + " daily " + SHA + ": recorded attempt",
                           lambda: observe([r], SHA, "daily", NOW, RUNNERS))
 
     def test_missing_conclusions(self):
         for conclusion in ("skipped", "queued-too-long", "absent"):
-            r = record(); r.update(status="MISSING", conclusion=conclusion)
+            r = record(); r.update(status="MISSING", conclusion=conclusion, gates=[], artifact=None, runner_name=None)
             self.rejected("MISSING daily " + SHA + ": recorded attempt",
                           lambda: observe([r], SHA, "daily", NOW, RUNNERS))
 
     def test_disagreement(self):
-        r = record(); r.update(attempt="1/2", status="FAIL", conclusion="failure")
+        r = record(); r.update(attempt="1/2", status="FAIL", conclusion="failure"); r["gates"][0]["status"] = "FAIL"
         history = append([r], record(), SHA, "daily", RUNNERS)
         self.rejected("FAIL daily " + SHA + ": recorded attempt", lambda: observe(history, SHA, "daily", NOW, RUNNERS))
+
+    def test_old_failure_cannot_age_out(self):
+        r = record(); r.update(status="FAIL", conclusion="failure")
+        r["gates"][0]["status"] = "FAIL"
+        fresh = record(); fresh["attempt"] = "2/1"
+        import datetime as dt
+        later = NOW + 36*3600 + 1
+        fresh["completed"] = dt.datetime.fromtimestamp(later, dt.timezone.utc).isoformat()
+        self.rejected("FAIL daily " + SHA + ": recorded attempt",
+                      lambda: observe([r, fresh], SHA, "daily", later, RUNNERS))
 
 if __name__ == "__main__":
     unittest.main()
