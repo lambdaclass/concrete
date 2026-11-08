@@ -1237,8 +1237,7 @@ theorem InfiniteExecution.toObserveSteps_matches {S : Observe.EventSignature}
     refine ⟨m, (A.project (X.states m).events).drop (X.emittedCount A m), ?_⟩
     rw [X.visiblePrefix_toObserveSteps, List.take_append_drop]
 
-/-- Helper (projection). Derived by erasing instrumentation or inverting an existing semantic witness
-(approved: PENDING).
+/-- Law (subject `Observe.CompleteTrace`).
 Every finite prefix of an infinite execution under a well-formed adapter and C1 oracle has a
 complete valid C6 event trace. -/
 theorem InfiniteExecution.projected_completeTrace {S : Observe.EventSignature}
@@ -2348,6 +2347,27 @@ theorem visiblePrefix_silentObserveSteps {O : Operands} {S : Observe.EventSignat
   | zero => rfl
   | succ n ih => simp [Observe.visiblePrefix_succ, silentObserveSteps, Observe.Step.event?, ih]
 
+/-- A trace-completeness mutation that rejects every non-empty projected event history. -/
+def emptyOnlyCompleteTrace {S : Observe.EventSignature} (C : Observe.OperationContract S)
+    (input : C.Input) (events : List (Observe.Event S)) : Prop :=
+  Observe.CompleteTrace C input events ∧ events = []
+
+/-- Instance (law `InfiniteExecution.projected_completeTrace`, case `keepingAdapter`). -/
+example : Observe.CompleteTrace Observe.Demo.contract ()
+    (keepingAdapter.project (event_infinite.states 5).events) :=
+  InfiniteExecution.projected_completeTrace (O := ops) (P := prog) (ρ₀ := env)
+    (c := eventConfig) (S := Observe.Demo.signature) (C := Observe.Demo.contract)
+    (input := ()) (A := keepingAdapter) event_infinite keepingWellFormed 5
+
+/-- Planted (law `InfiniteExecution.projected_completeTrace`, case `keepingAdapter`,
+subject `Observe.CompleteTrace`, mutant `emptyOnlyCompleteTrace`). -/
+example : Observe.ExecAdapter.WellFormed keepingAdapter Observe.Demo.contract () env ∧
+    ¬ emptyOnlyCompleteTrace Observe.Demo.contract ()
+      (keepingAdapter.project (event_infinite.states 5).events) := by
+  refine ⟨keepingWellFormed, ?_⟩
+  rintro ⟨_, h⟩
+  cases h
+
 /-- Instance (law `InfiniteExecution.toObserveSteps_matches`, case `keepingAdapter`). -/
 example : MatchesProjectedHistory keepingAdapter event_infinite
     (event_infinite.toObserveSteps keepingAdapter) :=
@@ -2535,7 +2555,8 @@ example : ¬ ({ thirdQuery with occurrence := 0 } : Query ops).occurrence =
 
 /-- Instance (law `runFromQ_interleaved_site`, case `threeRequestConfig`). -/
 example : thirdQuery.occurrence = interleavedQuery0.occurrence +
-    occurrenceAt (((runQ prog env 7 threeRequestConfig).queries.drop 0).take (2 - 0)) s :=
+    occurrenceAt (((runFromQ prog env 7 [] [] threeRequestConfig).queries.drop 0).take (2 - 0))
+      interleavedQuery0.site :=
   runFromQ_interleaved_site (O := ops) (P := prog) (ρ := env.toQueryOracle)
     7 [] [] threeRequestConfig QueryHistoryValid.nil (i := 0) (j := 2)
     (q := interleavedQuery0) (q' := thirdQuery) (by decide) rfl rfl rfl
