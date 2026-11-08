@@ -3511,6 +3511,96 @@ example : CheckerAccepted erasedOps types permitE emptyProg acceptedStuckConfig 
       Ending.IsStuck (Exec.run (eraseProgram emptyProg) erasedOracle 100 (eraseConfigDone acceptedStuckConfig)).ending) := by
   exact ⟨acceptedStuck_checkerAccepted_inv, by decide⟩
 
+/-- The exact successor of the closed move-binding step. -/
+def bindSuccessor : Exec.Config instrumentedOps :=
+  match Exec.step emptyProg bindMoveConfig with
+  | some (.next c) => c
+  | _ => bindMoveConfig
+
+/-- The exact continuation of the closed primitive request. -/
+def primitiveContinuation : Exec.Answer Int Int (Store Int) → Option (Exec.Config instrumentedOps) :=
+  match Exec.step emptyProg primOneConfig with
+  | some (.request _ _ _ _ k) => k
+  | _ => fun _ => none
+
+def primitiveSuccessor : Exec.Config instrumentedOps :=
+  (primitiveContinuation (liftAnswer initial ⟨some 7, .ok 7, 7⟩)).getD primOneConfig
+
+/-- Helper (computation). Closed event-producing step used as a law hypothesis.
+(approved: PENDING). -/
+private theorem primitiveStep : Exec.Step emptyProg primOneConfig (.emit 7) primitiveSuccessor :=
+  @Exec.Step.prim instrumentedOps emptyProg primOneConfig primitiveSuccessor () [7] ⟨0⟩
+    ⟨0, initial⟩ primitiveContinuation (liftAnswer initial ⟨some 7, .ok 7, 7⟩) rfl rfl rfl
+
+/-- Helper (computation). Closed nonempty trace used as a law hypothesis.
+(approved: PENDING). -/
+private theorem primitiveSteps : Exec.Steps emptyProg primOneConfig [7] primitiveSuccessor :=
+  .step primitiveStep (.refl _)
+
+/-- Instance (law `ConcreteSpec.Core.Own.step_next_erasure`, case `ConcreteSpec.Core.Own.Examples.bindMoveConfig`). -/
+example : Exec.step (eraseProgram emptyProg) (eraseConfig bindMoveConfig) =
+    some (.next (eraseConfig bindSuccessor)) :=
+  @step_next_erasure erasedOps types permitE emptyProg bindMoveConfig bindSuccessor rfl
+
+/-- Planted (law `ConcreteSpec.Core.Own.step_next_erasure`, case `ConcreteSpec.Core.Own.Examples.bindMoveConfig`, subject `ConcreteSpec.Core.Own.eraseConfig`, mutant `ConcreteSpec.Core.Own.ExecErasureWitnesses.eraseConfigDone`). -/
+example : Exec.step emptyProg bindMoveConfig = some (.next bindSuccessor) ∧
+    ¬ (Exec.step (eraseProgram emptyProg) (eraseConfigDone bindMoveConfig) =
+      some (.next (eraseConfigDone bindSuccessor))) := ⟨rfl, by intro h; cases h⟩
+
+/-- Instance (law `ConcreteSpec.Core.Own.step_request_erasure`, case `ConcreteSpec.Core.Own.Examples.primOneConfig`). -/
+example : ∃ k_erased,
+    Exec.step (eraseProgram emptyProg) (eraseConfig primOneConfig) =
+      some (.request () [7] ⟨0⟩ (erase (⟨0, initial⟩ : Store Int)) k_erased) ∧
+    ∀ a c', primitiveContinuation a = some c' →
+      k_erased (eraseAnswer a) = some (eraseConfig c') :=
+  @step_request_erasure erasedOps types permitE emptyProg primOneConfig () [7] ⟨0⟩
+    ⟨0, initial⟩ primitiveContinuation rfl
+
+/-- Planted (law `ConcreteSpec.Core.Own.step_request_erasure`, case `ConcreteSpec.Core.Own.Examples.primOneConfig`, subject `ConcreteSpec.Core.Own.eraseConfig`, mutant `ConcreteSpec.Core.Own.ExecErasureWitnesses.eraseConfigDone`). -/
+example : Exec.step emptyProg primOneConfig =
+      some (.request () [7] ⟨0⟩ ⟨0, initial⟩ primitiveContinuation) ∧
+    ¬ (∃ k_erased,
+      Exec.step (eraseProgram emptyProg) (eraseConfigDone primOneConfig) =
+        some (.request () [7] ⟨0⟩ (erase (⟨0, initial⟩ : Store Int)) k_erased) ∧
+      ∀ a c', primitiveContinuation a = some c' →
+        k_erased (eraseAnswer a) = some (eraseConfigDone c')) := by
+  refine ⟨rfl, ?_⟩
+  rintro ⟨_, h, _⟩
+  cases h
+
+/-- Instance (law `ConcreteSpec.Core.Own.Step_erasure`, case `ConcreteSpec.Core.Own.Examples.primOneConfig`). -/
+example : Exec.Step (eraseProgram emptyProg) (eraseConfig primOneConfig)
+    (eraseLabel (O := erasedOps) (types := types) (permit := permitE) (.emit 7))
+    (eraseConfig primitiveSuccessor) :=
+  @Step_erasure erasedOps types permitE emptyProg primOneConfig primitiveSuccessor (.emit 7) primitiveStep
+
+/-- Planted (law `ConcreteSpec.Core.Own.Step_erasure`, case `ConcreteSpec.Core.Own.Examples.primOneConfig`, subject `ConcreteSpec.Core.Own.eraseConfig`, mutant `ConcreteSpec.Core.Own.ExecErasureWitnesses.eraseConfigDone`). -/
+example : Exec.Step emptyProg primOneConfig (.emit 7) primitiveSuccessor ∧
+    ¬ Exec.Step (eraseProgram emptyProg) (eraseConfigDone primOneConfig)
+      (eraseLabel (O := erasedOps) (types := types) (permit := permitE) (.emit 7))
+      (eraseConfigDone primitiveSuccessor) :=
+  ⟨primitiveStep, step_det_none_inv rfl⟩
+
+/-- Instance (law `ConcreteSpec.Core.Own.Steps_erasure`, case `ConcreteSpec.Core.Own.Examples.primOneConfig`). -/
+example : Exec.Steps (eraseProgram emptyProg) (eraseConfig primOneConfig) [7]
+    (eraseConfig primitiveSuccessor) :=
+  @Steps_erasure erasedOps types permitE emptyProg primOneConfig primitiveSuccessor [7] primitiveSteps
+
+/-- Planted (law `ConcreteSpec.Core.Own.Steps_erasure`, case `ConcreteSpec.Core.Own.Examples.primOneConfig`, subject `ConcreteSpec.Core.Own.eraseConfig`, mutant `ConcreteSpec.Core.Own.ExecErasureWitnesses.eraseConfigDone`). -/
+example : Exec.Steps emptyProg primOneConfig [7] primitiveSuccessor ∧
+    ¬ Exec.Steps (eraseProgram emptyProg) (eraseConfigDone primOneConfig) [7]
+      (eraseConfigDone primitiveSuccessor) := by
+  refine ⟨primitiveSteps, ?_⟩
+  intro hs
+  have traceEmpty : ∀ {tr c'},
+      Exec.Steps (eraseProgram emptyProg) (eraseConfigDone primOneConfig) tr c' → tr = [] := by
+    intro tr c' h
+    cases h with
+    | refl => rfl
+    | step first _ => exact False.elim (step_det_none_inv rfl first)
+  have he := traceEmpty hs
+  cases he
+
 end ExecErasureWitnesses
 
 /-- Preservation is a property of the actual result, so an operation mutant can falsify
