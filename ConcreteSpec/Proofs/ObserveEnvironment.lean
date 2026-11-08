@@ -4,9 +4,10 @@ import ConcreteSpec.Proofs.Observe2
 
 `Responds` specifies relational environment admission, while `Environment` specifies executable
 environment dispatch by operation kind. The admission bridge is a helper. The operational laws execute typed handlers through C1,
-preserving computed replies and ordered histories, and advance completed traces to valid
-completed or pending traces; `Demo` and
-`RoutingDemo` supply the closed `Instance` and `Planted` witnesses.
+binding and returning the computed reply in `Environment.call`, preserving the C1 store, connecting
+both answered and blocked runs to `reportObservation`, and advancing completed traces to valid
+completed or pending traces; `Demo`, `HistoryDemo` and `RoutingDemo` supply the closed `Instance`
+and `Planted` witnesses.
 -/
 
 namespace ConcreteSpec.Core.Observe
@@ -71,32 +72,97 @@ theorem environment_oracle_wellFormed {S : EventSignature} (C : OperationContrac
     cases found
 
 /-- Law (subject `ConcreteSpec.Core.Observe.Environment.oracle`).
-Executing a typed handler call in C1 records the ordered request and computed reply, passes the
-same reply as the result, preserves the C1 store, and extends a valid history to a complete
-contract-compliant trace. No response-admission guard is evaluated by this bridge. -/
+Executing a typed handler call in C1 binds the oracle's returned value to local `⟨0⟩` and returns
+it while preserving the C1 store `store : S.State`. When `E.reply` produces `some reply`, the C1
+run ends in `.final (.returned (some ⟨q.1, reply⟩)) store`, `reportObservation` reports the
+terminal `.exited 0` observation with the extended event history and final external state `store`,
+and the projected history is a `CompleteTrace`. When `E.reply` returns `none`, the C1 run blocks
+at the primitive request, `reportObservation` reports `.blocked`, and the pending trace satisfies
+`ValidTrace` and `C.mayBlock`. -/
 theorem environment_run_reply {S : EventSignature} (C : OperationContract S)
     (E : Environment S C.Input) (validEnv : Environment.Valid C E) (input : C.Input)
-    (hist : List (Request S × Response S)) (q : Request S) (site : SiteId)
-    (reply : S.Response q.1)
-    (validHist : CompleteTrace C input (Environment.history hist))
-    (answered : E.reply input (Environment.history hist ++ [.request q]) q.1 q.2 = some reply) :
-    Exec.runFrom (O := Environment.operands S) ⟨[]⟩ (E.oracle input) 1 hist (Environment.call S q site) =
-      ⟨hist ++ [(q, ⟨q.1, reply⟩)], .final .normal ()⟩ ∧
-    CompleteTrace C input
-      ((Environment.adapter S).project
-        (Exec.runFrom (O := Environment.operands S) ⟨[]⟩ (E.oracle input) 1 hist (Environment.call S q site)).events) := by
+    (hist : List (Request S × Response S)) (q : Request S) (site : SiteId) (store : S.State)
+    (validHist : CompleteTrace C input (Environment.history hist)) :
+    (∀ reply, E.reply input (Environment.history hist ++ [.request q]) q.1 q.2 = some reply →
+      Exec.runFrom (O := Environment.operands S) ⟨[]⟩ (E.oracle input) 4 hist
+          (Environment.call S q site store) =
+        ⟨hist ++ [(q, ⟨q.1, reply⟩)], .final (.returned (some ⟨q.1, reply⟩)) store⟩ ∧
+      (∃ permitted,
+        reportObservation ⟨[]⟩ (Environment.adapter S) C input
+          (Exec.runFrom (O := Environment.operands S) ⟨[]⟩ (E.oracle input) 4 hist
+            (Environment.call S q site store)) permitted =
+          some (.terminal ⟨Environment.history hist ++ [.request q, .response ⟨q.1, reply⟩],
+            .exited 0, store⟩)) ∧
+      CompleteTrace C input
+        ((Environment.adapter S).project
+          (Exec.runFrom (O := Environment.operands S) ⟨[]⟩ (E.oracle input) 4 hist
+            (Environment.call S q site store)).events)) ∧
+    (E.reply input (Environment.history hist ++ [.request q]) q.1 q.2 = none →
+      (∃ permitted,
+        reportObservation ⟨[]⟩ (Environment.adapter S) C input
+          (Exec.runFrom (O := Environment.operands S) ⟨[]⟩ (E.oracle input) 4 hist
+            (Environment.call S q site store)) permitted =
+          some (.blocked (Environment.history hist ++ [.request q]) q)) ∧
+      ValidTrace C input (some q) (Environment.history hist ++ [.request q]) ∧
+      C.mayBlock input (Environment.history hist ++ [.request q]) q) := by
+  have wf := environment_oracle_wellFormed C E validEnv input
+  have hperm : ExecAdapter.BlockingPermitted ⟨[]⟩ (Environment.adapter S) C input
+      (Exec.runFrom (O := Environment.operands S) ⟨[]⟩ (E.oracle input) 4 hist
+        (Environment.call S q site store)) :=
+    runFrom_blockingPermitted ⟨[]⟩ (Environment.adapter S) C input
+      (E.oracle input) wf (fuel := 4) (hist := hist) (c := Environment.call S q site store) validHist
   constructor
-  · have answer : E.oracle input hist q [] site () =
-        some ⟨some (q, ⟨q.1, reply⟩), .ok (some ⟨q.1, reply⟩), ()⟩ := by
+  · intro reply answered
+    have answer : E.oracle input hist q [] site store =
+        some ⟨some (q, ⟨q.1, reply⟩), .ok (some ⟨q.1, reply⟩), store⟩ := by
       simp only [Environment.oracle, answered, Option.map_some]
-    unfold Environment.call
-    rw [Exec.runFrom.eq_def]
-    dsimp [Exec.Config.final?, Exec.step, Exec.evalArgs, Exec.onRes, Environment.operands]
-    rw [answer]
-    rfl
-  · exact (runFrom_validTrace ⟨[]⟩ (Environment.adapter S) C input (E.oracle input)
-      (environment_oracle_wellFormed C E validEnv input) 1 hist
-      (Environment.call S q site) validHist).1
+    have hrun : Exec.runFrom (O := Environment.operands S) ⟨[]⟩ (E.oracle input) 4 hist
+        (Environment.call S q site store) =
+        ⟨hist ++ [(q, ⟨q.1, reply⟩)], .final (.returned (some ⟨q.1, reply⟩)) store⟩ := by
+      unfold Environment.call
+      conv => lhs; unfold Exec.runFrom
+      dsimp [Exec.Config.final?, Exec.step]
+      conv => lhs; unfold Exec.runFrom
+      dsimp [Exec.Config.final?, Exec.step, Exec.evalArgs, Exec.onRes, Environment.operands]
+      rw [answer]
+      dsimp [Exec.bindLife, Exec.bindDst]
+      conv => lhs; unfold Exec.runFrom
+      dsimp [Exec.Config.final?, Exec.step]
+      conv => lhs; unfold Exec.runFrom
+      dsimp [Exec.Config.final?, Exec.step, Exec.onRes, Environment.operands, AList.lookup]
+      unfold Exec.runFrom
+      rfl
+    refine ⟨hrun, ⟨hperm, ?_⟩, ?_⟩
+    · simp [reportObservation, hrun, ExecAdapter.terminal?, Environment.adapter,
+        ExecAdapter.project, Environment.history]
+    · exact (runFrom_validTrace ⟨[]⟩ (Environment.adapter S) C input (E.oracle input) wf
+        4 hist (Environment.call S q site store) validHist).1
+  · intro blocked
+    have answer : E.oracle input hist q [] site store = none := by
+      simp [Environment.oracle, blocked]
+    have hrun : Exec.runFrom (O := Environment.operands S) ⟨[]⟩ (E.oracle input) 4 hist
+        (Environment.call S q site store) =
+        ⟨hist, .noAnswer ⟨.exec (.prim (some ⟨"reply", 0⟩) q [] site), [], store, [.seq (.ret ⟨"reply", 0⟩ site)]⟩⟩ := by
+      unfold Environment.call
+      conv => lhs; unfold Exec.runFrom
+      dsimp [Exec.Config.final?, Exec.step]
+      conv => lhs; unfold Exec.runFrom
+      dsimp [Exec.Config.final?, Exec.step, Exec.evalArgs, Exec.onRes, Environment.operands]
+      rw [answer]
+    refine ⟨⟨hperm, ?_⟩, ValidTrace.request validHist, ?_⟩
+    · simp only [reportObservation, hrun, Exec.step, Exec.evalArgs, Exec.onRes,
+        Environment.operands, Environment.adapter, Option.map_some]
+      rfl
+    · obtain ⟨k, req⟩ := q
+      exact validEnv.mayBlock blocked
+
+/-- Fault: records the response event and preserves the store, but returns `none` as the C1
+primitive result value instead of `some ⟨q.1, reply⟩`. -/
+def dropReturnValueOracle {S : EventSignature} {Input : Type}
+    (E : Environment S Input) (input : Input) : Exec.Oracle (Environment.operands S) :=
+  fun hist q _ _ store =>
+    (E.reply input (Environment.history hist ++ [.request q]) q.1 q.2).map fun reply =>
+      ⟨some (q, ⟨q.1, reply⟩), .ok none, store⟩
 
 /-- Fault: discards every typed handler answer before C1 can consume it. -/
 def noReplyOracle {S : EventSignature} {Input : Type}
@@ -171,7 +237,7 @@ def Demo.envHandler : Environment Demo.signature Unit where
 
 /-- Helper (computation). Proves that `Demo.envHandler` satisfies `Environment.Valid` for
 `Demo.contract` by arithmetic (`n * 2 = n + n`), feeding the closed `Instance` and `Planted`
-witnesses of `environment_respond_valid` and `environment_stepHistory_valid`.
+witnesses of `environment_run_reply` and `environment_stepHistory_valid`.
 (approved: PENDING) -/
 theorem Demo.envHandler_valid : Environment.Valid Demo.contract Demo.envHandler := by
   constructor
@@ -186,30 +252,64 @@ theorem Demo.envHandler_valid : Environment.Valid Demo.contract Demo.envHandler 
     simp [Demo.envHandler] at h
 
 /-- Instance (law `ConcreteSpec.Core.Observe.environment_run_reply`, case `doubling_c1_call`). -/
-example : Exec.runFrom ⟨[]⟩ (Demo.envHandler.oracle ()) 1 []
-      (Environment.call Demo.signature ⟨.double, 3⟩ ⟨7⟩) =
-      ⟨[] ++ [(⟨.double, 3⟩, ⟨.double, 6⟩)], .final .normal ()⟩ ∧
-    CompleteTrace Demo.contract () ((Environment.adapter Demo.signature).project
-      (Exec.runFrom ⟨[]⟩ (Demo.envHandler.oracle ()) 1 []
-        (Environment.call Demo.signature ⟨.double, 3⟩ ⟨7⟩)).events) :=
+example : (∀ reply, Demo.envHandler.reply () (Environment.history [] ++ [.request ⟨.double, 3⟩]) .double 3 = some reply →
+      Exec.runFrom (O := Environment.operands Demo.signature) ⟨[]⟩ (Demo.envHandler.oracle ()) 4 []
+          (Environment.call Demo.signature ⟨.double, 3⟩ ⟨7⟩ 7) =
+        ⟨[] ++ [(⟨.double, 3⟩, ⟨.double, reply⟩)], .final (.returned (some ⟨.double, reply⟩)) 7⟩ ∧
+      (∃ permitted,
+        reportObservation ⟨[]⟩ (Environment.adapter Demo.signature) Demo.contract ()
+          (Exec.runFrom (O := Environment.operands Demo.signature) ⟨[]⟩ (Demo.envHandler.oracle ()) 4 []
+            (Environment.call Demo.signature ⟨.double, 3⟩ ⟨7⟩ 7)) permitted =
+          some (.terminal ⟨Environment.history [] ++ [.request ⟨.double, 3⟩, .response ⟨.double, reply⟩],
+            .exited 0, 7⟩)) ∧
+      CompleteTrace Demo.contract ()
+        ((Environment.adapter Demo.signature).project
+          (Exec.runFrom (O := Environment.operands Demo.signature) ⟨[]⟩ (Demo.envHandler.oracle ()) 4 []
+            (Environment.call Demo.signature ⟨.double, 3⟩ ⟨7⟩ 7)).events)) ∧
+    (Demo.envHandler.reply () (Environment.history [] ++ [.request ⟨.double, 3⟩]) .double 3 = none →
+      (∃ permitted,
+        reportObservation ⟨[]⟩ (Environment.adapter Demo.signature) Demo.contract ()
+          (Exec.runFrom (O := Environment.operands Demo.signature) ⟨[]⟩ (Demo.envHandler.oracle ()) 4 []
+            (Environment.call Demo.signature ⟨.double, 3⟩ ⟨7⟩ 7)) permitted =
+          some (.blocked (Environment.history [] ++ [.request ⟨.double, 3⟩]) ⟨.double, 3⟩)) ∧
+      ValidTrace Demo.contract () (some ⟨.double, 3⟩) (Environment.history [] ++ [.request ⟨.double, 3⟩]) ∧
+      Demo.contract.mayBlock () (Environment.history [] ++ [.request ⟨.double, 3⟩]) ⟨.double, 3⟩) :=
   environment_run_reply Demo.contract Demo.envHandler Demo.envHandler_valid () []
-    ⟨.double, 3⟩ ⟨7⟩ 6 .idle rfl
+    ⟨.double, 3⟩ ⟨7⟩ 7 .idle
 
 /-- Planted (law `ConcreteSpec.Core.Observe.environment_run_reply`, case `doubling_c1_call`,
-subject `ConcreteSpec.Core.Observe.Environment.oracle`, mutant `ConcreteSpec.Core.Observe.noReplyOracle`). -/
+subject `ConcreteSpec.Core.Observe.Environment.oracle`, mutant `ConcreteSpec.Core.Observe.dropReturnValueOracle`). -/
 example : Environment.Valid Demo.contract Demo.envHandler ∧
     CompleteTrace Demo.contract () (Environment.history []) ∧
-    Demo.envHandler.reply () (Environment.history [] ++ [.request ⟨.double, 3⟩]) .double 3 = some 6 ∧
-    ¬ (Exec.runFrom ⟨[]⟩ (noReplyOracle Demo.envHandler ()) 1 []
-        (Environment.call Demo.signature ⟨.double, 3⟩ ⟨7⟩) =
-        ⟨[] ++ [(⟨.double, 3⟩, ⟨.double, 6⟩)], .final .normal ()⟩ ∧
-      CompleteTrace Demo.contract () ((Environment.adapter Demo.signature).project
-        (Exec.runFrom ⟨[]⟩ (noReplyOracle Demo.envHandler ()) 1 []
-          (Environment.call Demo.signature ⟨.double, 3⟩ ⟨7⟩)).events)) := by
-  refine ⟨Demo.envHandler_valid, .idle, rfl, ?_⟩
+    ¬ ((∀ reply, Demo.envHandler.reply () (Environment.history [] ++ [.request ⟨.double, 3⟩]) .double 3 = some reply →
+        Exec.runFrom (O := Environment.operands Demo.signature) ⟨[]⟩ (dropReturnValueOracle Demo.envHandler ()) 4 []
+            (Environment.call Demo.signature ⟨.double, 3⟩ ⟨7⟩ 7) =
+          ⟨[] ++ [(⟨.double, 3⟩, ⟨.double, reply⟩)], .final (.returned (some ⟨.double, reply⟩)) 7⟩ ∧
+        (∃ permitted,
+          reportObservation ⟨[]⟩ (Environment.adapter Demo.signature) Demo.contract ()
+            (Exec.runFrom (O := Environment.operands Demo.signature) ⟨[]⟩ (dropReturnValueOracle Demo.envHandler ()) 4 []
+              (Environment.call Demo.signature ⟨.double, 3⟩ ⟨7⟩ 7)) permitted =
+            some (.terminal ⟨Environment.history [] ++ [.request ⟨.double, 3⟩, .response ⟨.double, reply⟩],
+              .exited 0, 7⟩)) ∧
+        CompleteTrace Demo.contract ()
+          ((Environment.adapter Demo.signature).project
+            (Exec.runFrom (O := Environment.operands Demo.signature) ⟨[]⟩ (dropReturnValueOracle Demo.envHandler ()) 4 []
+              (Environment.call Demo.signature ⟨.double, 3⟩ ⟨7⟩ 7)).events)) ∧
+      (Demo.envHandler.reply () (Environment.history [] ++ [.request ⟨.double, 3⟩]) .double 3 = none →
+        (∃ permitted,
+          reportObservation ⟨[]⟩ (Environment.adapter Demo.signature) Demo.contract ()
+            (Exec.runFrom (O := Environment.operands Demo.signature) ⟨[]⟩ (dropReturnValueOracle Demo.envHandler ()) 4 []
+              (Environment.call Demo.signature ⟨.double, 3⟩ ⟨7⟩ 7)) permitted =
+            some (.blocked (Environment.history [] ++ [.request ⟨.double, 3⟩]) ⟨.double, 3⟩)) ∧
+        ValidTrace Demo.contract () (some ⟨.double, 3⟩) (Environment.history [] ++ [.request ⟨.double, 3⟩]) ∧
+        Demo.contract.mayBlock () (Environment.history [] ++ [.request ⟨.double, 3⟩]) ⟨.double, 3⟩)) := by
+  refine ⟨Demo.envHandler_valid, .idle, ?_⟩
   intro invalid
-  have ending := congrArg Exec.Report.ending invalid.1
-  cases ending
+  have hrun := (invalid.1 6 rfl).1
+  have hend := congrArg Exec.Report.ending hrun
+  change (Exec.Ending.final (.returned none) 7 : Exec.Ending (Environment.operands Demo.signature)) =
+    .final (.returned (some ⟨.double, 6⟩)) 7 at hend
+  cases hend
 
 /-- Computation example for the handler admission bridge, not independent law evidence. -/
 example : Responds Demo.contract () ([] ++ [.request ⟨.double, 3⟩]) ⟨.double, 3⟩
@@ -300,29 +400,61 @@ theorem prior_valid : CompleteTrace contract () (Environment.history prior) :=
   .response (.request .idle) (RequestResponse.matched _ _ _) rfl
 
 /-- Instance (law `ConcreteSpec.Core.Observe.environment_run_reply`, case `history_sensitive_c1_call`). -/
-example : Exec.runFrom ⟨[]⟩ (handler.oracle ()) 1 prior
-      (Environment.call Demo.signature ⟨.double, 3⟩ ⟨7⟩) =
-      ⟨prior ++ [(⟨.double, 3⟩, ⟨.double, 9⟩)], .final .normal ()⟩ ∧
-    CompleteTrace contract () ((Environment.adapter Demo.signature).project
-      (Exec.runFrom ⟨[]⟩ (handler.oracle ()) 1 prior
-        (Environment.call Demo.signature ⟨.double, 3⟩ ⟨7⟩)).events) :=
-  environment_run_reply contract handler handler_valid () prior ⟨.double, 3⟩ ⟨7⟩ 9 prior_valid rfl
+example : (∀ reply, handler.reply () (Environment.history prior ++ [.request ⟨.double, 3⟩]) .double 3 = some reply →
+      Exec.runFrom (O := Environment.operands Demo.signature) ⟨[]⟩ (handler.oracle ()) 4 prior
+          (Environment.call Demo.signature ⟨.double, 3⟩ ⟨7⟩ 7) =
+        ⟨prior ++ [(⟨.double, 3⟩, ⟨.double, reply⟩)], .final (.returned (some ⟨.double, reply⟩)) 7⟩ ∧
+      (∃ permitted,
+        reportObservation ⟨[]⟩ (Environment.adapter Demo.signature) contract ()
+          (Exec.runFrom (O := Environment.operands Demo.signature) ⟨[]⟩ (handler.oracle ()) 4 prior
+            (Environment.call Demo.signature ⟨.double, 3⟩ ⟨7⟩ 7)) permitted =
+          some (.terminal ⟨Environment.history prior ++ [.request ⟨.double, 3⟩, .response ⟨.double, reply⟩],
+            .exited 0, 7⟩)) ∧
+      CompleteTrace contract ()
+        ((Environment.adapter Demo.signature).project
+          (Exec.runFrom (O := Environment.operands Demo.signature) ⟨[]⟩ (handler.oracle ()) 4 prior
+            (Environment.call Demo.signature ⟨.double, 3⟩ ⟨7⟩ 7)).events)) ∧
+    (handler.reply () (Environment.history prior ++ [.request ⟨.double, 3⟩]) .double 3 = none →
+      (∃ permitted,
+        reportObservation ⟨[]⟩ (Environment.adapter Demo.signature) contract ()
+          (Exec.runFrom (O := Environment.operands Demo.signature) ⟨[]⟩ (handler.oracle ()) 4 prior
+            (Environment.call Demo.signature ⟨.double, 3⟩ ⟨7⟩ 7)) permitted =
+          some (.blocked (Environment.history prior ++ [.request ⟨.double, 3⟩]) ⟨.double, 3⟩)) ∧
+      ValidTrace contract () (some ⟨.double, 3⟩) (Environment.history prior ++ [.request ⟨.double, 3⟩]) ∧
+      contract.mayBlock () (Environment.history prior ++ [.request ⟨.double, 3⟩]) ⟨.double, 3⟩) :=
+  environment_run_reply contract handler handler_valid () prior ⟨.double, 3⟩ ⟨7⟩ 7 prior_valid
 
 /-- Planted (law `ConcreteSpec.Core.Observe.environment_run_reply`, case `history_sensitive_c1_call`,
 subject `ConcreteSpec.Core.Observe.Environment.oracle`, mutant `ConcreteSpec.Core.Observe.forgetHistoryOracle`). -/
 example : Environment.Valid contract handler ∧
     CompleteTrace contract () (Environment.history prior) ∧
-    handler.reply () (Environment.history prior ++ [.request ⟨.double, 3⟩]) .double 3 = some 9 ∧
-    ¬ (Exec.runFrom ⟨[]⟩ (forgetHistoryOracle handler ()) 1 prior
-        (Environment.call Demo.signature ⟨.double, 3⟩ ⟨7⟩) =
-        ⟨prior ++ [(⟨.double, 3⟩, ⟨.double, 9⟩)], .final .normal ()⟩ ∧
-      CompleteTrace contract () ((Environment.adapter Demo.signature).project
-        (Exec.runFrom ⟨[]⟩ (forgetHistoryOracle handler ()) 1 prior
-          (Environment.call Demo.signature ⟨.double, 3⟩ ⟨7⟩)).events)) := by
-  refine ⟨handler_valid, prior_valid, rfl, ?_⟩
+    ¬ ((∀ reply, handler.reply () (Environment.history prior ++ [.request ⟨.double, 3⟩]) .double 3 = some reply →
+        Exec.runFrom (O := Environment.operands Demo.signature) ⟨[]⟩ (forgetHistoryOracle handler ()) 4 prior
+            (Environment.call Demo.signature ⟨.double, 3⟩ ⟨7⟩ 7) =
+          ⟨prior ++ [(⟨.double, 3⟩, ⟨.double, reply⟩)], .final (.returned (some ⟨.double, reply⟩)) 7⟩ ∧
+        (∃ permitted,
+          reportObservation ⟨[]⟩ (Environment.adapter Demo.signature) contract ()
+            (Exec.runFrom (O := Environment.operands Demo.signature) ⟨[]⟩ (forgetHistoryOracle handler ()) 4 prior
+              (Environment.call Demo.signature ⟨.double, 3⟩ ⟨7⟩ 7)) permitted =
+            some (.terminal ⟨Environment.history prior ++ [.request ⟨.double, 3⟩, .response ⟨.double, reply⟩],
+              .exited 0, 7⟩)) ∧
+        CompleteTrace contract ()
+          ((Environment.adapter Demo.signature).project
+            (Exec.runFrom (O := Environment.operands Demo.signature) ⟨[]⟩ (forgetHistoryOracle handler ()) 4 prior
+              (Environment.call Demo.signature ⟨.double, 3⟩ ⟨7⟩ 7)).events)) ∧
+      (handler.reply () (Environment.history prior ++ [.request ⟨.double, 3⟩]) .double 3 = none →
+        (∃ permitted,
+          reportObservation ⟨[]⟩ (Environment.adapter Demo.signature) contract ()
+            (Exec.runFrom (O := Environment.operands Demo.signature) ⟨[]⟩ (forgetHistoryOracle handler ()) 4 prior
+              (Environment.call Demo.signature ⟨.double, 3⟩ ⟨7⟩ 7)) permitted =
+            some (.blocked (Environment.history prior ++ [.request ⟨.double, 3⟩]) ⟨.double, 3⟩)) ∧
+        ValidTrace contract () (some ⟨.double, 3⟩) (Environment.history prior ++ [.request ⟨.double, 3⟩]) ∧
+        contract.mayBlock () (Environment.history prior ++ [.request ⟨.double, 3⟩]) ⟨.double, 3⟩)) := by
+  refine ⟨handler_valid, prior_valid, ?_⟩
   intro invalid
+  have hrun := (invalid.1 9 rfl).1
   have responses := congrArg (fun r : Exec.Report (Environment.operands Demo.signature) =>
-    r.events.map fun pair => pair.2.2) invalid.1
+    r.events.map fun pair => pair.2.2) hrun
   change [3, 7] = [3, 9] at responses
   exact (by decide : ([3, 7] : List Nat) ≠ [3, 9]) responses
 
@@ -359,7 +491,7 @@ def envHandler : Environment signature Unit where
 
 /-- Helper (computation). Proves that `RoutingDemo.envHandler` satisfies `Environment.Valid` for
 both `.twice` and `.fourTimes` operation kinds, feeding the closed `Instance` and `Planted`
-witnesses of `environment_respond_valid` and `environment_stepHistory_valid`.
+witnesses of `environment_run_reply` and `environment_stepHistory_valid`.
 (approved: PENDING) -/
 theorem envHandler_valid : Environment.Valid contract envHandler := by
   constructor
@@ -383,29 +515,61 @@ theorem envHandler_valid : Environment.Valid contract envHandler := by
     cases k <;> simp [envHandler] at h
 
 /-- Instance (law `ConcreteSpec.Core.Observe.environment_run_reply`, case `routed_c1_call`). -/
-example : Exec.runFrom ⟨[]⟩ (envHandler.oracle ()) 1 []
-      (Environment.call signature ⟨.fourTimes, 3⟩ ⟨7⟩) =
-      ⟨[] ++ [(⟨.fourTimes, 3⟩, ⟨.fourTimes, 12⟩)], .final .normal ()⟩ ∧
-    CompleteTrace contract () ((Environment.adapter signature).project
-      (Exec.runFrom ⟨[]⟩ (envHandler.oracle ()) 1 []
-        (Environment.call signature ⟨.fourTimes, 3⟩ ⟨7⟩)).events) :=
+example : (∀ reply, envHandler.reply () (Environment.history [] ++ [.request ⟨.fourTimes, 3⟩]) .fourTimes 3 = some reply →
+      Exec.runFrom (O := Environment.operands signature) ⟨[]⟩ (envHandler.oracle ()) 4 []
+          (Environment.call signature ⟨.fourTimes, 3⟩ ⟨7⟩ ()) =
+        ⟨[] ++ [(⟨.fourTimes, 3⟩, ⟨.fourTimes, reply⟩)], .final (.returned (some ⟨.fourTimes, reply⟩)) ()⟩ ∧
+      (∃ permitted,
+        reportObservation ⟨[]⟩ (Environment.adapter signature) contract ()
+          (Exec.runFrom (O := Environment.operands signature) ⟨[]⟩ (envHandler.oracle ()) 4 []
+            (Environment.call signature ⟨.fourTimes, 3⟩ ⟨7⟩ ())) permitted =
+          some (.terminal ⟨Environment.history [] ++ [.request ⟨.fourTimes, 3⟩, .response ⟨.fourTimes, reply⟩],
+            .exited 0, ()⟩)) ∧
+      CompleteTrace contract ()
+        ((Environment.adapter signature).project
+          (Exec.runFrom (O := Environment.operands signature) ⟨[]⟩ (envHandler.oracle ()) 4 []
+            (Environment.call signature ⟨.fourTimes, 3⟩ ⟨7⟩ ())).events)) ∧
+    (envHandler.reply () (Environment.history [] ++ [.request ⟨.fourTimes, 3⟩]) .fourTimes 3 = none →
+      (∃ permitted,
+        reportObservation ⟨[]⟩ (Environment.adapter signature) contract ()
+          (Exec.runFrom (O := Environment.operands signature) ⟨[]⟩ (envHandler.oracle ()) 4 []
+            (Environment.call signature ⟨.fourTimes, 3⟩ ⟨7⟩ ())) permitted =
+          some (.blocked (Environment.history [] ++ [.request ⟨.fourTimes, 3⟩]) ⟨.fourTimes, 3⟩)) ∧
+      ValidTrace contract () (some ⟨.fourTimes, 3⟩) (Environment.history [] ++ [.request ⟨.fourTimes, 3⟩]) ∧
+      contract.mayBlock () (Environment.history [] ++ [.request ⟨.fourTimes, 3⟩]) ⟨.fourTimes, 3⟩) :=
   environment_run_reply contract envHandler envHandler_valid () []
-    ⟨.fourTimes, 3⟩ ⟨7⟩ 12 .idle rfl
+    ⟨.fourTimes, 3⟩ ⟨7⟩ () .idle
 
 /-- Planted (law `ConcreteSpec.Core.Observe.environment_run_reply`, case `routed_c1_call`,
 subject `ConcreteSpec.Core.Observe.Environment.oracle`, mutant `ConcreteSpec.Core.Observe.noReplyOracle`). -/
 example : Environment.Valid contract envHandler ∧
     CompleteTrace contract () (Environment.history []) ∧
-    envHandler.reply () (Environment.history [] ++ [.request ⟨.fourTimes, 3⟩]) .fourTimes 3 = some 12 ∧
-    ¬ (Exec.runFrom ⟨[]⟩ (noReplyOracle envHandler ()) 1 []
-        (Environment.call signature ⟨.fourTimes, 3⟩ ⟨7⟩) =
-        ⟨[] ++ [(⟨.fourTimes, 3⟩, ⟨.fourTimes, 12⟩)], .final .normal ()⟩ ∧
-      CompleteTrace contract () ((Environment.adapter signature).project
-        (Exec.runFrom ⟨[]⟩ (noReplyOracle envHandler ()) 1 []
-          (Environment.call signature ⟨.fourTimes, 3⟩ ⟨7⟩)).events)) := by
-  refine ⟨envHandler_valid, .idle, rfl, ?_⟩
+    ¬ ((∀ reply, envHandler.reply () (Environment.history [] ++ [.request ⟨.fourTimes, 3⟩]) .fourTimes 3 = some reply →
+        Exec.runFrom (O := Environment.operands signature) ⟨[]⟩ (noReplyOracle envHandler ()) 4 []
+            (Environment.call signature ⟨.fourTimes, 3⟩ ⟨7⟩ ()) =
+          ⟨[] ++ [(⟨.fourTimes, 3⟩, ⟨.fourTimes, reply⟩)], .final (.returned (some ⟨.fourTimes, reply⟩)) ()⟩ ∧
+        (∃ permitted,
+          reportObservation ⟨[]⟩ (Environment.adapter signature) contract ()
+            (Exec.runFrom (O := Environment.operands signature) ⟨[]⟩ (noReplyOracle envHandler ()) 4 []
+              (Environment.call signature ⟨.fourTimes, 3⟩ ⟨7⟩ ())) permitted =
+            some (.terminal ⟨Environment.history [] ++ [.request ⟨.fourTimes, 3⟩, .response ⟨.fourTimes, reply⟩],
+              .exited 0, ()⟩)) ∧
+        CompleteTrace contract ()
+          ((Environment.adapter signature).project
+            (Exec.runFrom (O := Environment.operands signature) ⟨[]⟩ (noReplyOracle envHandler ()) 4 []
+              (Environment.call signature ⟨.fourTimes, 3⟩ ⟨7⟩ ())).events)) ∧
+      (envHandler.reply () (Environment.history [] ++ [.request ⟨.fourTimes, 3⟩]) .fourTimes 3 = none →
+        (∃ permitted,
+          reportObservation ⟨[]⟩ (Environment.adapter signature) contract ()
+            (Exec.runFrom (O := Environment.operands signature) ⟨[]⟩ (noReplyOracle envHandler ()) 4 []
+              (Environment.call signature ⟨.fourTimes, 3⟩ ⟨7⟩ ())) permitted =
+            some (.blocked (Environment.history [] ++ [.request ⟨.fourTimes, 3⟩]) ⟨.fourTimes, 3⟩)) ∧
+        ValidTrace contract () (some ⟨.fourTimes, 3⟩) (Environment.history [] ++ [.request ⟨.fourTimes, 3⟩]) ∧
+        contract.mayBlock () (Environment.history [] ++ [.request ⟨.fourTimes, 3⟩]) ⟨.fourTimes, 3⟩)) := by
+  refine ⟨envHandler_valid, .idle, ?_⟩
   intro invalid
-  have ending := congrArg Exec.Report.ending invalid.1
+  have hrun := (invalid.1 12 rfl).1
+  have ending := congrArg Exec.Report.ending hrun
   cases ending
 
 /-- Computation example for the handler admission bridge, not independent law evidence. -/
@@ -461,5 +625,94 @@ example : Environment.Valid contract envHandler ∧
   cases hpend
 
 end RoutingDemo
+
+namespace BlockingEnvDemo
+
+/-- Contract permitting blocking while still requiring doubled responses when answered. -/
+def contract : OperationContract Demo.signature where
+  Input := Unit
+  allows := fun _ _ q r => q.2 * 2 = r.2
+  mayBlock := fun _ _ _ => True
+
+/-- Executable handler that leaves requests unanswered (`.blocked`). -/
+def blockingHandler : Environment Demo.signature Unit where
+  reply := fun _ _ _ _ => none
+
+/-- Helper (computation). `blockingHandler` satisfies `Environment.Valid` for `BlockingEnvDemo.contract`
+because `reply` is `none` and `mayBlock` is permitted. (approved: PENDING) -/
+theorem blockingHandler_valid : Environment.Valid contract blockingHandler := by
+  constructor
+  · intro input history k req resp h
+    cases h
+  · intro input history k req _
+    trivial
+
+/-- Fault: fabricates a self-echoed reply when the handler returns `none` instead of leaving
+the C1 request unanswered. -/
+def fabricateReplyOnBlockOracle (_E : Environment Demo.signature Unit) (_input : Unit) :
+    Exec.Oracle (Environment.operands Demo.signature) :=
+  fun _ q _ _ store => some ⟨some (q, q), .ok (some q), store⟩
+
+/-- Instance (law `ConcreteSpec.Core.Observe.environment_run_reply`, case `blocking_c1_call`). -/
+example : (∀ reply, blockingHandler.reply () (Environment.history [] ++ [.request ⟨.double, 3⟩]) .double 3 = some reply →
+      Exec.runFrom (O := Environment.operands Demo.signature) ⟨[]⟩ (blockingHandler.oracle ()) 4 []
+          (Environment.call Demo.signature ⟨.double, 3⟩ ⟨7⟩ 7) =
+        ⟨[] ++ [(⟨.double, 3⟩, ⟨.double, reply⟩)], .final (.returned (some ⟨.double, reply⟩)) 7⟩ ∧
+      (∃ permitted,
+        reportObservation ⟨[]⟩ (Environment.adapter Demo.signature) contract ()
+          (Exec.runFrom (O := Environment.operands Demo.signature) ⟨[]⟩ (blockingHandler.oracle ()) 4 []
+            (Environment.call Demo.signature ⟨.double, 3⟩ ⟨7⟩ 7)) permitted =
+          some (.terminal ⟨Environment.history [] ++ [.request ⟨.double, 3⟩, .response ⟨.double, reply⟩],
+            .exited 0, 7⟩)) ∧
+      CompleteTrace contract ()
+        ((Environment.adapter Demo.signature).project
+          (Exec.runFrom (O := Environment.operands Demo.signature) ⟨[]⟩ (blockingHandler.oracle ()) 4 []
+            (Environment.call Demo.signature ⟨.double, 3⟩ ⟨7⟩ 7)).events)) ∧
+    (blockingHandler.reply () (Environment.history [] ++ [.request ⟨.double, 3⟩]) .double 3 = none →
+      (∃ permitted,
+        reportObservation ⟨[]⟩ (Environment.adapter Demo.signature) contract ()
+          (Exec.runFrom (O := Environment.operands Demo.signature) ⟨[]⟩ (blockingHandler.oracle ()) 4 []
+            (Environment.call Demo.signature ⟨.double, 3⟩ ⟨7⟩ 7)) permitted =
+          some (.blocked (Environment.history [] ++ [.request ⟨.double, 3⟩]) ⟨.double, 3⟩)) ∧
+      ValidTrace contract () (some ⟨.double, 3⟩) (Environment.history [] ++ [.request ⟨.double, 3⟩]) ∧
+      contract.mayBlock () (Environment.history [] ++ [.request ⟨.double, 3⟩]) ⟨.double, 3⟩) :=
+  environment_run_reply contract blockingHandler blockingHandler_valid () []
+    ⟨.double, 3⟩ ⟨7⟩ 7 .idle
+
+/-- Planted (law `ConcreteSpec.Core.Observe.environment_run_reply`, case `blocking_c1_call`,
+subject `ConcreteSpec.Core.Observe.Environment.oracle`, mutant `ConcreteSpec.Core.Observe.BlockingEnvDemo.fabricateReplyOnBlockOracle`). -/
+example : Environment.Valid contract blockingHandler ∧
+    CompleteTrace contract () (Environment.history []) ∧
+    ¬ ((∀ reply, blockingHandler.reply () (Environment.history [] ++ [.request ⟨.double, 3⟩]) .double 3 = some reply →
+        Exec.runFrom (O := Environment.operands Demo.signature) ⟨[]⟩ (fabricateReplyOnBlockOracle blockingHandler ()) 4 []
+            (Environment.call Demo.signature ⟨.double, 3⟩ ⟨7⟩ 7) =
+          ⟨[] ++ [(⟨.double, 3⟩, ⟨.double, reply⟩)], .final (.returned (some ⟨.double, reply⟩)) 7⟩ ∧
+        (∃ permitted,
+          reportObservation ⟨[]⟩ (Environment.adapter Demo.signature) contract ()
+            (Exec.runFrom (O := Environment.operands Demo.signature) ⟨[]⟩ (fabricateReplyOnBlockOracle blockingHandler ()) 4 []
+              (Environment.call Demo.signature ⟨.double, 3⟩ ⟨7⟩ 7)) permitted =
+            some (.terminal ⟨Environment.history [] ++ [.request ⟨.double, 3⟩, .response ⟨.double, reply⟩],
+              .exited 0, 7⟩)) ∧
+        CompleteTrace contract ()
+          ((Environment.adapter Demo.signature).project
+            (Exec.runFrom (O := Environment.operands Demo.signature) ⟨[]⟩ (fabricateReplyOnBlockOracle blockingHandler ()) 4 []
+              (Environment.call Demo.signature ⟨.double, 3⟩ ⟨7⟩ 7)).events)) ∧
+      (blockingHandler.reply () (Environment.history [] ++ [.request ⟨.double, 3⟩]) .double 3 = none →
+        (∃ permitted,
+          reportObservation ⟨[]⟩ (Environment.adapter Demo.signature) contract ()
+            (Exec.runFrom (O := Environment.operands Demo.signature) ⟨[]⟩ (fabricateReplyOnBlockOracle blockingHandler ()) 4 []
+              (Environment.call Demo.signature ⟨.double, 3⟩ ⟨7⟩ 7)) permitted =
+            some (.blocked (Environment.history [] ++ [.request ⟨.double, 3⟩]) ⟨.double, 3⟩)) ∧
+        ValidTrace contract () (some ⟨.double, 3⟩) (Environment.history [] ++ [.request ⟨.double, 3⟩]) ∧
+        contract.mayBlock () (Environment.history [] ++ [.request ⟨.double, 3⟩]) ⟨.double, 3⟩)) := by
+  refine ⟨blockingHandler_valid, .idle, ?_⟩
+  intro invalid
+  obtain ⟨permitted, hrep⟩ := (invalid.2 rfl).1
+  change (some (.terminal ⟨[Demo.request 3, Demo.response 3], .exited 0, 7⟩) :
+      Option (FullObservation Demo.signature)) =
+    some (.blocked [Demo.request 3] ⟨.double, 3⟩) at hrep
+  cases hrep
+
+end BlockingEnvDemo
 
 end ConcreteSpec.Core.Observe

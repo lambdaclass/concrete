@@ -546,18 +546,21 @@ def launchObservation {α : Type} [DecidableEq α] (required configured : List �
 /-! ## Examples -/
 
 /-- C1 operand interface for typed environment calls. Requests and replies retain their dependent
-operation identities; ordinary operand evaluation has no external effect. -/
+operation identities, local variables hold returned `Option (Response S)` values read by `eval`,
+and the C1 store carries the signature's externally visible state `S.State`. -/
 abbrev Environment.operands (S : EventSignature) : Exec.Operands where
   Val := Option (Response S)
-  Expr := Option (Response S)
+  Expr := Var
   Ty := Unit
-  Store := Unit
+  Store := S.State
   Prim := Request S
   Event := Request S × Response S
   unitVal := none
   unitTy := ()
   isCopy := fun _ => true
-  eval := fun _ st value => .ok (value, st)
+  eval := fun L st x => match AList.lookup L x with
+    | some value => .ok (value, st)
+    | none => .stuck
   life := fun _ st => some st
   test := fun _ => none
   allows := fun _ _ _ _ => true
@@ -576,19 +579,22 @@ def Environment.oracle {S : EventSignature} {Input : Type}
     (E.reply input (Environment.history hist ++ [.request q]) q.1 q.2).map fun reply =>
       ⟨some (q, ⟨q.1, reply⟩), .ok (some ⟨q.1, reply⟩), store⟩
 
-/-- The observation adapter for typed environment calls. This adapter does not compute or check
-handler responses; the executable oracle supplies them. -/
+/-- The observation adapter for typed environment calls. Returned `some r` values map to exit
+status `0` and the C1 store `S.State` projects directly as the externally visible state; this
+adapter does not compute or check handler responses. -/
 def Environment.adapter (S : EventSignature) : ExecAdapter (Environment.operands S) S where
   events := fun pair => [.request pair.1, .response pair.2]
   request := fun q _ _ _ => some q
-  status := fun _ => none
-  state := fun _ => S.initState
+  status := fun v => match v with | some _ => some 0 | none => none
+  state := id
   sites := []
 
-/-- A single typed call, used by the operational handler laws for any signature and handler. -/
-def Environment.call (S : EventSignature) (q : Request S) (site : SiteId) :
+/-- Execute a single typed call in C1 from `store`: bind the primitive's returned response value to
+local variable `⟨"reply", 0⟩` and return that bound local so the `.final (.returned v) store` ending
+observes both the returned response value and the preserved C1 store. -/
+def Environment.call (S : EventSignature) (q : Request S) (site : SiteId) (store : S.State) :
     Exec.Config (Environment.operands S) :=
-  ⟨.exec (.prim none q [] site), [], (), []⟩
+  ⟨.exec (.seq (.prim (some ⟨"reply", 0⟩) q [] site) (.ret ⟨"reply", 0⟩ site)), [], store, []⟩
 
 namespace Demo
 
