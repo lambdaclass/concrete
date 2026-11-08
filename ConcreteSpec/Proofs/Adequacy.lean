@@ -878,6 +878,111 @@ def spin_infinite : InfiniteExecution prog env spinConfig where
 theorem spin_silent_divergence : SilentDivergence prog env spinConfig :=
   ⟨spin_infinite, ⟨0, fun n => by simp [spin_infinite, spinPosition]⟩⟩
 
+/-! ### Exact terminal-query witnesses -/
+
+/-- A configuration whose first machine step requests `log 1`. -/
+def terminalConfig : Config ops := ⟨.exec (.prim none .log [.lit 1] s), [], .init, []⟩
+
+/-- The unique first query issued by `terminalConfig`. -/
+def terminalQuery : Query ops := Query.issue [] .log [1] s .init []
+
+/-- A planted fabrication: the same request with occurrence `1` instead of its actual occurrence
+`0`. -/
+def fabricatedTerminalQuery : Query ops := { terminalQuery with occurrence := 1 }
+
+/-- A query oracle that never answers. -/
+def noAnswerOracle : QueryOracle ops := fun _ => none
+
+/-- Non-vacuous soundness instance: the concrete run reports exactly the authenticated query. -/
+example : runFromQ prog noAnswerOracle 1 [] [] terminalConfig =
+    ⟨[], [terminalQuery], .noAnswer terminalConfig⟩ := rfl
+
+/-- The exact terminal query is accepted together with its conclusion. -/
+example : ∃ hc : Conclusion prog noAnswerOracle (.noAnswer terminalConfig)
+    ⟨terminalConfig, [], []⟩, ReportedQueries prog noAnswerOracle hc [terminalQuery] := by
+  refine ⟨.noAnswer rfl rfl, ?_⟩
+  exact ReportedQueries.noAnswer (P := prog) (ρ := noAnswerOracle) (c := terminalConfig)
+    (events := []) (issued := []) (p := .log) (vs := [1]) (site := s) (st := .init) rfl rfl
+
+/-- Planted counter-example: no justification accepts a fabricated occurrence number. -/
+example : ¬ ∃ hc : Conclusion prog noAnswerOracle (.noAnswer terminalConfig)
+    ⟨terminalConfig, [], []⟩,
+    ReportedQueries prog noAnswerOracle hc [fabricatedTerminalQuery] := by
+  rintro ⟨hc, hr⟩
+  cases hc
+  cases hr
+
+/-- An oracle whose answer has the wrong event for `log 1`. -/
+def badAnswerOracle : QueryOracle ops := fun _ => some ⟨some 5, .ok 0, .init⟩
+
+/-- A refused answer still records exactly the request that was issued. -/
+example : ∃ hc : Conclusion prog badAnswerOracle (.badAnswer terminalConfig)
+    ⟨terminalConfig, [], []⟩, ReportedQueries prog badAnswerOracle hc [terminalQuery] := by
+  refine ⟨.badAnswer rfl rfl rfl, ?_⟩
+  exact ReportedQueries.badAnswer (P := prog) (ρ := badAnswerOracle) (c := terminalConfig)
+    (events := []) (issued := []) (p := .log) (vs := [1]) (site := s) (st := .init) rfl rfl rfl
+
+/-- Planted counter-example: `badAnswer` cannot record the fabricated query either. -/
+example : ¬ ∃ hc : Conclusion prog badAnswerOracle (.badAnswer terminalConfig)
+    ⟨terminalConfig, [], []⟩,
+    ReportedQueries prog badAnswerOracle hc [fabricatedTerminalQuery] := by
+  rintro ⟨hc, hr⟩
+  cases hc
+  cases hr
+
+/-- A machine-stuck configuration with no request in flight. -/
+def terminalStuckConfig : Config ops := ⟨.trapped .abort s, [], .init, []⟩
+
+/-- Machine stuckness appends no query. -/
+example : ∃ hc : Conclusion prog noAnswerOracle (.stuck terminalStuckConfig)
+    ⟨terminalStuckConfig, [], []⟩, ReportedQueries prog noAnswerOracle hc [] := by
+  refine ⟨.stuck rfl, ?_⟩
+  exact ReportedQueries.stuck (P := prog) (ρ := noAnswerOracle) (c := terminalStuckConfig)
+    (events := []) (issued := []) rfl
+
+/-- Planted counter-example: no `stuck` justification lets machine stuckness acquire a query. -/
+example : ¬ ∃ hc : Conclusion prog noAnswerOracle (.stuck terminalStuckConfig)
+    ⟨terminalStuckConfig, [], []⟩, ReportedQueries prog noAnswerOracle hc [terminalQuery] := by
+  rintro ⟨hc, hr⟩
+  cases hc <;> cases hr <;> simp_all [terminalStuckConfig, step]
+
+/-- Demo operands whose lifecycle discipline refuses every primitive result binding. -/
+abbrev refusingBindOps : Operands := { ops with
+  life := fun e st => match e with
+    | .bind _ => none
+    | _ => some (DState.life e st) }
+
+/-- The empty program is sufficient for a direct primitive statement. -/
+def refusingBindProgram : Program refusingBindOps := ⟨[]⟩
+
+/-- A request whose otherwise valid answer cannot be bound to `x`. -/
+def refusingBindConfig : Config refusingBindOps :=
+  ⟨.exec (.prim (some x) .log [.lit 1] s), [], .init, []⟩
+
+/-- The allowed answer to `refusingBindConfig`'s request. -/
+def refusingBindOracle : QueryOracle refusingBindOps := fun _ => some ⟨some 1, .ok 0, .init⟩
+
+/-- The query issued before the continuation refuses the answer. -/
+def refusingBindQuery : Query refusingBindOps := Query.issue [] .log [1] s .init []
+
+/-- Continuation refusal records the authenticated terminal query. -/
+example : ∃ hc : Conclusion refusingBindProgram refusingBindOracle (.stuck refusingBindConfig)
+    ⟨refusingBindConfig, [], []⟩, ReportedQueries refusingBindProgram refusingBindOracle hc
+      [refusingBindQuery] := by
+  refine ⟨.stuckContinuation rfl rfl rfl rfl, ?_⟩
+  exact ReportedQueries.stuckContinuation (P := refusingBindProgram) (ρ := refusingBindOracle)
+    (c := refusingBindConfig) (events := []) (issued := []) (p := .log) (vs := [1]) (site := s)
+    (st := .init) rfl rfl rfl rfl
+
+/-- Planted counter-example: no `stuck` justification lets continuation refusal omit its query and
+masquerade as machine stuckness. -/
+example : ¬ ∃ hc : Conclusion refusingBindProgram refusingBindOracle (.stuck refusingBindConfig)
+    ⟨refusingBindConfig, [], []⟩, ReportedQueries refusingBindProgram refusingBindOracle hc [] := by
+  rintro ⟨hc, hr⟩
+  cases hc <;> cases hr <;>
+    simp_all [refusingBindConfig, refusingBindOps, ops, step, evalArgs, evalE, onRes,
+      Res.bind, Res.map]
+
 end Demo
 
 end ConcreteSpec.Core.Exec

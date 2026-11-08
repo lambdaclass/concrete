@@ -148,28 +148,33 @@ inductive ReportedQueries (P : Program O) (ρ : QueryOracle O) :
     {ending : Ending O} → {pos : Position O} → Conclusion P ρ ending pos →
       List (Query O) → Prop where
   | final {f} {pos : Position O} (hf : pos.config.final? = some f) :
-      ReportedQueries P ρ (Conclusion.final hf) pos.queries
+      ReportedQueries P ρ (ending := .final f) (pos := pos) (Conclusion.final hf) pos.queries
   | stuck {c : Config O} {events : List O.Event} {issued : List (Query O)}
-      (hs : step P c = none) : ReportedQueries P ρ (Conclusion.stuck hs) issued
+      (hs : step P c = none) :
+      ReportedQueries P ρ (ending := .stuck c) (pos := ⟨c, events, issued⟩)
+        (Conclusion.stuck hs) issued
   | stuckContinuation {c : Config O} {events : List O.Event} {issued : List (Query O)}
       {p vs site st k a} (hs : step P c = some (.request p vs site st k))
       (ha : answer ρ (Query.issue events p vs site st issued) = some a)
       (hallow : O.allows p vs st a = true) (hk : k a = none) :
-      ReportedQueries P ρ (Conclusion.stuckContinuation hs ha hallow hk)
+      ReportedQueries P ρ (ending := .stuck c) (pos := ⟨c, events, issued⟩)
+        (Conclusion.stuckContinuation hs ha hallow hk)
         (issued ++ [Query.issue events p vs site st issued])
   | noAnswer {c : Config O} {events : List O.Event} {issued : List (Query O)}
       {p vs site st k} (hs : step P c = some (.request p vs site st k))
       (ha : answer ρ (Query.issue events p vs site st issued) = none) :
-      ReportedQueries P ρ (Conclusion.noAnswer hs ha)
-        (issued ++ [Query.issue events p vs site st issued])
+      ReportedQueries P ρ (ending := .noAnswer c) (pos := ⟨c, events, issued⟩)
+        (Conclusion.noAnswer hs ha) (issued ++ [Query.issue events p vs site st issued])
   | badAnswer {c : Config O} {events : List O.Event} {issued : List (Query O)}
       {p vs site st k a} (hs : step P c = some (.request p vs site st k))
       (ha : answer ρ (Query.issue events p vs site st issued) = some a)
       (hallow : O.allows p vs st a = false) :
-      ReportedQueries P ρ (Conclusion.badAnswer hs ha hallow)
-        (issued ++ [Query.issue events p vs site st issued])
+      ReportedQueries P ρ (ending := .badAnswer c) (pos := ⟨c, events, issued⟩)
+        (Conclusion.badAnswer hs ha hallow) (issued ++ [Query.issue events p vs site st issued])
   | outOfFuel {c : Config O} {events : List O.Event} {issued : List (Query O)}
-      (hf : c.final? = none) : ReportedQueries P ρ (Conclusion.outOfFuel hf) issued
+      (hf : c.final? = none) :
+      ReportedQueries P ρ (ending := .outOfFuel c) (pos := ⟨c, events, issued⟩)
+        (Conclusion.outOfFuel hf) issued
 
 /-- An infinite maximal execution under one fixed query-level oracle. Every adjacent pair is a
 successful transition, so this excludes final, stuck, blocked, and bad-answer endpoints. -/
