@@ -1,0 +1,4 @@
+[piece 1 of 1: scripts]
+- ConcreteSpec/Spec/Adequacy.lean:149: `ReportedQueries.noAnswer` accepts an arbitrary `q`, without requiring it to equal `Query.issue events p vs site st issued` for the terminal request. The `badAnswer` and `stuckContinuation` constructors have the same gap. Consequently, `Conclusion ∧ ReportedQueries` accepts histories ending in a fabricated query, so the strengthened `runFromQ_sound` statement does not establish its claimed exact issued-query history.
+
+Repository reads failed because the sandbox could not start; owner-decision compliance could not be verified against `docs/decisions.md`.
