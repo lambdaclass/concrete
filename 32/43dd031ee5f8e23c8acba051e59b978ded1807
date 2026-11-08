@@ -1,0 +1,2 @@
+[piece 1 of 2: scripts]
+- scripts/land/acceptance_shim.sh:191: Short destinations are checked only under `refs/heads/`, but Git also resolves existing tags. If protected `refs/tags/alias` is symbolic to `refs/heads/main`, `git push --force origin wip/x:alias` checks the nonexistent `refs/heads/alias`, passes the shim, and updates `main` through the tag symref. Resolve short destinations as Git does, or refuse ambiguous destinations on protected repositories.
