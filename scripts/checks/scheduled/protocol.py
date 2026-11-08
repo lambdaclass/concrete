@@ -39,7 +39,10 @@ def inventory():
     spec = importlib.util.spec_from_file_location("ci2_binding", path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
-    return module.read_inventory()
+    try:
+        return module.read_inventory()
+    except (SystemExit, OSError, ValueError) as error:
+        raise EvidenceError(f"INCOMPLETE runner inventory: {error}") from error
 
 def validate(record, sha, tier, runners, repository=None):
     require(re.fullmatch(r"[0-9a-f]{40}", sha) is not None, "invalid full SHA")
@@ -60,7 +63,8 @@ def validate(record, sha, tier, runners, repository=None):
     require(start <= end, "completion precedes start")
     require(record.get("occurrence"), "missing occurrence")
     require(missing or record.get("artifact"), "missing result-index artifact")
-    require(missing or record.get("gate_revision") == sha, "wrong gate revision")
+    require(missing or record.get("gate_revision") == sha or
+            (record.get("status") == "INCOMPLETE" and record.get("gate_revision") is None), "wrong gate revision")
     gates = record.get("gates")
     require(isinstance(gates, list) and (missing or gates), "missing gate evidence")
     require(len({g["id"] for g in gates}) == len(gates), "duplicate gate evidence")

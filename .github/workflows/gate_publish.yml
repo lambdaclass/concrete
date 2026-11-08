@@ -1,0 +1,37 @@
+name: Publish scheduled gate evidence
+on:
+  workflow_run:
+    workflows: [Scheduled gate tiers]
+    types: [completed]
+    branches: [main]
+  schedule:
+    - cron: '29 * * * *'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  publish:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: write
+      actions: read
+    concurrency:
+      group: scheduled-trusted-publisher
+      cancel-in-progress: false
+    steps:
+      # Only trusted default-branch controller code; never the selected historical SHA.
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+      - name: Collect authoritative job provenance and append notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          source scripts/checks/lib/bounded.sh
+          bounded_run 20 -- git config user.name concrete-scheduled
+          bounded_run 20 -- git config user.email concrete-scheduled@users.noreply.github.com
+          bounded_run 1100 -- python3 scripts/checks/scheduled/collect.py

@@ -1,0 +1,29 @@
+"""Publication controls do not contact remotes."""
+import subprocess
+import unittest
+from unittest.mock import patch
+import publish
+from protocol import EvidenceError
+from test_protocol import SHA, RUNNERS, record
+
+class Publication(unittest.TestCase):
+    def test_idempotent_attempt(self):
+        r = record()
+        with patch.object(publish, "git", side_effect=["remote ref", "", "remote"]), patch.object(publish, "read_note", return_value=[r]), patch.object(publish.subprocess, "run") as push:
+            publish.publish(r, RUNNERS)
+            push.assert_not_called()
+
+    def test_collision_has_exact_diagnostic(self):
+        r = record(); old = record(); old["occurrence"] = "different"
+        with patch.object(publish, "git", side_effect=["remote ref", "", "remote"]), patch.object(publish, "read_note", return_value=[old]):
+            with self.assertRaisesRegex(EvidenceError, "^replay would overwrite attempt$"):
+                publish.publish(r, RUNNERS)
+
+    def test_dropped_response_readback_and_lease(self):
+        ref = "refs/notes/concrete-gates-daily"
+        with patch.object(publish, "git", side_effect=["old ref", "", "old", "new", "new ref"]), patch.object(publish, "read_note", return_value=[]), patch.object(publish.subprocess, "run", side_effect=[subprocess.CompletedProcess([], 0), subprocess.TimeoutExpired("git push", 120)]) as execute:
+            publish.publish(record(), RUNNERS)
+            self.assertIn("--force-with-lease=" + ref + ":old", execute.call_args_list[-1].args[0])
+
+if __name__ == "__main__":
+    unittest.main()

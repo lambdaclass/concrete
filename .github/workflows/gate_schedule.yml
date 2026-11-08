@@ -50,6 +50,7 @@ jobs:
             bounded_run 30 -- git merge-base --is-ancestor "$sha" "$main_sha"
           fi
           [[ "$tier" = daily || "$tier" = weekly ]]
+          echo "SCHEDULE_SELECTION $sha $tier"
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
           echo "tier=$tier" >> "$GITHUB_OUTPUT"
   campaign:
@@ -58,7 +59,7 @@ jobs:
     runs-on: [self-hosted, linux, x64, concrete, concrete-ci-2]
     timeout-minutes: 1440
     permissions:
-      contents: write
+      contents: read
     concurrency:
       group: scheduled-note-${{ needs.select.outputs.tier }}
       cancel-in-progress: false
@@ -73,6 +74,7 @@ jobs:
         with:
           ref: main
           fetch-depth: 0
+          persist-credentials: false
       - name: Run exact-SHA tier
         env:
           SELECTED_SHA: ${{ needs.select.outputs.sha }}
@@ -95,13 +97,3 @@ jobs:
           path: result-index/
           if-no-files-found: error
           retention-days: 90
-      - name: Append durable exact-SHA note
-        if: always()
-        env:
-          RESULT_ARTIFACT_URL: ${{ steps.result.outputs.artifact-url }}
-        run: |
-          set -euo pipefail
-          source scripts/checks/lib/bounded.sh
-          bounded_run 20 -- git config user.name concrete-scheduled
-          bounded_run 20 -- git config user.email concrete-scheduled@users.noreply.github.com
-          bounded_run 300 -- python3 scripts/checks/scheduled/publish.py result-index/index.json
