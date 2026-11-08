@@ -1,0 +1,2 @@
+[piece 1 of 2: scripts]
+- scripts/land/acceptance_shim.sh:158: Checking only `push.recurseSubmodules` misses Git’s fallback to `submodule.recurse=true`, which enables `on-demand` recursion when the former is unset ([Git documentation](https://git-scm.com/docs/git-config)). Thus `git -c submodule.recurse=true push fix main` can pass the local-fixture exception while Git pushes changed submodules to unchecked remotes, potentially moving a protected repository’s `main`. Check the fallback configuration or explicitly disable recursion when executing allowed pushes.
