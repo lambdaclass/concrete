@@ -43,7 +43,7 @@ bounded() {
 }
 manifest=${1:-}
 [ -z "$manifest" ] || manifest=$(realpath -m "$manifest")
-compare=(python3 "$root/scripts/checks/lib/repro_compare.py")
+compare=(python3 -I "$root/scripts/checks/lib/repro_compare.py")
 # Materialize the dependency checkouts (no build): they must be the manifest's clean revisions,
 # which build_identity.sh checks before anything is built.
 bounded 600 lake env true

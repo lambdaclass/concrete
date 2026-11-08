@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
 # Per-test determinism gate, the one-compiler-build complement of gate 8. Every bir: manifest row is
 # emitted and built natively twice from different absolute output paths, working directories, HOMEs,
-# TMPDIRs and environment assignment orders; every emitted and native artifact must be byte-identical.
+# TMPDIRs and opposite insertion orders of the same explicit env -i keys. Recursive inventories must
+# be equal and every emitted/native file byte-identical; required files also catch absence on both sides.
 # A second emit in the same Lean process checks in-process determinism. Gate 8 instead rebuilds the
 # compiler and LCB independently from two source copies and also compares cross-runner manifests.
-# Controls: a planted CWD in llvm.ll, planted monotonic time in lcb_body.s, and a missing artifact
+# slice0_native.sh normalizes its own children with env -i, so its step varies paths, cwd and TMPDIR.
+# Controls: a planted CWD in llvm.ll, planted monotonic time in lcb_body.s, and missing or extra files
 # must each fail for that named reason; a clean double run must pass. Plants require
 # --allow-planted-failure in slice0_bir.lean.
 #
@@ -66,7 +68,7 @@ fi
 printf 'one compiler build; per-test determinism\n' >"$work/identity"
 emitted=bir.txt,llvm.ll,lcb_job.txt,lcb_source.txt,lcb_body.ssa,lcb_body.s,lcb_rt.ssa,status,stderr
 all=$emitted,lcb_rt.s,llvm.o,lcb_body.o,lcb_rt.o,llvm.exe,lcb.exe
-compare=(python3 -I "$root/scripts/checks/lib/repro_compare.py" --label slice0_determinism)
+compare=(python3 -I "$root/scripts/checks/lib/repro_compare.py" --inventory --label slice0_determinism)
 
 a=$work/first/output-with-one-absolute-path
 b=$work/second/a-different-and-deliberately-longer-absolute-output-path
@@ -83,18 +85,29 @@ emit_one() { # emit_one SIDE CWD NAME PROGRAM EXPECT [PLANT]
   plant_args=()
   [ -z "$plant" ] || plant_args=(--allow-planted-failure --plant "$plant")
   if [ "$side" = "$a" ]; then
-    envs=("HOME=$side/home" "TMPDIR=$side/tmp" LC_ALL=C TZ=UTC SOURCE_DATE_EPOCH=1 ZERO_AR_DATE=1)
+    envs=("PATH=$PATH" "HOME=$side/home" "TMPDIR=$side/tmp" LC_ALL=C TZ=UTC SOURCE_DATE_EPOCH=1 ZERO_AR_DATE=1)
   else
-    envs=(ZERO_AR_DATE=1 SOURCE_DATE_EPOCH=1 TZ=UTC LC_ALL=C "TMPDIR=$side/tmp" "HOME=$side/home")
+    envs=(ZERO_AR_DATE=1 SOURCE_DATE_EPOCH=1 TZ=UTC LC_ALL=C "TMPDIR=$side/tmp" "HOME=$side/home" "PATH=$PATH")
   fi
-  (cd "$cwd" && bounded 120 env "${envs[@]}" "$lake_cmd" --dir "$root" env lean --run "$driver" emit \
+  (cd "$cwd" && bounded 120 env -i "${envs[@]}" "$lake_cmd" --dir "$root" env lean --run "$driver" emit \
     "${program#bir:}" "$out" "$target" "${expectation[@]}" ${plant_args[@]+"${plant_args[@]}"})
 }
 
 native_one() { # native_one SIDE NAME
-  local side=$1 name=$2 out=$side/out/$name log=$side/$name.native.log
-  if ! (cd "$side" && bounded 300 env "TMPDIR=$side/tmp" "HOME=$side/home" ZERO_AR_DATE=1 \
-      SOURCE_DATE_EPOCH=1 bash "$root/scripts/checks/lib/slice0_native.sh" "$out" "$lcb") >"$log" 2>&1; then
+  local side=$1
+  local name=$2
+  local out=$side/out/$name
+  local log=$side/$name.native.log
+  local -a envs
+  if [ "$side" = "$a" ]; then
+    envs=("PATH=$PATH" "HOME=$side/home" "TMPDIR=$side/tmp" LC_ALL=C TZ=UTC SOURCE_DATE_EPOCH=1
+      ZERO_AR_DATE=1 "CONCRETE_SLICE0_CLANG=$CONCRETE_SLICE0_CLANG")
+  else
+    envs=("CONCRETE_SLICE0_CLANG=$CONCRETE_SLICE0_CLANG" ZERO_AR_DATE=1 SOURCE_DATE_EPOCH=1 TZ=UTC
+      LC_ALL=C "TMPDIR=$side/tmp" "HOME=$side/home" "PATH=$PATH")
+  fi
+  if ! (cd "$side" && bounded 300 env -i "${envs[@]}" \
+      bash "$root/scripts/checks/lib/slice0_native.sh" "$out" "$lcb") >"$log" 2>&1; then
     cat "$log" >&2
     echo "FAIL slice0_determinism: $name: native build failed" >&2
     exit 1
@@ -118,18 +131,18 @@ while IFS=$'\t' read -r name program expect; do
   read -r -a expectation <<<"$expect"
   bounded 120 "$lake_cmd" --dir "$root" env lean --run "$driver" emit-twice "${program#bir:}" \
     "$same/a/out/$name" "$same/b/out/$name" "$target" "${expectation[@]}"
-  "${compare[@]}" --stages "$emitted" "$same/a" "$same/b" "$work/identity"
+  "${compare[@]}" --required "$emitted" "$same/a" "$same/b" "$work/identity"
 done <"$work/rows"
 
-stages=$all
-[ "$emit_only" = 0 ] || stages=$emitted
-"${compare[@]}" --stages "$stages" "$a" "$b" "$work/identity"
+required=$all
+[ "$emit_only" = 0 ] || required=$emitted
+"${compare[@]}" --required "$required" "$a" "$b" "$work/identity"
 echo 'ok slice0_determinism: clean double run'
 
-control_compare() { # control_compare LABEL ARTIFACT SIDE_A SIDE_B STAGES
+control_compare() { # control_compare LABEL ARTIFACT SIDE_A SIDE_B REQUIRED
   local label=$1 artifact=$2 ca=$3 cb=$4 selected=$5 rc=0
   local log=$work/control-$label.log
-  "${compare[@]}" --stages "$selected" "$ca" "$cb" "$work/identity" >"$log" 2>&1 || rc=$?
+  "${compare[@]}" --required "$selected" "$ca" "$cb" "$work/identity" >"$log" 2>&1 || rc=$?
   if [ "$rc" = 0 ] || ! grep -qF "$first_name: $artifact:" "$log"; then
     echo "FAIL slice0_determinism control $label: comparator did not name $artifact" >&2
     cat "$log" >&2
@@ -163,7 +176,14 @@ mkdir -p "$c"
 cp -R "$a" "$c/a"
 cp -R "$a" "$c/b"
 rm "$c/b/out/$first_name/lcb_body.s"
-control_compare missing-artifact lcb_body.s "$c/a" "$c/b" "$stages"
+control_compare missing-artifact lcb_body.s "$c/a" "$c/b" "$required"
+
+c=$work/control-extra
+mkdir -p "$c"
+cp -R "$a" "$c/a"
+cp -R "$a" "$c/b"
+touch "$c/b/out/$first_name/unexpected.extra"
+control_compare extra-artifact unexpected.extra "$c/a" "$c/b" "$required"
 
 rc=0
 read -r -a first_expectation <<<"$first_expect"
