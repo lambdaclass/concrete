@@ -73,6 +73,7 @@ Each row records a decision and its reason. A language rule itself is its Lean d
 - Owner sign-offs of slice 0, record-language and one repository ([row](#decided-2026-11-08-signoffs)).
 - The landing protection redesign: server-side protection of `main` ([row](#decided-2026-11-08-landing-redesign)).
 - Commit and push everything all the time ([row](#decided-2026-11-08-commit-push)).
+- Codex, Kimi and agy write; Claude reviews ([row](#decided-2026-11-08-writers)).
 - Byte-for-byte sweeps into `legacy/`, and `docs/archive/` moves there ([sweep](#decided-2026-11-08-legacy-sweep), [archive](#decided-2026-11-08-archive-move)).
 - Every branch gets an agy review too ([row](#decided-project-review)).
 - Eleven plan and process decisions: UBSan dropped, a complete adapter theorem, smaller landing scripts, Claude's quota on the critical path, the front end now, one decisions writer, risk-capped reviews, one clones folder, a later no-libc runtime, a compile-speed budget and the termination wording ([row](#decided-2026-11-08-eleven)).
@@ -1378,6 +1379,18 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
   builds and its checks pass, and pushed to `origin` and `lambdaclass` at once: on `wip/` branches,
   from a full clone, with the hook on, and never force-pushed. `main` changes only through the train.
   A candidate under review stays fixed; new work goes in new commits or branches.
+- <a id="decided-2026-11-08-writers"></a>**Codex, Kimi and agy write; Claude reviews** (owner,
+  2026-11-08: "can you have kimi, codex and agy implement things and we just review it"). This extends
+  [Claude's quota on the critical path](#decided-2026-11-08-quota), which named only Codex and Kimi as
+  writers. Codex, Kimi and agy implement. Each works in its own fresh full clone on its own `wip/`
+  branch. Codex uses `codex exec -s danger-full-access`; Kimi uses `kimi -p`, never `--yolo` or
+  `--auto`; agy uses `agy -p` with its inputs inline because it cannot read files. Runs are bounded by
+  `systemd-run` with `TasksMax` and `MemoryMax`, under `timeout`, with at most two heavy runs per
+  machine. Claude briefs, reviews the diff, runs the gates and lands. The two models that did not write
+  the diff cross-review it. A writer never reviews its own work, and findings go back to the writer.
+  Claude writes a fix itself only when a reviewer pinpointed a small change, and says so. For decision
+  records, Kimi or Codex drafts the text, Claude checks it against the quotes and the others review.
+  The one decisions writer still owns `docs/decisions.md` and `ROADMAP.md`.
 - <a id="decided-2026-11-08-legacy-sweep"></a>**Byte-for-byte sweeps into `legacy/`** (owner,
   2026-11-08: "ok to 1", answering legacy sweep question 1). `legacy_frozen.sh` may accept an addition
   under `legacy/` only if it is byte-identical to the same root path at a named commit, and the file
