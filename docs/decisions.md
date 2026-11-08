@@ -34,7 +34,7 @@ Each row records a decision and its reason. A language rule itself is its Lean d
 
 - The core statement ([row](#decided-project-core-statement)).
 - Proof infrastructure from the first commit ([row](#decided-project-proof-infrastructure)).
-- No hidden traps, and termination known beforehand ([row](#decided-project-no-hidden-traps)).
+- No hidden traps, and termination evidence or a report of the permitted unresolved obligations ([row](#decided-project-no-hidden-traps)).
 - The `checked_*`, `#[proof]` and `#[may_not_terminate]` spellings ([row](#decided-project-no-hidden-traps)).
 - The per-function facts report and query ([row](#decided-project-facts-report)).
 - The predictable policy ([row](#decided-project-predictable-policy)).
@@ -64,6 +64,12 @@ Each row records a decision and its reason. A language rule itself is its Lean d
 - Where the decisions and their work are tracked, with a home and a gate per item ([row](#decided-2026-11-07-tracking)).
 - The trusted-base statement, differential fuzzer, sanitizers, binary-size tracking and frozen JSON schema ([row](#decided-2026-11-07-early-evidence)).
 - The documentation and tooling cleanup is approved, not performed by that record ([row](#decided-2026-11-07-cleanup)).
+- The shared foundation is written and frozen in Lean first, then each slice adds its rules ([row](#decided-2026-11-07-foundation-first)).
+- The Lean foundation, contracts C1–C10, and the answers to its sixteen questions ([row](#decided-2026-11-08-foundation)).
+- A std-per-slice table in the roadmap; no user-guide chapter per slice for now; the written grammar before the parser; a speed target against C at slice 16 ([row](#decided-2026-11-08-std-table)).
+- Capabilities stay as decided, `with(...)` permission sets plus grant values; confirmed, no revision ([row](#decided-2026-11-08-capabilities-kept)).
+- Every branch gets an agy review too ([row](#decided-project-review)).
+- Eleven plan and process decisions: UBSan dropped, a complete adapter theorem, smaller landing scripts, Claude's quota on the critical path, the front end now, one decisions writer, risk-capped reviews, one clones folder, a later no-libc runtime, a compile-speed budget and the termination wording ([row](#decided-2026-11-08-eleven)).
 
 <a id="rules-a-decision-changed"></a>
 ## Rules a decision has changed
@@ -195,7 +201,7 @@ The owner answered every row of the 2026-11-05 decision page, in the terminal. T
 - **Q1.4** How are brands compared and supplied? — Nominal brand equality; explicit brand arguments.
 - **Q1.5** How are allocator dependencies tracked across calls? — Structural dependencies; checked interface summaries.
 - **Q1.6** Who owns a child allocator’s backing? — Child owns backing; parent brand exposed in type. *Revises or adds: Clarify/extend allocator interface.*
-- **Q1.7** Where does release information live? — Stable release state and raw context; no safe references.
+- **Q1.7** Where does release information live? — Stable release state and raw context; no safe references. *Revised 2026-11-08 by the [foundation decision](#foundation-q6): release-context erasure is allowed only with a proof (release statically known, no per-instance information), including owning Text where applicable; no unconditional one-pointer claim.*
 - **Q1.8** What if creating allocator state fails? — Fallible allocator construction conserving surviving inputs.
 - **Q1.9** What do allocation failures contain? — `AllocFailure<T>` returns rejected `T`; operation-specific recovery.
 - **Q1.10** Are capacity and addresses observable? — Observable capacity; explicit raw-address exposure.
@@ -216,10 +222,10 @@ The owner answered every row of the 2026-11-05 decision page, in the terminal. T
 - **Q3.4** Which view accesses conflict? — Existing whole-root conflict rules.
 - **Q3.5** What is the index type? — `u64` lengths/indices across profiles; checked target limits.
 - **Q3.6** How are nested linear elements traversed without substitutes? — `drain` / `map_into` for consuming traversal; `swap_at(v, i, x) -> T` for in-place replacement.
-- **Q3.7** What is the raw-memory model and validity taxonomy? — Blocks with provenance; pointer = (prov: Option<BlockId>, addr: u64); integers carry no provenance; every access needs explicit validity premises.
+- **Q3.7** What is the raw-memory model and validity taxonomy? — Blocks with provenance; pointer = (prov: Option<BlockId>, addr: u64); integers carry no provenance; every access needs explicit validity premises. *Generalized 2026-11-08 by the [foundation decision](#foundation-q3): the address is read from a read-only target profile; the existing 64-bit little-endian profile is unchanged, and the provenance rules and the zero-byte exception are preserved.*
 - **Q3.8** How do zero-sized elements behave? — Zero-sized slots own their obligations; they occupy no bytes and may share addresses.
-- **Q3.9** What do pointer equality and integer round trips mean? — `expose` records the block; `from_exposed` picks in-bounds, then one-past, else no provenance.
-- **Q3.10** What happens when address space runs out? — A collision means overlapping occupied bytes; address exhaustion is part of Avail.
+- **Q3.9** What do pointer equality and integer round trips mean? — `expose` records the block; `from_exposed` picks in-bounds, then one-past, else no provenance. *Generalized 2026-11-08 by the [foundation decision](#foundation-q3): over the target profile's address spaces; the reconstruction policy is unchanged.*
+- **Q3.10** What happens when address space runs out? — A collision means overlapping occupied bytes; address exhaustion is part of Avail. *Generalized 2026-11-08 by the [foundation decision](#foundation-q3): the existing profile keeps the `base + size ≤ 2^64−1` one-past bound; any generalized profile needs an analogous checked bound.*
 - **Q3.11** How are typed values related to raw bytes? — Structured values and raw store joined by `Rep`.
 - **Q3.12** How are extern pointer parameters marked, and how does C keep memory past the call? — (a) `kept` parameter marker; `Kept<H>` receipt ended only by the paired extern. *Revises or adds: New design + spelling: owner decision.*
 - **Q4.1** What is a literal’s type? — Copy `StaticStr`; explicit fallible dynamic conversion.
@@ -240,7 +246,7 @@ The owner answered every row of the 2026-11-05 decision page, in the terminal. T
 - **Q6.5** How do short-circuit operators interact with refusal? — Check both short-circuit operands; execute conditionally.
 - **Q6.6** What happens when constant evaluation fails? — Separate invalid and unknown; no evaluator-resource failure.
 - **Q6.7** What distinguishes traps, unsafe stuckness and exhaustion? — Separate traps, unsafe stuckness, OOM and fuel exhaustion.
-- **Q7.1** How are target grant schemas and multiplicities specified? — One target, linux-x86_64-hosted (Linux ≥ 5.6), with a fixed grant table; main asks for grants as parameters.
+- **Q7.1** How are target grant schemas and multiplicities specified? — One target, linux-x86_64-hosted (Linux ≥ 5.6), with a fixed grant table; main asks for grants as parameters. *Revised 2026-11-08 by the [foundation decision](#foundation-q16): the grant table is a lawful extensible registry rather than a permanently closed one.*
 - **Q7.2** How do narrowing, acquisition and splitting relate? — Narrowing consumes and intersects rights; children are acquired from a grant that stays.
 - **Q7.3** What are close and close-error contracts? — close always consumes; failure is a Copy error holding no handle; listen failure returns its grant.
 - **Q7.4** How does process inheritance work? — Deferred: this target offers no process spawning.
@@ -249,7 +255,7 @@ The owner answered every row of the 2026-11-05 decision page, in the terminal. T
 - **Q7.7** What are network scopes? — Connect and listen grants with numeric scopes; a separate Resolver grant with explicit server, transport, suffixes and record types.
 - **Q7.8** Is grant policy enforced statically or dynamically? — Static authority checks plus atomic dynamic scope checks.
 - **Q7.9** How are blocking, terminal actions and delivery observed? — Split request/response events; logical terminal observations.
-- **Q7.10** Do you approve the linux-x86_64-hosted grant table? — Approve R4 F6's complete grant table below as part of this row: every launch configuration, operation signature, permission, narrowing rule and ending contract. Standard-stream operations require Console (Q7.11), not Device; where the R4 F6 table says with(Device) for StdIn/StdOut/StdErr, read with(Console). A missing configured grant refuses startup with exit 125; a trap exits 134. *Revises or adds: New target contract: owner decision.* *Extended 2026-11-06 by [no hidden traps](#decided-project-no-hidden-traps): the stack target contract (adequate stack excludes exhaustion, launch refusal 125 when the reservation is smaller than the bound; then a defined outcome for inadequate stack) is a future target-contract obligation, not a current guarantee.*
+- **Q7.10** Do you approve the linux-x86_64-hosted grant table? — Approve R4 F6's complete grant table below as part of this row: every launch configuration, operation signature, permission, narrowing rule and ending contract. Standard-stream operations require Console (Q7.11), not Device; where the R4 F6 table says with(Device) for StdIn/StdOut/StdErr, read with(Console). A missing configured grant refuses startup with exit 125; a trap exits 134. *Revises or adds: New target contract: owner decision.* *Extended 2026-11-06 by [no hidden traps](#decided-project-no-hidden-traps): the stack target contract (adequate stack excludes exhaustion, launch refusal 125 when the reservation is smaller than the bound; then a defined outcome for inadequate stack) is a future target-contract obligation, not a current guarantee.* *Revised 2026-11-08 by the [foundation decision](#foundation-q16): the grant table is a lawful extensible registry; the existing grant contracts are preserved, an unknown operation is refused, and the Entropy grant's shape waits for slice 6 ([question 14](#foundation-q14)).*
 - **Q7.11** Which permission do the standard streams use? — Add a Console capability for StdIn/StdOut/StdErr operations; keep Device for device grants. *Revises or adds: Authority rule 13 (adds Console); rules 5 and 7 lists include it.*
 - **Q8.1** What is the first proof endpoint? — Proved source→BIR; qualified native; conditional image claim.
 - **Q8.2** What exact source subset is admitted? — A1 minimal `u8`/linear-struct component subset. <a id="q8-2-revision"></a>Confirmed 2026-11-06 by [vertical slices](#decided-project-vertical-slices-2026-11-06): this is slice 1; its defined trap is an explicit `abort()`, with the refused `200 + 56` as its known-violation control; integers are complete at slice 2.
@@ -264,7 +270,7 @@ The owner answered every row of the 2026-11-05 decision page, in the terminal. T
 - **Q9.4** How are data, matching and exits represented? — Flat data/matches; structured exits; checked stores.
 - **Q9.5** Are heap opening and borrowing separate user mechanisms? — One surface borrow; distinct typed Core cases.
 - **Q9.6** Which operations are primitives rather than ordinary definitions? — Irreducible primitives; checked destructor bodies.
-- **Q9.7** How are primitive calls specified? — One exhaustive typed primitive-contract inventory.
+- **Q9.7** How are primitive calls specified? — One exhaustive typed primitive-contract inventory. *Revised 2026-11-08 by the [foundation decision](#foundation-q16): lawful registry instances rather than a permanently closed inventory; exhaustive coverage of the selected registry; an unknown operation is refused.*
 - **Q9.8** Does `defer` survive in Core? — Nested deferred scopes; late reads; reverse cleanup.
 - **Q9.9** What is evaluator state and execution style? — Total clock-indexed evaluator; explicit instrumented state.
 - **Q9.10** How are ownership instrumentation and erasure organized? — Ghost ownership instrumentation with proved erasure.
@@ -520,6 +526,10 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
     by the owner: the LCB joins slice 0 as a second unverified backend, and its adapter is the first
     backend proof target (*Backend order* above). This revises the new-compiler row's single
     slice-0 BIR → LLVM printer in the same way.
+    *Revised 2026-11-08* by [foundation question 17](#foundation-q17): the backend-order equality
+    stays, with a per-native-trace Core refinement check; allocation-dependent observations are
+    decided at slice 24. The [complete adapter theorem](#decided-2026-11-08-adapter) says an adapter
+    error produces no artifact and success implies correctness, retiring the adapter premise (R-0579).
 - <a id="decided-project-long-term-2026-11-06"></a>**Long-term changes to the plan** (owner, 2026-11-06:
   after asking "is this the best long term design", the owner was asked whether to accept all five
   changes below (A2i before the freeze, the LP0 LCB pilot, certificates, the modular specification
@@ -618,7 +628,9 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
     cycle; a loop or cycle terminates only when its bounds, guards, bodies, callees and cleanup
     terminate too. A Lean termination theorem (row P18) closes termination only; depth and stack
     need their own evidence.
-  - *Termination is known beforehand (Q13, "d-site").* Termination evidence is required by default.
+  - *Every function has termination evidence with its premises, or a report naming the explicitly
+    permitted unresolved obligations (Q13, "d-site"; wording revised 2026-11-08,
+    [ISS-0014 F7](#decided-2026-11-08-f7)).* Termination evidence is required by default.
     Every undischarged termination obligation must carry an explicit permission at its source: the
     loop, the recursive cycle, the indirect call, or the external, foreign or blocking boundary;
     otherwise the program is refused. A permission covers only its identified obligation and never
@@ -848,6 +860,8 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
   Revised 2026-11-07 by the [randomness decision](#decided-2026-11-07-stack-randomness): the entropy capability arrives at slice 6, yields
   `Secret<T>` at slice 7 and gains fill-bytes at slice 15, with its source named as a trusted premise
   in facts.
+  Extended 2026-11-08 by the [foundation decision](#foundation-q18): `Secret<T>` has exactly `T`'s
+  layout; layout does not establish constant time, the information-flow rules do.
 - <a id="decided-project-pipeline-2026-11-06"></a>**The new compiler pipeline** (owner, 2026-11-06,
   relayed by the orchestrator from the owner session: the owner asked "is there any way to improve the full compiler design or pipeline?"; after
   the Codex, agy and Kimi pipeline review was reported, "did we also log that we will have the new
@@ -948,7 +962,11 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
   yes then as you said right", approving the recorded recommendation). This answers when performance
   is measured and how it is reported. Flagship runtime is tracked from slice 2. Compiler wall time,
   per-stage time and memory are tracked from slice 0. Every measurement is recorded by exact SHA,
-  backend and target, and is report-only until the noise is understood.
+  backend and target, and is report-only until the noise is understood. Revised 2026-11-08 by the
+  [compile-speed budget](#decided-2026-11-08-compile-budget) and
+  [speed target](#decided-2026-11-08-speed-target): the compile-speed budget is tracked per example;
+  speed and size stay report-only until the owner sets a target against C from measured data at
+  the first real showcase (grep, slice 16).
 - <a id="decided-2026-11-07-stack-randomness"></a>**Early stack bounds and randomness** (owner,
   2026-11-07: "1 and 2 should be done early too", referring to stack-overflow bounds and randomness
   in the coordinator's "what are we forgetting" list; then "ok let's add it", approving the
@@ -967,9 +985,15 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
   - *Differential fuzzer.* A random-program fuzzer runs against the Lean evaluator, starting with
     the slice-0 front end and growing one feature per slice. It runs on concrete-ci-2.
   - *Sanitizers.* From slice 0, every example's LLVM output is also built and run under
-    AddressSanitizer and UndefinedBehaviorSanitizer in CI.
+    AddressSanitizer and UndefinedBehaviorSanitizer in CI. Revised 2026-11-08
+    ([UBSan](#decided-2026-11-08-ubsan)): UBSan is dropped, since it instruments C at clang's front
+    end and checks nothing on LLVM IR input; ASan stays.
   - *Binary size.* From slice 0, binary size is tracked per example per commit next to speed
-    tracking, report-only.
+    tracking, report-only. Revised 2026-11-08 by the
+    [compile-speed budget](#decided-2026-11-08-compile-budget) and
+    [speed target](#decided-2026-11-08-speed-target): the compile-speed budget is also tracked per
+    example; speed and size stay report-only until the owner sets a target against C from measured
+    data at the first real showcase (grep, slice 16).
   - *JSON schema.* A frozen, versioned JSON schema for diagnostics and facts output, with golden
     tests, starts with the first front-end output.
 - <a id="decided-2026-11-07-tracking"></a>**Where these decisions and their work are tracked** (owner,
@@ -986,7 +1010,7 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
     enforce it.
   The gates are: reproducibility (two directories, two machines, hashes compared); stack (the
   final-artifact bound against the claim); a trusted-base golden; the fuzzer (short in CI, long
-  nightly on concrete-ci-2); ASan and UBSan; speed and size, report-only; and the JSON schema
+  nightly on concrete-ci-2); ASan (UBSan dropped 2026-11-08, [row](#decided-2026-11-08-ubsan)); speed and size, report-only; and the JSON schema
   generated from the Lean types, with goldens. All of them join `required-checks.txt` when the
   compiler lands on main.
 - <a id="decided-2026-11-07-cleanup"></a>**The documentation and tooling cleanup** (owner,
@@ -1003,6 +1027,150 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
   the dead `prepush_record.sh` and `treestate.sh`; delete `scripts/land/legacy_move.sh` and
   `move_prereqs.py`, leaving them in git history, and the empty `required-checks-transition.tsv`,
   updating the inventory, retention and `legacy_frozen` diagnostics.
+- <a id="decided-2026-11-07-foundation-first"></a>**The foundation first, then per slice** (owner,
+  2026-11-07: "ok to option b then for freeze the foundation>?", answering what of the spec is
+  written before the freeze with option (b), the foundation then per slice). Before slice 1 builds
+  on it, the shared foundation is fully written in the Lean spec and frozen: types, values and
+  layout, ownership and places, capabilities and grants, outcomes and traps, the step model's shape,
+  and the diagnostics and facts types. Each later slice adds its own rules on top of that foundation
+  without rewriting it. Changing a frozen foundation definition is an owner decision: the earlier
+  proofs are re-run and the change is recorded here. This answers the scheduling question S1 of the
+  [spec plan](proposals/SPEC_UNIFICATION.md#51-answered-scheduling-questions-coordinator-2026-11-06),
+  which had proposed writing every slice's spec side before the freeze. What the foundation contains
+  is the [next row](#decided-2026-11-08-foundation).
+- <a id="decided-2026-11-08-foundation"></a>**The Lean foundation: contracts C1–C10 and the answers to
+  its questions** (owner, 2026-11-08: "ok all recommended", answering every question of the
+  [foundation proposal](proposals/FOUNDATION.md), draft 3, with its recommendation; the proposal was
+  reviewed by Codex, Kimi and agy in four rounds and by Claude, and its last edit was checked by Codex
+  and Kimi). The foundation is ten contracts, each an interface with its laws, written in the Lean
+  spec ([C1 execution, calls and cleanup](proposals/FOUNDATION.md#c1-execution-calls-and-cleanup),
+  [C2 scalars, failure and arithmetic](proposals/FOUNDATION.md#c2-scalars-failure-and-arithmetic),
+  [C3 target, layout and representation](proposals/FOUNDATION.md#c3-target-layout-and-representation),
+  [C4 byte memory and value validity](proposals/FOUNDATION.md#c4-byte-memory-and-value-validity),
+  [C5 dynamic borrow, brands and authority](proposals/FOUNDATION.md#c5-dynamic-borrow-brands-and-authority),
+  [C6 observations, environment and concurrency extension](proposals/FOUNDATION.md#c6-observations-environment-and-concurrency-extension),
+  [C7 secret leakage and accounting](proposals/FOUNDATION.md#c7-secret-leakage-and-accounting),
+  [C8 evaluator adequacy and termination](proposals/FOUNDATION.md#c8-evaluator-adequacy-and-termination),
+  [C9 identities, primitive contracts, evidence and ghost erasure](proposals/FOUNDATION.md#c9-identities-primitive-contracts-evidence-and-ghost-erasure),
+  [C10 frames and ABI](proposals/FOUNDATION.md#c10-frames-and-abi)), with the
+  [pipeline and validation contract](proposals/FOUNDATION.md#3-pipeline-and-validation-contract)
+  they serve. The rules themselves live only in the Lean spec; ROADMAP R-0607 to R-0616 hold the
+  work, each with its home and gate. The answers, numbered as in the proposal (questions 12 and 13
+  were removed as already decided by OD106 and by Q2.3 and Q3.8):
+  - <a id="foundation-q1"></a>*Question 1*, [scope](proposals/FOUNDATION.md#q1): the interface and law boundary
+    of C1–C10 is approved. The foundation is frozen only after its Lean implementation, its kernel
+    proofs, its interaction tests, review by the four models and the owner's acceptance.
+  - <a id="foundation-q2"></a>*Question 2*, [state](proposals/FOUNDATION.md#q2): one hybrid state, structured
+    places for safe typed storage plus byte and provenance blocks, materialized only on raw
+    address-taking, `expose` or passing an address to foreign code (C4).
+  - <a id="foundation-q3"></a>*Question 3*, [target profiles](proposals/FOUNDATION.md#q3): read-only profiles
+    separate address width, pointer representation, length width, byte order and address spaces.
+    The existing 64-bit little-endian profile is unchanged. This generalizes Q3.7, Q3.9 and Q3.10
+    and OD126's profile (noted at each).
+  - <a id="foundation-q4"></a>*Question 4*, [enum layout](proposals/FOUNDATION.md#q4): the existing profile's
+    `i32` enum tags stay for now; compact tags are decided at the layout slice.
+  - <a id="foundation-q5"></a>*Question 5*, [niches](proposals/FOUNDATION.md#q5): option (b), tagged layout now
+    and no niches; a future niche only by owner decision.
+  - <a id="foundation-q6"></a>*Question 6*, [release context](proposals/FOUNDATION.md#q6): release-context
+    erasure only with a preservation proof (noted at Q1.7).
+  - <a id="foundation-q7"></a>*Question 7*, [`usize`](proposals/FOUNDATION.md#q7): option (c), the `u64` meaning
+    everywhere per Q3.5, with proved narrower representations where bounds justify them. No source
+    `usize` or `isize` is added.
+  - <a id="foundation-q8"></a>*Question 8*, [native image](proposals/FOUNDATION.md#q8): R-0505's later
+    native-image closure and Q8.1's conditional endpoint stay.
+  - <a id="foundation-q9"></a>*Question 9*, [trap kinds](proposals/FOUNDATION.md#q9): the trap kind names and
+    their renderings are decided before the first slice that prints them.
+  - <a id="foundation-q10"></a>*Question 10*, [columns](proposals/FOUNDATION.md#q10): source columns count bytes,
+    and a tab counts one byte, with conformance tests (noted at the
+    [trap line](#decided-project-runtime-2026-11-06)).
+  - <a id="foundation-q11"></a>*Question 11*, [UTF-8 failures](proposals/FOUNDATION.md#q11): their classification
+    is deferred to the text slice.
+  - <a id="foundation-q14"></a>*Question 14*, [entropy](proposals/FOUNDATION.md#q14): its grant shape is deferred
+    to slice 6.
+  - <a id="foundation-q15"></a>*Question 15*, [struct invariants](proposals/FOUNDATION.md#q15): the SPARK exposure
+    definition is in the spec before the freeze; the source feature comes at slice 17.
+  - <a id="foundation-q16"></a>*Question 16*, [registries](proposals/FOUNDATION.md#q16): lawful extensible
+    registries; an unknown operation is refused (noted at Q7.1, Q7.10 and Q9.7).
+  - <a id="foundation-q17"></a>*Question 17*, [qualification](proposals/FOUNDATION.md#q17): the decided
+    backend-order equality stays, plus a per-native-trace Core refinement check;
+    allocation-dependent observations are decided at slice 24.
+  - <a id="foundation-q18"></a>*Question 18*, [`Secret<T>`](proposals/FOUNDATION.md#q18): `Secret<T>` has `T`'s
+    layout (noted at the [information-flow decision](#decided-project-infoflow-2026-11-06)).
+
+  *Revisions of decided rows*, as the proposal's [revision register](proposals/FOUNDATION.md#4-revision-register)
+  states them:
+  - **OD126; Q3.7, Q3.9, Q3.10** (question 3): the address and profile interface is generalized,
+    preserving the provenance rules and the zero-byte exception; the existing 64-bit little-endian
+    profile is unchanged, including Q3.10's `base + size ≤ 2^64−1` one-past bound. Any generalized
+    profile needs an analogous checked bound.
+  - **Q1.7** (question 6): proved release-context erasure, including owning Text where applicable;
+    no unconditional one-pointer claim.
+  - **Q7.1, Q7.10; Q9.7** (questions 16 and 14): lawful registry instances rather than a permanently
+    closed inventory; the existing grant contracts are preserved. Entropy details are deferred.
+  - Retained without revision: Q3.5 and its dependents (Q1.11, Q2.4, Q4.6, TYPE-19, FFI-7) keep
+    the `u64` semantics and permit only proved narrower representations (question 7); OD126 and
+    FFI-7's `i32` enum tags (question 4); Q8.1, the early-evidence decision and R-0505 (question 8);
+    the natural native struct layout of the [runtime decision](#decided-project-runtime-2026-11-06),
+    which supersedes FFI-7/10's unspecified-layout prose, with the `repr` restrictions retained.
+- <a id="decided-2026-11-08-eleven"></a>**Eleven plan and process decisions** (owner, 2026-11-08: "ok
+  go ahead with all the decisions", approving the coordinator's list of eleven, each as
+  recommended). The process rules (items 4, 6, 7 and 8) are stated in [AGENTS.md](../AGENTS.md#rules);
+  the work is in ROADMAP.
+  1. <a id="decided-2026-11-08-ubsan"></a>*UBSan leaves the slice-0 gates; ASan stays.*
+     UndefinedBehaviorSanitizer instruments C at clang's front end, so on LLVM IR input it checks
+     nothing; a gate that cannot fail is not kept. This revises the
+     [early-evidence](#decided-2026-11-07-early-evidence) and [tracking](#decided-2026-11-07-tracking)
+     rows (R-0301).
+  2. <a id="decided-2026-11-08-adapter"></a>*A complete adapter theorem.* The BIR → LCB-IR adapter
+     theorem is complete: an adapter error produces no artifact, and success implies correctness.
+     This retires the adapter premise (R-0579).
+  3. <a id="decided-2026-11-08-landing-shrink"></a>*Smaller landing scripts.* Keep the train, its
+     review leg, the gates and the `legacy/` protection; drop the landing bot, notify, install-bot,
+     the systemd units and duplicate helpers; the old copies move to `legacy/` (R-0617).
+  4. <a id="decided-2026-11-08-quota"></a>*Claude's quota goes to the critical path:* the spec, slice 0
+     and the front end. Mechanical work goes to Codex and Kimi as writers.
+  5. <a id="decided-2026-11-08-front-end"></a>*The front end starts now.* The lexer and the LL(1)
+     parser are written now, in parallel with the foundation (R-0620); since the later answer "ok do
+     the written grammar", the parser waits for the owner-approved written grammar and its Lean
+     judgment ([written grammar](#decided-2026-11-08-written-grammar), R-0622).
+  6. <a id="decided-2026-11-08-one-writer"></a>*One writer for `docs/decisions.md` and `ROADMAP.md`
+     at a time;* other workers send it their records.
+  7. <a id="decided-2026-11-08-review-caps"></a>*Review rounds capped by risk:* docs and roadmap 2,
+     scripts 3, compiler and spec 5 (R-0618).
+  8. <a id="decided-2026-11-08-clones"></a>*One clones folder:* every branch's clone is
+     `~/projects/clones/<branch>`, removed after the branch lands (R-0619).
+  9. <a id="decided-2026-11-08-no-libc"></a>*A no-libc runtime* on the proven path comes as a later
+     slice, around slices 24–25; until then libc stays a named premise (R-0621).
+  10. <a id="decided-2026-11-08-compile-budget"></a>*A compile-speed budget,* tracked per example and
+      report-only like binary size (R-0550).
+  11. <a id="decided-2026-11-08-f7"></a>*The termination wording* (ISS-0014 F7): "every function has
+      termination evidence with its premises, or a report naming the explicitly permitted
+      unresolved obligations". It replaces "termination is known beforehand", which overstated what a
+      d-site permission establishes, in the [no-hidden-traps row](#decided-project-no-hidden-traps),
+      README.md, PHILOSOPHY.md and the pending no-hidden-traps changelog fragment.
+- <a id="decided-2026-11-08-std-table"></a>**A std-per-slice table, no user-guide chapters for now, the written grammar and the speed target**
+  (owner, 2026-11-08: "ok let's do 2, for now let's not do 3"). Item 2 is approved: `ROADMAP.md`
+  gets a table of which standard-library module arrives in which slice, with its spec contract, its
+  std source, its proof status and the showcases that need it
+  ([table](../ROADMAP.md#std-per-slice)). Item 3, a user-guide chapter per slice, is not done for
+  now; it has no roadmap item. Item 1 was then approved (owner, 2026-11-08: "ok do the written
+  grammar"): <a id="decided-2026-11-08-written-grammar"></a>before the parser is built, the full
+  surface grammar is written down for the owner's review, every construct with its decided row and
+  the open spellings flagged; after approval it is encoded in Lean as the independent grammar
+  judgment (row Q8.3), and only then is the parser built against it (R-0622). Item 4 was approved
+  too (owner, 2026-11-08: "and yes speed target is fine"):
+  <a id="decided-2026-11-08-speed-target"></a>speed and size stay report-only until the first real
+  showcase (grep, slice 16); then a performance target against C is set from measured data, as an
+  owner decision (R-0623).
+- <a id="decided-2026-11-08-capabilities-kept"></a>**Capabilities stay as decided: `with(...)` permission
+  sets plus grant values** (owner, 2026-11-08: "i don't see an isue with noisier if it's clearer").
+  This confirms the existing design with no revision: the [authority rules](#decided-2026-11-02-authority)
+  and the Q5 and Q7 rows stand as written, and foundation contract C5 is written to them. The
+  answer closes a comparison with a capabilities-as-values-only (object-capability) model, in
+  which all four reviewing models recommended keeping today's design, because `with(...)` is the
+  checked ceiling in a function's signature when structs own capabilities. Follow-up for the
+  allocation slice: whether destroying a collection still needs `with(Alloc)` when its release
+  metadata travels with it (R-0624, raised by agy).
 - <a id="decided-project-spark-2026-11-06"></a>**What Concrete takes from SPARK** (owner, 2026-11-06: "ok do everything", after Claude, Codex, agy and Kimi chose unanimously; the
   [review](proposals/SPARK.md) items 1, 2, 3, 6, 7, 9 and 10).
   - *Function values with safety preconditions.* A function whose `#[requires]` is a safety
@@ -1029,7 +1197,8 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
 - <a id="decided-project-runtime-2026-11-06"></a>**Trap line, default layout and spec version** (owner, 2026-11-06: "ok do everything", after Claude, Codex, agy and Kimi chose unanimously).
   - *The trap line* ([OD101](#od101)'s form, spec obligation O4): `concrete: trap: <kind> at
     <path>:<line>:<col> (site <id>)`, the path relative to the project root with forward slashes,
-    line and column 1-based.
+    line and column 1-based. Extended 2026-11-08 by the [foundation decision](#foundation-q10): a
+    column counts bytes, and a tab counts one byte.
   - *Default struct layout:* declaration order, natural alignment defined exactly per target, the
     size rounded up to the alignment, and zero-sized fields taking no bytes. It is not a C ABI
     promise (R-0502).
@@ -1065,7 +1234,13 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
   of infrastructure before it is published or brought to the owner. A second, independent reviewer
   (Kimi, Grok or agy/Gemini) reviews as well when one is available, as the owner required for cleanup
   branches on 2026-10-28; when none is (quota, credit or sign-in), its absence is recorded with the
-  review and never assumed. A review never replaces the gates.
+  review and never assumed. A review never replaces the gates. Extended 2026-11-08 (owner: "also
+  remember we have agy not only codex kimi and claude"; also on 2026-11-08: "ok but review the
+  foundation with all the models right? agy, kimi and codex apart from claude that is us"; "use agy laso";
+  "have everything reviewed by the other llms"): every branch gets an agy review beside the
+  Codex and Kimi reviews. agy cannot read files, so its prompt carries the diff and the context it
+  needs and ends with a required verdict line. (The coordinator's relay added that agy can also act
+  as a writer.)
 - <a id="decided-project-throughput"></a>**Development throughput** (2026-10-22). The development
   feedback loop (landing, review, CI) is a priority track beside the main sequence
   ([record](archive/roadmap-2026-11/ROADMAP_DECISIONS.md#2026-10-22--development-throughput-priority)).
@@ -1238,7 +1413,7 @@ V1a, V1b and V1c.
 | OD123 | <a id="od123"></a>`as` on a newtype outside its module (added 2026-10-30, raised while absorbing the platform and stdlib documents). Question: Whether `v as N` and `n as T`, between a newtype `N` and its inner type `T`, are accepted outside the module that declares `N`, where TYPE-11 refuses `N(v)`. Bears on TYPE-11, TYPE-24, ARITH-5, OPEN-54. The current compiler: both accepted in any module, so `x as Id` builds a foreign newtype that `Id(x)` may not (E0296), and a validated wrapper's smart constructor can be bypassed. [VALIDATED_WRAPPERS.md](../legacy/docs/stdlib/VALIDATED_WRAPPERS.md) §8 describes the cast rule as guarding the wrapper contract from an `as` bypass, which holds for casts to unrelated types only. Options: (a) accepted anywhere, as in the current compiler; (b) accepted only where `N(v)` and `.0` are (TYPE-11, with R-0500's follow-on for `.0`); (c) `as` never names a newtype, the conversions being `N(v)` and `.0`. Austral: no newtype (OPEN-54's comparison). Pick: none given (raised by the absorption of docs/platform and docs/stdlib, 2026-10-30). | see OPEN-123 | see OPEN-123 | decided 2026-11-01 by the owner (final set): `as` never names a newtype |
 | OD124 | <a id="od124"></a>Profiles in the specification (added 2026-10-30, raised while absorbing the platform and stdlib documents). Question: Whether the profiles (the admission profiles Safe, Predictable and Proof, and the build profiles) belong to the language specification, in a chapter of their own, and whether a profile may change what an accepted program does. Bears on ARITH-9, OPEN-97, PASS-3, PASS-4. The current compiler: a profile only refuses or reports: `--check predictable` reports its five gates (no recursion, bounded loops, no allocation, no extern calls, no `File`, `Network` or `Process`), `[policy] predictable = true` in `Concrete.toml` turns a violation into E0610, and no profile changes the behaviour of a program it accepts; ARITH-9 states that for arithmetic. [PROFILES.md](../legacy/docs/platform/PROFILES.md) says a profile never changes what a program means, while OPEN-97 asks whether a build profile may omit a run-time check. Options: (a) no profiles chapter: profiles are tooling, and the spec states only that no profile changes an accepted program's behaviour; (b) a profiles chapter whose entries state each profile's admission rules as refusals, with that same guarantee; (c) as (b), with build profiles allowed to differ as OPEN-97 decides. Austral: not checked. Pick: none given (raised by the absorption of docs/platform and docs/stdlib, 2026-10-30). | see OPEN-124 | see OPEN-124 | decided 2026-11-01 by the owner (final set): Profiles chapter of refusals; no behaviour change |
 | OD125 | <a id="od125"></a>Contracts at run time (added 2026-10-30, raised while absorbing the platform and stdlib documents). Question: Whether a `#[requires]`, `#[ensures]` or loop `#[invariant]` that no proof discharges is checked at run time, trapping when it fails, or is only a claim. Bears on CON-1, CON-2, STMT-2. The current compiler: contracts are erased metadata: a call that violates `#[requires(x > 0)]` runs normally, in the binary and in `--interp`, and `assert` elaborates to proof evidence only (syntax chapter introduction). [ERROR_CONVENTIONS.md](../legacy/docs/stdlib/ERROR_CONVENTIONS.md) lists contract-violation traps among the fatal failures. Options: (a) claims only, never checked at run time, as in the current compiler; (b) checked at run time and trapping unless discharged; (c) checked under a build profile only (OPEN-97, OPEN-124). Austral: not checked. Pick: none given (raised by the absorption of docs/platform and docs/stdlib, 2026-10-30). | see OPEN-125 | see OPEN-125 | decided 2026-11-01 by the owner (final set): Claims only **Qualified 2026-11-06 by [no hidden traps](#decided-project-no-hidden-traps): a claim used for safety admission needs closed evidence.** |
-| OD126 | <a id="od126"></a>Target assumptions (added 2026-10-30, raised while absorbing the platform and stdlib documents). Question: Which target facts are language rules: 64-bit pointers, little-endian byte order, POSIX hosts, and the sizes of `bool`, `Unit` and pointers. Bears on FFI-2, FFI-7, TYPE-19, TYPE-20. The current compiler: one target profile: `Layout` hardcodes 8-byte pointers and references, `bool` of 1 byte, `Unit` of 0 bytes, an `i32` enum tag, and assumes little-endian POSIX hosts; FFI-2 names AAPCS64 for the native profile, and the integer types' widths follow from their names (TYPE-19). [EXECUTION_MODEL.md](../legacy/docs/platform/EXECUTION_MODEL.md) and [ABI.md](../legacy/docs/platform/ABI.md) state these as platform facts. Options: (a) language rules, a 32-bit or big-endian target being another language profile; (b) target facts, observable only through `sizeof`, `alignof` (FFI-7) and named target constants; (c) as (b), with the sizes of `bool` and `Unit` fixed by the language. Austral: not checked. Pick: none given (raised by the absorption of docs/platform and docs/stdlib, 2026-10-30). | see OPEN-126 | see OPEN-126 | decided 2026-11-01 by the owner (final set): Language rules; other targets are other profiles |
+| OD126 | <a id="od126"></a>Target assumptions (added 2026-10-30, raised while absorbing the platform and stdlib documents). Question: Which target facts are language rules: 64-bit pointers, little-endian byte order, POSIX hosts, and the sizes of `bool`, `Unit` and pointers. Bears on FFI-2, FFI-7, TYPE-19, TYPE-20. The current compiler: one target profile: `Layout` hardcodes 8-byte pointers and references, `bool` of 1 byte, `Unit` of 0 bytes, an `i32` enum tag, and assumes little-endian POSIX hosts; FFI-2 names AAPCS64 for the native profile, and the integer types' widths follow from their names (TYPE-19). [EXECUTION_MODEL.md](../legacy/docs/platform/EXECUTION_MODEL.md) and [ABI.md](../legacy/docs/platform/ABI.md) state these as platform facts. Options: (a) language rules, a 32-bit or big-endian target being another language profile; (b) target facts, observable only through `sizeof`, `alignof` (FFI-7) and named target constants; (c) as (b), with the sizes of `bool` and `Unit` fixed by the language. Austral: not checked. Pick: none given (raised by the absorption of docs/platform and docs/stdlib, 2026-10-30). | see OPEN-126 | see OPEN-126 | decided 2026-11-01 by the owner (final set): Language rules; other targets are other profiles. Generalized 2026-11-08 by the [foundation decision](#foundation-q3): profiles are read-only and separate address width, pointer representation, length width, byte order and address spaces; the existing 64-bit little-endian profile and its `i32` enum tags are unchanged |
 | OD127 | <a id="od127"></a>UTF-8 in every `String` (added 2026-10-30, raised while absorbing the platform and stdlib documents). Question: Whether every `String` value that safe code can reach holds valid UTF-8, as a language guarantee. Bears on TYPE-3, SYN-5, TRUST-2. The current compiler: literals are UTF-8 (SYN-5), but nothing keeps a `String` valid: `push_char` appends a byte unchecked, `Bytes::to_string` transfers bytes without validation, and std's `read_to_string` does not validate. [STRING_TEXT_CONTRACT.md](../legacy/docs/stdlib/STRING_TEXT_CONTRACT.md) §1 states the invariant as a target, and [UNICODE_POLICY.md](../legacy/docs/stdlib/UNICODE_POLICY.md) has a validating `Bytes::to_string` returning `Option`. Options: (a) a language guarantee, every safe constructor validating and an unchecked one being a trusted operation with that premise; (b) a std convention only, `String` being bytes to the language. Austral: not checked. Pick: none given (raised by the absorption of docs/platform and docs/stdlib, 2026-10-30). | see OPEN-127 | see OPEN-127 | decided 2026-10-31 by the owner's rule (every reviewer agreed, as strict as Austral or stricter): Language guarantee |
 | OD128 | <a id="od128"></a>`->` between a match arm's pattern and body (added 2026-10-30, raised while absorbing the compiler documents and the grammar comments). Question: Whether a match arm may separate its pattern from its body with `->` as well as `=>`. Bears on SYN-1 and PAT-7. The current compiler: the parser accepts both (`parseMatchArms`; `2 -> { return 42; }` exits 42 on both consumers), and the grammar's `match_arm` has only `=>`. The syntax freeze review (2026-04, [SYNTAX_FREEZE_REVIEW.md](../legacy/docs/archive/design-records/SYNTAX_FREEZE_REVIEW.md) §1.5) recommended `=>` as the canonical form with a warning for `->`, which also spells a return type. Options: (a) `=>` only, `->` refused; (b) both accepted; (c) both accepted, with a warning on `->`, as the freeze review recommended. Austral: not applicable. Pick: none given (raised by the absorption of docs/compiler, 2026-10-30). | see OPEN-128 | see OPEN-128 | decided 2026-11-01 by the owner (final set): `=>` only |
 | OD129 | <a id="od129"></a>Type arguments of an enum literal taken from its expected type (added 2026-10-30, raised while absorbing the compiler documents and the grammar comments). Question: Whether an enum literal or variant written without type arguments (`Option::Some { value: 42 }`, `Option::None`) takes them from the type its position expects, and from which positions. Bears on TYPE-7, TYPE-15 and OPEN-46, which asks the same of a generic call's type arguments and whose pick excludes the expected result type. The current compiler: the type arguments come from the expected type of a `return` (the function's result type), of an annotated `let` and of a call argument (the parameter's type); all three exit 42 on both consumers, and spec examples rely on it (PAT-1). The syntax freeze review (§1.3, kill-list items 1, 4 and 5) proposed this inference for enum literals and for constructor calls such as `Vec::new()`. Options: (a) explicit type arguments always; (b) from the expected type in the positions the current compiler uses; (c) the answer to OPEN-46, applied to enum literals. Austral: type parameters are inferred from the arguments, and a declaration's type can disambiguate. Pick: none given (raised by the absorption of docs/compiler, 2026-10-30). | see OPEN-129 | see OPEN-129 | decided 2026-11-01 by the owner (final set): Same rule as OD46: type arguments from the arguments, otherwise explicit (`None::<i32>`) |
