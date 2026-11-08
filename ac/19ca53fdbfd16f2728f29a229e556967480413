@@ -1,0 +1,2 @@
+[piece 1 of 1: scripts]
+- scripts/land/lib.sh:170: This reapplies `insteadOf` to URLs already expanded by `git remote get-url`. Git applies these rewrites only once. With reciprocal rewrites between `https://github.com/` and `https://attacker.example/`, a configured GitHub remote resolves to the attacker, but this second expansion converts it back to GitHub and passes the guard. Validate the raw configured URL once, or avoid expanding URLs already resolved by Git.
