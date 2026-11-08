@@ -347,14 +347,14 @@ jobs:
 
   # THE COMPILER'S GATES (Concrete/README.md gates 4, 6, 6a, 8, 9, 10, 11 and 12; slice 0, provisional),
   # scripts/checks/compiler/: not root checks (run.sh runs only scripts/checks/*.sh), because they need
-  # the compiler's devshell, a native macOS runner and minutes each. Every hand-written BIR example
-  # through the LLVM path and the LCB path, each executable's observation compared with the BIR
-  # semantics; sanitizers, binary size (report-only) and the stack bound; the trusted-base golden; and
+  # the compiler's devshell, a native macOS runner and minutes each. Every bir: row in the test manifest
+  # through the LLVM path and the LCB path, each executable's observation compared with the manifest
+  # expectation; sanitizers, binary size (report-only) and the stack bound; the trusted-base golden; and
   # every build stage reproduced in distinct directories and on distinct machines. Each runs natively
   # on x86-64 Linux and on AArch64 macOS (LCB's first native proof profile is Apple AArch64), and every
   # matrix leg is a required job of its own name.
-  backends:
-    name: Slice 0 backends (${{ matrix.arch }})
+  tests:
+    name: Tests (${{ matrix.arch }})
     needs: landing-record
     if: ${{ !cancelled() && needs.landing-record.outputs.recorded != 'true' }}
     # The compiler's devshell (flake.nix default: Lean, clang, LLVM, gdb/lldb), entered per step;
@@ -378,8 +378,8 @@ jobs:
       - uses: actions/checkout@v4
       - name: Install Nix
         uses: cachix/install-nix-action@v31
-      - name: Backend gate (LLVM and LCB, native)
-        run: nix develop --command bash scripts/checks/compiler/slice0_backends.sh
+      - name: Manifest tests (LLVM and LCB, native)
+        run: nix develop --command bash scripts/checks/compiler/tests.sh
 
   artifacts:
     name: Slice 0 artifacts (${{ matrix.arch }})

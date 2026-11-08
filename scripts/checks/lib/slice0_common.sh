@@ -1,5 +1,5 @@
 # shellcheck shell=bash
-# Shared machinery of the slice-0 example gates (PROVISIONAL): slice0_backends.sh (gates 4, 6, 6a)
+# Shared machinery of the slice-0 example gates (PROVISIONAL): tests.sh (gates 4, 6, 6a)
 # and slice0_artifacts.sh (gates 10, 11, 12). Source it from the repository root, inside the nix
 # devshell, with `set -euo pipefail`. It builds the compiler and LCB's command line under the
 # gate's limits (lib/limits.sh: an address-space cap of SLICE0_GATE_MEM_GB GiB, default 64; 0 for
@@ -14,7 +14,7 @@
 #     OUT.stdout, OUT.stderr;
 #   judge EXPECTED_DIR OBS: the observation OBS.* equals the expectation, byte for byte;
 #   build NAME LOG CMD...: run CMD, or print LOG and fail the gate;
-#   emit_examples: the example names, one per line, failing if there are none;
+#   manifest_rows KIND: validated manifest rows of one program kind, failing if there are none;
 #   cap_out: copy stdin to stdout, failing above 1 MiB: every command output a gate captures
 #     into a variable goes through it, so no producer can grow the gate's shell (which may run
 #     with no address-space cap, see SLICE0_GATE_MEM_GB) without bound.
@@ -97,9 +97,11 @@ cap_out() {
   printf '%s' "$out"
 }
 
-emit_examples() {
-  local names
-  names=$("${emitter[@]}" list | cap_out) || { echo "slice0: listing the examples failed" >&2; exit 1; }
-  [ -n "$names" ] || { echo "slice0: no examples listed" >&2; exit 1; }
-  printf '%s\n' "$names"
+test_manifest=${CONCRETE_TEST_MANIFEST:-tests/manifest.tsv}
+manifest_rows() {
+  local kind=$1 rows
+  rows=$(bounded 30 python3 -I "$root/scripts/checks/lib/test_manifest.py" rows --kind "$kind" "$test_manifest" | cap_out) ||
+    { echo "slice0: reading $test_manifest failed" >&2; exit 1; }
+  [ -n "$rows" ] || { echo "slice0: no $kind tests listed in $test_manifest" >&2; exit 1; }
+  printf '%s\n' "$rows"
 }
