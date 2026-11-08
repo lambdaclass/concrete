@@ -39,8 +39,15 @@ if [ ! -d "$CLONE/.git" ]; then
   git clone -q "$ORIGIN_URL" "$CLONE"
 fi
 cd "$CLONE"
-if [ "$(git remote get-url origin)" != "$ORIGIN_URL" ]; then
-  say "repointing origin from $(git remote get-url origin) to $ORIGIN_URL"; git remote set-url origin "$ORIGIN_URL"
+if [ "$(git config --get-all remote.origin.url)" != "$ORIGIN_URL" ]; then
+  say "repointing origin from $(git config --get-all remote.origin.url | paste -sd' ') to $ORIGIN_URL"
+  git config --replace-all remote.origin.url "$ORIGIN_URL"
+fi
+# A push URL would send pushes somewhere other than the fetch URL (train.sh refuses one that names
+# another repository); the bot pushes where it fetches, so it keeps none.
+if git config --get-all remote.origin.pushurl >/dev/null 2>&1; then
+  say "removing origin's push URL(s): $(git config --get-all remote.origin.pushurl | paste -sd' ')"
+  git config --unset-all remote.origin.pushurl
 fi
 if git remote get-url lambdaclass >/dev/null 2>&1; then say "removing the old mirror remote 'lambdaclass' (origin is that repository now)"; git remote remove lambdaclass; fi
 if git remote get-url fork >/dev/null 2>&1; then say "the clone has a remote named 'fork'; the bot refuses it, removing it"; git remote remove fork; fi
@@ -91,8 +98,11 @@ EOF
   say "wrote $ENVF"
 else
   say "kept the existing $ENVF"
+  # An older install set LAND_REPO=unbalancedparentheses/concrete2; train.sh and the bot refuse a
+  # LAND_REPO that is not the one repository, so the installer migrates the line rather than warn.
   if grep -q '^LAND_REPO=' "$ENVF" && ! grep -qx 'LAND_REPO=lambdaclass/concrete' "$ENVF"; then
-    say "WARNING: $ENVF sets $(grep '^LAND_REPO=' "$ENVF"); train.sh refuses a remote that is not that repository. Set LAND_REPO=lambdaclass/concrete."
+    say "migrating $ENVF: $(grep '^LAND_REPO=' "$ENVF" | paste -sd' ') -> LAND_REPO=lambdaclass/concrete"
+    sed -i 's|^LAND_REPO=.*|LAND_REPO=lambdaclass/concrete|' "$ENVF"
   fi
 fi
 for u in concrete-landing-bot.service concrete-landing-bot.timer; do

@@ -6,7 +6,8 @@
 #   legs_wait                   wait for every leg; sets LEGS_FAILED, LEGS_SUM, LEGS_REPORT
 #   MOVE_GATE_MARKER            the line train.sh's dry-run land prints when only the move gate refused
 #   dryland_only_move_gate rc out   0 iff a dry-run land exited 5 with MOVE_GATE_MARKER as a whole line
-#   land_remote_bad remote repo     print why <remote> is not <repo> (owner/name) and return 1, else 0
+#   LAND_CANONICAL_REPO         the one GitHub repository (owner/name); not overridable
+#   land_remote_bad remote repo     print why <remote> or <repo> is not LAND_CANONICAL_REPO and return 1, else 0
 #
 # A LEG is one independent validation (impact gates, remote full gates, Codex review). Legs of one
 # candidate run at the same time and are all collected: one failing leg fails the whole, and no
@@ -74,25 +75,33 @@ dryland_only_move_gate() { # rc out
   return 1
 }
 
-# THE ONE REPOSITORY (owner, 2026-11-06: lambdaclass/concrete). Every URL git would use for <remote>,
-# fetch and push alike (`get-url --all` and `get-url --push --all`, insteadOf and pushurl applied), that
-# is a GitHub URL must name <repo>; a fetch URL at lambdaclass with a pushurl still at the archived
-# concrete2 would otherwise pass a fetch-only check and publish there. A URL that is not GitHub (the
-# test fixtures' bare repositories) passes. Prints the first offending URL and returns 1.
+# The one repository since 2026-11-06 (docs/decisions.md#decided-project-repository). It is a constant,
+# not LAND_REPO: a stale clone that still has origin=concrete2 and an old LAND_REPO=concrete2 in its
+# environment would otherwise pass a check that only compares the two.
+LAND_CANONICAL_REPO=lambdaclass/concrete
+# Every fetch URL and every push URL of <remote> (git pushes to remote.<r>.pushurl when one is set,
+# and to each of several) that is a GitHub URL must name LAND_CANONICAL_REPO, and then <repo>, the
+# repository gh reads, must be it too. A URL that is not GitHub (the test fixtures' bare
+# repositories) passes, and leaves <repo> free for a fake gh. Prints why and returns 1.
 land_remote_bad() { # remote repo
-  local r="$1" want u path urls
-  want="$(printf '%s' "$2" | tr 'A-Z' 'a-z')"
+  local r="$1" want u path urls github=0
+  want="$(printf '%s' "$LAND_CANONICAL_REPO" | tr 'A-Z' 'a-z')"
   urls="$(git remote get-url --all "$r" 2>/dev/null)" || { echo "the remote '$r' is not configured"; return 1; }
   urls="$urls"$'\n'"$(git remote get-url --push --all "$r" 2>/dev/null)"
   while IFS= read -r u; do
     case "$u" in
       *github.com[:/]*)
+        github=1
         path="${u#*github.com[:/]}"; path="${path%/}"; path="${path%.git}"
         if [ "$(printf '%s' "$path" | tr 'A-Z' 'a-z')" != "$want" ]; then
-          echo "$r uses $u, not github.com/$2: this clone points at another repository. Repoint it: git remote set-url $r https://github.com/$2.git (and drop any other url or pushurl of $r)"
+          echo "$r uses $u, not github.com/$LAND_CANONICAL_REPO: this clone points at another repository. Repoint it: git remote set-url $r https://github.com/$LAND_CANONICAL_REPO.git (and drop any other url or pushurl of $r)"
           return 1
         fi ;;
     esac
   done <<< "$urls"
+  if [ "$github" = 1 ] && [ "$(printf '%s' "$2" | tr 'A-Z' 'a-z')" != "$want" ]; then
+    echo "LAND_REPO is '$2' but $r is github.com/$LAND_CANONICAL_REPO: gh would read another repository. Set LAND_REPO=$LAND_CANONICAL_REPO or unset it"
+    return 1
+  fi
   return 0
 }

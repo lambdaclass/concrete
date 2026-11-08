@@ -413,7 +413,7 @@ script while it runs. On the server, the remote leg runs locally (`run-at-ref.sh
 train SHA from the bot's clone. The bot also needs two credentials:
 
 - `gh` authentication, to dispatch CI;
-- write access to both repositories, to push main, `ci/*` and the notes.
+- write access to lambdaclass/concrete, to push main, `ci/*` and the notes.
 
 ```sh
 scripts/land/install-bot.sh --ssh dev@<server> [--source-ref <ref>]
@@ -488,7 +488,7 @@ The server was shared with other full runs at a load average of 15 to 32.
 
 ## Watching trains
 
-`scripts/status/status.py` renders the landing log, the `ci/*` runs in flight, both mains and the
+`scripts/status/status.py` renders the landing log, the `ci/*` runs in flight, main and the
 ready branches as one phone-friendly page. `scripts/land/notify.sh <level> <title> <body>` pushes
 a message to ntfy or Slack, falling back to stdout, and drops duplicates. Setup and the
 publishing decision are in docs/project/STATUS_PAGE.md.

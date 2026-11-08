@@ -51,13 +51,13 @@ printf 'pid=%s worktree=%s\n' "$$" "$(pwd)" > "$PUSH_LOCK/owner" 2>/dev/null || 
 trap 'rm -f "$PUSH_LOCK/owner" 2>/dev/null; rmdir "$PUSH_LOCK" 2>/dev/null || true' EXIT
 
 REMOTE="${PUSH_REMOTE:-origin}"
-REPO="${LAND_REPO:-lambdaclass/concrete}"
 if [ "$REMOTE" = "fork" ]; then
   echo "push-both: refusing the remote named fork (a divergent repository)" >&2
   exit 2
 fi
 # shellcheck source=scripts/land/lib.sh
 . "$ROOT_DIR/scripts/land/lib.sh"
+REPO="${LAND_REPO:-$LAND_CANONICAL_REPO}"
 # Every fetch and push URL of the remote that is GitHub must be the one repository (lib.sh).
 if ! why="$(land_remote_bad "$REMOTE" "$REPO")"; then
   echo "push-both: $why. Nothing was pushed." >&2
