@@ -1,0 +1,22 @@
+Implemented and committed; working tree is clean. No push.
+
+- `2209101d1` — Make lifecycle transitions partial and propagate refusal.
+- `dc015b7f4` — Prove refusal laws, add scope-exit examples, update README.
+
+New theorems establish:
+
+- `bind_refused`, `assign_refused`: refused initialization makes the step stuck.
+- `enter_refused`, `call_refused`: refused activation blocks initial/internal entry.
+- `scope_drop_refused`, `exit_drop_refused`, `test_drop_refused`: refused drops block scope and test-frame exits.
+- `return_refused`: refused leave or result binding blocks explicit and Unit returns.
+- `prim_bind_refused`: refused primitive-result binding returns no continuation.
+- `continuation_refused`: a refused continuation cannot produce a configuration.
+- `no_step_of_none`: a refused step has no transition.
+
+All existing theorems remain, with specific lifecycle-success premises where needed; no totality assumption was added. Existing examples retain their results, and the new flagged-local example ends stuck.
+
+Validation passed at `dc015b7f4`: `ConcreteSpec` build, rules gate (32 checks), trust-ban gate (23 checks).
+
+Left out: C5 implementation and heavy/independent review, reserved for the coordinator/reviewer by the brief.
+
+QUESTIONS: None.

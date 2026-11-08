@@ -16,3 +16,6 @@ C5 owner answers Q1-Q3 (yes to everything) added to C5 ROUND3 items 4-6.
 C10 r4 2dfce586: 7 gates PASS (c10g4); agy ACCEPT; Codex CHANGES (4 major: c1_call_frame, ABI laws, stack/launcher, retention are projections of assumed contracts). ROUND5 queued after C4 audit.
 C9 r3 4313e251: 7 gates PASS (c9g3); Codex CHANGES (6) + agy CHANGES (6): identity laws are record-shape restatements; discharge_fact transport; collision_refuses; trapLine planted; schema gaps (GenericId trait items, StableKey owner, PackageRelativeKey). ROUND4 queued after C5 r3.
 C9 owner answers (keys/PackageId/premises) added to C9 ROUND4 items 8-10. Suffix typing (complementary, revises OD31/OD138): no C-contract covers literal typing (Core literals typed after elaboration); nothing to encode.
+OWNER RULE push-often: backup-loop pushes every writer wip/spec-* tip (ff-only) every 10 min + evidence snapshot branch wip/spec-evidence-2026-11-08 (docs/proposals/spec-evidence/, first 0dcffd0bf).
+OWNER RULE writers-only: Claude writes no file content (no golden commits, no evidence snapshots). Retired evidence-sync; backup-loop pushes only. Evidence snapshot 0dcffd0bf was produced by Claude script before the rule -> Kimi to redo/own branch.
+Goldens: golden-and-gates retired; golden-flow.sh = coordinator runs generator on ci-2, Kimi inspects+commits, coordinator verifies byte-equal then gates.

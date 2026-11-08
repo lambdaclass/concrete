@@ -1,0 +1,57 @@
+Implemented and committed C4. Working tree is clean; nothing was pushed.
+
+Commits:
+
+- `67fd373b` — scalar representation, allocation freshness, release/access laws.
+- `5d376665` — allocation preserves well-formedness; containing candidates are unique.
+- `8cf5b597` — repair shadow-block invariant; prove reconstruction soundness.
+- `14baea61` — store/load and block/byte frame laws.
+- `7445a623` — scalar hybrid state, partial reads, active-byte writes.
+- `423fe36e` — require unique block entries.
+- `1008e71d` — materialization projection and idempotence.
+- `7f566f03` — padding/raw-write examples and post-free allocation identity law.
+- `866d0e73` — update reading guide and integration wording.
+
+The real draft defect was inconsistent association-list entries: lookup could hide a block that `fromExposed` still scanned. `WellFormed` now requires canonical, unique entries; recorded as ISS-0017.
+
+Theorems in [Proofs/Memory.lean](ConcreteSpec/Proofs/Memory.lean):
+
+- `decodeInt_encodeInt`: valid integers round-trip in either byte order.
+- `decodeInt_inRange`: decoded integers are in range.
+- `decodeBool_encodeBool`: bools round-trip.
+- `decodeBool_valid`: successful decoding requires the corresponding byte `0` or `1`.
+- `decodePtr_encodePtr`: pointers round-trip under a well-formed target.
+- `alloc_result`: success returns identity `m.next`, the specified new memory, and fitting premises.
+- `alloc_fresh`: that identity was absent.
+- `alloc_block`, `alloc_initialized`: the new block is present, live, unexposed and entirely uninitialized.
+- `alloc_failure`: an unavailable request returns only the error.
+- `alloc_wellFormed`: allocation preserves the memory invariant.
+- `alloc_ne_existing`, `free_alloc_ne_existing`: allocation never reuses an existing identity, including after release.
+- `free_retains`: release retains the block, marks it dead/unexposed, and preserves `next`.
+- `access_zero`: zero-byte access checks only alignment and non-nullness.
+- `access_no_provenance`, `access_after_free`: nonzero accesses without provenance or through released provenance fail.
+- `access_some`: successful nonempty access supplies its live block and bounds.
+- `store_load`: a successful store reads back exactly its bytes.
+- `store_other_block`, `store_same_block_frame`: stores preserve other blocks and bytes outside their range.
+- `fromExposed_sound`: reconstructed provenance identifies an eligible containing block, or a one-past block when none contains the address.
+- `candidate_contains_unique`: two eligible blocks cannot contain the same address.
+- `eqAddr_provenance`: address equality ignores provenance.
+- Supporting lemmas establish byte-order involution (`ordered_ordered`), encoding/decoding lengths (`leBytes_length`, `ordered_length`, `octets_length`, `encodeInt_length`), initialized-octet recovery (`octets_init`), numeric recovery/bounds (`leValue_leBytes`, `leValue_lt`, `intByte_power`), update lookup (`block_modify`), overlap symmetry, and splice read/frame properties (`splice_read`, `splice_frame`).
+
+Theorems in [Proofs/Hybrid.lean](ConcreteSpec/Proofs/Hybrid.lean):
+
+- `encode_length`: encoding occupies the active scalar size.
+- `rep_roundtrip`: valid scalar encodings decode to their values.
+- `decode_valid`: decoding supplies the requested type and a valid value.
+- `read_structured`: unmaterialized reads return the structured value.
+- `write_read`: successful typed writes read back their value.
+- `typed_store_frame`: active-byte writes preserve outside bytes, including padding metadata.
+- `materialize_reuse`: existing materialized storage is reused unchanged.
+- `materialize_projection`: success installs the returned range.
+- `materialize_idempotent`: repeating materialization preserves that range and state.
+
+Validation: final build passed at `866d0e73`; rule gate passed `32/0` and trust-ban passed `23/0` at `7f566f03`. Codex reviews returned clean but had sandbox limitations. Independent static review found no semantic, proof or owner-decision violations; its two documentation findings are fixed.
+
+Left out: struct field layouts, enums, pointers in structs, C5 ownership/permissions, allocator algorithms, FFI and the C8 padding oracle. The scalar model takes initial trailing padding explicitly and never reselects it on typed writes. The `Operands` integration plan is documented without changing `Exec.lean`.
+
+**QUESTIONS:** Pointer reads from anything other than one intact stored pointer remain open: reject them, decode numeric addresses without provenance, or define additional fragment-reconstruction rules. Existing `decodePtr` behavior is unchanged.
