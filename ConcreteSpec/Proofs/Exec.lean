@@ -428,15 +428,15 @@ Consequently changing the dispatcher to skip or insert a call invalidates `clean
 -/
 
 /-- An actual execution stopped at its first configuration satisfying `stop`. -/
-inductive FirstSteps (P : Program O) (stop : Config O → Prop) :
+inductive FirstSteps (R : Config O → Label O → Config O → Prop) (stop : Config O → Prop) :
     Config O → List O.Event → Config O → Prop where
-  | stop {c} : stop c → FirstSteps P stop c [] c
-  | step {c l c' tr c''} : ¬ stop c → Step P c l c' → FirstSteps P stop c' tr c'' →
-      FirstSteps P stop c (l.events ++ tr) c''
+  | stop {c} : stop c → FirstSteps R stop c [] c
+  | step {c l c' tr c''} : ¬ stop c → R c l c' → FirstSteps R stop c' tr c'' →
+      FirstSteps R stop c (l.events ++ tr) c''
 
 /-- Helper (inversion). Forgetting first-arrival information preserves the actual execution. -/
 theorem FirstSteps.steps_inv {P : Program O} {stop : Config O → Prop} {c c' : Config O}
-    {tr : List O.Event} (h : FirstSteps P stop c tr c') : Steps P c tr c' := by
+    {tr : List O.Event} (h : FirstSteps (Step P) stop c tr c') : Steps P c tr c' := by
   induction h with
   | stop => exact .refl _
   | step _ hs _ ih => exact .step hs ih
@@ -465,7 +465,7 @@ inductive BoundaryRun (P : Program O) (R : Config O → Label O → Config O →
   | call {pre rest L st st' d acts tr₁ tr₂ Lend stEnd} : pre ≠ [] →
       R ⟨.exiting e, L, st, pre ++ k⟩ .silent
         ⟨.exec d.stmt, L, st, .resume (.exit e) :: rest ++ k⟩ →
-      FirstSteps P (fun c => c.ctrl = .done ∧ c.frames = .resume (.exit e) :: rest ++ k)
+      FirstSteps (Step P) (fun c => c.ctrl = .done ∧ c.frames = .resume (.exit e) :: rest ++ k)
         ⟨.exec d.stmt, L, st, .resume (.exit e) :: rest ++ k⟩ tr₁
         ⟨.done, L, st', .resume (.exit e) :: rest ++ k⟩ →
       R ⟨.done, L, st', .resume (.exit e) :: rest ++ k⟩ .silent
@@ -716,6 +716,412 @@ theorem steps_from_trapped {P : Program O} {kd : TrapKind} {site : SiteId} {L : 
     cases hs with
     | silent h => simp [step_trapped] at h
     | prim h _ _ => simp [step_trapped] at h
+
+/-- A call retains its saved caller frame until normal return. -/
+private def Protected (L : AList Var O.Val) (q : List (Frame O)) (c : Config O) : Prop :=
+  ∃ pre, c.frames = pre ++ .ret none L :: q
+
+/-- Helper (inversion). Decomposes a raw execution using the machine stack rules. -/
+private theorem register_protected_inv (d : Deferred O) (caller : AList Var O.Val)
+    (q : List (Frame O)) : ∀ (pre : List (Frame O)) (k' : List (Frame O)),
+    register d (pre ++ .ret none caller :: q) = some k' →
+    ∃ pre', k' = pre' ++ .ret none caller :: q
+  | [], _, h => by simp [register] at h
+  | f :: pre, k', h => by
+    cases f with
+    | seq t =>
+      simp only [List.cons_append, register] at h
+      cases hr : register d (pre ++ .ret none caller :: q) with
+      | none => simp [hr] at h
+      | some rest =>
+        simp only [hr, Option.map_some, Option.some.injEq] at h
+        obtain ⟨pre', rfl⟩ := register_protected_inv d caller q pre rest hr
+        exact ⟨.seq t :: pre', h.symm⟩
+    | scope b dm ds =>
+      simp only [List.cons_append, register, Option.some.injEq] at h
+      exact ⟨.scope b dm (d :: ds) :: pre, h.symm⟩
+    | test l cr t body site dm => simp [register] at h
+    | body l cr t body site => simp [register] at h
+    | resume p => simp [register] at h
+    | ret dst L => simp [register] at h
+
+set_option maxHeartbeats 2000000 in
+/-- Helper (inversion). Decomposes a raw execution using the machine stack rules. -/
+private theorem protected_step_inv {P : Program O} {caller : AList Var O.Val}
+    {q : List (Frame O)} {c c' : Config O} {label : Label O}
+    (hp : Protected caller q c) (h : Step P c label c') :
+    Protected caller q c' ∨ (c'.ctrl = .done ∧ c'.locals = caller ∧ c'.frames = q) := by
+  cases c with | mk ctrl locals st frames =>
+    obtain ⟨pre, rfl⟩ := hp
+    cases h with
+    | silent h =>
+      cases pre with
+      | nil =>
+        change step P ⟨ctrl, locals, st, .ret none caller :: q⟩ = _ at h
+        cases ctrl with
+        | exec stmt =>
+          cases stmt <;> simp only [step, onRes, Option.bind, Option.map, bindLife] at h <;>
+            repeat' first | simp_all [register] | split at h
+          all_goals try simp only [Option.some.injEq, Out.next.injEq] at h
+          all_goals try subst c'
+          all_goals try contradiction
+          all_goals repeat' first | simp_all [Protected] | split at h
+          all_goals try grind [Protected, register_protected_inv]
+          all_goals try first
+            | rfl
+            | exact ⟨[], rfl⟩
+            | exact ⟨[_], rfl⟩
+            | exact ⟨[_, _], rfl⟩
+            | exact .inl ⟨[], rfl⟩
+            | exact .inl ⟨[_], rfl⟩
+            | exact .inl ⟨[_, _], rfl⟩
+            | (rcases h with ⟨_, rfl⟩; exact .inl ⟨[_, _], rfl⟩)
+        | done =>
+          simp only [step, Option.bind, Option.map, bindLife] at h
+          repeat' first | simp_all | split at h
+          all_goals try simp only [Option.some.injEq, Out.next.injEq] at h
+          all_goals try subst c'
+          all_goals try contradiction
+          all_goals repeat' first | simp_all [Protected] | split at h
+          all_goals exact .inr rfl
+        | exiting e =>
+          cases e <;> simp only [step, stepExit, Option.bind, Option.map, bindLife] at h
+          all_goals repeat' first | simp_all | split at h
+          all_goals try simp only [Option.some.injEq, Out.next.injEq] at h
+          all_goals try subst c'
+          all_goals try contradiction
+          all_goals repeat' first | simp_all [Protected, bindDst] | split at h
+          all_goals exact .inr rfl
+        | trapped kd site => simp [step] at h
+      | cons f pre =>
+        change step P ⟨ctrl, locals, st, f :: (pre ++ .ret none caller :: q)⟩ = _ at h
+        cases ctrl with
+        | exec stmt =>
+          cases stmt <;> simp only [step, onRes, Option.bind, Option.map, bindLife] at h <;>
+            repeat' first | simp_all | split at h
+          all_goals try simp only [Option.some.injEq, Out.next.injEq] at h
+          all_goals try subst c'
+          all_goals try contradiction
+          all_goals repeat' first | simp_all [Protected] | split at h
+          all_goals try grind [Protected, register_protected_inv]
+          all_goals try first
+            | rfl
+            | exact ⟨f :: pre, rfl⟩
+            | exact ⟨_ :: f :: pre, rfl⟩
+            | exact ⟨_ :: _ :: f :: pre, rfl⟩
+            | exact .inl ⟨f :: pre, rfl⟩
+            | exact .inl (register_protected_inv _ caller q (f :: pre) _ (by assumption))
+            | exact .inl ⟨_ :: f :: pre, rfl⟩
+            | exact .inl ⟨_ :: _ :: f :: pre, rfl⟩
+        | done =>
+          cases f <;> simp only [step, onRes, startCleanup, Option.bind, Option.map, bindLife] at h <;>
+            repeat' first | simp_all | split at h
+          all_goals try simp only [Option.some.injEq, Out.next.injEq] at h
+          all_goals try subst c'
+          all_goals try contradiction
+          all_goals repeat' first | simp_all [Protected, bindDst] | split at h
+          all_goals try grind [Protected, register_protected_inv]
+          all_goals try first
+            | rfl
+            | exact ⟨pre, rfl⟩
+            | exact ⟨_ :: pre, rfl⟩
+            | exact ⟨_ :: _ :: pre, rfl⟩
+            | exact .inl ⟨pre, rfl⟩
+            | exact .inl ⟨_ :: pre, rfl⟩
+            | exact .inl ⟨_ :: _ :: pre, rfl⟩
+        | exiting e =>
+          cases f <;> cases e <;>
+            simp only [step, stepExit, startCleanup, Option.bind, Option.map, bindLife] at h <;>
+            repeat' first | simp_all | split at h
+          all_goals try simp only [Option.some.injEq, Out.next.injEq] at h
+          all_goals try subst c'
+          all_goals try contradiction
+          all_goals repeat' first | simp_all [Protected, bindDst] | split at h
+          all_goals try grind [Protected, register_protected_inv]
+          all_goals try first
+            | rfl
+            | exact ⟨pre, rfl⟩
+            | exact ⟨_ :: pre, rfl⟩
+            | exact ⟨_ :: _ :: pre, rfl⟩
+            | exact .inl ⟨pre, rfl⟩
+            | exact .inl ⟨_ :: pre, rfl⟩
+            | exact .inl ⟨_ :: _ :: pre, rfl⟩
+        | trapped kd site => simp [step] at h
+    | prim h ha hk =>
+      cases ctrl with
+      | exec stmt =>
+        cases stmt <;> simp only [step, onRes, Option.bind, Option.map] at h <;>
+          repeat' first | simp_all [Protected, bindLife] | split at h | split at hk
+        all_goals try grind [Protected]
+        all_goals exact ⟨pre, rfl⟩
+      | done =>
+        cases pre with
+        | nil =>
+          change step P ⟨.done, locals, st, .ret none caller :: q⟩ = _ at h
+          simp only [step, Option.bind, Option.map, bindLife] at h
+          repeat' first | simp_all | split at h
+        | cons f pre =>
+          change step P ⟨.done, locals, st, f :: (pre ++ .ret none caller :: q)⟩ = _ at h
+          cases f <;> simp only [step, onRes, startCleanup, Option.bind, Option.map] at h <;>
+            repeat' first | simp_all | split at h
+      | exiting e => exact False.elim (stepExit_no_request_inv locals st e _ _ _ _ _ _ h)
+      | trapped kd site => simp [step] at h
+/-- A step count for a first-arrival execution, used only for induction on strict subpaths. -/
+private inductive FirstStepsN (R : Config O → Label O → Config O → Prop) (stop : Config O → Prop) :
+    Config O → List O.Event → Config O → Nat → Prop where
+  | stop {c} : stop c → FirstStepsN R stop c [] c 0
+  | step {c l c' tr c'' n} : ¬ stop c → R c l c' → FirstStepsN R stop c' tr c'' n →
+      FirstStepsN R stop c (l.events ++ tr) c'' (n + 1)
+
+/-- Helper (inversion). Decomposes a raw execution using the machine stack rules. -/
+private theorem FirstSteps.sized_inv {P : Program O} {stop : Config O → Prop}
+    {c c' : Config O} {tr : List O.Event} (h : FirstSteps (Step P) stop c tr c') :
+    ∃ n, FirstStepsN (Step P) stop c tr c' n := by
+  induction h with
+  | stop hs => exact ⟨0, .stop hs⟩
+  | step hn hs _ ih => obtain ⟨n, ih⟩ := ih; exact ⟨n + 1, .step hn hs ih⟩
+
+/-- Helper (inversion). Decomposes a raw execution using the machine stack rules. -/
+private theorem FirstStepsN.unsized_inv {P : Program O} {stop : Config O → Prop}
+    {c c' : Config O} {tr : List O.Event} {n : Nat} (h : FirstStepsN (Step P) stop c tr c' n) :
+    FirstSteps (Step P) stop c tr c' := by
+  induction h with
+  | stop hs => exact .stop hs
+  | step hn hs _ ih => exact .step hn hs ih
+
+/-- Helper (inversion). Decomposes a raw execution using the machine stack rules. -/
+private theorem protected_height_inv {caller : AList Var O.Val} {q : List (Frame O)}
+    {c : Config O} (h : Protected caller q c) : q.length < c.frames.length := by
+  obtain ⟨pre, he⟩ := h
+  simp only [he, List.length_append, List.length_cons]
+  omega
+
+/-- Helper (inversion). Decomposes a raw execution using the machine stack rules. -/
+private theorem protected_not_return_inv {caller : AList Var O.Val} {q : List (Frame O)}
+    {c : Config O} (h : Protected caller q c) : ¬ (c.ctrl = .done ∧ c.frames = q) := by
+  intro hr
+  have hh := protected_height_inv h
+  rw [hr.2] at hh
+  exact Nat.lt_irrefl _ hh
+
+/-- Helper (inversion). Decomposes a raw execution using the machine stack rules. -/
+private theorem FirstStepsN.split_return_inv {P : Program O} {bound : Nat}
+    {c endC : Config O} {tr : List O.Event} {n : Nat}
+    (h : FirstStepsN (Step P) (fun c => c.frames.length ≤ bound) c tr endC n) :
+    ∀ {caller : AList Var O.Val} {q : List (Frame O)}, bound < q.length → Protected caller q c →
+      ∃ n₁ n₂ tr₁ st₁ tr₂, n = n₁ + n₂ ∧ tr = tr₁ ++ tr₂ ∧
+        FirstStepsN (Step P) (fun c => c.ctrl = .done ∧ c.frames = q) c tr₁ ⟨.done, caller, st₁, q⟩ n₁ ∧
+        FirstStepsN (Step P) (fun c => c.frames.length ≤ bound) ⟨.done, caller, st₁, q⟩ tr₂ endC n₂ := by
+  induction h with
+  | stop hs =>
+    intro caller q hq hp
+    have hh := protected_height_inv hp
+    omega
+  | @step c l c' tr endC n hn hs ht ih =>
+    intro caller q hq hp
+    cases protected_step_inv hp hs with
+    | inl hp' =>
+      obtain ⟨n₁, n₂, tr₁, st₁, tr₂, hc, he, ha, hb⟩ := ih hq hp'
+      exact ⟨n₁ + 1, n₂, l.events ++ tr₁, st₁, tr₂, by omega,
+        by simp [he, List.append_assoc], .step (protected_not_return_inv hp) hs ha, hb⟩
+    | inr hr =>
+      have he : c' = ⟨.done, caller, c'.store, q⟩ := by cases c'; simp_all
+      rw [he] at hs ht
+      have hseg : FirstStepsN (Step P) (fun c => c.ctrl = .done ∧ c.frames = q)
+          c l.events ⟨.done, caller, c'.store, q⟩ 1 := by
+        simpa using (FirstStepsN.step (protected_not_return_inv hp) hs
+          (FirstStepsN.stop (R := Step P) (stop := fun c : Config O => c.ctrl = .done ∧ c.frames = q) ⟨rfl, rfl⟩))
+      exact ⟨1, n, l.events, c'.store, tr, by omega, rfl, hseg, ht⟩
+
+/-- Helper (inversion). Decomposes a raw execution using the machine stack rules. -/
+private theorem call_protects_inv {P : Program O} {L : AList Var O.Val} {st : O.Store}
+    {q : List (Frame O)} {d : Deferred O} {label : Label O} {c' : Config O}
+    (h : Step P ⟨.exec d.stmt, L, st, q⟩ label c') :
+    (∃ kd site, c'.ctrl = .trapped kd site ∧ c'.frames = q) ∨ Protected L q c' := by
+  cases h with
+  | silent h =>
+    simp only [step, Deferred.stmt, onRes, Option.bind, Option.map] at h
+    repeat' first | simp_all [Protected] | split at h
+    all_goals try subst c'
+    all_goals try simp_all
+    all_goals try first
+      | exact .inl ⟨_, _, rfl, rfl⟩
+      | exact ⟨[_], rfl⟩
+      | (rcases h with ⟨_, rfl⟩; exact .inr ⟨[_], rfl⟩)
+  | prim h _ _ =>
+    simp only [step, Deferred.stmt, onRes, Option.bind, Option.map] at h
+    repeat' first | simp_all | split at h
+
+/-- Helper (inversion). Decomposes a raw execution using the machine stack rules. -/
+private theorem FirstStepsN.end_stop_inv {P : Program O} {stop : Config O → Prop}
+    {c c' : Config O} {tr : List O.Event} {n : Nat} (h : FirstStepsN (Step P) stop c tr c' n) : stop c' := by
+  induction h with
+  | stop hs => exact hs
+  | step _ _ _ ih => exact ih
+
+/-- Helper (inversion). Decomposes a raw execution using the machine stack rules. -/
+private theorem FirstStepsN.trap_impossible_inv {P : Program O} {bound : Nat}
+    {kd : TrapKind} {site : SiteId} {L : AList Var O.Val} {st : O.Store}
+    {q : List (Frame O)} {tr : List O.Event} {endC : Config O} {n : Nat}
+    (hq : bound < q.length)
+    (h : FirstStepsN (Step P) (fun c => c.frames.length ≤ bound) ⟨.trapped kd site, L, st, q⟩ tr endC n) :
+    False := by
+  have he := (steps_from_trapped h.unsized_inv.steps_inv).2
+  have hs := h.end_stop_inv
+  rw [he] at hs
+  exact Nat.not_le_of_gt hq hs
+
+/-- Helper (inversion). Decomposes a raw execution using the machine stack rules. -/
+private theorem FirstStepsN.call_return_inv {P : Program O} {bound : Nat}
+    {L : AList Var O.Val} {st : O.Store} {q : List (Frame O)} {d : Deferred O}
+    {tr : List O.Event} {endC : Config O} {n : Nat} (hq : bound < q.length)
+    (h : FirstStepsN (Step P) (fun c => c.frames.length ≤ bound) ⟨.exec d.stmt, L, st, q⟩ tr endC n) :
+    ∃ n₁ n₂ tr₁ st₁ tr₂, n = n₁ + n₂ ∧ tr = tr₁ ++ tr₂ ∧
+      FirstStepsN (Step P) (fun c => c.ctrl = .done ∧ c.frames = q)
+        ⟨.exec d.stmt, L, st, q⟩ tr₁ ⟨.done, L, st₁, q⟩ n₁ ∧
+      FirstStepsN (Step P) (fun c => c.frames.length ≤ bound) ⟨.done, L, st₁, q⟩ tr₂ endC n₂ := by
+  cases h with
+  | stop hs => exact False.elim (Nat.not_le_of_gt hq hs)
+  | @step _ l c' tr endC n hn hs ht =>
+    cases call_protects_inv hs with
+    | inl hp =>
+      obtain ⟨kd, site, hc, hf⟩ := hp
+      have he : c' = ⟨.trapped kd site, c'.locals, c'.store, q⟩ := by cases c'; simp_all
+      rw [he] at ht
+      exact False.elim (FirstStepsN.trap_impossible_inv hq ht)
+    | inr hp =>
+      obtain ⟨n₁, n₂, tr₁, st₁, tr₂, hc, he, ha, hb⟩ := ht.split_return_inv hq hp
+      exact ⟨n₁ + 1, n₂, l.events ++ tr₁, st₁, tr₂, by omega,
+        by simp [he, List.append_assoc], .step (by intro h; cases h.1) hs ha, hb⟩
+
+/-- Helper (inversion). Decomposes a raw execution using the machine stack rules. -/
+private theorem exit_label_inv {P : Program O} {e : Exit O.Val} {L : AList Var O.Val}
+    {st : O.Store} {frames : List (Frame O)} {label : Label O} {c : Config O}
+    (h : Step P ⟨.exiting e, L, st, frames⟩ label c) : label = .silent := by
+  cases h with
+  | silent _ => rfl
+  | prim h _ _ => exact False.elim (stepExit_no_request_inv L st e frames _ _ _ _ _ h)
+
+/-- Helper (inversion). Decomposes a raw execution using the machine stack rules. -/
+private theorem resume_step_inv {P : Program O} {e : Exit O.Val} {L : AList Var O.Val}
+    {st : O.Store} {frames : List (Frame O)} {label : Label O} {c : Config O}
+    (h : Step P ⟨.done, L, st, .resume (.exit e) :: frames⟩ label c) :
+    label = .silent ∧ c = ⟨.exiting e, L, st, frames⟩ := by
+  cases h with
+  | silent h =>
+    simp only [step, Option.some.injEq, Out.next.injEq] at h
+    exact ⟨rfl, h.symm⟩
+  | prim h _ _ => simp [step] at h
+
+/-- Helper (inversion). Decomposes a raw execution using the machine stack rules. -/
+private theorem boundary_complete_inv {P : Program O} {e : Exit O.Val} {k pre : List (Frame O)}
+    {L Lend : AList Var O.Val} {st stEnd : O.Store} {tr : List O.Event} {n : Nat} {endC : Config O}
+    (h : FirstStepsN (Step P) (fun c => c.frames.length ≤ k.length)
+      ⟨.exiting e, L, st, pre ++ k⟩ tr endC n)
+    (he : endC = ⟨.exiting e, Lend, stEnd, k⟩)
+    (hp : ∀ f ∈ pre, Passes e f) :
+    ∃ acts, BoundaryRun P (Step P) e k pre L st acts tr Lend stEnd := by
+  induction n using Nat.strongRecOn generalizing pre L st tr endC with
+  | ind n ih =>
+    cases pre with
+    | nil =>
+      cases h with
+      | stop _ =>
+        have hm : L = Lend ∧ st = stEnd := by
+          simpa only [List.nil_append, Config.mk.injEq, true_and, and_true] using he
+        obtain ⟨rfl, rfl⟩ := hm
+        exact ⟨[], .stop⟩
+      | step hn _ _ => exact False.elim (hn (by simp))
+    | cons f pre =>
+      have hp' : ∀ f ∈ pre, Passes e f := fun f hf => hp f (List.mem_cons_of_mem _ hf)
+      have hpf : Passes e f := hp f List.mem_cons_self
+      cases h with
+      | stop hs => simp at hs; omega
+      | @step _ label c' tr₀ _ m hn hs ht =>
+        have hl := exit_label_inv hs
+        subst label
+        have hnext := exit_step_next_inv hs
+        change step P ⟨.exiting e, L, st, f :: (pre ++ k)⟩ = _ at hnext
+        have pass (pre' : List (Frame O)) (L' : AList Var O.Val) (st' : O.Store)
+            (hc : c' = ⟨.exiting e, L', st', pre' ++ k⟩)
+            (hpp : ∀ f ∈ pre', Passes e f) :
+            ∃ acts, BoundaryRun P (Step P) e k (f :: pre) L st acts
+              (Label.silent.events ++ tr₀) Lend stEnd := by
+          rw [hc] at ht hs
+          obtain ⟨acts, hr⟩ := ih m (by omega) ht he hpp
+          exact ⟨leaving (f :: pre) L ++ acts,
+            by simpa [Label.events] using BoundaryRun.pass (by simp) hs hr⟩
+        cases f with
+        | seq t =>
+          simp only [step, stepExit, Option.some.injEq, Out.next.injEq] at hnext
+          exact pass pre L st hnext.symm hp'
+        | scope b dm ds =>
+          cases ds with
+          | nil =>
+            cases hd : dropOut O dm L st with
+            | none => simp [step, stepExit, hd] at hnext
+            | some stDrop =>
+              simp only [step, stepExit, hd, Option.map_some, Option.some.injEq, Out.next.injEq] at hnext
+              exact pass pre (restrict dm L) stDrop hnext.symm hp'
+          | cons d ds =>
+            simp only [step, stepExit, startCleanup, Option.some.injEq, Out.next.injEq] at hnext
+            subst c'
+            have hq : k.length < (.resume (.exit e) :: .scope b dm ds :: (pre ++ k)).length := by
+              simp only [List.length_cons, List.length_append]; omega
+            obtain ⟨nc, nr, trCall, stCall, trRest, hnCall, heCall, hCall, hRest⟩ :=
+              ht.call_return_inv hq
+            cases hRest with
+            | stop hstop => simp only [List.length_cons, List.length_append] at hstop; omega
+            | @step _ lab cNext trTail _ nt hnRest hsRest hTail =>
+              obtain ⟨hl, hc⟩ := resume_step_inv hsRest
+              subst lab
+              subst cNext
+              have hpp : ∀ f ∈ (.scope b dm ds :: pre), Passes e f := by
+                intro f hf
+                cases hf with
+                | head => trivial
+                | tail _ hf => exact hp' f hf
+              obtain ⟨acts, hr⟩ := ih nt (by omega) hTail he hpp
+              refine ⟨.call L d :: acts, ?_⟩
+              have hb := BoundaryRun.call (pre := .scope b dm (d :: ds) :: pre)
+                (rest := .scope b dm ds :: pre) (by simp) hs hCall.unsized_inv hsRest hr
+              simpa [heCall, Label.events] using hb
+        | test l cr t body site dm =>
+          cases hd : dropOut O dm L st with
+          | none => simp [step, stepExit, hd] at hnext
+          | some stDrop =>
+            simp only [step, stepExit, hd, Option.map_some, Option.some.injEq, Out.next.injEq] at hnext
+            exact pass pre (restrict dm L) stDrop hnext.symm hp'
+        | body l cr t body site =>
+          cases e with
+          | ret v =>
+            simp only [step, stepExit, Option.some.injEq, Out.next.injEq] at hnext
+            exact pass pre L st hnext.symm hp'
+          | brk l' =>
+            have hne : l' ≠ l := hpf
+            simp only [step, stepExit, hne, ↓reduceIte, Option.some.injEq, Out.next.injEq] at hnext
+            exact pass pre L st hnext.symm hp'
+          | cont l' =>
+            have hne : l' ≠ l := hpf
+            simp only [step, stepExit, hne, ↓reduceIte, Option.some.injEq, Out.next.injEq] at hnext
+            exact pass pre L st hnext.symm hp'
+        | resume p => exact False.elim hpf
+        | ret dst caller => exact False.elim hpf
+
+/-- Every raw first-boundary unwind through passable frames has an observation; the observer
+cannot silently exclude an execution with an unexpected dispatcher shape. The proof derives
+call-return segmentation from stack protection, rather than requiring it of the raw run. -/
+theorem raw_cleanup_runs_plan {P : Program O} {e : Exit O.Val} {k pre : List (Frame O)}
+    {L Lend : AList Var O.Val} {st stEnd : O.Store} {tr : List O.Event}
+    (h : FirstSteps (Step P) (fun c => c.frames.length ≤ k.length)
+      ⟨.exiting e, L, st, pre ++ k⟩ tr ⟨.exiting e, Lend, stEnd, k⟩)
+    (hp : ∀ f ∈ pre, Passes e f) :
+    ∃ acts, BoundaryRun P (Step P) e k pre L st acts tr Lend stEnd ∧
+      acts = planWith pre L ∧ Performed P acts st tr stEnd := by
+  obtain ⟨n, hn⟩ := h.sized_inv
+  obtain ⟨acts, ha⟩ := boundary_complete_inv hn rfl hp
+  exact ⟨acts, ha, cleanup_runs_exact_plan ha⟩
+
 
 /-- **`abort()` runs no cleanup.** From `abort()` the only step is to the trap, with the same
 frames and state, and nothing follows: no deferred call runs and no event is emitted. -/
@@ -977,14 +1383,17 @@ theorem seqDestroyOrder_storage (n : Nat) :
 /-- The entries of a map, in visiting order. -/
 private def entryParts (n : Nat) : List Part := (List.range n).flatMap fun i => [.key i, .value i]
 
+/-- Helper (inversion). Decomposes a raw execution using the machine stack rules. -/
 private theorem entryParts_succ (n : Nat) :
     entryParts (n + 1) = entryParts n ++ [.key n, .value n] := by
   simp [entryParts, List.range_succ, List.flatMap_append]
 
+/-- Helper (inversion). Decomposes a raw execution using the machine stack rules. -/
 private theorem entryParts_length : ∀ n, (entryParts n).length = 2 * n
   | 0 => rfl
   | n + 1 => by rw [entryParts_succ]; simp [entryParts_length n]; omega
 
+/-- Helper (inversion). Decomposes a raw execution using the machine stack rules. -/
 private theorem entryParts_get : ∀ (n i : Nat), i < n →
     (entryParts n)[2 * i]? = some (.key i) ∧ (entryParts n)[2 * i + 1]? = some (.value i)
   | 0, _, h => absurd h (Nat.not_lt_zero _)
@@ -1062,21 +1471,21 @@ open Demo
 inside the planted dispatchers: the mutation changes only selection, not the call's behavior. -/
 private theorem logSegment (n : Int) (e : Exit Int) (L : AList Var Int)
     (rest : List (Frame ops)) :
-    FirstSteps prog (fun c => c.ctrl = .done ∧ c.frames = .resume (.exit e) :: rest)
+    FirstSteps (Step prog) (fun c => c.ctrl = .done ∧ c.frames = .resume (.exit e) :: rest)
       ⟨.exec (.call none logF [.lit n] s), L, .init, .resume (.exit e) :: rest⟩ [n]
       ⟨.done, L, .init, .resume (.exit e) :: rest⟩ := by
   let q : List (Frame ops) := .resume (.exit e) :: rest
   let entered : DState := DState.life (.enter [x]) .init
-  refine FirstSteps.step (P := prog) (c' := ⟨.exec logFn.body, [(x, n)], entered,
+  refine FirstSteps.step (R := Step prog) (c' := ⟨.exec logFn.body, [(x, n)], entered,
       .scope logFn.block [x] [] :: .ret none L :: q⟩)
     (by intro h; cases h.1) (.silent rfl) ?_
-  refine FirstSteps.step (P := prog) (c' := ⟨.done, [(x, n)], entered,
+  refine FirstSteps.step (R := Step prog) (c' := ⟨.done, [(x, n)], entered,
       .scope logFn.block [x] [] :: .ret none L :: q⟩)
     (by intro h; cases h.1)
     (Step.prim (P := prog) (p := .log) (vs := [n]) (site := s) (st := entered) (a := ⟨some n, .ok 0, entered⟩) rfl (by simp [ops]) rfl) ?_
-  refine FirstSteps.step (P := prog) (c' := ⟨.done, [(x, n)], entered, .ret none L :: q⟩)
+  refine FirstSteps.step (R := Step prog) (c' := ⟨.done, [(x, n)], entered, .ret none L :: q⟩)
     (by intro h; cases h.2) (.silent rfl) ?_
-  refine FirstSteps.step (P := prog) (c' := ⟨.done, L, .init, q⟩)
+  refine FirstSteps.step (R := Step prog) (c' := ⟨.done, L, .init, q⟩)
     (by intro h; cases h.2) (.silent rfl) ?_
   exact .stop ⟨rfl, rfl⟩
 
