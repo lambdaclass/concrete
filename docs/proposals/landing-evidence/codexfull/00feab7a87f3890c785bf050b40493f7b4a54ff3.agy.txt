@@ -1,0 +1,10 @@
+The fix in `REVIEW.diff` is complete and sound:
+
+- **`scripts/agent/launch.sh` (`unit_result`, `lost_exit`, `inspect`)**: `unit_result` now captures both stdout/stderr and the exit status of `systemctl --user show "$UNIT" --property=Result --value`. On non-zero exit, it reports the diagnostic to stderr and returns `2`. `lost_exit` propagates `2` via `reason="$(unit_result)" || return 2` before caching `$JOBDIR/result` or running `reset-failed`, and `inspect` propagates `lost_exit`'s status via `return "$?"` instead of hardcoding `125`.
+- **`scripts/checks/agent_launch.sh`**: Stubs and controls cover both loud (stderr bus error) and silent (empty output) `systemctl show` failures after `is-active` reports `failed`, verifying exit status `2`, empty stdout, expected stderr diagnostics, absence of `$JOBDIR/result` and `reset-failed`, and subsequent recovery on retry returning `125` with the real `killed` result cached.
+- **`AGENTS.md` & `changelog.d/2026-11-08-agent-launcher.md`**: Documentation matches the implementation and controls.
+
+No defects or preferences found.
+
+VERDICT: ACCEPT
+rc=0

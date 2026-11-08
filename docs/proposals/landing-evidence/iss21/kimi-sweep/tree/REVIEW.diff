@@ -1,0 +1,1050 @@
+diff --git a/.github/workflows/oracle.yml b/.github/workflows/oracle.yml
+index 582c47318..f6fc27c2b 100644
+--- a/.github/workflows/oracle.yml
++++ b/.github/workflows/oracle.yml
+@@ -6,7 +6,7 @@
+ # reproduce the oracle (a vanished download, a moved tag, a nondeterministic build), which must be
+ # investigated before the next differential run relies on the published artifact. It never runs on
+ # a push or in a train: the oracle is frozen, so nothing a candidate changes can affect this result.
+-# Kept at the root by the legacy/ move (scripts/land/legacy_move.sh, prerequisite P2), whose check
++# Kept at the root by the legacy/ move (legacy/scripts/land/legacy_move.sh, prerequisite P2), whose check
+ # reads exactly one unconditional step `bash scripts/oracle/build.sh`; keep that step's form.
+ name: oracle
+ 
+diff --git a/ISSUES.tsv b/ISSUES.tsv
+index bdaba4108..b246ea581 100644
+--- a/ISSUES.tsv
++++ b/ISSUES.tsv
+@@ -5,7 +5,7 @@ id	date	area	evidence	owner	severity	closure_condition	status
+ ISS-0001	2026-11-04	ci	P13 is approved (2026-11-05): CI runs on concrete-ci-2 plus GitHub-hosted runners as one regular pool, and the oracle is a GitHub release asset. Published 2026-11-05 with owner approval: release oracle-legacy-compiler-final on unbalancedparentheses/concrete2, its tag at the locked commit 066c9d9b8836, asset oracle-legacy-compiler-final-x86_64-linux.tar.gz downloading to artifact_sha256; ORACLE.lock artifact_url is set and scripts/oracle/fetch.sh installs and verifies it on fede-256gb. Closed 2026-11-05: CI run 42061363497 (unbalancedparentheses/concrete2, workflow CI, conclusion success) at wip/oracle-hosted 915483933015082d172e5e54cda8b7ed6c17f2b3; its job Oracle (GitHub-hosted fetch + smoke) on ubuntu-latest ran scripts/oracle/ci_check.sh: fetch.sh downloaded the release asset, verified artifact_sha256 and the install manifest, and smoke.con exited 42 through run.sh (also passed in run 42059824955 at a1ba9b51dd33b22cf5a477846242a03160f7e3f0)	R-0564	medium	the tarball is published with scripts/oracle/publish.sh as release asset oracle-legacy-compiler-final-x86_64-linux.tar.gz (release_tag oracle-legacy-compiler-final), artifact_url is set to its download URL, and fetch.sh installs and verifies it on a GitHub-hosted runner	closed
+ ISS-0002	2026-11-04	migration	required-checks.txt lists the old CI's landing tier; the new root has only the Root checks job	R-0558	high	the move commit carries the new root's required-checks.txt and a required-checks-transition.tsv row for every old job (replaced or retired with a reason), and the acceptance test passes on the moved tree	open
+ ISS-0003	2026-11-04	migration	the fuzz farm corpus and findings, perf history and leanprof data on concrete-ci-3 were not copied before the handover (P14)	R-0272	low	fuzzing restarts against the new compiler from tests/regressions, tests/wrong-code and generated programs (R-0272) and perf baselines are re-measured (R-0550)	open
+-ISS-0004	2026-11-04	migration	the owner approved taking the website down with no frozen browser bundle (P9, 2026-11-05) and it was partly done the same day (2026-11-05): unbalancedparentheses.github.io/concrete2 is unpublished (Pages API DELETE, verified 404) and the `site` workflow is disabled on both repositories; on lambdaclass/concrete the Pages DELETE was refused (HTTP 422, organisation policy), so lambdaclass.github.io/concrete still served the last deploy that day. Closed 2026-11-06: both URLs answer 404 (curl at 01:54 UTC, with and without a cache-busting query); the `site` workflow is disabled_manually on both repositories; the lambdaclass Pages API object remains (build_type workflow) but nothing deploys to it. The admin unpublish named as the remaining action was not performed: the URL answers 404 without it, which is what the closure condition requires, and the orchestrator closed the issue on that evidence on 2026-11-06; removing the leftover Pages object is optional cleanup, not a takedown step. docs/archive/site-down.md reads status: done 2026-11-06	R-0565	high	both site URLs return 404 (unbalancedparentheses.github.io/concrete2 and lambdaclass.github.io/concrete) and docs/archive/site-down.md records it; remaining action: a lambdaclass organisation admin unpublishes lambdaclass/concrete in Settings > Pages	closed
++ISS-0004	2026-11-04	migration	the owner approved taking the website down with no frozen browser bundle (P9, 2026-11-05) and it was partly done the same day (2026-11-05): unbalancedparentheses.github.io/concrete2 is unpublished (Pages API DELETE, verified 404) and the `site` workflow is disabled on both repositories; on lambdaclass/concrete the Pages DELETE was refused (HTTP 422, organisation policy), so lambdaclass.github.io/concrete still served the last deploy that day. Closed 2026-11-06: both URLs answer 404 (curl at 01:54 UTC, with and without a cache-busting query); the `site` workflow is disabled_manually on both repositories; the lambdaclass Pages API object remains (build_type workflow) but nothing deploys to it. The admin unpublish named as the remaining action was not performed: the URL answers 404 without it, which is what the closure condition requires, and the orchestrator closed the issue on that evidence on 2026-11-06; removing the leftover Pages object is optional cleanup, not a takedown step. legacy/docs/archive/site-down.md reads status: done 2026-11-06	R-0565	high	both site URLs return 404 (unbalancedparentheses.github.io/concrete2 and lambdaclass.github.io/concrete) and legacy/docs/archive/site-down.md records it; remaining action: a lambdaclass organisation admin unpublishes lambdaclass/concrete in Settings > Pages	closed
+ ISS-0005	2026-11-04	ci	the GitHub-hosted fallback path for the oracle differential was unrehearsed and the runner-pool limits unwritten (holistic review, P13/F15). On wip/oracle-hosted: the required job Oracle (GitHub-hosted fetch + smoke) runs scripts/oracle/ci_check.sh (fetch.sh, then smoke.con through run.sh) on ubuntu-latest, check_oracle_fetch.sh holds the INCOMPLETE/FAILED cases, and docs/project/SELF_HOSTED_RUNNERS.md records the pools. Closed 2026-11-05: CI run 42061363497 (unbalancedparentheses/concrete2, workflow CI, conclusion success) at wip/oracle-hosted 915483933015082d172e5e54cda8b7ed6c17f2b3; its job Oracle (GitHub-hosted fetch + smoke) on ubuntu-latest ran scripts/oracle/ci_check.sh: fetch.sh downloaded the release asset, verified artifact_sha256 and the install manifest, and smoke.con exited 42 through run.sh (also passed in run 42059824955 at a1ba9b51dd33b22cf5a477846242a03160f7e3f0); check_oracle_fetch.sh, in that job, held the missing, corrupt, unverifiable, refused-install and compile-failure cases as INCOMPLETE or FAILED	R-0564	medium	a required oracle check runs fetch.sh then run.sh on a GitHub-hosted runner; a rehearsal shows that a missing artifact, a corrupted artifact and an install that fails verification each leave that check incomplete (blocking) rather than passed; the pool limits and the fallback-supported checks are recorded in docs/project/SELF_HOSTED_RUNNERS.md	closed
+ ISS-0006	2026-11-05	ci	scripts/tests/run_tests.sh bug 282 check (a nest 20000 blocks deep resolves within 50 ms, retry 100 ms) is a wall-clock budget: on fede-256gb at load average 56 it took 60 then 127 ms and failed the acceptance check leg at aa2d10fbc; the same commit on concrete-ci-2 passed 2917/0 at 23 ms. Host contention, not a regression; the budget stays as it is	R-0543	low	wall-clock budgets in gates run only where the machine-wide heavy-run semaphore (R-0543) holds load down, or the bug 282 check measures work (a step or allocation count) instead of time; a recorded week has no load-caused failure of it	open
+ ISS-0007	2026-11-05	ci	the self-hosted runner services on concrete-ci-2 (gha1..gha8) have no systemd CPU or memory cap (CPUQuota and MemoryMax = infinity, measured 2026-11-05); a heavy job can starve the others on the machine Closed 2026-11-06: concrete-runners.slice holds all eight runner services (Slice=concrete-runners.slice on gha1..gha8), capped at CPUQuotaPerSecUSec=24s (2400%), MemoryMax=103079215104 (96G), MemorySwapMax=0, TasksMax=16384; gha1..gha6 each MemoryMax=30064771072 (28G), no CPU cap; gha7, gha8 each CPUQuotaPerSecUSec=4s (400%), MemoryMax=8589934592 (8G) (systemctl show on concrete-ci-2, 2026-11-06 13:41 UTC; the slice and runner MemoryHigh=infinity, CPUWeight unset (default 100); GitHub's runner API lists all eight online and idle at the same time; a DRY_RUN rerun of servers/runners.sh for both pools writes nothing). Set from the dotfiles host file servers/hosts/concrete-ci-2.env (CONCRETE_RUNNERS_*, CONCRETE_*RUNNER_*) by servers/runners.sh, dotfiles commits eca6a0b and 1695d0b; values recorded in docs/SELF_HOSTED_RUNNERS.md	R-0543	low	each runner service (or a runner slice) carries a CPU and memory cap set from the dotfiles host file, and docs/SELF_HOSTED_RUNNERS.md (docs/project/ before the move) records the values	closed
+@@ -13,8 +13,8 @@ ISS-0008	2026-11-06	migration	train.sh's move gate (is_move_candidate) made any
+ ISS-0009	2026-11-06	ci	Review failed open in the landing path: train.sh check set review=0 when no review command existed (no error), its review leg rejected only a published findings note (absent, malformed or blocked passed after a zero exit), and land read no review record at all, so a check run with --no-review landed like any other (facts-decision landed at ab537833d after train.sh check --no-review). Structural cause: review was enforced only as one leg's exit status inside check, a missing reviewer was mapped to a disabled leg, and land trusted CI alone: no reader of review provenance existed at land time. Fixed on wip/fix-landing-machinery (a173432e): check fails with no review command; review_provenance (verify.sh on origin's notes: a clean head note, or with no head note a clean note on every member at its exact SHA) gates both the review leg and land	R-0539	high	check fails without a review command; land refuses a train without review provenance; landing_script.sh controls show absent, malformed, blocked and findings notes, at the head or on a member, cannot qualify; the change is on main	open
+ ISS-0010	2026-11-06	migration	scripts/land/acceptance.sh's check leg ran train.sh check --no-review --no-remote, so an accepted rehearsal (the record the move gate trusts) could rest on a check that skipped review, and agents cannot run it (the permission system treats --no-review as a CI bypass); both its build leg and its broken-build control defaulted to make build, which the restarted root (no Makefile; nix develop --command lake build) does not have; its header described only --no-review and make build. Structural cause: the rehearsal scripted its own exemption from a required leg and copied the old tree's build entry point into two places, so it drifted when the root changed. Fixed on wip/fix-landing-machinery (9b48910f): check --no-remote with the review leg passing on verified notes; one BUILD_CMD default for both build legs; header corrected; a landing_script.sh structural control	R-0563	medium	acceptance.sh runs check without --no-review, both build legs use one default (nix develop --command lake build), and the change is on main	open
+ ISS-0011	2026-11-06	ci	scripts/review/review.sh's prompts (standard and neutral) made any patch touching what an owner decision covers a finding, with no distinction between choosing a side and recording an answer the owner explicitly gave under docs/decisions.md's recording rule; the review leg refused the facts-decision recording batch, which then landed with check --no-review on a separate manual Codex ACCEPT. Structural cause: the prompt's owner-decision question had no notion of provenance, so a faithful recording had no path through the required review. Fixed on wip/fix-landing-machinery (39059429): recording an approved decision is permitted and the reviewer checks provenance (quoted, dated owner answer or rule), faithful transcription, scope and that nothing unapproved is added; choosing or revising an undecided question is still a finding; docs/REVIEW.md holds the rule, AGENTS.md and docs/LANDING.md link to it	R-0544	medium	both prompts distinguish recording an approved decision from choosing one, docs/REVIEW.md is the single home of the rule, and the change is on main	open
+-ISS-0012	2026-11-06	ci	Three decision-recording trains landed on 2026-11-06 after train.sh check --no-review: docs-2026-11-06 (28889fbd3a..ac8e50404b), nht-decision (ac8e50404b..d20e3ab333) and facts-decision (70e222d947..ab537833d7). Each had a manual Codex ACCEPT on a diff with the same content as the landed one (checked byte for byte, docs/archive/landing-audit-2026-11-06/README.md); for docs-2026-11-06, round 1 was asked to focus on the new part, its first two commits being stated to replay a diff accepted earlier, which this audit did not re-verify. None had a review note or a recorded second reviewer. Structural cause: ISS-0009 (check recorded a pass without review; land read no review record) and ISS-0011 (the review refused decision recording), both fixed on main at 4de277fe. Retrospective reviews 2026-11-06: Codex notes on the landed heads (ac8e50404b findings, d20e3ab333 clean, ab537833d7 clean); Kimi second reviews (docs-2026-11-06 findings, nht-decision findings, facts-decision clean)	R-0539	medium	the audit record and the retrospective review notes are on main, the docs/decisions.md:440 provenance gap is fixed (ISS-0013), and the remaining retrospective findings are triaged (ISS-0014)	open
++ISS-0012	2026-11-06	ci	Three decision-recording trains landed on 2026-11-06 after train.sh check --no-review: docs-2026-11-06 (28889fbd3a..ac8e50404b), nht-decision (ac8e50404b..d20e3ab333) and facts-decision (70e222d947..ab537833d7). Each had a manual Codex ACCEPT on a diff with the same content as the landed one (checked byte for byte, legacy/docs/archive/landing-audit-2026-11-06/README.md); for docs-2026-11-06, round 1 was asked to focus on the new part, its first two commits being stated to replay a diff accepted earlier, which this audit did not re-verify. None had a review note or a recorded second reviewer. Structural cause: ISS-0009 (check recorded a pass without review; land read no review record) and ISS-0011 (the review refused decision recording), both fixed on main at 4de277fe. Retrospective reviews 2026-11-06: Codex notes on the landed heads (ac8e50404b findings, d20e3ab333 clean, ab537833d7 clean); Kimi second reviews (docs-2026-11-06 findings, nht-decision findings, facts-decision clean)	R-0539	medium	the audit record and the retrospective review notes are on main, the docs/decisions.md:440 provenance gap is fixed (ISS-0013), and the remaining retrospective findings are triaged (ISS-0014)	open
+ ISS-0013	2026-11-06	spec	docs/decisions.md:440, the long-term-changes row (decided-project-long-term-2026-11-06), recorded five plan revisions as owner-approved with "option 1: accept all five" but without the owner's answer quoted; found by the retrospective Codex review of ac8e50404b and by Kimi. Structural cause: the recording rule asked for provenance but no review checked it (ISS-0011). Fixed on wip/landing-audit-2026-11-06: the row quotes the owner's answer "1" (2026-11-06), given after the owner asked "is this the best long term design"	R-0544	medium	the row quotes the owner's dated answer and the change is on main	open
+-ISS-0014	2026-11-06	spec	Unconfirmed retrospective second-review findings (Kimi, 2026-11-06) on landed decision rows. docs-2026-11-06 at ac8e50404b: decisions.md:482 records rule detail beside 'the checking rules are left to R-0574' (and PHILOSOPHY.md:143); decisions.md:446 cites README obligations O7/O9 with no referent (ROADMAP.md:168, 258); ROADMAP.md:168-169 A2i/A2c acceptance omits R-0574; ROADMAP.md:13 places native proof in phase E against the LP0 pilot; changelog.d/2026-11-06-direction-docs.md:4 and decisions.md:436 state certificate-discharged trust without the retained assumptions. nht-decision at d20e3ab333: README.md:10 drops the 'safe code' qualifier; decisions.md:530 (and README.md:12, PHILOSOPHY.md:134, the changelog) say termination is known beforehand where a d-site permission leaves it unresolved. Structural cause: these rows landed without the automated review leg and without a second reviewer (ISS-0012). Codex verdicts (2026-11-06, against main 583c9d91, numbered F1-F8): F1 (rule detail beside the R-0574 deferral) REJECTED: the row states a direction and defers the rules explicitly; F2 (O7/O9 with no referent) CONFIRMED, wording: now linked to ConcreteSpec/README.md; F3 (A2i/A2c acceptance omits R-0574) PARTLY: the dependency exists in R-0567, the A2i summary now names the pre-freeze part of R-0574; F4 (native proof placed in phase E against LP0) CONFIRMED, wording: ROADMAP now names LP0 as the bounded exception; F5 (certificate trust without retained assumptions) PARTLY: the row keeps the assumptions, the two summaries now say so; F6 (README drops the safe-code qualifier) CONFIRMED, wording: the README now says accepted safe code; F7 (termination is known where a permission leaves it unresolved) CONFIRMED as misleading wording in decisions.md (the Q13 d-site row heading), README.md, PHILOSOPHY.md and the no-hidden-traps changelog, held for the owner because the phrase is the recorded decision's own; F8 (the structural-cause claim) REJECTED as unsubstantiated by the snapshots alone (the train records are in docs/archive/landing-audit-2026-11-06/ and ISS-0012). F2-F6 fixed on wip/iss0014-wording	R-0544	medium	Codex confirms or rejects each finding with a recorded verdict; confirmed wording changes to recorded decisions go to the owner and land through a normal train	open
++ISS-0014	2026-11-06	spec	Unconfirmed retrospective second-review findings (Kimi, 2026-11-06) on landed decision rows. docs-2026-11-06 at ac8e50404b: decisions.md:482 records rule detail beside 'the checking rules are left to R-0574' (and PHILOSOPHY.md:143); decisions.md:446 cites README obligations O7/O9 with no referent (ROADMAP.md:168, 258); ROADMAP.md:168-169 A2i/A2c acceptance omits R-0574; ROADMAP.md:13 places native proof in phase E against the LP0 pilot; changelog.d/2026-11-06-direction-docs.md:4 and decisions.md:436 state certificate-discharged trust without the retained assumptions. nht-decision at d20e3ab333: README.md:10 drops the 'safe code' qualifier; decisions.md:530 (and README.md:12, PHILOSOPHY.md:134, the changelog) say termination is known beforehand where a d-site permission leaves it unresolved. Structural cause: these rows landed without the automated review leg and without a second reviewer (ISS-0012). Codex verdicts (2026-11-06, against main 583c9d91, numbered F1-F8): F1 (rule detail beside the R-0574 deferral) REJECTED: the row states a direction and defers the rules explicitly; F2 (O7/O9 with no referent) CONFIRMED, wording: now linked to ConcreteSpec/README.md; F3 (A2i/A2c acceptance omits R-0574) PARTLY: the dependency exists in R-0567, the A2i summary now names the pre-freeze part of R-0574; F4 (native proof placed in phase E against LP0) CONFIRMED, wording: ROADMAP now names LP0 as the bounded exception; F5 (certificate trust without retained assumptions) PARTLY: the row keeps the assumptions, the two summaries now say so; F6 (README drops the safe-code qualifier) CONFIRMED, wording: the README now says accepted safe code; F7 (termination is known where a permission leaves it unresolved) CONFIRMED as misleading wording in decisions.md (the Q13 d-site row heading), README.md, PHILOSOPHY.md and the no-hidden-traps changelog, held for the owner because the phrase is the recorded decision's own; F8 (the structural-cause claim) REJECTED as unsubstantiated by the snapshots alone (the train records are in legacy/docs/archive/landing-audit-2026-11-06/ and ISS-0012). F2-F6 fixed on wip/iss0014-wording	R-0544	medium	Codex confirms or rejects each finding with a recorded verdict; confirmed wording changes to recorded decisions go to the owner and land through a normal train	open
+ ISS-0015	2026-11-06	ci	Sandboxes inherit the caller's git environment. scripts/checks/review_tool.sh isolated git config only, not the repository-locating variables; a pre-push hook of a LINKED worktree exports GIT_DIR=<repo>/.git/worktrees/<name>, so every git -C <sandbox> in the check acted on the caller. On 2026-11-06 `train.sh ci laudit` run from the linked worktree ~agent/audit-records made the hook's review_tool.sh create its test branches (nonff, capped, parse-*) and set core.bare=true in ~agent/audit-clone (kept unchanged as evidence), and push 28 commits to origin refs/notes/concrete-review (tip b4b364f4, pre-leak 5b6add0d) and 12 to refs/notes/concrete-review-findings (tip 21c56796, pre-leak fd3c6451), authored Review Gate, 17:16:49-17:17:43Z, annotating 21 sandbox commits that exist on no remote (first counted as 22, which wrongly included c54679c3, a real commit whose note at 17:21Z is legitimate); no earlier note was deleted or changed and every reader looks notes up by exact SHA, so none can count as provenance for a real commit. lambdaclass has no notes refs. Codex confirmed with a bounded reproducer on concrete-ci-2 at main f9a8c333 (caller refs and refs/notes/* changed: LEAK) and an independent GIT_DIR experiment. landing_script.sh and landing_bot.sh unset only five of git's local variables; legacy_frozen.sh, acceptance.sh, run-at-ref.sh and bot.sh unset none. Second incident, same cause: the first reproducer installed a pre-push hook that ran review_tool.sh; the leaked GIT_DIR made each nested push re-enter that hook, the recursion exhausted fede-256gb (load ~1900) and the OOM killer took down the orchestrator's session. Structural owner: the sandbox helper scripts/checks/lib/git_sandbox.sh (unsets every `git rev-parse --local-env-vars` variable), sourced by every repository-making script; reproducers and tests run with no installed hook, under timeout 120 and a 512-task / 8G systemd scope bound, or a finite cgroup memory.max plus a process limit, and never an unbounded run. Closed 2026-11-07: the fix landed at dbe838488891, where every closure part is checked in Root checks (scripts/checks/run.sh, all 11 pass: sandbox_isolation PASS=13 FAIL=0 with its structural leg over 9 scripts, the two live linked-worktree probes and the leaking control; landing_script PASS=208 FAIL=0 with the linked-worktree, hook-off, foreign-hook and identify refusal legs; also run on concrete-ci-2 at 8e62e377) (train siso from a full clone; reviewed by Codex, rounds clean at 8e62e377, and Kimi; CI run 42424663064; main CI 42425007584 on origin and 42425010605 on lambdaclass, both success). The stray notes were removed from origin by one forward fast-forward commit per ref on its then-current tip, no force: refs/notes/concrete-review d4bdcae22d50 -> dcffeea8e6cd (21 entries removed, 224 untouched at the push; Codex confirmed the list against the earlier tip 8cbb7db253f7, where 223 were untouched, and the one commit between that tip and d4bdcae22d50 only added a legitimate note for 9d6dc01a, so the removal list is identical) and refs/notes/concrete-review-findings 301e929e1bab -> 5d7c6dc3dad5 (11 removed, 105 untouched); the 40 leaked commits wrote 33 entries, one of which they removed themselves (0c04c01c); Codex confirmed the removal list and the tree diffs before the push; lambdaclass has no notes refs and none were created. ~agent/audit-clone is kept unchanged as evidence with LEAK-EVIDENCE-README.txt	R-0544	high	every repository-making script under scripts/ sources git_sandbox.sh (scripts/checks/sandbox_isolation.sh, structural leg); review_tool.sh and legacy_frozen.sh run from a linked worktree with GIT_DIR exported leave the caller's refs, refs/notes/*, core.bare and upstream unchanged while a leaking control is detected (same check, bounded); train.sh and the pre-push hook refuse a linked worktree and train.sh refuses a clone without the repository hook; and the stray notes are removed from origin by a forward fast-forward notes commit whose before and after tips are recorded here	closed
+ ISS-0016	2026-11-07	ci	CI run 42424028055 (train legacydocs at 4d0355a56e, a docs-only change over 93850111) failed Kernel replay (leanchecker): the per-module leg replayed ConcreteSpec.Spec.Ownership, a module renamed to Slice1Ownership by 44ee1231, and stopped on unknown constant 'ConcreteSpec.lookupF'. The job's lake cache had been restored through a restore-key prefix from the cache of train commit 5b894432ad, whose sources predate the rename. Non-fresh `leanchecker ConcreteSpec` picks every .olean on the search path whose name has the prefix (the toolchain's LeanChecker.lean, lines 91-94), so orphaned build files are replayed. Reproducer: build 44ee1231^, build 93850111's sources over that build directory, run scripts/proofs/kernel_replay.sh: FAIL on the Checker/Syntax orphans; a clean build of the same sources passes. Codex confirmed it with that reproducer (2026-11-07). Structural cause: the replay took its module list from the build directory's contents instead of the sources.	scripts/proofs/kernel_replay.sh	high	closed by wip/replay-source-modules: kernel_replay.sh replays a staged library holding exactly the modules the sources declare and checks that the replayed set equals that list; scripts/proofs/lib.sh prunes build files of modules with no source before building; negative controls plant an orphan that fails an unfiltered replay and is ignored by the staged one	closed
+\ No newline at end of file
+diff --git a/README.md b/README.md
+index ad789f776..036889114 100644
+--- a/README.md
++++ b/README.md
+@@ -29,7 +29,7 @@ root compiles Concrete programs yet.
+ ## Where to read
+ 
+ - **Why Concrete exists and the rules it follows:** [docs/PHILOSOPHY.md](docs/PHILOSOPHY.md).
+-- **The language (normative):** [ConcreteSpec/](ConcreteSpec/). Its README, the reading guide, and
++- **The language (PROPOSED; normative once the owner freezes Core at A2c):** [ConcreteSpec/](ConcreteSpec/). Its README, the reading guide, and
+   the browsable owner view generated by `scripts/spec/lean_site.sh` land with the integrated spec
+   (A2i).
+ - **The compiler architecture:** `Concrete/README.md`, which lands with slice 0
+diff --git a/RETENTION.tsv b/RETENTION.tsv
+index 32782c270..064664bc9 100644
+--- a/RETENTION.tsv
++++ b/RETENTION.tsv
+@@ -42,8 +42,9 @@ scripts/tests/check_oracle_fetch.sh	oracle	retained	scripts/checks/oracle_fetch.
+ docs/project/LANDING.md docs/project/SELF_HOSTED_RUNNERS.md docs/project/REVIEW.md docs/LANDING.md docs/SELF_HOSTED_RUNNERS.md docs/REVIEW.md	process	retained	docs/	R-0563	root: never; legacy/ copy: at LD (R-0590) (a frozen duplicate of the live root file)	open
+ docs/project/PHILOSOPHY.md docs/PHILOSOPHY.md	vision	retained	docs/PHILOSOPHY.md	R-0558	root: never; legacy/ copy: at LD (R-0590) (a frozen duplicate of the live root file)	open
+ docs/spec/decisions.md docs/decisions.md	decisions	retained	docs/decisions.md	R-0558	root: never; legacy/ copy: at LD (R-0590) (a frozen duplicate of the live root file)	open
+-docs/archive/roadmap-2026-11 docs/archive/site-down.md docs/archive/decisions-2026-11-05 docs/archive/bugs-2026-11	plan and decision history	retained	docs/archive/ (the roadmap task_disposition.tsv, decision log, task register, reconciliation and restructure records, the site takedown record, the 2026-11-05 decision rows, the old bug ledger's disposition)	R-0558	root: never; legacy/ copy: at LD (R-0590) (a frozen duplicate of the live root file)	open
++docs/archive/roadmap-2026-11 docs/archive/decisions-2026-11-05 docs/archive/crucial-2026-11-06 docs/archive/no-hidden-traps-2026-11-06	plan and decision history	archived	legacy/docs/archive/ (the roadmap task_disposition.tsv, decision log, task register, reconciliation and restructure records, the 2026-11-05 decision rows, the 2026-11-06 proposals); until decisions.md holds their decisions and quotes they stay at the root beside their frozen legacy/ copies (P21, 2026-11-08)	R-0558	root: each moves to legacy/ by a sweep once decisions.md holds its decisions and quotes (P21); legacy/ copy: never deleted automatically; deleted with legacy/ at LD (R-0590), after the ideas sweeps and with the owner's approval	open
+ docs/archive/roadmap-2026-11/ROADMAP.md docs/archive/roadmap-2026-11/ROADMAP_BACKLOG.md docs/archive/roadmap-2026-11/ROADMAP_DIRECTION.md docs/archive/roadmap-2026-11/WORK_QUEUE.md	plan history	archived	legacy/docs/archive/roadmap-2026-11/ only: the root duplicates were removed 2026-11-06 (owner: "do the whole movement"; P21 revised)	R-0558	never deleted automatically; deleted with legacy/ at LD (R-0590), after the ideas sweeps and with the owner's approval	open
++docs/archive/bugs-2026-11 docs/archive/landing-audit-2026-11-06 docs/archive/site-down.md scripts/land/legacy_move.sh scripts/land/move_prereqs.py docs/proposals/IDEAS.md docs/proposals/MERGED.md	swept history	archived	legacy/, swept 2026-11-08 from 3bd7bc4151 (owner: "i want only to keep the new things under the root"); site-down.md's root copy was a link-rewrite duplicate of its frozen copy	R-0558	never deleted automatically; deleted with legacy/ at LD (R-0590), after the ideas sweeps and with the owner's approval	open
+ CHANGELOG.md	history	archived	legacy/CHANGELOG.md; the root starts a new empty CHANGELOG.md whose first entry names the tag	R-0558	never deleted with the pipeline	open
+ changelog.d	history	archived	legacy/changelog.d (pending fragments folded first); the root starts an empty changelog.d	R-0558	never deleted with the pipeline	open
+ Concrete Main.lean Concrete.lean Browser.lean	old compiler	retire	legacy/ (the oracle is the tag-built artifact, not this copy)	R-0558	LD (R-0590): once the new compiler implements a full real program, after the final ideas sweep and with the owner's approval	open
+@@ -66,7 +67,7 @@ examples	corpus	migrate	legacy/examples; examples return as the language they us
+ std	library	migrate	legacy/std; std returns module by module with its contracts and regressions	R-0561	only when each module is ported or retired; std defects move with it	open
+ proofs	proofs	migrate	legacy/proofs; DesignExamples inform ConcreteSpec, flagship proofs return with their slice	R-0555	only when the matching Lean rules and theorems exist in ConcreteSpec	open
+ scripts/browser	website tooling	archived	legacy/scripts/browser; no frozen bundle is served (P9): the site goes down at the move	R-0569	never deleted automatically; the new site (R-0569) is built from scratch, then the owner decides	open
+-site	website	archived	legacy/site; the site is taken down at the move (P9, docs/archive/site-down.md) and rebuilt from scratch (R-0569)	R-0569	never deleted automatically; the new site does not derive from it, then the owner decides	open
++site	website	archived	legacy/site; the site is taken down at the move (P9, legacy/docs/archive/site-down.md) and rebuilt from scratch (R-0569)	R-0569	never deleted automatically; the new site does not derive from it, then the owner decides	open
+ docs/spec	prose spec	archived	legacy/docs/spec (non-normative once the Lean rules exist)	R-0555	never deleted with the pipeline; each chapter is retired as its Lean rules land	open
+ docs	docs	archived	legacy/docs; a page returns when a task needs it (more specific rows above govern their paths)	R-0558	never deleted with the pipeline	open
+ editor	tooling	archived	legacy/editor	R-0558	never deleted automatically; returns with an editor task (phase G)	open
+diff --git a/changelog.d/2026-11-06-landing-audit.md b/changelog.d/2026-11-06-landing-audit.md
+index af6042059..f67110892 100644
+--- a/changelog.d/2026-11-06-landing-audit.md
++++ b/changelog.d/2026-11-06-landing-audit.md
+@@ -1,6 +1,6 @@
+ - The three decision trains that landed on 2026-11-06 with the review leg skipped are audited
+   (ISS-0012): each manual Codex review was of a diff with the same content as the landed one (for
+   docs-2026-11-06, partly by a stated replay of an earlier accepted diff, not re-verified), and retrospective Codex and Kimi
+-  reviews are recorded ([docs/archive/landing-audit-2026-11-06/README.md](docs/archive/landing-audit-2026-11-06/README.md)).
++  reviews are recorded ([legacy/docs/archive/landing-audit-2026-11-06/README.md](legacy/docs/archive/landing-audit-2026-11-06/README.md)).
+   The long-term-changes row in `docs/decisions.md` now quotes the owner's answer (ISS-0013); the
+   unconfirmed second-review findings are tracked in ISS-0014.
+diff --git a/changelog.d/2026-11-08-legacy-sweep.md b/changelog.d/2026-11-08-legacy-sweep.md
+new file mode 100644
+index 000000000..7d18646f1
+--- /dev/null
++++ b/changelog.d/2026-11-08-legacy-sweep.md
+@@ -0,0 +1,28 @@
++### Only the new things at the root: the first legacy/ sweep (2026-11-08)
++
++The owner asked to keep "only the new things under the root" and approved how a file enters the
++frozen `legacy/` ("ok to 1"): `scripts/checks/legacy.lock` names each sweep's source commit and the
++`legacy/` tree it produced, and `legacy_frozen.sh` admits an addition only as a byte-for-byte move of
++a root file that is gone from the root. It judges every step from the frozen tree through each sweep
++tree to the current `legacy/`, so a swept file is then as frozen as an original one. New controls
++cover a valid move, a missing sweep line, a copy left at the root, a modified copy, a mode change, a
++file with no root original, an edit of a frozen file, a later edit or open-row deletion of a swept
++file, a sweep commit outside HEAD's history, a sweep line without its tree, a path spelled as pathspec
++magic and a path git would C-quote.
++
++The check also judges trusted history, main's first-parent chain: a lock row that landed is never
++rewritten or removed, and a `legacy/` file never changes from a version it had there, so neither a
++replaced sweep row nor a deletion and re-addition can rewrite a file. The lock has one reader,
++`scripts/checks/lib/legacy_lock.py`, which refuses a NUL, a CR, a repeated row, a last line without
++its newline and any line that is not exactly a `base`, `tree` or `sweep` row; `legacy_frozen.sh` and
++`doc_links.py` take its rows from there, and a control refuses any other reader.
++
++This sweep moved the old bug ledger's disposition, the landing audit, the finished move tooling
++(`legacy_move.sh`, `move_prereqs.py`) and the answered proposals `IDEAS.md` and `MERGED.md`; the site
++takedown record's root copy was a link-rewrite duplicate of its frozen copy and was removed. "ok to
++2" moves all of `docs/archive/` once `docs/decisions.md` holds every decision and quote the archive
++files carry; the decision log, task register, reconciliation and restructure records, the
++2026-11-05 rows and R4 rationale, and the 2026-11-06 proposals stay until that consolidation. The
++landing bot stays (its root copy carries the ISS-0015 fix its frozen copy lacks), as do
++`worktree-new.sh` (the live playbooks use it), `SPARK.md` and `EXAMPLES.md` (open items). README no
++longer calls the proposed spec normative.
+diff --git a/docs/archive/site-down.md b/docs/archive/site-down.md
+deleted file mode 100644
+index 60bcb9462..000000000
+--- a/docs/archive/site-down.md
++++ /dev/null
+@@ -1,19 +0,0 @@
+-# Website takedown record (R-0565, decision row P9)
+-
+-The owner decided on 2026-11-05 that the website goes down at the move and is rebuilt from scratch
+-with the new compiler (R-0569); no frozen playground is served in between
+-([decision](../decisions.md#decided-project-site)). The move stops the site build. Unpublishing
+-the live sites is a separate manual step, because it is visible outside the repository: it runs only
+-after the owner confirms the moment, and this record is then updated to `status: done` with the date.
+-
+-decision: P9 (owner, 2026-11-05)
+-build: book.yml stops with the move (archived under legacy/.github/workflows/)
+-deployment: https://unbalancedparentheses.github.io/concrete2/ and https://lambdaclass.github.io/concrete/ (GitHub Pages, workflow builds)
+-unpublish: gh api -X DELETE repos/unbalancedparentheses/concrete2/pages; gh api -X DELETE repos/lambdaclass/concrete/pages
+-confirmation: the owner confirmed the moment on 2026-11-05 (P9: taken down with no frozen browser bundle)
+-unbalancedparentheses: unpublished 2026-11-05 (Pages DELETE; the URL answers 404); the site workflow is disabled
+-lambdaclass: the Pages DELETE was refused 2026-11-05 (HTTP 422, organisation policy) and the site workflow was disabled; by 2026-11-06 the URL answers 404. The Pages API object still exists (build_type workflow, GET repos/lambdaclass/concrete/pages), but the only workflow that deployed to it, `site` (book.yml), is disabled_manually and is archived by the move, so nothing deploys to it
+-verified: 2026-11-06 01:54 UTC, curl with and without a cache-busting query: https://lambdaclass.github.io/concrete/ 404, https://unbalancedparentheses.github.io/concrete2/ 404; `gh workflow list --all` shows `site` disabled_manually on lambdaclass/concrete and unbalancedparentheses/concrete2; GET repos/unbalancedparentheses/concrete2/pages answers 404
+-status: done 2026-11-06
+-
+-Both URLs answered 404 on 2026-11-06, so the record reads `status: done`. The old site's sources stay archived under `legacy/site/` with their `RETENTION.tsv` row.
+diff --git a/docs/decisions.md b/docs/decisions.md
+index 2adc1e765..8cf79ccd6 100644
+--- a/docs/decisions.md
++++ b/docs/decisions.md
+@@ -64,6 +64,7 @@ Each row records a decision and its reason. A language rule itself is its Lean d
+ - Where the decisions and their work are tracked, with a home and a gate per item ([row](#decided-2026-11-07-tracking)).
+ - The trusted-base statement, differential fuzzer, sanitizers, binary-size tracking and frozen JSON schema ([row](#decided-2026-11-07-early-evidence)).
+ - The documentation and tooling cleanup is approved, not performed by that record ([row](#decided-2026-11-07-cleanup)).
++- Only the new things at the root, and how files enter the frozen `legacy/` ([row](#decided-2026-11-08-legacy-sweep)).
+ 
+ <a id="rules-a-decision-changed"></a>
+ ## Rules a decision has changed
+@@ -301,7 +302,7 @@ The owner answered every row of the 2026-11-05 decision page, in the terminal. T
+ - **P18** Phase E: contracts and termination within OD115–OD117 — Phase E: no source old, quantifier, implication or snapshot construct (OD117); entry/exit and frame properties are Lean theorems (a source frame clause would be a new decision for you); spec functions have a body and are total (OD115); ordinary functions have no total category (OD116) and get per-function termination theorems where wanted. R-0524 becomes 'Frame and entry/exit theorems in Lean, no old'; R-0526 stays 'checked totality of spec functions'.
+ - **P19** Mutation testing for the new compiler — Retire the old mutation-harness defect work (R-0518). The new compiler gets its own mutation harness under R-0498, not a port of the old one.
+ - **P20** One home for binding decisions — Move the still-binding roadmap decisions (new compiler, retention contract, authority, allocation, Lean as the spec) into docs/decisions.md beside your language answers. The dated log becomes history; ROADMAP.md links to decisions.md and restates nothing.
+-- **P21** Retention records outlive legacy/ — RETENTION.tsv, ISSUES.tsv, required-checks.txt, scripts/oracle/ and docs/archive/roadmap-2026-11/ (with task_disposition.tsv) are part of the day-one root, outside legacy/, so they survive deleting it. *Revised 2026-11-06 (owner, verbatim: "do the whole movement"): of docs/archive/roadmap-2026-11/, the files that are decision sources or disposition records stay at the root (task_disposition.tsv, the decision log ROADMAP_DECISIONS.md, the task register ROADMAP_TASKS.md, ROADMAP_RECONCILIATION.md, ROADMAP_RESTRUCTURE.md with its table, and the archive README); the old control plane ROADMAP.md, ROADMAP_BACKLOG.md, ROADMAP_DIRECTION.md and WORK_QUEUE.md were duplicates of their frozen legacy/ copies apart from the move's mechanical rewrites, and nothing cites them as a decision source, so their root copies were removed and links point at the legacy/ copies, which stay until the legacy deletion point. The other docs/archive/ records (the site takedown record, the old bug ledger's disposition, the landing audit and the dated decision archives) stay at the root.*
++- **P21** Retention records outlive legacy/ — RETENTION.tsv, ISSUES.tsv, required-checks.txt, scripts/oracle/ and docs/archive/roadmap-2026-11/ (with task_disposition.tsv) are part of the day-one root, outside legacy/, so they survive deleting it. *Revised 2026-11-06 (owner, verbatim: "do the whole movement"): of docs/archive/roadmap-2026-11/, the files that are decision sources or disposition records stay at the root (task_disposition.tsv, the decision log ROADMAP_DECISIONS.md, the task register ROADMAP_TASKS.md, ROADMAP_RECONCILIATION.md, ROADMAP_RESTRUCTURE.md with its table, and the archive README); the old control plane ROADMAP.md, ROADMAP_BACKLOG.md, ROADMAP_DIRECTION.md and WORK_QUEUE.md were duplicates of their frozen legacy/ copies apart from the move's mechanical rewrites, and nothing cites them as a decision source, so their root copies were removed and links point at the legacy/ copies, which stay until the legacy deletion point. The other docs/archive/ records (the site takedown record, the old bug ledger's disposition, the landing audit and the dated decision archives) stay at the root.* *Revised 2026-11-08 (owner, verbatim: "ok to 2", answering whether all of docs/archive/ moves under legacy/, the decision sources included, after "i want only to keep the new things under the root"): all of docs/archive/ moves to legacy/, with docs/decisions.md kept the one home of decisions and verbatim quotes, so an archive file that holds a decision or quote decisions.md lacks moves only once its content is there. The 2026-11-08 sweep moved the old bug ledger's disposition, the landing audit and the site takedown record; the rest of docs/archive/ waits for that consolidation ([sweep](#decided-2026-11-08-legacy-sweep)).*
+ - **P22** The work-queue dispatcher — Stop the dispatcher for the lean start. Agents are started by hand from the roadmap; bring the dispatcher back only when there is enough parallel work to need it.
+ - **P23** Precedence between decisions, rows and drafts — Recorded decisions govern. An accepted row supersedes a recorded rule only through an explicitly identified, owner-approved revision (Q5.1/Q5.4 for OD45/OD87, Q6.4 for TYPE-22, Q2.8 for TRAIT-1, Q9.15/P3 for generated chapters). R4's replacements govern conflicting draft recommendations. Before your acceptance is recorded, every passage R4 F18 lists is reconciled (capability inference, generated chapters, roadmap authority, assurance wording, restart order and retention, Phase E, freeze dependencies, superseded Core recommendations), and historical conflicting text is marked superseded.
+ 
+@@ -853,7 +854,7 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
+   the Codex, agy and Kimi pipeline review was reported, "did we also log that we will have the new
+   compiler pipeline that we designed in this session?" and "ok decisions is fine"; the open set was
+   then approved with "ok do everything"; reviewed by Claude, Codex, agy and Kimi,
+-  [review](proposals/MERGED.md)). It
++  [review](../legacy/docs/proposals/MERGED.md)). It
+   supersedes the pipeline of [VERIFIED_PIPELINE.md](../legacy/docs/compiler/VERIFIED_PIPELINE.md).
+   The slice-0 design (`Concrete/README.md`, on branch `wip/slice0`) becomes the detailed
+   description once it lands.
+@@ -989,6 +990,21 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
+   nightly on concrete-ci-2); ASan and UBSan; speed and size, report-only; and the JSON schema
+   generated from the Lean types, with goldens. All of them join `required-checks.txt` when the
+   compiler lands on main.
++- <a id="decided-2026-11-08-legacy-sweep"></a>**Only the new things at the root; frozen-legacy sweeps** (owner,
++  2026-11-07: "ok move to the old anythign that is old right? including scripts" and "i want only to
++  keep the new things under the root"; 2026-11-08: "ok to 1" and "ok to 2"). A file stays at the root
++  only if it belongs to the new compiler, the new spec or the current project docs, or if landing or
++  CI on main would break without it; everything else moves under `legacy/` at the same path. "ok to
++  1" approves how a file enters the frozen `legacy/`: `scripts/checks/legacy.lock` gains one line per
++  sweep naming its source commit, and `legacy_frozen.sh` admits an addition `legacy/P` only if `P`
++  has the same mode and content at a sweep commit and no longer exists at the root; every other
++  addition, and every edit of a `legacy/` file, is still refused. So that a swept file is held to
++  the same rule after its sweep, the line (`sweep <commit> <tree>`) also records the `legacy/` tree
++  the sweep produced, and the check judges each step from the frozen tree through each sweep tree to
++  the current `legacy/`: a later edit of a swept file is refused, and its deletion needs a resolved
++  RETENTION.tsv row, as for a frozen file. A root file whose frozen `legacy/`
++  copy differs only by the move's mechanical link and path rewrites is removed from the root
++  instead, as on 2026-11-06. "ok to 2" is recorded under P21.
+ - <a id="decided-2026-11-07-cleanup"></a>**The documentation and tooling cleanup** (owner,
+   2026-11-07: "ok go ahead all yes then as you said right", approving the Codex/Kimi cleanup list).
+   This answers whether that cleanup may proceed; it does not perform it. The approved scope is:
+diff --git a/docs/proposals/SPEC_UNIFICATION.md b/docs/proposals/SPEC_UNIFICATION.md
+index 46de10f46..600773d80 100644
+--- a/docs/proposals/SPEC_UNIFICATION.md
++++ b/docs/proposals/SPEC_UNIFICATION.md
+@@ -13,7 +13,7 @@ the repository; the exact revisions below are the inputs. I checked each kept re
+ - `origin/wip/spec-nht` a5e982a6c4: A2i no-hidden-traps M1 (`atomBounds`, `admitted`, `checked_no_implicit_traps`, `add100` refused, `add0` accepted).
+ - `origin/main` ab537833d7 and `origin/wip/decisions-followup` 4e75883d91: `docs/decisions.md` and `ROADMAP.md`. The three decided proposals are in [`docs/archive/crucial-2026-11-06/`](../archive/crucial-2026-11-06/).
+ - `origin/wip/slice0` 53f9a21798: `Concrete/README.md`, the compiler's view of the spec. It records the owner's slice order of 2026-11-06 at lines 612-622.
+-- The pipeline review [`MERGED.md`](MERGED.md) (item 11).
++- The pipeline review [`MERGED.md`](../../legacy/docs/proposals/MERGED.md) (item 11).
+ 
+ **Path conventions.** A file:line reference is to `origin/wip/spec-root` 6f80b9c9d0
+ unless it is marked `nht:`. The declaration name next to each line number is the anchor: the
+diff --git a/docs/archive/bugs-2026-11/README.md b/legacy/docs/archive/bugs-2026-11/README.md
+similarity index 97%
+rename from docs/archive/bugs-2026-11/README.md
+rename to legacy/docs/archive/bugs-2026-11/README.md
+index 3b177e814..90be797bc 100644
+--- a/docs/archive/bugs-2026-11/README.md
++++ b/legacy/docs/archive/bugs-2026-11/README.md
+@@ -2,7 +2,7 @@
+ 
+ `bug_disposition.tsv` gives every record of the old compiler's bug ledger (frozen at
+ `legacy/docs/bugs/`) one disposition across the restart, as decisions P10 and P11 prescribe
+-([decisions](../../decisions.md#decided-project-bugs)):
++([decisions](../../../../docs/decisions.md#decided-project-bugs)):
+ 
+ - **legacy-impl**: a defect of the old implementation. It is *retired with the old implementation*,
+   never marked fixed. It keeps its reproducer, ruling and structural class, and its reproducer feeds
+diff --git a/docs/archive/bugs-2026-11/bug_disposition.tsv b/legacy/docs/archive/bugs-2026-11/bug_disposition.tsv
+similarity index 100%
+rename from docs/archive/bugs-2026-11/bug_disposition.tsv
+rename to legacy/docs/archive/bugs-2026-11/bug_disposition.tsv
+diff --git a/docs/archive/landing-audit-2026-11-06/README.md b/legacy/docs/archive/landing-audit-2026-11-06/README.md
+similarity index 100%
+rename from docs/archive/landing-audit-2026-11-06/README.md
+rename to legacy/docs/archive/landing-audit-2026-11-06/README.md
+diff --git a/docs/archive/landing-audit-2026-11-06/docs-2026-11-06.tsv b/legacy/docs/archive/landing-audit-2026-11-06/docs-2026-11-06.tsv
+similarity index 100%
+rename from docs/archive/landing-audit-2026-11-06/docs-2026-11-06.tsv
+rename to legacy/docs/archive/landing-audit-2026-11-06/docs-2026-11-06.tsv
+diff --git a/docs/archive/landing-audit-2026-11-06/facts-decision.tsv b/legacy/docs/archive/landing-audit-2026-11-06/facts-decision.tsv
+similarity index 100%
+rename from docs/archive/landing-audit-2026-11-06/facts-decision.tsv
+rename to legacy/docs/archive/landing-audit-2026-11-06/facts-decision.tsv
+diff --git a/docs/archive/landing-audit-2026-11-06/flm.tsv b/legacy/docs/archive/landing-audit-2026-11-06/flm.tsv
+similarity index 100%
+rename from docs/archive/landing-audit-2026-11-06/flm.tsv
+rename to legacy/docs/archive/landing-audit-2026-11-06/flm.tsv
+diff --git a/docs/archive/landing-audit-2026-11-06/nht-decision.tsv b/legacy/docs/archive/landing-audit-2026-11-06/nht-decision.tsv
+similarity index 100%
+rename from docs/archive/landing-audit-2026-11-06/nht-decision.tsv
+rename to legacy/docs/archive/landing-audit-2026-11-06/nht-decision.tsv
+diff --git a/docs/proposals/IDEAS.md b/legacy/docs/proposals/IDEAS.md
+similarity index 100%
+rename from docs/proposals/IDEAS.md
+rename to legacy/docs/proposals/IDEAS.md
+diff --git a/docs/proposals/MERGED.md b/legacy/docs/proposals/MERGED.md
+similarity index 100%
+rename from docs/proposals/MERGED.md
+rename to legacy/docs/proposals/MERGED.md
+diff --git a/scripts/land/legacy_move.sh b/legacy/scripts/land/legacy_move.sh
+similarity index 100%
+rename from scripts/land/legacy_move.sh
+rename to legacy/scripts/land/legacy_move.sh
+diff --git a/scripts/land/move_prereqs.py b/legacy/scripts/land/move_prereqs.py
+similarity index 100%
+rename from scripts/land/move_prereqs.py
+rename to legacy/scripts/land/move_prereqs.py
+diff --git a/scripts/checks/legacy.lock b/scripts/checks/legacy.lock
+index 66137eff8..1c1a04515 100644
+--- a/scripts/checks/legacy.lock
++++ b/scripts/checks/legacy.lock
+@@ -1,2 +1,4 @@
+ base 9186ca4c9f301ec34b97e66a3677b5eb24bd06d6
+ tree 2b6b53678b6d953331f35295caf9ad00cafd359b
++sweep 3bd7bc41511e0a0ba247b53231b5dc8589533d2f b582b773bfee2730c5df868eb9a353cb0a4422e3
++sweep 02011ffea0c09e7d425aadb2a7ad85cacf1b8702 ac06c6c3e8f0858d67b5bfcb1f90afd2df02b08b
+diff --git a/scripts/checks/legacy_frozen.sh b/scripts/checks/legacy_frozen.sh
+index 953f8e8f2..93fc5ff01 100755
+--- a/scripts/checks/legacy_frozen.sh
++++ b/scripts/checks/legacy_frozen.sh
+@@ -1,30 +1,68 @@
+ #!/usr/bin/env bash
+ # legacy/ IS FROZEN (ROADMAP R-0558, R-0562).
+ #
+-# legacy/ is a byte-for-byte copy of main's tree at the move's base commit. scripts/checks/legacy.lock
+-# records that commit and its tree. This check holds three things:
++# legacy/ is a byte-for-byte copy of main's tree at the move's base commit, plus the files later
++# sweeps moved into it byte for byte. scripts/checks/legacy.lock records that commit and its tree, and
++# each sweep; its format, and its one reader, is lib/legacy_lock.py (no code here reads the lock's
++# bytes itself). This check holds five things:
+ #   1. the recorded tree is the recorded commit's tree (legacy/ is that snapshot, nothing else);
+-#   2. HEAD:legacy differs from it only by deletions: an added or modified path is refused;
++#   2. HEAD:legacy differs from it only by deletions and by sweeps: a modified path is refused, and an
++#      added path is refused unless a sweep moved it (below);
+ #   3. each deleted path is covered by at least one RETENTION.tsv row, and every row covering it
+ #      (its own path or an ancestor directory) has `status` = `resolved` (the row's deletion
+ #      criterion holds): a resolved parent never releases a child with its own unresolved row.
+ #      Until RETENTION.tsv has a status column, every deletion is refused.
++#   4. SWEEPS (owner, 2026-11-08: "ok to 1"). Each `sweep <commit> <tree>` line of the lock records
++#      one move into legacy/: the commit of HEAD's history it took files from, and the legacy/ tree
++#      it produced. The trees form a chain, frozen tree -> sweep 1 -> ... -> HEAD:legacy. Each step
++#      to a sweep tree may add a path P only if P has the same mode and blob at that sweep's commit
++#      and P no longer exists at the root of HEAD; the last step, to HEAD:legacy, adds nothing. Every
++#      step refuses an edit of a legacy/ file and admits only the deletions RETENTION.tsv allows, so
++#      a swept file, once in a sweep tree, is protected like a frozen one.
++#   5. TRUSTED HISTORY. The steps above judge the lock this commit carries, so on their own a rewritten
++#      lock line, or a file deleted by one sweep and re-added with other bytes by the next, would pass.
++#      History settles both. The trusted history is main's landed states: the first-parent chain of
++#      the merge base of HEAD and LEGACY_TRUSTED_REF (default origin/main), each commit read against
++#      its first parent. Harnesses pass that merge base explicitly as LEGACY_TRUSTED_REF so a
++#      sandbox with different refs judges the same trusted history. Otherwise, use HEAD's own first-parent chain when that ref is absent (on main and on a
++#      train head, whose first parent is main, the same thing; on a bare branch tip it is stricter:
++#      the branch's own commits count, so a branch that corrected its own lock fails there). A train's member commits are second parents: a line a branch wrote and then
++#      corrected before it landed is not trusted history. (a) Every base, tree and sweep line of every trusted version of
++#      the lock is still in the lock: lines are only ever added. (b) Every version a legacy/ path ever
++#      had in trusted history is the version it has now, if it still exists: a frozen or swept file
++#      is never rewritten, by an edit or by deletion and re-addition. A candidate's own commits are
++#      not trusted history; they are what the review and this gate judge.
+ # Negative controls run the same judgment on synthetic trees first, so a judge that accepts
+ # everything fails here before the real check.
+ set -uo pipefail
+ source "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh" || exit 2
+ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
++SELF="$ROOT_DIR/scripts/checks/${BASH_SOURCE[0]##*/}"
+ cd "$ROOT_DIR"
+ LOCK=scripts/checks/legacy.lock
++LOCKPY="$ROOT_DIR/scripts/checks/lib/legacy_lock.py"
+ PASS=0; FAIL=0
+ ok(){ echo "  ok   $1"; PASS=$((PASS+1)); }
+ no(){ echo "  FAIL $1"; FAIL=$((FAIL+1)); }
+ 
++# checked STEP COMMAND...: preserve semantic diagnostics; execution failures always print a refusal.
++# Helpers use stdout as the refusal channel, including when the failed command printed nothing.
++checked() {
++  local label="$1" output rc; shift
++  output="$("$@")"; rc=$?
++  [ -z "$output" ] || printf '%s\n' "$output"
++  if [ "$rc" -ne 0 ] && { [ "$rc" -ne 1 ] || [ -z "$output" ]; }; then
++    printf 'refused: %s failed (exit %s)\n' "$label" "$rc"
++  fi
++  return "$rc"
++}
++
+ # judge FROZEN_TREE CURRENT_TREE RETENTION_FILE (in the current repository): prints one problem per line.
+-judge() {
+-  local frozen="$1" cur="$2" ret="$3"
++judge() { # FROZEN CUR RETENTION ROOT-TREE [SWEEP-COMMIT...]
++  local frozen="$1" cur="$2" ret="$3" root="$4"; shift 4
+   [ "$frozen" = "$cur" ] && return 0
+-  git diff-tree -r --no-renames --name-status "$frozen" "$cur" | python3 -I -c '
++  # -z: paths arrive raw, never C-quoted, so the ls-tree lookups below see the real path.
++  git diff-tree -z -r --no-renames --name-status "$frozen" "$cur" | python3 -I -c '
+ import sys
+ ret = sys.argv[1]
+ rows = [l.rstrip("\n").split("\t") for l in open(ret) if l.strip() and not l.startswith("#")]
+@@ -41,13 +79,127 @@ def ok(p):
+     # a resolved parent does not release a child that has its own unresolved row.
+     cover = [res for n, res in named if p == n or p.startswith(n + "/")]
+     return bool(cover) and all(cover)
+-for line in sys.stdin:
+-    st, path = line.rstrip("\n").split("\t", 1)
+-    if st != "D":
+-        print(f"{st} legacy/{path}: legacy/ admits no addition or modification")
++f = sys.stdin.buffer.read().split(b"\0")
++if f and f[-1] == b"": f.pop()
++for st, raw in zip(f[0::2], f[1::2]):
++    st, path = st.decode(), raw.decode("utf-8", "surrogateescape")
++    if "\n" in path or "\t" in path or not path.isprintable():
++        print(f"{st} legacy/{path!r}: legacy/ admits no path with control characters")
++    elif st == "A":
++        print(f"ADD\t{path}")
++    elif st != "D":
++        print(f"{st} legacy/{path}: legacy/ admits no modification")
+     elif not ok(path):
+         print(f"D legacy/{path}: no resolved RETENTION.tsv row allows this deletion")
+-' "$ret"
++' "$ret" | while IFS= read -r line || [ -n "$line" ]; do
++    case "$line" in ADD$'\t'*) ;; *) printf '%s\n' "$line"; continue ;; esac
++    local path="${line#ADD$'\t'}" want s entry found=""
++    local -x GIT_LITERAL_PATHSPECS=1 # a path is a path: ":(literal)p/x" must not resolve to p/x
++    want="$(git ls-tree "$cur" -- "$path" | cut -f1)" || { echo "refused: judge added-path lookup failed"; continue; }
++    [ -n "$want" ] || { echo "A legacy/$path: cannot resolve the added path; refused"; continue; }
++    entry="$(git ls-tree "$root" -- "$path")" || { echo "refused: judge root lookup failed"; continue; }
++    if [ -n "$entry" ]; then
++      echo "A legacy/$path: a swept file must no longer exist at the root, and $path does"; continue
++    fi
++    for s in "$@"; do
++      entry="$(git ls-tree "$s" -- "$path" | cut -f1)" || { echo "refused: judge sweep lookup failed"; continue; }
++      [ "$entry" = "$want" ] && { found=1; break; }
++    done
++    [ -n "$found" ] || echo "A legacy/$path: no sweep commit in the lock has $path with this content; legacy/ admits only byte-for-byte moves"
++  done || echo "refused: judge diff/retention pipeline failed"
++}
++
++chain() { # LOCK FROZEN CUR RETENTION HEAD-COMMIT: judges frozen -> each sweep tree -> CUR; prints refusals
++  local lock="$1" prev="$2" cur="$3" ret="$4" head="$5" root rows kind sw st n=0 step
++  rows="$(lock_rows "$lock")" || { printf '%s\n' "$rows"; return 0; }
++  root="$(git rev-parse "$head^{tree}")" || { echo "refused: chain HEAD tree lookup failed"; return; }
++  while read -r kind sw st || [ -n "$kind" ]; do # rows are the parser's, one per line
++    [ "$kind" = sweep ] || continue
++    n=$((n+1))
++    if ! git rev-parse -q --verify "$sw^{commit}" >/dev/null \
++       || ! git merge-base --is-ancestor "$sw" "$head" || [ "$(git cat-file -t "$st" 2>/dev/null)" != tree ]; then
++      echo "sweep line $n: needs a commit of HEAD's history and a tree: $sw $st"; continue
++    fi
++    step="$(judge "$prev" "$st" "$ret" "$root" "$sw" 2>&1)"
++    [ -z "$step" ] || printf 'sweep %s (%s):\n%s\n' "$n" "${sw:0:10}" "$step"
++    prev="$st"
++  done <<<"$rows"
++  step="$(judge "$prev" "$cur" "$ret" "$root" 2>&1)"
++  [ -z "$step" ] || printf 'since the last sweep:\n%s\n' "$step"
++}
++
++# trusted_base HEAD-COMMIT: the newest commit whose history is trusted (see 5 above).
++trusted_base() {
++  local ref="${LEGACY_TRUSTED_REF:-origin/main}" rc
++  git rev-parse -q --verify "$ref^{commit}" >/dev/null; rc=$?
++  if [ "$rc" = 0 ]; then
++    git merge-base "$1" "$ref" || echo "refused: trusted_base merge-base failed"
++  elif [ "$rc" = 1 ]; then
++    git rev-parse -q --verify "$1^{commit}" || echo "refused: trusted_base HEAD lookup failed"
++  else
++    echo "refused: trusted_base ref lookup failed"
++  fi
++}
++
++# lock_rows LOCK-FILE: the lock's rows, from its one parser (lib/legacy_lock.py); exit 1 with one
++# diagnostic per problem. No code here reads the lock's bytes itself.
++lock_rows() { checked lock_rows python3 -I "$LOCKPY" rows "$1"; }
++# lock_history LOCK-FILE LOCK-PATH TRUSTED: every row of every version of LOCK-PATH in TRUSTED's
++# first-parent history is still a row of LOCK-FILE; a malformed trusted version is refused. Prints
++# one refusal per problem, naming the newest trusted commit that has a missing row.
++lock_history() { checked lock_history python3 -I "$LOCKPY" history "$1" "$2" "$3"; }
++
++# history_identity PREFIX HEAD-COMMIT TRUSTED: every version PREFIX/<path> had in TRUSTED's history is
++# the version it has at HEAD-COMMIT, for each path HEAD-COMMIT still has. Prints one refusal per path.
++history_identity() {
++  local prefix="$1" head="$2" trusted="$3"
++  checked history_identity python3 -I - "$prefix" "$head" "$trusted" <<'PY'
++import subprocess, sys
++prefix = sys.argv[1] + "/"
++def tokens(args):
++    return subprocess.check_output(["git", *args]).split(b"\0")
++seen = {}
++t = tokens(["log", "--first-parent", "--diff-merges=first-parent", "-z", "--raw", "--no-renames", "--no-abbrev", "--format=", sys.argv[3], "--", prefix]); i = 0
++while i < len(t):
++    tok = t[i].lstrip(b"\n")
++    if tok.startswith(b":") and i + 1 < len(t):
++        _, newmode, _, newsha, st = tok[1:].decode().split(" ")
++        path = t[i + 1].decode("utf-8", "surrogateescape")
++        if not st.startswith("D"):
++            seen.setdefault(path, set()).add((newmode, newsha))
++        i += 2
++    else:
++        i += 1
++for ent in tokens(["ls-tree", "-r", "-z", "--full-tree", sys.argv[2], "--", prefix]):
++    if not ent:
++        continue
++    meta, path = ent.split(b"\t", 1)
++    mode, _, sha = meta.decode().split(" ")
++    path = path.decode("utf-8", "surrogateescape")
++    other = sorted(v for v in seen.get(path, ()) if v != (mode, sha))
++    if other:
++        print(f"{path}: was {other[0][1][:10]} (mode {other[0][0]}) in trusted history and is {sha[:10]} (mode {mode}) now: a frozen or swept file is never rewritten, by an edit or by deletion and re-addition")
++PY
++}
++
++read_loop_scan() {
++  printf '%s\n' "$1" | grep -vF '|| [ -n "$' | grep -vF 'grep -nE'
++  local statuses=("${PIPESTATUS[@]}") rc
++  for rc in "${statuses[@]}"; do [ "$rc" -le 1 ] || { echo "refused: read-loop scan failed"; break; }; done
++}
++named_readers() {
++  git ls-files -z -- scripts .githooks .github | xargs -0 -r grep -nIE 'legacy[.]lock' -- 2>/dev/null \
++  | grep -vE '^[^:]+:[0-9]+:[[:space:]]*#' | grep -vE '^scripts/checks/lib/legacy_lock[.]py:' \
++  | grep -vE '^scripts/checks/legacy_frozen[.]sh:[0-9]+:LOCK=scripts/checks/legacy[.]lock$'
++  local statuses=("${PIPESTATUS[@]}") rc
++  [ "${statuses[0]}" = 0 ] || echo "refused: reader file listing failed"
++  for rc in "${statuses[@]:1}"; do [ "$rc" -le 1 ] || { echo "refused: reader scan failed"; break; }; done
++}
++lock_uses() {
++  grep -nE '"\$(LOCK|lock)"' "$SELF" | grep -vE '^[0-9]+:[[:space:]]*#' \
++  | grep -vE '(lock_rows|lock_history|chain) "\$(LOCK|lock)"|\[ -f "\$LOCK" \]|echo "=== |no "\$LOCK |local lock="\$1"'
++  local statuses=("${PIPESTATUS[@]}") rc
++  for rc in "${statuses[@]}"; do [ "$rc" -le 1 ] || { echo "refused: lock-use scan failed"; break; }; done
+ }
+ 
+ echo "=== negative controls ==="
+@@ -63,49 +215,264 @@ trap 'rm -rf "$TMP"' EXIT
+   git add -A; git -c user.name=t -c user.email=t@t commit -qm frozen
+ ) || { echo "FATAL: control repository"; exit 2; }
+ cd "$TMP/c"
++# The sweep controls make commits: give the control repository its own identity, so they do not
++# depend on the host's git config (a CI runner has none).
++git config user.name t; git config user.email t@t
+ F="$(git rev-parse HEAD^{tree})"
+ tree_with() { # shell snippet applied to a copy of the frozen tree; prints the new tree
+   git read-tree "$F"; git checkout-index -a -f; git clean -fdq; eval "$1"; git add -A >/dev/null; git write-tree; }
+ printf 'path\tstatus\nb\topen\n' > "$TMP/r_open.tsv"
+ printf 'path\tstatus\nb\tresolved\n' > "$TMP/r_ok.tsv"
+ printf 'path\tkind\nb\tx\n' > "$TMP/r_nostatus.tsv"
+-[ -z "$(judge "$F" "$F" "$TMP/r_open.tsv")" ] && ok "control: an unchanged tree passes" || no "control: unchanged tree"
++[ -z "$(judge "$F" "$F" "$TMP/r_open.tsv" "$F")" ] && ok "control: an unchanged tree passes" || no "control: unchanged tree"
+ T="$(tree_with 'echo new > a/z')"
+-[ -n "$(judge "$F" "$T" "$TMP/r_ok.tsv")" ] && ok "control: an added file is refused" || no "control: addition accepted"
++[ -n "$(judge "$F" "$T" "$TMP/r_ok.tsv" "$F")" ] && ok "control: an added file is refused" || no "control: addition accepted"
+ T="$(tree_with 'echo changed > a/x')"
+-[ -n "$(judge "$F" "$T" "$TMP/r_ok.tsv")" ] && ok "control: a modified file is refused" || no "control: modification accepted"
++[ -n "$(judge "$F" "$T" "$TMP/r_ok.tsv" "$F")" ] && ok "control: a modified file is refused" || no "control: modification accepted"
+ T="$(tree_with 'rm -rf b')"
+-[ -n "$(judge "$F" "$T" "$TMP/r_open.tsv")" ] && ok "control: a deletion under an open row is refused" || no "control: open-row deletion accepted"
+-[ -n "$(judge "$F" "$T" "$TMP/r_nostatus.tsv")" ] && ok "control: a deletion without a status column is refused" || no "control: status-less deletion accepted"
+-[ -z "$(judge "$F" "$T" "$TMP/r_ok.tsv")" ] && ok "control: a deletion under a resolved row passes" || no "control: resolved-row deletion refused"
++[ -n "$(judge "$F" "$T" "$TMP/r_open.tsv" "$F")" ] && ok "control: a deletion under an open row is refused" || no "control: open-row deletion accepted"
++[ -n "$(judge "$F" "$T" "$TMP/r_nostatus.tsv" "$F")" ] && ok "control: a deletion without a status column is refused" || no "control: status-less deletion accepted"
++[ -z "$(judge "$F" "$T" "$TMP/r_ok.tsv" "$F")" ] && ok "control: a deletion under a resolved row passes" || no "control: resolved-row deletion refused"
+ printf 'path\tstatus\nb\tresolved\nb/y\topen\n' > "$TMP/r_child.tsv"
+ T="$(tree_with 'rm -rf b')"
+-[ -n "$(judge "$F" "$T" "$TMP/r_child.tsv")" ] && ok "control: a resolved parent does not release a child with an open row" || no "control: open child released by resolved parent"
++[ -n "$(judge "$F" "$T" "$TMP/r_child.tsv" "$F")" ] && ok "control: a resolved parent does not release a child with an open row" || no "control: open child released by resolved parent"
+ T="$(tree_with 'rm -f a/x')"
+-[ -n "$(judge "$F" "$T" "$TMP/r_ok.tsv")" ] && ok "control: a deletion outside the resolved row is refused" || no "control: unrelated deletion accepted"
++[ -n "$(judge "$F" "$T" "$TMP/r_ok.tsv" "$F")" ] && ok "control: a deletion outside the resolved row is refused" || no "control: unrelated deletion accepted"
++# Sweep controls. S is a root commit holding p/moved (and an a/x unlike the frozen one); a sweep
++# moves p/moved into legacy/ byte for byte. R0 is a root tree without p/moved, RS one that still has it.
++S="$(git commit-tree "$(tree_with 'mkdir -p p; echo m > p/moved; echo changed > a/x')" -m sweep-source)"
++R0="$(tree_with 'rm -rf a b top; echo r > rootfile')"
++[ -n "$S" ] && [ -n "$R0" ] || { echo "FATAL: sweep control commit"; exit 2; }
++RS="$(git rev-parse "$S^{tree}")"
++T="$(tree_with 'mkdir -p p; echo m > p/moved')"
++[ -z "$(judge "$F" "$T" "$TMP/r_ok.tsv" "$R0" "$S")" ] && ok "control: a byte-for-byte move from a sweep commit, gone from the root, passes" || no "control: a valid sweep was refused: $(judge "$F" "$T" "$TMP/r_ok.tsv" "$R0" "$S")"
++[ -n "$(judge "$F" "$T" "$TMP/r_ok.tsv" "$R0")" ] && ok "control: the same addition with no sweep line is refused" || no "control: sweep-less addition accepted"
++[ -n "$(judge "$F" "$T" "$TMP/r_ok.tsv" "$RS" "$S")" ] && ok "control: a swept copy that still exists at the root is refused" || no "control: copy kept at the root accepted"
++T="$(tree_with 'mkdir -p p; echo m2 > p/moved')"
++[ -n "$(judge "$F" "$T" "$TMP/r_ok.tsv" "$R0" "$S")" ] && ok "control: a modified copy of a swept file is refused" || no "control: modified swept copy accepted"
++T="$(tree_with 'mkdir -p p; echo m > p/moved; chmod +x p/moved')"
++[ -n "$(judge "$F" "$T" "$TMP/r_ok.tsv" "$R0" "$S")" ] && ok "control: a swept copy with another file mode is refused" || no "control: mode change accepted"
++T="$(tree_with 'mkdir -p p; echo n > p/new')"
++[ -n "$(judge "$F" "$T" "$TMP/r_ok.tsv" "$R0" "$S")" ] && ok "control: a new file with no root original is refused" || no "control: unoriginated addition accepted"
++T="$(tree_with 'echo changed > a/x')"
++[ -n "$(judge "$F" "$T" "$TMP/r_ok.tsv" "$R0" "$S")" ] && ok "control: an edit of an existing legacy/ file is refused, even matching a sweep commit" || no "control: edit of a frozen file accepted via a sweep"
++# After a sweep, the sweep tree is the baseline: deleting a swept file needs a resolved row.
++SW1="$(tree_with 'mkdir -p p; echo m > p/moved')"
++printf 'path\tstatus\np\topen\n' > "$TMP/r_popen.tsv"; printf 'path\tstatus\np\tresolved\n' > "$TMP/r_pok.tsv"
++[ -n "$(judge "$SW1" "$F" "$TMP/r_popen.tsv" "$R0")" ] && ok "control: deleting a swept file under an open row is refused" || no "control: swept file deleted under an open row"
++[ -z "$(judge "$SW1" "$F" "$TMP/r_pok.tsv" "$R0")" ] && ok "control: deleting a swept file under a resolved row passes" || no "control: resolved deletion of a swept file refused"
++[ -n "$(judge "$SW1" "$(tree_with 'mkdir -p p; echo m > p/moved; echo q > p/other')" "$TMP/r_ok.tsv" "$R0")" ] && ok "control: an addition after the last sweep, with no new sweep line, is refused" || no "control: post-sweep addition accepted"
++# Lock-chain controls: H is a commit with S in its history; X is a commit outside it.
++H="$(git commit-tree "$R0" -p "$S" -m head)"
++# X has the would-be moved file (tree RS), so only its ancestry can refuse it.
++X="$(git commit-tree "$RS" -m unrelated)"
++[ -n "$H" ] && [ -n "$X" ] || { echo "FATAL: chain control commits"; exit 2; }
++# A control lock: its base and tree rows, then the sweep rows given.
++HDR="base $S"$'\n'"tree $F"
++printf '%s\nsweep %s %s\n' "$HDR" "$S" "$SW1" > "$TMP/l_ok"
++[ -z "$(chain "$TMP/l_ok" "$F" "$SW1" "$TMP/r_ok.tsv" "$H")" ] && ok "control: a lock chaining the frozen tree through a sweep to HEAD:legacy passes" || no "control: valid chain refused: $(chain "$TMP/l_ok" "$F" "$SW1" "$TMP/r_ok.tsv" "$H")"
++printf '%s\nsweep %s %s\n' "$HDR" "$X" "$SW1" > "$TMP/l_x"
++o="$(chain "$TMP/l_x" "$F" "$SW1" "$TMP/r_ok.tsv" "$H")"
++# The refused row is skipped, so its addition is then refused too, as an unoriginated one.
++[ "$o" = "sweep line 1: needs a commit of HEAD's history and a tree: $X $SW1"$'\n'"since the last sweep:"$'\n'"A legacy/p/moved: no sweep commit in the lock has p/moved with this content; legacy/ admits only byte-for-byte moves" ] && ok "control: a sweep commit outside HEAD's history is refused, as such" || no "control: non-ancestor sweep: '$o'"
++[ -n "$(chain "$TMP/l_ok" "$F" "$F" "$TMP/r_popen.tsv" "$H")" ] && ok "control: deleting a swept file after its sweep, under an open row, is refused" || no "control: post-sweep deletion accepted"
++# The lock's one parser (lib/legacy_lock.py). Each malformed lock is refused by chain() with the
++# parser's exact diagnostic, before any sweep is judged: no byte is a row to one reader and not to another.
++ROW="is not a lock row: line 3 must be 'sweep <commit> <tree>', one space between fields, each oid 40 or 64 lowercase hex digits"
++refused_lock() { # NAME CONTENT-PRINTF-FORMAT EXPECTED [ARGS...]: chain() on that lock prints EXPECTED exactly
++  local name="$1" fmt="$2" want="$3"; shift 3
++  printf "$fmt" "$@" > "$TMP/$name"
++  o="$(chain "$TMP/$name" "$F" "$F" "$TMP/r_popen.tsv" "$H")"
++  [ "$o" = "$want" ] && ok "control: $name is refused by the lock parser, as such" || no "control: $name: '$o'"
++}
++# A landed sweep row with a NUL in front: GNU grep -x matches the row behind the NUL, sed skips it.
++refused_lock "a NUL-prefixed sweep row" '%s\n\0sweep %s %s\n' "$TMP/a NUL-prefixed sweep row:3: holds a NUL byte: the lock is text" "$HDR" "$S" "$SW1"
++refused_lock "a CR line ending" '%s\nsweep %s %s\r\n' "$TMP/a CR line ending:3: holds a carriage return: a line ends with a newline (LF) alone" "$HDR" "$S" "$SW1"
++refused_lock "a sweep row without its tree" '%s\nsweep %s\n' "$TMP/a sweep row without its tree:3: $ROW" "$HDR" "$S"
++refused_lock "a sweep row with a trailing space" '%s\nsweep %s %s \n' "$TMP/a sweep row with a trailing space:3: $ROW" "$HDR" "$S" "$SW1"
++refused_lock "a sweep row with a third field" '%s\nsweep %s %s %s\n' "$TMP/a sweep row with a third field:3: $ROW" "$HDR" "$S" "$SW1" "$SW1"
++refused_lock "a blank line" '%s\n\nsweep %s %s\n' "$TMP/a blank line:3: $ROW" "$HDR" "$S" "$SW1"
++refused_lock "a repeated sweep row" '%s\nsweep %s %s\nsweep %s %s\n' "$TMP/a repeated sweep row:4: repeats line 3: a row is recorded once" "$HDR" "$S" "$SW1" "$S" "$SW1"
++refused_lock "a last row without its newline" '%s\nsweep %s %s' "$TMP/a last row without its newline:3: has no newline: every line, the last too, ends with one" "$HDR" "$S" "$SW1"
++refused_lock "a lock without its base row" 'tree %s\ntree %s\n' "$TMP/a lock without its base row:1: is not a lock row: line 1 must be 'base <commit>', one space between fields, each oid 40 or 64 lowercase hex digits" "$F" "$F"
++refused_lock "a preview lock" '%s\npreview missing: P2\n' "$TMP/a preview lock:3: the move is a --preview build (preview missing: P2); a lock may only record a move generated with its landing prerequisites met (the generator is legacy/scripts/land/legacy_move.sh since the 2026-11-08 sweep)" "$HDR"
++S2="$(git commit-tree "$(tree_with 'mkdir -p p; echo m2 > p/moved')" -p "$S" -m sweep-2)"
++H2="$(git commit-tree "$R0" -p "$S2" -m head2)"
++[ -n "$S2" ] && [ -n "$H2" ] || { echo "FATAL: second sweep control commits"; exit 2; }
++SW2="$(tree_with 'mkdir -p p; echo m2 > p/moved')"
++printf '%s\nsweep %s %s\nsweep %s %s\n' "$HDR" "$S" "$SW1" "$S2" "$SW2" > "$TMP/l_two"
++[ -n "$(chain "$TMP/l_two" "$F" "$SW2" "$TMP/r_ok.tsv" "$H2")" ] && ok "control: a later sweep cannot rewrite a file an earlier sweep moved" || no "control: second sweep rewrote a swept file"
++T="$(tree_with 'mkdir -p p; printf m > "p/odd\\name"')"
++[ -n "$(judge "$F" "$T" "$TMP/r_ok.tsv" "$R0" "$S")" ] && ok "control: an added path git would C-quote is refused when it has no original" || no "control: C-quoted path accepted"
++# A legitimate sweep of p/moved plus a file at ":(literal)p/moved": read as pathspec magic, that path
++# would resolve to p/moved, match the sweep commit and pass.
++T="$(tree_with 'mkdir -p p ":(literal)p"; echo m > p/moved; echo m > ":(literal)p/moved"')"
++[ -n "$(judge "$F" "$T" "$TMP/r_ok.tsv" "$R0" "$S")" ] && ok "control: an added path spelled as pathspec magic is refused" || no "control: pathspec-magic path accepted"
++# Trusted-history controls: real commits with legacy/ and the lock. M1 freezes legacy/ = F; M2 sweeps
++# p/moved (m) into it. Both are trusted (main's). The candidate commits after them are not.
++commit_of() { # parent tree-of-legacy root-file-content lock-text -> commit
++  local idx="$TMP/idx.$$" t
++  rm -f "$idx"; GIT_INDEX_FILE="$idx" git read-tree --prefix=legacy/ "$2"
++  printf '%s' "$3" > "$TMP/rootf"; printf '%s\n' "$4" > "$TMP/lockf"
++  GIT_INDEX_FILE="$idx" git update-index --add --cacheinfo "100644,$(git hash-object -w "$TMP/rootf"),rootfile" \
++    --cacheinfo "100644,$(git hash-object -w "$TMP/lockf"),L"
++  t="$(GIT_INDEX_FILE="$idx" git write-tree)"; rm -f "$idx"
++  if [ -n "$1" ]; then git commit-tree "$t" -p "$1" -m c; else git commit-tree "$t" -m c; fi
++}
++LK1="$(printf 'base %s\ntree %s\n' "$S" "$F")"
++M1="$(commit_of "" "$F" r "$LK1")"
++M2="$(commit_of "$M1" "$SW1" r "$LK1"$'\n'"sweep $S $SW1")"
++[ -n "$M1" ] && [ -n "$M2" ] || { echo "FATAL: trusted-history control commits"; exit 2; }
++git show "$M2:L" > "$TMP/lock_same"
++[ -z "$(lock_history "$TMP/lock_same" L "$M2")" ] && ok "control: a lock that keeps every trusted line passes" || no "control: unchanged lock refused: $(lock_history "$TMP/lock_same" L "$M2")"
++printf '%s\nsweep %s %s\n' "$LK1" "$S2" "$SW2" > "$TMP/lock_rewritten"   # the M2 row replaced
++o="$(lock_history "$TMP/lock_rewritten" L "$M2")"
++[ "$o" = "lock: 'sweep $S $SW1' (in ${M2:0:10}, trusted history) is not in the lock: recorded lines are only ever added, never rewritten or removed" ] \
++  && ok "control: rewriting a trusted sweep line is refused, naming the line" || no "control: rewritten sweep line: '$o'"
++printf '%s\n' "$LK1" > "$TMP/lock_dropped"
++o="$(lock_history "$TMP/lock_dropped" L "$M2")"
++[ "$o" = "lock: 'sweep $S $SW1' (in ${M2:0:10}, trusted history) is not in the lock: recorded lines are only ever added, never rewritten or removed" ] \
++  && ok "control: removing a trusted sweep line is refused, naming the line" || no "control: removed sweep line: '$o'"
++printf 'base %s\ntree %s\nsweep %s %s\n' "$S2" "$F" "$S" "$SW1" > "$TMP/lock_rebased"
++o="$(lock_history "$TMP/lock_rebased" L "$M2")"
++[ "$o" = "lock: 'base $S' (in ${M2:0:10}, trusted history) is not in the lock: recorded lines are only ever added, never rewritten or removed" ] \
++  && ok "control: changing the trusted base line is refused, naming the line" || no "control: changed base line: '$o'"
++# The NUL attack on history: the landed row kept behind a NUL. The parser refuses the lock itself,
++# so no row of it can match a trusted row.
++printf '%s\n\0sweep %s %s\n' "$LK1" "$S" "$SW1" > "$TMP/lock_nul"
++o="$(lock_history "$TMP/lock_nul" L "$M2")"
++[ "$o" = "$TMP/lock_nul:3: holds a NUL byte: the lock is text" ] \
++  && ok "control: a trusted sweep row kept behind a NUL byte is refused by trusted history" || no "control: NUL-prefixed trusted row: '$o'"
++# A malformed version in trusted history is refused, not skipped.
++MB="$(commit_of "$M2" "$SW1" r "$LK1"$'\n'"sweep $S $SW1"$'\r')"
++o="$(lock_history "$TMP/lock_same" L "$MB")"
++[ "$o" = "lock: a trusted version is malformed: ${MB:0:10}:L:3: holds a carriage return: a line ends with a newline (LF) alone" ] \
++  && ok "control: a malformed lock in trusted history is refused, not skipped" || no "control: malformed trusted lock: '$o'"
++[ -z "$(history_identity legacy "$M2" "$M2")" ] && ok "control: a legacy/ that kept every trusted version passes" || no "control: unchanged history refused: $(history_identity legacy "$M2" "$M2")"
++# The attacks. (1) the row rewrite: the candidate replaces M2's row and p/moved's bytes together.
++C1="$(commit_of "$M2" "$SW2" r "$LK1"$'\n'"sweep $S2 $SW2")"
++o="$(history_identity legacy "$C1" "$M2")"
++[ "$o" = "legacy/p/moved: was $(git rev-parse "$SW1:p/moved" | cut -c1-10) (mode 100644) in trusted history and is $(git rev-parse "$SW2:p/moved" | cut -c1-10) (mode 100644) now: a frozen or swept file is never rewritten, by an edit or by deletion and re-addition" ] \
++  && ok "control: a swept file rewritten with its lock row is refused by trusted history" || no "control: row-rewrite attack: '$o'"
++# (2) delete then re-add: a trusted commit deletes p/moved (a resolved deletion); the candidate re-adds
++# it with other bytes under a new sweep line. Each chain step passes; history refuses.
++M3="$(commit_of "$M2" "$F" r "$LK1"$'\n'"sweep $S $SW1")"
++C2="$(commit_of "$M3" "$SW2" r "$LK1"$'\n'"sweep $S $SW1"$'\n'"sweep $S2 $SW2")"
++o="$(history_identity legacy "$C2" "$M3")"
++case "$o" in "legacy/p/moved: was $(git rev-parse "$SW1:p/moved" | cut -c1-10) (mode 100644) in trusted history and is $(git rev-parse "$SW2:p/moved" | cut -c1-10) (mode 100644) now: "*)
++  ok "control: a frozen file deleted and re-added with other bytes is refused by trusted history" ;; *) no "control: delete-then-re-add attack: '$o'" ;; esac
++# The same re-addition with the same bytes is no rewrite.
++C3="$(commit_of "$M3" "$SW1" r "$LK1"$'\n'"sweep $S $SW1")"
++[ -z "$(history_identity legacy "$C3" "$M3")" ] && ok "control: re-adding a file with its trusted bytes passes" || no "control: identical re-addition refused"
++# A branch that rewrote its own lock line and corrected it before landing: its commits are the merge's
++# second parent, so the corrected line is no trusted line and the landed lock passes.
++B1="$(commit_of "$M2" "$SW1" r "$LK1"$'\n'"sweep $S2 $SW2")"
++B2="$(commit_of "$B1" "$SW1" r "$LK1"$'\n'"sweep $S $SW1")"
++MM="$(git commit-tree "$(git rev-parse "$B2^{tree}")" -p "$M2" -p "$B2" -m landed)"
++[ -n "$MM" ] || { echo "FATAL: merge control commit"; exit 2; }
++[ -z "$(lock_history "$TMP/lock_same" L "$MM")" ] && [ -z "$(history_identity legacy "$MM" "$MM")" ] \
++  && ok "control: a member branch's corrected intermediate lock is not trusted history (first parents only)" || no "control: second-parent history trusted: $(lock_history "$TMP/lock_same" L "$MM")"
++# trusted_base: the merge base with the trusted ref; HEAD itself when the ref is absent.
++[ "$(LEGACY_TRUSTED_REF="$M2" trusted_base "$C1")" = "$M2" ] && [ "$(LEGACY_TRUSTED_REF=refs/heads/no-such trusted_base "$C1")" = "$C1" ] \
++  && ok "control: the trusted base is the merge base with the trusted ref, else HEAD (everything trusted)" || no "control: trusted_base"
++# Exact failure controls: command stubs affect only the subshell invoking the helper.
++expect_refusal() {
++  local name="$1" want="$2" got; shift 2
++  got="$("$@" 2>/dev/null)"
++  [ "$got" = "$want" ] && ok "control: $name" || no "control: $name: '$got' (wanted '$want')"
++}
++env_chain_stub() { local LOCKPY="$1"; chain "$TMP/l_ok" "$F" "$F" "$TMP/r_ok.tsv" "$H"; }
++env_history_stub() { local LOCKPY="$1"; lock_history "$TMP/lock_dropped" L "$M1"; }
++printf 'base %s\n' "$S" > "$TMP/base_only"
++expect_refusal "base-only chain" "$TMP/base_only:2: missing: line 2 must be 'tree <tree>'" chain "$TMP/base_only" "$F" "$F" "$TMP/r_ok.tsv" "$H"
++MB0="$(commit_of "" "$F" r "base $S")"
++expect_refusal "base-only trusted lock" "lock: a trusted version is malformed: ${MB0:0:10}:L:2: missing: line 2 must be 'tree <tree>'" lock_history "$TMP/lock_dropped" L "$MB0"
++for rc in 1 2; do
++  printf 'import sys\nprint("stub error", file=sys.stderr)\nsys.exit(%s)\n' "$rc" > "$TMP/parser_stub.py"
++  expect_refusal "silent parser exit $rc chain" "refused: lock_rows failed (exit $rc)" env_chain_stub "$TMP/parser_stub.py"
++  expect_refusal "silent parser exit $rc history" "refused: lock_history failed (exit $rc)" env_history_stub "$TMP/parser_stub.py"
++done
++expect_refusal "chain HEAD lookup failure" "refused: chain HEAD tree lookup failed" chain "$TMP/l_ok" "$F" "$F" "$TMP/r_ok.tsv" no-such-head
++expect_refusal "judge diff failure" "refused: judge diff/retention pipeline failed" judge no-such-tree "$F" "$TMP/r_ok.tsv" "$F"
++expect_refusal "judge retention failure" "refused: judge diff/retention pipeline failed" judge "$SW1" "$F" "$TMP/no-retention" "$F"
++expect_refusal "judge root lookup failure" "refused: judge root lookup failed" judge "$F" "$SW1" "$TMP/r_ok.tsv" no-such-tree "$S"
++expect_refusal "judge sweep lookup failure" "refused: judge sweep lookup failed"$'\n'"A legacy/p/moved: no sweep commit in the lock has p/moved with this content; legacy/ admits only byte-for-byte moves" judge "$F" "$SW1" "$TMP/r_ok.tsv" "$R0" no-such-commit
++expect_refusal "identity log failure" "refused: history_identity failed (exit 1)" history_identity legacy "$M1" no-such-commit
++expect_refusal "identity tree failure" "refused: history_identity failed (exit 1)" history_identity legacy no-such-commit "$M1"
++expect_refusal "trusted merge-base failure" "refused: trusted_base merge-base failed" env LEGACY_TRUSTED_REF="$M1" bash -c "$(declare -f trusted_base); trusted_base no-such-head"
++expect_refusal "trusted HEAD failure" "refused: trusted_base HEAD lookup failed" env LEGACY_TRUSTED_REF=refs/heads/no-such bash -c "$(declare -f trusted_base); trusted_base no-such-head"
++# Selectively fail one command while letting all other Git/Python calls run normally.
++fail_command() (
++  local target="$1"; shift
++  git() { if [ "$1" = "$target" ]; then return 2; else command git "$@"; fi; }
++  grep() { if [ "$target" = grep ]; then return 2; else command grep "$@"; fi; }
++  python3() { if [ "$target" = python3 ]; then return 2; else command python3 "$@"; fi; }
++  "$@"
++)
++expect_refusal "judge Python failure" "refused: judge diff/retention pipeline failed" fail_command python3 judge "$SW1" "$F" "$TMP/r_ok.tsv" "$F"
++expect_refusal "judge added-path lookup failure" "refused: judge added-path lookup failed" fail_command ls-tree judge "$F" "$SW1" "$TMP/r_ok.tsv" "$R0" "$S"
++expect_refusal "identity Python failure" "refused: history_identity failed (exit 2)" fail_command python3 history_identity legacy "$M1" "$M1"
++expect_refusal "trusted ref lookup failure" "refused: trusted_base ref lookup failed" fail_command rev-parse trusted_base "$M1"
++expect_refusal "reader listing failure" "refused: reader file listing failed" fail_command ls-files named_readers
++expect_refusal "reader scan failure" "refused: reader scan failed" fail_command grep named_readers
++expect_refusal "lock-use scan failure" "refused: lock-use scan failed" fail_command grep lock_uses
++expect_refusal "read-loop scan failure" "refused: read-loop scan failed" fail_command grep read_loop_scan 'while read x || [ -n "$x" ]'
++# Subprocess Git failures must not be mistaken for absent history or a deleted lock.
++mkdir "$TMP/bin"
++REAL_GIT="$(command -v git)"
++cat > "$TMP/bin/git" <<'STUB'
++#!/usr/bin/env bash
++if [ "$1" = "$FAIL_GIT_COMMAND" ] || { [ "$FAIL_GIT_COMMAND" = blob-and-tree ] && { [ "$1" = cat-file ] || [ "$1" = ls-tree ]; }; }; then exit 2; fi
++exec "$REAL_GIT" "$@"
++STUB
++chmod +x "$TMP/bin/git"
++export REAL_GIT
++path_failure() { local PATH="$TMP/bin:$PATH"; export FAIL_GIT_COMMAND="$1"; shift; "$@"; }
++expect_refusal "lock history log failure" "lock: cannot list the trusted history of L through ${M1:0:10}" path_failure log lock_history "$TMP/lock_dropped" L "$M1"
++expect_refusal "lock history blob failure" "lock: cannot read trusted version ${M1:0:10}:L" path_failure cat-file lock_history "$TMP/lock_dropped" L "$M1"
++expect_refusal "lock history tree failure" "lock: cannot read trusted version ${M1:0:10}:L" path_failure blob-and-tree lock_history "$TMP/lock_dropped" L "$M1"
++# Every shell read loop here reads a last line that has no newline: `read` fails on it, so a bare
++# `while read` silently drops it. (The loops' behaviour is checked above; this keeps a new one honest.)
++loops="$(grep -nE '^[^#]*while[^#]*[[:space:]]read[[:space:]]' "$SELF")" || { echo "FATAL: cannot read $SELF"; exit 2; }
++bad="$(read_loop_scan "$loops")"
++[ "$(printf '%s\n' "$loops" | grep -cF '|| [ -n "$')" -ge 3 ] && [ -z "$bad" ] && ok "control: every read loop in this check reads a last line without a newline" || no "control: a read loop drops an unterminated last line: $bad"
+ cd "$ROOT_DIR"
++# The parser is the lock's one reader. Outside legacy/ (frozen, never run) and comments, the lock's
++# path is named only by the parser and by this check's LOCK=, and every use of LOCK here hands it to
++# the parser (lock_rows, lock_history) or only tests or names it.
++named="$(named_readers)"
++uses="$(lock_uses)"
++[ -z "$named" ] && [ -z "$uses" ] && [ "$(grep -c '' "$SELF")" -gt 0 ] \
++  && ok "control: lib/legacy_lock.py is the lock's one reader: no other code names or reads the lock" \
++  || no "control: another reader of the lock: ${named}${uses:+ / in this check: $uses}"
+ 
+ echo "=== legacy/ against $LOCK ==="
+ [ -f "$LOCK" ] || { no "$LOCK is missing"; echo "legacy_frozen: PASS=$PASS FAIL=$FAIL"; exit 1; }
+-base="$(sed -n 's/^base //p' "$LOCK")"; frozen="$(sed -n 's/^tree //p' "$LOCK")"
+-pv="$(sed -n 's/^preview //p' "$LOCK")"
+-[ -z "$pv" ] && ok "the move was generated with its landing prerequisites met" \
+-  || no "the move is a --preview build ($pv); regenerate it with scripts/land/legacy_move.sh on a base that meets them"
+-if [ -z "$base" ] || [ -z "$frozen" ]; then
+-  no "$LOCK needs a 'base <commit>' and a 'tree <oid>' line"
++rows="$(lock_rows "$LOCK")" && lock_ok=1 || lock_ok=""
++base="" frozen="" nsw=0
++while read -r kind a _ || [ -n "$kind" ]; do
++  case "$kind" in base) base="$a" ;; tree) frozen="$a" ;; sweep) nsw=$((nsw+1)) ;; esac
++done <<<"$rows"
++if [ -z "$lock_ok" ]; then
++  no "$LOCK is malformed (lib/legacy_lock.py is its format):"; printf '%s\n' "$rows" | sed 's/^/      /'
+ elif [ "$(git rev-parse -q --verify "$base^{tree}" 2>/dev/null)" != "$frozen" ]; then
+   no "the recorded tree $frozen is not the tree of the recorded base $base (or the base is not in this clone's history)"
+ else
+-  ok "legacy.lock: tree ${frozen:0:10} is the tree of base ${base:0:10}"
++  ok "the lock parses (base, tree, $nsw sweep row(s), nothing else), and tree ${frozen:0:10} is the tree of base ${base:0:10}"
+   cur="$(git rev-parse -q --verify HEAD:legacy 2>/dev/null)"
+   if [ -z "$cur" ]; then
+     no "HEAD has no legacy/ directory"
+   else
+     [ -f RETENTION.tsv ] || { no "RETENTION.tsv is missing"; }
+-    out="$(judge "$frozen" "$cur" "${RETENTION:-RETENTION.tsv}" 2>&1)"
++    out="$(checked chain chain "$LOCK" "$frozen" "$cur" "${RETENTION:-RETENTION.tsv}" HEAD)"
++    tb="$(checked trusted_base trusted_base HEAD)"
++    hist="$(checked lock_history lock_history "$LOCK" "$LOCK" "$tb"; checked history_identity history_identity legacy HEAD "$tb")"
++    [ -z "$hist" ] && ok "trusted history (through ${tb:0:10}): every lock line kept, no legacy/ file rewritten" \
++      || { no "legacy/ or its lock rewrote trusted history (through ${tb:0:10}):"; echo "$hist" | sed 's/^/      /'; }
++    [ "$nsw" = 0 ] || [ -n "$out" ] || ok "the lock's $nsw sweep line(s) name commits of HEAD's history and chain to HEAD:legacy"
+     if [ -z "$out" ]; then
+       [ "$cur" = "$frozen" ] && ok "legacy/ is byte-identical to the frozen tree" \
+-                            || ok "legacy/ differs from the frozen tree only by deletions RETENTION.tsv allows"
++                            || ok "legacy/ differs from the frozen tree only by byte-for-byte sweeps and deletions RETENTION.tsv allows"
+     else
+       no "legacy/ changed:"; echo "$out" | sed 's/^/      /'
+     fi
+diff --git a/scripts/checks/lib/doc_links.py b/scripts/checks/lib/doc_links.py
+index efc2f49e6..2fbc7be58 100644
+--- a/scripts/checks/lib/doc_links.py
++++ b/scripts/checks/lib/doc_links.py
+@@ -162,6 +162,29 @@ def folded_changelog(root):
+         sys.path.pop(0)
+ 
+ 
++def swept_files(root):
++    """legacy/ paths not in the frozen tree the lock records (its `tree` row): the files sweeps moved
++    there. The lock is read by its one parser, legacy_lock.py; a malformed lock raises its LockError.
++    Empty without a lock or a git repository."""
++    sys.path.insert(0, str(DEFAULT_ROOT / "scripts" / "checks" / "lib"))
++    try:
++        import legacy_lock
++    finally:
++        sys.path.pop(0)
++    lock = root / legacy_lock.LOCK_PATH
++    if not lock.is_file():
++        return set()
++    tree = next(r.split()[1] for r in legacy_lock.read(str(lock)) if r.startswith("tree "))
++    def ls(spec):
++        r = subprocess.run(["git", "-C", str(root), "ls-tree", "-r", "-z", "--name-only", spec],
++                           capture_output=True)
++        return {n for n in r.stdout.decode(errors="surrogateescape").split("\0") if n} if r.returncode == 0 else None
++    frozen, now = ls(tree), ls("HEAD:legacy")
++    if frozen is None or now is None:
++        return set()
++    return {"legacy/" + n for n in now - frozen}
++
++
+ def markdown_files(root):
+     if (root / ".git").exists():
+         r = subprocess.run(["git", "-C", str(root), "ls-files", "-z", "--cached", "--others",
+@@ -169,7 +192,11 @@ def markdown_files(root):
+         if r.returncode == 0:
+             names = [n for n in r.stdout.decode().split("\0") if n]
+             # legacy/ is frozen and was checked at the tag; its root-relative links point at the old root.
+-            return sorted(root / n for n in names if (root / n).is_file() and not n.startswith("legacy/"))
++            # A file a sweep moved into legacy/ later (one not in the lock's frozen tree) is read where it
++            # now is, so its links must resolve from there.
++            swept = swept_files(root)
++            return sorted(root / n for n in names if (root / n).is_file()
++                          and (not n.startswith("legacy/") or n in swept))
+     return sorted(p for p in root.rglob("*.md")
+                   if not any(part in SKIP_PARTS for part in p.relative_to(root).parts))
+ 
+@@ -191,7 +218,13 @@ def main():
+         return cache[p]
+ 
+     failures, links, frags = [], 0, 0
+-    for path in markdown_files(root):
++    try:
++        files = markdown_files(root)
++    except ValueError as e:  # legacy_lock.LockError: which legacy/ files to read is unknown
++        print(f"FAIL the legacy lock is malformed:\n{e}")
++        print("DOC-LINKS: FAIL=1 CHECKED=0 ANCHORS=0")
++        return 1
++    for path in files:
+         rel = path.relative_to(root)
+         text = path.read_text(errors="replace")
+         scan = blank_code(text)
+diff --git a/scripts/checks/lib/legacy_lock.py b/scripts/checks/lib/legacy_lock.py
+new file mode 100644
+index 000000000..4798fa2d0
+--- /dev/null
++++ b/scripts/checks/lib/legacy_lock.py
+@@ -0,0 +1,152 @@
++#!/usr/bin/env python3
++"""The one reader of scripts/checks/legacy.lock, the record legacy_frozen.sh judges legacy/ against.
++
++No other code reads the lock's bytes: legacy_frozen.sh and doc_links.py take its rows from here, and
++legacy_frozen.sh's controls refuse any other reader. One parser means every consumer sees the same
++rows, so no byte can be a row to one check and not to another.
++
++THE FORMAT. Every line ends with a newline (LF) and is exactly one row:
++  line 1     base <commit>            the move's base commit
++  line 2     tree <tree>              that commit's tree: the frozen legacy/
++  line 3...  sweep <commit> <tree>    one per sweep: its source commit and the legacy/ tree it produced
++An <oid> is 40 or 64 lowercase hex digits; one space separates the fields. Nothing else is a row:
++no blank line, comment, NUL, CR, tab, leading or trailing space, non-ASCII byte, repeated row, or
++last line without its newline. A `preview` line (a move generated by --preview) is refused with
++its own message. Every problem is reported, one diagnostic per line, as NAME:LINE: message.
++
++Usage:
++  legacy_lock.py rows FILE|-              print the rows, one per line; exit 1 with the diagnostics
++  legacy_lock.py history LOCK PATH TRUSTED
++      every row of every version of PATH in TRUSTED's first-parent history (each commit read
++      against its first parent) is a row of LOCK: rows are only ever added. A malformed trusted
++      version is refused, not skipped. Prints one refusal per problem; exit 1 if any.
++Exit 2 on a usage or I/O error.
++"""
++
++import re
++import subprocess
++import sys
++
++LOCK_PATH = "scripts/checks/legacy.lock"
++OID = r"(?:[0-9a-f]{40}|[0-9a-f]{64})"
++FORMS = {
++    "base": re.compile(rf"base {OID}"),
++    "tree": re.compile(rf"tree {OID}"),
++    "sweep": re.compile(rf"sweep {OID} {OID}"),
++}
++PREVIEW = re.compile(r"preview(?: .*)?")
++
++
++class LockError(ValueError):
++    """The lock is malformed; .problems holds one diagnostic per problem."""
++
++    def __init__(self, problems):
++        super().__init__("\n".join(problems))
++        self.problems = problems
++
++
++def parse(data, name):
++    """The rows of a lock's bytes, as strings ('base X', 'tree X', 'sweep X Y'), in order."""
++    if not data:
++        raise LockError([f"{name}: empty: line 1 must be 'base <commit>'"])
++    lines = data.split(b"\n")
++    last_unterminated = lines[-1] != b""
++    if not last_unterminated:
++        lines.pop()
++    problems, rows, seen = [], [], {}
++    for n, raw in enumerate(lines, 1):
++        where = f"{name}:{n}"
++        if b"\0" in raw:
++            problems.append(f"{where}: holds a NUL byte: the lock is text"); continue
++        if b"\r" in raw:
++            problems.append(f"{where}: holds a carriage return: a line ends with a newline (LF) alone"); continue
++        try:
++            line = raw.decode("ascii")
++        except UnicodeDecodeError:
++            problems.append(f"{where}: holds a non-ASCII byte"); continue
++        if n == len(lines) and last_unterminated:
++            problems.append(f"{where}: has no newline: every line, the last too, ends with one"); continue
++        want = "base" if n == 1 else "tree" if n == 2 else "sweep"
++        if PREVIEW.fullmatch(line):
++            problems.append(f"{where}: the move is a --preview build ({line}); a lock may only record a move "
++                            "generated with its landing prerequisites met (the generator is "
++                            "legacy/scripts/land/legacy_move.sh since the 2026-11-08 sweep)"); continue
++        if not FORMS[want].fullmatch(line):
++            shape = {"base": "'base <commit>'", "tree": "'tree <tree>'", "sweep": "'sweep <commit> <tree>'"}[want]
++            problems.append(f"{where}: is not a lock row: line {n} must be {shape}, one space between "
++                            "fields, each oid 40 or 64 lowercase hex digits"); continue
++        if line in seen:
++            problems.append(f"{where}: repeats line {seen[line]}: a row is recorded once"); continue
++        seen[line] = n
++        rows.append(line)
++    if len(lines) < 2:
++        problems.append(f"{name}:2: missing: line 2 must be 'tree <tree>'")
++    if problems:
++        raise LockError(problems)
++    return rows
++
++
++def read(path):
++    """The rows of the lock file at path ('-' is stdin)."""
++    if path == "-":
++        return parse(sys.stdin.buffer.read(), "<stdin>")
++    with open(path, "rb") as f:
++        return parse(f.read(), path)
++
++
++def git(*args):
++    r = subprocess.run(["git", *args], capture_output=True)
++    return r.returncode, r.stdout
++
++
++def history(lock, lpath, trusted):
++    """Refusals: rows of trusted versions of lpath that lock lacks, and malformed trusted versions."""
++    current = set(read(lock))
++    rc, out = git("log", "--first-parent", "--diff-merges=first-parent", "--no-patch", "--format=%H",
++                  trusted, "--", lpath)
++    if rc != 0:
++        return [f"lock: cannot list the trusted history of {lpath} through {trusted[:10]}"]
++    refusals, reported = [], set()
++    for c in out.decode().split():
++        rc, blob = git("cat-file", "blob", f"{c}:{lpath}")
++        if rc != 0:
++            rc, entries = git("ls-tree", c, "--", lpath)
++            if rc != 0 or entries:
++                refusals.append(f"lock: cannot read trusted version {c[:10]}:{lpath}")
++            continue  # an absent path is a deletion; older versions are still checked
++        try:
++            rows = parse(blob, f"{c[:10]}:{lpath}")
++        except LockError as e:
++            refusals += [f"lock: a trusted version is malformed: {p}" for p in e.problems]
++            continue
++        for row in rows:  # newest first, so the commit named is the newest that has the row
++            if row not in current and row not in reported:
++                reported.add(row)
++                refusals.append(f"lock: '{row}' (in {c[:10]}, trusted history) is not in the lock: "
++                                "recorded lines are only ever added, never rewritten or removed")
++    return refusals
++
++
++def main(argv):
++    try:
++        if len(argv) == 2 and argv[0] == "rows":
++            for row in read(argv[1]):
++                print(row)
++            return 0
++        if len(argv) == 4 and argv[0] == "history":
++            refusals = history(*argv[1:])
++            for r in refusals:
++                print(r)
++            return 1 if refusals else 0
++    except LockError as e:
++        print("\n".join(e.problems))
++        return 1
++    except OSError as e:
++        print(f"legacy_lock.py: {e}", file=sys.stderr)
++        return 2
++    print("usage: legacy_lock.py rows FILE|- | history LOCK PATH TRUSTED", file=sys.stderr)
++    return 2
++
++
++if __name__ == "__main__":
++    sys.exit(main(sys.argv[1:]))
+diff --git a/scripts/checks/sandbox_isolation.sh b/scripts/checks/sandbox_isolation.sh
+index dba7a483e..da07e144a 100755
+--- a/scripts/checks/sandbox_isolation.sh
++++ b/scripts/checks/sandbox_isolation.sh
+@@ -67,6 +67,20 @@ source "$HELPER" || exit 2
+ TMP="$(mktemp -d)" || exit 2
+ trap 'rm -rf "$TMP"' EXIT
+ git_sandbox "$TMP/gitconfig" || exit 2
++# Resolve in the real caller: a bare clone need not carry its origin/main ref.
++trusted_ref="${LEGACY_TRUSTED_REF:-origin/main}"
++git -C "$ROOT_DIR" rev-parse -q --verify "$trusted_ref^{commit}" >/dev/null
++trusted_rc=$?
++case "$trusted_rc" in
++  0) TRUSTED_BASE="$(git -C "$ROOT_DIR" merge-base HEAD "$trusted_ref")" || {
++       echo "FATAL: sandbox_isolation: trusted base merge-base failed" >&2; exit 2; } ;;
++  1) TRUSTED_BASE="$(git -C "$ROOT_DIR" rev-parse --verify 'HEAD^{commit}')" || {
++       echo "FATAL: sandbox_isolation: trusted base HEAD lookup failed" >&2; exit 2; } ;;
++  *) echo "FATAL: sandbox_isolation: trusted base ref lookup failed" >&2; exit 2 ;;
++esac
++[[ "$TRUSTED_BASE" =~ ^[0-9a-f]{40}$ ]] || {
++  echo "FATAL: sandbox_isolation: trusted base is not a full commit SHA" >&2; exit 2;
++}
+ printf '[user]\n\tname = isolation gate\n\temail = isolation@example.invalid\n[init]\n\tdefaultBranch = main\n[advice]\n\tdetachedHead = false\n' > "$GIT_CONFIG_GLOBAL"
+ 
+ BOUNDED_PARENT="$TMP"
+@@ -130,7 +144,7 @@ snap() { # dir
+ run_as_hook() {
+   local d="$1" s="$2" gd
+   gd="$(git -C "$d/linked" rev-parse --absolute-git-dir)"
+-  ( cd "$d/linked" && GIT_DIR="$gd" && export GIT_DIR && bounded bash "$s" ) > "$d/run.log" 2>&1
++  ( cd "$d/linked" && GIT_DIR="$gd" && export GIT_DIR && LEGACY_TRUSTED_REF="$TRUSTED_BASE" bounded bash "$s" ) > "$d/run.log" 2>&1
+   echo $?
+ }
+ probe() { # label script expect-change [completion-marker]
+@@ -157,6 +171,25 @@ probe() { # label script expect-change [completion-marker]
+   fi
+ }
+ 
++echo "=== control: the hook probe receives the root trusted base ==="
++mkdir -p "$TMP/trusted-control"
++cat > "$TMP/trusted-control/print.sh" <<'EOF'
++#!/usr/bin/env bash
++printf '%s\n' "${LEGACY_TRUSTED_REF:-}"
++EOF
++trusted_caller="$(mktemp -d "$TMP/caller.XXXXXX")"
++if mk_caller "$trusted_caller"; then
++  trusted_rc="$(run_as_hook "$trusted_caller" "$TMP/trusted-control/print.sh")"
++  if [ "$trusted_rc" = 0 ] && [ "$(cat "$trusted_caller/run.log")" = "$TRUSTED_BASE" ]; then
++    ok "trusted-base control: LEGACY_TRUSTED_REF equals $TRUSTED_BASE exactly"
++  else
++    no "trusted-base control: expected exactly $TRUSTED_BASE (exit $trusted_rc)"
++    cat "$trusted_caller/run.log"
++  fi
++else
++  no "trusted-base control: could not build the caller"
++fi
++
+ echo "=== control: the harness sees a leak ==="
+ mkdir -p "$TMP/ctl"
+ cat > "$TMP/ctl/leaky.sh" <<'EOF'

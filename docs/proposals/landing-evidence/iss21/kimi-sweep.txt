@@ -1,0 +1,490 @@
+kimi version 2.4.1
+• I need perform read-only comprehensive review. Should start final exact REPOSITORY readable/unreadable then files read. Do inspect REVIEW.diff and all touched full plus interactions. No modifications no network/state changing. Tools Read/Grep/Glob safe. Bash read-only commands allowed but avoid any that state. Should understand files. Should have meticulous. First read diff.
+
+• I’ll inspect the full diff, then trace the lock parser through every consumer, test, and documented control before assessing fail-closed behavior.
+
+• Should continue diff.Touched list:
+  .github/workflows/oracle.yml
+  ISSUES.tsv
+  README.md
+  RETENTION.tsv
+  changelog landing audit
+  new changelog
+  docs/archive/site-down deleted (need current absent cannot read in dir full? Diff contains full; requirement every file touches read from directory every file change touches. Deleted can't current; legacy copy exists likely near same and read full. Should list as diff/deleted perhaps files read list includes REVIEW.diff and legacy copy)
+  docs/decisions.md
+  docs/proposals/SPEC_UNIFICATION.md
+  moved docs bugs readme + tsv
+  landing audit README and 4 TSV
+  IDEAS MERGED
+  legacy_move.sh move_prereqs.py
+  legacy.lock
+  legacy_frozen.sh
+  doc_links.py
+  legacy_lock.py
+  sandbox_isolation.sh
+  Potential lots full files huge. Should read every full. I can parallel Read max100k. Should have all interacting callers/tests/docs. legacy_frozen invoked run.sh, hooks etc. doc_links main callers. sandbox etc. I must inspect. I'll use TodoList? User read-only; TodoList changes tool internal not file but unnecessary perhaps use for tracking. I can use no state? It changes tool state arguably allowed? "Do not run anything changes state" safest avoid. Tools Read only and Grep/Glob. Bash commands could compute SHA read-only but no need. I can parallel many reads. Start primary scripts full and moved tooling.I need analyze bugs. Immediate judge early return if frozen==cur ignores root tree and sweeps okay unchanged no additions. Fail-closed issue chain returns 0 after parser errors intentionally diagnostics semantic; outer out captures checked chain and out nonempty fails. Fine. checked exit1 with output no "refused" semantic. Requirement failures parser/helper fail closed exact refused <step> failed (exit N). For parser exit1 diagnostics no refused, expected semantic. Silent parser exit1 checked prints refused. chain rows="$(lock_rows)" output? Nested checked: if parser exits 1 silent, inner checked prints refused, returns1; chain prints rows and return0. Outer checked chain sees 0 and out nonempty, no generic but diagnostic from inner. okay.
+
+  Potential severe trusted_base failure empty tb -> lock_history git log "" likely fail produces diagnostic, history identity empty fails checked output; fail closed. trusted_base prints refused if command failure but can also output? git merge-base failure output none -> echo; tb includes refusal text passed as trusted causing more but fail.
+
+  history lock path handling injection? trusted user ref with --? trusted passed after options and before --, could option injection if LEGACY_TRUSTED_REF starts - ; trusted_base verifies "$ref^{commit}" possibly weird. Not primary.
+
+  Main likely bug doc_links fail-open helper failures: swept_files returns empty on git ls-tree failure, then skips all legacy including swept docs. User explicitly "Failures parser or helper commands must fail closed ... never read no problems". doc_links returns set on git failures = fails open for links. That's obvious REAL DEFECT at 183-184. Also no git repo behavior intentionally empty fallback rglob all docs. Git ls-files failure falls back rglob includes all legacy original docs, potentially tons false failures but not fail open. ls-tree failure should raise. Perhaps another bug doc_links root import uses DEFAULT_ROOT not root so --root controls use current parser rather than fixture's parser; preexisting folded does same. Tests maybe relevant. Swept lock read I/O error not caught main except ValueError, so traceback exit1 fail closed (not nice diagnostic requirement exact?). User asks failures exact refused <step> failed (exit N) likely shell helpers. doc_links semantic.
+
+  Legacy_frozen has multiple fail-open pipelines due command substitutions and pipefail semantics? judge:
+  git diff-tree | python | while ... done || echo. With pipefail set, while's exit status normally last command; pipeline status catches any nonzero. However while body lookup failures: `want="$(...)" || { echo; continue; }` continue status 0, pipeline overall git diff tree success etc and while 0. It prints refusal, chain captures out and fails semantic. good. Python open retention failure causes python nonzero; while still 0 but pipefail yields nonzero -> echo refusal. good. But Python parsing malformed retention could produce no rows then deletions diagnostics. fine.
+
+  history_identity parsing raw output potential path with newlines/control: raw -z handled. tok format status for merge? --diff-merges first-parent output. tokens .lstrip(b"\n") dangerous path token? Only applied metadata tok not path. Fine.
+
+  Big issue git log history only commits where lock changed due path filter, enough every version. lock current parsed then git log. First-parent chain of trusted includes all. Deletions handled.
+
+  history_identity git log -- path only commits touching legacy. For each change record sees newest version at each historical commit. Current path compared all seen. If path existed in trusted base initial commit but never changed in trusted range (trusted merge-base excludes base commit changes?) Current head includes base version same unless candidate changes candidate diff judge catches. Good. If current legacy file newly added candidate, history seen may other older path etc.
+
+  Candidate own history not trusted except fallback origin/main missing => HEAD all trusted, lock_history current includes rows so cannot detect own row rewrite because current includes replacement and old missing? It traverses HEAD including previous commits, catches old line missing yes. history identity catches. Good.
+
+  One concern history_identity only checks paths existing HEAD. Deletion re-add same path handled. Deletion current absent permitted by retention regardless history. okay.
+
+  Sweep validation allows each step additions if matching *any* prior/current sweep commit passed to judge only current step's sw, actually for each step passes "$sw" single. Good. Root absence checked at HEAD, not at sweep root. Requirement no longer root HEAD yes.
+
+  Critical: chain invalid sweep row does `continue` without updating prev; emits diagnostic. Outer catches. fine.
+
+  Critical: chain `root="$(git rev-parse "$head^{tree}")"` could succeed output multiple? fine.
+
+  Real control issue `checked` return "$rc": rc >255? exit normal.
+
+  Frozen lock base tree is whole commit tree, not legacy subtree? Initial move sets legacy = base whole tree and tree row commit tree. yes.
+
+  Swept files doc links compares frozen set full root paths vs now legacy subtree names; works. now-frozen includes all newly swept. Deleted frozen ignored. Any swept file subsequently modified caught by legacy gate; doc links checks. Any file deleted then readded same path in current and frozen not considered swept even if lock says? trusted catches.
+
+  Now read tests doc_links.sh full, run.sh, root_inventory etc references. Use Grep lock all repo excluding legacy? Tool can.
+
+• The core chain is present, but `doc_links.py` currently converts failed Git tree lookups into an empty sweep set; I’m checking whether its wrapper or another gate turns that into a refusal, and auditing the remaining consumers and fixtures.
+
+• Grep output included REVIEW and legacy many. named_readers only scripts .githooks .github excludes docs, root etc intentional code only. It scans scripts including legacy? root scripts no legacy. good. Doc links no tests for new functionality at all! No swept valid/broken/malformed/failure controls in doc_links.sh. User controls exact diagnostics load-bearing; missing tests is preference/real depending behavior. I can cite fail-open definite.
+
+  Should identify more defects. I'll inspect full touched docs/files. Parallel groups. Some docs decisions ~1000 lines under100k. RETENTION etc.Important docs/decisions rest required. Also site-down legacy link is old root and excluded as original frozen (not swept) fine. Root deleted version differed decision link. RETENTION row says swept from base all including site but actually site not swept addition existed frozen. destination okay wording "site root copy ... removed". Swept lock first/second trees unknown can't verify no git. I can compare moved content vs legacy preexisting duplicates where exist. Moved IDEAS/MERGED might already frozen from initial whole tree! Wait legacy/ initial snapshot is entire base at move. At current before sweep, root docs/proposals/IDEAS.md new or restored after move? Initial legacy contains docs/proposals perhaps yes. I'll Glob. If files already in frozen tree at same paths, then "addition" no-op first sweep? REVIEW shows rename to legacy paths but if already existing in base commit current? Diff would show modification if frozen had file. Since diff shows rename from root to legacy, base's legacy lacks those paths (they were added to root after initial move). okay.
+
+  Moved legacy/scripts/land/legacy_move.sh initial legacy/scripts/land maybe did not have generator because handwritten root only, so addition.
+
+  Should second sweep 02011 maybe within branch intermediate source to adjust links. Lock row first base 3bd7 tree b582 then second source 02011 tree ac06. Commit under review 35b final. Source first base as requested. Good.
+
+  Potential bug first sweep tree includes docs/bugs README original link then second sweep source commit includes modified link. chain first frozen->tree1 adds root original with ../../decisions link. doc links final current second. fine.
+
+  Docs decisions claims P5 unchanged byte frozen except deletions contradict new sweep exception. New row revises but old decided-project-restart line 376-378 still says only deletions, and P5 line288 only deletions. New row explicit new mechanism may count revision but not marked in old rows. User asks docs/changelog. Could be PREFERENCE/REAL documentation inconsistency. New row says "every other addition, every edit refused" but old P5 says no additions. Since later row explicit revises mechanism, reader can reconcile, but project instruction sweep comments old docs. Could mark preference to cross-reference revision, not reject alone. README line55/75 says frozen byte for byte/never edited, now additions via sweeps. "legacy/ is frozen snapshot old tree ... never edited" concept still additions don't edit existing, but no longer only snapshot. New model snapshot plus sweeps. Could be documentation defect. Yet desired focus likely code.
+
+  Now finish decisions.Now finish.Finish the response.Now moved files full. bug disposition potentially large >100k but read. IDEAS/MERGED huge perhaps need chunks. Landing audit.Bug disposition need full lines158-324. IDEAS links now broken: docs/proposals/IDEAS moved to legacy/docs/proposals, content has `../legacy-checks/INVENTORY.md` from legacy/docs/proposals -> legacy/docs/legacy-checks yes good. Paths like `docs/decisions.md` inline no links. MERGED says "git archive copies in this folder: codex/, ... BRIEF.md" but those weren't moved in diff because not at root? Perhaps root docs/proposals only IDEAS/MERGED, no assets. At base they may have been stale references already. Not introduced content unchanged. Swept doc links will check local markdown links only few. IDEAS no Markdown links except none. MERGED none. Landing audit relative TSV works.
+
+  Potential moved bug README new link correct four ups: legacy/docs/archive/bugs-2026-11 -> up bugs->archive (1), docs(2), legacy(3), root(4) yes.
+
+  Should have full bug tsv no relevance but requirement.Continue.Now docs full read touched all yes. Should have remaining interactions docs describing new lock: ROADMAP row perhaps changed not in diff but mentions legacy. root_inventory list to ensure swept scripts still references legacy_move in landing tests etc. Grep legacy_move all. Also docs decisions 2026 cleanup says delete leaving history but new row supersedes move. Could note.
+
+  Should inspect CI workflow full history and sandbox uses. .github lean action full. scripts land train/run-at-ref acceptance uses legacy_frozen environment trusted base. Grep LEGACY_TRUSTED_REF all.Train full 1147 lines huge but done. User asked files interact with callers checks docs. I need not read unrelated entire landing docs perhaps only references. But they said "files they interact with (callers, checks that test them, docs describe them)" broad. I read main tests.
+
+  Key possible defect run-at-ref fresh clone lacks origin/main? It clones gate repo and fetches origin remote refs, yes origin/main available. Sandbox clones ROOT bare and full: full clone of bare only HEAD branch likely main and origin/main exists if bare HEAD main. TRUSTED_BASE passed anyway.
+
+  Sandbox isolation computes trusted base after git_sandbox which unsets GIT_DIR etc but keeps current root. Good. If origin/main absent, TRUSTED_BASE=HEAD, and copied scripts commit adds candidate lock/legacy on top of cloned HEAD; live legacy_frozen sees origin/main perhaps original HEAD and merge-base HEAD original. If no origin/main in caller, fallback HEAD in probe points new commit (scripts under test) making its own history trusted; but source original commit lock versions in first parent includes modifications only new commit no historical rewrites. okay.
+
+  Potential structural flaw: mk_caller commits copied scripts including current lock file. If current lock has sweep rows naming commits not present in cloned ROOT? They are in ROOT history yes. If current commit is git archive no .git can't run but actual CI yes.
+
+  Main fail closed bug in doc_links definite.
+
+  Look deeper legacy_frozen chain/fail-closed. The `checked` wrapper prints command output and if exit nonzero with no output generic. But command output capturing only stdout; helper stderr passes through. Fine.
+
+  At actual run:
+  rows="$(lock_rows "$LOCK")" && lock_ok=1 || lock_ok=""
+  If parser exits 2 with diagnostic on stderr, checked prints "refused..." stdout, rows gets it. failure marks lock_ok empty. Good.
+  Then if lock malformed no chain/history. FAIL.
+  If base rev-parse command fails -> output empty != frozen -> no. Good.
+  cur empty -> fail.
+  retention missing no but still judge with path missing -> out refused.
+  out chain always returns 0 even helper internal failures but diagnostic. checked doesn't generic but out nonempty -> fail.
+  tb command could return success with multiple lines if git merge-base --all? not --all so one.
+  hist executes lock_history and history_identity separated `;` in command substitution. Both always run. tb empty on trusted failure; lock_history returns diagnostics, history returns. nonempty.
+  Positive ok trusted history only if hist empty. nsw >0 out empty => okay.
+  FAIL tally robust.
+
+  Could `judge` silently accept invalid added path if git diff output malformed? `zip(f[0::2],f[1::2])` discards odd trailing token. Git should well formed, helper corruption could produce malformed output and rc0 only malicious git not expected. Fail commands not output.
+  Retention parser uses open default encoding strict; Unicode decode error -> pipeline fail. Good.
+  Named_readers uses xargs grep. If zero files xargs -r no grep, pipeline statuses 0,1,1,1 accepted empty but there are files. If filenames newline, grep output parser can be bypassed, repository paths control? A bad actor can add script path with newline containing lock text etc. `git ls-files -z | xargs -0 grep -nIE` output with newline filenames ambiguous. Their "one reader" control could be evaded by path names/newline or code formatting, but structural scans inherently heuristic. Could add other lock reader with alias/path constructed variable not literal. Threat model gate regression not adversarial? They deliberately control path magic etc. Perhaps findings not broad evasions.
+
+  More serious named_readers excludes any line whose beginning after file:line whitespace #. Python comments okay, shell comments. It excludes legacy_lock.py all lines and legacy_frozen LOCK assignment. doc_links contains legacy_lock.LOCK_PATH not literal legacy.lock so not caught but allowed parser. If another consumer uses same module constant no direct lock read okay. If script reads via LOCK variable added lock_uses only exact "$LOCK" patterns, can evade `cat $LOCK` unquoted. But requirement "ONE parser and reader" perhaps control expected exact no other code names lock; no malicious evasion necessary. Not real unless current code another reader: Grep only shows parser etc. fine.
+
+  Doc_links exception catches ValueError broad including LockError. `next` if no tree row parser guarantees line2 tree so no StopIteration. read OSError uncaught -> exit traceback nonzero, fail closed but no normalized output. helper ls fail empty fail open.
+
+  Doc_links has git directory detection only `(root/".git").exists()` works worktree .git file exists yes. Archive no .git fallback includes all legacy files, so local review if run doc links would scan all old links (perhaps massive fail) but no run allowed. Not relevant actual.
+
+  Swept_files set calculation treats `now-frozen` rather than all sweep rows. If frozen tree contains path that was deleted then swept back after initial? A file originally in frozen tree but removed in an earlier resolved deletion, then later reintroduced by a sweep should be checked links but `now - frozen` excludes it. Is this allowed by model? Sweeps can add paths present in original frozen tree after deletion. chain from prev (without path) to sweep tree (with path) is A and root gone, matches source. history_identity allows same bytes only. doc_links calls "legacy paths not in frozen tree = files sweeps moved" false for reintroduced original path. Such re-addition with identical content doesn't need link rewrite? It may be a new swept file that had old root-relative links from initial snapshot and now should resolve at new location? Original frozen file links should point old root (by design excluded); if source file was at root newer with adjusted links and same bytes as original frozen, same old links intended old root. Perhaps no need. But if path was original frozen then root live file edited link, readd bytes differ prohibited trusted history, so only identical old content. exclusion fine.
+
+  More important docs that are moved with mechanical link rewrite (bug README) swept current - frozen includes because path not originally frozen (root copy added after move). checked.
+
+  Potential fail-open in `doc_links.swept_files` when lock missing returns empty. Docstring intended. But if git repo and lock missing, legacy_frozen separately fails but doc links might skip swept docs. User specifically every consumer fail closed helper commands, missing lock perhaps expected empty by docstring but parser not invoked. Context says "doc_links.py takes lock rows from parser" and failures parser/helpers fail closed. Missing lock is arguably no lock state for synthetic trees. They intentionally empty without lock. Actual repo legacy gate fails so no overall green. Fine.
+
+  Check parser `history`: current set(read(lock)) can raise OSError -> main catches returns2 stderr; checked generic. Good.
+  `git()` only returns stdout, no stderr, expected semantic messages.
+  `history` cat-file failure + ls-tree no entries treats absent. If cat-file fails due missing object but ls-tree path absent? If commit exists and path absent okay. If commit corrupted, ls-tree fails -> refusal. If cat-file command missing returns127, ls-tree returns entries empty if lock absent => treats command failure as deletion, but subsequent commits maybe none, no refusals -> fail open if all trusted versions have no lock and git cat-file unavailable. However path lock absent in all trusted history means no need cat-file; helper command failing but absent path. Requirement helper failures not read no problems: their fallback intentionally uses ls-tree to distinguish. If cat-file fails systematically and lock exists in history, ls-tree entries nonempty -> refusal. If no lock anywhere, no rows to preserve, correct despite cat-file unnecessary failure. Fine.
+
+  `history` uses git log with lpath potentially starts `-` after `--` safe. trusted can start option. trusted_base returns OID so actual safe. Tests direct could arbitrary no.
+
+  history_identity Python subprocess check_output inherits stderr, errors generic. Good.
+
+  Potential no first-parent `--diff-merges=first-parent` compatibility installed git? Workflow uses modern likely. Not review environment. Can't execute.
+
+  Exact diagnostics controls load-bearing: Many tests compare output from `judge` non-empty not exact for additions. Specific parser exact. Fail tests perhaps wrong:
+  - `expect_refusal "judge root lookup failure"` calls judge F SW1 root no-such-tree S. `git ls-tree "$cur"` okay. root lookup fails, echo, continue. while returns0, diff okay, pipeline0, exact. good.
+  - `judge sweep lookup failure`: for s no-such, entry assignment fails, echo continue (continues for loop not while), found empty then semantic. exact two lines. good.
+  - `judge Python failure`: judge SW1 F ret ok rootF, deletion b/y resolved; fail python, while sees no lines returns0, pipefail python2 -> echo generic. good.
+  - `identity log failure` checked history python exit1 no stdout => generic exit1. subprocess stderr inherited but suppressed expected. good.
+  - `reader scan failure` fail_command grep named_readers: git ls-files function actual, xargs calls external grep not shell function (functions exported? Shell functions not inherited by xargs; grep in pipeline after xargs is function fails, statuses: git0 xargs0 grep2 grep2 grep2. emits reader scan failed. good.
+  - read_loop scan failure fail_command grep read_loop_scan: printf external? shell builtin, first grep function returns2, second grep function returns2 statuses 0,2,2 => echo. good.
+  - `lock-use scan failure` all grep fail2 outputs generic. good.
+  - trusted ref lookup fail fail_command rev-parse trusted_base: function git returns2 first, rc2 -> echo. good.
+
+  Could controls themselves fail open due `[ -n "$(...)" ]` just any output; specific others exact. They have control tally. fine.
+
+  But major sweep source validation vulnerability: sweep commit need only ancestor of HEAD, and root file absence only at HEAD. A malicious candidate can add a new root file and delete it in same candidate, then sweep into legacy. Is that allowed? Rule says file moves from root commit in HEAD history and gone current root; yes it was at root at sweep commit. Doesn't require trusted root file. Owner rule permits sweep new files? It says everything old, but check can't judge age. Not defect against explicit.
+
+  Mode symlink matching git ls-tree `120000 blob` works. directories not diff files.
+
+  Retention every row covering rule differs from retention.py longest prefix. judge uses all covering rows by design. good.
+
+  One big trusted history issue on PR CI: `origin/main` at current main, HEAD is PR merge commit created by GitHub. merge-base main okay. Branch changes untrusted. good.
+
+  On main push CI after landing, HEAD=origin/main => trusted_base HEAD; current lock includes all lines so removed row in current candidate cannot happen on main if train earlier gate allowed? train gate base merge main before candidate, catches. Main direct push prepush catches too. fine.
+
+  On mirror CI where origin/main may point different repo mirror? origin is lambdaclass main same landed head. fine.
+
+  Sandbox isolation new `TRUSTED_BASE` export only `run_as_hook`. It computes before making callers using root HEAD and origin main. Then copies current scripts and commits. If candidate changes `scripts/checks/legacy.lock`, synthetic caller base HEAD original? cloned ROOT includes candidate HEAD because ROOT current actual. origin/main merge base same trusted base. yes.
+
+  Potential full fresh clone run-at-ref does not set LEGACY_TRUSTED_REF but origin/main available. okay.
+
+  Should read ROADMAP sections referring sweep and docs LANDING maybe full relevant no change but required docs. Grep legacy/sweep in root docs excluding huge.
+
+• The remaining sweep-chain checks are internally fail-closed on their real call path. I’m now checking for stale references and documentation mismatches introduced by moving the tooling and archives, and for cases the new doc-link controls do not exercise.
+
+• ROADMAP clearly stale "refuses any addition" contradict commit. This file not touched but interacts docs describes. Should be finding REAL DEFECT docs? It makes current invariant false. New owner decision specifically changes rule. At line75 and 517 done criterion still old. New decision row at993 but ROADMAP not updated. Could cite ROADMAP.md:75,517 fix mention sweep exception/link. Also decisions.md P5/restart stale. User asked docs/changelog touched, probably expected identify. Changelog old fragment is historical should not rewrite? It describes landed at time and pending fragments folded into current CHANGELOG; still statement "legacy_frozen refuses any change" now false. New changelog later explains exception, but old fragment not revised perhaps history okay as dated. ROADMAP current rules must update.
+
+  README line55 "old compiler and everything around it frozen byte for byte" and line75 "snapshot ... never edited" could tolerate additions are new frozen files. ROADMAP explicitly no addition impossible now. decisions old P5 also says only deletions. New row may supersede but not cross-linked. Should classify REAL DEFECT documentation. Verdict reject already code.
+
+  Stale `changelog.d/2026-11-04-legacy-move.md` link references moved files but code spans not actual links; gate not check. It's historical and new fragment explains. Not necessarily finding.
+
+  Check `docs/decisions.md` recording rule says one home, new row inserted after early-evidence but before cleanup out of chronological minor.
+
+  Moved tooling now in legacy and "frozen, never run" but `.github/workflows/oracle.yml` comment points to it for prerequisite historical, not running. fine.
+
+  Swept docs `legacy/docs/proposals/IDEAS.md` line1 says awaiting owner decision while changelog calls answered proposals. It was already accepted before move but content unchanged; status stale introduced relocation makes contradictory current doc. Could update impossible frozen; should have edited before sweep (second sweep allows source modifications) to mark answered. But user focus perhaps swept files check content. MERGED line1 also awaiting owner though decided. Changelog says answered proposals. They were reviewed and decisions made. Moving as answered while content still PROPOSED awaiting is a docs defect. But root before move already stale from previous decisions, not introduced by this commit except context changes. Review whole branch only change, moved file exact; no need fix preexisting unless moved status makes misleading. Could mention preference not real.
+
+  More serious moved IDEAS internal link `../legacy-checks/INVENTORY.md` path resolves legacy/docs/legacy-checks/INVENTORY.md? I'll Glob.Glob literal braces perhaps supported but no. Inventory path absent? Should Glob legacy/docs/legacy-checks/*.Perhaps inventory under legacy/research? Grep filename.No inventory at all, preexisting plain code no actual markdown. Not link checker. Not new.
+
+  Should check swept files byte-for-byte relative to base via REVIEW diff enough. Could compare files with legacy existing copies? no base unavailable except diff. All renames 100% except README link edit. Lock records two sweeps to allow. No hash verify possible no git objects. I should explicitly in response say could not execute due no .git/read-only, but final findings stand. User asks verdict no tests required perhaps mention not run.
+
+  Should inspect exact REVIEW diff file list no omitted. I covered all. Should read deleted site from diff and current legacy full yes.
+
+  Potential new bug in doc_links: catching ValueError around `markdown_files` catches any ValueError but helper command failures don't raise. Already.
+
+  Potential actual doc links broken due `DEFAULT_ROOT` import and current `legacy_lock.py` new path works. The moved bug README decision link valid. Other links moved valid. Root docs changelog landing link valid. SPEC link valid. decisions MERGED valid. oracle comment no link.
+
+  `doc_links.markdown_files` uses git ls-files `*.md` pathspec includes recursively? Git pathspec "*.md" matches basename across dirs yes. swept set strings with surrogateescape while names decode default utf8 strict at line193 can fail for nonutf8 paths; preexisting. Not relevant.
+
+  One-parser control flags `REVIEW.diff`? named_readers only tracked scripts .githooks .github, so REVIEW not tracked actual. Fine.
+
+  Could new `legacy_lock.py` itself not executable but invoked python. fine.
+
+  No tests dedicated for parser module direct, controls robust.
+
+  Potential exact diagnostic requirement on chain lock malformed: chain captures parser error and returns0, so direct chain "failure" not nonzero but semantic output. Top handles. User says failures parser/helper commands must fail closed (`refused: <step> failed (exit N)`), never no problems. For malformed parser exit1 with diagnostics, checked does not print `refused: lock_rows failed (exit 1)` because output nonempty. Requirement perhaps expects all parser failures (including malformed) generic? Context clarifies controls exact diagnostics likely current intended semantic. User specifically says "Failures of parser or helper commands must fail closed (`refused: <step> failed (exit N)`), never read as 'no problems'." A malformed lock prints parser diagnostics and chain output; fails actual. No generic needed if semantic. Silent exit1 gets generic. Fine.
+
+  But there's a subtle fail-open in `checked` due rc1 with arbitrary stdout: if parser/helper exits1 and prints non-diagnostic output to stdout (e.g. usage/error message), checked treats as semantic and doesn't append refused. Still output leads failure in real call path except trusted_base? `checked trusted_base` output tb assigned and hist perhaps fail. `checked chain` out nonempty. `checked history` hist nonempty. `lock_rows` top rows nonempty and lock_ok empty. So no green. Direct tests might expect generic only silent. Fine.
+
+  `trusted_base` returns 0 after echo refusal, checked rc0 output, tb nonempty then downstream perhaps could hist empty if trusted string happens valid ref? The string "refused: trusted_base merge-base failed" isn't valid; fails. If `git merge-base` fails but prints a valid SHA to stdout before error then echo adds line, tb multiline -> failure. okay.
+
+  `chain` root lookup fail returns last command echo status0, output. outer failure.
+
+  `judge` frozen==cur early returns without checking retention file. Controls unchanged with nonexistent retention would pass. Actual if no changes and RETENTION missing, actual `[ -f ] no` ensures fail. Helper requirement failure of retention helper? If frozen==cur and ret missing direct judge passes but no need read retention. fine.
+
+  `history_identity` no validation head/trusted before commands; failures generic.
+
+  Trusted history parser could treat missing current lock path history absent as no lines, current parser fails earlier so no actual.
+
+  One major logic issue: history identity only tracks changed paths in `git log --first-parent --diff-merges=first-parent -z --raw ...`. `--diff-merges=first-parent` shows diffs for merges, yes. But `git log` simplifies history by default: path-limited log may omit commits on first-parent chain where path unchanged (fine no new version). For merge commits where legacy changed relative first parent, raw shows. Good.
+
+  Mode changes history compare correct newmode. For added/deleted, newmode. For deletion ignored, readd same okay. For typechange status T included not D, newmode captured. good.
+
+  Unicode paths decode surrogateescape then printing can encode surrogate back to stdout? Python stdout default utf8 surrogateescape? `sys.stdout` errors surrogateescape likely environment; printing path with surrogate may error -> checked generic exit1 fail closed. fine.
+
+  History log status fields split(" ") expected raw status perhaps `M100` etc one field. rename disabled. Submodule mode160000 captured, current ls-tree -r includes gitlink entries, compare. judge diff-tree -r includes gitlink addition and ls-tree source works. Byte-for-byte for submodule commit oid, acceptable.
+
+  `swept_files` ls-tree `-r --name-only` for frozen tree includes gitlinks too. now-frozen paths. okay.
+
+  Doc_links original root .git check fails in bare repos, fallback scanning working root all docs perhaps irrelevant.
+
+  New sandbox trusted control could produce false pass if TRUSTED_BASE empty? regex prevents. It doesn't export TRUSTED_BASE itself but inline env. Good.
+
+  Read all moved files and touched yes. Should read docs LANDING relevant lines 130-170 perhaps not full requirement "docs describe them" user might expect full. I read Grep only not full; user MUST read every file change touches full, files they interact with callers checks docs. Does that mean full interacting too? Wording "and the files they interact with (callers, the checks that test them, the docs that describe them)" likely yes read full every relevant. I've read full many. ROADMAP full. docs/LANDING only grep, could read full 290 lines. README read. changelog move read. Also docs/REVIEW not relevant. CI read. Should read full docs/LANDING to satisfy. Also `scripts/land/lib.sh` perhaps callers of run checks no direct. Not needed. `flake.nix` gates environment interacts but not necessary. `scripts/checks/lib/bounded.sh` sandbox uses and I didn't read full, should. Also `scripts/checks/review_tool.sh` other probe interacts run_as_hook, should full perhaps 800 lines. User explicitly sandbox passes trusted base to probe, review_tool same probe no direct legacy. Not essential but "every consumer" only legacy lock consumers read. sandbox tests checked. Could read bounded and docs LANDING. Also root README/AGENTS supplied full from context but I didn't Read AGENTS; project provided counts as read? final list perhaps not include. No need interaction.
+
+  Should assess stale ROADMAP as defect. I'll formulate:
+  - REAL DEFECT scripts/checks/lib/doc_links.py:182-184: Git ls-tree failure returns empty, so all swept markdown excluded and DOC-LINKS PASS possible with broken links. Fix raise an error (custom with command+rc) and have main emit FAIL nonzero; add negative control injecting failing git for frozen/current lookups. This is clear.
+  - REAL DEFECT ROADMAP.md:75 and :517 current rule says any addition refused, but new sweeps intentionally additions. Also docs/decisions.md:288 and 374-378 old decision says only deletions. The change should revise those rows to point to new sweep row; otherwise normative references conflict. Since ROADMAP says linked record governs, docs decisions new row explicit, but old row P5 remains unchanged not marked revised. New row is later so likely enough? It's contradictory. Mark REAL DEFECT perhaps "current documentation states two incompatible gate contracts" fix update old summaries. It doesn't cause code but requested docs. Verdict reject from first.
+  - PREFERENCE doc_links.sh no new controls for swept docs or malformed lock/helper failure. This is testing gap tied to defect; could include in same finding fix. Avoid separate.
+  - PREFERENCE perhaps moved IDEAS/MERGED statuses stale. Not necessary.
+
+  Should find other code defect before finalize. I'll reason doc_links fail on lock malformed. Main catches ValueError. `LockError` subclasses ValueError. Good.
+  But when `swept_files` git tree OID object missing, returns empty. This can happen in shallow CI? full history root checks, so no. In synthetic --root tests lock tree invalid could pass broken links. Helper failures actual rare but explicit requirement.
+
+  Another code defect: `legacy_frozen.sh` uses Python `rows[0]` without checking retention empty. If retention file empty, python crashes, pipeline generic fail. okay.
+  Command `git diff-tree` can exit 0 but no diff if unknown path? tree ids validated. good.
+  When added path has control char, Python prints diagnostic and no ADD. chain sees output. good.
+  When path not UTF8, `st.decode()` statuses ascii; path surrogate. Shell variable can hold nonutf8 bytes except NUL. `git diff-tree -z` paths cannot NUL. Bash variables can arbitrary bytes. `read -r` okay. `path.isprintable` rejects control; other Unicode printable okay. `GIT_LITERAL_PATHSPECS=1` exported only within while subshell and git children. good.
+  Path beginning `-` in git ls-tree after tree and `--` safe.
+  Root lookup uses no cut, checks any entry including directory. If root P is directory, refuses addition legacy/P file because root path exists directory. A root file swept path cannot coexist directory same path; proper.
+  Source lookup `git ls-tree "$s" -- "$path" | cut -f1` returns mode type sha. Want same. good.
+  Git ls-tree source commit if file at path is symlink same mode content. fine.
+  Duplicate sweep rows exact disallowed but same source different tree allowed. This supports sequential sweeps from same commit. chain protects files.
+  Lock history only row presence not ordering. A candidate can reorder trusted rows, parser base/tree fixed first but sweep order can change. Chain might fail if reordered trees modifications/deletions unresolved. Could reorder independent sweeps (disjoint files) and pass, violating "rows only ever added" because order changed but set same. Requirement "a lock row landed never rewritten or removed", reorder isn't row rewrite; but chain order is semantic. Could an attacker reorder sweep rows to alter validation? If disjoint moves, no security issue. If dependent trees, chain likely refuses deletion if rows open. If deletion rows resolved, reorder may allow weird delete/readd but history identity prevents changed bytes. Same bytes okay. fine.
+  Base/tree duplicate same repeated disallowed. Changing base row while keeping old base as sweep impossible shape (base only line1) so history catches. Tree row changing with old tree as sweep? line2 must tree so old tree row could be included line3? "tree" invalid sweep, history missing if changed. good.
+
+  History trust ref absent fallback: on CI pull_request checkout `origin/main` exists? checkout action fetch-depth0 only branch? actions/checkout by default fetches only ref? With fetch-depth 0, docs says fetches all history for all tags and branches? It fetches all branches? `fetch-depth:0` fetches all history for all tags and branches, origin/main likely. If PR from fork, origin main exists. good.
+
+  Full CI comment line106 only move commit but now sweep source also history, full covers.
+
+  Potential main first-parent trust bug in train merges: train head first parent main, candidate branch second. good. Multiple merge commits in train each first parent previous train starting main, good.
+  Landing on main as merge train head first parent previous main, history then trusts all final rows and files. good.
+
+  `lock_history` current set uses parser ensures valid. Trusted malformed any historical preview lock from original move? Existing legacy.lock base/tree valid. Future a preview landed impossible. okay.
+  No newline ISSUES irrelevant.
+
+  Controls not testing non-ASCII despite parser requirement but implementation handles. Repeated base/tree not directly tested but seen generic. Missing line1 base tested. Empty not tested but code. Missing line2 tested. Good.
+
+  Controls "NUL attack GNU grep..." old reader removed. Exact.
+  `PREVIEW = re.compile(r"preview(?: .*)?")` accepts "preview" and "preview " with anything; `preview missing: P2` matches. "preview  " also special but refused. good.
+  Data split with trailing two newlines: lines includes blank row and diagnostics, no missing line2 weird but fail.
+  Data base only no LF: lines len1 unterminated -> diagnostic missing newline + missing line2. Control base_only uses LF so only missing. fine.
+  Non-ASCII last line no LF reports nonASCII only not no LF due continue; docs "Every problem" could imply both but not material.
+  Repeated malformed row doesn't get repeated diag because malformed continue; okay.
+  Base line 1 valid, tree line2 valid, no sweep lines accepted. nsw0 works.
+  OID allows 64 for sha256 repos; sandbox regex trusted base only 40 so sandbox incompatible sha256 repo but project SHA1. Parser generalized unnecessary. no issue.
+
+  `doc_links.swept_files` calls `next(r.split()[1] ...)`; uses split whitespace but rows canonical. fine.
+  No subprocess check on frozen ls-tree spec injection tree canonical. safe.
+  Errors decode default surrogateescape good.
+  One potential no fail closed when git ls-files fails: markdown_files falls back rglob and scans all legacy, which is more not less. Not no problems unless no markdown files due root nonexistent -> returns empty PASS. `--root /nonexistent` yields PASS. Existing preexisting behavior, not change. Could matter helper failure requirement "never read no problems": root missing results no files pass. Not introduced. Focus changed code.
+
+  Swept docs malformed lock is caught before root docs scanning, so root docs links not checked but returns fail. good.
+
+  Sandbox `trusted_rc` rev-parse may exit 1 both ref missing and HEAD invalid; then HEAD lookup fails fatal. correct.
+  Trusted ref provided as full 64 OID fails regex40 but project SHA1. okay.
+  `run_as_hook` uses `LEGACY_TRUSTED_REF="$TRUSTED_BASE" bounded bash` environment assignment applies to bounded function and exported? In Bash, assignment preceding shell function call: variable is in environment of function? Shell variable assignments preceding function invocation are visible to function and exported to external commands according to POSIX? Yes assignment is exported to function's environment for external commands, and local in function. `bounded` calls bounded_run with env? Should inspect bounded: perhaps env sanitization strips LEGACY_TRUSTED_REF? I should read bounded to verify.
+
+• One current-document contradiction remains: the roadmap still says every `legacy/` addition is refused, while this branch deliberately admits recorded sweeps. I’m doing the final environment check on the trusted-base probe and then will report the concrete findings.
+
+• Environment assignment exported through Python subprocess normal inherited. good.
+
+  Now perhaps run read-only Bash not allowed anything state. Could run `python3 -I -c` importing parser and pure parse data no files modification; process state okay but user says "do not run anything that changes state" executing pure code doesn't change filesystem but process is state ephemeral. Usually read-only review allows tests that don't mutate but scripts all mutate temp forbidden. I need not run. I can use static enough.
+
+  Could use `git` unavailable no .git anyway. Don't run.
+
+  Should have final FILES READ exhaustive list all actual read. I read 50+ files. Should list every file I read under FILES READ. Include REVIEW.diff and all touched, interaction. Ensure no omission:
+  REVIEW.diff
+  .github/workflows/oracle.yml
+  ISSUES.tsv
+  README.md
+  RETENTION.tsv
+  changelog.d/2026-11-06-landing-audit.md
+  changelog.d/2026-11-08-legacy-sweep.md
+  docs/decisions.md
+  docs/proposals/SPEC_UNIFICATION.md
+  legacy/docs/archive/bugs-2026-11/README.md
+  bug_disposition
+  landing audit 5
+  legacy/docs/proposals/IDEAS.md MERGED
+  legacy/scripts/land/legacy_move.sh move_prereqs
+  scripts/checks/legacy.lock
+  legacy_frozen
+  doc_links
+  legacy_lock
+  sandbox
+  legacy/docs/archive/site-down (deleted root read through REVIEW diff, list current file)
+  scripts/checks/doc_links.sh
+  run.sh
+  .githooks/pre-push
+  root_inventory.sh
+  retention_manifest.sh
+  git_sandbox.sh
+  gate_env.sh
+  .github/workflows/lean_action_ci.yml
+  root_inventory.txt
+  scripts/land/retention.py
+  train.sh
+  run-at-ref.sh
+  acceptance.sh
+  changelog.d/2026-11-04-legacy-move.md
+  ROADMAP.md
+  bounded.sh bounded_exec.py docs/LANDING.md review_tool.sh
+  Also Grep not count files read? User says list every file you read. I searched contents many via Grep, arguably "read" includes those outputs. Can't list every legacy file Grep touched? User means full files read. Should list those I issued Read. Grep on specific files outputs partial but not full; no need perhaps list REVIEW etc. I did Grep broad across repo producing content of e.g legacy/Makefile etc, not full. Final list should perhaps say "Full files read:" to clarify but user exact "FILES READ:" list. Include only Read calls plus files known from provided content? I read project root via system not tool but can omit.
+
+  Deleted docs/archive/site-down.md read in diff not direct possible. Include `docs/archive/site-down.md (deleted; read in REVIEW.diff)` and legacy copy. That satisfies transparent.
+
+  Should have final findings format each `file:line — REAL DEFECT/PREFERENCE: ... Fix: ...`. Verdict last exact.
+
+  Should I include docs contradiction as REAL DEFECT? I'll decide. User wants read-only review of commit, verdict reject if any real. Already one. Additional valid findings important. Could identify moved tooling docs path self references in legacy scripts now wrong if someone reads, but legacy frozen not run. Current docs comments in archived code historical old root path acceptable.
+
+  Stale ROADMAP is definitely current documentation false. It says root check refuses any addition. New sweep model exceptions. Fix update line75 and R0558 line517. Also decisions P5 and restart normative old row conflict. I can combine file refs multiple, but requested file:line each finding perhaps separate or one with several. Could list:
+  - ROADMAP.md:75 (also 517), docs/decisions.md:288,374-378 — REAL DEFECT: current rules still categorically forbid additions. New decision only adds new row but doesn't revise old. Fix mark old rows revised by 2026-11-08 and describe recorded sweeps.
+  This is good.
+
+  Any PREFERENCE:
+  - scripts/checks/doc_links.sh:126 — no repository-level/throwaway control for swept docs. This allowed fail open. Since already in fix first, separate preference redundant. Could include first fix add controls.
+  - docs/decisions.md:993 insertion after 2026-11-07 early before 2026-11-07 cleanup not chronological PREFERENCE trivial no need.
+  - legacy/docs/proposals/IDEAS.md:1 and MERGED.md:1 still PROPOSED awaiting owner while changelog calls answered. Real doc stale perhaps should list PREFERENCE to mark historical/accepted before freezing. It could mislead. Since moved content says exact status awaiting owner, now moved because answered. This is actual contradiction. But these documents are historical proposals; header records at time, and answered proposals moving to archive, could remain as original proposed artifact. Changelog calls answered but doesn't require editing. Not finding.
+  - README.md:55,75 says frozen snapshot never edited but addition isn't edit existing, okay.
+
+  Could there be missing changelog `changelog.d/README` validator requiring first line "- " vs new fragment starts ###? Existing other fragment same style so fine.
+
+  Check changelog generator may not include new file due naming allowed yes.
+
+  `RETENTION.tsv` new row disposition archived for scripts/land legacy_move means frozen copy no deletion automatically; okay.
+
+  Retention specific row and broad scripts/land covering deletion: judge requires all covering rows resolved; new row open and parent open. Fine.
+
+  Root inventory allows docs/proposals still because remaining files. scripts/land remains. Good.
+
+  `doc_links` scans swept Markdown but not original frozen. `legacy/docs/archive/site-down.md` original frozen excluded so stale link `../spec/decisions.md` still points old path inside legacy (exists legacy/docs/spec/decisions.md) and works. fine.
+  Bug disposition README new link works.
+  Landing audit links all work.
+  IDEAS plain path no links.
+  MERGED no links.
+
+  Perhaps root `README` "Proposals awaiting owner docs/proposals" now only open remaining, correct.
+  `docs/decisions.md` line314 says each entry links verbatim record archive root still stays until consolidation, okay.
+
+  Doc links root `changelog.d/2026-11-04-legacy-move.md` no Markdown links just code spans. Fine.
+
+  Could add finding no test of actual lock/tree because no .git can't verify lock OIDs. I should state verification limitation in response after findings: "No tests run: archive has no .git and review was read-only; sweep OIDs could not be resolved." User asked not run state changing. Important transparency. Does this undermine verdict? no.
+
+  I'll list files read huge ~47 lines acceptable. Findings first then files? User says begin repository then list every file under FILES READ, then findings. Exact order likely REPOSITORY, FILES READ, findings, verdict. I'll comply.
+
+  Perhaps final list all 49. Count:
+  1 REVIEW.diff
+  2 .github/workflows/oracle.yml
+  3 .github/workflows/lean_action_ci.yml
+  4 .githooks/pre-push
+  5 ISSUES.tsv
+  6 README.md
+  7 RETENTION.tsv
+  8 ROADMAP.md
+  9 changelog.d/2026-11-04-legacy-move.md
+  10 landing audit
+  11 new sweep
+  12 docs/LANDING.md
+  13 docs/decisions.md
+  14 docs/proposals/SPEC_UNIFICATION.md
+  15 docs/archive/site-down deleted
+  16 legacy/docs/archive/site-down
+  17 bug readme
+  18 bug tsv
+  19 landing README
+  20 docs tsv
+  21 facts
+  22 flm
+  23 nht
+  24 IDEAS
+  25 MERGED
+  26 legacy_move
+  27 move_prereqs
+  28 scripts/checks/legacy.lock
+  29 legacy_frozen
+  30 doc_links lib
+  31 legacy_lock
+  32 sandbox
+  33 doc_links.sh
+  34 run.sh
+  35 root_inventory.sh
+  36 root_inventory.txt
+  37 retention_manifest
+  38 git_sandbox
+  39 gate_env
+  40 bounded.sh
+  41 bounded_exec.py
+  42 review_tool.sh
+  43 retention.py
+  44 train.sh
+  45 run-at-ref
+  46 acceptance
+  47 perhaps scripts/checks/lib? yes no more.
+  47 files. Good.
+
+  Findings line exact for doc links 183-184. Docs line75 and 517. Could include decisions stale separate as REAL DEFECT at docs/decisions.md:288 and374-378. This new commit itself touches docs decisions and should update stale. One combined docs consistency finding with four locations perhaps formatting:
+  - `ROADMAP.md:75`, `ROADMAP.md:517`, `docs/decisions.md:288`, `docs/decisions.md:374-378` — REAL DEFECT: ...
+  Fix.
+  No need preference. User says list findings as file:line with fix marking each REAL DEFECT or PREFERENCE. I can have 2 real no preferences.
+
+  Does failure in doc_links produce PASS if one ls fails? `frozen=None now=set` => returns set empty; markdown_files filters not legacy unless n in empty, so only root docs. If root docs all valid, PASS. Yes certain.
+
+  What if git command failure also legacy_frozen will fail in run.sh so repository overall cannot pass? Root run executes all checks; legacy_frozen also uses git ls-tree and would fail if git broken. But doc_links consumer individually fails open, and failures can be selective only doc_links (e.g. missing frozen object also legacy_frozen fails base tree revparse). A synthetic test direct still. Requirement explicit every consumer. Even if root set backstop, real defect. Could there be failure now ls-tree HEAD:legacy while legacy_frozen cur revparse works (e.g. ls-tree command unsupported) then legacy_frozen judge fails too. Selective stub arg spec possible. Gate fail closed as a whole but doc_links incorrectly says PASS. Valid.
+
+  Docs conflict could be considered PREFERENCE because new row supersedes. Mark REAL DEFECT due normative contradictory current. Fine.
+
+  No need to state "controls exact all good" but final findings enough. Could mention no other issues. Tests no run.
+
+  Final last line exactly VERDICT: REJECT. Ensure no text after.
+
+• REPOSITORY: readable
+
+  FILES READ:
+  - REVIEW.diff
+  - .github/workflows/lean_action_ci.yml
+  - .github/workflows/oracle.yml
+  - .githooks/pre-push
+  - ISSUES.tsv
+  - README.md
+  - RETENTION.tsv
+  - ROADMAP.md
+  - changelog.d/2026-11-04-legacy-move.md
+  - changelog.d/2026-11-06-landing-audit.md
+  - changelog.d/2026-11-08-legacy-sweep.md
+  - docs/LANDING.md
+  - docs/decisions.md
+  - docs/proposals/SPEC_UNIFICATION.md
+  - docs/archive/site-down.md (deleted version, read through REVIEW.diff)
+  - legacy/docs/archive/site-down.md
+  - legacy/docs/archive/bugs-2026-11/README.md
+  - legacy/docs/archive/bugs-2026-11/bug_disposition.tsv
+  - legacy/docs/archive/landing-audit-2026-11-06/README.md
+  - legacy/docs/archive/landing-audit-2026-11-06/docs-2026-11-06.tsv
+  - legacy/docs/archive/landing-audit-2026-11-06/facts-decision.tsv
+  - legacy/docs/archive/landing-audit-2026-11-06/flm.tsv
+  - legacy/docs/archive/landing-audit-2026-11-06/nht-decision.tsv
+  - legacy/docs/proposals/IDEAS.md
+  - legacy/docs/proposals/MERGED.md
+  - legacy/scripts/land/legacy_move.sh
+  - legacy/scripts/land/move_prereqs.py
+  - scripts/checks/legacy.lock
+  - scripts/checks/legacy_frozen.sh
+  - scripts/checks/lib/doc_links.py
+  - scripts/checks/lib/legacy_lock.py
+  - scripts/checks/sandbox_isolation.sh
+  - scripts/checks/doc_links.sh
+  - scripts/checks/run.sh
+  - scripts/checks/root_inventory.sh
+  - scripts/checks/root_inventory.txt
+  - scripts/checks/retention_manifest.sh
+  - scripts/checks/lib/git_sandbox.sh
+  - scripts/checks/lib/gate_env.sh
+  - scripts/checks/lib/bounded.sh
+  - scripts/checks/lib/bounded_exec.py
+  - scripts/checks/review_tool.sh
+  - scripts/land/retention.py
+  - scripts/land/train.sh
+  - scripts/land/run-at-ref.sh
+  - scripts/land/acceptance.sh
+
+  Findings:
+
+  - `scripts/checks/lib/doc_links.py:182-184` — REAL DEFECT: a failed `git ls-tree` is converted into an empty sweep set. `markdown_files()` then excludes every swept Markdown file, so broken links in those files can produce `DOC-LINKS: PASS` precisely when the helper could not determine what to check. Fix: raise an exception identifying the failed lookup and return a failing `DOC-LINKS` result rather than an empty set. Add controls for failures of both the frozen-tree and `HEAD:legacy` lookups, plus positive and broken-link controls for swept documents.
+
+  - `ROADMAP.md:75`, `ROADMAP.md:517`, `docs/decisions.md:288`, `docs/decisions.md:374-378` — REAL DEFECT: the current rules still say the gate refuses every addition under `legacy/`, contradicting the recorded sweep mechanism and its actual implementation. The new decision row does not mark or revise these older statements. Fix: update the roadmap and the P5/restart rows to describe additions admitted only through valid lock-recorded, byte-for-byte sweeps, with links to the 2026-11-08 decision.
+
+  No commands or test suites were run: this is a read-only archive without `.git`, so the lock’s commit and tree object IDs could not be resolved locally.
+
+  VERDICT: REJECT
+
+To resume this session: kimi -r session_1ea06662-66ca-4198-a141-38e78eec9728
+rc=0

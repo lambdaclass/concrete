@@ -1,0 +1,26 @@
+REPOSITORY: readable
+
+FILES READ:
+- `REVIEW.diff`
+- `AGENTS.md`
+- `RETENTION.tsv`
+- `changelog.d/2026-11-08-agent-launcher.md`
+- `scripts/agent/launch.sh`
+- `scripts/checks/agent_launch.sh`
+- `scripts/checks/root_inventory.txt`
+- `scripts/checks/run.sh`
+- `scripts/checks/lib/gate_env.sh`
+- `scripts/checks/lib/bounded.sh`
+- `scripts/checks/root_inventory.sh`
+- `scripts/checks/retention_manifest.sh`
+- `scripts/checks/doc_links.sh`
+- `scripts/checks/lib/has_match.sh`
+- `scripts/land/retention.py`
+- `CLAUDE.md`
+- `scripts/checks/legacy_frozen.sh`
+
+FINDINGS:
+- [scripts/checks/run.sh:12](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/iss21/agy-launcher/tree/scripts/checks/run.sh#L12) (PREFERENCE): `scripts/checks/agent_launch.sh` is executed by the `scripts/checks/*.sh` glob in `run.sh`, but adding `agent_launch` to `REQUIRED` in `scripts/checks/run.sh` would also guard against accidental deletion of the check file. Fix: append `agent_launch` to the `REQUIRED="..."` list on line 12 of `scripts/checks/run.sh`.
+
+VERDICT: ACCEPT
+rc=0

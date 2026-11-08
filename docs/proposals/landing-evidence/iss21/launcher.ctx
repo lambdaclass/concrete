@@ -1,0 +1,1 @@
+This is the whole launcher branch (three commits: initial, round-2 and round-3 fixes, the latter fixing: run_job exits 0 iff status written else 2; cached result readback; ''/success -> unknown; --dir trailing slash). Also check AGENTS.md subsection, RETENTION.tsv row, root_inventory entry, and the changelog fragment.

@@ -1,0 +1,60 @@
+REPOSITORY: readable
+
+FILES READ:
+- `REVIEW.diff`
+- `.github/workflows/lean_action_ci.yml`
+- `.github/workflows/oracle.yml`
+- `.githooks/pre-push`
+- `ISSUES.tsv`
+- `README.md`
+- `RETENTION.tsv`
+- `ROADMAP.md`
+- `changelog.d/2026-11-06-landing-audit.md`
+- `changelog.d/2026-11-08-legacy-sweep.md`
+- `docs/decisions.md`
+- `docs/proposals/SPEC_UNIFICATION.md`
+- `legacy/docs/archive/bugs-2026-11/README.md`
+- `legacy/docs/archive/bugs-2026-11/bug_disposition.tsv`
+- `legacy/docs/archive/landing-audit-2026-11-06/README.md`
+- `legacy/docs/archive/landing-audit-2026-11-06/docs-2026-11-06.tsv`
+- `legacy/docs/archive/landing-audit-2026-11-06/facts-decision.tsv`
+- `legacy/docs/archive/landing-audit-2026-11-06/flm.tsv`
+- `legacy/docs/archive/landing-audit-2026-11-06/nht-decision.tsv`
+- `legacy/docs/archive/site-down.md`
+- `legacy/docs/proposals/IDEAS.md`
+- `legacy/docs/proposals/MERGED.md`
+- `legacy/scripts/land/legacy_move.sh`
+- `legacy/scripts/land/move_prereqs.py`
+- `scripts/checks/doc_links.sh`
+- `scripts/checks/issues.sh`
+- `scripts/checks/landing_bot.sh`
+- `scripts/checks/landing_script.sh`
+- `scripts/checks/legacy.lock`
+- `scripts/checks/legacy_frozen.sh`
+- `scripts/checks/lib/doc_links.py`
+- `scripts/checks/lib/gate_env.sh`
+- `scripts/checks/lib/git_sandbox.sh`
+- `scripts/checks/lib/has_match.sh`
+- `scripts/checks/lib/legacy_lock.py`
+- `scripts/checks/oracle_fetch.sh`
+- `scripts/checks/retention_manifest.sh`
+- `scripts/checks/review_tool.sh`
+- `scripts/checks/root_inventory.sh`
+- `scripts/checks/root_inventory.txt`
+- `scripts/checks/run.sh`
+- `scripts/checks/sandbox_isolation.sh`
+- `scripts/checks/workflow_yaml.sh`
+- `scripts/land/impact_gates.sh`
+- `scripts/land/retention.py`
+- `scripts/land/train.sh`
+
+FINDINGS:
+None.
+
+- **Parser & Single Reader (`scripts/checks/lib/legacy_lock.py`)**: Reads raw bytes (`parse_bytes`) and strictly enforces line 1 `base <40-hex oid>`, line 2 `tree <40-hex oid>`, and subsequent `sweep <40-hex oid> <40-hex oid>` rows. Refuses empty files, NUL bytes, CR bytes, non-ASCII bytes, missing line 2, unterminated last lines, `preview` or other malformed lines, and duplicate rows. `history()` verifies the trusted ref is a commit and an ancestor of `HEAD`, walks the first-parent chain (`--first-parent --reverse`), parses every historical lock version with `parse_bytes` (refusing malformed historical locks), verifies append-only prefix growth at each step and in the working tree, and fails closed on any `git` failure.
+- **Frozen Gate & Controls (`scripts/checks/legacy_frozen.sh`)**: Routes all helper commands through `checked()` so any non-zero exit produces `refused: <step> failed (exit N)` rather than empty output. Verifies byte-for-byte move provenance (blob OID and file mode) for every file added under `legacy/` in a sweep, refuses modifications/deletions under `legacy/`, verifies `LEGACY_TRUSTED_REF` lies on `refs/remotes/origin/main`'s first-parent chain when present, and enforces via `read_loop_scan`, `named_readers`, and `lock_uses` that `legacy_lock.py` remains the sole parser/reader of `scripts/checks/legacy.lock`. Every negative control asserts the exact refusal diagnostic.
+- **Consumers (`scripts/checks/lib/doc_links.py`, `scripts/checks/doc_links.sh`, `scripts/checks/sandbox_isolation.sh`)**: `doc_links.py` consumes lock rows exclusively via `legacy_lock.read()` and fails closed (`swept_err = True`, incrementing `broken`) if the lock is malformed or if `git ls-tree` fails on any sweep tree. `sandbox_isolation.sh` resolves `TRUSTED_BASE` before clearing `GIT_*` variables, passes `LEGACY_TRUSTED_REF="$TRUSTED_BASE"` into the simulated hook environment, and tests that an unresolvable `LEGACY_TRUSTED_REF` fails `legacy_frozen.sh` with its exact diagnostic.
+- **Swept Files, Manifests & Docs**: All 11 swept files are pure git renames into `legacy/` (and `docs/archive/site-down.md` is deleted as an exact duplicate of `legacy/docs/archive/site-down.md`), governed in `RETENTION.tsv`, with links updated across `docs/decisions.md`, `docs/proposals/SPEC_UNIFICATION.md`, `ISSUES.tsv`, `README.md`, and `changelog.d/`. No owner decisions (`OD1`–`OD157`) are chosen or modified.
+
+VERDICT: ACCEPT
+rc=0
