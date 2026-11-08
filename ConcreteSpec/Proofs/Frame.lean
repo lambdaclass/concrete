@@ -1192,6 +1192,15 @@ theorem toyTransition_conforms : TransitionConforms toySignature toyTransition :
   · simp [toySignature, ArgumentsHold, Binding.Holds, Location.read, toyInput, runToy]
   · simp [toySignature, Binding.Holds, Location.read, toyBody, toyBodyAt, toyInput, runToy]
 
+/-- Law (subject `ConcreteSpec.Core.Frame.ABI.stackSamples`).
+The structured eight-slot frame models each depth sampled from actual instruction execution. -/
+theorem toyBody_stack_model (before : Machine Nat Nat) (resultReg result : Nat)
+    (sample : Nat × Option Nat) (hs : sample ∈ toyTrace (toyBodyAt resultReg result) before) :
+    sample.1 ∈ stackSamples (.frame 8 .done) before.stackPointer := by
+  simp [toyTrace, toyBodyAt, runToy] at hs
+  rcases hs with rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl <;>
+    simp [stackSamples]
+
 /-- Law (subject `ConcreteSpec.Core.Frame.ABI.toyBodyAt`).
 The actual instruction trace stays within the signature budget and all spill reads and writes
 stay inside the active allocation, for any initial pointer and return register. -/
@@ -1199,6 +1208,9 @@ theorem toyBody_stack_safe (before : Machine Nat Nat) (resultReg result : Nat) :
     ToyTraceSafe before.stackPointer toySignature.stackBound
       (toyTrace (toyBodyAt resultReg result) before) := by
   intro sample hs
+  have modeled := toyBody_stack_model before resultReg result sample hs
+  have bound := stackSamples_bounded (.frame 8 .done) before.stackPointer sample.1 modeled
+  simp only [computedStackBound, Nat.add_zero] at bound
   simp [toyTrace, toyBodyAt, runToy] at hs
   rcases hs with rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl <;>
     simp [toySignature] <;> omega
@@ -1253,6 +1265,21 @@ example : ¬ ToyTraceSafe (toyInput toyBase 11).stackPointer toySignature.stackB
   intro h
   have bad : 17 ≤ 9 := (h (17, none) (by decide)).2.1
   omega
+
+/-- Instance (law `ConcreteSpec.Core.Frame.ABI.toyBody_stack_model`, case `spill`). -/
+example : ((9, some 1) : Nat × Option Nat).1 ∈
+    stackSamples (.frame 8 .done) (toyInput toyBase 11).stackPointer :=
+  toyBody_stack_model (toyInput toyBase 11) 1 7 (9, some 1) (by decide)
+
+/-- A planted structured model omits every allocated depth. -/
+def ignoringStackSamples (_code : StackCode) (base : Nat) : List Nat := [base]
+
+/-- Planted (law `ConcreteSpec.Core.Frame.ABI.toyBody_stack_model`, case `spill`,
+subject `ConcreteSpec.Core.Frame.ABI.stackSamples`, mutant `ConcreteSpec.Core.Frame.ABI.ignoringStackSamples`). -/
+example : (9, some 1) ∈ toyTrace (toyBodyAt 1 7) (toyInput toyBase 11) ∧
+    ¬ (((9, some 1) : Nat × Option Nat).1 ∈
+      ignoringStackSamples (.frame 8 .done) (toyInput toyBase 11).stackPointer) := by
+  decide
 
 /-- A planted call clobbers a callee-saved register without restoring it. -/
 def wrongToySaved (base : Machine Nat Nat) (arg result : Nat) : ToyRun :=
