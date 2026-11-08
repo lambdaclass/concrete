@@ -18,9 +18,13 @@
 #     stack pointer only). REPORT/stack.tsv. Controls: the analysis must refuse an unmodelled
 #     stack-pointer write, an indirect call, recursion, a call to an unknown function, two depths
 #     meeting, a stack pointer used as a value or written through a partial register, a partial
-#     frame-pointer write, an indexed stack address, an unmodelled
+#     frame-pointer write, an indexed stack address, a saved frame pointer popped into another
+#     register, a stack address taken, an overwritten return address, an AArch64 frame pointer
+#     stored, a register-directed return, a return after a call without the link register
+#     restored, an unmodelled
 #     instruction (x86 `loop`) and frame-pointer writeback (AArch64), and give the
-#     expected bound on a known function and on a red-zone store; the comparison must reject a
+#     expected bound on known functions (x86 frame, red-zone store, two AArch64 frame-record
+#     shapes); the comparison must reject a
 #     measurement above the bound.
 #
 # usage: slice0_artifacts.sh [REPORT_DIR]. Run inside the nix devshell, from the repository root.
@@ -202,6 +206,12 @@ refuse indexed-stack-address '    1010:\tmov\teax, dword ptr [rsp + 4*rcx - 0x8]
 refuse partial-stack-pointer '    1010:\tpush\trax\n    1011:\tpop\tsp\n    1013:\tret\n'
 refuse partial-frame-pointer '    1010:\tpush\trbp\n    1011:\tmov\trbp, rsp\n    1014:\tmov\tbp, 0x0\n    1018:\tmov\teax, dword ptr [rbp - 0x100]\n    101e:\tpop\trbp\n    101f:\tret\n'
 refuse loop-instruction '    1010:\tmov\tecx, 0x2\n    1015:\tloop\t0x1018 <main+0x8>\n    1017:\tret\n    1018:\tsub\trsp, 0x100\n    101f:\tadd\trsp, 0x100\n    1026:\tret\n'
+refuse saved-frame-pointer-popped '    1010:\tpush\trbp\n    1011:\tmov\trbp, rsp\n    1014:\tpush\trbp\n    1015:\tpop\trax\n    1016:\tmov\tdword ptr [rax - 0x100], ecx\n    101c:\tpop\trbp\n    101d:\tret\n'
+refuse stack-address-taken '    1010:\tpush\trbp\n    1011:\tmov\trbp, rsp\n    1014:\tlea\trax, [rbp - 0x10]\n    1018:\tpop\trbp\n    1019:\tret\n'
+refuse return-address-overwrite '    1010:\tmov\tqword ptr [rsp], rax\n    1014:\tret\n'
+refuse a64-frame-pointer-stored '    1010:\tmov\tx29, sp\n    1014:\tstr\tx29, [x0]\n    1018:\tret\n' aarch64 _main
+refuse a64-ret-register '    1010:\tret\tx0\n' aarch64 _main
+refuse a64-link-register-lost '    1010:\tstp\tx29, x30, [sp, #-0x10]!\n    1014:\tbl\t0x1020 <_concrete_body>\n    1018:\tadd\tsp, sp, #0x10\n    101c:\tret\n\n0000000000001020 <_concrete_body>:\n    1020:\tret\n' aarch64 _main
 refuse a64-w29-writeback-load '    1010:\tsub\tsp, sp, #0x10\n    1014:\tmov\tx29, sp\n    1018:\tldr\tw29, [sp], #0x10\n    101c:\tstr\tx0, [x29, #-0x100]\n    1020:\tret\n' aarch64 _main
 refuse a64-frame-writeback '    1010:\tmov\tx29, sp\n    1014:\tstr\tx0, [x29], #-0x100\n    1018:\tstr\tx0, [x29]\n    101c:\tadd\tx29, x29, #0x100\n    1020:\tret\n' aarch64 _main
 # A leaf's red-zone store, below the stack pointer, is inside the bound: 8 + 0x30.
@@ -221,6 +231,17 @@ else
   echo "FAIL control: red-zone bound: $(stack_bound x86_64 "$redzone")"
   fail=1
 fi
+# bound_is NAME ARCH EXPECTED BODY: the analysis of the synthetic function(s) BODY (printf format,
+# headers included) gives exactly EXPECTED.
+bound_is() {
+  local f got
+  f=$(ctl_dis "$1" <<<"$(printf "\n$4")")
+  got=$(stack_bound "$2" "$f" | cap_out | tr '\n' ' ') || true
+  if [ "$got" = "$3 " ]; then echo "ok   control: stack bound of $1"
+  else echo "FAIL control: stack bound of $1: ${got:-refused}, expected $3"; fail=1; fi
+}
+bound_is a64-framed-main-and-leaf aarch64 'bound 32' '0000000000001000 <_main>:\n    1000:\tstp\tx29, x30, [sp, #-0x10]!\n    1004:\tmov\tx29, sp\n    1008:\tbl\t0x1020 <_concrete_body>\n    100c:\tldp\tx29, x30, [sp], #0x10\n    1010:\tret\n\n0000000000001020 <_concrete_body>:\n    1020:\tsub\tsp, sp, #0x10\n    1024:\tstr\tw0, [sp, #0xc]\n    1028:\tadd\tsp, sp, #0x10\n    102c:\tret\n'
+bound_is a64-offset-frame-record aarch64 'bound 32' '0000000000001000 <_main>:\n    1000:\tsub\tsp, sp, #0x20\n    1004:\tstp\tx29, x30, [sp, #0x10]\n    1008:\tadd\tx29, sp, #0x10\n    100c:\tstur\twzr, [x29, #-0x4]\n    1010:\tldp\tx29, x30, [sp, #0x10]\n    1014:\tadd\tsp, sp, #0x20\n    1018:\tret\n'
 if [ -n "$gdb" ]; then
   # A run that does not end as expected gives no measurement.
   wrong=$(( ($(head -c 16 "$(dirname "$last_exe")/status") + 1) % 256 ))
