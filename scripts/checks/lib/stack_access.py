@@ -66,21 +66,91 @@ X86_TWO_OP = (
 X86_SHIFT_OP = ("shl", "shr", "sar", "sal", "rol", "ror")
 
 A64_SP = ("sp", "wsp")
-A64_FP = ("x29", "w29")
-A64_LR = ("x30", "w30")
-A64_REGSIZE = {"x": 8, "w": 4, "q": 16, "d": 8, "s": 4, "h": 2, "b": 1}
-A64_FLAGS_ONLY = ("cmp", "cmn", "tst", "ccmp", "ccmn", "nop")
-A64_COND = re.compile(r"^b\.[a-z]+$")
+A64_FP = ("x29", "w29", "fp")
+A64_LR = ("x30", "w30", "lr")
+A64_REGSIZE = {"x": 8, "w": 4, "q": 16, "d": 8, "s": 4, "h": 2, "b": 1, "f": 8, "l": 8}
+A64_FLAGS_ONLY = ("cmp", "cmn", "tst", "ccmp", "ccmn", "fcmp", "nop")
+A64_COND = re.compile(r"^b\.(?:eq|ne|cs|hs|cc|lo|mi|pl|vs|vc|hi|ls|ge|lt|gt|le|al|nv)$")
+_A64_CC = re.compile(r"^(?:eq|ne|cs|hs|cc|lo|mi|pl|vs|vc|hi|ls|ge|lt|gt|le|al|nv)$")
 A64_PLAIN = re.compile(
     r"^(mov|movz|movk|movn|add|adds|sub|subs|neg|negs|mul|madd|msub|mneg|smull|umull|smulh|umulh"
     r"|smaddl|umaddl|sdiv|udiv|and|ands|orr|orn|eor|eon|bic|bics|mvn|lsl|lsr|asr|ror|lslv|lsrv"
-    r"|asrv|cmp|cmn|tst|ccmp|ccmn|cset|csetm|csel|csinc|csinv|csneg|cinc|cneg|sxtb|sxth|sxtw"
+    r"|asrv|rorv|cmp|cmn|tst|ccmp|ccmn|cset|csetm|csel|csinc|csinv|csneg|cinc|cneg|sxtb|sxth|sxtw"
     r"|uxtb|uxth|ubfx|sbfx|ubfm|sbfm|bfi|bfxil|extr|adr|adrp|nop"
+    r"|fmov|fcvt|fneg|fabs|fsqrt|fcvtzs|fcvtzu|scvtf|ucvtf|fadd|fsub|fmul|fdiv|fcmp|fcsel"
     r"|ldr|ldrb|ldrh|ldrsb|ldrsh|ldrsw|ldur|ldurb|ldurh|ldursb|ldursh|ldursw"
     r"|str|strb|strh|stur|sturb|sturh|ldp|stp|ldpsw)$"
 )
-A64_REG = re.compile(r"(?:[xw](?:[12]?\d|30)|sp|fp|lr)$")
-A64_DATA_REG = re.compile(r"^(?:[xw](?:[12]?\d|30)|[xw]zr|sp|wsp|[bhsdq](?:[12]?\d|3[01]))$")
+A64_SINGLE_LDST = (
+    "ldr", "ldrb", "ldrh", "ldrsb", "ldrsh", "ldrsw",
+    "ldur", "ldurb", "ldurh", "ldursb", "ldursh", "ldursw",
+    "str", "strb", "strh", "stur", "sturb", "sturh",
+)
+A64_UNSCALED_LDST = (
+    "ldur", "ldurb", "ldurh", "ldursb", "ldursh", "ldursw",
+    "stur", "sturb", "sturh",
+)
+A64_PAIR_LDST = ("ldp", "stp", "ldpsw")
+A64_LDST = A64_SINGLE_LDST + A64_PAIR_LDST
+A64_ZERO_OP = ("nop",)
+A64_TWO_OP = (
+    "mov", "adr", "adrp", "cset", "csetm", "sxtb", "sxth", "sxtw", "uxtb", "uxth",
+    "fmov", "fcvt", "fneg", "fabs", "fsqrt", "fcvtzs", "fcvtzu", "scvtf", "ucvtf", "fcmp",
+)
+A64_TWO_OR_THREE_OP = ("movz", "movk", "movn", "mvn", "neg", "negs", "cmp", "cmn", "tst")
+A64_THREE_OP = (
+    "mul", "mneg", "smull", "umull", "smulh", "umulh", "sdiv", "udiv",
+    "lsl", "lsr", "asr", "ror", "lslv", "lsrv", "asrv", "rorv",
+    "cinc", "cneg", "fadd", "fsub", "fmul", "fdiv",
+)
+A64_THREE_OR_FOUR_OP = (
+    "add", "adds", "sub", "subs", "and", "ands", "orr", "orn", "eor", "eon", "bic", "bics",
+)
+A64_FOUR_OP = (
+    "madd", "msub", "smaddl", "umaddl", "ccmp", "ccmn", "csel", "csinc", "csinv", "csneg",
+    "ubfx", "sbfx", "ubfm", "sbfm", "bfi", "bfxil", "extr", "fcsel",
+)
+A64_ARITY = {
+    **{m: (2,) for m in A64_TWO_OP},
+    **{m: (2, 3) for m in A64_TWO_OR_THREE_OP},
+    **{m: (3,) for m in A64_THREE_OP},
+    **{m: (3, 4) for m in A64_THREE_OR_FOUR_OP},
+    **{m: (4,) for m in A64_FOUR_OP},
+}
+A64_COND_OP = (
+    "cset", "csetm", "cinc", "cneg", "csel", "csinc", "csinv", "csneg", "ccmp", "ccmn", "fcsel",
+)
+A64_MOD_OP = A64_TWO_OR_THREE_OP + A64_THREE_OR_FOUR_OP
+A64_IMM_OK = {
+    ("mov", 1), ("movz", 1), ("movk", 1), ("movn", 1),
+    ("cmp", 1), ("cmn", 1), ("tst", 1), ("ccmp", 1), ("ccmn", 1), ("ccmp", 2), ("ccmn", 2),
+    ("add", 2), ("adds", 2), ("sub", 2), ("subs", 2),
+    ("and", 2), ("ands", 2), ("orr", 2), ("eor", 2),
+    ("lsl", 2), ("lsr", 2), ("asr", 2), ("ror", 2),
+    ("ubfx", 2), ("ubfx", 3), ("sbfx", 2), ("sbfx", 3),
+    ("ubfm", 2), ("ubfm", 3), ("sbfm", 2), ("sbfm", 3),
+    ("bfi", 2), ("bfi", 3), ("bfxil", 2), ("bfxil", 3), ("extr", 3),
+    ("fmov", 1), ("fcmp", 1),
+}
+A64_IMM_REQ = {
+    ("movz", 1), ("movk", 1), ("movn", 1), ("ccmp", 2), ("ccmn", 2),
+    ("ubfx", 2), ("ubfx", 3), ("sbfx", 2), ("sbfx", 3),
+    ("ubfm", 2), ("ubfm", 3), ("sbfm", 2), ("sbfm", 3),
+    ("bfi", 2), ("bfi", 3), ("bfxil", 2), ("bfxil", 3), ("extr", 3),
+}
+A64_REG = re.compile(r"^(?:[xw](?:[12]?\d|30)|sp|fp|lr)$")
+A64_ADDR_BASE = re.compile(r"^(?:x(?:[12]?\d|30)|sp|fp|lr)$")
+A64_GPR = re.compile(r"^(?:[xw](?:[12]?\d|30)|[xw]zr|sp|wsp|fp|lr)$")
+A64_GPR_NO_SP = re.compile(r"^(?:[xw](?:[12]?\d|30)|[xw]zr|fp|lr)$")
+A64_FP_REG = re.compile(r"^[bhsdq](?:[12]?\d|3[01])$")
+A64_DATA_REG = re.compile(r"^(?:[xw](?:[12]?\d|30)|[xw]zr|sp|wsp|fp|lr|[bhsdq](?:[12]?\d|3[01]))$")
+_A64_IMM = re.compile(r"^#-?(?:0x[0-9a-f]+|\d+)$")
+_A64_UIMM = re.compile(r"^#(?:0x[0-9a-f]+|\d+)$")
+_A64_TARGET = re.compile(r"^#?-?(?:0x)?[0-9a-f]+(?:\s*<[^>\[\]]+>)?$")
+_A64_SHIFT = re.compile(r"^(?:lsl|lsr|asr|ror)\s+#(?:0x[0-9a-f]+|\d+)$")
+_A64_ADD_SHIFT = re.compile(r"^(?:lsl|lsr|asr)\s+#(?:0x[0-9a-f]+|\d+)$")
+_A64_EXTEND = re.compile(r"^(?:uxtb|uxth|uxtw|uxtx|sxtb|sxth|sxtw|sxtx)(?:\s+#[0-4])?$")
+_A64_INDEX_EXT = re.compile(r"^(lsl|uxtw|sxtw|uxtx|sxtx)(?:\s+#([0-4]))?$")
 
 _BRACKET_MEM = re.compile(
     r"^(?:(?P<seg1>[cdefg]s|ss):\s*)?"
@@ -151,13 +221,26 @@ def control(arch, mn, ops):
         return "call", ops
     if mn == "b":
         return "jmp", ops
-    if A64_COND.match(mn) or mn in ("cbz", "cbnz", "tbz", "tbnz"):
+    if A64_COND.match(mn):
         return "jcc", ops
+    if mn in ("cbz", "cbnz"):
+        parts = [p.strip() for p in ops.split(",")]
+        if len(parts) != 2 or not A64_GPR_NO_SP.fullmatch(parts[0]):
+            return "indirect", ops
+        return "jcc", parts[1]
+    if mn in ("tbz", "tbnz"):
+        parts = [p.strip() for p in ops.split(",")]
+        if (len(parts) != 3 or not A64_GPR_NO_SP.fullmatch(parts[0])
+                or not _A64_UIMM.fullmatch(parts[1]) or _num(parts[1][1:]) > 63):
+            return "indirect", ops
+        return "jcc", parts[2]
     if mn in ("blr", "br", "braa", "blraa", "braaz", "blraaz", "retaa", "retab"):
         return "indirect", ops
     if mn == "ret":
         return ("indirect", ops) if ops else ("ret", None)
     if mn in ("brk", "udf", "hlt"):
+        if ops and not _A64_UIMM.fullmatch(ops):
+            return "indirect", ops
         return "stop", None
     return None, None
 
@@ -340,64 +423,175 @@ def x86_addresses(asm, reg, next_pc):
     return [addr & MASK]
 
 
-def _a64_index(text, reg):
-    """Value of an AArch64 index operand: `x9`, `x9, lsl #3`, `w9, sxtw #2`, `w9, uxtw`."""
-    parts = [p.strip() for p in text.split(",")]
-    r = parts[0]
-    v = _reg(reg, "x" + r[1:], A64_REG) if r.startswith("w") else _reg(reg, r, A64_REG)
-    if r.startswith("w"):
-        v &= 0xFFFFFFFF
-    shift = 0
-    if len(parts) > 1:
-        m = re.fullmatch(r"(lsl|sxtw|uxtw|sxtx|uxtx)(?:\s+#(\d+))?", parts[1])
+def _strip_a64_comment(text):
+    return text.split("//", 1)[0].split(";", 1)[0].strip()
+
+
+def _parse_a64_index(parts):
+    """Parse the index register and optional shift/extend of `[base, xm[, ext #n]]`, or None."""
+    if len(parts) not in (1, 2) or not A64_GPR_NO_SP.fullmatch(parts[0]):
+        return None
+    idx_reg = parts[0]
+    if len(parts) == 1:
+        return None if idx_reg.startswith("w") else (idx_reg, "lsl", 0)
+    em = _A64_INDEX_EXT.fullmatch(parts[1])
+    if not em or (em.group(1) in ("uxtw", "sxtw")) != idx_reg.startswith("w"):
+        return None
+    return idx_reg, em.group(1), int(em.group(2) or 0)
+
+
+def _valid_a64_mod(mn, prev_kind, op):
+    if mn in ("movz", "movk", "movn"):
+        return bool(re.fullmatch(r"lsl\s+#(0|16|32|48)", op))
+    if prev_kind == "imm":
+        return mn in ("add", "adds", "sub", "subs", "cmp", "cmn") and bool(re.fullmatch(r"lsl\s+#(0|12)", op))
+    if mn in ("add", "adds", "sub", "subs", "cmp", "cmn"):
+        return bool(_A64_ADD_SHIFT.fullmatch(op) or _A64_EXTEND.fullmatch(op))
+    return bool(_A64_SHIFT.fullmatch(op))
+
+
+def _valid_a64_reg(mn, op):
+    if mn.startswith(("f", "scvt", "ucvt")):
+        return bool(
+            A64_FP_REG.fullmatch(op)
+            or (mn in ("fmov", "fcvtzs", "fcvtzu", "scvtf", "ucvtf") and A64_GPR_NO_SP.fullmatch(op))
+        )
+    return bool(A64_GPR.fullmatch(op))
+
+
+def parse_a64_plain(mn, ops):
+    """Parse a non-control AArch64 instruction in llvm-objdump or LLDB syntax.
+
+    Consumes every byte of every operand against the explicit allowlist of mnemonics and operand
+    shapes (general and SIMD/FP scalar registers, immediates, shift/extend modifiers, condition
+    codes, PC-relative targets, and bracketed memory operands in offset, pre-indexed, post-indexed,
+    or register-offset addressing modes). Returns (parsed_ops, mem) where mem is None or
+    (mode, data_regs, base, disp, index_info, writeback)."""
+    what = f"{mn} {ops}".strip()
+    if not A64_PLAIN.match(mn):
+        raise ValueError(f"unmodelled instruction: {what}")
+    raw_ops = [a.strip() for a in re.split(r",(?![^\[\]]*\])", ops)] if ops else []
+    if any(not a for a in raw_ops):
+        raise ValueError(f"malformed operand list: {what}")
+    if mn in A64_ZERO_OP:
+        if raw_ops:
+            raise ValueError(f"unexpected operand: {what}")
+        return [], None
+    if mn in A64_LDST:
+        n_data = 2 if mn in A64_PAIR_LDST else 1
+        if len(raw_ops) not in (n_data + 1, n_data + 2):
+            raise ValueError(f"wrong operand count: {what}")
+        data = raw_ops[:n_data]
+        if not all(A64_DATA_REG.fullmatch(r) for r in data):
+            raise ValueError(f"unmodelled transfer register: {what}")
+        if mn.startswith("ld") and any(r in A64_SP for r in data):
+            raise ValueError(f"stack pointer loaded: {what}")
+        m = re.fullmatch(r"\[([^\[\]]*)\](!?)", raw_ops[n_data])
         if not m:
-            raise ValueError(f"unparsed index extension {parts[1]}")
-        if m.group(1) == "sxtw" and v & 0x80000000:
-            v -= 1 << 32
-        shift = int(m.group(2) or 0)
-    if len(parts) > 2:
-        raise ValueError(f"unparsed index {text}")
-    return v << shift
+            raise ValueError(f"unbracketed or malformed memory operand: {what}")
+        inner = [p.strip() for p in m.group(1).split(",")] if m.group(1).strip() else []
+        if not inner or any(not p for p in inner):
+            raise ValueError(f"malformed memory address: {what}")
+        base, pre = inner[0], m.group(2) == "!"
+        post_op = raw_ops[n_data + 1] if len(raw_ops) == n_data + 2 else None
+        if base in ("wsp", "w29"):
+            raise ValueError(f"unmodelled stack address: {what}")
+        if not A64_ADDR_BASE.fullmatch(base):
+            raise ValueError(f"unmodelled base register {base!r}: {what}")
+        if post_op is not None and not pre and mn not in A64_UNSCALED_LDST and len(inner) == 1 and _A64_IMM.fullmatch(post_op):
+            mem = ("post", data, base, _num(post_op[1:]), None, True)
+        elif post_op is None and len(inner) == 1 and not pre:
+            mem = ("offset", data, base, 0, None, False)
+        elif post_op is None and len(inner) == 2 and _A64_IMM.fullmatch(inner[1]) and not (pre and mn in A64_UNSCALED_LDST):
+            mem = ("pre" if pre else "offset", data, base, _num(inner[1][1:]), None, pre)
+        elif post_op is None and not pre and mn not in A64_PAIR_LDST and mn not in A64_UNSCALED_LDST and _parse_a64_index(inner[1:]) is not None:
+            mem = ("index", data, base, 0, _parse_a64_index(inner[1:]), False)
+        else:
+            raise ValueError(f"unsupported addressing mode: {what}")
+        return [("reg", r) for r in data] + [("mem", mem)], mem
+
+    if len(raw_ops) not in A64_ARITY[mn]:
+        raise ValueError(f"wrong operand count: {what}")
+    parsed_ops = []
+    for i, op in enumerate(raw_ops):
+        if mn in ("adr", "adrp") and i == 1:
+            if not _A64_TARGET.fullmatch(op):
+                raise ValueError(f"unmodelled address target {op!r}: {what}")
+            tm = re.fullmatch(r"#?(0x[0-9a-f]+)(?:\s*<[^>\[\]]*>)?", op)
+            parsed_ops.append(("target", int(tm.group(1), 16) if tm else None))
+            continue
+        if mn in A64_COND_OP and i == len(raw_ops) - 1:
+            if not _A64_CC.fullmatch(op):
+                raise ValueError(f"unmodelled condition {op!r}: {what}")
+            parsed_ops.append(("cond", op))
+            continue
+        if mn in A64_MOD_OP and len(raw_ops) == max(A64_ARITY[mn]) and i == len(raw_ops) - 1:
+            if not _valid_a64_mod(mn, parsed_ops[-1][0], op):
+                raise ValueError(f"unmodelled shift or extend {op!r}: {what}")
+            parsed_ops.append(("mod", op))
+            continue
+        if _A64_IMM.fullmatch(op) or (mn in ("fmov", "fcmp") and i == 1 and re.fullmatch(r"#-?\d+(?:\.\d+)?", op)):
+            if (mn, i) not in A64_IMM_OK:
+                raise ValueError(f"invalid immediate operand: {what}")
+            parsed_ops.append(("imm", _num(op[1:]) if _A64_IMM.fullmatch(op) else 0))
+            continue
+        if (mn, i) not in A64_IMM_REQ and _valid_a64_reg(mn, op):
+            parsed_ops.append(("reg", op))
+            continue
+        raise ValueError(f"unmodelled operand {op!r}: {what}")
+    return parsed_ops, None
 
 
 def a64_addresses(mnemonic, operands, reg):
-    """Effective addresses of one AArch64 instruction in LLDB's syntax (`stp x29, x30, [sp,
-    #-0x10]!`, `ldr x30, [sp], #0x10`, `ldr w8, [x9, x10, lsl #2]`). A post-indexed access is at the
-    base; a pre-indexed or offset one at base plus offset. Use a64_new_sp for the stack pointer a
-    pre-indexed access is judged against."""
-    mn, ops = mnemonic.lower().strip(), operands.lower().split("//", 1)[0].strip()
-    kind, _ = control("aarch64", mn, ops)
-    if kind is None and not A64_PLAIN.match(mn):
-        raise ValueError(f"unmodelled instruction: {mn} {operands}")
-    if "[" not in ops and "]" not in ops:
+    """Effective addresses of one AArch64 instruction in LLDB's or llvm-objdump's syntax
+    (`stp x29, x30, [sp, #-0x10]!`, `ldr x30, [sp], #0x10`, `ldr w8, [x9, x10, lsl #2]`).
+    Uses the shared fail-closed instruction and operand grammar (parse_a64_plain). A post-indexed
+    access is at the base; a pre-indexed or offset one at base plus offset. Use a64_new_sp for the
+    stack pointer a pre-indexed access is judged against."""
+    mn, ops = mnemonic.lower().strip(), _strip_a64_comment(operands.lower())
+    what = f"{mn} {ops}".strip()
+    if not mn:
+        raise ValueError("empty instruction")
+    kind, arg = control("aarch64", mn, ops)
+    if kind is not None:
+        if kind == "indirect":
+            raise ValueError(f"indirect control transfer: {what}")
+        if kind in ("call", "jmp", "jcc") and not _A64_TARGET.fullmatch(arg):
+            raise ValueError(f"indirect or unparsed control target: {what}")
         return []
-    m = re.search(r"\[([^\[\]]*)\](!?)", ops)
-    if not m or "[" in ops[:m.start()] or "]" in ops[:m.start()] or "[" in ops[m.end():] or "]" in ops[m.end():]:
-        raise ValueError(f"unparsed memory operand in {mn} {operands}")
-    parts = [p.strip() for p in m.group(1).split(",", 1)]
-    base = _reg(reg, parts[0], A64_REG)
-    post = ops[m.end():].strip()
-    if post:
-        if m.group(2) == "!" or not re.fullmatch(r",\s*(#-?(0x[0-9a-f]+|\d+)|x\d+)", post) or len(parts) > 1:
-            raise ValueError(f"unparsed post-index in {mn} {operands}")
+    _, mem = parse_a64_plain(mn, ops)
+    if mem is None:
+        return []
+    mode, _, base_name, disp, index_info, _ = mem
+    base = _reg(reg, base_name, A64_ADDR_BASE)
+    if mode == "post":
         return [base & MASK]
-    if len(parts) == 1:
-        return [base & MASK]
-    off = parts[1]
-    if off.startswith("#"):
-        return [(base + _num(off[1:])) & MASK]
-    return [(base + _a64_index(off, reg)) & MASK]
+    if mode in ("offset", "pre"):
+        return [(base + disp) & MASK]
+    idx_reg, ext_kind, ext_shift = index_info
+    v = _reg(reg, "x" + idx_reg[1:] if idx_reg.startswith("w") else idx_reg, A64_REG)
+    if idx_reg.startswith("w") or ext_kind in ("uxtw", "sxtw"):
+        v &= 0xFFFFFFFF
+        if ext_kind == "sxtw" and (v & 0x80000000):
+            v -= 1 << 32
+    return [(base + (v << ext_shift)) & MASK]
 
 
 def a64_new_sp(mnemonic, operands, reg, sp):
     """The stack pointer an access of this instruction is judged against: the written-back one for
     a pre-indexed sp access (`stp x29, x30, [sp, #-0x90]!` allocates the frame first, then stores
     at the new sp, as stack_bound.py treats it), else `sp`."""
-    ops = operands.lower().split("//", 1)[0]
-    m = re.search(r"\[\s*sp\s*(?:,\s*#(-?(?:0x[0-9a-f]+|\d+)))?\s*\]!", ops)
-    if not m:
+    mn, ops = mnemonic.lower().strip(), _strip_a64_comment(operands.lower())
+    kind, _ = control("aarch64", mn, ops)
+    if kind is not None:
         return sp
-    return min(sp, (sp + _num(m.group(1) or "0")) & MASK)
+    _, mem = parse_a64_plain(mn, ops)
+    if mem is None:
+        return sp
+    mode, _, base_name, disp, _, _ = mem
+    if mode != "pre" or base_name != "sp":
+        return sp
+    return min(sp, (sp + disp) & MASK)
 
 
 def lowest_stack(addresses, sp, sp0, red_zone, span):

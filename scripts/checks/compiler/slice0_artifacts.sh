@@ -38,7 +38,11 @@
 #     duplicate-sign expressions, and an absolute address; also missing, duplicate, non-power-of-two
 #     or PT_LOAD-less PT_TLS metadata, a callee that does not restore the frame pointer, a frame
 #     record away from sp, an unmodelled instruction (x86 `loop`, AArch64 `mrs` TPIDR_EL0, string
-#     ops, `xlat`, `enter`) and frame- or link-register writeback (AArch64), with a mutation check
+#     ops, `xlat`, `enter`), AArch64 operand and addressing-mode violations (`nop garbage`,
+#     unbracketed memory-like operands, `sp` post-index/pre+post/unscaled writeback, unsupported
+#     addressing modes, unextended `w` index or mismatched index extend, malformed arity, shifts,
+#     extends, conditions, targets, and `cbz`/`tbz`/`brk` operands), and frame- or link-register
+#     writeback (AArch64), with a mutation check
 #     proving each guard is load-bearing. Known bounds cover x86 frame, red-zone store, two AArch64
 #     frame-record shapes, a read written on both paths, an adrp-based load, an fs:0x28 canary load,
 #     aligned PT_TLS allocations, and LCB's single link-register save with a Mach-O stub call in a
@@ -381,6 +385,43 @@ refuse a64-unmapped-stub 'neither owned nor a stub' '    1010:\tstr\tx30, [sp, #
 refuse a64-mid-stub-call 'neither owned nor a stub' '    1010:\tstr\tx30, [sp, #-0x10]!\n    1014:\tbl\t0x1044 <__stubs+0x4>\n    1018:\tldr\tx30, [sp], #0x10\n    101c:\tret\n\nDisassembly of section __TEXT,__stubs:\n\n0000000000001040 <__stubs>:\n    1040:\tadrp\tx16, 0x2000\n    1044:\tldr\tx16, [x16]\n    1048:\tbr\tx16\nstub 0x0000000000001040 _write\n' aarch64-macos _main
 refuse a64-unmapped-stub-section 'neither owned nor a stub' '    1010:\tstr\tx30, [sp, #-0x10]!\n    1014:\tbl\t0x1040 <__stubs>\n    1018:\tldr\tx30, [sp], #0x10\n    101c:\tret\n\nDisassembly of section __TEXT,__stubs:\n\n0000000000001040 <__stubs>:\n    1040:\tadrp\tx16, 0x2000\n    1044:\tldr\tx16, [x16]\n    1048:\tbr\tx16\n' aarch64-macos _main
 refuse a64-callee-residual-reread 'reads stack bytes this function has not written' '    1010:\tstp\tx29, x30, [sp, #-0x10]!\n    1014:\tmov\tx29, sp\n    1018:\tstur\tx0, [sp, #-0x10]\n    101c:\tbl\t0x1040 <_concrete_body>\n    1020:\tldr\tx0, [sp, #-0x10]\n    1024:\tldp\tx29, x30, [sp], #0x10\n    1028:\tret\n\n0000000000001040 <_concrete_body>:\n    1040:\tstp\tx29, x30, [sp, #-0x10]!\n    1044:\tldp\tx29, x30, [sp], #0x10\n    1048:\tret\n' aarch64-macos _main
+refuse a64-nop-garbage 'unexpected operand: nop garbage' '    1010:\tnop\tgarbage\n    1014:\tret\n' aarch64-macos _main
+refuse a64-malformed-operand-list 'malformed operand list: mov x0, , x1' '    1010:\tmov\tx0, , x1\n    1014:\tret\n' aarch64-macos _main
+refuse a64-ldst-wrong-arity 'wrong operand count: ldr x0' '    1010:\tldr\tx0\n    1014:\tret\n' aarch64-macos _main
+refuse a64-unmodelled-transfer-reg 'unmodelled transfer register: str foo, \[sp, #-0x8\]' '    1010:\tstr\tfoo, [sp, #-0x8]\n    1014:\tret\n' aarch64-macos _main
+refuse a64-sp-loaded 'stack pointer loaded: ldr sp, \[sp, #-0x8\]' '    1010:\tstr\tx0, [sp, #-0x8]\n    1014:\tldr\tsp, [sp, #-0x8]\n    1018:\tret\n' aarch64-macos _main
+refuse a64-unbracketed-mem 'unbracketed or malformed memory operand: ldr x0, 0x1000' '    1010:\tldr\tx0, 0x1000\n    1014:\tret\n' aarch64-macos _main
+refuse a64-unbracketed-mem-sp 'unbracketed or malformed memory operand: str x0, sp' '    1010:\tstr\tx0, sp\n    1014:\tret\n' aarch64-macos _main
+refuse a64-empty-mem-address 'malformed memory address: str x0, \[\]' '    1010:\tstr\tx0, []\n    1014:\tret\n' aarch64-macos _main
+refuse a64-wsp-base 'unmodelled stack address: str x0, \[wsp, #-0x8\]' '    1010:\tstr\tx0, [wsp, #-0x8]\n    1014:\tret\n' aarch64-macos _main
+refuse a64-unmodelled-base-reg "unmodelled base register 'w8': str x0, \[w8, #-0x8\]" '    1010:\tstr\tx0, [w8, #-0x8]\n    1014:\tret\n' aarch64-macos _main
+refuse a64-sp-writeback-reg-post 'unsupported addressing mode: str x0, \[sp\], x8' '    1010:\tsub\tsp, sp, #0x10\n    1014:\tstr\tx0, [sp], x8\n    1018:\tadd\tsp, sp, #0x10\n    101c:\tret\n' aarch64-macos _main
+refuse a64-sp-writeback-pre-and-post 'unsupported addressing mode: str x0, \[sp, #-0x8\]!, #0x8' '    1010:\tstr\tx0, [sp, #-0x8]!, #0x8\n    1014:\tadd\tsp, sp, #0x8\n    1018:\tret\n' aarch64-macos _main
+refuse a64-sp-writeback-unscaled 'unsupported addressing mode: stur x0, \[sp, #-0x10\]!' '    1010:\tstur\tx0, [sp, #-0x10]!\n    1014:\tadd\tsp, sp, #0x10\n    1018:\tret\n' aarch64-macos _main
+refuse a64-unsupported-addressing-mode 'unsupported addressing mode: str x0, \[sp, x8, ror #1\]' '    1010:\tstr\tx0, [sp, x8, ror #1]\n    1014:\tret\n' aarch64-macos _main
+refuse a64-pair-indexed-addressing-mode 'unsupported addressing mode: stp x0, x1, \[sp, x8\]' '    1010:\tstp\tx0, x1, [sp, x8]\n    1014:\tret\n' aarch64-macos _main
+refuse a64-unextended-w-index 'unsupported addressing mode: str x0, \[sp, w8\]' '    1010:\tstr\tx0, [sp, w8]\n    1014:\tret\n' aarch64-macos _main
+refuse a64-mismatched-index-extend 'unsupported addressing mode: str x0, \[sp, x8, sxtw #2\]' '    1010:\tstr\tx0, [sp, x8, sxtw #2]\n    1014:\tret\n' aarch64-macos _main
+refuse a64-indexed-stack-address 'indexed stack address: str x0, \[sp, x8\]' '    1010:\tstr\tx0, [sp, x8]\n    1014:\tret\n' aarch64-macos _main
+refuse a64-pc-relative-offset-beyond "PC-relative access beyond the premise's reach" '    1010:\tadrp\tx8, 0x1000 <_main>\n    1014:\tldr\tx0, [x8, #0x8000]\n    1018:\tret\n' aarch64-macos _main
+refuse a64-pc-relative-writeback "PC-relative access beyond the premise's reach" '    1010:\tadrp\tx8, 0x1000 <_main>\n    1014:\tldr\tx0, [x8, #0x8]!\n    1018:\tret\n' aarch64-macos _main
+refuse a64-pc-relative-indexed "PC-relative access beyond the premise's reach" '    1010:\tadrp\tx8, 0x1000 <_main>\n    1014:\tldr\tx0, [x8, x9]\n    1018:\tret\n' aarch64-macos _main
+refuse a64-plain-wrong-arity 'wrong operand count: mov x0' '    1010:\tmov\tx0\n    1014:\tret\n' aarch64-macos _main
+refuse a64-bad-adrp-target "unmodelled address target '\[sp\]': adrp x8, \[sp\]" '    1010:\tadrp\tx8, [sp]\n    1014:\tret\n' aarch64-macos _main
+refuse a64-bad-condition "unmodelled condition 'bogus': cset w0, bogus" '    1010:\tcset\tw0, bogus\n    1014:\tret\n' aarch64-macos _main
+refuse a64-bad-shift-extend "unmodelled shift or extend 'ror #1': add x0, x1, x2, ror #1" '    1010:\tadd\tx0, x1, x2, ror #1\n    1014:\tret\n' aarch64-macos _main
+refuse a64-bad-imm-extend "unmodelled shift or extend 'uxtw': add x0, x1, #0x1, uxtw" '    1010:\tadd\tx0, x1, #0x1, uxtw\n    1014:\tret\n' aarch64-macos _main
+refuse a64-bad-movz-shift "unmodelled shift or extend 'lsl #8': movz x0, #0x1, lsl #8" '    1010:\tmovz\tx0, #0x1, lsl #8\n    1014:\tret\n' aarch64-macos _main
+refuse a64-invalid-imm 'invalid immediate operand: mul x0, x1, #0x2' '    1010:\tmul\tx0, x1, #0x2\n    1014:\tret\n' aarch64-macos _main
+refuse a64-unmodelled-operand "unmodelled operand '\[sp\]': mov x0, \[sp\]" '    1010:\tmov\tx0, [sp]\n    1014:\tret\n' aarch64-macos _main
+refuse a64-missing-required-imm "unmodelled operand 'x1': movz x0, x1" '    1010:\tmovz\tx0, x1\n    1014:\tret\n' aarch64-macos _main
+refuse a64-dynamic-sp 'unmodelled stack-pointer write: add sp, sp, x8' '    1010:\tadd\tsp, sp, x8\n    1014:\tret\n' aarch64-macos _main
+refuse a64-fp-from-sp-sub 'stack or frame pointer used as a value: sub x29, sp, #0x8' '    1010:\tstp\tx29, x30, [sp, #-0x10]!\n    1014:\tsub\tx29, sp, #0x8\n    1018:\tldp\tx29, x30, [sp], #0x10\n    101c:\tret\n' aarch64-macos _main
+refuse a64-lr-overwritten 'link register overwritten: mov x30, x0' '    1010:\tmov\tx30, x0\n    1014:\tret\n' aarch64-macos _main
+refuse a64-sp-escape 'stack or frame pointer used as a value: mov x0, sp' '    1010:\tmov\tx0, sp\n    1014:\tret\n' aarch64-macos _main
+refuse a64-cbz-bad-reg 'indirect control transfer cbz sp, 0x1010 <_main>' '    1010:\tcbz\tsp, 0x1010 <_main>\n    1014:\tret\n' aarch64-macos _main
+refuse a64-tbz-bad-bit 'indirect control transfer tbz x0, #64, 0x1010 <_main>' '    1010:\ttbz\tx0, #64, 0x1010 <_main>\n    1014:\tret\n' aarch64-macos _main
+refuse a64-brk-bad-imm 'indirect control transfer brk garbage' '    1010:\tbrk\tgarbage\n    1014:\tret\n' aarch64-macos _main
 # A read of a byte written on only one path into it.
 refuse one-path-write 'reads stack bytes this function has not written' '    1010:\tpush\trbp\n    1011:\tmov\trbp, rsp\n    1014:\tje\t0x101e <main+0xe>\n    1016:\tmov\tqword ptr [rbp - 0x8], rax\n    101e:\tmov\trax, qword ptr [rbp - 0x8]\n    1022:\tpop\trbp\n    1023:\tret\n'
 # A read never written (stale bytes of whatever ran before).
@@ -522,7 +563,58 @@ for asm in rejected_x86:
         pass
     else:
         raise AssertionError("accepted unmodelled x86 instruction or operand: " + asm)
-for mn, ops in (("mrs", "x8, tpidr_el0"), ("ldr", "x0, [sp] [sp]"), ("ldr", "x0, [sp, #-0x8]!, #0x8")):
+a64_cases = (
+    ("stp", "x29, x30, [sp, #-0x10]!", [0x7fffffffdff0], 0x7fffffffdff0),
+    ("ldp", "x29, x30, [sp], #0x10", [0x7fffffffe000], 0x7fffffffe000),
+    ("ldr", "w8, [x9, x10, lsl #2]", [(0x7fffffffe000 + (0x7fffffffe000 << 2)) & stack_access.MASK], 0x7fffffffe000),
+    ("ldr", "w8, [x9, w10, sxtw #2]", [(0x7fffffffe000 + (-0x2000 << 2)) & stack_access.MASK], 0x7fffffffe000),
+    ("ldr", "w8, [x9, w10, uxtw #2]", [(0x7fffffffe000 + (0xffffe000 << 2)) & stack_access.MASK], 0x7fffffffe000),
+    ("ldr", "q0, [sp, #0x10]", [0x7fffffffe010], 0x7fffffffe000),
+    ("mov", "w8, #0x64 ; =100", [], 0x7fffffffe000),
+    ("adds", "w8, w9, w9, uxtb", [], 0x7fffffffe000),
+    ("cbnz", "w8, 0x1008 <_main+0x8>", [], 0x7fffffffe000),
+    ("nop", "", [], 0x7fffffffe000),
+)
+for mn, ops, expected_addrs, expected_sp in a64_cases:
+    got_addrs = stack_access.a64_addresses(mn, ops, reg)
+    got_sp = stack_access.a64_new_sp(mn, ops, reg, 0x7fffffffe000)
+    assert got_addrs == expected_addrs, (mn, ops, got_addrs, expected_addrs)
+    assert got_sp == expected_sp, (mn, ops, got_sp, expected_sp)
+rejected_a64 = (
+    ("mrs", "x8, tpidr_el0"),
+    ("nop", "garbage"),
+    ("ldr", "x0, 0x1000"),
+    ("ldr", "x0, sp"),
+    ("str", "x0, [sp], x8"),
+    ("ldr", "x0, [sp, #-0x8]!, #0x8"),
+    ("stur", "x0, [sp, #-0x8]!"),
+    ("ldr", "x0, [sp, x8]!"),
+    ("ldp", "x0, x1, [sp, x8]"),
+    ("ldr", "x0, [sp, w8]"),
+    ("ldr", "x0, [sp, x8, sxtw #2]"),
+    ("ldr", "x0, [sp, x8, ror #1]"),
+    ("ldr", "x0, [sp] [sp]"),
+    ("ldr", "x0, [sp"),
+    ("ldr", "sp, [sp, #0x8]"),
+    ("ldr", "x0, [wsp, #-0x8]"),
+    ("ldr", "x0, [w8, #-0x8]"),
+    ("mov", "x0, [sp]"),
+    ("mov", "x0"),
+    ("mov", "x0, , x1"),
+    ("adrp", "x8, [sp]"),
+    ("cset", "w0, bogus"),
+    ("add", "x0, x1, x2, ror #1"),
+    ("add", "x0, x1, #0x1, uxtw"),
+    ("movz", "x0, #0x1, lsl #8"),
+    ("mul", "x0, x1, #0x2"),
+    ("movz", "x0, x1"),
+    ("ret", "x0"),
+    ("blr", "x8"),
+    ("cbz", "sp, 0x1010 <_main>"),
+    ("tbz", "x0, #64, 0x1010 <_main>"),
+    ("brk", "garbage"),
+)
+for mn, ops in rejected_a64:
     try:
         stack_access.a64_addresses(mn, ops, reg)
     except ValueError:
@@ -792,20 +884,57 @@ mutations = [
     ("stack_bound.py", "if dst in X86_SP:\n        raise Refuse(f\"unmodelled stack-pointer write: {what}\")", "pass", "dynamic-sp"),
     ("stack_bound.py", "if dst in X86_FP:\n        return st.but(fp=None), deepest", "pass", "partial-frame-pointer"),
     ("stack_bound.py", "if slot and dst != \"rbp\":\n        raise Refuse(f\"a saved frame pointer popped into {dst}: {what}\")", "pass", "saved-frame-pointer-popped"),
-    ("stack_bound.py", "if base in A64_FP and (pre or post is not None):\n            raise Refuse(f\"writeback on the frame pointer: {what}\")", "pass", "a64-frame-writeback"),
-    ("stack_bound.py", "if base in A64_LR and (pre or post is not None):\n            raise Refuse(f\"writeback on the link register: {what}\")", "pass", "a64-link-register-writeback"),
-    ("stack_bound.py", "if base in A64_LR and (pre or post is not None):\n            raise Refuse(f\"writeback on the link register: {what}\")", "pass", "a64-link-register-store-writeback"),
+    ("stack_bound.py", "if base in A64_FP and writeback:\n            raise Refuse(f\"writeback on the frame pointer: {what}\")", "pass", "a64-frame-writeback"),
+    ("stack_bound.py", "if base in A64_LR and writeback:\n            raise Refuse(f\"writeback on the link register: {what}\")", "pass", "a64-link-register-writeback"),
+    ("stack_bound.py", "if base in A64_LR and writeback:\n            raise Refuse(f\"writeback on the link register: {what}\")", "pass", "a64-link-register-store-writeback"),
     ("stack_bound.py", "if base not in {x[0] for x in st.g}:\n                raise Refuse(f\"memory addressed through a register that may hold a stack address: {what}\")", "pass", "a64-argv-store"),
-    ("stack_bound.py", "if t and abs(int(t.group(1), 16) - addr) <= PC_REACH:", "if t:", "a64-pc-relative-far"),
-    ("stack_bound.py", "        g.add((args[0], 1))", "        g.add((args[0], 0))", "a64-pc-relative-walk"),
+    ("stack_bound.py", "if writeback or mode == \"index\" or abs(k) > A64_OFF_REACH:\n                raise Refuse(f\"PC-relative access beyond the premise'\''s reach: {what}\")", "pass", "a64-pc-relative-offset-beyond"),
+    ("stack_bound.py", "if writeback or mode == \"index\" or abs(k) > A64_OFF_REACH:\n                raise Refuse(f\"PC-relative access beyond the premise'\''s reach: {what}\")", "pass", "a64-pc-relative-writeback"),
+    ("stack_bound.py", "if writeback or mode == \"index\" or abs(k) > A64_OFF_REACH:\n                raise Refuse(f\"PC-relative access beyond the premise'\''s reach: {what}\")", "pass", "a64-pc-relative-indexed"),
+    ("stack_bound.py", "if mode == \"index\":\n                raise Refuse(f\"indexed stack address: {what}\")", "if mode == \"index\":\n                return st, None", "a64-indexed-stack-address"),
+    ("stack_bound.py", "if tgt is not None and abs(tgt - addr) <= PC_REACH:", "if tgt is not None:", "a64-pc-relative-far"),
+    ("stack_bound.py", "        g.add((dst, 1))", "        g.add((dst, 0))", "a64-pc-relative-walk"),
     ("stack_bound.py", "if not slot or slot[2][0] != tag:\n                        raise Refuse(f\"{data[0]} loaded from other than its saved slot: {what}\")", "if not slot or slot[2][0] != tag:\n                        slot = (lo, top, (tag, True))", "a64-lr-from-other-slot"),
-    ("stack_bound.py", "if not (record or single) and any(a in A64_SP + A64_FP for a in data):\n            raise Refuse(f\"stack or frame pointer stored as a value: {what}\")", "pass", "a64-frame-pointer-stored"),
+    ("stack_bound.py", "if not (record or single) and any(a in A64_SP + A64_FP for a in data):\n                raise Refuse(f\"stack or frame pointer stored as a value: {what}\")", "pass", "a64-frame-pointer-stored"),
     ("stack_bound.py", "if any(a in A64_LR for a in data) and not (record or restored):\n            raise Refuse(f\"link register overwritten: {what}\")", "pass", "a64-frame-record-elsewhere"),
     ("stack_bound.py", "if any(a in A64_FP for a in data) and not restored:\n            st = st.but(fp=None)", "pass", "a64-w29-writeback-load"),
+    ("stack_bound.py", "            return st.but(d=f + n if mn == \"sub\" else f - n), None\n        raise Refuse(f\"unmodelled stack-pointer write: {what}\")", "            return st.but(d=f + n if mn == \"sub\" else f - n), None\n        return st, None", "a64-dynamic-sp"),
+    ("stack_bound.py", "if any(a in A64_SP + A64_FP for a in srcs):\n            raise Refuse(f\"stack or frame pointer used as a value: {what}\")", "pass", "a64-fp-from-sp-sub"),
+    ("stack_bound.py", "if dst in A64_LR:\n        raise Refuse(f\"link register overwritten: {what}\")", "pass", "a64-lr-overwritten"),
+    ("stack_bound.py", "if any(a in A64_SP + A64_FP for a in srcs):\n        raise Refuse(f\"stack or frame pointer used as a value: {what}\")", "pass", "a64-sp-escape"),
     ("stack_bound.py", "if key in active:\n            raise Refuse(f\"recursion through {key}\")", "if key in active:\n            return 0, {}", "recursion"),
     ("stack_bound.py", "if old.key() != st.key():\n                raise Refuse(f\"{key}+{addr:#x}: states {old.key()} and {st.key()} meet\")", "pass", "depths-meet"),
     ("stack_bound.py", "if not (old.w <= st.w and old.g <= st.g and (st.lr or not old.lr)):\n                states[j] = old.but(w=old.w & st.w,", "if not (st.w <= old.w and old.g <= st.g and (st.lr or not old.lr)):\n                states[j] = old.but(w=old.w | st.w,", "one-path-write"),
-    ("stack_bound.py", "if not A64_PLAIN.match(mn):\n        raise Refuse(f\"unmodelled instruction: {what}\")", "if not A64_PLAIN.match(mn):\n        return st, None", "a64-tpidr-el0"),
+    ("stack_access.py", "if not A64_PLAIN.match(mn):\n        raise ValueError(f\"unmodelled instruction: {what}\")", "if not A64_PLAIN.match(mn):\n        return [], None", "a64-tpidr-el0"),
+    ("stack_access.py", "if any(not a for a in raw_ops):\n        raise ValueError(f\"malformed operand list: {what}\")", "if any(not a for a in raw_ops):\n        return [], None", "a64-malformed-operand-list"),
+    ("stack_access.py", "if mn in A64_ZERO_OP:\n        if raw_ops:\n            raise ValueError(f\"unexpected operand: {what}\")", "if mn in A64_ZERO_OP:\n        return [], None", "a64-nop-garbage"),
+    ("stack_access.py", "if len(raw_ops) not in (n_data + 1, n_data + 2):\n            raise ValueError(f\"wrong operand count: {what}\")", "if len(raw_ops) not in (n_data + 1, n_data + 2):\n            return [], None", "a64-ldst-wrong-arity"),
+    ("stack_access.py", "if not all(A64_DATA_REG.fullmatch(r) for r in data):\n            raise ValueError(f\"unmodelled transfer register: {what}\")", "if not all(A64_DATA_REG.fullmatch(r) for r in data):\n            return [], None", "a64-unmodelled-transfer-reg"),
+    ("stack_access.py", "if mn.startswith(\"ld\") and any(r in A64_SP for r in data):\n            raise ValueError(f\"stack pointer loaded: {what}\")", "pass", "a64-sp-loaded"),
+    ("stack_access.py", "if not m:\n            raise ValueError(f\"unbracketed or malformed memory operand: {what}\")", "if not m:\n            return [], None", "a64-unbracketed-mem"),
+    ("stack_access.py", "if not m:\n            raise ValueError(f\"unbracketed or malformed memory operand: {what}\")", "if not m:\n            return [], None", "a64-unbracketed-mem-sp"),
+    ("stack_access.py", "if not inner or any(not p for p in inner):\n            raise ValueError(f\"malformed memory address: {what}\")", "if not inner or any(not p for p in inner):\n            return [], None", "a64-empty-mem-address"),
+    ("stack_access.py", "if base in (\"wsp\", \"w29\"):\n            raise ValueError(f\"unmodelled stack address: {what}\")", "if base in (\"wsp\", \"w29\"):\n            return [], None", "a64-wsp-base"),
+    ("stack_access.py", "if not A64_ADDR_BASE.fullmatch(base):\n            raise ValueError(f\"unmodelled base register {base!r}: {what}\")", "if not A64_ADDR_BASE.fullmatch(base):\n            return [], None", "a64-unmodelled-base-reg"),
+    ("stack_access.py", "if post_op is not None and not pre and mn not in A64_UNSCALED_LDST and len(inner) == 1 and _A64_IMM.fullmatch(post_op):\n            mem = (\"post\", data, base, _num(post_op[1:]), None, True)", "if post_op is not None and not pre and mn not in A64_UNSCALED_LDST and len(inner) == 1:\n            mem = (\"offset\", data, base, 0, None, False)", "a64-sp-writeback-reg-post"),
+    ("stack_access.py", "if post_op is not None and not pre and mn not in A64_UNSCALED_LDST and len(inner) == 1 and _A64_IMM.fullmatch(post_op):\n            mem = (\"post\", data, base, _num(post_op[1:]), None, True)", "if post_op is not None:\n            mem = (\"pre\", data, base, -8, None, True)", "a64-sp-writeback-pre-and-post"),
+    ("stack_access.py", "elif post_op is None and len(inner) == 2 and _A64_IMM.fullmatch(inner[1]) and not (pre and mn in A64_UNSCALED_LDST):", "elif post_op is None and len(inner) == 2 and _A64_IMM.fullmatch(inner[1]):", "a64-sp-writeback-unscaled"),
+    ("stack_access.py", "else:\n            raise ValueError(f\"unsupported addressing mode: {what}\")", "else:\n            return [], None", "a64-unsupported-addressing-mode"),
+    ("stack_access.py", "elif post_op is None and not pre and mn not in A64_PAIR_LDST and mn not in A64_UNSCALED_LDST and _parse_a64_index(inner[1:]) is not None:", "elif post_op is None and not pre and mn not in A64_UNSCALED_LDST and _parse_a64_index(inner[1:]) is not None:\n            return [], None\n        elif False:", "a64-pair-indexed-addressing-mode"),
+    ("stack_access.py", "return None if idx_reg.startswith(\"w\") else (idx_reg, \"lsl\", 0)", "return (idx_reg, \"lsl\", 0)", "a64-unextended-w-index"),
+    ("stack_access.py", "if not em or (em.group(1) in (\"uxtw\", \"sxtw\")) != idx_reg.startswith(\"w\"):\n        return None", "if not em:\n        return None", "a64-mismatched-index-extend"),
+    ("stack_access.py", "if len(raw_ops) not in A64_ARITY[mn]:\n        raise ValueError(f\"wrong operand count: {what}\")", "if len(raw_ops) not in A64_ARITY[mn]:\n        return [], None", "a64-plain-wrong-arity"),
+    ("stack_access.py", "if not _A64_TARGET.fullmatch(op):\n                raise ValueError(f\"unmodelled address target {op!r}: {what}\")", "if not _A64_TARGET.fullmatch(op):\n                return [], None", "a64-bad-adrp-target"),
+    ("stack_access.py", "if not _A64_CC.fullmatch(op):\n                raise ValueError(f\"unmodelled condition {op!r}: {what}\")", "if not _A64_CC.fullmatch(op):\n                return [], None", "a64-bad-condition"),
+    ("stack_access.py", "if not _valid_a64_mod(mn, parsed_ops[-1][0], op):\n                raise ValueError(f\"unmodelled shift or extend {op!r}: {what}\")", "if not _valid_a64_mod(mn, parsed_ops[-1][0], op):\n                return [], None", "a64-bad-shift-extend"),
+    ("stack_access.py", "if prev_kind == \"imm\":\n        return mn in (\"add\", \"adds\", \"sub\", \"subs\", \"cmp\", \"cmn\") and bool(re.fullmatch(r\"lsl\\s+#(0|12)\", op))", "if prev_kind == \"imm\":\n        return True", "a64-bad-imm-extend"),
+    ("stack_access.py", "if mn in (\"movz\", \"movk\", \"movn\"):\n        return bool(re.fullmatch(r\"lsl\\s+#(0|16|32|48)\", op))", "if mn in (\"movz\", \"movk\", \"movn\"):\n        return True", "a64-bad-movz-shift"),
+    ("stack_access.py", "if (mn, i) not in A64_IMM_OK:\n                raise ValueError(f\"invalid immediate operand: {what}\")", "pass", "a64-invalid-imm"),
+    ("stack_access.py", "if (mn, i) not in A64_IMM_REQ and _valid_a64_reg(mn, op):", "if _valid_a64_reg(mn, op):", "a64-missing-required-imm"),
+    ("stack_access.py", "        if (mn, i) not in A64_IMM_REQ and _valid_a64_reg(mn, op):\n            parsed_ops.append((\"reg\", op))\n            continue\n        raise ValueError(f\"unmodelled operand {op!r}: {what}\")", "        if (mn, i) not in A64_IMM_REQ and _valid_a64_reg(mn, op):\n            parsed_ops.append((\"reg\", op))\n            continue\n        return [], None", "a64-unmodelled-operand"),
+    ("stack_access.py", "if len(parts) != 2 or not A64_GPR_NO_SP.fullmatch(parts[0]):\n            return \"indirect\", ops", "pass", "a64-cbz-bad-reg"),
+    ("stack_access.py", "if (len(parts) != 3 or not A64_GPR_NO_SP.fullmatch(parts[0])\n                or not _A64_UIMM.fullmatch(parts[1]) or _num(parts[1][1:]) > 63):\n            return \"indirect\", ops", "pass", "a64-tbz-bad-bit"),
+    ("stack_access.py", "if ops and not _A64_UIMM.fullmatch(ops):\n            return \"indirect\", ops", "pass", "a64-brk-bad-imm"),
     ("stack_bound.py", "if touched is not None and touched > max(before, st.d) + RED_ZONE:\n                    raise Refuse(f\"{key}+{addr:#x}: an access {touched - max(before, st.d)} bytes below the \"\n                                 f\"stack pointer, beyond the {RED_ZONE}-byte red zone of {TARGET}: {mn} {ops}\")", "pass", "x86-beyond-red-zone"),
     ("stack_bound.py", "if kind == \"indirect\":\n                raise Refuse(f\"{key}+{addr:#x}: indirect control transfer {mn} {ops}\")", "if kind == \"indirect\":\n                continue", "a64-ret-register"),
     ("stack_bound.py", "if not st.lr:\n                    raise Refuse(f\"{key}+{addr:#x}: return through a link register not restored\")", "pass", "a64-link-register-lost"),
@@ -822,10 +951,14 @@ for which, old, new, ctl_name in mutations:
     out = run_mutated(which, old, new, tgt, dis_path)
     if re.search(r"^refused: .*" + diag_re, out):
         raise AssertionError(f"control {ctl_name} still passed when its guard in {which} was deleted: {out}")
-    if ctl_name not in ("a64-link-register-writeback", "a64-link-register-store-writeback"):
+    if ctl_name in ("a64-link-register-writeback", "a64-link-register-store-writeback"):
+        assert "memory addressed through a register that may hold a stack address" in out, out
+    elif ctl_name in ("a64-unextended-w-index", "a64-mismatched-index-extend"):
+        assert "indexed stack address:" in out, out
+    else:
         assert out.startswith("bound "), f"control {ctl_name} was shadowed by another guard when its guard in {which} was deleted: {out}"
 ' "$root/scripts/checks/lib" "$work/ctl"; then
-  echo "ok   control: guard-mutation check verifies all 51 guards are load-bearing and unshadowed"
+  echo "ok   control: guard-mutation check verifies all 86 guards are load-bearing and unshadowed"
 else
   echo "FAIL control: guard-mutation check found a shadowed or non-load-bearing guard"; fail=1
 fi

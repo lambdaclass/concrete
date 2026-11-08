@@ -75,12 +75,10 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import stack_access
 from stack_access import (
-    A64_DATA_REG,
     A64_FLAGS_ONLY,
     A64_FP,
     A64_LR,
     A64_OFF_REACH,
-    A64_PLAIN,
     A64_REGSIZE,
     A64_SP,
     PC_REACH,
@@ -88,7 +86,6 @@ from stack_access import (
     TCB_SIZE,
     X86_FP,
     X86_GPR64,
-    X86_PLAIN,
     X86_SP,
     X86_STACK,
     byte_interval,
@@ -212,25 +209,18 @@ def parse(path):
             continue
         m = inst.match(line)
         if m and cur is not None:
-            ops = m.group(3).split("#", 1)[0] if ARCH == "x86_64" else m.group(3).split("//")[0]
+            ops = (
+                m.group(3).split("#", 1)[0]
+                if ARCH == "x86_64"
+                else m.group(3).split("//", 1)[0].split(";", 1)[0]
+            )
             funcs[cur].append((int(m.group(1), 16), m.group(2).lower(), ops.strip()))
     return funcs, stubs, tls_memsz
 
 
 def target_of(ops):
-    m = (re.fullmatch(r"0x([0-9a-f]+)\s*<([^>]+)>", ops)
-         or re.fullmatch(r"([0-9a-f]+)\s*<([^>]+)>", ops)
-         or re.search(r"0x([0-9a-f]+)\s*<([^>]+)>", ops)
-         or re.search(r"\b([0-9a-f]+)\s*<([^>]+)>", ops))
+    m = re.fullmatch(r"#?(?:0x)?([0-9a-f]+)\s*<([^>\[\]]+)>", ops)
     return (int(m.group(1), 16), m.group(2)) if m else (None, None)
-
-
-def imm(s):
-    t = s.strip().lstrip("#")
-    try:
-        return int(t, 16) if t.lower().startswith(("0x", "-0x")) else int(t)
-    except ValueError:
-        raise Refuse(f"not an immediate: {s}") from None
 
 
 class St:
@@ -403,20 +393,22 @@ def x86_pop(st, dst, at, what):
     return st.but(d=at - 8, fp=slot[2][1] if slot and slot[2][0] == "fp" else None)
 
 
-def a64_size(mn, data, what):
+def a64_size(mn, data):
     if mn in ("ldrb", "strb", "ldrsb", "ldurb", "sturb", "ldursb"):
         return 1
     if mn in ("ldrh", "strh", "ldrsh", "ldurh", "sturh", "ldursh"):
         return 2
     if mn in ("ldrsw", "ldursw", "ldpsw"):
         return 4 * len(data)
-    if not data or data[0][0] not in A64_REGSIZE:
-        raise Refuse(f"stack access of unknown size: {what}")
     return A64_REGSIZE[data[0][0]] * len(data)
 
 
 def a64_reg(r):
-    """The 64-bit name of a general register (w8 -> x8)."""
+    """The 64-bit name of a general register (w8 -> x8, fp -> x29, lr -> x30)."""
+    if r == "fp":
+        return "x29"
+    if r == "lr":
+        return "x30"
     return "x" + r[1:] if re.fullmatch(r"w([0-9]|[12][0-9]|30)", r) else r
 
 
@@ -426,77 +418,67 @@ def a64_inst(mn, ops, st, addr=0):
     instruction writes leaves it; adrp/adr with a target within PC_REACH of the instruction puts
     its destination in at level 0, and one add of an immediate up to 4095 to a level-0 register
     puts its destination in at level 1 (so the address stays within a fixed reach of the code)."""
-    new, deepest = a64_core(mn, ops, st)
-    args = [a.strip() for a in re.split(r",(?![^\[]*\])", ops)] if ops else []
-    first_mem = next((i for i, a in enumerate(args) if a.startswith("[")), len(args))
-    if mn.startswith(("ld", "st")):
-        written = list(args[:first_mem]) if mn.startswith("ld") else []
-        if first_mem < len(args) and (args[first_mem].endswith("!") or first_mem + 1 < len(args)):
-            written.append(re.match(r"\[(\w+)", args[first_mem]).group(1))
+    try:
+        parsed_ops, mem = stack_access.parse_a64_plain(mn, ops)
+    except ValueError as e:
+        raise Refuse(str(e)) from None
+    new, deepest = a64_core(mn, ops, parsed_ops, mem, st)
+    if mem is not None:
+        _, data, base, _, _, writeback = mem
+        written = list(data) if mn.startswith("ld") else []
+        if writeback:
+            written.append(base)
     else:
-        written = [] if mn in A64_FLAGS_ONLY or not args else [args[0]]
+        written = [] if mn in A64_FLAGS_ONLY or not parsed_ops else [parsed_ops[0][1]]
     out = {a64_reg(r) for r in written}
     g = {x for x in new.g if x[0] not in out}
-    if mn in ("adrp", "adr") and len(args) == 2 and args[0].startswith("x"):
-        t = re.fullmatch(r"(0x[0-9a-f]+)(?:\s*<[^>]*>)?", args[1])
-        if t and abs(int(t.group(1), 16) - addr) <= PC_REACH:
-            g.add((args[0], 0))
-    elif (mn == "add" and len(args) == 3 and args[0].startswith("x") and (args[1], 0) in st.g
-          and re.fullmatch(r"#(0x[0-9a-f]+|\d+)", args[2]) and imm(args[2]) <= 4095):
-        g.add((args[0], 1))
+    dst = parsed_ops[0][1] if parsed_ops and parsed_ops[0][0] == "reg" else ""
+    if mn in ("adrp", "adr") and len(parsed_ops) == 2 and dst.startswith("x"):
+        tgt = parsed_ops[1][1]
+        if tgt is not None and abs(tgt - addr) <= PC_REACH:
+            g.add((dst, 0))
+    elif (mn == "add" and len(parsed_ops) == 3 and dst.startswith("x")
+          and (parsed_ops[1][1], 0) in st.g and parsed_ops[2][0] == "imm"
+          and 0 <= parsed_ops[2][1] <= 4095):
+        g.add((dst, 1))
     return new.but(g=frozenset(g)), deepest
 
 
-def a64_core(mn, ops, st):
-    """(new state, deepest byte touched or None) after a non-control AArch64 instruction."""
+def a64_core(mn, ops, parsed_ops, mem, st):
+    """(new state, deepest byte touched or None) after a parsed non-control AArch64 instruction."""
     what = f"{mn} {ops}".strip()
-    if not A64_PLAIN.match(mn):
-        raise Refuse(f"unmodelled instruction: {what}")
-    args = [a.strip() for a in re.split(r",(?![^\[]*\])", ops)] if ops else []
-    if any(not a for a in args):
-        raise Refuse(f"malformed operand list: {what}")
-    first_mem = next((i for i, a in enumerate(args) if a.startswith("[")), len(args))
-    data = args[:first_mem]
-    if any("[" in a or "]" in a for a in data):
-        raise Refuse(f"unmodelled address form: {what}")
     is_load, is_store = mn.startswith("ld"), mn.startswith("st")
     deepest = None
     record = restored = single = False
-    if first_mem < len(args):
-        if first_mem + 2 < len(args) or not all(A64_DATA_REG.match(r) for r in data):
-            raise Refuse(f"unmodelled address form: {what}")
-        mem = args[first_mem]
-        post = args[first_mem + 1] if first_mem + 1 < len(args) else None
-        m = re.fullmatch(r"\[(\w+)(?:,\s*(#?-?(?:0x)?[0-9a-f]+))?\](!?)", mem)
-        if not m or (post is not None and (m.group(3) == "!" or not re.fullmatch(r"#-?(?:0x)?[0-9a-f]+", post))):
-            raise Refuse(f"unmodelled address form: {what}")
-        base, off, pre = m.group(1), m.group(2), m.group(3) == "!"
-        if base in A64_FP and (pre or post is not None):
+    if mem is not None:
+        mode, data, base, k, _, writeback = mem
+        if base in A64_FP and writeback:
             raise Refuse(f"writeback on the frame pointer: {what}")
-        if base in A64_LR and (pre or post is not None):
+        if base in A64_LR and writeback:
             raise Refuse(f"writeback on the link register: {what}")
-        if base not in ("sp", "x29") + A64_SP + A64_FP:
+        if base not in ("sp", "x29", "fp"):
             # Any other register may hold a stack address (main's argv, envp and apple
             # vector, a value an external function left): only a PC-relative one is used.
             if base not in {x[0] for x in st.g}:
                 raise Refuse(f"memory addressed through a register that may hold a stack address: {what}")
-            if pre or post is not None or (off and abs(imm(off)) > A64_OFF_REACH):
+            if writeback or mode == "index" or abs(k) > A64_OFF_REACH:
                 raise Refuse(f"PC-relative access beyond the premise's reach: {what}")
-        if base in ("sp", "x29"):
+        else:
+            if mode == "index":
+                raise Refuse(f"indexed stack address: {what}")
             record = mn in ("stp", "ldp") and data == ["x29", "x30"] and base == "sp"
-            size = a64_size(mn, data, what)
-            k = imm(off) if off else 0
+            size = a64_size(mn, data)
             d = st.d
-            if base == "x29":
+            if base in A64_FP:
                 top = frame_depth(st.fp, what) - k
-            elif pre:
+            elif mode == "pre":
                 d = d - k
                 top = d
+            elif mode == "post":
+                top = st.d
+                d = d - k
             else:
                 top = d - k
-            if post is not None:
-                top = st.d
-                d = d - imm(post)
             lo = top - size + 1
             saved, fp, lr = st.saved, st.fp, st.lr
             if record and is_store:
@@ -517,7 +499,7 @@ def a64_core(mn, ops, st):
                     w = touch(st, lo, top, "w", what)
                     saved = cleared(saved, lo, top) | {(lo, top, (tag, lr if tag == "lr" else fp))}
                     single = True
-                elif is_load:
+                else:
                     slot = slot_at(saved, lo, top)
                     w = touch(st, lo, top, "r", what, restore=(slot,) if slot else ())
                     if not slot or slot[2][0] != tag:
@@ -527,47 +509,39 @@ def a64_core(mn, ops, st):
                     else:
                         fp = slot[2][1]
                     restored = True
-                else:
-                    raise Refuse(f"unmodelled stack memory instruction: {what}")
-            elif is_load or is_store:
+            else:
                 w = touch(st, lo, top, "r" if is_load else "w", what)
                 if is_store:
                     saved = cleared(saved, lo, top)
-            else:
-                raise Refuse(f"unmodelled stack memory instruction: {what}")
             st = st.but(d=d, saved=saved, fp=fp, lr=lr, w=w)
             deepest = top
-        elif base in A64_SP + A64_FP:
-            raise Refuse(f"unmodelled stack address: {what}")
-    if is_store:
-        if not (record or single) and any(a in A64_SP + A64_FP for a in data):
-            raise Refuse(f"stack or frame pointer stored as a value: {what}")
-        return st, deepest
-    if is_load:
-        if any(a in A64_SP for a in data):
-            raise Refuse(f"stack pointer loaded: {what}")
+        if is_store:
+            if not (record or single) and any(a in A64_SP + A64_FP for a in data):
+                raise Refuse(f"stack or frame pointer stored as a value: {what}")
+            return st, deepest
         if any(a in A64_LR for a in data) and not (record or restored):
             raise Refuse(f"link register overwritten: {what}")
         if any(a in A64_FP for a in data) and not restored:
             st = st.but(fp=None)
         return st, deepest
     # Not a memory instruction.
-    dst, srcs = (args[0] if args else ""), args[1:]
+    dst = parsed_ops[0][1] if parsed_ops and mn not in A64_FLAGS_ONLY and parsed_ops[0][0] == "reg" else ""
+    srcs = [val for kind, val in (parsed_ops if mn in A64_FLAGS_ONLY else parsed_ops[1:]) if kind == "reg"]
     if dst in A64_SP:
-        if mn in ("sub", "add") and len(args) == 3 and args[1] == "sp" and args[2].startswith("#"):
-            n = imm(args[2])
+        if mn in ("sub", "add") and len(parsed_ops) == 3 and parsed_ops[1] == ("reg", "sp") and parsed_ops[2][0] == "imm":
+            n = parsed_ops[2][1]
             return st.but(d=st.d + n if mn == "sub" else st.d - n), None
         if (mn, srcs) == ("mov", ["x29"]):
             return st.but(d=frame_depth(st.fp, what)), None
-        if mn in ("sub", "add") and len(args) == 3 and args[1] == "x29" and args[2].startswith("#"):
-            n, f = imm(args[2]), frame_depth(st.fp, what)
+        if mn in ("sub", "add") and len(parsed_ops) == 3 and parsed_ops[1] == ("reg", "x29") and parsed_ops[2][0] == "imm":
+            n, f = parsed_ops[2][1], frame_depth(st.fp, what)
             return st.but(d=f + n if mn == "sub" else f - n), None
         raise Refuse(f"unmodelled stack-pointer write: {what}")
     if dst in A64_FP:
         if (mn, srcs) == ("mov", ["sp"]):
             return st.but(fp=st.d), None
-        if mn == "add" and len(args) == 3 and args[1] == "sp" and args[2].startswith("#"):
-            return st.but(fp=st.d - imm(args[2])), None
+        if mn == "add" and len(parsed_ops) == 3 and parsed_ops[1] == ("reg", "sp") and parsed_ops[2][0] == "imm":
+            return st.but(fp=st.d - parsed_ops[2][1]), None
         if any(a in A64_SP + A64_FP for a in srcs):
             raise Refuse(f"stack or frame pointer used as a value: {what}")
         return st.but(fp=None), None
