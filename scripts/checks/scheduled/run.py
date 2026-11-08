@@ -8,7 +8,7 @@ import subprocess
 import sys
 import tempfile
 import time
-from protocol import EvidenceError, git, inventory, require, validate
+from protocol import EvidenceError, git, inventory, require, clean_env
 
 ROOT = Path(__file__).resolve().parents[3]
 
@@ -21,6 +21,7 @@ def call(argv, **kwargs):
     if kwargs.pop("capture_output", False):
         kwargs["stdout"] = subprocess.PIPE
         kwargs["stderr"] = subprocess.PIPE
+    kwargs.setdefault("env", clean_env())
     process = subprocess.Popen(argv, start_new_session=True, **kwargs)
     try:
         stdout, stderr = process.communicate(timeout=budget)
@@ -39,28 +40,27 @@ def call(argv, **kwargs):
 
 def run(sha, tier, output):
     output = Path(output).resolve(); output.mkdir(parents=True, exist_ok=True)
-    require(git("rev-parse", sha + "^{commit}") == sha, "wrong SHA")
-    runners = inventory()
-    require(os.environ.get("RUNNER_ENVIRONMENT") == "self-hosted" and
-            os.environ.get("RUNNER_NAME") in runners.get(os.environ.get("GITHUB_REPOSITORY"), set()),
-            "forged runner: not inventoried concrete-ci-2")
     attempt = os.environ["GITHUB_RUN_ID"] + "/" + os.environ["GITHUB_RUN_ATTEMPT"]
     record = dict(sha=sha, tier=tier, repository=os.environ["GITHUB_REPOSITORY"],
                   runner_name=os.environ["RUNNER_NAME"], runner_environment="self-hosted",
                   attempt=attempt, occurrence=os.environ.get("OCCURRENCE", tier) + "/" + os.environ["GITHUB_RUN_ID"],
                   controller_revision=git("rev-parse", "HEAD"),
-                  gate_revision=sha, started=now(), status="INCOMPLETE", conclusion="incomplete",
+                  gate_revision=None, started=now(), status="INCOMPLETE", conclusion="incomplete",
                   artifact=os.environ["GITHUB_SERVER_URL"] + "/" + os.environ["GITHUB_REPOSITORY"] +
                   "/actions/runs/" + os.environ["GITHUB_RUN_ID"], gates=[])
     with tempfile.TemporaryDirectory(prefix="concrete-scheduled-") as scratch:
         checkout = Path(scratch) / "source"
-        call(["git", "clone", "--shared", "--no-checkout", str(ROOT), str(checkout)], check=True)
-        call(["git", "-C", str(checkout), "checkout", "--detach", sha], check=True)
-        # G1 owns selection, time budgets, commands, seeds and control invocations.
-        # No fallback list and no use of frozen legacy runner code.
-        exporter = checkout / "scripts/checks/lib/gate_manifest.py"
-        slots = checkout / "scripts/checks/lib/heavy_slots.sh"
         try:
+            require(git("rev-parse", sha + "^{commit}") == sha, "wrong SHA")
+            runners = inventory()
+            require(os.environ.get("RUNNER_NAME") in runners.get(os.environ.get("GITHUB_REPOSITORY"), set()),
+                    "forged runner: not inventoried concrete-ci-2")
+            call(["git", "clone", "--shared", "--no-checkout", str(ROOT), str(checkout)], check=True)
+            call(["git", "-C", str(checkout), "checkout", "--detach", sha], check=True)
+            record["gate_revision"] = git("-C", str(checkout), "rev-parse", "HEAD")
+            require(record["gate_revision"] == sha, "wrong checked-out revision")
+            exporter = checkout / "scripts/checks/lib/gate_manifest.py"
+            slots = ROOT / "scripts/checks/lib/heavy_slots.sh"
             require(exporter.is_file(), "INCOMPLETE dependency: G1 tier registry unavailable")
             require(slots.is_file(), "INCOMPLETE dependency: shared host-wide heavy slots unavailable")
             result = call(["python3", str(exporter), "scheduled", "--tier", tier],
@@ -77,37 +77,42 @@ def run(sha, tier, output):
                 gate = dict(id=row["id"], status="INCOMPLETE", command=row["command"],
                             tools=row["tools"], seed=row["seed"], resources={}, controls=[], log=log.name)
                 record["gates"].append(gate)
-                began = time.monotonic()
-                # The shared helper owns acquisition/release; gate commands inherit the held slot.
-                command = ["nix", "develop", "--command", "bash", str(ROOT / "scripts/checks/scheduled/with_slot.sh"),
-                           str(row["budget_seconds"]), *row["command"]]
-                with log.open("w") as stream:
-                    outcome = call(command, cwd=checkout, stdout=stream, stderr=subprocess.STDOUT,
-                                   timeout=row["budget_seconds"] * 3 + 180)
-                gate["resources"] = {"wall_seconds": time.monotonic() - began, "exit_code": outcome.returncode}
-                gate["status"] = "PASS" if outcome.returncode == 0 else "INCOMPLETE" if outcome.returncode == 124 else "FAIL"
-                for control in row["controls"]:
-                    require(isinstance(control["command"], list) and control["command"], "invalid control command")
-                    require(isinstance(control["diagnostic"], str) and control["diagnostic"], "missing exact control diagnostic")
-                    control_run = call(["nix", "develop", "--command", "bash", str(ROOT / "scripts/checks/scheduled/with_slot.sh"),
-                                        str(row["budget_seconds"]), *control["command"]], cwd=checkout,
-                                       capture_output=True, text=True, timeout=row["budget_seconds"] * 3 + 180)
-                    diagnostic = (control_run.stdout + control_run.stderr).strip()
-                    passed = control_run.returncode == control["exit_code"] and control_run.returncode not in (0, 124) and diagnostic == control["diagnostic"]
-                    gate["controls"].append(dict(id=control["id"], status="PASS" if passed else "FAIL", diagnostic=diagnostic))
-                    if not passed:
-                        gate["status"] = "FAIL"
-            statuses = {g["status"] for g in record["gates"]}
-            record["status"] = "FAIL" if "FAIL" in statuses else "INCOMPLETE" if "INCOMPLETE" in statuses else "PASS"
-            record["conclusion"] = {"PASS": "success", "FAIL": "failure", "INCOMPLETE": "incomplete"}[record["status"]]
+                try:
+                    began = time.monotonic()
+                    # The shared helper owns acquisition/release; gate commands inherit the held slot.
+                    command = ["nix", "develop", "--command", "bash", str(ROOT / "scripts/checks/scheduled/with_slot.sh"),
+                               str(row["budget_seconds"]), *row["command"]]
+                    with log.open("w") as stream:
+                        outcome = call(command, cwd=checkout, stdout=stream, stderr=subprocess.STDOUT,
+                                       timeout=row["budget_seconds"] * 3 + 180)
+                    gate["resources"] = {"wall_seconds": time.monotonic() - began, "exit_code": outcome.returncode}
+                    gate["status"] = "PASS" if outcome.returncode == 0 else "INCOMPLETE" if outcome.returncode == 125 else "FAIL"
+                    for control in row["controls"]:
+                        require(isinstance(control["command"], list) and control["command"], "invalid control command")
+                        require(isinstance(control["diagnostic"], str) and control["diagnostic"], "missing exact control diagnostic")
+                        control_run = call(["nix", "develop", "--command", "bash", str(ROOT / "scripts/checks/scheduled/with_slot.sh"),
+                                            str(row["budget_seconds"]), *control["command"]], cwd=checkout,
+                                           capture_output=True, text=True, timeout=row["budget_seconds"] * 3 + 180)
+                        diagnostic = (control_run.stdout + control_run.stderr).strip()
+                        passed = control_run.returncode == control["exit_code"] and control_run.returncode not in (0, 125) and diagnostic == control["diagnostic"]
+                        status = "PASS" if passed else "INCOMPLETE" if control_run.returncode == 125 else "FAIL"
+                        gate["controls"].append(dict(id=control["id"], status=status, diagnostic=diagnostic))
+                        if status == "FAIL" or (status == "INCOMPLETE" and gate["status"] != "FAIL"):
+                            gate["status"] = status
+                except (EvidenceError, OSError, ValueError, KeyError, subprocess.SubprocessError) as error:
+                    gate["error"] = str(error)
+                    if gate["status"] != "FAIL":
+                        gate["status"] = "INCOMPLETE"
         except (EvidenceError, OSError, ValueError, KeyError, subprocess.SubprocessError) as error:
             (output / "incomplete.log").write_text(str(error) + "\n")
             print(error, file=sys.stderr)
             # A dependency failure is evidence about availability, never a dummy passed gate.
             record["gates"].append(dict(id="scheduler-dependencies", status="INCOMPLETE", command=[],
                                        tools={}, seed=None, resources={}, controls=[], log="incomplete.log"))
+    statuses = {g["status"] for g in record["gates"]}
+    record["status"] = "FAIL" if "FAIL" in statuses else "INCOMPLETE" if "INCOMPLETE" in statuses else "PASS"
+    record["conclusion"] = {"PASS": "success", "FAIL": "failure", "INCOMPLETE": "incomplete"}[record["status"]]
     record["completed"] = now()
-    validate(record, sha, tier, runners)
     (output / "index.json").write_text(json.dumps(record, sort_keys=True) + "\n")
     return 0 if record["status"] == "PASS" else 1
 
