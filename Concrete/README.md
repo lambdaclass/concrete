@@ -579,7 +579,7 @@ The CLI is `concrete facts FILE [FN]` and `concrete build FILE -o OUT` (owner, 2
    An in-process leg also compares `BIR.behaviour b` with LCB's own evaluator on the emitted body, an executable cross-check of `emit_correct`.
 6a. **AArch64:** a GitHub-hosted AArch64 macOS job (`macos-15`) builds the LCB output for `aarch64-macos`, runs gates 4 and 6 there natively, and compares against Lean. LLVM-native also runs there, as a third cross-check. Gates 4 and 6 for x86-64 run on concrete-ci-2.
 7. **Certificates:** the kernel checks every acceptance and refusal certificate, with measured budgets.
-8. **Reproducibility** (implemented, `scripts/checks/compiler/slice0_repro.sh`): two independent builds give byte-identical outputs at every stage, on each target, and GitHub-hosted `ubuntu-24.04` and concrete-ci-2 give identical Linux manifests after their runner provenance is verified. See [Reproducible builds](#reproducible-builds-owner-2026-11-07).
+8. **Reproducibility** (implemented, `scripts/checks/compiler/slice0_repro.sh`): the gate requires byte-identical outputs from two independent builds on each target. CI additionally requires matching x86-64 Linux manifests from GitHub-hosted `ubuntu-24.04` and concrete-ci-2 after verifying runner provenance; this comparison failed in run 42495924019 (ISS-0031), so cross-machine executable reproducibility remains to be established by passing branch CI. See [Reproducible builds](#reproducible-builds-owner-2026-11-07).
 9. **Trusted base** (owner, 2026-11-07): a golden test that `concrete facts` prints exactly the spec's premise list, so a premise added, removed or reworded anywhere fails until the golden is updated with it. Implemented provisionally in `scripts/checks/compiler/slice0_trusted_base.sh`: until `concrete facts` exists, `scripts/checks/compiler/slice0_trusted_base.lean` prints `Premises.report`: the premise registry `Concrete/Premises.lean`, the sorted axioms of each headline theorem (`Premises.theorems`) and each axiom's type; the gate appends the Lean toolchain and the Lake pins, and the result must equal `tests/golden/slice0_trusted_base.txt` byte for byte. The README's open-premise table must equal the registry's rendering (`Premises.tableRow`). Controls cover the comparison, a failing printer, the axiom collection and a drifted table. The statements are text until `FrontendPremises` and `NativePremises` land as Lean structures; each entry then names its field.
 10. **Sanitizers** (owner, 2026-11-07; UBSan dropped by the owner, 2026-11-08; implemented in `scripts/checks/compiler/slice0_artifacts.sh`): every LLVM example also runs built with ASan in CI, and must give the same observation with no sanitizer report. ASan instruments only functions marked `sanitize_address`, which clang's C front end adds and the printed IR lacks, so the sanitizer build adds it to every definition (`slice0_native.sh sanitize`); a control body with an out-of-bounds load must be reported. There is no UBSan leg: UBSan's checks are inserted by clang's C front end, so on LLVM IR input it checks nothing. No C is compiled in slice 0, and the LLVM-level undefined behaviour of the printed IR (poison, `unreachable`) stays P_print's.
 11. **Binary size** (owner, 2026-11-07; implemented, same script): the size of each example's executable (bytes and text size, pinned `llvm-size`), per backend and target, is recorded per run in `sizes.tsv`, uploaded with the job. Report-only: it never fails a run. **Compile time** (owner, 2026-11-08; same script, report-only): each example's emit step (the Lean emitter, Lean start-up included) and native step (clang and LCB's command line) in wall-clock milliseconds, next to its budget (the step's time bound), in `compile_times.tsv`.
@@ -707,8 +707,17 @@ byte, a missing artifact and a differing inventory. The slice-0 front end is not
 this gate starts at the hand-written BIR contract.
 
 Both native gates use `scripts/checks/lib/slice0_native.sh` (a build helper, not a gate): the Nix-pinned clang 21 (`CONCRETE_SLICE0_CLANG`; the
-shell's general `clang` is unchanged), an environment reduced to `PATH`, `HOME` and `TMPDIR`
-(reduced, not hermetic), fixed relative object names and link order, epoch 1, UTC/C locale, no
+shell's general `clang` is unchanged), with a flake-owned compiler/linker/sysroot closure and an
+explicit wrapper environment (fixed tool PATH, Nix store and purity policy, build directory and
+TMPDIR; no inherited flags). Every link, including control and ASan links, checks its consumed-input
+trace against that closure and checks loader and runtime search paths before accepting the executable.
+Build identity records the policy and sorted closure digests. Host-layout controls plant a libc
+symlink, change cwd/TMPDIR and inject ambient search flags; all executable hashes must remain equal,
+and a host RUNPATH must be refused. Linux startup objects, libc, GCC runtime, compiler runtime and
+loader belong to the compiler's pinned Nix closure. macOS uses the pinned SDK and linker; its fixed
+`/usr/lib/dyld` ABI and SDK-backed OS dylib install names refer to macOS at runtime. This is a reduced,
+not hermetic whole build: Lake/Lean and executable execution are outside a Nix sandbox, and macOS
+runtime libraries belong to the host OS. The native policy uses fixed relative object names and link order, epoch 1, UTC/C locale, no
 debug information, path prefix maps, and no ELF build ID or Mach-O UUID (`ZERO_AR_DATE=1` on
 both paths). The printers traverse ordered lists/arrays (including stable first-occurrence
 intrinsic deduplication); site paths are project-relative source data. They emit no clock,

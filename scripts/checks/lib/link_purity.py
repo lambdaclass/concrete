@@ -43,15 +43,31 @@ if not objects.issubset(seen):
 if sys.platform == 'darwin':
     tool = os.environ['CONCRETE_SLICE0_LLVM'] + '/llvm-objdump'
     headers = subprocess.check_output([tool, '--macho', '--private-headers', exe], text=True)
-    # dyld is supplied by macOS, not Nix. Its fixed OS ABI path is an explicit
-    # platform exception; SDK stubs and all linked inputs still belong to closure.
-    for path in re.findall(r'^\s*(?:name|path) (\S+) \(offset', headers, re.M):
-        if path == '/usr/lib/dyld':
+    # Validate each load command separately: OS ABI install names are allowed
+    # only if represented by a stub in the declared SDK. RPATH has no exception.
+    for block in re.split(r'Load command \d+', headers)[1:]:
+        command = re.search(r'^\s*cmd (LC_\w+)', block, re.M)
+        entry = re.search(r'^\s*(?:name|path) (\S+) \(offset', block, re.M)
+        if not command or not entry:
             continue
-        # SDK dylib install names refer to the OS shared cache, not host link inputs.
-        if path.startswith(('/usr/lib/', '/System/Library/')):
-            continue
+        path = entry[1]
+        if command[1] == 'LC_LOAD_DYLINKER' and path == '/usr/lib/dyld':
+            continue  # fixed Darwin kernel ABI, not a link-time host input
+        if command[1] in ('LC_LOAD_DYLIB', 'LC_LOAD_WEAK_DYLIB', 'LC_REEXPORT_DYLIB'):
+            sdk = Path(os.environ['CONCRETE_SLICE0_SYSROOT'])
+            stub = sdk / path.lstrip('/')
+            if path.startswith(('/usr/lib/', '/System/Library/')):
+                candidates = [stub, stub.with_suffix('.tbd') if stub.suffix == '.dylib'
+                              else Path(str(stub) + '.tbd')]
+                for candidate in candidates:
+                    if candidate.is_file():
+                        allowed(str(candidate))
+                        break
+                else:
+                    sys.exit('link purity: install name absent from SDK: ' + path)
+                continue
         allowed(path)
+
 else:
     tool = os.environ['CONCRETE_SLICE0_LINKER_BIN'] + '/readelf'
     headers = subprocess.check_output([tool, '-l', '-d', exe], text=True)

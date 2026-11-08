@@ -78,6 +78,13 @@ variable off before taking the servers down.
 
 ### CI2 reproducibility attestation (ISS-0029)
 
+This route enforces a comparison, not a claim that it has passed: run 42495924019 at
+688e10a86 failed on linked executables (ISS-0031). The native toolchain now declares its
+Nix closure and validates link inputs and runtime paths. Passing branch CI on both
+Ubuntu and concrete-ci-2 is required to establish cross-machine executable equality.
+macOS is checked within its own target; it is never compared with Linux.
+
+
 Outside `pull_request`, the `linux-ci2` reproducibility leg requires exactly the labels
 `self-hosted`, `linux`, `x64`, `concrete` and `concrete-ci-2`. It therefore uses only the heavy
 runners provisioned on concrete-ci-2, not another machine carrying only the general `concrete`
