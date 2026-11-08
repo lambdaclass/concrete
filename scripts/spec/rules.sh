@@ -180,15 +180,19 @@ $END" "$EXA
 [ "$RC" = 1 ] && [[ "$OUT" == *"malformed rule citation"* ]] && ok "control: a malformed citation fails" \
   || no "control: malformed citation not reported: $OUT"
 fixture rawattr "$GOOD
-$END" '/-- Accepted (rule `R.ok`). -/
+$END" "$EXA"'
+/-- Accepted (rule `R.ok`). -/
 @[deprecated r#"a " ] example"#]
-def a : True := trivial
-
+def a : True := trivial'
+[ "$RC" = 1 ] && [[ "$OUT" == *"outside an example"* ]] \
+  && ok "control: a raw string in an attribute cannot stand in for an example" || no "control: raw-string attribute example not reported: $OUT"
+fixture qattr "$GOOD
+$END" "$EXA"'
 /-- Refused (rule `R.ok`). -/
 @[deprecated «x ] example»]
 def b : True := trivial'
 [ "$RC" = 1 ] && [[ "$OUT" == *"outside an example"* ]] \
-  && ok "control: a raw string or quoted name in an attribute cannot stand in for an example" || no "control: raw-string attribute example not reported: $OUT"
+  && ok "control: a quoted name in an attribute cannot stand in for an example" || no "control: quoted-name attribute example not reported: $OUT"
 fixture cmtattr "$GOOD
 $END" '/-- Accepted (rule `R.ok`). -/
 @[simp /- ] example -/]
