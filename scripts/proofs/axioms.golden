@@ -1254,6 +1254,7 @@ ConcreteSpec.Core.Ghost.drive.eq_2	propext
 ConcreteSpec.Core.Ghost.drive.eq_3	propext
 ConcreteSpec.Core.Ghost.drive.eq_def	propext
 ConcreteSpec.Core.Ghost.drive_steps	propext
+ConcreteSpec.Core.Ghost.drive_steps_result	propext
 ConcreteSpec.Core.Ghost.erase.eq_1	
 ConcreteSpec.Core.Ghost.erasePiece.eq_1	
 ConcreteSpec.Core.Ghost.erasePiece.eq_2	
@@ -1573,6 +1574,8 @@ ConcreteSpec.Core.TrapKind.name_injective	Classical.choice Quot.sound propext
 ConcreteSpec.Core.TrapKind.ofNat_ctorIdx	
 ConcreteSpec.Core.TrapKind.outOfBounds.sizeOf_spec	
 ConcreteSpec.Core.TrapKind.overflow.sizeOf_spec	
+ConcreteSpec.Core.Vacuity.evidence._proof_1	
+ConcreteSpec.Core.Vacuity.swap._proof_1	
 ConcreteSpec.Core.Var.mk.inj	
 ConcreteSpec.Core.Var.mk.injEq	propext
 ConcreteSpec.Core.Var.mk.sizeOf_spec	
