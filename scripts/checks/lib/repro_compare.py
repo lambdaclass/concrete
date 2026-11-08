@@ -5,8 +5,8 @@ usage: repro_compare.py SIDE_A SIDE_B IDENTITY [MANIFEST]
 
 Each SIDE holds `names` (the example inventory) and `out/NAME/STAGE` for every stage. Every file
 is read on both sides: a missing file, a differing inventory or one differing byte fails. With
-MANIFEST, writes runner provenance and the identity lines followed by one `SHA256  NAME/STAGE`
-line per artifact.
+MANIFEST, writes repository and runner provenance and the identity lines followed by one
+`SHA256  NAME/STAGE` line per artifact.
 """
 import hashlib
 import os
@@ -40,6 +40,7 @@ def main(argv):
         print(f'ok slice0_repro: {name}: all stages byte-identical')
     if len(argv) == 5:
         provenance = [
+            f"github_repository={os.environ.get('CONCRETE_REPRO_GITHUB_REPOSITORY', 'unknown')}",
             f"runner_environment={os.environ.get('CONCRETE_REPRO_RUNNER_ENVIRONMENT', 'unknown')}",
             f"runner_name={os.environ.get('CONCRETE_REPRO_RUNNER_NAME', 'unknown')}",
         ]

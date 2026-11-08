@@ -46,7 +46,8 @@ for f in "$WF_DIR"/*.yml "$WF_DIR"/*.yaml; do
 done
 
 echo "=== cross-machine reproducibility (ISS-0029) ==="
-if python3 -I - "$WF_DIR/lean_action_ci.yml" "$GATE_TMP/compare-linux.sh" <<'PY'
+if python3 -I scripts/checks/lib/repro_guard_check.py "$WF_DIR/lean_action_ci.yml" &&
+  python3 -I - "$WF_DIR/lean_action_ci.yml" "$GATE_TMP/compare-linux.sh" <<'PY'
 import sys
 from pathlib import Path
 import yaml
@@ -66,24 +67,19 @@ require(set(by_id) == {"linux-github", "linux-ci2", "macos"},
 require(by_id["linux-github"]["runner"] == "ubuntu-24.04",
         "linux-github is not GitHub-hosted ubuntu-24.04")
 ci2_runner = by_id["linux-ci2"]["runner"]
-require(ci2_runner == '${{ github.event_name != \'pull_request\' && fromJSON(\'["self-hosted","linux","x64","concrete"]\') || \'ubuntu-24.04\' }}',
-        f"linux-ci2 does not exclude self-hosted runners on pull_request: {ci2_runner}")
+require(ci2_runner == '${{ github.event_name != \'pull_request\' && fromJSON(\'["self-hosted","linux","x64","concrete","concrete-ci-2"]\') || \'ubuntu-24.04\' }}',
+        f"linux-ci2 does not select only provisioned concrete-ci-2 runners outside pull_request: {ci2_runner}")
 require(by_id["linux-ci2"]["machine"] == "concrete-ci-2",
         "linux-ci2 does not record its machine")
 require(by_id["macos"]["runner"] == "macos-15", "the macOS leg changed")
 require(repro["runs-on"] == "${{ matrix.runner }}", "reproducibility does not use matrix.runner")
-guard = repro["steps"][0]
-require(guard.get("if") == "matrix.machine == 'concrete-ci-2' && runner.environment != 'self-hosted'",
-        "the first step does not guard a non-self-hosted concrete-ci-2 leg")
-guard_run = guard.get("run", "")
-require("exit 1" in guard_run and
-        all(text in guard_run for text in ("concrete-ci-2", "self-hosted", "pull_request")),
-        "the concrete-ci-2 substitute guard does not fail with a clear message")
 nix = [step for step in repro["steps"] if step.get("uses") == "cachix/install-nix-action@v31"]
 require(len(nix) == 1 and nix[0].get("if") == "runner.environment != 'self-hosted'",
         "Nix installation is not GitHub-hosted-only")
 build = next(step for step in repro["steps"]
              if "slice0_repro.sh" in step.get("run", ""))
+require(build["env"]["CONCRETE_REPRO_GITHUB_REPOSITORY"] == "${{ github.repository }}",
+        "github.repository is not recorded")
 require(build["env"]["CONCRETE_REPRO_RUNNER_ENVIRONMENT"] == "${{ runner.environment }}",
         "runner.environment is not recorded")
 require(build["env"]["CONCRETE_REPRO_RUNNER_NAME"] == "${{ runner.name }}",
@@ -104,14 +100,58 @@ for text in ("reproducibility-linux-github/manifest.txt",
 Path(output).write_text(run)
 PY
 then
-  echo "  ok   workflow excludes self-hosted ci2 on pull_request and refuses substitutes"; PASS=$((PASS+1))
+  echo "  ok   workflow uses dedicated ci2 labels, records repository and behaviorally refuses substitutes"; PASS=$((PASS+1))
 else
-  echo "  FAIL workflow reproducibility structure"; FAIL=$((FAIL+1))
+  echo "  FAIL workflow reproducibility structure or substitute guard"; FAIL=$((FAIL+1))
 fi
 
-write_manifest() { # PATH ENVIRONMENT RUNNER_NAME HASH
+guard_mutation_control() { # LABEL KIND EXPECTED_ERROR
+  local label=$1 kind=$2 expected=$3
+  local mutated="$GATE_TMP/guard-$label.yml" output="$GATE_TMP/guard-$label.out" rc=0
+  if ! python3 -I - "$WF_DIR/lean_action_ci.yml" "$mutated" "$kind" <<'PY'
+import copy
+import sys
+from pathlib import Path
+import yaml
+
+source, output, kind = sys.argv[1:]
+workflow = copy.deepcopy(yaml.safe_load(Path(source).read_text()))
+steps = workflow["jobs"]["reproducibility"]["steps"]
+guard = next((step for step in steps if step.get("name") == "Refuse a substitute for concrete-ci-2"), None)
+if kind == "removed":
+    del steps[0]
+elif kind == "moved":
+    steps.insert(1, steps.pop(0))
+elif kind == "exit0":
+    guard["run"] = guard["run"].replace("exit 1", "exit 0 # exit 1")
+elif kind == "inverted":
+    guard["if"] = "!(" + guard["if"] + ")"
+else:
+    raise ValueError(kind)
+Path(output).write_text(yaml.safe_dump(workflow, sort_keys=False))
+PY
+  then
+    echo "  FAIL guard mutation $label could not be generated"; FAIL=$((FAIL+1)); return
+  fi
+  python3 -I scripts/checks/lib/repro_guard_check.py "$mutated" >"$output" 2>&1 || rc=$?
+  if [ "$rc" != 0 ] && has_match -F "$expected" <"$output"; then
+    echo "  ok   guard mutation $label is refused"; PASS=$((PASS+1))
+  else
+    echo "  FAIL guard mutation $label was not refused as '$expected' (rc=$rc)"
+    sed 's/^/         /' "$output"; FAIL=$((FAIL+1))
+  fi
+}
+
+guard_mutation_control body-exit0 exit0 "exited 0"
+guard_mutation_control condition-inverted inverted "guard enabled="
+guard_mutation_control guard-removed removed "exactly one"
+guard_mutation_control guard-after-checkout moved "before checkout"
+
+write_manifest() { # PATH ENVIRONMENT RUNNER_NAME HASH [REPOSITORY]
+  local repository=${5:-unbalancedparentheses/concrete2}
   mkdir -p "${1%/*}"
   {
+    [ "$repository" = none ] || printf 'github_repository=%s\n' "$repository"
     printf 'runner_environment=%s\n' "$2"
     printf 'runner_name=%s\n' "$3"
     printf 'compiler_commit=0123456789abcdef\n'
@@ -120,16 +160,20 @@ write_manifest() { # PATH ENVIRONMENT RUNNER_NAME HASH
   } > "$1"
 }
 
-compare_control() { # LABEL SECOND_ENVIRONMENT SECOND_RUNNER_NAME SECOND_HASH SECOND_KIND EXPECTED_ERROR
+compare_control() { # LABEL SECOND_ENVIRONMENT SECOND_RUNNER_NAME SECOND_HASH SECOND_KIND EXPECTED_ERROR [CI2_REPOSITORY [GITHUB_REPOSITORY]]
   local label=$1 env=$2 name=$3 hash=$4 kind=$5 expected=$6
+  local ci2_repository=${7:-unbalancedparentheses/concrete2}
+  local github_repository=${8:-unbalancedparentheses/concrete2}
   local d="$GATE_TMP/repro-$label" rc=0
   mkdir -p "$d/scripts/checks/lib"
-  cp scripts/checks/lib/repro_manifest_compare.py "$d/scripts/checks/lib/"
+  cp scripts/checks/lib/repro_manifest_compare.py scripts/checks/lib/ci2_runners.txt "$d/scripts/checks/lib/"
+  [ "$kind" != missing-inventory ] || rm "$d/scripts/checks/lib/ci2_runners.txt"
   write_manifest "$d/manifests/reproducibility-linux-github/manifest.txt" \
-    github-hosted github-actions aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+    github-hosted github-actions aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa \
+    "$github_repository"
   if [ "$kind" != missing ]; then
     write_manifest "$d/manifests/reproducibility-linux-ci2/manifest.txt" \
-      "$env" "$name" "$hash"
+      "$env" "$name" "$hash" "$ci2_repository"
   fi
   (cd "$d" && bash "$GATE_TMP/compare-linux.sh") > "$d/output" 2>&1 || rc=$?
   if [ -z "$expected" ]; then
@@ -150,11 +194,26 @@ if [ -s "$GATE_TMP/compare-linux.sh" ]; then
   a=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
   b=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
   compare_control identical self-hosted concrete-ci-2-gha1 "$a" normal ""
+  compare_control lambdaclass self-hosted concrete-ci-2-gha4 "$a" normal "" \
+    lambdaclass/concrete lambdaclass/concrete
   compare_control differing-ci2 self-hosted concrete-ci-2-gha1 "$b" normal "manifests differ"
-  compare_control wrong-ci2-name self-hosted concrete-ci-2-worker "$a" normal \
-    "expected runner_name matching ^concrete-ci-2-gha[0-9]+$"
+  compare_control unregistered-pattern-name self-hosted concrete-ci-2-gha999 "$a" normal \
+    "runner_name=concrete-ci-2-gha999 is not eligible for unbalancedparentheses/concrete2"
+  compare_control wrong-repository-runner self-hosted concrete-ci-2-gha4 "$a" normal \
+    "runner_name=concrete-ci-2-gha4 is not eligible for unbalancedparentheses/concrete2"
+  compare_control light-pool-runner self-hosted concrete-ci-2-gha7 "$a" normal \
+    "runner_name=concrete-ci-2-gha7 is not eligible for lambdaclass/concrete" \
+    lambdaclass/concrete lambdaclass/concrete
+  compare_control repository-mismatch self-hosted concrete-ci-2-gha4 "$a" normal \
+    "github.repository differs" lambdaclass/concrete
+  compare_control unknown-repository self-hosted concrete-ci-2-gha1 "$a" normal \
+    "no concrete-ci-2 runner inventory for example/unknown" example/unknown example/unknown
   compare_control two-github github-hosted concrete-ci-2-gha1 "$a" normal \
     "expected runner_environment=self-hosted"
+  compare_control missing-repository self-hosted concrete-ci-2-gha1 "$a" normal \
+    "missing github_repository" none
+  compare_control missing-inventory self-hosted concrete-ci-2-gha1 "$a" missing-inventory \
+    "cannot read runner inventory"
   compare_control missing-manifest self-hosted concrete-ci-2-gha1 "$a" missing "cannot read manifest"
   compare_control missing-hashes self-hosted concrete-ci-2-gha1 none normal "missing lcb.exe SHA-256"
 fi
