@@ -4,6 +4,7 @@ import contextlib
 import importlib.util
 import io
 import os
+import subprocess
 from pathlib import Path
 import tempfile
 import unittest
@@ -36,6 +37,29 @@ class TrustLexer(unittest.TestCase):
                     with contextlib.redirect_stdout(io.StringIO()):
                         lexer.examples(tmp, str(Path(tmp) / "out"), ["Spoof.lean"])
                     self.assertIn("noncomputable def", (Path(tmp) / "out/Spoof.lean").read_text())
+
+    def test_lean_accepts_interpolation_boundaries(self):
+        # Differential witness: these are Lean terms, not merely invented lexer inputs.
+        fixtures = ["import Lean\n"]
+        for index, (prefix, gap) in enumerate(
+                (p, g) for p in ("s!", "m!", "f!")
+                for g in (" ", "\n", "/- nested /- comment -/ -/", "-- comment\n")):
+            fixtures.append(f'''namespace Witness{index}
+ def a := {prefix}{gap}"{{("/-")}}"
+ set_option maxRecDepth 100000 in
+ theorem bad : True := by decide +kernel
+ example : False := by sorry
+ def b := {prefix}{gap}"{{("-/")}}"
+end Witness{index}
+'''.replace("\n ", "\n"))
+        source = "".join(fixtures)
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "Witness.lean"
+            path.write_text(source)
+            result = subprocess.run(["lake", "env", "lean", str(path)],
+                                    text=True, capture_output=True, check=False)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(lexer.count_examples(source), 12)
 
     def test_ambiguous_or_invalid_literals_fail_closed(self):
         for source in ('def x := "{--"', 'def x := custom "{("/-")}"',

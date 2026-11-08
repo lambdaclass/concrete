@@ -87,15 +87,13 @@ W=$(python3 "$PROOFS_DIR/lean_lex.py" scan-compiler "$BANNED_WORD_RE|$EXTENSION_
 # the headline theorem registry. The compiler root must import every source module.
 "$LAKE" build Concrete > "$TMP/compiler-build.log" 2>&1 \
   || { cat "$TMP/compiler-build.log" >&2; no "compiler build failed"; finish; }
-sed 's/^import ConcreteSpec$/import Concrete/; s/`ConcreteSpec/`Concrete/g' \
-  "$ENUMERATOR" > "$TMP/compiler-enumerator.lean"
-PROOF_MODE=constants "$LAKE" env lean "$TMP/compiler-enumerator.lean" > "$TMP/compiler-consts.tsv" \
+PROOF_PKG=Concrete PROOF_MODE=constants "$LAKE" env lean "$ENUMERATOR" > "$TMP/compiler-consts.tsv" \
   || { no "compiler constant enumeration failed"; finish; }
 B=$(banned "$TMP/compiler-consts.tsv"); A=$(declared "$TMP/compiler-consts.tsv")
 [ -s "$TMP/compiler-consts.tsv" ] && [ -z "$B$A" ] \
   && ok "all compiler constants obey the axiom ban" \
   || no "compiler banned dependencies: $B; declared axioms: $A"
-PROOF_MODE=imported "$LAKE" env lean "$TMP/compiler-enumerator.lean" > "$TMP/compiler-imported.txt" \
+PROOF_PKG=Concrete PROOF_MODE=imported "$LAKE" env lean "$ENUMERATOR" > "$TMP/compiler-imported.txt" \
   || { no "compiler import enumeration failed"; finish; }
 { echo Concrete.lean; find Concrete -name '*.lean'; } | sed -E 's#\.lean$##; s#/#.#g' | sort -u > "$TMP/compiler-modules.txt"
 GAP=$(comm -23 "$TMP/compiler-modules.txt" <(sort -u "$TMP/compiler-imported.txt"))
@@ -166,7 +164,7 @@ EX="$TMP/ex"; mkdir -p "$EX"
 cp lakefile.toml lean-toolchain lake-manifest.json "$EX"/ || { no "could not copy the Lake files"; finish; }
 [ -d .lake/build ] && mkdir -p "$EX/.lake" && cp -r .lake/build "$EX/.lake/"
 sed -i 's/^warningAsError = true$/warningAsError = false/' "$EX/lakefile.toml"
-sed '/^import ConcreteSpec$/a import Concrete' "$ENUMERATOR" > "$TMP/examples-enumerator.lean"
+cp "$ENUMERATOR" "$TMP/examples-enumerator.lean"
 NEX=$(python3 "$PROOFS_DIR/lean_lex.py" examples . "$EX" "${SRC[@]}" "${COMPILER_SRC[@]}") \
   || { no "the examples could not be rewritten: $NEX"; finish; }
 (cd "$EX" && "$LAKE" build ConcreteSpec Concrete) > "$TMP/ex-build.log" 2>&1 \
@@ -185,6 +183,36 @@ NE=$(grep -c . "$TMP/examples.tsv"); X=$(nonstandard "$TMP/examples.tsv")
   || no "examples: $NEX rewritten, $NE in the environment; on other axioms: $(echo $X | cut -c1-300)"
 
 echo "=== negative controls ==="
+python3 "$PROOFS_DIR/test_lean_lex.py" > "$TMP/lexer-tests.log" 2>&1; RC=$?
+[ "$RC" = 0 ] && ok "control: literal boundaries, interpolation spoofing and compiler module graph regressions" \
+  || { cat "$TMP/lexer-tests.log" >&2; no "lexer regression controls (rc=$RC)"; }
+# Exercise the compiler CLI itself: these must be reported, even with an otherwise valid header.
+for body in 'import Std' 'import Lean.DoesNotExist' 'def bad : Nat := sorry' 'set_option maxRecDepth 100000'; do
+  printf 'import Concrete.Lex\n%s\n' "$body" > "$TMP/compiler-bad.lean"
+  W=$(python3 "$PROOFS_DIR/lean_lex.py" scan-compiler "$BANNED_WORD_RE|$EXTENSION_RE" "$TMP/compiler-bad.lean"); RC=$?
+  [ "$RC" = 0 ] && [[ "$W" == *"$body"* ]] \
+    && ok "control: compiler scan reports $body" || no "compiler scan missed $body (rc=$RC): $W"
+done
+# A private synthetic build tests deletion and preservation for both library roots and IR.
+ORPHAN="$TMP/orphan-build"
+for dir in lib/lean ir; do
+  for pkg in ConcreteSpec Concrete; do
+    mkdir -p "$ORPHAN/$dir/$pkg"
+    for ext in olean ilean trace olean.hash c; do
+      touch "$ORPHAN/$dir/$pkg/Gone.$ext" "$ORPHAN/$dir/$pkg.$ext"
+    done
+  done
+  mkdir -p "$ORPHAN/$dir/Concrete/Lex" "$ORPHAN/$dir/Other"
+  touch "$ORPHAN/$dir/Concrete/Lex.olean" "$ORPHAN/$dir/Other/Gone.olean"
+done
+prune_orphans "$ORPHAN" > "$TMP/pruned.log"; RC=$?
+REMAIN=$(find "$ORPHAN" -type f -path '*/Concrete*/Gone.*')
+[ "$RC" = 0 ] && [ -z "$REMAIN" ] \
+  && [ -f "$ORPHAN/lib/lean/Concrete.olean" ] && [ -f "$ORPHAN/ir/ConcreteSpec.c" ] \
+  && [ -f "$ORPHAN/lib/lean/Concrete/Lex.olean" ] && [ -f "$ORPHAN/ir/Other/Gone.olean" ] \
+  && ok "control: orphan spec/compiler artifacts are pruned, live and foreign artifacts retained" \
+  || no "orphan pruning control (rc=$RC): remaining $REMAIN"
+
 # control NAME BODY AXIOM-ERE WHAT: the declarations in BODY must be refused at ConcreteSpecControl.NAME
 control() {
   printf '%s\n' "$2" > "$TMP/c-$1.lean"
@@ -290,11 +318,7 @@ for v in short:"not pinned to a full commit" branch:"not pinned to a full commit
   case "$L" in *"${v#*:}"*) ok "control: a lakefile whose dependency or library set is changed (${v%%:*}) is refused ($L)" ;;
     *) no "control: the ${v%%:*} lakefile was not refused for '${v#*:}': '$L'" ;; esac
 done
-W=$(scan "$TMP/src/Brace.lean"); RC=$?
-[ "$RC" = 0 ] && [[ "$W" == *sorry* ]] \
-  && ok "control: ordinary string braces are accepted and following banned code is found" \
-  || no "control: plain string braces hid banned code: $W"
-for f in missing Open Quote; do
+for f in missing Open Quote Brace; do
   scan "$TMP/src/$f.lean" > /dev/null 2>&1; RC=$?
   [ "$RC" != 0 ] && ok "control: a source the scan cannot read or lex ($f) fails it (rc=$RC)" \
     || no "control: the scan of $f exited 0"
