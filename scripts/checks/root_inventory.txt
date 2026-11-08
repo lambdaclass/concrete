@@ -36,6 +36,7 @@ docs/SELF_HOSTED_RUNNERS.md
 docs/archive
 docs/decisions.md
 docs/proposals
+scripts/agent
 scripts/checks
 scripts/land
 scripts/oracle
