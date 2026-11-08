@@ -1,0 +1,49 @@
+name: Backend scaling
+
+on:
+  pull_request:
+    paths:
+      - 'Concrete/**'
+      - 'scripts/checks/compiler/lcb_numbering*'
+      - '.github/workflows/backend_scaling.yml'
+      - 'lakefile.toml'
+      - 'lake-manifest.json'
+      - 'lean-toolchain'
+      - 'flake.nix'
+      - 'flake.lock'
+  schedule:
+    - cron: '43 3 * * 1'
+  workflow_dispatch:
+
+concurrency:
+  group: backend-scaling-${{ github.ref }}-${{ github.event_name }}
+  cancel-in-progress: false
+
+jobs:
+  numbering:
+    name: Prepared backend numbering
+    # Pull requests use GitHub-hosted machines; scheduled heavy legs may use the CI server.
+    runs-on: ${{ (github.event_name != 'pull_request' && vars.CONCRETE_SELF_HOSTED == 'true') && fromJSON('["self-hosted","linux","x64","concrete"]') || 'ubuntu-latest' }}
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Nix (GitHub-hosted only)
+        if: runner.environment != 'self-hosted'
+        uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+      - name: Cheap PR regressions or full weekly scaling and stack-depth checks
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          args=()
+          if [ "$EVENT_NAME" != pull_request ]; then args=(--full); fi
+          nix develop --command bash scripts/checks/compiler/lcb_numbering.sh "${args[@]}" 2>&1 | tee backend-scaling.tsv
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: backend-scaling-${{ github.sha }}
+          path: backend-scaling.tsv

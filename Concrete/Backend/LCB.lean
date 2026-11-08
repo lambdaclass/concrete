@@ -871,6 +871,8 @@ theorem adaptFast_eq (p : Program) : adaptFast p = adaptSpec p := by
   simp only [prepare_ok]
   cases hn : numberingOk p <;> simp [hblocks, bind, Except.bind, pure, Except.pure]
 
+theorem adapt_eq_spec (p : Program) : adapt p = adaptSpec p := adaptFast_eq p
+
 theorem emit_eq_spec (p : Program) : emit p = emitSpec p := by
   simp [emit, emitSpec, adapt, adaptFast_eq]
 

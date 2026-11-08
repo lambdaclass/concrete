@@ -161,6 +161,8 @@ theorem printFast_eq (p : Program) : printFast p = printSpec p := by
 
 def print (p : Program) : String := printFast p
 
+theorem print_eq_spec (p : Program) : print p = printSpec p := printFast_eq p
+
 /-- The whole LLVM module: the body and the runtime entry. -/
 def module (p : Program) : String := print p ++ "\n" ++ Runtime.llvm p.sites
 
