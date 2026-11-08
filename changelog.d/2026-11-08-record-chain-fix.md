@@ -33,3 +33,5 @@ The durable decision records are [the 29 picks](docs/decisions.md#decided-2026-1
 
 - Synchronize the open-question indexes with the task rows: gate-tier assignment is superseded by the coordinator-approved decision; K3’s allow-list versus R-0630’s ban and complementary suffix placement remain open for the owner. Qualify the Slice 5 and R-0493 scheduling clauses without choosing a placement.
 - Identify R-0558 as Phase T (T2) and correct its owner-clause punctuation.
+
+- Integrate the gate roadmap rows R-0667–R-0688, existing-owner extensions and queue placements with the complete record chain; link them from the gate-tier decision while preserving all open owner questions.
