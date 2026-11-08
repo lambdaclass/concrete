@@ -123,7 +123,7 @@ def main(argv):
             return 0
         if budget + kill_after > rem:
             kill_after = min(kill_after, max(0.05, rem * 0.25))
-            budget = max(0.05, rem - kill_after)
+            budget = min(budget, max(0.0, rem - kill_after))
 
     def cancel(sig, _frame):
         raise Cancelled(sig)
