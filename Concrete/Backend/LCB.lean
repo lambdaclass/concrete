@@ -189,12 +189,214 @@ def adapt (p : Program) : Except String Source.Function := do
   return { resultWidth := .word, parameters := #[],
            valueWidths := Array.replicate (valueCount p) .word, blocks := blocks.toArray }
 
+/-- The reference LCB emit, retained for the executable/reference equality. -/
+def emitSpec (p : Program) : Except String (Source.Function × SiteTable) := do
+  let f ← adapt p
+  return (f, p.sites)
+
+/-! ## Prepared numbering and predecessors -/
+
+structure InstNumberingData where
+  ids : List (Reg × Nat)
+  intermediates : List Nat
+  offsets : List Nat
+
+structure BlockNumberingData where
+  ids : List (Reg × Nat)
+  intermediates : List Nat
+  instOffsets : List Nat
+
+structure NumberingData where
+  ids : List (Reg × Nat)
+  intermediates : List Nat
+  blocks : List (Nat × List Nat)
+
+def instNumbering (base : Nat) : List Inst → InstNumberingData
+  | [] => ⟨[], [], []⟩
+  | ins :: rest =>
+    let tail := instNumbering (base + Inst.width ins) rest
+    ⟨(instDefs ins).map (fun (r, off) => (r, base + off)) ++ tail.ids,
+      (interOffsets ins).map (base + ·) ++ tail.intermediates, base :: tail.offsets⟩
+
+def blockNumbering (base : Nat) (b : Block) : BlockNumberingData :=
+  let tail := instNumbering (base + b.params.length) b.insts
+  ⟨(indexed b.params).map (fun (k, (r, _)) => (r, base + k)) ++ tail.ids,
+    tail.intermediates, tail.offsets⟩
+
+def numberingFrom (base : Nat) : List Block → NumberingData
+  | [] => ⟨[], [], []⟩
+  | b :: rest =>
+    let head := blockNumbering base b
+    let tail := numberingFrom (base + blockSize b) rest
+    ⟨head.ids ++ tail.ids, head.intermediates ++ tail.intermediates,
+      (base, head.instOffsets) :: tail.blocks⟩
+
+def numbering (p : Program) : NumberingData := numberingFrom 0 p.blocks
+
+/-- The same prepared data, expressed by the closed reference functions. -/
+def numberingSpec (p : Program) : NumberingData :=
+  ⟨ids p, intermediates p, (indexed p.blocks).map fun (j, b) =>
+    (blockBase p j, (indexed b.insts).map fun (i, _) => blockBase p j + instBase b i)⟩
+
+/-- One more than the largest register, including every malformed register. -/
+def regBound : List (Reg × Nat) → Nat
+  | [] => 0
+  | (r, _) :: rest => max (r + 1) (regBound rest)
+
+/-- Mark previously unseen natural numbers, refusing a duplicate or an out-of-bounds number. -/
+def markUnique (xs : List Nat) (a : Array Bool) : Option (Array Bool) :=
+  match xs with
+  | [] => some a
+  | x :: xs =>
+    if h : x < a.size then
+      if a[x] then none else markUnique xs (a.setIfInBounds x true)
+    else none
+
+def regCheck (ids : List (Reg × Nat)) : Bool :=
+  let regs := ids.map Prod.fst
+  (markUnique regs (Array.replicate (regBound ids) false)).isSome
+
+def slotInterCheck (slots inters : List Nat) (count : Nat) : Bool :=
+  match markUnique slots (Array.replicate count false) with
+  | none => false
+  | some a => inters.all fun m => if h : m < a.size then !a[m] else false
+
+def numberingOkFastData (data : NumberingData) (count : Nat) : Bool :=
+  regCheck data.ids && slotInterCheck (data.ids.map Prod.snd) data.intermediates count
+
+/-- Targeted incoming edges, before grouping by target. -/
+def targetedEdges (p : Program) : List (Nat × (Nat × List Operand)) :=
+  (indexed p.blocks).flatMap fun (k, b) =>
+    match b.term with
+    | .br t args => [(t, (k, args))]
+    | .condbr _ t ta e ea => [(t, (k, ta)), (e, (k, ea))]
+    | _ => []
+
+def incomingBound : List (Nat × (Nat × List Operand)) → Nat
+  | [] => 0
+  | e :: es => max (e.1 + 1) (incomingBound es)
+
+def addIncoming (es : List (Nat × (Nat × List Operand)))
+    (bs : Array (List (Nat × List Operand))) : Array (List (Nat × List Operand)) :=
+  match es with
+  | [] => bs
+  | e :: es =>
+    let bs := if h : e.1 < bs.size then bs.setIfInBounds e.1 (e.2 :: bs[e.1]) else bs
+    addIncoming es bs
+
+def incomingBuckets (p : Program) : Array (List (Nat × List Operand)) :=
+  let es := targetedEdges p
+  addIncoming es (Array.replicate (incomingBound es) [])
+
+def incomingBucket (bs : Array (List (Nat × List Operand))) (j : Nat) : List (Nat × List Operand) :=
+  (bs[j]?).getD []
+
+structure Prepared where
+  data : NumberingData
+  offsets : Array (Nat × Array Nat)
+  regs : Array (Option Nat)
+  incoming : Array (List (Nat × List Operand))
+  ok : Bool
+
+/-- Insert only an absent register, so the first definition wins exactly as in `List.lookup`. -/
+def addRegIds (ids : List (Reg × Nat)) (a : Array (Option Nat)) : Array (Option Nat) :=
+  match ids with
+  | [] => a
+  | (r, n) :: ids =>
+    let a := if h : r < a.size then
+      if a[r].isSome then a else a.setIfInBounds r (some n)
+    else a
+    addRegIds ids a
+
+def regTable (data : NumberingData) : Array (Option Nat) :=
+  addRegIds data.ids (Array.replicate (regBound data.ids) none)
+
+def blockOffset (prep : Prepared) (j : Nat) : Nat :=
+  (prep.offsets[j]?.map (·.1)).getD 0
+
+def instOffset (prep : Prepared) (j i : Nat) : Nat :=
+  ((prep.offsets[j]?.map (·.2)).getD #[])[i]?.getD 0
+
+def prepare (p : Program) : Prepared :=
+  let data := numbering p
+  { data, offsets := (data.blocks.map fun (base, offsets) => (base, offsets.toArray)).toArray,
+    regs := regTable data, incoming := incomingBuckets p,
+    ok := numberingOkFastData data (valueCount p) }
+
+def regIdFast (prep : Prepared) (r : Reg) : Option Nat := (prep.regs[r]?).getD none
+
+def idOfFast (prep : Prepared) (r : Reg) : Except String Nat :=
+  match regIdFast prep r with
+  | some n => .ok n
+  | none => .error s!"register %r{r} has no definition"
+
+def operandFast (prep : Prepared) : Operand → Except String Source.Operand
+  | .reg r => return .local (← idOfFast prep r)
+  | .imm _ v => return .literal (word v)
+
+def instFast (prep : Prepared) (n : Nat) : Inst → Except String (List Source.Instruction)
+  | .bin op t _ a b => do
+    unless inProfile t do throw s!"{repr t} is outside LCB's slice-0 profile"
+    let a ← operandFast prep a
+    let b ← operandFast prep b
+    return [ins n (.binary (opBinary op) a b),
+      ins (n + 1) (.binary .sub (.local n) (.literal (word t.min))),
+      ins (n + 2) (.binary .andBits (.local (n + 1)) (.literal (word (2 ^ t.bits - 1)))),
+      ins (n + 3) (.binary .add (.local (n + 2)) (.literal (word t.min)))]
+  | .binOvf op t _ _ a b => do
+    unless inProfile t do throw s!"{repr t} is outside LCB's slice-0 profile"
+    let a ← operandFast prep a
+    let b ← operandFast prep b
+    return [ins n (.binary (opBinary op) a b),
+      ins (n + 1) (.binary .sub (.local n) (.literal (word t.min))),
+      ins (n + 2) (.binary .andBits (.local (n + 1)) (.literal (word (2 ^ t.bits - 1)))),
+      ins (n + 3) (.binary .add (.local (n + 2)) (.literal (word t.min))),
+      ins (n + 4) (.compare .unsignedLT .word (.local (n + 1)) (.literal (word (2 ^ t.bits)))),
+      ins (n + 5) (.compare .eq .word (.local (n + 4)) (.literal (word 0)))]
+  | .trunc fr to _ a => do
+    unless inProfile fr && inProfile to do throw s!"{repr fr} → {repr to} is outside LCB's slice-0 profile"
+    let a ← operandFast prep a
+    return [ins n (.binary .sub a (.literal (word to.min))),
+      ins (n + 1) (.binary .andBits (.local n) (.literal (word (2 ^ to.bits - 1)))),
+      ins (n + 2) (.binary .add (.local (n + 1)) (.literal (word to.min)))]
+
+def termFast (prep : Prepared) : Term → Except String Source.Terminator
+  | .ret a => return .ret (← operandFast prep a)
+  | .trap s => return .ret (.literal (word (256 + s)))
+  | .br t _ => return .jump t
+  | .condbr c t _ e _ => return .branch (.local (← idOfFast prep c)) t e
+
+def adaptPhiFast (prep : Prepared) (j k : Nat) : Except String Source.Phi := do
+  let arms ← (incomingBucket prep.incoming j).reverse.mapM fun (pred, args) => do
+    let a ← match args[k]? with
+      | some a => operandFast prep a
+      | none => throw s!"block {pred} passes too few arguments to block {j}"
+    pure (pred, a)
+  pure { destination := blockOffset prep j + k, width := .word, incoming := arms.toArray }
+
+def adaptInstFast (prep : Prepared) (j : Nat) : Nat × Inst → Except String (List Source.Instruction)
+  | (i, ins) => instFast prep (instOffset prep j i) ins
+
+def adaptBlockFast (prep : Prepared) : Nat × Block → Except String Source.Block
+  | (j, b) => do
+    let phis ← (indexed b.params).mapM fun (k, _) => adaptPhiFast prep j k
+    let insts ← (indexed b.insts).mapM (adaptInstFast prep j)
+    pure { phis := phis.toArray, instructions := insts.flatten.toArray, terminator := ← termFast prep b.term }
+
+/-- The executable adapter: all tables and validation are prepared once per program. -/
+def adaptFast (p : Program) : Except String Source.Function := do
+  let prep := prepare p
+  unless prep.ok do throw "the numbering is not injective (a register defined twice?)"
+  let blocks ← (indexed p.blocks).mapM (adaptBlockFast prep)
+  return { resultWidth := .word, parameters := #[],
+           valueWidths := Array.replicate (valueCount p) .word, blocks := blocks.toArray }
+
 /-- The LCB backend's emit: the adapted body paired with the program's site table (the table that
 decodes the body's result is part of the emitted artifact), or the adapter's refusal, in which case
 no artifact exists (`artifact` and the emitter build only from `.ok`). `Proof.emit_correct` and
 `Proof.artifact_correct` are the backend contract: no premise. -/
 def emit (p : Program) : Except String (Source.Function × SiteTable) := do
-  let f ← adapt p
+  let f ← adaptFast p
   return (f, p.sites)
 
 /-! ## Assembly, in process (inside `P_toolchain[lcb]`) -/
@@ -253,6 +455,503 @@ def bodyResult (f : Source.Function) : BodyResult → Prop
       ¬ Source.HasBehavior f #[] .diverges
 
 namespace Proof
+
+/-! ## Prepared-data reference equalities -/
+
+def instSpecFrom (b : Block) (base i : Nat) : InstNumberingData :=
+  let xs := Runtime.indexedFrom i (b.insts.drop i)
+  ⟨xs.flatMap fun (q, ins) => (instDefs ins).map fun (r, off) =>
+      (r, base + instBase b q + off),
+    xs.flatMap fun (q, ins) => (interOffsets ins).map (base + instBase b q + ·),
+    xs.map fun (q, _) => base + instBase b q⟩
+
+def blockSpec (base : Nat) (b : Block) : BlockNumberingData :=
+  let tail := instSpecFrom b base 0
+  ⟨(indexed b.params).map (fun (k, (r, _)) => (r, base + k)) ++ tail.ids,
+    tail.intermediates, tail.offsets⟩
+
+def numberingSpecFrom (p : Program) (j : Nat) : NumberingData :=
+  let bs := Runtime.indexedFrom j (p.blocks.drop j)
+  ⟨bs.flatMap fun (q, b) => (blockSpec (blockBase p q) b).ids,
+    bs.flatMap fun (q, b) => (blockSpec (blockBase p q) b).intermediates,
+    bs.map fun (q, b) => (blockBase p q, (blockSpec (blockBase p q) b).instOffsets)⟩
+
+theorem instBase_succ {b : Block} {i : Nat} {ins : Inst} (hi : b.insts[i]? = some ins) :
+    instBase b (i + 1) = instBase b i + Inst.width ins := by
+  simp [instBase, List.take_add_one, hi, List.sum_append, Nat.add_assoc]
+
+theorem instNumbering_from (b : Block) (base : Nat) :
+    ∀ (i : Nat) (l : List Inst), b.insts.drop i = l →
+      instNumbering (base + instBase b i) l = instSpecFrom b base i
+  | i, [], hd => by simp [instNumbering, instSpecFrom, hd, Runtime.indexedFrom]
+  | i, ins :: rest, hd => by
+    have hi : b.insts[i]? = some ins := by
+      have := congrArg (·[0]?) hd
+      simpa [List.getElem?_drop] using this
+    have hd' : b.insts.drop (i + 1) = rest := by
+      rw [← List.tail_drop, hd]
+      rfl
+    have ih := instNumbering_from b base (i + 1) rest hd'
+    rw [instBase_succ hi] at ih
+    simp only [instNumbering, instSpecFrom, hd, Runtime.indexedFrom, List.flatMap_cons,
+      List.map_cons]
+    rw [Nat.add_assoc, ih]
+    simp only [instSpecFrom, hd']
+
+theorem blockNumbering_eq (base : Nat) (b : Block) : blockNumbering base b = blockSpec base b := by
+  have h := instNumbering_from b base 0 b.insts (by simp)
+  simp only [instBase, List.take_zero, List.map_nil, List.sum_nil, Nat.add_zero] at h
+  simp only [blockNumbering, blockSpec, h]
+
+theorem blockBase_succ {p : Program} {j : Nat} {b : Block} (hb : p.blocks[j]? = some b) :
+    blockBase p (j + 1) = blockBase p j + blockSize b := by
+  simp [blockBase, List.take_add_one, hb, List.sum_append]
+
+theorem numberingFrom_correct (p : Program) :
+    ∀ (j : Nat) (l : List Block), p.blocks.drop j = l →
+      numberingFrom (blockBase p j) l = numberingSpecFrom p j
+  | j, [], hd => by simp [numberingFrom, numberingSpecFrom, hd, Runtime.indexedFrom]
+  | j, b :: rest, hd => by
+    have hb : p.blocks[j]? = some b := by
+      have := congrArg (·[0]?) hd
+      simpa [List.getElem?_drop] using this
+    have hd' : p.blocks.drop (j + 1) = rest := by
+      rw [← List.tail_drop, hd]
+      rfl
+    have ih := numberingFrom_correct p (j + 1) rest hd'
+    rw [blockBase_succ hb] at ih
+    simp only [numberingFrom, numberingSpecFrom, hd, Runtime.indexedFrom, blockNumbering_eq,
+      List.flatMap_cons, List.map_cons]
+    rw [ih]
+    simp only [numberingSpecFrom, hd']
+
+theorem numbering_eq (p : Program) : numbering p = numberingSpec p := by
+  have h := numberingFrom_correct p 0 p.blocks (by simp)
+  exact h
+
+theorem regBound_lt {ids : List (Reg × Nat)} {r n : Nat} (h : (r, n) ∈ ids) : r < regBound ids := by
+  induction ids with
+  | nil => simp at h
+  | cons a ids ih =>
+    rcases a with ⟨q, m⟩
+    simp only [List.mem_cons, Prod.mk.injEq] at h
+    rcases h with ⟨rfl, rfl⟩ | h
+    · simp only [regBound]; omega
+    · simp only [regBound]; have := ih h; omega
+
+theorem lookup_none_of_not_mem {ids : List (Reg × Nat)} {r : Reg}
+    (h : r ∉ ids.map Prod.fst) : ids.lookup r = none := by
+  induction ids with
+  | nil => rfl
+  | cons a ids ih =>
+    rcases a with ⟨q, n⟩
+    simp only [List.map_cons, List.mem_cons] at h
+    have hq : r ≠ q := fun e => h (Or.inl e)
+    have hb : (r == q) = false := by simpa using hq
+    simp [List.lookup, hb, ih (fun hm => h (Or.inr hm))]
+
+theorem size_addRegIds : ∀ (ids : List (Reg × Nat)) (a : Array (Option Nat)),
+    (addRegIds ids a).size = a.size
+  | [], _ => rfl
+  | (r, n) :: ids, a => by
+    simp only [addRegIds]
+    rw [size_addRegIds]
+    split <;> (try split) <;> first | rfl | simp
+
+theorem addRegIds_lookup : ∀ (ids : List (Reg × Nat)) (a : Array (Option Nat)) (r : Reg),
+    r < a.size → ((addRegIds ids a)[r]?).getD none = ((a[r]?).getD none).or (ids.lookup r)
+  | [], a, r, _ => by simp [addRegIds]
+  | (x, n) :: ids, a, r, hr => by
+    simp only [addRegIds]
+    by_cases hx : x < a.size
+    · simp only [hx, ↓reduceDIte]
+      cases ha : a[x] with
+      | none =>
+        simp only [Option.isSome_none, Bool.false_eq_true, ↓reduceIte]
+        rw [addRegIds_lookup ids _ r (by simpa using hr)]
+        by_cases h : r = x
+        · subst h
+          simp [List.lookup, Array.getElem?_setIfInBounds_self_of_lt hx,
+            Array.getElem?_eq_getElem hx, ha]
+        · have hne : r ≠ x := h
+          have hb : (r == x) = false := by simpa using hne
+          simp [List.lookup, hb, Array.getElem?_setIfInBounds_ne (Ne.symm hne)]
+      | some v =>
+        simp only [Option.isSome_some, ↓reduceIte]
+        rw [addRegIds_lookup ids a r hr]
+        by_cases h : r = x
+        · subst h
+          simp [List.lookup, Array.getElem?_eq_getElem hx, ha]
+        · have hne : r ≠ x := h
+          have hb : (r == x) = false := by simpa using hne
+          simp [List.lookup, hb]
+    · simp only [hx, ↓reduceDIte]
+      rw [addRegIds_lookup ids a r hr]
+      have hne : r ≠ x := fun h => hx (h ▸ hr)
+      have hb : (r == x) = false := by simpa using hne
+      simp [List.lookup, hb]
+
+theorem regTable_lookup (data : NumberingData) (r : Reg) :
+    ((regTable data)[r]?).getD none = data.ids.lookup r := by
+  by_cases hr : r < regBound data.ids
+  · rw [regTable, addRegIds_lookup _ _ r (by simpa using hr)]
+    rw [Array.getElem?_eq_getElem (show r < (Array.replicate (regBound data.ids) none).size by simpa)]
+    simp
+  · have hnone : ((regTable data)[r]?) = none := by
+      apply Array.getElem?_eq_none
+      rw [regTable, size_addRegIds]
+      simpa using hr
+    have hnot : r ∉ data.ids.map Prod.fst := by
+      intro hm
+      obtain ⟨a, ha, hra⟩ := List.mem_map.mp hm
+      change a.1 = r at hra
+      have hb : (r, a.2) ∈ data.ids := by rwa [← hra]
+      exact hr (regBound_lt hb)
+    simp [hnone, lookup_none_of_not_mem hnot]
+
+theorem prepare_regId (p : Program) (r : Reg) : regIdFast (prepare p) r = regId p r := by
+  simp only [regIdFast, prepare, regTable_lookup, regId]
+  rw [numbering_eq]
+  rfl
+
+theorem blockOffset_prepare {p : Program} {j : Nat} {b : Block} (hb : p.blocks[j]? = some b) :
+    blockOffset (prepare p) j = blockBase p j := by
+  simp [blockOffset, prepare, numbering_eq, numberingSpec, List.getElem?_toArray,
+    List.getElem?_map, Runtime.getElem?_indexed, hb]
+
+theorem instOffset_prepare {p : Program} {j i : Nat} {b : Block} {ins : Inst}
+    (hb : p.blocks[j]? = some b) (hi : b.insts[i]? = some ins) :
+    instOffset (prepare p) j i = blockBase p j + instBase b i := by
+  simp [instOffset, prepare, numbering_eq, numberingSpec, List.getElem?_toArray,
+    List.getElem?_map, Runtime.getElem?_indexed, hb, hi]
+
+theorem incomingBound_lt {e : Nat × (Nat × List Operand)} {es : List (Nat × (Nat × List Operand))}
+    (h : e ∈ es) : e.1 < incomingBound es := by
+  induction es with
+  | nil => simp at h
+  | cons a es ih =>
+    simp only [List.mem_cons] at h
+    rcases h with rfl | h
+    · simp only [incomingBound]; omega
+    · simp only [incomingBound]; have := ih h; omega
+
+theorem size_addIncoming : ∀ (es : List (Nat × (Nat × List Operand)))
+    (bs : Array (List (Nat × List Operand))), (addIncoming es bs).size = bs.size
+  | [], _ => rfl
+  | e :: es, bs => by
+    simp only [addIncoming]
+    rw [size_addIncoming]
+    split <;> simp
+
+theorem incomingBucket_add : ∀ (es : List (Nat × (Nat × List Operand)))
+    (bs : Array (List (Nat × List Operand))) (j : Nat), j < bs.size →
+    incomingBucket (addIncoming es bs) j =
+      ((es.filter (·.1 == j)).map Prod.snd).reverse ++ incomingBucket bs j
+  | [], bs, j, _ => by simp [addIncoming, incomingBucket]
+  | e :: es, bs, j, hj => by
+    simp only [addIncoming]
+    by_cases hlt : e.1 < bs.size
+    · simp only [hlt, ↓reduceDIte]
+      rw [incomingBucket_add es _ j (by simpa using hj)]
+      by_cases h : e.1 = j
+      · subst h
+        have hget : bs[e.1]?.getD [] = bs[e.1] := by
+          rw [Array.getElem?_eq_getElem hlt]; rfl
+        simp [incomingBucket, Array.getElem?_setIfInBounds_self_of_lt (by simpa using hlt), hget,
+          List.reverse_cons, List.append_assoc]
+      · have hne : j ≠ e.1 := Ne.symm h
+        simp [incomingBucket, h]
+    · simp only [hlt, ↓reduceDIte]
+      rw [incomingBucket_add es bs j hj]
+      have hne : e.1 ≠ j := by omega
+      simp [hne]
+
+theorem incomingBucket_buckets (p : Program) (j : Nat) :
+    (incomingBucket (incomingBuckets p) j).reverse =
+      ((targetedEdges p).filter (·.1 == j)).map Prod.snd := by
+  by_cases hj : j < (Array.replicate (incomingBound (targetedEdges p))
+    ([] : List (Nat × List Operand))).size
+  · have h := incomingBucket_add (targetedEdges p)
+      (Array.replicate (incomingBound (targetedEdges p)) ([] : List (Nat × List Operand))) j hj
+    have hinit : incomingBucket (Array.replicate (incomingBound (targetedEdges p))
+        ([] : List (Nat × List Operand))) j = [] := by
+      simp only [incomingBucket]
+      rw [Array.getElem?_eq_getElem hj]
+      simp
+    change (incomingBucket (addIncoming (targetedEdges p)
+      (Array.replicate (incomingBound (targetedEdges p)) [])) j).reverse = _
+    rw [h, hinit]
+    simp
+  · have hnone : (incomingBuckets p)[j]? = none := by
+      apply Array.getElem?_eq_none
+      rw [incomingBuckets, size_addIncoming]
+      simpa using hj
+    have hnoedge : (targetedEdges p).filter (·.1 == j) = [] := by
+      apply List.filter_eq_nil_iff.mpr
+      intro e he
+      have hlt := incomingBound_lt he
+      simp only [beq_iff_eq]
+      intro h
+      subst h
+      exact hj (by simpa using hlt)
+    simp [incomingBucket, hnone, hnoedge]
+
+theorem targetedEdges_incoming (p : Program) (j : Nat) :
+    ((targetedEdges p).filter (·.1 == j)).map Prod.snd = incoming p j := by
+  unfold targetedEdges incoming
+  generalize indexed p.blocks = bs
+  induction bs with
+  | nil => rfl
+  | cons a bs ih =>
+    rcases a with ⟨k, b⟩
+    simp only [List.flatMap_cons, List.filter_append, List.map_append, ih]
+    rcases b with ⟨params, insts, tm⟩
+    cases tm <;> simp [edgesTo] <;> (try split) <;> (try split) <;> simp_all
+
+theorem prepare_incoming (p : Program) (j : Nat) :
+    (incomingBucket (prepare p).incoming j).reverse = incoming p j := by
+  rw [prepare, incomingBucket_buckets, targetedEdges_incoming]
+
+/-- The marked entries of an array are exactly the previously seen natural numbers. -/
+def Marks (a : Array Bool) (seen : List Nat) : Prop :=
+  ∀ m, m < a.size → (a[m]?).getD false = decide (m ∈ seen)
+
+theorem marks_replicate (n : Nat) : Marks (Array.replicate n false) [] := by
+  intro m hm
+  rw [Array.getElem?_eq_getElem hm]
+  simp
+
+theorem markUnique_ok : ∀ (xs : List Nat) (a : Array Bool) (seen : List Nat), Marks a seen →
+    (markUnique xs a).isSome =
+      (decide xs.Nodup && xs.all (· < a.size) && decide (∀ x ∈ xs, x ∉ seen))
+  | [], a, seen, h => by simp [markUnique]
+  | x :: xs, a, seen, h => by
+    by_cases hx : x < a.size
+    · cases ha : a[x] with
+      | false =>
+        have hxnot : x ∉ seen := by
+          have hm := h x hx
+          rw [Array.getElem?_eq_getElem hx, ha] at hm
+          simpa using hm
+        have hmarks : Marks (a.setIfInBounds x true) (x :: seen) := by
+          intro m hm
+          simp only [Array.size_setIfInBounds] at hm
+          by_cases hmx : m = x
+          · subst m
+            simp [Array.getElem?_setIfInBounds_self_of_lt hx]
+          · rw [Array.getElem?_setIfInBounds_ne (Ne.symm hmx)]
+            rw [h m hm]
+            simp [hmx]
+        simp only [markUnique, hx, ↓reduceDIte, ha, Bool.false_eq_true, ↓reduceIte]
+        rw [markUnique_ok xs _ (x :: seen) hmarks]
+        have hdisj : (∀ y ∈ xs, y ∉ x :: seen) ↔ x ∉ xs ∧ ∀ y ∈ xs, y ∉ seen := by
+          constructor
+          · intro hd
+            exact ⟨fun hm => hd x hm (by simp), fun y hy hys => hd y hy (by simp [hys])⟩
+          · rintro ⟨hxs, hd⟩ y hy
+            simp only [List.mem_cons, not_or]
+            exact ⟨fun e => hxs (e ▸ hy), hd y hy⟩
+        simp only [Array.size_setIfInBounds, hdisj]
+        simp [List.nodup_cons, List.all_cons, hx, hxnot, Bool.and_assoc, Bool.and_left_comm,
+          Bool.and_comm]
+      | true =>
+        have hxmem : x ∈ seen := by
+          have hm := h x hx
+          rw [Array.getElem?_eq_getElem hx, ha] at hm
+          simpa using hm
+        simp [markUnique, hx, ha, hxmem]
+    · simp [markUnique, hx]
+
+theorem size_markUnique {xs : List Nat} {a a' : Array Bool}
+    (h : markUnique xs a = some a') : a'.size = a.size := by
+  induction xs generalizing a with
+  | nil => cases h; rfl
+  | cons x xs ih =>
+    simp only [markUnique] at h
+    split at h
+    · next hx =>
+      split at h
+      · cases h
+      · exact ih h |>.trans (Array.size_setIfInBounds)
+    · cases h
+
+theorem markUnique_marks : ∀ (xs : List Nat) (a a' : Array Bool) (seen : List Nat),
+    Marks a seen → markUnique xs a = some a' →
+      ∀ m, m < a'.size → (a'[m]?).getD false = decide (m ∈ xs ∨ m ∈ seen)
+  | [], a, a', seen, h, hm => by
+    cases hm
+    intro m hlt
+    rw [h m hlt]
+    simp
+  | x :: xs, a, a', seen, h, hm => by
+    simp only [markUnique] at hm
+    split at hm
+    · next hx =>
+      split at hm
+      · cases hm
+      · next ha =>
+        have ha' : a[x] = false := by simpa using ha
+        have hxnot : x ∉ seen := by
+          have hxm := h x hx
+          rw [Array.getElem?_eq_getElem hx, ha'] at hxm
+          simpa using hxm
+        have hmarks : Marks (a.setIfInBounds x true) (x :: seen) := by
+          intro m hlt
+          simp only [Array.size_setIfInBounds] at hlt
+          by_cases hmx : m = x
+          · subst m
+            simp [Array.getElem?_setIfInBounds_self_of_lt hx]
+          · rw [Array.getElem?_setIfInBounds_ne (Ne.symm hmx)]
+            rw [h m hlt]
+            simp [hmx]
+        have ih := markUnique_marks xs _ a' (x :: seen) hmarks hm
+        intro m hlt
+        rw [ih m hlt]
+        simp only [List.mem_cons]
+        congr 1
+        simp [or_left_comm, or_assoc]
+    · simp at hm
+
+theorem all_and {α : Type} (f g : α → Bool) (l : List α) :
+    l.all (fun x => f x && g x) = (l.all f && l.all g) := by
+  induction l with
+  | nil => rfl
+  | cons x l ih =>
+    simp only [List.all_cons]
+    rw [ih]
+    cases f x <;> cases g x <;> cases l.all f <;> cases l.all g <;> rfl
+
+theorem regCheck_eq (ids : List (Reg × Nat)) : regCheck ids = decide ((ids.map Prod.fst).Nodup) := by
+  have h := markUnique_ok (ids.map Prod.fst) (Array.replicate (regBound ids) false) []
+    (marks_replicate _)
+  simp only [Array.size_replicate] at h
+  have hall : (ids.map Prod.fst).all (· < regBound ids) = true := by
+    apply List.all_eq_true.mpr
+    intro r hr
+    obtain ⟨a, ha, hra⟩ := List.mem_map.mp hr
+    change a.1 = r at hra
+    have hb : (r, a.2) ∈ ids := by rwa [← hra]
+    simpa using regBound_lt hb
+  simp only [regCheck, h, hall, List.not_mem_nil, not_false_eq_true, implies_true, decide_true,
+    Bool.and_true]
+
+theorem slotInterCheck_eq (slots inters : List Nat) (count : Nat) :
+    slotInterCheck slots inters count =
+      (decide slots.Nodup && slots.all (· < count) && inters.all (· < count) &&
+        inters.all (fun m => !slots.contains m)) := by
+  cases h : markUnique slots (Array.replicate count false) with
+  | none =>
+    have ho := markUnique_ok slots (Array.replicate count false) [] (marks_replicate _)
+    rw [h] at ho
+    have hb : (decide slots.Nodup && slots.all (· < count)) = false := by
+      have := ho.symm
+      simpa using this
+    simp [slotInterCheck, h, hb]
+  | some a =>
+    have ho := markUnique_ok slots (Array.replicate count false) [] (marks_replicate _)
+    rw [h] at ho
+    have hs : (decide slots.Nodup && slots.all (· < count)) = true := by
+      have := ho.symm
+      simpa using this
+    have hsize : a.size = count := by
+      have := size_markUnique h
+      simpa using this
+    have hmarks := markUnique_marks slots _ a [] (marks_replicate _) h
+    have hfun : (fun m => if hm : m < a.size then !a[m] else false) =
+        (fun m => decide (m < count) && !slots.contains m) := by
+      funext m
+      by_cases hm : m < a.size
+      · have hm' := hmarks m hm
+        rw [Array.getElem?_eq_getElem hm] at hm'
+        have hma : a[m] = decide (m ∈ slots) := by simpa using hm'
+        have hmc : m < count := by simpa [hsize] using hm
+        simp [hm, hmc, hma, List.contains_eq_mem]
+      · have hmc : ¬ m < count := by simpa [hsize] using hm
+        simp [hm, hmc]
+    simp only [slotInterCheck, h]
+    rw [hfun, all_and (fun m => decide (m < count)) (fun m => !slots.contains m) inters, hs]
+    simp
+
+theorem numberingOkFastData_eq (data : NumberingData) (count : Nat) :
+    numberingOkFastData data count =
+      (decide ((data.ids.map Prod.fst).Nodup) && decide ((data.ids.map Prod.snd).Nodup) &&
+        (data.ids.map Prod.snd).all (· < count) && data.intermediates.all (· < count) &&
+        data.intermediates.all (fun m => !(data.ids.map Prod.snd).contains m)) := by
+  rw [numberingOkFastData, regCheck_eq, slotInterCheck_eq]
+  cases decide ((data.ids.map Prod.fst).Nodup) <;> simp
+
+theorem prepare_ok (p : Program) : (prepare p).ok = numberingOk p := by
+  rw [prepare, numberingOkFastData_eq, numbering_eq]
+  rfl
+
+theorem mapM_ext {α β ε : Type} {f g : α → Except ε β} : ∀ (l : List α),
+    (∀ x ∈ l, f x = g x) → l.mapM f = l.mapM g
+  | [], _ => rfl
+  | x :: l, h => by
+    simp only [List.mapM_cons, h x (by simp)]
+    rw [mapM_ext l (fun y hy => h y (by simp [hy]))]
+
+theorem getElem_of_mem_indexed {α : Type} {l : List α} {i : Nat} {x : α}
+    (hm : (i, x) ∈ indexed l) : l[i]? = some x := by
+  obtain ⟨q, hq, he⟩ := List.mem_iff_getElem.mp hm
+  have hs : (indexed l)[q]? = some (i, x) := by
+    rw [List.getElem?_eq_getElem hq, he]
+  rw [Runtime.getElem?_indexed] at hs
+  cases hi : l[q]? with
+  | none => simp [hi] at hs
+  | some v =>
+    simp only [hi, Option.map_some, Option.some.injEq, Prod.mk.injEq] at hs
+    obtain ⟨rfl, rfl⟩ := hs
+    exact hi
+
+theorem idOfFast_eq (p : Program) (r : Reg) : idOfFast (prepare p) r = idOf p r := by
+  simp [idOfFast, idOf, prepare_regId]
+
+theorem operandFast_eq (p : Program) (a : Operand) : operandFast (prepare p) a = operand p a := by
+  cases a <;> simp [operandFast, operand, idOfFast_eq]
+
+theorem instFast_eq (p : Program) (n : Nat) (ins : Inst) :
+    instFast (prepare p) n ins = inst p n ins := by
+  cases ins <;> simp [instFast, inst, operandFast_eq]
+
+theorem termFast_eq (p : Program) (tm : Term) : termFast (prepare p) tm = term p tm := by
+  cases tm <;> simp [termFast, term, operandFast_eq, idOfFast_eq]
+
+theorem adaptPhiFast_eq {p : Program} {j : Nat} {b : Block} (hb : p.blocks[j]? = some b) (k : Nat) :
+    adaptPhiFast (prepare p) j k = adaptPhi p j k := by
+  simp [adaptPhiFast, adaptPhi, prepare_incoming, operandFast_eq, blockOffset_prepare hb]
+
+theorem adaptInstFast_eq {p : Program} {j i : Nat} {b : Block} {ins : Inst}
+    (hb : p.blocks[j]? = some b) (hi : b.insts[i]? = some ins) :
+    adaptInstFast (prepare p) j (i, ins) = adaptInst p j b (i, ins) := by
+  simp [adaptInstFast, adaptInst, instOffset_prepare hb hi, instFast_eq]
+
+theorem adaptBlockFast_eq {p : Program} {j : Nat} {b : Block} (hb : p.blocks[j]? = some b) :
+    adaptBlockFast (prepare p) (j, b) = adaptBlock p (j, b) := by
+  have hp : (indexed b.params).mapM (fun (k, _) => adaptPhiFast (prepare p) j k) =
+      (indexed b.params).mapM (fun (k, _) => adaptPhi p j k) := by
+    apply mapM_ext
+    rintro ⟨k, ty⟩ hm
+    exact adaptPhiFast_eq hb k
+  have hi : (indexed b.insts).mapM (adaptInstFast (prepare p) j) =
+      (indexed b.insts).mapM (adaptInst p j b) := by
+    apply mapM_ext
+    rintro ⟨i, ins⟩ hm
+    exact adaptInstFast_eq hb (getElem_of_mem_indexed hm)
+  simp only [adaptBlockFast, adaptBlock, hp, hi, termFast_eq]
+
+theorem adaptFast_eq (p : Program) : adaptFast p = adapt p := by
+  have hblocks : (indexed p.blocks).mapM (adaptBlockFast (prepare p)) =
+      (indexed p.blocks).mapM (adaptBlock p) := by
+    apply mapM_ext
+    rintro ⟨j, b⟩ hm
+    exact adaptBlockFast_eq (getElem_of_mem_indexed hm)
+  unfold adaptFast adapt
+  simp only [prepare_ok]
+  cases hn : numberingOk p <;> simp [hblocks, bind, Except.bind, pure, Except.pure]
+
+theorem emit_eq_spec (p : Program) : emit p = emitSpec p := by
+  simp [emit, emitSpec, adaptFast_eq]
 
 /-- How a BIR value is represented in LCB: an integer as its 32-bit word, a flag as 0 or 1. -/
 def enc : Val → Source.Value
@@ -2010,6 +2709,7 @@ theorem adapter_correct {p : Program} (hwf : WF p) {f : Source.Function}
 theorem emit_ok {p : Program} {f : Source.Function} {tbl : SiteTable}
     (h : emit p = .ok (f, tbl)) : adapt p = .ok f ∧ tbl = p.sites := by
   unfold emit at h
+  rw [adaptFast_eq] at h
   cases ha : adapt p with
   | error e => rw [ha] at h; cases h
   | ok g =>
