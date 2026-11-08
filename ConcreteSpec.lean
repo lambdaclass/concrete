@@ -13,3 +13,5 @@ import ConcreteSpec.Proofs.Const
 import ConcreteSpec.Proofs.Memory
 
 import ConcreteSpec.Proofs.Hybrid
+
+import ConcreteSpec.Proofs.ObserveSource

@@ -131,6 +131,14 @@ def trapLine (kind : TrapKind) (site : SiteId) (sp : Span) : String :=
 /-- The 1-based byte column after source text `before`: its UTF-8 byte length plus one. -/
 def byteColumn (before : String) : Nat := before.utf8ByteSize + 1
 
+/-- Construct an operation's source span from the text preceding it on its source line.
+The caller supplies a positive line number, but cannot supply a column: UTF-8 source bytes
+establish that column, with a tab contributing its single encoded byte (foundation Q10).
+Connecting the elaborator's source offsets to this constructor remains O1. -/
+def sourceSpan (path : String) (line : Nat) (linePositive : 0 < line)
+    (before : String) : Span :=
+  ⟨path, line, before.utf8ByteSize + 1, linePositive, Nat.zero_lt_succ _⟩
+
 /-- A span's column is the byte column at the operation on its source line. -/
 def Span.HasByteColumn (sp : Span) (before : String) : Prop := sp.col = byteColumn before
 
@@ -442,7 +450,8 @@ def refusingAdapter : ExecAdapter refusingBindOps signature where
   status := fun _ => none
   sites := []
 
-/-- A stuck report has no `noAnswer` ending, so the blocking premise imposes nothing. -/
+/-- Helper (computation). Bookkeeping for a stuck report: its `noAnswer` antecedent is
+impossible. This is not a contract law or evidence of blocking correctness. (approved: PENDING) -/
 theorem refusedReportPermitted :
     ExecAdapter.BlockingPermitted ⟨[]⟩ refusingAdapter contract () refusedReport := by
   intro c p vs site store k q ending pending typed
