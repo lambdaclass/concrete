@@ -29,22 +29,26 @@ conditional arms and out-of-profile types, conditional-arm order/multiplicity, h
 `adapt = adaptSpec` / `emit = emitSpec` / `LLVM.print = LLVM.printSpec` equivalence, and a
 non-timed stack-depth check on `sparse` and `deepBlocks`) run in
 `scripts/checks/compiler/slice0_bir.lean` (`numbering`, invoked by
-`scripts/checks/compiler/tests.sh`). The scaling families (`wide_phi`,
-`sparse_registers`, `dense_registers`, `many_blocks`, and the `100000`-entry depth probes) are
-recorded in `Concrete/README.md` for Gate C (`scripts/checks/compiler/scaling.lean`).
+`scripts/checks/compiler/tests.sh`). Ongoing backend scaling and deep-stack regression coverage
+(`wide_phi`, `sparse_registers`, `dense_registers`, `many_blocks`, and the `1,000`-entry PR /
+`100,000`-entry daily depth probes) lives in Gate C (`scripts/checks/compiler/scaling.sh` and
+`scripts/checks/compiler/scaling.lean`, `R-0550` / `R-0563`), so `wip/lcb-numbering` and
+`gate-scaling-determinism` are merged and land together.
 
 Measured on the ISS-0030 reproducer family ($2k+1$ blocks, one parameter and four instructions per
-body block) with a linear structural digest (milliseconds, minimum of three runs; `—` is the
-baseline `LCB.emit` $k=1000$ run omitted because cubic growth projects ~15 hours):
+body block) at `ee2d8252` on the shared Linux host with a linear structural digest (milliseconds,
+minimum of three runs; `—` is the baseline `LCB.emit` $k=1000$ run omitted because cubic growth
+projects ~15 hours):
 
 | stage | k=1 before / after | k=10 before / after | k=100 before / after | k=1000 before / after | 10→100 before / after | 100→1000 after |
 |---|---:|---:|---:|---:|---:|---:|
 | `LCB.emit` | 0.394 / 0.144 | 69.929 / 1.339 | 53944 / 13.528 | — / 141.896 | 2.887 / 1.004 | 1.021 |
 | `LLVM.module` | 0.203 / 0.213 | 0.776 / 0.683 | 18.621 / 5.727 | 1437.992 / 60.883 | 1.380 / 0.923 | 1.027 |
 
-Measured across the four stress families (milliseconds per operation, minimum average of three
-sampling windows $\ge 10\text{ ms}$, including a linear structural output digest; on `concrete-ci-2`
-at `ef3fed56`, all backend exponents are $\le 1.075$):
+Focused local measurement at `1103b54c4f9e5e60605ce96c0d1e7576b82e5657` on the shared Linux host
+(`nix develop --command lake env lean --run scripts/checks/compiler/lcb_numbering_cases.lean`, sizes
+`10/100/1000`, milliseconds per operation, minimum average of three sampling windows
+$\ge 10\text{ ms}$, including a linear structural output digest):
 
 | Family | Stage | n=10 ms | n=100 ms | n=1000 ms | 100→1000 exponent |
 |---|---|---:|---:|---:|---:|
@@ -56,3 +60,10 @@ at `ef3fed56`, all backend exponents are $\le 1.075$):
 | `dense_registers` | `llvm_module` | 0.020237 | 0.119599 | 1.126592 | 0.974 |
 | `many_blocks` | `lcb_emit` | 0.071261 | 0.635718 | 6.228520 | 0.991 |
 | `many_blocks` | `llvm_module` | 0.027513 | 0.210669 | 2.069792 | 0.992 |
+
+Separate server runs on `concrete-ci-2` (`RESULTS.md`): at
+`ef3fed56ab78f1adb04778d099091c6c57c8d2fe`, `lcb_numbering.sh --full` (`100/1000/10000`,
+$\ge 50\text{ ms}$ windows, plus `100,000`-entry depth probes) and the backend/repro/trusted-base
+gates passed; at `cea8af594b287a6b8442005db122cd08d0669755`, `slice0_backends` (including the
+migrated `numbering` regressions), `slice0_trusted_base`, `slice0_artifacts`, `slice0_repro` and
+root checks `11/11` passed.
