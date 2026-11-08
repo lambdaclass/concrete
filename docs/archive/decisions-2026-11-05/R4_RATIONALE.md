@@ -432,9 +432,9 @@ The roadmap's A2 row reads "provisional approval → four checked theorems again
    - `ISSUES.tsv` (F16).
 2. **T1, rehearse.** Do the move on a throwaway branch, then run: fresh clone → build → hook → exact-SHA CI → `train.sh --dry-run land`. Negative controls (a broken build, a failing gate, a missing required check) must each be refused.
 3. **T2, move in one train.** After the move:
-   - `legacy/` is byte-frozen. Revised 2026-11-08: under the [legacy sweep decision](../../decisions.md#decided-2026-11-08-legacy-sweep), the root check admits additions only through valid, lock-recorded, byte-for-byte sweeps, refuses every modification, and allows deletions only when their `RETENTION.tsv` rows authorize them;
+   - `legacy/` is byte-frozen. A root check compares its tree hash with the recorded tree **minus the paths whose deletion a satisfied `RETENTION.tsv` entry authorized**;
    - no legacy gate ever runs, so the conditional "run when `legacy/` changes" is removed;
-   - Revised 2026-11-08: the [legacy sweep decision](../../decisions.md#decided-2026-11-08-legacy-sweep) also permits valid, lock-recorded, byte-for-byte additions; all modifications remain refused and every deletion still needs authorization from its satisfied `RETENTION.tsv` rows.
+   - any change under `legacy/` is refused, except deletions that a satisfied `RETENTION.tsv` entry authorizes.
 4. **B3.** Delete the old pipeline: compiler sources and their scripts, gates and build files.
    - Retained assets (corpus, regressions, examples, std, bug ledger, site, docs, research) stay in `legacy/` until each entry is migrated or retired by the owner.
    - `legacy/` disappears when `RETENTION.tsv` has no live entry, not at B3.
