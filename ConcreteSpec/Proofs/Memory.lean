@@ -395,4 +395,27 @@ theorem store_same_block_frame (tgt : Target) (m m' : Memory) (hw : m.WellFormed
   have := hw.sized b x hx
   omega
 
+/-- The allocated block is live and unexposed and every byte is uninitialized. -/
+theorem alloc_initialized (tgt : Target) (m : Memory) (s : AddrSpace) (base size align : Nat)
+    (b : MemBlockId) (m' : Memory) (h : m.alloc tgt s base size align = .ok (b, m')) :
+    ∃ x, m'.block b = some x ∧ x.live = true ∧ x.exposed = false ∧
+      x.bytes = List.replicate size .uninit :=
+  ⟨candidate s base size align, alloc_block tgt m s base size align b m' h, rfl, rfl, rfl⟩
+
+/-- Releasing a block cannot permit any existing identity to be reused by the next allocation,
+even when the allocator reuses the released address. -/
+theorem free_alloc_ne_existing (tgt : Target) (m freed allocated : Memory)
+    (hw : m.WellFormed tgt) (b c new : MemBlockId) (x : Block)
+    (hf : m.free b = some freed) (hc : m.block c = some x)
+    (s : AddrSpace) (base size align : Nat)
+    (ha : freed.alloc tgt s base size align = .ok (new, allocated)) : new ≠ c := by
+  obtain ⟨_, _, _, hn⟩ := free_retains m b freed hf
+  obtain ⟨he, _, _⟩ := alloc_result tgt freed s base size align new allocated ha
+  have hlt := hw.fresh c x hc
+  intro heq
+  rw [heq] at he
+  have hid := congrArg MemBlockId.id he
+  dsimp at hid
+  omega
+
 end ConcreteSpec.Core.Mem

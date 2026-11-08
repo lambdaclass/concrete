@@ -163,4 +163,26 @@ example : (State.mk (fun _ => some ⟨.bool, .structured (.bool true)⟩) Memory
 /-- Refused: invalid bytes at a materialized bool do not fall back to a structured value. -/
 example : decode linuxX8664 .bool [.init 2 none] = none := by decide
 
+/-- Accepted: materialize once with uninitialized and initialized padding, rewrite the bool,
+then observe exactly the original padding. Refused: a raw write of byte 2 leaves no bool value. -/
+example : (do
+    let st : State := ⟨fun p => if p = ⟨0⟩ then some ⟨.bool, .structured (.bool true)⟩ else none,
+      Memory.empty⟩
+    let (r, st) ← st.materialize linuxX8664 ⟨0⟩ ⟨0⟩ 4096 1 [.uninit, .init 73 none]
+    let st ← st.write linuxX8664 ⟨0⟩ (.bool false)
+    let typed := st.read linuxX8664 ⟨0⟩
+    let padding := st.memory.load linuxX8664 { r.ptr with addr := 4097 } 2 1
+    let st ← st.rawWrite linuxX8664 r.ptr [.init 2 none] 1
+    pure (typed, padding, st.read linuxX8664 ⟨0⟩)) =
+      some (some (.bool false), some [.uninit, .init 73 none], none) := by decide
+
+/-- Accepted: another raw address-taking reuses the first mapping and first padding, even
+when given different proposed storage and padding. -/
+example : (do
+    let st : State := ⟨fun _ => some ⟨.bool, .structured (.bool true)⟩, Memory.empty⟩
+    let (r, st) ← st.materialize linuxX8664 ⟨0⟩ ⟨0⟩ 4096 1 [.init 73 none]
+    let (r', st) ← st.materialize linuxX8664 ⟨0⟩ ⟨0⟩ 8192 8 [.init 99 none]
+    pure (r.ptr == r'.ptr, st.memory.load linuxX8664 r'.ptr 2 1)) =
+      some (true, some [.init 1 none, .init 73 none]) := by decide
+
 end ConcreteSpec.Core.Hybrid
