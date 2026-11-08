@@ -116,6 +116,85 @@ theorem decodePtr_encodePtr (tgt : Target) (ht : tgt.WellFormed) (p : Ptr) (hpv 
     (m.modify b f).block c = if c = b then (m.block b).map f else m.block c := by
   exact AList.lookup_update b f m.blocks c
 
+/-- Empty memory satisfies every target's memory invariant. -/
+theorem empty_wellFormed (tgt : Target) : Memory.empty.WellFormed tgt := by
+  constructor <;> simp [Memory.empty, Memory.block, AList.lookup]
+
+private theorem keys_update (xs : AList MemBlockId Block) (b : MemBlockId) (f : Block → Block) :
+    List.map Prod.fst (AList.update xs b f) = List.map Prod.fst xs := by
+  induction xs with
+  | nil => rfl
+  | cons e xs ih =>
+    simp only [AList.update]
+    split <;> simp_all
+
+private theorem canonical_of_unique (xs : AList MemBlockId Block)
+    (hu : (List.map Prod.fst xs).Nodup) :
+    ∀ e ∈ xs, AList.lookup xs e.1 = some e.2 := by
+  induction xs with
+  | nil => simp
+  | cons a xs ih =>
+    simp only [List.map_cons, List.nodup_cons] at hu
+    intro e he
+    rcases List.mem_cons.mp he with he | he
+    · subst e; simp [AList.lookup]
+    · have hn : a.1 ≠ e.1 := by
+        intro hh
+        exact hu.1 (hh ▸ List.mem_map.mpr ⟨e, he, rfl⟩)
+      simp [AList.lookup, hn, ih hu.2 e he]
+
+/-- A block update preserving geometry and byte count, and never reviving a dead block,
+preserves the whole memory invariant. Exposure and byte contents are otherwise unrestricted. -/
+theorem modify_wellFormed (tgt : Target) (m : Memory) (hw : m.WellFormed tgt)
+    (b : MemBlockId) (f : Block → Block)
+    (hg : ∀ x, (f x).space = x.space ∧ (f x).base = x.base ∧
+      (f x).size = x.size ∧ (f x).align = x.align)
+    (hs : ∀ x, m.block b = some x → (f x).bytes.length = x.size)
+    (hl : ∀ x, (f x).live = true → x.live = true) :
+    (m.modify b f).WellFormed tgt := by
+  have hu : (List.map Prod.fst (m.modify b f).blocks).Nodup := by
+    simpa only [Memory.modify, keys_update] using hw.unique
+  have origin : ∀ c y, (m.modify b f).block c = some y →
+      ∃ x, m.block c = some x ∧ y.space = x.space ∧ y.base = x.base ∧
+        y.size = x.size ∧ y.align = x.align ∧ y.bytes.length = x.size ∧
+        (y.live = true → x.live = true) := by
+    intro c y hy
+    rw [block_modify] at hy
+    split at hy
+    next he =>
+      subst c
+      cases hx : m.block b with
+      | none => simp [hx] at hy
+      | some x =>
+        simp only [hx, Option.map_some, Option.some.injEq] at hy
+        subst y
+        exact ⟨x, rfl, (hg x).1, (hg x).2.1, (hg x).2.2.1,
+          (hg x).2.2.2, hs x hx, hl x⟩
+    next => exact ⟨y, hy, rfl, rfl, rfl, rfl, hw.sized c y hy, id⟩
+  constructor
+  · exact canonical_of_unique _ hu
+  · exact hu
+  · intro c y hy
+    obtain ⟨x, hx, _⟩ := origin c y hy
+    exact hw.fresh c x hx
+  · intro c y hy
+    obtain ⟨x, _, _, _, hsize, _, hlen, _⟩ := origin c y hy
+    omega
+  · intro c y hy
+    obtain ⟨x, hx, _, hbase, hsize, _⟩ := origin c y hy
+    rw [hbase, hsize]; exact hw.fits c x hx
+  · intro c y hy
+    obtain ⟨x, hx, hspace, _⟩ := origin c y hy
+    rw [hspace]; exact hw.spaces c x hx
+  · intro c y hy
+    obtain ⟨x, hx, _, hbase, _, halign, _⟩ := origin c y hy
+    rw [hbase, halign]; exact hw.aligned c x hx
+  · intro c y d z hy hz hne hyl hzl
+    obtain ⟨x, hx, hspace, hbase, hsize, _, _, hlive⟩ := origin c y hy
+    obtain ⟨w, hw', hspace', hbase', hsize', _, _, hlive'⟩ := origin d z hz
+    simpa only [Block.Overlaps, hspace, hbase, hsize, hspace', hbase', hsize'] using
+      hw.disjoint c x d w hx hw' hne (hlive hyl) (hlive' hzl)
+
 theorem alloc_result (tgt : Target) (m : Memory) (s : AddrSpace) (base size align : Nat)
     (b : MemBlockId) (m' : Memory) (h : m.alloc tgt s base size align = .ok (b, m')) :
     b = ⟨m.next⟩ ∧ m' = ⟨(b, candidate s base size align) :: m.blocks, m.next + 1⟩ ∧
@@ -406,6 +485,71 @@ theorem alloc_initialized (tgt : Target) (m : Memory) (s : AddrSpace) (base size
     ∃ x, m'.block b = some x ∧ x.live = true ∧ x.exposed = false ∧
       x.bytes = List.replicate size .uninit :=
   ⟨candidate s base size align, alloc_block tgt m s base size align b m' h, rfl, rfl, rfl⟩
+
+/-- Successful byte stores preserve block geometry, liveness and well-formedness. -/
+theorem store_wellFormed (tgt : Target) (m m' : Memory) (hw : m.WellFormed tgt)
+    (p : Ptr) (bs : List MByte) (a : Nat) (h : m.store tgt p bs a = some m') :
+    m'.WellFormed tgt := by
+  unfold Memory.store at h
+  cases ha : m.access tgt p bs.length a with
+  | none => simp [ha] at h
+  | some v =>
+    rw [ha] at h
+    cases v with
+    | none => cases h; exact hw
+    | some pair =>
+      obtain ⟨b, off⟩ := pair
+      cases h
+      obtain ⟨x, _, hx, _, _, _, hlo, hhi, _, hoff, _⟩ :=
+        access_some tgt m p bs.length a b off ha
+      apply modify_wellFormed tgt m hw b
+      · intro y; exact ⟨rfl, rfl, rfl, rfl⟩
+      · intro y hy
+        rw [hx] at hy; cases hy
+        have := hw.sized b x hx
+        simp only [List.length_append, List.length_take, List.length_drop]
+        omega
+      · intro y hy; exact hy
+
+/-- Successful release preserves the invariant without deleting the identity. -/
+theorem free_wellFormed (tgt : Target) (m m' : Memory) (hw : m.WellFormed tgt)
+    (b : MemBlockId) (h : m.free b = some m') : m'.WellFormed tgt := by
+  unfold Memory.free at h
+  split at h
+  next x hx =>
+    split at h
+    next =>
+      cases h
+      apply modify_wellFormed tgt m hw b
+      · intro y; exact ⟨rfl, rfl, rfl, rfl⟩
+      · intro y hy; exact hw.sized b y hy
+      · intro y hy; cases hy
+    next => cases h
+  next => cases h
+
+/-- Exposure changes exactly the exposed flag of a live provenance block. -/
+theorem expose_result (m m' : Memory) (p : Ptr) (h : m.expose p = some m') :
+    ∃ b x, p.prov = some b ∧ m.block b = some x ∧ x.live = true ∧
+      m' = m.modify b (fun y => { y with exposed := true }) := by
+  unfold Memory.expose at h
+  split at h
+  next => cases h
+  next b hp =>
+    split at h
+    next x hx =>
+      split at h
+      next hl => cases h; exact ⟨b, x, hp, hx, hl, rfl⟩
+      next => cases h
+    next => cases h
+
+/-- Marking a block exposed preserves well-formedness. -/
+theorem expose_wellFormed (tgt : Target) (m m' : Memory) (hw : m.WellFormed tgt)
+    (p : Ptr) (h : m.expose p = some m') : m'.WellFormed tgt := by
+  obtain ⟨b, _, _, _, _, rfl⟩ := expose_result m m' p h
+  apply modify_wellFormed tgt m hw b
+  · intro y; exact ⟨rfl, rfl, rfl, rfl⟩
+  · intro y hy; exact hw.sized b y hy
+  · intro y hy; exact hy
 
 /-- Releasing a block cannot permit any existing identity to be reused by the next allocation,
 even when the allocator reuses the released address. -/
