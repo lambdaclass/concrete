@@ -614,6 +614,40 @@ Generated from [`docs/project/candidates.tsv`](legacy/docs/project/candidates.ts
 | v1-design-examples | — | V1 design examples (R-0511, row 3) | `v1-design-examples` | `03d2edec1d21` | none (isolated proof development) | not run | not run | not run | V1a's Core interfaces freeze | 2026-11-02: research input for phase A, not an accepted compiler deliverable. landed on main at 03d2edec but not accepted: review of the design questions, then stages (b) and (c) |
 <!-- END GENERATED: candidate record -->
 
+## Proposed acceptance experiment: replace an implementation
+
+**Status: proposed; schedules no work and changes no language decision.** After the
+new compiler supports the needed constructs and contract proofs, use one bounded
+function to test the product goal: accept substantially different implementations
+against the same independently stated contract. This consumes the existing Core
+semantics, contract, subject-identity and replay work in E–F; it adds no second
+verification architecture and does not delay the current compiler queue.
+
+The proposed acceptance artifact contains:
+
+- One fixed contract and observation boundary: results, mutation, failure/traps,
+  permitted authority and resource obligations, with exclusions such as timing
+  stated explicitly. Use refinement where the contract permits several behaviors;
+  claim equivalence only for observations actually covered.
+- Two structurally different implementations, each checked against that contract,
+  and unchanged callers. Bind each proof to its exact implementation, contract,
+  dependencies and environment; state the compiler/backend assumptions separately.
+- Rejection controls for a wrong boundary case, overflow, unauthorized authority
+  and stale evidence. Unsupported or incomplete verification cannot report success.
+  Differential agreement remains test evidence.
+- A small scripted candidate/check/repair loop consuming structured obligations,
+  source locations, counterexamples when available, evidence status and remaining
+  assumptions from the canonical verification task. No synthesis framework is
+  required for the first experiment.
+- An independent reader's attempt to implement the written contract, with surprising
+  permitted behaviors recorded and specification changes reviewed explicitly.
+- Measured proof-authoring time, review effort, checking time and repair iterations
+  for the replacement, including failed attempts. Report the cost of establishing
+  acceptance separately from the cost of generating code.
+
+Success demonstrates replacement within the declared boundary, not correctness of
+all generated programs or equivalence of native binaries beyond the proved scope.
+
 ## Releases
 
 Nightlies publish the newest fully qualified main commit with no support promise. After 0.1, release
