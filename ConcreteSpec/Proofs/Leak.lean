@@ -669,4 +669,86 @@ theorem unestablished_report_sound (lineage : LineageId) (entry exit : Account)
         ⟨peak, .notEstablished⟩, ⟨footprintLimit, .notEstablished⟩⟩ := by
   simp [LineageReport.Sound, Bound.Sound, Bound.SoundOptional]
 
+/-! ## Wipe-preservation witnesses -/
+
+namespace WipeDemo
+
+inductive Statement where
+  | pure (value : Nat)
+  | output (value : Nat)
+  | wipe (event : WipeEvent)
+  deriving DecidableEq, Repr
+
+abbrev Program := List Statement
+
+/-- Erase only pure arithmetic; output and wipe effects remain in their original order. -/
+def erasePure : Program → Program
+  | [] => []
+  | .pure _ :: rest => erasePure rest
+  | .output v :: rest => .output v :: erasePure rest
+  | .wipe w :: rest => .wipe w :: erasePure rest
+
+def wipes : Program → List WipeEvent
+  | [] => []
+  | .pure _ :: rest => wipes rest
+  | .output _ :: rest => wipes rest
+  | .wipe w :: rest => w :: wipes rest
+
+def observations : Program → List Nat
+  | [] => []
+  | .pure _ :: rest => observations rest
+  | .output v :: rest => v :: observations rest
+  | .wipe _ :: rest => observations rest
+
+/-- The actual optimization relation: the target is exactly pure-instruction erasure of the source. -/
+def optimized (source target : Program) : Prop := target = erasePure source
+
+/-- A relation that certifies only ordinary observation preservation. -/
+def observationRelated (source target : Program) : Prop :=
+  observations source = observations target
+
+/-- The erasure pass preserves every ordered wipe effect. -/
+theorem erasePure_preserves_wipes : WipePreservation optimized wipes wipes := by
+  intro source target h
+  change target = erasePure source at h
+  subst target
+  induction source with
+  | nil => rfl
+  | cons statement rest ih =>
+    cases statement <;> simp [erasePure, wipes, ih]
+
+def firstWipe : WipeEvent := ⟨⟨0⟩, ⟨0⟩, 4⟩
+def secondWipe : WipeEvent := ⟨⟨1⟩, ⟨0⟩, 2⟩
+
+def source : Program :=
+  [.pure 99, .wipe firstWipe, .output 7, .pure 100, .wipe secondWipe]
+
+def target : Program := erasePure source
+
+/-- Non-trivial related pair: two nonzero wipes survive pure-instruction erasure in order. -/
+example : optimized source target ∧ wipes source = [firstWipe, secondWipe] ∧
+    wipes target = [firstWipe, secondWipe] := by
+  exact ⟨rfl, rfl, rfl⟩
+
+/-- Planted bad targets retain the source's ordinary output but mishandle its wipes. -/
+def droppedTarget : Program := [.pure 99, .wipe secondWipe, .output 7, .pure 100]
+def changedTarget : Program :=
+  [.pure 99, .wipe ⟨⟨0⟩, ⟨0⟩, 5⟩, .output 7, .pure 100, .wipe secondWipe]
+def reorderedTarget : Program :=
+  [.pure 99, .wipe secondWipe, .output 7, .pure 100, .wipe firstWipe]
+
+example : observationRelated source droppedTarget ∧ wipes source ≠ wipes droppedTarget :=
+  ⟨rfl, by decide⟩
+example : observationRelated source changedTarget ∧ wipes source ≠ wipes changedTarget :=
+  ⟨rfl, by decide⟩
+example : observationRelated source reorderedTarget ∧ wipes source ≠ wipes reorderedTarget :=
+  ⟨rfl, by decide⟩
+
+/-- Observation preservation without wipe preservation does not satisfy the C7 obligation. -/
+example : ¬ WipePreservation observationRelated wipes wipes := by
+  intro h
+  exact (by decide : wipes source ≠ wipes droppedTarget) (h source droppedTarget rfl)
+
+end WipeDemo
+
 end ConcreteSpec.Core.Leak
