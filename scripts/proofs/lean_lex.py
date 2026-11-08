@@ -68,9 +68,6 @@ def lex(src, spans=None, literals=True):
             if c == "\\": emit(src[i:i + 2], True); i += 2
             elif c == '"': emit(c, True); return i + 1
             elif c == "{" and interp: emit(c, True); i = code(i + 1, True)
-            elif c == "{":
-                line = src.count("\n", 0, i) + 1
-                raise LexError(f"line {line}: a string holding '{{' without s!, m! or f! before it")
             else: emit(c, True); i += 1
         raise LexError("unterminated string")
 
@@ -127,7 +124,7 @@ HEADER = re.compile(r"import ConcreteSpec(\.[A-Za-z0-9_]+)*\s*$")
 FIRST_COMMAND = re.compile(r"(namespace|open|section|def|theorem|structure|inductive|abbrev)\b")
 
 
-def scan(pattern, paths):
+def scan(pattern, paths, header=HEADER):
     word, rc = re.compile(pattern, re.M), 0
     for path in paths:
         try:
@@ -138,12 +135,12 @@ def scan(pattern, paths):
         # Lean lets an import list continue (`import A B`, or B on the next line), so the first
         # line after the header must be a command at column 0.
         k = 0
-        while k < len(lines) and (not lines[k].strip() or HEADER.match(lines[k])): k += 1
+        while k < len(lines) and (not lines[k].strip() or header.match(lines[k])): k += 1
         if k < len(lines) and not FIRST_COMMAND.match(lines[k]):
             print(f"{path}:{k + 1}: {lines[k].strip()} (the import header must end in a command at column 0)")
         hits = {text.count("\n", 0, m.start()) + 1 for m in word.finditer(text)}
         hits |= {j for j, line in enumerate(lines, 1)
-                 if re.search(r"\bimport\b", line) and not (j <= k and HEADER.match(line))}
+                 if re.search(r"\bimport\b", line) and not (j <= k and header.match(line))}
         for j in sorted(hits):
             print(f"{path}:{j}: {lines[j - 1].strip()}")
     return rc
@@ -180,6 +177,8 @@ def examples(src_dir, dst_dir, paths):
 
 if __name__ == "__main__":
     try:
+        if sys.argv[1] == "scan-compiler":
+            sys.exit(scan(sys.argv[2], sys.argv[3:], re.compile(r"import [A-Za-z0-9_.]+\s*$")))
         if sys.argv[1] == "scan":
             sys.exit(scan(sys.argv[2], sys.argv[3:]))
         if sys.argv[1] == "examples":

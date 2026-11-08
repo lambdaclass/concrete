@@ -75,6 +75,33 @@ W=$(scan "${SRC[@]}"); RC=$?
 [ "$RC" = 0 ] && [ "${#SRC[@]}" -ge 10 ] && [ -z "$W" ] && ok "none of the ${#SRC[@]} source files spells a banned word outside comments" \
   || no "the source scan (rc=$RC) of ${#SRC[@]} files: $(printf '%s\n' "$W" | head -5 | tr '\n' '|')"
 
+# Compiler sources obey the same trust-word/option/extension ban. Compiler imports
+# include Lean's premise-reporting API and the pinned backend, so scan their header
+# grammar separately; no compiler file is exempt from the ban.
+mapfile -t COMPILER_SRC < <({ echo Concrete.lean; find Concrete -name '*.lean'; } | sort)
+W=$(python3 "$PROOFS_DIR/lean_lex.py" scan-compiler "$BANNED_WORD_RE|$EXTENSION_RE" "${COMPILER_SRC[@]}"); RC=$?
+[ "$RC" = 0 ] && [ -z "$W" ] && ok "all compiler sources obey the trust ban" \
+  || no "compiler source scan (rc=$RC): $(printf '%s\n' "$W" | head -5 | tr '\n' '|')"
+
+# Read every compiler constant as well, including declarations not reachable from
+# the headline theorem registry. The compiler root must import every source module.
+"$LAKE" build Concrete > "$TMP/compiler-build.log" 2>&1 \
+  || { cat "$TMP/compiler-build.log" >&2; no "compiler build failed"; finish; }
+sed 's/^import ConcreteSpec$/import Concrete/; s/`ConcreteSpec/`Concrete/g' \
+  "$ENUMERATOR" > "$TMP/compiler-enumerator.lean"
+PROOF_MODE=constants "$LAKE" env lean "$TMP/compiler-enumerator.lean" > "$TMP/compiler-consts.tsv" \
+  || { no "compiler constant enumeration failed"; finish; }
+B=$(banned "$TMP/compiler-consts.tsv"); A=$(declared "$TMP/compiler-consts.tsv")
+[ -s "$TMP/compiler-consts.tsv" ] && [ -z "$B$A" ] \
+  && ok "all compiler constants obey the axiom ban" \
+  || no "compiler banned dependencies: $B; declared axioms: $A"
+PROOF_MODE=imported "$LAKE" env lean "$TMP/compiler-enumerator.lean" > "$TMP/compiler-imported.txt" \
+  || { no "compiler import enumeration failed"; finish; }
+{ echo Concrete.lean; find Concrete -name '*.lean'; } | sed -E 's#\.lean$##; s#/#.#g' | sort -u > "$TMP/compiler-modules.txt"
+GAP=$(comm -23 "$TMP/compiler-modules.txt" <(sort -u "$TMP/compiler-imported.txt"))
+[ -z "$GAP" ] && ok "all compiler modules are in the checked import closure" \
+  || no "compiler modules outside checked closure: $GAP"
+
 # lake_options LAKEFILE → empty when the specification library builds from ConcreteSpec.lean and
 # ConcreteSpec/ (Lake's defaults: no srcDir, roots or globs) with warningAsError, and nothing can turn
 # it off. The package holds exactly two libraries, ConcreteSpec and the compiler, Concrete (ROADMAP B0),
@@ -262,7 +289,11 @@ for v in short:"not pinned to a full commit" branch:"not pinned to a full commit
   case "$L" in *"${v#*:}"*) ok "control: a lakefile whose dependency or library set is changed (${v%%:*}) is refused ($L)" ;;
     *) no "control: the ${v%%:*} lakefile was not refused for '${v#*:}': '$L'" ;; esac
 done
-for f in missing Open Brace Quote; do
+W=$(scan "$TMP/src/Brace.lean"); RC=$?
+[ "$RC" = 0 ] && [[ "$W" == *sorry* ]] \
+  && ok "control: ordinary string braces are accepted and following banned code is found" \
+  || no "control: plain string braces hid banned code: $W"
+for f in missing Open Quote; do
   scan "$TMP/src/$f.lean" > /dev/null 2>&1; RC=$?
   [ "$RC" != 0 ] && ok "control: a source the scan cannot read or lex ($f) fails it (rc=$RC)" \
     || no "control: the scan of $f exited 0"

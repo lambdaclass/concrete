@@ -1,5 +1,16 @@
+import ConcreteSpec.Spec.Borrow
+
 /-!
 # Settled pieces of the slice-0 surface
+
+PROPOSED: not normative until the owner freezes Core (ROADMAP A2c).
+Part of ConcreteSpec.Spec; see ConcreteSpec/README.md.
+
+Authority: docs/decisions.md, owner-approved language list item 30 (OPEN-1),
+SYN-5@3 and SYN-6@3. Core Q4.2 permits embedded NUL in static text VALUES
+(e.g. through the `\0` escape), not in raw source bytes. Item 30 says no BOM;
+together with the owner’s no-hidden-surprises rule this excludes U+FEFF anywhere,
+including inside comments and literals. Item 30 also makes bare CR end a comment.
 
 Only UTF-8 source validity, NUL/BOM refusal, ASCII identifier characters and line comments
 are specified here. Tokens, keywords, punctuation, literals, other whitespace, grammar,
@@ -9,30 +20,22 @@ diagnostics and CLI spellings are not defined. There is no shebang or block-comm
 namespace ConcreteSpec.Surface0
 namespace Utf8
 
-/-- A Unicode scalar value: below U+110000 and outside the surrogate interval. -/
+/-- Decision: owner-approved language list item 30 (OPEN-1), SYN-5@3 / SYN-6@3.
+ A Unicode scalar value: below U+110000 and outside the surrogate interval. -/
 def Scalar (c : Nat) : Prop := c < 0x110000 ∧ (c < 0xD800 ∨ 0xE000 ≤ c)
 
-/-- Table 3-7's one-byte row. -/
-def One (a : UInt8) : Prop := a.toNat ≤ 0x7F
-
-/-- Table 3-7's two-byte row (C2..DF, 80..BF). -/
-def Two (a b : UInt8) : Prop :=
-  0xC2 ≤ a.toNat ∧ a.toNat ≤ 0xDF ∧ 0x80 ≤ b.toNat ∧ b.toNat ≤ 0xBF
-
-/-- Table 3-7's three-byte rows, including the E0 and ED restrictions. -/
-def Three (a b c : UInt8) : Prop :=
-  0xE0 ≤ a.toNat ∧ a.toNat ≤ 0xEF ∧
-  0x80 ≤ b.toNat ∧ b.toNat ≤ 0xBF ∧ 0x80 ≤ c.toNat ∧ c.toNat ≤ 0xBF ∧
-  (a.toNat = 0xE0 → 0xA0 ≤ b.toNat) ∧ (a.toNat = 0xED → b.toNat ≤ 0x9F)
-
-/-- Table 3-7's four-byte rows, including the F0 and F4 restrictions. -/
+/-- Decision: item 30 (OPEN-1), SYN-5@3. The shared UTF-8 one-byte row. -/
+def One (a : UInt8) : Prop := Borrow.isScalar [a.toNat] = true
+/-- Decision: item 30 (OPEN-1), SYN-5@3. The shared UTF-8 two-byte row. -/
+def Two (a b : UInt8) : Prop := Borrow.isScalar [a.toNat, b.toNat] = true
+/-- Decision: item 30 (OPEN-1), SYN-5@3. The shared UTF-8 three-byte rows. -/
+def Three (a b c : UInt8) : Prop := Borrow.isScalar [a.toNat, b.toNat, c.toNat] = true
+/-- Decision: item 30 (OPEN-1), SYN-5@3. The shared UTF-8 four-byte rows. -/
 def Four (a b c d : UInt8) : Prop :=
-  0xF0 ≤ a.toNat ∧ a.toNat ≤ 0xF4 ∧
-  0x80 ≤ b.toNat ∧ b.toNat ≤ 0xBF ∧ 0x80 ≤ c.toNat ∧ c.toNat ≤ 0xBF ∧
-  0x80 ≤ d.toNat ∧ d.toNat ≤ 0xBF ∧
-  (a.toNat = 0xF0 → 0x90 ≤ b.toNat) ∧ (a.toNat = 0xF4 → b.toNat ≤ 0x8F)
+  Borrow.isScalar [a.toNat, b.toNat, c.toNat, d.toNat] = true
 
-/-- A scalar's encoding, expressed as byte ranges and the positional value equation;
+/-- Decision: owner-approved language list item 30 (OPEN-1), SYN-5@3 / SYN-6@3.
+ A scalar's encoding, expressed as byte ranges and the positional value equation;
 this judgment does not run a decoder. All other lengths are excluded. -/
 def Encodes (s : Nat) (bs : List UInt8) : Prop :=
   match bs with
@@ -45,7 +48,8 @@ def Encodes (s : Nat) (bs : List UInt8) : Prop :=
         (c.toNat - 0x80) * 64 + (d.toNat - 0x80)
   | _ => False
 
-/-- Bytes decode to scalars exactly when they concatenate their encodings in order. -/
+/-- Decision: owner-approved language list item 30 (OPEN-1), SYN-5@3 / SYN-6@3.
+ Bytes decode to scalars exactly when they concatenate their encodings in order. -/
 inductive Decodes : List UInt8 → List Nat → Prop
   | nil : Decodes [] []
   | cons {s : Nat} {chunk bs : List UInt8} {cs : List Nat} :
@@ -53,49 +57,56 @@ inductive Decodes : List UInt8 → List Nat → Prop
 
 end Utf8
 
-/-- A source has a decoding with neither NUL nor BOM anywhere. -/
+/-- Decision: owner-approved language list item 30 (OPEN-1), SYN-5@3 / SYN-6@3.
+ A source has a decoding with neither NUL nor BOM anywhere. -/
 def SourceOk (bs : List UInt8) : Prop :=
   ∃ cs, Utf8.Decodes bs cs ∧ ∀ c ∈ cs, c ≠ 0 ∧ c ≠ 0xFEFF
 
-/-- ASCII letters and underscore start identifiers. -/
+/-- Decision: owner-approved language list item 30 (OPEN-1), SYN-5@3 / SYN-6@3.
+ ASCII letters and underscore start identifiers. -/
 def IdentStart (c : Nat) : Prop :=
   (65 ≤ c ∧ c ≤ 90) ∨ (97 ≤ c ∧ c ≤ 122) ∨ c = 95
 
-/-- Only ASCII letters, underscore and digits continue identifiers. -/
+/-- Decision: owner-approved language list item 30 (OPEN-1), SYN-5@3 / SYN-6@3.
+ Only ASCII letters, underscore and digits continue identifiers. -/
 def IdentContinue (c : Nat) : Prop := IdentStart c ∨ (48 ≤ c ∧ c ≤ 57)
 
-/-- A comment body ends before the first LF or CR, or at EOF. The terminating line
-break stays in the remainder; every body scalar differs from both terminators. -/
-inductive CommentBody : List Nat → List Nat → List Nat → Prop
-  | eof : CommentBody [] [] []
-  | lf (rest : List Nat) : CommentBody (10 :: rest) [] (10 :: rest)
-  | cr (rest : List Nat) : CommentBody (13 :: rest) [] (13 :: rest)
-  | cons {c : Nat} {input body rest : List Nat} : c ≠ 10 → c ≠ 13 →
-      CommentBody input body rest → CommentBody (c :: input) (c :: body) rest
+/-- Decision: item 30 (OPEN-1), SYN-6@3. Skip through the first LF, CR or EOF;
+the terminator stays in the suffix. No discarded body is constructed. -/
+inductive CommentBody : List Nat → List Nat → Prop
+  | eof : CommentBody [] []
+  | lf (rest : List Nat) : CommentBody (10 :: rest) (10 :: rest)
+  | cr (rest : List Nat) : CommentBody (13 :: rest) (13 :: rest)
+  | cons {c : Nat} {input rest : List Nat} : c ≠ 10 → c ≠ 13 →
+      CommentBody input rest → CommentBody (c :: input) rest
 
-/-- A line comment starts with two slashes. The output pair is the whole comment
-(including its slashes) and the unconsumed remainder. No other opener is admitted. -/
-inductive LineComment : List Nat → (List Nat × List Nat) → Prop
-  | intro {input body rest : List Nat} : CommentBody input body rest →
-      LineComment (47 :: 47 :: input) (47 :: 47 :: body, rest)
+/-- Decision: item 30 (OPEN-1), SYN-6@3. Two slashes open a line comment;
+the result is its unconsumed suffix. -/
+inductive LineComment : List Nat → List Nat → Prop
+  | intro {input rest : List Nat} : CommentBody input rest →
+      LineComment (47 :: 47 :: input) rest
 
-/-- Scalar membership is decidable by its interval bounds. -/
+/-- Decision: owner-approved language list item 30 (OPEN-1), SYN-5@3 / SYN-6@3.
+ Scalar membership is decidable by its interval bounds. -/
 instance (c : Nat) : Decidable (Utf8.Scalar c) := inferInstanceAs (Decidable (_ ∧ _))
-/-- Identifier-start membership is decidable by ASCII bounds. -/
+/-- Decision: owner-approved language list item 30 (OPEN-1), SYN-5@3 / SYN-6@3.
+ Identifier-start membership is decidable by ASCII bounds. -/
 instance (c : Nat) : Decidable (IdentStart c) := inferInstanceAs (Decidable (_ ∨ _))
-/-- Identifier-continuation membership is decidable by ASCII bounds. -/
+/-- Decision: owner-approved language list item 30 (OPEN-1), SYN-5@3 / SYN-6@3.
+ Identifier-continuation membership is decidable by ASCII bounds. -/
 instance (c : Nat) : Decidable (IdentContinue c) := inferInstanceAs (Decidable (_ ∨ _))
-/-- The one-byte range constraint is decidable. -/
-instance (a : UInt8) : Decidable (Utf8.One a) := inferInstanceAs (Decidable (_ ≤ _))
-/-- The two-byte range constraints are decidable. -/
-instance (a b : UInt8) : Decidable (Utf8.Two a b) := inferInstanceAs (Decidable (_ ∧ _))
-/-- The three-byte range constraints are decidable. -/
-instance (a b c : UInt8) : Decidable (Utf8.Three a b c) := inferInstanceAs (Decidable (_ ∧ _))
-/-- The four-byte range constraints are decidable. -/
+/-- Decision: item 30 (OPEN-1). Reflection in the shared scalar checker. -/
+instance (a : UInt8) : Decidable (Utf8.One a) := inferInstanceAs (Decidable (_ = true))
+/-- Decision: item 30 (OPEN-1). Reflection in the shared scalar checker. -/
+instance (a b : UInt8) : Decidable (Utf8.Two a b) := inferInstanceAs (Decidable (_ = true))
+/-- Decision: item 30 (OPEN-1). Reflection in the shared scalar checker. -/
+instance (a b c : UInt8) : Decidable (Utf8.Three a b c) := inferInstanceAs (Decidable (_ = true))
+/-- Decision: item 30 (OPEN-1). Reflection in the shared scalar checker. -/
 instance (a b c d : UInt8) : Decidable (Utf8.Four a b c d) :=
-  inferInstanceAs (Decidable (_ ∧ _))
+  inferInstanceAs (Decidable (_ = true))
 
-/-- Encoding membership is decidable directly from the range constraints. -/
+/-- Decision: owner-approved language list item 30 (OPEN-1), SYN-5@3 / SYN-6@3.
+ Encoding membership is decidable directly from the range constraints. -/
 instance (c : Nat) (bs : List UInt8) : Decidable (Utf8.Encodes c bs) := by
   unfold Utf8.Encodes
   split <;> infer_instance
@@ -117,13 +128,13 @@ example : ¬ Utf8.Scalar 0xD800 := by decide
 example : IdentStart 95 ∧ IdentContinue 48 ∧ ¬ IdentStart 48 := by decide
 example : ¬ IdentContinue 0xE9 := by decide
 
-example : LineComment [47, 47, 32,120,10,114] ([47, 47, 32,120], [10,114]) :=
+example : LineComment [47, 47, 32,120,10,114] [10,114] :=
   .intro (.cons (by decide) (by decide) (.cons (by decide) (by decide) (.lf _)))
-example : LineComment [47, 47, 32,120,13] ([47, 47, 32,120], [13]) :=
+example : LineComment [47, 47, 32,120,13] [13] :=
   .intro (.cons (by decide) (by decide) (.cons (by decide) (by decide) (.cr _)))
-example : LineComment [47, 47, 32,120] ([47, 47, 32,120], []) :=
+example : LineComment [47, 47, 32,120] [] :=
   .intro (.cons (by decide) (by decide) (.cons (by decide) (by decide) .eof))
-example (out : List Nat × List Nat) : ¬ LineComment [47, 42, 32,120,32,42,47] out := by
+example (out : List Nat) : ¬ LineComment [47, 42, 32,120,32,42,47] out := by
   intro h; cases h
 
 end ConcreteSpec.Surface0

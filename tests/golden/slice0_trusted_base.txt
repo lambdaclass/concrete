@@ -7,6 +7,22 @@ premise P_rt [implementation] retired-by: a proof of the decoding entry against 
 premise P_trap_site [implementation] retired-by: the same runtime-entry proof (owner, 2026-11-06: a premise now) :: a launch whose body returns 256 + i writes exactly trapLine tbl[i] and a newline on fd 2
 premise P_launch [environment] retired-by: not planned :: an admitted launch of a WF image within the frame bound is never killed, and fd 2 accepts the trap line
 premise P_live [environment] retired-by: not planned :: an admitted launch happens and has a behaviour
+theorem Concrete.Lex.decodeAt_sound axioms: propext
+theorem Concrete.Lex.decodeAt_complete axioms: propext, Classical.choice, Quot.sound
+theorem Concrete.Lex.decodeUtf8_sound axioms: propext
+theorem Concrete.Lex.decodeUtf8_complete axioms: propext, Classical.choice, Quot.sound
+theorem Concrete.Lex.sourceAt_iff axioms: propext, Quot.sound
+theorem Concrete.Lex.checkSource_sound axioms: propext, Quot.sound
+theorem Concrete.Lex.checkSource_complete axioms: propext, Classical.choice, Quot.sound
+theorem Concrete.Lex.identStart?_iff axioms: propext
+theorem Concrete.Lex.identContinue?_iff axioms: propext
+theorem Concrete.Lex.scanLine_sound axioms: propext
+theorem Concrete.Lex.scanLine_complete axioms: propext
+theorem Concrete.Lex.lineComment_sound axioms: propext
+theorem Concrete.Lex.lineComment_complete axioms: propext
+theorem Concrete.Lex.decode_ok_iff axioms: propext, Classical.choice, Quot.sound
+theorem Concrete.Lex.lineComment_some_iff axioms: propext
+theorem Concrete.Lex.decode_error_not_decodes axioms: propext, Classical.choice, Quot.sound
 theorem Concrete.BIR.decode_encode axioms: propext, Quot.sound
 theorem Concrete.BIR.run_progress axioms: propext, Classical.choice, Quot.sound
 theorem Concrete.BIR.behaviour_diverges_iff axioms: propext, Classical.choice, Quot.sound

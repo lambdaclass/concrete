@@ -539,8 +539,8 @@ def answerDischarged : Program :=
 def return134 : Program :=
   { blocks := [{ params := [], insts := [], term := .ret (.imm .u8 134) }], sites := [] }
 
-example : WF answer := by decide +kernel
-example : WF overflow := by decide +kernel
+example : WF answer := by decide
+example : WF overflow := by decide
 example : WF answerDischarged := by decide
 example : WF return134 := by decide
 example : run answer 3 = .exited 42 := by decide
@@ -604,7 +604,7 @@ def twoSites (a b c : Int) : Program :=
     sites := [⟨.arithmeticOverflow, ⟨3⟩, ⟨10, 15⟩, ⟨"src/main.con", 1, 11⟩⟩,
               ⟨.arithmeticOverflow, ⟨9⟩, ⟨40, 47⟩, ⟨"src/ñandú \"x\"/lib.con", 17, 5⟩⟩] }
 
-example : WF (twoSites 100 100 2) := by decide +kernel
+example : WF (twoSites 100 100 2) := by decide
 example : run (twoSites 100 100 2) 5 = .trapped 1 := by decide
 example : run (twoSites 200 100 2) 5 = .trapped 0 := by decide
 example : run (twoSites 20 1 2) 5 = .exited 42 := by decide
@@ -630,20 +630,20 @@ def useBeforeDef : Program :=
         term := .ret (.reg 0) }],
     sites := [] }
 
-example : Loc.wf ⟨"/abs/main.con", 1, 1⟩ = false := by decide +kernel
-example : Loc.wf ⟨"src\\main.con", 1, 1⟩ = false := by decide +kernel
-example : Loc.wf ⟨"src/main.con\n", 1, 1⟩ = false := by decide +kernel
-example : Loc.wf ⟨"src/main.con", 0, 1⟩ = false := by decide +kernel
-example : Loc.wf ⟨"src/main.con", 1, 0⟩ = false := by decide +kernel
-example : Loc.wf ⟨"src/\u0085main.con", 1, 1⟩ = false := by decide +kernel
-example : Loc.wf ⟨"src/\u2028main.con", 1, 1⟩ = false := by decide +kernel
-example : Loc.wf ⟨"../outside.con", 1, 1⟩ = false := by decide +kernel
-example : Loc.wf ⟨"src/../main.con", 1, 1⟩ = false := by decide +kernel
-example : Loc.wf ⟨"./main.con", 1, 1⟩ = false := by decide +kernel
-example : Loc.wf ⟨"src//main.con", 1, 1⟩ = false := by decide +kernel
-example : Loc.wf ⟨"src/", 1, 1⟩ = false := by decide +kernel
-example : Loc.wf ⟨"C:/outside.con", 1, 1⟩ = false := by decide +kernel
-example : Loc.wf ⟨"src/ñandú \"x\"/lib.con", 17, 5⟩ = true := by decide +kernel
+example : Loc.wf ⟨"/abs/main.con", 1, 1⟩ = false := by decide
+example : Loc.wf ⟨"src\\main.con", 1, 1⟩ = false := by decide
+example : Loc.wf ⟨"src/main.con\n", 1, 1⟩ = false := by decide
+example : Loc.wf ⟨"src/main.con", 0, 1⟩ = false := by decide
+example : Loc.wf ⟨"src/main.con", 1, 0⟩ = false := by decide
+example : Loc.wf ⟨"src/\u0085main.con", 1, 1⟩ = false := by decide
+example : Loc.wf ⟨"src/\u2028main.con", 1, 1⟩ = false := by decide
+example : Loc.wf ⟨"../outside.con", 1, 1⟩ = false := by decide
+example : Loc.wf ⟨"src/../main.con", 1, 1⟩ = false := by decide
+example : Loc.wf ⟨"./main.con", 1, 1⟩ = false := by decide
+example : Loc.wf ⟨"src//main.con", 1, 1⟩ = false := by decide
+example : Loc.wf ⟨"src/", 1, 1⟩ = false := by decide
+example : Loc.wf ⟨"C:/outside.con", 1, 1⟩ = false := by decide
+example : Loc.wf ⟨"src/ñandú \"x\"/lib.con", 17, 5⟩ = true := by decide
 example : ¬ WF unreachableParam := by decide
 example : ¬ WF crossBlockUse := by decide
 example : ¬ WF useBeforeDef := by decide
@@ -679,7 +679,7 @@ def all : List (String × Program × Outcome) :=
    ("site1", twoSites 100 100 2, .trapped 1), ("site0", twoSites 200 100 2, .trapped 0),
    ("two_sites_ok", twoSites 20 1 2, .exited 42)]
 
-example : all.all (fun (_, p, o) => wf p && run p 5 == o) := by decide +kernel
+example : all.all (fun (_, p, o) => wf p && run p 5 == o) := by decide
 
 end Examples
 

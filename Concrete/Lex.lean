@@ -1,4 +1,4 @@
-import ConcreteSpec.Spec.Surface0
+import ConcreteSpec.Proofs.Surface0
 
 /-!
 # Settled lexer components
@@ -10,7 +10,6 @@ truncation points at EOF. TODO: prove the first non-extendible-prefix property o
 The success correspondence theorems below do not claim error-position correctness.
 -/
 
-set_option maxRecDepth 2048
 
 namespace Concrete.Lex
 open ConcreteSpec.Surface0
@@ -138,28 +137,36 @@ theorem decodeAt_complete {bs : List UInt8} {cs : List Nat} (h : Utf8.Decodes bs
     match chunk with
     | [] => simp [Utf8.Encodes] at enc
     | [a] =>
-      obtain ⟨ha, rfl⟩ := enc
+      change Utf8.One a ∧ _ at enc
+      obtain ⟨ha, he⟩ := enc
+      subst s
       simp only [List.cons_append, List.nil_append]
       rw [decodeAt.eq_def]
       simp only [ha, ↓reduceIte, ih, prepend]
     | [a, b] =>
-      obtain ⟨hab, rfl⟩ := enc
-      have ha : ¬ Utf8.One a := by unfold Utf8.One; unfold Utf8.Two at hab; omega
+      change Utf8.Two a b ∧ _ at enc
+      obtain ⟨hab, he⟩ := enc
+      subst s
+      have ha : ¬ Utf8.One a := by simp only [Utf8.one_iff, Utf8.two_iff] at *; omega
       simp only [List.cons_append, List.nil_append]
       rw [decodeAt.eq_def]
       simp only [ha, ↓reduceIte, hab, ih, prepend]
     | [a, b, c] =>
-      obtain ⟨habc, rfl⟩ := enc
-      have ha : ¬ Utf8.One a := by unfold Utf8.One; unfold Utf8.Three at habc; omega
-      have hb : ¬ Utf8.Two a b := by unfold Utf8.Two; unfold Utf8.Three at habc; omega
+      change Utf8.Three a b c ∧ _ at enc
+      obtain ⟨habc, he⟩ := enc
+      subst s
+      have ha : ¬ Utf8.One a := by simp only [Utf8.one_iff, Utf8.three_iff] at *; omega
+      have hb : ¬ Utf8.Two a b := by simp only [Utf8.two_iff, Utf8.three_iff] at *; omega
       simp only [List.cons_append, List.nil_append]
       rw [decodeAt.eq_def]
       simp only [ha, ↓reduceIte, hb, habc, ih, prepend]
     | [a, b, c, d] =>
-      obtain ⟨habcd, rfl⟩ := enc
-      have ha : ¬ Utf8.One a := by unfold Utf8.One; unfold Utf8.Four at habcd; omega
-      have hb : ¬ Utf8.Two a b := by unfold Utf8.Two; unfold Utf8.Four at habcd; omega
-      have hc : ¬ Utf8.Three a b c := by unfold Utf8.Three; unfold Utf8.Four at habcd; omega
+      change Utf8.Four a b c d ∧ _ at enc
+      obtain ⟨habcd, he⟩ := enc
+      subst s
+      have ha : ¬ Utf8.One a := by simp only [Utf8.one_iff, Utf8.four_iff] at *; omega
+      have hb : ¬ Utf8.Two a b := by simp only [Utf8.two_iff, Utf8.four_iff] at *; omega
+      have hc : ¬ Utf8.Three a b c := by simp only [Utf8.three_iff, Utf8.four_iff] at *; omega
       simp only [List.cons_append, List.nil_append]
       rw [decodeAt.eq_def]
       simp only [ha, ↓reduceIte, hb, hc, habcd, ih, prepend]
@@ -172,12 +179,6 @@ theorem decodeUtf8_sound {bs : List UInt8} {cs : List Nat}
 /-- Every declarative decoding is returned by the decoder. -/
 theorem decodeUtf8_complete {bs : List UInt8} {cs : List Nat}
     (h : Utf8.Decodes bs cs) : decodeUtf8 bs = .ok cs := decodeAt_complete h 0
-
-/-- The independent decoding judgment is deterministic. -/
-theorem decodes_unique {bs : List UInt8} {cs ds : List Nat}
-    (hc : Utf8.Decodes bs cs) (hd : Utf8.Decodes bs ds) : cs = ds := by
-  have := (decodeUtf8_complete hc).symm.trans (decodeUtf8_complete hd)
-  exact Except.ok.inj this
 
 /-- Refuse NUL or BOM before inspecting the remaining source. -/
 def sourcePrepend (off c : Nat) (r : Except DecodeError (List Nat)) :
@@ -317,18 +318,9 @@ theorem checkSource_sound {bs : List UInt8} {cs : List Nat}
 
 /-- Every source-valid decoding is returned with exactly its scalars. -/
 theorem checkSource_complete {bs : List UInt8} {cs : List Nat}
-    (hd : Utf8.Decodes bs cs) (hs : SourceOk bs) : checkSource bs = .ok cs := by
-  obtain ⟨ds, hds, good⟩ := hs
-  have eq := decodes_unique hds hd
-  subst ds
-  exact (sourceAt_iff 0 bs cs).mpr ⟨decodeUtf8_complete hd, good⟩
-
-/-- Every encoded value is a Unicode scalar; the range judgment excludes surrogates. -/
-theorem encodes_scalar {c : Nat} {bs : List UInt8} (h : Utf8.Encodes c bs) :
-    Utf8.Scalar c := by
-  unfold Utf8.Encodes at h
-  split at h <;> simp only [Utf8.One, Utf8.Two, Utf8.Three, Utf8.Four] at h <;>
-    unfold Utf8.Scalar <;> omega
+    (hd : Utf8.Decodes bs cs) (hs : ∀ c ∈ cs, c ≠ 0 ∧ c ≠ 0xFEFF) :
+    checkSource bs = .ok cs :=
+  (sourceAt_iff 0 bs cs).mpr ⟨decodeUtf8_complete hd, hs⟩
 
 /-- Test the settled ASCII identifier-start predicate. -/
 def identStart? (c : Nat) : Bool := decide (IdentStart c)
@@ -344,23 +336,18 @@ theorem identStart?_iff (c : Nat) : identStart? c = true ↔ IdentStart c := by
 theorem identContinue?_iff (c : Nat) : identContinue? c = true ↔ IdentContinue c := by
   simp [identContinue?]
 
-/-- Scan a comment body, retaining its first LF or CR in the remainder. -/
-def scanLine : List Nat → List Nat × List Nat
-  | [] => ([], [])
-  | c :: cs =>
-    if c = 10 ∨ c = 13 then ([], c :: cs)
-    else let (body, rest) := scanLine cs; (c :: body, rest)
+/-- Skip a comment body, retaining its first LF or CR. Tail recursive. -/
+def scanLine : List Nat → List Nat
+  | [] => []
+  | c :: cs => if c = 10 ∨ c = 13 then c :: cs else scanLine cs
 
-/-- Scan a line comment only when the input begins with two slashes. -/
-def lineComment : List Nat → Option (List Nat × List Nat)
-  | 47 :: 47 :: cs =>
-      let (body, rest) := scanLine cs
-      some (47 :: 47 :: body, rest)
+/-- Skip a line comment only when the input begins with two slashes. -/
+def lineComment : List Nat → Option (List Nat)
+  | 47 :: 47 :: cs => some (scanLine cs)
   | _ => none
 
-/-- Scanning a body satisfies the declarative stopping rule. -/
-theorem scanLine_sound (cs : List Nat) :
-    CommentBody cs (scanLine cs).1 (scanLine cs).2 := by
+/-- Skipping satisfies the declarative stopping rule. -/
+theorem scanLine_sound (cs : List Nat) : CommentBody cs (scanLine cs) := by
   induction cs with
   | nil => exact .eof
   | cons c cs ih =>
@@ -370,9 +357,9 @@ theorem scanLine_sound (cs : List Nat) :
       · subst c; simpa [scanLine] using CommentBody.cr cs
       · simpa [scanLine, hl, hr] using CommentBody.cons hl hr ih
 
-/-- Every declarative body decomposition is the scanner's result. -/
-theorem scanLine_complete {cs body rest : List Nat} (h : CommentBody cs body rest) :
-    scanLine cs = (body, rest) := by
+/-- Every declarative suffix is returned by the scanner. -/
+theorem scanLine_complete {cs rest : List Nat} (h : CommentBody cs rest) :
+    scanLine cs = rest := by
   induction h with
   | eof => rfl
   | lf rest => simp [scanLine]
@@ -380,7 +367,7 @@ theorem scanLine_complete {cs body rest : List Nat} (h : CommentBody cs body res
   | cons hl hr _ ih => simp [scanLine, hl, hr, ih]
 
 /-- Successful line-comment scanning satisfies the independent judgment. -/
-theorem lineComment_sound {cs : List Nat} {out : List Nat × List Nat}
+theorem lineComment_sound {cs out : List Nat}
     (h : lineComment cs = some out) : LineComment cs out := by
   unfold lineComment at h
   split at h
@@ -389,17 +376,33 @@ theorem lineComment_sound {cs : List Nat} {out : List Nat × List Nat}
     exact .intro (scanLine_sound body)
   · cases h
 
-/-- Every declarative line comment is recognized, with the same body and remainder. -/
-theorem lineComment_complete {cs : List Nat} {out : List Nat × List Nat}
+/-- Every declarative comment is recognized with the same suffix. -/
+theorem lineComment_complete {cs out : List Nat}
     (h : LineComment cs out) : lineComment cs = some out := by
   cases h with
   | intro hb => simp [lineComment, scanLine_complete hb]
 
+/-- Comment skipping is exactly the declarative relation. -/
+theorem lineComment_some_iff {cs out : List Nat} :
+    lineComment cs = some out ↔ LineComment cs out :=
+  ⟨lineComment_sound, lineComment_complete⟩
+
+/-- Successful decoding is exactly the declarative relation. -/
+theorem decode_ok_iff {bs : List UInt8} {cs : List Nat} :
+    decodeUtf8 bs = .ok cs ↔ Utf8.Decodes bs cs :=
+  ⟨decodeUtf8_sound, decodeUtf8_complete⟩
+
+/-- Refusal rules out every declarative decoding. -/
+theorem decode_error_not_decodes {bs : List UInt8} {e : DecodeError}
+    (h : decodeUtf8 bs = .error e) : ∀ cs, ¬ Utf8.Decodes bs cs := by
+  intro cs hd
+  have hs := decodeUtf8_complete hd
+  rw [h] at hs
+  cases hs
+
 /-! ## Kernel-checked conformance cases -/
 
 section Conformance
--- The raised limit is for these `decide` cases only.
-set_option maxRecDepth 100000
 
 /-- Equality of decoder results for kernel-evaluated conformance cases. -/
 local instance : DecidableEq (Except DecodeError (List Nat)) := by
@@ -412,30 +415,47 @@ local instance : DecidableEq (Except DecodeError (List Nat)) := by
     | error _ => exact isFalse (by intro h; cases h)
     | ok ds => exact decidable_of_iff (cs = ds) ⟨congrArg Except.ok, Except.ok.inj⟩
 
-example : decodeUtf8 [65, 95, 57] = .ok [65, 95, 57] := by decide
-example : decodeUtf8 [0xC2, 0xA2] = .ok [0xA2] := by decide
-example : decodeUtf8 [0xE2, 0x82, 0xAC] = .ok [0x20AC] := by decide
-example : decodeUtf8 [0xF0, 0x9F, 0x98, 0x80] = .ok [0x1F600] := by decide
-example : decodeUtf8 [0xC0, 0x80] = .error ⟨0, .overlong⟩ := by decide
-example : decodeUtf8 [0xED, 0xA0, 0x80] = .error ⟨1, .surrogate⟩ := by decide
-example : decodeUtf8 [0xF4, 0x90, 0x80, 0x80] = .error ⟨1, .tooLarge⟩ := by decide
-example : decodeUtf8 [0xE2, 0x82] = .error ⟨2, .truncated⟩ := by decide
-example : decodeUtf8 [0x80] = .error ⟨0, .unexpectedContinuation⟩ := by decide
-example : checkSource [0] = .error ⟨0, .nul⟩ := by decide
-example : checkSource [0xEF, 0xBB, 0xBF] = .error ⟨0, .bom⟩ := by decide
-example : checkSource [65, 0] = .error ⟨1, .nul⟩ := by decide
-example : checkSource [65, 0xEF, 0xBB, 0xBF] = .error ⟨1, .bom⟩ := by decide
-example : checkSource [0, 0x80] = .error ⟨0, .nul⟩ := by decide
-example : checkSource [0xC2, 0xA2, 0] = .error ⟨2, .nul⟩ := by decide
-example : checkSource [65] = .ok [65] := by decide
+example : decodeUtf8 [65, 95, 57] = .ok [65, 95, 57] := by rfl
+example : decodeUtf8 [0xC2, 0xA2] = .ok [0xA2] := by rfl
+example : decodeUtf8 [0xE2, 0x82, 0xAC] = .ok [0x20AC] := by rfl
+example : decodeUtf8 [0xF0, 0x9F, 0x98, 0x80] = .ok [0x1F600] := by rfl
+example : decodeUtf8 [0xC0, 0x80] = .error ⟨0, .overlong⟩ := by rfl
+example : decodeUtf8 [0xED, 0xA0, 0x80] = .error ⟨1, .surrogate⟩ := by rfl
+example : decodeUtf8 [0xF4, 0x90, 0x80, 0x80] = .error ⟨1, .tooLarge⟩ := by rfl
+example : decodeUtf8 [0xE2, 0x82] = .error ⟨2, .truncated⟩ := by rfl
+example : decodeUtf8 [0x80] = .error ⟨0, .unexpectedContinuation⟩ := by rfl
+example : checkSource [0] = .error ⟨0, .nul⟩ := by rfl
+example : checkSource [0xEF, 0xBB, 0xBF] = .error ⟨0, .bom⟩ := by
+  rw [checkSource, sourceAt.eq_def]
+  simp only [show ¬ Utf8.One (0xEF : UInt8) by decide,
+    show ¬ Utf8.Two (0xEF : UInt8) 0xBB by decide,
+    show Utf8.Three (0xEF : UInt8) 0xBB 0xBF by decide, ↓reduceIte]
+  have hv : ((0xEF : UInt8).toNat - 0xE0) * 4096 +
+      ((0xBB : UInt8).toNat - 0x80) * 64 + ((0xBF : UInt8).toNat - 0x80) = 0xFEFF := by decide
+  rw [hv]
+  simp only [sourcePrepend, ↓reduceIte, show (0xFEFF : Nat) ≠ 0 by decide]
+example : checkSource [65, 0] = .error ⟨1, .nul⟩ := by rfl
+example : checkSource [65, 0xEF, 0xBB, 0xBF] = .error ⟨1, .bom⟩ := by rfl
+example : checkSource [0, 0x80] = .error ⟨0, .nul⟩ := by rfl
+example : checkSource [0xC2, 0xA2, 0] = .error ⟨2, .nul⟩ := by
+  rw [checkSource, sourceAt.eq_def]
+  simp only [show ¬ Utf8.One (0xC2 : UInt8) by decide,
+    show Utf8.Two (0xC2 : UInt8) 0xA2 by decide, ↓reduceIte]
+  have hv : ((0xC2 : UInt8).toNat - 0xC0) * 64 + ((0xA2 : UInt8).toNat - 0x80) = 0xA2 := by decide
+  rw [hv]
+  simp only [sourcePrepend, show (0xA2 : Nat) ≠ 0 by decide,
+    show (0xA2 : Nat) ≠ 0xFEFF by decide, ↓reduceIte]
+  have ht : sourceAt 2 [0] = .error ⟨2, .nul⟩ := rfl
+  rw [ht]
+  rfl
+example : checkSource [65] = .ok [65] := by rfl
 example : identStart? 0xE9 = false ∧ identContinue? 0xE9 = false := by decide
 
 example : lineComment [47,47,32,120,10,114,101,115,116] =
-    some ([47,47,32,120], [10,114,101,115,116]) := by decide
-example : lineComment [47,47,32,120,13] = some ([47,47,32,120], [13]) := by decide
-example : lineComment [47,47,32,120] = some ([47,47,32,120], []) := by decide
-example : lineComment [47,42,32,120,32,42,47] = none := by decide
+    some [10,114,101,115,116] := by rfl
+example : lineComment [47,47,32,120,13] = some [13] := by rfl
+example : lineComment [47,47,32,120] = some [] := by rfl
+example : lineComment [47,42,32,120,32,42,47] = none := by rfl
 
 end Conformance
-
 end Concrete.Lex

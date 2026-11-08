@@ -14,6 +14,7 @@ import Lean.PrettyPrinter
 import Lean.Util.CollectAxioms
 import Concrete.BIR.Progress
 import Concrete.Backend.LCB
+import Concrete.Lex
 
 namespace Concrete.Premises
 
@@ -56,6 +57,22 @@ def all : List Premise := [
 
 /-- The headline theorems, whose axioms the golden records. -/
 def theorems : List Lean.Name := [
+  ``Concrete.Lex.decodeAt_sound,
+  ``Concrete.Lex.decodeAt_complete,
+  ``Concrete.Lex.decodeUtf8_sound,
+  ``Concrete.Lex.decodeUtf8_complete,
+  ``Concrete.Lex.sourceAt_iff,
+  ``Concrete.Lex.checkSource_sound,
+  ``Concrete.Lex.checkSource_complete,
+  ``Concrete.Lex.identStart?_iff,
+  ``Concrete.Lex.identContinue?_iff,
+  ``Concrete.Lex.scanLine_sound,
+  ``Concrete.Lex.scanLine_complete,
+  ``Concrete.Lex.lineComment_sound,
+  ``Concrete.Lex.lineComment_complete,
+  ``Concrete.Lex.decode_ok_iff,
+  ``Concrete.Lex.lineComment_some_iff,
+  ``Concrete.Lex.decode_error_not_decodes,
   ``Concrete.BIR.decode_encode,
   ``Concrete.BIR.run_progress,
   ``Concrete.BIR.behaviour_diverges_iff,
