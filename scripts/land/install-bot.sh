@@ -40,13 +40,13 @@ if [ ! -d "$CLONE/.git" ]; then
 fi
 cd "$CLONE"
 if [ "$(git config --get-all remote.origin.url)" != "$ORIGIN_URL" ]; then
-  say "repointing origin from $(git config --get-all remote.origin.url | paste -sd' ') to $ORIGIN_URL"
+  say "repointing origin from $(git config --get-all remote.origin.url | tr '\n' ' ') to $ORIGIN_URL"
   git config --replace-all remote.origin.url "$ORIGIN_URL"
 fi
 # A push URL would send pushes somewhere other than the fetch URL (train.sh refuses one that names
 # another repository); the bot pushes where it fetches, so it keeps none.
 if git config --get-all remote.origin.pushurl >/dev/null 2>&1; then
-  say "removing origin's push URL(s): $(git config --get-all remote.origin.pushurl | paste -sd' ')"
+  say "removing origin's push URL(s): $(git config --get-all remote.origin.pushurl | tr '\n' ' ')"
   git config --unset-all remote.origin.pushurl
 fi
 if git remote get-url lambdaclass >/dev/null 2>&1; then say "removing the old mirror remote 'lambdaclass' (origin is that repository now)"; git remote remove lambdaclass; fi
@@ -108,8 +108,8 @@ else
   # An older install set LAND_REPO=unbalancedparentheses/concrete2; train.sh and the bot refuse a
   # LAND_REPO that is not the one repository, so the installer migrates the line rather than warn.
   if grep -q '^LAND_REPO=' "$ENVF" && ! grep -qx 'LAND_REPO=lambdaclass/concrete' "$ENVF"; then
-    say "migrating $ENVF: $(grep '^LAND_REPO=' "$ENVF" | paste -sd' ') -> LAND_REPO=lambdaclass/concrete"
-    sed -i 's|^LAND_REPO=.*|LAND_REPO=lambdaclass/concrete|' "$ENVF"
+    say "migrating $ENVF: $(grep '^LAND_REPO=' "$ENVF" | tr '\n' ' ') -> LAND_REPO=lambdaclass/concrete"
+    sed 's|^LAND_REPO=.*|LAND_REPO=lambdaclass/concrete|' "$ENVF" > "$ENVF.new" && mv "$ENVF.new" "$ENVF"
   fi
 fi
 for u in concrete-landing-bot.service concrete-landing-bot.timer; do
