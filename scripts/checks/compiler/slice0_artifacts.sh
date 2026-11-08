@@ -14,31 +14,33 @@
 #     LCB adaptation and in-process assembly, Lean start-up included) and native step (clang and
 #     LCB's command line, linking both executables), next to its budget (the step's time bound), in
 #     REPORT/compile_times.tsv.
-# 12. Stack bound: lib/stack_bound.py derives, from the linked executable's disassembly, a bound on
-#     the Concrete-owned stack below main's entry, covering every byte addressed relative to the
-#     stack or frame pointer (so the red zone), with external libc calls listed with their entry
-#     depth (their own use, and that _exit and abort do not return, are premises). A run under
-#     gdb (x86-64 Linux, lib/stack_measure.py) or LLDB (aarch64-macos, lib/stack_measure_lldb.py)
-#     must stay within it (the run counts the stack pointer and every stack byte a stepped
-#     instruction addresses, lib/stack_access.py, so the red zone). Each analysed disassembly is
-#     kept in REPORT/disassembly/. REPORT/stack.tsv. Controls: the analysis must refuse an unmodelled
-#     stack-pointer write, an indirect call, recursion, a call to an unknown function, two depths
-#     meeting, a stack pointer used as a value or written through a partial register, a partial
-#     frame-pointer write, an indexed stack address, a saved frame pointer popped into another
-#     register, a stack address taken, an overwritten return address, an AArch64 frame pointer
-#     stored, a register-directed return, a return after a call without the link register
-#     restored, a freed or restored saved slot reread, a callee's leftover saved slot reread by
-#     its caller (both architectures), a read of bytes written on one path only or never written,
-#     a store through main's argv, a PC-relative base kept across a call, walked by repeated adds or
-#     beyond the reach premise, fs/gs beyond TP_REACH, an absolute address (memory only through
-#     sp/fp, PC-relative or bounded fs/gs), a callee that does not restore the frame pointer, a frame
-#     record away from sp, an unmodelled instruction (x86 `loop`) and frame- or link-register
-#     writeback (AArch64), and give the expected bound on known functions (x86 frame, red-zone store,
-#     two AArch64 frame-record shapes, a read of bytes written on both paths, an adrp-based load, an
-#     fs:0x28 canary load with bound unchanged, LCB's single link-register save with a Mach-O stub
-#     call in a loop); also refuse the link register loaded from another slot, a stub call with no
-#     indirect-symbol entry, into a stub entry's middle or to the bare stub section; the run check
-#     must compute and count a beyond-reach fs address; the comparison must reject a measurement
+# 12. Stack bound: lib/stack_bound.py derives, from the linked executable's disassembly and (x86)
+#     PT_TLS program header, a bound on the Concrete-owned stack below main's entry, covering every
+#     byte addressed relative to the stack or frame pointer (so the red zone), with external libc
+#     calls listed with their entry depth (their own use, and that _exit and abort do not return,
+#     are premises). A run under gdb (x86-64 Linux, lib/stack_measure.py) or LLDB (aarch64-macos,
+#     lib/stack_measure_lldb.py) must stay within it (the run counts the stack pointer and every
+#     stack byte a stepped instruction addresses, lib/stack_access.py, so the red zone). Each
+#     analysed disassembly is kept in REPORT/disassembly/. REPORT/stack.tsv. Controls: the analysis
+#     must refuse an unmodelled stack-pointer write, an indirect call, recursion, a call to an
+#     unknown function, two depths meeting, a stack pointer used as a value or written through a
+#     partial register, a partial frame-pointer write, an indexed stack address, a saved frame
+#     pointer popped into another register, a stack address taken, an overwritten return address,
+#     an AArch64 frame pointer stored, a register-directed return, a return after a call without the
+#     link register restored, a freed or restored saved slot reread, a callee's leftover saved slot
+#     reread by its caller (both architectures), a read of bytes written on one path only or never
+#     written, a store through main's argv, a PC-relative base kept across a call, walked by repeated
+#     adds or beyond the reach premise, fs intervals outside the TCB/PT_TLS bounds (every width,
+#     both signs and wrap-around), every gs or register-relative override, segment-register writes,
+#     multi-memory-operand instructions, and an absolute address; also missing PT_TLS metadata, a
+#     callee that does not restore the frame pointer, a frame record away from sp, an unmodelled
+#     instruction (x86 `loop`) and frame- or link-register writeback (AArch64). Known bounds cover
+#     x86 frame, red-zone store, two AArch64 frame-record shapes, a read written on both paths, an
+#     adrp-based load, an fs:0x28 canary load, and LCB's single link-register save with a Mach-O stub
+#     call in a loop; also refuse the link register loaded from another slot, a stub call with no
+#     indirect-symbol entry, into a stub entry's middle or to the bare stub section. Real GDB must
+#     count both unbracketed fs forms, fail closed without fs_base, and derive a real nonzero PT_TLS;
+#     the comparison must reject a measurement
 #     above the bound; refuse an access beyond the target's red zone (x86-64, Apple arm64) and any
 #     below the stack pointer on aarch64-linux; and a linked main storing at the red zone's edge must
 #     be measured at 128 (bound 128), and with a 120-byte red zone not at all.
@@ -54,6 +56,7 @@ source scripts/checks/lib/slice0_common.sh
 : "${CONCRETE_SLICE0_LLVM:?run inside nix develop}"
 objdump=(bounded 60 "$CONCRETE_SLICE0_LLVM/llvm-objdump" -d --no-show-raw-insn)
 indirect=(bounded 60 "$CONCRETE_SLICE0_LLVM/llvm-objdump" --macho --indirect-symbols)
+readelf=(bounded 60 "$CONCRETE_SLICE0_LLVM/llvm-readelf" --program-headers --wide)
 case "$target" in
   x86_64-linux) arch=x86_64; objdump+=(--x86-asm-syntax=intel) ;;
   aarch64-*) arch=aarch64 ;;
@@ -116,6 +119,22 @@ measure() {
   fi
 }
 
+# append_tls EXE DIS: append the linked ELF's sole PT_TLS p_memsz, or zero without PT_TLS. The
+# analyzer never guesses this target fact; unreadable, malformed or repeated metadata fails closed.
+append_tls() {
+  local headers="$1.program-headers"
+  "${readelf[@]}" "$1" >"$headers" 2>"$headers.err" || return 1
+  awk '
+    $1 == "TLS" {
+      if (seen || NF < 8 || $6 !~ /^0x[0-9a-fA-F]+$/) bad = 1
+      else { seen = 1; memsz = $6 }
+    }
+    END {
+      if (bad) exit 1
+      print "tls_memsz", (seen ? memsz : "0x0")
+    }' "$headers" >>"$2"
+}
+
 # stack_check NAME BACKEND EXE: derive the bound, measure a run where supported, record both.
 stack_check() {
   local name=$1 backend=$2 exe=$3 dis="$3.dis" out bound ext m measured=not-run
@@ -130,6 +149,10 @@ stack_check() {
          s && $1 ~ /^0x[0-9a-f]+$/ && NF == 3 {print "stub", $1, $3}' >>"$dis"; then
       echo "FAIL $name [$backend] stack: indirect symbols failed: $(head -c 300 "$dis.err")"; fail=1; return
     fi
+  fi
+  if [ "$target" = x86_64-linux ] && ! append_tls "$exe" "$dis"; then
+    echo "FAIL $name [$backend] stack: PT_TLS metadata failed: $(head -c 300 "$exe.program-headers.err")"
+    fail=1; return
   fi
   # The disassembly the bound is derived from is kept in the report (audit evidence).
   mkdir -p "$report/disassembly"
@@ -212,9 +235,10 @@ else
   echo "FAIL control: ASan did not report an out-of-bounds load (status $(cat "$c/san.status"))"; fail=1
 fi
 
-# Controls (gate 12): the analysis on synthetic disassembly.
-ctl_dis() { # ctl_dis NAME: write a synthetic x86-64 disassembly from stdin
-  { echo "Disassembly of section .text:"; cat; } >"$work/ctl/$1.dis"
+# Controls (gate 12): the analysis on synthetic disassembly. PT_TLS is explicit even in controls:
+# absence of the line is a fail-closed error, not an implicit zero-sized TLS segment.
+ctl_dis() { # ctl_dis NAME [PT_TLS_MEMSZ]: write a synthetic disassembly from stdin
+  { echo "Disassembly of section .text:"; cat; echo "tls_memsz ${2:-0x0}"; } >"$work/ctl/$1.dis"
   echo "$work/ctl/$1.dis"
 }
 known=$(ctl_dis known <<'D'
@@ -245,18 +269,30 @@ else
   echo "FAIL control: stack bound of a known function: $(stack_bound x86_64-linux "$known")"
   fail=1
 fi
-refuse() { # refuse NAME BODY [TARGET [MAIN]]: BODY (printf format) follows the main header
+sed '/^tls_memsz /d' "$known" >"$work/ctl/no-tls-metadata.dis"
+if stack_bound x86_64-linux "$work/ctl/no-tls-metadata.dis" >"$work/ctl/no-tls-metadata.out"; then
+  echo "FAIL control: x86 analysis without PT_TLS metadata was accepted"; fail=1
+else
+  echo "ok   control: x86 analysis without PT_TLS metadata is refused"
+fi
+{ cat "$known"; echo 'tls_memsz 0x0'; } >"$work/ctl/duplicate-tls-metadata.dis"
+if stack_bound x86_64-linux "$work/ctl/duplicate-tls-metadata.dis" >"$work/ctl/duplicate-tls-metadata.out"; then
+  echo "FAIL control: duplicate PT_TLS metadata was accepted"; fail=1
+else
+  echo "ok   control: duplicate PT_TLS metadata is refused"
+fi
+refuse() { # refuse NAME BODY [TARGET [MAIN [PT_TLS_MEMSZ]]]: BODY follows the main header
   local f
-  f=$(ctl_dis "$1" <<<"$(printf "\n0000000000001010 <${4:-main}>:\n$2")")
+  f=$(ctl_dis "$1" "${5:-0x0}" <<<"$(printf "\n0000000000001010 <${4:-main}>:\n$2")")
   if stack_bound "${3:-x86_64-linux}" "$f" >"$f.out"; then
     echo "FAIL control: stack analysis accepts $1: $(head -c 2000 "$f.out")"; fail=1
   else
     echo "ok   control: stack analysis refuses $1"
   fi
 }
-refuse_tp() { # refuse_tp NAME BODY: a beyond-reach thread-pointer operand gets the reach refusal
+refuse_tp() { # refuse_tp NAME BODY [PT_TLS_MEMSZ]: an fs operand gets the reach refusal
   local f rc=0
-  f=$(ctl_dis "$1" <<<"$(printf "\n0000000000001010 <main>:\n$2")")
+  f=$(ctl_dis "$1" "${3:-0x0}" <<<"$(printf "\n0000000000001010 <main>:\n$2")")
   stack_bound x86_64-linux "$f" >"$f.out" || rc=$?
   if [ "$rc" -eq 1 ] && grep -q '^refused: .*thread-pointer-relative access beyond the premise' "$f.out"; then
     echo "ok   control: stack analysis refuses $1 with the reach diagnostic"
@@ -301,7 +337,22 @@ refuse a64-pc-relative-walk '    1010:\tadr\tx8, 0x1010 <_main>\n    1014:\tsub\
 refuse a64-pc-relative-far '    1010:\tadrp\tx8, 0x7fff0000\n    1014:\tstrb\twzr, [x8]\n    1018:\tret\n' aarch64-macos _main
 refuse absolute-address '    1010:\tmov\tbyte ptr [0x7fffffd0], 0x0\n    1018:\tret\n'
 refuse_tp fs-beyond-reach '    1010:\tmov\tbyte ptr fs:[0x100000], 0x0\n    1018:\tret\n'
-refuse_tp gs-beyond-reach '    1010:\tmov\tbyte ptr gs:[0x100000], 0x0\n    1018:\tret\n'
+refuse gs-absolute '    1010:\tmov\tbyte ptr gs:[0x0], 0x0\n    1018:\tret\n'
+for segment in fs gs; do
+  for base in rsp rbp rax; do
+    refuse "x86-$segment-through-$base" "    1010:\tmov\tbyte ptr $segment:[$base - 0x8], 0x0\n    1018:\tret\n"
+  done
+  refuse "x86-$segment-through-rip" "    1010:\tmov\tbyte ptr $segment:[rip + 0x10], 0x0\n    1018:\tret\n"
+done
+for segment in cs ds es ss; do
+  refuse "x86-$segment-stack-override" "    1010:\tmov\tbyte ptr $segment:[rsp - 0x8], 0x0\n    1018:\tret\n"
+done
+for segment in cs ds es fs gs ss; do
+  refuse "x86-segment-write-$segment" "    1010:\tmov\t$segment, eax\n    1013:\tret\n"
+done
+refuse x86-two-memory-operands '    1010:\tmov\tqword ptr fs:[0x28], qword ptr [rsp - 0x8]\n    1018:\tret\n'
+refuse x86-empty-fs-address '    1010:\tmov\trax, qword ptr fs:[]\n    1015:\tret\n'
+refuse x86-pc-relative-wide-beyond '    1010:\tmov\trax, qword ptr [rip + 0xfffffa]\n    1015:\tret\n'
 # The link register loaded from a slot that does not hold it, and a stub call with no stub entry.
 refuse a64-lr-from-other-slot '    1010:\tsub\tsp, sp, #0x20\n    1014:\tstr\tx30, [sp, #0x10]\n    1018:\tstr\tx0, [sp, #0x8]\n    101c:\tldr\tx30, [sp, #0x8]\n    1020:\tadd\tsp, sp, #0x20\n    1024:\tret\n' aarch64-macos _main
 refuse a64-unmapped-stub '    1010:\tstr\tx30, [sp, #-0x10]!\n    1014:\tbl\t0x1040 <_write+0x1040>\n    1018:\tldr\tx30, [sp], #0x10\n    101c:\tret\n' aarch64-macos _main
@@ -330,11 +381,11 @@ else
   echo "FAIL control: red-zone bound: $(stack_bound x86_64-linux "$redzone")"
   fail=1
 fi
-# bound_is NAME ARCH EXPECTED BODY: the analysis of the synthetic function(s) BODY (printf format,
-# headers included) gives exactly EXPECTED.
+# bound_is NAME ARCH EXPECTED BODY [PT_TLS_MEMSZ]: the synthetic function(s) BODY (printf format,
+# headers included) give exactly EXPECTED.
 bound_is() {
   local f got
-  f=$(ctl_dis "$1" <<<"$(printf "\n$4")")
+  f=$(ctl_dis "$1" "${5:-0x0}" <<<"$(printf "\n$4")")
   got=$(stack_bound "$2" "$f" | cap_out | tr '\n' ' ') || true
   if [ "$got" = "$3 " ]; then echo "ok   control: stack bound of $1"
   else echo "FAIL control: stack bound of $1: ${got:-refused}, expected $3"; fail=1; fi
@@ -349,6 +400,33 @@ bound_is a64-single-lr-save-and-stub aarch64-macos 'bound 48 external write 48' 
 # A read of bytes the function wrote on both paths into it is accepted.
 bound_is both-path-write x86_64-linux 'bound 16' '0000000000001010 <main>:\n    1010:\tpush\trbp\n    1011:\tmov\trbp, rsp\n    1014:\tje\t0x101c <main+0xc>\n    1016:\tmov\tqword ptr [rbp - 0x8], rax\n    101a:\tjmp\t0x1020 <main+0x10>\n    101c:\tmov\tqword ptr [rbp - 0x8], rcx\n    1020:\tmov\trax, qword ptr [rbp - 0x8]\n    1024:\tpop\trbp\n    1025:\tret\n'
 bound_is x86-thread-pointer-canary x86_64-linux 'bound 0' '0000000000001010 <main>:\n    1010:\tmov\trax, qword ptr fs:[0x28]\n    1019:\tret\n'
+bound_is x86-pc-relative-wide-edge x86_64-linux 'bound 0' '0000000000001010 <main>:\n    1010:\tmov\trax, qword ptr [rip + 0xfffff9]\n    1015:\tret\n'
+bound_is x86-lea-pc-relative x86_64-linux 'bound 0' '0000000000001010 <main>:\n    1010:\tlea\trdi, [rip + 0xdf5]\n    1015:\tret\n'
+# Every supported width is checked at both ends of both fs intervals. The last accepted positive
+# offset ends at 0x6f; the negative interval is [-0x80, 0). One byte farther is refused, as is
+# every negative access when PT_TLS is absent. Width one at offset zero is TCB, not negative TLS.
+for spec in byte:1 word:2 dword:4 qword:8 tbyte:10 xmmword:16 ymmword:32 zmmword:64; do
+  width_name=${spec%%:*} width=${spec##*:}
+  printf -v offset '0x%x' "$((0x70 - width))"
+  printf -v body '0000000000001010 <main>:\n    1010:\tmov\trax, %s ptr fs:[%s]\n    1019:\tret\n' "$width_name" "$offset"
+  bound_is "x86-fs-tcb-$width_name-edge" x86_64-linux 'bound 0' "$body"
+  printf -v offset '0x%x' "$((0x70 - width + 1))"
+  refuse_tp "x86-fs-tcb-$width_name-overflow" "    1010:\tmov\trax, $width_name ptr fs:[$offset]\n    1019:\tret\n"
+  printf -v offset -- '-0x%x' "$width"
+  printf -v body '0000000000001010 <main>:\n    1010:\tmov\trax, %s ptr fs:[%s]\n    1019:\tret\n' "$width_name" "$offset"
+  bound_is "x86-fs-tls-$width_name-top-edge" x86_64-linux 'bound 0' "$body" 0x80
+  refuse_tp "x86-fs-tls-$width_name-no-segment" "    1010:\tmov\trax, $width_name ptr fs:[$offset]\n    1019:\tret\n"
+  if [ "$width" -gt 1 ]; then
+    printf -v offset -- '-0x%x' "$((width - 1))"
+    refuse_tp "x86-fs-tls-$width_name-crosses-tcb" "    1010:\tmov\trax, $width_name ptr fs:[$offset]\n    1019:\tret\n" 0x80
+  fi
+  printf -v body '0000000000001010 <main>:\n    1010:\tmov\trax, %s ptr fs:[-0x80]\n    1019:\tret\n' "$width_name"
+  bound_is "x86-fs-tls-$width_name-bottom-edge" x86_64-linux 'bound 0' "$body" 0x80
+  refuse_tp "x86-fs-tls-$width_name-underflow" "    1010:\tmov\trax, $width_name ptr fs:[-0x81]\n    1019:\tret\n" 0x80
+done
+bound_is x86-fs-wrapped-negative x86_64-linux 'bound 0' '0000000000001010 <main>:\n    1010:\tmov\trax, byte ptr fs:[0xffffffffffffffff]\n    1019:\tret\n' 0x1
+refuse_tp x86-fs-wrapped-interval-crosses-tcb '    1010:\tmov\trax, word ptr fs:[0xffffffffffffffff]\n    1019:\tret\n' 0x1
+# Parser controls use GDB's actual spellings, including its unsigned rendering of negative offsets.
 if bounded 60 python3 -I -c '
 import sys
 sys.path.insert(0, sys.argv[1])
@@ -358,14 +436,101 @@ def reg(name):
     if name != "fs_base":
         raise ValueError("unexpected register " + name)
     return base
-addresses = stack_access.x86_addresses("mov byte ptr fs:[0x100000],0x0", reg, 0)
-assert addresses == [base + 0x100000], addresses
+cases = {
+    "mov    rax,QWORD PTR fs:0x28": base + 0x28,
+    "mov    BYTE PTR fs:0x100000,0x0": base + 0x100000,
+    "mov    rax,QWORD PTR fs:0xffffffffffffffd8": (base - 0x28) & stack_access.MASK,
+    "movabs rax,fs:0x100": base + 0x100,
+    "mov    BYTE PTR ds:0x100000,0x0": 0x100000,
+}
+for asm, expected in cases.items():
+    addresses = stack_access.x86_addresses(asm, reg, 0)
+    assert addresses == [expected], (asm, addresses, expected)
+addresses = stack_access.x86_addresses("mov BYTE PTR fs:0x100000,0x0", reg, 0)
 sp0 = base + 0x100000 + 128
 assert stack_access.lowest_stack(addresses, sp0, sp0, 128, 8 << 20) == base + 0x100000
+for asm in ("mov rax,QWORD PTR fs:bogus", "mov rax,QWORD PTR [rsp", "mov BYTE PTR ds:garbage,0x0"):
+    try:
+        stack_access.x86_addresses(asm, reg, 0)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("accepted unparsed memory: " + asm)
 ' "$root/scripts/checks/lib"; then
-  echo "ok   control: x86-run-thread-pointer-beyond-reach computes and counts the address"
+  echo "ok   control: x86 parser handles GDB absolute forms and rejects unparsed memory"
 else
-  echo "FAIL control: x86-run-thread-pointer-beyond-reach was not computed and counted"; fail=1
+  echo "FAIL control: x86 parser GDB absolute forms or fail-closed handling"; fail=1
+fi
+if [ -n "$gdb" ]; then
+  # Real GDB disassembly prints these absolute operands without brackets. Set FS so fs:0x100000 is
+  # exactly main_entry_sp - 128, then restore it before returning to libc. The qword canary load
+  # exercises GDB's other absolute fs form. No synthetic reg callback or analysis is involved.
+  tp="$work/ctl/thread-pointer"; mkdir -p "$tp"
+  cat >"$tp/control.s" <<'ASM'
+	.intel_syntax noprefix
+	.text
+	.globl	main
+	.type	main,@function
+main:
+	mov	eax, 158
+	mov	edi, 0x1003
+	lea	rsi, [rsp - 0x8]
+	syscall
+	mov	r10, QWORD PTR [rsp - 0x8]
+	mov	rsi, rsp
+	sub	rsi, 0x100080
+	mov	eax, 158
+	mov	edi, 0x1002
+	syscall
+	mov	BYTE PTR fs:[0x100000], 0
+	mov	rsi, r10
+	mov	eax, 158
+	mov	edi, 0x1002
+	syscall
+	mov	rax, QWORD PTR fs:[0x28]
+	mov	eax, 7
+	ret
+	.size	main, .-main
+	.section	.tdata,"awT",@progbits
+	.quad	0
+	.section	.note.GNU-stack,"",@progbits
+ASM
+  if ! bounded "$native_secs" bash "$root/scripts/checks/lib/slice0_native.sh" control "$tp" >"$tp/build.log" 2>&1; then
+    echo "FAIL control: the thread-pointer executable does not build: $(head -c 1000 "$tp/build.log")"; fail=1
+  else
+    "${objdump[@]}" "$tp/control.exe" >"$tp/control.exe.dis"
+    if ! tp_range=$(awk '
+      $2 == "<main>:" { inside = 1; lo = "0x" $1; next }
+      inside && /^[0-9a-f]+ </ { exit }
+      inside && $1 ~ /^[0-9a-f]+:$/ { hi = "0x" substr($1, 1, length($1) - 1) }
+      END { if (!lo || !hi) exit 1; print lo, hi }' "$tp/control.exe.dis"); then
+      echo "FAIL control: thread-pointer main has no disassembly range"; fail=1
+    else
+      tp_analysis=$(printf 'redzone 128\nrange main %s\n' "$tp_range")
+      tpm=$(measure "$tp/control.exe" "$tp_analysis" 7)
+      if [ "$tpm" = "measured 128" ]; then
+        echo "ok   control: real GDB counts BYTE PTR fs:0x100000 and QWORD PTR fs:0x28"
+      else
+        echo "FAIL control: real GDB thread-pointer run: ${tpm:-none} $(head -c 300 "$tp/control.exe.gdb.err")"; fail=1
+      fi
+      tpm=$(STACK_UNAVAILABLE_REGS=fs_base measure "$tp/control.exe" "$tp_analysis" 7)
+      if grep -q '^error .*fs_base is unavailable' <<<"$tpm"; then
+        echo "ok   control: real GDB fails closed when fs_base is unavailable"
+      else
+        echo "FAIL control: unavailable fs_base gave a measurement or wrong error: ${tpm:-none}"; fail=1
+      fi
+      tls_dis="$work/ctl/real-pt-tls.dis"
+      printf '\n0000000000001010 <main>:\n    1010:\tmov\trax, byte ptr fs:[-0x1]\n    1019:\tret\n' >"$tls_dis"
+      tls_memsz=0x0
+      if append_tls "$tp/control.exe" "$tls_dis" &&
+         tls_memsz=$(awk '$1 == "tls_memsz" {print $2}' "$tls_dis") &&
+         [ "$tls_memsz" != 0x0 ] && [ "$(stack_bound x86_64-linux "$tls_dis")" = "bound 0" ]; then
+        echo "ok   control: linked PT_TLS p_memsz $tls_memsz bounds a negative fs access"
+      else
+        echo "FAIL control: real PT_TLS metadata or negative fs bound (p_memsz $tls_memsz)"; fail=1
+      fi
+    fi
+  fi
 fi
 if [ -n "$measuring" ]; then
   # A run that does not end as expected gives no measurement.
@@ -402,7 +567,12 @@ if [ -n "$measuring" ]; then
     echo "FAIL control: the red-zone executable does not build: $(head -c 1000 "$rz/build.log")"; fail=1
   else
     "${objdump[@]}" "$rz/control.exe" >"$rz/control.exe.dis"
-    rza=$(stack_bound "$target" "$rz/control.exe.dis" --ranges | cap_out) || true
+    if [ "$target" = x86_64-linux ] && ! append_tls "$rz/control.exe" "$rz/control.exe.dis"; then
+      rza="refused: PT_TLS metadata failed"
+      echo "FAIL control: red-zone PT_TLS metadata could not be derived"; fail=1
+    else
+      rza=$(stack_bound "$target" "$rz/control.exe.dis" --ranges | cap_out) || true
+    fi
     rzm=$(measure "$rz/control.exe" "$rza" 7)
     if [ "$(awk '$1 == "bound" {print $2}' <<<"$rza")" = "$rzdepth" ] && [ "$rzm" = "measured $rzdepth" ]; then
       echo "ok   control: a red-zone store is measured (bound $rzdepth, measured $rzdepth)"

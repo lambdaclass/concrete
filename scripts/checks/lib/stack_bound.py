@@ -4,8 +4,10 @@
 usage: stack_bound.py TARGET DISASM           -> prints `bound N` and one `external SYM DEPTH` per call
        stack_bound.py TARGET DISASM --ranges  -> also prints `redzone N` (the target's) and
                                                 `range SYM LO HI` per Concrete function
-TARGET is a key of TARGETS (x86_64-linux, aarch64-macos, aarch64-linux); DISASM is `llvm-objdump -d --no-show-raw-insn` output of the LINKED
-executable (x86-64 in Intel syntax).
+TARGET is a key of TARGETS (x86_64-linux, aarch64-macos, aarch64-linux); DISASM is
+`llvm-objdump -d --no-show-raw-insn` output of the LINKED executable (x86-64 in Intel syntax).
+For x86-64 the gate appends `tls_memsz N`, derived by llvm-readelf from the linked executable's
+PT_TLS program header (zero without one); absent, malformed or duplicate metadata is an error.
 
 The Concrete-owned code is `main` (the runtime entry), `concrete_rt_write_all` and the body
 (`concrete_body`), with or without the Mach-O underscore. Each owned function is analysed over its
@@ -23,27 +25,35 @@ function (libc's `write`, `_exit`, `abort`) counted at its entry depth.
 Why addresses cannot escape this accounting: memory is addressed only through the stack or frame
 pointer (accounted), PC-relatively within a fixed reach of the code (x86 `rip` with a displacement
 up to PC_REACH; on AArch64 a register holding an adrp/adr result within PC_REACH, plus at most one
-add immediate, on every path since the last call, with a bounded offset and no writeback) or
-through an x86 thread-pointer segment with an absolute displacement of at most TP_REACH in
-magnitude. Any other register may hold a stack address (main's argv and envp, a value an external
-function left), so no access goes through one. The analysis also refuses taking a stack address as
-a value (`lea` of one, the stack or frame pointer copied, stored or used in arithmetic, except the
-modelled frame setup), so only the frame save (`push rbp`, `stp x29, x30`) puts one in memory.
-Saved slots may be read only by the modelled restore (`pop rbp`, `leave`, `ldp x29, x30` with base
-sp). Any other stack read must be of bytes the function itself wrote, on every path, since its last
-call: so no stale value (a callee's or the caller's saved frame pointer, libc's scratch) is ever
-loaded. Accesses must lie below the entry stack pointer (never the return address or the caller's
-frame) and at most the target's red zone below the current stack pointer (TARGETS: 128 bytes on
-x86-64 System V and on Apple arm64, none under AAPCS64 on Linux; deeper bytes may be overwritten
-asynchronously, by a signal handler, so code using them has no bound), returns must be at depth 0
-with the caller's frame pointer restored and, on AArch64, with the link register holding the return
-address.
+add immediate, on every path since the last call, with a bounded offset and no writeback) or through
+an absolute x86 `fs:` operand whose complete byte interval lies in the modelled TCB or static-TLS
+interval. `gs:` is not a thread-pointer base on x86-64 Linux and is refused outright, as is every
+register-relative segment override, every other segment override, a segment-register write and an
+instruction with two memory operands. Any other register may hold a stack address (main's argv and
+envp, a value an external function left), so no access goes through one. The analysis also refuses
+taking a stack address as a value (`lea` of one, the stack or frame pointer copied, stored or used
+in arithmetic, except the modelled frame setup), so only the frame save (`push rbp`, `stp x29, x30`)
+puts one in memory. Saved slots may be read only by the modelled restore (`pop rbp`, `leave`,
+`ldp x29, x30` with base sp). Any other stack read must be of bytes the function itself wrote, on
+every path, since its last call: so no stale value (a callee's or the caller's saved frame pointer,
+libc's scratch) is ever loaded. Accesses must lie below the entry stack pointer (never the return
+address or the caller's frame) and at most the target's red zone below the current stack pointer
+(TARGETS: 128 bytes on x86-64 System V and on Apple arm64, none under AAPCS64 on Linux; deeper
+bytes may be overwritten asynchronously, by a signal handler, so code using them has no bound),
+returns must be at depth 0 with the caller's frame pointer restored and, on AArch64, with the link
+register holding the return address.
 
 The premises (outside the bound, listed in the gate's report): the stack lies farther than
-PC_REACH + 4095 + A64_OFF_REACH bytes from the image's code, and farther than TP_REACH bytes from
-each x86 thread-pointer base (fs and gs), in both directions; the external functions' own stack
-use; that `_exit` and `abort` do not return (a path ends at a call to one); that external functions
-follow the ABI's callee-saved rule (the frame pointer and stack pointer preserved).
+PC_REACH + 4095 + A64_OFF_REACH bytes from the image's code. On x86-64 Linux, let M be the linked
+ELF's PT_TLS p_memsz (zero without PT_TLS), derived by the gate from its program headers. FS.base
+is the Variant II thread pointer and remains fixed throughout Concrete-owned execution, including
+across external calls. Static TLS occupies offsets [-M, 0), and the x86-64 Linux TCB header through
+__private_tm occupies [0, 0x70), relative to FS.base. The runtime-separation obligation is that no
+byte of the thread's stack has an address in { (FS.base + o) mod 2^64 | -M <= o < 0x70 }; this
+covers every byte of every accepted access and address wrap-around. The other premises are the
+external functions' own stack use; that `_exit` and `abort` do not return (a path ends at a call to
+one); and that external functions follow the ABI's callee-saved rule (the frame pointer and stack
+pointer preserved).
 
 Fail closed: an instruction outside the modelled set (X86_PLAIN, A64_PLAIN and the control
 transfers), any of the refusals above, an unmodelled stack-pointer write, an indirect branch, call
@@ -69,16 +79,29 @@ def owned_name(sym):
 
 
 def parse(path):
-    """Functions: name -> list of (addr, mnemonic, operands). Also the stubs: ELF PLT symbol names
+    """Functions, stubs and the ELF PT_TLS p_memsz recorded in the disassembly.
+
+    Functions map names to (addr, mnemonic, operands). Stubs are ELF PLT symbol names
     (`write@plt`), and Mach-O stub entries, address -> imported symbol, from `stub ADDR SYMBOL`
     lines the gate appends (from `llvm-objdump --macho --indirect-symbols`, since the Mach-O
-    disassembly names only the whole `__stubs` section)."""
+    disassembly names only the whole `__stubs` section). On x86 the gate also appends exactly one
+    `tls_memsz N` line from the linked executable's program headers (zero with no PT_TLS)."""
     funcs, cur, stubs, section = {}, None, {"names": set(), "addrs": {}}, ""
+    tls_memsz = None
     head = re.compile(r"^([0-9a-f]+) <([^>]+)>:$")
     inst = re.compile(r"^\s*([0-9a-f]+):\s*(\S+)\s*(.*)$")
     stub = re.compile(r"^stub 0x([0-9a-f]+) (\S+)$")
     for line in open(path, encoding="utf-8", errors="replace"):
         line = line.rstrip("\n")
+        if line.startswith("tls_memsz"):
+            m = re.fullmatch(r"tls_memsz (0x[0-9a-f]+|\d+)", line)
+            if not m or tls_memsz is not None:
+                raise Refuse(f"malformed or duplicate PT_TLS metadata: {line}")
+            tls_memsz = int(m.group(1), 0)
+            if tls_memsz > (1 << 64) - 1:
+                raise Refuse(f"PT_TLS p_memsz does not fit in 64 bits: {line}")
+            cur = None
+            continue
         m = stub.match(line)
         if m:
             addr = int(m.group(1), 16)
@@ -108,7 +131,7 @@ def parse(path):
         if m and cur is not None:
             ops = m.group(3).split("#", 1)[0] if ARCH == "x86_64" else m.group(3).split("//")[0]
             funcs[cur].append((int(m.group(1), 16), m.group(2).lower(), ops.strip()))
-    return funcs, stubs
+    return funcs, stubs, tls_memsz
 
 
 def target_of(ops):
@@ -189,10 +212,12 @@ def cleared(saved, lo, hi):
 X86_SP = ("rsp", "esp", "sp", "spl")
 X86_FP = ("rbp", "ebp", "bp", "bpl")
 X86_STACK = X86_SP + X86_FP
+X86_SEGMENTS = ("cs", "ds", "es", "fs", "gs", "ss")
 X86_GPR64 = re.compile(r"^(r[abcd]x|r[sd]i|rbp|r(?:8|9|1[0-5]))$")
 X86_SIZE = {"byte": 1, "word": 2, "dword": 4, "qword": 8, "tbyte": 10, "xmmword": 16,
             "ymmword": 32, "zmmword": 64}
 MEM = re.compile(r"\[([^\]]*)\]")
+MASK = (1 << 64) - 1
 
 
 # PC-relative addressing reaches at most PC_REACH bytes from the instruction (x86 rip
@@ -200,9 +225,11 @@ MEM = re.compile(r"\[([^\]]*)\]")
 # the access's own offset (at most A64_OFF_REACH): the premise that the stack lies farther than
 # that from the image's code makes such an access never a stack access.
 PC_REACH = 16 << 20
-# No fs/gs operands occurred in the 64 owned-code disassemblies measured on 2026-11-08. This round
-# bound also covers the stack-protector canary's fs:0x28 with 216 bytes of margin.
-TP_REACH = 0x100
+# x86-64 Linux glibc's tcbhead_t through __private_tm occupies [fs:0, fs:0x70). Static TLS uses
+# Variant II: the PT_TLS p_memsz bytes end at FS.base. No other fs: interval, and no gs: access,
+# is exempt from stack accounting.
+TCB_SIZE = 0x70
+TLS_MEMSZ = None
 # TARGET -> (architecture, red zone in bytes): how far below the stack pointer code may address
 # memory without moving it. x86-64 System V ABI section 3.2.2 (128); Apple, "Writing ARM64 code for
 # Apple platforms" (128); AAPCS64 has none (0).
@@ -211,29 +238,79 @@ TARGETS = {"x86_64-linux": ("x86_64", 128), "aarch64-macos": ("aarch64", 128),
 A64_OFF_REACH = 32760
 
 
+def byte_interval(k, size):
+    """The inclusive signed offsets of an access, with its displacement reduced modulo 2^64."""
+    lo = k & MASK
+    if lo & (1 << 63):
+        lo -= 1 << 64
+    return lo, lo + size - 1
+
+
 def x86_inst(mn, ops, st, addr=0):
     """(new state, deepest byte touched or None) after a non-control x86 instruction."""
     what = f"{mn} {ops}"
     args = [a.strip() for a in ops.split(",")] if ops else []
     dst = args[0] if args else ""
+    if dst in X86_SEGMENTS and mn not in ("cmp", "test"):
+        raise Refuse(f"write to a segment register: {what}")
+    memory = list(MEM.finditer(ops))
+    if len(memory) > 1:
+        raise Refuse(f"instruction with more than one memory operand: {what}")
     deepest, w, saved = None, st.w, st.saved
-    for m in MEM.finditer(ops):
+    for m in memory:
         terms = re.findall(r"[+-]?\s*[^+\-\s]+", m.group(1))
+        if not terms:
+            raise Refuse(f"empty memory address: {what}")
         regs = [t.strip(" +-") for t in terms if not re.fullmatch(r"[+-]?\s*(0x[0-9a-f]+|\d+)", t)]
+        prefix = ops[:m.start()]
+        segment_match = re.search(r"\b([cdefg]s|ss):\s*$", prefix)
+        segment = segment_match.group(1) if segment_match else None
+        if segment_match:
+            prefix = prefix[:segment_match.start()]
+        k = sum(int(t.replace(" ", ""), 0) for t in terms if t.strip(" +-") not in regs)
+        if mn == "lea":
+            # LEA accesses no bytes and has no operand width. Only its PC-relative address form is
+            # modelled; a stack address taken as a value and every segment override are refused.
+            if segment:
+                raise Refuse(f"segment override on LEA: {what}")
+            if any(r in X86_STACK for r in regs):
+                raise Refuse(f"stack address taken as a value: {what}")
+            if regs != ["rip"]:
+                raise Refuse(f"LEA through a register that may hold a stack address, or absolutely: {what}")
+            lo, _ = byte_interval(k, 1)
+            if abs(lo) > PC_REACH:
+                raise Refuse(f"PC-relative LEA beyond the premise's reach: {what}")
+            continue
+        size = re.search(r"(\w+) ptr\s*$", prefix)
+        if not size or size.group(1) not in X86_SIZE:
+            raise Refuse(f"memory access of unknown size: {what}")
+        width = X86_SIZE[size.group(1)]
+
+        # Classify the override before address provenance: FS.base is part of every fs: effective
+        # address, including one that also contains rsp or rbp. Only absolute fs: operands in the
+        # target's TCB or PT_TLS intervals are modelled; gs: has no thread-pointer role on Linux.
+        if segment == "gs":
+            raise Refuse(f"gs segment override on x86_64-linux: {what}")
+        if segment and segment != "fs":
+            raise Refuse(f"unmodelled {segment} segment override: {what}")
+        if segment == "fs" and regs:
+            raise Refuse(f"thread-pointer-relative access through a register: {what}")
+
         base = [r for r in regs if r in X86_STACK]
         if not base:
             # Any other register may hold a stack address (main's argv and envp, a value an
-            # external function left), so memory is addressed only PC-relative or through a bounded
-            # absolute thread-pointer displacement.
-            k = sum(int(t.replace(" ", ""), 0) for t in terms if t.strip(" +-") not in regs)
-            segment = re.search(r"\b[fg]s:\s*$", ops[:m.start()])
-            if segment:
-                if regs:
-                    raise Refuse(f"thread-pointer-relative access through a register: {what}")
-                if abs(k) > TP_REACH:
+            # external function left). The complete byte interval, not only its first byte, must
+            # lie within the relevant separation premise.
+            lo, hi = byte_interval(k, width)
+            if segment == "fs":
+                if TLS_MEMSZ is None:
+                    raise Refuse("x86 analysis without the linked executable's PT_TLS p_memsz")
+                in_tcb = 0 <= lo and hi < TCB_SIZE
+                in_tls = -TLS_MEMSZ <= lo and hi < 0
+                if not (in_tcb or in_tls):
                     raise Refuse(f"thread-pointer-relative access beyond the premise's reach: {what}")
             elif regs == ["rip"]:
-                if abs(k) > PC_REACH:
+                if lo < -PC_REACH or hi > PC_REACH:
                     raise Refuse(f"PC-relative access beyond the premise's reach: {what}")
             else:
                 raise Refuse(f"memory addressed through a register that may hold a stack address, "
@@ -245,15 +322,12 @@ def x86_inst(mn, ops, st, addr=0):
             raise Refuse(f"indexed stack address: {what}")
         if mn == "lea":
             raise Refuse(f"stack address taken as a value: {what}")
-        size = re.search(r"(\w+) ptr\s*(?:\w+:)?\s*$", ops[:m.start()])
-        if not size or size.group(1) not in X86_SIZE:
-            raise Refuse(f"stack access of unknown size: {what}")
-        k = sum(int(t.replace(" ", ""), 0) for t in terms if t.strip(" +-") not in regs)
         top = (frame_depth(st.fp, what) if base[0] == "rbp" else st.d) - k
-        lo = top - X86_SIZE[size.group(1)] + 1
-        # The memory operand is the destination when it comes first: written only by mov and
-        # setcc, read and written by the others, read only by cmp and test.
-        first = ops.lstrip().find("[") < ops.find(",") if "," in ops else True
+        lo = top - width + 1
+        # The memory operand is the destination when its match starts before the operand comma:
+        # written only by mov and setcc, read and written by the others, read only by cmp and test.
+        comma = ops.find(",")
+        first = comma < 0 or m.start() < comma
         if not first or mn in ("cmp", "test"):
             mode = "r"
         elif mn in ("mov", "movabs") or mn.startswith("set"):
@@ -670,7 +744,9 @@ if __name__ == "__main__":
     TARGET = sys.argv[1]
     ARCH, RED_ZONE = TARGETS[TARGET]
     try:
-        funcs, stubs = parse(sys.argv[2])
+        funcs, stubs, TLS_MEMSZ = parse(sys.argv[2])
+        if ARCH == "x86_64" and TLS_MEMSZ is None:
+            raise Refuse("x86 analysis without the linked executable's PT_TLS p_memsz")
         total, ext, owned = analyse(funcs, stubs)
     except Refuse as e:
         print(f"refused: {e}")

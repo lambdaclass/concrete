@@ -28,22 +28,34 @@ def _num(text):
 
 
 def x86_addresses(asm, reg, next_pc):
-    """Effective addresses of the memory operands of one instruction in gdb's Intel syntax
-    (`mov QWORD PTR [rsp-0x80],0x0`). reg(name) reads a register or segment base. lea and nop
-    compute an address without accessing it; fs:/gs: operands include that segment's base."""
+    """Effective addresses of the memory operands of one instruction in gdb's Intel syntax.
+
+    GDB prints register-relative operands bracketed (`QWORD PTR [rsp-0x80]`) but absolute
+    operands unbracketed (`QWORD PTR fs:0x28`, `BYTE PTR fs:0x100000`). reg(name) reads a
+    register or segment base. lea and nop compute an address without accessing it. Any memory
+    operand left unparsed is an error, never an instruction with no access."""
     asm = asm.split("#", 1)[0].strip().lower()
     mn = asm.split(None, 1)[0] if asm else ""
     if mn == "lea" or mn.startswith("nop") or mn.startswith("prefetch"):
         return []
     out = []
-    for m in re.finditer(r"(?:(\w\w):)?\[([^\]]*)\]", asm):
-        inner = m.group(2).replace(" ", "")
+    masked = list(asm)
+
+    def consume(start, end):
+        prefix = asm[:start]
+        size = re.search(r"\b\w+\s+ptr\s*$", prefix)
+        if size:
+            start = size.start()
+        for i in range(start, end):
+            masked[i] = " "
+
+    def address(segment, terms_text, original):
+        inner = terms_text.replace(" ", "")
         if not inner or inner[0] not in "+-":
             inner = "+" + inner
         terms = re.findall(r"([+-])([^+-]+)", inner)
         if "".join(s + t for s, t in terms) != inner:
-            raise ValueError(f"unparsed memory operand [{m.group(2)}] in {asm}")
-        segment = m.group(1)
+            raise ValueError(f"unparsed memory operand {original} in {asm}")
         addr = reg(segment + "_base") if segment in ("fs", "gs") else 0
         for sign, term in terms:
             if "*" in term:
@@ -60,6 +72,25 @@ def x86_addresses(asm, reg, next_pc):
                 v = _reg(reg, term, X86_REG)
             addr += v if sign == "+" else -v
         out.append(addr & MASK)
+
+    for m in re.finditer(r"(?:(\w\w):)?\[([^\]]*)\]", asm):
+        address(m.group(1), m.group(2), m.group(0))
+        consume(m.start(), m.end())
+    remainder = "".join(masked)
+    absolute = re.compile(r"\b([cdefg]s|ss):([+-]?(?:0x[0-9a-f]+|\d+))(?![\w.])")
+    for m in absolute.finditer(remainder):
+        address(m.group(1), m.group(2), m.group(0))
+        start, end = m.span()
+        for i in range(start, end):
+            masked[i] = " "
+        prefix = remainder[:start]
+        size = re.search(r"\b\w+\s+ptr\s*$", prefix)
+        if size:
+            for i in range(size.start(), start):
+                masked[i] = " "
+    remainder = "".join(masked)
+    if re.search(r"\bptr\b|\b(?:[cdefg]s|ss):|[\[\]]", remainder):
+        raise ValueError(f"unparsed memory operand in {asm}")
     if not out and re.match(r"(?:rep\w*\s+)?(?:movs|stos|lods|cmps|scas)[bwdq]?(?:\s|$)", asm):
         raise ValueError(f"string instruction with implicit memory operands: {asm}")
     return out

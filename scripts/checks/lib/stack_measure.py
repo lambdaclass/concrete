@@ -13,8 +13,10 @@
 # Fail closed: the measurement counts only for a run that stopped first at main's runtime address,
 # stopped after each external call exactly at its return address (or exited inside it), received
 # no signal, exited normally with status STACK_EXPECT, and addressed no stack byte deeper than the
-# target's red zone (STACK_RED_ZONE, from stack_bound.py) below the stack pointer. Prints `measured N` and `steps N`, or
-# `error ...` (the gate fails on anything but a measurement).
+# target's red zone (STACK_RED_ZONE, from stack_bound.py) below the stack pointer. Register values
+# come from the selected frame, never GDB convenience variables. STACK_UNAVAILABLE_REGS is a
+# comma-separated control-only fault injection for the unavailable-register leg. Prints
+# `measured N` and `steps N`, or `error ...` (the gate fails on anything but a measurement).
 import os
 import sys
 
@@ -49,8 +51,13 @@ gdb.execute("set disable-randomization on")
 gdb.execute("set disassembly-flavor intel")
 
 
+unavailable_regs = frozenset(filter(None, os.environ.get("STACK_UNAVAILABLE_REGS", "").split(",")))
+
+
 def reg(name):
-    return int(gdb.parse_and_eval(f"(unsigned long) ${name}"))
+    if name in unavailable_regs:
+        raise ValueError(f"register {name} is unavailable")
+    return int(gdb.selected_frame().read_register(name))
 
 
 def live():
