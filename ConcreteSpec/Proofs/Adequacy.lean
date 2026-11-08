@@ -680,22 +680,34 @@ theorem endlesslyBlocked_of_noAnswer {ρ₀ : Oracle O} {fuel : Nat} {c blocked 
     simp
   exact (congrArg Report.ending hm).trans h
 
-/-- The evidence field applies to every oracle, argument list, store, and entry configuration that
-satisfies the named premises. -/
+/-- Every admitted call has a successful lookup and entry and reaches a final outcome. The same
+outcome is reported at every fuel budget above the certificate's witness budget. -/
 theorem TerminationEvidence.all_allowed_runs (E : TerminationEvidence O P)
     (premises : E.Premises) (ρ : Oracle O) (args : List O.Val) (st : O.Store)
-    (fn : Fn O) (c : Config O) (hf : AList.lookup P.fns E.function = some fn)
-    (ha : E.admits premises ρ args st) (he : enter fn args st = some c) :
-    ∃ f, (run P ρ (E.fuel premises ρ args st) c).ending = .final f :=
-  E.terminates premises ρ args st fn c hf ha he
+    (ha : E.admits premises ρ args st) (m : Nat) (hm : E.fuel premises ρ args st ≤ m) :
+    ∃ fn c f, AList.lookup P.fns E.function = some fn ∧ enter fn args st = some c ∧
+      (run P ρ m c).ending = .final f := by
+  obtain ⟨fn, c, f, hf, he, hfinal⟩ := E.terminates premises ρ args st ha
+  refine ⟨fn, c, f, hf, he, ?_⟩
+  have hnot : ∀ c', (run P ρ (E.fuel premises ρ args st) c).ending ≠ .outOfFuel c' := by
+    rw [hfinal]
+    simp
+  have hmono : run P ρ m c = run P ρ (E.fuel premises ρ args st) c := by
+    apply runFrom_mono (P := P) (ρ₀ := ρ) (E.fuel premises ρ args st) m hm [] c hnot
+  exact (congrArg Report.ending hmono).trans hfinal
 
-/-- Per-function termination evidence excludes divergence from every allowed entry run. -/
+/-- Per-function termination evidence excludes divergence from every successful admitted entry
+configuration. -/
 theorem TerminationEvidence.excludes_infinite (E : TerminationEvidence O P)
     (premises : E.Premises) (ρ : Oracle O) (args : List O.Val) (st : O.Store)
     (fn : Fn O) (c : Config O) (hf : AList.lookup P.fns E.function = some fn)
     (ha : E.admits premises ρ args st) (he : enter fn args st = some c)
-    (X : InfiniteExecution P ρ c) : False := by
-  obtain ⟨f, hfinal⟩ := E.all_allowed_runs premises ρ args st fn c hf ha he
+    (X : InfiniteExecution P ρ.toQueryOracle c) : False := by
+  obtain ⟨fn', c', f, hf', he', hfinal⟩ := E.terminates premises ρ args st ha
+  rw [hf] at hf'
+  cases hf'
+  rw [he] at he'
+  cases he'
   exact not_infinite_of_final hfinal X
 
 /-! ### Fuel exhaustion is only a budget report -/

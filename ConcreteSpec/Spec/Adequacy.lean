@@ -191,19 +191,22 @@ This is C8's blocking classification over C1; it is not divergence and has no in
 def EndlesslyBlocked (P : Program O) (ρ : Oracle O) (fuel : Nat) (c blocked : Config O) : Prop :=
   ∀ n, fuel ≤ n → (run P ρ n c).ending = .noAnswer blocked
 
-/-- Per-function termination evidence. `Premises` names the trusted premises; `admits` selects the
-allowed oracles, arguments, and stores. `dependencies` names the other function identities whose
-termination evidence this certificate uses. The final field is a theorem over every allowed run:
-entry succeeds and the fixed fuel budget reports a final outcome. Concrete variants and cost models
-are deliberately not part of this interface. -/
+/-- Per-function termination evidence. `Premises` names the trusted premises, including any
+termination assumptions on callees; `admits` selects the allowed oracles, arguments, and stores.
+The final field is a theorem over every admitted call: function lookup and entry succeed, and the
+fixed fuel budget reports a final outcome. Concrete variants and cost models are deliberately not
+part of this interface. -/
 structure TerminationEvidence (O : Operands) (P : Program O) where
   function : FnId
   Premises : Type
+  /-- Callee identities used by this certificate. This is syntactic composition metadata at this
+  stage, not an extra semantic restriction: their evidence is represented in `Premises`, and a
+  composition layer must check those certificates against this list. -/
   dependencies : List FnId
   admits : Premises → Oracle O → List O.Val → O.Store → Prop
   fuel : Premises → Oracle O → List O.Val → O.Store → Nat
-  terminates : ∀ premises ρ args st fn c,
-    AList.lookup P.fns function = some fn → admits premises ρ args st →
-    enter fn args st = some c → ∃ f, (run P ρ (fuel premises ρ args st) c).ending = .final f
+  terminates : ∀ premises ρ args st, admits premises ρ args st →
+    ∃ fn c f, AList.lookup P.fns function = some fn ∧ enter fn args st = some c ∧
+      (run P ρ (fuel premises ρ args st) c).ending = .final f
 
 end ConcreteSpec.Core.Exec
