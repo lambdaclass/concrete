@@ -17,9 +17,9 @@
 # 12. Stack bound: lib/stack_bound.py derives, from the linked executable's disassembly, a bound on
 #     the Concrete-owned stack below main's entry, covering every byte addressed relative to the
 #     stack or frame pointer (so the red zone), with external libc calls listed with their entry
-#     depth (their own use, and that _exit and abort do not return, are premises). On x86-64
-#     Linux, a run under gdb (lib/stack_measure.py) must stay within it (the run measures the
-#     stack pointer only). REPORT/stack.tsv. Controls: the analysis must refuse an unmodelled
+#     depth (their own use, and that _exit and abort do not return, are premises). A run under
+#     gdb (x86-64 Linux, lib/stack_measure.py) or LLDB (aarch64-macos, lib/stack_measure_lldb.py)
+#     must stay within it (the run measures the stack pointer only). REPORT/stack.tsv. Controls: the analysis must refuse an unmodelled
 #     stack-pointer write, an indirect call, recursion, a call to an unknown function, two depths
 #     meeting, a stack pointer used as a value or written through a partial register, a partial
 #     frame-pointer write, an indexed stack address, a saved frame pointer popped into another
@@ -48,8 +48,16 @@ case "$target" in
   x86_64-linux) arch=x86_64; objdump+=(--x86-asm-syntax=intel) ;;
   aarch64-*) arch=aarch64 ;;
 esac
-gdb=
-if [ "$target" = x86_64-linux ]; then gdb=${CONCRETE_SLICE0_GDB:?the x86-64 Linux shell pins gdb}; fi
+# The run check's debugger: gdb on x86-64 Linux, LLDB on aarch64-macos (none elsewhere).
+gdb= lldb=
+case "$target" in
+  x86_64-linux) gdb=${CONCRETE_SLICE0_GDB:?the x86-64 Linux shell pins gdb} ;;
+  aarch64-macos)
+    lldb=${CONCRETE_SLICE0_LLDB:?the macOS shell names lldb}
+    [ -x "$lldb" ] || { echo "slice0_artifacts: no LLDB at $lldb" >&2; exit 2; }
+    echo "lldb: $("$lldb" --version 2>&1 | head -c 200 | head -1)" ;;
+esac
+measuring=${gdb:-$lldb}
 [ -n "$report" ] || report="$work/report"
 mkdir -p "$report"
 sizes="$report/sizes.tsv"
@@ -74,15 +82,24 @@ last_exe= last_analysis=
 # within MEASURED BOUND: the run stayed within the static bound (and actually ran).
 within() { [ "$1" -gt 0 ] && [ "$1" -le "$2" ]; }
 
-# measure EXE ANALYSIS EXPECT: the gdb run check's output (`measured N` or `error ...`), given the
-# analysis output (its `range` lines) and the expected exit status.
+# measure EXE ANALYSIS EXPECT: the run check's output (`measured N` or `error ...`), given the
+# analysis output (its `range` lines) and the expected exit status: gdb (lib/stack_measure.py) or
+# LLDB (lib/stack_measure_lldb.py, the same contract; Apple's LLDB runs its own Python, so the
+# shell's Python variables are removed).
 measure() {
   local ranges main
   ranges=$(awk '$1 == "range" {printf "%s%s:%s", sep, $3, $4; sep=","}' <<<"$2")
   main=$(awk '$1 == "range" && $2 == "main" {print $3}' <<<"$2")
-  STACK_RANGES=$ranges STACK_MAIN=$main STACK_EXPECT=$3 \
-    bounded 300 "$gdb" -batch -nx -x "$root/scripts/checks/lib/stack_measure.py" \
-    "$1" 2>"$1.gdb.err" | awk '$1 == "measured" || $1 == "error" {print}' | cap_out || true
+  if [ -n "$gdb" ]; then
+    STACK_RANGES=$ranges STACK_MAIN=$main STACK_EXPECT=$3 \
+      bounded 300 "$gdb" -batch -nx -x "$root/scripts/checks/lib/stack_measure.py" \
+      "$1" 2>"$1.gdb.err" | awk '$1 == "measured" || $1 == "error" {print}' | cap_out || true
+  else
+    STACK_EXE=$1 STACK_RANGES=$ranges STACK_MAIN=$main STACK_EXPECT=$3 \
+      bounded 300 env -u PYTHONPATH -u PYTHONHOME "$lldb" --batch --no-lldbinit \
+      -o "command script import $root/scripts/checks/lib/stack_measure_lldb.py" \
+      2>"$1.gdb.err" | awk '$1 == "measured" || $1 == "error" {print}' | cap_out || true
+  fi
 }
 
 # stack_check NAME BACKEND EXE: derive the bound, measure a run where supported, record both.
@@ -96,7 +113,7 @@ stack_check() {
   fi
   bound=$(awk '$1 == "bound" {print $2}' <<<"$out")
   ext=$(awk '$1 == "external" {printf "%s%s@%s", sep, $2, $3; sep=","}' <<<"$out")
-  if [ -n "$gdb" ]; then
+  if [ -n "$measuring" ]; then
     m=$(measure "$exe" "$out" "$(head -c 16 "$(dirname "$exe")/status")")
     measured=$(awk '$1 == "measured" {print $2}' <<<"$m")
     if [ -z "$measured" ] || ! within "$measured" "$bound"; then
@@ -284,7 +301,7 @@ bound_is a64-offset-frame-record aarch64 'bound 32' '0000000000001000 <_main>:\n
 bound_is a64-pc-relative-load aarch64 'bound 0' '0000000000001000 <_main>:\n    1000:\tadrp\tx8, 0x2000 <_main+0x1000>\n    1004:\tadd\tx8, x8, #0x10\n    1008:\tldr\tw0, [x8, #0x4]\n    100c:\tret\n'
 # A read of bytes the function wrote on both paths into it is accepted.
 bound_is both-path-write x86_64 'bound 16' '0000000000001010 <main>:\n    1010:\tpush\trbp\n    1011:\tmov\trbp, rsp\n    1014:\tje\t0x101c <main+0xc>\n    1016:\tmov\tqword ptr [rbp - 0x8], rax\n    101a:\tjmp\t0x1020 <main+0x10>\n    101c:\tmov\tqword ptr [rbp - 0x8], rcx\n    1020:\tmov\trax, qword ptr [rbp - 0x8]\n    1024:\tpop\trbp\n    1025:\tret\n'
-if [ -n "$gdb" ]; then
+if [ -n "$measuring" ]; then
   # A run that does not end as expected gives no measurement.
   wrong=$(( ($(head -c 16 "$(dirname "$last_exe")/status") + 1) % 256 ))
   if grep -q '^measured' <<<"$(measure "$last_exe" "$last_analysis" "$wrong")"; then
