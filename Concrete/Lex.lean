@@ -680,22 +680,32 @@ theorem lineComment_some_iff {cs out : List Nat} :
 /-- A non-comment result is exactly absence of an opening double slash.
 Malformed comment bodies produce errors rather than a non-comment result. -/
 theorem lineComment_none_iff {cs : List Nat} :
-    lineComment cs = .ok none ↔ (∀ out, ¬ LineComment cs out) ∧
-      (∀ e, lineComment cs ≠ .error e) := by
+    lineComment cs = .ok none ↔ ∀ tail, cs ≠ 47 :: 47 :: tail := by
+  unfold lineComment
+  split
+  · rename_i input
+    cases scanLine input <;> simp
+  · rename_i h
+    simp only [true_iff]
+    exact h
+
+/-- A comment error is exactly an opening double slash with no valid body suffix. -/
+theorem lineComment_error_iff {cs : List Nat} :
+    (∃ e, lineComment cs = .error e) ↔
+      ∃ body, cs = 47 :: 47 :: body ∧ ∀ out, ¬ CommentBody body out := by
   constructor
-  · intro hn
-    constructor
-    · intro out hc
-      have hs := lineComment_complete hc
-      rw [hn] at hs
-      cases hs
-    · intro e he; rw [hn] at he; cases he
-  · rintro ⟨h, herr⟩
-    cases he : lineComment cs with
-    | error e => exact False.elim (herr e he)
-    | ok result => cases result with
-      | none => rfl
-      | some out => exact False.elim (h out (lineComment_sound he))
+  · rintro ⟨e, he⟩
+    unfold lineComment at he
+    split at he
+    · rename_i body
+      refine ⟨body, rfl, ?_⟩
+      intro out hb
+      simp [scanLine_complete hb] at he
+    · cases he
+  · rintro ⟨body, rfl, hb⟩
+    cases hs : scanLine body with
+    | error e => exact ⟨e, by simp [lineComment, hs]⟩
+    | ok out => exact (hb out (scanLine_sound hs)).elim
 
 /-- A comment body's remainder is no longer than its input. -/
 theorem commentBody_rest_length_le {input rest : List Nat}
@@ -764,9 +774,7 @@ theorem skipTriviaAux_sound {cs out : List Nat}
             cases Except.ok.inj h
             apply Trivia.stop
             · intro d ds heq; cases heq; exact hw
-            · intro tail heq
-              cases heq
-              cases hs : scanLine tail <;> simp [lineComment, hs] at hline
+            · exact lineComment_none_iff.mp hline
           | some rest =>
             simp only [hline] at h
             have hcomment := lineComment_sound hline
@@ -785,12 +793,8 @@ theorem skipTriviaAux_complete {cs out : List Nat}
     cases rest with
     | nil => cases fuel <;> rfl
     | cons c input =>
-      have hline : lineComment (c :: input) = .ok none := by
-        unfold lineComment
-        split
-        · rename_i tail heq
-          exact (hc tail heq).elim
-        · rfl
+      have hline : lineComment (c :: input) = .ok none :=
+        lineComment_none_iff.mpr hc
       cases fuel with
       | zero => simp at hfuel
       | succ fuel =>

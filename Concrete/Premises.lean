@@ -62,6 +62,7 @@ def theorems : List Lean.Name := [
   ``Concrete.Lex.checkSource_error_complete,
   ``Concrete.Lex.checkSource_error_iff,
   ``Concrete.Lex.lineComment_none_iff,
+  ``Concrete.Lex.lineComment_error_iff,
   ``Concrete.Lex.decodeStep_complete,
   ``Concrete.Lex.decodeStep_error_first,
   ``Concrete.Lex.decodeLoop_sound,

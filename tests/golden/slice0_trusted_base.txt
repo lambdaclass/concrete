@@ -11,7 +11,8 @@ theorem Concrete.Lex.checkSource_ok_iff axioms: propext, Classical.choice, Quot.
 theorem Concrete.Lex.checkSource_error_offset_iff axioms: propext, Classical.choice, Quot.sound
 theorem Concrete.Lex.checkSource_error_complete axioms: propext, Classical.choice, Quot.sound
 theorem Concrete.Lex.checkSource_error_iff axioms: propext, Classical.choice, Quot.sound
-theorem Concrete.Lex.lineComment_none_iff axioms: propext
+theorem Concrete.Lex.lineComment_none_iff axioms: propext, Quot.sound
+theorem Concrete.Lex.lineComment_error_iff axioms: propext
 theorem Concrete.Lex.decodeStep_complete axioms: propext, Classical.choice, Quot.sound
 theorem Concrete.Lex.decodeStep_error_first axioms: propext, Classical.choice, Quot.sound
 theorem Concrete.Lex.decodeLoop_sound axioms: propext, Quot.sound
