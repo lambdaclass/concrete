@@ -31,8 +31,9 @@ Signed values are two's complement.
 
 **Conversions.** The one canonical lossless conversion (owner decision 2026-11-08, item 11(a),
 replacing `as`; its spelling is not yet approved) is allowed exactly when every value of the source
-type is a value of the target type (OD11's value-domain rule), and it never changes the value
-(`Lossless`). The checked conversion `try_convert` returns `Except OutOfRange` (OD106), a different
+type is a value of the target type (OD11's value-domain rule, ARITH-5), and it never changes the
+value: between integer types exactly when the source range lies inside the target's (`Lossless`),
+and from `bool` to every integer type, `false` as `0` and `true` as `1` (`boolToInt`). The checked conversion `try_convert` returns `Except OutOfRange` (OD106), a different
 error type from `ArithmeticError`. A lossy integer conversion keeps the low bits of the target's
 width (`wrap`); the names of the lossy conversions are OD99's.
 
@@ -108,6 +109,17 @@ def wrap (t : IntTy) (n : Int) : Int := ofBits t (toBits t n)
 def saturate (t : IntTy) (n : Int) : Int :=
   if n < t.min then t.min else if t.max < n then t.max else n
 
+/-- The bit pattern of a `bool`: `0` for `false`, `1` for `true` (TYPE-19, OD126). C4 lays it into
+one byte; the old fragment `Rep` already encodes it so. -/
+def boolToBits (b : Bool) : Nat := if b then 1 else 0
+
+/-- The `bool` a bit pattern denotes: only `0` and `1` are `bool` values; any other pattern is not
+a valid `bool` (reading one is a refused representation, never a value). -/
+def boolOfBits : Nat → Option Bool
+  | 0 => some false
+  | 1 => some true
+  | _ => none
+
 /-! ## Errors -/
 
 /-- The error a checked arithmetic operation returns (the no-hidden-traps decision's spellings,
@@ -179,6 +191,15 @@ def checked (t : IntTy) : ArithOp → Int → Int → Except ArithmeticError Int
 /-- Checked negation: `Overflow` for signed `MIN`, and for any nonzero unsigned value. -/
 def checkedNeg (t : IntTy) (a : Int) : Except ArithmeticError Int := inRangeOr t (-a)
 
+/-- Plain negation: checked negation, with `Overflow` a trap. -/
+def plainNeg (t : IntTy) (a : Int) : Res Int :=
+  match checkedNeg t a with
+  | .ok r => .ok r
+  | .error e => .trap e.trapKind
+
+/-- Wrapping negation: modulo `2^bits`, never failing. -/
+def wrappingNeg (t : IntTy) (a : Int) : Int := wrap t (-a)
+
 /-- A plain operation: the checked one, with a failure turned into a trap of its kind. -/
 def plain (t : IntTy) (op : ArithOp) (a b : Int) : Res Int :=
   match checked t op a b with
@@ -207,9 +228,17 @@ def Lossless (s t : IntTy) : Prop := t.min ≤ s.min ∧ s.max ≤ t.max
 
 instance (s t : IntTy) : Decidable (Lossless s t) := by unfold Lossless; infer_instance
 
+/-- The lossless conversion of a `bool` to an integer type: `0` or `1`, a value of every integer
+type (ARITH-5). -/
+def boolToInt (b : Bool) : Int := if b then 1 else 0
+
 /-- The checked conversion: the same value if it is a value of `t` (OD106). -/
 def tryConvert (t : IntTy) (n : Int) : Except OutOfRange Int :=
   if t.InRange n then .ok n else .error .outOfRange
+
+/-- A lossy integer conversion to `t`: the low `bits` bits of the value, read in `t` (`wrap`). The
+surface names of the lossy conversions are OD99's; this is their meaning only. -/
+def lossyConvert (t : IntTy) (n : Int) : Int := wrap t n
 
 /-! ## Contracts: machine and exact arithmetic -/
 
@@ -220,6 +249,17 @@ inductive MachineOp where
   | wrapping (op : WrapOp)
   | saturating (op : WrapOp)
   deriving DecidableEq, Repr
+
+/-- Whether the second operand is a shift count, which follows its own rule (`validShift`) and is
+not required to be a value of the operation's type. -/
+def MachineOp.countOperand : MachineOp → Bool
+  | .plain .shl | .plain .shr => true
+  | _ => false
+
+/-- The operands a machine operation at width `t` is defined on: values of `t`; a shift count is
+judged by the operation itself. -/
+def MachineOp.operandsOk (t : IntTy) (op : MachineOp) (x y : Int) : Bool :=
+  decide (t.InRange x) && (op.countOperand || decide (t.InRange y))
 
 /-- An arithmetic term of a contract. `machine` means the runtime operation at width `t`; `exact`
 means mathematical integers. The two are distinct constructors so a reader, a checker and a proof
@@ -232,11 +272,14 @@ inductive CTerm where
   | exact (op : WrapOp) (a b : CTerm)
 
 /-- What a contract term denotes, given the values of its variables. `none` where a machine
-operation would fail: a contract that uses such a term carries the obligation that it does not. -/
+operation is not defined: an operand that is not a value of its width (the runtime never sees one),
+or a plain operation that would fail. A contract that uses such a term carries the obligation that
+it is defined. -/
 def CTerm.eval (ρ : Var → Option Int) : CTerm → Option Int
   | .lit n => some n
   | .var x => ρ x
   | .machine t op a b => (a.eval ρ).bind fun x => (b.eval ρ).bind fun y =>
+    if op.operandsOk t x y = false then none else
     match op with
     | .plain o => match checked t o x y with
       | .ok r => some r
@@ -244,6 +287,24 @@ def CTerm.eval (ρ : Var → Option Int) : CTerm → Option Int
     | .wrapping o => some (wrapping t o x y)
     | .saturating o => some (saturating t o x y)
   | .exact op a b => (a.eval ρ).bind fun x => (b.eval ρ).map fun y => op.exact x y
+
+/-- The exact operation a plain machine add, subtract or multiply means where it is defined. -/
+def MachineOp.exactOf? : MachineOp → Option WrapOp
+  | .plain .add => some .add
+  | .plain .sub => some .sub
+  | .plain .mul => some .mul
+  | _ => none
+
+/-- A contract term with every plain machine add, subtract and multiply read as exact arithmetic.
+Where the original is defined, this one is too, with the same value (`eval_toExact`): a proof may
+reason in exact arithmetic once it has the obligations that the machine operations do not fail. -/
+def CTerm.toExact : CTerm → CTerm
+  | .lit n => .lit n
+  | .var x => .var x
+  | .machine t op a b => match op.exactOf? with
+    | some w => .exact w a.toExact b.toExact
+    | none => .machine t op a.toExact b.toExact
+  | .exact op a b => .exact op a.toExact b.toExact
 
 /-! ### Examples -/
 
@@ -300,5 +361,19 @@ example : (CTerm.machine .u8 (.plain .add) (.lit 255) (.lit 1)).eval (fun _ => n
     (CTerm.exact .add (.lit 255) (.lit 1)).eval (fun _ => none) = some 256 ∧
     (CTerm.machine .u8 (.wrapping .add) (.lit 255) (.lit 1)).eval (fun _ => none) = some 0 := by
   decide
+
+/-- A machine term is not defined on an operand outside its width: `300` is no `u8`, so even the
+wrapping sum is undefined. A shift count need not be a value of the type, only a valid count. -/
+example : (CTerm.machine .u8 (.wrapping .add) (.lit 300) (.lit 1)).eval (fun _ => none) = none ∧
+    (CTerm.machine .u8 (.plain .shl) (.lit 1) (.lit 7)).eval (fun _ => none) = some 128 := by
+  decide
+
+/-- `bool` patterns: only `0` and `1`. -/
+example : boolToBits true = 1 ∧ boolOfBits 0 = some false ∧ boolOfBits 2 = none := by decide
+
+/-- Negation: `-(-128)` overflows `i8`; wrapping gives `-128` back. A lossy conversion keeps the
+low bits: `300` to `u8` is `44`, `255` to `i8` is `-1`. -/
+example : plainNeg .i8 (-128) = .trap .overflow ∧ wrappingNeg .i8 (-128) = -128 ∧
+    lossyConvert .u8 300 = 44 ∧ lossyConvert .i8 255 = -1 := by decide
 
 end ConcreteSpec.Core

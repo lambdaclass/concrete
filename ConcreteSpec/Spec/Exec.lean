@@ -1,4 +1,4 @@
-import ConcreteSpec.Spec.Outcome
+import ConcreteSpec.Spec.Scalar
 
 /-!
 # Execution, calls and cleanup
@@ -10,21 +10,32 @@ proved and tested before the freeze).
 
 This module is the shape of every Core execution: a machine configuration, one labeled step, and
 the laws that sequencing, scopes, exits, calls and cleanup obey. It is *parametric* in the operand
-language (`Operands`): what a value is, how an operand is evaluated, which types exist and which
-primitive operations talk to the environment. The scalar operations (C2), memory (C4) and the
-environment (C6) are instances; they add operations, never change what the statements below mean
-(the freeze boundary: an extension preserves the old fragment's executions).
+language (`Operands`): what a value is, how an operand is evaluated, which types exist, what the
+shared state is (memory, C4; the loan and ownership instrumentation, C5) and which primitive
+operations read and change it or talk to the environment. The scalar operations (C2), memory (C4)
+and the environment (C6) are instances; they add operations, never change what the statements below
+mean (the freeze boundary: an extension preserves the old fragment's executions).
 
 **The configuration.** A `Config` holds the current control (a statement to run, a statement just
-completed, an exit in progress, or a trap), the locals, and the stack of continuation frames that
-says where execution resumes. Call frames are frames of the same stack.
+completed, an exit in progress, or a trap), the locals, the shared state, and the stack of
+continuation frames that says where execution resumes. Call frames are frames of the same stack. A
+call saves its caller's locals and restores them on return; the shared state is *not* saved, so
+what a callee (or a cleanup call) does to memory is seen after it returns.
+
+**Places and moves.** Writing a place other than a local (a field, an element, memory behind a
+pointer) is a primitive operation of the instance: its operands, the place's index operands and the
+value, are evaluated before it runs, and in A-normal form elaboration has already evaluated the
+right-hand side before any destination subexpression. Core's operands are explicit `copy x` and
+`move x` (Q9.1): which a type allows, and that a moved value is used exactly once, is the ownership
+instrumentation (C5), which is part of the instance's state; a move has no other run-time effect.
 
 **Evaluation order** (C1, STMT-4/5). Core is in A-normal form (Q9.1): an operand has no effects, so
 the only order that can be observed among operands is which failure is reported first. Arguments
 are evaluated left to right, and the first that traps decides the trap (`evalArgs`); every argument
 is evaluated before the callee is entered. An assignment evaluates its right-hand side before
-storing it. Source-level orders (receiver before arguments, left operand before right, fields and
-elements in written order, `&&` and `||` evaluating their right operand only when needed) are
+storing it. Source-level orders (STMT-4: receiver before arguments, left operand before right, a
+base before its index, an assignment's right-hand side before its destination's subexpressions,
+fields and elements in written order, `&&` and `||` evaluating their right operand only when needed) are
 elaboration's obligation: it lowers them to this sequential Core, and the checker checks both
 operands of a short-circuit operator (Q6.5). That belongs to the elaboration slices (README O1).
 
@@ -63,30 +74,40 @@ cleanup.
 namespace ConcreteSpec.Core.Exec
 open ConcreteSpec.Core
 
+/-- How a primitive operation was answered: the event the environment saw, if any, the result, and
+the new shared state. -/
+structure Answer (Val Event Store : Type) where
+  event : Option Event
+  result : Except TrapKind Val
+  store : Store
+
 /-- What an operand language supplies to the machine. An instance is a lawful extension: the
 statements keep their meaning whatever the instance.
 
-- `Val`, `Expr`: values and operands. `eval` evaluates an operand against the locals, with no
-  effect: a value, a trap, or unsafe stuckness (`Res`).
+- `Val`, `Expr`: values and operands. `eval` evaluates an operand against the locals and the
+  shared state, with no effect: a value, a trap, or unsafe stuckness (`Res`).
+- `Store`: the shared state, threaded through calls and cleanup.
 - `test`: the truth value of a condition (`none`: not a condition; unsafe stuckness).
 - `Ty`, `unitTy`, `unitVal`, `isCopy`: the types, `Unit` and its value, and which types are `Copy`
   (a declared and checked instance; the checker owns that check, C9).
-- `Prim`, `Event`, `allows`: the operations that talk to the environment, the events they emit, and
-  their contract: `allows p args ev r` says the environment may answer a request `p args` by
-  emitting `ev` with result `r` (a value or a trap). An environment answer outside the contract
-  is never taken (C6). -/
+- `Prim`, `allows`: the primitive operations and their contracts. `allows p args st a` says that a
+  request `p args` in state `st` may be answered by `a`: an event the environment sees (or none,
+  for an internal operation such as a memory access), a result (a value or a trap) and the new
+  state. An answer outside the contract is never taken (C6), and an operation with no allowed
+  answer is stuck. -/
 structure Operands where
   Val : Type
   Expr : Type
   Ty : Type
+  Store : Type
   Prim : Type
   Event : Type
   unitVal : Val
   unitTy : Ty
   isCopy : Ty → Bool
-  eval : AList Var Val → Expr → Res Val
+  eval : AList Var Val → Store → Expr → Res Val
   test : Val → Option Bool
-  allows : Prim → List Val → Event → Except TrapKind Val → Bool
+  allows : Prim → List Val → Store → Answer Val Event Store → Bool
 
 variable {O : Operands} {V : Type}
 
@@ -178,6 +199,7 @@ inductive Ctrl (O : Operands) where
 structure Config (O : Operands) where
   ctrl : Ctrl O
   locals : AList Var O.Val
+  store : O.Store
   frames : List (Frame O)
 
 /-- A function: ordinary typed parameters (the first is not special), a result type, the block of
@@ -202,9 +224,9 @@ inductive Final (V : Type) where
 /-- The configurations a run ends in. A trap is final whatever frames remain: they are not
 unwound. -/
 def Config.final? : Config O → Option (Final O.Val)
-  | ⟨.done, _, []⟩ => some .normal
-  | ⟨.exiting (.ret v), _, []⟩ => some (.returned v)
-  | ⟨.trapped k site, _, _⟩ => some (.trapped k site)
+  | ⟨.done, _, _, []⟩ => some .normal
+  | ⟨.exiting (.ret v), _, _, []⟩ => some (.returned v)
+  | ⟨.trapped k site, _, _, _⟩ => some (.trapped k site)
   | _ => none
 
 /-- The locals of `L` whose identity is in `dom`: what a scope restores when it is left. -/
@@ -221,9 +243,9 @@ def bindDst (dst : Option Var) (v : V) (L : AList Var V) : AList Var V :=
   | some x => (x, v) :: L
 
 /-- Evaluate arguments left to right; the first that traps (or is stuck) decides. -/
-def evalArgs (O : Operands) (L : AList Var O.Val) : List O.Expr → Res (List O.Val)
+def evalArgs (O : Operands) (L : AList Var O.Val) (st : O.Store) : List O.Expr → Res (List O.Val)
   | [] => .ok []
-  | e :: es => (O.eval L e).bind fun v => (evalArgs O L es).map (v :: ·)
+  | e :: es => (O.eval L st e).bind fun v => (evalArgs O L st es).map (v :: ·)
 
 /-- Register a cleanup call in the innermost scope, through the statements that follow it in that
 block. A `defer` anywhere else (directly in a loop's condition region, say) has no meaning; the
@@ -233,40 +255,43 @@ def register (d : Deferred O) : List (Frame O) → Option (List (Frame O))
   | .scope b dom ds :: k => some (.scope b dom (d :: ds) :: k)
   | _ => none
 
-/-- What one step does: move to a configuration, or ask the environment (a primitive operation:
-the request, its site, and the configuration each allowed result leads to). -/
+/-- What one step does: move to a configuration, or make a request of a primitive operation (its
+arguments, its site, the state it is made in, and the configuration each answer leads to). -/
 inductive Out (O : Operands) where
   | next (c : Config O)
-  | request (p : O.Prim) (args : List O.Val) (site : SiteId) (k : Except TrapKind O.Val → Config O)
+  | request (p : O.Prim) (args : List O.Val) (site : SiteId) (st : O.Store)
+      (k : Answer O.Val O.Event O.Store → Config O)
 
 /-- Continue with an operand's value; a trap stops at `site`, stuckness has no step. -/
-def onRes (r : Res V) (site : SiteId) (L : AList Var O.Val) (k : List (Frame O))
+def onRes (r : Res V) (site : SiteId) (L : AList Var O.Val) (st : O.Store) (k : List (Frame O))
     (f : V → Option (Out O)) : Option (Out O) :=
   match r with
   | .ok v => f v
-  | .trap kd => some (.next ⟨.trapped kd site, L, k⟩)
+  | .trap kd => some (.next ⟨.trapped kd site, L, st, k⟩)
   | .stuck => none
 
 /-- Start the next cleanup call of a scope, then continue with `p`. -/
-def startCleanup (L : AList Var O.Val) (b : BlockId) (dm : List Var) (d : Deferred O)
-    (ds : List (Deferred O)) (p : Pending O.Val) (k : List (Frame O)) : Out O :=
-  .next ⟨.exec d.stmt, L, .resume p :: .scope b dm ds :: k⟩
+def startCleanup (L : AList Var O.Val) (st : O.Store) (b : BlockId) (dm : List Var)
+    (d : Deferred O) (ds : List (Deferred O)) (p : Pending O.Val) (k : List (Frame O)) : Out O :=
+  .next ⟨.exec d.stmt, L, st, .resume p :: .scope b dm ds :: k⟩
 
 /-- One step of an exit `e` unwinding frames `k` with locals `L`: the frame decides, and only a
 loop's body frame and a call frame look at the exit itself. -/
-def stepExit (L : AList Var O.Val) (e : Exit O.Val) : List (Frame O) → Option (Out O)
-  | .seq _ :: k => some (.next ⟨.exiting e, L, k⟩)
-  | .scope b dm (d :: ds) :: k => some (startCleanup L b dm d ds (.exit e) k)
-  | .scope _ dm [] :: k => some (.next ⟨.exiting e, restrict dm L, k⟩)
-  | .test .. :: k => some (.next ⟨.exiting e, L, k⟩)
+def stepExit (L : AList Var O.Val) (st : O.Store) (e : Exit O.Val) :
+    List (Frame O) → Option (Out O)
+  | .seq _ :: k => some (.next ⟨.exiting e, L, st, k⟩)
+  | .scope b dm (d :: ds) :: k => some (startCleanup L st b dm d ds (.exit e) k)
+  | .scope _ dm [] :: k => some (.next ⟨.exiting e, restrict dm L, st, k⟩)
+  | .test .. :: k => some (.next ⟨.exiting e, L, st, k⟩)
   | .body l cr t b site :: k => match e with
-    | .brk l' => if l' = l then some (.next ⟨.done, L, k⟩) else some (.next ⟨.exiting e, L, k⟩)
+    | .brk l' =>
+      if l' = l then some (.next ⟨.done, L, st, k⟩) else some (.next ⟨.exiting e, L, st, k⟩)
     | .cont l' =>
-      if l' = l then some (.next ⟨.exec (.loop l cr t b site), L, k⟩)
-      else some (.next ⟨.exiting e, L, k⟩)
-    | .ret _ => some (.next ⟨.exiting e, L, k⟩)
+      if l' = l then some (.next ⟨.exec (.loop l cr t b site), L, st, k⟩)
+      else some (.next ⟨.exiting e, L, st, k⟩)
+    | .ret _ => some (.next ⟨.exiting e, L, st, k⟩)
   | .ret dst caller :: k => match e with
-    | .ret v => some (.next ⟨.done, bindDst dst v caller, k⟩)
+    | .ret v => some (.next ⟨.done, bindDst dst v caller, st, k⟩)
     | _ => none
   | .resume _ :: _ => none
   | [] => none
@@ -275,49 +300,50 @@ def stepExit (L : AList Var O.Val) (e : Exit O.Val) : List (Frame O) → Option 
 stuckness). -/
 def step (P : Program O) (c : Config O) : Option (Out O) :=
   let L := c.locals
+  let st := c.store
   match c.ctrl, c.frames with
   -- running a statement
-  | .exec .skip, k => some (.next ⟨.done, L, k⟩)
-  | .exec (.bind x e site), k => onRes (O.eval L e) site L k fun v =>
-      some (.next ⟨.done, (x, v) :: L, k⟩)
-  | .exec (.assign x e site), k => onRes (O.eval L e) site L k fun v =>
-      (AList.lookup L x).map fun _ => .next ⟨.done, AList.update L x (fun _ => v), k⟩
-  | .exec (.seq s t), k => some (.next ⟨.exec s, L, .seq t :: k⟩)
-  | .exec (.block b s), k => some (.next ⟨.exec s, L, .scope b (dom L) [] :: k⟩)
+  | .exec .skip, k => some (.next ⟨.done, L, st, k⟩)
+  | .exec (.bind x e site), k => onRes (O.eval L st e) site L st k fun v =>
+      some (.next ⟨.done, (x, v) :: L, st, k⟩)
+  | .exec (.assign x e site), k => onRes (O.eval L st e) site L st k fun v =>
+      (AList.lookup L x).map fun _ => .next ⟨.done, AList.update L x (fun _ => v), st, k⟩
+  | .exec (.seq s t), k => some (.next ⟨.exec s, L, st, .seq t :: k⟩)
+  | .exec (.block b s), k => some (.next ⟨.exec s, L, st, .scope b (dom L) [] :: k⟩)
   | .exec (.defer f args site), k =>
-      (register ⟨f, args, site⟩ k).map fun k' => .next ⟨.done, L, k'⟩
-  | .exec (.cond e s t site), k => onRes (O.eval L e) site L k fun v =>
-      (O.test v).map fun b => .next ⟨.exec (if b then s else t), L, k⟩
-  | .exec (.loop l cr t b site), k => some (.next ⟨.exec cr, L, .test l cr t b site :: k⟩)
-  | .exec (.brk l), k => some (.next ⟨.exiting (.brk l), L, k⟩)
-  | .exec (.cont l), k => some (.next ⟨.exiting (.cont l), L, k⟩)
-  | .exec (.ret e site), k => onRes (O.eval L e) site L k fun v =>
-      some (.next ⟨.exiting (.ret v), L, k⟩)
-  | .exec (.call dst f args site), k => onRes (evalArgs O L args) site L k fun vs =>
+      (register ⟨f, args, site⟩ k).map fun k' => .next ⟨.done, L, st, k'⟩
+  | .exec (.cond e s t site), k => onRes (O.eval L st e) site L st k fun v =>
+      (O.test v).map fun b => .next ⟨.exec (if b then s else t), L, st, k⟩
+  | .exec (.loop l cr t b site), k => some (.next ⟨.exec cr, L, st, .test l cr t b site :: k⟩)
+  | .exec (.brk l), k => some (.next ⟨.exiting (.brk l), L, st, k⟩)
+  | .exec (.cont l), k => some (.next ⟨.exiting (.cont l), L, st, k⟩)
+  | .exec (.ret e site), k => onRes (O.eval L st e) site L st k fun v =>
+      some (.next ⟨.exiting (.ret v), L, st, k⟩)
+  | .exec (.call dst f args site), k => onRes (evalArgs O L st args) site L st k fun vs =>
       (AList.lookup P.fns f).bind fun fn =>
         if fn.params.length = vs.length then
-          some (.next ⟨.exec fn.body, (fn.params.map Prod.fst).zip vs,
+          some (.next ⟨.exec fn.body, (fn.params.map Prod.fst).zip vs, st,
             .scope fn.block (fn.params.map Prod.fst) [] :: .ret dst L :: k⟩)
         else none
-  | .exec (.prim x p args site), k => onRes (evalArgs O L args) site L k fun vs =>
-      some (.request p vs site fun
-        | .ok v => ⟨.done, (x, v) :: L, k⟩
-        | .error kd => ⟨.trapped kd site, L, k⟩)
-  | .exec (.abort site), k => some (.next ⟨.trapped .abort site, L, k⟩)
+  | .exec (.prim x p args site), k => onRes (evalArgs O L st args) site L st k fun vs =>
+      some (.request p vs site st fun a => match a.result with
+        | .ok v => ⟨.done, (x, v) :: L, a.store, k⟩
+        | .error kd => ⟨.trapped kd site, L, a.store, k⟩)
+  | .exec (.abort site), k => some (.next ⟨.trapped .abort site, L, st, k⟩)
   -- a statement completed normally
-  | .done, .seq t :: k => some (.next ⟨.exec t, L, k⟩)
-  | .done, .scope b dm (d :: ds) :: k => some (startCleanup L b dm d ds .fall k)
-  | .done, .scope _ dm [] :: k => some (.next ⟨.done, restrict dm L, k⟩)
-  | .done, .test l cr t b site :: k => onRes (O.eval L t) site L k fun v =>
+  | .done, .seq t :: k => some (.next ⟨.exec t, L, st, k⟩)
+  | .done, .scope b dm (d :: ds) :: k => some (startCleanup L st b dm d ds .fall k)
+  | .done, .scope _ dm [] :: k => some (.next ⟨.done, restrict dm L, st, k⟩)
+  | .done, .test l cr t b site :: k => onRes (O.eval L st t) site L st k fun v =>
       (O.test v).map fun go =>
-        if go then .next ⟨.exec b, L, .body l cr t b site :: k⟩ else .next ⟨.done, L, k⟩
-  | .done, .body l cr t b site :: k => some (.next ⟨.exec (.loop l cr t b site), L, k⟩)
-  | .done, .resume .fall :: k => some (.next ⟨.done, L, k⟩)
-  | .done, .resume (.exit e) :: k => some (.next ⟨.exiting e, L, k⟩)
-  | .done, .ret dst caller :: k => some (.next ⟨.done, bindDst dst O.unitVal caller, k⟩)
+        if go then .next ⟨.exec b, L, st, .body l cr t b site :: k⟩ else .next ⟨.done, L, st, k⟩
+  | .done, .body l cr t b site :: k => some (.next ⟨.exec (.loop l cr t b site), L, st, k⟩)
+  | .done, .resume .fall :: k => some (.next ⟨.done, L, st, k⟩)
+  | .done, .resume (.exit e) :: k => some (.next ⟨.exiting e, L, st, k⟩)
+  | .done, .ret dst caller :: k => some (.next ⟨.done, bindDst dst O.unitVal caller, st, k⟩)
   | .done, [] => none
   -- an exit unwinding
-  | .exiting e, k => stepExit L e k
+  | .exiting e, k => stepExit L st e k
   -- a trap is terminal
   | .trapped .., _ => none
 
@@ -326,27 +352,33 @@ inductive Label (O : Operands) where
   | silent
   | emit (ev : O.Event)
 
+/-- The label of an answer: its event, if it has one. -/
+def Answer.label (a : Answer O.Val O.Event O.Store) : Label O :=
+  match a.event with
+  | none => .silent
+  | some ev => .emit ev
+
 /-- The events a label contributes to a trace. -/
 def Label.events : Label O → List O.Event
   | .silent => []
   | .emit ev => [ev]
 
-/-- The labeled single-step relation: a silent step, or a primitive operation answered within its
-contract. -/
+/-- The labeled single-step relation: a step of the machine itself (silent), or a primitive
+operation answered within its contract (labeled with the answer's event, if any). -/
 inductive Step (P : Program O) : Config O → Label O → Config O → Prop where
   | silent {c c'} : step P c = some (.next c') → Step P c .silent c'
-  | emit {c p vs site k ev r} : step P c = some (.request p vs site k) →
-      O.allows p vs ev r = true → Step P c (.emit ev) (k r)
+  | prim {c p vs site st k a} : step P c = some (.request p vs site st k) →
+      O.allows p vs st a = true → Step P c a.label (k a)
 
 /-- Many steps, with the events they emitted in order. -/
 inductive Steps (P : Program O) : Config O → List O.Event → Config O → Prop where
   | refl (c : Config O) : Steps P c [] c
   | step {c l c' tr c''} : Step P c l c' → Steps P c' tr c'' → Steps P c (l.events ++ tr) c''
 
-/-- The configuration that runs function `fn` on argument values `vs` as the whole program: its
-`return` ends the run with the returned value. -/
-def enter (fn : Fn O) (vs : List O.Val) : Config O :=
-  ⟨.exec fn.body, (fn.params.map Prod.fst).zip vs, [.scope fn.block (fn.params.map Prod.fst) []]⟩
+/-- The configuration that runs function `fn` on argument values `vs`, in state `st`, as the whole
+program: its `return` ends the run with the returned value. -/
+def enter (fn : Fn O) (vs : List O.Val) (st : O.Store) : Config O :=
+  ⟨.exec fn.body, (fn.params.map Prod.fst).zip vs, st, [.scope fn.block (fn.params.map Prod.fst) []]⟩
 
 /-! ## Cleanup plans
 
@@ -379,18 +411,35 @@ def unwindLocals : List (Frame O) → AList Var O.Val → AList Var O.Val
   | .scope _ dm _ :: k, L => unwindLocals k (restrict dm L)
   | _ :: k, L => unwindLocals k L
 
-/-- A cleanup call that completes: from locals `L`, on any frames, it runs to its normal end with
-events `tr`, and gives the locals back unchanged (a call restores its caller's locals). -/
-def Completes (P : Program O) (L : AList Var O.Val) (d : Deferred O) (tr : List O.Event) : Prop :=
-  ∀ k, Steps P ⟨.exec d.stmt, L, k⟩ tr ⟨.done, L, k⟩
+/-- A cleanup call that completes: from locals `L` and state `st`, on any frames, it runs to its
+normal end with events `tr` and state `st'`, and gives the locals back unchanged (a call restores
+its caller's locals). -/
+def Completes (P : Program O) (L : AList Var O.Val) (d : Deferred O) (st : O.Store)
+    (tr : List O.Event) (st' : O.Store) : Prop :=
+  ∀ k, Steps P ⟨.exec d.stmt, L, st, k⟩ tr ⟨.done, L, st', k⟩
 
-/-- Every cleanup call of these frames completes, each from the locals it runs with, with the
-events `tr d`. -/
-def Cleans (P : Program O) (tr : Deferred O → List O.Event) :
-    List (Frame O) → AList Var O.Val → Prop
-  | [], _ => True
-  | .scope _ dm ds :: k, L => (∀ d ∈ ds, Completes P L d (tr d)) ∧ Cleans P tr k (restrict dm L)
-  | _ :: k, L => Cleans P tr k L
+/-- The calls `ds` run one after another from locals `L`, each completing, the state threaded from
+each to the next: in list order, with the events of each in turn. -/
+inductive RunsAll (P : Program O) (L : AList Var O.Val) :
+    List (Deferred O) → O.Store → List O.Event → O.Store → Prop where
+  | nil (st : O.Store) : RunsAll P L [] st [] st
+  | cons {d ds st tr₁ st₁ tr₂ st₂} : Completes P L d st tr₁ st₁ → RunsAll P L ds st₁ tr₂ st₂ →
+      RunsAll P L (d :: ds) st (tr₁ ++ tr₂) st₂
+
+/-- The cleanup an exit through frames `pre` performs, from locals `L` and state `st`: each scope's
+calls run in turn (`RunsAll`), with the locals that scope restores passed on to the next, the
+innermost scope first. The calls it runs are exactly `plan pre`, in that order. -/
+inductive Cleans (P : Program O) :
+    List (Frame O) → AList Var O.Val → O.Store → List O.Event → O.Store → Prop where
+  | nil (L : AList Var O.Val) (st : O.Store) : Cleans P [] L st [] st
+  | scope {b dm ds pre L st tr₁ st₁ tr₂ st₂} : RunsAll P L ds st tr₁ st₁ →
+      Cleans P pre (restrict dm L) st₁ tr₂ st₂ →
+      Cleans P (.scope b dm ds :: pre) L st (tr₁ ++ tr₂) st₂
+  | seq {t pre L st tr st'} : Cleans P pre L st tr st' → Cleans P (.seq t :: pre) L st tr st'
+  | test {l cr t b site pre L st tr st'} : Cleans P pre L st tr st' →
+      Cleans P (.test l cr t b site :: pre) L st tr st'
+  | body {l cr t b site pre L st tr st'} : Cleans P pre L st tr st' →
+      Cleans P (.body l cr t b site :: pre) L st tr st'
 
 /-! ## Destruction and receivers -/
 
@@ -410,6 +459,40 @@ def DestroyProtocol.destroyCall {P : Program O} (D : DestroyProtocol P) (T : O.T
     (arg : O.Expr) (site : SiteId) : Option (Deferred O) :=
   (D.impl T).map fun f => ⟨f, [arg], site⟩
 
+/-! ## Destruction order (Q2.3, Q3.8)
+
+The order in which the container `Destroy` implementations visit the parts of a value. They are
+ordinary checked functions (Q2.7); these schedules are what their bodies must follow, stated once
+here so every implementation and its proof refer to the same order. A zero-sized element is
+visited in its index position like any other (Q3.8): the schedules do not look at sizes. -/
+
+/-- A part of a value that destruction visits. -/
+inductive Part where
+  /-- Element `i` of a sequence. -/
+  | elem (i : Nat)
+  /-- The key, or the value, of the entry with the `i`-th smallest key of an ordered map. -/
+  | key (i : Nat)
+  | value (i : Nat)
+  /-- The payload of a heap cell, an `Option` or a `Result`. -/
+  | payload
+  /-- A sequence's backing storage, a heap cell, or a map's nodes: released last. -/
+  | storage
+  deriving DecidableEq, Repr
+
+/-- A sequence of `n` elements: indices `0 … n−1` in increasing order, then the backing (Q2.3). -/
+def seqDestroyOrder (n : Nat) : List Part := (List.range n).map .elem ++ [.storage]
+
+/-- An ordered map of `n` entries: ascending key order, each key before its value, then the nodes
+(Q2.3). -/
+def mapDestroyOrder (n : Nat) : List Part :=
+  (List.range n).flatMap (fun i => [.key i, .value i]) ++ [.storage]
+
+/-- A heap cell: its payload, then the cell. -/
+def heapDestroyOrder : List Part := [.payload, .storage]
+
+/-- An `Option` or `Result`: the payload that is present, if any. -/
+def payloadDestroyOrder (present : Bool) : List Part := if present then [.payload] else []
+
 /-! ## Running
 
 `run` drives the step function with an oracle for the environment's answers, for at most `fuel`
@@ -417,10 +500,10 @@ steps. It is the skeleton of the reference evaluator (Q9.9, C8): an answer outsi
 contract is refused, never taken, and running out of fuel is reported as such, never as a result
 of the program. -/
 
-/-- The environment's answer to a request: given the events so far (oldest first), the operation,
-its arguments and its site, the event it emits and the result. -/
+/-- The answer to a request: given the events so far (oldest first), the operation, its arguments,
+its site and the current state. -/
 abbrev Oracle (O : Operands) :=
-  List O.Event → O.Prim → List O.Val → SiteId → Option (O.Event × Except TrapKind O.Val)
+  List O.Event → O.Prim → List O.Val → SiteId → O.Store → Option (Answer O.Val O.Event O.Store)
 
 /-- How a run of `run` ended. -/
 inductive Ending (O : Operands) where
@@ -428,7 +511,10 @@ inductive Ending (O : Operands) where
   | final (f : Final O.Val)
   /-- No rule applies: unsafe stuckness. -/
   | stuck (c : Config O)
-  /-- The oracle gave no answer, or one outside the operation's contract. -/
+  /-- The oracle gave no answer: the run waits on the environment. C8 refines this (a run that
+  blocks forever keeps this classification), and C6 splits a request from its response. -/
+  | noAnswer (c : Config O)
+  /-- The oracle gave an answer outside the operation's contract: refused, never taken. -/
   | badAnswer (c : Config O)
   /-- The fuel ran out: a statement about the budget only. -/
   | outOfFuel (c : Config O)
@@ -438,21 +524,23 @@ structure Report (O : Operands) where
   events : List O.Event
   ending : Ending O
 
-/-- Run for at most `fuel` steps; `hist` are the events so far. -/
+/-- Run for at most `fuel` steps; `hist` are the events so far. A final configuration is reported
+as final whatever fuel is left, so a run that ends on its last unit of fuel is not "out of fuel". -/
 def runFrom (P : Program O) (ρ : Oracle O) : Nat → List O.Event → Config O → Report O
-  | 0, hist, c => ⟨hist, .outOfFuel c⟩
-  | n + 1, hist, c =>
-    match c.final? with
-    | some f => ⟨hist, .final f⟩
-    | none =>
+  | fuel, hist, c =>
+    match c.final?, fuel with
+    | some f, _ => ⟨hist, .final f⟩
+    | none, 0 => ⟨hist, .outOfFuel c⟩
+    | none, n + 1 =>
       match step P c with
       | none => ⟨hist, .stuck c⟩
       | some (.next c') => runFrom P ρ n hist c'
-      | some (.request p vs site k) =>
-        match ρ hist p vs site with
-        | none => ⟨hist, .badAnswer c⟩
-        | some (ev, r) =>
-          if O.allows p vs ev r then runFrom P ρ n (hist ++ [ev]) (k r) else ⟨hist, .badAnswer c⟩
+      | some (.request p vs site st k) =>
+        match ρ hist p vs site st with
+        | none => ⟨hist, .noAnswer c⟩
+        | some a =>
+          if O.allows p vs st a then runFrom P ρ n (hist ++ a.event.toList) (k a)
+          else ⟨hist, .badAnswer c⟩
 
 /-- Run from `c` with no events yet. -/
 def run (P : Program O) (ρ : Oracle O) (fuel : Nat) (c : Config O) : Report O :=
@@ -460,16 +548,21 @@ def run (P : Program O) (ρ : Oracle O) (fuel : Nat) (c : Config O) : Report O :
 
 /-! ## Examples
 
-A small operand language: integer values, literals and locals as operands, one operand that traps
-with a given kind (to show which failure is reported first), and one primitive, `log`, that emits
-its argument as an event. -/
+A small operand language: integer values; literals, locals and a shared counter as operands; the
+plain `i32` arithmetic of C2, which traps on failure; one operand that traps with a given kind (to
+show which failure is reported first); and two primitives:
+`log`, which emits its argument as an event, and `bump`, an internal operation that adds one to the
+counter without an event. -/
 
 namespace Demo
 
 inductive E where
   | lit (n : Int)
   | var (x : Var)
+  | counter
   | fail (k : TrapKind)
+  /-- Plain `i32` arithmetic (C2): a failure is a trap of its kind. -/
+  | arith (op : ArithOp) (a b : E)
 
 /-- The types: only `Unit` and integers matter here. -/
 inductive T where
@@ -477,34 +570,43 @@ inductive T where
   | int
   deriving DecidableEq
 
-/-- The demo's one primitive. -/
+/-- The demo's primitives. -/
 inductive Pr where
   | log
+  | bump
+
+/-- Evaluate an operand: no effects; a failing operation traps, an unbound local is stuck. -/
+def evalE (L : AList Var Int) (st : Int) : E → Res Int
+  | .lit n => .ok n
+  | .var x => match AList.lookup L x with
+    | some v => .ok v
+    | none => .stuck
+  | .counter => .ok st
+  | .fail k => .trap k
+  | .arith op a b => (evalE L st a).bind fun x => (evalE L st b).bind fun y => plain .i32 op x y
 
 abbrev ops : Operands where
   Val := Int
   Expr := E
   Ty := T
+  Store := Int
   Prim := Pr
   Event := Int
   unitVal := 0
   unitTy := .unit
   isCopy := fun t => t == .int
-  eval := fun L e => match e with
-    | .lit n => .ok n
-    | .var x => match AList.lookup L x with
-      | some v => .ok v
-      | none => .stuck
-    | .fail k => .trap k
+  eval := evalE
   test := fun v => some (v ≠ 0)
-  allows := fun _ vs ev r => match vs, r with
-    | [v], .ok 0 => decide (ev = v)
-    | _, _ => false
+  allows := fun p vs st a => match p, vs, a.event, a.result with
+    | .log, [v], some ev, .ok 0 => decide (ev = v) && decide (a.store = st)
+    | .bump, [], none, .ok 0 => decide (a.store = st + 1)
+    | _, _, _, _ => false
 
-/-- The environment logs every request's argument and answers `0`. -/
-def env : Oracle ops := fun _ _ vs _ => match vs with
-  | [v] => some (v, .ok 0)
-  | _ => none
+/-- The environment logs every `log` argument; `bump` adds one to the counter. -/
+def env : Oracle ops := fun _ p vs _ st => match p, vs with
+  | .log, [v] => some ⟨some v, .ok 0, st⟩
+  | .bump, [] => some ⟨none, .ok 0, st + 1⟩
+  | _, _ => none
 
 def x : Var := ⟨"x", 0⟩
 def y : Var := ⟨"y", 1⟩
@@ -519,13 +621,18 @@ def logFn : Fn ops := ⟨[(x, .int)], .unit, ⟨100⟩, .prim y .log [.var x] s�
 /-- `fn boom() -> Unit { abort() }` -/
 def boomFn : Fn ops := ⟨[], .unit, ⟨101⟩, .abort ⟨9⟩⟩
 
-def prog : Program ops := ⟨[(logF, logFn), (boomF, boomFn)]⟩
+def bumpF : FnId := ⟨⟨[]⟩, "bump"⟩
+
+/-- `fn bump() -> Unit { bump }` -/
+def bumpFn : Fn ops := ⟨[], .unit, ⟨102⟩, .prim y .bump [] s⟩
+
+def prog : Program ops := ⟨[(logF, logFn), (boomF, boomFn), (bumpF, bumpFn)]⟩
 
 def dlog (n : Int) : Stmt ops := .defer logF [.lit n] s
 def callLog (n : Int) : Stmt ops := .call none logF [.lit n] s
 
 /-- Run a body as `main`. -/
-def go (body : Stmt ops) : Report ops := run prog env 200 (enter ⟨[], .int, ⟨0⟩, body⟩ [])
+def go (body : Stmt ops) : Report ops := run prog env 200 (enter ⟨[], .int, ⟨0⟩, body⟩ [] 0)
 
 /-- A report's events and, if the program finished, how. -/
 def brief (r : Report ops) : List Int × Option (Final Int) :=
@@ -610,8 +717,46 @@ example : brief (go (.seq (.bind x (.lit 1) s)
 example : isStuck (go (.seq (.block ⟨1⟩ (.bind y (.lit 5) s)) (.ret (.var y) s))) = true := by
   decide
 
+/-- The shared state is not restored on return: what a cleanup call does to it is seen after the
+block.
+```
+{ defer bump(); defer bump(); } log(counter);
+```
+logs 2. -/
+example : (go (.seq (.block ⟨1⟩ (.seq (.defer bumpF [] s) (.defer bumpF [] s)))
+    (.prim y .log [.counter] s))).events = [2] := by decide
+
+/-- Plain arithmetic of C2 runs inside the machine: `log(2147483647 + 1)` traps with kind
+`overflow` at its site, and `log(7 / 2)` logs 3. -/
+example : brief (go (.prim y .log [.arith .add (.lit 2147483647) (.lit 1)] ⟨4⟩)) =
+    ([], some (.trapped .overflow ⟨4⟩)) := by decide
+
+example : (go (.prim y .log [.arith .div (.lit 7) (.lit 2)] s)).events = [3] := by decide
+
+/-- A cleanup call whose argument overflows traps when it runs, after the newer calls ran:
+```
+{ defer log(2147483647 + 1); defer log(1); }
+```
+logs 1, then traps with `overflow`. -/
+example : brief (go (.block ⟨1⟩ (.seq (.defer logF [.arith .add (.lit 2147483647) (.lit 1)] ⟨6⟩)
+    (dlog 1)))) = ([1], some (.trapped .overflow ⟨6⟩)) := by decide
+
+/-- A run that is final on its last unit of fuel is final, not out of fuel. -/
+example : brief (run prog env 0 ⟨.done, [], 0, []⟩) = ([], some .normal) := by decide
+
+/-- An oracle that does not answer leaves the run waiting, which is not a refused answer; an answer
+outside the contract is refused. -/
+example : (match (run prog (fun _ _ _ _ _ => none) 10 (enter ⟨[], .int, ⟨0⟩, callLog 1⟩ [] 0)).ending with
+    | .noAnswer _ => true
+    | _ => false) = true := by decide
+
+example : (match (run prog (fun _ _ _ _ st => some ⟨some 5, .ok 0, st⟩) 10
+    (enter ⟨[], .int, ⟨0⟩, callLog 1⟩ [] 0)).ending with
+    | .badAnswer _ => true
+    | _ => false) = true := by decide
+
 /-- Running out of fuel is reported as such: a loop that never ends is not a result. -/
-example : isOutOfFuel (run prog env 50 (enter ⟨[], .int, ⟨0⟩, .loop ⟨0⟩ .skip (.lit 1) .skip s⟩ []))
+example : isOutOfFuel (run prog env 50 (enter ⟨[], .int, ⟨0⟩, .loop ⟨0⟩ .skip (.lit 1) .skip s⟩ [] 0))
     = true := by decide
 
 end Demo

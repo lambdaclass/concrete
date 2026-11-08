@@ -85,5 +85,8 @@ Open obligations, by name:
   (`Target`), C1 (`Exec`: the machine, its step, cleanup order, traps; parametric in the operand
   language) and C2 (`Scalar`, `Const`). C4–C10 remain. C1 leaves to later slices the source-level
   evaluation orders (elaboration, O1), counted loops (slice 4), and ownership of moved values
-  (C5); C2 leaves floats (slice 26) and whether a failing operation may appear in a constant
-  initializer (an owner question).
+  (C5), the split of a request from its response (C6) and the oracle's query record (C8); its
+  shared state is abstract until C4 and C5 instantiate it. C2 leaves floats (slice 26), the
+  representation of scalars in bytes (C4, which ports `Rep` onto `Core.IntTy` so one scalar model
+  remains), and two owner questions: whether a failing operation may appear in a constant
+  initializer, and whether the source may name a constant written later in the file.

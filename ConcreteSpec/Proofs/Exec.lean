@@ -10,18 +10,26 @@ What these prove, for every operand language:
 - **Sequencing**: `seq s t` runs `s` with `t` as its continuation; `t` runs when `s` completes, and
   an exit from `s` skips it (`step_seq`, `step_done_seq`, `step_exit_seq`).
 - **Scope restoration**: leaving a scope keeps exactly the locals visible when it was entered,
-  with their current values (`lookup_restrict`).
-- **Cleanup order**: an exit leaving a scope runs its deferred calls newest first, then restores
-  the scope (`exit_scope_runs_defers`); the normal end of a block does the same
-  (`done_scope_runs_defers`); an exit passing several frames runs the calls of `plan`, innermost
-  scope first (`unwind_runs_plan`); `register` adds a call as the newest of the innermost scope.
-- **Exit values**: a `return` evaluates its value before any cleanup (`step_ret`), and every
-  unwinding step carries the exit unchanged (`unwind_runs_plan` ends in the same exit).
+  with their current values (`lookup_restrict`); the shared state is not restored: a call's
+  return keeps the state the callee left (`step_return_caller`).
+- **Registration**: `defer` adds a call as the newest of the innermost scope (`register_scope`),
+  so `defer d₁; defer d₂` leaves `d₂` before `d₁` (`two_defers_register`).
+- **Cleanup order**, in two forms. *Every* run: the only step an exit or the end of a block can
+  take at a scope with registered calls starts its newest one (`exit_scope_next`,
+  `done_scope_next`). *A run whose calls complete*: an exit through a scope runs its calls newest
+  first, threading the state, and then restores the scope (`exit_scope_runs_defers`,
+  `done_scope_runs_defers`); an exit through several frames runs the calls of `plan`, innermost
+  scope first, and arrives unchanged (`unwind_runs_plan`); a `return` then reaches its caller with
+  the value bound (`return_reaches_caller`).
+- **Exit values**: a `return` evaluates its value before any cleanup (`step_ret`).
 - **Traps are terminal**: a trapped configuration has no step and no later event
   (`steps_from_trapped`); `abort()` runs no cleanup (`abort_runs_no_cleanup`), and so neither does a
   cleanup call that traps.
 - **Evaluation order**: the first argument that traps decides the trap (`evalArgs_first_trap`).
-- Silent steps are deterministic (`step_silent_deterministic`).
+- Steps of the machine itself are deterministic (`step_silent_deterministic`): only the answers of
+  primitive operations can make two runs differ.
+- **Destruction order** (Q2.3): a sequence's element `i` is visited `i`-th and the backing last; a
+  map's `i`-th entry has its key at `2i` and its value at `2i+1`, and the nodes come last.
 -/
 
 namespace ConcreteSpec.Core.Exec
@@ -49,28 +57,31 @@ theorem steps_next {P : Program O} {c c' c'' : Config O} {tr : List O.Event}
 
 /-- A primitive operation answered within its contract, followed by more steps. -/
 theorem steps_request {P : Program O} {c c'' : Config O} {p : O.Prim} {vs : List O.Val}
-    {site : SiteId} {k : Except TrapKind O.Val → Config O} {ev : O.Event}
-    {r : Except TrapKind O.Val} {tr : List O.Event}
-    (h : step P c = some (.request p vs site k)) (ha : O.allows p vs ev r = true)
-    (h' : Steps P (k r) tr c'') : Steps P c (ev :: tr) c'' := by
-  simpa [Label.events] using Steps.step (Step.emit h ha) h'
+    {site : SiteId} {st : O.Store} {k : Answer O.Val O.Event O.Store → Config O}
+    {a : Answer O.Val O.Event O.Store} {tr : List O.Event}
+    (h : step P c = some (.request p vs site st k)) (ha : O.allows p vs st a = true)
+    (h' : Steps P (k a) tr c'') : Steps P c (a.label.events ++ tr) c'' :=
+  Steps.step (Step.prim h ha) h'
 
 /-! ### Sequencing -/
 
-theorem step_seq (P : Program O) (s t : Stmt O) (L : AList Var O.Val) (k : List (Frame O)) :
-    step P ⟨.exec (.seq s t), L, k⟩ = some (.next ⟨.exec s, L, .seq t :: k⟩) := rfl
+theorem step_seq (P : Program O) (s t : Stmt O) (L : AList Var O.Val) (st : O.Store)
+    (k : List (Frame O)) :
+    step P ⟨.exec (.seq s t), L, st, k⟩ = some (.next ⟨.exec s, L, st, .seq t :: k⟩) := rfl
 
-theorem step_done_seq (P : Program O) (t : Stmt O) (L : AList Var O.Val) (k : List (Frame O)) :
-    step P ⟨.done, L, .seq t :: k⟩ = some (.next ⟨.exec t, L, k⟩) := rfl
+theorem step_done_seq (P : Program O) (t : Stmt O) (L : AList Var O.Val) (st : O.Store)
+    (k : List (Frame O)) :
+    step P ⟨.done, L, st, .seq t :: k⟩ = some (.next ⟨.exec t, L, st, k⟩) := rfl
 
 theorem step_exit_seq (P : Program O) (e : Exit O.Val) (t : Stmt O) (L : AList Var O.Val)
-    (k : List (Frame O)) : step P ⟨.exiting e, L, .seq t :: k⟩ = some (.next ⟨.exiting e, L, k⟩) :=
-  rfl
+    (st : O.Store) (k : List (Frame O)) :
+    step P ⟨.exiting e, L, st, .seq t :: k⟩ = some (.next ⟨.exiting e, L, st, k⟩) := rfl
 
 /-- Entering a block records the locals visible at its start. -/
 theorem step_block (P : Program O) (b : BlockId) (s : Stmt O) (L : AList Var O.Val)
-    (k : List (Frame O)) :
-    step P ⟨.exec (.block b s), L, k⟩ = some (.next ⟨.exec s, L, .scope b (dom L) [] :: k⟩) := rfl
+    (st : O.Store) (k : List (Frame O)) :
+    step P ⟨.exec (.block b s), L, st, k⟩ =
+      some (.next ⟨.exec s, L, st, .scope b (dom L) [] :: k⟩) := rfl
 
 /-! ### Scope restoration -/
 
@@ -98,33 +109,7 @@ theorem restrict_dom_drops (L₀ L : AList Var V) (x : Var) (hx : x ∉ dom L₀
     AList.lookup (restrict (dom L₀) L) x = none := by
   rw [lookup_restrict]; simp [hx]
 
-/-! ### Exits and cleanup -/
-
-/-- `return` evaluates its value first: the next configuration carries the value and the same
-frames, so no cleanup has run. -/
-theorem step_ret (P : Program O) (e : O.Expr) (site : SiteId) (L : AList Var O.Val)
-    (k : List (Frame O)) (v : O.Val) (hv : O.eval L e = .ok v) :
-    step P ⟨.exec (.ret e site), L, k⟩ = some (.next ⟨.exiting (.ret v), L, k⟩) := by
-  simp [step, onRes, hv]
-
-/-- A `break` reaching its loop's body frame continues after the loop. -/
-theorem step_break_loop (P : Program O) (l : LoopId) (cr b : Stmt O) (t : O.Expr) (site : SiteId)
-    (L : AList Var O.Val) (k : List (Frame O)) :
-    step P ⟨.exiting (.brk l), L, .body l cr t b site :: k⟩ = some (.next ⟨.done, L, k⟩) := by
-  simp [step, stepExit]
-
-/-- A `continue` reaching its loop's body frame starts the loop again from its condition region. -/
-theorem step_continue_loop (P : Program O) (l : LoopId) (cr b : Stmt O) (t : O.Expr)
-    (site : SiteId) (L : AList Var O.Val) (k : List (Frame O)) :
-    step P ⟨.exiting (.cont l), L, .body l cr t b site :: k⟩ =
-      some (.next ⟨.exec (.loop l cr t b site), L, k⟩) := by
-  simp [step, stepExit]
-
-/-- A `return` reaching the call frame restores the caller's locals and binds the value. -/
-theorem step_return_caller (P : Program O) (v : O.Val) (dst : Option Var)
-    (caller L : AList Var O.Val) (k : List (Frame O)) :
-    step P ⟨.exiting (.ret v), L, .ret dst caller :: k⟩ =
-      some (.next ⟨.done, bindDst dst v caller, k⟩) := rfl
+/-! ### Registration -/
 
 /-- A deferred call is registered as the newest call of the innermost scope. -/
 theorem register_scope (d : Deferred O) (b : BlockId) (dm : List Var) (ds : List (Deferred O))
@@ -134,98 +119,176 @@ theorem register_scope (d : Deferred O) (b : BlockId) (dm : List Var) (ds : List
 theorem register_seq (d : Deferred O) (t : Stmt O) (k : List (Frame O)) :
     register d (.seq t :: k) = (register d k).map (.seq t :: ·) := rfl
 
-/-- The plan of nested scopes: the innermost scope's calls come first. -/
+/-- **Reverse registration order.** A block running `defer d₁; defer d₂; s` reaches `s` with its
+scope holding `d₂` before `d₁`, so `d₂` runs first; nothing is emitted. -/
+theorem two_defers_register (P : Program O) (b : BlockId) (d₁ d₂ : Deferred O) (s : Stmt O)
+    (L : AList Var O.Val) (st : O.Store) (k : List (Frame O)) :
+    Steps P ⟨.exec (.block b (.seq (.defer d₁.f d₁.args d₁.site)
+        (.seq (.defer d₂.f d₂.args d₂.site) s))), L, st, k⟩ []
+      ⟨.exec s, L, st, .scope b (dom L) [d₂, d₁] :: k⟩ :=
+  steps_next rfl (steps_next rfl (steps_next rfl (steps_next rfl (steps_next rfl
+    (steps_next rfl (steps_next rfl (Steps.refl _)))))))
+
+/-! ### Exits -/
+
+/-- `return` evaluates its value first: the next configuration carries the value and the same
+frames, so no cleanup has run. -/
+theorem step_ret (P : Program O) (e : O.Expr) (site : SiteId) (L : AList Var O.Val)
+    (st : O.Store) (k : List (Frame O)) (v : O.Val) (hv : O.eval L st e = .ok v) :
+    step P ⟨.exec (.ret e site), L, st, k⟩ = some (.next ⟨.exiting (.ret v), L, st, k⟩) := by
+  simp [step, onRes, hv]
+
+/-- A `break` reaching its loop's body frame continues after the loop. -/
+theorem step_break_loop (P : Program O) (l : LoopId) (cr b : Stmt O) (t : O.Expr) (site : SiteId)
+    (L : AList Var O.Val) (st : O.Store) (k : List (Frame O)) :
+    step P ⟨.exiting (.brk l), L, st, .body l cr t b site :: k⟩ =
+      some (.next ⟨.done, L, st, k⟩) := by
+  simp [step, stepExit]
+
+/-- A `continue` reaching its loop's body frame starts the loop again from its condition region. -/
+theorem step_continue_loop (P : Program O) (l : LoopId) (cr b : Stmt O) (t : O.Expr)
+    (site : SiteId) (L : AList Var O.Val) (st : O.Store) (k : List (Frame O)) :
+    step P ⟨.exiting (.cont l), L, st, .body l cr t b site :: k⟩ =
+      some (.next ⟨.exec (.loop l cr t b site), L, st, k⟩) := by
+  simp [step, stepExit]
+
+/-- A `return` reaching the call frame restores the caller's locals, binds the value, and keeps
+the state as the callee left it. -/
+theorem step_return_caller (P : Program O) (v : O.Val) (dst : Option Var)
+    (caller L : AList Var O.Val) (st : O.Store) (k : List (Frame O)) :
+    step P ⟨.exiting (.ret v), L, st, .ret dst caller :: k⟩ =
+      some (.next ⟨.done, bindDst dst v caller, st, k⟩) := rfl
+
+/-! ### Cleanup -/
+
+/-- **Every run.** At a scope with registered calls, the only step an exit can take starts the
+newest call, remembering the exit. -/
+theorem exit_scope_next {P : Program O} {e : Exit O.Val} {b : BlockId} {dm : List Var}
+    {d : Deferred O} {ds : List (Deferred O)} {L : AList Var O.Val} {st : O.Store}
+    {k : List (Frame O)} {l : Label O} {c : Config O}
+    (h : Step P ⟨.exiting e, L, st, .scope b dm (d :: ds) :: k⟩ l c) :
+    l = .silent ∧ c = ⟨.exec d.stmt, L, st, .resume (.exit e) :: .scope b dm ds :: k⟩ := by
+  cases h with
+  | silent h =>
+    simp only [step, stepExit, startCleanup, Option.some.injEq, Out.next.injEq] at h
+    exact ⟨rfl, h.symm⟩
+  | prim h _ => simp [step, stepExit, startCleanup] at h
+
+/-- The same at the normal end of a block. -/
+theorem done_scope_next {P : Program O} {b : BlockId} {dm : List Var} {d : Deferred O}
+    {ds : List (Deferred O)} {L : AList Var O.Val} {st : O.Store} {k : List (Frame O)}
+    {l : Label O} {c : Config O} (h : Step P ⟨.done, L, st, .scope b dm (d :: ds) :: k⟩ l c) :
+    l = .silent ∧ c = ⟨.exec d.stmt, L, st, .resume .fall :: .scope b dm ds :: k⟩ := by
+  cases h with
+  | silent h =>
+    simp only [step, startCleanup, Option.some.injEq, Out.next.injEq] at h
+    exact ⟨rfl, h.symm⟩
+  | prim h _ => simp [step, startCleanup] at h
+
+/-- An exit leaving a scope whose calls complete runs them newest first, each with its events and
+its effect on the state, and leaves the scope with its locals restored; the exit, and a returned
+value, are unchanged. -/
+theorem exit_scope_runs_defers (P : Program O) (e : Exit O.Val) (b : BlockId) (dm : List Var)
+    (L : AList Var O.Val) (k : List (Frame O)) {ds : List (Deferred O)} {st st' : O.Store}
+    {tr : List O.Event} (h : RunsAll P L ds st tr st') :
+    Steps P ⟨.exiting e, L, st, .scope b dm ds :: k⟩ tr ⟨.exiting e, restrict dm L, st', k⟩ := by
+  induction h with
+  | nil st => exact steps_next rfl (Steps.refl _)
+  | @cons d ds st tr₁ st₁ tr₂ st₂ hd _ ih =>
+    exact steps_next (c := ⟨.exiting e, L, st, .scope b dm (d :: ds) :: k⟩) rfl
+      (Steps.trans (hd _) (steps_next rfl ih))
+
+/-- The normal end of a block runs its calls the same way. -/
+theorem done_scope_runs_defers (P : Program O) (b : BlockId) (dm : List Var)
+    (L : AList Var O.Val) (k : List (Frame O)) {ds : List (Deferred O)} {st st' : O.Store}
+    {tr : List O.Event} (h : RunsAll P L ds st tr st') :
+    Steps P ⟨.done, L, st, .scope b dm ds :: k⟩ tr ⟨.done, restrict dm L, st', k⟩ := by
+  induction h with
+  | nil st => exact steps_next rfl (Steps.refl _)
+  | @cons d ds st tr₁ st₁ tr₂ st₂ hd _ ih =>
+    exact steps_next (c := ⟨.done, L, st, .scope b dm (d :: ds) :: k⟩) rfl
+      (Steps.trans (hd _) (steps_next rfl ih))
+
+/-- **Cleanup order.** When the cleanup calls complete (`Cleans`, which runs the calls of
+`plan pre` in that order: the innermost scope first, each scope's newest registration first), an
+exit passing frames `pre` arrives at the frames below with the same exit, the locals the scopes
+restored and the state the calls left. -/
+theorem unwind_runs_plan (P : Program O) (e : Exit O.Val) (k : List (Frame O))
+    {pre : List (Frame O)} {L : AList Var O.Val} {st st' : O.Store} {tr : List O.Event}
+    (h : Cleans P pre L st tr st') (hp : ∀ f ∈ pre, Passes e f) :
+    Steps P ⟨.exiting e, L, st, pre ++ k⟩ tr ⟨.exiting e, unwindLocals pre L, st', k⟩ := by
+  induction h with
+  | nil L st => exact Steps.refl _
+  | @scope b dm ds pre L st tr₁ st₁ tr₂ st₂ hr _ ih =>
+    have h1 := exit_scope_runs_defers P e b dm L (pre ++ k) hr
+    have h2 := ih (fun f hf => hp f (List.mem_cons_of_mem _ hf))
+    simpa [unwindLocals] using Steps.trans h1 h2
+  | seq _ ih => exact steps_next rfl (ih (fun f hf => hp f (List.mem_cons_of_mem _ hf)))
+  | test _ ih => exact steps_next rfl (ih (fun f hf => hp f (List.mem_cons_of_mem _ hf)))
+  | @body l cr t b site pre L st tr st' _ ih =>
+    have ih' := ih (fun f hf => hp f (List.mem_cons_of_mem _ hf))
+    have hf : Passes e (.body l cr t b site) := hp _ List.mem_cons_self
+    cases e with
+    | brk l' =>
+      have hne : l' ≠ l := hf
+      exact steps_next (by simp [step, stepExit, hne]) ih'
+    | cont l' =>
+      have hne : l' ≠ l := hf
+      exact steps_next (by simp [step, stepExit, hne]) ih'
+    | ret v => exact steps_next rfl ih'
+
+/-- The plan of nested scopes lists the inner scope's calls first. -/
 theorem plan_scopes (b₁ b₂ : BlockId) (d₁ d₂ : List Var) (ds₁ ds₂ : List (Deferred O))
     (k : List (Frame O)) :
-    plan (.scope b₁ d₁ ds₁ :: .scope b₂ d₂ ds₂ :: k) = ds₁ ++ ds₂ ++ plan k := by
-  simp [plan]
+    plan (.scope b₁ d₁ ds₁ :: .scope b₂ d₂ ds₂ :: k) = ds₁ ++ (ds₂ ++ plan k) := rfl
 
-/-- An exit leaving a scope runs the scope's deferred calls, newest first (each with the events it
-emits), and leaves the scope with its locals restored; the exit, and a returned value, are
-unchanged. -/
-theorem exit_scope_runs_defers (P : Program O) (tr : Deferred O → List O.Event) (e : Exit O.Val)
-    (b : BlockId) (dm : List Var) (L : AList Var O.Val) (k : List (Frame O)) :
-    ∀ ds : List (Deferred O), (∀ d ∈ ds, Completes P L d (tr d)) →
-      Steps P ⟨.exiting e, L, .scope b dm ds :: k⟩ (ds.flatMap tr) ⟨.exiting e, restrict dm L, k⟩
-  | [], _ => by simpa using steps_next rfl (Steps.refl (P := P) ⟨.exiting e, restrict dm L, k⟩)
-  | d :: ds, hc => by
-    have hd := hc d (List.mem_cons_self ..) (.resume (.exit e) :: .scope b dm ds :: k)
-    have ih := exit_scope_runs_defers P tr e b dm L k ds
-      (fun d' hd' => hc d' (List.mem_cons_of_mem _ hd'))
-    have := steps_next (c := ⟨.exiting e, L, .scope b dm (d :: ds) :: k⟩) rfl
-      (Steps.trans hd (steps_next rfl ih))
-    simpa [List.flatMap_cons] using this
+/-- **A `return` reaches its caller** after the cleanup of every scope it leaves: the caller's
+locals come back with the value bound, in the state the cleanup left. -/
+theorem return_reaches_caller (P : Program O) (v : O.Val) (dst : Option Var)
+    (caller : AList Var O.Val) (k : List (Frame O)) {pre : List (Frame O)}
+    {L : AList Var O.Val} {st st' : O.Store} {tr : List O.Event}
+    (h : Cleans P pre L st tr st') (hp : ∀ f ∈ pre, Passes (.ret v) f) :
+    Steps P ⟨.exiting (.ret v), L, st, pre ++ .ret dst caller :: k⟩ tr
+      ⟨.done, bindDst dst v caller, st', k⟩ := by
+  have := Steps.trans (unwind_runs_plan P (.ret v) (.ret dst caller :: k) h hp)
+    (steps_next rfl (Steps.refl _))
+  simpa using this
 
-/-- The normal end of a block runs its deferred calls the same way. -/
-theorem done_scope_runs_defers (P : Program O) (tr : Deferred O → List O.Event) (b : BlockId)
-    (dm : List Var) (L : AList Var O.Val) (k : List (Frame O)) :
-    ∀ ds : List (Deferred O), (∀ d ∈ ds, Completes P L d (tr d)) →
-      Steps P ⟨.done, L, .scope b dm ds :: k⟩ (ds.flatMap tr) ⟨.done, restrict dm L, k⟩
-  | [], _ => by simpa using steps_next rfl (Steps.refl (P := P) ⟨.done, restrict dm L, k⟩)
-  | d :: ds, hc => by
-    have hd := hc d (List.mem_cons_self ..) (.resume .fall :: .scope b dm ds :: k)
-    have ih := done_scope_runs_defers P tr b dm L k ds
-      (fun d' hd' => hc d' (List.mem_cons_of_mem _ hd'))
-    have := steps_next (c := ⟨.done, L, .scope b dm (d :: ds) :: k⟩) rfl
-      (Steps.trans hd (steps_next rfl ih))
-    simpa [List.flatMap_cons] using this
-
-/-- **Cleanup order.** An exit passing frames `pre` runs exactly the deferred calls of
-`plan pre`, in that order (the innermost scope first, the newest registration of each scope
-first), each emitting its events, and arrives at the frames below with the same exit and the
-locals each scope restored. -/
-theorem unwind_runs_plan (P : Program O) (tr : Deferred O → List O.Event) (e : Exit O.Val)
-    (k : List (Frame O)) :
-    ∀ (pre : List (Frame O)) (L : AList Var O.Val), (∀ f ∈ pre, Passes e f) → Cleans P tr pre L →
-      Steps P ⟨.exiting e, L, pre ++ k⟩ ((plan pre).flatMap tr) ⟨.exiting e, unwindLocals pre L, k⟩
-  | [], L, _, _ => by simpa [plan, unwindLocals] using Steps.refl (P := P) ⟨.exiting e, L, k⟩
-  | f :: pre, L, hp, hc => by
-    have hrest : ∀ f' ∈ pre, Passes e f' := fun f' h => hp f' (List.mem_cons_of_mem _ h)
-    have hf : Passes e f := hp f (List.mem_cons_self ..)
-    cases f with
-    | seq t =>
-      exact steps_next rfl (unwind_runs_plan P tr e k pre L hrest hc)
-    | scope b dm ds =>
-      have h1 := exit_scope_runs_defers P tr e b dm L (pre ++ k) ds hc.1
-      have h2 := unwind_runs_plan P tr e k pre (restrict dm L) hrest hc.2
-      simpa [plan, unwindLocals, List.flatMap_append] using Steps.trans h1 h2
-    | test l cr t b site =>
-      exact steps_next rfl (unwind_runs_plan P tr e k pre L hrest hc)
-    | body l cr t b site =>
-      have ih := unwind_runs_plan P tr e k pre L hrest hc
-      cases e with
-      | brk l' =>
-        have hne : l' ≠ l := hf
-        exact steps_next (by simp [step, stepExit, hne]) ih
-      | cont l' =>
-        have hne : l' ≠ l := hf
-        exact steps_next (by simp [step, stepExit, hne]) ih
-      | ret v => exact steps_next rfl ih
-    | resume _ => exact absurd hf id
-    | ret _ _ => exact absurd hf id
+/-- **A `break` reaches its loop** after the cleanup of the scopes inside the loop body, and the
+loop is done. -/
+theorem break_reaches_loop (P : Program O) (l : LoopId) (cr b : Stmt O) (t : O.Expr)
+    (site : SiteId) (k : List (Frame O)) {pre : List (Frame O)} {L : AList Var O.Val}
+    {st st' : O.Store} {tr : List O.Event}
+    (h : Cleans P pre L st tr st') (hp : ∀ f ∈ pre, Passes (.brk l) f) :
+    Steps P ⟨.exiting (.brk l), L, st, pre ++ .body l cr t b site :: k⟩ tr
+      ⟨.done, unwindLocals pre L, st', k⟩ := by
+  have := Steps.trans (unwind_runs_plan P (.brk l) (.body l cr t b site :: k) h hp)
+    (steps_next (step_break_loop P l cr b t site _ st' k) (Steps.refl _))
+  simpa using this
 
 /-! ### Traps are terminal -/
 
 theorem step_trapped (P : Program O) (kd : TrapKind) (site : SiteId) (L : AList Var O.Val)
-    (k : List (Frame O)) : step P ⟨.trapped kd site, L, k⟩ = none := rfl
+    (st : O.Store) (k : List (Frame O)) : step P ⟨.trapped kd site, L, st, k⟩ = none := rfl
 
 /-- After a trap nothing runs: no step, no event, and the frames are not unwound. -/
 theorem steps_from_trapped {P : Program O} {kd : TrapKind} {site : SiteId} {L : AList Var O.Val}
-    {k : List (Frame O)} {tr : List O.Event} {c : Config O}
-    (h : Steps P ⟨.trapped kd site, L, k⟩ tr c) : tr = [] ∧ c = ⟨.trapped kd site, L, k⟩ := by
+    {st : O.Store} {k : List (Frame O)} {tr : List O.Event} {c : Config O}
+    (h : Steps P ⟨.trapped kd site, L, st, k⟩ tr c) :
+    tr = [] ∧ c = ⟨.trapped kd site, L, st, k⟩ := by
   cases h with
   | refl => exact ⟨rfl, rfl⟩
   | step hs _ =>
     cases hs with
     | silent h => simp [step_trapped] at h
-    | emit h _ => simp [step_trapped] at h
+    | prim h _ => simp [step_trapped] at h
 
-/-- **`abort()` runs no cleanup.** From `abort()`, the only step is to the trap, with the same
-frames, and nothing follows: no deferred call runs and no event is emitted. -/
+/-- **`abort()` runs no cleanup.** From `abort()` the only step is to the trap, with the same
+frames and state, and nothing follows: no deferred call runs and no event is emitted. -/
 theorem abort_runs_no_cleanup {P : Program O} {site : SiteId} {L : AList Var O.Val}
-    {k : List (Frame O)} {tr : List O.Event} {c : Config O}
-    (h : Steps P ⟨.exec (.abort site), L, k⟩ tr c) :
-    tr = [] ∧ (c = ⟨.exec (.abort site), L, k⟩ ∨ c = ⟨.trapped .abort site, L, k⟩) := by
+    {st : O.Store} {k : List (Frame O)} {tr : List O.Event} {c : Config O}
+    (h : Steps P ⟨.exec (.abort site), L, st, k⟩ tr c) :
+    tr = [] ∧ (c = ⟨.exec (.abort site), L, st, k⟩ ∨ c = ⟨.trapped .abort site, L, st, k⟩) := by
   cases h with
   | refl => exact ⟨rfl, .inl rfl⟩
   | step hs hrest =>
@@ -235,36 +298,52 @@ theorem abort_runs_no_cleanup {P : Program O} {site : SiteId} {L : AList Var O.V
       subst h
       have := steps_from_trapped hrest
       exact ⟨by simpa [Label.events] using this.1, .inr this.2⟩
-    | emit h _ => simp [step] at h
+    | prim h _ => simp [step] at h
 
 /-! ### Evaluation order and determinism -/
 
 /-- The first argument that traps decides the trap, whatever follows it. -/
-theorem evalArgs_first_trap (L : AList Var O.Val) (e : O.Expr) (kd : TrapKind)
-    (he : O.eval L e = .trap kd) (es₂ : List O.Expr) :
-    ∀ (es₁ : List O.Expr) (vs : List O.Val), evalArgs O L es₁ = .ok vs →
-      evalArgs O L (es₁ ++ e :: es₂) = .trap kd
+theorem evalArgs_first_trap (L : AList Var O.Val) (st : O.Store) (e : O.Expr) (kd : TrapKind)
+    (he : O.eval L st e = .trap kd) (es₂ : List O.Expr) :
+    ∀ (es₁ : List O.Expr) (vs : List O.Val), evalArgs O L st es₁ = .ok vs →
+      evalArgs O L st (es₁ ++ e :: es₂) = .trap kd
   | [], _, _ => by simp [evalArgs, he, Res.bind]
   | e₁ :: es₁, vs, h => by
-    show evalArgs O L (e₁ :: (es₁ ++ e :: es₂)) = _
-    cases h₁ : O.eval L e₁ with
+    show evalArgs O L st (e₁ :: (es₁ ++ e :: es₂)) = _
+    cases h₁ : O.eval L st e₁ with
     | ok v₁ =>
-      cases h₂ : evalArgs O L es₁ with
+      cases h₂ : evalArgs O L st es₁ with
       | ok vs₁ =>
-        have := evalArgs_first_trap L e kd he es₂ es₁ vs₁ h₂
+        have := evalArgs_first_trap L st e kd he es₂ es₁ vs₁ h₂
         simp [evalArgs, h₁, this, Res.bind, Res.map]
       | trap _ => simp [evalArgs, h₁, h₂, Res.bind, Res.map] at h
       | stuck => simp [evalArgs, h₁, h₂, Res.bind, Res.map] at h
     | trap _ => simp [evalArgs, h₁, Res.bind] at h
     | stuck => simp [evalArgs, h₁, Res.bind] at h
 
-/-- Silent steps are deterministic: only the environment's answers can make two runs differ. -/
+/-- Steps of the machine itself are deterministic. -/
 theorem step_silent_deterministic {P : Program O} {c c₁ c₂ : Config O}
-    (h₁ : Step P c .silent c₁) (h₂ : Step P c .silent c₂) : c₁ = c₂ := by
+    (h₁ : step P c = some (.next c₁)) (h₂ : step P c = some (.next c₂)) : c₁ = c₂ := by
+  rw [h₁] at h₂; cases h₂; rfl
+
+/-- **Determinism up to the environment.** Two steps from one configuration reach the same
+configuration with the same label, unless the configuration requests a primitive operation: then
+each step is the continuation applied to its answer, so only the environment's answers can differ. -/
+theorem step_deterministic {P : Program O} {c c₁ c₂ : Config O} {l₁ l₂ : Label O}
+    (h₁ : Step P c l₁ c₁) (h₂ : Step P c l₂ c₂) :
+    (l₁ = l₂ ∧ c₁ = c₂) ∨ ∃ p vs site st k a₁ a₂, step P c = some (.request p vs site st k) ∧
+      c₁ = k a₁ ∧ c₂ = k a₂ := by
   cases h₁ with
-  | silent h₁ =>
+  | silent h =>
     cases h₂ with
-    | silent h₂ => rw [h₁] at h₂; cases h₂; rfl
+    | silent h' => exact .inl ⟨rfl, step_silent_deterministic h h'⟩
+    | prim h' _ => rw [h] at h'; cases h'
+  | prim h _ =>
+    cases h₂ with
+    | silent h' => rw [h] at h'; cases h'
+    | prim h' _ =>
+      rw [h] at h'; cases h'
+      exact .inr ⟨_, _, _, _, _, _, _, h, rfl, rfl⟩
 
 /-! ### Destruction -/
 
@@ -285,17 +364,88 @@ theorem destroyCall_sig {P : Program O} (D : DestroyProtocol P) (T : O.Ty) (arg 
 theorem destroy_not_copy {P : Program O} (D : DestroyProtocol P) (T : O.Ty) (f : FnId)
     (h : D.impl T = some f) : O.isCopy T = false := D.notCopy T f h
 
+/-- A sequence's element `i` is visited at position `i`: in increasing index order. -/
+theorem seqDestroyOrder_elem (n i : Nat) (h : i < n) : (seqDestroyOrder n)[i]? = some (.elem i) := by
+  rw [seqDestroyOrder, List.getElem?_append_left (by simpa using h)]
+  simp [h]
+
+/-- A sequence's backing is released last, after all `n` elements. -/
+theorem seqDestroyOrder_storage (n : Nat) :
+    (seqDestroyOrder n).length = n + 1 ∧ (seqDestroyOrder n)[n]? = some .storage := by
+  simp [seqDestroyOrder]
+
+/-- The entries of a map, in visiting order. -/
+private def entryParts (n : Nat) : List Part := (List.range n).flatMap fun i => [.key i, .value i]
+
+private theorem entryParts_succ (n : Nat) :
+    entryParts (n + 1) = entryParts n ++ [.key n, .value n] := by
+  simp [entryParts, List.range_succ, List.flatMap_append]
+
+private theorem entryParts_length : ∀ n, (entryParts n).length = 2 * n
+  | 0 => rfl
+  | n + 1 => by rw [entryParts_succ]; simp [entryParts_length n]; omega
+
+private theorem entryParts_get : ∀ (n i : Nat), i < n →
+    (entryParts n)[2 * i]? = some (.key i) ∧ (entryParts n)[2 * i + 1]? = some (.value i)
+  | 0, _, h => absurd h (Nat.not_lt_zero _)
+  | n + 1, i, h => by
+    rw [entryParts_succ]
+    by_cases hi : i < n
+    · have hl := entryParts_length n
+      rw [List.getElem?_append_left (by omega), List.getElem?_append_left (by omega)]
+      exact entryParts_get n i hi
+    · have hin : i = n := by omega
+      subst hin
+      have hl := entryParts_length i
+      rw [List.getElem?_append_right (by omega), List.getElem?_append_right (by omega), hl]
+      simp
+
+/-- A map's `i`-th entry (in ascending key order) is visited key first, at position `2i`, then
+value, at `2i+1`. -/
+theorem mapDestroyOrder_entry (n i : Nat) (h : i < n) :
+    (mapDestroyOrder n)[2 * i]? = some (.key i) ∧
+      (mapDestroyOrder n)[2 * i + 1]? = some (.value i) := by
+  have hl := entryParts_length n
+  have := entryParts_get n i h
+  show (entryParts n ++ [Part.storage])[2 * i]? = _ ∧
+    (entryParts n ++ [Part.storage])[2 * i + 1]? = _
+  rw [List.getElem?_append_left (by omega), List.getElem?_append_left (by omega)]
+  exact this
+
+/-- A map's nodes are released last, after all `n` entries. -/
+theorem mapDestroyOrder_storage (n : Nat) :
+    (mapDestroyOrder n).length = 2 * n + 1 ∧ (mapDestroyOrder n)[2 * n]? = some .storage := by
+  have hl := entryParts_length n
+  show (entryParts n ++ [Part.storage]).length = _ ∧ (entryParts n ++ [Part.storage])[2 * n]? = _
+  rw [List.getElem?_append_right (by omega), hl]
+  simp [hl]
+
 /-! ### Non-vacuity
 
 The cleanup laws assume that each deferred call completes (`Completes`). Real calls meet it: in the
-demo language of `Spec/Exec.lean`, a deferred `log(1)` completes from any locals and on any frames,
-emitting `1`. -/
+demo language of `Spec/Exec.lean`, a deferred `log(1)` completes from any locals, in any state and
+on any frames, emitting `1`; a deferred `bump()` completes silently and adds one to the counter. -/
 
-theorem demo_log_completes (L : AList Var Demo.ops.Val) :
-    Completes Demo.prog L ⟨Demo.logF, [.lit 1], Demo.s⟩ [1] := by
+theorem demo_log_completes (L : AList Var Demo.ops.Val) (st : Demo.ops.Store) :
+    Completes Demo.prog L ⟨Demo.logF, [.lit 1], Demo.s⟩ st [1] st := by
   intro k
-  refine steps_next rfl (steps_request (O := Demo.ops) (P := Demo.prog) (ev := (1 : Int))
-    (r := .ok (0 : Int)) (tr := []) rfl rfl ?_)
+  refine steps_next rfl (steps_request (O := Demo.ops) (P := Demo.prog)
+    (a := ⟨some (1 : Int), .ok (0 : Int), st⟩) (tr := []) rfl (by simp [Demo.ops]) ?_)
   exact steps_next rfl (steps_next rfl (Steps.refl _))
+
+theorem demo_bump_completes (L : AList Var Demo.ops.Val) (st : Demo.ops.Store) :
+    Completes Demo.prog L ⟨Demo.bumpF, [], Demo.s⟩ st [] (st + 1) := by
+  intro k
+  refine steps_next rfl (steps_request (O := Demo.ops) (P := Demo.prog)
+    (a := ⟨none, .ok (0 : Int), st + 1⟩) (tr := []) rfl (by simp [Demo.ops]) ?_)
+  exact steps_next rfl (steps_next rfl (Steps.refl _))
+
+/-- So the cleanup law applies to a real scope: the end of a block that registered `log(1)` and
+then `bump()` runs `bump` (silently, adding one) and then `log`, from any state. -/
+example (L : AList Var Demo.ops.Val) (st : Int) (k : List (Frame Demo.ops)) (dm : List Var) :
+    Steps Demo.prog ⟨.done, L, st, .scope ⟨1⟩ dm [⟨Demo.bumpF, [], Demo.s⟩,
+      ⟨Demo.logF, [.lit 1], Demo.s⟩] :: k⟩ [1] ⟨.done, restrict dm L, st + 1, k⟩ :=
+  done_scope_runs_defers Demo.prog ⟨1⟩ dm L k
+    (.cons (demo_bump_completes L st) (.cons (demo_log_completes L (st + 1)) (.nil _)))
 
 end ConcreteSpec.Core.Exec

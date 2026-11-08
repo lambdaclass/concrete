@@ -11,20 +11,33 @@ A module constant (`const N: T = e;`) is computed at compile time, and its value
 `Copy` type (owner decision 2026-11-08, item 26: the direction). Its initializer is written in a
 *closed total subset* of expressions, defined here, and nothing else:
 
-- literals of the integer types (in range), `true`, `false` and `()`;
-- references to constants declared *earlier* (so no constant depends on itself);
+- literals of the integer types (in range, so a negative literal of a signed type is one literal,
+  not a negation), `true`, `false` and `()`;
+- references to constants *earlier in the dependency order* (so no constant depends on itself);
 - the wrapping and saturating forms of add, subtract and multiply (ARITH-4), the bitwise
-  operations, comparisons, and `!`, `&&`, `||` on booleans;
+  operations, comparisons of integers, and `!`, `&&`, `||` on booleans (both operands of `&&` and
+  `||` are evaluated: nothing in the subset can fail or has an effect, so short-circuiting could not
+  be observed);
 - the one lossless conversion (owner decision 2026-11-08, item 11(a); its spelling is not yet
-  approved).
+  approved), from an integer type to one whose range contains it, or from `bool` to an integer
+  type (ARITH-5).
 
 Every operation of the subset is *total*: it has a value for all well-typed operands, so a
 well-typed initializer always has a value (`eval_total`, in `Proofs/Const.lean`), computed without
 fuel, state, authority or the target. An initializer outside the subset, an ill-typed one, a
-literal out of its type's range and a reference to a later or unknown constant are refused. In
+literal out of its type's range and a reference to a constant not earlier in the order are refused. In
 particular plain arithmetic, division, shifts and checked operations are *not* in the subset:
 whether a failing operation may appear in an initializer, refused when it fails at compile time,
 is a question for the owner, not decided here.
+
+**Order.** Core receives a module's constants as a list in *dependency order*: each initializer
+refers only to constants before it. Elaboration supplies that order. Whether the source may name a
+constant written later in the file (elaboration then sorting the declarations, and refusing a
+cycle) is a question for the owner, not decided here; this module refuses a cycle either way.
+
+**Static admission.** The compiler checks constants by typing them (`typeConsts`), without
+evaluating: a list that types is admitted, and its evaluation cannot fail (`typed_admitted`); every constant then has a value of
+its declared type (`evalConsts_sound`).
 
 This module does not decide when a use of a constant is replaced by its value, or revise TYPE-22's
 evaluation-at-each-use: per item 26 that revision of Q6.4/TYPE-22 comes after this subset is
@@ -32,9 +45,9 @@ defined and the decided compile-time-evaluation reopening conditions (P17b) are 
 
 The constant types are an interface (`ConstTypes`): the language's type universe, a `Copy`
 predicate on it, and the embedding of the scalar types the subset computes with, which must all be
-`Copy`. A later slice may widen the subset (to `Copy` structs, say) only by extending that
-interface lawfully: every value it can produce stays of a `Copy` type and every operation stays
-total.
+`Copy`. Widening the subset (to `Copy` structs, say) revises `CTy`, `CVal` and `CExpr` and is an
+owner decision; this interface only fixes what any widening must keep: every value it can produce is
+of a `Copy` type and every operation is total.
 -/
 
 namespace ConcreteSpec.Core
@@ -129,6 +142,7 @@ def CExpr.eval (env : AList ConstId CVal) : CExpr → Option CVal
   | .or a b => (twoBools (a.eval env) (b.eval env)).map fun (x, y) => .bool (x || y)
   | .convert t a => match a.eval env with
     | some (.int s x) => if Lossless s t then some (.int t x) else none
+    | some (.bool b) => some (.int t (boolToInt b))
     | _ => none
 
 /-- Two operand types that are one integer type, or `none`. -/
@@ -160,6 +174,7 @@ def CExpr.ty? (Γ : AList ConstId CTy) : CExpr → Option CTy
   | .and a b | .or a b => if bothBool (a.ty? Γ) (b.ty? Γ) then some .bool else none
   | .convert t a => match a.ty? Γ with
     | some (.int s) => if Lossless s t then some (.int t) else none
+    | some .bool => some (.int t)
     | _ => none
 
 /-- The language's types as far as constants need them: a `Copy` predicate, and the scalar types
@@ -180,9 +195,9 @@ structure ConstDecl (U : ConstTypes) where
   ty : U.Ty
   init : CExpr
 
-/-- Compute the constants in declaration order. Each initializer sees only the constants declared
-before it; its declared type must be `Copy` and must be the type of its value; a name may be
-declared once. `none`: the declarations are refused. -/
+/-- Compute the constants in dependency order. Each initializer sees only the constants before it;
+its declared type must be `Copy` and must be the type of its value; a name may be declared once.
+`none`: the declarations are refused. -/
 def evalConsts (U : ConstTypes) : List (ConstDecl U) → AList ConstId CVal →
     Option (AList ConstId CVal)
   | [], env => some env
@@ -194,8 +209,22 @@ def evalConsts (U : ConstTypes) : List (ConstDecl U) → AList ConstId CVal →
       else none
     | none => none
 
+/-- Type the constants in dependency order, without evaluating: what the compiler checks. Each
+initializer is typed with the types of the constants before it; its declared type must be `Copy`
+and must be the initializer's type; a name may be declared once. -/
+def typeConsts (U : ConstTypes) : List (ConstDecl U) → AList ConstId CTy →
+    Option (AList ConstId CTy)
+  | [], Γ => some Γ
+  | d :: ds, Γ =>
+    match d.init.ty? Γ with
+    | some T =>
+      if U.isCopy d.ty = true ∧ U.ofC T = d.ty ∧ AList.lookup Γ d.id = none then
+        typeConsts U ds ((d.id, T) :: Γ)
+      else none
+    | none => none
+
 /-- **Rule: constant declarations are admitted** when every initializer is in the closed total
-subset and well typed, refers only to earlier constants, and has a `Copy` declared type that is its
+subset and well typed, refers only to constants before it in the dependency order, and has a `Copy` declared type that is its
 value's type (owner decision 2026-11-08, item 26; statically known module constants, Q6.2;
 compile-time evaluation stays within P17b's limits: this is a fixed, closed evaluator, not general
 compile-time execution). Their values are the result of `evalConsts`, computed at compile time. -/
@@ -241,6 +270,12 @@ example : ConstsAdmitted U [⟨cid "MASK", .c (.int .u8), .int .u8 0x0f⟩,
     ⟨cid "BOTH", .c (.int .u8), .bit .or (.ref (cid "MASK")) (.ref (cid "HIGH"))⟩,
     ⟨cid "WIDE", .c (.int .u16), .convert .u16 (.ref (cid "BOTH"))⟩] := by decide
 
+/-- The same declarations type, without evaluating. -/
+example : (typeConsts U [⟨cid "MASK", .c (.int .u8), .int .u8 0x0f⟩,
+    ⟨cid "HIGH", .c (.int .u8), .wrapping .mul (.ref (cid "MASK")) (.int .u8 16)⟩,
+    ⟨cid "BOTH", .c (.int .u8), .bit .or (.ref (cid "MASK")) (.ref (cid "HIGH"))⟩,
+    ⟨cid "WIDE", .c (.int .u16), .convert .u16 (.ref (cid "BOTH"))⟩] []).isSome := by decide
+
 example : (evalConsts U [⟨cid "MASK", .c (.int .u8), .int .u8 0x0f⟩,
     ⟨cid "HIGH", .c (.int .u8), .wrapping .mul (.ref (cid "MASK")) (.int .u8 16)⟩] []).bind
       (fun env => AList.lookup env (cid "HIGH")) = some (.int .u8 0xf0) := by decide
@@ -248,7 +283,7 @@ example : (evalConsts U [⟨cid "MASK", .c (.int .u8), .int .u8 0x0f⟩,
 /-- Refused (rule `ConcreteSpec.Core.ConstsAdmitted`): a constant of a type that is not `Copy`. -/
 example : ¬ ConstsAdmitted U [⟨cid "S", .text, .unit⟩] := by decide
 
-/-- Refused: a reference to a constant declared later (or to itself). -/
+/-- Refused: a reference to a constant later in the dependency order (or to itself). -/
 example : ¬ ConstsAdmitted U [⟨cid "A", .c (.int .u8), .ref (cid "B")⟩,
     ⟨cid "B", .c (.int .u8), .int .u8 1⟩] := by decide
 
@@ -259,6 +294,12 @@ example : ¬ ConstsAdmitted U [⟨cid "A", .c (.int .u8), .int .u8 256⟩] := by
 
 example : ¬ ConstsAdmitted U [⟨cid "A", .c (.int .u16),
     .wrapping .add (.int .u8 1) (.int .u16 1)⟩] := by decide
+
+/-- Accepted (rule `ConcreteSpec.Core.ConstsAdmitted`): `bool` converts losslessly to an integer,
+`true` as `1`. -/
+example : (evalConsts U [⟨cid "ON", .c .bool, .bool true⟩,
+    ⟨cid "N", .c (.int .i8), .convert .i8 (.ref (cid "ON"))⟩] []).bind
+      (fun env => AList.lookup env (cid "N")) = some (.int .i8 1) := by decide
 
 /-- Refused: a lossy conversion, and a declared type other than the value's. -/
 example : ¬ ConstsAdmitted U [⟨cid "A", .c (.int .u8), .convert .u8 (.int .i8 (-1))⟩] := by decide

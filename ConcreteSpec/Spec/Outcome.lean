@@ -27,10 +27,16 @@ trapped. They are a different type from the error values a checked operation ret
 (`ArithmeticError`, `OutOfRange`, C2), which are ordinary values a program handles.
 -/
 
--- Results of operations that can fail (`Except`) are compared in the examples.
-deriving instance DecidableEq for Except
-
 namespace ConcreteSpec.Core
+
+/-- Results of operations that can fail (`Except`) can be compared, so examples are decided by
+running them. -/
+instance instDecidableEqExcept {ε α : Type} [DecidableEq ε] [DecidableEq α] :
+    DecidableEq (Except ε α) := fun
+  | .ok a, .ok b => decidable_of_iff (a = b) ⟨fun h => h ▸ rfl, fun h => by cases h; rfl⟩
+  | .error a, .error b => decidable_of_iff (a = b) ⟨fun h => h ▸ rfl, fun h => by cases h; rfl⟩
+  | .ok _, .error _ => isFalse (fun h => by cases h)
+  | .error _, .ok _ => isFalse (fun h => by cases h)
 
 /-- Why a run trapped (owner decision 2026-11-08, item 4). The first three are the failures of a
 plain arithmetic operation, `outOfBounds` an index outside its sequence, `invalidRange` a range
