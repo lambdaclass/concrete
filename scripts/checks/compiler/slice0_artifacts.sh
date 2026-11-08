@@ -30,16 +30,18 @@
 #     restored, a freed or restored saved slot reread, a callee's leftover saved slot reread by
 #     its caller (both architectures), a read of bytes written on one path only or never written,
 #     a store through main's argv, a PC-relative base kept across a call, walked by repeated adds or
-#     beyond the reach premise, an absolute address (memory only through sp/fp, PC-relative or fs/gs), a callee that does not restore the frame pointer, a frame record away from sp, an unmodelled
-#     instruction (x86 `loop`) and frame- or link-register writeback (AArch64), and give the
-#     expected bound on known functions (x86 frame, red-zone store, two AArch64 frame-record
-#     shapes, a read of bytes written on both paths, an adrp-based load, LCB's single link-register
-#     save with a Mach-O stub call in a loop); also refuse the link register loaded from another
-#     slot, a stub call with no indirect-symbol entry, into a stub entry's middle or to the bare stub
-#     section; the comparison must reject a
-#     measurement above the bound; refuse an access beyond the target's red zone (x86-64, Apple
-#     arm64) and any below the stack pointer on aarch64-linux; and a linked main storing at the red
-#     zone's edge must be measured at 128 (bound 128), and with a 120-byte red zone not at all.
+#     beyond the reach premise, fs/gs beyond TP_REACH, an absolute address (memory only through
+#     sp/fp, PC-relative or bounded fs/gs), a callee that does not restore the frame pointer, a frame
+#     record away from sp, an unmodelled instruction (x86 `loop`) and frame- or link-register
+#     writeback (AArch64), and give the expected bound on known functions (x86 frame, red-zone store,
+#     two AArch64 frame-record shapes, a read of bytes written on both paths, an adrp-based load, an
+#     fs:0x28 canary load with bound unchanged, LCB's single link-register save with a Mach-O stub
+#     call in a loop); also refuse the link register loaded from another slot, a stub call with no
+#     indirect-symbol entry, into a stub entry's middle or to the bare stub section; the run check
+#     must compute and count a beyond-reach fs address; the comparison must reject a measurement
+#     above the bound; refuse an access beyond the target's red zone (x86-64, Apple arm64) and any
+#     below the stack pointer on aarch64-linux; and a linked main storing at the red zone's edge must
+#     be measured at 128 (bound 128), and with a 120-byte red zone not at all.
 #
 # usage: slice0_artifacts.sh [REPORT_DIR]. Run inside the nix devshell, from the repository root.
 set -euo pipefail
@@ -252,6 +254,16 @@ refuse() { # refuse NAME BODY [TARGET [MAIN]]: BODY (printf format) follows the 
     echo "ok   control: stack analysis refuses $1"
   fi
 }
+refuse_tp() { # refuse_tp NAME BODY: a beyond-reach thread-pointer operand gets the reach refusal
+  local f rc=0
+  f=$(ctl_dis "$1" <<<"$(printf "\n0000000000001010 <main>:\n$2")")
+  stack_bound x86_64-linux "$f" >"$f.out" || rc=$?
+  if [ "$rc" -eq 1 ] && grep -q '^refused: .*thread-pointer-relative access beyond the premise' "$f.out"; then
+    echo "ok   control: stack analysis refuses $1 with the reach diagnostic"
+  else
+    echo "FAIL control: $1: status $rc, output $(head -c 2000 "$f.out")"; fail=1
+  fi
+}
 refuse dynamic-sp '    1010:\tsub\trsp, rax\n    1013:\tret\n'
 refuse indirect-call '    1010:\tcall\trax\n    1012:\tret\n'
 refuse recursion '    1010:\tpush\trbp\n    1011:\tcall\t0x1010 <main>\n    1016:\tpop\trbp\n    1017:\tret\n'
@@ -288,6 +300,8 @@ refuse a64-pc-relative-after-call '    1010:\tstp\tx29, x30, [sp, #-0x10]!\n    
 refuse a64-pc-relative-walk '    1010:\tadr\tx8, 0x1010 <_main>\n    1014:\tsub\tx2, x1, #0xfff\n    1018:\tadd\tx8, x8, #0x8\n    101c:\tcmp\tx8, x2\n    1020:\tb.lo\t0x1018 <_main+0x8>\n    1024:\tstrb\twzr, [x8]\n    1028:\tret\n' aarch64-macos _main
 refuse a64-pc-relative-far '    1010:\tadrp\tx8, 0x7fff0000\n    1014:\tstrb\twzr, [x8]\n    1018:\tret\n' aarch64-macos _main
 refuse absolute-address '    1010:\tmov\tbyte ptr [0x7fffffd0], 0x0\n    1018:\tret\n'
+refuse_tp fs-beyond-reach '    1010:\tmov\tbyte ptr fs:[0x100000], 0x0\n    1018:\tret\n'
+refuse_tp gs-beyond-reach '    1010:\tmov\tbyte ptr gs:[0x100000], 0x0\n    1018:\tret\n'
 # The link register loaded from a slot that does not hold it, and a stub call with no stub entry.
 refuse a64-lr-from-other-slot '    1010:\tsub\tsp, sp, #0x20\n    1014:\tstr\tx30, [sp, #0x10]\n    1018:\tstr\tx0, [sp, #0x8]\n    101c:\tldr\tx30, [sp, #0x8]\n    1020:\tadd\tsp, sp, #0x20\n    1024:\tret\n' aarch64-macos _main
 refuse a64-unmapped-stub '    1010:\tstr\tx30, [sp, #-0x10]!\n    1014:\tbl\t0x1040 <_write+0x1040>\n    1018:\tldr\tx30, [sp], #0x10\n    101c:\tret\n' aarch64-macos _main
@@ -334,6 +348,25 @@ bound_is a64-pc-relative-load aarch64-macos 'bound 0' '0000000000001000 <_main>:
 bound_is a64-single-lr-save-and-stub aarch64-macos 'bound 48 external write 48' '0000000000001000 <_main>:\n    1000:\tsub\tsp, sp, #0x30\n    1004:\tstr\tx30, [sp, #0x20]\n    1008:\tmov\tw0, #0x2\n    100c:\tbl\t0x1040 <_write+0x1040>\n    1010:\tcbnz\tw0, 0x1008 <_main+0x8>\n    1014:\tldr\tx30, [sp, #0x20]\n    1018:\tadd\tsp, sp, #0x30\n    101c:\tret\n\nDisassembly of section __TEXT,__stubs:\n\n0000000000001040 <__stubs>:\n    1040:\tadrp\tx16, 0x2000\n    1044:\tldr\tx16, [x16]\n    1048:\tbr\tx16\nstub 0x0000000000001040 _write\n'
 # A read of bytes the function wrote on both paths into it is accepted.
 bound_is both-path-write x86_64-linux 'bound 16' '0000000000001010 <main>:\n    1010:\tpush\trbp\n    1011:\tmov\trbp, rsp\n    1014:\tje\t0x101c <main+0xc>\n    1016:\tmov\tqword ptr [rbp - 0x8], rax\n    101a:\tjmp\t0x1020 <main+0x10>\n    101c:\tmov\tqword ptr [rbp - 0x8], rcx\n    1020:\tmov\trax, qword ptr [rbp - 0x8]\n    1024:\tpop\trbp\n    1025:\tret\n'
+bound_is x86-thread-pointer-canary x86_64-linux 'bound 0' '0000000000001010 <main>:\n    1010:\tmov\trax, qword ptr fs:[0x28]\n    1019:\tret\n'
+if bounded 60 python3 -I -c '
+import sys
+sys.path.insert(0, sys.argv[1])
+import stack_access
+base = 0x7fff00000000
+def reg(name):
+    if name != "fs_base":
+        raise ValueError("unexpected register " + name)
+    return base
+addresses = stack_access.x86_addresses("mov byte ptr fs:[0x100000],0x0", reg, 0)
+assert addresses == [base + 0x100000], addresses
+sp0 = base + 0x100000 + 128
+assert stack_access.lowest_stack(addresses, sp0, sp0, 128, 8 << 20) == base + 0x100000
+' "$root/scripts/checks/lib"; then
+  echo "ok   control: x86-run-thread-pointer-beyond-reach computes and counts the address"
+else
+  echo "FAIL control: x86-run-thread-pointer-beyond-reach was not computed and counted"; fail=1
+fi
 if [ -n "$measuring" ]; then
   # A run that does not end as expected gives no measurement.
   wrong=$(( ($(head -c 16 "$(dirname "$last_exe")/status") + 1) % 256 ))

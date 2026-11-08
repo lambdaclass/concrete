@@ -29,23 +29,22 @@ def _num(text):
 
 def x86_addresses(asm, reg, next_pc):
     """Effective addresses of the memory operands of one instruction in gdb's Intel syntax
-    (`mov QWORD PTR [rsp-0x80],0x0`). reg(name) reads a register. lea and nop compute an address
-    without accessing it; fs:/gs: operands address the thread block, not the stack."""
+    (`mov QWORD PTR [rsp-0x80],0x0`). reg(name) reads a register or segment base. lea and nop
+    compute an address without accessing it; fs:/gs: operands include that segment's base."""
     asm = asm.split("#", 1)[0].strip().lower()
     mn = asm.split(None, 1)[0] if asm else ""
     if mn == "lea" or mn.startswith("nop") or mn.startswith("prefetch"):
         return []
     out = []
     for m in re.finditer(r"(?:(\w\w):)?\[([^\]]*)\]", asm):
-        if m.group(1) in ("fs", "gs"):
-            continue
         inner = m.group(2).replace(" ", "")
         if not inner or inner[0] not in "+-":
             inner = "+" + inner
         terms = re.findall(r"([+-])([^+-]+)", inner)
         if "".join(s + t for s, t in terms) != inner:
             raise ValueError(f"unparsed memory operand [{m.group(2)}] in {asm}")
-        addr = 0
+        segment = m.group(1)
+        addr = reg(segment + "_base") if segment in ("fs", "gs") else 0
         for sign, term in terms:
             if "*" in term:
                 a, b = term.split("*", 1)

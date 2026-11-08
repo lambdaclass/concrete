@@ -24,24 +24,26 @@ Why addresses cannot escape this accounting: memory is addressed only through th
 pointer (accounted), PC-relatively within a fixed reach of the code (x86 `rip` with a displacement
 up to PC_REACH; on AArch64 a register holding an adrp/adr result within PC_REACH, plus at most one
 add immediate, on every path since the last call, with a bounded offset and no writeback) or
-through the x86 thread-pointer segments. Any other register may hold a stack address (main's argv
-and envp, a value an external function left), so no access goes through one. The analysis also refuses taking a stack address as a value (`lea` of one, the stack or frame
-pointer copied, stored or used in arithmetic, except the modelled frame setup), so only the frame
-save (`push rbp`, `stp x29, x30`) puts one in memory. Saved slots may be read only
-by the modelled restore (`pop rbp`, `leave`, `ldp x29, x30` with base sp). Any other stack read
-must be of bytes the function itself wrote, on every path, since its last call: so no stale value
-(a callee's or the caller's saved frame pointer, libc's scratch) is ever loaded. Accesses must lie
-below the entry stack pointer (never the return address or the caller's frame) and at most the
-target's red zone below the current stack pointer (TARGETS: 128 bytes on x86-64 System V and on
-Apple arm64, none under AAPCS64 on Linux; deeper bytes may be overwritten asynchronously, by a
-signal handler, so code using them has no bound), returns must be at
-depth 0 with the caller's frame pointer restored and, on AArch64, with the link register holding
-the return address.
+through an x86 thread-pointer segment with an absolute displacement of at most TP_REACH in
+magnitude. Any other register may hold a stack address (main's argv and envp, a value an external
+function left), so no access goes through one. The analysis also refuses taking a stack address as
+a value (`lea` of one, the stack or frame pointer copied, stored or used in arithmetic, except the
+modelled frame setup), so only the frame save (`push rbp`, `stp x29, x30`) puts one in memory.
+Saved slots may be read only by the modelled restore (`pop rbp`, `leave`, `ldp x29, x30` with base
+sp). Any other stack read must be of bytes the function itself wrote, on every path, since its last
+call: so no stale value (a callee's or the caller's saved frame pointer, libc's scratch) is ever
+loaded. Accesses must lie below the entry stack pointer (never the return address or the caller's
+frame) and at most the target's red zone below the current stack pointer (TARGETS: 128 bytes on
+x86-64 System V and on Apple arm64, none under AAPCS64 on Linux; deeper bytes may be overwritten
+asynchronously, by a signal handler, so code using them has no bound), returns must be at depth 0
+with the caller's frame pointer restored and, on AArch64, with the link register holding the return
+address.
 
 The premises (outside the bound, listed in the gate's report): the stack lies farther than
-PC_REACH + 4095 + A64_OFF_REACH bytes from the image's code, and the thread-pointer block (fs/gs)
-is not on the stack; the external functions' own stack use; that `_exit` and `abort` do not return (a path ends at a call to one); that external
-functions follow the ABI's callee-saved rule (the frame pointer and stack pointer preserved).
+PC_REACH + 4095 + A64_OFF_REACH bytes from the image's code, and farther than TP_REACH bytes from
+each x86 thread-pointer base (fs and gs), in both directions; the external functions' own stack
+use; that `_exit` and `abort` do not return (a path ends at a call to one); that external functions
+follow the ABI's callee-saved rule (the frame pointer and stack pointer preserved).
 
 Fail closed: an instruction outside the modelled set (X86_PLAIN, A64_PLAIN and the control
 transfers), any of the refusals above, an unmodelled stack-pointer write, an indirect branch, call
@@ -198,6 +200,9 @@ MEM = re.compile(r"\[([^\]]*)\]")
 # the access's own offset (at most A64_OFF_REACH): the premise that the stack lies farther than
 # that from the image's code makes such an access never a stack access.
 PC_REACH = 16 << 20
+# No fs/gs operands occurred in the 64 owned-code disassemblies measured on 2026-11-08. This round
+# bound also covers the stack-protector canary's fs:0x28 with 216 bytes of margin.
+TP_REACH = 0x100
 # TARGET -> (architecture, red zone in bytes): how far below the stack pointer code may address
 # memory without moving it. x86-64 System V ABI section 3.2.2 (128); Apple, "Writing ARM64 code for
 # Apple platforms" (128); AAPCS64 has none (0).
@@ -218,13 +223,19 @@ def x86_inst(mn, ops, st, addr=0):
         base = [r for r in regs if r in X86_STACK]
         if not base:
             # Any other register may hold a stack address (main's argv and envp, a value an
-            # external function left), so memory is addressed only PC-relative or absolutely
-            # (a segment offset: the thread pointer's block).
+            # external function left), so memory is addressed only PC-relative or through a bounded
+            # absolute thread-pointer displacement.
             k = sum(int(t.replace(" ", ""), 0) for t in terms if t.strip(" +-") not in regs)
-            if regs == ["rip"]:
+            segment = re.search(r"\b[fg]s:\s*$", ops[:m.start()])
+            if segment:
+                if regs:
+                    raise Refuse(f"thread-pointer-relative access through a register: {what}")
+                if abs(k) > TP_REACH:
+                    raise Refuse(f"thread-pointer-relative access beyond the premise's reach: {what}")
+            elif regs == ["rip"]:
                 if abs(k) > PC_REACH:
                     raise Refuse(f"PC-relative access beyond the premise's reach: {what}")
-            elif regs or not re.search(r"\b[fg]s:\s*$", ops[:m.start()]):
+            else:
                 raise Refuse(f"memory addressed through a register that may hold a stack address, "
                              f"or absolutely: {what}")
             continue
