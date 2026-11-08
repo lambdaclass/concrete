@@ -192,6 +192,30 @@ not retried; a failure there stops `ci` before anything is dispatched.
 A remote named `fork` is refused. There is no mirror or `--no-mirror` option. `push-both.sh`, the
 by-hand publisher, likewise pushes only origin.
 
+**Enforced canonical destination (`scripts/land/lib.sh`).** One library (`scripts/land/lib.sh`) owns
+the canonical repository identity (`LAND_CANONICAL_REPO="lambdaclass/concrete"`,
+`LAND_CANONICAL_REMOTE="origin"`). Every publishing and landing tool (`train.sh`, `push-both.sh`,
+`ready.sh`, `notes.sh`, `impact_gates.sh`, `acceptance.sh`) and `.githooks/pre-push` (whenever
+`refs/heads/main` is pushed, before `CONCRETE_SKIP_GATES`) validates the destination through it
+before any ref moves:
+
+- `origin`'s configured and resolved fetch and push URLs (`git remote get-url --all origin` and
+  `git remote get-url --push --all origin`, after `pushurl`, `insteadOf` and `pushInsteadOf`
+  rewrites, with GitHub HTTPS and SSH URLs normalized to `github.com/<owner>/<repo>`) must each be a
+  single URL, must agree with each other, and must resolve to `github.com/lambdaclass/concrete`.
+- `.githooks/pre-push` also validates the remote argument (`$1`) and resolved destination URL (`$2`)
+  git passes it when `main` is pushed.
+- Multiple push URLs, fetch/push URL disagreements, destination overrides (`LAND_REMOTE`,
+  `PUSH_REMOTE`, `BRANCH`, positional destination arguments) and CI-evidence repository selectors
+  (`LAND_REPO`, `ACCEPT_REPO`, `GH_REPO`) naming any other repository are refused fail-closed,
+  naming the offending destination.
+- In the sandboxed gate checks (`scripts/checks/landing_script.sh`, `landing_ready.sh`), the
+  canonical identity maps to a local bare repository only through `CONCRETE_TEST_CANONICAL_DIR`,
+  which `scripts/land/lib.sh` accepts only when `git_sandbox` config isolation is active
+  (`GIT_CONFIG_NOSYSTEM=1` and `GIT_CONFIG_GLOBAL` under `${TMPDIR:-/tmp}`), the active checkout is
+  inside `${TMPDIR:-/tmp}` and is not the checkout owning `scripts/land/lib.sh`, and the target is
+  an existing local bare git repository inside `${TMPDIR:-/tmp}` (never a URL).
+
 ### bisect
 
 ```sh

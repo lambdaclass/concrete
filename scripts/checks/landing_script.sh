@@ -81,7 +81,8 @@ standin_hook() {
   chmod +x "$TMP/nohooks/pre-push"
 }
 standin_hook
-export LAND_NO_NIX=1 LAND_STATE_DIR="$TMP/state" LAND_GH="$TMP/fake-gh" LAND_REPO=test/repo
+export LAND_NO_NIX=1 LAND_STATE_DIR="$TMP/state" LAND_GH="$TMP/fake-gh"
+export CONCRETE_TEST_CANONICAL_DIR="$TMP/origin.git"
 export LAND_PUSH_RETRY_SLEEP=0
 unset LAND_GATES_HOST LAND_GATES_TRANSPORT CONCRETE_PREPUSH_NO_REUSE
 export FAKE_GH_DIR="$TMP/gh"; mkdir -p "$FAKE_GH_DIR"
@@ -95,8 +96,8 @@ case "$1 $2" in
   "run list") cat "$FAKE_GH_DIR/list.json" ;;
   "run cancel") exit 0 ;;
   "run view") if [ -f "$FAKE_GH_DIR/run.$3.json" ]; then cat "$FAKE_GH_DIR/run.$3.json"; else cat "$FAKE_GH_DIR/run.json"; fi ;;
-  "api repos/test/repo/compare/"*) cat "$FAKE_GH_DIR/compare.json" 2>/dev/null || exit 1 ;;
-  "api repos/test/repo/actions/runs?"*) cat "$FAKE_GH_DIR/runs.json" 2>/dev/null || exit 1 ;;
+  "api repos/lambdaclass/concrete/compare/"*) cat "$FAKE_GH_DIR/compare.json" 2>/dev/null || exit 1 ;;
+  "api repos/lambdaclass/concrete/actions/runs?"*) cat "$FAKE_GH_DIR/runs.json" 2>/dev/null || exit 1 ;;
   "api "*) echo "fake log tail for $2" ;;
   *) echo "fake gh: unexpected $*" >&2; exit 1 ;;
 esac
@@ -602,11 +603,11 @@ bash "$TRAIN" check t1 --no-remote >/dev/null 2>&1 || no "re-check after the gat
 out="$(env -u LAND_REPO bash "$TRAIN" --dry-run ci t1 2>&1)"; rc=$?
 [ "$rc" = 0 ] && printf '%s\n' "$out" | grep -qxF "train: (dry-run) would dispatch: $LAND_GH workflow run CI -R lambdaclass/concrete --ref ci/t1 -f base=$BASE" \
   && [ -z "$(git ls-remote origin refs/heads/ci/t1)" ] \
-  && ok "dry-run ci defaults LAND_REPO to lambdaclass/concrete and pushes nothing" || { no "dry-run ci default repository: exit $rc"; echo "$out" | sed 's/^/      /'; }
+  && ok "dry-run ci uses the canonical repository lambdaclass/concrete and pushes nothing" || { no "dry-run ci default repository: exit $rc"; echo "$out" | sed 's/^/      /'; }
 printf '[{"databaseId": 4242, "headSha": "%s", "createdAt": "9999-01-01T00:00:00Z"}]' "$HEAD1" > "$FAKE_GH_DIR/list.json"
 out="$(bash "$TRAIN" ci t1 2>&1)"; rc=$?
 [ "$rc" = 0 ] && [ "$(git ls-remote origin refs/heads/ci/t1 | cut -f1)" = "$HEAD1" ] && has "$(cat "$TMP/state/t1/train.env")" "run_id=4242" \
-  && has "$(cat "$FAKE_GH_DIR/calls.log")" "workflow run CI -R test/repo --ref ci/t1 -f base=$BASE" \
+  && has "$(cat "$FAKE_GH_DIR/calls.log")" "workflow run CI -R lambdaclass/concrete --ref ci/t1 -f base=$BASE" \
   && ok "ci pushes ci/t1 at the head, dispatches it with the train's base, records run 4242" || { no "ci: exit $rc"; echo "$out" | sed 's/^/      /'; }
 
 runjson(){ # sha landing-conclusion campaign-conclusion
@@ -615,7 +616,7 @@ runjson(){ # sha landing-conclusion campaign-conclusion
 }
 runjson "$HEAD1" success failure
 out="$(bash "$TRAIN" watch t1 --interval 1 2>&1)"; rc=$?
-[ "$rc" = 0 ] && has "$out" "ONLY THE CAMPAIGN TIER FAILED" && has "$out" "fake log tail for repos/test/repo/actions/jobs/12/logs" \
+[ "$rc" = 0 ] && has "$out" "ONLY THE CAMPAIGN TIER FAILED" && has "$out" "fake log tail for repos/lambdaclass/concrete/actions/jobs/12/logs" \
   && ok "watch: a campaign-only failure is named, its log tail fetched, landing allowed" || { no "watch campaign-only: exit $rc"; echo "$out" | sed 's/^/      /'; }
 runjson "$HEAD1" failure success
 out="$(bash "$TRAIN" watch t1 --interval 1 2>&1)"; rc=$?
@@ -631,12 +632,202 @@ runjson "$(git rev-parse b1)" success success
 out="$(bash "$TRAIN" land t1 2>&1)"; rc=$?
 [ "$rc" != 0 ] && has "$out" "not the train HEAD" && ok "land refuses a run at another SHA" || no "land accepted a head-SHA mismatch (exit $rc)"
 runjson "$HEAD1" success failure
-out="$(LAND_REMOTE=fork bash "$TRAIN" land t1 2>&1)"; rc=$?
-[ "$rc" != 0 ] && has "$out" "named 'fork'" && ok "land refuses the remote named fork as primary" || no "fork accepted as primary (exit $rc)"
+mkdir -p "$TMP/gitlog"
+real_git="$(command -v git)"
+cat > "$TMP/gitlog/git" <<EOF
+#!/usr/bin/env bash
+[ "\${1:-}" != push ] || printf '%s\n' "\$*" >> "$TMP/pushes.log"
+exec "$real_git" "\$@"
+EOF
+chmod +x "$TMP/gitlog/git"
+git init -q --bare "$TMP/concrete2.git"
+git push -q "$TMP/concrete2.git" "$BASE:refs/heads/main"
+git remote add concrete2 "$TMP/concrete2.git"
+
+echo "=== destination identity: one owner in scripts/land/lib.sh, resolved URL matching, fail-closed refusals ==="
+# 1. Single owner of canonical repository identity: only scripts/land/lib.sh defines lambdaclass/concrete.
+dup_repo="$(grep -rnE '^[^#]*lambdaclass/concrete' "$ROOT_DIR"/scripts/land/*.sh "$ROOT_DIR/scripts/push-both.sh" "$ROOT_DIR/.githooks/pre-push" \
+  | grep -v "^$ROOT_DIR/scripts/land/lib.sh:" || true)"
+[ -z "$dup_repo" ] && grep -qxF 'LAND_CANONICAL_REPO="lambdaclass/concrete"' "$ROOT_DIR/scripts/land/lib.sh" \
+  && grep -qxF 'LAND_CANONICAL_REMOTE="origin"' "$ROOT_DIR/scripts/land/lib.sh" \
+  && ok "scripts/land/lib.sh is the single owner of the canonical repository identity" \
+  || { no "duplicate canonical repo definition: $dup_repo"; }
+
+# 2. URL normalization: HTTPS and SSH spellings of lambdaclass/concrete normalize to one identity; concrete2 differs.
+norm_ok="$(
+  . "$ROOT_DIR/scripts/land/lib.sh"
+  for u in \
+    "https://github.com/lambdaclass/concrete" \
+    "https://github.com/lambdaclass/concrete.git" \
+    "https://github.com/LambdaClass/Concrete.git/" \
+    "https://token@github.com/lambdaclass/concrete.git" \
+    "git@github.com:lambdaclass/concrete.git" \
+    "git@github.com:lambdaclass/concrete" \
+    "ssh://git@github.com/lambdaclass/concrete.git" \
+    "ssh://git@github.com:22/lambdaclass/concrete.git"; do
+    got="$(land_normalize_url "$u")"
+    [ "$got" = "github.com/lambdaclass/concrete" ] || { echo "bad-canon:$u->$got"; exit 1; }
+  done
+  for u in \
+    "https://github.com/unbalancedparentheses/concrete2.git" \
+    "git@github.com:unbalancedparentheses/concrete2.git" \
+    "ssh://git@github.com/unbalancedparentheses/concrete2"; do
+    got="$(land_normalize_url "$u")"
+    [ "$got" = "github.com/unbalancedparentheses/concrete2" ] || { echo "bad-c2:$u->$got"; exit 1; }
+  done
+  echo ok
+)"
+[ "$norm_ok" = ok ] && ok "HTTPS and SSH GitHub URLs normalize to owner/name and distinguish concrete2" || no "URL normalization: $norm_ok"
+
+# Positive production-mode check (CONCRETE_TEST_CANONICAL_DIR unset, no network calls): HTTPS fetch +
+# SSH push (via pushurl or pushInsteadOf) to lambdaclass/concrete agree on the canonical identity and
+# are accepted by land_check_destination, train.sh watch and .githooks/pre-push.
+git remote set-url origin https://github.com/lambdaclass/concrete.git
+git remote set-url --push origin git@github.com:lambdaclass/concrete.git
+out="$(env -u CONCRETE_TEST_CANONICAL_DIR bash "$TRAIN" watch t1 --interval 1 2>&1)"; rc=$?
+git remote set-url --push --delete origin git@github.com:lambdaclass/concrete.git
+[ "$rc" = 0 ] && has "$out" "ONLY THE CAMPAIGN TIER FAILED" \
+  && ok "production mode accepts HTTPS fetch URL + SSH pushurl to lambdaclass/concrete" \
+  || { no "HTTPS fetch + SSH pushurl rejected (exit $rc)"; echo "$out" | sed 's/^/      /'; }
+git config "url.git@github.com:lambdaclass/concrete.git.pushInsteadOf" "https://github.com/lambdaclass/concrete.git"
+out="$(env -u CONCRETE_TEST_CANONICAL_DIR bash "$TRAIN" watch t1 --interval 1 2>&1)"; rc=$?
+hook_prod_out="$(printf 'refs/heads/main %s refs/heads/main %s\n' "$HEAD1" "$BASE" \
+  | env -u CONCRETE_TEST_CANONICAL_DIR CONCRETE_SKIP_GATES=1 bash "$ROOT_DIR/.githooks/pre-push" origin git@github.com:lambdaclass/concrete.git 2>&1)"; hook_prod_rc=$?
+git config --unset "url.git@github.com:lambdaclass/concrete.git.pushInsteadOf"
+git remote set-url origin "$TMP/origin.git"
+[ "$rc" = 0 ] && [ "$hook_prod_rc" = 0 ] && has "$out" "ONLY THE CAMPAIGN TIER FAILED" \
+  && ok "production mode accepts HTTPS fetch URL rewritten by pushInsteadOf to SSH lambdaclass/concrete (train + pre-push hook)" \
+  || { no "HTTPS + pushInsteadOf SSH rejected (train=$rc, hook=$hook_prod_rc)"; echo "$out $hook_prod_out" | sed 's/^/      /'; }
+
+# 3. Test seam security: CONCRETE_TEST_CANONICAL_DIR cannot be set to a URL, non-bare dir, outside /tmp,
+# without git_sandbox config isolation, or inside the owning checkout ($ROOT_DIR).
+seam_check() { # label expected-text cmd...
+  local label="$1" want="$2" o r; shift 2
+  o="$("$@" 2>&1)"; r=$?
+  [ "$r" != 0 ] && has "$o" "$want" && ok "test seam refuses $label" \
+    || { no "test seam accepted $label (exit $r)"; echo "$o" | sed 's/^/      /'; }
+}
+seam_check "a GitHub URL" "never a URL" env CONCRETE_TEST_CANONICAL_DIR=https://github.com/unbalancedparentheses/concrete2.git bash "$TRAIN" land t1
+seam_check "an empty value" "empty CONCRETE_TEST_CANONICAL_DIR" env CONCRETE_TEST_CANONICAL_DIR= bash "$TRAIN" land t1
+seam_check "a relative path" "must be an absolute path" env CONCRETE_TEST_CANONICAL_DIR=origin.git bash "$TRAIN" land t1
+seam_check "a non-bare repository" "not an existing bare git repository" env CONCRETE_TEST_CANONICAL_DIR="$W" bash "$TRAIN" land t1
+mkdir -p "$TMP/sub"
+seam_check "a path outside TMPDIR" "not inside" env TMPDIR="$TMP/sub" CONCRETE_TEST_CANONICAL_DIR="$TMP/origin.git" bash "$TRAIN" land t1
+rmdir "$TMP/sub"
+seam_check "when GIT_CONFIG_NOSYSTEM is unset" "outside git_sandbox config isolation" env -u GIT_CONFIG_NOSYSTEM CONCRETE_TEST_CANONICAL_DIR="$TMP/origin.git" bash "$TRAIN" land t1
+seam_check "inside the owning repository checkout" "disabled in the owning checkout" bash -c 'cd "$1" && . scripts/land/lib.sh && land_canonical_target test' _ "$ROOT_DIR"
+
+# Helper that snapshots every ref across all bare repositories and asserts no ref moved and no git push ran.
+snap_refs() {
+  local d
+  for d in "$TMP/origin.git" "$TMP/fork.git" "$TMP/concrete2.git" "$TMP/pbok.git"; do
+    [ -d "$d" ] || continue
+    printf '=== %s ===\n' "$d"
+    git --git-dir="$d" for-each-ref --format='%(refname) %(objectname)'
+  done
+}
+assert_refused_no_move() { # label want cmd...
+  local label="$1" want="$2" before after o r; shift 2
+  before="$(snap_refs)"
+  : > "$TMP/pushes.log"; : > "$FAKE_GH_DIR/calls.log"
+  o="$(PATH="$TMP/gitlog:$PATH" "$@" 2>&1)"; r=$?
+  after="$(snap_refs)"
+  if [ "$r" != 0 ] && has "$o" "$want" && [ "$before" = "$after" ] && [ ! -s "$TMP/pushes.log" ]; then
+    ok "$label (refused before any ref moved)"
+  else
+    no "$label (exit $r, pushes '$(cat "$TMP/pushes.log")')"
+    echo "$o" | sed 's/^/      /'
+  fi
+}
+
+# 4. Destination overrides (LAND_REMOTE, PUSH_REMOTE) and LAND_REPO / GH_REPO / ACCEPT_REPO mismatches.
+assert_refused_no_move "train land refuses LAND_REMOTE=fork" "named 'fork'" env LAND_REMOTE=fork bash "$TRAIN" land t1
+assert_refused_no_move "train land refuses LAND_REMOTE=concrete2" "LAND_REMOTE='concrete2' ($TMP/concrete2.git)" env LAND_REMOTE=concrete2 bash "$TRAIN" land t1
+assert_refused_no_move "train land refuses LAND_REMOTE=nosuch" "LAND_REMOTE='nosuch'" env LAND_REMOTE=nosuch bash "$TRAIN" land t1
+assert_refused_no_move "train land refuses empty LAND_REMOTE" "LAND_REMOTE=''" env LAND_REMOTE= bash "$TRAIN" land t1
+assert_refused_no_move "train ci refuses LAND_REMOTE=concrete2" "LAND_REMOTE='concrete2'" env LAND_REMOTE=concrete2 bash "$TRAIN" ci t1
+assert_refused_no_move "train land refuses PUSH_REMOTE=fork" "named 'fork'" env PUSH_REMOTE=fork bash "$TRAIN" land t1
+assert_refused_no_move "train land refuses PUSH_REMOTE=concrete2" "PUSH_REMOTE='concrete2'" env PUSH_REMOTE=concrete2 bash "$TRAIN" land t1
+
+for sub_args in "build t-bad --no-fetch b1" "check t1 --no-remote" "ci t1" "watch t1 --interval 1" "land t1" "--dry-run land t1" "record $HEAD1 --base $BASE"; do
+  # shellcheck disable=SC2086
+  assert_refused_no_move "train ${sub_args%% *} refuses LAND_REPO=unbalancedparentheses/concrete2" \
+    "LAND_REPO='unbalancedparentheses/concrete2'" env LAND_REPO=unbalancedparentheses/concrete2 bash "$TRAIN" $sub_args
+  [ ! -s "$FAKE_GH_DIR/calls.log" ] || no "train ${sub_args%% *} called gh under LAND_REPO mismatch"
+done
+assert_refused_no_move "train land refuses LAND_REPO=test/repo" "LAND_REPO='test/repo'" env LAND_REPO=test/repo bash "$TRAIN" land t1
+assert_refused_no_move "train land refuses empty LAND_REPO" "LAND_REPO=''" env LAND_REPO= bash "$TRAIN" land t1
+assert_refused_no_move "train land refuses GH_REPO=unbalancedparentheses/concrete2" "GH_REPO='unbalancedparentheses/concrete2'" env GH_REPO=unbalancedparentheses/concrete2 bash "$TRAIN" land t1
+assert_refused_no_move "train land refuses ACCEPT_REPO=unbalancedparentheses/concrete2" "ACCEPT_REPO='unbalancedparentheses/concrete2'" env ACCEPT_REPO=unbalancedparentheses/concrete2 bash "$TRAIN" land t1
+assert_refused_no_move "acceptance.sh refuses ACCEPT_REPO=unbalancedparentheses/concrete2" "ACCEPT_REPO='unbalancedparentheses/concrete2'" \
+  bash -c 'for v in $(compgen -e); do case "$v" in LAND_*|CONCRETE_SKIP_*) unset "$v" ;; esac; done; ACCEPT_REPO=unbalancedparentheses/concrete2 bash "$1" --ref b1' _ "$ROOT_DIR/scripts/land/acceptance.sh"
+
+# 5. Old-repository origin (unbalancedparentheses/concrete2 over HTTPS/SSH, or foreign local bare repo).
+git remote set-url origin https://github.com/unbalancedparentheses/concrete2.git
+assert_refused_no_move "train land refuses unmigrated HTTPS concrete2 origin (prod mode)" \
+  "https://github.com/unbalancedparentheses/concrete2.git" env -u CONCRETE_TEST_CANONICAL_DIR bash "$TRAIN" land t1
+assert_refused_no_move "train ci refuses unmigrated HTTPS concrete2 origin" \
+  "https://github.com/unbalancedparentheses/concrete2.git" bash "$TRAIN" ci t1
+assert_refused_no_move "train record refuses unmigrated HTTPS concrete2 origin" \
+  "https://github.com/unbalancedparentheses/concrete2.git" bash "$TRAIN" record "$HEAD1" --base "$BASE"
+git remote set-url origin git@github.com:unbalancedparentheses/concrete2.git
+assert_refused_no_move "train land refuses unmigrated SSH concrete2 origin (prod mode)" \
+  "git@github.com:unbalancedparentheses/concrete2.git" env -u CONCRETE_TEST_CANONICAL_DIR bash "$TRAIN" land t1
+git remote set-url origin "$TMP/concrete2.git"
+for sub_args in "build t-bad --no-fetch b1" "check t1 --no-remote" "ci t1" "watch t1 --interval 1" "land t1" "record $HEAD1 --base $BASE"; do
+  # shellcheck disable=SC2086
+  assert_refused_no_move "train ${sub_args%% *} refuses foreign local origin ($TMP/concrete2.git)" \
+    "$TMP/concrete2.git" bash "$TRAIN" $sub_args
+done
+git remote set-url origin "$TMP/origin.git"
+
+# 6. Fetch URL vs push URL disagreement (both directions).
+git remote set-url --push origin "$TMP/concrete2.git"
+assert_refused_no_move "train land refuses canonical fetch + foreign pushurl" "disagree" bash "$TRAIN" land t1
+assert_refused_no_move "train ci refuses canonical fetch + foreign pushurl" "disagree" bash "$TRAIN" ci t1
+git remote set-url origin "$TMP/concrete2.git"
+git remote set-url --push origin "$TMP/origin.git"
+assert_refused_no_move "train land refuses foreign fetch + canonical pushurl" "disagree" bash "$TRAIN" land t1
+assert_refused_no_move "train ci refuses foreign fetch + canonical pushurl" "disagree" bash "$TRAIN" ci t1
+git remote set-url origin https://github.com/lambdaclass/concrete.git
+git remote set-url --push origin git@github.com:unbalancedparentheses/concrete2.git
+assert_refused_no_move "train land refuses lambdaclass fetch + concrete2 pushurl (prod mode)" "disagree" env -u CONCRETE_TEST_CANONICAL_DIR bash "$TRAIN" land t1
+git remote set-url --push --delete origin git@github.com:unbalancedparentheses/concrete2.git
+git remote set-url origin "$TMP/origin.git"
+
+# 7. Multiple configured push URLs on origin.
+git remote set-url --add --push origin "$TMP/origin.git"
+git remote set-url --add --push origin "$TMP/concrete2.git"
+assert_refused_no_move "train land refuses multiple push URLs (canonical + foreign)" "multiple push URLs" bash "$TRAIN" land t1
+assert_refused_no_move "train ci refuses multiple push URLs (canonical + foreign)" "multiple push URLs" bash "$TRAIN" ci t1
+git config --unset-all remote.origin.pushurl
+git remote set-url --add --push origin "$TMP/origin.git"
+git remote set-url --add --push origin "$TMP/origin.git"
+assert_refused_no_move "train land refuses multiple push URLs even when both match canonical" "multiple push URLs" bash "$TRAIN" land t1
+git config --unset-all remote.origin.pushurl
+
+# 8. insteadOf / pushInsteadOf rewrites to another repository.
+git config "url.$TMP/concrete2.git.insteadOf" "$TMP/origin.git"
+assert_refused_no_move "train land refuses insteadOf rewrite to another repository" "rewrites to '$TMP/concrete2.git'" bash "$TRAIN" land t1
+assert_refused_no_move "train ci refuses insteadOf rewrite to another repository" "rewrites to '$TMP/concrete2.git'" bash "$TRAIN" ci t1
+git config --unset "url.$TMP/concrete2.git.insteadOf"
+git config "url.$TMP/concrete2.git.pushInsteadOf" "$TMP/origin.git"
+assert_refused_no_move "train land refuses pushInsteadOf rewrite to another repository" "rewrites to '$TMP/concrete2.git'" bash "$TRAIN" land t1
+assert_refused_no_move "train ci refuses pushInsteadOf rewrite to another repository" "rewrites to '$TMP/concrete2.git'" bash "$TRAIN" ci t1
+git config --unset "url.$TMP/concrete2.git.pushInsteadOf"
+git remote set-url origin https://github.com/lambdaclass/concrete.git
+git config "url.https://github.com/unbalancedparentheses/concrete2.git.pushInsteadOf" "https://github.com/lambdaclass/concrete.git"
+assert_refused_no_move "train land refuses pushInsteadOf rewrite to concrete2 (prod mode)" \
+  "rewrites to 'https://github.com/unbalancedparentheses/concrete2.git'" env -u CONCRETE_TEST_CANONICAL_DIR bash "$TRAIN" land t1
+git config --unset "url.https://github.com/unbalancedparentheses/concrete2.git.pushInsteadOf"
+git remote set-url origin "$TMP/origin.git"
+
 out="$(bash "$TRAIN" land t1 --no-mirror 2>&1)"; rc=$?
 [ "$rc" = 1 ] && printf '%s\n' "$out" | grep -qxF "train: land: unknown option --no-mirror" \
   && ok "land has no --no-mirror option" || no "land accepted --no-mirror (exit $rc): $out"
-[ "$(git ls-remote fork refs/heads/main | cut -f1)" = "$BASE" ] && ok "fork untouched" || no "fork was pushed"
+[ "$(git ls-remote fork refs/heads/main | cut -f1)" = "$BASE" ] \
+  && [ "$(git ls-remote concrete2 refs/heads/main | cut -f1)" = "$BASE" ] \
+  && ok "fork and concrete2 untouched" || no "a foreign remote was pushed"
 out="$(bash "$TRAIN" --dry-run land t1 2>&1)"; rc=$?
 [ "$rc" = 0 ] && has "$out" "would run" && [ "$(git ls-remote origin refs/heads/main | cut -f1)" = "$BASE" ] \
   && ok "dry-run land verifies and pushes nothing" || { no "dry-run land: exit $rc"; echo "$out" | sed 's/^/      /'; }
@@ -647,21 +838,15 @@ git clone -q "$TMP/origin.git" "$TMP/other"
 out="$(bash "$TRAIN" land t1 2>&1)"; rc=$?
 [ "$rc" = 4 ] && has "$out" "moved from" && has "$out" "build t1 --force b1 b2" && ok "land refuses a moved main and prints the rebuild" || { no "moved main: exit $rc"; echo "$out" | sed 's/^/      /'; }
 ( cd "$TMP/other" && git push -q --force origin "$BASE:main" )
-mkdir -p "$TMP/gitlog"
-real_git="$(command -v git)"
-cat > "$TMP/gitlog/git" <<EOF
-#!/usr/bin/env bash
-[ "\${1:-}" != push ] || printf '%s\n' "\$*" >> "$TMP/pushes.log"
-exec "$real_git" "\$@"
-EOF
-chmod +x "$TMP/gitlog/git"
-: > "$TMP/pushes.log"
+: > "$TMP/pushes.log"; : > "$FAKE_GH_DIR/calls.log"
 out="$(PATH="$TMP/gitlog:$PATH" bash "$TRAIN" land t1 2>&1)"; rc=$?
 landed="train: landed ${HEAD1:0:10} on origin/main. Members (result: CI run 4242 at ${HEAD1:0:10}):"
 [ "$rc" = 0 ] && ! git remote get-url lambdaclass >/dev/null 2>&1 && printf '%s\n' "$out" | grep -qxF "$landed" \
   && ok "land succeeds with no lambdaclass remote and reports origin/main exactly" || { no "land without lambdaclass: exit $rc"; echo "$out" | sed 's/^/      /'; }
 [ "$(cat "$TMP/pushes.log")" = "push origin $HEAD1:refs/heads/main" ] \
-  && [ "$(git ls-remote origin refs/heads/main | cut -f1)" = "$HEAD1" ] && [ "$(git ls-remote fork refs/heads/main | cut -f1)" = "$BASE" ] \
+  && [ "$(git ls-remote origin refs/heads/main | cut -f1)" = "$HEAD1" ] \
+  && [ "$(git ls-remote fork refs/heads/main | cut -f1)" = "$BASE" ] \
+  && [ "$(git ls-remote concrete2 refs/heads/main | cut -f1)" = "$BASE" ] \
   && ok "land pushes exactly origin once and never a second remote" || { no "land push set: $(cat "$TMP/pushes.log")"; echo "$out" | sed 's/^/      /'; }
 [ ! -d "$(git rev-parse --git-common-dir)/concrete-push-both.lock" ] && ok "publish lock released" || no "publish lock left behind"
 calls="$(cat "$FAKE_GH_DIR/calls.log")"
@@ -720,29 +905,123 @@ out="$(bash "$TRAIN" bisect t7 --test '! test -e BAD' 2>&1)"; rc=$?
 [ "$rc" = 0 ] && has "$out" "culprit: b8" && has "$out" "build t7 --force b9 b4" && ok "bisect attributes b8 and prints the rebuild without it" || { no "bisect: exit $rc"; echo "$out" | sed 's/^/      /'; }
 no_op_left && [ -z "$(git status --porcelain --untracked-files=no)" ] && ok "bisect leaves the checkout clean" || no "bisect left state behind"
 
-echo "=== push-both.sh: exactly one remote ==="
-cp "$ROOT_DIR/scripts/push-both.sh" scripts/push-both.sh
-before="$(git ls-remote origin refs/heads/main | cut -f1)"
-out="$(PUSH_REMOTE=fork bash scripts/push-both.sh 2>&1)"; rc=$?
-[ "$rc" = 2 ] && printf '%s\n' "$out" | grep -qxF "push-both: refusing the remote named fork (a divergent repository)" \
-  && ok "push-both refuses the remote named fork" || no "push-both PUSH_REMOTE=fork: exit $rc"
-out="$(PUSH_REMOTE=nosuch bash scripts/push-both.sh 2>&1)"; rc=$?
-[ "$rc" = 1 ] && printf '%s\n' "$out" | grep -qxF "push-both: the push to nosuch failed." \
-  && ok "push-both refuses a missing remote" || no "push-both missing remote: exit $rc"
-[ "$(git ls-remote origin refs/heads/main | cut -f1)" = "$before" ] && [ "$(git ls-remote fork refs/heads/main | cut -f1)" = "$BASE" ] \
-  && ok "no refused push-both moved origin or fork" || no "a refused push-both pushed something"
-# A successful local publish proves the push set, not just the resulting ref: exactly one push, to pb-ok.
+echo "=== push-both.sh and .githooks/pre-push: canonical destination enforced ==="
+PUSH_BOTH="$ROOT_DIR/scripts/push-both.sh"
 git clone -q --bare "$PWD" "$TMP/pbok.git" && git -C "$TMP/pbok.git" update-ref refs/heads/main "$(git rev-parse HEAD~1)"
 git remote add pb-ok "$TMP/pbok.git"
+orig_main_before="$(git ls-remote origin refs/heads/main | cut -f1)"
+
+# Negative controls for push-both.sh: every override, foreign remote, disagreement, multi-pushurl and rewrite is refused.
+assert_refused_no_move "push-both refuses PUSH_REMOTE=fork" "named 'fork'" env PUSH_REMOTE=fork bash "$PUSH_BOTH"
+assert_refused_no_move "push-both refuses PUSH_REMOTE=nosuch" "PUSH_REMOTE='nosuch'" env PUSH_REMOTE=nosuch bash "$PUSH_BOTH"
+assert_refused_no_move "push-both refuses PUSH_REMOTE=pb-ok override" "PUSH_REMOTE='pb-ok' ($TMP/pbok.git)" env PUSH_REMOTE=pb-ok bash "$PUSH_BOTH"
+assert_refused_no_move "push-both refuses empty PUSH_REMOTE" "PUSH_REMOTE=''" env PUSH_REMOTE= bash "$PUSH_BOTH"
+assert_refused_no_move "push-both refuses LAND_REMOTE=pb-ok" "LAND_REMOTE='pb-ok'" env LAND_REMOTE=pb-ok bash "$PUSH_BOTH"
+assert_refused_no_move "push-both refuses BRANCH=other" "BRANCH='other'" env BRANCH=other bash "$PUSH_BOTH"
+assert_refused_no_move "push-both refuses positional destination argument" "unknown option or destination override 'pb-ok'" bash "$PUSH_BOTH" pb-ok
+assert_refused_no_move "push-both refuses LAND_REPO=unbalancedparentheses/concrete2" \
+  "LAND_REPO='unbalancedparentheses/concrete2'" env LAND_REPO=unbalancedparentheses/concrete2 bash "$PUSH_BOTH"
+assert_refused_no_move "push-both refuses GH_REPO=unbalancedparentheses/concrete2" \
+  "GH_REPO='unbalancedparentheses/concrete2'" env GH_REPO=unbalancedparentheses/concrete2 bash "$PUSH_BOTH"
+
+git remote set-url origin https://github.com/unbalancedparentheses/concrete2.git
+assert_refused_no_move "push-both refuses unmigrated HTTPS concrete2 origin (prod mode)" \
+  "https://github.com/unbalancedparentheses/concrete2.git" env -u CONCRETE_TEST_CANONICAL_DIR bash "$PUSH_BOTH"
+git remote set-url origin "$TMP/concrete2.git"
+assert_refused_no_move "push-both refuses foreign local origin ($TMP/concrete2.git)" "$TMP/concrete2.git" bash "$PUSH_BOTH"
+git remote set-url origin "$TMP/origin.git"
+git remote set-url --push origin "$TMP/concrete2.git"
+assert_refused_no_move "push-both refuses canonical fetch + foreign pushurl" "disagree" bash "$PUSH_BOTH"
+git remote set-url origin "$TMP/concrete2.git"
+git remote set-url --push origin "$TMP/origin.git"
+assert_refused_no_move "push-both refuses foreign fetch + canonical pushurl" "disagree" bash "$PUSH_BOTH"
+git remote set-url --push --delete origin "$TMP/origin.git"
+git remote set-url origin "$TMP/origin.git"
+git remote set-url --add --push origin "$TMP/origin.git"
+git remote set-url --add --push origin "$TMP/concrete2.git"
+assert_refused_no_move "push-both refuses multiple push URLs" "multiple push URLs" bash "$PUSH_BOTH"
+git config --unset-all remote.origin.pushurl
+git config "url.$TMP/concrete2.git.insteadOf" "$TMP/origin.git"
+assert_refused_no_move "push-both refuses insteadOf rewrite to another repository" "rewrites to '$TMP/concrete2.git'" bash "$PUSH_BOTH"
+git config --unset "url.$TMP/concrete2.git.insteadOf"
+git config "url.$TMP/concrete2.git.pushInsteadOf" "$TMP/origin.git"
+assert_refused_no_move "push-both refuses pushInsteadOf rewrite to another repository" "rewrites to '$TMP/concrete2.git'" bash "$PUSH_BOTH"
+git config --unset "url.$TMP/concrete2.git.pushInsteadOf"
+
+# Positive control for push-both.sh: canonical origin (via sandbox test seam), no overrides -> 1 push to origin/main.
+git checkout -q -B pb-main "$orig_main_before"
+echo pb > pb.txt && git add pb.txt && git commit -qm pb
 LOCAL="$(git rev-parse HEAD)"
 : > "$TMP/pushes.log"
-out="$(PATH="$TMP/gitlog:$PATH" PUSH_REMOTE=pb-ok bash scripts/push-both.sh 2>&1)"; rc=$?
+out="$(PATH="$TMP/gitlog:$PATH" bash "$PUSH_BOTH" 2>&1)"; rc=$?
+[ "$rc" = 0 ] && printf '%s\n' "$out" | grep -qxF "push-both: published ${LOCAL:0:8} on origin/main" \
+  && [ "$(cat "$TMP/pushes.log")" = "push origin $LOCAL:main" ] \
+  && [ "$(git ls-remote origin refs/heads/main | cut -f1)" = "$LOCAL" ] \
+  && [ "$(git ls-remote fork refs/heads/main | cut -f1)" = "$BASE" ] \
+  && [ "$(git ls-remote concrete2 refs/heads/main | cut -f1)" = "$BASE" ] \
+  && [ "$(git -C "$TMP/pbok.git" rev-parse refs/heads/main)" != "$LOCAL" ] \
+  && ok "push-both publishes to canonical origin/main once and touches no other repository" \
+  || { no "push-both canonical publish: exit $rc, pushes '$(cat "$TMP/pushes.log")'"; echo "$out" | sed 's/^/      /'; }
+git push -q --force origin "$orig_main_before:refs/heads/main"
 git remote remove pb-ok
-[ "$rc" = 0 ] && printf '%s\n' "$out" | grep -qxF "push-both: published ${LOCAL:0:8} on pb-ok/main" \
-  && [ "$(cat "$TMP/pushes.log")" = "push pb-ok $LOCAL:main" ] && [ "$(git -C "$TMP/pbok.git" rev-parse refs/heads/main)" = "$LOCAL" ] \
-  && [ "$(git ls-remote origin refs/heads/main | cut -f1)" = "$before" ] && [ "$(git ls-remote fork refs/heads/main | cut -f1)" = "$BASE" ] \
-  && ok "push-both reports and makes exactly one push, to pb-ok/main" || { no "push-both single remote: exit $rc, pushes '$(cat "$TMP/pushes.log")'"; echo "$out" | sed 's/^/      /'; }
-rm -f scripts/push-both.sh
+
+# Pre-push hook controls when pushing main: validates $2 (and $1 / origin config) even with CONCRETE_SKIP_GATES=1.
+hook_main_stdin="refs/heads/main $LOCAL refs/heads/main $orig_main_before"
+hook_refuses_main() { # label want env/args...
+  local label="$1" want="$2" before after o r; shift 2
+  before="$(snap_refs)"
+  o="$(printf '%s\n' "$hook_main_stdin" | "$@" 2>&1)"; r=$?
+  after="$(snap_refs)"
+  [ "$r" != 0 ] && has "$o" "$want" && [ "$before" = "$after" ] \
+    && ok "$label" || { no "$label (exit $r)"; echo "$o" | sed 's/^/      /'; }
+}
+hook_refuses_main "pre-push hook refuses foreign HTTPS URL on main (prod mode)" \
+  "https://github.com/unbalancedparentheses/concrete2.git" \
+  env -u CONCRETE_TEST_CANONICAL_DIR CONCRETE_SKIP_GATES=1 bash "$ROOT_DIR/.githooks/pre-push" origin https://github.com/unbalancedparentheses/concrete2.git
+hook_refuses_main "pre-push hook refuses foreign SSH URL on main (prod mode)" \
+  "git@github.com:unbalancedparentheses/concrete2.git" \
+  env -u CONCRETE_TEST_CANONICAL_DIR CONCRETE_SKIP_GATES=1 bash "$ROOT_DIR/.githooks/pre-push" origin git@github.com:unbalancedparentheses/concrete2.git
+hook_refuses_main "pre-push hook refuses foreign local bare repo URL ($TMP/concrete2.git) on main" \
+  "$TMP/concrete2.git" env CONCRETE_SKIP_GATES=1 bash "$ROOT_DIR/.githooks/pre-push" origin "$TMP/concrete2.git"
+hook_refuses_main "pre-push hook refuses remote named fork on main" \
+  "named 'fork'" env CONCRETE_SKIP_GATES=1 bash "$ROOT_DIR/.githooks/pre-push" fork "$TMP/origin.git"
+hook_refuses_main "pre-push hook refuses non-origin remote name on main" \
+  "via 'concrete2'" env CONCRETE_SKIP_GATES=1 bash "$ROOT_DIR/.githooks/pre-push" concrete2 "$TMP/origin.git"
+hook_refuses_main "pre-push hook refuses missing destination URL on main" \
+  "without a destination URL" env CONCRETE_SKIP_GATES=1 bash "$ROOT_DIR/.githooks/pre-push" origin ""
+
+# Real `git push` to main with .githooks/pre-push installed: refuses foreign remote, multi-pushurl, and pushInsteadOf before any ref moves.
+git config core.hooksPath "$ROOT_DIR/.githooks"
+assert_refused_no_move_gitpush() { # label want cmd...
+  local label="$1" want="$2" before after o r; shift 2
+  before="$(snap_refs)"
+  o="$("$@" 2>&1)"; r=$?
+  after="$(snap_refs)"
+  [ "$r" != 0 ] && has "$o" "$want" && [ "$before" = "$after" ] \
+    && ok "$label (no ref moved)" || { no "$label (exit $r)"; echo "$o" | sed 's/^/      /'; }
+}
+assert_refused_no_move_gitpush "git push fork main refused by pre-push hook" "named 'fork'" \
+  env CONCRETE_SKIP_GATES=1 git push fork "$LOCAL:refs/heads/main"
+assert_refused_no_move_gitpush "git push concrete2 main refused by pre-push hook" "$TMP/concrete2.git" \
+  env CONCRETE_SKIP_GATES=1 git push concrete2 "$LOCAL:refs/heads/main"
+git remote set-url --add --push origin "$TMP/origin.git"
+git remote set-url --add --push origin "$TMP/concrete2.git"
+assert_refused_no_move_gitpush "git push origin main with multiple push URLs refused before first push" "multiple push URLs" \
+  env CONCRETE_SKIP_GATES=1 git push origin "$LOCAL:refs/heads/main"
+git config --unset-all remote.origin.pushurl
+git config "url.$TMP/concrete2.git.pushInsteadOf" "$TMP/origin.git"
+assert_refused_no_move_gitpush "git push origin main with pushInsteadOf rewrite refused by pre-push hook" "$TMP/concrete2.git" \
+  env CONCRETE_SKIP_GATES=1 git push origin "$LOCAL:refs/heads/main"
+git config --unset "url.$TMP/concrete2.git.pushInsteadOf"
+out="$(CONCRETE_SKIP_GATES=1 git push origin "$LOCAL:refs/heads/main" 2>&1)"; rc=$?
+[ "$rc" = 0 ] && [ "$(git ls-remote origin refs/heads/main | cut -f1)" = "$LOCAL" ] \
+  && [ "$(git ls-remote concrete2 refs/heads/main | cut -f1)" = "$BASE" ] \
+  && ok "git push origin main passes pre-push destination check when origin is canonical" \
+  || { no "git push origin main positive control (exit $rc)"; echo "$out" | sed 's/^/      /'; }
+git config --unset core.hooksPath
+git push -q --force origin "$orig_main_before:refs/heads/main"
+git checkout -q train/t7
+git branch -D pb-main >/dev/null 2>&1 || true
 
 echo "=== report ==="
 out="$(bash "$REPORT" 2>&1)"; rc=$?

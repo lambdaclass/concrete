@@ -47,8 +47,9 @@ standin_hook() {
 }
 standin_hook
 export LAND_PUSH_RETRY_SLEEP=0
-export LAND_NO_NIX=1 LAND_STATE_DIR="$TMP/landstate" LAND_GH="$TMP/fake-gh" LAND_REPO=test/repo
+export LAND_NO_NIX=1 LAND_STATE_DIR="$TMP/landstate" LAND_GH="$TMP/fake-gh"
 export LAND_HOOK="$TMP/hook" LAND_REMOTE_RUNNER="$TMP/fake-runner" FAKE_GH_DIR="$TMP/gh" ORIGIN_GIT="$TMP/origin.git"
+export CONCRETE_TEST_CANONICAL_DIR="$TMP/origin.git"
 # train.sh check never skips the review leg silently. Every member here is marked reviewed clean
 # (mark), so the leg passes on the members' provenance without calling the reviewer; a reviewer this
 # fails stands for one that is never needed.
@@ -91,17 +92,17 @@ echo "[concrete-remote] ref=$1 sha=$sha"
 EOF
 chmod +x "$TMP/fake-gh" "$TMP/hook" "$TMP/fake-runner"
 
-for r in origin lambdaclass fork; do git init -q --bare "$TMP/$r.git"; done
+for r in origin fork; do git init -q --bare "$TMP/$r.git"; done
 A="$TMP/agent"; W="$TMP/lander"
 git init -q "$A"; cd "$A" || exit 2
-for r in origin lambdaclass fork; do git remote add "$r" "$TMP/$r.git"; done
+for r in origin fork; do git remote add "$r" "$TMP/$r.git"; done
 mkdir -p src
 printf 'Build\n' > required-checks.txt  # train.sh refuses a landing with no required-checks.txt
 git add -A && git commit -qm base
-for r in origin lambdaclass fork; do git push -q "$r" main; done
+for r in origin fork; do git push -q "$r" main; done
 BASE="$(git rev-parse HEAD)"
 git clone -q "$TMP/origin.git" "$W"
-( cd "$W" && git remote add lambdaclass "$TMP/lambdaclass.git" && git remote add fork "$TMP/fork.git" )
+( cd "$W" && git remote add fork "$TMP/fork.git" )
 
 # mk <branch> <commit-message> <file> <content> [from]: one commit on <from> (default main), pushed.
 mk(){ ( cd "$A" && git fetch -q origin && git checkout -q -B "$1" "${5:-origin/main}" && mkdir -p "$(dirname "$3")" \
@@ -148,6 +149,10 @@ mk wip/rv2 rv2 src/rv2.txt rv2; mark wip/rv2 clean fail
 out="$(cd "$A" && LAND_REVIEW_CMD=true bash "$ROOT_DIR/scripts/land/ready.sh" wip/rv2 2>&1)"; rc=$?
 [ "$rc" = 0 ] && [ "$(cd "$A" && bash "$NOTES" get gates "$(sha_of wip/rv2)" gates)" = pass ] \
   && ok "passing legs publish gates: pass and the head becomes ready" || { no "ready.sh pass: exit $rc"; echo "$out" | sed 's/^/      /'; }
+out="$(cd "$A" && LAND_REMOTE=fork bash "$ROOT_DIR/scripts/land/ready.sh" wip/rv2 2>&1)"; rc=$?
+[ "$rc" != 0 ] && has "$out" "named 'fork'" && ok "ready.sh refuses LAND_REMOTE=fork" || no "ready.sh LAND_REMOTE=fork: exit $rc"
+out="$(cd "$A" && LAND_REPO=unbalancedparentheses/concrete2 bash "$NOTES" put gates "$(sha_of wip/rv2)" gates=pass 2>&1)"; rc=$?
+[ "$rc" != 0 ] && has "$out" "LAND_REPO='unbalancedparentheses/concrete2'" && ok "notes.sh refuses LAND_REPO mismatch" || no "notes.sh LAND_REPO mismatch: exit $rc"
 
 echo "=== bisect --ci: a red CI run names the culprit, each probe its own run ==="
 mk wip/cired cired CIRED red; mark wip/cired

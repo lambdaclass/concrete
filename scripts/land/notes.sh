@@ -16,14 +16,17 @@
 #                                           commit's note (fetch, rewrite, fast-forward push, retry)
 #   notes.sh ready <sha>                    exit 0 iff verdict is clean and gates is pass
 #
-# <kind> is review or gates. LAND_REMOTE (default origin) names the remote; `fork` is refused.
+# <kind> is review or gates. Destination identity (`origin` -> lambdaclass/concrete) is verified
+# through scripts/land/lib.sh (`land_check_destination`).
 # Writers: scripts/review/review.sh (review) and scripts/land/ready.sh (gates).
 # `put` never force-pushes: it rewrites on top of the remote's notes tip and retries on a race.
 set -euo pipefail
-REMOTE="${LAND_REMOTE:-origin}"
+SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=scripts/land/lib.sh
+. "$SELF_DIR/lib.sh"
+REMOTE="$LAND_CANONICAL_REMOTE"
 DRY="${LAND_NOTES_DRY:-0}"
 die() { echo "notes: $*" >&2; exit 1; }
-[ "$REMOTE" != fork ] || die "refusing the remote named 'fork'"
 
 kind_ok() { case "$1" in review|gates) ;; *) die "kind must be review or gates, not '$1'" ;; esac; }
 
@@ -83,6 +86,7 @@ put_note() { # kind sha key=value...
 }
 
 sub="${1:-}"; [ $# -gt 0 ] && shift
+case "$sub" in fetch|get|put|ready) land_check_destination "notes" || exit 1 ;; esac
 case "$sub" in
   fetch) fetch_kind review; fetch_kind gates ;;
   get) kind_ok "${1:-}"; [ -n "${2:-}" ] || die "get <kind> <sha> [key]"; get_note "$1" "$(git rev-parse "$2")" "${3:-}" ;;

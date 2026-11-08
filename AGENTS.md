@@ -94,7 +94,11 @@ as a conflict, until the owner answers; nobody extends or reverts it meanwhile.
   (`git push origin HEAD:refs/heads/wip/<branch>`); the hook's wip tier only scans for conflict
   markers.
 - The one repository is lambdaclass/concrete (owner, 2026-11-06), and `origin` is it in every
-  clone; unbalancedparentheses/concrete2 is archived (after the first landing here).
+  clone; unbalancedparentheses/concrete2 is archived (after the first landing here). One library
+  (`scripts/land/lib.sh`) owns that canonical identity and enforces it by resolved URL across
+  `scripts/land/train.sh`, `scripts/push-both.sh`, `scripts/land/*.sh` and `.githooks/pre-push` (on
+  `main`): fetch and push URLs on `origin` must be single, agree, and resolve to
+  `lambdaclass/concrete`, and destination or `LAND_REPO` overrides are refused before any ref moves.
 - Never push to `main`, `ci/*` or the remote `fork`. Landings go to `origin` only through the
   landing script (`scripts/land/train.sh`).
   `train.sh check` runs the checks before the push, and the push runs the root hook's full set again;

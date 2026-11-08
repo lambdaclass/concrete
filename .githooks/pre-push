@@ -13,11 +13,15 @@
 #     written by scripts/review/review.sh) and owner sign-off records (refs/owner-signoff/<sha>,
 #     written by scripts/land/signoff.sh): no source tree, nothing to check.
 #   - anything else, including a by-hand run with no stdin: the full root set, and only from a full
-#     clone (a linked worktree is refused; ISS-0015).
+#     clone (a linked worktree is refused; ISS-0015). When refs/heads/main is pushed, the remote ($1)
+#     and resolved destination URL ($2) are validated against the canonical repository identity in
+#     scripts/land/lib.sh (`land_check_hook_destination`) before any gate or bypass.
 #
-# Deliberate bypass:  CONCRETE_SKIP_GATES=1 git push   (you then own the CI result)
+# Deliberate bypass:  CONCRETE_SKIP_GATES=1 git push   (you then own the CI result; never bypasses the
+#                                                       canonical destination check on main)
 set -uo pipefail
-HOOK_SELF="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")"
+HOOK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+HOOK_SELF="$HOOK_DIR/$(basename "${BASH_SOURCE[0]}")"
 # train.sh asks the hook git would run which hook it is (ISS-0015): called with the single argument
 # --concrete-identify (git always passes a remote name and URL, never this), this one answers with
 # its real path and runs nothing. A wrapper that passes its arguments on to it (acceptance.sh's
@@ -27,20 +31,21 @@ if [ "$#" = 1 ] && [ "$1" = --concrete-identify ]; then
   echo "concrete-pre-push $(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)/$(basename "${BASH_SOURCE[0]}")"
   exit 0
 fi
+# shellcheck source=scripts/land/lib.sh
+. "$HOOK_DIR/../scripts/land/lib.sh"
 ROOT_DIR="$(git rev-parse --show-toplevel)"
 cd "$ROOT_DIR"
 
-if [ "${CONCRETE_SKIP_GATES:-0}" = "1" ]; then
-  echo "pre-push: gates SKIPPED by CONCRETE_SKIP_GATES=1 — you own the CI result." >&2
-  exit 0
-fi
-
-wip_refs=0; wip_dels=0; note_refs=0; other_refs=0; wip_shas=""; full_shas=""
+wip_refs=0; wip_dels=0; note_refs=0; other_refs=0; main_refs=0; wip_shas=""; full_shas=""
 # Kept whole so the hook can hand the same lines to itself when it re-enters the gate shell (below).
 HOOK_STDIN="$(cat)"
 while read -r _localref localsha remoteref _remotesha; do
   [ -z "${localsha:-}" ] && continue
   case "${remoteref:-}" in
+    refs/heads/main|main)
+      main_refs=$((main_refs+1))
+      other_refs=$((other_refs+1))
+      case "$localsha" in *[!0]*) full_shas="$full_shas $localsha" ;; esac ;;
     refs/heads/wip/*)
       case "$localsha" in
         *[!0]*) wip_refs=$((wip_refs+1)); wip_shas="$wip_shas $localsha" ;;
@@ -68,6 +73,16 @@ while read -r _localref localsha remoteref _remotesha; do
        case "$localsha" in *[!0]*) full_shas="$full_shas $localsha" ;; esac ;;
   esac
 done <<< "$HOOK_STDIN"
+
+# A push of main is validated against the canonical repository identity before any bypass or gate.
+if [ "$main_refs" -gt 0 ]; then
+  land_check_hook_destination "pre-push" "${1:-}" "${2:-}" || exit 1
+fi
+
+if [ "${CONCRETE_SKIP_GATES:-0}" = "1" ]; then
+  echo "pre-push: gates SKIPPED by CONCRETE_SKIP_GATES=1 — you own the CI result." >&2
+  exit 0
+fi
 
 if [ "$other_refs" -eq 0 ] && [ $((wip_refs + wip_dels)) -gt 0 ]; then
   bad=""

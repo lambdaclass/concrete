@@ -37,14 +37,16 @@
 #   * pushes name the exact SHA, never `HEAD` (push-both.sh: HEAD can move during a wait), and a
 #     remote named `fork` is refused outright.
 #   * (2026-11-06, the owner's decision: one repository, lambdaclass/concrete) there is no mirror:
-#     origin is that repository and `land` pushes it only.
+#     origin is that repository and `land` pushes it only. Destination and CI-evidence identity are
+#     owned by scripts/land/lib.sh (`land_check_destination`): `origin` must resolve to the canonical
+#     repository (single fetch URL and single push URL agreeing after pushurl/insteadOf/pushInsteadOf),
+#     and any override of LAND_REMOTE, PUSH_REMOTE, LAND_REPO, ACCEPT_REPO or GH_REPO is refused.
 #   * (2026-10-25) a push's exit status is not its result: GitHub drops the connection during a long
 #     hook, so a push can fail after the remote moved, or before. The train's push to ci/<name> and
 #     the push of `land` are followed by an `ls-remote` of the ref, and one that did not move it
 #     is retried (LAND_PUSH_ATTEMPTS). The ci/<name> reset to the base skips the hook; not retried.
 #
-# ENVIRONMENT (test seams and overrides): LAND_REPO (owner/name for gh, default
-# lambdaclass/concrete), LAND_GH (gh binary), LAND_REMOTE (the repository's remote, default origin),
+# ENVIRONMENT (test seams and overrides): LAND_GH (gh binary),
 # LAND_STATE_DIR (default <git common dir>/concrete-landing), LAND_LOG_DIR (default
 # $LAND_STATE_DIR/log), LAND_NO_NIX=1 (never re-enter `nix develop`), LAND_CAMPAIGN_JOBS (regex of
 # campaign-tier job names), LAND_HOOK (pre-push hook path, default .githooks/pre-push),
@@ -52,7 +54,8 @@
 # LAND_REQUIRED_CHECKS_FILE (default required-checks.txt), LAND_REQUIRED_TRANSITION_FILE (default
 # required-checks-transition.tsv), LAND_GATES_HOST (the
 # gate host of `check`'s impact leg, else `git config land.gatesHost`; see gates_host below) and
-# LAND_GATES_TRANSPORT (scripts/land/gates_remote.sh's transport).
+# LAND_GATES_TRANSPORT (scripts/land/gates_remote.sh's transport). LAND_REPO and LAND_REMOTE are
+# locked to the canonical repository and remote by scripts/land/lib.sh; any other value is refused.
 set -euo pipefail
 
 SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -96,9 +99,9 @@ where_ok() {
 }
 STATE_ROOT="${LAND_STATE_DIR:-$COMMON/concrete-landing}"
 LOG_DIR="${LAND_LOG_DIR:-$STATE_ROOT/log}"
-REPO="${LAND_REPO:-lambdaclass/concrete}"
+REPO="$LAND_CANONICAL_REPO"
 GH="${LAND_GH:-gh}"
-REMOTE="${LAND_REMOTE:-origin}"
+REMOTE="$LAND_CANONICAL_REMOTE"
 HOOK="${LAND_HOOK:-.githooks/pre-push}"
 # Must name exactly the workflow's campaign jobs (an `if:` on `inputs.campaign`, and the jobs that `needs:`
 # one): check_landing_script.sh derives that set from lean_action_ci.yml and fails on any difference.
@@ -1128,7 +1131,8 @@ cmd_status() {
 usage() { sed -n '2,14p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
 
 sub="${1:-}"; [ $# -gt 0 ] && shift
-case "$sub" in status|record|""|-h|--help) ;; *) where_ok ;; esac
+case "$sub" in build|check|ci|watch|land|bisect) where_ok ;; esac
+case "$sub" in build|check|ci|watch|land|bisect|record) land_check_destination "train" || exit 1 ;; esac
 case "$sub" in
   build) cmd_build "$@" ;;
   check) cmd_check "$@" ;;

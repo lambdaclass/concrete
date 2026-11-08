@@ -4,9 +4,12 @@
 # ONE REPOSITORY (2026-11-06, the owner's decision: "migrating everything to lambdaclass/concrete").
 # Until then this script pushed the gated primary (unbalancedparentheses/concrete2) and then
 # fast-forwarded a mirror (lambdaclass/concrete) to exactly the primary's tip. There is no mirror
-# now: `origin` is lambdaclass/concrete. The name is kept so the documented command and the shared
-# lock stay the same. Landings go through scripts/land/train.sh; this script is the by-hand
-# publisher, and shares the train's lock.
+# now: `origin` is lambdaclass/concrete, owned and verified in scripts/land/lib.sh
+# (`land_check_destination`). Multiple push URLs, fetch/push URL disagreements, URL rewrites to
+# another repository, and overrides of PUSH_REMOTE, LAND_REMOTE, BRANCH, LAND_REPO or GH_REPO are
+# refused before any push. The name is kept so the documented command and the shared lock stay the
+# same. Landings go through scripts/land/train.sh; this script is the by-hand publisher, and shares
+# the train's lock.
 #
 # Kept from the mirror era, each written after a measured mistake:
 #   * push the RECORDED SHA, never `HEAD` (HEAD moved during a CI wait and the wrong commit was
@@ -22,8 +25,42 @@
 #   * the wait is bounded (CI_TIMEOUT, calibrated above the observed run time), and absence of a
 #     run is reported as UNVERIFIED, never as success.
 set -uo pipefail
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [ -f "$SCRIPT_DIR/land/lib.sh" ]; then
+  # shellcheck source=scripts/land/lib.sh
+  . "$SCRIPT_DIR/land/lib.sh"
+elif [ -f "$(git rev-parse --show-toplevel 2>/dev/null)/scripts/land/lib.sh" ]; then
+  # shellcheck source=scripts/land/lib.sh
+  . "$(git rev-parse --show-toplevel)/scripts/land/lib.sh"
+else
+  echo "push-both: scripts/land/lib.sh missing" >&2
+  exit 2
+fi
+ROOT_DIR="$(git rev-parse --show-toplevel 2>/dev/null)" || { echo "push-both: not inside a git work tree" >&2; exit 2; }
 cd "$ROOT_DIR"
+
+CI_WAIT=0
+CI_WORKFLOW="${CI_WORKFLOW:-CI}"
+# Bounded so this cannot hang a session forever; a timeout is reported as no verdict.
+#
+# CALIBRATED against observed runs, not guessed. A first version used 2400s
+# (40min) and timed out on a run that was still in progress — this workflow's
+# recent full runs took 41m42s and 42m39s, so the timeout was SHORTER than the
+# job it was waiting for. A timeout below the expected duration does not bound a
+# hang, it manufactures a failure on every healthy push. 4200s leaves real
+# headroom above ~43min while still being finite.
+CI_TIMEOUT="${CI_TIMEOUT:-4200}"
+CI_INTERVAL="${CI_INTERVAL:-30}"
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --no-ci-wait) CI_WAIT=0; shift ;;          # retained: scripts may still pass it
+    --ci-wait)    CI_WAIT=1; shift ;;          # opt in to blocking on the verdict
+    *) echo "push-both: unknown option or destination override '$1'" >&2; exit 2 ;;
+  esac
+done
+
+land_check_destination "push-both" || exit 2
 
 # EXCLUSIVE, repo-wide. Two publishes at once is not hypothetical: on 2026-07-31
 # two agents sharing a worktree both ran this script and both sat in the CI-wait
@@ -49,34 +86,10 @@ fi
 printf 'pid=%s worktree=%s\n' "$$" "$(pwd)" > "$PUSH_LOCK/owner" 2>/dev/null || true
 trap 'rm -f "$PUSH_LOCK/owner" 2>/dev/null; rmdir "$PUSH_LOCK" 2>/dev/null || true' EXIT
 
-REMOTE="${PUSH_REMOTE:-origin}"
-if [ "$REMOTE" = "fork" ]; then
-  echo "push-both: refusing the remote named fork (a divergent repository)" >&2
-  exit 2
-fi
-REPO="${LAND_REPO:-lambdaclass/concrete}"
-BRANCH="${BRANCH:-main}"
+REMOTE="$LAND_CANONICAL_REMOTE"
+REPO="$LAND_CANONICAL_REPO"
+BRANCH="main"
 LOCAL="$(git rev-parse HEAD)"
-CI_WAIT=0
-CI_WORKFLOW="${CI_WORKFLOW:-CI}"
-# Bounded so this cannot hang a session forever; a timeout is reported as no verdict.
-#
-# CALIBRATED against observed runs, not guessed. A first version used 2400s
-# (40min) and timed out on a run that was still in progress — this workflow's
-# recent full runs took 41m42s and 42m39s, so the timeout was SHORTER than the
-# job it was waiting for. A timeout below the expected duration does not bound a
-# hang, it manufactures a failure on every healthy push. 4200s leaves real
-# headroom above ~43min while still being finite.
-CI_TIMEOUT="${CI_TIMEOUT:-4200}"
-CI_INTERVAL="${CI_INTERVAL:-30}"
-
-while [ $# -gt 0 ]; do
-  case "$1" in
-    --no-ci-wait) CI_WAIT=0; shift ;;          # retained: scripts may still pass it
-    --ci-wait)    CI_WAIT=1; shift ;;          # opt in to blocking on the verdict
-    *) echo "push-both: unknown option $1" >&2; exit 2 ;;
-  esac
-done
 
 echo "push-both: ${LOCAL:0:8} to $REMOTE/$BRANCH"
 # Push the RECORDED SHA, not `HEAD`. `HEAD` is a moving ref: everything below —

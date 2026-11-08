@@ -30,8 +30,9 @@ done
 [ -n "$base" ] && [ -n "$head" ] || die "--base and --head are required"
 case "$dst" in refs/heads/wip/*) die "--dst-ref $dst is in the hook's wip tier, which runs no gates" ;; esac
 cd "$(git rev-parse --show-toplevel)"
+land_check_destination "impact" || exit 1
 HOOK="${LAND_HOOK:-.githooks/pre-push}"
-REMOTE="${LAND_REMOTE:-origin}"
+REMOTE="$LAND_CANONICAL_REMOTE"
 [ "$(git rev-parse HEAD)" = "$(git rev-parse "$head")" ] || die "the checkout is not at --head $head"
 [ -f "$HOOK" ] || die "no pre-push hook at $HOOK"
 url="$(git remote get-url "$REMOTE" 2>/dev/null || echo "$REMOTE")"

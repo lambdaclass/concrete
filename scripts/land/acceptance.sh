@@ -89,7 +89,8 @@ bad_env="$(compgen -e | grep -E '^(LAND_|CONCRETE_SKIP_)' || true)"
 BUILD_CMD="${ACCEPT_BUILD_CMD:-nix develop --command lake build}"
 
 SRC_REPO="$(git rev-parse --show-toplevel 2>/dev/null)" || { echo "acceptance: run inside a clone" >&2; exit 2; }
-ORIGIN_URL="$(git -C "$SRC_REPO" remote get-url origin)"
+( cd "$SRC_REPO" && land_check_destination "acceptance" ) || exit 2
+ORIGIN_URL="$(git -C "$SRC_REPO" remote get-url "$LAND_CANONICAL_REMOTE")"
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/acceptance.XXXXXX")"
 [ "$KEEP" = 1 ] || trap 'rm -rf "$WORK"' EXIT
 C="$WORK/clone"
@@ -301,7 +302,7 @@ do_negative() {
   if [ -n "${SKIP[negative]:-}" ]; then row negative skipped "--skip"; SKIPPED=1; return 0; fi
   local rid rsha
   rid="$(cd "$C" && sed -n 's/^run_id=//p' "$(git rev-parse --git-common-dir)/concrete-landing/$NAME/train.env" | tail -1)"
-  rsha="$(gh run view "$rid" -R "${ACCEPT_REPO:-lambdaclass/concrete}" --json headSha 2>/dev/null | python3 -I -c 'import json,sys; print(json.load(sys.stdin).get("headSha",""))' 2>/dev/null)"
+  rsha="$(gh run view "$rid" -R "$LAND_CANONICAL_REPO" --json headSha 2>/dev/null | python3 -I -c 'import json,sys; print(json.load(sys.stdin).get("headSha",""))' 2>/dev/null)"
   if [ "$rsha" != "$HEAD" ]; then row neg:run failed "run ${rid:-?} is at ${rsha:-?}, not the train head $HEAD: the controls would test another SHA"; FAILED=1; return 0; fi
   row neg:run passed "run $rid is at the train head ${HEAD:0:10}"
   make_tamper_gh

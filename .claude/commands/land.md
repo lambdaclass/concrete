@@ -7,7 +7,9 @@ Land: $ARGUMENTS
 
 Rules: [AGENTS.md](../../AGENTS.md). The manual is
 [docs/LANDING.md](../../docs/LANDING.md); `scripts/land/train.sh` (header) is the
-contract. Landings reach `origin` (lambdaclass/concrete, the one repository) only through it.
+contract. Landings reach `origin` (lambdaclass/concrete, the one repository, enforced by resolved
+URL through `scripts/land/lib.sh` in `train.sh`, `push-both.sh` and `.githooks/pre-push`) only
+through it.
 
 **Where.** Run `train.sh` from a full clone with the repository hook enabled (`git clone`, then
 `git config core.hooksPath .githooks`), never from a linked worktree: it refuses both a worktree and
