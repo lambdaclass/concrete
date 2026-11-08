@@ -12,43 +12,8 @@
 # itself must reject a missing or extra newline, a wrong status with the right stderr, and stray
 # stdout. Run inside the nix devshell, from the repository root.
 set -euo pipefail
-root=$(pwd)
-work=$(mktemp -d)
-trap 'rm -rf "${work:?}"' EXIT
-BOUNDED_PARENT="$work"
-# shellcheck source=scripts/checks/lib/bounded.sh
-source scripts/checks/lib/bounded.sh
-[ "$BOUNDED_HAVE_WATCHDOG" = 1 ] || { echo "slice0_backends: python3 is required for bounded runs" >&2; exit 2; }
-# shellcheck source=scripts/checks/lib/limits.sh
-source scripts/checks/lib/limits.sh
-gate_limits 64 40000
-timeout -k 30 1800 lake build Concrete lean-compiler-backend/lcb >/dev/null
-lcb="$root/.lake/packages/lean-compiler-backend/.lake/build/bin/lcb"
-case "$(uname -s)-$(uname -m)" in
-  Linux-x86_64) target=x86_64-linux ;;
-  Linux-aarch64) target=aarch64-linux ;;
-  Darwin-arm64) target=aarch64-macos ;;
-  *) echo "slice0_backends: unsupported host $(uname -s)-$(uname -m)" >&2; exit 2 ;;
-esac
-emitter=(timeout -k 10 120 lake env lean --run scripts/checks/slice0_bir.lean)
-
-# observe EXE OUT SECS RETRY: OUT.status (status or "incomplete"), OUT.stdout, OUT.stderr.
-observe() {
-  local rc=0
-  bounded_run -i /dev/null -r "$4" "$3" -- bash "$root/scripts/checks/lib/limited_exec.sh" 1024 "$1" \
-    >"$2.stdout" 2>"$2.stderr" || rc=$?
-  if bounded_is_incomplete "$rc"; then echo incomplete >"$2.status"; else echo "$rc" >"$2.status"; fi
-}
-
-# judge EXPECTED_DIR OBS: the observation OBS.* equals the expectation, byte for byte.
-judge() {
-  cmp -s "$1/status" "$2.status" && cmp -s "$1/stderr" "$2.stderr" && [ ! -s "$2.stdout" ]
-}
-
-build() { # build NAME LOG CMD...
-  local name=$1 log=$2; shift 2
-  "$@" >"$log" 2>&1 || { cat "$log" >&2; echo "slice0_backends: $name: build failed: $*" >&2; exit 1; }
-}
+# shellcheck source=scripts/checks/lib/slice0_common.sh
+source scripts/checks/lib/slice0_common.sh
 
 fail=0
 count=0
@@ -71,8 +36,7 @@ check() {
   done
 }
 
-names=$("${emitter[@]}" list) || { echo "slice0_backends: listing the examples failed" >&2; exit 1; }
-[ -n "$names" ] || { echo "slice0_backends: no examples listed" >&2; exit 1; }
+names=$(emit_examples)
 for name in $names; do
   d="$work/ex/$name"
   "${emitter[@]}" emit "$name" "$d" "$target"

@@ -125,6 +125,12 @@
             # Slice-0 native builds name their compiler explicitly (scripts/checks/slice0_native.sh),
             # pinned here so the shell's general clang can move without changing their identity.
             CONCRETE_SLICE0_CLANG = "${pkgs.llvmPackages_21.clang}/bin/clang";
+            # The artifact gates (scripts/checks/slice0_artifacts.sh) read the linked executables
+            # with the same LLVM release's llvm-objdump and llvm-size, and on Linux measure a run
+            # under gdb.
+            CONCRETE_SLICE0_LLVM = "${pkgs.llvmPackages_21.llvm}/bin";
+          } // pkgs.lib.optionalAttrs pkgs.stdenv.isLinux {
+            CONCRETE_SLICE0_GDB = "${pkgs.gdb}/bin/gdb";
           } // gatesMarker);
 
           # `nix develop .#gates` — what CI runs every gate step in: the gate userland, the marker,

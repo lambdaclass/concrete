@@ -1,6 +1,6 @@
 name: Slice 0 backends
 
-# PROVISIONAL (ROADMAP B0, Concrete/README.md gates 4, 6 and 6a). The slice-0 backend gate,
+# PROVISIONAL (ROADMAP B0, Concrete/README.md gates 4, 6, 6a, 8, 10, 11 and 12). The slice-0 backend gate,
 # scripts/checks/slice0_backends.sh: every hand-written BIR example through the LLVM path and the
 # LCB path, each executable's observation (exit status plus the fd-2 trap line) compared with the
 # BIR semantics, plus LCB's own evaluator on the adapted body. It runs natively on x86-64 Linux and
@@ -38,6 +38,33 @@ jobs:
         uses: cachix/install-nix-action@v31
       - name: Backend gate (LLVM and LCB, native)
         run: nix develop --command bash scripts/checks/slice0_backends.sh
+
+  artifacts:
+    name: Slice 0 artifacts (${{ matrix.arch }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86-64
+            runner: ubuntu-latest
+          - arch: aarch64-macos
+            runner: macos-15
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Nix
+        uses: cachix/install-nix-action@v31
+      - name: Sanitizers, binary size (report-only) and stack bound (gates 10, 11, 12)
+        run: nix develop --command timeout 3000 bash scripts/checks/slice0_artifacts.sh report
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: artifacts-${{ matrix.arch }}
+          path: report
+          if-no-files-found: error
 
   reproducibility:
     name: Reproducibility (${{ matrix.id }})
