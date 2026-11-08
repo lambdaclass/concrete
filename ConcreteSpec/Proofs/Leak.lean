@@ -754,6 +754,61 @@ theorem run_peak_monotone {m m' : Memory} {actions : List Action}
       have hr' := ih hr
       exact ⟨Nat.le_trans ha'.1 hr'.1, Nat.le_trans ha'.2 hr'.2⟩
 
+/-- Each successful transition records the maximum of its old peak and new live bytes.
+This is a calculation used to connect the implementation to the independent trajectory observer. -/
+theorem apply_peak_exact {m m' : Memory} {action : Action}
+    (hwf : ∀ l, (m l).WF) (h : apply m action = some m') (lineage : LineageId) :
+    (m' lineage).functionPeak = max (m lineage).functionPeak (m' lineage).live := by
+  cases action with
+  | alloc l bytes =>
+    cases h
+    by_cases hl : lineage = l
+    · subst lineage; simp [Memory.set, Account.alloc]
+    · simp [Memory.set, hl, Nat.max_eq_left (hwf lineage).2]
+  | free l bytes =>
+    simp only [apply] at h
+    split at h
+    next =>
+      cases h
+      by_cases hl : lineage = l
+      · subst lineage
+        simp only [Memory.set, ↓reduceIte, Account.free]
+        exact (Nat.max_eq_left (Nat.le_trans (Nat.sub_le _ _) (hwf l).2)).symm
+      · simp [Memory.set, hl, Nat.max_eq_left (hwf lineage).2]
+    next => cases h
+  | reset l =>
+    cases h
+    by_cases hl : lineage = l
+    · subst lineage; simp [Memory.set, Account.reset]
+    · simp [Memory.set, hl, Nat.max_eq_left (hwf lineage).2]
+
+/-- The recorded local peak equals an independently observed maximum over the live-byte trajectory,
+including entry. Initialization at function entry is required, rather than an exit bound premise. -/
+theorem run_peak_exact {m m' : Memory} {actions : List Action}
+    (hwf : ∀ l, (m l).WF) (h : run m actions = some m') (lineage : LineageId) :
+    (m' lineage).functionPeak = max (m lineage).functionPeak (observedPeak lineage m actions) := by
+  induction actions generalizing m with
+  | nil =>
+    cases h
+    exact (Nat.max_eq_left (hwf lineage).2).symm
+  | cons action rest ih =>
+    cases ha : apply m action with
+    | none => simp [run, ha] at h
+    | some m₁ =>
+      have hr : run m₁ rest = some m' := by simpa [run, ha] using h
+      rw [ih (apply_wf ha hwf) hr, apply_peak_exact hwf ha lineage]
+      simp only [observedPeak, ha]
+      rw [Nat.max_assoc]
+      have hrest : (m₁ lineage).live ≤ observedPeak lineage m₁ rest := by
+        cases rest with
+        | nil => exact Nat.le_refl _
+        | cons a xs =>
+          simp only [observedPeak]
+          split
+          · exact Nat.le_refl _
+          · exact Nat.le_max_left _ _
+      rw [Nat.max_eq_right hrest, ← Nat.max_assoc, Nat.max_eq_left (hwf lineage).2]
+
 /-! ## Concrete accounting controls -/
 
 /-- A nonempty well-formed account and a second lineage with independent accounting. -/
@@ -894,7 +949,7 @@ example : ¬ Bound.SoundOptional none ⟨12, .boundEstablished⟩ := by
 /-- An arbitrary report is sound for an actual run when its established limits bound quantities
 obtained independently from the action sequence and function entry. Requested and net-change bounds
 are translated to entry/exit accounts by `run_conservation`; unestablished fields assert nothing. -/
-theorem run_report_sound {m m' : Memory} {actions : List Action} {lineage : LineageId}
+theorem run_report_transport {m m' : Memory} {actions : List Action} {lineage : LineageId}
     {footprint : Option Nat} {r : LineageReport} (hlineage : r.lineage = lineage)
     (h : run m actions = some m')
     (hrequested : Bound.Sound (allocated lineage actions) r.requested)
@@ -913,23 +968,44 @@ theorem run_report_sound {m m' : Memory} {actions : List Action} {lineage : Line
   rw [hreqEq, hnetEq]
   exact ⟨hlineage, hrequested, hnet, hpeak, hfootprint⟩
 
-/-- Independent numeric limits establish all four fields of a report for an actual run. The limits
-are parameters, not expressions copied from the exit account. -/
+/-- Independent analysis bounds establish a report for an actual function run. Peak evidence is
+about the maximum of observed live states, never the recorded exit peak. Footprint is supplied by
+the named allocator contract and its bound remains an explicit allocator premise. -/
 theorem established_report_sound {m m' : Memory} {actions : List Action} {lineage : LineageId}
-    {footprint : Option Nat} {requestedLimit : Nat} {netLimit : Int} {peakLimit footprintLimit : Nat}
+    {allocator : AllocatorContract} {requestedLimit : Nat} {netLimit : Int}
+    {peakLimit footprintLimit : Nat}
+    (hwf : ∀ l, (m l).WF) (hentry : (m lineage).functionPeak = (m lineage).live)
     (h : run m actions = some m') (hrequested : allocated lineage actions ≤ requestedLimit)
     (hnet : (allocated lineage actions : Int) - freed lineage actions -
       resetBytes lineage m actions ≤ netLimit)
-    (hpeak : (m' lineage).functionPeak ≤ peakLimit)
-    (hfootprint : ∃ bytes, footprint = some bytes ∧ bytes ≤ footprintLimit) :
-    LineageReport.Sound lineage (m lineage) (m' lineage) footprint
+    (hpeak : observedPeak lineage m actions ≤ peakLimit)
+    (hfootprint : ∃ bytes, allocator.footprint lineage m actions = some bytes ∧
+      bytes ≤ footprintLimit) :
+    LineageReport.Sound lineage (m lineage) (m' lineage) (allocator.footprint lineage m actions)
       ⟨lineage, ⟨requestedLimit, .boundEstablished⟩, ⟨netLimit, .boundEstablished⟩,
         ⟨peakLimit, .boundEstablished⟩, ⟨footprintLimit, .boundEstablished⟩⟩ := by
-  apply run_report_sound rfl h
+  apply run_report_transport rfl h
   · intro _; exact hrequested
   · intro _; exact hnet
-  · intro _; exact hpeak
+  · intro _
+    rw [run_peak_exact hwf h lineage, hentry]
+    apply Nat.max_le.mpr
+    constructor
+    · apply Nat.le_trans _ hpeak
+      cases actions with
+      | nil => exact Nat.le_refl _
+      | cons a xs =>
+        simp only [observedPeak]
+        split
+        · exact Nat.le_refl _
+        · exact Nat.le_max_left _ _
+    · exact hpeak
   · intro _; exact hfootprint
+
+/-- Example allocator contract: its footprint is the independent logical trajectory maximum.
+A real allocator may include metadata and slack; no such equality is assumed generically. -/
+def demoAllocator : AllocatorContract := ⟨fun lineage m actions =>
+  some (observedPeak lineage m actions)⟩
 
 /-- Entry for the concrete report example: 100 historical requested bytes and two live bytes. -/
 def reportEntry : Account := ⟨100, 2, 100, 2⟩
@@ -968,16 +1044,21 @@ theorem independent_report_sound :
     LineageReport.Sound ⟨0⟩ reportEntry reportExit (some 10) establishedReport := by
   have h := established_report_sound (m := reportEntryMemory) (m' := reportExitMemory)
     (actions := reportActions) (lineage := ⟨0⟩) (requestedLimit := 8) (netLimit := 5)
-    (peakLimit := 10) (footprintLimit := 12) (footprint := some 10) rfl
+    (peakLimit := 10) (footprintLimit := 12) (allocator := demoAllocator)
+    (by
+      intro l
+      by_cases hl : l = ⟨0⟩
+      · subst l; simp [reportEntryMemory, Memory.set, reportEntry, Account.WF]
+      · simp [reportEntryMemory, Memory.set, hl, Memory.empty, Account.empty, Account.WF])
+    rfl rfl
     (by decide) (by decide) (by decide) ⟨10, rfl, by decide⟩
-  simpa only [establishedReport, reportEntryMemory, Memory.set, ↓reduceIte,
-    reportExitMemory_lineage] using h
+  exact h
 
 /-- The established fields of the mixed-status report constrain the same actual run; its unknown
 net-change field makes no numeric claim. -/
 theorem mixed_status_report_sound :
     LineageReport.Sound ⟨0⟩ reportEntry reportExit (some 10) mixedStatusReport := by
-  have h := run_report_sound (m := reportEntryMemory) (m' := reportExitMemory)
+  have h := run_report_transport (m := reportEntryMemory) (m' := reportExitMemory)
     (actions := reportActions) (lineage := ⟨0⟩) (r := mixedStatusReport) (footprint := some 10) rfl rfl
     (by simp [mixedStatusReport, Bound.Sound, reportActions, allocated])
     (by simp [mixedStatusReport, Bound.Sound])
@@ -991,7 +1072,7 @@ theorem empty_function_report_sound :
     LineageReport.Sound ⟨0⟩ (Account.enter ⟨100, 0, 100, 0⟩) (Account.enter ⟨100, 0, 100, 0⟩) none
       ⟨⟨0⟩, ⟨0, .boundEstablished⟩, ⟨0, .boundEstablished⟩,
         ⟨0, .boundEstablished⟩, ⟨0, .notEstablished⟩⟩ := by
-  apply run_report_sound
+  apply run_report_transport
     (m := Memory.set Memory.empty ⟨0⟩ (Account.enter ⟨100, 0, 100, 0⟩))
     (m' := Memory.set Memory.empty ⟨0⟩ (Account.enter ⟨100, 0, 100, 0⟩))
     (actions := []) (lineage := ⟨0⟩) rfl rfl

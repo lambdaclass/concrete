@@ -308,6 +308,20 @@ def ResetConservation (before after : Account) (recordedOutflow : Nat) : Prop :=
     after.live = 0 ∧ after.live + recordedOutflow = before.live ∧
     after.peak = before.peak ∧ after.functionPeak = before.functionPeak
 
+/-- Independent maximum of live bytes at entry and every successful intermediate state.
+This observer never reads either recorded peak field. A failed suffix has no successor state. -/
+def observedPeak (lineage : LineageId) (m : Memory) : List Action → Nat
+  | [] => (m lineage).live
+  | action :: rest =>
+      match apply m action with
+      | none => (m lineage).live
+      | some m' => max (m lineage).live (observedPeak lineage m' rest)
+
+/-- The named allocator boundary defines footprint from the lineage, entry memory and actions.
+No logical-byte theorem invents a footprint for an allocator that does not provide one. -/
+structure AllocatorContract where
+  footprint : LineageId → Memory → List Action → Option Nat
+
 /-- Evidence for a reported bound. A bound is either established, with its stated limit, or not
 established. The latter never turns an unknown into a reassuring numeric claim. -/
 inductive BoundStatus where
@@ -340,7 +354,8 @@ structure LineageReport where
   peak : Bound Nat
   footprint : Bound Nat
 
-/-- Soundness of a lineage report against its entry and exit accounts. Requested bytes exclude
+/-- Soundness of a lineage report against explicitly identified entry and exit accounts.
+The identity must agree with the report; numeric bounds cannot be relabelled. Requested bytes exclude
 requests made before entry. The peak is the maximum live bytes reached since `Account.enter`, not
 the historical maximum of the whole program. The caller applies `Account.enter` at function entry
 and does not reset the local peak again before the function exits. -/
