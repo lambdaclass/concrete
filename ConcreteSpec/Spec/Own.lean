@@ -278,6 +278,25 @@ def writeOwner (tgt : Target) (p : Hybrid.Place) (v : Hybrid.Value)
   instrument (fun own => accessOwner own p .mutable)
     (fun st => (st.write tgt p v).map fun st => ((), st)) s
 
+/-- C4 currently resolves only whole scalar cells. A nonempty projection remains a logical
+access permission; its concrete operation waits for the aggregate resolver, rather than reading
+or overwriting the entire root as if it were that projection. -/
+def readLoan (tgt : Target) (i : LoanId) (s : Store Hybrid.State) :
+    Option (Hybrid.Value × Store Hybrid.State) := do
+  let l ← loan s.own i
+  if l.path = [] then
+    instrument (fun own => accessLoan own i .shared)
+      (fun st => (st.read tgt l.root).map fun v => (v, st)) s
+  else none
+
+def writeLoan (tgt : Target) (i : LoanId) (v : Hybrid.Value) (s : Store Hybrid.State) :
+    Option (Unit × Store Hybrid.State) := do
+  let l ← loan s.own i
+  if l.path = [] then
+    instrument (fun own => accessLoan own i .mutable)
+      (fun st => (st.write tgt l.root v).map fun st => ((), st)) s
+  else none
+
 namespace Examples
 
 def x : Var := ⟨"x", 0⟩
@@ -340,6 +359,14 @@ example : (do
     let s ← endLoan shared ⟨0⟩
     let s ← borrow s ⟨0⟩ [] .shared
     pure (s.loans.map Loan.id)) = some [⟨1⟩] := by decide
+
+/-- Refused: a zero-byte representation still has a linear ownership obligation (Q3.8). -/
+example : Hybrid.sizeof .unit = 0 ∧
+    drop [x] { initial with slots := [⟨⟨0⟩, 0, ⟨.unit, false, true⟩, .owned⟩] } = none := by decide
+/-- Accepted: explicitly consuming the zero-byte obligation permits its slot to end. -/
+example : (do
+    let s ← move { initial with slots := [⟨⟨0⟩, 0, ⟨.unit, false, true⟩, .owned⟩] } ⟨0⟩
+    drop [x] s).isSome = true := by decide
 
 /-- A small operand instance: all loan commands modify instrumentation only. There are no
 reference-valued fields, returns or aggregate operands. -/

@@ -208,6 +208,68 @@ theorem life_erasure {σ : Type} (types : Var → Option Descriptor) (e : Exec.L
   subst t
   rfl
 
+/-- Any successful instrumented operation preserves the invariant when its permission
+transition does. Concrete values and concrete branch choices are irrelevant to this proof. -/
+theorem instrument_preserves {σ α : Type} (permit : State → Option State)
+    (hp : ∀ s t, permit s = some t → WellFormed t) (operation : σ → Option (α × σ))
+    (s : Store σ) (a : α) (t : Store σ) (h : instrument permit operation s = some (a, t)) :
+    WellFormed t.own := by
+  unfold instrument at h
+  obtain ⟨own, ho, hh⟩ := Option.bind_eq_some_iff.mp h
+  obtain ⟨r, _, hh⟩ := Option.bind_eq_some_iff.mp hh
+  cases r
+  cases hh
+  exact hp _ _ ho
+
+theorem readOwner_erasure (tgt : Target) (p : Hybrid.Place) (s t : Store Hybrid.State)
+    (v : Hybrid.Value) (h : readOwner tgt p s = some (v, t)) :
+    s.concrete.read tgt p = some v ∧ t.concrete = s.concrete := by
+  have he := instrument_erasure _ _ _ _ _ h
+  dsimp [erase] at he
+  cases hc : s.concrete.read tgt p with
+  | none => simp [hc] at he
+  | some w => simp [hc] at he; rcases he with ⟨rfl, hstore⟩; exact ⟨rfl, hstore.symm⟩
+
+theorem writeOwner_erasure (tgt : Target) (p : Hybrid.Place) (s t : Store Hybrid.State)
+    (v : Hybrid.Value) (h : writeOwner tgt p v s = some ((), t)) :
+    s.concrete.write tgt p v = some t.concrete := by
+  have he := instrument_erasure _ _ _ _ _ h
+  dsimp [erase] at he
+  cases hc : s.concrete.write tgt p v with
+  | none => simp [hc] at he
+  | some st => simp [hc] at he; rw [← he]
+
+theorem readLoan_erasure (tgt : Target) (i : LoanId) (s t : Store Hybrid.State)
+    (v : Hybrid.Value) (h : readLoan tgt i s = some (v, t)) :
+    ∃ l, loan s.own i = some l ∧ l.path = [] ∧
+      s.concrete.read tgt l.root = some v ∧ t.concrete = s.concrete := by
+  unfold readLoan at h
+  obtain ⟨l, hl, hh⟩ := Option.bind_eq_some_iff.mp h
+  split at hh
+  · rename_i hpath
+    have he := instrument_erasure _ _ _ _ _ hh
+    dsimp [erase] at he
+    cases hc : s.concrete.read tgt l.root with
+    | none => simp [hc] at he
+    | some w => simp [hc] at he; rcases he with ⟨rfl, hstore⟩
+                exact ⟨l, hl, hpath, hc, hstore.symm⟩
+  · contradiction
+
+theorem writeLoan_erasure (tgt : Target) (i : LoanId) (s t : Store Hybrid.State)
+    (v : Hybrid.Value) (h : writeLoan tgt i v s = some ((), t)) :
+    ∃ l, loan s.own i = some l ∧ l.path = [] ∧
+      s.concrete.write tgt l.root v = some t.concrete := by
+  unfold writeLoan at h
+  obtain ⟨l, hl, hh⟩ := Option.bind_eq_some_iff.mp h
+  split at hh
+  · rename_i hpath
+    have he := instrument_erasure _ _ _ _ _ hh
+    dsimp [erase] at he
+    cases hc : s.concrete.write tgt l.root v with
+    | none => simp [hc] at he
+    | some st => simp [hc] at he; exact ⟨l, hl, hpath, he ▸ hc⟩
+  · contradiction
+
 /-- The next identity has never belonged to any currently active loan. Combined with the
 unchanged/incremented supply laws, ending a loan cannot make its identity fresh again. -/
 theorem nextLoan_fresh (s : State) (hs : WellFormed s) (l : Loan) (hl : l ∈ s.loans) :
