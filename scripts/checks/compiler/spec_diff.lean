@@ -298,6 +298,7 @@ def genSpec (seed : String) (n : Nat) (dir : System.FilePath) (target : LCB.Targ
           unless ← emitArtifacts child target bir .none do return 1
           unless ← writeSpecOutcome child bir outcome do return 1
           IO.FS.writeFile (child / "native-ready") ""
+          writeRegressionMetadata child (regressionName seed index) (.exited c) bir.sites
           compiled := compiled + 1
           didCompile := true
         programs := programs ++

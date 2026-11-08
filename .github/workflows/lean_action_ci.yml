@@ -345,7 +345,7 @@ jobs:
       - name: "Fetch the published oracle, verify it, run smoke.con through it (exit 42)"
         run: bash scripts/oracle/ci_check.sh
 
-  # THE COMPILER'S GATES (Concrete/README.md gates 4, 6, 6a, 8, 9, 10, 11 and 12; slice 0, provisional),
+  # THE COMPILER'S GATES (Concrete/README.md gates 4, 5, 6, 6a, 8, 9, 10, 11 and 12; slice 0, provisional),
   # scripts/checks/compiler/: not root checks (run.sh runs only scripts/checks/*.sh), because they need
   # the compiler's devshell, a native macOS runner and minutes each. Every bir: row in the test manifest
   # through the LLVM path and the LCB path, each executable's observation compared with the manifest
@@ -380,6 +380,32 @@ jobs:
         uses: cachix/install-nix-action@v31
       - name: Manifest tests (LLVM and LCB, native)
         run: nix develop --command bash scripts/checks/compiler/tests.sh
+
+  spec-differential:
+    name: Spec differential (${{ matrix.arch }})
+    needs: landing-record
+    if: ${{ !cancelled() && needs.landing-record.outputs.recorded != 'true' }}
+    defaults:
+      run:
+        shell: bash
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86-64
+            runner: ubuntu-latest
+          - arch: aarch64-macos
+            runner: macos-15
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Nix
+        uses: cachix/install-nix-action@v31
+      - name: Seeded spec and BIR differentials (gates 5 and 6)
+        run: nix develop --command bash scripts/checks/compiler/spec_diff.sh
 
   artifacts:
     name: Slice 0 artifacts (${{ matrix.arch }})
