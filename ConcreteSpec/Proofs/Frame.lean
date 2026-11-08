@@ -499,6 +499,71 @@ example : ¬ (∀ entry exit, incompleteC1Call c1Operands c1FnId c1Program entry
   rw [hk] at hframes
   simp [c1BadExit] at hframes
 
+/-- Law (subject `ConcreteSpec.Core.Frame.runEffect`).
+Actual C4 instruction execution preserves bytes, metadata and places outside its computed effects. -/
+theorem runEffect_frame (tgt : Target) (before : State) (command : EffectCommand)
+    (wellFormed : before.memory.WellFormed tgt) : EffectResult before (runEffect tgt before command) := by
+  cases command with
+  | store pointer bytes alignment =>
+    cases hs : before.memory.store tgt pointer bytes alignment with
+    | none => simp [runEffect, hs, EffectResult]
+    | some memory =>
+      simp only [runEffect, hs, Option.map_some, EffectResult]
+      exact store_frame tgt before wellFormed memory pointer bytes alignment _ rfl hs
+  | free block =>
+    cases hb : before.memory.block block with
+    | none => simp [runEffect, Memory.free, hb, EffectResult]
+    | some x =>
+      cases hs : before.memory.free block with
+      | none => simp [runEffect, hs, EffectResult]
+      | some memory =>
+        simp only [runEffect, hs, Option.map_some, EffectResult]
+        exact free_frame before block x memory hb hs
+  | expose pointer =>
+    cases hp : pointer.prov with
+    | none => simp [runEffect, hp, EffectResult]
+    | some block =>
+      cases hb : before.memory.block block with
+      | none => simp [runEffect, hp, Memory.expose, hb, EffectResult]
+      | some x =>
+        cases hs : before.memory.expose pointer with
+        | none => simp [runEffect, hp, hs, EffectResult]
+        | some memory =>
+          simp only [runEffect, hp, Option.bind_some, hs, Option.map_some, EffectResult]
+          exact expose_frame before memory pointer block x hp hb hs
+  | alloc space base size alignment =>
+    cases ha : before.memory.alloc tgt space base size alignment with
+    | error _ => simp [runEffect, ha, EffectResult]
+    | ok output =>
+      obtain ⟨block, memory⟩ := output
+      simp only [runEffect, ha, EffectResult]
+      exact alloc_frame tgt before wellFormed space base size alignment block memory ha
+  | set place cell => exact set_frame before place cell
+
+/-- Instance (law `ConcreteSpec.Core.Frame.runEffect_frame`, case `byte_store`). -/
+example : EffectResult metadataStoreBefore
+    (runEffect linuxX8664 metadataStoreBefore (.store metadataStorePtr [.init 7 none] 1)) :=
+  runEffect_frame linuxX8664 metadataStoreBefore (.store metadataStorePtr [.init 7 none] 1)
+    metadataStoreWellFormed
+
+/-- A planted executor corrupts block metadata after executing the instruction. -/
+def corruptEffect (tgt : Target) (before : State) (command : EffectCommand) :
+    Option (State × Footprint) :=
+  (runEffect tgt before command).map fun (after, footprint) =>
+    ({ after with memory := after.memory.modify ⟨0⟩ fun block => { block with live := false } }, footprint)
+
+/-- Planted (law `ConcreteSpec.Core.Frame.runEffect_frame`, case `byte_store`,
+subject `ConcreteSpec.Core.Frame.runEffect`, mutant `ConcreteSpec.Core.Frame.corruptEffect`). -/
+example : metadataStoreBefore.memory.WellFormed linuxX8664 ∧
+    ¬ EffectResult metadataStoreBefore
+      (corruptEffect linuxX8664 metadataStoreBefore (.store metadataStorePtr [.init 7 none] 1)) := by
+  refine ⟨metadataStoreWellFormed, ?_⟩
+  intro h
+  have hm := h.2.1 ⟨0⟩ metadataStoreBlock (by decide) (by decide)
+  simp [metadataStoreBefore, metadataStoreBlock,
+    metadataStorePtr, blockMetadata, Memory.modify, Memory.block,
+    AList.update, AList.lookup] at hm
+
 /-- Helper (congruence). Widen static permissions without changing an execution.
 (approved: PENDING) -/
 theorem preserves_covers {before after : State} {outer inner : Footprint}
@@ -672,7 +737,8 @@ example : ¬ (∀ base sample,
   contradiction
 
 
-/-- Law (subject `ConcreteSpec.Core.Frame.ABI.toyTransition`).
+/-- Helper (inversion). Establish the relation form of toy-call conformance from its
+independent execution witnesses. (approved: PENDING)
 The independently executed toy call satisfies the complete typed ABI contract for every base
 machine, argument and return value, including its private spill and balanced stack operations. -/
 theorem toyTransition_conforms : TransitionConforms toySignature toyTransition := by
@@ -696,74 +762,60 @@ theorem toyTransition_conforms : TransitionConforms toySignature toyTransition :
     have hn : r ≠ 1 := by simpa [toySignature] using hr
     simp [toyInput, toyBody, runToy, hn]
 
-/-- Instance (law `ConcreteSpec.Core.Frame.ABI.toyTransition_conforms`, case `spill`). -/
-example : TransitionConforms toySignature toyTransition := toyTransition_conforms
-
 /-- A populated base machine, including a caller-owned stack slot. -/
 def toyBase : Machine Nat Nat := ⟨fun r => 10 + r, fun slot => 20 + slot, 1⟩
 
-/-- Accepted: execution has a populated witness and actually changes the return register and spill. -/
-example : toyTransition (toyInput toyBase 11)
-    (runToy (toyBody 7) (toyInput toyBase 11)) [11] 7 :=
-  ⟨toyBase, 11, rfl, rfl, rfl⟩
+/-- Law (subject `ConcreteSpec.Core.Frame.ABI.toyCall`).
+Executing input packing and the independent toy body establishes the complete ABI contract. -/
+theorem toyCall_conforms (base : Machine Nat Nat) (arg result : Nat) :
+    toySignature.Call (toyInput base arg) (toyCall base arg result) [arg] result :=
+  toyTransition_conforms _ _ _ _ ⟨base, arg, rfl, rfl, rfl⟩
 
-/-- A planted transition appends a corrupting instruction after the real return. -/
-def corruptToy (instruction : ToyInstruction) : CallTransition Unit Nat Nat Nat :=
-  fun before after args result =>
-    ∃ middle, toyTransition before middle args result ∧ after = runToy [instruction] middle
+/-- Instance (law `ConcreteSpec.Core.Frame.ABI.toyCall_conforms`, case `spill`). -/
+example : toySignature.Call (toyInput toyBase 11) (toyCall toyBase 11 7) [11] 7 :=
+  toyCall_conforms toyBase 11 7
 
 /-- A planted call clobbers a callee-saved register. -/
-def wrongToySaved : CallTransition Unit Nat Nat Nat := corruptToy (.register 0 99)
-/-- A planted call overwrites a caller-owned stack slot by releasing its caller's stack. -/
-def wrongToySlot : CallTransition Unit Nat Nat Nat := fun before after args result =>
-  ∃ middle, toyTransition before middle args result ∧
-    after = runToy [.release 1, .slot 0 99, .reserve 1] middle
+def wrongToySaved (base : Machine Nat Nat) (arg result : Nat) : Machine Nat Nat :=
+  runToy [.register 0 99] (toyCall base arg result)
+/-- A planted call overwrites a caller-owned stack slot. -/
+def wrongToySlot (base : Machine Nat Nat) (arg result : Nat) : Machine Nat Nat :=
+  runToy [.release 1, .slot 0 99, .reserve 1] (toyCall base arg result)
 /-- A planted call leaks its frame. -/
-def wrongToyPointer : CallTransition Unit Nat Nat Nat := corruptToy (.reserve 8)
+def wrongToyPointer (base : Machine Nat Nat) (arg result : Nat) : Machine Nat Nat :=
+  runToy [.reserve 8] (toyCall base arg result)
 /-- A planted call overwrites the returned value. -/
-def wrongToyResult : CallTransition Unit Nat Nat Nat := corruptToy (.register 1 99)
+def wrongToyResult (base : Machine Nat Nat) (arg result : Nat) : Machine Nat Nat :=
+  runToy [.register 1 99] (toyCall base arg result)
 
-/-- Planted (law `ConcreteSpec.Core.Frame.ABI.toyTransition_conforms`, case `spill`,
-subject `ConcreteSpec.Core.Frame.ABI.toyTransition`, mutant `ConcreteSpec.Core.Frame.ABI.wrongToySaved`). -/
-example : ¬ TransitionConforms toySignature wrongToySaved := by
+/-- Planted (law `ConcreteSpec.Core.Frame.ABI.toyCall_conforms`, case `spill`,
+subject `ConcreteSpec.Core.Frame.ABI.toyCall`, mutant `ConcreteSpec.Core.Frame.ABI.wrongToySaved`). -/
+example : ¬ toySignature.Call (toyInput toyBase 11) (wrongToySaved toyBase 11 7) [11] 7 := by
   intro h
-  have hc := h (toyInput toyBase 11)
-    (runToy [.register 0 99] (runToy (toyBody 7) (toyInput toyBase 11))) [11] 7
-    ⟨_, ⟨toyBase, 11, rfl, rfl, rfl⟩, rfl⟩
-  have bad := hc.preserved.1 0 (by simp [toySignature])
-  simp [toyInput, toyBody, toyBase, runToy] at bad
+  have bad := h.preserved.1 0 (by simp [toySignature])
+  simp [wrongToySaved, toyCall, toyInput, toyBody, toyBase, runToy] at bad
 
-/-- Planted (law `ConcreteSpec.Core.Frame.ABI.toyTransition_conforms`, case `spill`,
-subject `ConcreteSpec.Core.Frame.ABI.toyTransition`, mutant `ConcreteSpec.Core.Frame.ABI.wrongToySlot`). -/
-example : ¬ TransitionConforms toySignature wrongToySlot := by
+/-- Planted (law `ConcreteSpec.Core.Frame.ABI.toyCall_conforms`, case `spill`,
+subject `ConcreteSpec.Core.Frame.ABI.toyCall`, mutant `ConcreteSpec.Core.Frame.ABI.wrongToySlot`). -/
+example : ¬ toySignature.Call (toyInput toyBase 11) (wrongToySlot toyBase 11 7) [11] 7 := by
   intro h
-  have hc := h (toyInput toyBase 11)
-    (runToy [.release 1, .slot 0 99, .reserve 1]
-      (runToy (toyBody 7) (toyInput toyBase 11))) [11] 7
-    ⟨_, ⟨toyBase, 11, rfl, rfl, rfl⟩, rfl⟩
-  have bad := hc.preserved.2.1 0 (by decide)
-  simp [toyInput, toyBody, toyBase, runToy] at bad
+  have bad := h.preserved.2.1 0 (by decide)
+  simp [wrongToySlot, toyCall, toyInput, toyBody, toyBase, runToy] at bad
 
-/-- Planted (law `ConcreteSpec.Core.Frame.ABI.toyTransition_conforms`, case `spill`,
-subject `ConcreteSpec.Core.Frame.ABI.toyTransition`, mutant `ConcreteSpec.Core.Frame.ABI.wrongToyPointer`). -/
-example : ¬ TransitionConforms toySignature wrongToyPointer := by
+/-- Planted (law `ConcreteSpec.Core.Frame.ABI.toyCall_conforms`, case `spill`,
+subject `ConcreteSpec.Core.Frame.ABI.toyCall`, mutant `ConcreteSpec.Core.Frame.ABI.wrongToyPointer`). -/
+example : ¬ toySignature.Call (toyInput toyBase 11) (wrongToyPointer toyBase 11 7) [11] 7 := by
   intro h
-  have hc := h (toyInput toyBase 11)
-    (runToy [.reserve 8] (runToy (toyBody 7) (toyInput toyBase 11))) [11] 7
-    ⟨_, ⟨toyBase, 11, rfl, rfl, rfl⟩, rfl⟩
-  have bad := hc.preserved.2.2
-  simp [toyInput, toyBody, toyBase, runToy] at bad
+  have bad := h.preserved.2.2
+  simp [wrongToyPointer, toyCall, toyInput, toyBody, toyBase, runToy] at bad
 
-/-- Planted (law `ConcreteSpec.Core.Frame.ABI.toyTransition_conforms`, case `spill`,
-subject `ConcreteSpec.Core.Frame.ABI.toyTransition`, mutant `ConcreteSpec.Core.Frame.ABI.wrongToyResult`). -/
-example : ¬ TransitionConforms toySignature wrongToyResult := by
+/-- Planted (law `ConcreteSpec.Core.Frame.ABI.toyCall_conforms`, case `spill`,
+subject `ConcreteSpec.Core.Frame.ABI.toyCall`, mutant `ConcreteSpec.Core.Frame.ABI.wrongToyResult`). -/
+example : ¬ toySignature.Call (toyInput toyBase 11) (wrongToyResult toyBase 11 7) [11] 7 := by
   intro h
-  have hc := h (toyInput toyBase 11)
-    (runToy [.register 1 99] (runToy (toyBody 7) (toyInput toyBase 11))) [11] 7
-    ⟨_, ⟨toyBase, 11, rfl, rfl, rfl⟩, rfl⟩
-  have bad := hc.result
-  simp [toySignature, Binding.Holds, Location.read, toyInput, toyBody, toyBase, runToy] at bad
-
+  have bad := h.result
+  simp [toySignature, Binding.Holds, Location.read, wrongToyResult, toyCall,
+    toyInput, toyBody, toyBase, runToy] at bad
 
 /-- Preserved machine state composes across sequential calls with the same saved-register set. -/
 theorem machine_preserved_trans {Reg Word : Type} {before middle after : Machine Reg Word}
@@ -788,7 +840,7 @@ theorem machine_registerFrame_union {Reg Word : Type} {before middle after : Mac
   exact (h₂ r hr'.2).trans (h₁ r hr'.1)
 
 /-- Helper (projection). Extracts an ABI contract obligation; implementation evidence is
-`ConcreteSpec.Core.Frame.ABI.toyTransition_conforms`. (approved: PENDING)
+`ConcreteSpec.Core.Frame.ABI.toyCall_conforms`. (approved: PENDING)
  A well-formed returning ABI call restores every callee-saved register exactly: well-formedness
 puts those registers outside the clobber set, and the call's register frame preserves that set. -/
 theorem callee_saved_registers_equal {Ty Val Reg Word : Type} {sig : Signature Ty Val Reg Word}
@@ -798,7 +850,7 @@ theorem callee_saved_registers_equal {Ty Val Reg Word : Type} {sig : Signature T
   fun r hr => h.clobbers r (hw.2.2.2 r hr)
 
 /-- Helper (projection). Extracts an ABI contract obligation; implementation evidence is
-`ConcreteSpec.Core.Frame.ABI.toyTransition_conforms`. (approved: PENDING)
+`ConcreteSpec.Core.Frame.ABI.toyCall_conforms`. (approved: PENDING)
  Registers outside the clobber set are unchanged; equivalently, clobbers are the only registers
 permitted to differ after return. -/
 theorem clobbers_only_changed_registers {Ty Val Reg Word : Type} {sig : Signature Ty Val Reg Word}
@@ -808,7 +860,7 @@ theorem clobbers_only_changed_registers {Ty Val Reg Word : Type} {sig : Signatur
   h.clobbers
 
 /-- Helper (projection). Extracts an ABI contract obligation; implementation evidence is
-`ConcreteSpec.Core.Frame.ABI.toyTransition_conforms`. (approved: PENDING)
+`ConcreteSpec.Core.Frame.ABI.toyCall_conforms`. (approved: PENDING)
  The caller's stack slots below its stack pointer are restored exactly. -/
 theorem caller_stack_slots_equal {Ty Val Reg Word : Type} {sig : Signature Ty Val Reg Word}
     {before after : Machine Reg Word} {args : List Val} {result : Val}
@@ -817,7 +869,7 @@ theorem caller_stack_slots_equal {Ty Val Reg Word : Type} {sig : Signature Ty Va
   h.preserved.2.1
 
 /-- Helper (projection). Extracts an ABI contract obligation; implementation evidence is
-`ConcreteSpec.Core.Frame.ABI.toyTransition_conforms`. (approved: PENDING)
+`ConcreteSpec.Core.Frame.ABI.toyCall_conforms`. (approved: PENDING)
  Returning restores the caller's stack pointer exactly. -/
 theorem stack_pointer_restored {Ty Val Reg Word : Type} {sig : Signature Ty Val Reg Word}
     {before after : Machine Reg Word} {args : List Val} {result : Val}
@@ -825,7 +877,7 @@ theorem stack_pointer_restored {Ty Val Reg Word : Type} {sig : Signature Ty Val 
   h.preserved.2.2
 
 /-- Helper (projection). Extracts an ABI contract obligation; implementation evidence is
-`ConcreteSpec.Core.Frame.ABI.toyTransition_conforms`. (approved: PENDING)
+`ConcreteSpec.Core.Frame.ABI.toyCall_conforms`. (approved: PENDING)
  Typed arguments occupy their signature locations at entry. -/
 theorem typed_arguments_at_entry {Ty Val Reg Word : Type} {sig : Signature Ty Val Reg Word}
     {before after : Machine Reg Word} {args : List Val} {result : Val}
@@ -833,7 +885,7 @@ theorem typed_arguments_at_entry {Ty Val Reg Word : Type} {sig : Signature Ty Va
   h.arguments
 
 /-- Helper (projection). Extracts an ABI contract obligation; implementation evidence is
-`ConcreteSpec.Core.Frame.ABI.toyTransition_conforms`. (approved: PENDING)
+`ConcreteSpec.Core.Frame.ABI.toyCall_conforms`. (approved: PENDING)
  The typed result occupies its return-convention locations after return. -/
 theorem typed_result_at_return {Ty Val Reg Word : Type} {sig : Signature Ty Val Reg Word}
     {before after : Machine Reg Word} {args : List Val} {result : Val}

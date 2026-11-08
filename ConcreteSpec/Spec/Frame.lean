@@ -143,6 +143,36 @@ def C1Call (O : Exec.Operands) (f : FnId) (P : Exec.Program O)
         ⟨.done, callee, stReturn, .ret dst caller :: k⟩ ∧
       Exec.step P ⟨.done, callee, stReturn, .ret dst caller :: k⟩ = some (.next exit)))
 
+/-- Executable effect instructions; their operands describe behavior, not preservation proofs. -/
+inductive EffectCommand where
+  | store (pointer : Ptr) (bytes : List MByte) (alignment : Nat)
+  | free (block : MemBlockId)
+  | expose (pointer : Ptr)
+  | alloc (space : AddrSpace) (base size alignment : Nat)
+  | set (place : Place) (cell : Cell)
+
+/-- Execute one C4 instruction and report its exact computed permission set. -/
+def runEffect (tgt : Target) (before : State) : EffectCommand → Option (State × Footprint)
+  | .store pointer bytes alignment =>
+    (before.memory.store tgt pointer bytes alignment).map fun memory =>
+      ({ before with memory := memory },
+        accessFootprint (before.memory.access tgt pointer bytes.length alignment) bytes.length)
+  | .free block =>
+    (before.memory.free block).map fun memory => ({ before with memory := memory }, .block block)
+  | .expose pointer =>
+    pointer.prov.bind fun block =>
+      (before.memory.expose pointer).map fun memory => ({ before with memory := memory }, .block block)
+  | .alloc space base size alignment =>
+    match before.memory.alloc tgt space base size alignment with
+    | .ok (block, memory) => some ({ before with memory := memory }, .byte (fullBlock block size))
+    | _ => none
+  | .set place cell => some (before.set place cell, .place place)
+
+/-- The specification of a successful effect's frame behavior. Rejected operations make no claim. -/
+def EffectResult (before : State) : Option (State × Footprint) → Prop
+  | none => True
+  | some (after, footprint) => footprint.Preserves before after
+
 /-- The full caller-restoration contract for complete C1 calls. Keeping the quantification here
 allows an incomplete-call mutant to challenge the actual operational restoration theorem. -/
 def CallerRestoration (O : Exec.Operands) (f : FnId) (P : Exec.Program O) : Prop :=
@@ -376,6 +406,10 @@ def toyInput (base : Machine Nat Nat) (arg : Nat) : Machine Nat Nat :=
 releases the frame. No instruction tests restoration or result validity. -/
 def toyBody (result : Nat) : List ToyInstruction :=
   [.reserve 8, .register 1 result, .slot 0 99, .release 8]
+
+/-- Execute a full toy call, including input packing. -/
+def toyCall (base : Machine Nat Nat) (arg result : Nat) : Machine Nat Nat :=
+  runToy (toyBody result) (toyInput base arg)
 
 /-- Independent execution relation for the toy convention. The witnesses describe input
 packing and actual instructions; they contain none of the ABI equalities being proved. -/
