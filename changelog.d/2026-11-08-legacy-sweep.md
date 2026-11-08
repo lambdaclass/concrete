@@ -1,11 +1,14 @@
 ### Only the new things at the root: the first legacy/ sweep (2026-11-08)
 
 The owner asked to keep "only the new things under the root" and approved how a file enters the
-frozen `legacy/` ("ok to 1"): `scripts/checks/legacy.lock` names each sweep's source commit, and
-`legacy_frozen.sh` admits an addition only as a byte-for-byte move of a root file that is gone from
-the root. Edits of `legacy/` files are still refused; new controls cover a valid move, a missing
-sweep line, a copy left at the root, a modified copy, a mode change, a file with no root original
-and an edit of a frozen file.
+frozen `legacy/` ("ok to 1"): `scripts/checks/legacy.lock` names each sweep's source commit and the
+`legacy/` tree it produced, and `legacy_frozen.sh` admits an addition only as a byte-for-byte move of
+a root file that is gone from the root. It judges every step from the frozen tree through each sweep
+tree to the current `legacy/`, so a swept file is then as frozen as an original one. New controls
+cover a valid move, a missing sweep line, a copy left at the root, a modified copy, a mode change, a
+file with no root original, an edit of a frozen file, a later edit or open-row deletion of a swept
+file, a sweep commit outside HEAD's history, a sweep line without its tree and a path git would
+C-quote.
 
 This sweep moved the old bug ledger's disposition, the landing audit, the finished move tooling
 (`legacy_move.sh`, `move_prereqs.py`) and the answered proposals `IDEAS.md` and `MERGED.md`; the site

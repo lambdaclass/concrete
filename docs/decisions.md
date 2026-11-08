@@ -995,10 +995,14 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
   keep the new things under the root"; 2026-11-08: "ok to 1" and "ok to 2"). A file stays at the root
   only if it belongs to the new compiler, the new spec or the current project docs, or if landing or
   CI on main would break without it; everything else moves under `legacy/` at the same path. "ok to
-  1" approves how a file enters the frozen `legacy/`: `scripts/checks/legacy.lock` gains one
-  `sweep <commit>` line per sweep, and `legacy_frozen.sh` admits an addition `legacy/P` only if `P`
+  1" approves how a file enters the frozen `legacy/`: `scripts/checks/legacy.lock` gains one line per
+  sweep naming its source commit, and `legacy_frozen.sh` admits an addition `legacy/P` only if `P`
   has the same mode and content at a sweep commit and no longer exists at the root; every other
-  addition, and every edit of a `legacy/` file, is still refused. A root file whose frozen `legacy/`
+  addition, and every edit of a `legacy/` file, is still refused. So that a swept file is held to
+  the same rule after its sweep, the line (`sweep <commit> <tree>`) also records the `legacy/` tree
+  the sweep produced, and the check judges each step from the frozen tree through each sweep tree to
+  the current `legacy/`: a later edit of a swept file is refused, and its deletion needs a resolved
+  RETENTION.tsv row, as for a frozen file. A root file whose frozen `legacy/`
   copy differs only by the move's mechanical link and path rewrites is removed from the root
   instead, as on 2026-11-06. "ok to 2" is recorded under P21.
 - <a id="decided-2026-11-07-cleanup"></a>**The documentation and tooling cleanup** (owner,
