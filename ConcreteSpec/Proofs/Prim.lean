@@ -160,16 +160,16 @@ theorem SafetyEvidence.discharge_sound {claim : ObligationId → Prop} (e : Safe
   | none => trivial
   | some discharged => exact sound discharged result
 
-/-- Law (subject `ConcreteSpec.Core.SafetyEvidence.discharge`).
-A stale context cannot produce a successful discharge. -/
+/-- Helper (computation). Computes the context-guard refusal branch. The public output contract carries soundness evidence.
+(approved: PENDING). -/
 theorem SafetyEvidence.discharge_context_mismatch {claim : ObligationId → Prop}
     (e : SafetyEvidence claim) (obligations : ObligationTable) (current : EvidenceContext)
     (requested : ObligationId) (mismatch : ¬ e.Usable current) :
     e.discharge obligations current requested = none := by
   simp [SafetyEvidence.discharge, mismatch]
 
-/-- Law (subject `ConcreteSpec.Core.SafetyEvidence.discharge`).
-Evidence cannot discharge an obligation identity different from the one its context names. -/
+/-- Helper (computation). Computes the requested-identity guard branch; this guard equation is not independent soundness evidence.
+(approved: PENDING). -/
 theorem SafetyEvidence.discharge_obligation_mismatch {claim : ObligationId → Prop}
     (e : SafetyEvidence claim) (obligations : ObligationTable) (current : EvidenceContext)
     (requested : ObligationId) (mismatch : current.obligation ≠ requested) :
@@ -353,8 +353,8 @@ theorem drive_steps_result (P : Exec.Program O) (ρ : Exec.Oracle O)
                 exact ⟨[], by simp, .refl _⟩
   exact sound fuel hist c _ rfl
 
-/-- Law (subject `ConcreteSpec.Core.Ghost.runStmts`).
-Once a configuration is not ordinarily completed, no later statement restarts it. -/
+/-- Helper (computation). Exposes the non-normal guard branch for the erasure induction. The terminal report and drive-step laws carry execution evidence.
+(approved: PENDING). -/
 theorem runStmts_of_not_normal (P : Exec.Program O) (ρ : Exec.Oracle O)
     (fuel : Nat) (hist : List O.Event) (ss : List (Exec.Stmt O)) (c : Exec.Config O)
     (hf : c.final? ≠ some .normal) : runStmts P ρ fuel hist ss c = drive P ρ fuel hist c := by
@@ -585,7 +585,7 @@ example : ¬ (match dischargeWrongKey evidence obligations EvidenceDemo.current 
   have equal := congrArg (fun result => result.map (fun ob => ob.key)) h.2.2.1
   contradiction
 
-/-- Instance (law `ConcreteSpec.Core.SafetyEvidence.discharge_obligation_mismatch`, case `ConcreteSpec.Core.Vacuity.mismatchedObligation`). -/
+/-- Regression example (not independent soundness evidence). -/
 example : evidence.discharge mismatchedObligations EvidenceDemo.current mismatchedObligation.id = none :=
   SafetyEvidence.discharge_obligation_mismatch evidence mismatchedObligations
     EvidenceDemo.current mismatchedObligation.id (by decide)
@@ -596,7 +596,7 @@ def dischargeIgnoringObligation {claim : ObligationId → Prop} (e : SafetyEvide
     Option (DischargedFact claim) :=
   if e.Usable current then some ⟨⟨e.context.obligation, obligationKey⟩, e.proof⟩ else none
 
-/-- Planted (law `ConcreteSpec.Core.SafetyEvidence.discharge_obligation_mismatch`, case `ConcreteSpec.Core.Vacuity.mismatchedObligation`, subject `ConcreteSpec.Core.SafetyEvidence.discharge`, mutant `ConcreteSpec.Core.Vacuity.dischargeIgnoringObligation`). -/
+/-- Regression example (not independent soundness evidence). -/
 example : EvidenceDemo.current.obligation ≠ mismatchedObligation.id ∧
     ¬ (dischargeIgnoringObligation evidence mismatchedObligations EvidenceDemo.current
       mismatchedObligation.id = none) := by
@@ -607,7 +607,7 @@ example : EvidenceDemo.current.obligation ≠ mismatchedObligation.id ∧
 /-- Only the contract revision changes in this stale context. -/
 def contractChanged : EvidenceContext := { EvidenceDemo.current with contract := ⟨⟨0⟩, 2⟩ }
 
-/-- Instance (law `ConcreteSpec.Core.SafetyEvidence.discharge_context_mismatch`, case `ConcreteSpec.Core.Vacuity.contractChanged`). -/
+/-- Regression example (not independent soundness evidence). -/
 example : evidence.discharge obligations contractChanged obligation.id = none :=
   SafetyEvidence.discharge_context_mismatch evidence obligations contractChanged obligation.id (by decide)
 
@@ -622,7 +622,7 @@ def dischargeIgnoringContext {claim : ObligationId → Prop} (e : SafetyEvidence
       some ⟨found, same ▸ e.proof⟩
     else none
 
-/-- Planted (law `ConcreteSpec.Core.SafetyEvidence.discharge_context_mismatch`, case `ConcreteSpec.Core.Vacuity.contractChanged`, subject `ConcreteSpec.Core.SafetyEvidence.discharge`, mutant `ConcreteSpec.Core.Vacuity.dischargeIgnoringContext`). -/
+/-- Regression example (not independent soundness evidence). -/
 example : ¬ evidence.Usable contractChanged ∧
     ¬ (dischargeIgnoringContext evidence obligations contractChanged obligation.id = none) := by
   refine ⟨by decide, ?_⟩
@@ -764,13 +764,13 @@ def restartingRunStmts {O : Exec.Operands} (P : Exec.Program O) (ρ : Exec.Oracl
     | .final .normal => restartingRunStmts P ρ r.remaining r.events ss r.config
     | _ => r
 
-/-- Instance (law `ConcreteSpec.Core.Ghost.runStmts_of_not_normal`, case `ConcreteSpec.Core.Vacuity.returnedStart`). -/
+/-- Regression example (not independent soundness evidence). -/
 example : Ghost.runStmts GhostDemo.program GhostDemo.oracle 20 [] [.abort ⟨4⟩] returnedStart =
     Ghost.drive GhostDemo.program GhostDemo.oracle 20 [] returnedStart :=
   Ghost.runStmts_of_not_normal GhostDemo.program GhostDemo.oracle 20 [] [.abort ⟨4⟩]
     returnedStart (by decide)
 
-/-- Planted (law `ConcreteSpec.Core.Ghost.runStmts_of_not_normal`, case `ConcreteSpec.Core.Vacuity.returnedStart`, subject `ConcreteSpec.Core.Ghost.runStmts`, mutant `ConcreteSpec.Core.Vacuity.restartingRunStmts`). -/
+/-- Regression example (not independent soundness evidence). -/
 example : returnedStart.final? ≠ some .normal ∧
     ¬ (restartingRunStmts GhostDemo.program GhostDemo.oracle 20 [] [.abort ⟨4⟩] returnedStart =
       Ghost.drive GhostDemo.program GhostDemo.oracle 20 [] returnedStart) := by

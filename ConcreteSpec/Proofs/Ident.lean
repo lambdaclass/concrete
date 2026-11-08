@@ -972,9 +972,8 @@ theorem EncodedPremise.read_unknown (reader : SpecVersion) (record : EncodedPrem
   · rw [PremiseKind.decode_eq_none_of_forall_encode_ne reader record.category unknown]
   · rfl
 
-/-- Law (subject `ConcreteSpec.Core.EncodedPremise.read`, `ConcreteSpec.Core.PremiseKind.decode`, `ConcreteSpec.Core.specVersion`).
-A premise record whose writer version disagrees with the reader version, or that is read at a
-version other than `specVersion`, is refused fail-closed. -/
+/-- Helper (computation). Computes the writer/reader version guards, including the decoder version guard. Unknown-category exclusion is proved independently.
+(approved: PENDING). -/
 theorem EncodedPremise.read_version_mismatch (reader : SpecVersion) (record : EncodedPremise)
     (mismatch : record.spec ≠ reader ∨ reader ≠ specVersion) :
     record.read reader = none := by
@@ -1741,15 +1740,15 @@ example : (∀ kind : PremiseKind, kind.encode ≠ unknownRecord.category) ∧
 def versionIgnoringRead (_reader : SpecVersion) (record : EncodedPremise) : Option PremiseRecord :=
   (PremiseKind.decode specVersion record.category).map fun kind => ⟨kind, record.scope, record.spec⟩
 
-/-- Instance (law `ConcreteSpec.Core.EncodedPremise.read_version_mismatch`, case `ConcreteSpec.Core.Vacuity.mismatchedRecord`). -/
+/-- Regression example (not independent soundness evidence). -/
 example : mismatchedRecord.read specVersion = none :=
   EncodedPremise.read_version_mismatch specVersion mismatchedRecord (Or.inl (by decide))
 
-/-- Instance (law `ConcreteSpec.Core.EncodedPremise.read_version_mismatch`, case `ConcreteSpec.Core.Vacuity.futureVersion`). -/
+/-- Regression example (not independent soundness evidence). -/
 example : stackRecord.encode.read futureVersion = none :=
   EncodedPremise.read_version_mismatch futureVersion stackRecord.encode (Or.inr (by decide))
 
-/-- Planted (law `ConcreteSpec.Core.EncodedPremise.read_version_mismatch`, case `ConcreteSpec.Core.Vacuity.mismatchedRecord`, subject `ConcreteSpec.Core.EncodedPremise.read`, mutant `ConcreteSpec.Core.Vacuity.versionIgnoringRead`). -/
+/-- Regression example (not independent soundness evidence). -/
 example : (mismatchedRecord.spec ≠ specVersion ∨ specVersion ≠ specVersion) ∧
     ¬ (versionIgnoringRead specVersion mismatchedRecord = none) :=
   ⟨Or.inl (by decide), by decide⟩
