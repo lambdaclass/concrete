@@ -29,5 +29,5 @@ revision note.
 - **ROADMAP:** R-0625 (the spelling round, before R-0622), R-0626 (the `Process` foreign-declaration
   audit) and R-0627 (the `assume` replacement, shown before removal) are added. The foundation rows
   gain the trap names, the typed first parameter, the mathematical-arithmetic marker, compile-time
-  constants, dead-store refusal and the `#[depends]` check. The slice and std tables follow the
-  decisions, and R-0618 takes the mixed-class cap and the sign-off path.
+  constants, dead-store refusal and the `#[depends]` check. The slice table follows the decisions;
+  the std introduction leaves the placement revisions to the separate std placement round; and R-0618 takes the mixed-class cap and the sign-off path.
