@@ -492,12 +492,110 @@ example : ¬ ∃ (dst : Option Var) (result : Nat) (caller : AList Var Nat)
   rw [hk] at hframes
   simp [c1BadExit] at hframes
 
-/-- A complete C1 call has exactly the frame law supplied by its callee contract. -/
+/-- Helper (congruence). Widen static permissions without changing an execution.
+(approved: PENDING) -/
+theorem preserves_covers {before after : State} {outer inner : Footprint}
+    (h : inner.Preserves before after) (cover : outer.Covers inner) :
+    outer.Preserves before after := by
+  refine ⟨?_, ?_, ?_⟩
+  · intro b i x hx ho
+    exact h.1 b i x hx (cover.1 b i ho)
+  · intro b x hx ho
+    exact h.2.1 b x hx (cover.2.1 b ho)
+  · intro p hp
+    exact h.2.2 p (cover.2.2 p hp)
+
+/-- Helper (congruence). Compose two executions with the same advertised permission set.
+(approved: PENDING) -/
+theorem preserves_trans {before middle after : State} {f : Footprint}
+    (h₁ : f.Preserves before middle) (h₂ : f.Preserves middle after) :
+    f.Preserves before after := by
+  apply preserves_covers (preserves_seq h₁ h₂)
+  refine ⟨?_, ?_, ?_⟩
+  · intro b i h r hr
+    simp only [Footprint.union, List.mem_append] at hr
+    exact hr.elim (h r) (h r)
+  · intro b h
+    simpa [Footprint.BlockOutside, Footprint.union] using h
+  · intro p h
+    simpa [Footprint.PlaceOutside, Footprint.union] using h
+
+/-- Law (subject `ConcreteSpec.Core.Frame.c4Execution`).
+An independently described C4 execution preserves everything outside its computed footprint. -/
+theorem c4_effects_frame (tgt : Target) :
+    ∀ before f after, c4Execution tgt before f after → f.Preserves before after := by
+  intro before f after h
+  induction h with
+  | idle st => exact preserves_refl st
+  | set st p cell => exact set_frame st p cell
+  | store st m' p bs align access hw ha hs =>
+    exact store_frame tgt st hw m' p bs align access ha hs
+  | free st b block m' hb hf => exact free_frame st b block m' hb hf
+  | expose st m' p b block hp hb he => exact expose_frame st m' p b block hp hb he
+  | alloc st space base size align b m' hw ha =>
+    exact alloc_frame tgt st hw space base size align b m' ha
+  | seq _ _ ih₁ ih₂ => exact preserves_seq ih₁ ih₂
+
+/-- Instance (law `ConcreteSpec.Core.Frame.c4_effects_frame`, case `byte_store`). -/
+example : ∀ before f after, c4Execution linuxX8664 before f after →
+    f.Preserves before after := c4_effects_frame linuxX8664
+
+/-- Accepted: a nonempty C4 execution changes byte 0 and keeps the unrelated byte 1. -/
+example : c4Execution linuxX8664 metadataStoreBefore (.byte ⟨⟨0⟩, 0, 1⟩)
+    metadataStoreAfter :=
+  C4Effects.store metadataStoreBefore metadataStoreAfter.memory metadataStorePtr [.init 7 none]
+    1 (some (some (⟨0⟩, 0))) metadataStoreWellFormed (by decide) rfl
+
+/-- A planted effect rule admits an undeclared mutation. -/
+def unframedExecution (_tgt : Target) (_before : State) (_f : Footprint) (_after : State) : Prop :=
+  True
+
+/-- Planted (law `ConcreteSpec.Core.Frame.c4_effects_frame`, case `byte_store`,
+subject `ConcreteSpec.Core.Frame.c4Execution`, mutant `ConcreteSpec.Core.Frame.unframedExecution`). -/
+example : ¬ (∀ before f after, unframedExecution linuxX8664 before f after →
+    f.Preserves before after) := by
+  intro h
+  have hm := (h metadataStoreBefore (.byte ⟨⟨0⟩, 0, 1⟩) metadataStoreBadAfter trivial).2.1
+    ⟨0⟩ metadataStoreBlock (by decide) (by decide)
+  simp [metadataStoreBadAfter, metadataStoreAfter, metadataStoreBefore, metadataStoreBlock,
+    blockMetadata, Memory.block, Memory.modify, AList.update, AList.lookup] at hm
+
+/-- Helper (inversion). Induction over actual C1 steps composes their independently justified
+C4 effects, including request/answer transitions. (approved: PENDING) -/
+theorem c1_steps_frame {O : Exec.Operands} {P : Exec.Program O} {project : O.Store → State}
+    {tgt : Target} {f : Footprint} (implementation : C1EffectImplementation O P project tgt f)
+    {entry exit : Exec.Config O} {trace : List O.Event} (steps : Exec.Steps P entry trace exit) :
+    f.Preserves (project entry.store) (project exit.store) := by
+  induction steps with
+  | refl entry =>
+    apply preserves_covers (preserves_refl (project entry.store))
+    refine ⟨?_, ?_, ?_⟩
+    · intro b i ho r hr
+      cases hr
+    · intro b ho hr
+      cases hr
+    · intro p ho hr
+      cases hr
+  | @step before label middle trace after step _ ih =>
+    obtain ⟨effectFootprint, effects, cover⟩ := implementation before label middle step
+    exact preserves_trans (preserves_covers (c4_effects_frame tgt _ _ _ effects) cover) ih
+
+/-- Law (subject `ConcreteSpec.Core.Frame.C1Call`).
+Complete-call framing follows from the callee's actual steps and their C4 decompositions,
+including its final return/pop. The call contract is the conclusion, never a premise. -/
 theorem c1_call_frame {O : Exec.Operands} {f : FnId} {P : Exec.Program O}
-    {project : O.Store → State} (contract : C1CallContract O f P project)
-    {entry exit : Exec.Config O} (h : C1Call O f P entry exit) :
-    contract.footprint.Preserves (project entry.store) (project exit.store) :=
-  contract.frame h
+    {project : O.Store → State} {tgt : Target} {advertised : Footprint}
+    (implementation : C1EffectImplementation O P project tgt advertised) :
+    C1Frames O f P project advertised := by
+  intro entry exit call
+  obtain ⟨fn, dst, caller, k, args, site, vs, st, stArgs, stEnter, stReturn, callee, tr, result,
+    _hf, _he, _hv, _hlen, _hl, returned⟩ := call
+  rcases returned with ⟨steps, pop⟩ | ⟨_unit, steps, pop⟩
+  all_goals
+    have framedPrefix := c1_steps_frame implementation steps
+    obtain ⟨effectFootprint, effects, cover⟩ := implementation _ _ _ (.silent pop)
+    exact preserves_trans framedPrefix (preserves_covers (c4_effects_frame tgt _ _ _ effects) cover)
+
 
 namespace ABI
 

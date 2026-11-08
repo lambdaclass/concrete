@@ -14,8 +14,8 @@ A fresh allocation has no old bytes to preserve; its fresh identity makes it dis
 range in an old block. Byte contents include initialization and pointer fragments, so preserving a
 byte preserves all three.
 
-Sequential composition unions footprints. A C1 call contract supplies the callee footprint and its
-frame law for the complete call, from argument evaluation and entry instrumentation through cleanup,
+Sequential composition unions footprints. A C1 call contract specifies the callee footprint and its
+required frame law. Local C4 effect derivations establish it for the complete call, from argument evaluation and entry instrumentation through cleanup,
 leave instrumentation and result binding. C1 return frames restore the caller's locals; shared hybrid
 state is not rolled back.
 
@@ -142,6 +142,58 @@ def C1Call (O : Exec.Operands) (f : FnId) (P : Exec.Program O)
      (result = O.unitVal ∧ Exec.Steps P entry tr
         ⟨.done, callee, stReturn, .ret dst caller :: k⟩ ∧
       Exec.step P ⟨.done, callee, stReturn, .ret dst caller :: k⟩ = some (.next exit)))
+
+/-- Static inclusion of effect permissions, expressed on the protected locations. This relates
+footprints only; it asserts nothing about the states of an execution. -/
+def Footprint.Covers (outer inner : Footprint) : Prop :=
+  (∀ b i, outer.ByteOutside b i → inner.ByteOutside b i) ∧
+  (∀ b, outer.BlockOutside b → inner.BlockOutside b) ∧
+  (∀ p, outer.PlaceOutside p → inner.PlaceOutside p)
+
+/-- Independently described C4 effects. Constructors record successful operations, including
+argument evaluation and lifecycle effects when used to implement a C1 transition. No constructor
+assumes a frame property. Sequential effects retain their individual footprints. -/
+inductive C4Effects (tgt : Target) : State → Footprint → State → Prop where
+  | idle (st : State) : C4Effects tgt st .empty st
+  | set (st : State) (p : Place) (cell : Cell) :
+      C4Effects tgt st (.place p) (st.set p cell)
+  | store (st : State) (m' : Memory) (p : Ptr) (bs : List MByte) (align : Nat)
+      (access : Option (Option (MemBlockId × Nat))) :
+      st.memory.WellFormed tgt → st.memory.access tgt p bs.length align = access →
+      st.memory.store tgt p bs align = some m' →
+      C4Effects tgt st (accessFootprint access bs.length) { st with memory := m' }
+  | free (st : State) (b : MemBlockId) (block : Block) (m' : Memory) :
+      st.memory.block b = some block → st.memory.free b = some m' →
+      C4Effects tgt st (.block b) { st with memory := m' }
+  | expose (st : State) (m' : Memory) (p : Ptr) (b : MemBlockId) (block : Block) :
+      p.prov = some b → st.memory.block b = some block → st.memory.expose p = some m' →
+      C4Effects tgt st (.block b) { st with memory := m' }
+  | alloc (st : State) (space : AddrSpace) (base size align : Nat) (b : MemBlockId) (m' : Memory) :
+      st.memory.WellFormed tgt → st.memory.alloc tgt space base size align = .ok (b, m') →
+      C4Effects tgt st (.byte (fullBlock b size)) { st with memory := m' }
+  | seq {before middle after : State} {f g : Footprint} :
+      C4Effects tgt before f middle → C4Effects tgt middle g after →
+      C4Effects tgt before (f.union g) after
+
+/-- The behavior described by a C4 effect derivation, independently of frame preservation. -/
+def c4Execution (tgt : Target) (before : State) (f : Footprint) (after : State) : Prop :=
+  C4Effects tgt before f after
+
+/-- A local implementation certificate for every actual C1 transition, including primitive
+answers, argument evaluation, lifecycle instrumentation, cleanup and result binding. The evidence
+is a finite decomposition into C4 operations, with static permission inclusion. It does not
+assume preservation or the conclusion of any complete-call law. -/
+def C1EffectImplementation (O : Exec.Operands) (P : Exec.Program O) (project : O.Store → State)
+    (tgt : Target) (advertised : Footprint) : Prop :=
+  ∀ before label after, Exec.Step P before label after →
+    ∃ effectFootprint, c4Execution tgt (project before.store) effectFootprint (project after.store) ∧
+      advertised.Covers effectFootprint
+
+/-- The specification of complete-call framing, distinct from local implementation evidence. -/
+def C1Frames (O : Exec.Operands) (f : FnId) (P : Exec.Program O)
+    (project : O.Store → State) (advertised : Footprint) : Prop :=
+  ∀ entry exit, C1Call O f P entry exit →
+    advertised.Preserves (project entry.store) (project exit.store)
 
 /-- The footprint contract of one C1 callee. `project` exposes the hybrid part of the operand
 instance's shared state; ownership instrumentation need not have a footprint. Every complete call of
