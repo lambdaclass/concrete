@@ -22,7 +22,7 @@ work=$(mktemp -d)
 # On every exit, the bounded-run summary (recovered and INCOMPLETE runs) goes to stdout before the
 # scratch directory is removed, and a gate that would pass with an INCOMPLETE run exits 3 instead.
 trap 'rc=$?; bounded_summary || true
-  if [ "$rc" = 0 ] && grep -qs "^incomplete\\|^runner-failed" "${BOUNDED_LOG:-/nonexistent}"; then
+  if [ "$rc" = 0 ] && grep -Eqs "^(incomplete|runner-failed)" "${BOUNDED_LOG:-/nonexistent}"; then
     echo "INCOMPLETE: a bounded run timed out twice; not a pass"; rc=3
   fi
   rm -rf "${work:?}"; exit "$rc"' EXIT

@@ -384,7 +384,7 @@ theorem compile_correct (F : FrontendPremises) {B N T} (P : NativePremises B N T
 1. `compile_spec`: `compile T src = .ok out` implies:
    - `Lex.lex`, `Parse.parse` and `Elab.elab` succeed and produce `out.p`;
    - `Fragment.core s0 out.p` and `check out.p = true`;
-   - `out.tokens = admit out.p`, `out.mir = lower out.p out.tokens`, `out.mem = memory out.mir`, `out.bir = ssa out.mem`, `out.ll = LLVM.print out.bir` and `LCB.emit out.bir = .ok out.lcb` (the adapted body with `out.bir.sites`);
+   - `out.tokens = admit out.p`, `out.mir = lower out.p out.tokens`, `out.mem = memory out.mir`, `out.bir = ssa out.mem`, `out.ll = LLVM.print out.bir` and `LCB.emit out.bir = .ok (out.lcb, out.bir.sites)`;
    - `out.bir.frameSlots ≤ T.maxSlots`.
 2. `F.lex`, `F.parse` and `elab_sound` give `Denotes src out.p`. `check_iff` gives `Checked`.
 3. `slice0_exits` gives `run … = .exit c` with `c < 256`; `run_exit_behaviour` then gives `Core.behaviour = .exited c`.

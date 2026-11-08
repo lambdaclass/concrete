@@ -8,6 +8,7 @@
 #     every build and analysis command is capped whatever the gate's cap;
 #   bounded SECS CMD...: CMD under capped and bounded_run (the gates' only time bound);
 #   root, work (removed on exit), lcb, target, emitter (the Lean emitter command, an array);
+#   expected_timeout CMD...: CMD with its bounded runs logged apart (a control expecting a timeout);
 #   observe EXE OUT SECS RETRY [MEM_MB [ENV...]]: run EXE under bounded_run (and limited_exec.sh
 #     MEM_MB, default 1024) with ENV assignments; OUT.status (status or "incomplete"),
 #     OUT.stdout, OUT.stderr;
@@ -23,7 +24,7 @@ work=$(mktemp -d)
 # with a command's stderr) goes to the gate's stdout before the scratch directory is removed, and a
 # gate that would pass with an INCOMPLETE run exits 3 instead (INCOMPLETE is never a pass).
 trap 'rc=$?; bounded_summary || true
-  if [ "$rc" = 0 ] && grep -qs "^incomplete\\|^runner-failed" "${BOUNDED_LOG:-/nonexistent}"; then
+  if [ "$rc" = 0 ] && grep -Eqs "^(incomplete|runner-failed)" "${BOUNDED_LOG:-/nonexistent}"; then
     echo "INCOMPLETE: a bounded run timed out twice; not a pass"; rc=3
   fi
   rm -rf "${work:?}"; exit "$rc"' EXIT
@@ -59,6 +60,14 @@ esac
 emit_secs=120
 native_secs=300
 emitter=(bounded "$emit_secs" lake env lean --run scripts/checks/slice0_bir.lean)
+
+# expected_timeout CMD...: run CMD (a function or command) with its bounded runs logged apart, for
+# a control whose expected observation IS a timeout (the diverging body): its INCOMPLETE runs are
+# the observation that CMD checks, not an incomplete gate, so the exit trap does not count them.
+expected_timeout() {
+  local BOUNDED_LOG="$work/expected-timeouts.log"
+  "$@"
+}
 
 observe() {
   local rc=0 mem=${5:-1024}

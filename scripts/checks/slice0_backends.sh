@@ -44,7 +44,7 @@ for name in $names; do
   examples=$((examples + 1))
 done
 "${emitter[@]}" loop "$work/ctl/loop" "$target"
-check control-loop "$work/ctl/loop" 1 1
+expected_timeout check control-loop "$work/ctl/loop" 1 1
 "${emitter[@]}" invalid "$work/ctl/invalid" "$target"
 check control-invalid-word "$work/ctl/invalid" 10 20
 
