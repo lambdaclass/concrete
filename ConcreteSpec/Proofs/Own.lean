@@ -208,4 +208,98 @@ theorem life_erasure {σ : Type} (types : Var → Option Descriptor) (e : Exec.L
   subst t
   rfl
 
+/-- The next identity has never belonged to any currently active loan. Combined with the
+unchanged/incremented supply laws, ending a loan cannot make its identity fresh again. -/
+theorem nextLoan_fresh (s : State) (hs : WellFormed s) (l : Loan) (hl : l ∈ s.loans) :
+    l.id ≠ LoanId.mk s.nextLoan := by
+  intro he
+  have hb := (hs.2.2.2.1 l hl).1
+  rw [he] at hb
+  exact Nat.lt_irrefl _ hb
+
+/-- A successful borrow issues the old supply and advances it exactly once. -/
+theorem borrow_birth (s t : State) (p : Hybrid.Place) (path : List Projection)
+    (m : Mode) (h : borrow s p path m = some t) :
+    t.nextLoan = s.nextLoan + 1 ∧
+      ∃ l ∈ t.loans, l.id = ⟨s.nextLoan⟩ ∧ l.root = p ∧ l.path = path := by
+  unfold borrow at h
+  obtain ⟨f, _, hh⟩ := Option.bind_eq_some_iff.mp h
+  split at hh
+  · obtain ⟨he, _⟩ := (validate_iff _ _).mp hh
+    subst t
+    exact ⟨rfl, _, List.mem_cons_self, rfl, rfl, rfl⟩
+  · contradiction
+
+/-- A reborrow keeps the original root and extends the parent's projection. -/
+theorem reborrow_birth (s t : State) (i : LoanId) (suffix : List Projection)
+    (m : Mode) (activation : Nat) (h : reborrowAt s i suffix m activation = some t) :
+    t.nextLoan = s.nextLoan + 1 ∧ ∃ a l, loan s i = some a ∧ l ∈ t.loans ∧
+      l.id = ⟨s.nextLoan⟩ ∧ l.root = a.root ∧ l.path = a.path ++ suffix ∧ l.parent = some i := by
+  unfold reborrowAt at h
+  obtain ⟨a, ha, hh⟩ := Option.bind_eq_some_iff.mp h
+  split at hh
+  · obtain ⟨he, _⟩ := (validate_iff _ _).mp hh
+    subst t
+    exact ⟨rfl, a, _, ha, List.mem_cons_self, rfl, rfl, rfl, rfl⟩
+  · contradiction
+
+private theorem endLoan_frames (s t : State) (i : LoanId) (h : endLoan s i = some t) :
+    t.frames = s.frames := by
+  unfold endLoan at h
+  obtain ⟨_, _, hh⟩ := Option.bind_eq_some_iff.mp h
+  split at hh
+  · contradiction
+  · obtain ⟨he, _⟩ := (validate_iff _ _).mp hh
+    subst t
+    rfl
+
+private theorem fold_frames {α : Type} (f : State → α → Option State)
+    (hf : ∀ s a t, f s a = some t → t.frames = s.frames) (xs : List α)
+    (s t : State) (h : xs.foldlM f s = some t) : t.frames = s.frames := by
+  induction xs generalizing s with
+  | nil => simp at h; subst t; rfl
+  | cons a xs ih =>
+    simp only [List.foldlM_cons] at h
+    obtain ⟨u, hu, hh⟩ := Option.bind_eq_some_iff.mp h
+    exact (ih u hh).trans (hf s a u hu)
+
+private theorem drop_absent (s t : State) (xs : List Var) (f : Activation)
+    (hf : s.frames.head? = some f) (h : drop xs s = some t)
+    (p : Hybrid.Place) (hp : p ∈ List.map Prod.snd (f.locals.filter fun e => decide (e.1 ∈ xs))) :
+    ∀ x ∈ t.slots, x.place ≠ p := by
+  unfold drop at h
+  rw [hf] at h
+  dsimp at h
+  split at h
+  · obtain ⟨he, _⟩ := (validate_iff _ _).mp h
+    subst t
+    intro x hx he
+    simp only [List.mem_filter, decide_eq_true_eq] at hx
+    exact hx.2 (he ▸ hp)
+  · contradiction
+
+/-- On leaving a call, no active loan remains rooted at any of that callee's locals.
+Outer owners passed downward are not locals; their parent loans remain usable after return. -/
+theorem leave_no_local_loan (s t : State) (f : Activation)
+    (hf : s.frames.head? = some f) (h : leave s = some t)
+    (entry : Var × Hybrid.Place) (he : entry ∈ f.locals)
+    (l : Loan) (hl : l ∈ t.loans) : l.root ≠ entry.2 := by
+  have ht := leave_preserves s t h
+  unfold leave at h
+  rw [hf] at h
+  dsimp at h
+  obtain ⟨u, hu, hh⟩ := Option.bind_eq_some_iff.mp h
+  have hframes := fold_frames _ (fun s l t hh => endLoan_frames s t l.id hh) _ s u hu
+  obtain ⟨v, hv, hh⟩ := Option.bind_eq_some_iff.mp hh
+  obtain ⟨heq, _⟩ := (validate_iff _ _).mp hh
+  have hp : entry.2 ∈ List.map Prod.snd (f.locals.filter fun e =>
+      decide (e.1 ∈ List.map Prod.fst f.locals)) := by
+    apply List.mem_map.mpr
+    exact ⟨entry, List.mem_filter.mpr ⟨he, by simp; exact ⟨entry.2, he⟩⟩, rfl⟩
+  have habsent := drop_absent u v _ f (hframes ▸ hf) hv entry.2 hp
+  intro hroot
+  obtain ⟨x, hx, hxroot, _⟩ := loan_has_owned_root t ht l hl
+  have hxv : x ∈ v.slots := by rw [← heq] at hx; exact hx
+  exact habsent x hxv (hxroot.trans hroot)
+
 end ConcreteSpec.Core.Own
