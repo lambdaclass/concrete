@@ -67,6 +67,7 @@ Each row records a decision and its reason. A language rule itself is its Lean d
 - The shared foundation is written and frozen in Lean first, then each slice adds its rules ([row](#decided-2026-11-07-foundation-first)).
 - The Lean foundation, contracts C1–C10, and the answers to its sixteen questions ([row](#decided-2026-11-08-foundation)).
 - A std-per-slice table in the roadmap; no user-guide chapter per slice for now; the written grammar before the parser; a speed target against C at slice 16 ([row](#decided-2026-11-08-std-table)).
+- Capabilities stay as decided, `with(...)` permission sets plus grant values; confirmed, no revision ([row](#decided-2026-11-08-capabilities-kept)).
 - Every branch gets an agy review too ([row](#decided-project-review)).
 - Eleven plan and process decisions: UBSan dropped, a complete adapter theorem, smaller landing scripts, Claude's quota on the critical path, the front end now, one decisions writer, risk-capped reviews, one clones folder, a later no-libc runtime, a compile-speed budget and the termination wording ([row](#decided-2026-11-08-eleven)).
 
@@ -1149,6 +1150,15 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
   <a id="decided-2026-11-08-speed-target"></a>speed and size stay report-only until the first real
   showcase (grep, slice 16); then a performance target against C is set from measured data, as an
   owner decision (R-0623).
+- <a id="decided-2026-11-08-capabilities-kept"></a>**Capabilities stay as decided: `with(...)` permission
+  sets plus grant values** (owner, 2026-11-08: "i don't see an isue with noisier if it's clearer").
+  This confirms the existing design with no revision: the [authority rules](#decided-2026-11-02-authority)
+  and the Q5 and Q7 rows stand as written, and foundation contract C5 is written to them. The
+  answer closes a comparison with a capabilities-as-values-only (object-capability) model, in
+  which all four reviewing models recommended keeping today's design, because `with(...)` is the
+  checked ceiling in a function's signature when structs own capabilities. Follow-up for the
+  allocation slice: whether destroying a collection still needs `with(Alloc)` when its release
+  metadata travels with it (R-0624, raised by agy).
 - <a id="decided-project-spark-2026-11-06"></a>**What Concrete takes from SPARK** (owner, 2026-11-06: "ok do everything", after Claude, Codex, agy and Kimi chose unanimously; the
   [review](proposals/SPARK.md) items 1, 2, 3, 6, 7, 9 and 10).
   - *Function values with safety preconditions.* A function whose `#[requires]` is a safety

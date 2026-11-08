@@ -42,3 +42,7 @@
   before the parser, then encoded in Lean as the grammar judgment (R-0622; R-0620 waits for it).
 - "and yes speed target is fine": speed and size stay report-only until grep at slice 16, when the
   owner sets a target against C from measured data (R-0623).
+- Recorded the owner's confirmation that capabilities stay as decided, `with(...)` permission sets
+  plus grant values, with no revision; foundation contract C5 is written to the decided authority
+  rules. Added R-0624: whether destroying a collection needs `with(Alloc)` when its release
+  metadata travels with it, decided with slice 19.
