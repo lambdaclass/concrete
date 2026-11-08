@@ -600,7 +600,7 @@ private theorem slot_unique (xs : List Slot) (hn : (xs.map Slot.place).Nodup)
       · exact False.elim (hn.1 (List.mem_map.mpr ⟨x, hx, he⟩))
       · exact ih hn.2 hx hy
 
-/-- Law (subject `ConcreteSpec.Core.Own.move`). A moved slot cannot have an active loan, since place identities are unique. -/
+/-- Helper (inversion). An invariant consequence using uniqueness of slot identities and owned roots; not an independent transition law. (approved: PENDING). -/
 theorem moved_no_loan (s : State) (hs : WellFormed s) (x : Slot) (hx : x ∈ s.slots)
     (hm : x.status = .moved) (l : Loan) (hl : l ∈ s.loans) : x.place ≠ l.root := by
   intro he
@@ -1127,9 +1127,8 @@ private theorem drop_absent (s t : State) (xs : List Var) (f : Activation)
     exact hx.2 (he ▸ hp)
   · contradiction
 
-/-- Law (subject `ConcreteSpec.Core.Own.leave`). On leaving a call, no active loan remains rooted at any of that callee's locals.
-Outer owners passed downward are not locals; their parent loans remain usable after return. -/
-theorem leave_no_local_loan (s t : State) (f : Activation)
+/-- Helper (inversion). Structural result proof for the operation-result law. (approved: PENDING). -/
+theorem leave_no_local_loan_result (s t : State) (f : Activation)
     (hf : s.frames.head? = some f) (hs : WellFormed s) (h : leave s = some t)
     (entry : Var × Hybrid.Place) (he : entry ∈ f.locals)
     (l : Loan) (hl : l ∈ t.loans) : l.root ≠ entry.2 := by
@@ -1168,10 +1167,8 @@ theorem adoptDown_only_arguments (s t : State) (args : List (Var × LoanId))
     exact guard.2.2.2.1 e he
   · contradiction
 
-/-- Law (subject `ConcreteSpec.Core.Own.leave`). Cleanup removes every slot owned by
- the departing activation from the authoritative slot inventory, even when a variable lookup
- index is incomplete. This follows from the removal operation, not a final invariant scan. -/
-theorem leave_no_activation_slot (s t : State) (f : Activation)
+/-- Helper (inversion). Structural result proof for the operation-result law. (approved: PENDING). -/
+theorem leave_no_activation_slot_result (s t : State) (f : Activation)
     (hf : s.frames.head? = some f) (h : leave s = some t) :
     ∀ x ∈ t.slots, x.activation ≠ f.id := by
   unfold leave at h
@@ -1269,9 +1266,8 @@ theorem passOwner_call_preserves_result (s t : CallState) (p : Hybrid.Place)
         · simpa [List.map_append, fresh l hl] using hs.2.2.2.2 l hl
     · contradiction
 
-/-- Law (subject `ConcreteSpec.Core.Own.passOwner`). Direct owner arguments freeze writes, and mutable arguments also freeze reads,
-from their left-to-right evaluation until their call-duration loan ends. -/
-theorem passOwner_freezes (s t : CallState) (p : Hybrid.Place) (path : List Projection)
+/-- Helper (inversion). Structural result proof for the operation-result law. (approved: PENDING). -/
+theorem passOwner_freezes_result (s t : CallState) (p : Hybrid.Place) (path : List Projection)
     (m : Mode) (x : Var) (h : passOwner s p path m x = some t) :
     ownerAccess t.own p .mutable = false ∧
       (m = .mutable → ownerAccess t.own p .shared = false) := by
@@ -1331,9 +1327,8 @@ private theorem endLoans_retains (xs : List Loan) (l : Loan)
     · cases hu
       exact List.mem_filter.mpr ⟨hl, by simpa using different a List.mem_cons_self⟩
 
-/-- Law (subject `ConcreteSpec.Core.Own.leave`). Returning from a call leaves every loan of another activation unchanged, including
-pre-existing caller loans. It ends only loans assigned to the departing activation. -/
-theorem leave_retains_caller (s t : State) (f : Activation) (l : Loan)
+/-- Helper (inversion). Structural result proof for the operation-result law. (approved: PENDING). -/
+theorem leave_retains_caller_result (s t : State) (f : Activation) (l : Loan)
     (hs : WellFormed s) (hf : s.frames.head? = some f) (hl : l ∈ s.loans)
     (caller : l.activation ≠ f.id) (h : leave s = some t) : l ∈ t.loans := by
   unfold leave at h
@@ -1376,9 +1371,8 @@ private theorem endLoans_removed (xs : List Loan) (s t : State)
       · simpa using hn
       · exact rest b hb
 
-/-- Law (subject `ConcreteSpec.Core.Own.leave`). Every call-duration loan ends on successful return, including direct owner arguments.
-There is no lingering caller parent for such arguments (owner Q2, 2026-11-08). -/
-theorem leave_no_activation_loan (s t : State) (f : Activation)
+/-- Helper (inversion). Structural result proof for the operation-result law. (approved: PENDING). -/
+theorem leave_no_activation_loan_result (s t : State) (f : Activation)
     (hf : s.frames.head? = some f) (h : leave s = some t) :
     ∀ l ∈ t.loans, l.activation ≠ f.id := by
   unfold leave at h
@@ -1626,8 +1620,8 @@ example : (do
 example : ¬ (called.own.loans = caller.own.loans) := by decide
 end DirectArgumentWitnesses
 
-/-- Law (subject `ConcreteSpec.Core.Own.reborrowTo`). Reborrowing preserves actual active destinations, rather than just the supply bound. -/
-theorem reborrowTo_live (s t : State) (i : LoanId) (path : List Projection)
+/-- Helper (inversion). Structural result proof for the operation-result law. (approved: PENDING). -/
+theorem reborrowTo_live_result (s t : State) (i : LoanId) (path : List Projection)
     (m : Mode) (activation : Nat) (hs : LiveDestinations s)
     (h : reborrowTo s i path m activation = some t) : LiveDestinations t := by
   obtain ⟨f, hf, he, _⟩ := reborrowTo_current s t i path m activation h
@@ -1643,9 +1637,8 @@ theorem reborrowTo_live (s t : State) (i : LoanId) (path : List Projection)
     · exact hs l hl
   · contradiction
 
-/-- Law (subject `ConcreteSpec.Core.Own.adoptDown`). Adopting pending arguments preserves active destinations: adopted loans target the
-current callee, and other loans retain their active caller destinations. -/
-theorem adoptDown_live (s t : State) (args : List (Var × LoanId))
+/-- Helper (inversion). Structural result proof for the operation-result law. (approved: PENDING). -/
+theorem adoptDown_live_result (s t : State) (args : List (Var × LoanId))
     (hs : LiveDestinations s) (h : adoptDown s args = some t) : LiveDestinations t := by
   unfold adoptDown at h
   obtain ⟨f, hf, h⟩ := Option.bind_eq_some_iff.mp h
@@ -1684,14 +1677,13 @@ private theorem leave_frames_proj (s t : State) (f : Activation)
       simp
   · contradiction
 
-/-- Law (subject `ConcreteSpec.Core.Own.leave`). Successful return cannot strand a loan targeting the departed frame. Together with
-active destinations on entry, this preserves the lifetime invariant across the pop. -/
-theorem leave_live (s t : State) (f : Activation) (hs : LiveDestinations s)
+/-- Helper (inversion). Structural result proof for the operation-result law. (approved: PENDING). -/
+theorem leave_live_result (s t : State) (f : Activation) (hs : LiveDestinations s)
     (hf : s.frames.head? = some f) (h : leave s = some t) : LiveDestinations t := by
   intro l hl
   have old := life_subset (fun _ => none) .leave s t h l hl
   have live := hs l old
-  have other := leave_no_activation_loan s t f hf h l hl
+  have other := leave_no_activation_loan_result s t f hf h l hl
   rw [leave_frames_proj s t f hf h]
   cases frames : s.frames with
   | nil => simp [frames] at hf
@@ -3886,5 +3878,173 @@ example : CallResult ((fun (s : CallState) (p : Hybrid.Place) (path : List Proje
 example : ((fun (s : CallState) (_p : Hybrid.Place) (_path : List Projection) (_m : Mode) (_x : Var) => CallState.WellFormed s) DirectArgumentWitnesses.caller ⟨1⟩ [.index 3] .mutable DirectArgumentWitnesses.z) ∧ ¬ CallResult ((fun (s : CallState) (p : Hybrid.Place) (path : List Projection) (m : Mode) (x : Var) => passOwnerCorrupt s p path m x) DirectArgumentWitnesses.caller ⟨1⟩ [.index 3] .mutable DirectArgumentWitnesses.z) := by decide
 
 end PreservationEvidence
+
+/-- Apply a semantic postcondition to an actual successful result. -/
+def ResultSatisfies {α : Type} (P : α → Prop) : Option α → Prop
+  | none => True
+  | some t => P t
+instance {α : Type} (P : α → Prop) [∀ t, Decidable (P t)] (r : Option α) :
+    Decidable (ResultSatisfies P r) := by
+  cases r <;> unfold ResultSatisfies <;> infer_instance
+
+/-- Law (subject `ConcreteSpec.Core.Own.leave`). The semantic postcondition holds
+of the actual successful operation result. -/
+theorem leave_no_local_loan (s : State) (f : Activation) (entry : Var × Hybrid.Place) (hf : s.frames.head? = some f) (hs : WellFormed s) (he : entry ∈ f.locals) :
+    ResultSatisfies (fun t : State => ∀ l ∈ t.loans, l.root ≠ entry.2) (leave s) := by
+  cases h : leave s with
+  | none => trivial
+  | some t => exact fun l hl => leave_no_local_loan_result s t f hf hs h entry he l hl
+
+/-- Law (subject `ConcreteSpec.Core.Own.leave`). The semantic postcondition holds
+of the actual successful operation result. -/
+theorem leave_no_activation_slot (s : State) (f : Activation) (hf : s.frames.head? = some f) :
+    ResultSatisfies (fun t : State => ∀ x ∈ t.slots, x.activation ≠ f.id) (leave s) := by
+  cases h : leave s with
+  | none => trivial
+  | some t => exact leave_no_activation_slot_result s t f hf h
+
+/-- Law (subject `ConcreteSpec.Core.Own.passOwner`). The semantic postcondition holds
+of the actual successful operation result. -/
+theorem passOwner_freezes (s : CallState) (p : Hybrid.Place) (path : List Projection) (m : Mode) (x : Var)  :
+    ResultSatisfies (fun t : CallState => ownerAccess t.own p .mutable = false ∧ (m = .mutable → ownerAccess t.own p .shared = false)) (passOwner s p path m x) := by
+  cases h : passOwner s p path m x with
+  | none => trivial
+  | some t => exact passOwner_freezes_result s t p path m x h
+
+/-- Law (subject `ConcreteSpec.Core.Own.leave`). The semantic postcondition holds
+of the actual successful operation result. -/
+theorem leave_retains_caller (s : State) (f : Activation) (l : Loan) (hs : WellFormed s) (hf : s.frames.head? = some f) (hl : l ∈ s.loans) (caller : l.activation ≠ f.id) :
+    ResultSatisfies (fun t : State => l ∈ t.loans) (leave s) := by
+  cases h : leave s with
+  | none => trivial
+  | some t => exact leave_retains_caller_result s t f l hs hf hl caller h
+
+/-- Law (subject `ConcreteSpec.Core.Own.leave`). The semantic postcondition holds
+of the actual successful operation result. -/
+theorem leave_no_activation_loan (s : State) (f : Activation) (hf : s.frames.head? = some f) :
+    ResultSatisfies (fun t : State => ∀ l ∈ t.loans, l.activation ≠ f.id) (leave s) := by
+  cases h : leave s with
+  | none => trivial
+  | some t => exact leave_no_activation_loan_result s t f hf h
+
+/-- Law (subject `ConcreteSpec.Core.Own.reborrowTo`). The semantic postcondition holds
+of the actual successful operation result. -/
+theorem reborrowTo_live (s : State) (i : LoanId) (path : List Projection) (m : Mode) (a : Nat) (hs : LiveDestinations s) :
+    ResultSatisfies (fun t : State => LiveDestinations t) (reborrowTo s i path m a) := by
+  cases h : reborrowTo s i path m a with
+  | none => trivial
+  | some t => exact reborrowTo_live_result s t i path m a hs h
+
+/-- Law (subject `ConcreteSpec.Core.Own.adoptDown`). The semantic postcondition holds
+of the actual successful operation result. -/
+theorem adoptDown_live (s : State) (args : List (Var × LoanId)) (hs : LiveDestinations s) :
+    ResultSatisfies (fun t : State => LiveDestinations t) (adoptDown s args) := by
+  cases h : adoptDown s args with
+  | none => trivial
+  | some t => exact adoptDown_live_result s t args hs h
+
+/-- Law (subject `ConcreteSpec.Core.Own.leave`). The semantic postcondition holds
+of the actual successful operation result. -/
+theorem leave_live (s : State) (f : Activation) (hs : LiveDestinations s) (hf : s.frames.head? = some f) :
+    ResultSatisfies (fun t : State => LiveDestinations t) (leave s) := by
+  cases h : leave s with
+  | none => trivial
+  | some t => exact leave_live_result s t f hs hf h
+
+namespace LifetimeEvidence
+open Examples
+/-- The callee is current, with a pending direct owner argument ready to adopt. -/
+def adoptionInput : State :=
+  (enter types [] DirectArgumentWitnesses.waiting.own).getD initial
+/-- Mutant: return without cleanup. -/
+def leaveIdentity (s : State) : Option State := some s
+/-- Mutant: cleanup indiscriminately ends caller loans too. -/
+def leaveAllLoans (s : State) : Option State :=
+  (leave s).map fun t => { t with loans := [] }
+/-- Mutant: pop the callee but strand its loans. -/
+def leaveStranded (s : State) : Option State := some { s with frames := s.frames.tail }
+/-- Mutant: argument evaluation omits the call-duration freeze. -/
+def passOwnerNoFreeze (s : CallState) (_ : Hybrid.Place) (_ : List Projection)
+    (_ : Mode) (_ : Var) : Option CallState := some s
+/-- Mutant: a fresh reborrow loses its destination frame. -/
+def reborrowToDead (s : State) (i : LoanId) (path : List Projection) (m : Mode) (a : Nat) :=
+  (reborrowTo s i path m a).map fun t => { t with frames := [] }
+/-- Mutant: adoption loses the active call stack. -/
+def adoptDownDead (s : State) (args : List (Var × LoanId)) :=
+  (adoptDown s args).map fun t => { t with frames := [] }
+
+def leave_no_local_loanCase := (RoundThreeWitnesses.localLoan)
+
+/-- Instance (law `ConcreteSpec.Core.Own.leave_no_local_loan`, case `ConcreteSpec.Core.Own.LifetimeEvidence.leave_no_local_loanCase`). -/
+example : ResultSatisfies (fun t : State => ∀ l ∈ t.loans, l.root ≠ ((y, Hybrid.Place.mk 1)).2) (leave (RoundThreeWitnesses.localLoan)) :=
+  @leave_no_local_loan RoundThreeWitnesses.localLoan ⟨1, [(y, ⟨1⟩)], []⟩ (y, ⟨1⟩) (rfl) (by decide) (by decide)
+
+/-- Planted (law `ConcreteSpec.Core.Own.leave_no_local_loan`, case `ConcreteSpec.Core.Own.LifetimeEvidence.leave_no_local_loanCase`, subject `ConcreteSpec.Core.Own.leave`, mutant `ConcreteSpec.Core.Own.LifetimeEvidence.leaveIdentity`). -/
+example : ((RoundThreeWitnesses.localLoan).frames.head? = some (⟨1, [(y, ⟨1⟩)], []⟩ : Activation)) ∧ (WellFormed (RoundThreeWitnesses.localLoan)) ∧ (((y, Hybrid.Place.mk 1)) ∈ (⟨1, [(y, ⟨1⟩)], []⟩ : Activation).locals) ∧ ¬ ResultSatisfies (fun t : State => ∀ l ∈ t.loans, l.root ≠ ((y, Hybrid.Place.mk 1)).2) (leaveIdentity (RoundThreeWitnesses.localLoan)) := by decide
+
+def leave_no_activation_slotCase := (RoundThreeWitnesses.localLoan)
+
+/-- Instance (law `ConcreteSpec.Core.Own.leave_no_activation_slot`, case `ConcreteSpec.Core.Own.LifetimeEvidence.leave_no_activation_slotCase`). -/
+example : ResultSatisfies (fun t : State => ∀ x ∈ t.slots, x.activation ≠ (⟨1, [(y, ⟨1⟩)], []⟩ : Activation).id) (leave (RoundThreeWitnesses.localLoan)) :=
+  @leave_no_activation_slot RoundThreeWitnesses.localLoan ⟨1, [(y, ⟨1⟩)], []⟩ (rfl)
+
+/-- Planted (law `ConcreteSpec.Core.Own.leave_no_activation_slot`, case `ConcreteSpec.Core.Own.LifetimeEvidence.leave_no_activation_slotCase`, subject `ConcreteSpec.Core.Own.leave`, mutant `ConcreteSpec.Core.Own.LifetimeEvidence.leaveIdentity`). -/
+example : ((RoundThreeWitnesses.localLoan).frames.head? = some (⟨1, [(y, ⟨1⟩)], []⟩ : Activation)) ∧ ¬ ResultSatisfies (fun t : State => ∀ x ∈ t.slots, x.activation ≠ (⟨1, [(y, ⟨1⟩)], []⟩ : Activation).id) (leaveIdentity (RoundThreeWitnesses.localLoan)) := by decide
+
+def passOwner_freezesCase := (DirectArgumentWitnesses.caller)
+
+/-- Instance (law `ConcreteSpec.Core.Own.passOwner_freezes`, case `ConcreteSpec.Core.Own.LifetimeEvidence.passOwner_freezesCase`). -/
+example : ResultSatisfies (fun t : CallState => ownerAccess t.own (⟨1⟩) .mutable = false ∧ ((Mode.mutable) = .mutable → ownerAccess t.own (⟨1⟩) .shared = false)) (passOwner (DirectArgumentWitnesses.caller) (⟨1⟩) ([.index 3]) (Mode.mutable) (DirectArgumentWitnesses.z)) :=
+  @passOwner_freezes DirectArgumentWitnesses.caller ⟨1⟩ [.index 3] .mutable DirectArgumentWitnesses.z 
+
+/-- Planted (law `ConcreteSpec.Core.Own.passOwner_freezes`, case `ConcreteSpec.Core.Own.LifetimeEvidence.passOwner_freezesCase`, subject `ConcreteSpec.Core.Own.passOwner`, mutant `ConcreteSpec.Core.Own.LifetimeEvidence.passOwnerNoFreeze`). -/
+example : ¬ ResultSatisfies (fun t : CallState => ownerAccess t.own (⟨1⟩) .mutable = false ∧ ((Mode.mutable) = .mutable → ownerAccess t.own (⟨1⟩) .shared = false)) (passOwnerNoFreeze (DirectArgumentWitnesses.caller) (⟨1⟩) ([.index 3]) (Mode.mutable) (DirectArgumentWitnesses.z)) := by decide
+
+def leave_retains_callerCase := (RoundThreeWitnesses.localLoan)
+
+/-- Instance (law `ConcreteSpec.Core.Own.leave_retains_caller`, case `ConcreteSpec.Core.Own.LifetimeEvidence.leave_retains_callerCase`). -/
+example : ResultSatisfies (fun t : State => ((Examples.shared.loans.headD ⟨⟨99⟩, ⟨99⟩, [], .shared, none, [], 99, false, false⟩)) ∈ t.loans) (leave (RoundThreeWitnesses.localLoan)) :=
+  @leave_retains_caller RoundThreeWitnesses.localLoan ⟨1, [(y, ⟨1⟩)], []⟩ (Examples.shared.loans.headD ⟨⟨99⟩, ⟨99⟩, [], .shared, none, [], 99, false, false⟩) (by decide) (rfl) (by decide) (by decide)
+
+/-- Planted (law `ConcreteSpec.Core.Own.leave_retains_caller`, case `ConcreteSpec.Core.Own.LifetimeEvidence.leave_retains_callerCase`, subject `ConcreteSpec.Core.Own.leave`, mutant `ConcreteSpec.Core.Own.LifetimeEvidence.leaveAllLoans`). -/
+example : (WellFormed (RoundThreeWitnesses.localLoan)) ∧ ((RoundThreeWitnesses.localLoan).frames.head? = some (⟨1, [(y, ⟨1⟩)], []⟩ : Activation)) ∧ (((Examples.shared.loans.headD ⟨⟨99⟩, ⟨99⟩, [], .shared, none, [], 99, false, false⟩)) ∈ (RoundThreeWitnesses.localLoan).loans) ∧ (((Examples.shared.loans.headD ⟨⟨99⟩, ⟨99⟩, [], .shared, none, [], 99, false, false⟩)).activation ≠ (⟨1, [(y, ⟨1⟩)], []⟩ : Activation).id) ∧ ¬ ResultSatisfies (fun t : State => ((Examples.shared.loans.headD ⟨⟨99⟩, ⟨99⟩, [], .shared, none, [], 99, false, false⟩)) ∈ t.loans) (leaveAllLoans (RoundThreeWitnesses.localLoan)) := by decide
+
+def leave_no_activation_loanCase := (RoundThreeWitnesses.localLoan)
+
+/-- Instance (law `ConcreteSpec.Core.Own.leave_no_activation_loan`, case `ConcreteSpec.Core.Own.LifetimeEvidence.leave_no_activation_loanCase`). -/
+example : ResultSatisfies (fun t : State => ∀ l ∈ t.loans, l.activation ≠ (⟨1, [(y, ⟨1⟩)], []⟩ : Activation).id) (leave (RoundThreeWitnesses.localLoan)) :=
+  @leave_no_activation_loan RoundThreeWitnesses.localLoan ⟨1, [(y, ⟨1⟩)], []⟩ (rfl)
+
+/-- Planted (law `ConcreteSpec.Core.Own.leave_no_activation_loan`, case `ConcreteSpec.Core.Own.LifetimeEvidence.leave_no_activation_loanCase`, subject `ConcreteSpec.Core.Own.leave`, mutant `ConcreteSpec.Core.Own.LifetimeEvidence.leaveIdentity`). -/
+example : ((RoundThreeWitnesses.localLoan).frames.head? = some (⟨1, [(y, ⟨1⟩)], []⟩ : Activation)) ∧ ¬ ResultSatisfies (fun t : State => ∀ l ∈ t.loans, l.activation ≠ (⟨1, [(y, ⟨1⟩)], []⟩ : Activation).id) (leaveIdentity (RoundThreeWitnesses.localLoan)) := by decide
+
+def reborrowTo_liveCase := (exclusive)
+
+/-- Instance (law `ConcreteSpec.Core.Own.reborrowTo_live`, case `ConcreteSpec.Core.Own.LifetimeEvidence.reborrowTo_liveCase`). -/
+example : ResultSatisfies (fun t : State => LiveDestinations t) (reborrowTo (exclusive) (⟨0⟩) ([.index 1]) (Mode.mutable) (0)) :=
+  @reborrowTo_live exclusive ⟨0⟩ [.index 1] .mutable 0 (by decide)
+
+/-- Planted (law `ConcreteSpec.Core.Own.reborrowTo_live`, case `ConcreteSpec.Core.Own.LifetimeEvidence.reborrowTo_liveCase`, subject `ConcreteSpec.Core.Own.reborrowTo`, mutant `ConcreteSpec.Core.Own.LifetimeEvidence.reborrowToDead`). -/
+example : (LiveDestinations (exclusive)) ∧ ¬ ResultSatisfies (fun t : State => LiveDestinations t) (reborrowToDead (exclusive) (⟨0⟩) ([.index 1]) (Mode.mutable) (0)) := by decide
+
+def adoptDown_liveCase := (adoptionInput)
+
+/-- Instance (law `ConcreteSpec.Core.Own.adoptDown_live`, case `ConcreteSpec.Core.Own.LifetimeEvidence.adoptDown_liveCase`). -/
+example : ResultSatisfies (fun t : State => LiveDestinations t) (adoptDown (adoptionInput) (DirectArgumentWitnesses.waiting.pending)) :=
+  @adoptDown_live adoptionInput DirectArgumentWitnesses.waiting.pending (by decide)
+
+/-- Planted (law `ConcreteSpec.Core.Own.adoptDown_live`, case `ConcreteSpec.Core.Own.LifetimeEvidence.adoptDown_liveCase`, subject `ConcreteSpec.Core.Own.adoptDown`, mutant `ConcreteSpec.Core.Own.LifetimeEvidence.adoptDownDead`). -/
+example : (LiveDestinations (adoptionInput)) ∧ ¬ ResultSatisfies (fun t : State => LiveDestinations t) (adoptDownDead (adoptionInput) (DirectArgumentWitnesses.waiting.pending)) := by decide
+
+def leave_liveCase := (RoundThreeWitnesses.localLoan)
+
+/-- Instance (law `ConcreteSpec.Core.Own.leave_live`, case `ConcreteSpec.Core.Own.LifetimeEvidence.leave_liveCase`). -/
+example : ResultSatisfies (fun t : State => LiveDestinations t) (leave (RoundThreeWitnesses.localLoan)) :=
+  @leave_live RoundThreeWitnesses.localLoan ⟨1, [(y, ⟨1⟩)], []⟩ (by decide) (rfl)
+
+/-- Planted (law `ConcreteSpec.Core.Own.leave_live`, case `ConcreteSpec.Core.Own.LifetimeEvidence.leave_liveCase`, subject `ConcreteSpec.Core.Own.leave`, mutant `ConcreteSpec.Core.Own.LifetimeEvidence.leaveStranded`). -/
+example : (LiveDestinations (RoundThreeWitnesses.localLoan)) ∧ ((RoundThreeWitnesses.localLoan).frames.head? = some (⟨1, [(y, ⟨1⟩)], []⟩ : Activation)) ∧ ¬ ResultSatisfies (fun t : State => LiveDestinations t) (leaveStranded (RoundThreeWitnesses.localLoan)) := by decide
+
+end LifetimeEvidence
 
 end ConcreteSpec.Core.Own
