@@ -14,3 +14,10 @@ until backfill and branch reconciliation finish. See docs/ISSUE_IDS.md for the o
 
 The backfill dry run also refused independent ISS-0018 introductions on five advertised wip heads;
 the operator must reconcile those before publication. No collision exemption is installed.
+
+Round 2: identity survives rebases, stacked branches, detached trains and evidence edits.
+Enforce reservations on introduced/modified records relative to origin/main; audit all remote
+drafts separately. Backfill and verify reservation refs before landing enforcement (exact operator
+order in docs/ISSUE_IDS.md). Handle remote-only legacy objects, deleted files and malformed bug
+records; cover both metadata namespaces and mixed hook tiers, Python sandbox makers, and issue
+ledger append conflicts. No reservation refs were published by the writer.

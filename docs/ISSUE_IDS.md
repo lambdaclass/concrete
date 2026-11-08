@@ -1,109 +1,105 @@
 # Issue and bug IDs
 
-The root allocator is `python3 -I scripts/ids/allocate.py`. Every new ISS and bug ID goes through
-it; never choose the next number from a file. This is the structural repair for ISS-0034,
-owned by R-0542 (one source for ledger identities) and R-0561 (the new bug ledger).
-The frozen `legacy/scripts/gen/new_bug.sh` is historical evidence, never a filing entry point.
-
-From the writer's own `wip/*` branch:
+`python3 -I scripts/ids/allocate.py` is the shared online allocator for ISS and bug identities
+(ISS-0034; structural owners R-0542 and R-0561). Never infer the next number from local files.
+The frozen legacy allocator is not a filing entry point.
 
 ```sh
 python3 -I scripts/ids/allocate.py reserve iss 'Short immutable title'
 python3 -I scripts/ids/allocate.py reserve bug 'Short immutable title'
 ```
 
-The returned ID is held on origin before it is printed. Copy the exact title into the issue's
-`title` column or the bug record's `# Bug NNN: Title` heading. Evidence, status and closure conditions
-can change independently. Keep the reservation branch name as provenance; descendants inherit
-records through Git ancestry, and after landing main provides that ancestry even if the original
-branch is deleted. Do not reuse an abandoned ID, rename an identity or transfer its reservation.
-A genuinely different issue needs a fresh ID. `--number N` is for a coordinator-assigned number;
-it still requires an unused number and wins the same atomic reservation as automatic allocation.
+Run from the writer's `wip/*` branch. Copy the returned ID and exact reserved title into the
+`ISSUES.tsv` title column or `# Bug NNN: Title` heading. The reservation binds ID, title and
+reserving branch. The branch is immutable provenance, not an ancestry requirement: derived,
+stacked, rebased, cherry-picked and detached train checkouts all carry the same identity. Status,
+evidence and closure fields may evolve. A different title for the same ID is a collision; a
+separate issue needs a new reservation. `--number N` permits a coordinator-assigned unused number
+through the same atomic protocol, without overwriting anything.
 
-ISS and bug numbers are typed identities: `ISS-0034` and `BUG-034` are different IDs. Both use the
-same allocator and protocol. ISS refs are `refs/reserved/iss/NNNN`. Bug refs remain
-`refs/bug-reservations/NNN`, the *same namespace* used by the frozen allocator: a legacy reservation
-and a root reservation therefore compete for exactly the same ref, never parallel authorities.
-The automatic bug sequence skips every existing bug record and every reservation, including
-unused legacy reservations; gaps are never reused. New bug records belong at `docs/bugs/NNN_*.md`
-when the ledger returns; frozen records stay at `legacy/docs/bugs/NNN_*.md` unchanged.
+ISS refs use `refs/reserved/iss/NNNN`; bugs use `refs/bug-reservations/NNN`, sharing the historical
+bug namespace. Unused legacy reservations remain burned. New bug files use
+`docs/bugs/NNN_description.md`; frozen files remain under `legacy/docs/bugs/`. Numeric filenames
+with fewer than three digits or a missing underscore, missing/mismatched Bug headings, and
+duplicate bug numbers across either directory are refused. Documentation files are not records.
 
-## Guarantee and failure handling
+## Reservation protocol and recovery
 
-A reservation is a parentless empty-tree commit with a JSON message recording schema, typed ID,
-immutable title, branch, holder email and host, UTC time and a random nonce. No code is published.
-Creation uses `--force-with-lease=<ref>:` (expected absent). Git's ref transaction allows exactly
-one concurrent creator for a given ID. The loser refuses and must rerun from a fresh snapshot;
-it never files under the losing number. The pre-push metadata tier validates this shape, refuses
-deletions and refuses replacing a schema reservation. An administrator who bypasses client hooks
-can still change refs; protect these namespaces on the authoritative server against deletion and
-forced update. This protocol assumes origin honours Git's leases and atomic ref transactions.
+A reservation is a parentless empty-tree commit with schema-1 JSON recording ID, immutable title,
+reserving branch, holder, timestamp and nonce. Creation uses an expected-absent exact ref lease;
+one concurrent creator wins. Every publication uses an atomic push and exact leases, followed by
+an exact remote OID read-back for every ref. Hooks refuse deletion, malformed metadata and schema
+reservation replacement. Protect these namespaces against deletion and forced update on origin:
+client hooks cannot constrain an administrator who bypasses them. Origin must support atomic
+pushes and honour leases.
 
-Every push is followed by an exact remote OID read-back. If the response was lost but the ref is
-ours, allocation succeeds. If another writer owns it, allocation fails. If origin cannot be read,
-the outcome is unknown: **do not file or retry with a different number**. Read the reservation
-ref and inspect its JSON metadata when origin returns. Before publication the tool writes and
-prints a recovery receipt under `.git/id-reservation-attempts/`, with every expected ref, old OID,
-new OID and complete commit bytes. Preserve that receipt; compare the remote OIDs with it, even
-after an interruption or local object pruning. No rollback deletes a reservation. Filing
-and reservation are separate: validate filing inputs first; a failed filing leaves the ID held,
-and the same branch can finish the record later without allocating again (the failure lesson of
-legacy bug 300). There is no offline mode or stale-fetch escape hatch.
+Before pushing, the allocator prints and saves a recovery receipt under
+`.git/id-reservation-attempts/` containing old/new OIDs and complete commit bytes. If transport
+fails but every remote ref matches, publication succeeded. Partial publication is refused. If
+origin cannot be read, the outcome is unknown: preserve the receipt, do not file or reserve a
+replacement, and reconcile the exact OIDs when origin returns. Never delete a reservation to
+recover. Failed filing leaves the identity held so the same record can be completed later.
 
-The gate `scripts/checks/id_reservations.sh` runs the controls and then validates the work tree
-and a fresh snapshot of origin main, all `wip/*` heads and reservation refs. It refuses duplicates
-within either ledger, absent reservations, mismatched titles and independent branch introductions
-of the same ID (even with identical titles). Shared ancestry permits inherited records. Historical
-branches lacking a title column derive their immutable title from the first introduction in Git
-history, rather than mutable current evidence. Main/CI integration must inherit each reservation's
-owning branch or main; detached candidates whose ancestry cannot be established are refused.
-Network failure fails the check. Like any read-only gate, its verdict describes the fetched
-snapshot: it does not lock future branch updates. Reservations provide exclusion at allocation;
-the gate detects manual violations when they become visible. It is included automatically by
-`run.sh` and named in that runner's required set. Fetches use a private temporary bare repository,
-so neither caller refs nor notes change. No legacy code or gate runs.
+Legacy conversions retain `legacy_oid`, require its exact lease, and fetch the remote old object
+without changing caller refs or FETCH_HEAD when the pre-push verifier needs it. Schema-1
+reservations cannot be converted again. Planning and checking fetch into a private bare repository;
+they never update caller refs or notes. Temporary Git operations isolate repository variables and
+global/system config, including when invoked from a hook. Origin must be reachable.
 
-## Operator migration (no refs are pushed by planning)
+## Enforcement and remote audit
 
-First have every writer stop hand allocation and publish the coordinated renumberings:
-acceptance-shim's ISS-0017 becomes **ISS-0033**, spec-* keeps ISS-0017, and the lexer collision
-becomes **ISS-0032**. Fix or retire stale wip snapshots that still introduce conflicting identities;
-the gate deliberately includes every advertised wip head. These are planned resolutions, never
-an exemption in the gate or an automatic rewrite of somebody else's branch.
+`allocate.py check` validates reservation namespace integrity and every record introduced or
+modified by the current work tree relative to its merge base with fresh origin/main. Issue row
+comparison includes all columns; editing evidence on an old unreserved issue requires reserving
+it first. Bug content edits likewise activate enforcement. Unchanged historical rows do not force
+a flag day. An activated record must have a schema-1 reservation with the exact title; there is
+no exemption for newly introduced IDs. Deleted tracked files are treated as absent.
 
-After the harness pushes this branch, from its full clone:
+The normal gate does not judge unrelated wip branches. `reserve` takes the next number above all
+advertised records and reservations but does not require unrelated drafts to pass validation.
+The authoritative reservation namespace provides mutual exclusion. A stale unreserved wip branch
+therefore cannot stop another branch's checks or reservations.
+
+`allocate.py audit-wip` separately checks all advertised main/wip records against reservations.
+`backfill --output PLAN` produces a nonpublishing operator plan for that same inventory plus the
+current tree and unused legacy reservations. Explicit titles define identity. For pre-title
+rows, backfill recovers historical titles; when evidence changed across rebases it accepts the
+canonical explicit title only if stable date/opened/area/kind fields agree. Conflicting explicit
+titles or incompatible legacy identities require operator reconciliation, never automatic
+renumbering. Main is preferred for initial provenance; existing reservation provenance never
+changes. The five ISS-0018 copies represent one evolving issue, not five introductions.
+
+## Exact operator rollout order
+
+1. Have writers stop hand allocation. Use the updated tools and hook from this branch in a full
+   clone **before enabling enforcement on main**. Planning and audit are read-only. Coordinate the
+   known renumberings: acceptance-shim ISS-0017 becomes ISS-0033, spec-* retains ISS-0017, lexer
+   becomes ISS-0032. Reconcile differing explicit titles; do not retire a rebased head merely for
+   lacking shared introduction ancestry.
+2. Produce the backfill plan with the commands below. Inspect every conflict, title, provenance,
+   old OID and legacy import. Resolve conflicts with the owning writers, then regenerate until
+   backfill exits 0. Inspect that ISS-0001 through ISS-0034 are represented by reservations or
+   updates. No planning command publishes refs.
+3. From that updated clone, the operator explicitly runs `publish-plan`. Its metadata-aware hook
+   handles bootstrap without running source gates. This is the first publication of reservation
+   refs, **before this enforcement branch lands**. Publication refuses a changed advertised head
+   set, uses atomic exact leases and verifies all remote OIDs. Preserve the plan and receipts.
+4. Run the separate whole-remote audit and the branch gates. Reconcile any remaining conflicting
+   active heads before declaring the inventory migrated. Old draft heads may remain unreserved
+   without blocking other branches, but their introduced/modified records cannot pass a landing
+   gate until corrected. Regenerate plans after remote head changes.
+5. Only after backfill and verification, land this enforcement branch through the normal train.
+   Thereafter every newly introduced or modified identity is checked immediately. Writers reserve
+   before filing; run the independent audit periodically to discover stale/manual draft records.
 
 ```sh
-nix develop --command python3 -I scripts/ids/allocate.py backfill --output /path/to/backfill.json
-# Review updates, provenance, legacy_oid imports, and conflicts in backfill.json.
-# If the command exits nonzero, correct the conflicting branches and regenerate; do not publish.
-nix develop --command python3 -I scripts/ids/allocate.py publish-plan /path/to/backfill.json
-nix develop --command bash scripts/checks/id_reservations.sh
-nix develop --command bash scripts/checks/issues.sh
+nix develop .#gates --command python3 -I scripts/ids/allocate.py backfill --output /private/path/ids.json
+# Inspect the plan; stop on a nonzero exit. Nothing above has published anything.
+nix develop .#gates --command python3 -I scripts/ids/allocate.py publish-plan /private/path/ids.json
+nix develop .#gates --command python3 -I scripts/ids/allocate.py audit-wip
+nix develop .#gates --command bash scripts/checks/id_reservations.sh
+nix develop .#gates --command bash scripts/checks/issues.sh
 ```
 
-Use a private output path of your choosing. The plan covers every ID in main, origin wip heads,
-and this work tree (including the coordinator-assigned ISS-0034), plus unused legacy bug
-reservations. Inspect that ISS-0001 through ISS-0034 are all represented by an existing reservation
-or a planned update; missing historical IDs must be recovered from their owning writer, never
-invented. A conflict writes a diagnostic plan but exits nonzero and publication refuses that plan.
-The known ISS-0017 resolution is recorded explicitly in every plan. Historical holders of a legacy
-reservation remain auditable through its original commit OID (`legacy_oid`) in the imported JSON;
-backfill metadata identifies the operator performing the import, not the original filer.
-
-`publish-plan` refuses a changed origin head set and uses one `git push --atomic` with exact leases
-for every new ref and legacy conversion. Origin without atomic-push support is refused. Conversion
-of an old reservation requires its exact previous OID; schema reservations are immutable. Read-back
-checks every ref, so a failed/ambiguous transaction is never inferred successful from a log message.
-A successful plan is idempotent while heads remain unchanged. An observed partial publication
-requires operator reconciliation from the retained plan; it is not a pass. Regenerate after any
-head or reservation changes. The writer of this change has pushed no reservations; migration is
-an explicit operator step, and until it completes the live gate is expected to refuse the tree.
-This is operational rollout of the full structural design, not a temporary allocator.
-
-A writer dry run on 2026-11-08 planned 356 reservations and refused one additional collision:
-ISS-0018 was introduced without common record ancestry on `wip/record-chain-fix`,
-`wip/record-signoffs`, `wip/record-signoffs-r`, `wip/roadmap-sweep` and `wip/roadmap-sweep-r`.
-That advertised snapshot already contained the coordinated ISS-0017/0032/0033 resolution.
-The operator must reconcile ISS-0018 too (or retire stale heads), then regenerate the plan;
-matching titles alone do not grant two independent branches the same reservation.
+A successful unchanged plan is idempotent. A conflicting plan cannot publish. No reservation refs
+were pushed by the round-2 writer; bootstrap publication remains an explicit operator action.
