@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Seeded spec/compiler differential (Concrete/README.md gates 5 and 6). Run from the repo root in
 # nix develop. The seed is SPEC_DIFF_SEED or the commit SHA. SPEC_DIFF_SECS (default 600) bounds
-# generation, controls and native comparisons after the shared compiler build; SPEC_DIFF_N (default
+# the shared build, generation, controls and native comparisons; SPEC_DIFF_N (default
 # 300) is the candidate count per leg, and SPEC_DIFF_MIN_JUDGED (default 8) is the minimum number of
 # BIR programs compared on all three legs. Too few comparisons by the deadline is INCOMPLETE (3),
 # never a pass. Both generators require at least 50% accepted candidates. All native executables
@@ -34,6 +34,7 @@ printf 'replay: SPEC_DIFF_REPLAY=%s:INDEX bash scripts/checks/compiler/spec_diff
 start=$(date +%s)
 deadline=$((start + budget))
 remaining() { echo $((deadline - $(date +%s))); }
+export SLICE0_BUILD_SECS=$budget
 
 # shellcheck source=scripts/checks/lib/slice0_common.sh
 source scripts/checks/lib/slice0_common.sh
