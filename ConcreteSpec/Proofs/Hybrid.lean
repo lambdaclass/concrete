@@ -580,13 +580,6 @@ def badRep : Target → Ty → List MByte → Value → Prop := fun _ _ _ _ => F
 def badEncode : Target → Value → List MByte := fun _ _ => []
 def badDecodeUnit : Target → Ty → List MByte → Option Value := fun _ _ _ => some .unit
 def badReadNone : Target → State → Place → Option Value := fun _ _ _ => none
-def badReadDiff : Target → State → Place → Option Value :=
-  fun _ st _ =>
-    match st.memory.block ⟨0⟩ with
-    | some x => if x.bytes == (candidate ⟨0⟩ 40 3 1).bytes then none else some (.bool true)
-    | none => none
-def badReadEmptyDiff : Target → State → Place → Option Value :=
-  fun _ st _ => if st.memory.next == 0 then none else some (.bool true)
 def badReadStructOnly : Target → State → Place → Option Value :=
   fun tgt st p => if st.memory.next == 0 then st.read tgt p else none
 def badMaterializeNone : Target → State → Place → AddrSpace → Nat → Nat → List MByte →
@@ -637,16 +630,6 @@ private theorem structState_wf : structState.WellFormed linuxX8664 := by
   split at hc
   next => cases hc; trivial
   next => cases hc
-
-/-- Helper (inversion). Places 0 and 1 are separated in the audit fixture state because place 1 is absent (approved: PENDING). -/
-private theorem before_sep : before.Separated ⟨0⟩ ⟨1⟩ := by
-  intro c d r s hc hq _ _
-  simp [State.places, before, AList.lookup] at hq
-
-/-- Helper (inversion). Places 0 and 1 have disjoint ranges in the audit fixture state because place 1 is absent (approved: PENDING). -/
-private theorem before_disjoint : before.RangesDisjoint ⟨0⟩ ⟨1⟩ := by
-  intro c d r s hc hq _ _
-  simp [State.places, before, AList.lookup] at hq
 
 -- 1. rep_roundtrip
 /-- Instance (law `ConcreteSpec.Core.Hybrid.rep_roundtrip`, case `boolTrue`). -/
@@ -752,6 +735,15 @@ example : before.materialize linuxX8664 ⟨0⟩ ⟨0⟩ 60 1 [] = some (range, b
 /-- Planted (law `ConcreteSpec.Core.Hybrid.materialize_idempotent`, case `secondCall`, subject `ConcreteSpec.Core.Hybrid.State.materialize`, mutant `ConcreteSpec.Core.Hybrid.Audit.badMaterializeRealloc`). -/
 example : badMaterializeRealloc linuxX8664 before ⟨0⟩ ⟨0⟩ 40 1 [] = some (range, before) ∧
     ¬ (badMaterializeRealloc linuxX8664 before ⟨0⟩ ⟨0⟩ 60 1 [] = some (range, before)) :=
+  ⟨rfl, by intro h; cases h⟩
+
+/-- Instance (law `ConcreteSpec.Core.Hybrid.materialize_idempotent`, case `firstAllocation`). The first call allocates and initializes storage; a different second request reuses it. -/
+example : matState.materialize linuxX8664 ⟨0⟩ ⟨0⟩ 60 1 [] = some (matRange, matState) :=
+  materialize_idempotent linuxX8664 structState matState ⟨0⟩ ⟨0⟩ ⟨0⟩
+    40 1 60 1 [] [] matRange rfl
+/-- Planted (law `ConcreteSpec.Core.Hybrid.materialize_idempotent`, case `firstAllocation`, subject `ConcreteSpec.Core.Hybrid.State.materialize`, mutant `ConcreteSpec.Core.Hybrid.Audit.badMaterializeRealloc`). -/
+example : badMaterializeRealloc linuxX8664 structState ⟨0⟩ ⟨0⟩ 40 1 [] = some (matRange, matState) ∧
+    ¬ (badMaterializeRealloc linuxX8664 matState ⟨0⟩ ⟨0⟩ 60 1 [] = some (matRange, matState)) :=
   ⟨rfl, by intro h; cases h⟩
 
 -- 9. write_wellFormed

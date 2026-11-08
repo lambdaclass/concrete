@@ -319,7 +319,7 @@ theorem access_no_provenance (tgt : Target) (m : Memory) (p : Ptr) (n a : Nat)
     (hn : n ≠ 0) (hp : p.prov = none) : m.access tgt p n a = none := by
   simp [Memory.access, hn, hp]
 
-/-- Helper (inversion). Extract the retained dead block and unchanged freshness counter of a successful release (approved: PENDING). -/
+/-- Helper (inversion). Decomposes a successful release for the result-oriented free_retains law and access-after-free proof (approved: PENDING). -/
 theorem free_retains_inv (m : Memory) (b : MemBlockId) (m' : Memory) (h : m.free b = some m') :
     ∃ x, m.block b = some x ∧
       m'.block b = some { x with live := false, exposed := false } ∧ m'.next = m.next := by
@@ -827,8 +827,7 @@ theorem expose_success (m : Memory) (p : Ptr) (b : MemBlockId) (x : Block)
     m.expose p = some (m.modify b (fun y => { y with exposed := true })) := by
   simp [Memory.expose, hp, hx, hl]
 
-/-- Helper (inversion). The exposed block has exactly its old fields except the exposed flag; other blocks and
-freshness counter are unchanged (approved: PENDING). -/
+/-- Helper (inversion). Decomposes a successful exposure for the result-oriented expose_frame law (approved: PENDING). -/
 theorem expose_frame_inv (m m' : Memory) (p : Ptr) (h : m.expose p = some m') :
     ∃ b x, p.prov = some b ∧ m.block b = some x ∧
       m'.block b = some { x with exposed := true } ∧ m'.next = m.next ∧
@@ -855,7 +854,7 @@ theorem expose_wellFormed (tgt : Target) (m : Memory) (hw : m.WellFormed tgt)
 def Block.geometry (x : Block) : AddrSpace × Nat × Nat × Nat :=
   (x.space, x.base, x.size, x.align)
 
-/-- Helper (congruence). Store does not change any block's projection geometry (approved: PENDING). -/
+/-- Helper (congruence). Decomposes a successful store for store_geometry and hybrid invariant transport (approved: PENDING). -/
 theorem store_geometry_inv (tgt : Target) (m m' : Memory) (p : Ptr) (bs : List MByte)
     (a : Nat) (h : m.store tgt p bs a = some m') (b : MemBlockId) :
     (m'.block b).map Block.geometry = (m.block b).map Block.geometry := by
@@ -872,7 +871,7 @@ theorem store_geometry_inv (tgt : Target) (m m' : Memory) (p : Ptr) (bs : List M
     · rfl
   next => cases h
 
-/-- Helper (congruence). Exposure also preserves every projection's geometry (approved: PENDING). -/
+/-- Helper (congruence). Decomposes a successful exposure for expose_geometry and hybrid invariant transport (approved: PENDING). -/
 theorem expose_geometry_inv (m m' : Memory) (p : Ptr) (h : m.expose p = some m')
     (b : MemBlockId) :
     (m'.block b).map Block.geometry = (m.block b).map Block.geometry := by
@@ -1047,6 +1046,13 @@ def exposedMemory : Memory := ⟨[(⟨0⟩, exposedBlock)], 1⟩
 def storedBlock : Block :=
   { initBlock with bytes := .init 7 none :: List.replicate 7 .uninit }
 def storedMemory : Memory := ⟨[(⟨0⟩, storedBlock)], 1⟩
+
+/-- A second live allocation with actual initialized bytes for framing witnesses. -/
+def frameBlock : Block := { candidate ⟨0⟩ 80 2 1 with bytes := [.init 9 none, .init 10 none] }
+def frameMemory : Memory := ⟨[(⟨1⟩, frameBlock), (⟨0⟩, initBlock)], 2⟩
+def frameStoredMemory : Memory := ⟨[(⟨1⟩, frameBlock), (⟨0⟩, storedBlock)], 2⟩
+def frameOther : Ptr := ⟨⟨0⟩, 80, some ⟨1⟩⟩
+
 
 def badDecodeInt : Target → IntTy → List MByte → Option Int := fun _ _ _ => none
 def badDecodeIntRange : Target → IntTy → List MByte → Option Int := fun _ _ _ => some 200
@@ -1535,15 +1541,15 @@ example : memory.WellFormed target ∧
 
 -- 23. store_other_block
 /-- Instance (law `ConcreteSpec.Core.Mem.store_other_block`, case `otherBlock`). -/
-example : (memory.store target ptr [.init 7 none] 1).bind (fun m' => m'.block ⟨1⟩) =
-    memory.block ⟨1⟩ :=
-  store_other_block target memory ptr [.init 7 none] 1 ⟨0⟩ 0 ⟨1⟩ rfl (by decide)
+example : (frameMemory.store target ptr [.init 7 none] 1).bind (fun m' => m'.block ⟨1⟩) =
+    frameMemory.block ⟨1⟩ :=
+  store_other_block target frameMemory ptr [.init 7 none] 1 ⟨0⟩ 0 ⟨1⟩ rfl (by decide)
 
 /-- Planted (law `ConcreteSpec.Core.Mem.store_other_block`, case `otherBlock`, subject `ConcreteSpec.Core.Mem.Memory.store`, mutant `ConcreteSpec.Core.Mem.Audit.badStoreDup`). -/
-example : memory.access target ptr ([MByte.init 7 none]).length 1 = some (some (⟨0⟩, 0)) ∧
+example : frameMemory.access target ptr ([MByte.init 7 none]).length 1 = some (some (⟨0⟩, 0)) ∧
     (⟨1⟩ : MemBlockId) ≠ ⟨0⟩ ∧
-    ¬ ((badStoreDup target memory ptr [.init 7 none] 1).bind (fun m' => m'.block ⟨1⟩) =
-      memory.block ⟨1⟩) :=
+    ¬ ((badStoreDup target frameMemory ptr [.init 7 none] 1).bind (fun m' => m'.block ⟨1⟩) =
+      frameMemory.block ⟨1⟩) :=
   ⟨rfl, by decide, by intro h; cases h⟩
 
 -- 24. store_same_block_frame
@@ -1632,13 +1638,13 @@ example : memory.WellFormed target ∧
 
 -- 30. store_load_other
 /-- Instance (law `ConcreteSpec.Core.Mem.store_load_other`, case `disjointProv`). -/
-example : storedMemory.load target other 1 1 = memory.load target other 1 1 :=
-  store_load_other target memory storedMemory ptr other [.init 7 none] 1 1 1 rfl (by decide)
+example : frameStoredMemory.load target frameOther 1 1 = frameMemory.load target frameOther 1 1 :=
+  store_load_other target frameMemory frameStoredMemory ptr frameOther [.init 7 none] 1 1 1 rfl (by decide)
 
 /-- Planted (law `ConcreteSpec.Core.Mem.store_load_other`, case `disjointProv`, subject `ConcreteSpec.Core.Mem.Memory.load`, mutant `ConcreteSpec.Core.Mem.Audit.badLoadDiff`). -/
-example : memory.store target ptr [.init 7 none] 1 = some storedMemory ∧
-    other.prov ≠ ptr.prov ∧
-    ¬ (badLoadDiff target storedMemory other 1 1 = badLoadDiff target memory other 1 1) :=
+example : frameMemory.store target ptr [.init 7 none] 1 = some frameStoredMemory ∧
+    frameOther.prov ≠ ptr.prov ∧
+    ¬ (badLoadDiff target frameStoredMemory frameOther 1 1 = badLoadDiff target frameMemory frameOther 1 1) :=
   ⟨rfl, by decide, by decide⟩
 
 -- 31. expose_load
@@ -1761,6 +1767,18 @@ example : exposedMemory.WellFormed target ∧ ¬ (∀ b, (wrongReconstruction ex
   intro h
   obtain ⟨x, hx, _⟩ := h ⟨1⟩ rfl
   cases hx
+
+/-- Accepted (rule C4). Framing observes initialized bytes in a second live allocation. -/
+example : frameMemory.load target frameOther 2 1 = some [.init 9 none, .init 10 none] ∧
+    frameStoredMemory.load target frameOther 2 1 = some [.init 9 none, .init 10 none] := by decide
+
+/-- Instance (law `ConcreteSpec.Core.Mem.eqAddr_separation`, case `space`). -/
+example : Ptr.eqAddr ptr ⟨⟨1⟩, 40, none⟩ = false ↔ ptr.space ≠ (⟨1⟩ : AddrSpace) ∨
+    ptr.addr < 40 ∨ 40 < ptr.addr := eqAddr_separation ptr ⟨⟨1⟩, 40, none⟩
+/-- Planted (law `ConcreteSpec.Core.Mem.eqAddr_separation`, case `space`, subject `ConcreteSpec.Core.Mem.Ptr.eqAddr`, mutant `ConcreteSpec.Core.Mem.Audit.alwaysEqual`). -/
+example : ¬ (alwaysEqual ptr ⟨⟨1⟩, 40, none⟩ = false ↔ ptr.space ≠ (⟨1⟩ : AddrSpace) ∨
+    ptr.addr < 40 ∨ 40 < ptr.addr) := by decide
+
 end Audit
 
 end ConcreteSpec.Core.Mem
