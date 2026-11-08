@@ -243,7 +243,57 @@ def numberingFrom (base : Nat) : List Block → NumberingData
     ⟨head.ids ++ tail.ids, head.intermediates ++ tail.intermediates,
       (base, head.instOffsets) :: tail.blocks⟩
 
-def numbering (p : Program) : NumberingData := numberingFrom 0 p.blocks
+/-- Production instruction numbering uses tail-recursive running positions and flat maps. -/
+def instNumberingFast (base : Nat) (xs : List Inst) : InstNumberingData :=
+  let ps := Runtime.positions Inst.width base xs
+  ⟨ps.flatMap (fun (n, ins) => (instDefs ins).map fun (r, off) => (r, n + off)),
+    ps.flatMap (fun (n, ins) => (interOffsets ins).map (n + ·)), ps.map Prod.fst⟩
+
+def blockNumberingFast (base : Nat) (b : Block) : BlockNumberingData :=
+  let tail := instNumberingFast (base + b.params.length) b.insts
+  ⟨(indexed b.params).map (fun (k, (r, _)) => (r, base + k)) ++ tail.ids,
+    tail.intermediates, tail.offsets⟩
+
+/-- Production block numbering has bounded call-stack depth, including long single blocks. -/
+def numberingFastFrom (base : Nat) (xs : List Block) : NumberingData :=
+  let ps := Runtime.positions blockSize base xs
+  ⟨ps.flatMap (fun (n, b) => (blockNumberingFast n b).ids),
+    ps.flatMap (fun (n, b) => (blockNumberingFast n b).intermediates),
+    ps.map (fun (n, b) => (n, (blockNumberingFast n b).instOffsets))⟩
+
+theorem instNumberingFast_eq (base : Nat) (xs : List Inst) :
+    instNumberingFast base xs = instNumbering base xs := by
+  induction xs generalizing base with
+  | nil => simp [instNumberingFast, Runtime.positions_eq, Runtime.positionsSpec, instNumbering]
+  | cons ins xs ih =>
+    have h := ih (base + Inst.width ins)
+    simp only [instNumberingFast, Runtime.positions_eq, Runtime.positionsSpec,
+      List.flatMap_cons, List.map_cons] at h ⊢
+    simp only [instNumbering]
+    cases ht : instNumbering (base + Inst.width ins) xs
+    simp only [ht, InstNumberingData.mk.injEq] at h
+    rcases h with ⟨hids, hinter, hoff⟩
+    simp only [hids, hinter, hoff]
+
+theorem blockNumberingFast_eq (base : Nat) (b : Block) :
+    blockNumberingFast base b = blockNumbering base b := by
+  simp only [blockNumberingFast, instNumberingFast_eq, blockNumbering]
+
+theorem numberingFastFrom_eq (base : Nat) (xs : List Block) :
+    numberingFastFrom base xs = numberingFrom base xs := by
+  induction xs generalizing base with
+  | nil => simp [numberingFastFrom, Runtime.positions_eq, Runtime.positionsSpec, numberingFrom]
+  | cons b xs ih =>
+    have h := ih (base + blockSize b)
+    simp only [numberingFastFrom, Runtime.positions_eq, Runtime.positionsSpec,
+      List.flatMap_cons, List.map_cons, blockNumberingFast_eq] at h ⊢
+    simp only [numberingFrom]
+    cases ht : numberingFrom (base + blockSize b) xs
+    simp only [ht, NumberingData.mk.injEq] at h
+    rcases h with ⟨hids, hinter, hblocks⟩
+    simp only [hids, hinter, hblocks]
+
+def numbering (p : Program) : NumberingData := numberingFastFrom 0 p.blocks
 
 /-- The same prepared data, expressed by the closed reference functions. -/
 def numberingSpec (p : Program) : NumberingData :=
@@ -451,7 +501,7 @@ theorem instBase_succ {b : Block} {i : Nat} {ins : Inst} (hi : b.insts[i]? = som
 theorem instNumbering_from (b : Block) (base : Nat) :
     ∀ (i : Nat) (l : List Inst), b.insts.drop i = l →
       instNumbering (base + instBase b i) l = instSpecFrom b base i
-  | i, [], hd => by simp [instNumbering, instSpecFrom, hd, Runtime.indexedFrom]
+  | i, [], hd => by simp [instNumbering, instSpecFrom, hd, Runtime.indexedFrom_nil]
   | i, ins :: rest, hd => by
     have hi : b.insts[i]? = some ins := by
       have := congrArg (·[0]?) hd
@@ -461,7 +511,7 @@ theorem instNumbering_from (b : Block) (base : Nat) :
       rfl
     have ih := instNumbering_from b base (i + 1) rest hd'
     rw [instBase_succ hi] at ih
-    simp only [instNumbering, instSpecFrom, hd, Runtime.indexedFrom, List.flatMap_cons,
+    simp only [instNumbering, instSpecFrom, hd, Runtime.indexedFrom_cons, List.flatMap_cons,
       List.map_cons]
     rw [Nat.add_assoc, ih]
     simp only [instSpecFrom, hd']
@@ -478,7 +528,7 @@ theorem blockBase_succ {p : Program} {j : Nat} {b : Block} (hb : p.blocks[j]? = 
 theorem numberingFrom_correct (p : Program) :
     ∀ (j : Nat) (l : List Block), p.blocks.drop j = l →
       numberingFrom (blockBase p j) l = numberingSpecFrom p j
-  | j, [], hd => by simp [numberingFrom, numberingSpecFrom, hd, Runtime.indexedFrom]
+  | j, [], hd => by simp [numberingFrom, numberingSpecFrom, hd, Runtime.indexedFrom_nil]
   | j, b :: rest, hd => by
     have hb : p.blocks[j]? = some b := by
       have := congrArg (·[0]?) hd
@@ -488,14 +538,15 @@ theorem numberingFrom_correct (p : Program) :
       rfl
     have ih := numberingFrom_correct p (j + 1) rest hd'
     rw [blockBase_succ hb] at ih
-    simp only [numberingFrom, numberingSpecFrom, hd, Runtime.indexedFrom, blockNumbering_eq,
+    simp only [numberingFrom, numberingSpecFrom, hd, Runtime.indexedFrom_cons, blockNumbering_eq,
       List.flatMap_cons, List.map_cons]
     rw [ih]
     simp only [numberingSpecFrom, hd']
 
 theorem numbering_eq (p : Program) : numbering p = numberingSpec p := by
   have h := numberingFrom_correct p 0 p.blocks (by simp)
-  exact h
+  change numberingFrom 0 p.blocks = numberingSpec p at h
+  simpa only [numbering, numberingFastFrom_eq] using h
 
 theorem addRegIds_lookup : ∀ (ids : List (Reg × Nat)) (a : Std.HashMap Reg Nat) (r : Reg),
     (addRegIds ids a)[r]? = a[r]?.or (ids.lookup r)
@@ -1611,7 +1662,7 @@ theorem mapM_ok_ok {α β ε : Type} {g : α → Except ε β} {l : List α} {l'
 
 theorem length_indexedFrom {α : Type} : ∀ (n : Nat) (l : List α), (Runtime.indexedFrom n l).length = l.length
   | _, [] => rfl
-  | n, _ :: l => by simp [Runtime.indexedFrom, length_indexedFrom (n + 1) l]
+  | n, _ :: l => by simp [Runtime.indexedFrom_cons, length_indexedFrom (n + 1) l]
 
 theorem length_indexed {α : Type} (l : List α) : (indexed l).length = l.length :=
   length_indexedFrom 0 l
@@ -1909,9 +1960,9 @@ theorem flatMap_indexedFrom_pick {α β : Type} (F : Nat → α → List β) (j 
     ∀ (n : Nat) (l : List α), (Runtime.indexedFrom n l).flatMap
       (fun (kx : Nat × α) => if kx.1 = j then F kx.1 kx.2 else []) =
       if n ≤ j then (match l[j - n]? with | some x => F j x | none => []) else []
-  | n, [] => by simp [Runtime.indexedFrom]
+  | n, [] => by simp
   | n, x :: l => by
-    simp only [Runtime.indexedFrom, List.flatMap_cons]
+    simp only [Runtime.indexedFrom_cons, List.flatMap_cons]
     rw [flatMap_indexedFrom_pick F j (n + 1) l]
     rcases Nat.lt_trichotomy n j with h | h | h
     · have h1 : j - n = (j - (n + 1)) + 1 := by omega
@@ -2397,7 +2448,7 @@ theorem initial_ok {p : Program} (hwf : WF p) {f : Source.Function} (hf : adapt 
   obtain ⟨lb, hfb, hlb⟩ := adapt_block hf hb
   obtain ⟨phis, xss, tm, hphis, -, -, rfl⟩ := adaptBlock_ok hlb
   rw [entry_params hwf hb] at hphis
-  simp only [indexed, Runtime.indexedFrom, List.mapM_nil, pure, Except.pure, Except.ok.injEq] at hphis
+  simp only [indexed, Runtime.indexedFrom_nil, List.mapM_nil, pure, Except.pure, Except.ok.injEq] at hphis
   subst hphis
   have hf' := adapt_ok hf
   obtain ⟨-, bs, -, rfl⟩ := hf'
