@@ -1,102 +1,133 @@
 # Compiler gate 9: trusted base
 
 `Concrete/Premises.lean` owns the only component and premise list. Its rendered
-component/premise rows are approved together; approval metadata never repeats the
-list. Observed declarations, example closures, executable identities and pins are
-separate evidence and cannot authorize themselves by updating a golden.
+component/premise rows and headline theorem axiom closures are approved together;
+approval metadata never repeats the component list. Observed declarations,
+example closures, executable identities and pins are separate evidence and cannot
+authorize themselves by updating a golden.
 
-The structural causes of the round-2 defects were lossy text framing, basename
-identity, a warm build standing in for a fresh build, source-lexer guesses about
-Lean syntax, declaration-shape guesses about compiler generation, and conflation
-of an editable inventory with approval authority. Gate 9 owns their removal.
+The structural causes of the earlier defects were lossy text framing, basename
+or union-closure tool identity, a warm build standing in for a fresh build,
+source-lexer guesses about Lean syntax, declaration-shape guesses about compiler
+generation, raw concatenation of trace logs across sessions, and anchoring owner
+approval in a mutable CI variable or rebase-fragile git commit SHA. Gate 9 owns
+their removal.
 
 ## Approval authority (T1)
 
-The coordinator must obtain a real owner signature and provision the owner's
-public key as the **protected** `CONCRETE_OWNER_ALLOWED_SIGNERS` CI variable
-(allowed-signers format, principal `owner`). Local runs take the path of an
-external allowed-signers file in the environment variable of the same name.
-Do not take this file or its authority from the branch under test.
-
-The owner signs the exact bytes of `tests/trusted-base-approval.json` with
-`ssh-keygen -Y sign -n concrete-trusted-base -f OWNER_KEY RECORD`. Commit the
-resulting `.json.sig` alongside the record. The JSON schema is:
+Owner decisions are recorded in `docs/decisions.md`, which is guarded by the
+single-writer rule (`AGENTS.md#rules`) and by `scripts/review/review.sh`'s
+owner-decision checks (`docs/REVIEW.md#owner-decisions-choosing-versus-recording`,
+`ISS-0011`, `ISS-0013`). `scripts/checks/lib/trusted_approval.py` verifies
+`tests/golden/slice0_trusted_base_approval.json` against `docs/decisions.md`
+and the rendered trusted-base report before any golden comparison or `update`:
 
 ```json
-{"schema":1,"registry_revision":"FULL_40_HEX_SHA","registry_sha256":"SHA256_OF_RENDERED_COMPONENT_AND_PREMISE_ROWS_WITH_NEWLINES","approval":"Owner statement authorizing this registry revision"}
+{
+  "schema": 1,
+  "decisions": [
+    {
+      "anchor": "docs/decisions.md#decided-YYYY-MM-DD-...",
+      "date": "YYYY-MM-DD",
+      "quote": "Verbatim owner quote from docs/decisions.md",
+      "scope": "What this decision record approves"
+    }
+  ],
+  "registry_sha256": "SHA256_OF_COMPONENT_AND_PREMISE_LINES",
+  "theorems_sha256": "SHA256_OF_THEOREM_AND_AXIOM_LINES",
+  "inputs": {
+    "flake.lock": "SHA256",
+    "flake.nix": "SHA256",
+    "lake-manifest.json": "SHA256",
+    "lean-toolchain": "SHA256"
+  }
+}
 ```
 
-The signature is checked against the protected signer before the revision is
-used. The revision must be an ancestor available in the full CI checkout; its
-registry source, flake/lock, Lean toolchain and Lake manifest must equal the
-consumed inputs. Every component and premise is thereby covered by the one
-revision approval, including its why/removal text. The report digest must match.
-Neither `update` nor a change to the approval JSON grants authority. A missing
-record/key/signature fails explicitly. No approval or signature has been invented
-for this fix round: actual owner provisioning remains required before landing.
-The coordinator must file the sweep row **Gate D / T1: protected owner signer and
-initial registry approval**; no ROADMAP entry is edited by this worker.
+For each entry in `decisions`, `trusted_approval.py` checks that the `<a id="...">`
+anchor exists in `docs/decisions.md` and that its decision block carries both the
+dated `(owner, YYYY-MM-DD:` header and the verbatim quoted owner answer (`"..."`).
+It then verifies that `registry_sha256` matches the report's `component ` and
+`premise ` rows, `theorems_sha256` matches the report's `theorem ` and `axiom `
+rows, and `inputs` matches the SHA-256 digests of `flake.nix`, `flake.lock`,
+`lean-toolchain` and `lake-manifest.json`. Because approval binds content digests
+and `docs/decisions.md` anchors rather than a git ancestor SHA or a mutable CI
+variable, rebasing never breaks an unchanged baseline, while any unapproved
+component/premise growth, theorem axiom change, pin change, or decision tamper
+fails closed. Full bidirectional decision provenance across all gates is tracked
+under `R-0678` (with `R-0509` owning T1/X2/N8 trusted identities and rebuilds).
 
 ## PR and scheduled evidence (X2 / N8)
 
 The common helper accepts a build callback; gate 9 installs tracing **before**
-sourcing it. There is no untraced initial build. A separate tiny, empty Lake
-project compiles Lean to C/object code and links a real executable on every PR.
-Its negative twin runs `objcopy` only during Lake configuration; rejection must
-name that tool. The full manifest emitter/native traces follow the initial build.
-Each individual syscall log is parsed before aggregation, preventing unresolved
-PID state from crossing trace sessions. Failed split PATH probes admit no tool.
-Relative exec/execveat targets are rejected explicitly because this tracer does
-not record cwd/fd state; they can only be supported with real cwd/fd tracking.
+sourcing it. There is no untraced initial build, and `trace_build` disables
+Lake's artifact cache (`LAKE_ARTIFACT_CACHE=false`) with a run-local
+`LAKE_CACHE_DIR`. A separate tiny, empty Lake project compiles Lean to C/object
+code and links a real executable on every PR; its negative twin runs `objcopy`
+only during Lake configuration and must fail naming `objcopy`. The full manifest
+emitter/native traces follow the initial build. Each individual `.execve` trace
+session file is parsed separately (`execve_names.py` `parse_many`), preventing
+unresolved PID state from crossing trace sessions. Failed split PATH probes
+admit no tool, and relative `execve`/`execveat` paths fail closed.
 
-The flake exposes exact roots for the pipeline, including Lean's fixed-output
-release archive. Gate 9 evaluates those roots from the checked-in flake/lock,
-queries their closure and NAR hashes, checks the consumed Lean/Lake canonical
-paths and version, checks that git and the approval verifier are the lock-derived
-executables, and requires every Lake checkout clean at its manifest rev.
-Successful execs preserve the executed path, canonical path and store hash.
-A different executable called `clang` outside that closure is refused. Local LCB
-is bound to its pinned source checkout, the initial Lake build and a binary hash
-which must remain unchanged through the audit. PR store identity relies on Nix's
-immutable store/content-address records; it does not claim a full store rebuild
-or independence from cached compiler artifacts.
+`flake.nix` narrows `trustedPipelineRoots` to the pipeline packages
+(`llvmPackages_21.clang`, `clang`, `leanRelease`, `git`, `bash`, `coreutils`) and
+exposes `passthru.trustedIdentity` (including per-tool root closures `toolRoots`,
+flake derivation mappings `derivations`, and exact `lean`, `git` and `nativeClang`
+paths). `trusted_identity.py` evaluates `trustedIdentity` in one call, verifies
+NAR hashes on the closure, checks the consumed `lean`, `lake`, `git` and
+`CONCRETE_SLICE0_CLANG` realpaths and the Lean toolchain version, and requires
+every Lake package checkout clean at its `lake-manifest.json` revision. Every
+observed `execve` must have both its invoked store root and its resolved store
+root inside that tool name's own `tool_closures[name]` set and resolve to an
+expected binary basename (`RESOLVED_NAMES`), while local `lcb` is restricted to
+`name == "lcb"` and `realpath == lcb` with a pinned SHA-256. Both a wrong-path
+`clang` binary and a symlink named `clang` pointing to a store binary (`bash`)
+inside the closure are tested as live negative controls and refused.
 
-`trusted_base_scheduled.yml` runs the full gate daily through
-`slice0_trusted_fresh.sh`: private source clone, empty `.lake`, disabled artifact
-cache, all Concrete and LCB compilation under the initial trace. On Sundays
-(and manual dispatch) `slice0_trusted_store.sh` also verifies store contents and
-independently rebuilds every pinned tool root with Nix's reproducibility check.
-These are executable scheduled legs, not promises to add them later. Heavy
-validation belongs to CI/concrete-ci-2, never a local full run on the shared host.
-The coordinator's sweep row is **Gate D / N8: qualify scheduled fresh/store legs**.
-The per-program `concrete facts` integration remains owned by R-0575 and the
-package `[assumptions]` interface by R-0589.
+The scheduled scripts `scripts/checks/compiler/slice0_trusted_fresh.sh` (daily)
+and `scripts/checks/compiler/slice0_trusted_store.sh` (weekly) are standalone
+entrypoints to be wired into the single repository-wide scheduled-tier workflow
+on `concrete-ci-2` with exact-SHA records and an independent freshness observer
+(`R-0676`, together with `R-0674` and `R-0509`; no per-gate duplicate workflow
+lives under `.github/workflows/`):
+- `slice0_trusted_fresh.sh` materializes and verifies `.lake/packages` locally
+  before cloning, copies only tracked source and dependency files (plus `.git`,
+  with no `.lake/build` artifacts), and runs `slice0_trusted_base.sh` with
+  `LAKE_ARTIFACT_CACHE=false` so the initial traced build compiles the entire
+  dependency and Concrete graph from scratch with no network fetches (`lake`
+  does not list `git-remote-https`).
+- `slice0_trusted_store.sh` instantiates the flake's devShell derivation graph
+  (`nix path-info --derivation ".#devShells.$system.default"`) and reads
+  `trustedIdentity.derivations` from the flake (never `nix-store --query --deriver`
+  on substituted paths), running `nix store verify --recursive --no-trust` and
+  `nix build --rebuild --no-link "$drv^*"` on each root. Both scripts enforce the
+  `bounded_summary` / `INCOMPLETE` exit-3 trap.
+
+The per-program `concrete facts` integration remains owned by `R-0575` and the
+package `[assumptions]` interface by `R-0589`.
 
 ## Trusted declarations and examples
 
 `matches` names executable tools, axioms, and explanatory source/proof boundaries.
 `declarations` exclusively names actual trusted Lean escape hatches. Each such
 entry must resolve back to a discovered trusted declaration, with exactly one
-owner of kind implementation/backend/runtime. The registry's current declaration
-list is empty; future lexer/parser boundary names do not preauthorize escape
-hatches. All ConstantInfo variants are checked for unsafe status, plus csimp and
-partial-loop use. Lean's recorded recursion tag licenses total recursive runtime
-twins; a hand-written name/shape alone does not. Partial runtime twins are audited
-rather than silently exempted.
+owner of kind `implementation`, `backend` or `runtime`. All `ConstantInfo`
+variants are checked for unsafe/partial/extern/implemented_by/csimp status and
+`Lean.Loop` (`while`/`repeat`) partial-loop use. Lean's recorded recursion tag
+(`Meta.recExt`) licenses total recursive runtime twins; partial runtime twins
+inherit their parent declaration's owner when registered.
 
-The frontend parses candidate files in their own header/import context. A raw
-substring filter may only add candidates; no lexer can hide an `example` or
-`partial` token. Actual example AST commands are retained as named declarations;
-quoted command syntax inside ordinary declaration bodies is left intact. Both
-empty/nonempty axiom closures use JSON arrays with a checked schema, and all
-new example auxiliaries are checked for trusted code too. Explicit partial
-modifiers are checked even when Lean optimizes a non-recursive partial definition
-to a safe kernel constant. Well-founded and mutual recursion have positive controls.
+`slice0_examples.lean` selects candidate files by identifier token (`example` or
+`partial`, so substrings like `examples` in `Concrete/Backend/LCB.lean` do not
+trigger redundant re-elaboration), retains `example` AST commands as named
+declarations with `line:column` identities, checks both `hasPartialModifier` and
+`trustedDeclarationKinds` against `effectiveOwners` (so registered `partial def`s
+owned by a code component pass while unlisted or non-code-owned ones print
+`FAIL ...` to stdout and fail), and `example_rows.py` fails closed if zero
+`example-json` rows are observed.
 
-Focused controls are `scripts/checks/tests/test_execve_names.py`,
-`trusted_base_controls.py`, and `trusted_policy_controls.py`. The gate runs the
-semantic/policy controls too. Every negative case requires its planted diagnostic,
-including the fake clang identity, signature failure, trust growth, pin mismatch,
-lexer-bypass example, partial loop, unsafe inductive, csimp, stale declaration and
-non-code owner. Reviewers must choose the best long-term design rather than cut
-corners for speed, diff size, or review-round budgets.
+Focused controls live in `scripts/checks/tests/test_execve_names.py`,
+`scripts/checks/tests/trusted_base_controls.py` and
+`scripts/checks/tests/trusted_policy_controls.py`, plus the inline negative
+controls in `scripts/checks/compiler/slice0_trusted_base.sh`.

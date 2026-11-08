@@ -438,19 +438,9 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
       - name: Install Nix
         uses: cachix/install-nix-action@v31
-      - name: Install protected owner trust anchor
-        env:
-          OWNER_SIGNERS: ${{ vars.CONCRETE_OWNER_ALLOWED_SIGNERS }}
-        run: |
-          test -n "$OWNER_SIGNERS"
-          printf '%s\n' "$OWNER_SIGNERS" > "$RUNNER_TEMP/owner-signers"
       - name: Trusted-base golden (premises, axioms, toolchain and LCB pin)
-        env:
-          CONCRETE_OWNER_ALLOWED_SIGNERS: ${{ runner.temp }}/owner-signers
         run: nix develop --command timeout 3000 bash scripts/checks/compiler/slice0_trusted_base.sh
 
   reproducibility:

@@ -1,0 +1,25 @@
+{
+  "decisions": [
+    {
+      "anchor": "docs/decisions.md#decided-2026-11-07-early-evidence",
+      "date": "2026-11-07",
+      "quote": "ok let's do 1, 2, 3, 4, 5",
+      "scope": "Trusted-base statement from slice 0: Lean kernel, LLVM printer and LLVM, LCB MIR-to-assembly step, linker, OS and named runtime premises."
+    },
+    {
+      "anchor": "docs/decisions.md#decided-2026-11-08-eleven",
+      "date": "2026-11-08",
+      "quote": "ok go ahead with all the decisions",
+      "scope": "Complete BIR-to-LCB-IR adapter theorem retiring the adapter premise (R-0579), with no-libc runtime deferred to slices 24-25 (R-0621)."
+    }
+  ],
+  "inputs": {
+    "flake.lock": "d0a75387719c81fc35e16c0242b7b099f896235959d3936ec510cd2e9c0d9a3d",
+    "flake.nix": "bbe472b67f4bffbbbe8b994497ce8677cff35ed5d1fee2bdb62565fc1a027b14",
+    "lake-manifest.json": "2aedd85285d989bc0a6d8ee249787140cf7e9ab3edf1e9abef7f28a1f99e5c15",
+    "lean-toolchain": "d5edba4e4b8faad9c1baeadb265716d20d03be4d1a2647dc5e35b0c0325bea7b"
+  },
+  "registry_sha256": "1624d6265e714896e4d52ba8070474daea9d0a79dfa4be07d1edb47caa54124e",
+  "schema": 1,
+  "theorems_sha256": "b8362ba53a69c20fdaa38b73d0e53b9a31e97d29fea3ef71b3fa67c2c0434a47"
+}

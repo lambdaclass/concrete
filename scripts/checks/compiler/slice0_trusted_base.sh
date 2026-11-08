@@ -20,10 +20,12 @@ export LC_ALL=C
 # This callback runs INSIDE common initialization, before any Lake build.
 slice0_audit_initial_build() {
   if [ "$(uname -s)" = Linux ]; then
-    bounded 1800 strace -f -qq -s 4096 -e trace=execve,execveat -o "$work/build.execve" \
+    LAKE_ARTIFACT_CACHE=false LAKE_CACHE_DIR="$work/lake-cache" \
+      bounded 1800 strace -f -qq -s 4096 -e trace=execve,execveat -o "$work/build.execve" \
       lake build Concrete lean-compiler-backend/lcb
   else
-    bounded 1800 lake build Concrete lean-compiler-backend/lcb
+    LAKE_ARTIFACT_CACHE=false LAKE_CACHE_DIR="$work/lake-cache" \
+      bounded 1800 lake build Concrete lean-compiler-backend/lcb
   fi
 }
 # shellcheck source=scripts/checks/lib/slice0_common.sh
@@ -195,7 +197,7 @@ if ! current "$work/current"; then
   exit 1
 fi
 bounded 60 python3 -I "$root/scripts/checks/lib/trusted_approval.py" \
-  "$work/current" "$root/tests/trusted-base-approval.json"
+  "$work/current" "$root/tests/golden/slice0_trusted_base_approval.json"
 if [ "${1:-}" = update ]; then
   mkdir -p "$(dirname "$golden")"
   cp "$work/current" "$golden"
