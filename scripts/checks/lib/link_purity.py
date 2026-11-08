@@ -11,13 +11,15 @@ import subprocess
 import sys
 
 from link_policy import verify_policy
+from link_paths import allowed
 
 verify_policy()
 exe, trace, *args = sys.argv[1:]
-from link_paths import allowed
-objects = {os.path.abspath(a): str(Path(a).resolve()) for a in args if a.endswith('.o')}
-for obj in objects:
-    allowed(obj, local=True)
+objects = {}
+for arg in args:
+    if arg.endswith('.o'):
+        allowed(os.path.abspath(arg), local=True)
+        objects[os.path.abspath(arg)] = str(Path(arg).resolve())
 
 lines = Path(trace).read_text().splitlines()
 seen = set()
@@ -32,7 +34,7 @@ for line in lines:
         sys.exit('link purity: unrecognized linker trace: ' + line[:500])
     path = match[1]
     try:
-        allowed(path, local=True)
+        allowed(path, local=os.path.abspath(path) in objects)
         if not Path(path).is_file():
             sys.exit('link purity: missing traced input: ' + path)
         seen.add(str(Path(path).resolve()))

@@ -6,12 +6,8 @@ set -euo pipefail
 policy_root=$(cd "$(dirname "$0")" && pwd)
 : "${CONCRETE_SLICE0_LINK_POLICY:?run inside nix develop}"
 python3 "$policy_root/link_policy.py"
-case "$(uname -s)-$(uname -m)" in
-  Linux-x86_64) target=x86_64-linux ;;
-  Linux-aarch64) target=aarch64-linux ;;
-  Darwin-arm64) target=aarch64-macos ;;
-  *) echo 'slice0_native: unsupported target' >&2; exit 2 ;;
-esac
+target=$CONCRETE_SLICE0_TARGET
+[ "$target" != unsupported ] || { echo 'slice0_native: unsupported target' >&2; exit 2; }
 if [ "${1:-}" = target ]; then echo "$target"; exit; fi
 # `control DIRECTORY` links DIRECTORY/control.s alone into control.exe, under the same policy: the run
 # checks' controls (slice0_artifacts.sh) are hand-written assembly built exactly like the examples.

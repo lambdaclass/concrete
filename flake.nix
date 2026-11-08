@@ -112,6 +112,12 @@
             rootPaths = [ nativeCC nativeLD nativeSysroot pkgs.llvmPackages_21.llvm pkgs.llvmPackages_21.compiler-rt pkgs.llvmPackages_21.libunwind ];
           };
           nativeSettings = {
+            CONCRETE_SLICE0_TARGET = {
+              x86_64-linux = "x86_64-linux";
+              aarch64-linux = "aarch64-linux";
+              aarch64-darwin = "aarch64-macos";
+              x86_64-darwin = "unsupported";
+            }.${pkgs.stdenv.hostPlatform.system};
             CONCRETE_SLICE0_COMPILER_RT = "${pkgs.llvmPackages_21.compiler-rt}";
             CONCRETE_SLICE0_CLANG = "${nativeCC}/bin/clang";
             CONCRETE_SLICE0_LINK_CLOSURE = "${nativeClosure}/store-paths";

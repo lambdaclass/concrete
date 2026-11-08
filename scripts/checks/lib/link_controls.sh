@@ -156,4 +156,7 @@ EMPTY
     done
   )
 fi
+if [ "$(uname -s)" = Linux ]; then
+  bash "$root/scripts/checks/lib/link_invocation_controls.sh"
+fi
 echo 'PASS native link controls'

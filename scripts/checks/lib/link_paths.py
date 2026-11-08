@@ -6,7 +6,10 @@ import sys
 
 def allowed(path, local=False):
     lexical = os.path.abspath(path)
-    resolved = str(Path(path).resolve())
+    try:
+        resolved = str(Path(path).resolve())
+    except (OSError, RuntimeError, ValueError) as error:
+        sys.exit('link purity: invalid path: ' + str(error)[:500])
     if local and lexical == resolved and Path(resolved).parent == Path.cwd().resolve() and Path(path).is_file() and path.endswith('.o'):
         return
     if not path.startswith('/') or os.path.normpath(path) != path:
