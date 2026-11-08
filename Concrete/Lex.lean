@@ -3,10 +3,13 @@ import ConcreteSpec.Spec.Surface0
 /-!
 # Settled lexer components
 
-Total byte-list UTF-8 decoding and source checking, ASCII identifier tests, the four settled
-whitespace scalars, line comments and maximal trivia scanning. No tokens, literal rules, shebang
-handling or block comments are introduced; no other Unicode whitespace is included.
-Error constructors are internal data, not diagnostic wording. Offsets are zero-based byte offsets;
+Total byte-list UTF-8 decoding and source checking, ASCII identifiers, the four settled whitespace
+scalars, line comments and maximal trivia scanning. String bodies implement only the six decided
+escapes and parameterize all other raw scalars. Longest match uses an arbitrary table, and decimal
+integer lexemes refuse leading zeroes. No keyword, reserved-word, builtin, concrete operator or
+punctuation set, literal suffix, other literal rule, shebang handling or block comment is introduced;
+no other Unicode whitespace is included. Error constructors are internal data, not diagnostic
+wording. Offsets are zero-based byte offsets;
 truncation points at EOF. TODO: prove the first non-extendible-prefix property of error offsets.
 The success correspondence theorems below do not claim error-position correctness.
 -/
@@ -546,6 +549,425 @@ theorem trivia_unique {cs : List Nat} {out₁ out₂ : List Nat × List Nat}
     (h₁ : Trivia cs out₁) (h₂ : Trivia cs out₂) : out₁ = out₂ := by
   rw [← skipTrivia_complete h₁, ← skipTrivia_complete h₂]
 
+/-- Scan the longest identifier-continuation run. -/
+def scanIdentBody : List Nat → List Nat × List Nat
+  | [] => ([], [])
+  | c :: cs =>
+    if IdentContinue c then let (body, rest) := scanIdentBody cs; (c :: body, rest)
+    else ([], c :: cs)
+
+/-- Scan an ASCII identifier only when its first scalar is a settled start scalar. -/
+def identifier : List Nat → Option (List Nat × List Nat)
+  | [] => none
+  | c :: cs =>
+    if IdentStart c then
+      let (body, rest) := scanIdentBody cs
+      some (c :: body, rest)
+    else none
+
+/-- The continuation scanner satisfies the independent maximal-run judgment. -/
+theorem scanIdentBody_sound (cs : List Nat) :
+    IdentBody cs (scanIdentBody cs).1 (scanIdentBody cs).2 := by
+  induction cs with
+  | nil =>
+    exact .stop [] (by intro c cs h; cases h)
+  | cons c cs ih =>
+    by_cases hc : IdentContinue c
+    · simpa [scanIdentBody, hc] using IdentBody.cons hc ih
+    · simpa [scanIdentBody, hc] using
+        IdentBody.stop (c :: cs) (by intro d ds h; cases h; exact hc)
+
+/-- Every declarative continuation decomposition is the scanner's result. -/
+theorem scanIdentBody_complete {cs body rest : List Nat} (h : IdentBody cs body rest) :
+    scanIdentBody cs = (body, rest) := by
+  induction h with
+  | stop rest hc =>
+    cases rest with
+    | nil => rfl
+    | cons c cs => simp [scanIdentBody, hc c cs rfl]
+  | cons hc _ ih => simp [scanIdentBody, hc, ih]
+
+/-- Successful identifier scanning satisfies the independent judgment. -/
+theorem identifier_sound {cs : List Nat} {out : List Nat × List Nat}
+    (h : identifier cs = some out) : Identifier cs out := by
+  cases cs with
+  | nil => simp [identifier] at h
+  | cons c cs =>
+    by_cases hc : IdentStart c
+    · simp only [identifier, hc, ↓reduceIte, Option.some.injEq] at h
+      cases h
+      exact .intro hc (scanIdentBody_sound cs)
+    · simp [identifier, hc] at h
+
+/-- Every declarative identifier is recognized with the same lexeme and remainder. -/
+theorem identifier_complete {cs : List Nat} {out : List Nat × List Nat}
+    (h : Identifier cs out) : identifier cs = some out := by
+  cases h with
+  | intro hc hb => simp [identifier, hc, scanIdentBody_complete hb]
+
+/-- Identifier decompositions are unique. -/
+theorem identifier_unique {cs : List Nat} {out₁ out₂ : List Nat × List Nat}
+    (h₁ : Identifier cs out₁) (h₂ : Identifier cs out₂) : out₁ = out₂ := by
+  have h := (identifier_complete h₁).symm.trans (identifier_complete h₂)
+  exact Option.some.inj h
+
+/-- Decode exactly the six settled escapes. -/
+def decodeEscape : Nat → Option Nat
+  | 110 => some 10
+  | 116 => some 9
+  | 114 => some 13
+  | 92 => some 92
+  | 34 => some 34
+  | 48 => some 0
+  | _ => none
+
+/-- Every scanner-approved escape is in the declarative escape relation. -/
+theorem decodeEscape_sound {escaped decoded : Nat} (h : decodeEscape escaped = some decoded) :
+    StringEscape escaped decoded := by
+  unfold decodeEscape at h
+  split at h <;> simp_all [StringEscape]
+
+/-- Every declarative escape is decoded to its settled scalar. -/
+theorem decodeEscape_complete {escaped decoded : Nat} (h : StringEscape escaped decoded) :
+    decodeEscape escaped = some decoded := by
+  rcases h with (⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩)
+  all_goals rfl
+
+/-- Prepend a decoded scalar to a successful string-body result. -/
+def stringPrepend (c : Nat) : Option (List Nat × List Nat) → Option (List Nat × List Nat)
+  | none => none
+  | some (decoded, rest) => some (c :: decoded, rest)
+
+/-- Scan a string body after its opening quote. `rawOk` remains an explicit parameter and does
+not choose whether any other raw control scalar is accepted. -/
+def stringBody (rawOk : Nat → Prop) [DecidablePred rawOk] :
+    List Nat → Option (List Nat × List Nat)
+  | [] => none
+  | 34 :: rest => some ([], rest)
+  | 92 :: escaped :: input =>
+    match decodeEscape escaped with
+    | some decoded => stringPrepend decoded (stringBody rawOk input)
+    | none => none
+  | 92 :: [] => none
+  | 10 :: _ => none
+  | 13 :: _ => none
+  | c :: input => if rawOk c then stringPrepend c (stringBody rawOk input) else none
+
+/-- Successful prepending exposes the successful tail and decoded list. -/
+theorem stringPrepend_ok {c : Nat} {r : Option (List Nat × List Nat)}
+    {out : List Nat × List Nat} (h : stringPrepend c r = some out) :
+    ∃ decoded rest, r = some (decoded, rest) ∧ out = (c :: decoded, rest) := by
+  cases r with
+  | none => simp [stringPrepend] at h
+  | some tail =>
+    cases tail with
+    | mk decoded rest =>
+      cases Option.some.inj h
+      exact ⟨decoded, rest, rfl, rfl⟩
+
+/-- Every scanner result satisfies the independent string-body judgment for the same `rawOk`. -/
+theorem stringBody_sound (rawOk : Nat → Prop) [DecidablePred rawOk]
+    {cs : List Nat} {out : List Nat × List Nat}
+    (h : stringBody rawOk cs = some out) : StringBody rawOk cs out := by
+  induction cs using stringBody.induct (rawOk := rawOk) generalizing out with
+  | case1 => simp [stringBody] at h
+  | case2 rest =>
+    cases Option.some.inj h
+    exact .close rest
+  | case3 escaped input decodedScalar he ih =>
+    simp only [stringBody, he] at h
+    obtain ⟨decoded, rest, ht, rfl⟩ := stringPrepend_ok h
+    exact .escape (decodeEscape_sound he) (ih ht)
+  | case4 escaped input he => simp [stringBody, he] at h
+  | case5 => simp [stringBody] at h
+  | case6 rest => simp [stringBody] at h
+  | case7 rest => simp [stringBody] at h
+  | case8 c input hq hb hl hr hc hraw ih =>
+    simp only [stringBody, hraw, ↓reduceIte] at h
+    obtain ⟨decoded, rest, ht, rfl⟩ := stringPrepend_ok h
+    have hb' : c ≠ 92 := by
+      intro heq
+      cases input with
+      | nil => exact hl heq rfl
+      | cons escaped tail => exact hb escaped tail heq rfl
+    exact .raw hq hb' hr hc hraw (ih ht)
+  | case9 c input hq hb hl hr hc hraw => simp [stringBody, hraw] at h
+
+/-- Every declarative string body is recognized with the same decoding and remainder. -/
+theorem stringBody_complete (rawOk : Nat → Prop) [DecidablePred rawOk]
+    {cs : List Nat} {out : List Nat × List Nat}
+    (h : StringBody rawOk cs out) : stringBody rawOk cs = some out := by
+  induction h with
+  | close rest => rfl
+  | raw hq hb hl hr hc _ ih => simp [stringBody, hb, hc, ih, stringPrepend]
+  | escape he _ ih => simp [stringBody, decodeEscape_complete he, ih, stringPrepend]
+
+/-- String-body decompositions are unique for every raw-scalar parameter. -/
+theorem stringBody_unique (rawOk : Nat → Prop) [DecidablePred rawOk]
+    {cs : List Nat} {out₁ out₂ : List Nat × List Nat}
+    (h₁ : StringBody rawOk cs out₁) (h₂ : StringBody rawOk cs out₂) : out₁ = out₂ := by
+  have h := (stringBody_complete rawOk h₁).symm.trans (stringBody_complete rawOk h₂)
+  exact Option.some.inj h
+
+/-- Strip a token from the front of an input, or report that it is not a prefix. -/
+def prefixRest : List Nat → List Nat → Option (List Nat)
+  | [], input => some input
+  | _ :: _, [] => none
+  | a :: token, b :: input => if a = b then prefixRest token input else none
+
+/-- Successful prefix stripping gives the corresponding concatenation. -/
+theorem prefixRest_sound {token input rest : List Nat} (h : prefixRest token input = some rest) :
+    input = token ++ rest := by
+  induction token generalizing input with
+  | nil =>
+    cases Option.some.inj h
+    rfl
+  | cons a token ih =>
+    cases input with
+    | nil => simp [prefixRest] at h
+    | cons b input =>
+      by_cases hab : a = b
+      · subst b
+        simp only [prefixRest, ↓reduceIte] at h
+        simp only [List.cons_append]
+        rw [ih h]
+      · simp [prefixRest, hab] at h
+
+/-- Every concatenated prefix is stripped to exactly its suffix. -/
+theorem prefixRest_complete {token input rest : List Nat} (h : input = token ++ rest) :
+    prefixRest token input = some rest := by
+  subst input
+  induction token with
+  | nil => rfl
+  | cons a token ih => simp [prefixRest, ih]
+
+/-- Scan an arbitrary table for a longest nonempty prefix. Ties choose the earlier entry, but
+any equal-length prefixes of one input are the same scalar list. -/
+def longestMatchAux (input : List Nat) : List (List Nat) → Option (List Nat × List Nat)
+  | [] => none
+  | token :: table =>
+    match prefixRest token input with
+    | none => longestMatchAux input table
+    | some rest =>
+      if token = [] then longestMatchAux input table
+      else
+        match longestMatchAux input table with
+        | none => some (token, rest)
+        | some (other, otherRest) =>
+          if other.length < token.length then some (token, rest) else some (other, otherRest)
+
+/-- Longest match over the supplied abstract table; this is not a Concrete token set. -/
+def longestMatch (table : List (List Nat)) (input : List Nat) : Option (List Nat × List Nat) :=
+  longestMatchAux input table
+
+/-- A tail-table longest match remains longest when the head cannot be a nonempty match. -/
+theorem longestMatch_cons_of_no_match {token : List Nat} {table : List (List Nat)}
+    {input : List Nat} {out : Option (List Nat × List Nat)}
+    (h : LongestMatch table input out)
+    (hhead : ∀ rest, token ≠ [] → input ≠ token ++ rest) :
+    LongestMatch (token :: table) input out := by
+  cases h with
+  | none hnone =>
+    apply LongestMatch.none
+    intro other hother hne rest hprefix
+    rcases List.mem_cons.mp hother with rfl | hmem
+    · exact hhead rest hne hprefix
+    · exact hnone other hmem hne rest hprefix
+  | @some other otherRest hmem hne hprefix hmax =>
+    apply LongestMatch.some (List.mem_cons_of_mem _ hmem) hne hprefix
+    intro candidate hcandidate tail htail
+    rcases List.mem_cons.mp hcandidate with rfl | htailMem
+    · by_cases hempty : candidate = []
+      · subst candidate; simp
+      · exact (hhead tail hempty htail).elim
+    · exact hmax candidate htailMem tail htail
+
+/-- The table scanner always returns a declarative longest match, including `none`. -/
+theorem longestMatchAux_sound (table : List (List Nat)) (input : List Nat) :
+    LongestMatch table input (longestMatchAux input table) := by
+  induction table with
+  | nil =>
+    apply LongestMatch.none
+    intro token h
+    cases h
+  | cons token table ih =>
+    cases hp : prefixRest token input with
+    | none =>
+      simp only [longestMatchAux, hp]
+      apply longestMatch_cons_of_no_match ih
+      intro rest _ hprefix
+      rw [prefixRest_complete hprefix] at hp
+      cases hp
+    | some rest =>
+      have hprefix := prefixRest_sound hp
+      by_cases hne : token = []
+      · subst token
+        simp only [longestMatchAux, hp, ↓reduceIte]
+        exact longestMatch_cons_of_no_match ih (fun _ h => (h rfl).elim)
+      · simp only [longestMatchAux, hp, hne, ↓reduceIte]
+        cases htail : longestMatchAux input table with
+        | none =>
+          rw [htail] at ih <;> simp only
+          cases ih with
+          | none hnone =>
+            apply LongestMatch.some (by simp) hne hprefix
+            intro other hother tail htailPrefix
+            rcases List.mem_cons.mp hother with rfl | hmem
+            · exact Nat.le_refl _
+            · by_cases hempty : other = []
+              · subst other; simp
+              · exact (hnone other hmem hempty tail htailPrefix).elim
+        | some out =>
+          cases out with
+          | mk other otherRest =>
+            rw [htail] at ih <;> simp only
+            cases ih with
+            | some hmem hneOther hprefixOther hmax =>
+              by_cases hlt : other.length < token.length
+              · simp only [hlt, ↓reduceIte]
+                apply LongestMatch.some (by simp) hne hprefix
+                intro candidate hcandidate tail htailPrefix
+                rcases List.mem_cons.mp hcandidate with rfl | hcandidateMem
+                · exact Nat.le_refl _
+                · exact Nat.le_trans (hmax candidate hcandidateMem tail htailPrefix)
+                    (Nat.le_of_lt hlt)
+              · simp only [hlt, ↓reduceIte]
+                apply LongestMatch.some (List.mem_cons_of_mem _ hmem) hneOther hprefixOther
+                intro candidate hcandidate tail htailPrefix
+                rcases List.mem_cons.mp hcandidate with rfl | hcandidateMem
+                · exact Nat.le_of_not_gt hlt
+                · exact hmax candidate hcandidateMem tail htailPrefix
+
+/-- The public longest-match scanner satisfies the independent judgment. -/
+theorem longestMatch_sound (table : List (List Nat)) (input : List Nat) :
+    LongestMatch table input (longestMatch table input) :=
+  longestMatchAux_sound table input
+
+/-- Longest-match outcomes are unique, including the remainder and the no-match outcome. -/
+theorem longestMatch_unique {table : List (List Nat)} {input : List Nat}
+    {out₁ out₂ : Option (List Nat × List Nat)}
+    (h₁ : LongestMatch table input out₁) (h₂ : LongestMatch table input out₂) : out₁ = out₂ := by
+  cases h₁ with
+  | none hnone =>
+    cases h₂ with
+    | none => rfl
+    | @some token rest hmem hne hprefix _ => exact (hnone token hmem hne rest hprefix).elim
+  | @some token rest hmem hne hprefix hmax =>
+    cases h₂ with
+    | none hnone => exact (hnone token hmem hne rest hprefix).elim
+    | @some other otherRest hmemOther _ hprefixOther hmaxOther =>
+      have hlen : token.length = other.length :=
+        Nat.le_antisymm (hmaxOther token hmem rest hprefix)
+          (hmax other hmemOther otherRest hprefixOther)
+      have htoken : token = other := by
+        calc
+          token = (token ++ rest).take token.length := by simp
+          _ = input.take token.length := by rw [← hprefix]
+          _ = input.take other.length := by rw [hlen]
+          _ = (other ++ otherRest).take other.length := by rw [hprefixOther]
+          _ = other := by simp
+      subst other
+      have hrest : rest = otherRest := by
+        calc
+          rest = (token ++ rest).drop token.length := by simp
+          _ = input.drop token.length := by rw [← hprefix]
+          _ = (token ++ otherRest).drop token.length := by rw [hprefixOther]
+          _ = otherRest := by simp
+      subst otherRest
+      rfl
+
+/-- Every declarative longest match is exactly the scanner's result. -/
+theorem longestMatch_complete {table : List (List Nat)} {input : List Nat}
+    {out : Option (List Nat × List Nat)} (h : LongestMatch table input out) :
+    longestMatch table input = out :=
+  longestMatch_unique (longestMatch_sound table input) h
+
+/-- Scan the maximal ASCII decimal-digit run. -/
+def scanDigits : List Nat → List Nat × List Nat
+  | [] => ([], [])
+  | c :: cs =>
+    if DecimalDigit c then let (digits, rest) := scanDigits cs; (c :: digits, rest)
+    else ([], c :: cs)
+
+/-- Scan an accepted decimal lexeme and its positional value. The remainder is only the suffix
+left by maximal digit scanning; no suffix, base prefix, separator or type-range rule is added. -/
+def decimalInteger (cs : List Nat) : Option (List Nat × Nat × List Nat) :=
+  let out := scanDigits cs
+  match out.1 with
+  | [] => none
+  | [48] => some (out.1, decimalValue out.1, out.2)
+  | 48 :: _ => none
+  | _ :: _ => some (out.1, decimalValue out.1, out.2)
+
+/-- The digit scanner satisfies the independent maximal-run judgment. -/
+theorem scanDigits_sound (cs : List Nat) :
+    DigitRun cs (scanDigits cs).1 (scanDigits cs).2 := by
+  induction cs with
+  | nil => exact .stop [] (by intro c cs h; cases h)
+  | cons c cs ih =>
+    by_cases hc : DecimalDigit c
+    · simpa [scanDigits, hc] using DigitRun.cons hc ih
+    · simpa [scanDigits, hc] using
+        DigitRun.stop (c :: cs) (by intro d ds h; cases h; exact hc)
+
+/-- Every declarative digit decomposition is the scanner's result. -/
+theorem scanDigits_complete {cs digits rest : List Nat} (h : DigitRun cs digits rest) :
+    scanDigits cs = (digits, rest) := by
+  induction h with
+  | stop rest hc =>
+    cases rest with
+    | nil => rfl
+    | cons c cs => simp [scanDigits, hc c cs rfl]
+  | cons hc _ ih => simp [scanDigits, hc, ih]
+
+/-- Successful decimal scanning satisfies the independent judgment. -/
+theorem decimalInteger_sound {cs : List Nat} {out : List Nat × Nat × List Nat}
+    (h : decimalInteger cs = some out) : DecimalInteger cs out := by
+  unfold decimalInteger at h
+  generalize heq : scanDigits cs = scanned at h
+  cases scanned with
+  | mk digits rest =>
+    have hrun : DigitRun cs digits rest := by
+      have hs := scanDigits_sound cs
+      rw [heq] at hs
+      simpa using hs
+    cases digits with
+    | nil => simp at h
+    | cons d ds =>
+      by_cases hd : d = 48
+      · subst d
+        cases ds with
+        | nil =>
+          cases h
+          exact DecimalInteger.intro (digits := [48]) (rest := rest)
+            (value := decimalValue [48]) hrun (by decide) rfl
+        | cons e ds => simp at h
+      · simp [hd] at h
+        cases h
+        exact .intro hrun (by simp [DigitsAccepted, hd]) rfl
+
+/-- Every declarative decimal integer is recognized with the same lexeme, value and remainder. -/
+theorem decimalInteger_complete {cs : List Nat} {out : List Nat × Nat × List Nat}
+    (h : DecimalInteger cs out) : decimalInteger cs = some out := by
+  cases h with
+  | @intro digits rest value hrun hacc hval =>
+    simp only [decimalInteger, scanDigits_complete hrun]
+    cases digits with
+    | nil => simp [DigitsAccepted] at hacc
+    | cons d ds =>
+      by_cases hd : d = 48
+      · subst d
+        cases ds with
+        | nil => simp [hval]
+        | cons e ds => simp [DigitsAccepted] at hacc
+      · simp [hd, hval]
+
+/-- Decimal-integer decompositions are unique. -/
+theorem decimalInteger_unique {cs : List Nat} {out₁ out₂ : List Nat × Nat × List Nat}
+    (h₁ : DecimalInteger cs out₁) (h₂ : DecimalInteger cs out₂) : out₁ = out₂ := by
+  have h := (decimalInteger_complete h₁).symm.trans (decimalInteger_complete h₂)
+  exact Option.some.inj h
+
 /-! ## Kernel-checked conformance cases -/
 
 section Conformance
@@ -604,6 +1026,40 @@ example : skipTrivia [0xA0,32] = ([], [0xA0,32]) := by decide
 example : skipTrivia [0xFEFF,32] = ([], [0xFEFF,32]) := by decide
 example : skipTrivia [47] = ([], [47]) := by decide
 example : skipTrivia [65,32] = ([], [65,32]) := by decide
+
+example : identifier [65,98,99,33] = some ([65,98,99], [33]) := by decide
+example : identifier [97,98,99] = some ([97,98,99], []) := by decide
+example : identifier [95,48,57] = some ([95,48,57], []) := by decide
+example : ([65,98,99] : List Nat) ≠ [97,98,99] := by decide
+example : identifier [48,98,99] = none := by decide
+example : identifier [0xE9,65] = none := by decide
+
+-- `False` is only a trivial test parameter that excludes raw scalars while exercising escapes
+-- and refusals. These cases choose nothing about raw tabs or other raw control scalars.
+example : stringBody (fun _ => False) [92,110,34,65] = some ([10], [65]) := by decide
+example : stringBody (fun _ => False)
+    [92,110,92,116,92,114,92,92,92,34,92,48,34,65] =
+    some ([10,9,13,92,34,0], [65]) := by decide
+example : stringBody (fun _ => False) [92,113,34] = none := by decide
+example : stringBody (fun _ => False) [10,34] = none := by decide
+example : stringBody (fun _ => False) [13,34] = none := by decide
+example : stringBody (fun _ => False) [] = none := by decide
+example : stringBody (fun _ => False) [92,110] = none := by decide
+example : stringBody (fun _ => False) [92] = none := by decide
+
+-- Arbitrary numeric lists only: this is deliberately not a Concrete token table.
+example : longestMatch [[1], [1,2,3], [1,2], [9]] [1,2,4] = some ([1,2], [4]) := by decide
+example : longestMatch [[1,2], [1,2]] [1,2,3] = some ([1,2], [3]) := by decide
+example : longestMatch [[], [1,2], [3]] [1,9] = none := by decide
+example : longestMatch [[1], []] [] = none := by decide
+
+example : decimalInteger [48,65] = some ([48], 0, [65]) := by decide
+example : decimalInteger [55] = some ([55], 7, []) := by decide
+example : decimalInteger [50,48,48,32] = some ([50,48,48], 200, [32]) := by decide
+example : decimalInteger [50,53,53] = some ([50,53,53], 255, []) := by decide
+example : decimalInteger [48,48,55] = none := by decide
+example : decimalInteger [48,48] = none := by decide
+example : decimalInteger [65] = none := by decide
 
 end Conformance
 
