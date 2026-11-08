@@ -110,6 +110,44 @@ theorem KeyConstruct.key_rename_named (preceding : List KeyConstruct) (kind : Co
       ⟨[⟨kind, .label name⟩]⟩ := by
   simp [KeyConstruct.key, KeyConstruct.segment, KeyConstruct.rename, ConstructName.rename]
 
+/-- Inserting a different-kind sibling preserves every descendant's complete assigned path,
+including descendants several unnamed levels beneath the root. -/
+theorem KeyConstruct.descendant_insert_differentKind (before after : List KeyConstruct)
+    (inserted target : KeyConstruct) (route : List Nat) (different : inserted.kind ≠ target.kind) :
+    target.descendantKey (before ++ inserted :: after) route =
+      target.descendantKey (before ++ after) route := by
+  simp [KeyConstruct.descendantKey, KeyConstruct.segment, List.filter_append, different]
+
+/-- Inserting a named sibling preserves complete descendant paths, not just root segments. -/
+theorem KeyConstruct.descendant_insert_named (before after : List KeyConstruct)
+    (label : String) (kind : ConstructKind) (children : List KeyConstruct)
+    (target : KeyConstruct) (route : List Nat) :
+    target.descendantKey (before ++ KeyConstruct.mk kind (.named label) children :: after) route =
+      target.descendantKey (before ++ after) route := by
+  simp [KeyConstruct.descendantKey, KeyConstruct.segment, List.filter_append,
+    ConstructName.isUnnamed]
+
+/-- Renaming a sibling cannot change the complete assigned path of any descendant of another
+item. The root's preceding siblings are scanned by the same assignment used for full trees. -/
+theorem KeyConstruct.descendant_rename_other (before after : List KeyConstruct)
+    (target other : KeyConstruct) (name : String) (route : List Nat) :
+    other.descendantKey (before ++ target.rename name :: after) route =
+      other.descendantKey (before ++ target :: after) route := by
+  have root := KeyConstruct.key_rename_other before after target other name
+  have segment := congrArg (fun key => key.path) root
+  simp only [KeyConstruct.key, List.cons.injEq, and_true] at segment
+  simp only [KeyConstruct.descendantKey, segment]
+
+/-- Renaming a named ancestor replaces its segment throughout its descendants' assigned paths.
+The suffix is computed from the actual subtree and remains unchanged. -/
+theorem KeyConstruct.descendant_rename_named (preceding : List KeyConstruct)
+    (kind : ConstructKind) (old name : String) (children : List KeyConstruct) (route : List Nat) :
+    ((KeyConstruct.mk kind (.named old) children).rename name).descendantKey preceding route =
+      (KeyConstruct.pathAt children route).map (fun suffix =>
+        ⟨⟨kind, .label name⟩ :: suffix.path⟩) := by
+  simp [KeyConstruct.descendantKey, KeyConstruct.rename, ConstructName.rename,
+    KeyConstruct.segment]
+
 /-- Helper (projection). A successful table lookup is in bounds. -/
 theorem SpecializationTable.entryAt_lt_length {Ty Cap : Type}
     {entries : List (SpecializationId Ty Cap)} {index : Nat} {requested : SpecializationId Ty Cap}
@@ -541,7 +579,9 @@ example : ¬ (siteTable.renumberSites collapse).NoDupSites := by decide
 
 /-- Helper (projection). An assignment outside `otherFunction` leaves `function` untouched. -/
 def stableBefore : FnId → SiteKeyTable := fun f => if f = function then siteTable else []
-def stableAfter : FnId → SiteKeyTable := stableBefore
+def stableAfter : FnId → SiteKeyTable := fun f =>
+  if f = otherFunction then [(⟨2⟩, ⟨.function f, ⟨[⟨.call, .ordinal 0⟩]⟩⟩)]
+  else (stableBefore f).renumber successor
 
 /-- Instance (law `ConcreteSpec.Core.OutsideFunctionEdit.persistentKeys`). The concrete structured
 assignment satisfies the outside-edit obligation and preserves both keys. -/
@@ -549,7 +589,8 @@ example : OutsideFunctionEdit stableBefore stableAfter otherFunction ∧
     List.map Prod.snd (stableAfter function) = [bindingKey, callKey] := by
   refine ⟨⟨?_⟩, rfl⟩
   intro f outside
-  rfl
+  simp [stableAfter, outside, SiteKeyTable.renumber, SiteKeyTable.renumberSites, List.map_map,
+    Function.comp_def]
 
 /-- Helper (projection). Global-site-derived keys change when another function gains a site. -/
 def globalBefore : FnId → SiteKeyTable := fun f =>
@@ -622,6 +663,57 @@ def rawChildUnder (preceding : List KeyConstruct) (construct : KeyConstruct) (ch
     FunctionRelativeKey := ⟨construct.segment preceding :: [⟨.call, .ordinal childIndex⟩]⟩
 
 example : rawChildUnder [] namedCall 0 ≠ (namedCall.rename "renamed").key [] := by decide
+
+/-- Helper (projection). A nested toy function body with two unnamed levels and a labelled leaf. -/
+def nestedBody : KeyConstruct := ⟨.block, .unnamed none,
+  [⟨.loop, .unnamed none, [⟨.primitive, .unnamed (some "effect"), []⟩]⟩]⟩
+def namedNested : KeyConstruct := ⟨.block, .named "body", nestedBody.children⟩
+def nestedPath : FunctionRelativeKey :=
+  ⟨[⟨.block, .ordinal 0⟩, ⟨.loop, .ordinal 0⟩, ⟨.primitive, .label "effect"⟩]⟩
+def insertedCall : KeyConstruct := ⟨.call, .unnamed none, []⟩
+
+/-- Instance (law `ConcreteSpec.Core.KeyConstruct.descendant_insert_differentKind`). In a whole
+function body, an earlier unnamed call does not renumber the nested block or its descendants. -/
+example : KeyConstruct.pathAt [insertedCall, nestedBody] [1, 0, 0] = some nestedPath ∧
+    nestedBody.descendantKey [insertedCall] [0, 0] = nestedBody.descendantKey [] [0, 0] := by
+  exact ⟨by decide, KeyConstruct.descendant_insert_differentKind [] [] insertedCall nestedBody
+    [0, 0] (by decide)⟩
+
+/-- Planted (law `ConcreteSpec.Core.KeyConstruct.descendant_insert_differentKind`). One ordinal
+across all kinds changes the existing block's prefix after the earlier unnamed call. -/
+example : ¬ (rawOrdinalKey [insertedCall] nestedBody = rawOrdinalKey [] nestedBody) := by decide
+
+/-- Instance (law `ConcreteSpec.Core.KeyConstruct.descendant_insert_named`). An earlier named block
+of the same kind leaves the complete three-segment path unchanged. -/
+example : nestedBody.descendantKey [namedNested] [0, 0] = some nestedPath ∧
+    nestedBody.descendantKey [namedNested] [0, 0] = nestedBody.descendantKey [] [0, 0] := by
+  exact ⟨by decide, KeyConstruct.descendant_insert_named [] [] "body" .block nestedBody.children
+    nestedBody [0, 0]⟩
+
+/-- Planted (law `ConcreteSpec.Core.KeyConstruct.descendant_insert_named`). Raw child indices change
+an unrelated block's prefix when a named sibling is inserted. -/
+example : ¬ (rawOrdinalKey [namedNested] nestedBody = rawOrdinalKey [] nestedBody) := by decide
+
+/-- Instance (law `ConcreteSpec.Core.KeyConstruct.descendant_rename_other`). Renaming a preceding
+unnamed block leaves the entire unrelated descendant path intact. -/
+example : nestedBody.descendantKey [nestedBody.rename "pinned"] [0, 0] =
+    nestedBody.descendantKey [nestedBody] [0, 0] :=
+  KeyConstruct.descendant_rename_other [] [] nestedBody nestedBody "pinned" [0, 0]
+
+/-- Planted (law `ConcreteSpec.Core.KeyConstruct.descendant_rename_other`). Excluding labelled
+unnamed siblings from the ordinal sequence changes the unrelated root's prefix. -/
+example : ¬ (labelOnlyOrdinal [nestedBody.rename "pinned"] nestedBody =
+    labelOnlyOrdinal [nestedBody] nestedBody) := by decide
+
+/-- Instance (law `ConcreteSpec.Core.KeyConstruct.descendant_rename_named`). Renaming the named
+ancestor updates its prefix while preserving both actual descendant segments. -/
+example : (namedNested.rename "renamed").descendantKey [] [0, 0] =
+    some ⟨[⟨.block, .label "renamed"⟩, ⟨.loop, .ordinal 0⟩, ⟨.primitive, .label "effect"⟩]⟩ := by decide
+
+/-- Planted (law `ConcreteSpec.Core.KeyConstruct.descendant_rename_named`). Retaining the old
+ancestor prefix after renaming fails the computed descendant-key law. -/
+example : ¬ (namedNested.descendantKey [] [0, 0] =
+    (namedNested.rename "renamed").descendantKey [] [0, 0]) := by decide
 
 /-- Helper (projection). Three specializations of one generic, differing one argument list at a time. -/
 def numeric : SpecializationId Nat String := ⟨.function function, [0], ["Fs"]⟩

@@ -238,7 +238,8 @@ structure InstanceId where
   deriving DecidableEq, Repr
 
 /-- A generic definition that can be specialized: a generic function or a generic type declaration.
-The decided language has no generic trait-method or associated-item case to add here. -/
+OD77 refuses generic trait methods and OD148 refuses type parameters on traits. No decided
+associated-item generic category is added here. -/
 inductive GenericId where
   | function (f : FnId)
   | declaration (d : DeclId)
@@ -399,6 +400,23 @@ def KeyConstruct.segment (preceding : List KeyConstruct) (construct : KeyConstru
 /-- The key of a construct root under its preceding siblings. -/
 def KeyConstruct.key (preceding : List KeyConstruct) (construct : KeyConstruct) : FunctionRelativeKey :=
   ⟨[construct.segment preceding]⟩
+
+/-- Assign the complete persistent path to an occurrence in a construct forest. The numeric
+route is only a locator in this particular syntax tree; no child index enters the assigned key.
+Every level uses the construct's kind and name or same-kind unnamed ordinal. -/
+def KeyConstruct.pathAt (forest : List KeyConstruct) : List Nat → Option FunctionRelativeKey
+  | [] => some ⟨[]⟩
+  | index :: route => do
+    let construct ← forest[index]?
+    let descendant ← KeyConstruct.pathAt construct.children route
+    pure ⟨construct.segment (forest.take index) :: descendant.path⟩
+
+/-- Assign a descendant path beneath a located root. This is also the compositional interface
+used when elaboration already knows the root and its preceding siblings. -/
+def KeyConstruct.descendantKey (preceding : List KeyConstruct) (construct : KeyConstruct)
+    (route : List Nat) : Option FunctionRelativeKey :=
+  (KeyConstruct.pathAt construct.children route).map fun descendant =>
+    ⟨construct.segment preceding :: descendant.path⟩
 
 /-- The premise and declared-assumption kinds named by decided rows. This is a closed schema
 enumeration: a constructor is added only when a decided row names that category. -/
