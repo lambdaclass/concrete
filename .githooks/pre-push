@@ -47,18 +47,31 @@ while read -r _localref localsha remoteref _remotesha; do
         *) wip_dels=$((wip_dels+1)) ;;
       esac ;;
     refs/owner-signoff/*)
-      # Only a record takes the notes tier: a parentless commit, under its subject's 40-hex name, whose
-      # tree is exactly the sign-off's seven plain files (record.txt plus each reviewer's request and
-      # output), no directory among them. Anything else pushed here, including the old four-file shape
-      # or a source commit, takes the full tier, as does a deletion.
-      if [[ "${remoteref#refs/owner-signoff/}" =~ ^[0-9a-f]{40}$ ]] && [ "$(git rev-list --parents -n 1 "$localsha" 2>/dev/null)" = "$localsha" ] \
-         && [ "$(git ls-tree --format='%(objectmode) %(objecttype) %(path)' "$localsha" 2>/dev/null | LC_ALL=C sort | tr '\n' ' ')" \
-              = "100644 blob agy-request.txt 100644 blob agy.txt 100644 blob codex-request.txt 100644 blob codex.txt 100644 blob kimi-request.txt 100644 blob kimi.txt 100644 blob record.txt " ]; then
-        note_refs=$((note_refs+1))
+      # The ref name supplies the subject. Verify the pushed object itself; a tree with the right
+      # names and modes is not a sign-off. Structural mode omits only the base-dependent cap checks.
+      subject="${remoteref#refs/owner-signoff/}"
+      case "$localsha" in *[!0]*) ;; *) other_refs=$((other_refs+1)); continue ;; esac
+      if [[ "$subject" =~ ^[0-9a-f]{40}$ ]]; then
+        if out="$(bash "$(dirname "$HOOK_SELF")/../scripts/land/signoff.sh" verify "$subject" --structural --record "$localsha" 2>&1)"; then
+          note_refs=$((note_refs+1)); continue
+        fi
+        echo "pre-push: invalid owner sign-off $remoteref: $out" >&2
       else
-        other_refs=$((other_refs+1))
-        case "$localsha" in *[!0]*) full_shas="$full_shas $localsha" ;; esac
-      fi ;;
+        echo "pre-push: invalid owner sign-off ref name $remoteref" >&2
+      fi
+      exit 1 ;;
+    refs/review-evidence/*)
+      subject="${remoteref#refs/review-evidence/}"
+      case "$localsha" in *[!0]*) ;; *) other_refs=$((other_refs+1)); continue ;; esac
+      if [[ "$subject" =~ ^[0-9a-f]{40}$ ]]; then
+        if out="$(bash "$(dirname "$HOOK_SELF")/../scripts/land/signoff.sh" evidence verify "$subject" --record "$localsha" 2>&1)"; then
+          note_refs=$((note_refs+1)); continue
+        fi
+        echo "pre-push: invalid review evidence $remoteref: $out" >&2
+      else
+        echo "pre-push: invalid review-evidence ref name $remoteref" >&2
+      fi
+      exit 1 ;;
     refs/notes/concrete-review|refs/notes/concrete-review-findings)
       case "$localsha" in
         *[!0]*) note_refs=$((note_refs+1)) ;;
@@ -84,7 +97,7 @@ if [ "$other_refs" -eq 0 ] && [ $((wip_refs + wip_dels)) -gt 0 ]; then
   exit 0
 fi
 if [ "$other_refs" -eq 0 ] && [ "$note_refs" -gt 0 ]; then
-  echo "pre-push: review-notes push (review notes, owner sign-offs) — no source tree, no gates"
+  echo "pre-push: review-notes push (notes, verified owner sign-offs and review evidence) — no source tree, no gates"
   exit 0
 fi
 
