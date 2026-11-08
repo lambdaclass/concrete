@@ -50,14 +50,22 @@ def parse(lines, paths=False):
     return sorted(found)
 
 
+def parse_many(log_paths, paths=False):
+    """Parse each trace session independently so unfinished PID state cannot cross sessions."""
+    found = set()
+    for log_path in log_paths:
+        with open(log_path, encoding="utf-8", errors="replace") as log:
+            found.update(parse(log, paths=paths))
+    return sorted(found)
+
+
 def main():
     paths = "--paths" in sys.argv
     if paths: sys.argv.remove("--paths")
-    if len(sys.argv) != 2:
-        raise ValueError("usage: execve_names.py LOG")
-    with open(sys.argv[1], encoding="utf-8", errors="replace") as log:
-        for name in parse(log, paths=paths):
-            print(name)
+    if len(sys.argv) < 2:
+        raise ValueError("usage: execve_names.py [--paths] LOG [LOG ...]")
+    for name in parse_many(sys.argv[1:], paths=paths):
+        print(name)
 
 
 if __name__ == "__main__":

@@ -1,6 +1,7 @@
 """Regression checks for real strace records."""
 import importlib.util
 from pathlib import Path
+import tempfile
 import unittest
 spec = importlib.util.spec_from_file_location("execve_names", Path(__file__).parents[1] / "lib/execve_names.py")
 m = importlib.util.module_from_spec(spec)
@@ -23,4 +24,14 @@ class TraceTests(unittest.TestCase):
             ('1 <... execve resumed>) = 0', "resumed exec has no unfinished call"),
         ]:
             with self.assertRaisesRegex(ValueError, diagnostic): m.parse([line])
+    def test_separate_sessions(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            a, b = Path(tmp) / "a.execve", Path(tmp) / "b.execve"
+            a.write_text('100 execve("/nix/store/tool/bin/lean", ["lean"], 0x0) = 0\n')
+            b.write_text('100 execve("/nix/store/tool/bin/clang", ["clang"], 0x0) = 0\n')
+            self.assertEqual(m.parse_many([a, b]), ["clang", "lean"])
+            a.write_text('100 execve("/nix/store/tool/bin/lean", ["lean"], 0x0 <unfinished ...>\n')
+            b.write_text('100 <... execve resumed>) = 0\n')
+            with self.assertRaisesRegex(ValueError, "unfinished exec calls have no result"):
+                m.parse_many([a, b])
 if __name__ == "__main__": unittest.main()

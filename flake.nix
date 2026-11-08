@@ -88,7 +88,6 @@
             file
             gnumake
             git
-            openssh            # gate 9 verifies detached owner approval signatures with ssh-keygen
             jq
             xxd                # check_hexdump_differential.sh skips its format legs without it
             # perl for `shasum`: the checker identity hashes the Lean images with it
@@ -118,6 +117,14 @@
           ] ++ gatesUserland ++ lib.optionals stdenv.isLinux [
             strace               # gate 9 inventories exec'd compilation-pipeline tools
           ];
+          pipelinePackages = [
+            pkgs.llvmPackages_21.clang
+            pkgs.clang
+            leanRelease
+            pkgs.git
+            pkgs.bash
+            pkgs.coreutils
+          ];
         in {
           # Default shell stays light: the pre-existing toolchain only. The
           # second-kernel drivers (Rocq, Isabelle) are an opt-in spike and Isabelle
@@ -127,10 +134,37 @@
             packages = base;
             # Gate 9 evaluates this from the checked-in flake/lock, rather than trusting PATH
             # or caller-supplied store roots. Descendant wrappers live in these closures.
-            passthru.trustedPipelineRoots = map builtins.toString
-              ([ pkgs.clang pkgs.llvmPackages_21.clang leanRelease ] ++ gatesUserland);
+            passthru.trustedPipelineRoots = map builtins.toString pipelinePackages;
+            passthru.trustedIdentity = {
+              roots = map builtins.toString pipelinePackages;
+              derivations = map (p: {
+                path = builtins.toString p;
+                drv = builtins.unsafeDiscardOutputDependency p.drvPath;
+              }) pipelinePackages;
+              toolRoots = {
+                lean = [ (builtins.toString leanRelease) ];
+                leanc = [ (builtins.toString leanRelease) ];
+                lake = [ (builtins.toString leanRelease) ];
+                git = [ (builtins.toString pkgs.git) ];
+                ar = map builtins.toString [ pkgs.llvmPackages_21.clang pkgs.clang leanRelease ];
+                clang = map builtins.toString [ pkgs.llvmPackages_21.clang pkgs.clang leanRelease ];
+                clang-21 = map builtins.toString [ pkgs.llvmPackages_21.clang pkgs.clang ];
+                ld = map builtins.toString [ pkgs.llvmPackages_21.clang pkgs.clang leanRelease ];
+                ld64 = map builtins.toString [ pkgs.llvmPackages_21.clang pkgs.clang leanRelease ];
+                "ld.lld" = map builtins.toString [ pkgs.llvmPackages_21.clang pkgs.clang leanRelease ];
+                as = map builtins.toString [ pkgs.llvmPackages_21.clang pkgs.clang ];
+                bash = map builtins.toString [ pkgs.bash pkgs.llvmPackages_21.clang pkgs.clang ];
+                env = map builtins.toString [ pkgs.coreutils pkgs.llvmPackages_21.clang pkgs.clang ];
+                uname = map builtins.toString [ pkgs.coreutils pkgs.llvmPackages_21.clang pkgs.clang ];
+                mktemp = map builtins.toString [ pkgs.coreutils pkgs.llvmPackages_21.clang pkgs.clang ];
+                realpath = map builtins.toString [ pkgs.coreutils pkgs.llvmPackages_21.clang pkgs.clang ];
+                rm = map builtins.toString [ pkgs.coreutils pkgs.llvmPackages_21.clang pkgs.clang ];
+              };
+              lean = builtins.toString leanRelease;
+              git = "${pkgs.git}/bin/git";
+              nativeClang = "${pkgs.llvmPackages_21.clang}/bin/clang";
+            };
             passthru.trustedLeanRoot = builtins.toString leanRelease;
-            passthru.trustedApprovalVerifier = "${pkgs.openssh}/bin/ssh-keygen";
             passthru.trustedGit = "${pkgs.git}/bin/git";
             passthru.trustedNativeClang = "${pkgs.llvmPackages_21.clang}/bin/clang";
             # Slice-0 native builds name their compiler explicitly (scripts/checks/lib/slice0_native.sh),
