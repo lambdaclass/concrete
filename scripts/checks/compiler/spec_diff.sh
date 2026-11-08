@@ -113,6 +113,8 @@ bounded_remaining() {
     echo "INCOMPLETE: bounded command timed out: $*" >&2
     return 3
   fi
+  # Reserve 3 for watchdog incompletion; a child exiting 3 is a real failure.
+  [ "$rc" -ne 3 ] || rc=4
   return "$rc"
 }
 
@@ -147,7 +149,7 @@ observe_remaining() { # observe_remaining EXE OUT: status incomplete is always I
   [ "$retry" -ge 1 ] || retry=1
   [ "$retry" -le "$obs_retry_cap" ] || retry=$obs_retry_cap
   observe "$1" "$2" "$first" "$retry" || rc=$?
-  [ "$rc" -eq 0 ] || { echo "INCOMPLETE: observer failed for $1" >&2; return 3; }
+  [ "$rc" -eq 0 ] || { echo "FAIL observer failed for $1" >&2; return 4; }
   if [ "$(cat "$2.status")" = incomplete ]; then
     echo "INCOMPLETE: observation timed out for $1" >&2
     return 3
@@ -376,45 +378,61 @@ judge_evaluator() { # judge_evaluator LEG CAND_SEED INDEX DIR: judge in-process 
   fi
 }
 
-native_one() { # Result axes: native_mismatch (sticky), native_complete; rc describes completion
+native_build() { bounded_remaining bash "$root/scripts/checks/lib/slice0_native.sh" "$1" "$lcb"; }
+
+native_one() { # Result axes: native_failed (sticky), native_incomplete, native_complete
   # 0 match, 1 mismatch (possibly incomplete), 3 incomplete, 4 build/setup. Inspect BOTH axes.
   # Judges every available observation independently of whether later builds/runs complete.
-  local leg cand_seed index d name backend bad=0 eval_rc=0 build_rc=0 obs_rc=0 incomplete=0
+  local leg cand_seed index d name backend bad=0 eval_rc=0 build_rc=0 obs_rc=0 incomplete=0 complete=1
   leg=$1
   cand_seed=$2
   index=$3
   d=$4
-  native_mismatch=0
+  native_failed=0
+  native_incomplete=0
   native_complete=0
   name=$leg-$index
   judge_evaluator "$leg" "$cand_seed" "$index" "$d" || eval_rc=$?
   if [ "$eval_rc" -eq 1 ]; then
     bad=1
-    native_mismatch=1
+    native_failed=1
   elif [ "$eval_rc" -eq 3 ]; then
     incomplete=1
+    native_incomplete=1
   elif [ "$eval_rc" -ne 0 ]; then
+    native_failed=1
     return 4
   fi
   if [ "$(remaining)" -lt "$min_candidate_secs" ]; then
     echo "INCOMPLETE: remaining time ($(remaining)s) below candidate build threshold (${min_candidate_secs}s)" >&2
-    [ "$native_mismatch" -eq 0 ] || return 1
+    native_incomplete=1
+    [ "$native_failed" -eq 0 ] || return 1
     return 3
   fi
-  ( build "$name" "$d/build.log" bounded_remaining bash "$root/scripts/checks/lib/slice0_native.sh" "$d" "$lcb" ) || build_rc=$?
+  native_build "$d" >"$d/build.log" 2>&1 || build_rc=$?
   if [ "$build_rc" -ne 0 ]; then
-    if grep -q 'INCOMPLETE:' "$d/build.log"; then
-      [ "$native_mismatch" -eq 0 ] || return 1
+    cat "$d/build.log" >&2
+    if [ "$build_rc" -eq 3 ]; then
+      native_incomplete=1
+      [ "$native_failed" -eq 0 ] || return 1
       return 3
     fi
     echo "FAIL $name: native build/setup failed" >&2
+    native_failed=1
     return 4
   fi
   for backend in llvm lcb; do
     obs_rc=0
     observe_remaining "$d/$backend.exe" "$d/$backend" || obs_rc=$?
     if [ "$obs_rc" -ne 0 ]; then
-      incomplete=1
+      if [ "$obs_rc" -eq 3 ]; then
+        incomplete=1
+        native_incomplete=1
+      else
+        bad=1
+        native_failed=1
+        complete=0
+      fi
       continue
     fi
     if judge "$d" "$d/$backend"; then
@@ -422,16 +440,70 @@ native_one() { # Result axes: native_mismatch (sticky), native_complete; rc desc
     else
       report_mismatch "$leg" "$cand_seed" "$index" "$d" "$backend"
       bad=1
-      native_mismatch=1
+      native_failed=1
     fi
   done
   if [ "$incomplete" -ne 0 ]; then
-    [ "$native_mismatch" -eq 0 ] || return 1
+    native_incomplete=1
+    [ "$native_failed" -eq 0 ] || return 1
     return 3
   fi
-  native_complete=1
+  native_complete=$complete
   return "$bad"
 }
+
+# Failure and completion are independent. Only explicit timeout state stops coverage;
+# setup errors and mismatches remain sticky failures even alongside a timeout.
+absorb_native_result() {
+  local rc=$1
+  if [ "$native_failed" -ne 0 ] || { [ "$rc" -ne 0 ] && [ "$rc" -ne 3 ]; }; then fail=1; fi
+  [ "$native_incomplete" -eq 0 ] || deadline_stopped=1
+}
+
+collect_available() {
+  local leg d index rc
+  for leg in bir spec; do
+    for d in "$work/$leg"/p* "$work/replay"; do
+      local cand_seed=$seed
+      index=${d##*/p}
+      if [ "$d" = "$work/replay" ]; then
+        [ -n "$replay" ] && [ "$leg" = "$replay_leg" ] || continue
+        cand_seed=$replay_seed
+        index=$replay_index
+      fi
+      if [ -f "$d/emission-error.txt" ]; then
+        local bundle="$regressions/$leg/$(cat "$d/safe-seed.txt")-$index"
+        mkdir -p "$bundle"
+        cp -R "$d/." "$bundle/"
+        replay_command "$leg" "$cand_seed" "$index" >"$bundle/replay.sh"
+        echo "FAIL $leg emission refusal: $(cat "$d/emission-error.txt"); regression bundle: $bundle" >&2
+        fail=1
+      fi
+      [ -f "$d/lcb_eval.status" ] || continue
+      rc=0
+      judge_evaluator "$leg" "$cand_seed" "$index" "$d" || rc=$?
+      case "$rc" in 0) ;; 3) deadline_stopped=1 ;; *) fail=1 ;; esac
+    done
+  done
+}
+
+# All exits, including control/generation timeouts and errexit, collect committed
+# observations before the shared scratch cleanup. Never infer outcome from log prose.
+finish_diff() {
+  local rc=$1
+  trap - EXIT
+  set +e
+  collect_available
+  bounded_summary
+  if [ "$fail" -ne 0 ] || { [ "$rc" -ne 0 ] && [ "$rc" -ne 3 ]; }; then
+    rc=1
+  elif [ "$deadline_stopped" -ne 0 ] || grep -Eq '^(incomplete|runner-failed)' "$BOUNDED_LOG"; then
+    rc=3
+  fi
+  rm -rf "${work:?}"
+  exit "$rc"
+}
+trap 'finish_diff $?' EXIT
 
 run_control() { # fn runs under set -euo pipefail and must return PLANTED_FAIL_RC (99) + match expected regex
   local label expected_regex fn log rc
@@ -449,7 +521,7 @@ run_control() { # fn runs under set -euo pipefail and must return PLANTED_FAIL_R
      ! grep -q 'INCOMPLETE:' "$log" &&
      grep -qE -- "$expected_regex" "$log"; then
     echo "ok   control $label: failed for the planted reason"
-  elif [ "$rc" -eq 3 ] || grep -q 'INCOMPLETE:' "$log"; then
+  elif [ "$rc" -eq 3 ]; then
     cat "$log" >&2
     deadline_stopped=1
     if [ "$fail" -ne 0 ]; then exit 1; fi
@@ -474,9 +546,10 @@ control_build() { # control_build NAME DIR
   local rc=0
   [ "$(remaining)" -ge "$min_candidate_secs" ] ||
     { echo "INCOMPLETE: deadline before control build $1" >&2; return 3; }
-  ( build "$1" "$2/build.log" bounded_remaining bash "$root/scripts/checks/lib/slice0_native.sh" "$2" "$lcb" ) || rc=$?
+  native_build "$2" >"$2/build.log" 2>&1 || rc=$?
   [ "$rc" -eq 0 ] && return 0
-  if grep -q 'INCOMPLETE:' "$2/build.log"; then return 3; fi
+  cat "$2/build.log" >&2
+  [ "$rc" -ne 3 ] || return 3
   echo "control setup: native build failed for $1" >&2
   return 1
 }
@@ -545,13 +618,13 @@ control_drop_overflow() {
     local rc=0 obs_first_cap=1 obs_retry_cap=1 safe_seed bundle
     local BOUNDED_KILL_AFTER=0 BOUNDED_LOG="$work/expected-timeouts.log"
     local regressions="$work/mismatch-timeout-regressions"
-    build() { return 0; }
+    native_build() { return 0; }
     printf '#!/usr/bin/env bash\nexec sleep 30\n' >"$mutated/lcb.exe"
     chmod +x "$mutated/lcb.exe"
     native_one bir "$seed" "$index" "$mutated" >"$work/mismatch-timeout.log" 2>&1 || rc=$?
     safe_seed=$(cat "$mutated/safe-seed.txt")
     bundle="$regressions/bir/${safe_seed}-$index"
-    [ "$rc" -eq 1 ] && [ "$native_mismatch" -eq 1 ] && [ "$native_complete" -eq 0 ] &&
+    [ "$rc" -eq 1 ] && [ "$native_failed" -eq 1 ] && [ "$native_complete" -eq 0 ] &&
       grep -qxF "FAIL bir seed $seed index $index [llvm]: observation mismatch" "$work/mismatch-timeout.log" &&
       grep -qxF "INCOMPLETE: observation timed out for $mutated/lcb.exe" "$work/mismatch-timeout.log" &&
       [ -f "$bundle/observed-llvm/status" ] && grep -qxF llvm "$bundle/backends" || {
@@ -609,14 +682,14 @@ control_lcb_off_by_one() {
     local sub="$work/control-lcb-llvm-timeout"
     rm -rf "$sub" "$regressions"
     cp -R "$mutated" "$sub"
-    build() { return 0; }
+    native_build() { return 0; }
     printf '#!/usr/bin/env bash\nexec sleep 30\n' >"$sub/llvm.exe"
     chmod +x "$sub/llvm.exe"
     log="$work/eval-llvm-timeout.log"
     native_one bir "$seed" "$index" "$sub" >"$log" 2>&1 || rc=$?
     safe_seed=$(cat "$sub/safe-seed.txt")
     bundle="$regressions/bir/${safe_seed}-$index"
-    [ "$rc" -eq 1 ] && [ "$native_mismatch" -eq 1 ] && [ "$native_complete" -eq 0 ] &&
+    [ "$rc" -eq 1 ] && [ "$native_failed" -eq 1 ] && [ "$native_complete" -eq 0 ] &&
       grep -qxF "FAIL bir seed $seed index $index [lcb_eval]: observation mismatch" "$log" &&
       grep -qxF "INCOMPLETE: observation timed out for $sub/llvm.exe" "$log" &&
       grep -qxF "FAIL bir seed $seed index $index [lcb]: observation mismatch" "$log" &&
@@ -638,14 +711,14 @@ control_lcb_off_by_one() {
     local sub="$work/control-lcb-lcb-timeout"
     rm -rf "$sub" "$regressions"
     cp -R "$mutated" "$sub"
-    build() { return 0; }
+    native_build() { return 0; }
     printf '#!/usr/bin/env bash\nexec sleep 30\n' >"$sub/lcb.exe"
     chmod +x "$sub/lcb.exe"
     log="$work/eval-lcb-timeout.log"
     native_one bir "$seed" "$index" "$sub" >"$log" 2>&1 || rc=$?
     safe_seed=$(cat "$sub/safe-seed.txt")
     bundle="$regressions/bir/${safe_seed}-$index"
-    [ "$rc" -eq 1 ] && [ "$native_mismatch" -eq 1 ] && [ "$native_complete" -eq 0 ] &&
+    [ "$rc" -eq 1 ] && [ "$native_failed" -eq 1 ] && [ "$native_complete" -eq 0 ] &&
       grep -qxF "FAIL bir seed $seed index $index [lcb_eval]: observation mismatch" "$log" &&
       grep -qxF "ok   bir-$index [llvm]: status $(cat "$original/status")" "$log" &&
       grep -qxF "INCOMPLETE: observation timed out for $sub/lcb.exe" "$log" &&
@@ -795,6 +868,34 @@ control_report_mismatch() {
   return "$PLANTED_FAIL_RC"
 }
 
+control_selective_refusal() {
+  local d="$work/control-selective" rc=0
+  control_bounded "${driver[@]}" gen-bir "$seed" 64 "$d-baseline" "$target" || return $?
+  bounded_remaining "${driver[@]}" control-selective-refusal "$seed" 64 "$d" "$target" \
+    --control SPEC_DIFF_PLANTED_CONTROL >"$d.log" 2>&1 || rc=$?
+  [ "$rc" -ne 3 ] || return 3
+  [ "$rc" -eq 1 ] &&
+    grep -qxF "FAIL BIR emission: seed $seed index 63: planted selective emission refusal" "$d.log" &&
+    grep -qxF 'planted selective emission refusal' "$d/p63/emission-error.txt" &&
+    [ -f "$d/p63/manifest-row.txt" ] || return 1
+  # The refused candidate is redundant for aggregate construct coverage and yield.
+  [ "$(summary_value "$d/summary.tsv" accepted)" -ge 32 ] || return 1
+  diff <(awk -F '\t' '$1 == "construct" {print $2}' "$d-baseline/summary.tsv" | sort) \
+       <(awk -F '\t' '$1 == "construct" {print $2}' "$d/summary.tsv" | sort) || return 1
+  (
+    local work="$work/selective-collection" regressions="$work/selective-regressions" fail=0
+    local bundle="$regressions/bir/$(cat "$d/p63/safe-seed.txt")-63"
+    mkdir -p "$work/bir"
+    cp -R "$d/p63" "$work/bir/p63"
+    collect_available
+    [ "$fail" -eq 1 ] && [ -f "$bundle/program.lean.txt" ] &&
+      [ -f "$bundle/manifest-row.txt" ] && [ -f "$bundle/replay.sh" ] &&
+      grep -qxF 'planted selective emission refusal' "$bundle/emission-error.txt"
+  ) || return 1
+  echo 'FAIL selective-refusal: admitted candidate refused despite intact aggregate coverage'
+  return "$PLANTED_FAIL_RC"
+}
+
 term_fingerprint() {
   local d=$1 out=$2 list="$work/fingerprint-list"
   (cd "$d" && find . -type f -name program.lean.txt -print | LC_ALL=C sort) >"$list"
@@ -841,23 +942,28 @@ if [ -n "$replay" ]; then
   fi
   rc=0
   native_one "$replay_leg" "$replay_seed" "$replay_index" "$d" || rc=$?
-  [ "$native_mismatch" -eq 0 ] || exit 1
-  [ "$rc" -ne 3 ] || exit 3
-  [ "$rc" -le 1 ] || exit "$rc"
+  absorb_native_result "$rc"
+  [ "$fail" -eq 0 ] || exit 1
+  [ "$native_incomplete" -eq 0 ] || exit 3
   echo "spec_diff replay: $replay_leg:$replay_seed:$replay_index judged on LLVM, LCB and LCB evaluator"
   exit "$rc"
 fi
 
+require_bounded python3 -I "$root/scripts/checks/compiler/test_spec_diff_orchestration.py"
 require_bounded python3 -I "$root/scripts/checks/lib/test_bounded_exec.py"
 require_bounded bash "$root/scripts/checks/import_layering.sh"
 require_bounded "${driver[@]}" gen-spec "$seed" "$candidate_count" "$work/spec"
 require_bounded "${driver[@]}" gen-bir "$seed" "$candidate_count" "$work/bir" "$target"
+collect_available
 print_counts "spec leg" "$work/spec/summary.tsv"
 print_counts "BIR leg" "$work/bir/summary.tsv"
 check_generation "spec leg" "$work/spec/summary.tsv"
 check_generation "BIR leg" "$work/bir/summary.tsv"
 
 control_determinism
+run_control selective-refusal \
+  '^FAIL selective-refusal: admitted candidate refused despite intact aggregate coverage$' \
+  control_selective_refusal
 run_control drop-overflow-llvm \
   '^FAIL drop-overflow-llvm: planted LLVM trap became exact exit [0-9]+; LCB retained trap$' \
   control_drop_overflow
@@ -887,9 +993,8 @@ while IFS=$'\t' read -r tag index outcome production; do
   fi
   rc=0
   native_one bir "$seed" "$index" "$d" || rc=$?
-  [ "$native_mismatch" -eq 0 ] || fail=1
-  if [ "$rc" -eq 3 ] || [ "$native_complete" -eq 0 ]; then
-    deadline_stopped=1
+  absorb_native_result "$rc"
+  if [ "$native_complete" -eq 0 ]; then
     continue
   fi
   if [ "$rc" -le 1 ]; then
@@ -922,9 +1027,8 @@ while IFS=$'\t' read -r tag index outcome compiled; do
   fi
   rc=0
   native_one spec "$seed" "$index" "$d" || rc=$?
-  [ "$native_mismatch" -eq 0 ] || fail=1
-  if [ "$rc" -eq 3 ] || [ "$native_complete" -eq 0 ]; then
-    deadline_stopped=1
+  absorb_native_result "$rc"
+  if [ "$native_complete" -eq 0 ]; then
     continue
   fi
   if [ "$rc" -le 1 ]; then

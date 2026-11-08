@@ -610,9 +610,11 @@ def evaluatorObservation (f : Source.Function) (sites : SiteTable) : String × S
 
 def writeEvaluator (dir : System.FilePath) (f : Source.Function) (sites : SiteTable) : IO Unit := do
   let (status, stderr) := evaluatorObservation f sites
-  IO.FS.writeFile (dir / "lcb_eval.status") (status ++ "\n")
   IO.FS.writeFile (dir / "lcb_eval.stderr") stderr
   IO.FS.writeFile (dir / "lcb_eval.stdout") ""
+  -- Publish the completion marker last and atomically: collection may follow a killed driver.
+  IO.FS.writeFile (dir / "lcb_eval.status.tmp") (status ++ "\n")
+  IO.FS.rename (dir / "lcb_eval.status.tmp") (dir / "lcb_eval.status")
 
 def writeBirRegressionMetadata (dir : System.FilePath) (seed : String) (index : Nat)
     (outcome : Outcome) (sites : SiteTable) : IO Unit := do
@@ -646,7 +648,11 @@ def emitArtifacts (dir : System.FilePath) (target : LCB.Target) (p : Program) (m
     IO.eprintln s!"{dir}: generated or control-mutated BIR is not well formed"
     return false
   match LCB.emit lcbProgram with
-  | .error msg => IO.eprintln s!"{dir}: adapter: {msg}"; return false
+  | .error msg =>
+    IO.FS.createDirAll dir
+    IO.FS.writeFile (dir / "emission-error.txt") (msg ++ "\n")
+    IO.eprintln s!"{dir}: adapter: {msg}"
+    return false
   | .ok (f, sites) =>
     unless ← writeBackends dir target p (f, sites) do return false
     if mutation = .dropOverflowLLVM then
@@ -663,32 +669,29 @@ def emitBirCandidate (seed : String) (index : Nat) (dir : System.FilePath) (targ
   unless wf g.program do
     IO.eprintln s!"seed {seed} index {index}: rejected: generated BIR is not well formed"
     return 4
-  match LCB.emit g.program with
-  | .error msg => IO.eprintln s!"seed {seed} index {index}: rejected: {msg}"; return 4
-  | .ok _ =>
-    let outcome := run g.program 1000
-    unless outcome.final && outcome != .stuck do
-      IO.eprintln s!"seed {seed} index {index}: non-final/stuck outcome {repr outcome}"
+  let outcome := run g.program 1000
+  unless outcome.final && outcome != .stuck do
+    IO.eprintln s!"seed {seed} index {index}: non-final/stuck outcome {repr outcome}"
+    return 1
+  unless ← writeOutcome dir outcome g.program.sites do return 1
+  if mutation = .dropOverflowLLVM then
+    match run (dropOverflowBir g.program) 1000 with
+    | .exited c => writeObservation (dir / "control-llvm") (toString c) ""
+    | o =>
+      IO.eprintln s!"{dir}: non-trap control model gives {repr o}"
       return 1
-    unless ← emitArtifacts dir target g.program mutation do return 1
-    unless ← writeOutcome dir outcome g.program.sites do return 1
-    if mutation = .dropOverflowLLVM then
-      match run (dropOverflowBir g.program) 1000 with
-      | .exited c => writeObservation (dir / "control-llvm") (toString c) ""
-      | o =>
-        IO.eprintln s!"{dir}: non-trap control model gives {repr o}"
-        return 1
-    if mutation = .lcbOffByOne then
-      match outcome with
-      | .exited c =>
-        unless c < 255 do IO.eprintln s!"{dir}: off-by-one control needs an exit below 255"; return 1
-        writeObservation (dir / "control-lcb") (toString (c + 1)) ""
-      | _ => IO.eprintln s!"{dir}: off-by-one control needs an exit"; return 1
-    IO.FS.writeFile (dir / "program.lean.txt") (reprStr g.program ++ "\n")
-    IO.FS.writeFile (dir / "constructs.txt") (String.intercalate "," g.constructs ++ "\n")
-    writeBirRegressionMetadata dir seed index outcome g.program.sites
-    IO.println s!"seed {seed} index {index}: {outcomeName outcome} {BirGen.Production.name g.production}"
-    return 0
+  if mutation = .lcbOffByOne then
+    match outcome with
+    | .exited c =>
+      unless c < 255 do IO.eprintln s!"{dir}: off-by-one control needs an exit below 255"; return 1
+      writeObservation (dir / "control-lcb") (toString (c + 1)) ""
+    | _ => IO.eprintln s!"{dir}: off-by-one control needs an exit"; return 1
+  IO.FS.writeFile (dir / "program.lean.txt") (reprStr g.program ++ "\n")
+  IO.FS.writeFile (dir / "constructs.txt") (String.intercalate "," g.constructs ++ "\n")
+  writeBirRegressionMetadata dir seed index outcome g.program.sites
+  unless ← emitArtifacts dir target g.program mutation do return 1
+  IO.println s!"seed {seed} index {index}: {outcomeName outcome} {BirGen.Production.name g.production}"
+  return 0
 
 abbrev Counts := List (String × Nat)
 
@@ -702,9 +705,10 @@ def addConstructs (counts : Counts) (xs : List String) : Counts :=
 def countsLines (kind : String) (counts : Counts) : String :=
   String.join <| counts.map fun (name, n) => s!"{kind}\t{name}\t{n}\n"
 
-/-- Generate and filter N independent BIR candidates. Rejections are data and are counted; the
-shell gate imposes its stated yield floor and coverage/vacuity requirements. -/
-def genBir (seed : String) (n : Nat) (dir : System.FilePath) (target : LCB.Target) : IO UInt32 := do
+/-- Admission is independent of the backend: the generator constructs the supported fragment,
+and `wf` checks it. Every admitted candidate must emit; refusal is a regression, never rejection. -/
+def genBir (seed : String) (n : Nat) (dir : System.FilePath) (target : LCB.Target)
+    (refuseIndex : Option Nat := none) : IO UInt32 := do
   IO.FS.createDirAll dir
   let mut programs := ""
   let mut rejects := ""
@@ -718,26 +722,30 @@ def genBir (seed : String) (n : Nat) (dir : System.FilePath) (target : LCB.Targe
     if !wf g.program then
       rejected := rejected + 1
       rejects := rejects ++ s!"reject\t{index}\tnot well formed\n"
-    else match LCB.emit g.program with
+    else
+      let outcome := run g.program 1000
+      if !outcome.final || outcome == .stuck then
+        IO.eprintln s!"seed {seed} index {index}: generated outcome {repr outcome}"
+        return 1
+      let child := dir / s!"p{index}"
+      unless ← writeOutcome child outcome g.program.sites do return 1
+      IO.FS.writeFile (child / "program.lean.txt") (reprStr g.program ++ "\n")
+      IO.FS.writeFile (child / "constructs.txt") (String.intercalate "," g.constructs ++ "\n")
+      writeBirRegressionMetadata child seed index outcome g.program.sites
+      let emission := if refuseIndex == some index then Except.error "planted selective emission refusal"
+        else LCB.emit g.program
+      match emission with
       | .error msg =>
-        rejected := rejected + 1
-        rejects := rejects ++ s!"reject\t{index}\t{msg}\n"
-      | .ok _ =>
-        let outcome := run g.program 1000
-        if !outcome.final || outcome == .stuck then
-          IO.eprintln s!"seed {seed} index {index}: generated outcome {repr outcome}"
-          return 1
-        let child := dir / s!"p{index}"
-        unless ← emitArtifacts child target g.program .none do return 1
-        unless ← writeOutcome child outcome g.program.sites do return 1
-        IO.FS.writeFile (child / "program.lean.txt") (reprStr g.program ++ "\n")
-        IO.FS.writeFile (child / "constructs.txt") (String.intercalate "," g.constructs ++ "\n")
-        writeBirRegressionMetadata child seed index outcome g.program.sites
-        accepted := accepted + 1
-        constructs := addConstructs constructs g.constructs
-        if outcomeName outcome = "exit" then exits := exits + 1 else traps := traps + 1
-        programs := programs ++
-          s!"program\t{index}\t{outcomeName outcome}\t{BirGen.Production.name g.production}\n"
+        IO.FS.writeFile (child / "emission-error.txt") (msg ++ "\n")
+        IO.eprintln s!"FAIL BIR emission: seed {seed} index {index}: {msg}"
+        return 1
+      | .ok _ => pure ()
+      unless ← emitArtifacts child target g.program .none do return 1
+      accepted := accepted + 1
+      constructs := addConstructs constructs g.constructs
+      if outcomeName outcome = "exit" then exits := exits + 1 else traps := traps + 1
+      programs := programs ++
+        s!"program\t{index}\t{outcomeName outcome}\t{BirGen.Production.name g.production}\n"
     IO.FS.writeFile (dir / "summary.tsv")
       (s!"seed\t{seed}\naccepted\t{accepted}\nrejected\t{rejected}\nattempted\t{n}\n" ++
        s!"outcome\texit\t{exits}\noutcome\ttrap\t{traps}\n" ++
@@ -944,6 +952,10 @@ def main (args : List String) : IO UInt32 := do
     | none => return 2
   | ["gen-bir", seed, n, dir, target] => match parseNat n with
     | some n => withTarget target (genBir seed n dir)
+    | none => return 2
+  | ["control-selective-refusal", seed, n, dir, target,
+      "--control", "SPEC_DIFF_PLANTED_CONTROL"] => match parseNat n with
+    | some n => withTarget target (fun t => genBir seed n dir t (some (n - 1)))
     | none => return 2
   | ["replay", seed, index, dir, target] => match parseNat index with
     | some index => withTarget target (fun t => emitBirCandidate seed index dir t .none)
