@@ -1,0 +1,15 @@
+Codex (codex exec, git-archive copy of origin/main), owner questions round:
+
+Q1: pick c; runner-up b; independent units expose more failures without inventing recovery semantics. Typed diagnostics and deterministic refusals support this (docs/decisions.md:821; docs/proposals/SPEC_UNIFICATION.md:410). Factual overstatement: a nonempty refusal list does not guarantee exhaustive reporting. Missing: explicit coverage for skipped stages and dependent units; legacy’s partial flag demonstrates the need (legacy/Main.lean:4363).
+
+Q2: pick a+i; runner-up a+iii; three policy outcomes warrant distinct exits from one authoritative mapping (docs/decisions.md:765; ROADMAP.md:470; legacy/Main.lean:10). Correction: an unknown individual fact need not make the command incomplete; policy requirements determine failure. Missing: precedence for mixed outcomes and informational success. Whole-checker limits differ from individual not-established refusals (docs/proposals/SPEC_UNIFICATION.md:410–436).
+
+Q3: pick a; runner-up d; explicit inspection and evaluator commands expose distinct operations (docs/PHILOSOPHY.md:59; docs/proposals/SPEC_UNIFICATION.md:322). Stage delivery: help first, inspection with printers, interp with executable semantics, run with launcher. These extend the decided two-command surface, requiring owner approval (docs/decisions.md:893). Missing option: independently scheduled commands; the recommendation itself is not an offered option.
+
+Q4: pick a; runner-up c; checking, rewriting and streaming serve distinct workflows; legacy implements all three (legacy/Main.lean:4265). Delivery belongs at slice 17 (docs/decisions.md:957). Missing: reject incompatible flags and define stdin-plus-check behavior; legacy silently prioritizes stdin, then check (legacy/Main.lean:4275). Proved meaning preservation remains necessary for automatic fixes (docs/decisions.md:827); parsing alone does not establish it.
+
+Q5: pick a; runner-up d; generated discovery describes this executable’s support, whereas a schema describes representable records (ROADMAP.md:461; docs/PHILOSOPHY.md:67). Missing: distinguish recognized rules from implemented features and supported targets. The objection to guides is overstated: teaching guides linking authoritative rules are explicitly allowed (docs/PHILOSOPHY.md:74), and legacy’s guide supplies workflows beyond individual next actions (legacy/Main.lean:3789).
+
+Q6: pick d; runner-up a; a typed policy over existing facts preserves claims-only contracts while enforcing meaningful proof coverage (docs/decisions.md:802; docs/decisions.md:1415; ROADMAP.md:463). Missing: require evidence covering the exact contract, quantify scope, and reject vacuous discharge; a strength label alone is insufficient. Named-premise acceptance must be explicit and transitive (docs/decisions.md:748; ROADMAP.md:468).
+
+ANSWER: c, a+i, a, a, a, d — These choices favor explicit, generated interfaces and fail-closed policies while keeping reporting completeness and proof coverage precise.
