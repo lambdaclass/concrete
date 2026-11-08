@@ -92,4 +92,47 @@ theorem typed_store_frame (tgt : Target) (m m' : Memory) (hw : m.WellFormed tgt)
   exact store_same_block_frame tgt m m' hw r.ptr (encode tgt v) r.align b off i x ha hx h
     (by simpa using hi)
 
+/-- Every successful materialization leaves the returned range as the place's sole projection. -/
+theorem materialize_projection (tgt : Target) (st st' : State) (p : Place) (s : AddrSpace)
+    (base align : Nat) (padding : List MByte) (r : Range)
+    (h : st.materialize tgt p s base align padding = some (r, st')) :
+    ∃ t, st'.places p = some ⟨t, .materialized r⟩ := by
+  unfold State.materialize at h
+  cases hc : st.places p with
+  | none => simp [hc] at h
+  | some c =>
+    simp only [hc] at h
+    dsimp at h
+    cases hs : c.storage with
+    | materialized old =>
+      simp only [hs, Option.some.injEq, Prod.mk.injEq] at h
+      obtain ⟨rfl, rfl⟩ := h
+      exact ⟨c.ty, by cases c; simp_all⟩
+    | structured v =>
+      simp only [hs] at h
+      split at h
+      next =>
+        cases ha : (st.memory.alloc tgt s base (encode tgt v ++ padding).length align).toOption with
+        | none => simp only [ha] at h; cases h
+        | some pair =>
+          obtain ⟨b, m⟩ := pair
+          simp only [ha] at h
+          dsimp at h
+          cases hm : m.store tgt ⟨s, base, some b⟩ (encode tgt v ++ padding) align with
+          | none => simp [hm] at h
+          | some m' =>
+            simp [hm] at h
+            obtain ⟨rfl, rfl⟩ := h
+            exact ⟨c.ty, by simp [State.set]⟩
+      next => simp at h
+
+/-- Materialization is idempotent after the first success, independently of later address,
+alignment or padding inputs. In particular it never asks for another padding selection. -/
+theorem materialize_idempotent (tgt : Target) (st st' : State) (p : Place) (s s' : AddrSpace)
+    (base align base' align' : Nat) (padding padding' : List MByte) (r : Range)
+    (h : st.materialize tgt p s base align padding = some (r, st')) :
+    st'.materialize tgt p s' base' align' padding' = some (r, st') := by
+  obtain ⟨t, ht⟩ := materialize_projection tgt st st' p s base align padding r h
+  exact materialize_reuse tgt st' p t r ht s' base' align' padding'
+
 end ConcreteSpec.Core.Hybrid
