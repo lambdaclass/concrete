@@ -5,3 +5,4 @@ import ConcreteSpec.Proofs.Examples
 import ConcreteSpec.Proofs.Authority
 import ConcreteSpec.Proofs.Observe
 import ConcreteSpec.Proofs.Slice0
+import ConcreteSpec.Spec.Surface0
