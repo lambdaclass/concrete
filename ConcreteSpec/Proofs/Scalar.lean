@@ -24,9 +24,11 @@ PROPOSED: not normative until the owner freezes Core (ROADMAP A2c). See `Concret
   drops the bits shifted out (`toBits_shl`), and an unsigned right shift is the logical shift of
   the pattern (`toBits_shr_unsigned`); a `bool` pattern is `0` or `1` (`boolOfBits_some_iff`).
 - **Negation and lossy conversion**: plain negation traps exactly when checked negation fails
-  (`plainNeg_ok_iff`, `plainNeg_trap_iff`); a lossy conversion lands in range and keeps a value that
-  fits (`lossyConvert_inRange`, `lossyConvert_of_inRange`); saturation clamps to the nearer end
-  (`saturate_below`, `saturate_above`).
+  (`plainNeg_ok_iff`, `plainNeg_trap_iff`; there is no wrapping negation, ARITH-4); a lossy
+  conversion lands in range and keeps a value that fits (`lossyConvert_inRange`,
+  `lossyConvert_of_inRange`); saturation keeps a value in range and clamps one outside to the
+  nearer end (`saturate_of_inRange`, `saturate_below`, `saturate_above`); bitwise operations act on
+  the patterns (`toBits_bitwise`, `toBits_bitNot`).
 - The trap kinds have distinct names, and the arithmetic errors map to distinct kinds.
 -/
 
@@ -68,6 +70,16 @@ theorem saturate_inRange (t : IntTy) (n : Int) : t.InRange (saturate t n) := by
   split
   · omega
   · split <;> omega
+
+/-- Saturation keeps a value in range. -/
+theorem saturate_of_inRange (t : IntTy) (n : Int) (h : t.InRange n) : saturate t n = n := by
+  obtain ⟨h1, h2⟩ := h
+  unfold saturate
+  split
+  · omega
+  · split
+    · omega
+    · rfl
 
 theorem bitwise_inRange (t : IntTy) (op : BitOp) (a b : Int) : t.InRange (bitwise t op a b) := by
   have ha := toBits_lt t a
@@ -186,14 +198,7 @@ theorem saturating_of_checked (t : IntTy) (op : WrapOp) (a b r : Int)
   unfold inRangeOr at h
   split at h
   · cases h
-    rename_i hr
-    obtain ⟨h1, h2⟩ := hr
-    unfold saturating saturate
-    split
-    · omega
-    · split
-      · omega
-      · rfl
+    exact saturate_of_inRange t _ (by assumption)
   · cases h
 
 /-! ### Conversions -/
@@ -319,13 +324,6 @@ theorem plainNeg_trap_iff (t : IntTy) (a : Int) (k : TrapKind) :
 theorem checkedNeg_inRange {t : IntTy} {a r : Int} (h : checkedNeg t a = .ok r) : t.InRange r :=
   inRangeOr_inRange h
 
-theorem wrappingNeg_of_checked (t : IntTy) (a r : Int) (h : checkedNeg t a = .ok r) :
-    wrappingNeg t a = r := by
-  unfold checkedNeg inRangeOr at h
-  split at h
-  · cases h; exact wrap_of_inRange t _ (by assumption)
-  · cases h
-
 theorem boolOfBits_boolToBits (b : Bool) : boolOfBits (boolToBits b) = some b := by
   cases b <;> rfl
 
@@ -385,6 +383,26 @@ theorem toBits_shr_unsigned (t : IntTy) (hs : t.signed = false) (a c r : Int) (h
       rw [Int.natCast_ediv, Int.natCast_pow]; rfl
     rw [hq, Int.toNat_natCast, Int.toNat_natCast]
   · cases h
+
+/-- Bitwise operations act on the patterns, bit by bit. -/
+theorem toBits_bitwise (t : IntTy) (op : BitOp) (a b : Int) :
+    toBits t (bitwise t op a b) = match op with
+      | .and => toBits t a &&& toBits t b
+      | .or => toBits t a ||| toBits t b
+      | .xor => toBits t a ^^^ toBits t b := by
+  have ha := toBits_lt t a
+  have hb := toBits_lt t b
+  cases op
+  · exact toBits_ofBits t _ (Nat.lt_of_le_of_lt Nat.and_le_left ha)
+  · exact toBits_ofBits t _ (Nat.or_lt_two_pow ha hb)
+  · exact toBits_ofBits t _ (Nat.xor_lt_two_pow ha hb)
+
+/-- Bitwise not flips every bit of the pattern. -/
+theorem toBits_bitNot (t : IntTy) (a : Int) :
+    toBits t (bitNot t a) = 2 ^ t.bits - 1 - toBits t a := by
+  have := toBits_lt t a
+  have hp : 0 < 2 ^ t.bits := Nat.two_pow_pos _
+  exact toBits_ofBits t _ (by omega)
 
 /-- Saturation clamps: below the range it gives the minimum, above it the maximum. -/
 theorem saturate_below (t : IntTy) (n : Int) (h : n < t.min) : saturate t n = t.min := by

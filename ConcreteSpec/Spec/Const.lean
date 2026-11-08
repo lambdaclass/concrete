@@ -36,8 +36,9 @@ constant written later in the file (elaboration then sorting the declarations, a
 cycle) is a question for the owner, not decided here; this module refuses a cycle either way.
 
 **Static admission.** The compiler checks constants by typing them (`typeConsts`), without
-evaluating: a list that types is admitted, and its evaluation cannot fail (`typed_admitted`); every constant then has a value of
-its declared type (`evalConsts_sound`).
+evaluating: a list is admitted exactly when it types (`admitted_iff_typed`), so the evaluation of
+an admitted list cannot fail, and every constant then has a valid value of its declared type
+(`evalConsts_sound`).
 
 This module does not decide when a use of a constant is replaced by its value, or revise TYPE-22's
 evaluation-at-each-use: per item 26 that revision of Q6.4/TYPE-22 comes after this subset is
@@ -76,20 +77,6 @@ def CVal.ty : CVal → CTy
 def CVal.Valid : CVal → Prop
   | .int t n => t.InRange n
   | _ => True
-
-/-- The comparison operators. -/
-inductive CmpOp where
-  | eq | ne | lt | le | gt | ge
-  deriving DecidableEq, Repr
-
-/-- A comparison of two integers. -/
-def CmpOp.eval : CmpOp → Int → Int → Bool
-  | .eq, a, b => a == b
-  | .ne, a, b => a != b
-  | .lt, a, b => decide (a < b)
-  | .le, a, b => decide (a ≤ b)
-  | .gt, a, b => decide (b < a)
-  | .ge, a, b => decide (b ≤ a)
 
 /-- An initializer of the closed total subset. -/
 inductive CExpr where
@@ -224,8 +211,8 @@ def typeConsts (U : ConstTypes) : List (ConstDecl U) → AList ConstId CTy →
     | none => none
 
 /-- **Rule: constant declarations are admitted** when every initializer is in the closed total
-subset and well typed, refers only to constants before it in the dependency order, and has a `Copy` declared type that is its
-value's type (owner decision 2026-11-08, item 26; statically known module constants, Q6.2;
+subset and well typed, refers only to constants before it in the dependency order, and has a
+`Copy` declared type that is its value's type (owner decision 2026-11-08, item 26; statically known module constants, Q6.2;
 compile-time evaluation stays within P17b's limits: this is a fixed, closed evaluator, not general
 compile-time execution). Their values are the result of `evalConsts`, computed at compile time. -/
 def ConstsAdmitted (U : ConstTypes) (ds : List (ConstDecl U)) : Prop :=

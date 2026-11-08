@@ -19,15 +19,18 @@ What these prove, for every operand language:
   `done_scope_next`). *A run whose calls complete*: an exit through a scope runs its calls newest
   first, threading the state, and then restores the scope (`exit_scope_runs_defers`,
   `done_scope_runs_defers`); an exit through several frames runs the calls of `plan`, innermost
-  scope first, and arrives unchanged (`unwind_runs_plan`); a `return` then reaches its caller with
-  the value bound (`return_reaches_caller`).
+  scope first, and arrives unchanged (`unwind_runs_plan`); the cleanup runs exactly the calls of
+  `plan`, in order (`cleans_runs_plan`, `planWith_calls`); a `return` then reaches its caller with
+  the value bound (`return_reaches_caller`), and a `break` or `continue` its loop
+  (`break_reaches_loop`, `continue_reaches_loop`).
 - **Exit values**: a `return` evaluates its value before any cleanup (`step_ret`).
 - **Traps are terminal**: a trapped configuration has no step and no later event
   (`steps_from_trapped`); `abort()` runs no cleanup (`abort_runs_no_cleanup`), and so neither does a
   cleanup call that traps.
 - **Evaluation order**: the first argument that traps decides the trap (`evalArgs_first_trap`).
 - Steps of the machine itself are deterministic (`step_silent_deterministic`): only the answers of
-  primitive operations can make two runs differ.
+  primitive operations, each allowed by its contract, can make two runs differ
+  (`step_deterministic`).
 - **Destruction order** (Q2.3): a sequence's element `i` is visited `i`-th and the backing last; a
   map's `i`-th entry has its key at `2i` and its value at `2i+1`, and the nodes come last.
 -/
@@ -134,8 +137,8 @@ theorem two_defers_register (P : Program O) (b : BlockId) (d₁ d₂ : Deferred 
 /-- `return` evaluates its value first: the next configuration carries the value and the same
 frames, so no cleanup has run. -/
 theorem step_ret (P : Program O) (e : O.Expr) (site : SiteId) (L : AList Var O.Val)
-    (st : O.Store) (k : List (Frame O)) (v : O.Val) (hv : O.eval L st e = .ok v) :
-    step P ⟨.exec (.ret e site), L, st, k⟩ = some (.next ⟨.exiting (.ret v), L, st, k⟩) := by
+    (st st' : O.Store) (k : List (Frame O)) (v : O.Val) (hv : O.eval L st e = .ok (v, st')) :
+    step P ⟨.exec (.ret e site), L, st, k⟩ = some (.next ⟨.exiting (.ret v), L, st', k⟩) := by
   simp [step, onRes, hv]
 
 /-- A `break` reaching its loop's body frame continues after the loop. -/
@@ -266,6 +269,75 @@ theorem break_reaches_loop (P : Program O) (l : LoopId) (cr b : Stmt O) (t : O.E
     (steps_next (step_break_loop P l cr b t site _ st' k) (Steps.refl _))
   simpa using this
 
+/-- **A `continue` reaches its loop** after the same cleanup, and the loop starts again from its
+condition region. -/
+theorem continue_reaches_loop (P : Program O) (l : LoopId) (cr b : Stmt O) (t : O.Expr)
+    (site : SiteId) (k : List (Frame O)) {pre : List (Frame O)} {L : AList Var O.Val}
+    {st st' : O.Store} {tr : List O.Event}
+    (h : Cleans P pre L st tr st') (hp : ∀ f ∈ pre, Passes (.cont l) f) :
+    Steps P ⟨.exiting (.cont l), L, st, pre ++ .body l cr t b site :: k⟩ tr
+      ⟨.exec (.loop l cr t b site), unwindLocals pre L, st', k⟩ := by
+  have := Steps.trans (unwind_runs_plan P (.cont l) (.body l cr t b site :: k) h hp)
+    (steps_next (step_continue_loop P l cr b t site _ st' k) (Steps.refl _))
+  simpa using this
+
+/-! ### What the cleanup runs
+
+`Cleans` runs the calls of `plan`, each with the locals of its scope's point in the unwinding:
+`planWith` lists them with those locals, its calls are `plan`'s (`planWith_calls`), and a cleanup is
+a run of exactly those calls in that order (`cleans_runs_plan`). -/
+
+/-- The calls an exit through frames `pre` runs, each paired with the locals it runs with. -/
+def planWith : List (Frame O) → AList Var O.Val → List (AList Var O.Val × Deferred O)
+  | [], _ => []
+  | .scope _ dm ds :: k, L => ds.map (L, ·) ++ planWith k (restrict dm L)
+  | _ :: k, L => planWith k L
+
+theorem planWith_calls : ∀ (pre : List (Frame O)) (L : AList Var O.Val),
+    (planWith pre L).map Prod.snd = plan pre
+  | [], _ => rfl
+  | .scope _ dm ds :: k, L => by
+    simp [planWith, plan, planWith_calls k (restrict dm L), List.map_map, Function.comp_def]
+  | .seq _ :: k, L => planWith_calls k L
+  | .test .. :: k, L => planWith_calls k L
+  | .body .. :: k, L => planWith_calls k L
+  | .resume _ :: k, L => planWith_calls k L
+  | .ret .. :: k, L => planWith_calls k L
+
+/-- A list of calls, each with its locals, run one after another, the state threaded. -/
+inductive RunsEach (P : Program O) :
+    List (AList Var O.Val × Deferred O) → O.Store → List O.Event → O.Store → Prop where
+  | nil (st : O.Store) : RunsEach P [] st [] st
+  | cons {L d rest st tr₁ st₁ tr₂ st₂} : Completes P L d st tr₁ st₁ → RunsEach P rest st₁ tr₂ st₂ →
+      RunsEach P ((L, d) :: rest) st (tr₁ ++ tr₂) st₂
+
+theorem RunsEach.append {P : Program O} {xs ys : List (AList Var O.Val × Deferred O)}
+    {st st₁ st₂ : O.Store} {tr₁ tr₂ : List O.Event}
+    (h₁ : RunsEach P xs st tr₁ st₁) (h₂ : RunsEach P ys st₁ tr₂ st₂) :
+    RunsEach P (xs ++ ys) st (tr₁ ++ tr₂) st₂ := by
+  induction h₁ with
+  | nil => simpa using h₂
+  | cons hd _ ih => simpa [List.append_assoc] using RunsEach.cons hd (ih h₂)
+
+theorem RunsAll.each {P : Program O} {L : AList Var O.Val} {ds : List (Deferred O)}
+    {st st' : O.Store} {tr : List O.Event} (h : RunsAll P L ds st tr st') :
+    RunsEach P (ds.map (L, ·)) st tr st' := by
+  induction h with
+  | nil => exact .nil _
+  | cons hd _ ih => exact .cons hd ih
+
+/-- **A cleanup runs exactly the plan**: the calls of `plan pre`, in order, each with its scope's
+locals, and nothing else. -/
+theorem cleans_runs_plan {P : Program O} {pre : List (Frame O)} {L : AList Var O.Val}
+    {st st' : O.Store} {tr : List O.Event} (h : Cleans P pre L st tr st') :
+    RunsEach P (planWith pre L) st tr st' := by
+  induction h with
+  | nil => exact .nil _
+  | scope hr _ ih => exact RunsEach.append hr.each ih
+  | seq _ ih => exact ih
+  | test _ ih => exact ih
+  | body _ ih => exact ih
+
 /-! ### Traps are terminal -/
 
 theorem step_trapped (P : Program O) (kd : TrapKind) (site : SiteId) (L : AList Var O.Val)
@@ -302,19 +374,29 @@ theorem abort_runs_no_cleanup {P : Program O} {site : SiteId} {L : AList Var O.V
 
 /-! ### Evaluation order and determinism -/
 
-/-- The first argument that traps decides the trap, whatever follows it. -/
-theorem evalArgs_first_trap (L : AList Var O.Val) (st : O.Store) (e : O.Expr) (kd : TrapKind)
-    (he : O.eval L st e = .trap kd) (es₂ : List O.Expr) :
-    ∀ (es₁ : List O.Expr) (vs : List O.Val), evalArgs O L st es₁ = .ok vs →
+/-- The first argument that traps decides the trap, whatever follows it: once the arguments
+before it evaluate, in whatever state they leave. -/
+theorem evalArgs_first_trap (L : AList Var O.Val) (e : O.Expr) (kd : TrapKind)
+    (es₂ : List O.Expr) :
+    ∀ (es₁ : List O.Expr) (st st₁ : O.Store) (vs : List O.Val),
+      evalArgs O L st es₁ = .ok (vs, st₁) → O.eval L st₁ e = .trap kd →
       evalArgs O L st (es₁ ++ e :: es₂) = .trap kd
-  | [], _, _ => by simp [evalArgs, he, Res.bind]
-  | e₁ :: es₁, vs, h => by
+  | [], st, st₁, _, h, he => by
+    simp only [evalArgs, Res.ok.injEq, Prod.mk.injEq] at h
+    obtain ⟨_, rfl⟩ := h
+    simp [evalArgs, he, Res.bind]
+  | e₁ :: es₁, st, st₁, vs, h, he => by
     show evalArgs O L st (e₁ :: (es₁ ++ e :: es₂)) = _
     cases h₁ : O.eval L st e₁ with
-    | ok v₁ =>
-      cases h₂ : evalArgs O L st es₁ with
-      | ok vs₁ =>
-        have := evalArgs_first_trap L st e kd he es₂ es₁ vs₁ h₂
+    | ok p =>
+      obtain ⟨v₁, st₀⟩ := p
+      cases h₂ : evalArgs O L st₀ es₁ with
+      | ok q =>
+        obtain ⟨vs₁, st₂⟩ := q
+        have hst : st₂ = st₁ := by
+          simp [evalArgs, h₁, h₂, Res.bind, Res.map] at h; exact h.2
+        subst hst
+        have := evalArgs_first_trap L e kd es₂ es₁ st₀ st₂ vs₁ h₂ he
         simp [evalArgs, h₁, this, Res.bind, Res.map]
       | trap _ => simp [evalArgs, h₁, h₂, Res.bind, Res.map] at h
       | stuck => simp [evalArgs, h₁, h₂, Res.bind, Res.map] at h
@@ -328,22 +410,24 @@ theorem step_silent_deterministic {P : Program O} {c c₁ c₂ : Config O}
 
 /-- **Determinism up to the environment.** Two steps from one configuration reach the same
 configuration with the same label, unless the configuration requests a primitive operation: then
-each step is the continuation applied to its answer, so only the environment's answers can differ. -/
+each step takes an answer the contract allows, is labeled by it and continues with it, so only the
+environment's answers can differ, and equal answers give equal steps. -/
 theorem step_deterministic {P : Program O} {c c₁ c₂ : Config O} {l₁ l₂ : Label O}
     (h₁ : Step P c l₁ c₁) (h₂ : Step P c l₂ c₂) :
     (l₁ = l₂ ∧ c₁ = c₂) ∨ ∃ p vs site st k a₁ a₂, step P c = some (.request p vs site st k) ∧
-      c₁ = k a₁ ∧ c₂ = k a₂ := by
+      O.allows p vs st a₁ = true ∧ O.allows p vs st a₂ = true ∧
+      l₁ = a₁.label ∧ l₂ = a₂.label ∧ c₁ = k a₁ ∧ c₂ = k a₂ := by
   cases h₁ with
   | silent h =>
     cases h₂ with
     | silent h' => exact .inl ⟨rfl, step_silent_deterministic h h'⟩
     | prim h' _ => rw [h] at h'; cases h'
-  | prim h _ =>
+  | prim h ha =>
     cases h₂ with
     | silent h' => rw [h] at h'; cases h'
-    | prim h' _ =>
+    | prim h' ha' =>
       rw [h] at h'; cases h'
-      exact .inr ⟨_, _, _, _, _, _, _, h, rfl, rfl⟩
+      exact .inr ⟨_, _, _, _, _, _, _, h, ha, ha', rfl, rfl, rfl, rfl⟩
 
 /-! ### Destruction -/
 
@@ -424,28 +508,45 @@ theorem mapDestroyOrder_storage (n : Nat) :
 
 The cleanup laws assume that each deferred call completes (`Completes`). Real calls meet it: in the
 demo language of `Spec/Exec.lean`, a deferred `log(1)` completes from any locals, in any state and
-on any frames, emitting `1`; a deferred `bump()` completes silently and adds one to the counter. -/
+on any frames, emitting `1`, as long as the instrumentation has not marked its parameter moved; a
+deferred `bump()` completes silently and adds one to the counter. -/
 
-theorem demo_log_completes (L : AList Var Demo.ops.Val) (st : Demo.ops.Store) :
+theorem demo_log_completes (L : AList Var Demo.ops.Val) (st : Demo.ops.Store)
+    (h : Demo.x ∉ st.moved) :
     Completes Demo.prog L ⟨Demo.logF, [.lit 1], Demo.s⟩ st [1] st := by
   intro k
+  have hreq : step Demo.prog ⟨.exec (.prim none .log [.var Demo.x] Demo.s), [(Demo.x, 1)], st,
+      .scope ⟨100⟩ [Demo.x] [] :: .ret none L :: k⟩ =
+      some (.request .log [1] Demo.s st fun a => match a.result with
+        | .ok v => ⟨.done, bindDst none v [(Demo.x, 1)], a.store,
+            .scope ⟨100⟩ [Demo.x] [] :: .ret none L :: k⟩
+        | .error kd => ⟨.trapped kd Demo.s, [(Demo.x, 1)], a.store,
+            .scope ⟨100⟩ [Demo.x] [] :: .ret none L :: k⟩) := by
+    simp only [step, onRes, evalArgs, Demo.evalE, AList.lookup, h, Res.bind, Res.map]
+    simp
+    funext a
+    rcases a with ⟨ev, r, st'⟩
+    cases r <;> rfl
   refine steps_next rfl (steps_request (O := Demo.ops) (P := Demo.prog)
-    (a := ⟨some (1 : Int), .ok (0 : Int), st⟩) (tr := []) rfl (by simp [Demo.ops]) ?_)
+    (a := ⟨some (1 : Int), .ok (0 : Int), st⟩) (tr := []) hreq (by simp [Demo.ops]) ?_)
   exact steps_next rfl (steps_next rfl (Steps.refl _))
 
 theorem demo_bump_completes (L : AList Var Demo.ops.Val) (st : Demo.ops.Store) :
-    Completes Demo.prog L ⟨Demo.bumpF, [], Demo.s⟩ st [] (st + 1) := by
+    Completes Demo.prog L ⟨Demo.bumpF, [], Demo.s⟩ st [] { st with counter := st.counter + 1 } := by
   intro k
   refine steps_next rfl (steps_request (O := Demo.ops) (P := Demo.prog)
-    (a := ⟨none, .ok (0 : Int), st + 1⟩) (tr := []) rfl (by simp [Demo.ops]) ?_)
+    (a := ⟨none, .ok (0 : Int), { st with counter := st.counter + 1 }⟩) (tr := []) rfl
+    (by simp [Demo.ops]) ?_)
   exact steps_next rfl (steps_next rfl (Steps.refl _))
 
 /-- So the cleanup law applies to a real scope: the end of a block that registered `log(1)` and
 then `bump()` runs `bump` (silently, adding one) and then `log`, from any state. -/
-example (L : AList Var Demo.ops.Val) (st : Int) (k : List (Frame Demo.ops)) (dm : List Var) :
+example (L : AList Var Demo.ops.Val) (st : Demo.DState) (k : List (Frame Demo.ops))
+    (dm : List Var) (h : Demo.x ∉ st.moved) :
     Steps Demo.prog ⟨.done, L, st, .scope ⟨1⟩ dm [⟨Demo.bumpF, [], Demo.s⟩,
-      ⟨Demo.logF, [.lit 1], Demo.s⟩] :: k⟩ [1] ⟨.done, restrict dm L, st + 1, k⟩ :=
+      ⟨Demo.logF, [.lit 1], Demo.s⟩] :: k⟩ [1]
+      ⟨.done, restrict dm L, { st with counter := st.counter + 1 }, k⟩ :=
   done_scope_runs_defers Demo.prog ⟨1⟩ dm L k
-    (.cons (demo_bump_completes L st) (.cons (demo_log_completes L (st + 1)) (.nil _)))
+    (.cons (demo_bump_completes L st) (.cons (demo_log_completes L { st with counter := st.counter + 1 } h) (.nil _)))
 
 end ConcreteSpec.Core.Exec

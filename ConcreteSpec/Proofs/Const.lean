@@ -11,8 +11,9 @@ PROPOSED: not normative until the owner freezes Core (ROADMAP A2c). See `Concret
 - **Validity** (`eval_valid`): every value an initializer computes is valid (an integer in range).
 - **Copy only** (`admitted_copy`): every constant of admitted declarations has a `Copy` type, and
   so does every value it can hold (`ofC_copy`).
-- **Static admission** (`typed_admitted`): declarations that type (`typeConsts`) are admitted, so
-  their evaluation at compile time cannot fail.
+- **Static admission** (`typed_admitted`, `admitted_iff_typed`): declarations are admitted exactly
+  when they type (`typeConsts`), so the compiler decides admission without evaluating, and the
+  evaluation of admitted declarations at compile time cannot fail.
 - **Declaration soundness** (`evalConsts_sound`): after admitted declarations, every declared
   constant has a valid value whose type is its declared type.
 -/
@@ -307,5 +308,122 @@ theorem evalConsts_sound (U : ConstTypes) : ∀ (ds : List (ConstDecl U)) (env e
         | tail _ hm => exact hrest d' hm
       · cases h
     · cases h
+
+/-! ### Static admission is exact -/
+
+theorem sameInt_some {x y : Option CVal} {t : IntTy} {a b : Int}
+    (h : sameInt x y = some (t, a, b)) : x = some (.int t a) ∧ y = some (.int t b) := by
+  match x, y, h with
+  | some (.int t₁ a₁), some (.int t₂ b₂), h =>
+    simp only [sameInt] at h
+    split at h
+    · rename_i he; subst he; cases h; exact ⟨rfl, rfl⟩
+    · cases h
+
+theorem twoBools_some {x y : Option CVal} {a b : Bool} (h : twoBools x y = some (a, b)) :
+    x = some (.bool a) ∧ y = some (.bool b) := by
+  match x, y, h with
+  | some (.bool _), some (.bool _), h => cases h; exact ⟨rfl, rfl⟩
+
+/-- The value of an initializer has the type `ty?` gives it, when each known constant's value has
+its recorded type. -/
+theorem eval_ty (env : AList ConstId CVal) (Γ : AList ConstId CTy)
+    (hm : ∀ c v, AList.lookup env c = some v → AList.lookup Γ c = some v.ty) :
+    ∀ (e : CExpr) (v : CVal), e.eval env = some v → e.ty? Γ = some v.ty := by
+  intro e
+  induction e with
+  | int t n =>
+    intro v h; simp only [CExpr.eval] at h; split at h
+    · cases h; simp [CExpr.ty?, *, CVal.ty]
+    · cases h
+  | bool b => intro v h; cases h; rfl
+  | unit => intro v h; cases h; rfl
+  | ref c => exact hm c
+  | wrapping op a b iha ihb | saturating op a b iha ihb | bit op a b iha ihb =>
+    intro v h
+    simp only [CExpr.eval, Option.map_eq_some_iff] at h
+    obtain ⟨⟨t, x, y⟩, hs, rfl⟩ := h
+    obtain ⟨ha, hb⟩ := sameInt_some hs
+    simp [CExpr.ty?, iha _ ha, ihb _ hb, sameIntTy, CVal.ty]
+  | cmp op a b iha ihb =>
+    intro v h
+    simp only [CExpr.eval, Option.map_eq_some_iff] at h
+    obtain ⟨⟨t, x, y⟩, hs, rfl⟩ := h
+    obtain ⟨ha, hb⟩ := sameInt_some hs
+    simp [CExpr.ty?, iha _ ha, ihb _ hb, sameIntTy, CVal.ty]
+  | bitNot a ih =>
+    intro v h; simp only [CExpr.eval] at h; split at h
+    · rename_i t x hx; cases h; simp [CExpr.ty?, ih _ hx, CVal.ty]
+    · cases h
+  | not a ih =>
+    intro v h; simp only [CExpr.eval] at h; split at h
+    · rename_i x hx; cases h; simp [CExpr.ty?, ih _ hx, CVal.ty]
+    · cases h
+  | and a b iha ihb | or a b iha ihb =>
+    intro v h
+    simp only [CExpr.eval, Option.map_eq_some_iff] at h
+    obtain ⟨⟨x, y⟩, hs, rfl⟩ := h
+    obtain ⟨ha, hb⟩ := twoBools_some hs
+    simp [CExpr.ty?, iha _ ha, ihb _ hb, bothBool, CVal.ty]
+  | convert t a ih =>
+    intro v h; simp only [CExpr.eval] at h; split at h
+    · rename_i s x hx
+      split at h
+      · rename_i hl; cases h; simp [CExpr.ty?, ih _ hx, CVal.ty, hl]
+      · cases h
+    · rename_i b hx; cases h; simp [CExpr.ty?, ih _ hx, CVal.ty]
+    · cases h
+
+theorem Matches.lookup {env : AList ConstId CVal} {Γ : AList ConstId CTy} (h : Matches env Γ) :
+    ∀ c v, AList.lookup env c = some v → AList.lookup Γ c = some v.ty := by
+  intro c v hv
+  cases hc : AList.lookup Γ c with
+  | none => rw [h.2 c hc] at hv; cases hv
+  | some T =>
+    obtain ⟨v', hv', hty, _⟩ := h.1 c T hc
+    rw [hv] at hv'; cases hv'; rw [hty]
+
+/-- Declarations that evaluate also type. -/
+theorem evaluates_typed (U : ConstTypes) : ∀ (ds : List (ConstDecl U)) (env env' : AList ConstId CVal)
+    (Γ : AList ConstId CTy), Matches env Γ → (∀ c v, AList.lookup env c = some v → v.Valid) →
+    evalConsts U ds env = some env' → (typeConsts U ds Γ).isSome = true
+  | [], _, _, _, _, _, _ => rfl
+  | d :: ds, env, env', Γ, hm, hv, h => by
+    simp only [evalConsts] at h
+    split at h
+    · rename_i v hev
+      split at h
+      · rename_i hc
+        obtain ⟨hcopy, hty, hfresh⟩ := hc
+        have hT := eval_ty env Γ hm.lookup d.init v hev
+        have hvv := eval_valid env hv d.init v hev
+        have hΓ : AList.lookup Γ d.id = none := by
+          cases hg : AList.lookup Γ d.id with
+          | none => rfl
+          | some T =>
+            obtain ⟨w, hw, _, _⟩ := hm.1 d.id T hg
+            rw [hfresh] at hw; cases hw
+        have hv' : ∀ c w, AList.lookup ((d.id, v) :: env) c = some w → w.Valid := by
+          intro c w hw
+          simp only [AList.lookup] at hw
+          split at hw
+          · cases hw; exact hvv
+          · exact hv c w hw
+        simp only [typeConsts, hT, hcopy, hty, hΓ, and_self, ↓reduceIte]
+        exact evaluates_typed U ds _ env' _ (hm.cons d.id v hvv) hv' h
+      · cases h
+    · cases h
+
+/-- **Static admission is exact**: declarations are admitted exactly when they type. -/
+theorem admitted_iff_typed (U : ConstTypes) (ds : List (ConstDecl U)) :
+    ConstsAdmitted U ds ↔ (typeConsts U ds []).isSome = true := by
+  have hm : Matches [] [] := ⟨fun _ _ h => (by cases h), fun _ _ => rfl⟩
+  constructor
+  · intro h
+    obtain ⟨env', he⟩ := Option.isSome_iff_exists.1 h
+    exact evaluates_typed U ds [] env' [] hm (fun _ _ h => (by cases h)) he
+  · intro h
+    obtain ⟨Γ, hΓ⟩ := Option.isSome_iff_exists.1 h
+    exact typed_admitted U ds Γ hΓ
 
 end ConcreteSpec.Core

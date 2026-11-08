@@ -33,8 +33,9 @@ Signed values are two's complement.
 replacing `as`; its spelling is not yet approved) is allowed exactly when every value of the source
 type is a value of the target type (OD11's value-domain rule, ARITH-5), and it never changes the
 value: between integer types exactly when the source range lies inside the target's (`Lossless`),
-and from `bool` to every integer type, `false` as `0` and `true` as `1` (`boolToInt`). The checked conversion `try_convert` returns `Except OutOfRange` (OD106), a different
-error type from `ArithmeticError`. A lossy integer conversion keeps the low bits of the target's
+and from `bool` to every integer type, `false` as `0` and `true` as `1` (`boolToInt`). The checked
+conversion `try_convert` returns `Except OutOfRange` (OD106), a different error type from
+`ArithmeticError`. A lossy integer conversion keeps the low bits of the target's
 width (`wrap`); the names of the lossy conversions are OD99's.
 
 **Errors are not trap kinds.** `ArithmeticError` and `OutOfRange` are values a program handles;
@@ -158,6 +159,20 @@ inductive BitOp where
   | and | or | xor
   deriving DecidableEq, Repr
 
+/-- The comparison operators. -/
+inductive CmpOp where
+  | eq | ne | lt | le | gt | ge
+  deriving DecidableEq, Repr
+
+/-- A comparison of two integers. -/
+def CmpOp.eval : CmpOp → Int → Int → Bool
+  | .eq, a, b => a == b
+  | .ne, a, b => a != b
+  | .lt, a, b => decide (a < b)
+  | .le, a, b => decide (a ≤ b)
+  | .gt, a, b => decide (b < a)
+  | .ge, a, b => decide (b ≤ a)
+
 /-- The exact result of a wrapping-capable operation. -/
 def WrapOp.exact : WrapOp → Int → Int → Int
   | .add, a, b => a + b
@@ -196,9 +211,6 @@ def plainNeg (t : IntTy) (a : Int) : Res Int :=
   match checkedNeg t a with
   | .ok r => .ok r
   | .error e => .trap e.trapKind
-
-/-- Wrapping negation: modulo `2^bits`, never failing. -/
-def wrappingNeg (t : IntTy) (a : Int) : Int := wrap t (-a)
 
 /-- A plain operation: the checked one, with a failure turned into a trap of its kind. -/
 def plain (t : IntTy) (op : ArithOp) (a b : Int) : Res Int :=
@@ -371,9 +383,10 @@ example : (CTerm.machine .u8 (.wrapping .add) (.lit 300) (.lit 1)).eval (fun _ =
 /-- `bool` patterns: only `0` and `1`. -/
 example : boolToBits true = 1 ∧ boolOfBits 0 = some false ∧ boolOfBits 2 = none := by decide
 
-/-- Negation: `-(-128)` overflows `i8`; wrapping gives `-128` back. A lossy conversion keeps the
-low bits: `300` to `u8` is `44`, `255` to `i8` is `-1`. -/
-example : plainNeg .i8 (-128) = .trap .overflow ∧ wrappingNeg .i8 (-128) = -128 ∧
+/-- Negation: `-(-128)` overflows `i8` (there is no wrapping negation: ARITH-4 has wrapping add,
+subtract and multiply only). A lossy conversion keeps the low bits: `300` to `u8` is `44`, `255`
+to `i8` is `-1`. -/
+example : plainNeg .i8 (-128) = .trap .overflow ∧ plainNeg .i8 5 = .ok (-5) ∧
     lossyConvert .u8 300 = 44 ∧ lossyConvert .i8 255 = -1 := by decide
 
 end ConcreteSpec.Core
