@@ -21,7 +21,7 @@ examples=0
 # check NAME DIR SECS RETRY: build both backends in DIR, run them and judge them.
 check() {
   local name=$1 d=$2 backend
-  build "$name" "$d/build.log" "${capped[@]}" timeout -k 10 300 bash "$root/scripts/checks/slice0_native.sh" "$d" "$lcb"
+  build "$name" "$d/build.log" bounded "$native_secs" bash "$root/scripts/checks/slice0_native.sh" "$d" "$lcb"
   for backend in llvm lcb; do
     observe "$d/$backend.exe" "$d/$backend" "$3" "$4"
     count=$((count + 1))

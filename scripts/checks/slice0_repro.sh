@@ -20,12 +20,27 @@ source scripts/checks/lib/slice0_sources.sh
 gate_limits 64 40000
 work=$(mktemp -d)
 trap 'rm -rf "${work:?}"' EXIT
+BOUNDED_PARENT="$work"
+# shellcheck source=scripts/checks/lib/bounded.sh
+source scripts/checks/lib/bounded.sh
+[ "$BOUNDED_HAVE_WATCHDOG" = 1 ] || { echo "slice0_repro: python3 is required for bounded runs" >&2; exit 2; }
+# bounded SECS CMD...: CMD through bounded_run (stdin /dev/null, one re-run on a timeout; a second
+# timeout returns 124 with no output and is reported INCOMPLETE, never a pass).
+bounded() {
+  local secs=$1 rc=0
+  shift
+  bounded_run -i /dev/null "$secs" -- "$@" || rc=$?
+  if [ "$rc" != 0 ] && bounded_is_incomplete "$rc"; then
+    echo "slice0_repro: INCOMPLETE (timed out twice): $*" >&2
+  fi
+  return "$rc"
+}
 manifest=${1:-}
 [ -z "$manifest" ] || manifest=$(realpath -m "$manifest")
 compare=(python3 "$root/scripts/checks/lib/repro_compare.py")
 # Materialize the dependency checkouts (no build): they must be the manifest's clean revisions,
 # which build_identity.sh checks before anything is built.
-timeout -k 30 600 lake env true
+bounded 600 lake env true
 bash scripts/checks/build_identity.sh > "$work/identity"
 target=$(bash scripts/checks/slice0_native.sh target)
 # Working source edits are included (the identity records their digest); no build product is.
@@ -46,14 +61,14 @@ for side in first second; do
     export TMPDIR="$work/$side/tmp" LC_ALL=C TZ=UTC SOURCE_DATE_EPOCH=1 ZERO_AR_DATE=1
     # No Lake artifact cache: each side compiles everything it uses.
     export LAKE_ARTIFACT_CACHE=false LAKE_CACHE_DIR="$work/$side/lake-cache"
-    timeout -k 30 3000 lake build Concrete lean-compiler-backend/lcb >"$work/$side/build.log" 2>&1 ||
+    bounded 3000 lake build Concrete lean-compiler-backend/lcb >"$work/$side/build.log" 2>&1 ||
       { tail -50 "$work/$side/build.log" >&2; echo "slice0_repro: $side: build failed" >&2; exit 1; }
     lcb="$d/.lake/packages/lean-compiler-backend/.lake/build/bin/lcb"
-    timeout -k 10 120 lake env lean --run scripts/checks/slice0_bir.lean list > names
+    bounded 120 lake env lean --run scripts/checks/slice0_bir.lean list > names
     [ -s names ] || { echo 'slice0_repro: no examples' >&2; exit 1; }
     while read -r name; do
-      timeout -k 10 120 lake env lean --run scripts/checks/slice0_bir.lean emit "$name" "$d/out/$name" "$target"
-      timeout -k 10 120 bash scripts/checks/slice0_native.sh "$d/out/$name" "$lcb"
+      bounded 120 lake env lean --run scripts/checks/slice0_bir.lean emit "$name" "$d/out/$name" "$target"
+      bounded 120 bash scripts/checks/slice0_native.sh "$d/out/$name" "$lcb"
     done < names
   )
 done

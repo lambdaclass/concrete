@@ -10,7 +10,7 @@ case "$(uname -s)-$(uname -m)" in
   *) echo 'slice0_native: unsupported target' >&2; exit 2 ;;
 esac
 if [ "${1:-}" = target ]; then echo "$target"; exit; fi
-# `sanitize` builds only llvm.san.exe: the LLVM example with ASan and UBSan (README gate 10).
+# `sanitize` builds only llvm.san.exe: the LLVM example with ASan (README gate 10; no UBSan, see there).
 [ "$#" = 2 ] || { [ "$#" = 3 ] && [ "$3" = sanitize ]; } ||
   { echo 'usage: slice0_native.sh DIRECTORY LCB [sanitize]' >&2; exit 2; }
 lcb=$2
@@ -26,12 +26,11 @@ cc=("${clean[@]}" "$CONCRETE_SLICE0_CLANG" --no-default-config
 [ "$target" != aarch64-macos ] || cc+=(--target=arm64-apple-macosx15.0 -mmacosx-version-min=15.0)
 if [ "${3:-}" = sanitize ]; then
   # ASan instruments only functions carrying `sanitize_address`, which clang's C front end adds and
-  # the printed IR does not; the sanitizer build adds it to every definition (llvm.san.ll). UBSan's
-  # checks are inserted by the C front end, so on IR input only its runtime is linked.
+  # the printed IR does not; the sanitizer build adds it to every definition (llvm.san.ll).
   sed -E 's/^(define .*\)) \{$/\1 sanitize_address {/' llvm.ll >llvm.san.ll
   [ "$(grep -c '^define ' llvm.san.ll)" = "$(grep -c '^define .* sanitize_address {$' llvm.san.ll)" ] ||
     { echo 'slice0_native: a definition lacks sanitize_address' >&2; exit 1; }
-  san=(-fsanitize=address,undefined -fno-sanitize-recover=all)
+  san=(-fsanitize=address -fno-sanitize-recover=all)
   "${cc[@]}" "${san[@]}" -c llvm.san.ll -o llvm.san.o
   "${cc[@]}" "${san[@]}" "${link[@]}" llvm.san.o -o llvm.san.exe
   exit

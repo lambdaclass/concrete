@@ -2,14 +2,18 @@
 # Slice-0 artifact gates (PROVISIONAL, Concrete/README.md gates 10, 11 and 12), over every
 # hand-written BIR example, on the executables slice0_native.sh links:
 #
-# 10. Sanitizers: the LLVM example also built with ASan and UBSan (slice0_native.sh sanitize: ASan
-#     instruments the printed IR once every definition carries sanitize_address; UBSan's checks
-#     come from clang's C front end, so on IR only its runtime is linked) must
+# 10. Sanitizers: the LLVM example also built with ASan (slice0_native.sh sanitize: ASan
+#     instruments the printed IR once every definition carries sanitize_address; no UBSan: its
+#     checks are inserted by clang's C front end, so on IR input it checks nothing) must
 #     give the same observation as the BIR semantics (status, exact fd-2 bytes, empty fd 1), so no
 #     sanitizer report. Its memory is bounded by ASan's hard_rss_limit_mb (the shadow reservation
 #     rules out an address-space cap; every other command is capped, see SLICE0_GATE_MEM_GB). Control: a body with an out-of-bounds load must be reported.
 # 11. Binary size (report-only, never fails on a size): bytes and text size of each executable,
-#     per backend and target, in REPORT/sizes.tsv.
+#     per backend and target, in REPORT/sizes.tsv. Compile time (report-only, owner 2026-11-08):
+#     wall-clock milliseconds of each example's emit step (the Lean emitter: checks, LLVM print,
+#     LCB adaptation and in-process assembly, Lean start-up included) and native step (clang and
+#     LCB's command line, linking both executables), next to its budget (the step's time bound), in
+#     REPORT/compile_times.tsv.
 # 12. Stack bound: lib/stack_bound.py derives, from the linked executable's disassembly, a bound on
 #     the Concrete-owned stack below main's entry, covering every byte addressed relative to the
 #     stack or frame pointer (so the red zone), with external libc calls listed with their entry
@@ -39,7 +43,7 @@ SLICE0_GATE_MEM_GB=0
 # shellcheck source=scripts/checks/lib/slice0_common.sh
 source scripts/checks/lib/slice0_common.sh
 : "${CONCRETE_SLICE0_LLVM:?run inside nix develop}"
-objdump=("${capped[@]}" "$CONCRETE_SLICE0_LLVM/llvm-objdump" -d --no-show-raw-insn)
+objdump=(bounded 60 "$CONCRETE_SLICE0_LLVM/llvm-objdump" -d --no-show-raw-insn)
 case "$target" in
   x86_64-linux) arch=x86_64; objdump+=(--x86-asm-syntax=intel) ;;
   aarch64-*) arch=aarch64 ;;
@@ -51,14 +55,18 @@ mkdir -p "$report"
 sizes="$report/sizes.tsv"
 stack="$report/stack.tsv"
 printf 'example\tbackend\ttarget\tbytes\ttext\n' >"$sizes"
+times="$report/compile_times.tsv"
+printf 'example\ttarget\temit_ms\temit_budget_ms\tnative_ms\tnative_budget_ms\n' >"$times"
+# now_ms: a monotonic clock in milliseconds (portable: BSD date has no %N).
+now_ms() { python3 -I -c 'import time; print(time.monotonic_ns() // 1000000)'; }
 printf 'example\tbackend\ttarget\tbound\tmeasured\texternals\n' >"$stack"
 # hard_rss_limit_mb and LeakSanitizer are Linux-only (ASan on Darwin refuses detect_leaks); on
 # macOS RLIMIT_AS is not enforced either, so there the job's memory is the bound, as for all runs.
 asan=abort_on_error=0:symbolize=0
 [ "$(uname -s)" != Linux ] || asan="$asan:hard_rss_limit_mb=1024:detect_leaks=1"
-san_env=("ASAN_OPTIONS=$asan" UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=0:symbolize=0)
+san_env=("ASAN_OPTIONS=$asan")
 # stack_bound ARCH DISASM [--ranges]: the analysis, capped and bounded in time.
-stack_bound() { "${capped[@]}" timeout -k 10 60 python3 -I "$root/scripts/checks/lib/stack_bound.py" "$@"; }
+stack_bound() { bounded 60 python3 -I "$root/scripts/checks/lib/stack_bound.py" "$@"; }
 fail=0
 examples=0
 last_exe= last_analysis=
@@ -73,14 +81,14 @@ measure() {
   ranges=$(awk '$1 == "range" {printf "%s%s:%s", sep, $3, $4; sep=","}' <<<"$2")
   main=$(awk '$1 == "range" && $2 == "main" {print $3}' <<<"$2")
   STACK_RANGES=$ranges STACK_MAIN=$main STACK_EXPECT=$3 \
-    "${capped[@]}" timeout -k 10 300 "$gdb" -batch -nx -x "$root/scripts/checks/lib/stack_measure.py" \
+    bounded 300 "$gdb" -batch -nx -x "$root/scripts/checks/lib/stack_measure.py" \
     "$1" 2>"$1.gdb.err" | awk '$1 == "measured" || $1 == "error" {print}' | cap_out || true
 }
 
 # stack_check NAME BACKEND EXE: derive the bound, measure a run where supported, record both.
 stack_check() {
   local name=$1 backend=$2 exe=$3 dis="$3.dis" out bound ext m measured=not-run
-  if ! timeout -k 10 60 "${objdump[@]}" "$exe" >"$dis" 2>"$dis.err"; then
+  if ! "${objdump[@]}" "$exe" >"$dis" 2>"$dis.err"; then
     echo "FAIL $name [$backend] stack: disassembly failed: $(head -c 300 "$dis.err")"; fail=1; return
   fi
   if ! out=$(stack_bound "$arch" "$dis" --ranges | cap_out); then
@@ -104,7 +112,7 @@ stack_check() {
 size_report() { # size_report NAME BACKEND EXE
   local bytes text
   bytes=$(wc -c <"$3" | tr -d ' ')
-  text=$("${capped[@]}" timeout -k 10 60 "$CONCRETE_SLICE0_LLVM/llvm-size" "$3" 2>/dev/null |
+  text=$(bounded 60 "$CONCRETE_SLICE0_LLVM/llvm-size" "$3" 2>/dev/null |
     awk 'NR == 2 {print $1}' | cap_out) || true
   printf '%s\t%s\t%s\t%s\t%s\n' "$1" "$2" "$target" "$bytes" "${text:-unavailable}" >>"$sizes"
 }
@@ -113,15 +121,19 @@ names=$(emit_examples)
 mkdir -p "$work/ctl"
 for name in $names; do
   d="$work/ex/$name"
+  t0=$(now_ms)
   "${emitter[@]}" emit "$name" "$d" "$target"
-  build "$name" "$d/build.log" "${capped[@]}" timeout -k 10 300 bash "$root/scripts/checks/slice0_native.sh" "$d" "$lcb"
+  t1=$(now_ms)
+  build "$name" "$d/build.log" bounded "$native_secs" bash "$root/scripts/checks/slice0_native.sh" "$d" "$lcb"
+  t2=$(now_ms)
+  printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$name" "$target" $((t1 - t0)) $((emit_secs * 1000)) $((t2 - t1)) $((native_secs * 1000)) >>"$times"
   build "$name" "$d/build-san.log" \
-    "${capped[@]}" timeout -k 10 300 bash "$root/scripts/checks/slice0_native.sh" "$d" "$lcb" sanitize
+    bounded "$native_secs" bash "$root/scripts/checks/slice0_native.sh" "$d" "$lcb" sanitize
   observe "$d/llvm.san.exe" "$d/san" 30 30 0 "${san_env[@]}"
   if judge "$d" "$d/san"; then
-    echo "ok   $name [llvm+asan+ubsan]: status $(cat "$d/san.status")"
+    echo "ok   $name [llvm+asan]: status $(cat "$d/san.status")"
   else
-    echo "FAIL $name [llvm+asan+ubsan]: status $(head -c 16 "$d/san.status") (expected $(head -c 16 "$d/status")), stderr" \
+    echo "FAIL $name [llvm+asan]: status $(head -c 16 "$d/san.status") (expected $(head -c 16 "$d/status")), stderr" \
       "$(head -c 600 "$d/san.stderr")"
     fail=1
   fi
@@ -147,9 +159,9 @@ entry:
   ret i32 %r
 }
 LL
-build control-asan "$c/build.log" "${capped[@]}" timeout -k 10 300 bash "$root/scripts/checks/slice0_native.sh" "$c" "$lcb"
+build control-asan "$c/build.log" bounded "$native_secs" bash "$root/scripts/checks/slice0_native.sh" "$c" "$lcb"
 build control-asan "$c/build-san.log" \
-  "${capped[@]}" timeout -k 10 300 bash "$root/scripts/checks/slice0_native.sh" "$c" "$lcb" sanitize
+  bounded "$native_secs" bash "$root/scripts/checks/slice0_native.sh" "$c" "$lcb" sanitize
 observe "$c/llvm.san.exe" "$c/san" 30 30 0 "${san_env[@]}"
 if ! judge "$c" "$c/san" && grep -q 'AddressSanitizer' "$c/san.stderr"; then
   echo "ok   control: ASan reports an out-of-bounds load"
@@ -285,6 +297,7 @@ if within 73 72; then echo "FAIL control: a measurement above the bound is accep
 else echo "ok   control: a measurement above the bound is rejected"; fi
 
 [ "$examples" -gt 0 ] || { echo "slice0_artifacts: no examples ran" >&2; exit 1; }
-echo "slice0_artifacts: $examples examples; sizes in $sizes, stack bounds in $stack"
+echo "slice0_artifacts: $examples examples; sizes in $sizes, compile times in $times, stack bounds in $stack"
 column -t -s "$(printf '\t')" "$sizes" 2>/dev/null || cat "$sizes"
+column -t -s "$(printf '\t')" "$times" 2>/dev/null || cat "$times"
 exit "$fail"

@@ -6,6 +6,7 @@
 # a gate whose executables under test need no cap, slice0_artifacts.sh) and defines:
 #   capped (a command prefix, an array): run under a 64 GiB address-space cap of its own, so
 #     every build and analysis command is capped whatever the gate's cap;
+#   bounded SECS CMD...: CMD under capped and bounded_run (the gates' only time bound);
 #   root, work (removed on exit), lcb, target, emitter (the Lean emitter command, an array);
 #   observe EXE OUT SECS RETRY [MEM_MB [ENV...]]: run EXE under bounded_run (and limited_exec.sh
 #     MEM_MB, default 1024) with ENV assignments; OUT.status (status or "incomplete"),
@@ -27,7 +28,19 @@ source scripts/checks/lib/bounded.sh
 source scripts/checks/lib/limits.sh
 gate_limits "${SLICE0_GATE_MEM_GB:-64}" 40000
 capped=(bash "$root/scripts/checks/lib/limited_exec.sh" 65536)
-"${capped[@]}" timeout -k 30 1800 lake build Concrete lean-compiler-backend/lcb >/dev/null
+# bounded SECS CMD...: CMD under `capped`, through bounded_run (stdin /dev/null; a timeout is
+# re-run once with a larger budget; a second timeout writes no output, returns 124 and is reported
+# INCOMPLETE, never a pass).
+bounded() {
+  local secs=$1 rc=0
+  shift
+  bounded_run -i /dev/null "$secs" -- "${capped[@]}" "$@" || rc=$?
+  if [ "$rc" != 0 ] && bounded_is_incomplete "$rc"; then
+    echo "slice0: INCOMPLETE (timed out twice): $*" >&2
+  fi
+  return "$rc"
+}
+bounded 1800 lake build Concrete lean-compiler-backend/lcb >/dev/null
 lcb="$root/.lake/packages/lean-compiler-backend/.lake/build/bin/lcb"
 case "$(uname -s)-$(uname -m)" in
   Linux-x86_64) target=x86_64-linux ;;
@@ -35,7 +48,10 @@ case "$(uname -s)-$(uname -m)" in
   Darwin-arm64) target=aarch64-macos ;;
   *) echo "slice0: unsupported host $(uname -s)-$(uname -m)" >&2; exit 2 ;;
 esac
-emitter=("${capped[@]}" timeout -k 10 120 lake env lean --run scripts/checks/slice0_bir.lean)
+# The time bounds of the emit step (the Lean emitter) and the native step (slice0_native.sh).
+emit_secs=120
+native_secs=300
+emitter=(bounded "$emit_secs" lake env lean --run scripts/checks/slice0_bir.lean)
 
 observe() {
   local rc=0 mem=${5:-1024}
