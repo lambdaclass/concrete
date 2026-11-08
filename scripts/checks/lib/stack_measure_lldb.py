@@ -123,9 +123,10 @@ def run(process, target, bp, ranges, main_lo, main_rt, expect):
             insn = target.ReadInstructions(lldb.SBAddress(pc, target), 1).GetInstructionAtIndex(0)
             mn, ops = insn.GetMnemonic(target), insn.GetOperands(target)
             try:
+                read = lambda r: register(frame, r)  # noqa: E731
                 touched = stack_access.lowest_stack(
-                    stack_access.a64_addresses(mn, ops, lambda r: register(frame, r)),
-                    sp, sp0, red_zone, SPAN)
+                    stack_access.a64_addresses(mn, ops, read),
+                    stack_access.a64_new_sp(mn, ops, read, sp), sp0, red_zone, SPAN)
             except ValueError as e:
                 raise RuntimeError(f"at {pc:#x} ({mn} {ops}): {e}") from None
             if touched is not None:

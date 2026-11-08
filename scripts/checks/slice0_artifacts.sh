@@ -357,11 +357,13 @@ if [ -n "$measuring" ]; then
   # The run check counts the bytes an instruction addresses below the stack pointer, not only the
   # stack pointer: a main that stores at the red zone's edge without moving the stack pointer
   # (built like the examples, slice0_native.sh control) is measured at 128 bytes, not 0. With a
-  # smaller red zone the same run is an error, not a measurement.
+  # smaller red zone the same run is an error, not a measurement. On AArch64 it first allocates and
+  # frees a 144-byte frame with a pre-indexed store (judged against the new stack pointer, so not
+  # beyond the red zone), so the expected depth there is 144.
   rz="$work/ctl/redzone"; mkdir -p "$rz"
   case "$target" in
-    x86_64-linux) printf '\t.intel_syntax noprefix\n\t.text\n\t.globl\tmain\n\t.type\tmain,@function\nmain:\n\tmov\tqword ptr [rsp - 0x80], 0\n\tmov\teax, 7\n\tret\n\t.size\tmain, .-main\n\t.section\t.note.GNU-stack,"",@progbits\n' ;;
-    aarch64-macos) printf '\t.text\n\t.globl\t_main\n\t.p2align\t2\n_main:\n\tstur\txzr, [sp, #-0x80]\n\tmov\tw0, #7\n\tret\n' ;;
+    x86_64-linux) rzdepth=128; printf '\t.intel_syntax noprefix\n\t.text\n\t.globl\tmain\n\t.type\tmain,@function\nmain:\n\tmov\tqword ptr [rsp - 0x80], 0\n\tmov\teax, 7\n\tret\n\t.size\tmain, .-main\n\t.section\t.note.GNU-stack,"",@progbits\n' ;;
+    aarch64-macos) rzdepth=144; printf '\t.text\n\t.globl\t_main\n\t.p2align\t2\n_main:\n\tstp\tx29, x30, [sp, #-0x90]!\n\tldp\tx29, x30, [sp], #0x90\n\tstur\txzr, [sp, #-0x80]\n\tmov\tw0, #7\n\tret\n' ;;
   esac >"$rz/control.s"
   if ! bounded "$native_secs" bash "$root/scripts/checks/slice0_native.sh" control "$rz" >"$rz/build.log" 2>&1; then
     echo "FAIL control: the red-zone executable does not build: $(head -c 1000 "$rz/build.log")"; fail=1
@@ -369,8 +371,8 @@ if [ -n "$measuring" ]; then
     "${objdump[@]}" "$rz/control.exe" >"$rz/control.exe.dis"
     rza=$(stack_bound "$target" "$rz/control.exe.dis" --ranges | cap_out) || true
     rzm=$(measure "$rz/control.exe" "$rza" 7)
-    if [ "$(awk '$1 == "bound" {print $2}' <<<"$rza")" = 128 ] && [ "$rzm" = "measured 128" ]; then
-      echo "ok   control: a red-zone store is measured (bound 128, measured 128)"
+    if [ "$(awk '$1 == "bound" {print $2}' <<<"$rza")" = "$rzdepth" ] && [ "$rzm" = "measured $rzdepth" ]; then
+      echo "ok   control: a red-zone store is measured (bound $rzdepth, measured $rzdepth)"
     else
       echo "FAIL control: red-zone run: analysis ${rza:-none}; run ${rzm:-none} $(head -c 300 "$rz/control.exe.gdb.err")"; fail=1
     fi

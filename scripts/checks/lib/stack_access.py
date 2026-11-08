@@ -76,7 +76,8 @@ def _a64_index(text, reg):
 def a64_addresses(mnemonic, operands, reg):
     """Effective addresses of one AArch64 instruction in LLDB's syntax (`stp x29, x30, [sp,
     #-0x10]!`, `ldr x30, [sp], #0x10`, `ldr w8, [x9, x10, lsl #2]`). A post-indexed access is at the
-    base; a pre-indexed or offset one at base plus offset. prfm/prfum only hint."""
+    base; a pre-indexed or offset one at base plus offset. prfm/prfum only hint. Use
+    a64_new_sp for the stack pointer a pre-indexed access is judged against."""
     mn, ops = mnemonic.lower(), operands.lower().split("//", 1)[0]
     if mn.startswith("prf"):
         return []
@@ -98,11 +99,23 @@ def a64_addresses(mnemonic, operands, reg):
     return [(base + _a64_index(off, reg)) & MASK]
 
 
+def a64_new_sp(mnemonic, operands, reg, sp):
+    """The stack pointer an access of this instruction is judged against: the written-back one for
+    a pre-indexed sp access (`stp x29, x30, [sp, #-0x90]!` allocates the frame first, then stores
+    at the new sp, as stack_bound.py treats it), else `sp`."""
+    ops = operands.lower().split("//", 1)[0]
+    m = re.search(r"\[\s*sp\s*(?:,\s*#(-?(?:0x[0-9a-f]+|\d+)))?\s*\]!", ops)
+    if not m or mnemonic.lower().startswith("prf"):
+        return sp
+    return min(sp, (sp + _num(m.group(1) or "0")) & MASK)
+
+
 def lowest_stack(addresses, sp, sp0, red_zone, span):
     """The lowest of `addresses` that lies on the stack below main's entry stack pointer sp0
     (within `span` bytes of it; the analysis' premise puts the image farther away), or None. An
-    access deeper than the red zone below the current stack pointer is an error: no bound holds
-    for bytes a signal handler may overwrite."""
+    access deeper than the red zone below `sp` is an error: no bound holds for bytes a signal
+    handler may overwrite. `sp` is the lower of the stack pointer before and after the access (a
+    pre-indexed access is at the new one; a64_new_sp)."""
     low = None
     for a in addresses:
         if sp0 - span <= a < sp0:

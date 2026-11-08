@@ -1,4 +1,4 @@
-import ConcreteSpec.Spec.Semantics
+import ConcreteSpec.Spec.Slice1Semantics
 
 /-!
 # BIR: the backend IR, the contract both backends read
