@@ -764,9 +764,8 @@ private theorem exit_call_plan_inv {P : Program O} {e : Exit O.Val} {k pre rest 
       | brk l' => by_cases he : l' = l <;> simp [step, stepExit, he] at h
       | cont l' => by_cases he : l' = l <;> simp [step, stepExit, he, Deferred.stmt] at h
 
-/-- Helper (inversion). Dispatches each planned deferred call of a scope in order before its
-final scope drop (approved: PENDING). -/
-private theorem boundary_scope_calls_inv {P : Program O} {e : Exit O.Val} {k : List (Frame O)}
+/-- Law (subject `ConcreteSpec.Core.Exec.Step`). A completed sequence of deferred calls dispatches each call before the final scope drop. -/
+theorem boundary_scope_calls {P : Program O} {e : Exit O.Val} {k : List (Frame O)}
     (b : BlockId) (dm : List Var) (pre : List (Frame O)) (ds : List (Deferred O))
     {L L' : AList Var O.Val} {st st' : O.Store}
     {acts : List (CleanAct O)} {tr : List O.Event}
@@ -784,9 +783,8 @@ private theorem boundary_scope_calls_inv {P : Program O} {e : Exit O.Val} {k : L
         BoundaryRun.call (pre := .scope b dm (d :: ds) :: pre)
           (rest := .scope b dm ds :: pre) (by simp) (.silent rfl) hc (.silent rfl) hr
 
-/-- Helper (inversion). Reconstructs an observed boundary run from a performed action plan
-through passable frames (approved: PENDING). -/
-private theorem boundary_of_performed_inv {P : Program O} {e : Exit O.Val} {k : List (Frame O)}
+/-- Law (subject `ConcreteSpec.Core.Exec.Step`). An independently performed action plan reconstructs the actual first-boundary execution. -/
+theorem boundary_of_performed {P : Program O} {e : Exit O.Val} {k : List (Frame O)}
     (pre : List (Frame O)) {L L' : AList Var O.Val} {st st' : O.Store} {tr : List O.Event}
     (hp : ∀ f ∈ pre, Passes e f)
     (hperf : Performed P (planWith pre L) L st tr L' st') :
@@ -804,7 +802,7 @@ private theorem boundary_of_performed_inv {P : Program O} {e : Exit O.Val} {k : 
         (by simp) (.silent rfl) (ih hp' hperf)
     | scope b dm ds =>
       simp only [planWith] at hperf ⊢
-      refine boundary_scope_calls_inv b dm pre ds hperf ?_
+      refine boundary_scope_calls b dm pre ds hperf ?_
       intro st₁ tr₂ hdrop
       cases hdrop with
       | drop hd hrest =>
@@ -865,7 +863,7 @@ theorem cleanup_runs_exact_plan (P : Program O) (e : Exit O.Val) (k pre : List (
       obtain ⟨hpp, he, hu⟩ := exit_call_plan_inv hs hne
       exact ⟨hpp ih.1, by rw [ih.2.1, ← he], by rw [ih.2.2.1, ← hu], Performed.call hc ih.2.2.2⟩
   · rintro ⟨hp, rfl, _, hperf⟩
-    exact boundary_of_performed_inv pre hp hperf
+    exact boundary_of_performed pre hp hperf
 
 /-! ### Traps are terminal -/
 
@@ -2208,6 +2206,95 @@ example : (∀ (f : Frame ops), f ∈ ([inner] : List (Frame ops)) → Passes (O
     cases observed with
     | pass _ hs _ => cases hs
     | call _ hs _ _ _ => cases hs
+
+/-- Mutant with no executable plan transitions. -/
+def NoPlanStep (_P : Program O) (_c : Config O) (_l : Label O) (_c' : Config O) : Prop := False
+
+/-- Mutant that preserves ordinary transitions but refuses every nonempty cleanup dispatch. -/
+def NoDispatchStep (P : Program O) (c : Config O) (l : Label O) (c' : Config O) : Prop :=
+  Step P c l c' ∧ match c.ctrl, c.frames with
+    | .exiting _, .scope _ _ (_ :: _) :: _ => False
+    | _, _ => True
+
+/-- Helper (inversion). Concrete singleton passability certificate (approved: PENDING). -/
+private theorem empty_passes : ∀ f ∈ [emptyScope], Passes (O := ops) (.ret 7) f := by
+  intro f hf
+  cases hf with
+  | head => trivial
+  | tail _ hf => cases hf
+
+/-- Representation lemma. Concrete independent drop execution (approved: PENDING). -/
+private theorem drop_performed : Performed prog [.drop [] [] []] [] .init [] [] .init :=
+  .drop rfl .nil
+
+/-- Instance (law `ConcreteSpec.Core.Exec.boundary_of_performed`, case `scope_drop`). -/
+example : BoundaryRun prog (Step prog) (.ret 7) [] [emptyScope] [] .init
+    (planWith [emptyScope] []) [] [] .init :=
+  boundary_of_performed (P := prog) (e := .ret 7) (k := []) [emptyScope]
+    (L := []) (L' := []) (st := .init) (st' := .init) (tr := []) empty_passes drop_performed
+
+/-- Planted (law `ConcreteSpec.Core.Exec.boundary_of_performed`, case `scope_drop`, subject `ConcreteSpec.Core.Exec.Step`, mutant `ConcreteSpec.Core.Exec.CleanupEvidence.NoPlanStep`).
+The independent drop succeeds but removing the actual drop transition prevents the execution. -/
+example : (∀ f ∈ [emptyScope], Passes (O := ops) (.ret 7) f) ∧
+    Performed prog (planWith [emptyScope] []) [] .init [] [] .init ∧
+    ¬ BoundaryRun prog (NoPlanStep prog) (.ret 7) [] [emptyScope] [] .init
+      (planWith [emptyScope] []) [] [] .init := by
+  refine ⟨empty_passes, drop_performed, fun h => ?_⟩
+  generalize ha : planWith [emptyScope] [] = acts at h
+  generalize ht : ([] : List Int) = trace at h
+  cases h with
+  | pass _ hs _ => cases hs
+  | call _ hs _ _ _ => cases hs
+
+/-- Representation lemma. Concrete action sequence with its first-return call certificate
+(approved: PENDING). -/
+private theorem single_performed : Performed prog
+    ([d 1].map (.call []) ++ [.drop [] [] []]) [] .init [1] [] .init :=
+  .call (logSegment 1 (.ret 7) [] [emptyScope]) (.drop rfl .nil)
+
+/-- Representation lemma. Production execution of an empty scope from an independently
+performed drop, used as a closed higher-order premise (approved: PENDING). -/
+private theorem base_execution : ∀ st₁ tr₂,
+    Performed prog [.drop [] [] []] [] st₁ tr₂ [] .init →
+    BoundaryRun prog (Step prog) (.ret 7) [] [emptyScope] [] st₁ [.drop [] [] []] tr₂ [] .init := by
+  intro st₁ tr₂ hp
+  exact boundary_of_performed (P := prog) (e := .ret 7) (k := []) [emptyScope] empty_passes hp
+
+/-- Representation lemma. The no-dispatch mutant retains successful empty-scope drops
+(approved: PENDING). -/
+private theorem mutant_base_execution : ∀ st₁ tr₂,
+    Performed prog [.drop [] [] []] [] st₁ tr₂ [] .init →
+    BoundaryRun prog (NoDispatchStep prog) (.ret 7) [] [emptyScope] [] st₁ [.drop [] [] []] tr₂ [] .init := by
+  intro st₁ tr₂ hp
+  cases hp with
+  | drop hd hrest =>
+    cases hrest
+    have hs : NoDispatchStep prog ⟨.exiting (.ret 7), [], st₁, [emptyScope]⟩ .silent
+        ⟨.exiting (.ret 7), [], .init, []⟩ :=
+      ⟨.silent (by simp [step, stepExit, emptyScope, hd, restrict]), True.intro⟩
+    simpa [leaving, emptyScope] using
+      (BoundaryRun.pass (pre := [emptyScope]) (pre' := []) (by simp) hs .stop)
+
+/-- Instance (law `ConcreteSpec.Core.Exec.boundary_scope_calls`, case `call_then_drop`). -/
+example : BoundaryRun prog (Step prog) (.ret 7) [] [.scope ⟨1⟩ [] [d 1]] [] .init
+    ([d 1].map (.call []) ++ [.drop [] [] []]) [1] [] .init :=
+  boundary_scope_calls (P := prog) (e := .ret 7) (k := []) ⟨1⟩ [] [] [d 1]
+    (L := []) (L' := []) (st := .init) (st' := .init) (acts := [.drop [] [] []]) (tr := [1])
+    single_performed base_execution
+
+/-- Planted (law `ConcreteSpec.Core.Exec.boundary_scope_calls`, case `call_then_drop`, subject `ConcreteSpec.Core.Exec.Step`, mutant `ConcreteSpec.Core.Exec.CleanupEvidence.NoDispatchStep`).
+The independent call and the final drop execute, but dispatch of the nonempty scope is missing. -/
+example : Performed prog ([d 1].map (.call []) ++ [.drop [] [] []]) [] .init [1] [] .init ∧
+    (∀ st₁ tr₂, Performed prog [.drop [] [] []] [] st₁ tr₂ [] .init →
+      BoundaryRun prog (NoDispatchStep prog) (.ret 7) [] [emptyScope] [] st₁ [.drop [] [] []] tr₂ [] .init) ∧
+    ¬ BoundaryRun prog (NoDispatchStep prog) (.ret 7) [] [.scope ⟨1⟩ [] [d 1]] [] .init
+      ([d 1].map (.call []) ++ [.drop [] [] []]) [1] [] .init := by
+  refine ⟨single_performed, mutant_base_execution, fun h => ?_⟩
+  generalize ha : ([d 1].map (.call []) ++ [.drop [] [] []] : List (CleanAct ops)) = acts at h
+  generalize ht : ([1] : List Int) = trace at h
+  cases h with
+  | pass _ hs _ => exact hs.2
+  | call _ hs _ _ _ => exact hs.2
 
 end CleanupEvidence
 
