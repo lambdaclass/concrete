@@ -8,9 +8,9 @@
 # its hooks configuration can make it pass.
 #
 # IT NEVER LANDS, and that does not rest on the script under test honouring --dry-run. Three
-# independent guards: a `git` shim first on PATH for every leg refuses any push whose destination is
-# main (or --all, --mirror, a bare HEAD), whatever flags the candidate's scripts pass, --no-verify
-# included; the clone's hooks path is a pre-push guard that refuses the same before it runs the real
+# independent guards: a `git` shim first on PATH for every leg refuses any push to either real remote
+# whose destination is main (or --all, --mirror, a bare HEAD), whatever flags the candidate's scripts
+# pass, --no-verify included, and lets the root checks push to their own local fixtures (ISS-0017); the clone's hooks path is a pre-push guard that refuses the same before it runs the real
 # hook; and both remotes' main is read before and after, a move to the train head being a failure.
 # The train head's publishing scripts are also refused if they run `git push ... --no-verify`. It refuses to start with any LAND_* or CONCRETE_SKIP_* variable set, since those
 # redirect remotes, swap the hook or skip the gates.
@@ -154,25 +154,10 @@ finish() {
 
 TRAIN() { ( cd "$C" && bash scripts/land/train.sh "$@" ); }
 
-# The git shim: every leg runs with it first on PATH. It refuses a push that could move main, and
-# passes everything else to the real git.
-make_git_shim() {
-  local real; real="$(command -v git)"
-  mkdir -p "$WORK/bin"
-  cat > "$WORK/bin/git" <<SHIM
-#!/usr/bin/env bash
-seen=0
-for a in "\$@"; do
-  if [ "\$seen" = 0 ]; then [ "\$a" = push ] && seen=1; continue; fi
-  case "\$a" in
-    --all|--mirror|HEAD|main|refs/heads/main|*:main|*:refs/heads/main|+*:main|+*:refs/heads/main)
-      echo "acceptance git shim: refusing push argument '\$a' (could move main)" >&2; exit 1 ;;
-  esac
-done
-exec "$real" "\$@"
-SHIM
-  chmod +x "$WORK/bin/git"
-}
+# The git shim: every leg runs with it first on PATH. It refuses a push that could move main on
+# either real remote and passes everything else, the root checks' pushes to throwaway local fixture
+# repositories included (ISS-0017); scripts/land/acceptance_shim.sh says how a destination is judged.
+source "$(dirname "${BASH_SOURCE[0]}")/acceptance_shim.sh" || { echo "acceptance: no acceptance_shim.sh" >&2; exit 2; }
 # The guard hooks path: pre-push refuses any main update, then runs the real hook on the same input.
 make_guard() {
   mkdir -p "$WORK/guard-hooks"
@@ -339,7 +324,7 @@ do_negative() {
   done
 }
 
-make_git_shim
+make_git_shim "$WORK/bin" "$(command -v git)" "$ORIGIN_URL" "$MIRROR_URL"
 export PATH="$WORK/bin:$PATH"
 echo "acceptance: $REF from $ORIGIN_URL"
 leg clone do_clone
