@@ -107,10 +107,27 @@ private theorem octets_fragments (os : List (Fin 256)) (p : Ptr) (start : Nat) :
   | nil => rfl
   | cons v vs ih => simp [List.zipIdx_cons, octets, ih]
 
+/-- Representation lemma. Reading a fixed-width octet sequence and writing it back is exact. -/
+private theorem leBytes_leValue (os : List (Fin 256)) : leBytes os.length (leValue os) = os := by
+  induction os with
+  | nil => rfl
+  | cons v vs ih =>
+    simp [leBytes, leValue, Nat.add_mod, Nat.add_div, Nat.mod_eq_of_lt v.isLt,
+      Nat.div_eq_of_lt v.isLt, Nat.not_le_of_gt v.isLt, ih]
+
+/-- A valid pointer round-trips by numeric octet decoding, independently of fragment validation. -/
 theorem decodePtr_encodePtr (tgt : Target) (ht : tgt.WellFormed) (p : Ptr) (hpv : p.Valid tgt) :
     decodePtr tgt (encodePtr tgt p) = some p := by
   have hp : 0 < tgt.ptrSize := by have := ht.1; have := ht.2.1; omega
   have hl : (ordered tgt.byteOrder (leBytes tgt.ptrSize p.addr)).length > 0 := by simpa using hp
+  have hb : p.addr < 256 ^ tgt.ptrSize := by
+    have hh := Nat.pow_le_pow_right (by decide : 1 ≤ 2) ht.2.1
+    have he : 256 ^ tgt.ptrSize = 2 ^ (8 * tgt.ptrSize) := by rw [Nat.pow_mul]
+    rw [he]
+    exact Nat.lt_of_lt_of_le hpv.1 hh
+  have ho : octets (encodePtr tgt p) = some (ordered tgt.byteOrder (leBytes tgt.ptrSize p.addr)) :=
+    octets_fragments _ _ 0
+  have hlen : (encodePtr tgt p).length = tgt.ptrSize := by simp [encodePtr]
   cases hs : ordered tgt.byteOrder (leBytes tgt.ptrSize p.addr) with
   | nil => simp [hs] at hl
   | cons v vs =>
@@ -120,16 +137,8 @@ theorem decodePtr_encodePtr (tgt : Target) (ht : tgt.WellFormed) (p : Ptr) (hpv 
     rw [he]
     simp only [decodePtr]
     rw [← he]
-    have hb : p.addr < 256 ^ tgt.ptrSize := by
-      have hh := Nat.pow_le_pow_right (by decide : 1 ≤ 2) ht.2.1
-      have he : 256 ^ tgt.ptrSize = 2 ^ (8 * tgt.ptrSize) := by
-        rw [Nat.pow_mul]
-      rw [he]
-      exact Nat.lt_of_lt_of_le hpv.1 hh
-    simp only [ite_eq_left hpv, ↓reduceIte]
-    rw [show octets (encodePtr tgt p) = some (ordered tgt.byteOrder (leBytes tgt.ptrSize p.addr)) from
-      octets_fragments _ _ 0]
-    simp [ordered_ordered, leValue_leBytes _ _ hb]
+    simp only [hlen, ↓reduceIte, ho]
+    simp [encodePtr, ordered_ordered, leValue_leBytes _ _ hb, hpv]
 
 @[simp] theorem block_modify (m : Memory) (b c : MemBlockId) (f : Block → Block) :
     (m.modify b f).block c = if c = b then (m.block b).map f else m.block c := by
@@ -528,45 +537,43 @@ theorem access_valid (tgt : Target) (m : Memory) (hw : m.WellFormed tgt)
     have hpos : 0 < 2 ^ tgt.addrBits := Nat.two_pow_pos tgt.addrBits
     exact ⟨by omega, hs ▸ hw.spaces b x hx⟩
 
-/-- Helper (inversion). The defensive target-validity check of pointer decoding. -/
-theorem decodePtr_valid_inv (tgt : Target) (bs : List MByte) (p : Ptr)
-    (h : decodePtr tgt bs = some p) : p.Valid tgt := by
+/-- Helper (inversion). Extract the independent width, fragment, numeric and validity checks. -/
+private theorem decodePtr_checks_inv (tgt : Target) (bs : List MByte) (p : Ptr)
+    (h : decodePtr tgt bs = some p) :
+    ∃ os, octets bs = some os ∧ bs.length = tgt.ptrSize ∧
+      bs = (os.zipIdx.map fun (v, i) => .init v (some (p, i))) ∧
+      leValue (ordered tgt.byteOrder os) = p.addr ∧ p.Valid tgt := by
   match bs with
   | .init _ (some (q, 0)) :: _ =>
     simp only [decodePtr] at h
     split at h
-    next hp =>
+    next hlen =>
       split at h
-      next =>
+      next os ho =>
         split at h
-        next => split at h
-                next => cases h; exact hp
-                next => cases h
+        next hc => cases h; exact ⟨os, ho, hlen, hc⟩
         next => cases h
       next => cases h
     next => cases h
   | [] | .uninit :: _ | .init _ none :: _ | .init _ (some (_, Nat.succ _)) :: _ => cases h
 
-/-- Successful pointer decoding recovers exactly a whole stored representation. -/
+/-- Helper (projection). Defensive target validity, covered by decodePtr_some. -/
+theorem decodePtr_valid_inv (tgt : Target) (bs : List MByte) (p : Ptr)
+    (h : decodePtr tgt bs = some p) : p.Valid tgt := by
+  obtain ⟨_, _, _, _, _, hv⟩ := decodePtr_checks_inv tgt bs p h
+  exact hv
+
+/-- Successful pointer decoding recovers exactly a whole stored representation and a valid
+pointer. The representation follows from numeric byte reconstruction, not encoder comparison. -/
 theorem decodePtr_some (tgt : Target) (bs : List MByte) (p : Ptr)
     (h : decodePtr tgt bs = some p) : bs = encodePtr tgt p ∧ p.Valid tgt := by
-  refine ⟨?_, decodePtr_valid_inv tgt bs p h⟩
-  match bs with
-  | .init _ (some (q, 0)) :: _ =>
-    simp only [decodePtr] at h
-    split at h
-    next =>
-      split at h
-      next he =>
-        split at h
-        next =>
-          split at h
-          next => cases h; exact he
-          next => cases h
-        next => cases h
-      next => cases h
-    next => cases h
-  | [] | .uninit :: _ | .init _ none :: _ | .init _ (some (_, Nat.succ _)) :: _ => cases h
+  obtain ⟨os, ho, hlen, hf, hn, hv⟩ := decodePtr_checks_inv tgt bs p h
+  have hos : os = ordered tgt.byteOrder (leBytes tgt.ptrSize p.addr) := by
+    have hr := leBytes_leValue (ordered tgt.byteOrder os)
+    rw [ordered_length, octets_length ho, hlen, hn] at hr
+    have hh := congrArg (ordered tgt.byteOrder) hr
+    simpa using hh.symm
+  exact ⟨by rw [hf, hos]; rfl, hv⟩
 
 /-- Nonempty access succeeds on the independent liveness, provenance and geometry obligations.
 Together with access_valid this proves deleting the redundant target-validity guard preserves

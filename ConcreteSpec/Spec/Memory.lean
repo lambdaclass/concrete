@@ -287,18 +287,20 @@ a fragment of the pointer. Encoding is total; decoding checks target validity. -
 def encodePtr (tgt : Target) (p : Ptr) : List MByte :=
   ((ordered tgt.byteOrder (leBytes tgt.ptrSize p.addr)).zipIdx).map fun (v, i) => .init v (some (p, i))
 
-/-- The pointer the bytes hold, when they are exactly one stored pointer's fragments, in order. Any
-other contents have no pointer meaning (owner decision 2026-11-08, item 20).
-The exact encoding comparison checks length, all fragment identities and indices, and octets;
-the numeric decode independently checks the address spelled by those octets. -/
+/-- The pointer the bytes hold: one pointer-width sequence of that pointer's fragments,
+in order, whose initialized octets decode its target-valid address. All other byte patterns
+have no pointer meaning (owner decision 2026-11-08, item 20). -/
 def decodePtr (tgt : Target) (bs : List MByte) : Option Ptr :=
   match bs with
   | .init _ (some (p, 0)) :: _ =>
-    if p.Valid tgt then if bs = encodePtr tgt p then
+    if bs.length = tgt.ptrSize then
       match octets bs with
-      | some os => if leValue (ordered tgt.byteOrder os) = p.addr then some p else none
+      | some os =>
+        if bs = (os.zipIdx.map fun (v, i) => .init v (some (p, i))) ∧
+            leValue (ordered tgt.byteOrder os) = p.addr ∧ p.Valid tgt
+        then some p else none
       | none => none
-    else none else none
+    else none
   | _ => none
 
 /-! ### Examples -/
