@@ -294,6 +294,18 @@ variable {O : Exec.Operands}
 def ExecAdapter.project (A : ExecAdapter O S) (events : List O.Event) : List (Event S) :=
   events.flatMap A.events
 
+/-- Select public outputs from the shared observation history, preserving their order. -/
+def publicOutputs (events : List (Event S)) : List S.Output :=
+  events.filterMap (fun event => match event with | .output value => some value | _ => none)
+
+/-- Independent output interpretation supplied by an operand/environment instance. `physical`
+specifies which public outputs a C1 event physically performs. This obligation is separate from
+request/response admission: a trace-valid adapter can still erase or reorder physical output.
+The adapter does not check this obligation at runtime. -/
+def ExecAdapter.OutputCorrespondence (A : ExecAdapter O S)
+    (physical : O.Event → List S.Output) : Prop :=
+  ∀ event, publicOutputs (A.events event) = physical event
+
 /-- Adapter and oracle well-formedness against a C6 operation contract. An internal answer emits
 only output. If a C1 request has typed request `q`, its answer projects to any output, then
 `.request q`, then a matching `.response r`, then any output; output cannot intervene while `q` is

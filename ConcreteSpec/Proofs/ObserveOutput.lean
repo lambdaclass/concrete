@@ -8,6 +8,26 @@ not assume a projected history or an output-preservation invariant.
 -/
 namespace ConcreteSpec.Core.Observe
 open ConcreteSpec.Core
+/-- Law (subject `ConcreteSpec.Core.Observe.ExecAdapter.project`).
+A projection satisfying the independently supplied physical-output interpretation for each
+primitive event preserves those physical outputs across the entire ordered history. -/
+theorem project_physical_outputs {O : Exec.Operands} {S : EventSignature}
+    (A : ExecAdapter O S) (physical : O.Event → List S.Output)
+    (corresponds : ExecAdapter.OutputCorrespondence A physical) (history : List O.Event) :
+    publicOutputs (A.project history) = history.flatMap physical := by
+  induction history with
+  | nil => rfl
+  | cons event history ih =>
+    change publicOutputs (A.events event ++ A.project history) = physical event ++ history.flatMap physical
+    have append : publicOutputs (A.events event ++ A.project history) =
+        publicOutputs (A.events event) ++ publicOutputs (A.project history) := by
+      simp only [publicOutputs, List.filterMap_append]
+    rw [append, corresponds event, ih]
+
+/-- Fault: history projection erases all projected events. -/
+def eraseProjection {O : Exec.Operands} {S : EventSignature}
+    (_A : ExecAdapter O S) (_history : List O.Event) : List (Event S) := []
+
 namespace OutputDemo
 
 /-- A concrete public output instance, independent of request/response admission. -/
@@ -83,6 +103,18 @@ theorem output_then_trap (values : List Int) (history : List Int) :
   | cons n ns ih =>
     simpa only [List.flatMap_cons, List.map_cons, List.singleton_append] using
       congrArg (List.cons (Event.output (S := Demo.signature) (toString n))) ih
+
+/-- Instance (law `ConcreteSpec.Core.Observe.project_physical_outputs`, case `ordered_physical_outputs`). -/
+example : publicOutputs (adapter.project [11, 3, 4]) =
+    ([11, 3, 4] : List Int).flatMap (fun n => [toString n]) :=
+  project_physical_outputs adapter (fun n => [toString n]) (fun _ => rfl) [11, 3, 4]
+
+/-- Planted (law `ConcreteSpec.Core.Observe.project_physical_outputs`, case `ordered_physical_outputs`,
+subject `ConcreteSpec.Core.Observe.ExecAdapter.project`, mutant `ConcreteSpec.Core.Observe.eraseProjection`). -/
+example : ExecAdapter.OutputCorrespondence adapter (fun n => [toString n]) ∧
+    ¬ (publicOutputs (eraseProjection adapter [11, 3, 4]) =
+      ([11, 3, 4] : List Int).flatMap (fun n => [toString n])) := by
+  exact ⟨fun _ => rfl, by decide⟩
 
 /-- Fault: an adapter drops every physical output while retaining request and trap projection. -/
 def erasingAdapter : ExecAdapter Exec.Demo.ops Demo.signature :=
