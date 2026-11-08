@@ -405,6 +405,25 @@ def site : SiteId := ⟨7⟩
 def sp : Span := ⟨"src/main.con", 40, 50, by decide, 3, 9, by decide, by decide⟩
 def sites : SiteTable := [(site, sp)]
 
+/-- The actual bytes behind the demo path and a span whose stored coordinates agree with them. -/
+def locationSources : SourceTable := [(sp.path, tabSource)]
+def badLocationSpan : Span := { tabSpan with col := 2, col_pos := by decide }
+
+/-- Accepted: path syntax, range bounds, line and byte column all validate against the source. -/
+example : SiteTable.Valid locationSources [(site, tabSpan)] := by
+  intro resolved span found
+  simp [AList.lookup] at found
+  rcases found with ⟨_, rfl⟩
+  exact ⟨by decide, tabSource, by decide, by decide⟩
+
+/-- Refused: a wrong stored column cannot pass site-table validation even when its path resolves. -/
+example : ¬ SiteTable.Valid locationSources [(site, badLocationSpan)] := by
+  intro valid
+  obtain ⟨_, source, resolved, location⟩ := valid site badLocationSpan (by simp [AList.lookup])
+  simp [locationSources, AList.lookup] at resolved
+  rcases resolved with ⟨_, rfl⟩
+  exact (by decide : ¬ badLocationSpan.LocationOk tabSource) location
+
 /-- The exact decided line, including the byte column and typed site identity. -/
 example : trapLine .overflow site sp =
     "concrete: trap: overflow at src/main.con:3:9 (site 7)" := by decide
