@@ -535,6 +535,8 @@ theorem evalConsts_sound (U : ConstTypes) (fuel : Nat) (ds : List (ConstDecl U))
     ∃ env, evalConsts U fuel ds [] = .ok env ∧
       ∀ d ∈ ds, ∃ v, AList.lookup env d.id = some v ∧ U.ofC v.ty = d.ty ∧ v.Valid := by
   obtain ⟨ht, he⟩ := h
+  unfold ConstsTyped at ht
+  unfold ConstsEvaluate at he
   cases ht' : typeConsts U ds [] with
   | none => simp [ht'] at ht
   | some Γ =>
@@ -584,7 +586,7 @@ The value's declared-type agreement is independently established by `evalConsts_
 theorem admitted_copy_proj (U : ConstTypes) (fuel : Nat) (ds : List (ConstDecl U))
     (h : ConstsAdmitted U fuel ds) : ∀ d ∈ ds, U.isCopy d.ty = true := by
   cases ht : typeConsts U ds [] with
-  | none => simp [ConstsAdmitted, ht] at h
+  | none => simp [ConstsAdmitted, ConstsTyped, ht] at h
   | some Γ =>
     intro d hd
     obtain ⟨_, _, _, hc⟩ := typeConsts_decls_inv U ds [] Γ ht d hd
@@ -601,6 +603,114 @@ theorem admitted_iff_typed_evaluates_proj (U : ConstTypes) (fuel : Nat) (ds : Li
     ConstsAdmitted U fuel ds ↔
       (typeConsts U ds []).isSome = true ∧ (evalConsts U fuel ds []).isOk = true := Iff.rfl
 
+/-- Law (subject `ConcreteSpec.Core.evalConsts`). Copy classification of computed values follows
+from independent static declarations and evaluator type soundness, with no Copy guard in evaluation. -/
+theorem admitted_copy (U : ConstTypes) (fuel : Nat) (ds : List (ConstDecl U))
+    (h : ConstsAdmitted U fuel ds) :
+    ∃ env, evalConsts U fuel ds [] = .ok env ∧
+      ∀ d ∈ ds, ∃ v, AList.lookup env d.id = some v ∧ U.isCopy (U.ofC v.ty) = true := by
+  obtain ⟨env, he, hs⟩ := evalConsts_sound U fuel ds h
+  refine ⟨env, he, ?_⟩
+  intro d hd
+  obtain ⟨v, hv, ht, _⟩ := hs d hd
+  exact ⟨v, hv, ht ▸ admitted_copy_proj U fuel ds h d hd⟩
+
+/-- A broken evaluator mapping every declaration to a non-Copy unit in the test universe. -/
+def unitConstValues (U : ConstTypes) (_fuel : Nat) (ds : List (ConstDecl U))
+    (env : AList ConstId CVal) : Except ConstEvalRefusal (AList ConstId CVal) :=
+  .ok (ds.map (fun d => (d.id, CVal.unit)) ++ env)
+
+/-- Instance (law `ConcreteSpec.Core.admitted_copy`, case `noncopy_universe`). -/
+example : ∃ env, evalConsts ConstDemo.NonCopyU 1
+      [⟨ConstDemo.cid "B", .c .bool, .bool true⟩] [] = .ok env ∧
+    ∀ d ∈ [ConstDecl.mk (U := ConstDemo.NonCopyU) (ConstDemo.cid "B") (.c .bool) (.bool true)],
+      ∃ v, AList.lookup env d.id = some v ∧
+        ConstDemo.NonCopyU.isCopy (ConstDemo.NonCopyU.ofC v.ty) = true :=
+  admitted_copy ConstDemo.NonCopyU 1 [⟨ConstDemo.cid "B", .c .bool, .bool true⟩] (by decide)
+
+/-- Planted (law `ConcreteSpec.Core.admitted_copy`, case `noncopy_universe`,
+subject `ConcreteSpec.Core.evalConsts`, mutant `ConcreteSpec.Core.unitConstValues`). -/
+example : ((typeConsts ConstDemo.NonCopyU
+      [⟨ConstDemo.cid "B", .c .bool, .bool true⟩] []).isSome = true ∧
+    (unitConstValues ConstDemo.NonCopyU 1
+      [⟨ConstDemo.cid "B", .c .bool, .bool true⟩] []).isOk = true) ∧
+    ¬ ∃ env, unitConstValues ConstDemo.NonCopyU 1
+      [⟨ConstDemo.cid "B", .c .bool, .bool true⟩] [] = .ok env ∧
+      ∀ d ∈ [ConstDecl.mk (U := ConstDemo.NonCopyU) (ConstDemo.cid "B") (.c .bool) (.bool true)],
+        ∃ v, AList.lookup env d.id = some v ∧
+          ConstDemo.NonCopyU.isCopy (ConstDemo.NonCopyU.ofC v.ty) = true := by
+  constructor
+  · decide
+  · rintro ⟨env, he, hall⟩
+    have heq : env = [(ConstDemo.cid "B", CVal.unit)] := Except.ok.inj he.symm
+    subst env
+    obtain ⟨v, hv, hc⟩ := hall ⟨ConstDemo.cid "B", .c .bool, .bool true⟩ (List.Mem.head _)
+    simp only [AList.lookup, ↓reduceIte, Option.some.injEq] at hv
+    subst v
+    cases hc
+
+/-- Helper (computation). Boolean dependency testing agrees with actual source membership.
+(approved: PENDING) -/
+private theorem dependsOn_reference_inv (U : ConstTypes) (ds : List (ConstDecl U)) (a b : ConstId)
+    (h : dependsOn U ds a b = true) : SourceReference U ds a b := by
+  simpa [dependsOn, SourceReference, List.any_eq_true, Bool.and_eq_true,
+    List.contains_iff_mem] using h
+
+/-- Helper (computation). Structural chain checking implies real edges, by induction on the
+chain rather than assuming an edge certificate. (approved: PENDING) -/
+private theorem refChain_actual_inv (U : ConstTypes) (ds : List (ConstDecl U)) :
+    ∀ chain, refChain U ds chain = true → ActualRefChain U ds chain
+  | [], h => by cases h
+  | [c], h => by
+    simpa [refChain, ActualRefChain, List.contains_iff_mem, List.mem_map] using h
+  | a :: b :: rest, h => by
+    have hh : dependsOn U ds a b = true ∧ refChain U ds (b :: rest) = true := by
+      simpa only [refChain, Bool.and_eq_true] using h
+    obtain ⟨hab, hrest⟩ := hh
+    exact ⟨dependsOn_reference_inv U ds a b hab, refChain_actual_inv U ds (b :: rest) hrest⟩
+
+/-- Law (subject `ConcreteSpec.Core.refChain`). A reported cycle closes at its starting identity
+and every edge is an actual reference in a source initializer. -/
+theorem cycle_chain_real (U : ConstTypes) (ds : List (ConstDecl U)) :
+    ∀ chain, CycleChain U ds chain →
+      ∃ c rest, chain = c :: rest ++ [c] ∧ ActualRefChain U ds chain := by
+  intro chain h
+  obtain ⟨c, rest, he, hc⟩ := h
+  exact ⟨c, rest, he, refChain_actual_inv U ds chain hc⟩
+
+/-- A faulty diagnostic checker accepting every chain. -/
+def acceptsEveryChain (_U : ConstTypes) (_ds : List (ConstDecl _U))
+    (_chain : List ConstId) : Bool := true
+
+/-- Instance (law `ConcreteSpec.Core.cycle_chain_real`, case `two_constants`). -/
+example : ∀ chain, CycleChain ConstDemo.U
+      [⟨ConstDemo.cid "A", .c .bool, .ref (ConstDemo.cid "B")⟩,
+       ⟨ConstDemo.cid "B", .c .bool, .ref (ConstDemo.cid "A")⟩] chain →
+    ∃ c rest, chain = c :: rest ++ [c] ∧ ActualRefChain ConstDemo.U
+      [⟨ConstDemo.cid "A", .c .bool, .ref (ConstDemo.cid "B")⟩,
+       ⟨ConstDemo.cid "B", .c .bool, .ref (ConstDemo.cid "A")⟩] chain :=
+  cycle_chain_real ConstDemo.U
+    [⟨ConstDemo.cid "A", .c .bool, .ref (ConstDemo.cid "B")⟩,
+     ⟨ConstDemo.cid "B", .c .bool, .ref (ConstDemo.cid "A")⟩]
+
+/-- Planted (law `ConcreteSpec.Core.cycle_chain_real`, case `two_constants`,
+subject `ConcreteSpec.Core.refChain`, mutant `ConcreteSpec.Core.acceptsEveryChain`). The mutant
+accepts `A → A` in the same source, although the source has no self-reference. -/
+example : ¬ (∀ chain,
+    (∃ c rest, chain = c :: rest ++ [c] ∧ acceptsEveryChain ConstDemo.U
+      [⟨ConstDemo.cid "A", .c .bool, .ref (ConstDemo.cid "B")⟩,
+       ⟨ConstDemo.cid "B", .c .bool, .ref (ConstDemo.cid "A")⟩] chain = true) →
+    ∃ c rest, chain = c :: rest ++ [c] ∧ ActualRefChain ConstDemo.U
+      [⟨ConstDemo.cid "A", .c .bool, .ref (ConstDemo.cid "B")⟩,
+       ⟨ConstDemo.cid "B", .c .bool, .ref (ConstDemo.cid "A")⟩] chain) := by
+  intro h
+  obtain ⟨_, _, _, hc⟩ := h [ConstDemo.cid "A", ConstDemo.cid "A"]
+    ⟨ConstDemo.cid "A", [], rfl, rfl⟩
+  obtain ⟨d, hd, he, href⟩ := hc.1
+  cases hd with
+  | head => simp [CExpr.refs, ConstDemo.cid] at href
+  | tail _ hd => cases hd with
+    | head => exact (by decide : ConstDemo.cid "B" ≠ ConstDemo.cid "A") he
+    | tail _ hm => cases hm
+
 end ConcreteSpec.Core
-
-

@@ -56,6 +56,9 @@ Open obligations, by name:
 - **O1 Elaboration** from surface syntax to Core: how literals get a type, how names become
   identities, how nested expressions and grouping become A-normal form, source positions, and that
   acceptance of a source program does not depend on how the elaborator names temporaries.
+  For constants, item 19 (2026-11-08) requires a permutation into dependency order, allowing
+  source forward references, or a refusal with a closed chain of actual references. The remaining
+  C2 global proofs are acyclic-order existence and value equality across admitted orders.
 - **O2 The lexer, model-translation and native-image obligations.**
 - **O3 Instrumentation erasure** (Q9.10): the ownership instrumentation (`Slot.moved`, the
   `used`, `live`, `known` and `kfields` fields of `Entry`) is stated as intent, with no erasure
@@ -99,5 +102,8 @@ Open obligations, by name:
   storage can use C4's hybrid state; C5 must still supply ownership instrumentation. Lifecycle
   instrumentation may refuse an event (`Option.none`), making execution stuck, including initial
   activation and primitive result binding; cleanup laws require successful lifecycle events. C2
-  leaves floats (slice 26), and two owner questions: whether a failing operation may appear in a constant
-  initializer, and whether the source may name a constant written later in the file.
+  leaves floats (slice 26). Owner decisions 2026-11-08, items 18 and 19 settle the earlier two
+  questions: closed initializers may use fallible scalar operations, with every initializer checked
+  by kernel reduction within fuel (failure and exhaustion refuse even unused constants); source
+  forward references are allowed, with dependency sorting and cycle-chain refusal required.
+  Checked arithmetic forms still require a Result constant type, outside the current `CTy`.

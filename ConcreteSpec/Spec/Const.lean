@@ -35,9 +35,9 @@ name a later declaration. `dependsOn` extracts the actual reference relation, in
 nested in operands. `DependencyOrder` is README obligation O1: elaboration supplies a permutation
 of the source list in which every referenced declaration occurs earlier. `ElaboratedConsts`
 requires either such an order or a cycle refusal whose chain is `c₀ → c₁ → … → c₀`, with every edge
-an actual reference. An acyclic source has a dependency order, all admitted dependency orders give
-the same values, and a reported cycle is a real cycle of this relation (`dependencyOrder_exists`,
-`evalConsts_order_independent`, and the chain judgment below). Core continues to receive only the
+an actual reference. The source elaboration obligation includes existence of an order for acyclic sources and
+order-independence of admitted results. These two global proof obligations remain explicit below;
+the chain law proves that a reported cycle consists of real references. Core continues to receive only the
 ordered form.
 
 The constant types are an interface (`ConstTypes`): the language's type universe, a `Copy`
@@ -304,16 +304,25 @@ def typeConsts (U : ConstTypes) : List (ConstDecl U) → AList ConstId CTy →
       else none
     | none => none
 
-/-- **Rule: constant declarations are admitted** exactly when the whole list types and every
+/-- Static typing is named separately from evaluation. Admission requires that the whole list types and every
 initializer evaluates successfully within `fuel`, whether used or not (owner decision 2026-11-08,
 item 18, revising TYPE-22; item 26 for `Copy`). Evaluation refusal identifies the constant and its
 failure or exhausted budget. -/
+def ConstsTyped (U : ConstTypes) (ds : List (ConstDecl U)) : Prop :=
+  (typeConsts U ds []).isSome = true
+
+/-- Every declaration, including unused declarations, computes a value within the supplied fuel.
+This is independent of static typing and Copy classification. -/
+def ConstsEvaluate (U : ConstTypes) (fuel : Nat) (ds : List (ConstDecl U)) : Prop :=
+  (evalConsts U fuel ds []).isOk = true
+
+/-- **Rule: constant declarations are admitted** by both independent checks. -/
 def ConstsAdmitted (U : ConstTypes) (fuel : Nat) (ds : List (ConstDecl U)) : Prop :=
-  (typeConsts U ds []).isSome = true ∧ (evalConsts U fuel ds []).isOk = true
+  ConstsTyped U ds ∧ ConstsEvaluate U fuel ds
 
 instance (U : ConstTypes) (fuel : Nat) (ds : List (ConstDecl U)) :
     Decidable (ConstsAdmitted U fuel ds) := by
-  unfold ConstsAdmitted
+  unfold ConstsAdmitted ConstsTyped ConstsEvaluate
   infer_instance
 
 /-! ### Source dependency order and cycle refusal -/
@@ -333,14 +342,29 @@ def refChain (U : ConstTypes) (ds : List (ConstDecl U)) : List ConstId → Bool
 def CycleChain (U : ConstTypes) (ds : List (ConstDecl U)) (chain : List ConstId) : Prop :=
   ∃ c rest, chain = c :: rest ++ [c] ∧ refChain U ds chain = true
 
+/-- An actual source reference, stated using declaration and expression membership rather than
+the executable Boolean dependency test. -/
+def SourceReference (U : ConstTypes) (ds : List (ConstDecl U)) (a b : ConstId) : Prop :=
+  ∃ d ∈ ds, d.id = a ∧ b ∈ d.init.refs
+
+/-- Every edge of a diagnostic is an actual source reference; its final identity is declared. -/
+def ActualRefChain (U : ConstTypes) (ds : List (ConstDecl U)) : List ConstId → Prop
+  | [] => False
+  | [c] => ∃ d ∈ ds, d.id = c
+  | a :: b :: rest => SourceReference U ds a b ∧ ActualRefChain U ds (b :: rest)
+
 /-- No cycle of the source reference relation. -/
 def Acyclic (U : ConstTypes) (ds : List (ConstDecl U)) : Prop :=
   ∀ chain, ¬ CycleChain U ds chain
 
 /-- README obligation O1: elaboration permutes the source declarations into dependency order. The
-`Pairwise` condition says that no declaration occurs before one it references. -/
+`Pairwise` condition says that no declaration occurs before one it references; the separate
+self-edge condition refuses self-reference even in a singleton list. References to undeclared
+identities and duplicate declarations are independently rejected by static typing. -/
 def DependencyOrder (U : ConstTypes) (source order : List (ConstDecl U)) : Prop :=
-  order.Perm source ∧ order.Pairwise fun a b => dependsOn U source a.id b.id = false
+  order.Perm source ∧
+    (∀ a ∈ order, dependsOn U source a.id a.id = false) ∧
+    order.Pairwise fun a b => dependsOn U source a.id b.id = false
 
 /-- Elaboration's required result (owner decision 2026-11-08, item 19): a dependency order for Core,
 or refusal with a real cycle chain. This is an O1 obligation on the source elaborator, not an
