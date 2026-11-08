@@ -1,0 +1,2326 @@
+kimi version 2.4.1
+• I need read brief round2 and execute. Should inspect files.
+
+• I’ll read the original brief and the round-two instructions, then inspect the relevant files before making changes.
+
+• I need modify. Should read guidance docs files relevant. AGENTS given but brief says read docs philosophy README foundation C6 etc original done but should inspect current Observe and proofs. Should git status branch log. Should have TODO since multi-step.wip/spec-c6
+66b2ee01 axioms.golden: the C6 observations (regenerated on concrete-ci-2)
+9ce88ba4 Merge remote-tracking branch 'origin/wip/spec-core' into wip/spec-c6
+ca2ee838 spec C6: typed observations and environment contracts
+5bc0748b axioms.golden: add the 45 generated C4 part-1 declarations (Memory.lean imported in ee6d879b without regenerating; r4 axioms gate failed at d719b1a0)
+d719b1a0 Const: record item 26's approved direction (compile-time, Copy-only, closed subset) revising Q6.4/TYPE-22's evaluation at each use; the P17b check is a task
+Should design robust. Should foundation proposal C6 and old observation slice retirement.I'll implement findings 1-6. Most challenging adapter validity and stuttering infinite.
+
+  Should reason architecture.
+
+  Finding 1 simple output pending none.
+
+  Finding2 reportObservation needs contract/input or premise. Currently signature P A r. Could add C input args and mayBlock check via Prop cannot decide Option computationally if C.mayBlock Prop. reportObservation currently computable def returning Option; adding premise in theorem instead is option "Add blocking-permission premise ... state law accordingly." Finding says turns every pending noAnswer ... Add premise (or classify noAnswer ...). Best don't change function? Theorem report_noAnswer_blocked add `blocking : C.mayBlock input (A.project events ++ [.request request]) request` and state accordingly. But reportObservation itself still turns any into observable blocked. Review specifically reportObservation turns ... without checking mayBlock; adding premise only theorem leaves function unsound semantically. Could make `reportObservation` take a proof? Def dependent match with premise parameter `(blocking : ∀ ...? )` difficult. Alternative add adapter or contract with decidable mayBlock? OperationContract mayBlock Prop, not computable. Could add `reportObservation` hypothesis as `mayBlock : C.mayBlock ...` only for specific report impossible dependent args. Better introduce relation `ReportObservation` and keep raw projection? But finding allows "Add blocking-permission premise ... state law accordingly" likely add premise to theorem accepted. Yet function remains unconditionally maps noAnswer. I can alter `reportObservation` to take an explicit blocking witness function as argument, noncomputational? Lean definitions can take Prop and match to determine Option via if? Prop can't eliminate to data generally except Decidable. Could take `(blocks : ∀ ... , Option (C.mayBlock ...))`, a proof-option oracle. Then only block if Some proof. This is clean but cumbersome API. Or `reportObservation (P) (A) (C) (input) (permit : ∀ events request, Option (C.mayBlock input (A.project events ++ [.request request]) request)) r`. However histories need wellformed C1 projected. `mayBlock` history current request. `blocked` FullObservation currently events excludes request. Finding5 decide includes request at end matching ValidTrace/OperationContract. Best change FullObservation.blocked events request convention: events includes current request as last event. Execution.blocked steps request HasFullObservation gives visible steps ++ [.request request] (assuming Execution steps exclude request event? Existing blocked steps request SameObservation visible steps; convention steps before pending request. Then blocked observation includes visible steps ++ request). reportObservation raw r.events prior to unanswered request, so append request. Then mayBlock uses projected r.events ++ request.
+
+  Could instead keep reportObservation P A r and change theorem premise only, plus doc clearly "raw adapter projection is only an observation under ...". But no C input in function means semantic `Option FullObservation` can't enforce. User asked fix not superficial. Better redesign `reportObservation` with explicit `blocking : Option` perhaps predicate as `BlockPermission C input` structure holding ∀ projected events? I'll think ideal spec: `reportObservation` returns `Option (FullObservation S)` from C1 evaluator and needs environment contract to validate blocked. I could define inductive `ReportObservation C input P A r observation` separating valid observation relation, with noAnswer requires C.mayBlock. Keep raw `reportObservation` renamed? Existing API can be modified no external uses likely. But finding explicitly "reportObservation ... Add blocking-permission premise ... or classify ... as no observation / evaluator report". Define `reportObservation` as `Option` plus extra `(blocked : ... → Bool)`? OperationContract Prop makes relation appropriate. Yet all existing theorem and function changed. Could make function parameter `permitBlock : List (Event S) → Request S → Prop` and require `permitBlock ...` as an argument to theorem only not function doesn't solve.
+
+  Could define `reportObservation (P) (A) (r) (blocking : ∀ (events : List O.Event) (request : Request S), Option (C.mayBlock input (A.project events ++ [.request request]) request)) : Option ...`. This gives actual check. Since Prop can appear in Option, function computes by matching witness option but doesn't extract proof to Type. It's okay dependent elimination from Option proof to Option FullObservation. `blocking` is essentially explicit evidence supplied by evaluator for noAnswer. This supports theorem `report_noAnswer_blocked` with witness. Could simplify `reportObservation` take `block : C.mayBlock input ...` for report's specific pending request via dependent match? Can't type before match easily but use `blocked : ∀ ...` general.
+
+  Alternative add `blocks : List (Event S) → Request S → Bool` to ExecAdapter with law blocks=true ↔ C.mayBlock; but environment-specific adapter not ideal.
+
+  Perhaps function `reportObservation` takes `mayBlock : List (Event S) → Request S → Option Unit` and law. But generic proof witness best.
+
+  Finding5 C1 adapter wellformedness:
+  - an answered C1 request whose A.request = some q projects to `.request q` then `.response r`, plus any output, matching ValidTrace.
+  Should formal structure `ExecAdapter.WellFormed (A) (C) (input)` likely relates every C1 Step.prim with request typed q to projection A.events events = [.request q] ++ outputs ++ [.response r], where outputs all `.output`, and ValidTrace intermediate pending to after response. The condition can directly require existence of output list and projected event shape, and C.allows. "plus any output" order? User said projects to `.request q` then `.response r`, plus any output, matching ValidTrace. Since outputs forbidden pending (finding1), output cannot be between request and response. So "plus any output" must be before request or after response within a single C1 answer event? A single answer event projects to several C6 events, sequential machine answer corresponds both request response atomically. To match ValidTrace with no output pending, projection can only be outputs before request or request,response,outputs after response. Outputs before request occur logically while previous no pending, outputs after response no pending. But convention explicitly "an answered C1 request whose A.request is some q projects to .request q then .response r, plus any output, matching ValidTrace." Likely define shape `[request q, response r]` only for typed requests; output-only operations A.request none project outputs. Could permit prefix/suffix output and formal valid trace ensures. Should environment answers satisfy relation. I need connect O.allows to C.allows via wellformed adapter.
+
+  I can define wellformed condition in terms of each `Step` request:
+  ```
+  structure ExecAdapter.WellFormed (A) (C) (input) : Prop where
+    answered : ∀ {p vs site store k a}, A.request p vs site store = some q →
+      ∃ r outputs, a.result = .ok ...? ...
+  ```
+  Cannot infer response r from C1 answer result Val without adapter response extraction. Current ExecAdapter.events only maps answer event to C6. If A.request some q, event projection should include response typed r, but response payload arbitrary derived from event. Condition can simply:
+  ```
+  answered {hist p vs site store k a q} :
+    A.request ... = some q →
+    ∃ r pre post,
+      A.events? a.event = pre ++ [.request q, .response r] ++ post ∧
+      RequestResponse q r ∧
+      C.allows input (A.project hist ++ pre ++ [.request q]) q r ∧
+      (∀ o ∈ pre++post, ∃ output, o=.output output)
+  ```
+  But event Option mapping and output positions. `A.project` of hist++a.event.toList = A.project hist ++ A.events... . For ValidTrace from previous valid, adding pre output while idle then request response then post outputs works. So wellformedness could directly state:
+  ```
+  answered : ∀ hist p vs site store a q,
+    A.request ... = some q →
+    ∃ before r after,
+      (a.event.toList.flatMap A.events) = before ++ [.request q, .response r] ++ after ∧
+      Outputs before ∧ Outputs after ∧
+      RequestResponse q r ∧ C.allows input (A.project hist ++ before ++ [.request q]) q r
+  ```
+  No k needed. This condition depends on all answers not necessarily O.allows? Only allowed used. Add O.allows premise optional not needed. For untyped request A.request none, to prove projected trace valid, need require all emitted events outputs:
+  ```
+  unrequested : A.request ... = none → ∃ outputs, projected = outputs.map .output
+  ```
+  But C1 requests could be internal operation with no environment event and output. yes.
+  What if A.request some q and a.result trap error? Should no response if trap, because operation traps instead of answered return? C1 answer includes result Except TrapKind Val; even on trap, event may represent request but no response. Full trace ends terminal with outstanding request? ValidTrace complete requires response. Wellformed condition should cover all answers. Could demand request+response even trap, semantically environment response might be trap? A trap is operation failure result, could still be response. C6 response type could encode error? But adapter decides. If it types request then every answer should have response. Fine.
+
+  "when every oracle answer satisfies environment relation, projected trace of a report satisfies ValidTrace" I can instead define `ExecAdapter.Answers` relation as wellformedness conditional only actual oracle answer. Should have induction runFrom, complex. Could state generic `ExecAdapter.WellFormed` over all C1 request/answers with C.allows and shape; then prove any report ValidTrace by induction fuel. That satisfies stronger, though phrasing "when every oracle answer satisfies environment relation" suggests define oracle environment relation. Better model wellformed adapter + `OracleRespects` where for every request with typed q and answer a, shape and allows. For untyped internal request output only adapter wellformed unconditional. Then theorem runFrom valid under OracleRespects. Since C1 `O.allows` check also. `reportObservation` needs C input and blocking proof from oracle noAnswer? `noAnswer` means oracle returned none; if environment may block, oracle no answer corresponds `.blocked`; could define `OracleRespects` includes `none → C.mayBlock`. Then no separate witness needed; theorem blocked from premise. But actual function cannot compute mayBlock proof; can return blocked anyway and validity theorem assumes mayBlock. Finding2 still function without premise but theorem now takes oracle relation. User might accept "add blocking-permission premise". I can add to reportObservation itself a `BlockEvidence` from oracle? Or define relation.
+
+  I'll inspect review expected likely modest changes. Should avoid overengineering but prove solid. I can design:
+  - `ExecAdapter.WellFormed C input A` says projection of each C1 answer obeys ValidTrace extension. This can be elegantly using a helper `ValidAnswer`:
+  ```
+  def ExecAdapter.ProjectsRequest ... : Prop :=
+   ∀ hist p vs st a q, A.request ... = some q →
+     ∃ before r after, ... ∧ ValidTrace C input none (A.project hist ++ before) →? 
+  ```
+  For theorem trace induction, easier invariant `ValidTrace pending hist` and step extension. If previous none and event typed:
+   shape output* ++ [req,res] ++ output*. Allows with hist correct. If previous some cannot occur next request in C1 because runFrom only calls oracle after previous answer resolved, so none.
+   untyped event all outputs.
+  - `ExecAdapter.Environment C input A ρ` says:
+    1. for `ρ hist p vs site store = some a`, if A.request = some q then shape and C.allows.
+    2. if none and A.request = some q then C.mayBlock input (A.project hist ++ [request q]) q.
+    3. for typed or untyped outputs projection shape. Could combine all answers wellformed in adapter independent ρ; then only oracle noanswer blocking. "when every oracle answer satisfies environment relation" encoded `OracleRespects`.
+  Could define:
+  ```
+  structure ExecAdapter.WellFormed ... where
+    unanswered : ... A.request ... = none → ∀ ev∈a.event.toList? Outputs ...
+  ```
+  Actually wellformed adapter only maps C1 events independent of oracle and requests. `answered` with C.allows is environment not adapter pure. So name `ExecAdapter.Contracts` or `OracleSatisfies`.
+
+  A single definition:
+  ```
+  def ExecAdapter.OracleRespects (A) (C) (input) (ρ) : Prop :=
+    (∀ hist p vs site st a q, ρ hist ... = some a → A.request ... = some q →
+       ∃ before r after, ... ∧ OnlyOutputs before ∧ OnlyOutputs after ∧ RequestResponse q r ∧ C.allows ...)
+    ∧ (∀ ... q, ρ ... = none → A.request ... = some q → C.mayBlock ...)
+    ∧ (∀ hist ... a, ρ ...=some a → A.request ...=none → OnlyOutputs (a.event.toList.flatMap A.events))
+  ```
+  Could make structure `Environment` with fields.
+
+  Then `reportObservation P A C input ρ? r` currently r doesn't contain ρ. I can add a `BlockPermitted` premise to validity theorem:
+  ```
+  theorem reportObservation_valid ... (env : OracleSatisfies...) (run : runFrom ... = r) :
+    match reportObservation ... with
+    | some (.blocked events q) => ValidTrace C input (some q) events ∧ C.mayBlock ...
+    | some (.terminal obs) => CompleteTrace ... obs.events
+    | _ => True
+  ```
+  And `report_noAnswer_blocked` premise C.mayBlock. This addresses semantics laws but raw function still maps forbidden noAnswer. Better modify `reportObservation` to accept `blocking` proof option derived from C input. Then `OracleSatisfies` ensures can supply but function caller must. Could define a new `reportObservation` that returns a `ReportProjection` sum distinguishing evaluator report and observation? Out of scope.
+
+  Option allowed: "Add the blocking-permission premise" to `reportObservation` function by making it a `def` with extra argument `(blocking : C.mayBlock input ... )` impossible generically but can put at theorem. Wording likely exactly theorem premise okay. Yet user might review again and flag. I want no lingering issue.
+
+  Could change `reportObservation` from computable Option to an inductive relation named `ReportObservation` and remove function. But finding refers function expected perhaps relation acceptable? "or classify ... as no observation / evaluator report" I could split `reportObservation` to return `Sum (FullObservation) EvaluatorReport`, but bigger.
+
+  Simplest robust: parameterize with explicit evidence callback:
+  ```
+  abbrev BlockingEvidence (A) (C) (input) :=
+    ∀ (events : List O.Event) (q : Request S),
+      Option (C.mayBlock input (A.project events ++ [.request q]) q)
+  ```
+  `reportObservation P A C input permit r`.
+  At noAnswer typed q:
+  ```
+  match permit events q with
+  | some _ => some (.blocked (A.project events ++ [.request q]) q)
+  | none => none
+  ```
+  No proof used computationally but validity guaranteed by construction. The theorem takes `permit ... = some permission`.
+  For valid report theorem if env says mayBlock then evidence can be some. I don't need runFrom theorem to show actual observation if permit arbitrary sound evidence, okay.
+
+  However extra `C` implicit cannot infer from permit perhaps explicit. Signature:
+  ```
+  def reportObservation (P) (A) (C) (input)
+      (permitBlock : ∀ events q, Option (...)) (r) : Option ...
+  ```
+  Could use `BlockingEvidence` abbreviation. More readable:
+  ```
+  structure BlockingEvidence ... where
+    permit : ∀ events q, Option ...
+  ```
+  No need structure.
+
+  FullObservation.blocked convention change affects examples and HasFullObservation.
+
+  Finding3 HasFullObservation:
+  For finite execution:
+  ```
+  HasFullObservation (.finite steps term) (.terminal ⟨visible steps, term⟩)
+  ```
+  blocked `.blocked (visible steps ++ [.request q]) q`.
+  infinite:
+  - finiteDivergence events if eventually all silent and visible entire = events. Define `EventuallySilent steps n := ∀ m, n ≤ m → steps m = silent`.
+    `HasFullObservation infinite (.finiteDivergence events)` iff ∃ n, EventuallySilent steps n ∧ visiblePrefix steps n = events. Note if all silent after n, visiblePrefix n is entire.
+  - infiniteDivergence trace if infinitely emitting and exact trace correspondence. I can define `InfinitelyEmitting steps := ∀ n, ∃ m ≥ n, (steps m).event?.isSome` (or ∃ m event). Then relation between steps and events function. Could use `SameInfiniteObservation steps (fun n => .emit (events n))`, since PrefixEventually both ensures same infinite event history, and if target emits every step, ensures infinitely emitting. Then HasFullObservation `.infinite steps` `.infiniteDivergence events` := SameInfiniteObservation steps (fun n => .emit (events n)). This elegantly covers. finiteDivergence can also use SameInfiniteObservation steps (eventually silent after finite emitted prefix) but current direct easiest. I need prove SameObservation x y and Has x o -> Has y o. finite/block immediate. infinite x/y and cases o:
+    finiteDivergence: h SameInfiniteObservation xs ys; hx eventually silent xs + visiblePrefix=events. Should transfer to ys. Prefix eventual alone does NOT ensure eventually silent ys? SameInfiniteObservation defined mutual eventual prefixes allows extra silent arbitrary but if xs eventually silent, ys could emit same finite events infinitely late? Events finite identical sequence cannot add events because prefixes both. Should prove ys eventually silent. Suppose ys emits at arbitrarily large times after all xs silent. Pick xs n beyond silence, hxs prefix finite events. hxy gives m with visiblePrefix ys m = events ++ rest. If ys has any emit after m? visible prefix grows extra and hyx reverse eventually in xs impossible since xs fixed. Can prove classical by contradiction using not eventually silent => exists emit beyond any N. Should construct logic and list lengths. Alternatively define finiteDivergence using SameInfiniteObservation with finite steps ending all silent:
+  ```
+  HasFullObservation (.infinite xs) (.finiteDivergence events) :=
+    SameInfiniteObservation xs (fun n => if n < events.length then .emit events[n] else .silent)
+  ```
+  Then transport via transitivity trivial. This relation indeed ensures eventually silent? SameInfiniteObservation could allow source xs to keep emitting? target finite events, mutual prefix prevents extra, yes. It exactly captures same complete finite trace and divergence. No need explicit eventually silent but doc relation covers. Could use a helper `finiteAsSteps events n` and define all infinite observations via SameInfiniteObservation to canonical step functions:
+  ```
+  def FiniteDivergenceSteps (events) n :=
+    if h:n<events.length then emit events[n] else silent
+  def InfiniteObservationSteps events n := emit(events n)
+  def HasFullObservation : Execution → FullObservation → Prop
+   finite = exact ...
+   blocked ...
+   infinite xs, finiteDiv events => SameInfiniteObservation xs (finiteDivergenceSteps events)
+   infinite xs, infiniteDiv events => SameInfiniteObservation xs (emit ∘ events)
+   other false
+  ```
+  Then preservation infinite is SameInfiniteObservation.trans h.symm? Given h Same xs ys and hx Same xs canonical, want Same ys canonical = h.symm.trans hx. Easy. But need ensure finite divergence definition "eventually-silent runs" direct enough. Could prove characterization with EventuallySilent and visiblePrefix separately if needed. Has relation based SameObservation risks reviewer says rewrap own definition? It now projects execution to FullObservation and transport meaningful. It's okay but could define direct and prove transport via canonical equivalence. Better direct relation plus bridge.
+
+  Alternative HasFullObservation infinite finite:
+  ```
+  ∃ n, visiblePrefix steps n = events ∧ ∀ m ≥ n, steps m = silent
+  ```
+  Then prove SameObservation transfer with lemmas. More work but feasible. Infinite infinite direct via `SameInfiniteObservation` canonical accepted.
+
+  Finding4 real stuttering:
+  - finite any insertion anywhere. Define relation `Stuttering xs ys` meaning ys obtained by inserting silents into xs. Could use visible equality directly theorem:
+  ```
+  theorem finite_stuttering {xs ys} (visible xs=visible ys) ... SameObservation
+  ```
+  This is mathematically any finite insertion but no explicit insertion relation. Reviewer wants "inserting any finite number silent steps anywhere in finite run" theorem with `visible` equality is broad enough and silent_internal_steps currently trivial. Add `finite_silent_stuttering (xs ys) terminal (h : visible xs = visible ys)`. But finding specifically real stuttering law likely acceptable if theorem arbitrary lists and visible equality. Better define inductive `InsertsSilent : List Step → List Step → Prop` with refl, silent insertion, preserve emit? Or relation `ListStuttering xs ys` as `visible xs = visible ys` already clear. Could define `Stuttering` inductive:
+  ```
+  inductive SilentInsertion : List Step → List Step → Prop
+   | nil
+   | silent {xs ys} : SilentInsertion xs ys → SilentInsertion xs (.silent::ys)
+   | emit event {xs ys} : SilentInsertion xs ys → SilentInsertion (.emit event::xs) (.emit event::ys)
+  ```
+  This inserts silents anywhere and preserves exact non-silent events. Prove visible equality by induction, then finite and blocked observation SameObservation. But relation oriented base xs and extended ys. Theorem `silent_insertion_finite` etc.
+  Could avoid new relation and use theorem all lists visible equal. Yet request explicit any finite number anywhere, inductive is transparent spec. Define in Spec Observe:
+  ```
+  inductive SilentInsertion : List (Step S) → List (Step S) → Prop where ...
+  ```
+  Doc. Prove `.visible` equality in Proofs.
+  Infinite stuttering via strictly increasing index map, all other steps silent. Should define `StrictlyIncreasing f := ∀ n, f n < f (n+1)` (core). `InfiniteStuttering (steps : Nat→Step) (f : Nat→Nat) (stutter : Nat→Step) : Prop := StrictMono f ∧ (∀ n, stutter (f n)=steps n) ∧ (∀ m, (∀ n, f n ≠ m) → stutter m=silent)`. Note original steps may include silent, all retained, extra silent at non-image. Strictly increasing index map cofinal? StrictMono Nat ensures f n ≥ n, unbounded. Then prove SameInfiniteObservation steps stutter. This is some work with visiblePrefix and list mapping/filterMap. I need lemmas to compute visible prefixes under such insertion.
+
+  Could define general infinite stuttering relation existentially and prove SameInfiniteObservation by using `visible` list relation and ranges. I need math.
+
+  Given f strict and stutter at f n = steps n, elsewhere silent. Should handle for every n, exists m rest, visiblePrefix stutter m = visiblePrefix steps n ++ rest. Choose m=f n+1 perhaps includes first n+1 source steps (0..n), while visiblePrefix steps n includes 0..n-1, so rest = visible [steps n] (0 or 1). Could choose f (n-1)+1 for n>0 but uniform f n +1 easier rest event of step n. Should prove:
+  `visiblePrefix stutter (f n + 1) = visiblePrefix steps n ++ visible [steps n]` = visiblePrefix steps (n+1). Actually first f n +1 stutter positions includes source indices 0..n exactly, so visible = visiblePrefix steps (n+1). Then rest = Step.event? (steps n).toList. This holds f strict ensures f i < f n for i<n and f i > f n for i>n.
+  Other direction: for every m, choose n=m perhaps f m ≥ m so visiblePrefix stutter m contained in visiblePrefix steps m (because stutter non-silent only at f indices, and f i < m implies i < m due f i≥i). Could choose m2=f m+1? Should target steps prefix includes at least all emits of stutter prefix m. Choose steps m prefix; prove visiblePrefix steps m = visiblePrefix stutter m ++ rest? Not necessarily order/rest: visiblePrefix steps m includes all events 0..m-1, while stutter m contains source indices with f i<m, a prefix 0..k-1 due strict. So yes visiblePrefix steps m = visiblePrefix stutter m ++ visible of source k..m-1. Should prove via list.
+
+  Can develop general list-level characterization:
+  Define `stutterList` for first N source steps, inserting according to f? The prefix at f n +1 equals `(List.range (n+1)).map steps` visible. Prove by induction n using range intervals and f strict.
+
+  Could use library list filter and `List.range` lemmas. Should check Lean core available lemmas. I can experiment.
+
+  Alternative define infinite stuttering constructively with a specific "stretch" function and prove general via sequences of visible event indexes, but requirement strictly increasing map. Could define `Stutter` using f and prove via `PrefixEventually` using generic filter over `List.range` and pointwise relationship. Could establish `visiblePrefix stutter (f n) = visiblePrefix steps n` if f 0=0? General f 0 may >0. At f n (exclusive), includes source indices 0..n-1 exactly (assuming strict f). Yes no need +1! For n=0, f 0 prefix all silent before first source, visible=[] = visiblePrefix steps 0. For n+1, f(n+1) includes indices 0..n. visiblePrefix stutter (f n)=visiblePrefix steps n. Nice first direction exact with rest=[].
+  Second direction for arbitrary m, choose n=m+1 perhaps visiblePrefix steps n contains stutter m. Should show exists rest. Choose n=m and prove prefix decomposition as above.
+
+  I can prove general prefix relation using induction on m and f with nat bounds, perhaps easier use a generic list lemma for `visiblePrefix` pointwise.
+
+  Observation: `visiblePrefix steps n = visible ((List.range n).map steps)`.
+  Define `stutter` property gives for any m:
+  - if m in range f, stutter m = steps n
+  - otherwise silent.
+  For arbitrary finite set range m, visible stutter corresponds to visible steps over ` (List.range m).filter (fun i => f i < m)` due strict injectivity. StrictMono gives f i<m iff i<m? no upper. Let k count. Should finite induction m general.
+
+  Could define canonical f and theorem only for a particular map? Requirement via a strictly increasing index map general likely theorem ∀ f. Should be general.
+
+  Can leverage classical sequence equivalence HasFullObservation canonical perhaps easier? Still SameInfiniteObservation proof requires list.
+
+  Could formulate `InfiniteStuttering` differently with map `f` and additional property `f 0=0`? Still second direction.
+
+  I can prove `PrefixEventually` via general list lemma based on `List.range` and strictMono:
+  1. `stutter_prefix_at (n) : visiblePrefix stutter (f n) = visiblePrefix steps n`.
+  Induction n:
+  Base: all j<f 0 are not in image f because f 0≤? for any n f n≥f0, so stutter silent. visible list of silent = [].
+  Step: f(n+1) = f n + d+1. Segment from f n to f(n+1)-1: at f n = steps n, all following until next are silent. So visiblePrefix stutter f(n+1) = visiblePrefix stutter f n ++ visible [steps n]. Should list range decomposition and pointwise. I can prove a general lemma:
+  ```
+  visiblePrefix_add (steps) a b : visiblePrefix steps (a+b)= visiblePrefix steps a ++ visible ((List.range b).map (fun i => steps(a+i)))
+  ```
+  using List.range_add? Check lemmas.
+  Then at b=f(n+1)-f n, positions offset. first steps n then silent. Should arithmetic and pointwise.
+
+  Base f0 arbitrary similar all positions <f0 silent.
+
+  Could instead require f 0=0 simplifies base but still step.
+
+  Define `StutterMap` with `StrictMono` and f0=0? "via strictly increasing index map" no requirement arbitrary f0; adding f0=0 means inserting only between/after events not before initial. Could prepend initial silents separately finite? Better no.
+
+  Potential easier use `List.ofFn` and filterMap? Range proofs same.
+
+  Perhaps define stuttering infinite as exists strictly increasing f with exact property and prove observation using a more abstract known relation `visiblePrefix` can be characterized by "flatten intervals". Should build library lemmas.
+
+  Finding5 report ValidTrace induction also substantial.
+
+  I need plan systematic, implement spec first (1,2,3,5 definitions,6) then proofs. Commit each after build. Could commit spec with proofs adjusted simultaneously to build. Requirement commit each piece as soon build passes. I can do one semantic commit then one stuttering proofs perhaps.
+
+  Should inspect Lean options lakefile.
+
+• The findings require three linked changes: blocked observations must include their pending request, C1 answers need an explicit projection contract, and observation preservation must transport an actual `Execution` projection rather than restate equivalence. I’ll make those definitions first, then add the general finite and infinite stuttering proofs.
+
+• Now decide exact definitions.
+
+  I'll design spec edits:
+  Header line add replacement and retirement "It replaces pre-foundation ConcreteSpec.Spec.Observation; slice 1's migration/retirement?" Which slice retires old one? Old Observation is part 7 slice1 semantics. Roadmap slice1 likely old fragment retired A2i? Should find specific proposal foundation C6 perhaps says later "pre-foundation modules retired at A2i". Search.Observation old likely deleted slice 1? Search within doc Observation only at gate.So header "A2i integration step 12 retires..." precise.
+
+  Define `OnlyOutput`:
+  ```
+  def OnlyOutput : List Event → Prop := ∀ e ∈ events, ∃ o, e=.output o
+  ```
+  Could use inductive `Outputs` for easier ValidTrace append:
+  ```
+  inductive Outputs : List Event → Prop where nil | cons o rest
+  ```
+  But list generated `.map Event.output outputs` easiest:
+  `∃ outputs : List S.Output, events = outputs.map Event.output`.
+  Then ValidTrace output append lemma.
+
+  C1 wellformed environment:
+  ```
+  structure ExecAdapter.Environment (A) (C) (input) (ρ) : Prop where
+    internal : ∀ hist p vs site store a,
+      ρ hist ... = some a → A.request ... = none →
+      ∃ outputs, a.event.toList.flatMap A.events = outputs.map Event.output
+    answered : ∀ hist ... a q,
+      ρ ...=some a → A.request ...=some q →
+      ∃ before r after,
+         ... = before ++ .request q :: .response r :: after ∧
+         (∃ outputs, before=map...) ∧ (∃ outputs, after=...) ∧
+         RequestResponse q r ∧
+         C.allows input (A.project hist ++ before ++ [.request q]) q r
+    blocked : ∀ hist ... q,
+      ρ ...=none → A.request ...=some q →
+      C.mayBlock input (A.project hist ++ [.request q]) q
+  ```
+  Structure in Prop with dependent C etc. Name `OracleEnvironment` perhaps `ExecAdapter.OracleLawful`. Doc explicit adapter well-formedness answered projection. Could split `ExecAdapter.WellFormed` independent of ρ with answered taking `O.allows p vs st a = true`, internal all a. Then `OracleSatisfies` mayBlock. But request says "State adapter well-formedness condition: an answered C1 request ...". A structure `ExecAdapter.WellFormed C input A ρ` satisfies though includes oracle. Better `ExecAdapter.Environment` may be seen not adapter wellformed. Use `ExecAdapter.WellFormed (A) (C) (input) (ρ)`.
+
+  Actually "when every oracle answer satisfies environment relation" this structure exactly. `answered` C.allows and matching. Great.
+
+  ValidTrace helpers in proofs:
+  - `validTrace_outputs`: from ValidTrace none hist and outputs map, yields none (hist ++ outputs).
+  - `validTrace_answered`: given CompleteTrace previous and answer shape yields CompleteTrace projected hist++events.
+  - `ValidTrace.blocked`: from complete trace and arbitrary q yields some q hist++request by .request.
+  For report r from runFrom, previous trace before response always none. Prove runFrom projection valid depending ending:
+  ```
+  def ReportTrace ... r : Prop :=
+   match r.ending with
+   | .noAnswer c =>
+      match step... typed with
+      | some q => ValidTrace C input (some q) (A.project r.events ++ [.request q]) ∧ C.mayBlock ...
+      | _ => True? 
+   | .badAnswer ... => CompleteTrace ...
+   | final/stuck/outOfFuel => CompleteTrace
+  ```
+  The theorem requested "projected trace of a report satisfies ValidTrace (and, for blocked report mayBlock)". Could state separate:
+  1 `runFrom_complete_valid`: ∀ fuel hist c, CompleteTrace C input (A.project hist) → CompleteTrace C input (A.project (runFrom ...).events)` — is this true noAnswer? Events hist excludes current request, so complete yes! Even for noAnswer projected r.events prior request remains complete. But blocked observation includes request separately. So theorem runFrom projected report events complete all endings. For blocked observation theorem valid pending and mayBlock.
+  2 `runFrom_noAnswer_valid`: if runFrom=noAnswer c, pending typed q then ValidTrace some q (project events++request) ∧ mayBlock.
+  Then `reportObservation_valid` matches some terminal/blocked.
+
+  `runFrom` induction:
+  ```
+  theorem runFrom_valid ... (wf) :
+   ∀ fuel hist c, CompleteTrace ... (A.project hist) →
+     CompleteTrace ... (A.project (runFrom P ρ fuel hist c).events)
+   | 0,... => by simp [runFrom]; split ... 
+  ```
+  Should have recursion equations and match. Better induction fuel general hist c:
+  ```
+  induction fuel generalizing hist c with
+  | zero =>
+    intro h
+    simp only [runFrom]
+    split <;> simp_all
+  | succ n ih =>
+    intro h
+    simp only [runFrom]
+    cases hfinal:c.final? with
+    | some f => simp [hfinal]; exact h
+    | none =>
+      simp [hfinal]
+      cases hs:step P c with
+      | none => simpa [hs] using h
+      | some out => cases out with
+        | next c' => exact ih ... h (after simp runFrom?)
+        | request p vs site st k =>
+          cases hρ:ρ hist ... with
+          | none => simpa [...] using h
+          | some a =>
+            by_cases ha:O.allows ... = true
+            · simp [runFrom, hfinal, hs, hρ, ha]
+              apply ih
+              -- prove projected hist++a.event toList complete using wf and typed option cases
+            · simp [...] ; exact h
+  ```
+  Can write one simp runFrom with equations.
+
+  At typed request some q use wf.answered hρ typed obtains before r after and outputs. Projection:
+  `A.project (hist ++ a.event.toList) = A.project hist ++ A.project a.event.toList`.
+  Then apply output/request/response/output constructors sequentially. Should list append normalization.
+
+  Untyped none use wf.internal and output constructor.
+
+  `blocked` theorem directly from runFrom noAnswer equation. Could derive from equation at request branch to get hρ none and pending. I can add theorem:
+  ```
+  theorem runFrom_noAnswer_block ... (run : runFrom ... = ⟨events,.noAnswer c⟩)
+   (pending...) (typed...) :
+   C.mayBlock input (A.project events ++ [.request q]) q
+  ```
+  Proof induction fuel? Simplify runFrom at equation and branch. Could extract by reverting events and cases fuel; matches. Or define more general `reportObservation_valid` by induction runFrom alongside. Could prove helper `runFrom_noAnswer` with cases fuel and simp. Since noAnswer only occurs direct current call, runFrom equation can be unfolded once regardless fuel; no recursive resulting noAnswer? Recursive runFrom could also noAnswer deeper. To prove property induction fuel straightforward same traversal.
+
+  Perhaps define theorem combined per recursion:
+  ```
+  structure RunValidity ... r : Prop where
+    complete : CompleteTrace ... r.events
+    blocked : ∀ c p ... q, r.ending = .noAnswer c → step... → typed... → mayBlock...
+  ```
+  Structure proposition on Report.
+  Then runFrom_valid gives both. Complete and blocked. This is elegant spec definition `ValidReport`? Could define in proofs only theorem pair:
+  ```
+  theorem runFrom_valid ... :
+   CompleteTrace ... (runFrom...).events ∧
+   ∀ c p ... q, (runFrom...).ending=.noAnswer c → ... → mayBlock...
+  ```
+  At recursive invoke IH with updated trace. Base final etc. The blocked pending may refer current or recursive. Induction handles. Then `report_valid_trace` from this.
+
+  Could define `ReportValid` in Spec:
+  ```
+  def ExecAdapter.ValidReport ... r : Prop :=
+   CompleteTrace ... (A.project r.events) ∧
+   ∀ c p... q, r.ending = .noAnswer c → ... →
+     C.mayBlock ... ∧ ValidTrace ... (some q) ...
+  ```
+  No need expose.
+
+  Finding2 reportObservation evidence callback plus valid theorem.
+
+  Perhaps simplify reportObservation by requiring a `Blocking` predicate proof at pending only using new inductive:
+  ```
+  def reportObservation ... (r) (blocked : ∀ ..., r.ending=.noAnswer c → ... → C.mayBlock ...) : Option ...
+  ```
+  A dependent function with premise for all pending noAnswer, then no Option evidence needed; function can ignore proof computationally and return blocked. This is precisely adding blocking-permission premise to function! Signature:
+  ```
+  def reportObservation (P) (A) (C) (input) (r)
+      (blocking : ∀ c p vs site store k q,
+         r.ending = .noAnswer c →
+         step P c = some (.request...) →
+         A.request ...=some q →
+         C.mayBlock input (A.project r.events ++ [.request q]) q) :
+      Option FullObservation
+  ```
+  The proof argument can be after r; no computation issue because simply not used except type. Then every call must prove any blocked observation permitted. For final/stuck etc proof trivial if no noAnswer. This directly fixes finding2 elegantly. The theorem `report_noAnswer_blocked` passes `blocking` argument. `runFrom_valid` provides premise to use adapter. `reportObservation` includes request in blocked. This is best. Lean proof arg not used in body okay.
+
+  Signature long but readable define `ExecAdapter.BlockingPermitted`:
+  ```
+  def ExecAdapter.BlockingPermitted (P) (A) (C) (input) (r) : Prop :=
+    ∀ {c p vs site store k} {q}, r.ending = .noAnswer c → ... → C.mayBlock ...
+  ```
+  Then `reportObservation P A C input r (blocking : A.BlockingPermitted...)`.
+  Doc says proof isn't event decision, just classifies noAnswer under environment. For forbidden cannot call function (instead raw evaluator remains).
+  Could put blocking before r? `reportObservation P A C input r blocking`.
+  Existing uses only proof theorem.
+
+  Then runFrom produces `BlockingPermitted` via environment. Great.
+
+  FullObservation blocked doc events include request last. Execution blocked Has includes.
+
+  HasFullObservation direct:
+  ```
+  def EventuallySilent (steps) (from) := ∀ n, from ≤ n → steps n = silent
+  def HasFullObservation
+   finite only ...
+   infinite, finiteDivergence events =>
+     ∃ n, visiblePrefix steps n = events ∧ EventuallySilent steps n
+   infinite, infiniteDivergence events =>
+     SameInfiniteObservation steps (fun n => .emit (events n))
+   ...
+  ```
+  Should prove transport finite divergence. Could add canonical bridge lemma to avoid direct list math:
+  Define `finiteDivergenceSteps events` in Spec. Prove `Has... infinite finite` iff SameInfiniteObservation with canonical perhaps still proof. Or transport direct with finite prefixes and no eventual silent contradiction. I'll assess direct proof manageable with classical logic and list lengths.
+
+  Given hxy : PrefixEventually xs ys and hyx reverse.
+  hx : ∃ n, visiblePrefix xs n=events ∧ ∀ m≥n,xs m=silent.
+  Should show ∃ p, visiblePrefix ys p=events ∧ EventuallySilent ys p.
+  From hxy n get p rest hpre : visiblePrefix ys p = events ++ rest.
+  From hyx p get q rest2 hreverse : visiblePrefix xs q = visiblePrefix ys p ++ rest2.
+  If q≥n, xs visiblePrefix q = events (since silent after n). Then events = events++rest++rest2 => rest=[] rest2=[].
+  Should have q≥n; hyx gives arbitrary q perhaps less n. Can first ensure get a prefix at max n q? PrefixEventually hyx p gives q not control. But can extend q to max n q and visiblePrefix xs remains events if q may before n includes missing events, not enough. I can use hxy to extend xs prefix q to ys further but circular. Another route choose n sufficiently large? Have eventual silence at n. hyx p gives q; if q<n, visible xs q prefix of events. Equation prefix events? hpre events++rest, so visible xs q = events++rest++rest2 implies events prefix of visible xs q, while visible xs q prefix events, hence equal lengths and rest empty. Even without q≥n, because visiblePrefix xs q for q<n is prefix of visiblePrefix xs n=events (general monotonic). So events = shorter ++ rest... impossible unless empty. Should lemma prefix of visiblePrefix for q≤n and append equation. Could instead extend q to n and since ys p prefix may not be prefix xs n? hyx says xs q = ys p++rest2; xs q prefix xs n events. Then ys p prefix events, combined hpre events=... => rest empty. So general prefix transitivity. Could prove list lengths easier:
+  - `visiblePrefix_mono`: q≤n → ∃ rest, visiblePrefix xs n = visiblePrefix xs q ++ rest.
+  - then events = (visiblePrefix xs q) ++ rest3.
+  - hyx p: visiblePrefix xs q = visiblePrefix ys p ++ rest2 = events++rest++rest2.
+  Then events = events++rest++rest2++rest3, append length implies rest empty.
+  Could use List.append_eq_self? `List.append_eq_left_iff` etc. Simp at equality perhaps `List.append_eq_self` not. From `events = events ++ rest ++ ...`, `List.length` yields lengths and `List.length_eq_zero`. Or use `List.prefix` and antisymmetry. Simpler derive `events = events ++ (rest ++ rest2 ++ rest3)` via assoc, then have `rest++...=[]` by `List.append_eq_self`? Check #check via scratch lean. I can use `List.append_eq_left` search #check. Use `#check List.append_eq_self` etc lean. I'll later.
+
+  Once rest=[] hpre gives visiblePrefix ys p=events. Should eventually silent ys p. Suppose at m≥p emits. Then visiblePrefix ys (m+1) has extra event so length > events length. hyx (m+1) gives q rest with visiblePrefix xs q = visiblePrefix ys(m+1)++rest. But visiblePrefix xs q is prefix or extension of events; if q≥n equals events, if q<n prefix events. Either length ≤ events.length, contradiction because ys(m+1) longer. Can derive using visiblePrefix events count monotonic and event membership. Prove general if steps m=emit e then `visiblePrefix steps (m+1)=visiblePrefix steps m ++ [e]` (m≤m+1) and length +1. Then length inequalities. Manageable.
+
+  Could avoid EventuallySilent direct transport with canonical SameInfiniteObservation much less proof if prove canonical relation equivalence separately perhaps same difficulty. But I can define Has finite divergence also via `SameInfiniteObservation` canonical and separately prove its steps eventually silent as a theorem? Finding requires covering eventually-silent, relation canonical does; no direct need. I can state:
+  ```
+  def finiteDivergenceSteps events n := if h:n<events.length then emit events[n] else silent
+  HasFullObservation infinite finiteDivergence := SameInfiniteObservation steps (finiteDivergenceSteps events)
+  ```
+  Then preservation trivial and infinite silent cannot terminated by SameObservation mixed. Finding3 says covering eventually-silent and infinitely-emitting. This relation does. Finding4 "infinite run whose steps all silent after some point must never related to terminated run" existing. Could additionally prove `eventually_silent_has_full_observation` to explicitly produce Has from direct eventual silent, but proving SameInfiniteObservation with canonical requires similar list proof though easier deterministic canonical. Could omit? HasFullObservation definition canonical not obviously direct "eventually silent" to reviewer but doc explicit.
+
+  Perhaps use a general `CompleteEvents steps : FullObservation` defined via `SameInfiniteObservation` is accepted. FullObservation preservation becomes non-tautological transport. Good.
+
+  Infinite stuttering proof remains difficult but could exploit SameInfiniteObservation as mutual prefix with generic f.
+
+  Alternative redefine SameInfiniteObservation using a step-indexed relation that makes stuttering transport easy:
+  ```
+  def SameInfiniteObservation steps1 steps2 :=
+   ∀ n, ∃ m, visiblePrefix steps1 n = visiblePrefix steps2 m ...?
+  ```
+  Current PrefixEventually. Could define observation via `VisibleTrace` and a relation of all finite prefixes. Infinite stuttering still prove.
+
+  Could introduce `Stutter` with map plus a premise directly that visible prefixes correspond? That would trivialize theorem and reviewer likely reject. Should real proof.
+
+  I can break work with Lean interactive compile.
+
+  First spec edits using Edit single large. I'll edit Observe sections.
+
+• I’ll use a proof argument on `reportObservation` so a blocked report cannot be projected unless its contract permits blocking. A blocked observation’s event list will end in `.request request`; the C1 environment law will require answered requests to project to output, request, matching response, then output.
+
+• Must Read again before edit same file. I can read relevant ranges and then one big edit perhaps multiple separated not possible consecutive without read. Use Read entire again then Edit huge old section 86-266 to new.Now big edit exact sections separately one edit can old entire 88-268 enormous. Better use python? Must Edit mandatory. Can one Edit old specific multiple not contiguous impossible. Should sequential read/edit. I can make ValidTrace edit now then reread.I'll insert Has after SameObservation and SilentInsertion/InfiniteStuttering definitions perhaps now. FullObservation doc. Read sections.One edit from FullObservation doc through reportObservation perhaps long but manageable. Should have exact new definitions.
+
+  Canonical finite steps:
+  ```
+  def finiteDivergenceSteps (events) n :=
+    if h:n<events.length then .emit events[n] else .silent
+  ```
+  Dependent get element syntax `events[n]` with h.
+  `HasFullObservation` matches:
+  finite terminal only equality rather than Prop conjunction:
+  ```
+  | .finite xs t, .terminal ⟨ys,t'⟩ => visible xs=ys ∧ t=t'
+  | .blocked xs q, .blocked events q' => visible xs ++ [.request q] = events ∧ q=q'
+  | .infinite xs, .finiteDivergence events => SameInfiniteObservation xs (finiteDivergenceSteps events)
+  | .infinite xs, .infiniteDivergence events => SameInfiniteObservation xs (fun n => .emit(events n))
+  | _,_=>False
+  ```
+  Has relation uniqueness perhaps can prove later.
+  SilentInsertion inductive.
+  StrictlyIncreasing name perhaps core exists `StrictMono` core. Use `StrictMono f` (Lean core defined). Explicit requirement readable. `StrictMono` is core. `InfiniteStuttering steps f stutter`:
+  ```
+  StrictMono f ∧ (∀ n, stutter (f n)=steps n) ∧ ∀ m, (∀ n, f n ≠m) → stutter m=.silent
+  ```
+  Use `StrictMono` has ∀ a b a<b ->. Finding strictly increasing map satisfied. Could define `StrictlyIncreasing` as ∀ n f n<f(n+1), easier lemmas prove f≥n and monotone. Use `StrictMono` standard and lemmas perhaps `StrictMono.le_apply` exists mathlib not core. Can prove induction using h (Nat.lt_succ_self). Standard StrictMono.monotone perhaps core. I'll handle. To avoid uncertain define own:
+  ```
+  def Increasing (f) := ∀ n, f n < f(n+1)
+  ```
+  Name `StepIndexIncreasing`. Prove f n≥n and f monotone by induction.
+  InfiniteStuttering uses it.
+
+  Adapter WellFormed with fields:
+  ```
+  structure ExecAdapter.WellFormed ... (ρ) : Prop where
+    internal : ∀ {hist p vs site store a}, ρ ...=some a → A.request ...=none →
+      ∃ outputs, A.project a.event.toList = outputs.map Event.output
+    answered : ∀
+  {hist p vs site store a q}, ρ...=some a → A.request...=some q →
+      ∃ before r after, A.project a.event.toList = before ++ [.request q, .response r] ++ after ∧
+        (∃ outputs, before=...) ∧ (∃ outputs, after=...) ∧
+        RequestResponse q r ∧ C.allows input (A.project hist ++ before ++ [.request q]) q r
+    blocked ...
+  ```
+  Notation `.request q, .response r` list works.
+  "plus any output" before/after explicit no interleaving pending.
+  Could internal output use all responses for A.request none even if event request accidentally? map output prevents.
+  `BlockedPermitted` def with r ending.
+  ```
+  def ExecAdapter.BlockingPermitted ... (r) : Prop :=
+  ∀ {c p vs site store k request}, r.ending=.noAnswer c → ... →
+   C.mayBlock input (A.project r.events ++ [.request request]) request
+  ```
+  Store variable name st.
+  `reportObservation ... (r) (_permitted : ...)`. Lean theorem proof argument explicit. `_permitted` unused and no warnings? Lean warning unusedVariables only variables with underscore avoids.
+  Should have C explicit input type. `(C : OperationContract S) (input : C.Input)`.
+
+  FullObservation blocked doc.
+
+  I'll edit huge old 165-268.Now proofs need major rewrite first 43-122 and C1 bottom. Could replace entire Observe2 file with Write? Existing continuity much trap proofs keep. Use Edit chunks. First replace 42-122 with new proofs finite/has and leave infinite stutter later. I can initially compile with silent_internal_steps generalized and Has transport, adapter bottom stub no sorry impossible. Should implement adapter proofs too. Could work in scratch Main.lean to test. Since existing file won't compile until bottom fixed. I can edit proof sections then build module and iterate.
+
+  Should formulate Has transport easy canonical:
+  ```
+  theorem HasFullObservation.preserve {x y o} (h : SameObservation x y) (hx:HasFullObservation x o): Has... y o := by
+   cases x <;> cases y <;> cases o ... 
+  ```
+  Finite observation o constructors nested. Cases:
+  x finite, y finite, o terminal obs with obs structure. `cases o with | terminal observation => cases observation ... | blocked ... | finite... | infinite...`
+  For finite x and o blocked Has false etc. `simp only [HasFullObservation] at hx` handles.
+  Could use `cases x <;> cases y <;> cases o <;> simp only [SameObservation,HasFullObservation] at h hx ⊢` but terminal observation is structure not deconstructed by cases o (observation field). `cases o` terminal observation remains and HasFullObservation delta match may not reduce until cases observation. `all_goals` etc. Easiest explicit:
+  ```
+  cases x with
+  | finite xs t =>
+   cases y with
+   | finite ys u =>
+     cases o with
+     | terminal obs =>
+        cases obs with | mk events u' =>
+        exact ⟨h.1.trans hx.1, h.2.trans hx.2⟩? equalities
+     | blocked ... => exact hx.elim ...
+   ...
+  ```
+  Could use `cases x <;> cases y <;> cases o` and `simp_all [SameObservation,HasFullObservation]` might split Observation automatically? `cases o` for terminal has `observation : Observation`, Lean simp cannot reduce match on unknown structure. Add `all_goals try {rename_i observation; cases observation}` tricky. Instead define HasFullObservation finite using `.terminal observation` with equality of whole Observation:
+  ```
+  | .finite steps terminal, .terminal observation =>
+     observation = ⟨visible steps, terminal⟩
+  ```
+  Then cases o no nested need. blocked similarly equality `FullObservation.blocked...` no.
+  Current can modify to whole obs simplifies. But current okay.
+
+  Transport finite:
+  h visible xs=visible ys and t=u. hx visible xs=events and t=terminal'. goal visible ys=events and u=terminal'. `exact ⟨h.1 ▸ hx.1?⟩` easiest `simp_all only [SameObservation,HasFullObservation]` after cases obs.
+
+  Infinite: h : SameInfiniteObservation xs ys; hx : Same... xs canonical; goal Same ys canonical = h.symm.trans hx using existing trans.
+  Cases o finiteDivergence/infiniteDivergence same `exact h.symm.trans hx`.
+  Other mixed false.
+
+  Could write robust by pattern matching x,y,o in tactic 27 cases and `simp_all` plus exact. I'll test.
+
+  Full preservation theorem new:
+  ```
+  theorem full_observation_preservation {x y o} (h) (hx) : HasFullObservation y o := ...
+  ```
+  Name same signature changed expected.
+  `silent_internal_steps` replace:
+  - `SilentInsertion.visible` proof induction:
+  ```
+  theorem SilentInsertion.visible {before after} (h) : visible before=visible after := by
+   induction h with
+   | nil=>rfl
+   | silent _ ih => simpa [visible,Step.event?] using ih
+   | emit event _ ih => simp [visible,Step.event?,ih]
+  ```
+  Check filterMap.
+  - `silent_internal_steps {before after} (h) terminal : SameObservation finite after?`
+  Original orientation h before after means after has inserted silent. SameObservation (.finite after term) (.finite before term) or before after. State insertion preserves either:
+  `SameObservation (.finite before terminal) (.finite after terminal)`.
+  exact ⟨h.visible,rfl⟩.
+  - blocked variant.
+  - `finite_stuttering` alias no need.
+  - infinite_stuttering proof later. For now can leave original? Should finding4 not done until add.
+  Has transport now.
+
+  C1 bottom report theorem adjust:
+  ```
+  theorem report_noAnswer_blocked ... (permitted : BlockingPermitted ... ⟨events,noAnswer c⟩) ... :
+   reportObservation ... permitted = some blocked...
+  ```
+  Proof simp. Since proof irrelevance definitional? reportObservation body doesn't use permitted so simp works.
+  `report_noAnswer_forbidden` demonstrate cannot construct permitted if ¬ mayBlock perhaps new theorem:
+  ```
+  theorem report_noAnswer_requires_mayBlock ... (permitted) pending typed : C.mayBlock ... :=
+  permitted rfl pending typed
+  ```
+  This explicitly law.
+  `runFrom_valid` and WellFormed.
+
+  Could first replace old full section and bottom with basic compiling, build to validate spec, commit piece? But findings 5 not yet. No need commit until build.
+
+  I'll edit full section 42-122.
+
+• The specification definitions are updated, including explicit finite and infinite stuttering relations and `HasFullObservation`. I’m now adapting the proofs; the preservation theorem will take an observation of the source execution and return the same observation for the target execution.
+
+• Potential flawed h.1 ▸ orientation. I'll compile after bottom fix.
+
+  Read bottom then edit report and add run valid.I can initially bottom update only report theorems and compile to catch Has. Add permitted for outoffuel function proof:
+  ```
+  (permitted : BlockingPermitted ... ⟨events,.outOfFuel c⟩) 
+  ```
+  Can provide `(by intro ... h; cases h)` inline theorem param.
+  For noAnswer permitted explicit and mayBlock theorem.
+
+  No run valid yet but compile.Build module using nix lake ConcreteSpec perhaps find errors.warning: Git tree '/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c6' is dirty
+✖ [27/42] Building ConcreteSpec.Spec.Observe (545ms)
+trace: .> LEAN_PATH=/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c6/.lake/build/lib/lean /nix/store/94bmilywgajdnqvix1fs35fj94kala0w-lean4-release-4.34.1/bin/lean /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c6/ConcreteSpec/Spec/Observe.lean -o /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c6/.lake/build/lib/lean/ConcreteSpec/Spec/Observe.olean -i /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c6/.lake/build/lib/lean/ConcreteSpec/Spec/Observe.ilean -c /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c6/.lake/build/ir/ConcreteSpec/Spec/Observe.c --setup /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c6/.lake/build/ir/ConcreteSpec/Spec/Observe.setup.json --json
+error: ConcreteSpec/Spec/Observe.lean:288:42: Invalid field notation: Type of
+  outputs
+is not known; cannot resolve field `map`
+
+Hint: Consider replacing the field projection with a call to one of the following:
+  • `Array.map`
+  • `BaseIO.map`
+  • `EIO.map`
+  • `EStateM.map`
+  • `Except.map`
+  • `ExceptT.map`
+  • `Functor.map`
+  • `List.map`
+  • `Option.map`
+  • `Prod.map`
+  • `StateT.map`
+  • `String.map`
+  • `Sum.map`
+  • `Task.map`
+  • `Thunk.map`
+  • `Vector.map`
+  • `Array.mapFinIdxM.map`
+  • `List.IsInfix.map`
+  • `List.IsPrefix.map`
+  • `List.IsSuffix.map`
+  • `List.Pairwise.map`
+  • `List.Perm.map`
+  • `List.Sublist.map`
+  • `Std.Iter.map`
+  • `Std.IterM.map`
+  • `Vector.mapFinIdxM.map`
+  • `AList.map`
+  • `Res.map`
+  • `Lean.Omega.Coeffs.map`
+  • `Lean.Omega.Constraint.map`
+  • `Std.IterM.InternalCombinators.map`
+  • `Std.Iterators.PostconditionT.map`
+error: ConcreteSpec/Spec/Observe.lean:292:27: Invalid field notation: Type of
+  outputs
+is not known; cannot resolve field `map`
+
+Hint: Consider replacing the field projection with a call to one of the following:
+  • `Array.map`
+  • `BaseIO.map`
+  • `EIO.map`
+  • `EStateM.map`
+  • `Except.map`
+  • `ExceptT.map`
+  • `Functor.map`
+  • `List.map`
+  • `Option.map`
+  • `Prod.map`
+  • `StateT.map`
+  • `String.map`
+  • `Sum.map`
+  • `Task.map`
+  • `Thunk.map`
+  • `Vector.map`
+  • `Array.mapFinIdxM.map`
+  • `List.IsInfix.map`
+  • `List.IsPrefix.map`
+  • `List.IsSuffix.map`
+  • `List.Pairwise.map`
+  • `List.Perm.map`
+  • `List.Sublist.map`
+  • `Std.Iter.map`
+  • `Std.IterM.map`
+  • `Vector.mapFinIdxM.map`
+  • `AList.map`
+  • `Res.map`
+  • `Lean.Omega.Coeffs.map`
+  • `Lean.Omega.Constraint.map`
+  • `Std.IterM.InternalCombinators.map`
+  • `Std.Iterators.PostconditionT.map`
+error: ConcreteSpec/Spec/Observe.lean:293:26: Invalid field notation: Type of
+  outputs
+is not known; cannot resolve field `map`
+
+Hint: Consider replacing the field projection with a call to one of the following:
+  • `Array.map`
+  • `BaseIO.map`
+  • `EIO.map`
+  • `EStateM.map`
+  • `Except.map`
+  • `ExceptT.map`
+  • `Functor.map`
+  • `List.map`
+  • `Option.map`
+  • `Prod.map`
+  • `StateT.map`
+  • `String.map`
+  • `Sum.map`
+  • `Task.map`
+  • `Thunk.map`
+  • `Vector.map`
+  • `Array.mapFinIdxM.map`
+  • `List.IsInfix.map`
+  • `List.IsPrefix.map`
+  • `List.IsSuffix.map`
+  • `List.Pairwise.map`
+  • `List.Perm.map`
+  • `List.Sublist.map`
+  • `Std.Iter.map`
+  • `Std.IterM.map`
+  • `Vector.mapFinIdxM.map`
+  • `AList.map`
+  • `Res.map`
+  • `Lean.Omega.Coeffs.map`
+  • `Lean.Omega.Constraint.map`
+  • `Std.IterM.InternalCombinators.map`
+  • `Std.Iterators.PostconditionT.map`
+Some required targets logged failures:
+- ConcreteSpec.Spec.Observe
+error: build failed
+Should type outputs List S.Output each. Edit all occurrences perhaps replace_all `(∃ outputs,` to `(∃ outputs : List S.Output,` and first `∃ outputs, A.project` too. Three occurrences all desired. Read range then Edit replace all.warning: Git tree '/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c6' is dirty
+✔ [27/42] Built ConcreteSpec.Spec.Observe (551ms)
+✔ [28/42] Built ConcreteSpec.Spec (130ms)
+✔ [29/42] Built ConcreteSpec.Proofs.Basics (184ms)
+✔ [30/42] Built ConcreteSpec.Proofs.Authority (304ms)
+✔ [31/42] Built ConcreteSpec.Proofs.Cleanup (484ms)
+✔ [32/42] Built ConcreteSpec.Proofs.Slice1 (540ms)
+✔ [33/42] Built ConcreteSpec.Proofs.Borrow (675ms)
+✔ [34/42] Built ConcreteSpec.Proofs.Brand (651ms)
+✔ [35/42] Built ConcreteSpec.Proofs.Observe (189ms)
+✖ [36/42] Building ConcreteSpec.Proofs.Observe2 (982ms)
+trace: .> LEAN_PATH=/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c6/.lake/build/lib/lean /nix/store/94bmilywgajdnqvix1fs35fj94kala0w-lean4-release-4.34.1/bin/lean /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c6/ConcreteSpec/Proofs/Observe2.lean -o /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c6/.lake/build/lib/lean/ConcreteSpec/Proofs/Observe2.olean -i /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c6/.lake/build/lib/lean/ConcreteSpec/Proofs/Observe2.ilean -c /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c6/.lake/build/ir/ConcreteSpec/Proofs/Observe2.c --setup /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c6/.lake/build/ir/ConcreteSpec/Proofs/Observe2.setup.json --json
+error: ConcreteSpec/Proofs/Observe2.lean:47:19: Type mismatch: After simplification, term
+  ih
+ has type
+  @Eq (List (Event S)) (Observe.visible before✝) (Observe.visible after✝)
+but is expected to have type
+  @Eq (List (Event S)) (Observe.visible before✝) (Observe.visible (Step.silent :: after✝))
+error: ConcreteSpec/Proofs/Observe2.lean:48:23: `simp` made no progress
+error: ConcreteSpec/Proofs/Observe2.lean:112:64: Invalid field `trans`: The environment does not contain `And.trans`, so it is not possible to project the field `trans` from an expression
+  And.symm h
+of type
+  terminal✝¹ = terminal✝ ∧ visible steps✝¹ = visible steps✝
+error: ConcreteSpec/Proofs/Observe2.lean:112:64: Invalid field `trans`: The environment does not contain `And.trans`, so it is not possible to project the field `trans` from an expression
+  And.symm h
+of type
+  request✝² = request✝¹ ∧ visible steps✝¹ = visible steps✝
+✔ [37/42] Built ConcreteSpec.Proofs.Checker (275ms)
+✔ [38/42] Built ConcreteSpec.Proofs.Rep (355ms)
+✔ [39/42] Built ConcreteSpec.Proofs.Slice0 (202ms)
+✔ [40/42] Built ConcreteSpec.Proofs.Examples (169ms)
+Some required targets logged failures:
+- ConcreteSpec.Proofs.Observe2
+error: build failed
+SilentInsertion visible simp doesn't unfold visible on cons because visible def needs `List.filterMap`. Simp [visible, Step.event?, List.filterMap] perhaps core filterMap simp theorem requires `List.filterMap_cons`. Existing uses visible simplification in original exact rfl for silent one because visible (.silent::steps) defeq visible steps likely yes. Why simpa using ih didn't simplify goal? Induction h silent goal visible before = visible (.silent::after); rfl reduction RHS to visible after should exact ih. `exact ih` likely works. Emit goal visible (.emit event::before)=visible (.emit event::after), reduces to event::visible before = event::visible after, `congrArg` or simp only [visible,List.filterMap] not progress due visible is abbrev? `exact congrArg (List.cons event) ih` likely defeq. Use:
+  ```
+  | silent _ ih => exact ih
+  | emit event _ ih => exact congrArg (List.cons event) ih
+  ```
+  Has tactic bad h.symm interpreted And in non-infinite goals due `first` picks type incorrect? Error line 112 h.symm.trans hx all goals first considered succeeds elaboration? It applied to finite goal then h is pair. Should explicit robust cases.
+
+  I can replace theorem with a recursive match tactic:
+  ```
+    cases x with
+    | finite xs terminal =>
+      cases y with
+      | finite ys terminal' =>
+        cases observation with
+        | terminal observation =>
+          cases observation
+          exact ⟨h.1.symm.trans hx.1 |?⟩
+  ...
+  ```
+  Equalities orientation:
+  h : visible xs=visible ys, terminal=terminal'
+  hx : visible xs=events, terminal=terminal''
+  Goal visible ys=events, terminal'=terminal''.
+  `h.1.symm.trans hx.1`.
+  Same blocked.
+  Infinite as h.symm.trans hx.
+  All impossible h False or hx False.
+
+  Write fully 3x4 = 12 outer:
+  ```
+  cases x <;> cases y <;> simp only [SameObservation] at h
+  ```
+  mixed finite/infinite h false automatically ` contradiction`.
+  Could after cases:
+  ```
+  all_goals first | exact h.elim | skip
+  ```
+  This will close all mixed (6). Remaining same constructors 3.
+  Then cases observation all:
+  ```
+  all_goals cases observation
+  ```
+  Now finite x finite y:
+  - terminal observation not reduced; need cases observation.
+  - blocked hx False etc.
+  blocked x blocked y similarly.
+  infinite:
+  - terminal hx False; blocked hx False; finite/infinite meaningful.
+  I can use `all_goals simp only [HasFullObservation] at hx ⊢` but terminal unknown.
+  Do `all_goals rename_i obs; cases obs` would rename many variables wrong.
+
+  Better define Has finite using whole observation as above to ease. Change spec:
+  ```
+  | .finite steps terminal, .terminal observation =>
+    observation = ⟨visible steps, terminal⟩
+  | blocked ... .blocked events request' =>...
+  ```
+  Then transport finite exact `hx ▸ congrArg ...`? h and hx.
+  h pair; hx : observation=mk visible xs terminal; goal observation=mk visible ys terminal'. `hx.trans (congrArg (fun p => Observation.mk p.1 p.2) ?)` dependent pair simpler cases h.1,h.2 then `exact hx`. After subst:
+  ```
+  cases h with | intro events terminal =>
+   cases events; cases terminal; exact hx
+  ```
+  h.1 visible xs=visible ys cases h.1 substitutes? `cases h.1` rewrites ys perhaps. h.2 too then exact hx.
+  Blocked current Has pair fine use h.1.symm.trans etc.
+
+  I can alter finite Has whole Observation then theorem:
+  ```
+    cases x <;> cases y <;> simp only [SameObservation] at h
+    all_goals first | exact h.elim | skip
+    · cases observation with
+      | terminal observation =>
+        simp only [HasFullObservation] at hx ⊢
+        cases h.1
+        cases h.2
+        exact hx
+      | blocked ... => exact hx.elim
+  ...
+  ```
+  Bullets after all_goals unpredictable but three goals order finite/blocked/infinite. Write explicit case nesting clearer.
+
+  ```
+  cases x with
+  | finite xs terminal =>
+   cases y with
+   | finite ys terminal' =>
+     cases observation with
+     | terminal observation =>
+       simp only [HasFullObservation] at hx ⊢
+       exact hx.trans (by cases h.1; cases h.2; rfl)
+     | blocked ... => exact hx.elim
+  ...
+   | blocked => exact h.elim
+   | infinite => exact h.elim
+  ...
+  ```
+  Should change spec Has finite.
+
+  I'll do spec and proofs independent files can parallel Edit calls allowed. Read spec range and proofs range first parallel.
+
+• The first build exposed only proof-elaboration issues, not definition errors. I’m simplifying the finite projection’s shape so the transport proof is explicit by execution case, then I’ll continue with the C1 trace theorem.
+
+• Should reread proofs theorem before edit same file.Write explicit cases concise using `cases x <;> cases y <;> cases observation` then all goals simplification and solve finite with h substitution perhaps I can use `all_goals simp_all only [SameObservation,HasFullObservation]` could close many but equality substitution. Avoid uncertain explicit:
+
+  ```
+    cases x with
+    | finite xs terminal =>
+      cases y with
+      | finite ys terminal' =>
+        cases observation with
+        | terminal observation =>
+          simp only [HasFullObservation] at hx ⊢
+          rw [hx]
+          exact congrArg (fun x => Observation.mk x.1 x.2) ? no
+  ```
+  After h : visible xs=visible ys ∧ terminal=terminal'. `cases h with | intro hv ht => cases hv; cases ht; exact hx` at goal observation=mk visible ys terminal'. hx same. So:
+  ```
+          cases h.1
+          cases h.2
+          exact hx
+  ```
+  Lean cases h.1 might "failed to eliminate variable" if ys occurs h.2 no issue.
+        | blocked events q => exact hx.elim
+  ...
+  Finite x blocked/infinite h false `exact h.elim`.
+  Blocked x blocked:
+   observation blocked events request':
+   h : visible xs=visible ys ∧ q=q'
+   hx : visible xs ++ req q=events ∧ q=request'
+   goal visible ys ++ req q'=events ∧ q'=request'
+   exact ⟨by rw [←h.1,←h.2]; exact hx.1, h.2.symm.trans hx.2⟩ perhaps first:
+  h.2 q=q'. To rewrite q' to q `rw [←h.2]`; rw [←h.1] changes visible ys to xs. exact hx.1.
+  `h.2.symm.trans hx.2`.
+  other observations false hx.
+  Infinite x infinite:
+   observation finiteDiv/infiniteDiv exact h.symm.trans hx.
+   mixed h false.
+
+  Full code 50 lines.warning: Git tree '/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c6' is dirty
+✔ [27/42] Built ConcreteSpec.Spec.Observe (550ms)
+✔ [28/42] Built ConcreteSpec.Spec (131ms)
+✔ [29/42] Built ConcreteSpec.Proofs.Basics (191ms)
+✔ [30/42] Built ConcreteSpec.Proofs.Authority (316ms)
+✔ [31/42] Built ConcreteSpec.Proofs.Cleanup (477ms)
+✔ [32/42] Built ConcreteSpec.Proofs.Slice1 (532ms)
+✔ [33/42] Built ConcreteSpec.Proofs.Borrow (691ms)
+✔ [34/42] Built ConcreteSpec.Proofs.Brand (648ms)
+✖ [35/42] Building ConcreteSpec.Proofs.Observe2 (956ms)
+trace: .> LEAN_PATH=/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c6/.lake/build/lib/lean /nix/store/94bmilywgajdnqvix1fs35fj94kala0w-lean4-release-4.34.1/bin/lean /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c6/ConcreteSpec/Proofs/Observe2.lean -o /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c6/.lake/build/lib/lean/ConcreteSpec/Proofs/Observe2.olean -i /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c6/.lake/build/lib/lean/ConcreteSpec/Proofs/Observe2.ilean -c /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c6/.lake/build/ir/ConcreteSpec/Proofs/Observe2.c --setup /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c6/.lake/build/ir/ConcreteSpec/Proofs/Observe2.setup.json --json
+error: ConcreteSpec/Proofs/Observe2.lean:117:8: Dependent elimination failed: Failed to solve equation
+  List.filterMap Step.event? ys = List.filterMap Step.event? xs
+error: ConcreteSpec/Proofs/Observe2.lean:114:6: Alternative `finiteDivergence` has not been provided
+error: ConcreteSpec/Proofs/Observe2.lean:114:6: Alternative `infiniteDivergence` has not been provided
+error: ConcreteSpec/Proofs/Observe2.lean:113:26: unsolved goals
+case finite.finite.blocked
+S : EventSignature
+xs : List (Step S)
+terminal : Terminal
+ys : List (Step S)
+terminal' : Terminal
+h : SameObservation (Execution.finite xs terminal) (Execution.finite ys terminal')
+events✝ : FiniteTrace S
+request✝ : Request S
+hx : HasFullObservation (Execution.finite xs terminal) (FullObservation.blocked events✝ request✝)
+⊢ HasFullObservation (Execution.finite ys terminal') (FullObservation.blocked events✝ request✝)
+error: ConcreteSpec/Proofs/Observe2.lean:112:4: Alternative `blocked` has not been provided
+error: ConcreteSpec/Proofs/Observe2.lean:112:4: Alternative `infinite` has not been provided
+error: ConcreteSpec/Proofs/Observe2.lean:110:2: Alternative `blocked` has not been provided
+error: ConcreteSpec/Proofs/Observe2.lean:110:2: Alternative `infinite` has not been provided
+error: ConcreteSpec/Proofs/Observe2.lean:120:16: unexpected token '..'; expected command
+✔ [36/42] Built ConcreteSpec.Proofs.Checker (277ms)
+✔ [37/42] Built ConcreteSpec.Proofs.Observe (194ms)
+✔ [38/42] Built ConcreteSpec.Proofs.Rep (358ms)
+✔ [39/42] Built ConcreteSpec.Proofs.Slice0 (207ms)
+✔ [40/42] Built ConcreteSpec.Proofs.Examples (170ms)
+Some required targets logged failures:
+- ConcreteSpec.Proofs.Observe2
+error: build failed
+Lean pattern alternatives syntax `| blocked .. | finiteDivergence ..` perhaps `..` not supported alternative with constructors? It parsed weird because `| blocked .. |` is pattern ellipsis? In Lean cases alternatives need full `| blocked events request =>` can't combine `..` after? Existing uses `| .trapped ..` in defs but tactic patterns supports `| blocked _ _ =>`. Could use `all_goals` instead simpler. Explicit alternatives combined syntax `| blocked _ _ | finiteDivergence _ =>` perhaps Lean supports multiple but `..` unexpected at subsequent. Use `| blocked events request => exact hx.elim` etc all explicit.
+
+  Dependent elimination `cases h.1` fails orientation due dependent. Use equality trans no cases:
+  finite Has whole obs:
+  goal observation=mk visible ys terminal'
+  hx observation=mk visible xs terminal
+  `hx.trans (congrArg (fun p : List(Event S)×Terminal => Observation.mk p.1 p.2) ?)` need pair equality `(visible xs,terminal)=(visible ys,terminal')` from `Prod.ext h.1 h.2`. `congrArg (fun p => Observation.mk p.1 p.2) (Prod.ext h.1 h.2)`. Prod.ext signature perhaps `Prod.ext h.1 h.2`.
+  Simpler `exact hx.trans (by rw [h.1,h.2])` target mk xs terminal = mk ys terminal'. `rw` works. So no cases.
+
+  Alternatives write full. Read range then edit theorem entire.Use tactic `case blocked => exact hx.elim` names no patterns. Explicit all.warning: Git tree '/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c6' is dirty
+✖ [40/42] Building ConcreteSpec.Proofs.Observe2 (766ms)
+trace: .> LEAN_PATH=/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c6/.lake/build/lib/lean /nix/store/94bmilywgajdnqvix1fs35fj94kala0w-lean4-release-4.34.1/bin/lean /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c6/ConcreteSpec/Proofs/Observe2.lean -o /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c6/.lake/build/lib/lean/ConcreteSpec/Proofs/Observe2.olean -i /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c6/.lake/build/lib/lean/ConcreteSpec/Proofs/Observe2.ilean -c /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c6/.lake/build/ir/ConcreteSpec/Proofs/Observe2.c --setup /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c6/.lake/build/ir/ConcreteSpec/Proofs/Observe2.setup.json --json
+error: ConcreteSpec/Proofs/Observe2.lean:138:54: Application type mismatch: The argument
+  hx
+has type
+  HasFullObservation (Execution.infinite xs) (FullObservation.finiteDivergence events)
+but is expected to have type
+  SameObservation (Execution.infinite xs) ?m.381
+in the application
+  SameObservation.trans (SameObservation.symm h) hx
+error: ConcreteSpec/Proofs/Observe2.lean:139:56: Application type mismatch: The argument
+  hx
+has type
+  HasFullObservation (Execution.infinite xs) (FullObservation.infiniteDivergence events)
+but is expected to have type
+  SameObservation (Execution.infinite xs) ?m.400
+in the application
+  SameObservation.trans (SameObservation.symm h) hx
+Some required targets logged failures:
+- ConcreteSpec.Proofs.Observe2
+error: build failed
+Name resolution h.symm.trans picks SameObservation due expected? h type not reduced SameObservation infinite; dot `h.symm` selected SameObservation.symm returns SameObservation infinite ys xs (defeq SameInfinite). Then `.trans` picks SameObservation.trans rather than SameInfiniteObservation.trans. Should explicit `SameInfiniteObservation.trans (SameInfiniteObservation.symm h) hx`. h defeq. Do both replace_all.Now add C1 run valid before infinite stutter. Build perhaps passes.
+
+• The execution projection and its preservation proof now elaborate apart from a namespace ambiguity that I’ve corrected. Next I’m proving the C1 report invariant: every projected report history is a complete valid trace, and every `noAnswer` projection has both a pending valid trace and blocking permission.warning: Git tree '/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c6' is dirty
+✔ [40/42] Built ConcreteSpec.Proofs.Observe2 (794ms)
+✔ [41/42] Built ConcreteSpec (131ms)
+Build completed successfully (42 jobs).
+
+
+• I should commit validated slice now per hard rule "Commit each piece as soon build passes". This piece findings 1,2 partial,3,5 definitions,6 but 4 not infinite and 5 theorem missing. Can commit current as semantic projection slice then continue. Should git diff inspect, commit allowed user original said commit. Should git status check no generated new. M ConcreteSpec/Proofs/Observe2.lean
+ M ConcreteSpec/Spec/Observe.lean
+ ConcreteSpec/Proofs/Observe2.lean | 124 +++++++++++++++++++++++++-------------
+ ConcreteSpec/Spec/Observe.lean    |  94 +++++++++++++++++++++++++----
+ 2 files changed, 164 insertions(+), 54 deletions(-)
+diff --git a/ConcreteSpec/Proofs/Observe2.lean b/ConcreteSpec/Proofs/Observe2.lean
+index cbe1666f..db75ef44 100644
+--- a/ConcreteSpec/Proofs/Observe2.lean
++++ b/ConcreteSpec/Proofs/Observe2.lean
+@@ -39,10 +39,24 @@ theorem Responds.matches {C : OperationContract S} {input : C.Input} {hist : Lis
+   cases h with
+   | response matching _ => exact matching
+ 
+-/-- Silent steps do not change a finite observation. -/
+-theorem silent_internal_steps (steps : List (Step S)) (terminal : Terminal) :
+-    SameObservation (.finite (.silent :: steps) terminal) (.finite steps terminal) := by
+-  exact ⟨rfl, rfl⟩
++/-- Inserting silent steps leaves exactly the same visible events, in the same order. -/
++theorem SilentInsertion.visible {before after : List (Step S)} (h : SilentInsertion before after) :
++    visible before = visible after := by
++  induction h with
++  | nil => rfl
++  | silent _ ih => exact ih
++  | emit event _ ih => exact congrArg (List.cons event) ih
++
++/-- Any finite number of silent steps may be inserted anywhere in a finite terminated run. -/
++theorem silent_internal_steps {before after : List (Step S)} (h : SilentInsertion before after)
++    (terminal : Terminal) : SameObservation (.finite before terminal) (.finite after terminal) := by
++  exact ⟨h.visible, rfl⟩
++
++/-- The same arbitrary finite stuttering preserves a blocked run and its pending request. -/
++theorem blocked_silent_internal_steps {before after : List (Step S)}
++    (h : SilentInsertion before after) (request : Request S) :
++    SameObservation (.blocked before request) (.blocked after request) := by
++  exact ⟨h.visible, rfl⟩
+ 
+ /-- Any finite visible prefix is immediately a prefix of the same execution's prefix. -/
+ theorem PrefixEventually.refl (steps : Nat → Step S) : PrefixEventually steps steps := by
+@@ -86,35 +100,47 @@ theorem SameObservation.trans {x y z : Execution S}
+   all_goals first | exact hxy.elim | exact hyz.elim |
+     exact ⟨hxy.1.trans hyz.1, hxy.2.trans hyz.2⟩ | exact hxy.trans hyz
+ 
+-private theorem observation_congr {xs ys : List (Event S)} {terminal terminal' : Terminal}
+-    (hxs : xs = ys) (ht : terminal = terminal') :
+-    (Observation.mk xs terminal : Observation S) = Observation.mk ys terminal' := by
+-  subst ys
+-  subst terminal'
+-  rfl
+-
+-private theorem blocked_congr {xs ys : List (Event S)} {request request' : Request S}
+-    (hxs : xs = ys) (hr : request = request') :
+-    (FullObservation.blocked xs request : FullObservation S) = .blocked ys request' := by
+-  subst ys
+-  subst request'
+-  rfl
+-
+-/-- **Full-observation preservation.** Silent internal steps may differ freely, but finite runs
+-have identical events and terminal actions, blocked runs also have the same request, and infinite
+-runs have the same complete event history. Every mixed finite/infinite case is impossible. -/
+-theorem full_observation_preservation {x y : Execution S} (h : SameObservation x y) :
+-    (match x, y with
+-      | .finite xs terminal, .finite ys terminal' =>
+-          (⟨visible xs, terminal⟩ : Observation S) = ⟨visible ys, terminal'⟩
+-      | .blocked xs request, .blocked ys request' =>
+-          (FullObservation.blocked (S := S) (visible xs) request) =
+-            .blocked (visible ys) request'
+-      | .infinite xs, .infinite ys => SameInfiniteObservation xs ys
+-      | _, _ => False) := by
+-  cases x <;> cases y <;> simp only [SameObservation] at h
+-  all_goals first | exact h.elim | exact h | exact observation_congr h.1 h.2 |
+-    exact blocked_congr h.1 h.2
++/-- **Full-observation preservation.** An observation projected from `x` is also an observation of
++every `y` equivalent to `x`. Finite runs preserve their events and terminal action, blocked runs
++also preserve their pending request, and infinite runs transport both eventually silent and
++infinitely emitting histories. No infinite run is related to a finite termination. -/
++theorem full_observation_preservation {x y : Execution S} {observation : FullObservation S}
++    (h : SameObservation x y) (hx : HasFullObservation x observation) :
++    HasFullObserv
+ation y observation := by
++  cases x with
++  | finite xs terminal =>
++    cases y with
++    | finite ys terminal' =>
++      cases observation with
++      | terminal observation =>
++        simp only [HasFullObservation] at hx ⊢
++        exact hx.trans (by rw [h.1, h.2])
++      | blocked events request => exact hx.elim
++      | finiteDivergence events => exact hx.elim
++      | infiniteDivergence events => exact hx.elim
++    | blocked ys request => exact h.elim
++    | infinite ys => exact h.elim
++  | blocked xs request =>
++    cases y with
++    | blocked ys request' =>
++      cases observation with
++      | blocked events request'' =>
++        exact ⟨by rw [← h.1, ← h.2]; exact hx.1, h.2.symm.trans hx.2⟩
++      | terminal observation => exact hx.elim
++      | finiteDivergence events => exact hx.elim
++      | infiniteDivergence events => exact hx.elim
++    | finite ys terminal => exact h.elim
++    | infinite ys => exact h.elim
++  | infinite xs =>
++    cases y with
++    | infinite ys =>
++      cases observation with
++      | finiteDivergence events => exact SameInfiniteObservation.trans (SameInfiniteObservation.symm h) hx
++      | infiniteDivergence events => exact SameInfiniteObservation.trans (SameInfiniteObservation.symm h) hx
++      | terminal observation => exact hx.elim
++      | blocked events request => exact hx.elim
++    | finite ys terminal => exact h.elim
++    | blocked ys request => exact h.elim
+ 
+ /-- In particular, an infinite silent run never acquires a terminal observation. -/
+ theorem infinite_silent_not_termination (terminal : Terminal) :
+@@ -241,19 +267,35 @@ theorem output_before_trap_kept (A : ExecAdapter O S) {P : Exec.Program O} {c c'
+     stepsObservation A steps = some ⟨A.project events, .trapped kind site sp (trapLine kind site sp)⟩ := by
+   simp [stepsObservation, final, ExecAdapter.terminal?, trapTerminal, resolved]
+ 
+-/-- A pending C1 request observed through `noAnswer` retains the earlier event history and the
+-request itself; it is not mistaken for termination or divergence. -/
+-theorem report_noAnswer_blocked (P : Exec.Program O) (A : ExecAdapter O S)
+-    (events : List O.Event) (c : Exec.Config O) (p : O.Prim) (vs : List O.Val) (site : SiteId)
+-    (store : O.Store) (k : Exec.Answer O.Val O.Event O.Store → Exec.Config O) (request : Request S)
++/-- The premise on `reportObservation` really supplies the operation contract's blocking
++permission, in the history ending in the current request. -/
++theorem report_noAnswer_mayBlock (P : Exec.Program O) (A : ExecAdapter O S)
++    (C : OperationContract S) (input : C.Input) (events : List O.Event) (c : Exec.Config O)
++    (permitted : ExecAdapter.BlockingPermitted P A C input ⟨events, .noAnswer c⟩)
++    {p : O.Prim} {vs : List O.Val} {site : SiteId} {store : O.Store}
++    {k : Exec.Answer O.Val O.Event O.Store → Exec.Config O} {request : Request S}
+     (pending : Exec.step P c = some (.request p vs site store k))
+     (typed : A.request p vs site store = some request) :
+-    reportObservation P A ⟨events, .noAnswer c⟩ = some (.blocked (A.project events) request) := by
++    C.mayBlock input (A.project events ++ [.request request]) request :=
++  permitted rfl pending typed
++
++/-- A permitted pending C1 request observed through `noAnswer` retains the earlier event history
++and ends in the request itself; it is not mistaken for termination or divergence. -/
++theorem report_noAnswer_blocked (P : Exec.Program O) (A : ExecAdapter O S)
++    (C : OperationContract S) (input : C.Input)
++    (events : List O.Event) (c : Exec.Config O) (p : O.Prim) (vs : List O.Val) (site : SiteId)
++    (store : O.Store) (k : Exec.Answer O.Val O.Event O.Store → Exec.Config O) (request : Request S)
++    (permitted : ExecAdapter.BlockingPermitted P A C input ⟨events, .noAnswer c⟩)
++    (pending : Exec.step P c = some (.request p vs site store k))
++    (typed : A.request p vs site store = some request) :
++    reportObservation P A C input ⟨events, .noAnswer c⟩ permitted =
++      some (.blocked (A.project events ++ [.request request]) request) := 
+by
+   simp [reportObservation, pending, typed]
+ 
+ /-- Fuel exhaustion produces no fabricated external observation or event. -/
+ theorem report_outOfFuel_none (P : Exec.Program O) (A : ExecAdapter O S)
+-    (events : List O.Event) (c : Exec.Config O) :
+-    reportObservation P A ⟨events, .outOfFuel c⟩ = none := rfl
++    (C : OperationContract S) (input : C.Input) (events : List O.Event) (c : Exec.Config O)
++    (permitted : ExecAdapter.BlockingPermitted P A C input ⟨events, .outOfFuel c⟩) :
++    reportObservation P A C input ⟨events, .outOfFuel c⟩ permitted = none := rfl
+ 
+ end ConcreteSpec.Core.Observe
+diff --git a/ConcreteSpec/Spec/Observe.lean b/ConcreteSpec/Spec/Observe.lean
+index eda33ec9..1e9aaed2 100644
+--- a/ConcreteSpec/Spec/Observe.lean
++++ b/ConcreteSpec/Spec/Observe.lean
+@@ -5,7 +5,9 @@ import ConcreteSpec.Spec.Exec
+ 
+ PROPOSED: not normative until the owner freezes Core (ROADMAP A2c). Part of `ConcreteSpec.Spec`;
+ see `ConcreteSpec/README.md`. Foundation contract C6 (the foundation proposal approved by the
+-owner on 2026-11-08, "ok all recommended").
++owner on 2026-11-08, "ok all recommended"). `ConcreteSpec.Core.Observe` is the C6 foundation
++replacement for the pre-foundation `ConcreteSpec.Spec.Observation`; A2i integration step 12 retires
++the old module and moves its remaining observation theorems.
+ 
+ An `EventSignature` is the extension point for external operations. Each operation kind has its
+ own request and response types; public output has its own type. Requests and responses are separate
+@@ -83,10 +85,10 @@ inductive Responds (C : OperationContract S) (input : C.Input) :
+       Responds C input hist q (.response r)
+   | blocked {hist q} : C.mayBlock input hist q → Responds C input hist q .blocked
+ 
+-/-- A sequential request/response trace. At most one request is outstanding. An output may occur
+-at any point; a response must match the outstanding request and satisfy its contract in the
+-history ending in that request. The final state `none` means that no request is outstanding;
+-`some q` is a prefix waiting for `q`'s response. -/
++/-- A sequential request/response trace. At most one request is outstanding. Output occurs only
++while no request is outstanding; a response must match the outstanding request and satisfy its
++contract in the history ending in that request. The final state `none` means that no request is
++outstanding; `some q` is a prefix waiting for `q`'s response. -/
+ inductive ValidTrace (C : OperationContract S) (input : C.Input) :
+     Option (Request S) → List (Event S) → Prop where
+   | idle : ValidTrace C input none []
+@@ -94,8 +96,8 @@ inductive ValidTrace (C : OperationContract S) (input : C.Input) :
+       ValidTrace C input (some q) (hist ++ [.request q])
+   | response {hist q r} : ValidTrace C input (some q) hist → RequestResponse q r →
+       C.allows input hist q r → ValidTrace C input none (hist ++ [.response r])
+-  | output {pending hist o} : ValidTrace C input pending hist →
+-      ValidTrace C input pending (hist ++ [.output o])
++  | output {hist o} : ValidTrace C input none hist →
++      ValidTrace C input none (hist ++ [.output o])
+ 
+ /-- A complete finite trace has no outstanding request. -/
+ def CompleteTrace (C : OperationContract S) (input : C.Input) (events : List (Event S)) : Prop :=
+@@ -161,7 +163,9 @@ structure Observation (S : EventSignature) where
+   terminal : Terminal
+ 
+ /-- Every externally visible behavior: finite termination, an explicitly blocked request, silent
+-or eventually silent divergence with a finite event history, or an infinite event history. -/
++or eventually silent divergence with a finite event history, or an infinite event history. In
++`blocked events request`, `events` ends in `.request request`: this is the history passed to the
++operation contract, and the pending state of a `ValidTrace`. -/
+ inductive FullObservation (S : EventSignature) where
+   | terminal (observation : Observation S)
+   | blocked (events : FiniteTrace S) (request : Request S)
+@@ -186,6 +190,21 @@ inductive Execution (S : EventSignature) 
+where
+   | blocked (steps : List (Step S)) (request : Request S)
+   | infinite (steps : Nat → Step S)
+ 
++/-- Any finite number of silent steps inserted anywhere in a finite execution. -/
++inductive SilentInsertion : List (Step S) → List (Step S) → Prop where
++  | nil : SilentInsertion [] []
++  | silent {before after} : SilentInsertion before after → SilentInsertion before (.silent :: after)
++  | emit {before after} event : SilentInsertion before after →
++      SilentInsertion (.emit event :: before) (.emit event :: after)
++
++/-- A strictly increasing map from old step indices to new step indices. -/
++def StepIndexIncreasing (f : Nat → Nat) : Prop := ∀ n, f n < f (n + 1)
++
++/-- Infinite stuttering retains old step `n` at new index `f n`; every other new step is silent. -/
++def InfiniteStuttering (steps : Nat → Step S) (f : Nat → Nat) (stutter : Nat → Step S) : Prop :=
++  StepIndexIncreasing f ∧ (∀ n, stutter (f n) = steps n) ∧
++    ∀ m, (∀ n, f n ≠ m) → stutter m = .silent
++
+ /-- The event contributed by a step, if any. -/
+ def Step.event? : Step S → Option (Event S)
+   | .silent => none
+@@ -220,6 +239,25 @@ def SameObservation : Execution S → Execution S → Prop
+   | .infinite xs, .infinite ys => SameInfiniteObservation xs ys
+   | _, _ => False
+ 
++/-- The canonical infinite execution that emits a finite history and then is silent forever. -/
++def finiteDivergenceSteps (events : FiniteTrace S) (n : Nat) : Step S :=
++  if h : n < events.length then .emit events[n] else .silent
++
++/-- An execution has a particular full observation. Finite and blocked runs project exactly their
++visible history and ending. An infinite run with finite divergence has the same history as the
++canonical eventually silent execution; infinite divergence retains every event of an infinite
++trace. This is a projection relation, not merely a restatement of `SameObservation`. -/
++def HasFullObservation : Execution S → FullObservation S → Prop
++  | .finite steps terminal, .terminal observation =>
++      observation = ⟨visible steps, terminal⟩
++  | .blocked steps request, .blocked events request' =>
++      visible steps ++ [.request request] = events ∧ request = request'
++  | .infinite steps, .finiteDivergence events =>
++      SameInfiniteObservation steps (finiteDivergenceSteps events)
++  | .infinite steps, .infiniteDivergence events =>
++      SameInfiniteObservation steps (fun n => .emit (events n))
++  | _, _ => False
++
+ /-! ## C1 adapter -/
+ 
+ /-- How a C1 operand instance appears in C6. An answer's C1 event may project to several typed C6
+@@ -238,6 +276,26 @@ variable {O : Exec.Operands}
+ def ExecAdapter.project (A : ExecAdapter O S) (events : List O.Event) : List (Event S) :=
+   events.flatMap A.events
+ 
++/-- Adapter and oracle well-formedness against a C6 operation contract. An internal answer emits
++only output. If a C1 request has typed request `q`, its answer projects to any output, then
++`.request q`, then a matching `.response r`, then any output; output cannot intervene while `q` is
++pending. The response satisfies `C.allows` in the history ending in that request. An unanswered
++typed request is blocking, not an evaluator result, only when `C.mayBlock` permits it. -/
++structure ExecAdapter.WellFormed (A : ExecAdapter O S) (C : OperationContract S) (input : C.Input)
++    (ρ : Exec.Oracle O) : Prop where
++  internal {hist p vs site store a} : ρ hist p vs site store = some a →
++    A.request p vs site store = none →
++    ∃ outputs : List S.Output, A.project a.event.toList = outputs.map Event.output
++  answered {hist p vs site store a q} : ρ hist p vs site store = some a →
++    A.request p vs site store = some q →
++    ∃ before r after, A.project a.event.toList = before ++ [.request q, .response r] ++ after ∧
++      (∃ outputs : List S.Output, before = outputs.map Event.output) ∧
++      (∃ outputs : List S.Output, after = outputs.map Event.output) ∧
++      RequestResponse q r ∧ C.allows input (A.project hist ++ before ++ [.request q]) q r
++  blocked {hist p vs site store q} : ρ hist p vs site store = none →
++    A.request p vs site store = some q →
++    C.mayBlock input (A.project hist ++ [.request q]) q
++
+ /-- Turn a C1 final configuration into a logical terminal observation, if it is a valid hosted
+ `main` ending with a known trap site. -/
+ def ExecAdapter.terminal? (A : ExecAdapter O S) : Exec.Final O.Val → Option Terminal
+@@ -251,17 +309,27 @@ def stepsObservation (A : ExecAdapter O S) {P : Exec.Program O} {c c' : Exec.Con
+     {events : List O.Event} (_steps : Exec.Steps P c events c') : Option (Observation S) :=
+   (c'.final?.bind A.terminal?).map fun terminal => ⟨A.project events, terminal⟩
+ 
+-/-- The observation of a C1 evaluator report. `noAnswer` becomes an explicitly blocked observation
+-only when the configuration really is a request and the adapter types that request. Unsafe
+-stuckness, a bad answer and fuel exhaustion remain evaluator/premise reports, not external events. -/
+-def reportObservation (P : Exec.Program O) (A : ExecAdapter O S) (r : Exec.Report O) :
++/-- Every `noAnswer` projection in a report is permitted to block. The history ends in the typed
++request, exactly as required by `OperationContract.mayBlock` and `ValidTrace`. -/
++def ExecAdapter.BlockingPermitted (P : Exec.Program O) (A : ExecAdapter O S)
++    (C : OperationContract S) (input : C.Input) (r : Exec.Report O) : Prop :=
++  ∀ {c p vs site store k q}, r.ending = .noAnswer c →
++    Exec.step P c = some (.request p vs site store k) → A.request p vs site store = some q →
++    C.mayBlock input (A.project r.events ++ [.request q]) q
++
++/-- The observation of a C1 evaluator report. The `BlockingPermitted` premise prevents an
++unanswered request from becoming a program observation when its operation forbids blocking.
++A blocked observation retains the earlier events and ends in its pending request. Unsafe stuckness,
++a bad answer and fuel exhaustion remain evaluator/premise reports, not external events. -/
++def reportObservation (P : Exec.Program O) (A : ExecAdapter O S) (C : OperationContract S)
++    (input : C.Input) (r : Exec.Report O) (_permitted : ExecAdapter.BlockingPermitted P A C input r) :
+     Option (FullObservation S) :=
+   match r.ending with
+   | .final final => (A.terminal? final).map fun terminal =>
+       .terminal ⟨A.project r.events, terminal⟩
+   | .noAnswer c => match Exec.step P c with
+     | some (.request p vs site store _) => (A.request p vs site store).map fun request =>
+-        .blocked (A.project r.events) request
++        .blocked (A.project r.events ++ [.request request]) request
+     | _ => none
+   | .stuck _ | .badAnswer _ | .outOfFuel _ => none
+ 
+Potential doc says no infinite related finite termination but SameObservation also blocked yes fine. Long lines warningAsError not lint. Commit.[wip/spec-c6 c75160a4] spec C6: project full observations with blocking premises
+ 2 files changed, 164 insertions(+), 54 deletions(-)
+Now implement C1 validity. Should helper lemmas. Add before output C1 section after variable O or before output. I'll append block at C1 observations after variable. Should have one edit with all helper and run theorem. I can use scratch to develop perhaps edit then build iterative. Should understand `Exec.runFrom` simplification.
+
+  Helper `ValidTrace.outputs`:
+  ```
+  theorem ValidTrace.outputs {C input hist} (h:ValidTrace C input none hist) :
+   ∀ outputs, ValidTrace C input none (hist ++ outputs.map Event.output)
+   | [] => by simpa
+   | o::os => by
+      have := ValidTrace.output (o:=o) h
+      -- hist++[output] ++ map ...
+      exact ... recursive from this
+  ```
+  Induction outputs general hist:
+  ```
+  induction outputs generalizing hist with
+  nil simpa
+  cons o os ih =>
+    rw [List.map_cons, List.append_cons]
+  ```
+  `hist ++ (o.map...) = (hist++[output o]) ++ ...` by simp [List.append_assoc]. `exact ih (ValidTrace.output h)` but ih expects hist new.
+  ```
+    simpa [List.append_assoc] using ih (ValidTrace.output h)
+  ```
+  At nil simpa.
+
+  `ValidTrace.answered` helper:
+  ```
+  theorem ValidTrace.answer_projection (h : CompleteTrace C input hist)
+   {before after q r} (before outputs etc) ...
+   : CompleteTrace C input (hist ++ (before ++ [req,res] ++ after))
+  ```
+  Construct hbefore=h.outputs outputs; request; response allows with exact history `hist ++ before ++ [req]`; then after outputs.
+  Response yields ValidTrace none `((hist++before++[req])++[resp])`.
+  After hpost.outputs. Should simpa append assoc using.
+  Inputs:
+  ```
+  (h : CompleteTrace ... hist)
+  {before after} {q r}
+  (beforeOut : ∃ outputs,before=...)
+  (afterOut...)
+  (matching)
+  (allows : C.allows input (hist++before++[request q]) q r)
+  ```
+  Proof obtain outputs rfl etc.
+  ```
+  obtain ⟨before,rfl⟩ := beforeOut
+  ...
+  have h₁ := h.outputs before
+  have h₂ := ValidTrace.request h₁
+  have h₃ := ValidTrace.response h₂ matching allows
+  have h₄ := h₃.outputs after
+  simpa only [List.append_assoc, List.singleton_append, List.cons_append, List.nil_append] using h₄
+  ```
+  Expression h outputs = hist++map before. h3 = ((hist++map)++[req])++[resp]. target hist ++ (map ++ [req,resp] ++ mapafter). simp [List.append_assoc] should.
+
+  Internal helper h.outputs enough.
+
+  `runFrom_valid` theorem pair:
+  ```
+  theorem runFrom_valid ... (wf : A.WellFormed C input ρ) :
+   ∀ fuel hist c, CompleteTrace C input (A.project hist) →
+   let r:=Exec.runFrom...
+   CompleteTrace ... (A.project r.events) ∧
+   ∀ {c' p vs site store k q}, r.ending=.noAnswer c' → step... → typed... → C.mayBlock...
+  ```
+  Avoid let by `∀ fuel hist c, ... → CompleteTrace ... (A.project (runFrom...).events) ∧ ∀ ...`.
+  Quantifier:
+  ```
+  ∀ {c' p vs site store k q},
+    (Exec.runFrom P ρ fuel hist c).ending = .noAnswer c' → ...
+  ```
+  Induction fuel:
+  ```
+    intro fuel
+    induction fuel with
+    | zero =>
+      intro hist c valid
+      simp only [Exec.runFrom]
+      split <;> ...
+  ```
+  At zero runFrom matches c.final? and fuel. `simp [Exec.runFrom]` may reduce match c.final? stuck. I can `cases hf:c.final? <;> simp [Exec.runFrom,hf]`:
+  - some final: report events hist ending final, valid; noAnswer equality impossible.
+  - none fuel 0: outoffuel.
+  `constructor; exact valid; intro ... ending; cases ending`.
+  Could define helper for non-noAnswer:
+  ```
+  have noBlock : ∀ ... , (⟨hist,.outOfFuel c⟩ : Report O).ending=.noAnswer... → ... := by intro ... h; cases h
+  ```
+  Simp `simp [Exec.runFrom, hf, valid]` might solve conjunction including ∀ via contradiction. Test.
+  ```
+    | zero =>
+      intro hist c valid
+      cases final : c.final? with
+      | none => simp [Exec.runFrom, final, valid]
+      | some f => simp [Exec.runFrom, final, valid]
+  ```
+  Since simp sees `.noAnswer` equality and eliminates all. likely.
+  succ:
+  ```
+  intro hist c valid
+  cases hf:c.final? with
+  some f => simp [Exec.runFrom,hf,valid]
+  none =>
+   cases hs:Exec.step P c with
+   none => simp [Exec.runFrom,hf,hs,valid]
+   some out =>
+    cases out with
+    | next c' =>
+      simpa [Exec.runFrom,hf,hs] using ih hist c' valid
+    | request p vs site store k =>
+      cases hρ : ρ hist p vs site store with
+      | none =>
+        -- report noAnswer c
+        constructor
+        · simpa [Exec.runFrom,hf,hs,hρ] using valid
+        · intro c' p' ... q ending pending typed
+          simp [Exec.runFrom,hf,hs,hρ] at ending
+          cases ending -- c'=c
+          -- pending same step gives parameters unify with p etc
+          rw [hs] at pending; cases pending
+          exact wf.blocked hρ typed
+      | some a =>
+        by_cases ha:O.allows p vs site store a = true
+        · -- run recursive hist++event
+          have answerValid : CompleteTrace ... (A.project (hist ++ a.event.toList)) := by
+            cases ht:A.request... with
+            | none =>
+               obtain ⟨outputs,hproj⟩ := wf.internal hρ ht
+               rw [ExecAdapter.project, List.flatMap_append] ??? project def
+               change CompleteTrace ... (A.project hist ++ A.project a.event.toList)
+               rw [hproj]
+               exact valid.outputs outputs
+            | some q =>
+               obtain ... := wf.answered hρ ht
+               -- project append
+               change ...
+               rw [hproj]
+               exact valid.answer_projection ... 
+          simpa [Exec.runFrom,hf,hs,hρ,ha] using ih (hist++a.event.toList) (k a) answerValid
+        · simp [Exec.runFrom,hf,hs,hρ,ha,valid]
+  ```
+  C1 if uses `if O.allows ... then` coerces Bool; `by_cases ha : O.allows ... = true`; simp [ha].
+  Project append lemma:
+  ```
+  theorem ExecAdapter.project_append ... : A.project (xs++ys)=A.project xs++A.project ys := by simp [ExecAdapter.project,List.flatMap_append]
+  ```
+  Add.
+
+  Blocked noAnswer theorem pair pending equality simplification. `ending` from runFrom simplified perhaps after `simp only [Exec.runFrom,hf,hs,hρ,Exec.Ending.noAnswer.injEq] at ending` then subst c'. Since runFrom with fuel n+1 and c.final none. `simp [Exec.runFrom,hf,hs,hρ] at ending` could ending : c=c'? `Exec.Ending.noAnswer.injEq`. `cases ending`.
+  pending = step P c = request p' ...; rewrite hs at pending then cases pending unifies p etc. `exact wf.blocked hρ typed`.
+
+  Pair first in noAnswer `simpa [Exec.runFrom,hf,hs,hρ] using valid`.
+  For `reportObservation` validity theorem can derive:
+  ```
+  theorem runFrom_blockingPermitted ... valid :
+   ExecAdapter.BlockingPermitted P A C input (runFrom...) :=
+    (runFrom_valid...).2
+  ```
+  Its r.events exact.
+  `runFrom_valid` second already C.mayBlock.
+  `report_valid`:
+  ```
+  theorem reportObservation_valid ... (run : runFrom...=r) (permitted) :
+   match reportObservation... with
+   | some (.terminal obs) => CompleteTrace C input obs.events
+   | some (.blocked events q) => ValidTrace C input (some q) events ∧ C.mayBlock...
+   | _ => True
+  ```
+  Could be overkill. Requested projected trace report satisfies ValidTrace and blocked mayBlock already runFrom_valid. It covers all report events CompleteTrace, blocked observation trace follows `.request valid` and second. Add corollary:
+  ```
+  theorem runFrom_noAnswer_validTrace ... valid pending typed :
+   ValidTrace C input (some q) (A.project (runFrom...).events ++ [request q]) :=
+   ValidTrace.request (runFrom_valid...).1
+  ```
+  And mayBlock via second. Name two theorems `runFrom_validTrace` pair enough. Doc states both.
+
+  Finding "projected trace of a report satisfies ValidTrace" report is arbitrary `r` generated runFrom; yes.
+
+  I'll add helpers and theorem.
+
+• The projection and blocking slice is committed as `c75160a4`. I’m now adding the C1 `runFrom` induction and its two corollaries: valid pending history for a blocked observation, and the `mayBlock` witness required by the adapter.
+
+• Unused c' ending theorem no ending premise! `runFrom_noAnswer_pending_valid` currently no assumption report ending noAnswer so it claims pending request arbitrary can append any q and valid, false. Should add `ending : runFrom...ending=.noAnswer c'` to use mayBlock corollary perhaps valid pending .request complete holds regardless but any q not actual pending report false. Add ending parameter and perhaps second mayBlock theorem uses runFrom_valid. Current pending/typed unused warningAsError? Lean unused variable linter perhaps warnings not errors? I need fix before build. Add `(ending : ...=.noAnswer c')` and proof exact ValidTrace.request valid. This is valid only q from pending due ending. Proof doesn't use ending but logically not needed for construction given q arbitrary? Actually complete history always, appending any request yields pending valid no contract requirement on request, so indeed q arbitrary yields ValidTrace pending. It's true regardless ending; mayBlock separate needs ending. But finding specifically blocked report; add ending to theorem and prove mayBlock pair:
+  ```
+  : ValidTrace ... ∧ C.mayBlock ... :=
+   ⟨.request ..., (runFrom_valid...).2 ending pending typed⟩
+  ```
+  Better. Should read and edit now before build.warning: Git tree '/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c6' is dirty
+✖ [40/42] Building ConcreteSpec.Proofs.Observe2 (984ms)
+trace: .> LEAN_PATH=/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c6/.lake/build/lib/lean /nix/store/94bmilywgajdnqvix1fs35fj94kala0w-lean4-release-4.34.1/bin/lean /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c6/ConcreteSpec/Proofs/Observe2.lean -o /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c6/.lake/build/lib/lean/ConcreteSpec/Proofs/Observe2.olean -i /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c6/.lake/build/lib/lean/ConcreteSpec/Proofs/Observe2.ilean -c /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c6/.lake/build/ir/ConcreteSpec/Proofs/Observe2.c --setup /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c6/.lake/build/ir/ConcreteSpec/Proofs/Observe2.setup.json --json
+error: ConcreteSpec/Proofs/Observe2.lean:281:18: don't know how to synthesize implicit argument `q`
+  @request S C input (hist ++ List.map Event.output beforeOutputs) ?m.87 (outputs h beforeOutputs)
+context:
+S : EventSignature
+C : OperationContract S
+input : C.Input
+hist : List (Event S)
+q : Request S
+r : Response S
+h : CompleteTrace C input hist
+matching : RequestResponse q r
+beforeOutputs : List S.Output
+allows : C.allows input (hist ++ List.map Event.output beforeOutputs ++ [Event.request q]) q r
+afterOutputs : List S.Output
+⊢ Request S
+error: ConcreteSpec/Proofs/Observe2.lean:281:7: failed to infer `have` declaration type
+error: ConcreteSpec/Proofs/Observe2.lean:278:86: unsolved goals
+S : EventSignature
+C : OperationContract S
+input : C.Input
+hist : List (Event S)
+q : Request S
+r : Response S
+h : CompleteTrace C input hist
+matching : RequestResponse q r
+beforeOutputs : List S.Output
+allows : C.allows input (hist ++ List.map Event.output beforeOutputs ++ [Event.request q]) q r
+afterOutputs : List S.Output
+⊢ CompleteTrace C input
+    (hist ++
+      (List.map Event.output beforeOutputs ++ [Event.request q, Event.response r] ++
+        List.map Event.output afterOutputs))
+error: ConcreteSpec/Proofs/Observe2.lean:331:39: Application type mismatch: The argument
+  answer
+has type
+  ρ hist p vs site store = none
+but is expected to have type
+  ρ (Exec.runFrom P ρ (fuel + 1) hist c).events ?m.431 ?m.432 ?m.433 ?m.434 = none
+in the application
+  wellFormed.blocked answer
+error: ConcreteSpec/Proofs/Observe2.lean:333:45: Application type mismatch: The argument
+  site
+has type
+  SiteId
+but is expected to have type
+  O.Store
+in the application
+  O.allows p vs site
+error: ConcreteSpec/Proofs/Observe2.lean:345:24: Invalid field notation: Function `ValidTrace.answer_projection` does not have a usable parameter of type `ValidTrace ...` for which to substitute `valid`
+
+Note: Such a parameter must be explicit, or implicit with a unique name, to be used by field notation
+error: ConcreteSpec/Proofs/Observe2.lean:346:14: Type mismatch: After simplification, term
+  ih (hist ++ a.event.toList) (k a) answerValid
+ has type
+  CompleteTrace C input (A.project (Exec.runFrom P ρ fuel (hist ++ a.event.toList) (k a)).events) ∧
+    ∀ {c' : Exec.Config O} {p : O.Prim} {vs : List O.Val} {site : SiteId} {store : O.Store}
+      {k_1 : Exec.Answer O.Val O.Event O.Store → Exec.Config O} {q : Request S},
+      (Exec.runFrom P ρ fuel (hist ++ a.event.toList) (k a)).ending = Exec.Ending.noAnswer c' →
+        Exec.step P c' = some (Exec.Out.request p vs site store k_1) →
+          A.request p vs site store = some q →
+            C.mayBlock input
+              (A.project (Exec.runFrom P ρ fuel (hist ++ a.event.toList) (k a)).events ++ [Event.request q]) q
+but is expected to have type
+  CompleteTrace C input
+      (A.project
+        (if O.allows p vs store a = true then Exec.runFrom P ρ fuel (hist ++ a.event.toList) (k a)
+          else { events := hist, ending := Exec.Ending.badAnswer c }).events) ∧
+    ∀ {c' : Exec.Config O} {p_1 : O.Prim} {vs_1 : List O.Val} {site : SiteId} {store_1 : O.Store}
+      {k_1 : Exec.Answer O.Val O.Event O.Store → Exec.Config O} {q : Request S},
+      (if O.allows p vs store a = true then Exec.runFrom P ρ fuel (hist ++ a.event.toList) (k a)
+            else { events := hist, ending := Exec.Ending.badAnswer c }).ending =
+          Exec.Ending.noAnswer c' →
+        Exec.step P c' = some (Exec.Out.request p_1 vs_1 site store_1 k_1) →
+          A.request p_1 vs_1 site store_1 = some q →
+            C.mayBlock input
+              (A.project
+                  (if O.allows p vs store a = true then Exec.runFrom P ρ fuel (hist ++ a.event.toList) (k a)
+                    else { events := hist, ending := Exec.Ending.badAnswer c }).events ++
+                [Event.request q])
+              q
+error: ConcreteSpec/Proofs/Observe2.lean:348:12: unsolved goals
+case neg
+S : EventSignature
+O : Exec.Operands
+P : Exec.Program O
+A : ExecAdapter O S
+C : OperationContract S
+input : C.Input
+ρ : Exec.Oracle O
+wellFormed : A.WellFormed C input ρ
+fuel : Nat
+ih :
+  ∀ (hist : List O.Event) (c : Exec.Config O),
+    CompleteTrace C input (A.project hist) →
+      CompleteTrace C input (A.project (Exec.runFrom P ρ fuel hist c).events) ∧
+        ∀ {c' : Exec.Config O} {p : O.Prim} {vs : List O.Val} {site : SiteId} {store : O.Store}
+          {k : Exec.Answer O.Val O.Event O.Store → Exec.Config O} {q : Request S},
+          (Exec.runFrom P ρ fuel hist c).ending = Exec.Ending.noAnswer c' →
+            Exec.step P c' = some (Exec.Out.request p vs site store k) →
+              A.request p vs site store = some q →
+                C.mayBlock input (A.project (Exec.runFrom P ρ fuel hist c).events ++ [Event.request q]) q
+hist : List O.Event
+c : Exec.Config O
+valid : CompleteTrace C input (A.project hist)
+final : c.final? = none
+p : O.Prim
+vs : List O.Val
+site : SiteId
+store : O.Store
+k : Exec.Answer O.Val O.Event O.Store → Exec.Config O
+next : Exec.step P c = some (Exec.Out.request p vs site store k)
+a : Exec.Answer O.Val O.Event O.Store
+answer : ρ hist p vs site store = some a
+allowed : ¬sorry = true
+⊢ CompleteTrace C input
+      (A.project
+        (if O.allows p vs store a = true then Exec.runFrom P ρ fuel (hist ++ a.event.toList) (k a)
+          else { events := hist, ending := Exec.Ending.badAnswer c }).events) ∧
+    ∀ {c' : Exec.Config O} {p_1 : O.Prim} {vs_1 : List O.Val} {site : SiteId} {store_1 : O.Store}
+      {k_1 : Exec.Answer O.Val O.Event O.Store → Exec.Config O} {q : Request S},
+      (if O.allows p vs store a = true then Exec.runFrom P ρ fuel (hist ++ a.event.toList) (k a)
+            else { events := hist, ending := Exec.Ending.badAnswer c }).ending =
+          Exec.Ending.noAnswer c' →
+        Exec.step P c' = some (Exec.Out.request p_1 vs_1 site store_1 k_1) →
+          A.request p_1 vs_1 site store_1 = some q →
+            C.mayBlock input
+              (A.project
+                  (if O.allows p vs store a = true then Exec.runFrom P ρ fuel (hist ++ a.event.toList) (k a)
+                    else { events := hist, ending := Exec.Ending.badAnswer c }).events ++
+                [Event.request q])
+              q
+error: ConcreteSpec/Proofs/Observe2.lean:348:55: This simp argument is unused:
+  allowed
+
+Hint: Omit it from the simp argument list.
+  [apply] simp [Exec.runFrom, final, next, answer, valid]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+error: ConcreteSpec/Proofs/Observe2.lean:348:64: This simp argument is unused:
+  valid
+
+Hint: Omit it from the simp argument list.
+  [apply] simp [Exec.runFrom, final, next, answer, allowed]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+Some required targets logged failures:
+- ConcreteSpec.Proofs.Observe2
+error: build failed
+Errors:
+  - q implicit specify `(q := q)`.
+  - blocked error after cases pending weird substitution c/hist? It expects ρ runFrom events means `cases ending` substituted c? Wait wellFormed.blocked implicit hist inferred from typed? After cases pending, typed perhaps q but wellFormed.blocked expects ρ hist p vs...; error expected ρ (runFrom...events) indicates it inferred hist as report events due expected C.mayBlock uses A.project runFrom.events, which not reduced. Should have `change C.mayBlock input (A.project hist ++ [.request q]) q`; then exact.
+  - O.allows missing `vs`? At line333 `by_cases allowed : O.allows p vs site store a = true` I wrote p vs site store, indeed missing st argument ordering p vs st a, should `O.allows p vs store a`.
+  - field notation h CompleteTrace def not ValidTrace direct so `ValidTrace.answer_projection valid`.
+  - simp allowed then works after corrected.
+  - neg simp should simplify with allowed false. Once correct.
+  Fix.Single edit: all four replacements in one Edit contiguous region, 281-348, is huge, though perhaps replace multiple unique lines not possible in one call. Could Edit exact `have pending...` etc with replace_all, not consecutive. I can use one big old block from have pending through run theorem to modify. 70 lines okay but no need token concerns. Alternatively Edit supports one old string with larger specific separated cannot. Use whole block from line281 to348, mostly same. Do.Build.
+
+• The C1 induction is in place. I’m checking the recursive `runFrom` cases now, especially that response contracts use the pre-response history ending in the request and that blocked reports retain that same history.warning: Git tree '/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c6' is dirty
+✖ [40/42] Building ConcreteSpec.Proofs.Observe2 (999ms)
+trace: .> LEAN_PATH=/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c6/.lake/build/lib/lean /nix/store/94bmilywgajdnqvix1fs35fj94kala0w-lean4-release-4.34.1/bin/lean /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c6/ConcreteSpec/Proofs/Observe2.lean -o /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c6/.lake/build/lib/lean/ConcreteSpec/Proofs/Observe2.olean -i /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c6/.lake/build/lib/lean/ConcreteSpec/Proofs/Observe2.ilean -c /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c6/.lake/build/ir/ConcreteSpec/Proofs/Observe2.c --setup /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c6/.lake/build/ir/ConcreteSpec/Proofs/Observe2.setup.json --json
+error: ConcreteSpec/Proofs/Observe2.lean:283:2: Type mismatch: After simplification, term
+  outputs answered afterOutputs
+ has type
+  ValidTrace C input none
+    (hist ++
+      (List.map Event.output beforeOutputs ++
+        Event.request q :: Event.response r :: List.map Event.output afterOutputs))
+but is expected to have type
+  CompleteTrace C input
+    (hist ++
+      (List.map Event.output beforeOutputs ++
+        Event.request q :: Event.response r :: List.map Event.output afterOutputs))
+error: ConcreteSpec/Proofs/Observe2.lean:331:14: 'change' tactic failed, pattern
+  C.mayBlock input (A.project hist ++ [Event.request q]) q
+is not definitionally equal to target
+  C.mayBlock input (A.project (Exec.runFrom P ρ (fuel + 1) hist c).events ++ [Event.request q]) q
+Some required targets logged failures:
+- ConcreteSpec.Proofs.Observe2
+error: build failed
+
+
+• First CompleteTrace def not unfolded by simpa; add `[CompleteTrace,List.append_assoc]`.
+  Second change target not reduced runFrom. `simp only [Exec.runFrom, final, next, answer]` at goal perhaps simplify events but could also q? Do `simpa [Exec.runFrom, final,next,answer] using wellFormed.blocked answer typed`. Instead of change exact:
+  ```
+  simpa [Exec.runFrom, final,next,answer] using (wellFormed.blocked answer typed)
+  ```
+  But after `simp ... at ending`, runFrom reduction perhaps simp only not goal. `simpa` works.
+  Edit two occurrences separate require one Edit block small lines 281-333 with entire? Can first replace all `simpa [List.append_assoc] using answered.outputs` unique and then reread for second. Do sequential with read required.One edit old string spanning just two impossible. Do first.Read 326-333 then edit.Build.
+
+• The trace helper needed `CompleteTrace` unfolded explicitly, and the blocked branch needed its report events reduced by the `runFrom` equations. Those are corrected; I’m rebuilding before committing this adapter slice.warning: Git tree '/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c6' is dirty
+✔ [40/42] Built ConcreteSpec.Proofs.Observe2 (1.0s)
+✔ [41/42] Built ConcreteSpec (125ms)
+Build completed successfully (42 jobs).
+
+
+• Commit adapter.[wip/spec-c6 3e05ea0a] proof C6: validate C1 report traces and blocking
+ 1 file changed, 117 insertions(+)
+Now infinite stuttering. Mark todos: finding semantics done, projection done but stutter in progress.Should prove infinite stuttering robust. I'll derive list lemmas in Lean. Can create scratch file? User says don't create test/scaffolding files unless project tests no? I can create temporary under /tmp not repo via Write? Working directory only? Tools allow outside abs but instructions avoid modify outside working unless instructed. Could create `Scratch.lean` then delete, but instruction no scaffolding files perhaps temporary okay but avoid. Edit proof directly and compile.
+
+  Math formalization options.
+
+  Define helper `visiblePrefix_succ`:
+  ```
+  theorem visiblePrefix_succ steps n :
+   visiblePrefix steps (n+1) = visiblePrefix steps n ++ (steps n).event?.toList := by
+   simp [visiblePrefix,List.range_succ,List.map_append,visible,List.filterMap_append]
+   cases steps n <;> rfl
+  ```
+  Check `Option.toList`.
+  This will aid prefix extensions and stutter intervals.
+
+  For `InfiniteStuttering`, key property:
+  A. `visiblePrefix stutter (f n)=visiblePrefix steps n`.
+  B. For any m, choose n=m, need `visiblePrefix steps m = visiblePrefix stutter m ++ rest`.
+  Can prove stronger B by induction m using compare m with f n existential.
+
+  Induction m:
+  base visiblePrefix steps 0=[] = visiblePrefix stutter 0=[].
+  succ m:
+  IH ∃rest visiblePrefix steps m = visiblePrefix stutter m ++ rest.
+  At step m:
+  - if m=f n for some n:
+    stutter m=steps n. Since f strict and f n=m, f n≥n (lemma), so n≤m. The visible events at steps prefix m+1 vs stutter prefix m+1. IH rest relation arbitrary; at new step source steps m and stutter steps n, not same unless n=m. If n<m, source prefix m includes step n already in rest; decomposition can be rotated? Events order: IH rest contains steps n..m-1 visible. New stutter emits steps n, which was in rest, while new source emits steps m. I need restructure to prefix stutter m+1 + rest' = source m+1. Since source prefix m = stutter prefix m ++ rest where rest visible of steps k..m-1. If stutter m emits steps n, n should equal number of source steps already consumed k, so rest begins visible step n. Should invariant stronger with n count: visiblePrefix stutter m = visiblePrefix steps k where k is number of retained indices below m, and f k≥m. Then A general.
+
+  Define for every m exists n, n≤m ∧ f n≥m ∧ visiblePrefix stutter m = visiblePrefix steps n ∧ ∀i<n f i<m perhaps. This is "next retained index" characterization. Prove induction m:
+  base n=0, f0≥0, prefix 0; ∀i<0.
+  At m+1:
+  from IH n with f n≥m and prior.
+  - if f n = m: then stutter m=steps n, new n+1. Should f(n+1)≥m+1 from strict f n<f(n+1), yes. prefix stutter m+1 = prefix steps n ++ event steps n = prefix steps(n+1). prior i<n+1 f i<m+1: for i<n old f i<m<m+1; i=n equality.
+  - if f n > m: no retained index at m (if some f i=m, strict mono implies i=n given prior and future?). Should show ∀i f i≠m:
+    * i<n -> f i<m from IH, ne
+    * i=n -> f n>m
+    * i>n -> f i≥f(n+1)>f n>m via monotonic.
+  Then stutter m=silent, same n, f n≥m+1, prefixes unchanged.
+  This yields B with n≤m? In first n+1≤m+1 since n≤m; second n≤m≤m+1. Then visiblePrefix steps m = visiblePrefix steps n ++ rest by prefix monotonic n≤m. Great. This invariant is manageable but needs monotonicity and case f n comparisons.
+
+  Alternatively define `next` using classical choose least n with m≤f n, then prove. Induction as above.
+
+  I can prove a helper `InfiniteStuttering.prefix` by induction m returning ∃ n, n≤m ∧ m≤f n ∧ visiblePrefix stutter m=visiblePrefix steps n ∧ ∀i<n,f i<m.
+  At base n=0.
+  Step:
+  obtain ⟨n,hnm,hnf,prefix,before⟩.
+  by_cases h : f n = m.
+  Case yes choose n+1:
+  - n+1≤m+1 by omega
+  - m+1≤f(n+1) by have increasing n; omega
+  - visiblePrefix succ both. h says stutter m = steps n via retained n and f n=m. `visiblePrefix_succ stutter m`, `visiblePrefix_succ steps n`, prefix, retained.
+  - ∀i<n+1 f i<m+1: Nat.lt_succ_iff gives i≤n; if i<n use before and omega; if i=n h. omega.
+  Case no choose n:
+  - m+1≤f n since hnf m≤f n and ne => m<f n omega.
+  - stutter m=silent using absent:
+  ```
+  apply hstutter.2.2
+  intro i hi
+  by_cases hin:i<n
+    have := before i hin; omega
+  by_cases heq:i=n
+    subst; exact h
+  have hgt:n<i := by omega
+  have monotonic f hinc hgt : f n < f i
+  omega
+  ```
+  Should lemma strict monotone for arbitrary i:
+  `StepIndexIncreasing.monotone : m≤n → f m≤f n`.
+  Prove by induction on difference or n.
+  ```
+  theorem StepIndexIncreasing.monotone {f} (hf) : ∀ {m n}, m≤n → f m≤f n := by
+   intro m n h
+   induction n with
+   | zero => have:m=0:=by omega; subst; rfl
+   | succ n ih =>
+     by_cases hm:m=n+1
+     · subst; exact Nat.le_refl
+     · have hmn:m≤n:=by omega
+       exact Nat.le_trans (ih hmn) (Nat.le_of_lt (hf n))
+  ```
+  But ih general m? `induction n generalizing m`.
+  Strict version for m<n:
+  ```
+  Nat.lt_of_le_of_lt? if m<n, monotone m≤n? only ≤, need strict f m<f n. Use monotone at m+1≤n and hf m:
+  f m < f(m+1) ≤ f n.
+  ```
+  lemma `strictMono` m<n.
+  `apply` helper `increasing_apply_le n : n≤f n` induction n:
+  zero omega; succ have hf n and ih; omega.
+  Can derive from monotone 0≤n and f0≥0 no gives f n≥f0≥0 not n. Induct.
+
+  With invariant B:
+  For PrefixEventually stutter steps (direction target source):
+  for m, invariant at m yields n≤m and visible stutter m=visible steps n. `visiblePrefix_prefix` n≤m gives ∃rest visible steps m=visible steps n++rest. Return m? Definition PrefixEventually stutter steps: input n=m, choose source steps m and rest, yes.
+  For PrefixEventually steps stutter:
+  input n choose f n and rest[] using A exact.
+  A could derive from invariant at f n: gives k with k≤f n, f n≤f k, visible stutter(f n)=visible steps k and before. Strict mono + f n≤f k implies n≤k? If k<n then before k gives f k<f n contradiction; so n≤k. Also k≤f n irrelevant. Should show k≤n using f n≤f k and strict monotonic: if n<k then f n<f k, compatible not contradiction; if k<n, f k<f n contradict f n≤f k. n≤k. Should also k≤n maybe f n≤f k only implies n≤k via monotone contrapositive? Since if k<n, f k<f n, contradiction, so n≤k. That gives n≤k, not k=n. Before ∀i<k f i<f n. If n<k then before n gives f n<f n contradiction, so k≤n. Both -> k=n. Great. Then A from invariant. Could avoid separate induction A.
+
+  Actually invariant at f n includes `f n ≤ f k`, `∀i<k f i<f n`. With k<n first strict gives f k<f n contradiction second inequality; with n<k before n gives f n<f n. omega using strict lemma. So k=n.
+
+  Then SameInfiniteObservation.
+
+  Should prove `visiblePrefix_prefix`:
+  ```
+  theorem visiblePrefix_prefix (steps) {m n} (h:m≤n) :
+   ∃rest, visiblePrefix steps n=visiblePrefix steps m++rest := by
+   obtain ⟨d,rfl⟩ := Nat.exists_eq_add_of_le h -- n=m+d
+   induction d ...
+  ```
+  Could use repeated succ:
+  ```
+  induction n, h using Nat.le_induction with
+  | base => exact ⟨[],by simp⟩
+  | succ n hmn ih =>
+   obtain ⟨rest,ih⟩
+   refine ⟨rest ++ (steps n).event?.toList, ?_⟩
+   rw [visiblePrefix_succ, ih, List.append_assoc]
+  ```
+  Lean `Nat.le_induction` syntax familiar. Simpler obtain d:
+  ```
+  obtain ⟨d, rfl⟩ := Nat.exists_eq_add_of_le h
+  ```
+  Check lemma gives n = m + d or m + d = n? In Lean core `Nat.exists_eq_add_of_le : m≤n → ∃k,n=m+k`. Used often `obtain ⟨d, rfl⟩ := Nat.exists_eq_add_of_le h`. Then induction d:
+  base simp
+  succ:
+  visiblePrefix steps (m+(d+1)) = visiblePrefix steps ((m+d)+1) arithmetic.
+  ```
+  induction d with
+  | zero => exact ⟨[],by simp⟩
+  | succ d ih =>
+   obtain ⟨rest,h⟩
+   refine ⟨rest++..., ?_⟩
+   rw [show m+(d+1)=m+d+1 by omega, visiblePrefix_succ, h,List.append_assoc]
+  ```
+  Works.
+
+  `visiblePrefix_succ` simp:
+  visiblePrefix = visible(map range)
+  List.range_succ gives range(n+1)=range n ++ [n]. map append. visible filterMap append. `simp [visiblePrefix,List.range_succ,visible,List.filterMap_append]`; Step.event? cases.
+  Try implement helpers before `SameInfiniteObservation` perhaps after Same... trans because theorem uses SameInfiniteObservation. Put after SameInfiniteObservation.trans before SameObservation.refl. It will be ~170 lines. Should have no new axioms only induction.
+
+  Define `StepIndexIncreasing.monotone` as theorem namespace.
+  ```
+  theorem StepIndexIncreasing.monotone {f} (hf) {m n} (h:m≤n): f m≤f n := by
+   induction n generalizing m with...
+  ```
+  Strict:
+  ```
+  theorem ...strict {m n} (h:m<n): f m<f n := by
+   have hm : f m < f(m+1):=hf m
+   have hn : f(m+1)≤f n := hf.monotone h
+   omega
+  ```
+  `h` m<n defeq m+1≤n.
+  `apply_le`:
+  ```
+  theorem ...apply_le (n) : n≤f n := by induction n ... omega
+  ```
+  Invariant theorem:
+  ```
+  theorem InfiniteStuttering.prefix_indices {steps f stutter} (h:InfiniteStuttering...) :
+  ∀ m, ∃ n, n≤m ∧ m≤f n ∧ visiblePrefix stutter m=visiblePrefix steps n ∧ ∀i<n,f i<m := by
+   intro m; induction m...
+  ```
+  h destruct `obtain ⟨increasing,kept,silent⟩ := h`.
+  Base:
+  `exact ⟨0, Nat.le_refl _, Nat.zero_le _, rfl, by intro i hi; omega⟩`
+  Step:
+  obtain...
+  by_cases atIndex : f n = m
+  · refine ⟨n+1, by omega, ?_, ?_, ?_⟩
+    · have := increasing n; omega
+    · rw [visiblePrefix_succ, visiblePrefix_succ, prefix]
+      have keep : stutter m = steps n := by rw [←atIndex]; exact kept n
+      rw [keep]
+    · intro i hi
+      have hi' : i≤n := by omega
+      by_cases i=n
+      · subst; omega
+      · have := before i (by omega); omega
+  · refine ⟨n, by omega, by omega, ?_, before?⟩
+    prefix:
+     rw [visiblePrefix_succ]
+     have noIndex : ∀i,f i≠m := by
+       intro i hi
+       by_cases iln:i<n
+       · have := before i iln; omega
+       · by_cases ieq:i=n
+         · subst i; exact atIndex
+         · have ilt:n<i:=by omega
+           have := increasing.strict ilt
+           omega
+     rw [silent m noIndex]
+     simp [Step.event?] -- visiblePrefix stutter m ++ [].toList =...
+     exact prefix perhaps `simpa [Step.event?] using prefix`.
+    ∀i<n f i<m+1: intro; before; omega.
+  The `visiblePrefix_succ` RHS `(Step.silent).event?.toList` simplification.
+  Case atIndex prefix after rw keep goal visiblePrefix steps n ++ (steps n).event?.toList = same, rfl.
+
+  A theorem `at_retained`:
+  ```
+  theorem InfiniteStuttering.visiblePrefix_at {..} h n :
+   visiblePrefix stutter (f n)=visiblePrefix steps n := by
+   obtain ⟨k,hkbound,hfnk,prefix,before⟩ := h.prefix_indices (f n)
+   have hkn : k=n := by
+     apply Nat.le_antisymm
+     · by_contra hnot
+       have hnk:n<k:=by omega
+       have := before n hnk
+       omega
+     · by_contra hnot
+       have hkn:k<n:=by omega
+       have := h.1.strict hkn
+       omega
+   simpa [hkn] using prefix
+  ```
+  First k≤n via not k≤n -> n<k, before n f n<f n.
+  Second n≤k via not -> k<n, strict f k<f n and hfnk f n≤f k.
+  Works.
+
+  Then `infinite_stuttering`:
+  ```
+  theorem infinite_stuttering ... (h) :
+   SameObservation (.infinite steps) (.infinite stutter) := by
+   constructor
+   · intro n
+     exact ⟨f n,[], by simp [h.visiblePrefix_at]⟩
+   · intro m
+     obtain ⟨n,hnm,_,prefix,_⟩ := h.prefix_indices m
+     obtain ⟨rest,extended⟩ := visiblePrefix_prefix steps hnm
+     exact ⟨m,rest, by rw [extended,prefix]⟩
+  ```
+  SameObservation def reduces to SameInfiniteObservation, `constructor` likely works after `change SameInfiniteObservation steps stutter`.
+  First direction PrefixEventually steps stutter: goal visiblePrefix stutter (f n)=visiblePrefix steps n++[]; simp [h.visiblePrefix_at].
+  Second as above.
+
+  This is real general proof.
+
+  Potential name conflict `infinite_stuttering` spec def InfiniteStuttering capital fine.
+
+  Add block after SameInfiniteObservation.trans.
+
+• The C1 validity proof is committed as `3e05ea0a`. For infinite stuttering, I’m proving a prefix-index invariant: at every new step, the visible prefix is exactly the old prefix up to the next retained index. This gives both eventual-prefix directions without assuming termination or infinitely many emissions.
+
+• Build.warning: Git tree '/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c6' is dirty
+✖ [40/42] Building ConcreteSpec.Proofs.Observe2 (1.0s)
+trace: .> LEAN_PATH=/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c6/.lake/build/lib/lean /nix/store/94bmilywgajdnqvix1fs35fj94kala0w-lean4-release-4.34.1/bin/lean /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c6/ConcreteSpec/Proofs/Observe2.lean -o /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c6/.lake/build/lib/lean/ConcreteSpec/Proofs/Observe2.olean -i /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c6/.lake/build/lib/lean/ConcreteSpec/Proofs/Observe2.ilean -c /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c6/.lake/build/ir/ConcreteSpec/Proofs/Observe2.c --setup /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c6/.lake/build/ir/ConcreteSpec/Proofs/Observe2.setup.json --json
+error: ConcreteSpec/Proofs/Observe2.lean:86:86: unsolved goals
+case silent
+S : EventSignature
+steps : Nat → Step S
+n : Nat
+⊢ (match steps n with
+    | Step.silent => none
+    | Step.emit event => some event) =
+    none
+
+case emit
+S : EventSignature
+steps : Nat → Step S
+n : Nat
+event✝ : Event S
+⊢ List.filterMap Step.event? [steps n] = [event✝]
+error: ConcreteSpec/Proofs/Observe2.lean:97:17: unexpected token 'prefix'; expected rcasesPat
+error: ConcreteSpec/Proofs/Observe2.lean:97:4: Unexpected syntax
+  failed to pretty print term (use 'set_option pp.rawOnError true' for raw representation)
+error: ConcreteSpec/Proofs/Observe2.lean:97:24: unexpected token '⟩'; expected ':'
+error: ConcreteSpec/Proofs/Observe2.lean:99:73: unexpected token ','; expected ':'
+error: ConcreteSpec/Proofs/Observe2.lean:105:38: No goals to be solved
+error: ConcreteSpec/Proofs/Observe2.lean:105:9: unsolved goals
+case zero
+f : Nat → Nat
+increasing : StepIndexIncreasing f
+m : Nat
+h : m ≤ 0
+this : m = 0
+⊢ f m ≤ f 0
+error: ConcreteSpec/Proofs/Observe2.lean:135:35: unexpected token 'prefix'; expected rcasesPat
+error: ConcreteSpec/Proofs/Observe2.lean:135:4: Unexpected syntax
+  failed to pretty print term (use 'set_option pp.rawOnError true' for raw representation)
+error: ConcreteSpec/Proofs/Observe2.lean:135:42: unexpected token ','; expected ':'
+error: ConcreteSpec/Proofs/Observe2.lean:140:58: unexpected token ']'; expected ':'
+error: ConcreteSpec/Proofs/Observe2.lean:161:40: unexpected token '·'; expected ':'
+error: ConcreteSpec/Proofs/Observe2.lean:171:33: unexpected token 'prefix'; expected rcasesPat
+error: ConcreteSpec/Proofs/Observe2.lean:171:40: unexpected token ','; expected ':'
+error: ConcreteSpec/Proofs/Observe2.lean:182:27: unexpected token '/--'; expected ':'
+error: ConcreteSpec/Proofs/Observe2.lean:195:35: unexpected token 'prefix'; expected rcasesPat
+error: ConcreteSpec/Proofs/Observe2.lean:195:4: Unexpected syntax
+  failed to pretty print term (use 'set_option pp.rawOnError true' for raw representation)
+error: ConcreteSpec/Proofs/Observe2.lean:195:42: unexpected token ','; expected ':'
+error: ConcreteSpec/Proofs/Observe2.lean:197:43: unexpected token ']'; expected ':'
+Some required targets logged failures:
+- ConcreteSpec.Proofs.Observe2
+error: build failed
+`prefix` reserved keyword in Lean? Cannot variable prefix. Rename `pref` all. Errors cascading. visiblePrefix cases `cases hstep : steps n` rather than `cases steps n` doesn't generalize occurrences. Use `cases hstep : steps n <;> simp [visiblePrefix,List.range_succ,visible,List.filterMap_append,Step.event?,hstep]`. It should.
+  Monotone zero `subst m` didn't substitute? `this : m=0`, `subst m` leaves f m? perhaps subst picked 0? Use `simpa [this]`.
+  "No goals to be solved" line105 because `subst m; exact` after subst closed by reflexivity perhaps exact extra. I'll simplify zero `simpa [show m=0 by omega]`.
+  Should Read block and Edit entire maybe rename all with replace_all `prefix` would affect visiblePrefix names and doc? Can't replace_all. Use exact string patterns `, prefix,` etc but several edits. Better rewrite whole block with corrected names and visible succ and monotone zero in one Edit old from visiblePrefix_succ through infinite_stuttering. Long ~120 lines but manageable. Or incremental `Edit replace_all "prefix" -> "pref"` would rename visiblePrefix to visiblePref undesired and PrefixEventually to PrefEventually breaking all. Not.
+  Could use Bash sed forbidden. Must Edit.
+  Do one big old section maybe current content read 84-200.
+
+• The first infinite-stuttering build found a few syntax and simplification issues (`prefix` is a parser keyword here, and the one-step lemma must rewrite with the step equation). I’m correcting those directly; the induction invariant itself is unchanged.
+
+• One edit replace entire block 84-197 with same corrections.Build.
+
+• The parser and step-equation fixes are applied. I’m rebuilding the full specification library to validate the general stuttering theorem and all earlier proofs together.warning: Git tree '/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c6' is dirty
+✖ [40/42] Building ConcreteSpec.Proofs.Observe2 (990ms)
+trace: .> LEAN_PATH=/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c6/.lake/build/lib/lean /nix/store/94bmilywgajdnqvix1fs35fj94kala0w-lean4-release-4.34.1/bin/lean /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c6/ConcreteSpec/Proofs/Observe2.lean -o /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c6/.lake/build/lib/lean/ConcreteSpec/Proofs/Observe2.olean -i /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c6/.lake/build/lib/lean/ConcreteSpec/Proofs/Observe2.ilean -c /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c6/.lake/build/ir/ConcreteSpec/Proofs/Observe2.c --setup /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c6/.lake/build/ir/ConcreteSpec/Proofs/Observe2.setup.json --json
+error: ConcreteSpec/Proofs/Observe2.lean:97:11: Tactic `rcases` failed: `ih : m ≤ m + d →
+  ∃ rest, visiblePrefix steps (m + d) = visiblePrefix steps m ++ rest` is not an inductive datatype
+error: ConcreteSpec/Proofs/Observe2.lean:105:12: try 'simp' instead of 'simpa'
+
+Note: This linter can be disabled with `set_option linter.unnecessarySimpa false`
+error: ConcreteSpec/Proofs/Observe2.lean:174:7: unknown tactic
+error: ConcreteSpec/Proofs/Observe2.lean:174:4: unsolved goals
+case h₁
+S : EventSignature
+steps : Nat → Step S
+f : Nat → Nat
+stutter : Nat → Step S
+h : InfiniteStuttering steps f stutter
+n k : Nat
+oldBound : k ≤ f n
+nextBound : f n ≤ f k
+pref : visiblePrefix stutter (f n) = visiblePrefix steps k
+before : ∀ (i : Nat), i < k → f i < f n
+⊢ k ≤ n
+error: ConcreteSpec/Proofs/Observe2.lean:172:23: unsolved goals
+case h₂
+S : EventSignature
+steps : Nat → Step S
+f : Nat → Nat
+stutter : Nat → Step S
+h : InfiniteStuttering steps f stutter
+n k : Nat
+oldBound : k ≤ f n
+nextBound : f n ≤ f k
+pref : visiblePrefix stutter (f n) = visiblePrefix steps k
+before : ∀ (i : Nat), i < k → f i < f n
+⊢ n ≤ k
+error: ConcreteSpec/Proofs/Observe2.lean:170:59: unsolved goals
+S : EventSignature
+steps : Nat → Step S
+f : Nat → Nat
+stutter : Nat → Step S
+h : InfiniteStuttering steps f stutter
+n k : Nat
+oldBound : k ≤ f n
+nextBound : f n ≤ f k
+pref : visiblePrefix stutter (f n) = visiblePrefix steps k
+before : ∀ (i : Nat), i < k → f i < f n
+same : k = n
+⊢ visiblePrefix stutter (f n) = visiblePrefix steps n
+Some required targets logged failures:
+- ConcreteSpec.Proofs.Observe2
+error: build failed
+
+
+• visiblePrefix_prefix induction d has h dependency not generalized because h used obtain d and induction hypothesis requires proof. Should `induction d with` after obtain has ih `m≤m+d →...`. Can either `obtain ⟨rest,pref⟩ := ih (Nat.le_add_right...)` each. For zero no ih. succ `ih (by omega)`.
+  Or generalize before induction. Use `obtain ⟨rest,pref⟩ := ih (by omega)`.
+  Monotone zero linter warningAsError: `simp [show m=0 by omega]` not simpa.
+  Unknown tactic line174 likely `by_contra` core tactic? Lean by_contra exists used perhaps no? Search existing uses by_contra.`by_contra` unknown tactic surprising Lean core has `by_contra` mathlib? Existing uses `by_cases` only. Use `by_cases le : k≤n; exact le; have later...; exfalso; omega`. Since goal k≤n, by_cases already.
+  ```
+  · by_cases le:k≤n
+    · exact le
+    · have later:n<k:=by omega
+      have impossible:=before n later
+      omega
+  ```
+  same other.
+  Final simpa same perhaps subst same then exact pref. `subst k` might work. `simpa only [same] using pref` linter perhaps okay. Could `rw [same] at pref; exact pref`.
+  I'll Edit block includes all three small separated impossible one call unless whole 91-182. Could use first edit `ih (by omega)` and then read etc. I have lots tool calls no issue. Use Edit unique old `obtain ⟨rest,pref⟩ := ih` one.One edit from zero only then read again; or replace the whole line 105 and by_contra region in one large span from induction n through same, which includes many lines, so no. Do first zero.Read 168 then edit bycontra.
+
+• The remaining issues are local: an induction hypothesis needs its arithmetic premise, and this core-only environment does not provide the `by_contra` tactic. I’m replacing that with explicit `by_cases` branches and rebuilding.
+
+warning: Git tree '/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c6' is dirty
+✔ [40/42] Built ConcreteSpec.Proofs.Observe2 (1.0s)
+✔ [41/42] Built ConcreteSpec (127ms)
+Build completed successfully (42 jobs).
+• Build passes. Should inspect theorem correctness no unused warnings. Commit.[wip/spec-c6 caa4fad8] proof C6: preserve observations under infinite stuttering
+ 1 file changed, 118 insertions(+)
+All findings perhaps need check finding4 "An infinite run whose steps are all silent after some point must never be related to a terminated run." Existing theorem all silent only not after some point. User specifically general after some point. Mixed SameObservation always false regardless steps, trivial theorem could add `eventually_silent_not_termination` with premise `∃ n ∀m≥n, steps m=silent`, but premise unused logically yet states. Better add general theorem no SameObservation infinite any steps finite terminal (stronger), existing infinite_silent. `infinite_not_termination (steps) (finiteSteps) terminal : ¬ SameObservation infinite steps finite ... := by simp`. Then covers all. Existing `infinite_silent_not_termination` only all silent, finding could accept mixed definition. But add `eventually_silent_not_termination` explicit with premise to satisfy wording. No new spec. Theorem:
+  ```
+  theorem eventually_silent_not_termination (steps) (n) (silent : ∀m,n≤m→steps m=.silent) (terminal):
+   ¬ SameObservation (.infinite steps) (.finite [] terminal) := by simp [SameObservation]
+  ```
+  unused silent warning? Lean linter unusedVariables not theorem proof locals perhaps no. But premise unnecessary and theorem weird. Stronger:
+  ```
+  theorem infinite_not_termination (steps : Nat→Step S) (terminal) :
+   ¬ SameObservation (.infinite steps) (.finite [] terminal) := by simp
+  ```
+  Then doc mentions in particular eventually silent. Replace existing infinite_silent with general and corollary existing retains. But new theorem after commit requires build/commit another small. Also HasFullObservation finiteDivergence relation perhaps eventually silent canonical not explicitly proving actual eventually silent execution Has. Reviewer may demand relation "covering eventually-silent" my SameInfiniteObservation canonical does mathematically but can prove `eventually_silent_hasFullObservation` using infinite stuttering? I can use SameInfiniteObservation with canonical via prefix lemma easier than general stuttering? For eventually silent steps after n and visiblePrefix n=events, canonical finiteDivergenceSteps events. Should have SameInfiniteObservation. Could show using PrefixEventually and visiblePrefix of canonical. But no requirement explicit theorem beyond Has definition. Review likely okay.
+
+  Finding4 "stuttering an infinite run (via strictly increasing index map, with all other steps silent), preserves observation" I prove SameObservation. Full observation transport theorem combines. Good.
+
+  Finding5 "Prove that when every oracle answer satisfies environment relation projected trace of a report satisfies ValidTrace (and, for blocked report, mayBlock)." yes.
+
+  Finding2 reportObservation premise perhaps accepted. Good.
+
+  Perhaps update examples to reflect blocked convention no existing blocked FullObservation examples besides launch finite. No compile issues.
+
+  Now run allowed rules/trust. But before response perhaps review code for comments stale. Header proofs currently says "finite observation laws identify executions after removing any number silent... infinite law compares..." now accurate. Could mention stuttering but okay. Spec Exec no edits. Should trust ban. `scripts/spec/rules.sh` might no new registered rules required? Run both in parallel? light checks can run parallel independent read only builds, okay. Also check axiom inventory forbidden axioms not run. Could run `#print axioms`? Not allowed axioms.sh only, no need. trust_ban. Before final build after no changes done. I should add infinite_not_termination to explicitly cover. It changes theorem new commit required. Is it overkill? User requested "An infinite run whose steps are all silent after some point must never be related to a terminated run." Existing SameObservation mixed false already and theorem `infinite_silent_not_termination` proves only all silent. Since definition covers any infinite, but explicit new theorem stronger is clear. Add:
+  ```
+  theorem infinite_not_termination (steps) (terminal) :
+   ¬ SameObservation (.infinite steps) (.finite [] terminal) := by simp...
+  ```
+  Then existing `infinite_silent_not_termination` exact infinite_not_termination... avoids duplicate. New theorem states all infinite not termination, stronger. It is not related to any finite steps as well could include finiteSteps.:
+  ```
+  theorem infinite_not_termination (steps) (finiteSteps) terminal :
+   ¬ SameObservation infinite steps finite finiteSteps terminal := by simp
+  ```
+  Then existing exact. This directly ensures. Build and commit.
+
+  Also could prove HasFullObservation terminal never infinite:
+  ```
+  theorem infinite_has_no_terminal ... (h:HasFullObservation infinite steps (.terminal obs)) : False := h.elim
+  ```
+  No need.
+
+  Do edit.
+
+• The general infinite-stuttering proof is committed as `caa4fad8`. I’m adding one explicit strengthening of the terminal-exclusion corollary—no infinite execution, including an eventually silent one, is equivalent to any finite termination—then I’ll run the allowed rule and trust checks.
+
+• Long lines at 256 existing from my earlier could format but not needed. Add theorem.Build then commit.warning: Git tree '/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c6' is dirty
+✔ [40/42] Built ConcreteSpec.Proofs.Observe2 (1.1s)
+✔ [41/42] Built ConcreteSpec (124ms)
+Build completed successfully (42 jobs).
+[wip/spec-c6 b48656e8] proof C6: exclude termination from every infinite run
+ 1 file changed, 9 insertions(+), 2 deletions(-)
+Now mark projection done validation in progress.Run allowed scripts parallel perhaps each nix develop.
+
+• All requested proof slices are committed, and the full `ConcreteSpec` build passes after the final change. I’m running the two allowed light checks now, then I’ll inspect the final diff and repository state.=== the specification ===
+  ok   1 registered rules in 39 sources, each documented with an existing decision row and an accepted and a refused example; every citation names a registered rule
+  ok   the registry and every rule citation of ConcreteSpec
+=== negative controls ===
+  ok   control: a documented rule with both examples passes
+  ok   control: a rule with no refused example fails
+  ok   control: a rule whose doc cites no decision row fails
+  ok   control: a rule registered twice fails
+  ok   control: a rule naming no declaration fails
+  ok   control: a citation of an unregistered rule fails
+  ok   control: a verdict on a non-example fails
+  ok   control: revision 0 fails
+  ok   control: a truncated listing is an error
+  ok   control: a rule with no accepted example fails
+  ok   control: a rule with no doc comment fails
+  ok   control: a rule citing a row no inventory has fails
+  ok   control: one example claiming both verdicts fails
+  ok   control: a verdict in a nested comment fails
+  ok   control: an unregistered quoted name fails
+  ok   control: examples with an attribute or a modifier count
+  ok   control: an unlexable source is an error
+  ok   control: a verdict in a string literal fails
+  ok   control: an attribute with brackets inside counts
+  ok   control: a row an inventory only mentions does not count
+  ok   control: an attribute string cannot stand in for an example
+  ok   control: an attribute holding a string with a bracket counts
+  ok   control: a quoted name holding a backtick is checked
+  ok   control: a malformed citation fails
+  ok   control: a raw string in an attribute cannot stand in for an example
+  ok   control: a quoted name in an attribute cannot stand in for an example
+  ok   control: a comment in an attribute cannot stand in for an example
+  ok   control: a quoted name holding citation-like text is one citation
+  ok   control: a missing source directory is an error
+  ok   control: a source directory with no .lean file is an error
+  ok   control: a checker that hangs through both attempts is INCOMPLETE
+SPEC-RULES: PASS=32 FAIL=0
+=== E/D: the environment ===
+  ok   all 40 ConcreteSpec source modules are in the environment E and D read
+  ok   none of the 7430 ConcreteSpec constants depends on sorryAx, ofReduceBool/Nat, trustCompiler or a native axiom
+  ok   ConcreteSpec declares no axiom
+=== S: the sources ===
+  ok   none of the 40 source files spells a banned word outside comments
+  ok   lakefile.toml builds the library with warningAsError, and nothing overrides it
+=== X: the examples, in the kernel's terms ===
+  ok   all 256 examples, kept as declarations, depend only on the standard axioms
+=== negative controls ===
+  ok   control: a theorem proved by sorry is refused (ConcreteSpecControl.sorryThm (sorryAx))
+  ok   control: a definition with a sorry body and no theorem about it is refused (ConcreteSpecControl.sorryDef (sorryAx))
+  ok   control: a theorem proved by native_decide is refused (ConcreteSpecControl.nativeThm (ConcreteSpecControl.nativeThm._native.native_decide.ax_1_1))
+  ok   control: a declared axiom is reported
+  ok   control: an axiom whose name holds a tab fails the run (no row can carry it)
+  ok   control: native_decide, and sorry inside an interpolation, after a string, raw string or quoted name holding comment delimiters, after an interpolation holding a string, a direct sorryAx, a syntax extension, an outside import, an option, meta code and decide options (native split across lines, positional) are found; the words in comments are not
+  ok   control: the header import ConcreteSpec.Spec Lean is reported
+  ok   control: the header import ConcreteSpec.Spec   Lean is reported
+  ok   control: the header prelude import ConcreteSpec.Spec is reported
+  ok   control: a library that turns warningAsError off is refused (the library sets options ['warningAsError'])
+  ok   control: a library built from another source directory is refused (the library sets ['srcDir'])
+  ok   control: a source the scan cannot read or lex (missing) fails it (rc=3)
+  ok   control: a source the scan cannot read or lex (Open) fails it (rc=3)
+  ok   control: a source the scan cannot read or lex (Brace) fails it (rc=3)
+  ok   control: a source the scan cannot read or lex (Quote) fails it (rc=3)
+  ok   control: source modules outside a (truncated) import closure are reported
+  ok   control: an example proved by decide +native and one closed by stop are reported, rfl is not, and the word example in a string is no example («⟪example⟫C.lean:1» («⟪example⟫C.lean:1»._native.decide.ax_1) «⟪example⟫C.lean:2» (sorryAx) )
+PROOF-TRUST-BAN: PASS=23 FAIL=0
+
+
+• Should have final inspection git status/log diff base. Check no new files.b48656e8 proof C6: exclude termination from every infinite run
+caa4fad8 proof C6: preserve observations under infinite stuttering
+3e05ea0a proof C6: validate C1 report traces and blocking
+c75160a4 spec C6: project full observations with blocking premises
+ ConcreteSpec/Proofs/Observe2.lean | 368 +++++++++++++++++++++++++++++++++-----
+ ConcreteSpec/Spec/Observe.lean    |  94 ++++++++--
+ 2 files changed, 407 insertions(+), 55 deletions(-)
+Should think if all new theorem list final can group not every helper? User says "what each new theorem states" likely list all new theorems including StepIndexIncreasing.monotone/strict/apply_le, ValidTrace.outputs/answer_projection, project_append. Should enumerate accurately. Could respond with 4 commits and findings. I can list grouped theorem bullets including all ~20. Should check no final uncommitted status output blank before log yes clean.
+
+  Potential issue axioms.golden not regenerated as instructed no edit. Heavy not run mention. No questions. Anything left? Nothing from round2 left. I did not run CI heavy per brief, reviewer regenerates axioms golden. Could mention left: no `Exec.lean` changes; no heavy gates per brief. Do I need codex review? ROUND2 says fix findings no explicit /creview. AGENTS every slice gets review before lands, not landing. Fine.
+
+  But perhaps need ensure all theorem axioms allowed. trust_ban only banned not axiom whitelist for all theorem but original allowed. `omega` uses no axioms, by_cases classical? `by_cases` uses Classical.propDecidable possibly Classical.choice allowed. Fine.
+
+  Potential subtle `SilentInsertion` cannot insert silent before first if original list nonempty? `SilentInsertion.silent` adds silent head of after at any recursion, yes anywhere including front/end. Good.
+  Infinite stuttering relation f strictly increasing, all other silent, proof general. Good.
+  `HasFullObservation` infinite finite divergence canonical relation covers all eventually silent and could include weird infinitely emitting with same finite trace impossible by prefix relation. Good.
+
+  Potential soundness `runFrom_noAnswer_pending_valid` theorem valid from runFrom any report ending noAnswer. yes.
+  WellFormed internal answer only outputs, answered typed output req res output. ValidTrace proof.
+  ReportObservation blocked includes request, premise mayBlock.
+  Output pending restricted.
+  Nit header done.
+
+  One concern `reportObservation` premise is unused computationally, but impossible to call without proof for noAnswer. For arbitrary r one can provide proof via ex falso if ending not noAnswer. Good.
+
+  No new tests requested examples perhaps rule registry only registered rule no need. Could add accepted/refused output pending example? Original hard rules examples accepted/refused where rule registered; ValidTrace not registered, existing accepted output no pending. No need.
+
+  Perhaps mark final TODO done for validation and summary in progress then respond all done? Before responding use TodoList mark validation done summary done? Instructions say keep exactly one in_progress; before responding list matches. I can set summary in_progress now then respond after preparing perhaps mark done and respond. No need more tools except full commit SHAs perhaps full SHA user asks SHA + line short accepted. Could get full? "commits (SHA + one line)" short SHA valid. I have short 8 chars. Fine.
+
+  Should response include build check results and heavy not run. QUESTIONS None. Theorems new:
+  From first commit:
+  - SilentInsertion.visible
+  - silent_internal_steps
+  - blocked_silent_internal_steps
+  - full_observation_preservation changed theorem
+  - report_noAnswer_mayBlock new
+  - report_noAnswer_blocked updated
+  - report_outOfFuel_none updated
+  From infinite:
+  - visiblePrefix_succ
+  - visiblePrefix_prefix
+  - StepIndexIncreasing.monotone
+  - strict
+  - apply_le
+  - InfiniteStuttering.prefix_indices
+  - visiblePrefix_at
+  - infinite_stuttering
+  - infinite_not_termination
+  C1:
+  - ValidTrace.outputs
+  - ValidTrace.answer_projection
+  - ExecAdapter.project_append
+  - runFrom_validTrace
+  - runFrom_noAnswer_pending_valid
+  - runFrom_blockingPermitted
+  All "new theorem" 18.
+  Also SameObservation etc existing not new no need. `infinite_silent_not_termination` existing theorem proof changed no statement same. output before unchanged. New definitions mention HasFullObservation etc under findings.
+
+  Response structure:
+  "Implemented all six findings on wip/spec-c6. No push."
+  Commits list.
+  Findings fixed numbered concise mapping.
+  Theorems grouped:
+  Observation/stuttering bullets perhaps combine helpers in one bullet each but "what each states" all names explicitly.
+  C1/report bullets.
+  Checks.
+  Left/questions.
+
+  Could avoid duplication by findings + theorem list somewhat redundant but requested. Use compact bullets.
+  Mention no changes to axioms golden and Exec, no heavy gates run (not requested) under left "No round-2 item remains. Heavy axiom/kernel/external gates intentionally left to reviewer; axioms.golden untouched." Is that "anything left with reason" yes.
+  QUESTIONS: None.
+
+  Before responding mark todos done.
+
+• Both allowed checks pass, the final diff is clean, and no generated or untracked files were added. All six review findings are addressed; the heavy axiom, kernel-replay, external, and full CI gates remain for the reviewer as required.
+
+• Respond detailed but not huge. Include file citations. Ensure "what each new theorem states" no omission `StepIndexIncreasing.apply_le` etc. State updated report theorem too perhaps new only requested but list new and changed. I can say "New/updated laws". Commits one-line. Findings fixed mapping all six. Checks exact. QUESTIONS none. No need code snippets.
+
+• Implemented all six round-two findings on `wip/spec-c6`. Nothing was pushed.
+
+  **Commits**
+  - `c75160a4` — spec C6: project full observations with blocking premises
+  - `3e05ea0a` — proof C6: validate C1 report traces and blocking
+  - `caa4fad8` — proof C6: preserve observations under infinite stuttering
+  - `b48656e8` — proof C6: exclude termination from every infinite run
+
+  **Findings fixed**
+  1. `ValidTrace.output` now requires no pending request, preserving sequential request/response history (`ConcreteSpec/Spec/Observe.lean:88`).
+  2. `reportObservation` now requires `BlockingPermitted`; forbidden blocking cannot become a program observation (`ConcreteSpec/Spec/Observe.lean:315`).
+  3. Added `HasFullObservation`, projecting finite, blocked, eventually silent, and infinitely emitting executions. `full_observation_preservation` now transports that projection across `SameObservation` (`ConcreteSpec/Spec/Observe.lean:246`, `ConcreteSpec/Proofs/Observe2.lean:225`).
+  4. Added arbitrary finite `SilentInsertion` and infinite stuttering through a strictly increasing index map, with every non-retained step silent. No infinite run is related to finite termination (`ConcreteSpec/Proofs/Observe2.lean:190`, `ConcreteSpec/Proofs/Observe2.lean:265`).
+  5. Added `ExecAdapter.WellFormed`: typed answers project to output, request, matching response, output, with the response contract checked against the history ending in the request. Blocked observations include that request. `runFrom_validTrace` proves the report invariant (`ConcreteSpec/Spec/Observe.lean:279`, `ConcreteSpec/Proofs/Observe2.lean:418`).
+  6. The header identifies C6 as the replacement for pre-foundation `ConcreteSpec.Spec.Observation`, retired at A2i integration step 12 (`ConcreteSpec/Spec/Observe.lean:6`).
+
+  **New and updated laws**
+  - `SilentInsertion.visible`: finite silent insertion preserves the ordered visible events.
+  - `silent_internal_steps`: arbitrary finite silent insertion preserves a terminated observation.
+  - `blocked_silent_internal_steps`: the same holds for blocked executions and their pending request.
+  - `visiblePrefix_succ`: one additional step appends exactly its optional event.
+  - `visiblePrefix_prefix`: a shorter execution prefix’s events prefix any longer prefix.
+  - `StepIndexIncreasing.monotone`: an increasing index map is monotone on every ordered pair.
+  - `StepIndexIncreasing.strict`: it strictly increases on every strictly ordered pair.
+  - `StepIndexIncreasing.apply_le`: every strictly increasing natural-index map is unbounded.
+  - `InfiniteStuttering.prefix_indices`: every stuttered prefix equals an old prefix up to the next retained index.
+  - `InfiniteStuttering.visiblePrefix_at`: the prefix before `f n` equals the original prefix before `n`.
+  - `infinite_stuttering`: arbitrary infinite stuttering preserves the complete observation in both eventual-prefix directions.
+  - `full_observation_preservation`: any full observation of `x` is also a full observation of equivalent `y`.
+  - `infinite_not_termination`: no infinite execution, including eventually silent divergence, is equivalent to finite termination.
+  - `ValidTrace.outputs`: output-only extensions preserve complete valid traces.
+  - `ValidTrace.answer_projection`: the adapter’s output/request/response/output shape extends a valid trace.
+  - `ExecAdapter.project_append`: C1 event projection distributes over appended histories.
+  - `runFrom_validTrace`: every well-formed C1 report has a complete valid history; `noAnswer` also has blocking permission.
+  - `runFrom_noAnswer_pending_valid`: a blocked report has the pending `ValidTrace` and `mayBlock` witness in the history ending in its request.
+  - `runFrom_blockingPermitted`: a well-formed C1 run supplies `reportObservation`’s blocking premise.
+  - `report_noAnswer_mayBlock`: the report premise yields the operation’s blocking permission.
+  - `report_noAnswer_blocked`: a permitted blocked report retains its history and ends in its pending request.
+  - `report_outOfFuel_none`: fuel exhaustion still produces no external observation.
+
+  **Verification**
+  - `nix develop -c timeout 1200 lake build ConcreteSpec` — passed.
+  - `nix develop -c timeout 600 bash scripts/spec/rules.sh` — passed, 32/32.
+  - `nix develop -c timeout 900 bash scripts/proofs/trust_ban.sh` — passed, 23/23.
+  - Working tree clean; `scripts/proofs/axioms.golden` and `ConcreteSpec/Spec/Exec.lean` untouched.
+  - Heavy axiom, kernel-replay, external, and full CI gates remain for the reviewer, as instructed.
+
+  **QUESTIONS:** None.
+
+To resume this session: kimi -r session_166d21b7-e8a1-45f9-9fde-ed8ab4d99ada
+kimi rc=0

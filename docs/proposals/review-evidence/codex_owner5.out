@@ -1,0 +1,493 @@
+Reading additional input from stdin...
+OpenAI Codex v0.166.0
+--------
+workdir: /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/owner-review5
+model: gpt-6.1-sol
+provider: openai
+approval: never
+sandbox: danger-full-access
+reasoning effort: none
+reasoning summaries: none
+session id: 01a1b916-56b6-7b42-ac56-32252e1cb932
+--------
+user
+Round 5 (final, delta-only) re-verification for the Concrete slice-0 branch. Round 2 findings: (1) the gates' new EXIT trap turned the backend gate's deliberately diverging control (whose expected observation is a timeout) into exit 3, so the gate could never pass; (2) README compile_spec equation ill-typed (LCB.emit returns Except String (Source.Function x SiteTable)). The fix diff is below: expected_timeout runs the control with its bounded runs logged to a separate file, so the trap does not count them while check still requires the 'incomplete' observation; README now says LCB.emit out.bir = .ok (out.lcb, out.bir.sites); the trap's grep uses -E. CI on the branch head is green on both platforms (the backend gate passes with the control). Verify the two fixes; findings with file:line marked real defect or preference. End with exactly one line: VERDICT: ACCEPT, VERDICT: ACCEPT-WITH-CHANGES or VERDICT: REJECT.
+```diff
+diff --git a/Concrete/README.md b/Concrete/README.md
+index 31ae2204c..36e022545 100644
+--- a/Concrete/README.md
++++ b/Concrete/README.md
+@@ -384,7 +384,7 @@ theorem compile_correct (F : FrontendPremises) {B N T} (P : NativePremises B N T
+ 1. `compile_spec`: `compile T src = .ok out` implies:
+    - `Lex.lex`, `Parse.parse` and `Elab.elab` succeed and produce `out.p`;
+    - `Fragment.core s0 out.p` and `check out.p = true`;
+-   - `out.tokens = admit out.p`, `out.mir = lower out.p out.tokens`, `out.mem = memory out.mir`, `out.bir = ssa out.mem`, `out.ll = LLVM.print out.bir` and `LCB.emit out.bir = .ok out.lcb` (the adapted body with `out.bir.sites`);
++   - `out.tokens = admit out.p`, `out.mir = lower out.p out.tokens`, `out.mem = memory out.mir`, `out.bir = ssa out.mem`, `out.ll = LLVM.print out.bir` and `LCB.emit out.bir = .ok (out.lcb, out.bir.sites)`;
+    - `out.bir.frameSlots ≤ T.maxSlots`.
+ 2. `F.lex`, `F.parse` and `elab_sound` give `Denotes src out.p`. `check_iff` gives `Checked`.
+ 3. `slice0_exits` gives `run … = .exit c` with `c < 256`; `run_exit_behaviour` then gives `Core.behaviour = .exited c`.
+diff --git a/scripts/checks/lib/slice0_common.sh b/scripts/checks/lib/slice0_common.sh
+index 2120793a8..502a74bc5 100644
+--- a/scripts/checks/lib/slice0_common.sh
++++ b/scripts/checks/lib/slice0_common.sh
+@@ -8,6 +8,7 @@
+ #     every build and analysis command is capped whatever the gate's cap;
+ #   bounded SECS CMD...: CMD under capped and bounded_run (the gates' only time bound);
+ #   root, work (removed on exit), lcb, target, emitter (the Lean emitter command, an array);
++#   expected_timeout CMD...: CMD with its bounded runs logged apart (a control expecting a timeout);
+ #   observe EXE OUT SECS RETRY [MEM_MB [ENV...]]: run EXE under bounded_run (and limited_exec.sh
+ #     MEM_MB, default 1024) with ENV assignments; OUT.status (status or "incomplete"),
+ #     OUT.stdout, OUT.stderr;
+@@ -23,7 +24,7 @@ work=$(mktemp -d)
+ # with a command's stderr) goes to the gate's stdout before the scratch directory is removed, and a
+ # gate that would pass with an INCOMPLETE run exits 3 instead (INCOMPLETE is never a pass).
+ trap 'rc=$?; bounded_summary || true
+-  if [ "$rc" = 0 ] && grep -qs "^incomplete\\|^runner-failed" "${BOUNDED_LOG:-/nonexistent}"; then
++  if [ "$rc" = 0 ] && grep -Eqs "^(incomplete|runner-failed)" "${BOUNDED_LOG:-/nonexistent}"; then
+     echo "INCOMPLETE: a bounded run timed out twice; not a pass"; rc=3
+   fi
+   rm -rf "${work:?}"; exit "$rc"' EXIT
+@@ -60,6 +61,14 @@ emit_secs=120
+ native_secs=300
+ emitter=(bounded "$emit_secs" lake env lean --run scripts/checks/slice0_bir.lean)
+ 
++# expected_timeout CMD...: run CMD (a function or command) with its bounded runs logged apart, for
++# a control whose expected observation IS a timeout (the diverging body): its INCOMPLETE runs are
++# the observation that CMD checks, not an incomplete gate, so the exit trap does not count them.
++expected_timeout() {
++  local BOUNDED_LOG="$work/expected-timeouts.log"
++  "$@"
++}
++
+ observe() {
+   local rc=0 mem=${5:-1024}
+   local envs=("${@:6}")
+diff --git a/scripts/checks/slice0_backends.sh b/scripts/checks/slice0_backends.sh
+index 3f497ab52..bed0218f8 100755
+--- a/scripts/checks/slice0_backends.sh
++++ b/scripts/checks/slice0_backends.sh
+@@ -44,7 +44,7 @@ for name in $names; do
+   examples=$((examples + 1))
+ done
+ "${emitter[@]}" loop "$work/ctl/loop" "$target"
+-check control-loop "$work/ctl/loop" 1 1
++expected_timeout check control-loop "$work/ctl/loop" 1 1
+ "${emitter[@]}" invalid "$work/ctl/invalid" "$target"
+ check control-invalid-word "$work/ctl/invalid" 10 20
+ 
+diff --git a/scripts/checks/slice0_repro.sh b/scripts/checks/slice0_repro.sh
+index ea8f1d0d6..202843658 100755
+--- a/scripts/checks/slice0_repro.sh
++++ b/scripts/checks/slice0_repro.sh
+@@ -22,7 +22,7 @@ work=$(mktemp -d)
+ # On every exit, the bounded-run summary (recovered and INCOMPLETE runs) goes to stdout before the
+ # scratch directory is removed, and a gate that would pass with an INCOMPLETE run exits 3 instead.
+ trap 'rc=$?; bounded_summary || true
+-  if [ "$rc" = 0 ] && grep -qs "^incomplete\\|^runner-failed" "${BOUNDED_LOG:-/nonexistent}"; then
++  if [ "$rc" = 0 ] && grep -Eqs "^(incomplete|runner-failed)" "${BOUNDED_LOG:-/nonexistent}"; then
+     echo "INCOMPLETE: a bounded run timed out twice; not a pass"; rc=3
+   fi
+   rm -rf "${work:?}"; exit "$rc"' EXIT
+``` Do not modify files.
+codex
+I’ll check the timeout wrapper against the logging and control checks, then verify the README equation against `LCB.emit` and `compile_spec`. I won’t modify files.
+exec
+/bin/bash -lc "pwd; git status --short; rg -n 'expected_timeout|BOUNDED_LOG|bounded_summary|control-loop|incomplete|compile_spec|def emit|theorem compile_spec' scripts/checks/lib/bounded.sh scripts/checks/lib/slice0_common.sh scripts/checks/slice0_backends.sh Concrete" in /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/owner-review5
+ succeeded in 0ms:
+/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/owner-review5
+fatal: not a git repository (or any of the parent directories): .git
+scripts/checks/lib/slice0_common.sh:11:#   expected_timeout CMD...: CMD with its bounded runs logged apart (a control expecting a timeout);
+scripts/checks/lib/slice0_common.sh:13:#     MEM_MB, default 1024) with ENV assignments; OUT.status (status or "incomplete"),
+scripts/checks/lib/slice0_common.sh:26:trap 'rc=$?; bounded_summary || true
+scripts/checks/lib/slice0_common.sh:27:  if [ "$rc" = 0 ] && grep -Eqs "^(incomplete|runner-failed)" "${BOUNDED_LOG:-/nonexistent}"; then
+scripts/checks/lib/slice0_common.sh:46:  if [ "$rc" != 0 ] && bounded_is_incomplete "$rc"; then
+scripts/checks/lib/slice0_common.sh:64:# expected_timeout CMD...: run CMD (a function or command) with its bounded runs logged apart, for
+scripts/checks/lib/slice0_common.sh:66:# the observation that CMD checks, not an incomplete gate, so the exit trap does not count them.
+scripts/checks/lib/slice0_common.sh:67:expected_timeout() {
+scripts/checks/lib/slice0_common.sh:68:  local BOUNDED_LOG="$work/expected-timeouts.log"
+scripts/checks/lib/slice0_common.sh:78:  if bounded_is_incomplete "$rc"; then echo incomplete >"$2.status"; else echo "$rc" >"$2.status"; fi
+scripts/checks/slice0_backends.sh:6:# Each executable runs under bounded_run; its observation is its exit status (or "incomplete"),
+scripts/checks/slice0_backends.sh:10:# Controls: a body that never returns must be observed as incomplete on both backends; a body
+scripts/checks/slice0_backends.sh:47:expected_timeout check control-loop "$work/ctl/loop" 1 1
+scripts/checks/slice0_backends.sh:62:         "incomplete|incomplete||"; do
+Concrete/Backend/LCB.lean:196:def emit (p : Program) : Except String (Source.Function × SiteTable) := do
+Concrete/README.md:384:1. `compile_spec`: `compile T src = .ok out` implies:
+Concrete/README.md:494:- `compile_spec`.
+scripts/checks/lib/bounded.sh:9:#   - the re-run times out too  -> INCOMPLETE: not a pass, not a failure. A gate with an incomplete
+scripts/checks/lib/bounded.sh:24:#     attempt and only a COMPLETED attempt's output is written: an incomplete run writes nothing,
+scripts/checks/lib/bounded.sh:29:#     124, so test with `bounded_is_incomplete "$rc"`, which also reads the outcome bounded_run
+scripts/checks/lib/bounded.sh:32:#   bounded_summary
+scripts/checks/lib/bounded.sh:33:#     Lists this gate's recovered and incomplete runs; gates print it before their final tally.
+scripts/checks/lib/bounded.sh:37:#     recovered and incomplete lines go to this gate's log (handed over on its command line).
+scripts/checks/lib/bounded.sh:39:#     The end-of-gate verdict for a gate using the watchdog form: lists recovered, incomplete and
+scripts/checks/lib/bounded.sh:40:#     runner-failed runs, removes the state directory, and returns 1 when any run was incomplete or
+scripts/checks/lib/bounded.sh:46:# is incomplete (status 124, a "runner-failed" log line): never a pass. If the runner is cancelled (the
+scripts/checks/lib/bounded.sh:51:# Such a run is never incomplete.
+scripts/checks/lib/bounded.sh:64:BOUNDED_LOG="$BOUNDED_DIR/log"
+scripts/checks/lib/bounded.sh:69:  [ -z "${BOUNDED_WATCHDOG_LOG:-}" ] || BOUNDED_LOG="$BOUNDED_WATCHDOG_LOG"
+scripts/checks/lib/bounded.sh:71:: >> "$BOUNDED_LOG"
+scripts/checks/lib/bounded.sh:78:bounded_is_incomplete() {
+scripts/checks/lib/bounded.sh:79:  [ "$1" = 124 ] && [ "$(cat "$BOUNDED_OUTCOME_FILE" 2>/dev/null)" = incomplete ]
+scripts/checks/lib/bounded.sh:120:    echo incomplete > "$BOUNDED_OUTCOME_FILE"
+scripts/checks/lib/bounded.sh:121:    echo "incomplete ${secs}s+${retry}s $*" >> "$BOUNDED_LOG"
+scripts/checks/lib/bounded.sh:125:    # incomplete exactly as a double timeout is (status 124, bounded_is_incomplete true).
+scripts/checks/lib/bounded.sh:127:    echo incomplete > "$BOUNDED_OUTCOME_FILE"
+scripts/checks/lib/bounded.sh:128:    echo "runner-failed ${secs}s $*" >> "$BOUNDED_LOG"
+scripts/checks/lib/bounded.sh:133:    [ "$tries" = 2 ] && echo "recovered ${secs}s $*" >> "$BOUNDED_LOG"
+scripts/checks/lib/bounded.sh:139:bounded_summary() {
+scripts/checks/lib/bounded.sh:141:  nrec=$(grep -c '^recovered' "$BOUNDED_LOG" 2>/dev/null || true); nrec=${nrec:-0}
+scripts/checks/lib/bounded.sh:142:  ninc=$(grep -c '^incomplete\|^runner-failed' "$BOUNDED_LOG" 2>/dev/null || true); ninc=${ninc:-0}
+scripts/checks/lib/bounded.sh:144:  echo "Bounded runs: $nrec recovered (timed out, then completed alone), $ninc incomplete (timed out twice, or the runner failed):"
+scripts/checks/lib/bounded.sh:145:  sed 's/^/  /' "$BOUNDED_LOG"
+scripts/checks/lib/bounded.sh:150:    TO=(env "BOUNDED_WATCHDOG_LOG=$BOUNDED_LOG" "BOUNDED_PARENT=$BOUNDED_DIR" bash "$BOUNDED_SH" "$1")
+scripts/checks/lib/bounded.sh:158:  bounded_summary
+scripts/checks/lib/bounded.sh:159:  ninc=$(grep -c '^incomplete\|^runner-failed' "$BOUNDED_LOG" 2>/dev/null || true); ninc=${ninc:-0}
+scripts/checks/lib/bounded.sh:160:  [ "$ninc" -eq 0 ] || echo "INCOMPLETE: $ninc command(s) timed out twice or lost their runner: this run is incomplete, not passed"
+scripts/checks/lib/bounded.sh:170:  if bounded_is_incomplete "$rc"; then
+
+exec
+/bin/bash -lc "cat scripts/checks/slice0_backends.sh; cat scripts/checks/lib/slice0_common.sh; sed -n '55,145p' scripts/checks/lib/bounded.sh; sed -n '190,220p' Concrete/Backend/LCB.lean; rg -n 'theorem compile_spec|LCB.emit .*ok|lcb :|sites' Concrete/Compile.lean" in /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/owner-review5
+ exited 2 in 0ms:
+#!/usr/bin/env bash
+# Slice-0 backend gate (PROVISIONAL, Concrete/README.md gates 4 and 6, hand-written BIR leg):
+# every hand-written BIR example goes through the LLVM path (clang) and the LCB path: the adapted
+# body assembled by LCB in process (no text on the proved path), linked with the runtime entry,
+# which LCB's command line assembles from QBE text.
+# Each executable runs under bounded_run; its observation is its exit status (or "incomplete"),
+# the exact bytes on descriptor 2, and descriptor 1, which must be empty. All three must equal what
+# the BIR semantics gives (the emitter writes the expected status and stderr bytes).
+#
+# Controls: a body that never returns must be observed as incomplete on both backends; a body
+# returning a word that encodes nothing must reach the runtime's refusal; and the comparison
+# itself must reject a missing or extra newline, a wrong status with the right stderr, and stray
+# stdout. Run inside the nix devshell, from the repository root.
+set -euo pipefail
+# shellcheck source=scripts/checks/lib/slice0_common.sh
+source scripts/checks/lib/slice0_common.sh
+
+fail=0
+count=0
+examples=0
+# check NAME DIR SECS RETRY: build both backends in DIR, run them and judge them.
+check() {
+  local name=$1 d=$2 backend
+  build "$name" "$d/build.log" bounded "$native_secs" bash "$root/scripts/checks/slice0_native.sh" "$d" "$lcb"
+  for backend in llvm lcb; do
+    observe "$d/$backend.exe" "$d/$backend" "$3" "$4"
+    count=$((count + 1))
+    if judge "$d" "$d/$backend"; then
+      echo "ok   $name [$backend]: status $(cat "$d/$backend.status")"
+    else
+      echo "FAIL $name [$backend]: status $(cat "$d/$backend.status") (expected $(cat "$d/status"))," \
+        "stderr $(od -An -c "$d/$backend.stderr" | tr -s ' ' | head -c 300)," \
+        "stdout $(wc -c <"$d/$backend.stdout") bytes"
+      fail=1
+    fi
+  done
+}
+
+names=$(emit_examples)
+for name in $names; do
+  d="$work/ex/$name"
+  "${emitter[@]}" emit "$name" "$d" "$target"
+  check "$name" "$d" 10 20
+  examples=$((examples + 1))
+done
+"${emitter[@]}" loop "$work/ctl/loop" "$target"
+expected_timeout check control-loop "$work/ctl/loop" 1 1
+"${emitter[@]}" invalid "$work/ctl/invalid" "$target"
+check control-invalid-word "$work/ctl/invalid" 10 20
+
+# The comparison's own negative controls: each forged observation must be rejected.
+e="$work/ctl/judge"; mkdir -p "$e"
+echo 134 >"$e/status"; printf 'concrete: trap: x\n' >"$e/stderr"
+forge() { # forge NAME STATUS STDERR-PRINTF STDOUT
+  local o="$work/ctl/forged-$1"
+  echo "$2" >"$o.status"; printf "$3" >"$o.stderr"; printf '%s' "$4" >"$o.stdout"
+  echo "$o"
+}
+judge "$e" "$(forge same 134 'concrete: trap: x\n' '')" || { echo "FAIL judge rejects an exact match"; fail=1; }
+for c in "no-newline|134|concrete: trap: x|" "extra-newline|134|concrete: trap: x\n\n|" \
+         "wrong-status|1|concrete: trap: x\n|" "stray-stdout|134|concrete: trap: x\n|42" \
+         "incomplete|incomplete||"; do
+  IFS='|' read -r n s err out <<<"$c"
+  if judge "$e" "$(forge "$n" "$s" "$err" "$out")"; then
+    echo "FAIL judge accepts a forged observation: $n"; fail=1
+  else
+    echo "ok   judge rejects $n"
+  fi
+done
+
+[ "$examples" -gt 0 ] || { echo "slice0_backends: no examples ran" >&2; exit 1; }
+echo "slice0_backends: $examples examples, $count backend runs (controls included)"
+exit "$fail"
+# shellcheck shell=bash
+# Shared machinery of the slice-0 example gates (PROVISIONAL): slice0_backends.sh (gates 4, 6, 6a)
+# and slice0_artifacts.sh (gates 10, 11, 12). Source it from the repository root, inside the nix
+# devshell, with `set -euo pipefail`. It builds the compiler and LCB's command line under the
+# gate's limits (lib/limits.sh: an address-space cap of SLICE0_GATE_MEM_GB GiB, default 64; 0 for
+# a gate whose executables under test need no cap, slice0_artifacts.sh) and defines:
+#   capped (a command prefix, an array): run under a 64 GiB address-space cap of its own, so
+#     every build and analysis command is capped whatever the gate's cap;
+#   bounded SECS CMD...: CMD under capped and bounded_run (the gates' only time bound);
+#   root, work (removed on exit), lcb, target, emitter (the Lean emitter command, an array);
+#   expected_timeout CMD...: CMD with its bounded runs logged apart (a control expecting a timeout);
+#   observe EXE OUT SECS RETRY [MEM_MB [ENV...]]: run EXE under bounded_run (and limited_exec.sh
+#     MEM_MB, default 1024) with ENV assignments; OUT.status (status or "incomplete"),
+#     OUT.stdout, OUT.stderr;
+#   judge EXPECTED_DIR OBS: the observation OBS.* equals the expectation, byte for byte;
+#   build NAME LOG CMD...: run CMD, or print LOG and fail the gate;
+#   emit_examples: the example names, one per line, failing if there are none;
+#   cap_out: copy stdin to stdout, failing above 1 MiB: every command output a gate captures
+#     into a variable goes through it, so no producer can grow the gate's shell (which may run
+#     with no address-space cap, see SLICE0_GATE_MEM_GB) without bound.
+root=$(pwd)
+work=$(mktemp -d)
+# On every exit, the bounded-run summary (recovered and INCOMPLETE runs, whatever a caller did
+# with a command's stderr) goes to the gate's stdout before the scratch directory is removed, and a
+# gate that would pass with an INCOMPLETE run exits 3 instead (INCOMPLETE is never a pass).
+trap 'rc=$?; bounded_summary || true
+  if [ "$rc" = 0 ] && grep -Eqs "^(incomplete|runner-failed)" "${BOUNDED_LOG:-/nonexistent}"; then
+    echo "INCOMPLETE: a bounded run timed out twice; not a pass"; rc=3
+  fi
+  rm -rf "${work:?}"; exit "$rc"' EXIT
+BOUNDED_PARENT="$work"
+# shellcheck source=scripts/checks/lib/bounded.sh
+source scripts/checks/lib/bounded.sh
+[ "$BOUNDED_HAVE_WATCHDOG" = 1 ] || { echo "slice0: python3 is required for bounded runs" >&2; exit 2; }
+# shellcheck source=scripts/checks/lib/limits.sh
+source scripts/checks/lib/limits.sh
+gate_limits "${SLICE0_GATE_MEM_GB:-64}" 40000
+capped=(bash "$root/scripts/checks/lib/limited_exec.sh" 65536)
+# bounded SECS CMD...: CMD under `capped`, through bounded_run (stdin /dev/null; a timeout is
+# re-run once with a larger budget; a second timeout writes no output, returns 124 and is reported
+# INCOMPLETE, never a pass).
+bounded() {
+  local secs=$1 rc=0
+  shift
+  bounded_run -i /dev/null "$secs" -- "${capped[@]}" "$@" || rc=$?
+  if [ "$rc" != 0 ] && bounded_is_incomplete "$rc"; then
+    echo "slice0: INCOMPLETE (timed out twice): $*" >&2
+  fi
+  return "$rc"
+}
+bounded 1800 lake build Concrete lean-compiler-backend/lcb >/dev/null
+lcb="$root/.lake/packages/lean-compiler-backend/.lake/build/bin/lcb"
+case "$(uname -s)-$(uname -m)" in
+  Linux-x86_64) target=x86_64-linux ;;
+  Linux-aarch64) target=aarch64-linux ;;
+  Darwin-arm64) target=aarch64-macos ;;
+  *) echo "slice0: unsupported host $(uname -s)-$(uname -m)" >&2; exit 2 ;;
+esac
+# The time bounds of the emit step (the Lean emitter) and the native step (slice0_native.sh).
+emit_secs=120
+native_secs=300
+emitter=(bounded "$emit_secs" lake env lean --run scripts/checks/slice0_bir.lean)
+
+# expected_timeout CMD...: run CMD (a function or command) with its bounded runs logged apart, for
+# a control whose expected observation IS a timeout (the diverging body): its INCOMPLETE runs are
+# the observation that CMD checks, not an incomplete gate, so the exit trap does not count them.
+expected_timeout() {
+  local BOUNDED_LOG="$work/expected-timeouts.log"
+  "$@"
+}
+
+observe() {
+  local rc=0 mem=${5:-1024}
+  local envs=("${@:6}")
+  bounded_run -i /dev/null -r "$4" "$3" -- env ${envs[@]+"${envs[@]}"} \
+    bash "$root/scripts/checks/lib/limited_exec.sh" "$mem" "$1" \
+    >"$2.stdout" 2>"$2.stderr" || rc=$?
+  if bounded_is_incomplete "$rc"; then echo incomplete >"$2.status"; else echo "$rc" >"$2.status"; fi
+}
+
+judge() {
+  cmp -s "$1/status" "$2.status" && cmp -s "$1/stderr" "$2.stderr" && [ ! -s "$2.stdout" ]
+}
+
+build() {
+  local name=$1 log=$2; shift 2
+  "$@" >"$log" 2>&1 || { cat "$log" >&2; echo "slice0: $name: build failed: $*" >&2; exit 1; }
+}
+
+cap_out() {
+  local LC_ALL=C out
+  out=$(head -c 1048577; echo x)
+  out=${out%x}
+  [ "${#out}" -le 1048576 ] || { echo "slice0: captured output over 1 MiB" >&2; return 1; }
+  printf '%s' "$out"
+}
+
+emit_examples() {
+  local names
+  names=$("${emitter[@]}" list | cap_out) || { echo "slice0: listing the examples failed" >&2; exit 1; }
+  [ -n "$names" ] || { echo "slice0: no examples listed" >&2; exit 1; }
+  printf '%s\n' "$names"
+}
+else echo "bounded.sh: BOUNDED_RETRY_FACTOR must be a number >= 1; using 2" >&2; BOUNDED_RETRY_FACTOR=2; fi
+# _bounded_secs_ok S: S is a positive decimal number of seconds (fractions allowed).
+_bounded_secs_ok() { [[ "$1" =~ ^[0-9]+(\.[0-9]+)?$ ]] && awk -v s="$1" 'BEGIN { exit !(s + 0 > 0) }'; }
+# Fixed-point, trailing zeros trimmed: never scientific notation, which _bounded_secs_ok rejects.
+_bounded_mul() { awk -v s="$1" -v f="$2" 'BEGIN { r = sprintf("%.6f", s * f); sub(/0+$/, "", r); sub(/\.$/, "", r); print r }'; }
+BOUNDED_SH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")"
+BOUNDED_EXEC="$(dirname "$BOUNDED_SH")/bounded_exec.py"
+BOUNDED_DIR="$(mktemp -d "${BOUNDED_PARENT:-${TMPDIR:-/tmp}}/bounded.XXXXXX")"
+BOUNDED_OUTCOME_FILE="$BOUNDED_DIR/outcome"
+BOUNDED_LOG="$BOUNDED_DIR/log"
+# The watchdog form appends to its caller's log, handed over explicitly on its command line.
+if [ "${BASH_SOURCE[0]}" = "$0" ]; then
+  # A standalone watchdog removes its state however it ends.
+  trap 'rm -rf "$BOUNDED_DIR"' EXIT
+  [ -z "${BOUNDED_WATCHDOG_LOG:-}" ] || BOUNDED_LOG="$BOUNDED_WATCHDOG_LOG"
+fi
+: >> "$BOUNDED_LOG"
+BOUNDED_HAVE_WATCHDOG=1
+if ! command -v python3 >/dev/null 2>&1; then
+  BOUNDED_HAVE_WATCHDOG=0
+  [ "${BASH_SOURCE[0]}" = "$0" ] || echo "  warn python3 not found — commands run without a hang watchdog" >&2
+fi
+
+bounded_is_incomplete() {
+  [ "$1" = 124 ] && [ "$(cat "$BOUNDED_OUTCOME_FILE" 2>/dev/null)" = incomplete ]
+}
+
+bounded_run() {
+  local stdin_file="" retry="" secs="" rc tries=0 budget tmp outcome
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      -i) stdin_file="$2"; shift 2 ;;
+      -r) retry="$2"; shift 2 ;;
+      --) shift; break ;;
+      *) if [ -z "$secs" ]; then secs="$1"; shift; else break; fi ;;
+    esac
+  done
+  [ -n "$secs" ] && [ $# -gt 0 ] || { echo "bounded_run: usage: bounded_run [-i FILE] [-r SECS] SECS -- CMD..." >&2; return 2; }
+  [ -n "$retry" ] || retry="$(_bounded_mul "$secs" "$BOUNDED_RETRY_FACTOR")"
+  if ! _bounded_secs_ok "$secs" || ! _bounded_secs_ok "$retry"; then
+    echo "bounded_run: budgets must be positive numbers of seconds (got $secs, retry $retry)" >&2; return 2
+  fi
+  echo done > "$BOUNDED_OUTCOME_FILE"
+  if [ "$BOUNDED_HAVE_WATCHDOG" != 1 ]; then
+    if [ -n "$stdin_file" ]; then "$@" < "$stdin_file"; else "$@"; fi
+    return $?
+  fi
+  tmp="$(mktemp -d "$BOUNDED_DIR/run.XXXXXX")"
+  budget="$secs"
+  while :; do
+    tries=$((tries + 1))
+    rm -f "$tmp/status"
+    if [ -n "$stdin_file" ]; then
+      python3 -I "$BOUNDED_EXEC" --timeout "$budget" --kill-after "${BOUNDED_KILL_AFTER:-10}" --status "$tmp/status" -- "$@" < "$stdin_file" > "$tmp/out" 2> "$tmp/err"
+    else
+      python3 -I "$BOUNDED_EXEC" --timeout "$budget" --kill-after "${BOUNDED_KILL_AFTER:-10}" --status "$tmp/status" -- "$@" > "$tmp/out" 2> "$tmp/err"
+    fi
+    outcome="$(cat "$tmp/status" 2>/dev/null)"
+    case "$outcome" in
+      "exit "*) break ;;
+      timeout) [ "$tries" = 1 ] || break; budget="$retry" ;;
+      *) outcome=runner-failed; break ;;
+    esac
+  done
+  if [ "$outcome" = timeout ]; then
+    echo incomplete > "$BOUNDED_OUTCOME_FILE"
+    echo "incomplete ${secs}s+${retry}s $*" >> "$BOUNDED_LOG"
+    rc=124
+  elif [ "$outcome" = runner-failed ]; then
+    # The runner reported nothing (it failed or was cancelled): no observation, so the run is
+    # incomplete exactly as a double timeout is (status 124, bounded_is_incomplete true).
+    echo "bounded_run: the runner reported no outcome for: $*" >&2
+    echo incomplete > "$BOUNDED_OUTCOME_FILE"
+    echo "runner-failed ${secs}s $*" >> "$BOUNDED_LOG"
+    rc=124
+  else
+    cat "$tmp/out"; cat "$tmp/err" >&2
+    rc="${outcome#exit }"
+    [ "$tries" = 2 ] && echo "recovered ${secs}s $*" >> "$BOUNDED_LOG"
+  fi
+  rm -rf "$tmp"
+  return "$rc"
+}
+
+bounded_summary() {
+  local nrec ninc
+  nrec=$(grep -c '^recovered' "$BOUNDED_LOG" 2>/dev/null || true); nrec=${nrec:-0}
+  ninc=$(grep -c '^incomplete\|^runner-failed' "$BOUNDED_LOG" 2>/dev/null || true); ninc=${ninc:-0}
+  [ "$nrec" -gt 0 ] || [ "$ninc" -gt 0 ] || return 0
+  echo "Bounded runs: $nrec recovered (timed out, then completed alone), $ninc incomplete (timed out twice, or the runner failed):"
+  sed 's/^/  /' "$BOUNDED_LOG"
+           valueWidths := Array.replicate (valueCount p) .word, blocks := blocks.toArray }
+
+/-- The LCB backend's emit: the adapted body paired with the program's site table (the table that
+decodes the body's result is part of the emitted artifact), or the adapter's refusal, in which case
+no artifact exists (`artifact` and the emitter build only from `.ok`). `Proof.emit_correct` and
+`Proof.artifact_correct` are the backend contract: no premise. -/
+def emit (p : Program) : Except String (Source.Function × SiteTable) := do
+  let f ← adapt p
+  return (f, p.sites)
+
+/-! ## Assembly, in process (inside `P_toolchain[lcb]`) -/
+
+/-- The targets the gate runs LCB's output on. -/
+inductive Target where
+  | x86_64Linux | aarch64Linux | aarch64Macos
+  deriving DecidableEq, Repr
+
+def Target.ofName : String → Option Target
+  | "x86_64-linux" => some .x86_64Linux
+  | "aarch64-linux" => some .aarch64Linux
+  | "aarch64-macos" => some .aarch64Macos
+  | _ => none
+
+/-- The body's symbol: the runtime entry calls `concrete_body`. -/
+def bodySymbol : LeanCompilerBackend.Verified.Symbol := { namespaceName := "concrete", name := "concrete_body", exported := true }
+
+/-- The adapted body as assembly text for `target`, computed in process from the value. -/
+def assemble (target : Target) (f : Source.Function) : Except String String :=
+  match target with
+  | .aarch64Macos => do
+    let job : LeanCompilerBackend.Verified.FunctionJob :=
+rg: Concrete/Compile.lean: IO error for operation on Concrete/Compile.lean: No such file or directory (os error 2)
+
+exec
+/bin/bash -lc "rg -n 'theorem compile_spec|lcb :|lcb_eq|LCB.emit out|emit.*sites|loop|incomplete' Concrete/Driver* scripts/checks/slice0_bir.lean; rg --files Concrete | rg 'Compile|Driver'; bash -n scripts/checks/lib/slice0_common.sh scripts/checks/slice0_backends.sh scripts/checks/slice0_repro.sh" in /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/owner-review5
+ succeeded in 0ms:
+rg: Concrete/Driver*: No such file or directory (os error 2)
+scripts/checks/slice0_bir.lean:15:Two controls exercise the gate itself: `... loop DIR TARGET` emits a well-formed BIR body that
+scripts/checks/slice0_bir.lean:16:never returns (`DIR/status` is `incomplete`), and `... invalid DIR TARGET` emits a body returning a
+scripts/checks/slice0_bir.lean:81:def loopBody : Program :=
+scripts/checks/slice0_bir.lean:86:  unless wf loopBody && run loopBody 1000 == .outOfFuel do
+scripts/checks/slice0_bir.lean:87:    IO.eprintln "loop: not a well-formed diverging body"; return 1
+scripts/checks/slice0_bir.lean:88:  match LCB.emit loopBody with
+scripts/checks/slice0_bir.lean:89:  | .error msg => IO.eprintln s!"loop: adapter: {msg}"; return 1
+scripts/checks/slice0_bir.lean:91:    if (LCB.evalBody f 10000).isSome then IO.eprintln "loop: LCB's evaluator returns"; return 1
+scripts/checks/slice0_bir.lean:92:    unless ← writeBackends dir target loopBody (f, tbl) do return 1
+scripts/checks/slice0_bir.lean:93:    writeExpected dir "incomplete" ""
+scripts/checks/slice0_bir.lean:120:  | ["loop", dir, t] => withTarget t (emitLoop dir)
+scripts/checks/slice0_bir.lean:122:  | _ => IO.eprintln "usage: slice0_bir.lean list | (emit NAME | loop | invalid) DIR TARGET"; return 2
+
+exec
+/bin/bash -lc "rg -n 'theorem compile_spec|lcb :|LCB.emit.*\\.ok' Concrete | head -25" in /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/owner-review5
+ succeeded in 0ms:
+Concrete/README.md:287:def lcb : Backend := ⟨LCB.Source.Function × SiteTable, LCB.emit,
+Concrete/README.md:372:  bir : BIR.Program; ll : String; lcb : LCB.Source.Function
+Concrete/README.md:387:   - `out.tokens = admit out.p`, `out.mir = lower out.p out.tokens`, `out.mem = memory out.mir`, `out.bir = ssa out.mem`, `out.ll = LLVM.print out.bir` and `LCB.emit out.bir = .ok (out.lcb, out.bir.sites)`;
+
+codex
+No findings in the delta.
+
+- `scripts/checks/lib/slice0_common.sh:67` correctly scopes the separate log through Bash’s dynamic scoping. The control still requires `incomplete` and matching output; build failures remain fatal. The `grep -E` expression correctly matches both failure categories.
+- `Concrete/README.md:387` now matches `LCB.emit`’s return type and its pairing with `p.sites`.
+
+Shell syntax checks passed. CI results are taken as reported; full gates were not rerun. No files changed.
+
+VERDICT: ACCEPT
+tokens used
+27,960
+No findings in the delta.
+
+- `scripts/checks/lib/slice0_common.sh:67` correctly scopes the separate log through Bash’s dynamic scoping. The control still requires `incomplete` and matching output; build failures remain fatal. The `grep -E` expression correctly matches both failure categories.
+- `Concrete/README.md:387` now matches `LCB.emit`’s return type and its pairing with `p.sites`.
+
+Shell syntax checks passed. CI results are taken as reported; full gates were not rerun. No files changed.
+
+VERDICT: ACCEPT

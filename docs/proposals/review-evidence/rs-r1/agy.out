@@ -1,0 +1,23 @@
+### Findings
+
+1. **`docs/decisions.md:75`, `docs/decisions.md:1376-1380`, `changelog.d/2026-11-08-record-signoffs.md:11-12` — Unrecorded quote and invented decision ("commit and push everything all the time")**
+   - `"commit and push everything all the time"` does not appear in `PENDING_RECORDS.md` (the authoritative list of verbatim owner answers). In addition, `pushed to origin and lambdaclass at once` (`docs/decisions.md:1378`) contradicts the `wip/one-repository` decision (`lambdaclass/concrete` only) recorded right above it at `docs/decisions.md:1369`.
+   - **Fix:** Remove the `#decided-2026-11-08-commit-push` entry (`docs/decisions.md:1376-1380`), its index bullet (`docs/decisions.md:75`), and the corresponding bullet in `changelog.d/2026-11-08-record-signoffs.md:11-12` until the quote is present in `PENDING_RECORDS.md`.
+
+2. **`docs/decisions.md:1381-1392`, `AGENTS.md:79-82`, `changelog.d/2026-11-08-record-signoffs.md:13-15` — Overstated operational details in `#decided-2026-11-08-writers`**
+   - `PENDING_RECORDS.md` records only:
+     `- 2026-11-08, verbatim: "can you have kimi, codex and agy implement things and we just review it". Codex, Kimi and agy implement; Claude briefs, reviews, gates and lands.`
+   - `docs/decisions.md:1383-1392` invents operational rules not in `PENDING_RECORDS.md`: fresh full clones on `wip/` branches, CLI invocation flags (`codex exec -s danger-full-access`, `kimi -p`, never `--yolo` or `--auto`, `agy -p` with inline inputs because it cannot read files), `systemd-run` / `TasksMax` / `MemoryMax` / `timeout` / two-heavy-runs limits, cross-review by the other two models, when Claude writes a fix itself, and who drafts decision records. `AGENTS.md:79-82` and `changelog.d/2026-11-08-record-signoffs.md:13-15` repeat parts of these invented details.
+   - **Fix:** Restrict `docs/decisions.md:1381-1392`, `AGENTS.md:79-82`, and `changelog.d/2026-11-08-record-signoffs.md:13-15` to what `PENDING_RECORDS.md` authorizes: Codex, Kimi, and agy implement; Claude briefs, reviews, runs the gates, and lands.
+
+3. **`docs/decisions.md:1382` (and `#decided-2026-11-08-quota`) — Missing revision note on the revised quota row**
+   - `docs/decisions.md:1382` states that `#decided-2026-11-08-writers` extends/revises `#decided-2026-11-08-quota` ("which named only Codex and Kimi as writers"), and `AGENTS.md:79-82` replaces that rule, but the `#decided-2026-11-08-quota` row in `docs/decisions.md` is not updated with an explicit `*Revised 2026-11-08 ...*` note. (Likewise, if `wip/remote-guard` and `wip/acceptance-shim` at `docs/decisions.md:1374` were recorded in an earlier decision row, that row also lacks a revision note.)
+   - **Fix:** Add `*Revised 2026-11-08 (owner, "can you have kimi, codex and agy implement things and we just review it"): agy is also a writer alongside Codex and Kimi; Claude briefs, reviews, gates and lands ([writers](#decided-2026-11-08-writers)).*` to `#decided-2026-11-08-quota` in `docs/decisions.md` (and add a revision note to any prior row that scheduled `wip/remote-guard` / `wip/acceptance-shim`).
+
+4. **`ROADMAP.md:481`, `ROADMAP.md:596-598` — New ROADMAP items omit phase/slice and `R-0628`..`R-0631` are missing from the phase table**
+   - `R-0630` (`ROADMAP.md:481`) is added to the `B0` phase row (`ROADMAP.md:180`), but its item row does not name slice 0 / phase `B0`.
+   - `R-0628`, `R-0629`, and `R-0631` (`ROADMAP.md:596-598`) are not added to any phase summary row in `ROADMAP.md` (unlike `R-0630` in `B0`), nor do their item rows name their phase or slice.
+   - In `R-0631` (`ROADMAP.md:598`), `| R-0631 | Move all of docs/archive/ under legacy/ ... |` has no phase/slice and uses prose (`the byte-for-byte sweep check`) in the prerequisite ID column instead of `—` or a ROADMAP ID, and `R-0631` is omitted from `changelog.d` / `PENDING_RECORDS.md`'s R-ID assignments.
+   - **Fix:** Add `R-0628`, `R-0629`, and `R-0631` to the appropriate phase row in the `ROADMAP.md` phase table, name the phase or slice explicitly in `R-0630`, `R-0628`, `R-0629`, and `R-0631`, and use `Home: tooling` on `R-0628` (`ROADMAP.md:596`, per the tracking rule's `spec or tooling`).
+
+VERDICT: REJECT

@@ -1,0 +1,3 @@
+Both Round 1 findings are cleanly resolved in [scripts/checks/landing_bot.sh](file:///home/unbalancedparen/projects/review-blockers/scripts/checks/landing_bot.sh#L417-L464): [`snapshot_misses`](file:///home/unbalancedparen/projects/review-blockers/scripts/checks/landing_bot.sh#L417-L446) now populates the temporary snapshot directory from the working tree (`$ROOT_DIR`) rather than `HEAD`, verifies that every `scripts/land/*.sh` in `$ROOT_DIR` is present in the snapshot, and includes a negative control for a `SNAPSHOT` list missing `scripts/land`. No correctness defects found.
+
+VERDICT: ACCEPT

@@ -1,0 +1,3 @@
+No correctness defects found in the delta.
+
+VERDICT: ACCEPT

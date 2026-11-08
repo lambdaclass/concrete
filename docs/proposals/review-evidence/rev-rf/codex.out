@@ -1,0 +1,17 @@
+The three owner answers are transcribed faithfully, the excluded “ok to 1”/“ok to 2” entries are not recorded, and the F7 wording is applied consistently. The affected decision rows carry the requested revisions. FOUNDATION.md’s relative links resolve, and R-0607–R-0621 each name a home and gate.
+
+Findings:
+
+1. **ROADMAP.md:366,372,377 — Foundation dependencies are cyclic.** R-0571 depends on R-0608, which depends on R-0571. Another cycle runs R-0571 → R-0613 → R-0592 → R-0571. These prevent a valid execution order. **Fix:** make foundational definitions prerequisites of integration; separate R-0592’s interface work from its integrated acceptance, and remove the backward dependencies.
+
+2. **docs/proposals/SPEC_UNIFICATION.md:957,1014 — The foundation ports need Core constructs scheduled later.** Step 7 covers the old kernel and C1 command forms, while saying later constructs arrive at their slices. Step 16 nevertheless ports Brand and Borrow whole, including loops, allocation, heap opening and views, before those slices. Step 11 also precedes several static modules required by the dependency graph at lines 653–655. **Fix:** explicitly schedule the necessary Core syntax, static judgments and semantic clauses before their consumers; defer only source exposure and slice-specific instances.
+
+3. **docs/proposals/SPEC_UNIFICATION.md:335,734,787,796 — Old scheduling references remain outside section 7.** Oracle migration still points to phase C; O8/O10 are still discharged at slices 14/19; D10 points to step 9 instead of 11; D19 points to steps 6–7 instead of 8–9. D16 at line 793 also describes step 12 as `Semantics`, although it is now `Contract`. **Fix:** audit and update the scheduling references throughout sections 1–6, including the theorem-port table and D rows.
+
+4. **docs/proposals/SPEC_UNIFICATION.md:783 — The plan commits to an unapproved trap wrapper.** “It is also the `arith` trap payload” chooses a constructor arrangement that foundation question 9 explicitly defers; approving ArithmeticError does not approve that wrapper. **Fix:** remove the `arith` assertion and leave the wrapper and rendering pending the owner’s answer.
+
+5. **AGENTS.md:80 — A reviewer assignment is added without provenance.** “And Claude reviews it” is absent from item 4 of the approved eleven and from its recorded decision at decisions.md:1115. It adds a process requirement beyond assigning mechanical writing to Codex/Kimi. **Fix:** remove that clause or cite a separate explicit owner approval.
+
+6. **docs/proposals/FOUNDATION.md:1,5 — The copy exceeds the permitted transformations.** Besides the requested status replacement, link fixes and question anchors, it changes the title and inserts an explanatory paragraph. The substantive proposal otherwise matches after normalizing the permitted transformations. **Fix:** restore the source title and omit the added paragraph to satisfy the requested exact-copy constraint.
+
+VERDICT: REVISE

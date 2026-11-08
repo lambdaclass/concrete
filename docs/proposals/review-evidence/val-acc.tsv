@@ -1,0 +1,7 @@
+2026-11-08T01:15:35Z	728001c002bbc4ac5536431b316a06fb85f08c9f	accept-56ad6ab21d	clone	passed	cloned https://github.com/unbalancedparentheses/concrete2.git; origin/wip/legacy-sweep-2 = 56ad6ab21
+2026-11-08T01:15:35Z	728001c002bbc4ac5536431b316a06fb85f08c9f	accept-56ad6ab21d	train	passed	train head 728001c002bbc4ac5536431b316a06fb85f08c9f
+2026-11-08T01:15:35Z	728001c002bbc4ac5536431b316a06fb85f08c9f	accept-56ad6ab21d	build	passed	built 728001c002bbc4ac5536431b316a06fb85f08c9f
+2026-11-08T01:15:35Z	728001c002bbc4ac5536431b316a06fb85f08c9f	accept-56ad6ab21d	check	passed	train: check passed at 728001c002; next: train.sh ci accept-56ad6ab21d
+2026-11-08T01:15:35Z	728001c002bbc4ac5536431b316a06fb85f08c9f	accept-56ad6ab21d	ci	passed	train: next: train.sh watch accept-56ad6ab21d
+2026-11-08T01:15:35Z	728001c002bbc4ac5536431b316a06fb85f08c9f	accept-56ad6ab21d	watch	failed	see /tmp/acceptance.E3whja/watch.log
+2026-11-08T01:15:35Z	728001c002bbc4ac5536431b316a06fb85f08c9f	accept-56ad6ab21d	verdict	failed	

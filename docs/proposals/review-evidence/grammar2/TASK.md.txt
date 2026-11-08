@@ -1,0 +1,8 @@
+Review the grammar review sheet GRAMMAR_REVIEW.md for the owner. It is the full surface grammar of Concrete, written before the grammar is encoded in Lean and the parser is built. The owner personally approves every spelling. Check:
+(1) every construct marked as decided really is decided by the cited row, with the spelling exactly as that row says;
+(2) every OPEN item really is undecided, and its recommendation is the best choice under the owner principles (one form per situation; clarity for readers over writing effort; LL(1); no hidden behaviour);
+(3) the LL(1) analysis is correct and complete: list any missed FIRST/FIRST or FIRST/FOLLOW conflict;
+(4) constructs that are missing or wrongly included;
+(5) the refusal list.
+Report errors only, each in at most 50 words with a citation. Then give your choice for each numbered OPEN item (agree, or your alternative, in one line each).
+End with exactly: ANSWER: ERRORS=<count>; OPEN_DISAGREE=<item numbers or none>

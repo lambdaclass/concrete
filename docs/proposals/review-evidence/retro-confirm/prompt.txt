@@ -1,0 +1,44 @@
+You are confirming suspected bugs against the current main of this repository (commit ea212942f4b890710ba864d0c5cb846db72cc777), checked out as a plain copy in the current directory. Read the repository files directly.
+
+Retroactive review passes on already-landed commits reported the findings in findings.txt (copied below). Later commits may have fixed some of them. For EACH finding, independently decide whether it is still a real bug on main at ea212942f4b890710ba864d0c5cb846db72cc777:
+- read the cited code as it stands now (line numbers may have moved);
+- build a minimal reproducer in a temporary directory outside this copy (use bounded commands; do not run full test suites; do not modify files in this copy);
+- report: finding id (F1..F7 in order of appearance), CONFIRMED / FIXED-ON-MAIN / NOT-A-BUG, severity, the exact file:line on main, the reproducer commands and their observed output, and a one-line structural cause.
+
+State at the start whether you could read the repository files. End with one line per finding "F<n>: <status>" and nothing after.
+
+findings.txt:
+### from retro-slice0
+I could read the repository files, including REVIEW.diff, the implementation, gates, ROADMAP.md, and docs/decisions.md. I found two issues:
+
+- `scripts/checks/lib/stack_bound.py:227: problem` **[medium]** Segment-relative absolute accesses bypass stack accounting without proving their effective addresses lie outside the stack. The stated premise that the thread-pointer block is outside the stack does not constrain arbitrary FS/GS displacements. For example, a separate FS block plus a displacement reaching `main_entry_sp - 128` permits a stack write while the analyzer reports `bound 0`. I reproduced acceptance of `mov byte ptr fs:[0x100000], 0x0; ret` with bound zero. The dynamic check also skips these accesses unconditionally (`scripts/checks/lib/stack_access.py:40`), so it cannot catch this undercount. Refuse such accesses or constrain and validate their effective address range.
+
+- `.github/workflows/lean_action_ci.yml:461: problem` **[medium]** The required reproducibility comparison substitutes a second GitHub-hosted Ubuntu runner for concrete-ci-2. The authoritative owner decision (`docs/decisions.md:784`, also ROADMAP R-0577) explicitly requires comparison between a GitHub runner and concrete-ci-2. Both current Linux legs use `ubuntu-24.04`; consequently, outputs could agree across GitHub runners yet differ on concrete-ci-2, and every required reproducibility check would still pass. This does not establish the decided cross-host qualification.
+
+tokens used
+103,857
+### from retro-split
+I could read the repository files, including `docs/decisions.md`. Both scenarios below reproduced using the actual scripts in a temporary Git repository.
+
+- **scripts/land/signoff.sh:194: high — Request binding still accepts incidental SHA mentions.** A request saying “Review exact commit A. Do not review B; that is a later unreviewed change” qualifies for signing B. `record` prepends `reviewed: B` automatically, and `names B` accepts the excluded SHA’s mention. With accepting outputs, recording succeeds and claims all three reviewers accepted B. The new control tests a mismatched header, but does not establish that the original request actually targeted B.
+
+- **scripts/land/signoff.sh:201: medium — Verdict filtering can discard the final verdict.** An output ending with `VERDICT: ACCEPT` followed by `VERDICT: BLOCKED` records successfully. The parser selects the last *recognized ACCEPT/REJECT* line, ignoring the actual final verdict. This violates the documented last-verdict rule and treats a blocked review as acceptance. Select the final `VERDICT:` line first, then require it to be `VERDICT: ACCEPT`.
+
+tokens used
+63,437
+### from retro-recfound
+I could read the repository files. The sixteen recorded foundation answers match the proposal’s recommendations; I found no undecided choice introduced in those rows. However, REVIEW.diff contains two tooling regressions:
+
+- `scripts/checks/sandbox_isolation.sh:46`: **medium** — The reverted scan checks only two directory levels and `.sh` files, despite claiming coverage of every repository-making script. Running this exact scan against nine compliant scripts plus an unsandboxed `scripts/a/b/leak.sh` reports `PASS=10 FAIL=0`. Such a script can inherit `GIT_DIR` and modify the caller’s repository without failing this structural control. The diff also removes the controls that detected this omission.
+
+- `scripts/land/install-bot.sh:66`: **medium** — The generated launcher’s snapshot omits `scripts/review/verify.sh`, which `train.sh` requires for review provenance. On a fresh snapshot, even a fully reviewed train cannot land: invoking the repository’s `review_provenance` function with this snapshot layout returns “no review verifier … is missing” and exit 1. The diff removes the snapshot-closure check that caught this failure; the planned future removal of the bot does not repair its current execution path.
+
+tokens used
+66,361
+### from retro-iss19
+I could read the repository files. The supplied snapshot and REVIEW.diff contain only the issue filing and changelog, not the described fix or new controls.
+
+scripts/land/train.sh:479: **High** — ISS-0019 remains reproducible. For history A→B→C, with train base A and a clean note on C reviewing only B..C, `verify.sh` returns 0 and this line accepts provenance despite B being unreviewed. I confirmed the verifier’s acceptance in a temporary repository. The member path at line 485 likewise supplies no required base. The requested ancestor checks and regression controls are absent.
+
+tokens used
+21,152

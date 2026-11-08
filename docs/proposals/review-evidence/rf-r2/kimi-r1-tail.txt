@@ -1,0 +1,60 @@
+
+  Finding mixed cap could be fixed by not choosing mixed cap myself. "Move mixed-class handling to Waiting for owner and link it, leaving numeric caps exactly as approved; don't claim R0618's behavior approved until answer." Since it already says put to owner, only missing open list and AGENTS qualification. I can say "Remove sentence from approved R0618 scope and add an explicit open question; align AGENTS so it doesn't imply mixed-case behavior is settled." Concrete enough.
+
+  Phase finding perhaps no need if already 6. But User expects all. Include as 6 or 7.
+
+  Order by severity:
+  1 unsupported owner decision.
+  2 missing revision annotations (backend/perf).
+  3 unapproved mixed cap.
+  4 stale R0544.
+  5 changelog wait.
+  6 wrong phase R0623.
+  Could combine 3&4 review process? Separate concrete fixes.
+
+  Perhaps note "No broken links found" in response.
+
+  Todo mark done before response.
+
+• The review is complete. The authoritative decisions are mostly faithful, but unsupported process additions, missing revision notes on older rows, and two roadmap/changelog inconsistencies require correction; no added Markdown link was broken.
+
+• Now craft response concise with file lines concrete fix. Should have exactly one verdict line at end. Don't mention date reminder. Use findings headings perhaps numbered. Ensure no overclaim. Response line exactly `VERDICT: REJECT`.
+
+  I'll formulate:
+
+  1. Unsupported agy decision: PENDING no quote. Diff records as verbatim and changes mandatory policy. refs. Fix remove quote/extension and AGENTS/changelog or provide authoritative record. This alone reject.
+  2. Revised original rows missing notes:
+    - backend order at 489-528 gets Q17 native refinement and adapter completeness but only 2026-11-06 revision. Add explicit 2026-11-08 notes links with allocation slice24 and no adapter premise.
+    - speed tracking 957-961 and binary size 983-984 get per-example compile budget and report-until-grep target but no notes. Add extensions.
+  Could split into two findings for file line clarity. Do so.
+  3. Mixed-class rule invented ROADMAP588. PENDING only caps. Fix open question or remove, align AGENTS.
+  4. R0544 stale five cap. fix revision note applicable R0618 cap; perhaps median≤5 metric can remain.
+  5. Changelog R0620 wait wrong. fix parser and task completion waits, lexer doesn't.
+  6. R0623 wrong section. move to C. Is this too nit? include.
+  All links resolved note.
+
+  Could also mention phase of R0622? Perhaps add in same: R0622 at459 sits B though SPEC step8 phase A. Is this definitely wrong? If include, fix move A or mark spans A/B. It names no slice phase except section. User asks roadmap items phase/slice. R0622 should name A2i/Step8. I can say "R-0622 is under B even though its referenced grammar work is SPEC_UNIFICATION step8 in phase A; R-0623 under D targets slice16 phase C. Move them to matching sections or explicitly state cross-phase timing." This is objectively true. R0622 work also parser B but row only grammar review/Lean grammar, so A. Good. Add.
+
+  Total 7 findings if backend/perf separate. Fine.
+
+  Do I need mention all 198 links? "All 198 added Markdown links resolved." okay. Respond not too long ~600 words? desired 4 perhaps 450. Each 2 sentences. Good.
+
+• 1. **Unsupported owner quote and mandatory agy-review rule.** `docs/decisions.md:1225-1229`, `AGENTS.md:146-151`, and `changelog.d/2026-11-08-record-foundation.md:33-36` introduce `"also remember we have agy not only codex kimi and claude"`, but that answer is absent from the authoritative `PENDING_RECORDS.md`. Remove the quoted decision and restore the availability-based review rule, unless a separate authoritative owner record is supplied.
+
+  2. **The backend-order revision is not annotated at its original row.** `docs/decisions.md:489-528` still records only 2026-11-06 revisions, although foundation Q17 adds per-native-trace Core refinement and the adapter decision retires the adapter premise. Add an explicit 2026-11-08 revision note linking `#foundation-q17` and `#decided-2026-11-08-adapter`, including the slice-24 allocation-dependent-observation follow-up and the complete error/success theorem.
+
+  3. **The performance revisions are missing from their original rows.** `docs/decisions.md:957-961` lacks the approved per-example compile-speed budget and the grep-at-slice-16 speed target; `docs/decisions.md:983-984` likewise leaves binary size report-only without the new target milestone. Add dated revision notes linking `#decided-2026-11-08-compile-budget` and `#decided-2026-11-08-speed-target`.
+
+  4. **An unapproved mixed-diff review rule was added.** `ROADMAP.md:588` requires mixed-class diffs to go back to the owner, but the authoritative answer approved only the 2/3/5 per-class caps. Remove that extra requirement from the approved scope, or record it explicitly as an open owner question and align `AGENTS.md:150-151` so mixed-class behavior is not presented as settled.
+
+  5. **The old five-round split rule remains contradictory.** `ROADMAP.md:582` still says “a slice past 5 is split,” while `AGENTS.md:153-154` now requires splitting past the applicable risk cap. Revise R-0544 with a dated note to use R-0618’s applicable cap; the separate median target may remain if desired.
+
+  6. **The changelog overstates the grammar dependency.** `changelog.d/2026-11-08-record-foundation.md:41-42` says all of R-0620 waits for the written grammar, contradicting `ROADMAP.md:460`, where the lexer explicitly does not wait. Change it to “R-0620’s parser, and therefore its completion, waits for R-0622; its lexer does not.”
+
+  7. **Two roadmap rows are under inconsistent phases.** `ROADMAP.md:459` places the grammar-only R-0622 under phase B although its referenced SPEC_UNIFICATION step 8 is in phase A; `ROADMAP.md:512` places R-0623 under phase D although its slice 16 target belongs to phase C (`ROADMAP.md:226`). Move them to the matching sections or explicitly document their cross-phase timing.
+
+  All 198 added Markdown links resolved.
+
+  VERDICT: REJECT
+
+To resume this session: kimi -r session_0ae39d15-98a1-4be9-9d07-05bbe7ac6908

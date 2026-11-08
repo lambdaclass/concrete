@@ -1,0 +1,10 @@
+Owner sign-off of ea5181b535fd2983abfcafe31b3ff7bf59ec6439 (wip/slice0), staged 2026-11-08; NO ref written.
+quote (verbatim, owner 2026-11-08): sign off ea5181b5, 1547734f8, a27fbb842, yes redesign
+date: 2026-11-08
+rounds-at: 3c5bb7524a76aa7d118db8919c073368795c63b8 (review.sh round 5 of 5; cap of a compiler/spec change = 5)
+base: the slice-0 train's base (origin/main at landing; 86c31477d3c4f3569138eb20b4d4cf0836912136 today)
+codex: request = the exact prompt of the verification pass (cv/prompt.txt); output = codex exec output (cv/codex.out), VERDICT: ACCEPT
+kimi:  request = the exact prompt sent (s0-p6.txt + the checkout sentence); output = kimi6.out, VERDICT: ACCEPT
+agy:   request = the exact prompt of the re-assessment pass (s0-agy6b.txt, which contains the first pass); output = agy6b.out, VERDICT: ACCEPT
+       (agy's first pass, agy6.out, was REJECT on the diff alone; it withdrew all three findings given the full files)
+Each request names ea5181b5 by prefix; record prepends "reviewed: <full sha>" (the commit each reviewer was run on).

@@ -1,0 +1,11 @@
+OWNER RULE (verbatim, 2026-11-08): "ALWAYS tell the reviewrs to do the best long term thing rather than cuitting corners". Judge by the best long-term design, not the cheapest now. Report any shortcut (Claude's, the repository's or your own) as a real finding and name the long-term alternative.
+
+The current directory is a git-archive copy of Concrete's origin/main (a fully proven systems language; Lean 4 is the specification; a new compiler is built slice by slice; the old compiler is frozen under legacy/). Read _review/LLIST.md (candidates L1-L8). Check each against the repository: docs/PHILOSOPHY.md, docs/decisions.md, ROADMAP.md (queue rows, slice table, task rows), RETENTION.tsv, ISSUES.tsv, docs/archive/roadmap-2026-11/task_disposition.tsv, docs/archive/bugs-2026-11/ (bug disposition), docs/proposals/*.md (SPARK.md item 5 is counterexamples), Concrete/README.md, ConcreteSpec/README.md, legacy/docs/ where needed.
+
+Tasks:
+1. For each L1-L8: AGREE or DISAGREE (reason at most 60 words); whether it already exists or is planned (cite the task/row/file); the slice or queue row it belongs in; whether it must START BEFORE SLICE 1 (B1); and the best long-term design if it differs from the candidate.
+2. Anything still missing that should be checked from the beginning to make the compiler excellent, with source, problem, slice and why not covered.
+Do not modify files. Cite repository paths you read.
+
+End with exactly one line:
+ANSWER: AGREE=<ids>; DISAGREE=<ids or none>; BEFORE_SLICE1=<ids>; MISSED=<short list or none>

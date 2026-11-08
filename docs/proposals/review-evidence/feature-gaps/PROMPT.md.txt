@@ -1,0 +1,12 @@
+You are reviewing a research answer for the owner of Concrete, a fully proven systems language with no GC (linear ownership, second-class references, explicit capabilities via with(...) plus grant values, no hidden traps, Lean 4 is the specification). The owner asked: "is there anything from spark, rust, odin, zig, or any system programming language or any other formal verified language feature that we should have that we didn't think about?"
+
+The current directory is a git-archive copy of origin/main. Claude's draft is _review/DRAFT.md. Read it, then check it against the repository: docs/PHILOSOPHY.md (rules 1-18, conflict order, admission test, refusals), docs/decisions.md, ROADMAP.md (slice table, std-per-slice table), docs/proposals/SPARK.md, IDEAS.md, MERGED.md, FOUNDATION.md, ConcreteSpec/, legacy/docs/spec/ (e.g. types.md TYPE-22 constants, references.md REF-6), docs/archive/decisions-2026-11-05/R4_RATIONALE.md (F6 hosted target table). Owner decisions from 2026-11-07/08 not yet in the repo are summarized in the draft's baseline paragraph (they include removing `as`, `char`, print builtins and dot calls).
+
+Tasks:
+1. For each gap G1-G12 say AGREE or DISAGREE, with a reason in at most 60 words. DISAGREE if it is already covered (cite file and section or decision row), wrong, breaks a decided row, conflicts with a PHILOSOPHY rule, or is placed in the wrong slice. Say if the ranking should change.
+2. Check the "already covered" and "recommend rejecting" lists: name any entry that is wrong (with a citation).
+3. List gaps Claude missed: features from SPARK/Ada, Rust, Zig, Odin, Austral, Hylo, Vale, Cyclone, ATS, F*/Low*, Dafny, Verus, Prusti, Creusot, Aeneas, Frama-C, CompCert, CakeML, seL4, Idris, Lean, Koka, Pony, Swift, C3, Hare, Jai, Nim, Carbon, Wasm component model, MISRA or others, that the repository does not cover and that pass the PHILOSOPHY admission test. For each: source, problem, proposed slice, and why it is not already covered. Be honest; fewer, real gaps are better than many weak ones.
+Do not modify files. Cite repository paths you read.
+
+End with exactly one line:
+ANSWER: AGREE=<gap ids>; DISAGREE=<gap ids or none>; MISSED=<short list or none>

@@ -1,0 +1,13 @@
+FOLLOW-UP on commit 61be4bed3 (wip/agent-launcher-2, this clone; your three launcher commits rebased onto main ea212942).
+A full-access Codex review found one real defect. Fix it in one commit, with controls in scripts/checks/agent_launch.sh that
+fail without the fix (prove it with a temporary mutation and report the result):
+- scripts/agent/launch.sh:153: unit_result turns a failed `systemctl --user show` (for example a bus error after is-active
+  said inactive/failed) into `unknown`. The watcher then caches `unknown`, runs reset-failed, and returns 125 when it should
+  return 2. Fix: a query failure of `show` is an operational error. lost_exit/inspect return 2 with a clear `cannot query
+  systemd` message. They write no result cache and do not collect the unit, so a later wait, once the bus is back, still
+  reads the real Result. Only a successful query with an empty or `success` Result maps to `unknown`.
+  Controls: a stub where `show` fails (loudly, and silently with no output) after is-active=failed gives exit 2, no
+  $JOBDIR/result, and no reset-failed. A following wait with a working stub returns 125 with the real Result.
+  Make the AGENTS.md and changelog wording about query failures match.
+Gates: timeout 600 bash scripts/checks/agent_launch.sh; timeout 1500 systemd-run --user --scope -q -p MemoryMax=8G -p TasksMax=1024 bash scripts/checks/run.sh (all pass).
+Commit locally, never push, never change git config/remotes, no --no-verify. Print the SHA, the summary and the mutation results.

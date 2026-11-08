@@ -1,0 +1,51 @@
+TASK: make scripts/checks/legacy_frozen.sh and its lock parser fail closed (branch wip/legacy-sweep-2, this clone, head 903fd3dab).
+
+Background. legacy/ is a frozen copy of the old tree. scripts/checks/legacy_frozen.sh enforces that it changes only by byte-for-byte
+sweeps recorded in scripts/checks/legacy.lock. scripts/checks/lib/legacy_lock.py is the lock's ONE parser and reader (read its
+docstring: the format, `rows FILE|-`, `history LOCK PATH TRUSTED`). legacy_frozen.sh calls it via lock_rows / lock_history;
+scripts/checks/lib/doc_links.py imports it. Read both files in full first.
+
+Two confirmed real defects to fix (from review of 903fd3dab):
+
+1. legacy_lock.py parse() accepts a lock that has only `base <oid>` (no `tree <oid>` line 2), and also an empty-after-base lock.
+   history() therefore accepts such a malformed trusted version without a diagnostic. Fix: a lock must have at least the two
+   header rows (line 1 base, line 2 tree); a lock missing line 2 is refused with an exact diagnostic in the existing
+   NAME:LINE: style (for a missing line, name the line that is missing, e.g. "<name>:2: missing: line 2 must be 'tree <tree>'").
+
+2. Fail-open on a failing parser or helper. In legacy_frozen.sh:
+   - chain(): `rows="$(lock_rows "$lock")" || { printf '%s\n' "$rows"; return 0; }` prints nothing when the parser exits
+     non-zero with empty stdout (a Python traceback goes to stderr, python3 missing, exit 2 on an I/O error), so chain's output
+     is empty and the lock is judged clean.
+   - the main section ignores lock_history's exit status (`hist="$(lock_history ...; history_identity ...)"`): a crash with no
+     stdout passes.
+   - AUDIT every other external command whose output is judged by emptiness: history_identity's python heredoc, judge()'s
+     `git diff-tree ... | python3 -I -c ...` pipeline into a while loop, trusted_base, and any git command whose failure would
+     produce empty output that reads as "no problems". Every such call must fail closed: a non-zero exit (or a failed pipeline
+     stage) becomes an explicit refusal line naming the step, never silence.
+   Decide one consistent mechanism (for example: helpers print a refusal and the caller also checks the exit status) and apply
+   it to every site.
+
+Controls (in legacy_frozen.sh's negative-control section, each asserting its EXACT diagnostic, each failing for its intended
+reason):
+   - a lock with only a base row is refused by chain() and, as a trusted version, by lock_history;
+   - a parser that exits non-zero with no stdout (point LOCKPY at a stub script that writes only to stderr and exits 1, and one
+     that exits 2) makes chain() and lock_history refuse, with the exact message;
+   - for each other fail-closed site you change, a control that forces its command to fail (a stub on PATH or a bad argument)
+     and asserts the refusal.
+   After adding the controls, prove each is load-bearing: temporarily revert each fix and confirm its control fails, then
+   restore. Report which mutation you ran and what failed.
+
+Gates that must pass (run each under timeout, bounded):
+   timeout 600 systemd-run --user --scope -q -p MemoryMax=4G -p TasksMax=512 bash scripts/checks/legacy_frozen.sh
+   timeout 1500 systemd-run --user --scope -q -p MemoryMax=8G -p TasksMax=1024 bash scripts/checks/run.sh   (all 11 pass)
+
+Out of scope: do not touch legacy/, scripts/checks/legacy.lock, docs/decisions.md, ROADMAP.md, or any file not needed for
+this fix. Keep the existing controls passing. If you change wording visible in the header comment of legacy_frozen.sh or in
+changelog.d/2026-11-08-legacy-sweep.md, keep them accurate.
+
+Hard rules: never push (the orchestrator pushes); you may commit locally with a clear message (no co-author lines needed);
+never use --no-verify, never force anything, never change git config or remotes; bound every test with timeout and
+systemd-run limits as above; do not connect to the network.
+
+When done, print: the commit SHA, a summary of each change by file, each control added with its exact diagnostic, and the
+mutation results.

@@ -1,0 +1,1027 @@
+Both claims are confirmed. I only read files; no review, edits, commits, or pushes were performed.
+
+**Claim 1 — exact prompt is not persisted**
+
+- `scripts/review/review.sh:242–275` constructs the prompt dynamically, including previous findings and `--prompt-extra`.
+- Lines **295–296** pass it directly as a command argument, with the diff supplied separately through stdin. Neither input is explicitly saved.
+- Lines **317–321, 332–335, 348** write metadata and reviewer responses to `.review/<sha>-<round>.md`; they do not write the prompt.
+- Lines **387–406** save verdict metadata and non-clean findings in git notes, without the prompt.
+- Lines **84–85** delete the temporary working directory on exit. The invocation also uses `--ephemeral` at line 295.
+
+The three supplied samples contain metadata and responses, with no request transcript. **The script persists no exact sent prompt**, so its records cannot reproduce the request verbatim.
+
+CLAIM 1: CONFIRMED — The prompt is constructed and sent directly but omitted from both the persistent raw output and git notes.
+
+**Claim 2 — repository-access failure still qualifies as clean**
+
+The exact invocation at **`scripts/review/review.sh:295–296`** is:
+
+```bash
+GIT_OPTIONAL_LOCKS=0 "$CODEX_BIN" exec --sandbox read-only --ephemeral --color never -C "$ROOT" -o "$out" \
+  "$(prompt_for "$kind" "$label" "$group" "$paths")" <"$piece" >"$log" 2>&1 || rc=$?
+```
+
+The fault is in how completion is judged:
+
+- **Lines 300–303:** exit status zero plus a final `VERDICT: clean` immediately sets `LAST_RESULT=clean`, before checking refusal text. There is no repository-access success check or sandbox-failure check.
+- **Line 336:** only `refused`, `noverdict`, and `error` trigger retries; these clean responses bypass that path.
+- **Lines 378–395:** zero blocked pieces and zero findings produce and record `verdict: clean`.
+- **`scripts/review/verify.sh:35–63, 68`:** the verifier validates the six metadata fields and accepts `clean`; it does not inspect reviewer output or repository-access evidence.
+- **`scripts/land/train.sh:512, 1033–1037`:** that successful verification qualifies as review provenance for landing.
+
+The supplied outputs demonstrate the failure:
+
+| Evidence | Repository-access failure | Recorded round |
+|---|---|---|
+| `sample-4d16e26f.md` | Lines 9, 17: sandbox could not start | Line 21: clean, 0 blocked |
+| `sample-b7f30d36.md` | Lines 9, 19: repository verification failed | Line 23: clean, 0 blocked |
+| `sample-fce6644d.md` | Line 17 explicitly reports `bwrap: Operation not permitted`; lines 9, 25, 33 report unavailable context | Line 37: clean, 0 blocked |
+
+Recounting all **112 rows** in `REVIEW_SCAN.txt`: **59 clean outputs**, of which **42 have `sandbox>0` — 42/59 (71.2%)**. This confirms the supplied scan’s count; the samples substantiate the reported host failure without rerunning it. The code establishes that the resulting notes qualify for provenance, although these files alone do not prove an actual landing occurred.
+
+CLAIM 2: CONFIRMED — Reported sandbox startup failures leave repository context unread, yet a zero-exit response ending in `VERDICT: clean` becomes a clean note that the train accepts as review provenance.
+Reading additional input from stdin...
+OpenAI Codex v0.166.0
+--------
+workdir: /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rv-confirm
+model: gpt-6.1-sol
+provider: openai
+approval: never
+sandbox: danger-full-access
+reasoning effort: none
+reasoning summaries: none
+session id: 01a1bb9c-ad98-7a50-a453-56673ed2aed6
+--------
+user
+Bug confirmation (do NOT fix, do not commit, do not push). This directory is a git-archive copy of Concrete's main; scripts/review/review.sh is the Codex review tool whose clean notes the landing train accepts as review provenance.
+
+Claim 1: review.sh does not save the exact prompt it sends to the reviewer, so a review's request cannot be reproduced or recorded verbatim (e.g. for an owner sign-off record). Check review.sh (prompt_for, run_one, the .review/<sha>-<round>.md output) and say whether the sent prompt is persisted anywhere.
+
+Claim 2 (more serious): review.sh runs Codex in a sandbox that cannot start on the dev host (bwrap: Operation not permitted), so Codex cannot read the repository and judges only the supplied diff, yet the round is still recorded as `verdict: clean` and the train accepts it. Evidence: REVIEW_SCAN.txt lists the raw outputs (.review/*.md) found on this machine since 2026-11-01 with `clean=1` when the round verdict was clean and `sandbox=N` the count of lines saying the repository could not be read; sample-*.md are three such outputs verbatim. Check review.sh's codex invocation (which sandbox mode/flags), whether it detects or fails on a reviewer that could not read the repository, and confirm the count from REVIEW_SCAN.txt (clean outputs with sandbox>0 out of all clean outputs). Do not run review.sh against a remote and do not run anything unbounded; reading files is enough, and you may run `codex --help` style commands under `timeout 60`.
+
+End with, for each claim: the exact lines at fault, the evidence, and one line `CLAIM 1: CONFIRMED|NOT A BUG` / `CLAIM 2: CONFIRMED|NOT A BUG` with a one-sentence reason.
+codex
+I’ll read the review script, landing checks, and supplied evidence without running a review or changing files.
+exec
+/bin/bash -lc "pwd; rg --files -g 'REVIEW_SCAN.txt' -g 'sample-*.md' -g 'review.sh' -g 'REVIEW.md' -g 'train.sh' -g 'AGENTS.md'" in /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rv-confirm
+ succeeded in 0ms:
+/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rv-confirm
+AGENTS.md
+REVIEW_SCAN.txt
+sample-4d16e26f.md
+scripts/review/review.sh
+sample-b7f30d36.md
+docs/REVIEW.md
+sample-fce6644d.md
+scripts/land/train.sh
+legacy/scripts/review/review.sh
+legacy/scripts/land/train.sh
+legacy/docs/project/AGENTS.md
+legacy/docs/project/REVIEW.md
+
+exec
+/bin/bash -lc 'nl -ba scripts/review/review.sh' in /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rv-confirm
+ succeeded in 0ms:
+     1	#!/usr/bin/env bash
+     2	# R-0544 — one review procedure for every agent. See docs/REVIEW.md.
+     3	#
+     4	#   scripts/review/review.sh [--base <ref>] [--head <ref>] [--max-rounds 5]
+     5	#                            [--pieces auto|N] [--prompt-extra "..."]
+     6	#
+     7	# --head names the commit the caller means to review (train.sh and ready.sh pass it); it must be
+     8	# the checkout's HEAD, or nothing runs (exit 2): the review always reads HEAD's tree.
+     9	#
+    10	# Runs ONE review round on HEAD and records the result as a git note on HEAD
+    11	# under refs/notes/concrete-review, which it then pushes.
+    12	#
+    13	#   round 1      reviews the full diff base..HEAD (base defaults to the merge-base
+    14	#                with origin/main);
+    15	#   round N > 1  reviews only the delta since the last reviewed commit (found from
+    16	#                the notes on earlier commits of the branch) and passes the previous
+    17	#                round's findings to the reviewer.
+    18	#
+    19	# A large diff is split into pieces by file group and size. A piece the reviewer
+    20	# refuses is retried once, halved and with a more neutral prompt; after that it is
+    21	# `blocked`. The round cap is enforced across invocations: there is no round
+    22	# max+1.
+    23	#
+    24	# Exit codes:
+    25	#   0  verdict clean
+    26	#   1  verdict findings (fix, commit, run again)
+    27	#   2  usage or environment error (nothing recorded)
+    28	#   3  round cap reached: split the branch or escalate (open findings are printed)
+    29	#   4  nothing to review (HEAD already reviewed, or empty diff)
+    30	#   5  verdict blocked (a piece could not be reviewed; see .review/)
+    31	#   6  result recorded locally but the notes ref could not be pushed
+    32	#
+    33	# Environment (mostly for the test gate, scripts/checks/review_tool.sh):
+    34	#   REVIEW_CODEX_BIN    reviewer binary (default: codex)
+    35	#   REVIEW_REMOTE       remote for notes and the default base (default: origin)
+    36	#   REVIEW_MAIN_REF     ref the default base is computed against (default: $REVIEW_REMOTE/main)
+    37	#   REVIEW_PUSH         1 to fetch/push the notes refs (default: 1)
+    38	#   REVIEW_PIECE_BYTES  size limit of one piece in bytes (default: 60000)
+    39	
+    40	set -euo pipefail
+    41	
+    42	SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    43	source "$SCRIPT_DIR/../checks/lib/has_match.sh" || exit 2  # bug 283: never a pipe into grep -q
+    44	ROOT="$(git rev-parse --show-toplevel)"
+    45	cd "$ROOT"
+    46	
+    47	CODEX_BIN="${REVIEW_CODEX_BIN:-codex}"
+    48	REMOTE="${REVIEW_REMOTE:-origin}"
+    49	MAIN_REF="${REVIEW_MAIN_REF:-$REMOTE/main}"
+    50	PUSH="${REVIEW_PUSH:-1}"
+    51	PIECE_BYTES="${REVIEW_PIECE_BYTES:-60000}"
+    52	NOTES_REF="refs/notes/concrete-review"
+    53	FINDINGS_REF="refs/notes/concrete-review-findings"
+    54	REVIEWER="codex"
+    55	
+    56	BASE=""
+    57	MAX_ROUNDS=5
+    58	PIECES="auto"
+    59	EXTRA=""
+    60	
+    61	usage() { awk 'NR > 1 { if (!/^#/) exit; sub(/^# ?/, ""); print }' "${BASH_SOURCE[0]}"; }  # the header, whatever its length
+    62	die() { echo "review: $*" >&2; exit 2; }
+    63	
+    64	while [ $# -gt 0 ]; do
+    65	  case "$1" in
+    66	    --base) [ $# -ge 2 ] || die "--base needs a ref"; BASE="$2"; shift 2 ;;
+    67	    --head) [ $# -ge 2 ] && [ -n "$2" ] || die "--head needs a ref"; WANT_HEAD="$2"; shift 2 ;;
+    68	    --max-rounds) [ $# -ge 2 ] || die "--max-rounds needs a number"; MAX_ROUNDS="$2"; shift 2 ;;
+    69	    --pieces) [ $# -ge 2 ] || die "--pieces needs auto or a number"; PIECES="$2"; shift 2 ;;
+    70	    --prompt-extra) [ $# -ge 2 ] || die "--prompt-extra needs text"; EXTRA="$2"; shift 2 ;;
+    71	    -h|--help) usage; exit 0 ;;
+    72	    *) die "unknown argument: $1 (see --help)" ;;
+    73	  esac
+    74	done
+    75	[[ "$MAX_ROUNDS" =~ ^[1-9][0-9]*$ ]] || die "--max-rounds must be a positive integer"
+    76	[[ "$PIECES" == auto || "$PIECES" =~ ^[1-9][0-9]*$ ]] || die "--pieces must be auto or a positive integer"
+    77	if [ -n "${WANT_HEAD:-}" ]; then
+    78	  want="$(git rev-parse -q --verify "$WANT_HEAD^{commit}")" || die "--head $WANT_HEAD is not a commit"
+    79	  [ "$want" = "$(git rev-parse HEAD)" ] || die "--head $WANT_HEAD is ${want:0:12}, but the checkout is at $(git rev-parse --short=12 HEAD)"
+    80	fi
+    81	[[ "$PIECE_BYTES" =~ ^[1-9][0-9]*$ ]] || die "REVIEW_PIECE_BYTES must be a positive integer"
+    82	command -v "$CODEX_BIN" >/dev/null 2>&1 || die "reviewer binary not found: $CODEX_BIN"
+    83	
+    84	WORK="$(mktemp -d)"
+    85	trap 'rm -rf "$WORK"' EXIT
+    86	
+    87	# ---------------------------------------------------------------- notes sync
+    88	# Fetch the remote notes refs and merge them into the local ones. On a conflict
+    89	# for the same commit the local note wins (`-s ours`): it is the newer result.
+    90	sync_notes() {
+    91	  [ "$PUSH" = 1 ] || return 0
+    92	  local ref tmp
+    93	  for ref in "$NOTES_REF" "$FINDINGS_REF"; do
+    94	    tmp="refs/notes/review-sync-${ref##*/}"
+    95	    if git fetch -q "$REMOTE" "+$ref:$tmp" 2>/dev/null; then
+    96	      if git show-ref -q --verify "$ref"; then
+    97	        git notes --ref="$ref" merge -q -s ours "$tmp" >/dev/null 2>&1 \
+    98	          || { echo "review: could not merge remote $ref" >&2; git update-ref -d "$tmp"; return 1; }
+    99	      else
+   100	        git update-ref "$ref" "$tmp"
+   101	      fi
+   102	      git update-ref -d "$tmp"
+   103	    fi
+   104	  done
+   105	}
+   106	
+   107	# Push both notes refs; on a non-fast-forward, fetch + merge and retry.
+   108	push_notes() {
+   109	  [ "$PUSH" = 1 ] || return 0
+   110	  local attempt refs=("$NOTES_REF")
+   111	  git show-ref -q --verify "$FINDINGS_REF" && refs+=("$FINDINGS_REF")
+   112	  for attempt in 1 2 3; do
+   113	    if git push -q "$REMOTE" "${refs[@]}" 2>"$WORK/push.err"; then
+   114	      return 0
+   115	    fi
+   116	    # Only a non-fast-forward is cured by fetch + merge. Anything else (a hook
+   117	    # refusal, auth, network) fails at once instead of being repeated.
+   118	    if ! grep -qE '\[rejected\].*\((fetch first|non-fast-forward)\)' "$WORK/push.err"; then
+   119	      break
+   120	    fi
+   121	    echo "review: notes push attempt $attempt rejected; fetching and merging" >&2
+   122	    sync_notes || true
+   123	  done
+   124	  cat "$WORK/push.err" >&2
+   125	  return 1
+   126	}
+   127	
+   128	note_field() { # note_field <text> <key>
+   129	  printf '%s\n' "$1" | awk -v k="$2: " 'index($0, k) == 1 && !done { print substr($0, length(k) + 1); done = 1 }'
+   130	}
+   131	
+   132	findings_for() { # findings_for <sha> <round>: the recorded findings of that round
+   133	  local sha="$1" round="$2"
+   134	  if git notes --ref="$FINDINGS_REF" show "$sha" 2>/dev/null; then return 0; fi
+   135	  if [ -f ".review/$sha-$round.md" ]; then cat ".review/$sha-$round.md"; return 0; fi
+   136	  echo "(findings text not available for $sha round $round)"
+   137	}
+   138	
+   139	cap_message() { # cap_message <rounds-done> <findings-text>
+   140	  {
+   141	    echo "review: round cap reached ($1 of $MAX_ROUNDS rounds without a clean verdict)."
+   142	    echo "review: do not run another round. Split the branch into smaller branches, or"
+   143	    echo "review: escalate to a human reviewer. Open findings:"
+   144	    echo "$2" | sed 's/^/  /'
+   145	  } >&2
+   146	}
+   147	
+   148	# ---------------------------------------------------------------- state
+   149	sync_notes || die "notes sync failed"
+   150	
+   151	HEAD_SHA="$(git rev-parse HEAD)"
+   152	if [ -z "$BASE" ]; then
+   153	  git rev-parse -q --verify "$MAIN_REF^{commit}" >/dev/null || die "no $MAIN_REF; pass --base"
+   154	  BASE_SHA="$(git merge-base HEAD "$MAIN_REF")" || die "no merge-base with $MAIN_REF"
+   155	else
+   156	  BASE_SHA="$(git rev-parse -q --verify "$BASE^{commit}")" || die "bad --base: $BASE"
+   157	fi
+   158	
+   159	if [ -n "$(git status --porcelain --untracked-files=no)" ]; then
+   160	  echo "review: warning: uncommitted changes are not reviewed; only HEAD is" >&2
+   161	fi
+   162	
+   163	# Latest note on the branch (round count), and the latest note whose round
+   164	# actually reviewed its diff (delta start). A `blocked` round reviewed only part
+   165	# of its diff, so it does not advance the delta start.
+   166	PREV_SHA="" PREV_ROUNDS=0 PREV_VERDICT="" REVIEWED_SHA="" REVIEWED_ROUNDS=0 REVIEWED_VERDICT=""
+   167	while read -r c; do
+   168	  [ -n "$c" ] || continue
+   169	  n="$(git notes --ref="$NOTES_REF" show "$c" 2>/dev/null)" || continue
+   170	  v="$(note_field "$n" verdict)"
+   171	  r="$(note_field "$n" rounds)"
+   172	  [[ "$r" =~ ^[0-9]+$ ]] || continue
+   173	  if [ -z "$PREV_SHA" ]; then PREV_SHA="$c" PREV_ROUNDS="$r" PREV_VERDICT="$v"; fi
+   174	  if [ "$v" = clean ] || [ "$v" = findings ]; then REVIEWED_SHA="$c" REVIEWED_ROUNDS="$r" REVIEWED_VERDICT="$v"; break; fi
+   175	done < <(git rev-list --topo-order HEAD "^$BASE_SHA")
+   176	
+   177	if [ "$PREV_SHA" = "$HEAD_SHA" ] && [ "$PREV_VERDICT" != blocked ]; then
+   178	  if [ "$PREV_VERDICT" = clean ]; then
+   179	    echo "review: HEAD $HEAD_SHA already reviewed clean (round $PREV_ROUNDS)"
+   180	    exit 0
+   181	  fi
+   182	  if [ "$PREV_ROUNDS" -ge "$MAX_ROUNDS" ]; then
+   183	    cap_message "$PREV_ROUNDS" "$(findings_for "$PREV_SHA" "$PREV_ROUNDS")"
+   184	    exit 3
+   185	  fi
+   186	  echo "review: HEAD already reviewed in round $PREV_ROUNDS (verdict $PREV_VERDICT)." >&2
+   187	  echo "review: commit the fixes, then run again." >&2
+   188	  exit 4
+   189	fi
+   190	
+   191	ROUND=$((PREV_ROUNDS + 1))
+   192	if [ "$ROUND" -gt "$MAX_ROUNDS" ]; then
+   193	  cap_message "$PREV_ROUNDS" "$(findings_for "$PREV_SHA" "$PREV_ROUNDS")"
+   194	  exit 3
+   195	fi
+   196	
+   197	FROM="${REVIEWED_SHA:-$BASE_SHA}"
+   198	git diff --no-color --no-ext-diff -M "$FROM" "$HEAD_SHA" >"$WORK/full.diff"
+   199	if [ ! -s "$WORK/full.diff" ]; then
+   200	  echo "review: nothing to review: no changes between $FROM and HEAD" >&2
+   201	  exit 4
+   202	fi
+   203	
+   204	# Open findings to carry forward: those of the latest round, and, when that
+   205	# round was blocked, also those of the last fully reviewed round (the blocked
+   206	# round may not have seen the code they are about).
+   207	PREV_FINDINGS=""
+   208	if [ -n "$PREV_SHA" ] && [ "$PREV_VERDICT" != clean ]; then
+   209	  PREV_FINDINGS="$(findings_for "$PREV_SHA" "$PREV_ROUNDS")"
+   210	fi
+   211	if [ "$REVIEWED_VERDICT" = findings ] && [ "$REVIEWED_SHA" != "$PREV_SHA" ]; then
+   212	  PREV_FINDINGS="$PREV_FINDINGS
+   213	$(findings_for "$REVIEWED_SHA" "$REVIEWED_ROUNDS")"
+   214	fi
+   215	
+   216	# ---------------------------------------------------------------- split
+   217	TOTAL="$(wc -c <"$WORK/full.diff" | tr -d ' ')"
+   218	split_at() { rm -rf "$WORK/pieces"; python3 "$SCRIPT_DIR/split_diff.py" "$WORK/full.diff" "$WORK/pieces" "$1"; }
+   219	if [ "$PIECES" = auto ]; then
+   220	  K="$(split_at "$PIECE_BYTES")"
+   221	else
+   222	  # --pieces N: start at total/N and grow the limit until at most N pieces come
+   223	  # out (repeated file headers add a little). File groups are never merged, so
+   224	  # more groups than N still give one piece per group.
+   225	  LIMIT=$(( (TOTAL + PIECES - 1) / PIECES ))
+   226	  K="$(split_at "$LIMIT")"
+   227	  while [ "$K" -gt "$PIECES" ] && [ "$LIMIT" -lt "$TOTAL" ]; do
+   228	    LIMIT=$(( LIMIT + LIMIT / 20 + 1 ))
+   229	    K="$(split_at "$LIMIT")"
+   230	  done
+   231	fi
+   232	
+   233	# ---------------------------------------------------------------- prompts
+   234	SCOPE_ROUND1="The patch below is the complete change of a branch against its base commit $BASE_SHA."
+   235	SCOPE_DELTA="The patch below is only the change since commit $FROM, which was reviewed in round $REVIEWED_ROUNDS. Earlier rounds covered the rest of the branch."
+   236	VERDICT_RULE='For each finding write one bullet: `- path:line: what is wrong and why`.
+   237	The last line of your reply must be exactly one of these two lines, with nothing after it:
+   238	VERDICT: clean
+   239	VERDICT: findings
+   240	Use `VERDICT: findings` when you report any finding, including an earlier finding that is still open.'
+   241	
+   242	prompt_for() { # prompt_for <standard|neutral> <piece label> <group> <paths>
+   243	  local scope="$SCOPE_ROUND1"
+   244	  [ -n "$REVIEWED_SHA" ] && scope="$SCOPE_DELTA"
+   245	  if [ "$1" = standard ]; then
+   246	    cat <<EOF
+   247	You are reviewing a patch to Concrete, a compiler for a small systems programming language. The compiler is written in Lean 4; the repository also holds its standard library, test programs, test scripts and documentation. The repository is checked out read-only in the working directory, and you may open any file in it for context.
+   248	
+   249	This is review round $ROUND. $scope
+   250	This is $2 (file group: $3; files: $4).
+   251	
+   252	Report correctness findings only: wrong behaviour, logic errors, regressions, unhandled cases, tests that do not check what they claim, and documentation that contradicts the code. Do not report style preferences.
+   253	
+   254	Also answer one question, as a finding when the answer is yes: does this patch pick a side on any owner decision in docs/decisions.md (OD1 - OD157 under "Owner decisions", or an undecided project question), that is, choose, revise, encode, implement, extend or revert what one of them covers without the owner's explicit answer? Only the project owner decides those; a patch that does so must not land. Recording a decision the owner explicitly approved (the recording rule in docs/decisions.md) is permitted and is not picking a side. For such a patch, report as a finding: a recorded answer without its provenance (the owner's answer quoted with its date, or the quoted owner rule that decides it under the recording rule); wording that does not faithfully transcribe that answer; any change beyond its scope; and anything recorded as decided that the owner did not approve.
+   255	EOF
+   256	  else
+   257	    cat <<EOF
+   258	Please do a routine code review of the source-code patch below. It belongs to a compiler, a program that translates source code into machine code, and to that compiler's tests and documentation. Treat it as ordinary software engineering: look for logic errors and for behaviour that differs from what the code and its comments say. You may read files in the working directory for context.
+   259	
+   260	This is $2 (files: $4). $scope
+   261	Also report as a finding any change that picks a side on an owner decision listed in docs/decisions.md (OD1 - OD157) or an undecided project question without the owner's explicit answer. Writing down a decision the owner explicitly approved is allowed; report it only when it lacks the owner's quoted, dated answer (or the quoted owner rule that decides it under the recording rule in docs/decisions.md), changes that answer's meaning, goes beyond it, or adds something the owner did not approve.
+   262	EOF
+   263	  fi
+   264	  if [ -n "$PREV_FINDINGS" ]; then
+   265	    cat <<EOF
+   266	
+   267	The previous round reported the findings below. Check whether this patch resolves each one, and list every one that is still open as a finding.
+   268	--- previous findings ---
+   269	$PREV_FINDINGS
+   270	--- end previous findings ---
+   271	EOF
+   272	  fi
+   273	  [ -n "$EXTRA" ] && printf '\n%s\n' "$EXTRA"
+   274	  printf '\n%s\n' "$VERDICT_RULE"
+   275	}
+   276	
+   277	# A refusal is recognized only when there is no verdict line: a real review that
+   278	# merely discusses content filters (as a review of this tool does) still parses.
+   279	REFUSAL_RE="(I can.?t|I cannot|I won.?t|I.?m (not able|unable)|unable to) (help|assist|comply|review|continue|provide)|cyber ?security|content (filter|policy)|usage polic|safety (system|filter|policy)|flagged (as|for)|potentially (harmful|malicious)|invalid_prompt|violat(es|ion of) .*polic"
+   280	
+   281	LAST_RESULT=""
+   282	LAST_BODY=""
+   283	RUN_N=0
+   284	# run_one <prompt-kind> <piece-file> <label> <group> <paths>; sets LAST_RESULT to
+   285	# clean|findings|refused|noverdict|error and LAST_BODY to the reviewer's message.
+   286	run_one() {
+   287	  local kind="$1" piece="$2" label="$3" group="$4" paths="$5" rc=0 msg last
+   288	  RUN_N=$((RUN_N + 1))
+   289	  local out="$WORK/out.$RUN_N.txt" log="$WORK/log.$RUN_N.txt"
+   290	  : >"$out"
+   291	  # GIT_OPTIONAL_LOCKS=0 (bug 209): the reviewer runs git in the caller's worktree, and its sandbox
+   292	  # does not stop `git status` from taking .git's index.lock to refresh the index. A command it
+   293	  # stops mid-refresh left that lock behind, 0 bytes, and the next commit in the worktree failed.
+   294	  # Without optional locks a status reads the index and writes nothing.
+   295	  GIT_OPTIONAL_LOCKS=0 "$CODEX_BIN" exec --sandbox read-only --ephemeral --color never -C "$ROOT" -o "$out" \
+   296	    "$(prompt_for "$kind" "$label" "$group" "$paths")" <"$piece" >"$log" 2>&1 || rc=$?
+   297	  msg="$(cat "$out")"
+   298	  [ -n "$msg" ] || [ "$rc" -ne 0 ] || msg="$(cat "$log")"
+   299	  LAST_BODY="$msg"
+   300	  last="$(printf '%s\n' "$msg" | sed -e 's/[`*]//g' -e 's/[[:space:]]*$//' | awk 'NF { l = $0 } END { print l }')"
+   301	  if [ "$rc" -eq 0 ] && [ "$last" = "VERDICT: clean" ]; then LAST_RESULT=clean
+   302	  elif [ "$rc" -eq 0 ] && [ "$last" = "VERDICT: findings" ]; then LAST_RESULT=findings
+   303	  elif { printf '%s\n' "$msg"; cat "$log"; } | has_match -iE "$REFUSAL_RE"; then LAST_RESULT=refused
+   304	  elif [ "$rc" -ne 0 ]; then
+   305	    LAST_RESULT=error
+   306	    LAST_BODY="$msg
+   307	(reviewer exited $rc; last lines of its log:)
+   308	$(tail -n 20 "$log")"
+   309	  else LAST_RESULT=noverdict
+   310	  fi
+   311	}
+   312	
+   313	RAW_DIR="$ROOT/.review"
+   314	mkdir -p "$RAW_DIR"
+   315	RAW="$RAW_DIR/$HEAD_SHA-$ROUND.md"
+   316	UTC="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+   317	{
+   318	  echo "# review of $HEAD_SHA, round $ROUND"
+   319	  echo
+   320	  echo "reviewer: $REVIEWER; utc: $UTC; base: $BASE_SHA; diff from: $FROM; pieces: $K; diff bytes: $TOTAL"
+   321	} >"$RAW"
+   322	
+   323	N_FINDINGS=0 N_BLOCKED=0
+   324	FINDINGS_TEXT=""
+   325	i=0
+   326	while IFS=$'\t' read -r name group bytes paths; do
+   327	  i=$((i + 1))
+   328	  label="piece $i of $K"
+   329	  echo "review: round $ROUND, $label ($group, $bytes bytes)" >&2
+   330	  run_one standard "$WORK/pieces/$name" "$label" "$group" "$paths"
+   331	  result="$LAST_RESULT" body="$LAST_BODY"
+   332	  {
+   333	    echo; echo "## $label: $group ($bytes bytes): $result"; echo; echo "files: $paths"; echo
+   334	    echo "$body"
+   335	  } >>"$RAW"
+   336	  if [ "$result" = refused ] || [ "$result" = noverdict ] || [ "$result" = error ]; then
+   337	    # Retry once: smaller pieces (the piece halved) and a more neutral prompt.
+   338	    half_dir="$WORK/half-$i"
+   339	    half_limit=$(( (bytes + 1) / 2 ))
+   340	    python3 "$SCRIPT_DIR/split_diff.py" "$WORK/pieces/$name" "$half_dir" "$half_limit" --no-groups >/dev/null
+   341	    result=clean body=""
+   342	    j=0
+   343	    while IFS=$'\t' read -r hname _hgroup hbytes hpaths; do
+   344	      j=$((j + 1))
+   345	      hlabel="part $j of piece $i of $K"
+   346	      echo "review: retrying $hlabel with a neutral prompt ($hbytes bytes)" >&2
+   347	      run_one neutral "$half_dir/$hname" "$hlabel" "$group" "$hpaths"
+   348	      { echo; echo "### retry, $hlabel ($hbytes bytes): $LAST_RESULT"; echo; echo "$LAST_BODY"; } >>"$RAW"
+   349	      case "$LAST_RESULT" in
+   350	        clean) ;;
+   351	        findings) [ "$result" = blocked ] || result=findings; body="$body
+   352	$LAST_BODY" ;;
+   353	        *) result=blocked ;;
+   354	      esac
+   355	    done <"$half_dir/manifest.tsv"
+   356	  fi
+   357	  stripped="$(printf '%s\n' "$body" | grep -vE '^[`*[:space:]]*VERDICT:' || true)"
+   358	  case "$result" in
+   359	    findings)
+   360	      N_FINDINGS=$((N_FINDINGS + 1))
+   361	      FINDINGS_TEXT="$FINDINGS_TEXT
+   362	[$label: $group]
+   363	$stripped"
+   364	      ;;
+   365	    blocked)
+   366	      N_BLOCKED=$((N_BLOCKED + 1))
+   367	      FINDINGS_TEXT="$FINDINGS_TEXT
+   368	[$label: $group] blocked: the reviewer refused or gave no verdict, also after one neutral retry. Files: $paths
+   369	$stripped"
+   370	      ;;
+   371	  esac
+   372	done <"$WORK/pieces/manifest.tsv"
+   373	
+   374	# `blocked` wins over `findings`: a round with a blocked piece did not review all
+   375	# of its diff, and only a `blocked` verdict keeps the next round's delta from
+   376	# starting after it. The findings of the pieces that were reviewed are still
+   377	# recorded and carried forward.
+   378	if [ "$N_BLOCKED" -gt 0 ]; then VERDICT=blocked
+   379	elif [ "$N_FINDINGS" -gt 0 ]; then VERDICT=findings
+   380	else VERDICT=clean
+   381	fi
+   382	{ echo; echo "## verdict: $VERDICT ($N_FINDINGS piece(s) with findings, $N_BLOCKED blocked)"; } >>"$RAW"
+   383	
+   384	# ---------------------------------------------------------------- record
+   385	# THE NOTE FORMAT IS AN INTERFACE: scripts/review/verify.sh parses it (train.sh's review leg reads
+   386	# it through verify.sh). Change it only together with verify.sh.
+   387	cat >"$WORK/note" <<EOF
+   388	verdict: $VERDICT
+   389	rounds: $ROUND
+   390	reviewer: $REVIEWER
+   391	utc: $UTC
+   392	base: $BASE_SHA
+   393	pieces: $K
+   394	EOF
+   395	git notes --ref="$NOTES_REF" add -f -F "$WORK/note" "$HEAD_SHA"
+   396	if [ "$VERDICT" = blocked ] && [ -n "$PREV_FINDINGS" ]; then
+   397	  # A blocked round cannot resolve the findings it was given: some code went
+   398	  # unreviewed. Record them with this round's own, so a later round (even after
+   399	  # several blocked rounds in a row, or a re-run on the same HEAD) still gets them.
+   400	  FINDINGS_TEXT="$FINDINGS_TEXT
+   401	[carried from earlier rounds; not confirmed resolved, because this round was blocked]
+   402	$PREV_FINDINGS"
+   403	fi
+   404	if [ "$VERDICT" != clean ]; then
+   405	  printf '%s\n' "${FINDINGS_TEXT#$'\n'}" >"$WORK/findings"
+   406	  git notes --ref="$FINDINGS_REF" add -f -F "$WORK/findings" "$HEAD_SHA"
+   407	fi
+   408	
+   409	echo "review: round $ROUND verdict $VERDICT ($K piece(s)); raw output: ${RAW#$ROOT/}"
+   410	[ "$VERDICT" = clean ] || printf '%s\n' "${FINDINGS_TEXT#$'\n'}"
+   411	
+   412	if ! push_notes; then
+   413	  echo "review: the result is recorded locally but $NOTES_REF could not be pushed to $REMOTE." >&2
+   414	  echo "review: push it by hand: git push $REMOTE $NOTES_REF" >&2
+   415	  exit 6
+   416	fi
+   417	
+   418	case "$VERDICT" in
+   419	  clean) exit 0 ;;
+   420	  findings|blocked)
+   421	    if [ "$ROUND" -ge "$MAX_ROUNDS" ]; then
+   422	      cap_message "$ROUND" "${FINDINGS_TEXT#$'\n'}"
+   423	      exit 3
+   424	    fi
+   425	    [ "$VERDICT" = findings ] && exit 1
+   426	    exit 5
+   427	    ;;
+   428	esac
+
+exec
+/bin/bash -lc "cat REVIEW_SCAN.txt; rg -n 'sandbox|bwrap|repository|verdict|cannot|unable|read-only' sample-*.md; rg -n 'review|verdict|provenance' scripts/land/train.sh" in /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rv-confirm
+ succeeded in 0ms:
+006b252204b919f115308e82eabc8cded340ad01-2 clean=1 sandbox=1 /home/unbalancedparen/projects/legacy-sweep-2/.review/006b252204b919f115308e82eabc8cded340ad01-2.md
+04319b00ede74c18b116373762ed87e601cac6e7-2 clean=0 sandbox=1 /home/agent/rtiso-clone/.review/04319b00ede74c18b116373762ed87e601cac6e7-2.md
+091a378eca92350203696019d3bd4dec8f42c4be-1 clean=0 sandbox=1 /home/unbalancedparen/projects/gate-host-identity/.review/091a378eca92350203696019d3bd4dec8f42c4be-1.md
+0c97ab968e3802fb36cd7f80fece0e0decc886d1-1 clean=1 sandbox=4 /home/agent/fr-clone/.review/0c97ab968e3802fb36cd7f80fece0e0decc886d1-1.md
+0d1a1b84a665b36cd413a9f7d560d9b993a9c9a8-1 clean=0 sandbox=1 /home/agent/rtiso-clone/.review/0d1a1b84a665b36cd413a9f7d560d9b993a9c9a8-1.md
+15b7b22f671675d970c93926abdae5995e883a2a-1 clean=1 sandbox=0 /home/agent/fr-clone/.review/15b7b22f671675d970c93926abdae5995e883a2a-1.md
+16ef6eb63cad4e69189ea80c76e9e82654ee7ea6-1 clean=0 sandbox=3 /home/unbalancedparen/projects/gates-test-manifest/.review/16ef6eb63cad4e69189ea80c76e9e82654ee7ea6-1.md
+18f541a195408497ce2a2399d085ebe02bf65c19-1 clean=0 sandbox=1 /home/unbalancedparen/projects/migrate-lc/concrete/.review/18f541a195408497ce2a2399d085ebe02bf65c19-1.md
+19561a9ded8eaca206f6df598fba78e679e96c2a-1 clean=0 sandbox=0 /home/unbalancedparen/projects/slice1-brief/.review/19561a9ded8eaca206f6df598fba78e679e96c2a-1.md
+1ade2b321295eda0776dda899f29262c2c4fd8ba-2 clean=0 sandbox=0 /home/unbalancedparen/projects/migrate-lc/concrete/.review/1ade2b321295eda0776dda899f29262c2c4fd8ba-2.md
+1cd5ffeffacfd45a0cb4060ecdc78877c593b8b9-2 clean=0 sandbox=0 /home/unbalancedparen/projects/migrate-lc/dotfiles/.review/1cd5ffeffacfd45a0cb4060ecdc78877c593b8b9-2.md
+1d7135d48af256978201b0f792d7d3295f98a651-4 clean=0 sandbox=1 /home/unbalancedparen/projects/acceptance-shim/.review/1d7135d48af256978201b0f792d7d3295f98a651-4.md
+2020ed8b2bb534d1090698e2c815729c26d74d9a-1 clean=0 sandbox=1 /home/unbalancedparen/projects/migrate-lc/dotfiles/.review/2020ed8b2bb534d1090698e2c815729c26d74d9a-1.md
+20db0cdb8796ed0f766737bf569c628109795afd-3 clean=0 sandbox=0 /home/agent/rtiso-clone/.review/20db0cdb8796ed0f766737bf569c628109795afd-3.md
+2441a0e318b1408bc7c1febdb547ffd0393a6fd5-1 clean=0 sandbox=1 /home/unbalancedparen/projects/review-blockers/.review/2441a0e318b1408bc7c1febdb547ffd0393a6fd5-1.md
+24ca43e825e8bf83264c95687006accd81a80d04-1 clean=0 sandbox=0 /home/unbalancedparen/projects/migrate-lc/concrete/.review/24ca43e825e8bf83264c95687006accd81a80d04-1.md
+26bec336b726deb89ec19d8492354689fff817c8-1 clean=1 sandbox=2 /home/agent/sr-clone/.review/26bec336b726deb89ec19d8492354689fff817c8-1.md
+2c383d07da164c2537f9b0e984e8e187792f00a8-5 clean=0 sandbox=0 /home/unbalancedparen/projects/migrate-lc/dotfiles/.review/2c383d07da164c2537f9b0e984e8e187792f00a8-5.md
+3243dd031ee5f8e23c8acba051e59b978ded1807-5 clean=0 sandbox=1 /home/unbalancedparen/projects/acceptance-shim/.review/3243dd031ee5f8e23c8acba051e59b978ded1807-5.md
+33d80dbb53e3d5999a23b02bc1632bab070283ab-1 clean=1 sandbox=0 /home/unbalancedparen/projects/migrate-lc/concrete-b/.review/33d80dbb53e3d5999a23b02bc1632bab070283ab-1.md
+36412ab7c1928a3e7c3909378417e9c5a2fcfbb5-3 clean=1 sandbox=2 /home/unbalancedparen/projects/replay-source-modules/.review/36412ab7c1928a3e7c3909378417e9c5a2fcfbb5-3.md
+37f4c7234b14fdb3b44cec4332c82e86c83bd7dd-1 clean=0 sandbox=0 /home/unbalancedparen/projects/review-blockers/.review/37f4c7234b14fdb3b44cec4332c82e86c83bd7dd-1.md
+385566b0e8f7111c9e1c06028bf9ec0cdd23c24d-1 clean=1 sandbox=6 /home/agent/sr-clone/.review/385566b0e8f7111c9e1c06028bf9ec0cdd23c24d-1.md
+3bd7bc41511e0a0ba247b53231b5dc8589533d2f-1 clean=1 sandbox=7 /home/unbalancedparen/projects/legacy-docs-move/.review/3bd7bc41511e0a0ba247b53231b5dc8589533d2f-1.md
+3c5bb7524a76aa7d118db8919c073368795c63b8-5 clean=1 sandbox=1 /home/unbalancedparen/projects/slice0-push/.review/3c5bb7524a76aa7d118db8919c073368795c63b8-5.md
+3c85fc6427d1eed9535541c0ebcf026941d27603-3 clean=0 sandbox=0 /home/unbalancedparen/projects/migrate-lc/concrete/.review/3c85fc6427d1eed9535541c0ebcf026941d27603-3.md
+3d6ef2739da7bbeac620daf3611db1a5541acd67-4 clean=0 sandbox=1 /home/unbalancedparen/projects/migrate-lc/dotfiles/.review/3d6ef2739da7bbeac620daf3611db1a5541acd67-4.md
+4232fbcea6b5b0f1efc18e64cd8dafcb5d7a397b-2 clean=1 sandbox=0 /home/agent/flm-clone/.review/4232fbcea6b5b0f1efc18e64cd8dafcb5d7a397b-2.md
+43adc6661d7d46bd9ec8a66be7e46d45bf809ded-1 clean=1 sandbox=2 /home/agent/sr-clone/.review/43adc6661d7d46bd9ec8a66be7e46d45bf809ded-1.md
+452153a63b222cca0084e259a51b595c188eab93-1 clean=0 sandbox=5 /home/agent/fr-clone/.review/452153a63b222cca0084e259a51b595c188eab93-1.md
+46a3bba9ce78cb6a7e250b20676a246d42eabc49-3 clean=1 sandbox=2 /home/unbalancedparen/projects/slice0-push/.review/46a3bba9ce78cb6a7e250b20676a246d42eabc49-3.md
+4d0355a56e343507d90d146918d0e618c657b3c1-1 clean=1 sandbox=7 /home/unbalancedparen/projects/legacy-docs-move/.review/4d0355a56e343507d90d146918d0e618c657b3c1-1.md
+4d16e26f0025129403ca723327ecb8439230ac80-1 clean=1 sandbox=2 /home/unbalancedparen/projects/clones/wip-signoff-reject/.review/4d16e26f0025129403ca723327ecb8439230ac80-1.md
+4fa8c308fb6d3417f4ac75d6b70b62571f140b8c-3 clean=0 sandbox=7 /home/agent/rtiso-records-clone/.review/4fa8c308fb6d3417f4ac75d6b70b62571f140b8c-3.md
+557a8edb811082630446f71314682ff120fd2ee3-1 clean=1 sandbox=0 /home/unbalancedparen/projects/replay-source-modules/.review/557a8edb811082630446f71314682ff120fd2ee3-1.md
+5632e9b9451d381591eadb077412a6993ba79bbc-1 clean=0 sandbox=3 /home/agent/sr-clone/.review/5632e9b9451d381591eadb077412a6993ba79bbc-1.md
+56ad6ab21d279508afc97180b045e272b72a775c-3 clean=1 sandbox=1 /home/unbalancedparen/projects/legacy-sweep-2/.review/56ad6ab21d279508afc97180b045e272b72a775c-3.md
+583c9d91189fa1db5abfeeb784d3b8b6e2bb9c48-1 clean=1 sandbox=2 /home/agent/sr-clone/.review/583c9d91189fa1db5abfeeb784d3b8b6e2bb9c48-1.md
+5a25dbba9efbaf1be594843173229e3529e1f704-1 clean=0 sandbox=1 /home/unbalancedparen/projects/acceptance-shim/.review/5a25dbba9efbaf1be594843173229e3529e1f704-1.md
+5b894432ad9dc32b5b9b4235a8b4c24c29ec5cf3-1 clean=1 sandbox=6 /home/unbalancedparen/projects/legacy-docs-move/.review/5b894432ad9dc32b5b9b4235a8b4c24c29ec5cf3-1.md
+5c52a98aca16542c91b4e9b61a7856d56a2807a0-1 clean=0 sandbox=0 /home/agent/sr-clone/.review/5c52a98aca16542c91b4e9b61a7856d56a2807a0-1.md
+66f041f165487e0b314c0d2a64b9ade9bdf29ffa-2 clean=1 sandbox=0 /home/agent/rtiso-clone/.review/66f041f165487e0b314c0d2a64b9ade9bdf29ffa-2.md
+6953da01fad74c99b0863e176b6058400fc53bde-2 clean=1 sandbox=0 /home/unbalancedparen/projects/migrate-lc/concrete/.review/6953da01fad74c99b0863e176b6058400fc53bde-2.md
+6b216cd19da8670e27481f98cd2e1bcc88f404b5-3 clean=1 sandbox=1 /home/unbalancedparen/projects/migrate-lc/dotfiles/.review/6b216cd19da8670e27481f98cd2e1bcc88f404b5-3.md
+70e222d9475a7549a86fa32ebd1f92ba0ece3553-1 clean=1 sandbox=1 /home/agent/land-runner-caps/.review/70e222d9475a7549a86fa32ebd1f92ba0ece3553-1.md
+73faba6ec76dd18c761a7a082472411c1079f493-1 clean=1 sandbox=0 /home/agent/rtiso-rec2-clone/.review/73faba6ec76dd18c761a7a082472411c1079f493-1.md
+7b0137de1238ee7d038d8e4bc487fa893c796e42-5 clean=0 sandbox=17 /home/unbalancedparen/projects/migrate-lc/concrete/.review/7b0137de1238ee7d038d8e4bc487fa893c796e42-5.md
+7e957cfbe333e3f3aba0b10b7ec6c5cef33c53a1-1 clean=1 sandbox=1 /home/unbalancedparen/projects/legacy-docs-move/.review/7e957cfbe333e3f3aba0b10b7ec6c5cef33c53a1-1.md
+7fa65070c52628a0a58575808beac002940326da-2 clean=1 sandbox=0 /home/agent/rtiso-rec2-clone/.review/7fa65070c52628a0a58575808beac002940326da-2.md
+8508e89f00e70f585ed88dc2990bd902560429e3-2 clean=1 sandbox=1 /home/unbalancedparen/projects/codex-decisions/.review/8508e89f00e70f585ed88dc2990bd902560429e3-2.md
+85092c233f2f2d098bec5770850a2f3952f5986a-1 clean=1 sandbox=1 /home/agent/fr-clone/.review/85092c233f2f2d098bec5770850a2f3952f5986a-1.md
+8695cc0e3455df3f76e4f904c4650be451ce5add-1 clean=0 sandbox=1 /home/unbalancedparen/projects/legacy-sweep-2/.review/8695cc0e3455df3f76e4f904c4650be451ce5add-1.md
+88b93fa05330421b8c732dedb0615ca0666d988a-1 clean=0 sandbox=7 /home/agent/sr-clone/.review/88b93fa05330421b8c732dedb0615ca0666d988a-1.md
+89cdaa7add2cdcdccdb362db89a98e152ff12e35-2 clean=1 sandbox=0 /home/unbalancedparen/projects/gate-host-identity/.review/89cdaa7add2cdcdccdb362db89a98e152ff12e35-2.md
+8b8ba59c6d8281d6316b2af3c02a3a825f7aed58-1 clean=0 sandbox=0 /home/agent/flm-clone/.review/8b8ba59c6d8281d6316b2af3c02a3a825f7aed58-1.md
+8e62e377fbcc11d19b6d6703c4e8f15a9d1ad48b-3 clean=1 sandbox=1 /home/agent/rtiso-clone/.review/8e62e377fbcc11d19b6d6703c4e8f15a9d1ad48b-3.md
+906b391b0a279df2a3e1b0c92c180723fc9c9f74-2 clean=0 sandbox=0 /home/unbalancedparen/projects/slice1-brief/.review/906b391b0a279df2a3e1b0c92c180723fc9c9f74-2.md
+909ec7204d642dbde789ba9ecefd6294e9b80675-1 clean=0 sandbox=0 /home/agent/fr-clone/.review/909ec7204d642dbde789ba9ecefd6294e9b80675-1.md
+92d8a2e4d74d0435a43d6e0100cc3ab695ce65ac-4 clean=1 sandbox=1 /home/unbalancedparen/projects/slice0-push/.review/92d8a2e4d74d0435a43d6e0100cc3ab695ce65ac-4.md
+93850111d68def9fe8638bdde69c94282b1576a5-1 clean=1 sandbox=3 /home/agent/sr-clone/.review/93850111d68def9fe8638bdde69c94282b1576a5-1.md
+96b67a75a598f984687d1cea643250bc9768bac9-1 clean=0 sandbox=7 /home/agent/sr-clone/.review/96b67a75a598f984687d1cea643250bc9768bac9-1.md
+97506628be5fa7f9715cb92655c3f8cbc5385aa3-1 clean=0 sandbox=0 /home/unbalancedparen/projects/migrate-lc/concrete/.review/97506628be5fa7f9715cb92655c3f8cbc5385aa3-1.md
+99b1c5aee2873de2bf3eea37f70442881f0bcf73-1 clean=1 sandbox=0 /home/agent/rtiso-records-clone/.review/99b1c5aee2873de2bf3eea37f70442881f0bcf73-1.md
+99bceaf485761450033bc763cd054bd453b7c78a-2 clean=1 sandbox=2 /home/agent/audit-records/.review/99bceaf485761450033bc763cd054bd453b7c78a-2.md
+9c7aed2c450157268d563760460942a8c45b042d-1 clean=0 sandbox=7 /home/agent/sr-clone/.review/9c7aed2c450157268d563760460942a8c45b042d-1.md
+9cec9dff72be5c842b9df325c96cb7e9e323f649-1 clean=1 sandbox=1 /home/unbalancedparen/projects/lexer-w1/.review/9cec9dff72be5c842b9df325c96cb7e9e323f649-1.md
+9d48937c1c6fbea317c4a55d803f38e8fe806511-1 clean=1 sandbox=5 /home/agent/sr-clone/.review/9d48937c1c6fbea317c4a55d803f38e8fe806511-1.md
+9d6dc01a028126db7837bf576cf08c3be995f0e2-3 clean=1 sandbox=1 /home/unbalancedparen/projects/codex-decisions/.review/9d6dc01a028126db7837bf576cf08c3be995f0e2-3.md
+9ebdda15b2d1af3f03e0d81d69579735c4df4d49-2 clean=0 sandbox=22 /home/unbalancedparen/projects/slice0-push/.review/9ebdda15b2d1af3f03e0d81d69579735c4df4d49-2.md
+9f0cee2413e8944bdf2c17b43c720ea117294ae6-1 clean=0 sandbox=5 /home/agent/sr-clone/.review/9f0cee2413e8944bdf2c17b43c720ea117294ae6-1.md
+a1334d184ca03446fca0bb06122721ea9f04247e-3 clean=1 sandbox=0 /home/agent/rtiso-rec2-clone/.review/a1334d184ca03446fca0bb06122721ea9f04247e-3.md
+a3352dcfeb328df7d1e1009367cc69ce15c867b6-3 clean=0 sandbox=0 /home/unbalancedparen/projects/acceptance-shim/.review/a3352dcfeb328df7d1e1009367cc69ce15c867b6-3.md
+a996c6a82511354b8bede7c68e6d1dc3a73bbf1f-5 clean=1 sandbox=0 /home/unbalancedparen/projects/migrate-lc/concrete/.review/a996c6a82511354b8bede7c68e6d1dc3a73bbf1f-5.md
+ab537833d7615b43cb8616741b7bd5a4df0ac08b-1 clean=1 sandbox=0 /home/agent/audit-wt-ab537833/.review/ab537833d7615b43cb8616741b7bd5a4df0ac08b-1.md
+ac19ca53fdbfd16f2728f29a229e556967480413-4 clean=0 sandbox=0 /home/unbalancedparen/projects/migrate-lc/concrete/.review/ac19ca53fdbfd16f2728f29a229e556967480413-4.md
+ac8e50404be13f71363aa13cbd01ba254c9e6cd8-1 clean=0 sandbox=0 /home/agent/audit-wt-ac8e5040/.review/ac8e50404be13f71363aa13cbd01ba254c9e6cd8-1.md
+adda573324690b1afec9c364dd7d151a2c3fc7d8-2 clean=1 sandbox=0 /home/unbalancedparen/projects/migrate-lc/concrete-b/.review/adda573324690b1afec9c364dd7d151a2c3fc7d8-2.md
+b1bfdbdb59175db131c5916d93d5d411b52dba93-1 clean=1 sandbox=1 /home/agent/rtiso-d-clone/.review/b1bfdbdb59175db131c5916d93d5d411b52dba93-1.md
+b5cd3aa5c8d3288e56375e45efb3ebfa9a2f0b36-3 clean=1 sandbox=1 /home/unbalancedparen/projects/migrate-lc/concrete-b/.review/b5cd3aa5c8d3288e56375e45efb3ebfa9a2f0b36-3.md
+b7f30d3601521b74e431f629809b09e35e439055-1 clean=1 sandbox=1 /home/unbalancedparen/projects/signoff-split-w1/.review/b7f30d3601521b74e431f629809b09e35e439055-1.md
+b95befa8b01014369be64172db0655bc5c5c9da9-1 clean=0 sandbox=5 /home/agent/fr-clone/.review/b95befa8b01014369be64172db0655bc5c5c9da9-1.md
+bad2a4f6935f51c02be071aea2267ccbd0b9ce30-1 clean=0 sandbox=6 /home/agent/sr-clone/.review/bad2a4f6935f51c02be071aea2267ccbd0b9ce30-1.md
+bdc8eb8119f174eb826801a8649e84f98768b064-1 clean=0 sandbox=4 /home/agent/fr-clone/.review/bdc8eb8119f174eb826801a8649e84f98768b064-1.md
+c1859445b89ea02f2e66704711b73b0f56332c73-3 clean=1 sandbox=0 /home/unbalancedparen/projects/migrate-lc/concrete/.review/c1859445b89ea02f2e66704711b73b0f56332c73-3.md
+c194302454f31ca28af07dbca985b1bb86fe5d54-2 clean=1 sandbox=1 /home/unbalancedparen/projects/review-blockers/.review/c194302454f31ca28af07dbca985b1bb86fe5d54-2.md
+c394b99f7dc665c00af605f2777d43403079bf33-1 clean=1 sandbox=2 /home/unbalancedparen/projects/codex-repro/.review/c394b99f7dc665c00af605f2777d43403079bf33-1.md
+c54679c39dcc6ac41f9cb757b33aa4e96e026bee-1 clean=1 sandbox=0 /home/agent/fr-clone/.review/c54679c39dcc6ac41f9cb757b33aa4e96e026bee-1.md
+c55dc5bf1ddaec8231ae49e6bcc505cfcfd28598-1 clean=0 sandbox=6 /home/agent/sr-clone/.review/c55dc5bf1ddaec8231ae49e6bcc505cfcfd28598-1.md
+c68c3afe43ab78e7836cd4aae90118b47daf91bb-1 clean=0 sandbox=6 /home/agent/sr-clone/.review/c68c3afe43ab78e7836cd4aae90118b47daf91bb-1.md
+c7cf9471a8655e9f4265a31b79c5448ae14eacc0-1 clean=1 sandbox=0 /home/agent/audit-records/.review/c7cf9471a8655e9f4265a31b79c5448ae14eacc0-1.md
+c8f66bf6a3da5918fc4dcf00720dae9a14d4a11a-2 clean=1 sandbox=1 /home/unbalancedparen/projects/migrate-lc/concrete/.review/c8f66bf6a3da5918fc4dcf00720dae9a14d4a11a-2.md
+ccd8d0e95a33c8ea8eabd9b52359f5559a1f4a27-2 clean=1 sandbox=1 /home/unbalancedparen/projects/replay-source-modules/.review/ccd8d0e95a33c8ea8eabd9b52359f5559a1f4a27-2.md
+cd1c2f0c90be9faee33db94434cb4a115338bdd3-1 clean=0 sandbox=6 /home/agent/sr-clone/.review/cd1c2f0c90be9faee33db94434cb4a115338bdd3-1.md
+cdaa1a17067b8d2cbe96028735207d166ec3de1e-1 clean=1 sandbox=2 /home/unbalancedparen/projects/codex-decisions/.review/cdaa1a17067b8d2cbe96028735207d166ec3de1e-1.md
+ce1e882d4c1e2ab7ec795052613d40101786b5da-2 clean=1 sandbox=1 /home/unbalancedparen/projects/acceptance-shim/.review/ce1e882d4c1e2ab7ec795052613d40101786b5da-2.md
+ce2803ec0a6f8b05dffe7081a158eaabe8896567-2 clean=0 sandbox=1 /home/unbalancedparen/projects/review-blockers/.review/ce2803ec0a6f8b05dffe7081a158eaabe8896567-2.md
+d20e3ab333da7edc0964caa933f85d96782e1b97-1 clean=1 sandbox=1 /home/agent/audit-wt-d20e3ab3/.review/d20e3ab333da7edc0964caa933f85d96782e1b97-1.md
+d8a679613aeab759d9876c7604b881eec348ca86-4 clean=0 sandbox=2 /home/agent/rtiso-records-clone/.review/d8a679613aeab759d9876c7604b881eec348ca86-4.md
+da687c9ec9bef1a5fd301564a7afef4104065687-1 clean=1 sandbox=3 /home/unbalancedparen/projects/clones/wip-slice0-lexer-tokens/.review/da687c9ec9bef1a5fd301564a7afef4104065687-1.md
+dd6b876a6da7554dc361d99dc62bb136ecd835df-1 clean=0 sandbox=5 /home/agent/sr-clone/.review/dd6b876a6da7554dc361d99dc62bb136ecd835df-1.md
+df26a3fb98d92184bdedb3307ad58ce511846395-1 clean=0 sandbox=3 /home/agent/fr-clone/.review/df26a3fb98d92184bdedb3307ad58ce511846395-1.md
+e0de2677867a71c6f6adefc89c03b92bb4009a3d-4 clean=0 sandbox=2 /home/unbalancedparen/projects/migrate-lc/concrete/.review/e0de2677867a71c6f6adefc89c03b92bb4009a3d-4.md
+e474d8f0305cc32494ad2a54d595527efce3b672-1 clean=1 sandbox=3 /home/unbalancedparen/projects/clones/wip-slice0-lexer-ws/.review/e474d8f0305cc32494ad2a54d595527efce3b672-1.md
+ebd435a265900d808dbb2f40b67296c10c6518ca-1 clean=0 sandbox=1 /home/agent/rtiso-clone/.review/ebd435a265900d808dbb2f40b67296c10c6518ca-1.md
+ed2df6d1f852977d55a72f2c96029afc5c9871cf-1 clean=0 sandbox=0 /home/agent/pi-clone/.review/ed2df6d1f852977d55a72f2c96029afc5c9871cf-1.md
+ed3c41fbaf8b3643ea1df73cc88d00adc9c05a91-1 clean=0 sandbox=6 /home/agent/sr-clone/.review/ed3c41fbaf8b3643ea1df73cc88d00adc9c05a91-1.md
+f0816b149c9c9a77f2570caafeb3dcf03bb747b0-1 clean=1 sandbox=1 /home/unbalancedparen/projects/review-blockers/.review/f0816b149c9c9a77f2570caafeb3dcf03bb747b0-1.md
+f12471f5135da5e5078159e63e96ee9161b12ba7-1 clean=0 sandbox=8 /home/agent/sr-clone/.review/f12471f5135da5e5078159e63e96ee9161b12ba7-1.md
+f60f1d43df7b265d08b28c09fbf2eb70f9956f85-1 clean=0 sandbox=7 /home/agent/sr-clone/.review/f60f1d43df7b265d08b28c09fbf2eb70f9956f85-1.md
+f9a8c333448a5cb60a07cd98d30118d4dc6d77ae-1 clean=1 sandbox=3 /home/agent/fr-clone/.review/f9a8c333448a5cb60a07cd98d30118d4dc6d77ae-1.md
+fb097fa4e5ae0e58e400ce577c62c55df880c700-3 clean=1 sandbox=2 /home/unbalancedparen/projects/review-blockers/.review/fb097fa4e5ae0e58e400ce577c62c55df880c700-3.md
+fce6644d9c46d4e2fb81b97572275a482560951f-1 clean=1 sandbox=2 /home/unbalancedparen/projects/clones/wip-axioms-property/.review/fce6644d9c46d4e2fb81b97572275a482560951f-1.md
+sample-fce6644d.md:9:No correctness or owner-decision findings in the supplied comment-only diff. Repository context could not be checked because the sandbox blocked file access.
+sample-fce6644d.md:17:Repository inspection failed because the sandbox could not start (`bwrap: Operation not permitted`). The supplied deletion alone establishes no correctness finding; I could not verify its consumers or owner-decision compatibility.
+sample-fce6644d.md:25:No correctness findings in the supplied diff. Repository inspection was blocked by a sandbox startup error, so I could not verify the owner-decision records or helper implementations.
+sample-fce6644d.md:33:No correctness findings in the supplied diff. Repository access failed because the sandbox could not initialize, so I could not verify the scripts or owner-decision provenance against repository context.
+sample-fce6644d.md:37:## verdict: clean (0 piece(s) with findings, 0 blocked)
+sample-b7f30d36.md:9:No correctness findings in the supplied diff. Repository reads failed because the sandbox could not start, so I could not verify owner-decision compliance against docs/decisions.md.
+sample-b7f30d36.md:19:Repository verification was blocked by a sandbox execution failure, so I could not check the implementation or docs/decisions.md.
+sample-b7f30d36.md:23:## verdict: clean (0 piece(s) with findings, 0 blocked)
+sample-4d16e26f.md:9:No correctness findings in the supplied diff. Repository reads failed because the sandbox could not start, so I could not verify the change against docs/decisions.md or inspect the surrounding test setup.
+sample-4d16e26f.md:17:I found no correctness issues in the supplied diff. Repository reads failed because the sandbox could not start, so I could not verify consistency with the code or check owner-decision provenance.
+sample-4d16e26f.md:21:## verdict: clean (0 piece(s) with findings, 0 blocked)
+7:#   train.sh [--dry-run] check  <name> [--no-remote] [--no-review] [--local-gates]
+25:#   * (2026-11-06) review fails closed: `check` with no review command fails rather than skipping the
+26:#     leg, and a train lands only with review provenance (review_provenance: a verified clean review
+458:# The review command: LAND_REVIEW_CMD, else scripts/review/review.sh, called with --base --head.
+460:review_cmd() {
+462:  elif [ -f scripts/review/review.sh ]; then echo "bash scripts/review/review.sh"; fi
+466:# REVIEW PROVENANCE (fail closed; docs/LANDING.md, "check" and "land"). A train is reviewed when its
+467:# head carries a clean review note, or when its head carries no review note and every member carries
+468:# one at its exact recorded SHA (each member was reviewed at its own head: a train
+469:# built or rebuilt from reviewed branches). Every note is judged by scripts/review/verify.sh, on
+476:# refs/owner-signoff/*, fetched first): the member reached the review cap of its diff's class and all
+477:# three reviewers accepted that commit.
+482:VERIFY="$SELF_DIR/../review/verify.sh"
+507:review_provenance() { # name head
+509:  [ -f "$VERIFY" ] || { echo "no review verifier ($VERIFY is missing)"; return 1; }
+510:  git fetch -q "$REMOTE" "+refs/notes/concrete-review:refs/notes/concrete-review" 2>/dev/null \
+511:    || { echo "could not fetch refs/notes/concrete-review from $REMOTE"; return 1; }
+512:  if out="$(bash "$VERIFY" "$head" 2>&1)"; then echo "the head ${head:0:10} carries a clean review note"; return 0; fi
+513:  if git notes --ref=refs/notes/concrete-review show "$head" >/dev/null 2>&1; then
+514:    echo "the head's review note does not qualify: ${out//$'\n'/ }"; return 1
+525:  [ "$n" -gt 0 ] || { echo "the head ${head:0:10} has no review note and the train records no members"; return 1; }
+526:  [ -z "$bad" ] || { echo "the head ${head:0:10} has no review note, and not every member has a clean one or an owner sign-off$bad"; return 1; }
+530:    echo "the head has no review note; every member ($n) carries a clean one or an owner sign-off ($signed) at its exact SHA, and the head is their clean merge"
+533:  echo "the head has no review note; every member ($n) carries a clean one at its exact SHA"
+536:# Codex review leg. It passes without running the reviewer when the train already has review
+537:# provenance. Otherwise it runs the review command; a non-zero exit fails, and so does a zero exit
+538:# that leaves no provenance (no note, or a malformed, blocked or findings note at the head).
+539:review_leg() { # name base head
+541:  if why="$(review_provenance "$1" "$3")"; then echo "review: $why; not reviewed again"; return 0; fi
+542:  echo "review: $why; running the reviewer"
+543:  bash -c "$(review_cmd) --base $2 --head $3" || return $?
+544:  why="$(review_provenance "$1" "$3")" || { echo "review: the reviewer exited 0, but $why"; return 1; }
+545:  echo "review: $why"
+549:  local name="" remote=1 review=1 local_gates=0
+553:      --no-review) review=0 ;;
+566:  if [ "$review" = 1 ] && [ -z "$(review_cmd)" ]; then
+567:    log_row "$name" check failed "no review command"
+568:    die "check: no review command (LAND_REVIEW_CMD is unset and scripts/review/review.sh is missing); the review leg is required and is never skipped silently. Restore the reviewer, or pass --no-review explicitly (land still requires review provenance)"
+581:  # Codex review. Any failing leg fails the check.
+585:    if [ "$review" = 1 ]; then note "(dry-run)   + review: the train's review provenance, else $(review_cmd) --base $base --head $head"; fi
+593:  if [ "$review" = 1 ]; then legs_start review "$dir/review.log" review_leg "$name" "$base" "$head"; fi
+605:  local verdict; verdict="$([ -z "$LEGS_FAILED" ] && echo passed || echo failed)"
+606:  if [ -n "$ghost" ] && [ "$impact_rc" = 3 ]; then verdict=incomplete; fi
+607:  log_row "$name" check-legs "$verdict" "$LEGS_REPORT wall=${wall}s sum=${LEGS_SUM}s"
+610:    log_row "$name" check passed "impact $impact_where$([ "$remote" = 1 ] && echo ' + remote')$([ "$review" = 1 ] && echo ' + review')"
+612:  elif [ "$verdict" = incomplete ]; then
+708:# conclusion is not success, is no verdict. GitHub branch protection is not configured for main, so
+759:  # The verdict must describe THIS train: its exact head, with a non-empty landing tier. Otherwise
+760:  # it is no verdict (bisect --ci consumes this exit status).
+778:    echo "train: run $id does not satisfy $REQUIRED_FILE; a missing, skipped or cancelled required job is no verdict:" >&2
+804:  # failed only when a landing job failed; otherwise (cancelled, skipped, pending) it is no verdict.
+899:# tree, and a tree is exactly what lands. A different tree, a different base or any other verdict is
+901:#   utc  verdict  train_head  train_head_tree  base  ref  name
+902:# A row that is not exactly that (7 fields, verdict accepted|failed|incomplete, 40-hex ids) is a
+908:# land has it. A candidate that edits train.sh changes the land path for every later land; review
+909:# must keep require_rehearsal on it. Nothing here defends against a reviewed change that removes it.
+935:    [ -z "$bad" ] || die "land: $REHEARSALS line $bad is not a rehearsal row (utc verdict head tree base ref name); fix or remove the record"
+1030:  # Review provenance, read now and not trusted from `check`: a check run with --no-review, or a
+1031:  # reviewer that wrote no clean note, leaves none, and nothing lands without it.
+1033:  if ! prov="$(review_provenance "$name" "$head")"; then
+1034:    log_row "$name" land refused "no review provenance"
+1035:    die "land: ${head:0:10} has no review provenance: $prov. Review the train head (scripts/review/review.sh --head ${head:0:10}) or its members, then land."
+1037:  note "review provenance: $prov"
+1125:  local step=0 half verdict
+1129:    verdict="$(subset_red "$name-b$step" "$test" "${first[@]}")"
+1130:    note "step $step: first half [$(printf '%s ' "${first[@]%@*}")] -> $verdict"
+1131:    case "$verdict" in
+1137:  verdict="$(subset_red "$name-bc" "$test" "$culprit")"
+1141:  log_row "$name" bisect "$([ "$verdict" = green ] && echo inconclusive || echo attributed)" "culprit $culprit alone: $verdict"
+1143:  note "culprit: ${culprit%@*} (${culprit##*@}) — alone it is $verdict"
+1144:  [ "$verdict" = green ] && note "it is green ALONE: the failure is an interaction between members; check it by hand"
+
+exec
+/bin/bash -lc "nl -ba scripts/review/review.sh | sed -n '323,440p'; nl -ba scripts/review/verify.sh; nl -ba sample-4d16e26f.md; nl -ba sample-b7f30d36.md; nl -ba sample-fce6644d.md; python3 - <<'PY'
+import re
+from pathlib import Path
+s=Path('REVIEW_SCAN.txt').read_text().splitlines()
+a=[(i+1,re.search(r'clean=(\\d+) sandbox=(\\d+)',x)) for i,x in enumerate(s)]
+a=[(i,int(m[1]),int(m[2])) for i,m in a if m]
+c=[x for x in a if x[1]==1]
+print('rows',len(a),'clean',len(c),'clean with sandbox>0',sum(x[2]>0 for x in c),'clean sandbox=0',sum(x[2]==0 for x in c))
+print('header:',s[:3])
+PY" in /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rv-confirm
+ succeeded in 0ms:
+   323	N_FINDINGS=0 N_BLOCKED=0
+   324	FINDINGS_TEXT=""
+   325	i=0
+   326	while IFS=$'\t' read -r name group bytes paths; do
+   327	  i=$((i + 1))
+   328	  label="piece $i of $K"
+   329	  echo "review: round $ROUND, $label ($group, $bytes bytes)" >&2
+   330	  run_one standard "$WORK/pieces/$name" "$label" "$group" "$paths"
+   331	  result="$LAST_RESULT" body="$LAST_BODY"
+   332	  {
+   333	    echo; echo "## $label: $group ($bytes bytes): $result"; echo; echo "files: $paths"; echo
+   334	    echo "$body"
+   335	  } >>"$RAW"
+   336	  if [ "$result" = refused ] || [ "$result" = noverdict ] || [ "$result" = error ]; then
+   337	    # Retry once: smaller pieces (the piece halved) and a more neutral prompt.
+   338	    half_dir="$WORK/half-$i"
+   339	    half_limit=$(( (bytes + 1) / 2 ))
+   340	    python3 "$SCRIPT_DIR/split_diff.py" "$WORK/pieces/$name" "$half_dir" "$half_limit" --no-groups >/dev/null
+   341	    result=clean body=""
+   342	    j=0
+   343	    while IFS=$'\t' read -r hname _hgroup hbytes hpaths; do
+   344	      j=$((j + 1))
+   345	      hlabel="part $j of piece $i of $K"
+   346	      echo "review: retrying $hlabel with a neutral prompt ($hbytes bytes)" >&2
+   347	      run_one neutral "$half_dir/$hname" "$hlabel" "$group" "$hpaths"
+   348	      { echo; echo "### retry, $hlabel ($hbytes bytes): $LAST_RESULT"; echo; echo "$LAST_BODY"; } >>"$RAW"
+   349	      case "$LAST_RESULT" in
+   350	        clean) ;;
+   351	        findings) [ "$result" = blocked ] || result=findings; body="$body
+   352	$LAST_BODY" ;;
+   353	        *) result=blocked ;;
+   354	      esac
+   355	    done <"$half_dir/manifest.tsv"
+   356	  fi
+   357	  stripped="$(printf '%s\n' "$body" | grep -vE '^[`*[:space:]]*VERDICT:' || true)"
+   358	  case "$result" in
+   359	    findings)
+   360	      N_FINDINGS=$((N_FINDINGS + 1))
+   361	      FINDINGS_TEXT="$FINDINGS_TEXT
+   362	[$label: $group]
+   363	$stripped"
+   364	      ;;
+   365	    blocked)
+   366	      N_BLOCKED=$((N_BLOCKED + 1))
+   367	      FINDINGS_TEXT="$FINDINGS_TEXT
+   368	[$label: $group] blocked: the reviewer refused or gave no verdict, also after one neutral retry. Files: $paths
+   369	$stripped"
+   370	      ;;
+   371	  esac
+   372	done <"$WORK/pieces/manifest.tsv"
+   373	
+   374	# `blocked` wins over `findings`: a round with a blocked piece did not review all
+   375	# of its diff, and only a `blocked` verdict keeps the next round's delta from
+   376	# starting after it. The findings of the pieces that were reviewed are still
+   377	# recorded and carried forward.
+   378	if [ "$N_BLOCKED" -gt 0 ]; then VERDICT=blocked
+   379	elif [ "$N_FINDINGS" -gt 0 ]; then VERDICT=findings
+   380	else VERDICT=clean
+   381	fi
+   382	{ echo; echo "## verdict: $VERDICT ($N_FINDINGS piece(s) with findings, $N_BLOCKED blocked)"; } >>"$RAW"
+   383	
+   384	# ---------------------------------------------------------------- record
+   385	# THE NOTE FORMAT IS AN INTERFACE: scripts/review/verify.sh parses it (train.sh's review leg reads
+   386	# it through verify.sh). Change it only together with verify.sh.
+   387	cat >"$WORK/note" <<EOF
+   388	verdict: $VERDICT
+   389	rounds: $ROUND
+   390	reviewer: $REVIEWER
+   391	utc: $UTC
+   392	base: $BASE_SHA
+   393	pieces: $K
+   394	EOF
+   395	git notes --ref="$NOTES_REF" add -f -F "$WORK/note" "$HEAD_SHA"
+   396	if [ "$VERDICT" = blocked ] && [ -n "$PREV_FINDINGS" ]; then
+   397	  # A blocked round cannot resolve the findings it was given: some code went
+   398	  # unreviewed. Record them with this round's own, so a later round (even after
+   399	  # several blocked rounds in a row, or a re-run on the same HEAD) still gets them.
+   400	  FINDINGS_TEXT="$FINDINGS_TEXT
+   401	[carried from earlier rounds; not confirmed resolved, because this round was blocked]
+   402	$PREV_FINDINGS"
+   403	fi
+   404	if [ "$VERDICT" != clean ]; then
+   405	  printf '%s\n' "${FINDINGS_TEXT#$'\n'}" >"$WORK/findings"
+   406	  git notes --ref="$FINDINGS_REF" add -f -F "$WORK/findings" "$HEAD_SHA"
+   407	fi
+   408	
+   409	echo "review: round $ROUND verdict $VERDICT ($K piece(s)); raw output: ${RAW#$ROOT/}"
+   410	[ "$VERDICT" = clean ] || printf '%s\n' "${FINDINGS_TEXT#$'\n'}"
+   411	
+   412	if ! push_notes; then
+   413	  echo "review: the result is recorded locally but $NOTES_REF could not be pushed to $REMOTE." >&2
+   414	  echo "review: push it by hand: git push $REMOTE $NOTES_REF" >&2
+   415	  exit 6
+   416	fi
+   417	
+   418	case "$VERDICT" in
+   419	  clean) exit 0 ;;
+   420	  findings|blocked)
+   421	    if [ "$ROUND" -ge "$MAX_ROUNDS" ]; then
+   422	      cap_message "$ROUND" "${FINDINGS_TEXT#$'\n'}"
+   423	      exit 3
+   424	    fi
+   425	    [ "$VERDICT" = findings ] && exit 1
+   426	    exit 5
+   427	    ;;
+   428	esac
+     1	#!/usr/bin/env bash
+     2	# R-0544 — does a commit carry a clean review verdict? See docs/REVIEW.md.
+     3	#
+     4	#   scripts/review/verify.sh [--fetch] <commit>
+     5	#
+     6	# Reads the git note that scripts/review/review.sh wrote on <commit> under
+     7	# refs/notes/concrete-review. The verdict counts only for that exact commit: a
+     8	# clean note on an ancestor says nothing about the commits after it.
+     9	#
+    10	#   --fetch  first fetch refs/notes/concrete-review from $REVIEW_REMOTE (default
+    11	#            origin), replacing the local copy (a reader, not a writer).
+    12	#
+    13	# Exit codes: 0 clean; 1 reviewed, not clean (findings or blocked);
+    14	#             2 no note, a malformed note, or a usage error.
+    15	
+    16	set -euo pipefail
+    17	
+    18	NOTES_REF="refs/notes/concrete-review"
+    19	REMOTE="${REVIEW_REMOTE:-origin}"
+    20	FETCH=0
+    21	if [ "${1:-}" = --fetch ]; then FETCH=1; shift; fi
+    22	[ $# -eq 1 ] || { echo "usage: verify.sh [--fetch] <commit>" >&2; exit 2; }
+    23	
+    24	if [ "$FETCH" = 1 ]; then
+    25	  git fetch -q "$REMOTE" "+$NOTES_REF:$NOTES_REF" \
+    26	    || { echo "verify: could not fetch $NOTES_REF from $REMOTE" >&2; exit 2; }
+    27	fi
+    28	
+    29	SHA="$(git rev-parse -q --verify "$1^{commit}")" || { echo "verify: not a commit: $1" >&2; exit 2; }
+    30	NOTE="$(git notes --ref="$NOTES_REF" show "$SHA" 2>/dev/null)" || {
+    31	  echo "$SHA unreviewed: no note under $NOTES_REF"
+    32	  exit 2
+    33	}
+    34	
+    35	# The note must carry each of the six fields review.sh writes exactly once, each well formed. Any
+    36	# other key, a repeated key, or a line that is not `key: value` makes the note malformed. Keys are
+    37	# matched by name, not position, because notes.sh `put` appends `utc` last.
+    38	malformed() {
+    39	  echo "$SHA malformed review note${1:+ ($1)}:"
+    40	  printf '%s\n' "$NOTE" | sed 's/^/  /'
+    41	  exit 2
+    42	}
+    43	# Plain variables F_<key>, not an associative array: macOS /bin/bash is 3.2.
+    44	SEEN=" "
+    45	while IFS= read -r line; do
+    46	  [[ "$line" =~ ^([a-z-]+):\ (.*)$ ]] || malformed "not key: value: '$line'"
+    47	  k="${BASH_REMATCH[1]}" v="${BASH_REMATCH[2]}"
+    48	  case "$SEEN" in *" $k "*) malformed "repeated key $k" ;; esac
+    49	  SEEN="$SEEN$k "
+    50	  printf -v "F_${k//-/_}" '%s' "$v"
+    51	  case "$k" in
+    52	    verdict)      [[ "$v" =~ ^(clean|findings|blocked)$ ]] ;;
+    53	    rounds)       [[ "$v" =~ ^[1-9][0-9]*$ ]] ;;
+    54	    reviewer)     [[ "$v" =~ ^[^[:space:]]+$ ]] ;;
+    55	    utc)          [[ "$v" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$ ]] ;;
+    56	    base)         [[ "$v" =~ ^[0-9a-f]{40}$ ]] ;;
+    57	    pieces)       [[ "$v" =~ ^[0-9]+$ ]] ;;
+    58	    *)            false ;;
+    59	  esac || malformed "bad $k"
+    60	done <<< "$NOTE"
+    61	for k in verdict rounds reviewer utc base pieces; do
+    62	  case "$SEEN" in *" $k "*) ;; *) malformed "missing $k" ;; esac
+    63	done
+    64	
+    65	field() { local n="F_${1//-/_}"; printf '%s' "${!n:-}"; }
+    66	VERDICT="$(field verdict)"
+    67	echo "$SHA $VERDICT (round $(field rounds), reviewer $(field reviewer), $(field utc), base $(field base), $(field pieces) piece(s))"
+    68	[ "$VERDICT" = clean ] && exit 0
+    69	exit 1
+     1	# review of 4d16e26f0025129403ca723327ecb8439230ac80, round 1
+     2	
+     3	reviewer: codex; utc: 2026-11-08T14:04:58Z; base: d3811a74723348181e1a6ea2011955780275d691; diff from: d3811a74723348181e1a6ea2011955780275d691; pieces: 2; diff bytes: 15250
+     4	
+     5	## piece 1 of 2: scripts (12366 bytes): clean
+     6	
+     7	files: ISSUES.tsv,scripts/checks/landing_script.sh,scripts/land/signoff.sh,scripts/land/train.sh
+     8	
+     9	No correctness findings in the supplied diff. Repository reads failed because the sandbox could not start, so I could not verify the change against docs/decisions.md or inspect the surrounding test setup.
+    10	
+    11	VERDICT: clean
+    12	
+    13	## piece 2 of 2: docs (2884 bytes): clean
+    14	
+    15	files: changelog.d/2026-11-08-signoff-reject.md,docs/LANDING.md,docs/REVIEW.md
+    16	
+    17	I found no correctness issues in the supplied diff. Repository reads failed because the sandbox could not start, so I could not verify consistency with the code or check owner-decision provenance.
+    18	
+    19	VERDICT: clean
+    20	
+    21	## verdict: clean (0 piece(s) with findings, 0 blocked)
+     1	# review of b7f30d3601521b74e431f629809b09e35e439055, round 1
+     2	
+     3	reviewer: codex; utc: 2026-11-08T06:48:37Z; base: fb097fa4e5ae0e58e400ce577c62c55df880c700; diff from: fb097fa4e5ae0e58e400ce577c62c55df880c700; pieces: 2; diff bytes: 28003
+     4	
+     5	## piece 1 of 2: scripts (23753 bytes): clean
+     6	
+     7	files: .githooks/pre-push,scripts/checks/landing_script.sh,scripts/checks/review_tool.sh,scripts/land/signoff.sh
+     8	
+     9	No correctness findings in the supplied diff. Repository reads failed because the sandbox could not start, so I could not verify owner-decision compliance against docs/decisions.md.
+    10	
+    11	VERDICT: clean
+    12	
+    13	## piece 2 of 2: docs (4250 bytes): clean
+    14	
+    15	files: changelog.d/2026-11-08-owner-signoff.md,docs/REVIEW.md
+    16	
+    17	No correctness findings in the supplied diff. The changes do not visibly choose an owner-decision outcome.
+    18	
+    19	Repository verification was blocked by a sandbox execution failure, so I could not check the implementation or docs/decisions.md.
+    20	
+    21	VERDICT: clean
+    22	
+    23	## verdict: clean (0 piece(s) with findings, 0 blocked)
+     1	# review of fce6644d9c46d4e2fb81b97572275a482560951f, round 1
+     2	
+     3	reviewer: codex; utc: 2026-11-08T13:47:31Z; base: b6a647beaf2c9b88899743bf64b645d4b9a6edbe; diff from: b6a647beaf2c9b88899743bf64b645d4b9a6edbe; pieces: 4; diff bytes: 91173
+     4	
+     5	## piece 1 of 4: scripts (764 bytes): clean
+     6	
+     7	files: .github/workflows/lean_action_ci.yml
+     8	
+     9	No correctness or owner-decision findings in the supplied comment-only diff. Repository context could not be checked because the sandbox blocked file access.
+    10	
+    11	VERDICT: clean
+    12	
+    13	## piece 2 of 4: scripts (59934 bytes): clean
+    14	
+    15	files: scripts/proofs/axioms.golden
+    16	
+    17	Repository inspection failed because the sandbox could not start (`bwrap: Operation not permitted`). The supplied deletion alone establishes no correctness finding; I could not verify its consumers or owner-decision compatibility.
+    18	
+    19	VERDICT: clean
+    20	
+    21	## piece 3 of 4: scripts (27644 bytes): clean
+    22	
+    23	files: scripts/proofs/axioms.golden,scripts/proofs/axioms.sh,scripts/proofs/pinned_theorems.txt
+    24	
+    25	No correctness findings in the supplied diff. Repository inspection was blocked by a sandbox startup error, so I could not verify the owner-decision records or helper implementations.
+    26	
+    27	VERDICT: clean
+    28	
+    29	## piece 4 of 4: docs (3026 bytes): clean
+    30	
+    31	files: ConcreteSpec/README.md,changelog.d/2026-11-08-axioms-property.md,docs/proposals/SPEC_UNIFICATION.md
+    32	
+    33	No correctness findings in the supplied diff. Repository access failed because the sandbox could not initialize, so I could not verify the scripts or owner-decision provenance against repository context.
+    34	
+    35	VERDICT: clean
+    36	
+    37	## verdict: clean (0 piece(s) with findings, 0 blocked)
+rows 112 clean 59 clean with sandbox>0 42 clean sandbox=0 17
+header: ['006b252204b919f115308e82eabc8cded340ad01-2 clean=1 sandbox=1 /home/unbalancedparen/projects/legacy-sweep-2/.review/006b252204b919f115308e82eabc8cded340ad01-2.md', '04319b00ede74c18b116373762ed87e601cac6e7-2 clean=0 sandbox=1 /home/agent/rtiso-clone/.review/04319b00ede74c18b116373762ed87e601cac6e7-2.md', '091a378eca92350203696019d3bd4dec8f42c4be-1 clean=0 sandbox=1 /home/unbalancedparen/projects/gate-host-identity/.review/091a378eca92350203696019d3bd4dec8f42c4be-1.md']
+
+codex
+Both claims are confirmed. I only read files; no review, edits, commits, or pushes were performed.
+
+**Claim 1 — exact prompt is not persisted**
+
+- `scripts/review/review.sh:242–275` constructs the prompt dynamically, including previous findings and `--prompt-extra`.
+- Lines **295–296** pass it directly as a command argument, with the diff supplied separately through stdin. Neither input is explicitly saved.
+- Lines **317–321, 332–335, 348** write metadata and reviewer responses to `.review/<sha>-<round>.md`; they do not write the prompt.
+- Lines **387–406** save verdict metadata and non-clean findings in git notes, without the prompt.
+- Lines **84–85** delete the temporary working directory on exit. The invocation also uses `--ephemeral` at line 295.
+
+The three supplied samples contain metadata and responses, with no request transcript. **The script persists no exact sent prompt**, so its records cannot reproduce the request verbatim.
+
+CLAIM 1: CONFIRMED — The prompt is constructed and sent directly but omitted from both the persistent raw output and git notes.
+
+**Claim 2 — repository-access failure still qualifies as clean**
+
+The exact invocation at **`scripts/review/review.sh:295–296`** is:
+
+```bash
+GIT_OPTIONAL_LOCKS=0 "$CODEX_BIN" exec --sandbox read-only --ephemeral --color never -C "$ROOT" -o "$out" \
+  "$(prompt_for "$kind" "$label" "$group" "$paths")" <"$piece" >"$log" 2>&1 || rc=$?
+```
+
+The fault is in how completion is judged:
+
+- **Lines 300–303:** exit status zero plus a final `VERDICT: clean` immediately sets `LAST_RESULT=clean`, before checking refusal text. There is no repository-access success check or sandbox-failure check.
+- **Line 336:** only `refused`, `noverdict`, and `error` trigger retries; these clean responses bypass that path.
+- **Lines 378–395:** zero blocked pieces and zero findings produce and record `verdict: clean`.
+- **`scripts/review/verify.sh:35–63, 68`:** the verifier validates the six metadata fields and accepts `clean`; it does not inspect reviewer output or repository-access evidence.
+- **`scripts/land/train.sh:512, 1033–1037`:** that successful verification qualifies as review provenance for landing.
+
+The supplied outputs demonstrate the failure:
+
+| Evidence | Repository-access failure | Recorded round |
+|---|---|---|
+| `sample-4d16e26f.md` | Lines 9, 17: sandbox could not start | Line 21: clean, 0 blocked |
+| `sample-b7f30d36.md` | Lines 9, 19: repository verification failed | Line 23: clean, 0 blocked |
+| `sample-fce6644d.md` | Line 17 explicitly reports `bwrap: Operation not permitted`; lines 9, 25, 33 report unavailable context | Line 37: clean, 0 blocked |
+
+Recounting all **112 rows** in `REVIEW_SCAN.txt`: **59 clean outputs**, of which **42 have `sandbox>0` — 42/59 (71.2%)**. This confirms the supplied scan’s count; the samples substantiate the reported host failure without rerunning it. The code establishes that the resulting notes qualify for provenance, although these files alone do not prove an actual landing occurred.
+
+CLAIM 2: CONFIRMED — Reported sandbox startup failures leave repository context unread, yet a zero-exit response ending in `VERDICT: clean` becomes a clean note that the train accepts as review provenance.
+tokens used
+36,784

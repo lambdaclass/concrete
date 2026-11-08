@@ -1,0 +1,627 @@
+Reading additional input from stdin...
+OpenAI Codex v0.166.0
+--------
+workdir: /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/iss19/src
+model: gpt-6.1-sol
+provider: openai
+approval: never
+sandbox: danger-full-access
+reasoning effort: none
+reasoning summaries: none
+session id: 01a1bb5d-e3be-7162-beb9-5d48ca632145
+--------
+user
+Confirm or refute a suspected bug in this repository's landing check, with a bounded, self-contained reproducer. You are in an extracted copy of origin/main (not a git clone). Rules: build the reproducer only inside a NEW scratch directory under ./repro-work (create it); use only local bare repositories as remotes; never contact GitHub or any network remote; never run any git hook (use `git -c core.hooksPath=/dev/null` ONLY inside the throwaway scratch repos you create, never anywhere else); never push anywhere except the local bare repo you create; keep every command under `timeout 120`.
+
+Suspected bug: scripts/land/train.sh review_provenance() accepts a train when its head carries a clean review note (judged by scripts/review/verify.sh). verify.sh checks that the note's `base:` field is a well-formed 40-hex SHA but not that the reviewed range base..head covers the train's diff (origin/main..head). So a clean note whose base is an unreviewed intermediate commit B (on top of main A) qualifies head C, landing B's content unreviewed.
+
+Task:
+1. Read scripts/land/train.sh (review_provenance, how REMOTE and state are set), scripts/review/verify.sh and scripts/review/review.sh (how the note is written: ref refs/notes/concrete-review, fields).
+2. Build the reproducer as a script repro-work/repro.sh: create a bare repo as "origin", a work repo with main commit A, commit B (stands for unreviewed content), commit C on B; write a note on C in refs/notes/concrete-review in exactly the format review.sh writes, with verdict clean and base = B; push main=A, the branch and the notes to the bare repo. Then run verify.sh on C, and call review_provenance (source or extract the function with its dependencies, with REMOTE pointing at the bare repo; do not run train.sh build/check/land) for head C. Show whether it returns success. As a control, show a note with a findings verdict is refused.
+3. Run it (bash repro-work/repro.sh) and show the output.
+4. Verdict line exactly: `VERDICT: CONFIRMED` if review_provenance accepts head C even though the note's base B is not main A (B's content never reviewed), or `VERDICT: REFUTED` with the code that prevents it (cite file:line). Also state the structural cause in one sentence and propose the structural fix (e.g., verify the note's base is an ancestor-or-equal of the train base, or that base == merge-base(head, origin/main), and where the check belongs: verify.sh vs review_provenance), citing file:line.
+codex
+I’ll inspect the review-note checks, then build and run a reproducer using only local repositories under `repro-work`, with hooks disabled and commands bounded by `timeout 120`.
+exec
+/bin/bash -lc "timeout 120 bash -c 'pwd; ls -ld repro-work 2>/dev/null || true; rg -n \"review_provenance|REMOTE=|STATE|state|verify.sh\" scripts/land/train.sh; cat scripts/review/verify.sh; rg -n \"notes|base:|verdict:|reviewer:|round:|timestamp|date:|commit:\" scripts/review/review.sh'" in /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/iss19/src
+ succeeded in 0ms:
+/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/iss19/src
+26:#     leg, and a train lands only with review provenance (review_provenance: a verified clean review
+35:#     same base) in <state>/rehearsals.tsv; see is_move_candidate and require_rehearsal. A dry run
+47:# LAND_STATE_DIR (default <git common dir>/concrete-landing), LAND_LOG_DIR (default
+48:# $LAND_STATE_DIR/log), LAND_NO_NIX=1 (never re-enter `nix develop`), LAND_CAMPAIGN_JOBS (regex of
+96:STATE_ROOT="${LAND_STATE_DIR:-$COMMON/concrete-landing}"
+97:LOG_DIR="${LAND_LOG_DIR:-$STATE_ROOT/log}"
+100:REMOTE="${LAND_REMOTE:-origin}"
+139:# --- state and log -------------------------------------------------------------------------------
+143:state_file() { echo "$STATE_ROOT/$1/train.env"; }
+145:state_get() { # name key
+146:  local f; f="$(state_file "$1")"
+151:state_set() { # name key value
+152:  local f; f="$(state_file "$1")"
+168:  base="$(state_get_soft "$name" base)"; head="$(state_get_soft "$name" head)"
+169:  members="$(state_get_soft "$name" members)"; run="$(state_get_soft "$name" run_id)"
+178:state_get_soft() {
+179:  local f; f="$(state_file "$1")"
+222:# The train's state must describe the checkout: same branch, same HEAD, clean.
+225:  head="$(state_get "$name" head)"
+227:    || die "check out train/$name first (state is bound to that branch)"
+231:  assert_no_op "state check"
+316:  rm -f "$(state_file "$name")"
+317:  state_set "$name" base "$base"
+318:  state_set "$name" members "$members"
+319:  state_set "$name" prev "$prev"
+382:  state_set "$name" head "$(git rev-parse HEAD)"
+383:  state_set "$name" built_utc "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+469:# and a train rebuilt from reviewed branches). Every note is judged by scripts/review/verify.sh, on
+470:# $REMOTE's notes (fetched first, replacing the local copy, as verify.sh --fetch does): an absent,
+473:VERIFY="$SELF_DIR/../review/verify.sh"
+474:review_provenance() { # name head
+483:  for m in $(state_get_soft "$name" members | tr ',' ' '); do
+497:  if why="$(review_provenance "$1" "$3")"; then echo "review: $why; not reviewed again"; return 0; fi
+500:  why="$(review_provenance "$1" "$3")" || { echo "review: the reviewer exited 0, but $why"; return 1; }
+518:  local base head; base="$(state_get "$name" base)"; head="$(git rev-parse HEAD)"
+520:  [ "$DRY" = 1 ] || state_set "$name" checked ""
+544:  local dir="$STATE_ROOT/$name/check-${head:0:12}"; mkdir -p "$dir"
+565:    state_set "$name" checked "$head"
+592:  local base head; base="$(state_get "$name" base)"; head="$(git rev-parse HEAD)"
+593:  if [ "$(state_get_soft "$name" checked)" != "$head" ]; then
+629:  state_set "$name" run_id "$id"
+630:  state_set "$name" ci_utc "$t0"
+699:  local id; id="$(state_get "$name" run_id)"
+717:  local head; head="$(state_get_soft "$name" head)"
+729:  local base unmet; base="$(state_get_soft "$name" base)"
+844:# $STATE_ROOT/rehearsals.tsv holds an `accepted` row for it, written by scripts/land/acceptance.sh.
+866:REHEARSALS="$STATE_ROOT/rehearsals.tsv"
+925:  local base head id; base="$(state_get "$name" base)"; head="$(git rev-parse HEAD)"
+926:  id="$(state_get "$name" run_id)"
+967:    echo "train:   train.sh build $name --force $(state_get "$name" members | tr ',' '\n' | sed 's/@.*//' | tr '\n' ' ')" >&2
+989:  if ! prov="$(review_provenance "$name" "$head")"; then
+1020:  state_set "$name" landed_utc "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+1023:  state_get "$name" members | tr ',' '\n' | sed 's/^/    /'
+1092:  local members; members="$(state_get "$name" members)"
+1119:  state_set "$name" bisect_culprit "$culprit"
+1129:  cat "$(state_file "$name")" 2>/dev/null || die "no train '$name'"
+#!/usr/bin/env bash
+# R-0544 — does a commit carry a clean review verdict? See docs/REVIEW.md.
+#
+#   scripts/review/verify.sh [--fetch] <commit>
+#
+# Reads the git note that scripts/review/review.sh wrote on <commit> under
+# refs/notes/concrete-review. The verdict counts only for that exact commit: a
+# clean note on an ancestor says nothing about the commits after it.
+#
+#   --fetch  first fetch refs/notes/concrete-review from $REVIEW_REMOTE (default
+#            origin), replacing the local copy (a reader, not a writer).
+#
+# Exit codes: 0 clean; 1 reviewed, not clean (findings or blocked);
+#             2 no note, a malformed note, or a usage error.
+
+set -euo pipefail
+
+NOTES_REF="refs/notes/concrete-review"
+REMOTE="${REVIEW_REMOTE:-origin}"
+FETCH=0
+if [ "${1:-}" = --fetch ]; then FETCH=1; shift; fi
+[ $# -eq 1 ] || { echo "usage: verify.sh [--fetch] <commit>" >&2; exit 2; }
+
+if [ "$FETCH" = 1 ]; then
+  git fetch -q "$REMOTE" "+$NOTES_REF:$NOTES_REF" \
+    || { echo "verify: could not fetch $NOTES_REF from $REMOTE" >&2; exit 2; }
+fi
+
+SHA="$(git rev-parse -q --verify "$1^{commit}")" || { echo "verify: not a commit: $1" >&2; exit 2; }
+NOTE="$(git notes --ref="$NOTES_REF" show "$SHA" 2>/dev/null)" || {
+  echo "$SHA unreviewed: no note under $NOTES_REF"
+  exit 2
+}
+
+# The note must carry each of the six fields review.sh writes exactly once, each well formed. Two
+# optional keys are the landing pipeline's (scripts/land/notes.sh, docs/LANDING.md):
+# `carried-from: <sha>`, written by the landing bot when it carries a clean verdict across a
+# conflict-free rebase, and `order: N`. Any other key, a repeated key, or a line that is not
+# `key: value` makes the note malformed. Keys are matched by name, not position, because notes.sh
+# `put` (the bot's writer) appends `utc` last.
+malformed() {
+  echo "$SHA malformed review note${1:+ ($1)}:"
+  printf '%s\n' "$NOTE" | sed 's/^/  /'
+  exit 2
+}
+# Plain variables F_<key>, not an associative array: macOS /bin/bash is 3.2.
+SEEN=" "
+while IFS= read -r line; do
+  [[ "$line" =~ ^([a-z-]+):\ (.*)$ ]] || malformed "not key: value: '$line'"
+  k="${BASH_REMATCH[1]}" v="${BASH_REMATCH[2]}"
+  case "$SEEN" in *" $k "*) malformed "repeated key $k" ;; esac
+  SEEN="$SEEN$k "
+  printf -v "F_${k//-/_}" '%s' "$v"
+  case "$k" in
+    verdict)      [[ "$v" =~ ^(clean|findings|blocked)$ ]] ;;
+    rounds)       [[ "$v" =~ ^[1-9][0-9]*$ ]] ;;
+    reviewer)     [[ "$v" =~ ^[^[:space:]]+$ ]] ;;
+    utc)          [[ "$v" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$ ]] ;;
+    base)         [[ "$v" =~ ^[0-9a-f]{40}$ ]] ;;
+    pieces)       [[ "$v" =~ ^[0-9]+$ ]] ;;
+    carried-from) [[ "$v" =~ ^[0-9a-f]{40}$ ]] ;;
+    order)        [[ "$v" =~ ^[0-9]+$ ]] ;;
+    *)            false ;;
+  esac || malformed "bad $k"
+done <<< "$NOTE"
+for k in verdict rounds reviewer utc base pieces; do
+  case "$SEEN" in *" $k "*) ;; *) malformed "missing $k" ;; esac
+done
+
+field() { local n="F_${1//-/_}"; printf '%s' "${!n:-}"; }
+VERDICT="$(field verdict)"
+CARRIED=""; [ -z "$(field carried-from)" ] || CARRIED=", carried from $(field carried-from)"
+echo "$SHA $VERDICT (round $(field rounds), reviewer $(field reviewer), $(field utc), base $(field base), $(field pieces) piece(s)$CARRIED)"
+[ "$VERDICT" = clean ] && exit 0
+exit 1
+11:# under refs/notes/concrete-review, which it then pushes.
+16:#                the notes on earlier commits of the branch) and passes the previous
+31:#   6  result recorded locally but the notes ref could not be pushed
+35:#   REVIEW_REMOTE       remote for notes and the default base (default: origin)
+37:#   REVIEW_PUSH         1 to fetch/push the notes refs (default: 1)
+52:NOTES_REF="refs/notes/concrete-review"
+53:FINDINGS_REF="refs/notes/concrete-review-findings"
+87:# ---------------------------------------------------------------- notes sync
+88:# Fetch the remote notes refs and merge them into the local ones. On a conflict
+90:sync_notes() {
+94:    tmp="refs/notes/review-sync-${ref##*/}"
+97:        git notes --ref="$ref" merge -q -s ours "$tmp" >/dev/null 2>&1 \
+107:# Push both notes refs; on a non-fast-forward, fetch + merge and retry.
+108:push_notes() {
+121:    echo "review: notes push attempt $attempt rejected; fetching and merging" >&2
+122:    sync_notes || true
+134:  if git notes --ref="$FINDINGS_REF" show "$sha" 2>/dev/null; then return 0; fi
+149:sync_notes || die "notes sync failed"
+156:  BASE_SHA="$(git rev-parse -q --verify "$BASE^{commit}")" || die "bad --base: $BASE"
+169:  n="$(git notes --ref="$NOTES_REF" show "$c" 2>/dev/null)" || continue
+320:  echo "reviewer: $REVIEWER; utc: $UTC; base: $BASE_SHA; diff from: $FROM; pieces: $K; diff bytes: $TOTAL"
+382:{ echo; echo "## verdict: $VERDICT ($N_FINDINGS piece(s) with findings, $N_BLOCKED blocked)"; } >>"$RAW"
+388:verdict: $VERDICT
+390:reviewer: $REVIEWER
+392:base: $BASE_SHA
+395:git notes --ref="$NOTES_REF" add -f -F "$WORK/note" "$HEAD_SHA"
+406:  git notes --ref="$FINDINGS_REF" add -f -F "$WORK/findings" "$HEAD_SHA"
+412:if ! push_notes; then
+
+exec
+/bin/bash -lc "timeout 120 bash -c 'sed -n \"75,105p;139,185p;460,495p\" scripts/land/train.sh; sed -n \"145,190p;382,398p\" scripts/review/review.sh; nl -ba scripts/land/train.sh | sed -n \"465,493p\"; nl -ba scripts/review/verify.sh | sed -n \"55,85p\"'" in /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/iss19/src
+ succeeded in 0ms:
+# core.hooksPath, or one pointing elsewhere) those pushes would run no gate. The hook git runs is
+# `git rev-parse --git-path hooks/pre-push` (core.hooksPath honoured). It is asked who it is: run
+# with the single argument --concrete-identify and no input, the repository's .githooks/pre-push prints
+# `concrete-pre-push <its real path>` and runs nothing, and so does a wrapper that runs it
+# (acceptance.sh's guard hook). Any other answer, or none, is refused; a hook that merely mentions
+# the file is not enough. `status` and `record` push nothing (record runs in CI's Landing record
+# job, in a checkout with no hook enabled), so they run anywhere.
+where_ok() {
+  local gd hook want got
+  gd="$(cd "$(git rev-parse --git-dir)" && pwd -P)"
+  [ "$gd" = "$(cd "$COMMON" && pwd -P)" ] \
+    || die "refusing to run in a linked worktree ($ROOT; its git dir is $gd): run train.sh from a full clone, never a worktree"
+  hook="$(git rev-parse --git-path hooks/pre-push)"
+  case "$hook" in /*) ;; *) hook="$ROOT/$hook" ;; esac
+  [ -f "$hook" ] && [ -x "$hook" ] \
+    || die "refusing to run: this clone has no enabled pre-push hook ($hook is missing or not executable); enable the repository's: git config core.hooksPath .githooks"
+  want="concrete-pre-push $(cd "$ROOT" && pwd -P)/.githooks/pre-push"
+  got="$("$hook" --concrete-identify < /dev/null 2>/dev/null | tail -n 1 || true)"   # a failing hook is an answer too
+  [ "$got" = "$want" ] \
+    || die "refusing to run: the enabled pre-push hook $hook is not the repository's .githooks/pre-push and does not run it (asked who it is, it answered '${got}'); enable it: git config core.hooksPath .githooks"
+}
+STATE_ROOT="${LAND_STATE_DIR:-$COMMON/concrete-landing}"
+LOG_DIR="${LAND_LOG_DIR:-$STATE_ROOT/log}"
+REPO="${LAND_REPO:-unbalancedparentheses/concrete2}"
+GH="${LAND_GH:-gh}"
+REMOTE="${LAND_REMOTE:-origin}"
+MIRROR="${LAND_MIRROR-lambdaclass}"
+HOOK="${LAND_HOOK:-.githooks/pre-push}"
+# Must name exactly the workflow's campaign jobs (an `if:` on `inputs.campaign`, and the jobs that `needs:`
+# one): check_landing_script.sh derives that set from lean_action_ci.yml and fails on any difference.
+# The root has no campaign tier yet; a campaign job, when one returns, is named "Campaign: ...".
+# --- state and log -------------------------------------------------------------------------------
+# State and log live in the COMMON git dir: every worktree sees the same trains, nothing is committed,
+# and no per-train file can conflict on a rebase (LANDING.md, "Where the record lives").
+
+state_file() { echo "$STATE_ROOT/$1/train.env"; }
+
+state_get() { # name key
+  local f; f="$(state_file "$1")"
+  [ -f "$f" ] || die "no train '$1' (build it first: train.sh build $1 <ref>...)"
+  sed -n "s/^$2=//p" "$f" | tail -1
+}
+
+state_set() { # name key value
+  local f; f="$(state_file "$1")"
+  mkdir -p "$(dirname "$f")"
+  touch "$f"
+  grep -v "^$2=" "$f" > "$f.tmp" || true
+  printf '%s=%s\n' "$2" "$3" >> "$f.tmp"
+  mv "$f.tmp" "$f"
+}
+
+STAGE_T0=0
+stage_start() { STAGE_T0="$(date +%s)"; }
+
+# utc, train, stage, base, head, members (ref@sha, comma-joined), run id, result, duration_s, note
+log_row() { # name stage result note
+  [ "$DRY" = 1 ] && return 0
+  local name="$1" stage="$2" result="$3" notes="${4:-}" now dur base head members run
+  now="$(date +%s)"; dur=$(( now - STAGE_T0 ))
+  base="$(state_get_soft "$name" base)"; head="$(state_get_soft "$name" head)"
+  members="$(state_get_soft "$name" members)"; run="$(state_get_soft "$name" run_id)"
+  mkdir -p "$LOG_DIR"
+  local f="$LOG_DIR/$name.tsv"
+  [ -f "$f" ] || printf 'utc\ttrain\tstage\tbase\thead\tmembers\trun_id\tresult\tduration_s\tnote\n' > "$f"
+  printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+    "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$name" "$stage" "${base:--}" "${head:--}" "${members:--}" \
+    "${run:--}" "$result" "$dur" "$(printf '%s' "${notes:--}" | tr '\t\n' '  ')" >> "$f"
+}
+
+state_get_soft() {
+  local f; f="$(state_file "$1")"
+  [ -f "$f" ] || return 0
+  sed -n "s/^$2=//p" "$f" | tail -1
+}
+
+# --- toolchain -----------------------------------------------------------------------------------
+# The pre-push hook builds the compiler, so pushes and checks run inside the dev shell.
+review_cmd() {
+  if [ -n "${LAND_REVIEW_CMD:-}" ]; then echo "$LAND_REVIEW_CMD"
+  elif [ -f scripts/review/review.sh ]; then echo "bash scripts/review/review.sh"; fi
+  return 0
+}
+
+# REVIEW PROVENANCE (fail closed; docs/LANDING.md, "check" and "land"). A train is reviewed when its
+# head carries a clean review note, or when its head carries no review note and every member carries
+# one at its exact recorded SHA (each member was reviewed at its own head: the landing bot's trains,
+# and a train rebuilt from reviewed branches). Every note is judged by scripts/review/verify.sh, on
+# $REMOTE's notes (fetched first, replacing the local copy, as verify.sh --fetch does): an absent,
+# malformed, blocked or findings note qualifies nothing, and a head note that is not clean is not
+# overridden by its members. Prints what qualified; on failure prints why and returns 1.
+VERIFY="$SELF_DIR/../review/verify.sh"
+review_provenance() { # name head
+  local name="$1" head="$2" out m n=0 bad=""
+  [ -f "$VERIFY" ] || { echo "no review verifier ($VERIFY is missing)"; return 1; }
+  git fetch -q "$REMOTE" "+refs/notes/concrete-review:refs/notes/concrete-review" 2>/dev/null \
+    || { echo "could not fetch refs/notes/concrete-review from $REMOTE"; return 1; }
+  if out="$(bash "$VERIFY" "$head" 2>&1)"; then echo "the head ${head:0:10} carries a clean review note"; return 0; fi
+  if git notes --ref=refs/notes/concrete-review show "$head" >/dev/null 2>&1; then
+    echo "the head's review note does not qualify: ${out//$'\n'/ }"; return 1
+  fi
+  for m in $(state_get_soft "$name" members | tr ',' ' '); do
+    n=$((n + 1))
+    out="$(bash "$VERIFY" "${m##*@}" 2>&1)" || bad="$bad; member ${m%@*}: ${out//$'\n'/ }"
+  done
+  [ "$n" -gt 0 ] || { echo "the head ${head:0:10} has no review note and the train records no members"; return 1; }
+  [ -z "$bad" ] || { echo "the head ${head:0:10} has no review note, and not every member has a clean one$bad"; return 1; }
+  echo "the head has no review note; every member ($n) carries a clean one at its exact SHA"
+}
+
+# Codex review leg. It passes without running the reviewer when the train already has review
+# provenance. Otherwise it runs the review command; a non-zero exit fails, and so does a zero exit
+# that leaves no provenance (no note, or a malformed, blocked or findings note at the head).
+review_leg() { # name base head
+  } >&2
+}
+
+# ---------------------------------------------------------------- state
+sync_notes || die "notes sync failed"
+
+HEAD_SHA="$(git rev-parse HEAD)"
+if [ -z "$BASE" ]; then
+  git rev-parse -q --verify "$MAIN_REF^{commit}" >/dev/null || die "no $MAIN_REF; pass --base"
+  BASE_SHA="$(git merge-base HEAD "$MAIN_REF")" || die "no merge-base with $MAIN_REF"
+else
+  BASE_SHA="$(git rev-parse -q --verify "$BASE^{commit}")" || die "bad --base: $BASE"
+fi
+
+if [ -n "$(git status --porcelain --untracked-files=no)" ]; then
+  echo "review: warning: uncommitted changes are not reviewed; only HEAD is" >&2
+fi
+
+# Latest note on the branch (round count), and the latest note whose round
+# actually reviewed its diff (delta start). A `blocked` round reviewed only part
+# of its diff, so it does not advance the delta start.
+PREV_SHA="" PREV_ROUNDS=0 PREV_VERDICT="" REVIEWED_SHA="" REVIEWED_ROUNDS=0 REVIEWED_VERDICT=""
+while read -r c; do
+  [ -n "$c" ] || continue
+  n="$(git notes --ref="$NOTES_REF" show "$c" 2>/dev/null)" || continue
+  v="$(note_field "$n" verdict)"
+  r="$(note_field "$n" rounds)"
+  [[ "$r" =~ ^[0-9]+$ ]] || continue
+  if [ -z "$PREV_SHA" ]; then PREV_SHA="$c" PREV_ROUNDS="$r" PREV_VERDICT="$v"; fi
+  if [ "$v" = clean ] || [ "$v" = findings ]; then REVIEWED_SHA="$c" REVIEWED_ROUNDS="$r" REVIEWED_VERDICT="$v"; break; fi
+done < <(git rev-list --topo-order HEAD "^$BASE_SHA")
+
+if [ "$PREV_SHA" = "$HEAD_SHA" ] && [ "$PREV_VERDICT" != blocked ]; then
+  if [ "$PREV_VERDICT" = clean ]; then
+    echo "review: HEAD $HEAD_SHA already reviewed clean (round $PREV_ROUNDS)"
+    exit 0
+  fi
+  if [ "$PREV_ROUNDS" -ge "$MAX_ROUNDS" ]; then
+    cap_message "$PREV_ROUNDS" "$(findings_for "$PREV_SHA" "$PREV_ROUNDS")"
+    exit 3
+  fi
+  echo "review: HEAD already reviewed in round $PREV_ROUNDS (verdict $PREV_VERDICT)." >&2
+  echo "review: commit the fixes, then run again." >&2
+  exit 4
+fi
+
+{ echo; echo "## verdict: $VERDICT ($N_FINDINGS piece(s) with findings, $N_BLOCKED blocked)"; } >>"$RAW"
+
+# ---------------------------------------------------------------- record
+# THE NOTE FORMAT IS AN INTERFACE: the landing bot and scripts/review/verify.sh
+# parse it. Change it only together with them.
+cat >"$WORK/note" <<EOF
+verdict: $VERDICT
+rounds: $ROUND
+reviewer: $REVIEWER
+utc: $UTC
+base: $BASE_SHA
+pieces: $K
+EOF
+git notes --ref="$NOTES_REF" add -f -F "$WORK/note" "$HEAD_SHA"
+if [ "$VERDICT" = blocked ] && [ -n "$PREV_FINDINGS" ]; then
+  # A blocked round cannot resolve the findings it was given: some code went
+  # unreviewed. Record them with this round's own, so a later round (even after
+   465	
+   466	# REVIEW PROVENANCE (fail closed; docs/LANDING.md, "check" and "land"). A train is reviewed when its
+   467	# head carries a clean review note, or when its head carries no review note and every member carries
+   468	# one at its exact recorded SHA (each member was reviewed at its own head: the landing bot's trains,
+   469	# and a train rebuilt from reviewed branches). Every note is judged by scripts/review/verify.sh, on
+   470	# $REMOTE's notes (fetched first, replacing the local copy, as verify.sh --fetch does): an absent,
+   471	# malformed, blocked or findings note qualifies nothing, and a head note that is not clean is not
+   472	# overridden by its members. Prints what qualified; on failure prints why and returns 1.
+   473	VERIFY="$SELF_DIR/../review/verify.sh"
+   474	review_provenance() { # name head
+   475	  local name="$1" head="$2" out m n=0 bad=""
+   476	  [ -f "$VERIFY" ] || { echo "no review verifier ($VERIFY is missing)"; return 1; }
+   477	  git fetch -q "$REMOTE" "+refs/notes/concrete-review:refs/notes/concrete-review" 2>/dev/null \
+   478	    || { echo "could not fetch refs/notes/concrete-review from $REMOTE"; return 1; }
+   479	  if out="$(bash "$VERIFY" "$head" 2>&1)"; then echo "the head ${head:0:10} carries a clean review note"; return 0; fi
+   480	  if git notes --ref=refs/notes/concrete-review show "$head" >/dev/null 2>&1; then
+   481	    echo "the head's review note does not qualify: ${out//$'\n'/ }"; return 1
+   482	  fi
+   483	  for m in $(state_get_soft "$name" members | tr ',' ' '); do
+   484	    n=$((n + 1))
+   485	    out="$(bash "$VERIFY" "${m##*@}" 2>&1)" || bad="$bad; member ${m%@*}: ${out//$'\n'/ }"
+   486	  done
+   487	  [ "$n" -gt 0 ] || { echo "the head ${head:0:10} has no review note and the train records no members"; return 1; }
+   488	  [ -z "$bad" ] || { echo "the head ${head:0:10} has no review note, and not every member has a clean one$bad"; return 1; }
+   489	  echo "the head has no review note; every member ($n) carries a clean one at its exact SHA"
+   490	}
+   491	
+   492	# Codex review leg. It passes without running the reviewer when the train already has review
+   493	# provenance. Otherwise it runs the review command; a non-zero exit fails, and so does a zero exit
+    55	    verdict)      [[ "$v" =~ ^(clean|findings|blocked)$ ]] ;;
+    56	    rounds)       [[ "$v" =~ ^[1-9][0-9]*$ ]] ;;
+    57	    reviewer)     [[ "$v" =~ ^[^[:space:]]+$ ]] ;;
+    58	    utc)          [[ "$v" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$ ]] ;;
+    59	    base)         [[ "$v" =~ ^[0-9a-f]{40}$ ]] ;;
+    60	    pieces)       [[ "$v" =~ ^[0-9]+$ ]] ;;
+    61	    carried-from) [[ "$v" =~ ^[0-9a-f]{40}$ ]] ;;
+    62	    order)        [[ "$v" =~ ^[0-9]+$ ]] ;;
+    63	    *)            false ;;
+    64	  esac || malformed "bad $k"
+    65	done <<< "$NOTE"
+    66	for k in verdict rounds reviewer utc base pieces; do
+    67	  case "$SEEN" in *" $k "*) ;; *) malformed "missing $k" ;; esac
+    68	done
+    69	
+    70	field() { local n="F_${1//-/_}"; printf '%s' "${!n:-}"; }
+    71	VERDICT="$(field verdict)"
+    72	CARRIED=""; [ -z "$(field carried-from)" ] || CARRIED=", carried from $(field carried-from)"
+    73	echo "$SHA $VERDICT (round $(field rounds), reviewer $(field reviewer), $(field utc), base $(field base), $(field pieces) piece(s)$CARRIED)"
+    74	[ "$VERDICT" = clean ] && exit 0
+    75	exit 1
+
+codex
+The head-note path returns success as soon as `verify.sh` accepts the note; it does not compare the note’s base with the train base. I’ll test that path with the exact function extracted from `train.sh`, then replace the clean verdict with `findings` as a control.
+exec
+/bin/bash -lc "timeout 120 bash <<'OUTER'
+set -eu
+mkdir repro-work
+cat > repro-work/repro.sh <<'SCRIPT'
+#"'!/usr/bin/env bash
+set -euo pipefail
+# Bound the entire reproduction, including every child command.
+if [ "${1:-}" != --bounded ]; then
+  exec timeout 120 bash "$0" --bounded
+fi
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+SCRATCH="$(mktemp -d "$ROOT/repro-work/run.XXXXXXXX")"
+# Copy only the verifier and exact required function definitions. Never source train.sh'"'s CLI.
+cp \""'$ROOT/scripts/review/verify.sh" "$SCRATCH/verify.sh"
+awk '"'/"'^(state_file|state_get_soft|review_provenance)'"\\(\\) \\{/ { copying=1 }
+     copying { print }
+     copying && /"'^}/ { copying=0 }'"' \""'$ROOT/scripts/land/train.sh" > "$SCRATCH/functions.sh"
+mkdir "$SCRATCH/work" "$SCRATCH/origin.git"
+cd "$SCRATCH/origin.git"
+# This wrapper is defined only after entering our newly created throwaway directory.
+# Exporting it also disables hooks for git calls in verify.sh and extracted functions.
+git() { command git -c core.hooksPath=/dev/null "$@"; }
+export -f git
+# Isolate ambient Git configuration and repo-selection variables.
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY GIT_ALTERNATE_OBJECT_DIRECTORIES
+export GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null
+export GIT_ALLOW_PROTOCOL=file
+export GIT_AUTHOR_DATE=2026-11-08T00:00:00Z GIT_COMMITTER_DATE=2026-11-08T00:00:00Z
+git init -q --bare --initial-branch=main .
+cd "$SCRATCH/work"
+git init -q --initial-branch=main .
+git config user.name Reproducer
+git config user.email reproducer@example.invalid
+git config commit.gpgsign false
+git config notes.gpgsign false
+printf '"'main content\\n' > main.txt
+git add main.txt
+git commit -qm A
+A=\""'$(git rev-parse HEAD)"
+git remote add origin "$SCRATCH/origin.git"
+git push -q origin main
+git checkout -qb candidate
+printf '"'unreviewed B content\\n' > unreviewed.txt
+git add unreviewed.txt
+git commit -qm B
+B=\""'$(git rev-parse HEAD)"
+printf '"'reviewed C content\\n' > reviewed.txt
+git add reviewed.txt
+git commit -qm C
+C=\""'$(git rev-parse HEAD)"
+git push -q origin candidate
+git fetch -q origin main
+STATE_ROOT="$SCRATCH/state"
+REMOTE="$SCRATCH/origin.git"
+VERIFY="$SCRATCH/verify.sh"
+mkdir -p "$STATE_ROOT/demo"
+printf '"'base=%s\\nhead=%s\\nmembers=candidate@%s\\n' \""'$A" "$C" "$C" > "$STATE_ROOT/demo/train.env"
+source "$SCRATCH/functions.sh"
+write_note() {
+  # The exact six-field order and format written by review.sh'"'s record block.
+  cat > \""'$SCRATCH/note" <<EOF
+verdict: $1
+rounds: 1
+reviewer: codex
+utc: 2026-11-08T00:00:00Z
+base: $B
+pieces: 1
+EOF
+  git notes --ref=refs/notes/concrete-review add -f -F "$SCRATCH/note" "$C" 2>/dev/null
+  git push -q origin refs/notes/concrete-review
+}
+capture() {
+  local label="$1"; shift
+  if "$@"; then RESULT=0; else RESULT=$?; fi
+  printf '"'%s exit=%s\\n' \""'$label" "$RESULT"
+}
+printf '"'A (origin/main, train base) = %s\\nB (note base) = %s\\nC (train head) = %s\\n' \""'$A" "$B" "$C"
+[ "$A" = "$(git rev-parse origin/main)" ]
+[ "$A" != "$B" ]
+git merge-base --is-ancestor "$A" "$B"
+git merge-base --is-ancestor "$B" "$C"
+printf '"'\\nTrain diff A..C:\\n'
+git diff --name-only \""'$A" "$C"
+printf '"'Reviewed range B..C:\\n'
+git diff --name-only \""'$B" "$C"
+[ -n "$(git diff "$A" "$B" -- unreviewed.txt)" ]
+[ -z "$(git diff "$B" "$C" -- unreviewed.txt)" ]
+printf '"'\\nClean note:\\n'
+write_note clean
+cat \""'$SCRATCH/note"
+capture verify-clean bash "$VERIFY" "$C"
+[ "$RESULT" -eq 0 ]
+capture provenance-clean review_provenance demo "$C"
+[ "$RESULT" -eq 0 ]
+printf '"'\\nFindings control:\\n'
+write_note findings
+capture verify-findings bash \""'$VERIFY" "$C"
+[ "$RESULT" -eq 1 ]
+capture provenance-findings review_provenance demo "$C"
+[ "$RESULT" -eq 1 ]
+printf '"'\\nVERDICT: CONFIRMED\\n'
+SCRIPT
+bash repro-work/repro.sh
+OUTER" in /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/iss19/src
+ succeeded in 0ms:
+A (origin/main, train base) = d787afe8f00a72bb3a325805f4c290b71e2c433b
+B (note base) = 565cec0e05189347b6b1ad86abb6088488e015db
+C (train head) = ecaef448e85c3ecd05568b4b31068c6f0ea99e35
+
+Train diff A..C:
+reviewed.txt
+unreviewed.txt
+Reviewed range B..C:
+reviewed.txt
+
+Clean note:
+verdict: clean
+rounds: 1
+reviewer: codex
+utc: 2026-11-08T00:00:00Z
+base: 565cec0e05189347b6b1ad86abb6088488e015db
+pieces: 1
+ecaef448e85c3ecd05568b4b31068c6f0ea99e35 clean (round 1, reviewer codex, 2026-11-08T00:00:00Z, base 565cec0e05189347b6b1ad86abb6088488e015db, 1 piece(s))
+verify-clean exit=0
+the head ecaef448e8 carries a clean review note
+provenance-clean exit=0
+
+Findings control:
+ecaef448e85c3ecd05568b4b31068c6f0ea99e35 findings (round 1, reviewer codex, 2026-11-08T00:00:00Z, base 565cec0e05189347b6b1ad86abb6088488e015db, 1 piece(s))
+verify-findings exit=1
+the head's review note does not qualify: ecaef448e85c3ecd05568b4b31068c6f0ea99e35 findings (round 1, reviewer codex, 2026-11-08T00:00:00Z, base 565cec0e05189347b6b1ad86abb6088488e015db, 1 piece(s))
+provenance-findings exit=1
+
+VERDICT: CONFIRMED
+
+codex
+VERDICT: CONFIRMED
+
+Created [repro-work/repro.sh](repro-work/repro.sh) and ran `bash repro-work/repro.sh` successfully under `timeout 120`. It uses only newly created local repositories, disables hooks, and extracts the actual provenance function without running train commands.
+
+Output (SHAs abbreviated):
+
+```text
+A (origin/main, train base) = d787afe8f0…
+B (note base) = 565cec0e05…
+C (train head) = ecaef448e8…
+
+Train diff A..C:
+reviewed.txt
+unreviewed.txt
+Reviewed range B..C:
+reviewed.txt
+
+verify-clean exit=0
+the head ecaef448e8 carries a clean review note
+provenance-clean exit=0
+
+verify-findings exit=1
+the head's review note does not qualify: … findings …
+provenance-findings exit=1
+
+VERDICT: CONFIRMED
+```
+
+The note uses the exact six-field format written at `scripts/review/review.sh:387`.
+
+Structural cause: `verify.sh:59` validates `base` only syntactically, and `train.sh:479` accepts its clean verdict without checking that the reviewed range covers the train’s diff.
+
+Proposed structural fix: at `scripts/land/train.sh:479`, require the note base to be an ancestor-or-equal of the recorded train base before accepting head provenance. The train-specific obligation belongs in `review_provenance`; `verify.sh` could expose an explicit required-base option to perform that check. No production code was changed.
+tokens used
+19,584
+VERDICT: CONFIRMED
+
+Created [repro-work/repro.sh](repro-work/repro.sh) and ran `bash repro-work/repro.sh` successfully under `timeout 120`. It uses only newly created local repositories, disables hooks, and extracts the actual provenance function without running train commands.
+
+Output (SHAs abbreviated):
+
+```text
+A (origin/main, train base) = d787afe8f0…
+B (note base) = 565cec0e05…
+C (train head) = ecaef448e8…
+
+Train diff A..C:
+reviewed.txt
+unreviewed.txt
+Reviewed range B..C:
+reviewed.txt
+
+verify-clean exit=0
+the head ecaef448e8 carries a clean review note
+provenance-clean exit=0
+
+verify-findings exit=1
+the head's review note does not qualify: … findings …
+provenance-findings exit=1
+
+VERDICT: CONFIRMED
+```
+
+The note uses the exact six-field format written at `scripts/review/review.sh:387`.
+
+Structural cause: `verify.sh:59` validates `base` only syntactically, and `train.sh:479` accepts its clean verdict without checking that the reviewed range covers the train’s diff.
+
+Proposed structural fix: at `scripts/land/train.sh:479`, require the note base to be an ancestor-or-equal of the recorded train base before accepting head provenance. The train-specific obligation belongs in `review_provenance`; `verify.sh` could expose an explicit required-base option to perform that check. No production code was changed.
+EXIT 0

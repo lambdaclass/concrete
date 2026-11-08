@@ -1,0 +1,65 @@
+You are the writer for branch wip/review-access of the Concrete repo, in this clone (~/projects/clones/wip-review-access), from main ea212942. Fix two confirmed bugs in scripts/review/review.sh (the Codex review tool whose clean notes the landing train accepts as review provenance), and file them.
+
+BUG A (ISS-0021, high): review.sh runs Codex in a sandbox that cannot start on the dev host (AppArmor blocks bwrap/user namespaces: "bwrap: Operation not permitted"), so Codex cannot read the repository and judges only the supplied diff; the round is still recorded as `verdict: clean` and the train accepts it. Of 59 clean review.sh raw outputs found on the dev host since 2026-11-01, 42 say the repository could not be read (Codex confirmed both the cause and the count).
+BUG B (ISS-0022, medium): review.sh never saves the exact prompt it sends, so a review's request cannot be reproduced or recorded verbatim (e.g. in an owner sign-off record).
+
+Codex's confirmation (quoted at the end) names the exact lines.
+
+THE FIX (design decided by the coordinator):
+1. Run Codex where it can read the repository. The known working setup on this host: `codex exec --skip-git-repo-check -s danger-full-access` with stdin closed (`< /dev/null`), run inside a git-archive copy of the reviewed commit (`git archive <sha> | tar -x -C <tmpdir>`), never in the live clone, so the reviewer cannot touch the repository, its refs or notes. Bound the run as review.sh already does. Keep the supplied-diff piece mechanism, but the reviewer must be able to read the whole tree at the reviewed SHA.
+2. Save the exact prompt: write every prompt sent, byte for byte, next to the raw output (e.g. .review/<sha>-<round>.prompt.<piece>.txt, or inside the .md in a clearly delimited block), and record its sha256 in the raw output.
+3. Refuse a clean note when the reviewer could not read the repository: ask the reviewer to end with a line `REPOSITORY: readable` or `REPOSITORY: unreadable` (state it in the prompt) and ALSO detect the known failure texts (sandbox could not start / initialize, bwrap Operation not permitted, repository reads failed, could not read the repository). A piece without `REPOSITORY: readable`, or matching a failure text, is "blocked", never clean; the round verdict is then blocked (exit 5, as for a piece that could not be reviewed) and no clean note is written.
+4. Record in the note that the repository was readable: add a key `repository: readable` to clean notes; scripts/review/verify.sh must treat a clean note without `repository: readable` as NOT clean (exit 1 with a clear message naming the missing key), so old diff-only notes stop counting as provenance. Check what scripts/land/train.sh and scripts/land/signoff.sh read from verify.sh and keep them consistent; do not change their other rules.
+5. Controls in scripts/checks/review_tool.sh (bounded, sandboxed, no network: use the existing fake-reviewer seam the controls already use): an unreadable repository (a reviewer output with `REPOSITORY: unreadable`, one with a sandbox failure text and `VERDICT: clean`, one missing the REPOSITORY line) yields no clean note and exit 5; a readable clean review writes a clean note with `repository: readable` and a saved prompt whose sha256 matches; verify.sh refuses a clean note lacking `repository: readable`.
+6. ISSUES.tsv: rows ISS-0021 and ISS-0022 in the file's columns (date 2026-11-08, area ci, evidence including Codex's confirmation and, for ISS-0021, the 42-of-59 count; owner R-0618 or the review tool's roadmap row if you find it; severity high / medium; closure_condition; status closed by this fix). Run the issues checker.
+7. Update docs/REVIEW.md, docs/LANDING.md and AGENTS.md where they describe review.sh's sandbox, notes or raw outputs. Do not edit docs/decisions.md or ROADMAP.md. Add changelog.d/2026-11-08-review-access.md.
+
+Run inside `nix develop .#gates`: bash scripts/checks/review_tool.sh, bash scripts/checks/landing_script.sh, the issues checker, and bash scripts/checks/run.sh if cheap (report if not). Never run review.sh against the real remotes or push notes. Commit on wip/review-access (do not push). End with a short report: files changed, the note format change, controls and results, checks run, anything left open (e.g. what happens to existing diff-only notes).
+
+Codex's confirmation:
+
+codex
+Both claims are confirmed. I only read files; no review, edits, commits, or pushes were performed.
+
+**Claim 1 — exact prompt is not persisted**
+
+- `scripts/review/review.sh:242–275` constructs the prompt dynamically, including previous findings and `--prompt-extra`.
+- Lines **295–296** pass it directly as a command argument, with the diff supplied separately through stdin. Neither input is explicitly saved.
+- Lines **317–321, 332–335, 348** write metadata and reviewer responses to `.review/<sha>-<round>.md`; they do not write the prompt.
+- Lines **387–406** save verdict metadata and non-clean findings in git notes, without the prompt.
+- Lines **84–85** delete the temporary working directory on exit. The invocation also uses `--ephemeral` at line 295.
+
+The three supplied samples contain metadata and responses, with no request transcript. **The script persists no exact sent prompt**, so its records cannot reproduce the request verbatim.
+
+CLAIM 1: CONFIRMED — The prompt is constructed and sent directly but omitted from both the persistent raw output and git notes.
+
+**Claim 2 — repository-access failure still qualifies as clean**
+
+The exact invocation at **`scripts/review/review.sh:295–296`** is:
+
+```bash
+GIT_OPTIONAL_LOCKS=0 "$CODEX_BIN" exec --sandbox read-only --ephemeral --color never -C "$ROOT" -o "$out" \
+  "$(prompt_for "$kind" "$label" "$group" "$paths")" <"$piece" >"$log" 2>&1 || rc=$?
+```
+
+The fault is in how completion is judged:
+
+- **Lines 300–303:** exit status zero plus a final `VERDICT: clean` immediately sets `LAST_RESULT=clean`, before checking refusal text. There is no repository-access success check or sandbox-failure check.
+- **Line 336:** only `refused`, `noverdict`, and `error` trigger retries; these clean responses bypass that path.
+- **Lines 378–395:** zero blocked pieces and zero findings produce and record `verdict: clean`.
+- **`scripts/review/verify.sh:35–63, 68`:** the verifier validates the six metadata fields and accepts `clean`; it does not inspect reviewer output or repository-access evidence.
+- **`scripts/land/train.sh:512, 1033–1037`:** that successful verification qualifies as review provenance for landing.
+
+The supplied outputs demonstrate the failure:
+
+| Evidence | Repository-access failure | Recorded round |
+|---|---|---|
+| `sample-4d16e26f.md` | Lines 9, 17: sandbox could not start | Line 21: clean, 0 blocked |
+| `sample-b7f30d36.md` | Lines 9, 19: repository verification failed | Line 23: clean, 0 blocked |
+| `sample-fce6644d.md` | Line 17 explicitly reports `bwrap: Operation not permitted`; lines 9, 25, 33 report unavailable context | Line 37: clean, 0 blocked |
+
+Recounting all **112 rows** in `REVIEW_SCAN.txt`: **59 clean outputs**, of which **42 have `sandbox>0` — 42/59 (71.2%)**. This confirms the supplied scan’s count; the samples substantiate the reported host failure without rerunning it. The code establishes that the resulting notes qualify for provenance, although these files alone do not prove an actual landing occurred.
+
+CLAIM 2: CONFIRMED — Reported sandbox startup failures leave repository context unread, yet a zero-exit response ending in `VERDICT: clean` becomes a clean note that the train accepts as review provenance.
+tokens used
+36,784

@@ -1,0 +1,8 @@
+scripts/land/signoff.sh:65: The quote check resolves prefixes through Git refs, so a branch can override an ambiguous object prefix. Reproduced with two commits beginning `54b8280`: creating branch `54b8280` pointing to one made `record` accept `approve 54b8280` for it despite the collision. An owner’s quote approving the other commit can therefore qualify the wrong SHA.
+
+.githooks/pre-push:53: The notes tier checks only parentlessness, filenames and modes; it never checks record contents or correspondence to the ref’s SHA. Reproduced exit 0 with all four files containing only `x`. The positive control at scripts/checks/review_tool.sh:305 constructs exactly this non-record and expects acceptance, so it pins the loophole rather than detecting it.
+
+scripts/land/signoff.sh:127: Verification does not enforce the record’s parentless-commit requirement. Reproduced by rebuilding a valid record’s tree as a commit with the source commit as its parent: `verify` still returned 0. Such a malformed record can reach origin through a bypassed hook and subsequently qualify in the train; the train’s verifier does not independently enforce the advertised record structure.
+
+VERDICT: REJECT
+36,224

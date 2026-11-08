@@ -1,0 +1,16 @@
+=== controls: the checker on throwaway trees ===
+  ok   positive control: slugs (literal underscore, emphasis), duplicate suffix, explicit id, code skipped, root-relative fragment links and a sibling fragment's heading pass
+  ok   a link to a missing heading fails
+  ok   a duplicate suffix past the last repeated heading fails
+  ok   a heading inside a code fence is not an anchor
+  ok   a heading inside an HTML comment is not an anchor
+  ok   an id written inside a code span is not an anchor
+  ok   an image inside a link's text is checked
+  ok   a link to a missing file fails
+  ok   outside changelog.d/ a link resolves against its own directory
+  ok   a changelog.d/ fragment resolves against the root, not changelog.d/
+  ok   a fragment's anchor is checked too
+=== the repository ===
+  ok   DOC-LINKS: PASS CHECKED=917 ANCHORS=717
+
+DOC-LINKS-GATE: PASS=12 FAIL=0 INCOMPLETE=0

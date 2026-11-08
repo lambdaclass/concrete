@@ -1,0 +1,2 @@
+
+The proposal is the file STD_PLACEMENT.md in the current directory, which is a copy of branch wip/record-language. Read it fully. Verify claims against: ROADMAP.md (sections "Vertical slices", "Showcases", "Std per slice"), docs/decisions.md, docs/PHILOSOPHY.md, docs/proposals/EXAMPLES.md, docs/proposals/FOUNDATION.md, legacy/docs/archive/decisions-2026-11-05/R4_RATIONALE.md (section F6, the hosted grant table approved as Q7.10), legacy/std/src/*.con (ideas only), and LANGUAGE_DECISIONS_2026-11-08.md (today's language decisions).

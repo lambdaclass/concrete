@@ -1,0 +1,281 @@
+Answer directly from the context below. Do NOT read files or use tools; draft 2 and its change log are included at the end. You cannot check docs/decisions.md; judge consistency and design quality.
+
+Concrete is a systems language rebuilt as a fully proven compiler in Lean. There is no GC; the goal is "know everything" about a program. Ownership is linear: non-Copy values are used exactly once, and Copy is declared and checked, never derived. References are second-class: never returned, with borrow views. Capabilities are explicit grants handed to main. `Secret<T>` gives constant time, and only scalar secrets are Copy. There are no hidden traps: every run-time failure is either proven impossible or explicit (checked_* returning Result<T, ArithmeticError>, abort()). The decided trap line is "concrete: trap: <kind> at <path>:<line>:<col> (site <id>)", with exit 134. Struct layout is declaration order with natural alignment. Backends: an LLVM printer (x86-64, AArch64) and the Lean Compiler Backend (verified, AArch64 first). The Lean spec is the only home of rules. Owner principles: best long-term design; one form per situation, no duplication; LLMs write the code and humans read it, so optimize for checking and reading; work is driven by real workloads; verbose is fine when clear.
+
+Delta review, round 2. _review/FOUNDATION_PROPOSAL.md is draft 2 of a foundation proposal for the owner; _review/FOUNDATION_PROPOSAL_v1.md is draft 1, which three reviewers (Codex, Kimi, agy) reviewed; _review/CHANGES_v2.md says how each finding was handled. 
+
+Report only: (1) findings from round 1 that draft 2 handled wrongly or incompletely, including any rejection in CHANGES_v2.md you think is wrong; (2) new errors introduced by draft 2, especially the hybrid state in C4/C8 (is it coherent and provable?), the certificates/maximal-behaviour paragraph, and any citation that does not support its claim; (3) for each of the 17 owner questions in section 5, whether you AGREE with the recommended answer, or prefer the runner-up or another option (one line each, with the decisive reason). Be brief; do not repeat agreement on unchanged text.
+
+End with exactly this line:
+ANSWER: BLOCKERS=<short list, or none>; Q=<question numbers where you would not take the recommendation, each with your choice, or none>
+
+===== FOUNDATION_PROPOSAL.md (draft 2) =====
+# Concrete Lean foundation proposal — draft 2
+
+Status: proposal, not a completed freeze or approval of new rules. On 2026-11-07 the owner said, verbatim, **"ok to option b then for freeze the foundation>?"** (owner answer supplied with this revision). This approves writing the shared foundation before freezing it; **pending recording in docs/decisions.md**. It does not approve the new questions in section 5.
+
+The [A2i decision](../docs/decisions.md#decided-project-long-term-2026-11-06) freezes integrated scopes, "not an untested whole-language architecture". Here the frozen foundation means interfaces and laws implemented, proved and tested together, with representative interactions. It does not mean designing every future slice before slice 1. Later slices supply lawful instances; changes to decided rules return to the owner.
+
+References below use the actual anchors in this checkout. **Core rows** means [Q1–Q9](../docs/decisions.md#decided-2026-11-05-core). The pipeline referred to in the brief as the 2026-11-07 decision is recorded here under [the 2026-11-06 pipeline anchor](../docs/decisions.md#decided-project-pipeline-2026-11-06); there is no `decided-2026-11-07-pipeline` anchor. Proposed additions without a decided row are identified as such, not attributed to an invented decision.
+
+## 1. The freeze boundary
+
+Freeze **extensible interfaces and their laws**, not an exhaustive list of future types, grants, instructions or events. Every admitted instance must provide the required laws; an unknown instance is refused, never silently given semantics. Extensions must preserve the old fragment's judgments and executions. A new operation cannot change what an old operation means.
+
+The foundation comprises target profiles; typed identities; types, values and places; control and calls; scalar operations; layout and representation; byte memory; ownership, loans, brands and authority; observations and leakage; evaluator adequacy; primitive contracts; frames and ABI; evidence, facts and diagnostics. An interface includes its state, preconditions, results and preservation laws, not just a record of names.
+
+Before freezing, implement these contracts in the authoritative Lean library, with readable comments, accepted/refused examples and counterexamples to invalid premises. Discharge the four Q9.14 design theorems and the [A2i interaction/erasure obligations](../docs/decisions.md#decided-project-long-term-2026-11-06), including the laws below. Tests alone do not establish them. Existing `ConcreteSpec` fragments are starting material, not evidence that omitted pointer fragments, external frames, initialization or cleanup interactions are already covered. Review and owner approval precede the freeze. This is a writing proposal, not that completed review or approval.
+
+## 2. Contracts to finish before the freeze
+
+These are contracts to complete, not declarations that the proofs exist. Decided rules remain binding. New semantic completions and revisions are separately answerable in section 5; none is approved by this draft.
+
+### C1. Execution, calls and cleanup
+
+**Freeze:** machine configurations with current command, locals, places, call frames and structured continuations; a labeled single-step relation; results for ordinary completion, return, labeled break/continue and terminal abort. A continuation says where execution resumes. Prove sequencing, scope restoration and cleanup preservation, including effects while evaluating an exit value.
+
+**Rule:** evaluate subexpressions completely left to right: receiver before arguments, left operand before right, literal fields/elements in written order, base before index. Assignment evaluates its RHS before any destination subexpression. `&&` evaluates its RHS only if the LHS is true; `||` only if false; both operands are still checked. Resolve calls by typed identity; evaluate arguments before entering the callee. Moves transfer ownership exactly once; copies require a declared, checked Copy instance.
+
+Keep the decided Core loop condition region, counted-loop bound snapshots and counter advancement. Preserve the restrictions on exits inside operands. Return evaluates its result before leaving scopes. Normal block exit, return, break and continue run the deferred calls of each exited scope, inner scope first and reverse registration order within a scope. Deferred operands are read at cleanup, with dependencies kept alive. If cleanup aborts, stop immediately; no remaining cleanup runs. Explicit abort runs no deferred call and does not unwind. Ordinary locals do not acquire implicit user destructors: explicit consumption, storage teardown and resource destruction remain different operations. Collection destruction order is deferred under question 13. Destruction is an ordinary checked call and may itself fail to terminate unless stronger evidence exists.
+
+**Authority:** Core Q2.1–Q2.7, Q6.5, Q9.1, Q9.3–Q9.4, Q9.8, Q9.11; [OD10](../docs/decisions.md#od10), [OD53](../docs/decisions.md#od53), [OD69](../docs/decisions.md#od69); STMT-4/5. **Later:** source constructs and their lowering, loop/call bounds and destructor bodies at their slices. No postfix `?`, exceptions or implicit error propagation is introduced.
+
+### C2. Scalars, failure and arithmetic
+
+**Freeze:** mathematical scalar values, finite bit representations, operation contracts and error classification; representation and operation correspondence laws. Integer widths remain those named by `i8`…`i64` and `u8`…`u64`; proposed `usize` is separate. A bool has only false/true, encoded as byte 0/1. TYPE-20 makes char a one-byte code unit: every u8 round-trips through char. OD137 restricts character literals to ASCII; it does not restrict stored char values to ASCII.
+
+**Rule:** signed representation is two's complement. Division truncates toward zero; nonzero remainder has the dividend's sign. Zero divisors and signed `MIN / -1` and `MIN % -1` are errors, the latter two `Overflow`. Shift counts satisfy `0 ≤ count < width`; valid shifts discard outgoing bits, signed right shift sign-fills and unsigned right shift zero-fills. Plain arithmetic needs closed safety evidence. Checked operations return the decided `Result<T, ArithmeticError>`; wrapping operations compute modulo the width and saturating operations clamp to bounds. `as` is lossless over the entire source domain; lossy conversions use named operations, with the checked-conversion error type left to question 12.
+
+Keep Q6.7's separation of traps, unsafe stuckness, allocation failure and evaluator fuel exhaustion. Handled checked errors are values, not traps; explicit abort is terminal. Safe admission requires evidence excluding implicit traps. The exact trap taxonomy and UTF-8 failure mapping are questions 9 and 11, not consequences of ArithmeticError.
+
+
+**Authority:** [no hidden traps](../docs/decisions.md#decided-project-no-hidden-traps), [OD11](../docs/decisions.md#od11), [OD99](../docs/decisions.md#od99), [OD106](../docs/decisions.md#od106), [OD114](../docs/decisions.md#od114), TYPE-19, Core Q6.7. **Later:** operation syntax and admission instances; float rules at slice 26. The interface admits float instances but does not invent their unsettled details. No `isize` is added by implication: pointer differences use a mathematical signed offset in the model and an explicitly contracted representable result in source APIs.
+
+### C3. Target, layout and representation
+
+**Freeze:** a well-formed target profile and a layout interface. Separate address width, pointer storage size/alignment, length width, byte order and address spaces; do not infer any from CPU arithmetic width. The profile specifies pointer encoding, distinguished null, accessible spaces and maximum object sizes. Require representable sizes/offsets and checked layout arithmetic; reject an unrepresentable layout rather than wrap. No universal 64-bit assumption, including for 20/24-bit addresses.
+
+Layout laws: positive power-of-two alignment; size a multiple of aggregate alignment; occupied field bytes in bounds and non-overlapping; required field alignment in native/C modes; unique discriminants; and sound decoding of any niche (an otherwise unused encoding used for a variant). Zero-size fields have empty byte ranges and may share offsets. Packed mode replaces natural field alignment with explicit unaligned-access premises; it must not falsely prove packed fields naturally aligned. Core uses the hybrid state in C4, with target/layout as a read-only parameter for sizeof/alignof and raw access. Safe typed operations are proved representation-independent where their premises permit it. The concrete algorithm below is one implementation proving these laws, not the premise of every earlier proof.
+
+**Rule:** native structs retain declaration order, each field rounded up to its alignment, aggregate alignment the maximum (1 for empty), and final size rounded up. Empty aggregates have size 0/alignment 1. Arrays have size `n × size(T)` and alignment `align(T)`, including `n = 0`. Fixed-width integer storage respects value width; alignment is target-defined. StaticStr and views use their decided pointer/length adapters; text length counts UTF-8 bytes. TYPE-3 Text owns immutable bytes, never aliases another value’s buffer, and is linear. Its ownership, allocator dependency and sufficient release context must survive representation; Q4.5’s FFI adapter does not fix Text’s internal size. No universal two-word Text layout is frozen. Shared/mutable views share representation. Address-space selection is explicit profile metadata, including program-memory text: no silent cast to data pointers. `Secret<T>` has T's layout, without implying constant time.
+
+Native enum layout and niche policy are separate questions 4 and 5. Until answered, retain the existing profile rules; OD72 still refuses empty-enum source declarations. Invalid raw tags do not become valid typed values.
+
+Include native, C and packed modes now. C layout/calling details come from the selected ABI; enums remain forbidden across extern boundaries. Packed structs use declaration order/no padding/alignment 1; C+packed uses C order with packing overriding alignment. Misaligned fields are permitted but references to them are refused. Direct field access uses an explicitly justified unaligned operation, possibly lowered to byte accesses. Preserve FFI-4's existing `align(N)` restriction; surface repr forms wait for slice 25. Stronger over-alignment, MMIO and section-placement syntax remain deferred to workloads. No shortened MCU trap format is adopted.
+
+**Authority:** [runtime/layout decision](../docs/decisions.md#decided-project-runtime-2026-11-06), Core Q3.5–Q3.11, Q4.1–Q4.5; [OD72](../docs/decisions.md#od72), [OD110](../docs/decisions.md#od110), [OD111](../docs/decisions.md#od111), [OD126](../docs/decisions.md#od126), [OD147](../docs/decisions.md#od147); FFI-4/7/8/10. Revisions are listed below. **Later:** syntax, additional target/ABI implementations, concrete allocation and FFI operations; not the layout laws or alignment premises.
+
+### C4. Byte memory and value validity
+
+**Freeze:** blocks with fresh allocation identity, address space, base, extent, alignment and lifetime; byte initialization state; pointer provenance (the allocation a pointer originates from); a typed representation relation `Rep`; partial decoding, access validity and disjoint-memory composition laws. Pointer fragments carry provenance metadata separately from numeric bytes. Do not introduce a poison value that can become an arbitrary typed result.
+
+**State choice (question 2):** Core and its Lean evaluator use one hybrid state: structured places for safe typed storage, plus byte/provenance blocks for raw and exposed storage. A partial place-to-block/range projection and Rep relate the two. They are not independently writable copies: typed writes update the represented range; raw writes invalidate affected typed validity until checked decoding restores it. Address-taking materializes a coherent representation with fixed padding choices for that execution. Raw pointers, expose/from_exposed and sizeof/alignof therefore already have Core meanings. Layout is a read-only parameter. Memory CFG makes this representation and ABI explicit for every operation; it does not introduce raw memory for the first time. This keeps typed proofs abstract while allowing slice 24 to execute without replacing Core state.
+
+**Rule:** memory bytes are initialized octets or uninitialized. Allocation starts uninitialized unless its primitive contract initializes it. Track initialization per occupied field/element; moving out removes that slot's typed ownership/read permission. Reading a typed value requires its active representation bytes initialized and valid. Padding and inactive enum storage need not be initialized and cannot affect typed equality, typed control or typed observations. Initialized padding may be observed through authorized raw byte reads and then affect output. Representation simulations preserve such observed bytes, or explicitly relate the same allowed padding choices; they cannot erase a raw observation as irrelevant nondeterminism. Raw byte copying may transport uninitialized padding and provenance fragments without observing them; observing a byte requires initialization. `Rep` ignores padding but checks active tags, bool/char/text validity and pointer fragments. Prove encoding/decoding round-trip for valid typed values, with allowed padding choices, and that decoding yields only valid values.
+
+Block identity is never reused, even if an address is. Deallocation ends all access rights to the old block. Nonzero accesses need provenance, bounds, liveness, alignment (or justified unaligned mode), initialization for reads and write permission for writes. Q3.7’s zero-byte raw access needs only alignment and a non-null address. One-past pointers may be formed but not dereferenced. Address arithmetic cannot silently wrap into another allocation. Integers carry no provenance; `expose` records the block in the address space, and `from_exposed` uses Q3.9's in-bounds-first, then one-past, then no-provenance rule over live, nonempty eligible exposed blocks. Do not add a new arbitrary tie-break where the decided relation permits choices. Pointer equality follows the decided raw model, not equality of allocation identities alone.
+
+Zero-size slots own distinct logical obligations, occupy no bytes and may share addresses; address equality does not merge owners. Typed operations still discharge their logical ownership obligations; this does not strengthen the zero-byte raw-access rule. Address collisions mean overlapping occupied bytes, not merely equal bases. Address exhaustion belongs to allocator availability. Allocation failure is a typed result conserving the rejected input, not an implicit trap. Require Q1.11's allocator availability laws: progress under availability, unchanged allocator state on failure, release never reducing availability, and a concrete success witness. Callback effects are not rolled back; every element remains accounted for in its typed result. Raw/foreign writes must re-establish validity before safe typed use; violating a trusted premise yields no safety claim, not a fabricated valid value.
+
+**Authority:** Core Q1.8–Q1.12, Q3.7–Q3.11; [memory decision](../docs/decisions.md#decided-project-memory-2026-11-06). Hybrid state, initialization/padding and pointer-fragment completions require question 2; they do not revise Q3.7’s exception. **Later:** raw-pointer syntax (24), allocator algorithms (19–23), FFI operations (25). They instantiate this model rather than replace it.
+
+### C5. Dynamic borrow, brands and authority
+
+**Freeze:** a preservation invariant relating owner slots, moves, root/projection identities, active loans and parent loans, generative brands, dependency lifetimes, grant/resource identities and operation rights. Prove preservation on each step and across calls, including ghost erasure.
+
+**Rule:** loans retain the original root and projection. Keep **whole-root** conflicts, including disjoint fields: an exclusive loan conflicts with every other active access to that root; shared loans freeze the whole owner against mutation/move. A reborrow suspends conflicting access through its parent until the child ends. A loan-derived pointer is valid only during the loan. Shared views are Copy; mutable views are nonduplicable and end by borrow discipline, without an exactly-once destruction obligation. No optimization exploits exclusivity before the checker guarantee is proved.
+
+Fresh brand binders are nominal, including reset/loop generations; dependencies cannot escape their lifetime. Child allocators own backing and expose parent dependence. Grant narrowing consumes and intersects rights; acquisition preserves the parent as decided; close/give-up consumes its resource on all specified outcomes. Zero representation size never removes linear obligations. Permissions in `with(...)` are erased sets, distinct from runtime grants. `GrantTy` describes launch-grant types; File/Socket/Listener are acquired handles. Clock kind has separate identity/resolution/guarantee metadata. Entropy’s source is a named premise under the randomness decision; its exact grant shape and ending contract wait for slice 6 (question 14).
+
+Heap handles contain a pointer and sufficient stable release context, with any erasure requiring question 6 and a proof that release is statically known and needs no per-instance information. Allocator/grant representations are opaque per resource; grant state erases only if stream/device identity, rights and lifecycle are statically determined and all authority transitions are preserved. Prove erasure, rather than assuming one allocator or one capability means zero state.
+
+**Authority:** Core Q1.1–Q1.7, Q3.1–Q3.4, Q7.1–Q7.11; [OD15](../docs/decisions.md#od15), [OD23](../docs/decisions.md#od23), [authority decision](../docs/decisions.md#decided-2026-11-02-authority), [randomness](../docs/decisions.md#decided-2026-11-07-stack-randomness). **Later:** concrete loan/grant operations and source rules; no choice of a new stacked/tree borrow model replacing whole-root rules.
+
+### C6. Observations, environment and concurrency extension
+
+**Freeze:** extensible typed event signatures, request/response matching, finite and infinite traces, terminal observations and an environment relation. A trace is the ordered externally relevant history. Prove preservation of full observations, allowing internal steps that emit no event, without turning infinite internal execution into successful termination.
+
+**Rule:** model startup, capability requests and responses (including blocking), external/FFI effects, public output, logical terminal actions and shutdown. Bind external choices to a shared input/environment history. Error, partial-delivery and blocking behavior belongs to each operation contract; do not assume a hostile environment cooperates. Preserve output preceding a trap and externally visible final state. Normal exit and trap exit 134 remain different observations. Missing launch grants refuse startup with 125. Traps retain kind, typed site and the exact decided line `concrete: trap: <kind> at <path>:<line>:<col> (site <id>)`, project-relative forward-slash path, 1-based line and column; no per-build abbreviated variant. The kind inventory/rendering and byte-column/tab convention are questions 9–10. No abbreviated MCU format is introduced.
+
+An environment response may be nondeterministic but must satisfy its contract. Distinguish modeled failure, unmodeled foreign behavior and broken premises. Exhaustion of an allocator can return its specified error; stack guarantees remain subject to the exact artifact's checked bound, reservation and launcher premises. Do not invent a universal resource-exhaustion trap. Fuel exhaustion is an evaluator report, never an external event.
+
+Concurrency is deferred to slice 28. Sequential theorems assume a single thread and no interference. Any future extension must preserve complete executions of that fragment under those premises; deleting synchronization events from interfering executions is insufficient. No concurrent memory model is chosen here.
+
+**Authority:** Core Q6.7, Q7.5–Q7.10, Q8.4–Q8.6; [runtime](../docs/decisions.md#decided-project-runtime-2026-11-06), [stack bounds](../docs/decisions.md#decided-2026-11-07-stack-randomness), [concurrency last](../docs/decisions.md#decided-2026-11-07-final-slices). The sequential preservation obligation is an interface law, not a chosen concurrent model. **Later:** grant-specific events and adapters; concurrency and atomic laws at slice 28, last. Public environment effects are not deterministic merely because input replay is deterministic.
+
+### C7. Secret leakage and accounting
+
+**Freeze:** a separate leakage trace and public-observation relation; public/secret state equivalence; explicit release-site records; byte/resource accounting and their preservation/erasure laws. Leakage means information visible to the baseline timing observer, not ordinary I/O.
+
+**Rule:** leakage records branch decisions, exact addresses, allocation sizes, loop counts and operands of variable-time operations, with public lengths and contracted external effects. A release record carries ordered (typed site, released value), with reason/path metadata for facts. The release-policy interface lists allowed functions/sites or forbids release, checks reachable releases through calls, and permits only explicit declared values. Its security obligation is delimited release: for equal public inputs, matched external choices and equal ordered release site/value traces, prove equal public observations (NI), and separately equal leakage traces (CT). Policy authorization alone does not establish either theorem or allow other secret effects. These are distinct decided claims, not an optional variable-time Secret tier.
+
+Preserve wipe events as effects optimization cannot erase. Per allocator lineage report requested bytes, net change and peak logical bytes, plus allocator-defined footprint, each a sound bound with status or “not established”. Release/reset conserve accounting, and zero-size ownership adds no invented bytes. Bounds use polynomials with max over counts, lengths and depths; stack remains separate. This is the A2i instrumentation of R-0592, not later slice analysis.
+
+
+**Authority:** [information flow](../docs/decisions.md#decided-project-infoflow-2026-11-06), [memory/accounting](../docs/decisions.md#decided-project-memory-2026-11-06), Core Q9.10. **Later:** scalar secret rules/proofs at 7, arrays/wipes at 15 and heaps at 19. Binary constant time, hardware timing and actual wiping remain named backend premises until proved; speculative leakage is outside the decided observer model.
+
+### C8. Evaluator adequacy and termination
+
+**Freeze:** both the small-step relation and Q9.9's total fuel-indexed evaluator over instrumented hybrid Core state: `eval(target, layout, environmentChoices, fuel, coreProgram, state)`. This is the reference evaluator for qualification; it executes Core, not BIR or source text. Choices explicitly cover external responses, allocation/address choices, exposed-pointer alternatives and padding materialization. A choice input can be an oracle rather than a finite stream; each answer is checked against the operation contract. Fixed inputs make evaluation deterministic. Prove evaluator soundness (a reported result has a matching finite execution), completeness (every finite execution is obtained with enough fuel), monotonicity (extra fuel preserves a completed result) and trace-prefix consistency. For nondeterministic effects these statements quantify over the same environment choices.
+
+**Rule:** `outOfFuel` means only insufficient simulation budget. It proves neither divergence nor program failure. Divergence is an infinite execution; a blocked request is separately represented. Termination evidence is a theorem about all allowed runs under its named premises, not the evaluator returning once. Carry per-function termination permissions and evidence dependencies. Resource bounds count specified abstract operations; they are neither elapsed time nor evaluator implementation fuel.
+
+**Authority:** Core Q6.6–Q6.7, Q9.9, [bounded execution](../docs/decisions.md#decided-project-no-hidden-traps), [step bounds](../docs/decisions.md#decided-2026-11-07-step-bounds). **Later:** concrete variants, loop/call cost instances and user proofs. Q9.9 is retained, not replaced by small-step semantics.
+
+### C9. Identities, primitive contracts, evidence and ghost erasure
+
+**Freeze:** distinct typed identities for declarations/types, functions, binders/places, fields/variants, instances, sites, loans, brands, blocks, grants and obligations; capture-avoiding substitution and renaming laws. Names are presentation only. One primitive-contract interface supplies parameter/result types, authority, ownership/dependencies, pre/postconditions, memory footprint, initialization/validity, failures, events/leakage, resource effects and termination obligations. Every registered primitive supplies a complete contract; there is no catch-all unknown primitive.
+
+**Rule:** use independent typing, ownership, authority and execution judgments, with checker equivalence and elaborator correspondence. Keep safety evidence bound to typed identities, target, contracts and checker/spec versions. Recheck generic substitutions and Mono admission; compose checked summaries across calls/modules without reading bodies to guess effects. Struct-invariant rules remain those in the SPARK decision: private-field struct invariants hold at every exposure, with the spec definition written before freeze; the source feature waits for slice 17 (question 15). Contracts are erased logical assertions; ensures observes the result and surviving parameters after cleanup. Safety admission needs closed evidence; assumptions cannot manufacture it.
+
+Prove erasure of ownership/brand/loan and accounting instrumentation and ghost computation: projected concrete executions and observations agree, and ghost state cannot alter runtime branches, authority or resources. Preserve diagnostic/evidence links even where code erases. Facts and diagnostics use one typed evidence graph and one versioned schema, with stable source sites; machine JSON views derive from it. A schema extension does not reinterpret old records.
+
+**Authority:** Core Q1.5, Q6.3, Q9.1–Q9.2, Q9.6–Q9.7, Q9.10–Q9.13; [OD81](../docs/decisions.md#od81), [OD125](../docs/decisions.md#od125), [pipeline](../docs/decisions.md#decided-project-pipeline-2026-11-06), [early evidence](../docs/decisions.md#decided-2026-11-07-early-evidence). **Later:** primitive instances and syntax, module/invariant checking at 17. Q9.7's exhaustive inventory becomes exhaustive coverage of the selected registry, not a permanently closed universe.
+
+### C10. Frames and ABI
+
+**Freeze:** logical memory footprints and the frame law (an operation preserves disjoint memory outside its permitted footprint); call-frame ownership/restoration; ABI signatures relating typed arguments/results to registers, stack slots and preserved machine state. Include frame size/alignment, return convention, clobbers, stack-accounting handoff, extern validity/retention and launcher entry/exit relations.
+
+**Rule:** internal calls use an explicit target convention proved compatible with these contracts. At Memory CFG, lower the hybrid Core representation to explicit byte/provenance operations and ABI calls, proving its simulation against C4’s projection. BIR carries the complete resulting contract. Frame accounting binds to the final artifact, including spills, cleanup and launcher/runtime contributions, not merely source locals. Stack facts are separate from heap accounting. Foreign retention needs the decided `kept`/`Kept<H>` contract; FFI-safe types and no-enum restriction remain. Logical frame theorems do not add a source frame clause or snapshot construct.
+
+**Authority:** Core Q3.12, Q8.5–Q8.6, [pipeline](../docs/decisions.md#decided-project-pipeline-2026-11-06), [contracts/P18](../docs/decisions.md#decided-project-contracts), [stack bounds](../docs/decisions.md#decided-2026-11-07-stack-randomness). **Later:** ABI implementations, extern syntax at 25, stronger program frame proofs. Neither the frame interface nor packed access waits until then.
+
+## 3. Pipeline and validation contract
+
+Retain the decided stages:
+
+`bytes → lexer → LL(1) parser → AST → resolve → HIR → elaboration → Core → checker → CheckedCore → Mono Core → Place MIR → Memory CFG → SSA → BIR`.
+
+BIR feeds the LLVM printer or the proved BIR→LCB adapter. **Memory CFG stays the single layout/ABI/provenance lowering boundary**; retract P2's folding proposal. Earlier semantics uses C4’s hybrid state and read-only layout interface; representation simulations relate it to this explicit lowering boundary.
+
+**Frontend:** retract P1's parse/print criterion. Define byte/token/grammar acceptance independently of the lexer/parser implementation, and source binding, typing and source-to-Core correspondence independently of resolve/elaboration. Prove lexer/parser correspondence to the independent grammar, resolution's binding preservation and elaboration's preservation of meaning, sequencing, cleanup, identities and source sites. Prove checker equivalence to independent admission judgments. Parse/print tests can supplement these proofs but cannot replace them. This retains Core Q8.3/Q9.13 and the decided direct frontend proofs.
+
+Keep direct proofs for sequencing, cleanup, representation and the BIR→LCB adapter. Preserve the decided option of **proved validators for Mono and SSA**, as well as SSA optimizations, register allocation and linking. A validator's acceptance theorem establishes the required correspondence; running a checker without that theorem is not proof. Mono re-admits its output.
+
+**Certificates and maximal behavior:** retain the [compiler-execution decision](../docs/decisions.md#decided-project-long-term-2026-11-06): every authoritative compilation emits kernel-checked certificates binding the exact source bytes through independent judgments/validated edges to the exact emitted BIR, and binding the actual backend input to it. A digest establishes identity, not semantic correspondence. Native execution of proved Lean definitions is not itself proof; any gap retains explicit compiler/runtime/toolchain assumptions. After slice 0 use the decided per-edge certificates.
+
+Each lowering proves refinement of maximal behaviors, including termination, abort/trap, blocking and infinite execution with their traces under matched allowed choices. Target steps may stutter finitely; a progress or well-founded argument excludes infinite silent target stuttering that replaces source progress or completion. Q9.9 already calls for maximal behaviors; this makes the proof obligation explicit.
+
+**Native closure (P3):** retain Q8.1’s proved source→BIR, qualified native and conditional image claim, LP0 after slice 1 and R-0505’s later final-image closure. Question 8 separately asks whether to advance it to 0.1. Any validator must bind exact linked image bytes, encodings, relocations, symbols, entry state, launcher/ABI, retained dependencies and target to LCB instruction semantics. Hardware/ISA correspondence, loader/OS/environment, foreign/runtime code, adequate stack and timing/wipe premises remain named unless discharged. LLVM stays unverified.
+
+**Qualification (P4):** run LLVM, LCB and the hybrid Core Lean evaluator on **every supported example and controlled test**, with matched input bytes, target/layout profile, grant configuration, external responses and allowed nondeterministic choices. Frontend certificates bind this Core program to the source; representation simulations relate its raw-byte/layout observations to both native paths. Compare observable effects, not evaluator internals or raw step counts. Compare complete observations, not only exit codes: ordered requests/responses/output, terminal classification, trap kind/site/line and observable final external state. Use bounded scripted environments for effectful/blocking cases. Report unsupported or inconclusive runs explicitly; do not count `outOfFuel` as agreement or divergence. Compare leakage separately where the claimed backend evidence supports it. Never require arbitrary user programs to execute three times. Tests qualify implementations; the LCB path is **proved under named premises**, and LLVM remains unverified. Keep the two premise sets separate.
+
+## 4. Revision register
+
+No revision is enacted here. Each question in section 5 has its own answer; an umbrella approval cannot choose these independently.
+
+| Rows | Scope and status | Question |
+|---|---|---|
+| OD126; Q3.7/Q3.9 | Generalize address/profile interface, preserving provenance rules and zero-byte exception; existing 64-bit little-endian profile unchanged. | 3 |
+| Q3.5; TYPE-19; FFI-7 | Add usize; replace u64 index/length/sizeof/alignof results only if approved. Fixed-width data unchanged. | 7 |
+| OD126; FFI-7 | Native enum tag/payload layout changes existing i32-tag profile separately from target abstraction. | 4 |
+| Q1.7 | Proved release-context erasure, including owning Text where applicable; no unconditional one-pointer claim. | 6 |
+| Q7.1/Q7.10; Q9.7 | Lawful registry instances rather than a permanently closed inventory; preserve existing grant contracts. Entropy details deferred. | 16, 14 |
+| FFI-7/10 | Natural native struct layout already supersedes unspecified-layout prose under runtime decision; retain repr restrictions. | Retained clarification |
+| Q8.1; early-evidence decision; R-0505 | Keep current conditional endpoint and later closure; advancing it requires separate approval. | 8 |
+
+Q9.11/OD144 already decide post-cleanup ensures timing. The SPARK decision already decides source struct invariants. Neither is a new rule. C4’s hybrid/representation completion is a proposed formalization choice, not authority to revise raw access. Exact trap constructors, byte columns and conversion errors are not inferred from Q6.7 or ArithmeticError.
+
+## 5. Separately answerable owner questions
+
+Each recommendation is a proposal, not an implemented language decision. “Defer” preserves existing decided rules and leaves detailed instances to the named slice.
+
+1. **Foundation scope.** Recommend approving the interface/law boundary of C1–C10, with freeze only after implementation, kernel proofs, interaction tests, independent review and owner acceptance. Runner-up: freeze smaller integrated scopes incrementally. Neither approves the other numbered questions.
+2. **Hybrid state and representation completion.** Recommend C4’s structured-place/byte-block state, coherent projection, pointer fragments and explicit initialization/padding laws. Runner-up: use byte blocks for all Core storage. The hybrid keeps typed proofs small while raw operations remain executable; both must preserve Q3.7 and raw observations.
+3. **Target abstraction.** Recommend read-only profiles separating address width, pointer representation, length width, byte order and address spaces; generalize Q3.7/Q3.9 without changing existing profile constants or reconstruction policy. Runner-up: separate semantics per profile under OD126. No usize or enum change is included.
+4. **Enum layout.** Recommend retaining the existing profile’s i32 tags for now, deferring a compact u8/u16/u32 algorithm to the aggregate/layout slice and a separate owner answer. Runner-up: approve now the smallest tag fitting the variant count (u8 ≤256, u16 ≤65,536, u32 ≤2^32), declaration-order tags, aligned common payload and rounded aggregate size, rejecting larger counts. This changes OD126/FFI-7 independently of question 3.
+5. **Niches.** Three options: (a) exactly one null-empty/non-null single-pointer-payload niche, with pointer-size, provenance, ownership and release-context proofs; (b) tagged layout now, future niches only by owner decision; (c) no niches permanently. Recommend **(b)**: the foundation needs representation laws, not a permanent optimization inventory. Runner-up **(a)** gives compact optional ownership but adds a special eligibility proof; multiword release contexts and nullable raw pointers are ineligible. Reviewers split: Kimi preferred (a), Codex offered (b), agy preferred (c). (c) is uniform but unnecessarily permanent.
+6. **Release-context erasure.** Recommend retaining sufficient stable context and erasing only with a release/identity/dependency preservation proof and no per-instance state. Runner-up: always store context. This separately revises Q1.7; it does not fix Text’s internal word count.
+7. **usize.** Recommend target-sized usize for indices, lengths, capacities, allocation sizes and sizeof/alignof; keep fixed-width integers and add no isize implicitly. Runner-up: retain Q3.5’s u64 with checked target limits. This revises TYPE-19/FFI-7 separately from profile abstraction.
+8. **Native-image milestone.** Recommend keeping R-0505’s later closure and Q8.1’s conditional endpoint. Runner-up: require proved exact AArch64 linked-image validation by 0.1, explicitly revising Q8.1, early-evidence and proof-infrastructure milestones while retaining all undischarged premises. Qualification is question 17, not bundled here.
+9. **Trap inventory and spellings.** Recommend deferring concrete constructors/renderings until trap semantics needs them, before their first supported slice. Runner-up: approve `arithmetic(ArithmeticError) | bounds | invalidRange | abort`, rendered `overflow`, `division_by_zero`, `invalid_shift`, `bounds`, `invalid_range`, `abort`, with one trailing newline. ArithmeticError’s decided cases do not decide this wrapper or its strings. Preserve the runtime line format and exits either way.
+10. **Columns and tabs.** Recommend byte columns, tabs counting one byte, with conformance tests; runner-up: Unicode-scalar columns, tabs counting one scalar. The runtime decision fixes only 1-based columns, so neither convention is already decided.
+11. **UTF-8 failure classification.** Recommend deferring mapping to the text slice’s operation contracts while preserving UTF-8 validity and no hidden traps. Runner-up: map unchecked UTF-8 boundary failures to proposed invalidRange. This does not turn handled checked errors into traps.
+12. **Checked-conversion error type.** Recommend deciding the type in the integer/conversion slice before exposing the API. Runner-up: a distinct builtin ConversionError with OutOfRange, returned as Result<T, ConversionError>, outside ArithmeticError and TrapKind. No unplaced OutOfRange constructor is frozen.
+13. **Destruction order.** Recommend deferring arrays and collections to their slices and checked Destroy bodies. Runner-up: freeze increasing array indices then backing, and ascending OrderedMap keys, key before value then nodes. The foundation needs sequencing/cleanup preservation, not these library orders.
+14. **Entropy shape.** Recommend deferring exact launch-grant type, operations and ending contract to slice 6, consistent with Q7.10 and the randomness schedule. Runner-up: approve a nullary Entropy grant only together with a complete instance contract. No nullary shape is assumed by C5.
+15. **Struct-invariant implementation.** Recommend deferring the source feature to slice 17, while writing the decided SPARK exposure definition in the spec before freeze and retaining Q9.11/OD144 post-cleanup ensures semantics. Runner-up: implement the source feature earlier if an interaction proof needs it. There is no new timing choice to approve.
+16. **Registry extensibility.** Recommend lawful typed extensions preserving existing primitive/grant entries and exhaustive coverage of every selected instance; unknown operations are refused. Runner-up: retain closed Q9.7/Q7.10 inventories and seek an owner amendment for each addition. Schema compatibility must preserve old records; no new source spelling is implied.
+17. **Differential qualification.** Recommend P4’s complete-observation comparison on every supported controlled example/test across LLVM, LCB and explicit-choice Core evaluation. Runner-up: staged coverage with every unsupported/inconclusive case reported and no stronger correctness claim. Preserve the already-decided two-backend comparison; testing never replaces proof.
+
+===== CHANGES_v2.md =====
+# Draft 2 review dispositions
+
+Only final verdicts are used; agy’s repo claims were unverified by that reviewer. References are relative to this directory’s parent. Core-row details were checked in [core_rows.json](../docs/archive/decisions-2026-11-05/core_rows.json), which decisions.md incorporates; row notes govern over R4 where they differ. Agreement verdicts are included for coverage.
+
+- Codex S1 — accepted: quote the supplied 2026-11-07 owner answer verbatim, mark recording pending, and reconcile the interface/law freeze with [A2i](../docs/decisions.md#decided-project-long-term-2026-11-06), which rejects an untested whole-language architecture.
+- Codex C1 — accepted: retain sequencing and cleanup; Q2/Q9 and STMT-4/5 support the core rules; collection orders are separately deferred.
+- Codex C2 — accepted: Q6.7 separates failure categories but does not select TrapKind constructors; question 9 isolates taxonomy and spelling.
+- Codex C3 — accepted: [TYPE-3](../legacy/docs/spec/types.md#TYPE-3) requires owning, non-aliasing linear Text; Q4.5’s adapter does not establish a universal two-word internal representation.
+- Codex C4 — accepted: raw initialized padding can be output under Q3.7; C4 restricts independence to typed observations and preserves observed bytes through simulations.
+- Codex C5 — accepted: retain Q1/Q3/Q7 ownership/authority contracts; context erasure remains a separate proposed Q1.7 revision.
+- Codex C6 columns — accepted: [runtime](../docs/decisions.md#decided-project-runtime-2026-11-06) fixes 1-based columns only; question 10 isolates byte/tab counting.
+- Codex C6 concurrency — accepted: slice 28 remains undecided; require preservation of complete single-thread/no-interference runs, not deletion of synchronization from interfering runs.
+- Codex C7 — accepted: [INFOFLOW](../docs/archive/crucial-2026-11-06/INFOFLOW.md) specifies delimited release; C7 defines policy authorization, ordered site/value equality and separate NI/CT obligations, including allocation sizes and loop counts.
+- Codex C8 — accepted: retain Q9.9 adequacy and fuel distinctions; add explicit choices and Core IR as requested by agy.
+- Codex C9 — accepted: retain independent judgments, evidence and erasure under Q9.10–Q9.13; separate registry extension approval.
+- Codex C10 — accepted: retain frame/ABI contracts under Q8.5–Q8.6 and P18; repair the earlier-memory wording consistently with C4.
+- Codex S3 certificates — accepted: [compiler-execution trust](../docs/decisions.md#decided-project-long-term-2026-11-06) explicitly requires kernel-checked exact-input→BIR certificates and backend-input binding, not merely universal pass proofs.
+- Codex S3 maximal behavior — accepted: Q9.9 explicitly calls for maximal behaviors; each edge now excludes infinite silent target stuttering as well as preserving observations.
+- Codex register OD126 — accepted: [OD126](../docs/decisions.md#od126) includes the existing profile; target generalization preserves its constants while enum layout is separately answerable.
+- Codex register early-evidence — accepted: Q8.1’s conditional image endpoint is named alongside R-0505; advancing native closure would revise both, not silently discharge premises.
+- Codex register remaining rows — accepted: retain the substance of Q3.5/Q3.7/Q3.9/Q1.7/TYPE-19/FFI-7/FFI-10/Q7.10/Q9.7 proposals, split by independent change; no revision is enacted.
+- Codex DEC1 — accepted: draft 2 is a corrected proposal, not a claim that contracts or proofs are complete.
+- Codex DEC2 — accepted: independent target, usize, enum, release-context and registry questions replace blanket register approval.
+- Codex DEC3 — accepted: add tagged-now/future-owner-approval option; recommend it because the extensible representation laws do not require a permanent niche inventory.
+- Codex DEC4 — accepted: questions 8 and 17 separate image milestone from qualification, matching distinct Q8.1/pipeline obligations.
+- Codex unflagged findings — accepted: option-b provenance, columns, TrapKind and owning Text are addressed individually above; none is attributed to an invented decided row.
+
+- Kimi S1 — accepted: retain the extensible interface boundary, qualified by A2i’s proved/tested scope and the supplied owner answer.
+- Kimi C1 — partly accepted: core sequencing/cleanup matches Q2/Q9; agreement does not justify the unrecorded collection orders, now deferred in question 13.
+- Kimi C2 — accepted: [TYPE-20](../legacy/docs/spec/types.md#TYPE-20) makes char one byte with every-u8 round trip; [OD137](../docs/decisions.md#od137) restricts literals, not stored code units.
+- Kimi C3 — partly accepted: layout laws are useful, but OD126’s i32 tags and TYPE-3 owning Text prevent treating all draft-1 representations as decided; split enum question and repair Text.
+- Kimi C4 — accepted: Q3.7’s row note explicitly permits zero-byte access with only alignment and non-null address; distinguish initialization for reads from write permission and retain byte-valued char.
+- Kimi C5 — partly accepted: retain decided ownership/authority; Q7.10 contains no Entropy instance, so its exact shape cannot be frozen by agreement.
+- Kimi C6 — partly accepted: runtime format and environment distinctions stand, but column counting and trap strings are new; isolate them and defer concurrency details.
+- Kimi C7 — accepted: [INFOFLOW](../docs/archive/crucial-2026-11-06/INFOFLOW.md) requires allocation sizes, loop counts and equal ordered release site/value traces; [memory decision](../docs/decisions.md#decided-project-memory-2026-11-06) requires requested/net/peak logical bytes and defined footprint per lineage.
+- Kimi C8 — accepted: Q9.9 supports adequacy/fuel distinctions; explicit environment choices and hybrid Core execution complete the executable interface.
+- Kimi C9 — partly accepted: preserve Q9 evidence/erasure and already-decided post-cleanup timing, while registry extension and slice-level implementations remain explicit.
+- Kimi C10 — partly accepted: ABI/frame obligations stand under Q8/P18; structured-only wording is repaired because Core already contains raw-memory contracts.
+- Kimi S3 — accepted: [ROADMAP](../ROADMAP.md) places R-0505 native closure later and LP0 after slice 1; recommend retaining that schedule, independently of qualification.
+- Kimi register OD126 — partly accepted: explicit profile revision is legitimate to propose, but compact enum tags are a separate undecided change.
+- Kimi register Q3.5 — accepted: usize is an explicit proposed replacement for u64 indices/lengths, not a decided type.
+- Kimi register Q3.7 — accepted: address abstraction may be proposed independently; retain all decided access premises including the zero-byte exception.
+- Kimi register Q3.9 — accepted: preserve in-bounds/one-past/none reconstruction policy, including live nonempty candidates; generalize only the address domain.
+- Kimi register Q1.7 — accepted: context erasure needs its own preservation proof and owner answer.
+- Kimi register TYPE-19 — accepted: adding usize is explicit and does not add isize.
+- Kimi register FFI-7 — partly accepted: natural struct layout is already revised by runtime decision; enum tags and sizeof/alignof result types need separate answers.
+- Kimi register FFI-10 — accepted: remove stale unspecified-struct wording only as clarification; retain repr restrictions.
+- Kimi register Q7.10 — accepted: preserve existing complete grant contracts; exact Entropy instance waits for slice 6 under the randomness decision.
+- Kimi register Q9.7 — accepted: lawful extensibility is proposed separately while selected-instance coverage stays exhaustive.
+- Kimi register early-evidence — accepted: retain later image closure; question 8 explicitly describes the rejected draft-1 milestone recommendation as runner-up.
+- Kimi DEC1 — accepted: correct C2/C4/C7 before proposing a freeze; proof completion and owner acceptance remain future requirements.
+- Kimi DEC2 — accepted: split independent register revisions rather than bundling them with a scheduling change.
+- Kimi DEC3 — partly accepted: the single-pointer niche remains option (a), with its eligibility proofs; recommend option (b) rather than Kimi’s permanent single-niche policy.
+- Kimi DEC4 — accepted: keep qualification independent of advancing R-0505 to 0.1.
+- Kimi unflagged findings — accepted: remove Unicode-scalar char and zero-byte access tightening rather than proposing revisions to TYPE-20/Q3.7.
+
+- agy citation-verification request — accepted: checked the pipeline/Core rows and relevant OD/spec rules; Q7.10 confirms exits 125/134, Q3.9 reconstruction, Q8.5–Q8.6 retention, and Q9.14/A2i proof obligations; no authority is inferred from agy’s repo-blind review.
+- agy S1 — partly accepted: retain extensible foundation scope but make the dated owner answer and A2i restriction explicit.
+- agy C1 — accepted: Q9.6 uses checked destructor bodies; no cited row establishes those array/OrderedMap orders, so question 13 defers them.
+- agy C2 — partly accepted: isolate checked-conversion error type and UTF-8 mapping; reject the implication that checked error values must be merged into TrapKind, since Q6.7 distinguishes them.
+- agy C3 — accepted: Q3.7/raw operations and OD126/FFI-7 layout queries contradict blanket layout independence; use a read-only interface and separate enum question.
+- agy C4 — accepted: adopt one hybrid state with a coherent place-to-byte projection; safe typed and raw storage cannot be unrelated state models.
+- agy C5 — accepted: remove nullary Entropy assertion; Q7.10’s fixed table lacks it and the randomness decision schedules its resource contract at slice 6.
+- agy C6 spellings — accepted: runtime fixes the message form but not these six strings; question 9 isolates them.
+- agy C6 concurrency — accepted: slice 28 decides concurrency; remove premature fields and state only complete-fragment preservation under no interference.
+- agy C7 CT tier — rejected: [infoflow decision](../docs/decisions.md#decided-project-infoflow-2026-11-06) explicitly separates NI and CT, both release-sensitive under INFOFLOW; neither is an optional weakening for accepted Secret operations.
+- agy C7 release metadata — rejected: INFOFLOW already decides reason strings, reachable release sites/paths and ordered site/value releases; retain them rather than reopen an owner question.
+- agy C8 — accepted: Q9.9’s total evaluator needs explicit admissible choices; signature now identifies Core and its hybrid state, enabling matched three-way observations.
+- agy C9 struct invariants — partly accepted: defer source implementation to slice 17, but [SPARK](../docs/decisions.md#decided-project-spark-2026-11-06) already decides exposure rules and requires their spec definition before freeze; do not defer that definition.
+- agy C9 ensures timing — rejected: Q9.11, [OD144](../docs/decisions.md#od144) and CON-3 explicitly decide post-cleanup observation; retain it rather than invent a new timing question.
+- agy C10 — accepted: Memory CFG is the explicit representation/ABI lowering boundary, not the first semantic existence of raw bytes or layout queries.
+- agy S3 — accepted: specify hybrid Core reference execution, matched profile/choices and representation simulations; this makes layout/raw observations comparable with LLVM and LCB.
+- agy register OD126 — accepted: separate target abstraction from enum tag sizing and payload layout.
+- agy register FFI-7 — accepted: enum layout and sizeof/alignof return-type changes are independently answerable.
+- agy register Q7.10 — accepted: remove the C5/nullary-Entropy contradiction and defer a complete instance consistently.
+- agy DEC1 — accepted: repair state/evaluator contradictions and expose undecided rules before requesting a freeze.
+- agy DEC2 — accepted: enum layout and Entropy instance are no longer hidden in blanket register approval.
+- agy DEC3 — partly accepted: include permanent no-niches option (c), but recommend tagged-now option (b); no decided row makes a permanent prohibition necessary for readable code or representation proofs.
+- agy DEC4 — partly accepted: accept independent complete-observation qualification; reject automatic advancement to 0.1 because Q8.1 and ROADMAP retain a later conditional-native closure milestone requiring a separate owner answer.
+- agy unflagged list — partly accepted: separately expose trap strings, conversion error, UTF-8 mapping, enum layout, destruction and Entropy; struct exposure and post-cleanup ensures are already decided, so only implementation scheduling remains open.

@@ -1,0 +1,21 @@
+### Delta Review Summary
+
+All previous findings across all three parts are resolved, and the additional delta updates are consistent with the owner's decisions and the specification build order:
+
+- **Part 1 (`docs/decisions.md`, `AGENTS.md`, `ISSUES.tsv`, `changelog.d/2026-11-08-record-foundation.md`)**:
+  - Provenance for the `agy` per-branch review instruction and the separate legacy-sweep branch recording of `"ok to 1"` / `"ok to 2"` (`ROADMAP.md:585`) are accounted for.
+  - `#decided-2026-11-08-front-end` (`docs/decisions.md:1120-1122`) and the changelog (`changelog.d/2026-11-08-record-foundation.md:27`) now cross-reference `#decided-2026-11-08-written-grammar` (R-0622), and `R-0620` (`ROADMAP.md:459`) drops the circular dependency on `R-0593`.
+  - The index list at `docs/decisions.md:71`, the row title at `docs/decisions.md:1138`, the `#foundation-q14` cross-reference at `docs/decisions.md:257`, the F7 closure notes (`ISSUES.tsv:18`, `changelog.d/2026-11-08-record-foundation.md:31`), and the deduplicated review-cap reference (`AGENTS.md:269`) are all fixed.
+- **Part 2 (`ROADMAP.md`)**:
+  - Unplaced `hash`, `path`, and text helpers are noted in `ROADMAP.md:327`, and duplicate parenthetical links are cleaned up (`ROADMAP.md:324-328`).
+  - `R-0607` and `R-0611` dependencies (`ROADMAP.md:415,419`) now match the C1-before-C5 foundation step order (step 14 before step 16), `R-0578` links question 17 (`ROADMAP.md:447`), and `R-0621` clarifies its relation to `R-0584` (`ROADMAP.md:512`).
+- **Part 3 (`docs/proposals/SPEC_UNIFICATION.md`)**:
+  - The spliced revision sentence at lines 3–8 is fixed.
+  - Step order is forward-only: step 6 parameterizes `Primitives` over the event and leakage record types defined in steps 12 and 17 (`SPEC_UNIFICATION.md:957-958`), and step 15 defines the static `Termination` module with C8's termination evidence before step 20's `checked_exits` and step 23's freeze (`SPEC_UNIFICATION.md:931,990-993,1025-1028,1099-1100`).
+  - The contract table (C1, C5, C8, C9 at `SPEC_UNIFICATION.md:924-932`), decision table (D11, D12, D21 at `SPEC_UNIFICATION.md:789-790,799`), trap-kind name notes (`SPEC_UNIFICATION.md:268,799`), and cross-references (`Brand` at line 682, `Rules` at line 909, `O4` at line 1086, wipe events at line 1111, `D12, D13` at line 1121) are all updated.
+
+### Findings
+
+None.
+
+VERDICT: ACCEPT

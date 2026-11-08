@@ -1,0 +1,92 @@
+=== ready: both notes, at the exact head ===
+  ok   list runs
+  ok   a head with clean review and passing gates is ready
+  ok   wip/nogates is not ready
+  ok   wip/findings is not ready
+  ok   wip/gatefail is not ready
+  ok   wip/stale is not ready
+  ok   wip/land-x is not ready
+  ok   other/x is not ready
+=== ordering ===
+  ok   explicit orders (5, then 0800 read as decimal 800) before the rule change, then the rest by size
+  ok   the rule branch is recognized by its new E-code
+  ok   a Check/Elab edit reusing an existing E-code is not a rule change
+=== dry-run, kill switch, lock ===
+  ok   dry-run prints the train and changes nothing
+  ok   the kill switch stops the tick
+  ok   the pause is acknowledged in the event log (and notified)
+  ok   a second paused tick does not acknowledge the same pause again
+  ok   a live holder of the kernel lock stops a second instance
+  ok   CONTROL: the leaked-ref probe sees a planted wip/land-* ref
+=== train: the tick lands every ready branch, in order, on main ===
+  ok   once the holder lets go, the next tick takes the lock and runs
+  ok   all five ready branches are in origin/main
+  ok   fork untouched
+  ok   the train merged members in landing order
+  ok   the remote leg ran on a per-run wip/land-* ref, and the ref is gone afterwards
+  ok   notify.sh was called with the landing
+  ok   state is idle after landing
+=== bisect: a red check ejects the culprit and the rest lands ===
+  ok   the good members landed
+  ok   the red member did not land
+  ok   the culprit is ejected by name
+  ok   gates: fail published at the culprit's SHA
+  ok   the ejection was notified
+  ok   the ejected head is no longer ready
+=== bisect: a red CI run ejects the culprit ===
+  ok   CI-red member ejected, the rest landed
+=== kill switch reaches bisection; a block waits for a human ===
+  ok   a pause during bisection stops it: nothing ejected, nothing landed, not blocked
+  ok   a bisection that names no culprit blocks the bot
+  ok   the next tick keeps the block (no automatic retry)
+  ok   after reset the culprit is ejected and the rest lands
+=== resume: a restart while the train is in CI does not dispatch again ===
+  ok   the kill switch between CI and land holds the train in CI
+  ok   the restarted bot resumed the run and landed with one dispatch
+=== kill switch inside a bisection probe ===
+  ok   a pause during the halving probe stops the bisection; nothing attributed
+  ok   after the pause, the same train is bisected and the rest lands
+  ok   a pause during a --ci probe's check dispatches nothing more; the red train stays in CI
+  ok   resumed: the red run is re-read, bisected, the culprit ejected
+  ok   a pause raised DURING the red culprit probe attributes nothing
+  ok   after the pause the culprit is ejected and the rest lands
+=== remote leg: a same-SHA ref of another run is never adopted ===
+  ok   an existing ref at the same SHA is refused, a fresh name is used, and only the run's own ref is deleted
+=== dispatch: a restart between dispatch and recording the run reconciles, never re-dispatches ===
+  ok   a failed run lookup is no answer: the train stays dispatching
+  ok   an empty answer inside the grace period waits instead of re-dispatching
+  ok   the run was found by its head SHA and landed with no second dispatch
+=== auto-rebase: skip rules, scratch clone, refreshed notes, conflicts ===
+  ok   heads with activity in the last 10 minutes are not rebased
+  ok   a quiet ready head is rebased onto the new main and pushed
+  ok   the rebased head carries the review verdict (naming the reviewed SHA) and a fresh gates note
+  ok   a real conflict is notified with its files and the branch is left alone
+  ok   the conflict was notified
+  ok   no rebase left in progress, no worktree, scratch clones removed, clone clean
+  ok   a tried (head, main) pair is not retried
+=== ready.sh: legs in parallel; any failed leg (the review included) publishes gates: fail ===
+  ok   a failed review leg revokes readiness even over an older clean verdict
+  ok   the bot no longer sees wip/rv as ready
+  ok   passing legs publish gates: pass and the head becomes ready
+=== the bot refuses a remote that is not the one repository ===
+  ok   bot tick refuses a stale GitHub remote before any fetch, push or gh call
+  ok   bot rebase refuses a stale GitHub remote before any fetch, push or gh call
+  ok   bot list refuses a stale GitHub remote before any fetch, push or gh call
+  ok   bot rebase refuses an old origin even with an old LAND_REPO
+  ok   no branch or note moved on a refused pass
+=== the installer migrates a stale clone and its launcher checks the remote before fetching ===
+  ok   the installer migrates an old LAND_REPO line in an existing environment file, keeping its mode (0600)
+  ok   the installer migrates a stale LAND_REPO line beside a canonical one (concrete first)
+  ok   the installer migrates a stale LAND_REPO line beside a canonical one (concrete2 first)
+  ok   a fresh install logs its origin with the credentials redacted
+  ok   the installer repoints every origin url and drops a stale push URL, logging it redacted
+  ok   a fresh install refuses a foreign URL before cloning (INSTALL_ORIGIN_URL=https://github.com/someone/else.git)
+  ok   a fresh install refuses a foreign URL before cloning (INSTALL_ORIGIN_URL=https://github.com/unbalancedparentheses/concrete2.git)
+  ok   a fresh install refuses a foreign URL before cloning (GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=url.https://github.com/someone/else.git.insteadOf GIT_CONFIG_VALUE_0=https://github.com/lambdaclass/concrete.git INSTALL_ORIGIN_URL=https://github.com/lambdaclass/concrete.git)
+  ok   the launcher refuses origin=https://github.com/unbalancedparentheses/concrete2.git before its first fetch
+  ok   the launcher refuses origin=git@github-old:lambdaclass/concrete.git before its first fetch
+  ok   the launcher fetches and runs the bot when origin is a local repository (the shim sees the fetch)
+=== main is never force-pushed ===
+  ok   no forced push of refs/heads/main in scripts/land
+
+check_landing_bot: PASS=74 FAIL=0

@@ -1,0 +1,928 @@
+kimi version 2.4.1
+• I need read files BRIEF ROUND4 and perhaps others. Should carry out round4. Should obey instructions. First read direct both in parallel.
+
+• I’ll read the original brief and the Round 4 instructions, then inspect the affected files before making any changes.
+
+• I need perform merge then build resolve conflicts etc. Should inspect git status branch current perhaps other instructions in subdirs? Read AGENTS already root supplied but perhaps ConcreteSpec no nested AGENTS? Should glob for AGENTS in ConcreteSpec perhaps no. Should inspect files and relevant docs perhaps all prior review rounds for context. I need execute git fetch merge user explicitly asks, merge authorized not history rewrite. Should status first ensure clean. Should probably have current branch modifications? Bash git status etc. Could use TodoList multi-step. Should commit each piece after build. First merge and resolution build commit. I should set todos.Should have status and AGENTS glob perhaps direct no need.## wip/spec-c10
+fa284eb9ac823020451f9946b2e29b0077033062
+wip/spec-c10
+Clean at expected. Now fetch origin wip/spec-core then merge. Network action fetch okay explicit. Use command sequential. Could timeout 300.
+
+• The worktree is clean at the expected commit on `wip/spec-c10`. I’m merging `origin/wip/spec-core` first and will resolve only the integration conflicts before committing that merge.From https://github.com/unbalancedparentheses/concrete2
+ * branch                wip/spec-core -> FETCH_HEAD
+   d719b1a02..07c16bb5f  wip/spec-core -> origin/wip/spec-core
+Auto-merging ConcreteSpec.lean
+Auto-merging ConcreteSpec/README.md
+CONFLICT (content): Merge conflict in ConcreteSpec/README.md
+Auto-merging ConcreteSpec/Spec.lean
+CONFLICT (content): Merge conflict in ConcreteSpec/Spec.lean
+Auto-merging scripts/proofs/axioms.golden
+Recorded preimage for 'ConcreteSpec/README.md'
+Recorded preimage for 'ConcreteSpec/Spec.lean'
+Automatic merge failed; fix conflicts and then commit the result.
+
+
+• Conflicts README unexpected. Should resolve keep every entries etc golden theirs. Should inspect conflicted status files. Use git status and Read relevant conflict. Also axioms golden specified theirs but no conflict? Auto merging no conflict perhaps take theirs instruction "expected conflicts module/import lists and golden" actually actual README and Spec.lean. Should list conflicts. Read both.M  ConcreteSpec.lean
+A  ConcreteSpec/Proofs/Observe2.lean
+UU ConcreteSpec/README.md
+UU ConcreteSpec/Spec.lean
+M  ConcreteSpec/Spec/Ident.lean
+A  ConcreteSpec/Spec/Observe.lean
+A  changelog.d/2026-11-08-spec-c6-observations.md
+M  scripts/proofs/axioms.golden
+ConcreteSpec/README.md
+ConcreteSpec/Spec.lean
+Should resolve README combine C6 plus C10 and remaining C5 C7-C9 (C6 done). Sentence O11 list already C6, line C10 and C5-C9 remain should C5 and C7-C9. Spec imports already all auto merged, conflict prose combine Observe and Frame. Golden no conflict but instruction "take spec-core side" perhaps auto merged modifications includes both? It says auto merging no conflict, so no theirs stage. Could checkout theirs fails for unmerged. I shouldn't. Should use Edit mandatory for incremental. Two files edits independent parallel.
+
+• The conflicts are `ConcreteSpec/README.md` and `ConcreteSpec/Spec.lean`; `axioms.golden` merged cleanly and will remain untouched. I’ll keep both C6 and C10 in the reading guide and module description.
+
+• Now git add conflicts then build before commit per round says commit merge resolutions only then make tree build? Exact: "Commit the merge with its resolutions only and list ...; then make the tree build." Hard rules commit each piece after build passes. I should build merge before commit. Now git add two. Check no conflict markers perhaps Grep. Build nix develop -c timeout 1200 lake build ConcreteSpec. This may be heavy but allowed. Perhaps merge conflict resolution only. Run git diff --check and build. Could do add then status then build.While build run can read Frame and proofs and Exec relevant, ROUND prior perhaps needed examples. Should not modify until commit merge? Could inspect. Read files length likely <100k.
+
+• While the merge build runs, I’m tracing the call-step semantics and the existing frame examples so the repair derives restoration from execution rather than assuming it.
+
+• Should read output log known path direct.Now commit merge. Ensure no operations in progress, status. Git commit normal, merge message exists. "commit merge resolutions only" staged includes all merge naturally. Do git status then commit --no-edit? git commit --no-edit allowed not no verify. Should have no pipes.
+
+• The merged tree builds successfully. I’m committing the merge now, then I’ll change `C1Call` and its proofs in a separate slice.M  ConcreteSpec.lean
+A  ConcreteSpec/Proofs/Observe2.lean
+M  ConcreteSpec/README.md
+M  ConcreteSpec/Spec.lean
+M  ConcreteSpec/Spec/Ident.lean
+A  ConcreteSpec/Spec/Observe.lean
+A  changelog.d/2026-11-08-spec-c6-observations.md
+M  scripts/proofs/axioms.golden
+Recorded resolution for 'ConcreteSpec/README.md'.
+Recorded resolution for 'ConcreteSpec/Spec.lean'.
+[wip/spec-c10 
+f5f46bef1] Merge remote-tracking branch 'origin/wip/spec-core' into wip/spec-c10
+
+
+• Now tasks update merge done next in progress. Should design carefully. Round item 1&2 intertwined. Should remove restoration conjuncts and support explicit and unit fall-through each actual final pop. Should state theorem caller saved at entry. Should derive from final step case lifecycle. Should have witnesses accepted explicit and fallthrough, rejected incomplete, planted counterexample mismatched entry caller/continuation fails theorem conclusion not only C1Call.
+
+  I need understand existing C1Call relation shape and how best change. Options:
+  - Define C1CallBoundary inductive? Should have both explicit and done. Could use sum or disjunction existential. Simpler define:
+  def C1Call ... :=
+   ∃ fn dst caller k args ... st stArgs stEnter stReturn callee tr (result : O.Val) (returning : Exec.Config O),
+   entry... ∧ ... ∧
+   Exec.Steps P entry tr returning ∧
+   ((returning = ⟨.exiting (.ret result), callee, stReturn, .ret dst caller :: k⟩ ∧
+     Exec.step P returning = some (.next exit)) ∨
+    (returning = ⟨.done, callee, stReturn, .ret dst caller :: k⟩ ∧ result = O.unitVal ∧ Exec.step P returning = ...))
+  Perhaps no need extra config existential:
+   ... ∧
+   ((Exec.Steps P entry tr ⟨.exiting (.ret result),...⟩ ∧
+     Exec.step P ⟨...⟩ = some...) ∨
+    (result = O.unitVal ∧ Exec.Steps P entry tr ⟨.done,...⟩ ∧ Exec.step P ⟨.done,...⟩ = some...)).
+  This supports both. But theorem destruct h derive regardless. Could abstract C1ReturnBoundary relation to avoid duplication. "each followed by actual final pop step" disjunction good.
+
+  Should state c1Call_restores_caller about entry's caller/dst/k. Could conclusion ∃ dst result caller k,
+   entry = ⟨.exec (.call dst f args site), caller, st, k⟩ etc? Review says "state ... about caller locals and continuation saved at call's entry (the `.ret dst caller :: k` frame pushed by call step from `entry`), and derive ...". The theorem can simply decompose C1Call and conclude:
+  ∃ dst result caller k, entry.frames = k ∧ entry.locals = caller ∧
+   exit.locals = bindDst dst result caller ∧ exit.frames = k.
+  But to tie dst to entry statement need entry.ctrl relation. Since h already includes entry exact shape, theorem could conclusion:
+  ∃ dst result caller k args site st,
+   entry = ⟨.exec (.call dst f args site), caller, st, k⟩ ∧
+   exit.locals = ... ∧ exit.frames = k.
+  This clearly tied to entry and dst. Perhaps also exit.ctrl = .done derived final step. Good include. Statement:
+  theorem c1Call_restores_caller ... :
+   ∃ (dst : Option Var) (result : O.Val) (caller : AList Var O.Val)
+     (k : List ...) (args : List O.Expr) (site : SiteId) (st : O.Store),
+     entry = ⟨.exec (.call dst f args site), caller, st, k⟩ ∧
+     exit.ctrl = .done ∧ exit.locals = ... ∧ exit.frames = k := by ...
+  This proves actual final step. Counterexample theorem with c1Entry caller [] k [] and exit same shape with different caller? Should bad exit with locals = bindDst none result wrongCaller = wrongCaller and frames wrongK. Since dst none, choose caller [⟨...⟩]? Should Var construction easy. Could use `[(⟨0⟩, 1)]`? Var likely structure? Should inspect Basics identifiers. Search examples.
+
+• The merge is committed. For the call repair, I’ll use one relation with two explicit final boundaries—`.exiting (.ret …)` and Unit `.done`—and make restoration quantify over the exact `dst`, caller locals, and continuation in `entry`.
+
+• Should plan detailed proof derivation. Existing step_return_restores_caller can derive by case split O.life. For final hr:
+  Exec.step P ⟨.exiting (.ret result), callee, stReturn, .ret dst caller :: k⟩ = some (.next exit)
+  Unfold Exec.step Exec.stepExit at hr. It reduces:
+  (O.life .leave stReturn).bind fun st' => (Exec.bindLife O dst st').map ... = some (.next exit)
+  Should have cases hl : O.life .leave stReturn with none/some.
+  none => simp [hl] at hr
+  some stLeave =>
+   cases hb : Exec.bindLife O dst stLeave with none/some...
+   none simp [hl,hb] at hr
+   some stBind =>
+   simp only [Exec.step, Exec.stepExit, hl, Option.bind_some, hb, Option.map_some, Option.some.injEq, Out.next.injEq] at hr maybe `Exec.step` delta reduction includes let. `simp [Exec.step, Exec.stepExit, hl, hb] at hr` likely turns `⟨...⟩ = exit` or `exit =`. Existing proofs use similar. Search proof Exec step_return_caller.f5f46bef1 Merge remote-tracking branch 'origin/wip/spec-core' into wip/spec-c10
+fa284eb9a axioms.golden: C10 round 3 (regenerated on concrete-ci-2)
+d8033bc23 spec: cover metadata footprint helper laws
+9ccaef1d2 spec: witness C1 call return explicitly
+d5203f015 spec: separate byte and metadata footprints
+0933e5c4d spec: require exact kept-pair result types
+07c16bb5f axioms.golden: A2i integration of C1 partial lifecycle, C4 and C6 (regenerated on concrete-ci-2)
+f06a8de3a proof C6: exercise partial-continuation adapter laws
+Perhaps do combined items 1+2 in one commit "repair C1 call..." commit each piece after build. User lists 3 items could do item1+2 together logical. Then item3 separate. I need include non-trivial law examples and negation. Existing c1Call accepted and incomplete examples need updated, add fallthrough accepted, bad restoration example. Could write examples in Proofs around theorem.
+
+  I need be careful all laws changed include C1Call definition? law c1Call_restores... requires (a) nontrivial instance e.g. derive theorem applied to accepted explicit and fallthrough? User specifically "for every law you add or change give (a) ... and (b)". I can provide general examples for theorem: accepted restoration equality perhaps example `c1Call_restores_caller (show C1Call... from by ...)` but h proof duplication. Could use named theorem/example to reuse? Lean anonymous examples cannot reference. Define private theorem c1ExplicitCall maybe then example uses. Existing example can be private theorem? Hard rules docs examples. Could define `private theorem c1ExplicitCall : C1Call ... := by...` with doc comment "Accepted..." then use in `example : c1Exit.locals = ... := ...`. User asks accepted fall-through example and rejected incomplete-call. Keep explicit accepted as example and add restoration examples separately perhaps reconstruct h each time small. Or private definitions and private theorem to reduce.
+
+  I can make `private theorem c1ExplicitCall` rather than example but user wants examples; a theorem with doc "Accepted" counts? Existing style all examples. Better keep `example : C1Call...` plus theorem witness can prove direct `∃...` via exact c1Call_restores_caller (by exact ⟨...⟩)` duplicate big term. Could define private theorem `c1ExplicitCall` then `example : C1Call ... := c1ExplicitCall` and `example : ... := ... c1ExplicitCall`. Good. Similar unit.
+
+  Counterexample must "an exit with right shape but caller or continuation different from entry's must fail theorem's conclusion (not only C1Call)." I need negation of conclusion instantiated to fixed `c1Entry` and `c1BadExit`. If conclusion existential includes entry exact, for `c1Entry`, dst none args etc, any h gives exit locals = caller=[] and frames =[]; bad exit locals perhaps [] same but frames `[.ret none []]` different. Use bad exit `.done, [], (), [.ret none []]` exactly existing incomplete. Negation of conclusion can show frames equality impossible. But this same bad exit is also incomplete C1Call example. User wants caller or continuation different. Use bad exit locals `[((⟨"x",0⟩),99)]` perhaps structure literal `(⟨"x", 0⟩ : Var)` and frames `[.ret none []]` both differ. Then proof intro h; obtain ⟨dst,result,caller,k,args,site,st, he, hxc,hxl,hxf⟩; have hk : k=[] := congrArg frames he (symm). have hcaller : caller=[] := congrArg locals he perhaps entry eq orientation. `c1Entry` def. `he : c1Entry = ⟨...,caller,st,k⟩`. congrArg frames he : [] = k, so hk : k=[] := (...).symm. hxf : bad.frames = k. `rw [hk] at hxf`; simplification bad exit frames `[ret]` vs [] contradiction. `simp [c1BadExit] at hxf`. Could just continuation counterexample sufficient. Could choose bad exit only frames different and locals [] to isolate. Wording "caller or continuation different" continuation different satisfies. I can add separate bad locals example? Not necessary but stronger perhaps two in conjunction. User specifically planted counterexample an exit right shape but caller or continuation different must fail conclusion. Use bad frames only. Existing incomplete-call example same bad config but negative C1Call. Can reuse `c1IncompleteExit` def with frames ret. Then `example : ¬ (∃ ... conclusion c1Entry c1IncompleteExit)`: fails. This explicitly is same. Good.
+
+  However conclusion existential result caller etc includes `entry =` so proof deriving contradiction via hxf simple.
+
+  Should derive restoration from step robustly. Could add helper theorem `step_ret_boundary_restores` taking final hr and yielding exit.ctrl/locals/frames. Then unit similar helper or generalized final boundary. But user says theorem derive from final step case split life. Could directly in c1Call proof handle branches and repeated. Perhaps helper for each not necessary.
+
+  Could define helper:
+  private theorem restores_of_ret_step ... (hr : Exec.step P ⟨...⟩ = some (.next exit)) :
+   exit.ctrl = .done ∧ exit.locals=... ∧ exit.frames=k := by
+   cases hl : O.life (.leave callee) stReturn with
+   | none => simp [Exec.step, Exec.stepExit, hl] at hr
+   | some stLeave =>
+     cases hb : Exec.bindLife O dst stLeave with
+     | none => simp [Exec.step, Exec.stepExit, hl, hb] at hr
+     | some stBind =>
+        simp only [Exec.step, Exec.stepExit, hl, Option.bind_some, hb, Option.map_some,
+           Option.some.injEq, Exec.Out.next.injEq] at hr
+        -- hr probably equality of Config to exit? Should see.
+        cases hr
+        exact ⟨rfl,rfl,rfl⟩
+  Wait `O.life (.leave callee)`? Exec `.leave` event takes what? Review says case split `O.life (.leave callee) stReturn` but current step at line 345 `O.life .leave st` no callee argument? Perhaps merged Exec changed lifecycle events? Read earlier Event.Review text `O.life (.leave callee)` perhaps stale mismatch, actual no args. Follow code.
+
+  Could add theorem `step_done_restores_caller` in Proofs for Unit final, similar existing `step_return_restores_caller`, a law addition needs witnesses. But not necessary requested only c1Call. Yet useful to derive. I can avoid adding extra laws to minimize vacuity obligations.
+
+  C1Call shape could use `boundary` inductive:
+  inductive C1Return (O) where
+   | explicit (result)
+   | unit
+  def C1Return.config ... etc. Overkill.
+
+  Simplest disjunction. Existential `result` still unit branch constrain `result = O.unitVal`. The order:
+  ∃ ...,
+   entry... ∧ ... ∧
+   ((Exec.Steps ... explicit ∧ Exec.step explicit = some...) ∨
+    (result = O.unitVal ∧ Exec.Steps ... done ∧ Exec.step done = some...))
+  Then h destruct final `hb` and cases. Existing accepted explicit term changes final from `rfl,rfl,rfl,hs,rfl` to `rfl,rfl,rfl, Or.inl ⟨hs,rfl⟩`. Actually after remove 3 conjuncts and disjunction.
+
+  Detailed h:
+  obtain ⟨fn,dst,caller,k,args,site,vs,st,stArgs,stEnter,stReturn,callee,tr,result,
+   hf, he,hv,hlen,hl,hb⟩ := h
+  refine ⟨dst,result,caller,k,args,site,st,he,?_,?_,?_⟩?
+  Should prove triple from cases hb. Could have `have hexit : exit.ctrl = .done ∧ ... := by cases hb with | inl hret => ... | inr hfall => ...`
+  Then exact ⟨..., hexit⟩.
+  Within hret `⟨hs,hr⟩`.
+  case life.
+  I can test Lean incrementally via edit then build. Perhaps use `simp only [Exec.step, Exec.stepExit, hl, Option.bind_some, hb, Option.map_some, Option.some.injEq, Exec.Out.next.injEq] at hr` `Out.next.injEq` actual namespace `Exec.Out.next.injEq`. In previous code unqualified open? namespace ConcreteSpec.Core.Frame, `Exec.Out.next.injEq`. `Out.next.injEq` perhaps resolved due to open? They used `Out.next.injEq` inside `namespace ConcreteSpec.Core.Exec` in Proofs/Exec. Here use `Exec.Out.next.injEq`.
+
+  After simp hr : ⟨.done,...⟩ = exit? `some (.next config) = some (.next exit)` simplifies to config = exit, so `cases hr` replaces exit with config likely yes. exact ⟨rfl,rfl,rfl⟩.
+
+  Unit hfall `⟨hresult, hs, hr⟩`; subst result perhaps hresult result = unitVal; `subst result` works.
+  cases life etc same simp [Exec.step, hl,hb] no stepExit.
+  At exit.ctrl .done etc.
+
+  Could refactor helper `final_pop_restores` generalized `result` and control `ctrl` with a premise that step corresponds. But no need.
+
+  Should add step theorem for fallthrough? Existing C1Call accepted uses `rfl` final so enough.
+
+  Unit example: define c1UnitFnId `⟨⟨[]⟩,"unit"⟩`, c1UnitFn body `.skip` (Stmt.skip) and retTy Unit etc: `⟨[], (), ⟨0⟩, .skip⟩`. Entry call none. Steps:
+  entry -> `.exec .skip` with frames `.scope block [] [] :: ret`
+  -> `.done` same frames
+  -> `.done` with frames ret after scope pop (dropOut for [] -> some same)
+  -> final step to exit done. `Exec.Steps` from entry to c1UnitBoundary `.done, [], (), [.ret none []]` is 3 steps, same as explicit (call, return eval, scope pop). c1UnitBoundary distinct from c1Boundary. hs steps 3.
+  C1Call unit witness result 0 and `Or.inr ⟨rfl, hs, rfl⟩`.
+
+  Rejected incomplete call existing can update h destruct and contradiction via final hr rather than hxf removed. Since exit frames ret, but final step implies exit.frames=k and k=[] from entry. I can derive using c1Call_restores_caller! Example:
+  intro h
+  obtain ⟨dst,result,caller,k,args,site,st,he,hxc,hxl,hxf⟩ := c1Call_restores_caller h
+  have hk : k=[] := (congrArg frames he).symm
+  rw [hk] at hxf
+  simp [c1Entry?] at hxf. he after unfold c1Entry? congrArg doesn't reduce unless `he` contains def reducible; `have hk : k=[] := (congrArg ... he).symm` expected left reduces c1Entry.frames to [] by defeq, yes.
+  `simpa using hxf`? hxf target config frames `[ret]` = [] after hk. `simp at hxf` should contradiction by Config.frames projection reduction of literal. The exit is literal, yes.
+
+  Restoration accepted example could `example : c1Exit.locals = Exec.bindDst none 7 [] ∧ c1Exit.frames = [] := by
+    obtain ⟨dst,result,caller,k,args,site,st,he,hxc,hxl,hxf⟩ := c1Call_restores_caller (f:=...) c1ExplicitCall
+    ... need show dst=none result=7? From entry he only dst none, args etc but result unconstrained by entry; C1Call relation final + steps could derive result=7 but restoration theorem only gives some result. c1Exit.locals=[] and bindDst dst result caller with dst none from he -> caller=[] => hxl gives []=[] regardless result. So just prove locals and frames:
+  have hd : dst=none := by injection congrArg ctrl he maybe.
+  have hc : caller=[] := congrArg locals he (not symm; c1Entry.locals=[] = caller, so hc : [] = caller, use symm).
+  have hk ...
+  Then `simp [c1Exit, hd, hc?] at hxl` etc. Could simply after obtain:
+  have he' := congrArg Exec.Config.ctrl he
+  injection he' with ... maybe messy.
+  Alternative positive witness of law use explicit direct existential with same theorem and prove `∃ caller k, caller = [] ∧ k=[] ∧ c1Exit.locals=...`? Should satisfy.
+
+  Better state an example directly that there exists entry dst/result etc and check entry equality plus exit:
+  `example : ∃ dst result caller k args site st,
+   c1Entry = ... ∧ c1Exit.ctrl=.done ∧ ... := c1Call_restores_caller c1ExplicitCall`
+  This merely restates theorem with instance but valid non-trivial instance hypotheses hold and conclusion existential. Accepted example theorem application enough. Doc "Accepted: the explicit-return call is a non-trivial instance of caller restoration..." This is good but not demonstrating values. Could make specific equality easier by use C1Call theorem h and `have` from entry.
+
+  Potential vacuity reviewer may not like just relation proof. Existing accepted C1Call plus bad conclusion should satisfy. But final response per law identify explicit and fallthrough accepted and counterexample. Good.
+
+  I could avoid extra restoration positive example and point accepted C1Call examples. Owner says every law give examples where hypotheses hold; C1Call accepted is such, but not applying law. Probably enough? Better explicit theorem application example as above.
+
+  Should theorem helper for fallthrough direct? Not necessary.
+
+  Item 3 simplify KeptPair drop redundant Valid conjuncts and prove `keptPair_results_valid` theorem both endpoints. This is a law addition needs positive and negative witnesses. Existing accepted WF and refused FFI, mismatched handle, same identities examples. Add theorem:
+  theorem keptPair_results_valid {F H} (pair) ... (h : pair.WellFormed ...) :
+   ExternResult.Valid pair pair.submit submitResult ∧
+   ExternResult.Valid pair pair.complete completeResult := by
+   obtain ⟨hne,hp,hs,hc,hr⟩ := h
+   subst submitParam? hp not needed
+   subst submitResult
+   subst completeParam
+   subst completeResult
+   exact ⟨⟨rfl,rfl⟩,⟨rfl,rfl⟩⟩
+  Perhaps pair.submit ≠ pair.complete unused, okay. Name `keptPair_results_valid`. Doc "Well-formed pairs imply endpoint validity; the exact type constraints are sufficient, so validity is not duplicated in WellFormed." Positive example existing WF accepted and could example validity by decide already indirectly no direct. Add `example : ExternResult.Valid ... .receipt ∧ ... .owned := keptPair_results_valid ... (by exact...)` or `by decide` but to witness theorem use theorem. Negative theorem instance with bad `.ffi` result? The theorem's conclusion can hold for FFI even WF false, so cannot have `¬ (Valid...)` because FFI is valid. Vacuity counterexample should bad state fails law? For law `WF -> Valid`, a planted invalid WF cannot produce invalid endpoints if exact constraints. Negation example could show `¬ WF` with mutated handle/result, but that's already examples and not conclusion failure. Owner says "mutated rule or bad state that fails it, written as example with negation." Existing refused WF with FFI and wrong handle suffice as hypotheses fail, not law conclusion. But for theorem, negative should perhaps `¬ (pair.WellFormed ... (.receipt 8) ... )` showing hypothesis not trivial. User likely accepts existing. Yet to demonstrate derived Valid not vacuous, existing refused unrelated extern `¬ ExternResult.Valid` covers Valid rule. I can add example `¬ ((WellFormed with wrong submitResult) ∧ ...?)` no. More meaningful negative: a pair with exact identities but result handle mismatch fails WF and therefore cannot be used in theorem. Existing different completionParam but completeResult correct; existing FFI results. Good.
+
+  Could instead keep Valid conjuncts and comment avoid new law. But reviewer option allows keep with comment. Easier: keep them and say why in comment. But item says "Either drop and prove lemma or keep and say why comment. Your choice; say which." Could keep and add comment "The redundant validity conjuncts are retained deliberately so WellFormed includes the general endpoint validity interface as a single package..." But agy nit preference perhaps better drop prove lemma. Do that.
+
+  Now edit Spec Frame C1Call and WF in same file? Instruction do not consecutive Edit same file. I can do one Edit replacing C1Call only then build/commit item1+2, then later reread/edit WF. For proofs one Edit large replace C1 theorem through examples perhaps. Should first Spec edit. Use exact content lines 123-142. Update doc both boundaries.
+
+• I’m applying the call-definition change first: restoration conjuncts are removed, and each return mode must include its own real final `Exec.step` into `exit`.
+
+• Now proofs large edit lines 357-415 replace entire block. Should formulate.
+
+  I'll write helper perhaps reduces proof and examples. Theorem c1Call_restores with full statement. Direct proof repeated.
+
+  Pseudo:
+    obtain ⟨..., hf, he, hv, hlen, hl, hreturn⟩ := h
+    refine ⟨dst,result,caller,k,args,site,st,he,?_⟩
+    cases hreturn with
+    | inl hexplicit =>
+      obtain ⟨hs,hr⟩ := hexplicit
+      cases hl' : O.life .leave stReturn with
+      | none => simp [Exec.step, Exec.stepExit, hl'] at hr
+      | some stLeave =>
+        cases hb : Exec.bindLife O dst stLeave with
+        | none => simp [Exec.step, Exec.stepExit, hl', hb] at hr
+        | some stBind =>
+          simp only [Exec.step, Exec.stepExit, hl', Option.bind_some, hb, Option.map_some,
+             Option.some.injEq, Exec.Out.next.injEq] at hr
+          cases hr
+          exact ⟨rfl,rfl,rfl⟩
+    | inr hfall =>
+      obtain ⟨hresult,hs,hr⟩ := hfall
+      subst result
+  ...
+  Note theorem expected after refine he remaining goal `exit.ctrl=.done ∧ ...`, yes.
+
+  Potential `subst result` hresult orientation fine.
+
+  Examples definitions:
+  private def c1UnitFnId, c1UnitFn, c1UnitProgram, c1UnitEntry, c1UnitBoundary. c1Exit same.
+
+  private theorem c1ExplicitCall ... with hs etc. Then `example : C1Call ... := c1ExplicitCall`. Existing doc accepted. This is new named theorem not in spec axioms golden regenerated later reviewer. okay.
+
+  `private theorem c1UnitCall`.
+  Accepted example restoration:
+  example : ∃ (dst...), c1Entry=... ∧ c1Exit.ctrl... := c1Call_restores_caller c1ExplicitCall
+  Could include huge type signature cumbersome but copy theorem conclusion concrete:
+  example : ∃ (dst : Option Var) (result : Nat) (caller : AList Var Nat)
+      (k : List (Exec.Frame c1Operands)) (args : List Nat) (site : SiteId) (st : Unit),
+      c1Entry = ⟨.exec (.call dst c1FnId args site), caller, st,k⟩ ∧
+      c1Exit.ctrl = .done ∧ c1Exit.locals=... ∧ c1Exit.frames=k :=
+    c1Call_restores_caller c1ExplicitCall
+  This is verbose but readable and positive law.
+
+  Counterexample same existential for c1Entry and bad exit:
+  private def c1BadExit : Exec.Config c1Operands := ⟨.done, [], (), [.ret none []]⟩
+  example : ¬ ∃ ... := by
+   intro h
+   obtain ⟨..., he,hxc,hxl,hxf⟩ := h
+   have hk : k=[] := (congrArg Exec.Config.frames he).symm
+   rw [hk] at hxf
+   simp [c1BadExit] at hxf
+  Works.
+
+  Rejected incomplete call can use c1BadExit and c1Call restoration:
+  example : ¬ C1Call ... c1BadExit := by
+   intro h
+   have hr := c1Call_restores_caller h
+   obtain ... := hr
+   same proof. Duplication okay. But requirement counterexample not only C1Call explicitly separate yes.
+
+  Unit incomplete? User "rejected incomplete-call example" existing explicit c1BadExit. Fine.
+
+  Explicit example docs mention final. Unit accepted docs. Positive law could perhaps skip due verbosity. I can use example concise consequence:
+  `example : c1Exit.locals = [] ∧ c1Exit.frames = [] := by
+    obtain ⟨dst, result, caller, k, args, site, st, he, hctrl, hlocals, hframes⟩ :=
+      c1Call_restores_caller c1ExplicitCall
+    have hk : k = [] := ...
+    have hdst : dst = none := by
+       have hc := congrArg Exec.Config.ctrl he
+       injection hc with hctrl' -- `.exec (.call dst...)` equality to same f args etc, injection tricky.
+    have hcaller : caller=[] := (congrArg locals he).symm
+    have hk...
+    subst dst? derive via `injection he` directly Config equality injection yields ctrl equality, locals, store, frames. `injection he with hctrl hcaller hst hk` maybe structures with nested ctor; injection Config.mk gives 4 equalities. `injection he with hectrl hecaller hest heframes`; hectrl `.exec call none... = .exec call dst...`, injection again to dst. I don't need dst/result to prove c1Exit.locals=[] using hlocals and caller=[] but hlocals `[] = bindDst dst result []`; bindDst dst result [] yields if some then non-empty, if none [] so always []! Can cases dst <;> simp [Exec.bindDst] at hlocals; if some, hlocals impossible, if none exact. Simpler use hframes and `cases dst <;> simp [c1Exit, Exec.bindDst] at hlocals ⊢`? Goal conjunction.
+    have hk ...
+    subst k
+    constructor
+    · cases dst <;> simp [Exec.bindDst] at hlocals
+      -- some case hlocals : [] = (x,result)::[] contradiction simp closes goal automatically? In tactic branch `simp ... at hlocals` turns hlocals False and closes branch. none hlocals : []=[] and simp closes goal perhaps.
+    · exact hframes
+  c1Exit frames defeq [] so hframes exact.
+  Actually hlocals itself after cases dst and simp yields no goals. Could just:
+    have hk...
+    subst k
+    cases dst <;> simp [c1Exit, Exec.bindDst] at hlocals hframes ⊢
+  But hframes after k [] c1Exit.frames=[] trivial. `simp [c1Exit, Exec.bindDst] at hlocals ⊢` in none branch closes entire conjunction using hframes? hframes not included, so frames goal rfl yes. In some branch hlocals contradiction. `cases dst <;> simp [c1Exit, Exec.bindDst] at hlocals ⊢` likely works. No need hk for frames? hframes : c1Exit.frames = k -> []=k; goal [] = k, exact hframes. So:
+    refine ⟨?_, hframes⟩
+    have hdst? Not.
+    cases dst <;> simp [c1Exit, Exec.bindDst] at hlocals ⊢
+    all_goals exact hlocals? For none simp at hlocals makes hlocals : []=[] and goal []=[] so simp closes; some contradiction closes. `cases dst <;> simp_all [c1Exit, Exec.bindDst]` perhaps hframes too. Could use exact `⟨by cases dst <;> simp [c1Exit,Exec.bindDst] at hlocals ⊢, hframes⟩`. In none `simp ... at hlocals ⊢` uses hlocals? simp at hlocals simplifies both to True and goal to True closes. yes.
+  But c1Exit in hframes not unfolded but defeq. Good.
+  This is positive law example concise. Also fallthrough restoration example same proof with c1UnitCall result etc c1Exit same, no need duplicate. Two C1Call accepted examples plus positive explicit law enough.
+
+  Counterexample existential huge could define predicate to avoid? The theorem conclusion can be given name via `def C1CallRestores` but new spec definition not necessary. Could state:
+  `example : ¬ (∃ (dst ... )..., ...) := by ...` verbose but required.
+
+  Could formulate negation using `c1Call_restores_caller`? Cannot negate theorem universally because theorem true. Should have exact conclusion.
+
+  Alternative define private `def SavedRestoration (O) (f) (P?) (entry exit) : Prop := ∃ ...` and use in theorem to reduce but changes statement to definition could be seen restating definition/vacuity. Avoid.
+
+  I'll perform large Edit from theorem through rejected incomplete example. Should include existing private definitions c1Operands etc unchanged in old block? Replace entire from doc line357 to before c1_call_frame. I'll reproduce c1Operands etc with additions. Big but okay. Ensure no comments noise default but doc comments required.
+
+  Proof hr simplification may fail. I'll test.
+
+• The proof will now case-split `.leave` and result-bind instrumentation for both return modes. I’m also adding a bad-exit example that negates the restoration conclusion itself, not merely `C1Call`.
+
+• Now build to see errors. Could `nix develop -c timeout 1200 lake build ConcreteSpec` foreground up to 300 tool but build quick. Use background? I need result next step, foreground as instruction if depends. timeout 300 tool enough actual 5 sec.warning: Git tree '/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c10' is dirty
+✔ [30/47] Built ConcreteSpec.Spec.Frame (490ms)
+✔ [31/47] Built ConcreteSpec.Spec (132ms)
+✔ [32/47] Built ConcreteSpec.Proofs.Basics (196ms)
+✔ [33/47] Built ConcreteSpec.Proofs.Authority (358ms)
+✔ [34/47] Built ConcreteSpec.Proofs.Cleanup (542ms)
+✔ [35/47] Built ConcreteSpec.Proofs.Memory (543ms)
+✔ [36/47] Built ConcreteSpec.Proofs.Slice1 (581ms)
+✔ [37/47] Built ConcreteSpec.Proofs.Borrow (746ms)
+✔ [38/47] Built ConcreteSpec.Proofs.Brand (684ms)
+✔ [39/47] Built ConcreteSpec.Proofs.Observe (224ms)
+✔ [40/47] Built ConcreteSpec.Proofs.Checker (323ms)
+✔ [41/47] Built ConcreteSpec.Proofs.Hybrid (369ms)
+✖ [42/47] Building ConcreteSpec.Proofs.Frame (408ms)
+trace: .> LEAN_PATH=/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c10/.lake/build/lib/lean /nix/store/94bmilywgajdnqvix1fs35fj94kala0w-lean4-release-4.34.1/bin/lean /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c10/ConcreteSpec/Proofs/Frame.lean -o /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c10/.lake/build/lib/lean/ConcreteSpec/Proofs/Frame.olean -i /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c10/.lake/build/lib/lean/ConcreteSpec/Proofs/Frame.ilean -c /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c10/.lake/build/ir/ConcreteSpec/Proofs/Frame.c --setup /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c10/.lake/build/ir/ConcreteSpec/Proofs/Frame.setup.json --json
+error: ConcreteSpec/Proofs/Frame.lean:443:14: Application type mismatch: The argument
+  hframes
+has type
+  c1Exit.frames = k
+but is expected to have type
+  c1Exit.frames = []
+in the application
+  ⟨?m.88, hframes⟩
+✔ [43/47] Built ConcreteSpec.Proofs.Rep (409ms)
+✔ [44/47] Built ConcreteSpec.Proofs.Slice0 (227ms)
+✔ [45/47] Built ConcreteSpec.Proofs.Examples (186ms)
+Some required targets logged failures:
+- ConcreteSpec.Proofs.Frame
+error: build failed
+Only positive example hframes k need hk. Add have hk and subst k before refine. Should Read file before Edit per tool after previous edit yes already output not read. Read small region.
+
+• The new restoration proof elaborates; only the positive example needs to use the entry equality to identify the saved continuation as `[]`. I’m correcting that example and rebuilding.
+
+warning: Git tree '/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c10' is dirty
+✖ [45/47] Building ConcreteSpec.Proofs.Frame (342ms)
+trace: .> LEAN_PATH=/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c10/.lake/build/lib/lean /nix/store/94bmilywgajdnqvix1fs35fj94kala0w-lean4-release-4.34.1/bin/lean /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c10/ConcreteSpec/Proofs/Frame.lean -o /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c10/.lake/build/lib/lean/ConcreteSpec/Proofs/Frame.olean -i /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c10/.lake/build/lib/lean/ConcreteSpec/Proofs/Frame.ilean -c /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c10/.lake/build/ir/ConcreteSpec/Proofs/Frame.c --setup /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c10/.lake/build/ir/ConcreteSpec/Proofs/Frame.setup.json --json
+error: ConcreteSpec/Proofs/Frame.lean:445:14: Unknown identifier `hframes`
+Some required targets logged failures:
+- ConcreteSpec.Proofs.Frame
+error: build failed
+• subst k clears hframes? subst k uses hk k=[] perhaps substitutes and clears hframes if rfl? Actually subst k likely substitutes k and hframes becomes proof c1Exit.frames=[] but if reducible, tactic clears? It says unknown hframes at refine after subst perhaps subst cleared hframes as trivial? Could avoid subst: rw [hk] at hframes then refine. Same as other. Edit need Read again.Build again.warning: Git tree '/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c10' is dirty
+✔ [45/47] Built ConcreteSpec.Proofs.Frame (352ms)
+✔ [46/47] Built ConcreteSpec (136ms)
+Build completed successfully (47 jobs).
+Should inspect diff and ensure no issue theorem truly derives. Build passed. Perhaps examples vacuity all good. Should consider "C1Call caller entry" yes. "planted counterexample caller or continuation different from entry's must fail theorem conclusion" yes bad k. "explicit and Unit both final actual step" yes.
+
+  Perhaps add a positive fallthrough law application? accepted unit call is instance. Good.
+
+  Now commit item 1+2 after build. But before commit perhaps run diff check. `git diff --check && git diff --stat` and perhaps commit. Could commit direct. I should include separate piece items1+2 in one. `git add ... && git commit -m "spec: derive C1 caller restoration from return steps"` no push. Do.
+
+• The call changes now build, including explicit return, Unit fall-through, incomplete-call rejection, and the bad-continuation counterexample. I’m committing this slice before simplifying `KeptPair.WellFormed`.[wip/spec-c10 98b87c7fd] spec: derive C1 caller restoration from return steps
+ 2 files changed, 104 insertions(+), 24 deletions(-)
+
+
+• Update todos: item2 and3 done item4 in progress. Then read spec WF region and proofs examples region to edit. I already read original but since edited file after read? Spec edited C1 only, tool says read again before next Edit same file. Should read around WF. Proofs edited and committed but need read relevant insertion location. Also existing examples WF must update tuple proofs because dropped conjuncts. In Spec examples line 451 proof exact changes. Refused projections change. I need adjust docs accepted perhaps add lemma in proofs. I'll reason.
+
+  New WF:
+  pair.submit ≠ pair.complete ∧ submitParam=... ∧
+   submitResult=.receipt ... ∧
+   completeParam=.receipt ... ∧ completeResult=.owned ...
+  Five conjuncts. Accepted exact `⟨by decide,rfl,rfl,rfl,rfl⟩`.
+  Refused FFI:
+  first h.2.2.1 now submitResult (was same h.2.2.1 before? Old: 1 ne, 2.1 param, 2.2.1 submitResult yes same). second completeResult old h.2.2.2.2.2.1? I'll parse old:
+  1 ne
+  2.1 submitParam
+  2.2.1 submitResult
+  2.2.2.1 Valid submit
+  2.2.2.2.1 completeParam
+  2.2.2.2.2.1 completeResult
+  2.2.2.2.2.2 Valid complete
+  Existing second hr h.2.2.2.2.2.1 completeResult indeed new completeResult h.2.2.2.2.1 (ne, param, submitres, completeparam, completeres). Different completionParam example old h.2.2.2.2.1 completeParam yes new h.2.2.2.1. Same identity h.1 unchanged.
+
+  Should add accepted Valid theorem example in Proofs. Could use existing WF accepted in Spec only inaccessible anonymous. Define theorem keptPair_results_valid with h. Proof:
+    obtain ⟨hne, hsp, hsr, hcp, hcr⟩ := h
+    subst submitResult
+    subst completeResult
+    exact ⟨⟨rfl,rfl⟩,⟨rfl,rfl⟩⟩
+  No need subst params.
+  Theorem statement all params.
+  Then example:
+  `/-- Accepted: ... -/
+  example : ExternResult.Valid (⟨0,1,7⟩...) 0 (.receipt 7) ∧ ... := keptPair_results_valid _ _ _ _ _ (by exact ⟨by decide,rfl,rfl,rfl,rfl⟩)` arguments inference perhaps:
+  ```
+    apply keptPair_results_valid (pair := (⟨0,1,7⟩ : KeptPair Nat Nat))
+      (submitParam := ⟨.owned 7,.kept⟩) ...
+    exact ⟨by decide,rfl,rfl,rfl,rfl⟩
+  ```
+  The theorem has explicit `pair submitParam submitResult completeParam completeResult` if defined `(pair ...) (submitParam ...)...` then `exact keptPair_results_valid _ _ _ _ _ (by ...)`.
+  Better named private def pair? Existing direct.
+
+  Negative example for law could be `example : ¬ (⟨0,1,7⟩...).WellFormed ... submitResult .receipt 8 ...` spec add. Already different handle for completeParam, not submitResult. Add to Spec refused perhaps enough. Response can say lemma positive accepted example and negative existing malformed pair examples demonstrate rejected hypotheses plus existing unrelated invalid endpoints. But owner vacuity demands per law counterexample written negation. I can add in Proofs:
+  ```
+  /-- Refused: mutating submission's result to another handle violates the premise; no validity theorem can be applied to this malformed pair. -/
+  example : ¬ (pair...).WellFormed ... (.receipt 8) ... := by
+   intro h
+   have hr := h.2.2.1
+   injection hr -- `.receipt 7 = .receipt 8`, cases impossible
+  ```
+  This is negative of hypothesis not theorem conclusion. But their general examples for other laws often are negation of property being proved e.g. store_frame no h operation but `¬ Preserves bad`. For WF -> Valid property, to make conclusion false while h true impossible. A counterexample to mutated rule could be if WF omitted exact result constraint then `.ffi` accepted but `Valid` also true so not failure. If WF only checked f identity not handle, `submitResult = .receipt 8` and Valid false, so bad state fails validity. Example conjunction `¬ (WellFormed ... wrong ... ∧ ExternResult.Valid pair pair.submit wrong)` is trivially via WF but also valid false. Better `example : ¬ ExternResult.Valid pair 0 (.receipt 8)` existing invalid value proves consequence non-trivial. Could combine:
+  ```
+  example :
+   ¬ WellFormed pair ... (.receipt 8) ... ∧
+   ¬ ExternResult.Valid pair pair.submit (.receipt 8) := by decide
+  ```
+  This witnesses both bad premise and bad endpoint. This is a planted counterexample to dropping handle equality. Good. Add accepted theorem application with exact correct and negative malformed conjunction. Existing spec already wrong completeParam, could add wrong submit result to Spec examples instead, but proofs negation okay.
+
+  No need overdo. Reviewer likely expects just simplification no new examples but vacuity rule yes.
+
+  Now read.
+
+• For `KeptPair`, I’ll remove the redundant validity conjuncts and add a theorem deriving both endpoint validities from the exact receipt/owned result constraints, with valid and malformed-handle examples.
+
+• Should have two edits same Spec file not consecutive? I can do one Edit replacing from doc WF through? Could replace WF definition only plus examples all in one old string huge lines 354-480? Could one Edit call only supports one old/new. I need modify two disjoint regions; can either one broad replacement entire lines 354-480 (126 lines) or sequential read/edit. Better first definition Edit, then read examples again and second Edit allowed after read. Tool says do not issue consecutive Edit calls same file, read again before next. I can do definition then read. I'll do.One broad replace lines451-473 all.Now proofs insert after extern_result_rejects_unrelated perhaps before kept transitions. One Edit. Theorem params implicit? I'll write:
+  ```
+  theorem keptPair_results_valid {F H} (pair) (submitParam) ... (h) :
+  ...
+  ```
+  Use `subst submitResult` hsr orientation okay subst. `subst completeResult`.
+  Examples with pair correct and bad. Type inference in accepted:
+  ```
+  example : ExternResult.Valid ... ∧ ... := by
+    apply keptPair_results_valid (pair := ...) (submitParam := ...) ...
+    exact ...
+  ```
+  If submitParam explicit, named args accepted even explicit. `apply` creates h only. Use:
+  ```
+    exact keptPair_results_valid (⟨0,1,7⟩...) ⟨.owned 7,.kept⟩ (.receipt 7) (.receipt 7) (.owned 7)
+      (by exact ...)
+  ```
+  Long lines wrap. Fine.
+  Negative conjunction by decide:
+  ```
+  example : ¬ pair.WellFormed ... receipt8 ... ∧ ¬ ExternResult.Valid pair 0 (.receipt 8) := by decide
+  ```
+  Decidable WF? I didn't define Decidable instance for WF! `by decide` cannot. Prove manually:
+  constructor
+  · intro h; have hs:=h.2.2.1; injection hs
+  · intro h; exact (by have := h.2; contradiction)
+  `cases h.2` where h.2 : 8=7, cases works no confusion.
+  First `cases h.2.2.1` should noConfusion equality receipt7=receipt8 closes via cases? Existing `cases hc` on receipt 7=receipt8 closes. yes.
+  Second `exact h.2` impossible Nat equality, `cases h.2`.
+  `constructor <;> intro h`
+  first `have hr := h.2.2.1; cases hr`
+  second `have hh := h.2; cases hh`.
+  Good.
+
+  Doc negative says wrong receipt neither wellformed nor valid, mutated rule dropping exact result handle would admit premise but conclusion remains false. Nice.Build.warning: Git tree '/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c10' is dirty
+✖ [30/47] Building ConcreteSpec.Spec.Frame (449ms)
+trace: .> LEAN_PATH=/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c10/.lake/build/lib/lean /nix/store/94bmilywgajdnqvix1fs35fj94kala0w-lean4-release-4.34.1/bin/lean /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c10/ConcreteSpec/Spec/Frame.lean -o /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c10/.lake/build/lib/lean/ConcreteSpec/Spec/Frame.olean -i /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c10/.lake/build/lib/lean/ConcreteSpec/Spec/Frame.ilean -c /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c10/.lake/build/ir/ConcreteSpec/Spec/Frame.c --setup /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c10/.lake/build/ir/ConcreteSpec/Spec/Frame.setup.json --json
+error: ConcreteSpec/Spec/Frame.lean:465:15: Invalid projection: Projections extract constructor fields for one-constructor inductive types. The expression
+  h.right.right.right.right
+has type
+  ExternType.ffi FFIType.int = ExternType.owned { submit := 0, complete := 1, handle := 7 }.handle
+which has no fields.
+Some required targets logged failures:
+- ConcreteSpec.Spec.Frame
+error: build failed
+My completeResult path wrong? Parse new 5:
+  h.1 ne
+  h.2.1 sp
+  h.2.2.1 sr
+  h.2.2.2.1 cp
+  h.2.2.2.2 cr
+  I used h.2.2.2.2.1 too deep. Yes earlier counted incorrectly. New completeResult = h.2.2.2.2 (not .1). Existing old completeResult h.2.2.2.2.2.1 yes. Fix to h.2.2.2.2. Should read region.
+
+• One proof projection still points past the final conjunct after removing the redundant fields. I’m adjusting it to the new five-conjunct shape.
+
+warning: Git tree '/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c10' is dirty
+✔ [30/47] Built ConcreteSpec.Spec.Frame (485ms)
+✔ [31/47] Built ConcreteSpec.Spec (134ms)
+✔ [32/47] Built ConcreteSpec.Proofs.Basics (180ms)
+✔ [33/47] Built ConcreteSpec.Proofs.Authority (369ms)
+✔ [34/47] Built ConcreteSpec.Proofs.Cleanup (543ms)
+✔ [35/47] Built ConcreteSpec.Proofs.Memory (585ms)
+✔ [36/47] Built ConcreteSpec.Proofs.Slice1 (632ms)
+✔ [37/47] Built ConcreteSpec.Proofs.Brand (740ms)
+✔ [38/47] Built ConcreteSpec.Proofs.Borrow (801ms)
+✔ [39/47] Built ConcreteSpec.Proofs.Observe (216ms)
+✔ [40/47] Built ConcreteSpec.Proofs.Checker (310ms)
+✔ [41/47] Built ConcreteSpec.Proofs.Hybrid (340ms)
+✔ [42/47] Built ConcreteSpec.Proofs.Rep (403ms)
+✔ [43/47] Built ConcreteSpec.Proofs.Slice0 (239ms)
+✔ [44/47] Built ConcreteSpec.Proofs.Frame (442ms)
+✔ [45/47] Built ConcreteSpec.Proofs.Examples (191ms)
+✔ [46/47] Built ConcreteSpec (136ms)
+Build completed successfully (47 jobs).
+• Now commit item3. But should consider warnings unused variables hne etc no warningAsError build no warnings apparently Lean doesn't warn. Good.
+
+  Commit.
+
+• The simplified pairing definition and derived validity theorem build successfully. I’m committing that change, then I’ll run the permitted rules and trust checks on the final tree.[wip/spec-c10 c591c5782] spec: derive kept-pair endpoint validity
+ 2 files changed, 34 insertions(+), 6 deletions(-)
+
+
+• Now final checks build/rules/trust. Build already final but run perhaps final build with rules and trust independent could parallel? Heavy limit at most 2, build light. Rules and trust may build? allowed. Run in parallel independent reads but possible lake locks? trust perhaps invokes lake? Read scripts? User explicitly commands. Could run sequential command `nix develop -c timeout 600 bash scripts/spec/rules.sh` and `nix develop -c timeout 900 bash scripts/proofs/trust_ban.sh` in parallel independent but trust and rules may not write same? rules probably build site? Better parallel allowed independent. Final build already done exact commit contents (commit doesn't change), no need repeat? Final required build/rules/trust results. I can run rules and trust parallel. Also git diff HEAD review and status. Should check new files generated after. Use Todo update done item4 next.=== the specification ===
+  ok   1 registered rules in 44 sources, each documented with an existing decision row and an accepted and a refused example; every citation names a registered rule
+  ok   the registry and every rule citation of ConcreteSpec
+=== negative controls ===
+  ok   control: a documented rule with both examples passes
+  ok   control: a rule with no refused example fails
+  ok   control: a rule whose doc cites no decision row fails
+  ok   control: a rule registered twice fails
+  ok   control: a rule naming no declaration fails
+  ok   control: a citation of an unregistered rule fails
+  ok   control: a verdict on a non-example fails
+  ok   control: revision 0 fails
+  ok   control: a truncated listing is an error
+  ok   control: a rule with no accepted example fails
+  ok   control: a rule with no doc comment fails
+  ok   control: a rule citing a row no inventory has fails
+  ok   control: one example claiming both verdicts fails
+  ok   control: a verdict in a nested comment fails
+  ok   control: an unregistered quoted name fails
+  ok   control: examples with an attribute or a modifier count
+  ok   control: an unlexable source is an error
+  ok   control: a verdict in a string literal fails
+  ok   control: an attribute with brackets inside counts
+  ok   control: a row an inventory only mentions does not count
+  ok   control: an attribute string cannot stand in for an example
+  ok   control: an attribute holding a string with a bracket counts
+  ok   control: a quoted name holding a backtick is checked
+  ok   control: a malformed citation fails
+  ok   control: a raw string in an attribute cannot stand in for an example
+  ok   control: a quoted name in an attribute cannot stand in for an example
+  ok   control: a comment in an attribute cannot stand in for an example
+  ok   control: a quoted name holding citation-like text is one citation
+  ok   control: a missing source directory is an error
+  ok   control: a source directory with no .lean file is an error
+  ok   control: a checker that hangs through both attempts is INCOMPLETE
+SPEC-RULES: PASS=32 FAIL=0
+=== E/D: the environment ===
+  ok   all 45 ConcreteSpec source modules are in the environment E and D read
+  ok   none of the 8459 ConcreteSpec constants depends on sorryAx, ofReduceBool/Nat, trustCompiler or a native axiom
+  ok   ConcreteSpec declares no axiom
+=== S: the sources ===
+  ok   none of the 45 source files spells a banned word outside comments
+  ok   lakefile.toml builds the library with warningAsError, and nothing overrides it
+=== X: the examples, in the kernel's terms ===
+  ok   all 311 examples, kept as declarations, depend only on the standard axioms
+=== negative controls ===
+  ok   control: a theorem proved by sorry is refused (ConcreteSpecControl.sorryThm (sorryAx))
+  ok   control: a definition with a sorry body and no theorem about it is refused (ConcreteSpecControl.sorryDef (sorryAx))
+  ok   control: a theorem proved by native_decide is refused (ConcreteSpecControl.nativeThm (ConcreteSpecControl.nativeThm._native.native_decide.ax_1_1))
+  ok   control: a declared axiom is reported
+  ok   control: an axiom whose name holds a tab fails the run (no row can carry it)
+  ok   control: native_decide, and sorry inside an interpolation, after a string, raw string or quoted name holding comment delimiters, after an interpolation holding a string, a direct sorryAx, a syntax extension, an outside import, an option, meta code and decide options (native split across lines, positional) are found; the words in comments are not
+  ok   control: the header import ConcreteSpec.Spec Lean is reported
+  ok   control: the header import ConcreteSpec.Spec   Lean is reported
+  ok   control: the header prelude import ConcreteSpec.Spec is reported
+  ok   control: a library that turns warningAsError off is refused (the library sets options ['warningAsError'])
+  ok   control: a library built from another source directory is refused (the library sets ['srcDir'])
+  ok   control: a source the scan cannot read or lex (missing) fails it (rc=3)
+  ok   control: a source the scan cannot read or lex (Open) fails it (rc=3)
+  ok   control: a source the scan cannot read or lex (Brace) fails it (rc=3)
+  ok   control: a source the scan cannot read or lex (Quote) fails it (rc=3)
+  ok   control: source modules outside a (truncated) import closure are reported
+  ok   control: an example proved by decide +native and one closed by stop are reported, rfl is not, and the word example in a string is no example («⟪example⟫C.lean:1» («⟪example⟫C.lean:1»._native.decide.ax_1) «⟪example⟫C.lean:2» (sorryAx) )
+PROOF-TRUST-BAN: PASS=23 FAIL=0
+c591c5782 spec: derive kept-pair endpoint validity
+98b87c7fd spec: derive C1 caller restoration from return steps
+f5f46bef1 Merge remote-tracking branch 'origin/wip/spec-core' into wip/spec-c10
+fa284eb9a axioms.golden: C10 round 3 (regenerated on concrete-ci-2)
+Checks pass. Should do final review diff and status untracked perhaps status empty. Perhaps run git status full and log full SHAs for the response. Also confirm axioms.golden untouched after merge? It was modified via merge as spec core, instruction "Do not edit" okay no subsequent diff. Should compare HEAD~2 etc. Perhaps ensure all explicit requirements final response: Commits SHA+one line, merge conflicts resolutions, per item what changed and (a)/(b) witnesses, build/rules/trust results, QUESTIONS None. I can now respond. But before responding, perhaps inspect `git show --stat` and exact SHAs. `git rev-parse ...`, status, check no merge in progress per AGENTS after merge already committed but can git status. Also check no new files. Should mark Todo done. Could run status and full shas.
+
+• All permitted checks pass: the build, 32 specification-rule checks, and 23 proof-trust checks. I’m doing the final cleanliness and commit-ID check; no forbidden heavy gates were run.## wip/spec-c10
+f5f46bef1b091528010ac165d9dad8663deb0469
+98b87c7fd87a030484b2b080bd971e3ac23e98d6
+c591c57825fb604a2f36f74c2f046aa39f52ec83
+diff --git a/scripts/proofs/axioms.golden b/scripts/proofs/axioms.golden
+index 237439863..54e9ffef7 100644
+--- a/scripts/proofs/axioms.golden
++++ b/scripts/proofs/axioms.golden
+@@ -1155,6 +1155,10 @@ ConcreteSpec.Core.Exec.restrict.eq_1	propext
+ ConcreteSpec.Core.Exec.restrict_dom_drops	propext
+ ConcreteSpec.Core.Exec.return_reaches_caller	propext
+ ConcreteSpec.Core.Exec.return_refused	propext
++ConcreteSpec.Core.Exec.runFrom.eq_1	propext
++ConcreteSpec.Core.Exec.runFrom.eq_2	propext
++ConcreteSpec.Core.Exec.runFrom.eq_3	propext
++ConcreteSpec.Core.Exec.runFrom.eq_def	propext
+ ConcreteSpec.Core.Exec.scope_drop_refused	propext
+ ConcreteSpec.Core.Exec.seqDestroyOrder.eq_1	
+ ConcreteSpec.Core.Exec.seqDestroyOrder_elem	propext
+@@ -1670,6 +1674,171 @@ ConcreteSpec.Core.Mem.store_wellFormed._proof_1_1	Quot.sound propext
+ ConcreteSpec.Core.ModuleId.mk.inj	
+ ConcreteSpec.Core.ModuleId.mk.injEq	propext
+ ConcreteSpec.Core.ModuleId.mk.sizeOf_spec	
++ConcreteSpec.Core.Observe.AdapterDemo.Op.double.sizeOf_spec	
++ConcreteSpec.Core.Observe.AdapterDemo.adapter.eq_1	propext
++ConcreteSpec.Core.Observe.AdapterDemo.answeringOracle.eq_1	propext
++ConcreteSpec.Core.Observe.AdapterDemo.answeringWellFormed	propext
++ConcreteSpec.Core.Observe.AdapterDemo.blockedObservation	Classical.choice Quot.sound propext
++ConcreteSpec.Core.Observe.AdapterDemo.blockedPermitted	Quot.sound propext
++ConcreteSpec.Core.Observe.AdapterDemo.blockingOracle.eq_1	propext
++ConcreteSpec.Core.Observe.AdapterDemo.blockingWellFormed	propext
++ConcreteSpec.Core.Observe.Answer.blocked.sizeOf_spec	
++ConcreteSpec.Core.Observe.Answer.response.inj	
++ConcreteSpec.Core.Observe.Answer.response.injEq	propext
++ConcreteSpec.Core.Observe.Answer.response.sizeOf_spec	
++ConcreteSpec.Core.Observe.CompleteTrace.eq_1	
++ConcreteSpec.Core.Observe.Demo.Op.double.sizeOf_spec	
++ConcreteSpec.Core.Observe.Demo.refusedReportPermitted	propext
++ConcreteSpec.Core.Observe.Demo.sp._proof_1	
++ConcreteSpec.Core.Observe.Demo.sp._proof_2	
++ConcreteSpec.Core.Observe.Event.output.inj	
++ConcreteSpec.Core.Observe.Event.output.injEq	propext
++ConcreteSpec.Core.Observe.Event.output.sizeOf_spec	
++ConcreteSpec.Core.Observe.Event.request.inj	
++ConcreteSpec.Core.Observe.Event.request.injEq	propext
++ConcreteSpec.Core.Observe.Event.request.sizeOf_spec	
++ConcreteSpec.Core.Observe.Event.response.inj	
++ConcreteSpec.Core.Observe.Event.response.injEq	propext
++ConcreteSpec.Core.Observe.Event.response.sizeOf_spec	
++ConcreteSpec.Core.Observe.EventSignature.mk.inj	
++ConcreteSpec.Core.Observe.EventSignature.mk.injEq	propext
++ConcreteSpec.Core.Observe.EventSignature.mk.sizeOf_spec	
++ConcreteSpec.Core.Observe.ExecAdapter.WellFormed.answered	
++ConcreteSpec.Core.Observe.ExecAdapter.WellFormed.blocked	
++ConcreteSpec.Core.Observe.ExecAdapter.WellFormed.internal	
++ConcreteSpec.Core.Observe.ExecAdapter.mk.inj	
++ConcreteSpec.Core.Observe.ExecAdapter.mk.injEq	propext
++ConcreteSpec.Core.Observe.ExecAdapter.mk.sizeOf_spec	
++ConcreteSpec.Core.Observe.ExecAdapter.project.eq_1	
++ConcreteSpec.Core.Observe.ExecAdapter.project_append	propext
++ConcreteSpec.Core.Observe.ExecAdapter.terminal?.eq_1	Classical.choice Quot.sound propext
++ConcreteSpec.Core.Observe.ExecAdapter.terminal?.eq_2	Classical.choice Quot.sound propext
++ConcreteSpec.Core.Observe.ExecAdapter.terminal?.eq_3	Classical.choice Quot.sound propext
++ConcreteSpec.Core.Observe.Execution.blocked.inj	
++ConcreteSpec.Core.Observe.Execution.blocked.injEq	propext
++ConcreteSpec.Core.Observe.Execution.blocked.sizeOf_spec	
++ConcreteSpec.Core.Observe.Execution.finite.inj	
++ConcreteSpec.Core.Observe.Execution.finite.injEq	propext
++ConcreteSpec.Core.Observe.Execution.finite.sizeOf_spec	
++ConcreteSpec.Core.Observe.Execution.infinite.inj	
++ConcreteSpec.Core.Observe.Execution.infinite.injEq	propext
++ConcreteSpec.Core.Observe.Execution.infinite.sizeOf_spec	
++ConcreteSpec.Core.Observe.FullObservation.blocked.inj	
++ConcreteSpec.Core.Observe.FullObservation.blocked.injEq	propext
++ConcreteSpec.Core.Observe.FullObservation.blocked.sizeOf_spec	
++ConcreteSpec.Core.Observe.FullObservation.finiteDivergence.inj	
++ConcreteSpec.Core.Observe.FullObservation.finiteDivergence.injEq	propext
++ConcreteSpec.Core.Observe.FullObservation.finiteDivergence.sizeOf_spec	
++ConcreteSpec.Core.Observe.FullObservation.infiniteDivergence.inj	
++ConcreteSpec.Core.Observe.FullObservation.infiniteDivergence.injEq	propext
++ConcreteSpec.Core.Observe.FullObservation.infiniteDivergence.sizeOf_spec	
++ConcreteSpec.Core.Observe.FullObservation.terminal.inj	
++ConcreteSpec.Core.Observe.FullObservation.terminal.injEq	propext
++ConcreteSpec.Core.Observe.FullObservation.terminal.sizeOf_spec	
++ConcreteSpec.Core.Observe.HasFullObservation._sparseCasesOn_1.else_eq	propext
++ConcreteSpec.Core.Observe.HasFullObservation._sparseCasesOn_2.else_eq	propext
++ConcreteSpec.Core.Observe.HasFullObservation._sparseCasesOn_3.else_eq	propext
++ConcreteSpec.Core.Observe.HasFullObservation.eq_1	propext
++ConcreteSpec.Core.Observe.HasFullObservation.eq_2	propext
++ConcreteSpec.Core.Observe.HasFullObservation.eq_3	propext
++ConcreteSpec.Core.Observe.HasFullObservation.eq_4	propext
++ConcreteSpec.Core.Observe.HasFullObservation.eq_5	propext
++ConcreteSpec.Core.Observe.InfiniteStuttering.prefix_indices	Quot.sound propext
++ConcreteSpec.Core.Observe.InfiniteStuttering.prefix_indices._proof_1_1	Quot.sound propext
++ConcreteSpec.Core.Observe.InfiniteStuttering.prefix_indices._proof_1_10	Quot.sound propext
++ConcreteSpec.Core.Observe.InfiniteStuttering.prefix_indices._proof_1_11	Quot.sound propext
++ConcreteSpec.Core.Observe.InfiniteStuttering.prefix_indices._proof_1_15	Quot.sound propext
++ConcreteSpec.Core.Observe.InfiniteStuttering.prefix_indices._proof_1_2	Quot.sound propext
++ConcreteSpec.Core.Observe.InfiniteStuttering.prefix_indices._proof_1_3	Quot.sound propext
++ConcreteSpec.Core.Observe.InfiniteStuttering.prefix_indices._proof_1_4	Quot.sound propext
++ConcreteSpec.Core.Observe.InfiniteStuttering.prefix_indices._proof_1_5	Quot.sound propext
++ConcreteSpec.Core.Observe.InfiniteStuttering.prefix_indices._proof_1_6	Quot.sound propext
++ConcreteSpec.Core.Observe.InfiniteStuttering.prefix_indices._proof_1_7	Quot.sound propext
++ConcreteSpec.Core.Observe.InfiniteStuttering.prefix_indices._proof_1_8	Quot.sound propext
++ConcreteSpec.Core.Observe.InfiniteStuttering.prefix_indices._proof_1_9	Quot.sound propext
++ConcreteSpec.Core.Observe.InfiniteStuttering.visiblePrefix_at	Quot.sound propext
++ConcreteSpec.Core.Observe.InfiniteStuttering.visiblePrefix_at._proof_1_1	Quot.sound propext
++ConcreteSpec.Core.Observe.InfiniteStuttering.visiblePrefix_at._proof_1_2	Quot.sound propext
++ConcreteSpec.Core.Observe.InfiniteStuttering.visiblePrefix_at._proof_1_3	Quot.sound propext
++ConcreteSpec.Core.Observe.InfiniteStuttering.visiblePrefix_at._proof_1_4	Quot.sound propext
++ConcreteSpec.Core.Observe.Observation.mk.inj	
++ConcreteSpec.Core.Observe.Observation.mk.injEq	propext
++ConcreteSpec.Core.Observe.Observation.mk.sizeOf_spec	
++ConcreteSpec.Core.Observe.OperationContract.mk.inj	
++ConcreteSpec.Core.Observe.OperationContract.mk.injEq	propext
++ConcreteSpec.Core.Observe.OperationContract.mk.sizeOf_spec	
++ConcreteSpec.Core.Observe.PrefixEventually.refl	propext
++ConcreteSpec.Core.Observe.PrefixEventually.trans	propext
++ConcreteSpec.Core.Observe.RequestResponse.kind	
++ConcreteSpec.Core.Observe.Responds.allows	
++ConcreteSpec.Core.Observe.Responds.matches	
++ConcreteSpec.Core.Observe.SameInfiniteObservation.refl	propext
++ConcreteSpec.Core.Observe.SameInfiniteObservation.symm	
++ConcreteSpec.Core.Observe.SameInfiniteObservation.trans	propext
++ConcreteSpec.Core.Observe.SameObservation._sparseCasesOn_1.else_eq	propext
++ConcreteSpec.Core.Observe.SameObservation._sparseCasesOn_2.else_eq	propext
++ConcreteSpec.Core.Observe.SameObservation._sparseCasesOn_3.else_eq	propext
++ConcreteSpec.Core.Observe.SameObservation.eq_1	propext
++ConcreteSpec.Core.Observe.SameObservation.eq_2	propext
++ConcreteSpec.Core.Observe.SameObservation.eq_3	propext
++ConcreteSpec.Core.Observe.SameObservation.eq_4	propext
++ConcreteSpec.Core.Observe.SameObservation.refl	propext
++ConcreteSpec.Core.Observe.SameObservation.symm	propext
++ConcreteSpec.Core.Observe.SameObservation.trans	propext
++C
+oncreteSpec.Core.Observe.SilentInsertion.brecOn	
++ConcreteSpec.Core.Observe.SilentInsertion.visible	
++ConcreteSpec.Core.Observe.Step.emit.inj	
++ConcreteSpec.Core.Observe.Step.emit.injEq	propext
++ConcreteSpec.Core.Observe.Step.emit.sizeOf_spec	
++ConcreteSpec.Core.Observe.Step.event?.eq_1	
++ConcreteSpec.Core.Observe.Step.event?.eq_2	
++ConcreteSpec.Core.Observe.Step.silent.sizeOf_spec	
++ConcreteSpec.Core.Observe.StepIndexIncreasing.apply_le	Quot.sound propext
++ConcreteSpec.Core.Observe.StepIndexIncreasing.apply_le._proof_1_1	Quot.sound propext
++ConcreteSpec.Core.Observe.StepIndexIncreasing.monotone	Quot.sound propext
++ConcreteSpec.Core.Observe.StepIndexIncreasing.monotone._proof_1_1	Quot.sound propext
++ConcreteSpec.Core.Observe.StepIndexIncreasing.monotone._proof_1_2	Quot.sound propext
++ConcreteSpec.Core.Observe.StepIndexIncreasing.strict	Quot.sound propext
++ConcreteSpec.Core.Observe.StepIndexIncreasing.strict._proof_1_1	Quot.sound propext
++ConcreteSpec.Core.Observe.StepIndexIncreasing.strict._proof_1_2	Quot.sound propext
++ConcreteSpec.Core.Observe.Terminal.exited.inj	
++ConcreteSpec.Core.Observe.Terminal.exited.injEq	propext
++ConcreteSpec.Core.Observe.Terminal.exited.sizeOf_spec	
++ConcreteSpec.Core.Observe.Terminal.startupRefused.sizeOf_spec	
++ConcreteSpec.Core.Observe.Terminal.trapped.inj	
++ConcreteSpec.Core.Observe.Terminal.trapped.injEq	propext
++ConcreteSpec.Core.Observe.Terminal.trapped.sizeOf_spec	
++ConcreteSpec.Core.Observe.ValidTrace.answer_projection	propext
++ConcreteSpec.Core.Observe.ValidTrace.brecOn	
++ConcreteSpec.Core.Observe.ValidTrace.outputs	propext
++ConcreteSpec.Core.Observe.blocked_silent_internal_steps	propext
++ConcreteSpec.Core.Observe.byteColumn.eq_1	
++ConcreteSpec.Core.Observe.byteColumn_tab	Quot.sound propext
++ConcreteSpec.Core.Observe.full_observation_preservation	propext
++ConcreteSpec.Core.Observe.infinite_not_termination	propext
++ConcreteSpec.Core.Observe.infinite_silent_not_termination	propext
++ConcreteSpec.Core.Observe.infinite_stuttering	Quot.sound propext
++ConcreteSpec.Core.Observe.output_before_trap_kept	Classical.choice Quot.sound propext
++ConcreteSpec.Core.Observe.reportObservation.eq_1	Classical.choice Quot.sound propext
++ConcreteSpec.Core.Observe.report_noAnswer_blocked	Classical.choice Quot.sound propext
++ConcreteSpec.Core.Observe.report_noAnswer_mayBlock	propext
++ConcreteSpec.Core.Observe.report_outOfFuel_none	Classical.choice Quot.sound propext
++ConcreteSpec.Core.Observe.runFrom_blockingPermitted	Quot.sound propext
++ConcreteSpec.Core.Observe.runFrom_noAnswer_pending_valid	Quot.sound propext
++ConcreteSpec.Core.Observe.runFrom_validTrace	Quot.sound propext
++ConcreteSpec.Core.Observe.silent_internal_steps	propext
++ConcreteSpec.Core.Observe.stepsObservation.eq_1	Classical.choice Quot.sound propext
++ConcreteSpec.Core.Observe.trapLine.eq_1	Classical.choice Quot.sound propext
++ConcreteSpec.Core.Observe.trapLineChars.eq_1	Classical.choice Quot.sound propext
++ConcreteSpec.Core.Observe.trapLine_injective	Classical.choice Quot.sound propext
++ConcreteSpec.Core.Observe.trapTerminal.eq_1	Classical.choice Quot.sound propext
++ConcreteSpec.Core.Observe.trap_line_uses_byte_columns	Classical.choice Quot.sound propext
++ConcreteSpec.Core.Observe.visible.eq_1	
++ConcreteSpec.Core.Observe.visiblePrefix.eq_1	
++ConcreteSpec.Core.Observe.visiblePrefix_prefix	Quot.sound propext
++ConcreteSpec.Core.Observe.visiblePrefix_prefix._proof_1_1	Quot.sound propext
++ConcreteSpec.Core.Observe.visiblePrefix_prefix._proof_1_2	Quot.sound propext
++ConcreteSpec.Core.Observe.visiblePrefix_succ	Quot.sound propext
+ ConcreteSpec.Core.OutOfRange.ofNat_ctorIdx	
+ ConcreteSpec.Core.OutOfRange.outOfRange.sizeOf_spec	
+ ConcreteSpec.Core.Res.bind.eq_1	
+@@ -1694,6 +1863,7 @@ ConcreteSpec.Core.SliceId.mk.injEq	propext
+ ConcreteSpec.Core.SliceId.mk.sizeOf_spec	
+ ConcreteSpec.Core.Span.col_pos	
+ ConcreteSpec.Core.Span.line_pos	
++ConcreteSpec.Core.Span.mk.congr_simp	
+ ConcreteSpec.Core.Span.mk.inj	
+ ConcreteSpec.Core.Span.mk.injEq	propext
+ ConcreteSpec.Core.Span.mk.sizeOf_spec	
+@@ -1707,6 +1877,7 @@ ConcreteSpec.Core.TheoremId.mk.inj
+ ConcreteSpec.Core.TheoremId.mk.injEq	propext
+ ConcreteSpec.Core.TheoremId.mk.sizeOf_spec	
+ ConcreteSpec.Core.TrapKind.abort.sizeOf_spec	
++ConcreteSpec.Core.TrapKind.all.eq_1	
+ ConcreteSpec.Core.TrapKind.divisionByZero.sizeOf_spec	
+ ConcreteSpec.Core.TrapKind.invalidRange.sizeOf_spec	
+ ConcreteSpec.Core.TrapKind.invalidShift.sizeOf_spec	
+@@ -2927,6 +3098,61 @@ _private.ConcreteSpec.Proofs.Observe.0.ConcreteSpec.retOutcome.match_1.eq_4	prop
+ _private.ConcreteSpec.Proofs.Observe.0.ConcreteSpec.runBody.match_1.eq_1	
+ _private.ConcreteSpec.Proofs.Observe.0.ConcreteSpec.runBody.match_1.eq_2	
+ _private.ConcreteSpec.Proofs.Observe.0.ConcreteSpec.runBody.match_1.eq_3	
++_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.Exec.runFrom.match_1.eq_1	
++_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.Exec.runFrom.match_1.eq_2	
++_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.Exec.runFrom.match_3.eq_1	
++_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.Exec.runFrom.match_3.eq_2	
++_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.Exec.runFrom.match_5.eq_1	
++_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.Exec.runFrom.match_5.eq_2	
++_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.Exec.runFrom.match_5.eq_3	
++_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.Exec.runFrom.match_7.eq_1	
++_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.Exec.runFrom.match_7.eq_2	
++_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.Exec.runFrom.match_7.eq_3	
++_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.Exec.runFrom.match_9.eq_1	
++_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.Observe.ExecAdapter.terminal?.match_1.eq_1	
++_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.Observe.ExecAdapter.terminal?.match_1.eq_2	
++_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.Observe.ExecAdapter.terminal?.match_1.eq_3	
++_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.Observe.HasFullObservation.match_1.eq_1	propext
++_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.Observe.HasFullObservation.match_1.eq_2	propext
++_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.Observe.HasFullObservation.match_1.eq_3	propext
++_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.Observe.HasFullObservation.match_1.eq_4	propext
++_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.Observe.HasFullObservation.match_1.eq_5	propext
++_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.Observe.SameObservation.match_1.eq_1	propext
++_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.Observe.SameObservation.match_1.eq_2	propext
++_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.Observe.SameObservation.match_1.eq_3	propext
++_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.Observe.SameObservation.match_1.eq_4	propext
++_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.Observe.Step.event?.match_1.eq_1	
++_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.Observe.Step.event?.match_1.eq_2	
++_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.Observe.decodeKind.eq_1	Classical.choice Quot.sound propext
++_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.Observe.decodeKind_render	Classical.choice Quot.sound propext
++_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.Observe.decodeKinds.eq_1	Classical.choice Quot.sound propext
++_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.Observe.decodeKinds.eq_2	Classical.choice Quot.sound propext
++_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.Observe.decodeKinds.eq_def	Classical.choice Quot.sound propext
++_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.Observe.decodeKinds.match_1.eq_1	
++_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.Observe.decodeKinds.match_1.eq_2	
++_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.Observe.decodeKinds.match_3.eq_1	
++_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.Observe.decodeKinds.match_3.eq_2	
++_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.Observe.decodeTrapLine.eq_1	Classical.choice Quot.sound propext
++_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.Observe.decodeTrapLine_render	Classical.choice Quot.sound propext
++_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.Observe.decodeWithKind_render	Classical.choice Quot.sound propext
++_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.Observe.linePrefix.eq_1	Classical.choice Quot.sound propext
++_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.Observe.parseRevNat.eq_1	
++_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.Observe.parseRevNat_digits	Classical.choice Quot.sound propext
++_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.Observe.stripPrefix.eq_1	
++_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.Observe.stripPrefix.eq_2	
++_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.Observe.stripPrefix.eq_3	
++_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.Observe.stripPrefix.eq_def	
++_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.Observe.stripPrefix.match_1.eq_1	
++_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.Observe.stripPrefix.match_1.eq_2	
++_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.Observe.stripPrefix.match_1.eq_3	
++_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.Observe.stripPrefix_append	propext
++_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.Observe.trapLineChars_prefix	Classical.choice Quot.sound propext
++_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.instReprTrapKind.repr.match_1.eq_1	
++_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.instReprTrapKind.repr.match_1.eq_2	
++_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.instReprTrapKind.repr.match_1.eq_3	
++_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.instReprTrapKind.repr.match_1.eq_4	
++_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.instReprTrapKind.repr.match_1.eq_5	
++_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.instReprTrapKind.repr.match_1.eq_6	
+ _private.ConcreteSpec.Proofs.Rep.0.ConcreteSpec.Rep.Ty.size.match_3.eq_1	
+ _private.ConcreteSpec.Proofs.Rep.0.ConcreteSpec.Rep.Ty.size.match_3.eq_2	
+ _private.ConcreteSpec.Proofs.Rep.0.ConcreteSpec.Rep.decodeNat.match_1.eq_1	
+
+
+• Oops command diff axioms from original shows merge modifications; intended. Fine. Should have no manual edit, not in response. Status clean.
+
+  Perhaps inspect no accidental changed after tests yes status clean. Mark done.Now final response detailed. Must list commits full SHA one line, conflicts/resolutions, per item changed + witnesses, checks, questions None. Mention no push, clean tree. Also axioms golden merged from spec-core not edited after merge. Perhaps conflicted files only README Spec.lean. Golden auto merged and retained incoming spec-core content; no manual edit. Item 1 c1 restoration theorem derives final step cases life bind, tied to entry. (a) explicit accepted c1ExplicitCall plus restoration example lines 440; (b) bad continuation negated conclusion line484. Item2 (a) Unit fallthrough line462 and explicit line436; (b) incomplete line474 and perhaps bad restoration. Item3 (a) correct pair example line612; (b) wrong receipt line619 plus spec FFI examples. Mention keptPair.WellFormed redundant conjuncts dropped chosen. Checks exact. Build succeeded 47 jobs, rules pass32, trust23. Heavy not run perhaps not needed but can state. Commits merge includes resolution only, build prior. Full SHAs.
+
+  No "what left out why" round4 only QUESTIONS. Could say no additional omissions. Ensure response not overly long. Use headings light.
+
+• Implemented Round 4 on `wip/spec-c10`; the worktree is clean and nothing was pushed.
+
+  ### Commits
+
+  - `f5f46bef1b091528010ac165d9dad8663deb0469` — Merge `origin/wip/spec-core`, retaining both C6 and C10.
+  - `98b87c7fd87a030484b2b080bd971e3ac23e98d6` — Derive C1 caller restoration from actual return steps and support Unit fall-through.
+  - `c591c57825fb604a2f36f74c2f046aa39f52ec83` — Remove redundant kept-pair validity conjuncts and prove endpoint validity.
+
+  ### Merge conflicts
+
+  - `ConcreteSpec/README.md` — combined C6 and C10 documentation; remaining contracts are C5 and C7–C9.
+  - `ConcreteSpec/Spec.lean` — retained `Observe`, `Frame`, and both module descriptions.
+  - `scripts/proofs/axioms.golden` merged cleanly from spec-core and was not subsequently edited or regenerated.
+
+  ### Changes and witnesses
+
+  1. **Caller restoration**
+     - Removed the assumed `exit` conjuncts from `C1Call`.
+     - `c1Call_restores_caller` at `ConcreteSpec/Proofs/Frame.lean:360` now names the exact entry statement, destination, caller locals, and continuation, deriving the exit shape from the final step by case-splitting `.leave` and destination-bind instrumentation.
+     - **(a)** Explicit-return call and restoration examples at `ConcreteSpec/Proofs/Frame.lean:436`.
+     - **(b)** The bad-continuation example at `ConcreteSpec/Proofs/Frame.lean:484` negates the restoration conclusion itself.
+
+  2. **Unit fall-through**
+     - `C1Call` now accepts either an explicit `.exiting (.ret …)` boundary or a Unit `.done` boundary, each followed by its actual final pop step.
+     - **(a)** Unit fall-through example at `ConcreteSpec/Proofs/Frame.lean:462`; explicit return remains covered at line 436.
+     - **(b)** Incomplete-call rejection at `ConcreteSpec/Proofs/Frame.lean:474`, together with the bad-exit counterexample at line 484.
+
+  3. **Kept-pair validity**
+     - Chose to drop the redundant `ExternResult.Valid` conjuncts.
+     - `keptPair_results_valid` at `ConcreteSpec/Proofs/Frame.lean:601` derives both endpoint validities from the exact receipt/owned result constraints.
+     - **(a)** Correctly paired declarations at `ConcreteSpec/Proofs/Frame.lean:612`.
+     - **(b)** A receipt for the wrong handle fails both well-formedness and endpoint validity at line 619; malformed FFI result examples remain in the specification.
+
+  ### Checks
+
+  - `lake build ConcreteSpec` — passed, 47 jobs.
+  - `scripts/spec/rules.sh` — **PASS=32 FAIL=0**.
+  - `scripts/proofs/trust_ban.sh` — **PASS=23 FAIL=0**, including all 311 examples.
+
+  **QUESTIONS:** None.
+
+To resume this session: kimi -r session_cefcf18b-31bd-498f-b3db-cdc87606d455
+[unexpected] RuntimeError: workspace wd_c10_5f2d53c9265a is not materialized
+    at RuntimeResolver.acquire (/home/runner/work/kimi-code/kimi-code/apps/kimi-code/dist-native/intermediates/main.cjs:180498:36)
+    at AgentRuntimeService.acquire (/home/runner/work/kimi-code/kimi-code/apps/kimi-code/dist-native/intermediates/main.cjs:132231:25)
+    at AgentFileHistoryService.readCurrent (/home/runner/work/kimi-code/kimi-code/apps/kimi-code/dist-native/intermediates/main.cjs:177606:31)
+    at AgentFileHistoryService.endCheckpoint (/home/runner/work/kimi-code/kimi-code/apps/kimi-code/dist-native/intermediates/main.cjs:177519:32) {
+  code: 'runtime.not_found'
+}
+kimi rc=0

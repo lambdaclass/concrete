@@ -1,0 +1,12 @@
+All six round-1 findings are cleanly resolved:
+
+1. **Commit-push row & remotes (`AGENTS.md:99-102`, `docs/decisions.md:75,1381-1384`, `changelog.d/2026-11-08-record-signoffs.md:12-14`)**: Updated to push to "the push remotes in force" (`origin` and `lambdaclass` today; `lambdaclass/concrete` once one-repository lands), reconciling the row with `AGENTS.md` and `#decided-2026-11-08-landing-redesign`.
+2. **Writers row scope (`docs/decisions.md:1387-1388`, `AGENTS.md:78-85`, `changelog.d/2026-11-08-record-signoffs.md:16-17`)**: Trimmed the decision record and changelog to the owner's quote and its direct meaning; moved the operational writer rules into `AGENTS.md` with `bounded_run` (never GNU `timeout`).
+3. **Quota row revision note (`docs/decisions.md:1129-1131`)**: Added the revision note cross-referencing `#decided-2026-11-08-writers`.
+4. **P5 anchor (`docs/decisions.md:300,1395`)**: Added `<a id="decided-2026-11-05-p5"></a>` on P5 and updated the sweep row link to target it.
+5. **Sweep & archive-move revisions (`ROADMAP.md:76-78,93-98,489,540,589`)**: Updated rules-in-force, R-0562, R-0590, and R-0558 with revision notes linking `#decided-2026-11-08-legacy-sweep` and `#decided-2026-11-08-archive-move`.
+6. **Roadmap placement & dependencies (`ROADMAP.md:180,487,604`)**: Added the `T3` queue row for R-0628, R-0629, and R-0631; anchored R-0630 at slice 0 (`B0`); and moved the sweep-check prerequisite into R-0631's acceptance criteria with `—` in the dependency column.
+
+No new issues found.
+
+VERDICT: ACCEPT

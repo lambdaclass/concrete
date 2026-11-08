@@ -1,0 +1,7 @@
+All six round-1 findings are resolved. The owner answers are faithfully recorded; R-0620 waits for R-0622’s approved Lean grammar; R-0623 preserves the owner’s future target decision. The roadmap task dependencies are acyclic.
+
+One anchor regression remains:
+
+- **ROADMAP.md:287** — `questions-for-the-core-session` now precedes “Std per slice,” so existing links from decisions.md and PHILOSOPHY.md land at the wrong section. The explicit anchor also duplicates the later heading’s generated anchor. **Fix:** move the explicit anchor immediately before “Questions for the Core session” at line 332.
+
+VERDICT: REVISE

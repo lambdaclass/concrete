@@ -1,0 +1,14 @@
+### Items 1–58
+
+- **1–5 (A. Process):** **AGREE.**
+- **6–18 (B. Language simplifications):** **AGREE.** *(Note on 11 and 13: removing expression `as` casts also removes the `as` operator row from the precedence table in 42, while `as` remains in import renaming (44) and decided scoped `borrow ... as ...` headers (37 / Q4.7); `assume(e);` should share `assert(e);`'s parenthesized form while kept under 24.)*
+- **19–29 (C. Removals and keeps):** **AGREE.**
+- **30–39 (D. Grammar items all agreed):** **AGREE.**
+- **40–53 (E. Grammar choices):** **AGREE.**
+- **54–58 (F. Later, no decision now):** **AGREE.**
+
+### Missing Decisions
+
+- **None.** All round-1 objections and open grammar/spelling follow-ups are accounted for in the revised items and the scheduled before/after pass in item 55.
+
+ANSWER: DISAGREE=none; MISSING=none

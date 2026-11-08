@@ -1,0 +1,12 @@
+Concrete is a systems language rebuilt as a fully proven compiler in Lean. There is no GC; the goal is "know everything" about a program. Ownership is linear: non-Copy values are used exactly once, and Copy is declared and checked, never derived. References are second-class: never returned, with borrow views. Capabilities are explicit grants handed to main. `Secret<T>` gives constant time, and only scalar secrets are Copy. There are no hidden traps: every run-time failure is either proven impossible or explicit (checked_* returning Result<T, ArithmeticError>, abort()). The decided trap line is "concrete: trap: <kind> at <path>:<line>:<col> (site <id>)", with exit 134. Struct layout is declaration order with natural alignment. Backends: an LLVM printer (x86-64, AArch64) and the Lean Compiler Backend (verified, AArch64 first). The Lean spec is the only home of rules. Owner principles: best long-term design; one form per situation, no duplication; LLMs write the code and humans read it, so optimize for checking and reading; work is driven by real workloads; verbose is fine when clear.
+
+You may read the repository (docs/decisions.md authoritative, ConcreteSpec/, legacy/docs/spec/, legacy/ parser) to check. The sheet is at _review/GRAMMAR_REVIEW.md. Do not modify files.
+
+Review the grammar review sheet GRAMMAR_REVIEW.md for the owner. It is the full surface grammar of Concrete, written before the grammar is encoded in Lean and the parser is built. The owner personally approves every spelling. Check:
+(1) every construct marked as decided really is decided by the cited row, with the spelling exactly as that row says;
+(2) every OPEN item really is undecided, and its recommendation is the best choice under the owner principles (one form per situation; clarity for readers over writing effort; LL(1); no hidden behaviour);
+(3) the LL(1) analysis is correct and complete: list any missed FIRST/FIRST or FIRST/FOLLOW conflict;
+(4) constructs that are missing or wrongly included;
+(5) the refusal list.
+Report errors only, each in at most 50 words with a citation. Then give your choice for each numbered OPEN item (agree, or your alternative, in one line each).
+End with exactly: ANSWER: ERRORS=<count>; OPEN_DISAGREE=<item numbers or none>

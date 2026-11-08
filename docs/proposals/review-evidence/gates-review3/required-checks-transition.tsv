@@ -1,0 +1,7 @@
+# The required-checks transition of the legacy/ move (R-0558, R-0563): one row per job the base's
+# required-checks.txt names and this tree's does not. scripts/land/required_checks.py reads it at train
+# watch and land: replacements must each be in required-checks.txt (so they run and are checked at
+# the exact SHA), and `-` retires the job with a reason; a retired job is reported NOT RUN, never passed.
+# "Root checks" keeps its name and is required on both sides, so it has no row. Delete a row once main
+# no longer requires its job (required_checks.py reports it stale).
+old_job	replacements	reason

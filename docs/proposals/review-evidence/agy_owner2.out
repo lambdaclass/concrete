@@ -1,0 +1,11 @@
+All six Round 1 findings are cleanly and completely resolved in the delta:
+
+1. **Post-launch load address (`scripts/checks/lib/stack_measure_lldb.py:53-55`):** `entry.GetLoadAddress(target)` is now read after `target.Launch(...)` and checked against `lldb.LLDB_INVALID_ADDRESS`.
+2. **Exact symbol-entry breakpoint (`scripts/checks/lib/stack_measure_lldb.py:35-40`):** Resolves the single `eSymbolTypeCode` symbol for `main` and breaks via `BreakpointCreateBySBAddress(entry)`, avoiding prologue skipping so both `sp0` and the ASLR slide (`main_rt - main_lo`) are exact.
+3. **AArch64 return detection and stop-reason whitelist (`scripts/checks/lib/stack_measure_lldb.py:70-72, 88, 98-99`):** Captures `lr` at entry and detects return when `pc == caller and sp == sp0` (alongside `sp > sp0`), and restricts valid stops to `eStopReasonBreakpoint`, `eStopReasonPlanComplete`, and `eStopReasonTrace`.
+4. **Unconditional `bounded_summary` and `INCOMPLETE` exit conversion (`scripts/checks/lib/slice0_common.sh:25-29`, `scripts/checks/slice0_repro.sh:24-28`, `scripts/checks/slice0_trusted_base.sh:121`):** The `EXIT` trap emits `bounded_summary` to the gate's stdout and turns any `rc=0` exit with an `incomplete` or `runner-failed` entry in `BOUNDED_LOG` into exit code `3`.
+   - *Preference (`scripts/checks/lib/slice0_common.sh:26`, `scripts/checks/slice0_repro.sh:25`):* `grep -Eqs "^(incomplete|runner-failed)"` would avoid relying on BRE `\|` extension and double-inside-single-quote backslash escaping (`"\\|"`), though the current form works on both GNU and macOS BSD `grep`.
+5. **Documentation alignment (`Concrete/README.md:387, 430, 491, 720-723`):** Updates `LCB.adapt` / `adapter_correct` references to `LCB.emit` / `emit_correct` and documents `bounded_run` semantics and the outer CI `timeout` role.
+6. **Emitted trap table lookup (`scripts/checks/slice0_bir.lean:74`):** Looks up `.trapped s` in the emitted `tbl` rather than `p.sites`.
+
+VERDICT: ACCEPT

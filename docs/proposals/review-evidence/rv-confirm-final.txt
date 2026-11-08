@@ -1,0 +1,46 @@
+
+codex
+Both claims are confirmed. I only read files; no review, edits, commits, or pushes were performed.
+
+**Claim 1 — exact prompt is not persisted**
+
+- `scripts/review/review.sh:242–275` constructs the prompt dynamically, including previous findings and `--prompt-extra`.
+- Lines **295–296** pass it directly as a command argument, with the diff supplied separately through stdin. Neither input is explicitly saved.
+- Lines **317–321, 332–335, 348** write metadata and reviewer responses to `.review/<sha>-<round>.md`; they do not write the prompt.
+- Lines **387–406** save verdict metadata and non-clean findings in git notes, without the prompt.
+- Lines **84–85** delete the temporary working directory on exit. The invocation also uses `--ephemeral` at line 295.
+
+The three supplied samples contain metadata and responses, with no request transcript. **The script persists no exact sent prompt**, so its records cannot reproduce the request verbatim.
+
+CLAIM 1: CONFIRMED — The prompt is constructed and sent directly but omitted from both the persistent raw output and git notes.
+
+**Claim 2 — repository-access failure still qualifies as clean**
+
+The exact invocation at **`scripts/review/review.sh:295–296`** is:
+
+```bash
+GIT_OPTIONAL_LOCKS=0 "$CODEX_BIN" exec --sandbox read-only --ephemeral --color never -C "$ROOT" -o "$out" \
+  "$(prompt_for "$kind" "$label" "$group" "$paths")" <"$piece" >"$log" 2>&1 || rc=$?
+```
+
+The fault is in how completion is judged:
+
+- **Lines 300–303:** exit status zero plus a final `VERDICT: clean` immediately sets `LAST_RESULT=clean`, before checking refusal text. There is no repository-access success check or sandbox-failure check.
+- **Line 336:** only `refused`, `noverdict`, and `error` trigger retries; these clean responses bypass that path.
+- **Lines 378–395:** zero blocked pieces and zero findings produce and record `verdict: clean`.
+- **`scripts/review/verify.sh:35–63, 68`:** the verifier validates the six metadata fields and accepts `clean`; it does not inspect reviewer output or repository-access evidence.
+- **`scripts/land/train.sh:512, 1033–1037`:** that successful verification qualifies as review provenance for landing.
+
+The supplied outputs demonstrate the failure:
+
+| Evidence | Repository-access failure | Recorded round |
+|---|---|---|
+| `sample-4d16e26f.md` | Lines 9, 17: sandbox could not start | Line 21: clean, 0 blocked |
+| `sample-b7f30d36.md` | Lines 9, 19: repository verification failed | Line 23: clean, 0 blocked |
+| `sample-fce6644d.md` | Line 17 explicitly reports `bwrap: Operation not permitted`; lines 9, 25, 33 report unavailable context | Line 37: clean, 0 blocked |
+
+Recounting all **112 rows** in `REVIEW_SCAN.txt`: **59 clean outputs**, of which **42 have `sandbox>0` — 42/59 (71.2%)**. This confirms the supplied scan’s count; the samples substantiate the reported host failure without rerunning it. The code establishes that the resulting notes qualify for provenance, although these files alone do not prove an actual landing occurred.
+
+CLAIM 2: CONFIRMED — Reported sandbox startup failures leave repository context unread, yet a zero-exit response ending in `VERDICT: clean` becomes a clean note that the train accepts as review provenance.
+tokens used
+36,784

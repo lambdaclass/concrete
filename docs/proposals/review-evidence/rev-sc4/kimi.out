@@ -1,0 +1,20 @@
+• I’ll compare both diffs with the round-1 findings, then audit `Target.lean` and the rule-gate implementation for unresolved contracts or bypasses.
+
+• The round-1 fixes are present. I’m checking the new profile against C3 and the owner-decision records, and examining the scanner’s treatment of malformed citations and Lean syntax rather than only its listed controls.
+
+• One possible remaining gate issue is whether two doc comments can make a single Lean `example` supply both verdicts. I’m testing that and other adversarial cases entirely in memory, with bytecode writing disabled.
+
+• The Lean kernel rejects consecutive doc comments, so that candidate is not a valid-source bypass. The profile examples themselves are sound; I’m now checking edge cases in row recognition and confirming the few documentation/contract concerns against the actual inventories.
+
+• The remaining concerns are in `Target.lean`’s contract/provenance, not the gate mechanics. I’m doing one final read-only regression pass over the repaired gate cases before issuing the verdict.
+
+• 1. `ConcreteSpec/Spec/Target.lean:77-84` — **defect:** the comment says `maxObject < 2 ^ addrBits` ensures that an object’s one-past address fits, but without a base-address bound it does not. For example, `linuxX8664` permits size `2^64 − 1`; at base 1, the one-past address is `2^64`, which is unrepresentable.  
+     **Fix:** state only the profile-level size bound here and leave `base + size ≤ 2^addrBits − 1` as a per-block memory obligation, or formalize that obligation with a base address.
+
+  2. `ConcreteSpec/Spec/Target.lean:7-21` — **defect:** the cited authorities are absent or inconsistent in this branch. `docs/proposals/FOUNDATION.md` does not exist; `docs/decisions.md` contains no 2026-11-08 owner decision answering questions 3 and 7; and section 6 step 3 of `SPEC_UNIFICATION.md:899-902` describes `Types`, not `Target`. Thus the claimed C3 contract and owner-approved generalizations cannot be verified from the delivered tree.  
+     **Fix:** land and cite the C3 contract and the owner-decision row, and update the plan’s step numbering/description to include `Target`, or correct these references before landing.
+
+  All six round-1 findings are resolved or explicitly scoped. The Target examples elaborate successfully, and the module does not decide column units, trap kinds, or `Secret<T>` layout. Read-only in-memory regression probes confirmed distinct examples, quoted-name and unknown-row rejection, stray-verdict rejection, and attributed examples; I found no remaining rule-gate bypass.
+
+  VERDICT: REVISE
+

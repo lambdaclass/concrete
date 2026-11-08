@@ -1,0 +1,406 @@
+kimi version 2.4.1
+• Kimi needs to respond with a comprehensive language review max 12 candidates, decided anchors. Should read grammar sheet entire, decisions, philosophy, spec relevant. No modifications. Must not ask. Should have tools read parallel. First inspect grammar review, perhaps size.
+
+• I’ll audit the grammar against the owner decisions and normative Lean spec, then separate real simplifications from deliberate distinctions.
+
+• I have grammar all. Should decide candidates. I need thoroughly audit decisions, spec, legacy. Perhaps ask to produce high quality 12. Should not just grammar punctuation proposed vs decided. Candidate ideas emerging:
+  1 Arithmetic families duplication wrapping/saturating vs plain checked with evidence vs checked_ Result. Are they justified? Different semantics intentional KEEP.
+  2 Array repeat [e;N] and list [a,b] same job? repeat restricted Copy, eval once, concise clear. Not duplicate, KEEP.
+  3 field shorthand puns vs explicit f:f violates one form per situation? Two ways to construct same struct and destructuring shorthand/renaming. Strong remove puns. Anchor OD77 / OPEN-20 currently recommendation, not decided. User asks whole language and decided row revise. Could say WORTH ASKING because field puns are undecided, don't admit. Also let destructuring field rename shorthand two forms? `S {x}` vs `S{x:x}` same. Proposed OPEN-17. Strong likely candidate: remove field puns everywhere; one explicit `field: expr`, binder perhaps `field: name`; anchors OD77/OD84 and grammar OPEN-20. Costs writing only, loss concision no semantic. STRONG perhaps.
+  4 Method call `x.m()` vs qualified `Trait::method(&x)` duplication. But methods static bound vs qualified disambiguation; not same situation except unambiguous. One form per situation: could remove method syntax and require associated/qualified calls? Current explicit borrow requirement already `(&s).m()`, and `Trait::method(&x)` gives same. Inherent methods? `Type::method` via path perhaps. Method call is second spelling with dot, parser burdens, generic method tail. Is trait method call useful for readability but owner one form principle suggests strong candidate remove method call sugar, use `Type::method` / `Trait::method`. Should anchor OD6 and OD32, grammar OPEN-12. However inherent associated calls? `Type::method` accepted? Grammar path neutral, methods by named type. Could propose retain only explicit associated/qualified calls, remove receiver sugar and `self` special parameter, use named first param? That is broad. In traits, static dispatch based on type perhaps qualified `Trait::method(&x)` works. Inherent methods `Type::method`. Function receiver no special syntax, though `self` contextual as receiver. Loss ergonomic namespacing and UFCS familiarity, generic code longer, but explicitness good. Proof burden slight only elaboration, not deep. STRONG or WORTH ASKING. Since decided OD6 has both? Should read OD6 and legacy traits. I'll inspect targeted decisions. Also cleanup:
+  5 Destroy trait + `destroy` + `defer` + scoped borrow + linear exact use; defer is separate cleanup timing mechanism necessary. Destroy trait and `drain` map_into not duplicates, different ownership needs KEEP. But Q2.2 exactly 16 Destroy impls, Copy/Destroy overlapping coherence special case huge complexity. Could simplify container cleanup by removing Destroy trait implementations for containers of Copy? Wait Copy payload can just drop as part of consuming container, no per-element destroy, storage release. Generic `destroy` needs Alloc capability. Two impl sets for T Copy and T Destroy needed for typeclass no disjunction. Could avoid trait/coherence exception with named specializations? One `Destroy` bound requiring container payload `Destroy`, and separate named `release` for Copy containers? That adds API duplicates. Alternative make Copy types all Destroy? Copy means only duplication, and Destroy cleanup separate; blanket impl Copy Destroy conflicts user impl and semantic resource? Copy values can be freely dropped; `destroy` consuming can no-op contents. Could define one generic Destroy container impl with runtime/type-directed branch if T Copy or Destroy -> disjunction. Current explicit 16 impls verbose but regular, no disjunctive syntax. Not propose perhaps KEEP.
+  6 Traits generally cost vs value. Non-generic traits + impl + method overloading + coherence/orphan + Copy/Destroy special disjointness; showcases can use generics and direct functions. But traits needed bounded generics? only Copy built-in and Destroy custom. User traits perhaps abstraction useful real programs. Could remove user-defined traits and methods, keep Copy marker and explicit destroy functions. Would hugely simplify spec, proof, resolution, special coherence. Loss generic reuse and showcase interfaces. Is this strongest candidate WORTH ASKING. Should anchor OD6, OD28, OD60, OD148 Q2.8. Workloads EVM/KV may need interfaces but monomorphization generics with function context possible. Real long-term systems language likely traits valuable and static no dynamic dispatch. User asks b cost exceeds value showcases. Candidate: defer user-defined traits until workload pull; not necessarily permanent removal. WORTH ASKING.
+
+  7 Raw pointers + trusted + Unsafe necessary FFI / RocksDB, KEEP. Function values + explicit context and indirect call vs traits/generics: needed EVM/web server callbacks and drain/map_into use fn types. KEEP.
+  8 Generics + function values + traits overlapping parametric polymorphism. Different jobs KEEP.
+  9 StaticStr, String<A>, text views, char and arrays/views: StaticStr vs String are different ownership, static vs alloc; View types can unify arrays/text/heap views already unified borrow. KEEP unified one scoped borrow Q4.7/Q9.5.
+  10 References `&T` expression and borrow statement `borrow x as r`: two ways to borrow same place? Important. `borrow` statement ordinary reference borrows and unary `&place` / `&mut place` used for call parameters, method receiver. Scoped `borrow` holds ref binding over block, references can be passed downward. This is duplication in introduction mechanisms. Could eliminate `borrow` no-range form and use `let r = &x`? But references second-class and lifetime scoped, `let` ref binding would extend scope; borrow blocks explicit extent and avoid lifetime. `&place` is temporary downward call only (not bindable? Should legacy refs). If & expressions cannot be bound or returned, they are call arguments; scoped borrow for named held reference and heap/text/range. Different situations. KEEP with reason. Could perhaps simplify `borrow` no-range vs `&place` but intentional.
+  11 `View<T>` / `ViewMut<T>` vs `&[T]` open. Recommend distinct View due unsized form, no extra reference category. KEEP recommendation.
+  12 Capability parameters vs grants/resources duplication. `with(Fs)` plus Dir grant both needed authority and linear resource; KEEP. `give_up` vs consuming close_dir? `give_up` general explicit abandon permission? Should inspect authority Q7 spec. Perhaps `give_up` duplicates linear consumption? Capability is compile-time set, give_up resource? Could be dropping grant explicitly without closing? Should understand. Read decisions later authority and spec Authority.
+  13 `const` and `spec fn` duplication compile-time pure values. const runtime initializer evaluated each use, spec fn pure total contracts possibly also runtime? spec functions erased only. Distinct.
+  14 `ghost let` vs spec fn: local proof state vs reusable pure definition distinct.
+  15 `assert` vs `assume` vs `#[proof]` vs `requires/ensures/invariant`: different roles. But `assert(e) by thm(args)` and function `#[proof(path)]` duplicate attaching Lean theorem to obligations. Could remove `assert ... by` suffix and use `#[proof]` at function level, as latter can discharge exact obligations by identity. Having both is two mechanisms to supply Lean theorem evidence, and assert-by has call args (explicit theorem instantiation) vs proof attribute no args. This is a strong duplication candidate. Owner no hidden traps introduced #[proof] after OD79/SPARK assert by. `#[proof]` general role matches obligations; `assert ... by` proves local assertion with arguments. Could instead remove function `#[proof]` and use local `assert by`? Safety obligations at callsites/loops/functions may not have assert source site. So keep #[proof], remove `by` suffix from assert; write theorem reference function attr and plain assert to create/check? How link assert theorem if no suffix? #[proof] exact statement residual obligation should discharge any obligation including assert. If theorem needs args, can define specialized Lean lemma at desired statement. Owner verbose fine. Lost local proximity and direct theorem application convenience. Strong candidate STRONG.
+  16 `assume` now cannot admit safety in safe code. Remaining value: logical assumptions for proofs, facts conditional. Could eliminate source `assume` entirely and put named assumptions in Concrete.toml or trusted declarations? Assume is dangerous/misreader thinks safety. No-hidden-traps clarified can't admit safe ops, but used in program correctness with conditional facts. `#[requires]` can express assumptions with call discharge and entry contracts. `assume` arbitrary mid-function fact may be needed proofs but creates trust boundary. Owner goal honest assumptions; source named explicit is useful. Could WORTH ASKING remove safe `assume`, restrict trusted or replace with named assumptions in Lean theorem premises. Anchors OD80 CON-6 no-hidden-traps. What lost: convenient local proof scaffolding, conditional verification. It might be cost exceeds value; not necessarily duplication. Candidate.
+
+  17 `discard` vs `_` or Unit statement: For Copy values, any expression statement already discards Unit only? Unit statement rule requires Unit except discard? `discard` explicit use of Copy values and Option/Result cannot. Could remove `discard` by allowing any Copy expression as statement? But that hides intentional ignoring and violates explicitness. KEEP.
+  18 `let mut` vs linear swap/reassignment. Necessary.
+  19 `return` in match arm vs value match + assignment perhaps distinct control. KEEP.
+  20 break labels and counted loops vs while. Counted for can be while, but proof/termination automatic and immutable index; valuable for bounded. KEEP.
+  21 loops while/for two forms same iteration but distinct proof burden, KEEP.
+  22 integer bases 4 forms and no separators. Different representations useful for systems, KEEP. Octal perhaps low value for showcases and adds lexer tiny burden. Could remove octal; but systems file permissions use octal, not huge. WORTH ASKING? Not top 12.
+  23 floats f32/f64 and four conversions `trunc`, `round`, `floor`, `ceil` duplicate semantics? Distinct rounding. Float support cost high proof and value only perhaps QOI no, EVM no, KV no, web no, crypto no, grep no, Wasm perhaps floats, showcases includes Wasm likely needs. Keep but named conversions. Could defer floats unless workload needs; already slice 26 due late. Not top.
+  24 `reinterpret` vs `truncate` vs `as` vs `try_convert`: different jobs, KEEP. `round/floor/trunc/ceil` target conversions unclear. `trunc` name conflicts truncate. Reader could misread `trunc` float-to-int vs `truncate` int conversion. Propose rename to `float_to_int_trunc` etc? Verbose clear. But decided OD107 names? Should inspect. Could candidate WORTH ASKING unify conversion naming: `try_convert` all checked conversions? Float rounding modes require separate. `trunc`, `round`, `floor`, `ceil` common. Not huge.
+  25 Secret classify/declassify with reason vs capabilities: explicit source audit, KEEP. `ct_select` and `ct_eq` are necessary crypto. Plain equality on Secret? closed ops. KEEP.
+  26 checked arithmetic vs plain arithmetic with guards vs wrapping/saturating. Different failure semantics. KEEP.
+  27 checked_div/rem + /% same operation but explicit failure vs proof. KEEP.
+  28 `abort()` vs `return` main and trap line; explicit terminal vs normal, KEEP.
+  29 attributes `#[requires]`, `#[ensures]` vs spec fn contract? Distinct.
+  30 `#[invariant]` on loops and structs same spelling different semantic target. Reader may confuse; could rename struct invariant `#[struct_invariant]`? One form per situation, same concept invariant, no issue.
+  31 `#[variant]` loops/functions same concept termination measure, KEEP.
+  32 `#[may_not_terminate]` permission syntax as attribute expression prefix unusual/misread. Expression attributes add grammar complexity and proof burden. Could instead require named wrapper function with attribute for indirect calls, or named `assume_may_not_terminate("reason")`? That would duplicate. Use existing function declaration attribute on target? Permission belongs callsite obligation not function. Could require a bodyless declaration or named binding with contract. Candidate: eliminate expression-position attributes; introduce statement `with_may_not_terminate("reason") { fp(x); }`? New form worse. Or put `#[may_not_terminate]` before `let`/expression statement only, disallow nested indirect call without wrapper. Existing expression prefix allows any nested indirect call, clear attachment to postfix. Real web server/callback termination unknown. Removing nested expression permission means wrap every indirect call in named function designated nontermination, more verbose but auditable and simpler grammar. Is this valuable? WORTH ASKING but not top perhaps.
+  33 `#[proof]` vs `assert by` definitely.
+  34 `extern fn` and `trusted extern fn`: trust needed C safety. `trusted fn` and `with(Unsafe)`: distinct trust vs authority, KEEP.
+  35 `kept` marker and `Kept<H>` receipt vs raw pointers, necessary FFI retention.
+  36 bodyless ordinary `fn` declarations plus extern fn duplication? Bodyless ordinary declarations perhaps forward interfaces and specs. Could remove if only extern needed, but OD77 retains. Should reason. Could candidate WORTH ASKING if no value yet; but important recursion/module declarations? Lean declaration-level requires bodyless? Yet ordinary functions with bodies support direct recursion without forward declarations if top-level order independent. Bodyless declarations create linkage unresolved. Might be used for builtins? Not clear.
+  37 Type aliases vs one form canonical names: alias gives domain naming but no distinct type; can hide actual layout/capabilities in signature but helps readability. No newtype decided. Low cost. KEEP.
+
+  38 imports renaming `as` plus `as` casts same token different context not duplication semantic. Import renaming conflicts one canonical name / no aliases? Capability aliases forbidden, type aliases allowed. Import renaming creates two names for same entity across modules, reader misresolves, but local collision avoidance. Owner one form per situation might ask remove import renaming, require qualified paths. Anchor OD77, OD139, OD151. This is a good STRONG/WORTH ASKING candidate. Concrete compiler-owned identity means semantics safe but human audit must map alias. Explicit imports already long. `import a.b.{x,y as z}` adds alias grammar, name resolution and reading burden. Alternative use `import a.b.{x,y}` and qualified path `a.b.y` or module? Grammar says no whole-module alias; multilevel module path required imports. Should if can reference full path without whole module import. OD151. Could remove rename only; collisions resolved with qualified original names. Loss local concise names and migration convenience; no semantic loss. Strong candidate STRONG perhaps. Owner principle no duplication two names one thing. Yet renaming common useful when two modules same symbol. Fully qualified is transparent. This is likely intended.
+  39 Field puns similar.
+  40 modules `import a.b.{x}` plus fully qualified path `a.b.x` are two ways to refer same entity. Could remove imports entirely and require fully qualified names. But imports declared dependencies at file top useful authority and phase separation. `OD139 explicit imports` likely require imports even qualified, so imported symbol vs path two spellings. One form per situation could choose only qualified references (with explicit import module declarations) or only unqualified. Current grammar `import IDENT import_path_tail` always final list symbols. To use full path do you import symbol then still can write full path? Yes multilevel module path. This is duplication. Strong simplification: imports only bring module dependency and names? Could require all uses fully qualified and keep `import a.b.{x,y};` as allowed dependency list but redundant. Better `import a.b;` dependency declaration, all references `a.b.x`. But OD139 explicit imports of symbols perhaps decisions. Should read. Could candidate combine import renaming + dual path forms: remove aliases and unqualified imported names, keep explicit module dependency imports and fully-qualified use. This reduces renaming and path ambiguity; code verbose but clear. What lost concise names. STRONG likely.
+  41 Traits qualified calls `Trait::method` and type associated `Type::method` plus method syntax as above.
+  42 Enum constructors `E::V{}` vs path function calls no duplication.
+  43 Struct destructuring let vs match on struct: match only enum patterns no unqualified struct match, so distinct.
+  44 OR patterns vs duplicate arms: two ways same job but OR patterns only no bindings? Could remove OR patterns to simplify exhaustiveness and first matching. They can be expanded to repeated arms with identical body (dup code). Or extract spec function? Dup behavior body violates one fact. OR patterns useful and low cost. KEEP.
+
+  45 `_` catch-all and field `..` rest same wildcard different levels, necessary.
+  46 optional trailing commas vs no trailing commas two accepted layouts same semantics. Owner one form per situation: trailing comma optional gives two ways to write every list, huge surface duplication albeit purely syntactic. This is likely important candidate: disallow trailing commas everywhere or require? Standard optional trailing commas benefits generated code/diffs, LLM writes, human audit negligible. One form strict would suggest no optional trailing commas. Grammar OPEN-9/11/14/17/20 recommends optional trailing commas. User explicitly asks full surface grammar, anything duplication. Candidate: remove trailing comma acceptance, also puns, import aliases. Verdict WORTH ASKING or STRONG? Owner says never two ways, so optional trailing commas are obvious second spelling. No semantic loss except diff/generation convenience. But code generators like trailing commas; LLM write no concern. STRONG. Could group with field puns as "syntactic sugar alternatives" but each candidate specific. At most 12 most important. I can have 12 including KEEPs. Should prioritize deep architectural features over punctuation perhaps.
+  47 `let` type annotations optional vs required: two ways to declare same binding, inferred vs explicit. Owner signatures fully explicit, global inference refused, unannotated lets allowed where typing determines. This is clear duplication and reader ambiguity. Slice 0 requires typed lets, later OPEN-18 recommends unannotated lets. Proposed require `let x: T = e` always (and patterns perhaps fields infer). Anchor OD46 and slice-0 surface / OPEN-18. Lost routine annotation, but verbose clear. STRONG. This may be one of intended simplifications. Type inference from arguments only and literal expected typing; unannotated lets creates expected-type propagation? `let x = 1` unconstrained refused, but `let x = y` works. Readers must know type. Given know everything, explicit types beneficial. Strong.
+  48 `let mut` type optional same.
+  49 `fn` return type optional default Unit vs explicit `-> Unit`: two ways to say Unit. Grammar signature `["->", type]`. Owner verbose clear, Unit canonical, no hidden. Require explicit `-> Unit` on every function, including main? Main decision allows `Unit` result mapping. Current parameterless main perhaps `fn main() -> u8`; functions no arrow mean Unit. This is clear candidate. Anchor OD66/OD157 and main decision, OD29. Loss 7 chars. STRONG perhaps group with explicit type annotations as "eliminate optional type spellings: require let annotations and `-> Unit`". They are same principle but separate decided anchors. Could one candidate "no omitted types" includes both. This maximizes list.
+  50 `self` receiver variants `self`, `&self`, `&mut self`, `self: T` multiple forms; semantics consuming vs borrowing different, not duplication except typed self alternative. OPEN-12 alternative typed only. Remove receiver sugar as above.
+  51 no arrow functions + `()` Unit expression etc.
+  52 struct declaration optional `Copy` marker vs `impl Copy`? Only marker, good.
+  53 enum declaration Copy optional marker, consistent.
+  54 generic bounds `T: Copy + Trait` plus impl disambiguation. Fine.
+  55 capability argument syntax `f::<T, C + Fs>` vs `with(Fs)` signature both permission vs arguments different.
+  56 capability unions names with `+` same token generic bounds `+` but different semantic union vs conjunction. A reader could misread: `T: Copy + Foo` means intersection bounds, `C + Fs` set union. Same punctuation analogous set combination, not serious.
+  57 `cap` parameters and capability sets are types? Grammar kind-neutral avoids. Fine.
+  58 Static text `char` ASCII literals but computed char Unicode scalar? Reader misread `char` as Unicode due UTF-8 string and ASCII literal. TYPE-20 says computed char perhaps 0..255? Should read. It says ASCII literal restrictions do not restrict every computed char to 0…127. Could be char is Unicode scalar? Legacy TYPE-20. If char is byte? I'll inspect. Could candidate rename `char` to `ascii` or `u8`? Decided OD137 and TYPE-20. Should see.
+  59 strings length bytes vs chars explicitly byte. `char` possibly u32 Unicode scalar, ASCII literals only. StaticStr indexing byte_at, no char_at, so char only standalone. Could be weird low value feature cost. Char type and literals arrive slice16, showcases grep text needs Unicode? Byte-level systems can use u8, Unicode char conversion perhaps no APIs. If char is u32 with ASCII literal but computed values beyond ASCII, readers may assume literal can express any char; no hex/unicode escapes. Feature might be undermotivated. Candidate remove `char` type and literals, use u8 for ASCII and explicit Unicode scalar newtype if needed; but showcases perhaps Wasm char? QOI uses bytes. Rust char costs proof conversions. Anchor OD137, OD102, TYPE-20, Q4 UTF8. WORTH ASKING. Should inspect type.
+
+  60 `StaticStr` supports lexicographic order and content equality, strings similar, intentional.
+  61 Arrays list/repeat vs Vec/HeapArray: fixed stack arrays vs heap dynamic vs owning heap fixed? `HeapArray` and `Vec`: HeapArray fixed-length heap, Vec growable. Distinct. Array `[T;N]` static inline. KEEP.
+  62 OrderedMap and HashMap: two map structures same job with perf/order tradeoffs, but HashMap lacks Destroy due hasher? Q2.2 excludes HashMap perhaps no deterministic cleanup? Could simplify remove HashMap, keep OrderedMap, because proof-friendly deterministic iteration, showcases KV can use ordered. HashMap cost hashing, entropy, collision, DoS, iteration nondeterminism, cleanup unsupported. This is a strong b candidate: remove/defer HashMap until workload demonstrates need. OrderedMap provides same map job; two map types are not language duplication per se library types, but standard builtins and spec proof burden. HashMap is nominal builtin slice23 and Destroy excluded Q2.2. Owner real workloads: KV store may value hash map performance, EVM uses maps, web perhaps. But OrderedMap suffices semantically, performance could matter. HashMap requires entropy? explicit capability, deterministic reproducibility. Could propose defer rather than remove. WORTH ASKING. Anchor Q2.2, slice23, allocation decision. Loss expected O(1), hash DoS and workload perf. Cost spec/proofs, nondeterminism. Good.
+  63 HeapArray vs Vec duplication but distinct growth semantics. KEEP perhaps use as KEEP instead HashMap?
+  64 `OrderedMap` four Destroy impls and HashMap excluded suggests HashMap unfinished. Could recommend remove built-in HashMap from language, implement as library later. Built-in containers all library? They are nominal builtins. Strong perhaps WORTH.
+  65 Allocators brands/existentials high complexity vs value. Essential no GC, allocator failure, real workloads. Could simplify brands by one global allocator? Violates authority and nested alloc reset, not. KEEP.
+  66 `drain` and `map_into`: both consuming traversal with callbacks, potential duplication. `drain(v,ctx,f)` empties container with same element handling; `map_into` transforms container into another? Q2.5 failures shapes. Could unify into one consuming traversal primitive with mapping result `Step<T,E>`? Should understand allocation Q2.4/2.5 and spec. `drain` and `map_into` perhaps different jobs: resource cleanup vs transforming arrays. But both callback traversal and stop/survivor/rest. Could candidate WORTH ASKING unify or remove map_into if drain enough. Should read allocation legacy/spec Brand/Cleanup. Showcase map transformations likely map_into useful. Should inspect docs spec cleanup.
+  67 `swap_at` vs borrow mutable element impossible by design; necessary in-place replacement. KEEP.
+  68 `destroy` and `drain`: drain needed non-Destroy resource, KEEP.
+  69 resource grants close_dir/give_up perhaps unify all ending through destroy? Grant-specific close errors require close. `give_up` general release for Copy grant? Should inspect.
+  70 Capability `Console` vs `Device` recently split; are these duplicate permissions? Standard streams are devices, could keep Device for all and remove Console. Owner just decided Q7.11 to separate. User invites revise decided rows; could argue Console and Device both byte I/O authority and separate grants already identify resources, so split is redundant. `Fs`, `Network`, `Env`, `Time`, `Alloc`, `Device`, `Console`, `Process`, `Unsafe`, Entropy = 10. Process no spawning current target perhaps used exit? Could remove Process until spawning, since main return no process_exit, no spawn. Why Process capability reserved with no operations? Perhaps process services (args?) Env covers. Q7 grant table includes Process perhaps current process? Should inspect Q7 R4 F6. Process capability could be dead surface. User b features cost exceeds value: `Process` reserved but no spawning, `process_exit` removed. What operation uses Process? Search.
+
+• The sheet already removes most historical duplication. I’m checking the remaining candidates where two mechanisms overlap—especially imports, receivers, proof attachment, cleanup, and grant permissions—and where a feature has little workload pull.
+
+• Lots. Should have precise lines decisions via Read 1115-1275 and authority 1279-1500 perhaps.Now choose candidates, perhaps char obvious strong: char is exactly one-byte code unit, lossless u8 as char and back, comparisons same byte. This is a second type doing same job with cast and literal syntax, reader misreads Unicode. Remove char type and CHAR literals/patterns; use u8 and byte literals? Current no byte literal, use decimal/hex or introduce b'a' would be new form but simpler? Could keep `'a'` as u8 literal, remove char type/casts, char literal becomes byte literal. Proposal simplify `char` to alias? Alias duplication. Strong remove type but retain ASCII `'a'` syntax typed u8 expected; `'\n'` u8. That preserves readable bytes, removes conversions and type rules, bool/char comparison special case. Anchor TYPE-20, OD42, OD137, TYPE-19. Loss nominal distinction between byte and character; but it's false distinction since all u8 convertible and UTF-8 code unit not character. STRONG. This is likely excellent candidate.
+
+  Process capability dead: target no spawn, abort no Process, process_exit removed. Remove until process target introduced; reduce reserved capability and exact set types. Anchor authority rule13/OD95, Q7.4, audit abort, OD136. STRONG perhaps no current operation uses Process. Search only confirms target table no Process grants. Could say no current target operation requires it. Yes target table no process, only deferred spawning. Strong.
+
+  Console vs Device: split permissions perhaps recently intentional. I can KEEP because different grant operations and target policies, resource alone not enough. But could ask unify? Q7.11 explicit added Console because std streams distinct device. User wants honest KEEP. Keep candidate for authority permission/resource not duplication or Console/Device. More important KEEP arithmetic families, borrow forms, counted loop, drain/map_into, arrays maps perhaps.
+
+  HashMap: grammar says maps slice 23 but Q2.2 says HashMap excluded from Destroy initial inventory and admitted only with stated order. Is it actually decided admitted? Roadmap slice 23 includes maps likely OrderedMap/HashMap. Should read vertical slice line around 225.Good.
+
+  Other candidate high: static strings `print`, `println`, `append` special multi-argument builtins closed types. User grammar reserved names, but full grammar no signatures. These are duplication: ordinary functions cannot variadic, but print/println/append are reserved variadic-like forms. `print` vs `println` two output functions differing newline; can use explicit "\n", but implicit no allocation static. `append` overloaded closed list expands typed calls. This violates one form per situation, hidden overload resolution? Philosophy specifically permits reserved output and append forms only multi-argument forms, closed types expand typed calls authority visible. Could propose remove `print`/`println`/`append` builtins, use ordinary grant-backed `write` and typed conversion functions. Current target table std write bytes, StaticStr. `print` and `println` likely output convenience and overloaded types; ordinary write requires StaticStr or bytes. For showcases logging integers needs conversions with allocation, no hidden. Owner wants no two ways and real long-term; these builtins are magic, not function values, closed overload set. This is a strong candidate. Anchors OD133, PHILOSOPHY implicit string conversion and variadics, Q7.10/11. Proposal remove special `print`, `println`, `append`; use `write(out, bytes)` and explicit named numeric-to-text routines, newline written explicitly. What lost concise output and append without generic format machinery; must expose allocation/failure and grant at every call (actually improvement). Strong? It may be intended as deliberate exception to variadic to make output easy, but cost reader confusion and special elaboration. User says whole language and showcases, yes candidate. Should inspect OD133 exact.Print/append good strong or ask. Since philosophy explicitly says reserved forms allowed and user asks revise decided rows. STRONG perhaps clear duplication special forms.
+
+  Other magic `sizeof`, `alignof` builtins not grammar sheet list perhaps exact builtin inventory gap. Not candidate.
+
+  Optional let annotations and Unit return omission likely strong. However decided grammar sheet not approved; can propose during OPEN-18, no decided revision except historical grammar. I'll anchor slice0, OD157, OPEN-18. User wants decided row it would revise (anchor), can anchor current proposed open and decided row. Say "Anchor: slice-0 typed-let rule and OD157; this is also OPEN-18/OPEN-9, so close it by requiring..." Good.
+
+  Method syntax removal may clash with traits whole feature. If propose remove user traits, method syntax becomes only inherent. Could combine candidate "remove method-call sugar and special self receivers, use qualified ordinary functions; then reassess user traits" not both. Which more important? Method syntax is duplication but trait resolution machinery remains needed for generic bound dispatch. Using `Trait::method` still traits. Strong change aligns one form. Could include as STRONG. User traits themselves KEEP (static abstraction useful) or WORTH ASKING defer? Should not propose too many aggressive removals. Honest: traits restricted non-generic and no dynamic dispatch, value for showcases likely abstraction. I can KEEP user traits but remove sugar. Could say traits not duplication with generics/function values.
+
+  Proof suffix removal strong.
+
+  Imports fully qualified only strong.
+
+  Char removal strong.
+
+  Process removal strong.
+
+  Print/append removal strong.
+
+  HashMap defer ask.
+
+  Assume removal ask.
+
+  Optional type omissions strong.
+
+  Puns and trailing commas strong perhaps group.
+
+  Method call strong.
+
+  That's 9 strong: char, process, print, proof suffix, imports, method call, omitted types, sugar puns/trailing commas, perhaps trailing comma grouped with puns not conceptually same. 8 if group. Plus HashMap ask, assume ask, KEEP arithmetic, KEEP borrow, KEEP drain/map, KEEP traits/capabilities perhaps at most 12. Should prioritize. 12 candidates exactly, perhaps 8 strong, 2 ask, 2 keep. User asked review whole language; two KEEPs won't cover all but preamble says other reviewed no changes. Could have 12 with 7 strong 2 ask 3 keep.
+
+  Potential more severe than puns/trailing commas: `const` semantics evaluated each use vs named spec fn? Constants can call functions? OD8 immutable global and Q6.4 evaluates at each use; constants are not necessarily compile-time and can trap, runtime side effects? No capabilities/tokens, pure functions can be called? A const initializer may call pure function, arithmetic. Reader expects constants evaluated once compile-time; actual at each use, not storage, no life before main. This is misread and duplication with functions: `const X: T = e;` is essentially zero-arg pure function inlined at each use. Why have const? For named values and known value propagation, module constants checked known facts. `spec fn` erased can't runtime. Could simplify constants to literal-only or require `const` initializer restricted no calls and no failure; then they are named constants not functions. Q6.4 says constant initializer provably fails refused even unused; no hidden traps requires all failing safety evidence. Runtime repeated pure eval can cost hidden work, violates predictable code. Candidate: restrict `const` to literal/aggregate constant expressions with no calls, no borrow, no allocation and no potentially failing op except named total wrapping/saturating/lossless; or replace with spec fn? Strong/WORTH ASKING. Owner principle no hidden work and no general compile-time eval. Current const at each use means `const X:i64=f()` calls f each use (if allowed). TYPE-22 explicitly. This is a reader misread. Better long-term: constants should be compile-time values, evaluate once in checker and inline result, but general compile-time eval refused. Restrict initializer to total literal expression subset and fold at compile time. What lost named pure computations/calls at module scope; replace named function or explicit local. Anchor OD8, TYPE-22, Q6.4, PHILOSOPHY no comptime. This is arguably more important than trailing commas. Could propose WORTH ASKING or STRONG. If constants already no function calls? Legacy says scope no local and can call read(&X) example refused borrow, but pure functions likely allowed. `const` may have arbitrary expr and runtime operations with capabilities not accessible. No hidden work from source? Name looks constant, repeated inline not obvious. Restrict good. User asks d reader misread. Include WORTH ASKING.
+
+  Type aliases similarly second spelling but useful domain docs, no runtime. Could KEEP no need.
+
+  `StaticStr` vs `String` good KEEP.
+
+  Function `const` and `spec fn` difference runtime vs erased. I can include const ask.
+
+  Attributes stacked requires/invariants vs `&&`: two ways same logical claim. CON-8 explicitly repeated requires/invariants mean conjunction, and one `#[requires(a && b)]` also same. Violates one form per situation. Separate obligations identities useful evidence granularity, but can write separate conjunct obligations? One clause yields perhaps conjunction splitting. The reason says each own identity. This is deliberate. Could propose KEEP because separate evidence sites and diagnostics vs compound; but it is exactly duplication. Owner one form would choose repeated clauses for atomic facts and prohibit top-level &&? That is silly. Or only one attribute with && loses localized obligations. Current is useful. Could mention as KEEP if need. Not top.
+
+  `#[proof]` repeatable vs one proof attr list? Multiple attrs okay same attachment not duplication semantically.
+
+  `assert e;` and `assert(e);` both allowed because grammar contract expr grouping means second is same assert with parenthesized expression. Also theorem suffix only parenthesized creates syntactic distinction with same semantic assertion: `assert(x>0) by thm` vs `assert x>0` without. Parentheses optional generally but here change eligibility of suffix, reader confusion and grammar ambiguity. Could simplify require parentheses for all assert: `assert(e);`, optional by. That eliminates two assertion spellings and weird rule. But if remove by suffix, require `assert(e);` uniformly. Include in proof candidate. Strong.
+
+  Method call vs qualified path also field access dot needed, no issues.
+
+  Raw pointer read_owned vs `*p` for Copy types and &mut replace: semantics distinct, keep.
+
+  Secret arrays and normal arrays views same, unified.
+
+  One candidate "Copy declarations vs Destroy impls overlapping" current disjoint is intentional and crucial, KEEP perhaps explain no simplify.
+
+  I should perhaps run no tools more unless inspect constants exact and SPARK assert suffix to ensure proposed proof attribute can replace args. Read relevant SPARK.
+
+• Two especially clear findings are that `char` is only a second name for a byte, and `Process` currently has no operation after exit/spawn removal. I’m doing a final pass on contract and constant semantics before ranking the changes.
+
+• Important: assert by role strictly separate, so should not claim duplicate blindly. Could verdict KEEP due distinct roles, per decided. It establishes fact at point vs discharges existing obligation. User wants honest, so KEEP. I could propose unify? There is overlap but decided explanation strong. `#[proof]` exact matching discharges obligations, assert by injects new fact, so not duplicate. KEEP. If I had strong would be wrong. Good I checked.
+
+  Assume removal: role proof-only hypotheses and tracked. Keep perhaps because valuable conditional theorems, cannot safety. Not strong. Could WORTH ASKING due proof surface complexity, but role necessary for assumptions. Owner principles honest trust, explicit assume better than hidden. Likely KEEP.
+
+  Constants: potential actual issue. Include WORTH ASKING restrict.
+
+  Method call: qualified vs bound method roles same for unambiguous but method call ergonomic and trait inference. OD6 includes both ambiguous and unambiguous. One form per situation strict, candidate valid. Could remove method sugar but inherent methods then associated call path `Type::method` ordinary. Does current associated path for inherent methods exist? Legacy MOD-9 uses `Q::mk`, yes. Trait methods qualified. Good.
+
+  Imports: current both bare and qualified names accepted after import (MOD-4 example), so clear duplication. Remove unqualified import bindings but keep import list as dependency manifest. Then no import alias needed. This is one candidate strong. `import a.{f}` no longer binds f, weird syntax but manifest. Better syntax `use a.{f};` no, adding. Could keep `import a.{f};` as explicit permission/dependency and always write `a::f`, documented. `mod a;` loads and `import` exposes specific public declarations, though qualified paths require import. It is coherent. Multi-level `a::b::f`, import `a.b.{f}`. Loss shorter names and conflict rename; full path solves. Strong.
+
+  Puns: legacy TYPE-7 says every field explicitly, but OD84 example shorthand. Grammar puns open, so don't admit. Field destructuring `let S {a}` is decided, so removing puns from patterns revises OD84. Constructor puns not decided. I can say require `S { field: expr }` and `let S { field: binder }`; `_` still explicit. This loses one-character duplicate name. Strong but lower priority.
+
+  Trailing comma optional open. Can group "Do not admit optional punctuation/sugar: field puns and trailing commas" but User each candidate what it is; grouping two unrelated surface forms might be seen cheating max12. Could choose puns only; trailing comma mention in same as general no optional aliases? Better candidate titled "One spelling for lists and fields" includes two purely surface shorthand alternatives. Proposed no puns, no trailing commas. Anchor OPEN-9/11/14/17/20, OD84. Lost easier generated output/diffs. Verdict WORTH ASKING rather than strong due optional trailing comma helps audited diffs and no semantic reader confusion. But owner says no two ways, strong. Yet "do not propose change for own sake" and optional trailing comma standard has real value for code review diff. LLMs write code humans read, one form principle still. Could be less important, perhaps exclude to avoid punctuation bikeshed.
+
+  No omitted types: current legacy unannotated lets decided? OPEN-18 not approved. Requiring `-> Unit` conflicts legacy grammar and no arrow shorthand, but no dedicated decision except OD157. Good strong.
+
+  Print forms: `print` and `println` only difference newline, `append` multiple types. Could instead just remove `println` as duplicate of print with "\n"; keep print and append because distinct variadic closed output. Candidate narrower strong: remove `println`, and possibly append overload. If propose all, cost dynamic conversion functions but correct. Owner says one form per situation and no implicit string conversion except special allowed. This is a conscious tradeoff. Verdict WORTH ASKING perhaps not strong because ordinary `write` APIs at slice16 and formatting at 22, output conveniences useful. But long-term special multiarg builtin is extra language magic. Strong enough.
+
+  Char: retain `'a'` literal as u8, does expected typing allow no type? literal expected type char currently, if byte literal class can expected u8. `return 'a'` main u8 expected. Fine. ASCII controls, comparisons generic numeric. Remove `char` patterns replaced INT? Could keep byte literal pattern same syntax typed u8, so no loss pattern readability. Good.
+
+  Process: `Process` could be for future spawn, remove until readd with operations; no loss current. Strong.
+
+  HashMap: initial Destroy excluded not necessarily broken because drain can cleanup? Q2.4 drain non-Destroy can empty, so HashMap can be drained and release backing. But no Destroy means no simple destroy; deterministic order absent makes proofs harder. OrderedMap already covers all seven showcases semantically but EVM/KV need performance. WORTH ASKING defer until measured workload and specified deterministic destruction. Good.
+
+  Constants: strong ask restrict, not remove. No current showcase needs dynamic const evaluation. Q6.4 compile refusal means static failure no runtime, but repeated eval pure known may cost. Restrict to closed total literal/spec expression; `spec fn` total could be called at compile time but general comptime refused. Could allow total spec functions in const initializers? That is compile-time evaluation, exactly refused until workload. So restrict to literals and total machine ops known at compile time. Perhaps owner decided constants evaluate each use to avoid compile-time eval; alternative make const merely inline expression and require readers know, but name misread. I propose replace `const` with literal-only `const` evaluated by checker once and no calls or plain checked ops unless proven; this changes TYPE-22. Lost pure named computation at module scope, use function or repeat explicit expression. WORTH ASKING.
+
+  KEEP candidates:
+  - arithmetic families (plain checked evidence, Result checked, wrapping, saturating) distinct outcomes, no remove.
+  - scoped borrow + unary & (held vs call) plus View unified, KEEP.
+  - `drain` and `map_into` distinct no new values vs transform, KEEP.
+  - `assert by` and #[proof] distinct as above KEEP.
+  - capabilities/grants and Console/Device perhaps KEEP. I can choose 4 keeps to show review breadth, leaving 8 candidates strong/ask = total 12.
+  Current strong: char, Process, imports, method sugar, omitted types, print/append, puns =7. Ask: HashMap, const =2. Keeps need 3 to total12. Could drop puns and include 4 keeps. User wants most important first, puns less important. 6 strong +3 ask (puns ask?) +3 keep =12. Response ANSWER STRONG list, ASK list only; KEEP not in response lists. Verdicts inside.
+
+  Should decide whether traits user-defined removal WORTH ASKING more important than puns. Could include candidate user traits as KEEP rather than method sugar? Method sugar removal leaves traits and coherent static dispatch; traits restricted enough. No need ask removal.
+
+  Potential candidate no implicit Unit return types and typed lets is strong but "type annotation optional" only proposed open not decided, so easy. Include both in one candidate "Omitted types" perhaps two situations but same simplification. Good.
+
+  I need citations code locations? User asked decided anchor, use markdown links to docs/decisions anchors and legacy types. Kimi can use `[TYPE-20](legacy/docs/spec/types.md#TYPE-20)`, `[OD137](docs/decisions.md#od137)`, `[Core Q7.4/Q7.10](docs/decisions.md#decided-2026-11-05-core)`. Grammar review OPEN items link `_review/GRAMMAR_REVIEW.md` no anchors explicit but sections. I can cite `GRAMMAR_REVIEW.md` path perhaps links. Each candidate format:
+  1. **`char` is a byte alias with extra rules — STRONG**
+     - What/anchor: ...
+     - Change: ...
+     - Lost: ...
+     - Verdict included title.
+  Should have at most 12 and most important first. Could avoid repetitive four bullets by concise paragraphs "Anchor ... Proposal ... Lost ... Verdict". User explicitly each candidate all. Use numbered list and labels, 12 candidates perhaps 1500-2000 words. Should enough.
+
+  I'll reason validity of each:
+
+  1 char strong. Could someone argue nominal char useful distinct even one byte? It prevents accidentally treating text code unit as number without explicit cast, but conversions both ways lossless with `as` and comparison, so only marker. Value is reader knows text vs arbitrary byte. However name "char" tells code unit, not Unicode char per docs. It could help readability. Strong verdict perhaps WORTH ASKING rather than strong because nominal types convey intent. But User principle one form, no duplication, and no newtypes (removed) suggests they don't want nominal wrappers convenience; named struct for true nominal. char is built-in newtype with special literal. Strong removal consistent.
+
+  2 Process strong.
+  3 method sugar strong. Loss method chaining and type-directed lookup. Full path still needs type-directed? `Trait::method` generic bound qualified. Inherent `Type::method`. What if trait has one bound and receiver generic `T`, can `Trait::method(&x)` static. Fine. `self` special parameter removed, trait signatures use explicit `self: &Self`? `Self` type keyword contextual? Current trait supports Self but grammar type_name IDENT, Self not reserved. Proposal ordinary first parameter `self: &Self` inside trait/impl; inherent `self: &P` or arbitrary name. This keeps no receiver special forms. Should explicit consuming form `self: Self`. Qualified call. Great. This also eliminates OD60 receiver protocol? Consuming function first arg still. Anchor OD6, OD32, OD60, TRAIT-9. Lost convenient dot syntax/chaining, not semantic. Proof/spec surface reduces method resolution and overlap check receiver (but ordinary args still overlap). Strong.
+
+  4 import names strong. Current `import a.{f}` and `a::f` both accepted. Remove aliases and bare binding. `import` remains whitelist of external dependencies. Should also field enum variant imports? Types full path `a::S`, variants `a::E::V` perhaps module multilevel path neutral. Fine. Lost renaming collision solution; use full path. Strong.
+
+  5 special output builtins strong or ask. `print/println/append` currently not in grammar operations table except reserved name inventory. Q7.10 write is ordinary grant-backed. At slice16 integers printed by user code perhaps intended print. Remove all three magic forms, ordinary `write` and explicit conversions. `append` may be string append, not output? Philosophy says "reserved output and append forms" multiargument, `append` likely variadic string builder. Remove overloading. Lost convenient variadic text construction and newline shorthand, users call several writes / conversion functions and handle allocation. Strong because magic special case.
+  6 omitted types strong. `fn f(){}` implicit Unit and `let x = e` inference. Require explicit `-> Unit` and `let x: T`. Function types already require optional arrow? Grammar fn type optional too; require there too for consistency. `extern fn` optional too, trait etc. Unit context all explicit. Lost less annotation. Type args inference remains (different, call target explicit types not all). Strong.
+  7 field puns strong/ask. Constructor puns open, destructuring shorthand decided. Require explicit field:binder. Lost duplication typing only. STRONG perhaps lower.
+  8 constants WORTH ASKING.
+  9 HashMap WORTH ASKING.
+  10 assert proof KEEP.
+  11 arithmetic KEEP.
+  12 borrow + drain/map perhaps need choose. I can combine KEEP "apparent overlapping mechanisms that are distinct" but each candidate must what it is. Choose borrow forms as most core. Drain/map no candidate then mention in closing? User asks whole language, not need every construct candidate. Could include 13 impossible. Drop field puns or constants to include drain/map. 12 candidates: 6 strong (char, process, methods, imports, output, omitted types), 3 ask (field puns, const, hashmap), 3 keep (proof, arithmetic, borrow). No drain/map. Fine.
+
+  Would owner expect "remove saturating arithmetic" perhaps no, KEEP explains. Traits and maps covered. Secret/capabilities not candidates but no changes needed. End exactly `ANSWER: STRONG=<list or none>; ASK=<list or none>`. Should have names concise and exact response line no trailing text. STRONG list six, ASK three. KEEP excluded as format only strong/ask. Use identifiers perhaps `char, Process, method-call sugar, import aliases/bare imports, print/println/append, omitted types`. ASK `field puns, const evaluation, HashMap`. All candidates verdict align.
+
+  But could `print/println/append` verdict STRONG too aggressive and not actually duplication with write? `append` is allocating string operation not output; ordinary typed functions already exist `string_append`, etc. It is closed overloaded form expanded to typed calls, so exact duplicate. print/println likely expand to writes, yes. Good.
+
+  Could char removal not decided grammar current sheet includes char patterns open. Fine.
+
+  Field puns and optional trailing commas perhaps response strong list no trailing. I could include trailing commas with field puns as ASK "surface shorthand (field puns and optional trailing commas)" but each construct different. Perhaps just field puns.
+
+  Constants what exactly propose: Keep `const` only for closed, total, side-effect-free compile-time evaluable initializer; evaluate once in checker, inline value. This introduces general compile-time eval for spec functions if allowed, so specify no function calls, no borrows, no allocation, no plain potentially failing arithmetic. Allow literals, constructors of Copy data, lossless casts, wrapping/saturating operations whose semantics total. If arbitrary struct linear constants? Constants cannot capability token but could linear value? Each use would move from constant impossible if linear; likely Copy only. Not relevant. Proposed total Copy constants. Loss named pure runtime computations at module scope; write explicit function or local. WORTH ASKING due compiler known-value and no hidden runtime benefits vs ergonomic pure expressions.
+
+  HashMap lost O(1) expected lookup and workload performance, so defer not permanent remove until EVM/KV measurement. Destruction order can be specified deterministic independently of hash (e.g. iteration order? expensive sort) or use drain with no observable order? Q2.3 cleanup order observable because destructors can effects Alloc only but still events allocation, so need deterministic. Proposal remove initial builtin, use OrderedMap; reintroduce only with measured need and deterministic cleanup/hashing contracts. WORTH ASKING.
+
+  Assert by KEEP reason from SPARK exact separate roles, not duplicate. Good.
+  Arithmetic KEEP reason plain checked uses proof, checked_* explicit recoverable, wrapping modular, saturating clamp. Mention not four ways to add; four different contracts. Loss if removed actual needed semantics.
+  Borrow KEEP reason unary & call lifetime, borrow block multi-statement and heap/range views; Q9.5 one surface mechanism for views already unified. Could mention View<T> vs & refs different second-class view but no need.
+  Perhaps a KEEP for capabilities/grants rather than borrow because User asks capability review. Authority row explicitly says not duplication. Could replace arithmetic or proof? Should broad coverage. I can make one candidate "Capabilities and grants / Console and Device — KEEP" with reason resource vs permission, separate standard streams vs devices. Then no borrow KEEP. But borrow more likely duplication. At most12; perhaps drop field puns and include capability KEEP as 12. Then 6 strong 2 ask 4 keep =12. Response ASK two. Field puns obvious but less important. User most important, dropping puns reasonable. Candidate list:
+  1 char strong
+  2 Process strong
+  3 method receiver sugar strong
+  4 imports strong
+  5 special output strong
+  6 omitted types strong
+  7 const ask
+  8 HashMap ask
+  9 proof forms keep
+  10 arithmetic keep
+  11 borrow forms keep
+  12 capability+grants keep
+  This is well-rounded. No field puns, no trailing commas. Could mention in response after candidates "I would not remove ...", but would be 13th candidate not allowed. Don't.
+
+  Are there any stronger feature candidates than output or omitted types: `HashMap`, `const`, traits, char, Process, imports, methods. Good.
+
+  Should perhaps spec row for omitted Unit return `OD157` doesn't decide omission vs explicit; grammar legacy allows omission. Phrase "Anchor: OD157 (canonical Unit spelling), slice-0 typed-let decision, and OPEN-18/OPEN-9—not a claim that these open spellings are already approved." Proposal revise legacy omission. User asked decided row it would revise, OD157 only type spelling not omission; need precise. Could say anchor `OD157` plus historical `SYN` statement, but decided row doesn't require revision because it remains. `fn` no result arrow is existing grammar not decided; proposed OPEN-9. I should be honest: "Anchor: slice-0 typed-let decision and OD157; the omission itself is OPEN-18/OPEN-9, so this is a recommendation for those open rows, not a reversal of OD157." That meets.
+  Import anchor `OD77` renaming and `OD139` import required, `OD151` paths, MOD-2/MOD-9. Fine.
+  Method anchor `OD6`, `OD32`, `OD60`, TRAIT-9. Full associated path exists via OD77 perhaps.
+  Output anchor `OD133` only reserves names not admits forms? Philosophy describes special forms and OD154 functions. Use `OD133`, `OD154`, Q7.10/Q7.11. Note exact new ordinary API signatures OPEN-4/21 but ordinary write target table decided. Proposal no new design hidden.
+  Char anchor TYPE-20 and OD137/42, Q4 UTF8. Good.
+  Process anchor authority rules 5,13 and Q7.4, audit (abort no Process), OD136/156. Evidence no operation target table. Good.
+  Const anchor TYPE-22, Q6.4, OD8 and no general compile-time eval refusal. Good.
+  HashMap anchor Q2.2/2.3 and vertical slice23. Good.
+  Proof KEEP anchor OD79, SPARK, no-hidden-traps spelling2.
+  Arithmetic KEEP anchor OD10, no hidden traps spellings, ARITH4/10. Good.
+  Borrow KEEP anchor OD58, OD1/2, Q4.7/Q9.5.
+  Capability KEEP anchor authority rules1-2 and Q7.11. Console/Device distinction perhaps User could argue merge, explain separate grants alone wouldn't preserve independently revocable permissions. But is that enough? `Console` standard output vs `Device` arbitrary devices with different policies and external effects. Current decision clear, KEEP.
+
+  Should state no files modified? Not necessary but can one intro "I reviewed ... no changes". Respond with no extra after the response. Could mention sheet proposed not approved in intro, distinguishing decided anchors from open punctuation. "I treated the sheet as an inventory, not as approved syntax; OPEN items below are recommendations, not existing decisions." Good.
+
+  Ordering most important: Perhaps Process removal smaller than char but okay. Method/import larger. Put char first due simple strong. Process second. Methods third. Imports fourth. Output fifth. Omitted types sixth. Const ask seventh, HashMap eighth. Keeps 9-12.
+
+  Could make strong 1 methods (larger simplification) and char 2, imports3, output4, process5, omitted6. Most important by impact. Which top? Removing method sugar significantly simplifies but reader used to method syntax. Char removes tiny spec but type semantic. Process trivial. "Most important first" rank by architectural impact:
+  1 Method-call/receiver sugar (resolution and duplication)
+  2 char (type system)
+  3 imports (name resolution)
+  4 output builtins (magic variadics)
+  5 Process (dead capability)
+  6 omitted types (surface)
+  7 HashMap (feature cost) ask
+  8 const (misread) ask
+  Then keeps. Or char first obvious. No strict objective. Fine.
+
+  Should be honest method call not necessarily two ways in ambiguity: unambiguous `(&s).m()` and `Type::m(&s)` same. `Type::m` associated calls are accepted as shown. Good.
+  Could propose keep traits and Destroy, not remove; emphasize.
+
+  `Process` current target no spawning but external C can spawn with capability? Primitive table extern can require arbitrary capabilities; no current Process operation. Extern could declare with(Process) even if no grant? Authority rule2 every operation resource, external process handle perhaps future. No current safe operation. Remove from reserved set now, foreign bindings can't claim it; reintroduce target with process grants. Good.
+
+  Output builtins: `print/println` might not take grant currently old language but new authority requires all operations grant. Special forms could be made grant-backed, so cost not inherently. Still duplicate and magic. Lost convenience only. STRONG.
+
+  No change for secrets etc, perhaps a closing sentence before response "Everything else I reviewed—including ...—I would leave unchanged; in particular ...". But this could introduce candidates beyond 12? I can state broad no extra specifics. Not needed.
+
+  Response length around 2000 words. I'll draft ~1500. Each candidate 4 labeled bullets perhaps 100 words =1200. Good.
+
+  Should have response exactly format no period after? `ANSWER: STRONG=method-call sugar, char, import aliases/bare imports, print/println/append, Process, omitted types; ASK=HashMap, const evaluation` exact. User says `<list or none>` likely no brackets required. Fine.
+
+  Check "End with exactly:" means response last line exact prefix. I'll comply.
+
+  I'll formulate.
+
+• I treated `GRAMMAR_REVIEW.md` as an inventory, not as approved syntax. The OPEN items mentioned below are opportunities to avoid adding forms, not existing rules to reverse.
+
+  1. **Method-call and receiver sugar — STRONG**
+
+     **What:** `(&s).m()` and `Trait::m(&s)` / `Type::m(&s)` are two ways to make the same statically resolved call. Special `self`, `&self`, and `&mut self` parameters add a second parameter model.
+
+     **Anchor:** [OD6](docs/decisions.md#od6), [OD32](docs/decisions.md#od32), [OD60](docs/decisions.md#od60), and TRAIT-9.
+
+     **Proposal:** Keep traits, inherent implementations, and `Destroy`, but retain only associated/qualified calls. Write the receiver as an ordinary named first parameter, including `self: &Self` where appropriate. Remove postfix method calls and special receiver grammar.
+
+     **Lost:** Familiar dot notation and chaining. No expressive power or static dispatch is lost. This removes receiver lookup, receiver-specific borrowing rules, and one whole class of “is this a field or method?” reading.
+
+  2. **`char` is a second byte type — STRONG**
+
+     **What:** `char` is exactly a one-byte code unit. Every `u8` converts losslessly to `char` and back, so it is not a Unicode character type and provides no additional invariant.
+
+     **Anchor:** [TYPE-20](legacy/docs/spec/types.md#TYPE-20), [OD137](docs/decisions.md#od137), and [OD42](docs/decisions.md#od42).
+
+     **Proposal:** Remove the `char` type and its conversion/comparison special cases. Keep ASCII quoted literals as `u8` literals, including in patterns. Text remains UTF-8 bytes with explicit scalar-boundary checks for views.
+
+     **Lost:** A nominal hint that a byte is intended as text. That hint is weak anyway, and `char` actively invites the Unicode misreading. Byte-oriented showcases lose nothing.
+
+  3. **Import aliases and dual qualified/unqualified references — STRONG**
+
+     **What:** After importing a declaration, source can use both its imported bare name and its qualified path. `as` adds a third local spelling for the same entity.
+
+     **Anchor:** [OD77](docs/decisions.md#od77), [OD139](docs/decisions.md#od139), [OD151](docs/decisions.md#od151), and MOD-9.
+
+     **Proposal:** Keep explicit imports as the required dependency/visibility manifest, but make every cross-module reference fully qualified. Remove import renaming and bare imported bindings: `import a.{f}; … a::f()`.
+
+     **Lost:** Short names and local renaming. Name collisions are instead resolved visibly at each use. Typed semantic identity already prevents compiler confusion; this change addresses the human reader’s aliasing burden.
+
+  4. **Special variadic/overloaded output and append builtins — STRONG**
+
+     **What:** `print`, `println`, and `append` are compiler-special forms beside ordinary grant-backed output and typed string operations. `println` also duplicates printing with an explicit newline, while `append` duplicates a closed family of typed operations.
+
+     **Anchor:** [OD133](docs/decisions.md#od133), [OD154](docs/decisions.md#od154), and the ordinary grant-backed operations in Core Q7.10/Q7.11.
+
+     **Proposal:** Remove all three special forms. Use ordinary `write` calls and named typed conversions/append operations. Write `"\n"` explicitly and make allocation and failure visible through the ordinary APIs.
+
+     **Lost:** Concise formatting and output. In return, the language needs no special variadic exception, closed overloading rule, or desugaring table for these operations.
+
+  5. **The currently operationless `Process` capability — STRONG**
+
+     **What:** `Process` remains in the reserved capability set, but process spawning is absent from the target, `process_exit` was removed, arguments use `Env`, and `abort()` explicitly needs no permission.
+
+     **Anchor:** Authority rules 5 and 13, [OD136](docs/decisions.md#od136), [OD156](docs/decisions.md#od156), Core Q7.4/Q7.10, and the authority audit’s `abort()` rule.
+
+     **Proposal:** Remove `Process` from the current capability universe and primitive signatures. Reintroduce it only together with a target’s process grants and operations.
+
+     **Lost:** A placeholder for future process support. Nothing currently showcases or executes needs it; retaining it only adds names, set cases, and misleading signature possibilities.
+
+  6. **Omitted local and result types — STRONG**
+
+     **What:** Later slices propose unannotated `let x = e`, while slice 0 requires typed bindings. Functions may also omit `-> Unit`, despite `Unit` now having a canonical spelling.
+
+     **Anchor:** The slice-0 typed-let decision and [OD157](docs/decisions.md#od157). The omission details are OPEN-18/OPEN-9, not already approved decisions.
+
+     **Proposal:** Require `let x: T = e` and an explicit result type on every function and function type, using `-> Unit` where there is no other result. Keep the narrowly decided generic-argument inference; this is not a request for global inference.
+
+     **Lost:** Shorter declarations. Every binding and signature instead exposes its type locally, which is directly aligned with auditing and “know everything.”
+
+  7. **`HashMap` before its deterministic contracts and workload case exist — WORTH ASKING**
+
+     **What:** Slice 23 schedules both `OrderedMap` and `HashMap`, but `HashMap` is excluded from the sixteen initial `Destroy` implementations because its destruction order is unspecified.
+
+     **Anchor:** Core Q2.2/Q2.3 and [vertical slice 23](ROADMAP.md#vertical-slices).
+
+     **Proposal:** Defer `HashMap`; ship `OrderedMap` first. Admit hashing only with a measured EVM/KV requirement and deterministic hashing, iteration, cleanup, and failure contracts.
+
+     **Lost:** Expected constant-time lookup and possibly important showcase performance. This should be a performance-driven admission decision, not a claim that ordered trees are always adequate.
+
+  8. **Constants whose initializers execute at every use — WORTH ASKING**
+
+     **What:** A `const` initializer is inlined and evaluated at each use, not evaluated once at startup or necessarily at compile time. That is surprising under the familiar meaning of “constant” and can conceal repeated work behind a name.
+
+     **Anchor:** [TYPE-22](legacy/docs/spec/types.md#TYPE-22), Core Q6.4, [OD8](docs/decisions.md#od8), and the refusal of general compile-time evaluation.
+
+     **Proposal:** Restrict `const` to a closed total literal/constructor/total-operation subset, evaluate it once in the checker, and inline the resulting value. Exclude calls, borrows, allocation, and potentially failing plain arithmetic. Use an ordinary function for anything richer.
+
+     **Lost:** Named pure computations at module scope. This needs an owner decision because an alternative is simply to document the current inline-expression model, but the current name is easy to misread.
+
+  9. **`assert(e) by thm(...)` versus `#[proof]` — KEEP**
+
+     **What:** Both involve Lean theorems, but they do different jobs.
+
+     **Anchor:** [OD79](docs/decisions.md#od79), the [SPARK decision](docs/decisions.md#decided-project-spark-2026-11-06), and the `#[proof]` spelling in no-hidden-traps.
+
+     **Reason:** `#[proof]` discharges an existing generated function obligation or records a property of that function. `assert(e) by thm(...)` proves and introduces a new fact at a particular program point, with its hypotheses discharged. Removing either would lose a distinct proof operation. The parenthesized-assert restriction is somewhat awkward, but not enough to invalidate the mechanism.
+
+  10. **Plain, `checked_*`, wrapping, and saturating arithmetic — KEEP**
+
+      **What:** Superficially, these are several ways to perform the same arithmetic.
+
+      **Anchor:** [OD10](docs/decisions.md#od10), [ARITH-4](legacy/docs/spec/arithmetic.md#ARITH-4), and the no-hidden-traps checked-operation spellings.
+
+      **Reason:** They have different observable contracts: plain operators require proof of safety; `checked_*` exposes recoverable failure as `Result`; wrapping defines modular arithmetic; saturating defines clamping. Hashes, checksums, crypto, parsers, and ordinary checked computation need those distinctions. Removing any family would push its semantics into duplicated user code.
+
+  11. **`&place` arguments versus scoped `borrow` blocks — KEEP**
+
+      **What:** Both introduce references.
+
+      **Anchor:** [OD58](docs/decisions.md#od58), [OD1](docs/decisions.md#od1), [OD2](docs/decisions.md#od2), and Core Q4.7/Q9.5.
+
+      **Reason:** `&place` supplies a reference for the duration of a call; a borrow block names a reference across multiple statements. The block also uniformly opens heap cells and array/text views. References cannot be bound by ordinary `let`, so replacing blocks with `let r = &x` is not an equivalent simplification. The decided single scoped form for all views is already the right unification.
+
+  12. **Capabilities and grants, including `Console` versus `Device` — KEEP**
+
+      **What:** An operation needs both a `with(...)` permission and a resource value, which can look like stating authority twice. Standard streams and devices also have separate permissions.
+
+      **Anchor:** Authority rules 1–2 and Core Q7.11.
+
+      **Reason:** The permission says what a function may do; the grant says which object it may do it to. Neither implies the other, and separating them enables narrowed resources and signature-level authority review. `Console` permits policy for standard streams independently of arbitrary device grants. This is deliberate two-factor authority, not duplication.
+
+  ANSWER: STRONG=method-call sugar, char, import aliases/bare imports, print/println/append, Process, omitted types; ASK=HashMap, const evaluation
+
+To resume this session: kimi -r session_3e0cb783-c964-4a26-9d15-214b2d06897d

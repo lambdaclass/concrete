@@ -1,0 +1,11 @@
+No blocking findings.
+
+**Check summary:**
+- **Faithful to reproducer & nothing overstated:** Accurately summarizes the Codex confirmation (commits `A` on `main`, unreviewed `B`, `C` on `B`, clean note on `C` with `base: B` accepted by `verify.sh` and `review_provenance`, while a `findings` note is rejected) and notes that the `wip/record-signoffs` / `wip/record-language` instance was not exploited.
+- **Structural cause & fix owner:** Clearly states the structural cause (`verify.sh:59` validates `base:` only syntactically as 40 hex, never against the train base) and names `scripts/land/train.sh review_provenance` as the owner.
+- **Done-when correctness & sufficiency:**
+  - *Direction:* Requiring `note_base <= train_base` (ancestor-or-equal) ensures `train_base..head` is a subset of the reviewed range `note_base..head` along the lineage (whereas `train_base < note_base`, as in `A < B < C`, leaves `A..B` unreviewed).
+  - *Member-note case:* Yes, member notes need the same check. Each train member is branched off `main` (at or before `train_base`) and merged into the train; if a member branch has an unreviewed intermediate commit `B` between `train_base` and the member tip `M`, a note on `M` with `base: B` would likewise leave `train_base..B` unreviewed when the train lands on `train_base` via member provenance. Requiring every member note's `base` to be an ancestor-or-equal of `train_base` closes that parallel gap.
+- **TSV format:** All 8 tab-separated fields (`id`, `date`, `area`, `description`, `owner`, `severity`, `done-when`, `status`) are present and properly formatted, and `ISS-0016`'s missing trailing newline is restored.
+
+VERDICT: ACCEPT

@@ -1,0 +1,18 @@
+### Review of `e474d8f0` (`wip/slice0-lexer-ws`)
+
+1. **Faithful encoding of item 30 and scope discipline (`ConcreteSpec/Spec/Surface0.lean:61-98`, `Concrete/Lex.lean:348-440`):**
+   - [`Whitespace`](file:///home/unbalancedparen/projects/clones/wip-slice0-lexer-ws/ConcreteSpec/Spec/Surface0.lean#L61-L62) admits only space (`32`), tab (`9`), LF (`10`), and CR (`13`).
+   - [`Trivia`](file:///home/unbalancedparen/projects/clones/wip-slice0-lexer-ws/ConcreteSpec/Spec/Surface0.lean#L88-L98) combines only `Whitespace` and `LineComment`. No tokens, punctuation, literal rules, diagnostics, block comments, shebang handling, or additional Unicode whitespace are introduced.
+
+2. **Independence and maximality of the judgment (`ConcreteSpec/Spec/Surface0.lean:88-98`, `Concrete/Lex.lean:545-547`):**
+   - `Trivia` is a purely declarative inductive relation in `ConcreteSpec.Surface0` with no dependency on scanner functions (`whitespace?`, `lineComment`, `skipTriviaAux`, `skipTrivia`).
+   - Maximality is enforced by `Trivia.stop` (`ConcreteSpec/Spec/Surface0.lean:89-92`), which requires both `∀ c cs, rest = c :: cs → ¬ Whitespace c` and `∀ cs, rest ≠ 47 :: 47 :: cs` on the unconsumed remainder. Together with `skipTrivia_sound` and `skipTrivia_complete`, [`trivia_unique`](file:///home/unbalancedparen/projects/clones/wip-slice0-lexer-ws/Concrete/Lex.lean#L545-L547) establishes that every input has a unique maximal trivia decomposition.
+
+3. **Proof soundness and conformance controls (`Concrete/Lex.lean:407-547`, `Concrete/Lex.lean:590-606`, `scripts/proofs/axioms.golden:885`):**
+   - [`skipTriviaAux_sound`](file:///home/unbalancedparen/projects/clones/wip-slice0-lexer-ws/Concrete/Lex.lean#L443-L487), [`skipTriviaAux_complete`](file:///home/unbalancedparen/projects/clones/wip-slice0-lexer-ws/Concrete/Lex.lean#L490-L533), [`skipTrivia_sound`](file:///home/unbalancedparen/projects/clones/wip-slice0-lexer-ws/Concrete/Lex.lean#L536-L537), [`skipTrivia_complete`](file:///home/unbalancedparen/projects/clones/wip-slice0-lexer-ws/Concrete/Lex.lean#L540-L542), and [`trivia_unique`](file:///home/unbalancedparen/projects/clones/wip-slice0-lexer-ws/Concrete/Lex.lean#L545-L547) are proved without `sorry`, `native_decide`, or new axioms (`scripts/proofs/axioms.golden:885` records only `ConcreteSpec.Surface0.Trivia.brecOn` with an empty axiom list).
+   - Kernel-checked `decide` examples (`Concrete/Lex.lean:590-606`) cover each of the four whitespace scalars, CRLF, line comments ending at LF, CR, and EOF, mixed trivia runs, and negative controls (block comment `/*...*/`, shebang `#!`, NBSP `0xA0`, BOM `0xFEFF`, single `/`, and non-trivia prefix).
+
+No blocking or non-blocking defects found.
+
+VERDICT: ACCEPT
+rc=0

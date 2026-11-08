@@ -1,0 +1,6 @@
+No correctness defects found in the delta:
+
+- [`scripts/checks/lib/stack_access.py`](file:///home/unbalancedparen/projects/slice0-push/scripts/checks/lib/stack_access.py#L16): [`X86_REG`](file:///home/unbalancedparen/projects/slice0-push/scripts/checks/lib/stack_access.py#L16) now restricts numbered registers to `r8`–`r15` (with optional `d`/`w`/`b` suffix), rejecting `r0`–`r7` and `r16`–`r99`.
+- [`scripts/checks/lib/stack_access.py`](file:///home/unbalancedparen/projects/slice0-push/scripts/checks/lib/stack_access.py#L64): the string-instruction guard in [`x86_addresses`](file:///home/unbalancedparen/projects/slice0-push/scripts/checks/lib/stack_access.py#L30-L66) now matches `(?:rep\w*\s+)?(?:movs|stos|lods|cmps|scas)[bwdq]?(?:\s|$)` instead of a prefix match on `movs`, so sign-extending moves (`movsx`, `movsxd`) without memory operands are no longer rejected.
+
+VERDICT: ACCEPT

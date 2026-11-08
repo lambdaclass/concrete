@@ -1,0 +1,7 @@
+No findings.
+
+- **`scripts/checks/legacy_frozen.sh`**: `judge()` and `chain()` validate each step from the base frozen tree through every `sweep <commit> <tree>` entry to `HEAD:legacy`. NUL-delimited `diff-tree -z` parsing, `GIT_LITERAL_PATHSPECS=1` on `ls-tree`, ancestor/type checks on sweep commits and trees, and the negative controls cover unrecorded additions, root copies left behind, content/mode modifications, post-sweep edits or open-row deletions, C-quoted paths, and pathspec-magic paths.
+- **Links, `RETENTION.tsv`, `ISSUES.tsv`, and `docs/decisions.md`**: Relative and root-relative links to moved files (`MERGED.md`, `landing-audit-2026-11-06`, `site-down.md`, `legacy_move.sh`) resolve properly, `RETENTION.tsv` rows match the swept and retained-until-consolidated sets, and the recorded decisions match the quoted owner approvals (`"ok to 1"`, `"ok to 2"`).
+
+Verdict: ACCEPT
+agy exit 0

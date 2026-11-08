@@ -1,0 +1,9 @@
+### Verification Summary
+
+1. **`docs/decisions.md` references (`changelog.d/2026-11-08-one-repository.md:5-6`, `docs/LANDING.md:166-167`, `docs/SELF_HOSTED_RUNNERS.md:89-90,103-104`)**: All four claims that the 2026-11-06 owner decisions ("one repository" and runner exposure "A") were already recorded in `docs/decisions.md` have been updated to state they are pending record in `docs/decisions.md`. `docs/decisions.md` itself is untouched.
+2. **`scripts/oracle/ORACLE.lock:9-10`**: The comment no longer describes `concrete2` as already archived, instead noting it is to be archived after the first landing on `lambdaclass/concrete`. Only comment lines (`#`) were modified; no parsed `key=value` lock fields changed.
+
+No new defects found in the delta.
+
+VERDICT: ACCEPT
+rc=0

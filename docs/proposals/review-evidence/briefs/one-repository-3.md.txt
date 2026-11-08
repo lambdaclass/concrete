@@ -1,0 +1,12 @@
+FOLLOW-UP on your commit 11938145 (wip/one-repository-2, this clone; your 556d15c8 rebased onto main ea212942).
+A full-access Codex review found two real documentation defects. Fix both in one commit:
+1. changelog.d/2026-11-08-one-repository.md:5 says the owner decisions are recorded in docs/decisions.md, and they are not
+   (neither the one-repository move nor the runner-exposure "A"). Say instead that they are the owner's decisions of
+   2026-11-06, pending their record in docs/decisions.md. Apply the same correction to every other place in this commit that
+   claims or links them as recorded in decisions.md (e.g. the `[decision](decisions.md)` / `[decisions](decisions.md)` links
+   in docs/SELF_HOSTED_RUNNERS.md, and any in LANDING.md, AGENTS.md or train.sh). Do NOT edit docs/decisions.md or ROADMAP.md.
+2. scripts/oracle/ORACLE.lock:9 calls concrete2 already "archived". Say: "the first publication stays on the old concrete2
+   repository, to be archived after the first landing on lambdaclass/concrete". The lock's hashed or parsed fields must not
+   change. Run the oracle checks.
+Gates: timeout 1500 systemd-run --user --scope -q -p MemoryMax=8G -p TasksMax=1024 bash scripts/checks/run.sh (all pass).
+Commit locally, never push, never change git config/remotes, no --no-verify. Print the SHA and every line you changed.

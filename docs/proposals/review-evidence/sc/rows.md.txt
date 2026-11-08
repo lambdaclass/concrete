@@ -1,0 +1,84 @@
+- <a id="decided-2026-11-07-foundation-first"></a>**The foundation first, then per slice** (owner,
+  2026-11-07: "ok to option b then for freeze the foundation>?", answering what of the spec is
+  written before the freeze with option (b), the foundation then per slice). Before slice 1 builds
+  on it, the shared foundation is fully written in the Lean spec and frozen: types, values and
+  layout, ownership and places, capabilities and grants, outcomes and traps, the step model's shape,
+  and the diagnostics and facts types. Each later slice adds its own rules on top of that foundation
+  without rewriting it. Changing a frozen foundation definition is an owner decision: the earlier
+  proofs are re-run and the change is recorded here. This answers the scheduling question S1 of the
+  [spec plan](proposals/SPEC_UNIFICATION.md#51-answered-scheduling-questions-coordinator-2026-11-06),
+  which had proposed writing every slice's spec side before the freeze. What the foundation contains
+  is the [next row](#decided-2026-11-08-foundation).
+- <a id="decided-2026-11-08-foundation"></a>**The Lean foundation: contracts C1–C10 and the answers to
+  its questions** (owner, 2026-11-08: "ok all recommended", answering every question of the
+  [foundation proposal](proposals/FOUNDATION.md), draft 3, with its recommendation; the proposal was
+  reviewed by Codex, Kimi and agy in four rounds and by Claude, and its last edit was checked by Codex
+  and Kimi). The foundation is ten contracts, each an interface with its laws, written in the Lean
+  spec ([C1 execution, calls and cleanup](proposals/FOUNDATION.md#c1-execution-calls-and-cleanup),
+  [C2 scalars, failure and arithmetic](proposals/FOUNDATION.md#c2-scalars-failure-and-arithmetic),
+  [C3 target, layout and representation](proposals/FOUNDATION.md#c3-target-layout-and-representation),
+  [C4 byte memory and value validity](proposals/FOUNDATION.md#c4-byte-memory-and-value-validity),
+  [C5 dynamic borrow, brands and authority](proposals/FOUNDATION.md#c5-dynamic-borrow-brands-and-authority),
+  [C6 observations, environment and concurrency extension](proposals/FOUNDATION.md#c6-observations-environment-and-concurrency-extension),
+  [C7 secret leakage and accounting](proposals/FOUNDATION.md#c7-secret-leakage-and-accounting),
+  [C8 evaluator adequacy and termination](proposals/FOUNDATION.md#c8-evaluator-adequacy-and-termination),
+  [C9 identities, primitive contracts, evidence and ghost erasure](proposals/FOUNDATION.md#c9-identities-primitive-contracts-evidence-and-ghost-erasure),
+  [C10 frames and ABI](proposals/FOUNDATION.md#c10-frames-and-abi)), with the
+  [pipeline and validation contract](proposals/FOUNDATION.md#3-pipeline-and-validation-contract)
+  they serve. The rules themselves live only in the Lean spec; ROADMAP R-0607 to R-0616 hold the
+  work, each with its home and gate. The answers, numbered as in the proposal (questions 12 and 13
+  were removed as already decided by OD106 and by Q2.3 and Q3.8):
+  1. <a id="foundation-q1"></a>[Scope](proposals/FOUNDATION.md#q1): the interface and law boundary
+     of C1–C10 is approved. The foundation is frozen only after its Lean implementation, its kernel
+     proofs, its interaction tests, review by the four models and the owner's acceptance.
+  2. <a id="foundation-q2"></a>[State](proposals/FOUNDATION.md#q2): one hybrid state, structured
+     places for safe typed storage plus byte and provenance blocks, materialized only on raw
+     address-taking, `expose` or passing an address to foreign code (C4).
+  3. <a id="foundation-q3"></a>[Target profiles](proposals/FOUNDATION.md#q3): read-only profiles
+     separate address width, pointer representation, length width, byte order and address spaces.
+     The existing 64-bit little-endian profile is unchanged. This generalizes Q3.7, Q3.9 and Q3.10
+     and OD126's profile (noted at each).
+  4. <a id="foundation-q4"></a>[Enum layout](proposals/FOUNDATION.md#q4): the existing profile's
+     `i32` enum tags stay for now; compact tags are decided at the layout slice.
+  5. <a id="foundation-q5"></a>[Niches](proposals/FOUNDATION.md#q5): option (b), tagged layout now
+     and no niches; a future niche only by owner decision.
+  6. <a id="foundation-q6"></a>[Release context](proposals/FOUNDATION.md#q6): release-context
+     erasure only with a preservation proof (noted at Q1.7).
+  7. <a id="foundation-q7"></a>[`usize`](proposals/FOUNDATION.md#q7): option (c), the `u64` meaning
+     everywhere per Q3.5, with proved narrower representations where bounds justify them. No source
+     `usize` or `isize` is added.
+  8. <a id="foundation-q8"></a>[Native image](proposals/FOUNDATION.md#q8): R-0505's later
+     native-image closure and Q8.1's conditional endpoint stay.
+  9. <a id="foundation-q9"></a>[Trap kinds](proposals/FOUNDATION.md#q9): the trap kind names and
+     their renderings are decided before the first slice that prints them.
+  10. <a id="foundation-q10"></a>[Columns](proposals/FOUNDATION.md#q10): source columns count bytes,
+      and a tab counts one byte, with conformance tests.
+  11. <a id="foundation-q11"></a>[UTF-8 failures](proposals/FOUNDATION.md#q11): their classification
+      is deferred to the text slice.
+  14. <a id="foundation-q14"></a>[Entropy](proposals/FOUNDATION.md#q14): its grant shape is deferred
+      to slice 6.
+  15. <a id="foundation-q15"></a>[Struct invariants](proposals/FOUNDATION.md#q15): the SPARK exposure
+      definition is in the spec before the freeze; the source feature comes at slice 17.
+  16. <a id="foundation-q16"></a>[Registries](proposals/FOUNDATION.md#q16): lawful extensible
+      registries; an unknown operation is refused (noted at Q7.10 and Q9.7).
+  17. <a id="foundation-q17"></a>[Qualification](proposals/FOUNDATION.md#q17): the decided
+      backend-order equality stays, plus a per-native-trace Core refinement check;
+      allocation-dependent observations are decided at slice 24.
+  18. <a id="foundation-q18"></a>[`Secret<T>`](proposals/FOUNDATION.md#q18): `Secret<T>` has `T`'s
+      layout.
+
+  *Revisions of decided rows*, as the proposal's [revision register](proposals/FOUNDATION.md#4-revision-register)
+  states them:
+  - **OD126; Q3.7, Q3.9, Q3.10** (question 3): the address and profile interface is generalized,
+    preserving the provenance rules and the zero-byte exception; the existing 64-bit little-endian
+    profile is unchanged, including Q3.10's `base + size ≤ 2^64−1` one-past bound. Any generalized
+    profile needs an analogous checked bound.
+  - **Q1.7** (question 6): proved release-context erasure, including owning Text where applicable;
+    no unconditional one-pointer claim.
+  - **Q7.1, Q7.10; Q9.7** (questions 16 and 14): lawful registry instances rather than a permanently
+    closed inventory; the existing grant contracts are preserved. Entropy details are deferred.
+  - Retained without revision: Q3.5 and its dependents (Q1.11, Q2.4, Q4.6, TYPE-19, FFI-7) keep
+    the `u64` semantics and permit only proved narrower representations (question 7); OD126 and
+    FFI-7's `i32` enum tags (question 4); Q8.1, the early-evidence decision and R-0505 (question 8);
+    the natural native struct layout of the [runtime decision](#decided-project-runtime-2026-11-06),
+    which supersedes FFI-7/10's unspecified-layout prose, with the `repr` restrictions retained.

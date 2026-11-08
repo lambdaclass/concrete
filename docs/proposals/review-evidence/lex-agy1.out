@@ -1,0 +1,24 @@
+### Review Summary
+
+1. **Faithfulness and independence of `ConcreteSpec/Spec/Surface0.lean`:**
+   - **UTF-8 (`Utf8.One`, `Two`, `Three`, `Four`, `Encodes`, `Decodes`):** Exact declarative transcription of Unicode Table 3-7 (`00..7F`; `C2..DF 80..BF`; `E0..EF` with `E0 ⇒ A0..BF` and `ED ⇒ 80..9F`; `F0..F4` with `F0 ⇒ 90..BF` and `F4 ⇒ 80..8F`) plus the positional value equations. Overlong forms, surrogates (`U+D800..U+DFFF`), values above `U+10FFFF`, and truncated sequences are all excluded. `encodes_scalar` in [Concrete/Lex.lean](file:///home/unbalancedparen/projects/lexer-w1/Concrete/Lex.lean#L327-L331) machine-checks that every `Utf8.Encodes c bs` satisfies `Utf8.Scalar c`.
+   - **NUL and BOM refusal (`SourceOk`):** Requires a valid `Utf8.Decodes bs cs` with `c ≠ 0 ∧ c ≠ 0xFEFF` for every `c ∈ cs`.
+   - **ASCII identifiers (`IdentStart`, `IdentContinue`):** `A–Z` (`65..90`), `a–z` (`97..122`), and `_` (`95`) for start; those plus `0–9` (`48..57`) for continuation.
+   - **Line comments (`CommentBody`, `LineComment`):** Requires prefix `47 :: 47` (`//`) and stops before the first `10` (LF) or `13` (CR) or at EOF, leaving the line terminator in the unconsumed remainder.
+
+2. **Theorem statements and non-vacuity (`Concrete/Lex.lean`):**
+   - `decodeUtf8_sound`, `decodeUtf8_complete`, `decodes_unique`, `checkSource_sound`, `checkSource_complete`, `encodes_scalar`, `identStart?_iff`, `identContinue?_iff`, `lineComment_sound`, and `lineComment_complete` all state the intended bidirectional correspondence against the independent judgments in `ConcreteSpec.Surface0`. None are vacuous, and kernel-checked `example`s inhabit both positive and negative cases of each judgment.
+
+3. **Scope / Owner Decisions:**
+   - Nothing beyond the settled slice-0 rules is defined. No token set, literal syntax, general whitespace rule, shebang rule, block comment rule, or user-visible diagnostic wording is introduced.
+
+4. **Examples and Lean hygiene:**
+   - All error offsets and reasons in the conformance examples are consistent with `decodeUtf8` / `checkSource` and checked by `decide` in the kernel (no `sorry`, `axiom`, `partial`, or `native_decide`).
+
+### Findings
+
+- `Concrete/Lex.lean:190`: **PREFERENCE** — `sourceAt` duplicates the 1-to-4-byte matching spine of `decodeAt` (`Concrete/Lex.lean:58`), requiring parallel 9-case inductions in `decodeAt_sound` and `sourceAt_iff`. Factoring a single-scalar step function (`decodeStep`) shared by `decodeAt` and `sourceAt` would halve the case analysis if another pass is added later (for example, when proving the `TODO` first-error-offset theorem).
+- `Concrete/Lex.lean:400`: **PREFERENCE** — `set_option maxRecDepth 100000` is open until `end Concrete.Lex`; wrapping the conformance examples in a `section` would prevent the elevated recursion limit from silently applying to declarations added later at the bottom of the namespace.
+
+VERDICT: ACCEPT
+agy rc=0

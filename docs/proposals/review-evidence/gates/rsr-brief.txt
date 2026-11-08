@@ -1,0 +1,9 @@
+You are the writer for two rebases with one known conflict. Repository: current directory. Do not push, do not run nix. Use `git -c core.hooksPath=.githooks` for git commands that commit.
+1. git checkout -b wip/record-signoffs-r 0b9d3cfa3498dedd42a4ab819e0d7f5ef2f682e5
+2. git rebase --onto 09d2821e79b29d7a2de967a6e4a28a295ceb8c5e 1547734f86e83d381f6cac2f25d2810b083bc9ed
+   The first commit (a13c363b5) conflicts in ISSUES.tsv only. Resolve it as the union, in ID order: the lines up to and including ISS-0016 unchanged; then the ISS-0018 row exactly as in commit a13c363b5 (`git show a13c363b5:ISSUES.tsv | grep '^ISS-0018'`); then the ISS-0019 row exactly as on 09d2821e7 (`git show 09d2821e7:ISSUES.tsv | grep '^ISS-0019'`). The file ends with one newline. Remove all conflict markers, `git add ISSUES.tsv`, `git rebase --continue` (keep the commit message unchanged; set GIT_EDITOR=true).
+   If a later commit conflicts in ISSUES.tsv, resolve it the same way (keep both rows, ID order, each row exactly as its side has it). If any OTHER file conflicts anywhere, STOP: `git rebase --abort` and report.
+3. git checkout -b wip/roadmap-sweep-r 95d808c792c1cbf6e440e25e813a4d3370ba5c93
+   git rebase --onto wip/record-signoffs-r 0b9d3cfa3498dedd42a4ab819e0d7f5ef2f682e5
+   Same rules (stop on any conflict outside ISSUES.tsv).
+4. Print: git log --oneline 09d2821e7..wip/roadmap-sweep-r

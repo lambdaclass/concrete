@@ -1,0 +1,21 @@
+**(1) Fairness of examples:**
+Mostly fair on value counts (27 parameters in both, since grants are already explicit), but structurally biased toward TODAY in two ways. First, in `(b)`, bundling `disk: Directory` directly into `Store<A>` creates the exact aggregate-authority problem TODAY was designed to solve; an idiomatic object-capability design would separate in-memory `Entries<A>` from `disk: &Directory` (just as `Allocator<A>` is kept separate) or pass field borrows `&db.entries`. Second, `(c)` tests only a single generic callback (`cap E`). Real higher-order code composing multiple callbacks or traits requires multiple `cap` variables and explicit `<cap {...}>` instantiations at every call site, where TODAY’s syntactic and type-checking burden scales much worse than shown.
+
+**(2) The "independent ceiling" argument:**
+Codex is right. If a struct bundles multiple resources (required for long-lived state or single-context callbacks because references cannot be stored), MERGED grants any function taking `&Store` or `&mut Ctx` all contained authority. Recovering this in MERGED requires either:
+- Projection/wrapper types or splitting structs, which fails when a callback genuinely needs state bundled into one context parameter `C`; or
+- Checked authority summaries on public signatures, which simply reintroduces `with(...)` under another name.
+Because humans read signatures to audit LLM-generated edits, losing a declaration-level operational ceiling is a real regression.
+
+**(3) Proof and checker claims:**
+Right. TODAY’s Lean set-inclusion proof (`Authority.lean`) is simple and orthogonal to aliasing/value flow. MERGED eliminates set judgments, but proving object-capability containment across aggregates, dynamic narrowing, and generic contexts `C` without whole-program body inspection requires modular reachability summaries—harder than set inclusion, and needed alongside provenance proofs that *both* designs must eventually build anyway.
+
+**(4) What Codex missed:**
+1. **Violation of "one form per situation":** For 1-to-1 resource permissions (`Fs`/`Directory`, `Console`/`StdOut`, `Time`/`Clock`), `with(...)` is redundant whenever parameters aren't bundled into opaque aggregates.
+2. **Release-metadata contradiction:** `destroy_entries(entries)` needs `with(Alloc)` TODAY, yet MERGED rule 6 claims release authority travels inside `Vec<Entry, A>` metadata. If `Vec` already carries release authority, `with(Alloc)` on `destroy_entries` is pure noise; if `destroy` is an observable `Alloc` effect, MERGED hides it inside ordinary value destruction.
+3. **Multi-callback combinators:** Codex understates how badly explicit `cap E1, cap E2` instantiation scales without inference.
+
+**(5) Recommendation: KEEP TODAY**
+Despite duplicating unbundled resource parameters, TODAY is the better long-term design for Concrete’s constraints. Because second-class references force long-lived structs and callback contexts to *own* their capabilities, bundled aggregates are unavoidable. `with(...)` provides a cheap, local, syntax-visible ceiling that prevents an LLM implementation edit from silently exercising dormant capabilities hidden in a struct, with simpler modular checking in Lean.
+
+ANSWER: KEEP; REASON=Second-class references force capabilities into owned aggregates, making `with(...)` an irreplaceable, modularly checkable signature ceiling against silent authority creep.

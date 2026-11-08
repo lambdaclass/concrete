@@ -1,0 +1,39 @@
+• ## Findings
+
+  - **High — abbreviated push options still bypass protection**  
+    `scripts/land/acceptance_shim.sh:129-145` recognizes only exact `--mirror` and `--receive-pack`; other option-like tokens are ignored and their arguments can be misclassified as the repository or a refspec. Git accepts unique long-option abbreviations.
+
+    Reproduced through the shim on `PATH`, under `timeout 10`:
+
+    ```bash
+    git -C "$S/w" push --mir --receive-p git-receive-pack origin
+    ```
+
+    The shim treats `git-receive-pack` as the repository and `origin` as a non-main refspec, then delegates. Git interprets `--mir` as `--mirror` and `--receive-p` as `--receive-pack`, with no refspec. The command exited **0** and created both `refs/heads/main` and `refs/heads/wip/x` on the protected bare repository.
+
+  - **Low — a legitimate `file://localhost` fixture push is wrongly refused**  
+    `scripts/land/acceptance_shim.sh:36-42` strips only `file://`; the `localhost` handling at `scripts/land/acceptance_shim.sh:52` is used during shim creation, not for push destinations at line 153.
+
+    ```bash
+    git -C "$S/w" push "file://localhost$S/fix.git" main
+    ```
+
+    The unprotected fixture push exited **1** with “not an absolute path to a local repository.” The same command without the shim exited **0** (“Everything up-to-date”).
+
+  - **Low — documentation remains inaccurate, including the allowed count**  
+    The bypass above contradicts the closed status and safety claims in `ISSUES.tsv:21` and `changelog.d/2026-11-08-acceptance-shim.md:10-16`.
+
+    The allowed count is **15**, not 14: fourteen invocations at `scripts/checks/landing_script.sh:1069-1075`, plus the second-shim fixture push at line 1098. The **38 refused invocations**, separately listed protected-URL cases, and **two refused shim creations** are counted accurately.
+
+  ## Round-2 findings
+
+  - **`--config-env` bypass: fixed.** Both separate and `=` forms were refused under `timeout 10`; neither created protected `main`.
+  - **Protected `file://localhost` and `~` URLs: fixed.** Shim creation resolved both identities; absolute-path pushes to each protected repository were refused and neither gained `main`.
+  - **Documentation accuracy: not fixed**, for the reasons above.
+
+  Existing bounded checks pass: `landing_script.sh` **PASS=210 FAIL=0**, `issues.sh` **PASS=5 FAIL=0**. All reproductions used `/tmp` scratch repositories; the archive was not modified.
+
+  Verdict: CHANGES-NEEDED
+
+To resume this session: kimi -r session_ec2619b7-3d06-46c3-b1d6-faac8fefdace
+kimi exit 0

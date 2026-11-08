@@ -1,0 +1,472 @@
+kimi version 2.4.1
+• I need review read-only scratch under /tmp. Should inspect files and diff repro. Must not modify repo. Should likely extensive testing scratch. I can use tools. I'll mention approach one sentence then tool calls. Should read ../change.diff, repro.sh, shim, landing control, issues, changelog. Paths cwd repo, ../ is scratchpad/kimi-shim/change.diff. Direct reads in parallel.
+
+• I’ll inspect the shim and its acceptance coverage first, then probe protected-remote and fixture-push cases in isolated scratch repositories under `/tmp`.
+
+• I got huge landing file okay. Should diff and repro absolute path known cwd prefix. Use Read absolute /tmp/.../scratchpad/kimi-shim/change.diff etc. Also read changelog and acceptance.sh perhaps sandbox helper. Should review git semantics. I'll read diff perhaps 22k.I need deeply analyze bypasses. Likely several. I must reproduce under timeout scratch. Make sure no protected actual network calls if bypass tests with local paths only. Use local protected repos representing origin/mirror. All under /tmp. Set HOME scratch config. Real Git no hooks. Use shim. Should test cases options parsing, refspecs, config/env, remote.pushDefault, pushurl, insteadOf, symlinks relative -C. Should find bypass.
+
+  I'll understand Git CLI parsing. Shim finds first token exactly push, pre includes globals and values for -C, -c, --git-dir, --work-tree, --namespace. Does not handle --git-dir= etc pre fine. --exec-path value? irrelevant. Option after push:
+  --all, --mirror flag. --repo forms. consumes --repo, -o, --push-option, --receive-pack, --exec. Others -* ignored. -- doesn't set end options, but repo parsing same positional. Potential option with separate value not consumed e.g. --upload-pack? git push uses --receive-pack. --exec. -o. `--config-env` global not consumed in pre (global before push) so pre parsing broken because it treats config env value as command and never finds push? Actually while searches push exact anywhere, pre includes all tokens, but only increments extra for known. `--config-env` and its value both included anyway because loop includes each one; so fine for passing pre to real git. It doesn't parse positional until after push. `--literal-pathspecs` no issue. Env GIT_DIR affects config remote get-url. Fine fail close? Protected actual URL path local.
+
+  Refspec:
+  - `main` detected
+  - `refs/heads/main` */main
+  - `heads/main` */main
+  - `HEAD` @
+  - source colon main dest :main detected d main.
+  - deletion `:main` t :main d main.
+  - colon alone.
+  - globs `*` only literal star. Git refspec globs use `*` yes.
+  - `+refs/heads/main:refs/remotes/...` doesn't main remote irrelevant.
+  - `--delete` with no specs moves_main due no specs and protected; with main detected.
+  - `--tags` no refspec => refuse conservatively though won't main; allowed fixtures wrongly refused `git push fixture --tags` and `git push fixture tag v1`? `tag v1` specs includes `tag`, `v1` no main so passes. `--follow-tags` no specs refuses. Requirement only push could move main and fixture allowed push main. Over-refusal perhaps not important unless root checks use tags. Could note low if expected all other. But User explicitly allowed fixture pushes wrongly refuses, need probe.
+
+  Important refspec `refs/heads/main:main` yes. `main:refs/heads/main` yes. Could push HEAD using full sha alone? `git push protected <sha>` source object with no colon: Git refspec src no dest -> error "dst refspec ... matches more than one"? Should know. Lone source `<commit>` means push to same branch? If source isn't ref, error. `HEAD:main` detected. `@:main` detected. `:/...` no.
+
+  Push default config no refspec caught. Remote config push refspec while explicit non-main refspec? If explicit specs supplied configured push refspec not used. `remote.pushDefault` no repo caught.
+
+  URL canonicalization:
+  `canon()` strips exactly leading file:// then requires absolute path, existing, cd, pwd -P. Local path with `~` fails closed. Relative path always protected -> wrongly refuses legitimate fixtures via relative paths, explicitly comment says relative protected. User says "for allowed fixture pushes it wrongly refuses". Existing relative local path is a local fixture but design deliberately says relative path protected, allowed only existing local path perhaps "unresolvable relative" but all relative unresolvable by canon. This is conservative not security issue, but can be functional bug. Root fixtures use absolute TMP so okay.
+
+  Potential symlink protected path: canonical both. Raw symlink path c canonical real, p protected canonical. Good. But symlink swap race TOCTOU perhaps can move protected through symlink changed after check? Should not adversarial concurrent? Could exploit push process delays perhaps not.
+
+  `file://localhost/path` fails closed. URL percent encoding file paths: `file:///tmp/prot%2egit` Git decodes? canon checks literal nonexistent => fail closed. Over-refusal local.
+  `file://` with path double slash canonical works.
+  Local path `//tmp/...` absolute cd canonical.
+  Local path with newline? remote get-url output splits multiple lines, fail protected likely.
+  Path to non-directory existing file: cd fails => protected.
+  Git dir path file (worktree `.git` file) cd fails => protected though valid repo arg should directory not file.
+  Protected URLs actual often https://... or git@github..., p noncanonical. If repo resolved to local fixture path passes. Could an alternate local URL maps to protected remote via config other than insteadOf? `url.<base>.pushInsteadOf` caught any config. But env `GIT_CONFIG_PARAMETERS` used in real pre config check yes? It invokes `"REAL" "${pre[@]}" config`. Environment honored. Any insteadOf anywhere including global and system. Yes. But `GIT_CONFIG_COUNT`, KEY etc honored. `-c` pre honored. `--config-env` honored in real git. Good.
+
+  Could bypass by alias? shim detects token "push" even alias? e.g `git -c alias.p=!... p` no push token -> exec real and shell alias may invoke real git not shim? This is significant. If acceptance candidate scripts execute `git alias`? User asks spelling git push options etc not alias explicitly. `git -c alias.push='!git ...'`? Builtin push cannot be alias overridden. Aliases named other command can run `git push` via shell; PATH shim recursively catches unless alias uses real path or /usr/bin/git. Any shim can't guard arbitrary shell commands anyway scope push spelling. Could `git -c alias.p=push p` expansion invokes push builtin within same real git process, no literal push argument. Shim while no `push` -> exec real; alias `p = push` then `git p origin main` moves main. This is clear bypass. But threat model candidate scripts perhaps can configure alias then use. User asked "spelling of git push (options, refspecs, config, env...)" alias config qualifies. Reproduce. However acceptance shim first PATH, alias expansion internal to real git means bypass. Severity high because protected main can move. Pre-push guard still refuses main in acceptance clone. User demands shim itself STILL refuse every push. Finding high even guard independent. But if actual Git aliases cannot shadow builtin but can alias p. Test.
+
+  Other major bypass: `git push --receive-pack='git receive-pack ...'` not relevant.
+
+  `git push` options can abbreviate long options: `--repo` parser okay. `--rep=origin`? Git parse-options allows abbreviations. Shim ignores --rep= as generic -* so no repo -> protected (fail closed) if no positional; with positional repository okay. `--mirror` abbreviations `--mir` not detected, then no specs => moves_main=1 anyway. If `--mir origin wip/x` with explicit non-main spec, mirror pushes main but shim sees flagall=0, specs wip/x moves_main=0 -> immediately exec before destination -> bypass. Similarly `--al` with nonmain refspec? `--all` plus refspec perhaps Git rejects? --mirror accepts refspec? likely `git push --mirror origin wip/x` perhaps --mirror sets all refs and refspec arguments? I'll test. `--mirror` can be abbreviated `--mir`, `--mirr` parse options. Shim only exact. With `origin wip/x` spec, shim sees wip/x nonmain and passes, Git --mirror probably refspec wip/x might limit? Should know. Git push docs --mirror: all refs under refs/ pushed, in addition to refspecs explicitly listed? likely all. `--all` docs push all branches in addition to other refspecs? Yes "Push all branches ... in addition to the ones given on command line." So `--al origin wip/x` pushes main and wip/x. That's direct high bypass. Also short combined? `--all` only. `--delete` abbreviated irrelevant if refspec main detected. `--force-with-lease` separate optional value ignored fine.
+  `--repo` abbreviation with nonmain refspec? `git push --rep=origin wip/x` only pushes wip/x no main. Config remote push could? explicit.
+  `--follow-tags` no.
+  `--atomic` no.
+  `--signed` no.
+
+  Other option with argument can create fake positional repo/refspec causing pass while actual semantics move main. Example `--receive-pack` consumed. `--exec` consumed. `--push-option` consumed. `--repo` consumed. Options not consumed: `--force-with-lease` optional separate? Git accepts `--force-with-lease=<ref>:<expect>` or `--force-with-lease` no separate (perhaps separate next interpreted repo). `--recurse-submodules` value attached required? only =. `--signed` no separate. `--verify` no. `--set-upstream`.
+  `--upload-pack` alias for receive-pack perhaps accepted by push? Shim doesn't consume. If `--upload-pack /path origin main`, repo becomes /path, specs origin main; detects main anyway. With non-main spec and mirror? Perhaps.
+  Short `-u` no arg.
+  `--progress` no.
+  `--porcelain`.
+  `--thin`.
+  `--no-thin`.
+  `--ipv4`, `--ipv6`.
+  `--server-option`? git push supports `-o`.
+  Potential `--config` push option? no.
+
+  Global option parsing first exact push token. If global `-C` value is literal push, parser skips it properly. If `-c` config value contains push token no issue separate arg not equal. If global `--git-dir=...` pre includes. Env GIT_DIR passed. Good.
+  `git --exec-path push`? --exec-path optional path? `git --exec-path=/x push`. pre includes.
+  `git --html-path push` not actual push but shim thinks push, may refuse irrelevant.
+  `git -P push` okay.
+
+  Refspec colon destination parsing: uses `${t##*:}` last colon. Git only one colon allowed except perhaps IPv6? refspec doesn't. Good.
+  Negative refspec `^main`: d ^main no detection but negative refspec excludes main, safe. `^:main` weird.
+  Refspec destination `refs/heads/main/` invalid.
+  Case-sensitive correct.
+  Special source `HEAD` detection regardless dest means `git push fixture HEAD:wip/x` wrongly refused on protected remote (conservative: HEAD doesn't move main if dest non-main). On fixture allowed. They define lone source HEAD or any dest HEAD? Code d HEAD even `main:HEAD` invalid. On protected `HEAD:wip/x` overrefusal but safe. Requirement only could move main, this can't. Not major.
+  Lone `main` can mean source and destination main under matching semantics. Good.
+  `@` alone same.
+  Full remote tracking ref source `refs/remotes/origin/main` alone destination? Git may error because not heads. Caught */main conservative.
+  `refs/tags/main` caught though tag main not branch. conservative.
+  Could destination be `refs/heads/main` via `refs/heads//main` Git normalizes? Git refs disallow double slash. `.` components? invalid.
+  `refs/heads/main@{...}` no.
+  `HEAD^{commit}:main` d main caught.
+  Hex SHA to main d main caught.
+  Empty source `:refs/heads/main` caught.
+  Refspec `+:refs/heads/main` caught.
+  `+:` caught t +: after strip t : d initially empty then t%%:* empty => d empty; case t colon catches.
+  Glob patterns using `?` or `[`? Git refspec only * as glob, others literal? Check.
+  `--all` exact, abbreviated major.
+
+  Config `remote.origin.push` with refspec main but explicit `--all`? no.
+  Remote helpers can turn an existing local path into protected remote? Git remote syntax `<transport>::<url>` e.g. `ext::` fails closed nonabsolute. But `remote.<name>.vcs`? If repository arg local absolute directory containing config that specifies something? `git push /tmp/repo` always local transport regardless internal config. Good.
+  `remote.<name>.uploadpack` no.
+  Push URL multiple: remote get-url --push --all outputs all. Good. But if remote has only `remote.origin.pushurl` protected and fetch URL local? outputs push. Good. Multiple pushurls plus `remote.origin.url` behavior all pushurls. Good.
+  `remote get-url --push --all` applies insteadOf rewrites itself. They pre-refuse any. Good.
+  Config includes includes? git config default reads includes? `git config --get-regexp` includes? By default includes are respected when querying all? Should handle. `git config --get-regexp` includes defaults false for specific file? Docs includes default on when querying all config? `--includes` default off for specific file, on when all. likely. Env config could hide? GIT_CONFIG_NOSYSTEM etc but real push same environment.
+  `GIT_CONFIG_GLOBAL=/dev/null` same both.
+  `GIT_CONFIG_PARAMETERS` can contain malformed causing real config command fails, command substitution output empty => treated no insteadOf, then remote get-url may fail and urls=repo. If repo local fixture and actual push config malformed fails anyway. If malformed config only impacts check not push? same.
+  `git config --get-regexp` exit 1 no matches output empty safe.
+  Could `GIT_CONFIG_PARAMETERS` inject `remote.origin.pushurl` etc remote get-url same.
+  `GIT_DIR` env and pre -C config both same.
+  `GIT_CONFIG` environment? `git config` reads it but push may ignore GIT_CONFIG? same enough.
+  `GIT_CONFIG_SYSTEM` weird.
+  `HOME` etc same.
+
+  Remote names beginning dash: git push -- <remote> main, shim -- ignored then repo dash string? case -* catches as option even after --. This is key: after `--`, a repository named `-foo` should positional but shim treats -* as option. Then `main` becomes repo, no specs -> moves_main=1, remote get-url main fails raw main -> protected. Refuses safe/unsafe. For refspec starting dash after -- e.g unusual ref no. Remote protected origin not dash.
+
+  Position of options after repo and refspec parse okay Git options can anywhere (parse-options stops at non-option? Git push likely options can after).
+  `--repo` after positional correctly ignored as repository by Git? Docs --repo option equivalent repository; if positional already given does Git allow both and what does it do? They assume first positional repository and --repo only missing. Should test perhaps --repo sets repo even if positional? `git push origin --repo=fixture main` may "invalid refspec" or choose latest? Could bypass if shim uses origin but real uses fixture, conservative or opposite. Test matrix.
+
+  Most important possible bypass via `remote get-url` remote name same as raw absolute path. If repo absolute protected path and there happens to be a remote named `/tmp/prot.git` configured to fixture URL, `git remote get-url /tmp/prot.git` resolves as remote name, while `git push /tmp/prot.git` how disambiguates? Git push repository can remote name or URL; remote name exact absolute path likely remote takes precedence too. Fine.
+  If remote get-url fails due config and raw repo absolute fixture passes but real push perhaps uses remote name with different protected? It fails same config.
+
+  Protected p raw https but remote get-url returns something else local via `insteadOf` caught. SSH aliases etc nonlocal protected.
+  Protected real remotes are HTTPS URLs. Could a protected GitHub repo be reachable through a local existing path that is a remote helper? no.
+  Alternate spelling `git@github.com:...` not equal protected https and canon fails => protected. Safe.
+  Local protected path and alternate symlink canonical works.
+  Hard links directories impossible. Bind mounts canonical path differs; local protected repo accessible via bind mount path would not compare same and be allowed. In scratch I can't mount. Git repo path via `/proc/self/fd/N` symlink canonical to actual path if dir exists. `/dev/fd` same. `pwd -P` resolves symlink. `/proc/<pid>/root/tmp/prot.git` `cd` then pwd -P perhaps yields `/tmp/prot.git`? likely. Path through `/proc/self/cwd` perhaps resolves.
+  Case-insensitive FS not here.
+  Path to same repo using gitfile / worktree? Protected bare path vs non-bare clone `.git` same object repo but pushing to checkout path vs .git path both same. Canonical different if origin protected URL is `/tmp/prot` worktree and push `/tmp/prot/.git`: Git remote URL to non-bare root accepts? Git push to `/tmp/prot` local repo finds .git; push to `/tmp/prot/.git` same. Canon `/tmp/prot` vs `/tmp/prot/.git` differ -> bypass! Protected URLs in real acceptance are GitHub HTTPS so not local, but requirements however spelled and tests use local protected. Real remote URLs likely `git@...`/https not local. Yet protected URL could be local clone path if acceptance run in local clone (ORIGIN_URL might local mirror path), must robust. Also a protected bare repo can be accessed via alternate path `prot.git/.` canonical same. `.git` alias only nonbare.
+  For non-bare protected repo `/tmp/prot` remote configured, raw `/tmp/prot/.git main` pushes same repo. Shim canonical differs => allows. High if applicable. Reproduce scratch. But origin actual likely URL not local, yet User explicitly local paths and symlinks. Worth report perhaps medium/high. Can find bypass more directly with symlink? Symlink to protected `.git`? canonical protects only exact protected path, not internal `.git` route. Test.
+
+  Another path alias via `protected/.git` when protected is working tree and direct main push to checked out branch denied by receive.denyCurrentBranch default, so won't move main unless bare or config receive.denyCurrentBranch=ignore. Set ignore in fixture to prove. Real remote non-bare may deny, but could update main if current other branch. Set checkout wip so main not current. Or protected bare path can be reached via `prot.git` only no .git subdir. Could protected nonbare with HEAD wip and main exists. Shim allows, Git updates main. This is real.
+  Also path to nonbare via `.git/` canonical differs. Protected raw origin URL `/tmp/prot` while remote origin get-url `/tmp/prot/.git`, comparison no match. Yes.
+
+  Other local path transport `file:///tmp/prot/.git` same.
+
+  Could protected remote URL point to a bare repo via symlink and raw path to actual canonical handles.
+
+  `git push /tmp/prot/.git` `git remote get-url --push --all` fails, urls raw. moves_main=1. c differs p. passes. Should verify.
+
+  Another bypass using `GIT_DIR` to cause remote get-url from different config than actual push? Both same pre/env. no.
+
+  Options abbreviations easiest and actual real protected bare local path. I'll build harness in /tmp using Write (new file) then run timeout. Must not use cat heredoc via Bash. I can Write script /tmp/kimi-acceptance-review-.../probe.sh. Should source repo shim absolute. Script creates temp and traps. Use real git path. Set HOME etc to scratch to avoid config. Use `timeout` per user specifically under timeout. Bash allowed timeout here reviewer not repo gate. Could run each push with timeout 10. No network. Should have cases:
+  - alias `p=push` to protected remote main -> likely moves.
+  - abbreviated --all with nonmain spec -> pushes main.
+  - abbreviated --mirror with nonmain spec perhaps pushes all. Could test separately reset.
+  - `.git` path alias.
+  - push.default / remote config no refspec should refuse.
+  - insteadOf catches.
+  - remote.pushDefault no repo catches.
+  - GIT_DIR etc catches.
+  - symlink catches.
+  - relative protected catches.
+  - -C spelling catches.
+  - second pushurl catches.
+  - fixture relative overrefusal.
+  - fixture --tags overrefusal.
+  - push options perhaps `--force-with-lease` etc.
+  - `--all` abbreviated perhaps parse `--al` ambiguous with --all? Only --all likely.
+  - `--mirror` `--mir` unique.
+  - `--repo` abbreviations perhaps not needed.
+
+  Test no accidental actual remote. All protected local. Initialize bare prot and fixture. Work main commit1, wip/x branch. Set remotes origin path prot, fix path fixture. Shim protects prot and second fake local mirror? Set mirror.git. For bypass run push and inspect. Alias command `G -C w -c alias.p=push p origin main`; parser searches args: -C w -c alias.p=push p origin main, no push token (alias.p=push not exact), exec REAL with args. Real alias expands push and uses protected. Yes.
+  For abbreviated --all `G -C w push --al origin wip/x` shim moves_main=0 due spec wip/x. Real pushes all branches plus explicit? verify. Use fresh prot each case or unique branch. I'll create separate work? Can reset prot main deletion using real git (not shim) between. Easier script function reset `REAL --git-dir=prot update-ref -d refs/heads/main`, etc. Alias test main then check.
+  For --all, main absent and wip/x absent; real should push both. check main.
+  Mirror similarly.
+  Nonbare alias test separate pn and worktree. Set `git init -b wip pn` then commit main branch? Should have initial branch main commit then checkout -b wip. `git -C pn checkout -b wip` after commit. Configure protected path pn, remote pnurl `$S/pn/.git`, shim perhaps rebuild with protected pn. Push main via G2. receive.denyCurrentBranch not issue current wip. Check pn refs/heads/main changes from initial to new commit? Work commit second. Setup:
+  git init -b main pn; empty base; git checkout -b wip (HEAD wip)
+  work main at commit1; add commit2. remote pnonbare `$S/pn/.git`; shim protect `$S/pn`.
+  push pnonbare main -> work main commit2 to pn main. c `/tmp/.../pn/.git`, pc `/tmp/.../pn`, allowed. Should succeed.
+  Potential protected main p paths? Good.
+
+  Allowed fixture `relative`: from S/w remote `rel ../fix.git` and G -C w push rel main: shim urls=../fix.git, canon requires absolute => protected refuses. Actual git push would allow. Reproduce direct real after verifying shim? Use real to demonstrate moves fixture. But direct push main may up-to-date from prior. I can just report shim refusal although valid. To prove wrongly refuses, call real after and check rc0. Fine.
+  Allowed fixture `fix --tags`: no specs moves_main=1, fixture c okay protected=0, so actually it allows! Wait moves_main=1 then destination unprotected -> exec real. So no overrefusal on fixture. On protected it refuses even if cannot main. Design fail closed. Fixture all allowed as long dest local. So only relative local path is wrongly refused by deliberate policy. Raw relative too. Remote names fixture with `url = ../fix.git` resolve relative to working dir? Git relative remote URL resolves relative cwd. canon can't. Yes.
+
+  Allowed fixture via non-existing repo path that Git creates? `git push /tmp/new.git main` fails if nonexistent anyway no issue.
+  Fixture using `~` path existing expands only shell if unquoted before shim becomes absolute. Config `~/fix.git` Git expands? Git URL path `~/` perhaps supported only ssh. Could overrefuse.
+  Fixture path with `file://localhost` may be valid local and refused. Could note low.
+
+  Should run standard new control perhaps landing_script entire heavy but user says check new control. I can extract run only shim block? I can execute full landing_script under timeout perhaps takes ~? It's shell fixture, may be a couple minutes, no heavy root. I can run full `timeout 180 bash scripts/checks/landing_script.sh`, but it modifies only /tmp and no repo? It copies files within temp, source root read-only. safe. At most heavy? This gate itself not heavy? Fine. But likely my bypass not covered. Run in background or foreground with timeout 240. Should not run nix. It's standard gate impacted. I should run `timeout 240 bash scripts/checks/landing_script.sh` under Bash perhaps output huge but final summary tail (can't use tail known output? tool says tail known path -> Read; direct pipe tail to command output prohibited dedicated? I should run command perhaps redirect to /tmp log and print rc? Bash echo user no, but status tool returns command no stdout if redirect. Can use `timeout 240 bash ... > /tmp/.../landing.log 2>&1` and Read last lines negative offset. Fine. Should create scratch dir before logs. I can use Bash mkdir /tmp. Write probe. Also `bash -n` and check issues script. Read scripts/checks/check_issues? Glob. Later.
+
+  I'll create probe script.
+
+• The parser has two promising fail-open edges: Git’s abbreviated long options are not recognized by the shim, and aliases can expand to `push` only after the shim has delegated. I’m testing those alongside local-path aliases and the intended fixture behavior.
+
+alias expands to protected push: rc=0 main=2dc282ac42da86dfa8dbf42088ed739e4c3913c4
+abbreviated --all plus non-main refspec: rc=128
+abbreviated --mirror plus non-main refspec: rc=128
+protected worktree addressed through .git: rc=1 main=9d86fd691e51dd97c20c3632ba3b590051536fbb
+relative local fixture push: rc=1
+protected symlink push: rc=1
+insteadOf protected push: rc=1
+remote.pushDefault protected push: rc=1
+GIT_DIR-style protected push: rc=1
+bash: scripts/checks/check_issues.sh: No such file or directory
+• Interesting abbreviated rc128 due option ambiguous? Should read output. Nonbare rc1 but main changed from base? It reports main exists 9d86 perhaps base or new? Should compare work main hash. It may real push failed because branch refused? Current wip so should success. rc1 could shim refusal? Why canon p perhaps nonbare protected p exists and c nonbare/.git differ so allow. Git push nonbare main perhaps `remote get-url` resolves push URL? no. Main hash 9d86 perhaps new. Should read logs and refs. Landing log summary. Check check issues path via Glob.9d86fd691e51dd97c20c3632ba3b590051536fbb
+9d86fd691e51dd97c20c3632ba3b590051536fbb
+0ac54ffff9902cdf6c595240774dfd5c4cbb1d6a
+Nonbare push rejected nonFF so no move. Use force +main, detected moves and allow; then update. Add `+main` or reset nonbare main to work parent? Base unrelated, force. Test. Also abbreviation no specs caught moves_main=1 so safe. Could combine options with refspec forbidden so no bypass. Alias confirmed. Should find other bypasses likely expected. Should comprehensive.
+
+  Long option abbreviations for --repo can alter repo without specs? If no specs moves=1 and repo empty due unrecognized `--rep=...`, protected=1 fail closed. With positional? actual two repos error. No bypass.
+  `--all` exact no spec catches. abbreviation no specs catches. Good.
+  `--mirror` no specs catches. safe.
+
+  Other fail-open from moves_main=0 before destination means if refspec classifier misses, any destination checks irrelevant. Should hunt refspec spellings or push options that update main in addition to non-main. --all/mirror cannot combine. Config push refspec not used with args. `--tags` with non-main refspec perhaps Git allows tags in addition and if tag named main? It updates refs/tags/main not heads main, safe. `--follow-tags` pushes tags plus explicit nonmain, safe. `--delete` with nonmain deletes nonmain. `--prune` with nonmain refspec could delete main on destination if matching? This is interesting. `git push --prune origin refs/heads/wip/x:refs/heads/wip/x` prunes remote refs not present locally? Documentation: refs not on remote-tracking? `--prune` remove remote branches that don't have local counterpart, based on refspec mapping. With explicit refspec only wip/x destination scope perhaps only that. With remote config refspec mapping all heads and explicit nonmain refspec? Could prune main even though explicit spec classifier nonmain. Should test. `git push --prune origin wip/x` where local main exists anyway so main not pruned. To move main deletion if local lacks main but remote has main and refspec `refs/heads/*:refs/heads/*` glob caught. With explicit `wip/x`, prune only wip/x. No.
+
+  `--delete` can be abbreviated and combined nonmain only safe. `--force` no extra.
+  Push options `--atomic` etc.
+
+  Remote helpers and `remote.<name>.push` perhaps command line refspec + `--prune` uses configured mapping. Could config `remote.origin.push= refs/heads/*:refs/heads/*` and explicit wip/x means configured ignored for pushes but prune mapping perhaps command line. main local exists. If remote has extra main and local doesn't, but command executed from repo with no local main and remote has main, `git push --prune origin wip/x` perhaps deletes main? Should understand. Might test but likely no.
+
+  `git push origin --delete wip/x` safe.
+
+  `git push origin refs/heads/wip/x:refs/heads/wip/x refs/heads/main` main caught.
+
+  `git push origin ^main wip/x` negative refspec perhaps no main push.
+  Push refspec can use `--` separator; shim case -- ignored not issue.
+  Refnames can include escaped characters? Git ref names cannot whitespace colon etc. `main` exact case. Branch `main` dest can be abbreviated `heads/main`, caught.
+  Special destination empty means source; source `main` caught. Source `refs/heads/main` caught. `HEAD` caught. `@` caught. Source `@{-1}` pointing main with no dest? Git source rev can be `@{-1}` and no dst uses branch same name? For source not a ref? `git push origin @{-1}` likely destination `@{-1}` invalid, error. But with explicit dest nonmain no main.
+  Source arbitrary ref `refs/remotes/origin/main` no dest might map to refs/remotes/origin/main remote not main. caught conservative.
+  Source tag `main` caught though tag not branch.
+  Source full SHA with no dest errors.
+  Source `:/main` is commit search syntax no dest error.
+  `@:main` caught.
+
+  Option `--repo` itself after push parser pre remote get-url uses pre globals only not push options. Good.
+
+  Environment `GIT_PUSH_OPTION` no repo.
+
+  Aliases is one high. Are aliases within acceptance realistic? Candidate's scripts could call `git -c alias...` and bypass shim but guard hook still stops main. However acceptance guard runs real hook and main before after; still never lands. But specific acceptance safety relies three guards, one bypass doesn't actually move protected main because guard. User specifically "shim ... must STILL refuse every push ... however spelled ... fail closed" so high within component, perhaps severity high due security control bypass. Should mention guard still provides independent protection but does not satisfy shim contract.
+
+  Could direct `git -c alias.push=...` cannot override. Alias only no literal push, arguably not "spelling of git push" but definitely config. User mentions config. Good.
+
+  Perhaps another direct push spelling bypass via `git push` with global `--config-env` pre command remote get-url different due `-c` order? It passes pre exactly including global options before `config`, same as actual push. Fine.
+  But parser finds first "push" token even when it's value to global option it doesn't know takes value. Known consuming only -C -c --git-dir --work-tree --namespace. Git global options with separate values: `--exec-path` optional value? `--exec-path[=<path>]`, if `--exec-path push` does Git treat push as path or command? `--exec-path` without = prints path and no command; with separate `push` likely command push? Should have docs: `--exec-path[=<path>]`, no separate value. `--config-env=<name>=<envvar>` only equals. `--list-cmds` equals. `--attr-source` perhaps equals or separate? New. `--attr-source=<tree-ish>`. `--work-tree` separate handled. `--namespace` handled. `-c` handled.
+  `--git-dir` handled.
+  `--no-replace-objects` no.
+  `--literal-pathspecs` etc.
+
+  Environment variable `GIT_DIR` can point at protected repo config while working from fixture. Both resolution same.
+  `GIT_CONFIG_PARAMETERS` with alias confirmed simpler.
+
+  Config alias environment `GIT_CONFIG_COUNT=1 KEY_0=alias.p...` no literal `push` argument but value contains `push` not exact, exec. Real alias moves. Test perhaps not needed alias -c enough.
+
+  More serious direct bypass via Git `push` as alias of another builtin? `git -c alias.p=push p`. yes.
+
+  Local `.git` path alias direct with +main likely. Now run force.
+
+• The new landing control passes (`PASS=210 FAIL=0`), but it does not cover the confirmed alias bypass. The abbreviated `--all`/`--mirror` attempts fail closed in Git itself; I’m narrowing the remaining results and checking whether the non-bare `.git` spelling can actually update the protected ref.rc=0
+before=9d86fd691e51dd97c20c3632ba3b590051536fbb
+after=0ac54ffff9902cdf6c595240774dfd5c4cbb1d6a
+source=0ac54ffff9902cdf6c595240774dfd5c4cbb1d6a
+=== ISSUES.tsv ===
+  ok   ISSUES.tsv is well-formed (17 issues, 10 open)
+=== negative controls ===
+  ok   an unknown area is refused
+  ok   an unknown status is refused
+  ok   an empty closure condition is refused
+  ok   a repeated id is refused
+
+check_issues: PASS=5 FAIL=0
+
+
+• Two highs. Should hunt further as user explicit. Could be env `GIT_DIR` push using URL protected via `git -C` etc catches. Should test options and relative false refusal.
+
+  Perhaps direct bypass with remote URL syntax `file://` plus `localhost` etc fails closed not open.
+  Protected remote "however spelled" includes raw path to protected Git repo via `.git` confirmed. Also `git push protectedpath/. main` canonical same. Symlink works.
+  What about local protected bare via `protected.git` path with trailing `/.git`? Bare repo has no .git, fails real. no.
+
+  Hardlink config no.
+
+  `file://` URL with host empty and extra slash canonical path fine.
+  URL percent encoding protected path fails closed (refused) safe.
+  Tilde protected path direct expansion canonical same if existing.
+  Relative protected path always refused.
+  Absolute protected path with symbolic links caught.
+  Path using `..` canonical same.
+  Case different hard no.
+
+  Alias bypass perhaps guard hook prevents actual main update in acceptance. My scratch no hooks. But user specifically reproduce move main on protected yet passes shim, yes done. Under timeout.
+
+  Perhaps exploit remote helper via directory named `ext::...`? absolute path only. No.
+  Remote names with newlines weird.
+
+  Could config `url...insteadOf` check be bypassed with section/key case? Regex case-insensitive? Git config key output normalizes section and key? Section names case-sensitive but variable names case-insensitive; regex matches `(push)?insteadof` lowercase. `git config --get-regexp` key matching regex is case-sensitive? Git config outputs subsection as given but final key canonical lower? Setting `URL./tmp.insteadOf` section "URL" uppercase? Config section names case-insensitive? `[URL "x"]` key output `URL.x.insteadof` uppercase section so regex '^url\.' misses, but Git rewrite applies case-insensitively section names? This could be a major direct bypass. Should investigate. Git config section and variable names case-insensitive, subsection case-sensitive. `git config URL."$S/prot.git".insteadOf fixalias` perhaps writes `[URL "/tmp/prot"] insteadOf = fixalias`, output key `url./tmp...insteadof` canonical section lower? `git config --get-regexp` likely section name canonical lower even input uppercase? Test. Also subsection with uppercase irrelevant regex `.*`. Key `insteadOf` normalized lowercase in output. Could use `[url "x"] InsteadOf` output lowercase. likely safe.
+
+  Regex `^url\..*\.(push)?insteadof$` requires key with at least `url..insteadof` and subsection perhaps empty. Git url base cannot empty? no.
+  Config key can contain newline in subsection, output quoted with newline escaped, regex `.*` no newline but quoted `\n` literal, matches. fine.
+  `url.<base>.insteadOf` in included config if includes disabled could be missed while push uses includes. Should test! `git config --get-regexp` without `--includes` behavior. Git docs: "Includes are automatically included when looking up config values (e.g. when using --get or --get-all or --get-regexp), and excluded when doing file-oriented operations (e.g. --list, --fixed-value etc)"? I'll recall actual: `--includes` default off when specific file given, on when searching all config files. no file here, so on. Fine.
+  Conditional includeIf gitdir path: both commands same context.
+  Config scope `--local` etc not.
+
+  `GIT_CONFIG_PARAMETERS` env quoting passed same.
+  `GIT_CONFIG_COUNT` may only support `git push` and `git config` both.
+  `GIT_CONFIG_GLOBAL` can point to FIFO changing content between calls: adversarial race not normal spelling.
+  `include.path` symlink changed race no.
+
+  Remote push URL aliases:
+  - `remote.<name>.pushurl` can be multiple. all output.
+  - `url.<base>.pushInsteadOf` caught.
+  - `remote.pushDefault` no repo caught.
+  - `branch.main.remote` no repo caught.
+  - `branch.main.pushRemote` no repo caught.
+  - `push.default` no specs caught.
+  - `remote.origin.push` no specs caught.
+  - config `push.default=matching` etc no specs caught.
+  - `remote.origin.mirror=true` with explicit nonmain refspec? Git push configured remote mirror causes mirror behavior even without --mirror. This is promising! `remote.<name>.mirror` config: if true, pushing to remote behaves as --mirror automatically. With explicit refspec `wip/x`, does mirror config plus refspec update all? Config docs `remote.<name>.mirror`: "Setting this to true makes git push behave as if --mirror option was given. This is for mirroring the repository, and you probably don't want to use this in a normal situation." If explicit refspec and mirror=true, Git may reject combination or mirror all. Shim moves_main=0, passes. Real push might `--mirror` with refspec and fatal same. Should test. Config `remote.origin.push = +refs/heads/*:refs/heads/*` plus explicit no.
+  - `remote.<name>.push` with command line `--all` exact caught.
+  - `remote.<name>.prune` and nonmain perhaps deletes main.
+  - `remote.<name>.pruneTags`.
+  - `push.autoSetupRemote` no.
+  - `push.useBitmaps`.
+  - `push.recurseSubmodules` triggers pushes of submodule main? Very interesting! `git push --recurse-submodules=on-demand origin wip/x` may push submodule commits to submodule origin main, which could be protected real remote if configured. Shim judges only top-level destination, sees nonmain refspec and passes. Git recursive push may push main in submodules depending branch config. This could move main on protected remote. Real acceptance candidate with submodules perhaps none. Scope perhaps "every push that could move main on either real remote" includes recursive. Could test but complex. Also `git submodule foreach git push` uses shim each command so catches unless aliases. On-demand internally invokes git subprocess? uses real git process PATH perhaps shim? C-level run_command git push uses git executable not PATH? Could bypass. But likely out of scope no submodules. Should not overdo but user says hunt.
+  - hooks can push main internally via real git path, not spelling direct.
+
+  Config `remote.origin.mirror` test quick. Also `push.default` no specs caught.
+
+  Option `--recurse-submodules=on-demand` plus main explicit caught. nonmain can push submodule main if needed. Perhaps no.
+
+  Alternate command `git push --all=origin` invalid.
+  `--mirror=origin` invalid.
+
+  Short option bundles: `-u` etc no all/mirror short.
+  `--delete` can delete main if refspec expressed as option argument? main caught.
+  `--prune` as above.
+
+  Raw refspec with leading `+` only stripped one. `++main` invalid.
+  Leading `^` negative. Could `^refs/heads/wip/x` plus configured push refspec matching main? Negative refspec alone without positive might use configured remote.push? Docs negative refspec can be specified without positive? "When a negative refspec is specified without a positive refspec, the refspec configured for remote is used" perhaps! This is huge. `git push origin ^refs/heads/wip/x` could push configured refs including main, shim sees spec ^refs/heads/wip/x nonmain and passes. Should check docs. Negative refspecs: "A <refspec> may begin with ^ to indicate a negative refspec. Rather than specifying which refs to push or which refs to fetch, it specifies refs to exclude. A ref will be considered to match if it matches at least one positive refspec, and does not match any negative refspec. Negative refspecs can be used to restrict the scope of a pattern refspec so that it will not match specific refs. Negative refspecs can themselves be pattern refspecs. However, they may only contain a <src> and do not specify a <dst>. Fully spelled out hex object names are also not supported." If only negative refspec perhaps no positive = nothing or configured. Should test with remote.origin.push main/wip and command `^wip/x`. Could push main. Shim misses. This would be direct high. Test in scratch with prot main absent, configure `remote.origin.push refs/heads/*:refs/heads/*`, call shim push origin ^refs/heads/wip/x. If actual uses configured positive, main moves. Also no remote.push config perhaps default positive? `git push origin ^wip/x` perhaps fatal "negative refspecs need positive". I'll test.
+  Refspec with `--porcelain` etc no.
+
+  `git push origin ^wip/x` classification safe incorrectly if default refspec fills. Should have experiment.
+
+  Also `git push origin :` caught.
+
+  Config remote mirror.
+
+• Two protected-main updates are now confirmed: an alias that expands to `push`, and addressing a protected non-bare repository through its `.git` directory. I’m also checking configured mirroring and negative refspecs, which can add ref updates not obvious from the command-line destination.mirror rc=128 main=
+negative rc=1 main=
+
+
+• Negative rc1 could shim refusal? Shim case t ^refs... d same no main, moves=0 should exec real. Real rc1 perhaps "src refspec..."? Read.Good.
+
+  Other refspec classifier misses `refs/heads/main` if escaped through rev-parse syntax destination? Destination refspec not arbitrary rev, must valid ref. No.
+
+  Could remote destination main move due upstream config when source nonmain lone refspec? `git push origin wip/x` always same branch wip/x unless matching config? Explicit refspec no dest uses same name, not upstream. `push.default=upstream` only no refspec. caught.
+  `git push origin HEAD` caught even though dest current branch could main. Good.
+  `git push origin @{-1}` with current branch? Source is previous branch shorthand and destination `@{-1}`? likely invalid. `git push origin @{-1}:main` main caught.
+  `git push origin main^0` d main^0 not caught, real destination main^0 invalid. no.
+  `git push origin refs/heads/main:refs/heads/main/` invalid.
+  Case Unicode no.
+
+  Config receive-pack on remote can update main regardless push wip/x via server hooks, out of scope.
+
+  Push to protected remote via `git push . main` where `.` current worktree, if protected p is same current path? canon "." relative fails protected. Absolute `.git` bypass.
+  Path via `file://` + `.git` also bypass.
+
+  Protected path comparison canonical repository root instead of Git common dir is root cause. Could more generally two separate clones with shared object store but refs separate; pushing alternate clone does not move protected main unless same git dir.
+  Nonbare `.git` alias same git dir.
+  Worktree: protected main on common repo, push to linked worktree git dir? A linked worktree's `.git` file can't canon, fails closed. `gitdir` path `/repo/.git/worktrees/name` is git dir but refs shared; pushing to it might update common main. Protected p `/repo` or `/repo/.git`, c `/repo/.git/worktrees/name` differs, allows. Existing path. Receive denies current main? If linked worktree current wip, main checked in other worktree perhaps receive.denyCurrentBranch applies? Could ignore. Same class.
+  Bare `core.worktree` no.
+
+  Alias fix would need not pass aliases or invoke real `git push` explicit? To enforce alias expansion, shim should identify actual command after global args via `git`? Could reject aliases in config all, fail closed if no literal push? But then every nonpush command with alias config would be refused? Only if no push token, can't know command alias expands to push without querying config. Could use `git config --get alias.<command>` and if starts push parse, but aliases can shell. Not my fix required.
+
+  Potential wrapper direct `git -c alias.p='push --all' p origin` no specs in original, no literal push. same.
+
+  Functional false refusals: all relative existing paths are refused by design documented. User asks for allowed fixture pushes wrongly refuses perhaps expects flag this. But changelog explicitly says existing local fixture goes through without absolute qualifier? Line 9 "its URL is not an existing local path" refused, relative path existing local is an existing local path, contradictory header line 14 says relative path shim cannot resolve. It could resolve using pre `-C` or GIT_DIR/worktree. Relative remote URLs in root checks perhaps used? Search push patterns in root scripts to see if fixtures use relative paths. Use Grep `remote add.*\.git|push.*main` perhaps huge but scope landing_bot landing_script review_tool sandbox. They use absolute TMP. No functional acceptance issue. Still low severity if contract says allowed existing local fixture regardless relative. But design comments explicitly choose relative protected fail closed, so not bug relative to spec: user says unprotected only existing local path? Original user: "judges destination... still refuse... for allowed fixture pushes it wrongly refuses." Could be they expect only absolute local allowed. I can mention low if worthwhile but findings should be real not intentional. Better not call intentional conservative refusal a finding unless actual required root fixture use relative. I can note not finding. Focus two highs.
+
+  Should inspect ISSUES row/changelog claims now inaccurate due bypasses. I should include under same findings or separate low documentation: ISSUES row closed says refuses every protected spelling, but alias and .git disprove. Since closure condition not met, row should stay open or update after fix. Changelog likewise overclaims every spelling. User explicitly asks check row and fragment, likely report as low or part of high. Should mention line ISSUES.tsv:21 and changelog:7-12 overstate fixed behavior, status closed premature. Severity medium? Usually issue closure incorrect due known fail-open, high finding already. I can add low "ISS-0017 is marked closed despite closure condition not holding" or fold into high descriptions to avoid redundant. Should have file:line severity for each finding. Could have:
+  1 High scripts/land/acceptance_shim.sh:31-36: alias expansion bypass. Repro command, observed rc0 main created. Missing control at landing_script:1047 etc. Because pre scan only literal push and delegates if absent. Fix not requested.
+  2 High scripts/land/acceptance_shim.sh:64-82: local path canonicalization compares URL directory string not actual Git repository; protected nonbare `/tmp/nonbare` can be pushed as `/tmp/nonbare/.git` with +main. Observed forced update. Also `file://.../.git`. This is direct spelling and in scope.
+  3 Low scripts/checks/landing_script.sh:1062-1084: control claims every spelling but omits alias and .git; passes despite both. Could combine with each or separate low test gap. User asks check new control. Mention in verification rather than finding perhaps "Control passes but isn't sufficient." A test gap alone is not independent if highs reported. Could add to each high "new control doesn't cover". Fine.
+  4 Low ISSUES/changelog closure claims inaccurate. Could state as final finding medium? They explicitly want report. Could say "Low — ISSUES.tsv:21 and changelog...:7-12 mark closed and say every spelling; contradicted by above." Fine.
+
+  Make sure no other severe direct bypass with remote alias and command alias. Could there be options `--receive-pack` consuming value bug because short `--exec` okay. Option `-o` handled. Long option `--push-option=main` ignored safe. `--repo=...` okay.
+  `--repo` repo selection semantics first positional perhaps wrong. Test if actual differs in way bypass. E.g `git push fixture --repo=protected main`: shim repo fixture (first positional) allows, actual may use protected? If actual honors --repo over positional, high. Should test! They comment as Git reads first positional repo and --repo only missing, but is that true? Should verify with scratch. I assumed. Set fixture remote and protected raw opt. Commands:
+  G -C w push fix --repo=/tmp/prot.git +main perhaps shim have_repo fix, specs +main, urls fix, allow. Real parse options --repo sets repo variable then positional? In builtin/push.c parse options then if argc > 0 repo=argv[0] else repo=optrepo. likely fixture. Actual output confirms. Opposite protected positional + fixture opt should refuse though actual fixture perhaps overrefusal but safe. Tests only `--repo=fix fix main` not mixed different. I can run quickly, no need if code docs. But User explicit options. Good to test.
+  Other option parser: `--repo` consumes next even if next is `main` and no repo then repo main etc same.
+  Global pre `--git-dir` and `-C` order preserved for config.
+  `remote get-url` may interpret `--all` output lines. fine.
+
+  Perhaps Git supports `git push --repository=origin` (abbrev) with positional nonmain refspec only no repo? Shim repo empty => moves=1 protected. safe.
+
+  Remote push default with nonmain explicit no main.
+  Config `remote.origin.push` and command line no specs caught.
+
+  Test protected remote configured as remote name `origin` but protected URL supplied with trailing slash vs actual no slash. Canon both local same. HTTPS no canonical and string comparison: if protected URL https://github.com/org/repo and actual remote https://github.com/org/repo.git or ssh spelling, canon empty => protected fail closed. Good. If actual local path string p remote and u https? nonlocal protected. safe. Fail closed robust.
+
+  The alias bypass depends no literal `push` token, but `pre` loop might see alias config value `alias.p=push` not equal, yes.
+
+  Could `git -c alias.p=push p /tmp/prot main` with no remote name and path protected actual moves. Already origin protected remote enough.
+
+  Acceptance pre-push guard still would stop main. Severity perhaps medium rather than high because defense in depth remains and shim not sole guard. User frames high safety requirement. Standard code review severity: P1 high if allows main move in scratch but actual acceptance still protected by guard. Yet one of three guards failing doesn't land due others. Could rate medium? They request severity no specific scale except ISSUES high etc. Usually review findings use High for bypass of security guard even redundant. But to be precise: "High (shim contract); acceptance's separate guard still prevents end-to-end landing." That shows context. If both high findings do not actually lead real main move due guard, but user specifically asks shim must refuse, so high valid.
+
+  Could the nonbare .git push be blocked by acceptance guard if protected nonbare real remote hooks? Guard is local pre-push in clone, always refuses main, so actual no. Again component fail.
+
+  Should run mixed repo test and perhaps alias with env GIT_CONFIG_PARAMETERS to cover env. No need but user asked env such as GIT_CONFIG_PARAMETERS. Could test same alias injected via env, shows environment bypass. This strengthens high. `GIT_CONFIG_COUNT=1...` or GIT_CONFIG_PARAMETERS="'alias.p=push'" correct syntax. `GIT_CONFIG_PARAMETERS="alias.p=push"` perhaps env expects `alias.p=push` quoted? Git docs values with spaces quoted. `GIT_CONFIG_PARAMETERS='alias.p=push'` works? Could test. `GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=alias.p GIT_CONFIG_VALUE_0=push G -C w p origin +main`. Shim no literal push, real alias. This is easy, reset prot and run. Repro actual main update. Use new commit or force. Should have no output truncated. Also direct relative fixture valid real fallback. Run mixed options and env alias under timeout.
+
+• Configured mirroring and a lone negative refspec did not bypass the check. I’m doing one final option-precedence probe and confirming that the alias bypass also works through Git’s environment-based configuration, then I’ll summarize the evidence and documentation impact.env alias rc=0 main=0ac54ffff9902cdf6c595240774dfd5c4cbb1d6a
+mixed repository rc=0 protected-main= fixture-main=0ac54ffff9902cdf6c595240774dfd5c4cbb1d6a
+real relative fixture rc=0
+
+
+• I have enough. Perhaps run repro original? User says confirmed by reproducer, no need run old. I ran standard. Should check no modifications outside scratch: scripts/checks/issues.sh uses TMP and no repo modifications. landing_script uses tmp. Bash -n no. Good. Scratch path /tmp only. No .git status possible archive. Fine.
+
+  Response should stand-alone findings file lines severity repro evidence, verdict exact. User expects review format findings first. I should avoid overlong. Include two high + low docs, tests. Mention relative path intentional fail-closed not a bug? Could mention "Relative fixture paths are refused by design; root checks use absolute paths." Not necessary. User asked hunt allowed wrongly refuses: I found relative existing fixture refused, but documented intentionally. Should I report as Low? I'll evaluate wording user: "A destination is therefore unprotected only when every URL it resolves to is an existing local path ... a relative path the shim cannot resolve" from code. Relative path can be resolved using cwd but design explicitly treats protected. The user's task: "and for allowed fixture pushes it wrongly refuses." Allowed means unprotected existing absolute paths. Relative ones are not allowed by intended policy, so not finding. Good.
+
+  Check changelog fragment line 8 "refused on either real remote however it is spelled (a remote name, URL, file, --repo second push URL)" alias is command spelling not destination URL. .git is URL spelling direct contradiction. Closure row says however spelled. So low docs.
+  Should line reference alias at shim 31-36 and nonbare 64-82.
+  Control gap perhaps line 1063-1077 covers lists but not these. Mention each high "landing_script control at lines ... misses". Could include no separate finding.
+
+  Detailed repro:
+  1 setup protected bare `$S/prot.git`, work repo remote origin, shim with protected. `G -C w -c alias.p=push p origin main` returned 0 and created main `2dc...`. Env version `GIT_CONFIG_COUNT=1 ... p origin main` returned 0 moved main to `0ac...`. I can state hashes not essential. Under `timeout 10`. New landing control only literal `push` invocations.
+  2 protected nonbare `$S/nonbare` protected in shim, remote nonbare `$S/nonbare/.git`; `G -C w push --force nonbare +main` returned 0 output forced update 9d86... to 0ac... . Why canon paths different though same repo. Direct protected nonbare path not real actual remotes but requirement local protected paths. Could severity high.
+  3 Low issue row/changelog marked closed. `ISSUES.tsv:21`, `changelog...:7-12`. "Every spelling" and closed inaccurate until fixed. I should not suggest row necessarily open if fix later but currently branch closure wrong.
+
+  Validation:
+  - `timeout 240 bash scripts/checks/landing_script.sh` PASS=210 FAIL=0.
+  - `bash scripts/checks/issues.sh` PASS=5 FAIL=0.
+  - bash -n succeeded (compound initially failed due wrong script but bash -n part succeeded; no need mention wrong path).
+  - Standard control passing doesn't change findings.
+  Could include "Other probes (insteadOf, symlinks, remote.pushDefault, explicit --git-dir, mixed --repo) were refused or behaved safely; relative local paths are deliberately refused." Nice but not necessary.
+
+  Verdict CHANGES-NEEDED.
+
+  Make sure final response exact ends with 'Verdict: CHANGES-NEEDED'. Good.
+
+  Potential reviewer expects only one finding perhaps alias outside threat? Nonbare direct definitely in scope. Both good. Severity labels high. If acceptance remote URLs always https, nonbare local protected is test fixture not actual real remotes. User explicitly tests protected path local so in scope. Fine.
+
+  Could perhaps classify alias high as command alias not git push spelling, but environment config requested. Good.
+
+  I'll respond concise but sufficient.
+
+• ### High — aliases bypass the shim completely
+
+  `scripts/land/acceptance_shim.sh:31-36` only recognizes a literal `push` argument. If none exists, it delegates to real Git, where an alias can subsequently expand to `push`.
+
+  Reproduced under `timeout 10` against a scratch protected bare repository:
+
+  ```bash
+  G -C w -c alias.p=push p origin main
+  ```
+
+  This returned 0 and created `refs/heads/main` on the protected repository. The environment-only spelling also succeeded:
+
+  ```bash
+  GIT_CONFIG_COUNT=1 \
+  GIT_CONFIG_KEY_0=alias.p \
+  GIT_CONFIG_VALUE_0=push \
+  G -C w p origin main
+  ```
+
+  Thus `GIT_CONFIG_PARAMETERS`-style configuration can bypass the shim without any literal `push` argument. The control at `scripts/checks/landing_script.sh:1062-1084` does not exercise aliases.
+
+  ### High — a protected non-bare repository is exposed through `.git`
+
+  `scripts/land/acceptance_shim.sh:64-82` compares canonical URL directory paths, not the actual Git repository directory. Protecting `/tmp/.../nonbare` does not protect `/tmp/.../nonbare/.git`, although both name the same repository.
+
+  With the shim protecting `$S/nonbare` and a remote pointing at `$S/nonbare/.git`, this succeeded under `timeout 10`:
+
+  ```bash
+  G -C w push --force nonbare +main
+  ```
+
+  Git reported:
+
+  ```text
+  + 9d86fd6...0ac54ff main -> main (forced update)
+  ```
+
+  The canonical paths `$S/nonbare` and `$S/nonbare/.git` differ, so the destination is incorrectly classified as an unprotected fixture. The new control only protects and addresses a bare repository, missing this case.
+
+  ### Low — closure and changelog claims are premature
+
+  `ISSUES.tsv:21` marks ISS-0017 closed and claims protected remotes are refused “however it is spelled.” `changelog.d/2026-11-08-acceptance-shim.md:7-12` makes the equivalent claim. Both are contradicted by the reproduced bypasses above.
+
+  Validation performed:
+
+  - `landing_script.sh`: `PASS=210 FAIL=0`
+  - `issues.sh`: `PASS=5 FAIL=0`
+  - Shell syntax checks passed.
+  - `insteadOf`, protected symlinks, `remote.pushDefault`, explicit `--git-dir`, and mixed positional/`--repo` destination probes behaved safely.
+
+  Verdict: CHANGES-NEEDED
+
+To resume this session: kimi -r session_f2d5a3e1-c9d1-47c2-a859-5d3c25373a22
+kimi exit 0

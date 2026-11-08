@@ -1,0 +1,12 @@
+# Required CI jobs: a train lands only when every job named here ran at the candidate's exact SHA and
+# succeeded (scripts/land/train.sh watch and land). One exact job name per line, as GitHub shows it.
+# GitHub branch protection is not configured for main, so this file is the record. Every job of
+# .github/workflows/lean_action_ci.yml is listed: the root has no campaign tier.
+Root checks
+Spec build
+Oracle (GitHub-hosted fetch + smoke)
+Landing record
+Proof axioms
+Proof trust ban (sorry, native_decide)
+Kernel replay (leanchecker)
+External re-check (con-leche, nanoda)

@@ -1,0 +1,339 @@
+Reading additional input from stdin...
+OpenAI Codex v0.166.0
+--------
+workdir: /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/cdx-dot4
+model: gpt-6.1-sol
+provider: openai
+approval: never
+sandbox: danger-full-access
+reasoning effort: none
+reasoning summaries: none
+session id: 01a1b8d0-7fd2-7c61-80fc-e6b96852d282
+--------
+user
+Read-only review: do not modify any file and do not run anything that changes state or connects to a network. REVIEW.diff changes servers/dev-home.sh (run as root on the CI gate host concrete-ci-2, set -euo pipefail, idempotent, DRY_RUN=1 previews via run() in servers/lib.sh) so the dev user's gate clone ~dev/concrete2 is normalised to https://github.com/lambdaclass/concrete.git. PRIOR.txt holds your finding on the previous version; check it is resolved, then review the block for anything else wrong. List findings as file:line with a fix, then one line VERDICT: CLEAN or VERDICT: FINDINGS.
+codex
+I’ll read the diff, prior finding, and shell helpers, then check the block without changing state or using the network.
+exec
+/bin/bash -lc "pwd; rg --files -g 'AGENTS.md' -g 'REVIEW.diff' -g 'PRIOR.txt' -g 'dev-home.sh' -g 'lib.sh'" in /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/cdx-dot4
+ succeeded in 0ms:
+/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/cdx-dot4
+REVIEW.diff
+PRIOR.txt
+servers/lib.sh
+servers/dev-home.sh
+
+exec
+/bin/bash -lc 'cat REVIEW.diff PRIOR.txt; nl -ba servers/dev-home.sh; nl -ba servers/lib.sh' in /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/cdx-dot4
+ succeeded in 0ms:
+commit c0f76697185fbf98123411e211586c553c9f8b4b
+Author: Federico Carrone <mail@fcarrone.com>
+Date:   Sun Nov 8 01:13:16 2026 +0000
+
+    dev-home: the gate clone follows lambdaclass/concrete (REPO_URL; an existing clone gets exactly one origin url, no push url, and refuses an insteadOf that sends it elsewhere)
+
+diff --git a/servers/dev-home.sh b/servers/dev-home.sh
+index 0e7b882..bb4d236 100755
+--- a/servers/dev-home.sh
++++ b/servers/dev-home.sh
+@@ -2,7 +2,7 @@
+ # The `dev` user's gate-host setup for `~/bin/concrete-remote`. Run as root
+ # (after users.sh). Idempotent; DRY_RUN=1 to preview.
+ #
+-#   ~dev/concrete2   https clone of unbalancedparentheses/concrete2 (public, so no
++#   ~dev/concrete2   https clone of lambdaclass/concrete (public, so no
+ #                    key: concrete-remote only fetches pushed refs), with a warm
+ #                    .lake from `nix develop -c lake build` on origin/main.
+ #                    concrete-remote seeds each run's .lake from it.
+@@ -18,7 +18,7 @@ set -euo pipefail
+ need_root
+ id dev >/dev/null 2>&1 || die "no user dev (run users.sh dev first)"
+ 
+-REPO_URL=https://github.com/unbalancedparentheses/concrete2
++REPO_URL=https://github.com/lambdaclass/concrete.git
+ H=/home/dev
+ NIXBIN=/nix/var/nix/profiles/default/bin
+ # cd / first: git refuses to start in a cwd dev cannot read (/root).
+@@ -33,6 +33,28 @@ log "elan"
+ log "concrete2 clone"
+ fresh=0
+ if ! [ -d "$H/concrete2/.git" ]; then as_dev git clone -q "$REPO_URL" "$H/concrete2"; fresh=1; fi
++# An existing clone follows REPO_URL (the repository moved to lambdaclass/concrete on 2026-11-08; the
++# landing tooling refuses a gate clone whose origin is any other repository): exactly one origin url,
++# no push url, and no url.*.insteadOf that sends either elsewhere. Reads bypass run(), so DRY_RUN=1
++# previews only the changes a real run would make.
++dev_git() { ( cd / && sudo -u dev -H git -C "$H/concrete2" "$@" ); }
++if [ -d "$H/concrete2/.git" ]; then
++  # The clone's own settings (--local: what the writes below change); an inherited origin url, push
++  # url or rewrite is not ours to edit and fails the effective check below.
++  # A trailing sentinel keeps an empty entry (command substitution strips trailing newlines).
++  urls="$(dev_git config --local --get-all remote.origin.url || true; echo .)"
++  if ! dev_git remote | grep -qx origin; then as_dev git -C "$H/concrete2" remote add origin "$REPO_URL"
++  elif [ "$urls" != "$REPO_URL"$'\n.' ]; then as_dev git -C "$H/concrete2" config --local --replace-all remote.origin.url "$REPO_URL"
++  fi
++  if dev_git config --local --get-all remote.origin.pushurl >/dev/null; then
++    as_dev git -C "$H/concrete2" config --local --unset-all remote.origin.pushurl
++  fi
++  if [ "$DRY_RUN" != 1 ]; then
++    eff="$(dev_git remote get-url --all origin; echo .; dev_git remote get-url --push --all origin; echo .)"
++    [ "$eff" = "$REPO_URL"$'\n.\n'"$REPO_URL"$'\n.' ] \
++      || die "~dev/concrete2 origin resolves to [$(echo $eff)], not $REPO_URL (an inherited origin url, push url or url.*.insteadOf in dev's git config?); fix it by hand"
++  fi
++fi
+ if [ "${REBUILD:-0}" = 1 ]; then
+   as_dev git -C "$H/concrete2" fetch -q origin main
+   as_dev git -C "$H/concrete2" checkout -q --detach origin/main
+13,366
+Both prior findings are resolved: origin existence is checked separately, and inherited settings that change effective URLs produce an actionable rejection.
+
+- servers/dev-home.sh:44 — Command substitution strips trailing newlines, so URLs `[REPO_URL, ""]` compare equal to `REPO_URL`. Normalization is skipped, and line 52’s effective check also loses the empty entry. Fix: preserve empty entries using a sentinel or NUL-delimited parsing, and require exactly one URL in both checks.
+
+VERDICT: FINDINGS
+     1	#!/bin/bash
+     2	# The `dev` user's gate-host setup for `~/bin/concrete-remote`. Run as root
+     3	# (after users.sh). Idempotent; DRY_RUN=1 to preview.
+     4	#
+     5	#   ~dev/concrete2   https clone of lambdaclass/concrete (public, so no
+     6	#                    key: concrete-remote only fetches pushed refs), with a warm
+     7	#                    .lake from `nix develop -c lake build` on origin/main.
+     8	#                    concrete-remote seeds each run's .lake from it.
+     9	#   ~dev/runs        concrete-remote's per-run checkouts.
+    10	#   ~dev/.elan       elan + the repo's lean-toolchain, for the gates that call
+    11	#                    ~/.elan/bin/lake directly (check_external_checker.sh).
+    12	#   devshells        `nix develop` and `.#provers` profiles in ~/.cache/devshell,
+    13	#                    linked from /nix/var/nix/gcroots/concrete so
+    14	#                    nix-collect-garbage keeps them warm.
+    15	# REBUILD=1 fast-forwards the clone to origin/main and rebuilds.
+    16	set -euo pipefail
+    17	. "$(dirname "$0")/lib.sh"
+    18	need_root
+    19	id dev >/dev/null 2>&1 || die "no user dev (run users.sh dev first)"
+    20	
+    21	REPO_URL=https://github.com/lambdaclass/concrete.git
+    22	H=/home/dev
+    23	NIXBIN=/nix/var/nix/profiles/default/bin
+    24	# cd / first: git refuses to start in a cwd dev cannot read (/root).
+    25	as_dev() { ( cd / && run sudo -u dev -H env PATH="$H/.elan/bin:$NIXBIN:/usr/local/bin:/usr/bin:/bin" "$@" ); }
+    26	
+    27	[ -d "$H/runs" ] || as_dev mkdir -p "$H/runs"
+    28	
+    29	log "elan"
+    30	[ -x "$H/.elan/bin/elan" ] \
+    31	  || as_dev sh -c 'curl -sSfL https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh | sh -s -- -y --default-toolchain none --no-modify-path'
+    32	
+    33	log "concrete2 clone"
+    34	fresh=0
+    35	if ! [ -d "$H/concrete2/.git" ]; then as_dev git clone -q "$REPO_URL" "$H/concrete2"; fresh=1; fi
+    36	# An existing clone follows REPO_URL (the repository moved to lambdaclass/concrete on 2026-11-08; the
+    37	# landing tooling refuses a gate clone whose origin is any other repository): exactly one origin url,
+    38	# no push url, and no url.*.insteadOf that sends either elsewhere. Reads bypass run(), so DRY_RUN=1
+    39	# previews only the changes a real run would make.
+    40	dev_git() { ( cd / && sudo -u dev -H git -C "$H/concrete2" "$@" ); }
+    41	if [ -d "$H/concrete2/.git" ]; then
+    42	  # The clone's own settings (--local: what the writes below change); an inherited origin url, push
+    43	  # url or rewrite is not ours to edit and fails the effective check below.
+    44	  # A trailing sentinel keeps an empty entry (command substitution strips trailing newlines).
+    45	  urls="$(dev_git config --local --get-all remote.origin.url || true; echo .)"
+    46	  if ! dev_git remote | grep -qx origin; then as_dev git -C "$H/concrete2" remote add origin "$REPO_URL"
+    47	  elif [ "$urls" != "$REPO_URL"$'\n.' ]; then as_dev git -C "$H/concrete2" config --local --replace-all remote.origin.url "$REPO_URL"
+    48	  fi
+    49	  if dev_git config --local --get-all remote.origin.pushurl >/dev/null; then
+    50	    as_dev git -C "$H/concrete2" config --local --unset-all remote.origin.pushurl
+    51	  fi
+    52	  if [ "$DRY_RUN" != 1 ]; then
+    53	    eff="$(dev_git remote get-url --all origin; echo .; dev_git remote get-url --push --all origin; echo .)"
+    54	    [ "$eff" = "$REPO_URL"$'\n.\n'"$REPO_URL"$'\n.' ] \
+    55	      || die "~dev/concrete2 origin resolves to [$(echo $eff)], not $REPO_URL (an inherited origin url, push url or url.*.insteadOf in dev's git config?); fix it by hand"
+    56	  fi
+    57	fi
+    58	if [ "${REBUILD:-0}" = 1 ]; then
+    59	  as_dev git -C "$H/concrete2" fetch -q origin main
+    60	  as_dev git -C "$H/concrete2" checkout -q --detach origin/main
+    61	fi
+    62	[ "$DRY_RUN" = 1 ] && ! [ -d "$H/concrete2" ] && { log "dev ok (dry run)"; exit 0; }
+    63	TC=$(cat "$H/concrete2/lean-toolchain")
+    64	sudo -u dev -H "$H/.elan/bin/elan" toolchain list 2>/dev/null | grep -qF "${TC#*:}" \
+    65	  || as_dev "$H/.elan/bin/elan" toolchain install "$TC"
+    66	
+    67	log "devshells pinned as gcroots"
+    68	# dev builds the profiles (`nix develop --profile`); root only links them into
+    69	# gcroots, an indirect root that nix-collect-garbage follows.
+    70	[ -d /nix/var/nix/gcroots/concrete ] || run install -d -m 755 /nix/var/nix/gcroots/concrete
+    71	[ -d "$H/.cache/devshell" ] || as_dev mkdir -p "$H/.cache/devshell"
+    72	for shell in default provers; do
+    73	  if ! [ -e "$H/.cache/devshell/$shell" ] || [ "${REBUILD:-0}" = 1 ]; then
+    74	    as_dev bash -c "cd $H/concrete2 && nix develop .#$shell --profile $H/.cache/devshell/$shell -c true"
+    75	  fi
+    76	  [ "$(readlink "/nix/var/nix/gcroots/concrete/dev-devshell-$shell" 2>/dev/null)" = "$H/.cache/devshell/$shell" ] \
+    77	    || run ln -sfn "$H/.cache/devshell/$shell" "/nix/var/nix/gcroots/concrete/dev-devshell-$shell"
+    78	done
+    79	
+    80	if [ "$fresh" = 1 ] || [ "${REBUILD:-0}" = 1 ] || ! [ -d "$H/concrete2/.lake/build" ]; then
+    81	  log "lake build (warm .lake for concrete-remote)"
+    82	  as_dev bash -c "cd $H/concrete2 && nix develop -c lake build > $H/build.log 2>&1 && echo ok > $H/build.done"
+    83	fi
+    84	# The gate-host contract concrete-remote relies on, checked in the session it actually gets: a
+    85	# non-login `ssh dev@host bash -s` whose PATH comes from pam_env (/etc/environment), then
+    86	# `nix develop`. The devshell inherits that PATH, so a tool the host must supply has to be on it.
+    87	# 2026-10-23: Arch's `shasum` was only on login PATHs, and 17 checker-identity gates failed.
+    88	if [ "$DRY_RUN" != 1 ]; then
+    89	  PAM_PATH=$( { sed -n 's/^PATH=//p' /etc/environment 2>/dev/null || true; } | tail -1 | tr -d "\"'")
+    90	  [ -n "$PAM_PATH" ] || PAM_PATH=/usr/local/sbin:/usr/local/bin:/usr/bin:/bin
+    91	  sudo -u dev env -i HOME="$H" PATH="$PAM_PATH" sh -c 'echo x | shasum -a 256 >/dev/null 2>&1' \
+    92	    || die "gate host: shasum not on dev's ssh PATH ($PAM_PATH); concrete's checker identity needs it"
+    93	  # pam_env reads /etc/environment everywhere and /etc/default/locale on Ubuntu.
+    94	  grep -hqsE '^LANG="?[A-Za-z_]+\.(UTF-8|utf8)' /etc/environment /etc/default/locale \
+    95	    || die "gate host: no UTF-8 LANG for pam_env; dev's ssh sessions would run under POSIX"
+    96	fi
+    97	log "dev ok: $(sudo -u dev git -C "$H/concrete2" rev-parse --short HEAD)"
+     1	#!/bin/bash
+     2	# Shared helpers for the servers/ scripts. Sourced, not run.
+     3	#
+     4	# Every script here is idempotent: it compares before it changes anything, so a
+     5	# re-run on a configured host reports "ok" and changes nothing. DRY_RUN=1 makes
+     6	# every mutation print what it would do instead (reads still happen), which is
+     7	# how to check a script against a live host without touching it:
+     8	#   sudo DRY_RUN=1 servers/apply.sh fede-256gb
+     9	
+    10	DRY_RUN=${DRY_RUN:-0}
+    11	SERVERS_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+    12	
+    13	log()  { printf '[%s] %s\n' "${0##*/}" "$*"; }
+    14	die()  { printf '[%s] ERROR: %s\n' "${0##*/}" "$*" >&2; exit 1; }
+    15	need_root() { [ "$(id -u)" -eq 0 ] || [ "$DRY_RUN" = 1 ] || die "run as root"; }
+    16	
+    17	# runners_busy: true while any GitHub Actions runner on this host runs a job.
+    18	# A Runner.Worker process exists only for the duration of a job. Same answer
+    19	# from anywhere: gh api repos/unbalancedparentheses/concrete2/actions/runners \
+    20	#   -q '.runners[]|"\(.name) \(.busy)"'
+    21	runners_busy() { pgrep -f '/actions-runner-[0-9]+/bin/Runner\.Worker' >/dev/null 2>&1; }
+    22	
+    23	# guard_runners WHAT: never install/upgrade packages or restart services while
+    24	# a runner job is active. On 2026-10-22 an apt install (tailscale.sh) let
+    25	# needrestart restart gha3 mid-job and killed a CI run. Waits up to
+    26	# RUNNER_WAIT seconds (default 1h) for the runners to go idle, then gives up.
+    27	guard_runners() {
+    28	  runners_busy || return 0
+    29	  if [ "$DRY_RUN" = 1 ]; then printf '  would wait for idle runners before: %s\n' "$1"; return 0; fi
+    30	  local waited=0 limit=${RUNNER_WAIT:-3600}
+    31	  log "runner jobs active; waiting for idle runners before: $1"
+    32	  while runners_busy; do
+    33	    [ "$waited" -lt "$limit" ] || die "runners still busy after ${limit}s; not running: $1"
+    34	    sleep 30; waited=$((waited + 30))
+    35	  done
+    36	}
+    37	
+    38	# run CMD...: execute, or print it under DRY_RUN. Package installs/upgrades and
+    39	# service restarts go through guard_runners first, so no script here can
+    40	# disturb a running CI job.
+    41	run() {
+    42	  case " $* " in
+    43	    *" apt-get install "*|*" apt-get upgrade "*|*" apt-get dist-upgrade "*|*" pacman -S"*|\
+    44	    *" systemctl restart "*|*" systemctl reload "*|*" systemctl stop "*|*" --now "*|*"svc.sh stop"*|*"svc.sh start"*|*"svc.sh uninstall"*|*"nix-install.sh"*)
+    45	      guard_runners "$*" ;;
+    46	  esac
+    47	  if [ "$DRY_RUN" = 1 ]; then printf '  would run: %s\n' "$*"; else "$@"; fi
+    48	}
+    49	
+    50	# write_file PATH MODE OWNER < content: replace PATH only if the content differs.
+    51	# Returns 0 if it changed (or would), 1 if it was already up to date, so
+    52	# callers can restart a service only when its config moved.
+    53	write_file() {
+    54	  local path=$1 mode=$2 owner=$3 tmp
+    55	  tmp=$(mktemp)
+    56	  cat >"$tmp"
+    57	  if [ -f "$path" ] && cmp -s "$tmp" "$path"; then
+    58	    rm -f "$tmp"; return 1
+    59	  fi
+    60	  if [ "$DRY_RUN" = 1 ]; then
+    61	    printf '  would write: %s\n' "$path"; rm -f "$tmp"; return 0
+    62	  fi
+    63	  install -D -m "$mode" -o "${owner%%:*}" -g "${owner##*:}" "$tmp" "$path"
+    64	  rm -f "$tmp"
+    65	  log "wrote $path"
+    66	}
+    67	
+    68	# apt_install PKG...: install only what's missing.
+    69	apt_install() {
+    70	  local missing=() p
+    71	  for p in "$@"; do
+    72	    dpkg-query -W -f='${Status}' "$p" 2>/dev/null | grep -q 'install ok installed' || missing+=("$p")
+    73	  done
+    74	  [ "${#missing[@]}" -eq 0 ] && return 0
+    75	  run env DEBIAN_FRONTEND=noninteractive apt-get install -y "${missing[@]}"
+    76	}
+    77	
+    78	# pacman_install PKG...: install only what's missing (Arch).
+    79	pacman_install() {
+    80	  local missing=() p
+    81	  for p in "$@"; do pacman -Qq "$p" >/dev/null 2>&1 || missing+=("$p"); done
+    82	  [ "${#missing[@]}" -eq 0 ] && return 0
+    83	  run pacman -S --needed --noconfirm "${missing[@]}"
+    84	}
+    85	
+    86	# os_id: ID from /etc/os-release: "arch", or "ubuntu"/"debian" for the apt path
+    87	# (Debian-family; fede-256gb is Ubuntu). Arch is the default for new servers
+    88	# (decided 2026-10-22).
+    89	# shellcheck disable=SC1091
+    90	os_id() { . /etc/os-release; echo "$ID"; }
+    91	
+    92	# retire_units UNIT...: take a service off this host (apply.sh, RETIRED_SERVICES): disable and stop
+    93	# its units. The unit files, the service's user and all its state stay on disk, so the data remains
+    94	# for reference and the move can be undone by listing the service in SERVICES again. Stops go
+    95	# through run(), so they wait for idle runners like every other restart.
+    96	retire_units() {
+    97	  local u
+    98	  for u in "$@"; do
+    99	    if [ "$(systemctl is-enabled "$u" 2>/dev/null)" = enabled ]; then run systemctl disable "$u"; fi
+   100	    if systemctl is-active -q "$u" 2>/dev/null; then run systemctl stop "$u"; fi
+   101	  done
+   102	}
+   103	
+   104	# retire_fail2ban: stop and uninstall fail2ban. SSH is reachable only over Tailscale (ufw allows
+   105	# tailscale0 only; nmap 2026-10-31: every public TCP port filtered), so its sshd jail never sees a
+   106	# login attempt. Removed 2026-10-31.
+   107	retire_fail2ban() {
+   108	  local installed=0
+   109	  case "$(os_id)" in
+   110	    arch) pacman -Q fail2ban >/dev/null 2>&1 && installed=1 ;;
+   111	    *) dpkg -s fail2ban >/dev/null 2>&1 && installed=1 ;;
+   112	  esac
+   113	  [ "$installed" = 1 ] || [ -e /etc/fail2ban/jail.d/sshd.local ] || return 0
+   114	  log "fail2ban: removed (SSH is Tailscale-only)"
+   115	  retire_units fail2ban.service
+   116	  if [ "$installed" = 1 ]; then
+   117	    case "$(os_id)" in
+   118	      arch) run pacman -Rns --noconfirm fail2ban ;;
+   119	      *) run apt-get purge -y fail2ban ;;
+   120	    esac
+   121	  fi
+   122	  [ ! -e /etc/fail2ban/jail.d/sshd.local ] || run rm -f /etc/fail2ban/jail.d/sshd.local
+   123	}
+   124	
+   125	# farm_hold UNIT: the [Service] lines that keep the fuzz farm paused while UNIT (a measuring
+   126	# service: perf, leanprof) runs, on a host that runs the farm; nothing elsewhere. The hold is
+   127	# fuzz-farm-hold@UNIT.service (services/fuzz-farm.sh), which keeps the farm's own pause flag set.
+   128	# Needs the host file loaded (SERVICES).
+   129	farm_hold() {
+   130	  [[ " ${SERVICES:-} " == *" fuzz-farm "* ]] || return 0
+   131	  printf 'ExecStartPre=+/usr/bin/systemctl start fuzz-farm-hold@%s.service\n' "$1"
+   132	  printf 'ExecStopPost=+/usr/bin/systemctl stop fuzz-farm-hold@%s.service\n' "$1"
+   133	}
+   134	
+   135	# load_host NAME: read servers/hosts/NAME.env (role, users, runners, services).
+   136	load_host() {
+   137	  local f=$SERVERS_DIR/hosts/$1.env
+   138	  [ -f "$f" ] || die "no host file $f"
+   139	  # shellcheck disable=SC1090
+   140	  . "$f"
+   141	}
+
+codex
+The prior finding is resolved: sentinels preserve trailing empty URL entries in both checks. No additional findings.
+
+VERDICT: CLEAN
+tokens used
+7,541
+The prior finding is resolved: sentinels preserve trailing empty URL entries in both checks. No additional findings.
+
+VERDICT: CLEAN

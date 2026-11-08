@@ -1,0 +1,41 @@
+You are the writer for branch wip/lexer-literals of the Concrete repo, in this clone (~/projects/clones/wip-lexer-literals), stacked on da687c9ec. A previous run of yours was stopped mid-work because the owner has now decided the open spellings; its uncommitted edits to Concrete/Lex.lean and ConcreteSpec/Spec/Surface0.lean are still in the working tree. Read them (git diff), keep what fits, and finish the job against the EXACT rules below. The original brief follows after the decisions; where it said "parameterize" or "report the open question", the owner's decision now replaces that: implement the decided rule exactly.
+
+OWNER DECISIONS 2026-11-08 (verbatim record):
+## 2026-11-08T15:31:59Z owner (verbatim)
+"okay with your decisions"
+This answers three pending asks, with Claude's picks as shown:
+
+### Lexer spellings
+Block (a)-(d) unanimous:
+- (a) Byte-literal escapes are exactly \n \t \r \0 \\ \'. \" and \xHH are refused. Raw content is U+0020-U+007E excluding ' and \.
+- (b) Strings refuse raw: all of Cc (U+0000-U+001F, U+007F-U+009F), U+2028-U+2029, and the bidi controls (U+061C, U+200E-U+200F, U+202A-U+202E, U+2066-U+2069). This is explicitly approved as a new restriction. Byte literals allow raw U+0020-U+007E only.
+- (c) Prefixes are lowercase only (0x/0b/0o), and hex digits are lowercase only.
+- (d) The suffix set is exactly i8 i16 i32 i64 u8 u16 u32 u64, on every base, with no float suffixes. Malformed adjacent text is one refused token.
+
+The two split questions:
+1. A raw TAB inside a // comment is PERMITTED. Other Cc, U+2028/9 and bidi controls are refused in comments, and LF/CR end a comment.
+2. Suffixes are COMPLEMENTARY. A suffix is required where no expected-type position (OD138) exists, and refused where one does. This revises OD31/OD138, and the Q6.2 example becomes S { a: 200 }.
+
+
+How to apply them in the lexer:
+- (a) and (b) are lexical: implement exactly. Byte literal raw content U+0020–U+007E excluding ' and \; escapes exactly \n \t \r \0 \\ \' (others, including \" and \xHH, refused). Strings refuse raw all of Cc (U+0000–U+001F, U+007F–U+009F), U+2028–U+2029, and U+061C, U+200E–U+200F, U+202A–U+202E, U+2066–U+2069 (so raw TAB, LF, CR are refused in strings). Comments: raw TAB permitted; other Cc, U+2028/9 and the bidi controls refused; LF/CR end the comment (as already decided by item 30). Each refusal is an internal error constructor; tests for each range boundary.
+- (c): only 0x/0b/0o prefixes and lowercase hex digits a–f; 0X/0B/0O and A–F refused; tests.
+- (d): the lexer produces an integer token with an optional suffix from exactly i8 i16 i32 i64 u8 u16 u32 u64, on every base; no float suffixes; any other adjacent identifier-continue text (123u9, 200U8, 1f32, 0xffu9, 200u8foo, repeated suffix, invalid base digit) is one refused token, never split; `_` refused. Suffix TYPING (required where no OD138 expected-type position exists, refused where one does) belongs to the type checker, NOT the lexer: do not implement it here. Record it as an obligation for the checker's slice: add a clearly marked doc-comment note in Surface0 next to the suffix token and a line in the changelog fragment ("checker obligation: complementary suffix typing per owner 2026-11-08; Q6.2's example becomes S { a: 200 }"), and say so in your report so the coordinator can put it on the checker slice's roadmap row (you do not edit ROADMAP.md).
+- Legacy examples using uppercase hex (0x1F, 0xFF) migrate to lowercase wherever they appear in the files you touch (do not edit legacy/ or docs/decisions.md).
+
+ORIGINAL BRIEF (superseded where the decisions above apply):
+You are the writer for branch wip/lexer-literals of the Concrete repo, in this clone (~/projects/clones/wip-lexer-literals). It stacks on da687c9ec (wip/slice0-lexer-tokens, not yet on main; record that dependency in the changelog fragment). Read Concrete/Lex.lean and ConcreteSpec/Spec/Surface0.lean first: they are the lexer's declarative judgments plus executable scanners with soundness/completeness theorems, and the header lists what is deliberately NOT introduced.
+
+The owner decided (2026-11-08, "all yes"; section B of the owner's 29 decisions), verbatim:
+ 3. `'a'` is an ASCII byte literal of type u8 (equal to 97u8), with its own small escape list. Non-ASCII content is refused. The lexer tells it apart from `'label` by looking for the closing quote. Tests pin down both the literal and the label distinction. REVISES: language item 16, which removed char and migrated quoted ASCII literals explicitly. This item fixes the spelling.
+ 4. No raw tab or other control character inside a string. Write `\t`.
+ 5. Numbers allow: suffixes such as 200u8; the prefixes 0x, 0b and 0o. They refuse: `_` separators; malformed suffixes such as 123u9, instead of splitting them into tokens.
+
+Implement exactly these in the lexer, in the same style (declarative judgment in Surface0, executable scanner in Lex, soundness and completeness theorems, examples/tests by `decide`/`example`), and update the module headers' "not introduced" lists accordingly:
+ - Item 3: the byte-literal lexeme `'c'` with c ASCII printable (decide and state precisely which ASCII scalars are allowed raw, consistent with item 4: no raw control characters) or an escape; non-ASCII refused; `'label` vs `'a'` distinguished by the closing quote, with tests for both (e.g. `'a'`, `'a`, `'ab` as a label if labels are identifier-shaped, `'é'` refused). THE ESCAPE LIST IS NOT DECIDED ("its own small escape list" gives no members): do not choose members. Parameterize the byte-literal escape table exactly as the string escapes are handled, prove the theorems for any table, instantiate no members beyond what docs/decisions.md or the spec already decide for byte literals (search; cite what you find), and report the open question.
+ - Item 4: string bodies refuse raw tab and every other control character (state which: C0 controls and DEL? cite the decided rule; if only "control character" is decided, use Unicode general category Cc = U+0000-U+001F and U+007F-U+009F and say so in the report as a point to confirm), with the refusal as an internal error constructor.
+ - Item 5: integer lexemes with optional 0x/0b/0o prefix (digits valid for the base, at least one digit; decide nothing about uppercase 0X/hex-digit case unless decided — search docs/decisions.md; if undecided, accept only what item 5 states and report), the existing leading-zero refusal kept for decimal, `_` refused, and a suffix: a maximal run of identifier-continue scalars directly after the digits is the suffix candidate and must be one of the decided integer type names (find the decided integer types in docs/decisions.md / the spec; cite them); any other candidate (123u9, 12abc, 0x1g) is a lexing error, never split into number + identifier.
+
+OWNER RULE (2026-11-08, verbatim: "ALWAYS tell the reviewrs to do the best long term thing rather than cuitting corners"): judge and fix by the best long-term design. Never cut corners for speed, a smaller diff or fewer rounds. As a reviewer, report any shortcut, containment patch or corner cut as a real finding and say what the long-term fix is. As a writer, implement the structural fix, not a containment patch; if staging is truly unavoidable, record the long-term design and name its roadmap row.
+
+Run inside the repository's nix devshell: build only the touched Lean modules (lake build Concrete.Lex ConcreteSpec.Spec.Surface0 or the narrowest targets), bash scripts/proofs/axioms.sh or the axioms golden check the branch uses, and the lexer's own checks if any (grep scripts/checks for Lex). Bound every run; no full suites. Do not edit docs/decisions.md or ROADMAP.md. Add changelog.d/2026-11-08-lexer-literals.md citing owner items 3, 4 and 5. Commit on wip/lexer-literals in logical commits (do not push). If a rule needs a decision not in the text above or the repository, stop and report it rather than choose. End with a short report: what was added, theorems, tests, open questions (escape list, control-character set, prefix case, anything else).

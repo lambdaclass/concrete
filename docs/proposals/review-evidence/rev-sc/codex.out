@@ -1,0 +1,25 @@
+The Lean definitions match the intended step-2 structure: identities are distinct types, fields include their owners, spans require positive coordinates, and slices use `Fin 29`. The column unit remains explicitly undecided (`ConcreteSpec/Spec/Ident.lean:131–141`). I found no `sorry` or `native_decide` in the new modules.
+
+CI wiring is correct: the rule gate follows the build (`.github/workflows/lean_action_ci.yml:156–166`), and `Spec build` is required (`required-checks.txt:6`). Timeout handling fails closed: incomplete checker runs return 2, which neither the positive nor negative controls accept (`scripts/spec/rules.sh:26–30`).
+
+The architecture agrees with the proposal’s sections 1.2, 1.10, 2.2 and step 2, using the proposal text preserved in `_review.diff`; the proposal file itself is absent. Lifecycle checks are correctly deferred to step 9. The empty registry is intentional at this stage (`ConcreteSpec/Spec/Rules.lean:20–27`).
+
+I reproduced the Python issues below using in-memory inputs. No files were written; I did not run builds or the shell gate because they create files.
+
+Findings:
+
+1. **Rule citations with quoted names can escape checking.** `scripts/spec/rules.py:18–19` excludes whitespace inside names. Adding `(rule `R.«missing rule»`)` passes without reporting the unregistered rule. Ordinary dotted names work, but valid Lean quoted components containing spaces do not. **Fix:** parse backticked Lean names with quoted-component support, canonicalize them against registry names, and add negative controls.
+
+2. **One example can satisfy both example obligations.** `scripts/spec/rules.py:54–60` credits every verdict found in a doc block. A single `/-- Accepted (rule …). Refused (rule …). -/ example : True := trivial` passes. Nested-comment verdict text is credited too. **Fix:** identify example commands separately, require distinct accepted and refused examples for each rule, and define how nested comment text is treated.
+
+3. **Valid example modifiers are rejected.** `scripts/spec/rules.py:20,56` requires `example` immediately after whitespace. Documentation directly attached to `@[simp] example` or `noncomputable example` fails. **Fix:** recognize Lean declaration prefixes before the `example` command, with positive controls for attributes and modifiers.
+
+4. **A decision-shaped string substitutes for an actual decision row.** `scripts/spec/rules.py:17,36` accepts nonexistent `Q999.999`; I reproduced a complete passing fixture with that doc string. This does not establish the README’s decision-row claim (`ConcreteSpec/README.md:43`). **Fix:** validate extracted identifiers against the authoritative decision inventories.
+
+5. **Source enumeration can pass vacuously.** `scripts/spec/rules.py:38` silently accepts a nonexistent source directory. With only the end record, it reports success for zero rules and scans nothing. Unreadable directories can likewise be skipped by `os.walk`. **Fix:** require the source directory, propagate traversal errors, and verify that the expected source population was scanned.
+
+6. **Negative controls do not cover every failure path.** `scripts/spec/rules.sh:60–93` tests missing Refused, but omits missing Accepted, missing documentation, lexical failure, source-enumeration failure and timeout behavior. It also lacks the parser edge cases above. **Fix:** add isolated controls for those paths, including a checker that hangs through both bounded attempts and must leave the gate nonzero.
+
+7. **The field example’s comment names different variants from its proof.** `ConcreteSpec/Spec/Ident.lean:179–185` promises `Some` versus `Ok`, while the example proves `E.A` versus `E.B`. **Fix:** align the comment and example names.
+
+VERDICT: REVISE

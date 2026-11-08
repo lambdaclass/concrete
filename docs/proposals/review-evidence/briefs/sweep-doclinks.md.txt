@@ -1,0 +1,19 @@
+Owner rule (verbatim: "ALWAYS tell the reviewrs to do the best long term thing rather than cuitting corners"): judge and fix by the best long-term design. Never cut corners for speed, a smaller diff, or fewer rounds. A reviewer reports any shortcut or containment patch as a REAL DEFECT and states the long-term fix. A writer implements the structural fix, not a containment patch.
+
+TASK on wip/legacy-sweep-2 (this clone, HEAD 35b489e4). A full-access review found a real fail-open defect. Fix it structurally,
+in the same discipline as the rest of this branch, where every lock consumer fails closed:
+- scripts/checks/lib/doc_links.py, swept_files(): when `git ls-tree` fails for the frozen tree or for HEAD:legacy, it returns an
+  empty set. markdown_files() then silently skips every swept Markdown file, so broken links in them can yield DOC-LINKS: PASS
+  exactly when the helper could not work out what to check. The same goes for any other silent fallback in this path: a lock
+  without a `tree` row reaching next(), and a git failure in markdown_files() falling back to rglob. Decide for each whether it
+  is a legitimate "no repository / no lock" case or a failure. A failure must make the DOC-LINKS result fail, with a diagnostic
+  naming the failed step. Absence that is genuinely legitimate stays explicit and documented.
+- Controls in the doc_links gate (scripts/checks/doc_links.sh, or wherever its controls live): a failing frozen-tree lookup and
+  a failing HEAD:legacy lookup each make the check fail with the exact diagnostic. A swept document with a valid link passes,
+  and one with a broken link fails. Prove each control is load-bearing with a temporary mutation and report the result.
+- Do NOT edit docs/decisions.md or ROADMAP.md; their stale statements go to the decisions writer separately.
+- Update the changelog fragment changelog.d/2026-11-08-legacy-sweep.md if its description of doc_links changes.
+Gates: timeout 1500 systemd-run --user --scope -q -p MemoryMax=8G -p TasksMax=1024 bash scripts/checks/run.sh
+(read its own exit status; all must pass).
+Commit locally (one commit). Never push, never change git config or remotes, no --no-verify. Print the SHA, a summary per
+fallback with your decision for each, and the mutation results.

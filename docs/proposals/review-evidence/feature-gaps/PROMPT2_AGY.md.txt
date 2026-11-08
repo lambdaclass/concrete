@@ -1,0 +1,187 @@
+You may read files in the current directory (a git-archive copy of Concrete's origin/main; the drafts are also under _review/) if your tools allow; otherwise answer from the context below. Do not modify files.
+
+OWNER RULE (verbatim, 2026-11-08): "ALWAYS tell the reviewrs to do the best long term thing rather than cuitting corners". Judge every item by the best long-term design, not by what is cheapest to add now. Report any shortcut (in Claude's proposals, in the repository's plan, or in your own suggestions) as a real finding and name the long-term alternative.
+
+You are reviewing, round 2, a research answer for the owner of Concrete, a fully proven systems language with no GC (linear ownership, second-class references, with(...) permissions plus grant values, no hidden traps; Lean 4 is the specification; a new compiler is built slice by slice, both an LLVM printer path and the Lean Compiler Backend (LCB) path). The current directory is a git-archive copy of origin/main. Read _review/DRAFT2.md (revised language-gap list R1-R10, with the round-1 verdicts and the corrections Claude accepted; round-1 draft is _review/DRAFT.md) and _review/KLIST.md (part 2: compiler-architecture candidates K1-K12). Check both against the repository: docs/PHILOSOPHY.md, docs/decisions.md, ROADMAP.md (queue rows, slice table, task rows), docs/proposals/*.md (MERGED.md is the pipeline review), Concrete/README.md (slice-0 compiler design), ConcreteSpec/, legacy/docs/spec/, docs/archive/roadmap-2026-11/task_disposition.tsv, docs/archive/decisions-2026-11-05/R4_RATIONALE.md.
+
+Tasks:
+1. R1-R10: AGREE or DISAGREE each, reason at most 60 words (cite file/row if already covered, wrong, breaks a decided row, or wrongly placed). Say whether the stated design is the best long-term one, and if not, what is.
+2. K1-K12: for each, AGREE or DISAGREE that it should be done; whether it already exists or is planned (cite the ROADMAP task/row or file); the slice or queue row it belongs in; and whether it must START BEFORE SLICE 1 (B1) or can wait. Reason at most 60 words each.
+3. List anything missed in either part (language features or early compiler-architecture work), with source, problem, slice and why it is not covered.
+Do not modify files. Cite repository paths you read.
+
+End with exactly one line:
+ANSWER: R_AGREE=<ids>; R_DISAGREE=<ids or none>; K_AGREE=<ids>; K_DISAGREE=<ids or none>; K_BEFORE_SLICE1=<ids>; MISSED=<short list or none>
+
+Context summary: see the round-1 prompt context in _review/PROMPT_AGY.md (philosophy rules, refusals, slice plan). Your round-1 review is reproduced in _review/agy_round1.out.
+
+=== DRAFT2.md ===
+# Feature gaps, revision 2 (after round 1: Codex, Kimi, agy)
+
+Round-1 raw outputs: codex.out, kimi.out, agy.out. Owner rule (2026-11-08, verbatim): "ALWAYS tell
+the reviewrs to do the best long term thing rather than cuitting corners". Every item below states
+the best long-term design, not the cheapest addition.
+
+Round-1 verdicts: G1 Codex D / Kimi A / agy A; G2 D(as written)/A/A; G3 A/A/A; G4 D(schedule)/A/A;
+G5 D(as written)/A/A; G6 D/D/A; G7 D/D/A; G8 A/A/D; G9 A/A/A; G10 A/A/A; G11 D/D/D; G12 D/D/D.
+
+Dropped as already planned (accepted): G6 C boundary artifacts (R-0283/R-0287 -> R-0301, R-0286
+generated headers; FFI_GLUE.md), G7 inline assembly (R-0325: trusted + with(Unsafe), deferred to a
+device workload), G11 property tests (R-0190 -> R-0177), G12 binary-format generators (R-0406).
+
+Corrections accepted: SPARK 4(b)/4(c) were open in the repo (now approved in the 2026-11-08 list,
+items 28-29, not yet recorded); OD11's `as` is removed (its value-domain rule stays); general packed
+structs are removed (item 23 revises OD111/OD147), so OD147 is not live coverage; unreachable arms
+are OD18, not OD41; the SMT refusal is about admission only (kernel-checked proofs and certificate
+replay inside Lean theorems stay allowed, and SMT-checked lowering is proof-order item 7); tail calls
+(R-0303) and generational references (R-0412) are pull-gated, not rejected; the Wasm component model
+is later work (R-0305), not covered; stack reservation is covered (Q7.10/Q8.5, foundation C6/C10)
+and trap realization is R-0581.
+
+## Gaps, ranked (best long-term design for each)
+
+R1. The hosted launch and final-image contract (was G3; plus Kimi M2-M4, agy M3).
+  Sources: Rust's start code (SIGPIPE ignored), WASI/Capsicum/Fuchsia (no inherited ambient
+  handles), GCC/LLVM stack-clash probing, OpenBSD W^X and `-z noexecstack`, seL4/CompCert exact
+  artifacts, Wasm's deterministic float profile.
+  Gap: the Q7.10 table (R4 F6) does not state: SIGPIPE disposition (a write to a closed pipe kills
+  the process; `grep | head` at 16/18, every socket at 27); inherited descriptors >= 3 (authority
+  outside every grant, rule 11); umask (hidden input to every created file's mode); the inherited
+  signal mask and dispositions; dynamic-loader injection (LD_PRELOAD, LD_AUDIT,
+  DYLD_INSERT_LIBRARIES) and the identity of loaded libraries; how stack pages are touched (a large
+  frame can jump a grow-down guard page; a byte bound alone does not prevent it); segment
+  permissions of the final image; the floating-point control state at entry (rounding, FTZ/DAZ).
+  Long-term design: the target table defines a clean, fully specified initial process state, each
+  item a launcher obligation checked on the final artifact: SIGPIPE ignored so writes return typed
+  errors; all signal dispositions and the mask reset to a stated state; descriptors >= 3 closed or
+  start refused (125) unless granted; file creation mode is an explicit argument of the create
+  operation and umask is set to 0, so no hidden input remains; loader-environment injection refused
+  and the loaded set bound by hash (or static linking on the proof profile); the stack pre-mapped to
+  the budget or probed, validated in the final artifact; no executable stack and no writable and
+  executable segment, as a final-artifact fact from slice 0; FP control state fixed at entry
+  (slice 26). Slices: 0 (image permissions), 6 (launcher), 16/18/27 (streams, files, sockets),
+  25 (loader), 26 (FP). Rules 3, 8, 11, 12, 14, 18. Owner: the target-table rows.
+
+R2. Read-only static storage for aggregate constants (was G2).
+  Sources: C `static const`, Rust `static`, Ada constant aggregates in read-only memory, Zig.
+  Gap: TYPE-22 gives a constant no storage and inlines it at each use; constants arrive at slice 17,
+  while SHA-256/Keccak/Poly1305 (15), the EVM tables (15), CRC32/DEFLATE (21-22) and a grep DFA (16)
+  need tables.
+  Long-term design: make storage part of the semantics, not an LLVM optimization: an aggregate
+  constant has exactly one read-only instance; reading it at a use is a shared view (no copy, never
+  `&mut`), so source-level stack and step bounds do not count a per-use copy and do not depend on the
+  optimizer; scalars keep TYPE-22 at-use semantics; REF-6 is unchanged (the initializer still does
+  not borrow). Constants (at least single-file top-level constants) move to slice 15. Owner revision
+  of TYPE-22 and of the Q6.4 placement.
+
+R3. Integer primitives for bit manipulation and wide arithmetic (was G4).
+  Sources: Rust rotate/leading_zeros/trailing_zeros/count_ones/swap_bytes/carrying_add/widening_mul,
+  Zig @clz/@popCount/@byteSwap/@mulWithOverflow, Ada Interfaces.Rotate_Left, HACL*/Fiat limbs.
+  Gap: ROADMAP's std table says wide arithmetic is unplaced; slice 2 lists bitwise ops and shifts
+  only. Tuples are refused and structs arrive at 9, so multi-result forms cannot be at 2 (Codex, agy).
+  Long-term design: every primitive has a single scalar result, so the set lands complete at
+  slice 2: rotate_left/right, leading_zeros, trailing_zeros, count_ones, swap_bytes, mul_high (the
+  high word; `wrapping_mul` is the low word), and carry/borrow as separate total scalar operations
+  (the wrapped sum plus a `bool` carry-out predicate taking the carry-in). Each is in the closed
+  constant-time table where the target makes it constant time. A proved limb-based u128/u256 std
+  module at 15. No arbitrary-width integer types. Owner: spellings and placement.
+
+R4. Split and bulk operations on views (agy M1, M2).
+  Sources: Rust split_at_mut / copy_from_slice / copy_within / fill, Zig @memcpy/@memset, Ada slice
+  assignment, Low* Buffer.sub.
+  Gap: OD15 whole-root freezing and Q3.2-Q3.4 give one view per root at a time; safe code cannot
+  hold two disjoint mutable views of one array (in-place block crypto at 15, DEFLATE window copy at
+  21-22, merge sort), nor copy within one buffer, except element by element.
+  Long-term design: language primitives, not std loops: `split` of one view at a checked index
+  yields two disjoint second-class views under the single existing root loan (OD15 unchanged: the
+  root stays frozen); `copy_from` (equal lengths, distinct views), `copy_within` (overlap-correct, one
+  view) and `fill`, each with one Lean range-update law and lowering to memmove/memset. Slice 15,
+  extended to heap arrays at 21. Owner (touches Q3.2-Q3.4).
+
+R5. The scope of secret wiping (was G5).
+  Sources: Rust zeroize docs, GCC -fzero-call-used-regs and `strub`, libsodium, Jasmin/libjade.
+  Gap: decided wiping on destroy does not say what happens to moved-from slots, spills, callee
+  frames, never-destroyed scalar Copy secrets, the abort path, core dumps and swap; an unscoped
+  "wiped" overclaims (rule 12).
+  Long-term design: the slice-7 claim states exactly which locations are covered. Source level: a
+  Core property that after a linear secret is destroyed no reachable location holds its bytes (a
+  move of a linear secret is specified to leave no readable copy). Backend: frame and register
+  scrubbing on return from a function that held secrets, a proof obligation on the LCB path and a
+  named premise for LLVM. The abort path, core dumps and paging are named premises; the launcher
+  disables core dumps for a program whose facts show secrets. Slices 7, 15, 19. Owner: claim scope.
+
+R6. Generated functional models, earlier (was G1; Codex: planned, a scheduling question).
+  Sources: Aeneas, hax, Creusot, Verus, seL4 AutoCorres, Lean Std.Do/mvcgen.
+  Gap: functional models are proof-order item 4 (phase E), while program theorems are needed at 7,
+  15 and 18; `#[proof]` already names the function's semantic identity or generated contract
+  (no-hidden-traps decision, 2(c)), but no planned artifact gives users a pure model to prove about.
+  Long-term design: one generated model per function with a proved refinement to the Core
+  semantics, reusing R-0482 (model/proposition identities) and R-0454 (canonical subjects); pure
+  subset at slice 8, `&mut` as returned updates at 13, effects as event traces at 18, allocation at
+  19. Owner: moves part of item 4 from E to C.
+
+R7. Unused imports and unreachable private items (was G9).
+  Sources: Go, Zig, MISRA C 2.1-2.7, Rust dead_code, SPARK ineffective code.
+  Long-term design: an unused import is refused (a declared dependency nothing uses, rule 5). An
+  unreachable private item is refused, with reachability roots defined in the spec (exports, `main`,
+  tests, theorem and spec dependencies, target-selected files), because "no warnings" leaves refuse
+  or fact and an unused item is unreviewed surface. Codex prefers a fact plus policy first. Slice 17.
+  Owner.
+
+R8. The spec version a package targets (was G10).
+  Sources: Rust editions (only the declaration, not multiple modes), go.mod `go`, Ada language-version
+  switches, Lean toolchain pin.
+  Long-term design: `Concrete.toml` declares the spec version; the compiler refuses a version it does
+  not implement (no edition modes); facts and receipts record it. Stated before 1.0 (phase G). Owner.
+
+R9. The incoming C boundary of exported functions (agy M4).
+  Sources: CompCertO incoming interfaces, Rust extern "C" fn, Ada pragma Export.
+  Gap: FFI-5 covers export symbol names; R-0286 covers headers and evidence; nothing says what a
+  `#[export_name]` function's `with(...)` means when C calls it (C cannot mint grants), which types it
+  may take, or the foreign caller's entry premises.
+  Long-term design: an exported function takes only FFI-safe types; operational capabilities appear
+  only through grant handles that Concrete code created and passed out (never forged by C); its
+  entry premises are declared assumptions in the facts. Slice 25. Owner.
+
+R10. Layout queries as checked values (Kimi M1, agy M5).
+  Sources: Rust offset_of!/size_of in const, Zig @offsetOf/@sizeOf, C offsetof/_Static_assert.
+  Gap: FFI-7 gives sizeof/alignof but not offsets, and Q6.2's known-value table excludes them, so
+  trusted and FFI code restate offsets and sizes by hand (rule 5).
+  Long-term design: `offset_of` over a typed field identity (never a string) for representation-fixed
+  types, and sizeof/alignof/offset_of of concrete types in the known-value table, so buffers and
+  static layout checks use the one computed layout. Slices 24-25 (and 9 for sizeof). Owner.
+
+## Recommend rejecting (d), corrected
+- General comptime (Zig, Jai): refusal with reopen rule (rules 3, 15).
+- Zig errdefer: a second cleanup form beside written error arms and `defer` (rule 2).
+- Inferred error sets, Odin `or_return`, Rust `?`: permanent refusal (rule 3).
+- Odin/Jai implicit `context` and `using`: hidden data flow (rules 3, 11).
+- Algebraic effects (Koka, Effekt): permanent refusal.
+- Cell/RefCell-style run-time borrow checks: hidden traps (rule 18). (Generational references stay
+  pull-gated under R-0412.)
+- Lifetimes / regions as types: rule 10.
+- Arbitrary-width integers and struct bitfields: rule 15 (pull-gated layout research R-0303); R3
+  covers the arithmetic need.
+- Run-time contract checking (E-ACSL, SPARK -gnata, C3): OD125.
+- Solver-trusted admission (Dafny, Verus, Prusti, Creusot, Why3, Frama-C WP): rule 18; kernel-checked
+  proofs in Lean stay allowed.
+- Broad cfg, cargo features: P17b. MISRA-style admission profiles: OD124.
+- include_bytes / @embedFile: reviewed external generators instead (rules 3, 5).
+- Ada fixed-point, F# units of measure: no workload (rule 17; units design deferred in types.md).
+- Spectre-class leakage: outside the decided observer model.
+
+=== KLIST.md ===
+# Part 2: compiler architecture candidates (owner question 2026-11-08, verbatim: "is there anythign else we have to do early on to make sure this is the bes compiler")
+
+K1. Source provenance through every IR: every node in HIR, Core, MIR, CFG, SSA and BIR carries its origin span and a stable ID, so diagnostics, trap-site accounting, debug info and facts all work. Costly to retrofit.
+K2. A textual printer and parser for every IR with a round-trip law, so each pass can be tested in isolation (LLVM .ll / MLIR style). Complements the B0 printers.
+K3. A compiler with no panics: no panic!, unreachable!, partial def or sorry in compiler code, or else an allow-list with a gate; the compiler's own totality is a stated property.
+K4. Generated-code quality benchmarks: runtime and code size of the showcases against C at -O2, for both LCB and LLVM paths, with a history on concrete-ci-2.
+K5. An optimization architecture decided early: where optimizations live (verified BIR passes, translation validation, or LLVM on the printer path only), and what the LCB path promises about performance. Possibly an owner question.
+K6. Translation validation, or a differential check, for the unproven LLVM printer path until it is replaced or proven.
+K7. Incremental and parallel compilation readiness: per-function compilation units and content-addressed caching keyed by input hashes (determinism already makes this possible); the LSP builds on it later.
+K8. Compile-speed targets: absolute lines per second on reference workloads, beside the scaling gate.
+K9. A proof-engineering style guide with a gate: no large decide terms, pinned simp sets, a proof module per stage, lemma reuse.
+K10. An architecture document per stage: input invariant, output invariant, the theorem linking them, its trusted pieces; one file each, kept in sync by the traceability gate.
+K11. Debug info (DWARF) and source maps planned from K1's spans, with a slice assigned.
+K12. A versioned stable output schema for facts, diagnostics and CLI JSON (extends owner item 16).

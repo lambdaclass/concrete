@@ -1,0 +1,18 @@
+### Findings
+
+1. **`scripts/checks/legacy_frozen.sh:191` — PREFERENCE**
+   In `named_readers()`, `xargs -0 -r grep -nIE 'legacy[.]lock' --` relies on all files under `scripts .githooks .github` fitting into a single `xargs` invocation that includes the known matches (`legacy_frozen.sh` and `legacy_lock.py`). If the file list ever grew past `ARG_MAX` and split into a second batch with zero matches, `grep` would exit `1` on that batch and `xargs` would exit `123`, tripping `[ "$rc" -le 1 ]`.
+   - **Fix (optional):** Append `$SELF` to the `grep` arguments (`xargs -0 -r grep -nIE 'legacy[.]lock' -- "$SELF"`) or use `git grep -nIE 'legacy[.]lock' -- scripts .githooks .github` (where exit `1` means no match across the whole invocation).
+
+2. **`scripts/checks/legacy_frozen.sh:469` — PREFERENCE**
+   `lock_history()` (line 150) and `history_identity()` (line 156) already invoke `checked` internally, so `checked lock_history lock_history ...` and `checked history_identity history_identity ...` at line 469 double-wrap them; on an exit status `> 1`, both the inner and outer `checked` append `refused: <step> failed (exit N)`.
+   - **Fix (optional):** Call `lock_history` and `history_identity` directly at line 469 (or keep `checked` only at the call site).
+
+### Scope Verification
+
+- **Both defects fixed:** `legacy_lock.py:82-83` rejects any lock with fewer than 2 lines (`line 2 must be 'tree <tree>'`) in both `rows` and `history()`, and `legacy_lock.py:113-115` verifies via `git ls-tree` that a path is genuinely absent before treating a failed `git cat-file blob` as a deletion. All helper pipelines in `legacy_frozen.sh` now fail closed on empty stdout when a command exits non-zero.
+- **No spurious refusals on healthy runs:** In `judge()`, every iteration of the `while` loop ends with `continue`, `[ -n "$found" ]` (when `found=1`), or `echo ...` (when `found=""`), all of which exit `0`, so `done || echo "refused: ..."` triggers only when the upstream `git diff-tree` / `python3` pipeline fails.
+- **Controls and scope:** All 26 refusal controls in `legacy_frozen.sh` and the `LEGACY_TRUSTED_REF` control in `sandbox_isolation.sh` match their intended failure paths, and nothing outside the stated scope changed.
+
+VERDICT: ACCEPT
+rc=0

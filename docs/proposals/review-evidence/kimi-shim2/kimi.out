@@ -1,0 +1,460 @@
+kimi version 2.4.1
+• I need perform read-only review. Should inspect round1 findings, delta, shim full, related fixtures tests issues changelog. Must modify only scratch under /tmp. Repo itself no edits. I can create scratch. Should have no subagents. Should todo as complex. Should be careful git commands read only repo and scratch mutating allowed. Should know paths parent. Use Read known ../round1 etc delta. Also acceptance shim. I'll call parallel reads and todo.
+
+• I’ll compare both round-1 reviews against the current shim, then exercise protected-repository and fixture cases in an isolated `/tmp` repository.
+
+• Should absolute parent path. cwd given /tmp/.../repo. parent /tmp/.../scratchpad/kimi-shim2. Use exact absolute. Should inspect relevant acceptance.sh landing tests. Glob files. Read findings.Now deeply analyze for bypasses. Shim bash script generated. Git invocation through shim on PATH. Protected URLs resolved identities. Parser potential options --exec-path= etc. Global parsing treats all -* as no-arg except listed. Git global options with separate args: --exec-path? git [--version] [--help] [-C <path>] [-c <name>=<value>] [--exec-path[=<path>]] [--html-path] [--man-path] [--info-path] [-p|--paginate|-P|--no-pager] [--no-replace-objects] [--no-lazy-fetch] [--no-optional-locks] [--no-advice] [--bare] [--git-dir=<path>] [--work-tree=<path>] [--namespace=<name>] [--config-env=<name>=<envvar>] <command>. Parser doesn't handle --config-env separate value. It treats --config-env as no arg, next <name>=<envvar> as subcommand. Real git interprets as global option and push later. This could bypass: git --config-env alias.p=CFG p origin main with env CFG=push? Parser sees --config-env -* pre; next alias.p=CFG as sub. It may look for alias "alias.p=CFG" no alias -> exec real, real applies config-env and p alias -> push. Yes high. Should reproduce. Also --git-dir= supported no arg fine. --work-tree=. fine. --namespace= fine. -c alias.p=push handled. -c with no arg weird. Long --config-env omitted. Also short options combined? -cfoo=bar? git supports -c <name>=<value>, likely no combined. -Cpath maybe? git -C <path> only. --config-env= handled as -* okay.
+
+  Also global options after? git push ... parser push options. Many push options with separate args not accounted: --force-with-lease[=<refname>[:<expect>]] no separate, --receive-pack yes, --exec yes, -o yes, --push-option yes, --repo yes. -u no arg. --set-upstream no arg. --follow-tags etc. Should bypass via push option that alters refspec/remote? --delete main considered specs. --prune no refspec moves main (refuses even fixture perhaps false positive? legitimate git push --prune fixture wip? no refspec potentially main yes fail safe). --tags: no specs => refuses, though tags cannot move main unless no main? safe overrefusal fixture perhaps user asks fixture push wrongly refuses. Existing design deliberately no refspec considered could move main even --tags can't. Could flag low false refusal but perhaps intended fail closed. Should find actual substantive.
+
+  Remote resolution remote get-url --push --all "$repo". This invokes real with pre options. For raw local path, remote get-url fails then urls raw. For remote configured multiple URLs good. However repository argument could be . or path with weird leading dash? parser treats -* as option, matches git. -- separator handling: after --, all args positional but parser keeps treating -* as options. Git push options after -- are repo/refspec. Could use repo names starting dash? not likely protected remote path absolute. More importantly refspec after -- starting -? no main impact perhaps.
+
+  Alias parser flaws. Builtins detection. command -v "git-$sub" checks PATH. If attacker supplies git-p wrapper on PATH? Shim delegates real; real executes external command git-p, which can push via real git? If script invocation through shim on PATH but external git-* commands may call shim on PATH. If malicious test candidate can add arbitrary git-* executable to PATH, could call absolute real out of scope? They can create script that calls git push (shim) then protected. Not bypass unless external built-in git-remote helpers etc. Real git invokes alias after command -v. But order perhaps command -v before checking alias matches git. Fine.
+
+  Alias splitting via read -r -a is not git's alias split even for unquoted strings. They refuse any quote/backslash. Environment aliases can include newlines, tabs, leading whitespace, shell comment? Git alias parsing uses split_cmdline, quotes only special. Unquoted alias multiple whitespace okay read handles. Alias values with newline? git config values may have newline and splitting likely shell-like line? Should not handle.
+
+  Environment config: GIT_CONFIG_COUNT etc real config pre works. GIT_CONFIG_PARAMETERS works. --config-env bypass obvious. Also -c alias.push=... builtin push bypass alias intentionally Git ignores alias named builtin. no issue.
+
+  Main detection:
+  t="${s#+}"; d="${t##*:}"; [ -n "$d" ] || d="${t%%:*}"
+  case "$t" in *'*'*|:) ...
+  case "$d" main|*/main|HEAD|@.
+  Ref syntax destination with ^? negative refspecs. Could move main through refspec using refspec destination abbreviated refs? They cover */main. What about destination `heads/main` yes */main. `refs/remotes/...` not main branch. `HEAD` handled lone or dest. `@` handled exact only. `@:refs/heads/main` d main. `HEAD:main` yes. Colon multiple weird invalid.
+  Could use refspec `main:refs/heads//main` invalid. Case sensitive correct.
+  Push config refspecs no args refused. `--all` after `--` would be positional repo? parser flagall regardless. safe.
+  `--mirror=...` no.
+  Push refspec can use `+refs/heads/foo:refs/heads/main` covered.
+  Can push main via deletion using `:main`, covered d main. `--delete` main covered.
+  Could use --force-with-lease=main as arg no positional, then repo origin main normal covered.
+  Could use remote helpers via ext:: URL which executes commands but repo_identity refuses.
+  Bundle? no.
+
+  Protected identity flaws:
+  repo_identity uses env unsets only 5 local vars, but not GIT_CEILING_DIRECTORIES, GIT_DISCOVERY_ACROSS_FILESYSTEM, GIT_CONFIG_COUNT, GIT_CONFIG_PARAMETERS, GIT_CONFIG_SYSTEM/GLOBAL etc. git rev-parse --git-common-dir can be influenced by GIT_CONFIG? core.worktree? bare? Common dir likely robust. But environment GIT_DIR unset. GIT_COMMON_DIR etc. GIT_OBJECT_DIRECTORY. Others local env vars: GIT_ALTERNATE_OBJECT_DIRECTORIES, GIT_CONFIG? git rev parse local env list includes GIT_DIR, GIT_WORK_TREE, GIT_IMPLICIT_WORK_TREE, GIT_COMMON_DIR, GIT_OBJECT_DIRECTORY, GIT_INDEX_FILE, GIT_ALTERNATE_OBJECT_DIRECTORIES, GIT_CONFIG, GIT_CONFIG_PARAMETERS, GIT_CONFIG_COUNT, GIT_CONFIG_KEY_, VALUE_, GIT_GRAFT_FILE, GIT_SHALLOW_FILE, GIT_REPLACE_REF_BASE, GIT_NO_REPLACE_OBJECTS, GIT_CEILING..., GIT_DISCOVERY..., GIT_CONFIG_GLOBAL/SYSTEM/NOSYSTEM. repo_identity not full sandbox. Can manipulate rev-parse via `GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.bare GIT_CONFIG_VALUE_0=...` perhaps common dir unaffected. `GIT_CONFIG_KEY_0=core.worktree` can affect git common dir? no. `GIT_DIR` unset enough. `GIT_COMMON_DIR` unset. `GIT_NAMESPACE` no. `GIT_CONFIG` can point config file perhaps core.worktree no.
+
+  Absolute git common dir symlink-free via cd pwd-P. Git common dir path can have newline? generated arrays printf q robust. URL output newline ambiguity: remote URLs can contain newline, git config can. Multiple lines parsed as URLs; protected raw exact won't match full but repo_identity each fragment fails closed. fine.
+
+  Relative protected URLs acceptance adds $SRC_REPO/$u. Codex finding: make shim called before clone from source cwd. They resolve at $PWD (whatever subdir invocation), and source top. Git clone relative URL semantics: Important relative URL on clone is resolved relative to current working directory, not source repo top. In clone's config, remote origin URL remains as supplied (e.g. ../upstream.git). Subsequent `git -C clone push origin` resolves relative URL relative to clone working tree root? Git docs: relative URL in config resolved relative to cwd? likely current working dir. Acceptance protects both creation caller and source top. Is source top enough for clone top? Suppose source repo /home/work/repo and origin ../upstream.git -> /home/work/upstream.git. Clone C /tmp/acceptance/clone. After clone remote origin remains ../upstream.git, from C resolves /tmp/acceptance/upstream.git, not actual source origin. They protect original identity via $SRC_REPO/$u = correct source top if original remote was interpreted from source root. Acceptance run may from subdir, make resolves $PWD/$u and adds source top. Actual original origin relative path convention normally relative to repo root. Fine. Pushes via absolute original protected identity blocked. Raw original relative URL string blocked even when URL points elsewhere now; fail closed. Good.
+
+  But protected remote can be absolute path containing symlink. repo_identity resolves actual. good. Non-bare .git same common dir. Worktrees: protected non-bare main common dir and linked worktree common dir same. good.
+
+  Protected remote using local path with `file://localhost/...`? repo_identity strips file:// yields localhost/... relative -> refuses any push to it even protected (fail closed) no bypass. Protected creation cannot resolve but raw match blocks exact. Alternative absolute path protects? Actual remote file://localhost/path could point protected but raw other absolute path identity not known at creation; could bypass if file://localhost accepted by Git? Should protected IDs includes if remote URL file://localhost/tmp/prot.git: abs="localhost/tmp/prot.git" case not absolute and no scheme because stripped, then PWD/localhost/tmp... nonexistent so no ID. At push raw URL can be absolute /tmp/prot.git; not equal raw; id protected? PROTECTED_ID empty => allowed, Git original remote file://localhost/tmp/prot.git may refer same repo. This is a bypass for file URLs with authority localhost. Does Git support file://localhost/path? likely yes or perhaps "file://localhost/tmp" supported. Should test. Similarly file://<host> only localhost allowed perhaps. Docs file://localhost/path. This would violate. Could reproduce. User specifically says protected local URLs at creation; likely expected to handle file://. They claim file://. Should probe. Also file://./ etc.
+
+  Absolute local URLs may be scp-like local? / absolute fine. `file:///tmp/prot.git` stripped /tmp works. `file://localhost/tmp/prot.git` repo_identity at creation fails. At push by /tmp path identity allowed. If Git accepts localhost then high. Test in scratch. Could also file://127 etc unsupported. Should run test suite multiple hypotheses. Also `file://` path with percent encoding? Git local file URL supports percent? Perhaps not.
+
+  Relative protected paths handling has *@*:* pattern case to avoid scp; absolute first. Tilde paths `~/prot.git` treated relative creation PWD/~/prot.git nonexistent, raw original `~/prot.git` remote get-url perhaps expands? At push absolute /tmp/prot allowed. Does Git expand tilde in local path? Git supports ~user/path for ssh, local `~/repo.git` shell expands if unquoted but config remote URL "~/prot.git" Git might expand tilde? Likely yes for local? Should test. If protected ORIGIN_URL is "~/prot.git" or "~user/prot.git" and make shim cannot resolve because relative. A push absolute path might bypass. `repo_identity` only absolute. Git supports tilde expansion in paths? `git clone ~/foo` shell expands before Git, but remote config url "~/foo" no shell. Git's `~/` perhaps expand via expand_user_path for local. likely. Could reproduce. Also env vars not expanded.
+
+  Protected URL as relative path is resolved using caller and source top, but other spellings e.g. path with `..` id resolves. good.
+
+  Protected URL absolute path through nonexistent at creation? Real remote existing presumably.
+
+  Protected remote URL can itself be remote name? origin URL actual get-url returns path.
+
+  Alternate Git URL syntax local path `file://localhost`. strong candidate.
+
+  Push URLs rewriting: refuses any insteadOf config. Good.
+
+  Remote get-url can apply insteadOf itself, but check before. Global config environment `--config-env` bypass can also insteadOf. Main issue.
+
+  Global option `--bare` pre no arg; repo_identity unsets GIT_DIR but real remote get-url uses --bare and current cwd to identify repo. Fine.
+  Global `--exec-path` separate arg: actual Git accepts `--exec-path <path>`? docs `--exec-path[=<path>]`; likely `--exec-path /x` prints path and ignores? Without = it prints path and no subcommand; if followed path then treats path command? So not an issue. `--config-env` definitely takes separate arg. Should verify.
+
+  Global `-c` can use `-calias.p=push`? no likely unknown option. `--git-dir` handled separate and equals. `--work-tree` handled. `--namespace`. `-C` multiple. `--config-env` missing. Also long `--git-dir` missing argument leads pre with empty and then next push consumed as value so no subcommand delegates real with same -> real error no push. safe.
+
+  Global options parsing all -* means git `--literal-pathspecs` etc okay no args.
+  Git global `--list-cmds` takes arg with equals only.
+  `--attr-source` perhaps new version separate arg? git global `--attr-source=<tree-ish>` equals only perhaps.
+  Version check environment git. Use bash command which git, git version allowed read-only. Scratch create. Now setup comprehensive harness. Use Write under /tmp. User says reproduce under timeout. I can write script /tmp/review acceptance random. Should source repo absolute path. Script setup protected bare and nonbare, fixture, work commit. make shim. Test round1 alias, env alias, nonbare, relative, new config-env, file localhost, tilde perhaps. Each use timeout 10. Should avoid actual remote network: all local. Ensure global config isolation with HOME scratch, GIT_CONFIG_NOSYSTEM=1, XDG_CONFIG_HOME. Real git path captured before PATH. I'll create script with commands, report rc and refs. For each case reset protected main to absent and fixture perhaps. Work repo has main. To detect push success, command rc. For nonbare force main, use +main. Protected main absent easier. Use G function? invoke "$G" -C "$W". Protected configured. make_git_shim bin real "$P" etc. For relative separate shim perhaps.
+
+  First basic harness to test --config-env and file localhost/tilde. Could use one script. Should shell syntax correct. `timeout 10 env CFG=push "$G" --config-env alias.p=CFG -C "$W" p origin main`. Shim global order: args --config-env alias.p=CFG -C... sees --config-env then sub alias.p=CFG. pre only --config-env. Real config called `"REAL" --config-env config --get alias.alias.p=CFG`? real command fails (missing config env arg perhaps consumes config as env spec? Wait pre array missing value. In `al="$REAL" "${pre[@]}" config --get...` real args --config-env config --get alias.alias.p=CFG. Git --config-env consumes `config` as <name>=<envvar>, invalid "missing =". Then no alias -> exec real original, which works. yes.
+
+  Could even simpler `git --config-env alias.p=CFG p ...`. reproduce.
+
+  For file localhost, create shim protected `file://localhost$P` and origin same. Then invoke push absolute "$P" main. Raw list P; PROTECTED_RAW file://localhost... no match; ids creation? abs=localhost/tmp/... then case relative => PWD/localhost/... no id. allowed if repo_identity P returns P. Real git push /tmp path moves main. Make sure original remote is valid but not used in push. Existence of protected URL not validated at creation except id empty. To demonstrate protected repo real via localhost, test real git ls-remote file://localhost$P. Use timeout. I can include. If Git rejects file://localhost, hypothesis no.
+
+  Tilde: HOME=S/home; protected URL "~/prot.git"; repo at home/prot.git. make shim protected "~/prot.git" abs="$PWD/~/prot.git" no id. Push absolute home/prot.git allowed if real considers ~ URL same. `git ls-remote '~/prot.git'` verify. Shell quoting. Good.
+
+  Also local URL using `/tmp/foo/../prot` identity covered.
+
+  Other clever identity bypass via `GIT_CONFIG_COUNT core.repositoryformatversion` no.
+
+  Remote names resolving via `remote get-url --push --all`: for remote with pushurl relative, returns raw relative and refuses. fixture push with remote pushurl absolute works.
+
+  False refusals:
+  - Any unquoted alias that Git accepts but shim misparses can wrongly refuse fixture or protected? They refuse quoted alias deliberately, accepted design says refuses quoted aliases. Changelog explicit. Plain alias may include escaped? quoted refused. Could plain alias with leading `!` shell refused. Fine.
+  - Alias expansion uses `read -r -a`, but Git treats empty alias? real fails.
+  - Aliases cannot shadow builtins, handled builtins list. External commands check. Potential Bash `command -v git-$sub` may find function/alias exported in environment while Git only finds executable on PATH, then shim delegates real which fails not unsafe; false refusal no.
+  - Global option `--config-env` with fixture push wrongly? Shim bypass delegates real so fixture passes (unsafe protected).
+  - Commands non-push with global option values can be misclassified and alias refusal, e.g. `git --config-env alias.st=CFG st` with CFG=status: shim sees sub alias.st=CFG and delegates real, works status. no false.
+  - Unknown option with separate value that happens to be "push" can shim evaluate wrong. Git valid options list only config-env.
+
+  Main detection could miss refspec using `refs/heads/main` with `^` negative? no move.
+  Could refspec be fetched from `remote.origin.push` even when refspec `--delete` etc no specs caught.
+  `git push origin main^:main` d main caught.
+  `git push origin :refs/heads/main` caught.
+  `git push origin refs/heads/main:` d empty then d="${t%%:*}" = refs/heads/main => caught though deletes? invalid perhaps over.
+  `git push origin main:` lone? d source main caught.
+  `git push origin :` case exact ":" caught. `+:` t=":" after +? t=${s#+} ":" caught.
+  Glob patterns only `*`; Git refspec allows `*` only wildcard, no ? [] per docs. good.
+  `HEAD` destination can be lowercase head? refs case-sensitive no.
+  Special `@` alone covered, `@{u}` as source to main d main caught; lone `@{u}` can push to configured branch main? Git refspec `@{u}` alone means source ref and destination same upstream ref e.g. refs/remotes origin not valid. `@{-1}` source could be main but dest `@{-1}` invalid? Git supports @{-1} only source? destination perhaps interpreted branch name? Git push origin @{-1} expands source only, with refspec no colon, default dest same branch name? Important: `git push origin <src>` expects refspec src:dst where dst omitted uses source name. If src is `HEAD`, special handling pushes current branch to same name, covered. `@` alias HEAD covered. Other rev expressions like `main^0` as lone refspec: source identifies commit not ref; Git requires dst when src not ref? "error: src refspec main^0 does not match any" perhaps if rev resolves but dst absent then "dst refspec main^0 matches more than one"? Likely invalid dst. `refs/heads/main^{commit}` same invalid. `main:...` covered.
+
+  Could use SHA:main covered. Good.
+
+  Push option `--follow-tags` with no refspec refused though if configured push default nothing? safe.
+
+  Fixture wrongly refuses non-main pushes if dest HEAD but source branch other and remote HEAD points non-main: design considers HEAD could move main. If fixture HEAD points other, push HEAD to fixture actually update current branch main? Bare HEAD symref perhaps main, likely could main. safe.
+
+  Potential repo arg parsing via push `-o` missing value consumes origin so repo main? Real fails no push.
+
+  Push has `--repo` introduced newer; handled.
+
+  `--receive-pack` with protected path containing spaces okay arrays.
+
+  Repository path newline no.
+
+  Main vulnerability from `git push` invoked via `git -c alias...` fixed, but alias config environment using `GIT_CONFIG_PARAMETERS` quoted old syntax perhaps `al` extraction works. Tests only env refused not stderr verification and no GIT_CONFIG_COUNT? current test line 98 only GIT_CONFIG_PARAMETERS. round1 said environment-only spelling GIT_CONFIG_COUNT. They don't test count in new fixture despite changelog claims environment broad. But implementation works as real config. Could verify both.
+
+  Quoted alias overrefusal intended. Plain alias with `git` prefix? Git alias `p = git push origin main` executes `git` external? Alias expansion becomes `git git push` unknown, no.
+
+  Shell alias refusal broad any alias starting ! even unrelated status; docs explicitly all shell refused. This can wrongly refuse non-push fixture command `alias.st=!status` but design fails closed, user asks "fixture push it wrongly refuses" not arbitrary command. Fine.
+
+  Could shell alias be invoked with arguments but protected main no literal? refused safe.
+
+  Alias through environment `GIT_ALIAS`? no.
+
+  Git subcommand `push` via external `git-push` on PATH: sub push bypasses external command check, parse shim. Real Git has builtin push so yes.
+
+  Case `git --no-pager push` works.
+
+  `-c` alias from `-c` value with newline etc no.
+
+  Repository identity via common dir can be tricked with git configuration `core.worktree`? For a .git file, `git -C path rev-parse --git-common-dir` follows. Good.
+
+  Protected URL is symlink to nonexistent at shim creation then created later to repo? Original actual remote exists at creation acceptance, no.
+
+  Path identities are resolved only at shim creation. If protected repo moved/replaced during acceptance, protected ID path stays same string and push path same blocked. If symlink protected changes to fixture, still ID old; raw symlink exact blocks. Alternative direct real old path blocked. If repo directory renamed and new fixture created at old protected path, false refusal but safe.
+
+  Protected repo has worktree with `.git` common dir and pushing to worktree path updates branch perhaps refuses. yes.
+
+  URL path syntactic variations `file:////tmp/prot` stripping file:// yields //tmp/prot. repo_identity case absolute. cd //tmp pwd -P returns /tmp likely. good.
+  `file://localhost` remains.
+
+  Tilde expansion: I'll see.
+
+  Also `file://` URL with empty host and relative? file://../? invalid.
+
+  SSH URL raw protected remote cannot be locally pushed without network in scratch. But could use `ext::` etc out scope local. Protected https remote can map to local via `url.insteadOf` but any rewrite refuses. Could map using `GIT_CONFIG_COUNT` after check? check uses same env so refuses. Using `GIT_CONFIG_PARAMETERS` malformed real config returns nonzero, command substitution output empty interpreted no rewrites then exec real perhaps real fails; no push.
+
+  Can per-command config for remote get-url differ from final push due to alias expansion? pre same. Environment stable. no.
+
+  Hooks: `remote get-url` invokes external? no. Config includes include.path could execute? no.
+
+  Git config aliases may be external command shell functions? no.
+
+  Potential malicious git `config` alias? builtin config cannot alias. good.
+
+  Use REAL `--exec-path` command call ignores global pre for external command detection. Fine.
+
+  `command -v git-$sub` finds shim's `git-push`? none.
+
+  I should run harness.
+
+• The three round-1 mechanisms have direct fixes in the new code. I also see two untested URL forms and one missing global-option arity to probe before treating those fixes as complete.
+
+
+== round 1: config alias ==
+acceptance git shim: refusing a push to origin, a protected remote, that could move main (git -C /tmp/acceptance-shim-review-ce1e882/scratch/w push origin main)
+rc=1 protected_main=<absent>
+
+== round 1: nested config alias ==
+acceptance git shim: refusing a push to origin, a protected remote, that could move main (git -C /tmp/acceptance-shim-review-ce1e882/scratch/w push origin main)
+rc=1 protected_main=<absent>
+
+== round 1: GIT_CONFIG_COUNT alias ==
+acceptance git shim: refusing a push to origin, a protected remote, that could move main (git -C /tmp/acceptance-shim-review-ce1e882/scratch/w push origin main)
+rc=1 protected_main=<absent>
+
+== round 1: GIT_CONFIG_PARAMETERS alias ==
+acceptance git shim: refusing a push to origin, a protected remote, that could move main (git -C /tmp/acceptance-shim-review-ce1e882/scratch/w push origin main)
+rc=1 protected_main=<absent>
+
+== round 1: protected non-bare .git ==
+acceptance git shim: refusing a push to /tmp/acceptance-shim-review-ce1e882/scratch/nonbare/.git (/tmp/acceptance-shim-review-ce1e882/scratch/nonbare/.git, a protected repository) that could move main (git -C /tmp/acceptance-shim-review-ce1e882/scratch/w push --force /tmp/acceptance-shim-review-ce1e882/scratch/nonbare/.git +main)
+rc=1 protected_main=<absent>
+
+== fixture through plain alias ==
+rc=0 protected_main=<absent>
+
+== Codex: relative protected URL, absolute push ==
+acceptance git shim: refusing a push to origin (/tmp/acceptance-shim-review-ce1e882/scratch/prot.git, a protected repository) that could move main (git -C /tmp/acceptance-shim-review-ce1e882/scratch/w push origin main)
+rc=1 protected_main=<absent>
+
+== Codex: relative protected URL, direct absolute path ==
+acceptance git shim: refusing a push to /tmp/acceptance-shim-review-ce1e882/scratch/prot.git (/tmp/acceptance-shim-review-ce1e882/scratch/prot.git, a protected repository) that could move main (git -C /tmp/acceptance-shim-review-ce1e882/scratch/w push /tmp/acceptance-shim-review-ce1e882/scratch/prot.git main)
+rc=1 protected_main=<absent>
+
+== new: --config-env alias ==
+To /tmp/acceptance-shim-review-ce1e882/scratch/prot.git
+ * [new branch]      main -> main
+rc=0 protected_main=4aafd6a634e0e89f582f282f95ab5de4869ddfaf
+
+== URL syntax support ==
+file://localhost ls-remote rc=0
+tilde ls-remote rc=128
+
+== new: file://localhost protected URL, absolute push ==
+To /tmp/acceptance-shim-review-ce1e882/scratch/prot.git
+ * [new branch]      main -> main
+rc=0 protected_main=4aafd6a634e0e89f582f282f95ab5de4869ddfaf
+
+== new: tilde protected URL, absolute push ==
+To /tmp/acceptance-shim-review-ce1e882/scratch/prot.git
+ * [new branch]      main -> main
+rc=0 protected_main=4aafd6a634e0e89f582f282f95ab5de4869ddfaf
+• I have 3 new high findings. Tilde ls-remote failed because symlink created after support test. Oops test invalid ordering. Push later allowed and actual protected path updated, but protected URL ~ points to symlink created before push. Should verify real git ls-remote after symlink. It likely supports. I can run. But all real Git absolute path out of scope only means "Running real git by absolute path is out of scope (acceptance other guards)" meaning my probes use real for setup okay. Attack invocation through shim yes. For file localhost and tilde, make shim protected URL syntax and attack direct absolute path. This is in scope. Should confirm acceptance actual ORIGIN_URL could be those forms. Git remote get-url returns exact. Yes.
+
+  Could there be more severe bypasses. I should hunt again thoroughly. Should likely expected identify config-env and file://localhost and tilde perhaps. Round2 code purposely robust but holes. I should examine delta claims 35/14 accurate count. I can count 35 bad? List lines 84-91: count:
+  1 origin main
+  2 abs
+  3 file
+  4 --repo
+  5 HEAD
+  6 +wip main
+  7 wip refs main
+  8 refs main
+  9 --all
+  10 --mirror
+  11 -o
+  12 origin no specs
+  13 two
+  14 mirror
+  15 ../prot
+  16 push no args
+  17 @
+  18 :
+  19 +:
+  20 glob
+  21 heads/main
+  22 :main
+  23 --delete
+  24 nb/.git
+  25 nb
+  26 file nb
+  27 link
+  28 p
+  29 pp
+  30 q
+  31 -c alias z
+  32 qq
+  33 sh
+  34 insteadOf. That's 34, not 35? Plus env alias line 98 = 35. allowed list 14:
+  1 fix main
+  2 abs fix
+  3 file fix
+  4 HEAD main
+  5 :
+  6 origin wip/x
+  7 -o origin wip
+  8 --repo=fix fix main
+  9 p fix
+  10 pp
+  11 q
+  12 -c z fix
+  13 status
+  14 alias st. yes. accurate.
+
+  Changelog says "A push that could move main passes only to an existing local repository that is neither real remote." False with bypass. Also "relative, remote ... fail closed" tilde considered relative? Tilde remote URL fails closed at push if direct `~/prot.git`, but alternative absolute path passes, so blanket protected real remote false. ISSUES says protected local URLs resolved when made (relative ones caller and clone top) but file localhost and tilde not. Closure premature.
+
+  Should further probe possible false refusal fixture pushes due to protected identity collision common dir. Suppose fixture is a linked worktree of protected repo. It shares common dir so indeed protected semantically could move main. right.
+
+  Fixtures that are non-bare and push to checked-out branch main: real git refuses by receive.denyCurrentBranch, not shim. Fixture tests use bare. no.
+
+  Relative local fixture push deliberately refused even though original issue fixtures may use relative paths. Requirement says "or for a fixture push it wrongly refuses" likely expected validate allowed fixture patterns. Design says relative fails closed. Root checks perhaps some use relative fixture pushes and would be wrongly refused despite acceptance claimed passes. They claim acceptance run passes so existing root checks fine. I shouldn't report intended relative refusal as wrong unless fixture local path relative accepted by real and unprotected but spec explicitly says fails closed. User wording may invite discovering legitimate fixture push wrongly refused beyond design. But new bypasses enough CHANGES. I should still test standard landing_script. Could run specific gate? Full landing_script may be heavy and user wants read-only except /tmp. Test script likely writes only tmp, but it may be heavy. I can run shim subsuite extracted? Already direct. Could run `bash scripts/checks/landing_script.sh` under timeout perhaps full ~? round1 did PASS=210. No need entire for targeted review but standard test relevant. I can run in scratch with timeout 120? It might need git repo and no .git in archive causing fail. Tests use ROOT_DIR and create their own. Could run and see, but could be 1-2 min. No modifications outside /tmp by script? Should inspect top to ensure TMP mktemp and no writes repo. Read relevant start/end.
+  Also I must verify no more parser bypasses. I'll get git version/help docs locally. `git --help` might man no. `git --list-cmds` no. `git --exec-path`. `git -h` output. Use Bash.
+
+• All round-1 reproducers are now blocked, and a plain-alias fixture push succeeds. The new probes found two independent bypass classes—`--config-env` aliases and incompletely canonicalized protected local URLs—so I’m checking their exact scope and whether the closure text overstates the result.
+
+git version 2.53.0
+usage: git [-v | --version] [-h | --help] [-C <path>] [-c <name>=<value>]
+           [--exec-path[=<path>]] [--html-path] [--man-path] [--info-path]
+           [-p | --paginate | -P | --no-pager] [--no-replace-objects] [--no-lazy-fetch]
+           [--no-optional-locks] [--no-advice] [--bare] [--git-dir=<path>]
+           [--work-tree=<path>] [--namespace=<name>] [--config-env=<name>=<envvar>]
+           <command> [<args>]
+
+These are common Git commands used in various situations:
+
+start a working area (see also: git help tutorial)
+   clone      Clone a repository into a new directory
+   init       Create an empty Git repository or reinitialize an existing one
+
+work on the current change (see also: git help everyday)
+   add        Add file contents to the index
+   mv         Move or rename a file, a directory, or a symlink
+   restore    Restore working tree files
+   rm         Remove files from the working tree and from the index
+
+examine the history and state (see also: git help revisions)
+   bisect     Use binary search to find the commit that introduced a bug
+   diff       Show changes between commits, commit and working tree, etc
+   grep       Print lines matching a pattern
+   log        Show commit logs
+   show       Show various types of objects
+   status     Show the working tree status
+
+grow, mark and tweak your common history
+   backfill   Download missing objects in a partial clone
+   branch     List, create, or delete branches
+   commit     Record changes to the repository
+   merge      Join two or more development histories together
+   rebase     Reapply commits on top of another base tip
+   reset      Set `HEAD` or the index to a known state
+   switch     Switch branches
+   tag        Create, list, delete or verify tags
+
+collaborate (see also: git help workflows)
+   fetch      Download objects and refs from another repository
+   pull       Fetch from and integrate with another repository or a local branch
+   push       Update remote refs along with associated objects
+
+'git help -a' and 'git help -g' list available subcommands and some
+concept guides. See 'git help <command>' or 'git help <concept>'
+to read about a specific subcommand or concept.
+See 'git help git' for an overview of the system.
+• Interesting git usage shows --config-env=<...> equals only, but my separate argument accepted! Docs syntax perhaps parser allows both. Confirm yes reproduced. Good.
+
+  Should validate tilde support properly and perhaps more local URL user expansion. Run simple.tilde ls-remote rc=0
+localhost ls-remote rc=0
+Should assess if combine URL issues one finding or separate. Findings with file:line severity. Could say High two findings:
+  1 missing --config-env at line 67-69, alias guard bypass.
+  2 repo_identity only strips file:// and accepts absolute at lines 34-39, creation 48-50: file://localhost and ~ paths produce no protected ID; direct absolute push passes. Both same canonicalization class, one finding with two reproducers. Severity high. Round1 relative fixed but generalized local protected URL not fully. Changelog low docs. Verdict changes.
+
+  But user asked hunt again for a git invocation or fixture wrongly refuses. I found enough. Could stop, but thorough review expected. I should inspect possible `file://localhost` remote get-url behavior if pushing origin instead of absolute. Current shim raw match would refuse exact protected URL, but absolute direct bypass. yes.
+
+  Potential protected tilde remote not "relative" but accepted local path. repo_identity comment says no relative. At creation code case tries PWD/~. No id. `PROTECTED_RAW` includes '~' path. Attack absolute. exact.
+
+  Could make even more direct without direct absolute path? Direct absolute path allowed for fixtures, necessary. protected identity absent so yes.
+
+  Another URL form: relative path with environment tilde not covered despite round1 claim relative fixed. Tilde is distinct. `file://localhost` explicit. Good.
+
+  Check `repo_identity` identity can fail for protected local path containing `?` etc no.
+
+  Could path with `.git` file and commondir relocatable okay.
+
+  Could Git support UNIX socket `file://` no.
+
+  Global config option `--config-env` could also bypass insteadOf check not just alias: since parser sees alias.e=CFG sub, delegates real before push parsing. My repro enough.
+
+  Perhaps even no alias needed: `git --config-env url...=CFG push fixalias main` parser sub `url...=CFG`, delegates real, real push. This bypasses no alias. This is same root but simpler, uses URL rewrite. If protected origin absolute and `--config-env` with `url...insteadOf` plus raw fake URL, real applies rewrite and push. Shim's insteadOf check bypass. Could reproduce but not needed. Alias shows round1 incomplete. Direct alias exactly new code claims. Strong.
+
+  Could global `--config-env` set alias command itself with value push. fine.
+
+  Fixture false refusal from global option parser: Valid git global option `--config-env` with value "push" as env? My shim passes attack. For legitimate fixture, no refuse. No issue.
+
+  Other valid global option arities from usage only config-env. All covered.
+
+  Perhaps aliases with tabs etc read okay. Aliases with comments `#` unquoted: Git split_cmdline treats # normal? read same. Good.
+
+  Quoted aliases intentionally refused. But detection only `'"\` anywhere. Git alias can have shell quoting using newline? no.
+
+  Git alias values can start with spaces then `!`? config trims leading whitespace unless quoted, quoted refused. env config value " !git..." perhaps Git alias sees leading space? alias shell only if first char ! after config parser trims? shim al command output strips trailing newlines not leading. case doesn't recognize leading !; read splits to !git and recursion sees sub !git, attempts alias etc delegates real with !git as command -> real fails, no push. safe.
+  Alias `p= push` al output push no issue.
+
+  Alias nested depth env user can set ACCEPT_SHIM_DEPTH high causing refusal, no bypass. User can set negative -> depth nonnumeric? "-1" matches *[!0-9]* yes depth 10 refuse. set 0 normal. Can't reset each recursion because exec env increments. good.
+
+  `ACCEPT_SHIM_DEPTH=09` test -lt handles decimal? bash test 09 integer okay. huge integer may error and `[ "$depth" -lt 10 ] || refuse` if integer expression expected returns 2 then refuse. safe.
+
+  `BUILTINS` extraction `--list-cmds=builtins` output includes "push" etc. good.
+
+  Could command name contain spaces? args sub exact.
+
+  Git external commands in exec path `git-<name>` detection means aliases ignored same as real. Fine.
+
+  Remote resolution option injection: `repo` starts with `-` cannot because parser options. `--` handling bug: Git `git push -- --repo=origin main` treats `--repo=origin` as repository (name/path) not option. Shim still optrepo and then repo main? Actually rest -- ignored, --repo= sets optrepo, main becomes repo. moves_main no specs -> checks repo main, real push tries repository --repo=origin with refspec main? This may differ but attack unlikely could result protected push allowed? I'll explore parser after `--` could classify protected repo refspec etc incorrectly. If real accepts repo `-weird` after -- and refspec main, shim sees -* ignored so have_repo maybe main and no specs, repo main; remote get-url fails -> urls main relative -> refuses. safe. If protected path absolute doesn't start -, first positional correctly. Options after protected repo could be mistaken but moves_main still. Example `git push -- origin --all` real repo origin refspec --all (probably invalid), shim flagall and repo origin, refuses. safe.
+  Could real treat --repo=origin as repo path with insteadOf to protected and shim repo main etc fails closed.
+
+  Remote named `main` with push refspec wip/x (nonmain) but after -- strange, no protected main move.
+
+  Push options after repo: Git accepts options anywhere (parse_options), shim too. good.
+
+  URLs beginning dash need --, fails closed.
+
+  No false refusal important.
+
+  Test suite standard could run landing_script under timeout perhaps 210 tests quick 2 sec? Round1 outputs pass. Since archive no .git but script standalone. It creates temp. Run timeout 180, output to /tmp file. This is read-only repo. It might run all and take <1m. I should run to verify claimed 35/14 pass. Use Bash command `timeout 180 bash scripts/checks/landing_script.sh > /tmp/.../landing_script.out 2>&1; rc...; tail` cannot use tail known path should Read. Instructions say cat/head/tail known path -> Read, avoid Bash tail. Run only command and output rc with redirect then Read last lines. Bash `printf` talk user no, but printing rc okay command result. `rc=$?; echo` they say echo talk to user not, this is command metadata acceptable perhaps `exit` would tool report nonzero. I can direct output and use `wc -l`, no need rc? Bash tool gives exit code if failure. `timeout 180 bash ... >... 2>&1` returns output blank and status. Then Read -30. Do.
+
+• The URL bypasses are confirmed with Git itself: both `file://localhost/...` and `~/...` resolve to the protected repository, yet the shim records no protected identity for either. I’ll run the existing landing-script gate as a control, then report the new cases separately from the fixed round-1 findings.
+
+• Perhaps run issues gate to check TSV structural? Not necessary but can. User specifically accuracy. I know inaccurate. Could run scripts/checks/issues.sh if exists. Glob.I can mark probe done and docs in progress. Perhaps no more investigation required. Check issue and changelog text exact lines known. Should test counts accurate. Existing gate pass. Perhaps acceptance run claim cannot independently verify full acceptance; delta says run. I shouldn't challenge that without evidence. But closure contradicted. Docs severity Low. Should have issues gate perhaps run.Should respond concise but detailed findings and each round1 fixed. Should include exact repro commands generic with variables and observed rc/main. File:line severity. Should have no modifications repo. Todo complete. Before responding perhaps should consider severity docs medium? Prior low premature. New high enough. I can list 2 high, 1 low. Round1 summary:
+  - High aliases fixed: config, nested, GIT_CONFIG_COUNT, GIT_CONFIG_PARAMETERS all rc1; fixture p allowed rc0. Reference lines 63-85.
+  - High nonbare fixed lines 31-50,116-118 common dir identity; rc1.
+  - Codex High relative protected URL fixed lines 45-50 + acceptance 327-329; both origin and absolute rc1.
+  - Low closure not fixed due new bypasses; docs still premature.
+  New:
+  1 High `--config-env` consumes following arg but parser only recognizes five at line 67. At line 68 catches -* no arg, then alias.e=CFG seen sub; line78 no alias delegates real. Repro:
+  CFG=push G --config-env alias.e=CFG -C w e origin main
+  observed rc0 main created. Should have G shim on PATH. In my harness G absolute path to shim though user asks git invocation through shim on PATH. I invoked G path, PATH included its dir. "through shim (on PATH)" likely acceptable but to be rigorous attack should literally `git` resolved on PATH not absolute shim. User may expect. My probes use "$G" path but it is the shim, on PATH too. The scope excludes real absolute, not shim absolute. Fine. I can phrase `git` with PATH. Reproduce under timeout. yes.
+  2 High protected local URL canonicalization:
+  `repo_identity` u="${2#file://}", case absolute; make shim converts nonabsolute to `$PWD/$abs`. For `file://localhost$S/prot.git` becomes `$PWD/localhost/...` no id; for `~/prot.git` `$PWD/~/prot.git` no id. Both accepted by real Git. Attack `G -C w push "$S/prot.git" main` rc0. PROTECTED_RAW doesn't match absolute. Protected main created. One finding two examples.
+  Could label line 48-50 primary and line34-39. This means Codex relative fix incomplete for other valid local syntaxes. Perhaps `~` URL when shim created HOME differs from later? My shim same HOME. Real Git resolves. clear.
+  3 Low docs ISSUES line21 and changelog 7-14 claim only nonremote passes and closure. Inaccurate. Test count 35/14 is accurate and gate passes but doesn't cover new cases. State acceptance run claim not retested (full acceptance heavy) not needed.
+
+  Validation: landing_script PASS210, issues PASS5, bash-n, scratch under /tmp. Include no fixture false refusal found beyond intended fail closed. Should I mention no new false refusal found. Yes.
+
+  Could respond "Findings" first ordered severity. Then round1 status. Then docs and tests. End exact Verdict line. User asked "Say whether each round-1 finding is fixed, then hunt again..." Could structure round1 first then new findings. But standard review findings first severity. User explicitly says say whether each then hunt. I can start "Round 1" statuses then "New findings". But findings should prominent. I can say "Round-1 findings: all three code findings fixed; closure finding remains." Then new. Detailed. Fine.
+
+  Should not include giant logs. Keep ~700 words max, maybe 500. Include commands. Could combine two high under findings.
+
+  Should mark todo done before responding.
+
+• The existing controls pass (`landing_script`: 210/210; `issues`: 5/5), but they do not cover either new bypass. The 35-refused/14-allowed counts are accurate; the broader closure and “neither real remote” claims are not.
+
+• ## Round-1 findings
+
+  - **Fixed — aliases bypass the shim.** `scripts/land/acceptance_shim.sh:63-85` now locates subcommands after global options and recursively expands plain aliases. Config aliases, nested aliases, `GIT_CONFIG_COUNT`, and `GIT_CONFIG_PARAMETERS` reproducers all exited 1 without creating protected `main`. A plain-alias push to a fixture succeeded.
+  - **Fixed — protected non-bare repository through `.git`.** Repository identity now uses the absolute common directory (`scripts/land/acceptance_shim.sh:31-50,116-118`). Pushing `+main` to the protected repository’s `.git` exited 1 and moved nothing.
+  - **Fixed — Codex’s relative protected URL.** Relative protected paths are resolved when creating the shim (`scripts/land/acceptance_shim.sh:45-50`), with the source-top spelling added by `scripts/land/acceptance.sh:327-329`. Both the remote-name and direct-absolute-path reproducers were refused.
+  - **Not resolved — premature closure/documentation.** New bypasses below still contradict the closure claims.
+
+  ## New findings
+
+  ### High — `--config-env` bypasses alias and push inspection
+
+  `scripts/land/acceptance_shim.sh:67-69` does not account for `--config-env` consuming a separate argument. The shim treats `alias.e=CFG` as the subcommand and delegates to real Git at line 78; real Git then processes the option and expands the alias to `push`.
+
+  Reproduced under `timeout 10`, with the shim first on `PATH`:
+
+  ```bash
+  CFG=push git --config-env alias.e=CFG -C w e origin main
+  ```
+
+  Observed: exit 0 and `refs/heads/main` created on the protected bare repository.
+
+  ### High — valid local protected URL forms receive no protected identity
+
+  At `scripts/land/acceptance_shim.sh:34-39,48-50`, only `file://` is stripped and every remaining non-absolute spelling is treated as relative to `$PWD`. Consequently:
+
+  - `file://localhost/tmp/.../prot.git` becomes a nonexistent `$PWD/localhost/tmp/...` path.
+  - `~/prot.git` becomes a nonexistent `$PWD/~/prot.git` path.
+
+  Real Git accepts both forms and resolves them to the protected repository, confirmed with `ls-remote`. With either form supplied as the protected URL to `make_git_shim`, this invocation succeeded:
+
+  ```bash
+  git -C w push /tmp/.../prot.git main
+  ```
+
+  The absolute spelling did not match `PROTECTED_RAW`, no corresponding entry existed in `PROTECTED_ID`, and the push exited 0 after creating protected `main`. Both cases were reproduced independently under `timeout 10`.
+
+  ### Low — ISS-0017 and the changelog remain inaccurate
+
+  `ISSUES.tsv:21` marks the issue closed and says protected local URLs are resolved at creation. `changelog.d/2026-11-08-acceptance-shim.md:7-14` says a main-moving push passes only to a repository that is neither real remote. The two bypass classes above contradict those statements.
+
+  The stated **35 refused and 14 allowed** test counts are accurate, and the existing gate passes; it simply lacks these cases. No additional wrongful fixture refusal was found.
+
+  Validation: `landing_script.sh` **PASS=210 FAIL=0**, `issues.sh` **PASS=5 FAIL=0**, and shell syntax checks passed. All reproductions used scratch repositories under `/tmp`; the archive was not modified.
+
+  Verdict: CHANGES-NEEDED
+
+To resume this session: kimi -r session_dc083997-1123-498e-9d62-589ca825b69d
+kimi exit 0

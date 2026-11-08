@@ -1,0 +1,473 @@
+kimi version 2.4.1
+• I need modify two files only, commit no push. Should read target and listed refs, perhaps changelog. Must comply. Should consider branch/head status first perhaps git status/head. I have exact known files Read parallel. Also should inspect train watch/land sections, workflow. Could read entire perhaps sizes. Should have concise progress. I should use TodoList multi-step. No plan mode user didn't ask plan. I should begin say reviewing claims and rollout then run gates. Tool parallel Read target, workflow, required checks, train, landing, changelog and Bash status? Independent. Read max 100k each could huge. Perhaps target sizes unknown. I can parallel Read all. Also check GitHub behaviors potentially read-only GET allowed but not required. I need know actor types actual repository rulesets. GitHub docs knowledge: repository ruleset bypass actors can OrganizationAdmin, RepositoryRole, Team, Integration, DeployKey. Actor IDs: Integration IDs e.g. 15368 GitHub Actions, 1? Bypass actors: RepositoryRole with actor_id 5 admin, 2 maintain, 4 write? OrganizationAdmin actor_id 0; Team id; Integration app id; DeployKey key id. A GitHub App installed as integration narrower than DeployKey class-wide? Should have precise docs perhaps can fetch public GitHub docs with FetchURL (allowed not mutating). Should state app actor type Integration exists; whether GitHub App bypass actor narrower than all keys yes specific installed GitHub App (integration) can bypass. But using app credential to hand push also same trust issue; confinement via dedicated installation credential host. Could propose GitHub App as bypass actor if narrower and check. Could rely docs plus read-only gh api current rulesets to confirm. Should avoid network if unavailable. User specifically confirmed findings no need external except check actual actor types. I can fetch docs to verify. Perhaps docs REST create repo ruleset lists actor types. Read-only command gh api repos/OWNER/REPO/rulesets/ID exact commands. Should doc command audit keys & bypass. likely owner repo inferred from train? Read.
+
+  I'll tool.
+
+• I’ll inspect the draft, landing machinery, and CI workflow first, then revise only the proposal and its changelog fragment. I’ll verify the required-check and ruleset claims before committing locally and running the requested gates.
+
+## wip/main-protection...origin/main [ahead 1]
+9db6e4f7c1aff4b943fea6a2267619a2ed811579
+• I have all. Should verify actual GitHub semantics. Can FetchURL docs pages. Should avoid unsupported exact claim. Confirmed findings sufficient but check actor types and required check semantics. Could use read-only gh api if network works but not required. Fetch official docs:
+  - https docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-rulesets/about-rulesets
+  - REST repos create org/repo ruleset page with bypass actor types.
+  - Required workflow status checks page perhaps "troubleshooting-required-status-checks" states check conclusion success/skipped/neutral accepted and GitHub Actions app. I'll search web specific. Use parallel WebSearch two or Fetch known URLs. Tools call network allowed public. I'll use WebSearch official.
+
+• The deadlock is real: the existing pull-request rule would still block the deploy-key push even after the new rulesets were active. I’m also separating GitHub’s permissive check conclusions from `train.sh`’s stricter run, SHA, and base validation, and checking the documented bypass-actor types.
+
+• Should fetch official status and rules docs.Should specific status semantics from docs perhaps status checks reference not explicitly required accepted neutral, skipped says pass. Confirmed user says so; can state without citation. Could fetch "available rules for rulesets" likely text required workflows. Should find actor types exact in saved output with Grep.I have actual actor types. Should formulate revised doc concise plain prose short sections exact commands. Perhaps verify existing draft commands valid required status check exact commit claim. Original says "Requires each job ... succeeded on exact commit before ref update". Real required status checks semantics: checks on pushed commit, not necessarily exact? In direct push branch rule status checks associated with commit yes. But GitHub accepts statuses on commits being pushed? Rulesets required checks on push evaluate? Should understand. For direct pushes required status checks on pushed commits? Yes check runs on target commit accepted. Could phrase "requires each listed context to pass on the commit being pushed" but conclusions semantics success/skipped/neutral. "Exact commit" is fair but no workflow/run/base binding. Required list should exclude Landing record (7 vs 8). required-checks.txt stays 8 train list, ruleset 7 deliberately not equal. Draft currently "list equal required-checks" update "seven substantive jobs in required-checks.txt, deliberately excluding Landing record..." The landing record job does nothing on ci dispatch steps all push main, but output defaults empty. Job success if no steps? Yes workflow job has all steps skipped, job conclusion success. Requiring adds no provenance. Drop from ruleset with reason. Train requires all required-checks including landing record success exact run; on dispatch landing record no steps and success, doesn't prove anything. Should state train still requires it? Finding says train strict authority. "train.sh watch/land require every landing-tier and every job named by required-checks.txt to conclude success, in the recorded workflow run at exact candidate SHA, and land requires origin/main base. Landing record remains in file but on dispatch merely completes no steps; the substantive evidence is other jobs." Could note record also workflow path/base in post-main but not necessary. What remains enforced only train: exact workflow? watch/land doesn't check path or event or base explicitly! Important nuance: Reviewer #3 says integration_id binds app not workflow,event,branch,base,run; list remains enforced only train.sh. train watch/land as read: run id recorded from cmd_ci from workflow dispatch list workflow CI, branch, event, exact head, createdAt. At land it revalidates id, status, SHA, all jobs, base main unchanged. Does land re-check workflow,event,branch,base? It trusts state run_id created by ci. The doc must be honest: "the train records a workflow_dispatch run of CI on ci/<name>, dispatches it with -f base=<base>; watch and land then require the recorded run to be completed at exact candidate SHA, all landing and required jobs success, and land requires origin/main still base. These checks are in train.sh and its state, not rulesets." Is "base" enforced by train land? Base in input recorded and main unchanged check. The train `land` does not query display title to confirm base. It uses its state and run id, and ci dispatched it. So statement "base stays train" could be precise. Could say "Only train.sh records the CI dispatch and base, checks the recorded run's exact SHA and success-only job conclusions, and verifies main is still the train base. The rulesets do not bind a required check to that run, workflow, event, branch or base." This is honest. "workflow event branch" are established in ci not necessarily watch validation. User specifically "list what remains enforced only by train.sh" so I can list:
+  - selection of CI workflow_dispatch on ci/<name> with base input;
+  - exact recorded run at candidate SHA;
+  - all landing-tier jobs success plus all required names success (not skipped/neutral);
+  - main still base, ancestry fast-forward, review provenance, rehearsal etc perhaps relevant but concise. Also server rulesets ensure fast-forward separately.
+
+  Potential bigger issue: deploy key bypass and direct push while ruleset 1 no bypass means checks still required. The deploy key holder can hand-push "qualifying fast-forward" (any commit with acceptable checks) bypassing train. Yes state. Admin can edit rulesets then push. "Goal main moves only by train" impossible absolute. Rewrite goal: "main changes only by fast-forward pushes with listed checks, direct updates restricted to landing credential or admins after editing protections. Rulesets stop accidental and unauthorized pushes by everyone else; admin emergency path." Should not claim only train server enforces execution. Perhaps Goal:
+  "Goal: main cannot be force-pushed or deleted; an ordinary direct update needs acceptable required checks and the landing credential. The normal path is train.sh land. Repository admins retain emergency ability to edit/disable rulesets, so this is protection against accidental and unauthorised pushes, not a guarantee that no admin or credential holder can bypass train.sh."
+  "unauthorised" ambiguous admin authorized? fine user provided exact wording. Use British existing.
+
+  Actor trust:
+  - DeployKey actor class-wide every current/future write deploy key (read-only keys cannot push anyway).
+  - Credential authenticates key, not train execution.
+  - Trusted authorities: custodian/host holding landing credential and admins/custom roles with edit rules (user asks repo admins who can edit rulesets; include custom role optional precise).
+  - propose dedicated landing host/service with sole write key, only train service can use, no general shell; no other write deploy keys; key rotation and audit perhaps.
+  - GitHub App actor type Integration is narrower than class-wide DeployKey because specific app integration actor. But app private key can also authenticate arbitrary git pushes if app has contents write. Use dedicated GitHub App installed only repo with contents read/write, actions perhaps to dispatch? train requires gh API auth to dispatch. Installation token can push over HTTPS and bypass as Integration. Recommend App over DeployKey if operationally feasible. Should note confirm App appears as Integration bypass in repo before replacing key; read-only query. "REST supports Integration, OrganizationAdmin, RepositoryRole, Team, DeployKey, User. For this design Integration (a particular GitHub App) is narrower than DeployKey (all write deploy keys). It still authenticates credential not train.sh." Actor types User exists API but UI may not eligible? I can state REST actor types supported with docs link. The task says "a GitHub App as bypass actor if that is narrower — check and state GitHub's actual actor types for repository rulesets". So include exact list perhaps sentence. "Repository ruleset REST API accepts Integration, OrganizationAdmin, RepositoryRole, Team, DeployKey and User." link docs. "Prefer a dedicated GitHub App (Integration) ... narrower." Could make ruleset 2 command use Integration instead of DeployKey? Existing proposal is deploy key design; user asks propose confinement, App if narrower. Could keep DeployKey command and recommend alternative. Or modify command to GitHub App Integration with placeholder app ID, more secure and precise but rollout prerequisites complex. Should preserve concise exact commands. I can present default DeployKey command and note App replacement. The changelog still updates only from landing credential not deploy key perhaps.
+
+  Rollout:
+  Current order says remove after train lands deadlock. Rewrite steps:
+  Prereq key and rulesets. Activate both replacements while PR rule active (this temporarily blocks all direct main pushes including landing). Remove PR rule immediately after replacements active, then test train. This creates small window? New rulesets active means update only deploy key, checks. Other admins cannot bypass update ruleset, but can edit. Good. Rulesets 1 & 2 commands active. Remove PR ruleset after new active before landing. Rollback if train fails: restore PR ruleset? Should have exact rollback step with command. Options disable new rulesets and recreate PR ruleset. Original PR rule id deleted can't "re-enable" via DELETE. Better change enforcement of old PR ruleset to disabled rather than DELETE until test success, enabling rollback. User finding says "remove the PR rule" could mean disable/remove rule. User specifically "(activate the replacements, remove the PR rule, then test with a train landing), with a rollback step." Could disable old ruleset (removes enforcement but retains config) via PATCH enforcement disabled; test; delete after successful. Rollback PATCH old active and new disabled. That is safer and exact commands. Should know gh api -X PATCH repos/.../rulesets/19117072 -f enforcement=disabled works. yes REST update repo ruleset. Then after success delete old. Rollback before deletion: re-enable old, disable new by IDs. New IDs captured from POST output. Commands placeholders `<checks-ruleset-id>` and `<update-ruleset-id>` not directly executable but exact pattern. "Record IDs returned by two POSTs." Use shell vars? concise:
+  ```
+  gh api -X PATCH repos/.../rulesets/19117072 -f enforcement=disabled
+  ```
+  Then train landing. Rollback:
+  ```
+  gh api -X PATCH repos/.../rulesets/19117072 -f enforcement=active
+  gh api -X PATCH repos/.../rulesets/<ruleset-1-id> -f enforcement=disabled
+  gh api -X PATCH repos/.../rulesets/<ruleset-2-id> -f enforcement=disabled
+  ```
+  Order rollback old active first while new active still deploy key deadlock but immediately disable new. If old active first and new disabled after, briefly all direct pushes blocked. If disable new first then old active, window old behavior. For rollback intended restore old, reenable PR first then disable replacements avoids unprotected window. Fine. "If test fails, restore previous behaviour by reactivating old then disabling replacements." Could classic branch protection stays throughout to avoid unprotected window. Original suggests remove classic after. Recommend leave classic until successful, then optional delete. Rollback of main after successful train? not needed config rollback.
+
+  "Remove PR rule" can disable old ruleset not delete until validated. Say "Disable (remove enforcement of) superseded PR ruleset only after both replacements active; this is required before train test because all active rulesets stack and ruleset 2's bypass does not bypass 19117072." Then after train success delete. Exactly addresses.
+
+  Testing hand push from nonlanding identity is mutating and doc proposal can instruct owner; hard rules me not execute. Fine. But user asked read-only audit command stays. "a hand push test" is mutating command in doc? Existing doc says must refused; okay not me applying. But perhaps should avoid requiring hand push due no actual test commit? Could maintain. Test train first. Should have verification read-only:
+  ```
+  gh api repos/lambdaclass/concrete/rules/branches/main
+  gh api repos/lambdaclass/concrete/rulesets --paginate
+  gh api repos/lambdaclass/concrete/rulesets/<id>
+  gh api repos/lambdaclass/concrete/keys --paginate | jq '.[] | select(.read_only == false) | {id,key_id,title,read_only,verified}'
+  ```
+  GitHub repo deploy keys API response fields: id, key, url, title, verified, created_at, read_only, added_by?, last_used?, enabled? `gh repo deploy-key list` outputs ID TITLE READONLY etc. Should command lists write deploy keys and ruleset bypass actors. Could do:
+  ```
+  gh api repos/lambdaclass/concrete/keys --paginate |
+    jq '.[] | select(.read_only == false) | {id,title,read_only,last_used}'
+  gh api repos/lambdaclass/concrete/rulesets --paginate |
+    jq -r '.[].id' |
+    xargs -r -n1 sh -c 'gh api "repos/lambdaclass/concrete/rulesets/$0" | jq "{id,name,enforcement,bypass_actors}"'
+  ```
+  This lists bypass actors for all repo rulesets, but xargs sh positional id as $0 works. Exact read-only. Simpler no jq dependency? gh api has --jq. Could list:
+  ```
+  gh api repos/lambdaclass/concrete/keys --paginate --jq '.[] | select(.read_only == false) | {id,title,read_only,last_used}'
+  gh api repos/lambdaclass/concrete/rulesets --paginate --jq '.[] | {id,name,enforcement}'
+  gh api repos/lambdaclass/concrete/rulesets/<id> --jq '{id,name,enforcement,bypass_actors}'
+  ```
+  This is read-only audit, requires repeat per id. User "keep a read-only audit command that lists write deploy keys and ruleset bypass actors" could combine:
+  ```
+  for id in $(gh api repos/.../rulesets --paginate --jq '.[].id'); do
+   gh api "repos/.../rulesets/$id" --jq '{id,name,enforcement,bypass_actors}'
+  done
+  ```
+  and keys command. That's two commands in one block. Good.
+
+  Should check current read settings perhaps no network needed. I should not gh GET because status says read on date existing. No need.
+
+  Potential issue required check source integration_id 15368. GitHub Actions check run `app.id` 15368 indeed. Other workflows can same names. Also external people with write may create check runs as GitHub Actions app? Only app itself through workflows; another workflow in repo can do it. "another workflow can produce same check names" exactly. The required checks app binding rejects commit statuses from others but doesn't guarantee CI workflow. Mention "The list must contain seven substantive names from required-checks.txt; train transition semantics etc follow-up gate can compare with deliberate exclusion." Since out of scope required-checks file not modify.
+
+  "strict false": original "strict adds nothing for fast-forward" perhaps claim incorrect? Required branches up to date applies PR not direct pushes? User says all claims about GitHub correct. I should scrutinize original and new all GitHub behavior. strict_required_status_checks_policy false on direct push perhaps no effect? GitHub required checks direct push exact commit. "strict off because train only lands base... strict would add nothing for fast-forward" likely could be okay but strict up-to-date semantics branch PR, not needed. Better phrase neutral: "`strict...false` because train.sh itself refuses a moved main and requires head descends from base; rulesets are not relied on for that check." Avoid "adds nothing" absolute. Should ensure no false "no required status checks on classic" existing read observations. Keep.
+
+  Ruleset update rule + bypass actors: A bypass actor for update rule can push without checks? No, ruleset1 no bypass so checks apply. deletion/nonFF ruleset1 no bypass actors so deploy key cannot bypass these. Good. Pull request rule stacking.
+
+  Admins and update rule: Ruleset2 no admin bypass; admin can't hand push while active unless has key. But can edit/disable. Goal wording as above.
+
+  Ruleset 1 "Applies to everyone" admins can't bypass unless edit. okay.
+
+  Checks accepted skipped/neutral. Should be exact about GitHub required checks on direct pushes and "success, skipped, neutral" confirmed. Could say "For a required check, GitHub treats `success`, `skipped`, and `neutral` as passing; 'passed' therefore does not mean the job ran successfully." Official docs note skipped report success. Fine.
+
+  Landing record on dispatch no steps: all steps `if push main`, so no actions, completes success. Drop required list. Explain its real role after main push: "On main's subsequent push run it can link qualifying dispatch and let main skip duplicate jobs; it supplies no evidence before the push and is deliberately not a ruleset requirement." That's precise what proves after, not overclaim. Could say "On main's later push run, it runs train.sh record and records qualifying run when found; that post-landing function is not a precondition for landing." Good.
+
+  Train authority:
+  - exact run's head SHA and completed.
+  - every landing-tier success and required checks success; skipped neutral no verdict.
+  - base unchanged and ancestry.
+  - recorded run selected by ci workflow CI event workflow_dispatch branch. "workflow, event, branch and base association" perhaps train's ci dispatch, but `land` does not independently re-query these. Should explicit "The association comes from train.sh ci recording the run it dispatched; watch/land do not independently reconstruct it from check names." This addresses honest trust and possible state tampering. Do I need mention local train state trusted? Perhaps "train.sh's own strict job-conclusion check ... stays authority for that." I can say "The train, not ruleset, is authority for..." and list. Avoid claim land validates base run title (it doesn't).
+  - review provenance etc enforced only train but not needed perhaps list "review provenance and acceptance rehearsal" remains only local too; user says list what remains enforced only train in context provenance. Include all relevant landing policy:
+    * CI dispatch identity workflow/branch/base in train state
+    * exact SHA, success only required + landing
+    * main unchanged base and head descends
+    * review and any rehearsal.
+  Server handles checks/no rewrite/update identity. Good.
+
+  Credential:
+  "Ruleset 2 name updates only by landing key" still true in normal settings, but deploy keys all. Title could change "main: updates only by landing credentials" to reflect class. Command name currently landing key. Could retain and explain. "only bypass is DeployKey class". "person admin or not cannot push by hand" remove. "An admin with no key is refused until changing rules; any person/process holding any write deploy key can direct push if checks pass." This direct statement satisfies.
+
+  Narrower app:
+  Perhaps provide alternate JSON bypass line:
+  ```
+  {"actor_id": <landing-app-id>, "actor_type":"Integration","bypass_mode":"always"}
+  ```
+  Invalid JSON placeholder means not exact command. Could say replace object with `{"actor_id": APP_ID,...}` but current command heredoc JSON can't shell expand due quoted JSON. Could use actual numeric placeholder? Better keep as prose, no command needed for alternative. If user asks exact commands only existing style. Could say "If owner chooses App, replace DeployKey object with app's Integration actor ID in JSON; verify GET after creation." Not exact command but adequate. Perhaps use `"actor_id": 0` would wrong. No.
+
+  Audit API docs links:
+  - [repository ruleset REST API](https://docs.github.com/en/rest/repos/rules)
+  - [ruleset layering](...about-rulesets#about-rule-layering) perhaps in doc links check supports anchor.
+  - [status checks](...).
+  No need too many citations, but doc style currently none. User says if unsure must verify docs page. I am sure now. Could include "GitHub's [repository ruleset API](...) lists..." and "See [rule layering](...)". Concise perhaps 2 links.
+  Changelog update matching: 1 paragraph or 2:
+  "`...` now uses seven substantive required checks (excludes no-op Landing record on ci dispatch), documents success/skipped/neutral vs train strict, Integration vs DeployKey, admin emergency, non-deadlocking activate-disable-test with rollback, audit commands. Nothing applied." concise.
+
+  Should decide full rewrite via Write allowed existing complete replacement, read before yes. File ~90 lines, substantial rewrite entire document. Instructions say Write for complete replacements okay; incremental changes Edit mandatory. I'm rewriting most sections, Write suitable complete replacement. But "Edit mandatory for every incremental change especially small" full replacement okay. Could Write target complete ~140 lines. Changelog full rewrite small but complete replacement Write okay after read. I need no other files. Then diff inspect.
+
+  Before writing perhaps use Todo mark verify done, revise in progress. I'll draft carefully.
+
+  I'll formulate target:
+
+  #...
+  Status same.
+  Read same.
+  Goal:
+  "Goal: normal landings are train.sh land fast-forwards whose CI train validated. Server should block deletion/nonFF and direct updates except landing credential, and require checks. Rulesets cannot prove train.sh ran. Repo admins/custom role can edit/disable emergency. rulesets stop accidental and unauthorised pushes by everyone else; they do not make 'nobody admins included' true."
+  Perhaps "unauthorised pushes by everyone else" admins can push without editing if checks? update ruleset blocks admins no key. yes.
+
+  Section ruleset1:
+  "Requires every listed check context to pass on commit being pushed. GitHub passing includes success skipped neutral; no claim ran. train strict..."
+  But train section later, avoid duplicate. Put core semantics after JSON.
+
+  JSON remove Landing record line.
+
+  "integration_id 15368 identifies GitHub Actions app. It does not identify workflow, event, ref, base, run; same names another workflow. Rulesets only names/app/pass."
+  "The seven substantive job names match required-checks except Landing record. follow-up gate compare with deliberate exclusion."
+  "Landing record deliberately omitted... no steps ci. after main moves role."
+
+  Train section perhaps separate `## What only train.sh establishes` after ruleset 1:
+  "`ci` records run ID of CI workflow_dispatch on ci/<name> with base input. watch/land... exact SHA completed all landing and required success; `land` main still base/head descends. Rulesets do not establish workflow,event,branch,base,specific run or success-only. Nor enforce review/rehearsal. Association with dispatch depends on train's recorded state; it isn't inferred from checks."
+  Potential wording "base association" train input but main before. Good.
+
+  Ruleset2:
+  "Restrict updates to bypass actors. DeployKey class-wide current/future write keys. Bypass only this ruleset; ruleset1 still applies; no bypass for nonFF/deletion. Any holder can hand-push qualifying FF without train."
+  JSON same.
+  Prereq dedicated key no other keys and dedicated host/service.
+  "Trusted authorities are host/custodian of credential and admins/custom role edit rules. GitHub App alternative Integration narrower than DeployKey, but app credential same limitation. Prefer dedicated app installed only repo with contents write, installation creds confined to service. REST types list. Confirm configured actor with audit below before relying."
+  Do I need app actions permission dispatch? not essential for bypass but normal train also dispatch; include "only permissions landing needs" rather than contents write exact.
+  "DeployKey actor_id null class wide" explicit.
+
+  Audit block two commands.
+
+  Rollout `## Cutover, test and rollback`
+  1 after B lands before small guard, prerequisites, record ids.
+  2 POST both active while old active; direct pushes temporarily blocked (including train) until disable old. Note this isn't deadlock if you disable old before test.
+  3 Disable old PR:
+  ```
+  gh api -X PATCH ... -f enforcement=disabled
+  ```
+  "required because active rulesets and classic protection stack; bypass only own."
+  4 "Run a train landing as test. It must succeed. A hand push from nonlanding identity must be refused; inspect effective rules..." command GET. Should owner execute hand push? no command. fine.
+  5 after success delete old and optional classic. Original recommended remove classic, keep. `DELETE` old after success. Classic removal recommended? With admin not enforced classic duplicates. New rulesets no issue. "Once test passes delete disabled PR ruleset... Classic can stay or remove recommended one place." Good.
+  Rollback:
+  "If landing fails, reactivate old first then disable both replacements, then diagnose. This restores old behavior (admin bypass included)." commands. If old already deleted after success rollback command fails; state rollback is before deleting old. "Before deleting old, if test fails..." clear. After deletion need recreate from original definition not provided? Could provide rollback before cleanup enough. "Do not delete old until test passes, so rollback remains available." Good.
+
+  Perhaps test train could fail due landing record removed from required checks? train still requires no-op job success, okay.
+
+  Risks final:
+  "Admin emergency, key trust above, renamed check blocks, strict false because train base checks. Required checks can pass skipped/neutral so ruleset alone insufficient. GitHub behavior source docs. Exact settings must be verified GET after applying." Already.
+
+  No assertion "only owner applies them" okay.
+
+  Status nothing applied line stays.
+
+  Changelog match no overclaim "required checks on exact commit" could keep but add semantics. Use complete paragraph.
+
+  Should validate Markdown links doc_links perhaps external links ignored? likely. Internal no issues.
+
+  I'll Write.
+
+• GitHub’s REST documentation confirms that `Integration` is a distinct repository-ruleset bypass actor for a specific GitHub App, unlike the class-wide `DeployKey` actor. I’ll keep the deploy-key design explicit, recommend the narrower App alternative, and make the cutover reversible by disabling—not deleting—the old PR ruleset until a train lands successfully.
+
+• Should inspect diff to ensure claims and style. Bash git diff --check and git diff -- files. Could use Bash for git diff allowed. Also Grep perhaps check prohibited phrase and Landing record. Use git diff.diff --git a/changelog.d/2026-11-08-main-protection-proposal.md b/changelog.d/2026-11-08-main-protection-proposal.md
+index 89d69d43..f9b082a1 100644
+--- a/changelog.d/2026-11-08-main-protection-proposal.md
++++ b/changelog.d/2026-11-08-main-protection-proposal.md
+@@ -1,7 +1,10 @@
+ ### A proposal for server-side protection of main (2026-11-08)
+ 
+-`docs/proposals/MAIN_PROTECTION.md` drafts the GitHub rulesets that would make the server the
+-boundary for main on lambdaclass/concrete: the required checks on the exact commit and no rewrite
+-for everyone, and updates only from the landing clone's deploy key. It records the settings read on
+-2026-11-08 (an admin bypass lets any admin push main) and the exact `gh api` commands. Nothing is
+-applied: the owner applies or approves them.
++`docs/proposals/MAIN_PROTECTION.md` drafts GitHub rulesets for main on lambdaclass/concrete and a
++reversible cutover: activate the replacements, disable the old pull-request ruleset, test a train
++landing, then remove the old ruleset. It distinguishes GitHub's `success`/`skipped`/`neutral`
++required-check semantics from train.sh's exact-run, success-only and base checks; omits the no-op
++`ci/*` Landing record job from the server requirements; and records the limits of the GitHub Actions
++app binding. It also covers class-wide deploy-key bypass, the narrower GitHub App alternative,
++credential and admin trust, read-only audits, and rollback. Nothing is applied: the owner applies or
++approves the settings.
+diff --git a/docs/proposals/MAIN_PROTECTION.md b/docs/proposals/MAIN_PROTECTION.md
+index e3478136..0b62587b 100644
+--- a/docs/proposals/MAIN_PROTECTION.md
++++ b/docs/proposals/MAIN_PROTECTION.md
+@@ -12,13 +12,19 @@ Read on 2026-11-08 (read-only `gh api`):
+   pull_request (1 approval); bypass: OrganizationAdmin and RepositoryRole 5 (admin), "always".
+ So today any admin, including the account the train pushes with, can update main with anything.
+ 
+-Goal: main moves only by a train's fast-forward push of a commit whose required checks are green,
+-from one landing identity; nobody (admins included) can push main by hand, force-push or delete it.
++Goal: the normal way to move main is a train's fast-forward push of a commit whose required checks
++are green, using one landing identity. The rulesets block deletion and non-fast-forwards and stop
++accidental and unauthorised pushes by everyone else. They do not prove that `train.sh` ran.
++Repository admins (and any custom role with "edit repository rules") can edit or disable rulesets;
++that is the emergency path, so "nobody, admins included, can push main by hand" is not a guarantee
++GitHub can provide here.
+ 
+ ## Ruleset 1 "main: required checks, no rewrite" (no bypass actors)
+ 
+-Applies to everyone. Requires each job in required-checks.txt to have succeeded on the exact commit
+-before the ref update (the train runs CI on ci/<name> at that SHA, so the landing push satisfies it).
++Requires each listed check context to pass on the commit being pushed. For a required status check,
++GitHub accepts the conclusions `success`, `skipped` and `neutral` as passing: "passed" does not
++necessarily mean that the job ran successfully. The train's stricter check remains authoritative
++(see below).
+ 
+     gh api -X POST repos/lambdaclass/concrete/rulesets --input - <<'JSON'
+     {
+@@ -37,7 +43,6 @@ before the ref update (the train runs CI on ci/<name> at that SHA, so the landin
+             {"context": "Root checks", "integration_id": 15368},
+             {"context": "Spec build", "integration_id": 15368},
+             {"context": "Oracle (GitHub-hosted fetch + smoke)", "integration_id": 15368},
+-            {"context": "Landing record", "integration_id": 15368},
+             {"context": "Proof axioms", "integration_id": 15368},
+             {"context": "Proof trust ban (sorry, native_decide)", "integration_id": 15368},
+             {"context": "Kernel replay (leanchecker)", "integration_id": 15368},
+@@ -47,13 +52,37 @@ before the ref update (the train runs CI on ci/<name> at that SHA, so the landin
+     }
+     JSON
+ 
+-integration_id 15368 is GitHub Actions, so a status posted by anything else cannot satisfy a check.
+-The list must stay equal to required-checks.txt; a follow-up gate can compare them read-only.
++`integration_id` 15368 identifies the GitHub Actions app, not this workflow, an event, a branch, a
++base or a particular run. Another Actions workflow can produce checks with the same names and app.
++The ruleset therefore binds only the check names, app and GitHub's passing conclusions.
++
++The list is `required-checks.txt` minus **Landing record**, deliberately. On the train's `ci/*`
++workflow dispatch, every step of that job has a `push`-to-main condition, so the job runs no steps
++and adds no provenance before main moves. On main's later push run it looks up and links the
++qualifying dispatch, allowing duplicate jobs to be skipped; that post-landing record is not a
++pre-landing check. A follow-up gate can compare the lists with this one deliberate exclusion.
++
++## What only train.sh establishes
++
++`train.sh ci` dispatches CI on `ci/<name>` with the train's base and records that workflow run's id.
++`watch` and `land` require the recorded run to be completed at the exact candidate SHA, every
++landing-tier job to conclude `success`, and every job required by `required-checks.txt` and the
++transition rules to be present and conclude `success`; skipped and neutral jobs are not accepted.
++`land` also requires origin/main still to be the train's base and the head to descend from it, and
++separately checks review provenance and any required acceptance rehearsal.
++
++Those workflow/event/branch/base associations come from the run that `train.sh ci` dispatched and
++recorded; they are not inferred from check names, and `watch`/`land` do not reconstruct them from a
++ruleset. The success-only job rule, exact-run check, moved-main refusal, review and rehearsal policy
++remain train.sh's enforcement, not GitHub ruleset guarantees.
+ 
+ ## Ruleset 2 "main: updates only by the landing key"
+ 
+-Restricts who may update main at all. The only bypass is the landing clone's deploy key, so a
+-person (admin or not) cannot push main by hand; the train's push still has to pass ruleset 1.
++Restricts who may update main. The `DeployKey` bypass is class-wide: it covers every current and
++future write deploy key, not one named key. Its bypass applies only to this ruleset; ruleset 1's
++checks, deletion ban and non-fast-forward rule still apply. A deploy key authenticates a credential,
++not execution of `train.sh`: anyone or any process holding a write deploy key can hand-push a
++qualifying fast-forward without running the train.
+ 
+     gh api -X POST repos/lambdaclass/concrete/rulesets --input - <<'JSON'
+     {
+@@ -68,23 +97,64 @@ person (admin or not) cannot push main by hand; the train's push still has to pa
+ 
+ Prerequisites (owner): a dedicated write deploy key for the landing clone (`gh repo deploy-key add
+ <pub> --repo lambdaclass/concrete --title landing-train --allow-write`), the landing clone's
+-lambdaclass remote using it (an ssh host alias), and no other write deploy key on the repository
+-(DeployKey bypass covers every write deploy key): `gh repo deploy-key list --repo lambdaclass/concrete`.
++lambdaclass remote using it (an ssh host alias), and no other write deploy key on the repository.
++Confine the key to a dedicated landing host or service that exposes only the train operation, not a
++general-purpose shell. The trusted authorities are that credential's custodian and host, plus the
++repository admins and custom roles that can edit rulesets.
+ 
+-## Then
++A dedicated GitHub App is a narrower bypass actor: the REST actor type `Integration` identifies a
++particular app, whereas `DeployKey` covers the whole write-key class. Prefer an App installed only
++on this repository, with only the permissions landing needs and its installation credentials confined
++to the landing service, if that operational change is feasible. Its credential still would not prove
++that `train.sh` ran. The [repository ruleset REST API](https://docs.github.com/en/rest/repos/rules)
++lists `Integration`, `OrganizationAdmin`, `RepositoryRole`, `Team`, `DeployKey` and `User` actor
++types. Whichever identity is chosen, verify the saved bypass actor read-only before relying on it.
+ 
+-- Remove the superseded PR ruleset once both are active and a train has landed through them:
+-  `gh api -X DELETE repos/lambdaclass/concrete/rulesets/19117072`. Its admin bypass is the hole.
+-- Classic protection can stay (it duplicates deletion/force-push blocking) or be removed:
+-  `gh api -X DELETE repos/lambdaclass/concrete/branches/main/protection`. Recommended: remove, so
+-  one place holds the rules.
+-- Verify, read-only: `gh api repos/lambdaclass/concrete/rules/branches/main` lists the rules that
+-  apply to main; a hand push of a test commit from a non-landing identity must be refused, and a
+-  train landing must succeed.
+-- Order relative to the switch: apply after B lands (lambdaclass is then the one repository), and
+-  before the small local guard, which only refuses mistakes early.
++Audit write deploy keys and every repository ruleset's bypass actors (all read-only):
+ 
+-Risks to weigh: an admin can still edit or disable the rulesets (that is the owner's emergency
+-path, and it is audited); a required check renamed in the workflow blocks every landing until the
+-ruleset is updated (fail closed); `strict` is off because the train already lands only on the main
+-it was built on (it refuses a moved main), and strict would add nothing for a fast-forward.
++    gh api repos/lambdaclass/concrete/keys --paginate \
++      --jq '.[] | select(.read_only == false) | {id,title,read_only,last_used}'
++    for id in $(gh api repos/lambdaclass/concrete/rulesets --paginate --jq '.[].id'); do
++      gh api "repos/lambdaclass/concrete/rulesets/$id" \
++        --jq '{id,name,enforcement,bypass_actors}'
++    done
++
++## Cutover, test and rollback
++
++Apply after B lands (lambdaclass is then the one repository) and before the small local guard. Record
++the ids returned by the two POST commands above.
++
++1. Create both replacements as active while ruleset 19117072 is still active. This temporarily
++   blocks direct main pushes, including the train's; do not test a landing yet.
++2. Disable the superseded PR ruleset, removing its enforcement but retaining it for rollback:
++
++       gh api -X PATCH repos/lambdaclass/concrete/rulesets/19117072 -f enforcement=disabled
++
++   This order is necessary because all active rulesets and classic branch protection stack. A bypass
++   in ruleset 2 does not bypass ruleset 19117072, so leaving its pull_request rule active would
++   deadlock the deploy key's direct train push. See GitHub's [rule layering
++   documentation](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-rulesets/about-rulesets#about-rule-layering).
++3. Test with a real train landing; it must succeed. A hand push from a non-landing identity must be
++   refused. Inspect the effective rules read-only:
++
++       gh api repos/lambdaclass/concrete/rules/branches/main
++
++4. Only after that landing succeeds, delete the disabled PR ruleset:
++
++       gh api -X DELETE repos/lambdaclass/concrete/rulesets/19117072
++
++   Classic protection can stay (it duplicates deletion/force-push blocking) or be removed:
++   `gh api -X DELETE repos/lambdaclass/concrete/branches/main/protection`. Recommended: remove it
++   after the successful test, so one place holds the rules.
++
++If the test fails, and before deleting ruleset 19117072, restore the previous behaviour by
++reactivating it first and then disabling both replacements (substituting their returned ids):
++
++    gh api -X PATCH repos/lambdaclass/concrete/rulesets/19117072 -f enforcement=active
++    gh api -X PATCH repos/lambdaclass/concrete/rulesets/<ruleset-1-id> -f enforcement=disabled
++    gh api -X PATCH repos/lambdaclass/concrete/rulesets/<ruleset-2-id> -f enforcement=disabled
++
++Risks to weigh: admins retain the emergency path above; the landing credential's holder can bypass
++the train but not ruleset 1; and a renamed required check blocks every landing until the ruleset is
++updated (fail closed). `strict_required_status_checks_policy` is false because the train itself
++refuses a moved main and checks ancestry, rather than relying on GitHub's up-to-date-branch policy.
+Should assess any issues before gates. One potential serious: `watch` and `land` every landing-tier job success includes campaign? run_jobs tier landing/campaign. yes.
+  `land` completed run, watch completed. yes.
+  "every job required by required-checks.txt and transition rules present success" required_report computed base/candidate. yes.
+  "Those workflow/event/branch/base associations come from run ci dispatched recorded" ci queries workflow CI branch event head SHA createdAt and state. base is input but no verification of run display title in watch/land; association via dispatch. okay.
+
+  "GitHub accepts success skipped neutral as passing" user confirmed. Good.
+  "ruleset binds check names, app and passing conclusions" also exact commit implied. fine.
+  "DeployKey bypass covers future write keys" confirmed.
+  "anyone or process holding write deploy key can hand-push qualifying FF" must also key registered repo; implied. Good.
+  "A GitHub App narrower actor Integration identifies particular app" verified.
+  "REST actor types includes User" verified.
+  "read-only audit every repository ruleset bypass" API list default includes all? Endpoint GET all repo rulesets defaults includes_parents=true? returns active all? It lists all repo rulesets yes. `--paginate --jq` behavior gh: when --paginate with --jq, gh applies jq per page and outputs each object. good.
+  `last_used` field may absent and jq yields null; fine.
+  "current status read 2026-11-08" unchanged.
+  Cutover disables old and test. rollback good.
+  "Reactiving old first then disable replacements" temporary deadlock but restore, okay.
+  "Classic can stay duplicates deletion/force push" yes.
+  "landing credential holder can bypass train but not ruleset1" can bypass checks by generating spoof same name in another workflow but still cannot literally bypass ruleset1. Correct. They can hand push qualifying checks, including weak semantics. Fine.
+  "only owner applies settings" repository admin could but status procedural.
+  Potential issue use `gh api -X PATCH ... -f enforcement=disabled` exact accepted. yes.
+
+  Could perhaps avoid quoting rejected phrase in goal because user says replace "nobody..." with true statement. I still contain phrase but explicitly negated. They might grep expecting removed? "Replace 'nobody (admins included) can push main by hand' with true statement: admins can edit..." My phrase "so 'nobody, admins included, can push main by hand' is not a guarantee" is true, but safer remove entirely to avoid perception. Goal could simply end "that is emergency path; rulesets do not prevent an admin from changing protection and then pushing by hand." More direct and no old false quote. Do that. Also "The rulesets block deletion and non-fast-forwards" admins can edit them then delete/force push, context rules active. Fine.
+
+  Potential "A hand push from nonlanding identity must be refused" admin can disable but test under settings. fine.
+
+  One issue status line says "Nothing here has been applied" exactly kept. Good.
+
+  Now run doc_links after small edit. Use Edit single target then gates.
+
+• The draft now separates server enforcement from train-only provenance, omits `Landing record` from the required ruleset checks, and includes a tested cutover with rollback plus read-only audits. I’m tightening one remaining goal sentence, then I’ll run the two requested gate commands unchanged.
+
+• Now run doc_links and full gate. Instructions say gates inside nix develop but user exact commands `timeout 300 bash ...`, `timeout 1500 systemd-run...`. Should run exactly. Heavy at most 2; one full. Could run doc_links foreground first then full. Todo revise done gate in progress.=== controls: the checker on throwaway trees ===
+  ok   positive control: slugs (literal underscore, emphasis), duplicate suffix, explicit id, code skipped, root-relative fragment links and a sibling fragment's heading pass
+  ok   a link to a missing heading fails
+  ok   a duplicate suffix past the last repeated heading fails
+  ok   a heading inside a code fence is not an anchor
+  ok   a heading inside an HTML comment is not an anchor
+  ok   an id written inside a code span is not an anchor
+  ok   an image inside a link's text is checked
+  ok   a link to a missing file fails
+  ok   outside changelog.d/ a link resolves against its own directory
+  ok   a changelog.d/ fragment resolves against the root, not changelog.d/
+  ok   a fragment's anchor is checked too
+=== the repository ===
+  ok   DOC-LINKS: PASS CHECKED=913 ANCHORS=713
+
+DOC-LINKS-GATE: PASS=12 FAIL=0 INCOMPLETE=0
+Run full with timeout 1500 Bash timeout perhaps max300 foreground schema says max300 but user command itself 1500 and tool timeout max300. Set run background true timeout 1500? Background allowed max86400. User wants bounded run. I can background to avoid tool 300 cap and wait automatic? I need result before commit, can use run background then WaitFor since no other work perhaps user explicitly requires all. Better Bash foreground timeout 300 will move to background after 300 not kill due tool; inner timeout 1500. Could set run_in_background true timeout 1600 description then use WaitFor up to90 repeatedly only no other work. Tool says notifications automatic, return control user instead waiting? But task needs complete in turn, I can WaitFor when nothing else. Could foreground with `timeout`: 300 and command inner 1500; if >300 moved background notification. Usually full scripts perhaps under 5min? all 11 could ~2min. User specifically command systemd-run. Use Bash run_in_background true `timeout`:1600 description "Run full repository checks". Then can inspect final diff while runs light? Gates tree stable, git diff read-only fine. Should have no edits. Could review exact line references. Use background then perhaps doc claim audit not needed. I can run full and while running check status/diff perhaps no need. Tool says long tests conversation should not wait set background, notified. I can dispatch then perform git diff --stat and check no new files after later. I can WaitFor 90 if next depends. I'll run background.I need wait but instruction "do NOT wait poll" automatic, continue current work. I can inspect doc via Read? After write no need solely prove. Could audit source no further changes. Should have final diff perhaps already did before one sentence. Can run git diff --check/status after full completion. Right now could check current branch head and no mutations from me? not necessary. Could use time to validate JSON snippets syntax? Extract requires scripting reading file and parse here docs. Gates doc checks perhaps not JSON. Make sure JSON valid. Could use Python read doc extract ```? It's indented heredoc. Run python parse two JSON blocks read-only. Also verify required check list matches expected automatically via Python. This is useful additional verification, not repeated broad. Use Bash python no writes. Also perhaps audit commands `gh api` GET not required. Avoid network. Use Python parse JSON and compare required-checks. Should not use shell grep. Bash script reads known file (dedicated Read preferred, but programmatic parse is okay Bash for script semantics). Use Python.
+
+• `doc_links.sh` passed all 12 checks. The full 11-gate run is now in progress; meanwhile I’m validating the two embedded ruleset JSON payloads and the intentional seven-versus-eight required-check difference.ruleset JSON: 2 valid payloads; 7 substantive checks match required-checks.txt minus Landing record
+
+
+• Now nothing to do until full completes. Could respond? Can't commit until gates. I can WaitFor despite automatic says don't wait? Tool output explicit "do NOT wait, poll ... continue current work". I have no work. I could perhaps run git diff --check now (not test) and then automatic might arrive. Use Bash `git diff --check && git status --short` quick. Then if not completed use WaitFor allowed "only no other work" but next_step says do not wait perhaps harness wants end turn? Yet task requires complete and auto notification later. I can do final review content via Read perhaps no. Should inspect proposal with line numbers for response references after edit. That's meaningful final navigation. Read full known file not solely prove write? Instructions "After successful Edit/Write, do not re-read solely to prove write landed." I can avoid. `git diff --check` and status useful. M changelog.d/2026-11-08-main-protection-proposal.md
+ M docs/proposals/MAIN_PROTECTION.md
+Now need wait. Could use WaitFor since no other work, 90.Full pass all 11. Should commit. Before commit check new files git status, only two. Perhaps precommit hook will run? Commit local no push. Use clear message "docs: correct main protection ruleset proposal". Must not git config. I should mark gate done commit in progress. Then Bash `git status --short && git diff --check && git add -- two && git commit -m ...` dependent. User hard only two files, git add exact. Commit allowed explicitly. Make sure no new files from runs. status before commit only two earlier but after tests check again. I can do `git status --short` first and then separate commit. Better check output. Also perhaps review final diff stat. Use Bash status.
+
+• The full run completed successfully: all 11 root checks passed, and the embedded ruleset payloads also validated. Only the two permitted files are modified; I’m committing them now with no push.
+
+ M changelog.d/2026-11-08-main-protection-proposal.md
+ M docs/proposals/MAIN_PROTECTION.md
+ changelog.d/2026-11-08-main-protection-proposal.md |  13 ++-
+ docs/proposals/MAIN_PROTECTION.md                  | 122 ++++++++++++++++-----
+ 2 files changed, 104 insertions(+), 31 deletions(-)
+• Now commit.[wip/main-protection d6159bf6] docs: correct main protection ruleset proposal
+ 2 files changed, 104 insertions(+), 31 deletions(-)
+Should verify commit SHA and status no new files. Bash `git rev-parse HEAD && git status --short --branch && git show --stat --oneline --summary HEAD` read-only. Should confirm exact two files. Then todo done.d6159bf65ec07a508635b9baf4a1a68755d05d56
+## wip/main-protection...origin/main [ahead 2]
+d6159bf6 docs: correct main protection ruleset proposal
+ changelog.d/2026-11-08-main-protection-proposal.md |  13 ++-
+ docs/proposals/MAIN_PROTECTION.md                  | 122 ++++++++++++++++-----
+ 2 files changed, 104 insertions(+), 31 deletions(-)
+Now todo done and respond.Respond concise but summary each change (6 findings + changelog). Include commit SHA full, gates. No push/no settings. Perhaps file refs no line needed. Mention docs official checked perhaps not necessary but good. "Committed d615..." "Changes: rollout active replacements disable PR test delete rollback; required check semantics and train authority; app scope & landing record removed; credential trust, app Integration types, audit; admin honesty; changelog." "Validation: doc_links 12 pass; run all 11; JSON check. Worktree clean no push no GitHub mutations." Should mention branch ahead 2? not necessary but no push clear. Could include no GitHub setting changed. Ensure user asked print summary each change, yes bullets. I should avoid saying "all claims correct" absolute. Use "Revised". Respond no citations necessary because work not research response; could mention verified actor types against GitHub REST docs. No need source URL? I relied in response perhaps cite if claim Integration narrower. But this is code task and file includes links. Response could include link optional.
+
+• Committed locally as **`d6159bf65ec07a508635b9baf4a1a68755d05d56`** (`docs: correct main protection ruleset proposal`).
+
+  Changes in `docs/proposals/MAIN_PROTECTION.md`:
+
+  - Fixed the cutover deadlock: activate replacements, disable the PR ruleset, test a train landing, then delete the old ruleset. Added explicit rollback commands.
+  - Documented that GitHub accepts `success`, `skipped`, and `neutral`; retained `train.sh`’s success-only, exact-run, and base checks as authoritative.
+  - Clarified that `integration_id` 15368 identifies GitHub Actions, not a workflow, event, branch, base, or run.
+  - Removed the no-op `Landing record` job from the proposed required checks and explained its post-landing role.
+  - Documented class-wide deploy-key bypass, credential and admin trust boundaries, the narrower `Integration`/GitHub App alternative, and read-only audit commands.
+  - Replaced the absolute admin-protection claim with the actual emergency path.
+  - Updated `changelog.d/2026-11-08-main-protection-proposal.md` accordingly.
+
+  Validation passed:
+
+  - `doc_links.sh`: 12/12 checks.
+  - `scripts/checks/run.sh`: all 11 root checks.
+  - Embedded ruleset JSON validated; seven required contexts match `required-checks.txt` minus `Landing record`.
+
+  Nothing was pushed or applied to GitHub. The worktree is clean.
+
+To resume this session: kimi -r session_c8f4d4cf-6648-4ec7-ac11-0ee867089439
+[unexpected] RuntimeError: workspace wd_main-protection_0f17082da9f2 is not materialized
+    at RuntimeResolver.acquire (/home/runner/work/kimi-code/kimi-code/apps/kimi-code/dist-native/intermediates/main.cjs:180498:36)
+    at AgentRuntimeService.acquire (/home/runner/work/kimi-code/kimi-code/apps/kimi-code/dist-native/intermediates/main.cjs:132231:25)
+    at AgentFileHistoryService.readCurrent (/home/runner/work/kimi-code/kimi-code/apps/kimi-code/dist-native/intermediates/main.cjs:177606:31)
+    at AgentFileHistoryService.endCheckpoint (/home/runner/work/kimi-code/kimi-code/apps/kimi-code/dist-native/intermediates/main.cjs:177519:32) {
+  code: 'runtime.not_found'
+}
+rc=0

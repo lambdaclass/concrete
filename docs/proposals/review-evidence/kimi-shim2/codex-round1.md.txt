@@ -1,0 +1,21 @@
+# review of 5a25dbba9efbaf1be594843173229e3529e1f704, round 1
+
+reviewer: codex; utc: 2026-11-08T01:09:46Z; base: 3bd7bc41511e0a0ba247b53231b5dc8589533d2f; diff from: 3bd7bc41511e0a0ba247b53231b5dc8589533d2f; pieces: 2; diff bytes: 23497
+
+## piece 1 of 2: scripts (22251 bytes): findings
+
+files: ISSUES.tsv,scripts/checks/landing_script.sh,scripts/land/acceptance.sh,scripts/land/acceptance_shim.sh
+
+- scripts/land/acceptance_shim.sh:65: `canon` recognizes only absolute paths, but protected remote URLs can be relative paths. If acceptance starts with origin `../upstream.git`, a push naming that repository by its absolute path resolves successfully while the protected URL cannot be canonicalized. The comparison therefore treats the real upstream as an unprotected fixture and allows a push to main, including with `--no-verify`. Resolve protected local URLs against their original working directory when creating the shim.
+
+VERDICT: findings
+
+## piece 2 of 2: docs (1246 bytes): clean
+
+files: changelog.d/2026-11-08-acceptance-shim.md
+
+No correctness or owner-decision findings in the supplied diff. Repository reads failed because of a sandbox error, so I could not verify the changelog against the implementation or docs/decisions.md.
+
+VERDICT: clean
+
+## verdict: findings (1 piece(s) with findings, 0 blocked)

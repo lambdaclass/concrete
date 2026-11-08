@@ -1,0 +1,28 @@
+• I’ll re-check each round-1 finding against the delta, then audit the new owner answers, std table, spec ordering, and roadmap dependency graph.
+
+• Most round-1 fixes are present. I’m now checking the revised step details for new ordering gaps and comparing every adopted showcase stage with the std table’s explicit conflict list.
+
+• The delta leaves several concrete issues: the EVM/crypto wide-integer dependency is absent from the std audit, the spec’s module count and one primitive-contract step are inconsistent, and some roadmap fixes only removed the visible cycle without correcting the underlying delivery order.
+
+• The four new owner quotes are verbatim, no per-slice user-guide work was added, and the explicit R-to-R dependency graph is acyclic. Other round-1 findings are resolved or reasonably qualified; these remain:
+
+  1. **defect — `ROADMAP.md:415`, `ROADMAP.md:423`, `ROADMAP.md:460`: C9’s early interface and late acceptance remain conflated.** C1 needs the primitive interface at spec step 6, but R-0615 waits for C1. Moreover, R-0615’s gate requires R-0593, which reaches R-0615 again through R-0592 → R-0571. **Fix:** split early identities/primitive contracts from late evidence/erasure; make C1 depend on the early task, and move R-0593’s generated-JSON gate to a post-integration increment.
+
+  2. **defect — `ROADMAP.md:413`: R-0602’s delivery order is still inverted.** R-0612 says it delivers R-0602 (`ROADMAP.md:420`), and R-0571 depends on R-0612, yet R-0602 still waits for R-0571. **Fix:** make R-0602 depend on R-0612, or fold its acceptance into R-0612.
+
+  3. **defect — `ROADMAP.md:458-459`: the written-grammar dependency also blocks the lexer.** Combined R-0620 depends on R-0622, although the recorded later answer makes only the parser wait; the lexer was still approved to start now. **Fix:** split lexer and parser tasks, with only the parser depending on R-0622.
+
+  4. **defect — `ROADMAP.md:293-329`: the std conflict audit omits wide-integer arithmetic.** EVM at 15 requires u256 (`docs/proposals/EXAMPLES.md:25`), while X25519 and Poly1305 at 15/18 require arithmetic wider than u64 (`docs/proposals/EXAMPLES.md:28`). No module or scheduling gap covers these contracts. **Fix:** add an unplaced limb/wide-integer arithmetic row and explicitly flag EVM 15 and crypto 15/18.
+
+  5. **defect — `docs/proposals/SPEC_UNIFICATION.md:1023-1029`: step 15 completes contracts needing a later definition.** Step 6 says leakage records arrive at step 17 (`docs/proposals/SPEC_UNIFICATION.md:955-958`), but step 15 completes “every existing operation’s contract,” including leakage. **Fix:** defer leakage-bearing instances/contracts to step 17, or explicitly limit step 15 to contracts not requiring that record.
+
+  6. **defect — `docs/proposals/SPEC_UNIFICATION.md:681-683`: the module count is 34, not 33.** The original 26 plus the seven named additions and the separate `Layout` module gives 34. **Fix:** change the count to 34.
+
+  7. **defect — `docs/proposals/SPEC_UNIFICATION.md:1027`: stale step reference.** `checked_exits` is delivered at step 24 (`docs/proposals/SPEC_UNIFICATION.md:1084-1088`), not step 20. **Fix:** replace “step 20’s” with “step 24’s.”
+
+  8. **defect — `AGENTS.md:148`: the new agy command violates the repository’s timeout rule.** `AGENTS.md:133-134` requires `bounded_run`, never GNU `timeout`. **Fix:** use the documented bounded wrapper, for example `bash scripts/checks/lib/bounded.sh 1500 agy -p "<prompt>"`.
+
+  9. **defect — `docs/decisions.md:1217-1219`: agy’s role is expanded beyond the supplied answer.** “It may also write self-contained pieces” is not in the owner’s quote or the coordinator’s relay that agy reviews every branch. **Fix:** remove that clause or obtain and record explicit owner approval.
+
+  VERDICT: REVISE
+

@@ -1,0 +1,13 @@
+All seven round-1 findings in scope are cleanly resolved by `3be01c745`:
+
+- **`docs/proposals/FOUNDATION.md:3`** records both verbatim owner quotes (`"ok all recommended"` on 2026-11-08 and `"ok to option b then for freeze the foundation>?"` on 2026-11-07) with relative links to `../decisions.md#decided-2026-11-08-foundation` and `../decisions.md#decided-2026-11-07-foundation-first`.
+- **`docs/decisions.md:1238-1240`** cites the confirmed verbatim quote (`"also remember we have agy not only codex kimi and claude"`) together with the three supporting 2026-11-08 quotes now recorded in `PENDING_RECORDS.md`.
+- **`docs/decisions.md:529-532`** adds the 2026-11-08 revision note to the backend-order row cross-referencing `#foundation-q17` and `#decided-2026-11-08-adapter` (R-0579).
+- **`docs/decisions.md:965-969` and `992-996`** add the 2026-11-08 revision notes to the 2026-11-07 speed and binary-size rows cross-referencing `#decided-2026-11-08-compile-budget` and `#decided-2026-11-08-speed-target`.
+- **`ROADMAP.md:582` (`R-0544`)** aligns the review round limit with `R-0618`'s per-class caps (2 / 3 / 5).
+- **`changelog.d/2026-11-08-record-foundation.md:27-28, 43-44`** states that the lexer starts now against the spec's Lexical rules (`R-0620`) and only its LL(1) parser waits for `R-0622`.
+- **`ROADMAP.md:459` (`R-0622`) and `512` (`R-0623`)** state the exact timing inside each row (before slice 0's parser / blocking B0's `R-0620` completion, and at slice 16's `grep` showcase respectively).
+
+No new issues or contradictions found.
+
+VERDICT: ACCEPT

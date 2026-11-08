@@ -1,0 +1,219 @@
+Reading additional input from stdin...
+OpenAI Codex v0.166.0
+--------
+workdir: /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/found10/codex
+model: gpt-6.1-sol
+provider: openai
+approval: never
+sandbox: danger-full-access
+reasoning effort: none
+reasoning summaries: none
+session id: 01a1b89c-b495-77e3-8195-30c52fd6fe0b
+--------
+user
+_review/FOUNDATION_PROPOSAL_v3.md is draft 3 of Concrete's foundation proposal. _review/FOUNDATION_PROPOSAL.md is the same text after Claude's small edits, which fix two round-3 blockers:
+(1) the P4 qualification paragraph and Q17 now keep the decided backend-order rule (LLVM and LCB full observations equal each other, and any mismatch fails; docs/decisions.md around line 483), and defer allocation-dependent observations to slice 24;
+(2) a new Q18 for the Secret<T> layout, plus a C3 wording change.
+Run `diff _review/FOUNDATION_PROPOSAL_v3.md _review/FOUNDATION_PROPOSAL.md` and check only those edits against docs/decisions.md. Do not modify files. Report any error in at most 80 words total.
+End with exactly: ANSWER: OK or ANSWER: FIX=<short>
+codex
+I’ll check the diff against `docs/decisions.md`, limited to those edits, without modifying files.
+exec
+/bin/bash -lc 'diff _review/FOUNDATION_PROPOSAL_v3.md _review/FOUNDATION_PROPOSAL.md' in /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/found10/codex
+ exited 1 in 0ms:
+48c48
+< **Rule:** native structs retain declaration order, each field rounded up to its alignment, aggregate alignment the maximum (1 for empty), and final size rounded up. Empty aggregates have size 0/alignment 1. Arrays have size `n × size(T)` and alignment `align(T)`, including `n = 0`. Fixed-width integer storage respects value width; alignment is target-defined. Q4.5 decides only StaticStr’s explicit pointer/byte-length FFI adapter, without an internal ABI promise. Q3.1–Q3.4 and Q4.6–Q4.7 decide view roots, loans and ranges, not their physical representation. Text length counts UTF-8 bytes. TYPE-3 Text owns immutable bytes, never aliases another value’s buffer, and is linear. Its ownership, allocator dependency and sufficient release context must survive representation; Q4.5’s FFI adapter does not fix Text’s internal size. No universal two-word Text layout is frozen. A common shared/mutable view representation is a proposal, not a decided rule. Defer its concrete layout to the view/layout slice, preserving the decided second-class semantics; no two-word view ABI is frozen. Address-space selection is explicit profile metadata, including program-memory text: no silent cast to data pointers. `Secret<T>` has T's layout, without implying constant time.
+---
+> **Rule:** native structs retain declaration order, each field rounded up to its alignment, aggregate alignment the maximum (1 for empty), and final size rounded up. Empty aggregates have size 0/alignment 1. Arrays have size `n × size(T)` and alignment `align(T)`, including `n = 0`. Fixed-width integer storage respects value width; alignment is target-defined. Q4.5 decides only StaticStr’s explicit pointer/byte-length FFI adapter, without an internal ABI promise. Q3.1–Q3.4 and Q4.6–Q4.7 decide view roots, loans and ranges, not their physical representation. Text length counts UTF-8 bytes. TYPE-3 Text owns immutable bytes, never aliases another value’s buffer, and is linear. Its ownership, allocator dependency and sufficient release context must survive representation; Q4.5’s FFI adapter does not fix Text’s internal size. No universal two-word Text layout is frozen. A common shared/mutable view representation is a proposal, not a decided rule. Defer its concrete layout to the view/layout slice, preserving the decided second-class semantics; no two-word view ABI is frozen. Address-space selection is explicit profile metadata, including program-memory text: no silent cast to data pointers. `Secret<T>` has T's layout if question 18 approves it; layout never implies constant time.
+155c155
+< **Qualification (P4):** run LLVM, LCB and the hybrid Core Lean evaluator on **every supported example and controlled test**, with the same input bytes, target/layout profile, grant configuration and compatible scripted external responses. Frontend certificates bind this Core program to the source; representation simulations relate its raw-byte/layout observations to both native paths. For each native run, check that its complete trace is an allowed observation of a Core execution under those inputs: this is a refinement check. Exposed stack addresses and initialized padding can differ between correct LLVM and LCB runs; find and validate a separate admissible Core choice witness for each, without normalizing away raw observations. Native execution cannot be forced to follow the evaluator’s oracle. Require exact equality where behavior is deterministic. Failed witness search is inconclusive unless exclusion is proved. Compare complete observations: ordered requests/responses/output, terminal classification, trap kind/site/line and observable final external state. Use bounded scripted environments for effectful/blocking cases. Report unsupported or inconclusive runs explicitly; do not count `outOfFuel` as agreement or divergence. Compare leakage separately where the claimed backend evidence supports it. Never require arbitrary user programs to execute three times. Tests qualify implementations; the LCB path is **proved under named premises**, and LLVM remains unverified. Keep the two premise sets separate.
+---
+> **Qualification (P4):** run LLVM, LCB and the hybrid Core Lean evaluator on **every supported example and controlled test**, with the same input bytes, target/layout profile, grant configuration and compatible scripted external responses. Frontend certificates bind this Core program to the source; representation simulations relate its raw-byte/layout observations to both native paths. For each native run, check that its complete trace is an allowed observation of a Core execution under those inputs: this is a refinement check. The decided backend-order rule stays: LLVM and LCB full observations must equal each other and the expected outcome on every supported example, and any mismatch fails (question 17). Supported examples therefore do not observe allocation-dependent values such as exposed addresses or initialized padding. Native execution cannot be forced to follow the evaluator’s oracle, so the Core check finds and validates an admissible choice witness per native run, without normalizing away raw observations. Qualifying programs that legitimately observe such values is decided at slice 24. Failed witness search is inconclusive unless exclusion is proved. Compare complete observations: ordered requests/responses/output, terminal classification, trap kind/site/line and observable final external state. Use bounded scripted environments for effectful/blocking cases. Report unsupported or inconclusive runs explicitly; do not count `outOfFuel` as agreement or divergence. Compare leakage separately where the claimed backend evidence supports it. Never require arbitrary user programs to execute three times. Tests qualify implementations; the LCB path is **proved under named premises**, and LLVM remains unverified. Keep the two premise sets separate.
+191c191,193
+< **Q17. Differential qualification.** Recommend P4’s per-native-trace refinement check against allowed Core observations on every supported controlled example/test, with exact equality for deterministic behavior. Keep exposed addresses and padding as real observations; allow separate validated Core choice witnesses. Runner-up: staged coverage until witness validation is executable, explicitly reporting unsupported/inconclusive cases. Codex’s round-2 objection to mandatory equality is accepted; Kimi and agy’s agreement with draft 2 does not solve native choice matching. Preserve the decided two-backend comparison; testing never replaces proof.
+---
+> **Q17. Differential qualification.** Recommend keeping the decided [backend-order](../docs/decisions.md#decided-project-pipeline-2026-11-06) rule unchanged: on every supported example, LLVM and LCB full observations must equal each other and the expected outcome, and any mismatch fails. Add, on top of it, the check that each native trace is an allowed observation of the Core semantics. Supported examples must not observe allocation-dependent values (exposed addresses, initialized padding), so equality stays meaningful. How to qualify programs that legitimately observe such values (raw pointers, slice 24) is an open question for that slice, not relaxed now. Runner-up: relax cross-backend equality to per-backend refinement for such programs now, which revises the backend-order row. Kimi found draft 3 relaxed that decided rule without registering it; this fixes that.
+> 
+> **Q18. Secret<T> layout.** Recommend that `Secret<T>` has exactly the layout of T (zero-cost wrapper). Layout does not establish constant time; the information-flow rules do. The [information-flow decision](../docs/decisions.md#decided-project-infoflow-2026-11-06) covers typing, Copy, wiping and leakage, not representation, so this is a new rule (Kimi, round 3). Runner-up: an opaque representation fixed per slice. All three reviewers chose identical layout in the earlier step-3 round.
+
+exec
+/bin/bash -lc "rg -n 'backend|Secret|allocation|layout|LLVM|LCB' docs/decisions.md" in /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/found10/codex
+ succeeded in 0ms:
+42:- The spec layout: one library in modules ([row](#decided-project-long-term-2026-11-06)).
+44:- The LCB joins slice 0 ([row](#decided-project-proof-infrastructure)).
+50:- Secrets, noninterference and constant time ([row](#decided-project-infoflow-2026-11-06)).
+54:- Trap line, default layout and spec version ([row](#decided-project-runtime-2026-11-06)).
+122:These items were undesigned when the chapters were cleaned up on 2026-11-03. **The owner approved their design provisionally on 2026-11-05** ([the decided rows](#decided-2026-11-05-core): allocator identities Q1, allocation contracts Q1–Q2, the heap-array view Q3, static text Q4, capability inference Q5, unsafe contracts Q3.7–Q3.12, static refusal Q6, grants Q7, semantic objects Q8–Q9). Where a chapter still says **undecided: see the target Core proposal**, read the decided row; the rule is rewritten in Lean at stage A2b and frozen at A2c. The proposal is owned by
+127:  callbacks, and lifetime-safe release metadata; the allocation decision's conservation and no-live-
+128:  allocation requirements stand, but the discipline expressing them, undecided on 2026-11-03, is provisionally decided by rows Q1.1–Q1.13 ([rows](#decided-2026-11-05-core)).
+129:- <a id="core-allocation-contracts"></a>[Core-session question 1–2](../ROADMAP.md#questions-for-the-core-session). **Allocation contracts:** failure payload shapes and complete
+130:  growth, reserve and multi-allocation transition contracts; applicability of container `Destroy`
+135:  allocator-branded strings, undecided on 2026-11-03, are provisionally decided by rows Q4.1–Q4.6 ([rows](#decided-2026-11-05-core)); static text requires no allocation.
+146:- <a id="core-semantic-contract"></a>[Core-session question 8–9](../ROADMAP.md#questions-for-the-core-session). **Semantic objects:** exact events, admissible allocation oracles,
+162:| TYPE-10, OWN-13 | [Complete conserving failure contracts and container Destroy applicability](#core-allocation-contracts) |
+163:| MEM-5, MEM-7 | [Allocator identity introduction, dependency discipline and release metadata](#core-allocator-identities); MEM-5 also needs [failure payload contracts](#core-allocation-contracts) |
+200:- **Q1.9** What do allocation failures contain? — `AllocFailure<T>` returns rejected `T`; operation-specific recovery.
+206:- **Q2.2** Which containers implement `Destroy`? — Exactly sixteen named Destroy impls: Array (T: Destroy); Heap, HeapArray and Vec (two each: T: Copy; T: Destroy); String (unconditional); Option (T: Destroy); Result (three: T: Destroy/E: Copy, T: Destroy/E: Destroy, T: Copy/E: Destroy); OrderedMap (four: each of K and V Copy or Destroy). HashMap excluded. <a id="q2-2-revision"></a>Revised 2026-11-06 by [information flow](#decided-project-infoflow-2026-11-06): `Secret<T>` is `Copy` only for scalar `T`; secret arrays and heap secrets are linear and their destruction wipes them.
+260:- **Q8.7** What prevents vacuous correctness? — Coverage, realizable witnesses and rejection controls; a spec where every allocation fails fails qualification.
+274:- **Q9.14** What must pass before Core freezes? — Provisional approval, then four kernel-checked theorems against a proposed Spec.lean, then freeze. Revised 2026-11-06 by the [long-term changes](#decided-project-long-term-2026-11-06): the integration stage A2i (interaction proofs, semantic contract, modular layout, owner view, outside-reader pass) also passes before the freeze.
+279:- **Q9.19** How do approval, formalization and Core freeze relate? — A2a → A2b → A2c; Spec.lean headed PROPOSED until freeze; R-0560 depends on the freeze. *Revises or adds: Process: owner decision.* Revised 2026-11-06 by the [long-term changes](#decided-project-long-term-2026-11-06): integration (A2i) comes between A2b and the A2c freeze, and the modular layout (R-0560) precedes the freeze.
+303:- **P20** One home for binding decisions — Move the still-binding roadmap decisions (new compiler, retention contract, authority, allocation, Lean as the spec) into docs/decisions.md beside your language answers. The dated log becomes history; ROADMAP.md links to decisions.md and restates nothing.
+365:  imports it and builds a proved lowering chain below Core; slice 1 gets a BIR → LLVM printer
+367:  [proof infrastructure](#decided-project-proof-infrastructure): slice 0 gets the first BIR → LLVM
+369:  the Lean Compiler Backend joins slice 0 as a second unverified backend. Std, examples and tests migrate to the
+436:  and to lean backend we created right"; "and then we can do end to end proof"; Claude and Codex agree).
+441:    unverified native builds, LLVM and the Lean Compiler Backend (revised 2026-11-06; see *Backend
+483:  - *Backend order* (revised 2026-11-06 by the owner: the LCB joins slice 0; relayed by the orchestrator from the owner session: asked
+484:    whether the LCB should join slice 0, unverified, with its adapter proven early and an ARM CI job,
+485:    the owner answered "yeah the lean compiler backend should be added i think right?", after stating
+487:    in llvm and lean compiler backend where we prove lean compiler backend in the futgure right"). From slice 0, every
+488:    supported example is built through two unverified backends, BIR → LLVM and BIR → LCB-IR → the
+489:    Lean Compiler Backend, each labelled unverified. BIR is a complete backend contract designed for
+491:    backend. CI builds and runs each example through both and compares their full observations
+493:    with each other and with the expected outcome; any mismatch fails. The LCB output runs natively
+499:    Proofs then come in this order: the BIR → LCB-IR adapter's refinement proof is the first backend
+501:    LCB's theorems for the supported subset; native proof closure through the LCB for the profile
+502:    follows the pilot. LLVM and LCB claims have separate assumption inventories, and the end-to-end
+503:    theorem names their premises separately; proving the BIR → LCB adapter removes that adapter
+504:    obligation only when composed with the applicable LCB theorems, and the LLVM profile stays
+507:    BIR → LLVM printer; slice 1 extends the same path) and strengthens the proof-order row's minimal
+516:  - *Revised 2026-11-06* by the [long-term changes](#decided-project-long-term-2026-11-06): the backend
+517:    order gains a bounded BIR → LCB → native pilot after slices 0 and 1, and per-compilation
+520:    by the owner: the LCB joins slice 0 as a second unverified backend, and its adapter is the first
+521:    backend proof target (*Backend order* above). This revises the new-compiler row's single
+522:    slice-0 BIR → LLVM printer in the same way.
+525:  changes below (A2i before the freeze, the LP0 LCB pilot, certificates, the modular specification
+537:  - *Bound the LLVM hole* (revised 2026-11-06 by the owner: the LCB joins slice 0, quoted in the
+538:    [backend order](#decided-project-proof-infrastructure)). The LCB runs
+539:    unverified beside LLVM from slice 0, and its BIR → LCB-IR adapter is the first backend proof
+540:    target ([backend order](#decided-project-proof-infrastructure)). After B0 and B1 (the slices
+543:    LCB's theorems for the supported subset and with the slice theorem under named premises, kept
+544:    separate from the LLVM premises. Every remaining backend obligation has its own task and
+545:    milestone. "The holes only shrink" prevents regression; this rule requires progress. The LLVM
+550:    validators, without trusting native evaluation; the backend input is bound to that BIR (a digest
+553:    programs compiled through the LCB does not by itself verify execution of the compiler. This
+560:    (R-0555) and the modular layout (R-0560) are delivered before the freeze. The outside-reader check
+635:    boundaries (established termination, a recursion depth or stack bound, no abort, no allocation,
+706:  conditional on their named assumptions (the unverified LLVM path among them).
+711:  establish: the capabilities used and the grants and resources actually reachable; allocation and
+743:    explicit `abort`, allocation failure, stack exhaustion and foreign behaviour. Determinism,
+769:  Admission requires established evidence of no allocation, no blocking and no foreign calls; an
+773:  trigger by this decision; unlike R-0220's draft it admits no allocation at all, bounded or not.
+779:  revision, toolchain pin and target give byte-identical output: the BIR, LLVM IR text, LCB job and
+780:  output, and final binary (R-0577). The toolchain pin covers the nix flake, LCB revision and
+781:  LLVM/clang version. Artifacts contain no timestamps, absolute paths or host names
+832:  (R-0594); the analysis, its theorems and the policy entries come with the allocation slice
+834:- <a id="decided-project-infoflow-2026-11-06"></a>**Secrets, noninterference and constant time**
+838:  binary only under named backend premises. The surface is the type `Secret<T>`, with `classify`,
+841:  container lengths are public, and a secret length is refused. `Secret<T>` is `Copy` only for
+845:  interface is fixed in A2i (R-0592); `Secret<T>` lands as its own slice with its proofs (R-0596).
+849:  `Secret<T>` at slice 7 and gains fill-bytes at slice 15, with its source named as a trusted premise
+864:    Memory CFG (layout, ABI, byte and provenance memory) → SSA → BIR. BIR is a complete backend
+865:    contract: layout, endianness, calling convention, trap kind and site, and the frame-accounting
+867:  - *Backends.* From BIR, an unverified LLVM printer, and the BIR → LCB-IR adapter (the first
+868:    backend proof) feeding the Lean Compiler Backend on AArch64, proved later. Both run from slice
+869:    0, and CI compares their full observations ([backend order](#decided-project-proof-infrastructure)).
+871:    and elaboration, sequencing, cleanup, representation lowering and BIR → LCB-IR. Proved
+873:    allocation and linking. After slice 0, per-edge certificates replace the whole-compiler
+875:  - *The theorem.* The end-to-end theorem has named premises, with the LLVM and LCB premises
+893:  (source, every stage, BIR, both backends, facts and diagnostics, conformance examples) before
+896:  [backend order](#decided-project-proof-infrastructure) permits: the source-to-BIR stages are
+897:  proved; the LLVM build stays unverified and qualified by tests; the LCB path carries named premises
+898:  until its proof lands (the adapter first, then LP0), the two backends' premises kept separate.
+905:  `Secret<T>` output under the [randomness decision](#decided-2026-11-07-stack-randomness);
+916:  backend evidence; a step bound is not a wall-clock deadline.
+929:  Each showcase states its functional, resource, authority and backend claims separately. Codex and
+951:  backend and target, and is report-only until the noise is understood.
+957:    measured from the final binary on both backends. An unknown bound, or one over the
+961:    with capabilities at slice 6. Its output is `Secret<T>` at slice 7, and fill-bytes arrives with
+966:    kernel, LLVM printer and LLVM, LCB's MIR→assembly step, linker, OS and named runtime premises.
+969:  - *Sanitizers.* From slice 0, every example's LLVM output is also built and run under
+1029:- <a id="decided-project-runtime-2026-11-06"></a>**Trap line, default layout and spec version** (owner, 2026-11-06: "ok do everything", after Claude, Codex, agy and Kimi chose unanimously).
+1033:  - *Default struct layout:* declaration order, natural alignment defined exactly per target, the
+1152:| OD37 | <a id="od37"></a>The names of the pointer difference and ordering functions (added 2026-10-29, while recording OD26). Options: `ptr::diff(p, q) -> Int` and `ptr::cmp(p, q) -> Ordering` beside `ptr::offset`; or no ordering at all, only `ptr::addr(p)` (via `ptr::expose`) compared as integers. Recommendation: `ptr::diff` and `ptr::cmp`, both trusted, each with its provenance premise (same allocation) stated as an obligation; Austral has no named pointer-difference or ordering functions, and its `Pointer` and `Address` types are compared with the ordering operators Reviewed pick (2026-10-30, a recommendation that supersedes the recommendation above where they differ): one trusted `ptr::diff` (same-allocation premise), ordering read from its sign, no `ptr::cmp`; specify the representability of its result, one-past pointers included (Q8 is marked agreed in the picks; ROADMAP records no owner answer for it) | trusted code compares raw pointers with `==` and `<` today (bug 322) | bug 322's repair (TYPE-6, TRUST-1) | decided 2026-11-01 by the owner (final set): One trusted `ptr::diff`, ordering from its sign, no `ptr::cmp` |
+1154:| OD39 | <a id="od39"></a>The interface artifact format (added 2026-10-29, while recording OD9). Options: a generated `.coni` text file per module beside the build output; a JSON interface in the build directory; or the `pub` declarations rendered as Concrete source. Recommendation: rendered Concrete source (declarations without bodies), deterministic and reviewable as a diff Reviewed pick (2026-10-30, a recommendation that supersedes the recommendation above where they differ): the `pub` declarations rendered as Concrete source without bodies, generated by the compiler, with an API-diff gate; it also carries private layout, impl methods, attributes, constants, capabilities and generic bodies, and is not read as FFI-6 bodyless foreign bindings | the compiler has the declaration-level `FileSummary` and `--report interface`, but no persisted per-module interface artifact and no API-diff gate of the proposed form | R-0556 (MOD-7) | decided 2026-11-01 by the owner (final set): `pub` decls rendered as Concrete source, compiler-generated, API-diff gate |
+1179:| OD64 | <a id="od64"></a>Raw pointers derived from a borrow (added 2026-10-30, item G19 of the owner picks of that day). Question: What a raw pointer derived from a borrow may do: whether it is valid only while the borrow lives, may escape the borrow block, may be passed to C, and how extern parameters say so. Options: (a) valid only while the borrow lives and never escaping it; (b) the operational loan rules of REF-14 only. Pick (the coordinator's pick after the Kimi, Codex and Grok review of 2026-10-30, a recommendation and not a decision): (a): no returning, no escaping storage (a local `let` inside the block stays allowed), no converting to an integer and no capturing in an outer `defer`; borrow-derived pointers go only to call-only `extern` parameters; C uses it only during a call (memory C keeps must come from an allocation with its own owner); `extern` parameters say call-only (the default) or kept; field pointers come from the same borrow of the whole owner; deferred calls in the block run before the borrow ends; provenance survives copies, offsets, field pointers, helpers and indirect calls; a shared borrow never yields write access; `ptr::expose` is refused on such a pointer; the annotation's syntax gets an LL(1) check. Austral: not checked | no pass assumes `&mut` exclusivity (OD15); REF-14 bounds aliases by their loan | REF-14, TRUST-1, TRUST-3, FFI-3, OWN-12 | decided 2026-10-31 by the owner's rule (every reviewer agreed, as strict as Austral or stricter): Valid only inside the borrow; call-only extern params |
+1198:| OD83 | <a id="od83"></a>The call-site allocator binding in the grammar (added 2026-10-30, item C6 of the owner picks of that day). Question: Whether the grammar gains the call-site allocator binding `f(...) with(Alloc = e)`. Options: (a) add it to the grammar; (b) remove it from the parser, so the language loses the form; (c) keep the recorded divergence for now. Pick (the coordinator's pick after the Kimi, Codex and Grok review of 2026-10-30, a recommendation and not a decision): individual review required; no pick recorded. Austral: not checked | the parser accepts it | TRUST-4, MEM-5, SYN-1 | decided 2026-11-01 by the owner (final set): No call-site binding `f(...) with(Alloc = e)`. Under the authority decision, one allocator form per target: hosted, `with(Alloc)` and no allocator value; freestanding, an `Arena` parameter plus `with(Alloc)`. Revised 2026-11-02 by the owner's rule: one form on every target, an `Allocator<A>` value plus `with(Alloc)` ([decisions](decisions.md#decided-2026-11-02-allocation)) |
+1210:| OD95 | <a id="od95"></a>What `Time`, `Env`, `Process` and `Alloc` mean (added 2026-10-30, raised while absorbing CALLABLE_VALUES and HANDLE_CAPABILITIES). Question: What authority each of `Time`, `Env`, `Process` and `Alloc` names. Bears on TRUST-D1, TRUST-4. The current compiler: no document states them; HANDLE_CAPABILITIES §2 defined `Console`, `File` and `Network`, and SAFETY.md `Random` (TRUST-D1). std requires `Time` for its clock and sleep functions, `Env` for environment variables and for `std.net`'s `bind` and `connect`, `Process` for exit, spawn, wait and kill, and `Alloc` for heap allocation. Options: state each as std uses it, or narrow or split it (std's `Env` on socket functions is the case to settle). Austral: not applicable (capabilities are values). Pick: none given (raised by the absorption of 2026-10-30). | see OPEN-95 | see OPEN-95 | decided 2026-11-01 by the owner (final set): State each; move socket `bind`/`connect` from `Env` to `Network` |
+1229:| OD114 | <a id="od114"></a>How integer division rounds (added 2026-10-30, from the Codex and Kimi review of the absorption). Question: How an integer division that does not abort rounds its quotient, and which sign a nonzero remainder takes. Bears on ARITH-3. The current compiler: the quotient is truncated toward zero and a nonzero remainder has the sign of the dividend, as C99 and LLVM's `sdiv` and `srem` give (`-7 / 2` is `-3`, `-7 % 2` is `-1`, `7 % -2` is `1`), in the binary, the interpreter and the constant folder (`IntArith.evalIntBinOp`). The archived [ARITHMETIC_POLICY.md](../legacy/docs/archive/design-records/ARITHMETIC_POLICY.md) states when division aborts (§5) but not how it rounds. Options: (a) truncation toward zero, as in the current compiler; (b) floored division, the remainder taking the divisor's sign; (c) Euclidean division, the remainder never negative. Austral: not checked. Pick: none given (raised by the Codex and Kimi review of the absorption, 2026-10-30). | the quotient is truncated toward zero and a remainder has the dividend's sign (C99) | ARITH-3 | decided 2026-10-31 by the owner's rule (every reviewer agreed, as strict as Austral or stricter): Truncation toward zero |
+1237:| OD122 | <a id="od122"></a>A `repr(C)` struct returned from an extern function (added 2026-10-30, raised while absorbing the platform and stdlib documents). Question: Whether a `#[repr(C)]` struct returned from an `extern fn` is returned as the platform's C calling convention returns it, at every size. Bears on FFI-2, FFI-11. The current compiler: a returned struct of at most 8 bytes comes back as one 64-bit integer, stored as 8 bytes into the struct's slot even when the struct is smaller (a 4-byte `in_addr` returned by `inet_makeaddr` reads back wrong natively); a larger one is returned as an LLVM aggregate, which matches C on x86-64 and AArch64 only for some layouts. [ABI.md](../legacy/docs/platform/ABI.md) promised returns of at most 8 bytes and listed larger ones as not promised. Options: (a) every size, as C, classified by the `Layout` authority (R-0502); (b) at most 8 bytes (or 16), a larger return refused in an `extern fn` signature; (c) none, a returned struct going through an out-pointer the binding declares. Austral: not checked. Pick: none given (raised by the absorption of docs/platform and docs/stdlib, 2026-10-30). | see OPEN-122 | see OPEN-122 | decided 2026-11-01 by the owner (final set): Every size per C ABI via `Layout` |
+1239:| OD124 | <a id="od124"></a>Profiles in the specification (added 2026-10-30, raised while absorbing the platform and stdlib documents). Question: Whether the profiles (the admission profiles Safe, Predictable and Proof, and the build profiles) belong to the language specification, in a chapter of their own, and whether a profile may change what an accepted program does. Bears on ARITH-9, OPEN-97, PASS-3, PASS-4. The current compiler: a profile only refuses or reports: `--check predictable` reports its five gates (no recursion, bounded loops, no allocation, no extern calls, no `File`, `Network` or `Process`), `[policy] predictable = true` in `Concrete.toml` turns a violation into E0610, and no profile changes the behaviour of a program it accepts; ARITH-9 states that for arithmetic. [PROFILES.md](../legacy/docs/platform/PROFILES.md) says a profile never changes what a program means, while OPEN-97 asks whether a build profile may omit a run-time check. Options: (a) no profiles chapter: profiles are tooling, and the spec states only that no profile changes an accepted program's behaviour; (b) a profiles chapter whose entries state each profile's admission rules as refusals, with that same guarantee; (c) as (b), with build profiles allowed to differ as OPEN-97 decides. Austral: not checked. Pick: none given (raised by the absorption of docs/platform and docs/stdlib, 2026-10-30). | see OPEN-124 | see OPEN-124 | decided 2026-11-01 by the owner (final set): Profiles chapter of refusals; no behaviour change |
+1246:| OD131 | <a id="od131"></a>`union` declarations (added 2026-10-30, raised while absorbing the compiler documents and the grammar comments). Question: Whether the language has `union` declarations, and if so what reading a field other than the one last written means. Bears on SYN-1, TYPE-7, FFI-7 and FFI-8. The current compiler: `union U { a: Int, b: Uint }` parses (`Concrete/Frontend/Parser.lean`, as a struct whose fields share storage) and compiles; a value built as `U { a: 42 }` is linear, and `union` is neither a keyword nor in the grammar. No document specifies it. Options: (a) remove it; (b) keep it, for the foreign boundary only, with its layout and read rules specified. Austral: no unions. Pick: none given (raised by the absorption of docs/compiler, 2026-10-30). | see OPEN-131 | see OPEN-131 | decided 2026-10-31 by the owner's rule (every reviewer agreed, as strict as Austral or stricter): Remove |
+1256:| OD141 | <a id="od141"></a>More than one `main` in a program (added 2026-10-30, raised by the spec quality audit of 2026-10-30). Question: Which function is the entry point when more than one module of a program declares `main`. Bears on STMT-7, MOD-3 and PASS-10. The current compiler: `mod a { pub fn main() -> u8 { return 7; } }` beside `mod b { pub fn main() -> u8 { return 9; } }` fails natively inside LLVM (`redefinition of global '@__concrete_argc'`) and prints 7 under `--interp`, which runs the first, also when the second `main` is the root module's; MOD-3 makes a name unique within one module only. Options: (a) only the root module's `main` is the entry point, and others are ordinary functions; (b) a program with more than one `main` is refused; (c) a `main` outside the root module is refused. Austral: not checked. Pick: none given (raised by the spec quality audit, 2026-10-30). | see OPEN-141 | see OPEN-141 | decided 2026-11-01 by the owner (final set): A `main` outside the root module is refused |
+1257:| OD142 | <a id="od142"></a>`X.con` beside `X/mod.con` (added 2026-10-30, raised by the spec quality audit of 2026-10-30). Question: Which file `mod X;` loads when both `X.con` and `X/mod.con` exist. Bears on MOD-4. The current compiler: `X.con` is loaded and `X/mod.con` is ignored without a diagnostic (with `X.con` returning 7 and `X/mod.con` 9, the program exits 7 on both consumers). MOD-4 says one module is loaded from either file. Options: (a) refuse the pair; (b) `X.con` takes precedence, as the current compiler does; (c) `X/mod.con` takes precedence. Austral: not checked. Pick: none given (raised by the spec quality audit, 2026-10-30). | see OPEN-142 | see OPEN-142 | decided 2026-11-01 by the owner (final set): One module layout: `X.con`, children in directory `X/`; no `mod.con` |
+1262:| OD147 | <a id="od147"></a>`repr(C, packed)` together (added 2026-10-30, raised by the spec quality audit of 2026-10-30). Question: Whether `#[repr(C, packed)]` is accepted, and what layout it gives. Bears on FFI-4 and FFI-8. The current compiler: accepted: `#[repr(C, packed)] struct Copy P { a: u8, b: u32 }` has size 5, so packing overrides C alignment. FFI-4 refuses only `packed` with `align(N)`, and FFI-8 states C layout and packed layout separately. Options: (a) refuse the combination; (b) accept it as C field order with no padding and alignment 1, as the current compiler does, and FFI-8 says so. Austral: not checked. Pick: none given (raised by the spec quality audit, 2026-10-30). | see OPEN-147 | see OPEN-147 | decided 2026-11-01 by the owner (final set): Accept: C order, no padding, align 1, stated in FFI-8 |
+1269:| OD154 | <a id="od154"></a>Whether the string builtins require `Alloc` (added 2026-10-31, raised while reviewing the builtins catalog of spec readability 2). Question: Whether `string_concat`, `string_slice`, `string_substr`, `string_trim`, `int_to_string`, `bool_to_string`, `float_to_string`, `string_push_char`, `string_append`, `string_append_int` and `string_append_bool` require the `Alloc` capability. Bears on MEM-7, TRUST-4 and OPEN-133. The current compiler: Check gives none of these builtins a capability, and a function with no capabilities calls `string_concat` and `string_append_int` and exits 42 on both consumers (the other names were not probed). MEM-7@1 lists `string_reserve` and `append` among the builtins that require `Alloc`; `append` is accepted without `Alloc` (bug 349), and it expands into `string_append`, `string_append_int`, `string_append_bool` and `string_push_char`. MEM-7's rationale says allocation is an effect a signature shows. Options: (a) each builtin named above requires `Alloc`, and MEM-7 lists it; (b) a stated subset of them requires `Alloc`, and MEM-7 lists that subset; (c) only the builtins MEM-7 already lists require `Alloc`, so `string_reserve` and `append` do and the names above do not, and MEM-7 says so; (d) no string builtin requires `Alloc`, `string_reserve` and `append` included, and MEM-7 drops those two. Austral: not checked. Pick: none given (raised while reviewing the builtins catalog of spec readability 2, 2026-10-31). | see OPEN-154 | see OPEN-154 | decided 2026-11-01 by the owner (final set): Allocating string builtins need `Alloc` (MEM-7; closes bug 349) |
+1337:   block" are a conservative table over the capabilities, which also covers allocation, destruction
+1378:<a id="decided-2026-11-02-allocation"></a>**Allocation** (revises OD83, the former authority rule 10
+1381:- **One allocation form on every target**: an allocator value plus `with(Alloc)`. A hosted target hands
+1382:  `main` the system allocator; a freestanding target hands it its arenas. There is no allocation by
+1400:  (OD154) take an allocator and report failure; static text needs no allocation.
+1427:  allocator, requires `with(Alloc)` and no live allocation or conflicting loan from it, and returns an
+1465:  allocation may still be alive at registration only if the cleanup removes it before its allocator is
+
+exec
+/bin/bash -lc "sed -n '483,506p;834,850p;1029,1044p' docs/decisions.md" in /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/found10/codex
+ succeeded in 0ms:
+  - *Backend order* (revised 2026-11-06 by the owner: the LCB joins slice 0; relayed by the orchestrator from the owner session: asked
+    whether the LCB should join slice 0, unverified, with its adapter proven early and an ARM CI job,
+    the owner answered "yeah the lean compiler backend should be added i think right?", after stating
+    "the objective is to have a first slice of the compiler fully proven with the full best pipeline
+    in llvm and lean compiler backend where we prove lean compiler backend in the futgure right"). From slice 0, every
+    supported example is built through two unverified backends, BIR → LLVM and BIR → LCB-IR → the
+    Lean Compiler Backend, each labelled unverified. BIR is a complete backend contract designed for
+    both from its first definition: no BIR construct, invariant or lowering choice depends on one
+    backend. CI builds and runs each example through both and compares their full observations
+    (exit status, the trap line, startup refusal, later the event traces), never exit codes alone,
+    with each other and with the expected outcome; any mismatch fails. The LCB output runs natively
+    on a GitHub-hosted AArch64 macOS runner, the platform of the first native proof profile
+    ([targets](../ROADMAP.md#targets)), free for this public repository. Rejected: qemu-user on
+    concrete-ci-2, which would add an unmodelled emulator to the execution trust and runs only Linux
+    binaries; a hosted Linux AArch64 runner, which is not the proof profile's platform; and a
+    self-hosted ARM machine, which does not exist (and self-hosted runners never run pull requests).
+    Proofs then come in this order: the BIR → LCB-IR adapter's refinement proof is the first backend
+    proof target, right after the front-end and lowering proofs; the LP0 pilot composes it with the
+    LCB's theorems for the supported subset; native proof closure through the LCB for the profile
+    follows the pilot. LLVM and LCB claims have separate assumption inventories, and the end-to-end
+    theorem names their premises separately; proving the BIR → LCB adapter removes that adapter
+    obligation only when composed with the applicable LCB theorems, and the LLVM profile stays
+    unverified.
+  - *What it revises.* It amends the new-compiler row (slice 0, not slice 1, gets the first
+- <a id="decided-project-infoflow-2026-11-06"></a>**Secrets, noninterference and constant time**
+  (owner, 2026-11-06: "a", option (a) on every question of the [proposal](archive/crucial-2026-11-06/INFOFLOW.md), reviewed
+  by Codex, agy and Kimi). Noninterference and constant time are two separate claims (authority
+  rule 14), each a theorem about the source semantics of every accepted program, holding at the
+  binary only under named backend premises. The surface is the type `Secret<T>`, with `classify`,
+  `declassify(x, "reason")`, `ct_select` and `ct_eq`; a `declassify` is traced in the facts like a
+  `#[may_not_terminate]` permission. Control flow on a secret is refused (write `ct_select`);
+  container lengths are public, and a secret length is refused. `Secret<T>` is `Copy` only for
+  scalar `T`; secret arrays and heap secrets are linear and wiped on destroy, which revises
+  [Q2.2](#q2-2-revision). The observer model is the baseline constant-time model (branches, exact
+  addresses, variable-time operations); speculative leakage is not covered. The leakage-trace
+  interface is fixed in A2i (R-0592); `Secret<T>` lands as its own slice with its proofs (R-0596).
+  Its sources include the pure `classify` of a value passed in; grant-backed sources come with the
+  console, files and network ([vertical slices](#decided-project-vertical-slices-2026-11-06)).
+  Revised 2026-11-07 by the [randomness decision](#decided-2026-11-07-stack-randomness): the entropy capability arrives at slice 6, yields
+  `Secret<T>` at slice 7 and gains fill-bytes at slice 15, with its source named as a trusted premise
+  in facts.
+- <a id="decided-project-runtime-2026-11-06"></a>**Trap line, default layout and spec version** (owner, 2026-11-06: "ok do everything", after Claude, Codex, agy and Kimi chose unanimously).
+  - *The trap line* ([OD101](#od101)'s form, spec obligation O4): `concrete: trap: <kind> at
+    <path>:<line>:<col> (site <id>)`, the path relative to the project root with forward slashes,
+    line and column 1-based.
+  - *Default struct layout:* declaration order, natural alignment defined exactly per target, the
+    size rounded up to the alignment, and zero-sized fields taking no bytes. It is not a C ABI
+    promise (R-0502).
+  - *Spec version:* every output carries one `spec_version`, in one header covering every record
+    (JSON lines included): 0.x before the freeze, 1.0 at A2c, bumped by every normative change and
+    checked in CI. It is distinct from the product's 1.0 (R-0603).
+- <a id="decided-project-lean-root"></a>**A minimal root** (owner, 2026-11-06: "keep the folders and
+  root of the new compiler simple and lean"). The root and the new compiler's folders stay small:
+  the top-level entries and the immediate entries under `docs/` and `scripts/` are those listed in
+  [scripts/checks/root_inventory.txt](../scripts/checks/root_inventory.txt), which a root check
+  enforces, and something comes back from `legacy/` only in the change that needs it. This keeps the
+  [restart](#decided-project-restart)'s minimal day-one root (R-0558) after the move.
+
+codex
+ANSWER: OK
+tokens used
+18,563
+ANSWER: OK

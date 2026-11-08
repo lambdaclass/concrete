@@ -1,0 +1,123 @@
+kimi version 2.4.1
+• I need modify repo structurally. Should inspect. Should comply owner review instruction perhaps need tell reviewers best long term via review.sh? Task says commit local gates etc. Should read relevant files and AGENTS. Should have current status. I should plan internally TodoList multi-step. Should have no subagents unless asked no. I need inspect doc_links.py sh tests controls changelog git status. Use tools parallel read known files plus Bash status perhaps glob nested AGENTS? Current root AGENTS given. Should check scripts/AGENTS etc via Glob. Also no full-access review? I have task. Should run gates exactly timeout 1500 systemd... eventually. Local commit allowed explicit. Should prove mutations temporarily, careful not leave. Should understand project.
+
+  I can say "I’ll trace every fallback in the DOC-LINKS path, make failures explicit, then exercise each control with temporary mutations before running the full gate set." Then TodoList and parallel calls.
+
+• I’ll trace each DOC-LINKS fallback, make genuine failures fail closed, and prove the controls with temporary mutations before running the full gate set.
+
+## wip/legacy-sweep-2...origin/wip/legacy-sweep-2
+• Should understand legacy_lock read, existing patterns errors git fail closed in other scripts, controls for git wrappers perhaps fake git. Should inspect lib.
+
+• The defect is confirmed: both `ls-tree` failures and a failed `git ls-files` currently degrade to a smaller scan. I’m checking the lock parser and neighboring gate conventions so legitimate no-lock/no-repository cases remain explicit without hiding operational failures.35b489e49 (HEAD -> wip/legacy-sweep-2, origin/wip/legacy-sweep-2, lambdaclass/wip/legacy-sweep-2) fix sandbox probe trusted base to match caller history
+123f03aa8 Fail closed on malformed legacy locks and failed freeze checks
+903fd3dab legacy lock: one strict parser (lib/legacy_lock.py) is its only reader; it refuses NUL, CR, repeated rows, a last line without its newline and any line not exactly a base, tree or sweep row; legacy_frozen.sh and doc_links.py take its rows from it; controls for each refusal, the NUL attack on history, a malformed trusted version, and any other reader (review)
+647cd6bcf legacy_frozen: every read loop reads a last line without a newline (chain dropped an unterminated last sweep row, so a deletion skipped its retention check); controls for each loop and one that keeps new loops honest (review)
+7e306a0d7 legacy_frozen: the header says what the absent-ref fallback trusts on a branch tip
+
+
+• Should design.
+
+  Cases:
+  - no lock: explicit legitimate no lock no swept files. Root tests no lock currently fallback rglob. In repo lock exists. Lock malformed next StopIteration currently uncaught (except ValueError doesn't catch StopIteration), causing traceback no DOC-LINKS summary and nonzero; User asks decide lock without tree row reaching next. It is malformed lock failure, should diagnostic failed step. Legacy_lock parser guarantees tree for valid file, but if tree missing parser raises LockError; `next` defensive unreachable but structurally should no silent/unclear. I can parse tree rows list and if no tree raise custom DiscoveryError "legacy lock has no tree row" perhaps this is genuinely failure. But read always raises if missing tree. Controls perhaps can stub legacy_lock? They specifically mention "same goes for any other silent fallback in this path: a lock without a tree row reaching next(), and a git failure in markdown_files() falling back to rglob. Decide for each whether it is a legitimate 'no repository / no lock' case or a failure. A failure must make the DOC-LINKS result fail, with a diagnostic naming the failed step. Absence that is genuinely legitimate stays explicit and documented."
+
+  - swept_files git ls-tree fails frozen/HEAD => raise custom error with step diagnostic exact. Should choose messages. e.g. `FAIL cannot list the frozen legacy tree <tree>: git ls-tree failed (exit N)` and `FAIL cannot list HEAD:legacy: git ls-tree failed (exit N)`; summary `DOC-LINKS: FAIL=1 CHECKED=0 ANCHORS=0`. Controls exact diagnostic. Likely expected phrasing not predetermined beyond test. Should build robust.
+
+  - markdown_files no .git path fallback rglob is legitimate no repository for controls. If .git exists, git ls-files nonzero raise DiscoveryError `git ls-files failed (exit N)` and summary. No repo fallback explicit doc. .git could be file worktree, exists yes. Bare? root nonrepo with .git? failure. What if git command missing OSError? subprocess.run raises FileNotFoundError currently traceback, no summary. "any other silent fallback in this path" perhaps handle OSError too structural all git failure. Could wrapper function catches OSError and raises StepError with exit? Should have no hidden fail-open. Same lock read OSError currently uncaught main only ValueError -> traceback nonzero, not PASS, but requirement failure DOC-LINKS result fail diagnostic step perhaps include. Focus all discovery failures. Could design custom `DiscoveryError` for all known inability. `swept_files` doc no repo/lock. If no lock returns set even in repo? Legit no lock means no sweep metadata, then no legacy swept files to include; explicit. In no repo but lock present, git ls-tree fails and should fail? User says "Decide for each whether it is a legitimate 'no repository / no lock' case or a failure." A no repo with lock? Lock claims frozen classification requires Git, so no repository is failure if lock present. No lock no repo fallback rglob valid. No lock repo valid? returns no swept. Good.
+
+  - markdown_files currently `.git` check determines git path. In actual linked worktree .git file. Good. Git repo could parent repository but root subdir lacking .git? `--root` seam is tree, should only root. No .git = standalone directory intentional rglob. Legit documented.
+
+  - lock without tree row next(): valid parser prevents. I should avoid next and explicit raise `DiscoveryError("legacy lock has no tree row")`. But because parser raises first, control needs stub parser? Could unit import patch? Existing shell controls can manipulate sys.path? `doc_links.py` imports actual legacy_lock via sys.path insert DEFAULT_ROOT not root. Controls run `python3 -I CHECK`, actual parser. Missing tree in a synthetic lock results LockError from parser exact malformed summary. No direct next after my fix. I can add control missing tree expected `FAIL the legacy lock is malformed` or exact `...:2: missing...`. Requirement specifically mentions it reaching next; structural no next enough. Could control malformed lock without tree row ensures failure. Existing no controls for lock. Add.
+
+  Controls frozen and HEAD lookup each failing exact diagnostic. Should synthetic git repo with lock valid and frozen tree / legacy. Build in doc_links.sh controls. Could initialize repo in temp. Gate currently doesn't source git_sandbox unlike legacy. Controls no git currently. Should use `git_sandbox` to prevent inherited env. I can source only for repo control? It unsets env globally? Read.
+
+• The design split is clear: no lock means there are no recorded sweeps, and a standalone control directory without `.git` may use `rglob`; once a lock or repository metadata exists, discovery failures are errors. A missing `tree` row is malformed-lock failure, not absence.123f03aa8 Fail closed on malformed legacy locks and failed freeze checks
+ scripts/checks/legacy_frozen.sh   | 149 ++++++++++++++++++++++++++++++--------
+ scripts/checks/lib/legacy_lock.py |   7 +-
+ 2 files changed, 124 insertions(+), 32 deletions(-)
+
+
+• Perhaps no review mandatory? AGENTS says every slice Codex review before lands; user asks commit local not land. Owner rule says "ALWAYS tell reviewrs..." likely expects run review? Task specifically full-access review found defect. I should follow branch discipline and perhaps run scripts/review/review.sh before commit? This can require external codex. Should later inspect REVIEW tool if needed. But primary implement.
+
+  I'll formulate exact code. Could introduce `class DiscoveryError(Exception): ...` perhaps subclass ValueError so existing main catches and prints "the legacy lock is malformed" incorrectly if not separate. Better main:
+  ```
+  class DiscoveryError(Exception): pass
+  ...
+  def _git(root,*args):
+   try: r = subprocess.run...
+   except OSError as e: raise DiscoveryError(f"{step} could not run git: {e}") from e
+   if r.returncode !=0:
+     detail = r.stderr.decode(...).strip()
+     suffix = f": {detail}" if detail else ""
+     raise DiscoveryError(f"{step} failed (exit {r.returncode}){suffix}")
+   return r.stdout
+  ```
+  Exact diagnostics controls can be stable if wrapper emits no stderr and exit 42. e.g.
+  `FAIL frozen legacy tree lookup failed: git ls-tree <tree> exited 2`
+  `FAIL current legacy tree lookup failed: git ls-tree HEAD:legacy exited 2`
+  `FAIL Markdown file listing failed: git ls-files exited 2`
+  Summary. "diagnostic naming failed step". Good. Include stderr? Can be multiline injection but not needed. Structural best long-term include underlying stderr helpful but exact control easier. `_git` accepting `step` and args. Keep errors:
+  ```
+  def git_output(root, step, *args):
+    try...
+    except OSError as e:
+        raise DiscoveryError(f"{step}: could not execute git: {e}") from e
+    if r.returncode:
+        detail = r.stderr...strip()
+        message = f"{step}: git {args[0]} exited {r.returncode}"
+        if detail: message += f": {detail}"
+        raise DiscoveryError(message)
+    return r.stdout
+  ```
+  Then controls exact includes fake no stderr:
+  `FAIL frozen legacy tree lookup failed: git ls-tree exited 2`
+  `FAIL HEAD:legacy lookup failed: git ls-tree exited 2`
+  `FAIL Markdown file listing failed: git ls-files exited 2`
+  `DOC-LINKS: FAIL=1 CHECKED=0 ANCHORS=0`. Good.
+
+  `swept_files`:
+  ```
+  tree_rows = [r.split()[1] ...]
+  if len !=1: raise DiscoveryError("legacy lock tree-row lookup failed: lock has no tree row") 
+  tree = tree_rows[0]
+  ```
+  Parser exactly one? Format line 2 tree and others sweeps so exactly. Defensive `if not tree_rows`. Could more than one impossible parser; no need. Avoid next. Error `legacy lock tree lookup failed: the lock has no tree row`. But read malformed gets ValueError handled with old malformed. Fine. To test no tree direct need parser control yields LockError, no DiscoveryError. Main catches LockError specifically instead of ValueError? Import scoped only in function. Could keep except ValueError for LockError. DiscoveryError subclass? separate. `except DiscoveryError` before `except ValueError`. Print `FAIL {e}`. For malformed summary old. OSError lock read? Could handle in swept_files:
+  ```
+  try: rows=legacy_lock.read
+  except OSError as e: raise DiscoveryError(f"legacy lock read failed: {e}")
+  ```
+  Lock is_file can OSError? Path.is_file returns False on some OSError -> treats no lock. This might be silent fallback: inaccessible lock could be is_file false. In Python 3.8 is_file returns false on permission etc. "same goes for any other silent fallback in this path" best long-term no hidden. Should distinguish absence via `lock.exists()`? Also returns false errors. Use `os.stat` catching FileNotFoundError only; other OSError fail. `lock.is_file` conflates non-file with absent. If lock path directory, legitimate no lock? Should be failure because expected file but not regular. Could:
+  ```
+  try:
+    lock.stat()
+  except FileNotFoundError:
+    return set()
+  except OSError as e:
+    raise DiscoveryError(f"legacy lock access failed: {e}")
+  if not lock.is_file(): raise ...
+  ```
+  But `stat` successful dir then read raises IsADirectoryError handled. Simpler `try: rows=legacy_lock.read(str(lock)) except FileNotFoundError: return set() except OSError: raise DiscoveryError("legacy lock read failed...")`. This explicitly no lock only open gets ENOENT. A dangling symlink FileNotFoundError considered absent; arguably no lock. Fine. This eliminates `.is_file` pre-check and race (TOCTOU) structural. No lock open FileNotFound -> no rows. Parser handles empty. Good.
+
+  markdown `.git.exists()` also could permission errors false; no repo detection. Could use `.git` presence via `os.path.lexists`? Path.exists returns false inaccessible. Standard no repo explicit enough? "any other silent fallback in this path" only git ls-files fallback named. Long-term use:
+  ```
+  try:
+      (root / ".git").stat()
+  except FileNotFoundError:
+      return rglob
+  except OSError as e:
+      raise DiscoveryError(f"repository metadata lookup failed: {e}")
+  r = ...
+  ```
+  Path with `.git` dangling symlink stat absent perhaps no repo. `lexists` detects symlink but git fails then fail closed. Could use `os.lstat(root/".git")` and catch FileNotFoundError. Import os. Better no extra import? `Path.lstat()`. 
+  ```
+  try: (root / ".git").lstat()
+  except FileNotFoundError: return rglob...
+  except OSError as e: raise DiscoveryError(...)
+  ```
+  No `.git` standalone -> explicit rglob. `.git` any node -> use git and failures fail. This handles permission. Root missing leads lstat .git FileNotFound -> rglob yields empty PASS (!) root nonexistent. Existing `--root` no repo absent root could pass. Is that in path silent fallback? Could be structural long-term. `--root` nonexistent should fail. I can ensure root.is_dir? Similar failure. Not asked but no corner. Should avoid scope creep. `--root` intended test seam existing. Best long-term discovery should fail if root cannot list. rglob may permission silently? Path.rglob in Python version likely raises? Perhaps handle OSError around file discovery. Main catch OSError too with diagnostic. But user explicitly "same goes for any other silent fallback in this path" lists lock next and rglob. I can focus those and robust subprocess OSError.
+
+  Potential `folded_changelog` returns None on errors fallback read base file. That's another silent fallback in this path? The phrase "same goes for any other silent fallback in this path: a lock without ... and a git failure..." specifically two other. folded_changelog has fallback could hide malformed fragment, but not enumeration? Could broken anchors pass if changelog fold failure and pending fragments headings ignored. A fragment self link might check base file and fail not pass; link into base old heading pass even if fragment parse fails. But out of task? User says "any other silent fallback in this path" likely specifically enumeration. Should not widen beyond asked.
+
+  Should have controls. Existing `tree` creates no `.git` and no lock, tests rglob. Add control for legitimate no lock maybe existing positive demonstrates no repo/no lock but explicit named control useful. Add repo control with swept doc valid/broken. Should control requirements:
+  - failing frozen-tree lookup and failing HEAD:legacy lookup each fail exact diagnostic.
+  - swept doc valid passes, broken fails.
+  - mutation proof each control load-bearing temporary mutation and report result. This includes four controls plus maybe ls-files/missing tree. They explicitly controls in gate these 4. Should build repo. Could one repository, with lock and moved doc. I need create base commit containing `legacy` frozen tree not swept file. Then sweep commit? doc_links only tree from lock and HEAD:legacy. Lock can base any 40hex, tree actual tree OID of legacy base. I need valid lock. Base commit initial with `legacy/KEEP.md` and root maybe docs target. Frozen tree = `git rev-parse HEAD:legacy`. Then add swept `legacy/docs/SWEPT.md` containing links. But doc_links `git ls-files --cached --others` reads working tree; HEAD:legacy sees only committed files. Should

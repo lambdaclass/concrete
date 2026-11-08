@@ -1,0 +1,63 @@
+### Review Summary
+
+#### 1. LCB Backend Contract & Theorems (`Concrete/Backend/LCB.lean`, `Concrete/Premises.lean`, `scripts/checks/slice0_bir.lean`)
+* **Theorems & contract**: `LCB.emit` (`Concrete/Backend/LCB.lean:196`) pairs the result of `adapt p` with `p.sites` inside `Except String`. `LCB.artifact` (`Concrete/Backend/LCB.lean:234`) binds `emit p` before calling `assemble`.
+  * `Proof.emit_ok` (`Concrete/Backend/LCB.lean:2010`), `Proof.emit_correct` (`Concrete/Backend/LCB.lean:2023`), `Proof.artifact_of_emit_error` (`Concrete/Backend/LCB.lean:2030`), and `Proof.artifact_correct` (`Concrete/Backend/LCB.lean:2037`) prove the claimed properties: an adaptation error produces no artifact for any target, and any successful emit/artifact preserves BIR semantics under LCB's `Source.HasBehavior` (`bodyResult`) decoded with the emitted `SiteTable`.
+  * The proofs use standard tactics (`unfold`, `cases`, `rw`, `obtain`, `exact`) and depend only on standard axioms (`propext`, `Classical.choice`, `Quot.sound`), matching `tests/golden/slice0_trusted_base.txt:14-16`.
+* **Emitter path**: Both `emit` (`scripts/checks/slice0_bir.lean:63`) and `emitLoop` (`scripts/checks/slice0_bir.lean:88`) go through `LCB.emit` and pass the resulting `(f, tbl)` tuple to `writeBackends` -> `writeLcb`. The only direct caller of `writeLcb` is `emitInvalid` (`scripts/checks/slice0_bir.lean:105`), which is a synthetic negative control for the runtime decoding of an out-of-range word (`257`).
+
+#### 2. `bounded_run` Integration (`scripts/checks/lib/slice0_common.sh`, `scripts/checks/slice0_artifacts.sh`, `scripts/checks/slice0_repro.sh`)
+* All `timeout` invocations in the diff are replaced by `bounded`, which wraps `bounded_run -i /dev/null "$secs" -- ...` and preserves exit codes and `/dev/null` stdin.
+* However, several call sites redirect stderr of the `bounded` shell function itself (or run non-idempotent directory builds under retry), which obscures or alters `INCOMPLETE` reporting on double timeouts (see Finding 3 below).
+
+#### 3. AArch64 macOS LLDB Stack Measurement (`scripts/checks/lib/stack_measure_lldb.py`, `scripts/checks/slice0_artifacts.sh`)
+* There are two **real defects** in `scripts/checks/lib/stack_measure_lldb.py` that will cause the macOS stack measurement check to fail or misbehave when run on Darwin CI (see Findings 1 and 2 below).
+
+#### 4. Documentation Consistency (`Concrete/README.md`, `Concrete/Premises.lean`, `tests/golden/slice0_trusted_base.txt`)
+* The removal of `P_adapter` from `Concrete/Premises.lean`, the README open-premise table (`Concrete/README.md:343-351`), the `Backend`/`NativePremises`/`compile_correct`/`answer_correct` signatures in `Concrete/README.md`, and `tests/golden/slice0_trusted_base.txt` are all mutually consistent, as are the gate 10, 11, and 12 descriptions.
+
+---
+
+### Findings
+
+1. **[Real defect] `scripts/checks/lib/stack_measure_lldb.py:36` — `GetLoadAddress()` is called before `target.Launch()`, returning `LLDB_INVALID_ADDRESS` (`0xffffffffffffffff`)**
+   ```python
+   bp = target.BreakpointCreateByName("main", target.GetExecutable().GetFilename())
+   if bp.GetNumLocations() != 1:
+       raise RuntimeError(f"main has {bp.GetNumLocations()} breakpoint locations")
+   main_rt = bp.GetLocationAtIndex(0).GetLoadAddress()
+   ...
+   process = target.Launch(info, err)
+   ```
+   In LLDB, a target's section load list is not populated until the process is launched (even when `eLaunchFlagDisableASLR` is later set on `SBLaunchInfo`). Calling `bp.GetLocationAtIndex(0).GetLoadAddress()` before `target.Launch(info, err)` returns `lldb.LLDB_INVALID_ADDRESS` (`0xffffffffffffffff`). Consequently, `run()` will immediately fail at `scripts/checks/lib/stack_measure_lldb.py:70-71` with:
+   `first stop at 0x10000..., not main (0xffffffffffffffff)`.
+   *Fix*: Read `main_rt = bp.GetLocationAtIndex(0).GetLoadAddress()` **after** `target.Launch(info, err)` has stopped at `bp` (and verify `main_rt != lldb.LLDB_INVALID_ADDRESS` before deleting `bp`).
+
+2. **[Real defect] `scripts/checks/lib/stack_measure_lldb.py:84-86` — Detecting `main`'s return via `sp > sp0` is an x86-64 assumption that fails on AArch64**
+   ```python
+   if sp > sp0:  # main has returned
+       process.Continue()
+       continue
+   ```
+   On x86-64, `call main` pushes an 8-byte return address onto the stack, so when `main` executes `ret`, `rsp` becomes `sp0 + 8 > sp0`. On AArch64, `bl _main` stores the return address in `lr` (`x30`) without modifying `sp`, and `_main`'s `ret` branches to `x30` with `sp == sp0`.
+   If `_main` ever returns to its caller (`dyld`) instead of terminating inside `_exit`, `sp` after `ret` is `sp0` (not `> sp0`), `pc` is in `dyld` (outside `owned`), and `lr` is still the return address in `dyld` (outside `owned`), causing lines 94–96 to raise `RuntimeError("external code at ... returns to ..., outside the owned code")`.
+   *Fix*: Record `caller_lr = frame.FindRegister("lr").GetValueAsUnsigned()` on entry to `main` (at `main_rt`), and detect return from `main` when `pc == caller_lr and sp == sp0` (or `sp > sp0`).
+
+3. **[Real defect] `scripts/checks/slice0_artifacts.sh:95-101,108,132` and `scripts/checks/slice0_repro.sh:64` — Stderr redirections on `bounded` swallow the `INCOMPLETE` diagnostic**
+   In `slice0_common.sh:38-40` and `slice0_repro.sh:33-35`, `bounded` reports a double timeout via `echo "...: INCOMPLETE (timed out twice): $*" >&2`. However, callers redirect stderr of the `bounded` shell function call itself:
+   * `scripts/checks/slice0_artifacts.sh:95,101`: `bounded 300 "$gdb" ... 2>"$1.gdb.err" | ... || true` (and the `lldb` branch) redirects `bounded`'s stderr into `$1.gdb.err` and ignores the `124` exit code via `|| true`. In `stack_check` (`line 120`), only the first 200 bytes (`head -c 200 "$exe.gdb.err"`) are printed to stdout, so if the debugger prints >=200 bytes to stderr before timing out twice, the `INCOMPLETE` message at the end of `$1.gdb.err` is completely lost.
+   * `scripts/checks/slice0_artifacts.sh:108`: `if ! "${objdump[@]}" "$exe" >"$dis" 2>"$dis.err"` redirects `bounded`'s `INCOMPLETE` message into `$dis.err` (truncated to 300 bytes on stdout).
+   * `scripts/checks/slice0_artifacts.sh:132`: `bounded 60 ... llvm-size "$3" 2>/dev/null || true` discards `bounded`'s stderr to `/dev/null`.
+   * `scripts/checks/slice0_repro.sh:64`: `bounded 3000 lake build ... >"$work/$side/build.log" 2>&1` redirects `bounded`'s stderr into `build.log` (though `tail -50` will usually include the last line).
+
+4. **[Preference] `scripts/checks/lib/stack_measure_lldb.py:59-61` — Allowlist expected stop reasons in `check_live`**
+   `check_live` only rejects `eStopReasonSignal` and `eStopReasonException`. Explicitly requiring `thread.GetStopReason() in (lldb.eStopReasonBreakpoint, lldb.eStopReasonPlanComplete, lldb.eStopReasonTrace)` is more defensive against unexpected stop reasons (e.g., `eStopReasonExec`, `eStopReasonInvalid`).
+
+5. **[Preference] `scripts/checks/slice0_bir.lean:48,73` — Redundant parameters / site lookup after `LCB.emit`**
+   * In `scripts/checks/slice0_bir.lean:73`, after `match LCB.emit p with | .ok (f, tbl) =>`, the `.trapped s` arm still looks up `p.sites[s]?` instead of `tbl[s]?` (they are equal by `emit_ok`, but using `tbl` uses the emitted pair consistently).
+   * In `scripts/checks/slice0_bir.lean:32-46`, `writeLcb` still duplicates the target dispatch instead of calling `LCB.assemble` / `LCB.artifact`, though `emit` and `emitLoop` both gate `writeBackends` on `LCB.emit p = .ok (f, tbl)`.
+
+6. **[Preference] `scripts/checks/slice0_artifacts.sh:141-146` — `compile_times.tsv` includes retry wall time if the first attempt times out**
+   Because `t0`/`t1`/`t2` bracket `bounded`, if `bounded_run` times out once and succeeds on retry, `emit_ms` or `native_ms` measures both attempts combined and can exceed `emit_budget_ms` / `native_budget_ms`. Since `compile_times.tsv` is report-only, this is benign.
+
+VERDICT: REJECT

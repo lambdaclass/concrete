@@ -1,0 +1,1247 @@
+kimi version 2.4.1
+• I need respond to user ask read BRIEF then carry out ROUND2 in current directory. Should inspect files. I have AGENTS lengthy guidance. Must read BRIEF and ROUND2 direct parallel perhaps user says read brief then carry round2. Can read both parallel. Also perhaps FOUNDATION_PROPOSAL language decisions relevant. Should determine task. Start concise note perhaps "I’ll review the brief and round-two instructions, then..." Use tools.
+
+• I’ll review the original brief and round-two requirements, then implement and validate the requested changes.
+
+• Should execute. Should inspect repository status branch base, files, required docs. BRIEF says read first list. Original done but now round2 changes. Should read Prim spec/proof and relevant. Should merge origin/wip/spec-core if advanced past base. User explicitly asks carry round2 includes fetch merge. Git mutations merge authorized explicitly. Should check branch status. Must commit each piece after build passes, no push. I need obey no axiom golden edits. Should understand previous work and all laws C9 vacuity. Should inspect git log, status, remote base. Use Bash git status branch log maybe fetch first? "Before starting, merge origin/wip/spec-core into this branch if it has advanced past your base (git fetch ... && git merge ...)" Should perform fetch and determine. Could run status + branch + log in one bash (independent? related command output). I should use Bash. Also read key files parallel. Should use TodoList multi-step.## wip/spec-c9
+wip/spec-c9
+f898f298a (HEAD -> wip/spec-c9, origin/wip/spec-c9, lambdaclass/wip/spec-c9) axioms.golden: C9 identities, contracts, evidence, ghost erasure (regenerated on concrete-ci-2)
+76aa9ab0b C9: limit ensures to surviving state
+4a7a64dc8 C9: prove ghost statement erasure
+b1aa98c3c C9: bind safety evidence to exact contexts
+189db4089 C9: add complete primitive contract registries
+4e0da6293 C9: add typed identities and renaming laws
+d8f89ea75 (origin/wip/spec-c1-life, origin/HEAD, wip/spec-c1-life) axioms.golden: partial lifecycle transitions (regenerated on concrete-ci-2)
+dc015b7f4 Prove lifecycle refusals are stuck and exercise refused scope exit
+2209101d1 Make C1 lifecycle transitions partial and propagate refusal
+5bc0748b8 (origin/wip/spec-core) axioms.golden: add the 45 generated C4 part-1 declarations (Memory.lean imported in ee6d879b without regenerating; r4 axioms gate failed at d719b1a0)
+d719b1a02 Const: record item 26's approved direction (compile-time, Copy-only, closed subset) revising Q6.4/TYPE-22's evaluation at each use; the P17b check is a task
+ee6d879bb spec C4 part 1 (draft, unreviewed): blocks, provenance, access validity, alloc/free, expose/from_exposed, scalar byte representation
+I got full main. Should fetch merge before edits. origin/wip/spec-core currently 5bc0748b8; base d8f89ea75 has 5bc? log shows origin spec core at 5bc, likely base ancestor? Should merge-base. fetch.
+
+• The defect is in `PrimContract.Allowed`: success answers currently bypass the declared failure alternatives. I’m checking the shared base first, as required, before changing the contract and its examples.From https://github.com/unbalancedparentheses/concrete2
+ * branch                wip/spec-core -> FETCH_HEAD
+5bc0748b8 axioms.golden: add the 45 generated C4 part-1 declarations (Memory.lean imported in ee6d879b without regenerating; r4 axioms gate failed at d719b1a0)
+
+
+• No merge needed ancestor. Should plan how implement all vacuity examples every law. Should determine scope "every law of C9 (not only changed ones): for each, non-trivial instance and planted counter-example". Could mean every theorem in Proofs/Prim (27 or so) need examples. I'll carefully add examples for all laws. I need count:
+  lookupId_rename
+  eval_rename
+  eval_operands_rename
+  rename_inverse
+  rename_id
+  lookupId_rehint
+  eval_rehint
+  eval_operands_rehint
+  SafetyEvidence.usable_current
+  obligation_mismatch
+  target_mismatch
+  contract_mismatch
+  checker_mismatch
+  spec_mismatch
+  allows_unknown
+  unknown_primitive_stuck
+  allows_allowed
+  allows_postcondition
+  allows_no_implicit_trap
+  drive_steps
+  (new corollary drive_steps_empty perhaps)
+  runStmts_of_not_normal
+  ghost_erasure_run
+  ghost_erasure_ending
+  Possibly Allowed law answerOk_iff structure field not theorem? round says restate answerOk_iff (field) and vacuity every law C9. I'll make examples for registry answerOk_iff both directions success/failure and counterexamples. Existing examples accepted refused. I'll add non-trivial instance and planted counterexample each law. Could organize examples in Proof module near theorem or Spec examples. They request examples written as `example` with negation for counterexamples. I'll ensure no axioms changes? Adding theorems/examples perhaps examples don't appear in axiom golden? `example` declarations anonymous? likely no golden. New corollary theorem changes axiom golden if theorem added; reviewer says leave axioms golden to reviewer, so build okay but trust_ban not axiom golden. I must not run axioms. New theorem drive_steps corollary would be axiom golden new theorem not listed and reviewer handles. Could define corollary as example to avoid? They explicitly "Add a corollary of drive_steps without auxiliary r." Should theorem. Axioms golden untouched per instruction.
+
+  Perhaps existing Spec examples already satisfy some. But requirement "apply vacuity rule ... every law ... for each ... non-trivial instance and planted counter-example ... written as an example with a negation." Make sure in proofs perhaps examples after each theorem, or grouped namespace `Vacuity` with descriptive comments. I can add paired examples after each theorem with comments "Non-trivial instance..." "Planted counter-example..." This is verbose but readable. Perhaps reusing existing Spec examples can count, but response should list per law. Better explicit all pairs in Proofs/Prim.lean so clear. But counterexample to universal theorem? Should formulate meaningful mutation not negating theorem (which is true). E.g. for `lookupId_rename`, non-trivial instance of equality for swap, planted counterexample using non-injective `Renaming`? Can't construct bad Renaming due proofs. Can show equality fails if locals not renamed or wrong key, e.g.
+  example : lookupId (renameLocals swap [(x,3)]) x.id ≠ lookupId [(x,3)] x.id := by decide? Here original x id 0, renamed key id1; lookup key0 none vs some3 => `none ≠ some3`. Good. This is bad usage not mutated rule. They allow "mutated rule or a bad state that fails it". This demonstrates not trivial.
+  For eval_rename nontrivial instance using swap of term binder/local. counterexample inconsistent env (only term renamed) eval results differ.
+  eval_operands_rename same.
+  rename_inverse nontrivial swap term; counterexample applying same renaming twice perhaps for swap same is inverse so choose non-self-inverse renaming like increment modulo? Should have bijection easy `succ` not bijection on Nat no inverse. `swap 0 1` self inverse can't counter same twice. Could define `rotate` on Nat bijection `0→1,1→2,2→0, else same`; inverse. Or use `Renaming` with toFun n+1 and inv n-1 not true at0. Could simple `Renaming` add? Nat bijection shift via even/odd: toFun `2*n` not surjective. Should non-self-inverse easy 3-cycle. Define demo `cycle : Renaming` mapping 0 1, 1 2, 2 0, n n; inverse mapping 0 2,1 0,2 1,n n. Prove by decide finite cases `intro n; repeat' cases?` Could `toFun_inv := by intro n; cases n ...` using `omega` unavailable? core omega perhaps Lean.Omega imported? Existing modules use simp decide. Define helper functions with `Nat` match and decide? `toFun_inv := by decide` cannot for all infinite? Decidable forall Nat is not Decidable. `intro | 0 | 1 | 2 | n+3 => rfl` works equation. syntax:
+    toFun_inv := by
+      intro n
+      cases n with
+      | zero => rfl
+      | succ n =>
+        cases n with
+        | zero => rfl
+  ...
+  Can use `omega` not needed. `fun | 0 | 1 | 2 | n+3 => rfl`? pattern n+3 syntax works. `toFun_inv := by decide` no.
+
+  But perhaps no need 3 cycle if counterexample inverse on wrong original e.g. `renameTerm swap (renameTerm swap e) = e` actually holds, so can't. Show mutated rule dropping inverse: `renameTerm .id (renameTerm swap e) ≠ e` with e var0 and swap var0 var1. This is a planted counterexample to inverse law where inverse omitted, valid. So only swap needed. Nontrivial rename_inverse example swap on var0. Counter `renameTerm .id (renameTerm swap (.var x0)) ≠ .var x0`. Nice.
+  rename_id nontrivial example compound term; counterexample mutated renaming `swap` not identity on var0. Good.
+  lookupId_rehint: consistent rehint local numeric lookup equality; counterexample using AList.lookup whole Var with changed hint differs (review nit mentions C1 AList compares whole Var). Example `AList.lookup (rehintLocals h [(x0,3)]) (rehintVar h x0) = some 3` actually consistent holds. Counter inconsistent lookup original x after rehint gives none vs some. `AList.lookup (rehintLocals ... ) x0 ≠ AList.lookup [(x0,3)] x0`. Should have DecidableEq etc.
+  eval_rehint nontrivial with compound and changed hints both; counter inconsistent only term changed yields stuck vs ok. This directly nit.
+  eval_operands_rehint similarly through adapter.
+  SafetyEvidence.usable_current nontrivial existing EvidenceDemo evidence usable current. counterexample changed context already spec example. Could add in proofs pair.
+  Each mismatch law: non-trivial instance means hypothesis holds and negation conclusion. Existing evidence + current changed. For obligation mismatch target etc examples all changed. Planted counter-example: show dropping the changed component check would incorrectly accept? But Usable is full equality so if mismatch hypotheses hold theorem conclusion always true. A counterexample "bad state that fails it" perhaps an example where mismatch hypothesis does not hold, so not `¬Usable`; e.g. `¬ (e.context.obligation ≠ e.context.obligation)` is trivial and not meaningful. Or `¬ ¬ e.Usable e.context`? Classical double negation, not. `example : ¬ ¬ evidence.Usable current := by decide` demonstrates negating conclusion false when no mismatch. But "planted counter-example: a mutated rule or a bad state that fails it, written as an example with a negation." Could mutate evidence usability to component-wise check ignoring other fields and show counter? Should define mutated `UsableIgnoring...`? That adds definitions, perhaps overkill. Or counterexample to converse overclaim: if one component same, doesn't imply usable when another differs. For each mismatch law, nontrivial instance e evidence, current with changed target; counterexample `¬ (e.context.target ≠ current.target)` when same? Not failing law, just hypothesis absent. Vacuity wants counterexample to ensure hypotheses non-vacuous and conclusion not trivially true. A pair positive example mismatch and negative `¬ evidence.Usable current`? That would false. Should `example : ¬ (¬ evidence.Usable current) := by decide` written with negation, proves law's conclusion fails in matching state. This is a planted bad state? The matching state is good, not bad. Could phrase "Planted counter-example to strengthening mismatch into unconditional refusal". But requirement probably reviewers expect concrete counterexample for each law, likely tests as examples with negation of bad equality, not necessarily exact formal negation of theorem. I can interpret flexible.
+
+  For `allows_unknown`: nontrivial unknown p accepted false. counterexample registered p with unknown assumption false: `registry.allows ⟨0⟩ ... ≠ false` or `¬ registry.allows ... = false`. This shows no catchall refusal. Fine.
+  `unknown_primitive_stuck`: need nontrivial actual `Step` request configuration and show no step for all label c'. Existing theorem requires hstep and hnone. Should build concrete program statement `.prim` etc and step request. Should inspect Exec definitions. I'll read relevant Exec, Ident Var docs. Also all imports settings.
+
+• `origin/wip/spec-core` is already an ancestor of this branch, so no merge is needed. Next I’m tracing the execution constructors and existing examples so the new counterexamples exercise real runs rather than restating definitions.4e0da6293 C9: add typed identities and renaming laws
+ ConcreteSpec.lean             |   1 +
+ ConcreteSpec/Proofs/Prim.lean | 121 +++++++++++++++++++++++++++++++++++++
+ ConcreteSpec/Spec.lean        |   1 +
+ ConcreteSpec/Spec/Ident.lean  |  40 +++++++++++--
+ ConcreteSpec/Spec/Prim.lean   | 136 ++++++++++++++++++++++++++++++++++++++++++
+ 5 files changed, 294 insertions(+), 5 deletions(-)
+189db4089 C9: add complete primitive contract registries
+ ConcreteSpec/Proofs/Prim.lean |  64 +++++++++++++++
+ ConcreteSpec/Spec/Prim.lean   | 185 ++++++++++++++++++++++++++++++++++++++++++
+ 2 files changed, 249 insertions(+)
+b1aa98c3c C9: bind safety evidence to exact contexts
+ ConcreteSpec/Proofs/Prim.lean | 33 ++++++++++++++++++++++++
+ ConcreteSpec/Spec/Prim.lean   | 58 +++++++++++++++++++++++++++++++++++++++++++
+ 2 files changed, 91 insertions(+)
+4a7a64dc8 C9: prove ghost statement erasure
+ ConcreteSpec/Proofs/Prim.lean | 124 ++++++++++++++++++++++++++++++++++
+ ConcreteSpec/Spec/Prim.lean   | 150 +++++++++++++++++++++++++++++++++++++++++-
+ 2 files changed, 273 insertions(+), 1 deletion(-)
+76aa9ab0b C9: limit ensures to surviving state
+ ConcreteSpec/Proofs/Prim.lean |  6 +++---
+ ConcreteSpec/Spec/Prim.lean   | 13 +++++++------
+ 2 files changed, 10 insertions(+), 9 deletions(-)
+
+
+• Should update Ident Var doc in Ident.lean allowed? Round nit says note in Var doc comment. yes.
+
+  Should decide sequence commits: "commit each piece separately" original pieces already done. Round fixes perhaps commit one fix per item? At least each piece after build. Could commit contract fix + examples/vacuity all perhaps separate commits:
+  1 C9 failure-aware contracts with accepted/refused examples and relevant law examples
+  2 renaming doc/corollary + vacuity examples identities
+  3 evidence/registry vacuity examples
+  4 ghost vacuity and drive corollary. But round says commit each piece after build. I can group coherent and build before each. Time okay. Could do one commit all after build? User explicitly commit each piece; safer 3-4 commits.
+
+  Should first implement defect and tests, build commit. Then add vacuity all laws including changed answerOk law and allows. Could include vacuity in respective commits. Should have response list per law all examples. Naming anonymous examples difficult reference. Could use comments with exact names e.g. "Non-trivial instance for `eval_rename`..." and "Planted counter-example..." then response reference line ranges. Perhaps named definitions? `example` anonymous no name but comments identify.
+
+  Should fix design precisely:
+  Allowed:
+  args len req term events ∧ common state props ∧ match a.result with error false | ok v =>
+    c.initialized v ∧ c.valid v ∧
+      ((c.ensures v a.store ∧ ¬? failure?) OR ∃ f ∈ c.failures, f.errorTy = c.result ∧ f.holds v)
+  Spec round: "Make acceptance check that a failure result matches a declared alternative (its type and predicate) and that a success result satisfies ensures". Should distinguish success vs failure in ordinary Val. Current only `Failure.errorTy` and holds. How tell whether a given ordinary value is a failure vs success? Existential: if matches any failure alternative then accepted by failure branch; otherwise must ensures. Could Allowed be `(c.ensures v ... ∨ ∃ f ∈ failures, f.errorTy = c.result ∧ f.holds v)` (with common predicates). That allows a value satisfying both, fine. "failure result matches declared alternative ... and a success result satisfies ensures." This exactly disjunction. But type c.result vs errorTy? Each Failure has `errorTy : Ty`; need require `errorTy = c.result` because result value typed c.result. Could also parameter types result relation not typed at Lean level. Yes.
+  `answerOk_iff` restatement: field currently `↔ c.Allowed`; after Allowed includes failures automatically restated? Round explicitly "restate answerOk_iff" perhaps they expect separate fields or refined equivalence to expose disjunction. Could change registry field to equivalence with new `Allowed` including failure. Perhaps doc comment update "answerOk_iff". Could add theorem `PrimRegistry.answerOk_allowed` no need. They likely mean update field proof in demo. The definition is still `answerOk ↔ Allowed`; restate not shape. Could make `PrimContract.Allowed` with `resultOk` predicate and answerOk_iff unchanged is semantically restated via Allowed. But to satisfy explicit perhaps add `PrimContract.ResultAllowed` definition? Or change field to:
+  `answerOk_iff : ... c.answerOk ... = true ↔ c.Allowed ...`
+  is same. They probably mean update proof, not necessarily type.
+
+  Should demo contract with declared failure. Existing unitContract ensures v=0, failures=[] and answerOk v=0. Add `errorTy=(), holds v => v=1` failure and `ensures v=0`, answerOk v=0∨v=1. Accepted success 0 and declared failure 1. Refused undeclared 2. Existing wrong result 1 currently refused will become accepted, update wrong result 2. Add explicit examples comments. Registry proof simp [Allowed, unitContract] should handle `List.any` etc. `answerOk` decide `(args=[] ∧ event none ∧ (v=0∨v=1) ∧ store=st)`; Allowed common ensures or failure. `simp` can solve int numeral disjunction. Make sure Prop exists simplification. Define failures `[⟨(), fun v => v = 1⟩]`. Allowed:
+  `(c.ensures v a.store ∨ ∃ f ∈ c.failures, f.errorTy = c.result ∧ f.holds v) ∧ initialized...`
+  Then unit contract proof simp yields `(v=0∨v=1)`. Good.
+  `allows_postcondition` currently claims all accepted ok ensures; no longer true for failures! Must restate to success or declared failure. Round explicitly success result satisfies ensures and failure matches declared. Theorem `allows_postcondition` should become:
+  match a.result with
+  | .ok v => c.ensures v a.store ∨ ∃ f ∈ c.failures, f.errorTy = c.result ∧ f.holds v
+  | .error _ => False
+  Then doc "postcondition or declared failure". But brief original says every answer accepted satisfies primitive postcondition; typed failure predicate is postcondition. Fine.
+  Could split new theorem `allows_result` and keep `allows_postcondition` only under `¬ failure` hypothesis? One form per situation, no unnecessary. Restate existing theorem as disjunction.
+  `allows_allowed` uses Allowed no change.
+  `allows_no_implicit_trap` same proof h etc adjust.
+  Non-vacuity examples for `allows_postcondition` declared failure accepted but ensures false proves not merely ensures; counter undeclared rejected.
+
+  AnswerOk interface user-supplied executable, proof enforces. Good.
+
+  Potential requirement "an ordinary value representing an undeclared typed failure can be admitted." My disjunction handles. Make sure if ensures is True and failures declared, any value accepted as success, including semantically error-like value. That's unavoidable without discriminator; contract responsible to separate ensures. A result matching undeclared "typed failure" can still be admitted if ensures true as success. But "an ordinary value representing an undeclared typed failure" notion only via `Failure.holds`; no intrinsic error tag. Their intended fix likely disjunction. Could they expect each success must not match any failure predicate? Not stated. Fine.
+
+  Should vacuity all laws possibly theorem `allows_postcondition` positive success + declared failure and counter undeclared. Good.
+
+  I'll edit Spec Prim and Ident separately in parallel (different files), then Proofs Prim for allows postcondition. But consecutive edits same file require reread. I can one Edit each file for independent chunks? Spec Prim needs multiple replacements in same file cannot consecutive without reread; can make one big old_string replacing from Allowed through end? Too huge. Could use one Edit for Allowed and demo entire chunk? Old string from line192 to 201 and another from unit contract etc requires reread in between. I can do sequential tool turns. First Allowed and Proof postcondition and Ident doc in parallel.
+
+• I’ll make an ordinary result acceptable in exactly two ways: it satisfies `ensures`, or it matches a declared failure alternative with the contract’s result type. The registry’s postcondition theorem will expose that same distinction.
+
+• Now Spec demo read relevant updated lines before edit mandatory.Now update todo: inspect done merge done fix in progress.Now build after this piece. But vacuity for allows changed not yet. Could add later separate. Hard rule commit each piece after build. Run nix develop timeout.
+
+• The demo now distinguishes success `0`, declared failure `1`, and undeclared result `2`. I’m building this focused fix before committing it, then I’ll add the corollary and the full non-vacuity example set.warning: Git tree '/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c9' is dirty
+✔ [16/42] Built ConcreteSpec.Spec.Ident (480ms)
+✔ [17/42] Built ConcreteSpec.Spec.Outcome (184ms)
+✔ [18/42] Built ConcreteSpec.Spec.Target (220ms)
+✔ [19/42] Built ConcreteSpec.Spec.Scalar (403ms)
+✔ [20/42] Built ConcreteSpec.Spec.Memory (429ms)
+✔ [21/42] Built ConcreteSpec.Spec.Const (450ms)
+✔ [22/42] Built ConcreteSpec.Spec.Rules (128ms)
+✔ [23/42] Built ConcreteSpec.Proofs.Scalar (694ms)
+✔ [24/42] Built ConcreteSpec.Spec.Exec (1.1s)
+✔ [25/42] Built ConcreteSpec.Proofs.Const (544ms)
+✔ [26/42] Built ConcreteSpec.Spec.Prim (522ms)
+✔ [27/42] Built ConcreteSpec.Spec (129ms)
+✔ [28/42] Built ConcreteSpec.Proofs.Exec (679ms)
+✔ [29/42] Built ConcreteSpec.Proofs.Basics (187ms)
+✔ [30/42] Built ConcreteSpec.Proofs.Prim (383ms)
+✔ [31/42] Built ConcreteSpec.Proofs.Authority (308ms)
+✔ [32/42] Built ConcreteSpec.Proofs.Slice1 (519ms)
+✔ [33/42] Built ConcreteSpec.Proofs.Cleanup (465ms)
+✔ [34/42] Built ConcreteSpec.Proofs.Brand (640ms)
+✔ [35/42] Built ConcreteSpec.Proofs.Borrow (675ms)
+✔ [36/42] Built ConcreteSpec.Proofs.Observe (201ms)
+✔ [37/42] Built ConcreteSpec.Proofs.Checker (293ms)
+✔ [38/42] Built ConcreteSpec.Proofs.Rep (363ms)
+✔ [39/42] Built ConcreteSpec.Proofs.Slice0 (217ms)
+✔ [40/42] Built ConcreteSpec.Proofs.Examples (176ms)
+✔ [41/42] Built ConcreteSpec (129ms)
+Build completed successfully (42 jobs).
+
+
+• Build passes. Commit only fix and doc? Doc nit can be included this commit though todo later. Perhaps run rules after spec doc/definition change? allowed light standard later. Commit now. Before commit git diff check no unwanted. ConcreteSpec/Proofs/Prim.lean |  7 ++++---
+ ConcreteSpec/Spec/Ident.lean  |  3 ++-
+ ConcreteSpec/Spec/Prim.lean   | 28 ++++++++++++++++++----------
+ 3 files changed, 24 insertions(+), 14 deletions(-)
+ M ConcreteSpec/Proofs/Prim.lean
+ M ConcreteSpec/Spec/Ident.lean
+ M ConcreteSpec/Spec/Prim.lean
+[wip/spec-c9 b91093b69] C9: enforce declared primitive failure contracts
+ 3 files changed, 24 insertions(+), 14 deletions(-)
+Now vacuity. Should design examples. I can add all in one large Write? Existing file incremental use Edit. I can insert sections at multiple points. Could replace entire Proofs/Prim.lean with Write? Not allowed incremental must Edit. Can use one Edit large old entire file? cumbersome. Multiple edits with reads between. I can make additions grouped at namespace ends using unique markers and one Edit at a time with Read each time. Or insert all vacuity examples at end of file in one Edit, avoiding interleaving. Define namespace `Vacuity` sections and refer to theorem names. This may be clean: after `end ConcreteSpec.Core`, add `namespace ConcreteSpec.Core.C9Vacuity`? All examples under dedicated namespace. But examples in proofs module with comments per law. I can add at end before `end ConcreteSpec.Core` a `namespace Vacuity` with sections Identities, Evidence, Registries, Ghost. New corollary should be beside drive_steps in Ghost namespace, not vacuity. Could insert corollary separately then append examples at end in one edit. This yields two edits same file with read between. Good.
+
+  Should define demo renaming `swap` and vars/terms for examples. Could use `PrimDemo` for registry, `GhostDemo` for ghost. Vacuity namespace nested `ConcreteSpec.Core.Vacuity`; open `Prim`. Should have names resolution.
+
+  All theorem examples detailed.
+
+  I'll list exact theorem laws including structure `answerOk_iff` perhaps no named theorem to reference. Vacuity section can comment `PrimRegistry.answerOk_iff` and example both `unitContract.answerOk ... = true ↔ unitContract.Allowed ...` positive for success and failure and negative undeclared equivalence? Counterexample with mutated rule:
+  `example : ¬ (unitContract.answerOk [] 7 ⟨none, .ok 2,7⟩ = true ↔ unitContract.Allowed ... )`? Both false so equivalence true, can't. To plant counterexample to omission of failures, define `unitContract.ensures 1 7` false and declared failure accepted. Example `¬ unitContract.ensures 1 7` with registry acceptance; already spec accepted. For answerOk_iff nontrivial `example : unitContract.answerOk ... = true ↔ unitContract.Allowed ... := by decide` for declared failure. Counter mutated `answerOk` ignoring declared failure? If mutated answerOk old success only then equivalence fails for failure:
+  `example : ¬ ((decide (1=0) : Bool) = true ↔ unitContract.Allowed [] 7 ⟨none,.ok1,7⟩) := by decide`. Better no arbitrary mutated answerOk expression? Define `successOnlyAnswerOk` local function? Could simply `example : ¬ (false = true ↔ unitContract.Allowed ... ) := by decide` shows planted checker rejecting declared failure violates equivalence. And another undeclared accepted `¬ (true = true ↔ unitContract.Allowed ...2)` demonstrates too. One counter enough.
+
+  For each law:
+  1 lookupId_rename:
+  Nontrivial `example : Prim.lookupId (Prim.renameLocals swap [(x0,3),(x1,4)]) (swap.toFun 1) = some 4 := by decide` (or equality to original).
+  Counter `example : Prim.lookupId (Prim.renameLocals swap [(x0,3)]) 0 ≠ Prim.lookupId [(x0,3)] 0 := by decide`.
+  2 eval_rename:
+  Nontrivial compound `renameTerm swap term`, locals etc equality `.ok 5`. Counter only term rename `Term.eval locals (renameTerm swap (.var x0)) ≠ Term.eval locals (.var x0)` (left stuck right ok).
+  3 eval_operands_rename same with Unit. Could combine positive using `eval_operands_rename swap ...` theorem? To avoid restating definition, actual equality computed `= .ok (3,())`. Counter `operands.eval [] () (renameTerm swap var0)` vs original with locals.
+  4 rename_inverse positive swap var0; counter no inverse.
+  5 rename_id positive compound perhaps `.bind x0 (lit1) (add var0 (lit2))`; counter `renameTerm swap (.var x0) ≠ .var x0`.
+  6 lookupId_rehint positive consistent rehint; counter AList lookup inconsistent as above or `lookupId` cannot fail since ignores hints. Should counter to law using wrong key? `lookupId (rehintLocals h [(x0,3)]) 1 ≠ lookupId [(x0,3)] 0` trivially key changed. Better demonstrate C1 whole Var lookup: `AList.lookup (rehintLocals h [(x0,3)]) x0 ≠ AList.lookup [(x0,3)] x0`. It is counter to applying rehint only env under C1. Good.
+  7 eval_rehint positive with h changes x to renamed and consistent; counter only term.
+  8 eval_operands_rehint same adapter.
+  Could combine 2 &3 examples separate explicit comments.
+  9 usable_current positive existing `EvidenceDemo.evidence.Usable current`; counter `¬ evidence.Usable changed contract`. Existing spec examples but add.
+  10 obligation_mismatch positive `¬ evidence.Usable {current with obligation=⟨1⟩}` by decide; counter "same obligation alone does not make evidence usable": choose changed target, same obligation, `example : ¬ evidence.Usable { current with target := ... }` but that's also positive target mismatch. To be distinct, mutated usability check comparing only obligation would accept changed target. Define local `obligationOnly (e) current := e.context.obligation = current.obligation`. Example `¬ (EvidenceDemo.evidence.context.obligation = changed.obligation → EvidenceDemo.evidence.Usable changed)`? This implication is false because antecedent true and usable false, so `¬ (...)`, by decide. This is a planted counterexample to dropping other checks. But law itself only mismatch refusal, no need. Could for each mismatch theorem counterexample show matching just this component insufficient:
+  - obligation law: current with target changed (obligation same), `¬ (e.context.obligation = current'.obligation → e.Usable current')`.
+  - target law: current with obligation changed, same target.
+  - contract law: current with checker changed, same contract.
+  - checker law: current with spec changed, same checker.
+  - spec law: current with contract changed, same spec.
+  This gives meaningful non-vacuity and per-law negative examples but highly repetitive. Alternatively counterexample `¬ ¬ evidence.Usable current` for all not meaningful. Use component-only implication.
+
+  Perhaps define alternative target available `Target.linuxX8664` and `Target...` inspect Target.
+
+• The contract fix builds and is committed as `b91093b69`. I’m now adding paired witnesses for every C9 law; the negative examples will mutate the transformation, checker, evidence match, or execution state so they cannot pass by definitional folding alone.## wip/spec-c9
+b91093b69a207998ac9a264948848cf42994b3a0 C9: enforce declared primitive failure contracts
+
+
+• Now add drive_steps corollary. Form:
+  theorem drive_steps' (P) (ρ) (fuel hist c) :
+    ∃ tr, (drive P ρ fuel hist c).events = hist ++ tr ∧
+      Exec.Steps P c tr (drive ...).config := by
+    exact drive_steps P ρ fuel hist c _ rfl
+  Could name `drive_steps_self` or `drive_steps_run`. "without auxiliary r" `drive_steps_apply`? `drive_steps'` not readable. `drive_steps_result` good.
+  theorem drive_steps_result ... : ∃ tr,... := drive_steps ... _ rfl.
+  Should vacuity positive nontrivial actual `drive` with skip and event perhaps skip enough non-trivial steps. Positive `∃ tr, ...` using corollary. Counterexample bad trace: `¬ Exec.Steps GhostDemo.program ⟨.exec .skip,...5...⟩ [99] ⟨.done,...5...⟩` or inequality events. Could show `drive` actual events ≠ [99]. `example : (Ghost.drive ... ).events ≠ [99] := by decide` (List Int Decidable). This is counter to arbitrary trace soundness. For drive_steps original positive use initial history `[4]`, drive skip, exists tr and steps; `exact Ghost.drive_steps ... rfl` perhaps example of theorem with r explicit. For corollary positive `Ghost.drive_steps_result ...`. Should have both law examples separate.
+
+  `runStmts_of_not_normal`: positive on stuck/nonfinal exec skip with fuel0? c.final? none, drive with fuel0 gives outOfFuel and runStmts same. Better final returned or trapped ensures no restart. `startReturned : Config base := ⟨.exiting (.ret 1), [],5,[]⟩` final returned. `runStmts program oracle 20 [] [.abort ⟨9⟩] startReturned = drive ...` rfl. Counterexample use normal `start`, where theorem hypothesis false and actual `runStmts [abort] start` differs from `drive start` because runStmts runs abort, drive start final normal. `example : Ghost.runStmts ... [.abort] GhostDemo.start ≠ Ghost.drive ... start := by decide`. Config/Ending DecidableEq? SegmentReport no deriving DecidableEq. `≠` by decide requires Decidable equality of SegmentReport, not derived. Can instead compare ending: `(runStmts ...).ending ≠ (drive ...).ending` Ending derives? inspect Outcome/Exec ending.Update fix done corollary in progress.Actually renaming doc done, drive corollary now.Now build commit corollary before vacuity per piece. But could build now.warning: Git tree '/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c9' is dirty
+✔ [40/42] Built ConcreteSpec.Proofs.Prim (329ms)
+✔ [41/42] Built ConcreteSpec (128ms)
+Build completed successfully (42 jobs).
+[wip/spec-c9 8c21074e6] C9: expose drive step soundness directly
+ 1 file changed, 7 insertions(+)
+Now vacuity massive. Should formulate compile-correct. I'll think systematically and possibly use scratch append and iterate build.
+
+  I can insert namespace `Vacuity` before final `end ConcreteSpec.Core` with sections. This adds 250 lines. All examples.
+
+  First helper definitions:
+  namespace Vacuity
+  open Prim
+  def x0 : Var := ⟨"x",0⟩
+  def x1 ...
+  def swap : Renaming where
+   toFun n := if n=0 then 1 else if n=1 then 0 else n
+   inv same
+   toFun_inv := by
+     intro n
+     by_cases h0 : n=0 <;> by_cases h1 : n=1 <;> simp [h0,h1]
+   inv_toFun same
+  But simp needs nested if toFun reduction. Define `swapNat` to avoid repetition:
+  def swapNat (n) := if n=0 then 1 else if n=1 then 0 else n
+  `swap` fields `toFun := swapNat`, `inv := swapNat`, laws by `intro n; by_cases ... <;> simp [swapNat,*]` likely works.
+  Could use match:
+  def swapNat : Nat → Nat
+   | 0 => 1 | 1 => 0 | n => n
+  Then proof:
+    toFun_inv := by
+      intro n
+      cases n with
+      | zero => rfl
+      | succ n =>
+        cases n with
+        | zero => rfl
+        | succ n => rfl
+  Same for inv_toFun. `cases n twice` for n≥2 swapNat n+2 reduces to n+2. rfl. Define with equations and `by decide` no. 
+  ```
+    toFun_inv := by
+      intro n
+      repeat' cases n -- Lean tactic `repeat'` mathlib? no.
+  ```
+  explicit:
+  ```
+      match n with
+      | 0 | 1 | n+2 => rfl
+  ```
+  Tactic `cases n <;> ...` not.
+  Function theorem:
+  ```
+    toFun_inv := fun
+      | 0 => rfl
+      | 1 => rfl
+      | n + 2 => rfl
+  ```
+  Lean structure field expects ∀ n, can use pattern lambda. Works often. Same inv.
+  `def hints (x : Var) : String := "renamed-" ++ x.hint` or constant `"renamed"` fine. If all hints same C1 AList can conflict if ids differ? AList compares whole Var includes id so okay.
+  `def source : Term := .bind x0 (.lit 2) (.add (.var x0) (.copy x1))`
+  `def locals : AList Var Int := [(x0,10),(x1,3)]`
+  Eval source: bind x0=2, add var x0=2 copy x1=3 =>5.
+  `def result5`. Use by decide for Res Int equality (Res derives DecidableEq? likely). `rfl` computations easier.
+
+  lookup positive:
+  ```
+  example : lookupId (renameLocals swap [(x0,3),(x1,4)]) (swap.toFun 1) =
+      lookupId [(x0,3),(x1,4)] 1 := by decide
+  ```
+  Since swap reduces perhaps decide.
+  Counter `... ≠ ... := by decide`.
+  eval positive:
+  ```
+  example : Term.eval (renameLocals swap locals) (renameTerm swap source) = Term.eval locals source := by decide
+  ```
+  Nontrivial actual result perhaps conjunction `= .ok 5` to ensure not both stuck. Law instance equality could both stuck considered trivial. Owner says non-trivial instance, use `.ok 5` plus perhaps equality to original. `example : Term.eval ... = .ok 5 ∧ Term.eval locals source = .ok 5 := ⟨by decide, by decide⟩` but to witness law use first equality plus original `.ok5`: `(renamed eval = original eval) ∧ original = .ok5`. `by decide`.
+  Simpler `example : Term.eval renamed ... = Term.eval locals source ∧ Term.eval locals source = .ok 5 := by decide`.
+  Counter inconsistent term.
+  operands positive same plus `.ok (5,())`. `operands.eval ... = operands.eval ... ∧ operands.eval ... = .ok (5,())`. Type annotations may needed Res (Int×Unit).
+  rename_inverse positive actual term not id: `renameTerm swap.symm (renameTerm swap source) = source ∧ renameTerm swap source ≠ source := by decide`.
+  counter no inverse.
+  rename_id positive `renameTerm .id source = source`; counter swap var ≠.
+  lookup rehint positive equality and some3.
+  counter AList.
+  eval_rehint positive actual ok5.
+  operands same.
+  Could reduce examples by using law theorem rather than decide? `by decide` computational works.
+
+  Evidence:
+  `abbrev e := EvidenceDemo.evidence` not abbrev? open.
+  `def obligationChanged : EvidenceContext := { EvidenceDemo.current with obligation := ⟨1⟩ }` etc perhaps define 5 contexts. To show component-only insufficiency I can use different changed contexts:
+  - Positive obligation mismatch: obligationChanged.
+  - Counter for obligation: targetChanged, obligation same, implication.
+  - Positive target mismatch: targetChanged with `byteOrder := .big`.
+  - Counter target: obligationChanged target same.
+  - Positive contract: contractChanged.
+  - Counter contract: checkerChanged contract same.
+  - Positive checker: checkerChanged.
+  - Counter checker: specChanged checker same.
+  - Positive spec: specChanged.
+  - Counter spec: contractChanged spec same.
+  This has duplicate positives but okay. Define five.
+  Target changed only byteOrder doesn't need well formed for evidence context. fine.
+  `by decide` on Usable equal structures with Target includes big numbers maxObject 2^64; decide equality computes but okay existing.
+  Counter implication propositions decidable. `example : ¬ (evidence.context.obligation = targetChanged.obligation → evidence.Usable targetChanged) := by decide`. Since antecedent true and consequence false. Good.
+
+  Registries:
+  - `allows_unknown` positive `registry.allows 1...=false`.
+   counter registered `registry.allows 0...≠false`.
+  - `unknown_primitive_stuck`: Should concrete step config.
+  Define:
+  ```
+  abbrev requestStart : Exec.Config PrimDemo.machine :=
+    ⟨.exec (.prim none ⟨1⟩ [] ⟨0⟩), [], 7, []⟩
+  ```
+  Here `PrimDemo.machine` Prim=PrimId, Expr=Unit. `.prim none ⟨1⟩ [] ⟨0⟩`.
+  `hstep : Exec.step GhostDemo? program registry machine requestStart = some (.request ... )`. Program type `Exec.Program PrimDemo.machine` empty. Define `abbrev requestProgram : Exec.Program PrimDemo.machine := ⟨[]⟩`.
+  `example (l : Exec.Label PrimDemo.machine) (c' : Exec.Config PrimDemo.machine) :
+    ¬ Exec.Step requestProgram requestStart l c' := by
+    apply PrimRegistry.unknown_primitive_stuck PrimDemo.registry requestProgram (p:=⟨1⟩) ?hstep ?hnone l c'
+    · rfl
+    · rfl
+  `
+  Implicit vs args k inferred from hstep. `PrimRegistry.unknown_primitive_stuck (R:=?)` theorem method R explicit first then P. `exact PrimRegistry.unknown_primitive_stuck PrimDemo.registry requestProgram rfl rfl l c'` likely works rfl hstep with continuation. Should have hnone lookup unknown rfl. requestStart reduce evalArgs etc yes.
+  Counterexample registered primitive does have step for answer 0. Show `¬ (¬ Exec.Step ...)`? Better direct negation of no-step:
+  ```
+  example : ¬ (∀ (l : Exec.Label machine) (c' : Config machine),
+      ¬ Exec.Step requestProgram registeredStart l c') := by
+    intro h
+    exact h (.emit? none -> label silent) _ (.prim rfl (by decide) rfl)
+  ```
+  Answer no event label `.silent`; c' after k `.done,[],7,[]`. 
+  ```
+    have hs : Exec.Step requestProgram registeredStart .silent
+        ⟨.done, [], 7, []⟩ := .prim rfl (by decide) rfl
+    exact h .silent _ hs
+  ```
+  Will `.prim` hstep rfl? `registeredStart` uses p0, answer ⟨none,.ok0,7⟩, continuation none dst -> some done. allows true by decide. Good. This is counterexample to treating registered as unknown.
+  - `allows_allowed`: positive `unitContract.Allowed []7 declared failure` and accepted. Could use `PrimRegistry.allows_allowed` to derive but non-trivial computation `example : unitContract.Allowed ... .ok1 := by decide` and ha. Counter `¬ unitContract.Allowed ... .ok2` by decide.
+  - `answerOk_iff`: positive `unitContract.answerOk ... = true ↔ unitContract.Allowed ...` by decide on failure1. counter mutated checker `¬ (false = true ↔ unitContract.Allowed ...1)` by decide. Does `false = true` parse Bool equality. yes.
+  - `allows_postcondition`: positive success and failure perhaps one nontrivial declared failure:
+  ```
+  example : unitContract.ensures 1 7 ∨ ∃ f ∈ unitContract.failures,... := by decide
+  ```
+  Counter ensures-only old law `¬ unitContract.ensures 1 7` by decide and accepted example separate. But per law planted counterexample to requiring ensures for every accepted result: `¬ (registry.allows ...1 = true → unitContract.ensures 1 7) := by decide`. Great.
+  - `allows_no_implicit_trap`: positive accepted result exists `.ok1`: `∃ v, (⟨...ok1...⟩).result = .ok v` = ⟨1,rfl⟩. counter `¬ ∃v, (⟨none,.error .abort,7⟩ : Answer...).result = .ok v := by decide` (Except TrapKind Int Decidable). This is counterexample to implicit trap ordinary value.
+  Perhaps positive use actual theorem with ha:
+  ```
+  example : ∃ v, (...declared failure answer...).result = .ok v :=
+    PrimRegistry.allows_no_implicit_trap ... (by decide)
+  ```
+  Good.
+  - `allows_unknown` positive direct theorem perhaps no need.
+  - `allows_allowed` positive using theorem and failure actual.
+
+  Ghost:
+  Should have `drive_steps` positive nontrivial events. Existing base has prim events possible, use machine registry and oracle returns event? unitContract events none only, so no events but silent step is non-trivial. For drive_steps use `requestProgram` and oracle returning success 0 no event. start primitive registered, fuel 2. `drive` step request then done. `∃tr, r.events = []++tr ∧ Steps...` actual. Use theorem with r. Could define `abbrev answerOracle : Exec.Oracle PrimDemo.machine := fun _ _ _ _ _ => some ⟨none,.ok0,7⟩`. Note store input 7. Fine. `requestProgram`.
+  `example : ∃ tr, (Ghost.drive requestProgram answerOracle 2 [] registeredStart).events = [] ++ tr ∧ Exec.Steps ... := Ghost.drive_steps ... _ rfl`. Nonempty tr? It will tr=[] even one prim label no events. Non-trivial instance could use `.exec .skip` silent step. Steps non-refl. To ensure non-vacuous, add example `Exec.Steps requestProgram registeredStart [] ⟨done...⟩ := .single (.prim rfl by decide rfl)` perhaps positive directly. This shows actual request step. `drive_steps` positive via theorem and separate result ending done perhaps not necessary. Could use history [4] to ensure event trace nonempty but added tr remains []. Nontrivial hypotheses actual hstep. Fine.
+  Counter bad trace `[99]`: `example : ¬ Exec.Steps requestProgram registeredStart [99] ⟨done...⟩ := by intro h; cases h ...` Hard because Steps could step label silent has events [] then impossible. `by decide` cannot decide existential inductive Steps (Prop no Decidable). Should proof:
+  ```
+    intro h
+    cases h with
+    | refl => contradiction? List []=[99] noConfusion
+    | step hs rest =>
+      cases hs with
+      | silent hstep => simp [Exec.step, registeredStart, requestProgram] at hstep
+      | prim hstep ha hk =>
+         -- Answer event none so label.events=[]; h is step with l = answer.label and trace [99].
+  ```
+  Cases h unifies trace l.events++tr=[99]; when silent, simplification at h? I can perhaps use `drive` events inequality instead for counter, which is by decide. Requirement for law drive_steps says soundness trace exact, bad trace drive events ≠ [99] is adequate counterexample. `example : (Ghost.drive ...).events ≠ [99] := by decide`. Good no Steps negation.
+  - drive_steps_result positive direct `Ghost.drive_steps_result`.
+   counter same but auxiliary r? Could bad final config `drive ... .config.store ≠ 8` by decide. Should distinct comments.
+  - runStmts positive returned config. Use ending comparison to avoid SegmentReport decidable:
+  ```
+  def returnedStart ...
+  example : Ghost.runStmts ... returnedStart = Ghost.drive ... returnedStart := by
+   apply Ghost.runStmts_of_not_normal ...; decide
+  ```
+  Actually equality of structures by rfl after reduction.
+  Counter ending inequality:
+  `(runStmts ... [.abort] start).ending ≠ (drive ... start).ending := by decide`
+  Ending derives DecidableEq? Should check.
+
+• The direct `drive_steps_result` corollary is committed as `8c21074e6`. The remaining work is a single proof-module section pairing each law with a concrete successful instance and a planted failure, including real primitive steps and ghost executions.
+
+• No DecidableEq Ending or Config, so `by decide` on ending equality unavailable. Could prove `≠` by intro h; cases h? Ending constructors differ final normal vs final trapped; `cases h` closes if constructor distinct. For runStmts normal start + abort ending `.final (.trapped .abort site)`; drive start `.final .normal`. 
+  ```
+  example : ...ending ≠ ...ending := by
+    intro h
+    cases h
+  ```
+  Will `cases h` noConfusion recursively likely yes. If same outer final but inner different, cases h uses injection noConfusion perhaps `contradiction` or `simp [Ghost.runStmts, Ghost.drive, GhostDemo.start, ...] at h`. Computable equality props but no Decidable. `simp [Ghost.runStmts, Ghost.drive, GhostDemo.start, GhostDemo.program, GhostDemo.oracle] at h` may reduce and contradiction. `cases h` usually tactic `cases h` on equality proof performs subst not discriminate if endpoints not variables? For `h : a = b`, cases h tries unify and if constructors disjoint closes. Should.
+
+  Ghost erasure:
+  positive existing example runPieces = runStmts. Should non-trivial actual concrete statement `.skip` and ghost updates, store5. Use same existing.
+  Counter planted bad state: if erase concrete `.skip` too, runs differ? runPieces with pieces includes skip vs runStmts [] start: runPieces executes skip and ends final normal same config store, events, remaining perhaps remaining differs: runPieces fuel20 after skip remaining19; runStmts [] start final leaves20. SegmentReport not decidable, compare `.remaining`: 19≠20 by decide. Great:
+  ```
+  example : (runPieces ... pieces ... start).remaining ≠
+      (runStmts ... [] start).remaining := by decide
+  ```
+  Even final reports equal ending/config but remaining distinguishes. If pieces initial ghost etc then skip consumes one. yes.
+  Ghost ending counterexample need actual difference ending when concrete removed? Existing pieces only skip both final normal, so no. Define `effectPieces` = ghost bind + concrete abort. runPieces ending final trapped; runStmts [] ending final normal. `example : (runPieces ... [.ghost assert, .concrete (.abort ⟨3⟩)] ...).ending ≠ (runStmts ... [] ...).ending := by intro h; cases h`. This is counter to erasing concrete as well. For ghost_erasure_ending positive actual conjunction perhaps existing `ghost_erasure_ending ...` plus counter effectPieces. For ghost_erasure_run counter remaining as above. Good.
+  RunStmts counter as above same effect.
+
+  Unknown primitive positive requires hstep; examples.
+  Registry `allows_allowed` and postcondition no issue.
+
+  Should vacuity for `SafetyEvidence.usable_current` and mismatch all.
+  `PrimRegistry.answerOk_iff` not standalone law perhaps include.
+  Could theorem `allows_no_implicit_trap` positive failure.
+  `lookupId...` etc.
+  Total 24*2 examples ~48. File adds 300 lines. User requested. Fine.
+
+  Should also include `eval_rename` counter result `.stuck` vs `.ok`. by decide on Res equality. `operands.eval` types annotations. I can test.
+
+  I'll insert one big namespace. Should Read end after previous edit.
+
+• The direct `drive_steps_result` corollary is committed as `8c21074e6`. The remaining work is a single proof-module section pairing each law with a concrete successful instance and a planted failure, including real primitive steps and ghost executions.
+
+• Compose insertion carefully Lean naming and implicit types.
+
+  Namespace:
+  ```
+  namespace Vacuity
+  open Prim
+  ...
+  end Vacuity
+  end ConcreteSpec.Core
+  ```
+  `Prim` namespace open makes Term etc. `PrimDemo` accessible.
+  Defs:
+  ```
+  def x0 : Var := ⟨"x",0⟩
+  ...
+  def swapNat : Nat → Nat
+    | 0 => 1
+    | 1 => 0
+    | n => n
+  def swap : Prim.Renaming where ...
+  ```
+  After open Prim can use Renaming. To avoid ambiguous `Prim` vs Exec prim no.
+  `source` etc.
+
+  Counter rename inverse:
+  ```
+  example : renameTerm .id (renameTerm swap (.var x0)) ≠ .var x0 := by decide
+  ```
+  `.id` might inferred `Renaming.id`, yes expected.
+  Rehint `AList.lookup` uses List pairs. 
+  ```
+  example : AList.lookup (rehintLocals hints [(x0,3)]) x0 ≠
+      AList.lookup [(x0,3)] x0 := by decide
+  ```
+  left none right some. Good.
+  Operands examples:
+  ```
+  example : operands.eval (renameLocals swap locals) () (renameTerm swap source) =
+      operands.eval locals () source ∧ operands.eval locals () source = .ok (5, ()) := by decide
+  ```
+  expected numeric Int inferred from operands. decide can reduce.
+  Evidence contexts:
+  ```
+  def targetChanged : EvidenceContext :=
+   { EvidenceDemo.current with target := { linuxX8664 with byteOrder := .big } }
+  ```
+  Spec version `⟨0,2⟩`.
+  Counter implications by decide.
+  Reg:
+  `answer1` definitions could reduce repetition:
+  ```
+  def successAnswer : Exec.Answer Int Int Int := ⟨none,.ok0,7⟩
+  ...
+  ```
+  Ty Unit but Answer only Val Event Store so Int Int Int. args st.
+  `answerOk` expects List Int and Int st. Use these defs.
+  `allowed` by decide.
+  Unknown primitive step definitions:
+  ```
+  abbrev requestProgram : Exec.Program PrimDemo.machine := ⟨[]⟩
+  abbrev unknownStart : Exec.Config PrimDemo.machine :=
+   ⟨.exec (.prim none ⟨1⟩ [] ⟨0⟩), [], 7, []⟩
+  ```
+  Lean `.prim none ⟨1⟩ [] ⟨0⟩` `Expr=Unit`, args [] no issue.
+  `answerOracle` uses `some ⟨none, .ok 0, 7⟩`, expected Store Int.
+  Positive unknown:
+  ```
+  example (l : Exec.Label PrimDemo.machine) (c' : Exec.Config PrimDemo.machine) :
+      ¬ Exec.Step requestProgram unknownStart l c' :=
+    PrimRegistry.unknown_primitive_stuck PrimDemo.registry requestProgram rfl rfl l c'
+  ```
+  The theorem has `{c}` implicit inferred hstep `rfl`, hnone `rfl`. likely.
+  Registered counter:
+  ```
+  example : ¬ (∀ (l ...) (c' ...), ¬ Exec.Step requestProgram registeredStart l c') := by
+    intro h
+    apply h .silent ⟨.done, [], 7, []⟩
+    exact .prim rfl (by decide) rfl
+  ```
+  Check `.prim` continuation `k` inferred from hstep; answer `a` inferred from allows proof? Expected Step label `.silent`, c' done. Elaborator might not infer a. Provide named:
+  ```
+    exact Exec.Step.prim (a := successAnswer) rfl (by decide) rfl
+  ```
+  Step.prim implicit `a` can named. `successAnswer` event none so label reduces silent. Great.
+  `allows_allowed` positive:
+  ```
+  example : PrimDemo.unitContract.Allowed [] 7 failureAnswer :=
+    PrimRegistry.allows_allowed PrimDemo.registry ⟨0⟩ PrimDemo.unitContract rfl [] 7 failureAnswer (by decide)
+  ```
+  O implicit base? The theorem O is operand `PrimDemo.base`, R registry. `(R.operands O).allows` definitional machine. by decide.
+  `answerOk_iff` positive:
+  ```
+  example : PrimDemo.unitContract.answerOk [] 7 failureAnswer = true ↔
+      PrimDemo.unitContract.Allowed [] 7 failureAnswer := by decide
+  ```
+  counter `¬ (false = true ↔ Allowed failure)` by decide.
+  `allows_postcondition` positive perhaps use direct theorem:
+  ```
+  example : PrimDemo.unitContract.ensures 1 failureAnswer.store ∨ ∃ f ∈ ..., ... := by decide
+  ```
+  Counter implication as above.
+  `allows_no_implicit_trap` positive direct theorem or `⟨1,rfl⟩` perhaps law instance use theorem:
+  ```
+  example : ∃v, failureAnswer.result = .ok v :=
+    PrimRegistry.allows_no_implicit_trap ... (by decide)
+  ```
+  Counter implicit trap:
+  `def trapAnswer : Answer ... := ⟨none,.error .abort,7⟩`
+  `example : ¬ ∃v, trapAnswer.result = .ok v := by decide`.
+
+  Ghost:
+  `drive_steps` positive:
+  ```
+  example : ∃ tr, (Ghost.drive requestProgram answerOracle 2 [] registeredStart).events = [] ++ tr ∧
+      Exec.Steps requestProgram registeredStart tr
+        (Ghost.drive ...).config :=
+    Ghost.drive_steps requestProgram answerOracle 2 [] registeredStart _ rfl
+  ```
+  Here drive_steps has r explicit implicit? Signature `(P)(ρ) : ∀ fuel hist c r, drive= r →...`; exact with `_ rfl`.
+  Counter events `[99]`.
+  `drive_steps_result` same but shorter. Could combine using exact.
+  runStmts returned:
+  ```
+  abbrev returnedStart : Config base := ⟨.exiting (.ret 1),[],5,[]⟩
+  example : Ghost.runStmts GhostDemo.program GhostDemo.oracle 20 [] [.skip] returnedStart =
+      Ghost.drive ... := by
+    apply Ghost.runStmts_of_not_normal
+    decide
+  ```
+  After `apply`, all args inferred, hf returned final ≠ normal by decide. Good.
+  Counter ending:
+  ```
+  example : (Ghost.runStmts ... 20 [] [.abort ⟨3⟩] GhostDemo.start).ending ≠
+      (Ghost.drive ... start).ending := by
+    intro h
+    cases h
+  ```
+  Potential `.abort` site `⟨3⟩`.
+  Ghost positive:
+  ```
+  example : Ghost.runPieces ... = Ghost.runStmts ... :=
+    Ghost.ghost_erasure_run ...
+  ```
+  Already spec example rfl but this is instance.
+  Counter remaining with erase []:
+  ```
+  example : (runPieces ... pieces ...).remaining ≠ (runStmts ... [] ...).remaining := by decide
+  ```
+  runStmts [] uses drive final start no fuel, remaining20; runPieces after skip uses 19.
+  Ending positive:
+  ```
+  example : events equality ∧ ending equality :=
+    Ghost.ghost_erasure_ending ...
+  ```
+  Counter effect:
+  ```
+  example : (runPieces ... [.ghost (.assert ⟨0⟩ True), .concrete (.abort ⟨3⟩)] ...).ending ≠
+   (runStmts ... [] ...).ending := by intro h; cases h
+  ```
+  Here mixed list type inference `.ghost` statement `assert` G language inferred from runPieces language. Fine.
+  `ghost_erasure_run` counter to dropping concrete, remaining; `ghost_erasure_ending` counter to dropping concrete abort.
+
+  What about `drive_steps` counter by decide on events list yes.
+  Could positive drive theorem actual request step use answer success and unitContract no events. okay.
+
+  Potential vacuity rule also `lookupId_rename` not explicitly "law" yes covered.
+  Potential theorem `allows_no_implicit_trap` positive failure.
+  `SafetyEvidence.usable_current` positive fact True perhaps trivial safety fact but context matching nontrivial. Could define evidence with fact `1+1=2` instead of True to be nontrivial? Existing evidence fact True considered vacuous? Owner vacuity law usable current guard equality, fact True irrelevant. But to avoid "trivial fact" create `def evidence : SafetyEvidence := ⟨1+1=2,current,by decide⟩` in Vacuity. Use this throughout instead of EvidenceDemo.evidence. Good. `proof := by decide`. Then usable context equality still.
+  `currentEvidence`. Defs use `evidence`.
+  `SafetyEvidence` contains Prop and proof, equality of evidence not needed, only context. Decidable Usable uses context equality.
+  Define current = EvidenceDemo.current.
+  This is nontrivial enough.
+  Counter for `usable_current`: changed contract no match.
+  Mismatch counters as above.
+
+  Could positive mismatch use exact theorem rather than by decide, but by decide actual. Fine.
+
+  Should have comments grouping per law explicitly. Each pair comments. Some `example` positive no doc `/-- ... -/` to expose in generated docs? Proof examples can use `/-- Non-trivial ... -/` many docs. Fine.
+
+  I'll make big Edit.
+
+• I’m adding the paired examples now. Each pair is labeled with its law so the final review can trace every non-vacuity witness directly to the Lean source.
+
+• Now update todo corollary done vacuity in progress.Run build to catch errors.warning: Git tree '/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c9' is dirty
+✖ [40/42] Building ConcreteSpec.Proofs.Prim (367ms)
+trace: .> LEAN_PATH=/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c9/.lake/build/lib/lean /nix/store/94bmilywgajdnqvix1fs35fj94kala0w-lean4-release-4.34.1/bin/lean /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c9/ConcreteSpec/Proofs/Prim.lean -o /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c9/.lake/build/lib/lean/ConcreteSpec/Proofs/Prim.olean -i /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c9/.lake/build/lib/lean/ConcreteSpec/Proofs/Prim.ilean -c /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c9/.lake/build/ir/ConcreteSpec/Proofs/Prim.c --setup /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c9/.lake/build/ir/ConcreteSpec/Proofs/Prim.setup.json --json
+error: ConcreteSpec/Proofs/Prim.lean:397:75: failed to synthesize instance of type class
+  OfNat operands.Val 5
+numerals are polymorphic in Lean, but the numeral `5` cannot be used in a context where the expected type is
+  operands.Val
+due to the absence of the instance above
+
+Hint: Type class instance resolution failures can be inspected with the `set_option trace.Meta.synthInstance true` command.
+error: ConcreteSpec/Proofs/Prim.lean:401:44: failed to synthesize
+  Decidable (operands.eval locals () (renameTerm swap (Term.var x0)) ≠ operands.eval locals () (Term.var x0))
+
+Hint: Additional diagnostic information may be available using the `set_option diagnostics true` command.
+error: ConcreteSpec/Proofs/Prim.lean:428:91: Tactic `decide` proved that the proposition
+  Term.eval locals (rehintTerm hints (Term.var x0)) ≠ Term.eval locals (Term.var x0)
+is false
+error: ConcreteSpec/Proofs/Prim.lean:432:75: failed to synthesize instance of type class
+  OfNat operands.Val 5
+numerals are polymorphic in Lean, but the numeral `5` cannot be used in a context where the expected type is
+  operands.Val
+due to the absence of the instance above
+
+Hint: Type class instance resolution failures can be inspected with the `set_option trace.Meta.synthInstance true` command.
+error: ConcreteSpec/Proofs/Prim.lean:436:44: failed to synthesize
+  Decidable (operands.eval locals () (rehintTerm hints (Term.var x0)) ≠ operands.eval locals () (Term.var x0))
+
+Hint: Additional diagnostic information may be available using the `set_option diagnostics true` command.
+error: ConcreteSpec/Proofs/Prim.lean:494:59: failed to synthesize
+  Decidable
+    (PrimDemo.unitContract.answerOk [] 7 failureAnswer = true ↔ PrimDemo.unitContract.Allowed [] 7 failureAnswer)
+
+Hint: Additional diagnostic information may be available using the `set_option diagnostics true` command.
+error: ConcreteSpec/Proofs/Prim.lean:497:84: failed to synthesize
+  Decidable ¬(false = true ↔ PrimDemo.unitContract.Allowed [] 7 failureAnswer)
+
+Hint: Additional diagnostic information may be available using the `set_option diagnostics true` command.
+error: ConcreteSpec/Proofs/Prim.lean:507:38: failed to synthesize instance of type class
+  OfNat PrimDemo.machine.Store 7
+numerals are polymorphic in Lean, but the numeral `7` cannot be used in a context where the expected type is
+  PrimDemo.machine.Store
+due to the absence of the instance above
+
+Hint: Type class instance resolution failures can be inspected with the `set_option trace.Meta.synthInstance true` command.
+error: ConcreteSpec/Proofs/Prim.lean:509:38: failed to synthesize instance of type class
+  OfNat PrimDemo.machine.Store 7
+numerals are polymorphic in Lean, but the numeral `7` cannot be used in a context where the expected type is
+  PrimDemo.machine.Store
+due to the absence of the instance above
+
+Hint: Type class instance resolution failures can be inspected with the `set_option trace.Meta.synthInstance true` command.
+error: ConcreteSpec/Proofs/Prim.lean:514:2: Type mismatch
+  PrimRegistry.unknown_primitive_stuck ?m.3 ?m.4 ?m.13 ?m.16 ?m.17 ?m.18
+has type
+  ¬Exec.Step ?m.4 ?m.5 ?m.17 ?m.18
+but is expected to have type
+  ¬Exec.Step requestProgram unknownStart l c'
+error: ConcreteSpec/Proofs/Prim.lean:520:30: failed to synthesize instance of type class
+  OfNat PrimDemo.machine.Store 7
+numerals are polymorphic in Lean, but the numeral `7` cannot be used in a context where the expected type is
+  PrimDemo.machine.Store
+due to the absence of the instance above
+
+Hint: Type class instance resolution failures can be inspected with the `set_option trace.Meta.synthInstance true` command.
+error: ConcreteSpec/Proofs/Prim.lean:521:52: Expected type must not contain metavariables
+  Exec.Operands.allows ?m.13 ?m.17 ?m.18 ?m.20 ?m.22 = true
+error: ConcreteSpec/Proofs/Prim.lean:525:81: failed to synthesize instance of type class
+  OfNat (Exec.Operands.Store ?m.8) 7
+numerals are polymorphic in Lean, but the numeral `7` cannot be used in a context where the expected type is
+  Exec.Operands.Store ?m.8
+due to the absence of the instance above
+
+Hint: Type class instance resolution failures can be inspected with the `set_option trace.Meta.synthInstance true` command.
+error: ConcreteSpec/Proofs/Prim.lean:529:70: failed to synthesize
+  Decidable ¬PrimDemo.unitContract.Allowed [] 7 undeclaredAnswer
+
+Hint: Additional diagnostic information may be available using the `set_option diagnostics true` command.
+error: ConcreteSpec/Proofs/Prim.lean:535:65: failed to synthesize
+  Decidable
+    (PrimDemo.unitContract.ensures 1 failureAnswer.store ∨
+      ∃ f, f ∈ PrimDemo.unitContract.failures ∧ f.errorTy = PrimDemo.unitContract.result ∧ f.holds 1)
+
+Hint: Additional diagnostic information may be available using the `set_option diagnostics true` command.
+error: ConcreteSpec/Proofs/Prim.lean:539:63: failed to synthesize
+  Decidable
+    ¬(PrimDemo.registry.allows { id := 0 } [] 7 failureAnswer = true →
+        PrimDemo.unitContract.ensures 1 failureAnswer.store)
+
+Hint: Additional diagnostic information may be available using the `set_option diagnostics true` command.
+error: ConcreteSpec/Proofs/Prim.lean:543:90: failed to synthesize instance of type class
+  OfNat (Exec.Operands.Store ?m.11) 7
+numerals are polymorphic in Lean, but the numeral `7` cannot be used in a context where the expected type is
+  Exec.Operands.Store ?m.11
+due to the absence of the instance above
+
+Hint: Type class instance resolution failures can be inspected with the `set_option trace.Meta.synthInstance true` command.
+error: ConcreteSpec/Proofs/Prim.lean:547:49: failed to synthesize
+  Decidable ¬∃ v, trapAnswer.result = Except.ok v
+
+Hint: Additional diagnostic information may be available using the `set_option diagnostics true` command.
+error: ConcreteSpec/Proofs/Prim.lean:558:83: failed to synthesize instance of type class
+  OfNat PrimDemo.machine.Event 99
+numerals are polymorphic in Lean, but the numeral `99` cannot be used in a context where the expected type is
+  PrimDemo.machine.Event
+due to the absence of the instance above
+
+Hint: Type class instance resolution failures can be inspected with the `set_option trace.Meta.synthInstance true` command.
+error: ConcreteSpec/Proofs/Prim.lean:558:93: Expected type must not contain metavariables
+  (Ghost.drive requestProgram answerOracle 2 [] registeredStart).events ≠ [99]
+error: ConcreteSpec/Proofs/Prim.lean:567:88: failed to synthesize instance of type class
+  OfNat PrimDemo.machine.Store 8
+numerals are polymorphic in Lean, but the numeral `8` cannot be used in a context where the expected type is
+  PrimDemo.machine.Store
+due to the absence of the instance above
+
+Hint: Type class instance resolution failures can be inspected with the `set_option trace.Meta.synthInstance true` command.
+error: ConcreteSpec/Proofs/Prim.lean:567:96: Expected type must not contain metavariables
+  (Ghost.drive requestProgram answerOracle 2 [] registeredStart).config.store ≠ 8
+Some required targets logged failures:
+- ConcreteSpec.Proofs.Prim
+error: build failed
+Many due abbrev reducibility typeclass not unfolding. Should have annotations, proof instead decide for Props existential no Decidable. Rehint eval counter false because Term.eval uses lookupId ignoring hints! Nit specifically C1 AList but Term.eval ignores hints so inconsistent rehint has no effect in minimal eval. My counter eval_rehint wrong. Should counterexample mutated language using AList? Law eval_rehint only consistent transformation but minimal Term eval ignores hint so theorem holds even inconsistent. Can't show failure with only term. Should planted counterexample mutate numeric id instead of hint: `rehintTerm (fun x => ...?)` only hint no id can't. Show changing id rather than hint breaks eval:
+  `Term.eval locals (.var ⟨"renamed",1⟩) ≠ Term.eval locals (.var ⟨"x",0⟩)` but locals has x1=3 so not unbound and both 3 vs10 still ≠. Use only [(x0,10)] to avoid. This is "mutated rehinting also changes id". Similar operands. For lookupId_rehint counter C1 okay.
+  Term eval rehint counter change id, not inconsistent hints. Doc update.
+  Operands eval type annotations.
+
+  PrimContract.Allowed Prop contains existential f with `holds : Val→Prop`, no Decidable instance automatically even concrete because existential over Failure lacks Decidable. `by decide` cannot. Use `by simp [PrimContract.Allowed, PrimDemo.unitContract, failureAnswer, successAnswer]` etc. Registry allows is Bool decide okay.
+  AnswerOk iff by simp [unitContract, Allowed, failureAnswer].
+  Counter false equivalence simp.
+  Allowed undeclared `by simp [Allowed, unitContract, undeclaredAnswer]`.
+  postcondition disjunction `by simp [unitContract]` likely chooses right and exists.
+  old ensures implication `by simp [PrimDemo.registry, PrimRegistry.allows, unitContract, failureAnswer]` or `by decide` on implication? conclusion ensures decidable but left bool equality decidable, implication decidable actually error came because existential? Wait old ensures no existential but error at 539 says no Decidable for ¬ allows→ensures perhaps because Int store metatype? Actually unitContract ensures reducible, but typeclass doesn't unfold. `by simp [...]`.
+  trap existential no Decidable, proof `by intro h; obtain ⟨v,h⟩ := h; cases h` should contradiction.
+  Type annotations numerals:
+  operands Val issue because operands is def not abbrev and typeclass doesn't unfold. Add `(5 : Int)` and `( () : Unit)` perhaps result type annotation whole `.ok ((5 : Int), ())`.
+  `operands.eval ... = .ok ((5:Int), ())` still expected operands.Val on lhs but rhs annotation may force unification? Definitional equality reducer in unification yes but typeclass OfNat issue avoided. For counter Decidable equality need type ascription entire:
+  ```
+  example : (operands.eval ... : Res (Int × Unit)) ≠ operands.eval ... := by decide
+  ```
+  Only one side annotation enough expected propagates. Could define `def renamedOperandResult : Res (Int×Unit) := ...` but easier.
+  Numeral 7 in Config use `(7 : Int)`.
+  Machine event `[ (99 : Int)]`.
+  store `≠ (8 : Int)`.
+  allows_allowed theorem needs specify O to resolve 7:
+  `PrimRegistry.allows_allowed (O := PrimDemo.base) ...`
+  Similarly no implicit.
+  unknown theorem specify O base and all implicits perhaps:
+  ```
+    PrimRegistry.unknown_primitive_stuck (O := PrimDemo.base)
+      (c := unknownStart) (p := ⟨1⟩) (vs := []) (site := ⟨0⟩) (st := 7)
+      PrimDemo.registry requestProgram rfl rfl l c'
+  ```
+  But c implicit argument can named. `k` inferred. hstep rfl perhaps works once expected. Or use `by
+    apply PrimRegistry.unknown_primitive_stuck (O := PrimDemo.base) PrimDemo.registry requestProgram
+      (p := ⟨1⟩) (hstep := rfl) (hnone := rfl)
+  `
+  Lean theorem binder hstep unnamed? It is `(hstep : ...)`, can named. `exact PrimRegistry.unknown_primitive_stuck (O := PrimDemo.base) (c := unknownStart) (p := ⟨1⟩) ...`.
+  Should vs site st k perhaps inference from hstep expected after c p. I can write tactic:
+  ```
+    apply PrimRegistry.unknown_primitive_stuck (O := PrimDemo.base) PrimDemo.registry requestProgram
+    · rfl
+    · rfl
+  ```
+  When apply goal unifies P c l c', R from explicit, p/hstep etc hstep remaining. It should infer p from hstep after rfl? apply creates metavars p vs... hstep goal `step... = request ?p...`, rfl unifies actual. Should.
+
+  Step.prim counter expected allows metas because a explicit but O perhaps infer from requestProgram if goal apply h gave expected Step. It failed at 7 before perhaps annotations solve. Add `(O :=?)` Step.prim no O explicit implicit `{O}` global can named `Exec.Step.prim (P := requestProgram) (a := successAnswer) rfl (by decide) rfl` but P is explicit? Step namespace inductive P parameter, constructor implicit? `Exec.Step.prim (P := requestProgram)` likely accepted. Type annotation 7 solves.
+
+  Ghost abbrev typeclass store annotation.
+
+  Should fix several sections same file. I can use one Edit replacing large blocks perhaps entire vacuity section easiest using old substrings? Multiple edits same file sequential read each. Could use one Edit from first failing eval operands through trap etc huge. Better perform a single Edit replace all problematic via entire Vacuity section? Already huge but can Read and then Write complete file prohibited incremental. I can use one Edit `old_string` entire from first failing line 395 to end 628, new updated. That's ~230 lines. I have original content in context, can do. Or multiple `Edit` calls cannot same file parallel/consecutive without read. I can do iterative edits 4 chunks with Read each. More tool calls but okay.
+
+  First chunk operands rename & rehint and eval counter lines ~390-438. Read.
+
+• The first build exposed two issues in the new examples: several numerals need explicit `Int` types through the operand adapter, and the contract propositions need simplification rather than `decide`. It also confirmed that the minimal term evaluator ignores hints entirely, so I’m changing those negative cases to mutate the numeric identity instead.
+
+• Should note file total 615 not 628 fine. Replace four blocks in one Edit requires contiguous old from 395-436 with all between. Do.Now Read registry chunk.Replace chunk 494-569. Proof simp:
+  - answerOk iff: `by simp [PrimDemo.unitContract, PrimContract.Allowed, failureAnswer]`
+  - false equivalence: `by simp [PrimContract.Allowed, PrimDemo.unitContract, failureAnswer]`
+  Allowed undeclared `by simp [...]`.
+  Postcond `by simp [PrimDemo.unitContract]` might simplifier sees `failureAnswer.store` reduce if include.
+  Old claim `by simp [PrimDemo.registry, PrimRegistry.allows, PrimDemo.unitContract, failureAnswer]` need AList.lookup simplification included `AList.lookup`. `simp [PrimDemo.registry, PrimRegistry.allows, AList.lookup, PrimDemo.unitContract, failureAnswer]`.
+  trap:
+  ```
+    intro h
+    obtain ⟨v, hv⟩ := h
+    cases hv
+  ```
+  Since trapAnswer reducible? cases hv cannot unify unless `simp [trapAnswer] at hv`. `simp [trapAnswer] at hv` should contradiction.
+  allows allowed call add `(O := PrimDemo.base)`.
+  no implicit same.
+  unknown tactic.
+  Config 7 annotations.
+  Step exact `(P := requestProgram)` perhaps P not named implicit? Can use type annotation:
+  ```
+    exact Exec.Step.prim (P := requestProgram) (a := successAnswer) rfl (by decide) rfl
+  ```
+  Check constructor P is parameter explicit in inductive declaration `inductive Step (P : Program O)`; constructor parameters usually P implicit? `Step.prim` signature `{O} {P}...` likely named accepted.
+  Drive event and store type annotations.
+  AnswerOracle type def with successAnswer works.
+  Unknown theorem:
+  ```
+    by
+      apply PrimRegistry.unknown_primitive_stuck (O := PrimDemo.base)
+        PrimDemo.registry requestProgram
+      · rfl
+      · rfl
+  ```
+  The `apply` may leave l c' already. Good.
+
+  Counter `¬ registry.allows...=false` by decide passed previously no error.
+  I'll edit.Build again.
+
+• I’ve corrected the example elaboration and strengthened the rehinting negatives to change semantic identity, which is the actual invalid mutation. I’m rebuilding to check the execution witnesses and contract proofs.warning: Git tree '/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c9' is dirty
+✖ [40/42] Building ConcreteSpec.Proofs.Prim (362ms)
+trace: .> LEAN_PATH=/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c9/.lake/build/lib/lean /nix/store/94bmilywgajdnqvix1fs35fj94kala0w-lean4-release-4.34.1/bin/lean /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c9/ConcreteSpec/Proofs/Prim.lean -o /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c9/.lake/build/lib/lean/ConcreteSpec/Proofs/Prim.olean -i /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c9/.lake/build/lib/lean/ConcreteSpec/Proofs/Prim.ilean -c /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c9/.lake/build/ir/ConcreteSpec/Proofs/Prim.c --setup /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c9/.lake/build/ir/ConcreteSpec/Proofs/Prim.setup.json --json
+error: ConcreteSpec/Proofs/Prim.lean:398:63: failed to synthesize instance of type class
+  OfNat operands.Val 5
+numerals are polymorphic in Lean, but the numeral `5` cannot be used in a context where the expected type is
+  operands.Val
+due to the absence of the instance above
+
+Hint: Type class instance resolution failures can be inspected with the `set_option trace.Meta.synthInstance true` command.
+error: ConcreteSpec/Proofs/Prim.lean:402:44: failed to synthesize
+  Decidable (operands.eval locals () (renameTerm swap (Term.var x0)) ≠ operands.eval locals () (Term.var x0))
+
+Hint: Additional diagnostic information may be available using the `set_option diagnostics true` command.
+error: ConcreteSpec/Proofs/Prim.lean:434:63: failed to synthesize instance of type class
+  OfNat operands.Val 5
+numerals are polymorphic in Lean, but the numeral `5` cannot be used in a context where the expected type is
+  operands.Val
+due to the absence of the instance above
+
+Hint: Type class instance resolution failures can be inspected with the `set_option trace.Meta.synthInstance true` command.
+error: ConcreteSpec/Proofs/Prim.lean:437:31: failed to synthesize instance of type class
+  OfNat operands.Val 10
+numerals are polymorphic in Lean, but the numeral `10` cannot be used in a context where the expected type is
+  operands.Val
+due to the absence of the instance above
+
+Hint: Type class instance resolution failures can be inspected with the `set_option trace.Meta.synthInstance true` command.
+error: ConcreteSpec/Proofs/Prim.lean:438:24: failed to synthesize instance of type class
+  OfNat operands.Val 10
+numerals are polymorphic in Lean, but the numeral `10` cannot be used in a context where the expected type is
+  operands.Val
+due to the absence of the instance above
+
+Hint: Type class instance resolution failures can be inspected with the `set_option trace.Meta.synthInstance true` command.
+error: ConcreteSpec/Proofs/Prim.lean:571:2: failed to synthesize
+  Decidable ((Ghost.drive requestProgram answerOracle 2 [] registeredStart).events ≠ [99])
+
+Hint: Additional diagnostic information may be available using the `set_option diagnostics true` command.
+error: ConcreteSpec/Proofs/Prim.lean:581:2: failed to synthesize
+  Decidable ((Ghost.drive requestProgram answerOracle 2 [] registeredStart).config.store ≠ 8)
+
+Hint: Additional diagnostic information may be available using the `set_option diagnostics true` command.
+Some required targets logged failures:
+- ConcreteSpec.Proofs.Prim
+error: build failed
+
+
+• Only operands and ghost decidable left. Type ascription not working due full expression lhs inference before annotation. Perhaps define typed functions using `Prim.operands` still def Val projection not reducible for typeclass. Numerals must all annotated `(5 : Int)` but error still expected operands.Val even annotation? It says numeral 5 no OfNat operands.Val at rhs `.ok (5,())`, annotation on whole result should propagate but not due lhs conjunct first infers equality at operands type then second ascription perhaps not enough. Explicit numeral `(5 : Int)` avoids OfNat operands.Val. Tuple expected still operands.Val but numeral already typed. `10` annotate. Decidable equality remains even no numerals because `operands.eval` result type `Res (operands.Val×Unit)` not reducible to synthesize Decidable Res Int. Should force `show Res (Int×Unit) from operands.eval ...` perhaps type ascription elaborates but outer lhs still type mismatch? Decidable doesn't unfold operands. Could `change` goal to typed expression then decide:
+  ```
+  example : operands.eval ... ≠ ... := by
+    change (Term.eval ... : Res Int) ≠ Term.eval ...
+    decide
+  ```
+  Since operands.eval reduces to `Res.map` over Term.eval with state Unit, perhaps `change` to actual `.map`? `change (Term.eval locals (renameTerm ...)).map (fun v => (v,())) ≠ ...` cumbersome. Or use `by
+    intro h
+    have he := eval_operands_rename ...?` no.
+  `by decide` with `change` full typed same syntax:
+  ```
+    change (operands.eval ... : Res (Int×Unit)) ≠ (operands.eval ... : Res (Int×Unit))
+    decide
+  ```
+  But `change` target defeq with type ascription not change elaboration? Type ascription elaboration will know expected. 
+  Better use `show (operands.eval ... : Res (Int × Unit)) ≠ (operands.eval ... : Res (Int×Unit)) from by decide` as theorem statement:
+  ```
+  example : show (operands.eval ... : Res ...) ≠ (...) from by decide
+  ```
+  Same ascription perhaps works.
+  Actually current `(operands.eval ... : Res ...) ≠ operands.eval...` failed Decidable because RHS inferred from LHS expected perhaps still operands.Val? Ascription should make LHS Res Int, equality forces RHS Res Int, then Decidable should synthesize. But failed means perhaps `Res` in current namespace resolves `ConcreteSpec.Core.Res` with type param but `operands.eval` still typeclass opaque due projection reduction in TC. Definitional equality should reduce type. Perhaps `operands` is a def with `Val := Int`, projection reduces only with `[operands]` but TC transparency reducible doesn't unfold regular def. `change` tactic uses default transparency and works. Then `decide` uses changed goal typed.
+
+  Could add local abbreviation:
+  ```
+  abbrev typedOperands : Exec.Operands := Prim.operands
+  ```
+  Same issue perhaps abbrev reducible TC works. Existing PrimDemo.base is abbrev no issues. I can define `abbrev termOperands := Prim.operands` in Vacuity, and use `termOperands` instead of `operands`. Since abbrev projection reducible typeclass. But law example should reference actual operands; abbreviation definitional same. Easy replace within four examples `operands.eval` -> `termOperands.eval` and define `abbrev termOperands : Exec.Operands := operands` before. This resolves OfNat and Decidable. But theorem name eval_operands still instance. Good.
+
+  Ghost requestProgram abbrev and machine abbrev, but drive is def with O implicit typeclass still not unfold projections for TC. Can avoid decide by `rfl`-based `by intro h; cases h` for lists numerals if endpoints defeq. For events list `h : []=[99]`, `cases h` closes. Store `h :7=8`, `cases h` closes. No Decidable needed. Use `by intro h; cases h` likely. Or `by simp [Ghost.drive, requestProgram, registeredStart, answerOracle, PrimDemo.machine, PrimDemo.registry, ...]` huge. `by decide` can't projection. `intro h; cases h` reduction uses unification default. Should.
+
+  Similarly operands negative use `by intro h; cases h` could avoid Decidable and type numerals annotation. For positive conjunction by decide still typeclass. Use `rfl` perhaps actual evaluations reduce. 
+  ```
+  example : ... := by
+    constructor
+    · rfl
+    · rfl
+  ```
+  No Decidable. Numeral 5 annotate Int. Negative `intro h; cases h` no typeclass. This easiest. Replace operands examples `by decide` with `by constructor <;> rfl` and negatives `by intro h; cases h`. For numeric identity changed eval left stuck right ok10, equality cases discriminates. Rehint positive same. Ghost negative same. This avoids abbrev.
+
+  Should read chunk and edit.
+
+• The remaining failures are only decidable-instance synthesis through opaque operand projections. I’m replacing those checks with direct reduction and constructor discrimination, which keeps the examples computational without requiring extra instances.
+
+• One edit two areas? Should contiguous 395-438 includes all. Replace only four exact occurrences using replace_all? `old_string": ":= by decide"` too broad no. Could replace `operands.eval` all in file with `termOperands.eval` using replace_all then add abbrev, but requires two edits. Better large chunk as before. Could smaller edit first two then read next. Use old 395-402 replace.Now read ghost chunk then edit.Build again.warning: Git tree '/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c9' is dirty
+✔ [40/42] Built ConcreteSpec.Proofs.Prim (403ms)
+✔ [41/42] Built ConcreteSpec (132ms)
+Build completed successfully (42 jobs).
+Great. Should inspect full vacuity and theorem list ensure every law. Could use Grep theorem in Proofs/Prim and comments. Perhaps no `example` pair for `SafetyEvidence.usable_current` etc yes.
+  Laws list:
+  lookupId_rename
+  eval_rename
+  eval_operands_rename
+  rename_inverse
+  rename_id
+  lookupId_rehint
+  eval_rehint
+  eval_operands_rehint
+  usable_current
+  obligation
+  target
+  contract
+  checker
+  spec
+  allows_unknown
+  unknown stuck
+  allows_allowed
+  allows_postcondition
+  allows_no implicit
+  drive_steps
+  drive_steps_result
+  runStmts
+  ghost run
+  ghost ending
+  answerOk_iff field
+  24.
+  What about `PrimRegistry.allows` unknown etc all.
+  Vacuity rule "for every law you add or change" first says every law C9, so done.
+
+  Perhaps `answerOk_iff` restate registry field doc to mention failure explicitly. I changed Allowed but field doc "Every semantic condition..." okay. Could improve `PrimRegistry` doc answerOk complete including failures. Existing spec section intro "checker accepts exactly answers satisfying every predicate". fine.
+
+  Should run rules.sh trust_ban.sh allowed after changes. But before response perhaps commit vacuity now build passed. Then checks on final commit. Could run checks before commit no matter. Should update todo vacuity done, validation in progress. Commit vacuity as piece after build. But ensure code comments line length warning? warningAsError build passed. Good. `git diff --check`. Commit.
+
+• All paired non-vacuity examples now build, including the actual unknown-primitive refusal, registered-primitive step, declared failure, and concrete-ending counterexamples. I’m committing that set, then running the two permitted lightweight validation scripts on the final tree.
+
+ ConcreteSpec/Proofs/Prim.lean | 287 ++++++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 287 insertions(+)
+[wip/spec-c9 700cb9a47] C9: exercise every law with non-vacuity witnesses
+ 1 file changed, 287 insertions(+)
+• Now run scripts parallel independent? `rules.sh` and trust_ban both read build, can parallel. Use multi tool Bash two calls.=== the specification ===
+  ok   1 registered rules in 39 sources, each documented with an existing decision row and an accepted and a refused example; every citation names a registered rule
+  ok   the registry and every rule citation of ConcreteSpec
+=== negative controls ===
+  ok   control: a documented rule with both examples passes
+  ok   control: a rule with no refused example fails
+  ok   control: a rule whose doc cites no decision row fails
+  ok   control: a rule registered twice fails
+  ok   control: a rule naming no declaration fails
+  ok   control: a citation of an unregistered rule fails
+  ok   control: a verdict on a non-example fails
+  ok   control: revision 0 fails
+  ok   control: a truncated listing is an error
+  ok   control: a rule with no accepted example fails
+  ok   control: a rule with no doc comment fails
+  ok   control: a rule citing a row no inventory has fails
+  ok   control: one example claiming both verdicts fails
+  ok   control: a verdict in a nested comment fails
+  ok   control: an unregistered quoted name fails
+  ok   control: examples with an attribute or a modifier count
+  ok   control: an unlexable source is an error
+  ok   control: a verdict in a string literal fails
+  ok   control: an attribute with brackets inside counts
+  ok   control: a row an inventory only mentions does not count
+  ok   control: an attribute string cannot stand in for an example
+  ok   control: an attribute holding a string with a bracket counts
+  ok   control: a quoted name holding a backtick is checked
+  ok   control: a malformed citation fails
+  ok   control: a raw string in an attribute cannot stand in for an example
+  ok   control: a quoted name in an attribute cannot stand in for an example
+  ok   control: a comment in an attribute cannot stand in for an example
+  ok   control: a quoted name holding citation-like text is one citation
+  ok   control: a missing source directory is an error
+  ok   control: a source directory with no .lean file is an error
+  ok   control: a checker that hangs through both attempts is INCOMPLETE
+SPEC-RULES: PASS=32 FAIL=0
+=== E/D: the environment ===
+  ok   all 40 ConcreteSpec source modules are in the environment E and D read
+  ok   none of the 7669 ConcreteSpec constants depends on sorryAx, ofReduceBool/Nat, trustCompiler or a native axiom
+  ok   ConcreteSpec declares no axiom
+=== S: the sources ===
+  ok   none of the 40 source files spells a banned word outside comments
+  ok   lakefile.toml builds the library with warningAsError, and nothing overrides it
+=== X: the examples, in the kernel's terms ===
+  ok   all 314 examples, kept as declarations, depend only on the standard axioms
+=== negative controls ===
+  ok   control: a theorem proved by sorry is refused (ConcreteSpecControl.sorryThm (sorryAx))
+  ok   control: a definition with a sorry body and no theorem about it is refused (ConcreteSpecControl.sorryDef (sorryAx))
+  ok   control: a theorem proved by native_decide is refused (ConcreteSpecControl.nativeThm (ConcreteSpecControl.nativeThm._native.native_decide.ax_1_1))
+  ok   control: a declared axiom is reported
+  ok   control: an axiom whose name holds a tab fails the run (no row can carry it)
+  ok   control: native_decide, and sorry inside an interpolation, after a string, raw string or quoted name holding comment delimiters, after an interpolation holding a string, a direct sorryAx, a syntax extension, an outside import, an option, meta code and decide options (native split across lines, positional) are found; the words in comments are not
+  ok   control: the header import ConcreteSpec.Spec Lean is reported
+  ok   control: the header import ConcreteSpec.Spec   Lean is reported
+  ok   control: the header prelude import ConcreteSpec.Spec is reported
+  ok   control: a library that turns warningAsError off is refused (the library sets options ['warningAsError'])
+  ok   control: a library built from another source directory is refused (the library sets ['srcDir'])
+  ok   control: a source the scan cannot read or lex (missing) fails it (rc=3)
+  ok   control: a source the scan cannot read or lex (Open) fails it (rc=3)
+  ok   control: a source the scan cannot read or lex (Brace) fails it (rc=3)
+  ok   control: a source the scan cannot read or lex (Quote) fails it (rc=3)
+  ok   control: source modules outside a (truncated) import closure are reported
+  ok   control: an example proved by decide +native and one closed by stop are reported, rfl is not, and the word example in a string is no example («⟪example⟫C.lean:1» («⟪example⟫C.lean:1»._native.decide.ax_1) «⟪example⟫C.lean:2» (sorryAx) )
+PROOF-TRUST-BAN: PASS=23 FAIL=0
+Should have final verify git status no generated new files. Build had .lake tracked ignored. Scripts perhaps generated? git status. Also perhaps run final lake build after scripts? Already final code build before commit, no changes after. Checks pass. Should inspect git log SHAs full and status. Also perhaps `git diff f898... --stat` and confirm axioms golden untouched. Use Bash.
+
+• Both permitted checks pass: the rule registry and negative controls (`32/32`), plus the proof trust ban including all `314` examples (`23/23`). I’m doing the final cleanliness and commit-scope check now.## wip/spec-c9
+700cb9a476fe49999f85cb2727af57436b5c4541 C9: exercise every law with non-vacuity witnesses
+8c21074e60bdae18ee8704fbc7e9ba0840ce5afa C9: expose drive step soundness directly
+b91093b69a207998ac9a264948848cf42994b3a0 C9: enforce declared primitive failure contracts
+ConcreteSpec/Proofs/Prim.lean
+ConcreteSpec/Spec/Ident.lean
+ConcreteSpec/Spec/Prim.lean
+
+
+• Should have Todo done.User brief asks for a final response listing commits SHA + one line, what each theorem states, what's left out and why, QUESTIONS. Round2 additionally requires a per-law witnesses list. Should produce a concise but complete final response with the commit list, changes/theorems, validation, vacuity per law, left out, questions. Should mention no merge because the base is an ancestor. No push. Do not mention the date. Should have citations path lines. Should have current line numbers after additions. I have some. Spec Prim Allowed lines 192-203 perhaps current. Demo 430 etc. Proof corollary lines 286? Vacuity starts 352, per examples lines 380 onward. Could cite broad ranges `ConcreteSpec/Proofs/Prim.lean:354` etc. Should have exact current lines from Reads after changes:
+  Spec Allowed 192 etc unchanged plus two lines. Var Ident line33.
+  Proof theorem lines:
+  allows_postcondition 190 etc.
+  drive_steps_result after 285 now line? previously inserted at 286, yes.
+  Vacuity begins around 352, defs line360.
+  Non-vacuity comments from line380 etc, final 635. I can cite ranges not each exact.
+  Final "what each theorem states" could refer to only changed/new theorems (allows_postcondition and drive_steps_result) because original task already done, round2. But brief explicitly asks the final response to list what each theorem states, perhaps all C9 theorems. I can group by theorem and descriptions plus witness. Per-law list can combine statement + positive/negative witness to avoid duplication. There are 24 laws; table with columns Law, statement/witness pair. User asked "what each theorem states" and round says per law examples. I can present grouped bullets with law statement and witnesses. That's long ~24 bullets but necessary. Use compact table? Instructions say avoid large tables; use shallow grouped bullets. Could group identities 8, registry 7, evidence 6, ghost 5. Each bullet `law` — statement. Witness: positive; counter: negative. This satisfies everything.
+
+  Should mention `PrimRegistry.answerOk_iff` is a structure field not a theorem; include as contract law. Theorems:
+  - `lookupId_rename`: renamed env/key lookup same.
+  - `eval_rename`: bijective renaming preserves Term.eval.
+  - `eval_operands_rename`: same through C1.
+  - `rename_inverse`: inverse recovers.
+  - `rename_id`.
+  - `lookupId_rehint`.
+  - `eval_rehint`.
+  - `eval_operands_rehint`.
+  Evidence 6.
+  Registry:
+  - `allows_unknown`: absent registry allows false.
+  - `unknown_primitive_stuck`: no Step.
+  - `allows_allowed`: accepted answer satisfies complete Allowed.
+  - `allows_postcondition`: ordinary result ensures or declared failure.
+  - `allows_no_implicit_trap`.
+  - answerOk_iff field equivalence.
+  Ghost:
+  - drive_steps
+  - drive_steps_result
+  - runStmts_of_not_normal
+  - ghost_erasure_run
+  - ghost_erasure_ending.
+  24.
+  Each witness names examples by doc comment because anonymous. I can state "positive: renamed second entry returns 3; negative: unrenamed key loses entry". That identifies.
+
+  "what is left out and why": round2 did not add primitive instances/syntax, module invariants, ownership erasure, JSON schema, C8, per original out of scope. Also no heavy gates per brief, no axioms golden edit. Mention `scripts/proofs/axioms.golden` untouched; heavy axioms/kernel/external/checks not run as instructed. The branch had axioms golden from original and new theorem means golden now stale? Round says leave to reviewer. I should explicitly say not regenerated by instruction. No questions. No open design questions. Merge base ancestor no conflicts. Worktree clean. No push.
+
+  Commit list:
+  b910... enforce declared primitive failures + doc rehint
+  8c210... corollary
+  700cb... witnesses
+  All full SHA perhaps list full as asked SHA + one line. Full okay.
+
+  Validation exact commands:
+  - `nix develop -c timeout 1200 lake build ConcreteSpec` passed after each piece.
+  - rules pass 32
+  - trust ban 23 all 314 examples.
+  No heavy run.
+
+  "what each theorem states" perhaps `allows_postcondition` now disjunction and no implicit trap. Mention defect fixed success 0 failure1 undeclared2 examples Spec lines 480 etc.
+
+  Per-law witness list can be concise perhaps not restate full theorem if section summary covers. To satisfy both, combine.
+
+  I'll plan the final response:
+
+  "Implemented ROUND2 on wip/spec-c9. origin/wip/spec-core was already ancestor, so no merge. Worktree clean, no push."
+
+  Commits.
+
+  "Main fixes" 3 bullets:
+  - Allowed disjunction and common checks; accepted declared failure/refused undeclared. `allows_postcondition` restated.
+  - Var doc consistent rehint.
+  - drive_steps_result.
+
+  "Theorem statements and non-vacuity witnesses"
+  Use shorthand "Each bullet gives the law, then its positive / planted-negative example in `Vacuity` (`Proofs/Prim.lean:352`)."
+  Identities:
+  - lookup... statement; + second entry=3; – key not renamed fails.
+  ...
+  Evidence:
+  - usable_current exact context; + arithmetic fact; – changed contract.
+  - obligation_mismatch etc. Could group mismatch theorem statements collectively? User "what each theorem states" need each names. Use 5 bullets with statement.
+  Registry.
+  Ghost.
+
+  This is lengthy ~1500 words but desired necessary. I can compress each to 1-2 lines.
+
+  Should be careful `eval_rehint` negative changes numeric identity, not inconsistent C1 because minimal evaluator ignores hints. `lookupId_rehint` negative whole-Var AList only env. `eval_operands_rehint` same numeric identity. Good.
+
+  Evidence counterexamples:
+  - obligation law positive obligationChanged, negative only-obligation check with wrong target.
+  - target positive targetChanged, negative only-target check wrong obligation.
+  - contract positive contractChanged, negative only-contract check wrong checker.
+  - checker positive checkerChanged, negative only-checker wrong spec.
+  - spec positive specChanged, negative only-spec wrong contract.
+  - usable_current positive evidence exact, negative changed contract. Fine.
+  Registry answerOk positive failure passes both; negative checker false vs Allowed true.
+  allows_unknown positive unknown returns false, negative registered not false.
+  unknown stuck positive actual no Step, negative registered does have step.
+  allows_allowed positive failure allowed, negative 2 not.
+  postcondition positive failure alternative despite ensures false, negative ensures-only implication fails.
+  no implicit positive failure exists ok, negative trap not.
+  drive_steps positive real request Steps, negative event99 impossible.
+  drive_steps_result same positive no auxiliary, negative final store !=8.
+  runStmts positive returned no restart, negative normal abort vs drive differs.
+  ghost run positive ghost+skip report same, negative deleting skip changes remaining fuel.
+  ghost ending positive events/ending same, negative deleting concrete abort changes ending.
+  rename_inverse positive source changes and recovers, negative identity not inverse.
+  rename_id positive compound unchanged, negative swap not id.
+  lookup rehint positive numeric finds3, negative C1 AList inconsistent.
+  eval op positive returns5 etc.
+
+  All good.
+
+  Could avoid "every theorem" includes original helper theorem `SafetyEvidence.usable_current` etc yes. No other theorem in file? `PrimRegistry.allows_allowed`, no separate `PrimContract.Allowed` law. I included all.
+
+  "Left out": No concrete primitive instances and syntax etc unchanged. Heavy checks not run. `QUESTIONS: None.` explicit.
+
+  I'll mention no files generated. Worktree clean.
+
+  Response length perhaps ~1700 tokens. That's okay. Use headings light.
+
+• Implemented `_review/ROUND2.md` on `wip/spec-c9`. `origin/wip/spec-core` was already an ancestor, so no merge was needed. Nothing was pushed, `scripts/proofs/axioms.golden` was untouched, and the worktree is clean.
+
+  ### Commits
+
+  - `b91093b69a207998ac9a264948848cf42994b3a0` — enforce declared primitive failure contracts; document consistent rehinting.
+  - `8c21074e60bdae18ee8704fbc7e9ba0840ce5afa` — add `drive_steps_result`, the corollary without an auxiliary report argument.
+  - `700cb9a476fe49999f85cb2727af57436b5c4541` — add positive instances and planted counterexamples for every C9 law.
+
+  ### Main changes
+
+  - `PrimContract.Allowed` now accepts an ordinary result only when it satisfies `ensures` or matches a declared failure alternative with the contracted result type (`ConcreteSpec/Spec/Prim.lean:192`).
+  - The demo accepts success `0` and declared failure `1`, but refuses undeclared result `2` (`ConcreteSpec/Spec/Prim.lean:478`).
+  - `allows_postcondition` now states the success/declared-failure disjunction (`ConcreteSpec/Proofs/Prim.lean:190`).
+  - `Var` documents that C1’s `AList.lookup` compares the whole variable, so binders and occurrences must be rehinted consistently (`ConcreteSpec/Spec/Ident.lean:33`).
+  - `drive_steps_result` states concrete-step soundness directly for the report returned by `drive` (`ConcreteSpec/Proofs/Prim.lean:286`).
+
+  ### Laws and non-vacuity witnesses
+
+  All examples below are in `ConcreteSpec/Proofs/Prim.lean:352`.
+
+  **Identities**
+
+  - `lookupId_rename`: renamed lookup equals the original. Positive: second renamed entry returns `3`; negative: failing to rename the key loses the entry.
+  - `eval_rename`: bijective renaming preserves evaluation. Positive: compound binder term returns `5`; negative: renaming only the occurrence becomes unbound.
+  - `eval_operands_rename`: the same preservation holds through C1. Positive: adapter returns `5`; negative: inconsistent occurrence renaming changes the result.
+  - `rename_inverse`: inverse renaming recovers the term. Positive: swap changes then restores the source; negative: substituting identity for the inverse does not restore it.
+  - `rename_id`: identity renaming changes nothing. Positive: compound term unchanged; negative: swap is not identity.
+  - `lookupId_rehint`: numeric lookup ignores hints. Positive: rehinted lookup returns `3`; negative: inconsistent rehinting breaks C1’s whole-`Var` lookup.
+  - `eval_rehint`: consistent rehinting preserves evaluation. Positive: result remains `5`; negative: mutating the numeric identity instead breaks evaluation.
+  - `eval_operands_rehint`: the same holds through C1. Positive: adapter returns `5`; negative: changing numeric identity changes the adapter result.
+
+  **Evidence**
+
+  - `SafetyEvidence.usable_current`: evidence is usable in its exact context. Positive: proved arithmetic fact matches; negative: changed contract invalidates it.
+  - `obligation_mismatch`: changing the obligation invalidates evidence. Positive: changed obligation refused; negative: an obligation-only check misses a wrong target.
+  - `target_mismatch`: changing the target invalidates evidence. Positive: changed target refused; negative: a target-only check misses a wrong obligation.
+  - `contract_mismatch`: changing the contract invalidates evidence. Positive: changed revision refused; negative: a contract-only check misses a wrong checker.
+  - `checker_mismatch`: changing the checker invalidates evidence. Positive: changed checker refused; negative: a checker-only check misses a wrong spec.
+  - `spec_mismatch`: changing the spec invalidates evidence. Positive: changed spec refused; negative: a spec-only check misses a wrong contract.
+
+  **Primitive contracts**
+
+  - `PrimRegistry.answerOk_iff`: executable acceptance coincides with `Allowed`. Positive: declared failure satisfies both; negative: a checker omitting that failure violates equivalence.
+  - `allows_unknown`: an unregistered primitive returns `false`. Positive: primitive one refused; negative: registered primitive zero is not treated as unknown.
+  - `unknown_primitive_stuck`: an actual unknown request has no C1 step. Positive: no `Step` exists; negative: the corresponding registered request does have a step.
+  - `allows_allowed`: accepted answers satisfy the complete contract. Positive: declared failure satisfies `Allowed`; negative: undeclared `2` does not.
+  - `allows_postcondition`: accepted results satisfy `ensures` or a declared failure. Positive: failure `1` matches its alternative despite failing `ensures`; negative: the former ensures-only claim fails.
+  - `allows_no_implicit_trap`: accepted results are ordinary values. Positive: declared failure is `.ok 1`; negative: an implicit trap has no ordinary-value witness.
+
+  **Execution and ghost erasure**
+
+  - `drive_steps`: a driver run has a matching `Steps` derivation and event trace. Positive: real primitive request; negative: fabricated event `99` is absent.
+  - `drive_steps_result`: the same law without an auxiliary report. Positive: direct request witness; negative: final store is not the fabricated value `8`.
+  - `runStmts_of_not_normal`: non-normal configurations are not restarted. Positive: returned configuration unchanged; negative: a normal configuration does execute a later `abort`.
+  - `ghost_erasure_run`: erasing ghost statements preserves the complete report. Positive: ghost computations around concrete `skip`; negative: also erasing `skip` changes remaining fuel.
+  - `ghost_erasure_ending`: erasure preserves events and ending. Positive: mixed ghost/concrete example; negative: erasing a concrete `abort` changes the ending.
+
+  ### Validation
+
+  - `nix develop -c timeout 1200 lake build ConcreteSpec` — passed after each commit.
+  - `nix develop -c timeout 600 bash scripts/spec/rules.sh` — **PASS=32, FAIL=0**.
+  - `nix develop -c timeout 900 bash scripts/proofs/trust_ban.sh` — **PASS=23, FAIL=0**, including all 314 examples.
+
+  Heavy proof and CI gates were not run, as instructed. Concrete primitive syntax/instances, module invariants, ownership erasure, JSON schema generation, and C8 remain outside C9’s scope.
+
+  **QUESTIONS:** None.
+
+To resume this session: kimi -r session_a8ceda4a-618c-486f-a8f4-ba34e9f599b1
+[unexpected] RuntimeError: workspace wd_c9_facc9b7d835c is not materialized
+    at RuntimeResolver.acquire (/home/runner/work/kimi-code/kimi-code/apps/kimi-code/dist-native/intermediates/main.cjs:180498:36)
+    at AgentRuntimeService.acquire (/home/runner/work/kimi-code/kimi-code/apps/kimi-code/dist-native/intermediates/main.cjs:132231:25)
+    at AgentFileHistoryService.readCurrent (/home/runner/work/kimi-code/kimi-code/apps/kimi-code/dist-native/intermediates/main.cjs:177606:31)
+    at AgentFileHistoryService.endCheckpoint (/home/runner/work/kimi-code/kimi-code/apps/kimi-code/dist-native/intermediates/main.cjs:177519:32) {
+  code: 'runtime.not_found'
+}
+kimi rc=0

@@ -1,0 +1,529 @@
+我将读取修改后的文件以结合完整上下文进行审查。
+我将读取 `scripts/checks/slice0_trusted_base.sh` 和 `.github/workflows/slice0.yml` 以确认所有上下文。
+我将读取 `scripts/checks/run.sh` 和 `scripts/checks/lib/slice0_common.sh`，看看其它检查脚本是如何组织的。
+我将仔细分析这些改动，检查是否存在请求中提到的各类缺陷（错误的地址算术、解析器静默处理而非抛出异常的操作数形式、测量值被少算的情况、对照测试未实际覆盖新行为、LLDB/gdb API 误用、bash 错误等）。
+
+让我们逐个文件仔细检查。
+
+### 1. `scripts/checks/lib/stack_access.py`
+
+先看注释和总体设计：
+- "The run check counts the lowest byte each stepped instruction of the Concrete-owned code addresses, not only the stack pointer: code may use the target's red zone, below the stack pointer, without moving it (stack_bound.py counts the same bytes). An access's lowest byte is its effective address, whatever its size, so only the address is computed. Fail closed: an operand this module cannot evaluate is an error, never "no access"."
+
+让我们检查 `x86_addresses(asm, reg, next_pc)`:
+```python
+def x86_addresses(asm, reg, next_pc):
+    """Effective addresses of the memory operands of one instruction in gdb's Intel syntax
+    (`mov QWORD PTR [rsp-0x80],0x0`). reg(name) reads a register. lea and nop compute an address
+    without accessing it; fs:/gs: operands address the thread block, not the stack."""
+    asm = asm.split("#", 1)[0].strip().lower()
+    mn = asm.split(None, 1)[0] if asm else ""
+    if mn == "lea" or mn.startswith("nop") or mn.startswith("prefetch"):
+        return []
+```
+等等！在 x86-64 gdb Intel 语法中，指令可能带有前缀吗？比如 `rep stos`, `lock add`, `rex.w`, `data16 nop`, `bnd jmp` 等？
+如果 `asm` 是 `data16 nop WORD PTR cs:[rax+rax*1+0x0]`（这是 GNU objdump / gdb 对长多字节 NOP 的标准反汇编！）
+等一下！gdb 怎么反汇编多字节 NOP 的？！
+在 x86-64 上，编译器（clang / gas）对齐时经常生成多字节 NOP，例如 `66 2e 0f 1f 84 00 00 00 00 00`，gdb 反汇编它是：
+`nop WORD PTR cs:[rax+rax*1+0x0]` 或者是 `data16 cs nop WORD PTR [rax+rax*1+0x0]`！
+如果 `mn` 是 `nop`，`mn.startswith("nop")` 返回 `[]`。但如果带有 `data16` 前缀，它是 fail-closed（或者算 `cs:[rax+rax*1+0x0]`，只要 `rax*2` 不碰巧落在 `[sp0 - 8MB, sp0)` 就没事，如果碰巧在 stack 就会误报，不是漏报）。
+
+但是等等！什么样的 x86 指令会访问栈内存，但是**没有** `[...]` 显式内存操作数？！
+1. `push` / `pop` / `call` / `ret` / `leave` / `enter`：
+   - 对于 `push reg`：`sp` 在执行后减小 8，下一次循环开头 `pc, sp = reg("pc"), reg("sp")` 会读取新的 `sp` 并执行 `low = min(low, sp)`！
+   - 等等！如果是最后一条指令 `ret` 呢？`ret` 只是读取 `[rsp]` 并把 `rsp` 加 8，不会访问比当前 `rsp` 更低的地址。
+   - 如果是 `push` 紧接着 `pop` 呢？由于是单步执行 (`stepi`)，`push` 执行完停在下一条指令时，`sp` 已经减 8，循环开头的 `low = min(low, sp)` 会记录这个 `sp`。
+   - 等等！如果一条指令是 `call` 跳向外部函数呢？
+     在 `stack_measure.py` 中：
+     当 `pc` 在 `call ext@plt` 时（在 owned 范围内），`stepi` 单步执行 `call`，进入 PLT stub。此时 `pc` 不在 owned `ranges` 内！
+     在下一次循环迭代时：
+     `pc, sp = reg("pc"), reg("sp")` -> `sp` 已经减了 8（因为 `call` 压入了返回地址），然后 `low = min(low, sp)` 被执行！然后再走 `else:` 分支跳到 `ret` 地址！
+   - 等等：如果 `push rsp` 或别的呢？一样移动了 `sp`。
+   - 那有没有不移动 `sp`（或者在同一条指令内先减后加）或隐式访问内存的指令？
+     line 51: `if not out and re.search(r"\b(movs|stos|lods|cmps|scas)", mn):`
+     注意！如果有 `rep movs...`，`mn` 是 `"rep"`！因為 `mn = asm.split(None, 1)[0]`！
+     如果指令是 `rep stos BYTE PTR es:[rdi],al`，注意：
+     1) gdb 反汇编 `stosb` / `movsb` 是什么样的？
+     在 gdb Intel 语法中，`stosb` 被反汇编为 `stos BYTE PTR es:[rdi],al`！它**有** `[rdi]`（所以 `out` 非空）！
+     Wait: `movs QWORD PTR es:[rdi],QWORD PTR ds:[rsi]` 也有 `[rdi]` 和 `[rsi]`！
+
+再看 `x86_addresses` 的正则和解析：
+```python
+    for m in re.finditer(r"(?:(\w\w):)?\[([^\]]*)\]", asm):
+        if m.group(1) in ("fs", "gs"):
+            continue
+```
+看看 `re.finditer(r"(?:(\w\w):)?\[([^\]]*)\]", asm)`。
+如果段寄存器不是两个字符，或者只有 `ds:` / `es:` / `cs:` / `ss:`，它是 2 个字符，`\w\w` 匹配。
+
+再看 `x86_addresses` 中的每一项计算：
+```python
+        for sign, term in terms:
+            if "*" in term:
+                r, scale = term.split("*", 1)
+                v = reg(r) * _num(scale)
+            elif NUM.match(term):
+                v = _num(term)
+            elif term == "rip":
+                v = next_pc
+            else:
+                v = reg(term)
+            addr += v if sign == "+" else -v
+        out.append(addr & MASK)
+```
+等等！看看：
+1) 如果 `term` 是 `4*rcx` 而不是 `rcx*4` 呢？
+在 `x86_addresses` 中：
+`r, scale = term.split("*", 1)`
+`v = reg(r) * _num(scale)`
+如果 `term` 是 `4*rcx`，`r` 是 `"4"`，调用 `reg("4")`：
+在 gdb 中 `reg("4")` 执行 `gdb.parse_and_eval("(unsigned long) $4")`！
+在 gdb 中 `$4` 是什么？！`$4` 是 gdb convenience / value history variable（如果存在的话，或者是 0 或报错）！如果 `scale` 是 `"rcx"`，`_num("rcx")` 会抛 `ValueError`，所以在 `4*rcx` 时 `_num("rcx")` 会抛 `ValueError`（fail closed）。
+在 gdb Intel 语法中，gdb 总是输出 `reg*scale`（如 `rax*1`）。
+
+2) 在 gdb 中，`reg(name)` 是怎么实现的？
+看看 `stack_measure.py:52-53`：
+```python
+def reg(name):
+    return int(gdb.parse_and_eval(f"(unsigned long) ${name}"))
+```
+**停下来仔细看这里！**
+在 gdb 中，如果 `name` 是一个**不存在的寄存器名**（比如拼写错误，或者某个未识别的符号/词法项落入 `else: v = reg(term)`），`gdb.parse_and_eval(f"(unsigned long) ${name}")` 会发生什么？！
+**在 GDB 中，访问一个不存在的 `$foo` 不会报错！GDB 会把它当作一个未初始化的 convenience variable（值为 `void`），而 `(unsigned long) $foo` 在 GDB 中要么报错 `Invalid cast.`，要么如果 `$foo` 曾被定义过就会求值！**
+等一下，在 GDB 中 `(unsigned long) $nonexistent` 是报错 `Invalid cast.`（抛出 `gdb.error`）吗？
+我们可以在命令行用 `gdb` 测一下吗？先别急，先把所有代码看完。
+
+让我们继续看 `stack_access.py` 的 `a64_addresses` 和 `_a64_index`！
+**仔细看 `a64_addresses`（第 76-98 行）和 `_a64_index`（第 56-73 行）！**
+
+```python
+def _a64_index(text, reg):
+    """Value of an AArch64 index operand: `x9`, `x9, lsl #3`, `w9, sxtw #2`, `w9, uxtw`."""
+    parts = [p.strip() for p in text.split(",")]
+    r = parts[0]
+    v = reg("x" + r[1:]) if r.startswith("w") else reg(r)
+    if r.startswith("w"):
+        v &= 0xFFFFFFFF
+    shift = 0
+    if len(parts) > 1:
+        m = re.fullmatch(r"(lsl|sxtw|uxtw|sxtx|uxtx)(?:\s+#(\d+))?", parts[1])
+        if not m:
+            raise ValueError(f"unparsed index extension {parts[1]}")
+        if m.group(1) == "sxtw" and v & 0x80000000:
+            v -= 1 << 32
+        shift = int(m.group(2) or 0)
+    if len(parts) > 2:
+        raise ValueError(f"unparsed index {text}")
+    return v << shift
+```
+看看 `_a64_index`：
+1. 如果 `m.group(1) == "sxtx"` 呢？因为 `v` 是 `uint64`（来自 `GetValueAsUnsigned()`），外层 `(base + _a64_index(off, reg)) & MASK` 模 $2^{64}$，所以对于 64 位 `sxtx` 和 `uxtx` 在模 $2^{64}$ 下左移 `shift` 是一样的。
+2. 如果 `r` 是 `wzr` 或 `xzr` 呢？
+在 `stack_measure_lldb.py` 中：
+```python
+def register(frame, name):
+    """A general register's value (`sp`, `x0`..`x30`, `fp`, `lr`); unknown names fail closed."""
+    v = frame.FindRegister(name)
+    if not v.IsValid() and name in ("x29", "x30"):
+        v = frame.FindRegister({"x29": "fp", "x30": "lr"}[name])
+    if not v.IsValid():
+        raise ValueError(f"no register {name}")
+    return v.GetValueAsUnsigned()
+```
+如果指令是 `ldr x8, [sp, xzr]`（虽然少见），`register(frame, "xzr")` 会抛 `ValueError("no register xzr")`，这是 fail-closed。
+但如果 `r` 是 `w9` 呢？
+`v = reg("x" + r[1:]) if r.startswith("w") else reg(r)` -> 调用 `register(frame, "x9")`，这没问题！
+等等：如果基址寄存器或者别的地方向 `register(frame, name)` 传了什么？基址寄存器在 AArch64 内存操作数中只能是 64 位寄存器 (`x0`..`x30`, `sp`)。
+
+3. **现在看 `a64_addresses` 的第 80-98 行！**
+```python
+def a64_addresses(mnemonic, operands, reg):
+    """Effective addresses of one AArch64 instruction in LLDB's syntax (`stp x29, x30, [sp,
+    #-0x10]!`, `ldr x30, [sp], #0x10`, `ldr w8, [x9, x10, lsl #2]`). A post-indexed access is at the
+    base; a pre-indexed or offset one at base plus offset. prfm/prfum only hint."""
+    mn, ops = mnemonic.lower(), operands.lower().split("//", 1)[0]
+    if mn.startswith("prf"):
+        return []
+    m = re.search(r"\[([^\]]*)\](!?)", ops)
+    if not m:
+        return []
+    parts = [p.strip() for p in m.group(1).split(",", 1)]
+    base = reg(parts[0])
+    post = ops[m.end():].strip()
+    if post:
+        if not re.fullmatch(r",\s*(#-?(0x[0-9a-f]+|\d+)|x\d+)", post) or len(parts) > 1:
+            raise ValueError(f"unparsed post-index in {mn} {operands}")
+        return [base & MASK]
+    if len(parts) == 1:
+        return [base & MASK]
+    off = parts[1]
+    if off.startswith("#"):
+        return [(base + _num(off[1:])) & MASK]
+    return [(base + _a64_index(off, reg)) & MASK]
+```
+
+**等一下！仔细看 `a64_addresses`！这里有几个非常关键的问题：**
+
+#### 问题 A：AArch64 有没有不带 `[...]` 的内存访问指令？
+PC-relative load literal！例如：
+`ldr x0, 0x1000` / `ldr w0, label` / `ldrsw x0, label` / `ldr q0, label`！
+不过 PC-relative literal load 访问的是代码/只读数据段，不是栈（除非代码离栈在 1MB 以内，这违反 premise）。
+
+#### 问题 B：AArch64 内存指令中，地址是访问的最低字节吗？
+注释写着：
+`An access's lowest byte is its effective address, whatever its size, so only the address is computed.`
+在 little-endian (x86-64 和 AArch64 都是) 中，一个 N 字节的内存访问 `[addr, addr + N - 1]`，它的最低地址字节确实是 `addr`！
+**而在栈向下增长的模型中，深度是 `sp0 - byte_addr`！**
+Wait:
+字节地址越**低**（越小），距离 `sp0` 越**远**（即 `sp0 - a` 越**大**，在栈中越**深**）！
+让我核对一下 `stack_bound.py` 和 `stack_access.py` 中“深 (deep)”和“低 (low)”的定义是否一致！
+
+**停下来！立刻算一下这个数学关系！**
+这极其重要！让我们一步一步算清楚！
+
+在真实的机器内存中（x86-64 和 AArch64）：
+栈向**低地址**增长（downward growing）。
+设 `main` 入口时的栈指针为 `sp0`（例如 `sp0 = 0x1000`）。
+当执行一条指令：
+`mov qword ptr [rsp - 0x80], 0`（8 字节写入）
+此时 `rsp = sp0 = 0x1000`。
+有效地址（Effective Address, EA）是：
+`EA = rsp - 0x80 = 0x1000 - 128 = 0x0f80`。
+这个 8 字节的 `qword` 写入的是哪 8 个字节？！
+是内存地址：
+`0x0f80, 0x0f81, 0x0f82, 0x0f83, 0x0f84, 0x0f85, 0x0f86, 0x0f87`！
+也就是 `[rsp - 128, rsp - 121]`！
+这 8 个字节中，距离 `sp0` 最远（最深）的字节是哪一个？
+是地址最小的那个字节：`0x0f80 = sp0 - 128`，它的深度是 `sp0 - 0x0f80 = 128`！
+地址最大的那个字节是 `0x0f87 = sp0 - 121`，它的深度是 `sp0 - 0x0f87 = 121`！
+
+现在，让我们看看 **`stack_bound.py`** 是怎么算的！
+看 `stack_bound.py` 第 240-242 行（`x86_inst`）：
+```python
+        k = sum(int(t.replace(" ", ""), 0) for t in terms if t.strip(" +-") not in regs)
+        top = (frame_depth(st.fp, what) if base[0] == "rbp" else st.d) - k
+        lo = top - X86_SIZE[size.group(1)] + 1
+```
+在 `mov qword ptr [rsp - 0x80], 0` 中：
+- `st.d = 0`
+- `k = -0x80 = -128`
+- `top = 0 - (-128) = 128`（深度 128，对应字节地址 `sp0 - 128`，即有效地址 EA！）
+- `lo = 128 - 8 + 1 = 121`（深度 121，对应字节地址 `sp0 - 121`，即最高字节地址 EA + 7！）
+- `deepest = top = 128`！
+再看 `stack_bound.py` 第 390-402 行（`a64_core`）：
+```python
+            if base == "x29":
+                top = frame_depth(st.fp, what) - k
+            elif pre:
+                d = d - k
+                top = d
+            else:
+                top = d - k
+            if post is not None:
+                if base != "sp":
+                    raise Refuse(f"unmodelled writeback: {what}")
+                top = st.d
+                d = d - imm(post)
+            lo = top - size + 1
+```
+- 在 `stur xzr, [sp, #-0x80]` 中：`k = -128`，`top = 0 - (-128) = 128`，`lo = 128 - 8 + 1 = 121`，`deepest = top = 128`。
+- 所以在 `stack_bound.py` 中：
+  一个内存访问 `[EA, EA + size - 1]`，由于 `EA = sp0 - top`，它的字节范围在硬件地址上是 `[sp0 - top, sp0 - top + size - 1]` = `[sp0 - top, sp0 - lo]`。
+  其中离 `sp0` 最深（depth 最大）的字节深度就是 `top = sp0 - EA`，对应的硬件地址就是最低字节地址 `EA`！
+
+等等！那如果 `lo < 1` 呢？
+在 `stack_bound.py` 中：
+如果 `mov qword ptr [rsp - 4], rax`：
+`EA = sp0 - 4`，写的是 `[sp0 - 4, sp0 + 3]`。
+`top = 4`，`lo = 4 - 8 + 1 = -3 < 1`，`touch` 拒绝它（因为它触碰了 `[sp0, sp0 + 3]` 即返回地址）。
+而在 `stack_access.py` 中：
+`EA = sp0 - 4 < sp0`，`lowest_stack` 只检查 `sp0 - span <= a < sp0` 和 `a < sp - red_zone`。
+
+但是等等！在 `stack_bound.py` 中，如果一条指令在 `aarch64-linux`（`RED_ZONE = 0`）上是怎么检查的？
+让我们看 `stack_bound.py` 第 588-592 行：
+```python
+                # The stack pointer either side of the instruction (a pre-indexed or pushing access
+                # is at the new one, a post-indexed one at the old).
+                if touched is not None and touched > max(before, st.d) + RED_ZONE:
+                    raise Refuse(f"{key}+{addr:#x}: an access {touched - max(before, st.d)} bytes below the "
+                                 f"stack pointer, beyond the {RED_ZONE}-byte red zone of {TARGET}: {mn} {ops}")
+```
+**停下来！仔细检查 `stack_bound.py` 第 588-592 行和 `stack_access.py` 的交互！**
+
+让我们测试所有指令类型在这两处的表现！
+
+#### 场景 1：`stack_bound.py` 中的 `max(before, st.d)` 与一条包含多个内存操作数或同时修改 `rsp` 的指令？
+在 x86 中，有没有既访问内存又修改 `rsp` 的指令？
+1. `push rbp`：
+   `before = st.d`，`st.d = before + 8`，`touched = before + 8`。
+   `max(before, st.d) = before + 8`。`touched > max(before, st.d) + RED_ZONE` 为 `False`。
+   Wait: 在 `stack_measure.py`（动态运行检查）中，当单步到 `push rbp` 时（还没执行 `push rbp`）：
+   `insn["asm"]` 是 `"push   rbp"`。
+   `x86_addresses("push rbp", reg, next_pc)` 返回什么？
+   因为 `"push rbp"` 没有 `[...]`，`x86_addresses` 返回 `[]`！
+   然后 `gdb.execute("stepi")` 执行 `push rbp`。
+   下一轮循环开头：`pc, sp = reg("pc"), reg("sp")`，`low = min(low, sp)` 记录了新的 `sp`（即 `sp - 8`）。
+   **但是！如果指令是 `push QWORD PTR [rsp - 0x80]` 呢？或者如果是最后一条指令呢？**
+   在 `stack_bound.py` 中，`push` 只允许 `X86_GPR64`（第 264 行：`if not X86_GPR64.match(dst): raise Refuse(...)`），所以 `push [...]` 在静态分析中直接被拒绝了。
+
+2. **等一下！在 AArch64 中，pre-indexed store/load 在 `stack_measure_lldb.py`（动态运行检查）中会发生什么？！**
+**停下来！！算一下这个！！**
+
+看 AArch64 的标准函数序言（prologue）指令：
+`stp x29, x30, [sp, #-0x10]!` （或者 `stp x29, x30, [sp, #-0xa0]!`，或者在 `RED_ZONE = 0` 的目标上 `stp x29, x30, [sp, #-0x10]!`）！
+当程序在 LLDB 下单步执行到 `stp x29, x30, [sp, #-0x10]!`（或者 `str x30, [sp, #-0x90]!`）时：
+在 `stack_measure_lldb.py` 第 116-133 行：
+```python
+        pc, sp = frame.GetPC(), frame.GetSP()
+        ...
+        if owned(pc):
+            insn = target.ReadInstructions(lldb.SBAddress(pc, target), 1).GetInstructionAtIndex(0)
+            mn, ops = insn.GetMnemonic(target), insn.GetOperands(target)
+            try:
+                touched = stack_access.lowest_stack(
+                    stack_access.a64_addresses(mn, ops, lambda r: register(frame, r)),
+                    sp, sp0, red_zone, SPAN)
+```
+注意！此时指令 `stp x29, x30, [sp, #-0x90]!` **还没有执行**（`StepInstruction` 在第 133 行，即在 `lowest_stack` **之后**）！
+所以此时的 `sp` 是**指令执行前**的旧 `sp`（比如 `sp = sp0`）！
+而 `a64_addresses("stp", "x29, x30, [sp, #-0x90]!", ...)` 计算出的有效地址是：
+`a = sp - 0x90`（即 `sp0 - 144`）！
+然后把这个 `a = sp - 144` 传给 `stack_access.lowest_stack(addresses, sp, sp0, red_zone, SPAN)`！
+在 `lowest_stack` 中（`stack_access.py:109`）：
+```python
+        if sp0 - span <= a < sp0:
+            if a < sp - red_zone:
+                raise ValueError(f"an access {sp - a} bytes below the stack pointer, beyond the "
+                                 f"{red_zone}-byte red zone")
+```
+**天哪！！看这里！！**
+在 `stp x29, x30, [sp, #-0x90]!`（或者 `str x30, [sp, #-0x90]!`）中：
+这是一条 **pre-indexed** 指令（带 `!` 写回 `sp`）！
+在 ARM64 架构规范中，pre-indexed 指令 `stp x29, x30, [sp, #-0x90]!` 会改变 `sp`（把 `sp` 减去 `0x90` 并写访问新的 `[sp]`），它**不是**对红区（red zone）的访问，而是分配栈帧！
+在 `stack_bound.py`（静态分析，第 588-590 行）中，作者专门考虑了这一点：
+```python
+                # The stack pointer either side of the instruction (a pre-indexed or pushing access
+                # is at the new one, a post-indexed one at the old).
+                if touched is not None and touched > max(before, st.d) + RED_ZONE:
+```
+静态分析知道 pre-indexed 访问是在**新的** `sp`（`st.d = before + 0x90`）处，所以 `touched = before + 0x90 <= max(before, st.d) + RED_ZONE`，静态分析**允许** `stp x29, x30, [sp, #-0x90]!`（以及在 `aarch64-linux` `RED_ZONE=0` 下允许 `stp x29, x30, [sp, #-0x10]!`）！
+**但是在 `stack_measure_lldb.py` / `stack_access.py`（动态运行检查）中：**
+在执行 `StepInstruction` **之前**调用 `lowest_stack`，传入的 `sp` 只是指令执行**前**的 `sp`（旧 `sp`）！
+`a64_addresses` 看到 `m = re.search(r"\[([^\]]*)\](!?)", ops)`，完全忽略了 `m.group(2)`（那个 `!`），直接返回 `[(base + _num(off[1:])) & MASK]` = `[sp - 0x90]`，然后 `lowest_stack` 用指令执行**前**的 `sp` 检查 `if a < sp - red_zone:`！
+结果：
+1. 在 `aarch64-macos`（`red_zone = 128`）上，任何分配超过 128 字节栈帧的 pre-indexed prologue 指令（例如 clang 在 `-O0` 或较大栈帧时常生成的 `stp x29, x30, [sp, #-0x90]!` 或 `str x30, [sp, #-0x90]!`），`a = sp - 144 < sp - 128`，动态运行检查 `lowest_stack` 会直接抛出 `ValueError: an access 144 bytes below the stack pointer, beyond the 128-byte red zone`！
+2. 如果 `red_zone = 0`（如 `aarch64-linux`，或者任何 red_zone 较小的测试），连最普通的 `stp x29, x30, [sp, #-0x10]!`（`a = sp - 16 < sp - 0`）都会被 `lowest_stack` 误判为越过 red zone 而报错！
+
+让我们再验证一下这个发现！
+看用户 prompt 的描述：
+> Context:
+> - scripts/checks/lib/stack_bound.py is a fail-closed static stack-bound analysis over llvm-objdump disassembly of a linked executable (x86-64 Intel syntax, AArch64). The bound is the deepest stack byte below main's entry stack pointer that the stack pointer reaches or any instruction addresses. NEW: it takes a TARGET (x86_64-linux, aarch64-macos, aarch64-linux) with a red zone (128, 128, 0) and refuses an access deeper than the red zone below the current stack pointer (taking the larger depth of before/after the instruction, for pre/post-indexed and push forms). --ranges also prints `redzone N`.
+
+看！在 `stack_bound.py` 中作者专门写了 "(taking the larger depth of before/after the instruction, for pre/post-indexed and push forms)"，但在 `stack_access.py` / `stack_measure_lldb.py` 中，因为是在 `StepInstruction` 之前只用指令执行前的 `sp` 调用 `lowest_stack(addresses, sp, sp0, red_zone, SPAN)`，完全忘了 pre-indexed `[sp, #-imm]!` 会把 `sp` 更新为 `sp - imm`！
+
+等一下，除了 `stack_measure_lldb.py` 中的 pre-indexed `[sp, #imm]!`，那 post-indexed 呢？
+假设有一条 post-indexed 指令，比如 `ldr x30, [sp], #-0x90`（虽然少见，向下移动 `sp`）或者普通的 `ldr x30, [sp], #0x10`（向上弹栈）：
+在 `ldr x30, [sp], #0x10` 中，指令执行前 `sp` 在低处，访问的是旧 `sp`，此时还没执行指令，`sp` 还是旧 `sp`，所以 `a = sp >= sp - red_zone`。但是执行完 `StepInstruction` 后，下一轮循环 `sp` 变成了 `sp + 0x10`。
+那如果一条 post-indexed 指令是 `str x30, [sp], #-0x90` 呢？执行前访问的是旧 `sp`（`a = sp`），执行后下一轮循环 `sp` 变成 `sp - 0x90`，`low = min(low, sp)` 记录了新的 `sp`。
+而对于 pre-indexed 指令（例如 `stp x29, x30, [sp, #-0x90]!`），访问发生在更新后的 `sp`（`sp - 0x90`），但 `lowest_stack` 比较的却是更新前的 `sp`！
+
+等等，`stack_bound.py` 中对 pre-indexed / post-indexed 的 red zone 检查有没有反过来的问题？
+让我们仔细看 `stack_bound.py` 第 588-592 行！
+```python
+                # The stack pointer either side of the instruction (a pre-indexed or pushing access
+                # is at the new one, a post-indexed one at the old).
+                if touched is not None and touched > max(before, st.d) + RED_ZONE:
+                    raise Refuse(f"{key}+{addr:#x}: an access {touched - max(before, st.d)} bytes below the "
+                                 f"stack pointer, beyond the {RED_ZONE}-byte red zone of {TARGET}: {mn} {ops}")
+```
+让我们检查 `stack_bound.py` 中所有既修改 `st.d` 又有 `touched` 的指令！
+在 `stack_bound.py` 中：
+1. `x86_inst`：
+   有没有一条 x86 指令既有内存操作数（设置 `deepest`），又修改 `st.d`？
+   看 `x86_inst`（258-289行）：
+   - `push`：操作数必须是 `X86_GPR64`（无 `[...]`），返回 `st.but(d=d, ...), d`。`touched = d = st.d`。
+   - `pop`：操作数必须是 `X86_GPR64`（无 `[...]`），返回 `x86_pop(...), None`。Wait：`pop` 返回的 `touched` 是 `None`！
+     **等一下！为什么 `x86_pop` 和 `leave` 返回的 `touched` 是 `None`？！**
+     如果 `st.d` 在 `pop` 前是 8，`pop rax` 读取 `[1, 8]`（深度 8），`st.d` 变为 0。因为进入 `pop` 前 `st.d = 8` 已经被前面的指令记录进 `deepest` 了？
+     等等，如果函数刚进来在 `st.d = 0` 就 `pop` 呢？`touch(st, at - 7, at, ...)` 会因为 `at - 7 = -7 < 1` 抛 `Refuse("touches the return address or the caller's frame")`。
+     那如果 `leave` 呢？假设 `rbp` 的深度是 `fp = 32`，而当前 `rsp` 的深度是 `st.d = 0`（比如之前 `add rsp, 32` 把 `rsp` 移上去了，使 `[rbp - 8, rbp]` 落入 red zone，然后执行 `leave` 相当于 `mov rsp, rbp; pop rbp`）！
+     等一下！如果在 x86-64 上：
+     ```
+     push rbp          ; st.d = 8, saved fp at [1, 8]
+     mov rbp, rsp      ; st.fp = 8
+     sub rsp, 0x100    ; st.d = 264
+     mov rbp, rsp      ; st.fp = 264
+     ```
+     如果 `st.fp` 比 `st.d` 更深（即 `st.fp > st.d`），然后执行 `leave`（或者 `mov rsp, rbp`）：
+     `leave` 调用 `x86_pop(st, "rbp", frame_depth(st.fp, what), what)`：
+     它会读取 `[st.fp - 7, st.fp]`（深度 `st.fp`），并把 `st.d` 设为 `st.fp - 8`，但是返回 `touched = None`！
+     不仅 `touched` 是 `None`（所以 `deepest = max(deepest, st.d, touched or 0)` 只算了 `st.fp - 8`，漏掉了被 pop 的那 8 个字节 `[st.fp - 7, st.fp]`！），而且如果 `st.fp > st.d + RED_ZONE`，`touched` 是 `None` 所以也不会触发 red zone 检查！
+     不过在 `x86_pop` 中，`touch` 要求被读的 8 字节要么是 `saved` slot，要么在 `st.w` 中（曾经被写过，那时就已经计入 `deepest` 了）。
+2. 再看 `a64_core` 中既有 `touched` 又修改 `st.d` 的指令：
+   - pre-indexed `[sp, #k]!`：
+     `before = st.d`
+     `d = before - k`
+     `top = d`
+     `touched = top = st.d`。
+     如果 `k > 0`（例如 `ldr x0, [sp, #0x90]!`，即 `sp` 向上移动 144 字节，变为 `before - 144`，然后访问新的 `sp`）：
+     硬件上怎么执行 `ldr x0, [sp, #0x10]!`？
+     在 ARM64 中，pre-indexed `ldr x0, [sp, #0x10]!` 先令 `sp = sp + 0x10`，然后访问 `[sp]`（即新的 `sp`）。在访问发生时以及指令结束后，该访问都不在 `sp` 下方（它在新的 `sp` 处，也在旧的 `sp` 上方）。
+     那如果是 post-indexed `ldr x0, [sp], #0x90` 呢？
+     `before = st.d`（比如 160）。
+     `post = "#0x90"`（+144）。
+     `top = st.d = 160`（访问在旧 `sp` 处，即深度 160）。
+     `d = before - 144 = 16`（指令执行后，新 `sp` 在深度 16）。
+     **注意！** 当执行 `ldr x0, [sp], #0x90` 时：
+     在 ARM64 硬件上，内存访问发生在 `sp` 更新前？还是更新后若有异步信号会发生什么？
+     等一下！如果在 ARM64 Linux（`RED_ZONE = 0`）或 macOS（`RED_ZONE = 128`）上，执行 `ldr x0, [sp], #0x90`（或 `ldp x29, x30, [sp], #0x90`）：
+     **想一想！如果一条指令是 `ldp x29, x30, [sp], #0x90`，在硬件上它是怎么工作的？！**
+     在 `ldp x29, x30, [sp], #0x90` 执行**完成**后，`sp` 增加了 `0x90`（144 字节）！但寄存器 `x29, x30` 已经在指令执行期间从 `[old_sp]` 读进寄存器里了，内存里 `[old_sp]` 的值以后再也不需要了（栈帧已经释放了）！
+     而在指令执行**之前**，`sp` 还是 `old_sp`，`[old_sp]` 在 `sp` 之上（深度等于 `old_sp`），信号处理程序绝不会覆盖它！
+     在指令执行**期间**，ARM64 单条 `ldp` 指令是原子的（中断/信号只能在指令边界投递，或者如果页错误重试，因为 `x29`/`x30` 不是 base register `sp`，`sp` 还没有写回）！
+     所以 `ldp x29, x30, [sp], #0x90` 在 `before` 时访问深度是 `before`（距离旧 `sp` 0 字节），完成后栈已经缩回 `before - 144`，栈帧已被丢弃！
+     因此在 `stack_bound.py` 中，`max(before, st.d)` 对于 `ldp x29, x30, [sp], #0x90` 是 `before`（160），`touched` 是 160，`touched <= max(before, st.d) + RED_ZONE` 成立！
+     **反之，如果一条指令是 `str x0, [sp, #-0x90]!`（pre-indexed store）：**
+     如果信号在指令**前**到达，还没写内存，信号处理程序用 `[old_sp - ...]`, 返回后再执行 `str x0, [sp, #-0x90]!`，写入并更新 `sp = old_sp - 0x90`；如果信号在指令**后**到达，`sp` 已经是 `old_sp - 0x90` 了，信号处理程序在新的 `sp` 下方运行，不会覆盖 `[new_sp]`！
+     所以 pre-indexed 访问的基准是 `after` (`st.d`)，post-indexed 访问的基准是 `before`！
+     **但是，如果是一条 pre-indexed 且偏移为正（向上缩栈）的指令，或者 post-indexed 且偏移为负（向下扩栈）的指令呢？**
+     - 假设在 `aarch64-linux` (`RED_ZONE = 0`) 上执行 `str x0, [sp, #0x10]!`（虽然奇葩）：
+       `before = 32`，`st.d = 16`（`sp` 先加 16 缩栈），然后把 `x0` 写到 `[new_sp]`（深度 16）。这访问的是 `new_sp`（在 `new_sp` 处，不在 `new_sp` 下方），所以是安全的。
+     - **但是假设执行 `ldr x0, [sp, #-0x10]!` 呢？**
+       `before = 16`，`st.d = 32`（`sp` 减 16 扩栈），然后从深度 32 读（当然 `touch` 会拒绝读未写的内存，除非之前写过）。
+       Wait：如果之前在深度 32 写过（比如 `sub sp, sp, #32; str x0, [sp]; add sp, sp, #16`），一旦执行 `add sp, sp, #16` 把 `sp` 移到 16，深度 32 就暴露在 `sp` 下方 16 字节了！
+       **等等！！说到这个！！**
+       看 `stack_bound.py` 的第 268-271 行、第 177-178 行、以及第 639 行！
+       如果在 `aarch64-linux` (`RED_ZONE = 0`) 上（或者在 x86-64 上超过 128 字节）：
+       ```
+       sub sp, sp, #0x20    ; st.d = 32
+       str x0, [sp]         ; 写入 [25, 32]，st.w 包含 25..32，此时 st.d = 32，没有违反 RED_ZONE
+       add sp, sp, #0x20    ; st.d = 0！此时 [25, 32] 在 sp 下方 32 字节（超出了 aarch64-linux 的 0 字节 red zone！）
+       sub sp, sp, #0x20    ; st.d = 32
+       ldr x0, [sp]         ; 读取 [25, 32]！此時 st.w 仍然包含 25..32，且 st.d = 32！
+       ```
+       不过那是 `st.w` 在 `add sp` 时没有清除高于新 `st.d + RED_ZONE` 的字节，但这不在本次 diff 修改的范围内（虽然有趣，我们先专注于本次 diff 引入的代码和契约）。
+
+让我们回到刚才在 `stack_access.py` / `stack_measure_lldb.py` 中发现的 pre-indexed 问题，再深入检查 `stack_access.py` 的每一行代码！
+
+---
+
+### 深入检查 `scripts/checks/lib/stack_access.py`
+
+让我们逐行阅读 `stack_access.py`：
+
+#### 1. `x86_addresses(asm, reg, next_pc)`
+
+```python
+def x86_addresses(asm, reg, next_pc):
+    """Effective addresses of the memory operands of one instruction in gdb's Intel syntax
+    (`mov QWORD PTR [rsp-0x80],0x0`). reg(name) reads a register. lea and nop compute an address
+    without accessing it; fs:/gs: operands address the thread block, not the stack."""
+    asm = asm.split("#", 1)[0].strip().lower()
+    mn = asm.split(None, 1)[0] if asm else ""
+    if mn == "lea" or mn.startswith("nop") or mn.startswith("prefetch"):
+        return []
+```
+让我们检查：
+1) **x86 指令前缀问题**：
+在 gdb 的 Intel 语法反汇编中，指令前面可以有前缀（prefix）：
+例如：
+- 多字节 NOP：在 x86-64 上，clang/GAS 经常生成 `data16 cs nop WORD PTR [rax+rax*1+0x0]` 或 `cs nop WORD PTR [rax+rax*1+0x0]`。
+  此时 `asm.split(None, 1)[0]` 得到的是 `"data16"` 或 `"cs"`，**不是** `"nop"`！
+  于是 `mn.startswith("nop")` 为 `False`！
+  然后 `re.finditer(r"(?:(\w\w):)?\[([^\]]*)\]", asm)` 匹配到 `cs:[rax+rax*1+0x0]`（或 `[rax+rax*1+0x0]`）。
+  `m.group(1)` 是 `"cs"`（不是 `"fs"`, `"gs"`）。
+  然后它计算 `rax + rax*1 + 0x0`！
+  如果此时寄存器 `rax` 的值恰好使得 `2 * rax`（模 $2^{64}$）落在 `[sp0 - 8MB, sp0)` 范围内（例如 `rax` 碰巧是一个栈地址或某数的一半），这本来是一条 `nop` 指令，根本没有访问内存，却被当作一次栈内存访问，甚至如果 `< sp - red_zone` 就会直接报错！
+- 同样，对于 `rep movs ...` / `rep stos ...` / `repz cmps ...` / `repnz scas ...`：
+  `mn` 是 `"rep"` / `"repz"` / `"repnz"` / `"repe"` / `"repne"`，而不是 `"movs"` / `"stos"` 等！
+  虽然在 line 51：
+  `if not out and re.search(r"\b(movs|stos|lods|cmps|scas)", mn):`
+  因为搜索的是 `mn`（第一个单词）而不是 `asm`，如果指令带 `rep` 前缀且没有 `[...]`，`re.search(..., mn)` 永远不会匹配，因为 `mn` 是 `"rep"`！
+
+2) **x86 隐式栈内存访问指令（没有 `[...]` 操作数，或不在 `[...]` 中体现）**：
+等一下！在 x86-64 中，当执行 `push`、`pop`、`call`、`ret`、`leave`、`enter` 时：
+- 假设有一条指令在 `red_zone = 0`（或测试较小 red zone）下执行，或者假设 `main` 的**最后一条指令**访问了栈，或者 `pop` 指令访问了栈：
+  等等！假设一个函数写坏了 `rsp`（或者通过 `leave` / `pop`）：
+  比如：
+  ```
+  sub rsp, 128
+  add rsp, 128
+  ```
+  这里 `sp` 动了，所以在下一条指令停下时，`sp = reg("sp")` 被读取，`low = min(low, sp)` 记录了 `sp`。
+  **但是！如果一条指令先减小 `rsp` 再恢复，或者如果 `push` 之后立刻 `pop` 呢？**
+  对于 `push rax`：
+  执行 `push rax` 前，`sp = sp0`。`x86_addresses("push rax", ...)` 返回 `[]`。
+  然后 `stepi` 执行 `push rax`。
+  在下一条指令开头，`sp = sp0 - 8`，`low = min(low, sp)` 记录了 `sp0 - 8`。
+  **但是，如果 `pop rax` 是怎么回事呢？**
+  假设 `rsp` 在 `[sp0 - 8]`，执行 `pop rax`：执行前 `sp = sp0 - 8` 已经被记录了。
+  **但是如果执行 `pop QWORD PTR [rsp - 0x80]` 呢？** 它有 `[rsp - 0x80]`，会被 `x86_addresses` 捕获。
+  **那如果是 `push` 一个值，但是 `red_zone` 设为负数？不，`red_zone >= 0`。**
+  **等等：如果一条指令是 `call` 到一个空的 owned 函数或指令流，或者 `ret` 呢？**
+  等等，在 `stack_measure.py` 第 77-81 行：
+  ```python
+    while live():
+        pc, sp = reg("pc"), reg("sp")
+        if sp > sp0:  # main has returned
+            gdb.execute("continue", to_string=True)
+            continue
+        low = min(low, sp)
+  ```
+  思考一个场景：
+  如果 `main` 中的一条指令把 `sp` 改成了**高于** `sp0`（比如 `add rsp, 0x80`，此时 `sp = sp0 + 0x80 > sp0`），但 `main` 并没有返回，接着下一条指令在 `[rsp - 0x100]`（即 `sp0 - 0x80`）处写栈，然后再 `sub rsp, 0x80; ret` 呢？
+  因为 `if sp > sp0:` 认为 `main has returned`，直接 `continue` 全速运行到结束了，后面的指令根本不会单步！
+  （这是原有代码，不是本次 diff 改的，但如果是 `stack_measure_lldb.py` 也是如此）。
+
+3) **看 `x86_addresses` 对内存操作数的解析（第 29-50 行）**：
+```python
+    for m in re.finditer(r"(?:(\w\w):)?\[([^\]]*)\]", asm):
+        if m.group(1) in ("fs", "gs"):
+            continue
+        inner = m.group(2).replace(" ", "")
+        if not inner or inner[0] not in "+-":
+            inner = "+" + inner
+        terms = re.findall(r"([+-])([^+-]+)", inner)
+        if "".join(s + t for s, t in terms) != inner:
+            raise ValueError(f"unparsed memory operand [{m.group(2)}] in {asm}")
+        addr = 0
+        for sign, term in terms:
+            if "*" in term:
+                r, scale = term.split("*", 1)
+                v = reg(r) * _num(scale)
+            elif NUM.match(term):
+                v = _num(term)
+            elif term == "rip":
+                v = next_pc
+            else:
+                v = reg(term)
+            addr += v if sign == "+" else -v
+        out.append(addr & MASK)
+```
+让我们仔细测试这段代码在各种输入下的行为：
+- 如果 `m.group(2)` 是空的 `[]`：
+  `inner = "+"`
+  `terms = []`
+  `"".join(...) != "+"` -> 抛出 `ValueError`。好。
+- 如果 `m.group(2)` 是 `rsp - 0x80`：
+  `inner = "+rsp-0x80"`
+  `terms = [("+", "rsp"), ("-", "0x80")]`
+  `sign="+", term="rsp"` -> `addr += reg("rsp")`
+  `sign="-", term="0x80"` -> `addr -= 0x80`
+  `out.append(addr & MASK)`。
+- 如果 `m.group(2)` 有比例变址，例如 `rsp + rcx*8 - 0x10`：
+  `terms = [("+", "rsp"), ("+", "rcx*8"), ("-", "0x10")]`
+  对于 `"rcx*8"`：`r = "rcx"`, `scale = "8"`，`v = reg("rcx") * 8`。
+  **等等！如果比例因子写在前面，比如 `rsp + 8*rcx` 呢？**
+  `r = "8"`, `scale = "rcx"`。
+  `reg("8")` 在 gdb 中：`$8` 是 GDB 的历史值变量（value history）！如果之前沒有 `$8`，`(unsigned long) $8` 会在 `_num("rcx")` 之前先求值，即使 `_num("rcx")` 会抛 `ValueError`。
+  **但是！如果 `term` 是 `rcx*2*2` 呢？** `term.split("*", 1)` 得到 `r="rcx", scale="2*2"`，`_num("2*2")` 抛 `ValueError`。
+- **等一下！在 32 位地址模式（address-size override，例如 `[esp - 0x80]` 或 `[ebp - 0x10]`）下呢？**
+  在 x86-64 上，如果指令使用 32 位寻址，比如 `mov dword ptr [esp - 0x80], 0`：
+  在硬件上，32 位寻址的计算是 `(esp - 0x80) & 0xFFFFFFFF`（零扩展到 64 位），而不是 `(esp - 0x80) & 0xFFFFFFFFFFFFFFFF`！
+  不过在 64 位 Linux 上栈地址在高位（`0x7fff...`），`[esp - 0x80]` 本身就会段错误。
+- **等等！在 GDB 中，`reg(term)` 对 32/16/8 位或特殊名称会发生什么？**
+  在 `stack_measure.py` 中：
+  `def reg(name): return int(gdb.parse_and_eval(f"(unsigned long) ${name}"))`
+  在 GDB 中，`$` 后面跟任何标识符，如果**不是**寄存器名，GDB 会把它当作 **convenience variable**！
+  我们用 `run_command` 实际测试一下 GDB 对 `(unsigned long) $nonexistent` 的行为！
+  先看看能不能跑一个简单的 python / gdb 命令验证一下（不修改任何文件）。

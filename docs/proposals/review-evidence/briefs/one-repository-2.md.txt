@@ -1,0 +1,42 @@
+TASK: the one-repository switch, rebuilt on current main WITHOUT the superseded remote guard (branch wip/one-repository-2,
+this clone, on main f65b9121).
+
+Background. The project moves from github.com/unbalancedparentheses/concrete2 to github.com/lambdaclass/concrete; concrete2
+will be archived. The owner signed off an earlier version, `lambdaclass/wip/one-repository` at a27fbb842 (fetched here), but it
+was built on top of `wip/remote-guard` (a large local URL guard in scripts/land/lib.sh: LAND_REPOSITORIES, land_url_target,
+land_ssh_host, land_url_expand, land_url_bad, land_remote_bad, and its calls in many scripts and the pre-push hook). The owner
+has since SUPERSEDED that guard (2026-11-08): main will be protected server-side, and a much smaller local guard comes as a
+separate later branch. Main has also changed: the landing bot (bot.sh, notify.sh, install-bot.sh, systemd units,
+landing_bot.sh) was deleted, and an owner sign-off path was added (scripts/land/signoff.sh, train.sh review_provenance).
+
+Read first: B's own changes over the guard, `git diff b60670804 a27fbb842` (b60670804 is the guard branch's tip that B
+merged; the diff is what B itself changed), the changelog fragment `git show a27fbb842:changelog.d/2026-11-07-one-repository.md`,
+and on current main: scripts/land/train.sh, scripts/land/lib.sh, scripts/push-both.sh, scripts/land/acceptance.sh,
+scripts/oracle/ORACLE.lock and build.sh, .github/workflows/lean_action_ci.yml, docs/LANDING.md, docs/SELF_HOSTED_RUNNERS.md,
+AGENTS.md, README.md, .claude/commands/land.md, scripts/checks/landing_script.sh.
+
+Do: re-apply B's INTENT onto current main, as a fresh set of commits (no merge of the old branches):
+- No mirror: `origin` is lambdaclass/concrete; train.sh lands on origin only (LAND_MIRROR and `land --no-mirror` gone);
+  LAND_REPO defaults to lambdaclass/concrete; push-both.sh pushes one remote (keep its name and lock unless it becomes a
+  pure duplicate of something else; if so, say so in your report rather than deleting it); acceptance.sh follows.
+- CI: the Landing record job reads runs from `github.repository`, not a hard-coded concrete2.
+- Oracle: ORACLE.lock points at the release on lambdaclass/concrete (take the exact values from a27fbb842's ORACLE.lock;
+  `mirror_url` gone) and build.sh follows.
+- Docs (LANDING.md, SELF_HOSTED_RUNNERS.md, AGENTS.md, README.md, .claude/commands/land.md, the SPEC_UNIFICATION.md line
+  B touched): one repository, no mirror.
+- Keep the owner sign-off path and every existing control passing.
+- Do NOT bring back any of the guard functions above, the deleted bot files, or `LAND_REPOSITORIES`. Where B's code called
+  the guard (e.g. require_remote_repo), drop the call, unless main still has an equivalent check you must keep; the small
+  guard is a later branch.
+- Controls in scripts/checks/landing_script.sh: train.sh lands on origin only and never pushes a second remote; with no
+  `lambdaclass` remote configured nothing refuses for that reason; LAND_REPO defaults to lambdaclass/concrete; push-both.sh
+  pushes exactly one remote. Each asserted on its exact output; prove each is load-bearing with a temporary mutation.
+- A changelog fragment changelog.d/2026-11-08-one-repository.md describing the switch as it is now (no guard).
+- Do NOT edit docs/decisions.md or ROADMAP.md (B's old edits to them are not carried; the decisions writer records them).
+
+Gates (bounded):
+   timeout 1500 systemd-run --user --scope -q -p MemoryMax=8G -p TasksMax=1024 bash scripts/checks/run.sh   (all pass)
+Hard rules: commit locally (one or a few clear commits); never push; never change git config or remotes; no --no-verify;
+bounded runs; no network beyond what the gates do offline; do not run train.sh against real remotes. When done print the
+commit SHA(s), a per-file summary, what you deliberately did not carry from a27fbb842 and why, the controls with their exact
+assertions, and the mutation results.

@@ -1,0 +1,34 @@
+TASK: revise docs/proposals/MAIN_PROTECTION.md (branch wip/main-protection, this clone, head 9db6e4f7) so every claim about
+GitHub behaviour is correct and the proposal is honest about what rulesets can and cannot enforce. It is a DRAFT for the owner;
+nothing is applied to GitHub. Read the file, .github/workflows/lean_action_ci.yml (especially the "Landing record" job),
+required-checks.txt, scripts/land/train.sh (watch/land: how it validates the qualifying run) and docs/LANDING.md first.
+
+Confirmed findings from three reviewers to fix:
+1. Cutover order deadlocks: while ruleset 19117072 (pull_request rule, admin bypass only) is active, the deploy key's direct
+   push is blocked (rulesets stack; ruleset 2's bypass does not bypass 19117072). Rewrite the rollout so it can succeed
+   (activate the replacements, remove the PR rule, then test with a train landing), with a rollback step.
+2. Required status checks accept `success`, `skipped` and `neutral` conclusions; the doc says "succeeded". State the real
+   semantics and that train.sh's own strict job-conclusion check (success only, exact SHA, base) stays the authority for that.
+3. integration_id 15368 binds the GitHub Actions app, not the workflow, event, branch, base or run: another workflow can
+   produce the same check names. Say so; list what remains enforced only by train.sh.
+4. The "Landing record" job does nothing on the ci/* dispatch (its steps run only on a push to main), so requiring it adds no
+   provenance before main moves. Either drop it from the required list in the draft with that reason, or explain precisely
+   what it proves; do not overclaim.
+5. A DeployKey bypass actor is class-wide (every current and future write deploy key), and a deploy key authenticates a
+   credential, not the execution of train.sh: whoever holds it can hand-push a qualifying fast-forward. State the trusted
+   authorities honestly (the landing credential's custodian/host, repository admins who can edit rulesets), propose how to
+   confine the credential (a dedicated landing host/service; a GitHub App as the bypass actor if that is narrower — check
+   and state GitHub's actual actor types for repository rulesets), and keep a read-only audit command that lists write
+   deploy keys and ruleset bypass actors.
+6. Replace "nobody (admins included) can push main by hand" with the true statement: admins can edit or disable rulesets
+   (the emergency path); the rulesets stop accidental and unauthorised pushes by everyone else.
+Keep the document concise and in the existing style (plain prose, short sections, exact commands). Keep the status line that
+nothing is applied. Update changelog.d/2026-11-08-main-protection-proposal.md to match. If you are unsure about a GitHub
+behaviour, say it must be verified and give the read-only command or docs page to verify it, rather than asserting it.
+
+Gates: timeout 300 bash scripts/checks/doc_links.sh; timeout 1500 systemd-run --user --scope -q -p MemoryMax=8G -p
+TasksMax=1024 bash scripts/checks/run.sh (all 11 pass).
+Out of scope: any file other than those two; never edit docs/decisions.md or ROADMAP.md.
+Hard rules: commit locally with a clear message; never push; never apply any GitHub setting or call a mutating gh/API
+command (read-only `gh api` GETs are allowed if network works, but not required); no --no-verify; no git config changes;
+bounded runs. Print the commit SHA and a summary of each change.

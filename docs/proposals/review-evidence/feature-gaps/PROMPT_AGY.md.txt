@@ -1,0 +1,257 @@
+You may read files in the current directory (a git-archive copy of Concrete's origin/main) if your tools allow; if not, answer from the context below. Do not modify files.
+
+You are reviewing a research answer for the owner of Concrete, a fully proven systems language with no GC (linear ownership, second-class references, explicit capabilities via with(...) plus grant values, no hidden traps, Lean 4 is the specification). The owner asked: "is there anything from spark, rust, odin, zig, or any system programming language or any other formal verified language feature that we should have that we didn't think about?"
+
+The current directory is a git-archive copy of origin/main. Claude's draft is _review/DRAFT.md. Read it, then check it against the repository: docs/PHILOSOPHY.md (rules 1-18, conflict order, admission test, refusals), docs/decisions.md, ROADMAP.md (slice table, std-per-slice table), docs/proposals/SPARK.md, IDEAS.md, MERGED.md, FOUNDATION.md, ConcreteSpec/, legacy/docs/spec/ (e.g. types.md TYPE-22 constants, references.md REF-6), docs/archive/decisions-2026-11-05/R4_RATIONALE.md (F6 hosted target table). Owner decisions from 2026-11-07/08 not yet in the repo are summarized in the draft's baseline paragraph (they include removing `as`, `char`, print builtins and dot calls).
+
+
+Key decided context (from the repository): PHILOSOPHY rules: 1 best long-term structure; 2 one form per situation; 3 most transparent wins; 4 verbosity OK; 5 every fact once; 6 Lean is the spec; 7 systems first, proofs attach to real code; 8 no hidden runtime; 9 linear ownership; 10 second-class references; 11 visible authority; 12 honest trust boundaries; 13 compiler owns identity; 14 artifact-first; 15 small core; 16 predictable execution, termination evidence per function; 17 real programs test the shape; 18 no hidden traps (evidence from a decidable checker proved in Lean, closed contracts, Lean theorems, never SMT). Refusals: GC/RC, async runtime, exceptions, ?, mutable globals (OD8), implicit conversions, closures, trait objects, operator overloading, effect handlers, macros/derive, general comptime (reopen on pull), broad cfg (reopen on pull), variadics, default args, shadowing, old/quantifiers in contracts (OD117), runtime contract checks (OD125). TYPE-22: a constant has no storage; its initializer is inlined at each use. Slice plan: 0 u8 arith; 1 linear struct; 2 integers; 3 bool/if; 4 loops+invariant/variant; 5 functions/recursion/requires/ensures; 6 authority/grants/entropy; 7 Secret<T>; 8 proof surface (assert by, ghost, spec fn, #[proof], #[test]); 9 structs; 10 enums; 11 generics; 12 Option/Result; 13 refs; 14 traits/defer; 15 arrays; 16 text/console; 17 modules/constants/interfaces/DWARF/#[invariant]/formatter; 18 files (file-copy, 0.1); 19 allocation; 20 fn values (R-0601 fn-type and trait-method contracts); 21 HeapArray; 22 Vec/String; 23 maps; 24 raw pointers/trusted; 25 FFI; 26 floats; 27 clock/network/devices; 28 concurrency (last). Showcases: grep 16-18, QOI/PNG 19-22, EVM 15-23, KV store 23, Wasm 21-26, crypto 7-15-18 (tunnel after 28), static web server 27 sequential. Proof order: functional models for safe code is item 4 (phase E). SPARK was surveyed in docs/proposals/SPARK.md (callable contracts, invariants, assert-by, flow facts, counterexamples, device events, stale permissions, vacuity, lexicographic variants, assurance names, no-return fact).
+
+=== DRAFT ===
+# Feature gaps from other languages: draft gap list (Claude, 2026-11-08)
+
+Question from the owner: "is there anything from spark, rust, odin, zig, or any system programming
+language or any other formal verified language feature that we should have that we didn't think
+about?"
+
+Baseline read: origin/main ea212942f (docs/PHILOSOPHY.md, docs/decisions.md, ROADMAP.md,
+ConcreteSpec/, docs/proposals/SPARK.md, IDEAS.md, MERGED.md, FOUNDATION.md, legacy/docs/spec/,
+legacy/docs/project/INFLUENCES.md), plus the owner answers not yet recorded (2026-11-07/08: the
+59-item language list incl. removal of `as`, `char`, print builtins and dot calls; foundation
+C1-C10; reproducible builds, stack bounds, entropy at 6/7/15; std-per-slice table).
+
+SPARK was already surveyed in docs/proposals/SPARK.md (items decided or on the roadmap), and the
+legacy ideas sweep in IDEAS.md. This list tries to find what those two did NOT cover.
+
+## Candidate gaps (category c), ranked
+
+G1. A user proof interface: generated functional models of Concrete functions, early.
+  Sources: Aeneas (Rust -> pure Lean functions + backward functions for &mut), hax, Creusot,
+  Verus, seL4 AutoCorres (C -> monadic Isabelle functions with a proved correspondence),
+  Low*/KaRaMeL, Lean Std.Do/mvcgen.
+  Problem: PHILOSOPHY says a program's correctness is "proved by Lean theorems about it", and the
+  showcases need program theorems from slice 7 (noninterference), 15 (crypto, EVM opcodes) and
+  18 (file-copy, 0.1). Today "functional models for safe code" is proof-order item 4 in phase E;
+  before E each program theorem is written against the deep clock-indexed Core semantics by hand.
+  Nothing fixes what Lean term a user theorem is about (the subject shape of `#[proof(path)]`),
+  nor gives a per-function pure model with a proved (or per-compilation validated) refinement to
+  Core. Linearity plus second-class references make Concrete the ideal Aeneas target (no lifetimes;
+  &mut only downward -> a model returning the updated value).
+  Proposal: fix the theorem-subject shape in A2i/A3 (a function's model, its refinement theorem,
+  and how effects/grants appear: a trace over the observable-event kind); generate the model for
+  the pure subset at slice 8 (proof surface); extend at 13 (&mut as returned updates), 18 (effects
+  as traces), 19 (allocation). Keeps rule 7 (proofs attach to real code), rule 12, rule 14.
+  Owner: yes (moves part of proof-order item 4 from E to C).
+
+G2. Read-only static data for constant tables.
+  Sources: C `static const`, Rust `static` (vs `const`), Ada constant aggregates placed in
+  read-only memory, Zig comptime arrays in .rodata, SPARK constants with no elaboration.
+  Problem: TYPE-22 says "a constant has no storage: the binary inlines its initializer at each use",
+  and REF-6 refuses a borrowing constant initializer. Crypto (SHA-256 K, Keccak round constants,
+  Poly1305), CRC32, DEFLATE/Huffman, the EVM opcode/gas table, Wasm opcode tables and a grep DFA
+  all need 64-entry to multi-KiB tables. Under TYPE-22 each use re-materializes the table as a value
+  (stack and step cost per use; the decided stack bound counts it), and constants themselves only
+  arrive at slice 17 while crypto/EVM need tables at 15 and grep at 16.
+  Proposal: an array (or Copy aggregate) constant is stored once in read-only memory; a shared
+  borrow of a constant is a range view into that storage (never a stack copy, never &mut), with
+  indexing evidence as for arrays; the facts report shows its bytes as static, not stack; place
+  constants (at least top-level array constants in one file) at slice 15. Rule 3 (visible cost),
+  rule 16 (predictable stack/steps), rule 17 (showcases).
+  Owner: yes (revises TYPE-22's "no storage" and the slice of Q6.4 constants).
+
+G3. Ambient process state at launch on the hosted target.
+  Sources: Rust's runtime sets SIGPIPE to ignored before main; Go and Python handle EPIPE; Ada
+  Ravenscar/GNAT runtime signal handling; Hare/Zig start code; Capsicum-style "no ambient
+  authority" (WASI, Fuchsia: no inherited handles).
+  Problem: the Q7.10 grant table (R4 F6) fixes grants, startup, exit and trap, but not: (a) SIGPIPE
+  - with the default disposition a write to a closed pipe (`grep ... | head`, the slice 16/18
+  showcase, and every socket at 27) kills the process silently, a hidden trap under rule 18;
+  (b) inherited file descriptors beyond 0-2, which are ambient authority outside every grant
+  (rule 11); (c) umask, a hidden input that changes the permissions of every created file;
+  (d) RLIMIT_STACK / the main-thread stack reservation, which the decided stack budget silently
+  depends on; (e) the inherited signal mask and other ignored/handled dispositions; (f) how a trap
+  is realized (raise(SIGABRT) may write a core dump and run inherited handlers; exit_group(134)
+  does not).
+  Proposal: the target table states each of these: SIGPIPE ignored so a write returns a typed
+  error; descriptors >= 3 closed (or refused at start, exit 125) unless granted; umask fixed or a
+  launch input recorded in the manifest; the launcher reserves at least the budgeted stack or
+  refuses to start; trap = write message + exit_group(134), no signal. Slice 6 (launcher), 16
+  (console streams), 18 (files), 27 (sockets). Rules 8, 11, 12, 18.
+  Owner: yes (target-table rows).
+
+G4. Wide-integer and bit-manipulation primitives.
+  Sources: Rust `carrying_add`/`borrowing_sub`/`widening_mul`, `rotate_left`, `leading_zeros`,
+  `trailing_zeros`, `count_ones`, `swap_bytes`; Zig `@addWithOverflow`, `@mulWithOverflow`, `@clz`,
+  `@popCount`, `@byteSwap`, arbitrary-width `u256`; Ada `Interfaces.Rotate_Left`; HACL*/Fiat-crypto
+  limb arithmetic.
+  Problem: ROADMAP's std table already says "wide-integer arithmetic is unplaced" (EVM 15 u256,
+  X25519/Poly1305 at 15/18), and the slice-2 row lists bitwise ops and shifts but no rotate,
+  clz/ctz, popcount, byte swap, add-with-carry or widening multiply (the LCB already needs high
+  multiply for slice 2). Writing these from shifts and checked ops is slow, hard to prove constant
+  time, and each user writes them differently (rule 2).
+  Proposal: named total primitives in slice 2 (`rotate_left/right`, `leading/trailing_zeros`,
+  `count_ones`, `swap_bytes`, `add_with_carry -> (sum, carry)`, `sub_with_borrow`,
+  `mul_wide -> (hi, lo)`), each in the closed constant-time table where it is constant time on the
+  target; a limb-based fixed-width u128/u256 std module at 15. No arbitrary-width integer types.
+  Owner: yes (spellings; placement).
+
+G5. The scope of secret wiping: residue from moves, spills, frames and aborts.
+  Sources: Rust `zeroize` documentation (moves and copies leave residue it cannot clear), GCC
+  `-fzero-call-used-regs` and `__attribute__((strub))` stack scrubbing (GCC 14), libsodium
+  `sodium_memzero`/`sodium_mlock`, OpenSSL `OPENSSL_cleanse`, Jasmin/libjade zeroization of the
+  stack on return.
+  Problem: decided: secret arrays and heap secrets are wiped on destroy; scalar secrets are Copy;
+  abort runs no deferred call; backend wiping is a named premise. Not stated: copies left in
+  moved-from stack slots and spilled registers, callee frames that held secrets, scalar Copy
+  secrets that are never destroyed, the abort/trap path (no wipe, possible core dump), and paging
+  to swap. A claim "secrets are wiped" without that scope overclaims (rule 12).
+  Proposal: the slice-7 claim states exactly which locations are wiped; a source-level property
+  "no live copy after destroy" over the Core semantics (moves of a linear secret clear the source
+  slot), frame and register scrubbing on return from a function that held secrets as a backend
+  obligation (premise for LLVM, proof target for LCB), and the abort and paging residue named as
+  premises (optionally the launcher disables core dumps for programs that hold secrets). Slice 7,
+  15, 19.
+  Owner: yes (claim scope); the rest internal.
+
+G6. The C boundary as derived and checked artifacts.
+  Sources: Rust abi-cafe and the libc crate's layout tests (ctest), Zig's test/c_abi suite and
+  `translate-c`, rust-bindgen and cbindgen, CompCert's ABI conformance tests, Ada `Convention => C`.
+  Problem: slice 25 brings `extern fn`, `#[link_name]`, `#[export_name]` and repr forms, and the
+  C ABI is a named premise. Nothing plans: (a) a gate that compiles each repr(C) type and extern
+  signature with clang and compares size, alignment, field offsets and call/return behaviour in
+  both directions (bug 166 was a silent wrong-code C-boundary defect); (b) a generated C header for
+  exported functions, so the header is a derived view and not a second hand-written definition
+  (rule 5); (c) an external, reviewed generator from C headers to extern declarations, so foreign
+  signatures are not retyped by hand.
+  Proposal: (a) is a slice-25 acceptance gate; (b) is generated from the interface (R-0556); (c) is
+  a tool whose output is ordinary reviewed source (consistent with the macro refusal). Rules 5, 12,
+  14.
+  Owner: (b)/(c) tool scope yes; (a) internal.
+
+G7. Inline assembly: record the refusal.
+  Sources: Rust `asm!`/`global_asm!`, Zig `asm volatile`, Odin, C; Vale/Jasmin (verified assembly).
+  Problem: decisions.md and PHILOSOPHY never mention inline assembly. Crypto and device code
+  usually reach for it; without a recorded answer a later slice may invent one.
+  Proposal: record a refusal: no inline assembly in any Concrete code, trusted included; foreign
+  assembly objects are linked through `extern fn` with their contract and a named premise (slice
+  25); reopens only under the pull rules with a design that states its semantics, its effects and
+  its clobbers in Core. Rules 3, 12, 15.
+  Owner: yes (a refusal is an owner decision).
+
+G8. Readiness-based I/O on one thread (poll) before concurrency.
+  Sources: Zig/Odin/C event loops over poll/epoll/kqueue, Rust mio (not async), nginx/redis
+  single-threaded models, Hare's `unix::poll`.
+  Problem: the tunnel moved after slice 28 because it "needs both directions at once", and the
+  concurrent web server waits for 28. A sequential program with an explicit readiness wait over
+  several owned sockets does both without threads, scheduler or hidden runtime.
+  Proposal: an explicit `PollSet` grant-backed value that owns its sockets (linear, no stored
+  references), `wait(&mut set, timeout) with(Network, Time) -> Result<Ready, NetError>` and scoped
+  access to one socket; termination and blocking facts as for any blocking call. Slice 27. Does not
+  reopen the concurrency decision.
+  Owner: yes (it changes where the tunnel and a multi-connection server can land).
+
+G9. Unused imports and unused private items.
+  Sources: Go (unused import is a compile error), Zig (unused locals refused), MISRA C 2.1-2.7,
+  Rust dead_code lint, SPARK flow "ineffective" findings.
+  Problem: OD62 covers bound names, item 29 dead stores, OD41 unreachable arms, Q6.4 checks all
+  written code. Nothing covers an import nothing uses or a private function/type/constant nothing
+  reaches; with "no warnings", the choice is refuse or report.
+  Proposal: an unused import is refused (it is a declared dependency nothing checks, rule 5); an
+  unreachable private item is refused or a fact a policy may refuse. Slice 17.
+  Owner: yes.
+
+G10. The language version a package is written against.
+  Sources: Rust editions, Ada `-gnat2022` / language-version pragmas, C/C++ `-std=`, Lean's
+  toolchain pin per project, Go's `go` directive in go.mod.
+  Problem: outputs carry `spec_version` and each rule a revision (R-0603), but a package does not
+  declare which spec version it targets; after 1.0 a rule revision could change what old source
+  means with no signal (rule 13: identity of the rule a fact was checked under).
+  Proposal: `Concrete.toml` declares the spec version; the compiler refuses a package whose declared
+  version it does not implement, and facts and receipts record it. Phase G (stated before 1.0).
+  Owner: yes.
+
+G11. Property tests with a spec-function oracle, and a user fuzz entry.
+  Sources: QuickCheck/Hypothesis, Go native fuzzing (`func FuzzX`), cargo-fuzz, Zig `std.testing.fuzz`,
+  Dafny test generation, SPARK counterexample replay.
+  Problem: `#[test]` (slice 8) and the compiler's differential fuzzer exist; there is no way for a
+  user (or an LLM) to test a function against its total `spec fn` over generated inputs before
+  proving it, or to fuzz a parser showcase. Results are evidence "tested", never "proved" (rule 12).
+  Proposal: `#[test]` over a declared finite or generated input domain comparing against a `spec fn`,
+  run on the Lean evaluator and both backends; reported as tested with its domain. Slice 8 (runner),
+  18 (byte inputs). Low priority.
+  Owner: yes (surface), runner internal.
+
+G12. Verified binary-format parsers from a description (EverParse 3D).
+  Sources: EverParse (F*/Low*, used in Windows/Hyper-V), Kaitai, Zig packed-struct parsing.
+  Problem: PNG, Wasm, EVM bytecode, HTTP and the tunnel all parse untrusted binary input; R-0406
+  (binary-format DSL) is deferred. Hand-written parsers are the main source of bugs and proofs.
+  Proposal: keep the language refusal of in-language generators; plan an external generator that
+  emits ordinary Concrete source plus Lean theorems (parse/serialize round trip, no trap on any
+  input) from a format description. Phase E, pulled by the first parser showcase. Low priority.
+  Owner: yes (tool scope).
+
+## Already covered (a) or planned (b) - one line each (abridged)
+- Absence of run-time errors, termination by default, Subprogram/Loop_Variant, ghost code, flow
+  facts, device events, stale permissions, vacuity, assurance names: SPARK.md + decided SPARK row.
+- Refinement/range types: no separate construct; private-field struct + `#[invariant]` (slice 17)
+  and the octagon checker; newtype removed (OD54).
+- Loop invariants/variants: OD82, OD105, slice 4; lexicographic measures R-0605 on pull.
+- Frames/modifies: P18 (Lean theorems), derived write facts (SPARK 4(a)), R-0524.
+- Information flow, constant time: Secret<T> decision, slice 7, 15.
+- Error handling: Result + exhaustive match; no `?`, no exceptions (PHILOSOPHY refusals).
+- Allocators, arenas, regions: allocation decision, brands, slice 19; heap bounds (memory row).
+- Bounded stack/heap: stack from final artifact at slice 0, proven at 5; heap budgets in
+  Concrete.toml.
+- Integer semantics: OD11, OD99, OD106, checked/wrapping/saturating at slice 2; u64 meaning
+  (foundation Q7).
+- Layout/representation: C3 foundation, declaration-order layout, packed removed (item 23),
+  alignment facts R-0284 deferred-with-trigger.
+- Volatile/MMIO: observable-event kind R-0602, device grants at 27, freestanding R-0323/R-0325.
+- FFI/ABI: slice 25, OD4 (no foreign function values), OD147, Kept<H>.
+- Portability: target profiles (C3, OD126), Linux x86-64 + macOS AArch64, BSDs on pull.
+- Conditional compilation: module/file selection per target profile (P17b reopen rule).
+- Comptime: constants computed at compile time (item 26); general comptime reopen rule.
+- Generics/traits: slice 11/14, Q6.3 re-check after Mono; const generics designed and deferred
+  (legacy types.md "No const generics"); function-type and trait-method contracts R-0601.
+- Modules/visibility/packages: slice 17, OD43/OD21, interface diff R-0556, Concrete.toml policy
+  composition; packages phase G.
+- Reproducible builds: slice 0 decision.
+- Testing/fuzzing: #[test] slice 8, differential fuzzer from slice 0, ASan, capability-seam fault
+  simulation R-0030 -> R-0071.
+- Proof reuse: R-0162, R-0172; Mathlib only by owner exception (Q9.16).
+- Panic/abort: abort terminal, trap line, OD10, OD119 (buffered output), STMT-13.
+- Static analysis profiles: predictable policy over facts (OD124 replaced profiles).
+- Dead code: OD62, OD41, Q6.4, dead stores (item 29).
+- Debug info: DWARF R-0587 at 17. LSP R-0398 later; formatter at 17.
+- Units of measure: designed, deferred (legacy types.md units section).
+- Concurrency (Ravenscar, Pony capabilities, Send/Sync): slice 28, model undecided.
+- Wasm component model: worlds ~ main grant table; own/borrow handles ~ linear values and
+  second-class borrows.
+
+## Recommend rejecting (d)
+- General comptime (Zig, Jai #run): refusal with reopen rule; rule 3, 15.
+- Zig errdefer: second cleanup form beside written error arms and defer (rule 2).
+- Inferred error sets / Odin or_return / Rust `?`: permanent refusal (rule 3).
+- Odin/Jai implicit `context` allocator and `using`: hidden data flow (rules 3, 11).
+- Algebraic effects and handlers (Koka, Effekt): permanent refusal.
+- Interior mutability (Cell/RefCell), Vale generational references: run-time borrow checks are
+  hidden traps (rule 18).
+- Lifetimes / regions as types (Rust, Cyclone, Austral regions): rule 10.
+- Arbitrary bit-width integers (Zig u3, C23 _BitInt) and struct bitfields: rule 15; shifts/masks
+  and G4's primitives instead; reopen with a device workload.
+- Guaranteed tail calls (Zig .always_tail, Rust `become`): second form of a loop (rule 2); R-0303.
+- Run-time contract checking (E-ACSL, SPARK -gnata, C3 contracts in comments): OD125.
+- SMT-discharged contracts (Dafny, Verus, Prusti, Creusot, Why3, Frama-C WP): rule 18.
+- Cargo features / #[cfg] everywhere: P17b. MISRA-style admission profiles: OD124.
+- include_bytes / @embedFile: build reads files; use a reviewed external generator (rule 3, 5).
+- Ada fixed-point types: no workload (rule 17).
+- Spectre-class speculative leakage: decided out of the observer model.
+
+Tasks:
+1. For each gap G1-G12 say AGREE or DISAGREE, with a reason in at most 60 words. DISAGREE if it is already covered (cite file and section or decision row), wrong, breaks a decided row, conflicts with a PHILOSOPHY rule, or is placed in the wrong slice. Say if the ranking should change.
+2. Check the "already covered" and "recommend rejecting" lists: name any entry that is wrong (with a citation).
+3. List gaps Claude missed: features from SPARK/Ada, Rust, Zig, Odin, Austral, Hylo, Vale, Cyclone, ATS, F*/Low*, Dafny, Verus, Prusti, Creusot, Aeneas, Frama-C, CompCert, CakeML, seL4, Idris, Lean, Koka, Pony, Swift, C3, Hare, Jai, Nim, Carbon, Wasm component model, MISRA or others, that the repository does not cover and that pass the PHILOSOPHY admission test. For each: source, problem, proposed slice, and why it is not already covered. Be honest; fewer, real gaps are better than many weak ones.
+Do not modify files. Cite repository paths you read.
+
+End with exactly one line:
+ANSWER: AGREE=<gap ids>; DISAGREE=<gap ids or none>; MISSED=<short list or none>

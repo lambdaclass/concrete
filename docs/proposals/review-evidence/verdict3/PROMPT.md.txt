@@ -1,0 +1,14 @@
+Concrete is a systems language rebuilt as a fully proven compiler in Lean. You may read the repository here (docs/decisions.md, docs/PHILOSOPHY.md, legacy/docs/spec/) and _review/ (LIST_r2.md = the round-2 list, GRAMMAR_REVIEW.md).
+
+Round 3. In round 2 (list: _review/LIST_r2.md) agy agreed with everything; Codex disagreed with 11; Kimi with 11, 40 and 49. All three objections are accepted. The revised items:
+
+11. Remove expression `as` casts; one canonical named lossless conversion (OD11 value-domain rule and provenance restrictions preserved). `as` stays only as a binder keyword: import renaming, decided `borrow ... as view` (Q4.7/Q9.5) and the proposed `unpack ... as`.
+40. (OPEN-3) Reserve spec, by, kept, Self, while, Entropy, and also reserve `self` as a keyword with no use, so code written with Rust-style receivers gets a precise diagnostic instead of `self` silently becoming an ordinary parameter name. Drop obsolete reservations (in/newtype/union/total) unless a decided row still needs them.
+49. (OPEN-18) Labels on both loop forms: 'label: while and 'label: for, break 'label;, continue 'label;; no empty statements.
+59. New: the remaining OPEN sub-rules the reviewers listed come back to the owner in the spelling round with item 55, as before/after code: numeric token policy (base-prefix case, separators, exponents, malformed adjacency; OPEN-5), attribute duplication/ordering/attachment/scope incl. struct-invariant scope (OPEN-15), zero-count array repetition (OPEN-20), the closed builtin inventory and exhaustive view/constant-time/text/container/branded API signatures (OPEN-4/21), trait/inherent impl shells (OPEN-12), and brand binder scope, escape/repackaging and loop-carried existential rules (OPEN-22).
+
+All other items 1-58 are unchanged from round 2.
+
+TASK: AGREE or DISAGREE with each of 11, 40, 49, 59 (DISAGREE only with a concrete reason, at most 40 words). Say whether anything else from your round-2 answer remains unaddressed. Do not modify files.
+End with exactly one line:
+ANSWER: DISAGREE=<item numbers or none>; UNADDRESSED=<short list or none>

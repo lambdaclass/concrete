@@ -1,0 +1,322 @@
+kimi version 2.4.1
+• I need perform thorough read-only review diff against branch authoritative. Do inspect. Must no edit. Should call the tool. Perhaps todo multi step. I have REVIEW.diff known path direct Read, sources, docs decisions, roadmap. Should have exact items. I'll read files in parallel perhaps REVIEW diff max 100k may long. First wc via Bash allowed? Read known. I can Read max each. Should understand size. Use parallel Read REVIEW.diff, LANGUAGE, PENDING, maybe changelog fragments later.
+
+• I’ll compare the round-2 diff against the authoritative records, then audit the affected decision and roadmap rows for omissions, contradictions, and broken links.
+
+• Should rest diff.I need inspect full live decisions/roadmap for contradictions. Diff only touches subset rows and leaves historical stale accepted? User explicitly no contradiction elsewhere live rows/slice table stale as methods char HashMap packed print *h. Should grep. Should determine baseline file already contains diff applied? REVIEW diff index new likely files working current? Read docs lines to see. I can grep many patterns in docs decisions roadmap. Should authoritative exact all items compare, appears faithful but perhaps errors. Key potential issues:
+  - Header says spellings items 6–29 and 40–53 illustrative, grammar 30–39 decided. Source says item 11 spelling illustrative exact later; all B,C,E spelling round item55, so okay.
+  - Item 55 source says "all spellings from B,C,E" i.e 6–29 and40–53, okay narrowed.
+  - Item59 open grammar.
+  - Item52 "only pointer qualification left" recorded.
+  - item40 ordinary parse or resolution error additional from PENDING exact, good.
+  - item5 process recorded yes.
+  - Item54 etc.
+  - Item 26 "Before Q6.4 and TYPE-22 are revised" yes.
+  - Revised notes list includes Q6.4 pending preconditions. Live Q6.4 itself not revised note intentionally pending. Good.
+  - Revised TYPE-20 not actual anchor row? Decisions table only ODs no TYPE20 separate except in source row and revisions list unlinked. User specifically every revised row named explicitly with revision note (TYPE-20/OD137). They add list "TYPE-20, OD137 and OD42" but TYPE-20 legacy normative not in decisions. Could count. Perhaps live references elsewhere need links.
+
+  Potential missing revised rows:
+  OD133/OD153 builtin print reserve contradictions? New no builtins print etc but OD133 says reserve names. Could be no contradiction: names reserved still perhaps? Source no print builtins, could reserve user names remains? It could be stale but not necessarily contradiction. However user asks e.g stale print live rows. OD154 "allocating string builtins need Alloc" while item17 removes append builtin only, other string builtins perhaps still exist until std placement. No direct contradiction except append named in current/historical columns. Could be okay.
+
+  OD36 borrow block syntax remains stale `borrow h as r` in descriptive historical question but final current rule only "through borrow block no (&h).f", no as final. Fine.
+  OD58 historical. Q4.7 revised notes.
+  Q6.2 base as historical with note.
+  Allocation rules updated.
+
+  Should grep current decisions and roadmap for terms and identify unqualified live normative statements. Use Grep separate patterns, output content max. Perhaps many. Search "as |\\bas\\b" too many. Better specific `\bas\s+[A-Za-z_]` and `borrow .* as`, `\.\w+\(`, `self`, `char`, `HashMap`, `packed`, `print`, `\*h`, `println`, `append`, `let [A-Za-z_]` etc. Should entire roadmap lines. I can use Python read only to extract markdown links and check later. Dedicated grep. Parallel.
+
+• The 59-item record and the named revision list are present. I’m now checking the unchanged surrounding rows, where stale syntax or placements could still contradict the new decisions.
+
+• Grep too broad. Should inspect current decisions entire? ~2k lines. Key current normative earlier sections around 1-180, 179-400, 600-750, 1000-1350, 1700-1810. Perhaps stale exact contradictions beyond diff. Round1 addressed specific rows but may leave many obvious.
+
+  Potential serious issue in roadmap R-0614: "constants ... before Q6.4 and TYPE-22 are revised" correct. Slice17 says "(Q6.4 and TYPE-22 as revised)" implies already revised by slice17 via foundation yes okay.
+
+  "each new item names slice/phase, home and gate" R-0625 task no slice/phase explicit aside from dependency owner; located phase B table? Should inspect section headings. R-0626/R-0627 added A2i dependencies and tasks under phase? R-0625 in B table, good. R-0626/27 A2i. New slice items have phases. fine.
+
+  R-0626 gate refusal control for Process if removed, but what if not removed? Recorded audit gate enough. okay.
+  R-0627 Gate owner removal approval although item24 says after replacement shown then removed; owner approved conditional removal no second owner approval? This is additional process requirement not invented decision? A task gate can require owner approval perhaps not source but cautious. Not overstatement.
+
+  Changelog says "The slice and std tables follow the decisions" but std table deliberately unchanged and intro says future round. This is a clear contradiction/overstatement. At diff lines162-163: "The slice and std tables follow the decisions" but std table still HashMap at23 unconditionally, etc. User explicitly std placements deliberately unchanged separate round. Changelog should say slice table follows decisions; std intro schedules placement revision. This likely finding. Perhaps reject-worthy yes.
+
+  Roadmap std intro itself "and until then they stand as recorded" potentially contradicts item19 HashMap only when measurements need. But says placement table stand until revision, deliberately accepted user says placements deliberately unchanged intro now says so, don't flag. Changelog however says std table follows decisions, directly false and contradicts deliberate. Good finding.
+
+  Perhaps roadmap phase summary line 332 says "maps arrive with store/EVM/Wasm stage23" despite HashMap conditional. But user says std placements deliberately unchanged, this is std consistency notes not placements? User explicitly no contradiction elsewhere in ROADMAP with decisions e.g. stale HashMap live rows or slice table, while says std-per-slice placements deliberately unchanged separate round and std intro now says so. Line332 "maps arrive with store..." is live statement, could fall under unchanged std placement? It is a note in Std per slice section and derives from placement table, likely deliberately unchanged allowed. Don't flag due explicit exemption.
+
+  Should find live decisions contradictions. Early "reconciliation table" lines117-118 says fixed in prose 2026-11-03, now new revisions but not updated. Does new decision require revision notes there? It's audit historical table, says issue and fixed prose. No current rule? "SYN-6 A char literal..." in audit finding historical. Could be not contradiction, though "fixed" stale? It refers legacy docs. No need.
+
+  Critical current decision Q6.2 example `let S { a }` unlabeled pattern, new item9 all patterns field:binder. Round1 added revision notes on Q6.2 about as but not example. New item9 revises OD130 but Q6.2's current example still shorthand pattern `let S { a }`. This is a live decided example and now contradicts item9. Round1 notes Q6.2 only as; they should update example to `let S { a: a }` or note spelling migrated. User specifically no contradiction elsewhere decisions stale methods etc, pattern shorthand too likely. Also slice0/1 struct destructuring let not written type? Slice1 says "a struct-destructuring `let`" generic no syntax, every local written type. Example in Q6.2 definitely violates item9 and item18 (`let S {a} =...` no type annotation). It is known value example current rule. Should have revision note on Q6.2 or update example. Round1 "revision notes added ... Q6.2" but only as, missed item8/9/18. This is concrete remaining issue. I'll cite docs/decisions.md:191. Could be accepted as historical example? Paragraph says "So ... is refused" normative example. It needs spelling migration. likely finding.
+
+  Search other unlabeled patterns and lets in live sections. Should have current doc lines around all. Use Grep regex for `let (mut )?[A-Z]` etc and `\{ [A-Za-z_][A-Za-z0-9_]* \}` huge. Focus changed decisions. Could find no typed local examples everywhere, but item18 says spelling illustrative exact later, existing examples may need mass migration? Requirement no contradiction live rows likely they expect updating. They intentionally round1 added notes allocation etc. Should distinguish historical examples in old OD rows vs new live core rows. Q6.2 is core current.
+
+  Methods stale in core rows Q? Search `.method` in lines180-400. Use Read.
+
+• Two concrete issues are emerging: the changelog claims the std table already follows the decisions despite its deferred placement round, and a live Q6.2 example still uses now-removed pattern/local syntax. I’m checking for any further instances before assigning the verdict.
+
+• I found bigger stale live audit lines1795-1800 methods. New revision notes added OD6 but "Decided 2026-11-02 audit" current canonical trait call still `Trait::method(&x...)` which actually new decision calls Type::f/Trait::f typed first param, `&x` can be typed first ref param so not inherently method? Wording "ambiguous method call" contradicts no method calls. And `Trait::method` syntax generic function name okay; example &x may be valid typed first param. "method" terminology stale but semantic perhaps associated trait function. Item6 removes dot method calls not necessarily word method. However user e.g stale methods. Line194 P4 "duplicate method names in impl" could remain methods as impl functions though no method calls/receivers, not necessarily contradiction. But line1795 explicitly "ambiguous method call" could be trait call, not dot. New decisions revision summary says "a trait call is Trait::f(x); an ambiguous call is still qualified". This audit's rule matches if interpret method as function. Not necessarily stale.
+
+  More important: no `as` live raw pointer examples in OD112 etc historical current compiler only. Q6.2 current old text with revision note okay.
+  No `self` final current except revised note. New rule Q9.8 kept no note inline but list says kept no change okay.
+
+  Potential direct contradiction: item 18 every function result arrow incl ->Unit, but item 22 trait signatures etc fine. Existing Q2.4 `f: fn... ->` typed.
+  ROADMAP slice 0 main ->u8 etc good.
+
+  Potential new decision records not exact quote due line breaks? Quotes exact text content whitespace collapsed okay.
+
+  Should link resolution systematic. I can run Python script inline no file create to parse markdown links in changed files. Since read-only no editing; Bash command okay for custom validation. Should inspect git status maybe no modifications. I can use python standard library to parse inline markdown links, anchors. Should account reference style? All inline. Verify file exists and fragments. Headings GitHub slug plus explicit a ids. Should compute heading anchors robust enough. Could use scripts/checks link gate? Full not needed. Search available check links script maybe `scripts/checks/check_links.sh`. Glob.Potential more severe: no-as revision named only OD11/OD91, but there are OD98, OD103, OD123 explicitly `as` conversions whose final decided answers likely still rely on as and are live. User says "every revised row named explicitly with revision note (OD6/... OD11/OD91... )" list does not include OD98 etc perhaps source only gave examples not exhaustive? Source line5 "Each change to a decided row must be recorded as explicit owner revision naming that row (e.g. ...)" e.g. implies all. User specific parenthetical list includes exactly required but no OD98 etc. Requirement 4 no contradiction elsewhere stale as live rows. I need inspect OD98, OD103, OD123. These likely final decisions:
+  OD98 pointer/reference conversions written with as, perhaps final: explicit functions ptr::from_ref etc, not as? I'll read relevant.OD98 final says reference to raw pointer conversion only trusted/unsafe but does not explicitly spelling as. Question says written with as, final answer could be interpreted current final set refers option? Option B as only ref->raw, C named functions. Final "Reference to raw pointer conversion only in trusted/Unsafe code (equal to Austral)" doesn't specify named vs as. Existing as removed means named conversion needed but no explicit revision note on OD98. This is likely required no contradiction elsewhere. Source item11 "(a) expression casts replaced by one canonical named lossless conversion. OD11 value-domain rule and provenance restrictions preserved" Could "one canonical named lossless conversion" apply all casts including pointer? OD98 pointer conversion may lossless in representation but provenance? Named conversion for expression casts all. They didn't name OD98 but user required examples OD11/OD91. Requirement 4 catches stale `as` references in live rows. OD98 title and historical question aren't live rule; final rule no `as`. It doesn't contradict directly, but needs revision note? "every revised row named explicitly with revision note" source e.g only required list user gave, so perhaps not expected to catch OD98. Yet actual semantic revision changes OD98 spelling and trust condition? Final only trust no spelling. Could reasonably not need explicit revision because no surviving as final. But the row title remains "written with as" historical and answer doesn't contradict named conversion. Not flag.
+
+  OD103 final refuse, no contradiction.
+  OD123 final as never names newtype, no contradiction.
+  OD138 option target type as historical, final declared positions + other operand. no issue.
+  OD112 final no syntax.
+  OD98 perhaps no issue.
+
+  Bigger no methods live:
+  - authority rule 7 "trait dispatch, generic methods" still generic methods could be associated functions no receiver; word methods not syntax.
+  - P4 duplicates method names okay.
+  - Q2.6 etc ordinary destroy.
+  - Qualified trait calls `Trait::method(&x)` valid form. no dot.
+  - R-0601 "Function-type contracts, including trait methods" okay.
+
+  No char live:
+  - early audit historical
+  - OD102 final no Char alias, consistent no char? "No Float32 or Char aliases" still true weaker.
+  - OD26 numbers only; bool exception OD42 revised.
+  - Q4 etc no char.
+  - std table perhaps text no char.
+  No packed live other than new and historical.
+  No print live:
+  - OD119 final output generic, historical print builtins.
+  -OD133 reserve names still consistent (reserve even no builtins? Decision said no print builtins not necessarily unreserve names; no new revision).
+  - OD154 final allocating string builtins need Alloc; item17 remove append builtins but others remain, slice22 "allocating text APIs (OD154); string append ordinary allocating call". Good.
+  - allocation line "Allocating string operations (OD154)" general enough.
+
+  HashMap Q2.2 says excluded already. Std deliberate.
+
+  Move-out:
+  - OD121 final projection base `* of named reference`, not heap. okay.
+  - Q? Search *h only early historical and revised. good.
+  - `*` consuming in OD30 revised.
+
+  Borrow as:
+  - Q4 revised
+  - OD36 historical recommendation and final no syntax. Could need explicit revision note? Source only Q4.7/Q9.5 required. user no stale as live rows final doesn't show as. okay.
+  - OD57/58 historical only.
+  - allocations opening no syntax.
+  No direct.
+
+  Patterns:
+  - Q6.2 definitely current live example invalid; could be fixed by adding revision note like old spelling superseded, not necessarily editing old example (they preserve history elsewhere). Also every local type: example missing type, two violations. I can mention both.
+  - OD84 final "Add struct destructuring let" doesn't spell final current syntax, question historical old. New item9 and18 revisions should be noted? User required OD130 only, not OD84. But no final stale example except title historical. Q6.2 current example more clear.
+
+  Written types:
+  - New source says every local written type and every function result arrow. Many old OD final examples without local annotations are historical current compiler or options, not governing. Q6.2 is accepted current example.
+  - New item18 itself generic inference kept. Slice0 typed lets yes, slice9 every local type. What about slices1-8? Coordinator placed typed locals slice9, but slice1 includes struct destructuring let before slice9. Item18 global rule from start, slice0 typed, slice1 row doesn't explicitly every local but type rules global. Coordinator says placements slice9 typed locals deliberately. Fine.
+
+  Constants:
+  - Q6.4 currently unchanged "when constant evaluated at each use never start unchanged" at docs186, directly contradicts item26 "computed at compile time" but item26 explicitly says rows revised only after subset and reopening checked. So pending precondition means current old behavior stands until then. No contradiction because new row says not yet revised. R-0614 before freeze ensures. Good.
+
+  ROADMAP slice17 says Q6.4/TYPE22 "as revised" but actual revision occurs C8 before freeze. okay.
+
+  Process reserved set includes Process until audit, no revision note at authority rule13. New item20 says audit then remove if none. Does live rule need revision note? R-0626 covers. "every revised row named explicitly" item20 source authority rules linked, revision list does not include authority rule13 except item20 link. They didn't append note to rule13 but not yet revised. okay.
+
+  Bodyless:
+  - OD62 says bodyless declaration no body no exception, historical option, current generated etc. Fine.
+  - Q9.18 etc.
+  - R-0622 grammar written before parser depends spelling.
+  Potential logical conflict: R-0620 lexer "does not wait for R-0622" but R-0620 depends on R-0622; description clarifies completion only. okay.
+  New item R-0625 in Phase B queue? R-0622 depends owner review. Gate owner approval. good.
+
+  "each new item names slice/phase, home and gate" Process R-0626/R-0627 in A2i yes. But R-0625 located under B0? Should inspect section heading around440. It may be "B0/B1 proof spine" and depends only owner spelling, no explicit slice. Yet position indicates B. User says each new item names slice/phase. R-0625 description says before Lean grammar, no "phase B0" explicitly. R-0626 and27 integrated A2i list. R-0625 added in table under B0? Should have lines 435-467.
+
+• The remaining contradiction check is clean for the specifically named stale forms in their governing text; most other hits are historical descriptions or carry supersession notes. I’ll run the repository’s link checker and verify the new tasks’ phase placement and dependencies.
+
+FAIL legacy/changelog.d/2026-10-25-bend-roc-review-followup.md:9: missing local link docs/archive/roadmap-2026-11/ROADMAP_BACKLOG.md#open-research-questions-bend-and-roc
+FAIL legacy/changelog.d/2026-10-25-bend-roc-review-followup.md:12: missing local link research/meta/bend-roc-lessons.md
+FAIL legacy/changelog.d/2026-10-25-bug265-269-backend-long-functions.md:17: missing local link docs/bugs/270_loop_header_phi_per_binding.md
+FAIL legacy/changelog.d/2026-10-25-bug268-binder-refs-eager-frames.md:7: missing local link docs/bugs/268_binder_refs_empty_scope_leg_missed_eager_frames.md
+FAIL legacy/changelog.d/2026-10-25-bug271-diverged-arm-writes.md:8: missing local link docs/bugs/271_merge_kept_diverged_arm_writes.md
+FAIL legacy/changelog.d/2026-10-25-roadmap-owner-decisions.md:6: missing local link docs/spec/decisions.md#owner-decisions
+FAIL legacy/changelog.d/2026-10-26-bug178-dominators-lengauer-tarjan.md:7: missing local link docs/bugs/178_superlinear_match_lowering.md
+FAIL legacy/changelog.d/2026-10-26-bug273-parser-module-items.md:6: missing local link docs/bugs/273_parser_module_items_append.md
+FAIL legacy/changelog.d/2026-10-26-bug274-resolve-enum-variants.md:6: missing local link docs/bugs/274_resolve_enum_variant_symbols_fold.md
+FAIL legacy/changelog.d/2026-10-26-bug275-check-declaration-tables.md:9: missing local link docs/bugs/275_check_declaration_collisions_assoc_list.md
+FAIL legacy/changelog.d/2026-10-26-bug276-elab-declaration-analyses.md:9: missing local link docs/bugs/276_elab_declaration_analyses_list_scans.md
+FAIL legacy/changelog.d/2026-10-26-bug277-corecheck-callee-map.md:7: missing local link docs/bugs/277_corecheck_callee_signature_list.md
+FAIL legacy/changelog.d/2026-10-26-bug278-mono-type-name-counts.md:8: missing local link docs/bugs/278_mono_type_name_collision_filter.md
+FAIL legacy/changelog.d/2026-10-26-bug279-lower-module-tables.md:8: missing local link docs/bugs/279_lower_module_function_list_append.md
+FAIL legacy/changelog.d/2026-10-26-bug280-nested-operand-walks.md:8: missing local link docs/bugs/280_nested_expression_subtree_rewalks.md
+FAIL legacy/changelog.d/2026-10-26-bug281-flat-uses-accumulator.md:7: missing local link docs/bugs/281_evidence_flat_uses_nested_copy.md
+FAIL legacy/changelog.d/2026-10-26-bug282-resolve-nested-scopes.md:7: missing local link docs/bugs/282_resolve_lookup_scope_per_nesting_level.md
+FAIL legacy/changelog.d/2026-10-26-bug283-pipefail.md:11: missing local link docs/bugs/283_gate_grep_q_sigpipe_false_fail.md
+FAIL legacy/changelog.d/2026-10-26-bug284-match-arm-evidence.md:8: missing local link docs/bugs/284_match_arm_evidence_dropped.md
+FAIL legacy/changelog.d/2026-10-26-bug285-enum-payload-addr-taken.md:8: missing local link docs/bugs/285_enum_payload_addr_taken_unseen.md
+FAIL legacy/changelog.d/2026-10-26-bug286-nested-region-addr-taken.md:8: missing local link docs/bugs/286_lower_nested_region_addr_taken_rewalks.md
+FAIL legacy/changelog.d/2026-10-26-bug287-defer-borrow-promotion.md:7: missing local link docs/bugs/287_defer_borrow_promoted_at_first_emission.md
+FAIL legacy/changelog.d/2026-10-26-bug288-emitssa-name-tables.md:6: missing local link docs/bugs/288_emitssa_name_tables_lists.md
+FAIL legacy/changelog.d/2026-10-26-bug289-check-nested-branch-facts.md:8: missing local link docs/bugs/289_check_nested_branch_end_facts_rewalks.md
+FAIL legacy/changelog.d/2026-10-26-bug290-match-arm-environment.md:8: missing local link docs/bugs/290_check_match_arm_environment_walks.md
+FAIL legacy/changelog.d/2026-10-26-bug291-type-lookups.md:7: missing local link docs/bugs/291_type_lookups_by_list_search.md
+FAIL legacy/changelog.d/2026-10-26-bug292-loop-header-patches.md:7: missing local link docs/bugs/292_loop_header_patch_maps_all_blocks.md
+FAIL legacy/changelog.d/2026-10-26-bug293-report-scoped-walker.md:8: missing local link docs/bugs/293_report_scoped_walker_nested_rewalks.md
+FAIL legacy/changelog.d/2026-10-26-bug294-scaling-gate-host-load.md:7: missing local link docs/bugs/294_scaling_gate_wall_budgets_under_load.md
+FAIL legacy/changelog.d/2026-10-26-bug295-parser-list-appends.md:7: missing local link docs/bugs/295_parser_list_appends.md
+FAIL legacy/changelog.d/2026-10-26-bug296-callee-walk.md:7: missing local link docs/bugs/296_callee_walk_list_appends.md
+FAIL legacy/changelog.d/2026-10-26-bug297-call-arguments-appended.md:8: missing local link docs/bugs/297_call_arguments_and_merge_inputs_appended.md
+FAIL legacy/changelog.d/2026-10-26-bug298-operand-escape-value-branches.md:7: missing local link docs/bugs/298_operand_escape_search_value_branches.md
+FAIL legacy/changelog.d/2026-10-26-bug299-queue-fetch-refs.md:10: missing local link docs/bugs/299_work_queue_dispatcher_fetch_races_agent_pushes.md
+FAIL legacy/changelog.d/2026-10-26-bug300-new-bug-sh-reserves-a-number-then-refuses-the-fi.md:11: missing local link docs/bugs/300_new_bug_sh_reserves_a_number_then_refuses_the_fi.md
+FAIL legacy/changelog.d/2026-10-26-bug301-lower-s-address-taken-walk-did-not-see-the-root.md:8: missing local link docs/bugs/301_lower_s_address_taken_walk_did_not_see_the_root.md
+FAIL legacy/changelog.d/2026-10-26-bug302-a-loop-moved-an-address-taken-scalar-back-into-a.md:7: missing local link docs/bugs/302_a_loop_moved_an_address_taken_scalar_back_into_a.md
+FAIL legacy/changelog.d/2026-10-26-bug303-the-value-if-did-not-drop-the-bindings-its-arms.md:7: missing local link docs/bugs/303_the_value_if_did_not_drop_the_bindings_its_arms.md
+FAIL legacy/changelog.d/2026-10-26-bug304-a-value-if-or-match-written-as-a-comparison-oper.md:7: missing local link docs/bugs/304_a_value_if_or_match_written_as_a_comparison_oper.md
+FAIL legacy/changelog.d/2026-10-26-bug305-a-break-continue-or-return-out-of-a-borrow-mut-b.md:11: missing local link docs/bugs/305_a_break_continue_or_return_out_of_a_borrow_mut_b.md
+FAIL legacy/changelog.d/2026-10-26-r0550-compile-scaling-gate.md:13: missing local link docs/bugs/273_parser_module_items_append.md
+FAIL legacy/changelog.d/2026-10-26-roadmap-trust-and-process.md:8: missing local link docs/archive/ROADMAP_LEGACY_PLAN.md#estimated-plan-to-a-proven-compiler
+FAIL legacy/changelog.d/2026-10-26-roadmap-trust-and-process.md:12: missing local link docs/spec/decisions.md#owner-decisions
+FAIL legacy/changelog.d/2026-10-26-roadmap-trust-and-process.md:18: missing local link docs/project/AGENTS.md
+FAIL legacy/changelog.d/2026-10-27-bug306-the-interpreter-ran-a-for-loop-s-step-inside-the.md:10: missing local link docs/bugs/306_the_interpreter_ran_a_for_loop_s_step_inside_the.md
+FAIL legacy/changelog.d/2026-10-27-bug307-a-call-argument-mut-x-passed-a-temporary-copy-of.md:11: missing local link docs/bugs/307_a_call_argument_mut_x_passed_a_temporary_copy_of.md
+FAIL legacy/changelog.d/2026-10-27-bug308-a-value-if-or-match-passed-to-a-generic-paramete.md:7: missing local link docs/bugs/308_a_value_if_or_match_passed_to_a_generic_paramete.md
+FAIL legacy/changelog.d/2026-10-27-bug309-a-loop-in-the-right-operand-of-or-rebound-an-agg.md:7: missing local link docs/bugs/309_a_loop_in_the_right_operand_of_or_rebound_an_agg.md
+FAIL legacy/changelog.d/2026-10-28-bug311-a-destructuring-let-in-another-module-binds-a-st.md:4: missing local link docs/bugs/311_a_destructuring_let_in_another_module_binds_a_st.md
+FAIL legacy/changelog.d/2026-10-28-bug315-the-scaling-gate-judged-wall-time-growth-on-a-ho.md:9: missing local link docs/bugs/315_the_scaling_gate_judged_wall_time_growth_on_a_ho.md
+FAIL legacy/changelog.d/2026-10-28-bug316-browser-lean-the-browser-compiler-root-did-not-b.md:8: missing local link docs/bugs/316_browser_lean_the_browser_compiler_root_did_not_b.md
+FAIL legacy/changelog.d/2026-10-28-roadmap-compaction.md:3: missing local link ROADMAP.md
+FAIL legacy/changelog.d/2026-10-28-roadmap-compaction.md:6: missing local link docs/archive/roadmap-2026-11/ROADMAP_TASKS.md
+FAIL legacy/changelog.d/2026-10-28-roadmap-compaction.md:7: missing local link docs/archive/roadmap-2026-11/ROADMAP_DECISIONS.md
+FAIL legacy/changelog.d/2026-10-28-roadmap-compaction.md:8: missing local link docs/archive/roadmap-2026-11/ROADMAP_DIRECTION.md
+FAIL legacy/changelog.d/2026-10-28-roadmap-compaction.md:9: missing local link docs/project/PROMOTION_PIPELINE.md
+
+FAIL legacy/changelog.d/2026-10-28-roadmap-compaction.md:10: missing local link docs/archive/roadmap-language-scope.md
+FAIL legacy/changelog.d/2026-10-28-roadmap-compaction.md:12: missing local link docs/archive/ROADMAP_HISTORY.md
+FAIL legacy/changelog.d/2026-10-29-bug226-submodule-imports-private-function.md:4: missing local link docs/bugs/226_submodule_imports_private_function.md
+FAIL legacy/changelog.d/2026-10-29-bug329-the-ll-1-checkers-never-computed-follow-sets-a-f.md:9: missing local link docs/bugs/329_the_ll_1_checkers_never_computed_follow_sets_a_f.md
+FAIL legacy/changelog.d/2026-10-29-bug330-a-continue-inside-a-for-loop-s-step-the-binary-n.md:11: missing local link docs/bugs/330_a_continue_inside_a_for_loop_s_step_the_binary_n.md
+FAIL legacy/changelog.d/2026-10-29-docs-project-consolidation.md:5: missing local link docs/project/PROJECT.md
+FAIL legacy/changelog.d/2026-10-29-docs-project-consolidation.md:10: missing local link docs/project/AGENTS.md
+FAIL legacy/changelog.d/2026-10-29-docs-project-consolidation.md:14: missing local link docs/project/EXAMPLES.md
+FAIL legacy/changelog.d/2026-10-29-docs-project-consolidation.md:16: missing local link docs/project/STYLE.md
+FAIL legacy/changelog.d/2026-10-30-bug340-the-interpreter-runs-a-program-the-compiler-refu.md:6: missing local link docs/bugs/340_the_interpreter_runs_a_program_the_compiler_refu.md
+FAIL legacy/changelog.d/2026-10-31-bug341-two-modules-that-each-declare-main-pass-check-an.md:4: missing local link docs/bugs/341_two_modules_that_each_declare_main_pass_check_an.md
+FAIL legacy/changelog.d/2026-10-31-bug342-the-diagnostic-code-completeness-gate-scans-a-fi.md:9: missing local link docs/bugs/342_the_diagnostic_code_completeness_gate_scans_a_fi.md
+FAIL legacy/changelog.d/2026-10-31-bug343-a-qualified-call-m-f-runs-a-parent-function-name.md:4: missing local link docs/bugs/343_a_qualified_call_m_f_runs_a_parent_function_name.md
+FAIL legacy/changelog.d/2026-10-31-bug344-the-interpreter-refuses-the-abort-intrinsic-as-a.md:4: missing local link docs/bugs/344_the_interpreter_refuses_the_abort_intrinsic_as_a.md
+FAIL legacy/changelog.d/2026-10-31-bug345-a-newtype-unwrap-bound-to-a-let-of-the-inner-typ.md:4: missing local link docs/bugs/345_a_newtype_unwrap_bound_to_a_let_of_the_inner_typ.md
+FAIL legacy/changelog.d/2026-10-31-bug346-a-diverging-abort-bound-to-a-typed-let-that-is-r.md:4: missing local link docs/bugs/346_a_diverging_abort_bound_to_a_typed_let_that_is_r.md
+FAIL legacy/changelog.d/2026-10-31-bug347-get-args-has-a-check-signature-and-no-implementa.md:4: missing local link docs/bugs/347_get_args_has_a_check_signature_and_no_implementa.md
+FAIL legacy/changelog.d/2026-10-31-bug348-float-to-string-runs-natively-and-interp-stops-w.md:4: missing local link docs/bugs/348_float_to_string_runs_natively_and_interp_stops_w.md
+FAIL legacy/changelog.d/2026-10-31-bug349-append-is-accepted-in-a-function-that-does-not-d.md:4: missing local link docs/bugs/349_append_is_accepted_in_a_function_that_does_not_d.md
+FAIL legacy/changelog.d/2026-10-31-bug350-the-proven-overflow-arm-of-the-compile-time-safe.md:4: missing local link docs/bugs/350_the_proven_overflow_arm_of_the_compile_time_safe.md
+FAIL legacy/changelog.d/2026-11-02-roadmap-restructure.md:5: missing local link docs/archive/roadmap-2026-11/ROADMAP_RESTRUCTURE.md
+FAIL legacy/changelog.d/2026-11-03-a1-boundaries.md:4: missing local link docs/compiler/A1_BOUNDARIES.md
+FAIL legacy/changelog.d/2026-11-03-queue-reorder.md:4: missing local link research/process/design-review-2026-11-03.md
+FAIL legacy/changelog.d/2026-11-03-roadmap-coherent-plan.md:3: missing local link ROADMAP.md
+FAIL legacy/changelog.d/2026-11-04-core-proposal.md:4: missing local link docs/compiler/CORE_PROPOSAL.md
+FAIL legacy/changelog.d/2026-11-04-lean-is-the-spec.md:4: missing local link docs/archive/roadmap-2026-11/ROADMAP_DECISIONS.md#2026-11-04--lean-is-the-specification
+FAIL legacy/changelog.d/2026-11-04-new-roadmap.md:3: missing local link ROADMAP.md
+FAIL legacy/changelog.d/2026-11-04-new-roadmap.md:7: missing local link docs/archive/roadmap-2026-11/README.md
+FAIL legacy/changelog.d/2026-11-04-new-roadmap.md:12: missing local link docs/archive/roadmap-2026-11/task_disposition.tsv
+FAIL legacy/changelog.d/2026-11-04-philosophy.md:3: missing local link docs/project/PHILOSOPHY.md
+FAIL legacy/changelog.d/2026-11-04-philosophy.md:13: missing local link docs/spec/decisions.md
+FAIL legacy/changelog.d/2026-11-04-philosophy.md:23: missing local link docs/project/INFLUENCES.md
+DOC-LINKS: FAIL=88 CHECKED=6544 ANCHORS=3302
+fatal: not a git repository (or any of the parent directories): .git
+• Interesting no .git repository. Can't git status. No edit. Link checker includes legacy due no .git fallback; should run root official script same issue? It would also no git fallback include legacy, fails unrelated. Should targeted link check to changed docs. Could use temporary copy? Cannot edit any file means no create? User says do not edit any file, could create temp? Better avoid. I can run python inline import checker and scan only three changed files, no writes. Use module functions to check links. Should target anchor resolution all root files. Implement python -c here doc no files. This is not editing. Should avoid huge output. Check changed file links with same logic, ignoring changelog folding perhaps no links in changelog. Use importlib, regex etc. For each docs/decisions, ROADMAP, changelog fragment parse links, resolve and anchors. Should replicate path and anchor. Use code. Could call script with temporary git? no. Inline.
+
+  Before response, need evaluate more issues. R-0567 Core freeze dependencies did not add R-0626/R-0627 even A2i queue added. A2i queue row lists R-0626,R-0627, R-0571 integration row dependencies not updated, R-0567 freeze row dependencies not updated. This is significant: Queue A2i says includes new tasks but actual R-0571 task dependency list omits them; R-0567 depends on R-0571 etc but not new tasks. New items A2i may not be gated before freeze despite queue. User "Process foreign audit and assume replacement shown before removal are tasks; each new item names slice/phase home gate." They didn't explicitly require dependencies beyond R-0625 before grammar. But adding to A2i queue without adding to R-0571/R-0567 dependencies is inconsistent. Does queue semantics rows A2i every task of row enough? At line395 says dependencies can name queue rows (A2b every task of that row). A2i queue includes new tasks so R-0567 depends R-0571, whose task is integrate, not queue A2i? R-0567 depends explicit R-0571 and C1-C10 but not R-0626/27. Queue A2i itself says R-0626/27, but R-0567 row not depends A2i symbolic, only R-0571. R-0571 done when integrate spec and interaction proofs, not audit/replacement. So these new tasks listed under A phase and A2i queue but not blockers. Is that a finding within ask? User wants roadmap task placement, not necessarily freeze gating. R-0627 replacement before removal not necessarily before freeze, yet placing under A2i implies yes. Source item24 no exact phase. Coordinator chose A2i. If intended A2i, dependencies missing. Could report as roadmap internal dependency gap. Concrete fix add R-0626,R-0627 to R-0571 depends and R-0567 or replace explicit list with A2i. But R-0627 could be after freeze? A2i queue explicitly says new tasks part A2i, so yes missing. This may be expected review catch. Should decide severity. I should include.
+
+  Similarly R-0625 spelling round added Phase B but R-0622 depends on it. Good. New R-0626/27 added A2i queue but R-0571/R-0567 omission likely oversight. Round2 remaining/new.
+
+  Also R-0627 says removal only after worked examples and owner approval, and slice8 says removed only after R-0627. Fine.
+
+  A2i queue row R-0626/27 perhaps enough as queue is not task dependency? Queue rows used for phase assignment and overview, not automatically dependency. Explicit R-0567 is authoritative freeze. Should flag.
+
+  R-0626 audit every foreign declaration before Process removal. Does not need before Core freeze semantically. Why placed A2i? Could be no slice phase named otherwise. They intentionally added to A2i queue, so must be dependency. Could instead fix by moving tasks out of A2i to appropriate later phase if not intended prefreeze. But concrete fix recommended align dependency lists with A2i.
+
+  Link checker no git includes legacy failures. Should targeted run. Also REVIEW.diff perhaps not same current git but files applied. I can report links changed pass targeted. Should have no need for mention unrelated 88 in response unless verification notes perhaps not findings as user wants only issues. I can say changed-file links resolve via targeted check; repository-wide command unsuitable no git and legacy. But response desired concise findings only plus verdict. Could include no other issues and link pass.
+
+  Potential item record "Codex, Kimi and agy reviewed list in six rounds and agreed on every item except 11b" source says unanimous every item below; 11b decided by owner after round6. Exact. fine.
+
+  Potential "grammar items 30–39 decided as written" item37 "restrictions as proposed" lacks actual restrictions in record. Source same, but link to grammar review absent. Could be under-specified but faithful, not finding.
+
+  Potential overstatement "each revised row carries explicit revision note" changelog but Q9.8 kept no inline note; revision list includes. fine.
+
+  R-0614 constants "with decided reopening conditions checked" but where conditions? P17b line306, no link in new row. User just needs included. good.
+
+  No stale packed in foundation contract itself docs/proposals/FOUNDATION.md outside diff. Requirement only decisions/ROADMAP. okay.
+
+  Should inspect decisions link #decided-2026-11-08-language used item10 etc resolves explicit. targeted.
+
+  Use inline python.
+
+• The roadmap also lists R-0626/R-0627 under A2i without adding them to the integration/freeze dependency chains, so the queue and the executable task graph disagree. I’m validating the changed-file links independently of the repository-wide legacy failures.CHANGED-DOC-LINKS: PASS CHECKED=664
+
+
+• Should thoroughly consider if R-0626/27 dependency really issue enough. Also perhaps new R-0625 not in A2i despite Lean grammar before parser B0, okay.
+
+  Check R-0493 "Typed arithmetic and casts" stale cast terminology but generic casts named conversions okay.
+  R-0601 trait methods okay.
+  Roadmap slice14 typed first parameter but methods in C phase summary "traits" no issue.
+  No link fails.
+
+  Potential new issue: item 11(b) "same last segment refused" applies "two imported modules" but import syntax only item list `import a::b::{x,y}`, how know imported module if multiple items same module? fine. Same module repeated? "two imported modules same last segment" yes.
+  Q: Local named like imported segment refused; no shadowing. recorded exact.
+
+  Potential source quote "record, yes to all recommended" header says approving list as recommended but source PENDING says item11b not covered; header then exception clear. good.
+  Quotes split across lines no punctuation changes.
+  "Codex Kimi agy six rounds" source exact.
+  Review round cap signoff "after ... have all reviewed it" changelog says "after ... reviewed it" exact enough.
+  Mixed cap actual diff "branch mixing classes" source branch vs record diff actual changes, correct.
+
+  Check "slice0 lands at 0e..." recorded as process decision though REVIEW.diff doesn't roadmap landing action, source says yes. okay.
+
+  Potential "Every new item names slice/phase home gate": decisions items 1-59 themselves no per item slice/home/gate, but roadmap only relevant new tasks. User likely means each new roadmap item. R-0625 has phase B, home/gate; R26/27 A2i queue home/gate. yes.
+
+  Contradiction Q6.2 old example perhaps because spellings illustrative until spelling round means exact spellings items6-29 not decided? Item8/9 are decisions semantics but spelling illustrative. They preserve old examples with revision notes rather than rewriting, as many old ODs. However Q6.2 example has no revision note for patterns or types. Is old syntax allowed pending spelling round? The decision says "Spellings of items6-29 ... illustrative; exact spellings come later" could mean `field: binder` itself not final? Yet constructors/patterns always labeled is decided semantic. Old unlabeled pattern definitely no longer valid regardless exact label spelling. Every local written type decided. Should note. Strong.
+
+  Could also live example at docs/decisions.md:261 Q8.2 refused `200 +56` no local. fine.
+  No other live old local examples in current non-historical sections? Search whole doc regex found only Q6.2 outside OD table (OD63 historical). Good.
+
+  What about Q6.2 old example `let S {a}` no result arrow because no fn shown. fix `let S { a: a }: S = ...`? Actual typed destructuring syntax later (item55) not decided, so cannot invent concrete replacement. Better concrete fix add explicit revision note to Q6.2 example stating pattern labels and local type ascriptions are required and its old surface spelling is superseded; exact typed-destructuring syntax awaits R-0625. This avoids deciding syntax. Or update after spelling round. User asks concrete fix. Say append 2026-11-08 note to Q6.2 revision marking example's unlabeled pattern/untyped local superseded, with exact replacement deferred to R-0625. That's concrete and respects pending spelling. Could show illustrative `let S { a: a }: S = S...` but type position might be `let S {a:a} : S =` likely grammar. Better no invented syntax.
+
+  Changelog fix line32-33 change "The slice and std tables follow the decisions" to "The slice table follows the decisions; the std introduction defers placement changes to the separate std-placement review." Good.
+
+  Dependency fix lines410,413 add R-0626,R-0627. A2i queue line177 already. R-0567 dependency list could add both; R-0571 too. If only R0567 add both sufficient freeze, but integration task should include them as A2i. Recommend both for consistency.
+
+  Are these "remaining or new issues only" yes none round1 listed except Q6.2 note added but new aspect. Fine.
+
+  Perhaps cite REVIEW.diff lines or actual files. User asks file:line concrete fix. Use current actual lines. Good.
+
+  I'll report 3 findings, severity perhaps ordered:
+  1 roadmap dependencies perhaps medium
+  2 Q6.2
+  3 changelog overstatement
+  No need mention link checker failures unrelated but say all 664 links changed docs resolve. Could include "Links: no broken links in changed files (664 checked)." User asked list findings; helpful. Full repo checker failure not due diff and no git; don't distract. But I did run repo link script and it failed 88 legacy. I should not claim global links. Say targeted. Could mention no other issues in 1-59/revisions/foundation. Keep concise.
+
+  Now final todo mark done before responding.Respond exactly one verdict line at end. Findings only remaining/new. Could order dependencies first or Q6.2. Ensure no extraneous after verdict. "VERDICT: REJECT" exact. Mention links targeted pass before final verdict not after. Should have confidence no false positive dependency. I'll reason roadmap semantics: Queue A2i row includes R26/27 but R0567 dependencies explicit. At line395 dependencies may name queue rows. R0567 currently depends R0571 (integration) not A2i. R0571's own dependencies no R26/27. So indeed not blockers. If A2i is queue row and R0567 text says "after A2i complete acceptance" maybe semantic dependency even if graph omitted; task graph used tooling may not enforce prose. The ask each new item names phase, not dependency, but internal contradiction of graph vs prose is valid. Fix explicit.
+
+  R0627 is "assume replacement shown before removal" not necessarily required for A2i, but A2i queue listing intentional. If not intended prefreeze, alternate fix remove from A2i queue and place later. My finding can phrase "Either add ... or move them out of A2i; as written queue and task graph disagree." Concrete fix recommended add dependencies. Good.
+
+  Q6.2 revision note can mark example old syntax. Item18 exact destructuring typing later, but general rule current. fine.
+
+  Changelog std tables plural maybe "slice and std tables follow decisions" could mean std intro follows decisions by saying pending, not placements. But ordinary reading claims std table itself follows. User explicitly says std placements deliberately unchanged; this line conflicts. Good.
+
+  Do I need include no item faithfulness problems found? Can say after findings "The 59-item record, required revision notes, foundation/slice placements, and 664 changed-file links otherwise check out." This summarizes verification. User wants remaining issues only; okay short. Full repo check failed unrelated legacy don't need mention? "changed-file links" precise.
+
+  Respond around 400 words max.
+
+• 1. **A2i’s new tasks are absent from the integration/freeze dependency graph.** `ROADMAP.md:177` places R-0626 and R-0627 in A2i, but `ROADMAP.md:410` and `ROADMAP.md:413` omit both from the dependencies of Core freeze and A2i integration. Consequently, the textual A2i placement does not make either task a prerequisite for integration or freezing.  
+     **Fix:** add R-0626 and R-0627 to the dependency lists in R-0571 and R-0567, or move them out of A2i if they are not intended to block the freeze.
+
+  2. **The governing Q6.2 example still uses removed syntax.** `docs/decisions.md:191` gives `let S { a } = S { a: 200u8 }; a + 100` as the current refused example. Its unlabeled pattern contradicts item 9’s mandatory `field: binder`, and its unannotated local contradicts item 18’s written-type rule. The new Q6.2 note at `docs/decisions.md:243` covers only removal of `as`.  
+     **Fix:** extend the Q6.2 revision note to mark the example’s unlabeled pattern and unannotated local as superseded; leave the exact typed-destructuring replacement to R-0625 rather than inventing its syntax now.
+
+  3. **The changelog overstates the std-table update.** `changelog.d/2026-11-08-record-language.md:32` says “The slice and std tables follow the decisions,” but the std placements deliberately remain unchanged pending the separate placement review, as `ROADMAP.md:291` explains.  
+     **Fix:** replace this with “The slice table follows the decisions; the std introduction schedules placement revisions for the separate std-placement review.”
+
+  The 59-item record, required revision list, foundation/slice placements, and owner quotations otherwise match the authoritative sources. A targeted check found all 664 links in the changed files resolvable.
+
+  VERDICT: REJECT
+
+To resume this session: kimi -r session_602e8f24-5007-4bef-8548-917e5b0036c4

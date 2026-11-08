@@ -1,0 +1,19 @@
+Review of commit `4d16e26f` (`wip/signoff-reject`, on `d3811a74` for `ISS-0020`):
+
+- **Correctness & Unweakened Checks (`scripts/land/signoff.sh:178-206`)**:
+  - `check()` still enforces all existing structural and provenance checks: `record.txt` single-occurrence keys, `signoff: owner`, exact `commit` match, date format, quote naming the commit by 7+ hex prefix, diff class & review-round cap on `rounds-at`, presence of `F_request_<r>` and `F_verdict_<r>` for all three reviewers (`codex`, `kimi`, `agy`), exact seven `100644` blobs in the tree, `sha256` verification of all request and output blobs, `reviewed: <sha>` first line, and 7+ hex commit prefix in each request body.
+  - At `scripts/land/signoff.sh:202-204`, each reviewer output is still required to contain at least one `VERDICT: (ACCEPT|REJECT)` line (refusing verdict-less outputs with `the $r output has no verdict`), and the last matching verdict line is extracted. Instead of rejecting `VERDICT:REJECT`, it appends `$r ${verdict#VERDICT:}` to `verdicts`.
+- **Success Line Reporting (`scripts/land/signoff.sh:206`)**:
+  - The summary line now outputs `verdicts: codex <V>, kimi <V>, agy <V>`, reporting each reviewer's final verdict verbatim.
+- **Controls (`scripts/checks/landing_script.sh:1275-1282`)**:
+  - Negative controls for missing `reviewed:` line (`noreviewed`), verdict only in request (`requestverdict`, exercising verdict-less output), unnamed commit in request body (`unnamedbody`), and missing reviewer (`noagy`) remain intact.
+  - The `reject` leg (`scripts/checks/landing_script.sh:1279-1282`) now verifies both that the train accepts the signed-off member when `agy` ends in `REJECT` and that `signoff.sh verify` exits `0` and outputs `verdicts: codex ACCEPT, kimi ACCEPT, agy REJECT`.
+- **Documentation & Changelog (`docs/LANDING.md:96-98`, `docs/REVIEW.md:188-190`, `scripts/land/signoff.sh:45-48`, `scripts/land/train.sh:477`, `changelog.d/2026-11-08-signoff-reject.md:1-5`)**:
+  - All documentation and header comments accurately state that each reviewer output's last verdict line must be `VERDICT: ACCEPT` or `VERDICT: REJECT`, that `REJECT` is recorded and reported, and that missing reviewers or verdict-less outputs are refused.
+- **`ISSUES.tsv` Row (`ISSUES.tsv:23`)**:
+  - Well-formed 8-column tab-separated entry (`ISS-0020`, `2026-11-08`, `ci`, description with Codex reproducer, `R-0618`, `medium`, resolution summary with `landing_script.sh` controls, `closed`).
+
+No findings.
+
+VERDICT: ACCEPT
+rc=0

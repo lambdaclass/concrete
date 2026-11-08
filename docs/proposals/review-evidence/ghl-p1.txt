@@ -1,0 +1,81 @@
+Review a small bash change in the Concrete repository's landing tooling. scripts/land/gates_transport_ssh.sh writes run.sh, which is copied to a gate host over scp and run there by ssh; it runs the impact gates in the host's gate clone and any failure exits 255, which the caller reports as INCOMPLETE (never a pass). NEW: before anything is fetched, run.sh refuses a login whose `id -u` is not a number (fail closed), a root login (uid 0) and a login with no gate clone directory ($RUN_AT_REF_REPO or ~/concrete2 lacking .git), naming the user@host and path. Cause: a train run from an account whose ssh alias for the CI host logs in as root looked for /root/concrete2 and only said "fetch failed". scripts/checks/landing_script.sh adds two end-to-end cases through the real transport with ssh/scp shims (a fake `id` printing 0/root on the host's PATH; the gate clone moved away), each must be INCOMPLETE, name the cause, and fetch nothing.
+Note the echo lines produce run.sh code: single-quoted strings are host-side code. Review for correctness defects: quoting, a check that can pass without looking, a way a root or missing-clone login could still run gates or report a pass, and portability to the hosts' bash (Linux) — and whether the tests really exercise the new lines. Format: file:line, defect, concrete failing scenario; label preferences "preference". End with exactly one line: VERDICT: ACCEPT or VERDICT: FINDINGS.
+--- DIFF ---
+diff --git a/changelog.d/2026-11-08-gate-host-login.md b/changelog.d/2026-11-08-gate-host-login.md
+new file mode 100644
+index 00000000..154b2f1e
+--- /dev/null
++++ b/changelog.d/2026-11-08-gate-host-login.md
+@@ -0,0 +1,10 @@
++### The gate host checks its login before it fetches (2026-11-08)
++
++A landing check run from an account whose `concrete-ci-2` ssh alias is the root admin login
++(by design: the provisioned gate identity is `agent` on fede-256gb, which logs into `dev` with the
++`ci_gates` key, dotfiles `servers/agent-home.sh`) looked for `/root/concrete2` and reported only that
++the fetch failed. `scripts/land/gates_transport_ssh.sh` now checks the login on the host before
++anything is fetched: a root login is refused (gates never run as root), a login `id` cannot read is
++refused rather than taken as non-root, and a login without its gate clone names the account and
++path. Each is INCOMPLETE, never a pass. `scripts/checks/landing_script.sh` covers all three through
++the real transport, and none fetches.
+diff --git a/scripts/checks/landing_script.sh b/scripts/checks/landing_script.sh
+index d0083061..a709b1a5 100755
+--- a/scripts/checks/landing_script.sh
++++ b/scripts/checks/landing_script.sh
+@@ -564,6 +564,25 @@ dec="$( cd "$RI" && export CONCRETE_TEST_OUT="$TMP" CONCRETE_TEST_LIB="$ROOT_DIR
+ dec="$( cd "$RI" && source "$ROOT_DIR/scripts/checks/lib/prepush_record.sh" && ppr_remote_components "$RI" "$RIH" "$TMP/ri.changed" "$TMP/ri.plan" "$TMP/ri.comp" \
+   && ppr_remote_check "$RI" "$TMP/ri.comp" && echo REUSE || echo "refused:$PPR_REASON" )"
+ has "$dec" "refused:changed:env" && ok "a push in another CONCRETE_* environment than the host's run does not reuse it" || no "e2e env mismatch: $dec"
++# The login is checked on the host before anything is fetched: a root login, an unreadable one, or
++# one without its gate clone is INCOMPLETE and named (2026-11-08: the root admin alias looked for
++# /root/concrete2). A git shim on the "host" logs every fetch; each case must log none.
++mkdir -p "$TMP/hostgit" "$TMP/hostroot" "$TMP/hostnoid"
++printf '#!/bin/sh\nfor a in "$@"; do case "$a" in fetch) echo "$*" >> "%s"; break ;; esac; done\nexec "%s" "$@"\n' "$TMP/hostgit.log" "$(command -v git)" > "$TMP/hostgit/git"
++printf '#!/bin/sh\ncase "$1" in -u) echo 0 ;; -un) echo root ;; *) exit 1 ;; esac\n' > "$TMP/hostroot/id"
++printf '#!/bin/sh\nexit 1\n' > "$TMP/hostnoid/id"
++chmod +x "$TMP/hostgit/git" "$TMP/hostroot/id" "$TMP/hostnoid/id"
++: > "$TMP/hostgit.log"; PATH="$TMP/hostroot:$TMP/hostgit:$PATH" e2e
++[ "$rc" = 3 ] && has "$out" "INCOMPLETE" && has "$out" "gate host login is root@" && [ ! -s "$TMP/hostgit.log" ] && [ ! -f "$RIATT" ] \
++  && ok "a root login on the gate host is refused before it fetches (INCOMPLETE)" || { no "root gate login: exit $rc"; echo "$out" | sed 's/^/      /'; }
++: > "$TMP/hostgit.log"; PATH="$TMP/hostnoid:$TMP/hostgit:$PATH" e2e
++[ "$rc" = 3 ] && has "$out" "INCOMPLETE" && has "$out" "cannot read the gate host login" && [ ! -s "$TMP/hostgit.log" ] && [ ! -f "$RIATT" ] \
++  && ok "a gate host login that id cannot read is refused, not taken as non-root (INCOMPLETE)" || { no "unreadable gate login: exit $rc"; echo "$out" | sed 's/^/      /'; }
++mv "$HH/concrete2" "$HH/concrete2.away"; : > "$TMP/hostgit.log"
++PATH="$TMP/hostgit:$PATH" e2e
++mv "$HH/concrete2.away" "$HH/concrete2"
++[ "$rc" = 3 ] && has "$out" "INCOMPLETE" && has "$out" "no gate clone at $HH/concrete2 for " && [ ! -s "$TMP/hostgit.log" ] && [ ! -f "$RIATT" ] \
++  && ok "a gate login without its gate clone is INCOMPLETE and names the account and path" || { no "missing gate clone: exit $rc"; echo "$out" | sed 's/^/      /'; }
+ touch "$HH/unreachable"; e2e; rm -f "$HH/unreachable"
+ [ "$rc" = 3 ] && has "$out" "INCOMPLETE" && [ ! -f "$RIATT" ] && ok "the real transport to an unreachable host is INCOMPLETE (exit 3), attests nothing" || { no "e2e unreachable: exit $rc"; echo "$out" | sed 's/^/      /'; }
+ hook="$ROOT_DIR/.githooks/pre-push"
+diff --git a/scripts/land/gates_transport_ssh.sh b/scripts/land/gates_transport_ssh.sh
+index d9f8a6f6..21c1db19 100755
+--- a/scripts/land/gates_transport_ssh.sh
++++ b/scripts/land/gates_transport_ssh.sh
+@@ -9,7 +9,7 @@
+ # date with its origin (so base, which is on main, is there) and runs run-at-ref.sh with
+ # RUN_AT_REF_SOURCE=<the bundle>, <ref> and <command>. The ref and command are quoted for bash HERE,
+ # into that file, so the host's login shell only ever sees `bash land-remote-<id>/run.sh`, whatever
+-# the command contains. Output is run-at-ref.sh's. The host needs its gate clone (RUN_AT_REF_REPO,
++# the command contains. Output is run-at-ref.sh's. The login must not be root. The host needs its gate clone (RUN_AT_REF_REPO,
+ # default ~/concrete2) and nix; it needs no GitHub credentials and no copy of the landing scripts.
+ #
+ # Env: LAND_GATES_SSH (default `ssh -o BatchMode=yes -o ServerAliveInterval=20 -o ServerAliveCountMax=120`),
+@@ -31,7 +31,17 @@ cp "$bundle" "$tmp/$id/c.bundle" && cp "$SELF_DIR/run-at-ref.sh" "$tmp/$id/scrip
+   echo '#!/usr/bin/env bash'
+   echo 'dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"'
+   echo 'trap '\''rm -rf "$dir"'\'' EXIT'
+-  echo 'git -C "${RUN_AT_REF_REPO:-$HOME/concrete2}" fetch -q origin || { echo "transport: fetch in the gate clone failed" >&2; exit 255; }'
++  echo 'gc="${RUN_AT_REF_REPO:-$HOME/concrete2}"'
++  # Who the ssh destination logged in as, checked ON THE HOST before anything is fetched: gates never
++  # run as root, an unreadable identity is not "not root", and a login without its gate clone names
++  # the account and path. (2026-11-08: a train run from an account whose `concrete-ci-2` alias is
++  # the root admin login looked for /root/concrete2 and reported only "fetch in the gate clone
++  # failed".) Each is a transport failure: INCOMPLETE, never a pass.
++  echo 'uid="$(id -u 2>/dev/null)"; who="$(id -un 2>/dev/null)@$(hostname 2>/dev/null)"'
++  echo 'case "$uid" in ""|*[!0-9]*) echo "transport: cannot read the gate host login (id -u gave \"$uid\")" >&2; exit 255 ;; esac'
++  echo '[ "$uid" != 0 ] || { echo "transport: the gate host login is $who (root); gates run as the gate user (dev on the CI hosts), never root: check the ssh destination User" >&2; exit 255; }'
++  echo '[ -d "$gc/.git" ] || { echo "transport: no gate clone at $gc for $who (RUN_AT_REF_REPO); is the ssh destination the gate user?" >&2; exit 255; }'
++  echo 'git -C "$gc" fetch -q origin || { echo "transport: fetch in the gate clone failed" >&2; exit 255; }'
+   printf 'RUN_AT_REF_SOURCE="$dir/c.bundle" bash "$dir/scripts/land/run-at-ref.sh" %q %q\n' "$ref" "$cmd"
+ } > "$tmp/$id/run.sh"
+ "${SCP[@]}" "$tmp/$id" "$host:$id" || { echo "transport: copying to $host failed" >&2; exit 255; }

@@ -1,0 +1,297 @@
+kimi version 2.4.1
+• I need perform read-only review, no edits/no state-changing commands. Should inspect REVIEW.diff and tree. Should detailed correctness security remaining archived repo paths docs portability tests. Must only read tools and read-only Bash commands. Should be thorough. I can use TodoList? Changes state? TodoList session state perhaps user says no run anything changes state; avoid. Should read REVIEW.diff known path directly, perhaps large. Should have AGENTS already. Should inspect git diff? Read file.
+
+• I’ll trace the diff through each landing/publish path, then check remaining repository references and the updated fixtures without modifying the tree.
+
+• Should remainder.Should review full tree references. Should inspect current scripts and tests full relevant, base behavior. Should read files in parallel. Also grep concrete2/unbalanced, lambdaclass, LAND_MIRROR, PRIMARY/MIRROR usages, ORACLE mirror etc. Dedicated Grep parallel. I can run multiple.I have potential bugs:
+  - install-bot default ORIGIN_URL no longer reads existing ~/concrete2 origin, okay migration.
+  - It repoints origin before verifying REF exists. With default origin/main canonical, okay. But --source-ref custom and existing env.
+  - Env migration changes any LAND_REPO not canonical, including local test custom. Intent? Could break users deliberately? Guard would refuse on GitHub anyway. Good.
+  - If env has no LAND_REPO line, launcher defaults canonical so okay.
+  - systemd environment maybe old LAND_REMOTE=lambdaclass? Not migrated. Existing bot env likely LAND_REMOTE not. Not specified.
+  - origin remote can be missing. git config --get-all returns nonzero under set -e in command substitution inside [ ... ]? Condition safe. Then replace-all creates. okay.
+  - Multiple remote.origin.url entries comparison: output newline vs single, replace-all removes all. Test covers.
+  - insteadOf url rewriting? git config direct origin canonical but global url.insteadOf could still point old, guard uses remote get-url and applies. Installer fetch before guard at line60: this is potentially security: install-bot repoints to ORIGIN_URL then git fetch -q origin before land_remote_bad. If global url.*.insteadOf rewrites canonical URL to archived repo or attacker, installer fetch reads archived before launcher guard. First branch guard claims every fetch before? Diff says stale clones fail closed before any fetch or push, installer migration perhaps direct fetch unguarded. Existing install-bot had no guard before fetch. New requirement "every guarded command, the bot and its launcher ... before any fetch or push" not installer itself? Docs says build etc. User asks any remaining path pushes/reads archived. install-bot `git fetch origin` after config can read archived via `url.<old>.insteadOf` canonical? `git remote get-url` applies insteadOf per lib comment, so guard would detect but fetch is before guard. Also ORIGIN_URL env override can be archived; installer clones or repoints then fetches old before guard. Tests local origin require arbitrary INSTALL_ORIGIN_URL, so cannot simply guard canonical for local test. Could call land_remote_bad origin canonical before fetch, allows local paths and enforces canonical LAND_REPO. Since lib.sh may not exist at REF before fetch? Current clone script file available? Installer run from source maybe old? Can source lib.sh current clone? It exists in clone if previous. Fresh clone would already read arbitrary origin by explicit override, but intended tests. Main concern remaining reads archived through acceptance etc.
+
+  - push-both acquires lock (state change) before remote guard. User specifically fail before anything pushed, okay. No fetch. LAND_REPO on local allowed test. It pushes by-hand main, pre-push hook guards actual URL too. LAND_REPO could old with local URL and gh reads old after pushing local; tests use test/repo. Intent local exception. In production network canonical.
+
+  - Push-both changed from `PRIMARY` to `PUSH_REMOTE`. Existing callers/docs may still use PRIMARY, silently ignored causing push to origin. Could be safety issue backward compatibility: environment previously `PRIMARY=fork` used to prevent? Tests updated. User might expect PRIMARY override. But no root usages. Not necessarily bug.
+
+  - push-both comment stale "primary verification parity check" lines 91-93, minor docs.
+  - push-both CI query `--limit 1` without ensuring push event at exact SHA? gh run list filters. okay.
+  - push-both CI successful then no recheck remote after CI wait. Previous had recheck for mirror, now publishing already done and success message "published" still true at time initial read, but remote could advance. Not correctness migration.
+  - train guard moved after require_train_checkout in ci/land. Diff claim every command checks before anything else/fetch/read GitHub. require_train_checkout local only. okay.
+  - train build guard before valid_name possibly remote read before input validation not bug.
+  - `record` no require_remote_repo, uses LAND_REPO github.repository in workflow. If manually run record in stale clone with default canonical, reads canonical, not archived. If LAND_REPO=archived manually record reads archived because no guard. User asks any remaining path reads archived. Diff explicitly `record` runs inside own CI by construction; CI env now github.repository. But command is available manually and `LAND_REPO` override is test seam. First branch had guard accepting both and record unguarded too. This diff intended all paths? "points LAND_REPO defaults, CI landing record..." likely record expected. Could flag if realistic? Should distinguish intended test seams/local. `train.sh record` can read archived if `LAND_REPO=unbalanced...` passed. But user asks "any remaining path that pushes to or reads archived repository" likely they expect scanning not adversarial env overrides. Yet LAND_REPO stale env is specifically concern; train `record` doesn't guard. On CI env canonical. Not necessarily finding if design says record run anywhere no guard.
+
+  - oracle build only url canonical. publish/fetch scripts defaults from lock. Should inspect all oracle. Other scripts perhaps hardcoded archived beyond grep excluding legacy. Grep found only historical records and fixtures. Root scripts status absent because retired. Active docs archive historical not stale operational. changelog old branch accurately historical; not stale.
+
+  - `.github` other workflows repository references? Grep unbalanced only workflow changed. Good.
+  - README clone instructions perhaps no clone? Should not handle.
+
+  Potential serious portability tests: changed fixtures use `grep -q` etc existing. `${var:0:10}` bash 3.2 okay. associative arrays existing not bash3 but project says bash3.2/BSD. Should scan diff additions for Bash4 features none except existing arrays. `git config --replace-all remote.origin.url "$ORIGIN_URL"` behavior with multiple values: Without value-pattern, replaces all, yes.
+  - BSD `sed -E` existing. `sed 's|^LAND_REPO=.*|...|'` portable.
+  - `grep -qx` portable.
+  - `tr`, `read` etc.
+
+  Test false positives:
+  1. Updated URL table changed expected row `0 git@github_work:lambdaclass/concrete.git lambdaclass/concrete` but comment says every other name itself. If github_work resolves to itself, should be 1, not 0. I'll inspect ssh stub full.
+
+• The active tree has no remaining operational `concrete2` URL outside negative controls and historical records. I’m now checking the migration fixtures themselves, especially the SSH-alias expectations and installer/CI edge cases.
+
+• No stub mismatch comment minor only. Should look for actual errors tests:
+  - fake gh calls log handling at landing_script lines 716: `[ -f calls.log ] && cp ...; : > calls.log` with set -uo pipefail but no -e, fine. Restore only if kept.
+  - gh-canon test at line699 relies global LAND_REPO=test/repo. Good.
+  - URL table has `1 ssh://host lambdaclass/concrete`: land_url_target no slash p="" host=host, rejects. okay.
+  - `0 ./a:b.git` parser case `${u%%:*}` = "./a" contains / returns local. okay.
+  - test removal of gh-other foreign repo cases reduces generic attacker coverage but URL table covers attacker. train guard only stale but same path.
+  - hook refusal test still expects "not one of project's repositories" which remains message. good.
+  - push-both no success test! Existing push-both perhaps only refusal tests. New one-repo push actual functionality not covered, but land covers push. Could pass despite push-both push removed entirely? Static? Test checks destination print via gitnonet. It could pass if push-both never pushes on success; no success fixture. User asks tests wrong reason. This is a test gap, not necessarily reject unless concrete bug. I should list meaningful findings, not generic.
+  - install tests environment: initial `ib` with existing env file but fresh clone, so doesn't test existing env with fresh? It creates fresh clone and existing env, covers migration. Then stale clone repoint. Fine.
+  - They removed assertion `! has "$out" "SENTINEL"` in installer stale URL test but no secret in that test. Fresh covers.
+  - Installer redaction `sed` pattern greediness through last @ works because `[^/]*` greedy. BSD sed ERE greedy yes.
+  - Documentation stale path `docs/LANDING.md` links `docs/project/STATUS_PAGE.md` nonexistent? Preexisting, not migration.
+  - Changelog says 44 accounts and self hosted exposure accepted. Not code.
+  - Date mismatch changelog 2026-11-07 vs today 8 no issue.
+
+  Potential CI issue: `LAND_REPO: ${{ github.repository }}` is correct for current repo. But `train.sh record` runs `where_ok` skipped record. Good.
+  - Landing record job permissions actions read contents read. `GH_TOKEN` github token on same repo now, before cross-repo needed maybe token couldn't read other? improved.
+  - If repository renamed, dynamic okay.
+  - On self-hosted landing record, checkout repo canonical. yes.
+
+  Oracle lock: build.sh loop `for url in ${ORACLE_SOURCE:-} "$(lock url)"; do` if ORACLE_SOURCE contains path spaces splits as preexisting. No migration.
+  - scripts/oracle/publish.sh may verify `release_repo` matches `artifact_url` etc. Should read to ensure no mirror assumptions.Potential run-at-ref direct path no guard itself: gates_transport guards origin but bot uses run-at-ref.sh with RUN_AT_REF_SOURCE bot clone, REPO gate clone default. Installer launcher guard bot clone origin, not gate clone. In bot on server, `LAND_REMOTE_RUNNER=run-at-ref.sh`, `RUN_AT_REF_SOURCE=$CLONE`, `RUN_AT_REF_REPO` defaults `~/concrete2`. run-at-ref fetches from bot clone into gate clone. If gate clone's origin archived, no fetch origin occurs in this path, only local source, so doesn't read archived. It clones gate repo and might use stale origin only for fetching refs from itself, no network. Fine. Full remote gates via laptop concrete-remote outside repo may read old but transport guards.
+
+  Acceptance: no guard before clone. It takes origin URL from source stale clone, clones archived and fetches. `train.sh build` later refuses, but acceptance has already read archived. User explicit "any remaining path that pushes to or reads archived repository". First branch added guard to train etc, acceptance not guarded? Diff changes acceptance only mirror and default. Should acceptance now guard source remote before clone to avoid stale archived read. Docs says acceptance? `docs/LANDING.md` list of guarded commands omits acceptance. Changelog says "every guarded command, the bot and its launcher, the gate transport and pre-push" not acceptance. But user likely expects detection. Since migration aims no path reads archived, acceptance is obvious. If run from stale clone, `ORIGIN_URL=archived`, `git clone` reads it. Fix `why="$(land_remote_bad origin "${ACCEPT_REPO:-$LAND_CANONICAL_REPO}")"` before clone? But ACCEPT_REPO used gh override, acceptance rejects only LAND_* env not ACCEPT_*. Local tests maybe acceptance no fixture. Should allow local path. `land_remote_bad origin` suffices reject archived and other network. For gh `ACCEPT_REPO` stale can still read old in do_negative, should perhaps require canonical on network remote. Existing default canonical. The user asks remaining path likely this. Could list acceptance.sh:92 and :304. At line92 no guard, clone archived. `ACCEPT_REPO` deliberately configurable test seam? No docs env. Fix derive `ACCEPT_REPO` canonical/default and guard. But if local bare origin used acceptance tests fake gh, default canonical for gh okay. Add `why="$(land_remote_bad origin "${ACCEPT_REPO:-$LAND_CANONICAL_REPO}")"` after sourcing lib and before clone. It rejects ACCEPT_REPO=test/repo with local origin? land_remote_bad local URLs leaves repo free, so allowed. Good. Then `gh` uses matching on network. This is legitimate finding perhaps medium.
+
+  Install-bot same: ORIGIN_URL can archived via default? New default canonical so only existing global insteadOf or explicit override. Existing stale clone is repointed canonical before fetch. No direct stale read except url rewrite. Acceptance direct stale common. More severe.
+
+  Review scripts `notes.sh` guards only fetch|put, `get` local. ready guard no LAND_REPO but no gh. review no gh. okay.
+  `train.sh bisect` not in require guard directly but calls build/check/ci which guards. However before those local operations only. Fine.
+  `train.sh status` no network.
+  `train.sh record` as above.
+  `push-both.sh` old env `PRIMARY` ignored, but default origin stale guard prevents.
+  `install-bot.sh` fresh `git clone "$ORIGIN_URL"` if `INSTALL_ORIGIN_URL=archived` explicit override. Not normal stale env because new var. Could still flag consistency, but fix guard after clone impossible before initial read; validate URL using `land_url_target` before clone for network while allowing local. Installer doesn't source lib because remote single file over ssh comment. Could embed check or download? But source repo's lib available when running locally, over ssh only file transferred so not. It could reject exact old string. Not necessary if explicit override intended tests.
+
+  Potential major bug: `install-bot.sh` migrates origin by direct config to `ORIGIN_URL` but does not update remote fetch spec? Old origin concrete2 same ref names so okay.
+  - Existing clone's `origin` could have `remote.origin.pushInsteadOf` global not removed, guard catches at launcher after installer fetch. Again read before guard.
+  - Old `LAND_REPO` line migration uses `grep -q '^LAND_REPO=' && ! grep -qx canonical`. If file has canonical plus commented? okay. If multiple LAND_REPO lines including canonical first old later, `! grep -qx` false (because at least one canonical) so it does not migrate, systemd uses last old line -> launcher passes old LAND_REPO and refuses. The condition is wrong for duplicates: it checks "no exact canonical line" rather than "any noncanonical LAND_REPO line". Existing env generated has one line normally. But could have duplicates from manual edits. Tests don't cover duplicates. Not high.
+  - If env has `LAND_REPO = old` spaces, systemd EnvironmentFile accepts? Systemd syntax allows `VAR=` no whitespace? likely no.
+  - Existing env uses `export LAND_REPO=` not generated, no.
+  - `LAND_REMOTE=lambdaclass` in existing env after mirror remote removed causes launcher still checks origin explicitly but snapshot bot inherits LAND_REMOTE=lambdaclass and fails remote not configured. Migration removes mirror but doesn't clean LAND_REMOTE. Was old install env only LAND_REPO no LAND_REMOTE. Not expected.
+
+  Potential security: running installer on existing clone with stale `origin` uses `git config --get-all remote.origin.url` command substitution inside say. Credentials redacted through last @. Multiple lines collapsed. Good. But error from `git config` no URL not printed.
+
+  Potential tests pass wrong reason:
+  - `landing_bot.sh` installer env migration test checks `rc=0`, but `ib` stubs `ssh gh systemctl` all exit 1, script handles. okay.
+  - It does not assert `lambdaclass` remote removed. New migration claim removes remote, no test. Could be gap. Actual code straightforward.
+  - It tests stale launcher after installer created launcher with `LAND_REPO` default canonical. Environment file isn't sourced by direct launcher invocation (systemd would), so old LAND_REPO not in launcher test. Separate env check covers.
+  - `landing_script.sh` URL test `land_remote_bad url-probe "$repo" >/dev/null` and got=$?. Under set -u no -e. Fine.
+  - Remote guard tests `watch` call log saves/restores, ensures no fake gh. Good.
+  - For land/ci/check no git shim, only origin unchanged. A bug could read stale network but not push and still test passes. They claim "before pushing anything", not before read for land. CI test no gh log except watch. check no git shim. First branch may have tests for every command? Original loop just checked output no network. User specifically tests could pass wrong reason perhaps expected to note build dry-run `--no-fetch` doesn't prove build refuses before fetch. Indeed new build test uses `--dry-run build ... --no-fetch`, so it cannot detect an implementation that fetches archived before guard when fetch enabled. But actual build guard before fetch. Test gap not bug.
+  - `landing_script` gh-canon test `ci` may fail in require_train_checkout before require_remote_repo? It is on train t1? At this point yes currently train t1 likely. It expects "gh would read another repository", so specific.
+  - `land` guard after require_train_checkout means if not on train, stale remote won't be refused with repo message; tests set correct.
+  - `bot` guard happens after initialization, git_sandbox, state vars but before acquire lock. no network.
+  - `push-both` remote guard after lock creation; tests no lock? Each invocation trap cleans.
+  - `push-both` no `set -e`; `URL="$(git remote get-url --push "$REMOTE")"` fails? Guard ensures remote exists and URLs. If command fails unexpectedly URL empty but continues. Not migration.
+  - `LOCAL="$(git rev-parse HEAD)"` could fail and continue empty; preexisting.
+  - New `REPO` canonical from lib. fine.
+
+  Bash 3.2: acceptance already uses declare -A so not Bash3 compatible despite request perhaps evaluate changed code only. New changes don't add. `landing_script` here-string and arrays existing. `install-bot` `git config --get-all` portable git. `seq` existing.
+  - `LAND_CANONICAL_REPO` indirect default inside generated heredoc: line77 `\${LAND_REPO:-\$LAND_CANONICAL_REPO}` evaluation: I'll parse carefully. Installer writes heredoc unquoted. `if ! why="\$(land_remote_bad origin "\${LAND_REPO:-\$LAND_CANONICAL_REPO}")"; then`. Output should `if ! why="$(land_remote_bad origin "${LAND_REPO:-$LAND_CANONICAL_REPO}")"; then`. yes.
+  - In launcher set -u, lib defines canonical before expansion. good.
+
+  Oracle: `ORACLE_SOURCE` override archived remains possible explicit. Not a stale default. lock no old. Fine.
+
+  Docs stale two-repo:
+  - Root `changelog.d/2026-11-08-remote-guard.md` says `push-both.sh (both remotes)` and install origin/lambdaclass. It's historical fragment dated first branch, accurately describes then. Should not update historical changelog. `docs/archive` historical not stale.
+  - `ISSUES` historical evidence both remotes. fine.
+  - `docs/LANDING.md` line 195 "A clone that still points at archived ... is repointed with..." instructs manual. good.
+  - `AGENTS.md` says archived "(after the first landing here)" ambiguous currently head second branch before first landing? owner decision says archive after full landing. fine.
+  - `README` badge changed.
+  - Root `CLAUDE.md` perhaps symlink? Grep didn't show refs.
+  - `.github` no archived.
+  - `required-checks` no.
+
+  Could use `git diff --check` read-only? `git diff --check` no state, but diff file not working diff. `git apply --check REVIEW.diff` read-only? It doesn't change, but tree head already applied so would fail. Not useful. `bash -n` read-only, can run on scripts, doesn't change state. User says don't run anything changes state; bash -n safe. Could run `bash -n scripts/...`. Shellcheck if installed read-only, perhaps command -v. I can run `bash -n` all changed scripts. Also `git status --short` read-only to ensure no changes by me, but not needed. No tests because they change temp/state; user explicit read-only no run anything changes state, cannot run tests even tmp. I can use bash -n. Should not yet.
+
+  Should deeply examine guard for possible bypass introduced? Only shrink list. Could be `LAND_CANONICAL_REPO` not readonly despite comment constant; environment cannot override because assignment unconditionally. But caller after source can mutate, not threat. `LAND_REPOSITORIES` one. good.
+
+  Potential owner/name parsing allows extra path e.g. github.com/lambdaclass/concrete? path lower exact. good.
+  - URLs with query/fragment rejected. good.
+  - trailing `.git` stripping bug `p="${p%.git}"` removes suffix case-sensitive after p lower? p isn't lower until print, so `.GIT` rejected, safe.
+  - canonical uppercase `LAND_REPO=LambdaClass/Concrete` lower accepted. good.
+  - `LAND_REPO` with whitespace not accepted network. good.
+  - local paths allow arbitrary LAND_REPO, tests fake. intended.
+
+  Remaining path to archived via old git remote named lambdaclass: train only uses origin default, ignores lambdaclass. No pushes. push-both `MIRROR` ignored, so even if old automation sets `PRIMARY=origin MIRROR=lambdaclass`, only origin. good.
+  - Existing scripts outside root active e.g. `.githooks` might invoke `legacy/scripts/push-both.sh`? Grep references. Should search `legacy/scripts` or `scripts/push-both` references.
+
+• Two unguarded entry points need closer scrutiny: acceptance clones its source remote before the train guard runs, and the installer fetches before its generated launcher guard. I’m checking whether those are reachable with stale configuration and whether any caller bypasses the new defaults.
+
+• Interesting grep output included kimi.out containing my reasoning. File existed initially, probably tool captures output? I didn't create. Ignore. Should not mention.
+
+  Potential first branch guard explicitly did not include acceptance and record, so second migration task may not require adding guards. But user asks review diff not broader first branch? "Check ... any remaining path that pushes to or reads archived repository" definitely within whole tree head, so acceptance valid.
+
+  Should investigate `scripts/checks/landing_script.sh` record tests using LAND_REPO=test/repo and local origin; adding guard with REPO would allow local. Fine.
+  Could propose require_remote_repo for record too, but in CI actions checkout has origin canonical and LAND_REPO dynamic, so works. `record` designed to run with no hook but remote exists. This would close manual stale env. Does `record` need guard before `git cat-file` no network, fine. It uses GH only. Add `require_remote_repo` in cmd_record before gh. Then tests record on local origin test/repo pass. Good finding perhaps combine with acceptance? They are separate file lines/fix.
+
+  Also `scripts/oracle/publish.sh` uses lock canonical. no issue.
+  `acceptance` ACCEPT_REPO stale environment not rejected because bad_env only LAND/CONCRETE_SKIP, so direct stale `ACCEPT_REPO` can read archived even with canonical clone. Fix use canonical constant rather than override? Tests perhaps need override. Better guard matching remote as above.
+  `install-bot` old global `LAND_REPO` isn't used until launcher, install fetch independent. Could source lib from current script? On remote can't. But after `git show` lib only after fetch. To guard before fetch on existing clone, can use current clone's `scripts/land/lib.sh` if present (old clone base first branch likely has it) but fresh clone needs pre-clone URL validation. Since default canonical and override test local, can validate ORIGIN_URL using a small embedded `land_url_target`? Duplicating undesirable. Alternative move `git fetch` after `git show "$SHA:scripts/land/lib.sh"` impossible SHA remote needs fetch but existing `origin/main` may stale. Security vs functionality. Installer itself is migration tool, allowed to read stale to migrate? It repoints first so intended no stale reads. `url.insteadOf` unusual but guard claims all URL forms. I can mention lower severity if needed.
+
+  Should not over-report hypothetical explicit overrides. Focus concrete acceptance normal stale clone. `train record` requires explicit stale LAND_REPO but that's exactly stale env migration concern. `LAND_REPO` default fixed, existing shell env could be old. In normal stale clone with origin old and LAND_REPO old, `train.sh record` reads old. So yes valid. It won't push but reads CI archived, contrary goal. It could produce qualifying record based on archived CI runs if manually used; main CI uses canonical so no security landing impact. Still bug.
+
+  Could there be even more direct old reads via `scripts/land/install-bot.sh` old `ORIGIN_URL` default no. `acceptance` stale clone yes.
+
+  `READY` remote full runner default external `~/bin/concrete-remote` not repo, may have hardcoded old. Out of scope tree.
+  `run-at-ref` direct invocation with default origin in stale gate clone reads old (line36). It is an active script and can be run directly. `gates_transport` guards but server-local bot path uses `RUN_AT_REF_SOURCE` local. If user invokes `run-at-ref.sh wip/x ...` in stale `~/concrete2`, it fetches old. No guard inside. First branch guard added transport only, not run-at-ref. User "any remaining path" broad could include this. Fix source lib.sh and `land_remote_bad` when SRC=origin? But run-at-ref is copied with lib by transport, and in actual root has lib. In bot snap includes scripts/land so lib. Add guard before fetch for any network source? If SRC is origin, `(cd "$REPO" && land_remote_bad origin)` before line36. If SRC path/bundle local no need. This would ensure direct path. However not changed diff except docs path name, perhaps expected to catch. Could list many unguarded scripts; need decide scope avoid noisy theoretical.
+
+  `acceptance` definitely changed and should include.
+  `install-bot` changed and should include.
+  `record` changed default and CI, should include.
+  `run-at-ref` not changed but remaining old path only directory name not URL. No old URL in code, depends stale config. Same as train guards designed for stale config. Why guard some not all? User specifically any remaining path reads archived. I should identify all meaningful.
+
+  Also `scripts/oracle/build.sh` `ORACLE_SOURCE` can old explicit, but that's an override designed to allow arbitrary source, not stale config. No need guard because verification commit and tag pin protects. `ACCEPT_REPO` explicit similarly but default and source remote stale enough.
+
+  `gh` without `-R` in acceptance tamper wrapper: real `gh` inherits repo from C canonical if source canonical. negative `gh run view` explicit default canonical. okay.
+  `push-both` pre-push hook only checks URL argument from git. If remote uses multiple push URLs, git invokes hook per URL, guard catches old. good.
+
+  Potential remote guard bypass via `url.insteadOf` in install: `ORIGIN_URL` config stores canonical but `git fetch` applies rewrite, real. I can describe as actual configuration scenario not explicit malicious override. Existing stale global config likely if migration used insteadOf to redirect? Some users may have `[url "git@github.com:unbalancedparentheses/concrete2"] insteadOf = ...` less common. But guard is specifically supposed to apply insteadOf, so missing before fetch is real.
+
+  Fresh install `git clone` canonical subject to insteadOf old as well. To fix validate resolved URL before clone without lib? Could use `git ls-remote` no that's read. Should use `git remote get-url` only after clone. Could create temporary git config remote and source lib from running repository unavailable over ssh. Could embed helper in installer (it already duplicates redaction). Or change installer to transfer lib with itself over ssh? Simpler reject any `url.*.insteadOf`? Use `git config --get-regexp '^url\..*\.(insteadOf|pushInsteadOf)$'` and fail if canonical could rewrite? Hard to map. Could after clone run guard before `git fetch`, but initial clone already read. For existing stale clone, repoint then guard before fetch solves most. Finding line60 specifically existing install, fix source installed/current lib before fetch; fresh clone line42 separately if thorough. Perhaps don't report to avoid complexity.
+
+  Should inspect base `REVIEW.diff` only changed files means acceptance guard omitted perhaps intentional from first branch not acceptance. The user may expect findings about actual introduced correctness bugs rather than preexisting omitted hardening. But review asks remaining paths whole head. Fine.
+
+  Potential actual serious bug in migration: `install-bot.sh` sets ORIGIN_URL canonical by default, but when run `install-bot.sh --source-ref origin/wip/...` on old clone before first new landing, it repoints origin to lambdaclass/concrete where that wip branch may not exist yet (migration branch pushed only to old origin?) This second branch is on lambdaclass? Tree here head and base first branch perhaps both pushed both. Owner migration sequence likely branches exist canonical. Fine.
+  - First full landing with new script is a chicken-and-egg: base main on lambdaclass has old train.sh requiring mirror and primary old? Train head uses new script, remote canonical, base main canonical at same base. run CI canonical. Land pushes canonical. Good. Old origin concrete2 not updated by design then archived.
+  - Review provenance notes copied canonical. okay.
+  - required checks main branch on canonical old workflow? CI dispatch uses candidate workflow canonical. Landing record on main new workflow dynamic repo. good.
+  - Oracle asset republished, digest same. good.
+  - Self-hosted runner re-registration. external facts cannot verify read-only local. No need web network as read-only? FetchURL read-only external but user says no run anything changes state, web read okay. But no need and current facts not verify.
+
+  Potential CI record dynamic repository can be uppercase? github.repository exact owner/name. guard not called record. fine.
+  - `github.repository` in a reusable workflow? not reusable. good.
+
+  Potential removal mirror from acceptance weakens no-landing guard: previously monitored both origin and lambdaclass main to detect accidental landing either. Now scripts no mirror, but a candidate under test could contain stale script that pushes `lambdaclass` remote? Acceptance fresh clone no longer adds lambdaclass, so such push fails missing remote, not lands. A candidate could add remote itself using old URL, git shim only checks push main and would refuse regardless remote. Pre-push guard refuses main too. main_heads only origin cannot detect if candidate adds archived remote and pushes main there because git shim would block push. Three guards enough. If shim bypass? no.
+  - `do_clone` echoes `$ORIGIN_URL` unredacted at line197 and line342, preexisting; migration might canonical credentials. Not diff.
+  - `main_heads` errors suppressed yields empty before and after perhaps no detection, preexisting.
+  - `ACCEPT_REPO` default canonical while origin can local tests. okay.
+
+  Potential `install-bot` use `git config --replace-all remote.origin.url "$ORIGIN_URL"` when ORIGIN_URL contains `\n` or `%` could inject config? git config value newline accepted as multi-line? Env trusted. no.
+  - `sed` env migration preserves file permissions? `>` creates `$ENVF.new` with umask then mv, replacing existing env possibly mode 600 -> new mode 644 (default umask 022), potentially exposing secrets in env file. Existing env contains repo config no secrets normally, but could include tokens? Environment file has PATH, bot config, notifications maybe `NTFY_TOKEN` or Slack? Installer env file could include credentials added by operator. Migration rewrites whole file to new file with default mode and mv, changing mode from 600 to 644, a security bug introduced. This is a good catch! `sed ... > "$ENVF.new" && mv` does not preserve permissions/ownership. Running as same user ownership stays, but mode changes based umask. Existing env file could be 600. Systemd EnvironmentFile often contains tokens for notify (BOT_NOTIFY perhaps ntfy no auth). Still best practice. Fix use `chmod --reference="$ENVF" "$ENVF.new"` GNU not BSD, or `chmod "$(stat...)"` portability; simplest `cp -p "$ENVF" "$ENVF.new"` then `sed ... "$ENVF.new" > "$ENVF.tmp"`? That still second temp mode. Could write temp with `cp -p "$ENVF" "$ENVF.new"` then `sed -i ''` not portable. Portable: `cp -p "$ENVF" "$ENVF.new" && sed 's...' "$ENVF.new" > "$ENVF"` modifies original in place, preserves mode but not atomic; or set `umask 077` around temp creation then `chmod --reference` not BSD. `cp -p "$ENVF" "$ENVF.new"` then `sed ... "$ENVF" > "$ENVF.new.tmp"` again. Better use `cp -p "$ENVF" "$ENVF.new" && printf ...?` Need transform without creating another file: `cp -p "$ENVF" "$ENVF.new" && sed 's...' "$ENVF" > "$ENVF.new"` truncates existing new retaining copied mode, then mv. Yes:
+  `cp -p "$ENVF" "$ENVF.new" && sed 's...' "$ENVF" > "$ENVF.new" && mv ...` cp -p preserved mode, then redirection truncates not recreates. Atomic replacement. BSD/GNU cp -p. Or `chmod 600` might overly restrict. This is valid security bug but perhaps tangential. User explicitly security and portability. Include? Severity low/medium. I should avoid overwhelming findings with speculative secrets. Environment files commonly may hold notify tokens, and preserving permissions expected. The old script kept existing file untouched, new writes it. Strong actual behavior. Could report.
+
+  Also symlink attack: if ENVF symlink, `mv` replaces symlink rather than target; not huge dedicated user. `$ENVF.new` predictable symlink attack if another user same home no. Installer run dev only.
+  - multiple duplicate LAND_REPO condition mentioned. Could combine env migration issues? Better separate if meaningful.
+
+  Potential `install-bot` env migration logs entire old LAND_REPO values. No secrets expected.
+  - `mv` may lose SELinux xattrs etc. cp -p not all. mode main.
+
+  Potential remote migration `git config --replace-all` doesn't remove remote.origin.pushurl until after; no fetch between. good.
+  - Removes `lambdaclass` remote with `git remote remove`, which also removes remote-tracking refs? Fine.
+  - No longer removes push URLs from lambdaclass before removing remote, removal drops config. good.
+  - `ORIGIN_URL` default canonical but existing origin can canonical with different URL form; comparison sees different and rewrites to default, okay.
+
+  Potential test fixture wrong reason for env file permissions absent. Could mention tests don't cover but finding line115 enough.
+
+  Potential `push-both` no `set -e` plus new `URL` perhaps no. Not introduced.
+
+  Potential default repository name in docs `docs/LANDING.md` line 176 confirm command lacks `-R lambdaclass/concrete`; run from clone canonical per docs. okay.
+
+  Potential docs stale `docs/LANDING.md` line 131 campaign description says mutation fuzz etc but root no campaign, preexisting. Not migration.
+  - `docs/LANDING.md` line 138 says origin lock then checks, require_remote happens before lock actually. fine.
+  - AGENTS says "The one repository is... origin it in every clone" but test clones local exception. operational docs fine.
+  - changelog `2026-11-07-one-repository` line 15 says guard covers "under any URL form or ssh alias before any fetch or push" but acceptance and record omissions make docs claim perhaps limited "every guarded command". It enumerates not acceptance/record. fine.
+
+  Potential owner decision "archived after first landing" but diff merges before archive. okay.
+
+  Should check `git status` perhaps current tree head matches diff, no edits. Later.
+
+  Should run `bash -n` changed scripts read-only. Also perhaps use `git diff --no-index` no. I can run `bash -n` on seven scripts and `python` YAML parse? Python reading no state with -I and no pycache? Python -I doesn't prevent pycache for imported local? PyYAML installed perhaps no need. `bash -n` safe.
+
+• The main train, bot, hook, review, oracle, and CI paths consistently use the canonical repository. I did find concrete stale-read gaps outside those guarded paths; I’m doing a final syntax and fixture-consistency pass before assigning the verdict.
+
+• Should have final verdict likely REJECT with findings. Make sure all listed are real and not overreport. Could respond with 3-5:
+  1 acceptance unguarded source remote + ACCEPT_REPO. file:92 fix guard before clone and use repo in gh. This is clear.
+  2 train record no guard: line801? Should have exact line require insertion. Cite scripts/land/train.sh:801 or :818. `cmd_record` at801 and GH at818. Fix `require_remote_repo` before API, allowing local. Tests add stale LAND_REPO + no gh.
+  3 install-bot fetch before guard line60 and clone line42? Might be redundant with broad unguarded. Could mention at :60 existing clone repointed but url insteadOf rewrite not checked until launcher; direct INSTALL_ORIGIN_URL old also. Fix validate effective ORIGIN_URL and remote with land_remote_bad before any clone/fetch. Add no-fetch test. This is legitimate but perhaps reviewer expects.
+  4 env permissions line115. Fix cp -p temp.
+  5 tests push-both no positive success. Is test gap enough to reject? Could include as low severity, but no need if already 4. User specifically tests wrong reason; I should identify actual test flaw. There may be stronger fixture bug:
+  - `landing_bot` stale launcher test sets `PATH="$IB/stub:$PATH"` with git shim that logs and executes real. `land_remote_bad` invokes `ssh -G`; `$IB/stub/ssh` exits1, fallback host itself. For stale https and github-old both reject. good.
+  - Installer repoint test after setting stale URLs and push URL runs `ib`; function uses `PATH=$IB/stub` with no git shim yet, real. Fine.
+  - It doesn't assert old `lambdaclass` removed but code.
+  - `landing_script` guard table no generic `https://github.com/someone/else.git` now removed! It only tests old repo and attacker host, no arbitrary other GitHub repo over HTTPS. `LAND_REPOSITORIES` shrink bug that accepts any GitHub repo except concrete2 would pass table. gh-canon with test/repo confirms LAND_REPO mismatch, but if guard only compares `want` and doesn't known list, stale old with old LAND_REPO expected reject would catch? If implementation accepted any GitHub when want matches, row old+old would fail test (expected1), so covers arbitrary logic only old specifically. A bug whitelist `lambdaclass/concrete unbalanced... someone/else` improbable. No need generic.
+  - Positive push-both missing means migration could leave no push and all tests pass. User says tests could pass wrong reason, this is textbook. Cite `scripts/checks/landing_script.sh:795` block only negative plus shim. Fix add real local bare remote success asserting exact SHA and no fork, plus CI `-R canonical` maybe local LAND_REPO test. This is test coverage not correctness bug but requested. Could list low.
+  - Actual comment in push-both line91 stale "primary verification parity check" no parity now. Minor not worth.
+  - Docs comments in `lib.sh` plural "project's repositories" and `LAND_REPOSITORIES` retained intentionally compatibility. Not stale two-repo docs, singular list. okay.
+  - `gates_transport_ssh.sh` comments plural generic. fine.
+
+  Perhaps final response not too long, 4 findings enough. Verdict REJECT. But should not list speculative install guard if not expected. I'll scrutinize design claims to see if acceptance/record explicitly excluded, perhaps not considered bugs. `docs/LANDING` says record runs inside repository own CI by construction, so manual record not guarded by design. User asks "any remaining path ... reads archived" could still count because record manual is supported usage header. It is listed command and tests run manually. Good.
+  Acceptance docs bad_env rejects LAND_* so cannot set LAND_REPO, but ACCEPT_REPO old possible. Source clone stale is normal.
+  Install bot default origin canonical so only override/global rewrite. Guard goal includes URL forms and insteadOf. Existing bot clone stale gets repointed before fetch, so normal no old read. `url.insteadOf` is explicit config not typical migration. But land_remote_bad docs specifically applies insteadOf and test should cover. Installer itself not claimed guarded in docs; only generated launcher. Changelog says install migrates. Could leave install fetch out to avoid low-probability. Yet user specifically security, any path. Could present lower severity.
+  `install-bot` initial `git clone` from `INSTALL_ORIGIN_URL=archived` is an explicit request to read archived, not a bug (test override). Global rewrite could redirect any URL and is a security issue but no malicious config threat? A stale config from migration possible. Better phrase precise.
+
+  Permissions bug strong but perhaps security severity minor. Include.
+
+  Could there be more serious actual installer migration bug with `git config --replace-all` and URL credentials comparison test wrong reason due `set -e`: In `if [ "$(git config --get-all remote.origin.url)" != "$ORIGIN_URL" ]; then`, if no remote origin config, command substitution exit status 1 but [ compares "" != canonical and returns 0; no set-e because if condition. okay.
+  `if git config --get-all remote.origin.pushurl >/dev/null 2>&1; then ... git config --unset-all` returns 0. fine.
+  `if git remote get-url lambdaclass ...; then ...; fi` no set-e.
+  Env duplicate condition perhaps more likely than URL rewrite? Existing env could have canonical line plus old line from previous attempts, but generated never duplicates. Not required.
+
+  What does "fixtures" mean User likely expects review changed test fixtures with fabricated expected outputs. I should inspect all diff changes no missed lines after 1675 yes. Fixture test `gh-canon` now still `LAND_REPO=test/repo` global, and fake gh no network. It requires specific error, fine.
+  Potential URL table expected `0 git@github_work` and stub does alias despite comment says every other name itself. The code comment at646 is stale and says only github-lambdaclass alias, but stub includes github_work. This is a stale fixture doc, not functional. Could list minor? No.
+  Potential portability `cp -p` fix works BSD. Current code uses `sed` with `|` and slash repo no delimiter issue. Fine.
+  `grep -qx` on BSD supported. `git config --replace-all` supported old Git. `ssh -G` not available macOS? OpenSSH supports. no changes.
+
+  I could perhaps use read-only small shell snippet to test file mode behavior? That would change temp state, prohibited. No need logic obvious.
+
+  Final response format file:line with fix. I can order severity:
+  - acceptance stale read
+  - train record stale gh
+  - install-bot effective URL fetch
+  - env permissions
+  - test success gap.
+  Do these justify reject? Yes first two enough.
+
+  Should mention no tests run due read-only, bash -n passed? Could add concise after findings before verdict. User wants end exact VERDICT. I can include "Read-only check: bash -n passed; no state-changing tests run." Not necessary but helpful.
+
+  Should not include every minor issue. Could omit install guard and test gap if too many. But User explicitly tests wrong reason, include.
+
+  I'll formulate precise:
+  1 `scripts/land/acceptance.sh:92` — ORIGIN_URL read without `land_remote_bad`; `do_clone` at190 clones/fetches before train's guard. Running from stale clone reads archived; `ACCEPT_REPO` at304 can also read old. Fix immediately after determining source repo: `why="$(land_remote_bad origin "${ACCEPT_REPO:-$LAND_CANONICAL_REPO}")" || { echo ...; exit 1; }`, before mktemp/clone; add fixture with stale origin and git/gh shims asserting no calls. Note `land_remote_bad` local paths allows test repo and arbitrary ACCEPT_REPO.
+  2 `scripts/land/train.sh:801` — record excluded from require guard by case at1125 and cmd_record no require. With old `LAND_REPO`, API at818/824 reads archived. Fix `require_remote_repo` at start cmd_record before GH; safe in CI dynamic canonical and local tests. Add no-gh test.
+  3 `scripts/land/install-bot.sh:60` — installer fetch before generated launcher guard. `url.insteadOf`/`pushInsteadOf` can make canonical ORIGIN_URL resolve archived. Actually `pushInsteadOf` doesn't affect fetch, `insteadOf` affects both. Existing origin repointed to canonical then fetch applies insteadOf. Fresh clone line42 too. Fix validate effective URL before clone/fetch. Since installer standalone over ssh, can stage/source lib or use a preflight temp clone config? I can just say reuse guard before network. Add test rewriting canonical to old and no-network shim. Does `land_remote_bad` need a configured remote, fresh clone not yet. Could validate existing clone after repoint, and fresh `ORIGIN_URL` using `land_url_target` + git config insteadOf expansion. "Apply the same effective-URL guard to ORIGIN_URL before clone and to origin before fetch" enough.
+  4 `install-bot.sh:115` mode. Fix `cp -p "$ENVF" "$ENVF.new"` before sed redirect to existing temp then mv. Ensure `cp -p` fails if no etc inside existing branch. E.g.
+  `cp -p "$ENVF" "$ENVF.new" && sed ... "$ENVF" > "$ENVF.new" && mv...`
+  This preserves mode. Also ownership perhaps cp -p as same user.
+  5 `landing_script.sh:795` — block has only refusal tests and deliberate failed push; no successful push-both. It would pass if script never pushed or always exited after printing. Fix positive control local origin with exact HEAD update and readback, assert only selected remote. This is a test gap not actual bug. Fine.
+
+  Do I need include stale docs? I found none operational. Could state "No stale two-repository operational docs or bash 3.2/BSD syntax regressions found." But I found env permission fix cp portability. Good to mention after findings. `bash -n` on current Bash not 3.2 but syntax additions compatible. No actual 3.2 run. Say no new Bash4 constructs, not claim verified 3.2.
+  Verdict REJECT.
+
+  Would the response be considered overzealous because explicit `ACCEPT_REPO` override allowed? Source origin normal stale confirms.
+  Could combine acceptance line92 and 304 in one finding.
+  No need cite diff lines.
+
+  One more possible critical: `scripts/land/acceptance.sh` rejects any LAND_* env, so suggested guard uses canonical and ACCEPT_REPO, works.
+  Train record require_remote_repo uses REMOTE origin default, actions checkout may have push URL with `https://x-access-token:...@github.com/lambdaclass/concrete`, guard redacts only on error, accepts. Good.
+  Install test with local origin and LAND_REPO old env migration: guard if added with canonical would local pass. good.
+
+  Should have final response self-contained. Use bullets, each file line and fix. Include severity perhaps not required. "Findings" heading light. Last line exact.
+
+• - `scripts/land/acceptance.sh:92` — the source `origin` is never checked before `do_clone` clones and fetches it at lines 190–194. Running acceptance from a stale clone therefore reads `unbalancedparentheses/concrete2` before `train.sh` can refuse it. `ACCEPT_REPO` can likewise select the archived repository at line 304. **Fix:** before cloning, run `land_remote_bad origin "${ACCEPT_REPO:-$LAND_CANONICAL_REPO}"`; local remotes remain usable by fixtures. Add stale-origin and stale-`ACCEPT_REPO` controls with git/gh shims proving no network call occurs.
+
+  - `scripts/land/train.sh:801` — `record` bypasses `require_remote_repo`, so an inherited old `LAND_REPO` makes its API calls at lines 818 and 824 read the archived repository. The CI workflow now supplies the correct value, but the documented command remains unguarded elsewhere. **Fix:** call `require_remote_repo` at the start of `cmd_record`, before any GitHub API use, and add a control asserting that stale `LAND_REPO` is refused without invoking `gh`.
+
+  - `scripts/land/install-bot.sh:60` — the installer fetches before the generated launcher’s guard ever runs. A `url.*.insteadOf` rule can rewrite the newly configured canonical URL to the archived repository; the fresh clone at line 42 has the same effective-URL gap. **Fix:** validate the effective destination before both clone and fetch, using the same URL/alias resolution as `land_remote_bad`. Add a control that redirects the canonical URL through `insteadOf` and proves no fetch or clone occurs.
+
+  - `scripts/land/install-bot.sh:115` — the environment-file migration replaces the existing file with a newly created `$ENVF.new`, potentially changing a mode such as `0600` to the process umask’s default and exposing other credentials stored in that environment file. **Fix:** preserve metadata, portably, for example with `cp -p "$ENVF" "$ENVF.new"` before overwriting that temporary file’s contents and moving it back. Add a permission-preservation assertion.
+
+  - `scripts/checks/landing_script.sh:795` — the rewritten `push-both.sh` fixture has only refusal cases and an intentionally failed network push. It would still pass if the success path never pushed anything. **Fix:** add a positive control against the local bare `origin`, asserting exit 0, `origin/main == HEAD`, an unchanged `fork/main`, and the final `published` message.
+
+  The changed shell files pass `bash -n`; no state-changing tests were run. I found no remaining operational two-repository documentation or new Bash 4-only syntax.
+
+  VERDICT: REJECT
+
+To resume this session: kimi -r session_d4ff66e4-c8b7-4e09-ae1a-a3aafeee506e

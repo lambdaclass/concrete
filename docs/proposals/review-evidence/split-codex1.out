@@ -1,0 +1,5 @@
+review: round 1, piece 1 of 2 (scripts, 23753 bytes)
+review: round 1, piece 2 of 2 (docs, 4250 bytes)
+review: round 1 verdict clean (2 piece(s)); raw output: .review/b7f30d3601521b74e431f629809b09e35e439055-1.md
+pre-push: review-notes push (review notes, owner sign-offs) — no source tree, no gates
+rc=0

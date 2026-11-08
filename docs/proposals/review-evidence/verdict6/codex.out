@@ -1,0 +1,851 @@
+Reading additional input from stdin...
+OpenAI Codex v0.166.0
+--------
+workdir: /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/verdict6/codex
+model: gpt-6.1-sol
+provider: openai
+approval: never
+sandbox: danger-full-access
+reasoning effort: none
+reasoning summaries: none
+session id: 01a1b955-a799-7151-a248-6c25ae290165
+--------
+user
+Concrete is a systems language rebuilt as a fully proven compiler in Lean. You may read the repository here (docs/decisions.md, docs/PHILOSOPHY.md, legacy/docs/spec/modules.md) and _review/GRAMMAR_REVIEW.md.
+
+Round 6. All three of you rejected (b-fixed) module imports in round 5 (new form; two routes to one item; MOD-2 item manifest). Claude accepts. `as` is removed entirely (owner: "fully gone"), so import renaming cannot exist. Imports stay item lists only (`import a::b::{x, y};`, MOD-2 manifest kept, OD139 kept). The remaining question is how two imported items with the same name are used. Options:
+
+1. Refuse the clash (MOD-3 unchanged). A module cannot use json's parse and csv's parse together; the programmer splits code into separate modules. No new rule.
+2. Situation-determined qualification: `import std::json::{parse}; import std::csv::{parse};` is allowed; when two imported items share a name, every use of that name MUST be qualified by its module's last segment (`json::parse`, `csv::parse`); a unique imported name MUST be used bare. One form per situation, chosen by the compiler, never by the writer. Revises MOD-3. If the last segments also clash, the clash is refused (option 1 behaviour).
+3. Always qualified: every imported item is used as `<last segment>::name` (e.g. `vec::Vec<u8>`, `json::parse`), never bare.
+
+Claude recommends 2: keeps the manifest, keeps one form per situation, works for the rare clash; 3 makes every type in every signature noisier (`vec::Vec<u8>`, `option::Option<T>`) for a rare problem; 1 forces module splits for a naming accident.
+
+TASK: For options 1, 2, 3 say which you recommend and AGREE/DISAGREE with Claude's recommendation (concrete reason at most 50 words: second form, MOD-2/MOD-3/OD139/OD151/OD152, LL(1), resolution ambiguity, or readability for auditors). Do not modify files.
+End with exactly one line:
+ANSWER: PICK=<1|2|3>; DISAGREE=<yes|no>; NOTE=<short or none>
+codex
+I’ll read the cited rules and review notes, then give a concise recommendation without changing files.
+exec
+/bin/bash -lc "pwd; rg -n 'MOD-2|MOD-3|OD139|OD151|OD152|import|qualif|one form|LL\\(1\\)' docs/decisions.md docs/PHILOSOPHY.md legacy/docs/spec/modules.md _review/GRAMMAR_REVIEW.md" in /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/verdict6/codex
+ succeeded in 0ms:
+/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/verdict6/codex
+_review/GRAMMAR_REVIEW.md:11:**LL(1) status.** The expression and declaration kernels below are factored for predictive parsing. There are unresolved surface choices, especially statement/value blocks and contextual words. This is not a claim that a complete grammar has passed a mechanical LL(1) check. Section 8 identifies the remaining conflicts and the decisions needed; it would be false to promise a fully checked LL(1) grammar before those choices are approved. No decided spelling is changed to hide a conflict.
+_review/GRAMMAR_REVIEW.md:15:EBNF: `=` defines; `|` separates alternatives; `[x]` is optional; `{x}` repeats; quoted text is a token; `ε` is empty. `IDENT`, `INT`, `FLOAT`, `CHAR`, `STRING`, `LABEL`, `EOF` are token classes. Quoted identifier-shaped attribute names are contextual token tests, **not** automatically reserved words. `List(X)` and `List1(X)` below are explicitly defined list expansions. No uppercase/lowercase path heuristic is permitted: [OD152](../docs/decisions.md#od152).
+_review/GRAMMAR_REVIEW.md:35:| 14 | traits/impls/methods/qualified trait calls, Destroy, defer |
+_review/GRAMMAR_REVIEW.md:38:| 17 | modules/imports/pub/constants, struct invariants |
+_review/GRAMMAR_REVIEW.md:71:Names are case-sensitive (recommended, OPEN-2), and casing does not determine a path's syntactic category ([OD152](../docs/decisions.md#od152)). `_` is an unused binding, not a license to lose a linear value or Option/Result: [OD62](../docs/decisions.md#od62), [audit](../docs/decisions.md#decided-2026-11-02-audit).
+_review/GRAMMAR_REVIEW.md:80:false fn for from ghost if impl import let match mod mut pub return
+_review/GRAMMAR_REVIEW.md:84:Explicit decisions: `from`/`until` [OD50](../docs/decisions.md#od50); `ghost` [OD81](../docs/decisions.md#od81); `Copy` [OD90](../docs/decisions.md#od90); the nine capabilities, including `Console`, [authority rule 13](../docs/decisions.md#decided-2026-11-02-authority), as revised by [Q7.11](../docs/decisions.md#decided-2026-11-05-core). [OD73](../docs/decisions.md#od73) forbids reserved words in identifier positions, including import aliases and variant names. The entropy capability arrives at slice 6, but its **name is not supplied by that decision**: [stack/randomness decision](../docs/decisions.md#decided-2026-11-07-stack-randomness). Do not reintroduce the historical capability `Random` without approval.
+_review/GRAMMAR_REVIEW.md:88:Canonical builtin type names are **reserved declaration names**, not necessarily keyword tokens: `i8 i16 i32 i64 u8 u16 u32 u64 bool char f32 f64 Unit`, plus the builtin nominal constructors admitted by their slices (`Secret`, `StaticStr`, `Option`, `Result`, `Allocator`, `Heap`, `HeapArray`, `Vec`, `String`, `OrderedMap`, `HashMap`, `AllocFailure`, `ArithmeticError`, `OutOfRange`, `Kept`, etc.). [OD43](../docs/decisions.md#od43), [OD102](../docs/decisions.md#od102), [OD157](../docs/decisions.md#od157) fix collisions/canonical spellings; [TYPE-19](../legacy/docs/spec/types.md#TYPE-19) lists scalar names. Builtin function names cannot be redeclared ([OD133](../docs/decisions.md#od133), [OD153](../docs/decisions.md#od153)). The exact complete builtin/grant/primitive name inventory is **OPEN-4**; `etc.` here is an identified inventory gap, not a wildcard accepted by the parser. Compiler-owned `__` names, `user_main` and the `__destr_` binding prefix have legacy restrictions ([MOD-3](../legacy/docs/spec/modules.md#MOD-3), [SYN-3](../legacy/docs/spec/syntax.md#SYN-3)); carry their exact scope for approval in OPEN-4.
+_review/GRAMMAR_REVIEW.md:116:No `\xHH`, `\u{…}`, interpolation, raw-string delimiter or byte-string prefix is admitted by this proposal. Embedded NUL in static text is explicitly permitted by Core Q4.2, using `\0`; ASCII literal restrictions do not restrict every computed `char` to 0…127 ([TYPE-20](../legacy/docs/spec/types.md#TYPE-20)). A char ending in a closing quote takes priority over LABEL; a bare apostrophe plus a name is LABEL. The exact lexical distinction and malformed-quote refusal is OPEN-6, not a token-level LL(1) claim about individual bytes.
+_review/GRAMMAR_REVIEW.md:167:              | "import", IDENT, import_path_tail
+_review/GRAMMAR_REVIEW.md:188:import_path_tail = ".", import_after_dot ;
+_review/GRAMMAR_REVIEW.md:189:import_after_dot = IDENT, import_path_tail
+_review/GRAMMAR_REVIEW.md:190:                 | "{", List1(import_symbol), "}", ";" ;
+_review/GRAMMAR_REVIEW.md:191:import_symbol = IDENT, ["as", IDENT] ;
+_review/GRAMMAR_REVIEW.md:216:| import path/symbol/rename | 17 | explicit imports [OD139](../docs/decisions.md#od139); renaming [OD77](../docs/decisions.md#od77); dot module separators [SYN-10](../legacy/docs/spec/syntax.md#SYN-10); exact `. {…}` boundary/list **OPEN-11** |
+_review/GRAMMAR_REVIEW.md:217:| trait/impl/method heads | 14; generic impl 14 using slice-11 parameters | qualified calls [OD6](../docs/decisions.md#od6); trait parameters forbidden [OD148](../docs/decisions.md#od148); generic trait methods forbidden [OD77](../docs/decisions.md#od77); precise heads/receiver punctuation **OPEN-12** |
+_review/GRAMMAR_REVIEW.md:219:| extern_rest/extern_param | 25 | `extern fn` [OD4](../docs/decisions.md#od4); explicit with [FFI-3](../legacy/docs/spec/ffi.md#FFI-3); marker `kept` and receipt `Kept<H>` [Q3.12](../docs/decisions.md#decided-2026-11-05-core); `kept buf: H` and unmarked call-only default already decided; remaining API qualification **OPEN-23** |
+_review/GRAMMAR_REVIEW.md:297:| named_type | scalars 0/2/3/16/26, structs 1/9, enums 10, applications 11, qualified 17 | [OD43](../docs/decisions.md#od43), [OD151](../docs/decisions.md#od151), [OD152](../docs/decisions.md#od152); punctuation **OPEN-14** where not fixed |
+_review/GRAMMAR_REVIEW.md:317:               | "::", IDENT, let_qualified_pattern_tail ;
+_review/GRAMMAR_REVIEW.md:318:let_qualified_pattern_tail = "::", IDENT, let_qualified_pattern_tail
+_review/GRAMMAR_REVIEW.md:327:match_name_tail = "::", IDENT, match_qualified_tail | ε ;
+_review/GRAMMAR_REVIEW.md:328:match_qualified_tail = "::", IDENT, match_qualified_tail
+_review/GRAMMAR_REVIEW.md:335:Slices: let name/binder 0; empty struct destructuring 1; named field patterns 9; match/variant/OR/rest 10; CHAR patterns no earlier than char at 16. `binder` may be `_`; it is not a general binding catch-all pattern in match. Recommended bare match IDENT is only `_`; bare qualified path denotes a fieldless enum variant. Irrefutable enum lets and mutable pattern binders are retained ([PAT-10/11](../legacy/docs/spec/patterns.md#PAT-10)); the factored let path admits module-qualified struct and enum heads, subject to OPEN-17 exact path closure. Nested patterns remain deferred, and fields must be handled explicitly or through the decided ignore forms (OD25). Generic pattern paths such as `E::<T>::V` are accepted by the frozen parser but not established by that fact as a new decision: OPEN-17 must explicitly disposition them; the kernel above does not yet include their arguments. Char literal patterns and the precise payload-rest combination grammar remain OPEN-17.
+_review/GRAMMAR_REVIEW.md:337:**Wording conflict requiring clarification:** OD25/PAT-3 allow a “bare variant name” only for a fieldless variant; the chapter’s “No bare variant names” subsection requires enum qualification. “Bare” may mean no payload braces rather than no enum prefix. Retain qualified patterns in this proposed kernel, but do not declare an authoritative general refusal of unqualified fieldless variants without owner clarification. No nested-pattern admission is proposed. The grammar deliberately does not silently add nested tuple/array/struct match patterns.
+_review/GRAMMAR_REVIEW.md:339:Decisions: struct destructuring [OD84](../docs/decisions.md#od84); binding renaming [OD77](../docs/decisions.md#od77); named fields and `_` [OD25](../docs/decisions.md#od25), [OD130](../docs/decisions.md#od130); no unqualified struct match pattern [OD76](../docs/decisions.md#od76); no guards [OD55](../docs/decisions.md#od55); no ranges [OD56](../docs/decisions.md#od56); unbraced arm restricted to expression/block/return [OD86](../docs/decisions.md#od86). The exact OR/arm-comma and pattern grammar inherited from [PAT-1/3](../legacy/docs/spec/patterns.md#PAT-1) is OPEN-17. `arm_expr` is the non-block-root expression alternative; `arm_block` is a block parsed once and checked for value/statement use (OPEN-16), preventing two `{` alternatives.
+_review/GRAMMAR_REVIEW.md:377:`expr_statement_start` is `expr` with root `if`/`match` and leading attributes excluded, because those prefixes already dispatch above. Attributes are consumed once before statement dispatch; in a value context they use the expression-prefix production of section 5. `statement_block`, `arm_block`, `value_contents` and the treatment of a root `if`/`match` as a final value have the **OPEN-16** decision exposed in section 8. They are specified by the following proposed block algorithm, not left as an unexplained claim of LL(1):
+_review/GRAMMAR_REVIEW.md:381:3. In a value block, parse a leading `if` or `match` once as a control node. A closing `}` immediately after it can mark it as the tail. If it is followed by more statements, classify it as a statement. Value-if must have else; statement-if need not. The control node's branch blocks therefore need delayed statement/value classification. This last step needs a grammar proof or owner-approved restriction; it is not asserted to be a plain LL(1) EBNF expansion today.
+_review/GRAMMAR_REVIEW.md:398:The assertion production is a common-prefix parser proposal: parse the complete contract expression and record whether its root is a parenthesized group; only that grouped root admits optional `by path(args)`. An expression merely starting with `(`, such as `(a) == b`, has a binary root and does not qualify. This restriction reflects the approved `assert(e) by thm(...)` spelling; it is not an approved extension to `assert e by ...`.
+_review/GRAMMAR_REVIEW.md:471:| multilevel module path | [OD151](../docs/decisions.md#od151); imports required [OD139](../docs/decisions.md#od139); name classification [OD152](../docs/decisions.md#od152) |
+_review/GRAMMAR_REVIEW.md:501:| raw memory | 24 | `ptr::offset`, `ptr::diff` (ordering from sign, no ptr::cmp), `read_owned(p)`, explicit `expose`/`from_exposed`; [OD26](../docs/decisions.md#od26), [OD37](../docs/decisions.md#od37), [OD13](../docs/decisions.md#od13), [Core Q3.7–Q3.11](../docs/decisions.md#decided-2026-11-05-core); exact qualification/signatures **OPEN-23** |
+_review/GRAMMAR_REVIEW.md:518:`range_bound` must stop at the delimiter `as`. Ordinary expr also consumes `as` casts; the unrestricted expansion `until expr as IDENT` is **not LL(1)**. **OPEN-19** recommends a bound expression mode with top-level casts disabled and casts allowed in parentheses. Example recommendation: `borrow a from lo until (n as u64) as v {…}`. This restricts only an undecided delimiter edge; it does not relabel the decided `as`.
+_review/GRAMMAR_REVIEW.md:526:Slice 25 declares C bindings as `extern fn`, optionally `trusted extern fn`, explicit `with(...)`, mandatory semicolon and no body. `#[link_name = "symbol"]` and `#[export_name = "symbol"]` payload forms are recommendations (OPEN-15), not an inferred `extern "C" {…}` block. Direct calls only: foreign function values and `extern "C" fn` types are not admitted ([OD4](../docs/decisions.md#od4)). FFI-safe types exclude enums ([OD110](../docs/decisions.md#od110)); C structs cross by value at every size ([OD122](../docs/decisions.md#od122)). `kept buf: H`, no marker meaning call-only, and the paired receipt discipline are already decided by the [full Q3.12 row](../docs/archive/decisions-2026-11-05/core_rows.json). The submit contract names a paired extern taking exactly Kept<H> and returning H; borrow-derived pointers are forbidden there. A kept raw pointer is not a substitute for the owned allocation. OPEN-23 concerns remaining raw API qualification and transcription, not these settled choices. Semantic validity obligations must not be replaced by inventing an `unsafe {…}` source block.
+_review/GRAMMAR_REVIEW.md:544:## 8. LL(1) review
+_review/GRAMMAR_REVIEW.md:546:This is a manual conflict inventory, not the output of a generator. A mechanical FIRST/FOLLOW test must be run on the owner-approved expansions and contextual-token model before encoding the independent grammar in Lean. The frozen [conflict ledger](../legacy/grammar/ll1_known_conflicts.tsv) and [EBNF](../legacy/grammar/concrete.ebnf) are useful controls, not proof that this revised grammar is LL(1).
+_review/GRAMMAR_REVIEW.md:551:| IDENT followed by `::`, call, fields or nothing | FIRST/FIRST if paths/calls/variants are separate alternatives | consume IDENT once; factor path_tail and postfix; declaration judgment resolves meaning, never initial case (OD152) |
+_review/GRAMMAR_REVIEW.md:561:| import module path dot vs final dot before `{` | common prefix | consume dot; IDENT continues path, `{` starts list; exact terminal dot approval OPEN-11 |
+_review/GRAMMAR_REVIEW.md:562:| trailing comma in a naive `X {',' X} [',']` | FIRST/FOLLOW on comma | explicit list tails consume comma then dispatch X/closing delimiter; this also applies to patterns, arguments, import lists, arrays if trailing commas approved |
+_review/GRAMMAR_REVIEW.md:563:| `let IDENT` binding vs struct/enum destructuring | common prefix | consume let/mut/name once; `{` selects destructuring, `:`/`=` ordinary let; consume qualified path before field list; generic heads OPEN-17 |
+_review/GRAMMAR_REVIEW.md:567:| statement if/match vs value if/match at block tail | FIRST/FIRST and mode-dependent FOLLOW | **unresolved as plain LL(1) EBNF**: current proposal parses control once and delays branch-mode checking; prove a factored grammar or approve a restriction (OPEN-16); do not claim omission from primary makes it LL(1) |
+_review/GRAMMAR_REVIEW.md:578:| char vs apostrophe label | lexical prefix conflict | closed char scan before label token classification; OPEN-6 approves exact malformed-input policy; token-level LL(1) does not imply one-byte lexing |
+_review/GRAMMAR_REVIEW.md:582:There is no mechanical acceptance certificate attached. The important owner-visible blockers are OPEN-3, OPEN-14, OPEN-16, OPEN-19 and OPEN-22; several are specification gaps rather than language-spelling conflicts. This sheet refuses to resolve them by changing approved `as`, `if`, `match`, `#[…]`, or path spellings.
+_review/GRAMMAR_REVIEW.md:628:2. **OPEN-2 — Identifier alphabet/case (0).** Recommend ASCII `[A-Za-z_][A-Za-z0-9_]*`, case-sensitive; no casing-based category. Alternative: Unicode XID with a specified normalization policy. Reason: ASCII is auditable and matches old EBNF; OD152 still governs declaration-based resolution.
+_review/GRAMMAR_REVIEW.md:630:4. **OPEN-4 — Reserved declaration/builtin inventory (by slice).** Recommend one explicit closed table of every admitted builtin type, grant type, primitive and function, with compiler prefixes and collision scopes; emit no aliases. Alternative: reserve only a compiler namespace and qualify builtin calls. Reason: OD43/133/153 require a publishable complete set; the present materials do not enumerate the final branded/secret/grant surface in one place. This approves an inventory, not unseen APIs. Q7.10 already approves the hosted grant table; only consolidation/transcription is outstanding there.
+_review/GRAMMAR_REVIEW.md:637:11. **OPEN-11 — Imports (17).** Recommend `import a.b.{x, y as z};`, nonempty list, mandatory commas, optional trailing comma after factoring; wildcard already refused by [MOD-2](../legacy/docs/spec/modules.md#MOD-2), no whole-module alias or alternate missing-dot form. Alternative: `import a.b {x, y as z};`. Reason: old parser accepts both final-dot styles, so the owner should choose one canonical form.
+_review/GRAMMAR_REVIEW.md:640:14. **OPEN-14 — Generic/type grammar closure (11/15/19/20).** Recommend nonempty comma lists, type parameters before cap parameters, type/brand arguments before capability arguments, `cap C`, `+` name unions and `{}` empty set, `[T; INT]`, generic cast targets parenthesized; parse named arguments once then check kind. Alternative: explicit kind-tagged arguments and semicolon-separated capability arguments. Reason: respect OD88/Q5 without pretending IDENT types and sets have disjoint FIRST sets. Approve qualified names, composite cast targets, array length expressions and union spelling inside with individually.
+_review/GRAMMAR_REVIEW.md:642:16. **OPEN-16 — Blocks and LL(1) statement/value modes (3/10/20).** Recommend retain decided statement/value behavior, explicit function returns, no standalone block primary, and derive one common-prefix block grammar with delayed control-node classification as described in section 4. Alternative: require explicit grouping of tail if/match or a tail marker, **only after checking and explicitly revising any decided acceptance it changes**. Reason: a position-blind grammar with both `{stmt}` and optional expr is not LL(1); the independent grammar must settle this rather than omit value alternatives. Approval must include a mechanical check, not just the algorithm description.
+_review/GRAMMAR_REVIEW.md:643:17. **OPEN-17 — Exact kept pattern/arm surface (9/10/16).** Recommend qualified enum patterns, `_` catch-all, integer/bool/char literals, OR patterns, named field renaming, whole-payload `{..}` and a mandatory comma after every arm. Keep irrefutable enum lets, mut applying to every binder, explicit field handling and the deferred status of nested patterns. Alternative: comma only after non-block arms, subject to FIRST/FOLLOW proof. Clarify OD25’s “bare” fieldless wording against the chapter’s qualification rule; explicitly disposition generic `E::<T>::V` and module-qualified let paths. Do not treat the frozen parser as authority for a new accepted form.
+_review/GRAMMAR_REVIEW.md:647:21. **OPEN-21 — API/view spellings and branded signatures (7/15/16/19/21–27).** Recommend View/ViewMut second-class parameter constructors and ordinary calls for the decided ct_select/ct_eq/text/container APIs; use exact explicit branded type arguments; floating conversions use `name::<Target>(x)`. Alternative: &[]-style view types and qualified associated APIs. Reason: feature names in Q3/Q4 and the information-flow decision do not decide every arity, type position, qualifier or conversion target syntax. Submit the exhaustive concrete signature table before encoding it; no fabricated complete signatures here.
+_review/GRAMMAR_REVIEW.md:649:23. **OPEN-23 — Remaining raw/FFI API closure (24/25).** Preserve decided `kept buf: H` for an owned allocation, unmarked call-only parameters, paired `Kept<H>` completion, and the absolute ban on borrow-derived kept arguments (full Q3.12). Recommend ptr-qualified raw APIs except decided `read_owned(p)`, and extern fn without ABI-string blocks. Alternative for the remaining qualification choice: global raw operation names. Marker placement/default and receipt signatures are transcription obligations, not open alternatives.
+_review/GRAMMAR_REVIEW.md:681:| 23 | FFI | Owned kept H, default settled, no borrowed retention | Agree v1; reserve kept | Agree v1 | Correct to full Q3.12; remaining qualification only is open. |
+_review/GRAMMAR_REVIEW.md:687:Review record: v2 reconciles the final Codex (6 findings), Kimi (18 findings) and agy (10 findings plus citation checklist) sections. agy did not read the repository; every assertion is therefore checked here rather than treated as verified by that reviewer. See GRAMMAR_CHANGES.md for individual outcomes. Recommendations remain unapproved; the owner alone decides revisions. The reviewers have not reviewed this merged v2. No compiler, legacy gate or parser was run; there is no mechanical LL(1) certificate. Only this review artifact is requested for approval; it changes no language rule or implementation.
+legacy/docs/spec/modules.md:5:only by importing it (`import a.{f, T as U};`). Names resolve once, before checking, to exactly
+legacy/docs/spec/modules.md:6:one declaration. This chapter covers name resolution (MOD-1), visibility (MOD-2), one binding
+legacy/docs/spec/modules.md:7:per name in a module (MOD-3), loading module files (MOD-4), the privacy of `std.libc` (MOD-6),
+legacy/docs/spec/modules.md:8:generated interfaces (MOD-7, pending), calls the compiler generates (MOD-8) and what an import binds
+legacy/docs/spec/modules.md:13:OD67 refuses locals that reuse a visible top-level function, import alias, constant or intrinsic name (SCOPE-1 and SCOPE-2). TIGHTENING_DECISIONS
+legacy/docs/spec/modules.md:23:**MOD-1@1.** Every name a program uses resolves to exactly one declaration visible where it is used (a local binding, a declaration of the module, an import, a type parameter or a builtin), and a name that resolves to none, a type alias that names itself, and `Self` outside an `impl` are refused.
+legacy/docs/spec/modules.md:39:The builtins include the enums `Option` and `Result`, which a module uses without an import; OD43 refuses user declarations that collide with these builtin type names. The types chapter's
+legacy/docs/spec/modules.md:70:<a id="MOD-2"></a>
+legacy/docs/spec/modules.md:71:### MOD-2. Only `pub` declarations cross a module boundary
+legacy/docs/spec/modules.md:73:**MOD-2@1.** A declaration is private to its module unless it is declared `pub`, and another module uses it only by importing it from a module that exists, where it is `pub`.
+legacy/docs/spec/modules.md:79:- Enforced by: Concrete.Pipeline.resolve, Concrete.importRefusal
+legacy/docs/spec/modules.md:87:depend on packages. Resolve, Check and Elab each verify imports (E0111, E0285, E0419).
+legacy/docs/spec/modules.md:90:first and Check or Elab when they meet the import again (`importCode` and `unimportableCode` in
+legacy/docs/spec/modules.md:92:(elab); a declaration that is not `pub` is E0111, E0285 or E0419; and an import naming a public
+legacy/docs/spec/modules.md:93:trait, which no import binds, is E0126, E0323 or E0423. On a single file the import refusals are
+legacy/docs/spec/modules.md:94:reported at resolve (E0110, E0111, E0126); a qualified call to a private function there is E0101
+legacy/docs/spec/modules.md:100:instead). There are no glob imports, permanently: every imported name is listed, so each module
+legacy/docs/spec/modules.md:103:named in an import list (E0111). Capabilities are not hidden by a module boundary: calling a
+legacy/docs/spec/modules.md:114:An import binds a name in the importing module only and does not make it `pub` there, so a module
+legacy/docs/spec/modules.md:115:cannot re-export what it imports, and `pub import` is a parse error (SYN-1).
+legacy/docs/spec/modules.md:117:```con reject name=import-private code=E0111 stage=resolve pair=import-public
+legacy/docs/spec/modules.md:120:import a.{hidden};
+legacy/docs/spec/modules.md:138:```con reject name=submodule-imports-private code=E0285 stage=check pair=import-public
+legacy/docs/spec/modules.md:158:import a.{secret};
+legacy/docs/spec/modules.md:165:```con reject name=reexport code=E0285 stage=check pair=import-public
+legacy/docs/spec/modules.md:170:import c.{g};
+legacy/docs/spec/modules.md:187:import a.{f};
+legacy/docs/spec/modules.md:190:import b.{f};
+legacy/docs/spec/modules.md:197:```con accept name=import-public exit=42
+legacy/docs/spec/modules.md:200:import a.{shown};
+legacy/docs/spec/modules.md:218:<a id="MOD-3"></a>
+legacy/docs/spec/modules.md:219:### MOD-3. A module binds each name once
+legacy/docs/spec/modules.md:221:**MOD-3@3.** A module binds each name to at most one declaration, whether by a declaration or an import, an import alias does not name a compiler intrinsic, and no function definition takes a builtin name or another name the compiler reserves, while an impl method does not bind a free-function name `Type_method`.
+legacy/docs/spec/modules.md:233:lookup met first (bug 082). Renaming on import (`import a.{f as g}`) resolves a clash. Importing
+legacy/docs/spec/modules.md:284:```con reject name=import-clashes-with-local-decided code=E0299 stage=check pair=renamed-import pending=R-0555 now=reject:E0299:check
+legacy/docs/spec/modules.md:287:import a.{f};
+legacy/docs/spec/modules.md:308:```con accept name=renamed-import exit=42
+legacy/docs/spec/modules.md:311:import a.{f as g};
+legacy/docs/spec/modules.md:364:import present.{answer};
+legacy/docs/spec/modules.md:391:**MOD-6@1.** The `extern` bindings of `std.libc` are imported only by modules of std, so no module of a program names them.
+legacy/docs/spec/modules.md:397:- Enforced by: Concrete.importRefusal
+legacy/docs/spec/modules.md:403:`std.libc`, whose `extern` declarations are not `pub`; std's own modules import them, and a program
+legacy/docs/spec/modules.md:404:uses std's wrappers instead. Until bug 226's fix the import rule of a submodule admitted a private
+legacy/docs/spec/modules.md:406:could; one import rule (`importRefusal`) now gives MOD-2 to every module and keeps `std.libc`
+legacy/docs/spec/modules.md:410:```con reject name=program-imports-libc code=E0326 stage=check pair=program-uses-std project=libcuser interp-exempt=project-needs-std
+legacy/docs/spec/modules.md:424:import std.libc.{strlen};
+legacy/docs/spec/modules.md:431:```con reject name=program-root-imports-libc code=E0326 stage=resolve pair=program-uses-std project=libcroot interp-exempt=project-needs-std
+legacy/docs/spec/modules.md:432:import std.libc.{strlen};
+legacy/docs/spec/modules.md:440:import std.string.{String};
+legacy/docs/spec/modules.md:488:### MOD-9. An import binds the declaration it names
+legacy/docs/spec/modules.md:490:**MOD-9@2.** Importing a `pub` function, foreign binding, struct, enum, trait, type alias or constant binds that declaration itself, and an import alias of a struct or enum names the same type, with its methods and impls, in every pass.
+legacy/docs/spec/modules.md:501:**Rationale.** A public trait is explicitly exported and imported like other declarations (owner, 2026-11-02); aliases preserve declaration identity, and removed newtypes introduce none.
+legacy/docs/spec/modules.md:503:```con accept name=import-constant-and-alias exit=42
+legacy/docs/spec/modules.md:507:import user.{run};
+legacy/docs/spec/modules.md:518:import shapes.{P as Q, BASE};
+docs/PHILOSOPHY.md:330:  ambiguous call is qualified, and resolution is by typed identity ([OD6](decisions.md#od6)),
+docs/PHILOSOPHY.md:381:  call shows every argument it passes; defaults conflict with visible arguments and with one form per
+docs/decisions.md:99:| TYPE-11/21/24, OWN-D1/15, REF-3/5, MOD-9;  | Newtypes exist, have representation rules, constructors, `.0`, casts, and imports. | OD54/123/155 | Fixed in prose 2026-11-03. |
+docs/decisions.md:113:| TRAIT-6 and introduction; rationale  | Ambiguous bound-method calls are refused and qualification does not exist. | OD6, completed 2026-11-02 by the qualified call `Trait::method(&x, ...)` | Fixed in prose 2026-11-03. |
+docs/decisions.md:115:| Conformance examples across all 15 rule chapters; e.g. | Unqualified accepted fixtures use removed aliases/forms, wrong `main` results, or unused named bindings. | Alias/main decisions; OD33/52–57/62 and others above | Fixed in prose 2026-11-03. |
+docs/decisions.md:182:- **The generated-chapter requirement** (rows Q9.15, P3): Lean is the specification, in one main normative file with doc comments and examples; no prose is generated from it. This confirms the [2026-11-04 decision](#decided-project-lean-is-the-spec). The "one main normative file" wording is revised 2026-11-06 by the [long-term changes](#decided-project-long-term-2026-11-06): one authoritative specification library in cohesive modules, with `ConcreteSpec/Spec.lean` as its public import.
+docs/decisions.md:186:- <a id="decided-2026-11-05-q9-1-reads"></a>**Q9.1, read forms** (owner-confirmed, 2026-11-05): `copy x` is allowed only when `x` has a Copy type and `move x` only when it has a non-Copy (linear) type. Each read has one form; `move` of a Copy value and `copy` of a linear value are both refused.
+docs/decisions.md:254:- **Q8.1** What is the first proof endpoint? — Proved source→BIR; qualified native; conditional image claim.
+docs/decisions.md:257:- **Q8.4** Does the first artifact qualify as a complete executable? — Component plus bound launcher first.
+docs/decisions.md:260:- **Q8.7** What prevents vacuous correctness? — Coverage, realizable witnesses and rejection controls; a spec where every allocation fails fails qualification.
+docs/decisions.md:283:- **P1** Where agent discretion ends — Claude and Codex reason every question from the philosophy and recommend; they never pick a language answer through code, fixtures, diagnostics or docs. 'Important' = anything that revises a decided rule, changes observable language meaning you have not ruled on, or that you reserved. Every important decision comes to you.
+docs/decisions.md:319:  The owner decides every language question and every important project question. Claude and Codex
+docs/decisions.md:351:  modules with `Spec.lean` as its public import); proofs and tooling import it. No
+docs/decisions.md:361:  `legacy-compiler-final` and retired. `ConcreteSpec` imports nothing from any compiler and holds
+docs/decisions.md:362:  the grammar as data with its LL(1) check, Core with identities, the statics as inductive judgments
+docs/decisions.md:365:  imports it and builds a proved lowering chain below Core; slice 1 gets a BIR → LLVM printer
+docs/decisions.md:437:  - *Slice 0.* The first executable compiler slice is slice 0: one source unit, no imports or grants,
+docs/decisions.md:557:    `ConcreteSpec/Spec.lean` kept as the public import; proofs stay in separate files. A browsable
+docs/decisions.md:690:       specification functions stay total. Grammar, which must stay LL(1) and is checked mechanically:
+docs/decisions.md:860:  - *Stages.* Bytes → lexer → LL(1) parser (the grammar is data, with a mechanical LL(1) check) →
+docs/decisions.md:890:  first with integers right?", then "reorder based on what you believe is more important" and "have
+docs/decisions.md:897:  proved; the LLVM build stays unverified and qualified by tests; the LCB path carries named premises
+docs/decisions.md:996:  make `CLAUDE.md` a one-line import of `AGENTS.md`; simplify `SELF_HOSTED_RUNNERS.md`, `LANDING.md`,
+docs/decisions.md:1079:**Only the project owner decides these items, OD1 – OD157.** All are answered. OD1 – OD32 (exit 2n, closed) and OD47 were decided on 2026-10-29 (OD23 – OD32 by the strictness pass of that day). OD33 – OD157 were decided on 2026-10-31, by the owner's rule that an answer every reviewer agreed on and as strict as Austral or stricter is taken, and on 2026-11-01, when the owner approved the final set for the rest; the authority decision of the same day supersedes OD38's and OD156's `Root` readings (OD94 was withdrawn: MOD-1 already refuses its case, bug 337). The answers are recorded in [docs/decisions.md](decisions.md), state the decided rules in chapters now (owner revision, 2026-11-03), then become Lean in phases B–D, and are enforced as each new-compiler slice lands. The questions raised while recording them were answered on 2026-11-02, the owner deciding the first four and, by the owner's rule of that day, Claude and Codex agreeing on the best long-term answer for the rest ([decisions](decisions.md#decided-2026-11-02)); they revise OD24, OD38, OD43, OD83, OD102, OD146 and OD156 and the authority rules. The spec audit's questions were answered the same day ([decisions](decisions.md#decided-2026-11-02-audit)), revising OD140 and STMT-13. Traits are exported and imported like any other declaration (owner, 2026-11-02). Core was provisionally approved on 2026-11-05 ([record](#decided-2026-11-05-core)); A2b formalization is current, and the A2c freeze awaits the four design theorems, the A2i integration stage (2026-11-06) and an outside-reader pass. New questions follow the same rule: No agent, orchestrator or
+docs/decisions.md:1121:| OD6 | <a id="od6"></a>Traits are coherent: one impl per (trait, type), the orphan rule, an ambiguous method call must be qualified, resolution by typed identity | D7; implemented by bug 186's repair (TRAIT-1 – TRAIT-9) | bug 186's repair (exit 0b), so every deliverable; R-0548, R-0549; V5 | decided 2026-10-29 by the owner: traits are coherent: one impl per (trait, type), the orphan rule, an ambiguous method call must be qualified, resolution by typed identity. Completed 2026-11-02: qualified as `Trait::method(&x, ...)` ([decisions](decisions.md#decided-2026-11-02-audit)) **Canonical current qualification rule: this OD6 as completed by the audit below; the audit supplies syntax, not a second rule.** |
+docs/decisions.md:1135:| OD20 | <a id="od20"></a>Outside the language list: the visibility of std's internal `std.libc` bindings | bug 226 open (a std API decision) | bug 226's repair (MOD-2); OD9 | decided 2026-10-29 by the owner: std's internal `std.libc` bindings are private to std; programs cannot see them |
+docs/decisions.md:1136:| OD21 | <a id="od21"></a>Representation rights of a parent over its child module (added 2026-10-25, from bug 262): when a parent module imports its child's newtype or struct, every stage lets the parent construct the newtype and read and write the struct's private fields, because Check counts the children's declarations among the module's own for construction and field rights; Resolve also lets a parent name a child's newtype as a symbol without an import. Two options: enforce TYPE-11 as written (a newtype or private field is constructed or accessed only inside the module that declares it, so a child is another module), or amend TYPE-11 to grant a parent these rights over the declarations it imports from its children | the behaviour dates from construction rights slice 1 (2026-07-18); it contradicts TYPE-11@1's wording ("outside the module that declares it"); bug 262's record names `tests/programs/module_qualified_impl` as a program that applying TYPE-11 strictly would refuse; the wider impact is not yet measured (no `scripts/tools/rule_impact.sh` scan is recorded); bug 262's record (branch `wip/newtype-ctor-stage`) leaves the question to R-0011 and makes no recommendation | R-0011; the construction-rights fixtures (`module_qualified_impl` and bug 262's `error_262_*` and `regress_262_*` fixtures); bug 262's follow-up (whether Resolve binds a child's newtype in its parent) | decided 2026-10-29 by the owner: only the declaring module; a newtype is constructed, and a private field read or written, only inside the module that declares it, and a parent module gets no rights over its child (TYPE-11 enforced as written) |
+docs/decisions.md:1158:| OD43 | <a id="od43"></a>How a type position resolves a name (added 2026-10-29, from the spec gap bug 229's ruling found). Options: (a) the current compiler's rules: type positions search the type namespace only, a user `enum Option` is always the builtin, and a parent sees its child's newtypes; (b) a user declaration shadows a builtin of the same name, with a warning; (c) a user type may not take a builtin type's name (refused). Recommendation: (c), which removes the shadowing question entirely; Austral reserves its builtin type names the same way Reviewed pick (2026-10-30, a recommendation that supersedes the recommendation above where they differ): (c) refused, for builtin-name collisions only, with the complete reserved set published (also for aliases and import renames); this answer would not retire OD43, whose type-versus-value lookup and child-module questions stay open in it. A user `struct Copy HeapArray` is treated as linear today | the current compiler follows (a) | MOD-1; bug 229's record | decided 2026-10-31 by the owner's rule (every reviewer agreed, as strict as Austral or stricter): Refuse builtin-name collisions, publish reserved set. Completed 2026-11-02 by the owner: one namespace per module, and a child module's declarations only through `child::T` or an import ([decisions](decisions.md#decided-2026-11-02-namespace)) |
+docs/decisions.md:1159:| OD44 | <a id="od44"></a>Two packages of one program that define the same top-level module name (added 2026-10-29, from bug 074's ruling). Options: (a) refused when the project loads, naming both packages (the current compiler); (b) module paths are qualified by their package, so both coexist. Recommendation: (a) until packages depend on packages (R-0440), then revisit with (b) Reviewed pick (2026-10-30, a recommendation that supersedes the recommendation above where they differ): (a) refused at load, naming both packages, until packages depend on packages (R-0440) | the current compiler refuses (bug 074) | MOD-1, MOD-4; R-0440 | decided 2026-10-31 by the owner's rule (every reviewer agreed, as strict as Austral or stricter): Refuse at load, naming both, until R-0440 |
+docs/decisions.md:1162:| OD47 | <a id="od47"></a>Loops: `while` and a counted range loop (added 2026-10-29) | the current compiler has `while` and the C-style `for (init; cond; step)`, `for (cond)` and `for { }`; bug 331 | exit 2q; R-0499; V1a's loops and exits | decided 2026-10-29 by the owner: (1) the C-style `for` is removed in every form; (2) loops are `while cond { ... }` and `for i from a until b { ... }`: half-open (`a`, ..., `b - 1`, empty when `a >= b`), the index immutable in the body, `a` and `b` evaluated once before the first iteration, the index of the bounds' integer type (both bounds of one type), `break` and `continue` as usual (`continue` advances to the next index), `from` and `until` reserved (whether reserved or contextual was reopened by the reviews of that day: OD50), LL(1) as `for` IDENT `from` expr `until` expr block with the restricted head expression for `b` (OD16); (3) in Core the counted loop desugars to the one `while` form, carrying its termination measure `b - i`. Now STMT-6@3, STMT-11@2 and STMT-12 (pending, bug 331) |
+docs/decisions.md:1179:| OD64 | <a id="od64"></a>Raw pointers derived from a borrow (added 2026-10-30, item G19 of the owner picks of that day). Question: What a raw pointer derived from a borrow may do: whether it is valid only while the borrow lives, may escape the borrow block, may be passed to C, and how extern parameters say so. Options: (a) valid only while the borrow lives and never escaping it; (b) the operational loan rules of REF-14 only. Pick (the coordinator's pick after the Kimi, Codex and Grok review of 2026-10-30, a recommendation and not a decision): (a): no returning, no escaping storage (a local `let` inside the block stays allowed), no converting to an integer and no capturing in an outer `defer`; borrow-derived pointers go only to call-only `extern` parameters; C uses it only during a call (memory C keeps must come from an allocation with its own owner); `extern` parameters say call-only (the default) or kept; field pointers come from the same borrow of the whole owner; deferred calls in the block run before the borrow ends; provenance survives copies, offsets, field pointers, helpers and indirect calls; a shared borrow never yields write access; `ptr::expose` is refused on such a pointer; the annotation's syntax gets an LL(1) check. Austral: not checked | no pass assumes `&mut` exclusivity (OD15); REF-14 bounds aliases by their loan | REF-14, TRUST-1, TRUST-3, FFI-3, OWN-12 | decided 2026-10-31 by the owner's rule (every reviewer agreed, as strict as Austral or stricter): Valid only inside the borrow; call-only extern params |
+docs/decisions.md:1182:| OD67 | <a id="od67"></a>Locals that reuse a top-level name (added 2026-10-30, item review new 4 (SCOPE-4) of the owner picks of that day). Question: Whether a local binding may reuse the name of a top-level function, an import alias or an intrinsic (MEMORY_SEMANTICS §15.4 also lists constants). Options: (a) allowed, as today; (b) refused, as SCOPE-1 refuses shadowing a local. Pick (the coordinator's pick after the Kimi, Codex and Grok review of 2026-10-30, a recommendation and not a decision): none given (raised by the review). Austral: not checked | allowed | SCOPE-1, SCOPE-2, MOD-1 | decided 2026-10-31 by the owner's rule (every reviewer agreed, as strict as Austral or stricter): Refuse |
+docs/decisions.md:1189:| OD74 | <a id="od74"></a>A raw pointer type with no qualifier (added 2026-10-30, item P6 of the owner picks of that day). Question: Whether a bare `*T` is refused or read as `*mut T`. Options: (a) refused, `*const` or `*mut` required; (b) the grammar adds `*T` as `*mut T`. Pick (the coordinator's pick after the Kimi, Codex and Grok review of 2026-10-30, a recommendation and not a decision): (a) refuse; the qualifier is the safety-relevant part. Austral: not applicable | the parser reads `*T` as `*mut T` | SYN-1, TRUST-1 | decided 2026-11-01 by the owner (final set): Refuse; qualifier required |
+docs/decisions.md:1191:| OD76 | <a id="od76"></a>Unqualified struct patterns in `match` (added 2026-10-30, item G1-b of the owner picks of that day). Question: Whether an unqualified struct pattern is allowed in `match` (`match s { S { a } => ... }`), given that only `let` destructures structs today (the `if let` form follows OD52). Options: (a) refused in `match`, PAT-1's wording fixed to say so; (b) allowed. Pick (the coordinator's pick after the Kimi, Codex and Grok review of 2026-10-30, a recommendation and not a decision): (a) refuse in `match`; fix PAT-1's wording. Austral: not checked | the parser refuses it in `match` and `if let` and accepts it in `let` | PAT-1, PAT-5, SYN-1 | decided 2026-11-01 by the owner (final set): Refuse in `match`; fix PAT-1 |
+docs/decisions.md:1198:| OD83 | <a id="od83"></a>The call-site allocator binding in the grammar (added 2026-10-30, item C6 of the owner picks of that day). Question: Whether the grammar gains the call-site allocator binding `f(...) with(Alloc = e)`. Options: (a) add it to the grammar; (b) remove it from the parser, so the language loses the form; (c) keep the recorded divergence for now. Pick (the coordinator's pick after the Kimi, Codex and Grok review of 2026-10-30, a recommendation and not a decision): individual review required; no pick recorded. Austral: not checked | the parser accepts it | TRUST-4, MEM-5, SYN-1 | decided 2026-11-01 by the owner (final set): No call-site binding `f(...) with(Alloc = e)`. Under the authority decision, one allocator form per target: hosted, `with(Alloc)` and no allocator value; freestanding, an `Arena` parameter plus `with(Alloc)`. Revised 2026-11-02 by the owner's rule: one form on every target, an `Allocator<A>` value plus `with(Alloc)` ([decisions](decisions.md#decided-2026-11-02-allocation)) |
+docs/decisions.md:1205:| OD90 | <a id="od90"></a>`struct Copy <T>` and contextual keywords (added 2026-10-30, item Copy of the owner picks of that day). Question: Whether `Copy` stays a contextual keyword, with the LL(1) checkers taught to model it, or becomes a reserved word (the other unreserved words, `self`, `repr`, `packed` and `align`, stay as they are unless decided separately). Options: (a) reserve `Copy` as a keyword, refusing it as an identifier; (b) keep it contextual, the LL(1) checkers taught to model a quoted unreserved terminal as also IDENT, each conflict found listed for the owner (letters as in the divergence report). Pick (the coordinator's pick after the Kimi, Codex and Grok review of 2026-10-30, a recommendation and not a decision): (a) reserve `Copy`: one lexical rule, consistent with OD50 (reserved `from` and `until`) and OD43 (builtin names refused as user names). Austral: its keywords are reserved | contextual; the `struct Copy <T>` conflict is invisible to the checkers' token model | SYN-1, OWN-D1 | decided 2026-10-31 by the owner's rule (every reviewer agreed, as strict as Austral or stricter): Reserve `Copy` |
+docs/decisions.md:1206:| OD91 | <a id="od91"></a>A cast followed by `<` (added 2026-10-30, item LL(1) type\|5.2 of grammar/ll1_known_conflicts.tsv). Question: How `x as T < y` parses, given that `<` after a cast's type name may start type arguments or be the less-than operator. Options: (a) a cast's type takes no type arguments unless parenthesized (`x as (T<U>)`), so `<` is less-than; (b) the parser's reading: `<` always starts type arguments, so the comparison needs parentheses (`(x as T) < y`); (c) refuse `<` directly after a cast's type and require parentheses either way. Pick (the coordinator's pick after the Kimi, Codex and Grok review of 2026-10-30, a recommendation and not a decision): none given (in the LL(1) ledger, not the picks). Austral: a conversion is the cast expression `e : T`, which takes no type arguments after it, so the conflict does not arise | the parser always reads type arguments, so `x as T < y` is refused (grammar/ll1_known_conflicts.tsv, row type\|5.2) | SYN-1, SYN-2, ARITH-5 | decided 2026-11-01 by the owner (final set): `x as T < y` is less-than; a generic cast type needs parentheses `x as (Vec<T>)` |
+docs/decisions.md:1248:| OD133 | <a id="od133"></a>User functions named `print`, `println` or `append` (added 2026-10-30, raised while absorbing the compiler documents and the grammar comments). Question: Whether a program may declare a function named `print`, `println` or `append`, which then replaces the builtin of that name in calls the program writes. Bears on MOD-3, MOD-8 and TYPE-10. The current compiler: accepted; with `fn print(x: Int) -> Int`, `print(42)` calls it (exit 42 on both consumers), because Elab desugars the variadic builtins only when no function of that name is visible, and MOD-3's reserved names do not include them. MOD-8 already binds the calls the compiler itself generates by identity. Options: (a) reserve the three names (MOD-3); (b) allow the replacement, as the current compiler does. Austral: not applicable. Pick: none given (raised by the absorption of docs/compiler, 2026-10-30). | see OPEN-133 | see OPEN-133 | decided 2026-11-01 by the owner (final set): Reserve the three names |
+docs/decisions.md:1250:| OD135 | <a id="od135"></a>A method's `Type_method` name in its module's namespace (added 2026-10-30, raised while reviewing the absorption of docs/compiler and docs/platform). Question: Whether an impl method `m` of a type `T` also occupies the name `T_m` in its module, so that a free function of that name is refused. Bears on MOD-3 and MOD-8. The current compiler: refused: `fn P_get(a: Int) -> Int` beside `impl P { fn get(&self) -> Int }` is E0299 under MOD-3@2 ("a function named 'P_get' is also declared in this module as an impl method"), on both consumers, because the method is entered under its mangled name. MOD-3's reserved names are the `__` prefix, `user_main` and the builtins, which do not include such names. Options: (a) keep it, listing `T_m` among the names MOD-3 reserves; (b) stop entering methods under `T_m`, so the free function is accepted. Austral: not applicable (no methods). Pick: none given (raised by the review of the absorption of docs/compiler, 2026-10-30). | see OPEN-135 | see OPEN-135 | decided 2026-11-01 by the owner (final set): Stop entering methods under `T_m` |
+docs/decisions.md:1254:| OD139 | <a id="od139"></a>A qualified call to a function that is not imported (added 2026-10-30, raised by the spec quality audit of 2026-10-30). Question: Whether `a::f()` may call a `pub` function of another module that the caller has not imported. Bears on MOD-2, SYN-10 and MOD-4. The current compiler: accepted: `mod a { pub fn answer() -> u8 { return 42; } }` and `a::answer()` in `main` exits 42 with no import, as MOD-4's and SYN-10's accepted examples also do, while MOD-2's sentence says another module uses a declaration only by importing it. Options: (a) a qualified path to a `pub` declaration is a use in its own right, and MOD-2 says so; (b) an import is required, and the unimported qualified call is refused. Austral: not checked. Pick: none given (raised by the spec quality audit, 2026-10-30). | see OPEN-139 | see OPEN-139 | decided 2026-10-31 by the owner's rule (every reviewer agreed, as strict as Austral or stricter): Import required |
+docs/decisions.md:1256:| OD141 | <a id="od141"></a>More than one `main` in a program (added 2026-10-30, raised by the spec quality audit of 2026-10-30). Question: Which function is the entry point when more than one module of a program declares `main`. Bears on STMT-7, MOD-3 and PASS-10. The current compiler: `mod a { pub fn main() -> u8 { return 7; } }` beside `mod b { pub fn main() -> u8 { return 9; } }` fails natively inside LLVM (`redefinition of global '@__concrete_argc'`) and prints 7 under `--interp`, which runs the first, also when the second `main` is the root module's; MOD-3 makes a name unique within one module only. Options: (a) only the root module's `main` is the entry point, and others are ordinary functions; (b) a program with more than one `main` is refused; (c) a `main` outside the root module is refused. Austral: not checked. Pick: none given (raised by the spec quality audit, 2026-10-30). | see OPEN-141 | see OPEN-141 | decided 2026-11-01 by the owner (final set): A `main` outside the root module is refused |
+docs/decisions.md:1265:| OD150 | <a id="od150"></a>Which text governs the grammar until it is resynchronized (added 2026-10-30, raised by the spec quality audit of 2026-10-30). Question: Whether, until OPEN-77's resynchronization, `grammar/concrete.ebnf` or the rule entries govern where they disagree. Bears on SYN-1 and OPEN-77. The current compiler: the parser accepts forms the EBNF does not derive (`import a.{f};`, `m::f()`, `f::<T>(x)`, value `if` and `match`, `pub` fields, bodyless declarations) and the EBNF keeps forms the entries removed (`E#V`, the C-style `for`, `break <expr>`); SYN-1 calls the EBNF the grammar, and the LL(1) checkers read it. Options: (a) the rule entries govern, and the EBNF is descriptive until the resync; (b) the EBNF governs, and an entry that disagrees is pending; (c) neither: each disagreement is decided one by one under OPEN-77. Austral: not checked. Pick: none given (raised by the spec quality audit, 2026-10-30). | see OPEN-150 | see OPEN-150 | decided 2026-11-01 by the owner (final set): Rule entries govern |
+docs/decisions.md:1266:| OD151 | <a id="od151"></a>Module paths of more than one level (added 2026-10-31, raised while absorbing SYNTAX_FREEZE_REVIEW §1.1). Question: Whether a qualified path may name a member of a module nested more than one level deep (`a::b::f()`). Bears on SYN-10, MOD-4 and OPEN-139. The current compiler: the parser's lowercase module-path branch accepts one qualification pair: `a::b::f()`, with `f` in `mod b` inside `mod a`, is a parse error on both consumers (E0001, `expected <, got ident(f)`), because after `a::b` it accepts only `::<` (explicit type arguments). SYNTAX_FREEZE_REVIEW §1.1 gives `std::fs::read_to_string` as an example of module qualification, which this parser does not accept. Options: (a) one qualification pair, as in the current compiler, and SYN-10 says so; (b) any depth, every segment before the last naming a module (a repetition, which stays LL(1)). Austral: not checked. Pick: none given (raised while absorbing SYNTAX_FREEZE_REVIEW §1.1, 2026-10-31). | see OPEN-151 | see OPEN-151 | decided 2026-11-01 by the owner (final set): Allow multi-level module paths `a::b::f` |
+docs/decisions.md:1267:| OD152 | <a id="od152"></a>Whether a path's first letter decides its syntactic form (added 2026-10-31, raised while absorbing SYNTAX_FREEZE_REVIEW §1.1). Question: Whether the first letter of a path's first segment decides the syntactic form of `X::y`, or one path form leaves to name resolution whether `X` is a type or a module. Bears on SYN-10, SYN-1 and MOD-1. The current compiler: the parser chooses by the first letter of `X`: an uppercase `X` gives an associated-function call or an enum literal, and a lowercase `X` the flattened name `X_y`, which name resolution looks up as one identifier (bug 343); a module named with an uppercase letter goes through the associated-function form, and `M::f()` on `mod M` builds and runs on both consumers. SYNTAX_FREEZE_REVIEW §1.1 presents the case split as how the parse stays LL(1). Options: (a) the first letter decides the syntactic form, as in the current compiler, and SYN-10 states it; (b) the parser reads `X::y` as one path form, which is also LL(1), and name resolution decides whether `X` is a type or a module. Austral: not checked. Pick: none given (raised while absorbing SYNTAX_FREEZE_REVIEW §1.1, 2026-10-31). | see OPEN-152 | see OPEN-152 | decided 2026-11-01 by the owner (final set): Resolve `X::y` by declaration, not by the first letter |
+docs/decisions.md:1268:| OD153 | <a id="od153"></a>Program functions named like a builtin (added 2026-10-31, raised while reviewing the builtins catalog of spec readability 2). Question: Whether a program may declare a function whose name is a builtin's, other than `print`, `println` and `append` (OPEN-133) and the names MOD-3 reserves, and which function the program's calls of that name reach. Bears on MOD-3, MOD-1, MOD-8 and OPEN-133. The current compiler: a program function `string_length` is called by the program's calls on both consumers, and so are program functions named `string_len` and `String_len` (`string_len` returns 7 and `String_len` returns 9; a program that calls both exits 79 on both consumers), while `destroy`, `discard`, `abort`, `alloc`, `free`, `alloc_array`, `free_array` and `realloc_array` are reserved (E0578). The calls the compiler itself generates are bound by identity (MOD-8), so only the program's own calls change. Options: (a) reserve every remaining builtin's name, aliases included, and MOD-3 lists them (`print`, `println` and `append` stay with OPEN-133); (b) allow the declaration, and the program's own calls reach it, as the current compiler does, and MOD-3 says so; (c) allow the declaration, and a program reaches the builtin by a qualified name. Austral: not checked. Pick: none given (raised while reviewing the builtins catalog of spec readability 2, 2026-10-31). | see OPEN-153 | see OPEN-153 | decided 2026-11-01 by the owner (final set): Refuse program functions named like builtins |
+docs/decisions.md:1312:  visible in its parent by bare name: the parent writes `child::T` or imports it. Owner's answer,
+docs/decisions.md:1373:    including import aliases, capability parameters and other binders.
+docs/decisions.md:1448:  a path call resolved by the trait's identity, and is refused otherwise; qualification never relaxes
+docs/decisions.md:1451:  and another module imports it explicitly (OD139) to implement it, bound by it or call
+docs/decisions.md:1452:  it qualified as `Trait::method(&x, ...)`.
+docs/decisions.md:1528:- <a id="OPEN-139"></a>**OPEN-139** (OD139, A qualified call to a function that is not imported): See [OD139](#od139).
+docs/decisions.md:1550:- <a id="OPEN-74"></a>**OPEN-74** (OD74, A raw pointer type with no qualifier): See [OD74](#od74).
+docs/decisions.md:1551:- <a id="OPEN-76"></a>**OPEN-76** (OD76, Unqualified struct patterns in `match`): See [OD76](#od76).
+docs/decisions.md:1604:- <a id="OPEN-151"></a>**OPEN-151** (OD151, Module paths of more than one level): See [OD151](#od151).
+docs/decisions.md:1605:- <a id="OPEN-152"></a>**OPEN-152** (OD152, Whether a path's first letter decides its syntactic form): See [OD152](#od152).
+
+exec
+/bin/bash -lc "cat docs/PHILOSOPHY.md; sed -n '1,155p' legacy/docs/spec/modules.md; sed -n '435,475p' _review/GRAMMAR_REVIEW.md" in /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/verdict6/codex
+ succeeded in 0ms:
+# Concrete Philosophy
+
+Status: standing policy, the one home of the project's design rules. Every other document links
+here instead of restating them. The language rules themselves are the
+[specification](../legacy/docs/spec/README.md) and the owner's [decision record](decisions.md); where this
+document cites one, those are authoritative, and nothing here overrides a decided entry.
+
+It absorbs, as of 2026-11-04, the principles and design policy of [PROJECT.md](../legacy/docs/project/PROJECT.md), the
+refusal list of `ANTI_FEATURES.md` and the "no" and "not yet" entries of PROJECT.md's language
+decisions. The per-language comparisons that used to sit beside each refusal are in
+[INFLUENCES.md](../legacy/docs/project/INFLUENCES.md#how-other-languages-answer-concretes-refusals).
+
+Contents:
+
+1. [What Concrete is for](#what-concrete-is-for)
+2. [The rules](#the-rules)
+3. [When rules conflict](#when-rules-conflict)
+4. [Admission test](#admission-test)
+5. [What Concrete refuses](#what-concrete-refuses)
+6. [Where the earlier rules went](#where-the-earlier-rules-went)
+
+## What Concrete is for
+
+**Concrete is a fully proven systems programming language with no garbage collector, where you can
+know everything a program does: what it does, what it may touch, whether it can fail or stop, and
+what is proved about it.** "Fully proven" means compiler correctness proved end to end, with every
+unproven step named as an explicit assumption and never silently trusted, and a program's own
+correctness proved by Lean theorems about it. This states the project's goal: each guarantee holds
+only as its evidence lands, and native claims remain conditional on their named assumptions
+([decision](decisions.md#decided-project-core-statement)).
+
+Concrete is a small systems language for code that must be reviewed, audited, bounded and proved:
+no garbage collector and no hidden runtime, linear ownership, second-class references, and
+authority that is visible in every signature. Its aim is that a reader can answer "what does this
+code do, what may it touch, and what is actually proved about it" from the source, the compiler's
+reports and the Lean theorems, without trusting anything that is not named. Lean 4 is the language
+the semantics and proofs are written in and the language the compiler is built in; Concrete itself
+stays a systems language, not a proof assistant.
+
+Most Concrete code is expected to be written by language models, not typed by hand. What matters
+is that everything is checkable and easy to understand: the cost that counts is the cost for a
+reviewer, an auditor or a checker to understand what code does and what it may touch. Rule 4
+draws the consequence for verbosity.
+
+## The rules
+
+Each rule states what holds and why. Its history is in the changelog and the decision record.
+
+1. **Pick the best long-term structural solution.** A design question is answered by the structure
+   that removes the whole class of problem, not by the smallest local patch, and once that answer is
+   known it is chosen rather than offered as one option among several. *Why:* a patch fixes one
+   instance and leaves the class to recur; the language is still small enough to change shape.
+
+2. **One form per situation.** There are never two ways to write one thing. A second spelling, an
+   alias or a convenience form beside an existing one is removed, not added. *Why:* every extra form
+   is one more thing a reader, a checker and a proof must cover, and two forms drift apart. The
+   decided removals are listed in [OD61](decisions.md#od61) and the entries it names.
+
+3. **The most transparent long-term option wins.** Between two designs, prefer the one that leaves
+   nothing for the reader to reconstruct: no hidden control flow, data flow, allocation, dispatch,
+   authority or cleanup. *Why:* Concrete's value is that behaviour can be read off the source.
+
+4. **Verbosity never argues against a clearer or safer design.** Writing more is acceptable when it
+   makes behaviour, authority or failure visible. "It is longer" is not a reason to reject a
+   design; "it hides something" is. *Why:* most code is now written by tools, where writing explicit
+   forms is cheap and reviewing them is the expensive part.
+
+5. **Every fact once.** Every fact that affects behavior or authority has exactly one authoritative
+   definition, at a place the reader can find from the use site. Views checked against that
+   definition (a signature, a compiler report, a derived table or registry) and explanatory
+   examples are not second definitions. A restated fact that nothing checks (a size copied into a
+   constant, a rule copied into a second document, a capability implied rather than declared) is a
+   defect waiting to drift. This document is itself an instance: other documents link here.
+
+6. **Lean is the specification.** The language's syntax, typing, ownership, effects and semantics
+   are defined in Lean. Each rule is a readable definition with a plain-words doc comment and its
+   conformance examples, and the reference interpreter is built from those definitions. No prose is
+   generated from them. Machine views (the rule registry, rule IDs, manifests) are derived from them
+   and checked for staleness. A guide may teach and link the rules but states none of its own. Until
+   a rule lands in Lean, its prose chapter states the decided rule, and the chapter retires once its
+   rules are covered
+   ([Lean-source decision](archive/roadmap-2026-11/ROADMAP_DECISIONS.md#2026-11-01--lean-as-the-only-source),
+   [revised 2026-11-04](archive/roadmap-2026-11/ROADMAP_DECISIONS.md#2026-11-04--lean-is-the-specification)). *Why:* one
+   definition that machines check cannot silently disagree with itself, and a second prose
+   rendering would be a second text to keep in step.
+
+7. **Systems first, not theorem-prover first.** Source code reads as systems programming. Proofs
+   attach to real Concrete functions through the semantics, not to a parallel reimplementation.
+   *Why:* the point is evidence about the code that runs.
+
+8. **No hidden runtime.** No garbage collector, no hidden reference counting, no hidden scheduler or
+   executor, no life before `main`. What the target does at startup, at shutdown and on a trap is a
+   named entry in the target's table. *Why:* memory, time and authority behaviour must be auditable
+   and boundable.
+
+9. **Ownership is linear, not affine.** A non-Copy value is used exactly once; it is never dropped
+   silently at the end of a scope. Copy means "may be duplicated", nothing more. `_` names an unused
+   binding and never discards a linear value, a `Result` or an `Option`
+   ([OD62](decisions.md#od62), [OWN-5](../legacy/docs/spec/ownership.md#OWN-5)). Cleanup is an explicit
+   consuming operation. *Why:* every resource has one visible owner and one visible end.
+
+10. **References are second-class.** A reference may be passed down into a call or held inside a
+    borrow block; no function, trusted or not, returns one and no value stores one
+    ([REF-1](../legacy/docs/spec/references.md#REF-1), [REF-3](../legacy/docs/spec/references.md#REF-3)). Raw pointers, used
+    in `trusted` code or under `with(Unsafe)`, are the only escape, and every use carries stated
+    validity premises; the full raw-memory taxonomy is still
+    [undecided](decisions.md#core-unsafe-premises). *Why:* scoped access
+    needs no lifetime language, and the checker and the proofs stay local.
+
+11. **Authority and trust are visible.** A function's permissions are declared in `with(...)`; a
+    resource is a value it holds; an operation on a resource needs both. Nothing discharges or hides
+    an operational capability, `trusted` and `with(Unsafe)` included, and there are no umbrella
+    capabilities ([authority rules](decisions.md#decided-2026-11-02-authority)). *Why:* a
+    reviewer reads what a function may do from its signature alone.
+
+12. **Trust boundaries are honest.** Every claim says which of these it is: enforced by the compiler,
+    reported by analysis, proved in Lean, or assumed at a named source, backend, toolchain or target
+    boundary. Being listed in the trusted base proves nothing; an unknown is never reported as a
+    reassuring default ([ABSENCE_IS_NOT_A_FACT.md](../legacy/docs/project/ABSENCE_IS_NOT_A_FACT.md)). New kinds of fact
+    (frames, dependencies, ghost state, resource bounds) are reported through the one obligation and
+    evidence ledger, never a parallel system. *Why:* evidence that overstates itself is worse than
+    none.
+
+13. **The compiler owns semantic identity.** A name, a link symbol or a restated constant is a
+    representation of an entity, never the entity. Every pass preserves an entity's identity or
+    creates a checked derivation from it, and identity claims are tested structurally, not by
+    observed values. *Why:* using a representation as identity, and re-interpreting it in a later
+    pass, is the single largest class of past compiler defects. (Older documents and comments
+    call this "principle 12".)
+
+14. **Artifact-first auditability.** The compiler emits facts, evidence and replay commands that
+    people, CI and tools consume directly. Auditing never means reading the compiler's source.
+    *Why:* an audit that depends on the auditor's reading of the implementation is not repeatable.
+
+15. **A small analyzable core over feature growth.** A smaller language with strong boundaries
+    beats a larger one with weaker analysis. Removing a feature is an improvement when what remains
+    is more coherent; each refusal makes the rest easier to check, teach and prove. *Why:* every
+    feature is paid for in grammar, checker, semantics, proofs and review.
+
+16. **Predictable execution and a separable core.** Recursion, loop bounds, allocation, blocking and
+    foreign calls stay visible, so a bounded, analyzable core can be told apart from an effectful
+    shell, and writing code that way is natural. Termination is known before a program runs: every
+    loop, recursive cycle, indirect call and blocking or foreign boundary either has termination
+    evidence or carries a written permission at that source, which every report traces to its
+    callers. Recursion depth, stack use, allocation, blocking, foreign calls and possible aborts are
+    reported per function with their evidence, and a module or project policy may require them;
+    these are reported facts, not function categories
+    ([decision](decisions.md#decided-project-no-hidden-traps), 2026-11-06). *Why:* resource bounds
+    and proofs need a core they can reach, and an unexplained infinite loop is a hidden behaviour.
+
+17. **Real programs test the shape.** A design is validated by serious workloads, not by thought
+    experiments alone, and a refused or deferred feature reopens only on such evidence. *Why:*
+    hypothetical convenience is not a cost; measured pain is.
+
+18. **No hidden traps.** Accepted safe code has no reachable implicit language trap: every operation
+    that could fail at run time carries checked evidence that it cannot, or its failure is handled by
+    a branch written in the source. An explicit `abort()` remains terminal behaviour and is reported
+    transitively; resource exhaustion and foreign behaviour are named target and trust premises.
+    Evidence comes from a small decidable checker proved correct in Lean, contracts whose evidence is
+    closed, and Lean theorems, never from an unpredictable solver
+    ([decision](decisions.md#decided-project-no-hidden-traps), 2026-11-06). *Why:* an inserted trap
+    is an exit the reader of the operation cannot see, which rule 3 refuses for the same reason
+    exceptions are refused.
+
+## When rules conflict
+
+**Decided by the owner on 2026-11-05** (row P2, [record](decisions.md#decided-project-priority)). When two rules pull in different directions, the earlier
+item in this order wins:
+
+1. soundness and provability, which includes honest trust boundaries (rule 12) and compiler-owned
+   semantic identity (rule 13): a claim that overstates its evidence, or an entity known only by
+   its spelling, is unsound;
+2. transparency: nothing hidden, and every claim backed by an artifact a reader can inspect and
+   replay (rules 3, 8, 11, 14);
+3. a single source of truth: one authoritative definition per fact (rule 5);
+4. explicitness at the use site;
+5. brevity.
+
+The third item is read with rule 5's definition: every fact that affects behavior or authority has
+one authoritative definition, at a place the reader can find from the use site. So "write it once"
+and "show it at the use site" agree whenever the use site can reach that definition, directly or
+through a checked view such as a signature or a report; a fact that can be found only by searching
+the whole program fails both.
+
+**This order guides choices that are still open. It never reopens a decided rule.** The owner's
+answers in [decisions.md](decisions.md) stand as recorded, whatever this order would
+suggest; changing one is a new owner decision. When the order argues for changing a decided rule,
+the change goes to the owner as a proposed revision and the decided rule stands meanwhile. For
+example, type arguments are inferred from the checked argument types
+([OD46](decisions.md#od46)), and that stands. Capability arguments were inferred the same
+way ([OD45](decisions.md#od45), [OD87](decisions.md#od87)) until the owner
+approved, on 2026-11-05, the revision that writes them on every capability-polymorphic call,
+checked against the callee, because a call's authority should be read rather than solved for
+([revision](decisions.md#decided-2026-11-05-revisions)).
+
+## Admission test
+
+A proposed language feature, compiler feature or borrowed idea is admitted only if every question
+below has a good answer. Each question is a rule above applied to the proposal; failing one is
+grounds for rejection.
+
+1. **One form?** Does it add a second way to do something already expressible? (rule 2)
+2. **Visible?** Does it expose ownership, effects, dispatch, layout, allocation or control flow, or
+   hide work behind familiar syntax? (rules 3, 8)
+3. **One fact, one place?** Is every fact it introduces written once and findable from the use site?
+   (rule 5)
+4. **A simple invariant?** Can it be stated as one Lean judgment without "except when" clauses, and
+   does it elaborate into simpler Core forms? (rules 6, 15)
+5. **Declaration-level and phase-separated?** Does it keep cross-module dependence on declarations
+   and summaries, never on another module's bodies, and early phases independent of later semantic
+   information? (rule 15)
+6. **Static or explicitly indirect dispatch?** Is every call target known at compile time or visibly
+   indirect at the call site? (rule 3)
+7. **Predictable code?** Can a reader form a rough model of the generated work from the source?
+   (rule 16)
+8. **One owner?** Does exactly one pass or judgment own it, with one diagnostic when it fails? (rules
+   5, 13)
+9. **Authority intact?** Does every effect still appear in `with(...)` and every resource as a
+   value, with no way to hide either? (rule 11)
+10. **Through the contract boundary?** Do its safety, behaviour, effects, failure modes and resource
+    consequences appear in summaries and obligations, rather than disappear at a function boundary?
+    (rules 12, 14)
+11. **Fails visibly?** Does an unsupported use produce a precise diagnostic or a named hole, never
+    silence? (rule 12)
+12. **Identity kept?** Does every entity, claim and piece of evidence it introduces have a typed
+    identity of its own (subject, claim, dependencies, artifacts, checker rule, freshness), never a
+    string, a display name, a first-match lookup or one status standing for several independently
+    degradable claims? Does it keep apart identities that change independently (implementation,
+    model, exported contract, proposition, policy, claim scope) and say which one moves under each
+    change? An exact digest prevents substitution but says nothing about whether a model is
+    faithful; an identity key holds the subject of a fact, never alternative answers, so
+    contradictory rows (trusted and proved, refinement and equivalence) cannot coexist under
+    different keys. (rule 13)
+13. **Honest under hostile input?** For an evidence or tooling feature: does it treat proof
+    modules, generated artifacts, receipts and checker output as adversarial, define limits,
+    malformed, duplicate and surplus input behaviour, negative controls and mutation tests, and say
+    how a revoked checker or assumption degrades only the claims that depend on it? Silence creates
+    a missing obligation, never an assumption. (rule 12)
+14. **A real benefit for audited code?** Is the gain more than writing speed? Convenience alone is
+    not enough, and brevity alone never outweighs a visibility loss. (rules 4, 17)
+
+**In one line.** A feature is promising when it makes the language and the compiler easier to
+explain at the same time: explicit, local, phase-separated, summary-friendly and easy to lower
+away, never implicit, global, inference-heavy, body-dependent or hard to model formally.
+
+**Ordering.** Architecture before ornament; visibility in tooling before convenience syntax;
+layout and ABI credibility before feature expansion; proof-friendly boundaries before richer
+abstractions; replayable evidence alongside each new contract family. The roadmap applies this
+order; it does not restate it.
+
+**Borrowed ideas.** Copy constraints before copying features: Zig, Austral, SPARK and Odin are
+most useful where they say no. [INFLUENCES.md](../legacy/docs/project/INFLUENCES.md) records what is copied, adapted and
+rejected.
+
+**Recording a refusal.** A rejected feature with its reason is worth more than a feature added
+without one. A new refusal gets an entry in the next section, with its research note when there is
+one. A refusal that is a language rule is an owner decision first ([decisions.md](decisions.md)).
+
+## What Concrete refuses
+
+Each refusal is either **Permanent**, with the reason, or **Reopens when** a named condition holds.
+"Under the pull rules" means that a real workload, bug report, pilot or user need runs into the
+refusal and measures its cost; a hypothetical convenience never counts (rule 17). Reopening a
+refusal that is a decided language rule is an owner decision, recorded in
+[decisions.md](decisions.md).
+
+Some former "not yet" entries are planned work, not refusals, and live in the roadmap: freestanding
+targets (the [allocation decision](decisions.md#decided-2026-11-02-allocation) already
+covers their allocators; [R-0323](../legacy/docs/archive/roadmap-2026-11/ROADMAP_BACKLOG.md#task-r-0323) and
+[R-0324](../legacy/docs/archive/roadmap-2026-11/ROADMAP_BACKLOG.md#task-r-0324) split std and its capabilities), package management
+(decided 2026-10-17, in the [task register](archive/roadmap-2026-11/ROADMAP_TASKS.md)), and the richer contract layer
+(dependency-flow contracts, mature loop invariant and variant authoring, the specification
+library, and package and release evidence summaries, phase E of the
+[roadmap](../ROADMAP.md#phases)). That layer's syntax is frozen only after a flagship or external
+workload needs its facts, and its facts are reported through the one evidence ledger (rule 12).
+Within that layer the decided rules hold: no `old`, quantifier or implication in contracts
+([OD117](decisions.md#od117)), specification functions with a required, total body
+([OD115](decisions.md#od115)) and no total-function category
+([OD116](decisions.md#od116)). How frames, entry-state facts and termination are stated
+inside those rules was decided on 2026-11-05 (row P18, [record](decisions.md#decided-project-contracts)): no snapshot construct, frame
+and entry/exit properties as Lean theorems (a source frame clause would be a new owner decision),
+and per-function termination theorems for ordinary functions.
+
+**Hidden runtime and hidden work**
+
+- **Garbage collection and hidden reference counting.** Permanent. They hide when memory is
+  reclaimed and whether a call allocates; linear ownership and explicit cleanup replace them.
+- **A hidden async runtime, executor or scheduler, and function colouring.** Permanent. They hide
+  concurrency and scheduling behind calls that look ordinary.
+- **Explicit structured concurrency.** Reopens when [R-0399](../legacy/docs/archive/roadmap-2026-11/ROADMAP_BACKLOG.md#task-r-0399)'s pull
+  trigger holds: a workload needs concurrency after the new compiler's v1 surface is frozen. Any
+  design keeps authority in `with(...)` and handles as linear values; single-threaded execution
+  until then.
+- **Exceptions and unwinding.** Permanent. They turn every call into a hidden exit. Recoverable
+  failure is a `Result` handled by an exhaustive `match`, running out of memory included
+  ([allocation decision](decisions.md#decided-2026-11-02-allocation)); an abort is terminal
+  and runs no deferred call ([OD10](decisions.md#od10)).
+- **Postfix `?` and any implicit error propagation or conversion.** Permanent. It hides a function
+  exit, a cleanup boundary and a conversion behind one character; the error arm is written.
+- **Mutable global state of any kind.** Permanent ([OD8](decisions.md#od8)). Constants are
+  truly immutable; resources reach code only as values handed to it.
+
+**Implicit conversions and inference**
+
+- **Implicit numeric conversions.** Permanent. They hide data loss. `as` converts only when no
+  value can be lost ([OD11](decisions.md#od11)); every other conversion is a named function
+  ([OD99](decisions.md#od99)), and a checked one reports failure as a `Result`
+  ([OD106](decisions.md#od106)).
+- **Truthiness.** Permanent. A condition is a `bool`; no other value stands in for one.
+- **Implicit string conversion** (`Display`/`ToString`-style hooks). Permanent. It hides
+  allocation and dispatch. The reserved output and append forms ([OD133](decisions.md#od133))
+  accept a closed list of types, expand to typed calls and keep their authority visible.
+- **Global (Hindley–Milner) inference and inference from the expected result type.** Permanent.
+  Signatures are written in full. A generic call's type arguments are inferred only from the checked
+  types of its arguments ([OD46](decisions.md#od46), [OD129](decisions.md#od129));
+  what no argument determines is written explicitly. Capability arguments are not inferred at all: they
+  are written on every capability-polymorphic call and checked (owner revision of
+  [OD45](decisions.md#od45) and [OD87](decisions.md#od87), 2026-11-05,
+  [record](decisions.md#decided-2026-11-05-revisions)).
+
+**Dispatch and abstraction**
+
+- **Closures and anonymous functions with capture.** Permanent. Captured data and control flow are
+  invisible at the call site. Named functions, capture-free function values, monomorphized generics
+  and an explicit context parameter replace them ([detail](../legacy/research/language/no-closures.md)).
+- **Trait objects and hidden dynamic dispatch.** Permanent. An opaque vtable hides the call target
+  from the reader, the analyses and the prover. Enums, monomorphized generics and explicit function
+  values replace them ([detail](../legacy/research/language/no-trait-objects.md)).
+- **Implicit trait resolution beyond monomorphization.** Permanent. Traits are coherent, an
+  ambiguous call is qualified, and resolution is by typed identity ([OD6](decisions.md#od6)),
+  so adding an impl elsewhere cannot change what a call means.
+- **Class inheritance.** Permanent. It makes the call target depend on a hierarchy instead of the
+  source; structs, enums, traits and composition replace it.
+- **User-defined operator overloading.** Permanent. An operator would hide allocation or effects
+  behind arithmetic syntax; operators take primitive operands only
+  ([OD26](decisions.md#od26), [OD42](decisions.md#od42)), and user types use named
+  functions.
+- **Hiding an operational capability**, for example a trusted wrapper that uses `Fs` or `Alloc`
+  without declaring it. Permanent ([authority rule 5](decisions.md#decided-2026-11-02-authority)).
+  A caller must see what authority a call uses. A `trusted fn` absorbs `Unsafe` only, which is a
+  caller safety obligation, not authority ([TRUST-5](../legacy/docs/spec/trusted.md#TRUST-5)).
+- **Umbrella capabilities and capability aliases** (`Std`, user `cap X = ...`). Permanent
+  ([authority rule 6](decisions.md#decided-2026-11-02-authority),
+  [audit decisions](decisions.md#decided-2026-11-02-audit)). A signature lists its real
+  capabilities.
+- **An effect system beyond `with(...)`** (algebraic effects and handlers). Permanent. Permissions
+  are compile-time sets over a fixed, reserved list of capabilities and resources are linear values;
+  that needs no runtime support and keeps signatures readable.
+- **Foreign function values.** Refused ([OD4](decisions.md#od4)). Reopens when the owner
+  admits typed `extern "C" fn` types, which OD4 leaves for later, with the permissions of foreign
+  callbacks decided at that point ([authority rule 4](decisions.md#decided-2026-11-02-authority));
+  [R-0283](../legacy/docs/archive/roadmap-2026-11/ROADMAP_BACKLOG.md#task-r-0283) reviews the C interop requirements when phase C becomes
+  active or next.
+
+**Generation and metaprogramming**
+
+- **Source-generating macros, derive helpers and in-language source generation.** Permanent. They
+  break file-local parsing and phase separation and make audit output describe code nobody wrote.
+  Generics, ordinary functions and external generators whose output is reviewed as ordinary source
+  replace them; attributes classify, never generate.
+- **Derived structural equality.** Permanent as language machinery, for the same reason; equality
+  is written or generated as reviewable source.
+- **General compile-time evaluation** (`comptime`, `constexpr`-style). Reopens when a workload under
+  the pull rules needs compile-time values beyond constant declarations; any design stays
+  constants-only and states its interaction with the semantics.
+- **Broad in-source conditional compilation** (`#[cfg]` throughout files). It hides control flow,
+  authority and target assumptions behind build configuration. Target-specific code is selected by
+  module and file per target profile in `Concrete.toml`, and audit output names what was selected
+  and excluded. Reopens when, with the project model, target profiles and the hosted/freestanding
+  std split ([R-0323](../legacy/docs/archive/roadmap-2026-11/ROADMAP_BACKLOG.md#task-r-0323)) in place, a workload under the pull rules
+  shows that module and file selection is not enough; any form is narrow and appears in audit
+  output.
+
+**Calls and declarations**
+
+- **User-defined and C-style variadic functions.** Permanent. They are unchecked or complicate
+  every signature. The reserved output and append forms are the only multi-argument forms, and they
+  are not a function type and cannot be passed as values.
+- **Default arguments.** Permanent (owner, 2026-11-05, row P17a,
+  [record](decisions.md#decided-project-refusals)), reopened only by a new owner decision. A
+  call shows every argument it passes; defaults conflict with visible arguments and with one form per
+  situation. General compile-time evaluation and broad conditional compilation (above) keep their
+  evidence-based reopening (row P17b).
+- **Lexical shadowing of a visible local, parameter or top-level name.** Permanent
+  ([SCOPE-1](../legacy/docs/spec/scope.md#SCOPE-1), [OD67](decisions.md#od67)). One name, one binding
+  in a scope; the compiler still never recovers identity from spellings (rule 13).
+
+**Contracts and ghost code**
+
+- **Decorative contracts.** Permanent. A contract is a claim that lowers to an obligation and is
+  reported with its evidence; contracts never change what a program does at run time
+  ([OD125](decisions.md#od125)), and a vacuous one is reported as such
+  ([OD120](decisions.md#od120)).
+- **`old`, quantifiers and implication in contracts.** Permanent ([OD117](decisions.md#od117)).
+  Such properties are stated as Lean theorems, keeping the contract language small.
+- **Ghost code that affects execution.** Permanent. Ghost code itself is admitted as decided:
+  `ghost let` with `ghost` reserved ([OD81](decisions.md#od81)) and specification
+  functions whose body is required and total ([OD115](decisions.md#od115)). How ghost state
+  is represented in Core and erased was approved provisionally by the owner on 2026-11-05 (row
+  Q9.10, [decided rows](decisions.md#decided-2026-11-05-core)): ghost ownership
+  instrumentation with proved erasure; Core freezes at stage A2c
+  ([roadmap](../ROADMAP.md#questions-for-the-core-session)).
+
+## Where the earlier rules went
+
+Nothing from the documents this one absorbed was dropped silently. The former principles of
+PROJECT.md (numbered as they were) and its fifteen admission criteria map as follows; "AT" is the
+[admission test](#admission-test).
+
+| former rule | here |
+|---|---|
+| principle 1, systems first | rule 7 |
+| principle 2, no hidden runtime | rule 8 |
+| principle 3, linearity and ownership | rule 9 |
+| principle 4, second-class references | rule 10 |
+| principle 5, visible capabilities and trust | rule 11 |
+| principle 6, predictable execution | rule 16 |
+| principle 7, core/shell separation | rule 16 |
+| principle 8, artifact-first auditability | rule 14; conflict order item 2 |
+| principle 9, proofs attach to real code | rule 7 |
+| principle 10, small analyzable core | rule 15 |
+| principle 11, honest trust boundaries | rule 12; conflict order item 1 |
+| principle 12, compiler-owned identity | rule 13; conflict order item 1 |
+| criterion 1, a simple invariant | AT 4 |
+| criterion 2, more visible | AT 2 |
+| criterion 3, less phase coupling | AT 5 |
+| criterion 4, declaration-level dependencies | AT 5 |
+| criterion 5, static or explicit dispatch | AT 6 |
+| criterion 6, predictable code generation | AT 7 |
+| criterion 7, clear diagnostics | AT 8 |
+| criterion 8, one owning pass | AT 8 |
+| criterion 9, the proof story | AT 4 |
+| criterion 10, real benefit for audited code | AT 14 |
+| criterion 11, crosses a contract boundary | AT 10 |
+| criterion 12, fails visibly | AT 11 |
+| criterion 13, evidence as precise as its claim | AT 12 |
+| criterion 14, honest under hostile input | AT 13 |
+| criterion 15, independent semantic identities | AT 12 |
+| admission principle, quick decision rule, one-line test | AT, "In one line" |
+| main rule for borrowed ideas | AT, "Borrowed ideas" |
+| ordering principle | AT, "Ordering" |
+| shape principles (features earn admission, removals improve, constraints compound, real programs test shape, record refusals) | rules 15, 17; AT, "Recording a refusal" |
+| high-leverage priorities | not a design rule: the [roadmap](../ROADMAP.md) owns priority |
+| ANTI_FEATURES.md entries and PROJECT.md's "no" and "not yet" decisions | [What Concrete refuses](#what-concrete-refuses); comparisons in [INFLUENCES.md](../legacy/docs/project/INFLUENCES.md#how-other-languages-answer-concretes-refusals) |
+# Modules and Names
+
+A program is a tree of modules, one source file per module, loaded by `mod name;`. Every
+declaration is private to its module unless it is declared `pub`, and another module reaches it
+only by importing it (`import a.{f, T as U};`). Names resolve once, before checking, to exactly
+one declaration. This chapter covers name resolution (MOD-1), visibility (MOD-2), one binding
+per name in a module (MOD-3), loading module files (MOD-4), the privacy of `std.libc` (MOD-6),
+generated interfaces (MOD-7, pending), calls the compiler generates (MOD-8) and what an import binds
+(MOD-9). There is no MOD-5: the number was never allocated, and IDs are not renumbered
+([MAINTAINERS.md](MAINTAINERS.md) §2.1). Representation privacy (which fields and constructors another module
+may use) is TYPE-11, and trait coherence is the traits chapter.
+
+OD67 refuses locals that reuse a visible top-level function, import alias, constant or intrinsic name (SCOPE-1 and SCOPE-2). TIGHTENING_DECISIONS
+D9 (one source file per module with `pub` as its interface, and interface artifacts the compiler
+generates and checks) is decided and scheduled late; it is MOD-7, pending R-0556. The design record is
+[VISIBILITY_AND_MODULE_HYGIENE.md](../archive/design-records/VISIBILITY_AND_MODULE_HYGIENE.md).
+
+## Rules
+
+<a id="MOD-1"></a>
+### MOD-1. Every name resolves to one declaration
+
+**MOD-1@1.** Every name a program uses resolves to exactly one declaration visible where it is used (a local binding, a declaration of the module, an import, a type parameter or a builtin), and a name that resolves to none, a type alias that names itself, and `Self` outside an `impl` are refused.
+
+- Kind: refusal
+- Uses: none
+- Codes: E0100 (resolve), E0101 (resolve), E0102 (resolve), E0103 (resolve), E0104 (resolve), E0105 (resolve), E0106 (resolve), E0107 (resolve), E0108 (resolve), E0109 (resolve), E0112 (resolve), E0125 (resolve), E0200 (check), E0201 (check), E0202 (check), E0263 (check), E0267 (check)
+- Status: enforced
+- Enforced by: Concrete.Pipeline.resolve
+- Semantics: none
+- Obligation: resolution by identity (`DefId`, `LocalId`), never by spelling (R-0492)
+- Evidence: tested
+
+**Rationale.** Resolution validates every name once, before checking. Later passes do not yet
+work only with what a name denotes: Elab and CoreCheck still look some names up by spelling, and
+R-0492 moves them to identities. Bugs 039 to 045 were names resolved more than once, differently; binders
+are now keyed by identity (SCOPE-1, SCOPE-3), and declarations get the same treatment under R-0492.
+The checker repeats some lookups (E0200 to E0202, E0263, E0267) as defense in depth.
+The builtins include the enums `Option` and `Result`, which a module uses without an import; OD43 refuses user declarations that collide with these builtin type names. The types chapter's
+[builtin catalog](types.md#builtin-functions) records the current compiler's builtin functions,
+their signatures, the capabilities it checks and how it handles their names.
+
+```con reject name=undeclared-name code=E0100 stage=resolve pair=declared-name
+fn example_value() -> i64 {
+    return missing + 1;
+}
+fn main() -> u8 {
+    if example_value() == 0 {
+        return 0;
+    }
+    return 1;
+}
+```
+
+```con accept name=declared-name exit=42
+fn example_value() -> i64 {
+    let present: i64 = 41;
+    return present + 1;
+}
+fn main() -> u8 {
+    if example_value() == 42 {
+        return 42;
+    }
+    return 1;
+}
+```
+
+
+
+<a id="MOD-2"></a>
+### MOD-2. Only `pub` declarations cross a module boundary
+
+**MOD-2@1.** A declaration is private to its module unless it is declared `pub`, and another module uses it only by importing it from a module that exists, where it is `pub`.
+
+- Kind: refusal
+- Uses: none
+- Codes: E0110 (resolve), E0111 (resolve), E0126 (resolve), E0284 (check), E0285 (check), E0323 (check), E0418 (elab), E0419 (elab), E0423 (elab)
+- Status: enforced
+- Enforced by: Concrete.Pipeline.resolve, Concrete.importRefusal
+- Semantics: none
+- Obligation: none
+- Evidence: tested
+
+**Rationale.** Private by default makes every public API intentional: a missing `pub` cannot
+export a helper by accident. `pub` on a type exports its name, not its representation (TYPE-11).
+There is one public level today; a package-internal `pub(pkg)` is designed for when packages
+depend on packages. Resolve, Check and Elab each verify imports (E0111, E0285, E0419).
+
+**Codes by case.** Each of the three refusals has one code per pass that can report it, Resolve
+first and Check or Elab when they meet the import again (`importCode` and `unimportableCode` in
+`Concrete/Resolve/FileSummary.lean`): an unknown module is E0110 (resolve), E0284 (check) or E0418
+(elab); a declaration that is not `pub` is E0111, E0285 or E0419; and an import naming a public
+trait, which no import binds, is E0126, E0323 or E0423. On a single file the import refusals are
+reported at resolve (E0110, E0111, E0126); a qualified call to a private function there is E0101
+(unknown function).
+
+Visibility has two levels, `pub` and private, and private is the default, so a module's public
+surface is explicit and nothing is exported by accident; a `pub(pkg)` level is deferred until
+packages need it, and `pub(super)` or `pub(in path)` will not be added (restructure the modules
+instead). There are no glob imports, permanently: every imported name is listed, so each module
+begins with a manifest of what it uses and a name's origin is always visible (STDLIB design
+principle 8). A module's non-public items are not in its `FileSummary.publicNames` and cannot be
+named in an import list (E0111). Capabilities are not hidden by a module boundary: calling a
+function needs the capabilities in its signature (TRUST-4), so a module cannot smuggle a `File`
+call behind an `Alloc` signature, and each public function declares only what it needs; std contains
+`Unsafe` behind `trusted` functions that expose domain capabilities (operations need their declared resource and permission).
+`--report caps`, `--report authority` and `--report interface` show these surfaces, and a package
+policy (`[policy] deny = ["Unsafe"]`) can refuse capabilities. The visibility design and its
+pre-package hygiene checklist are the archived
+[VISIBILITY_AND_MODULE_HYGIENE.md](../archive/design-records/VISIBILITY_AND_MODULE_HYGIENE.md)
+(several of its first-release choices, such as all fields and variants visible, were since replaced
+by TYPE-11 and R-0011).
+
+An import binds a name in the importing module only and does not make it `pub` there, so a module
+cannot re-export what it imports, and `pub import` is a parse error (SYN-1).
+
+```con reject name=import-private code=E0111 stage=resolve pair=import-public
+// spec-file: main.con
+mod a;
+import a.{hidden};
+fn example_value() -> i64 {
+    return hidden();
+}
+pub fn main() -> u8 {
+    if example_value() == 0 {
+        return 0;
+    }
+    return 1;
+}
+
+// spec-file: a.con
+fn hidden() -> i64 {
+    return 1;
+}
+
+```
+
+```con reject name=submodule-imports-private code=E0285 stage=check pair=import-public
+// spec-file: main.con
+mod b;
+mod a;
+fn example_value() -> i64 {
+    return b::g();
+}
+fn main() -> u8 {
+    if example_value() == 0 {
+        return 0;
+    }
+    return 1;
+}
+
+// spec-file: a.con
+fn secret() -> i64 {
+    return 42;
+}
+array_tail    = ";", INT, "]" | array_list_tail ;
+array_list_tail = "]" | ",", expr, array_list_tail ;
+path_tail     = ["::", path_after_separator] ;
+path_after_separator = arguments, ["::", IDENT, path_tail]
+                     | IDENT, path_tail ;
+constructor_body = "{", [field_value, field_value_tail], "}" ;
+field_value_tail = [",", field_value_after_comma] ;
+field_value_after_comma = field_value, field_value_tail | ε ;
+field_value   = IDENT, ":", expr ;
+value_else    = value_block
+              | "if", head_expr, value_block, "else", value_else ;
+```
+
+All expression auxiliaries inherit the slices of their operators/atoms from section 2. `path_tail` and arguments arrive at 11 for generics, 14 for associated/trait calls, 17 for module paths, and 10 for `Enum::Variant`; simple calls at 5. The proposed path production parses a common neutral path and defers declaration classification; it does not approve arguments on arbitrary intermediate module segments. Those restrictions and explicit generic enum constructors are **OPEN-14/20**. The syntax distinguishes `f::<T>(x)` from `x < y`, with a single-token choice after `::`: `<` starts arguments, IDENT continues the path. Actual calls to a function value become legal only at slice 20.
+
+`head_expr` is the same precedence hierarchy with a separate **head primary**: at enclosing `(`/`[` depth zero it has no constructor-body suffix. Entering grouping, call parentheses, array brackets or index brackets restores ordinary expr for the contents. Thus `if LIMIT {…}` ends the head, while `if test(P { x: 1 }) {…}` permits a literal inside parentheses. `as` also terminates the source of a range borrow, so that source must use the place grammar below rather than unrestricted expr. [OD16](../docs/decisions.md#od16), [OD34](../docs/decisions.md#od34) fix the head rule, not a casing convention.
+
+`attributes` before a postfix are checked to contain only expression-legal `may_not_terminate` permissions, target an indirect call, and attach to that entire immediately following postfix, not the next binary operand ([no-hidden-traps](../docs/decisions.md#decided-project-no-hidden-traps)). The enclosing statement parser consumes a leading attribute prefix only once; it hands the same prefix to either loop or expression classification. Nested attributes inside arguments are parsed by expr itself. Attachment to parenthesized postfix chains, duplicate expression prefixes and interaction with casts are **OPEN-15/16** for the exact frontend judgment.
+
+The place sublanguage, used for assignment checks and borrow-source parsing, is proposed as:
+
+```ebnf
+place         = place_base, {place_projection} ;
+place_base    = IDENT | "(", place, ")" | "*", place_base ;
+place_projection = ".", IDENT | "[", expr, "]" ;
+```
+
+Place identity is structural; not every syntactic place is valid for every type. [OD121](../docs/decisions.md#od121), [audit projection rule](../docs/decisions.md#decided-2026-11-02-audit) require a local or projection through a place; bind call results before projecting. No tuple `.0` remains after [OD54](../docs/decisions.md#od54). Heap opening has its own scoped form, not `(&h).f` ([OD36](../docs/decisions.md#od36)); no automatic receiver borrow ([OD32](../docs/decisions.md#od32)): use `(&s).m()` or `(&mut s).m()`. Precise grouped/dereferenced place precedence and method-call versus projection treatment are **OPEN-20**.
+
+| Atom/form | Authority / OPEN detail |
+|---|---|
+| value if, value match, block tails | [OD77](../docs/decisions.md#od77), [SYN-8/9](../legacy/docs/spec/syntax.md#SYN-8), [STMT-8](../legacy/docs/spec/statements.md#STMT-8); value if requires else; OPEN-16 |
+| constructors `S { f: e }`, `E::V { f: e }` | enum separator [OD77](../docs/decisions.md#od77), argument-based enum inference, otherwise explicit [OD129](../docs/decisions.md#od129); struct literal shell slice 1; explicit expression fields recommended under OPEN-20; empty struct literal already admitted by OD65 and approved slice 1 |
+| array `[a,b]`, `[e; N]` | repetition evaluated once, Copy [OD149](../docs/decisions.md#od149); empty list literals refused by TYPE-7; separators and allowed length OPEN-14/20 |
+| `()` | [OD66](../docs/decisions.md#od66), [OD157](../docs/decisions.md#od157) |
+| `Trait::method(&x, ...)` | [OD6](../docs/decisions.md#od6), [audit](../docs/decisions.md#decided-2026-11-02-audit) |
+| multilevel module path | [OD151](../docs/decisions.md#od151); imports required [OD139](../docs/decisions.md#od139); name classification [OD152](../docs/decisions.md#od152) |
+| borrowed expression `&place` / `&mut place` | [OD1](../docs/decisions.md#od1), [OD2](../docs/decisions.md#od2); parse unary syntax then reject non-place/temporary roots |
+| `*r`, `*h`, `*p` | reference 13, heap 19, raw 24; [OD59](../docs/decisions.md#od59), [OD13](../docs/decisions.md#od13); semantics depend on type; raw non-Copy move-out must use read_owned |
+
+No free-standing block expression has been added merely because a value branch has a block. Whether standalone `{…}` is a primary or statement is **OPEN-16**. No tuples, closures, anonymous functions, named call arguments, variadics or operator overloading are inferred from general-purpose expression notation.
+
+codex
+1: Reject; naming collisions should not force module splits.
+2: DISAGREE with Claude; adding an import changes mandatory spellings elsewhere.
+3: Recommend; stable qualification exposes provenance to auditors. MOD-2/OD139 remain intact; MOD-3 needs revision. OD152 permits declaration-based resolution without a new LL(1) conflict. Philosophy prioritizes transparency over brevity.
+
+ANSWER: PICK=3; DISAGREE=yes; NOTE=Stable qualification makes provenance visible at every use
+tokens used
+22,533
+1: Reject; naming collisions should not force module splits.
+2: DISAGREE with Claude; adding an import changes mandatory spellings elsewhere.
+3: Recommend; stable qualification exposes provenance to auditors. MOD-2/OD139 remain intact; MOD-3 needs revision. OD152 permits declaration-based resolution without a new LL(1) conflict. Philosophy prioritizes transparency over brevity.
+
+ANSWER: PICK=3; DISAGREE=yes; NOTE=Stable qualification makes provenance visible at every use

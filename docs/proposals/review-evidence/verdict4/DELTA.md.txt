@@ -1,0 +1,13 @@
+Round 4. Round 3 was unanimous on item 11 as "remove expression casts; keep `as` only as a binder keyword". The owner now asks: why not remove `as` entirely? Claude recommends full removal. Proposed revision of item 11 (11-full); spellings illustrative, exact ones go to the owner in the item-55 spelling round:
+
+11-full. Remove `as` from the language entirely; reserve it with no use so Rust-style `x as u32` and `y as z` get a precise diagnostic.
+ (a) Expression casts: replaced by one canonical named lossless conversion (OD11 value-domain rule, provenance restrictions preserved), as in round 3.
+ (b) Import renaming removed: `import a::b::{y};` only. A name clash is resolved by writing the fully qualified path (`json::parse`, `csv::parse`). Every entity has one name across the codebase (rule 13). Prerequisite: fully qualified paths must be usable without renaming (OPEN-11 must guarantee this; no whole-module alias).
+ (c) Borrow (revises the decided Core Q4.7/Q9.5 spelling `borrow [mut] source [from a until b] as view {...} [else {...}]`): the new name moves to the left, like let: `borrow [mut] view = source [from a until b] { ... } [else { ... }]`.
+ (d) Unpack (only proposed, OPEN-22): `unpack <brand A> x = p { ... }`.
+Claude's reasons: one binding shape (every new name left of `=`), one name per entity (no import aliases; grep/audit), and the borrow range-bound delimiter mode disappears from the grammar.
+Costs: revises a decided owner spelling (Q4.7/Q9.5); loses import aliases.
+
+TASK: AGREE or DISAGREE with 11-full and with each of (a)-(d) separately, DISAGREE only with a concrete reason (at most 50 words): LL(1) conflict, decided row, linear ownership, proof, showcase workload, or a second form. Check in particular that `borrow [mut] view = source ...` is LL(1) given `let` and statements, that qualified paths work without import aliases, and anything else that used `as`. Do not modify files.
+End with exactly one line:
+ANSWER: DISAGREE=<11-full, a, b, c, d or none>; OTHER_AS_USES=<list or none>

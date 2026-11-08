@@ -1,0 +1,100 @@
+REPOSITORY: readable
+
+FILES READ:
+- `REVIEW.diff`
+- `.claude/commands/creview.md`
+- `.claude/commands/cstatus.md`
+- `.claude/commands/land.md`
+- `.claude/commands/rebase.md`
+- `.claude/commands/roadmap-item.md`
+- `.github/workflows/lean_action_ci.yml`
+- `.github/workflows/oracle.yml`
+- `.githooks/pre-push`
+- `AGENTS.md`
+- `CHANGELOG.md`
+- `CLAUDE.md`
+- `ISSUES.tsv`
+- `README.md`
+- `RETENTION.tsv`
+- `changelog.d/2026-11-08-one-repository.md`
+- `docs/LANDING.md`
+- `docs/PHILOSOPHY.md`
+- `docs/REVIEW.md`
+- `docs/SELF_HOSTED_RUNNERS.md`
+- `docs/archive/site-down.md`
+- `docs/proposals/SPEC_UNIFICATION.md`
+- `flake.nix`
+- `required-checks-transition.tsv`
+- `required-checks.txt`
+- `scripts/checks/doc_links.sh`
+- `scripts/checks/issues.sh`
+- `scripts/checks/landing_ready.sh`
+- `scripts/checks/landing_script.sh`
+- `scripts/checks/legacy_frozen.sh`
+- `scripts/checks/lib/bounded.sh`
+- `scripts/checks/lib/bounded_exec.py`
+- `scripts/checks/lib/changelog.py`
+- `scripts/checks/lib/doc_links.py`
+- `scripts/checks/lib/gate_env.sh`
+- `scripts/checks/lib/git_sandbox.sh`
+- `scripts/checks/lib/has_match.sh`
+- `scripts/checks/lib/prepush_record.sh`
+- `scripts/checks/lib/treestate.sh`
+- `scripts/checks/oracle_fetch.sh`
+- `scripts/checks/retention_manifest.sh`
+- `scripts/checks/review_tool.sh`
+- `scripts/checks/root_inventory.sh`
+- `scripts/checks/root_inventory.txt`
+- `scripts/checks/run.sh`
+- `scripts/checks/sandbox_isolation.sh`
+- `scripts/checks/workflow_yaml.sh`
+- `scripts/land/acceptance.sh`
+- `scripts/land/gates_remote.sh`
+- `scripts/land/gates_transport_ssh.sh`
+- `scripts/land/impact_gates.sh`
+- `scripts/land/legacy_move.sh`
+- `scripts/land/lib.sh`
+- `scripts/land/move_prereqs.py`
+- `scripts/land/notes.sh`
+- `scripts/land/ready.sh`
+- `scripts/land/report.sh`
+- `scripts/land/required_checks.py`
+- `scripts/land/resolve_conflicts.py`
+- `scripts/land/retention.py`
+- `scripts/land/run-at-ref.sh`
+- `scripts/land/signoff.sh`
+- `scripts/land/train.sh`
+- `scripts/oracle/ORACLE.lock`
+- `scripts/oracle/build.sh`
+- `scripts/oracle/ci_check.sh`
+- `scripts/oracle/fetch.sh`
+- `scripts/oracle/lib.sh`
+- `scripts/oracle/publish.sh`
+- `scripts/oracle/run.sh`
+- `scripts/push-both.sh`
+- `scripts/review/review.sh`
+- `scripts/review/split_diff.py`
+- `scripts/review/verify.sh`
+- `scripts/worktree-new.sh`
+
+FINDINGS:
+- [scripts/checks/landing_ready.sh:94](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/iss21/agy-B/tree/scripts/checks/landing_ready.sh#L94-L104) (`PREFERENCE`): `landing_ready.sh` still initializes an unused `lambdaclass` bare repository and remote in its sandbox setup (`for r in origin lambdaclass fork; do git init -q --bare "$TMP/$r.git"; done`), unlike [scripts/checks/landing_script.sh:142](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/iss21/agy-B/tree/scripts/checks/landing_script.sh#L142) which dropped `lambdaclass` from that loop. Fix: drop `lambdaclass` from the bare-repo setup loop and `git push -q lambdaclass main` in `scripts/checks/landing_ready.sh` when convenient.
+
+SUMMARY OF CHECKS:
+1. **No stale `concrete2` reference that would break landing**:
+   - [.github/workflows/lean_action_ci.yml:80](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/iss21/agy-B/tree/.github/workflows/lean_action_ci.yml#L80) sets `LAND_REPO: ${{ github.repository }}` in `Landing record`.
+   - [scripts/land/train.sh:99](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/iss21/agy-B/tree/scripts/land/train.sh#L99), [scripts/land/acceptance.sh:304](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/iss21/agy-B/tree/scripts/land/acceptance.sh#L304), and [scripts/push-both.sh:57](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/iss21/agy-B/tree/scripts/push-both.sh#L57) default `LAND_REPO` / `ACCEPT_REPO` to `lambdaclass/concrete`, and `push-both.sh` passes `-R "$REPO"` to `gh run list` and in its rerun hints.
+   - [scripts/oracle/ORACLE.lock:13-30](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/iss21/agy-B/tree/scripts/oracle/ORACLE.lock#L13-L30) and [scripts/oracle/build.sh:49](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/iss21/agy-B/tree/scripts/oracle/build.sh#L49) point `url`, `release_repo`, and `artifact_url` at `lambdaclass/concrete` and remove `mirror_url` while keeping `artifact_sha256` unchanged.
+   - The `~/concrete2` directory in `gates_transport_ssh.sh` and `run-at-ref.sh` is a local checkout path on `concrete-ci-2`, which [docs/LANDING.md:222](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/iss21/agy-B/tree/docs/LANDING.md#L222) explicitly documents as a path name whose `origin` is `lambdaclass/concrete`.
+2. **No lost safety check other than the removed mirror**:
+   - Full-clone and hook-identity verification (`where_ok`), `fork` refusal (`refuse_fork` in `train.sh` and `REMOTE=fork` refusal in `push-both.sh`), `concrete-push-both.lock` serialization in `COMMON_GIT_DIR`, exact-SHA pushes (`$head:refs/heads/main` and `$LOCAL:$BRANCH`), `ls-remote` readback verification, CI exact-SHA + landing-tier + `required_checks.py` checks, `now_main = base` and ancestry checks, `review_provenance` (including `verify.sh` and `signoff.sh` + `pure_merge`), and `require_rehearsal` all remain intact.
+3. **New controls in [scripts/checks/landing_script.sh](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/iss21/agy-B/tree/scripts/checks/landing_script.sh)**:
+   - Lines 602–605 verify `env -u LAND_REPO` dispatches against `-R lambdaclass/concrete` via `grep -qxF` and does not push `ci/t1`.
+   - Lines 636–638 verify `land t1 --no-mirror` exits 1 with exact error `train: land: unknown option --no-mirror`.
+   - Lines 650–665 wrap `git` to log `push` calls and verify `land` succeeds with no `lambdaclass` remote configured, logs only `push origin $HEAD1:refs/heads/main`, advances `origin`, and leaves `fork` untouched.
+   - Lines 723–745 verify `push-both.sh` refuses `PUSH_REMOTE=fork` (exit 2) and fails on `PUSH_REMOTE=nosuch` (exit 1) without moving `origin` or `fork`, and logs a single exact-SHA push `push pb-ok $LOCAL:main` on a valid remote.
+4. **Docs state nothing false as present fact**:
+   - The documentation and changelog fragment accurately distinguish completed actions (republished oracle release, copied review notes, runner registration and `CONCRETE_SELF_HOSTED=true` on `lambdaclass/concrete`) from pending/later items (`concrete2` archived after the first landing here, 2026-11-06 owner decisions pending their record in `docs/decisions.md`, server-side `main` protection, and the separate later local remote guard).
+
+VERDICT: ACCEPT
+rc=0

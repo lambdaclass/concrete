@@ -1,0 +1,14 @@
+You are the writer. In this repository (branch wip/roadmap-sweep, uncommitted edits in ROADMAP.md, docs/decisions.md and changelog.d/2026-11-08-roadmap-sweep.md), replace the placeholder row R-0646 ("CLI question audit; its gaps are placed when it reports") with the audit's placements. Edit only those three files. Do NOT commit, push or run nix. Never invent owner quotes or answers. Source: .cli-input/CLI_QUESTION_AUDIT.md (origin/wip/cli-question-audit @ 23d929403, docs/proposals/CLI_QUESTION_AUDIT.md: 73 legacy questions, 40 covered, 3 dropped, 3 missing, 27 partial; urgent U1-U13). Read it. Delete .cli-input/ at the end.
+
+Placements (coordinator's, from the audit):
+- U1-U4, U7 and U12 belong to contract C9 at A2i, before the facts schema freezes.
+- U5 (refusals name their stage; a rule for failures after admission), U11 (generated code records its generating rule), U13 (every BIR instruction carries its origin) and the IR text printers (U8) belong in B0.
+- The debug bundle and one build record belong in B0/B1 under R-0503.
+- U9 (obligations exported as Lean propositions) and U10 (subject binding) are due at slice 8.
+- The why, trust-edge, layout, generic-instance, traceability, proof-dependency and fact-kind views are placed with their constructs (slices 5, 9, 11; use the audit's text for which view goes where).
+
+Do it compactly: R-0646 becomes "The CLI question audit's placements" (owner wip/cli-question-audit @ 23d929403), done-when listing the above placements by U-number with one short phrase each; Home: spec (C9 identities) and tooling (the front end, BIR, printers, facts views); Gate: each placed item gets its slice's conformance or golden control, and an urgent item U1-U13 without a placement fails the audit. Add R-0646 to the A2i and B0 queue rows' task lists. Where R-0503's row exists, add a short clause that it covers the debug bundle and one build record (B0/B1), citing R-0646. Do not add new R-IDs beyond R-0646.
+
+Open owner questions: append to the "### Open owner questions" section, as questions only (no answers encoded, no picks since none exist yet), each with source "wip/cli-question-audit @ 23d929403, docs/proposals/CLI_QUESTION_AUDIT.md" and the note "a three-model round with options and picks comes before the owner (R-0641)": U6 front-end recovery after a failure; an exit-code scheme for build/facts/diff plus a check-only mode; trace/emit/run/interp/help commands; fmt --check/--write/--stdin; agent feature discovery; a proof-floor policy for user contracts. Use the audit's wording where it states these.
+
+Update the changelog fragment's R-0646 sentence accordingly. When done print git diff --stat and a short summary.

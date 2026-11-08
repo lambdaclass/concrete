@@ -1,0 +1,2 @@
+
+ROUND 2. This is draft 2. Section 7 lists how round-1 findings (from Codex, Kimi and agy) were applied, and three disputed items with reasons. Check that (a) each round-1 finding is really fixed, (b) the fixes introduced no new error, and (c) for each disputed item, whether you accept the reason (say ACCEPT-DISPUTE or REJECT-DISPUTE with why). Report only findings that remain or are new; do not repeat fixed ones.

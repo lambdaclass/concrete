@@ -1,0 +1,8 @@
+You are the writer for one rebase with a known conflict. Repository: current directory. Do not push, do not run nix. Use `git -c core.hooksPath=.githooks` for committing git commands; set GIT_EDITOR=true.
+1. git checkout -B wip/roadmap-sweep-r 95d808c792c1cbf6e440e25e813a4d3370ba5c93
+2. git rebase --onto wip/record-signoffs-r 0b9d3cfa3498dedd42a4ab819e0d7f5ef2f682e5
+   It conflicts in ROADMAP.md, in one hunk covering the adjacent rows R-0625, R-0622 and R-0620. Resolve row by row:
+   - R-0625 and R-0620: take the sweep's version (the 95d808c79 side) exactly.
+   - R-0622: take the HEAD side (wip/record-signoffs-r) exactly; the sweep did not change R-0622 (verify: `git show 0b9d3cfa3:ROADMAP.md | grep '^| R-0622'` equals `git show 95d808c79:ROADMAP.md | grep '^| R-0622'`). If the sweep did change R-0622, STOP and report instead.
+   Remove all markers; if any other hunk or file conflicts, STOP (`git rebase --abort`) and report it. `git add ROADMAP.md && git rebase --continue`.
+3. Print git log --oneline -3 and `git diff wip/record-signoffs-r HEAD --stat`.

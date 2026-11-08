@@ -1,0 +1,20 @@
+**Blockers:** None. Draft 3 resolves all round-2 semantic, proof-adequacy, and decided-row discrepancies (`OD106`/`ARITH-10` `OutOfRange`, `Q2.3`/`Q3.8` destruction orders, `C4` hybrid materialization/padding/decode laws, `C8`/Section 3 infinite-prefix refinement, and `P4` per-run observation refinement).
+
+**Owner Question Choices:**
+- **1:** `recommend` (approve C1–C10 interface/law boundary, freeze after proofs/tests/review)
+- **2:** `recommend` (hybrid structured-place + byte-block state)
+- **3:** `recommend` (read-only target profile abstraction preserving existing 64-bit constants)
+- **4:** `recommend` (defer compact tags; retain `i32` tags for now)
+- **5:** `c` (no niches permanently)
+- **6:** `recommend` (proof-gated release-context erasure)
+- **7:** `a` (target-sized `usize`, or `c` if `Q3.5` `u64` semantics are kept; choosing `a` per prior preference)
+- **8:** `recommend` (keep `R-0505` later closure and `Q8.1` conditional endpoint)
+- **9:** `runner-up` (approve trap constructor inventory and spellings now)
+- **10:** `recommend` (1-based byte columns, tabs = 1 byte)
+- **11:** `recommend` (defer UTF-8 failure classification to text slice contracts)
+- **14:** `recommend` (defer `Entropy` shape and ending contract to slice 6)
+- **15:** `recommend` (write SPARK invariant exposure spec before freeze, defer source syntax to slice 17)
+- **16:** `recommend` (lawful typed registry extensions with exhaustive selected coverage)
+- **17:** `recommend` (per-native-trace refinement check against allowed Core observations with exact equality when deterministic)
+
+ANSWER: BLOCKERS=none; CHOICES=1:recommend,2:recommend,3:recommend,4:recommend,5:c,6:recommend,7:a,8:recommend,9:runner-up,10:recommend,11:recommend,14:recommend,15:recommend,16:recommend,17:recommend

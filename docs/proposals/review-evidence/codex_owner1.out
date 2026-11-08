@@ -1,0 +1,2587 @@
+Reading additional input from stdin...
+OpenAI Codex v0.166.0
+--------
+workdir: /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/owner-review1
+model: gpt-6.1-sol
+provider: openai
+approval: never
+sandbox: danger-full-access
+reasoning effort: none
+reasoning summaries: none
+session id: 01a1b8d6-795b-7293-afc0-ea14e4d8b295
+--------
+user
+Review of ./DELTA.diff in this copy of the Concrete repository (slice 0, a provisional compiler in Lean 4.34.1; LCB = the Lean compiler backend dependency). Three commits implementing owner decisions of 2026-11-08:
+1. Gates: UBSan dropped (it instruments C in clang's front end, so it checks nothing on LLVM IR input; ASan stays); every slice-0 gate time bound now goes through bounded_run (scripts/checks/lib/bounded.sh) instead of GNU timeout (slice0_common.sh `bounded`, slice0_repro.sh); a report-only compile-time table (compile_times.tsv: emit and native wall-clock ms next to their budgets).
+2. The LCB backend contract made complete: LCB.emit : Program -> Except String (Source.Function x SiteTable) (a refused adaptation produces no artifact), LCB.artifact builds only from a successful emit; theorems Proof.emit_ok, emit_correct, artifact_of_emit_error, artifact_correct; the emitter (scripts/checks/slice0_bir.lean) goes through LCB.emit; premise P_adapter retired from the registry (Concrete/Premises.lean), README and the trusted-base golden. The Lean builds with warningAsError on the CI server.
+3. aarch64-macos stack run check under Apple's LLDB (scripts/checks/lib/stack_measure_lldb.py, wired in slice0_artifacts.sh; flake.nix names /usr/bin/lldb on darwin). It has not yet run on macOS (CI will run it).
+Check correctness and fail-closed behaviour: do the theorems state what is claimed (an error produces no artifact, success implies correctness), is there any artifact path that bypasses emit, does bounded_run preserve each gate's semantics (exit codes, stdin, output files, the INCOMPLETE distinction), does the LLDB script measure correctly and fail closed (stop reasons, return through the link register, exit status, ASLR, stdio), and are docs consistent. Do not modify files. Verdict ACCEPT / ACCEPT-WITH-CHANGES / REJECT, findings with file:line, each marked as a real defect or a preference.
+codex
+I’ll read the diff and relevant code, then check the proof claims, timeout semantics, and LLDB failure paths. I won’t modify files.
+exec
+/bin/bash -lc 'cat DELTA.diff' in /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/owner-review1
+ succeeded in 0ms:
+diff --git a/Concrete/Backend/LCB.lean b/Concrete/Backend/LCB.lean
+index 4b1ad6d4e..18a40c138 100644
+--- a/Concrete/Backend/LCB.lean
++++ b/Concrete/Backend/LCB.lean
+@@ -10,8 +10,9 @@ import LeanCompilerBackend.AArch64
+ PROVISIONAL (slice 0). The adapter turns `main`'s body into a function of LCB's verified source
+ profile (`LeanCompilerBackend.Verified.Source`, `ssa-int-v2`: integer operations, comparisons,
+ branches and phis, no calls, memory or traps), returning the result word. Its correctness against
+-LCB's own semantics, `adapter_correct`, is the first backend proof target; until it is proved it is
+-premise `P_adapter` (`Concrete/README.md`).
++LCB's own semantics is proved: `Proof.adapter_correct` for an accepted program, and the complete
++backend contract `Proof.emit_correct` / `Proof.artifact_correct` (a refused adaptation produces no
++artifact), which retired premise `P_adapter` (`Concrete/README.md`).
+ 
+ Representation: an integer of type `t` is the 32-bit word `BitVec.ofInt 32 v`; a flag is the word
+ 0 or 1. Slice 0's profile covers the types of at most 16 bits, whose exact results fit a word:
+@@ -188,6 +189,14 @@ def adapt (p : Program) : Except String Source.Function := do
+   return { resultWidth := .word, parameters := #[],
+            valueWidths := Array.replicate (valueCount p) .word, blocks := blocks.toArray }
+ 
++/-- The LCB backend's emit: the adapted body paired with the program's site table (the table that
++decodes the body's result is part of the emitted artifact), or the adapter's refusal, in which case
++no artifact exists (`artifact` and the emitter build only from `.ok`). `Proof.emit_correct` and
++`Proof.artifact_correct` are the backend contract: no premise. -/
++def emit (p : Program) : Except String (Source.Function × SiteTable) := do
++  let f ← adapt p
++  return (f, p.sites)
++
+ /-! ## Assembly, in process (inside `P_toolchain[lcb]`) -/
+ 
+ /-- The targets the gate runs LCB's output on. -/
+@@ -221,6 +230,11 @@ def assemble (target : Target) (f : Source.Function) : Except String String :=
+     | .x86_64Linux => LeanCompilerBackend.AMD64.emitModuleValidated m false false
+     | _ => LeanCompilerBackend.AArch64.emitModuleValidated m false false
+ 
++/-- The LCB body artifact for `target`: the assembly of a successful `emit`, or its refusal. -/
++def artifact (target : Target) (p : Program) : Except String String := do
++  let (f, _) ← emit p
++  assemble target f
++
+ /-! ## `adapter_correct`, value level
+ 
+ The first layer of the adapter proof: each BIR instruction's expansion computes, in LCB's 32-bit
+@@ -1993,6 +2007,44 @@ theorem adapter_correct {p : Program} (hwf : WF p) {f : Source.Function}
+     | diverges => exact hb.symm
+     | stuck => exact (hr.2 hd).elim
+ 
++theorem emit_ok {p : Program} {f : Source.Function} {tbl : SiteTable}
++    (h : emit p = .ok (f, tbl)) : adapt p = .ok f ∧ tbl = p.sites := by
++  unfold emit at h
++  cases ha : adapt p with
++  | error e => rw [ha] at h; cases h
++  | ok g =>
++    rw [ha] at h
++    cases h
++    exact ⟨rfl, rfl⟩
++
++/-- **The LCB backend contract, complete.** A refused adaptation emits nothing (`emit` is
++`.error`); a successful one emits a body whose every result, under LCB's own semantics, decodes
++with the emitted site table to the BIR behaviour. Retires `P_adapter`. -/
++theorem emit_correct {p : Program} (hwf : WF p) {f : Source.Function} {tbl : SiteTable}
++    (h : emit p = .ok (f, tbl)) (r : BodyResult) (hr : bodyResult f r) :
++    r.behaviour tbl = behaviour p := by
++  obtain ⟨ha, rfl⟩ := emit_ok h
++  exact adapter_correct hwf ha r hr
++
++/-- An adapter refusal produces no artifact, for every target. -/
++theorem artifact_of_emit_error {p : Program} {e : String} (h : emit p = .error e) (t : Target) :
++    artifact t p = .error e := by
++  unfold artifact
++  rw [h]
++  rfl
++
++/-- Every artifact comes from a successful `emit` whose body is correct. -/
++theorem artifact_correct {p : Program} (hwf : WF p) {t : Target} {s : String}
++    (h : artifact t p = .ok s) : ∃ f tbl, emit p = .ok (f, tbl) ∧ assemble t f = .ok s ∧
++      ∀ r, bodyResult f r → r.behaviour tbl = behaviour p := by
++  unfold artifact at h
++  cases he : emit p with
++  | error e => rw [he] at h; cases h
++  | ok ft =>
++    obtain ⟨f, tbl⟩ := ft
++    rw [he] at h
++    exact ⟨f, tbl, rfl, h, emit_correct hwf he⟩
++
+ end Proof
+ 
+ /-! ## The QBE debug dump (not on the build path) -/
+diff --git a/Concrete/Premises.lean b/Concrete/Premises.lean
+index d1b6951ee..1b6d48abb 100644
+--- a/Concrete/Premises.lean
++++ b/Concrete/Premises.lean
+@@ -40,9 +40,6 @@ def all : List Premise := [
+     "every tree the parser returns for a token list is one the grammar derives from it"⟩,
+   ⟨"P_print", .implementation, "an LLVM-IR semantics; not planned for slice 0",
+     "the printed LLVM text of a WF BIR means at most the BIR behaviour, encoded"⟩,
+-  ⟨"P_adapter", .implementation,
+-    "`adapter_correct` (proved for accepted programs), once `emit` represents adaptation failure (or the contract is restricted to accepted programs) and the theorem fills `NativePremises lcb`",
+-    "the adapted LCB function of a WF BIR means at most the BIR behaviour, encoded"⟩,
+   ⟨"P_toolchain[llvm]", .toolchain, "not planned",
+     "every result the linked LLVM body produces is one its text means"⟩,
+   ⟨"P_toolchain[lcb]", .toolchain, "LCB's own proofs (C01–C03 and beyond)",
+@@ -62,7 +59,10 @@ def theorems : List Lean.Name := [
+   ``Concrete.BIR.decode_encode,
+   ``Concrete.BIR.run_progress,
+   ``Concrete.BIR.behaviour_diverges_iff,
+-  ``Concrete.Backend.LCB.Proof.adapter_correct
++  ``Concrete.Backend.LCB.Proof.adapter_correct,
++  ``Concrete.Backend.LCB.Proof.emit_correct,
++  ``Concrete.Backend.LCB.Proof.artifact_of_emit_error,
++  ``Concrete.Backend.LCB.Proof.artifact_correct
+ ]
+ 
+ /-- The premise's row in Concrete/README.md's open-premise table (a generated view). -/
+diff --git a/Concrete/README.md b/Concrete/README.md
+index d77bb9e5c..7a903d02f 100644
+--- a/Concrete/README.md
++++ b/Concrete/README.md
+@@ -45,8 +45,8 @@ Memory CFG  (`out.mem`)
+ BIR  (`out.bir`)  ── designed for both backends from the start
+   ├───────────────────────────────────────────┐
+   │ print   Backend/LLVM.lean                  │ adapt   Backend/LCB.lean
+-  ▼ (unverified: premise P_print)              ▼ (first backend proof target: adapter_correct
+-.ll text  (`out.ll`)                           │  against LCB's imported semantics; P_adapter until proved)
++  ▼ (unverified: premise P_print)              ▼ (proved: emit_correct against LCB's imported
++.ll text  (`out.ll`)                           │  semantics; a refused adaptation emits nothing)
+   │ clang/llc, link                          LCB `Source.Function` value (`out.lcb`), handed
+   │ (premise P_toolchain[llvm])                │ to LCB IN PROCESS (no text on this path);
+   │                                            │ LCB lowering + assembler + link
+@@ -106,7 +106,7 @@ Every BIR construct has a direct LLVM spelling (`@llvm.uadd.with.overflow.i8`) a
+ 
+ The **LLVM printer** is unverified and stays a premise (`P_print`) until an LLVM-IR semantics exists.
+ 
+-The **BIR → LCB-IR adapter** is the first backend proof target. `adapter_correct` states that the adapter's output, under **LCB's own semantics** (`LeanCompilerBackend.Verified.Source`, the `ssa-int-v2` profile, imported and never restated), has the BIR behaviour. It is proved (`Proof.adapter_correct`) for every WF program the adapter accepts (`adapt p = .ok f`; the adapter refuses the rest, so no artifact exists for them). It supplies semantic preservation for successful adaptation; `P_adapter` stays in the premise list until the backend contract is resolved: `lcb`'s `emit` must represent adaptation failure (`adapt` returns `Except String Source.Function`) or the contract must be restricted to accepted programs, and the theorem composed into `NativePremises lcb`. The trusted-base golden (gate 9) then records the retirement.
++The **BIR → LCB-IR adapter** is the first backend proof target. `adapter_correct` states that the adapter's output, under **LCB's own semantics** (`LeanCompilerBackend.Verified.Source`, the `ssa-int-v2` profile, imported and never restated), has the BIR behaviour. It is proved (`Proof.adapter_correct`) for every WF program the adapter accepts (`adapt p = .ok f`). The backend contract is complete (owner, 2026-11-08): `LCB.emit : Program → Except String (Source.Function × SiteTable)` represents adaptation failure, `LCB.artifact` builds only from a successful `emit`, and `Proof.emit_correct` (success implies correctness), `Proof.artifact_of_emit_error` (a refusal produces no artifact, for every target) and `Proof.artifact_correct` (every artifact comes from a correct `emit`) state it. `P_adapter` is retired; the trusted-base golden (gate 9) records it.
+ 
+ The adapter's output is handed to LCB **in process**, as the value: on `aarch64-macos` through LCB's verified first path (`Verified.compileFunction`), on the Linux targets through LCB's compatibility backends (`Verified.reify`, then `AMD64`/`AArch64.emitModuleValidated`). No printer or importer sits between the adapter and LCB. The QBE text of the body is a debug dump only. The gate also runs the first path's admission on every example on every host.
+ 
+@@ -117,6 +117,7 @@ The adapter's output is handed to LCB **in process**, as the value: on `aarch64-
+    - *Uniqueness*: `hasBehavior_unique` (from LCB's `step_deterministic`): a function has at most one `Source.HasBehavior` on given arguments (two returns return the same value; a return excludes divergence).
+    - *Bridge*: `adapter_correct_behaviour`: the adapted body returns the word `w` with `behaviour p = decode p.sites w` (by `decode_encode`, which keeps the site lookup and the trap kind), or diverges exactly when BIR diverges.
+    - **`adapter_correct`**: `WF p → adapt p = .ok f → bodyResult f r → r.behaviour p.sites = behaviour p`, with `bodyResult` defined in `Backend/LCB.lean` as below. Axioms: `propext`, `Classical.choice`, `Quot.sound`.
++   - **`emit_correct`**: `WF p → emit p = .ok (f, tbl) → bodyResult f r → r.behaviour tbl = behaviour p`, with `artifact_of_emit_error` and `artifact_correct` for the artifact (no premise).
+    - *Adapter domain*: WF alone does not give `adapt p = .ok f` (WF admits `i32`/`u32`/64-bit instructions, which slice 0's adapter rejects); the statement takes the adapter's acceptance as a hypothesis, and widening the domain is LCB's 32↔64 work (wire version 3).
+ 3. *Blocks*: `execInsts` against those steps; `ret` and `trap` against LCB's `returned`; `br`/`condbr` against `transfer`: the target exists, each phi has exactly one arm from this predecessor (WF's `t ≠ e`), destinations are distinct (distinct registers), and all arms are read from the OLD environment before any destination is written, which is BIR's `enter` (all arguments evaluated before binding), including loop-carried swaps; the new state is at position 0.
+ 4. *Runs*: under `WF p` and `adapt p = .ok f`, `Source.initial f #[] = .ok s₀` (entry block exists with no phis, no parameters, an empty environment of size `valueCount p`); then `run p fuel = exited c` or `trapped s` gives `HasBehavior f #[] (.returned (word (encode o)))`. Divergence: each BIR block transition is at least one LCB `Step` (BIR fuel counts blocks, LCB counts instructions and terminators), so BIR running out of fuel at every fuel gives arbitrarily long LCB prefixes, i.e. `HasBehavior f #[] .diverges`. BIR progress (a WF program never gets stuck) is needed only to make exit, trap and divergence exhaustive.
+@@ -270,19 +271,20 @@ def BodyResult.behaviour (tbl : SiteTable) : BodyResult → Behaviour
+   | .returns w => decode tbl w | .diverges => .diverges | .stuck => .stuck
+ -- Everywhere below, `r.behaviour` abbreviates `r.behaviour b.sites` for the BIR `b` concerned.
+ 
+-/-- A backend: the total Lean function from BIR to the body text a native toolchain consumes, and
+-    what that text means as a `BodyResult`. For LCB, `Means` is DEFINED from LCB's imported
+-    semantics, so the emit obligation is a theorem target. For LLVM it is a parameter (a premise). -/
++/-- A backend: the Lean function from BIR to the body text a native toolchain consumes, or its
++    refusal (then no artifact exists), and what that text means as a `BodyResult`. For LCB,
++    `Means` is DEFINED from LCB's imported semantics, so the emit obligation is a theorem
++    (`emit_correct`). For LLVM it is a parameter (a premise). -/
+ structure Backend where
+   Text : Type
+-  emit : BIR.Program → Text
++  emit : BIR.Program → Except String Text
+   Means : Text → BodyResult → Prop
+ 
+-def llvm (M : String → BodyResult → Prop) : Backend := ⟨String, LLVM.print, M⟩
++def llvm (M : String → BodyResult → Prop) : Backend := ⟨String, fun b => .ok (LLVM.print b), M⟩
+ /-- The emitted LCB text is the adapted body PAIRED with its site table, so the table that
+     decodes the result is part of the emitted artifact. (The LLVM text already contains its
+     table, and printer injectivity covers it.) -/
+-def lcb : Backend := ⟨LCB.Source.Function × SiteTable, fun b => (LCB.adapt b, b.sites),
++def lcb : Backend := ⟨LCB.Source.Function × SiteTable, LCB.emit,
+   fun (f, _) r => LCB.bodyResult f r⟩
+ /-- From LCB's own source semantics (`LeanCompilerBackend.Verified.Source`, imported, never
+     restated), with no arguments: `returns w` iff `Source.HasBehavior f #[] (.returned (.word w))`,
+@@ -302,29 +304,28 @@ structure Native (B : Backend) where
+     signals, ptrace and rlimits below `stackBytes`, and requires fd 2 to be open, writable and
+     not to block forever. -/
+ structure NativePremises (B : Backend) (N : Native B) (T : TargetProfile) : Prop where
+-  /-- emit (implementation): the body text means at most the BIR behaviour, encoded.
+-      LLVM: premise P_print. LCB: premise P_adapter until `adapter_correct` is proved, after
+-      which this field is filled by the theorem and the premise is deleted. -/
+-  emit : ∀ b, b.WF → ∀ r, B.Means (B.emit b) r → r.behaviour = BIR.behaviour b
++  /-- emit (implementation): an emitted body text means at most the BIR behaviour, encoded.
++      LLVM: premise P_print. LCB: filled by `emit_correct` (no premise). -/
++  emit : ∀ b, b.WF → ∀ t r, B.emit b = .ok t → B.Means t r → r.behaviour = BIR.behaviour b
+   /-- P_toolchain[B] (toolchain): every result the linked body produces is one its text means.
+       LCB: LCB's own importer, lowering, assembler and linker, i.e. its named trust boundaries
+       (`docs/SEMANTICS.md`, "Target and environment assumptions"). -/
+-  toolchain : ∀ b img r, b.WF → N.Built T (B.emit b) img → N.BodyRuns T img r → B.Means (B.emit b) r
++  toolchain : ∀ b t img r, b.WF → B.emit b = .ok t → N.Built T t img → N.BodyRuns T img r → B.Means t r
+   /-- P_rt (implementation): the runtime entry decodes. A launch whose body returns `w` has the
+       behaviour `decode w`: it exits with w below 256; otherwise it writes the whole trap line to
+       fd 2 (looping on partial writes, ignoring write errors) and then exits 134 unconditionally.
+       A body that diverges gives a launch that diverges. The trap line's presence also relies on
+       the admitted-launch fd-2 condition, which belongs to P_launch, not here. -/
+-  rt : ∀ b img β, b.WF → N.Built T (B.emit b) img → N.Runs T img β → β ≠ .killed →
++  rt : ∀ b t img β, b.WF → B.emit b = .ok t → N.Built T t img → N.Runs T img β → β ≠ .killed →
+     ∃ r, N.BodyRuns T img r ∧ β = r.behaviour
+   /-- P_launch (environment, resources): an admitted launch of an image built from a WF BIR
+       within the profile's frame bound is never killed (stack, signals), and fd 2 accepts the
+       trap line. -/
+-  launch : ∀ b img β, b.WF → b.frameSlots ≤ T.maxSlots →
+-    N.Built T (B.emit b) img → N.Runs T img β → β ≠ .killed
++  launch : ∀ b t img β, b.WF → b.frameSlots ≤ T.maxSlots →
++    B.emit b = .ok t → N.Built T t img → N.Runs T img β → β ≠ .killed
+   /-- P_live (environment): an admitted launch happens and has a behaviour (maximal: a run that
+       never ends has behaviour `diverges`). -/
+-  live : ∀ b img, b.WF → N.Built T (B.emit b) img → ∃ β, N.Runs T img β
++  live : ∀ b t img, b.WF → B.emit b = .ok t → N.Built T t img → ∃ β, N.Runs T img β
+ ```
+ 
+ Every premise is used in the composition:
+@@ -343,7 +344,6 @@ There are two target profiles: `x86_64-linux` and `aarch64-macos` (LCB's first n
+ | P_lex | implementation | `lex_correct` |
+ | P_parse | implementation | the generic table-parser theorem |
+ | P_print | implementation | an LLVM-IR semantics; not planned for slice 0 |
+-| P_adapter | implementation | `adapter_correct` (proved for accepted programs), once `emit` represents adaptation failure (or the contract is restricted to accepted programs) and the theorem fills `NativePremises lcb` |
+ | P_toolchain[llvm] | toolchain | not planned |
+ | P_toolchain[lcb] | toolchain | LCB's own proofs (C01–C03 and beyond) |
+ | P_rt | implementation | a proof of the decoding entry against a libc model; not planned for slice 0 |
+@@ -374,7 +374,7 @@ structure Output where
+ /-- One theorem for both backends: `B` is `llvm _` or `lcb`. -/
+ theorem compile_correct (F : FrontendPremises) {B N T} (P : NativePremises B N T)
+     {src : ByteArray} {out : Output} {img : N.Image}
+-    (hc : compile T src = .ok out) (hb : N.Built T (B.emit out.bir) img) :
++    (hc : compile T src = .ok out) (he : B.emit out.bir = .ok t) (hb : N.Built T t img) :
+     Surface0.Denotes src out.p ∧ Fragment.core s0 out.p ∧ Checked out.p ∧
+     ∃ c, c < 256 ∧ run out.p (Core.fuel out.p) = .exit c ∧
+       (∃ β, N.Runs T img β) ∧ ∀ β, N.Runs T img β → β = .exited c
+@@ -392,11 +392,11 @@ theorem compile_correct (F : FrontendPremises) {B N T} (P : NativePremises B N T
+ 5. `admit_tokens_valid : Checked p → TokensValid p (admit p)`. The empty token set is valid for any well-scoped program.
+ 6. `lower_wf`, and `lower_correct : WellScoped p → TokensValid p t → MIR.behaviour (lower p t) = Core.behaviour p`. This holds for every well-scoped program with valid tokens, checked or not, so `200 + 56` with no tokens preserves `trapped .arithmeticOverflow`. The trap path is real.
+ 7. `memory_wf` and `memory_correct : m.WF → Mem.behaviour (memory m) = MIR.behaviour m`. Then `ssa_wf` and `ssa_correct : g.WF → BIR.behaviour (ssa g) = Mem.behaviour g`.
+-8. `P.launch` excludes `killed`. `P.rt` gives a body result `r` with `β = r.behaviour`. `P.toolchain` gives `B.Means (B.emit out.bir) r`, and `P.emit` gives `r.behaviour = BIR.behaviour out.bir = .exited c`. `P.live` gives existence.
++8. `P.launch` excludes `killed`. `P.rt` gives a body result `r` with `β = r.behaviour`. `P.toolchain` gives `B.Means t r`, and `P.emit` gives `r.behaviour = BIR.behaviour out.bir = .exited c`. `P.live` gives existence.
+ 
+ **Supporting theorems:**
+ - `addOvf_correct`: for arbitrary `u8` operands, the result is `(a+b) % 256` and the flag is `a+b ≥ 256`.
+-- `adapter_correct : b.WF → LCB.adapt b = .ok f → LCB.bodyResult f r → r.behaviour b.sites = BIR.behaviour b` (proved, `Backend/LCB.lean`, for programs the adapter accepts; composing it into `emit` needs the contract change above). It is proved over all WF BIR the adapter accepts, overflow included, against LCB's **raw** `Source.Function` semantics (`LeanCompilerBackend/Verified/Source.lean`, imported, never restated). Once the contract change lands, it fills `NativePremises lcb`'s `emit` field.
++- `adapter_correct : b.WF → LCB.adapt b = .ok f → LCB.bodyResult f r → r.behaviour b.sites = BIR.behaviour b` (proved, `Backend/LCB.lean`), over all WF BIR the adapter accepts, overflow included, against LCB's **raw** `Source.Function` semantics (`LeanCompilerBackend/Verified/Source.lean`, imported, never restated). `emit_correct` lifts it to `LCB.emit` and fills `NativePremises lcb`'s `emit` field.
+ - `adapt_admitted : compile T src = .ok out → LCB.admit (LCB.adapt out.bir) = .ok _`. It is separate from semantic preservation and uses LCB's own admission function, so it covers every profile check: SSA and dominance validation, reachability of all blocks, exact widths, supported operations only, at most 64 blocks, 480 definitions and the frame bound. It is proved, or, until then, checked for each compilation by `decide` in the certificate.
+ - `lower_emits_check`: every MIR add without a valid discharged-evidence token is followed by a branch on its flag to a trap site of kind `arithmeticOverflow`, with that add's origin.
+ - `denotes_behaviour_det`: two denotations of the same `src` have the same `Core.behaviour`. This is stated over behaviour, not at a fixed fuel.
+@@ -405,7 +405,7 @@ theorem compile_correct (F : FrontendPremises) {B N T} (P : NativePremises B N T
+ 
+ ```lean
+ theorem answer_correct (F : FrontendPremises) (P : NativePremises B N T₀)
+-    (hb : N.Built T₀ (B.emit answerOut.bir) img) : (∃ β, N.Runs T₀ img β) ∧ ∀ β, N.Runs T₀ img β → β = .exited 42
++    (he : B.emit answerOut.bir = .ok t) (hb : N.Built T₀ t img) : (∃ β, N.Runs T₀ img β) ∧ ∀ β, N.Runs T₀ img β → β = .exited 42
+ ```
+ 
+ **Non-vacuity, one witness per layer:**
+@@ -425,7 +425,7 @@ theorem answer_correct (F : FrontendPremises) (P : NativePremises B N T₀)
+    - `BodyRuns T (g, _) := LCB.bodyResult g`;
+    - `Runs T (g, tbl) β := ∃ r, LCB.bodyResult g r ∧ β = r.behaviour tbl`.
+ 
+-   Because `emit b = (adapt b, b.sites)`, a built image carries exactly `b.sites`, so `rt` holds by definition and no adapter injectivity is needed. `emit` is `adapter_correct`.
++   Because a successful `emit b` is `(f, b.sites)` (`Proof.emit_ok`), a built image carries exactly `b.sites`, so `rt` holds by definition and no adapter injectivity is needed. `emit` is `emit_correct`.
+ 
+    `live` holds because LCB's step relation is deterministic, so a run returns, faults or diverges. The witness follows from `adapter_correct` and lands with it.
+ 3. **Frontend premises:** these are claims about fixed code, not something a model can satisfy, so no model witness applies. They are discharged per compilation (next section), and universally once `lex_correct` and `parse_correct` land.
+@@ -530,7 +530,7 @@ Human output, JSON and future policies all render the same `Report`.
+ | Trusted / FFI / opaque (source) | `established`: none. |
+ | Trusted / FFI / opaque (artifact) | `notEstablished`: no link-map or symbol-inventory evidence yet. Behavioural premises can't establish this, because an observationally equal image may still contain foreign code. |
+ | Termination (source) | `established` (`slice0_exits`). |
+-| Termination (artifact) | `conditional`, on the backend's own premises: LLVM `P_print, P_toolchain[llvm], P_rt, P_launch, P_live`; LCB `P_adapter` (until `adapter_correct`), `P_toolchain[lcb], P_rt, P_launch, P_live`. |
++| Termination (artifact) | `conditional`, on the backend's own premises: LLVM `P_print, P_toolchain[llvm], P_rt, P_launch, P_live`; LCB `P_toolchain[lcb], P_rt, P_launch, P_live` (`emit` proved: `emit_correct`). |
+ | Recursion depth bound | `established`: 0, since there are no calls. |
+ | May block | `established`: no. |
+ | BIR frame slots (IR) | `established`: *n*. Reported as slots, never as bytes. |
+@@ -574,14 +574,14 @@ The CLI is `concrete facts FILE [FN]` and `concrete build FILE -o OUT` (owner, 2
+ 6. **Differential through the token-free lowering, both backends.** This covers overflow. Generated **well-scoped, unchecked** slice-0 programs over **arbitrary** `u8` operands, including `200 + 56`, take `lower q ∅ → memory → ssa`, so they have no tokens and no checker. Their Core `run` is compared with the LLVM path and the LCB path. Overflow must give exit 134 and the right site's trap line on fd 2, for both backends. This exercises token-aware lowering, Memory CFG and SSA, not only the backends.
+    A second leg compares generated BIR directly with both backends, to cover BIR shapes that lowering does not produce.
+ 
+-   An in-process leg also compares `BIR.behaviour b` with LCB's own evaluator on `adapt b`. That is the executable shadow of `adapter_correct` until it is proved.
++   An in-process leg also compares `BIR.behaviour b` with LCB's own evaluator on the emitted body, an executable cross-check of `emit_correct`.
+ 6a. **AArch64:** a GitHub-hosted AArch64 macOS job (`macos-15`) builds the LCB output for `aarch64-macos`, runs gates 4 and 6 there natively, and compares against Lean. LLVM-native also runs there, as a third cross-check. Gates 4 and 6 for x86-64 run on concrete-ci-2.
+ 7. **Certificates:** the kernel checks every acceptance and refusal certificate, with measured budgets.
+ 8. **Reproducibility** (implemented, `scripts/checks/slice0_repro.sh`): two independent builds give byte-identical outputs at every stage, on each target, and two independent Linux runners give identical manifests. See [Reproducible builds](#reproducible-builds-owner-2026-11-07).
+ 9. **Trusted base** (owner, 2026-11-07): a golden test that `concrete facts` prints exactly the spec's premise list, so a premise added, removed or reworded anywhere fails until the golden is updated with it. Implemented provisionally in `scripts/checks/slice0_trusted_base.sh`: until `concrete facts` exists, `scripts/checks/slice0_trusted_base.lean` prints `Premises.report`: the premise registry `Concrete/Premises.lean`, the sorted axioms of each headline theorem (`Premises.theorems`) and each axiom's type; the gate appends the Lean toolchain and the Lake pins, and the result must equal `tests/golden/slice0_trusted_base.txt` byte for byte. The README's open-premise table must equal the registry's rendering (`Premises.tableRow`). Controls cover the comparison, a failing printer, the axiom collection and a drifted table. The statements are text until `FrontendPremises` and `NativePremises` land as Lean structures; each entry then names its field.
+-10. **Sanitizers** (owner, 2026-11-07; ASan implemented in `scripts/checks/slice0_artifacts.sh`, UBSan **open**): every LLVM example also runs built with ASan and UBSan in CI, and must give the same observation with no sanitizer report. ASan instruments only functions marked `sanitize_address`, which clang's C front end adds and the printed IR lacks, so the sanitizer build adds it to every definition (`slice0_native.sh sanitize`); a control body with an out-of-bounds load must be reported. UBSan's checks are inserted by clang's C front end, so on IR input it links only its runtime and checks nothing: the UBSan half of this gate is not yet met. No runtime C is compiled in slice 0, and the LLVM-level undefined behaviour of the printed IR (poison, `unreachable`) stays P_print's; how to cover it (a UBSan-equivalent check of the IR, or a scope change) is an owner decision.
+-11. **Binary size** (owner, 2026-11-07; implemented, same script): the size of each example's executable (bytes and text size, pinned `llvm-size`), per backend and target, is recorded per run in `sizes.tsv`, uploaded with the job. Report-only: it never fails a run.
+-12. **Stack bound** (owner, 2026-11-07; implemented in the same script and `lib/stack_bound.py`, except the `aarch64-macos` run check, **open**): a stack-bound fact for each example, derived from the final artifact (the linked executable, not the IR) for both backends, and checked against a run. The analysis follows every path of the Concrete-owned code, instruction by instruction from an explicit set of modelled instructions, (`main`, `concrete_rt_write_all`, `concrete_body`) over the disassembly's control-flow graph, tracking the stack and frame pointers' depth below `main`'s entry and every byte addressed relative to them (so the red zone), and fails closed on anything it does not model (an instruction outside the set, another stack-pointer write, frame- or link-register writeback, an indirect branch or call, a stack pointer copied out, an indexed stack address, a stack read of bytes the function has not itself written on every path since its last call (so no stale saved frame pointer is ever loaded), a saved slot read other than by the modelled restore, two depths meeting, recursion, a call to a function neither owned nor a PLT/stub). The external calls (`write`, `_exit`, `abort`) are listed with the depth at their entry; their own use, and that `_exit` and `abort` do not return, are the libc premise. On x86-64 Linux the run check single-steps the owned code under the pinned gdb and requires the measured stack-pointer depth to be within the bound, for a complete run only (stopped first at `main`, back at each external call's return address, no signal, the expected exit status). On `aarch64-macos` the bound is derived but the run check is not yet implemented (no debugger in the pinned shell; LLDB from Xcode is the candidate). `stack.tsv` records bound, measurement and externals.
++10. **Sanitizers** (owner, 2026-11-07; UBSan dropped by the owner, 2026-11-08; implemented in `scripts/checks/slice0_artifacts.sh`): every LLVM example also runs built with ASan in CI, and must give the same observation with no sanitizer report. ASan instruments only functions marked `sanitize_address`, which clang's C front end adds and the printed IR lacks, so the sanitizer build adds it to every definition (`slice0_native.sh sanitize`); a control body with an out-of-bounds load must be reported. There is no UBSan leg: UBSan's checks are inserted by clang's C front end, so on LLVM IR input it checks nothing. No C is compiled in slice 0, and the LLVM-level undefined behaviour of the printed IR (poison, `unreachable`) stays P_print's.
++11. **Binary size** (owner, 2026-11-07; implemented, same script): the size of each example's executable (bytes and text size, pinned `llvm-size`), per backend and target, is recorded per run in `sizes.tsv`, uploaded with the job. Report-only: it never fails a run. **Compile time** (owner, 2026-11-08; same script, report-only): each example's emit step (the Lean emitter, Lean start-up included) and native step (clang and LCB's command line) in wall-clock milliseconds, next to its budget (the step's time bound), in `compile_times.tsv`.
++12. **Stack bound** (owner, 2026-11-07; implemented in the same script and `lib/stack_bound.py`; the `aarch64-macos` run check with LLDB, 2026-11-08): a stack-bound fact for each example, derived from the final artifact (the linked executable, not the IR) for both backends, and checked against a run. The analysis follows every path of the Concrete-owned code, instruction by instruction from an explicit set of modelled instructions, (`main`, `concrete_rt_write_all`, `concrete_body`) over the disassembly's control-flow graph, tracking the stack and frame pointers' depth below `main`'s entry and every byte addressed relative to them (so the red zone), and fails closed on anything it does not model (an instruction outside the set, another stack-pointer write, frame- or link-register writeback, an indirect branch or call, a stack pointer copied out, an indexed stack address, a stack read of bytes the function has not itself written on every path since its last call (so no stale saved frame pointer is ever loaded), a saved slot read other than by the modelled restore, two depths meeting, recursion, a call to a function neither owned nor a PLT/stub). The external calls (`write`, `_exit`, `abort`) are listed with the depth at their entry; their own use, and that `_exit` and `abort` do not return, are the libc premise. On x86-64 Linux the run check single-steps the owned code under the pinned gdb and requires the measured stack-pointer depth to be within the bound, for a complete run only (stopped first at `main`, back at each external call's return address, no signal, the expected exit status). On `aarch64-macos` the run check is the same, under Apple's LLDB (`/usr/bin/lldb`, `lib/stack_measure_lldb.py`; an external call's return address is the link register); LLDB is not pinned (Apple's signed debugserver is the only one allowed to attach), so its version is printed in the gate log. `stack.tsv` records bound, measurement and externals.
+ 
+ With the front end (owner, 2026-11-07): gate 5's random-program fuzzer compares the native executables with the Lean evaluator, and a JSON schema generated from the Lean types of the `facts` output has goldens. Each gate joins `required-checks.txt` when the compiler lands.
+ 
+@@ -624,7 +624,7 @@ These are internal. None blocks slice 0's correctness.
+ - **Retire premises:**
+   - `lex_correct` (P_lex);
+   - the generic table-parser theorem (P_parse);
+-  - `adapter_correct` (P_adapter, a slice-0 milestone);
++  - `adapter_correct` and `emit_correct` (P_adapter, retired 2026-11-08);
+   - a proof of the decoding entry against a libc model (P_rt).
+ - **P_toolchain[lcb]** is retired by LCB's own C01–C03 work. LCB's verified profile names Apple AArch64 as its intended target. The `x86_64-linux` executable goes through LCB's compatibility pipeline, inside P_toolchain[lcb], until LCB certifies that target.
+ - **Encoded result.** It works while LCB's verified profile has no calls, memory or traps. When it gains them, revisit the encoding: an external trap call, or a multi-function encoding.
+diff --git a/flake.nix b/flake.nix
+index aad6cd4f3..95463fdaf 100644
+--- a/flake.nix
++++ b/flake.nix
+@@ -126,11 +126,14 @@
+             # pinned here so the shell's general clang can move without changing their identity.
+             CONCRETE_SLICE0_CLANG = "${pkgs.llvmPackages_21.clang}/bin/clang";
+             # The artifact gates (scripts/checks/slice0_artifacts.sh) read the linked executables
+-            # with the same LLVM release's llvm-objdump and llvm-size, and on Linux measure a run
+-            # under gdb.
++            # with the same LLVM release's llvm-objdump and llvm-size, and measure a run under gdb
++            # (Linux, pinned) or LLDB (macOS: Apple's /usr/bin/lldb, whose signed debugserver is
++            # the only one allowed to attach; not pinned, its identity is recorded in the report).
+             CONCRETE_SLICE0_LLVM = "${pkgs.llvmPackages_21.llvm}/bin";
+           } // pkgs.lib.optionalAttrs pkgs.stdenv.isLinux {
+             CONCRETE_SLICE0_GDB = "${pkgs.gdb}/bin/gdb";
++          } // pkgs.lib.optionalAttrs pkgs.stdenv.isDarwin {
++            CONCRETE_SLICE0_LLDB = "/usr/bin/lldb";
+           } // gatesMarker);
+ 
+           # `nix develop .#gates` — what CI runs every gate step in: the gate userland, the marker,
+diff --git a/scripts/checks/lib/slice0_common.sh b/scripts/checks/lib/slice0_common.sh
+index 5e2fed536..7c71463f2 100644
+--- a/scripts/checks/lib/slice0_common.sh
++++ b/scripts/checks/lib/slice0_common.sh
+@@ -6,6 +6,7 @@
+ # a gate whose executables under test need no cap, slice0_artifacts.sh) and defines:
+ #   capped (a command prefix, an array): run under a 64 GiB address-space cap of its own, so
+ #     every build and analysis command is capped whatever the gate's cap;
++#   bounded SECS CMD...: CMD under capped and bounded_run (the gates' only time bound);
+ #   root, work (removed on exit), lcb, target, emitter (the Lean emitter command, an array);
+ #   observe EXE OUT SECS RETRY [MEM_MB [ENV...]]: run EXE under bounded_run (and limited_exec.sh
+ #     MEM_MB, default 1024) with ENV assignments; OUT.status (status or "incomplete"),
+@@ -27,7 +28,19 @@ source scripts/checks/lib/bounded.sh
+ source scripts/checks/lib/limits.sh
+ gate_limits "${SLICE0_GATE_MEM_GB:-64}" 40000
+ capped=(bash "$root/scripts/checks/lib/limited_exec.sh" 65536)
+-"${capped[@]}" timeout -k 30 1800 lake build Concrete lean-compiler-backend/lcb >/dev/null
++# bounded SECS CMD...: CMD under `capped`, through bounded_run (stdin /dev/null; a timeout is
++# re-run once with a larger budget; a second timeout writes no output, returns 124 and is reported
++# INCOMPLETE, never a pass).
++bounded() {
++  local secs=$1 rc=0
++  shift
++  bounded_run -i /dev/null "$secs" -- "${capped[@]}" "$@" || rc=$?
++  if [ "$rc" != 0 ] && bounded_is_incomplete "$rc"; then
++    echo "slice0: INCOMPLETE (timed out twice): $*" >&2
++  fi
++  return "$rc"
++}
++bounded 1800 lake build Concrete lean-compiler-backend/lcb >/dev/null
+ lcb="$root/.lake/packages/lean-compiler-backend/.lake/build/bin/lcb"
+ case "$(uname -s)-$(uname -m)" in
+   Linux-x86_64) target=x86_64-linux ;;
+@@ -35,7 +48,10 @@ case "$(uname -s)-$(uname -m)" in
+   Darwin-arm64) target=aarch64-macos ;;
+   *) echo "slice0: unsupported host $(uname -s)-$(uname -m)" >&2; exit 2 ;;
+ esac
+-emitter=("${capped[@]}" timeout -k 10 120 lake env lean --run scripts/checks/slice0_bir.lean)
++# The time bounds of the emit step (the Lean emitter) and the native step (slice0_native.sh).
++emit_secs=120
++native_secs=300
++emitter=(bounded "$emit_secs" lake env lean --run scripts/checks/slice0_bir.lean)
+ 
+ observe() {
+   local rc=0 mem=${5:-1024}
+diff --git a/scripts/checks/lib/stack_measure_lldb.py b/scripts/checks/lib/stack_measure_lldb.py
+new file mode 100644
+index 000000000..db139fbf8
+--- /dev/null
++++ b/scripts/checks/lib/stack_measure_lldb.py
+@@ -0,0 +1,118 @@
++# lldb --batch -o 'command script import stack_measure_lldb.py' (README gate 12, aarch64-macos).
++# PROVISIONAL.
++#
++# The LLDB counterpart of stack_measure.py (same contract, same environment: STACK_EXE, the
++# executable; STACK_RANGES "LO:HI,..." in link-time addresses, from stack_bound.py --ranges;
++# STACK_MAIN, main's LO; STACK_EXPECT, the expected exit status). It measures the stack depth one
++# complete run reaches, below the stack pointer at `main`'s entry, by single-stepping every
++# instruction of the Concrete-owned functions. An external function (entered by `bl`, so its
++# return address is in the link register) runs at full speed to that return address; its own use
++# is outside the bound, as in stack_bound.py, but the depth at its entry is measured. Once main has
++# returned, the rest runs freely.
++#
++# Fail closed: the measurement counts only for a run that stopped first at main's runtime address,
++# stopped after each external call exactly at its return address (or exited inside it), received
++# no signal, and exited normally with status STACK_EXPECT. Prints `measured N` and `steps N`, or
++# `error ...` (the gate fails on anything but a measurement).
++import os
++
++import lldb
++
++LIMIT = 2_000_000
++
++
++def measure(debugger):
++    exe = os.environ["STACK_EXE"]
++    ranges = [tuple(int(x, 16) for x in r.split(":")) for r in os.environ["STACK_RANGES"].split(",")]
++    main_lo = int(os.environ["STACK_MAIN"], 16)
++    expect = int(os.environ["STACK_EXPECT"])
++    debugger.SetAsync(False)
++    target = debugger.CreateTarget(exe)
++    if not target.IsValid():
++        raise RuntimeError(f"cannot load {exe}")
++    bp = target.BreakpointCreateByName("main", target.GetExecutable().GetFilename())
++    if bp.GetNumLocations() != 1:
++        raise RuntimeError(f"main has {bp.GetNumLocations()} breakpoint locations")
++    main_rt = bp.GetLocationAtIndex(0).GetLoadAddress()
++    info = lldb.SBLaunchInfo([])
++    info.SetLaunchFlags(lldb.eLaunchFlagDisableASLR)
++    for fd, flags in ((0, os.O_RDONLY), (1, os.O_WRONLY), (2, os.O_WRONLY)):
++        info.AddOpenFileAction(fd, "/dev/null", flags == os.O_RDONLY, flags != os.O_RDONLY)
++    err = lldb.SBError()
++    process = target.Launch(info, err)
++    if not err.Success() or not process.IsValid():
++        raise RuntimeError(f"launch failed: {err}")
++    try:
++        return run(process, target, bp, ranges, main_lo, main_rt, expect)
++    finally:
++        if process.GetState() not in (lldb.eStateExited, lldb.eStateDetached, lldb.eStateInvalid):
++            process.Kill()
++
++
++def check_live(process):
++    """True while the process is stopped (not exited); raises on a signal or another stop."""
++    state = process.GetState()
++    if state == lldb.eStateExited:
++        return False
++    if state != lldb.eStateStopped:
++        raise RuntimeError(f"unexpected process state {state}")
++    thread = process.GetSelectedThread()
++    if thread.GetStopReason() == lldb.eStopReasonSignal or thread.GetStopReason() == lldb.eStopReasonException:
++        raise RuntimeError(f"signal or exception: {thread.GetStopDescription(200)}")
++    return True
++
++
++def run(process, target, bp, ranges, main_lo, main_rt, expect):
++    if not check_live(process):
++        raise RuntimeError("exited before main")
++    thread = process.GetSelectedThread()
++    frame = thread.GetFrameAtIndex(0)
++    if frame.GetPC() != main_rt:
++        raise RuntimeError(f"first stop at {frame.GetPC():#x}, not main ({main_rt:#x})")
++    target.BreakpointDelete(bp.GetID())
++    offset = main_rt - main_lo
++    sp0 = frame.GetSP()
++    low, steps = sp0, 0
++
++    def owned(pc):
++        return any(lo + offset <= pc <= hi + offset for lo, hi in ranges)
++
++    while check_live(process):
++        thread = process.GetSelectedThread()
++        frame = thread.GetFrameAtIndex(0)
++        pc, sp = frame.GetPC(), frame.GetSP()
++        if sp > sp0:  # main has returned
++            process.Continue()
++            continue
++        low = min(low, sp)
++        if owned(pc):
++            thread.StepInstruction(False)
++            steps += 1
++            if steps > LIMIT:
++                raise RuntimeError(f"more than {LIMIT} steps")
++        else:
++            ret = frame.FindRegister("lr").GetValueAsUnsigned()
++            if not owned(ret):
++                raise RuntimeError(f"external code at {pc:#x} returns to {ret:#x}, outside the owned code")
++            tb = target.BreakpointCreateByAddress(ret)
++            tb.SetOneShot(True)
++            process.Continue()
++            if check_live(process) and process.GetSelectedThread().GetFrameAtIndex(0).GetPC() != ret:
++                raise RuntimeError(f"stopped at {process.GetSelectedThread().GetFrameAtIndex(0).GetPC():#x}, "
++                                   f"not the return address {ret:#x}")
++            target.BreakpointDelete(tb.GetID())
++    status = process.GetExitStatus()
++    if status != expect:
++        raise RuntimeError(f"exit status {status}, expected {expect}")
++    if steps == 0:
++        raise RuntimeError("no instruction stepped")
++    return sp0 - low, steps
++
++
++def __lldb_init_module(debugger, _dict):
++    try:
++        measured, steps = measure(debugger)
++        print(f"measured {measured}")
++        print(f"steps {steps}")
++    except Exception as e:  # noqa: BLE001 - every failure is reported, the gate fails closed
++        print(f"error {e}")
+diff --git a/scripts/checks/slice0_artifacts.sh b/scripts/checks/slice0_artifacts.sh
+index 28eb96724..d48420630 100644
+--- a/scripts/checks/slice0_artifacts.sh
++++ b/scripts/checks/slice0_artifacts.sh
+@@ -2,20 +2,24 @@
+ # Slice-0 artifact gates (PROVISIONAL, Concrete/README.md gates 10, 11 and 12), over every
+ # hand-written BIR example, on the executables slice0_native.sh links:
+ #
+-# 10. Sanitizers: the LLVM example also built with ASan and UBSan (slice0_native.sh sanitize: ASan
+-#     instruments the printed IR once every definition carries sanitize_address; UBSan's checks
+-#     come from clang's C front end, so on IR only its runtime is linked) must
++# 10. Sanitizers: the LLVM example also built with ASan (slice0_native.sh sanitize: ASan
++#     instruments the printed IR once every definition carries sanitize_address; no UBSan: its
++#     checks are inserted by clang's C front end, so on IR input it checks nothing) must
+ #     give the same observation as the BIR semantics (status, exact fd-2 bytes, empty fd 1), so no
+ #     sanitizer report. Its memory is bounded by ASan's hard_rss_limit_mb (the shadow reservation
+ #     rules out an address-space cap; every other command is capped, see SLICE0_GATE_MEM_GB). Control: a body with an out-of-bounds load must be reported.
+ # 11. Binary size (report-only, never fails on a size): bytes and text size of each executable,
+-#     per backend and target, in REPORT/sizes.tsv.
++#     per backend and target, in REPORT/sizes.tsv. Compile time (report-only, owner 2026-11-08):
++#     wall-clock milliseconds of each example's emit step (the Lean emitter: checks, LLVM print,
++#     LCB adaptation and in-process assembly, Lean start-up included) and native step (clang and
++#     LCB's command line, linking both executables), next to its budget (the step's time bound), in
++#     REPORT/compile_times.tsv.
+ # 12. Stack bound: lib/stack_bound.py derives, from the linked executable's disassembly, a bound on
+ #     the Concrete-owned stack below main's entry, covering every byte addressed relative to the
+ #     stack or frame pointer (so the red zone), with external libc calls listed with their entry
+-#     depth (their own use, and that _exit and abort do not return, are premises). On x86-64
+-#     Linux, a run under gdb (lib/stack_measure.py) must stay within it (the run measures the
+-#     stack pointer only). REPORT/stack.tsv. Controls: the analysis must refuse an unmodelled
++#     depth (their own use, and that _exit and abort do not return, are premises). A run under
++#     gdb (x86-64 Linux, lib/stack_measure.py) or LLDB (aarch64-macos, lib/stack_measure_lldb.py)
++#     must stay within it (the run measures the stack pointer only). REPORT/stack.tsv. Controls: the analysis must refuse an unmodelled
+ #     stack-pointer write, an indirect call, recursion, a call to an unknown function, two depths
+ #     meeting, a stack pointer used as a value or written through a partial register, a partial
+ #     frame-pointer write, an indexed stack address, a saved frame pointer popped into another
+@@ -39,26 +43,38 @@ SLICE0_GATE_MEM_GB=0
+ # shellcheck source=scripts/checks/lib/slice0_common.sh
+ source scripts/checks/lib/slice0_common.sh
+ : "${CONCRETE_SLICE0_LLVM:?run inside nix develop}"
+-objdump=("${capped[@]}" "$CONCRETE_SLICE0_LLVM/llvm-objdump" -d --no-show-raw-insn)
++objdump=(bounded 60 "$CONCRETE_SLICE0_LLVM/llvm-objdump" -d --no-show-raw-insn)
+ case "$target" in
+   x86_64-linux) arch=x86_64; objdump+=(--x86-asm-syntax=intel) ;;
+   aarch64-*) arch=aarch64 ;;
+ esac
+-gdb=
+-if [ "$target" = x86_64-linux ]; then gdb=${CONCRETE_SLICE0_GDB:?the x86-64 Linux shell pins gdb}; fi
++# The run check's debugger: gdb on x86-64 Linux, LLDB on aarch64-macos (none elsewhere).
++gdb= lldb=
++case "$target" in
++  x86_64-linux) gdb=${CONCRETE_SLICE0_GDB:?the x86-64 Linux shell pins gdb} ;;
++  aarch64-macos)
++    lldb=${CONCRETE_SLICE0_LLDB:?the macOS shell names lldb}
++    [ -x "$lldb" ] || { echo "slice0_artifacts: no LLDB at $lldb" >&2; exit 2; }
++    echo "lldb: $("$lldb" --version 2>&1 | head -c 200 | head -1)" ;;
++esac
++measuring=${gdb:-$lldb}
+ [ -n "$report" ] || report="$work/report"
+ mkdir -p "$report"
+ sizes="$report/sizes.tsv"
+ stack="$report/stack.tsv"
+ printf 'example\tbackend\ttarget\tbytes\ttext\n' >"$sizes"
++times="$report/compile_times.tsv"
++printf 'example\ttarget\temit_ms\temit_budget_ms\tnative_ms\tnative_budget_ms\n' >"$times"
++# now_ms: a monotonic clock in milliseconds (portable: BSD date has no %N).
++now_ms() { python3 -I -c 'import time; print(time.monotonic_ns() // 1000000)'; }
+ printf 'example\tbackend\ttarget\tbound\tmeasured\texternals\n' >"$stack"
+ # hard_rss_limit_mb and LeakSanitizer are Linux-only (ASan on Darwin refuses detect_leaks); on
+ # macOS RLIMIT_AS is not enforced either, so there the job's memory is the bound, as for all runs.
+ asan=abort_on_error=0:symbolize=0
+ [ "$(uname -s)" != Linux ] || asan="$asan:hard_rss_limit_mb=1024:detect_leaks=1"
+-san_env=("ASAN_OPTIONS=$asan" UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=0:symbolize=0)
++san_env=("ASAN_OPTIONS=$asan")
+ # stack_bound ARCH DISASM [--ranges]: the analysis, capped and bounded in time.
+-stack_bound() { "${capped[@]}" timeout -k 10 60 python3 -I "$root/scripts/checks/lib/stack_bound.py" "$@"; }
++stack_bound() { bounded 60 python3 -I "$root/scripts/checks/lib/stack_bound.py" "$@"; }
+ fail=0
+ examples=0
+ last_exe= last_analysis=
+@@ -66,21 +82,30 @@ last_exe= last_analysis=
+ # within MEASURED BOUND: the run stayed within the static bound (and actually ran).
+ within() { [ "$1" -gt 0 ] && [ "$1" -le "$2" ]; }
+ 
+-# measure EXE ANALYSIS EXPECT: the gdb run check's output (`measured N` or `error ...`), given the
+-# analysis output (its `range` lines) and the expected exit status.
++# measure EXE ANALYSIS EXPECT: the run check's output (`measured N` or `error ...`), given the
++# analysis output (its `range` lines) and the expected exit status: gdb (lib/stack_measure.py) or
++# LLDB (lib/stack_measure_lldb.py, the same contract; Apple's LLDB runs its own Python, so the
++# shell's Python variables are removed).
+ measure() {
+   local ranges main
+   ranges=$(awk '$1 == "range" {printf "%s%s:%s", sep, $3, $4; sep=","}' <<<"$2")
+   main=$(awk '$1 == "range" && $2 == "main" {print $3}' <<<"$2")
+-  STACK_RANGES=$ranges STACK_MAIN=$main STACK_EXPECT=$3 \
+-    "${capped[@]}" timeout -k 10 300 "$gdb" -batch -nx -x "$root/scripts/checks/lib/stack_measure.py" \
+-    "$1" 2>"$1.gdb.err" | awk '$1 == "measured" || $1 == "error" {print}' | cap_out || true
++  if [ -n "$gdb" ]; then
++    STACK_RANGES=$ranges STACK_MAIN=$main STACK_EXPECT=$3 \
++      bounded 300 "$gdb" -batch -nx -x "$root/scripts/checks/lib/stack_measure.py" \
++      "$1" 2>"$1.gdb.err" | awk '$1 == "measured" || $1 == "error" {print}' | cap_out || true
++  else
++    STACK_EXE=$1 STACK_RANGES=$ranges STACK_MAIN=$main STACK_EXPECT=$3 \
++      bounded 300 env -u PYTHONPATH -u PYTHONHOME "$lldb" --batch --no-lldbinit \
++      -o "command script import $root/scripts/checks/lib/stack_measure_lldb.py" \
++      2>"$1.gdb.err" | awk '$1 == "measured" || $1 == "error" {print}' | cap_out || true
++  fi
+ }
+ 
+ # stack_check NAME BACKEND EXE: derive the bound, measure a run where supported, record both.
+ stack_check() {
+   local name=$1 backend=$2 exe=$3 dis="$3.dis" out bound ext m measured=not-run
+-  if ! timeout -k 10 60 "${objdump[@]}" "$exe" >"$dis" 2>"$dis.err"; then
++  if ! "${objdump[@]}" "$exe" >"$dis" 2>"$dis.err"; then
+     echo "FAIL $name [$backend] stack: disassembly failed: $(head -c 300 "$dis.err")"; fail=1; return
+   fi
+   if ! out=$(stack_bound "$arch" "$dis" --ranges | cap_out); then
+@@ -88,7 +113,7 @@ stack_check() {
+   fi
+   bound=$(awk '$1 == "bound" {print $2}' <<<"$out")
+   ext=$(awk '$1 == "external" {printf "%s%s@%s", sep, $2, $3; sep=","}' <<<"$out")
+-  if [ -n "$gdb" ]; then
++  if [ -n "$measuring" ]; then
+     m=$(measure "$exe" "$out" "$(head -c 16 "$(dirname "$exe")/status")")
+     measured=$(awk '$1 == "measured" {print $2}' <<<"$m")
+     if [ -z "$measured" ] || ! within "$measured" "$bound"; then
+@@ -104,7 +129,7 @@ stack_check() {
+ size_report() { # size_report NAME BACKEND EXE
+   local bytes text
+   bytes=$(wc -c <"$3" | tr -d ' ')
+-  text=$("${capped[@]}" timeout -k 10 60 "$CONCRETE_SLICE0_LLVM/llvm-size" "$3" 2>/dev/null |
++  text=$(bounded 60 "$CONCRETE_SLICE0_LLVM/llvm-size" "$3" 2>/dev/null |
+     awk 'NR == 2 {print $1}' | cap_out) || true
+   printf '%s\t%s\t%s\t%s\t%s\n' "$1" "$2" "$target" "$bytes" "${text:-unavailable}" >>"$sizes"
+ }
+@@ -113,15 +138,19 @@ names=$(emit_examples)
+ mkdir -p "$work/ctl"
+ for name in $names; do
+   d="$work/ex/$name"
++  t0=$(now_ms)
+   "${emitter[@]}" emit "$name" "$d" "$target"
+-  build "$name" "$d/build.log" "${capped[@]}" timeout -k 10 300 bash "$root/scripts/checks/slice0_native.sh" "$d" "$lcb"
++  t1=$(now_ms)
++  build "$name" "$d/build.log" bounded "$native_secs" bash "$root/scripts/checks/slice0_native.sh" "$d" "$lcb"
++  t2=$(now_ms)
++  printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$name" "$target" $((t1 - t0)) $((emit_secs * 1000)) $((t2 - t1)) $((native_secs * 1000)) >>"$times"
+   build "$name" "$d/build-san.log" \
+-    "${capped[@]}" timeout -k 10 300 bash "$root/scripts/checks/slice0_native.sh" "$d" "$lcb" sanitize
++    bounded "$native_secs" bash "$root/scripts/checks/slice0_native.sh" "$d" "$lcb" sanitize
+   observe "$d/llvm.san.exe" "$d/san" 30 30 0 "${san_env[@]}"
+   if judge "$d" "$d/san"; then
+-    echo "ok   $name [llvm+asan+ubsan]: status $(cat "$d/san.status")"
++    echo "ok   $name [llvm+asan]: status $(cat "$d/san.status")"
+   else
+-    echo "FAIL $name [llvm+asan+ubsan]: status $(head -c 16 "$d/san.status") (expected $(head -c 16 "$d/status")), stderr" \
++    echo "FAIL $name [llvm+asan]: status $(head -c 16 "$d/san.status") (expected $(head -c 16 "$d/status")), stderr" \
+       "$(head -c 600 "$d/san.stderr")"
+     fail=1
+   fi
+@@ -147,9 +176,9 @@ entry:
+   ret i32 %r
+ }
+ LL
+-build control-asan "$c/build.log" "${capped[@]}" timeout -k 10 300 bash "$root/scripts/checks/slice0_native.sh" "$c" "$lcb"
++build control-asan "$c/build.log" bounded "$native_secs" bash "$root/scripts/checks/slice0_native.sh" "$c" "$lcb"
+ build control-asan "$c/build-san.log" \
+-  "${capped[@]}" timeout -k 10 300 bash "$root/scripts/checks/slice0_native.sh" "$c" "$lcb" sanitize
++  bounded "$native_secs" bash "$root/scripts/checks/slice0_native.sh" "$c" "$lcb" sanitize
+ observe "$c/llvm.san.exe" "$c/san" 30 30 0 "${san_env[@]}"
+ if ! judge "$c" "$c/san" && grep -q 'AddressSanitizer' "$c/san.stderr"; then
+   echo "ok   control: ASan reports an out-of-bounds load"
+@@ -272,7 +301,7 @@ bound_is a64-offset-frame-record aarch64 'bound 32' '0000000000001000 <_main>:\n
+ bound_is a64-pc-relative-load aarch64 'bound 0' '0000000000001000 <_main>:\n    1000:\tadrp\tx8, 0x2000 <_main+0x1000>\n    1004:\tadd\tx8, x8, #0x10\n    1008:\tldr\tw0, [x8, #0x4]\n    100c:\tret\n'
+ # A read of bytes the function wrote on both paths into it is accepted.
+ bound_is both-path-write x86_64 'bound 16' '0000000000001010 <main>:\n    1010:\tpush\trbp\n    1011:\tmov\trbp, rsp\n    1014:\tje\t0x101c <main+0xc>\n    1016:\tmov\tqword ptr [rbp - 0x8], rax\n    101a:\tjmp\t0x1020 <main+0x10>\n    101c:\tmov\tqword ptr [rbp - 0x8], rcx\n    1020:\tmov\trax, qword ptr [rbp - 0x8]\n    1024:\tpop\trbp\n    1025:\tret\n'
+-if [ -n "$gdb" ]; then
++if [ -n "$measuring" ]; then
+   # A run that does not end as expected gives no measurement.
+   wrong=$(( ($(head -c 16 "$(dirname "$last_exe")/status") + 1) % 256 ))
+   if grep -q '^measured' <<<"$(measure "$last_exe" "$last_analysis" "$wrong")"; then
+@@ -285,6 +314,7 @@ if within 73 72; then echo "FAIL control: a measurement above the bound is accep
+ else echo "ok   control: a measurement above the bound is rejected"; fi
+ 
+ [ "$examples" -gt 0 ] || { echo "slice0_artifacts: no examples ran" >&2; exit 1; }
+-echo "slice0_artifacts: $examples examples; sizes in $sizes, stack bounds in $stack"
++echo "slice0_artifacts: $examples examples; sizes in $sizes, compile times in $times, stack bounds in $stack"
+ column -t -s "$(printf '\t')" "$sizes" 2>/dev/null || cat "$sizes"
++column -t -s "$(printf '\t')" "$times" 2>/dev/null || cat "$times"
+ exit "$fail"
+diff --git a/scripts/checks/slice0_backends.sh b/scripts/checks/slice0_backends.sh
+index 317e6e7c2..3f497ab52 100755
+--- a/scripts/checks/slice0_backends.sh
++++ b/scripts/checks/slice0_backends.sh
+@@ -21,7 +21,7 @@ examples=0
+ # check NAME DIR SECS RETRY: build both backends in DIR, run them and judge them.
+ check() {
+   local name=$1 d=$2 backend
+-  build "$name" "$d/build.log" "${capped[@]}" timeout -k 10 300 bash "$root/scripts/checks/slice0_native.sh" "$d" "$lcb"
++  build "$name" "$d/build.log" bounded "$native_secs" bash "$root/scripts/checks/slice0_native.sh" "$d" "$lcb"
+   for backend in llvm lcb; do
+     observe "$d/$backend.exe" "$d/$backend" "$3" "$4"
+     count=$((count + 1))
+diff --git a/scripts/checks/slice0_bir.lean b/scripts/checks/slice0_bir.lean
+index 24a64a728..2a20763d2 100644
+--- a/scripts/checks/slice0_bir.lean
++++ b/scripts/checks/slice0_bir.lean
+@@ -24,8 +24,9 @@ def writeExpected (dir : System.FilePath) (status : String) (stderr : String) :
+   IO.FS.writeFile (dir / "stderr") stderr
+ 
+ /-- Write the LCB leg: the body assembled in process, the runtime entry as QBE text. -/
+-def writeLcb (dir : System.FilePath) (target : LCB.Target) (sites : SiteTable)
+-    (f : LeanCompilerBackend.Verified.Source.Function) : IO Bool := do
++def writeLcb (dir : System.FilePath) (target : LCB.Target)
++    (emitted : LeanCompilerBackend.Verified.Source.Function × SiteTable) : IO Bool := do
++  let (f, sites) := emitted
+   IO.FS.createDirAll dir
+   IO.FS.writeFile (dir / "lcb_source.txt") (reprStr f ++ "\n")
+   let job : LeanCompilerBackend.Verified.FunctionJob :=
+@@ -45,11 +46,11 @@ def writeLcb (dir : System.FilePath) (target : LCB.Target) (sites : SiteTable)
+     return true
+ 
+ def writeBackends (dir : System.FilePath) (target : LCB.Target) (p : Program)
+-    (f : LeanCompilerBackend.Verified.Source.Function) : IO Bool := do
++    (emitted : LeanCompilerBackend.Verified.Source.Function × SiteTable) : IO Bool := do
+   IO.FS.createDirAll dir
+   IO.FS.writeFile (dir / "bir.txt") (reprStr p ++ "\n")
+   IO.FS.writeFile (dir / "llvm.ll") (LLVM.module p)
+-  writeLcb dir target p.sites f
++  writeLcb dir target emitted
+ 
+ def emit (name : String) (dir : System.FilePath) (target : LCB.Target) : IO UInt32 := do
+   let some (_, p, expected) := Examples.all.find? (·.1 == name)
+@@ -59,15 +60,15 @@ def emit (name : String) (dir : System.FilePath) (target : LCB.Target) : IO UInt
+   unless got == expected do
+     IO.eprintln s!"{name}: BIR run gives {repr got}, expected {repr expected}"; return 1
+   let some word := encode expected | IO.eprintln s!"{name}: no result word"; return 1
+-  match LCB.adapt p with
++  match LCB.emit p with
+   | .error msg => IO.eprintln s!"{name}: adapter: {msg}"; return 1
+-  | .ok f =>
++  | .ok (f, tbl) =>
+     match LCB.evalBody f 100000 with
+     | some w =>
+       unless w == word do
+         IO.eprintln s!"{name}: LCB's evaluator returns {w}, BIR's result word is {word}"; return 1
+     | none => IO.eprintln s!"{name}: LCB's evaluator does not return"; return 1
+-    unless ← writeBackends dir target p f do return 1
++    unless ← writeBackends dir target p (f, tbl) do return 1
+     match expected with
+     | .exited c => writeExpected dir (toString c) ""
+     | .trapped s => match p.sites[s]? with
+@@ -84,11 +85,11 @@ def loopBody : Program :=
+ def emitLoop (dir : System.FilePath) (target : LCB.Target) : IO UInt32 := do
+   unless wf loopBody && run loopBody 1000 == .outOfFuel do
+     IO.eprintln "loop: not a well-formed diverging body"; return 1
+-  match LCB.adapt loopBody with
++  match LCB.emit loopBody with
+   | .error msg => IO.eprintln s!"loop: adapter: {msg}"; return 1
+-  | .ok f =>
++  | .ok (f, tbl) =>
+     if (LCB.evalBody f 10000).isSome then IO.eprintln "loop: LCB's evaluator returns"; return 1
+-    unless ← writeBackends dir target loopBody f do return 1
++    unless ← writeBackends dir target loopBody (f, tbl) do return 1
+     writeExpected dir "incomplete" ""
+     return 0
+ 
+@@ -101,7 +102,7 @@ def emitInvalid (dir : System.FilePath) (target : LCB.Target) : IO UInt32 := do
+   let f : LeanCompilerBackend.Verified.Source.Function :=
+     { resultWidth := .word, parameters := #[], valueWidths := #[],
+       blocks := #[{ phis := #[], instructions := #[], terminator := .ret (.literal (LCB.word 257)) }] }
+-  unless ← writeLcb dir target tbl f do return 1
++  unless ← writeLcb dir target (f, tbl) do return 1
+   writeExpected dir "134" (Runtime.invalidLine ++ "\n")
+   return 0
+ 
+diff --git a/scripts/checks/slice0_native.sh b/scripts/checks/slice0_native.sh
+index 552f414e5..b35d7c6c0 100755
+--- a/scripts/checks/slice0_native.sh
++++ b/scripts/checks/slice0_native.sh
+@@ -10,7 +10,7 @@ case "$(uname -s)-$(uname -m)" in
+   *) echo 'slice0_native: unsupported target' >&2; exit 2 ;;
+ esac
+ if [ "${1:-}" = target ]; then echo "$target"; exit; fi
+-# `sanitize` builds only llvm.san.exe: the LLVM example with ASan and UBSan (README gate 10).
++# `sanitize` builds only llvm.san.exe: the LLVM example with ASan (README gate 10; no UBSan, see there).
+ [ "$#" = 2 ] || { [ "$#" = 3 ] && [ "$3" = sanitize ]; } ||
+   { echo 'usage: slice0_native.sh DIRECTORY LCB [sanitize]' >&2; exit 2; }
+ lcb=$2
+@@ -26,12 +26,11 @@ cc=("${clean[@]}" "$CONCRETE_SLICE0_CLANG" --no-default-config
+ [ "$target" != aarch64-macos ] || cc+=(--target=arm64-apple-macosx15.0 -mmacosx-version-min=15.0)
+ if [ "${3:-}" = sanitize ]; then
+   # ASan instruments only functions carrying `sanitize_address`, which clang's C front end adds and
+-  # the printed IR does not; the sanitizer build adds it to every definition (llvm.san.ll). UBSan's
+-  # checks are inserted by the C front end, so on IR input only its runtime is linked.
++  # the printed IR does not; the sanitizer build adds it to every definition (llvm.san.ll).
+   sed -E 's/^(define .*\)) \{$/\1 sanitize_address {/' llvm.ll >llvm.san.ll
+   [ "$(grep -c '^define ' llvm.san.ll)" = "$(grep -c '^define .* sanitize_address {$' llvm.san.ll)" ] ||
+     { echo 'slice0_native: a definition lacks sanitize_address' >&2; exit 1; }
+-  san=(-fsanitize=address,undefined -fno-sanitize-recover=all)
++  san=(-fsanitize=address -fno-sanitize-recover=all)
+   "${cc[@]}" "${san[@]}" -c llvm.san.ll -o llvm.san.o
+   "${cc[@]}" "${san[@]}" "${link[@]}" llvm.san.o -o llvm.san.exe
+   exit
+diff --git a/scripts/checks/slice0_repro.sh b/scripts/checks/slice0_repro.sh
+index 9c56ed973..d872e0384 100755
+--- a/scripts/checks/slice0_repro.sh
++++ b/scripts/checks/slice0_repro.sh
+@@ -20,12 +20,27 @@ source scripts/checks/lib/slice0_sources.sh
+ gate_limits 64 40000
+ work=$(mktemp -d)
+ trap 'rm -rf "${work:?}"' EXIT
++BOUNDED_PARENT="$work"
++# shellcheck source=scripts/checks/lib/bounded.sh
++source scripts/checks/lib/bounded.sh
++[ "$BOUNDED_HAVE_WATCHDOG" = 1 ] || { echo "slice0_repro: python3 is required for bounded runs" >&2; exit 2; }
++# bounded SECS CMD...: CMD through bounded_run (stdin /dev/null, one re-run on a timeout; a second
++# timeout returns 124 with no output and is reported INCOMPLETE, never a pass).
++bounded() {
++  local secs=$1 rc=0
++  shift
++  bounded_run -i /dev/null "$secs" -- "$@" || rc=$?
++  if [ "$rc" != 0 ] && bounded_is_incomplete "$rc"; then
++    echo "slice0_repro: INCOMPLETE (timed out twice): $*" >&2
++  fi
++  return "$rc"
++}
+ manifest=${1:-}
+ [ -z "$manifest" ] || manifest=$(realpath -m "$manifest")
+ compare=(python3 "$root/scripts/checks/lib/repro_compare.py")
+ # Materialize the dependency checkouts (no build): they must be the manifest's clean revisions,
+ # which build_identity.sh checks before anything is built.
+-timeout -k 30 600 lake env true
++bounded 600 lake env true
+ bash scripts/checks/build_identity.sh > "$work/identity"
+ target=$(bash scripts/checks/slice0_native.sh target)
+ # Working source edits are included (the identity records their digest); no build product is.
+@@ -46,14 +61,14 @@ for side in first second; do
+     export TMPDIR="$work/$side/tmp" LC_ALL=C TZ=UTC SOURCE_DATE_EPOCH=1 ZERO_AR_DATE=1
+     # No Lake artifact cache: each side compiles everything it uses.
+     export LAKE_ARTIFACT_CACHE=false LAKE_CACHE_DIR="$work/$side/lake-cache"
+-    timeout -k 30 3000 lake build Concrete lean-compiler-backend/lcb >"$work/$side/build.log" 2>&1 ||
++    bounded 3000 lake build Concrete lean-compiler-backend/lcb >"$work/$side/build.log" 2>&1 ||
+       { tail -50 "$work/$side/build.log" >&2; echo "slice0_repro: $side: build failed" >&2; exit 1; }
+     lcb="$d/.lake/packages/lean-compiler-backend/.lake/build/bin/lcb"
+-    timeout -k 10 120 lake env lean --run scripts/checks/slice0_bir.lean list > names
++    bounded 120 lake env lean --run scripts/checks/slice0_bir.lean list > names
+     [ -s names ] || { echo 'slice0_repro: no examples' >&2; exit 1; }
+     while read -r name; do
+-      timeout -k 10 120 lake env lean --run scripts/checks/slice0_bir.lean emit "$name" "$d/out/$name" "$target"
+-      timeout -k 10 120 bash scripts/checks/slice0_native.sh "$d/out/$name" "$lcb"
++      bounded 120 lake env lean --run scripts/checks/slice0_bir.lean emit "$name" "$d/out/$name" "$target"
++      bounded 120 bash scripts/checks/slice0_native.sh "$d/out/$name" "$lcb"
+     done < names
+   )
+ done
+diff --git a/tests/golden/slice0_trusted_base.txt b/tests/golden/slice0_trusted_base.txt
+index 03f7bb4a1..228b872fb 100644
+--- a/tests/golden/slice0_trusted_base.txt
++++ b/tests/golden/slice0_trusted_base.txt
+@@ -1,7 +1,6 @@
+ premise P_lex [implementation] retired-by: `lex_correct` :: every token list the lexer returns for a source is one the source lexes to
+ premise P_parse [implementation] retired-by: the generic table-parser theorem :: every tree the parser returns for a token list is one the grammar derives from it
+ premise P_print [implementation] retired-by: an LLVM-IR semantics; not planned for slice 0 :: the printed LLVM text of a WF BIR means at most the BIR behaviour, encoded
+-premise P_adapter [implementation] retired-by: `adapter_correct` (proved for accepted programs), once `emit` represents adaptation failure (or the contract is restricted to accepted programs) and the theorem fills `NativePremises lcb` :: the adapted LCB function of a WF BIR means at most the BIR behaviour, encoded
+ premise P_toolchain[llvm] [toolchain] retired-by: not planned :: every result the linked LLVM body produces is one its text means
+ premise P_toolchain[lcb] [toolchain] retired-by: LCB's own proofs (C01–C03 and beyond) :: every result the linked LCB body produces is one its function means (LCB's named trust boundaries)
+ premise P_rt [implementation] retired-by: a proof of the decoding entry against a libc model; not planned for slice 0 :: every launch of an image built from a WF BIR that is not killed has the behaviour of some result its body produces (decode w for a returned word w, diverges for divergence)
+@@ -12,6 +11,9 @@ theorem Concrete.BIR.decode_encode axioms: propext, Quot.sound
+ theorem Concrete.BIR.run_progress axioms: propext, Classical.choice, Quot.sound
+ theorem Concrete.BIR.behaviour_diverges_iff axioms: propext, Classical.choice, Quot.sound
+ theorem Concrete.Backend.LCB.Proof.adapter_correct axioms: propext, Classical.choice, Quot.sound
++theorem Concrete.Backend.LCB.Proof.emit_correct axioms: propext, Classical.choice, Quot.sound
++theorem Concrete.Backend.LCB.Proof.artifact_of_emit_error axioms: propext, Classical.choice, Quot.sound
++theorem Concrete.Backend.LCB.Proof.artifact_correct axioms: propext, Classical.choice, Quot.sound
+ axiom propext : ∀ {a b : Prop}, (a ↔ b) → a = b
+ axiom Classical.choice : {α : Sort u} → Nonempty α → α
+ axiom Quot.sound : ∀ {α : Sort u} {r : α → α → Prop} {a b : α}, r a b → Quot.mk r a = Quot.mk r b
+
+exec
+/bin/bash -lc 'cat scripts/checks/lib/stack_measure_lldb.py scripts/checks/lib/slice0_common.sh scripts/checks/lib/bounded.sh' in /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/owner-review1
+ succeeded in 0ms:
+# lldb --batch -o 'command script import stack_measure_lldb.py' (README gate 12, aarch64-macos).
+# PROVISIONAL.
+#
+# The LLDB counterpart of stack_measure.py (same contract, same environment: STACK_EXE, the
+# executable; STACK_RANGES "LO:HI,..." in link-time addresses, from stack_bound.py --ranges;
+# STACK_MAIN, main's LO; STACK_EXPECT, the expected exit status). It measures the stack depth one
+# complete run reaches, below the stack pointer at `main`'s entry, by single-stepping every
+# instruction of the Concrete-owned functions. An external function (entered by `bl`, so its
+# return address is in the link register) runs at full speed to that return address; its own use
+# is outside the bound, as in stack_bound.py, but the depth at its entry is measured. Once main has
+# returned, the rest runs freely.
+#
+# Fail closed: the measurement counts only for a run that stopped first at main's runtime address,
+# stopped after each external call exactly at its return address (or exited inside it), received
+# no signal, and exited normally with status STACK_EXPECT. Prints `measured N` and `steps N`, or
+# `error ...` (the gate fails on anything but a measurement).
+import os
+
+import lldb
+
+LIMIT = 2_000_000
+
+
+def measure(debugger):
+    exe = os.environ["STACK_EXE"]
+    ranges = [tuple(int(x, 16) for x in r.split(":")) for r in os.environ["STACK_RANGES"].split(",")]
+    main_lo = int(os.environ["STACK_MAIN"], 16)
+    expect = int(os.environ["STACK_EXPECT"])
+    debugger.SetAsync(False)
+    target = debugger.CreateTarget(exe)
+    if not target.IsValid():
+        raise RuntimeError(f"cannot load {exe}")
+    bp = target.BreakpointCreateByName("main", target.GetExecutable().GetFilename())
+    if bp.GetNumLocations() != 1:
+        raise RuntimeError(f"main has {bp.GetNumLocations()} breakpoint locations")
+    main_rt = bp.GetLocationAtIndex(0).GetLoadAddress()
+    info = lldb.SBLaunchInfo([])
+    info.SetLaunchFlags(lldb.eLaunchFlagDisableASLR)
+    for fd, flags in ((0, os.O_RDONLY), (1, os.O_WRONLY), (2, os.O_WRONLY)):
+        info.AddOpenFileAction(fd, "/dev/null", flags == os.O_RDONLY, flags != os.O_RDONLY)
+    err = lldb.SBError()
+    process = target.Launch(info, err)
+    if not err.Success() or not process.IsValid():
+        raise RuntimeError(f"launch failed: {err}")
+    try:
+        return run(process, target, bp, ranges, main_lo, main_rt, expect)
+    finally:
+        if process.GetState() not in (lldb.eStateExited, lldb.eStateDetached, lldb.eStateInvalid):
+            process.Kill()
+
+
+def check_live(process):
+    """True while the process is stopped (not exited); raises on a signal or another stop."""
+    state = process.GetState()
+    if state == lldb.eStateExited:
+        return False
+    if state != lldb.eStateStopped:
+        raise RuntimeError(f"unexpected process state {state}")
+    thread = process.GetSelectedThread()
+    if thread.GetStopReason() == lldb.eStopReasonSignal or thread.GetStopReason() == lldb.eStopReasonException:
+        raise RuntimeError(f"signal or exception: {thread.GetStopDescription(200)}")
+    return True
+
+
+def run(process, target, bp, ranges, main_lo, main_rt, expect):
+    if not check_live(process):
+        raise RuntimeError("exited before main")
+    thread = process.GetSelectedThread()
+    frame = thread.GetFrameAtIndex(0)
+    if frame.GetPC() != main_rt:
+        raise RuntimeError(f"first stop at {frame.GetPC():#x}, not main ({main_rt:#x})")
+    target.BreakpointDelete(bp.GetID())
+    offset = main_rt - main_lo
+    sp0 = frame.GetSP()
+    low, steps = sp0, 0
+
+    def owned(pc):
+        return any(lo + offset <= pc <= hi + offset for lo, hi in ranges)
+
+    while check_live(process):
+        thread = process.GetSelectedThread()
+        frame = thread.GetFrameAtIndex(0)
+        pc, sp = frame.GetPC(), frame.GetSP()
+        if sp > sp0:  # main has returned
+            process.Continue()
+            continue
+        low = min(low, sp)
+        if owned(pc):
+            thread.StepInstruction(False)
+            steps += 1
+            if steps > LIMIT:
+                raise RuntimeError(f"more than {LIMIT} steps")
+        else:
+            ret = frame.FindRegister("lr").GetValueAsUnsigned()
+            if not owned(ret):
+                raise RuntimeError(f"external code at {pc:#x} returns to {ret:#x}, outside the owned code")
+            tb = target.BreakpointCreateByAddress(ret)
+            tb.SetOneShot(True)
+            process.Continue()
+            if check_live(process) and process.GetSelectedThread().GetFrameAtIndex(0).GetPC() != ret:
+                raise RuntimeError(f"stopped at {process.GetSelectedThread().GetFrameAtIndex(0).GetPC():#x}, "
+                                   f"not the return address {ret:#x}")
+            target.BreakpointDelete(tb.GetID())
+    status = process.GetExitStatus()
+    if status != expect:
+        raise RuntimeError(f"exit status {status}, expected {expect}")
+    if steps == 0:
+        raise RuntimeError("no instruction stepped")
+    return sp0 - low, steps
+
+
+def __lldb_init_module(debugger, _dict):
+    try:
+        measured, steps = measure(debugger)
+        print(f"measured {measured}")
+        print(f"steps {steps}")
+    except Exception as e:  # noqa: BLE001 - every failure is reported, the gate fails closed
+        print(f"error {e}")
+# shellcheck shell=bash
+# Shared machinery of the slice-0 example gates (PROVISIONAL): slice0_backends.sh (gates 4, 6, 6a)
+# and slice0_artifacts.sh (gates 10, 11, 12). Source it from the repository root, inside the nix
+# devshell, with `set -euo pipefail`. It builds the compiler and LCB's command line under the
+# gate's limits (lib/limits.sh: an address-space cap of SLICE0_GATE_MEM_GB GiB, default 64; 0 for
+# a gate whose executables under test need no cap, slice0_artifacts.sh) and defines:
+#   capped (a command prefix, an array): run under a 64 GiB address-space cap of its own, so
+#     every build and analysis command is capped whatever the gate's cap;
+#   bounded SECS CMD...: CMD under capped and bounded_run (the gates' only time bound);
+#   root, work (removed on exit), lcb, target, emitter (the Lean emitter command, an array);
+#   observe EXE OUT SECS RETRY [MEM_MB [ENV...]]: run EXE under bounded_run (and limited_exec.sh
+#     MEM_MB, default 1024) with ENV assignments; OUT.status (status or "incomplete"),
+#     OUT.stdout, OUT.stderr;
+#   judge EXPECTED_DIR OBS: the observation OBS.* equals the expectation, byte for byte;
+#   build NAME LOG CMD...: run CMD, or print LOG and fail the gate;
+#   emit_examples: the example names, one per line, failing if there are none;
+#   cap_out: copy stdin to stdout, failing above 1 MiB: every command output a gate captures
+#     into a variable goes through it, so no producer can grow the gate's shell (which may run
+#     with no address-space cap, see SLICE0_GATE_MEM_GB) without bound.
+root=$(pwd)
+work=$(mktemp -d)
+trap 'rm -rf "${work:?}"' EXIT
+BOUNDED_PARENT="$work"
+# shellcheck source=scripts/checks/lib/bounded.sh
+source scripts/checks/lib/bounded.sh
+[ "$BOUNDED_HAVE_WATCHDOG" = 1 ] || { echo "slice0: python3 is required for bounded runs" >&2; exit 2; }
+# shellcheck source=scripts/checks/lib/limits.sh
+source scripts/checks/lib/limits.sh
+gate_limits "${SLICE0_GATE_MEM_GB:-64}" 40000
+capped=(bash "$root/scripts/checks/lib/limited_exec.sh" 65536)
+# bounded SECS CMD...: CMD under `capped`, through bounded_run (stdin /dev/null; a timeout is
+# re-run once with a larger budget; a second timeout writes no output, returns 124 and is reported
+# INCOMPLETE, never a pass).
+bounded() {
+  local secs=$1 rc=0
+  shift
+  bounded_run -i /dev/null "$secs" -- "${capped[@]}" "$@" || rc=$?
+  if [ "$rc" != 0 ] && bounded_is_incomplete "$rc"; then
+    echo "slice0: INCOMPLETE (timed out twice): $*" >&2
+  fi
+  return "$rc"
+}
+bounded 1800 lake build Concrete lean-compiler-backend/lcb >/dev/null
+lcb="$root/.lake/packages/lean-compiler-backend/.lake/build/bin/lcb"
+case "$(uname -s)-$(uname -m)" in
+  Linux-x86_64) target=x86_64-linux ;;
+  Linux-aarch64) target=aarch64-linux ;;
+  Darwin-arm64) target=aarch64-macos ;;
+  *) echo "slice0: unsupported host $(uname -s)-$(uname -m)" >&2; exit 2 ;;
+esac
+# The time bounds of the emit step (the Lean emitter) and the native step (slice0_native.sh).
+emit_secs=120
+native_secs=300
+emitter=(bounded "$emit_secs" lake env lean --run scripts/checks/slice0_bir.lean)
+
+observe() {
+  local rc=0 mem=${5:-1024}
+  local envs=("${@:6}")
+  bounded_run -i /dev/null -r "$4" "$3" -- env ${envs[@]+"${envs[@]}"} \
+    bash "$root/scripts/checks/lib/limited_exec.sh" "$mem" "$1" \
+    >"$2.stdout" 2>"$2.stderr" || rc=$?
+  if bounded_is_incomplete "$rc"; then echo incomplete >"$2.status"; else echo "$rc" >"$2.status"; fi
+}
+
+judge() {
+  cmp -s "$1/status" "$2.status" && cmp -s "$1/stderr" "$2.stderr" && [ ! -s "$2.stdout" ]
+}
+
+build() {
+  local name=$1 log=$2; shift 2
+  "$@" >"$log" 2>&1 || { cat "$log" >&2; echo "slice0: $name: build failed: $*" >&2; exit 1; }
+}
+
+cap_out() {
+  local LC_ALL=C out
+  out=$(head -c 1048577; echo x)
+  out=${out%x}
+  [ "${#out}" -le 1048576 ] || { echo "slice0: captured output over 1 MiB" >&2; return 1; }
+  printf '%s' "$out"
+}
+
+emit_examples() {
+  local names
+  names=$("${emitter[@]}" list | cap_out) || { echo "slice0: listing the examples failed" >&2; exit 1; }
+  [ -n "$names" ] || { echo "slice0: no examples listed" >&2; exit 1; }
+  printf '%s\n' "$names"
+}
+#!/usr/bin/env bash
+# Bounded runs: a timeout is INCOMPLETE, never a failure and never a pass.
+#
+# The rule (docs/project/PROMOTION_PIPELINE.md, result vocabulary): a test that exceeds its time budget
+# has produced no observation. Under machine load a freshly linked binary or a compile can overrun
+# a budget sized for an idle machine (test_ssa.sh once reported hundreds of 5-second alarms as
+# failures), so a timeout is re-run once, alone, with a larger budget:
+#   - the re-run completes      -> its result is judged normally (pass or FAIL), recorded "recovered";
+#   - the re-run times out too  -> INCOMPLETE: not a pass, not a failure. A gate with an incomplete
+#                                  result exits nonzero, and a qualifying run contains none.
+#
+# Each attempt runs under lib/bounded_exec.py, which makes the command the leader of a new process
+# group, reports its outcome through a status file (never through the command's own streams, so
+# nothing the command prints can fake or hide a timeout) and, when the budget expires, sends SIGTERM
+# and then SIGKILL to the whole group, so no descendant outlives the attempt into the retry.
+#
+# Sourcing (`BOUNDED_PARENT="$TMP"; source scripts/checks/lib/bounded.sh`) gives the gate PRIVATE
+# state: a fresh directory (mktemp under BOUNDED_PARENT, else $TMPDIR) with an outcome file and a
+# log. Every sourcing creates its own directory, so nested or parallel gates never share state.
+# With BOUNDED_PARENT under the gate's own scratch directory, its cleanup removes the state too.
+#
+#   bounded_run [-i STDIN_FILE] [-r RETRY_SECS] SECS -- CMD [ARGS...]
+#     Runs CMD (an executable, not a shell function). Its stdout and stderr are buffered per
+#     attempt and only a COMPLETED attempt's output is written: an incomplete run writes nothing,
+#     so output-matching checks never pass on the partial output of a run that hung. Without -i the
+#     command inherits stdin, which a re-run cannot replay: callers that feed input pass -i.
+#     Returns CMD's status, or 124 when it timed out on both attempts or the runner reported no
+#     outcome. SECS and RETRY_SECS are positive decimal seconds. A command may itself exit
+#     124, so test with `bounded_is_incomplete "$rc"`, which also reads the outcome bounded_run
+#     recorded (this works across `( cd dir && bounded_run ... )` subshells; run one bounded_run
+#     at a time per sourcing). RETRY_SECS defaults to BOUNDED_RETRY_FACTOR (2) times SECS.
+#   bounded_summary
+#     Lists this gate's recovered and incomplete runs; gates print it before their final tally.
+#   bounded_watchdog SECS  -> sets the array TO for the watchdog form: "${TO[@]}" CMD [ARGS...]
+#     runs CMD through `bash bounded.sh SECS` in a separate process with the same retry; on a second
+#     timeout it writes no command output, prints "INCOMPLETE: ..." on stderr and exits 124. Its
+#     recovered and incomplete lines go to this gate's log (handed over on its command line).
+#   bounded_gate_status
+#     The end-of-gate verdict for a gate using the watchdog form: lists recovered, incomplete and
+#     runner-failed runs, removes the state directory, and returns 1 when any run was incomplete or
+#     the runner failed, so the gate exits nonzero whatever its own checks concluded from a hung
+#     command's empty output. Last line:
+#       bounded_gate_status && [ "$FAIL" -eq 0 ]
+#
+# If the runner itself fails (no outcome reported), the command's output is discarded and the run
+# is incomplete (status 124, a "runner-failed" log line): never a pass. If the runner is cancelled (the
+# gate is interrupted or terminated), it kills the command's group first.
+#
+# Without python3 commands run directly with no watchdog: one warning when the gate sources this
+# file, never inside a command's output, and the watchdog form then runs commands directly too.
+# Such a run is never incomplete.
+
+BOUNDED_RETRY_FACTOR="${BOUNDED_RETRY_FACTOR:-2}"
+if [[ "$BOUNDED_RETRY_FACTOR" =~ ^[0-9]+(\.[0-9]+)?$ ]] && awk -v f="$BOUNDED_RETRY_FACTOR" 'BEGIN { exit !(f + 0 >= 1) }'; then :
+else echo "bounded.sh: BOUNDED_RETRY_FACTOR must be a number >= 1; using 2" >&2; BOUNDED_RETRY_FACTOR=2; fi
+# _bounded_secs_ok S: S is a positive decimal number of seconds (fractions allowed).
+_bounded_secs_ok() { [[ "$1" =~ ^[0-9]+(\.[0-9]+)?$ ]] && awk -v s="$1" 'BEGIN { exit !(s + 0 > 0) }'; }
+# Fixed-point, trailing zeros trimmed: never scientific notation, which _bounded_secs_ok rejects.
+_bounded_mul() { awk -v s="$1" -v f="$2" 'BEGIN { r = sprintf("%.6f", s * f); sub(/0+$/, "", r); sub(/\.$/, "", r); print r }'; }
+BOUNDED_SH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")"
+BOUNDED_EXEC="$(dirname "$BOUNDED_SH")/bounded_exec.py"
+BOUNDED_DIR="$(mktemp -d "${BOUNDED_PARENT:-${TMPDIR:-/tmp}}/bounded.XXXXXX")"
+BOUNDED_OUTCOME_FILE="$BOUNDED_DIR/outcome"
+BOUNDED_LOG="$BOUNDED_DIR/log"
+# The watchdog form appends to its caller's log, handed over explicitly on its command line.
+if [ "${BASH_SOURCE[0]}" = "$0" ]; then
+  # A standalone watchdog removes its state however it ends.
+  trap 'rm -rf "$BOUNDED_DIR"' EXIT
+  [ -z "${BOUNDED_WATCHDOG_LOG:-}" ] || BOUNDED_LOG="$BOUNDED_WATCHDOG_LOG"
+fi
+: >> "$BOUNDED_LOG"
+BOUNDED_HAVE_WATCHDOG=1
+if ! command -v python3 >/dev/null 2>&1; then
+  BOUNDED_HAVE_WATCHDOG=0
+  [ "${BASH_SOURCE[0]}" = "$0" ] || echo "  warn python3 not found — commands run without a hang watchdog" >&2
+fi
+
+bounded_is_incomplete() {
+  [ "$1" = 124 ] && [ "$(cat "$BOUNDED_OUTCOME_FILE" 2>/dev/null)" = incomplete ]
+}
+
+bounded_run() {
+  local stdin_file="" retry="" secs="" rc tries=0 budget tmp outcome
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      -i) stdin_file="$2"; shift 2 ;;
+      -r) retry="$2"; shift 2 ;;
+      --) shift; break ;;
+      *) if [ -z "$secs" ]; then secs="$1"; shift; else break; fi ;;
+    esac
+  done
+  [ -n "$secs" ] && [ $# -gt 0 ] || { echo "bounded_run: usage: bounded_run [-i FILE] [-r SECS] SECS -- CMD..." >&2; return 2; }
+  [ -n "$retry" ] || retry="$(_bounded_mul "$secs" "$BOUNDED_RETRY_FACTOR")"
+  if ! _bounded_secs_ok "$secs" || ! _bounded_secs_ok "$retry"; then
+    echo "bounded_run: budgets must be positive numbers of seconds (got $secs, retry $retry)" >&2; return 2
+  fi
+  echo done > "$BOUNDED_OUTCOME_FILE"
+  if [ "$BOUNDED_HAVE_WATCHDOG" != 1 ]; then
+    if [ -n "$stdin_file" ]; then "$@" < "$stdin_file"; else "$@"; fi
+    return $?
+  fi
+  tmp="$(mktemp -d "$BOUNDED_DIR/run.XXXXXX")"
+  budget="$secs"
+  while :; do
+    tries=$((tries + 1))
+    rm -f "$tmp/status"
+    if [ -n "$stdin_file" ]; then
+      python3 -I "$BOUNDED_EXEC" --timeout "$budget" --kill-after "${BOUNDED_KILL_AFTER:-10}" --status "$tmp/status" -- "$@" < "$stdin_file" > "$tmp/out" 2> "$tmp/err"
+    else
+      python3 -I "$BOUNDED_EXEC" --timeout "$budget" --kill-after "${BOUNDED_KILL_AFTER:-10}" --status "$tmp/status" -- "$@" > "$tmp/out" 2> "$tmp/err"
+    fi
+    outcome="$(cat "$tmp/status" 2>/dev/null)"
+    case "$outcome" in
+      "exit "*) break ;;
+      timeout) [ "$tries" = 1 ] || break; budget="$retry" ;;
+      *) outcome=runner-failed; break ;;
+    esac
+  done
+  if [ "$outcome" = timeout ]; then
+    echo incomplete > "$BOUNDED_OUTCOME_FILE"
+    echo "incomplete ${secs}s+${retry}s $*" >> "$BOUNDED_LOG"
+    rc=124
+  elif [ "$outcome" = runner-failed ]; then
+    # The runner reported nothing (it failed or was cancelled): no observation, so the run is
+    # incomplete exactly as a double timeout is (status 124, bounded_is_incomplete true).
+    echo "bounded_run: the runner reported no outcome for: $*" >&2
+    echo incomplete > "$BOUNDED_OUTCOME_FILE"
+    echo "runner-failed ${secs}s $*" >> "$BOUNDED_LOG"
+    rc=124
+  else
+    cat "$tmp/out"; cat "$tmp/err" >&2
+    rc="${outcome#exit }"
+    [ "$tries" = 2 ] && echo "recovered ${secs}s $*" >> "$BOUNDED_LOG"
+  fi
+  rm -rf "$tmp"
+  return "$rc"
+}
+
+bounded_summary() {
+  local nrec ninc
+  nrec=$(grep -c '^recovered' "$BOUNDED_LOG" 2>/dev/null || true); nrec=${nrec:-0}
+  ninc=$(grep -c '^incomplete\|^runner-failed' "$BOUNDED_LOG" 2>/dev/null || true); ninc=${ninc:-0}
+  [ "$nrec" -gt 0 ] || [ "$ninc" -gt 0 ] || return 0
+  echo "Bounded runs: $nrec recovered (timed out, then completed alone), $ninc incomplete (timed out twice, or the runner failed):"
+  sed 's/^/  /' "$BOUNDED_LOG"
+}
+
+bounded_watchdog() {
+  if [ "$BOUNDED_HAVE_WATCHDOG" = 1 ]; then
+    TO=(env "BOUNDED_WATCHDOG_LOG=$BOUNDED_LOG" "BOUNDED_PARENT=$BOUNDED_DIR" bash "$BOUNDED_SH" "$1")
+  else
+    TO=(env)  # no python3: run commands directly (the gate warned once when it sourced this file)
+  fi
+}
+
+bounded_gate_status() {
+  local ninc
+  bounded_summary
+  ninc=$(grep -c '^incomplete\|^runner-failed' "$BOUNDED_LOG" 2>/dev/null || true); ninc=${ninc:-0}
+  [ "$ninc" -eq 0 ] || echo "INCOMPLETE: $ninc command(s) timed out twice or lost their runner: this run is incomplete, not passed"
+  rm -rf "$BOUNDED_DIR"
+  [ "$ninc" -eq 0 ]
+}
+
+# Watchdog form: `bash bounded.sh SECS CMD...` (through bounded_watchdog's TO array).
+if [ "${BASH_SOURCE[0]}" = "$0" ]; then
+  [ $# -ge 2 ] || { echo "usage: bash $0 SECS CMD [ARGS...]" >&2; exit 2; }
+  secs="$1"; shift
+  bounded_run "$secs" -- "$@"; rc=$?
+  if bounded_is_incomplete "$rc"; then
+    echo "INCOMPLETE: timed out twice (${secs}s, then $(_bounded_mul "$secs" "$BOUNDED_RETRY_FACTOR")s alone) or lost its runner: $*" >&2
+  fi
+  exit "$rc"
+fi
+
+exec
+/bin/bash -lc "git diff --stat; rg '"'^diff|''^@@'"' DELTA.diff; nl -ba scripts/checks/slice0_artifacts.sh | head -145; cat scripts/checks/lib/stack_measure.py" in /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/owner-review1
+ succeeded in 0ms:
+warning: Not a git repository. Use --no-index to compare two paths outside a working tree
+usage: git diff --no-index [<options>] <path> <path> [<pathspec>...]
+
+Diff output format options
+    -p, --patch           generate patch
+    -s, --no-patch        suppress diff output
+    -u                    generate patch
+    -U, --unified[=<n>]   generate diffs with <n> lines context
+    -W, --[no-]function-context
+                          generate diffs with <n> lines context
+    --raw                 generate the diff in raw format
+    --patch-with-raw      synonym for '-p --raw'
+    --patch-with-stat     synonym for '-p --stat'
+    --numstat             machine friendly --stat
+    --shortstat           output only the last line of --stat
+    -X, --dirstat[=<param1>,<param2>...]
+                          output the distribution of relative amount of changes for each sub-directory
+    --cumulative          synonym for --dirstat=cumulative
+    --dirstat-by-file[=<param1>,<param2>...]
+                          synonym for --dirstat=files,<param1>,<param2>...
+    --check               warn if changes introduce conflict markers or whitespace errors
+    --summary             condensed summary such as creations, renames and mode changes
+    --name-only           show only names of changed files
+    --name-status         show only names and status of changed files
+    --stat[=<width>[,<name-width>[,<count>]]]
+                          generate diffstat
+    --stat-width <width>  generate diffstat with a given width
+    --stat-name-width <width>
+                          generate diffstat with a given name width
+    --stat-graph-width <width>
+                          generate diffstat with a given graph width
+    --stat-count <count>  generate diffstat with limited lines
+    --[no-]compact-summary
+                          generate compact summary in diffstat
+    --binary              output a binary diff that can be applied
+    --[no-]full-index     show full pre- and post-image object names on the "index" lines
+    --[no-]color[=<when>] show colored diff
+    --ws-error-highlight <kind>
+                          highlight whitespace errors in the 'context', 'old' or 'new' lines in the diff
+    -z                    do not munge pathnames and use NULs as output field terminators in --raw or --numstat
+    --[no-]abbrev[=<n>]   use <n> digits to display object names
+    --src-prefix <prefix> show the given source prefix instead of "a/"
+    --dst-prefix <prefix> show the given destination prefix instead of "b/"
+    --line-prefix <prefix>
+                          prepend an additional prefix to every line of output
+    --no-prefix           do not show any source or destination prefix
+    --default-prefix      use default prefixes a/ and b/
+    --inter-hunk-context <n>
+                          show context between diff hunks up to the specified number of lines
+    --output-indicator-new <char>
+                          specify the character to indicate a new line instead of '+'
+    --output-indicator-old <char>
+                          specify the character to indicate an old line instead of '-'
+    --output-indicator-context <char>
+                          specify the character to indicate a context instead of ' '
+
+Diff rename options
+    -B, --break-rewrites[=<n>[/<m>]]
+                          break complete rewrite changes into pairs of delete and create
+    -M, --find-renames[=<n>]
+                          detect renames
+    -D, --irreversible-delete
+                          omit the preimage for deletes
+    -C, --find-copies[=<n>]
+                          detect copies
+    --[no-]find-copies-harder
+                          use unmodified files as source to find copies
+    --no-renames          disable rename detection
+    --[no-]rename-empty   use empty blobs as rename source
+    --[no-]follow         continue listing the history of a file beyond renames
+    -l <n>                prevent rename/copy detection if the number of rename/copy targets exceeds given limit
+
+Diff algorithm options
+    --minimal             produce the smallest possible diff
+    -w, --ignore-all-space
+                          ignore whitespace when comparing lines
+    -b, --ignore-space-change
+                          ignore changes in amount of whitespace
+    --ignore-space-at-eol ignore changes in whitespace at EOL
+    --ignore-cr-at-eol    ignore carrier-return at the end of line
+    --ignore-blank-lines  ignore changes whose lines are all blank
+    -I, --[no-]ignore-matching-lines <regex>
+                          ignore changes whose all lines match <regex>
+    --[no-]indent-heuristic
+                          heuristic to shift diff hunk boundaries for easy reading
+    --patience            generate diff using the "patience diff" algorithm
+    --histogram           generate diff using the "histogram diff" algorithm
+    --diff-algorithm <algorithm>
+                          choose a diff algorithm
+    --anchored <text>     generate diff using the "anchored diff" algorithm
+    --word-diff[=<mode>]  show word diff, using <mode> to delimit changed words
+    --word-diff-regex <regex>
+                          use <regex> to decide what a word is
+    --color-words[=<regex>]
+                          equivalent to --word-diff=color --word-diff-regex=<regex>
+    --[no-]color-moved[=<mode>]
+                          moved lines of code are colored differently
+    --[no-]color-moved-ws <mode>
+                          how white spaces are ignored in --color-moved
+
+Other diff options
+    --[no-]relative[=<prefix>]
+                          when run from subdir, exclude changes outside and show relative paths
+    -a, --[no-]text       treat all files as text
+    -R                    swap two inputs, reverse the diff
+    --[no-]exit-code      exit with 1 if there were differences, 0 otherwise
+    --[no-]quiet          disable all output of the program
+    --[no-]ext-diff       allow an external diff helper to be executed
+    --[no-]textconv       run external text conversion filters when comparing binary files
+    --ignore-submodules[=<when>]
+                          ignore changes to submodules in the diff generation
+    --submodule[=<format>]
+                          specify how differences in submodules are shown
+    --ita-invisible-in-index
+                          hide 'git add -N' entries from the index
+    --ita-visible-in-index
+                          treat 'git add -N' entries as real in the index
+    -S <string>           look for differences that change the number of occurrences of the specified string
+    -G <regex>            look for differences that change the number of occurrences of the specified regex
+    --pickaxe-all         show all changes in the changeset with -S or -G
+    --pickaxe-regex       treat <string> in -S as extended POSIX regular expression
+    -O <file>             control the order in which files appear in the output
+    --rotate-to <path>    show the change in the specified path first
+    --skip-to <path>      skip the output to the specified path
+    --find-object <object-id>
+                          look for differences that change the number of occurrences of the specified object
+    --diff-filter [(A|C|D|M|R|T|U|X|B)...[*]]
+                          select files by diff type
+    --max-depth <depth>   maximum tree depth to recurse
+    --output <file>       output to a specific file
+
+diff --git a/Concrete/Backend/LCB.lean b/Concrete/Backend/LCB.lean
+@@ -10,8 +10,9 @@ import LeanCompilerBackend.AArch64
+@@ -188,6 +189,14 @@ def adapt (p : Program) : Except String Source.Function := do
+@@ -221,6 +230,11 @@ def assemble (target : Target) (f : Source.Function) : Except String String :=
+@@ -1993,6 +2007,44 @@ theorem adapter_correct {p : Program} (hwf : WF p) {f : Source.Function}
+diff --git a/Concrete/Premises.lean b/Concrete/Premises.lean
+@@ -40,9 +40,6 @@ def all : List Premise := [
+@@ -62,7 +59,10 @@ def theorems : List Lean.Name := [
+diff --git a/Concrete/README.md b/Concrete/README.md
+@@ -45,8 +45,8 @@ Memory CFG  (`out.mem`)
+@@ -106,7 +106,7 @@ Every BIR construct has a direct LLVM spelling (`@llvm.uadd.with.overflow.i8`) a
+@@ -117,6 +117,7 @@ The adapter's output is handed to LCB **in process**, as the value: on `aarch64-
+@@ -270,19 +271,20 @@ def BodyResult.behaviour (tbl : SiteTable) : BodyResult → Behaviour
+@@ -302,29 +304,28 @@ structure Native (B : Backend) where
+@@ -343,7 +344,6 @@ There are two target profiles: `x86_64-linux` and `aarch64-macos` (LCB's first n
+@@ -374,7 +374,7 @@ structure Output where
+@@ -392,11 +392,11 @@ theorem compile_correct (F : FrontendPremises) {B N T} (P : NativePremises B N T
+@@ -405,7 +405,7 @@ theorem compile_correct (F : FrontendPremises) {B N T} (P : NativePremises B N T
+@@ -425,7 +425,7 @@ theorem answer_correct (F : FrontendPremises) (P : NativePremises B N T₀)
+@@ -530,7 +530,7 @@ Human output, JSON and future policies all render the same `Report`.
+@@ -574,14 +574,14 @@ The CLI is `concrete facts FILE [FN]` and `concrete build FILE -o OUT` (owner, 2
+@@ -624,7 +624,7 @@ These are internal. None blocks slice 0's correctness.
+diff --git a/flake.nix b/flake.nix
+@@ -126,11 +126,14 @@
+diff --git a/scripts/checks/lib/slice0_common.sh b/scripts/checks/lib/slice0_common.sh
+@@ -6,6 +6,7 @@
+@@ -27,7 +28,19 @@ source scripts/checks/lib/bounded.sh
+@@ -35,7 +48,10 @@ case "$(uname -s)-$(uname -m)" in
+diff --git a/scripts/checks/lib/stack_measure_lldb.py b/scripts/checks/lib/stack_measure_lldb.py
+@@ -0,0 +1,118 @@
+diff --git a/scripts/checks/slice0_artifacts.sh b/scripts/checks/slice0_artifacts.sh
+@@ -2,20 +2,24 @@
+@@ -39,26 +43,38 @@ SLICE0_GATE_MEM_GB=0
+@@ -66,21 +82,30 @@ last_exe= last_analysis=
+@@ -88,7 +113,7 @@ stack_check() {
+@@ -104,7 +129,7 @@ stack_check() {
+@@ -113,15 +138,19 @@ names=$(emit_examples)
+@@ -147,9 +176,9 @@ entry:
+@@ -272,7 +301,7 @@ bound_is a64-offset-frame-record aarch64 'bound 32' '0000000000001000 <_main>:\n
+@@ -285,6 +314,7 @@ if within 73 72; then echo "FAIL control: a measurement above the bound is accep
+diff --git a/scripts/checks/slice0_backends.sh b/scripts/checks/slice0_backends.sh
+@@ -21,7 +21,7 @@ examples=0
+diff --git a/scripts/checks/slice0_bir.lean b/scripts/checks/slice0_bir.lean
+@@ -24,8 +24,9 @@ def writeExpected (dir : System.FilePath) (status : String) (stderr : String) :
+@@ -45,11 +46,11 @@ def writeLcb (dir : System.FilePath) (target : LCB.Target) (sites : SiteTable)
+@@ -59,15 +60,15 @@ def emit (name : String) (dir : System.FilePath) (target : LCB.Target) : IO UInt
+@@ -84,11 +85,11 @@ def loopBody : Program :=
+@@ -101,7 +102,7 @@ def emitInvalid (dir : System.FilePath) (target : LCB.Target) : IO UInt32 := do
+diff --git a/scripts/checks/slice0_native.sh b/scripts/checks/slice0_native.sh
+@@ -10,7 +10,7 @@ case "$(uname -s)-$(uname -m)" in
+@@ -26,12 +26,11 @@ cc=("${clean[@]}" "$CONCRETE_SLICE0_CLANG" --no-default-config
+diff --git a/scripts/checks/slice0_repro.sh b/scripts/checks/slice0_repro.sh
+@@ -20,12 +20,27 @@ source scripts/checks/lib/slice0_sources.sh
+@@ -46,14 +61,14 @@ for side in first second; do
+diff --git a/tests/golden/slice0_trusted_base.txt b/tests/golden/slice0_trusted_base.txt
+@@ -1,7 +1,6 @@
+@@ -12,6 +11,9 @@ theorem Concrete.BIR.decode_encode axioms: propext, Quot.sound
+     1	#!/usr/bin/env bash
+     2	# Slice-0 artifact gates (PROVISIONAL, Concrete/README.md gates 10, 11 and 12), over every
+     3	# hand-written BIR example, on the executables slice0_native.sh links:
+     4	#
+     5	# 10. Sanitizers: the LLVM example also built with ASan (slice0_native.sh sanitize: ASan
+     6	#     instruments the printed IR once every definition carries sanitize_address; no UBSan: its
+     7	#     checks are inserted by clang's C front end, so on IR input it checks nothing) must
+     8	#     give the same observation as the BIR semantics (status, exact fd-2 bytes, empty fd 1), so no
+     9	#     sanitizer report. Its memory is bounded by ASan's hard_rss_limit_mb (the shadow reservation
+    10	#     rules out an address-space cap; every other command is capped, see SLICE0_GATE_MEM_GB). Control: a body with an out-of-bounds load must be reported.
+    11	# 11. Binary size (report-only, never fails on a size): bytes and text size of each executable,
+    12	#     per backend and target, in REPORT/sizes.tsv. Compile time (report-only, owner 2026-11-08):
+    13	#     wall-clock milliseconds of each example's emit step (the Lean emitter: checks, LLVM print,
+    14	#     LCB adaptation and in-process assembly, Lean start-up included) and native step (clang and
+    15	#     LCB's command line, linking both executables), next to its budget (the step's time bound), in
+    16	#     REPORT/compile_times.tsv.
+    17	# 12. Stack bound: lib/stack_bound.py derives, from the linked executable's disassembly, a bound on
+    18	#     the Concrete-owned stack below main's entry, covering every byte addressed relative to the
+    19	#     stack or frame pointer (so the red zone), with external libc calls listed with their entry
+    20	#     depth (their own use, and that _exit and abort do not return, are premises). A run under
+    21	#     gdb (x86-64 Linux, lib/stack_measure.py) or LLDB (aarch64-macos, lib/stack_measure_lldb.py)
+    22	#     must stay within it (the run measures the stack pointer only). REPORT/stack.tsv. Controls: the analysis must refuse an unmodelled
+    23	#     stack-pointer write, an indirect call, recursion, a call to an unknown function, two depths
+    24	#     meeting, a stack pointer used as a value or written through a partial register, a partial
+    25	#     frame-pointer write, an indexed stack address, a saved frame pointer popped into another
+    26	#     register, a stack address taken, an overwritten return address, an AArch64 frame pointer
+    27	#     stored, a register-directed return, a return after a call without the link register
+    28	#     restored, a freed or restored saved slot reread, a callee's leftover saved slot reread by
+    29	#     its caller (both architectures), a read of bytes written on one path only or never written,
+    30	#     a store through main's argv, a PC-relative base kept across a call, walked by repeated adds or
+    31	#     beyond the reach premise, an absolute address (memory only through sp/fp, PC-relative or fs/gs), a callee that does not restore the frame pointer, a frame record away from sp, an unmodelled
+    32	#     instruction (x86 `loop`) and frame- or link-register writeback (AArch64), and give the
+    33	#     expected bound on known functions (x86 frame, red-zone store, two AArch64 frame-record
+    34	#     shapes, a read of bytes written on both paths, an adrp-based load); the comparison must reject a
+    35	#     measurement above the bound.
+    36	#
+    37	# usage: slice0_artifacts.sh [REPORT_DIR]. Run inside the nix devshell, from the repository root.
+    38	set -euo pipefail
+    39	report=${1:-}
+    40	# The sanitizer executions need an unbounded address-space reservation, so the gate sets no cap of
+    41	# its own and caps every other command it starts (`capped`, and limited_exec.sh for executables).
+    42	SLICE0_GATE_MEM_GB=0
+    43	# shellcheck source=scripts/checks/lib/slice0_common.sh
+    44	source scripts/checks/lib/slice0_common.sh
+    45	: "${CONCRETE_SLICE0_LLVM:?run inside nix develop}"
+    46	objdump=(bounded 60 "$CONCRETE_SLICE0_LLVM/llvm-objdump" -d --no-show-raw-insn)
+    47	case "$target" in
+    48	  x86_64-linux) arch=x86_64; objdump+=(--x86-asm-syntax=intel) ;;
+    49	  aarch64-*) arch=aarch64 ;;
+    50	esac
+    51	# The run check's debugger: gdb on x86-64 Linux, LLDB on aarch64-macos (none elsewhere).
+    52	gdb= lldb=
+    53	case "$target" in
+    54	  x86_64-linux) gdb=${CONCRETE_SLICE0_GDB:?the x86-64 Linux shell pins gdb} ;;
+    55	  aarch64-macos)
+    56	    lldb=${CONCRETE_SLICE0_LLDB:?the macOS shell names lldb}
+    57	    [ -x "$lldb" ] || { echo "slice0_artifacts: no LLDB at $lldb" >&2; exit 2; }
+    58	    echo "lldb: $("$lldb" --version 2>&1 | head -c 200 | head -1)" ;;
+    59	esac
+    60	measuring=${gdb:-$lldb}
+    61	[ -n "$report" ] || report="$work/report"
+    62	mkdir -p "$report"
+    63	sizes="$report/sizes.tsv"
+    64	stack="$report/stack.tsv"
+    65	printf 'example\tbackend\ttarget\tbytes\ttext\n' >"$sizes"
+    66	times="$report/compile_times.tsv"
+    67	printf 'example\ttarget\temit_ms\temit_budget_ms\tnative_ms\tnative_budget_ms\n' >"$times"
+    68	# now_ms: a monotonic clock in milliseconds (portable: BSD date has no %N).
+    69	now_ms() { python3 -I -c 'import time; print(time.monotonic_ns() // 1000000)'; }
+    70	printf 'example\tbackend\ttarget\tbound\tmeasured\texternals\n' >"$stack"
+    71	# hard_rss_limit_mb and LeakSanitizer are Linux-only (ASan on Darwin refuses detect_leaks); on
+    72	# macOS RLIMIT_AS is not enforced either, so there the job's memory is the bound, as for all runs.
+    73	asan=abort_on_error=0:symbolize=0
+    74	[ "$(uname -s)" != Linux ] || asan="$asan:hard_rss_limit_mb=1024:detect_leaks=1"
+    75	san_env=("ASAN_OPTIONS=$asan")
+    76	# stack_bound ARCH DISASM [--ranges]: the analysis, capped and bounded in time.
+    77	stack_bound() { bounded 60 python3 -I "$root/scripts/checks/lib/stack_bound.py" "$@"; }
+    78	fail=0
+    79	examples=0
+    80	last_exe= last_analysis=
+    81	
+    82	# within MEASURED BOUND: the run stayed within the static bound (and actually ran).
+    83	within() { [ "$1" -gt 0 ] && [ "$1" -le "$2" ]; }
+    84	
+    85	# measure EXE ANALYSIS EXPECT: the run check's output (`measured N` or `error ...`), given the
+    86	# analysis output (its `range` lines) and the expected exit status: gdb (lib/stack_measure.py) or
+    87	# LLDB (lib/stack_measure_lldb.py, the same contract; Apple's LLDB runs its own Python, so the
+    88	# shell's Python variables are removed).
+    89	measure() {
+    90	  local ranges main
+    91	  ranges=$(awk '$1 == "range" {printf "%s%s:%s", sep, $3, $4; sep=","}' <<<"$2")
+    92	  main=$(awk '$1 == "range" && $2 == "main" {print $3}' <<<"$2")
+    93	  if [ -n "$gdb" ]; then
+    94	    STACK_RANGES=$ranges STACK_MAIN=$main STACK_EXPECT=$3 \
+    95	      bounded 300 "$gdb" -batch -nx -x "$root/scripts/checks/lib/stack_measure.py" \
+    96	      "$1" 2>"$1.gdb.err" | awk '$1 == "measured" || $1 == "error" {print}' | cap_out || true
+    97	  else
+    98	    STACK_EXE=$1 STACK_RANGES=$ranges STACK_MAIN=$main STACK_EXPECT=$3 \
+    99	      bounded 300 env -u PYTHONPATH -u PYTHONHOME "$lldb" --batch --no-lldbinit \
+   100	      -o "command script import $root/scripts/checks/lib/stack_measure_lldb.py" \
+   101	      2>"$1.gdb.err" | awk '$1 == "measured" || $1 == "error" {print}' | cap_out || true
+   102	  fi
+   103	}
+   104	
+   105	# stack_check NAME BACKEND EXE: derive the bound, measure a run where supported, record both.
+   106	stack_check() {
+   107	  local name=$1 backend=$2 exe=$3 dis="$3.dis" out bound ext m measured=not-run
+   108	  if ! "${objdump[@]}" "$exe" >"$dis" 2>"$dis.err"; then
+   109	    echo "FAIL $name [$backend] stack: disassembly failed: $(head -c 300 "$dis.err")"; fail=1; return
+   110	  fi
+   111	  if ! out=$(stack_bound "$arch" "$dis" --ranges | cap_out); then
+   112	    echo "FAIL $name [$backend] stack: $out"; fail=1; return
+   113	  fi
+   114	  bound=$(awk '$1 == "bound" {print $2}' <<<"$out")
+   115	  ext=$(awk '$1 == "external" {printf "%s%s@%s", sep, $2, $3; sep=","}' <<<"$out")
+   116	  if [ -n "$measuring" ]; then
+   117	    m=$(measure "$exe" "$out" "$(head -c 16 "$(dirname "$exe")/status")")
+   118	    measured=$(awk '$1 == "measured" {print $2}' <<<"$m")
+   119	    if [ -z "$measured" ] || ! within "$measured" "$bound"; then
+   120	      echo "FAIL $name [$backend] stack: bound $bound, run: ${m:-no measurement} $(head -c 300 "$exe.gdb.err")"
+   121	      fail=1; return
+   122	    fi
+   123	    last_exe=$exe last_analysis=$out
+   124	  fi
+   125	  printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$name" "$backend" "$target" "$bound" "$measured" "$ext" >>"$stack"
+   126	  echo "ok   $name [$backend] stack: bound $bound, measured $measured, externals ${ext:-none}"
+   127	}
+   128	
+   129	size_report() { # size_report NAME BACKEND EXE
+   130	  local bytes text
+   131	  bytes=$(wc -c <"$3" | tr -d ' ')
+   132	  text=$(bounded 60 "$CONCRETE_SLICE0_LLVM/llvm-size" "$3" 2>/dev/null |
+   133	    awk 'NR == 2 {print $1}' | cap_out) || true
+   134	  printf '%s\t%s\t%s\t%s\t%s\n' "$1" "$2" "$target" "$bytes" "${text:-unavailable}" >>"$sizes"
+   135	}
+   136	
+   137	names=$(emit_examples)
+   138	mkdir -p "$work/ctl"
+   139	for name in $names; do
+   140	  d="$work/ex/$name"
+   141	  t0=$(now_ms)
+   142	  "${emitter[@]}" emit "$name" "$d" "$target"
+   143	  t1=$(now_ms)
+   144	  build "$name" "$d/build.log" bounded "$native_secs" bash "$root/scripts/checks/slice0_native.sh" "$d" "$lcb"
+   145	  t2=$(now_ms)
+# gdb -batch -nx -x stack_measure.py EXE (README gate 12, x86-64 Linux). PROVISIONAL.
+#
+# Measures the stack depth one complete run of EXE reaches, below the stack pointer at `main`'s
+# entry, by single-stepping every instruction of the Concrete-owned functions (STACK_RANGES:
+# "LO:HI,..." in the executable's link-time addresses, from stack_bound.py --ranges; STACK_MAIN:
+# main's LO). An external function (entered through a call, so its return address is at the stack
+# pointer) runs at full speed to that return address; its own use is outside the bound, as in
+# stack_bound.py, but the depth at its entry is measured. Once main has returned, the rest runs
+# freely.
+#
+# Fail closed: the measurement counts only for a run that stopped first at main's runtime address,
+# stopped after each external call exactly at its return address (or exited inside it), received
+# no signal, and exited normally with status STACK_EXPECT. Prints `measured N` and `steps N`, or
+# `error ...` (the gate fails on anything but a measurement).
+import os
+
+import gdb
+
+LIMIT = 2_000_000
+ranges = [tuple(int(x, 16) for x in r.split(":")) for r in os.environ["STACK_RANGES"].split(",")]
+main_lo = int(os.environ["STACK_MAIN"], 16)
+expect = int(os.environ["STACK_EXPECT"])
+state = {"exit": None, "signal": None}
+
+
+def on_exit(event):
+    state["exit"] = event.exit_code if hasattr(event, "exit_code") else "unknown"
+
+
+def on_stop(event):
+    if isinstance(event, gdb.SignalEvent):
+        state["signal"] = event.stop_signal
+
+
+gdb.events.exited.connect(on_exit)
+gdb.events.stop.connect(on_stop)
+gdb.execute("set pagination off")
+gdb.execute("set confirm off")
+gdb.execute("set disable-randomization on")
+
+
+def reg(name):
+    return int(gdb.parse_and_eval(f"(unsigned long) ${name}"))
+
+
+def live():
+    if state["signal"] is not None:
+        raise RuntimeError(f"signal {state['signal']}")
+    return state["exit"] is None
+
+
+try:
+    gdb.execute("break *main", to_string=True)
+    gdb.execute("run </dev/null >/dev/null 2>/dev/null", to_string=True)
+    if not live():
+        raise RuntimeError("exited before main")
+    main_rt = int(gdb.parse_and_eval("(unsigned long) &main"))
+    if reg("pc") != main_rt:
+        raise RuntimeError(f"first stop at {reg('pc'):#x}, not main ({main_rt:#x})")
+    offset = main_rt - main_lo
+    sp0 = reg("sp")
+    low, steps = sp0, 0
+    inferior = gdb.selected_inferior()
+    gdb.execute("delete", to_string=True)
+    while live():
+        pc, sp = reg("pc"), reg("sp")
+        if sp > sp0:  # main has returned
+            gdb.execute("continue", to_string=True)
+            continue
+        low = min(low, sp)
+        if any(lo + offset <= pc <= hi + offset for lo, hi in ranges):
+            gdb.execute("stepi", to_string=True)
+            steps += 1
+            if steps > LIMIT:
+                raise RuntimeError(f"more than {LIMIT} steps")
+        else:
+            ret = int.from_bytes(inferior.read_memory(sp, 8).tobytes(), "little")
+            if not any(lo + offset <= ret <= hi + offset for lo, hi in ranges):
+                raise RuntimeError(f"external code at {pc:#x} returns to {ret:#x}, outside the owned code")
+            gdb.execute(f"tbreak *{ret:#x}", to_string=True)
+            gdb.execute("continue", to_string=True)
+            if live() and reg("pc") != ret:
+                raise RuntimeError(f"stopped at {reg('pc'):#x}, not the return address {ret:#x}")
+    if state["exit"] != expect:
+        raise RuntimeError(f"exit status {state['exit']}, expected {expect}")
+    if steps == 0:
+        raise RuntimeError("no instruction stepped")
+    print(f"measured {sp0 - low}")
+    print(f"steps {steps}")
+except Exception as e:  # noqa: BLE001 - every failure is reported, the gate fails closed
+    print(f"error {e}")
+
+exec
+/bin/bash -lc "command -v lldb; sed -n '190,240p' Concrete/Backend/LCB.lean; cat scripts/checks/slice0_bir.lean | head -120; sed -n '400,450p' Concrete/README.md; sed -n '570,595p' Concrete/README.md; cat scripts/checks/slice0_repro.sh; rg 'LCB\\.(adapt|assemble|artifact|emit)|timeout' Concrete scripts/checks/slice0* scripts/checks/lib/slice0*" in /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/owner-review1
+ succeeded in 0ms:
+           valueWidths := Array.replicate (valueCount p) .word, blocks := blocks.toArray }
+
+/-- The LCB backend's emit: the adapted body paired with the program's site table (the table that
+decodes the body's result is part of the emitted artifact), or the adapter's refusal, in which case
+no artifact exists (`artifact` and the emitter build only from `.ok`). `Proof.emit_correct` and
+`Proof.artifact_correct` are the backend contract: no premise. -/
+def emit (p : Program) : Except String (Source.Function × SiteTable) := do
+  let f ← adapt p
+  return (f, p.sites)
+
+/-! ## Assembly, in process (inside `P_toolchain[lcb]`) -/
+
+/-- The targets the gate runs LCB's output on. -/
+inductive Target where
+  | x86_64Linux | aarch64Linux | aarch64Macos
+  deriving DecidableEq, Repr
+
+def Target.ofName : String → Option Target
+  | "x86_64-linux" => some .x86_64Linux
+  | "aarch64-linux" => some .aarch64Linux
+  | "aarch64-macos" => some .aarch64Macos
+  | _ => none
+
+/-- The body's symbol: the runtime entry calls `concrete_body`. -/
+def bodySymbol : LeanCompilerBackend.Verified.Symbol := { namespaceName := "concrete", name := "concrete_body", exported := true }
+
+/-- The adapted body as assembly text for `target`, computed in process from the value. -/
+def assemble (target : Target) (f : Source.Function) : Except String String :=
+  match target with
+  | .aarch64Macos => do
+    let job : LeanCompilerBackend.Verified.FunctionJob :=
+      { code := { symbol := bodySymbol, body := f, abi := LeanCompilerBackend.Verified.planAbi f,
+                  layout := LeanCompilerBackend.Verified.planFrame f } }
+    let artifact ← (LeanCompilerBackend.Verified.compileFunction job).mapError (fun e => s!"LCB first path: {repr e}")
+    return ".text\n" ++ artifact.code.fragment ++ ".subsections_via_symbols\n"
+  | .x86_64Linux | .aarch64Linux => do
+    let m : LeanCompilerBackend.Module :=
+      { functions := #[LeanCompilerBackend.Verified.reify f bodySymbol.name bodySymbol.exported] }
+    LeanCompilerBackend.validateModule m
+    match target with
+    | .x86_64Linux => LeanCompilerBackend.AMD64.emitModuleValidated m false false
+    | _ => LeanCompilerBackend.AArch64.emitModuleValidated m false false
+
+/-- The LCB body artifact for `target`: the assembly of a successful `emit`, or its refusal. -/
+def artifact (target : Target) (p : Program) : Except String String := do
+  let (f, _) ← emit p
+  assemble target f
+
+/-! ## `adapter_correct`, value level
+
+The first layer of the adapter proof: each BIR instruction's expansion computes, in LCB's 32-bit
+import Concrete
+
+/-!
+Emitter for the slice-0 backend gate (`scripts/checks/slice0_backends.sh`). PROVISIONAL.
+
+`lake env lean --run scripts/checks/slice0_bir.lean list` prints the hand-written BIR examples;
+`... emit NAME DIR TARGET` checks the example in Lean (well formed; its BIR run gives the expected
+outcome; LCB's own evaluator on the adapted body returns the same result word) and writes
+`DIR/llvm.ll` (body + runtime entry), `DIR/lcb_body.s` (the adapted body, assembled by LCB in
+process for TARGET: `x86_64-linux`, `aarch64-linux` or `aarch64-macos`), `DIR/lcb_rt.ssa` (the
+runtime entry as QBE text, for LCB's command line), `DIR/lcb_body.ssa` (a debug dump only), and the
+observation the executables must show: `DIR/status` (the exit status) and `DIR/stderr` (the exact
+bytes on descriptor 2; descriptor 1 must stay empty).
+
+Two controls exercise the gate itself: `... loop DIR TARGET` emits a well-formed BIR body that
+never returns (`DIR/status` is `incomplete`), and `... invalid DIR TARGET` emits a body returning a
+word that encodes nothing, which the runtime must refuse (`Runtime.invalidLine`, then abort).
+-/
+
+open Concrete.BIR Concrete.Backend
+
+def writeExpected (dir : System.FilePath) (status : String) (stderr : String) : IO Unit := do
+  IO.FS.writeFile (dir / "status") (status ++ "\n")
+  IO.FS.writeFile (dir / "stderr") stderr
+
+/-- Write the LCB leg: the body assembled in process, the runtime entry as QBE text. -/
+def writeLcb (dir : System.FilePath) (target : LCB.Target)
+    (emitted : LeanCompilerBackend.Verified.Source.Function × SiteTable) : IO Bool := do
+  let (f, sites) := emitted
+  IO.FS.createDirAll dir
+  IO.FS.writeFile (dir / "lcb_source.txt") (reprStr f ++ "\n")
+  let job : LeanCompilerBackend.Verified.FunctionJob :=
+    { code := { symbol := LCB.bodySymbol, body := f,
+                abi := LeanCompilerBackend.Verified.planAbi f,
+                layout := LeanCompilerBackend.Verified.planFrame f } }
+  IO.FS.writeFile (dir / "lcb_job.txt") (reprStr job ++ "\n")
+  -- On every host, LCB's verified first path (the `aarch64-macos` target) must admit the body.
+  if let .error msg := LCB.assemble .aarch64Macos f then
+    IO.eprintln s!"{dir}: LCB first path: {msg}"; return false
+  match LCB.assemble target f with
+  | .error msg => IO.eprintln s!"{dir}: LCB: {msg}"; return false
+  | .ok asm =>
+    IO.FS.writeFile (dir / "lcb_body.s") asm
+    IO.FS.writeFile (dir / "lcb_rt.ssa") (Runtime.qbe sites)
+    IO.FS.writeFile (dir / "lcb_body.ssa") (LCB.render f)
+    return true
+
+def writeBackends (dir : System.FilePath) (target : LCB.Target) (p : Program)
+    (emitted : LeanCompilerBackend.Verified.Source.Function × SiteTable) : IO Bool := do
+  IO.FS.createDirAll dir
+  IO.FS.writeFile (dir / "bir.txt") (reprStr p ++ "\n")
+  IO.FS.writeFile (dir / "llvm.ll") (LLVM.module p)
+  writeLcb dir target emitted
+
+def emit (name : String) (dir : System.FilePath) (target : LCB.Target) : IO UInt32 := do
+  let some (_, p, expected) := Examples.all.find? (·.1 == name)
+    | IO.eprintln s!"unknown example {name}"; return 2
+  unless wf p do IO.eprintln s!"{name}: not well formed"; return 1
+  let got := run p 1000
+  unless got == expected do
+    IO.eprintln s!"{name}: BIR run gives {repr got}, expected {repr expected}"; return 1
+  let some word := encode expected | IO.eprintln s!"{name}: no result word"; return 1
+  match LCB.emit p with
+  | .error msg => IO.eprintln s!"{name}: adapter: {msg}"; return 1
+  | .ok (f, tbl) =>
+    match LCB.evalBody f 100000 with
+    | some w =>
+      unless w == word do
+        IO.eprintln s!"{name}: LCB's evaluator returns {w}, BIR's result word is {word}"; return 1
+    | none => IO.eprintln s!"{name}: LCB's evaluator does not return"; return 1
+    unless ← writeBackends dir target p (f, tbl) do return 1
+    match expected with
+    | .exited c => writeExpected dir (toString c) ""
+    | .trapped s => match p.sites[s]? with
+      | some e => writeExpected dir "134" (Runtime.trapLine e ++ "\n")
+      | none => IO.eprintln s!"{name}: no site {s}"; return 1
+    | _ => IO.eprintln s!"{name}: no observation"; return 1
+    return 0
+
+/-- A body that branches back to itself forever. -/
+def loopBody : Program :=
+  { blocks := [{ params := [], insts := [], term := .br 1 [] },
+               { params := [], insts := [], term := .br 1 [] }], sites := [] }
+
+def emitLoop (dir : System.FilePath) (target : LCB.Target) : IO UInt32 := do
+  unless wf loopBody && run loopBody 1000 == .outOfFuel do
+    IO.eprintln "loop: not a well-formed diverging body"; return 1
+  match LCB.emit loopBody with
+  | .error msg => IO.eprintln s!"loop: adapter: {msg}"; return 1
+  | .ok (f, tbl) =>
+    if (LCB.evalBody f 10000).isSome then IO.eprintln "loop: LCB's evaluator returns"; return 1
+    unless ← writeBackends dir target loopBody (f, tbl) do return 1
+    writeExpected dir "incomplete" ""
+    return 0
+
+/-- One site, and a body returning `256 + 1`: past the table, so the word encodes nothing. -/
+def emitInvalid (dir : System.FilePath) (target : LCB.Target) : IO UInt32 := do
+  let tbl : SiteTable := [Examples.plusSite]
+  IO.FS.createDirAll dir
+  IO.FS.writeFile (dir / "llvm.ll")
+    ("define i32 @concrete_body() {\nentry:\n  ret i32 257\n}\n\n" ++ Runtime.llvm tbl)
+  let f : LeanCompilerBackend.Verified.Source.Function :=
+    { resultWidth := .word, parameters := #[], valueWidths := #[],
+      blocks := #[{ phis := #[], instructions := #[], terminator := .ret (.literal (LCB.word 257)) }] }
+  unless ← writeLcb dir target (f, tbl) do return 1
+  writeExpected dir "134" (Runtime.invalidLine ++ "\n")
+  return 0
+
+def withTarget (name : String) (k : LCB.Target → IO UInt32) : IO UInt32 :=
+  match LCB.Target.ofName name with
+  | some t => k t
+  | none => do IO.eprintln s!"unknown target {name}"; return 2
+
+def main (args : List String) : IO UInt32 := do
+  match args with
+  | ["list"] => do
+    for (n, _, _) in Examples.all do IO.println n
+    return 0
+  | ["emit", name, dir, t] => withTarget t (emit name dir)
+  | ["loop", dir, t] => withTarget t (emitLoop dir)
+- `adapt_admitted : compile T src = .ok out → LCB.admit (LCB.adapt out.bir) = .ok _`. It is separate from semantic preservation and uses LCB's own admission function, so it covers every profile check: SSA and dominance validation, reachability of all blocks, exact widths, supported operations only, at most 64 blocks, 480 definitions and the frame bound. It is proved, or, until then, checked for each compilation by `decide` in the certificate.
+- `lower_emits_check`: every MIR add without a valid discharged-evidence token is followed by a branch on its flag to a trap site of kind `arithmeticOverflow`, with that add's origin.
+- `denotes_behaviour_det`: two denotations of the same `src` have the same `Core.behaviour`. This is stated over behaviour, not at a fixed fuel.
+
+**Program correctness transports**, through the acceptance witness `answer_accepts : compile T₀ answerSrc = .ok answerOut`:
+
+```lean
+theorem answer_correct (F : FrontendPremises) (P : NativePremises B N T₀)
+    (he : B.emit answerOut.bir = .ok t) (hb : N.Built T₀ t img) : (∃ β, N.Runs T₀ img β) ∧ ∀ β, N.Runs T₀ img β → β = .exited 42
+```
+
+**Non-vacuity, one witness per layer:**
+1. **Acceptance:** `answer_accepts`, by kernel `decide`.
+2. **Native model consistency, per backend.** For LLVM, `NativePremises (llvm refMeans) refNative T₀` is proved for a reference model:
+   - `Image := BIR.Program`;
+   - `Built T ll b := b.WF ∧ b.frameSlots ≤ T.maxSlots ∧ LLVM.print b = ll`;
+   - `BodyRuns T b r := r = BIR.bodyResult b`, where `bodyResult` returns `encode (behaviour b)` or diverges;
+   - `Runs T b β := β = BIR.behaviour b`;
+   - `refMeans ll r := ∃ b, b.WF ∧ LLVM.print b = ll ∧ r = BIR.bodyResult b`.
+
+   The `rt` field follows from `decode_encode`. The `emit` field needs **printer injectivity**, which is proved: `LLVM.unprint (LLVM.print b) = some b` for every WF `b`. That also makes the `.ll` text determine its BIR, which the certificate uses.
+
+   For LCB, `Means` is fixed by LCB's semantics. The witness `NativePremises lcb refNativeLCB T₀` uses:
+   - `Image := LCB.Source.Function × SiteTable`, which is the emitted text itself;
+   - `Built T t img := img = t ∧ frame bound`;
+   - `BodyRuns T (g, _) := LCB.bodyResult g`;
+   - `Runs T (g, tbl) β := ∃ r, LCB.bodyResult g r ∧ β = r.behaviour tbl`.
+
+   Because a successful `emit b` is `(f, b.sites)` (`Proof.emit_ok`), a built image carries exactly `b.sites`, so `rt` holds by definition and no adapter injectivity is needed. `emit` is `emit_correct`.
+
+   `live` holds because LCB's step relation is deterministic, so a run returns, faults or diverges. The witness follows from `adapter_correct` and lands with it.
+3. **Frontend premises:** these are claims about fixed code, not something a model can satisfy, so no model witness applies. They are discharged per compilation (next section), and universally once `lex_correct` and `parse_correct` land.
+4. **Native-build existence:** this is attested, not proved. The conformance job records toolchain provenance and the image digest for each example.
+
+## Per-compilation certificate (`Concrete/Cert.lean`), R-0552 first increment
+
+The driver emits `Cert_<digest>.lean`, which the kernel checks (`lake env lean`, no `native_decide`):
+
+```lean
+def srcBytes : ByteArray := ...      -- the exact input
+def expected : Output := ...         -- the exact toks, ast, q, sites, tokens, mir, mem, bir, ll, lcb
+-- one entry per edge, each checked by `decide` on that ONE stage function:
+theorem e_lex   : Lex.lex srcBytes = .ok expected.toks := by decide
+theorem e_parse : Parse.parse expected.toks = .ok expected.ast := by decide
+-- … e_elab, e_admit, e_lower, e_memory, e_ssa, e_llvm, e_lcb
+theorem cert_compile : compile T₀ srcBytes = .ok expected :=
+  compile_of_edges e_lex e_parse e_elab e_admit e_lower e_memory e_ssa e_llvm e_lcb
+    g_frame g_lcbAdmit
+-- the guards compile also checks, as explicit witnesses:
+--   g_frame    : expected.bir.frameSlots ≤ T₀.maxSlots := by decide
+--   g_lcbAdmit : LCB.admit expected.lcb = .ok _ := by decide
+   Accepted examples `return 125;` and `return 134;` are in the corpus and must classify as exits. Slice 0 can't produce a real startup refusal, because it has no grants. The refusal and trap classifications are also exercised by comparator self-tests: stub images, and the trap via gate 6.
+
+   **Refused examples have their own leg.** The Lean `check` result, the compiler's refusal (with its rule) and the refusal certificate must agree with `.expect`. No executable exists for a refused example. A separate supported-subset coverage report lists every grammar production and Core form that the corpus exercises. A reject-all compiler fails, because every accepted example must exit with its status.
+5. **Differential at the source:** generated accepted programs, with replayable seeds; native exit = Lean `run`.
+6. **Differential through the token-free lowering, both backends.** This covers overflow. Generated **well-scoped, unchecked** slice-0 programs over **arbitrary** `u8` operands, including `200 + 56`, take `lower q ∅ → memory → ssa`, so they have no tokens and no checker. Their Core `run` is compared with the LLVM path and the LCB path. Overflow must give exit 134 and the right site's trap line on fd 2, for both backends. This exercises token-aware lowering, Memory CFG and SSA, not only the backends.
+   A second leg compares generated BIR directly with both backends, to cover BIR shapes that lowering does not produce.
+
+   An in-process leg also compares `BIR.behaviour b` with LCB's own evaluator on the emitted body, an executable cross-check of `emit_correct`.
+6a. **AArch64:** a GitHub-hosted AArch64 macOS job (`macos-15`) builds the LCB output for `aarch64-macos`, runs gates 4 and 6 there natively, and compares against Lean. LLVM-native also runs there, as a third cross-check. Gates 4 and 6 for x86-64 run on concrete-ci-2.
+7. **Certificates:** the kernel checks every acceptance and refusal certificate, with measured budgets.
+8. **Reproducibility** (implemented, `scripts/checks/slice0_repro.sh`): two independent builds give byte-identical outputs at every stage, on each target, and two independent Linux runners give identical manifests. See [Reproducible builds](#reproducible-builds-owner-2026-11-07).
+9. **Trusted base** (owner, 2026-11-07): a golden test that `concrete facts` prints exactly the spec's premise list, so a premise added, removed or reworded anywhere fails until the golden is updated with it. Implemented provisionally in `scripts/checks/slice0_trusted_base.sh`: until `concrete facts` exists, `scripts/checks/slice0_trusted_base.lean` prints `Premises.report`: the premise registry `Concrete/Premises.lean`, the sorted axioms of each headline theorem (`Premises.theorems`) and each axiom's type; the gate appends the Lean toolchain and the Lake pins, and the result must equal `tests/golden/slice0_trusted_base.txt` byte for byte. The README's open-premise table must equal the registry's rendering (`Premises.tableRow`). Controls cover the comparison, a failing printer, the axiom collection and a drifted table. The statements are text until `FrontendPremises` and `NativePremises` land as Lean structures; each entry then names its field.
+10. **Sanitizers** (owner, 2026-11-07; UBSan dropped by the owner, 2026-11-08; implemented in `scripts/checks/slice0_artifacts.sh`): every LLVM example also runs built with ASan in CI, and must give the same observation with no sanitizer report. ASan instruments only functions marked `sanitize_address`, which clang's C front end adds and the printed IR lacks, so the sanitizer build adds it to every definition (`slice0_native.sh sanitize`); a control body with an out-of-bounds load must be reported. There is no UBSan leg: UBSan's checks are inserted by clang's C front end, so on LLVM IR input it checks nothing. No C is compiled in slice 0, and the LLVM-level undefined behaviour of the printed IR (poison, `unreachable`) stays P_print's.
+11. **Binary size** (owner, 2026-11-07; implemented, same script): the size of each example's executable (bytes and text size, pinned `llvm-size`), per backend and target, is recorded per run in `sizes.tsv`, uploaded with the job. Report-only: it never fails a run. **Compile time** (owner, 2026-11-08; same script, report-only): each example's emit step (the Lean emitter, Lean start-up included) and native step (clang and LCB's command line) in wall-clock milliseconds, next to its budget (the step's time bound), in `compile_times.tsv`.
+12. **Stack bound** (owner, 2026-11-07; implemented in the same script and `lib/stack_bound.py`; the `aarch64-macos` run check with LLDB, 2026-11-08): a stack-bound fact for each example, derived from the final artifact (the linked executable, not the IR) for both backends, and checked against a run. The analysis follows every path of the Concrete-owned code, instruction by instruction from an explicit set of modelled instructions, (`main`, `concrete_rt_write_all`, `concrete_body`) over the disassembly's control-flow graph, tracking the stack and frame pointers' depth below `main`'s entry and every byte addressed relative to them (so the red zone), and fails closed on anything it does not model (an instruction outside the set, another stack-pointer write, frame- or link-register writeback, an indirect branch or call, a stack pointer copied out, an indexed stack address, a stack read of bytes the function has not itself written on every path since its last call (so no stale saved frame pointer is ever loaded), a saved slot read other than by the modelled restore, two depths meeting, recursion, a call to a function neither owned nor a PLT/stub). The external calls (`write`, `_exit`, `abort`) are listed with the depth at their entry; their own use, and that `_exit` and `abort` do not return, are the libc premise. On x86-64 Linux the run check single-steps the owned code under the pinned gdb and requires the measured stack-pointer depth to be within the bound, for a complete run only (stopped first at `main`, back at each external call's return address, no signal, the expected exit status). On `aarch64-macos` the run check is the same, under Apple's LLDB (`/usr/bin/lldb`, `lib/stack_measure_lldb.py`; an external call's return address is the link register); LLDB is not pinned (Apple's signed debugserver is the only one allowed to attach), so its version is printed in the gate log. `stack.tsv` records bound, measurement and externals.
+
+With the front end (owner, 2026-11-07): gate 5's random-program fuzzer compares the native executables with the Lean evaluator, and a JSON schema generated from the Lean types of the `facts` output has goldens. Each gate joins `required-checks.txt` when the compiler lands.
+
+**Negative controls**, each a mutation the matching gate must refuse:
+- a deleted pass theorem;
+- an unrelated theorem substituted as a stage's evidence;
+- a silently omitted stage;
+- an extra or strengthened premise;
+- a changed premise-definition digest;
+- a certificate for the wrong source, BIR, `.ll` or LCB-IR;
+- a swapped executable or toolchain;
+#!/usr/bin/env bash
+# Slice-0 reproducibility gate (Concrete/README.md, gate 8). Two independent builds of the compiler
+# and of LCB, from two source copies with different paths and TMPDIRs, emit every hand-written BIR
+# example and build it natively; every stage is compared byte for byte, with no normalization.
+# The two sides share only the pinned Lean toolchain and the dependency SOURCES (each side compiles
+# them itself, with no Lake artifact cache). The comparator is checked by negative controls: a flipped byte, a missing artifact
+# and a differing inventory must each be refused.
+#
+#   slice0_repro.sh [MANIFEST]   (inside nix develop, from the repository root)
+#
+# MANIFEST gets the build identity and one hash per artifact; CI compares the manifests of two
+# independent runners of the same target.
+set -euo pipefail
+root=$(cd "$(dirname "$0")/../.." && pwd)
+cd "$root"
+# shellcheck source=scripts/checks/lib/limits.sh
+source scripts/checks/lib/limits.sh
+# shellcheck source=scripts/checks/lib/slice0_sources.sh
+source scripts/checks/lib/slice0_sources.sh
+gate_limits 64 40000
+work=$(mktemp -d)
+trap 'rm -rf "${work:?}"' EXIT
+BOUNDED_PARENT="$work"
+# shellcheck source=scripts/checks/lib/bounded.sh
+source scripts/checks/lib/bounded.sh
+[ "$BOUNDED_HAVE_WATCHDOG" = 1 ] || { echo "slice0_repro: python3 is required for bounded runs" >&2; exit 2; }
+# bounded SECS CMD...: CMD through bounded_run (stdin /dev/null, one re-run on a timeout; a second
+# timeout returns 124 with no output and is reported INCOMPLETE, never a pass).
+bounded() {
+  local secs=$1 rc=0
+  shift
+  bounded_run -i /dev/null "$secs" -- "$@" || rc=$?
+  if [ "$rc" != 0 ] && bounded_is_incomplete "$rc"; then
+    echo "slice0_repro: INCOMPLETE (timed out twice): $*" >&2
+  fi
+  return "$rc"
+}
+manifest=${1:-}
+[ -z "$manifest" ] || manifest=$(realpath -m "$manifest")
+compare=(python3 "$root/scripts/checks/lib/repro_compare.py")
+# Materialize the dependency checkouts (no build): they must be the manifest's clean revisions,
+# which build_identity.sh checks before anything is built.
+bounded 600 lake env true
+bash scripts/checks/build_identity.sh > "$work/identity"
+target=$(bash scripts/checks/slice0_native.sh target)
+# Working source edits are included (the identity records their digest); no build product is.
+for side in first second; do
+  d="$work/$side/checkout-with-$side-path"
+  mkdir -p "$d/.lake/packages" "$work/$side/tmp"
+  git ls-files -z -- "${slice0_sources[@]}" |
+    tar --null -T - -cf - | tar -xf - -C "$d"
+  # Dependency checkouts: tracked files and .git (which Lake checks against the manifest) only.
+  for pkg in .lake/packages/*/; do
+    pkg=$(basename "$pkg")
+    mkdir -p "$d/.lake/packages/$pkg"
+    (cd ".lake/packages/$pkg" && { git ls-files -z; printf '.git\0'; } | tar --null -T - -cf -) |
+      tar -xf - -C "$d/.lake/packages/$pkg"
+  done
+  (
+    cd "$d"
+    export TMPDIR="$work/$side/tmp" LC_ALL=C TZ=UTC SOURCE_DATE_EPOCH=1 ZERO_AR_DATE=1
+    # No Lake artifact cache: each side compiles everything it uses.
+    export LAKE_ARTIFACT_CACHE=false LAKE_CACHE_DIR="$work/$side/lake-cache"
+    bounded 3000 lake build Concrete lean-compiler-backend/lcb >"$work/$side/build.log" 2>&1 ||
+      { tail -50 "$work/$side/build.log" >&2; echo "slice0_repro: $side: build failed" >&2; exit 1; }
+    lcb="$d/.lake/packages/lean-compiler-backend/.lake/build/bin/lcb"
+    bounded 120 lake env lean --run scripts/checks/slice0_bir.lean list > names
+    [ -s names ] || { echo 'slice0_repro: no examples' >&2; exit 1; }
+    while read -r name; do
+      bounded 120 lake env lean --run scripts/checks/slice0_bir.lean emit "$name" "$d/out/$name" "$target"
+      bounded 120 bash scripts/checks/slice0_native.sh "$d/out/$name" "$lcb"
+    done < names
+  )
+done
+a="$work/first/checkout-with-first-path"
+b="$work/second/checkout-with-second-path"
+"${compare[@]}" "$a" "$b" "$work/identity" ${manifest:+"$manifest"}
+
+# Negative controls: the comparator must refuse each perturbation of an identical pair.
+control() { # control LABEL EXPECTED-MESSAGE SETUP...
+  local label=$1 expect=$2 c="$work/ctl/$1" rc=0; shift 2
+  mkdir -p "$c"
+  cp -R "$a" "$c/a"; cp -R "$a" "$c/b"
+  (cd "$c/b" && "$@")
+  "${compare[@]}" "$c/a" "$c/b" "$work/identity" >"$c/log" 2>&1 || rc=$?
+  if [ "$rc" = 0 ] || ! grep -qF -- "$expect" "$c/log"; then
+    echo "FAIL slice0_repro control $label: not refused as '$expect'" >&2; cat "$c/log" >&2; exit 1
+  fi
+  echo "ok slice0_repro control $label: refused"
+}
+first=$(head -1 "$a/names")
+flip() { python3 -c 'import sys;p=sys.argv[1];d=bytearray(open(p,"rb").read());d[len(d)//2]^=1;open(p,"wb").write(d)' "$1"; }
+control flipped-byte "$first: lcb.exe:" flip "out/$first/lcb.exe"
+control missing-artifact "$first: lcb_rt.o: missing" rm "out/$first/lcb_rt.o"
+control inventory 'example inventory differs' sh -c 'echo extra >> names'
+echo 'PASS slice0_repro'
+scripts/checks/slice0_repro.sh:# bounded SECS CMD...: CMD through bounded_run (stdin /dev/null, one re-run on a timeout; a second
+scripts/checks/slice0_repro.sh:# timeout returns 124 with no output and is reported INCOMPLETE, never a pass).
+scripts/checks/lib/slice0_common.sh:# bounded SECS CMD...: CMD under `capped`, through bounded_run (stdin /dev/null; a timeout is
+scripts/checks/lib/slice0_common.sh:# re-run once with a larger budget; a second timeout writes no output, returns 124 and is reported
+scripts/checks/slice0_bir.lean:  if let .error msg := LCB.assemble .aarch64Macos f then
+scripts/checks/slice0_bir.lean:  match LCB.assemble target f with
+scripts/checks/slice0_bir.lean:  match LCB.emit p with
+scripts/checks/slice0_bir.lean:  match LCB.emit loopBody with
+Concrete/README.md:The **BIR → LCB-IR adapter** is the first backend proof target. `adapter_correct` states that the adapter's output, under **LCB's own semantics** (`LeanCompilerBackend.Verified.Source`, the `ssa-int-v2` profile, imported and never restated), has the BIR behaviour. It is proved (`Proof.adapter_correct`) for every WF program the adapter accepts (`adapt p = .ok f`). The backend contract is complete (owner, 2026-11-08): `LCB.emit : Program → Except String (Source.Function × SiteTable)` represents adaptation failure, `LCB.artifact` builds only from a successful `emit`, and `Proof.emit_correct` (success implies correctness), `Proof.artifact_of_emit_error` (a refusal produces no artifact, for every target) and `Proof.artifact_correct` (every artifact comes from a correct `emit`) state it. `P_adapter` is retired; the trusted-base golden (gate 9) records it.
+Concrete/README.md:def lcb : Backend := ⟨LCB.Source.Function × SiteTable, LCB.emit,
+Concrete/README.md:   - `out.tokens = admit out.p`, `out.mir = lower out.p out.tokens`, `out.mem = memory out.mir`, `out.bir = ssa out.mem`, `out.ll = LLVM.print out.bir` and `out.lcb = LCB.adapt out.bir`;
+Concrete/README.md:- `adapter_correct : b.WF → LCB.adapt b = .ok f → LCB.bodyResult f r → r.behaviour b.sites = BIR.behaviour b` (proved, `Backend/LCB.lean`), over all WF BIR the adapter accepts, overflow included, against LCB's **raw** `Source.Function` semantics (`LeanCompilerBackend/Verified/Source.lean`, imported, never restated). `emit_correct` lifts it to `LCB.emit` and fills `NativePremises lcb`'s `emit` field.
+Concrete/README.md:- `adapt_admitted : compile T src = .ok out → LCB.admit (LCB.adapt out.bir) = .ok _`. It is separate from semantic preservation and uses LCB's own admission function, so it covers every profile check: SSA and dominance validation, reachability of all blocks, exact widths, supported operations only, at most 64 blocks, 480 definitions and the frame bound. It is proved, or, until then, checked for each compilation by `decide` in the certificate.
+Concrete/README.md:`timeout -k` on every build and emitter call. Every executable under test runs under `bounded_run`
+
+web search: 
+web search: site.lldb.llvm.org SBAddress GetLoadAddress target loaded launch breakpoint skip prologue BreakpointCreateByName
+codex
+The new Lean theorems match the claimed contract at the LCB source-semantics boundary. The LLDB code has a likely blocker: it reads `main`’s load address before launching the process. I’m also checking whether its entry breakpoint and return handling preserve the measurement baseline.
+exec
+/bin/bash -lc "rg -n 'main|ret|_exit' Concrete/Runtime.lean; nl -ba scripts/checks/lib/stack_measure_lldb.py; rg -n 'timeout -k|emit|NativePremises' Concrete/README.md | tail -15; sed -n '125,143p' flake.nix; cat scripts/checks/lib/bounded_exec.py" in /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/owner-review1
+ succeeded in 0ms:
+rg: Concrete/Runtime.lean: IO error for operation on Concrete/Runtime.lean: No such file or directory (os error 2)
+     1	# lldb --batch -o 'command script import stack_measure_lldb.py' (README gate 12, aarch64-macos).
+     2	# PROVISIONAL.
+     3	#
+     4	# The LLDB counterpart of stack_measure.py (same contract, same environment: STACK_EXE, the
+     5	# executable; STACK_RANGES "LO:HI,..." in link-time addresses, from stack_bound.py --ranges;
+     6	# STACK_MAIN, main's LO; STACK_EXPECT, the expected exit status). It measures the stack depth one
+     7	# complete run reaches, below the stack pointer at `main`'s entry, by single-stepping every
+     8	# instruction of the Concrete-owned functions. An external function (entered by `bl`, so its
+     9	# return address is in the link register) runs at full speed to that return address; its own use
+    10	# is outside the bound, as in stack_bound.py, but the depth at its entry is measured. Once main has
+    11	# returned, the rest runs freely.
+    12	#
+    13	# Fail closed: the measurement counts only for a run that stopped first at main's runtime address,
+    14	# stopped after each external call exactly at its return address (or exited inside it), received
+    15	# no signal, and exited normally with status STACK_EXPECT. Prints `measured N` and `steps N`, or
+    16	# `error ...` (the gate fails on anything but a measurement).
+    17	import os
+    18	
+    19	import lldb
+    20	
+    21	LIMIT = 2_000_000
+    22	
+    23	
+    24	def measure(debugger):
+    25	    exe = os.environ["STACK_EXE"]
+    26	    ranges = [tuple(int(x, 16) for x in r.split(":")) for r in os.environ["STACK_RANGES"].split(",")]
+    27	    main_lo = int(os.environ["STACK_MAIN"], 16)
+    28	    expect = int(os.environ["STACK_EXPECT"])
+    29	    debugger.SetAsync(False)
+    30	    target = debugger.CreateTarget(exe)
+    31	    if not target.IsValid():
+    32	        raise RuntimeError(f"cannot load {exe}")
+    33	    bp = target.BreakpointCreateByName("main", target.GetExecutable().GetFilename())
+    34	    if bp.GetNumLocations() != 1:
+    35	        raise RuntimeError(f"main has {bp.GetNumLocations()} breakpoint locations")
+    36	    main_rt = bp.GetLocationAtIndex(0).GetLoadAddress()
+    37	    info = lldb.SBLaunchInfo([])
+    38	    info.SetLaunchFlags(lldb.eLaunchFlagDisableASLR)
+    39	    for fd, flags in ((0, os.O_RDONLY), (1, os.O_WRONLY), (2, os.O_WRONLY)):
+    40	        info.AddOpenFileAction(fd, "/dev/null", flags == os.O_RDONLY, flags != os.O_RDONLY)
+    41	    err = lldb.SBError()
+    42	    process = target.Launch(info, err)
+    43	    if not err.Success() or not process.IsValid():
+    44	        raise RuntimeError(f"launch failed: {err}")
+    45	    try:
+    46	        return run(process, target, bp, ranges, main_lo, main_rt, expect)
+    47	    finally:
+    48	        if process.GetState() not in (lldb.eStateExited, lldb.eStateDetached, lldb.eStateInvalid):
+    49	            process.Kill()
+    50	
+    51	
+    52	def check_live(process):
+    53	    """True while the process is stopped (not exited); raises on a signal or another stop."""
+    54	    state = process.GetState()
+    55	    if state == lldb.eStateExited:
+    56	        return False
+    57	    if state != lldb.eStateStopped:
+    58	        raise RuntimeError(f"unexpected process state {state}")
+    59	    thread = process.GetSelectedThread()
+    60	    if thread.GetStopReason() == lldb.eStopReasonSignal or thread.GetStopReason() == lldb.eStopReasonException:
+    61	        raise RuntimeError(f"signal or exception: {thread.GetStopDescription(200)}")
+    62	    return True
+    63	
+    64	
+    65	def run(process, target, bp, ranges, main_lo, main_rt, expect):
+    66	    if not check_live(process):
+    67	        raise RuntimeError("exited before main")
+    68	    thread = process.GetSelectedThread()
+    69	    frame = thread.GetFrameAtIndex(0)
+    70	    if frame.GetPC() != main_rt:
+    71	        raise RuntimeError(f"first stop at {frame.GetPC():#x}, not main ({main_rt:#x})")
+    72	    target.BreakpointDelete(bp.GetID())
+    73	    offset = main_rt - main_lo
+    74	    sp0 = frame.GetSP()
+    75	    low, steps = sp0, 0
+    76	
+    77	    def owned(pc):
+    78	        return any(lo + offset <= pc <= hi + offset for lo, hi in ranges)
+    79	
+    80	    while check_live(process):
+    81	        thread = process.GetSelectedThread()
+    82	        frame = thread.GetFrameAtIndex(0)
+    83	        pc, sp = frame.GetPC(), frame.GetSP()
+    84	        if sp > sp0:  # main has returned
+    85	            process.Continue()
+    86	            continue
+    87	        low = min(low, sp)
+    88	        if owned(pc):
+    89	            thread.StepInstruction(False)
+    90	            steps += 1
+    91	            if steps > LIMIT:
+    92	                raise RuntimeError(f"more than {LIMIT} steps")
+    93	        else:
+    94	            ret = frame.FindRegister("lr").GetValueAsUnsigned()
+    95	            if not owned(ret):
+    96	                raise RuntimeError(f"external code at {pc:#x} returns to {ret:#x}, outside the owned code")
+    97	            tb = target.BreakpointCreateByAddress(ret)
+    98	            tb.SetOneShot(True)
+    99	            process.Continue()
+   100	            if check_live(process) and process.GetSelectedThread().GetFrameAtIndex(0).GetPC() != ret:
+   101	                raise RuntimeError(f"stopped at {process.GetSelectedThread().GetFrameAtIndex(0).GetPC():#x}, "
+   102	                                   f"not the return address {ret:#x}")
+   103	            target.BreakpointDelete(tb.GetID())
+   104	    status = process.GetExitStatus()
+   105	    if status != expect:
+   106	        raise RuntimeError(f"exit status {status}, expected {expect}")
+   107	    if steps == 0:
+   108	        raise RuntimeError("no instruction stepped")
+   109	    return sp0 - low, steps
+   110	
+   111	
+   112	def __lldb_init_module(debugger, _dict):
+   113	    try:
+   114	        measured, steps = measure(debugger)
+   115	        print(f"measured {measured}")
+   116	        print(f"steps {steps}")
+   117	    except Exception as e:  # noqa: BLE001 - every failure is reported, the gate fails closed
+   118	        print(f"error {e}")
+428:   Because a successful `emit b` is `(f, b.sites)` (`Proof.emit_ok`), a built image carries exactly `b.sites`, so `rt` holds by definition and no adapter injectivity is needed. `emit` is `emit_correct`.
+436:The driver emits `Cert_<digest>.lean`, which the kernel checks (`lake env lean`, no `native_decide`):
+455:`Lexes`, `Derives` and `Elab` each have a Boolean checker over explicit witnesses, with a one-way soundness lemma (`lexesB_sound` and so on, giving `Denotes src p`). So `cert_denotes` discharges the frontend premises **for this compilation**, and `compile_correct_cert` needs only `NativePremises`.
+478:--   and the two backend emits
+484:      (h : ∀ i N T, NativePremises (B i) N T → C' i)  -- the stage's OWN backend family
+491:The contract is an index, not a field, and it is applied to `run`. So `Contract := True` is impossible unless the golden table says so, and an unrelated theorem doesn't typecheck. The contract table's definitions are covered by the digest gate. The backend emits are stages too. Each has `native` evidence for its own backend family, as the golden table fixes. For the adapter it is `ι := Unit`, `B _ := lcb`. For the printer it is `ι := (String → BodyResult → Prop)`, `B M := llvm M`, so the contract is `∀ M, …`, with `M` in scope. `adapter_correct` turns LCB's evidence into `proof`. The glue between stages is stated as theorems:
+533:| Termination (artifact) | `conditional`, on the backend's own premises: LLVM `P_print, P_toolchain[llvm], P_rt, P_launch, P_live`; LCB `P_toolchain[lcb], P_rt, P_launch, P_live` (`emit` proved: `emit_correct`). |
+577:   An in-process leg also compares `BIR.behaviour b` with LCB's own evaluator on the emitted body, an executable cross-check of `emit_correct`.
+581:9. **Trusted base** (owner, 2026-11-07): a golden test that `concrete facts` prints exactly the spec's premise list, so a premise added, removed or reworded anywhere fails until the golden is updated with it. Implemented provisionally in `scripts/checks/slice0_trusted_base.sh`: until `concrete facts` exists, `scripts/checks/slice0_trusted_base.lean` prints `Premises.report`: the premise registry `Concrete/Premises.lean`, the sorted axioms of each headline theorem (`Premises.theorems`) and each axiom's type; the gate appends the Lean toolchain and the Lake pins, and the result must equal `tests/golden/slice0_trusted_base.txt` byte for byte. The README's open-premise table must equal the registry's rendering (`Premises.tableRow`). Controls cover the comparison, a failing printer, the axiom collection and a drifted table. The statements are text until `FrontendPremises` and `NativePremises` land as Lean structures; each entry then names its field.
+583:11. **Binary size** (owner, 2026-11-07; implemented, same script): the size of each example's executable (bytes and text size, pinned `llvm-size`), per backend and target, is recorded per run in `sizes.tsv`, uploaded with the job. Report-only: it never fails a run. **Compile time** (owner, 2026-11-08; same script, report-only): each example's emit step (the Lean emitter, Lean start-up included) and native step (clang and LCB's command line) in wall-clock milliseconds, next to its budget (the step's time bound), in `compile_times.tsv`.
+627:  - `adapter_correct` and `emit_correct` (P_adapter, retired 2026-11-08);
+676:**Still needed for the Linux targets:** the compatibility path is reached with `Verified.reify`, which maps both high multiplies to an ordinary `mul` (LCB `Verified/Canonical.lean`), because the compatibility IR has no high multiply. Slice 2's 64-bit multiply overflow would compute the wrong flag there. LCB must add high multiply to its compatibility IR and backends (or the x86-64 verified path) before slice 2; until then the adapter must refuse high multiply on Linux targets. Slice 0 emits none.
+701:emits every hand-written BIR example and builds it natively, and every stage is compared without
+712:intrinsic deduplication); site paths are project-relative source data. They emit no clock,
+720:`timeout -k` on every build and emitter call. Every executable under test runs under `bounded_run`
+            # Slice-0 native builds name their compiler explicitly (scripts/checks/slice0_native.sh),
+            # pinned here so the shell's general clang can move without changing their identity.
+            CONCRETE_SLICE0_CLANG = "${pkgs.llvmPackages_21.clang}/bin/clang";
+            # The artifact gates (scripts/checks/slice0_artifacts.sh) read the linked executables
+            # with the same LLVM release's llvm-objdump and llvm-size, and measure a run under gdb
+            # (Linux, pinned) or LLDB (macOS: Apple's /usr/bin/lldb, whose signed debugserver is
+            # the only one allowed to attach; not pinned, its identity is recorded in the report).
+            CONCRETE_SLICE0_LLVM = "${pkgs.llvmPackages_21.llvm}/bin";
+          } // pkgs.lib.optionalAttrs pkgs.stdenv.isLinux {
+            CONCRETE_SLICE0_GDB = "${pkgs.gdb}/bin/gdb";
+          } // pkgs.lib.optionalAttrs pkgs.stdenv.isDarwin {
+            CONCRETE_SLICE0_LLDB = "/usr/bin/lldb";
+          } // gatesMarker);
+
+          # `nix develop .#gates` — what CI runs every gate step in: the gate userland, the marker,
+          # and no compiler toolchain (mkShellNoCC, so not even stdenv's cc). Lean and the C
+          # toolchain come from the runner, exactly as before.
+          gates = pkgs.mkShellNoCC ({ packages = gatesUserland; } // gatesMarker);
+
+#!/usr/bin/env python3
+"""Run one command under a time budget, owning its whole process group (lib/bounded.sh's runner).
+
+  bounded_exec.py --timeout SECS --kill-after SECS --status FILE -- CMD [ARGS...]
+
+The command inherits stdin, stdout and stderr (the caller redirects them) and runs as the leader of
+a new session, so it and every descendant that does not create its own session share one process
+group. The outcome goes to FILE, never to the command's streams, so nothing the command prints can
+fake or hide it:
+  exit N      the command finished with status N (128+S when killed by signal S, as a shell reports)
+  timeout     the budget expired: the group got SIGTERM, then, KILL_AFTER seconds later, SIGKILL,
+              whether or not the leader had already exited, so a descendant that ignores SIGTERM
+              does not outlive the attempt.
+When the command finishes within its budget its group is left alone, as timeout(1) does.
+Both durations must be finite numbers, the budget positive and the grace nonnegative.
+This process exits 0 once FILE is written and 2 on a usage error. If it is itself cancelled
+(SIGTERM, SIGHUP, SIGINT), it kills the command's group, writes no outcome, and exits 128+signal.
+"""
+import math
+import os
+import signal
+import subprocess
+import sys
+import time
+
+
+class Cancelled(Exception):
+    def __init__(self, sig):
+        super().__init__(sig)
+        self.sig = sig
+
+
+def killpg(pgid, sig):
+    try:
+        os.killpg(pgid, sig)
+    except (ProcessLookupError, PermissionError):
+        pass
+
+
+def group_alive(pgid):
+    try:
+        os.killpg(pgid, 0)
+        return True
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+
+
+def duration(text, positive):
+    try:
+        v = float(text)
+    except ValueError:
+        return None
+    if not math.isfinite(v) or v < 0 or (positive and v == 0):
+        return None
+    return v
+
+
+def usage(msg):
+    print(f"bounded_exec: {msg}\n{__doc__}", file=sys.stderr)
+    return 2
+
+
+def main(argv):
+    try:
+        i = argv.index("--")
+    except ValueError:
+        return usage("missing --")
+    opts, cmd = argv[:i], argv[i + 1:]
+    if len(opts) != 6 or opts[0::2] != ["--timeout", "--kill-after", "--status"] or not cmd:
+        return usage("expected --timeout SECS --kill-after SECS --status FILE -- CMD...")
+    budget, kill_after, status = duration(opts[1], True), duration(opts[3], False), opts[5]
+    if budget is None or kill_after is None:
+        return usage(f"invalid duration: --timeout {opts[1]} --kill-after {opts[3]}")
+
+    def cancel(sig, _frame):
+        raise Cancelled(sig)
+
+    cancel_sigs = {signal.SIGTERM, signal.SIGHUP, signal.SIGINT}
+    for s in cancel_sigs:
+        signal.signal(s, cancel)
+    pgid = None
+    try:
+        # Cancellation is held off while the child is created, so it can never arrive between the
+        # child starting and its group being recorded; the child itself starts with them unblocked.
+        signal.pthread_sigmask(signal.SIG_BLOCK, cancel_sigs)
+        try:
+            proc = subprocess.Popen(cmd, start_new_session=True,
+                                    preexec_fn=lambda: signal.pthread_sigmask(signal.SIG_UNBLOCK, cancel_sigs))
+        except OSError as e:
+            proc = None
+            print(f"bounded_exec: cannot run {cmd[0]}: {e}", file=sys.stderr)
+            outcome = "exit 127"
+        else:
+            pgid = proc.pid
+        finally:
+            signal.pthread_sigmask(signal.SIG_UNBLOCK, cancel_sigs)  # a held signal is delivered here
+        if proc is not None:
+            try:
+                rc = proc.wait(timeout=budget)
+                outcome = f"exit {rc if rc >= 0 else 128 - rc}"
+            except subprocess.TimeoutExpired:
+                killpg(pgid, signal.SIGTERM)
+                deadline = time.monotonic() + kill_after
+                while time.monotonic() < deadline:
+                    if proc.poll() is not None and not group_alive(pgid):
+                        break
+                    time.sleep(0.05)
+                killpg(pgid, signal.SIGKILL)
+                proc.wait()
+                outcome = "timeout"
+    except Cancelled as c:
+        if pgid is not None:
+            killpg(pgid, signal.SIGKILL)
+            try:
+                proc.wait(timeout=5)
+            except Exception:
+                pass
+        return 128 + c.sig
+    with open(status, "w") as fh:
+        fh.write(outcome + "\n")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))
+
+web search: 
+web search: site.lldb.llvm.org SBBreakpointLocation GetLoadAddress LLDB_INVALID_ADDRESS ...
+exec
+/bin/bash -lc "rg --files Concrete | rg 'Runtime|Native|Compile'; rg -n 'define.*main|function.*main|ret |call.*exit' Concrete/Backend/Runtime.lean; sed -n '714,728p' Concrete/README.md; sed -n '1,85p' scripts/checks/slice0_repro.sh; rg -n 'range|main' scripts/checks/lib/stack_bound.py | tail -15; sed -n '380,425p' DELTA.diff" in /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/owner-review1
+ succeeded in 0ms:
+Concrete/Backend/Runtime.lean
+101:    "  call void @_exit(i32 134)\n  unreachable\n"
+115:  "out:\n  ret void\n}\n\n" ++
+116:  "define i32 @main() {\n" ++
+119:  "exit:\n  ret i32 %w\n" ++
+137:    "    call $_exit(w 134)\n    ret 0\n"
+146:  "export function w $main() {\n" ++
+147:  "@start\n    %w =w call $concrete_body()\n    %ok =w cultw %w, 256\n    jnz %ok, @exit, @trap\n" ++
+148:  "@exit\n    ret %w\n" ++
+152:  "    call $abort()\n    ret 0\n" ++
+complete Linux manifests from two independent runners. Different targets are never compared.
+Changes to these pins change the build identity; no reproducibility claim spans different
+toolchains or targets.
+
+Every slice-0 gate runs under `scripts/checks/lib/limits.sh` (per-process address space 64 GiB on
+Linux, since Lake reserves far more than it uses; at most 40000 processes for the user), with
+`timeout -k` on every build and emitter call. Every executable under test runs under `bounded_run`
+(time, and its whole process group killed) and `lib/limited_exec.sh` (1 GiB address space, no core
+file). Darwin does not enforce an address-space limit, so there the CI job's memory is the bound.
+#!/usr/bin/env bash
+# Slice-0 reproducibility gate (Concrete/README.md, gate 8). Two independent builds of the compiler
+# and of LCB, from two source copies with different paths and TMPDIRs, emit every hand-written BIR
+# example and build it natively; every stage is compared byte for byte, with no normalization.
+# The two sides share only the pinned Lean toolchain and the dependency SOURCES (each side compiles
+# them itself, with no Lake artifact cache). The comparator is checked by negative controls: a flipped byte, a missing artifact
+# and a differing inventory must each be refused.
+#
+#   slice0_repro.sh [MANIFEST]   (inside nix develop, from the repository root)
+#
+# MANIFEST gets the build identity and one hash per artifact; CI compares the manifests of two
+# independent runners of the same target.
+set -euo pipefail
+root=$(cd "$(dirname "$0")/../.." && pwd)
+cd "$root"
+# shellcheck source=scripts/checks/lib/limits.sh
+source scripts/checks/lib/limits.sh
+# shellcheck source=scripts/checks/lib/slice0_sources.sh
+source scripts/checks/lib/slice0_sources.sh
+gate_limits 64 40000
+work=$(mktemp -d)
+trap 'rm -rf "${work:?}"' EXIT
+BOUNDED_PARENT="$work"
+# shellcheck source=scripts/checks/lib/bounded.sh
+source scripts/checks/lib/bounded.sh
+[ "$BOUNDED_HAVE_WATCHDOG" = 1 ] || { echo "slice0_repro: python3 is required for bounded runs" >&2; exit 2; }
+# bounded SECS CMD...: CMD through bounded_run (stdin /dev/null, one re-run on a timeout; a second
+# timeout returns 124 with no output and is reported INCOMPLETE, never a pass).
+bounded() {
+  local secs=$1 rc=0
+  shift
+  bounded_run -i /dev/null "$secs" -- "$@" || rc=$?
+  if [ "$rc" != 0 ] && bounded_is_incomplete "$rc"; then
+    echo "slice0_repro: INCOMPLETE (timed out twice): $*" >&2
+  fi
+  return "$rc"
+}
+manifest=${1:-}
+[ -z "$manifest" ] || manifest=$(realpath -m "$manifest")
+compare=(python3 "$root/scripts/checks/lib/repro_compare.py")
+# Materialize the dependency checkouts (no build): they must be the manifest's clean revisions,
+# which build_identity.sh checks before anything is built.
+bounded 600 lake env true
+bash scripts/checks/build_identity.sh > "$work/identity"
+target=$(bash scripts/checks/slice0_native.sh target)
+# Working source edits are included (the identity records their digest); no build product is.
+for side in first second; do
+  d="$work/$side/checkout-with-$side-path"
+  mkdir -p "$d/.lake/packages" "$work/$side/tmp"
+  git ls-files -z -- "${slice0_sources[@]}" |
+    tar --null -T - -cf - | tar -xf - -C "$d"
+  # Dependency checkouts: tracked files and .git (which Lake checks against the manifest) only.
+  for pkg in .lake/packages/*/; do
+    pkg=$(basename "$pkg")
+    mkdir -p "$d/.lake/packages/$pkg"
+    (cd ".lake/packages/$pkg" && { git ls-files -z; printf '.git\0'; } | tar --null -T - -cf -) |
+      tar -xf - -C "$d/.lake/packages/$pkg"
+  done
+  (
+    cd "$d"
+    export TMPDIR="$work/$side/tmp" LC_ALL=C TZ=UTC SOURCE_DATE_EPOCH=1 ZERO_AR_DATE=1
+    # No Lake artifact cache: each side compiles everything it uses.
+    export LAKE_ARTIFACT_CACHE=false LAKE_CACHE_DIR="$work/$side/lake-cache"
+    bounded 3000 lake build Concrete lean-compiler-backend/lcb >"$work/$side/build.log" 2>&1 ||
+      { tail -50 "$work/$side/build.log" >&2; echo "slice0_repro: $side: build failed" >&2; exit 1; }
+    lcb="$d/.lake/packages/lean-compiler-backend/.lake/build/bin/lcb"
+    bounded 120 lake env lean --run scripts/checks/slice0_bir.lean list > names
+    [ -s names ] || { echo 'slice0_repro: no examples' >&2; exit 1; }
+    while read -r name; do
+      bounded 120 lake env lean --run scripts/checks/slice0_bir.lean emit "$name" "$d/out/$name" "$target"
+      bounded 120 bash scripts/checks/slice0_native.sh "$d/out/$name" "$lcb"
+    done < names
+  )
+done
+a="$work/first/checkout-with-first-path"
+b="$work/second/checkout-with-second-path"
+"${compare[@]}" "$a" "$b" "$work/identity" ${manifest:+"$manifest"}
+
+# Negative controls: the comparator must refuse each perturbation of an identical pair.
+control() { # control LABEL EXPECTED-MESSAGE SETUP...
+  local label=$1 expect=$2 c="$work/ctl/$1" rc=0; shift 2
+  mkdir -p "$c"
+  cp -R "$a" "$c/a"; cp -R "$a" "$c/b"
+  (cd "$c/b" && "$@")
+  "${compare[@]}" "$c/a" "$c/b" "$work/identity" >"$c/log" 2>&1 || rc=$?
+26:through the x86 thread-pointer segments. Any other register may hold a stack address (main's argv
+50:OWNED = ("main", "concrete_body", "concrete_rt_write_all")
+157:    if "r" in mode and not all(b in st.w for b in range(lo, hi + 1)):
+159:    return st.w | frozenset(range(lo, hi + 1)) if "w" in mode else st.w
+195:            # Any other register may hold a stack address (main's argv and envp, a value an
+354:                # Any other register may hold a stack address (main's argv, envp and apple
+488:    """(bound, externals, owned): main's bound, each external's deepest entry depth, both from
+489:    main's entry, and the owned functions' names."""
+491:    if "main" not in owned:
+492:        raise Refuse("no main")
+593:    total, ext = fn_bound("main")
+597:if __name__ == "__main__":
+599:        sys.exit("usage: stack_bound.py x86_64|aarch64 DISASM [--ranges]")
+610:    if len(sys.argv) == 4 and sys.argv[3] == "--ranges":
+613:            print(f"range {key} {code[0][0]:#x} {code[-1][0]:#x}")
++# returned, the rest runs freely.
++#
++# Fail closed: the measurement counts only for a run that stopped first at main's runtime address,
++# stopped after each external call exactly at its return address (or exited inside it), received
++# no signal, and exited normally with status STACK_EXPECT. Prints `measured N` and `steps N`, or
++# `error ...` (the gate fails on anything but a measurement).
++import os
++
++import lldb
++
++LIMIT = 2_000_000
++
++
++def measure(debugger):
++    exe = os.environ["STACK_EXE"]
++    ranges = [tuple(int(x, 16) for x in r.split(":")) for r in os.environ["STACK_RANGES"].split(",")]
++    main_lo = int(os.environ["STACK_MAIN"], 16)
++    expect = int(os.environ["STACK_EXPECT"])
++    debugger.SetAsync(False)
++    target = debugger.CreateTarget(exe)
++    if not target.IsValid():
++        raise RuntimeError(f"cannot load {exe}")
++    bp = target.BreakpointCreateByName("main", target.GetExecutable().GetFilename())
++    if bp.GetNumLocations() != 1:
++        raise RuntimeError(f"main has {bp.GetNumLocations()} breakpoint locations")
++    main_rt = bp.GetLocationAtIndex(0).GetLoadAddress()
++    info = lldb.SBLaunchInfo([])
++    info.SetLaunchFlags(lldb.eLaunchFlagDisableASLR)
++    for fd, flags in ((0, os.O_RDONLY), (1, os.O_WRONLY), (2, os.O_WRONLY)):
++        info.AddOpenFileAction(fd, "/dev/null", flags == os.O_RDONLY, flags != os.O_RDONLY)
++    err = lldb.SBError()
++    process = target.Launch(info, err)
++    if not err.Success() or not process.IsValid():
++        raise RuntimeError(f"launch failed: {err}")
++    try:
++        return run(process, target, bp, ranges, main_lo, main_rt, expect)
++    finally:
++        if process.GetState() not in (lldb.eStateExited, lldb.eStateDetached, lldb.eStateInvalid):
++            process.Kill()
++
++
++def check_live(process):
++    """True while the process is stopped (not exited); raises on a signal or another stop."""
++    state = process.GetState()
++    if state == lldb.eStateExited:
++        return False
+
+web search: 
+web search: https://lldb.llvm.org/cpp_reference/SBTarget_8cpp_source.html
+exec
+/bin/bash -lc "python3 - <<'PY'
+import sys, types
+from pathlib import Path
+m = types.SimpleNamespace(eStateExited=1,eStateStopped=2,eStopReasonSignal=3,eStopReasonException=4)
+sys.modules['lldb']=m
+ns={}
+exec(compile(Path('scripts/checks/lib/stack_measure_lldb.py').read_text(), 'stack_measure_lldb.py','exec'), ns)
+class Reg:
+ def GetValueAsUnsigned(self): return 0x9000
+class Frame:
+ def GetPC(self): return 0x1000 if proc.n==0 else 0x9000
+ def GetSP(self): return 0x8000
+ def FindRegister(self,n): return Reg()
+class Thread:
+ def GetFrameAtIndex(self,n): return Frame()
+ def GetStopReason(self): return 5
+ def StepInstruction(self,x): proc.n+=1
+class Process:
+ n=0
+ def GetState(self): return 2
+ def GetSelectedThread(self): return Thread()
+class Target:
+ def BreakpointDelete(self,x): pass
+proc=Process()
+try: ns['run'](proc,Target(),types.SimpleNamespace(GetID=lambda:1),[(0x1000,0x1000)],0x1000,0x1000,0)
+except RuntimeError as e: print('AArch64 main ret model:', e)
+PY
+bash -n scripts/checks/lib/slice0_common.sh scripts/checks/slice0_artifacts.sh scripts/checks/slice0_backends.sh scripts/checks/slice0_repro.sh scripts/checks/slice0_native.sh" in /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/owner-review1
+ succeeded in 0ms:
+AArch64 main ret model: external code at 0x9000 returns to 0x9000, outside the owned code
+
+codex
+**Verdict: REJECT.** The Lean contract looks sound, but the LLDB implementation has blockers.
+
+1. **Real defect — high:** `scripts/checks/lib/stack_measure_lldb.py:36` reads `main_rt` before launching. Load addresses can be unresolved until launch; the cached value is then compared against the stopped process’s PC and used to relocate every owned range. Read and validate the address after launch. Disabling ASLR does not resolve pre-launch addresses. See [LLDB’s address documentation](https://lldb.llvm.org/python_api/lldb.SBAddress.html).
+
+2. **Real defect — high:** `scripts/checks/lib/stack_measure_lldb.py:33` creates a name breakpoint without disabling prologue skipping. LLDB can stop after `main`’s stack allocation. That makes `sp0` the wrong baseline and incorrectly treats the skipped instruction bytes as an image slide at line 73. Break at the exact symbol entry, then derive the slide from that entry’s runtime address. [LLDB’s name resolver explicitly supports skipping prologues](https://lldb.llvm.org/cpp_reference/BreakpointResolverName_8cpp_source.html).
+
+3. **Real defect — high:** `scripts/checks/lib/stack_measure_lldb.py:84` uses the x86 return heuristic `sp > sp0`. AArch64 `ret` branches through LR without popping the stack, so a correctly returning `main` leaves `sp == sp0`. The script then classifies the caller as an external callee and rejects its LR as outside owned code. Ordinary successful examples return from `main` (`Concrete/Backend/Runtime.lean:119,148`). Track main’s entry LR and recognize its return explicitly. A small mocked execution reproduced this rejection.
+
+4. **Real defect — low, documentation:** `Concrete/README.md:720` still promises GNU `timeout -k` for builds and emission. Update it to describe `bounded_run`, including retry and INCOMPLETE behavior.
+
+The proof additions correctly establish acceptance/table preservation, successful emission’s semantic correctness, exact error propagation to `artifact`, and successful artifacts’ provenance. Native assembly correctness remains under `P_toolchain[lcb]`, as documented. Normal example and loop emission go through `LCB.emit`; the invalid-word runtime control deliberately constructs a body directly and is not a compiler-path bypass.
+
+The timeout conversions preserve completed-command exit codes and streams, explicitly supply `/dev/null` stdin, and reject double timeouts with INCOMPLETE diagnostics. I found no blocking regression there. UBSan removal and the report-only timing table match the stated decisions.
+
+Validation was static review, shell syntax checks, and the mocked return-path check. No Lean rebuild or macOS execution was available. No files were modified; no preference-only findings.
+tokens used
+63,649
+**Verdict: REJECT.** The Lean contract looks sound, but the LLDB implementation has blockers.
+
+1. **Real defect — high:** `scripts/checks/lib/stack_measure_lldb.py:36` reads `main_rt` before launching. Load addresses can be unresolved until launch; the cached value is then compared against the stopped process’s PC and used to relocate every owned range. Read and validate the address after launch. Disabling ASLR does not resolve pre-launch addresses. See [LLDB’s address documentation](https://lldb.llvm.org/python_api/lldb.SBAddress.html).
+
+2. **Real defect — high:** `scripts/checks/lib/stack_measure_lldb.py:33` creates a name breakpoint without disabling prologue skipping. LLDB can stop after `main`’s stack allocation. That makes `sp0` the wrong baseline and incorrectly treats the skipped instruction bytes as an image slide at line 73. Break at the exact symbol entry, then derive the slide from that entry’s runtime address. [LLDB’s name resolver explicitly supports skipping prologues](https://lldb.llvm.org/cpp_reference/BreakpointResolverName_8cpp_source.html).
+
+3. **Real defect — high:** `scripts/checks/lib/stack_measure_lldb.py:84` uses the x86 return heuristic `sp > sp0`. AArch64 `ret` branches through LR without popping the stack, so a correctly returning `main` leaves `sp == sp0`. The script then classifies the caller as an external callee and rejects its LR as outside owned code. Ordinary successful examples return from `main` (`Concrete/Backend/Runtime.lean:119,148`). Track main’s entry LR and recognize its return explicitly. A small mocked execution reproduced this rejection.
+
+4. **Real defect — low, documentation:** `Concrete/README.md:720` still promises GNU `timeout -k` for builds and emission. Update it to describe `bounded_run`, including retry and INCOMPLETE behavior.
+
+The proof additions correctly establish acceptance/table preservation, successful emission’s semantic correctness, exact error propagation to `artifact`, and successful artifacts’ provenance. Native assembly correctness remains under `P_toolchain[lcb]`, as documented. Normal example and loop emission go through `LCB.emit`; the invalid-word runtime control deliberately constructs a body directly and is not a compiler-path bypass.
+
+The timeout conversions preserve completed-command exit codes and streams, explicitly supply `/dev/null` stdin, and reject double timeouts with INCOMPLETE diagnostics. I found no blocking regression there. UBSan removal and the report-only timing table match the stated decisions.
+
+Validation was static review, shell syntax checks, and the mocked return-path check. No Lean rebuild or macOS execution was available. No files were modified; no preference-only findings.

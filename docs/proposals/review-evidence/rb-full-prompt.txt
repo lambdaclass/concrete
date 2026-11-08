@@ -1,0 +1,200 @@
+You are reviewing a small change to the Concrete compiler repository's landing tooling (bash). Review ONLY the diff below for correctness defects: bugs, ways a check can pass without looking, portability problems on Linux bash and macOS bash 3.2/BSD tools where the script claims to run there, and quoting errors. Context:
+1. scripts/checks/sandbox_isolation.sh: a structural gate that every repository-making shell script under scripts/ sources and calls git_sandbox before it makes a repository. It used to scan only scripts/*.sh and scripts/*/*.sh. Now it scans every *.sh or sh/bash-shebang file under scripts/ at any depth, and a control plants a deep unsandboxed maker, a suffixless one, and a good one.
+2. scripts/land/install-bot.sh writes a launcher (an unquoted heredoc, so \$ escapes are runtime, bare $ are install-time) that extracts a snapshot of the landing scripts by git archive. The snapshot lacked scripts/review/verify.sh, which train.sh reads at $SELF_DIR/../review/verify.sh, so bot trains always failed review provenance. Now one SNAPSHOT list is used, and an incomplete cached snapshot is rebuilt. scripts/checks/landing_bot.sh gets a check that every $SELF_DIR/../X path read by scripts/land/*.sh, and every sibling sourced by a snapshot library, is in the snapshot, plus a control with the old list.
+Report each finding as: file:line, the defect, a concrete failing scenario. Do not report style preferences as defects; label any preference "preference". End with exactly one line: VERDICT: ACCEPT or VERDICT: FINDINGS.
+
+--- DIFF ---
+diff --git a/changelog.d/2026-11-08-review-blockers.md b/changelog.d/2026-11-08-review-blockers.md
+new file mode 100644
+index 00000000..1d8cc6e8
+--- /dev/null
++++ b/changelog.d/2026-11-08-review-blockers.md
+@@ -0,0 +1,14 @@
++### Two landing-tool gaps a train review found (2026-11-08)
++
++The review of train/slice0 (9ebdda15b2) reported two defects in code already on main.
++`scripts/checks/sandbox_isolation.sh` scanned only `scripts/*.sh` and `scripts/*/*.sh`, so a
++repository-making script two directories down, or one without a `.sh` suffix, was never checked.
++The scan now covers every shell script under `scripts/` at any depth (a `*.sh` file or an sh/bash
++shebang), and a control plants an unsandboxed maker three directories down and a suffixless one,
++both refused, and a sandboxed one at depth, accepted.
++`scripts/land/install-bot.sh`'s launcher snapshotted only `scripts/land` and `git_sandbox.sh`, so
++`train.sh`'s review provenance found no `scripts/review/verify.sh` and refused every train run by
++the bot. The snapshot is now one `SNAPSHOT` list covering every file the landing scripts read
++outside `scripts/land` (`verify.sh`, `prepush_record.sh` and the `treestate.sh` it sources); an
++incomplete cached snapshot is rebuilt; `scripts/checks/landing_bot.sh` fails when a landing script
++reads a path the list lacks, with the pre-fix list as its control.
+diff --git a/scripts/checks/landing_bot.sh b/scripts/checks/landing_bot.sh
+index 4754f710..c1666aa7 100755
+--- a/scripts/checks/landing_bot.sh
++++ b/scripts/checks/landing_bot.sh
+@@ -409,6 +409,45 @@ echo "=== main is never force-pushed ==="
+ bad="$(grep -nE 'git push[^#]*(--force|[[:space:]]-f[[:space:]])[^#]*refs/heads/main' "$ROOT_DIR"/scripts/land/*.sh || true)"
+ [ -z "$bad" ] && ok "no forced push of refs/heads/main in scripts/land" || { no "forced push of main:"; echo "$bad" | sed 's/^/      /'; }
+ 
++echo "=== the bot's snapshot holds every path the landing scripts read ==="
++# install-bot.sh's SNAPSHOT is what the launcher extracts; train.sh, bot.sh and their helpers run
++# from that copy. Every `$SELF_DIR/../X` a landing script reads, and every sibling a snapshot library
++# sources, must be in it (2026-11-08: verify.sh was not, and review_provenance refused every train).
++# legacy_move.sh is excluded: its `$SELF_DIR/..` text is data it rewrites, not a path it reads.
++snapshot_misses() { # snapshot_misses "<paths>": prints each path the snapshot at HEAD lacks
++  local list="$1" d f ref
++  d="$(mktemp -d "$TMP/snap.XXXXXX")"
++  # shellcheck disable=SC2086
++  git -C "$ROOT_DIR" archive HEAD $list | tar -x -C "$d" || { echo "(git archive failed)"; return; }
++  for f in "$d"/scripts/land/*.sh; do
++    [ "$(basename "$f")" = legacy_move.sh ] && continue
++    grep -oE '\$SELF_DIR/\.\./[A-Za-z0-9_./-]+' "$f" | sed 's|^\$SELF_DIR/\.\./|scripts/|' | while read -r ref; do
++      [ -e "$d/$ref" ] || echo "$ref (read by scripts/land/$(basename "$f"))"
++    done
++  done
++  for f in "$d"/scripts/checks/lib/*.sh; do
++    [ -f "$f" ] || continue
++    grep -oE '^[[:space:]]*(source|\.) "\$[_A-Za-z]*dir/[A-Za-z0-9_.-]+"' "$f" | sed -E 's|.*dir/([^"]+)"$|\1|' | while read -r ref; do
++      [ -e "$d/scripts/checks/lib/$ref" ] || echo "scripts/checks/lib/$ref (sourced by scripts/checks/lib/$(basename "$f"))"
++    done
++  done
++  rm -rf "${d:?}"
++}
++SNAP_LIST="$(sed -n 's/^SNAPSHOT="\(.*\)"$/\1/p' "$ROOT_DIR/scripts/land/install-bot.sh")"
++if [ -z "$SNAP_LIST" ]; then no "install-bot.sh has no SNAPSHOT=\"...\" line"
++else
++  miss="$(snapshot_misses "$SNAP_LIST")"
++  [ -z "$miss" ] && ok "the snapshot ($SNAP_LIST) covers every path the landing scripts read" \
++    || { no "the bot's snapshot lacks paths its scripts read:"; echo "$miss" | sed 's/^/      /'; }
++  # Control: the snapshot as it was before 2026-11-08 must be reported short of verify.sh.
++  miss="$(snapshot_misses "scripts/land scripts/checks/lib/git_sandbox.sh")"
++  has "$miss" "scripts/review/verify.sh (read by scripts/land/train.sh)" \
++    && ok "control: a snapshot without scripts/review/verify.sh is reported" \
++    || { no "control: the old snapshot was not reported short of verify.sh"; echo "$miss" | sed 's/^/      /'; }
++  grep -q 'git archive "\\$sha" \$SNAPSHOT' "$ROOT_DIR/scripts/land/install-bot.sh" \
++    && ok "the launcher extracts exactly \$SNAPSHOT" || no "the launcher does not extract \$SNAPSHOT"
++fi
++
+ echo
+ echo "check_landing_bot: PASS=$PASS FAIL=$FAIL"
+ [ "$FAIL" -eq 0 ]
+diff --git a/scripts/checks/sandbox_isolation.sh b/scripts/checks/sandbox_isolation.sh
+index dba7a483..4abf23a5 100755
+--- a/scripts/checks/sandbox_isolation.sh
++++ b/scripts/checks/sandbox_isolation.sh
+@@ -42,26 +42,62 @@ echo "=== structural: every repository-making script sources the sandbox helper
+ # install-bot.sh` (no sibling files to source) and makes the bot's persistent clone, and
+ # worktree-new.sh makes a worktree OF the caller's repository by design.
+ EXEMPT=" scripts/land/install-bot.sh scripts/worktree-new.sh "
++MAKES='git( -C [^ ]+)? (init|clone)\b|worktree add'
++# shell_scripts DIR: every shell script under DIR/scripts at ANY depth, as paths relative to DIR,
++# sorted: a `*.sh` file, or any other file whose first line is a sh/bash shebang. (Until 2026-11-08
++# the scan was `scripts/*.sh scripts/*/*.sh`, so a script two directories down was never looked at.)
++shell_scripts() {
++  (cd "$1" && find scripts -type f -print | LC_ALL=C sort | while IFS= read -r f; do
++    case "$f" in
++      *.sh) echo "$f" ;;
++      *) head -n 1 "$f" 2>/dev/null | grep -qE '^#!.*[/ ](ba)?sh([[:space:]]|$)' && echo "$f" ;;
++    esac
++  done)
++}
++# scan_makers DIR: one line per repository-making script under DIR (exemptions and this check
++# skipped): `ok<TAB>file<TAB>why` or `FAIL<TAB>file<TAB>why`. The helper must be sourced and
++# called, as statements, before the first repository is made.
++scan_makers() {
++  local dir="$1" f first_make src_line call_line
++  shell_scripts "$dir" | while IFS= read -r f; do
++    [ "$f" = scripts/checks/sandbox_isolation.sh ] && continue
++    case "$EXEMPT" in *" $f "*) continue ;; esac
++    grep -qE "$MAKES" "$dir/$f" || continue
++    first_make="$(grep -nE "$MAKES" "$dir/$f" | grep -vE '^[0-9]+:[[:space:]]*#' | head -n 1 | cut -d: -f1)"
++    src_line="$(grep -nE '^[[:space:]]*(source|\.) .*checks/lib/git_sandbox\.sh' "$dir/$f" | head -n 1 | cut -d: -f1)"
++    call_line="$(grep -nE '^[[:space:]]*git_sandbox( |$)' "$dir/$f" | head -n 1 | cut -d: -f1)"
++    if [ -n "$src_line" ] && [ -n "$call_line" ] && [ -n "$first_make" ] \
++       && [ "$src_line" -lt "$call_line" ] && [ "$call_line" -lt "$first_make" ]; then
++      printf 'ok\t%s\tsources git_sandbox.sh (line %s) and calls it (line %s) before its first repository (line %s)\n' "$f" "$src_line" "$call_line" "$first_make"
++    else
++      printf 'FAIL\t%s\tmakes a repository (line %s) without sourcing (line %s) and calling git_sandbox (line %s) before it\n' "$f" "${first_make:-?}" "${src_line:-none}" "${call_line:-none}"
++    fi
++  done
++}
+ makers=0
+-for f in scripts/*.sh scripts/*/*.sh; do
+-  [ "$f" = scripts/checks/sandbox_isolation.sh ] && continue
+-  grep -qE 'git( -C [^ ]+)? (init|clone)\b|worktree add' "$f" || continue
+-  case "$EXEMPT" in *" $f "*) continue ;; esac
++while IFS=$'\t' read -r verdict f why; do
+   makers=$((makers+1))
+-  # The helper must be sourced and called, as statements, before the first repository is made.
+-  first_make="$(grep -nE 'git( -C [^ ]+)? (init|clone)\b|worktree add' "$f" | grep -vE '^[0-9]+:[[:space:]]*#' | head -n 1 | cut -d: -f1)"
+-  src_line="$(grep -nE '^[[:space:]]*(source|\.) .*checks/lib/git_sandbox\.sh' "$f" | head -n 1 | cut -d: -f1)"
+-  call_line="$(grep -nE '^[[:space:]]*git_sandbox( |$)' "$f" | head -n 1 | cut -d: -f1)"
+-  if [ -n "$src_line" ] && [ -n "$call_line" ] && [ -n "$first_make" ] \
+-     && [ "$src_line" -lt "$call_line" ] && [ "$call_line" -lt "$first_make" ]; then
+-    ok "$f sources git_sandbox.sh (line $src_line) and calls it (line $call_line) before its first repository (line $first_make)"
+-  else
+-    no "$f makes a repository (line ${first_make:-?}) without sourcing (line ${src_line:-none}) and calling git_sandbox (line ${call_line:-none}) before it"
+-  fi
+-done
++  if [ "$verdict" = ok ]; then ok "$f $why"; else no "$f $why"; fi
++done < <(scan_makers "$ROOT_DIR")
+ [ "$makers" -ge 9 ] && ok "found $makers repository-making scripts (at least the 9 known)" \
+   || no "found only $makers repository-making scripts; the scan is not seeing them"
+ 
++echo "=== control: the structural scan sees scripts at any depth and without a .sh suffix ==="
++# A planted tree: an unsandboxed maker three directories down and one with a bash shebang and no
++# suffix must both FAIL; a sandboxed one at depth must pass. The scan cannot pass by not looking.
++CTL_TREE="$(mktemp -d)" || exit 2
++mkdir -p "$CTL_TREE/scripts/a/b/c"
++printf '#!/usr/bin/env bash\ngit init -q "$1"\n' > "$CTL_TREE/scripts/a/b/c/deep.sh"
++printf '#!/bin/bash\ngit clone -q "$1" "$2"\n' > "$CTL_TREE/scripts/a/b/nosuffix"
++printf '#!/usr/bin/env bash\nsource "$(dirname "$0")/../../checks/lib/git_sandbox.sh"\ngit_sandbox "$1"\ngit init -q "$2"\n' > "$CTL_TREE/scripts/a/b/good.sh"
++ctl="$(scan_makers "$CTL_TREE")"; rm -rf "${CTL_TREE:?}"
++printf '%s\n' "$ctl" | grep -q $'^FAIL\tscripts/a/b/c/deep.sh\t' \
++  && ok "an unsandboxed maker three directories down is refused" || no "the scan missed scripts/a/b/c/deep.sh: $ctl"
++printf '%s\n' "$ctl" | grep -q $'^FAIL\tscripts/a/b/nosuffix\t' \
++  && ok "an unsandboxed maker with a bash shebang and no .sh suffix is refused" || no "the scan missed scripts/a/b/nosuffix: $ctl"
++printf '%s\n' "$ctl" | grep -q $'^ok\tscripts/a/b/good.sh\t' \
++  && ok "a sandboxed maker at depth passes" || no "the scan did not accept scripts/a/b/good.sh: $ctl"
++
+ # The harness itself is a sandbox: it must not be steered by whatever environment started it.
+ source "$HELPER" || exit 2
+ TMP="$(mktemp -d)" || exit 2
+diff --git a/scripts/land/install-bot.sh b/scripts/land/install-bot.sh
+index 70faeba7..355b6b6d 100755
+--- a/scripts/land/install-bot.sh
++++ b/scripts/land/install-bot.sh
+@@ -8,7 +8,8 @@
+ # On the host it:
+ #   1. makes a DEDICATED clone (default ~/concrete-bot): the bot checks out trains there, so no human
+ #      or agent may work in it. Remotes: origin and lambdaclass; core.hooksPath=.githooks.
+-#   2. writes ~/.local/libexec/concrete-landing-bot, which fetches, extracts scripts/land from
++#   2. writes ~/.local/libexec/concrete-landing-bot, which fetches, extracts $SNAPSHOT (scripts/land and
++#      the files it reads outside it) from
+ #      <source-ref> into an immutable snapshot (keyed by commit) and runs the bot from there, so a
+ #      train checkout never rewrites the running script. Full gates run locally through
+ #      scripts/land/run-at-ref.sh, fetching the train SHA from the bot's clone.
+@@ -29,6 +30,12 @@ while [ $# -gt 0 ]; do
+   esac; shift
+ done
+ say() { echo "install-bot: $*"; }
++# The snapshot: every path the landing scripts read outside scripts/land (each path above SELF_DIR in
++# scripts/land/*.sh, and what those files source), so a snapshot is the scripts' whole closure.
++# scripts/checks/landing_bot.sh fails when a landing script reads a path this list does not cover.
++# (Until 2026-11-08 it held only scripts/land and git_sandbox.sh: train.sh's review_provenance found
++# no scripts/review/verify.sh and refused every train run from a snapshot.)
++SNAPSHOT="scripts/land scripts/review/verify.sh scripts/checks/lib/git_sandbox.sh scripts/checks/lib/prepush_record.sh scripts/checks/lib/treestate.sh"
+ [ "$(id -un)" = dev ] || say "WARNING: running as $(id -un), not dev"
+ ORIGIN_URL="${INSTALL_ORIGIN_URL:-$(git -C "$HOME/concrete2" remote get-url origin 2>/dev/null || echo git@github.com:unbalancedparentheses/concrete2.git)}"
+ MIRROR_URL="${INSTALL_MIRROR_URL:-git@github.com:lambdaclass/concrete.git}"
+@@ -61,9 +68,11 @@ git fetch -q origin
+ sha="\$(git rev-parse --verify "\${BOT_SOURCE_REF:-$REF}^{commit}")"
+ snaps="\$HOME/.local/state/concrete-landing-bot/snap"
+ snap="\$snaps/\$sha"
+-if [ ! -f "\$snap/scripts/land/bot.sh" ]; then
+-  rm -rf "\$snap.tmp"; mkdir -p "\$snap.tmp"
+-  git archive "\$sha" scripts/land scripts/checks/lib/git_sandbox.sh | tar -x -C "\$snap.tmp"
++complete=1
++for p in $SNAPSHOT; do [ -e "\$snap/\$p" ] || complete=0; done
++if [ "\$complete" = 0 ]; then
++  rm -rf "\${snap:?}" "\$snap.tmp"; mkdir -p "\$snap.tmp"
++  git archive "\$sha" $SNAPSHOT | tar -x -C "\$snap.tmp"
+   mv "\$snap.tmp" "\$snap"
+   ls -1t "\$snaps" | tail -n +6 | while read -r old; do rm -rf "\${snaps:?}/\$old"; done
+ fi

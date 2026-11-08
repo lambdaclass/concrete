@@ -1,0 +1,14 @@
+# Part 2: compiler architecture candidates (owner question 2026-11-08, verbatim: "is there anythign else we have to do early on to make sure this is the bes compiler")
+
+K1. Source provenance through every IR: every node in HIR, Core, MIR, CFG, SSA and BIR carries its origin span and a stable ID, so diagnostics, trap-site accounting, debug info and facts all work. Costly to retrofit.
+K2. A textual printer and parser for every IR with a round-trip law, so each pass can be tested in isolation (LLVM .ll / MLIR style). Complements the B0 printers.
+K3. A compiler with no panics: no panic!, unreachable!, partial def or sorry in compiler code, or else an allow-list with a gate; the compiler's own totality is a stated property.
+K4. Generated-code quality benchmarks: runtime and code size of the showcases against C at -O2, for both LCB and LLVM paths, with a history on concrete-ci-2.
+K5. An optimization architecture decided early: where optimizations live (verified BIR passes, translation validation, or LLVM on the printer path only), and what the LCB path promises about performance. Possibly an owner question.
+K6. Translation validation, or a differential check, for the unproven LLVM printer path until it is replaced or proven.
+K7. Incremental and parallel compilation readiness: per-function compilation units and content-addressed caching keyed by input hashes (determinism already makes this possible); the LSP builds on it later.
+K8. Compile-speed targets: absolute lines per second on reference workloads, beside the scaling gate.
+K9. A proof-engineering style guide with a gate: no large decide terms, pinned simp sets, a proof module per stage, lemma reuse.
+K10. An architecture document per stage: input invariant, output invariant, the theorem linking them, its trusted pieces; one file each, kept in sync by the traceability gate.
+K11. Debug info (DWARF) and source maps planned from K1's spans, with a slice assigned.
+K12. A versioned stable output schema for facts, diagnostics and CLI JSON (extends owner item 16).

@@ -1,0 +1,41 @@
+### R3 (was L2): Single-quoted ASCII `u8` byte literal (`'a'`)
+
+* **Verdict:** **AGREE** (49 words)
+  Byte parsers and protocol code are unreadable and error-prone when written as raw decimal numbers (`97u8`). A single-quoted ASCII `u8` literal makes intent immediately auditable, directly fulfills 2026-11-08 items 16 ("quoted ASCII literals... migrate explicitly") and 33 ("exactly two escape lists"), and disambiguates cleanly from `'label` via closing-quote lookahead.
+* **Rows bearing on it:**
+  * `PHILOSOPHY.md`: "What Concrete is for" (LLM-written, human-audited), Rule 2 (one form per situation), Rule 3 (transparency), Rule 4 (verbosity vs. hiding intent), Admission Test 14 (real benefit for audited code).
+  * `docs/decisions.md`: `OD137` (refuse non-ASCII character literals), `SYN-6`, `OD42` (comparisons on `u8` cover migrated `char`).
+  * `LANGUAGE_DECISIONS_2026-11-08.md`: item 16 (remove `char`; `u8` plus explicit UTF-8; quoted ASCII literals migrate explicitly), item 33 (`OPEN-6`: exactly two escape lists; no raw line breaks), item 34 (`OPEN-7`: longest-match tokens), item 49 (`OPEN-18`: loop labels `'label`).
+* **Breaks a decided row?** **None.** (Conversely, dropping `'a'` would contradict 2026-11-08 items 16 and 33.)
+* **Better option:** None, other than explicitly stating in the lexer rule that any `'` not forming a valid `'a'` byte literal or `'ident` loop label (e.g., `'ab'` or unclosed `'a`) is refused as a single malformed token.
+
+---
+
+### R14 (was CLI Q3): `help`, `emit`, `trace`, `interp` when data exists; NO `run`
+
+* **Verdict:** **AGREE** (50 words)
+  Each admitted subcommand (`help`, `emit`, `trace`, `interp`) exposes a distinct compiler artifact or semantic engine, scheduled only when its backing data exists. Permanently omitting `run` avoids duplicating `concrete build` plus executing the binary, and avoids conflating compiler exit codes (0–4) with the program's own exit codes (0–255, 125, 134).
+* **Rows bearing on it:**
+  * `PHILOSOPHY.md`: Rule 2 (one form per situation / no duplication), Rule 3 (transparency), Rule 6 (Lean is the specification; reference interpreter is built from it), Rule 14 (artifact-first auditability), Rule 15 (small core), Ordering ("visibility in tooling before convenience syntax").
+  * `docs/decisions.md`: `decided-slice0-surface-2026-11-06` (`concrete build` and `concrete facts`), `Q7.10` / `Q8.5` (program exit codes 125 and 134), `P1` / `P23` (extending a decided surface requires an owner decision), `decided-project-diagnostics-2026-11-06`, `R-0479`, `R-0496` / `R-0586` (Lean reference interpreter and I/O driver).
+* **Breaks a decided row?** **None** once approved by the owner: it explicitly extends `decided-slice0-surface-2026-11-06` (which fixed the initial slice-0 commands as `build` and `facts`) via an owner decision per `P1`/`P23`.
+* **Better option:** None.
+
+---
+
+### R18 (was Foundation Q1): Fallible operations in constant initializers
+
+* **Verdict:** **AGREE** (53 words)
+  In Concrete, even `1u8 + 2u8` is fallible and requires no-overflow evidence; an "always-succeeds" subset would ban basic arithmetic in constants. Because constant initializers have no runtime inputs, kernel-checked compile-time evaluation is a closed, decidable proof procedure: evaluation success proves no trap occurs, and evaluation failure refuses the constant at compile time.
+* **Rows bearing on it:**
+  * `PHILOSOPHY.md`: Rule 2 (one form per situation), Rule 6 (Lean is the spec), Rule 18 (`decided-project-no-hidden-traps`: every fallible operation carries decidable checked evidence), Admission Test 4 (one Lean judgment without "except when" clauses), Refusals ("General compile-time evaluation").
+  * `docs/decisions.md`: `Q6.1`, `Q6.2` (statically known values include module constants and checked ops), `Q6.4` (revises `TYPE-22@1`), `Q6.6` (separate invalid and unknown; no evaluator-resource failure), `Q9.9` (total evaluator), `Q9.17` (kernel-only spec proofs), `OD8` (immutable constants only), `OD118` (refuse everywhere), `P17b` (comptime stays closed unless reopened).
+  * `LANGUAGE_DECISIONS_2026-11-08.md`: item 4 (trap names), item 26 (constants computed at compile time, `Copy`, closed total initializer subset and comptime reopening conditions checked before revising `Q6.4`/`TYPE-22`), item 35 (`const N: T = e;`).
+* **Breaks a decided row?** **None**, provided "ordinary operations" is scoped to primitive operations and `Copy` data constructors over acyclic constants (and does not admit user function calls or loops, which would violate `P17b` and 2026-11-08 item 26). Note that `TYPE-22@1`'s legacy note ("evaluated at each use, never at start") is explicitly superseded by 2026-11-08 item 26 ("computed at compile time").
+* **Soundness under Q6.4 / TYPE-22, Q6.6, and P17b:**
+  * **Q6.4 / TYPE-22:** **Sound.** `Q6.4` requires refusing any constant whose initializer provably fails, whether used or not. Because a constant initializer is a closed term with no runtime parameters, evaluation is a complete decision procedure: every failing initializer evaluates to a failure (`invalid`) at declaration time and is refused whether or not the constant is referenced, eliminating both `unused-constant-never-runs` and `constant-traps-at-use`.
+  * **Q6.6:** **Sound, if the expression grammar stays recursion- and loop-free.** `Q6.6` requires distinguishing `invalid` from `unknown` and forbids evaluator-resource (fuel) failure. Over a closed, acyclic AST of literals, other constants, `Copy` constructors, and primitive operations, evaluation is structurally terminating in $O(\text{AST size})$ without fuel: it never hits a resource limit and never yields `unknown`—only a concrete value (valid evidence) or a concrete trap (`invalid`, refused).
+  * **P17b (and 2026-11-08 item 26):** **Sound, provided the boundary is stated.** Admitting primitive operators (`+`, `-`, `*`, `/`, `%`, `<<`, `>>`, bit ops, comparisons, lossless conversions) in constant initializers is constant folding (already presupposed by `Q6.2` and item 26), not general `comptime`. It respects `P17b` as long as general `comptime` features—calling user functions, loops, branching control flow, or capabilities—remain excluded.
+* **Better option:** Explicitly state in the R18 rule text that constant initializers are restricted to **acyclic, call-free, loop-free expressions over literals, constants, `Copy` constructors, and primitive operations**, guaranteeing structural totality without fuel (`Q6.6`) while keeping general `comptime` closed (`P17b`).
+
+ANSWER: R3=agree; R14=agree; R18=agree

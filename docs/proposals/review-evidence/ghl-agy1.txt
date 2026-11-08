@@ -1,0 +1,11 @@
+No correctness defects found.
+
+- **Quoting & host-side evaluation (`scripts/land/gates_transport_ssh.sh:34-44`):** All new lines are single-quoted `echo` statements into `$tmp/$id/run.sh`, so `$RUN_AT_REF_REPO`, `$HOME`, `$(id ...)`, `$(hostname ...)`, `$uid`, `$who`, and `$gc` expand only on the gate host inside `run.sh`. `$gc` and `$uid` are properly double-quoted in every test and command invocation (`[ "$uid" != 0 ]`, `[ -d "$gc/.git" ]`, `git -C "$gc"`).
+- **Fail-closed behavior & cleanup:**
+  - Any empty, negative, multiline, or non-numeric output from `id -u` (or a missing/failing `id` binary) matches `""|*[!0-9]*` and exits `255` before the root comparison.
+  - UID `0` and a missing `$gc/.git` directory both exit `255` before `git -C "$gc" fetch` or `run-at-ref.sh` can run.
+  - The `EXIT` trap (`rm -rf "$dir"`) is registered on line 33 before the new checks, so the staged bundle and script directory on the host are still cleaned up on any early exit.
+  - `gates_remote.sh` clears any prior remote attestation (`$RIATT`) up front and requires `run-at-ref.sh`'s SHA-bound start/exit lines in the log, so exit `255` from `run.sh` unconditionally produces `INCOMPLETE` (exit `3`) and writes no attestation.
+- **Test coverage (`scripts/checks/landing_script.sh:567-585`):** Exercises all three failure branches (`id -u` -> `0`, `id` failing -> empty `$uid`, and `$HH/concrete2` moved away) end-to-end through `gates_remote.sh` and `gates_transport_ssh.sh`, verifying exit `3` (`INCOMPLETE`), the specific diagnostic message for each branch, absence of `$RIATT`, and an empty `hostgit.log` (confirming `git -C "$gc" fetch` is not reached).
+
+VERDICT: ACCEPT

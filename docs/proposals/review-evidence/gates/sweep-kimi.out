@@ -1,0 +1,653 @@
+kimi version 2.4.1
+• I need execute substantial doc edits exactly requested. Should inspect files sources. Must not commit/push/nix/build. Only edit ROADMAP.md docs/decisions.md new changelog fragment. Delete .sweep-inputs end. Should be careful only these. Should use tools dedicated. I can read source known paths parallel. Should todo list proactive. Should understand repo style. I have detailed instructions. Perhaps check current status and branch read-only allowed. No subagents. Should not have plan mode. I can use TodoList. First message brief sentence. Then parallel Reads source files and relevant docs perhaps full large. Use Read known. Also git status via Bash and maybe wc to know lengths? Dedicated Read outputs continuation. Could do Reads PENDING etc parallel with ROADMAP decisions changelog README? New file no need read. Must not edit .sweep-inputs. Read.
+
+• I’ll read the sweep inputs and the surrounding ROADMAP/decision rows, then make only the requested edits and remove the input directory at the end.
+
+## wip/roadmap-sweep...origin/wip/record-signoffs
+?? .sweep-inputs/
+   672 ROADMAP.md
+  2061 docs/decisions.md
+   185 .sweep-inputs/OWNER_QUESTIONS_REVIEW.md
+   202 .sweep-inputs/PENDING_RECORDS.md
+   395 .sweep-inputs/STD_COVERAGE.md
+   374 .sweep-inputs/STD_OWNER_QUESTIONS.md
+   378 .sweep-inputs/STD_PLACEMENT.md
+  4267 total
+• Should read target relevant chunks. ROADMAP 672 manageable read full 100k perhaps ~90k. decisions 2061 ~ large perhaps 400k. Should targeted sections. Use Grep headings and IDs. Read ROADMAP full perhaps 100000. decisions headings / anchors around Project section and Recent. Should have ISS-0019 done-when perhaps in ISSUES.tsv? User says edit only targets but can read ISSUES. Should have exact done when supplied enough. I can inspect rows. Also changelog style. Should have no modifications other than allowed. Read ROADMAP lines perhaps 1-672 and Grep decisions. Parallel.ISSUES grep no ISS19 perhaps file only 14. User enough. Should have exact decisions top recent and around 1386. Read lines 1-90, 1340-1410, perhaps rows format. Also R0632 new task dependencies/home/gate. Should decide exact placements.
+
+  I need all 15 new tasks R0632-R0646 consecutively no gaps. They span sections:
+  R0632-35 in B.
+  R0636-37 in A.
+  R0638 B.
+  R0639-43 T.
+  R0644 B1 perhaps B section.
+  R0645 perhaps D or B? User says R0645 std coverage gaps each proposed slices all marked proposed pending O1-O12 S1-S5 owner wip/std-placement. Could place D (Whole language) or B? Requirement every new row phase/slice named Home Gate owner. R0645 phase B–D or slices 15-27; likely D? Could place D with phase "B–D, proposed slices ...". R0646 T. R0644 B. Make sure task row ordering RIDs not strict across sections.
+
+  Should open questions section after Core session before Targets. Must include all:
+  - Foundation Q1 Q2 Q3 one line each pointer to PENDING_RECORDS source spec worker ~06:30 but directory deleted at end. Source lives "PENDING_RECORDS.md, spec worker ~06:30" but after deletion path nonexistent. User explicitly "Name where each source lives (branch @ SHA, path)." PENDING_RECORDS has no branch/SHA for itself. I need infer source branch? User says Sources all in .sweep-inputs/PENDING_RECORDS.md authoritative. Could cite ".sweep-inputs/PENDING_RECORDS.md" but deleting means links bad. User specifically says "Name where each source lives (branch @ SHA, path)." For STD and OWNER known. For PENDING_RECORDS foundation perhaps wip/roadmap-sweep? .sweep-inputs ephemeral not branch. Could say "Sweep input `PENDING_RECORDS.md`, spec worker ~06:30 (not a proposal branch)"? But asks branch @ SHA path each. Should inspect perhaps branch info embedded only PENDING lines. Could use wip/roadmap-sweep current base origin/wip/record-signoffs SHA perhaps source lives no branch. User expects pointers like "source: `PENDING_RECORDS.md`, spec worker ~06:30 (sweep input)" perhaps acceptable exception. But "Name where each source lives (branch @ SHA, path)" strongly wants all. Could identify remote branches and SHAs via git ls-remote? Read-only, allowed no push. But PENDING_RECORDS likely generated input only. Could record "Source: `PENDING_RECORDS.md` in this sweep's inputs (spec worker ~06:30; no proposal branch or SHA)." This names where lives but no branch @ SHA due none. User said no invented. I shouldn't invent branch SHA. For C1 lifecycle: wip/spec-c1-life @d8f89ea75 (path? likely contract file ConcreteSpec? Should have status says accepted at commit; pointer could source `PENDING_RECORDS.md`, no file path). User may expect proposal path e.g. wip/std-placement @abc648e4d, `docs/proposals/STD_COVERAGE.md`; wip/owner-questions-review @11d9e6ee2, `OWNER_QUESTIONS_REVIEW.md` (path perhaps root or owner-questions-review?). Source input heading says raw outputs in owner-questions-review/ but actual document perhaps root? User said OWNER_QUESTIONS_REVIEW.md same branch. I can write path `OWNER_QUESTIONS_REVIEW.md` at branch SHA. STD sources path `docs/proposals/STD_COVERAGE.md`, `docs/proposals/STD_OWNER_QUESTIONS.md`, `docs/proposals/STD_PLACEMENT.md` likely.
+
+  Open questions list must have questions with options and at most reviewer recs labelled. "one-line pointer each" and "one line each" for S1-S5 O1-O12 and ten reviewed with three-model picks as recommendations. Should compact but include options? Hard rule says open questions are written as questions with their options and, at most, reviewers' recommendation labelled. So each bullet should be question and options (short) plus source pointer. 3 + 5 +12 +10 + C1 + showcase =32 bullets. Long section but required. One line each can be long. Should not full elaboration, enough options. For O questions with status decided/partly decided? User says all O1-O12 pending owner answers even though sources say decided etc. Must list as open owner questions. Don't encode decisions. I can phrase:
+  - **O1:** Which parameter view type ... `View<T>/ViewMut<T>` or `&[T]/&mut[T]`? Reviewers recommend ...? STD_OWNER says recommendation. User says one-line each, three-model picks only for ten reviewed; for S/O can include recommendations? Hard rule at most reviewers recommendation. User item 11 says S1-S5 and O1-O12 one line each; not necessarily picks but could. Compact perhaps no rec for O, but S source recommendations helpful. However "with their options" needs list options for O12 A/B/C. O1 two. O2 recommended grant snapshot root vs copy primitive. O3 container vs primitive buffer. O4 callback vs scoped borrow. O5 64-bit limbs vs u128/widening primitive. O6 primitive/std for ct_eq UTF8, naming bare vs qualified (multi-part). O7 table includes mul/rotations? Though source says decided; user mandates pending O1-O12. Phrase "Which operations exactly..." options from source. O8 array literals included or not. O9 one generic vs two impl. O10 named struct vs &mut outputs. O11 Lean theorems vs trait law declaration. O12 A/B/C. S1 options a/b/c perhaps lengthy. S2 yes/no. S3 per-family/generic/associated trait. S4 Step callback/cursor/decide after D3? Source says recommendation decide after D3 but owner question options (a)/(b). F-NaN options a-d plus scoped d recommendation. Float == is part of F-NaN reviewed question? Ten includes F-NaN and table has Float == but user says ten reviewed L1-L4 S... R0600 F-NaN, with three-model picks. Should include float == as part F-NaN line perhaps options IEEE vs non-NaN/reflexive and named bit eq. The user item 8 just NaN semantics. I should include "Float equality: IEEE == (Codex/Kimi) vs NaN-free reflexive (agy), all named bit equality" within F-NaN bullet to fully reflect source? Could make section longer but accurate. User said ten reviewed one line each, so fold.
+
+  Showcase sketches before freeze item 1 not approved: phrase question "Should showcase sketches be written before freeze? Owner's gate answer expressly did not include item 1 ... options approve prefreeze sketches or leave to proposed compiled probes? Source: ..." Should not rec. Source PENDING_RECORDS quote exact "NOT included: item 1 (showcase sketches before freeze)". Open question not encode answer. Could quote "NOT included..." as source not owner quote? It's in source but not verbatim owner. Fine.
+
+  C1 lifecycle confirm: "Should C1 change `life : Life → Store → Option Store` ... accepted by reviewers at ... pending owner" options accept amendment or keep previous C1? Should have no encode. Source wip/spec-c1-life @d8f89ea75 path? likely `ConcreteSpec/Spec/...` unknown. Can cite source `PENDING_RECORDS.md` and branch commit only. User specifically name path. Could cite `ConcreteSpec/` as path? Better inspect git show branch? The commit d8f89ea75 may be local? Use git show --stat --oneline d8f89ea75 read-only to identify file paths. Similarly spec core SHAs perhaps not needed open question pointer source. STD paths known. Slice1 brief path `docs/proposals/SLICE1_BRIEF.md` branch @28b42ade9 known. R0600 source owner review. Foundation Qs perhaps source foundation proposal on some branch @? PENDING says final scratchpad not accessible? I can reference sweep source itself. Requirement sources all in .sweep-inputs. Perhaps open questions should point to ".sweep-inputs/PENDING_RECORDS.md" despite deletion at end; weird. User explicitly wants source locations likely external proposal branches for sources that have them, and for PENDING simply quote "sweep record, PENDING_RECORDS.md". I should avoid links to deleted inputs in response ROADMAP; plain code path note okay but stale. Perhaps record "Source: coordinator's `PENDING_RECORDS.md` (spec worker ~06:30; supplied to this sweep, no branch SHA)" honest. But user said name branch @ SHA each. Could find current source branches via git branch -a contains spec-core etc and use their SHA. Foundation Q1-3 likely FOUNDATION.md on wip/spec-core? Yet PENDING only says from spec worker, no exact proposal path. I could point to `PENDING_RECORDS.md` only and state no proposal branch given. This satisfies no invention over strict format partially.
+
+  Should have decisions row exact owner quotes four:
+  1 "do this with kimi, codex and agy and review it"
+  2 "we should have ci or gates for scaling, determinism, comparison in the spec and the compiler"
+  3 "ok wuith this but we have to add it to the roadmap or a slice"
+  4 "ok let's make sure the roadmap has all this and the slices"
+  PENDING read ends at line 202 missing fourth quote because 202 lines. User explicitly supplies fourth quote; can quote exact user, not invent. Include full context about back-end comparison in backticks or quotation? User says quoting four owner quotes above with that meaning. Could row:
+  - **Four test gates...** (owner, 2026-11-08: "do this ..."; "we should ..."; then, about the comparison design, "ok wuith ..."; and "ok let's ..."). A spec-vs-compiler... Details. "The comparison ships now..." as decided. Also showcase not included perhaps open section and decision row explicitly says owner answer did not include item 1? User wants decision about four gates; can mention no showcase approval perhaps not necessary but helpful avoid interpretation. No process "how" in six decision.
+
+  Six row after writers? Instruction 1 gates row after last 2026-11-08 row Project section i.e after writers. But currently legacy-sweep and archive-move after writers (also 2026-11-08 rows). User explicitly "place it after the last 2026-11-08 row ... i.e. after row ...writers" inconsistent because legacy rows after. I should place gates and six directly after writers before legacy sweep as instructed. "after last ... i.e. after writers" so direct after writers. Could add gates then six. Recent lines after writers or before byte sweeps? Add at top of 2026-11-08 recent section around lines 76. Perhaps two bullets after writers line and before byte. Good.
+
+  Should read exact decisions chunk.
+
+• The inputs confirm the two owner decisions and the proposal-only status of the std and slice-1 questions. I’m checking the exact insertion points and existing task wording before editing.d8f89ea75 axioms.golden: partial lifecycle transitions (regenerated on concrete-ci-2)
+ scripts/proofs/axioms.golden | 21 +++++++++++++++++++++
+ 1 file changed, 21 insertions(+)
+28b42ade9 proposals: slice-1 brief round-2 fixes (cap reached; pinpointed, unreviewed): §1 scope to the owner with a recommendation, item-18 forms pending, struct-typed let, whitespace, abort signature open, toml split, planted violation, B1 controls
+ docs/proposals/SLICE1_BRIEF.md | 52 ++++++++++++++++++++++++++++++------------
+ 1 file changed, 37 insertions(+), 15 deletions(-)
+abc648e4d proposals: std coverage audit against Rust, Zig, Go and C/POSIX (PROPOSED)
+ changelog.d/2026-11-08-std-coverage-audit.md |  10 +
+ docs/proposals/STD_COVERAGE.md               | 395 +++++++++++++++++++++++++++
+ 2 files changed, 405 insertions(+)
+11d9e6ee2 owner questions: three-model review of L1-L4, slice-1, R-0600 and float NaN
+ docs/proposals/OWNER_QUESTIONS_REVIEW.md         |  185 +++
+ docs/proposals/owner-questions-review/agy.out    |   83 +
+ docs/proposals/owner-questions-review/codex.out  | 1780 ++++++++++++++++++++++
+ docs/proposals/owner-questions-review/kimi.out   |  246 +++
+ docs/proposals/owner-questions-review/prompt.txt |   58 +
+ 5 files changed, 2352 insertions(+)
+
+
+• Should d8 only axioms golden not lifecycle file perhaps previous commit. wip/spec-c1-life branch head? User says accepted reviewers at d8 and pending. Source path could `scripts/proofs/axioms.golden` but actual lifecycle change elsewhere. I can point to branch @d8 `ConcreteSpec/Spec/` perhaps no exact. Better git show branch files around commit parent? `git diff --stat d8^..d8` only golden. Lifecycle change earlier. Could `git log --oneline --max-count 10 d8` and perhaps show stats. Read-only. Should not if cite PENDING input.
+
+  Should have "new rows with phase/slice named Home Gate negative control owner workstream/worker". Existing task rows don't include owners mostly. Should formulate all new carefully.
+
+  Task R0632:
+  Objective: "Phase B, every slice: a seeded spec-vs-compiler comparison whose generator grows with each slice; owner `wip/gate-spec-diff`."
+  Done: "back-end comparison now covers spec semantics vs LLVM binary vs proven-path binary and its evaluator, with fixed full-path hook; branch adding lowering switches on full spec-vs-native comparison; slice 1 requires it over generated and manifest programs; Home tooling (generator/comparison) against spec. Gate: CI comparison, with planted spec/binary mismatch failing."
+  Depends on: likely R0425, R0578, R0633? "B0" or R0425. Since B0 queue includes tasks and all start there. R0632 depends R0425, R0578, R0586 perhaps spec evaluator I/O from slice1. I can use "B0" or "R-0425, R-0578". Should fixed hook now; full at slice1 depends lowering R0501. Done when both now and slice1; dependency "R-0425, R-0578; full path at R-0501" depends column format perhaps tasks. Could simply `R-0425, R-0578` enough.
+
+  R0633:
+  Phase B every slice one manifest/runner. done when all tests one manifest format runner runs Lean/compiler? User only one test manifest one runner. "Home tooling (manifest/runner). Gate test absent manifest fails negative control". Depends R0425. Owner wip/test-manifest.
+
+  R0634:
+  Phase B from slice0 scaling 1x/10x/100x superlinear fails; determinism two compiles byte-identical. Existing R0577 reproducible two dirs/two machines; new task two compiles. Owner wip/gate-scaling-determinism. Home tooling CI. Gate planted quadratic step and nondeterministic byte fail. Depends R0503 perhaps R0550 R0577. Include phase B, every slice.
+
+  R0635:
+  Phase B every slice maintained trusted-base list. Home spec list plus tooling check. Gate trusted item missing fails. Depends R0509. Owner wip/trusted-base. Perhaps overlaps R0509 but this task maintained list. Good.
+
+  Add B0 tasks list R0632-35 plus R0638? User 1 four add B0. R0638 phase B0 should likely add B0 queue too? User only explicitly four to B0, R0638 phase B0. For coherence add R0638 B0 queue as well. R0636/37 A2i tasks add to A2i row, explicit R0637 referenced. R0636 vacuity before freeze add A2i tasks. R0637 A2i. R0644 B1. R0645 perhaps no queue later rows (only B0/B1). R0646 T no queue.
+
+  Slice shape addition exact user provided. Add after paragraph at line205:
+  "**Every slice also** extends..." exact.
+
+  Slice1 row add exit. Current 3 columns no exit. "In slice table slice 1 row ... gets an exit: ..." Can append "exit: the full ... required and green" in adds cell. Perhaps phrase "; exit: ...". It is not status tag. Fine.
+
+  Slice26 add "NaN semantics pending owner (F-NaN,S5)" exact.
+
+  Foundation status prose after A2i/A2c queue rows or R0637. Best add compact paragraph after queue table? User says right after A2i/A2c queue rows or in R0637. Inserting prose inside table impossible between A2i and A2c would break table. Could put status in R0637 done-when long; or after full queue table at line191 but not "right after". Could place within R0637 done-when with all status. That makes huge row but required compact. Alternative after A2c row within table not possible prose unless HTML? Could add status immediately after queue table line191 and before shared tasks, which is after A2i/A2c plus other rows. Less direct. Better include in R0637 done when. It can be long but one row. "at recording: ..." no status tags. User specifically "Include status prose item 6 below in this row's done-when or right after A2i queue row as prose." So do in R0637. R0637 row:
+  objective phase A2i start accepted contracts merge continuously wip/spec-core owner spec worker.
+  done when: "each accepted foundation contract is merged into wip/spec-core as accepted, without waiting for all C1-C10; ... status ... integration head doesn't build yet; A2c freeze stays gated on A2i; Home spec. Gate: ... negative control?" Every new row must Gate negative control where gate. R0637 gate could "an accepted contract absent from integration fails" negative control. Is that owner-approved? Task requirement demands Gate, can design gate as work not decision. Fine.
+  Status exactly:
+  C1/C2 accepted round4 d62d6cac1 (spec-core head5bc0748b8)
+  C1 lifecycle change accepted reviewers d8f... pending owner confirmation
+  C4 b9c3...
+  C6 738500fb
+  C7 4d146992
+  C3 to confirm
+  C5 b5fff070, C8 be5e9be09 C9 f898f298 C10 46211bbd fix rounds
+  integration head 6157005eb wip/spec-integrate not build.
+  Use semicolons compact.
+
+  R0636:
+  Phase A2i before A2c freeze. Objective vacuity every law nontrivial instance + planted counterexample fails; reviewers each law; audit accepted contracts. Done includes all. Owner spec worker. Home spec proofs/tests. Gate planted vacuous law/counterexample? "a law without witness or with accepted planted counterexample fails" negative control. Depends R0571 perhaps.
+  Potential duplication R0585 but distinct spec law vacuity. Fine.
+
+  R0638:
+  Phase B0 axiom golden property check only standard axioms and named theorems pinned. Owner wip/axioms-property (fce6644d, in review). Home tooling/proof integrity. Gate nonstandard axiom and unnamed theorem drift fail? "a planted non-standard axiom fails; only named theorem pins allowed". Depends R0630 perhaps R0509. Add B0 tasks. Status in review is prose not tag allowed. No [PARTIAL]. Good.
+
+  R0639:
+  Phase T shared launcher every background job bounded watcher. Owner migration worker. Home tooling. Gate unpaired background job fails / planted unbounded job refused. Depends perhaps —. "one shared launcher" done all call sites use it and job without watcher fails. Fine.
+
+  R0640:
+  Phase T process tooling frozen once owner-signoff(+split) and landing-shrink R0617 land; independent branches land independently not chained. Owner migration worker? User doesn't specify owner except "every new ... owner workstream branch or worker". Assign "process tooling owners" or migration worker as related. User R0639 explicitly migration. R0640 could "owner: migration worker" reasonable. Home tooling/process record. Gate "a change to frozen tooling outside new owner decision fails; chained independent branch control?" Should negative control "an independent branch made to wait on unrelated branch fails queue audit; a frozen-tooling edit without recorded reopening fails". No encode additional owner approval requirement? Owner decided frozen, how unfreeze unspecified. Don't invent "new owner decision" as process? Freeze implies owner decision perhaps but not stated. Better done when "tooling changes stop after those land except recorded fixes; queue shows independent branches landing independently" but exception recorded fixes is invent. Say "process tooling has no further changes after ...; two independent branches land without dependency chain". Gate "a post-freeze tooling diff and a fabricated dependency between independent branches both fail controls." Could be too rigid if bug fixes R0642/43 after freeze? Those are process tools. Decision freeze once owner-signoff split and shrink land, but R0642/43 fixes perhaps after. If freeze absolute, issue fixes contradict. "frozen once ... land" means no changes unless decision perhaps bug fixes accepted? Should not design details. Gate "a control change after freeze is detected and refused" seems exact. R0642 and R0643 depend on R0640? Could conflict. R0643 after owner-signoff lands, likely before freeze final? R0642 independent. I can set R0640 depends R0617 and owner-signoff branches (no IDs). R0643 depends owner-signoff landing, not R0640. Fine.
+
+  R0641:
+  Phase T every owner question Codex+Kimi+agy round before owner. Owner migration worker perhaps "process worker". AGENTS text follow-up say so. Home process tooling/review records. Gate "question reaching owner without three reviews fails; absence recorded?" Decision says every gets round, no absence exception. Negative control missing one review refused. Done "every owner question has recorded round; AGENTS.md text follow-up remains" no status tag. Depends —. "process; AGENTS.md text is a follow-up, say so." Include.
+
+  R0642:
+  Phase T fix ISS0019 review_provenance accepts clean note base not cover train diff. Objective. Done exact: note base ancestor-or-equal train base for head/member notes; verify.sh --required-base; reproducer control. Owner owner scripts/land. Home tooling. Gate note base not covering train diff fails plus original repro. Depends R0539 perhaps R0617? "R-0539". Note issue not in ISSUES but requested.
+
+  R0643:
+  Phase T signoff verify all 3 ACCEPT vs signoff decision outstanding. Codex confirmed reproducer. Issue to be filed slice0 worker after owner-signoff lands no ISS. Done verify accepts signoff records nonACCEPT outstanding and refuses missing verdict with controls. Owner "slice-0 worker (issue); sign-off tool owner (fix)" user only says slice0 files issue; every row owner workstream/worker. Could owner "owner of scripts/review; issue to be filed by slice-0 worker." This is better than assigning slice0 fix. User said "Owner: ..." only R0642 specified. R0643 can owner of scripts/review. Home tooling. Gate recorded nonACCEPT accepted, missing refused. Depends owner-signoff landing. I can write "owner-signoff landing" in depends column (not task). Fine.
+
+  R0644:
+  Phase B1 brief wip/slice1-brief draft proposal nothing launches until owner answers four. First abort spec spelling-free then lowering Core→BIR slice1. Exit per shape full comparison R0632 generated+manifest. Owner wip/slice1-brief? User "R0644 the slice-1 brief (wip/slice1-brief...)" so owner branch. Home spec/tooling? "Home: spec (slice1 abort and lowering) and proposal ...". Gate: owner answers recorded before launch; slice1 exit with planted mismatch via R0632. Depends `B0, R-0632, R-0633, owner: S1-scope, S1-move, S1-abort and S1-toml`. Note B0 perhaps slice0. Add B1 queue.
+
+  R0645:
+  One row plus short list needed for placements. Requirement "each placed in its proposed slice as listed there". A single row done when can enumerate:
+  G1 safe replace/take 13 + view swap15 pending S1; G2 line framing code grep16 std io17; G3 fs contracts18; G4 bits21; G5 floats26; G6 large file strategy18; P0 pre-A2c; D1a15 D1b22 D2 15 D3 20–21 D4 18/20/27. Also "design probes D1-D4 and P0" include D1a/b. Owner wip/std-placement. Home proposal docs and spec/std when approved. Gate "each accepted gap has conformance/probe at slice; an unplaced adopted need fails; all proposed pending O1-O12 S1-S5." Negative control "a proposed item treated as approved or missing slice artifact fails". Don't encode placements as decision mark proposed. Objective explicitly "Proposed only; pending owner O1-O12 S1-S5". Depends owner answers. Phase "A2c and slices 13–27 (phases A,C,D)" named. Place in D section? Could place B section after R0644 because phase crosses. But D fits most. User says every row phase/slice named. Objective can list. "Gate: at each slice, its approved gap or probe has its tests; a missing placement or a proposal used without owner answer fails." Good.
+  F0-F8 sources listed initial but task 7 says only G1-G6 D1-D4 P0. Open questions S/O not F0-F8 required. No row F flags. Fine.
+
+  R0646:
+  Phase T CLI question audit gaps placed when reports owner wip/cli-question-audit not pushed. Home tooling audit then ROADMAP/spec. Gate "audit has question inventory; unplaced reported gap fails; no gaps placed before report". Negative control missing gap disposition. Depends —. "not pushed yet" status prose allowed. Owner branch. Good.
+
+  Open questions sources: use exact paths and SHAs. For slice1 questions cite both wip/slice1-brief @28b42ade9 docs/proposals/SLICE1_BRIEF.md and review @11d9... path. STD S/O source at abc... all docs proposals. STD_OWNER/PLACEMENT commit might not be same abc head? User says same branch @abc648e4d includes only coverage new; previous commits contain owner and placement. Fine.
+
+  R0600 notes exact required wording "placement (slice 1 or the functions-and-calls slice 5) is an open owner question (R0600 below)". Add to row and B1 queue row. B1 queue row tasks cell can append after list? "R-0600 (placement ...)" but then task list reference weird. Could add done when start "R-0600's placement ...; [Slice1]..." User says add note in B1 queue row exact. Use objective goal cell after "theorem" perhaps `<br>`? Better append done-when sentence: "R-0600 stays listed here without choosing its placement: placement (slice 1 or the functions-and-calls slice 5) is an open owner question (R0600 below)." However "R0600 below" open section located before tasks, not below queue? Open questions section after Core at line340, B1 row line187 above, so R0600 below is not below from B1. User explicitly exact note says "(R0600 below)" likely refers reviewed question below in source? User demands add note exactly. Could use "([R0600](#open-owner-questions))" instead? User quoted phrase likely should use exact. "placement ... (R0600 below)" even if section below in R0600 task row? R0600 row later than B1 so yes its own row below. In R0600 row itself "R0600 below" weird but can refer open question perhaps open section above. User instructs note in both exact text; follow verbatim.
+
+  No status tags anywhere new. Existing statuses "not started" okay don't touch. I should not add NEXT etc. Changelog short fragment listing recorded quotes. No status tags in changelog too.
+
+  Should have editing approach. Many incremental edits to same files; Edit mandatory and no consecutive same file without re-read. Could use one large Edit per file replacing several disjoint? Edit only exact one contiguous old string. Should multiple changes same file require re-read each time. Could use Write complete replacement? Existing file large continuity no. Must Edit each incremental and re-read between. I can group changes by replacing big contiguous sections but risky. Many edits ~15 ROADMAP +3 decisions + Write changelog. Should comply "Do not issue consecutive Edit calls same file. Read again before next Edit." I can alternate Edit different files in parallel where independent, but must re-read target file between edits. I can do iterative with small Reads. Many tool calls but okay.
+
+  Could use a single Python script via Bash to perform multiple replacements? Not allowed incremental change must Edit, no Bash sed. So use Edit.
+
+  Plan order:
+  1 decisions recent lines add two bullets.
+  2 decisions row insertion after writers (need re-read).
+  3 ROADMAP queue rows A2i B0 B1 plus perhaps status no (status in task later). Can replace entire queue lines A2i-A2c? One Edit for A2i only; B0 next after re-read. Could combine A2i through B1 (lines183-187) in one contiguous replacement including unchanged A2c/A3. Big but manageable. I can edit exact whole 5 rows, adding R0636/37 A2i, four+0638 B0, R0644 B1 + note. This one Edit handles queue. Should have no owner quote decisions there.
+  4 ROADMAP slice shape and slice1 row+slice26 perhaps replace contiguous lines 200-244 huge, or separate. Could use Edit old paragraph + following order to add Every slice; then slice1 separately. Could combine slice1 row replacement and slice26 not contiguous no. Should re-read between.
+  5 Open questions section insert after Core session list before targets. One big Edit.
+  6 A tasks new R0636/37 insert after R0571 or before R0567? Place after R0571 line419. One Edit.
+  7 B new R0632-35 + R0638 + R0644 perhaps insert after table header before R0425. All new rows in one Edit. R0644 phase B1 can be there. Then modifications R0625,R0620,R0600 separate (3). Could combine contiguous lines R0625-R0620? They adjacent with R0622 between; replace lines469-471 to modify two and leave R0622. R0600 separate.
+  8 D R0645 insert perhaps before R0137. One edit.
+  9 T R0639-43,R0646 insert before R0568. One edit.
+  10 changelog Write.
+  Total ~12 ROADMAP edits with re-read each. Could reduce:
+  - Modify R0625/R0620/R0600 by replacing entire block lines469-480 including many unchanged rows huge ~12 lines each very long but manageable token heavy. Better separate.
+  - Add new rows in their respective sections in one each.
+  - Open section big.
+  ~10.
+
+  Should have exact content drafting now.
+
+  Decision rows:
+  Recent:
+  - Four test gates: spec comparison, manifest, scaling/determinism, trusted base ([row]...).
+  - Six spec and process improvements: law vacuity, property axioms, continuous foundation integration, frozen process tooling, bounded watchers, three-model owner-question review ([row]...).
+  No status tags.
+
+  Gates row perhaps 2 paragraphs list:
+  - anchor **Four test gates...** (owner quotes...). Work:
+    1 spec comparison seeded generator grows each slice. Ships now back-end: spec semantics vs LLVM binary vs proven-path binary and its evaluator. Fixed hook full path; lowering branch must switch on full comparison.
+    2 one test manifest and runner.
+    3 scaling 1x 10x100 superlinear fails and determinism two compiles byte identical.
+    4 maintained trusted base list.
+  "These are R-0632–R-0635. Every slice extends generator and manifest and states trusted-base additions. The owner's answer covered items 2–5; item1 showcase sketches before freeze was not included." Good. Quote fourth exact. No status tags.
+
+  Six row:
+  (owner 2026-11-08 ~14:00 UTC: "yes to 6 things")
+  1 every spec law non-trivial instance and planted counterexample must fail; reviewers check each law; audit accepted.
+  2 axiom golden property only standard axioms named theorem pins.
+  3 accepted contracts merge continuously wip/spec-core start A2i.
+  4 process tooling frozen after signoff split & landing shrink; independent branches land independently.
+  5 one shared launcher every bg job bounded watcher.
+  6 every owner question three model round.
+  R0636-R0641 mapping note item order differs IDs: R0636 item1, R0638 item2, R0637 item3, R0640 item4,R0639 item5,R0641 item6. Could mention tasks inline each to avoid confusion.
+  "Process 'how' is not part of this decision" user explicit meaning says process how not part decision. Should row include "This records what, not implementation procedure; AGENTS.md process text follow-up" or no? User asks quoting with six-item meaning (process "how" not part). Add "The decision records these outcomes, not their implementation procedure." Good.
+
+  Open question formatting. Intro: "Nothing here is decided. Recommendations are reviewers' recommendations only." Good no tags.
+
+  Foundation source pointer no branch SHA. Could cite "Source: `PENDING_RECORDS.md`, spec worker ~06:30, supplied in this sweep; no proposal branch or SHA was named." This is transparent. But user specifically branch SHA. Perhaps current source commit for PENDING could be wip/roadmap-gates? It is untracked .sweep-inputs no SHA. Say no SHA named is best.
+
+  Each bullet one physical line (Markdown line long) to satisfy one-line. Existing house wraps lines 100 chars but user "one line each" means bullet per question, can wrap indentation? Better physical one line each though long. User asks compact. I'll use one line each, likely ~250 chars. ROADMAP lines already long. Fine.
+
+  Q1 options:
+  "May a fallible operation appear in a constant initializer: refuse all but closed always-succeeds subset (Codex/Kimi), admit arithmetic but refuse failing evaluation (agy), or admit only with closed evidence of success (all three as an added constraint)?"
+  But strict subset excludes even 1+2, could note? not necessary. Source.
+  Q2 "Should forward const refs be order independent with cycles refused and dependency path (all reviewer rec) or source ordered?" Option source ordered not explicitly in source but natural alternative. Could say "Are forward constant references order-independent, with cycles refused and dependency path, or forbidden? Reviewers recommend order-independent..." Option forbidden plausible but not source explicit. Hard never invent options? Source question forward refs likely yes/no. Fine.
+  Q3 "Can pointer be formed partial bytes? no pointer meaning vs separate named bytes-to-address conversion no provenance. Reviewers recommend no implicit pointer meaning and separate named conversion." Good.
+
+  S1:
+  "How schedule safe displacement: (a) replace at13 and two-index view swap15; (b) replace only13; (c) neither before24 with sorted-array/by-value alternatives? Recommendation (a)." Source.
+  S2 yes/no rec yes.
+  S3 (a) per-family with shared Lean law (b) generic at20 (c) associated-cap trait; rec compare a18 b20 D4 c only if fail.
+  S4 reuse Step vs coordinate cursor, rec decide after D3.
+  S5 operations and NaN options canonical, Wasm allowed sets, bit exact premise; rec canonical. But F-NaN has different options c/d. Fine distinct proposals.
+
+  O1-O12 no three-model picks required but source has recs. Include rec compact all perhaps 12* long. User "one-line pointer each" perhaps each bullet with question and source only, options in source linked? Hard rule says with their options, so include options. I can label "Reviewers recommend" singular collective though source doc recommendations reviewed not necessarily unanimous after final. Better "Proposal recommendation" or "Reviewers' written recommendation". Hard rule at most reviewers recommendation labelled. Use "Recommendation: ..." clear not decision. Fine.
+
+  O1 source says status decided signatures spelling but user says pending owner O1-O12; don't repeat status. Options.
+  O2 grant snapshot root vs copy.
+  O3 language container vs std capacity buffer.
+  O4 callback vs scoped borrow.
+  O5 limbs vs u128/widening.
+  O6 "Which of view ct_eq and UTF8 validation are primitives or std; how validated views form; primitive names bare or qualified?" Options not exhaustive but alternatives. Recommendation std UTF8, bare primitives, decided borrow form. ct_eq source recommendation as decided; don't encode, phrase options.
+  O7 "Should table include 64bit mul and public rotations?" options include/exclude with backend premise. Recommendation include from decided table? Source says decided but User wants pending. Could phrase no recommendation to avoid conflict.
+  O8 array literal constants allowed in initializer vs literal-only/computed later. Rec literal arrays allowed computed wait.
+  O9 generic vs two implementations; rec two.
+  O10 named struct vs &mut outputs; rec named struct.
+  O11 Lean theorem premise vs trait-level law declaration; rec no new feature.
+  O12 A copy grant draw at7; B linear draw13; C linear by-value grant-returning draw9; rec B.
+  Source each repeated long pointer makes huge. Can define source groups intro:
+  "Sources for S1-S5/O1-O12: wip/std-placement @abc... paths ..." Then each bullet need one-line pointer "([S1](...))" but link to branch not accessible local. Could at end each "Source: same branch, `STD_COVERAGE.md` §6." Meets source name each, branch global. User "one-line pointer each". I can have intro defining `std sources` then each "std proposal S1" not explicit branch each. To be safe each bullet suffix "`wip/std-placement@abc648e4d`, `docs/proposals/STD_COVERAGE.md` (S1)." This repeats 17 times ~2k tokens. Fine.
+  Ten each suffix wip/owner-questions-review @11d9... `docs/proposals/OWNER_QUESTIONS_REVIEW.md` (L1), plus slice brief path for S1? Source review has all options. Good. R0644 open answers pointers also.
+  C1 lifecycle source branch @d8 path `scripts/proofs/axioms.golden` not meaningful. Use `PENDING_RECORDS.md` and branch commit "review record at wip/spec-c1-life @d8f89ea75 (`scripts/proofs/axioms.golden` is the commit's review artifact)" perhaps lifecycle source path earlier. Could inspect log to find actual file. I'll do git log stats quickly perhaps one tool call along with upcoming edits? Read only.
+
+• I’m now recording the two decisions verbatim and adding the task structure. Open questions will remain questions, with recommendations clearly labelled rather than treated as owner answers.
+
+• Should re-read decisions before next same file. Also ROADMAP first edit can in parallel with Read decisions and Bash git log. Do queue edit exact lines from read. Construct old string A2i through B1 perhaps ~9k tokens, expensive but okay. Could do individual A2i, B0, B1 needing reads. Better one replace 5 lines but old ~9k. New ~10k. Token budget plenty 90k. Yet error risk. Could do three Edit with alternating decisions. Perhaps more efficient one B0 edit then read etc. I have 100k token budget currently 70k? 91k left? I can.
+
+  Do A2i single line replacement add R0636,R0637. Then later B0 B1. Simultaneously Read decisions 1379.d8f89ea75 axioms.golden: partial lifecycle transitions (regenerated on concrete-ci-2)
+dc015b7f4 Prove lifecycle refusals are stuck and exercise refused scope exit
+2209101d1 Make C1 lifecycle transitions partial and propagate refusal
+5bc0748b8 axioms.golden: add the 45 generated C4 part-1 declarations (Memory.lean imported in ee6d879b without regenerating; r4 axioms gate failed at d719b1a0)
+d719b1a02 Const: record item 26's approved direction (compile-time, Copy-only, closed subset) revising Q6.4/TYPE-22's evaluation at each use; the P17b check is a task
+ee6d879bb spec C4 part 1 (draft, unreviewed): blocks, provenance, access validity, alloc/free, expose/from_exposed, scalar byte representation
+d62d6cac1 spec C1/C2 round 3: locals' life reported to the instrumentation, condition-region temporaries visible to the test, cleanup iff its plan
+d043481ef spec C1/C2 round 2: operands thread the state (move instrumentation), prim result optional, cleanup runs exactly the plan, static constant admission exact
+dc015b7f4 Prove lifecycle refusals are stuck and exercise refused scope exit
+
+ConcreteSpec/Proofs/Exec.lean
+ConcreteSpec/README.md
+ConcreteSpec/Spec/Exec.lean
+2209101d1 Make C1 lifecycle transitions partial and propagate refusal
+
+ConcreteSpec/Proofs/Exec.lean
+ConcreteSpec/Spec/Exec.lean
+d719b1a02 Const: record item 26's approved direction (compile-time, Copy-only, closed subset) revising Q6.4/TYPE-22's evaluation at each use; the P17b check is a task
+
+ConcreteSpec/Spec/Const.lean
+ee6d879bb spec C4 part 1 (draft, unreviewed): blocks, provenance, access validity, alloc/free, expose/from_exposed, scalar byte representation
+
+ConcreteSpec/Spec.lean
+ConcreteSpec/Spec/Memory.lean
+d62d6cac1 spec C1/C2 round 3: locals' life reported to the instrumentation, condition-region temporaries visible to the test, cleanup iff its plan
+
+ConcreteSpec/Proofs/Const.lean
+ConcreteSpec/Proofs/Exec.lean
+ConcreteSpec/Proofs/Scalar.lean
+ConcreteSpec/Spec/Const.lean
+ConcreteSpec/Spec/Exec.lean
+ConcreteSpec/Spec/Outcome.lean
+ConcreteSpec/Spec/Scalar.lean
+d043481ef spec C1/C2 round 2: operands thread the state (move instrumentation), prim result optional, cleanup runs exactly the plan, static constant admission exact
+
+ConcreteSpec/Proofs/Const.lean
+ConcreteSpec/Proofs/Exec.lean
+ConcreteSpec/Proofs/Scalar.lean
+ConcreteSpec/Spec/Const.lean
+ConcreteSpec/Spec/Exec.lean
+ConcreteSpec/Spec/Scalar.lean
+98666a90c spec C1/C2 round 1: shared state threaded through calls and cleanup, destruction orders, static constant admission, bool conversion, machine operands in range
+
+ConcreteSpec/Proofs/Const.lean
+ConcreteSpec/Proofs/Exec.lean
+ConcreteSpec/Proofs/Scalar.lean
+ConcreteSpec/README.md
+ConcreteSpec/Spec/Const.lean
+ConcreteSpec/Spec/Exec.lean
+ConcreteSpec/Spec/Outcome.lean
+ConcreteSpec/Spec/Scalar.lean
+f8b939688 spec: Outcome, Exec, Scalar, Const — foundation C1 (execution, calls, cleanup) and C2 (scalars, arithmetic, constants)
+
+ConcreteSpec/Proofs/Const.lean
+ConcreteSpec/Proofs/Exec.lean
+ConcreteSpec/Proofs/Scalar.lean
+ConcreteSpec/README.md
+ConcreteSpec/Spec.lean
+ConcreteSpec/Spec/Const.lean
+ConcreteSpec/Spec/Exec.lean
+ConcreteSpec/Spec/Ident.lean
+ConcreteSpec/Spec/Outcome.lean
+ConcreteSpec/Spec/Rules.lean
+ConcreteSpec/Spec/Scalar.lean
+Update todo now, done reading, task2 in progress. Next decisions Edit rows, plus ROADMAP read B0 line.Now Edit ROADMAP B0 and B1 in one contiguous string two lines. Do.Now re-read ROADMAP slice lines.Edit slice shape only then read.Now edit slice1/26 after re-read. Can Read lines213-246.One edit could replace from slice1 through slice26, huge, no. Do slice1 now, then read slice26.No need update until task done. Now read and edit slice26.Now add A tasks R0636/37. Should read around 415-424 current line shifted +4.Insert after R0571. Compose status. R0636 done has audit accepted contracts and reviewers. Gate negative. R0637 status exact C4 user says b9c3aeaaf (different PENDING older 80b use user latest). "C3 to confirm" ambiguous owner/reviewers just write "C3 remains to confirm". no tags. "C1 lifecycle change ... pending owner's confirmation" open. "The A2c freeze stays gated on A2i" in done.
+  Gate R0637 "an accepted contract missing from wip/spec-core fails the integration inventory control." Negative. Dependencies R0571 perhaps continuous integration begins A2i and R0571 integration, circular if R0571 depends all foundation not R0637. Fine R0637 depends R0571? Then accepted contracts merge only after integration done contradictory. Better depends `A2b` or `R-0560`. Start A2i, depends A2b. Use `A2b`. R0636 depends R0571? before freeze and laws, can happen alongside integration. `R-0571` sensible done after integration before R0567; A2i queue includes both and R0567 doesn't list R0636 dependency but queue A2i done requires all tasks. R0567 depends A2i complete via text. Fine.
+
+  Owner spec worker explicit both. Home spec + proofs. Gate.Good. Now add B rows after the header. Read around 448.Proceed with the new B rows. Should have R0644 "nothing launches until owner answers" exactly. Owner wip/slice1-brief. "first piece is abort() in slice1 spec (spelling-free)" but abort result type open S1-abort; writing spec before answer? User says first piece abort in spec spelling-free but nothing launches until answers all, so okay. "then lowering passes Core→BIR for slice1" and exit. Gate planted spec mismatch fails from R0632 plus "launch without four owner answers refused". Depends B0,R0632,R0633 owner four. R0638 commit in review status. R0632 owner branch etc. Phase each.
+
+  One concern R0634 "super-linear growth fails" scaling any superlinear growth may be intended algorithms, owner explicitly yes. Good.
+
+  R0632 "spec semantics vs LLVM binary vs proven-path binary and its evaluator" use "the LCB binary and its evaluator" user says proven-path binary. Keep exact.
+
+  R0635 trusted item missing list fails. Good.
+
+  Insert six rows before R0425.
+
+• The queue and slice exits now reference the new gates. I’m adding the task rows with their owners, homes, dependencies, and negative controls next.
+
+• Potential old_string header occurs in A section too? Exact next R0425 unique yes. Good.
+
+  Should modify R0625,R0620,R0600. Read current lines around475.Modify R0625 and R0620 contiguous with R0622 unchanged perhaps one Edit old string entire 3 lines, new. That's manageable lines ~1500 chars. Add six contents:
+  "the keyword/reserved table, builtin-name table, operator/punctuation set (L1), second escape list (L2), raw control characters in strings (L3), integer suffixes and base prefixes (L4)" Wait six list counting keyword/reserved 1 builtin2 operator3 second4 raw5 integer6. Exactly. Include in R0625 done before exact names. R0620 prose current lexer has comments, whitespace, identifiers,string escapes decimal; blocked spelling round list. User says add prose "the lexer has..." no status tag. Fine.
+  Use Edit three lines.Should have R0600 re-read then edit.I removed "due with functions..." replacing with open placement to avoid decided side, good. B1 note exact.
+
+  Now add D R0645. Read D header around530 now.R0645 phases A2c/C/D. Add after header. Done list compact all placements. G1 proposed S1(a) but options open, if I list replace13+swap15 as "G1 at13/15" could encode one option. Requirement each placed in proposed slice as listed there; source G1 stage OrderedMap23 but proposed S1 rec at13+15. Should explicitly proposed placements pending. "G1: safe displacement at 13 and view swap at 15 (the S1 recommendation), OrderedMap need at23" marks recommendation not decided. G2 code16 module17. G3 18. G4 21. G5 26. G6 18. P0 before A2c. D1a15 D1b22 D2 15 D3 20-21 D4 18,20,27. All proposed. Gate not treat rec as approval. "owner: wip/std-placement". Home proposal plus spec/std after approval. Negative "an item used as decided without owner answer fails" process gate imaginary but fine. Could say "Gate: each eventual slice has its gap/probe control; a missing slice placement or an unapproved item treated as decided fails the audit." Good.
+
+  Depends `owner: O1–O12 and S1–S5` plus perhaps R0071. Use both.Now T rows R0639-43,46. Read header around598.Insert after header six rows. R0640 depends R0617 and owner-signoff + split no task ID. "process tooling frozen" done when. R0641 AGENTS followup. R0642 exact base ancestor-or-equal "for head and member notes". `verify.sh --required-base` implemented and reproducer control. R0643 signoff decision item1 link `#decided-2026-11-08-process`, Codex confirmed repro. issue to be filed exact phrase. Owner `scripts/review` owner and slice0 files issue. Gate accepts nonACCEPT as outstanding refuses missing. "with controls" include two controls. Good.
+  R0646 CLI audit "not pushed yet" no tag. Gate "reported gap left unplaced fails placement audit" negative. Phase T.
+  R0639 Gate planted job launched without bounded watcher fails.
+  R0640 Gate post-freeze process tooling change fails freeze control and artificially chained independent branches fails queue control. Could process fixes impossible but decision. Fine.All tasks new done. Should open questions section. Also R0645 requirement "one row plus if needed short list" done one row. Status prose done. Task2 could done and task3 in progress. But open question section also float/lexer done status etc. Mark.Now big open section. Make sure no "answers encoded". Wording reviewers recommendations. Could use subhead bold groups not deep headings. Section "### Open owner questions". Each bullet one line. Source pointers exact. For foundation source no branch SHA named state. Perhaps can point to `PENDING_RECORDS.md` input path that will be deleted, not ideal. User wants branch @SHA path. I can identify foundation questions source perhaps docs/proposals/FOUNDATION.md on wip/spec-core @5bc0748b8. Does it include Q1-Q3? Read from git show without modifying. `git show 5bc0748b8:docs/proposals/FOUNDATION.md` perhaps path absent? I can grep via Bash prohibited use grep shell; can use git show to temp? Can't create files other than allowed. Could `git show 5bc...:docs/proposals/FOUNDATION.md` direct output large not ideal and Bash can read known nonsecret. Dedicated Read can't git object. Use Bash `git show ... |` no grep? Could use `git show ... --` path and output truncation. But source Qs in PENDING not necessarily FOUNDATION. No need. Use source note transparent.
+
+  Perhaps source for foundation Q1-3 is not a proposal at all, so "Source: `PENDING_RECORDS.md`, spec worker ~06:30 (sweep input; no branch or SHA recorded)." This violates branch@SHA but factual. Could name current branch base `wip/record-signoffs @<SHA>` path `.sweep-inputs/PENDING_RECORDS.md` but untracked not at SHA, false. Don't.
+
+  C1 lifecycle pointer actual `wip/spec-c1-life @d8f89ea75`, `ConcreteSpec/Spec/Exec.lean` and `ConcreteSpec/Proofs/Exec.lean` good.
+
+  Showcase sketches source PENDING no branch SHA. Same note.
+
+  Ten recommendations exact:
+  L1 unanimous a.
+  L2 2-1 a Codex b.
+  L3 unanimous a.
+  L4 unanimous a.
+  S1-scope unanimous a.
+  S1-move unanimous a.
+  S1-abort unanimous a.
+  S1-toml 2-1 b agy a.
+  R0600 2-1 b Codex c.
+  F-NaN no letter majority Codex/Kimi scoped d agy c. Include float == separate within bullet.
+  Questions with options concise. Each line perhaps very long but okay.
+
+  For S1-S5 STD_COVERAGE recs (source owner questions not three-model pick specific but proposal reviewed). Label "Proposal recommendation" not "reviewers recommend" perhaps user says reviewers rec at most. Source says recommendation. Use "Reviewers' proposal recommends..." all reviewed. Fine.
+
+  O1-O12 some source says decided but user mandates open, do not import status. I should list recommendations with "Proposal recommendation" because O7 decided table might confuse. But open questions section says nothing here decided and all O1-O12 pending per user, so okay.
+
+  Pointers to STD_OWNER_QUESTIONS for O, STD_COVERAGE for S. STD_PLACEMENT perhaps open O1 etc original. Use both where needed? "Source: `wip/std-placement` @`abc648e4d`, `docs/proposals/STD_OWNER_QUESTIONS.md` (O1) and `STD_PLACEMENT.md` §6." Repeating both huge. One path STD_OWNER enough for O. S path STD_COVERAGE. R0645 points coverage.
+
+  Showcase question options "write paper sketches before freeze or leave validation to compiled probes at slices" not approved. Include exact source note "owner's gate answer says 'NOT included...'" But that's not owner verbatim, it is record text. User says no owner quotes invented. I can avoid quote, state "The gates approval expressly did not include this item." This is not answer encoded; it's fact scope. "Should...? The four-gate approval did not include it." Good.
+
+  Foundation Q1 "closed evidence success" all three additional, option not exclusive. Phrase options exactly.
+
+  R0600 note "(R0600 below)" in open bullet? Use bold R0600.
+
+  Add `<a id="open-owner-questions"></a>` optional nice.
+
+  One-line pointer each means physical one line bullet. I'll generate long content ~12k. Use Edit insert replacing `<a id="targets">`. Ensure old unique.
+
+• All fifteen task IDs are now placed. I’m adding the open-question register with proposal locations and model picks, without selecting any option.
+
+• Open section huge 32 bullets done. Should assess possible issue O8 options misphrased: source open whether array literals in subset; recommendation literal arrays allowed computed tables wait; runner-up literal arrays only never computed? I say computed arrays included now alternative okay. No answer.
+
+  Should have no open question not included: "the ten reviewed ... with options and three-model picks" done. S1-S5 and O1-O12 done. foundation q done. C1 and showcase done. Sources branch@SHA for proposal ones done. PENDING no branch honest.
+
+  Now verify requirements and docs. Before changelog, inspect diff and search new rows count, status tags, quotes exact. I can use git diff via Bash read-only, no builds. `git diff --check` okay not build. `git diff --stat` final only requested at end but can now too. Should avoid generated files. `git status`. Also run perhaps markdown lint not standard? No builds. Can use python scripts? User says no nix/builds, simple validation okay. I can run `git diff --check` and custom python read files verify IDs. Should not run gates. Should check line table formats number pipes? Some cells include `|` code? New R0645 no pipe. Open questions not table. Decision rows okay. New R0632 etc Home Gate. Could script parse new IDs exactly one each except queue refs. Should have no owner answers encoded perhaps manual.
+
+  Now changelog content short. Before write perhaps read existing 2026-11-08 style. M ROADMAP.md
+ M docs/decisions.md
+?? .sweep-inputs/
+ ROADMAP.md        | 75 +++++++++++++++++++++++++++++++++++++++++++++++++------
+ docs/decisions.md | 30 ++++++++++++++++++++++
+ 2 files changed, 97 insertions(+), 8 deletions(-)
+new task rows: ['R-0636', 'R-0637', 'R-0632', 'R-0633', 'R-0634', 'R-0635', 'R-0638', 'R-0644', 'R-0645', 'R-0639', 'R-0640', 'R-0641', 'R-0642', 'R-0643', 'R-0646']
+count: 15 unique: 15
+decided-2026-11-08-gates 1 1
+decided-2026-11-08-six 1 1
+Interesting anchors count # only 1 each despite Recent + slice shape and tasks should many? Python `decisions.count(f'#{anchor}')` counts decisions file only: recent one and row other internal perhaps okay. ROADMAP references not counted. Good.
+
+  Should have task3 done, task4 in progress. Write changelog. Should short fragment listing all recorded:
+  - Decisions quotes four + six perhaps quote all four owner gates exact. Could shorten quote first two and third fourth. User says "quoting owner where decision recorded." Include all.
+  - R0632-R0646 rows summary groups
+  - queue/slice updates, R0600 open, lexer
+  - foundation status and open questions proposals not decisions
+  - issues fixes tasks no issue filed actual.
+  No status tags. Changelog heading.
+  Perhaps 25 lines.
+
+  Draft:
+  ### Test gates, spec/process improvements and open-question sweep (2026-11-08)
+  `docs/decisions.md` records:
+  - Four test gates ... quotes ...
+  - Six ... "yes to 6 things": vacuity, axioms property, continuous..., etc.
+  `ROADMAP.md` adds R0632-R0646:
+  - R0632-35 ...
+  - R0636-38 ...
+  - R0639-43...
+  - R0644...
+  - R0645 proposed...
+  - R0646...
+  Also records foundation acceptance/fix-round status, lexer current coverage/blockers, R0600 open placement, NaN open, full slice1 comparison. Open owner question section points etc and no answers.
+  This is short perhaps 30 lines. Exact quote "ok wuith" typo keep. Include owner fourth quote. Fine.
+
+  Write new file allowed.
+
+• The structural checks pass: all fifteen new task rows appear exactly once, and the diff has no whitespace errors. I’m writing the changelog fragment, then I’ll audit the full diff against each requested item.
+
+• Should audit full diff. `git diff -- ROADMAP.md docs/decisions.md changelog...` untracked not shown unless no-index. Read new file not needed. Use `git diff` output perhaps 75 lines long but open bullets lines huge. Bash output might truncate. Use Read target sections and Grep IDs/anchors. Should verify per-item summary with line numbers in the response after deletion. I need line numbers from Grep. Before response perhaps audit with Python specific checks and `git diff --check`, status. Make sure only allowed files changed. `.sweep-inputs` delete end with `rm -rf .sweep-inputs` explicitly instructed, allowed. Before deletion no need preserve. But verify all first.
+
+  Potential issues to catch:
+  - "New R-IDs start R0632 consecutively no other branch uses" done all.
+  - "Every new ROADMAP task row |task|objective|done when|depends on| with phase/slice named, Home Gate negative control and owner." Check R0632 all yes; R0633 yes; R0634 yes; R0635 yes; R0636 yes; R0637 yes; R0638 yes; R0639 yes; R0640 yes; R0641 yes; R0642 yes; R0643 yes; R0644 yes; R0645 yes; R0646 yes.
+  R0643 Gate wording "recorded non-ACCEPT case passes, missing-verdict and original reproducer controls fail". Original reproducer was all three ACCEPT requirement rejects outstanding, now should pass; "original reproducer controls fail" ambiguous/wrong. User says "Done when verify accepts ... refuses missing verdict, with controls." Original reproducer nonACCEPT should now accepted, so should not say original reproducer fails. Should fix. Gate: "the recorded non-ACCEPT case and original reproducer pass; missing-verdict control fails." I need edit. Good catch.
+  R0642 "original reproducer retained as control" Gate clean note fails including original good.
+  R0638 "unnamed theorem cannot acquire a pin" negative okay.
+  R0637 "C3 remains to confirm" status prose okay.
+  R0640 post-freeze tooling change fails no exceptions exact.
+  R0644 first work "without depending on spelling" yes.
+  R0645 all marked proposed and pending yes.
+  R0646 owner not pushed yes.
+  Decision row quotes exact owner four: first quote has pasted items 2-5; second exact; third exact; fourth user. yes.
+  Six process "how" not decision included.
+  No "next" added? Changelog "then" no.
+  Foundation C1 C2 round4 accepted d62 etc exact. C4 user b9. yes.
+  Lexer all six. R0625 operator set L1 included.
+  R0600 note both, no move row physically still same relative location. I removed "due with functions" to avoid contradiction but User says keep both rows add note; okay additive except removed due phrase? User said stacked do not change anything those branches recorded except add to it. "except to add to it" means should not delete/modify recorded content except additions. I modified R0600 row replacing "due with functions-and-calls slice" with open question note. This is a deletion of recorded content, perhaps violates "do not change anything those branches recorded except to add to it." Should preserve "due with functions-and-calls slice" and append note, despite contradictory but open. User specifically "keep both rows; add note ... Do not move it." Should not remove due. Restore phrase then note: "due with functions-and-calls slice; placement ... open ..." This seems inconsistent but required. Do that.
+  B1 row changed tasks add and prose add fine. R0625 etc additions. R0600 depends added owner okay.
+  R0645 phase D task added, fine.
+  Open O7 source decided but User requires open no rec okay.
+  Open Q1 alternatives no issue.
+  Changelog says "R0600 stays in both placements" might imply actual both scheduled instead of two rows? User "keep both rows" means B1 and own row. "stays in both placements" could encode it exists both, but next says slice open. Better "R-0600 stays in both rows while its slice is an owner question." This is precise. Edit changelog incremental requires Read first (I haven't Read after Write? tool says no need but before Edit must Read existing, I read prior nonexistent no. Now Read). I'll do Read ROADMAP R0600 + changelog and then edit separate in parallel. Also R0643 read.
+
+• The audit found two wording issues: R-0600’s original slice-5 text must remain alongside the open-placement note, and the sign-off reproducer should now pass rather than fail. I’m correcting those before the final checks.
+
+• First Read wrong R0600 location shifted to528 perhaps. Should Grep direct known content can Read using line around525. I can Edit R0643 now and changelog parallel, plus Read R0600.Should re-read before edit R0600 because same file previous Edit invalidation. Grep is read tool qualifies "Read file again" specifically says Read file again; Grep perhaps not enough? Use Read lines526-530.Should review diff against base to ensure only additions except line modifications required. `git diff --word-diff=porcelain` could inspect removed lines. Use `git diff --numstat`, `git diff --unified=1` perhaps output ~200 lines manageable. Also verify table rows fields via Python split unescaped pipes. R0600 and queue good. New open section may be overly long but user requested. Should possible issue "R0600 below" open question above row but original instruction exact no worry.
+
+  Perhaps "A2i row of queue references R0637" yes.
+  R0636 before freeze in A section yes.
+  R0638 B0 queue yes.
+  R0639 phase T yes.
+  R0640 independent branches yes.
+  R0641 AGENTS follow-up yes.
+  ISS0019 verify base ancestor-or-equal exact yes.
+  Signoff issue no ISS says exact "issue to be filed by slice-0 worker" yes.
+  Foundation status accepted C4 etc yes.
+  Slice1 R0644 owner question abort result type? S1-abort open includes. Nothing launches until all four yes.
+  R0645 all gaps/probes yes.
+  Float NaN pending yes.
+  CLI placeholder yes.
+  Open questions section after Core session yes.
+  Sources with branch@SHA and path proposals yes.
+  Changelog quotes owner yes.
+  Delete input end.
+  Print git diff --stat final and per-item summary with line numbers.
+
+  Perhaps status tags prohibition includes word "current work" existing no new. Fine.
+
+  One concern decisions Recent lines anchor count and gate row after writers but before legacy as requested. yes.
+
+  One concern owner quote in decisions "ok let's make sure..." not in PENDING source but user explicitly says, exact.
+  Changelog quote same.
+  Typo "wuith" preserved.
+  "yes to 6 things" exact.
+  No owner quotes invented.
+
+  Should verify decisions content with Read and recent. Also ROADMAP top sections, open section read perhaps already content from edit but no need. Full diff inspect using Bash perhaps best. `git diff --unified=2 -- ROADMAP.md docs/decisions.md` output could 60k. Tool truncation perhaps but still. Use `git diff --check` plus custom requirements script.
+
+  Write Python assertions no file modifications:
+  - set rows exact.
+  - each new row contains "Phase ", "owner:", "Home:", "Gate:"
+  - B0 tasks contains IDs four+638
+  - A2i contains 636,637; B1 644
+  - queue notes count exact phrase 2.
+  - section order
+  - decisions quotes all present
+  - open question IDs each count patterns.
+  - no .sweep after deletion later.
+  - only allowed status.
+  - new changelog exists.
+  No tests/build. Fine.
+
+  Perhaps markdown table pipe parse: `line.count('|')` expected 5 for new rows (leading+4 separators =5). New rows have `Core→BIR`, no pipes. All good. R0645 O1–O12 no. Decisions lists no.
+
+  Run `git diff --check` and Python. Also `git diff --stat` final later after delete. Before delete final status.
+
+• The corrections are in. I’m running a final documentation-only audit for required fields, queue references, owner quotes, open-question coverage, and file scope; no builds or gates are being run.Traceback (most recent call last):
+  File "<stdin>", line 12, in <module>
+AssertionError: ('R-0645', 'Phase ')
+ M ROADMAP.md
+ M docs/decisions.md
+?? .sweep-inputs/
+?? changelog.d/2026-11-08-roadmap-sweep.md
+
+
+• Oops Grep regex alternation not grouped and `.*` applied last only, path "." glob *.md recursive huge matched every line. I should avoid broad searches as instructions. I did, output huge but no modifications. Should not repeat same. Use path ROADMAP direct. Audit assertion R0645 "Phases" not "Phase " substring because "Phases" doesn't contain "Phase " (has s). Requirement phase named okay, can adjust audit to "Phase" no trailing. No need edit. But script stopped before other assertions. Re-run fixed. Should have no status tags. Should check exact fields all. I can use Python `assert 'Phase'`. Fine. Also verify new R0645 phase named "Phases A2c,C,D". Good.
+
+  Could improve R0645 "Phases" consistent no issue.
+
+  Should inspect diff removals ensure allowed. Use `git diff --unified=0 |` not grep. Could Python parse diff to print removed lines excluding headers. Use Bash git diff and Python pipeline? "Never pipe git rebase/merge..." only those, diff okay. But tool says Grep dedicated for search not shell. I can run Python subprocess `git diff` and print removed lines. Bash no grep. Or just `git diff --unified=0 -- ROADMAP.md docs/decisions.md` output 100 lines manageable. Should not handle. Custom script check all good.
+
+  Potential missing "negative control where there is gate": every new row gate describes failure yes.
+  "owner (workstream branch or worker)" R0645 wip branch, R0646 branch, R0632 etc. R0642 owner of script, R0643 owner script. good.
+
+  Potential R0636 depends R0571 and R0571 queue includes R0636? No circular in row tasks not dependency. okay.
+  R0637 depends A2b good.
+
+  Potential no actual `ISS-0019` issue file update due edit only allowed, task says phase T fix issue not file issue. good.
+
+  Perhaps add open questions to decisions "Waiting for owner" links? User only ROADMAP section no. Do not.
+
+  Should respond per-item line numbers. I can gather via Grep path specific with pattern grouped proper. Use `Grep pattern "^### Open owner questions$|^\\| R-063[2-9] \\||^\\| R-064[0-6] \\|"` path ROADMAP. `|` inside regex escaped. Should output 16 lines. Also queue lines B0/B1/A2i, slice shape, slice1/26,R0620/25/600. Use separate Grep with exact IDs and headings. Decisions rows lines and Recent. Changelog line1. Response summary can cite ranges:
+  1 ROADMAP.md:183-187 queue; :200-208 slice shape; :220 slice1; tasks :495-500? Should have actual lines from Grep. Decision :1391-1418. Recent :77-78.
+  2 decisions six same row; tasks R0636/37 :465? Should gather.
+  3 R0642/43 :644-645.
+  4 R0637 foundation line.
+  5 R0620/25 :521? gather.
+  6 R0644 etc.
+  7 R0645.
+  8 slice26 :246.
+  9 R0646.
+  10 R0600 :528 and B1 :187.
+  11 open :359-391 (32 bullets lines likely 359-391).
+  12 changelog :1-25.
+  Could summarize per-item not every new ID separate but 12 requested items. Include line numbers in response. Should have exact after final edits no line shifts if no new lines modifications. Delete doesn't affect.
+
+  Before response, perhaps need ensure changelog line count etc. Audit.
+
+• The audit stopped on a plural wording difference (“Phases” versus “Phase”), not a missing phase. I’m correcting the check and continuing the verification.Traceback (most recent call last):
+  File "<stdin>", line 23, in <module>
+AssertionError: Foundation Q1
+ M ROADMAP.md
+ M docs/decisions.md
+?? .sweep-inputs/
+?? changelog.d/2026-11-08-roadmap-sweep.md
+
+
+• Assertion q formatting mistake: f'**{q}**' yields "**Foundation Q1**" but actual "**Foundation Q1:**" colon inside bold. q should include colon for foundation. I set q Foundation Q1 no colon. Fix audit. Not doc issue. Run again. Perhaps don't overdo repeated failing audits, but standard checks should pass. Fine.
+
+  Also grep open section lines 360-399 exactly 40 lines, all bullets there. Good.
+
+  Could check "R-0645 Phase" script pass. Next q fix.Traceback (most recent call last):
+  File "<stdin>", line 29, in <module>
+AssertionError: we should have ci or gates for scaling, determinism, comparison in the spec and the compiler
+ M ROADMAP.md
+ M docs/decisions.md
+?? .sweep-inputs/
+?? changelog.d/2026-11-08-roadmap-sweep.md
+Quote line wrapped in decisions so raw text contains newline. Owner quote visible exact words but line break whitespace. Assertion should normalize whitespace. Changelog also wrap. User "quote exactly" line wrap doesn't change rendered quote. Script normalize `re.sub(r'\s+',' ',d)`. Re-run. I should stop silly failures. All content okay. Do normalized.documentation audit: 15 task rows, required fields, queue links, questions, quotes and anchors OK
+ M ROADMAP.md
+ M docs/decisions.md
+?? .sweep-inputs/
+?? changelog.d/2026-11-08-roadmap-sweep.md
+Good. Should possibly full diff scope with untracked changelog not in git diff --stat by default! User final print `git diff --stat` will show only 2 files not changelog because untracked. User explicitly "When done print git diff --stat" likely expected 2 files and changelog untracked not in diff. Could use `git diff --stat` exact plus mention changelog new separately. Cannot git add (would modify index not asked; no). So final include command output as exact 2 files. Could `git diff --stat -- .` same no untracked. Fine.
+
+  Should have final verify no unintended changes, `.sweep-inputs` delete at very end. Before delete perhaps mark task4 done task5 in progress. Then `rm -rf .sweep-inputs` explicitly user. Bash destructive but authorized. Then run final `git status --short`, `git diff --stat`, `git diff --check`, perhaps line numbers final already stable. Should have no more file edits after deletion. Then Todo done. Final response per-item summary 12 items with line numbers. Include tests no builds as requested; mention documentation audit and diff check passed, no commit/push/nix/build. The final must print git diff stat. Could show code block. Should include changelog untracked status maybe note "new fragment is untracked, as expected" not necessary.
+
+  But before responding, perhaps should inspect diff for unexpected modifications from previous branches? Initial status only .sweep inputs, so all modifications mine. Good. Only allowed 3 files. After delete status three files. Good.
+
+  One concern final summary line numbers open section line 360-399 includes all questions. R0636/37 lines464-465; R0632-38/44 494-499; R0645 574; T 641-646. Decisions 77-78 and1391-1418. Changelog 1-25. Queue lines 183/186/187. Slice shape 207-210; slice1 220; slice26 246. R0620 523 R0625 521 R0600 528. Good.
+
+  Per-item summary:
+  1. Four gates decision + R0632-35, B0, slice shape and slice1: refs.
+  2. Six decision + R0636-41: decisions and rows at464-465,498,641-643.
+  3. Issue fixes R0642-43 lines644-645.
+  4. Foundation status R0637 line465 and A2i queue183.
+  5. Lexer lines521,523.
+  6. Slice1 brief R0644 line499 B1 187 and slice exit220.
+  7. Std coverage R0645 line574.
+  8. NaN line246 + open question maybe390.
+  9. CLI R0646 line646.
+  10. R0600 notes lines187,528; open question maybe394.
+  11. Open questions section360-399.
+  12. Changelog1-25.
+
+  Should mention all RIDs consecutive verified.
+  Final stat numbers after deletion: ROADMAP 75 lines? decisions30, same. Changelog not included. `git diff --stat` output earlier 97 insertions 8 deletions. Since R0600 and R0643 edits still same. Good.
+  Perhaps user expects stat including new file but exact command won't. Could additionally `wc -l changelog` not needed. I can state "git diff --stat (untracked changelog not included by git diff)" to avoid confusion. But user said print command, do exact and note new file separately. Per item 12 covers.
+
+  I'll delete `.sweep-inputs/` at very end before final commands, okay. Use `rm -rf -- .sweep-inputs` then checks in same Bash? "delete directory at very end" after all edits yes. I can delete then run read-only commands. Fine. Mark todos before and after.
+
+• The documentation audit now passes. I’m deleting `.sweep-inputs/` as requested and taking the final status and diff statistics.
+
+ M ROADMAP.md
+ M docs/decisions.md
+?? changelog.d/2026-11-08-roadmap-sweep.md
+ ROADMAP.md        | 75 +++++++++++++++++++++++++++++++++++++++++++++++++------
+ docs/decisions.md | 30 ++++++++++++++++++++++
+ 2 files changed, 97 insertions(+), 8 deletions(-)
+• I'll mark the todo done.Now respond concise but per-item summary 12 lines with line refs. Must stand alone. Mention completed no commit push builds. Include diff stat exact. Should note untracked changelog omitted from stat? Good. Structure:
+  "Completed the sweep. Only ... changed; .sweep-inputs removed. No commits/pushes/nix/builds."
+  Then per-item numbered 1-12.
+  "Validation: git diff --check and custom doc audit passed (15 rows etc)."
+  "`git diff --stat`:" code block. Note new untracked changelog not included. Perhaps `git diff --stat` output exactly no status. Fine.
+
+  Line numbers cite path format. For item 1 include decisions anchors at1391 and rows494-497; queue186 and slice shape207 slice1 220.
+  Item2 decisions1407 and tasks lines464-465,498,641-643.
+  Item3 644-645.
+  Item4 465 and183.
+  Item5 521-523.
+  Item6 499,187,220.
+  Item7 574.
+  Item8 246 and F-NaN open question perhaps line? Should have exact line of F-NaN in open section. I can infer lines: 360 heading,361 blank,362-364 intro,365 blank, 366 Q1,367Q2,368Q3,369S1,370S2,371S3,372S4,373S5,374O1,375O2,376O3,377O4,378O5,379O6,380O7,381O8,382O9,383O10,384O11,385O12,386L1,387L2,388L3,389L4,390S1scope,391S1move,392S1abort,393S1toml,394R0600,395FNaN,396C1,397Showcase,398 blank,399 anchor,400 Targets. Good. Can cite section range instead of specific.
+  Item9 646.
+  Item10 187,528,394.
+  Item11 360-399.
+  Item12 changelog1-25.
+
+  No need list every owner quote in response, docs contain. Per item summary content enough.
+
+  Could mention `docs/decisions.md:77-78` Recent lines in item1/2.
+  Use 12 numbered list shallow.
+  Respond about 600 words. Keep ~450 words.
+
+• Completed the roadmap sweep. Only the three permitted files were changed, and `.sweep-inputs/` was deleted. No commits, pushes, nix commands, or builds were run.
+
+  1. **Four test gates:** recorded the owner’s four verbatim quotes and added R-0632–R-0635 with negative controls. Updated B0, the common slice requirements, and slice 1’s full-comparison exit. See `docs/decisions.md:77`, `docs/decisions.md:1391-1406`, `ROADMAP.md:186`, `ROADMAP.md:207-210`, `ROADMAP.md:220`, `ROADMAP.md:494-497`.
+  2. **Six approved improvements:** recorded “yes to 6 things” and its six-item meaning. Added R-0636–R-0641 for vacuity, continuous integration, axioms, bounded watchers, tooling freeze, and three-model question review. See `docs/decisions.md:78`, `docs/decisions.md:1407-1418`, `ROADMAP.md:464-465`, `ROADMAP.md:498`, `ROADMAP.md:641-643`.
+  3. **Tooling fixes:** added R-0642 for ISS-0019 and R-0643 for outstanding sign-off verdicts, including the required controls and issue-filing ownership. See `ROADMAP.md:644-645`.
+  4. **Foundation status:** recorded all supplied C1–C10 acceptance and fix-round states, the unconfirmed C1 lifecycle amendment, and the non-building integration head. A2c remains gated on A2i. See `ROADMAP.md:183`, `ROADMAP.md:465`.
+  5. **Lexer:** added the current lexer coverage and all six spelling-round blockers to R-0620 and R-0625. See `ROADMAP.md:521-523`.
+  6. **Slice-1 brief:** added R-0644 to B1, gated on S1-scope/S1-move/S1-abort/S1-toml, with `abort()` first, Core→BIR lowering, and full comparison at exit. See `ROADMAP.md:187`, `ROADMAP.md:220`, `ROADMAP.md:499`.
+  7. **Std coverage:** added R-0645 with proposed G1–G6, P0, and D1–D4 placements, all pending O1–O12 and S1–S5. See `ROADMAP.md:574`.
+  8. **Floats:** slice 26 now explicitly leaves NaN semantics open under F-NaN and S5. See `ROADMAP.md:246`.
+  9. **CLI audit:** added placeholder R-0646 for `wip/cli-question-audit`. See `ROADMAP.md:646`.
+  10. **R-0600:** retained both rows and added the open-placement note without moving the task. See `ROADMAP.md:187`, `ROADMAP.md:528`.
+  11. **Open owner questions:** added the complete register immediately after the Core-session questions, including sources, options, and clearly labelled reviewer recommendations. See `ROADMAP.md:360-399`.
+  12. **Changelog:** added the decision and roadmap summary at `changelog.d/2026-11-08-roadmap-sweep.md:1-25`.
+
+  Validation passed: `git diff --check` and a documentation audit covering all fifteen consecutive task rows, required fields, queue links, open questions, owner quotes, and anchors.
+
+  `git diff --stat`:
+
+  ```text
+   ROADMAP.md        | 75 +++++++++++++++++++++++++++++++++++++++++++++++++------
+   docs/decisions.md | 30 ++++++++++++++++++++++
+   2 files changed, 97 insertions(+), 8 deletions(-)
+  ```
+
+  The new changelog fragment is untracked, so Git does not include it in that stat.
+
+To resume this session: kimi -r session_55282cb8-2a85-4638-8e17-64d19b018806
+[unexpected] RuntimeError: workspace wd_roadmap-gates_269948eefa4a is not materialized
+    at RuntimeResolver.acquire (/home/runner/work/kimi-code/kimi-code/apps/kimi-code/dist-native/intermediates/main.cjs:180498:36)
+    at AgentRuntimeService.acquire (/home/runner/work/kimi-code/kimi-code/apps/kimi-code/dist-native/intermediates/main.cjs:132231:25)
+    at AgentFileHistoryService.readCurrent (/home/runner/work/kimi-code/kimi-code/apps/kimi-code/dist-native/intermediates/main.cjs:177606:31)
+    at AgentFileHistoryService.endCheckpoint (/home/runner/work/kimi-code/kimi-code/apps/kimi-code/dist-native/intermediates/main.cjs:177519:32) {
+  code: 'runtime.not_found'
+}
+EXIT 0

@@ -1,0 +1,461 @@
+kimi version 2.4.1
+• I need perform read-only review of REVIEW.diff against sources and whole docs contradictions links. Carefully inspect. I should not edit. Should likely large task. Use TodoList proactive. Should understand files diff. Start read REVIEW.diff, authoritative docs maybe large. I can use Read parallel known paths. Should check repo status maybe not necessary but review only. I need no subagents absent explicit. I can use tools. Should inspect sizes maybe Read default max 100k. REVIEW.diff likely manageable. Sources 59 items maybe large. Read all relevant parallel.
+
+• I’ll compare the diff item by item against the authoritative records, then audit the surrounding decision and roadmap text for stale contradictions and broken links.
+
+• I have working tree seems diff applied. Should read remaining diff 436-501, decisions remainder lines 802-2000, roadmap remainder 480-660. Can use focused Grep for contradictions instead of all but full to audit. Should inspect diff complete to know revised rows beyond line 435. I'll read in parallel remaining.Should have systematic review. Initial findings visible:
+  - Item 11(b) changelog says every imported item always qualified but omits same-module/builtin exceptions and same-name import revision? It says imports qualified never bare. Main decisions correct. Changelog fragment summary perhaps no need full all items but potential "every imported item qualified" correct.
+  - Every item 1-59 appears faithful mostly. Should check nuance item 37 "restrictions as proposed" recorded same vague. Fine.
+  - item 55 source says all spellings from B,C,E (6-29, 40-53) whereas decisions expands "every spelling items 6–53", includes D grammar 30-39 too. User explicit check says spelling round items 55,59; ROADMAP says every spelling items 6-53. Is this overstated? Authoritative source item 55 "and all spellings from B, C, E" excludes D (30–39), although main record says every spelling items 6–53. In user instructions perhaps expects exact items 1-59 faithfully; this is an invented extension to grammar items D 30-39. Should flag likely. R-0625 also every spelling items 6–53. Could be intentional simplification? Source B,C,E explicitly excludes D, D already all agreed. User said every spelling below illustrative and exact spellings come in spelling round, applied all. Should note.
+
+  - Item 5 "Slice 0 lands at ..." recorded as decision, but user asks diff recording decisions not performing. It says "*Slice 0 lands at...*" past tense vs authoritative "Land slice 0 ... Yes." Changelog omits item 5 perhaps okay. But process row could overstate actual landed state. Main docs says slice 0 lands at SHA which could be read directive? Italic statement in decided list, perhaps faithful. No actual ROADMAP queue updated to done, likely not required? Item 5 says land slice0. Check every item recorded. Could be okay.
+
+  - Revised rows explicit at original rows? Checklist specifically revised rows named explicitly with revision note, not necessarily each original. Diff updates many original rows except TYPE-20, Q9.8, Q6.4/TYPE-22 pending preconditions, MOD-2/MOD-3 no legacy live row perhaps not in decisions file, Q4.7/Q9.5 updated, review caps updated, foundation Q9 updated. TYPE-20 no row in decisions.md aside from OD137 reference. Q9.8 kept listed only central revision note. That's as requested. But other affected rows not named explicitly in requested list may need revision notes due contradictions. E.g OD30 says `*` stays consuming move-out, no revision note even OD59 revised. This is clear contradiction live row. OD36 includes stale `borrow h as r`, h.open().f historical proposal vs final set "only borrow block no (&h).f" but no current spelling and no revision note. Q4.6 at decisions line 236 stale `borrow ... as s` example not revised even Q4.7 revised. decided-2026-11-05-revisions line 190 stale old form `borrow ... as view` with no note. This is historical revision section though still binding? User says no contradiction elsewhere decisions.md/ROADMAP, stale as etc in live rows. Q4.6 is Core row current and directly references Q4.7 old spelling, definitely finding. Q6.2 line 243 stale "lossless `as`" current fixed table, no revision note. OD98 pointer/reference conversions written `as` likely owner's answer uses as with no revision note. OD103 as between reference types, OD123 as newtype, OD112 examples trusted code old current record only perhaps current answer not as. Should inspect all occurrences in decisions. Grep robust. Also `char` many live current answers e.g OD42 final says keep char comparisons no revision note; direct contradiction item16 no char. TYPE-20 not separate table. OD102 type aliases includes Char perhaps removed aliases. Should inspect lines around OD95-110 etc not read due gap 1503-1599. I'll read. Also ROADMAP foundation R-0609 says layout laws proved for packed algorithms, despite no packed structs until demonstrated ABI. Direct contradiction live foundation row not updated. User explicitly "packed references in live rows" likely designed to catch. R-0493 "Typed arithmetic and casts" stale casts perhaps generic named conversions? Could be casts as semantic category, not `as`, less clear. R-0259 "casts" generic. Slice 16 "integers printed by user code" okay output ordinary call not builtin, not stale print. Std modules legacy ideas not live semantics.
+  - R-0609 packed algorithms definite contradiction. Should revise to native and C, packed algorithm deferred until reopening. Also R-0502 no packed.
+  - ROADMAP std hash row "HashMap 23" needed by and unplaced hash module. Item19 says HashMap when KV measurements need, but std "hash" needed by HashMap 23 unqualified perhaps implies arrives regardless. User specifically stale HashMap references in live rows or slice table. This may be finding: line 302 hash needed by HashMap 23 no conditional, line 327 unplaced dependencies says "and the HashMap at 23 behind KV store, EVM 23 and Wasm host tables needs a hash module" states HashMap at 23 unconditionally and EVM/Wasm need it, contradicts only when KV measurements need it. line 330 "maps arrive with store/EVM/Wasm stage 23" plural maps implies both unconditional. Should assess expected. User explicitly asks no stale HashMap elsewhere ROADMAP, likely yes these are traps. Slice table and std HashMap row updated, but other references not. Should flag lines 302,327,330 perhaps concrete fix conditional. Also line 319 process module not placed okay audit task.
+  - methods stale references in ROADMAP: R-0601 "including trait methods" term methods could be generic but no method calls/receivers not necessarily declarations? They replace receiver forms, can still call functions in traits "trait methods" as associated functions perhaps acceptable. R-0499 etc no. "R-0493 casts" not exact as. I should grep all.
+
+  - decisions contradictions huge because many owner rows final answers not revised. User only demands revised row list specific, but no contradiction means need identify all direct live contradictions. Could be expected diff intentionally incomplete. Should be thorough but avoid over-reporting historical proposal columns (explicit history not contradictions). Focus owner's answer and current Core rows, live roadmap. Should scan Grep patterns in decisions and roadmap. I can use multiple Grep in parallel for `\bas\b`, method, char, HashMap, packed, print, `\*h`, `borrow .* as`, self. Output content perhaps huge 250. Narrow owner answer lines via pattern? Grep output lines all, can analyze. I can use Python script read-only to parse Markdown table rows and print lines containing terms in last column or Core sections. But dedicated Grep first. I can run Grep independently. Also links resolve: need link checker. Could use existing scripts? Read-only can run script check links perhaps scripts checks. But full checks unnecessary. I can write no files; use python inline to parse links and anchors. Bash can execute python read files, no edit. Dedicated tools cannot validate all automatically. Should know added links primarily anchors. I can programmatically extract Markdown links from changed lines and test targets. Since REVIEW.diff new/changed lines and current files. Could run python inline to gather added Markdown links and anchor definitions. Should not create. Use Bash. But first complete item compare and revision coverage.
+
+  Potential missing revision notes:
+  - Item 6/7 changes many rows beyond OD6/32/60: OD23 current answer receiver included with r.add example; no revision note. It's about overlap checks, receiver concept removed; final rule can generalize every argument no receiver but current wording contradiction. OD135 "Stop entering methods under T_m" not necessarily calls but method declarations removed? Methods as declarations with receiver removed, associated functions still may be called Type::f. Could still be called methods. OD148 examples &self in proposal column historical, final no issue. OD38 historical root.split methods in proposal no concern.
+  - Item 8 constructors field:value likely no revised row specified except none. Current rows with shorthand perhaps accepted examples in proposal history, not final. Q6.2 example already labeled. Fine.
+  - Item 9 OD130 revised.
+  - Item10 math arithmetic explicit perhaps OD12/145 kept but semantics shift default? OD145 says machine named ops, math default, new exact math must be marked explicitly. They say kept but new rule contracts mark exact math explicitly. Contradiction? Source says preserve OD12, OD145 so no.
+  - Item 11(a) other `as` decisions need revision? Source only explicitly OD11/OD91. But item says remove as entirely; all other decided rows using as must be revised to maintain no contradictions. They didn't include OD98, OD103, OD123, Q6.2, OD138 option c only not answer. Also allocation uses `*h`.
+  - Item11(b) MOD-2/3 central revision only not actual rows because no table for MOD. Other final OD139 import required okay. OD43 mentions aliases and import renames in proposal history only; one namespace final fine. OD151 multi-level module paths allowed could conflict "always qualified by last segment" if full path `a::b::f` allowed? Item says every imported item used `<last segment>::name` everywhere. OD151 final "Allow multi-level module paths a::b::f" direct contradiction if this applies imported items. Should revision note or clarify full module paths? Option 3 says always qualified by last segment not full path, so `a::b::f` no longer allowed for imported item? Source item11b explicitly exact. It keeps OD139 but not OD151. User only expects no contradictions, likely catch OD151. However item 15 import paths use :: and item 44 imports `a::b::{x,y}`. Use qualification last segment. OD151 allowing multi-level module paths may be general path (non-import perhaps pub qualified use requires import) but imported items should last segment only. Final says allow multi-level module paths generically, contradiction. Should flag perhaps. Similarly decided-2026-11-02-child parent writes child::T consistent last segment.
+  - Item 11(c) borrow Q4.6 and decided revisions stale. OD36 final no spelling except proposal current? It says only through borrow block no (&h).f, not contradictory with new form. But proposal contains recommended old borrow spelling, history. Q4.6 current uses old, direct.
+  - Item12 `*h`: OD30 current answer direct; allocation section line 1728 direct. Q? Q9.5 no. OD59 revised. R-? ROADMAP slice 19 no `*h`. Could be docs decisions 1728. Also Q2.1 etc no. Search.
+  - Item13 assert parentheses: OD79 final add assert, historical proposal `assert expr`, current response "Add assert" plus extension by thm; no direct syntax answer old? Table proposal not current. SPARK uses assert(e) already.
+  - Item14 symbol attr: any current decisions old link_name no quotes? Should search.
+  - Item16 char: OD42 final direct, perhaps OD26 "numbers only" bool/char resolved by OD42, no char. OD102 final perhaps aliases removed. TYPE-20 not present independent. Q? Q4 text no char. ROADMAP slice3 comparisons OD42 now OD42 stale. Must revise OD42 to bool equality only; char comparisons migrate to u8 explicit operations. User list revised rows did not include OD42, but no contradiction demands it. Could add revision note OD42 item16 and link it at OD42, or central rows this revises. They currently central revision says TYPE-20/OD137 only. Source instructs each change to decided row explicit owner revision. Item16 necessarily revises OD42. Source itself didn't list OD42 example but "e.g." at line5 not exhaustive. So definitely finding.
+  - Item17 print builtins: OD133 final "Reserve three names" now builtins removed. Does reservation stand? Item40 closed builtin name table no aliases, exact inventory later. Item17 no print builtins doesn't necessarily unreserve user function names. OD133 reserve names can stay reserved even no builtins? Reason was user replacement; with no builtins, reserving might be unnecessary and exact inventory later. Not direct contradiction (reserved names can remain). OD153 final refuse functions named like builtins; no print issue. OD154 allocating string builtins includes `string_push_char` (not char type, names okay) and `append`; item17 remove append builtin specifically `append`, string_append etc? Source says "Remove print/println/append builtins... String append ordinary allocating operation". Could `string_append` remain named ordinary op, no compiler builtin. OD154 "allocating string builtins need Alloc" could still be ordinary operations? It calls builtins catalog; direct current response if no builtins perhaps stale but generic names not necessarily removed. ROADMAP slice22 "allocating text APIs OD154" okay. Slice16 "integers printed by user code" no print builtin. R-? no print.
+
+  - Item18 every local written type, every function result arrow. Existing decisions OD157 Unit okay. Slice 0 typed. Slice1 "struct-destructuring let" no explicit type in table but not necessarily contradiction. Grammar later. Could be examples in current answers without type but historical.
+  - Item19 HashMap Q2.2 already excluded good. Std rows issues.
+  - Item20 Process authority rules still includes reserved set until audit, correct.
+  - Item21 defer kept no contradiction.
+  - Item22 bodyless current OD77/39 updated; Q9.15 etc no.
+  - Item23 packed: R-0609 and foundation decisions line1104 "repr restrictions retained" okay no packed until ABI, not contradiction. C3 contract link likely says packed algorithms; ROADMAP should defer.
+  - Item24 assume good.
+  - Item25 function values good.
+  - Item26 constants: Q6.4 not actually about constants timing except revisions, TYPE-22 external. They explicitly pending preconditions good. ROADMAP slice17 constants Q6.4 no mention compile time/Copy but foundation covers. Q6.6 constant evaluation fails separate etc compatible. Q6.2 module constants known values compatible. P17b compile-time eval reopening conditions but item says decided direction compile-time constants; not broad comptime, okay.
+  - Item27 keeps good.
+  - Item28/29 SPARK waiting list removed items 4b/c at top and added decisions. But SPARK row line1342 says review items 1,2,3,6,7,9,10 (excludes 4,5,8 etc) and no new explicit additions 4b/c there. Central language covers. No contradiction, but could revision note SPARK? user only OD62 and top waiting.
+  - Grammar items perhaps current contradictions:
+    - item40 reserved list excludes `fn`, `let` etc? It says reserved words spec by kept Self while Entropy, perhaps list additions not exhaustive? Source exact same. Fine.
+    - item42 chained comparisons parse, but no hidden traps perhaps semantics? Fine.
+    - item43 "Commas mandatory" broad item syntax ambiguous but source exact.
+    - item48 every match arm comma vs earlier OD86 unbraced match arm? Should check final OD86 perhaps expression no braces comma? compatible.
+    - item53 postfix member -> refused already OD128 is match arrow not member. fine.
+  - item54 no decision now but core freeze already approved process. It's scheduling later no new decision.
+  - item58 "Niches and smaller enum tags, only if workload needs them" source. Foundation Q4 says compact tags decided at layout slice, Q5 future niche owner. New item58 says only if workload needs, does it revise foundation Q4/Q5? It could add workload precondition but no revision note. User revised row list not include foundation Q4/Q5. No contradiction (foundation says future decision; item58 says condition). Could be no.
+  - quotes exact in docs/changelog yes. LANGUAGE_DECISIONS itself line4 says unanimous every item below; 11b decided owner contradictory phrase but main diff improves "agreed every item except". Good.
+  - "Codex, Kimi and agy reviewed list six rounds" source yes. "Every spelling below illustrative" source item11 says spellings illustrative perhaps global heading? PENDING item132 exact spelling in spelling round. Main okay.
+
+  Should check ROADMAP each new item names slice/phase, home gate. R-0625 in B section (Cumulative slices up to LP0) but no slice explicit? It is before grammar; home review sheet then spec, gate approval. Names phase via section B. R-0626/627 in A section, home/gate. Good. But R-0626 and R-0627 added to A2i queue tasks but R-0567 Core freeze dependencies and R-0571 integration dependencies not updated. A2i row includes them, but R-0567 depends only R-0607...16 etc not R-0626/27; R-0571 same. If A2i includes them, transitive task dependencies missing means freeze could complete without new tasks. User asks tasks and foundation rows, not dependency closure specifically. But "each new item names slice/phase home gate" yes. Could flag inconsistency A2i tasks added without R-0571/R-0567 dependencies. Does R-0627 assume replacement really need before Core freeze? Owner says remove only after replacement shown; no requirement before freeze. By adding to A2i queue, diff makes it freeze work. R-0626 Process audit also no requirement before freeze, but A2i includes. If intended, dependencies must update. Could be finding. Yet perhaps A2i row tasks is informative and R-0567 list oversight. This is concrete integration issue. Should consider severity. I should focus explicit requirements, likely expected intentional bugs. Many stale references seeded. Should have exhaustive list with file:line concrete fix, not overdo tangential.
+
+  Links resolve: Should check all added links anchors. Could automate. Existing broken links elsewhere not introduced? User says links resolve likely all changed/added. I should inspect. Added `#decided-2026-11-08-language-revisions`, `#...process`, `...spelling-round` anchors exist. Foundation proposal anchors perhaps check. R-0625 link decision anchor at item55 exists. Good. ROADMAP std per slice anchor generated. New `docs/decisions.md#decided-2026-11-08-language` exists. No obvious broken. But links in new central item10 OD12 etc exist. Q9.8 plain no link not issue. MOD-2 no link. Review caps link okay. Could run script to validate all local markdown links in changed files perhaps many existing broken due legacy move but current likely okay. I should not conflate existing. Use git diff base? REVIEW.diff tells changes. Working tree perhaps clean at candidate commit. `git status --short` and `git rev-parse` safe read-only. Could use Bash to parse added links. No need git mutation. I can run `git apply --check`? Would modify? check only no, but working tree already applied so no. Not needed.
+
+  Should inspect line1503-1599 current decisions for OD98/103/123 etc.
+
+• The 59-item record is largely present, but the surrounding live rows still contain several pre-decision forms. I’m narrowing those to actual contradictions rather than historical “proposal” or “record today” columns.
+
+• Grep huge not useful but key.
+
+  OD98 final answer doesn't explicitly `as`, just "Reference to raw pointer conversion only in trusted/Unsafe code" but row question/title current says as. Does item11 preserve provenance restrictions and replace all expression casts with one canonical named lossless conversion. Reference-to-pointer conversion likely lossless? Provenance restrictions kept. Should revise OD98 to named conversion and trusted unsafe. It isn't explicit in response but no revision note means user could read generic conversion not necessarily as. However source says `as` removed entirely all uses. The row title/question is proposal column, historical. Response not spelling so no direct contradiction, but revision should name OD98 because its semantic rule is affected in spelling. Yet user required revised row list excludes OD98 intentionally? They gave exact list expected, perhaps not require extra if response abstract enough. Q6.2 direct live answer `lossless as`, definite.
+
+  OD123 final `as never names a newtype` remains true (vacuously) and newtypes removed anyway. No need.
+  OD103 final refuse remains true.
+  OD112 historical only.
+  OD151 final multi-level path possible contradiction. Should examine MOD-2/MOD-3 actual live rows in legacy not edit per user only decisions.md. They explicitly only contradiction elsewhere in decisions or ROADMAP, so OD151 yes.
+
+  Other new decisions require revisions not listed:
+  - item16 OD42 direct.
+  - item17 OD133 perhaps reserved names not contradiction.
+  - item6/7 OD23 final has receiver included. Could revise to "every argument ... (receiver wording historical)" and r.add example stale. This is direct final response. Also decided-2026-11-02-audit lines 1788-1793 "ambiguous method call ... Trait::method(&x)" despite new central revision says trait call `Trait::f(x)` no method calls. Is `Trait::method` just a name, not dot method call, and &x first param is allowed ordinary typed first parameter. Term "method call" could be associated function, but source says no dot method calls, no receiver forms. `Trait::method(&x,...)` is allowed as Trait::f(x) with typed first param &x, so not contradiction except word method. Main diff OD6 leaves same completed text plus revision. Fine.
+  - OD23 `r.add(r.step)` is dot method call in response, direct stale example; semantically overlap root rule still valid for typed first param `Trait::add(r, r.step)` but response says receiver included. Should revision note and update example. Could flag as same finding group no method/receiver stale live rows. Also P4 duplicate method names in impl not necessarily receiver methods but associated functions allowed, okay.
+  - ROADMAP R-0601 trait methods likewise allowed terminology.
+  - OD135 response stop entering methods under T_m, methods as associated functions still meaningful.
+  - Rules changed table line107 historical fixed prose uses auto receivers and OD32 but table is audit of old issue not current rule, no direct current response. line119 says governing decision old qualified call but central revision could govern, yet table not updated with new revision; it states "Fixed in prose 2026-11-03" historical. Not live current rule? It says rules decision changed and governing decision. Could be stale but not necessary.
+  - Q4.6 direct.
+  - decided2026-11-05 revisions line190 historical record of old revision, central new revision note at Q4.7 enough? It is owner-approved revisions list current binding and old syntax. Should add 2026-11-08 note or update parenthetical. Since Q4.7 itself revised, line190 can be history. User says no contradiction elsewhere, this is a contradiction unless clearly historical. It says "is replaced ... one scoped form opens every view, [old]" present tense. Should include.
+  - Q4.6 similar.
+  - OD36 proposal old borrow spelling but final response only abstract, no direct.
+  - `as` in Q6.2.
+  - allocation *h direct.
+  - OD30 direct final response.
+  - `print` current response OD119 "Everything written..." no builtins mention final response; okay.
+  - `char` OD42 final response direct.
+  - `packed` foundation revisions line1104 says "repr restrictions retained" not contradictory with no packed.
+  - `HashMap` decisions Q2.2 excluded, central okay.
+  - methods decisions OD23 direct.
+  - `as` item40 ordinary identifier with no special meaning; OD11 revised etc. Perhaps final OD99 "These spellings as builtins" word as not code. no.
+  - constants no contradictions? decided P17b says compile-time evaluation reopens only workload etc. Item26 approves compile-time constants but defines subset before revising Q6.4/TYPE22. Current Q6.4 says when constant evaluated at each use unchanged in revisions line186. This is a direct live revision statement: "When a constant is evaluated (at each use, never at start) is unchanged." New item26 says computed at compile time, but central says Q6.4/TYPE22 revised only after preconditions. They deliberately leave pending preconditions. User specifically says "Q6.4/TYPE-22 pending preconditions" so they expect this not flagged contradiction yet; current old behavior stays until revision. Main new row item26 direction decided but before rows revised. It's intentionally conditional. ROADMAP R-0614 says before Q6.4 revised. Fine.
+  - process review caps AGENTS existing says at cap split vs owner signoff new. User only decisions and ROADMAP contradiction, not AGENTS. R-0618 says AGENTS update future. Fine.
+  - process item3 one review round on std placements; table currently approved before review? says one review round settles, okay.
+
+  - Item5 slice0 lands but ROADMAP queue still B0 active building next. This is a direct process contradiction: new decision item5 "Land slice 0 at SHA" and ROADMAP B0 active "design done; building next". If slice 0 landed at 0e2950e7, queue should mark landed? The diff records process item5 but doesn't update ROADMAP B0 status. User asks every item and no contradiction ROADMAP. Could be intended catch. PENDING authoritative "Land slice 0 at 0e2950e7 ... yes" means owner approved landing, not necessarily already landed. Main record says "Slice 0 lands at..." directive/record. ROADMAP queue "building it is next" stale after landing approval. But perhaps this diff on branch before landing and decision to land means after train lands B0 code will be main; record itself shouldn't mark done until actual. Changelog says process items omits slice0 landing entirely. User asks every item recorded; it is in docs. No need roadmap update perhaps outside scope. But "Slice 0 lands at SHA" is clear. Could note if confident? Might over-report. Focus explicit seeded examples likely expected findings.
+
+  Should compare base to ensure contradictions preexisting vs introduced. Review request expects no contradiction left after diff, so preexisting stale rows need fixed by diff. Good.
+
+  Should link validation. I'll run python script in Bash no writes. Should parse only added lines in REVIEW.diff. Added diff lines include `+` and markdown links. For each link target in added lines, map current file based diff section (ROADMAP, changelog, decisions). Resolve relative path and anchors. Anchors can explicit HTML or GitHub slug headings. Should implement robust. External URLs skip. Paths may contain line anchors legacy etc but added links mainly known. Use Python standard libs, `os.path`, `re`, `unicodedata`. No file writes. I can output failures and count. Should not read secrets. Fine. Also can inspect git status no files created by tools? Grep tool wrote output outside repo automatically, not my file in repo. User said don't edit any file; tool created session output automatically but not project? I didn't intentionally edit. Fine.
+
+  Script parse current new file sections. For link target `docs/decisions.md#...`, path relative containing file. For decisions links `../ROADMAP` etc. Anchors explicit IDs across file. Generate heading slug simplistic GitHub (lower, remove punctuation except hyphen spaces). I only need added targets explicit anchors. Could output all failures. Use Bash.
+
+• The clearest live conflicts are stale `as`, `*h`, old borrow syntax, `char` comparisons, and unconditional packed/HashMap planning. I’m also checking whether the new anchors and task dependencies actually close the requested roadmap sequence.Checked 84 links on added lines
+Broken: 0
+
+
+• Link checker good. Should evaluate item 55 extension perhaps check user phrasing: "ROADMAP: the spelling round (items 55, 59) precedes the Lean grammar (R-0622)" no exact scope besides sources. I'll flag.
+
+  Perhaps missing "OD139 kept" in central revisions? Item 11b main includes. Good.
+  - Changelog "Every imported item ... never bare" omits same module builtin exception but says imported item so same module not imported, builtin types not imported perhaps fine.
+  - Changelog says no print etc, okay.
+  - Changelog says `OrderedMap only for now` no conditional KV detail? It says only for now but main includes. Summary okay.
+  - Changelog quotes exact with line wrapping but text exact.
+  - Changelog claims "Each revised row carries explicit revision note." False due TYPE-20/Q9.8 etc? They are named in central revision notes. Every revised row as per checklist yes central notes. But additional Q6.2 etc no. This claim helps findings.
+
+  Potential central revision list Q6.4 TYPE22 wording: "compile-time Copy constants. The rows are revised once ..." Could be interpreted already revised now vs future. Source item26 direction decided now, rows before revising. Main says rows are revised once conditions (future). User explicitly wants pending preconditions. It's okay though perhaps phrase should "will be revised only once" to avoid saying already. R-0614 says before revised. Fine.
+
+  Foundation requirements all present:
+  - trap names R-0608 yes.
+  - compile-time Copy constants closed initializer subset R-0614 yes.
+  - dead-store R-0615 yes.
+  - depends R-0615 yes.
+  - math boundary R-0608 yes.
+  - typed first parameter R-0607 yes.
+  - Process audit R-0626 yes.
+  - assume replacement before removal R-0627 yes.
+  - each new item slice/phase home gate yes.
+  - R-0625 before R-0622 dependency yes.
+  No missing explicit checklist except contradictions and item55 scope.
+
+  But R-0609 packed is in foundation rows user specifically wanted no packed stale. Clear reject.
+
+  Perhaps C3 foundation source contract itself still packed algorithms and decision foundation approved before item23; new language revision should update R-0609 only in diff but docs/proposals not requested. They only audit decisions/ROADMAP. Fine.
+
+  Potential no method stale in ROADMAP phase C "traits" no.
+  - decisions Q9.6 "checked destructor bodies" no.
+  - decisions line187 `impl...` no.
+
+  Perhaps inspect `self` final current rows beyond proposals. Grep `decided.*self` multiline not easy. I can use Python to scan final response column for terms. I'll run script to parse Markdown table lines starting `| OD` and last `|` answer, print lines with target patterns in response. This will identify all. Also Core rows lines starting - Q etc. Use Bash no writes.
+
+• All 84 links added by the diff resolve. The remaining work is to distinguish direct owner-answer conflicts from merely historical examples and to check the exact scope of the spelling round.1458: decided 2026-10-29 by the owner: (1) passing a `&mut` on is plain lending, each call's use ending when it returns, with no reborrow concept or syntax; (2) a call is refused when an exclusive argument overlaps any other argument (`h(r, r)`, `h(&mut x, &x)`, `h(&mut a, &mut a.f)` refused); as tightened by OD15 (a) the same day, two arguments that borrow the same root conflict whenever one is exclusive, so even `h(&mut a.f, &mut a.g)` is refused; (3) `&mut` refers to the place, a write through it is the write to that place at once, and copy-in/copy-out is not part of the language (only an optimization proven equivalent); (4) `defer` keeps OWN-12 and a borrow passed to a deferred call stays live until the call runs; (5) one exit sequence on every non-abort exit: the exit value, then the scope's deferred calls (last registered first, innermost scope first), then the scope's loans end, then the remaining locals are destroyed; an abort runs none of it **Canonical current root-based exclusivity rule: REF-11 and OD15(a); this historical overlap formulation is a reference to that rule.**
+1467: decided 2026-10-29 by the owner: `as` only when lossless by value domain; every lossy conversion is a named function **Revised 2026-11-08 by the [language decisions](#decided-2026-11-08-language-revisions): `as` is removed; the value-domain rule moves to one named lossless conversion.**
+1471: decided 2026-10-29 by the owner. (a) Whole-owner freezing: a live borrow of any part of a value freezes the whole owner, and loans are keyed by the root binding (REF-11 as in the current compiler); this tightens OD2's part 2: at a call, two arguments that borrow the same root conflict whenever one is exclusive, even disjoint fields (`h(&mut a.f, &mut a.g)` is refused, as in the current compiler); OD1's "keyed by the root variable" stands. (b) The strict option: the language guarantees `&mut` exclusivity, which the checker enforces (OD2, OD15a), and no compiler pass or optimization may assume or exploit it until the checker's guarantee is proven in Lean (R-0499 with the Core semantics R-0496); until then the operational loan rules are defined now, G19 included: a pointer or alias derived from a loan is valid only while that loan lives. Now REF-11@3 (partial, bug 319, which OD23 adds) and REF-14 (pending, R-0496) **Canonical current root-based exclusivity subject: REF-11 (including OD23’s re-lent case); OD2 and OD23 refer here rather than defining separate variants.**
+1479: decided 2026-10-29 by the owner ("strict across the board"): every argument of a call, the receiver included, is overlap-checked against the root, including re-lent `&mut` bindings, so `r.add(r.step)` is refused; read the Copy field into a `let` first. Now REF-11@3 (partial, bug 319) **Canonical current rule: REF-11 and OD15(a); this is the historical clarification of its re-lent case.**
+1488: decided 2026-10-29 by the owner ("strict across the board"): no receiver auto-borrow: a method with `&self` or `&mut self` on an owned place is written `(&s).m()` or `(&mut s).m()`; a receiver that is already a reference is unchanged. Now OWN-15@3 (pending, bug 328) **Revised 2026-11-08 by the [language decisions](#decided-2026-11-08-language-revisions): no receivers and no method calls, so `(&s).m()` is gone.**
+1498: decided 2026-11-01 by the owner (final set): Keep `==`/`!=` on bool/char and `<` on char; refuse ordering on bool
+1515: decided 2026-11-01 by the owner (final set): `*h` + `destroy(h)`, no `free`, no `take` **Revised 2026-11-08 by the [language decisions](#decided-2026-11-08-language-revisions): a named move-out replaces `*h`; `destroy(h)` stays, no `free`, no `take`.**
+1547: decided 2026-11-01 by the owner (final set): `x as T < y` is less-than; a generic cast type needs parentheses `x as (Vec<T>)` **Revised 2026-11-08 by the [language decisions](#decided-2026-11-08-language-revisions): `as` is removed, so the question no longer arises.**
+1558: decided 2026-11-01 by the owner (final set): No `Float32` or `Char` aliases. Completed 2026-11-02 by the owner: the aliases `Int`, `Uint`, `Float64` and `Bool` are removed too ([decisions](decisions.md#decided-2026-11-02-aliases))
+1567: decided 2026-11-01 by the owner (final set): Accept field, refuse a reference to it **Revised 2026-11-08 by the [language decisions](#decided-2026-11-08-language-revisions): no packed structs until a demonstrated packed foreign ABI reopens them.**
+1579: decided 2026-11-01 by the owner (final set): `as` never names a newtype
+1593: decided 2026-10-31 by the owner's rule (every reviewer agreed, as strict as Austral or stricter): Refuse non-ASCII **Revised 2026-11-08 by the [language decisions](#decided-2026-11-08-language-revisions): there is no `char` type or character literal.**
+1603: decided 2026-11-01 by the owner (final set): Accept: C order, no padding, align 1, stated in FFI-8 **Revised 2026-11-08 by the [language decisions](#decided-2026-11-08-language-revisions): no `repr(C, packed)` until a demonstrated packed foreign ABI reopens it.**
+1607: decided 2026-11-01 by the owner (final set): Allow multi-level module paths `a::b::f`
+
+
+• I have done item compare enough. Update todo done first, second in progress. Should decide if further checks. I should not rush the response; need robust findings list with exact lines concrete fixes. Should potentially use `git diff` no edits to compare target base? REVIEW.diff enough. I can verify all revised rows named explicitly list. Checklist:
+  OD6/32/60 yes central and originals.
+  OD130 yes.
+  OD11/91 yes.
+  OD59 yes.
+  TYPE20/OD137 yes central, original OD137. TYPE20 no anchor in decisions. They name plain.
+  Q9.8 kept central.
+  OD39/77 yes.
+  OD111/147 yes.
+  OD80 yes.
+  Q6.4/TYPE22 pending central.
+  OD62 yes.
+  Q4.7/Q9.5 yes.
+  MOD2/3 central.
+  OD90 yes.
+  foundation Q9 names updated.
+  review caps updated.
+  All present. Mark first done, second in progress then verify roadmap done and dependencies. Could mark second done soon after analyze new item scope.
+
+  "each new item names slice/phase, home and gate" R-0625 located B section but its dependency owner. R-0626/627 A section. R-0625's "Home: a review sheet" isn't spec/tooling category but source says home spec or tooling. User says each new item names home, not restricted. It names review sheet then spec Grammar. Good.
+  - New R-0626 no explicit phase in row but under A, okay.
+  - R-0627 under A, okay.
+  - R-0625 under B, okay.
+  - New item R-0626 A2i listing as above. I can flag dependency issue if review expected? Should determine if "A2i" tasks list includes R-0626/27 but R-0567/571 dependencies missing means structural inconsistency. They might expect no finding if queue tasks can list independent tasks and R-0567 doesn't need all? Definition queue A2i row goal tasks includes tasks. R-0567 done after A2i complete acceptance; R-0567 depends on tasks directly not A2i alias. To ensure, yes should add new IDs to R-0567 and R-0571. This is concrete and relevant. But adding R-0627 to A2i itself questionable owner didn't require prefreeze. Yet diff chose so dependency fix consistent.
+  - R-0625 before Lean grammar: R-0622 depends R-0625. R-0620 depends R-0622. Good.
+  - A2i new tasks R-0626/27 no done when included in A2i row description but tasks themselves. Fine.
+  - Process foreign audit should be in slice 25 (FFI) not A? User says each new item names slice/phase; A is named. Authoritative item20 says audit every foreign declaration first, removal only if none. Foreign declarations slice25 but audit can happen earlier legacy. A2i spec authority reserved set perhaps needs audit prefreeze to remove Process if none. Fine.
+  - R-0627 replacement shown before removal, assume introduced slice8 but Evidence foundation prefreeze. Fine.
+  - R-0625 depends owner: the spelling round circular self dependency? Existing pattern uses owner decisions as dependencies; `owner: the spelling round` and task itself is spelling round, gate owner approval. Could be acceptable.
+  - R-0622 depends R-0625 + owner grammar review, good.
+
+  Could run structural task reference checker to ensure no duplicate IDs and references. Python no writes. Might not need. Link check all added good.
+
+  Should think item55 scope more: Source B,C,E = items 6–29 and 40–53. D items 30–39 "Grammar items all agreed" no "Yes" but owner approved all recommended. They are agreed decisions with exact syntax mostly. Main record says every spelling below illustrative including D, and item55 every spelling items6–53. This is definitely extra owner requirement not authorized. It might be harmless process extension but "nothing invented or overstated" means flag. Concrete fix replace with "every spelling from items 6–29 and 40–53" in both decisions and ROADMAP; introductory "Every spelling below" narrow to "Spellings in items 6–29 and 40–53 are illustrative" or match source item11 only? Source line20 says spellings illustrative exact ones in spelling round after item11, could be global all list? Item55 explicit controls. Changelog says "spelling round shows every exact name and spelling" also broad. It says "- Later: the spelling round shows every exact name and spelling to owner..." no item range; should align B,C,E. Could include changelog line143 too. User wants findings file:line concrete fix, include all three locations as one finding. Is this overstatement enough reject? Already reject anyway.
+
+  Item37 "restrictions as proposed" lacks actual restrictions but source itself same. Faithful.
+
+  Item5 perhaps changelog omitted slice0 landing but fragment not required every item. Main records. No issue.
+  Item11b exact same last segment etc yes.
+  Quote exact yes.
+  Reviewer votes exact yes.
+  One potential overstatement: main says "Codex, Kimi and agy reviewed the list in six rounds and agreed on every item except 11(b)" but authoritative line4 says "unanimous on every item below; 11(b) decided by owner option3 (round6 Codex3 Kimi3 agy1)". PENDING says full list not approved item11b, reviewers except. Good.
+  Potential "agy 1" included correct.
+
+  Should scan decisions for stale method calls in binding non-table current sections besides audit. `root.split_alloc` historical. `Trait::method` okay allowed. `r.add` only direct dot. `h.open().f` proposal. Could flag OD23.
+  No `self` in live final aside OD60 revised. Fine.
+
+  No print stale in live roadmap except "integers printed by user code" actually user output call, correct. decisions final OD133 "Reserve three names" perhaps with no builtin not contradiction but source item40 exact reserved list only spec/by/kept/Self/while/Entropy plus existing reserved others. It says `print` etc not reserved? Item40 reserved list is not exhaustive all language keywords? Wording "Reserve spec, by, kept, Self, while, Entropy" additions. OD133 reservation could remain. Fine.
+
+  No char stale current in Q? OD42 only.
+  No `*h` stale live in R? decisions OD30 and allocation. Also OD36 proposal text references OD30 `*`, not current answer, but Q4? Good.
+  No `as` stale Q6.2, perhaps `decided-2026-11-05-revisions` line186 at each use not as. `Q6.2` direct.
+  OD98 answer abstract not direct. However item11a says "Expression casts replaced by one canonical named lossless conversion" applies pointer/reference conversions? Source specifically OD11 value-domain and provenance restrictions kept. OD98 is pointer/reference conversion and owner response only trusted Unsafe; could be subsumed by one lossless conversion with provenance restrictions. To make no contradiction, title historical doesn't govern. No need.
+  OD151 is uncertain. Always qualified by module's last segment doesn't necessarily forbid full paths? It says "Every imported item is used as `<last segment of its module>::name` everywhere ... never bare." A full path `a::b::f` is not `<last segment>::name` unless module's last segment could be `a::b` no, so yes direct. But perhaps OD151 addresses qualified path to pub declaration without import, while OD139 requires import, so after import you could still choose full path. New rule says always exact form. Should revise OD151 to only import paths can multi-level, uses last segment. Since item11b source doesn't explicitly name OD151, but no contradiction requires note. Include finding.
+
+  MOD-3 revision allows same-named imports, central good. Local named like imported segment refused. Existing OD67 final "Refuse local reusing top-level name/import alias" compatible stricter.
+
+  ROADMAP HashMap:
+  - std table row301 updated conditional arrival but "needed by store23; EVM23; Wasm" could imply those need HashMap even if not triggered. The conditional in arrival column governs row, so needed-by list just potential consumers. Not direct on its own. line302 hash module "needed by HashMap23" without conditional but HashMap row conditional. Could fix to "HashMap 23 if enabled". line327 explicit "the HashMap at 23 behind the KV store, EVM23 and Wasm host tables" says definite and also changes trigger from only KV measurements to EVM/Wasm needs. This directly violates item19. line330 plural maps definite. I can group lines327 and330, optionally302. Concrete fix make all HashMap mentions conditional on KV measurement and don't assert EVM/Wasm require it; OrderedMap remains stage23. Good.
+  - Phase D row160 "maps" generic includes OrderedMap only so fine.
+  - Q2.2 HashMap excluded good.
+  - Std hash not placed but needed if HashMap enabled, okay.
+
+  Packed R0609 direct.
+
+  A2i dependencies perhaps include as finding if not too many. Should validate links all 84 added. I can state no broken links found in summary after findings. Respond exactly one verdict line at end. I should not include extra after. Findings ordered severity perhaps all are substantive. Review style concise but enough. I can group related stale rows into findings by decision topic with multiple file lines and fix. Perhaps 8-10 findings:
+  1. Spelling round scope expanded beyond source (docs decisions 1170,1294-1297, ROADMAP461, changelog143-144) -> items6–29,40–53.
+  2. Old borrow syntax remains at decisions190,236 -> update with revision note new form.
+  3. `as` remains Q6.2 line243 -> named lossless conversion, revision note.
+  4. Heap move-out `*h` remains OD30 line1486 and allocation line1728-29 -> named op + revision notes (OD30/allocation).
+  5. char comparisons OD42 line1498 -> revise OD42 bool only and char migrated.
+  6. method receiver example OD23 line1479 -> every argument no receiver, Type/Trait call example, revision.
+  7. Import OD151 line1607 -> clarify full multi-level only import declarations, uses last segment; revision.
+  8. ROADMAP packed R0609 line418 -> remove packed algorithm until ABI.
+  9. HashMap line327,330 and perhaps302 -> conditional.
+  10. A2i dependency missing R0626/27 at R0567/571 lines408,411 -> add.
+  11. Perhaps R0609 contract itself linked has packed but not scope; no.
+  12. No link issues.
+
+  Could group 2-7 into 4 topic findings to avoid overlong. But user asks list findings with file:line concrete fix. Group by topic acceptable. Should have every stale contradiction included. I might include Q4.7 old initial text line237 even has revision note, not a problem because note explicitly supersedes. Line190 no note and 236 no note. Good.
+  - Q6.2 old known values table `lossless as` no note.
+  - OD30 final answer old `*` no note.
+  - allocation old `*h` no note.
+  - OD42 no note.
+  - OD23 no note.
+  - OD151 no note.
+  All clear.
+
+  Potential `print` stale final decisions line1575 response everything output no issue. No additional.
+  Potential `packed` in decisions foundation row R0609 only.
+  Potential `as` in ROADMAP R0493 "Typed arithmetic and casts" not specifically syntax. Could update casts to conversions for clarity but not direct. User examples "stale as" might expect search any `as` code. R0493 "casts" no `as`, okay.
+  Potential `*h` in decisions line1728 definitely.
+  Potential `borrow ... as` in decisions line190,236. Good.
+  Potential "methods" in ROADMAP R0601 generic not dot call.
+  Potential no `char` in ROADMAP updated.
+  Potential no print in ROADMAP "integers printed by user code" not builtin, explicitly user code. Fine.
+  Potential process item 5 contradiction not needed.
+  Potential item 58 smaller tags foundation Q4 no explicit revision note. User revised row list doesn't include but could be considered no contradiction because adds workload condition. No.
+  Potential new item 40 reserved `Self` while no receivers: `Self` type may still used in trait associated functions, okay.
+  Potential "no module import" with OD151 full path use perhaps import declarations only. Fine.
+
+  Make sure no quotes mistakes in changelog:
+  "record, yes to all recommended" exact.
+  "i prefer fully gone, self and as are irrelevant from what i see" exact.
+  "i like 3" exact.
+  Main same. Good.
+  No invented "CI 9/9 green" source exact.
+  "three reviewers accepted" source 3 ACCEPT.
+  Review cap signoff says "approval and every outstanding finding and verdict" main yes, R0618 says approval every outstanding finding but not verdict, user foundation review caps perhaps exact? R0618 diff omits "and verdict" while source item1 says every outstanding finding/verdict recorded. Main decisions includes. ROADMAP R0618 should include verdict too? Requirement every item recorded faithfully across main, roadmap task could summarize. But roadmap says "with the approval and every outstanding finding recorded" omits verdict. Is that material? It weakens recording requirement in task acceptance. User specifically review caps revised rows and every item faithful. Could flag R0618 missing verdict as concrete fix "finding and verdict". Changelog line124-126 says "owner may sign off exact SHA ... after reviewers" but omits outstanding findings entirely, summary okay. R0618 is done when, should include all. Main covers so less severe. But if comprehensive, add minor finding or include with task dependencies. Do I want over-report? Perhaps expected checklist "review caps" includes signoff path exact; R0618 lacking verdict is small fidelity gap. The main decisions row has exact requirement so no contradiction, task should implement full. It says "[decision] items 1 and2" so linked record governs. Not necessary.
+  R0618 highest cap classified by files actual diff yes.
+  Signoff one exact SHA all three yes.
+  Never gates/proofs yes.
+  Good.
+
+  R0627 owner approval removal: source says remove after replacement shown, not explicitly owner removal approval but process owner decides language so appropriate. No overstatement.
+  R0626 gate refusal control if Process removed perhaps invented but operational task acceptance reasonable, user asks home/gate. Fine.
+  R0625 exact names output append etc yes.
+  Item55 every spelling overreach likely important.
+
+  A2i dependencies could be considered not asked, but real roadmap coherence. Include perhaps.
+
+  Should check the diff against wip/record-foundation is actual working tree? REVIEW.diff index and current files yes. No edits. Good.
+
+  Todo update now.
+
+• The required revision register and foundation additions are present. Two roadmap consistency issues remain besides the stale language rows: the spelling round is broader than the source, and A2i’s new tasks are missing from the integration/freeze dependency lists.
+
+• I should verify no other links issues; perhaps link checker is flawed for added diff paths because current file `changelog` no links except none. 84 includes duplicates. Fine.
+  Could run check anchors all local in entire changed files? User "links resolve" may mean all, but existing links many. I can run full checker over decisions and ROADMAP to identify preexisting broken links and determine changed relevance. There may be hundreds and external. My slug algorithm may false positives. Existing project likely links valid. Could run full and see. No modifications. This helps ensure added links not just. Use same script all local links. Should have paths with spaces angle? Regex. It will find missing due paths not exist? I can output perhaps lots. I can run and analyze. Also check R task dependencies IDs duplicates via Python. Do in parallel.Checked 650 local links in all delivered files
+BROKEN | docs/decisions.md | 32 | ../ConcreteSpec/ | missing file
+Broken: 1
+Duplicate task IDs: {}
+Task rows: 149
+Full link checker one directory link ConcreteSpec exists directory, my isfile false. So no broken. Good.
+
+  Perhaps inspect R-0609 foundation contract C3 to decide if no packed algorithms accepted foundation previously and owner new decision says remove general packed until real ABI. R0609 should remove. Yes.
+
+  Potential "no contradiction elsewhere" includes historical table initial answer plus revision note accepted pattern. I don't flag revised rows old text. Good.
+
+  Could create a checklist in analysis mapping all items:
+  1 main lines1174-1176, R0618, review cap lines1128-1131 yes
+  2 1177-79 yes
+  3 1180 + roadmap289 yes
+  4 1181-83 + foundation1070 + R0608 yes
+  5 1184 yes
+  6 1186 + slice14 + C1
+  7 1187-88 + C1
+  8 1189
+  9 1190-91 + OD130
+  10 1192-93 + C2
+  11 1194-1209 + OD11/91 Q4.7/9.5 MOD central yes
+  12 1210-12 + OD59
+  13 1213
+  14 1214 + slice25
+  15 1215
+  16 1216-17 + slice16 + OD137
+  17 1218-20 + no print table16 output user code
+  18 1221-23
+  19 1225-26 + slice23 std
+  20 1227-28 + R0626
+  21 1229-30 + Q9.8 central
+  22 1231-33 + OD39/77
+  23 1234-35 + OD111/147 slice25 but R0609 stale
+  24 1236-39 + OD80 R0627 slice8
+  25 1240-41 + slice20
+  26 1242-44 + R0614
+  27 1245-46
+  28 1247-48 + R0615
+  29 1249 + OD62 R0615
+  30-39 lines1252-62
+  40-53 lines1263-91
+  54-59 lines1293-1310.
+  All present.
+
+  One fidelity issue item55 main says every spelling 6–53 as above. Good.
+  Another fidelity issue item56 source entropy grant shape at slice6, main same.
+  57 same.
+  58 "Niches and smaller enum tags, only if workload needs them." main same.
+  59 all subrules exact yes.
+  No item missing.
+
+  Roadmap R0625 uses "every spelling from 2026-11-08 items 6–53" same overreach.
+  Changelog broad "every exact name and spelling" could be read within decided scope not explicit but to fix include B/C/E.
+  No other overstatement.
+
+  Perhaps R0614 "constants computed compile time ... before Q6.4 TYPE22 revised" places this work in C8 foundation before freeze. Source item26 says before revising rows, not necessarily before freeze but acceptable task scheduling choice? Owner approved list, roadmap planner can schedule. no.
+
+  Process item 5 not in changelog summary but okay.
+
+  "Each new item names slice/phase" R0625 in B but spelling round needs happen before parser in B0. okay.
+
+  Potential A2i R0626/27 inclusion could be an invented scheduling requirement (before Core freeze) not in source. The user specifically says "Process audit and assume replacement shown before removal are tasks" not necessarily A2i. Diff adds them to A2i queue, which schedules them pre-freeze. Is that overstated? It may be intended because authority/evidence foundation. But source item20 only audit first before removal, no deadline; item24 replacement before removal. Assigning A2i makes removal? R0627 done when replacement shown and owner removal approval; if A2i includes R0627, this requires assume removed before Core freeze, whereas slice8 (later C) still has assume "removed only after R0627". This is an actual logical contradiction:
+  - A2i includes R0627, so before freeze (A2c), replacement shown and only then assume removed; R0627 done when "only then is assume removed" could mean task includes removal. Slice8 later says `assume` present if removed only after R0627; if R0627 completed prefreeze, slice8 should not have assume. Wording "assume (never admits safety; removed only after R-0627)" could mean at slice8 if R0627 already done, it is removed and shouldn't be listed. A2i inclusion is odd. User explicitly expects "assume replacement shown before removal are tasks", not necessarily prefreeze. User may have intentionally added A2i tasks list R0626/27 without thinking. I can flag either missing dependencies or scheduling contradiction. Should infer expected review target: User explicitly mentions "(3) ROADMAP: ... Process foreign-declaration audit and the assume replacement shown before removal are tasks; each new item names slice/phase, home and gate". User likely expects R0626/627 in A section and A2i tasks perhaps required to integrate foundation. User may not view logical issue. User asks each new item phase, A. Could be deliberately expected. Avoid overcomplicate.
+
+  Dependency missing is objective given A2i list, but perhaps R0567/R0571 don't have to list every A2i task? They currently list all foundation R0607-16. A2i queue includes R0555 etc and R0567 depends all those yes. Compare:
+  A2i tasks before: R0571, R0574, R0496, R0560, R0555, R0559, R0588, R0592, R0602, R0603, R0607-16.
+  R0567 deps: R0571,R0574,R0496,R0560,R0555,R0559,R0607-16. Omits R0588,R0592,R0602,R0603 intentionally because R0571 or others dependencies cover? R0571 deps R0511,R0560,R0607-16. R0592 depends R0571 (so after integration weird). R0588 depends R0571. R0602 depends R0612. R0603 depends R0571. R0567 directly omits those but transitively R0602 via R0612, not R0588/92/603. A2i row includes tasks not necessarily all needed for freeze? Goal done when integrated and other tasks may parallel. R0567 list not exact closure by design. Adding R0626/27 might also be parallel not freeze dependencies. Then missing dependency not necessarily bug. A2i row task list includes concurrent fold work not all done requirement? A2i "done when" doesn't mention R0626/27. R0567 not need. So my earlier claim "A2i's new tasks missing integration/freeze dependencies" may be weak. User didn't ask dependency closure except R0625. I should not include unless certain. Better not flag. I can say no need. The commentary to user already said issue remains, but response can choose not include if re-evaluated? I should not knowingly make weak finding. I can still include as roadmap inconsistency if strong enough. But avoid false positive. Should analyze roadmap semantics: queue row A2i tasks all tasks associated, done when description. R0567 done when A2i complete acceptance with enumerated criteria, not necessarily every task in A2i row? It says complete acceptance, could imply all tasks. Yet existing omissions demonstrate not strict. R0588 etc are facts requirements perhaps covered through other tasks. R0626 audit Process may not required for C1-C10 freeze if Process stays until audit, so no dependency. R0627 assume replacement also not required before freeze because assume stays. Adding to A2i means work can happen alongside, not block. No dependency needed. I should omit finding. Could mention no issue.
+
+  Similarly R0627 A2i scheduling not necessarily removal prefreeze because task can remain incomplete? A2i active includes future task, but queue next A2c after A2i done. Still ambiguous. Not explicit check, skip.
+
+  Perhaps flag R0625 owner approval before Lean grammar, good.
+
+  Links all 650 local except directory false. I can confidently state links resolve.
+
+  Now evaluate OD151 finding strength. Could full multi-level module paths refer to direct qualified use without imports? OD139 says import required, but with new item imports always last segment. Yes direct. Should include.
+
+  OD23 method call finding direct but source item6 says no dot method calls. Yes.
+
+  OD42 char direct yes.
+
+  Q6.2 as direct yes.
+
+  OD30 and allocation *h direct yes.
+
+  HashMap line327 and330 direct yes.
+
+  Spelling scope direct source mismatch yes.
+
+  Potential other stale `as` live row Q6.2 only. Good.
+
+  Potential old borrow in line190 historical revision record, perhaps adding note there is expected. I can group with Q4.6. Q4.6 is direct. Even if line190 history, Q4.6 enough. Fix both.
+
+  Potential no print stale decisions OD133 reserve names no contradiction. Good.
+
+  Potential no packed stale decisions line418 R0609 only. Good.
+
+  Perhaps std table row301 needed by EVM/Wasm contradicts conditional trigger; include lines301-302 with327/330. Fix all to conditional. Main line301 arrival says conditional so not stale itself, but needed-by column implies uses if enabled. I can cite only 327,330 and 302 as related. Concrete fix update 302 to "HashMap 23 if enabled"; 327 to "if KV measurements enable HashMap, its hash module is also unplaced; do not claim EVM/Wasm require HashMap"; 330 "OrderedMap arrives at 23; HashMap only conditional." Good.
+
+  Should have response findings perhaps 9 items. Review output can be ~1000 words? Perhaps 700. Each finding with bold short title and file lines. Should have no big headings? Could use numbered list. End exact verdict line. Include link check summary at end before verdict perhaps one sentence "The three owner quotes and item 11(b) are exact, all required revision-register entries and foundation/task additions are present, and all 650 local links resolve (directory links included)." But note all links checker counted 650 and one false positive directory. Say "The added links resolve; I found no broken link." No need number 650 perhaps 84 added. Good.
+  No separate acceptance praise too long. Findings first. I should mention no issues with quotes etc after findings.
+
+  Should mark todo audit done and report in progress then respond. Before response perhaps re-read user requirements ensure exact final line one verdict. I need no tools after response. Todo final all done before response. I can call TodoList with all done now? Report not yet written, shouldn't mark done before actual. Could set audit done, report in progress, then respond would leave report in progress violating before response list matches actual. I can call TodoList all done immediately before response because report formulated in analysis and about to send; okay. Or two calls unnecessary. I can set all done now after I have findings ready, respond deliver. Fine.
+
+  But perhaps verify line refs exact current files. I have them. Changelog line27. Decisions line1294-97 and 1170. ROADMAP461. Good.
+  - docs/decisions.md:190,236 old borrow. concrete fix add 2026-11-08 revision note and replace syntax.
+  - Q6.2 line243.
+  - OD30 line1486, allocation 1728-1729.
+  - OD42 line1498.
+  - OD23 line1479.
+  - OD151 line1607.
+  - ROADMAP418.
+  - ROADMAP302,327,330.
+  Nine findings with first scope, then 7 contradictions, HashMap = 9. Could group methods/imports separately.
+  Perhaps line190 old syntax already directly superseded by Q4.7 at line237; nevertheless no note at Q4.6. Include both.
+  No missing revision notes required list, but new extra rows need explicit revision. Fix includes adding to central "Rows this revises" for Q6.2, OD30, OD42, OD23, OD151 and allocation. Should mention each original row note plus central register. This is concrete and aligns source "Each change decided row explicit revision naming row". For Q4.6 add Q4.6 to central list alongside Q4.7/Q9.5. For allocation section add revision note not central row ID perhaps link.
+  - For R0609 just change work no decision row central needed.
+  - HashMap plan update no decision revision.
+  - Spelling scope change no owner decision needed, recording fidelity.
+
+  Could response include severity labels? Not necessary. All are blocking due explicit requirements. Start "Findings:" then numbered. End verdict reject.
+
+  Should decide A2i dependency omit. Yes.
+
+  Could there be a more severe issue item55 scope than contradictions; order perhaps direct stale first then scope. Findings sorted source fidelity then contradictions. Fine.
+
+  Make sure statement "every spelling below illustrative" at decisions1170 overstates all 59 including process/trap names? Trap names exact decided not illustrative? It says every spelling below illustrative, could include trap names `overflow` etc which item4 decided exact. Source item4 trap names yes exact, item55 only B,C,E. This blanket makes even trap names seem provisional, contradicts item4. Good additional reason. Concrete fix narrow to spellings covered by item55, not every below. Changelog broad also. Mention.
+
+  No broken links. Good.
+
+  Todo final.
+
+• The audit is complete: the quotes and required revision register are accurate, the new links resolve, and the blocking findings are the source-scope expansion plus live rows that still prescribe removed forms.
+
+• Now respond polished, exactly one verdict line at end. Perhaps 9 findings each concrete fix. Ensure no "VERDICT" elsewhere. End exactly `VERDICT: REJECT`. I can state no link issues after list. I should not overdo. I'll draft:
+
+  1. Item55 broadened. Source B,C,E = 6–29,40–53. decisions 1170,1294-97, ROADMAP461, changelog27-28. Fix replace every spelling6-53 with B,C,E ranges and narrow blanket statement; otherwise new requirement for D items30-39 invented.
+  2. Borrow old syntax live: decisions190 and236. Fix use new form and add Q4.6 revision note/register (line190 mark superseded).
+  3. `as` Q6.2 line243. Fix named lossless conversion and revision note/register.
+  4. `*h`: OD30 line1486 and allocation1728-29. Fix named move-out and notes.
+  5. char OD42 line1498. Fix bool == != only and u8 comparisons, add OD42 item16 register.
+  6. methods OD23 line1479. Fix remove receiver qualifier/dot example, use ordinary args `Type::add(r,r.step)` or `Trait::add` and revision.
+  7. import OD151 line1607. Fix multi-level only import declaration, use b::f for module a::b, note revision. Is example `a::b::f` full path perhaps same module item declared in parent? If f declared in nested module a::b and current module imports it, last segment b. Good.
+  8. packed R0609 line418. Fix native,C only; packed deferred until ABI reopens.
+  9. HashMap ROADMAP302,327,330. Fix conditional KV only, no EVM/Wasm assumed.
+  Perhaps one more finding R0618 missing verdict? Skip.
+  Closing "The exact quotes, item11(b) option3 details, required revision entries, foundation additions, task homes/gates, and R0625->R0622 ordering are present. Added links resolve." This is positive but contradicts finding required revision entries all requested present yes. Good.
+  Should mention "every item 1–59 otherwise recorded" not necessary.
+  Response line exact.
+
+• 1. **The spelling round is broader than the approved item 55.** The source covers sections B, C and E—items 6–29 and 40–53—not every spelling in items 6–53. `docs/decisions.md:1170`, `docs/decisions.md:1294-1297`, `ROADMAP.md:461`, and `changelog.d/2026-11-08-record-language.md:27-28` expand it to the already-agreed grammar items 30–39. **Fix:** use the B/C/E ranges in both task and decision text, and narrow “Every spelling below” accordingly.
+
+  2. **The removed borrow spelling remains in live Core rows.** `docs/decisions.md:190` and `docs/decisions.md:236` still prescribe `borrow ... as view` without a 2026-11-08 revision note. **Fix:** change both examples to `borrow [mut] view = source ...`, add Q4.6 to the revision register beside Q4.7/Q9.5, and mark the older revision passage as superseded.
+
+  3. **Known-value propagation still names `as`.** `docs/decisions.md:243` lists “lossless `as`” in Q6.2’s current fixed table, contradicting item 11(a). **Fix:** replace it with the canonical named lossless conversion and add an explicit Q6.2 revision note/register entry.
+
+  4. **Consuming `*h` survives outside OD59.** OD30’s current answer at `docs/decisions.md:1486` says `*` stays the consuming move-out; the live allocation rules at `docs/decisions.md:1728-1729` again rely on `*h`. **Fix:** substitute the named move-out operation in both places and record the OD30/allocation revisions explicitly.
+
+  5. **OD42 still decides `char` comparisons.** `docs/decisions.md:1498` retains `==`/`!=` and `<` on `char`, directly contradicting item 16. **Fix:** revise OD42 to retain only the `bool` rules and migrate character comparisons to explicit `u8`/UTF-8 operations; add OD42 to the item-16 revision register.
+
+  6. **OD23’s current answer still uses a receiver and dot call.** `docs/decisions.md:1479` says “the receiver included” and uses `r.add(r.step)`. **Fix:** state the overlap rule over ordinary arguments, rewrite the example as a `Type::...` or `Trait::...` call, and add the corresponding revision note.
+
+  7. **OD151 conflicts with last-segment-only qualification.** `docs/decisions.md:1607` allows imported uses such as `a::b::f`, whereas item 11(b) requires `b::f`. **Fix:** limit OD151’s multi-level paths to import declarations and record that imported uses are qualified by the module’s last segment.
+
+  8. **The C3 foundation still requires packed layout proofs.** `ROADMAP.md:418` requires laws for “native, C and packed algorithms,” despite item 23 removing packed structs until a demonstrated ABI reopens them. **Fix:** require only native and C algorithms now, with packed work conditional on that reopening.
+
+  9. **HashMap remains unconditional in the scheduling analysis.** `ROADMAP.md:302`, `ROADMAP.md:327`, and `ROADMAP.md:330` assume HashMap at slice 23 and claim EVM/Wasm requirements, bypassing the sole approved trigger—the key-value store’s measurements. **Fix:** make the hash dependency and map scheduling conditional on that measurement, without asserting EVM or Wasm needs HashMap.
+
+  The three owner quotes and the full option-3 import rules are recorded accurately. All requested revision-register entries and foundation/task additions are present, R-0625 correctly precedes R-0622, and the added links resolve.
+
+  VERDICT: REJECT
+
+To resume this session: kimi -r session_42f9ea60-91ea-4223-9668-07998a9c6d22

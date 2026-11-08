@@ -1,0 +1,33 @@
+Answer directly from the context below. Do NOT read files or use any tools (headless mode denies them). Do not modify anything.
+
+OWNER RULE (verbatim, 2026-11-08): "ALWAYS tell the reviewrs to do the best long term thing rather than cuitting corners". Judge by the best long-term design, not the cheapest now. Report any shortcut (Claude's, the repository's or your own) as a real finding and name the long-term alternative.
+
+The current directory is a git-archive copy of Concrete's origin/main (a fully proven systems language; Lean 4 is the specification; the new compiler is built slice by slice). Read _review/K13.md (a diagnostics design the owner asked for, tied to K1 source provenance in _review/KLIST.md). Check it against the repository: docs/decisions.md (the diagnostics row "decided-project-diagnostics-2026-11-06", the runtime/trap-line row, rule IDs and revisions R-0603), docs/archive/crucial-2026-11-06/DIAGNOSTICS.md, ROADMAP.md (R-0593, R-0575, slice 0 and 1 rows), docs/proposals/MERGED.md item 5 (typed SiteId and spans), Concrete/README.md (slice-0 design, tokens with spans), docs/PHILOSOPHY.md.
+
+Tasks:
+1. For each of points a-f: AGREE or DISAGREE with a reason (at most 70 words), saying what is already decided or planned (cite), and the best long-term design. Compare concretely with Elm, rustc, Gleam and Roc: what each does well that Concrete should take, and what it should not (for example rustc's error codes, Elm's hint heuristics, Roc's continue-after-errors).
+2. Point c: should `concrete explain <rule>` exist, or should the explanation be reachable another single way (a link or path in every diagnostic, the browsable owner view)? Recommend one way.
+3. Point e: is first-error-per-file enough? Recommend the long-term rule.
+4. What must K1 provenance carry to support this, and must it start before slice 1?
+5. Anything missed.
+Cite the decided rows named in the context where relevant.
+
+End with exactly one line:
+ANSWER: AGREE=<points>; DISAGREE=<points or none>; EXPLAIN=<command|other: what>; CASCADE=<rule in a few words>; BEFORE_SLICE1=<yes|no>; MISSED=<short list or none>
+
+Decided context: diagnostics are typed checker results; a refusal says false (with witness) or not established; rule ID = Lean rule name + per-rule revision (e.g. StmtOk.let_.admitted@2), no numeric codes; fixes offered only after full recheck, auto-applied only if a lemma proves meaning preservation; NO warnings (weaker findings are facts, policies may refuse); output human text on a terminal and JSON lines otherwise (--format=human|json) from one record; frozen versioned JSON schema with goldens from the first front-end output (R-0593); byte columns, tab = one byte; trap line 'concrete: trap: <kind> at <path>:<line>:<col> (site <id>)'; tokens carry kind+payload+span; pipeline review proposed typed SiteId/span/origin edges minted at lex/parse and preserved to BIR.
+
+=== K13.md ===
+# K13. Diagnostics at Elm quality (owner, 2026-11-08, verbatim: "i want to have elm like errors for item 1 so we need to make sure they are good"; item 1 = K1 source provenance)
+
+Claude's proposal, to be judged against Elm, rustc, Gleam and Roc:
+a. Diagnostics as structured data with one renderer: each diagnostic carries a title, the rule ID (Lean rule name + revision), a primary span, labelled secondary spans ("moved here", "used again here"), a plain-language explanation and an optional fix hint. The same record renders as Elm-style terminal text and as JSON lines for agents (decided diagnostics row; K12; R-0593).
+b. What provenance (K1) must carry: spans with both ends (byte offsets plus line/column; decided: byte columns, a tab counts one byte), related spans across passes (a refusal found after elaboration or Mono still points at written source), and type-origin tracking ("this is u8 because of here"). K1's design must supply all of it.
+c. One explanation page per rule ID, with a failing example and its fixed version, generated from the rule's Lean doc comment and conformance examples (no second prose source, rule 5/6). A `concrete explain <rule>` command is new CLI surface: an owner question (one way per thing).
+d. A message style guide: second person, no unexplained jargon, show the code, say what to do next. A hint appears only when it is certain to be correct (decided: a fix is offered only after recheck, auto-applied only if a lemma proves it meaning-preserving).
+e. No cascades: the owner's item 12 stops at the first error per file. Is that enough (multiple files, errors after recovery, agent workflows)?
+f. A quality gate: golden diagnostics (T-f) plus a model reviewer that scores every new or changed message against the style guide; a refusal without a reviewed golden fails.
+The lexer and parser are writing refusals now, so the format is needed before slice 1.
+
+=== KLIST.md (K1) ===
+K1. Source provenance through every IR: every node in HIR, Core, MIR, CFG, SSA and BIR carries its origin span and a stable ID, so diagnostics, trap-site accounting, debug info and facts all work. Costly to retrofit.

@@ -1,0 +1,1482 @@
+Reading additional input from stdin...
+OpenAI Codex v0.166.0
+--------
+workdir: /home/unbalancedparen/projects/clones/wip/legacy-sweep-2
+model: gpt-6.1-sol
+provider: openai
+approval: never
+sandbox: danger-full-access
+reasoning effort: none
+reasoning summaries: none
+session id: 01a1b9c2-1088-76b0-a538-0e584b4aaca7
+--------
+user
+FOLLOW-UP on your commit 123f03aa in this clone (wip/legacy-sweep-2). The orchestrator ran
+`bash scripts/checks/run.sh` here: 10/11 pass; scripts/checks/sandbox_isolation.sh FAILS in its live probe of legacy_frozen.sh
+(the "trusted history" step), exactly as you noticed. Cause: sandbox_isolation.sh's mk_caller makes `git clone --bare "$ROOT_DIR"`,
+which copies only local branches and tags, so the probe's caller has no origin/main; legacy_frozen.sh's trusted_base then falls
+back to HEAD's own first-parent chain, which includes this branch's earlier lock versions (8695cc0e3's malformed row and a row
+later corrected), and refuses. The probe's verdict therefore depends on whether the clone running it has a local `main` (the
+orchestrator's older clone did, and passed). That is an environment-dependent gate result, a real defect.
+
+Fix (the structural one): the sandbox probe must judge the same trusted base the real run in $ROOT_DIR judges. In
+sandbox_isolation.sh, compute the trusted base in $ROOT_DIR the way legacy_frozen.sh does (merge-base of HEAD and
+${LEGACY_TRUSTED_REF:-origin/main}, else HEAD of $ROOT_DIR), as a full commit SHA, and pass it to the probe as
+LEGACY_TRUSTED_REF (the SHA exists in the probe's clone, since it is a clone of $ROOT_DIR). Make sure the variable actually
+reaches the probed script through run_as_hook / bounded. Do not weaken legacy_frozen.sh's own fallback. If computing it fails,
+the probe must fail with an explicit message (no silent fallback). Add a control in sandbox_isolation.sh showing the probe
+receives that exact SHA (for example by probing a tiny script that prints LEGACY_TRUSTED_REF, asserting the value). Also
+update the header comment of legacy_frozen.sh item 5 if it needs to mention that harnesses pass the trusted base explicitly.
+
+Then confirm in THIS clone (which has no local main): all 11 checks pass:
+   timeout 1500 systemd-run --user --scope -q -p MemoryMax=8G -p TasksMax=1024 bash scripts/checks/run.sh
+and legacy_frozen.sh alone passes (timeout 600 systemd-run --user --scope -q -p MemoryMax=4G -p TasksMax=512 bash scripts/checks/legacy_frozen.sh).
+
+Hard rules as before: commit locally, never push, no --no-verify, no git config/remote changes, bounded runs, no network.
+Print the commit SHA, the change, the control and its exact assertion, and the gate results.
+codex
+I’ll check how the probe launches, pass the root clone’s trusted-base SHA through it, add the control, and run the requested checks before committing locally.
+exec
+/bin/bash -lc "git status --short; git branch --show-current; sed -n '1,260p' scripts/checks/sandbox_isolation.sh; sed -n '1,160p' scripts/checks/legacy_frozen.sh" in /home/unbalancedparen/projects/clones/wip/legacy-sweep-2
+ succeeded in 0ms:
+wip/legacy-sweep-2
+#!/usr/bin/env bash
+# SANDBOXES NEVER TOUCH THE CALLER'S REPOSITORY (ISS-0015).
+#
+# A pre-push hook of a linked worktree runs with GIT_DIR=<repo>/.git/worktrees/<name> exported. On
+# 2026-11-06 review_tool.sh, run that way, did its sandbox work in the caller's clone and pushed 28 +
+# 12 test notes to GitHub. The owner of the fix is the sandbox helper, scripts/checks/lib/
+# git_sandbox.sh, which unsets every variable `git rev-parse --local-env-vars` names.
+#
+# Legs:
+#   structural  every script under scripts/ that makes a repository
+#               (git init, git clone, git worktree add) sources the helper and calls git_sandbox.
+#   live        a throwaway CALLER (bare upstream, full clone, linked worktree; no hook installed
+#               anywhere) runs review_tool.sh and legacy_frozen.sh, at this checkout's version, from
+#               the linked worktree with GIT_DIR exported exactly as a hook sees it. The caller's
+#               refs (refs/notes/* included), core.bare, worktree HEAD and its upstream's refs must be
+#               byte-for-byte unchanged.
+#   control     the same harness around a script that writes through an inherited GIT_DIR (as the
+#               unfixed review_tool.sh did) must report the change, so the live leg cannot pass by
+#               not looking.
+#
+# Every run is bounded in time (120 s per attempt, bounded_run) and in aggregate: a systemd user
+# scope with TasksMax=512 and MemoryMax=8G (fede-256gb, concrete-ci-2 logins), or, where there is
+# none (a CI runner service), the cgroup the check already runs in when it has a finite memory.max
+# (concrete-ci-2's runners: 28G per runner) plus `ulimit -u` of 512 more processes. With neither, the
+# live probes do not run and the check fails as INCOMPLETE: never an unbounded run. macOS has
+# neither (no unprivileged aggregate memory limit), so there the root checks are INCOMPLETE by design
+# and a gated push from a macOS clone is refused: gated pushes (trains) are made from a Linux clone
+# with a bound (fede-256gb or concrete-ci-2; no laptop builds), and CI runs on bounded runners. The 2026-11-06
+# reproducer had no such bound, recursed through a test hook and exhausted the machine.
+set -uo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh" || exit 2
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+cd "$ROOT_DIR" || exit 2
+HELPER="scripts/checks/lib/git_sandbox.sh"
+[ -f "$HELPER" ] || { echo "FATAL: $HELPER missing" >&2; exit 2; }
+PASS=0; FAIL=0
+ok(){ echo "  ok   $1"; PASS=$((PASS+1)); }
+no(){ echo "  FAIL $1"; FAIL=$((FAIL+1)); }
+
+echo "=== structural: every repository-making script sources the sandbox helper ==="
+# Two exceptions, neither a sandbox: install-bot.sh runs on the gate host as `bash -s <
+# install-bot.sh` (no sibling files to source) and makes the bot's persistent clone, and
+# worktree-new.sh makes a worktree OF the caller's repository by design.
+EXEMPT=" scripts/land/install-bot.sh scripts/worktree-new.sh "
+makers=0
+for f in scripts/*.sh scripts/*/*.sh; do
+  [ "$f" = scripts/checks/sandbox_isolation.sh ] && continue
+  grep -qE 'git( -C [^ ]+)? (init|clone)\b|worktree add' "$f" || continue
+  case "$EXEMPT" in *" $f "*) continue ;; esac
+  makers=$((makers+1))
+  # The helper must be sourced and called, as statements, before the first repository is made.
+  first_make="$(grep -nE 'git( -C [^ ]+)? (init|clone)\b|worktree add' "$f" | grep -vE '^[0-9]+:[[:space:]]*#' | head -n 1 | cut -d: -f1)"
+  src_line="$(grep -nE '^[[:space:]]*(source|\.) .*checks/lib/git_sandbox\.sh' "$f" | head -n 1 | cut -d: -f1)"
+  call_line="$(grep -nE '^[[:space:]]*git_sandbox( |$)' "$f" | head -n 1 | cut -d: -f1)"
+  if [ -n "$src_line" ] && [ -n "$call_line" ] && [ -n "$first_make" ] \
+     && [ "$src_line" -lt "$call_line" ] && [ "$call_line" -lt "$first_make" ]; then
+    ok "$f sources git_sandbox.sh (line $src_line) and calls it (line $call_line) before its first repository (line $first_make)"
+  else
+    no "$f makes a repository (line ${first_make:-?}) without sourcing (line ${src_line:-none}) and calling git_sandbox (line ${call_line:-none}) before it"
+  fi
+done
+[ "$makers" -ge 9 ] && ok "found $makers repository-making scripts (at least the 9 known)" \
+  || no "found only $makers repository-making scripts; the scan is not seeing them"
+
+# The harness itself is a sandbox: it must not be steered by whatever environment started it.
+source "$HELPER" || exit 2
+TMP="$(mktemp -d)" || exit 2
+trap 'rm -rf "$TMP"' EXIT
+git_sandbox "$TMP/gitconfig" || exit 2
+printf '[user]\n\tname = isolation gate\n\temail = isolation@example.invalid\n[init]\n\tdefaultBranch = main\n[advice]\n\tdetachedHead = false\n' > "$GIT_CONFIG_GLOBAL"
+
+BOUNDED_PARENT="$TMP"
+source "$ROOT_DIR/scripts/checks/lib/bounded.sh" || exit 2
+# bounded <cmd...>: at most 120 s per attempt (the portable bounded_run: its own watchdog kills the
+# whole process group; one re-run), inside an aggregate task and memory bound (above). Without one
+# the command does not run and the result is 125.
+cgroup_memory_max() { # the finite memory.max of this process's cgroup v2 or an ancestor, else fails
+  local cg f
+  cg="$(sed -n 's/^0:://p' /proc/self/cgroup 2>/dev/null)"; [ -n "$cg" ] || return 1
+  while :; do
+    f="/sys/fs/cgroup$cg/memory.max"
+    if [ -r "$f" ] && [ "$(cat "$f")" != max ]; then cat "$f"; return 0; fi
+    [ "$cg" = / ] && return 1
+    cg="$(dirname "$cg")"
+  done
+}
+BOUND=none
+if command -v systemd-run >/dev/null 2>&1 \
+   && systemd-run --user --scope -q -p TasksMax=512 -p MemoryMax=8G true >/dev/null 2>&1; then BOUND=scope
+elif CGMEM="$(cgroup_memory_max)"; then BOUND=cgroup; fi
+case "$BOUND" in
+  scope)  echo "bound: a systemd user scope, TasksMax=512, MemoryMax=8G" ;;
+  cgroup) echo "bound: this cgroup's memory.max ($CGMEM bytes, aggregate) and ulimit -u (512 more processes)" ;;
+  none)   echo "bound: none available (no systemd user scope, no finite cgroup memory.max; macOS has neither): the live probes will not run; run the root checks and gated pushes from a bounded Linux host (fede-256gb, concrete-ci-2) or in CI" ;;
+esac
+bounded() {
+  case "$BOUND" in
+    scope) bounded_run -i /dev/null -r 120 120 -- systemd-run --user --scope -q -p TasksMax=512 -p MemoryMax=8G "$@" ;;
+    cgroup)
+      local n; n="$(ps -o pid= -U "$(id -u)" 2>/dev/null | wc -l | tr -d ' ')"
+      ( ulimit -u $(( ${n:-0} + 512 )) 2>/dev/null || { echo "sandbox_isolation: ulimit -u refused; not running $*"; exit 125; }
+        bounded_run -i /dev/null -r 120 120 -- "$@" ) ;;
+    *) echo "sandbox_isolation: no aggregate task and memory bound here; not running $*"; return 125 ;;
+  esac
+}
+
+# A caller: bare upstream, a full clone of this checkout's HEAD, a linked worktree of it, with this
+# checkout's scripts/ (the version under test) copied over the worktree's. No hook is installed:
+# hooksPath points at an empty directory.
+mk_caller() { # dir
+  local d="$1"
+  mkdir -p "$d/nohooks"
+  git clone -q --bare "$ROOT_DIR" "$d/up.git" || return 1
+  git clone -q "$d/up.git" "$d/caller" || return 1
+  git -C "$d/caller" config core.hooksPath "$d/nohooks"
+  git -C "$d/caller" worktree add -q -b isolation-probe "$d/linked" || return 1
+  cp -R "$ROOT_DIR/scripts/." "$d/linked/scripts/" || return 1
+  git -C "$d/linked" add -A scripts && git -C "$d/linked" commit -q --allow-empty -m "scripts under test" || return 1
+}
+snap() { # dir
+  local d="$1"
+  git -C "$d/caller" for-each-ref --format='caller %(refname) %(objectname)'
+  echo "caller core.bare=$(git -C "$d/caller" config core.bare)"
+  echo "linked HEAD=$(git -C "$d/linked" rev-parse HEAD) $(git -C "$d/linked" symbolic-ref -q HEAD)"
+  git -C "$d/caller" worktree list --porcelain | grep '^worktree '
+  git -C "$d/up.git" for-each-ref --format='upstream %(refname) %(objectname)'
+}
+# run_as_hook <dir> <script relative to the linked worktree>: GIT_DIR exported as a linked
+# worktree's hook sees it; prints the script's exit code.
+run_as_hook() {
+  local d="$1" s="$2" gd
+  gd="$(git -C "$d/linked" rev-parse --absolute-git-dir)"
+  ( cd "$d/linked" && GIT_DIR="$gd" && export GIT_DIR && bounded bash "$s" ) > "$d/run.log" 2>&1
+  echo $?
+}
+probe() { # label script expect-change [completion-marker]
+  local label="$1" s="$2" want="$3" marker="${4:-}" d rc
+  d="$(mktemp -d "$TMP/caller.XXXXXX")"
+  mk_caller "$d" || { no "$label: could not build the caller"; return; }
+  [ -z "$(ls "$d/nohooks")" ] || { no "$label: a hook is installed"; return; }
+  snap "$d" | LC_ALL=C sort > "$d/before"
+  rc="$(run_as_hook "$d" "$s")"
+  snap "$d" | LC_ALL=C sort > "$d/after"
+  if [ "$want" = 0 ]; then
+    [ "$rc" = 125 ] && { no "$label: INCOMPLETE: no task and memory bound available, so it was not run"; return; }
+    bounded_is_incomplete "$rc" && { no "$label: INCOMPLETE: timed out twice (120 s each)"; tail -n 5 "$d/run.log" | sed 's/^/      /'; return; }
+    [ "$rc" = 0 ] || { no "$label: exit $rc (an early failure would make 'unchanged' vacuous)"; tail -n 8 "$d/run.log" | sed 's/^/      /'; }
+    grep -q "$marker" "$d/run.log" || { no "$label: its final tally ('$marker') is missing: it stopped early, so 'unchanged' proves nothing"; return; }
+    if cmp -s "$d/before" "$d/after"; then ok "$label: the caller's refs, notes, config and upstream are unchanged"
+    else no "$label: the caller changed"; diff "$d/before" "$d/after" | sed 's/^/      /' | head -20; fi
+  else
+    [ "$rc" = 125 ] && { no "$label: INCOMPLETE: no task and memory bound available, so it was not run"; return; }
+    bounded_is_incomplete "$rc" && { no "$label: INCOMPLETE: timed out twice"; return; }
+    grep -q 'refs/notes/' "$d/after" && ! cmp -s "$d/before" "$d/after" \
+      && ok "$label: the harness sees a write through the inherited GIT_DIR" \
+      || no "$label: a leaking script left the caller unchanged; the harness is blind"
+  fi
+}
+
+echo "=== control: the harness sees a leak ==="
+mkdir -p "$TMP/ctl"
+cat > "$TMP/ctl/leaky.sh" <<'EOF'
+#!/usr/bin/env bash
+# What the unfixed review_tool.sh did: build a sandbox without clearing GIT_DIR, then write to it.
+T="$(mktemp -d)"; git init -q "$T/w"
+git -C "$T/w" commit -q --allow-empty -m leaked
+git -C "$T/w" notes --ref=refs/notes/concrete-review add -m "verdict: clean" HEAD
+EOF
+probe "control (leaky script)" "$TMP/ctl/leaky.sh" 1
+
+echo "=== live: sandbox checks run from a linked worktree as its hook would run them ==="
+probe "review_tool.sh" scripts/checks/review_tool.sh 0 "^check_review_tool: PASS=[0-9]* FAIL=0$"
+probe "legacy_frozen.sh" scripts/checks/legacy_frozen.sh 0 "^legacy_frozen: PASS=[0-9]* FAIL=0$"
+
+echo
+bounded_summary
+echo "check_sandbox_isolation: PASS=$PASS FAIL=$FAIL"
+[ "$FAIL" -eq 0 ]
+#!/usr/bin/env bash
+# legacy/ IS FROZEN (ROADMAP R-0558, R-0562).
+#
+# legacy/ is a byte-for-byte copy of main's tree at the move's base commit, plus the files later
+# sweeps moved into it byte for byte. scripts/checks/legacy.lock records that commit and its tree, and
+# each sweep; its format, and its one reader, is lib/legacy_lock.py (no code here reads the lock's
+# bytes itself). This check holds five things:
+#   1. the recorded tree is the recorded commit's tree (legacy/ is that snapshot, nothing else);
+#   2. HEAD:legacy differs from it only by deletions and by sweeps: a modified path is refused, and an
+#      added path is refused unless a sweep moved it (below);
+#   3. each deleted path is covered by at least one RETENTION.tsv row, and every row covering it
+#      (its own path or an ancestor directory) has `status` = `resolved` (the row's deletion
+#      criterion holds): a resolved parent never releases a child with its own unresolved row.
+#      Until RETENTION.tsv has a status column, every deletion is refused.
+#   4. SWEEPS (owner, 2026-11-08: "ok to 1"). Each `sweep <commit> <tree>` line of the lock records
+#      one move into legacy/: the commit of HEAD's history it took files from, and the legacy/ tree
+#      it produced. The trees form a chain, frozen tree -> sweep 1 -> ... -> HEAD:legacy. Each step
+#      to a sweep tree may add a path P only if P has the same mode and blob at that sweep's commit
+#      and P no longer exists at the root of HEAD; the last step, to HEAD:legacy, adds nothing. Every
+#      step refuses an edit of a legacy/ file and admits only the deletions RETENTION.tsv allows, so
+#      a swept file, once in a sweep tree, is protected like a frozen one.
+#   5. TRUSTED HISTORY. The steps above judge the lock this commit carries, so on their own a rewritten
+#      lock line, or a file deleted by one sweep and re-added with other bytes by the next, would pass.
+#      History settles both. The trusted history is main's landed states: the first-parent chain of
+#      the merge base of HEAD and LEGACY_TRUSTED_REF (default origin/main), each commit read against
+#      its first parent, or HEAD's own first-parent chain when that ref is absent (on main and on a
+#      train head, whose first parent is main, the same thing; on a bare branch tip it is stricter:
+#      the branch's own commits count, so a branch that corrected its own lock fails there). A train's member commits are second parents: a line a branch wrote and then
+#      corrected before it landed is not trusted history. (a) Every base, tree and sweep line of every trusted version of
+#      the lock is still in the lock: lines are only ever added. (b) Every version a legacy/ path ever
+#      had in trusted history is the version it has now, if it still exists: a frozen or swept file
+#      is never rewritten, by an edit or by deletion and re-addition. A candidate's own commits are
+#      not trusted history; they are what the review and this gate judge.
+# Negative controls run the same judgment on synthetic trees first, so a judge that accepts
+# everything fails here before the real check.
+set -uo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh" || exit 2
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+SELF="$ROOT_DIR/scripts/checks/${BASH_SOURCE[0]##*/}"
+cd "$ROOT_DIR"
+LOCK=scripts/checks/legacy.lock
+LOCKPY="$ROOT_DIR/scripts/checks/lib/legacy_lock.py"
+PASS=0; FAIL=0
+ok(){ echo "  ok   $1"; PASS=$((PASS+1)); }
+no(){ echo "  FAIL $1"; FAIL=$((FAIL+1)); }
+
+# checked STEP COMMAND...: preserve semantic diagnostics; execution failures always print a refusal.
+# Helpers use stdout as the refusal channel, including when the failed command printed nothing.
+checked() {
+  local label="$1" output rc; shift
+  output="$("$@")"; rc=$?
+  [ -z "$output" ] || printf '%s\n' "$output"
+  if [ "$rc" -ne 0 ] && { [ "$rc" -ne 1 ] || [ -z "$output" ]; }; then
+    printf 'refused: %s failed (exit %s)\n' "$label" "$rc"
+  fi
+  return "$rc"
+}
+
+# judge FROZEN_TREE CURRENT_TREE RETENTION_FILE (in the current repository): prints one problem per line.
+judge() { # FROZEN CUR RETENTION ROOT-TREE [SWEEP-COMMIT...]
+  local frozen="$1" cur="$2" ret="$3" root="$4"; shift 4
+  [ "$frozen" = "$cur" ] && return 0
+  # -z: paths arrive raw, never C-quoted, so the ls-tree lookups below see the real path.
+  git diff-tree -z -r --no-renames --name-status "$frozen" "$cur" | python3 -I -c '
+import sys
+ret = sys.argv[1]
+rows = [l.rstrip("\n").split("\t") for l in open(ret) if l.strip() and not l.startswith("#")]
+hdr, rows = rows[0], rows[1:]
+# (path, resolved?) for every path a row names. With no status column, nothing is resolved.
+named = []
+if "path" in hdr:
+    pi = hdr.index("path"); si = hdr.index("status") if "status" in hdr else None
+    for r in rows:
+        res = si is not None and len(r) > si and r[si].strip() == "resolved"
+        named += [(p.rstrip("/"), res) for p in r[pi].split()]
+def ok(p):
+    # Every row covering p (its own path or an ancestor) must be resolved, and at least one must:
+    # a resolved parent does not release a child that has its own unresolved row.
+    cover = [res for n, res in named if p == n or p.startswith(n + "/")]
+    return bool(cover) and all(cover)
+f = sys.stdin.buffer.read().split(b"\0")
+if f and f[-1] == b"": f.pop()
+for st, raw in zip(f[0::2], f[1::2]):
+    st, path = st.decode(), raw.decode("utf-8", "surrogateescape")
+    if "\n" in path or "\t" in path or not path.isprintable():
+        print(f"{st} legacy/{path!r}: legacy/ admits no path with control characters")
+    elif st == "A":
+        print(f"ADD\t{path}")
+    elif st != "D":
+        print(f"{st} legacy/{path}: legacy/ admits no modification")
+    elif not ok(path):
+        print(f"D legacy/{path}: no resolved RETENTION.tsv row allows this deletion")
+' "$ret" | while IFS= read -r line || [ -n "$line" ]; do
+    case "$line" in ADD$'\t'*) ;; *) printf '%s\n' "$line"; continue ;; esac
+    local path="${line#ADD$'\t'}" want s entry found=""
+    local -x GIT_LITERAL_PATHSPECS=1 # a path is a path: ":(literal)p/x" must not resolve to p/x
+    want="$(git ls-tree "$cur" -- "$path" | cut -f1)" || { echo "refused: judge added-path lookup failed"; continue; }
+    [ -n "$want" ] || { echo "A legacy/$path: cannot resolve the added path; refused"; continue; }
+    entry="$(git ls-tree "$root" -- "$path")" || { echo "refused: judge root lookup failed"; continue; }
+    if [ -n "$entry" ]; then
+      echo "A legacy/$path: a swept file must no longer exist at the root, and $path does"; continue
+    fi
+    for s in "$@"; do
+      entry="$(git ls-tree "$s" -- "$path" | cut -f1)" || { echo "refused: judge sweep lookup failed"; continue; }
+      [ "$entry" = "$want" ] && { found=1; break; }
+    done
+    [ -n "$found" ] || echo "A legacy/$path: no sweep commit in the lock has $path with this content; legacy/ admits only byte-for-byte moves"
+  done || echo "refused: judge diff/retention pipeline failed"
+}
+
+chain() { # LOCK FROZEN CUR RETENTION HEAD-COMMIT: judges frozen -> each sweep tree -> CUR; prints refusals
+  local lock="$1" prev="$2" cur="$3" ret="$4" head="$5" root rows kind sw st n=0 step
+  rows="$(lock_rows "$lock")" || { printf '%s\n' "$rows"; return 0; }
+  root="$(git rev-parse "$head^{tree}")" || { echo "refused: chain HEAD tree lookup failed"; return; }
+  while read -r kind sw st || [ -n "$kind" ]; do # rows are the parser's, one per line
+    [ "$kind" = sweep ] || continue
+    n=$((n+1))
+    if ! git rev-parse -q --verify "$sw^{commit}" >/dev/null \
+       || ! git merge-base --is-ancestor "$sw" "$head" || [ "$(git cat-file -t "$st" 2>/dev/null)" != tree ]; then
+      echo "sweep line $n: needs a commit of HEAD's history and a tree: $sw $st"; continue
+    fi
+    step="$(judge "$prev" "$st" "$ret" "$root" "$sw" 2>&1)"
+    [ -z "$step" ] || printf 'sweep %s (%s):\n%s\n' "$n" "${sw:0:10}" "$step"
+    prev="$st"
+  done <<<"$rows"
+  step="$(judge "$prev" "$cur" "$ret" "$root" 2>&1)"
+  [ -z "$step" ] || printf 'since the last sweep:\n%s\n' "$step"
+}
+
+# trusted_base HEAD-COMMIT: the newest commit whose history is trusted (see 5 above).
+trusted_base() {
+  local ref="${LEGACY_TRUSTED_REF:-origin/main}" rc
+  git rev-parse -q --verify "$ref^{commit}" >/dev/null; rc=$?
+  if [ "$rc" = 0 ]; then
+    git merge-base "$1" "$ref" || echo "refused: trusted_base merge-base failed"
+  elif [ "$rc" = 1 ]; then
+    git rev-parse -q --verify "$1^{commit}" || echo "refused: trusted_base HEAD lookup failed"
+  else
+    echo "refused: trusted_base ref lookup failed"
+  fi
+}
+
+# lock_rows LOCK-FILE: the lock's rows, from its one parser (lib/legacy_lock.py); exit 1 with one
+# diagnostic per problem. No code here reads the lock's bytes itself.
+lock_rows() { checked lock_rows python3 -I "$LOCKPY" rows "$1"; }
+# lock_history LOCK-FILE LOCK-PATH TRUSTED: every row of every version of LOCK-PATH in TRUSTED's
+# first-parent history is still a row of LOCK-FILE; a malformed trusted version is refused. Prints
+# one refusal per problem, naming the newest trusted commit that has a missing row.
+lock_history() { checked lock_history python3 -I "$LOCKPY" history "$1" "$2" "$3"; }
+
+# history_identity PREFIX HEAD-COMMIT TRUSTED: every version PREFIX/<path> had in TRUSTED's history is
+# the version it has at HEAD-COMMIT, for each path HEAD-COMMIT still has. Prints one refusal per path.
+history_identity() {
+  local prefix="$1" head="$2" trusted="$3"
+  checked history_identity python3 -I - "$prefix" "$head" "$trusted" <<'PY'
+import subprocess, sys
+prefix = sys.argv[1] + "/"
+def tokens(args):
+    return subprocess.check_output(["git", *args]).split(b"\0")
+seen = {}
+
+exec
+/bin/bash -lc "python3 - <<'PY'
+p='scripts/checks/sandbox_isolation.sh'
+s=open(p).read(); needle='printf \\'[user]'
+pos=s.index(needle)
+s=s[:pos]+'''# Resolve in the real caller: a bare clone need not carry its origin/main ref.
+trusted_ref=\""'${LEGACY_TRUSTED_REF:-origin/main}"
+git -C "$ROOT_DIR" rev-parse -q --verify "$trusted_ref''^{commit}" >/dev/null
+trusted_rc=$?
+case "$trusted_rc" in
+  0) TRUSTED_BASE="$(git -C "$ROOT_DIR" merge-base HEAD "$trusted_ref")" || {
+       echo "FATAL: sandbox_isolation: trusted base merge-base failed" >&2; exit 2; } ;;
+  1) TRUSTED_BASE="$(git -C "$ROOT_DIR" rev-parse --verify '"'HEAD"'^{commit}'"')\" || {
+       echo \"FATAL: sandbox_isolation: trusted base HEAD lookup failed\" >&2; exit 2; } ;;
+  *) echo \"FATAL: sandbox_isolation: trusted base ref lookup failed\" >&2; exit 2 ;;
+esac
+[[ \""'$TRUSTED_BASE" =~ ''^[0-9a-f]{40}$ ]] || {
+  echo "FATAL: sandbox_isolation: trusted base is not a full commit SHA" >&2; exit 2;
+}
+'"'''+s[pos:]
+s=s.replace('bounded bash \""'$s"'"','LEGACY_TRUSTED_REF=\""'$TRUSTED_BASE" bounded bash "$s"'"')
+needle='echo \"=== control: the harness sees a leak ===\"'
+s=s.replace(needle,'''echo \"=== control: the hook probe receives the root trusted base ===\"
+mkdir -p \""'$TMP/trusted-control"
+cat > "$TMP/trusted-control/print.sh" <<'"'EOF'
+#"'!/usr/bin/env bash
+printf '"'%s\\\\n' \""'${LEGACY_TRUSTED_REF:-}"
+EOF
+trusted_caller="$(mktemp -d "$TMP/caller.XXXXXX")"
+if mk_caller "$trusted_caller"; then
+  trusted_rc="$(run_as_hook "$trusted_caller" "$TMP/trusted-control/print.sh")"
+  if [ "$trusted_rc" = 0 ] && [ "$(cat "$trusted_caller/run.log")" = "$TRUSTED_BASE" ]; then
+    ok "trusted-base control: LEGACY_TRUSTED_REF equals $TRUSTED_BASE exactly"
+  else
+    no "trusted-base control: expected exactly $TRUSTED_BASE (exit $trusted_rc)"
+    cat "$trusted_caller/run.log"
+  fi
+else
+  no "trusted-base control: could not build the caller"
+fi
+
+'"'''+needle)
+open(p,'w').write(s)
+p='scripts/checks/legacy_frozen.sh'; s=open(p).read(); s=s.replace('#      its first parent, or HEAD\\'s own first-parent chain', '#      its first parent. Harnesses pass that merge base explicitly as LEGACY_TRUSTED_REF so a\\n#      sandbox with different refs judges the same trusted history. Otherwise, use HEAD\\'s own first-parent chain');open(p,'w').write(s)
+PY
+bash -n scripts/checks/sandbox_isolation.sh scripts/checks/legacy_frozen.sh
+git diff --stat
+ git show-ref --verify refs/heads/main" in /home/unbalancedparen/projects/clones/wip/legacy-sweep-2
+ exited 128 in 0ms:
+ scripts/checks/legacy_frozen.sh     |  3 ++-
+ scripts/checks/sandbox_isolation.sh | 35 ++++++++++++++++++++++++++++++++++-
+ 2 files changed, 36 insertions(+), 2 deletions(-)
+fatal: 'refs/heads/main' - not a valid ref
+
+exec
+/bin/bash -lc 'timeout 1500 systemd-run --user --scope -q -p MemoryMax=8G -p TasksMax=1024 bash scripts/checks/run.sh > /tmp/legacy-sweep-2-checks-$$.log 2>&1; rc=$?; cat /tmp/legacy-sweep-2-checks-$$.log; exit "$rc"' in /home/unbalancedparen/projects/clones/wip/legacy-sweep-2
+exec
+/bin/bash -lc 'timeout 600 systemd-run --user --scope -q -p MemoryMax=4G -p TasksMax=512 bash scripts/checks/legacy_frozen.sh' in /home/unbalancedparen/projects/clones/wip/legacy-sweep-2
+ succeeded in 1406ms:
+=== negative controls ===
+  ok   control: an unchanged tree passes
+  ok   control: an added file is refused
+  ok   control: a modified file is refused
+  ok   control: a deletion under an open row is refused
+  ok   control: a deletion without a status column is refused
+  ok   control: a deletion under a resolved row passes
+  ok   control: a resolved parent does not release a child with an open row
+  ok   control: a deletion outside the resolved row is refused
+  ok   control: a byte-for-byte move from a sweep commit, gone from the root, passes
+  ok   control: the same addition with no sweep line is refused
+  ok   control: a swept copy that still exists at the root is refused
+  ok   control: a modified copy of a swept file is refused
+  ok   control: a swept copy with another file mode is refused
+  ok   control: a new file with no root original is refused
+  ok   control: an edit of an existing legacy/ file is refused, even matching a sweep commit
+  ok   control: deleting a swept file under an open row is refused
+  ok   control: deleting a swept file under a resolved row passes
+  ok   control: an addition after the last sweep, with no new sweep line, is refused
+  ok   control: a lock chaining the frozen tree through a sweep to HEAD:legacy passes
+  ok   control: a sweep commit outside HEAD's history is refused, as such
+  ok   control: deleting a swept file after its sweep, under an open row, is refused
+  ok   control: a NUL-prefixed sweep row is refused by the lock parser, as such
+  ok   control: a CR line ending is refused by the lock parser, as such
+  ok   control: a sweep row without its tree is refused by the lock parser, as such
+  ok   control: a sweep row with a trailing space is refused by the lock parser, as such
+  ok   control: a sweep row with a third field is refused by the lock parser, as such
+  ok   control: a blank line is refused by the lock parser, as such
+  ok   control: a repeated sweep row is refused by the lock parser, as such
+  ok   control: a last row without its newline is refused by the lock parser, as such
+  ok   control: a lock without its base row is refused by the lock parser, as such
+  ok   control: a preview lock is refused by the lock parser, as such
+  ok   control: a later sweep cannot rewrite a file an earlier sweep moved
+  ok   control: an added path git would C-quote is refused when it has no original
+  ok   control: an added path spelled as pathspec magic is refused
+  ok   control: a lock that keeps every trusted line passes
+  ok   control: rewriting a trusted sweep line is refused, naming the line
+  ok   control: removing a trusted sweep line is refused, naming the line
+  ok   control: changing the trusted base line is refused, naming the line
+  ok   control: a trusted sweep row kept behind a NUL byte is refused by trusted history
+  ok   control: a malformed lock in trusted history is refused, not skipped
+  ok   control: a legacy/ that kept every trusted version passes
+  ok   control: a swept file rewritten with its lock row is refused by trusted history
+  ok   control: a frozen file deleted and re-added with other bytes is refused by trusted history
+  ok   control: re-adding a file with its trusted bytes passes
+  ok   control: a member branch's corrected intermediate lock is not trusted history (first parents only)
+  ok   control: the trusted base is the merge base with the trusted ref, else HEAD (everything trusted)
+  ok   control: base-only chain
+  ok   control: base-only trusted lock
+  ok   control: silent parser exit 1 chain
+  ok   control: silent parser exit 1 history
+  ok   control: silent parser exit 2 chain
+  ok   control: silent parser exit 2 history
+  ok   control: chain HEAD lookup failure
+  ok   control: judge diff failure
+  ok   control: judge retention failure
+  ok   control: judge root lookup failure
+  ok   control: judge sweep lookup failure
+  ok   control: identity log failure
+  ok   control: identity tree failure
+  ok   control: trusted merge-base failure
+  ok   control: trusted HEAD failure
+  ok   control: judge Python failure
+  ok   control: judge added-path lookup failure
+  ok   control: identity Python failure
+  ok   control: trusted ref lookup failure
+  ok   control: reader listing failure
+  ok   control: reader scan failure
+  ok   control: lock-use scan failure
+  ok   control: read-loop scan failure
+  ok   control: lock history log failure
+  ok   control: lock history blob failure
+  ok   control: lock history tree failure
+  ok   control: every read loop in this check reads a last line without a newline
+  ok   control: lib/legacy_lock.py is the lock's one reader: no other code names or reads the lock
+=== legacy/ against scripts/checks/legacy.lock ===
+  ok   the lock parses (base, tree, 2 sweep row(s), nothing else), and tree 2b6b53678b is the tree of base 9186ca4c9f
+  ok   trusted history (through 3bd7bc4151): every lock line kept, no legacy/ file rewritten
+  ok   the lock's 2 sweep line(s) name commits of HEAD's history and chain to HEAD:legacy
+  ok   legacy/ differs from the frozen tree only by byte-for-byte sweeps and deletions RETENTION.tsv allows
+legacy_frozen: PASS=78 FAIL=0
+
+exec
+/bin/bash -lc "git diff --check; git diff -- scripts/checks/sandbox_isolation.sh scripts/checks/legacy_frozen.sh; sed -n '1,100p' scripts/checks/lib/bounded.sh; sed -n '1,90p' scripts/review/review.sh" in /home/unbalancedparen/projects/clones/wip/legacy-sweep-2
+ succeeded in 0ms:
+diff --git a/scripts/checks/legacy_frozen.sh b/scripts/checks/legacy_frozen.sh
+index cbf462dd..93fc5ff0 100755
+--- a/scripts/checks/legacy_frozen.sh
++++ b/scripts/checks/legacy_frozen.sh
+@@ -23,7 +23,8 @@
+ #      lock line, or a file deleted by one sweep and re-added with other bytes by the next, would pass.
+ #      History settles both. The trusted history is main's landed states: the first-parent chain of
+ #      the merge base of HEAD and LEGACY_TRUSTED_REF (default origin/main), each commit read against
+-#      its first parent, or HEAD's own first-parent chain when that ref is absent (on main and on a
++#      its first parent. Harnesses pass that merge base explicitly as LEGACY_TRUSTED_REF so a
++#      sandbox with different refs judges the same trusted history. Otherwise, use HEAD's own first-parent chain when that ref is absent (on main and on a
+ #      train head, whose first parent is main, the same thing; on a bare branch tip it is stricter:
+ #      the branch's own commits count, so a branch that corrected its own lock fails there). A train's member commits are second parents: a line a branch wrote and then
+ #      corrected before it landed is not trusted history. (a) Every base, tree and sweep line of every trusted version of
+diff --git a/scripts/checks/sandbox_isolation.sh b/scripts/checks/sandbox_isolation.sh
+index dba7a483..da07e144 100755
+--- a/scripts/checks/sandbox_isolation.sh
++++ b/scripts/checks/sandbox_isolation.sh
+@@ -67,6 +67,20 @@ source "$HELPER" || exit 2
+ TMP="$(mktemp -d)" || exit 2
+ trap 'rm -rf "$TMP"' EXIT
+ git_sandbox "$TMP/gitconfig" || exit 2
++# Resolve in the real caller: a bare clone need not carry its origin/main ref.
++trusted_ref="${LEGACY_TRUSTED_REF:-origin/main}"
++git -C "$ROOT_DIR" rev-parse -q --verify "$trusted_ref^{commit}" >/dev/null
++trusted_rc=$?
++case "$trusted_rc" in
++  0) TRUSTED_BASE="$(git -C "$ROOT_DIR" merge-base HEAD "$trusted_ref")" || {
++       echo "FATAL: sandbox_isolation: trusted base merge-base failed" >&2; exit 2; } ;;
++  1) TRUSTED_BASE="$(git -C "$ROOT_DIR" rev-parse --verify 'HEAD^{commit}')" || {
++       echo "FATAL: sandbox_isolation: trusted base HEAD lookup failed" >&2; exit 2; } ;;
++  *) echo "FATAL: sandbox_isolation: trusted base ref lookup failed" >&2; exit 2 ;;
++esac
++[[ "$TRUSTED_BASE" =~ ^[0-9a-f]{40}$ ]] || {
++  echo "FATAL: sandbox_isolation: trusted base is not a full commit SHA" >&2; exit 2;
++}
+ printf '[user]\n\tname = isolation gate\n\temail = isolation@example.invalid\n[init]\n\tdefaultBranch = main\n[advice]\n\tdetachedHead = false\n' > "$GIT_CONFIG_GLOBAL"
+ 
+ BOUNDED_PARENT="$TMP"
+@@ -130,7 +144,7 @@ snap() { # dir
+ run_as_hook() {
+   local d="$1" s="$2" gd
+   gd="$(git -C "$d/linked" rev-parse --absolute-git-dir)"
+-  ( cd "$d/linked" && GIT_DIR="$gd" && export GIT_DIR && bounded bash "$s" ) > "$d/run.log" 2>&1
++  ( cd "$d/linked" && GIT_DIR="$gd" && export GIT_DIR && LEGACY_TRUSTED_REF="$TRUSTED_BASE" bounded bash "$s" ) > "$d/run.log" 2>&1
+   echo $?
+ }
+ probe() { # label script expect-change [completion-marker]
+@@ -157,6 +171,25 @@ probe() { # label script expect-change [completion-marker]
+   fi
+ }
+ 
++echo "=== control: the hook probe receives the root trusted base ==="
++mkdir -p "$TMP/trusted-control"
++cat > "$TMP/trusted-control/print.sh" <<'EOF'
++#!/usr/bin/env bash
++printf '%s\n' "${LEGACY_TRUSTED_REF:-}"
++EOF
++trusted_caller="$(mktemp -d "$TMP/caller.XXXXXX")"
++if mk_caller "$trusted_caller"; then
++  trusted_rc="$(run_as_hook "$trusted_caller" "$TMP/trusted-control/print.sh")"
++  if [ "$trusted_rc" = 0 ] && [ "$(cat "$trusted_caller/run.log")" = "$TRUSTED_BASE" ]; then
++    ok "trusted-base control: LEGACY_TRUSTED_REF equals $TRUSTED_BASE exactly"
++  else
++    no "trusted-base control: expected exactly $TRUSTED_BASE (exit $trusted_rc)"
++    cat "$trusted_caller/run.log"
++  fi
++else
++  no "trusted-base control: could not build the caller"
++fi
++
+ echo "=== control: the harness sees a leak ==="
+ mkdir -p "$TMP/ctl"
+ cat > "$TMP/ctl/leaky.sh" <<'EOF'
+#!/usr/bin/env bash
+# Bounded runs: a timeout is INCOMPLETE, never a failure and never a pass.
+#
+# The rule (docs/project/PROMOTION_PIPELINE.md, result vocabulary): a test that exceeds its time budget
+# has produced no observation. Under machine load a freshly linked binary or a compile can overrun
+# a budget sized for an idle machine (test_ssa.sh once reported hundreds of 5-second alarms as
+# failures), so a timeout is re-run once, alone, with a larger budget:
+#   - the re-run completes      -> its result is judged normally (pass or FAIL), recorded "recovered";
+#   - the re-run times out too  -> INCOMPLETE: not a pass, not a failure. A gate with an incomplete
+#                                  result exits nonzero, and a qualifying run contains none.
+#
+# Each attempt runs under lib/bounded_exec.py, which makes the command the leader of a new process
+# group, reports its outcome through a status file (never through the command's own streams, so
+# nothing the command prints can fake or hide a timeout) and, when the budget expires, sends SIGTERM
+# and then SIGKILL to the whole group, so no descendant outlives the attempt into the retry.
+#
+# Sourcing (`BOUNDED_PARENT="$TMP"; source scripts/checks/lib/bounded.sh`) gives the gate PRIVATE
+# state: a fresh directory (mktemp under BOUNDED_PARENT, else $TMPDIR) with an outcome file and a
+# log. Every sourcing creates its own directory, so nested or parallel gates never share state.
+# With BOUNDED_PARENT under the gate's own scratch directory, its cleanup removes the state too.
+#
+#   bounded_run [-i STDIN_FILE] [-r RETRY_SECS] SECS -- CMD [ARGS...]
+#     Runs CMD (an executable, not a shell function). Its stdout and stderr are buffered per
+#     attempt and only a COMPLETED attempt's output is written: an incomplete run writes nothing,
+#     so output-matching checks never pass on the partial output of a run that hung. Without -i the
+#     command inherits stdin, which a re-run cannot replay: callers that feed input pass -i.
+#     Returns CMD's status, or 124 when it timed out on both attempts or the runner reported no
+#     outcome. SECS and RETRY_SECS are positive decimal seconds. A command may itself exit
+#     124, so test with `bounded_is_incomplete "$rc"`, which also reads the outcome bounded_run
+#     recorded (this works across `( cd dir && bounded_run ... )` subshells; run one bounded_run
+#     at a time per sourcing). RETRY_SECS defaults to BOUNDED_RETRY_FACTOR (2) times SECS.
+#   bounded_summary
+#     Lists this gate's recovered and incomplete runs; gates print it before their final tally.
+#   bounded_watchdog SECS  -> sets the array TO for the watchdog form: "${TO[@]}" CMD [ARGS...]
+#     runs CMD through `bash bounded.sh SECS` in a separate process with the same retry; on a second
+#     timeout it writes no command output, prints "INCOMPLETE: ..." on stderr and exits 124. Its
+#     recovered and incomplete lines go to this gate's log (handed over on its command line).
+#   bounded_gate_status
+#     The end-of-gate verdict for a gate using the watchdog form: lists recovered, incomplete and
+#     runner-failed runs, removes the state directory, and returns 1 when any run was incomplete or
+#     the runner failed, so the gate exits nonzero whatever its own checks concluded from a hung
+#     command's empty output. Last line:
+#       bounded_gate_status && [ "$FAIL" -eq 0 ]
+#
+# If the runner itself fails (no outcome reported), the command's output is discarded and the run
+# is incomplete (status 124, a "runner-failed" log line): never a pass. If the runner is cancelled (the
+# gate is interrupted or terminated), it kills the command's group first.
+#
+# Without python3 commands run directly with no watchdog: one warning when the gate sources this
+# file, never inside a command's output, and the watchdog form then runs commands directly too.
+# Such a run is never incomplete.
+
+BOUNDED_RETRY_FACTOR="${BOUNDED_RETRY_FACTOR:-2}"
+if [[ "$BOUNDED_RETRY_FACTOR" =~ ^[0-9]+(\.[0-9]+)?$ ]] && awk -v f="$BOUNDED_RETRY_FACTOR" 'BEGIN { exit !(f + 0 >= 1) }'; then :
+else echo "bounded.sh: BOUNDED_RETRY_FACTOR must be a number >= 1; using 2" >&2; BOUNDED_RETRY_FACTOR=2; fi
+# _bounded_secs_ok S: S is a positive decimal number of seconds (fractions allowed).
+_bounded_secs_ok() { [[ "$1" =~ ^[0-9]+(\.[0-9]+)?$ ]] && awk -v s="$1" 'BEGIN { exit !(s + 0 > 0) }'; }
+# Fixed-point, trailing zeros trimmed: never scientific notation, which _bounded_secs_ok rejects.
+_bounded_mul() { awk -v s="$1" -v f="$2" 'BEGIN { r = sprintf("%.6f", s * f); sub(/0+$/, "", r); sub(/\.$/, "", r); print r }'; }
+BOUNDED_SH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")"
+BOUNDED_EXEC="$(dirname "$BOUNDED_SH")/bounded_exec.py"
+BOUNDED_DIR="$(mktemp -d "${BOUNDED_PARENT:-${TMPDIR:-/tmp}}/bounded.XXXXXX")"
+BOUNDED_OUTCOME_FILE="$BOUNDED_DIR/outcome"
+BOUNDED_LOG="$BOUNDED_DIR/log"
+# The watchdog form appends to its caller's log, handed over explicitly on its command line.
+if [ "${BASH_SOURCE[0]}" = "$0" ]; then
+  # A standalone watchdog removes its state however it ends.
+  trap 'rm -rf "$BOUNDED_DIR"' EXIT
+  [ -z "${BOUNDED_WATCHDOG_LOG:-}" ] || BOUNDED_LOG="$BOUNDED_WATCHDOG_LOG"
+fi
+: >> "$BOUNDED_LOG"
+BOUNDED_HAVE_WATCHDOG=1
+if ! command -v python3 >/dev/null 2>&1; then
+  BOUNDED_HAVE_WATCHDOG=0
+  [ "${BASH_SOURCE[0]}" = "$0" ] || echo "  warn python3 not found — commands run without a hang watchdog" >&2
+fi
+
+bounded_is_incomplete() {
+  [ "$1" = 124 ] && [ "$(cat "$BOUNDED_OUTCOME_FILE" 2>/dev/null)" = incomplete ]
+}
+
+bounded_run() {
+  local stdin_file="" retry="" secs="" rc tries=0 budget tmp outcome
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      -i) stdin_file="$2"; shift 2 ;;
+      -r) retry="$2"; shift 2 ;;
+      --) shift; break ;;
+      *) if [ -z "$secs" ]; then secs="$1"; shift; else break; fi ;;
+    esac
+  done
+  [ -n "$secs" ] && [ $# -gt 0 ] || { echo "bounded_run: usage: bounded_run [-i FILE] [-r SECS] SECS -- CMD..." >&2; return 2; }
+  [ -n "$retry" ] || retry="$(_bounded_mul "$secs" "$BOUNDED_RETRY_FACTOR")"
+  if ! _bounded_secs_ok "$secs" || ! _bounded_secs_ok "$retry"; then
+    echo "bounded_run: budgets must be positive numbers of seconds (got $secs, retry $retry)" >&2; return 2
+  fi
+  echo done > "$BOUNDED_OUTCOME_FILE"
+  if [ "$BOUNDED_HAVE_WATCHDOG" != 1 ]; then
+    if [ -n "$stdin_file" ]; then "$@" < "$stdin_file"; else "$@"; fi
+    return $?
+#!/usr/bin/env bash
+# R-0544 — one review procedure for every agent. See docs/REVIEW.md.
+#
+#   scripts/review/review.sh [--base <ref>] [--head <ref>] [--max-rounds 5]
+#                            [--pieces auto|N] [--prompt-extra "..."]
+#
+# --head names the commit the caller means to review (train.sh and ready.sh pass it); it must be
+# the checkout's HEAD, or nothing runs (exit 2): the review always reads HEAD's tree.
+#
+# Runs ONE review round on HEAD and records the result as a git note on HEAD
+# under refs/notes/concrete-review, which it then pushes.
+#
+#   round 1      reviews the full diff base..HEAD (base defaults to the merge-base
+#                with origin/main);
+#   round N > 1  reviews only the delta since the last reviewed commit (found from
+#                the notes on earlier commits of the branch) and passes the previous
+#                round's findings to the reviewer.
+#
+# A large diff is split into pieces by file group and size. A piece the reviewer
+# refuses is retried once, halved and with a more neutral prompt; after that it is
+# `blocked`. The round cap is enforced across invocations: there is no round
+# max+1.
+#
+# Exit codes:
+#   0  verdict clean
+#   1  verdict findings (fix, commit, run again)
+#   2  usage or environment error (nothing recorded)
+#   3  round cap reached: split the branch or escalate (open findings are printed)
+#   4  nothing to review (HEAD already reviewed, or empty diff)
+#   5  verdict blocked (a piece could not be reviewed; see .review/)
+#   6  result recorded locally but the notes ref could not be pushed
+#
+# Environment (mostly for the test gate, scripts/checks/review_tool.sh):
+#   REVIEW_CODEX_BIN    reviewer binary (default: codex)
+#   REVIEW_REMOTE       remote for notes and the default base (default: origin)
+#   REVIEW_MAIN_REF     ref the default base is computed against (default: $REVIEW_REMOTE/main)
+#   REVIEW_PUSH         1 to fetch/push the notes refs (default: 1)
+#   REVIEW_PIECE_BYTES  size limit of one piece in bytes (default: 60000)
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/../checks/lib/has_match.sh" || exit 2  # bug 283: never a pipe into grep -q
+ROOT="$(git rev-parse --show-toplevel)"
+cd "$ROOT"
+
+CODEX_BIN="${REVIEW_CODEX_BIN:-codex}"
+REMOTE="${REVIEW_REMOTE:-origin}"
+MAIN_REF="${REVIEW_MAIN_REF:-$REMOTE/main}"
+PUSH="${REVIEW_PUSH:-1}"
+PIECE_BYTES="${REVIEW_PIECE_BYTES:-60000}"
+NOTES_REF="refs/notes/concrete-review"
+FINDINGS_REF="refs/notes/concrete-review-findings"
+REVIEWER="codex"
+
+BASE=""
+MAX_ROUNDS=5
+PIECES="auto"
+EXTRA=""
+
+usage() { awk 'NR > 1 { if (!/^#/) exit; sub(/^# ?/, ""); print }' "${BASH_SOURCE[0]}"; }  # the header, whatever its length
+die() { echo "review: $*" >&2; exit 2; }
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --base) [ $# -ge 2 ] || die "--base needs a ref"; BASE="$2"; shift 2 ;;
+    --head) [ $# -ge 2 ] && [ -n "$2" ] || die "--head needs a ref"; WANT_HEAD="$2"; shift 2 ;;
+    --max-rounds) [ $# -ge 2 ] || die "--max-rounds needs a number"; MAX_ROUNDS="$2"; shift 2 ;;
+    --pieces) [ $# -ge 2 ] || die "--pieces needs auto or a number"; PIECES="$2"; shift 2 ;;
+    --prompt-extra) [ $# -ge 2 ] || die "--prompt-extra needs text"; EXTRA="$2"; shift 2 ;;
+    -h|--help) usage; exit 0 ;;
+    *) die "unknown argument: $1 (see --help)" ;;
+  esac
+done
+[[ "$MAX_ROUNDS" =~ ^[1-9][0-9]*$ ]] || die "--max-rounds must be a positive integer"
+[[ "$PIECES" == auto || "$PIECES" =~ ^[1-9][0-9]*$ ]] || die "--pieces must be auto or a positive integer"
+if [ -n "${WANT_HEAD:-}" ]; then
+  want="$(git rev-parse -q --verify "$WANT_HEAD^{commit}")" || die "--head $WANT_HEAD is not a commit"
+  [ "$want" = "$(git rev-parse HEAD)" ] || die "--head $WANT_HEAD is ${want:0:12}, but the checkout is at $(git rev-parse --short=12 HEAD)"
+fi
+[[ "$PIECE_BYTES" =~ ^[1-9][0-9]*$ ]] || die "REVIEW_PIECE_BYTES must be a positive integer"
+command -v "$CODEX_BIN" >/dev/null 2>&1 || die "reviewer binary not found: $CODEX_BIN"
+
+WORK="$(mktemp -d)"
+trap 'rm -rf "$WORK"' EXIT
+
+# ---------------------------------------------------------------- notes sync
+# Fetch the remote notes refs and merge them into the local ones. On a conflict
+# for the same commit the local note wins (`-s ours`): it is the newer result.
+sync_notes() {
+
+codex
+The standalone `legacy_frozen.sh` check passed: `PASS=78 FAIL=0`. This clone has no local `main`. The full run is still underway; the new control checks that a script launched through `run_as_hook` and `bounded` receives the exact trusted-base SHA.
+exec
+/bin/bash -lc 'ls -t /tmp/legacy-sweep-2-checks-*.log | head -1 | xargs tail -15' in /home/unbalancedparen/projects/clones/wip/legacy-sweep-2
+ succeeded in 0ms:
+  ok   land refuses a red landing job
+  ok   land refuses a run at another SHA
+  ok   land refuses the remote named fork as primary
+  ok   land refuses the remote named fork as mirror
+  ok   land refuses a missing mirror remote before pushing anything
+  ok   fork untouched
+  ok   dry-run land verifies and pushes nothing
+  ok   land refuses a moved main and prints the rebuild
+  ok   land puts origin/main and lambdaclass/main at the train head
+  ok   fork still untouched after landing
+  ok   publish lock released
+  ok   land cancels no run; main's own run records the validating run
+=== dropped: a push's result is read from the remote, and a failed push is retried ===
+  ok   ci retries a push dropped before the remote moved
+  ok   exhausted retries fail the landing, move nothing and release the lock
+
+ succeeded in 54341ms:
+=== scripts/checks/doc_links.sh ===
+=== controls: the checker on throwaway trees ===
+  ok   positive control: slugs (literal underscore, emphasis), duplicate suffix, explicit id, code skipped, root-relative fragment links and a sibling fragment's heading pass
+  ok   a link to a missing heading fails
+  ok   a duplicate suffix past the last repeated heading fails
+  ok   a heading inside a code fence is not an anchor
+  ok   a heading inside an HTML comment is not an anchor
+  ok   an id written inside a code span is not an anchor
+  ok   an image inside a link's text is checked
+  ok   a link to a missing file fails
+  ok   outside changelog.d/ a link resolves against its own directory
+  ok   a changelog.d/ fragment resolves against the root, not changelog.d/
+  ok   a fragment's anchor is checked too
+=== the repository ===
+  ok   DOC-LINKS: PASS CHECKED=914 ANCHORS=714
+
+DOC-LINKS-GATE: PASS=12 FAIL=0 INCOMPLETE=0
+--- scripts/checks/doc_links.sh: pass (1s)
+=== scripts/checks/issues.sh ===
+=== ISSUES.tsv ===
+  ok   ISSUES.tsv is well-formed (16 issues, 10 open)
+=== negative controls ===
+  ok   an unknown area is refused
+  ok   an unknown status is refused
+  ok   an empty closure condition is refused
+  ok   a repeated id is refused
+
+check_issues: PASS=5 FAIL=0
+--- scripts/checks/issues.sh: pass (0s)
+=== scripts/checks/landing_bot.sh ===
+=== ready: both notes, at the exact head ===
+  ok   list runs
+  ok   a head with clean review and passing gates is ready
+  ok   wip/nogates is not ready
+  ok   wip/findings is not ready
+  ok   wip/gatefail is not ready
+  ok   wip/stale is not ready
+  ok   wip/land-x is not ready
+  ok   other/x is not ready
+=== ordering ===
+  ok   explicit orders (5, then 0800 read as decimal 800) before the rule change, then the rest by size
+  ok   the rule branch is recognized by its new E-code
+  ok   a Check/Elab edit reusing an existing E-code is not a rule change
+=== dry-run, kill switch, lock ===
+  ok   dry-run prints the train and changes nothing
+  ok   the kill switch stops the tick
+  ok   the pause is acknowledged in the event log (and notified)
+  ok   a second paused tick does not acknowledge the same pause again
+  ok   a live holder of the kernel lock stops a second instance
+  ok   CONTROL: the leaked-ref probe sees a planted wip/land-* ref
+=== train: the tick lands every ready branch, in order, on both remotes ===
+  ok   once the holder lets go, the next tick takes the lock and runs
+  ok   all five ready branches are in origin/main
+  ok   lambdaclass/main equals origin/main
+  ok   fork untouched
+  ok   the train merged members in landing order
+  ok   the remote leg ran on a per-run wip/land-* ref, and the ref is gone afterwards
+  ok   notify.sh was called with the landing
+  ok   state is idle after landing
+=== bisect: a red check ejects the culprit and the rest lands ===
+  ok   the good members landed
+  ok   the red member did not land
+  ok   the culprit is ejected by name
+  ok   gates: fail published at the culprit's SHA
+  ok   the ejection was notified
+  ok   the ejected head is no longer ready
+=== bisect: a red CI run ejects the culprit ===
+  ok   CI-red member ejected, the rest landed
+=== kill switch reaches bisection; a block waits for a human ===
+  ok   a pause during bisection stops it: nothing ejected, nothing landed, not blocked
+  ok   a bisection that names no culprit blocks the bot
+  ok   the next tick keeps the block (no automatic retry)
+  ok   after reset the culprit is ejected and the rest lands
+=== resume: a restart while the train is in CI does not dispatch again ===
+  ok   the kill switch between CI and land holds the train in CI
+  ok   the restarted bot resumed the run and landed with one dispatch
+=== kill switch inside a bisection probe ===
+  ok   a pause during the halving probe stops the bisection; nothing attributed
+  ok   after the pause, the same train is bisected and the rest lands
+  ok   a pause during a --ci probe's check dispatches nothing more; the red train stays in CI
+  ok   resumed: the red run is re-read, bisected, the culprit ejected
+  ok   a pause raised DURING the red culprit probe attributes nothing
+  ok   after the pause the culprit is ejected and the rest lands
+=== remote leg: a same-SHA ref of another run is never adopted ===
+  ok   an existing ref at the same SHA is refused, a fresh name is used, and only the run's own ref is deleted
+=== dispatch: a restart between dispatch and recording the run reconciles, never re-dispatches ===
+  ok   a failed run lookup is no answer: the train stays dispatching
+  ok   an empty answer inside the grace period waits instead of re-dispatching
+  ok   the run was found by its head SHA and landed with no second dispatch
+=== auto-rebase: skip rules, scratch clone, refreshed notes, conflicts ===
+  ok   heads with activity in the last 10 minutes are not rebased
+  ok   a quiet ready head is rebased onto the new main and pushed
+  ok   the rebased head carries the review verdict (naming the reviewed SHA) and a fresh gates note
+  ok   a real conflict is notified with its files and the branch is left alone
+  ok   the conflict was notified
+  ok   no rebase left in progress, no worktree, scratch clones removed, clone clean
+  ok   a tried (head, main) pair is not retried
+=== ready.sh: legs in parallel; any failed leg (the review included) publishes gates: fail ===
+  ok   a failed review leg revokes readiness even over an older clean verdict
+  ok   the bot no longer sees wip/rv as ready
+  ok   passing legs publish gates: pass and the head becomes ready
+=== main is never force-pushed ===
+  ok   no forced push of refs/heads/main in scripts/land
+
+check_landing_bot: PASS=59 FAIL=0
+--- scripts/checks/landing_bot.sh: pass (21s)
+=== scripts/checks/landing_script.sh ===
+=== resolution: generated views regenerated, ledgers union-merged ===
+  ok   build t1 (b1 b2) succeeds despite four conflicting files
+  ok   no merge left in progress
+  ok   the four conflicts were real and each took its route
+  ok   CHANGELOG carries both members' entries
+  ok   corpus map carries [201] and [202]
+  ok   generated block regenerated from both members' records
+  ok   BuildIdentity regenerated over the merged sources
+  ok   no conflict markers committed
+  ok   merge commits name member and SHA
+  ok   state binds head and member SHAs
+  ok   build row logged
+=== refusal: real conflicts stop the merge and leave nothing in progress ===
+  ok   a source conflict stops with exit 3 and names the file
+  ok   the stopped merge was aborted (no MERGE_HEAD)
+  ok   tree clean after the stop
+  ok   train/t2 holds the members merged before the conflict
+  ok   a prose conflict outside the generated block is refused
+  ok   a merge that duplicates a corpus key is refused
+  ok   two edits of one ledger entry are a real conflict, not a union
+  ok   code inserted outside the corpus maps is never unioned
+  ok   a map line carrying code after its key is never unioned
+  ok   a generated block whose generator will not run is a real conflict
+  ok   a generator's refusal fails the build and leaves the tree clean
+  ok   a refused build records no head
+  ok   an existing train is not overwritten without --force
+  ok   a train name with '/' is refused
+  ok   a dirty tree is refused
+  ok   a merge already in progress is refused
+  ok   a rebase in progress is refused
+=== pipeline: check -> ci -> watch -> land, with a fake gh ===
+  ok   ci refuses a train with no passing check
+  ok   check feeds the hook exactly base..head on ci/t1
+  ok   check fails when the hook's selection fails
+  ok   a failed re-check withdraws the earlier pass
+=== gate host: check's impact leg on the gate host, bound to the SHA; INCOMPLETE blocks ===
+  ok   check runs the impact leg on the gate host, from a bundle holding exactly the train head
+  ok   with a gate host the gates do not run on this machine
+  ok   the host runs the hook's selection over exactly base..head on ci/t1
+  ok   CONCRETE_* is forwarded quoted; the bypass is never forwarded and is cleared first
+  ok   the pass is attested for the train head, with the host's log kept
+  ok   the check row names the gate host; the train is checked at its head
+  ok   a run at another SHA is no result: INCOMPLETE, and the old attestation is withdrawn
+  ok   an incomplete check is logged as incomplete and withdraws the earlier pass
+  ok   ci refuses after an incomplete check
+  ok   an unreachable gate host is INCOMPLETE, blocks, and never falls back to a local run
+  ok   a log without its exit line (lost connection) is INCOMPLETE
+  ok   gates that fail on the host at the head fail the check (not incomplete)
+  ok   a pass without a remote record passes, attests nothing, says the push runs the gates
+  ok   --local-gates is the explicit opt-in to run the gates on this machine
+  ok   git config land.gatesHost names the gate host
+  ok   dry-run check names the gate host
+  ok   an empty LAND_GATES_HOST overrides the config (no gate host)
+  ok   run-at-ref.sh runs exactly the bundled head and prints sha= on both lines
+=== gate host: the pushing hook reuses the attestation only for this exact push ===
+  ok   the hook reuses an attested pass for exactly this push
+  ok   a push of another SHA does not reuse it
+  ok   a push of a ref that is not HEAD does not reuse it
+  ok   another changed-file list does not reuse it
+  ok   another selection does not reuse it
+  ok   another CONCRETE_* environment does not reuse it
+  ok   a dirty tracked tree does not reuse it
+  ok   a tampered log is refused (digest)
+  ok   a tampered log re-digested into the attestation is still refused (components)
+  ok   a tampered attestation head is refused
+  ok   a truncated attestation is refused
+  ok   a log whose run exited non-zero is never attested
+  ok   a remote record that is not a pass is never attested
+  ok   a log with two exit lines is never attested
+  ok   a log is never attested for a SHA it does not name
+  ok   a pass-deferred remote run is reused and its deferrals reported
+  ok   the environment digest binds whole values (a changed continuation line differs)
+  ok   the hook's nix re-entry bookkeeping does not break reuse (push from outside the gate shell)
+=== gate host end to end: the real ssh transport, shimmed, carries the command intact ===
+  ok   the real transport runs the head on the host and the pass is attested
+  ok   a forwarded value with newlines, $( ) and quotes runs nothing on the host
+  ok   the forwarded value arrives byte for byte
+  ok   the host's own CONCRETE_SKIP_GATES is cleared before the hook
+  ok   the host keeps no bundle or script after the run
+  ok   the push's hook reuses the record the host's run produced
+  ok   a push in another CONCRETE_* environment than the host's run does not reuse it
+  ok   the real transport to an unreachable host is INCOMPLETE (exit 3), attests nothing
+  ok   the root pre-push hook builds the spec and runs the full root set; it consults no remote attestation
+  ok   dry-run ci prints the push and dispatch and does neither
+  ok   ci pushes ci/t1 at the head, dispatches it with the train's base, records run 4242
+  ok   watch: a campaign-only failure is named, its log tail fetched, landing allowed
+  ok   watch: a landing failure is red and its log tail fetched
+  ok   watch: a green run at another SHA is no verdict
+  ok   land refuses a red landing job
+  ok   land refuses a run at another SHA
+  ok   land refuses the remote named fork as primary
+  ok   land refuses the remote named fork as mirror
+  ok   land refuses a missing mirror remote before pushing anything
+  ok   fork untouched
+  ok   dry-run land verifies and pushes nothing
+  ok   land refuses a moved main and prints the rebuild
+  ok   land puts origin/main and lambdaclass/main at the train head
+  ok   fork still untouched after landing
+  ok   publish lock released
+  ok   land cancels no run; main's own run records the validating run
+=== dropped: a push's result is read from the remote, and a failed push is retried ===
+  ok   ci retries a push dropped before the remote moved
+  ok   exhausted retries fail the landing, move nothing and release the lock
+  ok   land retries a push dropped before the update, accepts one dropped after it, and both remotes reach the head
+  ok   both dropped-connection seams fired
+=== bisect: halving finds the seeded red member ===
+  ok   bisect attributes b8 and prints the rebuild without it
+  ok   bisect leaves the checkout clean
+=== push-both.sh: both remotes required, refusals before anything is pushed ===
+  ok   push-both refuses PRIMARY=fork
+  ok   push-both refuses MIRROR=fork
+  ok   push-both refuses a missing mirror remote
+  ok   no refused push-both moved origin or fork
+=== report ===
+  ok   report prints the median time to land
+=== the campaign tier train.sh assumes is the workflow's campaign tier ===
+  ok   CAMPAIGN_RE names exactly the workflow's campaign jobs
+=== required checks: missing, skipped, cancelled, dropped ===
+  ok   watch refuses a run missing a required job
+  ok   land refuses a run missing a required job
+  ok   watch refuses a skipped required job
+  ok   land refuses a skipped required job
+  ok   watch refuses a cancelled required job
+  ok   land refuses a cancelled required job
+  ok   watch refuses a run whose only other job is a campaign-tier one
+  ok   land refuses a run whose only other job is a campaign-tier one
+  ok   a candidate that drops a base requirement without a transition row is still held to it
+  ok   a transition row replacing a base job by a required, green job passes and says so
+  ok   a replacement job that failed at this SHA refuses
+  ok   a replacement the candidate does not itself require is refused, and the old job stays required
+  ok   a retired base job is reported as retired, not run, never as passed
+  ok   a retirement without a reason is refused
+  ok   a malformed replacement list is refused, never read as a retirement
+  ok   a transition row for a job still required is refused
+  ok   no required-checks file anywhere is refused, not read as nothing required
+  ok   files without a final newline do not fuse names (Build and Other both required, both green)
+  ok   a job named BuildOther satisfies neither Build nor Other
+  ok   train.sh reads the candidate's transition file at the head commit
+=== record: main's run names the run that qualified its exact SHA, and nothing else (R-0570) ===
+  ok   record: the newest green run at exactly the head qualifies it (a skipped campaign job is fine)
+  ok   record refuses with no run at the head
+  ok   record refuses a run at another SHA
+  ok   record refuses a run the API lists at the head but whose own record names another SHA
+  ok   record refuses a run of another workflow
+  ok   record refuses a pull_request run
+  ok   record refuses a push run (its checks' base is not the declared one)
+  ok   record refuses a dispatch whose checks ran at another base
+  ok   record refuses a dispatch that names no base (a campaign or hand dispatch)
+  ok   record refuses an unfinished run
+  ok   record refuses the asking run itself
+  ok   record refuses a skipped required job
+  ok   record refuses a cancelled required job
+  ok   record refuses a failed landing-tier job
+  ok   record refuses a run without a required job
+  ok   record refuses a run with no landing-tier job
+  ok   record refuses an older green run behind a newer red one at the same SHA
+  ok   record refuses a head not strictly ahead of the base
+  ok   record refuses when the compare API cannot be read
+  ok   record refuses a base this clone does not have
+  ok   record refuses an all-zero base (a new branch, not a landing)
+  ok   record refuses an abbreviated head
+  ok   record refuses when the runs API cannot be read
+  ok   record refuses a head that drops a base requirement silently
+=== the workflow: Landing record gates every landing-tier job; a dispatch's base binds its checks ===
+  ok   every landing-tier job is skipped exactly when main's run holds a record
+  ok   CONTROL: the record-gate check finds a base-sensitive check that ignores the dispatch's base
+  ok   CONTROL: the record-gate check finds the ungated job
+  ok   CONTROL: the record-gate check finds the always job
+  ok   CONTROL: the record-gate check finds the nocancel job
+=== required-checks.txt names exactly the workflow's landing-tier jobs ===
+  ok   required-checks.txt = the workflow's landing tier
+=== the move gate: legacy/ lands only with an accepted rehearsal of that exact candidate ===
+  ok   land refuses the move with no rehearsal record
+  ok   dry-run land refuses the move with no rehearsal record (exit 5, every other check passed)
+  ok   land refuses the move with an accepted rehearsal of another candidate (another tree)
+  ok   dry-run land refuses the move with an accepted rehearsal of another candidate (another tree) (exit 5, every other check passed)
+  ok   land refuses the move with an accepted rehearsal of the same tree on another base
+  ok   dry-run land refuses the move with an accepted rehearsal of the same tree on another base (exit 5, every other check passed)
+  ok   land refuses the move with a failed rehearsal of this candidate
+  ok   dry-run land refuses the move with a failed rehearsal of this candidate (exit 5, every other check passed)
+  ok   land refuses the move with an incomplete rehearsal of this candidate
+  ok   dry-run land refuses the move with an incomplete rehearsal of this candidate (exit 5, every other check passed)
+  ok   a malformed rehearsal row refuses the land (not skipped, not exit 5)
+  ok   two trains of the same base and member: different merge commits, the same tree
+  ok   an accepted rehearsal by another train of the same tree and base satisfies the gate
+  ok   the rehearsed move lands
+  ok   a staged move (legacy/ already on the base) still needs a rehearsal of its own
+  ok   acceptance's dry-run leg: exit 5 + whole marker line passes; no marker, another exit, a prefixed or altered marker fail
+  ok   acceptance refuses --name with a record delimiter and writes no row
+  ok   acceptance refuses --ref with a record delimiter and writes no row
+  ok   acceptance: check keeps the review leg; both build legs run nix develop --command lake build
+  ok   an acceptance run that fails before building a train writes no rehearsal row
+  ok   a candidate adding scripts/checks/root_inventory.txt is a move too
+  ok   an inventory change of nested entries, comments and order only (docs/proposals) needs no rehearsal
+  ok   an inventory change that adds a top-level entry still needs a rehearsal
+  ok   a change under legacy/ (inventory untouched) still needs a rehearsal
+=== review: check fails closed, land requires review provenance ===
+  ok   check with no review command fails instead of skipping the leg
+  ok   a reviewer that exits 0 leaving no note fails check
+  ok   a reviewer that exits 0 leaving a malformed note fails check
+  ok   a reviewer that exits 0 leaving a blocked note fails check
+  ok   a reviewer that exits 0 leaving a findings note fails check
+  ok   a failed review leg leaves no pass for ci
+  ok   land refuses no review note anywhere
+  ok   land refuses an unreviewed head over a malformed member note
+Overwriting existing notes for object d9a0b4bdf506a5e6d383890ac4eaefd561139b71
+Overwriting existing notes for object 5121097f253a80003bddc798332588dac8d33a0e
+  ok   land refuses a malformed head note, whatever the members
+Overwriting existing notes for object d9a0b4bdf506a5e6d383890ac4eaefd561139b71
+Overwriting existing notes for object 5121097f253a80003bddc798332588dac8d33a0e
+  ok   land refuses an unreviewed head over a blocked member note
+Overwriting existing notes for object d9a0b4bdf506a5e6d383890ac4eaefd561139b71
+Overwriting existing notes for object 5121097f253a80003bddc798332588dac8d33a0e
+  ok   land refuses a blocked head note, whatever the members
+Overwriting existing notes for object d9a0b4bdf506a5e6d383890ac4eaefd561139b71
+Overwriting existing notes for object 5121097f253a80003bddc798332588dac8d33a0e
+  ok   land refuses an unreviewed head over a findings member note
+Overwriting existing notes for object d9a0b4bdf506a5e6d383890ac4eaefd561139b71
+Overwriting existing notes for object 5121097f253a80003bddc798332588dac8d33a0e
+  ok   land refuses a findings head note, whatever the members
+Overwriting existing notes for object d9a0b4bdf506a5e6d383890ac4eaefd561139b71
+  ok   land refuses an unreviewed head with one member unreviewed
+Overwriting existing notes for object d9a0b4bdf506a5e6d383890ac4eaefd561139b71
+  ok   land accepts an unreviewed head whose every member is clean at its exact SHA
+  ok   land accepts a clean head note
+  ok   check over members reviewed clean passes the review leg without running the reviewer
+=== where a train runs: a full clone with the repository hook (ISS-0015) ===
+  ok   train.sh refuses a linked worktree before doing anything
+  ok   train.sh status (read-only) still runs in a linked worktree
+  ok   the pre-push hook refuses a gated push from a linked worktree (before any check runs)
+  ok   a wip/* backup push from a linked worktree still passes (it runs nothing)
+  ok   train.sh record (CI's Landing record job: no hook there) is not refused for the hook
+  ok   train.sh refuses when the pre-push hook is not executable
+  ok   train.sh refuses when core.hooksPath names a directory with no pre-push
+  ok   train.sh refuses a pre-push hook that does not run the repository's
+  ok   train.sh refuses a hook that only mentions .githooks/pre-push
+  ok   the repository hook answers who it is with its real path and runs nothing
+  ok   a real push never takes the identify answer (no environment switch exists)
+  ok   no refused run left train state behind
+
+check_landing_script: PASS=209 FAIL=0
+--- scripts/checks/landing_script.sh: pass (18s)
+=== scripts/checks/legacy_frozen.sh ===
+=== negative controls ===
+  ok   control: an unchanged tree passes
+  ok   control: an added file is refused
+  ok   control: a modified file is refused
+  ok   control: a deletion under an open row is refused
+  ok   control: a deletion without a status column is refused
+  ok   control: a deletion under a resolved row passes
+  ok   control: a resolved parent does not release a child with an open row
+  ok   control: a deletion outside the resolved row is refused
+  ok   control: a byte-for-byte move from a sweep commit, gone from the root, passes
+  ok   control: the same addition with no sweep line is refused
+  ok   control: a swept copy that still exists at the root is refused
+  ok   control: a modified copy of a swept file is refused
+  ok   control: a swept copy with another file mode is refused
+  ok   control: a new file with no root original is refused
+  ok   control: an edit of an existing legacy/ file is refused, even matching a sweep commit
+  ok   control: deleting a swept file under an open row is refused
+  ok   control: deleting a swept file under a resolved row passes
+  ok   control: an addition after the last sweep, with no new sweep line, is refused
+  ok   control: a lock chaining the frozen tree through a sweep to HEAD:legacy passes
+  ok   control: a sweep commit outside HEAD's history is refused, as such
+  ok   control: deleting a swept file after its sweep, under an open row, is refused
+  ok   control: a NUL-prefixed sweep row is refused by the lock parser, as such
+  ok   control: a CR line ending is refused by the lock parser, as such
+  ok   control: a sweep row without its tree is refused by the lock parser, as such
+  ok   control: a sweep row with a trailing space is refused by the lock parser, as such
+  ok   control: a sweep row with a third field is refused by the lock parser, as such
+  ok   control: a blank line is refused by the lock parser, as such
+  ok   control: a repeated sweep row is refused by the lock parser, as such
+  ok   control: a last row without its newline is refused by the lock parser, as such
+  ok   control: a lock without its base row is refused by the lock parser, as such
+  ok   control: a preview lock is refused by the lock parser, as such
+  ok   control: a later sweep cannot rewrite a file an earlier sweep moved
+  ok   control: an added path git would C-quote is refused when it has no original
+  ok   control: an added path spelled as pathspec magic is refused
+  ok   control: a lock that keeps every trusted line passes
+  ok   control: rewriting a trusted sweep line is refused, naming the line
+  ok   control: removing a trusted sweep line is refused, naming the line
+  ok   control: changing the trusted base line is refused, naming the line
+  ok   control: a trusted sweep row kept behind a NUL byte is refused by trusted history
+  ok   control: a malformed lock in trusted history is refused, not skipped
+  ok   control: a legacy/ that kept every trusted version passes
+  ok   control: a swept file rewritten with its lock row is refused by trusted history
+  ok   control: a frozen file deleted and re-added with other bytes is refused by trusted history
+  ok   control: re-adding a file with its trusted bytes passes
+  ok   control: a member branch's corrected intermediate lock is not trusted history (first parents only)
+  ok   control: the trusted base is the merge base with the trusted ref, else HEAD (everything trusted)
+  ok   control: base-only chain
+  ok   control: base-only trusted lock
+  ok   control: silent parser exit 1 chain
+  ok   control: silent parser exit 1 history
+  ok   control: silent parser exit 2 chain
+  ok   control: silent parser exit 2 history
+  ok   control: chain HEAD lookup failure
+  ok   control: judge diff failure
+  ok   control: judge retention failure
+  ok   control: judge root lookup failure
+  ok   control: judge sweep lookup failure
+  ok   control: identity log failure
+  ok   control: identity tree failure
+  ok   control: trusted merge-base failure
+  ok   control: trusted HEAD failure
+  ok   control: judge Python failure
+  ok   control: judge added-path lookup failure
+  ok   control: identity Python failure
+  ok   control: trusted ref lookup failure
+  ok   control: reader listing failure
+  ok   control: reader scan failure
+  ok   control: lock-use scan failure
+  ok   control: read-loop scan failure
+  ok   control: lock history log failure
+  ok   control: lock history blob failure
+  ok   control: lock history tree failure
+  ok   control: every read loop in this check reads a last line without a newline
+  ok   control: lib/legacy_lock.py is the lock's one reader: no other code names or reads the lock
+=== legacy/ against scripts/checks/legacy.lock ===
+  ok   the lock parses (base, tree, 2 sweep row(s), nothing else), and tree 2b6b53678b is the tree of base 9186ca4c9f
+  ok   trusted history (through 3bd7bc4151): every lock line kept, no legacy/ file rewritten
+  ok   the lock's 2 sweep line(s) name commits of HEAD's history and chain to HEAD:legacy
+  ok   legacy/ differs from the frozen tree only by byte-for-byte sweeps and deletions RETENTION.tsv allows
+legacy_frozen: PASS=78 FAIL=0
+--- scripts/checks/legacy_frozen.sh: pass (2s)
+=== scripts/checks/oracle_fetch.sh ===
+=== a good published artifact installs and verifies (positive control) ===
+  ok   fetch.sh installs the good artifact (exit 0)
+  ok   the installed oracle verifies against the lock
+=== no published artifact, a failed download, other bytes, a failed verification: INCOMPLETE ===
+  ok   an empty artifact_url is INCOMPLETE (3)
+  ok   a failed download is INCOMPLETE (3)
+  ok   an artifact with other bytes (corrupted) is INCOMPLETE (3)
+  ok   the corrupted artifact left no install behind
+  ok   an install that fails verification (manifest not locked) is INCOMPLETE (3)
+  ok   the unverifiable artifact left no install behind
+=== ci_check.sh: INCOMPLETE without a verified oracle, FAILED on a wrong smoke result ===
+  ok   no published artifact: the oracle check is INCOMPLETE (3), never passed
+  ok   a corrupted artifact: the oracle check is INCOMPLETE (3)
+  ok   a failed verification: the oracle check is INCOMPLETE (3)
+  ok   run.sh refuses an altered install (125) before running anything
+  ok   end to end: fetch, verify, compile, run to 42 passes (positive control)
+  ok   end to end, wrong: FAILED (1), never passed
+  ok   end to end, compile42: FAILED (1), never passed
+  ok   end to end, compile1: FAILED (1), never passed
+  ok   end to end, noout: FAILED (1), never passed
+  ok   a failed download: the oracle check is INCOMPLETE (3) even with a working toolchain
+  ok   an install altered after fetch: the oracle check is INCOMPLETE (3) via run.sh's refusal
+
+check_oracle_fetch: 19 passed, 0 failed
+--- scripts/checks/oracle_fetch.sh: pass (1s)
+=== scripts/checks/retention_manifest.sh ===
+=== RETENTION.tsv governs the tree ===
+  ok   every tracked file (5007) has exactly one governing row
+  ok   the longest listed prefix governs (decisions.md retained inside archived docs/spec; fuzz findings migrate)
+=== negative controls ===
+  ok   an ungoverned path is refused
+  ok   an unknown disposition is refused
+  ok   an empty deletion criterion is refused
+  ok   removing the std row leaves std's files ungoverned
+  ok   a path listed twice is refused (no ambiguous deletion authority)
+  ok   a retained row that does not separate the root file from its legacy/ copy is refused
+  ok   an unknown status is refused
+  ok   after the move, legacy/ paths and the new root's paths are governed
+
+check_retention_manifest: PASS=10 FAIL=0
+--- scripts/checks/retention_manifest.sh: pass (0s)
+=== scripts/checks/review_tool.sh ===
+=== round 1: full diff, findings, note written and pushed ===
+  ok   findings exit 1 (got 1)
+  ok   one reviewer call
+  ok   reviewer runs with --sandbox read-only
+  ok   reviewer runs with GIT_OPTIONAL_LOCKS=0
+  ok   no reviewer call ran with optional locks
+  ok   round 1 prompt carries the verdict rule
+  ok   round 1 reviews the full diff from the merge-base
+  ok   note has exactly the six fields, in order
+  ok   note: verdict findings
+  ok   note: rounds 1
+  ok   note: base is the merge-base
+  ok   note: pieces 1
+  ok   raw output at .review/<sha>-1.md
+  ok   findings recorded under the findings ref
+  ok   notes ref pushed to origin
+  ok   .review/ stays untracked
+  ok   verify.sh: findings is not clean (exit 1, got 1)
+=== same HEAD again: nothing to review ===
+  ok   re-review of a reviewed HEAD exits 4 (got 4)
+  ok   and calls no reviewer
+=== --head: the callers' contract (train.sh, ready.sh pass --base --head) ===
+  ok   --head at the checkout's HEAD is accepted (reviewed HEAD exits 4, got 4)
+  ok   --base --head <sha> as train.sh calls it is accepted (got 4)
+  ok   --head other than the checkout refuses (exit 2, got 2)
+  ok   and says why
+  ok   an empty --head refuses (exit 2, got 2)
+  ok   and calls no reviewer
+=== round 2: only the delta, with the previous findings ===
+  ok   clean exit 0 (got 0)
+  ok   round 2 diff holds only the delta (new.txt, old.txt fix)
+  ok   round 2 diff does not resend the round-1 hunk
+  ok   round 2 prompt names the delta start
+  ok   round 2 prompt carries the previous findings
+  ok   note: rounds 2, verdict clean
+  ok   verify.sh: clean exit 0 (got 0)
+  ok   verify.sh prints the verdict
+  ok   verify.sh judges the exact commit, not the branch (R1 still 1)
+  ok   an already-clean HEAD reports clean without a call (exit 0)
+=== verify.sh: missing and malformed notes ===
+  ok   no note: exit 2 (got 2)
+  ok   malformed note (verdict line alone): exit 2 (got 2)
+Overwriting existing notes for object c172b93ebe321141d26f2e3a64f44ac1286bbaf4
+  ok   the landing bot's carried note verifies clean (exit 0, got 0)
+  ok   a carried verdict says where it came from
+Overwriting existing notes for object c172b93ebe321141d26f2e3a64f44ac1286bbaf4
+  ok   an unknown key is malformed: exit 2 (got 2)
+Overwriting existing notes for object c172b93ebe321141d26f2e3a64f44ac1286bbaf4
+  ok   a repeated key is malformed: exit 2 (got 2)
+=== verdict parsing ===
+  ok   markdown-emphasised verdict line is accepted (exit 0, verdict clean)
+  ok   text after the verdict line is not a verdict (exit 5, verdict blocked)
+  ok   a reply with no verdict line is blocked, not clean (exit 5, verdict blocked)
+  ok   a reviewer that exits nonzero is blocked (exit 5, verdict blocked)
+  ok   a real review that mentions content filters is not a refusal (exit 0, verdict clean)
+=== content-filter refusal: one neutral retry on smaller pieces ===
+  ok   refused then reviewed neutrally: clean (exit 0)
+  ok   first call standard, retries neutral
+  ok   retry pieces are smaller (384 < 523)
+  ok   neutral prompt avoids the project framing
+  ok   raw output records the refusal
+  ok   refused twice: blocked, exit 5 (got 5)
+  ok   note: verdict blocked
+  ok   no loop: one standard call and one retry pass (3 calls)
+  ok   blocked piece listed in the output
+  ok   a blocked HEAD may be re-run; it counts as round 2
+  ok   the re-run reviews the whole branch again (blocked does not advance the delta)
+=== findings in one piece, another piece blocked ===
+  ok   blocked wins over findings: verdict blocked, exit 5 (got 5, blocked)
+  ok   the reviewed piece's findings are still recorded
+  ok   next round restarts from the base, not after the blocked round
+  ok   and carries the blocked round's findings forward
+  ok   a blocked round with no findings of its own records the carried ones
+  ok   after two blocked rounds in a row the finding still reaches the prompt
+=== pre-push hook: a review-notes push runs no gates ===
+  ok   notes-only push: hook exits 0 (got 0)
+  ok   notes-only push: hook takes the review-notes tier
+  ok   notes alongside a wip push take the wip tier (exit 0)
+=== splitting by file group and size ===
+  ok   split review is clean (exit 0)
+  ok   several pieces (7)
+  ok   one call per piece
+  ok   no piece mixes file groups
+  ok   every piece within the size limit
+  ok   the big file is split across pieces
+  ok   compiler pieces come first
+  ok   each split part repeats the file header and starts a hunk
+  ok   --pieces N sizing: a third of the diff gives about three pieces (6)
+  ok   a limit of the whole diff still separates the four groups (4)
+  ok   split loses no diff line
+  ok   --pieces 3 on one file gives three pieces (3)
+  ok   split parts carry correct, contiguous @@ headers
+=== the round cap ===
+  ok   round 1 of 2: findings (exit 1)
+  ok   round 2 of 2 with findings: cap exit 3 (got 3)
+  ok   cap message says split or escalate
+  ok   cap message lists the open findings
+  ok   round 2 note was still written
+  ok   no round 3: refused with exit 3 (got 3)
+  ok   and no reviewer call
+  ok   no note written on the refused round
+=== notes push: non-fast-forward is fetched, merged and retried ===
+  ok   review after a concurrent notes push succeeds (exit 0)
+  ok   origin keeps the other writer's note
+  ok   origin has our note
+  ok   push rejected once, then merged and pushed (exit 0)
+  ok   the retry path ran
+  ok   origin holds the racing note
+  ok   origin holds our note
+=== notes push: any other refusal stops at once (exit 6) ===
+  ok   a refused (not non-fast-forward) push exits 6 (got 6)
+  ok   and is not retried as if it were a race
+  ok   the note is still recorded locally
+=== usage errors ===
+  ok   bad --pieces: exit 2 (got 2)
+  ok   unknown flag: exit 2 (got 2)
+
+check_review_tool: PASS=99 FAIL=0
+--- scripts/checks/review_tool.sh: pass (3s)
+=== scripts/checks/root_inventory.sh ===
+=== negative controls ===
+  ok   control: exactly the listed set passes
+  ok   control: an unlisted top-level entry is refused
+  ok   control: an unlisted docs/ entry is refused
+  ok   control: a missing listed entry is refused
+=== the tracked root against scripts/checks/root_inventory.txt ===
+  ok   the root holds exactly the day-one set
+root_inventory: PASS=5 FAIL=0
+--- scripts/checks/root_inventory.sh: pass (0s)
+=== scripts/checks/sandbox_isolation.sh ===
+=== structural: every repository-making script sources the sandbox helper ===
+  ok   scripts/checks/landing_bot.sh sources git_sandbox.sh (line 40) and calls it (line 41) before its first repository (line 133)
+  ok   scripts/checks/landing_script.sh sources git_sandbox.sh (line 60) and calls it (line 61) before its first repository (line 139)
+  ok   scripts/checks/legacy_frozen.sh sources git_sandbox.sh (line 207) and calls it (line 208) before its first repository (line 213)
+  ok   scripts/checks/review_tool.sh sources git_sandbox.sh (line 39) and calls it (line 40) before its first repository (line 115)
+  ok   scripts/land/acceptance.sh sources git_sandbox.sh (line 65) and calls it (line 66) before its first repository (line 191)
+  ok   scripts/land/bot.sh sources git_sandbox.sh (line 39) and calls it (line 40) before its first repository (line 260)
+  ok   scripts/land/run-at-ref.sh sources git_sandbox.sh (line 20) and calls it (line 21) before its first repository (line 42)
+  ok   scripts/oracle/build.sh sources git_sandbox.sh (line 29) and calls it (line 30) before its first repository (line 52)
+  ok   scripts/proofs/external.sh sources git_sandbox.sh (line 45) and calls it (line 46) before its first repository (line 73)
+  ok   found 9 repository-making scripts (at least the 9 known)
+bound: a systemd user scope, TasksMax=512, MemoryMax=8G
+=== control: the hook probe receives the root trusted base ===
+  ok   trusted-base control: LEGACY_TRUSTED_REF equals 3bd7bc41511e0a0ba247b53231b5dc8589533d2f exactly
+=== control: the harness sees a leak ===
+  ok   control (leaky script): the harness sees a write through the inherited GIT_DIR
+=== live: sandbox checks run from a linked worktree as its hook would run them ===
+  ok   review_tool.sh: the caller's refs, notes, config and upstream are unchanged
+  ok   legacy_frozen.sh: the caller's refs, notes, config and upstream are unchanged
+
+check_sandbox_isolation: PASS=14 FAIL=0
+--- scripts/checks/sandbox_isolation.sh: pass (8s)
+=== scripts/checks/workflow_yaml.sh ===
+  ok   .github/workflows/lean_action_ci.yml
+  ok   .github/workflows/oracle.yml
+
+WORKFLOW-YAML: PASS=2  FAIL=0
+--- scripts/checks/workflow_yaml.sh: pass (0s)
+
+root checks: all 11 pass
+
+codex
+All 11 root checks passed, including sandbox isolation (`PASS=14 FAIL=0`). The control received `3bd7bc41511e0a0ba247b53231b5dc8589533d2f` exactly. I’ll commit the validated changes locally now.
+exec
+/bin/bash -lc 'git diff --check && git add scripts/checks/sandbox_isolation.sh scripts/checks/legacy_frozen.sh && git commit -m "fix sandbox probe trusted base to match caller history" && git status --short && git rev-parse HEAD && git status --porcelain=v1 && git rev-parse --git-path MERGE_HEAD && git rev-parse --git-path rebase-merge && git rev-parse --git-path rebase-apply' in /home/unbalancedparen/projects/clones/wip/legacy-sweep-2
+ succeeded in 0ms:
+[wip/legacy-sweep-2 35b489e4] fix sandbox probe trusted base to match caller history
+ 2 files changed, 36 insertions(+), 2 deletions(-)
+35b489e49c2f79d75569b7228cb0877da4f3c3d4
+.git/MERGE_HEAD
+.git/rebase-merge
+.git/rebase-apply
+
+exec
+/bin/bash -lc 'for state in MERGE_HEAD rebase-merge rebase-apply CHERRY_PICK_HEAD REVERT_HEAD; do path=$(git rev-parse --git-path "$state"); if [ -e "$path" ]; then echo "unexpected operation state: $state"; exit 1; fi; done
+git diff HEAD --exit-code' in /home/unbalancedparen/projects/clones/wip/legacy-sweep-2
+ succeeded in 0ms:
+codex
+Committed locally: `35b489e49c2f79d75569b7228cb0877da4f3c3d4`.
+
+- Resolves the trusted base in `$ROOT_DIR` and passes its full SHA through `run_as_hook` / `bounded` as `LEGACY_TRUSTED_REF`. Resolution errors explicitly fail. The legacy fallback is unchanged; header updated.
+- Control asserts exit status `0` and captured output exactly equals `TRUSTED_BASE`: `3bd7bc41511e0a0ba247b53231b5dc8589533d2f`.
+- Requested bounded runs passed in this clone, with no local `main`: **all 11 root checks pass**; standalone legacy check **PASS=78 FAIL=0**; sandbox isolation **PASS=14 FAIL=0**.
+
+Checks ran on the exact contents committed. Working tree clean. No push, network use, config/remote changes, or verification bypass.
+tokens used
+28,205
+Committed locally: `35b489e49c2f79d75569b7228cb0877da4f3c3d4`.
+
+- Resolves the trusted base in `$ROOT_DIR` and passes its full SHA through `run_as_hook` / `bounded` as `LEGACY_TRUSTED_REF`. Resolution errors explicitly fail. The legacy fallback is unchanged; header updated.
+- Control asserts exit status `0` and captured output exactly equals `TRUSTED_BASE`: `3bd7bc41511e0a0ba247b53231b5dc8589533d2f`.
+- Requested bounded runs passed in this clone, with no local `main`: **all 11 root checks pass**; standalone legacy check **PASS=78 FAIL=0**; sandbox isolation **PASS=14 FAIL=0**.
+
+Checks ran on the exact contents committed. Working tree clean. No push, network use, config/remote changes, or verification bypass.
+rc=0

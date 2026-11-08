@@ -1,0 +1,10 @@
+READ-ONLY REVIEW. Do not modify, create or delete any file. This directory is a copy of the head of branch wip/spec-core of the Concrete repository; `_review.diff` is its full diff against origin/main (two commits: PLAN step 2 of docs/proposals/SPEC_UNIFICATION.md section 6, "`Ident`: the typed identities, SiteId, Span, SliceId, RuleId and spec_version", plus the per-rule gate that the plan says lands with Ident).
+
+The changes: ConcreteSpec/Spec/Ident.lean (typed identities; FieldId owned by a struct or an enum variant; Span with positive line/column and Span.PathOk; SliceId = Fin 29; RuleId; specVersion), ConcreteSpec/Spec/Rules.lean (the empty rule registry), scripts/spec/rules.{sh,py,lean} (the rule gate with negative controls), the CI workflow step, ConcreteSpec/README.md, scripts/proofs/axioms.golden.
+
+Check, citing file:line:
+1. Correctness of the Lean: definitions mean what their doc comments say; the examples prove what their comments claim; no `sorry`, no `native_decide`; nothing decides a language question the owner has not decided (the column unit was undecided on main at this commit; Ident must not pick one).
+2. The rule gate: does rules.py actually enforce each stated check (doc comment cites a decision row; an Accepted and a Refused example per rule, each a doc comment directly on an `example`; every `(rule `X`)` citation names a registered rule; no duplicate; rev >= 1; truncated listing is an error)? Can any check pass vacuously or be bypassed (comment forms, nested comments, string literals, `example` with attributes or modifiers, names with dots or «»)? Do the negative controls in rules.sh exercise each failure path, and does a timeout fail closed (bounded_run from scripts/checks/lib/bounded.sh)?
+3. CI wiring: is the gate run in the Spec build job after the build, and is the job required (required-checks.txt)?
+4. Consistency with SPEC_UNIFICATION.md section 1.2/1.10/2.2 and step 2, and with the README.
+End with findings (file:line, concrete fix) and a final line exactly `VERDICT: ACCEPT` or `VERDICT: REVISE`.

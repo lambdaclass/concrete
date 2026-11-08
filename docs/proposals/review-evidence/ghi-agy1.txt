@@ -1,0 +1,7 @@
+No correctness, quoting, bypass, or portability defects found:
+
+- **Quoting & host-side expansion (`scripts/land/gates_transport_ssh.sh:44-46`):** All three `echo '...'` lines are single-quoted when generating `run.sh`, so `$(id -un)`, `$(hostname)`, `$(id -u)`, `$who`, and `$gc` expand on the gate host inside `run.sh`, with double quotes around `"$(id -u)"` and `"$gc/.git"`.
+- **Fail-closed behavior:** Both failure paths exit `255` before `land_remote_bad`, `git -C "$gc" fetch`, and `run-at-ref.sh`. Because `run-at-ref.sh` never runs, no `[concrete-remote]` start/exit markers are emitted and `gates_remote.sh` reports `INCOMPLETE` (exit `3`) after having cleared any previous remote attestation.
+- **Test coverage (`scripts/checks/landing_script.sh:588-600`):** Both new end-to-end cases run through `gates_remote.sh` and `gates_transport_ssh.sh` via the `ssh`/`scp` shims, verify exit status `3` (`INCOMPLETE`), match the diagnostic messages emitted by the new checks, and verify `hostgit.log` is empty.
+
+VERDICT: ACCEPT

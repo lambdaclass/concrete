@@ -1,0 +1,222 @@
+kimi version 2.4.1
+• I need review read-only. Should read changed files in full REVIEW.diff likely large. Must not change state. Should carefully inspect. I can use read parallel. First determine diff full length perhaps Read. Also git status read-only allowed, but user says changed files full. Read REVIEW.diff known.
+
+• I’ll inspect the full diff and each changed file, then trace the remaining remote and safety assumptions through the landing scripts and fixtures.
+
+• Should read changed files full. List 15? .claude command, workflow, AGENTS, README, changelog, docs landing, self hosted, decisions, fixtures, acceptance bot install train lock build push. I have full many via Read parallel max. Should inspect exact line numbers actual working tree likely modified diff applied. Use reads perhaps huge train 1100 lines. I need full. Also scripts related not changed may assumptions search. Should not run state changing. Tools grep/glob read. Parallel many outputs could exceed but manageable batches. First train in chunks, push full, bot, install, acceptance.Potential bugs:
+  - require_remote_repo only get-url fetch URL, ignores pushurl. Stale clone origin fetch points lambdaclass but pushurl concrete2 can push wrong repo. This is major. Both train and push-both check only get-url. Also multiple pushurl. Should line citations train 139 and push 59. Tests no pushurl. Also non-GitHub URLs (ssh aliases github.com-lambdaclass, insteadOf?) get-url returns configured unexpanded? git remote get-url applies insteadOf yes but push uses pushurl. They intended GitHub remote URL must name repo. Can bypass with `git@github.com-lambdaclass:unbalanced...` alias not literally github.com? "a GitHub remote URL must name LAND_REPO" impossible aliases. More concrete pushurl is enough.
+
+  - install-bot ORIGIN_URL default now static rather than reading existing ~/concrete2, good. Existing env kept with stale LAND_REPO just warning, but train will refuse because origin lambdaclass and REPO concrete2 -> fail closed, no wrong push. Fine though installer should migrate env? Says bot follows perhaps broken install since existing env stale means bot nonfunctional until manual. Warning explicit perhaps acceptable but migration goal perhaps expected to update. Could finding? Should be concrete.
+
+  - bot only fork check, relies train build require. But bot sync_remote fetch and auto rebase push occur BEFORE train build require_remote_repo. Stale clone origin concrete2 can fetch and auto-rebase and push rebased commits + notes to wrong repository before build refuses. Also `bot.sh list` and `rebase` call sync and rebase without require. Migration says bot.sh removes mirror, require_remote_repo in train only. User explicitly asks way stale clone could still push wrong repository. Bot rebase pass pushes `$REMOTE` at bot.sh:239 before train require. This is major independent. Install repoints bot clone but manually run stale bot or existing env. Should cite bot.sh 460 sync, 490 rebase; line 239 push. Also notes.sh probably uses origin not LAND_REMOTE? Existing. Could mention rebase and notes. Should inspect notes maybe relevant. But changed files full first.
+
+  - train check remote_leg can push to wrong repo because check doesn't require_remote_repo. `cmd_check` no refuse/require, `remote_leg` line 435 push, review_provenance fetch. A stale clone can run `train.sh check` and push wip/land-* to concrete2 before ci/land refusal. Changelog says build ci land and push-both only, not check. User scope "any remaining two remote assumption stale clone wrong push lost safety broken test docs link". This is concrete. Even build dry-run require etc. Should report train.sh check missing guard, bot. Could consolidate one finding all entry points that push must guard. `bisect --ci` calls check then build guard; check might run after build (which guard passes if stale no). direct check existing state stale. Yes.
+
+  - require_remote_repo case pattern `*github.com[:/]*` matches malicious domain `github.com.evil`? Pattern requires colon/slash immediately after github.com so no. Case-sensitive host; GitHub.com uppercase not recognized; stale bypass with `GIT@GITHUB.COM:...` though SSH host case insensitive and scp-like? DNS case insensitive. So stale clone could change host capitalization and bypass. More important pushurl.
+
+  - URLs with `ssh://git@github.com/...` match. `https://github.com/...` yes. `git@github.com:` yes. trailing slash and .git removal only once. `https://github.com/lambdaclass/concrete/` good. Query? no.
+
+  - push-both lost retries safety property. Train push_verified retries dropped connections, push-both old script did not retry originally? Old push-both primary push simply if ! exit, no readback after failure, so unchanged except docs AGENTS after push manual retry. Not lost.
+
+  - push-both no preflight remote main ancestry? Plain push non-force, okay.
+  - CI wait occurs after publication now same before (primary published before wait). okay.
+
+  - Landing record github.repository correct.
+
+  - ORACLE build loop subtle: `for url in ${ORACLE_SOURCE:-} "$(lock url)"; do` unchanged except mirror. If ORACLE_SOURCE set multiple word split purposely. Fine.
+  - lock consumers may require mirror_url? Search.
+
+  - Docs broken links from changed anchors valid. Should inspect docs full. Also all references two remotes via Grep across repo. User read changed files full. I should do next batch.
+
+• The new repository check validates only the fetch URL, and some push-capable paths run before that check. I’m checking the fixtures and documentation now for coverage gaps and stale migration instructions.
+
+• Should landing_script remaining 801-1213 full. Also other changed full docs etc. Observations docs stale:
+  - LANDING line 416 "write access to both repositories" definitely wrong docs.
+  - line 491 "both mains" wrong.
+  - Config LAND_CAMPAIGN_JOBS stale default from before diff unchanged but user asks wrong docs perhaps not migration-specific and existing, not finding changed? It was context line unchanged. Don't report unrelated preexisting. Both repositories line context unchanged but now made wrong by migration, should update. Both mains similarly.
+  - SELF_HOSTED top says campaign/nightly current contrary new "root no nightly yet" preexisting inconsistency perhaps not introduced except changed paragraph claims no nightly. Could be wrong docs now contradictory within file. At lines 15-21 and 131-135, 169-171 mention nightly.yml that root perhaps doesn't exist. Diff changed paragraph line 94 says root no nightly campaign yet but earlier text still describes it. This is a concrete wrong docs introduced/left stale. Could report? User wants focused concrete bugs. Perhaps more important.
+
+  - LANDING dry run syntax line21 `land --dry-run` but actual global only before subcommand. Preexisting, unrelated.
+
+  - Tests fixture report expected landed 2 after mirror removal still two real land t1 t8 yes.
+
+  - landing_script test comment line144 "every command must refuse before network" but only build ci land, not check. Doc explicitly only build ci land. Could finding missing check.
+
+  - install bot migration existing env LAND_REPO stale warns but bot won't work, docs installer "bot ... follow". Not safety wrong push. Could note lower priority if no too many.
+
+  Should read rest changed full and global grep.Should have docs decisions full requested changed files in full. 1677 lines. I only read 500; must read rest. AGENTS full done. Workflow full 344 done. README, changelog, .claude full small. docs self full done. Decisions remainder in chunks. Also grep global remaining old references excluding legacy? Use Grep patterns unbalanced|lambdaclass|MIRROR|mirror etc root perhaps lots. Should focus changed files and scripts. I can grep root current (legacy included output massive) with glob excluding not supported negations? path scripts and docs separately. Use Grep in parallel.Read remainder decisions to comply.All changed files full yes. Should thorough bug search. Could use static read only bash `bash -n` allowed no state change (reads only). User says do not run anything changes state. bash -n okay. Tests not allowed because change temp state? Explicit do not run anything changes state; tests definitely create. Don't run. Can use shell parsing mentally. Should check syntax weird indent line117 no bug.
+
+  Potential broken test from removal LAND_MIRROR but env still exported in fixture? Grep only none. PRIMARY old references outside scripts? global Grep.Should not report unchanged ROADMAP? Migration makes "lands both remotes" stale, but diff doesn't update ROADMAP. User explicitly "any remaining two-remote assumption ... wrong docs". This qualifies. Root ROADMAP current operational lines 174,517 should update to one repo. Also docs/proposals current perhaps proposal awaiting not archive, but scope changed files? User says read changed files full, find remaining assumption anywhere. Could list root ROADMAP. But too many docs findings could be grouped. Should focus substantive.
+
+  Potential biggest hidden bug: `require_remote_repo` uses `git remote get-url "$REMOTE"` returns first URL only; multiple `remote.origin.url` values fetch uses all? Push default uses first? Git docs remote get-url --all. Pushurl definitely.
+
+  - install-bot repoints origin URL but doesn't clear `remote.origin.pushurl`; existing bot clone with stale pushurl will still push concrete2 despite fetch repoint. This makes direct realistic stale clone path even after migration installer. Mention install-bot line42-45 fails to remove pushurl. This is strongest integrated finding: installer claims repointed stale clone but pushes still old. Fix validate `--push --all`, clear stale pushurl or set to ORIGIN_URL.
+
+  - bot sync notes script could push wrong repo even if no rebase because sync_remote calls notes fetch only; review_leg may push via reviewer. But main direct rebase enough.
+
+  - check's remote_leg publishes before ci. Guard should called at cmd_check (and bot startup). Also ready.sh perhaps outside changed but one repo migration "hooks and docs move" not all scripts? `ready.sh` pushes notes and remote leg with origin. Not changed. But user specifically landing tooling train bot acceptance install push. Could note only those.
+
+  - acceptance.sh gets ORIGIN_URL from source stale clone and clones it; train build will refuse GitHub stale, so fails closed no push. But `do_clone` `git fetch` before build, no push. Fine.
+  - acceptance `ACCEPT_REPO` default static; if custom LAND_REPO not allowed due bad_env, okay. `ACCEPT_REPO` can be override independent and could inspect wrong run but default one. Fine.
+
+  - oracle release actual tag `legacy-compiler-final` on lambdaclass? Could verify web read-only network FetchURL public. User asks same sha. I could use FetchURL to release asset or GitHub API, read-only no state. Tools network. Make sure link not broken. FetchURL github release page and tag commit. I can check API URLs with FetchURL few. But primary task code review, not necessary? User explicitly republished release and broken links. I should verify public links perhaps use FetchURL GitHub API. Does network current accessible. `FetchURL` releases tag and tag ref API. Also file links anchors local already valid. Could use no changes. Perhaps `gh` not. FetchURL `https://api.github.com/repos/lambdaclass/concrete/releases/tags/oracle-legacy-compiler-final` and git ref tags/legacy-compiler-final. Also repository default branch and actions badge not. I can fetch.
+
+• Two stale operational documents still describe two repositories, and the installer does not clear a configured push URL. I’m doing a final pass over the oracle links and every push site before assigning findings.
+
+• Tag annotated need deref check commit. API git tag object could fetch.Oracle fine.
+
+  Should think through tests could fail due fixture `require_remote_repo` error message test expects "points at another repository". Actual die line: "$REMOTE is $url, not github... This clone points at another repository;" yes.
+
+  Potential fixture `LAND_REPO=test/repo` and local paths accepted. Good.
+
+  Potential bug require check `git remote get-url` in build before `valid_name` and `refs`, no issue.
+
+  Potential wrong error expectation push missing exit. set -uo not -e, if ! URL handles. fine.
+
+  Potential `push-both` CI wait return after push nonzero expected. Fine.
+
+  Lost safety property: old push-both CI wait no longer prevents mirror publish because no mirror, main already published before wait same before. okay.
+
+  - LAND_REPO can be malicious set to concrete2 and origin concrete2 passes, meaning stale clone plus old env both stale accepted. Migration requires LAND_REPO defaults and overridable test seam. A stale clone whose env still `LAND_REPO=unbalancedparentheses/concrete2` and origin old will pass new check and push wrong repo. This is extremely realistic: install-bot existing env kept stale. Train's check compares remote to `$REPO` override rather than fixed lambdaclass. Owner decision one repo, LAND_REPO should not be allowed to override repository for pushes or fixed separate expected repo constant. Changelog says other than LAND_REPO, so deliberate test seam. But request "stale clone could still push wrong repository": if stale clone also stale LAND_REPO, yes. install-bot specifically keeps existing ENVF with old LAND_REPO and only warns, then train checks old==old and lands old. Their warning line95 says train refuses remote that is not that repository (true but both old so no refuse). This is a critical bug! Should highlight. The intended safety property is prevent concrete2, not just match arbitrary LAND_REPO. Since LAND_REPO is environment test seam and legitimate tests use test/repo local path. Could enforce expected push repo fixed lambdaclass while GH repo override for fixtures? Fixtures local path exempt, so simplest require_remote_repo compare GitHub URL to constant `lambdaclass/concrete`, not `$REPO`, while GH uses LAND_REPO. Or disallow concrete2 always regardless LAND_REPO and require `$REPO` fixed for GitHub production. Tests use local path so unaffected. `push-both` fixtures LAND_REPO=test/repo and gh-stale compares mismatch expected, fixed also works. `LAND_REPO` could be different GitHub repo in tests? only test/repo with local remotes so fine. Best fix constant canonical repo for validation; keep LAND_REPO only gh test override. Or eliminate override outside test.
+
+  This combines with install-bot stale env. At install-bot lines92-96 kept existing `LAND_REPO=unbalanced...` and origin is repointed to lambdaclass, then mismatch causes refusal (not wrong push) because origin new and repo old. But a purely stale clone not installer old origin+old env pushes old. Installer repoint origin prevents wrong but breaks bot until manual env fix. Both issues. If install bot ORIGIN_URL override old? Not normal. Main safety check design arbitrary LAND_REPO is a bypass. I should report perhaps one finding: "Canonical repo is attacker/legacy-env configurable" at train100,143 and push54,66; old origin plus old LAND_REPO passes. Fix compare GitHub remotes to hard-coded lambdaclass/concrete (or reject archived repo independently) and migrate env. This is distinct from pushurl and check/bot missing guards. High severity.
+
+  Could say install-bot stale env causes migrated bot guaranteed refusal (if old env) and warning not repair; separate operational bug. But if fix constant canonical, existing old env still mismatch and refuses. Should have migration update env. User wants bugs with fixes. I can list install bot as additional medium: `install-bot.sh:92-96` existing stale LAND_REPO retained so re-running installer leaves timer unable to land. Fix rewrite exactly LAND_REPO line (preserving other config) rather than warning. But this behavior was deliberate "kept existing". Is it concrete bug? yes migration installer should migrate. But perhaps they chose fail closed and tell human. The task says install bot follows one repo. Warning tells set manually. Not necessarily bug if explicit. Avoid overreport unless important.
+
+  - require_remote_repo accepts non-GitHub URLs. A stale clone using SSH host alias e.g. `git@github-concrete2:unbalancedparentheses/concrete2.git` bypasses. But spec says "a GitHub remote URL must name LAND_REPO"; alias is GitHub remote URL semantically. Hard to resolve without network. Could restrict allowed protocols/hosts. But pushurl enough.
+
+  - `remote get-url` may apply insteadOf. If remote configured `github:unbalanced...` via insteadOf to `git@github.com:` get-url returns expanded? docs: get-url expands insteadOf yes. Good.
+
+  - Multiple URLs: get-url default first, pushes default first pushurl or first url? If multiple URLs and no pushurl, git push uses all? Documentation: remote.<name>.url multiple, push uses first? `git remote get-url --push --all` best.
+
+  - install-bot removing lambdaclass remote can mutate refs? read only review no run.
+
+  - `docs/decisions.md` says origin every clone etc. no.
+
+  - runner exposure doc security false: "push of any branch runs workflow file of that branch" root workflow `on.push.branches:[main]` so push any branch does not run CI, but branch-health workflow may not exist root. They claim every org member can put a job via pushing modified workflow to any branch; GitHub `push` event only runs if workflow on push includes branch. A member can modify CI `on` to all branches on their branch, yes runs modified workflow file of branch. Correct. `workflow_dispatch` can only dispatch workflow existing default branch? With write can alter. okay.
+
+  - workflow landing record LAND_REPO github.repository avoids wrong when fork PR? record only push main, fine.
+
+  - README badge branch default perhaps okay.
+
+  - ORACLE lock `url` new repository tag annotated commit checked. Good.
+
+  - docs LANDING configuration stale `LAND_CAMPAIGN_JOBS` old default vs actual ^Campaign. Preexisting inconsistency from earlier diff? It appears in REVIEW.diff context line with old regex unchanged. Not introduced. No.
+
+  - docs LANDING `both repositories` and `both mains` unchanged but now stale. Report one grouped finding at both lines perhaps file:line each requested. Root ROADMAP both remotes current should also update. Could group all stale docs under one bullet with locations. But user says list findings file:line with why fix. Could have each or one with multiple. 5-7 findings likely.
+
+  - .claude land example line34 wrong order `land --dry-run` preexisting. Not migration ignore.
+
+  - scripts/checks/landing_bot.sh docs says four-member but five preexisting changed line from four remains. It was already four while five prior, not migration. ignore.
+
+  - Test broken perhaps static test root no forced main grep sees line623 forced ci not main. fine.
+  - fixture main reset: after t1 land, report expected landed2 yes t8 and t1 then tm etc later report called before tm. okay.
+  - removal mirror changes fake GH calls no mirror calls, assertions only includes. fine.
+  - `landing_script` `gh-stale` created at start and no pushes, fine.
+  - `landing_bot` removal lambdaclass from loop all occurrences done.
+
+  - install-bot `ORIGIN_URL` no longer detects existing `~/concrete2` origin. Good.
+
+  - bot `MIRROR` removed but no references remain. good.
+
+  Potential lost review notes migration: `scripts/review/review.sh` has REMOTE default? Should read top relevant. It might default `LAND_REMOTE` and no require remote repo, so review notes can still push stale clone to old repo. User says "review notes were copied" but scope landing tooling. User explicitly any stale clone wrong push. `review.sh` unchanged still pushes origin, so stale clone can push notes to old repository. But not part of diff? Migration claims hooks/docs move and one repo every clone. `require_remote_repo` only train/push. AGENTS regular git push origin can also old repo, impossible tooling prevent all. Focus landing scripts. Bot and train check are direct expected guard.
+
+  - push-both obtains lock before remote check, creates state in stale clone but no push. Fine.
+  - dry-run `build` requires remote, no state. good.
+
+  Potential safety property lost: main moves between check and push in push-both: old primary preflight mirror removed, no `ls-remote` main before push; git non-force ensures fast-forward. good.
+  - `push-both` can push any BRANCH not just main, despite header "Publish main". existing BRANCH env old too. no.
+
+  - `require_remote_repo` message not prefix land/ci so tests generic. okay.
+
+  Potential exact check case `path="${url#*github.com[:/]}"` Bash pattern in parameter expansion: Is `[:/]` interpreted character class matching colon or slash yes. `*github.com[:/]*` wildcard matches first? `#` shortest prefix, if URL contains credentials with `github.com/` in username weird. Not relevant.
+  - URL `https://github.com/lambdaclass/concrete.git/` path after `%/` -> concrete.git then `%.git` -> concrete. good.
+  - ssh url with port `ssh://git@github.com:22/lambdaclass/concrete.git`: pattern sees github.com: then path `22/lambdaclass/concrete`, mismatch and refuses valid canonical. This is a false positive broken legitimate config. Does "GitHub remote URL must name LAND_REPO" support ssh port? Standard valid GitHub URL with port 22 should pass. Could report lower priority but not necessary. Fix parse URL robustly. More important no false negatives.
+  - `https://github.com:443/lambdaclass/concrete` similarly rejects valid. Not wrong push. I could mention as part URL parser insufficient but too many.
+  - host case bypass. Could combine into one finding "URL validation is not checking effective push destination" and examples pushurl, canonical override, alias. Better separate canonical override because different fix.
+
+  Potential require checks only URL and not actual repository if GitHub redirect renames? lambdaclass/concrete canonical actual.
+
+  Should verify `git remote get-url` push behavior documentation perhaps known. Could run read-only `git help` not needed. I can confidently state remote.<name>.pushurl overrides remote.<name>.url. Yes.
+
+  Should inspect current `git diff --check` read only? It reads diff no state. But no need. bash -n read-only could identify syntax. I can run `bash -n scripts...` safe. It does not change state. User allowed read-only commands. Use Bash only for genuinely shell semantics. Could also `git diff --check` no changes. But no need for response findings. They expect review only, tests not run. Could mention no tests run due read-only. Not necessary in response perhaps.
+
+  Should see REVIEW.diff exactly changed file list done. yes.
+
+  Could use `git status --short` read-only to ensure no changes created (I only fetch external). Not necessary.
+
+  Should assess whether VERDICT reject based high findings yes.
+
+  I need produce concise but enough 5-7 findings:
+  1. train.sh:100,137-145 + push-both.sh:54,59-67: safety compares against overridable LAND_REPO; stale old origin and old env passes, pushes archived. Fix canonical constant independent of GH override. This is strongest.
+  2. train.sh:139 and push-both.sh:59 + install-bot.sh:42-45: only fetch URL; pushurl stale bypass. Installer repoints url but leaves pushurl. Fix validate effective push URLs with `git remote get-url --push --all`, clear/set pushurl. Could cite install bot separately or same.
+  3. train.sh:521-566 / 435: check lacks require before remote_leg push. A stale clone can publish wip/land to archived even though build ci land guarded. Fix guard in cmd_check before starting legs (and remote_leg defense) and test.
+  4. bot.sh:139-143,239,450-490: bot has no require remote repo and auto-rebase pushes before train build. Fix share validator and invoke at startup before sync/rebase/notes; test stale origin rebase/tick. Could mention notes.sh pushes too line77 after rebase. This is distinct.
+  5. install-bot.sh:92-96 existing stale env left: bot fails after origin repoint. Is this worth? It might be intentional manual warning; not necessarily reject. I already have 4 code findings. Could add if confident.
+  6. docs/LANDING.md:416 and 491 stale both repos/mains; fix one. ROADMAP.md:174,517 stale both remotes. Could combine one "Docs still state old topology" with multiple lines and fix. User asks file:line perhaps one per file. At least LANDING and ROADMAP two bullets. This may be enough 6.
+  7. SELF_HOSTED contradictory current nightly no root vs descriptions. Not central, skip to avoid noise.
+
+  Potential finding on `install-bot` stale env perhaps include in #1 as compounding but be precise: pure stale clone with old origin and old LAND_REPO. If installer repoints origin, it warns stale env and fails closed (availability), not wrong push. I could note additional fix migrate env to avoid broken installed bot but not make standalone. Good.
+
+  Could there be a more severe test bug due LAND_REPO canonical override was intended for tests. Fix compare remote to fixed canonical breaks fixture gh-stale still correct, local test okay. fine.
+
+  Do I need line citations exact current files. Yes.
+  Finding 1 line 143 uses REPO set100. push 54/66. Mention both. Why: environment override intentionally supported, so safety property not canonical. Fix `LAND_EXPECTED_REPO=lambdaclass/concrete` not env, compare all GitHub URLs to that; optionally ensure REPO matches in non-fixture. Test `LAND_REPO=unbalancedparentheses/concrete2 LAND_REMOTE=gh-stale ...` refused.
+
+  Finding 2 line 139 fetch. Test with origin URL lambdaclass + pushurl concrete2, ensure no push. Installer clear pushurl. Good.
+
+  Finding 3 check no require and `remote_leg` push. Note remote review can push too but no need. `cmd_check` calls require_train etc but no remote. `build` prior normally guards stale, but existing train state created before remote becomes stale, direct check; or change origin after build. "A train built before origin became stale" precise. A stale clone could have existing state and run check. `remote_leg` default enabled only if `~/bin/concrete-remote` executable, production yes. Push occurs. Fix entry guard.
+
+  Finding 4 bot auto-rebase. `bot.sh` rebase command starts acquire lock then sync/rebase no train guard. Even `tick` sync and rebase. Push branch and notes. Fix central shared helper. Test stale bot.
+
+  Finding 5 docs. Root ROADMAP operational line says move lands both remotes but move already done historical acceptance perhaps criterion historical. Still current root doc and wrong. Could group with docs LANDING. "Update current operational docs (not archives)" good.
+
+  Potential "broken link" none found. Oracle verified so no finding. Don't mention unless short note optional. User wants findings and verdict exactly end. I can say no link issue not needed.
+
+  Do I need mention review not tests due read-only? Could preface "Findings (read-only; no tests run)." This is okay. They didn't ask tests. Perhaps no.
+
+  Make sure exactly one line verdict at end no text after. Use bullets not numbered perhaps severity labels. Could include 6 findings.
+
+  Should decide install bot availability as seventh:
+  `install-bot.sh:92-96` explicitly warns existing ENVF old, does not fix. On actual migration existing install has LAND_REPO=unbalancedparentheses/concrete2. After origin repointed, every build/ci/land refuses because REPO old vs URL new, so bot cannot operate until manual edit. The installer's purpose migrate existing clone and env. This is concrete broken migration, even if warning. User asks broken docs, bugs. Should list. Fix replace LAND_REPO line in existing ENVF with canonical (or fail installer with actionable nonzero instead of claiming installed). It says installed at SHA and enable command despite known bad config. This is real. Add as P2. Note if #1 fixed canonical, still gh query old so broken. Good.
+
+  Could finding docs self hosted not needed.
+
+  Total 7:
+  1 canonical override safety
+  2 pushurl
+  3 check
+  4 bot
+  5 installer env
+  6 LANDING stale
+  7 ROADMAP stale
+  Might be viewed overlong but fine. Could group docs into one bullet with both file lines resulting 6. They want file:line list, can one bullet two locations.
+
+  Potential duplicate #1 and installer env #5 related but distinct safety vs availability.
+
+  Order severity:
+  - pushurl and canonical override (P1)
+  - unguarded check and bot (P1)
+  - installer broken (P2)
+  - docs (P2/P3)
+  No requirement severity labels, can use bold.
+
+  Should avoid claiming `require_remote_repo` error string tests expected mismatch perhaps no.
+
+  Do I need run no state commands? Already enough. Respond now.
+
+• - `scripts/land/train.sh:100,137-145` and `scripts/push-both.sh:54,59-67` — the stale-clone guard compares the remote against overridable `LAND_REPO`, not the canonical repository. A genuinely stale clone with both `origin=…/unbalancedparentheses/concrete2` and the old `LAND_REPO=unbalancedparentheses/concrete2` passes validation and pushes to the archived repository. **Fix:** validate GitHub push destinations against a non-overridable `lambdaclass/concrete` constant; keep `LAND_REPO` only as the `gh` test override. Add this old-origin/old-environment combination as a refusal test.
+
+  - `scripts/land/train.sh:139`, `scripts/push-both.sh:59`, and `scripts/land/install-bot.sh:42-45` — only `remote.<name>.url` is checked. Git pushes instead to `remote.<name>.pushurl` when configured, so a clone can fetch from lambdaclass/concrete while still pushing to concrete2. The installer’s “repointing” also leaves that push URL untouched. **Fix:** validate every effective destination with `git remote get-url --push --all`; when migrating the bot clone, remove or replace stale `pushurl` entries. Add a differing-fetch/push-URL fixture.
+
+  - `scripts/land/train.sh:435,521-566` — `check` never calls `require_remote_repo`, although its default remote leg pushes `wip/land-*`. An existing train whose origin has become stale can therefore publish to concrete2 before `ci` or `land` would refuse it. **Fix:** validate before starting any check legs, ideally also inside `remote_leg` as defense in depth, and cover `check` in `scripts/checks/landing_script.sh`.
+
+  - `scripts/land/bot.sh:139-143,239,450-490` — the bot has no repository validation before fetching, auto-rebasing, pushing rebased branches, or publishing notes. In particular, `bot.sh rebase` reaches the push at line 239 without invoking any guarded train command. **Fix:** run the shared canonical-remote check at bot startup before `sync_remote`, and test stale-origin `tick` and `rebase` with assertions that no branch or note moved.
+
+  - `scripts/land/install-bot.sh:92-96` — an existing installation’s old `LAND_REPO=unbalancedparentheses/concrete2` is retained with only a warning. After origin is repointed, the installed bot cannot build, dispatch, or land because its GitHub repository and remote disagree, yet installation reports success. **Fix:** migrate the existing `LAND_REPO` line to lambdaclass/concrete, or fail installation explicitly until it is corrected.
+
+  - `docs/LANDING.md:416,491` and `ROADMAP.md:174,517` — current operational documentation still requires write access to “both repositories,” displays “both mains,” and says the move lands on “both remotes.” **Fix:** change these to the single lambdaclass/concrete main; leave only archival documents describing the former mirror topology.
+
+  VERDICT: REJECT
+
+To resume this session: kimi -r session_ea4928f2-1aae-4c8d-a67d-1f0186c89a84

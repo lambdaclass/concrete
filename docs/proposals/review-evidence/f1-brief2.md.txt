@@ -1,0 +1,116 @@
+You are the writer for branch wip/stack-tls-reach of the Concrete repo, in this clone (~/projects/clones/wip-stack-tls-reach), head ded66d31f (your round 1, ISS-0028). Round 2: full-access reviews by Codex and agy both REJECTED it. Their findings are quoted verbatim below. Fix ALL of them in new commits on wip/stack-tls-reach (do not amend, do not push), following their long-term fixes, in particular:
+- the run check parses the debugger's actual operand forms (GDB's unbracketed `fs:0x28`, `BYTE PTR fs:0x100000`), fails closed on any unparsed memory operand, and has a control using real GDB disassembly through stack_measure.py, including an unavailable-base failure;
+- segment overrides are identified before address-provenance classification: every register-relative fs/gs operand (rsp, rbp, rip, any register) is refused unless its full effective address is modelled; controls for each;
+- the reach check covers the whole accessed byte interval (width, wrap-around), with boundary controls for positive and negative offsets and each width;
+- refuse writes to segment registers and instructions with more than one memory operand; fix the `first`-operand detection to use the match position;
+- the long-term premise: on x86_64-linux, gs is not a thread-pointer base (refuse gs: outright); fs: non-negative offsets bounded by the TCB layout, negative offsets bounded by the binary's PT_TLS p_memsz (zero when there is no PT_TLS), derived from the linked binary's program headers, with the runtime-separation obligation stated precisely as a premise. If deriving PT_TLS needs a tool the gate lacks, use what the gate already runs (llvm-readelf/objdump in the devshell) and fail closed.
+
+OWNER RULE (2026-11-08, verbatim: "ALWAYS tell the reviewrs to do the best long term thing rather than cuitting corners"): judge and fix by the best long-term design. Never cut corners for speed, a smaller diff or fewer rounds. As a reviewer, report any shortcut, containment patch or corner cut as a real finding and say what the long-term fix is. As a writer, implement the structural fix, not a containment patch; if staging is truly unavoidable, record the long-term design and name its roadmap row.
+
+Run inside `nix develop`: the stack-bound controls of scripts/checks/compiler/slice0_artifacts.sh and the real artifacts (bounded; if the full gate is too heavy for this host, run the stack legs and say what you skipped), scripts/checks/issues.sh. Update ISS-0028's closure_condition, the docstring premises, Concrete/README.md and the changelog fragment. End with a short report per finding, controls and results.
+
+=== Codex review (verbatim) ===
+codex
+The repository was readable. I read `REVIEW.diff`; the touched files `Concrete/README.md`, `ISSUES.tsv`, `changelog.d/2026-11-08-stack-tls-reach.md`, `scripts/checks/compiler/slice0_artifacts.sh`, `scripts/checks/lib/stack_access.py`, and `stack_bound.py`; plus `stack_measure.py`, `stack_measure_lldb.py`, `slice0_native.sh`, `bounded.sh`, `docs/PHILOSOPHY.md`, and relevant sections of `docs/decisions.md` and `ROADMAP.md`.
+
+Three correctness findings block acceptance:
+
+1. **High — real GDB absolute segment operands are silently skipped.** `scripts/checks/lib/stack_access.py:39` recognizes only bracketed memory operands. Local GDB disassembly of libc produced `add rax,QWORD PTR fs:0x0`. Direct probes with `mov rax,QWORD PTR fs:0x28` and `mov BYTE PTR fs:0x100000,0x0` returned `[]` without requesting any segment register. Thus missing `fs_base`/`gs_base` does not fail closed for these forms: the lookup never happens.
+
+   **Long-term fix:** parse actual debugger operand forms, including unbracketed segment offsets, and reject unparsed memory accesses. Add a control using actual GDB disassembly through `stack_measure.py`, including an unavailable-base failure. The new synthetic bracketed control at `slice0_artifacts.sh:361` misses this production failure.
+
+2. **High — register-relative fs/gs accesses bypass the segment restriction when the register is rsp or rbp.** `scripts/checks/lib/stack_bound.py:226` checks the segment only inside `if not base`. The bounded probe `mov byte ptr gs:[rsp - 0x8], 0x0; ret` was accepted with **bound 8**, although its effective address includes GS base. The stated separation premise does not constrain `GS.base + rsp - 8` to the modeled stack slot; modular address arithmetic can place it deeper in the stack.
+
+   **Long-term fix:** identify segment overrides before classifying address provenance. Refuse every register-relative fs/gs operand unless its complete effective address is modeled. Add rsp, rbp, RIP, and ordinary-register controls for both segments. The current implementation contradicts the change’s claimed refusal of fs/gs through registers.
+
+3. **High — the reach check excludes only the first byte, leaving multi-byte accesses unsound under the stated premise.** `scripts/checks/lib/stack_bound.py:235` tests `abs(k)` without access width. `mov qword ptr fs:[0x100], 0x0; ret` was accepted with **bound 0**, but accesses offsets `0x100..0x107`. A stack beginning at base plus `0x101` satisfies “every stack byte lies farther than `TP_REACH`” while overlapping this store.
+
+   **Long-term fix:** model the complete byte interval, including width and address wrapping, and prove that interval disjoint from the stack under the premise. Add boundary controls for positive and negative offsets and supported operand widths. Increasing the constant alone preserves the defect at the new boundary.
+
+The finite reach policy can support a conditional bound; deriving a TLS allocation size from the binary alone would not establish its runtime separation from the stack. However, `0x100` is justified here only by observed instructions and canary headroom, not a target/runtime contract. The lasting model should state the full address interval and the precise runtime separation obligation.
+
+GDB’s register reader propagates lookup failures when invoked; LLDB is used only for AArch64 and does not need fs/gs bases. AArch64 thread-pointer reads (`mrs`) and x86 string instructions are outside the static whitelist, so I found no corresponding accepted implicit-access escape. Ordinary negative displacement refusal and the canary control behaved as intended.
+
+Only small direct Python probes and bounded local GDB disassembly were run. No repository files were changed, and no git, network, builds, or full artifact gate were used. Real-artifact bounds were not revalidated. These repairs do not require choosing a language owner decision.
+
+REPOSITORY: readable
+VERDICT: REJECT
+62,205
+
+=== agy review (verbatim) ===
+I was able to read the repository.
+
+**Files read:**
+
+---
+
+### Findings
+
+#### 1. High — `stack_access.x86_addresses` still returns `[]` on every displacement-only `fs:`/`gs:` operand in real GDB disassembly, and the new control mocks `llvm-objdump` syntax instead of GDB's
+- **Location:** [scripts/checks/lib/stack_access.py:39-48](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rev-f1b/src/scripts/checks/lib/stack_access.py#L39-L48), [scripts/checks/compiler/slice0_artifacts.sh:352-369](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rev-f1b/src/scripts/checks/compiler/slice0_artifacts.sh#L352-L369), [ISSUES.tsv:22](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rev-f1b/src/ISSUES.tsv#L22)
+- **Problem:** `stack_measure.py` feeds `insn["asm"]` from GDB's `arch.disassemble(pc)[0]` (`set disassembly-flavor intel`) into [`x86_addresses`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rev-f1b/src/scripts/checks/lib/stack_access.py#L30-L65). Unlike `llvm-objdump`, GDB's Intel disassembler (`libopcodes`) prints displacement-only memory operands **without square brackets**:
+  - `mov byte ptr fs:[0x100000], 0` $\to$ `'mov    BYTE PTR fs:0x100000,0x0'`
+  - `mov rax, qword ptr fs:[0x28]` $\to$ `'mov    rax,QWORD PTR fs:0x28'`
+  - `mov rax, qword ptr fs:[-0x28]` $\to$ `'mov    rax,QWORD PTR fs:0xffffffffffffffd8'`
+  - `movabs rax, qword ptr fs:[0x100]` $\to$ `'movabs rax,fs:0x100'`
+  - `mov byte ptr [0x100000], 0` $\to$ `'mov    BYTE PTR ds:0x100000,0x0'`
+
+  Because [`x86_addresses`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rev-f1b/src/scripts/checks/lib/stack_access.py#L39) only matches `r"(?:(\w\w):)?\[([^\]]*)\]"`, it never matches any displacement-only `fs:`, `gs:`, or `ds:` operand in real GDB output and still returns `[]`. Running `stack_measure.py` under `gdb` on a binary that sets `fs_base = rsp - 0x100080` and executes `mov byte ptr fs:[0x100000], 0` (the exact ISS-0028 scenario) still prints `measured 0` instead of `measured 128`. Furthermore, an unparsed `PTR` or `<seg>:` operand without `[...]` silently returns `[]` ("no access") instead of failing closed.
+  The control `x86-run-thread-pointer-beyond-reach` in [slice0_artifacts.sh:352-369](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rev-f1b/src/scripts/checks/compiler/slice0_artifacts.sh#L352-L369) passed only because it passed the `llvm-objdump`-formatted string `"mov byte ptr fs:[0x100000],0x0"` with a synthetic Python `reg` callback instead of disassembling/running under GDB.
+- **Long-term fix:**
+  1. In [`x86_addresses`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rev-f1b/src/scripts/checks/lib/stack_access.py#L30-L65), parse GDB's unbracketed displacement-only memory operands (`(?:fs|gs|ds|es|cs|ss):0x[0-9a-f]+` / `[-+]?0x[0-9a-f]+`) in addition to bracketed `[...]` operands, and fail closed (`raise ValueError`) if `ptr` or any `<seg>:` prefix remains in `asm` that was not parsed as a memory operand.
+  2. Make the control in [slice0_artifacts.sh](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rev-f1b/src/scripts/checks/compiler/slice0_artifacts.sh#L352-L369) load-bearing against GDB itself (either running `stack_measure.py` on a tiny control binary or feeding GDB's own `arch.disassemble` string and `reg` reader on `x86_64-linux`).
+
+#### 2. High — `stack_bound.py` accepts `fs:`/`gs:` with `rsp` or `rbp` (`fs:[rsp - 0x8]`, `gs:[rbp - 0x8]`) and ignores the segment base
+- **Location:** [scripts/checks/lib/stack_bound.py:223-253](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rev-f1b/src/scripts/checks/lib/stack_bound.py#L223-L253)
+- **Problem:** In [`x86_inst`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rev-f1b/src/scripts/checks/lib/stack_bound.py#L214-L300), the segment check (`segment = re.search(r"\b[fg]s:\s*$", ops[:m.start()])`) is placed inside `if not base:`, where `base = [r for r in regs if r in X86_STACK]`. When `regs` contains `rsp` or `rbp` (e.g. `mov byte ptr fs:[rsp - 0x8], 0x0` or `mov qword ptr gs:[rbp - 0x8], rax`):
+  1. `base` is non-empty, so `if not base:` is skipped.
+  2. Line 248 (`size = re.search(r"(\w+) ptr\s*(?:\w+:)?\s*$", ops[:m.start()])`) explicitly allows any optional `(?:\w+:)?` segment prefix before `[rsp ...]` / `[rbp ...]`.
+  3. Line 252 computes the accessed depth as `st.d - k` (or `frame_depth(st.fp, what) - k`), ignoring `fs:`/`gs:` completely.
+
+  This causes two distinct soundness bugs in [`stack_bound.py`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rev-f1b/src/scripts/checks/lib/stack_bound.py):
+  - **Uncounted stack depth under the stated premise:** With `sp0 = 0x7fffffffe000` and `fs_base = (-0x78) mod 2^64` (so `|stack - fs_base| >> TP_REACH`, satisfying the premise), `mov byte ptr fs:[rsp - 0x8], 0x0; ret` writes to `(fs_base + rsp - 8) mod 2^64 = sp0 - 128`, yet `stack_bound.py` reports `bound 8` (and with `fs_base = (-0x1000) mod 2^64` it writes 4104 bytes below `rsp`, bypassing the red-zone check).
+  - **Corrupted `st.w` and `st.saved` tracking even with a normal Linux `fs_base`:** At runtime `mov qword ptr fs:[rsp], 0x0` writes to `fs_base + rsp` (not `[rsp]`), but `stack_bound.py` marks the stack slot `[rsp .. rsp+7]` as written (`st.w`) and clears any saved frame-pointer slot in `st.saved` at `[rsp .. rsp+7]`. Consequently, `push rbp; mov rbp, rsp; push rbp; mov qword ptr fs:[rsp], 0x0; pop rax; pop rbp; ret` is accepted (`bound 16`), popping the intact saved `rbp` into `rax`; similarly, `mov qword ptr fs:[rsp - 0x8], rax` followed by `mov rax, qword ptr [rsp - 0x8]` is accepted (`bound 8`), reading uninitialized or residual callee stack bytes.
+- **Long-term fix:** Check for any segment prefix before `if not base:`, remove `(?:\w+:)?` from line 248, and refuse any segment prefix on a stack/frame-pointer operand or any register-based operand (`fs:[rsp - 0x8]`, `gs:[rbp - 0x8]`, `fs:[rax]`, `fs:[rip + 0x10]`, or any segment override other than the explicitly modelled thread-pointer form). Add negative controls in [slice0_artifacts.sh](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rev-f1b/src/scripts/checks/compiler/slice0_artifacts.sh) for `fs:[rsp - 0x8]`, `fs:[rax]`, and `fs:[rip + 0x10]`.
+
+#### 3. Medium — Segment register writes (`mov fs, eax`, `mov gs, eax`) and multi-memory-operand destination detection are not refused in `stack_bound.py`
+- **Location:** [scripts/checks/lib/stack_bound.py:256-300](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rev-f1b/src/scripts/checks/lib/stack_bound.py#L256-L300)
+- **Problem:**
+  1. `mov` is in `X86_PLAIN`, and [`x86_inst`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rev-f1b/src/scripts/checks/lib/stack_bound.py#L214-L300) accepts `mov fs, eax` and `mov gs, eax` (`bound 0`), which reload the segment selector in user mode (e.g. zeroing `FS.base` when `eax = 0` or loading a descriptor base) and invalidate the premise that `fs`/`gs` hold fixed entry bases.
+  2. At line 256, `first = ops.lstrip().find("[") < ops.find(",") if "," in ops else True` checks the position of the *first* `[` in `ops` rather than `m.start()`. When a first operand uses `[...]` (such as `fs:[0x28]` or `[rip + 0x10]`) and a second operand is `[rsp - 0x8]` (e.g. `mov qword ptr fs:[0x28], qword ptr [rsp - 0x8]` in synthetic disassembly), `first` evaluates to `True` for the second operand too, treating a stack read as `mode = "w"` (a stack write) and marking unwritten bytes as written in `st.w`.
+- **Long-term fix:** Refuse instructions that write to segment registers (`cs`, `ds`, `es`, `fs`, `gs`, `ss`), refuse instructions in `X86_PLAIN` with more than one memory operand, and use `m.start() < ops.find(",")` for `first`.
+
+#### 4. Medium — Boundary mismatch between `abs(k) > TP_REACH` and the stated premise (`|stack - base| > TP_REACH`) for multi-byte accesses
+- **Location:** [scripts/checks/lib/stack_bound.py:42-45](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rev-f1b/src/scripts/checks/lib/stack_bound.py#L42-L45), [scripts/checks/lib/stack_bound.py:229-241](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rev-f1b/src/scripts/checks/lib/stack_bound.py#L229-L241), [Concrete/README.md:586](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rev-f1b/src/Concrete/README.md#L586)
+- **Problem:** The stated premise is that *every stack byte lies farther than `TP_REACH` bytes from each thread-pointer base, in either direction* (i.e. $|s - \text{base}| \ge \text{TP\_REACH} + 1 = 257$). However, [`x86_inst`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rev-f1b/src/scripts/checks/lib/stack_bound.py#L233-L241) only checks `abs(k) > TP_REACH` on the starting displacement `k` and `continue`s before parsing the operand's `X86_SIZE` width (lines 248-250). A multi-byte access such as `mov qword ptr fs:[0x100], rax` has `k = 0x100 <= TP_REACH` (accepted with `bound 0`), but touches bytes `fs_base + 0x100 .. fs_base + 0x107` (distances `256 .. 263`), so bytes `fs_base + 257 .. fs_base + 263` can lie on the stack while the stated premise holds. (The same applies to `rip`-relative operands, where `rip` is `next_pc = addr + insn_len` and the access spans `size` bytes, and to `fs:[]` with empty brackets where `terms = []` gives `k = 0`.)
+- **Long-term fix:** Require non-empty `terms`, parse the operand size `sz = X86_SIZE[size.group(1)]` for all memory operands (not only stack-based ones), and require the entire accessed byte range `[k, k + sz - 1]` to lie within the reach bound (`-TP_REACH <= k` and `k + sz - 1 <= TP_REACH`).
+
+#### 5. Medium — Long-term model of `TP_REACH`, `gs:` on `x86_64-linux`, and `PT_TLS`
+- **Location:** [scripts/checks/lib/stack_bound.py:42-46](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rev-f1b/src/scripts/checks/lib/stack_bound.py#L42-L46), [scripts/checks/lib/stack_bound.py:203-205](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rev-f1b/src/scripts/checks/lib/stack_bound.py#L203-L205), [Concrete/README.md:586](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rev-f1b/src/Concrete/README.md#L586)
+- **Problem:**
+  1. **`gs:` is not a thread-pointer base on `x86_64-linux`:** The only x86 target in `TARGETS` is `x86_64-linux`. Under the System V x86-64 Linux ABI, `%fs` is the thread pointer (`FS.base` points to the TCB), whereas `%gs` is unused in user space and has `GS.base = 0x0` (the null page). Describing `gs` as a "thread-pointer base" on `x86_64-linux` and exempting `gs:[-0x100 .. 0x100]` is inaccurate and unnecessary; `gs:` should be refused outright on `x86_64-linux`.
+  2. **Arbitrary `TP_REACH = 0x100` vs. binary TLS metadata and ABI TCB layout:** Under x86-64 ELF Variant II TLS, static TLS variables (`.tdata`/`.tbss`) lie at *negative* offsets `[FS.base - tls_memsz, FS.base)` whose bound is given by the binary's `PT_TLS` program header (`p_memsz`), while the ABI TCB header (`tcbhead_t`, including the stack canary at `fs:0x28`) lies at small *non-negative* offsets `[FS.base, FS.base + TCB_SIZE)`. In slice 0, binaries have no `PT_TLS` header (so negative `fs:` offsets have no reason to be accepted at all), and once TLS exists (or if linked libc/runtime uses `PT_TLS`), a magic `0x100` is both too permissive when `PT_TLS` is absent and too small when `PT_TLS` exceeds 256 bytes.
+- **Long-term fix:** Refuse `gs:` on `x86_64-linux`. For `fs:` on `x86_64-linux`, bound negative offsets `[ -tls_size, 0 )` by the binary's `PT_TLS` `p_memsz` (0 when the binary has no `PT_TLS` segment) and bound non-negative offsets `[ 0, TCB_REACH )` (or specifically the TCB fields / `0 .. 0x70`) above `FS.base`, so the premise is tied to the actual ELF TLS/TCB layout rather than a symmetric magic constant around both `fs` and `gs`.
+
+---
+
+### Answers to the Review Questions
+
+1. **Can any `fs`/`gs` operand still reach the stack uncounted?**
+   - **Yes:**
+     - `fs:[rsp - k]` and `gs:[rbp - k]` bypass `if not base:` in [`stack_bound.py:224`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rev-f1b/src/scripts/checks/lib/stack_bound.py#L224), match `(?:\w+:)?` at line 248, and are accounted as if segment base were 0 (Finding 2).
+     - In the run check, GDB prints displacement-only operands without brackets (`BYTE PTR fs:0x100000,0x0`), so [`stack_access.x86_addresses`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rev-f1b/src/scripts/checks/lib/stack_access.py#L39) returns `[]` and counts nothing (Finding 1).
+     - Multi-byte accesses at `k = TP_REACH` (e.g. `mov qword ptr fs:[0x100], rax`) touch bytes up to `TP_REACH + 7` from `fs_base` (Finding 4).
+     - `mov fs, eax` / `mov gs, eax` are accepted by `stack_bound.py` and can change the segment base mid-function (Finding 3).
+   - **AArch64 thread-pointer equivalents:** Safe. AArch64 reads `tpidr_el0` / `tpidrro_el0` via `mrs`, which is not in `A64_PLAIN` and is refused; any subsequent register-indirect load/store through that register is also refused because only `sp`, `x29`, and `adrp`/`adr` provenance registers (`st.g`) may base a memory access.
+2. **Is the premise precise and is `TP_REACH` justified, and is it the right long-term model?**
+   - No: see Findings 4 and 5 (`gs` is `0x0`, not a thread-pointer base on `x86_64-linux`; the premise omits access width; negative `fs:` offsets belong to `PT_TLS` which is 0 when absent, while positive offsets belong to the TCB header).
+3. **Does the debugger glue provide `fs_base`/`gs_base`, failing closed when absent?**
+   - On `x86_64-linux`, GDB provides architectural registers `$fs_base` and `$gs_base` (and if absent, `(unsigned long) $name` on a `void` convenience variable raises `gdb.error: Invalid cast`, which `stack_measure.py` catches and reports as `error ...`, though `gdb.selected_frame().read_register(name)` is cleaner and avoids convenience variables altogether). On `aarch64-macos`, `stack_measure_lldb.py` calls `a64_addresses`, which never queries `fs_base`/`gs_base`. However, because of Finding 1, `stack_measure.py` **never actually calls `reg("fs_base")` or `reg("gs_base")`** on displacement-only `fs:`/`gs:` instructions in GDB.
+4. **Are the controls load-bearing?**
+   - No: `x86-run-thread-pointer-beyond-reach` tests `llvm-objdump` bracketed syntax with a mock `reg` callback rather than GDB's unbracketed disassembly (`BYTE PTR fs:0x100000,0x0`), masking Finding 1; and there are no `stack_bound.py` controls for `fs:[rsp - 0x8]`, `fs:[rax]`, `fs:[rip + 0x10]`, or negative beyond-reach displacements.
+5. **Any regression to existing bounds?**
+   - None on the 64 slice-0 disassemblies (none contain `fs:` or `gs:` operands).
+
+REPOSITORY: readable
+VERDICT: REJECT

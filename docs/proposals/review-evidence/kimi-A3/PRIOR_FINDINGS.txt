@@ -1,0 +1,13 @@
+• Prior findings 1, 3 and 4 are resolved. Finding 2’s precedence order is corrected, but its fail-closed requirement remains incomplete as described below.
+
+  1. **`.githooks/pre-push:39`, `scripts/land/lib.sh:167-170` — the hook expands `insteadOf` a second time.** Git passes the already-rewritten transport URL as `$2`, but `land_url_bad` runs `git ls-remote --get-url` on it again. With cyclic rules rewriting `lambdaclass/concrete.git` to `someone/else.git` and vice versa, a direct-URL push goes to `someone/else`, while the hook rewrites that URL back to `lambdaclass` and accepts it. The named-remote check does not protect direct-URL pushes. **Fix:** validate `$2` as an already-resolved URL without applying `insteadOf` again; keep expansion only for raw URLs such as installer inputs. Add a direct-URL hook regression with two rewrite rules.
+
+  2. **`scripts/push-both.sh:86-88` — a literal `PRIMARY` URL bypasses this guard.** When `git remote get-url "$PRIMARY"` fails, the loop continues. Unlike the mirror, the primary is never subsequently required to be a configured remote, so `PRIMARY=https://github.com/someone/else.git` reaches `git push` at line 142. This relies entirely on the pre-push hook, which may be disabled and which runs after Git’s initial remote communication. **Fix:** require `PRIMARY` to resolve through `land_remote_bad`, or explicitly validate literal URLs with `land_url_bad` if those are intended to be supported. Add a literal-foreign-`PRIMARY` test with a logging Git shim.
+
+  3. **`scripts/land/lib.sh:111-119` — failed SSH resolution is not fail-closed.** Both the `GIT_SSH` branch and the shell-command branch substitute the original host whenever `ssh -G` fails or prints no hostname. Thus an explicit `GIT_SSH_COMMAND`, `core.sshCommand`, or wrapper named `ssh` can remain unverified while `github.com` is accepted. **Fix:** retain the original-host fallback only when the default `ssh` is unavailable; return failure for explicit overrides and for any attempted query that fails or yields no hostname. Add a regression using an SSH stub that fails `-G`.
+
+  No additional Bash 3.2/BSD syntax defect was found by inspection. Tests were not run, per the read-only constraint.
+
+  VERDICT: REJECT
+
+To resume this session: kimi -r session_286f7df7-3780-4bf3-926a-3002f7018f64

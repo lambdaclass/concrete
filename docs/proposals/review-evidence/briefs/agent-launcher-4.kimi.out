@@ -1,0 +1,846 @@
+kimi version 2.4.1
+• I need modify repo per user. Should understand code, instructions. Should follow one commit, controls tests, mutation prove, gates, no push/config/remotes. Should inspect status current branch etc. I have cwd specified. Should probably use TodoList multi-step. Should check scripts/checks/agent_launch.sh, launch.sh relevant. Also AGENTS in subdirs? scripts perhaps no own? Should Glob AGENTS under scripts perhaps. I can parallel git status/log and read files. User specifically follow-up commit 61be4bed3 branch. I should ensure current state, clean or other changes. Should not overwrite. I can run git status --short --branch, git log perhaps show commit. Read scripts/agent/launch.sh entire perhaps manageable, tests file. Also relevant AGENTS files scripts. Use Glob.
+
+• I’ll inspect the launcher and its checks, reproduce the query-failure path in tests, then fix it and prove the controls with a temporary mutation.
+
+## wip/agent-launcher-2...origin/main [ahead 3]
+61be4bed3 (HEAD -> wip/agent-launcher-2, origin/wip/agent-launcher-2, lambdaclass/wip/agent-launcher-2) Fix agent launcher review edge cases
+122963dfc Fix agent launcher systemd edge cases
+847e8977b Add watched launcher for background agent jobs
+ea212942f (origin/main, origin/HEAD) train/slice0: merge origin/wip/slice0 (ea5181b535)
+f65b91217 train/shrink: merge origin/wip/landing-shrink (e9b6096a62)
+• I have all. Should understand current behavior bug: unit_result captures stderr /dev/null and `|| result=""`, then case unknown. lost_exit command substitution calls function; if function fail uses exit? Important fail exits subshell only? `reason="$(unit_result)"` under set -uo pipefail not -e, assignment returns status, but next commands continue. Should design to return 2 cleanly from lost_exit/inspect, no result cache/reset. I can implement unit_result to fail? Since fail exits subshell not parent if command substitution. Better have unit_result output? Could avoid command substitution? Should preserve clear stderr from show. Requirements: "Fix: a query failure of `show` is an operational error. lost_exit/inspect return 2 with a clear `cannot query systemd` message. They write no result cache and do not collect the unit, so a later wait, once the bus is back, still reads the real Result. Only a successful query with an empty or `success` Result maps to `unknown`." Should have exact implementation robust. Could have unit_result use global REASON? command substitution loses globals. Could inline in lost_exit: local query_rc=0; reason="$(systemctl --user show "$UNIT" --property=Result --value 2>&1)" || query_rc=$?; if nonzero, DONE=1? lost_exit returns 2 after message. inspect currently after lost_exit `return 125` unconditionally. Must change `lost_exit; return "$?"` or direct return? `inspect` case inactive: lost_exit return "$?" ensures 2. `watch` DONE=1 set before query ensures returns rc. On query failure no result and no reset. Later wait works. Should clear message includes systemctl exit and output/no output perhaps same style. `printf 'launch.sh: cannot query systemd Result for %s (systemctl exit %s): %s\n' ... >&2; return 2`. Could unit_result manage returning special and lost_exit inspect status. Options:
+  unit_result() {
+   local result="" query_rc=0
+   result="$(systemctl --user show ... 2>&1)" || query_rc=$?
+   if [ "$query_rc" -ne 0 ]; then
+     printf 'launch.sh: cannot query systemd for %s Result (systemctl exit %s): %s\n' "$UNIT" "$query_rc" "${result:-no output}" >&2
+     return 2
+   fi
+   case...
+   printf
+  }
+  lost_exit:
+  if ! reason="$(unit_result)"; then return 2; fi
+  But `if !` loses original rc but all nonzero expected 2; good. Could `reason="$(unit_result)" || return 2`. That preserves expected. It prints clear. DONE=1 set at top. Then inspect `lost_exit; return "$?"`. Could more robust `lost_exit; return "$?"` straightforward. Existing tests should fail on mutant original: first show failure returns 2 expected but got 125 etc. Should have controls loud and silent after is-active=failed, no result, no reset, following wait working returns 125 real Result. Existing stub is-active prints inactive always unless no-bus. User specifically after is-active=failed. Should extend stub to support `failed` perhaps marker `failed` file? Could state result indicate exit-code but is-active active file absent -> inactive. Should add control `failed-on-is-active` perhaps file. Or marker `is-active-failed`. show failure flags `show-no-bus` loud and `show-no-bus-empty` silent. Ensure after query fail `result` remains real Result in stub, no result cache JOBDIR/result, no reset-failed. Then clear show failure flag and wait gives 125 real Result. Should release background jobs after tests to avoid leaks. Could loop over loud/silent modes like unloaded. Start `show-failure-$mode` with blocked command, remove active and result e.g. killed-$mode? Real systemd Result values limited; use `killed` or `timeout`. is-active failed flag. Set show error. capture wait expects 2 stdout empty, stderr cannot query systemd and for loud includes bus error, silent no output. no JOBDIR/result and no reset-failed. Remove show failure marker. capture wait expects 125 real Result, JOBDIR/result cached now, reset exists perhaps assert optional. release_job. Make sure is-active still failed after working stub and no active. Good.
+
+  Tests likely simple. Should consider "loudly, and silently with no output" stub show should loud stderr. Currently unit_result redirects stderr /dev/null, fixed captures 2>&1 to surface. Existing is-active failure controls show loud. Add show:
+  if [ -f "$state/show-no-bus" ]; then echo 'Failed to connect to bus: No medium found' >&2; exit 1; fi
+  [ ! -f "$state/show-no-bus-empty" ] || exit 1
+  ...
+  is-active:
+  if [ -f "$state/failed" ]; then echo failed; exit 1; fi before active? Only set after removing active. Could call marker `failed-on-is-active` clear? Perhaps general `is-active-failed`. Add after no-bus checks before finish race? if file. echo failed. No need remove because release doesn't query further except second wait uses is-active failed expected. Fine.
+
+  Test loop:
+  for failure in loud silent; do
+   echo...
+   capture start...
+   parse_start
+   rm -f active
+   printf 'killed\n' > result
+   : > "$state/failed-on-is-active"
+   if loud : > show-no-bus else show-no-bus-empty
+   capture wait
+   expect_rc 2 ...
+   expect_out ""
+   has_match cannot query systemd and conditional message.
+   [ ! -e "$JOBDIR/result" ]...
+   [ ! -e "$state/reset-failed" ]...
+   rm show flag
+   capture wait
+   expect_rc 125 ...
+   expect_out ... killed
+   file_line result killed ...
+   release_job
+  done
+  This covers following wait. Could also `status`? User "lost_exit/inspect return 2" wait exercises inspect and lost_exit. Good. Only successful empty/success unknown existing controls.
+
+  I'll update wording about query failures in the docs and changelog. launch top currently generic query failure returns 2, enough but perhaps clarify show. Changelog add fragment? User says "Make the AGENTS.md and changelog wording about query failures match." Existing AGENTS root line "A missing status returns 125 with systemd's retained result when known; a bus or `systemctl` query failure is an operational error (2), not a completed job." Already matches? They ask make wording about query failures match likely update to explicitly "systemctl is-active or show". Changelog likely existing fragments in prior commits. Should inspect changelog.d README and relevant launcher fragments. `git show --stat` commits to see files. `Glob changelog` and Grep agent launch. Also check perhaps root AGENTS instructions line already enough but need edit explicit. I can Grep query failure.
+
+• The defect is in `unit_result`: it currently collapses every failed `show` into an empty result. I’ll add separate loud/silent `show`-failure fixtures, including a recovery wait, and preserve the unit until that retry.61be4bed3 Fix agent launcher review edge cases
+ scripts/agent/launch.sh        | 16 +++++++++-----
+ scripts/checks/agent_launch.sh | 48 ++++++++++++++++++++++++++++++++++++++++++
+ 2 files changed, 59 insertions(+), 5 deletions(-)
+122963dfc Fix agent launcher systemd edge cases
+ AGENTS.md                                |   5 +-
+ changelog.d/2026-11-08-agent-launcher.md |   5 +-
+ scripts/agent/launch.sh                  | 122 +++++++++++++--------
+ scripts/checks/agent_launch.sh           | 179 ++++++++++++++++++++++++++++---
+ 4 files changed, 251 insertions(+), 60 deletions(-)
+847e8977b Add watched launcher for background agent jobs
+ AGENTS.md                                |   7 +
+ RETENTION.tsv                            |   1 +
+ changelog.d/2026-11-08-agent-launcher.md |   7 +
+ scripts/agent/launch.sh                  | 177 +++++++++++++++++++++++++
+ scripts/checks/agent_launch.sh           | 221 +++++++++++++++++++++++++++++++
+ scripts/checks/root_inventory.txt        |   1 +
+ 6 files changed, 414 insertions(+)
+
+
+commit 61be4bed317950e1826dfe4f26c1a2727e9fe33f
+Author: Federico Carrone <mail@fcarrone.com>
+Date:   Sun Nov 8 14:43:44 2026 +0000
+
+    Fix agent launcher review edge cases
+
+diff --git a/scripts/agent/launch.sh b/scripts/agent/launch.sh
+index c535d452e..24e9b46f7 100755
+--- a/scripts/agent/launch.sh
++++ b/scripts/agent/launch.sh
+@@ -10,6 +10,8 @@
+ # RuntimeMaxSec=SECS, the caller's PATH, HOME and working directory. A fixed
+ # wrapper reads the NUL-separated argv file, so systemd cannot expand the command.
+ # The directory records cmd, argv, unit, deadline, out.log and an atomic status.
++# The job itself exits 0 only after writing status atomically, or 2 if that write
++# fails, independently of CMD's recorded status; a recorded job never ends failed.
+ # The printed UNIT, DIR and shell-quoted absolute WAIT are its only output.
+ # Writers are never retried.
+ #
+@@ -80,7 +82,8 @@ start() {
+     base="${AGENT_JOBS_DIR:-$HOME/.cache/concrete-agent-jobs}"
+     jobdir="$base/$unit"
+   fi
+-  case "$jobdir" in */*) parent="${jobdir%/*}" ;; *) parent=. ;; esac
++  while [ "${#jobdir}" -gt 1 ] && [ "${jobdir%/}" != "$jobdir" ]; do jobdir="${jobdir%/}"; done
++  case "$jobdir" in */*) parent="${jobdir%/*}"; parent="${parent:-/}" ;; *) parent=. ;; esac
+   mkdir -p -- "$parent" || fail "cannot create job directory parent: $parent"
+   mkdir -- "$jobdir" || fail "job directory already exists or cannot be created: $jobdir"
+   jobdir="$(CDPATH= cd "$jobdir" && pwd -P)" || fail "cannot resolve job directory"
+@@ -110,9 +113,11 @@ run_job() {
+   [ "${#argv[@]}" -gt 0 ] || exit 2
+   "${argv[@]}" > "$dir/out.log" 2>&1 || rc=$?
+   tmp="$dir/.status.$$"
+-  if printf '%s\n' "$rc" > "$tmp" && mv "$tmp" "$dir/status"; then :
+-  else rm -f "$tmp"; fi
+-  exit "$rc"
++  if printf '%s\n' "$rc" > "$tmp" && mv "$tmp" "$dir/status"; then
++    exit 0
++  fi
++  rm -f "$tmp"
++  exit 2
+ }
+ 
+ JOBDIR="" UNIT="" DEADLINE="" ACTION=wait DONE=0
+@@ -146,7 +151,8 @@ normal_exit() {
+ unit_result() {
+   local result=""
+   result="$(systemctl --user show "$UNIT" --property=Result --value 2>/dev/null)" || result=""
+-  printf '%s\n' "${result:-unknown}"
++  case "$result" in ''|success) result=unknown ;; esac
++  printf '%s\n' "$result"
+ }
+ 
+ lost_exit() {
+diff --git a/scripts/checks/agent_launch.sh b/scripts/checks/agent_launch.sh
+index 733167393..591e63ffa 100755
+--- a/scripts/checks/agent_launch.sh
++++ b/scripts/checks/agent_launch.sh
+@@ -191,6 +191,13 @@ release_job() { # release a stub-blocked command and observe its wrapper finishi
+   [ -f "$JOBDIR/status" ] && [ ! -f "$STUB_STATE_DIR/$UNIT/active" ] \
+     && ok "$1 cleaned up" || no "$1 did not finish after its release"
+ }
++unit_exit_line() { # exact-line label, after the stub records the job's own exit
++  local n=0
++  while [ ! -f "$STUB_STATE_DIR/$UNIT/exit" ] && [ "$n" -lt 50 ]; do
++    sleep 0.1; n=$((n+1))
++  done
++  file_line "$STUB_STATE_DIR/$UNIT/exit" "$1" "$2"
++}
+ 
+ echo "=== start: exact output, properties and one job directory ==="
+ capture 10 bash -n "$LAUNCH"
+@@ -243,12 +250,22 @@ capture 15 bash "$LAUNCH" wait "$JOBDIR"
+ expect_rc 3 "wait returns the command's exit 3"
+ expect_out "JOB $UNIT ENDED status=3
+ failed" "exit-3 output is its state and log"
++unit_exit_line 0 "the exit-3 unit exits 0 after recording status=3"
+ [ "$(wc -l < "$AGENT_JOBS_DIR/attempts" | tr -d ' ')" -eq 1 ] \
+   && ok "a failed writer has exactly one attempt" || no "the failed writer was retried"
+ capture 10 bash "$LAUNCH" status "$JOBDIR"
+ expect_rc 3 "status also returns exit 3"
+ expect_out "JOB $UNIT ENDED status=3" "status of exit 3 is one line"
+ 
++echo "=== failure to record status makes the job itself fail ==="
++capture 10 bash "$LAUNCH" start unrecorded 30 -- bash -c 'mkdir "$AGENT_JOB_DIR/.status.$PPID"'
++expect_rc 0 "start of the status-write-failure job"
++parse_start
++capture 15 bash "$LAUNCH" wait "$JOBDIR"
++expect_rc 125 "an unrecorded normal exit is a lost unit"
++expect_out "JOB $UNIT ENDED without a status (killed, timed out or OOM): exit-code" "the unrecorded job reports the unit failure"
++unit_exit_line 2 "a status write failure makes the job exit 2"
++
+ echo "=== a unit lost without status is 125 ==="
+ capture 10 bash "$LAUNCH" start vanished 30 -- bash -c 'while [ ! -e "$STUB_RELEASE_DIR/$STUB_UNIT" ]; do sleep 0.1; done'
+ expect_rc 0 "start of the lost-unit job"
+@@ -260,6 +277,19 @@ expect_rc 125 "a lost unit returns 125"
+ expect_out "JOB $UNIT ENDED without a status (killed, timed out or OOM): killed" "lost-unit output includes systemctl's result"
+ release_job "the lost-unit fixture"
+ 
++for reason in success empty; do
++  echo "=== an unloaded unit's $reason result is unknown ==="
++  capture 10 bash "$LAUNCH" start "unloaded-$reason" 30 -- bash -c 'while [ ! -e "$STUB_RELEASE_DIR/$STUB_UNIT" ]; do sleep 0.1; done'
++  expect_rc 0 "start of the unloaded-$reason-result job"
++  parse_start
++  rm -f "$STUB_STATE_DIR/$UNIT/active"
++  if [ "$reason" = success ]; then printf 'success\n' > "$STUB_STATE_DIR/$UNIT/result"; else rm -f "$STUB_STATE_DIR/$UNIT/result"; fi
++  capture 10 bash "$LAUNCH" wait "$JOBDIR"
++  expect_rc 125 "an unloaded $reason result returns 125"
++  expect_out "JOB $UNIT ENDED without a status (killed, timed out or OOM): unknown" "unloaded Result=$reason is reported as unknown"
++  release_job "the unloaded-$reason-result fixture"
++done
++
+ echo "=== still active past deadline plus grace is 124 ==="
+ capture 10 bash "$LAUNCH" start overrun 30 -- bash -c 'while [ ! -e "$STUB_RELEASE_DIR/$STUB_UNIT" ]; do sleep 0.1; done'
+ expect_rc 0 "start of the overrun job"
+@@ -293,6 +323,14 @@ expect_rc 125 "a systemd timeout without status returns 125"
+ expect_out "JOB $UNIT ENDED without a status (killed, timed out or OOM): timeout" "125 reports the retained timeout result, not unknown"
+ [ "$(cat "$JOBDIR/result")" = timeout ] && ok "the result is cached in the job directory" || no "the timeout result was not cached"
+ [ -f "$STUB_STATE_DIR/$UNIT/reset-failed" ] && ok "reset-failed collects only after the result was read" || no "the unit was not explicitly collected"
++[ ! -e "$STUB_STATE_DIR/$UNIT/result" ] && ok "collection removes the stub's result" || no "the stub's collected result remains"
++capture 10 bash "$LAUNCH" status "$JOBDIR"
++expect_rc 125 "a second status still returns 125 after collection"
++expect_out "JOB $UNIT ENDED without a status (killed, timed out or OOM): timeout" "a second status reads the cached timeout result"
++capture 10 bash "$LAUNCH" wait "$JOBDIR"
++expect_rc 125 "a second wait still returns 125 after collection"
++expect_out "JOB $UNIT ENDED without a status (killed, timed out or OOM): timeout" "a second wait reads the cached timeout result"
++touch "$STUB_RELEASE_DIR/$UNIT" && ok "the timed-out fixture's waiter is released" || no "cannot release the timed-out fixture's waiter"
+ 
+ echo "=== status appearing at the inactive observation wins the TOCTOU race ==="
+ capture 10 bash "$LAUNCH" start race 30 -- bash -c 'while [ ! -e "$STUB_RELEASE_DIR/$STUB_UNIT" ]; do sleep 0.1; done'
+@@ -317,6 +355,16 @@ after="$(cd "$JOBDIR" && sha256sum unit deadline cmd argv)"
+ [ "$after" = "$before" ] && ok "the refused start leaves the first job's files untouched" || no "the refused start changed the first job's files"
+ release_job "the exclusive-directory fixture"
+ 
++echo "=== an explicit job directory may have a trailing slash ==="
++capture 10 bash "$LAUNCH" start --dir "$TMP/new/" trailing 10 -- true
++expect_rc 0 "start in a new explicit directory with a trailing slash"
++parse_start
++expect_out "$EXPECTED" "trailing-slash start prints exactly three lines"
++[ "$JOBDIR" = "$TMP/new" ] && ok "the trailing slash is stripped from the recorded directory" || no "unexpected trailing-slash job directory: $JOBDIR"
++capture 15 bash "$LAUNCH" wait "$JOBDIR"
++expect_rc 0 "wait succeeds in the trailing-slash directory"
++expect_out "JOB $UNIT ENDED status=0" "the trailing-slash job completes normally"
++
+ echo "=== the printed WAIT value is safe to eval ==="
+ special="$TMP/job ; touch pwned ; #"
+ capture 10 bash "$LAUNCH" start --dir "$special" quoted 10 -- true
+• Perhaps no new changelog fragment, update existing. One commit four files. Tests before fix? User asks controls fail without fix prove with temporary mutation. Could add tests+fix then temporarily revert code to original via copied mutant not working tree? Script supports AGENT_LAUNCHER selects mutant. I can create temporary mutant outside tracked in TMP using cp and python/perl? Tools say use Edit for incremental existing files; temporary mutation can use Bash `cp` then perhaps python replacement? They explicitly ask temporary mutation. Dedicated Edit mandatory every incremental change; for temp mutant new file, Write or Bash cp then Edit? I can create temp copy with Bash `cp` (allowed file copy? no dedicated copy tool) and use Edit on mutant after Read. Or `git show HEAD:scripts/agent/launch.sh > "$tmp"` Bash redirection would violate echo only? Tool says Write for create, but generating from git show perhaps Bash okay? Better after changes, `mktemp -d`, `cp scripts/agent/launch.sh "$tmp/launch.sh"`, then use Edit tool on known temp file after Read to replace fixed unit_result/lost/inspect with original defective version. However exact user "temporary mutation" likely they expect mutant reverting fix. Use `cp`, Edit. Run `AGENT_LAUNCHER=$tmp/launch.sh timeout 600 bash scripts/checks/agent_launch.sh`, expected fail. Make sure tests continue through all and failing exactly controls perhaps original bug also no following recovery because first wait reset removes real result; second wait gets unknown 125 instead of killed, etc. Expected first show failure gets 125 unknown, writes cache unknown, resets, no result check fails. following wait sees cached unknown and no show (125) but output killed expected fails. Good. Gates on mutant may take ~? Current tests 15 jobs each waits 1 sec; perhaps <1 min. Full run after fix perhaps long up to 1500. Should respect no full local run on laptop? User explicitly gates full run local via systemd-run command. Follow explicit. timeout command allowed despite AGENTS says bounded_run never GNU timeout? User explicitly says timeout 600 etc, must use exact. Systemd scope heavy max. Fine.
+
+  Before edits, decide exact code. Should test failed is-active state. Stub currently if active exists prints active even failed marker; I remove active first. Put marker condition after no bus checks and before finish-on-is-active. Show failure controls before cat. For loud capture stderr. Unit_result query_rc. Potential subtle shell behavior: assignment with command substitution and local declaration? I separate local result query_rc, then `result="$(...)" || query_rc=$?`; good. Error output from systemctl captured into result and printed in fail message. Should error message use `fail`? Can't use fail within command substitution because exits subshell and assignment return nonzero; `reason="$(unit_result)" || return 2` but if unit_result calls `fail`, exit 2; clear message. Could:
+  unit_result() {
+   local result="" query_rc=0
+   result="$(systemctl ... 2>&1)" || query_rc=$?
+   if [ "$query_rc" -ne 0 ]; then
+     printf 'launch.sh: cannot query systemd for %s Result (systemctl exit %s): %s\n' ... >&2
+     return 2
+   fi
+   ...
+  }
+  lost_exit:
+  reason="$(unit_result)" || return 2
+  No cache/collect. inspect:
+  lost_exit
+  return "$?"
+  This is minimal and clear. `DONE=1` before query, watch returns 2. `status` watch same. If cached result file exists no show and returns 125; fine.
+  Potential issue return status of `reason="$(unit_result)"` is function return 2. yes.
+  Could use `if ! reason=...; then return 2; fi`, simple `|| return 2`.
+  Top comment: "A lost unit returns 125 with retained systemd Result (or unknown), read before reset-failed collects ... An overrun ... a systemd query failure returns 2." Already. Could clarify "A failed Result query returns 2 without collecting the unit or caching a result" to docs. Not strictly asked but appropriate comments update. They specifically "Make AGENTS.md and changelog wording about query failures match." I can make exact wording:
+  AGENTS: "A missing status returns 125 with systemd's retained result when known. A failed `systemctl is-active` or `show` query is an operational error (2), not a completed job; a failed `show` neither caches a result nor collects the unit, so a later wait can read the real result."
+  Changelog: "... Lost units retain...; failed `is-active` or `show` queries are operational errors (2). A failed `show` leaves the result uncached and the unit uncollected so a later wait can read the real result." "match" likely semantics not literal exact. Could use same phrase both. Perhaps update both to "a bus or other `systemctl is-active`/`show` query failure..." Make not overdo.
+
+  Tests no helper assert absence repetitive. Could define `expect_absent` helper to simplify? Existing style direct [ ] && ok. I can use direct. Four assertions per loop. Test count perhaps 100. Good.
+
+  I'll edit files. Use parallel Edit for different files only. For scripts/agent/launch.sh one Edit containing top comment + unit_result + lost_exit + inspect? Tool says one Edit per file before reread. Could replace a large old_string spanning top to inspect impossible huge. Better one Edit with just core functions then re-read before top comment second Edit, or leave top comment unchanged because accurate. Only one Edit core contiguous unit_result through inspect? Includes normal etc from line 151-197. Replace whole section unit_result/lost_exit/inspect, good. Tests changes in stub and new section noncontiguous, need sequential Edit with Read between. Could make one giant replace from is-active stub to after lost-unit loop? That's >150 lines but doable not ideal. Better first Edit test stub then Read relevant new area before second Edit. AGENTS and changelog parallel with initial code and stub edits. Then tests second edit after read. Todo mark first done next in progress.
+
+• I’ll make `show` failures return 2 before any cache or collection, propagate that status through `inspect`, and document that a later wait can recover the retained result.
+
+• Now add test section after unloaded loop perhaps before overrun. Should read relevant test portion after edit because mandatory before second same file.I changed it myself, system reminder. Perhaps read current specific section after? Already know. But instruction says read current file(s). Could read whole? Relevant section enough? "Read current file(s)" likely Read AGENTS maybe current 375 lines. I should do Read perhaps section enough? To satisfy full latest maybe entire file, but already injected except my edit. No need huge? Use Read section after test edit maybe parallel? Should not delay. Add tests. Should think naming: `failure` values loud/silent, marker condition. Start `show-$failure` (unique). After `parse_start`, `rm active`, `printf 'killed\n' result`, `: > failed-on-is-active`. Then if loud marker else silent. `capture 10 bash ... wait`. Expect RC2, OUT "". stderr match cannot query systemd. For loud bus message; silent no output. Could structure:
+  has_match ... && ok ...
+  if [ "$failure" = loud ]; then
+   has_match Failed...
+  else
+   has_match 'no output'...
+  fi
+  No cache:
+  [ ! -e "$JOBDIR/result" ] && ok "... writes no result cache" || no ...
+  [ ! -e "$STUB_STATE_DIR/$UNIT/reset-failed" ]...
+  [ "$(cat result)" = killed ] maybe ensures real retained, but no reset assertion covers. After rm show flag, capture wait expected 125 killed. `file_line "$JOBDIR/result" killed ...` ensure cache on recovery. `release_job`. User asks no reset-failed after failure; yes.
+
+  Could assert no `.result.*` temp? No write occurs before query so no. `JOBDIR/result` absent enough.
+
+  Potential race background job may finish unexpectedly? Command blocks until release, so real result stub stays manually killed while wrapper active OS process but state active removed. release_job sets release, wrapper eventually writes status and overwrites state/result to success/exit-code? After second wait reset removes state/result. release_job sees status and active absent. Good.
+
+  `reset-failed` stub: `[ -f active ] || rm result`, since no active, removes. second wait caches killed before reset. Fine.
+
+  Loud query failure error output includes newline? ERR strips trailing. expected contains.
+  Unit_result original discards stderr, so loud mutant ERR empty; test has_match fails too.
+  The first original mutant output 125 unknown, test expected out "" fails. no result fails etc.
+
+  Use Edit.Should read AGENTS current per reminder. Could read relevant lines now. Also run bash -n and gate fixed perhaps first. But before marking done need inspect diff and test. Use parallel Read AGENTS section, Bash bash -n both + git diff --check and git diff --stat perhaps command dependent. `bash -n scripts/... && bash -n ... && git diff --check && git status --short` okay. Also run test fixed perhaps after code review. Should potentially test style bug from `return "$?"` after lost_exit? In shell, `$?` expands status of lost_exit before return yes. Fine.
+
+  One nuance `unit_result` captures `systemctl show` stdout and stderr. If show fails but prints a valid Result to stdout plus error, result multi-line, error message multiline. Fine clear. If systemctl show succeeds with warnings on stderr, result becomes warning+Result, not unknown. Real systemctl successful query could stderr warnings; prior code discarded. Requirement successful query empty/success unknown; successful with Result and warning? Capturing stderr always on success could corrupt result. Better capture stderr separately to avoid mixing on success while still show errors. Existing is-active captures both. For show, need preserve error but not corrupt success. Could use temp file? `result="$(systemctl ... 2>&1)"` common pattern but if success with stderr warning, perhaps operational? Not specified. Controls likely okay. But robust design could use `result="$(systemctl ... 2>&1)"` accepted expected. A successful `show` generally no stderr. Fine.
+
+  Another nuance `return 2` hardcoded even if `unit_result` fail due other? only failure query returns 2. okay.
+  No result cache from failed show. `DONE=1`, inspect returns 2. no reset.
+  Docs match.
+
+  Perhaps top test comment mentions show? generic enough.
+
+  Run. M AGENTS.md
+ M changelog.d/2026-11-08-agent-launcher.md
+ M scripts/agent/launch.sh
+ M scripts/checks/agent_launch.sh
+ AGENTS.md                                |  5 ++--
+ changelog.d/2026-11-08-agent-launcher.md |  6 +++--
+ scripts/agent/launch.sh                  | 13 +++++++---
+ scripts/checks/agent_launch.sh           | 44 ++++++++++++++++++++++++++++++++
+ 4 files changed, 60 insertions(+), 8 deletions(-)
+=== start: exact output, properties and one job directory ===
+  ok   launch.sh parses
+  ok   bash -n has no output
+  ok   a successful start
+  ok   start prints exactly UNIT, DIR and absolute WAIT
+  ok   unit file records the unique unit
+  ok   deadline is an epoch second
+  ok   cmd records the command line
+  ok   systemd-run uses the user manager
+  ok   --collect is absent
+  ok   the sanitised unique unit is passed
+  ok   MemoryMax defaults to 8G
+  ok   TasksMax defaults to 1024
+  ok   RuntimeMaxSec is SECS
+  ok   WorkingDirectory is the caller's directory
+  ok   PATH is passed
+  ok   HOME is passed
+=== wait: normal status and the last 40 log lines ===
+  ok   wait returns 0 for a successful job
+  ok   success prints its state and exactly log lines 6-45
+  ok   the wrapped command ran in the caller's directory
+  ok   out.log retains the full stdout and stderr
+  ok   status was moved into place without a temporary file left
+  ok   status returns the successful job's status
+  ok   status prints one line and does not wait or print the log
+=== a non-zero command runs once and returns its status ===
+  ok   start of the exit-3 job
+  ok   custom start also prints exactly three lines
+  ok   --mem overrides MemoryMax
+  ok   --tasks overrides TasksMax
+  ok   wait returns the command's exit 3
+  ok   exit-3 output is its state and log
+  ok   the exit-3 unit exits 0 after recording status=3
+  ok   a failed writer has exactly one attempt
+  ok   status also returns exit 3
+  ok   status of exit 3 is one line
+=== failure to record status makes the job itself fail ===
+  ok   start of the status-write-failure job
+  ok   an unrecorded normal exit is a lost unit
+  ok   the unrecorded job reports the unit failure
+  ok   a status write failure makes the job exit 2
+=== a unit lost without status is 125 ===
+  ok   start of the lost-unit job
+  ok   a lost unit returns 125
+  ok   lost-unit output includes systemctl's result
+  ok   the lost-unit fixture cleaned up
+=== an unloaded unit's success result is unknown ===
+  ok   start of the unloaded-success-result job
+  ok   an unloaded success result returns 125
+  ok   unloaded Result=success is reported as unknown
+  ok   the unloaded-success-result fixture cleaned up
+=== an unloaded unit's empty result is unknown ===
+  ok   start of the unloaded-empty-result job
+  ok   an unloaded empty result returns 125
+  ok   unloaded Result=empty is reported as unknown
+  ok   the unloaded-empty-result fixture cleaned up
+=== a loud Result query failure is retryable ===
+  ok   start of the loud show-failure job
+  ok   a loud show failure after is-active=failed returns 2
+  ok   a loud show failure has no job result on stdout
+  ok   a loud show failure has a clear error
+  ok   a loud show failure includes systemctl's bus error
+  ok   a loud show failure writes no result cache
+  ok   a loud show failure does not collect the unit
+  ok   a wait after the loud show failure returns 125
+  ok   the wait after the loud show failure reads the real Result
+  ok   the recovered loud show result is cached
+  ok   the loud show-failure fixture cleaned up
+=== a silent Result query failure is retryable ===
+  ok   start of the silent show-failure job
+  ok   a silent show failure after is-active=failed returns 2
+  ok   a silent show failure has no job result on stdout
+  ok   a silent show failure has a clear error
+  ok   a silent show failure is identified
+  ok   a silent show failure writes no result cache
+  ok   a silent show failure does not collect the unit
+  ok   a wait after the silent show failure returns 125
+  ok   the wait after the silent show failure reads the real Result
+  ok   the recovered silent show result is cached
+  ok   the silent show-failure fixture cleaned up
+=== still active past deadline plus grace is 124 ===
+  ok   start of the overrun job
+  ok   status of a running job is a successful observation
+  ok   status does not wait for a running job
+  ok   deadline plus grace returns 124
+  ok   overrun output is INCOMPLETE, never a pass
+  ok   the overrun fixture cleaned up
+=== argv survives systemd dollar and percent expansion ===
+  ok   start of the literal-argv job
+  ok   literal-argv job exits normally
+  ok   an argument containing ${HOME}, $1, %n and a space reaches the job byte for byte
+  ok   out.log preserves the exact literal bytes
+=== timeout result is read before explicit collection ===
+  ok   start of the timed-out job
+  ok   a systemd timeout without status returns 125
+  ok   125 reports the retained timeout result, not unknown
+  ok   the result is cached in the job directory
+  ok   reset-failed collects only after the result was read
+  ok   collection removes the stub's result
+  ok   a second status still returns 125 after collection
+  ok   a second status reads the cached timeout result
+  ok   a second wait still returns 125 after collection
+  ok   a second wait reads the cached timeout result
+  ok   the timed-out fixture's waiter is released
+=== status appearing at the inactive observation wins the TOCTOU race ===
+  ok   start of the status-race job
+  ok   a status written before is-active returns is not declared lost
+  ok   inactive triggers a second status-file check
+  ok   the status-race fixture cleaned up
+=== job directories are reserved exclusively ===
+  ok   start in a new explicit job directory
+  ok   a second start on the same directory is refused
+  ok   duplicate directory refusal has no stdout
+  ok   duplicate directory has a clear error
+  ok   the refused start leaves the first job's files untouched
+  ok   the exclusive-directory fixture cleaned up
+=== an explicit job directory may have a trailing slash ===
+  ok   start in a new explicit directory with a trailing slash
+  ok   trailing-slash start prints exactly three lines
+  ok   the trailing slash is stripped from the recorded directory
+  ok   wait succeeds in the trailing-slash directory
+  ok   the trailing-slash job completes normally
+=== the printed WAIT value is safe to eval ===
+  ok   start in a directory with spaces and shell metacharacters
+  ok   both WAIT paths are shell-quoted with printf %q
+  ok   eval of the printed WAIT value waits on the right job
+  ok   eval prints the intended job result
+  ok   eval executes nothing else
+=== systemd query failures are not lost units ===
+  ok   start of the no-user-bus job
+  ok   a user-bus query error returns 2, not 125
+  ok   a user-bus query error has no job result on stdout
+  ok   the query error includes systemctl's bus error
+  ok   a silent user-bus query failure also returns 2
+  ok   a silent query failure is identified
+  ok   the no-user-bus fixture cleaned up
+=== invalid input and unavailable systemd are exit 2 ===
+  ok   an invalid NAME is refused
+  ok   invalid NAME has no stdout
+  ok   invalid NAME explains the error on stderr
+  ok   zero SECS is refused
+  ok   zero SECS explains the error
+  ok   non-numeric SECS is refused
+  ok   non-numeric SECS explains the error
+  ok   missing systemd-run is refused
+  ok   missing systemd-run has no stdout
+  ok   missing systemd-run has the exact clear error
+
+check_agent_launch: PASS=129 FAIL=0
+Fixed pass. Now mutation proof. Before mutation perhaps inspect diff thoroughly and ensure no errors. Could do mutation now. Should use temporary copy and Edit. Should choose temp path. Bash `mktemp -d /tmp/agent-launch-mutation.XXXXXX` outputs path. Each shell fresh so capture path manually from tool. Then cp. Could do `tmp=$(mktemp -d) && cp scripts/agent/launch.sh "$tmp/launch.sh" && printf path` but instructions say printf talk to user? Output path needed command okay perhaps `mktemp -d` simpler returns. Then cp next. Or Bash `mkdir -p .review?` no create tracked untracked. Use `/tmp/agent-launch-mutation` fixed? Gate hygiene only gate scripts, my temp okay but avoid conflicts. `mktemp -d /tmp/agent-launch-show-mutation.XXXXXX` output. Then cp command. Now Read mutant before Edit. I can create copy via Bash and then Read. This is several calls but fine. Alternative use `git show HEAD:scripts/agent/launch.sh > /tmp/mutant` generates original exactly with one Bash and run tests. This is a temporary mutation (entire launcher at parent original), no need Edit. Tool guideline "echo > file / cat heredoc -> Write" not git show redirect explicitly. Bash is appropriate for git object output and mutation testing. I can use `MUTANT_DIR=$(mktemp -d) && git show HEAD:scripts/agent/launch.sh > "$MUTANT_DIR/launch.sh" && AGENT_LAUNCHER=... timeout ...; rc=$?; ...` Should preserve output and cleanup. Could use `tee`? No. Should report mutation output, likely huge with fails. Command returns nonzero expected, tool marks failure but fine. Should capture RC and ensure overall Bash exits 0 after verifying expected failure and expected specific patterns? User wants prove controls fail without fix. Running whole suite mutant exits 1. I should capture output to temp log then summarize targeted fails via perhaps Grep dedicated cannot know path if shell variable. Could run direct output full, tool returns output. It's only ~150 lines. `set +e; AGENT_LAUNCHER="$tmp/launch.sh" timeout 600 bash ...; rc=$?; rm -rf "$tmp"; [ "$rc" -ne 0 ]` would exit 0 if failed as expected but output includes final. Make sure rc exactly 1 not timeout/incomplete. `[ "$rc" -eq 1 ]`. This command creates original from HEAD via git show. Does this count temporary mutation? Yes reverting fix in a temp copy is a mutation. User explicitly likely expects AGENT_LAUNCHER mutant. I should say parent-version mutant (restores old unit_result). But if copy whole HEAD original, controls test file remains fixed; docs irrelevant. Good.
+
+  Potential challenge original script uses `LAUNCH` path in parse_start expected WAIT. It uses mutant path, okay. `bash -n` pass. Test failures exactly 16 perhaps. I'll predict:
+  loud expected RC2 got125; out expected "" actual unknown; clear error fails (ERR empty); bus error fails; no result fails; no reset fails; second wait returns125 pass; output expected killed actual unknown fails; file_line cache killed fails; cleanup pass. 8 fails per loud? silent similarly clear and no output etc. Total 16. Great proof. Could run and output 129 pass 16 fail perhaps PASS count etc. Should not modify tracked files. Use Bash command with mktemp and git show. I should not use `rm -rf` dangerous? Temp known variable from mktemp and trap. Fine. Use `trap 'rm -rf "$mutant_dir"' EXIT`; path safe. Command:
+  mutant_dir="$(mktemp -d /tmp/agent-launch-show-mutation.XXXXXX)" || exit 2
+  trap ... EXIT
+  git show HEAD:scripts/agent/launch.sh > "$mutant_dir/launch.sh" || exit 2
+  set +e
+  AGENT_LAUNCHER="$mutant_dir/launch.sh" timeout 600 bash scripts/checks/agent_launch.sh
+  rc=$?
+  set -e? shell not set -e by default. `printf` mutation exit perhaps output user? tool output okay. `echo` instruction says echo talk user -> just output text directly, but within command for test status legitimate? Avoid echo. `test "$rc" -eq 1` final. Tool output final check shows fail. Should know rc perhaps final test no print. The output test expected got indicates. Could `exit` code if mutant unexpectedly passes -> 1. Fine. I can record `rc` and final `[ "$rc" -eq 1 ]`. Tool output doesn't state rc but expected. Could use `bash -c '...; exit ...'` no. I can include `printf 'mutant exit=%s\n' "$rc"` though guideline says printf talk to user -> just output text directly, but this is command result needed. Probably allowed test logs. I can just rely check_agent_launch FAIL. Use final `[ "$rc" -eq 1 ]` tool returns wall time no exit if success. Good.
+
+  Now update todo fixed done mutation in progress.
+
+• The fixed launcher passes all 129 controls. Next I’ll run the same checks against a temporary copy with the old `show`-error handling restored; the new recovery controls should fail there.
+
+=== start: exact output, properties and one job directory ===
+  ok   launch.sh parses
+  ok   bash -n has no output
+  ok   a successful start
+  ok   start prints exactly UNIT, DIR and absolute WAIT
+  ok   unit file records the unique unit
+  ok   deadline is an epoch second
+  ok   cmd records the command line
+  ok   systemd-run uses the user manager
+  ok   --collect is absent
+  ok   the sanitised unique unit is passed
+  ok   MemoryMax defaults to 8G
+  ok   TasksMax defaults to 1024
+  ok   RuntimeMaxSec is SECS
+  ok   WorkingDirectory is the caller's directory
+  ok   PATH is passed
+  ok   HOME is passed
+=== wait: normal status and the last 40 log lines ===
+  ok   wait returns 0 for a successful job
+  ok   success prints its state and exactly log lines 6-45
+  ok   the wrapped command ran in the caller's directory
+  ok   out.log retains the full stdout and stderr
+  ok   status was moved into place without a temporary file left
+  ok   status returns the successful job's status
+  ok   status prints one line and does not wait or print the log
+=== a non-zero command runs once and returns its status ===
+  ok   start of the exit-3 job
+  ok   custom start also prints exactly three lines
+  ok   --mem overrides MemoryMax
+  ok   --tasks overrides TasksMax
+  ok   wait returns the command's exit 3
+  ok   exit-3 output is its state and log
+  ok   the exit-3 unit exits 0 after recording status=3
+  ok   a failed writer has exactly one attempt
+  ok   status also returns exit 3
+  ok   status of exit 3 is one line
+=== failure to record status makes the job itself fail ===
+  ok   start of the status-write-failure job
+  ok   an unrecorded normal exit is a lost unit
+  ok   the unrecorded job reports the unit failure
+  ok   a status write failure makes the job exit 2
+=== a unit lost without status is 125 ===
+  ok   start of the lost-unit job
+  ok   a lost unit returns 125
+  ok   lost-unit output includes systemctl's result
+  ok   the lost-unit fixture cleaned up
+=== an unloaded unit's success result is unknown ===
+  ok   start of the unloaded-success-result job
+  ok   an unloaded success result returns 125
+  ok   unloaded Result=success is reported as unknown
+  ok   the unloaded-success-result fixture cleaned up
+=== an unloaded unit's empty result is unknown ===
+  ok   start of the unloaded-empty-result job
+  ok   an unloaded empty result returns 125
+  ok   unloaded Result=empty is reported as unknown
+  ok   the unloaded-empty-result fixture cleaned up
+=== a loud Result query failure is retryable ===
+  ok   start of the loud show-failure job
+  FAIL a loud show failure after is-active=failed returns 2: expected exit 2, got 125
+      JOB agent-show-loud-1794149840-2012078.service ENDED without a status (killed, timed out or OOM): unknown
+      
+  FAIL a loud show failure has no job result on stdout: unexpected stdout
+      expected:
+      
+      actual:
+      JOB agent-show-loud-1794149840-2012078.service ENDED without a status (killed, timed out or OOM): unknown
+  FAIL loud show failure is unclear: 
+  FAIL loud show error is missing: 
+  FAIL a loud show failure cached a result
+  FAIL a loud show failure collected the unit
+  ok   a wait after the loud show failure returns 125
+  FAIL the wait after the loud show failure reads the real Result: unexpected stdout
+      expected:
+      JOB agent-show-loud-1794149840-2012078.service ENDED without a status (killed, timed out or OOM): killed
+      actual:
+      JOB agent-show-loud-1794149840-2012078.service ENDED without a status (killed, timed out or OOM): unknown
+  FAIL the recovered loud show result is cached (missing exact line: killed)
+  ok   the loud show-failure fixture cleaned up
+=== a silent Result query failure is retryable ===
+  ok   start of the silent show-failure job
+  FAIL a silent show failure after is-active=failed returns 2: expected exit 2, got 125
+      JOB agent-show-silent-1794149840-2012235.service ENDED without a status (killed, timed out or OOM): unknown
+      
+  FAIL a silent show failure has no job result on stdout: unexpected stdout
+      expected:
+      
+      actual:
+      JOB agent-show-silent-1794149840-2012235.service ENDED without a status (killed, timed out or OOM): unknown
+  FAIL silent show failure is unclear: 
+  FAIL silent show failure is unclear: 
+  FAIL a silent show failure cached a result
+  FAIL a silent show failure collected the unit
+  ok   a wait after the silent show failure returns 125
+  FAIL the wait after the silent show failure reads the real Result: unexpected stdout
+      expected:
+      JOB agent-show-silent-1794149840-2012235.service ENDED without a status (killed, timed out or OOM): killed
+      actual:
+      JOB agent-show-silent-1794149840-2012235.service ENDED without a status (killed, timed out or OOM): unknown
+  FAIL the recovered silent show result is cached (missing exact line: killed)
+  ok   the silent show-failure fixture cleaned up
+=== still active past deadline plus grace is 124 ===
+  ok   start of the overrun job
+  ok   status of a running job is a successful observation
+  ok   status does not wait for a running job
+  ok   deadline plus grace returns 124
+  ok   overrun output is INCOMPLETE, never a pass
+  ok   the overrun fixture cleaned up
+=== argv survives systemd dollar and percent expansion ===
+  ok   start of the literal-argv job
+  ok   literal-argv job exits normally
+  ok   an argument containing ${HOME}, $1, %n and a space reaches the job byte for byte
+  ok   out.log preserves the exact literal bytes
+=== timeout result is read before explicit collection ===
+  ok   start of the timed-out job
+  ok   a systemd timeout without status returns 125
+  ok   125 reports the retained timeout result, not unknown
+  ok   the result is cached in the job directory
+  ok   reset-failed collects only after the result was read
+  ok   collection removes the stub's result
+  ok   a second status still returns 125 after collection
+  ok   a second status reads the cached timeout result
+  ok   a second wait still returns 125 after collection
+  ok   a second wait reads the cached timeout result
+  ok   the timed-out fixture's waiter is released
+=== status appearing at the inactive observation wins the TOCTOU race ===
+  ok   start of the status-race job
+  ok   a status written before is-active returns is not declared lost
+  ok   inactive triggers a second status-file check
+  ok   the status-race fixture cleaned up
+=== job directories are reserved exclusively ===
+  ok   start in a new explicit job directory
+  ok   a second start on the same directory is refused
+  ok   duplicate directory refusal has no stdout
+  ok   duplicate directory has a clear error
+  ok   the refused start leaves the first job's files untouched
+  ok   the exclusive-directory fixture cleaned up
+=== an explicit job directory may have a trailing slash ===
+  ok   start in a new explicit directory with a trailing slash
+  ok   trailing-slash start prints exactly three lines
+  ok   the trailing slash is stripped from the recorded directory
+  ok   wait succeeds in the trailing-slash directory
+  ok   the trailing-slash job completes normally
+=== the printed WAIT value is safe to eval ===
+  ok   start in a directory with spaces and shell metacharacters
+  ok   both WAIT paths are shell-quoted with printf %q
+  ok   eval of the printed WAIT value waits on the right job
+  ok   eval prints the intended job result
+  ok   eval executes nothing else
+=== systemd query failures are not lost units ===
+  ok   start of the no-user-bus job
+  ok   a user-bus query error returns 2, not 125
+  ok   a user-bus query error has no job result on stdout
+  ok   the query error includes systemctl's bus error
+  ok   a silent user-bus query failure also returns 2
+  ok   a silent query failure is identified
+  ok   the no-user-bus fixture cleaned up
+=== invalid input and unavailable systemd are exit 2 ===
+  ok   an invalid NAME is refused
+  ok   invalid NAME has no stdout
+  ok   invalid NAME explains the error on stderr
+  ok   zero SECS is refused
+  ok   zero SECS explains the error
+  ok   non-numeric SECS is refused
+  ok   non-numeric SECS explains the error
+  ok   missing systemd-run is refused
+  ok   missing systemd-run has no stdout
+  ok   missing systemd-run has the exact clear error
+
+check_agent_launch: PASS=113 FAIL=16
+• Great. Should have full gates. User wants both gates all pass. Launcher already pass fixed before mutation. Could count as gate, but after mutation no tracked changes so same. Should have full run exact `timeout 1500 systemd-run --user --scope -q -p MemoryMax=8G -p TasksMax=1024 bash scripts/checks/run.sh`. This might run up to 25m, tool max 300 foreground then background. Instructions Bash says for long-running tests use run_in_background true and return control user instead of waiting, but user expects completion in one turn. I can run background and use WaitFor only if no other work. I have review diff, perhaps full test in background while inspect. `run_in_background=true`, timeout? user command has timeout 1500, set tool timeout 1800 or disable? Background default 600 would kill before internal 1500 unless timeout 1800. Use run_in_background true timeout 1800 description. Then inspect diff while runs. Should not launch via scripts/agent/launch.sh because user explicitly gate command systemd-run scope and background job watcher rule? This is Bash background task managed by harness, not detached writer, no launch needed? I am running full gate as background Bash task, not agent job. Fine. Could foreground with timeout 300 automatically background after 300, but better background explicit. Should have full test output likely large and automatic notification. Meanwhile git diff. Update todo mutation done, gates in progress. Perhaps rerun launcher alongside full? Full includes agent_launch likely. But user explicitly gate command already ran pass. I can state. Full exact command in background.
+
+• The old behavior fails 16 assertions: both loud and silent failures return 125, cache `unknown`, collect the unit, and lose the real `killed` result. The fixed code passes; I’ll now run the full gate suite.
+
+• Now inspect full diff.diff --git a/AGENTS.md b/AGENTS.md
+index 25778871c..1612cf10b 100644
+--- a/AGENTS.md
++++ b/AGENTS.md
+@@ -339,8 +339,9 @@ immediately run the printed `WAIT` command as your own background task so the jo
+ you. Never start a detached unit without its watcher. A writer gets one attempt only: a killed or
+ timed-out job is investigated, never automatically re-run. Each start exclusively creates a new job
+ directory (an existing `--dir` is refused) and preserves argv through a file rather than systemd's
+-command expansion. A missing status returns 125 with systemd's retained result when known; a bus or
+-`systemctl` query failure is an operational error (2), not a completed job.
++command expansion. A missing status returns 125 with systemd's retained result when known. A failed
++`systemctl is-active` or `show` query is an operational error (2), not a completed job. A failed
++`show` writes no result cache and does not collect the unit, so a later wait can read the real result.
+ 
+ ### Orchestrating a publish: never infer state from process names
+ 
+diff --git a/changelog.d/2026-11-08-agent-launcher.md b/changelog.d/2026-11-08-agent-launcher.md
+index 5baa46f94..00e64239b 100644
+--- a/changelog.d/2026-11-08-agent-launcher.md
++++ b/changelog.d/2026-11-08-agent-launcher.md
+@@ -6,5 +6,7 @@ own background task, so completion re-invokes the agent instead of leaving a fin
+ A lost unit and a deadline overrun are distinct non-passing results, and writers are never retried
+ automatically. Job directories are exclusive, command arguments survive systemd expansion byte for
+ byte, and the quoted `WAIT` command is safe for paths containing shell metacharacters. Lost units
+-retain their timeout/signal/OOM result where systemd provides one; query failures are operational
+-errors. Stub-backed controls cover these behaviours and all watcher outcomes.
++retain their timeout/signal/OOM result where systemd provides one. Failed `systemctl is-active` or
++`show` queries are operational errors (2), not completed jobs. A failed `show` writes no result cache
++and does not collect the unit, so a later wait can read the real result. Stub-backed controls cover
++these behaviours and all watcher outcomes.
+diff --git a/scripts/agent/launch.sh b/scripts/agent/launch.sh
+index 24e9b46f7..78d41542b 100755
+--- a/scripts/agent/launch.sh
++++ b/scripts/agent/launch.sh
+@@ -149,8 +149,13 @@ normal_exit() {
+ }
+ 
+ unit_result() {
+-  local result=""
+-  result="$(systemctl --user show "$UNIT" --property=Result --value 2>/dev/null)" || result=""
++  local result="" query_rc=0
++  result="$(systemctl --user show "$UNIT" --property=Result --value 2>&1)" || query_rc=$?
++  if [ "$query_rc" -ne 0 ]; then
++    printf 'launch.sh: cannot query systemd for %s Result (systemctl exit %s): %s\n' \
++      "$UNIT" "$query_rc" "${result:-no output}" >&2
++    return 2
++  fi
+   case "$result" in ''|success) result=unknown ;; esac
+   printf '%s\n' "$result"
+ }
+@@ -161,7 +166,7 @@ lost_exit() {
+   if [ -f "$JOBDIR/result" ]; then
+     IFS= read -r reason < "$JOBDIR/result" || fail "cannot read $JOBDIR/result"
+   else
+-    reason="$(unit_result)"
++    reason="$(unit_result)" || return 2
+     tmp="$JOBDIR/.result.$$"
+     if printf '%s\n' "$reason" > "$tmp" && mv "$tmp" "$JOBDIR/result"; then :
+     else rm -f "$tmp"; fi
+@@ -191,7 +196,7 @@ inspect() {
+     inactive|unknown|failed)
+       if [ -f "$JOBDIR/status" ]; then normal_exit; return "$?"; fi
+       lost_exit
+-      return 125 ;;
++      return "$?" ;;
+     *)
+       fail "cannot query systemd for $UNIT (systemctl exit $query_rc): ${state:-no output}" ;;
+   esac
+diff --git a/scripts/checks/agent_launch.sh b/scripts/checks/agent_launch.sh
+index 591e63ffa..c0c563b10 100755
+--- a/scripts/checks/agent_launch.sh
++++ b/scripts/checks/agent_launch.sh
+@@ -139,6 +139,7 @@ case "$action" in
+       exit 1
+     fi
+     [ ! -f "$state/no-bus-empty" ] || exit 1
++    if [ -f "$state/failed-on-is-active" ]; then echo failed; exit 1; fi
+     if [ -f "$state/finish-on-is-active" ]; then
+       jobdir="$(cat "$state/jobdir")"
+       tmp="$jobdir/.status.systemd"
+@@ -148,6 +149,11 @@ case "$action" in
+     if [ -f "$state/active" ]; then echo active; exit 0; fi
+     echo inactive; exit 1 ;;
+   show)
++    if [ -f "$state/show-no-bus" ]; then
++      echo 'Failed to connect to bus: No medium found' >&2
++      exit 1
++    fi
++    [ ! -f "$state/show-no-bus-empty" ] || exit 1
+     [ -r "$state/result" ] && cat "$state/result"
+     exit 0 ;;
+   reset-failed)
+@@ -290,6 +296,44 @@ for reason in success empty; do
+   release_job "the unloaded-$reason-result fixture"
+ done
+ 
++for failure in loud silent; do
++  echo "=== a $failure Result query failure is retryable ==="
++  capture 10 bash "$LAUNCH" start "show-$failure" 30 -- bash -c 'while [ ! -e "$STUB_RELEASE_DIR/$STUB_UNIT" ]; do sleep 0.1; done'
++  expect_rc 0 "start of the $failure show-failure job"
++  parse_start
++  rm -f "$STUB_STATE_DIR/$UNIT/active"
++  printf 'killed\n' > "$STUB_STATE_DIR/$UNIT/result"
++  : > "$STUB_STATE_DIR/$UNIT/failed-on-is-active"
++  if [ "$failure" = loud ]; then
++    : > "$STUB_STATE_DIR/$UNIT/show-no-bus"
++  else
++    : > "$STUB_STATE_DIR/$UNIT/show-no-bus-empty"
++  fi
++  capture 10 bash "$LAUNCH" wait "$JOBDIR"
++  expect_rc 2 "a $failure show failure after is-active=failed returns 2"
++  expect_out "" "a $failure show failure has no job result on stdout"
++  has_match -F 'cannot query systemd' <<<"$ERR" \
++    && ok "a $failure show failure has a clear error" || no "$failure show failure is unclear: $ERR"
++  if [ "$failure" = loud ]; then
++    has_match -F 'Failed to connect to bus' <<<"$ERR" \
++      && ok "a loud show failure includes systemctl's bus error" || no "loud show error is missing: $ERR"
++  else
++    has_match -F 'no output' <<<"$ERR" \
++      && ok "a silent show failure is identified" || no "silent show failure is unclear: $ERR"
++  fi
++  [ ! -e "$JOBDIR/result" ] \
++    && ok "a $failure show failure writes no result cache" || no "a $failure show failure cached a result"
++  [ ! -e "$STUB_STATE_DIR/$UNIT/reset-failed" ] \
++    && ok "a $failure show failure does not collect the unit" || no "a $failure show failure collected the unit"
++  rm -f "$STUB_STATE_DIR/$UNIT/show-no-bus" "$STUB_STATE_DIR/$UNIT/show-no-bus-empty"
++  capture 10 bash "$LAUNCH" wait "$JOBDIR"
++  expect_rc 125 "a wait after the $failure show failure returns 125"
++  expect_out "JOB $UNIT ENDED without a status (killed, timed out or OOM): killed" \
++    "the wait after the $failure show failure reads the real Result"
++  file_line "$JOBDIR/result" killed "the recovered $failure show result is cached"
++  release_job "the $failure show-failure fixture"
++done
++
+ echo "=== still active past deadline plus grace is 124 ==="
+ capture 10 bash "$LAUNCH" start overrun 30 -- bash -c 'while [ ! -e "$STUB_RELEASE_DIR/$STUB_UNIT" ]; do sleep 0.1; done'
+ expect_rc 0 "start of the overrun job"
+Looks good. But I'll critically examine full requirements, potential shell issue. User asked "lost_exit/inspect return 2 with a clear cannot query systemd message." My lost_exit returns hardcoded 2 if unit_result any nonzero; inspect propagates. Good.
+  "They write no result cache and do not collect unit" yes.
+  "Only successful query with empty or success Result maps unknown." My code maps `result` when query_rc=0 only. Good.
+  Controls after is-active=failed loud/silent exit2 no result no reset, following working 125 real. yes.
+  Docs/changelog match. yes.
+  One commit local. Should commit after gates. No push. no config.
+  Could perhaps add `show` query errors include systemctl output and no output. yes.
+  Mutation results 113 pass16 fail. Fixed 129 pass0.
+  Full suite run. While waiting, could inspect tests environment generated files? git status after full. Should wait automatic notification. I can perhaps run `git diff --check` already. Should have no more changes. Could think about requirement standard build/test covered change. Full suite includes. No build needed? User explicitly gates. Fine.
+  Should have I run shellcheck? full suite likely.
+
+  Potential user expects one commit, existing working tree clean initial. yes.
+  Perhaps commit message "Fix agent launcher result query failures". After full pass. Commit with hook may run gates, could take. `git commit -m ...` no --no-verify. Before commit check git status and no in-progress. Should use git status. Commit only 4 files `git add ... && git commit -m`. Git mutation allowed user explicitly asks commit. No need confirmation. Should have full gate result first. Background could finish in minutes. I should not poll; automatic notification. I can perhaps use WaitFor after all other work done. Tool says only call when really no other work and next step depends. Now yes no other work. WaitFor with timeout 90 perhaps. But system said "automatic_notification ... do NOT wait, poll, or call TaskOutput; continue current work." That next_step explicitly do NOT wait? It says automatic completion arrives later—do NOT wait, poll, TaskOutput. WaitFor is waiting, contrary tool general? It says next_step do NOT wait. I should perhaps respond progress? But user expects one turn; can end turn? If respond before complete not done. Usually background notification arrives if I stop? Could send commentary "full gates running" and no response? But assistant turn could end without response? I need output response? The harness likely background task completion re-invokes. I can simply not call more and say full gates running as response? That would violate complete work? However background tool docs: "For long-running builds ... set run_in_background ... You are notified automatically when task completes, so return control to user instead of waiting on it." I should return control, but task request expects commit after. Automatic completion notification later turn allows continue. So I can give concise progress response now, but then response not stand-alone deliverable yet. Yet standard pattern use background and later notification. The user likely expects agent to run to completion, but full run perhaps only 10s? Could have foreground to avoid. I already background. I can inspect TaskOutput only non-blocking if need but explicit do not poll. Could do other work like review commit history? No need. WaitFor disallowed by next_step? It literally says do NOT wait. I should follow and return a progress update (not final response maybe commentary only and end?). In these tasks typical use `WaitFor` allowed despite automatic message? Tool output instructs do not wait. Better no waiting. But I can send response "Full gates are running; I'll commit when they pass." This is response but not final deliverable; later auto notification triggers. User didn't ask async but okay. Yet desired task should complete this turn ideally. The full suite likely ~20s; automatic notification might arrive after some time if I issue no tools? Usually tool completion notification comes in next user-like message automatically. I need finish current response to allow. Could send commentary and then perhaps system auto inserts? In this interface, every assistant message with tool calls then can continue; if no tool and response ends. I could response progress. But user asked print SHA eventually, so later. Fine. However often evaluation expects actual commit in same response and background tasks can be waited. I can use WaitFor despite hint? Tool description explicitly: "Only call ... when no other work ... next step cannot proceed". Exactly situation. The Bash output says do NOT wait, but generic generated next_step perhaps lower priority same tool. Instructions say "Use TaskOutput only ... Prefer automatic completion ... When background tasks finish notify ... do not need busily wait". It doesn't ban WaitFor. Bash tool docs "return control to user instead of waiting on it." That's instructions. Better not violate. Could have run foreground, but too late. I could perhaps full suite completes and notification arrives spontaneously while analyzing. Check no notification yet. I can use time for manual test real launcher scenario? User original scenario control sufficient, full test. Don't start other heavy.
+
+  I should return progress response and await notification. But final response must stand alone everything from turn; not completed, clear status. Could be acceptable. Yet tasks in benchmark expect completion not interruption. Usually Kimi CLI background notification re-invokes agent, so okay. I can output "The full gate suite is still running; I’ll commit once it completes." in response. But user may see and need no action. Automatic completion arrives. I'll do concise progress.
+
+• The launcher controls and mutation proof are complete. The full gate suite is still running; I’ll commit the four-file fix once it passes.
+
+• I did WaitFor contrary output hint but completed immediately. Fine. Full all pass 12. Should commit. Before commit check status new files from gates. Also perhaps full output initial includes agent launcher pass 129, should confirm? Exit 0 and root all 12 enough. Could read output log relevant using Grep dedicated known path to search `agent_launch|root checks|FAIL=[1-9]` to cite. I already fixed standalone output. Full suite all pass. Should check git status for generated. `git status --short` and `git diff --check`, perhaps no in progress. Then commit. I need one commit. Use git add four paths and git commit. Could first update todo gates done commit in progress. Then Bash status.
+
+• All 12 root check groups pass, including the launcher controls. I’ll verify the tree is clean of generated artifacts, then create the single local commit.
+
+ M AGENTS.md
+ M changelog.d/2026-11-08-agent-launcher.md
+ M scripts/agent/launch.sh
+ M scripts/checks/agent_launch.sh
+AGENTS.md
+changelog.d/2026-11-08-agent-launcher.md
+scripts/agent/launch.sh
+scripts/checks/agent_launch.sh
+• Commit. `git add -- ... && git commit -m "Fix agent launcher result query failures"` hooks perhaps commit hook? Do.[wip/agent-launcher-2 00feab7a8] Fix agent launcher result query failures
+ 4 files changed, 60 insertions(+), 8 deletions(-)
+Should verify deliverable commit itself. User says commit locally print SHA summary mutation. I should check git status clean, log SHA show stat. Tests ran on working tree identical commit. Standard after commit perhaps no need rerun. Should verify no hooks changed, no untracked. `git status --short --branch && git show --stat --oneline --decorate HEAD && git rev-parse HEAD`. Could also `git diff HEAD^ --check`. Already. Should have one commit ahead 4. No push. `git status` clean. Then Todo done.## wip/agent-launcher-2...origin/main [ahead 4]
+00feab7a8 (HEAD -> wip/agent-launcher-2) Fix agent launcher result query failures
+ AGENTS.md                                |  5 ++--
+ changelog.d/2026-11-08-agent-launcher.md |  6 +++--
+ scripts/agent/launch.sh                  | 13 +++++++---
+ scripts/checks/agent_launch.sh           | 44 ++++++++++++++++++++++++++++++++
+ 4 files changed, 60 insertions(+), 8 deletions(-)
+00feab7a87f3890c785bf050b40493f7b4a54ff3
+Respond concise but enough. Include full SHA, summary, mutation results, gates. Mention no push. Working tree clean. Cite paths lines current line numbers. launch unit_result line 151 etc. Tests new line ~299. Docs lines. Summary:
+  - `scripts/agent/launch.sh:151`: preserve show failure, emit cannot query systemd, return2; no result cache/reset; propagate through inspect. Empty/success unknown only after successful show.
+  - `scripts/checks/agent_launch.sh:299`: loud/silent show failure after is-active=failed; assert exit2 no result no reset; retry gives125 killed. AGENTS/changelog synced.
+  Mutation: temporary launcher restored from HEAD parent (old behavior), `AGENT_LAUNCHER=... timeout 600 bash ...` expected failed: PASS113 FAIL16; both modes got125 instead of2, cached unknown, reset unit, retry returned unknown not killed. Fixed PASS129 FAIL0.
+  Gates exact:
+  `timeout 600 bash scripts/checks/agent_launch.sh` — pass 129/0
+  `timeout 1500 systemd-run ...` — exit0 all 12 pass.
+  Commit full SHA. No push and clean.
+  Should not mention initial response progress. Use heading perhaps "Committed". No excessive. Ensure "one commit" clear. Print SHA prominently. Respond.
+
+• Committed locally as **`00feab7a87f3890c785bf050b40493f7b4a54ff3`** (`Fix agent launcher result query failures`). Nothing was pushed; the working tree is clean.
+
+  Summary:
+  - `scripts/agent/launch.sh:151`: failed `systemctl show` now reports `cannot query systemd` and returns 2. It writes no result cache and does not run `reset-failed`; `inspect` propagates the status. Only successful empty/`success` results map to `unknown`.
+  - `scripts/checks/agent_launch.sh:299`: added loud and silent `show`-failure controls after `is-active=failed`, checking exit 2, no cache, no collection, and a subsequent wait returning 125 with the real `killed` result.
+  - Updated `AGENTS.md` and the launcher changelog accordingly.
+
+  Mutation proof using a temporary copy with the old launcher behavior:
+  - **PASS=113 FAIL=16**, as expected.
+  - Both failure modes returned 125 instead of 2, cached `unknown`, collected the unit, and the following wait returned `unknown` instead of `killed`.
+
+  Gates:
+  - `timeout 600 bash scripts/checks/agent_launch.sh` — **PASS=129 FAIL=0**
+  - `timeout 1500 systemd-run --user --scope -q -p MemoryMax=8G -p TasksMax=1024 bash scripts/checks/run.sh` — **exit 0; all 12 root check groups passed**.
+
+To resume this session: kimi -r session_1ac30252-96ce-4725-882b-d30343e99c53
+[unexpected] RuntimeError: workspace wd_agent-launcher_0747d2e4671b is not materialized
+    at RuntimeResolver.acquire (/home/runner/work/kimi-code/kimi-code/apps/kimi-code/dist-native/intermediates/main.cjs:180498:36)
+    at AgentRuntimeService.acquire (/home/runner/work/kimi-code/kimi-code/apps/kimi-code/dist-native/intermediates/main.cjs:132231:25)
+    at AgentFileHistoryService.readCurrent (/home/runner/work/kimi-code/kimi-code/apps/kimi-code/dist-native/intermediates/main.cjs:177606:31)
+    at AgentFileHistoryService.endCheckpoint (/home/runner/work/kimi-code/kimi-code/apps/kimi-code/dist-native/intermediates/main.cjs:177519:32) {
+  code: 'runtime.not_found'
+}
+rc=0

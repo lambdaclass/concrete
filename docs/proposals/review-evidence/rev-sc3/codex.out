@@ -1,0 +1,14 @@
+1. **Defect — scripts/spec/rules.py:40–50:** Attribute skipping remains bypassable through raw strings, quoted identifiers and comments. In-memory checking returns **0** when both verdicts precede definitions using:
+   ```lean
+   @[deprecated r#"a " ] example"#]
+   def a : True := trivial
+   ```
+   The scanner treats an interior quote as the string’s end and accepts the interior `example`. **Fix:** skip all Lean literal forms and comments while balancing attribute brackets; add negative controls for these forms.
+
+2. **Defect — scripts/spec/rules.py:117–120:** The malformed-citation scan searches inside already valid citations. A registered name such as ``R.«a (rule ` b` c»`` is parsed correctly by `CITE`, but its interior citation-like text triggers “malformed rule citation.” In-memory checking returns **1** for otherwise valid accepted and refused examples. **Fix:** consume complete citations before searching for another start, excluding their quoted-name contents; add a positive control.
+
+The three original round-2 reproductions are addressed, and the added shell controls test their stated cases. Inventory checking now rejects prose-only mentions; the two unmatched combined bold labels have their identifiers declared elsewhere in the inventories.
+
+Reproductions were entirely in memory; no files were modified.
+
+VERDICT: REVISE

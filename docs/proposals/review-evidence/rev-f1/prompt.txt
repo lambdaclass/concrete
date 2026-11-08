@@ -1,0 +1,362 @@
+Do not run any tools or commands; every input you need is inline below. Answer from the text alone.
+
+You are reviewing branch wip/stack-tls-reach of the Concrete repository, commit ded66d31f7587062f60d614c4c5f03b075c628af (base main ea212942). It fixes ISS-0028: the slice-0 stack-bound analysis (scripts/checks/lib/stack_bound.py, a static analyzer of linked x86-64/AArch64 disassembly that derives a stack-depth bound, fail closed) exempted every x86 fs:/gs: segment-relative absolute operand from stack accounting with any displacement, under a premise that only said "the thread-pointer block is not on the stack"; `mov byte ptr fs:[0x100000], 0x0; ret` got bound 0. The run check (scripts/checks/lib/stack_access.py, used under gdb/LLDB to measure the lowest byte each instruction touches) skipped fs/gs operands entirely.
+
+The fix bounds fs/gs displacements by TP_REACH = 0x100, restates the premise (the stack lies farther than TP_REACH bytes from each fs/gs base), refuses fs/gs operands through a register or beyond the reach, makes the run check add the segment base (reg("fs_base") / reg("gs_base")) and count the address, and adds controls.
+
+Questions: Is the fix sound — can any fs/gs operand still reach the stack without being counted or refused (sign handling, operand forms such as fs:0x28 without brackets, segment overrides on other operand shapes, AArch64 tpidr_el0 equivalents, multiple memory operands)? Is the premise stated precisely and is TP_REACH justified? Does the run check's reg("fs_base") work with the debugger glue (gdb exposes $fs_base on x86-64 Linux; is a missing base a fail-closed error)? Are the controls load-bearing (would they fail if the fix were reverted)? Any regression for existing bounds?
+
+Report findings with file:line and severity, then end with exactly one line: VERDICT: ACCEPT or VERDICT: REJECT.
+
+=== The diff ===
+commit ded66d31f7587062f60d614c4c5f03b075c628af
+Author: Federico Carrone <mail@fcarrone.com>
+Date:   Sun Nov 8 15:10:03 2026 +0000
+
+    ISS-0028: bound thread-pointer-relative accesses
+
+diff --git a/Concrete/README.md b/Concrete/README.md
+index 9e99868c4..c6d6f9119 100644
+--- a/Concrete/README.md
++++ b/Concrete/README.md
+@@ -583,7 +583,7 @@ The CLI is `concrete facts FILE [FN]` and `concrete build FILE -o OUT` (owner, 2
+ 9. **Trusted base** (owner, 2026-11-07): a golden test that `concrete facts` prints exactly the spec's premise list, so a premise added, removed or reworded anywhere fails until the golden is updated with it. Implemented provisionally in `scripts/checks/compiler/slice0_trusted_base.sh`: until `concrete facts` exists, `scripts/checks/compiler/slice0_trusted_base.lean` prints `Premises.report`: the premise registry `Concrete/Premises.lean`, the sorted axioms of each headline theorem (`Premises.theorems`) and each axiom's type; the gate appends the Lean toolchain and the Lake pins, and the result must equal `tests/golden/slice0_trusted_base.txt` byte for byte. The README's open-premise table must equal the registry's rendering (`Premises.tableRow`). Controls cover the comparison, a failing printer, the axiom collection and a drifted table. The statements are text until `FrontendPremises` and `NativePremises` land as Lean structures; each entry then names its field.
+ 10. **Sanitizers** (owner, 2026-11-07; UBSan dropped by the owner, 2026-11-08; implemented in `scripts/checks/compiler/slice0_artifacts.sh`): every LLVM example also runs built with ASan in CI, and must give the same observation with no sanitizer report. ASan instruments only functions marked `sanitize_address`, which clang's C front end adds and the printed IR lacks, so the sanitizer build adds it to every definition (`slice0_native.sh sanitize`); a control body with an out-of-bounds load must be reported. There is no UBSan leg: UBSan's checks are inserted by clang's C front end, so on LLVM IR input it checks nothing. No C is compiled in slice 0, and the LLVM-level undefined behaviour of the printed IR (poison, `unreachable`) stays P_print's.
+ 11. **Binary size** (owner, 2026-11-07; implemented, same script): the size of each example's executable (bytes and text size, pinned `llvm-size`), per backend and target, is recorded per run in `sizes.tsv`, uploaded with the job. Report-only: it never fails a run. **Compile time** (owner, 2026-11-08; same script, report-only): each example's emit step (the Lean emitter, Lean start-up included) and native step (clang and LCB's command line) in wall-clock milliseconds, next to its budget (the step's time bound), in `compile_times.tsv`.
+-12. **Stack bound** (owner, 2026-11-07; implemented in the same script and `lib/stack_bound.py`; the `aarch64-macos` run check with LLDB, 2026-11-08): a stack-bound fact for each example, derived from the final artifact (the linked executable, not the IR) for both backends, and checked against a run. The analysis follows every path of the Concrete-owned code, instruction by instruction from an explicit set of modelled instructions, (`main`, `concrete_rt_write_all`, `concrete_body`) over the disassembly's control-flow graph, tracking the stack and frame pointers' depth below `main`'s entry and every byte addressed relative to them (so the red zone), refusing an access deeper than the target's red zone below the stack pointer (128 bytes on x86-64 System V and on Apple arm64, none under AAPCS64 on Linux: deeper bytes may be overwritten by a signal handler), and fails closed on anything it does not model (an instruction outside the set, another stack-pointer write, frame- or link-register writeback, an indirect branch or call, a stack pointer copied out, an indexed stack address, a stack read of bytes the function has not itself written on every path since its last call (so no stale saved frame pointer is ever loaded), a saved slot read other than by the modelled restore, two depths meeting, recursion, a call to a function neither owned nor a PLT/stub). The external calls (`write`, `_exit`, `abort`) are listed with the depth at their entry; their own use, and that `_exit` and `abort` do not return, are the libc premise. On x86-64 Linux the run check single-steps the owned code under the pinned gdb and requires the measured depth to be within the bound, for a complete run only (stopped first at `main`, back at each external call's return address, no signal, the expected exit status). The measured depth is the lowest of the stack pointer and every stack byte a stepped instruction addresses (`lib/stack_access.py` evaluates each memory operand), so a red-zone access is counted, and one deeper than the red zone is an error. A control links a `main` that stores at the red zone's edge without moving the stack pointer and requires bound 128 and measured 128 (on AArch64 it first allocates and frees a 144-byte frame with a pre-indexed store, judged against the new stack pointer, so 144); with a 120-byte red zone the same run gives no measurement. On Mach-O each stub entry's imported symbol comes from the indirect symbol table (`llvm-objdump --macho --indirect-symbols`), since the disassembly names only the `__stubs` section. On `aarch64-macos` the run check is the same, under Apple's LLDB (`/usr/bin/lldb`, `lib/stack_measure_lldb.py`; an external call's return address is the link register); LLDB is not pinned (Apple's signed debugserver is the only one allowed to attach), so its version is printed in the gate log. `stack.tsv` records bound, measurement and externals.
++12. **Stack bound** (owner, 2026-11-07; implemented in the same script and `lib/stack_bound.py`; the `aarch64-macos` run check with LLDB, 2026-11-08): a stack-bound fact for each example, derived from the final artifact (the linked executable, not the IR) for both backends, and checked against a run. The analysis follows every path of the Concrete-owned code, instruction by instruction from an explicit set of modelled instructions, (`main`, `concrete_rt_write_all`, `concrete_body`) over the disassembly's control-flow graph, tracking the stack and frame pointers' depth below `main`'s entry and every byte addressed relative to them (so the red zone), refusing an access deeper than the target's red zone below the stack pointer (128 bytes on x86-64 System V and on Apple arm64, none under AAPCS64 on Linux: deeper bytes may be overwritten by a signal handler), and fails closed on anything it does not model (an instruction outside the set, another stack-pointer write, frame- or link-register writeback, an indirect branch or call, a stack pointer copied out, an indexed stack address, a stack read of bytes the function has not itself written on every path since its last call (so no stale saved frame pointer is ever loaded), a saved slot read other than by the modelled restore, two depths meeting, recursion, a call to a function neither owned nor a PLT/stub). On x86, an absolute `fs:`/`gs:` memory operand is exempt from stack accounting only when its displacement has magnitude at most `TP_REACH = 0x100`; anything larger is refused. The corresponding premise is that every stack byte lies farther than `TP_REACH` bytes from each thread-pointer base (`fs` and `gs`), in either direction. The run check computes the effective address from the debugger's segment base and counts it like any other access. The external calls (`write`, `_exit`, `abort`) are listed with the depth at their entry; their own use, and that `_exit` and `abort` do not return, are the libc premise. On x86-64 Linux the run check single-steps the owned code under the pinned gdb and requires the measured depth to be within the bound, for a complete run only (stopped first at `main`, back at each external call's return address, no signal, the expected exit status). The measured depth is the lowest of the stack pointer and every stack byte a stepped instruction addresses (`lib/stack_access.py` evaluates each memory operand), so a red-zone access is counted, and one deeper than the red zone is an error. A control links a `main` that stores at the red zone's edge without moving the stack pointer and requires bound 128 and measured 128 (on AArch64 it first allocates and frees a 144-byte frame with a pre-indexed store, judged against the new stack pointer, so 144); with a 120-byte red zone the same run gives no measurement. On Mach-O each stub entry's imported symbol comes from the indirect symbol table (`llvm-objdump --macho --indirect-symbols`), since the disassembly names only the `__stubs` section. On `aarch64-macos` the run check is the same, under Apple's LLDB (`/usr/bin/lldb`, `lib/stack_measure_lldb.py`; an external call's return address is the link register); LLDB is not pinned (Apple's signed debugserver is the only one allowed to attach), so its version is printed in the gate log. `stack.tsv` records bound, measurement and externals.
+ 
+ With the front end (owner, 2026-11-07): gate 5's random-program fuzzer compares the native executables with the Lean evaluator, and a JSON schema generated from the Lean types of the `facts` output has goldens. Each gate joins `required-checks.txt` when the compiler lands.
+ 
+diff --git a/ISSUES.tsv b/ISSUES.tsv
+index f622a24eb..268adc380 100644
+--- a/ISSUES.tsv
++++ b/ISSUES.tsv
+@@ -19,3 +19,4 @@ ISS-0014	2026-11-06	spec	Unconfirmed retrospective second-review findings (Kimi,
+ ISS-0015	2026-11-06	ci	Sandboxes inherit the caller's git environment. scripts/checks/review_tool.sh isolated git config only, not the repository-locating variables; a pre-push hook of a LINKED worktree exports GIT_DIR=<repo>/.git/worktrees/<name>, so every git -C <sandbox> in the check acted on the caller. On 2026-11-06 `train.sh ci laudit` run from the linked worktree ~agent/audit-records made the hook's review_tool.sh create its test branches (nonff, capped, parse-*) and set core.bare=true in ~agent/audit-clone (kept unchanged as evidence), and push 28 commits to origin refs/notes/concrete-review (tip b4b364f4, pre-leak 5b6add0d) and 12 to refs/notes/concrete-review-findings (tip 21c56796, pre-leak fd3c6451), authored Review Gate, 17:16:49-17:17:43Z, annotating 21 sandbox commits that exist on no remote (first counted as 22, which wrongly included c54679c3, a real commit whose note at 17:21Z is legitimate); no earlier note was deleted or changed and every reader looks notes up by exact SHA, so none can count as provenance for a real commit. lambdaclass has no notes refs. Codex confirmed with a bounded reproducer on concrete-ci-2 at main f9a8c333 (caller refs and refs/notes/* changed: LEAK) and an independent GIT_DIR experiment. landing_script.sh and landing_bot.sh unset only five of git's local variables; legacy_frozen.sh, acceptance.sh, run-at-ref.sh and bot.sh unset none. Second incident, same cause: the first reproducer installed a pre-push hook that ran review_tool.sh; the leaked GIT_DIR made each nested push re-enter that hook, the recursion exhausted fede-256gb (load ~1900) and the OOM killer took down the orchestrator's session. Structural owner: the sandbox helper scripts/checks/lib/git_sandbox.sh (unsets every `git rev-parse --local-env-vars` variable), sourced by every repository-making script; reproducers and tests run with no installed hook, under timeout 120 and a 512-task / 8G systemd scope bound, or a finite cgroup memory.max plus a process limit, and never an unbounded run. Closed 2026-11-07: the fix landed at dbe838488891, where every closure part is checked in Root checks (scripts/checks/run.sh, all 11 pass: sandbox_isolation PASS=13 FAIL=0 with its structural leg over 9 scripts, the two live linked-worktree probes and the leaking control; landing_script PASS=208 FAIL=0 with the linked-worktree, hook-off, foreign-hook and identify refusal legs; also run on concrete-ci-2 at 8e62e377) (train siso from a full clone; reviewed by Codex, rounds clean at 8e62e377, and Kimi; CI run 42424663064; main CI 42425007584 on origin and 42425010605 on lambdaclass, both success). The stray notes were removed from origin by one forward fast-forward commit per ref on its then-current tip, no force: refs/notes/concrete-review d4bdcae22d50 -> dcffeea8e6cd (21 entries removed, 224 untouched at the push; Codex confirmed the list against the earlier tip 8cbb7db253f7, where 223 were untouched, and the one commit between that tip and d4bdcae22d50 only added a legitimate note for 9d6dc01a, so the removal list is identical) and refs/notes/concrete-review-findings 301e929e1bab -> 5d7c6dc3dad5 (11 removed, 105 untouched); the 40 leaked commits wrote 33 entries, one of which they removed themselves (0c04c01c); Codex confirmed the removal list and the tree diffs before the push; lambdaclass has no notes refs and none were created. ~agent/audit-clone is kept unchanged as evidence with LEAK-EVIDENCE-README.txt	R-0544	high	every repository-making script under scripts/ sources git_sandbox.sh (scripts/checks/sandbox_isolation.sh, structural leg); review_tool.sh and legacy_frozen.sh run from a linked worktree with GIT_DIR exported leave the caller's refs, refs/notes/*, core.bare and upstream unchanged while a leaking control is detected (same check, bounded); train.sh and the pre-push hook refuse a linked worktree and train.sh refuses a clone without the repository hook; and the stray notes are removed from origin by a forward fast-forward notes commit whose before and after tips are recorded here	closed
+ ISS-0016	2026-11-07	ci	CI run 42424028055 (train legacydocs at 4d0355a56e, a docs-only change over 93850111) failed Kernel replay (leanchecker): the per-module leg replayed ConcreteSpec.Spec.Ownership, a module renamed to Slice1Ownership by 44ee1231, and stopped on unknown constant 'ConcreteSpec.lookupF'. The job's lake cache had been restored through a restore-key prefix from the cache of train commit 5b894432ad, whose sources predate the rename. Non-fresh `leanchecker ConcreteSpec` picks every .olean on the search path whose name has the prefix (the toolchain's LeanChecker.lean, lines 91-94), so orphaned build files are replayed. Reproducer: build 44ee1231^, build 93850111's sources over that build directory, run scripts/proofs/kernel_replay.sh: FAIL on the Checker/Syntax orphans; a clean build of the same sources passes. Codex confirmed it with that reproducer (2026-11-07). Structural cause: the replay took its module list from the build directory's contents instead of the sources.	scripts/proofs/kernel_replay.sh	high	closed by wip/replay-source-modules: kernel_replay.sh replays a staged library holding exactly the modules the sources declare and checks that the replayed set equals that list; scripts/proofs/lib.sh prunes build files of modules with no source before building; negative controls plant an orphan that fails an unfiltered replay and is ignored by the staged one	closed
+ ISS-0019	2026-11-08	ci	scripts/land/train.sh review_provenance accepts a clean head review note without checking that its reviewed range covers the train diff; scripts/review/verify.sh:59 checks `base:` only as 40 hex, and train.sh:479 accepts the clean verdict. On wip/record-signoffs (head 0b9d3cfa3, clean note with base 1547734f8 = wip/record-language), a train of record-signoffs alone would have landed record-language's unreviewed content; record-language has no clean note and lands only by owner sign-off. Not exploited; nothing landed that way. Codex confirmed 2026-11-08 (VERDICT: CONFIRMED) using local bare repositories with no hooks: main A, unreviewed B, C on B, clean note on C based at B; review_provenance accepts C, while a findings note is refused. Structural cause: the note base is validated syntactically, never against the train base.	scripts/land/train.sh review_provenance	high	review_provenance accepts a head note only when the note's base is an ancestor-or-equal of the train's recorded base (origin/main at build), and a member note only when its base is an ancestor-or-equal of the train base; verify.sh takes an explicit --required-base; the landing tool's checks gain this reproducer as a control (clean note based on an unreviewed intermediate commit is refused; a note based at main passes)	open
++ISS-0028	2026-11-08	compiler	Codex confirmed at main ea212942 that `printf '0000000000401000 <main>:\n  401000: mov byte ptr fs:[0x100000], 0x0\n  401009: ret\n' > fs.dis; python3 scripts/checks/lib/stack_bound.py x86_64-linux fs.dis` printed `bound 0` and exited 0; with FS base main_entry_sp - 0x100080 the write lands at main_entry_sp - 128, while stack_access.x86_addresses returned []. Found by the retroactive full-access review of slice 0's landed rounds (86c31477..ea5181b5). Structural cause: segment-relative offsets were exempted without constraining their effective addresses. Structural owner: stack_bound.py's addressing model and its stated premises, beside PC_REACH	R-0575	medium	slice0_artifacts.sh controls fs-beyond-reach and gs-beyond-reach exit 1 with the thread-pointer reach refusal, x86-thread-pointer-canary keeps bound 0, x86-run-thread-pointer-beyond-reach computes and counts the segment-relative address, and the real artifact bounds are unchanged	closed
+diff --git a/changelog.d/2026-11-08-stack-tls-reach.md b/changelog.d/2026-11-08-stack-tls-reach.md
+new file mode 100644
+index 000000000..1305e1384
+--- /dev/null
++++ b/changelog.d/2026-11-08-stack-tls-reach.md
+@@ -0,0 +1,6 @@
++- ISS-0028: slice-0 gate 12 now fails closed on x86 `fs:`/`gs:` absolute displacements beyond
++  `TP_REACH = 0x100`, instead of exempting every thread-pointer-relative operand from stack
++  accounting. None of the 64 real owned-code disassemblies contained such an operand; the bound
++  covers the canary-style `fs:0x28` control with 216 bytes of margin. The premise now requires the
++  stack to be farther than `TP_REACH` from each segment base in either direction. The gdb run check
++  computes `fs_base`/`gs_base`-relative effective addresses and counts any that reach the stack.
+diff --git a/scripts/checks/compiler/slice0_artifacts.sh b/scripts/checks/compiler/slice0_artifacts.sh
+index 319cba787..cf6b02f2c 100644
+--- a/scripts/checks/compiler/slice0_artifacts.sh
++++ b/scripts/checks/compiler/slice0_artifacts.sh
+@@ -30,16 +30,18 @@
+ #     restored, a freed or restored saved slot reread, a callee's leftover saved slot reread by
+ #     its caller (both architectures), a read of bytes written on one path only or never written,
+ #     a store through main's argv, a PC-relative base kept across a call, walked by repeated adds or
+-#     beyond the reach premise, an absolute address (memory only through sp/fp, PC-relative or fs/gs), a callee that does not restore the frame pointer, a frame record away from sp, an unmodelled
+-#     instruction (x86 `loop`) and frame- or link-register writeback (AArch64), and give the
+-#     expected bound on known functions (x86 frame, red-zone store, two AArch64 frame-record
+-#     shapes, a read of bytes written on both paths, an adrp-based load, LCB's single link-register
+-#     save with a Mach-O stub call in a loop); also refuse the link register loaded from another
+-#     slot, a stub call with no indirect-symbol entry, into a stub entry's middle or to the bare stub
+-#     section; the comparison must reject a
+-#     measurement above the bound; refuse an access beyond the target's red zone (x86-64, Apple
+-#     arm64) and any below the stack pointer on aarch64-linux; and a linked main storing at the red
+-#     zone's edge must be measured at 128 (bound 128), and with a 120-byte red zone not at all.
++#     beyond the reach premise, fs/gs beyond TP_REACH, an absolute address (memory only through
++#     sp/fp, PC-relative or bounded fs/gs), a callee that does not restore the frame pointer, a frame
++#     record away from sp, an unmodelled instruction (x86 `loop`) and frame- or link-register
++#     writeback (AArch64), and give the expected bound on known functions (x86 frame, red-zone store,
++#     two AArch64 frame-record shapes, a read of bytes written on both paths, an adrp-based load, an
++#     fs:0x28 canary load with bound unchanged, LCB's single link-register save with a Mach-O stub
++#     call in a loop); also refuse the link register loaded from another slot, a stub call with no
++#     indirect-symbol entry, into a stub entry's middle or to the bare stub section; the run check
++#     must compute and count a beyond-reach fs address; the comparison must reject a measurement
++#     above the bound; refuse an access beyond the target's red zone (x86-64, Apple arm64) and any
++#     below the stack pointer on aarch64-linux; and a linked main storing at the red zone's edge must
++#     be measured at 128 (bound 128), and with a 120-byte red zone not at all.
+ #
+ # usage: slice0_artifacts.sh [REPORT_DIR]. Run inside the nix devshell, from the repository root.
+ set -euo pipefail
+@@ -252,6 +254,16 @@ refuse() { # refuse NAME BODY [TARGET [MAIN]]: BODY (printf format) follows the
+     echo "ok   control: stack analysis refuses $1"
+   fi
+ }
++refuse_tp() { # refuse_tp NAME BODY: a beyond-reach thread-pointer operand gets the reach refusal
++  local f rc=0
++  f=$(ctl_dis "$1" <<<"$(printf "\n0000000000001010 <main>:\n$2")")
++  stack_bound x86_64-linux "$f" >"$f.out" || rc=$?
++  if [ "$rc" -eq 1 ] && grep -q '^refused: .*thread-pointer-relative access beyond the premise' "$f.out"; then
++    echo "ok   control: stack analysis refuses $1 with the reach diagnostic"
++  else
++    echo "FAIL control: $1: status $rc, output $(head -c 2000 "$f.out")"; fail=1
++  fi
++}
+ refuse dynamic-sp '    1010:\tsub\trsp, rax\n    1013:\tret\n'
+ refuse indirect-call '    1010:\tcall\trax\n    1012:\tret\n'
+ refuse recursion '    1010:\tpush\trbp\n    1011:\tcall\t0x1010 <main>\n    1016:\tpop\trbp\n    1017:\tret\n'
+@@ -288,6 +300,8 @@ refuse a64-pc-relative-after-call '    1010:\tstp\tx29, x30, [sp, #-0x10]!\n
+ refuse a64-pc-relative-walk '    1010:\tadr\tx8, 0x1010 <_main>\n    1014:\tsub\tx2, x1, #0xfff\n    1018:\tadd\tx8, x8, #0x8\n    101c:\tcmp\tx8, x2\n    1020:\tb.lo\t0x1018 <_main+0x8>\n    1024:\tstrb\twzr, [x8]\n    1028:\tret\n' aarch64-macos _main
+ refuse a64-pc-relative-far '    1010:\tadrp\tx8, 0x7fff0000\n    1014:\tstrb\twzr, [x8]\n    1018:\tret\n' aarch64-macos _main
+ refuse absolute-address '    1010:\tmov\tbyte ptr [0x7fffffd0], 0x0\n    1018:\tret\n'
++refuse_tp fs-beyond-reach '    1010:\tmov\tbyte ptr fs:[0x100000], 0x0\n    1018:\tret\n'
++refuse_tp gs-beyond-reach '    1010:\tmov\tbyte ptr gs:[0x100000], 0x0\n    1018:\tret\n'
+ # The link register loaded from a slot that does not hold it, and a stub call with no stub entry.
+ refuse a64-lr-from-other-slot '    1010:\tsub\tsp, sp, #0x20\n    1014:\tstr\tx30, [sp, #0x10]\n    1018:\tstr\tx0, [sp, #0x8]\n    101c:\tldr\tx30, [sp, #0x8]\n    1020:\tadd\tsp, sp, #0x20\n    1024:\tret\n' aarch64-macos _main
+ refuse a64-unmapped-stub '    1010:\tstr\tx30, [sp, #-0x10]!\n    1014:\tbl\t0x1040 <_write+0x1040>\n    1018:\tldr\tx30, [sp], #0x10\n    101c:\tret\n' aarch64-macos _main
+@@ -334,6 +348,25 @@ bound_is a64-pc-relative-load aarch64-macos 'bound 0' '0000000000001000 <_main>:
+ bound_is a64-single-lr-save-and-stub aarch64-macos 'bound 48 external write 48' '0000000000001000 <_main>:\n    1000:\tsub\tsp, sp, #0x30\n    1004:\tstr\tx30, [sp, #0x20]\n    1008:\tmov\tw0, #0x2\n    100c:\tbl\t0x1040 <_write+0x1040>\n    1010:\tcbnz\tw0, 0x1008 <_main+0x8>\n    1014:\tldr\tx30, [sp, #0x20]\n    1018:\tadd\tsp, sp, #0x30\n    101c:\tret\n\nDisassembly of section __TEXT,__stubs:\n\n0000000000001040 <__stubs>:\n    1040:\tadrp\tx16, 0x2000\n    1044:\tldr\tx16, [x16]\n    1048:\tbr\tx16\nstub 0x0000000000001040 _write\n'
+ # A read of bytes the function wrote on both paths into it is accepted.
+ bound_is both-path-write x86_64-linux 'bound 16' '0000000000001010 <main>:\n    1010:\tpush\trbp\n    1011:\tmov\trbp, rsp\n    1014:\tje\t0x101c <main+0xc>\n    1016:\tmov\tqword ptr [rbp - 0x8], rax\n    101a:\tjmp\t0x1020 <main+0x10>\n    101c:\tmov\tqword ptr [rbp - 0x8], rcx\n    1020:\tmov\trax, qword ptr [rbp - 0x8]\n    1024:\tpop\trbp\n    1025:\tret\n'
++bound_is x86-thread-pointer-canary x86_64-linux 'bound 0' '0000000000001010 <main>:\n    1010:\tmov\trax, qword ptr fs:[0x28]\n    1019:\tret\n'
++if bounded 60 python3 -I -c '
++import sys
++sys.path.insert(0, sys.argv[1])
++import stack_access
++base = 0x7fff00000000
++def reg(name):
++    if name != "fs_base":
++        raise ValueError("unexpected register " + name)
++    return base
++addresses = stack_access.x86_addresses("mov byte ptr fs:[0x100000],0x0", reg, 0)
++assert addresses == [base + 0x100000], addresses
++sp0 = base + 0x100000 + 128
++assert stack_access.lowest_stack(addresses, sp0, sp0, 128, 8 << 20) == base + 0x100000
++' "$root/scripts/checks/lib"; then
++  echo "ok   control: x86-run-thread-pointer-beyond-reach computes and counts the address"
++else
++  echo "FAIL control: x86-run-thread-pointer-beyond-reach was not computed and counted"; fail=1
++fi
+ if [ -n "$measuring" ]; then
+   # A run that does not end as expected gives no measurement.
+   wrong=$(( ($(head -c 16 "$(dirname "$last_exe")/status") + 1) % 256 ))
+diff --git a/scripts/checks/lib/stack_access.py b/scripts/checks/lib/stack_access.py
+index 1f31e9f65..d37a0ee56 100644
+--- a/scripts/checks/lib/stack_access.py
++++ b/scripts/checks/lib/stack_access.py
+@@ -29,23 +29,22 @@ def _num(text):
+ 
+ def x86_addresses(asm, reg, next_pc):
+     """Effective addresses of the memory operands of one instruction in gdb's Intel syntax
+-    (`mov QWORD PTR [rsp-0x80],0x0`). reg(name) reads a register. lea and nop compute an address
+-    without accessing it; fs:/gs: operands address the thread block, not the stack."""
++    (`mov QWORD PTR [rsp-0x80],0x0`). reg(name) reads a register or segment base. lea and nop
++    compute an address without accessing it; fs:/gs: operands include that segment's base."""
+     asm = asm.split("#", 1)[0].strip().lower()
+     mn = asm.split(None, 1)[0] if asm else ""
+     if mn == "lea" or mn.startswith("nop") or mn.startswith("prefetch"):
+         return []
+     out = []
+     for m in re.finditer(r"(?:(\w\w):)?\[([^\]]*)\]", asm):
+-        if m.group(1) in ("fs", "gs"):
+-            continue
+         inner = m.group(2).replace(" ", "")
+         if not inner or inner[0] not in "+-":
+             inner = "+" + inner
+         terms = re.findall(r"([+-])([^+-]+)", inner)
+         if "".join(s + t for s, t in terms) != inner:
+             raise ValueError(f"unparsed memory operand [{m.group(2)}] in {asm}")
+-        addr = 0
++        segment = m.group(1)
++        addr = reg(segment + "_base") if segment in ("fs", "gs") else 0
+         for sign, term in terms:
+             if "*" in term:
+                 a, b = term.split("*", 1)
+diff --git a/scripts/checks/lib/stack_bound.py b/scripts/checks/lib/stack_bound.py
+index 159fcbcb4..00a1afc0f 100644
+--- a/scripts/checks/lib/stack_bound.py
++++ b/scripts/checks/lib/stack_bound.py
+@@ -24,24 +24,26 @@ Why addresses cannot escape this accounting: memory is addressed only through th
+ pointer (accounted), PC-relatively within a fixed reach of the code (x86 `rip` with a displacement
+ up to PC_REACH; on AArch64 a register holding an adrp/adr result within PC_REACH, plus at most one
+ add immediate, on every path since the last call, with a bounded offset and no writeback) or
+-through the x86 thread-pointer segments. Any other register may hold a stack address (main's argv
+-and envp, a value an external function left), so no access goes through one. The analysis also refuses taking a stack address as a value (`lea` of one, the stack or frame
+-pointer copied, stored or used in arithmetic, except the modelled frame setup), so only the frame
+-save (`push rbp`, `stp x29, x30`) puts one in memory. Saved slots may be read only
+-by the modelled restore (`pop rbp`, `leave`, `ldp x29, x30` with base sp). Any other stack read
+-must be of bytes the function itself wrote, on every path, since its last call: so no stale value
+-(a callee's or the caller's saved frame pointer, libc's scratch) is ever loaded. Accesses must lie
+-below the entry stack pointer (never the return address or the caller's frame) and at most the
+-target's red zone below the current stack pointer (TARGETS: 128 bytes on x86-64 System V and on
+-Apple arm64, none under AAPCS64 on Linux; deeper bytes may be overwritten asynchronously, by a
+-signal handler, so code using them has no bound), returns must be at
+-depth 0 with the caller's frame pointer restored and, on AArch64, with the link register holding
+-the return address.
++through an x86 thread-pointer segment with an absolute displacement of at most TP_REACH in
++magnitude. Any other register may hold a stack address (main's argv and envp, a value an external
++function left), so no access goes through one. The analysis also refuses taking a stack address as
++a value (`lea` of one, the stack or frame pointer copied, stored or used in arithmetic, except the
++modelled frame setup), so only the frame save (`push rbp`, `stp x29, x30`) puts one in memory.
++Saved slots may be read only by the modelled restore (`pop rbp`, `leave`, `ldp x29, x30` with base
++sp). Any other stack read must be of bytes the function itself wrote, on every path, since its last
++call: so no stale value (a callee's or the caller's saved frame pointer, libc's scratch) is ever
++loaded. Accesses must lie below the entry stack pointer (never the return address or the caller's
++frame) and at most the target's red zone below the current stack pointer (TARGETS: 128 bytes on
++x86-64 System V and on Apple arm64, none under AAPCS64 on Linux; deeper bytes may be overwritten
++asynchronously, by a signal handler, so code using them has no bound), returns must be at depth 0
++with the caller's frame pointer restored and, on AArch64, with the link register holding the return
++address.
+ 
+ The premises (outside the bound, listed in the gate's report): the stack lies farther than
+-PC_REACH + 4095 + A64_OFF_REACH bytes from the image's code, and the thread-pointer block (fs/gs)
+-is not on the stack; the external functions' own stack use; that `_exit` and `abort` do not return (a path ends at a call to one); that external
+-functions follow the ABI's callee-saved rule (the frame pointer and stack pointer preserved).
++PC_REACH + 4095 + A64_OFF_REACH bytes from the image's code, and farther than TP_REACH bytes from
++each x86 thread-pointer base (fs and gs), in both directions; the external functions' own stack
++use; that `_exit` and `abort` do not return (a path ends at a call to one); that external functions
++follow the ABI's callee-saved rule (the frame pointer and stack pointer preserved).
+ 
+ Fail closed: an instruction outside the modelled set (X86_PLAIN, A64_PLAIN and the control
+ transfers), any of the refusals above, an unmodelled stack-pointer write, an indirect branch, call
+@@ -198,6 +200,9 @@ MEM = re.compile(r"\[([^\]]*)\]")
+ # the access's own offset (at most A64_OFF_REACH): the premise that the stack lies farther than
+ # that from the image's code makes such an access never a stack access.
+ PC_REACH = 16 << 20
++# No fs/gs operands occurred in the 64 owned-code disassemblies measured on 2026-11-08. This round
++# bound also covers the stack-protector canary's fs:0x28 with 216 bytes of margin.
++TP_REACH = 0x100
+ # TARGET -> (architecture, red zone in bytes): how far below the stack pointer code may address
+ # memory without moving it. x86-64 System V ABI section 3.2.2 (128); Apple, "Writing ARM64 code for
+ # Apple platforms" (128); AAPCS64 has none (0).
+@@ -218,13 +223,19 @@ def x86_inst(mn, ops, st, addr=0):
+         base = [r for r in regs if r in X86_STACK]
+         if not base:
+             # Any other register may hold a stack address (main's argv and envp, a value an
+-            # external function left), so memory is addressed only PC-relative or absolutely
+-            # (a segment offset: the thread pointer's block).
++            # external function left), so memory is addressed only PC-relative or through a bounded
++            # absolute thread-pointer displacement.
+             k = sum(int(t.replace(" ", ""), 0) for t in terms if t.strip(" +-") not in regs)
+-            if regs == ["rip"]:
++            segment = re.search(r"\b[fg]s:\s*$", ops[:m.start()])
++            if segment:
++                if regs:
++                    raise Refuse(f"thread-pointer-relative access through a register: {what}")
++                if abs(k) > TP_REACH:
++                    raise Refuse(f"thread-pointer-relative access beyond the premise's reach: {what}")
++            elif regs == ["rip"]:
+                 if abs(k) > PC_REACH:
+                     raise Refuse(f"PC-relative access beyond the premise's reach: {what}")
+-            elif regs or not re.search(r"\b[fg]s:\s*$", ops[:m.start()]):
++            else:
+                 raise Refuse(f"memory addressed through a register that may hold a stack address, "
+                              f"or absolutely: {what}")
+             continue
+
+=== scripts/checks/lib/stack_measure.py (context: debugger glue) ===
+# gdb -batch -nx -x stack_measure.py EXE (README gate 12, x86-64 Linux). PROVISIONAL.
+#
+# Measures the stack depth one complete run of EXE reaches, below the stack pointer at `main`'s
+# entry: the lowest of the stack pointer and every stack byte an instruction addresses (so the red
+# zone, used below the stack pointer without moving it; lib/stack_access.py), by single-stepping
+# every instruction of the Concrete-owned functions (STACK_RANGES:
+# "LO:HI,..." in the executable's link-time addresses, from stack_bound.py --ranges; STACK_MAIN:
+# main's LO). An external function (entered through a call, so its return address is at the stack
+# pointer) runs at full speed to that return address; its own use is outside the bound, as in
+# stack_bound.py, but the depth at its entry is measured. Once main has returned, the rest runs
+# freely.
+#
+# Fail closed: the measurement counts only for a run that stopped first at main's runtime address,
+# stopped after each external call exactly at its return address (or exited inside it), received
+# no signal, exited normally with status STACK_EXPECT, and addressed no stack byte deeper than the
+# target's red zone (STACK_RED_ZONE, from stack_bound.py) below the stack pointer. Prints `measured N` and `steps N`, or
+# `error ...` (the gate fails on anything but a measurement).
+import os
+import sys
+
+import gdb
+
+sys.path.insert(0, os.environ["STACK_LIB"])
+import stack_access  # noqa: E402 - the path is the gate's lib directory
+
+LIMIT = 2_000_000
+ranges = [tuple(int(x, 16) for x in r.split(":")) for r in os.environ["STACK_RANGES"].split(",")]
+main_lo = int(os.environ["STACK_MAIN"], 16)
+expect = int(os.environ["STACK_EXPECT"])
+red_zone = int(os.environ["STACK_RED_ZONE"])
+SPAN = 8 << 20  # stack bytes counted below main's entry (stack_access.lowest_stack)
+state = {"exit": None, "signal": None}
+
+
+def on_exit(event):
+    state["exit"] = event.exit_code if hasattr(event, "exit_code") else "unknown"
+
+
+def on_stop(event):
+    if isinstance(event, gdb.SignalEvent):
+        state["signal"] = event.stop_signal
+
+
+gdb.events.exited.connect(on_exit)
+gdb.events.stop.connect(on_stop)
+gdb.execute("set pagination off")
+gdb.execute("set confirm off")
+gdb.execute("set disable-randomization on")
+gdb.execute("set disassembly-flavor intel")
+
+
+def reg(name):
+    return int(gdb.parse_and_eval(f"(unsigned long) ${name}"))
+
+
+def live():
+    if state["signal"] is not None:
+        raise RuntimeError(f"signal {state['signal']}")
+    return state["exit"] is None
+
+
+try:
+    gdb.execute("break *main", to_string=True)
+    gdb.execute("run </dev/null >/dev/null 2>/dev/null", to_string=True)
+    if not live():
+        raise RuntimeError("exited before main")
+    main_rt = int(gdb.parse_and_eval("(unsigned long) &main"))
+    if reg("pc") != main_rt:
+        raise RuntimeError(f"first stop at {reg('pc'):#x}, not main ({main_rt:#x})")
+    offset = main_rt - main_lo
+    sp0 = reg("sp")
+    low, steps = sp0, 0
+    inferior = gdb.selected_inferior()
+    arch = gdb.selected_frame().architecture()
+    gdb.execute("delete", to_string=True)
+    while live():
+        pc, sp = reg("pc"), reg("sp")
+        if sp > sp0:  # main has returned
+            gdb.execute("continue", to_string=True)
+            continue
+        low = min(low, sp)
+        if any(lo + offset <= pc <= hi + offset for lo, hi in ranges):
+            insn = arch.disassemble(pc)[0]
+            try:
+                touched = stack_access.lowest_stack(
+                    stack_access.x86_addresses(insn["asm"], reg, pc + insn["length"]),
+                    sp, sp0, red_zone, SPAN)
+            except ValueError as e:
+                raise RuntimeError(f"at {pc:#x} ({insn['asm']}): {e}") from None
+            if touched is not None:
+                low = min(low, touched)
+            gdb.execute("stepi", to_string=True)
+            steps += 1
+            if steps > LIMIT:
+                raise RuntimeError(f"more than {LIMIT} steps")
+        else:
+            ret = int.from_bytes(inferior.read_memory(sp, 8).tobytes(), "little")
+            if not any(lo + offset <= ret <= hi + offset for lo, hi in ranges):
+                raise RuntimeError(f"external code at {pc:#x} returns to {ret:#x}, outside the owned code")
+            gdb.execute(f"tbreak *{ret:#x}", to_string=True)
+            gdb.execute("continue", to_string=True)
+            if live() and reg("pc") != ret:
+                raise RuntimeError(f"stopped at {reg('pc'):#x}, not the return address {ret:#x}")
+    if state["exit"] != expect:
+        raise RuntimeError(f"exit status {state['exit']}, expected {expect}")
+    if steps == 0:
+        raise RuntimeError("no instruction stepped")
+    print(f"measured {sp0 - low}")
+    print(f"steps {steps}")
+except Exception as e:  # noqa: BLE001 - every failure is reported, the gate fails closed
+    print(f"error {e}")

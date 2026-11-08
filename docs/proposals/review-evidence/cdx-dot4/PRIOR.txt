@@ -1,0 +1,6 @@
+13,366
+Both prior findings are resolved: origin existence is checked separately, and inherited settings that change effective URLs produce an actionable rejection.
+
+- servers/dev-home.sh:44 — Command substitution strips trailing newlines, so URLs `[REPO_URL, ""]` compare equal to `REPO_URL`. Normalization is skipped, and line 52’s effective check also loses the empty entry. Fix: preserve empty entries using a sentinel or NUL-delimited parsing, and require exactly one URL in both checks.
+
+VERDICT: FINDINGS

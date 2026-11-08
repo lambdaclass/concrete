@@ -1,0 +1,538 @@
+kimi version 2.4.1
+• I need perform thorough critical independent review no modifications. Should inspect proposal and authoritative decisions, spec, roadmap legacy. Should have each S1, C1-C10, S3, revision register section 4, owner decisions section5 AGREE/DISAGREE specific fixes <=60 words disagreement. End exact answer format. Should likely large task use todo. Should read files. First read proposal known direct, decisions, roadmap perhaps proposal sizes. Use Read parallel.
+
+• I’ll audit the proposal’s claims against the authoritative decision rows and the current Lean and legacy specifications, then check the contracts for gaps, contradictions, and premature detail.
+
+• I got first 833 decisions only need rest includes infoflow, runtime, stack, final, early, OD rows etc. Should read rest. Also list ConcreteSpec modules/proofs. Could glob. Should map proposal claims systematically. Might save notes mentally. Should not modify. I'll read decisions 834-1659 in one. Glob modules. Legacy specific types ffi arithmetic statement etc. I can grep relevant rule IDs and read around. First parallel.Should have decisions 1203-1659 includes OD99 etc. Read.Read last 190.Now should inspect spec files contents all perhaps ~several k lines. Proposal explicitly acknowledges fragments incomplete. Should see contradictions with current spec, what missing. I should read key modules Rep, Borrow, Cleanup, Observation, Authority, Brand, Basics, Statics perhaps total ~100k each. Use parallel Read max 100k each.
+
+• The proposal correctly treats most additions as proposed, but several details already look normative—especially `usize`, enum layout, trap rendering, and cleanup sequencing. I’m now checking those against the actual Lean models and the older rule text they revise.
+
+• Large output but okay. Should have Statics/Basics/Semantics for trap kinds, arithmetic, evaluation. Read.Important char contradiction: proposal C2 says char validity excludes non-Unicode scalars, but decided TYPE-20 one-byte every u8, OD137 literals ASCII only. This is decisive C2 disagree. C4 Rep checks char validity similarly wrong. Great.
+
+  Should have evaluation order assignment RHS before destination perhaps legacy STMT4/5 says? Read statements arithmetic.Potential C5 reborrow contradiction: decided OD2 explicitly "no reborrow concept or syntax" yet C5 Rule says "A reborrow suspends conflicting access through its parent until child ends." User may mean internal Core reborrow allowed (REF10 obligation reborrow explicit Core). But wording could be okay semantic reborrow, no source concept. Should evaluate.
+
+  C1 possible counter advancement phrasing "Keep decided ... counter advancement." C1 says "counted-loop bound snapshots and counter advancement" vague not error. C1 cleanup "Normal block exit, return, break and continue run deferred calls ... If cleanup aborts ..." good. Destruction order fine. "Destruction ordinary checked call may itself fail to terminate" good. "Return evaluates result before leaving scopes." good. "Ordinary locals do not acquire implicit user destructors" good. C1 likely AGREE.
+
+  C2 char definitely. TrapKind exactly arithmetic | bounds | invalidRange | abort: Is this complete? Existing traps include pointer? float errors at slice26? Float operations are total no traps due checked conversion named error. Size/offset arithmetic errors arithmetic overflow. Array bounds. invalidRange text. Could also allocation? ordinary. stack named. unsafe stuck. Foreign. Might be complete. But trap taxonomy perhaps user explicit abort. Good. However invalidRange includes UTF8 boundary; bounds for a>b or b>len? Existing Borrow openRange just trap generic. Should decide range invalid reversed and OOB both invalidRange vs bounds. C2 says UTF8 boundary failures invalidRange. Range all invalid perhaps invalidRange. Fine.
+
+  C3 multiple concerns:
+  - Native enums smallest tag u8/u16/u32 with u32 through 2^32 variants and refuse >2^32. u32 has 2^32 distinct tags 0..2^32-1 so variant count 2^32 okay but implementation Nat huge okay. If exactly 2^32 variants can tag. Fine.
+  - enum layout algorithm as new rule flagged revision OD126, owner decision 2 covers every normative revision. C3 includes no explicit separate owner question for tag sizing beyond register yes flagged.
+  - zero-variant semantic type uninhabited but source empty refused. Might be unnecessary over-specification and introduces unreachable semantic type. But needed generic Core? Could leave slice. Yet not necessarily disagreement if sound.
+  - niche policy owner question flagged. Good.
+  - "Text/StaticStr and views are pointer plus length" current Q4.5 says StaticStr explicit pointer/byte-length FFI adapter, not necessarily representation itself pointer+length; C3 Rule sets representation all Text/StaticStr and views. Text old is owned bytes not pointer length? likely handle representation includes pointer length, plausible but new owner revision? C3 proposed completions approval. Could be over-specified representation of Secret and shared/mutable same, okay foundation.
+  - layout native struct rule decided. Empty aggregates size0 alignment1 new but natural.
+  - arrays size n*size including zero but legacy TYPE7 says array literal at least one, semantic zero arrays allowed perhaps slice.
+  - Address-space selection explicit metadata program text new target detail flagged via OD126 revision.
+  - "Raw nullable pointers ineligible" What is raw nullable pointer? No nullable raw pointer in language perhaps niche refers handles. Could be weird.
+  - C layout/calling details selected ABI good.
+  - Packed direct field access unaligned op new semantics but needed.
+  - Crucial: natural struct layout decided but FFI7 old says unspecified; revision correct.
+  - target address variation beyond current decided targets (20/24-bit addresses) new owner approval explicit.
+
+  C4:
+  - Block identity never reused vs CompCert block identity can be reused? Q3.7 no explicit never reuse. Proposed completion. Fine.
+  - pointer equality follows decided raw model Q3.9 doesn't specify equality! It says "What do pointer equality and integer round trips mean? — expose records...". Only expose/from_exposed answer no pointer equality definition. C4 says "Pointer equality follows the decided raw model, not equality of allocation identities alone." There is no decided raw pointer equality in Q3.9 beyond name. Legacy raw model perhaps CompCert pointer equality (same block & offset?) Could be unsupported citation/decision gap. Should inspect archived core_rows/rationale for full Q3.9 details. The row answer is recommendation and full recommendation might have pointer equality. docs row summary only terse; actual core_rows has full question/recommendation. Should read relevant. Use Grep Q3.9 in archive.
+
+• Two concrete mismatches are now clear: `char` is a one-byte code unit, not a Unicode scalar, and `Secret<T>`’s transparency was not decided merely by its layout. I’m checking the fuller Core-session records before treating the remaining compressed citations as unsupported.
+
+• Grep broad too huge. Should direct read R4 relevant lines 226-263 and perhaps F13. Also core_rows JSON one line difficult Read trunc. Could use python via Bash to extract selected rows? Dedicated Read can't parse. Bash Python reading nonsecret allowed but tool dedicated should be used before raw shell; here transformation JSON appropriate Bash. Could run python -c to load and print rows selected. No files modified. Do that.
+Q1.7
+question: Where does release information live?
+options: stable state plus raw context / relocatable state / safe allocator reference in each allocation
+reason: The dependency proof validates the context, including release-code identity and state lifetime; allocations never store safe references.
+rec: Stable release state and raw context; no safe references
+agree: Y
+revises: No
+
+Q3.5
+question: What is the index type?
+options: `u64` / new `usize` / any integer
+reason: One length and index type, u64, on every target, with explicit conversions; each target states a checked maximum allocation size, which is part of Avail.
+rec: `u64` lengths/indices across profiles; checked target limits
+agree: Y
+revises: No; strengthens cross-profile policy
+note: Agreed after Claude's pushback: u64 lengths and indices on every target, and each target states a checked maximum allocation size. The meaning of a program never depends on the target.
+upd: True
+
+Q3.7
+question: What is the raw-memory model and validity taxonomy?
+options: block–offset with provenance / concrete addresses alone / untyped bytes alone
+reason: State initialization, bounds, alignment, lifetime, provenance, exclusivity where required, transfer, frame and foreign mutation; unsafe authorization proves none of these premises.
+rec: Blocks with provenance; pointer = (prov: Option<BlockId>, addr: u64); integers carry no provenance; every access needs explicit validity premises
+agree: Y
+revises: No
+note: R4 F5. An access needs provenance, bounds, liveness, alignment, initialization (read) and write access (write). A violated premise is a failed proof obligation of the Unsafe code, never defined behaviour. Zero-byte accesses need only alignment and a non-null address.
+upd: True
+
+Q3.9
+question: What do pointer equality and integer round trips mean?
+options: exposed-address equality with retained provenance / integers manufacture provenance / purely symbolic equality
+reason: Equal addresses establish neither ownership nor interchangeable pointers. Integers carry no provenance, but from_exposed may recover the provenance of a live exposed block under the stated priority rule, including for fabricated integers. Borrow-derived exposure stays forbidden (OD64).
+rec: `expose` records the block; `from_exposed` picks in-bounds, then one-past, else no provenance
+agree: Y
+revises: No
+note: R4 F5. expose(p) with(Unsafe) adds p's block to the exposed set (refused on borrow-derived pointers, OD64); releasing a block removes it. from_exposed(x): (1) the unique live exposed nonempty block containing x; else (2) the unique one with x = base+size; else no provenance. Zero-sized blocks are never candidates. Fabricated integer inside an exposed block → that block; reused address of a non-exposed block → none; a stale pointer keeps its old block and every access fails liveness.
+upd: True
+
+Q3.11
+question: How are typed values related to raw bytes?
+options: structured values plus raw store and `Rep` / all values are bytes / unrelated models
+reason: It covers layout, initialization, pointer fragments, permissions and external frames; load/store and ownership-transfer correspondence require proofs.
+rec: Structured values and raw store joined by `Rep`
+agree: Y
+revises: No
+
+Q7.10
+question: Do you approve the linux-x86_64-hosted grant table?
+options: Approve as written / change specific rows
+reason: One concrete table instead of 'where supported' categories: every grant's instances, launch flag, operations with their permissions, narrowing, and how it ends.
+rec: Approve R4 F6's complete grant table below as part of this row: every launch configuration, operation signature, permission, narrowing rule and ending contract. Standard-stream operations require Console (Q7.11), not Device; where the R4 F6 table says with(Device) for StdIn/StdOut/StdErr, read with(Console). A missing configured grant refuses startup with exit 125; a trap exits 134.
+agree: Y
+revises: New target contract: owner decision
+note: R4 F6 table. Allocator<Sys> (≤1): alloc, arenas, with(Alloc); arenas made from it own their backing (Q1.6); ends by give_up(a) with(Alloc) -> Unit, only with no live allocation. Directory (one per name, --dir NAME=PATH:RIGHTS, rights ⊆ {list, read, write, create, remove}, with(Fs)): narrow(d, r) with(Fs) -> Directory consumes, rights ∩ r, cannot fail; open_dir(&d, path, r) with(Fs) -> Result<Directory, FsError> gives a child with rights ⊆ parent ∩ r and d stays; ends by close_dir(d) with(Fs) -> Unit, consuming in every outcome. File (acquired, not granted; rights per open mode): close(f) with(Fs) -> Result<Unit, CloseError>, consuming in every outcome; CloseError is Copy and holds no handle. Environment (≤1, --arg …, --env NAME allowlist): args and allowlisted vars read with(Env) through scoped views, no allocation; narrow_env(e, names) with(Env) -> Environment consumes; give_up(e) with(Env) -> Unit. Clock<Monotonic>, Clock<Wall> (≤1 each): now(&c) with(Time) -> u64 ns; resolution from clock_getres, recorded in the launch manifest; Wall may go backward; give_up(c) with(Time) -> Unit. StdIn, StdOut, StdErr (≤1 each): read or write bytes with(Console); give_up(s) with(Console) -> Result<Unit, IoError> flushes, consumes in every outcome, and leaves the descriptor open for runtime diagnostics. ConnectGrant (one per name, --connect NAME=tcp:CIDR,…:PORTS): connect(&g, addr) with(Network) -> Result<Socket, NetError>, g stays; narrow_connect(g, scope) with(Network) -> ConnectGrant consumes, scope ∩; give_up(g) with(Network) -> Unit. ListenGrant (one per name, --listen NAME=tcp:ADDR:PORT): listen(g) with(Network) -> Result<Listener, ListenFailed { grant: ListenGrant, err: NetError }>; ends through the listener's close(l) with(Network), or give_up(g) with(Network) -> Unit. Resolver (one per name, --resolve NAME=server:IP:PORT;transport:udp|tcp;suffix:S,…;types:A,AAAA): resolve(&r, name, a) with(Network, Alloc) -> Result<Vec<IpAddr, A>, ResolveError>; a name or type outside the scope fails before any query; addresses grant nothing; give_up(r) with(Network) -> Unit. Socket and Listener close like File: close(s) with(Network) -> Result<Unit, CloseError>, always consuming. Trace events: Start(grants), Exit(code: u8), Trap(kind): the runtime writes one line naming the trap and its source location to descriptor 2 (OD101's content) and exits 134. No process spawning. A parameter type this target does not offer is a compile error.
+upd: True
+new: True
+
+Q8.1
+question: What is the first proof endpoint?
+options: source→BIR plus native qualification / unconditional native correctness / native theorem only
+reason: Enumerate every remaining frontend-execution, printer, LLVM, runtime, linking and image assumption; adopting a Lean backend removes only the obligations it actually proves.
+rec: Proved source→BIR; qualified native; conditional image claim
+agree: Y
+revises: No
+note: R4 F14 wording: the first milestone proves the front end and lowering correct from exact source to BIR, for slice 1, in Lean. The native build is qualified by differential testing, not proved; printer, LLVM, linking and runtime are named assumptions; a native-image claim is conditional on them. Target: linux-x86_64-hosted.
+upd: True
+
+Q8.3
+question: What establishes frontend correspondence?
+options: independent byte-to-Core judgments / elaborator output defines correctness / parser tests alone
+reason: Keep executable lexer/parser assurance separately identified rather than smuggling it into the word “source.”
+rec: Independent byte-to-Core correspondence judgments
+agree: Y
+revises: No
+
+Q8.4
+question: Does the first artifact qualify as a complete executable?
+options: component plus bound launcher / extend slice to language `main` / call component a program
+reason: This is an explicitly scoped component milestone; complete-language-executable qualification requires admitting and proving the real `main` path, without scalar parameters added to `main`.
+rec: Component plus bound launcher first
+agree: Y
+revises: No
+
+Q8.5
+question: What launcher ABI and observations are fixed?
+options: exact profile contract / host defaults / stdout convention
+reason: Observe returned value or terminal trap under a stated resource premise; launcher diagnostics and host failures are separately attributed.
+rec: Pinned launcher ABI, inputs, startup and trap mapping
+agree: Y
+revises: No
+
+Q9.7
+question: How are primitive calls specified?
+options: one typed contract-indexed inventory / parallel extern/intrinsic tables / strings with unchecked metadata
+reason: Include generated operations, startup and shutdown; ordinary compound behavior comes from checked composition. Primitive identity must survive interfaces and specialization.
+rec: One exhaustive typed primitive-contract inventory
+agree: Y
+revises: No
+note: R4 F5: the extern call-only/kept contract is its own row (Q3.12).
+upd: True
+
+Q9.9
+question: What is evaluator state and execution style?
+options: total clock-indexed evaluator / partial interpreter / normative small-step plus separate runner
+reason: Define maximal behaviors and adequacy; budget exhaustion is an interpreter result, not a program behavior.
+rec: Total clock-indexed evaluator; explicit instrumented state
+agree: Y
+revises: No
+
+Q9.14
+question: What must pass before Core freezes?
+options: four checked representative proofs / prose inventory / full-language soundness first
+reason: Check reset generativity/dependencies, deferred allocator/loan cleanup, heap opening/mutable lending and one values-to-bytes lemma; return substantive formalization discoveries to A2.
+rec: Provisional approval, then four kernel-checked theorems against a proposed Spec.lean, then freeze
+agree: Y
+revises: No
+note: R4 F8. The four: reset_fresh (a reset gives a brand distinct from every live one), defer_cleanup_releases (structured exits run deferred destroy/give_up in reverse and release loans), open_mut_freezes_root (a mutable heap borrow blocks all other root access), rep_roundtrip (slice-1 types encode/decode). The sequence itself is row Q9.19. reset_fresh also proves that resets in a loop give pairwise-distinct brands and that old-brand values are refused by the new allocator's operations. defer_cleanup_releases covers every structured exit, releases each held loan after its call, and preserves the allocator-dependency check. open_mut_freezes_root also proves a shared open never grants writes. rep_roundtrip covers u8–u64, bool and the empty struct.
+upd: True
+Now continue systematic. I have many insights. Should audit S1, all C, S3, register rows, decisions. Should be precise no overflag frivolous. I'll deeply analyze each with sources.
+
+  Proposal status line claims "owner chose write shared foundation completely, then freeze it before slice1 (option b)." Is that actually in decisions? Current owner decision freeze Core before slices and slice0 skeleton allowed. The user asks review proposal itself. S1 freeze boundary extensible interfaces laws vs full complete foundation. Owner choice perhaps from orchestrator not in decisions. Could be unsupported? It states owner chose option b but no citation. I must check repo for phrase option b / shared foundation. Grep.S1 owner claim no source in current docs but proposal says owner chose perhaps external conversation not required cite all. I shouldn't flag without evidence contrary. Current ROADMAP slice0 skeleton before freeze and B1 after freeze consistent "before slice1". Fine.
+
+  Should inspect C7 mismatch leakage requirements: proposal C7 omits allocation sizes and loop counts explicitly! It says record branch choices, exact accessed addresses, operands variable-time. "Include public lengths and declared effects external operations." Decided R0592 requires branches, addresses, allocation sizes, loop counts, variable-time operands. C7 freeze should include allocation sizes and loop counts. This is clear missing foundation causing rewrite. DISAGREE C7. Also C7 declassification semantics wrong: proposal "For runs with identical public inputs and matched external choices, secret changes cannot change public observations except through explicit declassification; constant time additionally requires equal leakage under declared release policy. Declassification records its typed site and reason and releases only declared value." Decided NI requires equal ordered release traces (site and value) as hypothesis. Proposal phrasing could encompass via release policy but not explicit equality of release values. It says except through explicit declassification but should require same release values, otherwise two runs declassify different secrets at same site and public outputs differ, allowed? "except through explicit declassification" suggests allowed, correct release-sensitive security if release values differ may steer public obs; but CT equal leakage under declared release policy also needs equal release values. They need state matched release traces (site and value). Missing. C7 definite fix include allocation sizes/loop counts and equal release traces. 60 words max can combine.
+
+  C6 trap column byte + tab new flagged C6 approval. kind rendering new flagged. Fine. Observation: "normal exit and trap exit134 remain different observations" current Observation notes status alone not distinguish return134, correct. "Preserve output preceding trap" decided OD119. Good. "terminal observations" finite/infinite. Should potential semantic issue blocked request separately represented C8 good.
+  - concurrency extension reserves operation/event params thread identity, access mode synchronization evidence. This might overspecify/unflagged concurrency design? It explicitly says no memory order scheduler spawn and proposal C6 approved, not new owner question separate but C1-C10 approval covers. Hunt b new rule should owner decision but not flagged. This is proposed completion and flagged through C6. Not unflagged.
+  - "projection forgets future synchronization events" preserving sequential traces under single-thread/no-interference is good. Might need weak memory extension old fragment preservation. fine.
+
+  C8 evaluator:
+  - monotonicity extra fuel preserves completed result. With nondeterministic environment same choices. fine.
+  - completeness every finite execution enough fuel. For finite traces with external blocking? A blocked request not finite execution? separate. good.
+  - soundness reported result matching finite execution, outOfFuel not execution. good.
+  - small-step and total evaluator. good.
+  - per-function termination permission/evidence dependencies decided.
+  - resource bounds count abstract ops not fuel. good.
+
+  C9:
+  - complete contract fields no catchall. good.
+  - "Source struct invariants require construction initialization and preservation by permitted mutation, with module-boundary obligations explicit." decided invariants private fields every exposure. Fine.
+  - "ensures observes result and surviving parameters after cleanup" decided.
+  - "Facts and diagnostics use one typed evidence graph and one versioned schema" decided one graph, schema frozen. "schema extension does not reinterpret old records" good.
+  - "stable source sites" good.
+  - "Q9.7 exhaustive inventory becomes exhaustive coverage selected registry" revision register.
+  Potential "capture avoiding substitution and renaming laws" necessary.
+  Potential evidence graph missing function-type contracts R0601 prerequisite at slice20. Primitive contracts includes pre/post, but function-type contract binding design is pending owner? Decisions say binding task designs function-type contracts, not decided exact. C9 could freeze interface enough. No need exact now.
+
+  C10:
+  - frame and ABI includes internal calls explicit target convention, good.
+  - At Memory CFG lower structured values and calls once to layout bytes/provenance ABI. BIR complete. good.
+  - foreign retention kept decided.
+  - FFI safe types no enum. good.
+  - logical frame theorems no source frame. good.
+  - stack final artifact. good.
+  Potential native final image validation by 0.1 is conflict with roadmap phase E. Explicit revision. Owner decision4.
+  Potential "AArch64 final-image validator as 0.1" on macOS but 0.1 file-copy linux x86-64 hosted and LLVM unverified? Requiring AArch64 validator by 0.1 does not require file-copy on AArch64? Proposal P3 says exact linked image AArch64 validation 0.1. Could be possible phase C 0.1 with LCB supported file-copy. But current roadmap LP0 only slice0/1 and native closure phase E. Advancing entire file-copy to native proof by 0.1 huge scope but owner requested decision, not inherently contradiction. Perhaps DISAGREE decision4 because over-scoped milestone and not needed foundation, violates thin slices. User explicitly asks over-specified left slice. I should decide independent recommendation perhaps reject advancement to 0.1, retain R0505 phaseE. P4 qualification every supported example and controlled test on all three implementations, with matched nondeterministic choices. Current decision backend order only LLVM and LCB compare with expected outcome; evaluator I/O infrastructure from slice1 and all supported I/O from slice16. Requiring evaluator every supported example is strengthening and explicit P4. Good perhaps agree.
+
+  Section3:
+  - "Memory CFG stays single layout/ABI/provenance lowering boundary; retract P2 folding proposal." current pipeline exact. good.
+  - frontend retract P1 parse/print independent judgments direct. good.
+  - direct proofs and validators good.
+  - P3 native closure propose owner approval. good.
+  - P4 qualification: "run LLVM, LCB and Lean evaluator on every supported example and controlled test, with matched ... nondeterministic choices." Current roadmap every example both backends and evaluator expected. "Never require arbitrary user programs to execute three times." good.
+  - Compare "observable final external state" current target theorem includes filesystem final state. good.
+  - "bounded scripted environments" good.
+  - "Compare leakage separately where claimed backend evidence supports it" good.
+  - LLVM remains unverified; if P3 final image validator AArch64 only LCB. good.
+  Potential contradiction C7 says baseline timing observer not ordinary IO, section3 says compare complete observations and leakage separately good.
+  Potential P4 controlled tests include negative/refusal tests cannot "run" all three; wording "run ... every supported example and controlled test" could mean controlled tests that are compile refusal. Should distinguish build/run; not major.
+  Potential P3 certificate binds exact linked image to "LCB MIR and instruction semantics". Current R0505 exactly. good.
+
+  Revision register rows:
+  OD126: proposed native tag rules etc explicit. AGREE perhaps issue bool remains one byte but char? not in register. Fine.
+  Q3.5: target usize revision explicit. Is it good design? User best long term, target-specific usize natural. But Q3.5 note "meaning program never depends target." Switching from u64 to target width does make semantics of `usize` arithmetic and max target-dependent, but checked evidence and target profiles accepted meaning may vary across target. Existing C3 target profiles already layout affects `sizeof`, so acceptable. Owner explicit.
+  Potential source `usize` new spelling should owner decision flagged row TYPE19. good.
+  Q3.7 target address type. good.
+  Q3.9 generalization. good.
+  Q1.7 erasure release context. This is substantive optimization, explicit. Make sure sound condition "statically known release needing no per-instance state" plus release identity preservation. good.
+  TYPE19 add usize. good.
+  FFI7 native structs decided, enum new, sizeof usize. good.
+  FFI10 same. good.
+  Q7.10 entropy exact instance before slice6. Randomness decided explicit entropy capability but not grant type name "Entropy". This row proposes exact Entropy launch/operation/ending instance before slice6 but says detailed contract not yet decided and must not be invented. It flags owner approval every normative revision but does not specify exact operations/endings, so decision2 would "approve" unknown future contract. Could be a disagreement: register row asks to add exact Entropy instance but provides no exact schema, while owner decision2 approves every normative revision. Yet reason says detailed resource contract not yet decided. Approval is only plan to treat table extensible and add later with separate owner decision? Proposed new text says "add exact ... before slice6" not spell details. It leaves required details to slice (appropriate), but could owner approval of placeholder okay. I need not disagree if direction only. However C5 asserts "Entropy is a nullary launch-grant type, with source named premise." That is new rule approved C1-C10 and Q7.10 row. It is a new spelling `Entropy` capability vs grant type? Randomness decision "explicit entropy capability, granted to main like other grants" doesn't name type. C5 says GrantTy describes launch-grant types and Entropy nullary launch-grant type. This is properly owner decision via C5/Q7.10. Good.
+  Q9.7 registry extension. good.
+  Early evidence final image 0.1 explicit. Could disagree same as decision4.
+  Register perhaps missing TYPE20 revision for char because proposal didn't intend change but mistakenly uses Unicode. Should add UNFLAGGED? The proposal introduces Unicode char rule in C2/C4 but does not register TYPE20 revision or owner question. That's textbook (b) new rule should owner decision but not flagged separately. Although C1-C10 approval blanket proposed completions is owner flag, section4 says all normative revisions and doesn't include TYPE20. Since C2 contradicts decided TYPE20 and not register, UNFLAGGED=char-as-Unicode-scalar/TYPE20. The final response C includes C2 and perhaps C4 because repeats char validity; I should disagree both or C4 for separate memory issue. C4's `Rep` checks char validity is incorrect under current byte char. This alone makes C4 disagree. Could mention C2 covers wrong model and C4 same? Should avoid repetitive but each verdict independent. C4 also zero-size accesses conflict:
+  C4: "Their accesses still require a valid lifetime and permission." R4 Q3.7 note zero-byte access needs only alignment and non-null address. C4 says every access needs live provenance, bounds, init, alignment, authority/loan. Then zero-size "Their accesses still require valid lifetime and permission." Decided zero-sized slots own obligations, occupy no bytes may share addresses. Full core note: zero-byte accesses need only alignment and non-null address, not lifetime/provenance/bounds/init. C4 directly contradicts Q3.7 full row. So C4 disagree even stronger. Fix preserve Q3.7 zero-byte exception and char one-byte. Also from_exposed zero-size: C4 says "from_exposed uses Q3.9 in-bounds-first, then one-past, then no-provenance over eligible exposed blocks" "eligible" may imply nonempty but not explicit. It earlier "zero-size slots ... accesses require valid lifetime permission" wrong. Also C4 "Block identity never reused even address is" okay.
+  C4 "moving out removes slot's typed ownership/read permission" partial move of nonCopy field prohibited safe except destructure; raw read_owned can move. fine.
+
+  C4 "raw byte copying may transport ... pointer fragments without observing them" good.
+  C4 "Rep ignores padding but checks ... char validity" wrong only if Unicode model.
+  C4 "zero-size address collision" good.
+  C4 "Every access needs live provenance bounds initialization alignment or explicit unaligned and authority/loan permission." For raw trusted write initialization not required; sentence "Every access needs ... initialization" could mean read only previous sentence says reading typed value requires. Here literally writes require initialized bytes, contrary Q3.7 note initialization read only. This is another error. Fix distinguish read initialization and write access; zero byte exception. I can include <=60 words.
+
+  C5:
+  - shared views Copy, mutable nonduplicable no exactly-once destruction obligation. correct.
+  - reborrow phrase source no reborrow concept but semantic Core explicit reborrow obligation. Should not flag.
+  - whole-root conflicts "exclusive loan conflicts with every other active access to that root; shared loans freeze whole owner against mutation/move." Actual shared root can read, yes. exclusive conflicts with every other active access including parent? reborrow suspends parent, fine.
+  - grant narrowing consumes/intersects; acquisition parent stays decided. close/giveup consumes all outcomes. good.
+  - heap handles pointer release context erasure. proposed revision Q1.7.
+  - "Grant narrowing consumes and intersects rights; acquisition preserves parent as decided" directory open child yes, connect stays, listen consumes grant returns error with grant on fail. fine.
+  - Entropy nullary launch-grant type, capability separate. good.
+  - Clock metadata identity/resolution/guarantee decided.
+  - "Child allocators own backing and expose parent dependence." Q1.6 parent brand in type. good.
+  Potential grant state erasure overly specific but proposed completion. okay.
+
+  C3 char not there. C3 Secret layout could conflict infoflow needing secret tags at BIR. It says "Secret<T> has T's layout, without implying constant time." At source representation, transparent secret is reasonable, BIR secret tags are data metadata not layout. Fine.
+
+  C2 char aside, two's complement decided Rep current. Shift count `0 ≤ count < width` mathematical, signed negative invalid. good. "UTF8 boundary failures invalidRange" no decided rendering but kind new. good.
+  "Invalid unsafe execution stuckness not trap" correct.
+  "checked_no_implicit_traps excludes first three kinds under premises" first three arithmetic, bounds, invalidRange, leaves abort. correct.
+  One subtle: "Plain arithmetic needs closed safety evidence" no hidden traps. good.
+  "checked operations return decided Result<T, ArithmeticError>" yes.
+  "as lossless entire source domain" yes.
+  "pointer differences mathematical signed offset and explicitly contracted representable result no isize" good.
+
+  C1 "Return evaluates its result before leaving scopes" yes. "normal block exit" exit value only if value block. fine.
+  "deferred operands read cleanup dependencies alive" yes.
+  "cleanup aborts stop immediately" yes.
+  "Arrays destroy elements increasing then backing" arrays have no backing separate? Q2.3 exactly. good.
+  "OrderedMap ascending keys key before value then nodes" yes.
+  "Destruction ordinary checked call may fail terminate" Q2.6 partial. good.
+  Potential C1 misses right operand &&/|| may not move (OWN11), but foundation static rules later? C1 says both checked but not value flow restriction. Since complete foundation contract, omission could force proof later? Ownership C5 preservation general; source operation admission later. Not necessarily freeze every source rule. User says foundation not exhaustive future types etc. Fine.
+
+  S1:
+  - "Every admitted instance must provide required laws; unknown refused never silently semantics. Extensions preserve old fragment judgments and executions. A new operation cannot change old operation meaning." Good.
+  - Complete contracts includes all necessary. Missing? I found leak sizes loops. Could make S1 disagree because freeze complete foundation before slice1 and later slices no rewrite overly ambitious, contrary integrated scopes not whole-language architecture decision. Decisions long-term says "owner then freezes integrated scopes, not an untested whole-language architecture." Proposal wants complete C1-C10 including concurrency extension and ABI final image, niches, floats admitted etc before slice1. Is that contradictory? It says complete shared foundation interfaces not all rules, proving interaction. Current owner chose complete foundation then freeze (asserted). I can't say contrary if explicit new owner choice. But review could disagree due overfreezing details. User asks section1 verdict perhaps likely agree. Should independently judge not just consistency. S1 is good boundary extensibility. C1-C10 perhaps too broad but S1 concept good.
+
+  Owner decisions:
+  1 approve C1-C10 complete foundation. I disagree because C2/C4/C7 defects and missing perhaps ABI. DEC1=DISAGREE.
+  2 approve every normative revision including usize generalized. If all register rows agree, DEC2=AGREE, but if final image row in register disagree then decision2 includes every normative revision including early evidence final image, so DEC2=DISAGREE too even if decision4 separately. Could say DEC2=DISAGREE because bundles unacceptable early image revision and perhaps Q7.10 under-specified. Should choose. Could agree with all rows except early image then decision2 disagree. DEC4 also disagree. Fine.
+  3 niche policy recommend single. Should independently decide AGREE/DISAGREE. Owner decision3 is choose niche policy. I need say AGREE or DISAGREE. Could AGREE with recommendation? Niche rule perhaps problematic: handles linear ownership multiword release context ineligible; raw nullable pointers ineligible. `Option<Heap<T,A>>` if Heap one-pointer stateless release known could niche optimize. This couples layout to release representation and ownership but laws require. Good long-term. However rule as written has fatal ambiguity "single non-null pointer or handle payload" and "payload pointer's size/alignment null encoding empty" but pointer provenance metadata separate from numeric bytes C4. A pointer is not just pointer-sized numeric; C4 pointer fragments carry provenance metadata separately. Niche uses zero numeric address reserved null and provenance for payload; empty variant no pointer provenance. Feasible. Raw nullable pointers ineligible avoids conflating actual nullable raw pointer. "reserved null encoding" target profile has distinguished null. Good. Could agree as proposal flagged. Alternative no niches simpler, but best long-term one niche predictable. User principle struct layout declaration natural but enums undecided. I'd likely agree.
+  4 final image 0.1 + P4 qualification. Should verdict could DISAGREE due bundles two independent decisions and schedule contradiction. Current roadmap 0.1 at slice18 zero heap with file-copy; native proof closure phaseE. Advancing exact validator to 0.1 may be desirable owner goal fully proved compiler sooner. But proposal explicitly asks owner to advance and names premises, so not a defect logically. Critically: 0.1 current acceptance includes file-copy on both unverified native backends. Requiring final-image validator by 0.1 doesn't say all 0.1 claims verified, just have validator. Could be huge but long-term proof goal. User asks over-specified should left slice; P3 is milestone not foundation, should not be part foundation freeze. It is explicitly separate owner decision, so no unflagged. I can disagree as schedule unnecessarily couples 0.1 to phaseE R0505, contrary approved thin-slice plan. Specific fix retain R0505 phaseE; approve P4 separately. Reason decisive: native closure depends on full adapter/LCB/linker launcher proofs and would redefine 0.1 acceptance, not a foundation interface. 60 words. That seems solid.
+  P4 qualification "every controlled test" may be overbroad impossible all external nondeterministic choices? It says matched nondeterministic choices, bounded scripted. Fine. Could approve P4 separately.
+
+  Register final image row disagree same reason. Others all agree perhaps Q7.10 row under-specified? I'll scrutinize section4 claim "This table lists all proposed normative revisions" yet misses:
+  - TYPE20 char changed (unflagged)
+  - Q3.7 zero-byte access changed (unflagged normative revision)
+  - C7 missing not revision (weakens decided R0592)
+  - C1 perhaps reborrow no.
+  - C3 native enum layout revision covered OD126/FFI7.
+  - C6 trap kind rendering exact line revision? Exact trap format retained `<kind>` unspecified; proposed new details C6 approval, no decided row revision needed.
+  - C5 Q1.7 covered.
+  - C9 JSON "schema extension..." no.
+  - C10 final image covered.
+  - C4 pointer fragment initialization proposed completion Q3.11 explicitly.
+  - C4 "block identity never reused" new rule completion approved, not revision.
+  - C4 zero-size accesses directly revises Q3.7 not in register. UNFLAGGED include zero-byte access initialization/liveness tightening (Q3.7), char TYPE20.
+  - C7 change R0592 leakage omits allocation size loop count perhaps unflagged weakening of decided interface. Since S4 claims all normative revisions, this omission means unflagged (a? b?). UNFLAGGED short list can include leakage interface weakening (allocation sizes/loop counts), but it's not new rule it's incomplete contract. I can mention under C7 and final UNFLAGGED perhaps only char and zero-byte.
+  - C5 reborrow possibly new source concept but likely internal.
+  - C2 TrapKind exactly taxonomy perhaps decided no hidden trap only implicit kinds not named invalidRange before, proposed completion.
+  - C3 `Secret<T>` representation new decided rule via C3 approval no separate row needed (not revision).
+  - C6 "byte column tab counts" runtime decision only line/col 1-based not byte; new detail proposed C6 approval.
+  - C3 native tags new rule flagged owner decision via register.
+  - C3 zero-variant semantic type uninhabited new rule but no source, proposed completion C3.
+  - C4 "allocation starts uninitialized unless primitive" good.
+
+  Missing anything forcing foundation proof rewrite:
+  - Secret leak allocation sizes loop counts.
+  - char type.
+  - zero byte access.
+  - Memory initialization and provenance: pointer fragments with per-byte initialization state; provenance fragment partial initialization. good.
+  - Effective type/aliasing? Q3.7 requires exclusivity where required, transfer, frame foreign mutation. C4 has authority/loan permission, Rep. C5 invariant. good.
+  - Concurrency extension reservation thread IDs etc sufficient? future memory model may require event traces not just thread identity/access/synchronization evidence. But they explicitly no claim; preserving old sequential fragment and extensible events avoids rewrite. Could still need atomic memory event value semantics but instance interface supports. good.
+  - External frames and cleanup interactions C10. good.
+  - Handler of ordinary Result vs trap good.
+  - Allocator state conservation on failure and callback effects. good.
+  - Final external state and output on trap. good.
+  - Trap site identity and path source positions C9. good.
+  - Evaluation of cleanup exit value C1. good.
+  - Loop condition region and counter C1. good.
+  - Function-type contracts R0601 perhaps foundation C9 includes primitive but not function values, evidence. C1 calls typed identity direct and indirect? "Resolve calls by typed identity" could include indirect target sets. C8 termination dependencies includes indirect. C9 independent judgments. No fundamental omission.
+  - Open modules/separate compilation: C9 summaries across modules and evidence identities, C10 ABI. good.
+  - Polymorphic recursion and mono admission C9. good.
+  - Ghost erasure C9. good.
+  - Wipe events C7 and R0602. good.
+  - Frame preservation disjoint memory C10. good.
+  - Target max object sizes C3. good.
+  - Allocator availability nonvacuity C4. good.
+  - Program memory text address space C3. good.
+  - Trap kind source labels no old labels. good.
+  - Trap exit mapping exact line all targets no MCU shortened. good.
+  - `usize` checked arithmetic and conversion C2 includes integer widths remain i/u and proposed usize separate but C2 operation contracts doesn't specify whether usize wrapping/saturating etc. It says integer widths remain named ... proposed usize separate. Revision TYPE19 adds only usize. Plain arithmetic rules generic. Fine.
+  - Pointer address width vs length width separated. good.
+  - Signed pointer diff mathematical signed no isize. good.
+  - Layout of handles C5. good.
+  - ABI FFI safe `char` one byte issue C3 perhaps C10 FFI no explicit. C2 fix enough.
+
+  Potential contradiction C3 enum tags variant count with niche and `Option<T>` builtin declared Copy conditional. Niche Heap linear fine. `Result` two variants both payloads no niche. good.
+  Potential niche pointer null representation on target address space where null is valid? profile reserved null, explicit. good.
+  Potential zero-variant semantic uninhabited and decode with no tags: fine.
+
+  C4 zero-size raw from exposed rule uses eligible exposed blocks, likely nonempty. C4 "Their accesses still require valid lifetime and permission" perhaps deliberate strengthening proposed completion but revision register Q3.7 only general address type, not zero-byte. Since changing decided rule requires explicit owner revision; not allowed even if proposal C4 approval? Section4 says all unrecorded details proposed completions requiring approval part foundation, so arguably owner decision1 includes change but not identified as revision. User asks flag owner decision new rule not flagged. It is flagged generally C1-C10 but not as revision. Since contradicts full Core row, must register. I'll mark.
+
+  C7 exact decided leakage has loop counts/allocation sizes. Proposal C7 "public lengths" not same as allocation sizes (requested size could depend secret but lengths public metadata anyway; allocation size includes alignment and secret? secret allocation sizes refused but still interface must record). Loop counts are implicit branch leakage perhaps branch choices repeated could infer but trace finite/infinite and each iteration branch event could count; decided explicitly loop counts separate and must freeze. Should include.
+
+  C7 noninterference with "matched external choices" and "secret changes cannot change public observations except through explicit declassification" could be read as release-sensitive, but need equal release trace. Decisive reason cite decided INFOFLOW requires equal ordered release traces, not merely matching external choices. I can include both in 60 words.
+
+  C6 perhaps byte column decision new but could be over-specific. Tab counts one byte appropriate reproducible. no issue.
+
+  S3 native final-image validator certificate "bind ... to LCB MIR" current R0505 recorded adapter output. fine.
+  P4 LLVM/LCB/evaluator every controlled test and "matched nondeterministic choices" environment response nondeterminism same history. good.
+  "observable final external state" divergent runs no final state, compare traces prefix/infinite. They say complete observations finite/infinite. good.
+  "Run on every supported example and controlled test" legacy oracle excluded intentionally? Current B2 differential includes legacy oracle where applicable. Proposal doesn't mention legacy oracle at all in P4. Is that missing? P4 qualification contract runs three (LLVM,LCB,Lean) but decided B2/R0491 requires defect inventory classified differential (Lean semantics, native build, legacy oracle), with oracle cross-check. Section3 should retain legacy oracle? It says "Qualification (P4): run LLVM, LCB and Lean evaluator on every..." Does not explicitly retract oracle, but doesn't mention. Could be omission not contradiction. Proposal complete validation contract should include legacy differential oracle as supplemental where behavior matches decided language. Current roadmap R0564, R0491. Could mark S3 disagree for omitting required legacy oracle? But P4 might be new specific three-way qualification, existing oracle remains elsewhere. It says "Qualification (P4)" likely previous P4 not duplicate variants but orchestrator P4. It doesn't claim replaces all differential requirements. "Tests qualify implementations" broad. I shouldn't overflag.
+
+  S3 direct frontend "prove parser correspondence independent grammar" current decided verified parser phaseE but direct proof already pipeline. fine.
+  "Retract P1 parse/print criterion" no decisions row P1 language agent discretion; proposal says orchestrator retractions P1/P2 not project P1. Clear context. fine.
+
+  Register Q3.5 usize perhaps old reason meaning never target. I could disagree due introducing target-dependent source semantics, contradicts Q3.5 design rationale "meaning of a program never depends on target" and owner principle one form. But target profiles already other languages, C3 generalization explicit owner. Is target-sized usize best long-term? Many languages use usize. On 20/24 bit addresses u64 lengths impossible native but mathematical values can be checked; length representation pointer+u64 overhead. Workloads small MCUs need usize. Proposal reason good. Owner can revise. AGREE.
+  OD126 enum tag algorithm overspecified now? Layout is observable via sizeof/alignof and raw trusted operations; foundation needs one rule to prevent rewrite. Good.
+  Niche decision could defer until enum slice10, but representation Rep foundation needs layout interface not concrete algorithm. C3 itself says algorithm one implementation, yet Rule freezes exact enum algorithm. Is that over-specified? Since native layout decided for structs and current i32 enums old, changing to smallest target tag is new. Could leave enum algorithm slice10 while interface supports; but owner decision asks. User hunt e perhaps expects identify over-specified things like exact niche algorithm, native tags, 2^32 variant limit, trap spellings, 0.1 final image. I should critically decide if enum tag exact algorithm should be slice. Is freezing native enum layout before slice1 needed to avoid foundation proof rewrite? Layout interface laws enough; exact native algorithm can be slice10. However `rep_roundtrip` currently only scalars/empty struct, and future enum proofs can instantiate algorithm. S1 says freeze extensible interfaces not exhaustive future types. C3 contradicts by over-specifying native enum representation now including niches. It explicitly calls new owner question so properly flagged but could be premature. User asks over-specified left to slice. Could mark C3 DISAGREE on this basis, and owner decision3 DISAGREE (defer niche) rather than accept. But desired review likely tests substantive bugs, not arbitrary preferences. Should assess wording "The concrete algorithm below is one implementation proving these laws, not premise of every earlier proof" but then C3 Rule states exact algorithm and section4 revision asks owner to approve. If it is one implementation, could later replace without interface rewrite but observable layout changes language requiring owner decision. The foundation freeze could leave concrete layout per slice. Is it harmful? It creates complexity proving enum layout/niche before workload and interacts pointer provenance. Best long-term might choose now to avoid migration. Owner principle best long-term and layout stability beneficial. Native struct layout already decided; enums need rule eventually. One niche only avoids future layout changes. This is intentional reason. I'd not disagree merely premature if explicit rationale.
+
+  Potential bigger C3 bug: zero-size fields "empty byte ranges and may share offsets" natural alignment offset computation rounds each field, zero-size fields can share offsets but declaration order? Example struct {a:u8, z:Empty, b:u16}: offsets a0,z1,b2, okay. Two zero fields same offset. Fine.
+  Enum common payload offset after tag aligned to largest payload; if no payloads, largest alignment? Empty enum uninhabited; fieldless enum with variants payload-free max align tag. total tag size. Fine.
+  Enum niche eligibility "single non-null pointer or handle payload" a `Heap<T,A>` can have pointer plus stable release context; if stateless handle then pointer. good.
+  Target pointer storage size/alignment separate address width. good.
+  No `usize` alignment explicit target length width implies storage same width. good.
+  C3 "fixed-width integer storage respects value width" usize separate profile length width. good.
+  C3 "bool one byte" yes.
+  C3 "Text/StaticStr and views pointer+length" shared/mutable views representation same. A view of array includes base pointer and length, range offset encoded pointer; fine.
+  C3 `Secret<T>` layout T and scalar secret copy only, fine.
+
+  C4 validity "padding and inactive enum storage need not initialized cannot affect observations" raw byte copy observations? Raw copying uninit allowed, observing byte requires init. good.
+  Pointer equality addresses only as decided. good.
+  `expose` records block in address space and from_exposed eligible exposed blocks. good.
+  "Block identity never reused even if address is" compatible stale pointer.
+  "Deallocation ends all access rights old block" except zero-byte access only align non-null, but proposal says all, again zero exception.
+  "Allocation failure typed result conserving rejected input" general all allocation contracts. good.
+  "release never reducing availability" Q1.11. good.
+  "raw/foreign writes reestablish validity" good.
+
+  C5 release erasure could undermine byte accounting stable context, but condition sound. good.
+  C5 `GrantTy` launch types vs File Socket acquired handles good.
+
+  C6 "missing launch grants refuse startup 125" compile-time unknown grant type refusal too but not needed. good.
+  "terminal trap kind rendering arithmetic(Overflow) maps overflow" division etc. invalidRange spelling snake case. fine.
+  "TrapKind arithmetic | bounds | invalidRange | abort" explicit `abort()` trap kind abort. good.
+  "Checked error ordinary not trap." good.
+  "normal exit/trap 134 different observations." good.
+  "stack guarantees exact artifact bound reservation launcher premises" decided.
+  "fuel exhaustion evaluator report never external event." good.
+
+  C7 wipe events protected effects and erasure laws: instrumentation wipe events protected not erased (events observable) vs ghost erasure should preserve protected effects. good.
+  "leakage trace separate public observation" correct.
+  "exact accessed addresses" includes allocation sizes omitted.
+  "public lengths and declared external effects" loop counts omitted.
+  "byte/resource accounting" memory decision includes requested, net, peak logical and footprint; proposal only "live/peak backing bytes" omits requested bytes, net change, allocation count and allocator footprint! C7 freeze says byte/resource accounting, rule "Track live/peak backing bytes by allocator lineage, including zero-size ... release/reset..." Decided memory facts require requested, net, peak logical bytes and allocator footprint. Backing bytes perhaps footprint, but requested and net not explicit. This is more missing. Should include in C7 fix: preserve decided allocation-size/loop-count leakage and requested/net/peak logical+footprint accounting. 60 words tough but possible ~45. Also equal release traces. C7 severely incomplete. I can say "Restore the decided interfaces: allocation sizes and loop counts in leakage; equal ordered release site/value traces for NI/CT; and requested, net, peak logical bytes plus allocator-defined footprint per lineage. The current text records only branches/addresses/operands and live/peak backing bytes, so later memory and secrecy proofs would require new instrumentation." Count ~49. Good.
+
+  C8 resource bounds abstract operations no issue.
+
+  C9 facts report "one versioned schema" early decision frozen from first front-end output. schema extension old not reinterpret. good.
+  C9 "source struct invariants construction initialization preservation permitted mutation" every exposure private fields perhaps need module-boundary. good.
+  C9 "Safety evidence bound target contracts checker/spec versions" decided exact. good.
+
+  C10 external FFI calls foreign nondeterministic events etc C6. good.
+
+  Section4 early final row disagreement. Could also disagree register Q7.10 because randomness detailed contract left undecided but row asks owner approval without exact new contract. If DEC2 approves all revisions, it would approve only schema extension not exact Entropy operations. It says "add exact Entropy launch/operation/ending instance before slice6" and detailed contract not yet decided. Owner decision2 would approve requirement to later decide details, fine. Not false. AGREE.
+
+  Owner decision3 perhaps AGREE. DEC4 disagree. DEC2 if register early row disagree then DISAGREE. In response DEC=<1-4 verdicts> e.g `DEC=1:DISAGREE,2:DISAGREE,3:AGREE,4:DISAGREE`. Format exact final response allows. REG rows list identifiers disagree: `Early-evidence backend obligations/proof infrastructure` or `early-evidence` short. C=`2,4,7` perhaps S3=DISAGREE due P3 scheduling? Section3 itself proposes P3 needing approval, if I reject milestone section3 overall disagree because includes it. Yes S3=DISAGREE. Fix same as decision4: split P3 milestone from otherwise sound pipeline and P4; keep final image phaseE. If S3 DISAGREE because only P3, P4 agree. Good.
+  S1=AGREE. C1 AGREE C2 DISAGREE C3 AGREE C4 DISAGREE C5 AGREE C6 AGREE C7 DISAGREE C8 AGREE C9 AGREE C10 AGREE.
+  REG all rows except early evidence agree. DEC1 disagree due contract errors. DEC2 disagree due early image row. DEC3 agree. DEC4 disagree split.
+  UNFLAGGED=Unicode-scalar char (TYPE20), zero-byte/read-access tightening (Q3.7). Could also "requested/net/footprint accounting" is missing not unflagged new rule; no.
+  Could UNFLAGGED include `Secret<T>` same layout? It is new rule but owner approval C3 as proposed completion, so flagged adequately. no.
+  Could UNFLAGGED include native `char` validity C4 only same char.
+  Could UNFLAGGED include exact null niche? explicitly owner question no.
+  Could UNFLAGGED include `usize` explicitly owner decision no.
+  Could UNFLAGGED include trap spellings explicitly C6 approval no.
+  Could UNFLAGGED include zero-byte access new semantics although C4 approval says proposed completions all require approval; but not identified revision. User asks new rule should owner decision but not flagged. It is technically under owner decision1. However decided-row revision register says all proposed revisions; it's missing, so unflagged as a *revision*. Phrase "zero-byte access rule change (Q3.7)" precise.
+
+  Should support C4 read init: full Q3.7 from core rows is full decided row authoritative. Cite docs archive perhaps final references `docs/archive/decisions-2026-11-05/core_rows.json` but one line not useful line. Can cite R4_RATIONALE:258 plus Q3.7 decisions:219. Zero byte rule in rationale is behind full row note. Good.
+  C2 char cite `legacy/docs/spec/types.md:1402` and decisions OD137 at 1252. C4 same plus Q3.7. Should each disagreement <=60 words. Could say C2 fix "Restore TYPE-20: char is a one-byte code unit; every u8 round-trips, and OD137 restricts only literals to ASCII. Do not validate Unicode scalar values or add a TYPE-20 revision silently. The proposed Unicode-scalar validity rule contradicts decided representation and conversions." 44 words.
+  C4 fix "Distinguish read initialization from write access and restore Q3.7's zero-byte exception (alignment plus non-null only); retain byte-valued char validity. Requiring initialization/lifetime/permission for every access contradicts the raw-memory rule; Unicode-scalar checking contradicts TYPE-20." 36. Does Q3.7 zero-byte needs only alignment non-null, no lifetime permission. Good.
+  C7 as above 50.
+  S3 fix under 60 "Keep stages/frontend/validator and P4, but remove 0.1 final image requirement. R0505 currently schedules native final image proof phaseE after LP0 and slices. Advancing it is independent release replanning not necessary to freeze shared interfaces; approve P4 separately." 40. But proposal explicitly owner approval to revise schedule so "currently" not fatal, my recommendation independent. Decisive reason not contradiction but scope. Fine.
+  REG early row same specific fix no more 60.
+  DEC1 "Do not approve until C2 C4 C7 corrected; those contracts contradict decided char/raw memory rules and omit required leakage/accounting instrumentation." 25.
+  DEC2 "Split early image row; approve target/layout/grant/primitive revisions separately. 'Every' currently includes unjustified 0.1 schedule change." 17.
+  DEC3 agree no reason required but perhaps explain short niche sound and explicit.
+  DEC4 split final image and P4. Good.
+  For AGREE items perhaps one sentence each not necessary; user says for each say AGREE/DISAGREE. I should list each with verdict, and disagreements details. Could group AGREE in a sentence `C1 — AGREE. C3 — AGREE...` but clarity. Should include section1 and section3 and all revision rows and decisions. I can make headings shallow, bullet per item. Task detailed. 20+ items. Respond around 1200 words perhaps. I should not overexplain agreements, perhaps one line each. Register 11 rows (OD126,Q3.5,Q3.7,Q3.9,Q1.7,TYPE19,FFI7,FFI10,Q7.10,Q9.7,early). List each. Section5 four.
+
+  Make sure not modify files (only tools read). No git status required? No builds run, no files created. Good.
+
+  Before response, perhaps read proposal exact once more relevant C7 etc already. Perhaps review all source `docs/decisions` done. I should update todo cross-check done audit in progress then think if any hidden issue with C1/C5 `reborrow` contradiction. Should inspect C5 phrase and REF10: "no reborrow concept or syntax" but Core obligation explicit. C5 says "A reborrow suspends conflicting access through its parent until child ends." This could be interpreted adding reborrow to dynamic model, not source. Foundation Core can have reborrow. Authority C5 cites OD15 OD23 not OD2, but Core Q3.1-3.4 includes view lending. The decided model says no reborrow concept or syntax at source, but explicit Core reborrow is allowed REF10 obligation. Not flag.
+  C1 "moves transfer ownership exactly once; copies declared checked" fine.
+  C2 "integer widths remain ... proposed usize separate" no char. good.
+  C3 "native tags ... variant count through 2^32" at 2^32 variants tag values 0...max, okay. `u32` cannot represent variant count but only tags, okay.
+  C4 "Block identity never reused" R4 stale exposed address reuses new block IDs, good.
+  C4 "expose records block in address space" when release removes exposed set not explicitly stated! It says deallocation ends access, from_exposed over eligible exposed blocks likely live. Good.
+  C4 zero-size from_exposed eligible nonempty implicit but I should also explicitly restore nonempty candidate. Could include in C4 fix to avoid ambiguity: "and keep from_exposed candidates nonempty." Q3.9 full row. If I include 60 words. C4 current "eligible" could mean nonempty so not necessary.
+  C5 "Heap handles contain pointer and sufficient stable release context erased only when release statically known" Q1.7 revision.
+  C6 trap kind total lacks `outOfRange` because checked conversion returns Result not trap. fine.
+  C6 startup missing grant exit125 and trap output flushing before trap. good.
+  C7 "public observations except through explicit declassification" release site reason value. I fix.
+  C8 small-step infinite internal execution not successful C6. good.
+  C9 unknown primitive fail closed. good.
+  C10 ABI internal convention explicit, no source frame clause. good.
+  S1 A2i representative interactions plus all laws; current A2i requires only representative not full all contracts, but proposal owner chose expanded. fine.
+  S3 P3 requirement by0.1 contradicts roadmap but register explicit. My disagreement is design judgment, valid.
+
+  Perhaps decision2 could be AGREE except row early and response REG early disagree means natural DEC2 disagree. Good.
+
+  One concern response requested "DEC=<1-4 verdicts>" perhaps expected `DEC=1=DISAGREE,2=DISAGREE,3=AGREE,4=DISAGREE` or `DEC=DISAGREE,DISAGREE,AGREE,DISAGREE`. They say DEC=<1-4 verdicts> likely `DEC=1:D,2:A,...`. I'll use explicit `DEC=1:DISAGREE,2:DISAGREE,3:AGREE,4:DISAGREE`.
+  REG=`Early-evidence backend obligations/proof infrastructure` no spaces perhaps `early-evidence/final-image`.
+  C numbers comma.
+  UNFLAGGED short list semicolon? Response semicolons delimit fields, use commas within.
+  End exactly `ANSWER: S1=AGREE; C=2,4,7; S3=DISAGREE; REG=early-evidence/final-image; DEC=1:DISAGREE,2:DISAGREE,3:AGREE,4:DISAGREE; UNFLAGGED=Unicode-scalar char (TYPE-20), zero-byte/read-access tightening (Q3.7)`
+  Would `REG` require row labels all? Only disagree row early evidence. good.
+
+  Should have no tests because review only. Update todo all done in one before responding.
+
+• The remaining audit found one more substantive omission: C7 drops required leakage events and parts of the decided heap-accounting interface. The pipeline itself is coherent; my objection there is limited to moving final-image validation into 0.1 rather than keeping that independent native-closure milestone later.
+
+• Now respond formulate concise but complete. I should mention evidence paths in disagreements. Each <=60 words. Agreements just verdict. Use headings Section1 Contracts etc. No giant table. Ensure all C individually.
+
+  Section1 AGREE perhaps brief extensibility right.
+  C2 disagreement fix and decisive.
+  C4 disagreement.
+  C7 disagreement.
+  S3 disagreement with P3 but P4 okay.
+  Register row all.
+  Owner decisions.
+  UNFLAGGED explicitly explain after decisions? Response line enough but user wants short list. Could include paragraph "Unflagged revisions: ...". Already C2/C4. Add brief no need duplicate.
+  Should not claim decided rows at lines citations exact. `legacy/docs/spec/types.md:1402` header, `types.md:1405` exact rule. `docs/decisions.md:219` Q3.7 summary doesn't zero exception, cite archive R4:258 and core_rows note. `docs/archive/crucial...INFOFLOW:14` etc. Memory lines 24-31. Good.
+
+  S3 objection schedule: 60 words. "Keep decided pipeline and P4, but retain R-0505 in phase E and put P3 to a separate owner vote. The roadmap deliberately has LP0 after slice1 and full final-image closure later; making it 0.1 gate is release replanning, not needed for foundation correctness." Note proposal already separate owner vote decision4, saying put separate owner vote while it's bundled P4 there. Better "Split P3 from P4; retain R0505 phaseE. Approve P4..." Good.
+  Register early row similar.
+  Decision4 same.
+  Do I need owner decision2 recommendation perhaps approve all other revisions not target etc. Good.
+  Decision3 agree with recommended single niche. Good.
+  UNFLAGGED includes char and zero-byte. C7 omissions aren't unflagged revisions? no.
+
+  Could Section1 owner complete freeze be overambitious but agree.
+
+  I'll count C7 fix ~56:
+  "Restore the decided interfaces: allocation sizes and loop counts in leakage; equal ordered release site/value traces for NI/CT; and requested, net and peak logical bytes plus allocator-defined footprint per lineage. C7 currently omits these, so secrecy and memory proofs would need new instrumentation after the freeze (`R-0592`, INFOFLOW, MEMORY)." 47. Good.
+  C4 48.
+  S3 45.
+  Fine.
+
+  Respond with no "summary" extra beyond exact line.
+
+• ## Section 1 — AGREE
+
+  Freezing extensible interfaces and their preservation laws, rather than every future instance, is the right boundary. Unknown operations must fail closed, and extensions must preserve existing judgments and executions.
+
+  ## Contracts
+
+  - **C1 — AGREE.** Evaluation, structured exits, cleanup ordering, explicit destruction, and abort behavior match STMT-4/5/11, OD2/68/69, and Q2/Q9.
+
+  - **C2 — DISAGREE.** Restore TYPE-20: `char` is a one-byte code unit; every `u8` round-trips, while OD137 restricts only character literals to ASCII. Unicode-scalar validity contradicts the decided representation and conversions and would require an explicit TYPE-20 revision (`legacy/docs/spec/types.md:1402`).
+
+  - **C3 — AGREE.** The target/layout interface is appropriately separated from earlier semantics. Enum and niche changes are explicitly presented for approval rather than misrepresented as decided.
+
+  - **C4 — DISAGREE.** Distinguish read initialization from write access, restore Q3.7’s zero-byte exception—alignment and non-null address only—and retain byte-valued `char`. Requiring initialization, lifetime, and permission for every access contradicts the raw-memory rule (`docs/archive/decisions-2026-11-05/R4_RATIONALE.md:258`).
+
+  - **C5 — AGREE.** Whole-root conflicts, scoped lending, brands, authority, release context, and erasure conditions cohere with the decided ownership and grant rules.
+
+  - **C6 — AGREE.** Observations, trap realization, environmental nondeterminism, and the sequential concurrency extension are properly separated. The new trap renderings and byte-column detail are explicitly submitted for approval.
+
+  - **C7 — DISAGREE.** Restore the decided interfaces: allocation sizes and loop counts in leakage; equal ordered release site/value traces for NI/CT; and requested, net and peak logical bytes plus allocator-defined footprint per lineage. C7 omits these, so secrecy and memory proofs would need new instrumentation after the freeze (`docs/archive/crucial-2026-11-06/INFOFLOW.md:11`, `MEMORY.md:24`).
+
+  - **C8 — AGREE.** Evaluator adequacy, fuel, divergence, blocked requests, termination evidence, and abstract step bounds are correctly distinguished.
+
+  - **C9 — AGREE.** Typed identities, complete primitive contracts, closed evidence, ghost erasure, and the shared evidence graph form the necessary foundation without closing the primitive universe.
+
+  - **C10 — AGREE.** Frames, ABI contracts, final-artifact stack accounting, and foreign retention are placed at the correct lowering boundary without adding a source frame clause.
+
+  ## Section 3 — DISAGREE
+
+  Keep the pipeline, independent frontend judgments, validator options, and P4 qualification contract. Split out P3 and retain R-0505’s final-image work in phase E. The roadmap deliberately places LP0 after slice 1 and full native closure later; making final-image validation a 0.1 gate is release replanning, not a foundation requirement.
+
+  ## Revision register
+
+  - **OD126 — AGREE.**
+  - **Q3.5 — AGREE.**
+  - **Q3.7 — AGREE**, but only for the stated address-type generalization, not C4’s unregistered access-rule tightening.
+  - **Q3.9 — AGREE.**
+  - **Q1.7 — AGREE.**
+  - **TYPE-19 — AGREE.**
+  - **FFI-7 — AGREE.**
+  - **FFI-10 — AGREE.**
+  - **Q7.10 — AGREE.** Extending the schema is sound; the exact Entropy operation and ending contracts still need their own concrete approval before slice 6.
+  - **Q9.7 — AGREE.**
+  - **Early-evidence/proof-infrastructure — DISAGREE.** Remove the 0.1 final-image requirement and retain R-0505’s phase-E milestone. The row usefully names residual premises, but advances a substantial native-closure release commitment unrelated to freezing the foundation interfaces.
+
+  ## Owner decisions
+
+  1. **DISAGREE.** Do not approve C1–C10 until C2, C4, and C7 are corrected. They contradict decided `char`/raw-memory rules and omit required leakage and accounting instrumentation.
+
+  2. **DISAGREE.** Approve the target, layout, grant, and primitive-registry revisions separately from the early-evidence row. “Every normative revision” currently includes the disputed 0.1 schedule change.
+
+  3. **AGREE.** The single, narrowly proved pointer/handle niche is reasonable, explicitly undecided, and avoids a succession of ad hoc niche rules. Its provenance and release-context eligibility conditions are essential.
+
+  4. **DISAGREE.** Approve P4 separately, but do not advance exact linked-image validation to 0.1. That requirement should remain the later R-0505 native-closure milestone rather than redefining the file-copy release’s scope.
+
+  Unflagged decided-rule revisions are the Unicode-scalar `char` change (TYPE-20) and the zero-byte/read-access tightening (Q3.7); both belong in the register if retained, though the correct fix is to remove them.
+
+  ANSWER: S1=AGREE; C=2,4,7; S3=DISAGREE; REG=early-evidence/final-image; DEC=1:DISAGREE,2:DISAGREE,3:AGREE,4:DISAGREE; UNFLAGGED=Unicode-scalar char (TYPE-20), zero-byte/read-access tightening (Q3.7)
+
+To resume this session: kimi -r session_7374a3e5-72dd-4875-9e33-05c26494d5e8

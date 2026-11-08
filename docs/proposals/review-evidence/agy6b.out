@@ -1,0 +1,17 @@
+### Re-assessment of previous findings
+
+1. **`scripts/proofs/trust_ban.sh:108` (`import os` in `lake_options`) — WITHDRAWN**
+   In the full file, `import os` is already present earlier in the same Python snippet (at the `lakefile.lean` check before the diff hunk), so `os.path.join` and `os.path.dirname` are defined when `if reqs:` runs.
+
+2. **`scripts/checks/landing_script.sh:968` (`required_names.py` `legs()` diagnostics) — WITHDRAWN**
+   As noted in the first pass, `out` captures stdout from `required_names.py` and the check asserts `[ -z "$out" ]`, so any diagnostic printed by `legs()` before returning `[]` causes the check to fail as intended.
+
+3. **`.github/workflows/lean_action_ci.yml:479` (`compare-linux` `needs` and `if` gating) — WITHDRAWN**
+   The full `is_gated` logic in `scripts/checks/landing_script.sh` handles transitive gating via the `elif n:` branch: when a job does not list `landing-record` directly in `needs`, it is accepted as gated if all of its `needs` are gated (`is_gated("reproducibility")` is true) and its own `if` does not contain `always()`, `cancelled()`, or `failure()`. Omitting `if: !cancelled()` on `compare-linux` is intentional so that it runs only when all `reproducibility` matrix legs ran and succeeded, and is skipped when `reproducibility` is skipped by the `landing-record` gate.
+
+### New defects in the full files
+
+None found.
+
+VERDICT: ACCEPT
+agy rc=0

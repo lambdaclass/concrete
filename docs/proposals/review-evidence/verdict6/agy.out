@@ -1,0 +1,6 @@
+I recommend **Option 1** and **DISAGREE** with Claude's recommendation.
+
+**Reason (46 words):**
+Option 2 adds a second use-site form (`seg::item`), breaks MOD-3's single-binding invariant, implicitly binds `seg` (creating OD152 resolution ambiguity against types or locals named `seg`), and makes every bare call fragile when imports change. Option 1 keeps one bare form and simple injective name resolution.
+
+ANSWER: PICK=1; DISAGREE=yes; NOTE=Option 1 preserves MOD-3, avoids a second use-site form, and prevents implicit segment-name clashes under OD152.

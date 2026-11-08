@@ -1,0 +1,10 @@
+### Findings
+
+1. `scripts/push-both.sh:53` — **PREFERENCE**
+   `PRIMARY` was renamed to `PUSH_REMOTE` (`REMOTE="${PUSH_REMOTE:-origin}"`), whereas `scripts/land/train.sh` and `scripts/land/bot.sh` use `LAND_REMOTE`. Accepting `PUSH_REMOTE="${PUSH_REMOTE:-${LAND_REMOTE:-origin}}"` (or documenting `PUSH_REMOTE` in the header comment of `scripts/push-both.sh`) would keep the environment override discoverable from the script header.
+
+2. `scripts/push-both.sh:112` — **PREFERENCE**
+   Minor indentation misalignment (`      exit 1` is indented by 6 spaces instead of 4 inside the `if ! command -v gh` block). Fix: align `exit 1` to 4 spaces.
+
+VERDICT: ACCEPT
+rc=0

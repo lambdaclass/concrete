@@ -1,0 +1,1001 @@
+Reading additional input from stdin...
+OpenAI Codex v0.166.0
+--------
+workdir: /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/shimrepro/repo
+model: gpt-6.1-sol
+provider: openai
+approval: never
+sandbox: danger-full-access
+reasoning effort: none
+reasoning summaries: none
+session id: 01a1b8b0-247b-78b2-b13b-9fc23700d6b8
+--------
+user
+You are confirming a suspected bug; do not fix it. This directory is a git-archive copy of concrete2 main at 3bd7bc415. Claim: scripts/land/acceptance.sh's make_git_shim (lines ~157-173) refuses any 'git push ... main' regardless of destination, and since ISS-0015 (trains run the repository pre-push hook) the train's impact leg inside acceptance runs scripts/checks/run.sh, whose landing_bot.sh, landing_script.sh and review_tool.sh push main to throwaway local fixture remotes; so acceptance fails for every move candidate. Evidence: ../accept-check.log (the kept check.log of a real acceptance run; grep 'acceptance git shim'). Reproducer: ../repro.sh (run: timeout 60 bash ../repro.sh $PWD; it builds the shim from acceptance.sh unchanged and pushes main to a local bare repo). Run the reproducer under timeout, read the code, and state whether the bug is real, its structural cause, and whether anything else in the log (other than the shim) explains the failing checks. End with 'Verdict: CONFIRMED' or 'Verdict: NOT CONFIRMED'. Modify nothing in this directory except temporary files under /tmp.
+codex
+I’ll run the reproducer under the requested timeout, then trace the shim and failing checks in the log. I won’t modify the archived tree.
+exec
+/bin/bash -lc 'timeout 60 bash ../repro.sh "$PWD"' in /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/shimrepro/repo
+ succeeded in 0ms:
+REPRODUCED: acceptance git shim: refusing push argument 'main' (could move main)
+
+exec
+/bin/bash -lc "pwd
+rg -n 'acceptance git shim|FAIL|ERROR|error:|failed|INCOMPLETE' ../accept-check.log
+sed -n '120,205p' scripts/land/acceptance.sh
+cat ../repro.sh" in /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/shimrepro/repo
+ succeeded in 0ms:
+/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/shimrepro/repo
+20:DOC-LINKS-GATE: PASS=12 FAIL=0 INCOMPLETE=0
+31:check_issues: PASS=5 FAIL=0
+34:acceptance git shim: refusing push argument 'main' (could move main)
+35:acceptance git shim: refusing push argument 'main' (could move main)
+36:acceptance git shim: refusing push argument 'main' (could move main)
+45:  FAIL mark wip/a
+58:  FAIL mark wip/findings
+65:  FAIL mark wip/gatefail
+72:  FAIL mark wip/stale
+80:  FAIL mark wip/land-x
+87:  FAIL mark other/x
+94:  FAIL mark wip/rule
+101:  FAIL mark wip/checkonly
+108:  FAIL mark wip/explicit
+115:  FAIL mark wip/late
+116:  FAIL list exit 128
+120:  FAIL wip/a not ready: argument to [<revision>...] 
+128:  FAIL order: 'argument to [<revision>...] '
+132:  FAIL rule reason missing
+133:  FAIL checkonly misclassified
+135:  FAIL dry-run: exit 0
+143:  FAIL pause: exit 0
+150:  FAIL kernel lock: exit 0
+152:fatal: update_ref failed for ref 'refs/heads/wip/land-control': cannot update ref 'refs/heads/wip/land-control': trying to write ref 'refs/heads/wip/land-control' with nonexistent object b8c0246d05aabd04025308c22902c13b6fb7fcc3
+153:  FAIL the leaked-ref probe is blind
+155:  FAIL tick after release: exit 128
+181:  FAIL a ready branch did not land
+197:  FAIL fork was pushed
+217:  FAIL merge order: ''
+218:  FAIL remote leg refs: '', left: ''
+219:  FAIL no landing notification
+220:  FAIL state not idle
+228:  FAIL mark wip/g1
+235:  FAIL mark wip/bad
+242:  FAIL mark wip/g2
+250:  FAIL good members missing
+258:  FAIL no eject event for wip/bad
+262:  FAIL culprit's gates note not failed
+263:  FAIL no eject notification
+272:  FAIL mark wip/cired
+279:  FAIL mark wip/g3
+284:  FAIL CI-red bisect
+297:  FAIL mark wip/kb
+304:  FAIL mark wip/kg
+308:  FAIL pause in bisect
+314:  FAIL block
+320:  FAIL block overwritten
+330:  FAIL after reset
+343:  FAIL mark wip/r
+345:  FAIL pause before land
+352:  FAIL resume: dispatches 0
+365:  FAIL mark wip/pb
+372:  FAIL mark wip/pg
+373:  FAIL pause before culprit probe
+383:  FAIL after probe pause
+395:  FAIL mark wip/pc
+402:  FAIL mark wip/ph
+405:  FAIL --ci probe pause: dispatches 0
+415:  FAIL after --ci pause
+427:  FAIL mark wip/qb
+434:  FAIL mark wip/qg
+435:  FAIL pause in culprit probe
+446:  FAIL after culprit-probe pause
+459:  FAIL mark wip/cx
+463:  FAIL collision: exit 1, refs ''
+473:  FAIL mark wip/d1
+476:  FAIL lookup failure
+482:  FAIL empty lookup
+489:  FAIL reconcile: dispatches 0
+502:  FAIL mark wip/r1
+509:  FAIL mark wip/rc
+520:  FAIL active skip: exit 128
+527:  FAIL rebase r1
+534:  FAIL notes on rebased head: 
+535:  FAIL rebase conflict
+539:  FAIL no conflict notification
+542:=== ready.sh: legs in parallel; any failed leg (the review included) publishes gates: fail ===
+549:  FAIL mark wip/rv
+556:  FAIL ready.sh review failure: exit 1, note ''
+565:  FAIL mark wip/rv2
+566:  FAIL ready.sh pass: exit 1
+571:check_landing_bot: PASS=15 FAIL=74
+572:--- scripts/checks/landing_bot.sh: FAIL (3s)
+574:acceptance git shim: refusing push argument 'main' (could move main)
+576:  FAIL build t1 exit 128
+579:  FAIL resolution routes
+581:  FAIL CHANGELOG lost an entry
+582:  FAIL corpus map lost a key
+583:  FAIL generated block is not the union view
+584:  FAIL BuildIdentity is stale on the train
+590:  FAIL merge commit message
+595:  FAIL state file: 
+596:  FAIL no build row in the log
+598:  FAIL source conflict: exit 128
+605:  FAIL train/t2 head unexpected
+606:  FAIL prose conflict: exit 128
+608:  FAIL duplicate corpus key accepted (exit 128)
+610:  FAIL ledger edit conflict: exit 128
+612:  FAIL corpus code union: exit 128
+614:  FAIL smuggled code: exit 128
+616:  FAIL ghost block: exit 128
+618:  FAIL generator refusal: exit 128
+622:  FAIL existing train overwritten (exit 128)
+628:error: pathspec 'train/t1' did not match any file(s) known to git
+629:  FAIL ci ran without a check
+630:  FAIL check: exit 1, hook stdin ''
+633:  FAIL ci used a stale pass after a failed re-check
+634:  FAIL re-check after repair
+635:=== gate host: check's impact leg on the gate host, bound to the SHA; INCOMPLETE blocks ===
+636:  FAIL gate host ok: exit 1
+639:  FAIL remote command: 
+640:  FAIL forwarded env: 
+641:  FAIL no attestation for 8cafc04abbb5b366f5d16d88e772f75d14b8760e at /tmp/tmp.sd01T2e5jg/work/.git/concrete-prepush-remote-record
+644:  FAIL check row: 
+645:  FAIL wrong SHA: exit 1
+649:  FAIL incomplete row: 
+650:  FAIL ci ran after an incomplete check
+651:  FAIL unreachable: exit 1
+653:  FAIL lost connection: exit 1
+655:  FAIL remote failure: exit 1
+657:  FAIL norecord: exit 1
+659:  FAIL --local-gates: exit 1
+661:  FAIL land.gatesHost: exit 1
+662:  FAIL dry-run: train: no train 't1' (build it first: train.sh build t1 <ref>...)
+663:  FAIL empty LAND_GATES_HOST: exit 1
+665:  FAIL run-at-ref from a bundle: exit 128
+691:acceptance git shim: refusing push argument 'HEAD:main' (could move main)
+696:  FAIL e2e transport: exit 3
+697:      gates-remote: INCOMPLETE: --base is not a commit
+700:  FAIL forwarded env executed on the host
+706:  FAIL forwarded value altered
+710:  FAIL e2e reuse: refused:no_attestation
+711:  FAIL e2e env mismatch: refused:no_attestation
+712:  ok   the real transport to an unreachable host is INCOMPLETE (exit 3), attests nothing
+714:  FAIL re-check after the gate-host legs
+715:  FAIL dry-run ci: exit 1
+716:  FAIL ci: exit 1
+718:  FAIL watch campaign-only: exit 1
+720:  FAIL watch landing failure: exit 1
+721:  FAIL watch accepted a run at another SHA (exit 1)
+722:  FAIL land accepted a red landing job (exit 1)
+723:  FAIL land accepted a head-SHA mismatch (exit 1)
+724:  FAIL fork accepted as primary (exit 1)
+725:  FAIL fork accepted as mirror (exit 1)
+726:  FAIL missing mirror remote: exit 1
+727:  FAIL fork was pushed
+728:  FAIL dry-run land: exit 1
+731:acceptance git shim: refusing push argument 'main' (could move main)
+732:  FAIL moved main: exit 1
+734:acceptance git shim: refusing push argument '8cafc04abbb5b366f5d16d88e772f75d14b8760e:main' (could move main)
+735:  FAIL land: exit 1
+737:  FAIL fork was pushed
+740:  FAIL land touched main's run
+742:=== dropped: a push's result is read from the remote, and a failed push is retried ===
+743:  FAIL build t8
+744:error: pathspec 'train/t8' did not match any file(s) known to git
+745:  FAIL check t8
+746:  FAIL ci dropped push: exit 1
+748:  FAIL exhausted retries: exit 1
+750:  FAIL dropped land: exit 1
+752:  FAIL a dropped-connection seam never fired (vacuous leg)
+754:  FAIL build t7
+755:  FAIL bisect: exit 1
+762:  FAIL a refused push-both pushed something
+764:  FAIL report: exit 0
+769:  FAIL watch accepted a run missing a required job (exit 1)
+771:  FAIL land accepted a run missing a required job (exit 1)
+773:  FAIL watch accepted a skipped required job (exit 1)
+775:  FAIL land accepted a skipped required job (exit 1)
+777:  FAIL watch accepted a cancelled required job (exit 1)
+779:  FAIL land accepted a cancelled required job (exit 1)
+781:  FAIL watch accepted a run whose only other job is a campaign-tier one (exit 1)
+783:  FAIL land accepted a run whose only other job is a campaign-tier one (exit 1)
+787:  ok   a replacement job that failed at this SHA refuses
+797:error: pathspec 'train/t1' did not match any file(s) known to git
+801:  FAIL record accepted a run at another SHA (exit 0)
+804:  FAIL record accepted a run the API lists at the head but whose own record names another SHA (exit 0)
+810:  FAIL record accepted a dispatch whose checks ran at another base (exit 0)
+818:  ok   record refuses a failed landing-tier job
+828:error: pathspec 'train/t1' did not match any file(s) known to git
+842:  FAIL move train build
+844:error: pathspec 'train/tm' did not match any file(s) known to git
+845:  FAIL move train check
+846:  FAIL move train ci
+847:  FAIL land with no rehearsal record (exit 1)
+849:  FAIL dry-run land with no rehearsal record (exit 1)
+852:  FAIL land with an accepted rehearsal of another candidate (another tree) (exit 1)
+854:  FAIL dry-run land with an accepted rehearsal of another candidate (another tree) (exit 1)
+857:  FAIL land with an accepted rehearsal of the same tree on another base (exit 1)
+859:  FAIL dry-run land with an accepted rehearsal of the same tree on another base (exit 1)
+862:  FAIL land with a failed rehearsal of this candidate (exit 1)
+864:  FAIL dry-run land with a failed rehearsal of this candidate (exit 1)
+867:  FAIL land with an incomplete rehearsal of this candidate (exit 1)
+869:  FAIL dry-run land with an incomplete rehearsal of this candidate (exit 1)
+873:  FAIL malformed row: dry-run land exit 1
+876:  FAIL second move train build
+886:  FAIL second train: head train/tmb tree train/tmb^{tree} vs cacbe35bbea4202ff6447f0c1222d8cedb03458c 77248c597ff97d8b577d43404f36aee12b8f66a1
+887:error: pathspec 'train/tm' did not match any file(s) known to git
+889:  FAIL accepted rehearsal: dry-run land exit 1
+891:  FAIL rehearsed move land: exit 1
+893:  FAIL staged move train build
+894:error: pathspec 'train/tm3' did not match any file(s) known to git
+895:  FAIL staged move train check
+896:  FAIL staged move train ci
+897:  FAIL staged move: dry-run land exit 1
+904:  FAIL inventory train build
+905:error: pathspec 'train/tm2' did not match any file(s) known to git
+906:  FAIL inventory train check
+907:  FAIL inventory train ci
+908:  FAIL inventory move: dry-run land exit 1
+919:  FAIL tin1 build
+920:error: pathspec 'train/tin1' did not match any file(s) known to git
+921:  FAIL tin1 check
+922:  FAIL tin1 ci
+923:  FAIL nested inventory change: dry-run land exit 1
+928:  FAIL tin2 build
+929:error: pathspec 'train/tin2' did not match any file(s) known to git
+930:  FAIL tin2 check
+931:  FAIL tin2 ci
+932:  FAIL top-level inventory change: dry-run land exit 1
+937:  FAIL tin3 build
+938:error: pathspec 'train/tin3' did not match any file(s) known to git
+939:  FAIL tin3 check
+940:  FAIL tin3 ci
+941:  FAIL legacy change: dry-run land exit 1
+947:  FAIL review train build
+948:error: pathspec 'train/trv' did not match any file(s) known to git
+949:  FAIL missing reviewer: check exit 1
+951:  FAIL reviewer none: check exit 1
+953:  FAIL reviewer malformed: check exit 1
+955:  FAIL reviewer blocked: check exit 1
+957:  FAIL reviewer findings: check exit 1
+959:  FAIL ci after a failed review leg: exit 1
+960:  FAIL check --no-review
+961:  FAIL review train ci
+962:  FAIL land with no review note anywhere (exit 1)
+964:  FAIL land with an unreviewed head over a malformed member note (exit 1)
+969:  FAIL land with a malformed head note, whatever the members (exit 1)
+972:  FAIL land with an unreviewed head over a blocked member note (exit 1)
+977:  FAIL land with a blocked head note, whatever the members (exit 1)
+980:  FAIL land with an unreviewed head over a findings member note (exit 1)
+985:  FAIL land with a findings head note, whatever the members (exit 1)
+988:  FAIL land with an unreviewed head with one member unreviewed (exit 1)
+991:  FAIL land with an unreviewed head whose every member is clean at its exact SHA (exit 1)
+994:  FAIL land with a clean head note (exit 1)
+996:  FAIL check over reviewed members: exit 1, reviewer calls ''
+1012:check_landing_script: PASS=95 FAIL=141
+1013:--- scripts/checks/landing_script.sh: FAIL (7s)
+1046:legacy_frozen: PASS=29 FAIL=0
+1052:=== no published artifact, a failed download, other bytes, a failed verification: INCOMPLETE ===
+1053:  ok   an empty artifact_url is INCOMPLETE (3)
+1054:  ok   a failed download is INCOMPLETE (3)
+1055:  ok   an artifact with other bytes (corrupted) is INCOMPLETE (3)
+1057:  ok   an install that fails verification (manifest not locked) is INCOMPLETE (3)
+1059:=== ci_check.sh: INCOMPLETE without a verified oracle, FAILED on a wrong smoke result ===
+1060:  ok   no published artifact: the oracle check is INCOMPLETE (3), never passed
+1061:  ok   a corrupted artifact: the oracle check is INCOMPLETE (3)
+1062:  ok   a failed verification: the oracle check is INCOMPLETE (3)
+1065:  ok   end to end, wrong: FAILED (1), never passed
+1066:  ok   end to end, compile42: FAILED (1), never passed
+1067:  ok   end to end, compile1: FAILED (1), never passed
+1068:  ok   end to end, noout: FAILED (1), never passed
+1069:  ok   a failed download: the oracle check is INCOMPLETE (3) even with a working toolchain
+1070:  ok   an install altered after fetch: the oracle check is INCOMPLETE (3) via run.sh's refusal
+1072:check_oracle_fetch: 19 passed, 0 failed
+1088:check_retention_manifest: PASS=10 FAIL=0
+1091:acceptance git shim: refusing push argument 'main' (could move main)
+1093:  FAIL findings exit 1 (got 2)
+1094:  FAIL one reviewer call
+1096:  FAIL reviewer runs with --sandbox read-only
+1098:  FAIL reviewer runs with GIT_OPTIONAL_LOCKS=0
+1102:  FAIL round 1 prompt carries the verdict rule
+1104:  FAIL round 1 reviews the full diff from the merge-base
+1106:  FAIL note format: 
+1107:  FAIL note: verdict findings
+1108:  FAIL note: rounds 1
+1110:  FAIL note: pieces 1
+1111:  FAIL raw output at .review/<sha>-1.md
+1112:error: no note found for object 93dbb9cd5a9e03947bb58f1ca0648bf7b5ba5b5c.
+1113:  FAIL findings recorded under the findings ref
+1122:  FAIL verify.sh: findings is not clean (exit 1, got 2)
+1124:  FAIL re-review of a reviewed HEAD exits 4 (got 2)
+1125:  FAIL and calls no reviewer
+1127:  FAIL --head at the checkout's HEAD is accepted (reviewed HEAD exits 4, got 2)
+1128:  FAIL --base --head <sha> as train.sh calls it is accepted (got 1)
+1134:  FAIL clean exit 0 (got 2)
+1135:  FAIL round 2 diff holds only the delta (new.txt, old.txt fix)
+1139:  FAIL round 2 prompt names the delta start
+1141:  FAIL round 2 prompt carries the previous findings
+1142:  FAIL note: rounds 2, verdict clean
+1143:  FAIL verify.sh: clean exit 0 (got 2)
+1144:  FAIL verify.sh prints the verdict
+1146:  FAIL an already-clean HEAD reports clean without a call (exit 0)
+1158:  FAIL markdown-emphasised verdict line is accepted (exit 2, verdict )
+1159:  FAIL text after the verdict line is not a verdict (exit 2, verdict )
+1160:  FAIL a reply with no verdict line is blocked, not clean (exit 2, verdict )
+1161:  FAIL a reviewer that exits nonzero is blocked (exit 2, verdict )
+1162:  FAIL a real review that mentions content filters is not a refusal (exit 2, verdict )
+1164:  FAIL refused then reviewed neutrally: clean (exit 2)
+1166:  FAIL first call standard, retries neutral
+1170:  FAIL retry pieces are smaller ( < )
+1174:  FAIL raw output records the refusal
+1175:  FAIL refused twice: blocked, exit 5 (got 2)
+1176:  FAIL note: verdict blocked
+1177:  FAIL no loop: one standard call and one retry pass (0 calls)
+1178:  FAIL blocked piece listed in the output
+1179:  FAIL a blocked HEAD may be re-run; it counts as round 2
+1181:  FAIL the re-run reviews the whole branch again (blocked does not advance the delta)
+1183:  FAIL blocked wins over findings: verdict blocked, exit 5 (got 2, )
+1184:error: no note found for object 996efaf1bb4c7c15fce287d9c251a51493c34504.
+1185:  FAIL the reviewed piece's findings are still recorded
+1187:  FAIL next round restarts from the base, not after the blocked round
+1189:  FAIL and carries the blocked round's findings forward
+1190:error: no note found for object 4cc7352fb3cd4fd6155291b422a0c1e432257904.
+1191:  FAIL a blocked round with no findings of its own records the carried ones
+1193:  FAIL after two blocked rounds in a row the finding still reaches the prompt
+1199:  FAIL split review is clean (exit 2)
+1201:  FAIL several pieces ()
+1203:  FAIL one call per piece
+1210:  FAIL the big file is split across pieces
+1212:  FAIL compiler pieces come first
+1215:  FAIL each split part repeats the file header and starts a hunk
+1220:  FAIL --pieces 3 on one file gives three pieces ()
+1223:  FAIL split parts carry correct, contiguous @@ headers
+1225:  FAIL round 1 of 2: findings (exit 2)
+1226:  FAIL round 2 of 2 with findings: cap exit 3 (got 2)
+1227:  FAIL cap message says split or escalate
+1228:  FAIL cap message lists the open findings
+1229:  FAIL round 2 note was still written
+1230:  FAIL no round 3: refused with exit 3 (got 2)
+1237:fatal: failed to resolve 'HEAD' as a valid ref.
+1238:  FAIL review after a concurrent notes push succeeds (exit 2)
+1239:fatal: failed to resolve 'HEAD' as a valid ref.
+1240:  FAIL origin keeps the other writer's note
+1241:error: no note found for object e852333cd67612d22c51bd79c0cefc6be87f9f65.
+1242:  FAIL origin has our note
+1243:  FAIL push rejected once, then merged and pushed (exit 2)
+1244:  FAIL the retry path ran
+1245:fatal: failed to resolve 'HEAD' as a valid ref.
+1246:  FAIL origin holds the racing note
+1247:error: no note found for object 820dc60375d78ca1efd3eece9e1b8bcbe35ebdd6.
+1248:  FAIL origin holds our note
+1250:  FAIL a refused (not non-fast-forward) push exits 6 (got 2)
+1252:  FAIL the note is still recorded locally
+1257:check_review_tool: PASS=30 FAIL=69
+1258:--- scripts/checks/review_tool.sh: FAIL (2s)
+1267:root_inventory: PASS=5 FAIL=0
+1285:  FAIL review_tool.sh: exit 1 (an early failure would make 'unchanged' vacuous)
+1289:      fatal: failed to resolve 'HEAD' as a valid ref.
+1290:      fatal: failed to resolve 'HEAD' as a valid ref.
+1291:      error: no note found for object 85faad113da7b20b3b57c90027de7420269e6660.
+1292:      fatal: failed to resolve 'HEAD' as a valid ref.
+1293:      error: no note found for object 36639d3399ad714a47b7eca0bae96c1a0a9edc80.
+1294:  FAIL review_tool.sh: its final tally ('^check_review_tool: PASS=[0-9]* FAIL=0$') is missing: it stopped early, so 'unchanged' proves nothing
+1297:check_sandbox_isolation: PASS=12 FAIL=2
+1298:--- scripts/checks/sandbox_isolation.sh: FAIL (4s)
+1303:WORKFLOW-YAML: PASS=2  FAIL=0
+1306:root checks: FAILED: landing_bot.sh landing_script.sh review_tool.sh sandbox_isolation.sh (of 11)
+1307:pre-push: ROOT CHECKS FAILED (above) — fix, or bypass deliberately.
+1309:train: check FAILED at 44e78373e8 (impact); fix the member that broke it (bisect: train.sh bisect accept-56ad6ab21d --test '<failing gate>')
+        *) row main note "main moved during the run (not to the train head): $MAIN_BEFORE-> $after" ;;
+      esac
+    fi
+  fi
+  local verdict=accepted
+  [ "$SKIPPED" = 1 ] && verdict=incomplete
+  [ "$FAILED" = 1 ] && verdict=failed
+  local state; state="$(cd "$SRC_REPO" && cd "$(git rev-parse --git-common-dir)" && pwd)/concrete-landing"
+  local rec="${ACCEPT_RECORD:-$state/acceptance.tsv}"
+  mkdir -p "$(dirname "$rec")"
+  for r in "${ROWS[@]}"; do printf '%s\t%s\t%s\t%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${HEAD:-?}" "$NAME" "$r"; done >> "$rec"
+  printf '%s\t%s\t%s\tverdict\t%s\t\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${HEAD:-?}" "$NAME" "$verdict" >> "$rec"
+  # The rehearsal record train.sh's move gate reads (require_rehearsal): one row per run that built a
+  # train, keyed by the train head's tree and base, so the landing train (a new merge commit of the
+  # same base and members) finds it. Written for every verdict; only `accepted` satisfies the gate. A
+  # run that failed before it had a train head, tree and base (a bad ref, a failed build) binds no
+  # candidate and writes no row there (acceptance.tsv above still records it): train.sh refuses a
+  # malformed row outright, so an unbound row would block every later land.
+  local reh="${ACCEPT_REHEARSALS:-$state/rehearsals.tsv}" tree="" base=""
+  if [ -n "$HEAD" ]; then
+    tree="$(git -C "$C" rev-parse "$HEAD^{tree}" 2>/dev/null || true)"
+    base="$(sed -n 's/^base=//p' "$(cd "$C" && cd "$(git rev-parse --git-common-dir)" && pwd)/concrete-landing/$NAME/train.env" 2>/dev/null | tail -n 1)"
+  fi
+  if [[ "$HEAD" =~ ^[0-9a-f]{40}$ && "$tree" =~ ^[0-9a-f]{40}$ && "$base" =~ ^[0-9a-f]{40}$ ]]; then
+    mkdir -p "$(dirname "$reh")"
+    [ -s "$reh" ] || printf '# utc\tverdict\ttrain_head\ttrain_head_tree\tbase\tref\tname (scripts/land/acceptance.sh; read by train.sh require_rehearsal)\n' > "$reh"
+    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$verdict" "$HEAD" "$tree" "$base" "$REF" "$NAME" >> "$reh"
+  else
+    echo "acceptance: no train head, tree and base, so no rehearsal row (this run binds no candidate)"
+  fi
+  local kept=""; [ "$KEEP" = 1 ] && kept="; clone $C"
+  echo "acceptance: $verdict at ${HEAD:-?} (train $NAME; record $rec$kept)"
+  [ "$verdict" = accepted ]; exit $?
+}
+
+TRAIN() { ( cd "$C" && bash scripts/land/train.sh "$@" ); }
+
+# The git shim: every leg runs with it first on PATH. It refuses a push that could move main, and
+# passes everything else to the real git.
+make_git_shim() {
+  local real; real="$(command -v git)"
+  mkdir -p "$WORK/bin"
+  cat > "$WORK/bin/git" <<SHIM
+#!/usr/bin/env bash
+seen=0
+for a in "\$@"; do
+  if [ "\$seen" = 0 ]; then [ "\$a" = push ] && seen=1; continue; fi
+  case "\$a" in
+    --all|--mirror|HEAD|main|refs/heads/main|*:main|*:refs/heads/main|+*:main|+*:refs/heads/main)
+      echo "acceptance git shim: refusing push argument '\$a' (could move main)" >&2; exit 1 ;;
+  esac
+done
+exec "$real" "\$@"
+SHIM
+  chmod +x "$WORK/bin/git"
+}
+# The guard hooks path: pre-push refuses any main update, then runs the real hook on the same input.
+make_guard() {
+  mkdir -p "$WORK/guard-hooks"
+  cat > "$WORK/guard-hooks/pre-push" <<GUARD
+#!/usr/bin/env bash
+in="\$(cat)"
+while read -r _l _ls rref _rs; do
+  case "\$rref" in refs/heads/main|main) echo "acceptance guard: refusing a push to \$rref on \$1" >&2; exit 1 ;; esac
+done <<< "\$in"
+[ -x "$C/.githooks/pre-push" ] || [ -f "$C/.githooks/pre-push" ] || exit 0
+printf '%s\n' "\$in" | bash "$C/.githooks/pre-push" "\$@"
+GUARD
+  chmod +x "$WORK/guard-hooks/pre-push"
+}
+do_clone() {
+  git clone --quiet "$ORIGIN_URL" "$C" && cd "$C" || return 1
+  [ -z "$MIRROR_URL" ] || git remote add lambdaclass "$MIRROR_URL"
+  make_guard
+  git config core.hooksPath "$WORK/guard-hooks"
+  MAIN_BEFORE="$(main_heads)"
+  git fetch --quiet origin '+refs/heads/wip/*:refs/remotes/origin/wip/*' || true
+  git rev-parse --verify --quiet "$REF^{commit}" >/dev/null || { echo "no ref $REF in the fresh clone"; return 1; }
+  [ -f scripts/land/train.sh ] || { echo "no scripts/land/train.sh"; return 1; }
+  echo "cloned $ORIGIN_URL; $REF = $(git rev-parse "$REF")"
+}
+do_build() { # at the train head: the build result belongs to the SHA every other leg tests
+  [ "$(git -C "$C" rev-parse HEAD)" = "$HEAD" ] || { echo "the clone is not at the train head"; return 1; }
+  cd "$C" && bash -c "$BUILD_CMD" && echo "built $HEAD"
+}
+do_train() {
+#!/usr/bin/env bash
+# Reproducer: acceptance.sh's git shim refuses a push of main to a throwaway local fixture remote,
+# which the root checks (landing_bot.sh, landing_script.sh, review_tool.sh) do; so the impact leg
+# fails inside every acceptance run. Usage: repro.sh CLONE (a checkout of origin/main).
+set -u
+C="$1"; W="$(mktemp -d)"; trap 'rm -rf "$W"' EXIT
+# Extract make_git_shim from acceptance.sh exactly as it is and build the shim.
+WORK="$W"; eval "$(sed -n '/^make_git_shim() {/,/^}/p' "$C/scripts/land/acceptance.sh")"; make_git_shim
+export PATH="$W/bin:$PATH"
+cd "$W"; git init -q --bare fixture.git; git init -q -b main r; cd r
+git -c user.name=t -c user.email=t@t commit -q --allow-empty -m x
+git remote add origin "$W/fixture.git"
+if git push -q origin main 2>"$W/err"; then echo "NOT REPRODUCED: push of main to a local fixture passed"; exit 1; fi
+echo "REPRODUCED: $(cat "$W/err")"
+
+exec
+/bin/bash -lc "sed -n '1,65p' ../accept-check.log
+sed -n '1088,1135p' ../accept-check.log
+sed -n '1270,1312p' ../accept-check.log
+rg -n 'push .*main|init .*bare|mktemp|PATH=|make_git_shim|do_check|TRAIN.*check' scripts/checks/{landing_bot,landing_script,review_tool,sandbox_isolation,run}.sh scripts/land/acceptance.sh
+rg -n 'pre-push|impact|run.sh|ISS-0015' scripts/land/train.sh .githooks/pre-push ISSUES.tsv" in /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/shimrepro/repo
+ succeeded in 0ms:
+train: no gate host configured (LAND_GATES_HOST / git config land.gatesHost): the impact gates run on this machine
+pre-push: building the specification…
+pre-push: root checks…
+=== scripts/checks/doc_links.sh ===
+=== controls: the checker on throwaway trees ===
+  ok   positive control: slugs (literal underscore, emphasis), duplicate suffix, explicit id, code skipped, root-relative fragment links and a sibling fragment's heading pass
+  ok   a link to a missing heading fails
+  ok   a duplicate suffix past the last repeated heading fails
+  ok   a heading inside a code fence is not an anchor
+  ok   a heading inside an HTML comment is not an anchor
+  ok   an id written inside a code span is not an anchor
+  ok   an image inside a link's text is checked
+  ok   a link to a missing file fails
+  ok   outside changelog.d/ a link resolves against its own directory
+  ok   a changelog.d/ fragment resolves against the root, not changelog.d/
+  ok   a fragment's anchor is checked too
+=== the repository ===
+  ok   DOC-LINKS: PASS CHECKED=909 ANCHORS=713
+
+DOC-LINKS-GATE: PASS=12 FAIL=0 INCOMPLETE=0
+--- scripts/checks/doc_links.sh: pass (0s)
+=== scripts/checks/issues.sh ===
+=== ISSUES.tsv ===
+  ok   ISSUES.tsv is well-formed (16 issues, 10 open)
+=== negative controls ===
+  ok   an unknown area is refused
+  ok   an unknown status is refused
+  ok   an empty closure condition is refused
+  ok   a repeated id is refused
+
+check_issues: PASS=5 FAIL=0
+--- scripts/checks/issues.sh: pass (0s)
+=== scripts/checks/landing_bot.sh ===
+acceptance git shim: refusing push argument 'main' (could move main)
+acceptance git shim: refusing push argument 'main' (could move main)
+acceptance git shim: refusing push argument 'main' (could move main)
+warning: You appear to have cloned an empty repository.
+=== ready: both notes, at the exact head ===
+fatal: 'origin/main' is not a commit and a branch 'wip/a' cannot be created from it
+fatal: ambiguous argument 'refs/heads/wip/a': unknown revision or path not in the working tree.
+Use '--' to separate paths from revisions, like this:
+'git <command> [<revision>...] -- [<file>...]'
+fatal: Needed a single revision
+notes: put: 'rounds=1' is not a commit
+  FAIL mark wip/a
+fatal: 'origin/main' is not a commit and a branch 'wip/nogates' cannot be created from it
+fatal: ambiguous argument 'refs/heads/wip/nogates': unknown revision or path not in the working tree.
+Use '--' to separate paths from revisions, like this:
+'git <command> [<revision>...] -- [<file>...]'
+fatal: Needed a single revision
+notes: put: 'rounds=1' is not a commit
+fatal: 'origin/main' is not a commit and a branch 'wip/findings' cannot be created from it
+fatal: ambiguous argument 'refs/heads/wip/findings': unknown revision or path not in the working tree.
+Use '--' to separate paths from revisions, like this:
+'git <command> [<revision>...] -- [<file>...]'
+fatal: Needed a single revision
+notes: put: 'rounds=1' is not a commit
+  FAIL mark wip/findings
+fatal: 'origin/main' is not a commit and a branch 'wip/gatefail' cannot be created from it
+fatal: ambiguous argument 'refs/heads/wip/gatefail': unknown revision or path not in the working tree.
+Use '--' to separate paths from revisions, like this:
+'git <command> [<revision>...] -- [<file>...]'
+fatal: Needed a single revision
+notes: put: 'rounds=1' is not a commit
+  FAIL mark wip/gatefail
+check_retention_manifest: PASS=10 FAIL=0
+--- scripts/checks/retention_manifest.sh: pass (0s)
+=== scripts/checks/review_tool.sh ===
+acceptance git shim: refusing push argument 'main' (could move main)
+=== round 1: full diff, findings, note written and pushed ===
+  FAIL findings exit 1 (got 2)
+  FAIL one reviewer call
+grep: /tmp/tmp.phExweMecB/fake/calls: No such file or directory
+  FAIL reviewer runs with --sandbox read-only
+grep: /tmp/tmp.phExweMecB/fake/locks: No such file or directory
+  FAIL reviewer runs with GIT_OPTIONAL_LOCKS=0
+grep: /tmp/tmp.phExweMecB/fake/locks: No such file or directory
+  ok   no reviewer call ran with optional locks
+grep: /tmp/tmp.phExweMecB/fake/prompt.1: No such file or directory
+  FAIL round 1 prompt carries the verdict rule
+grep: /tmp/tmp.phExweMecB/fake/calls: No such file or directory
+  FAIL round 1 reviews the full diff from the merge-base
+fatal: Not a valid object name origin/main
+  FAIL note format: 
+  FAIL note: verdict findings
+  FAIL note: rounds 1
+  ok   note: base is the merge-base
+  FAIL note: pieces 1
+  FAIL raw output at .review/<sha>-1.md
+error: no note found for object 93dbb9cd5a9e03947bb58f1ca0648bf7b5ba5b5c.
+  FAIL findings recorded under the findings ref
+fatal: ambiguous argument 'refs/notes/concrete-review': unknown revision or path not in the working tree.
+Use '--' to separate paths from revisions, like this:
+'git <command> [<revision>...] -- [<file>...]'
+fatal: ambiguous argument 'refs/notes/concrete-review': unknown revision or path not in the working tree.
+Use '--' to separate paths from revisions, like this:
+'git <command> [<revision>...] -- [<file>...]'
+  ok   notes ref pushed to origin
+  ok   .review/ stays untracked
+  FAIL verify.sh: findings is not clean (exit 1, got 2)
+=== same HEAD again: nothing to review ===
+  FAIL re-review of a reviewed HEAD exits 4 (got 2)
+  FAIL and calls no reviewer
+=== --head: the callers' contract (train.sh, ready.sh pass --base --head) ===
+  FAIL --head at the checkout's HEAD is accepted (reviewed HEAD exits 4, got 2)
+  FAIL --base --head <sha> as train.sh calls it is accepted (got 1)
+  ok   --head other than the checkout refuses (exit 2, got 2)
+  ok   and says why
+  ok   an empty --head refuses (exit 2, got 2)
+  ok   and calls no reviewer
+=== round 2: only the delta, with the previous findings ===
+  FAIL clean exit 0 (got 2)
+  FAIL round 2 diff holds only the delta (new.txt, old.txt fix)
+=== structural: every repository-making script sources the sandbox helper ===
+  ok   scripts/checks/landing_bot.sh sources git_sandbox.sh (line 40) and calls it (line 41) before its first repository (line 133)
+  ok   scripts/checks/landing_script.sh sources git_sandbox.sh (line 60) and calls it (line 61) before its first repository (line 139)
+  ok   scripts/checks/legacy_frozen.sh sources git_sandbox.sh (line 100) and calls it (line 101) before its first repository (line 106)
+  ok   scripts/checks/review_tool.sh sources git_sandbox.sh (line 39) and calls it (line 40) before its first repository (line 115)
+  ok   scripts/land/acceptance.sh sources git_sandbox.sh (line 65) and calls it (line 66) before its first repository (line 191)
+  ok   scripts/land/bot.sh sources git_sandbox.sh (line 39) and calls it (line 40) before its first repository (line 260)
+  ok   scripts/land/run-at-ref.sh sources git_sandbox.sh (line 20) and calls it (line 21) before its first repository (line 42)
+  ok   scripts/oracle/build.sh sources git_sandbox.sh (line 29) and calls it (line 30) before its first repository (line 52)
+  ok   scripts/proofs/external.sh sources git_sandbox.sh (line 45) and calls it (line 46) before its first repository (line 73)
+  ok   found 9 repository-making scripts (at least the 9 known)
+bound: a systemd user scope, TasksMax=512, MemoryMax=8G
+=== control: the harness sees a leak ===
+  ok   control (leaky script): the harness sees a write through the inherited GIT_DIR
+=== live: sandbox checks run from a linked worktree as its hook would run them ===
+  FAIL review_tool.sh: exit 1 (an early failure would make 'unchanged' vacuous)
+      fatal: ambiguous argument 'HEAD': unknown revision or path not in the working tree.
+      Use '--' to separate paths from revisions, like this:
+      'git <command> [<revision>...] -- [<file>...]'
+      fatal: failed to resolve 'HEAD' as a valid ref.
+      fatal: failed to resolve 'HEAD' as a valid ref.
+      error: no note found for object 85faad113da7b20b3b57c90027de7420269e6660.
+      fatal: failed to resolve 'HEAD' as a valid ref.
+      error: no note found for object 36639d3399ad714a47b7eca0bae96c1a0a9edc80.
+  FAIL review_tool.sh: its final tally ('^check_review_tool: PASS=[0-9]* FAIL=0$') is missing: it stopped early, so 'unchanged' proves nothing
+  ok   legacy_frozen.sh: the caller's refs, notes, config and upstream are unchanged
+
+check_sandbox_isolation: PASS=12 FAIL=2
+--- scripts/checks/sandbox_isolation.sh: FAIL (4s)
+=== scripts/checks/workflow_yaml.sh ===
+  ok   .github/workflows/lean_action_ci.yml
+  ok   .github/workflows/oracle.yml
+
+WORKFLOW-YAML: PASS=2  FAIL=0
+--- scripts/checks/workflow_yaml.sh: pass (0s)
+
+root checks: FAILED: landing_bot.sh landing_script.sh review_tool.sh sandbox_isolation.sh (of 11)
+pre-push: ROOT CHECKS FAILED (above) — fix, or bypass deliberately.
+train: legs: impact=fail(1)/18s review=pass/1s; wall 18s, sequential 19s
+train: check FAILED at 44e78373e8 (impact); fix the member that broke it (bisect: train.sh bisect accept-56ad6ab21d --test '<failing gate>')
+scripts/land/acceptance.sh:94:WORK="$(mktemp -d "${TMPDIR:-/tmp}/acceptance.XXXXXX")"
+scripts/land/acceptance.sh:157:# The git shim: every leg runs with it first on PATH. It refuses a push that could move main, and
+scripts/land/acceptance.sh:159:make_git_shim() {
+scripts/land/acceptance.sh:169:      echo "acceptance git shim: refusing push argument '\$a' (could move main)" >&2; exit 1 ;;
+scripts/land/acceptance.sh:176:# The guard hooks path: pre-push refuses any main update, then runs the real hook on the same input.
+scripts/land/acceptance.sh:213:do_check() { TRAIN check "$NAME" --no-remote; }
+scripts/land/acceptance.sh:342:make_git_shim
+scripts/land/acceptance.sh:343:export PATH="$WORK/bin:$PATH"
+scripts/land/acceptance.sh:349:leg check do_check
+scripts/checks/landing_bot.sh:32:TMP="$(mktemp -d)" || { echo "FATAL: could not create a sandbox directory" >&2; exit 2; }
+scripts/checks/landing_bot.sh:133:for r in origin lambdaclass fork; do git init -q --bare "$TMP/$r.git"; done
+scripts/checks/landing_bot.sh:143:for r in origin lambdaclass fork; do git push -q "$r" main; done
+scripts/checks/landing_bot.sh:370:  && git commit -qam "main moves" && git push -q origin HEAD:main )
+scripts/checks/landing_bot.sh:410:[ -z "$bad" ] && ok "no forced push of refs/heads/main in scripts/land" || { no "forced push of main:"; echo "$bad" | sed 's/^/      /'; }
+scripts/checks/review_tool.sh:34:T="$(mktemp -d)"
+scripts/checks/review_tool.sh:115:git init -q --bare "$T/origin.git"
+scripts/checks/review_tool.sh:127:g push -q origin main
+scripts/checks/landing_script.sh:51:TMP="$(mktemp -d)" || { echo "FATAL: could not create a sandbox directory" >&2; exit 2; }
+scripts/checks/landing_script.sh:139:for r in origin lambdaclass fork; do git init -q --bare "$TMP/$r.git"; done
+scripts/checks/landing_script.sh:185:git push -q origin main && git push -q lambdaclass main && git push -q fork main
+scripts/checks/landing_script.sh:325:out="$(bash "$TRAIN" check t1 --no-remote 2>&1)"; rc=$?
+scripts/checks/landing_script.sh:329:out="$(bash "$TRAIN" check t1 --no-remote 2>&1)"; rc=$?
+scripts/checks/landing_script.sh:334:bash "$TRAIN" check t1 --no-remote >/dev/null 2>&1 || no "re-check after repair"
+scripts/checks/landing_script.sh:368:  out="$(LAND_GATES_HOST=fakehost CONCRETE_TEST_FWD='a b' CONCRETE_SKIP_GATES=1 bash "$TRAIN" check t1 --no-remote 2>&1)"; rc=$?
+scripts/checks/landing_script.sh:407:out="$(LAND_GATES_HOST=fakehost bash "$TRAIN" check t1 --no-remote --local-gates 2>&1)"; rc=$?
+scripts/checks/landing_script.sh:412:out="$(bash "$TRAIN" check t1 --no-remote 2>&1)"; rc=$?
+scripts/checks/landing_script.sh:414:out="$(bash "$TRAIN" --dry-run check t1 --no-remote 2>&1)"
+scripts/checks/landing_script.sh:417:out="$(LAND_GATES_HOST= bash "$TRAIN" check t1 --no-remote 2>&1)"; rc=$?
+scripts/checks/landing_script.sh:508:git init -q --bare "$TMP/ri-origin.git"; git init -q "$RI"
+scripts/checks/landing_script.sh:518:t="$(mktemp -d)"
+scripts/checks/landing_script.sh:526:  git add -A && git commit -qm base && git push -q origin HEAD:main \
+scripts/checks/landing_script.sh:570:# The root hook has no gate selection: every push that can reach main or ci/* builds the spec and
+scripts/checks/landing_script.sh:576:bash "$TRAIN" check t1 --no-remote >/dev/null 2>&1 || no "re-check after the gate-host legs"
+scripts/checks/landing_script.sh:622:( cd "$TMP/other" && echo moved > moved.txt && git add moved.txt && git commit -qm moved && git push -q origin main )
+scripts/checks/landing_script.sh:625:( cd "$TMP/other" && git push -q --force origin "$BASE:main" )
+scripts/checks/landing_script.sh:659:bash "$TRAIN" check t8 --no-remote >/dev/null 2>&1 || no "check t8"
+scripts/checks/landing_script.sh:978:bash "$TRAIN" check tm --no-remote >/dev/null 2>&1 || no "move train check"
+scripts/checks/landing_script.sh:1027:bash "$TRAIN" check tm3 --no-remote >/dev/null 2>&1 || no "staged move train check"
+scripts/checks/landing_script.sh:1056:grep -qxF 'do_check() { TRAIN check "$NAME" --no-remote; }' "$ACC" && ! grep -qE '^[^#]*--no-review' "$ACC" \
+scripts/checks/landing_script.sh:1072:bash "$TRAIN" check tm2 --no-remote >/dev/null 2>&1 || no "inventory train check"
+scripts/checks/landing_script.sh:1083:  && git add -A && git commit -qm inventory && CONCRETE_SKIP_GATES=1 git push -q origin main )
+scripts/checks/landing_script.sh:1089:  bash "$TRAIN" check "$1" --no-remote >/dev/null 2>&1 || no "$1 check"
+scripts/checks/landing_script.sh:1119:out="$(LAND_REVIEW_CMD= bash "$TRAIN" check trv --no-remote 2>&1)"; rc=$?
+scripts/checks/landing_script.sh:1124:  out="$(bash "$TRAIN" check trv --no-remote 2>&1)"; rc=$?
+scripts/checks/landing_script.sh:1133:bash "$TRAIN" check trv --no-remote --no-review >/dev/null 2>&1 || no "check --no-review"
+scripts/checks/landing_script.sh:1158:out="$(bash "$TRAIN" check trv --no-remote 2>&1)"; rc=$?
+scripts/checks/sandbox_isolation.sh:67:TMP="$(mktemp -d)" || exit 2
+scripts/checks/sandbox_isolation.sh:138:  d="$(mktemp -d "$TMP/caller.XXXXXX")"
+scripts/checks/sandbox_isolation.sh:165:T="$(mktemp -d)"; git init -q "$T/w"
+ISSUES.tsv:5:ISS-0001	2026-11-04	ci	P13 is approved (2026-11-05): CI runs on concrete-ci-2 plus GitHub-hosted runners as one regular pool, and the oracle is a GitHub release asset. Published 2026-11-05 with owner approval: release oracle-legacy-compiler-final on unbalancedparentheses/concrete2, its tag at the locked commit 066c9d9b8836, asset oracle-legacy-compiler-final-x86_64-linux.tar.gz downloading to artifact_sha256; ORACLE.lock artifact_url is set and scripts/oracle/fetch.sh installs and verifies it on fede-256gb. Closed 2026-11-05: CI run 42061363497 (unbalancedparentheses/concrete2, workflow CI, conclusion success) at wip/oracle-hosted 915483933015082d172e5e54cda8b7ed6c17f2b3; its job Oracle (GitHub-hosted fetch + smoke) on ubuntu-latest ran scripts/oracle/ci_check.sh: fetch.sh downloaded the release asset, verified artifact_sha256 and the install manifest, and smoke.con exited 42 through run.sh (also passed in run 42059824955 at a1ba9b51dd33b22cf5a477846242a03160f7e3f0)	R-0564	medium	the tarball is published with scripts/oracle/publish.sh as release asset oracle-legacy-compiler-final-x86_64-linux.tar.gz (release_tag oracle-legacy-compiler-final), artifact_url is set to its download URL, and fetch.sh installs and verifies it on a GitHub-hosted runner	closed
+ISSUES.tsv:9:ISS-0005	2026-11-04	ci	the GitHub-hosted fallback path for the oracle differential was unrehearsed and the runner-pool limits unwritten (holistic review, P13/F15). On wip/oracle-hosted: the required job Oracle (GitHub-hosted fetch + smoke) runs scripts/oracle/ci_check.sh (fetch.sh, then smoke.con through run.sh) on ubuntu-latest, check_oracle_fetch.sh holds the INCOMPLETE/FAILED cases, and docs/project/SELF_HOSTED_RUNNERS.md records the pools. Closed 2026-11-05: CI run 42061363497 (unbalancedparentheses/concrete2, workflow CI, conclusion success) at wip/oracle-hosted 915483933015082d172e5e54cda8b7ed6c17f2b3; its job Oracle (GitHub-hosted fetch + smoke) on ubuntu-latest ran scripts/oracle/ci_check.sh: fetch.sh downloaded the release asset, verified artifact_sha256 and the install manifest, and smoke.con exited 42 through run.sh (also passed in run 42059824955 at a1ba9b51dd33b22cf5a477846242a03160f7e3f0); check_oracle_fetch.sh, in that job, held the missing, corrupt, unverifiable, refused-install and compile-failure cases as INCOMPLETE or FAILED	R-0564	medium	a required oracle check runs fetch.sh then run.sh on a GitHub-hosted runner; a rehearsal shows that a missing artifact, a corrupted artifact and an install that fails verification each leave that check incomplete (blocking) rather than passed; the pool limits and the fallback-supported checks are recorded in docs/project/SELF_HOSTED_RUNNERS.md	closed
+ISSUES.tsv:19:ISS-0015	2026-11-06	ci	Sandboxes inherit the caller's git environment. scripts/checks/review_tool.sh isolated git config only, not the repository-locating variables; a pre-push hook of a LINKED worktree exports GIT_DIR=<repo>/.git/worktrees/<name>, so every git -C <sandbox> in the check acted on the caller. On 2026-11-06 `train.sh ci laudit` run from the linked worktree ~agent/audit-records made the hook's review_tool.sh create its test branches (nonff, capped, parse-*) and set core.bare=true in ~agent/audit-clone (kept unchanged as evidence), and push 28 commits to origin refs/notes/concrete-review (tip b4b364f4, pre-leak 5b6add0d) and 12 to refs/notes/concrete-review-findings (tip 21c56796, pre-leak fd3c6451), authored Review Gate, 17:16:49-17:17:43Z, annotating 21 sandbox commits that exist on no remote (first counted as 22, which wrongly included c54679c3, a real commit whose note at 17:21Z is legitimate); no earlier note was deleted or changed and every reader looks notes up by exact SHA, so none can count as provenance for a real commit. lambdaclass has no notes refs. Codex confirmed with a bounded reproducer on concrete-ci-2 at main f9a8c333 (caller refs and refs/notes/* changed: LEAK) and an independent GIT_DIR experiment. landing_script.sh and landing_bot.sh unset only five of git's local variables; legacy_frozen.sh, acceptance.sh, run-at-ref.sh and bot.sh unset none. Second incident, same cause: the first reproducer installed a pre-push hook that ran review_tool.sh; the leaked GIT_DIR made each nested push re-enter that hook, the recursion exhausted fede-256gb (load ~1900) and the OOM killer took down the orchestrator's session. Structural owner: the sandbox helper scripts/checks/lib/git_sandbox.sh (unsets every `git rev-parse --local-env-vars` variable), sourced by every repository-making script; reproducers and tests run with no installed hook, under timeout 120 and a 512-task / 8G systemd scope bound, or a finite cgroup memory.max plus a process limit, and never an unbounded run. Closed 2026-11-07: the fix landed at dbe838488891, where every closure part is checked in Root checks (scripts/checks/run.sh, all 11 pass: sandbox_isolation PASS=13 FAIL=0 with its structural leg over 9 scripts, the two live linked-worktree probes and the leaking control; landing_script PASS=208 FAIL=0 with the linked-worktree, hook-off, foreign-hook and identify refusal legs; also run on concrete-ci-2 at 8e62e377) (train siso from a full clone; reviewed by Codex, rounds clean at 8e62e377, and Kimi; CI run 42424663064; main CI 42425007584 on origin and 42425010605 on lambdaclass, both success). The stray notes were removed from origin by one forward fast-forward commit per ref on its then-current tip, no force: refs/notes/concrete-review d4bdcae22d50 -> dcffeea8e6cd (21 entries removed, 224 untouched at the push; Codex confirmed the list against the earlier tip 8cbb7db253f7, where 223 were untouched, and the one commit between that tip and d4bdcae22d50 only added a legitimate note for 9d6dc01a, so the removal list is identical) and refs/notes/concrete-review-findings 301e929e1bab -> 5d7c6dc3dad5 (11 removed, 105 untouched); the 40 leaked commits wrote 33 entries, one of which they removed themselves (0c04c01c); Codex confirmed the removal list and the tree diffs before the push; lambdaclass has no notes refs and none were created. ~agent/audit-clone is kept unchanged as evidence with LEAK-EVIDENCE-README.txt	R-0544	high	every repository-making script under scripts/ sources git_sandbox.sh (scripts/checks/sandbox_isolation.sh, structural leg); review_tool.sh and legacy_frozen.sh run from a linked worktree with GIT_DIR exported leave the caller's refs, refs/notes/*, core.bare and upstream unchanged while a leaking control is detected (same check, bounded); train.sh and the pre-push hook refuse a linked worktree and train.sh refuses a clone without the repository hook; and the stray notes are removed from origin by a forward fast-forward notes commit whose before and after tips are recorded here	closed
+.githooks/pre-push:5:# (scripts/checks/run.sh), the same set CI's "Root checks" and "Spec build" jobs run. The set is small
+.githooks/pre-push:15:#     clone (a linked worktree is refused; ISS-0015).
+.githooks/pre-push:20:# train.sh asks the hook git would run which hook it is (ISS-0015): called with the single argument
+.githooks/pre-push:26:  echo "concrete-pre-push $(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)/$(basename "${BASH_SOURCE[0]}")"
+.githooks/pre-push:33:  echo "pre-push: gates SKIPPED by CONCRETE_SKIP_GATES=1 — you own the CI result." >&2
+.githooks/pre-push:65:      *) echo "pre-push (wip tier): could not scan $sha (git grep exit $rc) — refusing"; exit 1 ;;
+.githooks/pre-push:68:  [ -z "$bad" ] || { echo "pre-push (wip tier): conflict markers in$bad — refusing"; exit 1; }
+.githooks/pre-push:69:  echo "pre-push: wip/* backup push ($wip_refs update(s), $wip_dels deletion(s)) — conflict-marker check only; the full set runs on ci/* and main"
+.githooks/pre-push:73:  echo "pre-push: review-notes push — no source tree, no gates"
+.githooks/pre-push:79:# real clone and on GitHub (ISS-0015). Every repository-making script now clears git's variables, and
+.githooks/pre-push:83:  echo "pre-push: refusing: this push runs the root checks, and $ROOT_DIR is a linked worktree; push it from a full clone (git clone), never a worktree." >&2
+.githooks/pre-push:91:    echo "pre-push: nix develop did not provide the gate shell with Lean — refusing to push." >&2; exit 1
+.githooks/pre-push:94:    echo "pre-push: the checks run inside nix develop, and nix is not on PATH — refusing to push." >&2; exit 1; }
+.githooks/pre-push:95:  echo "pre-push: entering nix develop for the checks"
+.githooks/pre-push:103:    echo "pre-push: pushing ${sha:0:10}, but the checkout is at ${head:0:10}; the checks would judge the wrong commit — check it out and push from there." >&2
+.githooks/pre-push:107:  echo "pre-push: the work tree has uncommitted changes to tracked files; the checks would not judge what is pushed — refusing." >&2
+.githooks/pre-push:111:echo "pre-push: building the specification…"
+.githooks/pre-push:113:lake build >"$BUILD_LOG" 2>&1 || { echo "pre-push: BUILD FAILED — see $BUILD_LOG" >&2; exit 1; }
+.githooks/pre-push:115:echo "pre-push: root checks…"
+.githooks/pre-push:116:bash scripts/checks/run.sh || { echo "pre-push: ROOT CHECKS FAILED (above) — fix, or bypass deliberately." >&2; exit 1; }
+.githooks/pre-push:117:echo "pre-push: build and root checks pass"
+scripts/land/train.sh:21:#   * (2026-11-06, ISS-0015) a train runs only from a FULL clone whose pre-push hook is the
+scripts/land/train.sh:49:# campaign-tier job names), LAND_HOOK (pre-push hook path, default .githooks/pre-push),
+scripts/land/train.sh:53:# gate host of `check`'s impact leg, else `git config land.gatesHost`; see gates_host below) and
+scripts/land/train.sh:71:# Where a train may run (ISS-0015). Only from a FULL clone: in a linked worktree git hands its hooks
+scripts/land/train.sh:74:# repository's pre-push hook enabled: train.sh pushes ci/* and main, and with the hook off (no
+scripts/land/train.sh:76:# `git rev-parse --git-path hooks/pre-push` (core.hooksPath honoured). It is asked who it is: run
+scripts/land/train.sh:77:# with the single argument --concrete-identify and no input, the repository's .githooks/pre-push prints
+scripts/land/train.sh:78:# `concrete-pre-push <its real path>` and runs nothing, and so does a wrapper that runs it
+scripts/land/train.sh:87:  hook="$(git rev-parse --git-path hooks/pre-push)"
+scripts/land/train.sh:90:    || die "refusing to run: this clone has no enabled pre-push hook ($hook is missing or not executable); enable the repository's: git config core.hooksPath .githooks"
+scripts/land/train.sh:91:  want="concrete-pre-push $(cd "$ROOT" && pwd -P)/.githooks/pre-push"
+scripts/land/train.sh:94:    || die "refusing to run: the enabled pre-push hook $hook is not the repository's .githooks/pre-push and does not run it (asked who it is, it answered '${got}'); enable it: git config core.hooksPath .githooks"
+scripts/land/train.sh:102:HOOK="${LAND_HOOK:-.githooks/pre-push}"
+scripts/land/train.sh:185:# The pre-push hook builds the compiler, so pushes and checks run inside the dev shell.
+scripts/land/train.sh:196:# connection during a long pre-push hook: the push can fail AFTER the remote ref moved (then it is
+scripts/land/train.sh:428:  out="$("$runner" "$ref" "${LAND_FULL_GATES_CMD:-lake build && bash scripts/checks/run.sh}" 2>&1)" || rc=$?
+scripts/land/train.sh:448:# LAND_GATES_HOST if set (empty = none), else `git config land.gatesHost`. With a gate host the impact
+scripts/land/train.sh:527:  local impact_cmd=(bash "$SELF_DIR/impact_gates.sh") impact_where="here"
+scripts/land/train.sh:528:  if [ -n "$ghost" ]; then impact_cmd=(bash "$SELF_DIR/gates_remote.sh" --host "$ghost"); impact_where="on $ghost"
+scripts/land/train.sh:529:  elif [ "$local_gates" = 0 ]; then note "no gate host configured (LAND_GATES_HOST / git config land.gatesHost): the impact gates run on this machine"; fi
+scripts/land/train.sh:535:  # "Pipelining"): the impact selection over exactly the range the `ci` push will present
+scripts/land/train.sh:539:    note "(dry-run) would run in parallel: impact gates $impact_where (hook line 'refs/heads/train/$name $head refs/heads/ci/$name $base')"
+scripts/land/train.sh:540:    if [ "$remote" = 1 ]; then note "(dry-run)   + remote full gates: $(remote_runner) <ref of ${head:0:10}> '${LAND_FULL_GATES_CMD:-lake build && bash scripts/checks/run.sh}'"; fi
+scripts/land/train.sh:546:  legs_start impact "$dir/impact.log" "${impact_cmd[@]}" --base "$base" --head "$head" \
+scripts/land/train.sh:552:  cat "$dir/impact.log"
+scripts/land/train.sh:554:    [ "$leg" = impact ] && continue
+scripts/land/train.sh:560:  local impact_rc=0; [ -f "$dir/impact.log.rc" ] && read -r impact_rc _ < "$dir/impact.log.rc"
+scripts/land/train.sh:562:  if [ -n "$ghost" ] && [ "$impact_rc" = 3 ]; then verdict=incomplete; fi
+scripts/land/train.sh:566:    log_row "$name" check passed "impact $impact_where$([ "$remote" = 1 ] && echo ' + remote')$([ "$review" = 1 ] && echo ' + review')"
+scripts/land/train.sh:569:    log_row "$name" check incomplete "impact gates on $ghost gave no result; legs failed: $LEGS_FAILED"
+scripts/land/train.sh:570:    die "check INCOMPLETE at ${head:0:10}: the gate host $ghost gave no result about it (see $dir/impact.log). Re-run when it is reachable, or run the gates here with: train.sh check $name --local-gates"
+
+exec
+/bin/bash -lc "cat scripts/land/impact_gates.sh
+sed -n '1,100p' scripts/checks/run.sh
+sed -n '125,147p' scripts/checks/landing_bot.sh
+sed -n '112,132p' scripts/checks/review_tool.sh
+sed -n '635,712p' ../accept-check.log" in /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/shimrepro/repo
+ succeeded in 0ms:
+#!/usr/bin/env bash
+# The impact-selected gates for exactly the range base..head, run in the current checkout (which must
+# be at head). Shared by train.sh check, ready.sh and the landing bot's auto-rebase.
+#
+#   impact_gates.sh --base <sha> --head <sha> [--src-ref R] [--dst-ref R] [--report FILE]
+#
+# 1. The pre-push hook's own selection (R-0022 fast surface gates + touched areas), fed the line
+#    `<src-ref> <head> <dst-ref> <base>`, so a later push presenting that range reuses its record.
+#    The dst ref must not be wip/* (the hook's backup tier runs no gates); default refs/heads/ci/impact.
+# 2. scripts/tests/select_gates.sh --base --head (R-0513), when it exists and the hook does not
+#    already call it, run through run_ci_gates_local.sh --first.
+# --report FILE receives `selected: N` (the select_gates count, or `hook` when only the hook ran).
+# LAND_HOOK, LAND_REMOTE, LAND_NO_NIX as in train.sh.
+set -euo pipefail
+SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=scripts/land/lib.sh
+. "$SELF_DIR/lib.sh"
+die() { echo "impact: $*" >&2; exit 1; }
+base="" head="" src="refs/heads/impact" dst="refs/heads/ci/impact" report=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --base) base="$2"; shift ;;
+    --head) head="$2"; shift ;;
+    --src-ref) src="$2"; shift ;;
+    --dst-ref) dst="$2"; shift ;;
+    --report) report="$2"; shift ;;
+    *) die "unknown argument $1" ;;
+  esac; shift
+done
+[ -n "$base" ] && [ -n "$head" ] || die "--base and --head are required"
+case "$dst" in refs/heads/wip/*) die "--dst-ref $dst is in the hook's wip tier, which runs no gates" ;; esac
+cd "$(git rev-parse --show-toplevel)"
+HOOK="${LAND_HOOK:-.githooks/pre-push}"
+REMOTE="${LAND_REMOTE:-origin}"
+[ "$(git rev-parse HEAD)" = "$(git rev-parse "$head")" ] || die "the checkout is not at --head $head"
+[ -f "$HOOK" ] || die "no pre-push hook at $HOOK"
+url="$(git remote get-url "$REMOTE" 2>/dev/null || echo "$REMOTE")"
+printf '%s %s %s %s\n' "$src" "$(git rev-parse "$head")" "$dst" "$(git rev-parse "$base")" \
+  | land_in_nix bash "$HOOK" "$REMOTE" "$url"
+selected=hook
+if [ -f scripts/tests/select_gates.sh ] && ! grep -q select_gates "$HOOK" 2>/dev/null; then
+  sel="$(land_in_nix bash scripts/tests/select_gates.sh --base "$base" --head "$head")"
+  args=() c=""
+  while IFS= read -r c; do [ -n "$c" ] && args+=(--first "$c"); done <<< "$sel"
+  selected="$(( ${#args[@]} / 2 ))"
+  if [ "${#args[@]}" -gt 0 ]; then land_in_nix bash scripts/checks/run.sh "${args[@]}"; fi
+fi
+[ -z "$report" ] || echo "selected: $selected" > "$report"
+echo "impact: gates passed for ${base:0:10}..${head:0:10} (selected: $selected)"
+#!/usr/bin/env bash
+# Every root check, in order; the one entry point the pre-push hook, CI's "Root checks" job and the
+# landing tools (scripts/land/train.sh, ready.sh: LAND_FULL_GATES_CMD) run.
+#
+# The set is every scripts/checks/*.sh except this file, so a new check cannot be written and then
+# forgotten here. REQUIRED names the checks that must exist: deleting one fails the run instead of
+# shrinking it. Each check runs to completion; the run fails if any check failed.
+set -uo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh" || exit 2
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+cd "$ROOT_DIR"
+REQUIRED="legacy_frozen root_inventory workflow_yaml doc_links landing_script landing_bot review_tool sandbox_isolation retention_manifest issues oracle_fetch"
+missing=""
+for c in $REQUIRED; do [ -f "scripts/checks/$c.sh" ] || missing="$missing $c"; done
+[ -z "$missing" ] || { echo "run.sh: required check(s) missing:$missing" >&2; exit 1; }
+failed="" n=0
+for f in scripts/checks/*.sh; do
+  [ "$f" = scripts/checks/run.sh ] && continue
+  n=$((n+1))
+  echo "=== $f ==="
+  s="$(date +%s)"
+  if bash "$f"; then echo "--- $f: pass ($(( $(date +%s) - s ))s)"
+  else echo "--- $f: FAIL ($(( $(date +%s) - s ))s)"; failed="$failed ${f##*/}"; fi
+done
+echo
+if [ -n "$failed" ]; then echo "root checks: FAILED:$failed (of $n)"; exit 1; fi
+echo "root checks: all $n pass"
+#!/usr/bin/env bash
+# A remote runner: fetches like concrete-remote (a ref on origin, or a SHA) and reports the SHA.
+echo "$1" >> "$FAKE_GH_DIR/runner.log"
+sha="$(git --git-dir="$ORIGIN_GIT" rev-parse --verify -q "refs/heads/$1" || git --git-dir="$ORIGIN_GIT" rev-parse --verify -q "$1^{commit}")" || { echo "no such ref $1"; exit 1; }
+echo "[concrete-remote] ref=$1 sha=$sha"
+EOF
+chmod +x "$TMP/fake-gh" "$TMP/hook" "$TMP/notify.sh" "$TMP/train-nobisect.sh" "$TMP/fake-runner"
+
+for r in origin lambdaclass fork; do git init -q --bare "$TMP/$r.git"; done
+A="$TMP/agent"; W="$TMP/bot"
+git init -q "$A"; cd "$A" || exit 2
+for r in origin lambdaclass fork; do git remote add "$r" "$TMP/$r.git"; done
+mkdir -p Concrete/Check Concrete/Elab src
+printf 'def e := "E0001 existing"\n' > Concrete/Check/Check.lean
+printf 'def x := 1\n' > Concrete/Elab/Elab.lean
+printf 'x\n' > conflict.txt
+printf 'Build\n' > required-checks.txt  # train.sh refuses a landing with no required-checks.txt
+git add -A && git commit -qm base
+for r in origin lambdaclass fork; do git push -q "$r" main; done
+BASE="$(git rev-parse HEAD)"
+git clone -q "$TMP/origin.git" "$W"
+( cd "$W" && git remote add lambdaclass "$TMP/lambdaclass.git" && git remote add fork "$TMP/fork.git" )
+
+reset_fake() { rm -f "$FAKE_LOG"/*; }
+
+# ------------------------------------------------------------------ repos
+git init -q --bare "$T/origin.git"
+git clone -q "$T/origin.git" "$T/w" 2>/dev/null
+W="$T/w"
+g() { git -C "$W" "$@"; }
+commit_file() { # commit_file <path> <content> <message>
+  mkdir -p "$(dirname "$W/$1")"
+  printf '%s\n' "$2" >"$W/$1"
+  g add -A && g commit -qm "$3"
+}
+commit_file README.md "base" "base"
+printf '.review/\n' >"$W/.gitignore"
+g add .gitignore && g commit -qm "ignore .review"
+g push -q origin main
+review() { (cd "$W" && bash "$REVIEW" "$@"); }
+note() { g notes --ref=refs/notes/concrete-review show "${1:-HEAD}" 2>/dev/null; }
+field() { note "${2:-HEAD}" | sed -n "s/^$1: //p"; }
+
+echo "=== round 1: full diff, findings, note written and pushed ==="
+=== gate host: check's impact leg on the gate host, bound to the SHA; INCOMPLETE blocks ===
+  FAIL gate host ok: exit 1
+      train: no train 't1' (build it first: train.sh build t1 <ref>...)
+  ok   with a gate host the gates do not run on this machine
+  FAIL remote command: 
+  FAIL forwarded env: 
+  FAIL no attestation for 8cafc04abbb5b366f5d16d88e772f75d14b8760e at /tmp/tmp.sd01T2e5jg/work/.git/concrete-prepush-remote-record
+tail: cannot open '/tmp/tmp.sd01T2e5jg/state/log/t1.tsv' for reading: No such file or directory
+tail: cannot open '/tmp/tmp.sd01T2e5jg/state/log/t1.tsv' for reading: No such file or directory
+  FAIL check row: 
+  FAIL wrong SHA: exit 1
+      train: no train 't1' (build it first: train.sh build t1 <ref>...)
+tail: cannot open '/tmp/tmp.sd01T2e5jg/state/log/t1.tsv' for reading: No such file or directory
+tail: cannot open '/tmp/tmp.sd01T2e5jg/state/log/t1.tsv' for reading: No such file or directory
+  FAIL incomplete row: 
+  FAIL ci ran after an incomplete check
+  FAIL unreachable: exit 1
+      train: no train 't1' (build it first: train.sh build t1 <ref>...)
+  FAIL lost connection: exit 1
+      train: no train 't1' (build it first: train.sh build t1 <ref>...)
+  FAIL remote failure: exit 1
+      train: no train 't1' (build it first: train.sh build t1 <ref>...)
+  FAIL norecord: exit 1
+      train: no train 't1' (build it first: train.sh build t1 <ref>...)
+  FAIL --local-gates: exit 1
+      train: no train 't1' (build it first: train.sh build t1 <ref>...)
+  FAIL land.gatesHost: exit 1
+  FAIL dry-run: train: no train 't1' (build it first: train.sh build t1 <ref>...)
+  FAIL empty LAND_GATES_HOST: exit 1
+warning: You appear to have cloned an empty repository.
+  FAIL run-at-ref from a bundle: exit 128
+      fatal: '/tmp/tmp.sd01T2e5jg/cand.bundle' does not appear to be a git repository
+      fatal: Could not read from remote repository.
+      
+      Please make sure you have the correct access rights
+      and the repository exists.
+=== gate host: the pushing hook reuses the attestation only for this exact push ===
+  ok   the hook reuses an attested pass for exactly this push
+  ok   a push of another SHA does not reuse it
+  ok   a push of a ref that is not HEAD does not reuse it
+  ok   another changed-file list does not reuse it
+  ok   another selection does not reuse it
+  ok   another CONCRETE_* environment does not reuse it
+  ok   a dirty tracked tree does not reuse it
+  ok   a tampered log is refused (digest)
+  ok   a tampered log re-digested into the attestation is still refused (components)
+  ok   a tampered attestation head is refused
+  ok   a truncated attestation is refused
+  ok   a log whose run exited non-zero is never attested
+  ok   a remote record that is not a pass is never attested
+  ok   a log with two exit lines is never attested
+  ok   a log is never attested for a SHA it does not name
+  ok   a pass-deferred remote run is reused and its deferrals reported
+  ok   the environment digest binds whole values (a changed continuation line differs)
+  ok   the hook's nix re-entry bookkeeping does not break reuse (push from outside the gate shell)
+=== gate host end to end: the real ssh transport, shimmed, carries the command intact ===
+acceptance git shim: refusing push argument 'HEAD:main' (could move main)
+fatal: ambiguous argument 'HEAD~1': unknown revision or path not in the working tree.
+Use '--' to separate paths from revisions, like this:
+'git <command> [<revision>...] -- [<file>...]'
+warning: You appear to have cloned an empty repository.
+  FAIL e2e transport: exit 3
+      gates-remote: INCOMPLETE: --base is not a commit
+grep: /tmp/tmp.sd01T2e5jg/remote.env: No such file or directory
+grep: /tmp/tmp.sd01T2e5jg/remote.env: No such file or directory
+  FAIL forwarded env executed on the host
+Traceback (most recent call last):
+  File "<string>", line 1, in <module>
+    import sys; sys.exit(0 if ("CONCRETE_INJ=" + sys.argv[2]).encode() in open(sys.argv[1], "rb").read().split(b"\0") else 1)
+                                                                          ~~~~^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: '/tmp/tmp.sd01T2e5jg/remote.env'
+  FAIL forwarded value altered
+grep: /tmp/tmp.sd01T2e5jg/remote.env: No such file or directory
+  ok   the host's own CONCRETE_SKIP_GATES is cleared before the hook
+  ok   the host keeps no bundle or script after the run
+  FAIL e2e reuse: refused:no_attestation
+  FAIL e2e env mismatch: refused:no_attestation
+  ok   the real transport to an unreachable host is INCOMPLETE (exit 3), attests nothing
+
+codex
+The bug is real. I ran `timeout 60 bash ../repro.sh "$PWD"`; it completed with:
+
+```text
+REPRODUCED: acceptance git shim: refusing push argument 'main' (could move main)
+```
+
+The structural cause is an overbroad safety boundary. `make_git_shim` in `scripts/land/acceptance.sh:159` scans arguments after `push` and rejects `main` and matching refspecs without examining the destination repository. Acceptance exports this shim through `PATH`, so nested checks inherit it even inside isolated fixture repositories.
+
+The code confirms the failure chain:
+
+- Acceptance calls `train.sh check`; its impact leg invokes the repository pre-push hook, which runs `scripts/checks/run.sh`.
+- `landing_bot.sh:143`, `landing_script.sh:185`, and `review_tool.sh:127` seed throwaway local bare remotes by pushing `main`.
+- The inherited shim rejects those pushes, leaving fixture remotes empty and required `origin/main` refs missing.
+
+The log shows no independent cause explaining the failing checks. Missing commits, train refs, notes, reviewer outputs, bundles and attestations follow the rejected fixture setup. `sandbox_isolation.sh` also fails because its nested `review_tool.sh` run fails. The remaining seven root checks pass, and the train reports `impact=fail` with `review=pass`.
+
+Thus the failure is candidate-independent for acceptance runs executing these checks under the inherited shim. No files in the archived directory were modified.
+
+Verdict: CONFIRMED
+tokens used
+26,326
+The bug is real. I ran `timeout 60 bash ../repro.sh "$PWD"`; it completed with:
+
+```text
+REPRODUCED: acceptance git shim: refusing push argument 'main' (could move main)
+```
+
+The structural cause is an overbroad safety boundary. `make_git_shim` in `scripts/land/acceptance.sh:159` scans arguments after `push` and rejects `main` and matching refspecs without examining the destination repository. Acceptance exports this shim through `PATH`, so nested checks inherit it even inside isolated fixture repositories.
+
+The code confirms the failure chain:
+
+- Acceptance calls `train.sh check`; its impact leg invokes the repository pre-push hook, which runs `scripts/checks/run.sh`.
+- `landing_bot.sh:143`, `landing_script.sh:185`, and `review_tool.sh:127` seed throwaway local bare remotes by pushing `main`.
+- The inherited shim rejects those pushes, leaving fixture remotes empty and required `origin/main` refs missing.
+
+The log shows no independent cause explaining the failing checks. Missing commits, train refs, notes, reviewer outputs, bundles and attestations follow the rejected fixture setup. `sandbox_isolation.sh` also fails because its nested `review_tool.sh` run fails. The remaining seven root checks pass, and the train reports `impact=fail` with `review=pass`.
+
+Thus the failure is candidate-independent for acceptance runs executing these checks under the inherited shim. No files in the archived directory were modified.
+
+Verdict: CONFIRMED

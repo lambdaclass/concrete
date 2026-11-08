@@ -1,0 +1,2132 @@
+• I’ll inspect the existing judgments, scanners, and proof patterns, then add the four pieces without introducing any undecided token rules.
+
+• The existing code uses structural recursion and independent inductive judgments. I’ll follow that pattern, with the string scanner parameterized by a decidable raw-scalar predicate and longest match defined only over an arbitrary table.
+
+• I’ll add the specification definitions first: maximal identifier and digit runs, escape-sensitive string bodies, and a table-parametric longest-match judgment.
+
+• The four Surface0 judgments elaborate. Next I’m adding the scanners and proofs piece by piece so each correspondence theorem is checked against the actual implementation.
+
+• The single-file check needs the edited specification built first; I’ll build that module, then rerun the lexer elaboration.
+
+• Identifier scanning now proves sound and complete; only the uniqueness wrapper needed option-injection rather than the pair-rewriting used for trivia. I’m correcting that and adding string-body scanning next.
+
+• String escapes exposed two proof issues: the prepend lemma’s output type was too broad, and the two-scalar escape step needs the scanner’s generated induction principle rather than ordinary one-step list induction.
+
+• The generated string induction distinguishes the five excluded head shapes plus the raw predicate. I’m naming those cases explicitly and fixing `rawOk` so the proof cannot accidentally generalize the parameter.
+
+• Identifier and string-body scanning now elaborate with their uniqueness theorems. I’m adding longest match over an abstract table, including the no-match case and proof that equal-length longest results are identical.
+
+• The first longest-match proof pass found only Lean-shape issues, plus one real gap in the no-match branch: empty table entries must be handled by length, not treated as contradictions. I’m correcting both before moving on.
+
+• I’ve isolated the remaining longest-match corrections to constructor patterns, match reduction, and the empty-entry length case; the declarative definition itself is unchanged.
+
+• The longest-match soundness proof is now down to simplifying matches that `cases` has already rewritten. After that, only the decimal scanner remains.
+
+• Longest match now proves soundness, completeness, and uniqueness for both matches and `none`. I’m adding the maximal digit scanner with the exact `0`-alone leading-zero rule and arbitrary-precision `Nat` values.
+
+• The decimal rules are in place; the remaining errors are dependent-pair reductions and one constructor-pattern name, not changes to the lexeme semantics.
+
+• All scanner proofs now pass except the single `0` case, where Lean is retaining unreduced pair projections in the acceptance goal. I’ll make that constructor’s digit list and value explicit.
+
+• All four scanners and their correspondence proofs now elaborate without warnings. I’m adding kernel-checked accepted/refused cases, including all six escapes and the required integer examples.
+
+• The conformance cases all pass, including refused bad escapes, raw LF/CR, EOF, `007`, and `00`. Next I’ll regenerate and audit the axiom inventory, run its verification gate, and build the full default target.
+
+• The axiom gate passes. Its golden diff has only 15 added lines for the new `DigitRun`, `IdentBody`, `StringBody`, and `DigitsAccepted` declarations; each is axiom-free or uses only `propext`, and no existing line changed.
+
+• `lake build` and `lake build Concrete` both succeed. I’m doing the final diff review now; the only `git diff --check` reports are the generated golden file’s normal tab separators, so I’ll check the handwritten files separately.
+
+• The final review found only the four requested files: the two Lean modules, the regenerated golden, and the changelog. No undecided tables, suffix rules, diagnostics, or banned proof constructs were added.
+
+• Implemented and committed as `da687c9ec9bef1a5fd301564a7afef4104065687` on `wip/slice0-lexer-tokens`. The commit records the dependency on unlanded `e474d8f0`. Nothing was pushed; the worktree is clean.
+
+  **Files changed**
+  - `ConcreteSpec/Spec/Surface0.lean`: added `IdentBody`/`Identifier`, `StringEscape`/`StringBody`, `LongestMatch`, and `DigitRun`/`DecimalInteger` judgments; updated the module header.
+  - `Concrete/Lex.lean`: added total scanners, `_sound`, `_complete`, and uniqueness theorems for all four pieces, plus accepted/refused `decide` examples; updated the module header.
+  - `scripts/proofs/axioms.golden`: 15 new lines, all belonging to the new declarations and using no axioms beyond `propext`; no existing line changed.
+  - `changelog.d/2026-11-08-lexer-tokens.md`: records the changes and stack dependency.
+
+  **Checks**
+  - `lake env lean Concrete/Lex.lean` — passed.
+  - `bash scripts/proofs/axioms.sh` — **PASS=9 FAIL=0**.
+  - `lake build` — passed.
+  - `lake build Concrete` — passed.
+  - No `partial`, `sorry`, `native_decide`, or new axioms.
+
+  Nothing requested was omitted. Raw control-character policy remains parameterized; keywords, reserved words, builtins, concrete operators/punctuation, suffixes, base prefixes, separators, other literals, `>>` splitting, and type range checks remain undefined as required.
+
+kimi version 2.4.1
+• I need implement substantial Lean proofs. Now read files first. Should follow instructions. User asks action. Should have tools. I should inspect git status/branch, files Surface0, Lex, axioms script/golden and perhaps AGENTS nested. Must first read ConcreteSpec/Spec/Surface0.lean and Concrete/Lex.lean. Parallel reads plus git status? "Read ... first" do reads first.
+
+• Should implement robustly. Should understand Lean version deps. Check branch status, nested AGENTS in dirs (Glob AGENTS). Read lakefile scripts axioms perhaps golden path. Changelog fragments style. Also current branch correct stacked base.## wip/slice0-lexer-tokens
+e474d8f03 (HEAD -> wip/slice0-lexer-tokens, origin/wip/slice0-lexer-ws) lexer: specify and scan slice-0 trivia
+7e8c926c0 (origin/wip/slice0-lexer) lexer: the axiom golden lists the 15 Surface0 declarations (propext or none)
+afd274d8d lexer: Surface0 is imported by ConcreteSpec.Spec, the public import of every rule module (Kimi); the raised recursion limit is scoped to the conformance examples (agy)
+9cec9dff7 lexer: prove the settled UTF-8 and surface components
+ea5181b53 (origin/wip/slice0) slice0: the compiler's gates become required jobs of the CI workflow (scripts/checks/compiler/), and the trust ban admits the compiler library and its pinned dependency
+Should have TodoList for multi-step. I should design. Four judgments independent. Style. I need likely all in two files. Should have exact naming perhaps Identifier, StringBody rawOk, LongestMatch, DecimalInteger. Total scanners. I must ensure theorem uniqueness and conformance. Numeric value scanning potentially overflow arbitrary Nat okay. Should have no rest rules except not digit. Make sure leading zero refusal. Judgment maximal run accepted iff zero alone or doesn't start zero. Could define DigitRun generic then accepted judgment? "A judgment for maximal run ... with lexeme accepted iff it is 0 alone or does not start 0; output (digit lexeme, numeric value, rest)." Could define inductive DecimalInteger with constructors zero and nonzero, carrying numeric value relation. Should independent scanner not circular. Define decimal value via inductive DigitsValue? Or use List.foldl in judgment declarative okay independent of scanner. Could define DecimalValue : List Nat -> Nat -> Prop inductive relation, and DecimalInt has digit run and numeric. Better readable.
+
+  Identifiers: inductive IdentBody similar CommentBody with stop requiring ¬ IdentContinue head; cons requires IdentContinue. Identifier input starts IdentStart then body. Output pair lexeme rest. Constructor intro:
+  IdentStart c → IdentBody input body rest → Identifier (c::input) (c::body, rest)
+  This ensures rest no continue. case sensitivity exact lists example Identifier [65,98,99] ... and not same output for [97..]. I can prove examples via scanner or direct constructors. Surface0 examples independent. `example : Identifier [65, 98, 99, 33] ([65,98,99],[33]) := .intro (by decide) (.cons ... etc)` can `by decide` if Decidable instances for judgment? Inductive propositions no automatic Decidable unless deriving? Lean can `by decide` only if instance generated? Existing direct constructors. Could use `.intro (by decide) (.cons (by decide) ...)` etc. Should refusal example non IdentStart all out `example (out) : ¬ Identifier [48,...] out := by intro h; cases h; ...` cases h leaves IdentStart 48 contradiction via decide perhaps `cases h with | intro hs _ => exact (by decide : ¬ IdentStart 48) hs`. Case sensitivity example `Abc` and `abc` different lexemes can just `example : ([65,98,99] : List Nat) ≠ [97,98,99] := by decide` plus accepted both. User specifically "an example that Abc and abc are different lexemes" could scanner conformance two outputs plus `by decide` inequality. In Surface0 maybe `example : Identifier ... ∧ Identifier ... ∧ lexeme ≠ ...` but direct.
+
+  String: parameter rawOk : Nat → Prop. Judgment after opening quote. Should decoded scalar list rest after closing. Constructors:
+  | close (rest) : StringBody rawOk (34::rest) [] rest
+  | raw {c input decoded rest} : c ≠34 → c≠92 → c≠10 → c≠13 → rawOk c → StringBody rawOk input decoded rest → StringBody rawOk (c::input) (c::decoded) rest
+  | escape {c... decodedScalar}: Escape c decoded → ... StringBody rawOk (92::c::input) (decoded::decodedList) rest
+  Could define Escape separate inductive or def `Escape (c d : Nat) : Prop := (c=110 ∧ d=10) ∨ ...`. This has Decidable. Use constructor escape with `Escape escape decoded`. For any other escapes refused follows no constructors. rawOk only for raw c other than delimiters LF CR, so yes. Close only 34. EOF no constructor. Backslash only escape constructor. Raw LF CR excluded. I must ensure rawOk not applied to quotes etc. Good. Scanner parameter `rawOk : Nat → Bool`, total recursive structural:
+  def stringBody (rawOk) : List Nat → Option (List Nat × List Nat)
+  | [] => none
+  | 34::rest => some([],rest)
+  | 92::c::cs => match c with 110 => prepend... etc; _ none
+  | 92::[] => none
+  | 10::_ => none
+  |13::_=>none
+  |c::cs => if rawOk c then prependOption c (stringBody rawOk cs) else none
+  Could use helper `stringPrepend` to Option. Sound induction using function induction or List induction with split. Complete induction on judgment, simp. Should sound result out pair. Define `stringBody_sound (rawOk) (cs) (out) h : StringBody (fun c => rawOk c = true) cs out`. Judgment parameter Prop counterpart. Then complete for arbitrary rawOk with `[DecidablePred rawOk]`, scanner takes Bool counterpart? User "make judgment and scanner take a parameter rawOk : Nat → Prop (with a Decidable instance / Bool counterpart)" Could scanner take `rawOk : Nat → Bool` straightforward. Sound for Boolean predicate `fun c => rawOk c = true`; complete for every such parameter. But also want complete for arbitrary Prop with Decidable instance using `fun c => decide (rawOk c)`. Could define scanner taking Prop and `[DecidablePred rawOk]`, total. Then sound/complete every such parameter. Lean def `stringBody (rawOk : Nat → Prop) [DecidablePred rawOk]` with `if rawOk c`. Then examples trivial predicate `fun _ => True`. Sound theorem can implicit instance. This meets "(with a Decidable instance / Bool counterpart)" likely yes. Could avoid typeclass trouble by scanner takes `rawOk? : Nat → Bool`, with judgment parameter `(fun c => rawOk? c = true)`. This proves all bool params; arbitrary prop counterpart via decide maybe extra theorem not needed. Wording explicitly "make the judgment and the scanner take a parameter rawOk : Nat → Prop (with a Decidable instance / Bool counterpart)" suggests scanner parameter can Bool counterpart. Best use Prop with typeclass. Total computable scanner with `[DecidablePred rawOk]`, no issues.
+
+  String `Option` prepend helper perhaps `stringPrepend (c) : Option (...) → ...`. `Option.map` easy `Option.map (fun out => (c::out.1,out.2))`. Structural recursive equation compiler. Sound:
+  theorem stringBody_sound (rawOk) [DecidablePred rawOk] {cs out} (h : stringBody rawOk cs = some out) : StringBody rawOk cs out := by
+   induction cs using stringBody.induct? Function has rawOk parameter, instance. `induction cs using stringBody.induct` maybe generated cases complex. Simpler induction cs generalizing out:
+   nil simp [stringBody] at h
+   cons c cs ih:
+    cases c patterns? `rw [stringBody.eq_def] at h`; split at h etc.
+  I can write recursive scanner using only top-level c::cs with nested matches to easier `simp [stringBody] at h` splitting. Sound by `induction cs generalizing out` then cases c = quote/backslash/LF/CR via by_cases. For backslash cases cs; c escape value via by_cases disjunction `Escape`. Could define escape decoder `escape? : Nat → Option Nat`, and lemma. Better modular:
+  def escapeValue (c) : Option Nat :=
+   if c=110 then some 10 else ...
+  Then scanner:
+  | 92 :: e :: cs =>
+   match escapeValue e with
+   | some d => prepend d (stringBody rawOk cs)
+   | none => none
+  ...
+  Sound requires lemma escapeValue_sound and complete. More theorems added golden okay. Judgment `Escape` def. Could prove `escapeValue_iff` with decide? `escapeValue_sound {e d} h : Escape e d` simp [escapeValue, Escape] at h split... omega/subst. `escapeValue_complete (h : Escape e d) : escapeValue e = some d` simp [Escape] at h, rcases etc. Or use direct nested patterns scanner:
+  | 92 :: 110 :: cs => prepend 10 ...
+  ... six
+  | 92 :: _ :: _ => none
+  Pattern matching order. Sound induction using `stringBody.induct` could handle 11 cases. Complete simp on constructors. Simpler define `decodeEscape : Nat → Option Nat` and prove iff via `decide`? General c,d cannot decide equality. `simp [decodeEscape, Escape]` with split. I can handle.
+
+  Longest match: token table List (List Nat), each nonempty scalar lists. Declarative judgment "t is table entry prefix input and no table entry prefix longer". Output t rest. Should rest equals drop t.length input. Could define `LongestMatch (table) (input) (out : Option (List Nat × List Nat)) : Prop` rather than inductive:
+  ∃ t rest, out=some(t,rest) ∧ t∈table ∧ t≠[] ∧ t <+: input ∧ input=t++rest ∧ ∀ u ∈ table, u <+: input → u.length ≤ t.length
+  or none when no nonempty entry prefix. They request "define declarative judgment 't is a table entry ...' and scanner returning longest ... (or none)." Could define `Longest (table input t rest) : Prop` plus `LongestMatch ... Option`. Scanner sound `match longestMatch ... with none => no entry ... | some ... => Longest`. Complete should handle both success and no match. Or define inductive `LongestMatch`:
+  | match {t rest} : t ∈ table → t ≠ [] → t <+: input → input=t++rest → (∀ u ∈ table, u <+: input → u.length ≤ t.length) → LongestMatch table input (some(t,rest))
+  | none : (∀ t ∈ table, t ≠ [] → ¬ t <+: input) → LongestMatch table input none
+  This is independent. Nonempty token table parameter could mean entries guaranteed nonempty via parameter? "Given a token table (a list of nonempty scalar lists, provided as a parameter)" likely scanner must enforce nonempty to avoid longest empty ambiguous. I can define judgment requires t≠[] and none excludes empty. Empty table entries simply ignored. Good.
+
+  Prefix in Lean `List.IsPrefix` notation `<+:` maybe available. Existing no uses. Could avoid dependency by existential `input = t ++ rest`, easier. `Prefix table input t rest := input = t ++ rest`. LongestMatch successful fields `t ∈ table`, `t ≠ []`, `input=t++rest`, `∀ u ∈ table, ∀ tail, input=u++tail → u.length≤t.length`. None `∀ t ∈ table, t≠[] → ∀ rest, input ≠ t++rest`. This directly captures. Scanner implementation list filtering candidates and max by length. Should total structural. Could recursively scan table accumulating best. Make sure longest ties result unique? Important: longest matching entry and rest. If table contains duplicate same scalar list, outputs same list/rest. If two different entries same length both prefix same input impossible: equal length prefixes implies equal list. So uniqueness yes. Scanner selection tie any but output same. Should proof sound/complete. Implementation straightforward choose candidate with max length recursively; recursion on table. `longestEntry (input) : List (List Nat) → Option (List Nat)`:
+  | [] none
+  | t::ts =>
+   let best := longestEntry input ts
+   if t≠[] ∧ input prefix t then
+    match best with
+    | none => some t
+    | some u => if u.length < t.length then some t else some u
+   else best
+  Then `longestMatch table input` maps t to `(t,input.drop t.length)`. But proving rest input=t++drop uses List.take_append_drop etc. Could scanner candidate return `(t,rest)` using `stripPrefix`? Lean List? Use `List.isPrefixOf` Bool and `List.drop`. Should have lemmas for `isPrefixOf` etc. Avoid library uncertainty by write own prefix recursion `prefixRest : List Nat → List Nat → Option (List Nat)` pattern entry,input:
+  | [], rest => some rest
+  | _::_, [] => none
+  | a::as,b::bs => if a=b then prefixRest as bs else none
+  Then `longestMatchAux input table` returns Option pair by candidate prefixRest. Recursive. Sound/complete candidate helper. Could define scanner:
+  def longestMatchAux (input) : List (List Nat) → Option (List Nat × List Nat)
+  | [] => none
+  | t::table =>
+   let best := longestMatchAux input table
+   match prefixRest t input with
+   | some rest =>
+     if t = [] then best else
+     match best with
+     | none => some(t,rest)
+     | some (u,urest) => if t.length ≤ u.length then best else some(t,rest)
+   | none => best
+  But pattern `if t=[]` with list Decidable. Sound use auxiliary property relative to subtable and uniqueness to lift. Complete based on LongestMatch of full table can induct table. Might be involved but manageable. Alternative enumerate matching candidates and use `List.maximumBy` no.
+
+  Could define judgment `Longest table input t rest` separate, and scanner success. Auxiliary theorem longestMatchAux_sound for table. Complete only for top-level can induction on table with head/tail cases. I need show algorithm result satisfies judgment directly via induction table, and every judgment equals scanner by induction on h? For complete induction on table, use head entry membership and global maximal. Manage.
+
+  I can simplify scanner selecting longest via natural fuel recursive input? Another scanner recurse over input and table? Not needed.
+
+  Could define scanner using fold with compare, prove via generic invariant. I can write auxiliary spec `LongestIn table input out` same as global; then induction table for sound. Completeness `LongestIn` h -> scanner = out also induction table. Should deal candidate selection cases.
+
+  I can design auxiliary scanner differently to make proofs easy: recursively find tail best, then compare with head if matches; use result uniqueness to prove complete from sound + existence. If prove existence of a longest match for every table/input, and sound for scanner, then completeness follows uniqueness. General pattern:
+  - scanner sound: LongestMatch table input (longestMatch ...)
+  - judgment unique: direct math or using scanner sound? Can't derive uniqueness from sound alone. Could prove existence then unique direct.
+  - complete: from h and sound, uniqueness -> equality.
+  Should prove unique declarative direct. Success-success same max length/prefix => t=u and rests. Success-none contradiction. Easier than complete induction. Existence of longest match for finite table: scanner itself if no match yields none, if some yields sound, so existence is simply ⟨scanner, sound⟩. Completeness from uniqueness + scanner sound. This is same existing pattern decode uses complete then unique, but can invert. User asks sound/complete and unique no mandated dependency.
+
+  For identifiers/string/digits, sound and complete direct then uniqueness.
+
+  Longest scanner sound induction table. Should define `LongestMatch` judgment and prove `longestMatch_unique` directly. Then complete by unique h (longestMatch_sound ...). Sound is main proof.
+
+  Perhaps choose scanner compute maximum based on recursive best with lexeme and rest. Define helper `better (candidate : Option pair) (new...)`. Sound induction table:
+  nil: scanner none; LongestMatch.none no members.
+  cons t ts ih:
+   by_cases hp : ∃ rest, prefixRest t input=some rest ∧ t≠[] (matching)
+   - no match: scanner = aux ts. Should lift LongestMatch ts to cons with none head. Cases ih:
+     success tail: construct success with membership tail, longest condition includes head impossible; none similarly.
+   - match t rest nonempty:
+     cases tail result and ih:
+      none: scanner some(t,rest), longest head; tail no matches
+      some (u,ur): compare lengths. If t longer choose head; else tail. Both preserve maximal.
+  Should prefixRest correctness to turn scanner candidate into input=t++rest. Could use `prefixRest_eq` iff ∃. Sound helper:
+  theorem prefixRest_sound {t input rest} (h : prefixRest t input=some rest) : input=t++rest.
+  complete from input=t++rest : prefixRest t input=some rest. Induction t generalizing input, cases input, simp [prefixRest,*].
+  Scanner by_cases `t=[]`; by_cases `hp : prefixRest t input` using cases hpre. Structure.
+
+  Could define `longestMatchAux` using h:
+  def longestMatchAux (input) : List (List Nat) → Option (List Nat×List Nat)
+  | [] => none
+  | t::table =>
+    let best := longestMatchAux input table
+    match prefixRest t input with
+    | none => best
+    | some rest =>
+      if t = [] then best else
+      match best with
+      | none => some(t,rest)
+      | some (u,urest) => if u.length < t.length then some(t,rest) else some(u,urest)
+  This chooses head only strictly longer. `longestMatch table input := longestMatchAux input table` (argument order table first maybe).
+  Sound can `induction table` generalizing? Input fixed. `simp [longestMatchAux]` rewrites. Cases hpre : prefixRest t input. Use rw [longestMatchAux.eq_def, hpre]. `simp only` etc. `split` on if and match. Use by_cases and cases tail with ih appropriate. Could avoid function induction with explicit theorem for aux.
+
+  Judgment successful can use `Prefix` as `input = t ++ rest`, no need prefix predicate. `LongestMatch` constructor fields. None excludes nonempty matching. Note empty entries can be prefix, ignored consistent list of nonempty assumption. Maximal condition quantifies all table entries including empty; empty length 0 ≤ successful t length trivially. None case no nonempty. Good.
+
+  Uniqueness:
+  cases h1,h2:
+  none none rfl
+  none success: hnone t membership nonempty rest inputEq contradiction
+  success none similarly
+  success success:
+   have hlen : t1.length=t2.length := le_antisymm (hmax2 t1 ... rest1 eq1) (hmax1 t2 ...)
+   Should list equality from same input append and same length. There is `List.append_inj` with length. Can use `List.take` congruence:
+   have htake := congrArg (List.take t1.length) eq? input =...
+   `t1 = List.take t1.length input` via eq1 simp; t2 similarly using hlen.
+   Easier lemma `append_left_inj_of_length` via List.append_inj? Check Lean #check. I can query in temp via `lake env lean` maybe. Or prove generic helper:
+  theorem eq_of_prefix_length {input t u : List Nat} {rest1 rest2}
+   (h1 : input=t++rest1) (h2 : input=u++rest2) (hl:t.length=u.length) : t=u ∧ rest1=rest2 := by
+   subst input
+   have hpre : t = u := by
+     rw [← List.take_append_of_le_length?]
+  Simpler induction t generalizing u input:
+  cases t, u based lengths. Use `List.append_inj` theorem likely `List.append_inj : as ++ bs = cs ++ ds → as.length = cs.length → as=cs ∧ bs=ds`. #check via lean. Could use omega plus `List.take`:
+  calc t = (t ++ rest1).take t.length := by simp
+   _ = input.take t.length := by rw [←h1]
+   _ = input.take u.length := by rw [hl]
+   _ = (u ++ rest2).take u.length := by rw [h2]
+   _ = u := by simp
+  Actually rw directions can work. rest equality from h1,h2 and t=u: input same, `List.append.injEq` simp at. `subst t` and h1/h2, exact List.append_left_cancel (h1.symm.trans h2) maybe h1 : input=t++r1 h2 input=t++r2 => h1.symm.trans h2 : t++r1=t++r2, `List.append_left_cancel`. Then output pairs equal.
+
+  Decimal:
+  def Digit c := 48≤c∧c≤57 (decidable).
+  inductive DigitRun : List Nat -> List Nat -> List Nat -> Prop similar stop:
+  stop rest : (∀ c cs, rest=c::cs -> ¬ Digit c) -> DigitRun rest [] rest
+  cons Digit c → DigitRun input digits rest → DigitRun (c::input)(c::digits) rest
+  This permits empty run. DecimalInteger accepted:
+  | zero {rest} : DigitRun? Could zero direct `DecimalInteger (48::rest) ([48],0,rest)` with condition rest not digit. Using DigitRun on input after? Constructors:
+  zero {input rest}: DigitRun input [] rest → DecimalInteger (48::input) ([48],0,rest). This ensures after 0 no digit because DigitRun input [] rest plus input=rest? DigitRun could empty only if input=rest by cases. Better generic:
+  def LeadingZeroOk digits := digits=[48] ∨ ∃ c cs, digits=c::cs ∧ c≠48
+  inductive DecimalInteger : input -> (List Nat × Nat × List Nat) -> Prop
+  | intro {input digits value rest} :
+   DigitRun input digits rest → digits ≠ [] → DecimalValue digits value →
+   (digits = [48] ∨ ∀ d ds, digits=d::ds -> d≠48) →
+   DecimalInteger input (digits,value,rest)
+  Maximal digit run and acceptance. Should output rest not digit from DigitRun. Nonempty from run. Leading zero exactly. Numeric relation:
+  inductive DecimalValue : List Nat → Nat → Prop
+  | single {c}: Digit c → DecimalValue [c] (c-48)
+  | cons {c cs n}: Digit c → DecimalValue cs n → DecimalValue (c::cs) ((c-48)*10^cs.length+n)
+  This recursion value weighting. Scanner can accumulate value left-to-right `value=acc*10+(c-48)`. Proving complete to positional relation requires length arithmetic pow. Alternative define decimal value as foldl directly in judgment: `DecimalValue digits value := value = digits.foldl (fun n d => n*10+(d-48)) 0`. This is independent of scanner but scanner same helper. Could define `decimalValue (digits) : Nat := digits.foldl...` in Surface0, judgment output value = decimalValue digits. They want declarative judgment independent of scanner, a function numeric conversion is okay. But scanner's numeric accumulator proof more involved if scanner uses foldl. Could scanner compute digit run then `decimalValue` using foldl. Then sound easy, complete easy. `decimalValue` total. Define in spec:
+  def digitValue (digits) := digits.foldl (fun value c => value*10+(c-48)) 0
+  DecimalInteger intro with `value = digitValue digits`.
+  Scanner `decimalInteger cs`:
+   let (digits,rest):=scanDigits cs
+   if digits=[] then none
+   else if digits=[48] ∨ head ≠48 then some(digits,decimalValue digits,rest) else none.
+  Scanning digits structural:
+  def scanDigits : List Nat -> List Nat×List Nat
+  [] ...
+  c::cs if Digit c then prepend c (scanDigits cs) else([],c::cs)
+  Sound/complete same scanLine.
+  decimal sound h: unfold decimalInteger, split conditions; use scanDigits_sound. Should prove acceptance predicate.
+  Could make `LeadingZeroOk (digits) : Prop := digits=[48] ∨ ∃ c cs, digits=c::cs ∧ c≠48`. Decidable instance automatic if define? `instance (digits) : Decidable (LeadingZeroOk digits) := inferInstanceAs (Decidable (_ ∨ _))` existential over list not decidable. Use match:
+  def LeadingZeroOk : List Nat → Prop
+  | [] => False
+  | [48] => True
+  | 48::_ => False
+  | _::_ => True
+  Then Decidable by unfold split infer. But exactly "0 alone or does not start 0" including empty? empty separately. Define `NoLeadingZero : List Nat → Prop := digits = [48] ∨ ∃ c cs, digits = c::cs ∧ c ≠48`. Scanner pattern matching easier no decidability:
+  def decimalInteger cs :=
+   let out := scanDigits cs
+   match out.1 with
+   | [] => none
+   | [48] => some(...)
+   | 48::_ => none
+   | _::_ => some(...)
+  Judgment `DecimalInteger` constructors zero and nonzero maybe easier sound:
+  | zero {rest}: DigitRun? no direct output of run.
+  Could define `DigitsAccepted digits` via match:
+  def DigitsAccepted : List Nat → Prop
+  | [] => False
+  | [48] => True
+  | 48::_ => False
+  | _::_ => True
+  Then DecimalInteger `DigitRun input digits rest → DigitsAccepted digits → value=...`.
+  Decidable instance by cases. This precisely nonempty and zero. Documentation clear. Sound/complete by pattern digits.
+
+  Conformance accepted `007` refused, `00`, accepted 0,7,200,255 numeric values. `200u8` should not decide suffix. If input digits followed u, scanDigits returns digits and rest u and judgment accepts `200` rest `u8`—user says do not decide what may directly follow digits. Their judgment says nothing beyond rest not digit, so yes this accepts lexeme 200 followed u, not full literal token classification. Avoid examples with suffix. Leading zero `007x` refused as decimal lexeme. Fine.
+
+  Identifier scanner same scanIdentContinue. Could reuse generic maximal run scanner parameter predicate to reduce? Style current direct. Define `identBody` and `identifier`.
+  `identifier : List Nat → Option (List Nat×List Nat)`
+  | c::cs => if IdentStart c then let out=identBody cs; some(c::out.1,out.2) else none
+  | [] none.
+  Sound and complete.
+
+  String scanner uses helper prepend Option maybe generic `prependToken` could be used all but don't refactor existing. Add `def stringPrepend`. Should have all theorems included axioms golden only ConcreteSpec theorems? script population theorems ConcreteSpec import closure maybe Concrete/Lex isn't ConcreteSpec closure. Existing axioms golden 15 Surface0 only? User expects new lines declarations added probably Surface0 theorems if I add uniqueness there? Existing all scanner theorems in Concrete/Lex not in golden since script ConcreteSpec. They want golden update every new line belongs declarations added maybe new Surface0 no theorems except instances/examples don't count. If I only add inductive judgments in Surface0 and theorems in Lex, axioms golden unchanged. Yet explicit regenerate means likely expected no changes or new if add spec uniqueness? Existing Surface0 has no theorems, only examples and judgments. Golden currently 15 other modules. Could remain no diff. They specifically "check every new line belongs to declarations you added" generic. Fine.
+
+  Should update module headers both. Add changelog short dependency.
+
+  Should branch commit. Must run lake build, axioms under nix. I should use nix develop .#gates with PATH. Standard build inside nix? User says regenerate inside `nix develop .#gates` export path; lake build must succeed likely inside too. I can do incremental `export PATH...; lake env lean ConcreteSpec/Spec/Surface0.lean` and `lake env lean Concrete/Lex.lean` maybe build. Since .lake available? Check. I should avoid full gates local. lake build entire tree considered heavy but user explicitly requests, allowed max2. I can run once final. For editing proofs, `lake env lean Concrete/Lex.lean` heavy-ish but single file. Use nix develop each command. I need know nix installed. likely.
+
+  Plan Todo.
+
+• I need edit Surface0. Should have no comments? User asks header, style doc comments required. Existing docs. I can add after IdentContinue identifier, after Trivia or before instances all judgments. Better order: Identifier after IdentContinue, StringBody, LongestMatch, Decimal after Trivia? Logical tokens after trivia. Could insert after Trivia before Decidable instances all new definitions. Identifier near ident predicates but okay. Should have instances for Digit etc and LeadingZero. Conformance examples at bottom before end.
+
+  I'll formulate Surface0 code.
+
+  Identifier:
+  inductive IdentBody...
+  stop (rest) : (∀ c cs, rest=c::cs → ¬IdentContinue c) → IdentBody rest [] rest
+  cons...
+  Identifier intro.
+
+  StringEscape def (c d) disjunction. Name `StringEscape` likely no collision.
+  `StringBody (rawOk : Nat → Prop)`.
+  constructors close/raw/escape.
+
+  LongestMatch as inductive with Option pair. Constructor `none` conflicts maybe `LongestMatch.none`; `match` reserved? use `some`.
+  | some {t rest}: ...
+  | none...
+  Quantifier longest `∀ u ∈ table, ∀ tail, input = u ++ tail → u.length ≤ t.length`. Empty u allowed but length fine. `some` requires t≠[].
+  none `∀ t ∈ table, t ≠ [] → ∀ rest, input ≠ t ++ rest`.
+  Uniqueness possible.
+
+  Digit `DecimalDigit`.
+  `Digits` or `DigitRun`.
+  `DigitsAccepted` match.
+  `decimalValue` function lower camel consistent `decimalValue`.
+  DecimalInteger output triple notation `(List Nat × Nat × List Nat)` right associative, constructor output `(digits, value, rest)`.
+
+  `DigitsAccepted` accepted 0 alone and nonzero head. Pattern order:
+  def DigitsAccepted : List Nat → Prop
+  | [] => False
+  | [48] => True
+  | 48 :: _ => False
+  | _ :: _ => True
+  Lean numeric pattern `[48]` works.
+
+  Decidable instances:
+  DecimalDigit infer.
+  DigitsAccepted (digits) by unfold DigitsAccepted; split <;> infer_instance perhaps same Encodes. Since match on list, `unfold; split` works.
+  StringEscape instance infer as disjunction.
+  Do I need Decidable Identifier etc no.
+  RawOk decidable passed scanner.
+
+  Examples Surface0:
+  Identifier accepted direct:
+  `example : Identifier [65,98,99,33] ([65,98,99],[33]) := .intro (by decide) (.cons (by decide) (.cons ... (.stop [33] (by intro c cs h; cases h; decide))))`
+  Stop proof can `by intro c cs h; cases h; decide`. After cases h c=33 cs=[] goal ¬IdentContinue33 decide.
+  For abc ending EOF body stop [] with intro impossible: `.stop [] (by intro c cs h; cases h)`.
+  Case sensitive `example : ([65,98,99] : List Nat) ≠ [97,98,99] := by decide`.
+  Refusal start digit `example (out) : ¬ Identifier [48,98,99] out := by intro h; cases h with | intro hs _ => exact (by decide : ¬IdentStart48) hs`. Syntax constructor has implicit c input body rest. `cases h with | intro hs hb => ...`.
+
+  String direct examples easier instantiate `rawOk := fun _ => False` to choose nothing, only escapes. Accepted `StringBody (fun _ => False) [92,110,34,65] ([10],[65])` .escape (by decide) (.close _). StringEscape 110 10 by decide. Escapes list six could example nested multiple. Use one input all six then close:
+  input `[92,110,92,116,92,114,92,92,92,34,92,48,34]`, output `[10,9,13,92,34,0]`. Direct nested `.escape (by decide) ...`. `by decide` on whole proposition if no Decidable StringBody impossible. Could prove via scanner conformance only, but User asks kernel checked accepted/refused. Lex examples by decide easier. Surface0 can minimal direct.
+  Refusal raw LF:
+  `example (rawOk) (out) : ¬ StringBody rawOk [10,34] out := by intro h; cases h` likely cases h no constructors because close head 34 no, raw requires c≠10, escape head92 no; cases h produces raw with contradiction? `cases h` doesn't automatically contradiction raw since same head can raw. cases h with | raw hl _ _ _ _ _ => exact hl rfl maybe. Constructor raw fields `hquote hback hlf hcr hraw tail`. `cases h with | raw _ _ hlf _ _ _ => exact hlf rfl`. `nomatch` no.
+  Unknown escape `[92,113,34]`: cases h with | escape he _ => exact (by decide : ¬ StringEscape 113 ?d) he. decoded implicit unknown d; `have : ¬ StringEscape 113 d := by unfold StringEscape; omega` or `simp [StringEscape] at he`. `cases h` then `simp [StringEscape] at ...`.
+  EOF: `example rawOk out : ¬ StringBody rawOk [] out := by intro h; cases h`.
+  Raw tab undecided no examples accepting/refusing. Comment explicit examples false choose nothing.
+
+  LongestMatch abstract table in Lex by decide? Inductive judgment no Decidable. Scanner examples `longestMatch [[1],[1,2],[3]] [1,2,4] = some([1,2],[4]) := by decide` List Nat decidable etc. None `[[],[1,2]] [1,3] = none` empty ignored and prefix mismatch. Duplicate/tie perhaps uniqueness theorem. Arbitrary numbers clearly not concrete set comment.
+
+  Decimal Surface direct could use scanner examples only. Refused judgment any out for `007`: `intro h; cases h with | intro hrun hacc hval => ...` digits determined by run but cases doesn't reduce. Easier use Lex `decimalInteger [48,48,55] = none := by decide`. Good.
+  Surface examples perhaps only judgment identifier/string enough existing pattern examples all types. Could add `example : DecimalInteger [50,48,48,65] ([50,48,48],200,[65]) := .intro run (by decide) rfl`. DigitRun construction verbose. I can omit as Lex conformance is kernel checked.
+
+  Update header now via Edit. One edit entire file insertion multiple modifications requires one Edit only same file consecutive restriction. I can replace header + block from IdentContinue through instances? Better one Edit replace entire content? Edit can old large chunk from header to? Only one Edit call with old string could include header and entire file enormous not ideal. Rule no consecutive Edit same file without Read. I can do first Edit insert definitions and instances and examples in one replacement of block lines 69-100 plus header separate requires second after Read. Or use one Edit replace header only then Read before next. I can do multiple cycles. I'll update header first.
+
+• Now Read needed before edit. Read lines 60-125.Insert between Trivia and instances plus decidable instances. Single Edit replace ending `Trivia...` plus first instance with expanded.Should add dec instances after IdentContinue. Read before edit.Edit instances and examples in one call replacing line 179 to one byte with new.I can compile Surface0 now. But first add examples perhaps separate todo conformance later. Should verify definitions. Use nix develop single lean.warning: Git tree '/home/unbalancedparen/projects/clones/wip-slice0-lexer-tokens' is dirty
+info: lean-compiler-backend: cloning https://github.com/unbalancedparentheses/lean-compiler-backend
+info: lean-compiler-backend: checking out revision '4bea4b3ffd8a43a73a0016012d865044067b3275'
+Success. Todo mark first done second progress. Should implement Lex. I can insert all scanners/proofs before Conformance. Should develop proofs iteratively perhaps create large code then compile fix. I should think thoroughly to minimize.
+
+  First identifier:
+  def scanIdentBody same.
+  def identifier.
+  theorems scanIdentBody_sound/complete; identifier_sound/complete; identifier_unique.
+  Conformance later.
+
+  String:
+  def stringPrepend
+  def decodeEscape
+  def stringBody (rawOk) [DecidablePred rawOk] ...
+  Should have Lean syntax for param typeclass before colon:
+  def stringBody (rawOk : Nat → Prop) [DecidablePred rawOk] : List Nat → Option ...
+  Recursive call instance available.
+
+  decodeEscape:
+  def decodeEscape (c) : Option Nat :=
+   if c=110 then some 10 else if... 
+  Theorems:
+  decodeEscape_sound {escaped decoded} (h) : StringEscape escaped decoded := by
+   unfold decodeEscape at h
+   split at h <;> rename_i heq
+   perhaps six splits. Could `simp only [decodeEscape] at h; split at h ...` manual.
+  Alternative define decodeEscape via match patterns:
+  def decodeEscape : Nat → Option Nat
+  |110=>some 10 ... |_=>none
+  Then sound:
+  unfold decodeEscape at h
+  split at h <;> simp_all [StringEscape]
+  Will `split at h` creates seven cases and `simp_all [StringEscape]` solves. Complete:
+  intro h
+  rcases h with ... six conjunctions
+  all `rcases h with (⟨rfl,rfl⟩|...)`; rfl.
+  `rcases h with (⟨rfl,rfl⟩ | ⟨rfl,rfl⟩ | ...); rfl` syntax.
+  Could theorem `decodeEscape_iff : decodeEscape escaped = some decoded ↔ StringEscape escaped decoded` by `unfold ...; split <;> simp [StringEscape, *]` perhaps easy:
+  ```
+  theorem decodeEscape_sound ... := by
+    unfold decodeEscape at h
+    split at h <;> first
+      | (cases Option.some.inj h; simp [StringEscape, *])
+      | cases h
+  ```
+  When split on if, each branch; `simp_all [StringEscape]` likely solves all:
+  ```
+    simp only [decodeEscape] at h
+    split at h <;> simp_all [StringEscape]
+  ``` But unfolding equation with if nested `simp only [decodeEscape] at h` unfolds all? `split at h` only first if then simp_all may split remaining? simp_all with h and StringEscape in branch c≠110 etc h still if... simp only reduces next conditions? split only one. `split at h <;> simp_all [decodeEscape, StringEscape]` simp_all can simplify nested if using hypotheses but doesn't split if no known. In each first branch c=110 yes; else h = nested if; simp_all doesn't split automatically perhaps simp at h can `split at h` repeatedly needed.
+  Could prove `decodeEscape_iff` via `decide`? Variables arbitrary no.
+  Use pattern matching and `split at h` with match on Nat yields 7 cases directly. Define via match literal:
+  ```
+  def decodeEscape : Nat → Option Nat
+  | 110 => some 10 ...
+  | _ => none
+  ```
+  Equation compiler uses matcher but `unfold decodeEscape at h; split at h <;> simp_all [StringEscape]` split all match patterns yes. Complete rcases and rfl.
+
+  String scanner pattern:
+  ```
+  def stringBody ... : List Nat → Option ...
+  | [] => none
+  | 34::rest => some([],rest)
+  | 92::escaped::input =>
+    match decodeEscape escaped with
+    | some d => stringPrepend d (stringBody rawOk input)
+    | none=>none
+  | 92::[] => none
+  | 10::_ => none
+  |13::_=>none
+  |c::input => if rawOk c then stringPrepend c (...) else none
+  ```
+  Order ensures raw c not delimiters by pattern. Sound using `induction cs using stringBody.induct` might function has typeclass and rawOk explicit. Generated induction can be invoked `induction cs using stringBody.induct generalizing out with` likely cases names case1... Should know. Existing decodeAt uses `induction off, bs using decodeAt.induct`. Here rawOk and inst fixed, `induction cs using stringBody.induct generalizing out` should. Cases:
+  case1
+  case2 rest close
+  case3 escaped input d hdecode ih? The recursive call inside match depends on decodeEscape; functional induction cases includes branch. Could write proof by ordinary list induction and use case analysis c, cs, decode. Simpler controlled:
+  ```
+  theorem stringBody_sound ... {cs out} (h...) := by induction cs generalizing out with
+  | nil => simp [stringBody] at h
+  | cons c cs ih =>
+    by_cases hq : c=34
+     subst; simp [stringBody] at h; cases h; exact .close _
+    by_cases hb:c=92
+     subst; cases cs with
+      nil => simp [stringBody] at h
+      cons e input =>
+        cases he : decodeEscape e with
+        | none => simp [stringBody,he] at h
+        | some d =>
+          have hp := stringPrepend_ok h after simp
+  ...
+  ```
+  Should have `stringPrepend_ok` analogous. `stringPrepend c r = some out -> ∃ tail, r=some tail ∧ out=(c::tail.1,tail.2)`.
+  ```
+  def stringPrepend c : Option pair -> Option pair
+  | none=>none
+  |some out=>some(c::out.1,out.2)
+  ```
+  lemma:
+  cases r; simp at; ok cases out, injection.
+  Could return `∃ decoded rest, r=some(decoded,rest) ∧ out=(c::decoded,rest)` easier.
+  ```
+  theorem stringPrepend_ok ... : ∃ decoded rest, r=some(decoded,rest) ∧ out=(c::decoded,rest) := by
+   cases r with
+   | none => simp [stringPrepend] at h
+   | some tail => cases tail with | mk decoded rest =>
+     simp only [stringPrepend, Option.some.injEq] at h
+     exact ⟨decoded,rest,rfl,h⟩
+  ```
+  h orientation out = tuple? Option.some.inj h : (c::decoded,rest)=out if h stringPrepend=some out. Actually `Option.some.inj h` yields constructed = out. My conjunction out=... use `.symm`. `simp ... at h` h likely pair equality. use cases h then rfl.
+  Sound:
+  have hs := ih (out := (decoded,rest)) hr
+  `simpa [hq,hb,...]` etc.
+  Raw case not quote/backslash/lf/cr:
+  ```
+  by_cases hl:c=10; subst; simp [stringBody] at h
+  by_cases hr...
+  rw [stringBody.eq_def] at h
+  simp only [hq,hb,hl,hr]??? 
+  ```
+  Since pattern matching reduction with variables c::cs and by_cases not always `simp [stringBody,hq,hb,hl,hr] at h` will select fallback. Yes.
+  ```
+  by_cases hc : rawOk c
+   · simp [stringBody,hq,hb,hl,hr,hc] at h
+     obtain... 
+     exact .raw hq hb hl hr hc (ih hr)
+   · simp [stringBody,hq,hb,hl,hr,hc] at h
+  ```
+  Note if c=34 branch h output some([],cs), `cases Option.some.inj h` then `.close cs`.
+  Escape h use simp [stringBody,he] at h.
+  Complete induction h:
+  ```
+  | close rest => rfl
+  | raw hq hb hl hr hraw tail ih =>
+    simp [stringBody,hq,hb,hl,hr,hraw,ih,stringPrepend]
+  | escape he tail ih =>
+    rw [stringBody.eq_def]
+    simp only [decodeEscape_complete he, ih, stringPrepend]
+  ```
+  Simp `[stringBody, decodeEscape_complete he, ih, stringPrepend]`. Because scanner pattern 92::escaped matches.
+  `StringBody` rawOk and typeclass instance same.
+
+  Unique via complete.
+
+  Longest helper:
+  prefixRest:
+  ```
+  def prefixRest : List Nat → List Nat → Option (List Nat)
+  | [], input => some input
+  | _::_, [] => none
+  | a::as,b::bs => if a=b then prefixRest as bs else none
+  ```
+  Sound:
+  ```
+  theorem prefixRest_sound {token input rest} (h) : input=token++rest := by
+   induction token generalizing input with
+   nil => simp [prefixRest] at h; subst rest; rfl
+   cons a token ih =>
+    cases input with nil=>simp[prefixRest] at h
+    cons b input =>
+     by_cases hab:a=b
+     · subst b; simp [prefixRest] at h; simp [ih h]
+     · simp[prefixRest,hab] at h
+  ```
+  After subst b h prefixRest... `have := ih h`; simp only[List.cons_append]; rw [this]? goal b::input=(b::token)++rest. `simp only [List.cons_append]; rw [ih h]`.
+  Complete:
+  ```
+  theorem prefixRest_complete {token input rest} (h : input=token++rest) : ... := by
+   subst input
+   induction token with nil=>rfl
+   cons a token ih => simp [prefixRest, ih]
+  ```
+  if a=a simp. Good.
+
+  Aux spec uses LongestMatch table input. Scanner aux argument table recursive.
+  ```
+  def longestMatchAux (input) : List ... → Option ...
+  ...
+  def longestMatch (table) (input) := longestMatchAux input table
+  ```
+  Sound aux:
+  ```
+  theorem longestMatchAux_sound (table input) : LongestMatch table input (longestMatchAux input table) := by
+   induction table with
+   | nil =>
+     exact .none (by intro token h; cases h)
+   | cons token table ih =>
+     cases hp : prefixRest token input with
+     | none =>
+       rw [longestMatchAux.eq_def, hp]
+       cases ih with
+       | none hnone =>
+         apply .none
+         intro t ht hn rest heq
+         cases ht with
+         | head => exact prefixRest_none hp heq? 
+  ...
+  ```
+  Should lemma prefixRest_none: if prefixRest token input=none then no rest input=token++rest, derived from complete: `fun rest heq => by rw [prefixRest_complete heq] at hp; cases hp`. define inline `have hno : ∀ rest, input ≠ token++rest := by intro rest heq; rw [prefixRest_complete heq] at hp; cases hp`.
+  For tail cases membership `List.mem_cons`. Could rcases `List.mem_cons.mp ht` with rfl | hmem.
+  When ih some fields and scanner hp none result tail same:
+  `exact .some hmem...` but membership goal t∈token::table `List.mem_cons_of_mem _ hmem`.
+  longest quantifier:
+  ```
+  apply LongestMatch.some (List.mem_cons_of_mem _ hmem) hnonempty heq
+  intro other ho tail hother
+  rcases List.mem_cons.mp ho with rfl | htail
+  · exact (hno tail hother).elim
+  · exact hmax other htail tail hother
+  ```
+  Constructor already has hmax as argument perhaps `.some ... (by ...)`.
+  When hp some rest:
+  `have hprefix := prefixRest_sound hp`
+  by_cases hempty: token=[]
+   · subst token; rw [longestMatchAux.eq_def,hp]; simp only [↓reduceIte]? `if token=[] then...`; scanner ignores. Should lift ih with head empty no matching. Same as above hno for nonempty head contradiction `hn rfl`. I can factor helper lift when head not viable.
+   · rw equation hp; simp [hempty]
+     cases htail : longestMatchAux input table with
+      none => ... ih after rw htail at ih
+      some out => cases out with mk other orest; ...
+  Could cases ih directly after rw htail at ih.
+  none:
+  scanner some(token,rest). `.some (by simp) hempty hprefix`; max:
+  for other∈token::table:
+   if head -> le_rfl after subst
+   tail -> ih none gives no matching, contradiction.
+  some:
+  ih success.
+  by_cases hlonger : other.length < token.length
+   scanner chooses token.
+   maximal:
+   head equal; tail ≤ other.length ≤ token.length via hmax + Nat.le_of_lt hlonger
+   else chooses other:
+   maximal head token.length≤other.length via Nat.le_of_not_gt hlonger; tail hmax.
+  Should membership and prefix fields.
+
+  Potential simplification create lemma `longestMatch_cons_no_head` but code manageable ~200 lines.
+
+  Uniqueness direct:
+  ```
+  theorem longestMatch_unique ... (h1 h2) : out1=out2 := by
+   cases h1 with
+   | none hn =>
+     cases h2 with
+     | none => rfl
+     | some hmem hne hp hm => exact (hn _ hmem hne _ hp).elim
+   | some hm1... =>
+     cases h2 ...
+  ```
+  Constructor field binder names generated order; tactic `case some input token rest hmem hne hp hmax =>` uncertain. Use `cases h₁ with | some hmem₁ hne₁ hp₁ hmax₁ => ...` implicit input/token/rest introduced inaccessible but can `rename_i input token rest ...`? In existing they use cases with intro. I can write theorem with `cases h₁` then `cases h₂` and `rename_i` but tricky.
+
+  Alternative complete via induction and uniqueness using scanner? I still need uniqueness. Can state theorem on explicit success `LongestMatch` and use inversion `cases` with `rename_i`.
+  Pattern:
+  ```
+    cases h₁ with
+    | @none input hn =>
+      cases h₂ with
+      | none => rfl
+      | @some _ token rest hmem hne hp hmax =>
+        exact (hn token hmem hne rest hp).elim
+    | @some input token rest hmem hne hp hmax =>
+      cases h₂ with
+      | none hn => exact (hn token hmem hne rest hp).elim
+      | @some _ other orest hmem₂ hne₂ hp₂ hmax₂ =>
+  ...
+  ```
+  Constructor implicit params in `@some` likely `{input token rest}` then explicit 4. `@none` input then explicit. Good.
+  hmax types.
+  ```
+  have hlen : token.length = other.length :=
+   Nat.le_antisymm (hmax₂ token hmem rest hp) (hmax other hmem₂ orest hp₂)
+  ```
+  Wait hmax₂: other longest, other token candidate => token.length ≤ other.length yes.
+  have htoken : token=other := by
+   calc
+   token = (token++rest).take token.length := by simp
+   _ = input.take token.length := by rw [←hp]
+   _ = input.take other.length := by rw [hlen]
+   _ = (other++orest).take other.length := by rw [hp₂]
+   _ = other := by simp
+  Check second: hp : input=token++rest, `←hp` rewrites token++rest to input yes. fourth hp₂ input=other++orest, `rw [hp₂]` yes.
+  subst other? `subst other` if htoken token=other replaces other. Then have rests : rest=orest := List.append_left_cancel (hp.symm.trans hp₂) (after other subst).
+  `cases htoken` perhaps token replaced? `subst other`; `have : rest=orest := ...`; `subst orest`; rfl.
+  No pair ext needed.
+
+  complete:
+  ```
+  theorem longestMatch_complete ... (h) : longestMatch table input = out := by
+   have hs := longestMatch_sound table input
+   exact (longestMatch_unique hs h).symm? 
+  ```
+  unique h hs: out = scanner; goal scanner=out. `exact longestMatch_unique hs h` hs out scanner, h out given => scanner=out. yes.
+  Sound wrapper aux.
+
+  Decimal scan and proofs straightforward. `scanDigits_sound`, complete, decimal sound/complete unique.
+
+  `decimalInteger` definition using scanDigits and match:
+  ```
+  def decimalInteger (cs) :=
+   let out := scanDigits cs
+   match hd : out.1 with
+   | [] => none
+   | [48] => some(out.1, decimalValue out.1, out.2)
+   | 48::_ => none
+   | _::_ => some...
+  ```
+  No need hd. Simpler:
+  ```
+  let (digits,rest):=scanDigits cs
+  match digits with ...
+  ```
+  Lean let pattern in def:
+  ```
+  def decimalInteger (cs) : Option triple :=
+    let out := scanDigits cs
+    match out.1 with
+  ...
+  ```
+  Sound h:
+  ```
+  unfold decimalInteger at h
+  generalize heq : scanDigits cs = out at h
+  cases out with | mk digits rest =>
+   have hrun : DigitRun cs digits rest := by
+     have hs := scanDigits_sound cs
+     rw [heq] at hs
+     exact hs
+   cases digits with
+   | nil => simp at h
+   | cons d ds =>
+     by_cases hd:d=48
+      subst d; cases ds with
+       nil => cases Option.some.inj h; exact .intro hrun (by decide) rfl
+       cons d ds => simp at h
+     · cases Option.some.inj h
+       exact .intro hrun (by simp [DigitsAccepted,hd]) rfl
+  ```
+  But match patterns `[48]`, `48::_`, fallback. `simp [DigitsAccepted,hd]` when d≠48 true.
+  When d=48, ds nonnil `simp at h` knows decimal match reduce none. When d=48 ds=nil some. `cases Option.some.inj h` might output tuple dependent, then hrun matches. value equality rfl.
+  Complete h:
+  cases h with intro hrun hacc hval
+  rw [scanDigits_complete hrun]
+  unfold decimalInteger? `simp only [decimalInteger, scanDigits_complete hrun]`
+  cases digits shapes, hacc.
+  ```
+    cases digits with
+    | nil => simp [DigitsAccepted] at hacc
+    | cons d ds =>
+      by_cases hd:d=48
+      · subst d; cases ds with
+        | nil => simp [decimalInteger, scanDigits_complete hrun, hval]
+        | cons => simp [DigitsAccepted] at hacc
+      · simp [decimalInteger, scanDigits_complete hrun, hval, hd]
+  ```
+  But after cases h, input etc. `rw [decimalInteger.eq_def, scanDigits_complete hrun]`; goal match digits ... = some. Then cases. Use `simp [hval, DigitsAccepted]`.
+  No output uniqueness issue.
+
+  Identifier uniqueness via complete.
+
+  Should update Lex header first separate. Then insert code before Conformance in one Edit. Could be ~700 lines. I can break per piece with Reads each. Better implement one piece at a time and compile, avoids huge error. Four scanners plus proofs ~500. Use Todo perhaps second spans. I'll update header and identifier in one edit? Same file modifications header and insertion one Edit can't two locations. Do header first then read.
+
+• Read the tail before editing.Insert identifier.warning: Git tree '/home/unbalancedparen/projects/clones/wip-slice0-lexer-tokens' is dirty
+Concrete/Lex.lean:1:0: error: unknown module prefix 'ConcreteSpec'
+
+No directory 'ConcreteSpec' or file 'ConcreteSpec.olean' in the search path entries:
+/home/unbalancedparen/projects/clones/wip-slice0-lexer-tokens/.lake/packages/lean-compiler-backend/.lake/build/lib/lean
+/home/unbalancedparen/projects/clones/wip-slice0-lexer-tokens/.lake/build/lib/lean
+/home/unbalancedparen/.elan/toolchains/leanprover--lean4---v4.34.1/lib/lean
+/home/unbalancedparen/.elan/toolchains/leanprover--lean4---v4.34.1/lib/lean
+Why previous Surface0 no import and no build wrote olean? lake env lean file output olean where? Running lean direct perhaps doesn't create olean without -o. ConcreteSpec olean absent because lake build not run. Now `lake build ConcreteSpec.Spec.Surface0` then lean. Standard targeted build.
+
+warning: Git tree '/home/unbalancedparen/projects/clones/wip-slice0-lexer-tokens' is dirty
+✔ [2/2] Built ConcreteSpec.Spec.Surface0 (288ms)
+Build completed successfully (2 jobs).
+Concrete/Lex.lean:611:6: error: Tactic `rewrite` failed: Did not find an occurrence of the pattern
+  some out₁
+in the target expression
+  out₁ = out₂
+
+cs : List Nat
+out₁ out₂ : List Nat × List Nat
+h₁ : Identifier cs out₁
+h₂ : Identifier cs out₂
+⊢ out₁ = out₂
+• Unique rw wrong: identifier_complete h1 : identifier cs = some out1, ← rewrite some out1 to identifier? rw uses ← means RHS some out1 yes should find but out1 not some in target. Existing trivia skipTrivia=out1 so ← finds out1. For option need inject:
+  `have := (identifier_complete h1).symm.trans (identifier_complete h2); exact Option.some.inj this`. Same decode. Fix.Edit fix then string insertion could same Edit replace unique and marker with string code. Good. Should avoid huge but okay. I'll do fix and string all.
+
+warning: Git tree '/home/unbalancedparen/projects/clones/wip-slice0-lexer-tokens' is dirty
+Concrete/Lex.lean:688:62: error: Application type mismatch: The argument
+  h
+has type
+  stringPrepend decodedScalar (stringBody rawOk input) = some out
+but is expected to have type
+  (do
+      let a ← stringPrepend ?m.176 ?m.177
+      pure (some a)) =
+    some ?m.178
+in the application
+  stringPrepend_ok h
+Concrete/Lex.lean:688:37: error: Tactic `subst` failed: invalid equality proof, it is not of the form (x = t) or (t = x)
+  ?m.178 = some (?m.176 :: decoded, rest)
+
+case pos.cons.some
+rawOk : Nat → Prop
+inst✝ : DecidablePred rawOk
+out : List Nat × List Nat
+hq : ¬92 = 34
+escaped : Nat
+input : List Nat
+ih :
+  ∀ {out : List Nat × List Nat},
+    stringBody rawOk (escaped :: input) = some out → StringBody rawOk (escaped :: input) out
+decodedScalar : Nat
+he : decodeEscape escaped = some decodedScalar
+h : stringPrepend decodedScalar (stringBody rawOk input) = some out
+decoded rest : List Nat
+ht : ?m.177 = some (decoded, rest)
+right✝ : ?m.178 = some (?m.176 :: decoded, rest)
+⊢ StringBody rawOk (92 :: escaped :: input) out
+Concrete/Lex.lean:695:6: error: `simp` made no progress
+Concrete/Lex.lean:698:24: warning: This simp argument is unused:
+  hq
+
+Hint: Omit it from the simp argument list.
+  [apply] simp [stringBody, hb, hl, hr, hc] at h
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+Concrete/Lex.lean:698:32: warning: This simp argument is unused:
+  hl
+
+Hint: Omit it from the simp argument list.
+  [apply] simp [stringBody, hq, hb, hr, hc] at h
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+Concrete/Lex.lean:698:36: warning: This simp argument is unused:
+  hr
+
+Hint: Omit it from the simp argument list.
+  [apply] simp [stringBody, hq, hb, hl, hc] at h
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+Concrete/Lex.lean:706:49: warning: This simp argument is unused:
+  hq
+
+Hint: Omit it from the simp argument list.
+  [apply] simp [stringBody, hb, hl, hr, hc, ih, stringPrepend]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+Concrete/Lex.lean:706:57: warning: This simp argument is unused:
+  hl
+
+Hint: Omit it from the simp argument list.
+  [apply] simp [stringBody, hq, hb, hr, hc, ih, stringPrepend]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+Concrete/Lex.lean:706:61: warning: This simp argument is unused:
+  hr
+
+Hint: Omit it from the simp argument list.
+  [apply] simp [stringBody, hq, hb, hl, hc, ih, stringPrepend]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+• Error stringPrepend r inferred `r out` same Option pair but binder `{r out : Option...}` should r Option, out Option not pair! I mistakenly out Option. h expects r Option out Option, but given out pair unification assigns out some pair leading weird. Should `{r : Option ...} {out : List Nat×List Nat}`. Also ih generalization issue in escape: ordinary induction cs where cs after c is escaped::input, ih for whole escaped::input, but recursive is input, not direct subterm induction hypothesis. Structural recursion input shorter by 2 but simple List induction only ih on escaped::input, no induction on input. Should use functional induction or nested induction. In raw branch ih input yes since c::input. Escape needs `stringBody_sound rawOk ht` recursive theorem not available termination in theorem? Could induction using `stringBody.induct` solves. Or add second induction generalizing escaped? In cons case after cases cs with cons escaped input, ih : property (escaped::input), can apply ih to stringBody on? Should have string body on input not escaped::input. But can get another induction hypothesis by strong induction on length or use function induction.
+
+  Could use `induction cs using stringBody.induct generalizing out with` and inspect cases. I'll change proof to functional. Should know case signatures. I can attempt:
+  ```
+    induction cs using stringBody.induct generalizing out with
+    | case1 => simp [stringBody] at h
+    | case2 rest => cases Option.some.inj h; exact .close rest
+    | case3 escaped input decoded he ih =>
+  ...
+  ```
+  But generated cases perhaps case3 parameters include rawOk inst? Fixed. I can see `#print stringBody.induct` via add? use `lake env lean` temp file import and #check? `#check stringBody.induct` prints type with `#check`. Could create /tmp? Shouldn't modify outside working dir unless instructed. Can use stdin lean? `lake env lean /dev/stdin` unknown module. Use `nix... -c bash -c '... #check' >` no Write? I can create new temporary file in repo with Write then delete, but don't need. `lake env lean --stdin` supports? lean --help. Easier use strong induction `induction hlen : cs.length using Nat.strong_induction_on generalizing cs out` messy.
+
+  Functional induction with no `with` then `case case1` etc use all_goals? Could use `induction cs using stringBody.induct generalizing out <;> simp_all [stringBody]` not enough constructing.
+
+  Use well-founded recursion scanner instead? no.
+
+  I can prove helper sound with induction on cs but escape branch derive property input from ih applied to list `input`? ih only exact tail cs. If ordinary induction principle `List.rec` has ih for cs before case split. When cs=escaped::input, ih for escaped::input. Could use ih on decode of escaped::input not useful. But could pattern scanner consume one at a time for backslash with escape pending? Alternative define scanner using helper on escaped where recursive call on `cs` after backslash? I can restructure string scanner to consume backslash by calling helper on tail and helper handles escape then body recursion, still two. Or define a step recursively with generic `c::cs`; for backslash, inspect escape and recursively scan cs? Could scanner when backslash::escaped::input recursively call `stringBody rawOk (??)` not tail current. Structural recursion Lean accepts input but proof strong.
+
+  Use functional induction ideal. I'll query `#print Concrete.Lex.stringBody.induct` by appending `#check`? Could command `lake env lean Concrete/Lex.lean` fails earlier but output #print after if appended not want. Create `.tmp` via Write allowed then remove Bash rm? File creation tool and removal via Bash okay. But can use `#check stringBody.induct` with `lake env lean <(printf...)` uses printf shell not user talk but file content tool? Tools say echo/printf to file -> Write. Use Write `/tmp` outside prohibited. Write `Scratch.lean` new in root then read output, delete. Not necessary I know functional induction style from decodeAt. Case count likely:
+  case1 rawOk inst? Actually parameters rawOk fixed before cs, induction tactic handles.
+  case2 rest
+  case3 escaped input decoded he ih (since match some)
+  case4 escaped input he (none)
+  case5 backslash empty
+  case6 rest LF
+  case7 rest CR
+  case8 c input hq hb hl hr hc ih? Pattern fallback includes conditions derived by equation compiler maybe hypotheses `h : c≠...` not rawOk branch splits:
+  stringBody has if rawOk c so functional induction cases case8 raw accepted ih, case9 refused. Similar decodeAt includes conditions.
+  Could write `induction cs using stringBody.induct generalizing out` then `case case1 ...` and compile missing cases errors guide. Better.
+
+  Before switching fix stringPrepend type. Then proof:
+  ```
+    induction cs using stringBody.induct generalizing out with
+    | case1 => simp [stringBody] at h
+    | case2 rest => cases Option.some.inj h; exact .close rest
+    | case3 escaped input decodedScalar he ih =>
+        simp only [stringBody, he] at h -- equation maybe h already simplified?
+  ...
+  ```
+  At functional induction context h original equation. `rw [stringBody.eq_def] at h; simp [he]`.
+  case4 no
+  case5 no
+  case6/7 no
+  case8 c input ... hc ih -> raw
+  case9 false.
+  Names of hypotheses can use `rename_i` to avoid signature. Use explicit case patterns guessed.
+
+  Alternative use `fun_induction stringBody rawOk cs` tactic? Lean has `fun_induction` perhaps.
+
+  I'll first fix type and try functional induction. Read relevant lines before Edit.
+
+• Edit type and proof.warning: Git tree '/home/unbalancedparen/projects/clones/wip-slice0-lexer-tokens' is dirty
+Concrete/Lex.lean:687:56: error: Application type mismatch: The argument
+  h
+has type
+  (if rawOk c then stringPrepend c (stringBody rawOk input) else none) = some out
+but is expected to have type
+  stringPrepend ?m.158 ?m.159 = some ?m.160
+in the application
+  stringPrepend_ok h
+Concrete/Lex.lean:687:31: error: Tactic `subst` failed: invalid equality proof, it is not of the form (x = t) or (t = x)
+  ?m.160 = (?m.158 :: decoded, rest)
+
+case case8
+rawOk : Nat → Prop
+inst✝ : DecidablePred rawOk
+cs : List Nat
+c : Nat
+input : List Nat
+hq : c = 34 → False
+hb : ∀ (escaped : Nat) (input_1 : List Nat), c = 92 → input = escaped :: input_1 → False
+hl : c = 92 → input = [] → False
+hr : c = 10 → False
+hc : c = 13 → False
+ih : ?rawOk c
+ih1✝ : ∀ {out : List Nat × List Nat}, stringBody rawOk input = some out → StringBody rawOk input out
+out : List Nat × List Nat
+h : (if rawOk c then stringPrepend c (stringBody rawOk input) else none) = some out
+decoded rest : List Nat
+ht : ?m.159 = some (decoded, rest)
+right✝ : ?m.160 = (?m.158 :: decoded, rest)
+⊢ StringBody rawOk (c :: input) out
+Concrete/Lex.lean:689:33: error: unsolved goals
+case case9
+rawOk : Nat → Prop
+inst✝ : DecidablePred rawOk
+cs : List Nat
+c : Nat
+input : List Nat
+hq : c = 34 → False
+hb : ∀ (escaped : Nat) (input_1 : List Nat), c = 92 → input = escaped :: input_1 → False
+hl : c = 92 → input = [] → False
+hr : c = 10 → False
+hc : c = 13 → False
+h✝ : ¬?rawOk c
+out : List Nat × List Nat
+h : rawOk c ∧ stringPrepend c (stringBody rawOk input) = some out
+⊢ StringBody rawOk (c :: input) out
+Concrete/Lex.lean:672:2: error: Alternative `rawOk` has not been provided
+Concrete/Lex.lean:671:70: error: unsolved goals
+case inst
+rawOk : Nat → Prop
+inst✝ : DecidablePred rawOk
+cs : List Nat
+⊢ DecidablePred fun a => sorry
+Concrete/Lex.lean:686:27: warning: This simp argument is unused:
+  hq
+
+Hint: Omit it from the simp argument list.
+  [apply] simp only [stringBody, hb, hl, hr, hc, ↓reduceIte] at h
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+Concrete/Lex.lean:686:31: warning: This simp argument is unused:
+  hb
+
+Hint: Omit it from the simp argument list.
+  [apply] simp only [stringBody, hq, hl, hr, hc, ↓reduceIte] at h
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+Concrete/Lex.lean:686:35: warning: This simp argument is unused:
+  hl
+
+Hint: Omit it from the simp argument list.
+  [apply] simp only [stringBody, hq, hb, hr, hc, ↓reduceIte] at h
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+Concrete/Lex.lean:686:39: warning: This simp argument is unused:
+  hr
+
+Hint: Omit it from the simp argument list.
+  [apply] simp only [stringBody, hq, hb, hl, hc, ↓reduceIte] at h
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+Concrete/Lex.lean:686:43: warning: This simp argument is unused:
+  hc
+
+Hint: Omit it from the simp argument list.
+  [apply] simp only [stringBody, hq, hb, hl, hr, ↓reduceIte] at h
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+Concrete/Lex.lean:686:47: warning: This simp argument is unused:
+  ↓reduceIte
+
+Hint: Omit it from the simp argument list.
+  [apply] simp only [stringBody, hq, hb, hl, hr, hc] at h
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+Concrete/Lex.lean:689:54: warning: This simp argument is unused:
+  hq
+
+Hint: Omit it from the simp argument list.
+  [apply] simp [stringBody, hb, hl, hr, hc] at h
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+Concrete/Lex.lean:689:58: warning: This simp argument is unused:
+  hb
+
+Hint: Omit it from the simp argument list.
+  [apply] simp [stringBody, hq, hl, hr, hc] at h
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+Concrete/Lex.lean:689:62: warning: This simp argument is unused:
+  hl
+
+Hint: Omit it from the simp argument list.
+  [apply] simp [stringBody, hq, hb, hr, hc] at h
+
+Note: This linter can b
+e disabled with `set_option linter.unusedSimpArgs false`
+Concrete/Lex.lean:689:66: warning: This simp argument is unused:
+  hr
+
+Hint: Omit it from the simp argument list.
+  [apply] simp [stringBody, hq, hb, hl, hc] at h
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+Concrete/Lex.lean:689:70: warning: This simp argument is unused:
+  hc
+
+Hint: Omit it from the simp argument list.
+  [apply] simp [stringBody, hq, hb, hl, hr] at h
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+Concrete/Lex.lean:697:49: warning: This simp argument is unused:
+  hq
+
+Hint: Omit it from the simp argument list.
+  [apply] simp [stringBody, hb, hl, hr, hc, ih, stringPrepend]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+Concrete/Lex.lean:697:57: warning: This simp argument is unused:
+  hl
+
+Hint: Omit it from the simp argument list.
+  [apply] simp [stringBody, hq, hb, hr, hc, ih, stringPrepend]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+Concrete/Lex.lean:697:61: warning: This simp argument is unused:
+  hr
+
+Hint: Omit it from the simp argument list.
+  [apply] simp [stringBody, hq, hb, hl, hc, ih, stringPrepend]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+Functional induction case8 has 5 discriminants + raw hypothesis ih and recursive ih1. I named hc = c≠13 and ih = rawOk c. Should name hraw and ih. Case9 hraw. Also functional induction generalizes rawOk due dependent if? Error Alternative rawOk not provided and inst weird `?rawOk` indicates `generalizing out` plus rawOk? Induction principle includes rawOk as target because occurrence in result? The tactic generalized rawOk automatically? Context rawOk still. Hypothesis shows `?rawOk c` weird due dependent proof motive includes rawOk metavariable from simp? Error "Alternative rawOk has not been provided" at induction indicates generated induction has case `rawOk`? Could be `using stringBody.induct` interprets `rawOk` in `generalizing out`? Wait error alternative `rawOk` likely named argument to `stringBody.induct`? The functional induction principle has parameter `rawOk` explicit and tactic wants `rawOk` case due `induction cs using ...` elaborator perhaps rawOk is an explicit major premise? Hmm existing decodeAt `induction off, bs using decodeAt.induct` no alternative parameters. Here stringBody rawOk [inst] : List ->... `stringBody.induct` includes rawOk as explicit parameter and tactic can't infer due rawOk occurs in h but `cs` target only. Should specify `(rawOk := rawOk)`? `induction cs using stringBody.induct (rawOk := rawOk) generalizing out` syntax using term parentheses. Or `induction cs using (stringBody.induct (rawOk := rawOk))` perhaps. The context h had ?rawOk c indicates missing.
+
+  Could avoid with helper scanner Boolean no Prop dependent if weird still. Specify.
+  ```
+  induction cs using stringBody.induct (rawOk := rawOk) generalizing out with
+  ```
+  Lean syntax existing `using decodeAt.induct generalizing`; term named arg should work `using stringBody.induct (rawOk := rawOk)` parser tactic perhaps yes.
+
+  Case8:
+  `| case8 c input hq hb hl hr hraw ih =>`
+  then simp only [stringBody, hraw, ↓reduceIte] at h (discriminants unused since h already if)
+  exact raw hq (fun...)? hb type c=92 -> ∀ escaped... due match discrimination. Constructor requires c≠92, derive `fun hc => hb 92?` Wait hb : ∀ escaped input_1, c=92 -> input=escaped::input_1 -> False. Should have `c≠92` can `fun hc => hb c input hc rfl`? if c=92 and input=c::input impossible choose escaped=c input_1=input; yes `hb c input hc rfl`. hl : c=92 -> input=[] -> False, no need. hq c≠34. hr c≠10, hc c≠13.
+  In case context names adjust:
+  hq c≠34
+  hb complex backslash cons
+  hl backslash nil
+  hr c≠10
+  hc c≠13
+  hraw : rawOk c
+  ih recursive.
+  Should have `have hb' : c ≠92 := fun heq => hb c input heq rfl` but if hb after subst? Fine.
+  `exact .raw hq hb' hr hc hraw (ih ht)`.
+  Case9 hraw false, h after simp becomes `rawOk c ∧ ...` weird simp [stringBody,hraw] should h false if hraw recognized. specify only [stringBody,hraw,↓reduceIte] at h then cases h. Context previous h changed to conjunction due simp with hraw not matched ?rawOk. Fix named param.
+
+  Complete warnings unusedSimpArgs treated warningAsError only build perhaps direct no warnings as errors? Should clean later.
+
+  Try.
+
+warning: Git tree '/home/unbalancedparen/projects/clones/wip-slice0-lexer-tokens' is dirty
+Concrete/Lex.lean:688:51: error: Application type mismatch: The argument
+  rfl
+has type
+  ?m.196 = ?m.196
+but is expected to have type
+  input = c :: input
+in the application
+  hb c input heq rfl
+Concrete/Lex.lean:698:49: warning: This simp argument is unused:
+  hq
+
+Hint: Omit it from the simp argument list.
+  [apply] simp [stringBody, hb, hl, hr, hc, ih, stringPrepend]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+Concrete/Lex.lean:698:57: warning: This simp argument is unused:
+  hl
+
+Hint: Omit it from the simp argument list.
+  [apply] simp [stringBody, hq, hb, hr, hc, ih, stringPrepend]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+Concrete/Lex.lean:698:61: warning: This simp argument is unused:
+  hr
+
+Hint: Omit it from the simp argument list.
+  [apply] simp [stringBody, hq, hb, hl, hc, ih, stringPrepend]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+• hb type `∀ escaped input_1, c=92 → input=escaped::input_1 → False`, I passed escaped=c so expects input=c::input impossible. Should choose escaped arbitrary but no value? Can derive c≠92 from hb by subst c then hb 0 [] rfl? If subst c, input must equal 0::[] not true. Actually match exclusion condition says if c=92, input cannot be escaped::input_1 for ANY escaped input_1. To derive false choose escaped=0 input_1=input.tail? Should show any nonempty input has decomposition, since input is arbitrary List but when c=92 and original cs=c::input, pattern 92::escaped::input requires input nonempty; if input empty case hb? There are two hypotheses hb and hl cover empty/nonempty. So derive by cases input:
+  - nil => hl heq rfl
+  - cons escaped tail => hb escaped tail heq rfl.
+  ```
+  have hb' : c≠92 := by
+   intro heq
+   cases input with
+   | nil => exact hl heq rfl
+   | cons escaped tail => exact hb escaped tail heq rfl
+  ```
+  Do that. Complete unused warnings can clean after.Compile.warning: Git tree '/home/unbalancedparen/projects/clones/wip-slice0-lexer-tokens' is dirty
+Concrete/Lex.lean:702:49: warning: This simp argument is unused:
+  hq
+
+Hint: Omit it from the simp argument list.
+  [apply] simp [stringBody, hb, hl, hr, hc, ih, stringPrepend]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+Concrete/Lex.lean:702:57: warning: This simp argument is unused:
+  hl
+
+Hint: Omit it from the simp argument list.
+  [apply] simp [stringBody, hq, hb, hr, hc, ih, stringPrepend]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+Concrete/Lex.lean:702:61: warning: This simp argument is unused:
+  hr
+
+Hint: Omit it from the simp argument list.
+  [apply] simp [stringBody, hq, hb, hl, hc, ih, stringPrepend]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+String done except warnings. Remove hq hl hr from complete simp raw. It needs hb? Constructor raw c arbitrary but scanner pattern needs quote/backslash etc. Simp uses hb (c≠92), hc (rawOk) and hr c≠13? Warning hq hl hr unused due dependent pattern matching generated simp uses only hb and hc? Keep hb,hc,ih,stringPrepend. But c=34 not rewritten? Apparently simp can split with hb etc enough equation compiler knows through constructor? Trust. Change later with next insertion same edit perhaps.
+
+  Longest implementation big. Before insert read tail marker and raw line perhaps one edit can replace complete line and marker with corrected and longest code. I'll do correction plus helper+scanner+sound perhaps uniqueness separate after compile. Insert all at once. Should have precise sound proof.
+
+  I'll construct code:
+
+  ```
+  def prefixRest ...
+  theorem prefixRest_sound...
+  theorem prefixRest_complete...
+  def longestMatchAux...
+  def longestMatch...
+  theorem longestMatchAux_sound (table) (input) : ... := by
+   induction table with
+   | nil =>
+     apply .none
+     intro token h
+     cases h
+   | cons token table ih =>
+     cases hp : prefixRest token input with
+     | none =>
+       have hno ... 
+       rw [longestMatchAux.eq_def, hp]
+       cases ih with
+       | @none _ hnone =>
+         apply .none
+         intro other hother hne tail hprefix
+         rcases List.mem_cons.mp hother with rfl | hmem
+         · exact hno tail hprefix
+         · exact hnone other hmem hne tail hprefix
+       | @some _ other orest hmem hne hprefix hmax =>
+         apply .some (List.mem_cons_of_mem _ hmem) hne hprefix
+         intro candidate hcand tail htail
+         rcases ... hcand with rfl | hcand
+         · exact (hno tail htail).elim
+         · exact hmax candidate hcand tail htail
+     | some rest =>
+       have hpref := prefixRest_sound hp
+       by_cases hne : token=[]
+       · subst token
+         rw [longestMatchAux.eq_def, hp]
+         simp only [↓reduceIte] ??? after hp, expression if []=[] then aux ...; `simp only` knows.
+         -- duplicate none-head lift with hno : ∀ rest, input≠[]++rest? Not true, empty is prefix but excluded by hne. Need membership head contradiction hnonempty rfl.
+         cases ih...
+         ...
+       · rw [longestMatchAux.eq_def,hp]
+         simp only [hne,↓reduceIte]
+         cases htail : longestMatchAux input table with
+         | none =>
+           rw [htail] at ih
+           cases ih with | @none _ hnone =>
+           rw [htail]
+           apply .some (by simp) hne hpref
+  ...
+  ```
+  After `rw [longestMatchAux.eq_def,hp]`, `rw` maybe equation unfolds `longestMatchAux input (token::table)` in goal both? goal LongestMatch ... (longestMatchAux...). rw fine. `simp only [hne, ↓reduceIte]` hne is token≠[] used if token=[] condition false; simp [hne].
+  none tail expression matches `match none with...` reduces via rw.
+  some tail `cases htail...` and rw htail at ih ⊢. cases out pair.
+  ```
+         | some out =>
+           cases out with | mk other orest =>
+             rw [htail] at ih
+             cases ih with | @some _ _ _ hmem hneOther hprefOther hmax =>
+             by_cases hlt : other.length < token.length
+             · simp only [hlt,↓reduceIte]
+               apply .some (by simp) hne hpref
+  ...
+             · simp only [hlt,↓reduceIte]
+               apply .some (List.mem_cons_of_mem _ hmem) hneOther hprefOther
+  ...
+  ```
+  Expression if other.length<token.length then some token else some(other,orest). `simp [hlt]`.
+  Max tail cases.
+
+  Duplication head ignored could factor lemma:
+  ```
+  theorem longestMatch_cons_of_tail {token table input out}
+   (h : LongestMatch table input out)
+   (hhead : ∀ rest, token≠[] → input ≠ token++rest) :
+   LongestMatch (token::table) input out := by ...
+  ```
+  This handles both no prefix and empty with hhead taking nonempty. Great.
+  Define private? New theorem okay. Name `longestMatch_cons` helper.
+  ```
+  theorem longestMatch_cons_of_no_match ... 
+  (hhead : ∀ rest, token ≠ [] → input ≠ token++rest)
+  ```
+  Cases h:
+  none -> none
+  some -> some and max.
+  This reduces sound:
+  none hp use helper ih (fun rest _ => hno rest)
+  empty use helper ih (fun rest hn => (hn rfl).elim)
+  No need duplicate.
+
+  Also when tail none and head matches no helper.
+
+  Uniqueness as above.
+
+  Complete uses sound wrapper.
+
+  Potential theorem helper is not necessary user no issue.
+
+  I'll insert with uniqueness and complete.
+
+  Check `List.mem_cons.mp` returns `a=b ∨` with `rfl` orientation candidate=token; rcases rfl substitutes candidate okay.
+  `List.mem_cons_of_mem token hmem`.
+  Head membership `by simp`.
+
+  No concrete token sets in defs.
+
+  PrefixRest argument order token input. longestMatch table input per judgment.
+
+  One nuance `longestMatchAux.eq_def` with let best may rw [hp] doesn't simplify let automatically. Def:
+  ```
+  | t::table =>
+    match prefixRest t input with
+    | none => longestMatchAux input table
+    | some rest =>
+      if t=[] then longestMatchAux input table else
+      match longestMatchAux input table with...
+  ```
+  No let to simplify. Fine.
+
+  Sound nil `exact .none (by intro token h; cases h)` h membership nil.
+
+  Helper hhead arguments order.
+
+  Unique hlen etc.
+
+  Complete:
+  ```
+  theorem longestMatch_complete {table input out} (h) :
+   longestMatch table input=out :=
+   longestMatch_unique (longestMatch_sound table input) h
+  ```
+  Implicit out Option.
+
+  I'll edit.
+
+• Potential ugly hnone tail none nonempty proof unnecessary: in head match token nonempty, other empty tail hnone needs nonempty proof; could just use hnone other hmem with proof from htailPrefix and input? Empty other cannot match if hprefix head? Actually hnone expects other≠[], need supply. I supplied if other=[] then htailPrefix input=tail possible no contradiction! `cases htailPrefix` not contradiction. So proof invalid logically: tail table none says no nonempty; empty candidate length 0≤token.length can prove directly by cases other empty or use hmax only for nonempty? I can by_cases candidate=[]; subst simp; else hnone contradiction. In max success head case for candidate tail empty, hmax from success accepts empties trivially. For tail none I need handle candidate emptiness separately. Current proof attempted contradiction impossible. Fix after compile. Also helper hnone has hne from candidate so fine.
+
+  Compile now.warning: Git tree '/home/unbalancedparen/projects/clones/wip-slice0-lexer-tokens' is dirty
+Concrete/Lex.lean:771:10: error(lean.invalidDottedIdent): Invalid dotted identifier notation: The expected type of `.none` could not be determined
+
+Hint: Using one of these would be unambiguous:
+  [apply] `none`
+  [apply] `Lean.SourceInfo.none`
+  [apply] `Option.Rel.none`
+  [apply] `LongestMatch.none`
+  [apply] `Lean.Meta.EtaStructMode.none`
+  [apply] `Lean.Meta.TransparencyMode.none`
+  [apply] `Lean.Parser.Sym.DSimp.none`
+  [apply] `Lean.Parser.Sym.Simp.none`
+Concrete/Lex.lean:772:10: error: No goals to be solved
+Concrete/Lex.lean:776:2: error: Too many variable names provided at alternative `some`: 7 provided, but 6 expected
+Concrete/Lex.lean:777:10: error(lean.invalidDottedIdent): Invalid dotted identifier notation: The expected type of `.some` could not be determined
+
+Hint: Using one of these would be unambiguous:
+  [apply] `some`
+  [apply] `Option.Rel.some`
+  [apply] `LongestMatch.some`
+Concrete/Lex.lean:778:10: error: No goals to be solved
+Concrete/Lex.lean:788:10: error(lean.invalidDottedIdent): Invalid dotted identifier notation: The expected type of `.none` could not be determined
+
+Hint: Using one of these would be unambiguous:
+  [apply] `none`
+  [apply] `Lean.SourceInfo.none`
+  [apply] `Option.Rel.none`
+  [apply] `LongestMatch.none`
+  [apply] `Lean.Meta.EtaStructMode.none`
+  [apply] `Lean.Meta.TransparencyMode.none`
+  [apply] `Lean.Parser.Sym.DSimp.none`
+  [apply] `Lean.Parser.Sym.Simp.none`
+Concrete/Lex.lean:789:10: error: No goals to be solved
+Concrete/Lex.lean:794:34: error: Tactic `rewrite` failed: Did not find an occurrence of the pattern
+  prefixRest token input
+in the target expression
+  LongestMatch (token :: table) input
+    (match token :: table with
+    | [] => none
+    | token :: table =>
+      match prefixRest token input with
+      | none => longestMatchAux input table
+      | some rest =>
+        if token = [] then longestMatchAux input table
+        else
+          match longestMatchAux input table with
+          | none => some (token, rest)
+          | some (other, otherRest) =>
+            if other.length < token.length then some (token, rest) else some (other, otherRest))
+
+case cons.none
+input token : List Nat
+table : List (List Nat)
+ih : LongestMatch table input (longestMatchAux input table)
+hp : prefixRest token input = none
+⊢ LongestMatch (token :: table) input
+    (match token :: table with
+    | [] => none
+    | token :: table =>
+      match prefixRest token input with
+      | none => longestMatchAux input table
+      | some rest =>
+        if token = [] then longestMatchAux input table
+        else
+          match longestMatchAux input table with
+          | none => some (token, rest)
+          | some (other, otherRest) =>
+            if other.length < token.length then some (token, rest) else some (other, otherRest))
+Concrete/Lex.lean:803:36: error: Tactic `rewrite` failed: Did not find an occurrence of the pattern
+  prefixRest [] input
+in the target expression
+  LongestMatch ([] :: table) input
+    (match [] :: table with
+    | [] => none
+    | token :: table =>
+      match prefixRest token input with
+      | none => longestMatchAux input table
+      | some rest =>
+        if token = [] then longestMatchAux input table
+        else
+          match longestMatchAux input table with
+          | none => some (token, rest)
+          | some (other, otherRest) =>
+            if other.length < token.length then some (token, rest) else some (other, otherRest))
+
+case pos
+input : List Nat
+table : List (List Nat)
+ih : LongestMatch table input (longestMatchAux input table)
+rest : List Nat
+hp : prefixRest [] input = some rest
+hprefix : input = [] ++ rest
+⊢ LongestMatch ([] :: table) input
+    (match [] :: table with
+    | [] => none
+    | token :: table =>
+      match prefixRest token input with
+      | none => longestMatchAux input table
+      | some rest =>
+        if token = [] then longestMatchAux input table
+        else
+          match longestMatchAux input table with
+          | none => some (token, rest)
+          | some (other, otherRest) =>
+            if other.length < token.length th
+en some (token, rest) else some (other, otherRest))
+Concrete/Lex.lean:806:36: error: Tactic `rewrite` failed: Did not find an occurrence of the pattern
+  prefixRest token input
+in the target expression
+  LongestMatch (token :: table) input
+    (match token :: table with
+    | [] => none
+    | token :: table =>
+      match prefixRest token input with
+      | none => longestMatchAux input table
+      | some rest =>
+        if token = [] then longestMatchAux input table
+        else
+          match longestMatchAux input table with
+          | none => some (token, rest)
+          | some (other, otherRest) =>
+            if other.length < token.length then some (token, rest) else some (other, otherRest))
+
+case neg
+input token : List Nat
+table : List (List Nat)
+ih : LongestMatch table input (longestMatchAux input table)
+rest : List Nat
+hp : prefixRest token input = some rest
+hprefix : input = token ++ rest
+hne : ¬token = []
+⊢ LongestMatch (token :: table) input
+    (match token :: table with
+    | [] => none
+    | token :: table =>
+      match prefixRest token input with
+      | none => longestMatchAux input table
+      | some rest =>
+        if token = [] then longestMatchAux input table
+        else
+          match longestMatchAux input table with
+          | none => some (token, rest)
+          | some (other, otherRest) =>
+            if other.length < token.length then some (token, rest) else some (other, otherRest))
+Concrete/Lex.lean:852:2: error: Too many variable names provided at alternative `none`: 2 provided, but 1 expected
+Concrete/Lex.lean:855:4: error: Too many variable names provided at alternative `some`: 7 provided, but 6 expected
+Concrete/Lex.lean:855:54: error(lean.unknownIdentifier): Unknown identifier `hnone`
+Concrete/Lex.lean:856:2: error: Too many variable names provided at alternative `some`: 7 provided, but 6 expected
+Concrete/Lex.lean:858:4: error: Too many variable names provided at alternative `none`: 2 provided, but 1 expected
+Concrete/Lex.lean:858:30: error(lean.unknownIdentifier): Unknown identifier `hnone`
+Concrete/Lex.lean:859:4: error: Too many variable names provided at alternative `some`: 7 provided, but 6 expected
+Concrete/Lex.lean:861:25: error(lean.unknownIdentifier): Unknown identifier `hmaxOther`
+Concrete/Lex.lean:862:11: error(lean.unknownIdentifier): Unknown identifier `hmax`
+Concrete/Lex.lean:866:48: error: Invalid rewrite argument: Expected an equality or iff proof or definition name, but `hprefix ?other ?a✝ ?tail
+  ?a✝¹` is a proof of
+  List.length ?other ≤ token✝¹.length
+Concrete/Lex.lean:868:63: error: Invalid rewrite argument: Expected an equality or iff proof or definition name, but
+  hprefixOther ?other ?a✝ ?tail ?a✝¹
+is a proof of
+  List.length ?other ≤ token✝.length
+Concrete/Lex.lean:868:15: error: Application type mismatch: The argument
+  otherRest
+has type
+  token✝ ∈ table
+of sort `Prop` but is expected to have type
+  List Nat
+of sort `Type` in the application
+  other ++ otherRest
+Concrete/Lex.lean:871:26: error: Type mismatch
+  otherRest
+has type
+  token✝ ∈ table
+but is expected to have type
+  token✝¹ ∈ table
+Concrete/Lex.lean:871:39: error(lean.unknownIdentifier): Unknown constant `List.append_left_cancel`
+Concrete/Lex.lean:872:6: error: Tactic `subst` failed: did not find equation for eliminating 'otherRest'
+
+case some.some
+table : List (List Nat)
+input token✝¹ token : List Nat
+rest : token✝¹ ∈ table
+hmem : token✝¹ ≠ []
+hne : input = token✝¹ ++ token
+hprefix :
+  ∀ (other : List Nat), other ∈ table → ∀ (tail : List Nat), input = other ++ tail → other.length ≤ token✝¹.length
+token✝ : List Nat
+otherRest : token✝ ∈ table
+hmemOther : token✝ ≠ []
+hprefixOther :
+  ∀ (other : List Nat), other ∈ table → ∀ (tail : List Nat), input = other ++ tail → other.length ≤ token✝.length
+a✝ : input = token✝ ++ token
+hlen : token.length = token.length
+hrest : sorry
+⊢ some (token✝¹, token) = some (token✝, token)
+Many syntactic implicit count. Inductive LongestMatch has table explicit parameter not implicit in constructor patterns. For h : LongestMatch table input out, table fixed. Constructor `@some` implicit input token rest only (table is param not bound in case). Pattern `@some _ other otherRest ...` 3 implicits +4 explicit=7 expected 6 means only 2 implicit? Input is fixed by h? Lean cases unifies input and doesn't introduce as accessible? It introduces token rest only =2 +4=6. So remove first `_`. `@none _ hnone` expected1 -> just `none hnone`. For helper cases:
+  `| none hnone =>` no @.
+  `| @some other otherRest hmem...` 2 implicit+4=6. Similarly uniqueness.
+  Constructors `.none` ambiguous due expected type not determined at `apply .none`; use `apply LongestMatch.none`; `.some` use full.
+
+  rw equation `rw [longestMatchAux.eq_def]` unfolds but leaves match token::table not reduced. Now `rw [longestMatchAux.eq_def]` then `simp only` or `simp only [List.cons...]`? `simp only [longestMatchAux]` at goal unfolds and reduces match. `rw [longestMatchAux.eq_def]` doesn't iota reduce apparently rw leaves. Add `simp only` with no lemmas? `simp only` does beta/iota. Then rw hp. Use `rw [longestMatchAux.eq_def]; simp only; rw [hp]` perhaps `simp only` reduces. Existing code often `rw [skipTriviaAux.eq_def]; simp only [hw]` and simp reduces match with hw. Here `simp only [hp]` after rw might reduce outer match and hp simultaneously. Instead replace `rw [longestMatchAux.eq_def, hp]` with `simp only [longestMatchAux, hp]` likely simp unfolds recursive definition all occurrences including tail? `simp only [longestMatchAux]` unfolds tail too recursively? simp uses equation on any `longestMatchAux input table` where table variable cannot reduce, so fine. It unfolds head and hp. For empty case same. `simp only [longestMatchAux, hp, hne, ↓reduceIte]` in one.
+
+  List.append_left_cancel unknown. Can use `List.append.inj_iff`? Query #check via #check? I can avoid theorem by rest equality using drops:
+  ```
+  calc rest = (token++rest).drop token.length := by simp
+   _=input.drop token.length := by rw [←hprefix]
+   _=(token++otherRest).drop token.length := by rw [hprefixOther]
+   _=otherRest := by simp
+  ```
+  After subst other. Good.
+
+  Most errors expected.
+
+  Fix tail none max candidate empty:
+  ```
+  rcases mem with rfl | hmem
+  · exact le_refl
+  · by_cases hc : other=[]
+    · subst other; simp
+    · exact (hnone other hmem hc tail htailPrefix).elim
+  ```
+
+  Case constructors hnone patterns.
+
+  I'll Read code then one Edit large replacements perhaps multiple changes same file one Edit old entire longest block easiest. Could replace from helper to complete with corrected whole block ~160 lines. This avoids multiple edits. Do that.
+
+• I can replace entire block lines 763-879. Should include complete ending read 875-882.Construct corrected block. Use `@some other otherRest` patterns. When cases ih with `| @some other otherRest hmem...` but other/otherRest already in context from cases out. If pattern names same will shadow or alternatives expected only explicit 4 because token/rest unified with existing? In previous `@some _ _ _` gave no arity error at line826, expected 6 and supplied 6 (3 underscores +4) but earlier helper 7 expected6. Wait line826 no error about arity. Because cases ih after htail and out has existing other otherRest, case only introduces fields 4, implicit input/token/rest maybe not introduced? Pattern `@some _ _ _` accepted perhaps underscores pattern match existing not binder? Hmm cases pattern @ includes all explicit fields but implicit indices can be wildcard and not count introduced? Arity errors said 7 provided but6 expected where `@some _ other otherRest hmem hne hprefix hmax`: 3 implicit+4=7. It expected 2 implicit+4. So line826 `@some _ _ _ hmem...` =3+4=6 accepted, because other/rest already in outer context means only input implicit +? It introduced no new token/rest (underscores unify?), weird. I can avoid @some entirely and use `| some hmem hneOther hprefixOther hmax` when other/rest already known. For helper tail h some need introduce token/rest, use `| @some other otherRest hmem...` correct 6. Uniqueness similarly `@some token rest...` 6.
+
+  Constructor `LongestMatch.some` explicit table fixed. Fine.
+
+  When `apply LongestMatch.some ...` max expected goal output `some` known.
+
+  `rw [htail] at ih` then `cases ih with | none hnone`; scanner goal after cases htail? I didn't `rw [htail]` goal, but `cases htail : expr` tactic substitutes equation in goal? cases h : expr usually goal still match expr; htail does not rewrite goal automatically. Previous code `cases htail` then after cases goal match longestMatchAux... perhaps `cases htail : ...` generalizes target? Tactic cases expression uses `cases h :` and reverts dependencies? In existing code they explicitly `rw [hline]`. I should `rw [htail]` goal as well. In branch none after cases, do `rw [htail] at ih ⊢` to reduce match. In some `rw [htail] at ih ⊢`. Good.
+
+  Initial `simp only [longestMatchAux, hp]` unfolds head and reduces. Empty `simp only [longestMatchAux,hp]` then `simp` if. `simp only [longestMatchAux,hp,↓reduceIte]`. For nonempty `simp only [longestMatchAux,hp,hne,↓reduceIte]`.
+
+  Unique `none` no implicit.
+
+  Rest calc.
+
+  I'll Edit.
+
+warning: Git tree '/home/unbalancedparen/projects/clones/wip-slice0-lexer-tokens' is dirty
+Concrete/Lex.lean:780:24: error: Application type mismatch: The argument
+  hne
+has type
+  other ≠ []
+but is expected to have type
+  candidate ≠ []
+in the application
+  hhead tail hne
+Concrete/Lex.lean:808:14: error: Tactic `rewrite` failed: Did not find an occurrence of the pattern
+  longestMatchAux input table
+in the target expression
+  LongestMatch (token :: table) input
+    (match none with
+    | none => some (token, rest)
+    | some (other, otherRest) => if other.length < token.length then some (token, rest) else some (other, otherRest))
+
+case neg.none
+input token : List Nat
+table : List (List Nat)
+ih : LongestMatch table input none
+rest : List Nat
+hp : prefixRest token input = some rest
+hprefix : input = token ++ rest
+hne : ¬token = []
+htail : longestMatchAux input table = none
+⊢ LongestMatch (token :: table) input
+    (match none with
+    | none => some (token, rest)
+    | some (other, otherRest) => if other.length < token.length then some (token, rest) else some (other, otherRest))
+Concrete/Lex.lean:821:16: error: Tactic `rewrite` failed: Did not find an occurrence of the pattern
+  longestMatchAux input table
+in the target expression
+  LongestMatch (token :: table) input
+    (match some (other, otherRest) with
+    | none => some (token, rest)
+    | some (other, otherRest) => if other.length < token.length then some (token, rest) else some (other, otherRest))
+
+case neg.some.mk
+input token : List Nat
+table : List (List Nat)
+rest : List Nat
+hp : prefixRest token input = some rest
+hprefix : input = token ++ rest
+hne : ¬token = []
+other otherRest : List Nat
+ih : LongestMatch table input (some (other, otherRest))
+htail : longestMatchAux input table = some (other, otherRest)
+⊢ LongestMatch (token :: table) input
+    (match some (other, otherRest) with
+    | none => some (token, rest)
+    | some (other, otherRest) => if other.length < token.length then some (token, rest) else some (other, otherRest))
+• Helper head branch after rcases rfl substitutes token? hne is other nonempty? In successful case token head and other tail. `rcases ... with rfl` candidate=token; hne currently other nonempty not head. hhead requires token nonempty unknown; but hhead takes token≠[] -> input≠... and htail prefix. I don't know head nonempty. To prove candidate.length≤other.length for head candidate if empty, length 0; if nonempty contradiction. Should by_cases hc: token=[] then simp else contradiction. Earlier used hne wrong. Fix:
+  ```
+  · by_cases hempty : candidate=[] ... 
+  ```
+  after rfl candidate token perhaps token.
+  ```
+  · by_cases hempty : token=[]
+    · subst token; simp
+    · exact (hhead tail hempty htail).elim
+  ```
+  rw at ih ⊢ fails because cases htail already rewrote goal, so use at ih only and `simp only` goal to reduce match. Change `rw [htail] at ih ⊢` -> `rw [htail] at ih; simp only` in both. `simp only` iota reduces. For some then by_cases hlt simp.
+
+  I'll edit small three locations one Edit via entire snippets perhaps replace_all `rw [htail] at ih ⊢` with `rw [htail] at ih\n          simp only` but indentation different 10 vs12 and replace all same string gives indentation embedded. Could use replace_all line only `rw [htail] at ih ⊢` to `rw [htail] at ih\n          simp only` first occurrence indent 10, second currently 12, adding 10 spaces okay tactic still accepted regardless indentation? second nested `cases out` with next `cases ih` at 12, `simp only` at10 might end branch wrong. Better replace entire sound small block from `| none =>...` to before public. But also helper. One Edit replace from helper `rcases...` through entire sound again cumbersome. I can first helper edit then Read before next, fine.One Edit can old string spanning helper through two rw all way line821 with lots content. Or replace unique small helper and use `rw [htail] at ih ⊢` replace_all with `rw [htail] at ih\n            simp only` works first:
+  context first at 10 spaces then inserted 12 spaces `simp only`, next `cases ih` at 10. This creates extra tactic inside branch still okay:
+  ```
+  | none =>
+    rw...
+    simp only
+    cases ih...
+  ```
+  if inserted 12 spaces while rw at10, Lean layout allows more indented continuation after rw? It would be nested inside `rw`? Tactic sequences can indent any > parent `|`, typically all same expected but Lean layout uses first tactic column sets sequence; a more indented second could be parser continuation and fail. Better replace first and second separately in same Edit impossible unless replace_all with newline indentation equal original prefix captured no regex. Can use Edit replace_all only rw text with `rw [htail] at ih <;> simp only`? `rw ... at ih` cannot use `<;>`? `rw [htail] at ih <;> simp only` applies simp to all goals after rw, fine. Replace all same text with `rw [htail] at ih <;> simp only` same line. Good. One Edit can replace helper and rw if old string spanning from helper line to first? Edit only one old string. Could use `old_string":"    · exact (hhead tail hne htail).elim"` new helper then Read again. Fine.Should Read before edit.
+
+warning: Git tree '/home/unbalancedparen/projects/clones/wip-slice0-lexer-tokens' is dirty
+Concrete/Lex.lean:780:24: error(lean.unknownIdentifier): Unknown identifier `token`
+• After rcases rfl token eliminated replaced candidate? Use candidate. At branch context unknown but `candidate` exists. `by_cases hempty : candidate=[]`; hhead expects token but after rfl candidate substituted token? Use candidate.Compile.warning: Git tree '/home/unbalancedparen/projects/clones/wip-slice0-lexer-tokens' is dirty
+Great. Decimal insert. Read marker.
+
+• Decimal code:
+  scanDigits sound stop with DecimalDigit.
+  `decimalInteger` use let out match. Sound generalize heq; hrun. When h after generalize perhaps let reduction.
+  ```
+    unfold decimalInteger at h
+    generalize heq : scanDigits cs = out at h
+    cases out with | mk digits rest =>
+      have hrun...
+      cases digits...
+  ```
+  unfold has `let out :=...` `generalize` perhaps h contains let. `simp only` at h to zeta reduce? `generalize scanDigits cs = out at h` will replace under let then h : (let out:=out; match out.1...) =... ; cases out reduces. Fine.
+  At nil `simp at h`.
+  cons d ds by_cases hd.
+  - subst d; cases ds
+    nil:
+     `cases Option.some.inj h`
+     exact DecimalInteger.intro hrun (by decide) rfl
+    cons e ds:
+     `simp at h`
+  - d nonzero:
+   `cases Option.some.inj h`
+   `exact .intro hrun (by simp [DigitsAccepted,hd]) rfl`
+  But scanner match fallback for d nonzero including any, h simplification perhaps not reduced in context. Should have `simp only [hd] at h` no match on d≠48 uses match compiler if. `simp [hd] at h` reduces. Before cases Option.some.inj h perhaps h already simplified by cases digits/ds? Cases reduces match. by_cases doesn't substitute nonzero, matcher uses if d=48 generated, h is `(if d=48 then none else some...)` likely `simp [hd] at h`.
+  Then `cases Option.some.inj h`.
+  Complete:
+  ```
+    cases h with | @intro input digits rest value hrun hacc hval =>
+      rw [decimalInteger.eq_def, scanDigits_complete hrun]
+  ```
+  Will rw unfold let reduce? Existing use simp. `simp only [decimalInteger, scanDigits_complete hrun]`
+  Then cases digits etc.
+  At d=48 ds nil goal some([48],value,rest)=some([48],decimalValue...,rest); `simp [hval]`.
+  d nonzero `simp [hd,hval]`.
+  Empty `simp [DigitsAccepted] at hacc`.
+  zero multiple `simp [DigitsAccepted] at hacc`.
+  Uniqueness option injection.
+
+  Add docs rest nothing.warning: Git tree '/home/unbalancedparen/projects/clones/wip-slice0-lexer-tokens' is dirty
+Concrete/Lex.lean:942:32: error: Expected type must not contain free variables
+  DigitsAccepted ([48], rest).fst
+
+Hint: Use the `+revert` option to automatically clean up and revert free variables
+Concrete/Lex.lean:945:30: error: Application type mismatch: The argument
+  h
+has type
+  (match d :: ds with
+    | [] => none
+    | [48] => some (d :: ds, decimalValue (d :: ds), rest)
+    | 48 :: tail => none
+    | head :: tail => some (d :: ds, decimalValue (d :: ds), rest)) =
+    some out
+but is expected to have type
+  some ?m.178 = some ?m.179
+in the application
+  Option.some.inj h
+Concrete/Lex.lean:946:21: error: Application type mismatch: The argument
+  hrun
+has type
+  DigitRun cs (d :: ds) rest
+but is expected to have type
+  DigitRun cs out.fst out.2.snd
+in the application
+  DecimalInteger.intro hrun
+Concrete/Lex.lean:946:27: error: unsolved goals
+cs : List Nat
+out : List Nat × Nat × List Nat
+rest : List Nat
+d : Nat
+ds : List Nat
+heq : scanDigits cs = (d :: ds, rest)
+h :
+  (match d :: ds with
+    | [] => none
+    | [48] => some (d :: ds, decimalValue (d :: ds), rest)
+    | 48 :: tail => none
+    | head :: tail => some (d :: ds, decimalValue (d :: ds), rest)) =
+    some out
+hrun : DigitRun cs (d :: ds) rest
+hd : ¬d = 48
+⊢ match out.fst with
+  | [] => False
+  | [48] => True
+  | 48 :: tail => False
+  | head :: tail => True
+Concrete/Lex.lean:944:19: warning: This simp argument is unused:
+  hd
+
+Hint: Omit it from the simp argument list.
+  [apply] simp only [↓reduceIte] at h
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+Concrete/Lex.lean:944:23: warning: This simp argument is unused:
+  ↓reduceIte
+
+Hint: Omit it from the simp argument list.
+  [apply] simp only [hd] at h
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+Concrete/Lex.lean:946:52: warning: This simp argument is unused:
+  hd
+
+Hint: Omit it from the simp argument list.
+  [apply] simp [DigitsAccepted]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+Concrete/Lex.lean:956:4: error: Invalid alternative name `nil`: Expected `zero` or `succ`
+Concrete/Lex.lean:957:4: error: Invalid alternative name `cons`: Expected `zero` or `succ`
+Concrete/Lex.lean:955:4: error: Alternative `zero` has not been provided
+Concrete/Lex.lean:955:4: error: Alternative `succ` has not been provided
+Issues dependent pair projections hrun not simplified after cases scanned? `rw [heq] at hs` only rewrites scanDigits cs but hs has projections, rw yields `(digits,rest).fst` not reduced. Should have `simpa using hs` after rw:
+  ```
+  have hs...
+  rw [heq] at hs
+  simpa using hs
+  ```
+  Error digits accepted ([48],rest).fst indicates not reduced. Fix.
+
+  Matcher not reducing d::ds with hd because pattern `[48]` overlapping and `48::tail` matcher may need cases ds even when d nonzero? Simp [DigitsAccepted] uses matcher but h not. I can `simp [hd] at h` perhaps earlier used simp only no unfold; simp only hd doesn't iota match equational compiler due match not simple if. `simp [hd] at h` includes default lemmas and split matcher. Use `simp [hd] at h` likely reduces. Complete `rename_i digits` grabbed value (Nat) because implicits order input digits rest value, after cases h existing input? rename_i picks value perhaps. Avoid rename. In `cases h with | @intro digits rest value hrun hacc hval` expected implicit? Constructor DecimalInteger `{input digits rest} {value}` 4 implicit, input fixed so 3 new likely `@intro digits rest value` correct. Current `| intro ...; rename_i digits` picks wrong Nat. Use `@intro digits rest value hrun hacc hval` and see arity. Similar longest learned fixed input leaves digits rest value 3. Good.
+
+  Sound after cases h output out, Option.some.inj h orientation gives constructed=out, cases should substitute out and hrun match. Fine.
+
+  Zero case h perhaps `Option.some.inj h` works after ds nil.
+
+  Fix.
+
+• Edit block.warning: Git tree '/home/unbalancedparen/projects/clones/wip-slice0-lexer-tokens' is dirty
+Concrete/Lex.lean:942:32: error: Expected type must not contain free variables
+  DigitsAccepted ([48], rest).fst
+
+Hint: Use the `+revert` option to automatically clean up and revert free variables
+Concrete/Lex.lean:945:30: error: Application type mismatch: The argument
+  h
+has type
+  (d :: ds, decimalValue (d :: ds), rest) = out
+but is expected to have type
+  some ?m.187 = some ?m.188
+in the application
+  Option.some.inj h
+Concrete/Lex.lean:946:21: error: Application type mismatch: The argument
+  hrun
+has type
+  DigitRun cs (d :: ds) rest
+but is expected to have type
+  DigitRun cs out.fst out.2.snd
+in the application
+  DecimalInteger.intro hrun
+Concrete/Lex.lean:946:27: error: unsolved goals
+cs : List Nat
+out : List Nat × Nat × List Nat
+rest : List Nat
+d : Nat
+ds : List Nat
+heq : scanDigits cs = (d :: ds, rest)
+hrun : DigitRun cs (d :: ds) rest
+hd : ¬d = 48
+h : (d :: ds, decimalValue (d :: ds), rest) = out
+⊢ match out.fst with
+  | [] => False
+  | [48] => True
+  | 48 :: tail => False
+  | head :: tail => True
+Concrete/Lex.lean:946:52: warning: This simp argument is unused:
+  hd
+
+Hint: Omit it from the simp argument list.
+  [apply] simp [DigitsAccepted]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+Now h simplified to pair equality (simp at h reduced Option.some.injEq), so `cases h` not Option.some.inj. Zero case h perhaps not simplified remains some equality. At zero error expected type DigitsAccepted ([48],rest).fst suggests hrun not simplified? hrun shown? At zero `exact .intro hrun` expected DigitRun cs out... perhaps h cases didn't substitute out due Option.some.inj? It seems hrun itself perhaps `DigitRun cs ([48],rest).fst ...` despite annotation? Wait annotation says digits rest but expected error DigitsAccepted ([48],rest).fst from proof `by decide` target depends on out after cases h not fully substitution? Use `cases h` at both to substitute pair. Then hrun matches. For nonzero `cases h`. Zero `cases Option.some.inj h` h is Option equality not simplified; could `cases h` directly also works Option.some injection? Tactic cases equality of constructors with different variables will inject automatically yes `cases h` on `some tuple=some out` works. Use `cases h` both. At nonzero pair equality `cases h` definitely.
+
+  Error zero DigitsAccepted ([48],rest).fst may resolve.
+
+  Change two `cases Option.some.inj h` within decimal only to `cases h`. There are other string same text, target block unique by surrounding. One Edit replace_all not safe. Replace entire sound chunk two.warning: Git tree '/home/unbalancedparen/projects/clones/wip-slice0-lexer-tokens' is dirty
+Concrete/Lex.lean:942:32: error: Expected type must not contain free variables
+  DigitsAccepted ([48], rest).fst
+
+Hint: Use the `+revert` option to automatically clean up and revert free variables
+Only zero by decide target DigitsAccepted ([48],rest).fst not reduced. hrun expected apparently annotation reduced? Goal after cases h out substituted but projections remain due dependent generalization. `exact .intro hrun (by decide) rfl` goal DecimalInteger cs (([48], decimalValue..., rest)?). Output is triple nested `(List Nat × Nat × List Nat)` constructed scanner `(out.1, decimalValue, out.2)` where out pair; after scanned cases projections remain. Constructor .intro hrun unifies digits with `([48],rest).fst`, rest with pair.snd. hrun annotation DigitRun cs [48] rest defeq should unify yes. `by decide` target DigitsAccepted ([48],rest).fst not reduced by decide due free var projections (whnf should reduce though expected type free variables error from decide tactic). Supply explicit `show DigitsAccepted [48] from by decide` may expected defeq but elaborator:
+  `exact DecimalInteger.intro hrun (show DigitsAccepted [48] from by decide) rfl`
+  It will unify explicitly digits [48] and rest. Could fix both nonzero using explicit hacc typed.
+  At zero:
+  `exact DecimalInteger.intro (digits := [48]) (rest := rest) (value := decimalValue [48]) hrun (by decide) rfl`
+  Constructor implicit input inferred. This forces goal defeq. Nonzero succeeded but explicit not needed. Use named digits/rest/value. Syntax constructor params includes `{input digits rest} {value}`, yes.
+
+  Do edit.
+
+warning: Git tree '/home/unbalancedparen/projects/clones/wip-slice0-lexer-tokens' is dirty
+• All scanner proofs done. Should have conformance examples and changelog. Add examples to Lex section before end Conformance. Also Surface0 examples perhaps accepted/refused judgment directly. User says kernel checked decide/rfl examples accepted/refused. Lex examples by decide satisfy. Case sensitivity. Should have strings `rawOk` trivial predicate choose nothing. Use `(fun _ => False)` ensures only escapes. Examples:
+  identifier [65,98,99,33]=some([65,98,99],[33]) by decide
+  identifier [97,98,99]=some([97,98,99],[]) by decide
+  example : ([65,98,99] : List Nat) ≠ [97,98,99] := by decide
+  identifier digit none, unicode é none perhaps existing ident tests. Accepted underscore/digits.
+  String:
+  `stringBody (fun _ => False) [92,110,34,65] = some([10],[65]) := by decide`
+  All six escape perhaps one example output list.
+  Input sequence `[92,110, 92,116, 92,114, 92,92, 92,34, 92,48, 34, 65]`.
+  Expected `[10,9,13,92,34,0]`.
+  Refused `\q`: `[92,113,34] = none`
+  Raw LF `[10,34] none`; CR; EOF `[]`; EOF after escape? `[92] none`; EOF after ordinary with raw false returns none but not meaningful. Use escape incomplete `[92,110] none` covers EOF before quote. Empty covers.
+  Unknown escape. Raw quote closes accepted some([], rest) perhaps escapes all includes closing.
+  Raw controls undecided comment: "These examples use `False` only to exclude every raw body scalar; they choose no rule for raw tabs or other controls." `False` does choose false for examples but instantiating trivial predicate only to exercise escapes allowed. Say chooses nothing for Concrete. Could use rawOk `fun _ => True` would accept all, false okay. User specifically "Examples may instantiate it with a trivial predicate only to exercise escapes, LF/CR refusal and EOF refusal, and must say they choose nothing." comment exact.
+
+  Longest abstract:
+  `longestMatch [[1], [1,2,3], [1,2], [9]] [1,2,4] = some([1,2],[4])` by decide. Tests longest not last longest? Table has longer nonprefix [1,2,3], good.
+  Tie duplicates `[[1,2],[1,2]]` output first same irrelevant.
+  none `[[],[1,2],[3]] [1,9] = none` (empty ignored).
+  Input empty none for nonempty.
+  No concrete operators.
+
+  Decimal accepted 0,7,200,255:
+  `decimalInteger [48,65] = some([48],0,[65])`; 7 EOF; 200 perhaps rest 32; 255 EOF. Refuse 007 and 00.
+  `007` list [48,48,55], none. `00` [48,48].
+  `decimalInteger [65] none` not required perhaps accepted refused non-digit. No suffix examples.
+  Value decimalValue foldl computes 200,255 by decide.
+  Conformance Surface0 direct judgment perhaps no need but module should include examples independent? Existing Surface0 has examples for Comment not Trivia. User says "a declarative judgment ... kernel checked conformance examples accepted/refused" Lex covers scanners. Could add direct Surface examples for case sensitivity and StringEscape and DigitsAccepted. `example : DigitsAccepted [48] := by decide`, `¬DigitsAccepted [48,48,55]` by decide; `StringEscape...`. These are not full judgments but scanner examples full. Fine.
+
+  Should update both header done.
+
+  Changelog short:
+  ### Lexer token components (2026-11-08)
+  Stacked on unlanded `wip/slice0-lexer-ws` at `e474d8f0`.
+  - Adds independent judgments and total scanners ... sound complete unique...
+  - raw param undecided etc no concrete tokens.
+
+  Commit message dependency: subject `lexer: scan slice-0 token components` body `Stacked on unlanded wip/slice0-lexer-ws at e474d8f0.` plus summary. Commit no push.
+
+  Before conformance, Todo second done third progress. Add Lex examples. Read tail.
+
+• Add examples replacing end block.Compile examples.warning: Git tree '/home/unbalancedparen/projects/clones/wip-slice0-lexer-tokens' is dirty
+Should add Surface0 examples direct? User asks declarative judgment and scanner conformance accepted/refused. Current Lex yes. Case-sensitivity exact scalar list yes. Identifier rest not continue by IdentBody. String raw parameter yes. Longest uniqueness. Decimal leading zero. Perhaps longest scanner complete uses sound+unique, good. Sound proof uses `longestMatch_cons_of_no_match` correctness checked.
+
+  Potential concern theorem names `_sound` `_complete` all present. LongestMatch result unique theorem yes. Identifier unique etc.
+
+  Should update module header comments both done. Changelog. Next build axiom. Before run need check no banned constructs in new lines via Grep (partial/sorry/native_decide/axiom) excluding existing perhaps. Also inspect git diff, ensure no docs. Then axioms update command exactly inside nix and PATH. Must `bash scripts/proofs/axioms.sh --update`. This builds spec maybe not heavy? allowed. Should save old golden diff to verify no existing changed. Since likely no new theorems in Surface0, golden unchanged. But update could reorder? I can git diff before/after. Run update then `git diff -- scripts/proofs/axioms.golden` and `bash scripts/proofs/axioms.sh`. User wants check every new line declarations added with allowed. If no diff say unchanged. Then lake build. Could parallel axioms update and lake build? Both build same tree possible race, don't. Sequential. Also build after axiom check. `lake build` full heavy user explicitly. Use `nix develop .#gates -c bash -c 'export...; bash ... --update'`. Already PATH before nix but requested inside `nix develop` with export; use `nix develop .#gates -c bash -c 'export PATH...; bash...'`. Good.
+
+  Todo third done fourth progress. Run update.
+
+warning: Git tree '/home/unbalancedparen/projects/clones/wip-slice0-lexer-tokens' is dirty
+wrote scripts/proofs/axioms.golden (1467 theorems)
+• 1467 theorems. Should inspect golden diff.diff --git a/scripts/proofs/axioms.golden b/scripts/proofs/axioms.golden
+index 7f0529092..63f4bd36d 100644
+--- a/scripts/proofs/axioms.golden
++++ b/scripts/proofs/axioms.golden
+@@ -882,10 +882,21 @@ ConcreteSpec.Stuck.typeError.sizeOf_spec
+ ConcreteSpec.Stuck.unbound.sizeOf_spec	
+ ConcreteSpec.Stuck.wrongMode.sizeOf_spec	
+ ConcreteSpec.Surface0.CommentBody.brecOn	
++ConcreteSpec.Surface0.DigitRun.brecOn	
++ConcreteSpec.Surface0.IdentBody.brecOn	
++ConcreteSpec.Surface0.StringBody.brecOn	
+ ConcreteSpec.Surface0.Trivia.brecOn	
+ ConcreteSpec.Surface0.Utf8.Decodes.brecOn	propext
+ ConcreteSpec.Surface0.Utf8.Encodes._sparseCasesOn_1.else_eq	propext
+ ConcreteSpec.Surface0.Utf8.Encodes._sparseCasesOn_2.else_eq	propext
++ConcreteSpec.Surface0.instDecidableDigitsAccepted._proof_1	
++ConcreteSpec.Surface0.instDecidableDigitsAccepted._proof_2	propext
++ConcreteSpec.Surface0.instDecidableDigitsAccepted._proof_3	
++ConcreteSpec.Surface0.instDecidableDigitsAccepted._proof_4	propext
++ConcreteSpec.Surface0.instDecidableDigitsAccepted._proof_5	
++ConcreteSpec.Surface0.instDecidableDigitsAccepted._proof_6	propext
++ConcreteSpec.Surface0.instDecidableDigitsAccepted._proof_7	
++ConcreteSpec.Surface0.instDecidableDigitsAccepted._proof_8	
+ ConcreteSpec.Surface0.instDecidableEncodes._proof_1	
+ ConcreteSpec.Surface0.instDecidableEncodes._proof_2	
+ ConcreteSpec.Surface0.instDecidableEncodes._proof_3	
+@@ -1447,6 +1458,10 @@ _private.ConcreteSpec.Proofs.Slice1.0.ConcreteSpec.runBody.match_1.eq_3
+ _private.ConcreteSpec.Proofs.Slice1.0.ConcreteSpec.runBody.match_3.eq_1	
+ _private.ConcreteSpec.Proofs.Slice1.0.ConcreteSpec.runBody.match_3.eq_2	
+ _private.ConcreteSpec.Proofs.Slice1.0.ConcreteSpec.runBody.match_3.eq_3	
++_private.ConcreteSpec.Spec.Surface0.0.ConcreteSpec.Surface0.DigitsAccepted.match_1.eq_1	propext
++_private.ConcreteSpec.Spec.Surface0.0.ConcreteSpec.Surface0.DigitsAccepted.match_1.eq_2	propext
++_private.ConcreteSpec.Spec.Surface0.0.ConcreteSpec.Surface0.DigitsAccepted.match_1.eq_3	propext
++_private.ConcreteSpec.Spec.Surface0.0.ConcreteSpec.Surface0.DigitsAccepted.match_1.eq_4	propext
+ _private.ConcreteSpec.Spec.Surface0.0.ConcreteSpec.Surface0.Utf8.Encodes.match_1.eq_1	propext
+ _private.ConcreteSpec.Spec.Surface0.0.ConcreteSpec.Surface0.Utf8.Encodes.match_1.eq_2	propext
+ _private.ConcreteSpec.Spec.Surface0.0.ConcreteSpec.Surface0.Utf8.Encodes.match_1.eq_3	propext
+ M Concrete/Lex.lean
+ M ConcreteSpec/Spec/Surface0.lean
+ M scripts/proofs/axioms.golden
+?? changelog.d/2026-11-08-lexer-tokens.md
+warning: Git tree '/home/unbalancedparen/projects/clones/wip-slice0-lexer-tokens' is dirty
+=== P: population ===
+  ok   all 28 ConcreteSpec source modules are in the root's import closure
+  ok   1467 theorems from all 12 source modules that declare one
+=== A: standard axioms only ===
+  ok   every theorem's transitive axioms are among Classical.choice Quot.sound propext (Classical.choice 10, Quot.sound 138, propext 515)
+=== G: golden list ===
+  ok   the inventory equals scripts/proofs/axioms.golden (1467 theorems)
+=== negative controls ===
+  ok   control: a theorem using a declared axiom is refused, and only it (ConcreteSpecControl.usesExtra (ConcreteSpecControl.extra))
+  ok   control: a new theorem, even axiom-free and even private, is a golden difference
+  ok   control: a golden missing a theorem (ConcreteSpec.Atom.bool.inj) differs
+  ok   control: a golden recording other axioms for a theorem differs
+  ok   control: source modules outside a (truncated) import closure are reported
+PROOF-AXIOMS: PASS=9 FAIL=0
+Golden new lines all my declarations DigitRun IdentBody StringBody, decidable DigitsAccepted and match. LongestMatch no brecOn? Why not? Perhaps inductive with option no recursive so no brecOn theorem? no new line. Identifier no rec. DecimalInteger no rec. All new only mine and allowed. no existing changed (diff plus only). Good. Now lake build.
+
+warning: Git tree '/home/unbalancedparen/projects/clones/wip-slice0-lexer-tokens' is dirty
+Build completed successfully (30 jobs).
+• Build says 30 jobs perhaps default ConcreteSpec only? lakefile defaultTargets ConcreteSpec but user lake build succeed. Concrete/Lex not in default target? lake build output 30 jobs perhaps root libraries? `defaultTargets=["ConcreteSpec"]` only spec. I separately elaborated Lex. User requires lake build, done. Should run `lake build Concrete` to verify deliverable build with warningAsError. I ran lean direct no warnings, but build Concrete prudent. User asked lake build exactly succeeded, but Concrete target compile should. Run targeted `lake build Concrete` not full heavy new compile small. Should verify conformance in final deliverable via lake env lean already. Build Concrete perhaps ensures. Then inspect git status new files build not tracked. Should review diff, no banned lists. I should run `git diff --check` and `git diff --stat`, `git diff` perhaps 600 lines output within tools truncated but need read relevant final files. I need review semantics. Also potential need use `lake build` after final changes no more changes. I should run Concrete now.warning: Git tree '/home/unbalancedparen/projects/clones/wip-slice0-lexer-tokens' is dirty
+✔ [7/44] Built LeanCompilerBackend.Verified.BuildIdentity (147ms)
+✔ [8/44] Built Concrete.LL1 (595ms)
+✔ [9/44] Built Concrete.Lex (956ms)
+✔ [10/44] Built LeanCompilerBackend.IR (1.3s)
+✔ [11/44] Built LeanCompilerBackend.Selection (274ms)
+✔ [12/44] Built LeanCompilerBackend.CFG (377ms)
+✔ [13/44] Built LeanCompilerBackend.Section (371ms)
+✔ [14/44] Built LeanCompilerBackend.Memory (311ms)
+✔ [15/44] Built LeanCompilerBackend.Numeric (326ms)
+✔ [16/44] Built LeanCompilerBackend.Aggregate (398ms)
+✔ [17/44] Built Concrete.BIR (1.8s)
+✔ [18/44] Built LeanCompilerBackend.Floating (324ms)
+✔ [19/44] Built LeanCompilerBackend.AArch64.ABI (337ms)
+✔ [20/44] Built LeanCompilerBackend.Assembly (390ms)
+✔ [21/44] Built Concrete.Backend.Runtime (329ms)
+✔ [22/44] Built LeanCompilerBackend.AggregateABI (491ms)
+✔ [23/44] Built LeanCompilerBackend.AMD64ABI (457ms)
+✔ [24/44] Built LeanCompilerBackend.Verified.Source (965ms)
+✔ [25/44] Built Concrete.BIR.Progress (515ms)
+✔ [26/44] Built Concrete.Backend.LLVM (212ms)
+✔ [27/44] Built LeanCompilerBackend.Validate (1.0s)
+✔ [28/44] Built LeanCompilerBackend.Verified.Admission (450ms)
+✔ [29/44] Built LeanCompilerBackend.Liveness (413ms)
+✔ [30/44] Built LeanCompilerBackend.Allocation.HomeFlow (414ms)
+✔ [31/44] Built LeanCompilerBackend.Semantics (612ms)
+✔ [32/44] Built LeanCompilerBackend.Verified.Canonical (289ms)
+✔ [33/44] Built LeanCompilerBackend.Allocation (433ms)
+✔ [34/44] Built LeanCompilerBackend.AArch64.ALU (272ms)
+✔ [35/44] Built LeanCompilerBackend.Verified.Plans (369ms)
+✔ [36/44] Built LeanCompilerBackend.Verified.StackMIR (763ms)
+✔ [37/44] Built LeanCompilerBackend.Verified.TypedA64 (678ms)
+✔ [38/44] Built LeanCompilerBackend.AMD64 (1.6s)
+✔ [39/44] Built LeanCompilerBackend.Verified.Job (617ms)
+✔ [40/44] Built LeanCompilerBackend.AArch64 (2.3s)
+✔ [41/44] Built Concrete.Backend.LCB (1.7s)
+✔ [42/44] Built Concrete.Premises (378ms)
+✔ [43/44] Built Concrete (267ms)
+Build completed successfully (44 jobs).
+scripts/proofs/axioms.golden:885: trailing whitespace.
++ConcreteSpec.Surface0.DigitRun.brecOn	
+scripts/proofs/axioms.golden:886: trailing whitespace.
++ConcreteSpec.Surface0.IdentBody.brecOn	
+scripts/proofs/axioms.golden:887: trailing whitespace.
++ConcreteSpec.Surface0.StringBody.brecOn	
+scripts/proofs/axioms.golden:892: trailing whitespace.
++ConcreteSpec.Surface0.instDecidableDigitsAccepted._proof_1	
+scripts/proofs/axioms.golden:894: trailing whitespace.
++ConcreteSpec.Surface0.instDecidableDigitsAccepted._proof_3	
+scripts/proofs/axioms.golden:896: trailing whitespace.
++ConcreteSpec.Surface0.instDecidableDigitsAccepted._proof_5	
+scripts/proofs/axioms.golden:898: trailing whitespace.
++ConcreteSpec.Surface0.instDecidableDigitsAccepted._proof_7	
+scripts/proofs/axioms.golden:899: trailing whitespace.
++ConcreteSpec.Surface0.instDecidableDigitsAccepted._proof_8	
+Trailing tab existing generated golden style all lines with tab. git diff --check naturally existing generated additions flagged. Can't modify generated manually. Mention no issue. Do inspect status separately because && stopped. Could use `git diff --check -- . ':(exclude)scripts/proofs/axioms.golden'` to verify other files. Also review diff no docs. I should use git diff Surface0/Lex perhaps large. Read current new blocks and reason.
+
+  Potential concern no Surface0 conformance examples new. Could add direct examples perhaps improve. But then golden possibly examples no theorem? `example` generates inaccessible theorem perhaps axiom golden population likely examples not included? Existing examples not in golden. Could add no need. User specifically "kernel-checked decide/rfl conformance examples (accepted and refused)" Lex by decide all.
+
+  Should check "exactly four pieces" I added helpers okay.
+
+  Should have "output (lexeme, rest), rest not starting IdentContinue" yes.
+
+  Case sensitivity: lexemes compared exact scalar lists example yes.
+
+  String judgment input after opening quote output decoded list rest after closing yes.
+
+  Backslash only list yes.
+  Raw LF CR refused yes.
+  EOF refused yes.
+  Raw other param. `rawOk` is only used fallback which excludes all 34,92,10,13 by patterns. Sound reconstructs. Complete `simp [stringBody,hb,hc...]` with hq hl hr unused but passes ensures. No raw examples choosing rules. Header "parameterize all other raw scalars" fine.
+
+  Longest judgment: no table entry prefix longer. It quantifies other entries including empty, rest existential via input=... exactly prefix. Some token nonempty. None no nonempty. Scanner returns longest or none. Unique theorem. Examples arbitrary numeric. No concrete op.
+
+  Decimal: `DigitsAccepted` [48] true, nonzero first true, empty false. maximal digit run. numeric fold. Rest only not digit. accepted examples values. No range check. Good.
+
+  One concern numeric function uses `Nat` subtraction c-48 but digits constrained, fine.
+
+  "update both module header comments state covered explicitly not" yes Surface header explicitly not raw controls? It says string raw param undecided, concrete lists excluded. Lex header similar. Surface header no diagnostic etc.
+
+  Changelog names dep. Commit body dependency.
+
+  Perhaps add tests for declarative refusals not just scanner. Sound/complete ensure. Examples scanner refusal enough.
+
+  Should review git diff. Use Bash `git diff -- ConcreteSpec/Spec/Surface0.lean changelog...` output manageable. `git diff -- Concrete/Lex.lean` ~650 lines could truncated but I have all from edits. Could use `git diff --unified=3 -- ...` read perhaps 100k enough 40k. Also check `git status`, `git diff --name-only`, `git diff --check exclude golden`. And perhaps `git diff --numstat golden` confirms 15 additions 0 deletions. Use parallel.
+
+ M Concrete/Lex.lean
+ M ConcreteSpec/Spec/Surface0.lean
+ M scripts/proofs/axioms.golden
+?? changelog.d/2026-11-08-lexer-tokens.md
+Concrete/Lex.lean
+ConcreteSpec/Spec/Surface0.lean
+scripts/proofs/axioms.golden
+15	0	scripts/proofs/axioms.golden
+diff --git a/ConcreteSpec/Spec/Surface0.lean b/ConcreteSpec/Spec/Surface0.lean
+index 5f21b1d12..e91380995 100644
+--- a/ConcreteSpec/Spec/Surface0.lean
++++ b/ConcreteSpec/Spec/Surface0.lean
+@@ -1,10 +1,13 @@
+ /-!
+ # Settled pieces of the slice-0 surface
+ 
+-UTF-8 source validity, NUL/BOM refusal, ASCII identifier characters, the four settled
+-whitespace scalars, line comments and maximal trivia runs are specified here. Tokens, keywords,
+-punctuation, literals, grammar, diagnostics and CLI spellings are not defined. There is no
+-shebang or block-comment rule; no other Unicode whitespace is included.
++UTF-8 source validity, NUL/BOM refusal, ASCII identifiers, the four settled whitespace scalars,
++line comments and maximal trivia runs are specified here. String bodies have only the six decided
++escapes and take the undecided treatment of other raw scalars as a parameter. Longest match is
++parametric in an arbitrary table, and decimal integer lexemes refuse leading zeroes. Keywords,
++reserved words, builtins, concrete punctuation and operators, suffixes, other literals, grammar,
++diagnostics and CLI spellings are not defined. There is no shebang or block-comment rule; no other
++Unicode whitespace is included.
+ -/
+ 
+ namespace ConcreteSpec.Surface0
+@@ -97,6 +100,75 @@ inductive Trivia : List Nat → (List Nat × List Nat) → Prop
+       LineComment input (comment, rest) → Trivia rest (trivia, final) →
+       Trivia input (comment ++ trivia, final)
+ 
++/-- The longest continuation run after an identifier's first scalar. -/
++inductive IdentBody : List Nat → List Nat → List Nat → Prop
++  | stop (rest : List Nat) :
++      (∀ c cs, rest = c :: cs → ¬ IdentContinue c) → IdentBody rest [] rest
++  | cons {c : Nat} {input body rest : List Nat} : IdentContinue c →
++      IdentBody input body rest → IdentBody (c :: input) (c :: body) rest
++
++/-- An ASCII identifier is one start scalar followed by its maximal continuation run.
++Lexemes are exact scalar lists, so case is significant. -/
++inductive Identifier : List Nat → (List Nat × List Nat) → Prop
++  | intro {c : Nat} {input body rest : List Nat} : IdentStart c → IdentBody input body rest →
++      Identifier (c :: input) (c :: body, rest)
++
++/-- The six decided string escapes and their decoded scalar values. -/
++def StringEscape (escaped decoded : Nat) : Prop :=
++  (escaped = 110 ∧ decoded = 10) ∨ (escaped = 116 ∧ decoded = 9) ∨
++  (escaped = 114 ∧ decoded = 13) ∨ (escaped = 92 ∧ decoded = 92) ∨
++  (escaped = 34 ∧ decoded = 34) ∨ (escaped = 48 ∧ decoded = 0)
++
++/-- A string body after its opening quote. Raw scalars other than quote, backslash, LF and CR
++are governed by `rawOk`; this parameter chooses no rule for them. EOF and raw line breaks cannot
++end a body, and only `StringEscape` permits a backslash. -/
++inductive StringBody (rawOk : Nat → Prop) : List Nat → (List Nat × List Nat) → Prop
++  | close (rest : List Nat) : StringBody rawOk (34 :: rest) ([], rest)
++  | raw {c : Nat} {input decoded rest : List Nat} :
++      c ≠ 34 → c ≠ 92 → c ≠ 10 → c ≠ 13 → rawOk c → StringBody rawOk input (decoded, rest) →
++      StringBody rawOk (c :: input) (c :: decoded, rest)
++  | escape {escaped decodedScalar : Nat} {input decoded rest : List Nat} :
++      StringEscape escaped decodedScalar → StringBody rawOk input (decoded, rest) →
++      StringBody rawOk (92 :: escaped :: input) (decodedScalar :: decoded, rest)
++
++/-- Longest match over an arbitrary table. Empty entries are not tokens. A successful result
++is a nonempty table entry and its unconsumed suffix, and no matching entry is longer. `none`
++says exactly that no nonempty entry is a prefix. This defines no Concrete token table. -/
++inductive LongestMatch (table : List (List Nat)) :
++    List Nat → Option (List Nat × List Nat) → Prop
++  | some {input token rest : List Nat} : token ∈ table → token ≠ [] → input = token ++ rest →
++      (∀ other ∈ table, ∀ tail, input = other ++ tail → other.length ≤ token.length) →
++      LongestMatch table input (some (token, rest))
++  | none {input : List Nat} :
++      (∀ token ∈ table, token ≠ [] → ∀ rest, input ≠ token ++ rest) →
++      LongestMatch table input none
++
++/-- Exactly ASCII digits zero through nine. -/
++def DecimalDigit (c : Nat) : Prop := 48 ≤ c ∧ c ≤ 57
++
++/-- The maximal decimal-digit run at the front of an input. -/
++inductive DigitRun : List Nat → List Nat → List Nat → Prop
++  | stop (rest : List Nat) : (∀ c cs, rest = c :: cs → ¬ DecimalDigit c) → DigitRun rest [] rest
++  | cons {c : Nat} {input digits rest : List Nat} : DecimalDigit c → DigitRun input digits rest →
++      DigitRun (c :: input) (c :: digits) rest
++
++/-- A nonempty digit run is accepted exactly for `0` alone or a nonzero first digit. -/
++def DigitsAccepted : List Nat → Prop
++  | [] => False
++  | [48] => True
++  | 48 :: _ => False
++  | _ :: _ => True
++
++/-- Positional decimal value; the scanner-independent digit run supplies only ASCII digits. -/
++def decimalValue (digits : List Nat) : Nat :=
++  digits.foldl (fun value c => value * 10 + (c - 48)) 0
++
++/-- A maximal accepted decimal-digit lexeme, its value and its remainder. Nothing is specified
++about the remainder beyond the digit run's maximality. -/
++inductive DecimalInteger : List Nat → (List Nat × Nat × List Nat) → Prop
++  | intro {input digits rest : List Nat} {value : Nat} : DigitRun input digits rest →
++      DigitsAccepted digits → value = decimalValue digits → DecimalInteger input (digits, value, rest)
++
+ /-- Scalar membership is decidable by its interval bounds. -/
+ instance (c : Nat) : Decidable (Utf8.Scalar c) := inferInstanceAs (Decidable (_ ∧ _))
+ /-- Whitespace membership is decidable by the four scalar equalities. -/
+@@ -105,6 +177,15 @@ instance (c : Nat) : Decidable (Whitespace c) := inferInstanceAs (Decidable (_ 
+ instance (c : Nat) : Decidable (IdentStart c) := inferInstanceAs (Decidable (_ ∨ _))
+ /-- Identifier-continuation membership is decidable by ASCII bounds. -/
+ instance (c : Nat) : Decidable (IdentContinue c) := inferInstanceAs (Decidable (_ ∨ _))
++/-- The escape relation is decidable by its six scalar equalities. -/
++instance (escaped decoded : Nat) : Decidable (StringEscape escaped decoded) :=
++  inferInstanceAs (Decidable (_ ∨ _))
++/-- Decimal-digit membership is decidable by its interval bounds. -/
++instance (c : Nat) : Decidable (DecimalDigit c) := inferInstanceAs (Decidable (_ ∧ _))
++/-- Leading-zero acceptance is decidable by the digit-list shape. -/
++instance (digits : List Nat) : Decidable (DigitsAccepted digits) := by
++  unfold DigitsAccepted
++  split <;> infer_instance
+ /-- The one-byte range constraint is decidable. -/
+ instance (a : UInt8) : Decidable (Utf8.One a) := inferInstanceAs (Decidable (_ ≤ _))
+ /-- The two-byte range constraints are decidable. -/
+• Status didn't list untracked changelog in diff name-only default (untracked not included) okay. Perhaps header "StringBody rawOk chooses no rule" yes.
+
+  Could improve specification naming `DigitsAccepted` uses True/False and generated 8 proofs +4 match lines causing golden new 15. Fine.
+
+  Now mark build done review in progress. Should review Lex full diff perhaps use `git diff -- Concrete/Lex.lean` output perhaps ~600 lines but manageable. I should inspect for accidental code or comments. Already know. Perhaps run `lake env lean` after no changes done, builds passed.
+
+  Should commit. Before commit, user explicitly "Commit on branch do not push". I can git add specific files and commit. Git mutation authorized by user. Must check no in-progress operations before/after per AGENTS. Already status. Should commit message dependency. Use `git add Concrete/Lex.lean ConcreteSpec/Spec/Surface0.lean scripts/proofs/axioms.golden changelog.d/... && git commit -m ... -m ...`. But review step before commit perhaps need no review script required user did not ask and AGENTS says every slice Codex review before lands, not necessarily before commit. I don't push/land. No need heavy full gates. Perhaps local impact gates? User only specified axioms/build. I did.
+
+  Potential issue changelog not shown in git diff because untracked. Read it? Write known no need. Commit include.
+
+  Before commit mark todo. Then `git diff --check` handwritten passed (first output no errors after numstat). Good.
+
+  Should check branch still wip/slice0-lexer-tokens. status earlier. Commit.
+
+[wip/slice0-lexer-tokens da687c9ec] lexer: scan slice-0 token components
+ 4 files changed, 566 insertions(+), 8 deletions(-)
+ create mode 100644 changelog.d/2026-11-08-lexer-tokens.md
+• Should post commit git status and verify no operations, log commit. User says no push. Check status and git show stats perhaps.## wip/slice0-lexer-tokens
+da687c9ec9bef1a5fd301564a7afef4104065687
+lexer: scan slice-0 token components
+Stacked on unlanded wip/slice0-lexer-ws at e474d8f0.
+
+Add declarative judgments, total scanners, soundness/completeness and
+uniqueness proofs for identifiers, string bodies, parametric longest
+match and decimal integers. Raw string-body scalars remain parameterized.
+
+e474d8f0305cc32494ad2a54d595527efce3b672
+Working clean. Should todo done. Respond short report files changed, judgments/theorems, checks results, left out why. Mention commit hash no push. 4 files changed. Judgments names. Scanners and theorem families. Checks exact:
+  - `lake env lean Concrete/Lex.lean` pass (inside nix)
+  - `bash scripts/proofs/axioms.sh --update` generated 15 new lines, allowed only propext none, existing unchanged.
+  - `bash scripts/proofs/axioms.sh` PASS 9 FAIL0.
+  - `lake build` pass 30 jobs.
+  - `lake build Concrete` pass 44 jobs.
+  - `git diff --check` handwritten pass; no need mention trailing tabs unless user might care. I did not run full test gate per instructions not requested. Response anything left out: all undecided requested excluded: raw control policy parameterized, keywords etc. No part omitted due missing decision beyond parameterized. Say "Nothing requested was omitted. Deliberately not defined: ...". User wants anything left out and why, list. Mention raw controls undecided; concrete token/operator set, keywords etc, suffix/prefix/separators, >> parser-level, type ranges. Could keep concise.
+
+  Perhaps include file references with lines current after final:
+  Surface0 definitions start 103 etc.
+  Lex scanners identifier at around 556, string 625, longest 717, decimal 887. Conformance 1032.
+  Header line 4.
+  Changelog.
+  Golden.
+  Commit.
+
+  Todo done.Final response in user language English. Report short but enough. Use headings perhaps 4 bullets. Mention clean tree. No citations web. No push. Ensure "both headers updated". All good.
+
+To resume this session: kimi -r session_f7bd31ce-92d4-457b-97a2-940087c9b752
+[unexpected] RuntimeError: workspace wd_wip-slice0-lexer-tokens_705b9bcd5c5c is not materialized
+    at RuntimeResolver.acquire (/home/runner/work/kimi-code/kimi-code/apps/kimi-code/dist-native/intermediates/main.cjs:180498:36)
+    at AgentRuntimeService.acquire (/home/runner/work/kimi-code/kimi-code/apps/kimi-code/dist-native/intermediates/main.cjs:132231:25)
+    at AgentFileHistoryService.readCurrent (/home/runner/work/kimi-code/kimi-code/apps/kimi-code/dist-native/intermediates/main.cjs:177606:31)
+    at AgentFileHistoryService.endCheckpoint (/home/runner/work/kimi-code/kimi-code/apps/kimi-code/dist-native/intermediates/main.cjs:177519:32) {
+  code: 'runtime.not_found'
+}
+kimi rc=0

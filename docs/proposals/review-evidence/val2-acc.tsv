@@ -1,0 +1,21 @@
+2026-11-08T01:43:13Z	03ed4aeaf8b64f28190bff0c2e3a29196bc64268	accept-2b56b8e353	clone	passed	cloned https://github.com/unbalancedparentheses/concrete2.git; origin/wip/legacy-sweep-2 = 2b56b8e35
+2026-11-08T01:43:13Z	03ed4aeaf8b64f28190bff0c2e3a29196bc64268	accept-2b56b8e353	train	passed	train head 03ed4aeaf8b64f28190bff0c2e3a29196bc64268
+2026-11-08T01:43:13Z	03ed4aeaf8b64f28190bff0c2e3a29196bc64268	accept-2b56b8e353	build	passed	built 03ed4aeaf8b64f28190bff0c2e3a29196bc64268
+2026-11-08T01:43:13Z	03ed4aeaf8b64f28190bff0c2e3a29196bc64268	accept-2b56b8e353	check	passed	train: check passed at 03ed4aeaf8; next: train.sh ci accept-2b56b8e353
+2026-11-08T01:43:13Z	03ed4aeaf8b64f28190bff0c2e3a29196bc64268	accept-2b56b8e353	ci	passed	train: next: train.sh watch accept-2b56b8e353
+2026-11-08T01:43:13Z	03ed4aeaf8b64f28190bff0c2e3a29196bc64268	accept-2b56b8e353	watch	passed	train: run 42434965600 green at 03ed4aeaf8; next: train.sh land accept-2b56b8e353
+2026-11-08T01:43:13Z	03ed4aeaf8b64f28190bff0c2e3a29196bc64268	accept-2b56b8e353	dryland	passed	dry-run land: every land check passed except the move gate, which this run's record satisfies
+2026-11-08T01:43:13Z	03ed4aeaf8b64f28190bff0c2e3a29196bc64268	accept-2b56b8e353	neg:build	passed	build refused the broken commit (ConcreteSpec.lean)
+2026-11-08T01:43:13Z	03ed4aeaf8b64f28190bff0c2e3a29196bc64268	accept-2b56b8e353	neg:hook	passed	the hook refused (landing-script check)
+2026-11-08T01:43:13Z	03ed4aeaf8b64f28190bff0c2e3a29196bc64268	accept-2b56b8e353	neg:run	passed	run 42434965600 is at the train head 03ed4aeaf8
+2026-11-08T01:43:13Z	03ed4aeaf8b64f28190bff0c2e3a29196bc64268	accept-2b56b8e353	neg:drop	passed	watch refused: missing: Root checks
+2026-11-08T01:43:13Z	03ed4aeaf8b64f28190bff0c2e3a29196bc64268	accept-2b56b8e353	neg:drop	passed	land refused: missing: Root checks
+2026-11-08T01:43:13Z	03ed4aeaf8b64f28190bff0c2e3a29196bc64268	accept-2b56b8e353	neg:skipped	passed	watch refused: skipped: Root checks
+2026-11-08T01:43:13Z	03ed4aeaf8b64f28190bff0c2e3a29196bc64268	accept-2b56b8e353	neg:skipped	passed	land refused: skipped: Root checks
+2026-11-08T01:43:13Z	03ed4aeaf8b64f28190bff0c2e3a29196bc64268	accept-2b56b8e353	neg:cancelled	passed	watch refused: cancelled: Root checks
+2026-11-08T01:43:13Z	03ed4aeaf8b64f28190bff0c2e3a29196bc64268	accept-2b56b8e353	neg:cancelled	passed	land refused: cancelled: Root checks
+2026-11-08T01:43:13Z	03ed4aeaf8b64f28190bff0c2e3a29196bc64268	accept-2b56b8e353	neg:failure	passed	watch refused: failure: Root checks
+2026-11-08T01:43:13Z	03ed4aeaf8b64f28190bff0c2e3a29196bc64268	accept-2b56b8e353	neg:failure	passed	land refused: failure: Root checks
+2026-11-08T01:43:13Z	03ed4aeaf8b64f28190bff0c2e3a29196bc64268	accept-2b56b8e353	neg:sha	passed	watch refused: says nothing about this train
+2026-11-08T01:43:13Z	03ed4aeaf8b64f28190bff0c2e3a29196bc64268	accept-2b56b8e353	neg:sha	passed	land refused: not the train HEAD
+2026-11-08T01:43:13Z	03ed4aeaf8b64f28190bff0c2e3a29196bc64268	accept-2b56b8e353	verdict	accepted	

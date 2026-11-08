@@ -1,0 +1,1358 @@
+Reading additional input from stdin...
+OpenAI Codex v0.166.0
+--------
+workdir: /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/gates-review5
+model: gpt-6.1-sol
+provider: openai
+approval: never
+sandbox: danger-full-access
+reasoning effort: none
+reasoning summaries: none
+session id: 01a1b888-7c41-7030-99db-bc1998db230a
+--------
+user
+Delta review (round 5) of the Concrete slice-0 stack-bound analysis, scripts/checks/lib/stack_bound.py (and its controls in scripts/checks/slice0_artifacts.sh). Round 4 REJECT: stack/frame pointers escaping through memory (x86 push rbp; pop rax / AArch64 str x29,[x0]) and register-directed returns (ret x0). ./DELTA.diff restructures the model: an explicit state St(d, fp, saved slots tagged fp / ("lr", valid), lr) joined by equality; x86_inst/a64_inst per instruction: no stack address leaves sp/fp (lea of a stack address, sp/fp read as a value outside the modelled frame setup, sp/x29 stored as data other than the stp x29,x30 frame record all refused); accesses must lie at depth >= 1 (never the return address or caller frame) and not overlap a saved slot except the modelled save/restore (push rbp/pop rbp/leave; stp/ldp x29,x30 with base sp); pop of a saved fp into another register refused; loads into sp or x30 refused (except the frame-record restore, which restores lr validity from the slot tag); bl invalidates lr; ret requires d == 0 and lr valid; ret with an operand is indirect (refused). New controls (all pass on ci-2, 25 controls, 121 ok, rc 0; real x86 code of both backends still accepted with the same bounds): your round-4 reproducers, lea stack address, return-address overwrite, a64 ret x0, a64 bl without lr restore, plus expected bounds for two AArch64 frame-record shapes. Verify the round-4 findings are resolved and look for any remaining way to get an understated bound. This is the last review round: if what remains is minor, say ACCEPT-WITH-CHANGES and list it. Do not modify files. Findings with file:line and severity; verdict ACCEPT / ACCEPT-WITH-CHANGES / REJECT.
+codex
+I’ll read the delta and the full analyzer, check the round-4 fixes, then look for remaining ways to understate the bound. I won’t modify files.
+exec
+/bin/bash -lc 'git status --short; cat DELTA.diff' in /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/gates-review5
+ succeeded in 0ms:
+fatal: not a git repository (or any of the parent directories): .git
+diff --git a/scripts/checks/lib/stack_bound.py b/scripts/checks/lib/stack_bound.py
+index d8c292c33..7579acad8 100644
+--- a/scripts/checks/lib/stack_bound.py
++++ b/scripts/checks/lib/stack_bound.py
+@@ -16,6 +16,12 @@ internal callee's own bound and the depth at which each external function (libc'
+ `_exit`, `abort`) is entered; the external functions' own use is outside it (a premise, listed),
+ and so is that `_exit` and `abort` do not return (a path ends at a call to one).
+ 
++Stack addresses never leave the stack and frame pointers: taking one as a value, storing or
++loading a saved frame pointer other than through the modelled frame save and restore, touching
++bytes at or above the entry stack pointer (the return address, the caller's frame) and returning
++through a link register that does not hold the return address are all refused (St, x86_inst,
++a64_inst).
++
+ Fail closed: an instruction outside the modelled set (X86_PLAIN, A64_PLAIN and the control
+ transfers), any instruction that writes the stack pointer in a way not modelled here, an indirect
+ branch or call, a branch leaving its function, two different depths at one address, a return at a
+@@ -87,156 +93,246 @@ def imm(s):
+ 
+ X86_SP = ("rsp", "esp", "sp", "spl")
+ X86_FP = ("rbp", "ebp", "bp", "bpl")
++X86_STACK = X86_SP + X86_FP
+ X86_GPR64 = re.compile(r"^(r[abcd]x|r[sd]i|rbp|r(?:8|9|1[0-5]))$")
++X86_SIZE = {"byte": 1, "word": 2, "dword": 4, "qword": 8, "tbyte": 10, "xmmword": 16,
++            "ymmword": 32, "zmmword": 64}
++MEM = re.compile(r"\[([^\]]*)\]")
+ 
+ 
+-def x86_step(mn, ops, d, fp):
+-    """New (d, fp) after a non-control x86 instruction. Every alias of the stack pointer is a
+-    stack-pointer write (refused unless modelled); every alias of the frame pointer drops it."""
++class St:
++    """The abstract state at an instruction: `d`, the stack pointer's depth below the function's
++    entry; `fp`, the frame pointer's depth (None: unknown); `saved`, the stack slots holding a
++    saved frame pointer or link register, as (lowest, highest) byte depths with a tag ("fp", or
++    "lr" with whether it holds the function's own return address); `lr`, whether the AArch64 link
++    register holds the function's own return address. A byte at depth n lies n bytes below the
++    entry stack pointer; the function's own bytes have depth >= 1."""
++
++    __slots__ = ("d", "fp", "saved", "lr")
++
++    def __init__(self, d=0, fp=None, saved=frozenset(), lr=True):
++        self.d, self.fp, self.saved, self.lr = d, fp, saved, lr
++
++    def key(self):
++        return (self.d, self.fp, self.saved, self.lr)
++
++    def but(self, **kw):
++        s = St(self.d, self.fp, self.saved, self.lr)
++        for k, v in kw.items():
++            setattr(s, k, v)
++        # Slots wholly below the stack pointer are free memory: drop them.
++        s.saved = frozenset(x for x in s.saved if x[0] <= s.d)
++        return s
++
++
++def check_bytes(st, lo, hi, what, allowed=()):
++    """The bytes [lo, hi] (depths) are the function's own and overlap no saved slot, except the
++    slots `allowed` (the frame-record save/restore itself)."""
++    if lo < 1:
++        raise Refuse(f"touches the return address or the caller's frame: {what}")
++    for slot in st.saved:
++        if slot not in allowed and slot[0] <= hi and lo <= slot[1]:
++            raise Refuse(f"touches a saved frame pointer or link register: {what}")
++
++
++def x86_inst(mn, ops, st):
++    """(new state, deepest byte touched or None) after a non-control x86 instruction. Fails closed:
++    a stack or frame pointer read as a value (other than the modelled frame setup), a stack
++    address taken (`lea`), an indexed or partial-register stack address, an access of unknown size,
++    an access at or above the entry stack pointer or into a saved frame pointer, a stack-pointer
++    write that is not modelled, a push or pop of other than a 64-bit general register."""
++    what = f"{mn} {ops}"
+     args = [a.strip() for a in ops.split(",")] if ops else []
+     dst = args[0] if args else ""
+-    if mn in ("push", "pop"):
+-        if not X86_GPR64.match(dst):
+-            raise Refuse(f"push/pop of other than a 64-bit general register: {mn} {ops}")
+-        if mn == "push":
+-            return d + 8, fp
+-        return d - 8, (None if dst == "rbp" else fp)
+-    if mn == "leave":
+-        if fp is None:
+-            raise Refuse("leave with an unknown frame pointer")
+-        return fp - 8, None
+-    if mn in ("sub", "add") and dst == "rsp":
+-        n = imm(args[1])
+-        return (d + n if mn == "sub" else d - n), fp
+-    if mn == "mov" and dst == "rbp" and args[1:] == ["rsp"]:
+-        return d, d
+-    if mn == "mov" and dst == "rsp" and args[1:] == ["rbp"]:
+-        if fp is None:
+-            raise Refuse("mov rsp, rbp with an unknown frame pointer")
+-        return fp, fp
+-    if dst in X86_SP:
+-        raise Refuse(f"unmodelled stack-pointer write: {mn} {ops}")
+-    if dst in X86_FP:
+-        return d, None
+-    return d, fp
+-
+-
+-MEM = re.compile(r"\[([^\]]*)\]")
+-X86_STACK = X86_SP + X86_FP
+-# x86 instructions whose stack-register operands the depth tracking itself models.
+-X86_MODELLED = {("push", "rbp"), ("pop", "rbp"), ("mov", "rbp, rsp"), ("mov", "rsp, rbp"),
+-                ("leave", "")}
+-
+-
+-def x86_access(mn, ops, d, fp):
+-    """The deepest byte an x86 instruction touches or addresses through the stack or frame
+-    pointer (a memory operand or `lea`), or None. The red zone below the stack pointer is used
+-    without moving it, so this, not only the stack pointer, is what the bound must cover.
+-    Refuses an indexed stack address and a stack or frame pointer copied out as a value."""
+     deepest = None
+-    for inner in MEM.findall(ops):
++    for m in MEM.finditer(ops):
++        inner = m.group(1)
+         terms = re.findall(r"[+-]?\s*[^+\-\s]+", inner)
+         regs = [t.strip(" +-") for t in terms if not re.fullmatch(r"[+-]?\s*(0x[0-9a-f]+|\d+)", t)]
+         base = [r for r in regs if r in X86_STACK]
+         if not base:
+             continue
+         if base[0] not in ("rsp", "rbp"):
+-            raise Refuse(f"stack address through a partial register: {mn} {ops}")
++            raise Refuse(f"stack address through a partial register: {what}")
+         if len(regs) != 1:
+-            raise Refuse(f"indexed stack address: {mn} {ops}")
++            raise Refuse(f"indexed stack address: {what}")
++        if mn == "lea":
++            raise Refuse(f"stack address taken as a value: {what}")
++        size = re.search(r"(\w+) ptr\s*(?:\w+:)?\s*$", ops[:m.start()])
++        if not size or size.group(1) not in X86_SIZE:
++            raise Refuse(f"stack access of unknown size: {what}")
+         k = sum(int(t.replace(" ", ""), 0) for t in terms if t.strip(" +-") not in regs)
+         if base[0] == "rbp":
+-            if fp is None:
+-                raise Refuse(f"frame-relative address with an unknown frame pointer: {mn} {ops}")
+-            depth = fp - k
++            if st.fp is None:
++                raise Refuse(f"frame-relative address with an unknown frame pointer: {what}")
++            top = st.fp - k
+         else:
+-            depth = d - k
+-        deepest = depth if deepest is None else max(deepest, depth)
++            top = st.d - k
++        check_bytes(st, top - X86_SIZE[size.group(1)] + 1, top, what)
++        deepest = top if deepest is None else max(deepest, top)
+     outside = MEM.sub("", ops)
+-    if (mn, ops) not in X86_MODELLED and not (mn in ("sub", "add") and ops.startswith("rsp,")):
+-        if any(re.search(rf"\b{r}\b", outside) for r in X86_STACK):
+-            raise Refuse(f"stack or frame pointer used as a value: {mn} {ops}")
+-    return deepest
++    modelled = (mn, ops) in (("push", "rbp"), ("pop", "rbp"), ("mov", "rbp, rsp"),
++                             ("mov", "rsp, rbp"), ("leave", "")) or (
++        mn in ("sub", "add") and dst == "rsp" and re.fullmatch(r"rsp, (0x[0-9a-f]+|\d+)", ops))
++    if not modelled and any(re.search(rf"\b{r}\b", outside) for r in X86_STACK):
++        raise Refuse(f"stack or frame pointer used as a value: {what}")
++    if mn in ("push", "pop"):
++        if not X86_GPR64.match(dst):
++            raise Refuse(f"push/pop of other than a 64-bit general register: {what}")
++        if mn == "push":
++            d = st.d + 8
++            saved = st.saved | {(d - 7, d, "fp")} if dst == "rbp" else st.saved
++            return st.but(d=d, saved=saved), d
++        slot = (st.d - 7, st.d, "fp")
++        if slot in st.saved and dst != "rbp":
++            raise Refuse(f"a saved frame pointer popped into {dst}: {what}")
++        check_bytes(st, st.d - 7, st.d, what, allowed=(slot,))
++        return st.but(d=st.d - 8, fp=None if dst == "rbp" else st.fp, saved=st.saved - {slot}), None
++    if mn == "leave":
++        if st.fp is None:
++            raise Refuse(f"leave with an unknown frame pointer: {what}")
++        slot = (st.fp - 7, st.fp, "fp")
++        check_bytes(st, st.fp - 7, st.fp, what, allowed=(slot,))
++        return st.but(d=st.fp - 8, fp=None, saved=st.saved - {slot}), None
++    if mn in ("sub", "add") and dst == "rsp":
++        n = imm(args[1])
++        return st.but(d=st.d + n if mn == "sub" else st.d - n), deepest
++    if (mn, ops) == ("mov", "rbp, rsp"):
++        return st.but(fp=st.d), deepest
++    if (mn, ops) == ("mov", "rsp, rbp"):
++        if st.fp is None:
++            raise Refuse(f"mov rsp, rbp with an unknown frame pointer: {what}")
++        return st.but(d=st.fp), deepest
++    if dst in X86_SP:
++        raise Refuse(f"unmodelled stack-pointer write: {what}")
++    if dst in X86_FP:
++        return st.but(fp=None), deepest
++    return st, deepest
+ 
+ 
+-def a64_access(mn, ops, d, fp):
+-    """As x86_access, for AArch64: `[sp, #k]` and `[x29, #k]` operands (writeback on sp is the
+-    depth tracking's); refuses a register offset from sp or x29, writeback on x29, and sp or x29
+-    copied out as a value (other than the frame setup the depth tracking models)."""
+-    deepest = None
+-    for inner in MEM.findall(ops):
+-        parts = [p.strip() for p in inner.split(",")]
+-        if parts[0] not in ("sp", "x29"):
+-            continue
+-        if len(parts) > 2 or (len(parts) == 2 and not parts[1].startswith("#")):
+-            raise Refuse(f"register-offset stack address: {mn} {ops}")
+-        k = imm(parts[1]) if len(parts) == 2 else 0
+-        if parts[0] == "x29":
+-            if fp is None:
+-                raise Refuse(f"frame-relative address with an unknown frame pointer: {mn} {ops}")
+-            depth = fp - k
+-        else:
+-            depth = d - k
+-        deepest = depth if deepest is None else max(deepest, depth)
+-    args = [a.strip() for a in re.split(r",(?![^\[]*\])", MEM.sub("[]", ops))] if ops else []
+-    modelled = (args[:1] in (["sp"], ["x29"]) or (mn.startswith(("stp", "ldp")) and "x29" in args[:2])
+-                or (mn.startswith(("str", "ldr")) and args[:1] == ["x29"]))
+-    if not modelled and any(a in ("sp", "x29", "wsp", "w29") for a in args[1:]):
+-        raise Refuse(f"stack or frame pointer used as a value: {mn} {ops}")
+-    return deepest
++A64_SP = ("sp", "wsp")
++A64_FP = ("x29", "w29")
++A64_LR = ("x30", "w30")
++A64_REGSIZE = {"x": 8, "w": 4, "q": 16, "d": 8, "s": 4, "h": 2, "b": 1}
+ 
+ 
+-SPWB_PRE = re.compile(r"\[sp(?:,\s*#(-?(?:0x)?[0-9a-f]+))?\]!")
+-SPWB_POST = re.compile(r"\[sp\],\s*#(-?(?:0x)?[0-9a-f]+)")
+-
+-
+-def a64_step(mn, ops, d, fp):
+-    """New (d, fp) after a non-control AArch64 instruction."""
++def a64_inst(mn, ops, st):
++    """(new state, deepest byte touched or None) after a non-control AArch64 instruction. Fails
++    closed as x86_inst does, and on: writeback on x29; a register offset from sp or x29; sp or
++    x29 stored or read as a value other than the frame record (`stp x29, x30` / `ldp x29, x30`
++    with base sp) and the modelled frame setup; a write to x30 other than the frame-record
++    restore."""
++    what = f"{mn} {ops}"
+     args = [a.strip() for a in re.split(r",(?![^\[]*\])", ops)] if ops else []
+-    dst = args[0] if args else ""
+-    if re.search(r"\[x29\],|\[x29[^\]]*\]!", ops):
+-        raise Refuse(f"writeback on the frame pointer: {mn} {ops}")
+-    m = SPWB_PRE.search(ops)
+-    if m:
+-        d = d - (imm(m.group(1)) if m.group(1) else 0)
+-    m = SPWB_POST.search(ops)
+-    if m:
+-        d = d - imm(m.group(1))
+-    # Registers a load writes: every operand before the memory operand. x29 and w29 alias.
+     first_mem = next((i for i, a in enumerate(args) if a.startswith("[")), len(args))
+-    loads_fp = mn.startswith("ld") and any(a in ("x29", "w29") for a in args[:first_mem])
+-    if SPWB_PRE.search(ops) or SPWB_POST.search(ops):
+-        return d, (None if loads_fp else fp)
+-    if dst in ("sp", "wsp"):
+-        if mn in ("sub", "add") and len(args) == 3 and args[1] == "sp":
++    data = args[:first_mem]
++    is_load, is_store = mn.startswith("ld"), mn.startswith("st")
++    record = mn in ("stp", "ldp") and data == ["x29", "x30"]
++    d, deepest, saved, fp, lr = st.d, None, st.saved, st.fp, st.lr
++    if first_mem < len(args):
++        mem = args[first_mem]
++        post = args[first_mem + 1] if first_mem + 1 < len(args) else None
++        m = re.fullmatch(r"\[(\w+)(?:,\s*(#?-?(?:0x)?[0-9a-f]+))?\](!?)", mem)
++        if not m:
++            if re.search(r"\b(sp|x29|w29|wsp)\b", mem):
++                raise Refuse(f"register-offset stack address: {what}")
++            base = None
++        else:
++            base, off, pre = m.group(1), m.group(2), m.group(3) == "!"
++        if base in A64_FP and (pre or post is not None):
++            raise Refuse(f"writeback on the frame pointer: {what}")
++        if base in ("sp", "x29"):
++            if mn in ("ldrb", "strb", "ldrsb", "ldurb", "sturb", "ldursb"):
++                size = 1
++            elif mn in ("ldrh", "strh", "ldrsh", "ldurh", "sturh", "ldursh"):
++                size = 2
++            elif mn in ("ldrsw", "ldursw", "ldpsw"):
++                size = 4 * len(data)
++            else:
++                if not data or data[0][0] not in A64_REGSIZE:
++                    raise Refuse(f"stack access of unknown size: {what}")
++                size = A64_REGSIZE[data[0][0]] * len(data)
++            k = imm(off) if off else 0
++            if base == "x29":
++                if fp is None:
++                    raise Refuse(f"frame-relative address with an unknown frame pointer: {what}")
++                top = fp - k
++            elif pre:
++                d = d - k
++                top = d
++            else:
++                top = d - k
++            if post is not None:
++                if base != "sp":
++                    raise Refuse(f"unmodelled writeback: {what}")
++                top = st.d
++                d = d - imm(post)
++            lo = top - size + 1
++            if record and base == "sp":
++                # x29 at the lower address (the deeper half), x30 above it.
++                rec = ((lo + 8, lo + 15, "fp"), (lo, lo + 7, ("lr", lr)))
++                if is_store:
++                    check_bytes(st, lo, top, what)
++                    saved = saved | set(rec)
++                else:
++                    lr_slot = next((s for s in saved if s[:2] == (lo, lo + 7)), None)
++                    check_bytes(st, lo, top, what, allowed=tuple(s for s in saved if s[0] >= lo and s[1] <= top))
++                    lr = bool(lr_slot and lr_slot[2] == ("lr", True))
++                    saved = frozenset(s for s in saved if not (s[0] >= lo and s[1] <= top))
++                    fp = None
++            else:
++                check_bytes(st, lo, top, what)
++            deepest = top
++        elif base is not None and (pre or post is not None) and base in A64_SP:
++            raise Refuse(f"unmodelled stack writeback: {what}")
++    if is_store and not record and any(a in A64_SP + A64_FP for a in data):
++        raise Refuse(f"stack or frame pointer stored as a value: {what}")
++    if is_load:
++        if any(a in A64_SP for a in data):
++            raise Refuse(f"stack pointer loaded: {what}")
++        if any(a in A64_LR for a in data) and not record:
++            raise Refuse(f"link register overwritten: {what}")
++        if any(a in A64_FP for a in data):
++            fp = None
++        return st.but(d=d, fp=fp, saved=frozenset(saved), lr=lr), deepest
++    if is_store:
++        return st.but(d=d, fp=fp, saved=frozenset(saved), lr=lr), deepest
++    # Not a memory instruction.
++    dst, srcs = (args[0] if args else ""), args[1:]
++    if dst in A64_SP:
++        if mn in ("sub", "add") and len(args) == 3 and args[1] == "sp" and args[2].startswith("#"):
+             n = imm(args[2])
+-            return (d + n if mn == "sub" else d - n), fp
+-        if mn == "mov" and args[1:] == ["x29"]:
++            return st.but(d=d + n if mn == "sub" else d - n), None
++        if (mn, args[1:]) == ("mov", ["x29"]):
+             if fp is None:
+-                raise Refuse("mov sp, x29 with an unknown frame pointer")
+-            return fp, fp
+-        if mn in ("sub", "add") and len(args) == 3 and args[1] == "x29":
++                raise Refuse(f"mov sp, x29 with an unknown frame pointer: {what}")
++            return st.but(d=fp), None
++        if mn in ("sub", "add") and len(args) == 3 and args[1] == "x29" and args[2].startswith("#"):
+             if fp is None:
+-                raise Refuse("sp from an unknown frame pointer")
++                raise Refuse(f"sp from an unknown frame pointer: {what}")
+             n = imm(args[2])
+-            return (fp + n if mn == "sub" else fp - n), fp
+-        raise Refuse(f"unmodelled stack-pointer write: {mn} {ops}")
+-    if dst in ("x29", "w29"):
+-        if mn == "mov" and args[1:] == ["sp"]:
+-            return d, d
+-        if mn == "add" and len(args) == 3 and args[1] == "sp":
+-            return d, d - imm(args[2])
+-        return d, None
+-    if loads_fp:
+-        return d, None
+-    return d, fp
++            return st.but(d=fp + n if mn == "sub" else fp - n), None
++        raise Refuse(f"unmodelled stack-pointer write: {what}")
++    if dst in A64_FP:
++        if (mn, srcs) == ("mov", ["sp"]):
++            return st.but(fp=d), None
++        if mn == "add" and len(args) == 3 and args[1] == "sp" and args[2].startswith("#"):
++            return st.but(fp=d - imm(args[2])), None
++        if any(a in A64_SP + A64_FP for a in srcs):
++            raise Refuse(f"stack or frame pointer used as a value: {what}")
++        return st.but(fp=None), None
++    if dst in A64_LR:
++        raise Refuse(f"link register overwritten: {what}")
++    if any(a in A64_SP + A64_FP for a in srcs):
++        raise Refuse(f"stack or frame pointer used as a value: {what}")
++    return st, None
+ 
+ 
+ X86_JCC = re.compile(r"^j(?!mp$)[a-z]+$")
+ A64_COND = re.compile(r"^b\.[a-z]+$")
+ 
+-# The data-processing instructions whose only effect on the stack is what x86_access/x86_step and
+-# a64_access/a64_step model (memory operands, and writes to the stack or frame pointer). Any other
++# The data-processing instructions whose only effect on the stack is what x86_inst and a64_inst
++# model (memory operands, and writes to the stack, frame and link registers). Any other
+ # instruction on a reachable path is refused: an unknown one may move the stack pointer or
+ # transfer control (x86 `loop`, a `rep` prefix), so the analysis never treats it as a fallthrough.
+ X86_PLAIN = re.compile(
+@@ -262,6 +358,8 @@ def control(mn, ops):
+         if X86_JCC.match(mn):
+             return "jcc", ops
+         if mn == "ret":
++            if ops:
++                return "indirect", ops
+             return "ret", None
+         if mn in ("ud2", "hlt", "int3"):
+             return "stop", None
+@@ -274,8 +372,10 @@ def control(mn, ops):
+         return "jcc", ops
+     if mn in ("blr", "br", "braa", "blraa", "braaz", "blraaz"):
+         return "indirect", ops
+-    if mn in ("ret", "retaa", "retab"):
++    if mn == "ret" and not ops:
+         return "ret", None
++    if mn in ("ret", "retaa", "retab"):
++        return "indirect", ops
+     if mn in ("brk", "udf", "hlt"):
+         return "stop", None
+     return None, None
+@@ -289,8 +389,7 @@ def analyse(funcs, stubs):
+         raise Refuse("no main")
+     memo, active = {}, set()
+     ret_push = 8 if ARCH == "x86_64" else 0
+-    step = x86_step if ARCH == "x86_64" else a64_step
+-    access = x86_access if ARCH == "x86_64" else a64_access
++    inst = x86_inst if ARCH == "x86_64" else a64_inst
+     plain = X86_PLAIN if ARCH == "x86_64" else A64_PLAIN
+ 
+     def add_ext(ext, sub, base):
+@@ -308,36 +407,38 @@ def analyse(funcs, stubs):
+         if not code:
+             raise Refuse(f"{key}: no instructions")
+         index = {a: i for i, (a, _, _) in enumerate(code)}
+-        seen, work, deepest, ext = {}, [(0, 0, None)], 0, {}
++        seen, work, deepest, ext = {}, [(0, St())], 0, {}
+         while work:
+-            i, d, fp = work.pop()
++            i, st = work.pop()
+             while True:
+                 if i >= len(code):
+                     raise Refuse(f"{key}: runs off its end")
+                 addr, mn, ops = code[i]
+                 if addr in seen:
+-                    if seen[addr] != (d, fp):
+-                        raise Refuse(f"{key}+{addr:#x}: depths {seen[addr]} and {(d, fp)} meet")
++                    if seen[addr] != st.key():
++                        raise Refuse(f"{key}+{addr:#x}: states {seen[addr]} and {st.key()} meet")
+                     break
+-                seen[addr] = (d, fp)
++                seen[addr] = st.key()
+                 kind, arg = control(mn, ops)
+                 if kind is None:
+                     if not plain.match(mn):
+                         raise Refuse(f"{key}+{addr:#x}: unmodelled instruction: {mn} {ops}")
+-                    touched = access(mn, ops, d, fp)
+-                    if touched is not None:
+-                        deepest = max(deepest, touched)
+-                    d, fp = step(mn, ops, d, fp)
+-                    if d < 0:
++                    try:
++                        st, touched = inst(mn, ops, st)
++                    except Refuse as e:
++                        raise Refuse(f"{key}+{addr:#x}: {e}") from None
++                    if st.d < 0:
+                         raise Refuse(f"{key}+{addr:#x}: stack above the entry")
+-                    deepest = max(deepest, d)
++                    deepest = max(deepest, st.d, touched or 0)
+                     i += 1
+                     continue
+                 if kind == "indirect":
+                     raise Refuse(f"{key}+{addr:#x}: indirect branch {mn} {ops}")
+                 if kind == "ret":
+-                    if d != 0:
+-                        raise Refuse(f"{key}+{addr:#x}: return at depth {d}")
++                    if st.d != 0:
++                        raise Refuse(f"{key}+{addr:#x}: return at depth {st.d}")
++                    if not st.lr:
++                        raise Refuse(f"{key}+{addr:#x}: return through a link register not restored")
+                     break
+                 if kind == "stop":
+                     break
+@@ -347,6 +448,7 @@ def analyse(funcs, stubs):
+                 if kind == "call":
+                     base = sym.split("+")[0]
+                     callee = owned_name(base)
++                    d = st.d
+                     if callee and "+" not in sym:
+                         sub_deep, sub_ext = fn_bound(callee)
+                         deepest = max(deepest, d + ret_push + sub_deep)
+@@ -360,6 +462,8 @@ def analyse(funcs, stubs):
+                             break
+                     else:
+                         raise Refuse(f"{key}+{addr:#x}: call to {sym}, neither owned nor a stub")
++                    if ARCH == "aarch64":
++                        st = st.but(lr=False)  # bl wrote x30: this function's return address is gone
+                     i += 1
+                     continue
+                 if tgt not in index:
+@@ -367,7 +471,7 @@ def analyse(funcs, stubs):
+                 if kind == "jmp":
+                     i = index[tgt]
+                     continue
+-                work.append((index[tgt], d, fp))
++                work.append((index[tgt], st))
+                 i += 1
+         active.discard(key)
+         memo[key] = (deepest, ext)
+diff --git a/scripts/checks/slice0_artifacts.sh b/scripts/checks/slice0_artifacts.sh
+index 39cf3dc30..e2caaee99 100644
+--- a/scripts/checks/slice0_artifacts.sh
++++ b/scripts/checks/slice0_artifacts.sh
+@@ -18,9 +18,13 @@
+ #     stack pointer only). REPORT/stack.tsv. Controls: the analysis must refuse an unmodelled
+ #     stack-pointer write, an indirect call, recursion, a call to an unknown function, two depths
+ #     meeting, a stack pointer used as a value or written through a partial register, a partial
+-#     frame-pointer write, an indexed stack address, an unmodelled
++#     frame-pointer write, an indexed stack address, a saved frame pointer popped into another
++#     register, a stack address taken, an overwritten return address, an AArch64 frame pointer
++#     stored, a register-directed return, a return after a call without the link register
++#     restored, an unmodelled
+ #     instruction (x86 `loop`) and frame-pointer writeback (AArch64), and give the
+-#     expected bound on a known function and on a red-zone store; the comparison must reject a
++#     expected bound on known functions (x86 frame, red-zone store, two AArch64 frame-record
++#     shapes); the comparison must reject a
+ #     measurement above the bound.
+ #
+ # usage: slice0_artifacts.sh [REPORT_DIR]. Run inside the nix devshell, from the repository root.
+@@ -202,6 +206,12 @@ refuse indexed-stack-address '    1010:\tmov\teax, dword ptr [rsp + 4*rcx - 0x8]
+ refuse partial-stack-pointer '    1010:\tpush\trax\n    1011:\tpop\tsp\n    1013:\tret\n'
+ refuse partial-frame-pointer '    1010:\tpush\trbp\n    1011:\tmov\trbp, rsp\n    1014:\tmov\tbp, 0x0\n    1018:\tmov\teax, dword ptr [rbp - 0x100]\n    101e:\tpop\trbp\n    101f:\tret\n'
+ refuse loop-instruction '    1010:\tmov\tecx, 0x2\n    1015:\tloop\t0x1018 <main+0x8>\n    1017:\tret\n    1018:\tsub\trsp, 0x100\n    101f:\tadd\trsp, 0x100\n    1026:\tret\n'
++refuse saved-frame-pointer-popped '    1010:\tpush\trbp\n    1011:\tmov\trbp, rsp\n    1014:\tpush\trbp\n    1015:\tpop\trax\n    1016:\tmov\tdword ptr [rax - 0x100], ecx\n    101c:\tpop\trbp\n    101d:\tret\n'
++refuse stack-address-taken '    1010:\tpush\trbp\n    1011:\tmov\trbp, rsp\n    1014:\tlea\trax, [rbp - 0x10]\n    1018:\tpop\trbp\n    1019:\tret\n'
++refuse return-address-overwrite '    1010:\tmov\tqword ptr [rsp], rax\n    1014:\tret\n'
++refuse a64-frame-pointer-stored '    1010:\tmov\tx29, sp\n    1014:\tstr\tx29, [x0]\n    1018:\tret\n' aarch64 _main
++refuse a64-ret-register '    1010:\tret\tx0\n' aarch64 _main
++refuse a64-link-register-lost '    1010:\tstp\tx29, x30, [sp, #-0x10]!\n    1014:\tbl\t0x1020 <_concrete_body>\n    1018:\tadd\tsp, sp, #0x10\n    101c:\tret\n\n0000000000001020 <_concrete_body>:\n    1020:\tret\n' aarch64 _main
+ refuse a64-w29-writeback-load '    1010:\tsub\tsp, sp, #0x10\n    1014:\tmov\tx29, sp\n    1018:\tldr\tw29, [sp], #0x10\n    101c:\tstr\tx0, [x29, #-0x100]\n    1020:\tret\n' aarch64 _main
+ refuse a64-frame-writeback '    1010:\tmov\tx29, sp\n    1014:\tstr\tx0, [x29], #-0x100\n    1018:\tstr\tx0, [x29]\n    101c:\tadd\tx29, x29, #0x100\n    1020:\tret\n' aarch64 _main
+ # A leaf's red-zone store, below the stack pointer, is inside the bound: 8 + 0x30.
+@@ -221,6 +231,17 @@ else
+   echo "FAIL control: red-zone bound: $(stack_bound x86_64 "$redzone")"
+   fail=1
+ fi
++# bound_is NAME ARCH EXPECTED BODY: the analysis of the synthetic function(s) BODY (printf format,
++# headers included) gives exactly EXPECTED.
++bound_is() {
++  local f got
++  f=$(ctl_dis "$1" <<<"$(printf "\n$4")")
++  got=$(stack_bound "$2" "$f" | cap_out | tr '\n' ' ') || true
++  if [ "$got" = "$3 " ]; then echo "ok   control: stack bound of $1"
++  else echo "FAIL control: stack bound of $1: ${got:-refused}, expected $3"; fail=1; fi
++}
++bound_is a64-framed-main-and-leaf aarch64 'bound 32' '0000000000001000 <_main>:\n    1000:\tstp\tx29, x30, [sp, #-0x10]!\n    1004:\tmov\tx29, sp\n    1008:\tbl\t0x1020 <_concrete_body>\n    100c:\tldp\tx29, x30, [sp], #0x10\n    1010:\tret\n\n0000000000001020 <_concrete_body>:\n    1020:\tsub\tsp, sp, #0x10\n    1024:\tstr\tw0, [sp, #0xc]\n    1028:\tadd\tsp, sp, #0x10\n    102c:\tret\n'
++bound_is a64-offset-frame-record aarch64 'bound 32' '0000000000001000 <_main>:\n    1000:\tsub\tsp, sp, #0x20\n    1004:\tstp\tx29, x30, [sp, #0x10]\n    1008:\tadd\tx29, sp, #0x10\n    100c:\tstur\twzr, [x29, #-0x4]\n    1010:\tldp\tx29, x30, [sp, #0x10]\n    1014:\tadd\tsp, sp, #0x20\n    1018:\tret\n'
+ if [ -n "$gdb" ]; then
+   # A run that does not end as expected gives no measurement.
+   wrong=$(( ($(head -c 16 "$(dirname "$last_exe")/status") + 1) % 256 ))
+
+exec
+/bin/bash -lc 'nl -ba scripts/checks/lib/stack_bound.py' in /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/gates-review5
+ succeeded in 0ms:
+     1	#!/usr/bin/env python3
+     2	"""Stack bound of a slice-0 executable, from its disassembly (README gate 12). PROVISIONAL.
+     3	
+     4	usage: stack_bound.py ARCH DISASM             -> prints `bound N` and one `external SYM DEPTH` per call
+     5	       stack_bound.py ARCH DISASM --ranges    -> also prints `range SYM LO HI` per Concrete function
+     6	ARCH is x86_64 or aarch64; DISASM is `llvm-objdump -d --no-show-raw-insn` output of the LINKED
+     7	executable (x86-64 in Intel syntax).
+     8	
+     9	The Concrete-owned code is `main` (the runtime entry), `concrete_rt_write_all` and the body
+    10	(`concrete_body`), with or without the Mach-O underscore. From `main`'s entry, every path through
+    11	them is followed over the control-flow graph, tracking the stack pointer's depth below its value
+    12	at `main`'s entry (and the frame pointer's). The bound is the deepest point reached, by the stack
+    13	pointer or by any byte addressed relative to it or the frame pointer (the red zone below the
+    14	stack pointer is used without moving it), counting each
+    15	internal callee's own bound and the depth at which each external function (libc's `write`,
+    16	`_exit`, `abort`) is entered; the external functions' own use is outside it (a premise, listed),
+    17	and so is that `_exit` and `abort` do not return (a path ends at a call to one).
+    18	
+    19	Stack addresses never leave the stack and frame pointers: taking one as a value, storing or
+    20	loading a saved frame pointer other than through the modelled frame save and restore, touching
+    21	bytes at or above the entry stack pointer (the return address, the caller's frame) and returning
+    22	through a link register that does not hold the return address are all refused (St, x86_inst,
+    23	a64_inst).
+    24	
+    25	Fail closed: an instruction outside the modelled set (X86_PLAIN, A64_PLAIN and the control
+    26	transfers), any instruction that writes the stack pointer in a way not modelled here, an indirect
+    27	branch or call, a branch leaving its function, two different depths at one address, a return at a
+    28	nonzero depth, recursion, or a call to a function that is neither Concrete-owned nor a PLT/stub
+    29	symbol is an error (exit 1), never a bound.
+    30	"""
+    31	import re
+    32	import sys
+    33	
+    34	OWNED = ("main", "concrete_body", "concrete_rt_write_all")
+    35	# External functions that do not return (part of the libc premise): a path ends at a call to one.
+    36	NORETURN = ("exit", "_exit", "_Exit", "abort")
+    37	
+    38	
+    39	class Refuse(Exception):
+    40	    pass
+    41	
+    42	
+    43	def owned_name(sym):
+    44	    s = sym[1:] if sym.startswith("_") and sym[1:] in OWNED else sym
+    45	    return s if s in OWNED else None
+    46	
+    47	
+    48	def parse(path):
+    49	    """Functions: name -> list of (addr, mnemonic, operands). Also the set of stub symbols."""
+    50	    funcs, cur, stubs, section = {}, None, set(), ""
+    51	    head = re.compile(r"^([0-9a-f]+) <([^>]+)>:$")
+    52	    inst = re.compile(r"^\s*([0-9a-f]+):\s*(\S+)\s*(.*)$")
+    53	    for line in open(path, encoding="utf-8", errors="replace"):
+    54	        line = line.rstrip("\n")
+    55	        if line.startswith("Disassembly of section"):
+    56	            section = line.split()[-1].rstrip(":")
+    57	            cur = None
+    58	            continue
+    59	        m = head.match(line)
+    60	        if m:
+    61	            name = m.group(2)
+    62	            if section in (".plt", ".plt.sec", ".plt.got", "__stubs") or name.endswith("@plt"):
+    63	                stubs.add(name)
+    64	                cur = None
+    65	            else:
+    66	                cur = name
+    67	                funcs.setdefault(name, [])
+    68	            continue
+    69	        m = inst.match(line)
+    70	        if m and cur is not None:
+    71	            ops = m.group(3).split("#", 1)[0] if ARCH == "x86_64" else m.group(3).split("//")[0]
+    72	            funcs[cur].append((int(m.group(1), 16), m.group(2).lower(), ops.strip()))
+    73	    return funcs, stubs
+    74	
+    75	
+    76	def target_of(ops):
+    77	    m = re.search(r"0x([0-9a-f]+)\s*<([^>]+)>", ops)
+    78	    if not m:
+    79	        m2 = re.search(r"\b([0-9a-f]+)\s*<([^>]+)>", ops)
+    80	        if not m2:
+    81	            return None, None
+    82	        m = m2
+    83	    return int(m.group(1), 16), m.group(2)
+    84	
+    85	
+    86	def imm(s):
+    87	    t = s.strip().lstrip("#")
+    88	    try:
+    89	        return int(t, 16) if t.lower().startswith(("0x", "-0x")) else int(t)
+    90	    except ValueError:
+    91	        raise Refuse(f"not an immediate: {s}") from None
+    92	
+    93	
+    94	X86_SP = ("rsp", "esp", "sp", "spl")
+    95	X86_FP = ("rbp", "ebp", "bp", "bpl")
+    96	X86_STACK = X86_SP + X86_FP
+    97	X86_GPR64 = re.compile(r"^(r[abcd]x|r[sd]i|rbp|r(?:8|9|1[0-5]))$")
+    98	X86_SIZE = {"byte": 1, "word": 2, "dword": 4, "qword": 8, "tbyte": 10, "xmmword": 16,
+    99	            "ymmword": 32, "zmmword": 64}
+   100	MEM = re.compile(r"\[([^\]]*)\]")
+   101	
+   102	
+   103	class St:
+   104	    """The abstract state at an instruction: `d`, the stack pointer's depth below the function's
+   105	    entry; `fp`, the frame pointer's depth (None: unknown); `saved`, the stack slots holding a
+   106	    saved frame pointer or link register, as (lowest, highest) byte depths with a tag ("fp", or
+   107	    "lr" with whether it holds the function's own return address); `lr`, whether the AArch64 link
+   108	    register holds the function's own return address. A byte at depth n lies n bytes below the
+   109	    entry stack pointer; the function's own bytes have depth >= 1."""
+   110	
+   111	    __slots__ = ("d", "fp", "saved", "lr")
+   112	
+   113	    def __init__(self, d=0, fp=None, saved=frozenset(), lr=True):
+   114	        self.d, self.fp, self.saved, self.lr = d, fp, saved, lr
+   115	
+   116	    def key(self):
+   117	        return (self.d, self.fp, self.saved, self.lr)
+   118	
+   119	    def but(self, **kw):
+   120	        s = St(self.d, self.fp, self.saved, self.lr)
+   121	        for k, v in kw.items():
+   122	            setattr(s, k, v)
+   123	        # Slots wholly below the stack pointer are free memory: drop them.
+   124	        s.saved = frozenset(x for x in s.saved if x[0] <= s.d)
+   125	        return s
+   126	
+   127	
+   128	def check_bytes(st, lo, hi, what, allowed=()):
+   129	    """The bytes [lo, hi] (depths) are the function's own and overlap no saved slot, except the
+   130	    slots `allowed` (the frame-record save/restore itself)."""
+   131	    if lo < 1:
+   132	        raise Refuse(f"touches the return address or the caller's frame: {what}")
+   133	    for slot in st.saved:
+   134	        if slot not in allowed and slot[0] <= hi and lo <= slot[1]:
+   135	            raise Refuse(f"touches a saved frame pointer or link register: {what}")
+   136	
+   137	
+   138	def x86_inst(mn, ops, st):
+   139	    """(new state, deepest byte touched or None) after a non-control x86 instruction. Fails closed:
+   140	    a stack or frame pointer read as a value (other than the modelled frame setup), a stack
+   141	    address taken (`lea`), an indexed or partial-register stack address, an access of unknown size,
+   142	    an access at or above the entry stack pointer or into a saved frame pointer, a stack-pointer
+   143	    write that is not modelled, a push or pop of other than a 64-bit general register."""
+   144	    what = f"{mn} {ops}"
+   145	    args = [a.strip() for a in ops.split(",")] if ops else []
+   146	    dst = args[0] if args else ""
+   147	    deepest = None
+   148	    for m in MEM.finditer(ops):
+   149	        inner = m.group(1)
+   150	        terms = re.findall(r"[+-]?\s*[^+\-\s]+", inner)
+   151	        regs = [t.strip(" +-") for t in terms if not re.fullmatch(r"[+-]?\s*(0x[0-9a-f]+|\d+)", t)]
+   152	        base = [r for r in regs if r in X86_STACK]
+   153	        if not base:
+   154	            continue
+   155	        if base[0] not in ("rsp", "rbp"):
+   156	            raise Refuse(f"stack address through a partial register: {what}")
+   157	        if len(regs) != 1:
+   158	            raise Refuse(f"indexed stack address: {what}")
+   159	        if mn == "lea":
+   160	            raise Refuse(f"stack address taken as a value: {what}")
+   161	        size = re.search(r"(\w+) ptr\s*(?:\w+:)?\s*$", ops[:m.start()])
+   162	        if not size or size.group(1) not in X86_SIZE:
+   163	            raise Refuse(f"stack access of unknown size: {what}")
+   164	        k = sum(int(t.replace(" ", ""), 0) for t in terms if t.strip(" +-") not in regs)
+   165	        if base[0] == "rbp":
+   166	            if st.fp is None:
+   167	                raise Refuse(f"frame-relative address with an unknown frame pointer: {what}")
+   168	            top = st.fp - k
+   169	        else:
+   170	            top = st.d - k
+   171	        check_bytes(st, top - X86_SIZE[size.group(1)] + 1, top, what)
+   172	        deepest = top if deepest is None else max(deepest, top)
+   173	    outside = MEM.sub("", ops)
+   174	    modelled = (mn, ops) in (("push", "rbp"), ("pop", "rbp"), ("mov", "rbp, rsp"),
+   175	                             ("mov", "rsp, rbp"), ("leave", "")) or (
+   176	        mn in ("sub", "add") and dst == "rsp" and re.fullmatch(r"rsp, (0x[0-9a-f]+|\d+)", ops))
+   177	    if not modelled and any(re.search(rf"\b{r}\b", outside) for r in X86_STACK):
+   178	        raise Refuse(f"stack or frame pointer used as a value: {what}")
+   179	    if mn in ("push", "pop"):
+   180	        if not X86_GPR64.match(dst):
+   181	            raise Refuse(f"push/pop of other than a 64-bit general register: {what}")
+   182	        if mn == "push":
+   183	            d = st.d + 8
+   184	            saved = st.saved | {(d - 7, d, "fp")} if dst == "rbp" else st.saved
+   185	            return st.but(d=d, saved=saved), d
+   186	        slot = (st.d - 7, st.d, "fp")
+   187	        if slot in st.saved and dst != "rbp":
+   188	            raise Refuse(f"a saved frame pointer popped into {dst}: {what}")
+   189	        check_bytes(st, st.d - 7, st.d, what, allowed=(slot,))
+   190	        return st.but(d=st.d - 8, fp=None if dst == "rbp" else st.fp, saved=st.saved - {slot}), None
+   191	    if mn == "leave":
+   192	        if st.fp is None:
+   193	            raise Refuse(f"leave with an unknown frame pointer: {what}")
+   194	        slot = (st.fp - 7, st.fp, "fp")
+   195	        check_bytes(st, st.fp - 7, st.fp, what, allowed=(slot,))
+   196	        return st.but(d=st.fp - 8, fp=None, saved=st.saved - {slot}), None
+   197	    if mn in ("sub", "add") and dst == "rsp":
+   198	        n = imm(args[1])
+   199	        return st.but(d=st.d + n if mn == "sub" else st.d - n), deepest
+   200	    if (mn, ops) == ("mov", "rbp, rsp"):
+   201	        return st.but(fp=st.d), deepest
+   202	    if (mn, ops) == ("mov", "rsp, rbp"):
+   203	        if st.fp is None:
+   204	            raise Refuse(f"mov rsp, rbp with an unknown frame pointer: {what}")
+   205	        return st.but(d=st.fp), deepest
+   206	    if dst in X86_SP:
+   207	        raise Refuse(f"unmodelled stack-pointer write: {what}")
+   208	    if dst in X86_FP:
+   209	        return st.but(fp=None), deepest
+   210	    return st, deepest
+   211	
+   212	
+   213	A64_SP = ("sp", "wsp")
+   214	A64_FP = ("x29", "w29")
+   215	A64_LR = ("x30", "w30")
+   216	A64_REGSIZE = {"x": 8, "w": 4, "q": 16, "d": 8, "s": 4, "h": 2, "b": 1}
+   217	
+   218	
+   219	def a64_inst(mn, ops, st):
+   220	    """(new state, deepest byte touched or None) after a non-control AArch64 instruction. Fails
+   221	    closed as x86_inst does, and on: writeback on x29; a register offset from sp or x29; sp or
+   222	    x29 stored or read as a value other than the frame record (`stp x29, x30` / `ldp x29, x30`
+   223	    with base sp) and the modelled frame setup; a write to x30 other than the frame-record
+   224	    restore."""
+   225	    what = f"{mn} {ops}"
+   226	    args = [a.strip() for a in re.split(r",(?![^\[]*\])", ops)] if ops else []
+   227	    first_mem = next((i for i, a in enumerate(args) if a.startswith("[")), len(args))
+   228	    data = args[:first_mem]
+   229	    is_load, is_store = mn.startswith("ld"), mn.startswith("st")
+   230	    record = mn in ("stp", "ldp") and data == ["x29", "x30"]
+   231	    d, deepest, saved, fp, lr = st.d, None, st.saved, st.fp, st.lr
+   232	    if first_mem < len(args):
+   233	        mem = args[first_mem]
+   234	        post = args[first_mem + 1] if first_mem + 1 < len(args) else None
+   235	        m = re.fullmatch(r"\[(\w+)(?:,\s*(#?-?(?:0x)?[0-9a-f]+))?\](!?)", mem)
+   236	        if not m:
+   237	            if re.search(r"\b(sp|x29|w29|wsp)\b", mem):
+   238	                raise Refuse(f"register-offset stack address: {what}")
+   239	            base = None
+   240	        else:
+   241	            base, off, pre = m.group(1), m.group(2), m.group(3) == "!"
+   242	        if base in A64_FP and (pre or post is not None):
+   243	            raise Refuse(f"writeback on the frame pointer: {what}")
+   244	        if base in ("sp", "x29"):
+   245	            if mn in ("ldrb", "strb", "ldrsb", "ldurb", "sturb", "ldursb"):
+   246	                size = 1
+   247	            elif mn in ("ldrh", "strh", "ldrsh", "ldurh", "sturh", "ldursh"):
+   248	                size = 2
+   249	            elif mn in ("ldrsw", "ldursw", "ldpsw"):
+   250	                size = 4 * len(data)
+   251	            else:
+   252	                if not data or data[0][0] not in A64_REGSIZE:
+   253	                    raise Refuse(f"stack access of unknown size: {what}")
+   254	                size = A64_REGSIZE[data[0][0]] * len(data)
+   255	            k = imm(off) if off else 0
+   256	            if base == "x29":
+   257	                if fp is None:
+   258	                    raise Refuse(f"frame-relative address with an unknown frame pointer: {what}")
+   259	                top = fp - k
+   260	            elif pre:
+   261	                d = d - k
+   262	                top = d
+   263	            else:
+   264	                top = d - k
+   265	            if post is not None:
+   266	                if base != "sp":
+   267	                    raise Refuse(f"unmodelled writeback: {what}")
+   268	                top = st.d
+   269	                d = d - imm(post)
+   270	            lo = top - size + 1
+   271	            if record and base == "sp":
+   272	                # x29 at the lower address (the deeper half), x30 above it.
+   273	                rec = ((lo + 8, lo + 15, "fp"), (lo, lo + 7, ("lr", lr)))
+   274	                if is_store:
+   275	                    check_bytes(st, lo, top, what)
+   276	                    saved = saved | set(rec)
+   277	                else:
+   278	                    lr_slot = next((s for s in saved if s[:2] == (lo, lo + 7)), None)
+   279	                    check_bytes(st, lo, top, what, allowed=tuple(s for s in saved if s[0] >= lo and s[1] <= top))
+   280	                    lr = bool(lr_slot and lr_slot[2] == ("lr", True))
+   281	                    saved = frozenset(s for s in saved if not (s[0] >= lo and s[1] <= top))
+   282	                    fp = None
+   283	            else:
+   284	                check_bytes(st, lo, top, what)
+   285	            deepest = top
+   286	        elif base is not None and (pre or post is not None) and base in A64_SP:
+   287	            raise Refuse(f"unmodelled stack writeback: {what}")
+   288	    if is_store and not record and any(a in A64_SP + A64_FP for a in data):
+   289	        raise Refuse(f"stack or frame pointer stored as a value: {what}")
+   290	    if is_load:
+   291	        if any(a in A64_SP for a in data):
+   292	            raise Refuse(f"stack pointer loaded: {what}")
+   293	        if any(a in A64_LR for a in data) and not record:
+   294	            raise Refuse(f"link register overwritten: {what}")
+   295	        if any(a in A64_FP for a in data):
+   296	            fp = None
+   297	        return st.but(d=d, fp=fp, saved=frozenset(saved), lr=lr), deepest
+   298	    if is_store:
+   299	        return st.but(d=d, fp=fp, saved=frozenset(saved), lr=lr), deepest
+   300	    # Not a memory instruction.
+   301	    dst, srcs = (args[0] if args else ""), args[1:]
+   302	    if dst in A64_SP:
+   303	        if mn in ("sub", "add") and len(args) == 3 and args[1] == "sp" and args[2].startswith("#"):
+   304	            n = imm(args[2])
+   305	            return st.but(d=d + n if mn == "sub" else d - n), None
+   306	        if (mn, args[1:]) == ("mov", ["x29"]):
+   307	            if fp is None:
+   308	                raise Refuse(f"mov sp, x29 with an unknown frame pointer: {what}")
+   309	            return st.but(d=fp), None
+   310	        if mn in ("sub", "add") and len(args) == 3 and args[1] == "x29" and args[2].startswith("#"):
+   311	            if fp is None:
+   312	                raise Refuse(f"sp from an unknown frame pointer: {what}")
+   313	            n = imm(args[2])
+   314	            return st.but(d=fp + n if mn == "sub" else fp - n), None
+   315	        raise Refuse(f"unmodelled stack-pointer write: {what}")
+   316	    if dst in A64_FP:
+   317	        if (mn, srcs) == ("mov", ["sp"]):
+   318	            return st.but(fp=d), None
+   319	        if mn == "add" and len(args) == 3 and args[1] == "sp" and args[2].startswith("#"):
+   320	            return st.but(fp=d - imm(args[2])), None
+   321	        if any(a in A64_SP + A64_FP for a in srcs):
+   322	            raise Refuse(f"stack or frame pointer used as a value: {what}")
+   323	        return st.but(fp=None), None
+   324	    if dst in A64_LR:
+   325	        raise Refuse(f"link register overwritten: {what}")
+   326	    if any(a in A64_SP + A64_FP for a in srcs):
+   327	        raise Refuse(f"stack or frame pointer used as a value: {what}")
+   328	    return st, None
+   329	
+   330	
+   331	X86_JCC = re.compile(r"^j(?!mp$)[a-z]+$")
+   332	A64_COND = re.compile(r"^b\.[a-z]+$")
+   333	
+   334	# The data-processing instructions whose only effect on the stack is what x86_inst and a64_inst
+   335	# model (memory operands, and writes to the stack, frame and link registers). Any other
+   336	# instruction on a reachable path is refused: an unknown one may move the stack pointer or
+   337	# transfer control (x86 `loop`, a `rep` prefix), so the analysis never treats it as a fallthrough.
+   338	X86_PLAIN = re.compile(
+   339	    r"^(mov|movabs|movzx|movsx|movsxd|lea|add|sub|adc|sbb|imul|mul|and|or|xor|not|neg|inc|dec"
+   340	    r"|cmp|test|shl|shr|sar|sal|rol|ror|cdq|cqo|cdqe|cwde|cbw|cwd|nop|endbr64"
+   341	    r"|push|pop|leave|set[a-z]+|cmov[a-z]+)$")
+   342	A64_PLAIN = re.compile(
+   343	    r"^(mov|movz|movk|movn|add|adds|sub|subs|neg|negs|mul|madd|msub|mneg|smull|umull|smulh|umulh"
+   344	    r"|smaddl|umaddl|sdiv|udiv|and|ands|orr|orn|eor|eon|bic|bics|mvn|lsl|lsr|asr|ror|lslv|lsrv"
+   345	    r"|asrv|cmp|cmn|tst|ccmp|ccmn|cset|csetm|csel|csinc|csinv|csneg|cinc|cneg|sxtb|sxth|sxtw"
+   346	    r"|uxtb|uxth|ubfx|sbfx|ubfm|sbfm|bfi|bfxil|extr|adr|adrp|nop"
+   347	    r"|ldr|ldrb|ldrh|ldrsb|ldrsh|ldrsw|ldur|ldurb|ldurh|ldursb|ldursh|ldursw"
+   348	    r"|str|strb|strh|stur|sturb|sturh|ldp|stp|ldpsw)$")
+   349	
+   350	
+   351	def control(mn, ops):
+   352	    """(kind, target) for a control instruction, or (None, None)."""
+   353	    if ARCH == "x86_64":
+   354	        if mn == "call":
+   355	            return "call", ops
+   356	        if mn == "jmp":
+   357	            return "jmp", ops
+   358	        if X86_JCC.match(mn):
+   359	            return "jcc", ops
+   360	        if mn == "ret":
+   361	            if ops:
+   362	                return "indirect", ops
+   363	            return "ret", None
+   364	        if mn in ("ud2", "hlt", "int3"):
+   365	            return "stop", None
+   366	        return None, None
+   367	    if mn == "bl":
+   368	        return "call", ops
+   369	    if mn == "b":
+   370	        return "jmp", ops
+   371	    if A64_COND.match(mn) or mn in ("cbz", "cbnz", "tbz", "tbnz"):
+   372	        return "jcc", ops
+   373	    if mn in ("blr", "br", "braa", "blraa", "braaz", "blraaz"):
+   374	        return "indirect", ops
+   375	    if mn == "ret" and not ops:
+   376	        return "ret", None
+   377	    if mn in ("ret", "retaa", "retab"):
+   378	        return "indirect", ops
+   379	    if mn in ("brk", "udf", "hlt"):
+   380	        return "stop", None
+   381	    return None, None
+   382	
+   383	
+   384	def analyse(funcs, stubs):
+   385	    """(bound, externals, owned): main's bound, each external's deepest entry depth, both from
+   386	    main's entry, and the owned functions' names."""
+   387	    owned = {owned_name(n): n for n in funcs if owned_name(n)}
+   388	    if "main" not in owned:
+   389	        raise Refuse("no main")
+   390	    memo, active = {}, set()
+   391	    ret_push = 8 if ARCH == "x86_64" else 0
+   392	    inst = x86_inst if ARCH == "x86_64" else a64_inst
+   393	    plain = X86_PLAIN if ARCH == "x86_64" else A64_PLAIN
+   394	
+   395	    def add_ext(ext, sub, base):
+   396	        for name, depth in sub.items():
+   397	            ext[name] = max(ext.get(name, 0), base + depth)
+   398	
+   399	    def fn_bound(key):
+   400	        """(deepest, externals) of owned function `key`, relative to its own entry."""
+   401	        if key in memo:
+   402	            return memo[key]
+   403	        if key in active:
+   404	            raise Refuse(f"recursion through {key}")
+   405	        active.add(key)
+   406	        code = funcs[owned[key]]
+   407	        if not code:
+   408	            raise Refuse(f"{key}: no instructions")
+   409	        index = {a: i for i, (a, _, _) in enumerate(code)}
+   410	        seen, work, deepest, ext = {}, [(0, St())], 0, {}
+   411	        while work:
+   412	            i, st = work.pop()
+   413	            while True:
+   414	                if i >= len(code):
+   415	                    raise Refuse(f"{key}: runs off its end")
+   416	                addr, mn, ops = code[i]
+   417	                if addr in seen:
+   418	                    if seen[addr] != st.key():
+   419	                        raise Refuse(f"{key}+{addr:#x}: states {seen[addr]} and {st.key()} meet")
+   420	                    break
+   421	                seen[addr] = st.key()
+   422	                kind, arg = control(mn, ops)
+   423	                if kind is None:
+   424	                    if not plain.match(mn):
+   425	                        raise Refuse(f"{key}+{addr:#x}: unmodelled instruction: {mn} {ops}")
+   426	                    try:
+   427	                        st, touched = inst(mn, ops, st)
+   428	                    except Refuse as e:
+   429	                        raise Refuse(f"{key}+{addr:#x}: {e}") from None
+   430	                    if st.d < 0:
+   431	                        raise Refuse(f"{key}+{addr:#x}: stack above the entry")
+   432	                    deepest = max(deepest, st.d, touched or 0)
+   433	                    i += 1
+   434	                    continue
+   435	                if kind == "indirect":
+   436	                    raise Refuse(f"{key}+{addr:#x}: indirect branch {mn} {ops}")
+   437	                if kind == "ret":
+   438	                    if st.d != 0:
+   439	                        raise Refuse(f"{key}+{addr:#x}: return at depth {st.d}")
+   440	                    if not st.lr:
+   441	                        raise Refuse(f"{key}+{addr:#x}: return through a link register not restored")
+   442	                    break
+   443	                if kind == "stop":
+   444	                    break
+   445	                tgt, sym = target_of(arg)
+   446	                if tgt is None:
+   447	                    raise Refuse(f"{key}+{addr:#x}: indirect {mn} {ops}")
+   448	                if kind == "call":
+   449	                    base = sym.split("+")[0]
+   450	                    callee = owned_name(base)
+   451	                    d = st.d
+   452	                    if callee and "+" not in sym:
+   453	                        sub_deep, sub_ext = fn_bound(callee)
+   454	                        deepest = max(deepest, d + ret_push + sub_deep)
+   455	                        add_ext(ext, sub_ext, d + ret_push)
+   456	                    elif base in stubs or base.endswith("@plt"):
+   457	                        # ELF `write@plt`; Mach-O stubs carry one extra leading underscore.
+   458	                        name = base.removesuffix("@plt") if base.endswith("@plt") else base[1:]
+   459	                        add_ext(ext, {name: 0}, d + ret_push)
+   460	                        deepest = max(deepest, d + ret_push)
+   461	                        if name in NORETURN:
+   462	                            break
+   463	                    else:
+   464	                        raise Refuse(f"{key}+{addr:#x}: call to {sym}, neither owned nor a stub")
+   465	                    if ARCH == "aarch64":
+   466	                        st = st.but(lr=False)  # bl wrote x30: this function's return address is gone
+   467	                    i += 1
+   468	                    continue
+   469	                if tgt not in index:
+   470	                    raise Refuse(f"{key}+{addr:#x}: branch leaves the function: {mn} {ops}")
+   471	                if kind == "jmp":
+   472	                    i = index[tgt]
+   473	                    continue
+   474	                work.append((index[tgt], st))
+   475	                i += 1
+   476	        active.discard(key)
+   477	        memo[key] = (deepest, ext)
+   478	        return memo[key]
+   479	
+   480	    total, ext = fn_bound("main")
+   481	    return total, ext, owned
+   482	
+   483	
+   484	if __name__ == "__main__":
+   485	    if len(sys.argv) not in (3, 4) or sys.argv[1] not in ("x86_64", "aarch64"):
+   486	        sys.exit("usage: stack_bound.py x86_64|aarch64 DISASM [--ranges]")
+   487	    ARCH = sys.argv[1]
+   488	    try:
+   489	        funcs, stubs = parse(sys.argv[2])
+   490	        total, ext, owned = analyse(funcs, stubs)
+   491	    except Refuse as e:
+   492	        print(f"refused: {e}")
+   493	        sys.exit(1)
+   494	    print(f"bound {total}")
+   495	    for name, depth in sorted(ext.items()):
+   496	        print(f"external {name} {depth}")
+   497	    if len(sys.argv) == 4 and sys.argv[3] == "--ranges":
+   498	        for key, name in sorted(owned.items()):
+   499	            code = funcs[name]
+   500	            print(f"range {key} {code[0][0]:#x} {code[-1][0]:#x}")
+
+exec
+/bin/bash -lc "python3 - <<'PY'
+import importlib.util
+s=importlib.util.spec_from_file_location('sb','scripts/checks/lib/stack_bound.py'); m=importlib.util.module_from_spec(s); s.loader.exec_module(m)
+cases=[('freed saved fp','x86_64',{'main':[(0,'push','rbp'),(1,'mov','rbp, rsp'),(2,'push','rbp'),(3,'add','rsp, 8'),(4,'mov','rax, qword ptr [rsp - 8]'),(5,'mov','dword ptr [rax - 0x100], ecx'),(6,'pop','rbp'),(7,'ret','')]}),('non-stack frame restore','aarch64',{'main':[(0,'ldp','x29, x30, [x0]'),(4,'ret','')]}),('callee frame clobber','x86_64',{'main':[(0,'push','rbp'),(1,'mov','rbp, rsp'),(2,'call','0x20 <concrete_body>'),(3,'mov','dword ptr [rbp - 0x100], ecx'),(4,'pop','rbp'),(5,'ret','')],'concrete_body':[(32,'sub','rsp, 0x1000'),(33,'mov','rbp, rsp'),(34,'add','rsp, 0x1000'),(35,'ret','')]})]
+for name,arch,funcs in cases:
+ m.ARCH=arch
+ try: print(name,m.analyse(funcs,set())[:2])
+ except m.Refuse as e: print(name,'REFUSED',e)
+PY" in /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/gates-review5
+ succeeded in 0ms:
+freed saved fp (16, {})
+non-stack frame restore (0, {})
+callee frame clobber (4112, {})
+
+codex
+The direct round-4 reproducers are now refused. I’ve reproduced two remaining holes: dropping a saved-slot tag lets the stored frame pointer escape through a later load, and `ldp x29, x30, [x0]` bypasses link-register validation. I’m also checking whether calls preserve the caller’s tracked frame pointer.
+exec
+/bin/bash -lc "sed -n '120,245p' scripts/checks/slice0_artifacts.sh; rg --files -g '*decisions*' -g '*PHILOSOPHY*' -g '*README*' | head -30" in /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/gates-review5
+ succeeded in 0ms:
+  else
+    echo "FAIL $name [llvm+asan+ubsan]: status $(head -c 16 "$d/san.status") (expected $(head -c 16 "$d/status")), stderr" \
+      "$(head -c 600 "$d/san.stderr")"
+    fail=1
+  fi
+  for backend in llvm lcb; do
+    size_report "$name" "$backend" "$d/$backend.exe"
+    stack_check "$name" "$backend" "$d/$backend.exe"
+  done
+  examples=$((examples + 1))
+done
+
+# Control (gate 10): an out-of-bounds load in the body must be reported by ASan.
+c="$work/ctl/asan"
+"${emitter[@]}" emit "${names%%$'\n'*}" "$c" "$target"
+sed -i.orig 's/^define i32 @concrete_body() {$/define i32 @concrete_body_orig() {/' "$c/llvm.ll"
+cat >>"$c/llvm.ll" <<'LL'
+
+@concrete_ctl = global [4 x i8] zeroinitializer
+define i32 @concrete_body() {
+entry:
+  %p = getelementptr i8, ptr @concrete_ctl, i64 4
+  %v = load volatile i8, ptr %p
+  %r = call i32 @concrete_body_orig()
+  ret i32 %r
+}
+LL
+build control-asan "$c/build.log" "${capped[@]}" timeout -k 10 300 bash "$root/scripts/checks/slice0_native.sh" "$c" "$lcb"
+build control-asan "$c/build-san.log" \
+  "${capped[@]}" timeout -k 10 300 bash "$root/scripts/checks/slice0_native.sh" "$c" "$lcb" sanitize
+observe "$c/llvm.san.exe" "$c/san" 30 30 0 "${san_env[@]}"
+if ! judge "$c" "$c/san" && grep -q 'AddressSanitizer' "$c/san.stderr"; then
+  echo "ok   control: ASan reports an out-of-bounds load"
+else
+  echo "FAIL control: ASan did not report an out-of-bounds load (status $(cat "$c/san.status"))"; fail=1
+fi
+
+# Controls (gate 12): the analysis on synthetic disassembly.
+ctl_dis() { # ctl_dis NAME: write a synthetic x86-64 disassembly from stdin
+  { echo "Disassembly of section .text:"; cat; } >"$work/ctl/$1.dis"
+  echo "$work/ctl/$1.dis"
+}
+known=$(ctl_dis known <<'D'
+
+0000000000001000 <concrete_body>:
+    1000:	push	rbp
+    1001:	mov	rbp, rsp
+    1004:	sub	rsp, 0x10
+    1008:	add	rsp, 0x10
+    100c:	pop	rbp
+    100d:	ret
+
+0000000000001010 <main>:
+    1010:	push	rbp
+    1011:	mov	rbp, rsp
+    1014:	sub	rsp, 0x20
+    1018:	call	0x1000 <concrete_body>
+    101d:	je	0x1024 <main+0x14>
+    101f:	call	0x2000 <write@plt>
+    1024:	leave
+    1025:	ret
+D
+)
+# main: 8 + 0x20 = 40 deep; the call pushes 8; the body goes 8 + 0x10 = 24 deeper: 72.
+if [ "$(stack_bound x86_64 "$known")" = "$(printf 'bound 72\nexternal write 48')" ]; then
+  echo "ok   control: stack bound of a known function"
+else
+  echo "FAIL control: stack bound of a known function: $(stack_bound x86_64 "$known")"
+  fail=1
+fi
+refuse() { # refuse NAME BODY [ARCH [MAIN]]: BODY (printf format) follows the main header
+  local f
+  f=$(ctl_dis "$1" <<<"$(printf "\n0000000000001010 <${4:-main}>:\n$2")")
+  if stack_bound "${3:-x86_64}" "$f" >"$f.out"; then
+    echo "FAIL control: stack analysis accepts $1: $(head -c 2000 "$f.out")"; fail=1
+  else
+    echo "ok   control: stack analysis refuses $1"
+  fi
+}
+refuse dynamic-sp '    1010:\tsub\trsp, rax\n    1013:\tret\n'
+refuse indirect-call '    1010:\tcall\trax\n    1012:\tret\n'
+refuse recursion '    1010:\tpush\trbp\n    1011:\tcall\t0x1010 <main>\n    1016:\tpop\trbp\n    1017:\tret\n'
+refuse unknown-call '    1010:\tcall\t0x3000 <helper>\n    1015:\tret\n'
+refuse depths-meet '    1010:\tje\t0x1014 <main+0x4>\n    1012:\tpush\trax\n    1013:\tnop\n    1014:\tret\n'
+refuse stack-pointer-escape '    1010:\tmov\trax, rsp\n    1013:\tret\n'
+refuse indexed-stack-address '    1010:\tmov\teax, dword ptr [rsp + 4*rcx - 0x8]\n    1014:\tret\n'
+refuse partial-stack-pointer '    1010:\tpush\trax\n    1011:\tpop\tsp\n    1013:\tret\n'
+refuse partial-frame-pointer '    1010:\tpush\trbp\n    1011:\tmov\trbp, rsp\n    1014:\tmov\tbp, 0x0\n    1018:\tmov\teax, dword ptr [rbp - 0x100]\n    101e:\tpop\trbp\n    101f:\tret\n'
+refuse loop-instruction '    1010:\tmov\tecx, 0x2\n    1015:\tloop\t0x1018 <main+0x8>\n    1017:\tret\n    1018:\tsub\trsp, 0x100\n    101f:\tadd\trsp, 0x100\n    1026:\tret\n'
+refuse saved-frame-pointer-popped '    1010:\tpush\trbp\n    1011:\tmov\trbp, rsp\n    1014:\tpush\trbp\n    1015:\tpop\trax\n    1016:\tmov\tdword ptr [rax - 0x100], ecx\n    101c:\tpop\trbp\n    101d:\tret\n'
+refuse stack-address-taken '    1010:\tpush\trbp\n    1011:\tmov\trbp, rsp\n    1014:\tlea\trax, [rbp - 0x10]\n    1018:\tpop\trbp\n    1019:\tret\n'
+refuse return-address-overwrite '    1010:\tmov\tqword ptr [rsp], rax\n    1014:\tret\n'
+refuse a64-frame-pointer-stored '    1010:\tmov\tx29, sp\n    1014:\tstr\tx29, [x0]\n    1018:\tret\n' aarch64 _main
+refuse a64-ret-register '    1010:\tret\tx0\n' aarch64 _main
+refuse a64-link-register-lost '    1010:\tstp\tx29, x30, [sp, #-0x10]!\n    1014:\tbl\t0x1020 <_concrete_body>\n    1018:\tadd\tsp, sp, #0x10\n    101c:\tret\n\n0000000000001020 <_concrete_body>:\n    1020:\tret\n' aarch64 _main
+refuse a64-w29-writeback-load '    1010:\tsub\tsp, sp, #0x10\n    1014:\tmov\tx29, sp\n    1018:\tldr\tw29, [sp], #0x10\n    101c:\tstr\tx0, [x29, #-0x100]\n    1020:\tret\n' aarch64 _main
+refuse a64-frame-writeback '    1010:\tmov\tx29, sp\n    1014:\tstr\tx0, [x29], #-0x100\n    1018:\tstr\tx0, [x29]\n    101c:\tadd\tx29, x29, #0x100\n    1020:\tret\n' aarch64 _main
+# A leaf's red-zone store, below the stack pointer, is inside the bound: 8 + 0x30.
+redzone=$(ctl_dis redzone <<'D'
+
+0000000000001010 <main>:
+    1010:	push	rbp
+    1011:	mov	rbp, rsp
+    1014:	mov	dword ptr [rbp - 0x30], eax
+    1017:	pop	rbp
+    1018:	ret
+D
+)
+if [ "$(stack_bound x86_64 "$redzone")" = "bound 56" ]; then
+  echo "ok   control: a red-zone store is inside the bound"
+else
+  echo "FAIL control: red-zone bound: $(stack_bound x86_64 "$redzone")"
+  fail=1
+fi
+# bound_is NAME ARCH EXPECTED BODY: the analysis of the synthetic function(s) BODY (printf format,
+# headers included) gives exactly EXPECTED.
+bound_is() {
+  local f got
+  f=$(ctl_dis "$1" <<<"$(printf "\n$4")")
+  got=$(stack_bound "$2" "$f" | cap_out | tr '\n' ' ') || true
+  if [ "$got" = "$3 " ]; then echo "ok   control: stack bound of $1"
+  else echo "FAIL control: stack bound of $1: ${got:-refused}, expected $3"; fail=1; fi
+}
+bound_is a64-framed-main-and-leaf aarch64 'bound 32' '0000000000001000 <_main>:\n    1000:\tstp\tx29, x30, [sp, #-0x10]!\n    1004:\tmov\tx29, sp\n    1008:\tbl\t0x1020 <_concrete_body>\n    100c:\tldp\tx29, x30, [sp], #0x10\n    1010:\tret\n\n0000000000001020 <_concrete_body>:\n    1020:\tsub\tsp, sp, #0x10\n    1024:\tstr\tw0, [sp, #0xc]\n    1028:\tadd\tsp, sp, #0x10\n    102c:\tret\n'
+bound_is a64-offset-frame-record aarch64 'bound 32' '0000000000001000 <_main>:\n    1000:\tsub\tsp, sp, #0x20\n    1004:\tstp\tx29, x30, [sp, #0x10]\n    1008:\tadd\tx29, sp, #0x10\n    100c:\tstur\twzr, [x29, #-0x4]\n    1010:\tldp\tx29, x30, [sp, #0x10]\n    1014:\tadd\tsp, sp, #0x20\n    1018:\tret\n'
+if [ -n "$gdb" ]; then
+README.md
+Concrete/README.md
+ConcreteSpec/README.md
+docs/archive/decisions-2026-11-05/README.md
+docs/archive/bugs-2026-11/README.md
+docs/decisions.md
+docs/PHILOSOPHY.md
+docs/archive/roadmap-2026-11/README.md
+legacy/paper/README.md
+legacy/std/README.md
+legacy/scripts/fuzz/farm/README.md
+legacy/scripts/README.md
+legacy/scripts/browser/README.md
+legacy/changelog.d/2026-10-29-spec-owner-decisions.md
+legacy/changelog.d/2026-10-25-roadmap-owner-decisions.md
+legacy/changelog.d/2026-11-05-record-decisions.md
+legacy/changelog.d/2026-10-30-spec-decisions-to-make.md
+legacy/changelog.d/2026-11-05-decisions-a2b.md
+legacy/changelog.d/README.md
+legacy/changelog.d/2026-11-01-record-decisions.md
+legacy/changelog.d/2026-11-02-decisions.md
+legacy/editor/concrete-grammar/README.md
+legacy/research/stdlib/languages/README.md
+legacy/README.md
+legacy/scripts/tests/README.md
+legacy/research/stdlib/README.md
+legacy/research/README.md
+legacy/tests/perf/compiler_pipeline/README.md
+legacy/tests/README.md
+legacy/tests/wrong-code/README.md
+
+exec
+/bin/bash -lc "python3 - <<'PY'
+import importlib.util, shlex, io
+from unittest.mock import patch
+s=importlib.util.spec_from_file_location('sb','scripts/checks/lib/stack_bound.py'); m=importlib.util.module_from_spec(s); s.loader.exec_module(m)
+n=0
+for line in open('scripts/checks/slice0_artifacts.sh'):
+ if not line.startswith(('refuse ', 'bound_is a64-')): continue
+ a=shlex.split(line)
+ if a[0]=='refuse':
+  _,name,body,*rest=a; m.ARCH=rest[0] if rest else 'x86_64'; main=rest[1] if len(rest)>1 else 'main'; dis='0000000000001010 <'+main+'>:\\n'+body; expect=None
+ else:
+  _,name,m.ARCH,expect,dis=a
+ dis=dis.replace('\\\\n','\\n').replace('\\\\t','\\t')
+ with patch('builtins.open',return_value=io.StringIO(dis)): funcs,stubs=m.parse('unused')
+ try:
+  bound=m.analyse(funcs,stubs)[0]; good=expect==f'bound {bound}'
+ except m.Refuse: good=expect is None
+ print(('PASS' if good else 'FAIL'),name); n+=1
+print('controls checked:',n)
+PY" in /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/gates-review5
+ succeeded in 0ms:
+PASS dynamic-sp
+PASS indirect-call
+PASS recursion
+PASS unknown-call
+PASS depths-meet
+PASS stack-pointer-escape
+PASS indexed-stack-address
+PASS partial-stack-pointer
+PASS partial-frame-pointer
+PASS loop-instruction
+PASS saved-frame-pointer-popped
+PASS stack-address-taken
+PASS return-address-overwrite
+PASS a64-frame-pointer-stored
+PASS a64-ret-register
+PASS a64-link-register-lost
+PASS a64-w29-writeback-load
+PASS a64-frame-writeback
+PASS a64-framed-main-and-leaf
+PASS a64-offset-frame-record
+controls checked: 20
+
+exec
+/bin/bash -lc "find scripts/checks/lib -maxdepth 2 -name '*stack_bound*' -ls" in /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/gates-review5
+ succeeded in 0ms:
+ 25362588     24 -rw-------   1 unbalancedparen unbalancedparen    22980 Nov  8 00:21 scripts/checks/lib/stack_bound.py
+ 27197584     32 -rw-------   1 unbalancedparen unbalancedparen    32505 Nov  8 00:22 scripts/checks/lib/__pycache__/stack_bound.cpython-313.pyc
+
+exec
+/bin/bash -lc 'rm scripts/checks/lib/__pycache__/stack_bound.cpython-313.pyc; rmdir scripts/checks/lib/__pycache__ 2>/dev/null || true' in /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/gates-review5
+ succeeded in 0ms:
+codex
+**REJECT.** The direct round-4 reproducers are resolved, but three remaining holes are material. All 18 refusal controls and both new AArch64 expected-bound controls passed when replayed against the analyzer.
+
+1. **P1 — Freed saved slots still contain stack addresses.** [stack_bound.py:123](scripts/checks/lib/stack_bound.py#L123) drops tags when SP moves past them, although memory retains its contents. This accepted sequence reports **bound 16**, while the final store reaches depth **264**:
+
+   ```asm
+   push rbp
+   mov rbp, rsp
+   push rbp
+   add rsp, 8
+   mov rax, qword ptr [rsp - 8]
+   mov dword ptr [rax - 0x100], ecx
+   pop rbp
+   ret
+   ```
+
+   Preserve provenance for readable freed slots, or refuse accesses that could recover their saved pointer values.
+
+2. **P1 — Frame-record exemptions apply with arbitrary bases.** [stack_bound.py:230](scripts/checks/lib/stack_bound.py#L230) recognizes `record` without requiring base `sp`. Consequently, the exemptions at lines 288 and 293 accept both `stp x29, x30, [x0]` and `ldp x29, x30, [x0]`. In particular:
+
+   ```asm
+   ldp x29, x30, [x0]
+   ret
+   ```
+
+   reports **bound 0**, retaining `lr=True` despite loading an arbitrary return target. Require the validated SP-based frame-record path before granting either exemption.
+
+3. **P1 — Calls retain an unverified caller frame pointer.** [stack_bound.py:452](scripts/checks/lib/stack_bound.py#L452) summarizes callee depth but does not verify that the callee preserves `rbp`/`x29`. An accepted `concrete_body` containing `sub rsp, 0x1000; mov rbp, rsp; add rsp, 0x1000; ret` leaves `rbp` pointing into its former frame. If the caller establishes its frame with `push rbp; mov rbp, rsp`, calls that body, then stores through `[rbp - 0x100]`, the analyzer reports **4112**, while the store reaches **4368**. Verify frame-pointer preservation on returning paths or invalidate the caller’s tracked FP across calls.
+
+These are understated-bound/control-flow failures, rather than minor changes suitable for ACCEPT-WITH-CHANGES. No source files were changed.
+tokens used
+32,950
+**REJECT.** The direct round-4 reproducers are resolved, but three remaining holes are material. All 18 refusal controls and both new AArch64 expected-bound controls passed when replayed against the analyzer.
+
+1. **P1 — Freed saved slots still contain stack addresses.** [stack_bound.py:123](scripts/checks/lib/stack_bound.py#L123) drops tags when SP moves past them, although memory retains its contents. This accepted sequence reports **bound 16**, while the final store reaches depth **264**:
+
+   ```asm
+   push rbp
+   mov rbp, rsp
+   push rbp
+   add rsp, 8
+   mov rax, qword ptr [rsp - 8]
+   mov dword ptr [rax - 0x100], ecx
+   pop rbp
+   ret
+   ```
+
+   Preserve provenance for readable freed slots, or refuse accesses that could recover their saved pointer values.
+
+2. **P1 — Frame-record exemptions apply with arbitrary bases.** [stack_bound.py:230](scripts/checks/lib/stack_bound.py#L230) recognizes `record` without requiring base `sp`. Consequently, the exemptions at lines 288 and 293 accept both `stp x29, x30, [x0]` and `ldp x29, x30, [x0]`. In particular:
+
+   ```asm
+   ldp x29, x30, [x0]
+   ret
+   ```
+
+   reports **bound 0**, retaining `lr=True` despite loading an arbitrary return target. Require the validated SP-based frame-record path before granting either exemption.
+
+3. **P1 — Calls retain an unverified caller frame pointer.** [stack_bound.py:452](scripts/checks/lib/stack_bound.py#L452) summarizes callee depth but does not verify that the callee preserves `rbp`/`x29`. An accepted `concrete_body` containing `sub rsp, 0x1000; mov rbp, rsp; add rsp, 0x1000; ret` leaves `rbp` pointing into its former frame. If the caller establishes its frame with `push rbp; mov rbp, rsp`, calls that body, then stores through `[rbp - 0x100]`, the analyzer reports **4112**, while the store reaches **4368**. Verify frame-pointer preservation on returning paths or invalidate the caller’s tracked FP across calls.
+
+These are understated-bound/control-flow failures, rather than minor changes suitable for ACCEPT-WITH-CHANGES. No source files were changed.

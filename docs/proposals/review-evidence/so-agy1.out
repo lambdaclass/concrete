@@ -1,0 +1,16 @@
+### Findings (non-blocking)
+
+- `scripts/land/train.sh:493`: `git merge-tree --write-tree "${p[1]}" "${shas[i]}" 2>/dev/null | head -1` pipes into `head -1`, which is unnecessary on a clean merge (where `--write-tree` prints only the single tree OID line) and relies on `pipefail` to preserve `git merge-tree`'s exit status 1 on conflict. On conflict, `git merge-tree --write-tree` still prints the conflicted tree OID on line 1 before the conflict details; when `pure_merge` is called without `set -o pipefail` (such as the extracted `pm()` helper in `scripts/checks/landing_script.sh:1240`), `| head -1` masks the exit code and sets `t` to the conflicted tree OID. Dropping `| head -1` makes conflict detection independent of `pipefail`.
+- `scripts/land/signoff.sh:68-70`: `cmd_record` runs `git update-ref "$PREFIX/$sha" "$commit"` before `cmd_verify "$sha"`. If `cmd_verify` rejects the inputs (e.g., a typo in `--quote` or a reviewer file ending in `VERDICT: REJECT`), `record` exits 1 as expected, but leaves the invalid `refs/owner-signoff/$sha` ref written locally (or overwrites a prior valid local ref).
+- `scripts/land/signoff.sh:80,100-102`: `cmd_verify` runs `git cat-file blob "$ref:record.txt"` before checking the tree contents at line 101. If a forged or corrupted commit at `refs/owner-signoff/<sha>` is missing `record.txt` (or has a non-blob entry), `set -e` aborts on `git cat-file blob` with exit 128 instead of calling `bad` and exiting 1 as documented.
+
+### Summary of Answers
+
+1. **Commit binding & ref freshness**: A sign-off cannot be accepted for another commit. `train.sh` fetches `+refs/owner-signoff/*:refs/owner-signoff/*` with `--prune` (removing stale local refs after a remote deletion), checks the exact member SHA, verifies `commit: <sha>` inside `record.txt`, and verifies that a `>=7`-character hex token in `quote` is a prefix of `<sha>`.
+2. **Pure merge check**: Whenever `signed > 0`, `pure_merge` walks the first-parent chain from `$head` down through each member in reverse order to `$base`, requiring each step to be a 2-parent merge whose second parent is that member's exact SHA and whose tree equals the conflict-free `git merge-tree --write-tree` of its two parents. Extra commits, resolved conflicts, regenerated views, and reordered or missing members are all refused.
+3. **Verdict & record validation**: `cmd_verify` rejects missing keys, duplicate keys, unknown keys, extra/missing files in the tree, sha256 mismatches, and missing or `VERDICT: REJECT` final verdicts.
+4. **Pre-push hook tier**: Pushing any ref other than `refs/heads/wip/*`, `refs/notes/concrete-review{,-findings}`, or non-deletion `refs/owner-signoff/*` increments `other_refs` and runs the full gate tier.
+5. **Controls & shell portability**: The controls in `scripts/checks/landing_script.sh` and `scripts/checks/review_tool.sh` exercise both positive and negative cases and can fail; the bash constructs used (`printf -v` on scalar variables, `[[ =~ ]]`, non-empty array expansion) work under macOS bash 3.2.
+
+VERDICT: ACCEPT
+agy rc=0

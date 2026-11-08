@@ -1,0 +1,803 @@
+Review of one commit on branch wip/slice0 of the Concrete repository (3c5bb752..ea5181b5). Context: the landing train for slice 0 (the provisional compiler, Concrete/) merged wip/slice0 onto main and main's CI workflow (.github/workflows/lean_action_ci.yml) failed two jobs:
+1. "Root checks": scripts/checks/run.sh runs every scripts/checks/*.sh in the `gates` nix shell, which deliberately has no Lean; the slice-0 gates (slice0_*.sh, build_identity.sh) lived there and failed with `lake: not found`.
+2. "Proof trust ban": scripts/proofs/trust_ban.sh's lakefile allow-list refused the `[[require]]` of the pinned LCB dependency and the second library `Concrete`.
+The fix: the slice-0 gates move to scripts/checks/compiler/ (the compiler's design README requires gates to stay under scripts/checks and forbids a scripts/compiler/ folder; run.sh globs only scripts/checks/*.sh); the jobs of the separate slice0.yml workflow move into lean_action_ci.yml, each gated on the landing-record job like the existing jobs, with every matrix leg listed by its GitHub display name in required-checks.txt; scripts/checks/landing_script.sh's check that required-checks.txt equals the workflow's landing-tier job names now expands `include` matrices into leg names (other matrix forms refused) with three controls; trust_ban.sh admits exactly the libraries [ConcreteSpec, Concrete] and `require` entries with keys exactly {name, git, rev}, rev a 40-hex commit, that lake-manifest.json records with the same url, rev and inputRev, with five new controls, and the two old lakefile controls now assert their specific refusal reason (they would otherwise pass vacuously on the library-list refusal).
+Questions: Is anything still referencing an old path? Can a required job now be skipped, cancelled or renamed without train.sh's required-checks comparison noticing? Does the trust-ban allow-list let anything change how the ConcreteSpec library builds, or reach ConcreteSpec's sources? Are the new controls able to fail? Any shell/YAML/Python bug?
+Report findings as `file:line: problem` with a concrete failure scenario, and end with exactly one line `VERDICT: ACCEPT` or `VERDICT: REJECT`.
+
+Do not run commands or use tools; review only the diff below.
+```diff
+diff --git a/.github/workflows/lean_action_ci.yml b/.github/workflows/lean_action_ci.yml
+index b9998104..0457c7b5 100644
+--- a/.github/workflows/lean_action_ci.yml
++++ b/.github/workflows/lean_action_ci.yml
+@@ -1,6 +1,6 @@
+ name: CI
+ 
+-# The root's CI after the legacy/ move. Eight jobs, all required (required-checks.txt):
++# The root's CI after the legacy/ move. Eighteen jobs, all required (required-checks.txt):
+ #   Landing record  main's push run names the run that qualified its exact SHA (R-0570), kept from
+ #                the base unchanged; when it finds one, the jobs below are skipped on main.
+ #   Root checks  every check of scripts/checks/run.sh: legacy/ frozen, the day-one root inventory,
+@@ -8,6 +8,8 @@ name: CI
+ #   Spec build   lake build of the specification, warnings refused.
+ #   Proof axioms, Proof trust ban (sorry, native_decide), Kernel replay (leanchecker), External
+ #                re-check (con-leche, nanoda)  the proof-integrity checks of scripts/proofs.
++#   Slice 0 backends, artifacts, trusted base, reproducibility (x86-64 Linux and AArch64 macOS)
++#                the compiler's gates (scripts/checks/compiler), each in the compiler's devshell.
+ #   Oracle (GitHub-hosted fetch + smoke)  the published oracle fetched, verified and run on a
+ #                GitHub-hosted runner (ISS-0005, P13; R-0564), kept from the base unchanged.
+ # legacy/ is never built or run here: its gates were qualified at tag legacy-compiler-final. The old
+@@ -342,3 +344,159 @@ jobs:
+ 
+       - name: "Fetch the published oracle, verify it, run smoke.con through it (exit 42)"
+         run: bash scripts/oracle/ci_check.sh
++
++  # THE COMPILER'S GATES (Concrete/README.md gates 4, 6, 6a, 8, 9, 10, 11 and 12; slice 0, provisional),
++  # scripts/checks/compiler/: not root checks (run.sh runs only scripts/checks/*.sh), because they need
++  # the compiler's devshell, a native macOS runner and minutes each. Every hand-written BIR example
++  # through the LLVM path and the LCB path, each executable's observation compared with the BIR
++  # semantics; sanitizers, binary size (report-only) and the stack bound; the trusted-base golden; and
++  # every build stage reproduced in distinct directories and on distinct machines. Each runs natively
++  # on x86-64 Linux and on AArch64 macOS (LCB's first native proof profile is Apple AArch64), and every
++  # matrix leg is a required job of its own name.
++  backends:
++    name: Slice 0 backends (${{ matrix.arch }})
++    needs: landing-record
++    if: ${{ !cancelled() && needs.landing-record.outputs.recorded != 'true' }}
++    # The compiler's devshell (flake.nix default: Lean, clang, LLVM, gdb/lldb), entered per step;
++    # the gates shell has no Lean.
++    defaults:
++      run:
++        shell: bash
++    strategy:
++      fail-fast: false
++      matrix:
++        include:
++          - arch: x86-64
++            runner: ubuntu-latest
++          - arch: aarch64-macos
++            runner: macos-15
++    runs-on: ${{ matrix.runner }}
++    timeout-minutes: 60
++    permissions:
++      contents: read
++    steps:
++      - uses: actions/checkout@v4
++      - name: Install Nix
++        uses: cachix/install-nix-action@v31
++      - name: Backend gate (LLVM and LCB, native)
++        run: nix develop --command bash scripts/checks/compiler/slice0_backends.sh
++
++  artifacts:
++    name: Slice 0 artifacts (${{ matrix.arch }})
++    needs: landing-record
++    if: ${{ !cancelled() && needs.landing-record.outputs.recorded != 'true' }}
++    # The compiler's devshell (flake.nix default: Lean, clang, LLVM, gdb/lldb), entered per step;
++    # the gates shell has no Lean.
++    defaults:
++      run:
++        shell: bash
++    strategy:
++      fail-fast: false
++      matrix:
++        include:
++          - arch: x86-64
++            runner: ubuntu-latest
++          - arch: aarch64-macos
++            runner: macos-15
++    runs-on: ${{ matrix.runner }}
++    timeout-minutes: 60
++    permissions:
++      contents: read
++    steps:
++      - uses: actions/checkout@v4
++      - name: Install Nix
++        uses: cachix/install-nix-action@v31
++      - name: Sanitizers, binary size (report-only) and stack bound (gates 10, 11, 12)
++        run: nix develop --command timeout 3000 bash scripts/checks/compiler/slice0_artifacts.sh report
++      - uses: actions/upload-artifact@v4
++        if: always()
++        with:
++          name: artifacts-${{ matrix.arch }}
++          path: report
++          if-no-files-found: error
++
++  trusted-base:
++    name: Slice 0 trusted base (gate 9, ${{ matrix.arch }})
++    needs: landing-record
++    if: ${{ !cancelled() && needs.landing-record.outputs.recorded != 'true' }}
++    # The compiler's devshell (flake.nix default: Lean, clang, LLVM, gdb/lldb), entered per step;
++    # the gates shell has no Lean.
++    defaults:
++      run:
++        shell: bash
++    strategy:
++      fail-fast: false
++      matrix:
++        include:
++          - arch: x86-64
++            runner: ubuntu-latest
++          - arch: aarch64-macos
++            runner: macos-15
++    runs-on: ${{ matrix.runner }}
++    timeout-minutes: 60
++    permissions:
++      contents: read
++    steps:
++      - uses: actions/checkout@v4
++      - name: Install Nix
++        uses: cachix/install-nix-action@v31
++      - name: Trusted-base golden (premises, axioms, toolchain and LCB pin)
++        run: nix develop --command timeout 3000 bash scripts/checks/compiler/slice0_trusted_base.sh
++
++  reproducibility:
++    name: Reproducibility (${{ matrix.id }})
++    needs: landing-record
++    if: ${{ !cancelled() && needs.landing-record.outputs.recorded != 'true' }}
++    # The compiler's devshell (flake.nix default: Lean, clang, LLVM, gdb/lldb), entered per step;
++    # the gates shell has no Lean.
++    defaults:
++      run:
++        shell: bash
++    strategy:
++      fail-fast: false
++      matrix:
++        include:
++          - id: linux-first
++            runner: ubuntu-24.04
++          - id: linux-independent
++            runner: ubuntu-24.04
++          - id: macos
++            runner: macos-15
++    runs-on: ${{ matrix.runner }}
++    timeout-minutes: 60
++    permissions:
++      contents: read
++    steps:
++      - uses: actions/checkout@v4
++      - uses: cachix/install-nix-action@v31
++      - name: Compare every stage in distinct build directories
++        run: nix develop --command timeout 3600 bash scripts/checks/compiler/slice0_repro.sh manifest.txt
++      - uses: actions/upload-artifact@v4
++        with:
++          name: reproducibility-${{ matrix.id }}
++          path: manifest.txt
++          if-no-files-found: error
++
++  compare-linux:
++    name: Cross-machine reproducibility (x86-64 Linux)
++    needs: reproducibility
++    # Runs only when every reproducibility job ran (landing-record gate inherited); no Nix here.
++    defaults:
++      run:
++        shell: bash
++    runs-on: ubuntu-24.04
++    permissions:
++      contents: read
++    steps:
++      - uses: actions/download-artifact@v4
++        with:
++          pattern: reproducibility-linux-*
++          path: manifests
++      - name: Compare like targets, including compiler and toolchain identity
++        run: |
++          set -eu
++          m1=manifests/reproducibility-linux-first/manifest.txt
++          m2=manifests/reproducibility-linux-independent/manifest.txt
++          # Both manifests carry the identity and at least one artifact hash.
++          for m in "$m1" "$m2"; do grep -q '^compiler_commit=' "$m"; grep -q '/lcb.exe$' "$m"; done
++          diff -u "$m1" "$m2"
+diff --git a/.github/workflows/slice0.yml b/.github/workflows/slice0.yml
+deleted file mode 100644
+index 0dbd268f..00000000
+--- a/.github/workflows/slice0.yml
++++ /dev/null
+@@ -1,135 +0,0 @@
+-name: Slice 0 backends
+-
+-# PROVISIONAL (ROADMAP B0, Concrete/README.md gates 4, 6, 6a, 8, 9, 10, 11 and 12). The slice-0 backend gate,
+-# scripts/checks/slice0_backends.sh: every hand-written BIR example through the LLVM path and the
+-# LCB path, each executable's observation (exit status plus the fd-2 trap line) compared with the
+-# BIR semantics, plus LCB's own evaluator on the adapted body. It runs natively on x86-64 Linux and
+-# on AArch64 macOS (GitHub-hosted; LCB's first native proof profile is Apple AArch64), so the LCB
+-# output is executed on both targets. It joins
+-# required-checks.txt when the compiler lands on main; until then it runs on the slice-0 branches.
+-
+-on:
+-  push:
+-    branches: ['wip/slice0', 'wip/slice0-*']
+-  workflow_dispatch:
+-
+-concurrency:
+-  group: slice0-${{ github.ref }}
+-  cancel-in-progress: true
+-
+-jobs:
+-  backends:
+-    name: Slice 0 backends (${{ matrix.arch }})
+-    strategy:
+-      fail-fast: false
+-      matrix:
+-        include:
+-          - arch: x86-64
+-            runner: ubuntu-latest
+-          - arch: aarch64-macos
+-            runner: macos-15
+-    runs-on: ${{ matrix.runner }}
+-    timeout-minutes: 60
+-    permissions:
+-      contents: read
+-    steps:
+-      - uses: actions/checkout@v4
+-      - name: Install Nix
+-        uses: cachix/install-nix-action@v31
+-      - name: Backend gate (LLVM and LCB, native)
+-        run: nix develop --command bash scripts/checks/slice0_backends.sh
+-
+-  artifacts:
+-    name: Slice 0 artifacts (${{ matrix.arch }})
+-    strategy:
+-      fail-fast: false
+-      matrix:
+-        include:
+-          - arch: x86-64
+-            runner: ubuntu-latest
+-          - arch: aarch64-macos
+-            runner: macos-15
+-    runs-on: ${{ matrix.runner }}
+-    timeout-minutes: 60
+-    permissions:
+-      contents: read
+-    steps:
+-      - uses: actions/checkout@v4
+-      - name: Install Nix
+-        uses: cachix/install-nix-action@v31
+-      - name: Sanitizers, binary size (report-only) and stack bound (gates 10, 11, 12)
+-        run: nix develop --command timeout 3000 bash scripts/checks/slice0_artifacts.sh report
+-      - uses: actions/upload-artifact@v4
+-        if: always()
+-        with:
+-          name: artifacts-${{ matrix.arch }}
+-          path: report
+-          if-no-files-found: error
+-
+-  trusted-base:
+-    name: Slice 0 trusted base (gate 9, ${{ matrix.arch }})
+-    strategy:
+-      fail-fast: false
+-      matrix:
+-        include:
+-          - arch: x86-64
+-            runner: ubuntu-latest
+-          - arch: aarch64-macos
+-            runner: macos-15
+-    runs-on: ${{ matrix.runner }}
+-    timeout-minutes: 60
+-    permissions:
+-      contents: read
+-    steps:
+-      - uses: actions/checkout@v4
+-      - name: Install Nix
+-        uses: cachix/install-nix-action@v31
+-      - name: Trusted-base golden (premises, axioms, toolchain and LCB pin)
+-        run: nix develop --command timeout 3000 bash scripts/checks/slice0_trusted_base.sh
+-
+-  reproducibility:
+-    name: Reproducibility (${{ matrix.id }})
+-    strategy:
+-      fail-fast: false
+-      matrix:
+-        include:
+-          - id: linux-first
+-            runner: ubuntu-24.04
+-          - id: linux-independent
+-            runner: ubuntu-24.04
+-          - id: macos
+-            runner: macos-15
+-    runs-on: ${{ matrix.runner }}
+-    timeout-minutes: 60
+-    permissions:
+-      contents: read
+-    steps:
+-      - uses: actions/checkout@v4
+-      - uses: cachix/install-nix-action@v31
+-      - name: Compare every stage in distinct build directories
+-        run: nix develop --command timeout 3600 bash scripts/checks/slice0_repro.sh manifest.txt
+-      - uses: actions/upload-artifact@v4
+-        with:
+-          name: reproducibility-${{ matrix.id }}
+-          path: manifest.txt
+-          if-no-files-found: error
+-
+-  compare-linux:
+-    name: Cross-machine reproducibility (x86-64 Linux)
+-    needs: reproducibility
+-    runs-on: ubuntu-24.04
+-    permissions:
+-      contents: read
+-    steps:
+-      - uses: actions/download-artifact@v4
+-        with:
+-          pattern: reproducibility-linux-*
+-          path: manifests
+-      - name: Compare like targets, including compiler and toolchain identity
+-        run: |
+-          set -eu
+-          m1=manifests/reproducibility-linux-first/manifest.txt
+-          m2=manifests/reproducibility-linux-independent/manifest.txt
+-          # Both manifests carry the identity and at least one artifact hash.
+-          for m in "$m1" "$m2"; do grep -q '^compiler_commit=' "$m"; grep -q '/lcb.exe$' "$m"; done
+-          diff -u "$m1" "$m2"
+diff --git a/Concrete/BIR.lean b/Concrete/BIR.lean
+index 6e9e1581..9887a62f 100644
+--- a/Concrete/BIR.lean
++++ b/Concrete/BIR.lean
+@@ -648,7 +648,7 @@ example : ¬ WF unreachableParam := by decide
+ example : ¬ WF crossBlockUse := by decide
+ example : ¬ WF useBeforeDef := by decide
+ 
+-/-- The examples, by name, with the outcome each must show (`scripts/checks/slice0_backends.sh`). -/
++/-- The examples, by name, with the outcome each must show (`scripts/checks/compiler/slice0_backends.sh`). -/
+ def all : List (String × Program × Outcome) :=
+   [("answer", answer, .exited 42), ("boundary", boundary, .exited 255),
+    ("overflow", overflow, .trapped 0), ("answer_discharged", answerDischarged, .exited 42),
+diff --git a/Concrete/Premises.lean b/Concrete/Premises.lean
+index 1b6d48ab..b612bdc3 100644
+--- a/Concrete/Premises.lean
++++ b/Concrete/Premises.lean
+@@ -5,7 +5,7 @@ closure the trusted-base golden records (Concrete/README.md gate 9).
+ This is the premise REGISTRY, the one list of the open premises: each entry has its trust class,
+ what retires it, and its statement. The statements are text until the structures that state them
+ as Lean propositions (`FrontendPremises`, `NativePremises`, whose design is in Concrete/README.md)
+-land with the front end; each entry then names its field instead. `scripts/checks/slice0_trusted_base.sh` prints
++land with the front end; each entry then names its field instead. `scripts/checks/compiler/slice0_trusted_base.sh` prints
+ this registry and the axioms of `theorems` and compares them with `tests/golden/slice0_trusted_base.txt`,
+ so a premise added, removed or reworded fails until the golden is updated with it.
+ -/
+diff --git a/Concrete/README.md b/Concrete/README.md
+index 10771cc8..9e99868c 100644
+--- a/Concrete/README.md
++++ b/Concrete/README.md
+@@ -1,6 +1,6 @@
+ # The Concrete compiler: slice 0 design (provisional)
+ 
+-PROVISIONAL. This is a design sketch, revision 8, written after eight Codex and agy review rounds. It folds in the Codex/agy/Kimi pipeline review and the owner's answers (2026-11-06). Build step 1 (BIR as the shared backend contract) is implemented: `Concrete/BIR.lean` and `Concrete/Backend/`, gate `scripts/checks/slice0_backends.sh`. Slice 0 is the first compiler slice. It is built before the owner freezes Core (A2c) and makes no normative claim before that freeze ([decision](../docs/decisions.md#decided-project-proof-infrastructure)). Branch `wip/slice0` depends on `wip/spec-root`, which puts `ConcreteSpec` on the new root, and is rebased onto main (under a new branch name) once that lands.
++PROVISIONAL. This is a design sketch, revision 8, written after eight Codex and agy review rounds. It folds in the Codex/agy/Kimi pipeline review and the owner's answers (2026-11-06). Build step 1 (BIR as the shared backend contract) is implemented: `Concrete/BIR.lean` and `Concrete/Backend/`, gate `scripts/checks/compiler/slice0_backends.sh`. Slice 0 is the first compiler slice. It is built before the owner freezes Core (A2c) and makes no normative claim before that freeze ([decision](../docs/decisions.md#decided-project-proof-infrastructure)). Branch `wip/slice0` depends on `wip/spec-root`, which puts `ConcreteSpec` on the new root, and is rebased onto main (under a new branch name) once that lands.
+ 
+ ## Scope
+ 
+@@ -159,7 +159,7 @@ Each IR has a total, fuel-indexed evaluator returning the spec's `Outcome` and a
+ **Changes to existing entries.** No new entry is created for any of these:
+ - `lakefile.toml` gains the `Concrete` lib, the `concrete` exe, and a pinned `require` of `lean-compiler-backend`; `lake-manifest.json` records it.
+ - `ConcreteSpec/Spec/Surface0.lean` and `ConcreteSpec/Proofs/Surface0.lean` go into the spec's existing folders.
+-- The gates and runners (conformance, the two differentials, certificates, the premise registry, negative controls) are files in the existing `scripts/checks/`. No `scripts/compiler/` is added.
++- The gates and runners (conformance, the two differentials, certificates, the premise registry, negative controls) are files in the existing `scripts/checks/`, in its subfolder `scripts/checks/compiler/`: they are CI jobs of their own (they need the compiler's devshell and a macOS runner), not root checks, which are exactly the `scripts/checks/*.sh` that `run.sh` runs. Their shared helpers are in `scripts/checks/lib/`. No `scripts/compiler/` is added.
+ - `required-checks.txt` and the CI workflow gain entries.
+ 
+ Generated outputs are never committed and get no new root entry. That covers certificates, `.ll` files, images and facts JSON, which all go under the git-ignored `.lake/concrete/`.
+@@ -198,7 +198,7 @@ tests/
+ - `Concrete/` has one subfolder, `Backend/`, because the backend stage has three files. No other subfolder exists until another stage outgrows one file, and a split never creates a one-file folder.
+ - Each stage's definitions and theorems live in the same file, so each fact has one home.
+ - `Resolve` merges into `Elab`, because it is one stage edge with one contract.
+-- Every entry has exactly one home: tests are in `tests/`, gates in `scripts/checks/`, the spec in `ConcreteSpec/`. Conformance has one home, `tests/`.
++- Every entry has exactly one home: tests are in `tests/`, gates in `scripts/checks/` (the compiler's in `scripts/checks/compiler/`), the spec in `ConcreteSpec/`. Conformance has one home, `tests/`.
+ - The stage table, the premise table and the fact-kind table in this README become **generated views** of the Lean registries in `Stages.lean`, `Premises.lean` and `Facts.lean` once the code exists. A gate fails when a view drifts from its registry.
+ 
+ The root inventory (`scripts/checks/root_inventory.txt`) lists each new root entry in the same change that creates it. An unlisted entry fails the check, and so does a listed entry that is missing.
+@@ -553,6 +553,8 @@ The CLI is `concrete facts FILE [FN]` and `concrete build FILE -o OUT` (owner, 2
+    - no `sorry` and no `native_decide`/`ofReduceBool`;
+    - a **totality ban**: no `partial`, `unsafe`, `@[implemented_by]`, `@[extern]` or `opaque` in `Concrete/` outside `Premises.lean`;
+    - an external-checker replay (con-leche/nanoda, R-0553) of the compiler's theorems.
++
++   Not yet a job. Until it is, the trusted-base golden (gate 9) fixes each headline theorem's axioms (a `sorryAx` among them fails it), and the trust ban of `scripts/proofs/trust_ban.sh` covers the specification only: it reads the compiler's library entry and its pinned dependency in `lakefile.toml`, not its sources or constants.
+ 3. **Premise registry and stage coverage:** the checks described in the stage registry section above.
+ 4. **Conformance, both backends:** each `tests/slice0/*.con` example runs through:
+    - the Lean `run`;
+@@ -577,9 +579,9 @@ The CLI is `concrete facts FILE [FN]` and `concrete build FILE -o OUT` (owner, 2
+    An in-process leg also compares `BIR.behaviour b` with LCB's own evaluator on the emitted body, an executable cross-check of `emit_correct`.
+ 6a. **AArch64:** a GitHub-hosted AArch64 macOS job (`macos-15`) builds the LCB output for `aarch64-macos`, runs gates 4 and 6 there natively, and compares against Lean. LLVM-native also runs there, as a third cross-check. Gates 4 and 6 for x86-64 run on concrete-ci-2.
+ 7. **Certificates:** the kernel checks every acceptance and refusal certificate, with measured budgets.
+-8. **Reproducibility** (implemented, `scripts/checks/slice0_repro.sh`): two independent builds give byte-identical outputs at every stage, on each target, and two independent Linux runners give identical manifests. See [Reproducible builds](#reproducible-builds-owner-2026-11-07).
+-9. **Trusted base** (owner, 2026-11-07): a golden test that `concrete facts` prints exactly the spec's premise list, so a premise added, removed or reworded anywhere fails until the golden is updated with it. Implemented provisionally in `scripts/checks/slice0_trusted_base.sh`: until `concrete facts` exists, `scripts/checks/slice0_trusted_base.lean` prints `Premises.report`: the premise registry `Concrete/Premises.lean`, the sorted axioms of each headline theorem (`Premises.theorems`) and each axiom's type; the gate appends the Lean toolchain and the Lake pins, and the result must equal `tests/golden/slice0_trusted_base.txt` byte for byte. The README's open-premise table must equal the registry's rendering (`Premises.tableRow`). Controls cover the comparison, a failing printer, the axiom collection and a drifted table. The statements are text until `FrontendPremises` and `NativePremises` land as Lean structures; each entry then names its field.
+-10. **Sanitizers** (owner, 2026-11-07; UBSan dropped by the owner, 2026-11-08; implemented in `scripts/checks/slice0_artifacts.sh`): every LLVM example also runs built with ASan in CI, and must give the same observation with no sanitizer report. ASan instruments only functions marked `sanitize_address`, which clang's C front end adds and the printed IR lacks, so the sanitizer build adds it to every definition (`slice0_native.sh sanitize`); a control body with an out-of-bounds load must be reported. There is no UBSan leg: UBSan's checks are inserted by clang's C front end, so on LLVM IR input it checks nothing. No C is compiled in slice 0, and the LLVM-level undefined behaviour of the printed IR (poison, `unreachable`) stays P_print's.
++8. **Reproducibility** (implemented, `scripts/checks/compiler/slice0_repro.sh`): two independent builds give byte-identical outputs at every stage, on each target, and two independent Linux runners give identical manifests. See [Reproducible builds](#reproducible-builds-owner-2026-11-07).
++9. **Trusted base** (owner, 2026-11-07): a golden test that `concrete facts` prints exactly the spec's premise list, so a premise added, removed or reworded anywhere fails until the golden is updated with it. Implemented provisionally in `scripts/checks/compiler/slice0_trusted_base.sh`: until `concrete facts` exists, `scripts/checks/compiler/slice0_trusted_base.lean` prints `Premises.report`: the premise registry `Concrete/Premises.lean`, the sorted axioms of each headline theorem (`Premises.theorems`) and each axiom's type; the gate appends the Lean toolchain and the Lake pins, and the result must equal `tests/golden/slice0_trusted_base.txt` byte for byte. The README's open-premise table must equal the registry's rendering (`Premises.tableRow`). Controls cover the comparison, a failing printer, the axiom collection and a drifted table. The statements are text until `FrontendPremises` and `NativePremises` land as Lean structures; each entry then names its field.
++10. **Sanitizers** (owner, 2026-11-07; UBSan dropped by the owner, 2026-11-08; implemented in `scripts/checks/compiler/slice0_artifacts.sh`): every LLVM example also runs built with ASan in CI, and must give the same observation with no sanitizer report. ASan instruments only functions marked `sanitize_address`, which clang's C front end adds and the printed IR lacks, so the sanitizer build adds it to every definition (`slice0_native.sh sanitize`); a control body with an out-of-bounds load must be reported. There is no UBSan leg: UBSan's checks are inserted by clang's C front end, so on LLVM IR input it checks nothing. No C is compiled in slice 0, and the LLVM-level undefined behaviour of the printed IR (poison, `unreachable`) stays P_print's.
+ 11. **Binary size** (owner, 2026-11-07; implemented, same script): the size of each example's executable (bytes and text size, pinned `llvm-size`), per backend and target, is recorded per run in `sizes.tsv`, uploaded with the job. Report-only: it never fails a run. **Compile time** (owner, 2026-11-08; same script, report-only): each example's emit step (the Lean emitter, Lean start-up included) and native step (clang and LCB's command line) in wall-clock milliseconds, next to its budget (the step's time bound), in `compile_times.tsv`.
+ 12. **Stack bound** (owner, 2026-11-07; implemented in the same script and `lib/stack_bound.py`; the `aarch64-macos` run check with LLDB, 2026-11-08): a stack-bound fact for each example, derived from the final artifact (the linked executable, not the IR) for both backends, and checked against a run. The analysis follows every path of the Concrete-owned code, instruction by instruction from an explicit set of modelled instructions, (`main`, `concrete_rt_write_all`, `concrete_body`) over the disassembly's control-flow graph, tracking the stack and frame pointers' depth below `main`'s entry and every byte addressed relative to them (so the red zone), refusing an access deeper than the target's red zone below the stack pointer (128 bytes on x86-64 System V and on Apple arm64, none under AAPCS64 on Linux: deeper bytes may be overwritten by a signal handler), and fails closed on anything it does not model (an instruction outside the set, another stack-pointer write, frame- or link-register writeback, an indirect branch or call, a stack pointer copied out, an indexed stack address, a stack read of bytes the function has not itself written on every path since its last call (so no stale saved frame pointer is ever loaded), a saved slot read other than by the modelled restore, two depths meeting, recursion, a call to a function neither owned nor a PLT/stub). The external calls (`write`, `_exit`, `abort`) are listed with the depth at their entry; their own use, and that `_exit` and `abort` do not return, are the libc premise. On x86-64 Linux the run check single-steps the owned code under the pinned gdb and requires the measured depth to be within the bound, for a complete run only (stopped first at `main`, back at each external call's return address, no signal, the expected exit status). The measured depth is the lowest of the stack pointer and every stack byte a stepped instruction addresses (`lib/stack_access.py` evaluates each memory operand), so a red-zone access is counted, and one deeper than the red zone is an error. A control links a `main` that stores at the red zone's edge without moving the stack pointer and requires bound 128 and measured 128 (on AArch64 it first allocates and frees a 144-byte frame with a pre-indexed store, judged against the new stack pointer, so 144); with a 120-byte red zone the same run gives no measurement. On Mach-O each stub entry's imported symbol comes from the indirect symbol table (`llvm-objdump --macho --indirect-symbols`), since the disassembly names only the `__stubs` section. On `aarch64-macos` the run check is the same, under Apple's LLDB (`/usr/bin/lldb`, `lib/stack_measure_lldb.py`; an external call's return address is the link register); LLDB is not pinned (Apple's signed debugserver is the only one allowed to attach), so its version is printed in the gate log. `stack.tsv` records bound, measurement and externals.
+ 
+@@ -687,14 +689,14 @@ LCB is our own project; these are tasks for it, not premises to keep. Checked ag
+ 
+ The same source, compiler revision, toolchain pins and target must produce byte-identical BIR,
+ LLVM text, LCB input and output, objects and executables. `nix develop --command bash
+-scripts/checks/build_identity.sh` prints the canonical identity: the compiler commit, a digest of
++scripts/checks/compiler/build_identity.sh` prints the canonical identity: the compiler commit, a digest of
+ the working-tree content of every tracked input with `source_tree=clean|dirty` (so a local edit never
+ reports a committed identity), Lean, clang/LLVM, the Nix inputs, the LCB revision and the target. It
+ fails unless every dependency checkout is at the revision `lake-manifest.json` pins with no
+ modified or untracked (not ignored) file. The
+ planned `concrete facts` command will print this identity.
+ 
+-`scripts/checks/slice0_repro.sh [MANIFEST]` makes two independent builds: two source copies at
++`scripts/checks/compiler/slice0_repro.sh [MANIFEST]` makes two independent builds: two source copies at
+ different paths with different TMPDIRs, each compiling the compiler, its dependencies and the `lcb`
+ executable itself, with no Lake artifact cache. They share only the pinned Lean toolchain and the
+ dependency sources (tracked files only). Each side
+@@ -704,7 +706,7 @@ all objects and both executables. Negative controls check that the comparator re
+ byte, a missing artifact and a differing inventory. The slice-0 front end is not implemented yet, so
+ this gate starts at the hand-written BIR contract.
+ 
+-Both native gates use `scripts/checks/lib/slice0_native.sh` (a build helper, not a check: every `scripts/checks/*.sh` is a root check): the Nix-pinned clang 21 (`CONCRETE_SLICE0_CLANG`; the
++Both native gates use `scripts/checks/lib/slice0_native.sh` (a build helper, not a gate): the Nix-pinned clang 21 (`CONCRETE_SLICE0_CLANG`; the
+ shell's general `clang` is unchanged), an environment reduced to `PATH`, `HOME` and `TMPDIR`
+ (reduced, not hermetic), fixed relative object names and link order, epoch 1, UTC/C locale, no
+ debug information, path prefix maps, and no ELF build ID or Mach-O UUID (`ZERO_AR_DATE=1` on
+diff --git a/changelog.d/2026-11-08-slice0.md b/changelog.d/2026-11-08-slice0.md
+index f5c8f197..1c6dc731 100644
+--- a/changelog.d/2026-11-08-slice0.md
++++ b/changelog.d/2026-11-08-slice0.md
+@@ -3,7 +3,8 @@
+ `Concrete/` holds the slice-0 compiler (PROVISIONAL, ROADMAP B0; `Concrete/README.md` is its
+ design and gate list). The hand-written BIR examples run through the LLVM path and the LCB path
+ (`Concrete/Backend/`), and each executable's observation is compared with the BIR semantics on
+-x86-64 Linux and AArch64 macOS (`.github/workflows/slice0.yml`). The BIR → LCB-IR adapter is
++x86-64 Linux and AArch64 macOS: the compiler's gates (`scripts/checks/compiler/`) are required jobs of
++the CI workflow, one per platform. The BIR → LCB-IR adapter is
+ proved against LCB's own semantics, and the backend contract is complete: `LCB.emit`
+ represents adaptation failure, `Proof.emit_correct`, `Proof.artifact_of_emit_error` and
+ `Proof.artifact_correct` state that a refusal produces no artifact and every artifact comes from a
+diff --git a/flake.nix b/flake.nix
+index f6a9d4e9..45f7269a 100644
+--- a/flake.nix
++++ b/flake.nix
+@@ -125,7 +125,7 @@
+             # Slice-0 native builds name their compiler explicitly (scripts/checks/lib/slice0_native.sh),
+             # pinned here so the shell's general clang can move without changing their identity.
+             CONCRETE_SLICE0_CLANG = "${pkgs.llvmPackages_21.clang}/bin/clang";
+-            # The artifact gates (scripts/checks/slice0_artifacts.sh) read the linked executables
++            # The artifact gates (scripts/checks/compiler/slice0_artifacts.sh) read the linked executables
+             # with the same LLVM release's llvm-objdump and llvm-size, and measure a run under gdb
+             # (Linux, pinned) or LLDB (macOS: Apple's /usr/bin/lldb, whose signed debugserver is
+             # the only one allowed to attach; not pinned, its identity is recorded in the report).
+diff --git a/required-checks.txt b/required-checks.txt
+index 4dc9584f..10a6199e 100644
+--- a/required-checks.txt
++++ b/required-checks.txt
+@@ -1,7 +1,8 @@
+ # Required CI jobs: a train lands only when every job named here ran at the candidate's exact SHA and
+ # succeeded (scripts/land/train.sh watch and land). One exact job name per line, as GitHub shows it.
+ # GitHub branch protection is not configured for main, so this file is the record. Every job of
+-# .github/workflows/lean_action_ci.yml is listed: the root has no campaign tier.
++# .github/workflows/lean_action_ci.yml is listed, each matrix leg under the name GitHub shows for it:
++# the root has no campaign tier.
+ Root checks
+ Spec build
+ Oracle (GitHub-hosted fetch + smoke)
+@@ -10,3 +11,13 @@ Proof axioms
+ Proof trust ban (sorry, native_decide)
+ Kernel replay (leanchecker)
+ External re-check (con-leche, nanoda)
++Slice 0 backends (x86-64)
++Slice 0 backends (aarch64-macos)
++Slice 0 artifacts (x86-64)
++Slice 0 artifacts (aarch64-macos)
++Slice 0 trusted base (gate 9, x86-64)
++Slice 0 trusted base (gate 9, aarch64-macos)
++Reproducibility (linux-first)
++Reproducibility (linux-independent)
++Reproducibility (macos)
++Cross-machine reproducibility (x86-64 Linux)
+diff --git a/scripts/checks/build_identity.sh b/scripts/checks/compiler/build_identity.sh
+similarity index 98%
+rename from scripts/checks/build_identity.sh
+rename to scripts/checks/compiler/build_identity.sh
+index f505e0c7..167f30b7 100755
+--- a/scripts/checks/build_identity.sh
++++ b/scripts/checks/compiler/build_identity.sh
+@@ -7,7 +7,7 @@
+ # build directory aside); otherwise this script fails. slice0_repro.sh copies only a dependency's
+ # tracked files and its `.git`, so ignored files never reach the compared builds.
+ set -euo pipefail
+-cd "$(dirname "$0")/../.."
++cd "$(dirname "$0")/../../.."
+ : "${CONCRETE_SLICE0_CLANG:?run inside nix develop}"
+ # shellcheck source=scripts/checks/lib/slice0_sources.sh
+ source scripts/checks/lib/slice0_sources.sh
+diff --git a/scripts/checks/slice0_artifacts.sh b/scripts/checks/compiler/slice0_artifacts.sh
+similarity index 100%
+rename from scripts/checks/slice0_artifacts.sh
+rename to scripts/checks/compiler/slice0_artifacts.sh
+diff --git a/scripts/checks/slice0_backends.sh b/scripts/checks/compiler/slice0_backends.sh
+similarity index 100%
+rename from scripts/checks/slice0_backends.sh
+rename to scripts/checks/compiler/slice0_backends.sh
+diff --git a/scripts/checks/slice0_bir.lean b/scripts/checks/compiler/slice0_bir.lean
+similarity index 96%
+rename from scripts/checks/slice0_bir.lean
+rename to scripts/checks/compiler/slice0_bir.lean
+index 6b758a2a..90176ba5 100644
+--- a/scripts/checks/slice0_bir.lean
++++ b/scripts/checks/compiler/slice0_bir.lean
+@@ -1,9 +1,9 @@
+ import Concrete
+ 
+ /-!
+-Emitter for the slice-0 backend gate (`scripts/checks/slice0_backends.sh`). PROVISIONAL.
++Emitter for the slice-0 backend gate (`scripts/checks/compiler/slice0_backends.sh`). PROVISIONAL.
+ 
+-`lake env lean --run scripts/checks/slice0_bir.lean list` prints the hand-written BIR examples;
++`lake env lean --run scripts/checks/compiler/slice0_bir.lean list` prints the hand-written BIR examples;
+ `... emit NAME DIR TARGET` checks the example in Lean (well formed; its BIR run gives the expected
+ outcome; LCB's own evaluator on the adapted body returns the same result word) and writes
+ `DIR/llvm.ll` (body + runtime entry), `DIR/lcb_body.s` (the adapted body, assembled by LCB in
+diff --git a/scripts/checks/slice0_premise_table.lean b/scripts/checks/compiler/slice0_premise_table.lean
+similarity index 82%
+rename from scripts/checks/slice0_premise_table.lean
+rename to scripts/checks/compiler/slice0_premise_table.lean
+index 4777bd46..aef3935f 100644
+--- a/scripts/checks/slice0_premise_table.lean
++++ b/scripts/checks/compiler/slice0_premise_table.lean
+@@ -2,7 +2,7 @@ import Concrete
+ 
+ /-!
+ Prints the rows of Concrete/README.md's open-premise table from the registry
+-(`Concrete.Premises.all`, `Premise.tableRow`), for `scripts/checks/slice0_trusted_base.sh`. PROVISIONAL.
++(`Concrete.Premises.all`, `Premise.tableRow`), for `scripts/checks/compiler/slice0_trusted_base.sh`. PROVISIONAL.
+ -/
+ 
+ #eval do
+diff --git a/scripts/checks/slice0_repro.sh b/scripts/checks/compiler/slice0_repro.sh
+similarity index 94%
+rename from scripts/checks/slice0_repro.sh
+rename to scripts/checks/compiler/slice0_repro.sh
+index e6992dac..21ad81ca 100755
+--- a/scripts/checks/slice0_repro.sh
++++ b/scripts/checks/compiler/slice0_repro.sh
+@@ -11,7 +11,7 @@
+ # MANIFEST gets the build identity and one hash per artifact; CI compares the manifests of two
+ # independent runners of the same target.
+ set -euo pipefail
+-root=$(cd "$(dirname "$0")/../.." && pwd)
++root=$(cd "$(dirname "$0")/../../.." && pwd)
+ cd "$root"
+ # shellcheck source=scripts/checks/lib/limits.sh
+ source scripts/checks/lib/limits.sh
+@@ -47,7 +47,7 @@ compare=(python3 "$root/scripts/checks/lib/repro_compare.py")
+ # Materialize the dependency checkouts (no build): they must be the manifest's clean revisions,
+ # which build_identity.sh checks before anything is built.
+ bounded 600 lake env true
+-bash scripts/checks/build_identity.sh > "$work/identity"
++bash scripts/checks/compiler/build_identity.sh > "$work/identity"
+ target=$(bash scripts/checks/lib/slice0_native.sh target)
+ # Working source edits are included (the identity records their digest); no build product is.
+ for side in first second; do
+@@ -70,10 +70,10 @@ for side in first second; do
+     bounded 3000 lake build Concrete lean-compiler-backend/lcb >"$work/$side/build.log" 2>&1 ||
+       { tail -50 "$work/$side/build.log" >&2; echo "slice0_repro: $side: build failed" >&2; exit 1; }
+     lcb="$d/.lake/packages/lean-compiler-backend/.lake/build/bin/lcb"
+-    bounded 120 lake env lean --run scripts/checks/slice0_bir.lean list > names
++    bounded 120 lake env lean --run scripts/checks/compiler/slice0_bir.lean list > names
+     [ -s names ] || { echo 'slice0_repro: no examples' >&2; exit 1; }
+     while read -r name; do
+-      bounded 120 lake env lean --run scripts/checks/slice0_bir.lean emit "$name" "$d/out/$name" "$target"
++      bounded 120 lake env lean --run scripts/checks/compiler/slice0_bir.lean emit "$name" "$d/out/$name" "$target"
+       bounded 120 bash scripts/checks/lib/slice0_native.sh "$d/out/$name" "$lcb"
+     done < names
+   )
+diff --git a/scripts/checks/slice0_trusted_base.lean b/scripts/checks/compiler/slice0_trusted_base.lean
+similarity index 64%
+rename from scripts/checks/slice0_trusted_base.lean
+rename to scripts/checks/compiler/slice0_trusted_base.lean
+index e883fe36..14b87a11 100644
+--- a/scripts/checks/slice0_trusted_base.lean
++++ b/scripts/checks/compiler/slice0_trusted_base.lean
+@@ -2,10 +2,10 @@ import Lean.Elab.Command
+ import Concrete
+ 
+ /-!
+-Printer for the slice-0 trusted-base golden (`scripts/checks/slice0_trusted_base.sh`, README gate
++Printer for the slice-0 trusted-base golden (`scripts/checks/compiler/slice0_trusted_base.sh`, README gate
+ 9). PROVISIONAL: it stands in for `concrete facts` until the compiler's command line exists.
+ 
+-`lake env lean scripts/checks/slice0_trusted_base.lean` prints `Concrete.Premises.report` of the
++`lake env lean scripts/checks/compiler/slice0_trusted_base.lean` prints `Concrete.Premises.report` of the
+ headline theorems: every open premise of the registry, each theorem's axioms, and each axiom's type.
+ -/
+ 
+diff --git a/scripts/checks/slice0_trusted_base.sh b/scripts/checks/compiler/slice0_trusted_base.sh
+similarity index 94%
+rename from scripts/checks/slice0_trusted_base.sh
+rename to scripts/checks/compiler/slice0_trusted_base.sh
+index 0c7b4ea8..3383d501 100644
+--- a/scripts/checks/slice0_trusted_base.sh
++++ b/scripts/checks/compiler/slice0_trusted_base.sh
+@@ -1,13 +1,13 @@
+ #!/usr/bin/env bash
+ # Slice-0 trusted-base golden (PROVISIONAL, Concrete/README.md gate 9). The trusted base, printed
+-# by scripts/checks/slice0_trusted_base.lean (until `concrete facts` exists): the premise registry
++# by scripts/checks/compiler/slice0_trusted_base.lean (until `concrete facts` exists): the premise registry
+ # Concrete/Premises.lean (the one list of open premises), each headline theorem's axioms and each
+ # axiom's type, followed by the Lean toolchain and every Lake pin, must equal
+ # tests/golden/slice0_trusted_base.txt byte for byte. A premise added, removed or reworded (id,
+ # trust class, what retires it, statement), a headline theorem gaining an axiom (sorryAx
+ # included), an axiom restated, or a toolchain or pin change fails until the golden is updated.
+ # The README's open-premise table is a generated view: it must equal the registry's rendering
+-# (scripts/checks/slice0_premise_table.lean).
++# (scripts/checks/compiler/slice0_premise_table.lean).
+ #
+ # Controls: the comparison must reject the golden with a premise line removed, reworded, or with an
+ # extra axiom; the printer must fail on a Lean file that prints and then errors; the report must
+@@ -36,7 +36,7 @@ print_lean() {
+ 
+ # current OUT: the whole trusted base into OUT; fails if any step fails.
+ current() {
+-  print_lean scripts/checks/slice0_trusted_base.lean "$1.lean" || return 1
++  print_lean scripts/checks/compiler/slice0_trusted_base.lean "$1.lean" || return 1
+   [ -s "$1.lean" ] || { echo "slice0_trusted_base: the printer printed nothing" >&2; return 1; }
+   { cat "$1.lean"; printf 'lean-toolchain %s\n' "$(head -c 200 lean-toolchain)"; } >"$1" || return 1
+   python3 -I -c 'import json,sys
+@@ -74,7 +74,7 @@ readme_rows() {
+        h==3{exit}
+        END{if (n == 0) exit 1}' "$1"
+ }
+-if ! print_lean scripts/checks/slice0_premise_table.lean "$work/rows"; then
++if ! print_lean scripts/checks/compiler/slice0_premise_table.lean "$work/rows"; then
+   echo "FAIL printing the registry's table rows"; fail=1
+ elif readme_rows Concrete/README.md >"$work/readme_rows" && cmp -s "$work/rows" "$work/readme_rows"; then
+   echo "ok   README's open-premise table equals the registry"
+diff --git a/scripts/checks/landing_script.sh b/scripts/checks/landing_script.sh
+index d0083061..ae3cd1d4 100755
+--- a/scripts/checks/landing_script.sh
++++ b/scripts/checks/landing_script.sh
+@@ -955,17 +955,49 @@ for v in ungated always nocancel; do
+ done
+ 
+ echo "=== required-checks.txt names exactly the workflow's landing-tier jobs ==="
+-out="$(python3 -I - "$ROOT_DIR/.github/workflows/lean_action_ci.yml" "$re_default" "$ROOT_DIR/required-checks.txt" <<'PY'
++# A matrix job is one job per leg, each under the name GitHub shows: its name template with that
++# leg's values (`include` rows only; any other matrix form is refused, since its legs are not listed).
++cat > "$TMP/required_names.py" <<'PY'
+ import re, sys, yaml
+ jobs = yaml.safe_load(open(sys.argv[1]))["jobs"]
+ rx = re.compile(sys.argv[2])
+-landing = {str(j.get("name", k)) for k, j in jobs.items() if not rx.search(str(j.get("name", k)))}
++def legs(k, j):
++    name = str(j.get("name", k)); m = (j.get("strategy") or {}).get("matrix")
++    if m is None:
++        return [name]
++    if set(m) != {"include"} or not isinstance(m["include"], list) or not m["include"]:
++        print(f"matrix of {k} is not a non-empty include list: its legs cannot be named"); return []
++    out = []
++    for row in m["include"]:
++        leg = re.sub(r"\$\{\{\s*matrix\.(\w+)\s*\}\}", lambda g: str(row.get(g.group(1), "\0")), name)
++        if "\0" in leg or "${{" in leg:
++            print(f"matrix leg {row} of {k} leaves its name unresolved: {name}"); continue
++        out.append(leg)
++    if len(set(out)) != len(m["include"]):
++        print(f"matrix legs of {k} do not have distinct names: {out}")
++    return out
++landing = {n for k, j in jobs.items() for n in legs(k, j) if not rx.search(n)}
+ req = {l.split("#")[0].strip() for l in open(sys.argv[3])} - {""}
+ for n in sorted(req - landing): print("required but not a landing-tier job: " + n)
+ for n in sorted(landing - req): print("landing-tier job not required: " + n)
+ PY
+-)"; rc=$?
+-[ "$rc" = 0 ] && [ -z "$out" ] && ok "required-checks.txt = the workflow's landing tier" || { no "required-checks.txt disagrees with the workflow (rc=$rc)"; echo "$out" | sed 's/^/      /'; }
++out="$(python3 -I "$TMP/required_names.py" "$ROOT_DIR/.github/workflows/lean_action_ci.yml" "$re_default" "$ROOT_DIR/required-checks.txt")"; rc=$?
++[ "$rc" = 0 ] && [ -z "$out" ] && ok "required-checks.txt = the workflow's landing tier, one name per matrix leg" || { no "required-checks.txt disagrees with the workflow (rc=$rc)"; echo "$out" | sed 's/^/      /'; }
++# Controls: a matrix leg missing from required-checks.txt, a leg whose name the template does not
++# resolve, and a cross-product matrix are each reported.
++python3 -I - "$ROOT_DIR/.github/workflows/lean_action_ci.yml" "$TMP/rn" <<'PY3'
++import sys, yaml, copy, os
++w = yaml.safe_load(open(sys.argv[1])); os.makedirs(sys.argv[2], exist_ok=True)
++a = copy.deepcopy(w); a["jobs"]["backends"]["strategy"]["matrix"]["include"].append({"arch": "riscv64", "runner": "ubuntu-latest"})
++b = copy.deepcopy(w); b["jobs"]["backends"]["name"] = "Slice 0 backends (${{ matrix.os }})"
++c = copy.deepcopy(w); c["jobs"]["backends"]["strategy"]["matrix"] = {"arch": ["x86-64", "aarch64-macos"]}
++for n, x in (("extraleg", a), ("unresolved", b), ("product", c)):
++    yaml.safe_dump(x, open(os.path.join(sys.argv[2], n + ".yml"), "w"))
++PY3
++for v in extraleg:"landing-tier job not required: Slice 0 backends (riscv64)" unresolved:"leaves its name unresolved" product:"is not a non-empty include list"; do
++  o="$(python3 -I "$TMP/required_names.py" "$TMP/rn/${v%%:*}.yml" "$re_default" "$ROOT_DIR/required-checks.txt")"
++  has "$o" "${v#*:}" && ok "CONTROL: the required-checks check reports the ${v%%:*} matrix" || no "CONTROL: the required-checks check missed the ${v%%:*} matrix: '$o'"
++done
+ 
+ echo "=== the move gate: legacy/ lands only with an accepted rehearsal of that exact candidate ==="
+ cd "$W" || exit 2
+diff --git a/scripts/checks/lib/slice0_common.sh b/scripts/checks/lib/slice0_common.sh
+index 32bf067f..a341dcf1 100644
+--- a/scripts/checks/lib/slice0_common.sh
++++ b/scripts/checks/lib/slice0_common.sh
+@@ -61,7 +61,7 @@ esac
+ # The time bounds of the emit step (the Lean emitter) and the native step (slice0_native.sh).
+ emit_secs=120
+ native_secs=300
+-emitter=(bounded "$emit_secs" lake env lean --run scripts/checks/slice0_bir.lean)
++emitter=(bounded "$emit_secs" lake env lean --run scripts/checks/compiler/slice0_bir.lean)
+ 
+ # expected_timeout CMD...: run CMD (a function or command) with its bounded runs logged apart, for
+ # a control whose expected observation IS a timeout (the diverging body): its INCOMPLETE runs are
+diff --git a/scripts/proofs/trust_ban.sh b/scripts/proofs/trust_ban.sh
+index 73761404..70e280e0 100644
+--- a/scripts/proofs/trust_ban.sh
++++ b/scripts/proofs/trust_ban.sh
+@@ -75,8 +75,13 @@ W=$(scan "${SRC[@]}"); RC=$?
+ [ "$RC" = 0 ] && [ "${#SRC[@]}" -ge 10 ] && [ -z "$W" ] && ok "none of the ${#SRC[@]} source files spells a banned word outside comments" \
+   || no "the source scan (rc=$RC) of ${#SRC[@]} files: $(printf '%s\n' "$W" | head -5 | tr '\n' '|')"
+ 
+-# lake_options LAKEFILE → empty when the one library builds from ConcreteSpec.lean and ConcreteSpec/
+-# (Lake's defaults: no srcDir, roots or globs) with warningAsError, and nothing can turn it off
++# lake_options LAKEFILE → empty when the specification library builds from ConcreteSpec.lean and
++# ConcreteSpec/ (Lake's defaults: no srcDir, roots or globs) with warningAsError, and nothing can turn
++# it off. The package holds exactly two libraries, ConcreteSpec and the compiler, Concrete (ROADMAP B0),
++# under the same key allow-list. A dependency is a `require` of a git URL pinned to a full commit,
++# which lake-manifest.json (beside the lakefile) records at the same URL and commit: the spec may
++# import nothing outside itself (S), so a dependency reaches only the compiler. This ban's scope is
++# the specification; the compiler's trust gate is Concrete/README.md gate 2.
+ lake_options() {
+   python3 - "$1" <<'EOF'
+ import sys, tomllib
+@@ -92,12 +97,29 @@ if cfg.get("leanOptions", {}).get("warningAsError") is not True:
+     bad.append("[leanOptions] warningAsError is not true")
+ # Allow-lists, not deny-lists: a key not named here (srcDir, roots, globs, moreLeanArgs, …) could
+ # point the build at other sources or pass options, so it is refused.
+-extra = set(cfg) - {"name", "version", "defaultTargets", "leanOptions", "lean_lib"}
++extra = set(cfg) - {"name", "version", "defaultTargets", "leanOptions", "lean_lib", "require"}
+ if extra: bad.append(f"the package sets {sorted(extra)}")
+ if set(cfg.get("leanOptions", {})) != {"warningAsError"}:
+     bad.append(f"[leanOptions] sets {sorted(set(cfg.get('leanOptions', {})) - {'warningAsError'})}")
++import json, re
++reqs = cfg.get("require", [])
++if reqs:
++    try:
++        man = json.load(open(os.path.join(os.path.dirname(sys.argv[1]) or ".", "lake-manifest.json")))
++        pkgs = {p.get("name", "").strip("«»"): p for p in man.get("packages", [])}
++    except Exception as e:
++        bad.append(f"lake-manifest.json unreadable: {e}"); pkgs = {}
++    for r in reqs:
++        n = r.get("name")
++        if set(r) != {"name", "git", "rev"}:
++            bad.append(f"the require {n} sets {sorted(set(r) ^ {'name', 'git', 'rev'})}"); continue
++        if not re.fullmatch(r"[0-9a-f]{40}", str(r["rev"])):
++            bad.append(f"the require {n} is not pinned to a full commit ({r['rev']})")
++        p = pkgs.get(n)
++        if not p or p.get("type") != "git" or p.get("url") != r["git"] or p.get("rev") != r["rev"] or p.get("inputRev") != r["rev"]:
++            bad.append(f"lake-manifest.json does not record the require {n} at {r['git']} {r['rev']}")
+ libs = cfg.get("lean_lib", [])
+-if [l.get("name") for l in libs] != ["ConcreteSpec"]: bad.append(f"libraries {[l.get('name') for l in libs]}")
++if [l.get("name") for l in libs] != ["ConcreteSpec", "Concrete"]: bad.append(f"libraries {[l.get('name') for l in libs]}")
+ for l in libs:
+     extra = set(l) - {"name", "leanOptions"}
+     if extra: bad.append(f"the library sets {sorted(extra)}")
+@@ -218,12 +240,28 @@ import ConcreteSpec.Spec'; do
+ done
+ printf '[leanOptions]\nwarningAsError = true\n\n[[lean_lib]]\nname = "ConcreteSpec"\nleanOptions = { autoImplicit = false, warningAsError = false }\n' > "$TMP/lake-off.toml"
+ L=$(lake_options "$TMP/lake-off.toml")
+-[ -n "$L" ] && ok "control: a library that turns warningAsError off is refused ($L)" \
++has_match -F "the library sets options ['warningAsError']" <<<"$L" && ok "control: a library that turns warningAsError off is refused ($L)" \
+   || no "control: a lakefile turning warningAsError off was accepted"
+ printf '[leanOptions]\nwarningAsError = true\n\n[[lean_lib]]\nname = "ConcreteSpec"\nsrcDir = "shadow"\n' > "$TMP/lake-src.toml"
+ L=$(lake_options "$TMP/lake-src.toml")
+-[ -n "$L" ] && ok "control: a library built from another source directory is refused ($L)" \
++has_match -F "the library sets ['srcDir']" <<<"$L" && ok "control: a library built from another source directory is refused ($L)" \
+   || no "control: a lakefile with srcDir was accepted"
++# The dependency controls run on a copy of this lakefile, beside a manifest, so each varies one thing.
++mkdir -p "$TMP/lk"
++lake_variant() { # NAME PYTHON-EDIT: lakefile.toml and lake-manifest.json copied to $TMP/lk/NAME, then edited
++  mkdir -p "$TMP/lk/$1"; cp lakefile.toml lake-manifest.json "$TMP/lk/$1/"
++  (cd "$TMP/lk/$1" && python3 -I -c "$2")
++}
++lake_variant short 'import re; p="lakefile.toml"; s=open(p).read(); r=re.search("[0-9a-f]{40}", s).group(0); open(p,"w").write(s.replace(r, r[:12]))'
++lake_variant branch 'import re; p="lakefile.toml"; s=open(p).read(); open(p,"w").write(re.sub(r"rev = \"[0-9a-f]+\"", "rev = \"main\"", s))'
++lake_variant drift 'import json; p="lake-manifest.json"; m=json.load(open(p)); m["packages"][0]["rev"]="0"*40; json.dump(m, open(p,"w"))'
++lake_variant subdir 'p="lakefile.toml"; s=open(p).read(); open(p,"w").write(s.replace("[[require]]\n", "[[require]]\nsubDir = \"x\"\n", 1))'
++lake_variant thirdlib 'p="lakefile.toml"; s=open(p).read(); open(p,"w").write(s + "\n[[lean_lib]]\nname = \"Other\"\n")'
++for v in short:"not pinned to a full commit" branch:"not pinned to a full commit" drift:"does not record the require" subdir:"sets ['subDir']" thirdlib:"libraries ['ConcreteSpec', 'Concrete', 'Other']"; do
++  L=$(lake_options "$TMP/lk/${v%%:*}/lakefile.toml")
++  case "$L" in *"${v#*:}"*) ok "control: a lakefile whose dependency or library set is changed (${v%%:*}) is refused ($L)" ;;
++    *) no "control: the ${v%%:*} lakefile was not refused for '${v#*:}': '$L'" ;; esac
++done
+ for f in missing Open Brace Quote; do
+   scan "$TMP/src/$f.lean" > /dev/null 2>&1; RC=$?
+   [ "$RC" != 0 ] && ok "control: a source the scan cannot read or lex ($f) fails it (rc=$RC)" \
+```

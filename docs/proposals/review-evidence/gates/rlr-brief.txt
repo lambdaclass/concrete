@@ -1,0 +1,11 @@
+You are the writer for one merge-conflict resolution. In this repository (current directory), branch wip/record-language-r is checked out at 1547734f8 (the owner-approved wip/record-language). Do exactly this:
+1. Run: git merge --no-ff --no-edit origin/main
+   It will conflict in ROADMAP.md only, in the R-0622 row (and the R-0625 row inserted next to it).
+2. Resolve with the UNION of both sides, nothing else:
+   - keep the R-0625 row exactly as on the 1547734f8 side ("theirs" of the conflict is origin/main, "ours" is 1547734f8; check with `git diff`);
+   - the R-0622 row must be origin/main's R-0622 row (which has the clause "this applies before slice 0's parser and blocks B0's R-0620 completion;") with its last column changed from "owner: the grammar review" to "R-0625, owner: the grammar review" (the 1547734f8 side's only change to that row).
+   Remove all conflict markers. Change nothing else in any file.
+3. If any other file conflicts, STOP: run `git merge --abort` and report the files.
+4. Stage and commit the merge: git add ROADMAP.md && git -c core.hooksPath=.githooks commit --no-edit
+   (Do not push. Do not run nix.)
+5. Print: git log --oneline -3, and `git diff HEAD^1 HEAD -- ROADMAP.md | grep '^[-+]| R-062[25]'`.

@@ -1,0 +1,14 @@
+Read-only review. Do not modify, create or delete any file in this directory, do not run git, do not push or use the network. You may read files and run read-only or bounded local commands (temporary files only outside this directory).
+
+The current directory is a plain copy (git archive) of the Concrete repository at commit ded66d31f7587062f60d614c4c5f03b075c628af. REVIEW.diff holds the change under review (ea212942f4b890710ba864d0c5cb846db72cc777..ded66d31f7587062f60d614c4c5f03b075c628af). Review it against the repository as a whole: read the files it touches and the code, docs, checks and decisions (docs/decisions.md, ROADMAP.md) it relies on.
+
+OWNER RULE (2026-11-08, verbatim: "ALWAYS tell the reviewrs to do the best long term thing rather than cuitting corners"): judge and fix by the best long-term design. Never cut corners for speed, a smaller diff or fewer rounds. As a reviewer, report any shortcut, containment patch or corner cut as a real finding and say what the long-term fix is. As a writer, implement the structural fix, not a containment patch; if staging is truly unavoidable, record the long-term design and name its roadmap row.
+
+CHANGE: branch wip/stack-tls-reach (written by Kimi), fixing ISS-0028 (Codex-confirmed): the slice-0 stack-bound analysis scripts/checks/lib/stack_bound.py exempted every x86 fs:/gs: absolute operand from stack accounting with any displacement (premise only "the thread-pointer block is not on the stack"); `mov byte ptr fs:[0x100000], 0x0; ret` got bound 0, and the run check scripts/checks/lib/stack_access.py skipped fs/gs operands. The fix bounds the displacement by TP_REACH = 0x100, restates the premise (the stack lies farther than TP_REACH from each fs/gs base), refuses fs/gs through a register or beyond reach, makes the run check add the segment base (reg("fs_base")/reg("gs_base")), and adds controls in scripts/checks/compiler/slice0_artifacts.sh.
+QUESTIONS: Can any fs/gs operand still reach the stack uncounted (operand forms, sign handling, several memory operands, implicit segment uses, AArch64 thread-pointer equivalents)? Is the premise precise and is TP_REACH justified, and is it the right long-term model (vs. e.g. deriving the TLS block bound from the binary)? Does the debugger glue (scripts/checks/lib/stack_measure.py, stack_measure_lldb.py) actually provide fs_base/gs_base, failing closed when absent? Are the controls load-bearing? Any regression to existing bounds?
+CPU RULE: this host is contended: do not run the full slice0_artifacts.sh or compiler builds; run stack_bound.py / stack_access.py directly on small inputs, bounded.
+
+
+Report findings with file:line, severity and the long-term fix. Start your answer by stating whether you could read the repository and list the files you read. End with exactly two lines:
+REPOSITORY: readable   (or REPOSITORY: unreadable)
+VERDICT: ACCEPT   (or VERDICT: REJECT)

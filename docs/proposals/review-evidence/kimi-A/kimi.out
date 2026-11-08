@@ -1,0 +1,396 @@
+kimi version 2.4.1
+• I need perform read-only review. Should inspect REVIEW.diff and files. Must not change state. Tools Read/Grep/Glob and Bash read only commands. Should likely complex multi-file review. User explicitly review, no agents unless asked, so no. Should understand guard. I can TodoList? This changes runtime not filesystem perhaps state? User says do not run anything changes state. Avoid TodoList perhaps tool state not repo but unnecessary. Should read diff. Start Read REVIEW.diff.
+
+• I’ll inspect the guard and each call site, then trace the acceptance and refusal cases against the diff’s tests.
+
+• I have full diff 684 lines. Should have rigorous correctness security portability tests false positives. Should inspect full actual files context, perhaps helper semantics, call order, tests. Should reason vulnerabilities.
+
+  Core land_url_target:
+  - classify file:// case-insensitive returns local, all file forms. Git accepts file with host? file://attacker/path local? file:// remote only local? Git file URL file://host/path perhaps unsupported except localhost. User says unknown schemes refuse. file local allowed intended.
+  - scheme parse *://*; auth path split.
+  - scp-like any *:* where prefix no slash. This includes Windows paths C:\ considered scp remote, on Linux okay. repos/concrete:backup local due slash prefix.
+  - h auth last @, user auth%@* then %%:* strips colon. For scp IPv6 unsupported -> invalid h because colon in h remains then catches invalid char -> ? ?. Fine.
+  - port parse for all non-scp if colon. userinfo passwords @.
+  - validates original h safe before ssh. port *[!0-9]* only, empty allowed. Negative etc invalid. Numeric huge ssh -G fails fallback original h, so github.com accepted if port invalid numeric? e.g. github.com:999999999 accepted because ssh -G failure fallback github.com, but actual git fails no network anyway. Security? Alias resolution failure fallbacks to original alias; if alias intended github and ssh unavailable, alias github-lambdaclass refused, breaking current setup if ssh -G absent or config error. Git needs ssh so likely available. ssh -G returns hostname with canonicalization? It may resolve based user port but CLI option ordering perhaps `ssh -G -l user -p port host`. OpenSSH supports. Bash 3 arrays okay.
+  - command substitution status subtle: h="$(ssh ... | awk ...)" || h="" gets pipeline status awk (no pipefail in sourced contexts perhaps set -o pipefail global). With pipefail, ssh fail returns nonzero even if awk 0 -> h="" fallback original. Fine.
+  - Resolved h not validated before comparison and trailing dot only; malicious ssh config hostname github.com could be actual config trusted. Hostname output options injection? original h cannot leading dash, user can't leading dash, port numeric. safe.
+  - aliases: `git@github-lambdaclass:` with ssh -G sees host alias. Accept.
+  - scp detection weird unknown scheme foo::https... parsed scp auth foo: p :https... h foo resolved hostname foo, reject. Fine.
+  - schemes accepted git (unauthenticated git protocol) host github.com repo allowed. Requirement unknown scheme refused yes.
+  - HTTP accepted although requirement https forms but extra http likely security? Both http and https to github allowed. http URLs could be MITM, not outside repository host string but network security. User says refuse any remote outside set other host other repo etc. HTTP host github okay but insecure transport. Perhaps finding.
+  - Path normalization simplistic:
+    p strip leading slashes, one trailing slash, then .git. Case lower.
+    Accept URLs with query/fragment? e.g. https://github.com/lambdaclass/concrete.git?foo path becomes concrete.git?foo -> reject. Fine.
+    `https://github.com/lambdaclass/concrete.git/` -> p trim slash then .git accept. Git likely fine.
+    `https://github.com/lambdaclass/concrete/.git` path becomes lambdaclass/concrete after .git removal? p `lambdaclass/concrete/.git` -> `lambdaclass/concrete/`? Parameter `${p%.git}` gives `lambdaclass/concrete/`, not equal allowed. Fine.
+    dot segments: `https://github.com/lambdaclass/concrete.git/..` reject; encoded path perhaps GitHub interprets `%2f` etc and guard rejects unless case exact. `%2e` rejects.
+    Accept extra trailing multiple slash? only one slash removed, rejects two. not break required.
+    user parsing for HTTP irrelevant.
+    Scheme with uppercase handled.
+    port h split with `h#*:` for multiple colon catches invalid.
+  - Redact only *://*@*, scheme pattern not validated but no security issue? Could print credentials in malformed URLs? `https:foo@...` scp no secret considered, but network? Git scp syntax user could include token `https:` scheme? Unknown scheme no slashes gets scp, h https, redaction retains user info possibly secret, e.g. `token@github-old:repo` user is credential? Comment scp user no secret. Requirement any userinfo redacted perhaps specifically scheme. Could leak passwords in unknown scheme with `foo://` covered. Newline injection can output secret second line: URLs can contain newline via git config; land_url_redact only processes first overall string pattern with Bash matches newline and parameter expansions perhaps entire string redacted authority includes newline until slash. Should consider logs, not core.
+  - `land_remote_bad`: gets fetch and push. `git remote get-url --all` applies insteadOf for first? Should git semantics. According docs get-url --all all URLs, insteadOf only first? pushInsteadOf etc. It expands. It might not enumerate all configured fetch URLs after insteadOf? `git remote get-url --all` lists urls with insteadOf transformations? Should know. Critical: multiple fetch URLs and push urls; fetch only first actually used, pushes all. Guard all.
+
+  - If `git remote get-url --push --all` fails, command substitution appended empty without checking status. But get-url fetch succeeded, push should too.
+  - local URLs skipped; mixed local and network first only network, so fetch local and push allowed network passes, with want checks network. This violates "all of them same repository" perhaps local allowed intentionally test fixtures. For current setup no local. Security fail-closed requirement "refuse any remote outside set ... before any fetch/push", local paths pass explicitly. Mixed local remote + network? User allows local fixtures and same repository requirement applies network. Fine.
+  - empty urls impossible if remote configured? Git remote with url empty could produce blank and passes. `git remote get-url --all` with url = "" prints perhaps empty and success; then guard return 0, actual git fetch fails. No external.
+  - want lower but not validate known. If remote only local passes want arbitrary deliberately.
+  - no global url rewriting pushInsteadOf? get-url applies.
+  - submodule? no.
+  - environment overrides GIT_CONFIG_COUNT etc could change get-url and actual git similarly.
+  - common injection r starts dash passed to git remote get-url "$r" no `--`, so remote named `--upload-pack=...`? REMOTE env attacker can inject options to git remote get-url. git remote get-url syntax options then name. `LAND_REMOTE=--all` could weird. But actual commands use remote similarly. Guard should fail closed perhaps no.
+  - r contains newline logs etc.
+  - Bash 3.2: `local u="$1" scheme="" auth p h user="" port=""` valid. arrays `args=()` and `${args[@]+"${args[@]}"}` common bash 3.2 empty array workaround. `<<<` here strings supported. `$'\n'` supported. `local mwhy;` inside if function okay. `&>` none. `source` okay. sed -E BSD supported. `tr` okay. awk.
+  - `ssh -G` not available old OpenSSH? target modern. macOS supports.
+  - `ssh -G` may output `hostname` resolved but can be relative? fine.
+  - `land_ssh_host` local `h args=()` local array implicit okay.
+  - Nounset: `$1` always provided in functions. land_known_repo always $1. land_url_redact always. `for r in "$PRIMARY" ${MIRROR:+"$MIRROR"}` good bash 3.
+  - pre-push sourcing path: HOOK_SELF definition inspect. Condition logic:
+  ```
+  if dest="$(land_url_target "${2:-}")" && { [ "${dest%% *}" != github.com ] || ! land_known_repo "${dest#* }"; }; then refuse fi
+  ```
+  If land_url_target returns 1 local, `&&` skips group, if condition false, accepts. Good. But unknown scheme returns 0 "? ?" refuse. alias resolution.
+  - Hook passes `${2:-}` location as given by git. For push with remote name, Git passes URL according docs remote location. If pushurl multiple, hook invoked per push URL? Comment. likely.
+  - Hook only checks push URL argument, not insteadOf expanded? Git passes expanded? likely yes.
+  - pre-push before ROOT_DIR etc. HOOK_SELF path read. Should check entire.
+
+• The core parser is centralized in `lib.sh`; I’m now checking whether each integration invokes it before its first remote operation and whether URL canonicalization matches Git’s behavior.
+
+• Potential major bug: install-bot performs git clone and git fetch origin before any guard. User says launcher before first fetch, installer perhaps guard? Request says "scripts/land/lib.sh ... used by ... bot.sh and its launcher (install-bot.sh)" and "It must refuse any remote outside the set ... before any fetch or push". install-bot itself clones arbitrary INSTALL_ORIGIN_URL and fetches origin unguarded. Diff only redacts, drops push urls, generated launcher guard. Fresh install with INSTALL_ORIGIN_URL attacker would clone before launcher. Tests explicitly fresh install with allowed URL shim no clone, but no test refusing foreign installer origin. This is a clear finding. Changelog says "every script that fetches from or pushes to GitHub" refuses, but installer fetches before guard. Could be intended installer exception? User explicitly includes launcher install-bot. Must flag high severity file install-bot.sh:42-59 fix source/generate guard before clone/fetch; validate ORIGIN_URL and MIRROR_URL before clone/add. Since lib.sh local available when run as file? over ssh single file cannot source lib on host before clone. Could embed URL validation or extract lib via local? `install-bot.sh --ssh` sends only script. Should fix perhaps guard ORIGIN_URL/MIRROR_URL directly with same lib if available, or have installer write staged lib and use direct URL helper. But also remote config existing. Could validate direct URLs before clone. `land_remote_bad` needs git repo existing. For fresh ORIGIN_URL use land_url_target and known repo. For existing after cd before fetch use land_remote_bad. Mirror direct validate before add. Ensure push URLs dropped before check. Good.
+
+  Other major: bot `status` not guarded, but status doesn't remote. `reset` no remote. tick/rebase/list guard before acquire lock? Should bottom lines.Should review current two-remote landing break. Guard requires all URLs of a remote same repository. Current origin concrete2 LAND_REPO concrete2 and lambdaclass separate passes. HTTPS, git@github, alias passes. Potential actual bug with `ssh -G` handling leading `-l`? Fine.
+
+  But perhaps Git's common SSH alias form `git@github-lambdaclass:lambdaclass/concrete.git` resolved via `ssh -G -l git github-lambdaclass`, output `hostname github.com` yes. Good.
+
+  Subtle severe bypass via `ssh -G` and canonical host output: for direct `github.com` with user containing valid characters and malicious `~/.ssh/config` `Host github.com HostName attacker` -> resolved attacker and refuses. Good. For HTTP URL DNS not config. Host `github.com.` accepted. Requirement other host, trailing dot same host okay.
+  - `github.com..` after remove one trailing dot => github.com. != github.com reject.
+  - resolved hostname might include trailing dot uppercase handled.
+
+  URL parsing security: Git supports URLs like `https://github.com/lambdaclass/concrete.git` straightforward. Could exploit backslashes? Git's URL parser perhaps treats `https://github.com\\@attacker/...` differently? Guard h includes backslash invalid rejects. Userinfo last @ robust.
+  - Scheme not validated plain before `://`: `1https://github...` scheme lower then unknown rejects. Newline etc unknown.
+  - `https://github.com:443@attacker/lambdaclass/concrete` h attacker reject.
+  - `https://attacker@github.com/lambdaclass/concrete` accept as userinfo, host correct.
+  - `https://github.com@github.com.evil/...` host evil reject.
+  - `https://github.com./...` accept same DNS.
+  - IPv6 irrelevant.
+  - SCP `github.com:lambdaclass/concrete` no user accepted and ssh config resolve. fine.
+  - ssh URL with no user `ssh://github.com/lambdaclass/concrete` accepted.
+  - explicit port with empty `ssh://git@github.com:/...` port empty accepted. Git perhaps defaults, okay.
+  - scp URL `git@github.com:22/lambdaclass/concrete` interpreted path `22/lambdaclass/concrete`, rejected. Correct scp can't port.
+  - HTTP URL port any digits accepted even other port. Host github.com but remote could be different service on port 443? Requirement other host only; port not prohibited. Current tests accepts 443. Could use `https://github.com:443` okay. Nonstandard port e.g. 1234 could be another repository service but host same. Github likely no. Not focus.
+  - percent-encoded host rejected due %. IDN rejected.
+  - repository path exact two segments no extra slash. Good.
+  - .git suffix case lower then strip before lower. `${p%.git}` case-sensitive! For URL `https://GitHub.com./LambdaClass/Concrete/` no .git uppercase. Tests `Concrete` no suffix. Current forms lower .git. But legitimate uppercase `.GIT` on GitHub should be equivalent? GitHub treats .git case? URL path repo case-insensitive and `.git` perhaps case-sensitive? Likely `.git` suffix perhaps case-insensitive? Not required.
+  - trailing slash + .git order: `concrete.git/` accepted. `concrete/.git` no.
+  - repeated slash leading accepted. `https://github.com//lambdaclass/concrete` guard accepts; Github may normalize. Fine.
+  - `https://github.com///lambdaclass/concrete` same.
+
+  Important local URL classification: any string with colon where prefix contains slash is local. `https//attacker...` no colon -> local path, actual git local path, no network. `file://` always local including `file://github.com/...` actual Git file transport perhaps remote via file? Git supports file:// only local host, no network. fine.
+  - `git@github.com:lambdaclass/concrete` is network.
+  - `github.com:lambdaclass/concrete` treated ssh even without user, correct.
+  - `C:/...` treated network host c and refused on Linux; portability Windows not asked.
+  - ext:: transport: Git supports `ext::` remote helper external command, parser sees scheme scp? `ext::ssh ...` auth ext, p :ssh..., h ext resolves -> reject. `foo::https` reject.
+  - remote helpers `hg::...` rejected host hg. good.
+  - `local` paths can start `-`? actual git options remote separate argument could injection but guard perhaps accepts local and later fetch interprets as option because quoted doesn't stop option. Existing issue.
+
+  Potential remote URL with newline can inject extra lines into urls list, each parsed separately. Git config values may contain newline; actual git remote get-url prints newline ambiguously. Could craft configured single URL `"https://github.com/lambdaclass/concrete\nhttps://attacker..."`, guard iterates and rejects attacker. If order malicious first rejects. If newline local etc actual invalid. no bypass.
+  - Carriage return at end path rejects.
+
+  Major TOCTOU: Guard reads remote URLs then later pushes/fetches. Another process can change git config between check and network operation. Requirement absolute "must refuse any remote outside set before any fetch/push", pre-push hook covers pushes with URL passed but fetches no hook. For train commands guard early then many operations; config could be changed concurrently. Usually not expected adversary local. But fail-closed guard security perhaps should use URL resolved/captured or recheck immediately each operation. Existing scripts long. But likely not expected finding unless robust review. Should focus clear.
+
+  Tests could pass wrong reason:
+  - train refusal tests no git shim around them despite comment "before any push or GitHub read"; only origin main unchanged doesn't catch fetch/ls-remote/gh reads. They run LAND_REMOTE gh-other guard and output ensures guard likely. But mirror test only output + origin unchanged, guard before any push by code yes. Test not proving no network for train, contrary changelog. Could flag tests inadequate but findings should correctness bugs priority.
+  - URL table uses ssh stub `for host; do :; done` picks last argument. With `ssh -G -l git -p 22 host`, picks host yes. But doesn't assert arguments except -G. Fine.
+  - no accepted mixed current two remote end-to-end in network forms because all actual landing uses local remotes; URL table probes individually with LAND_REPO. Current setup acceptance unit okay.
+  - pre-push accepted URLs use local W but passed network URL directly to hook; no actual git push network. Good enough parser.
+  - install tests source git log command `$(command -v git)` after stub? At line 430 before stub git created, command -v actual. At line 447 command -v git perhaps `IB/stub/git` does not yet exist (only ssh gh systemctl), actual. Fine.
+  - installer "drops push URL" test checks `! has "$out" "SENTINEL"` but URLs someone/else no SENTINEL, so redaction not tested there, separate fresh.
+  - redaction sed extraction test could pass wrong reason? It extracts regex from script line. Uses actual function? Good.
+  - host git shim test check `! grep -q "$HH/concrete2" "$TMP/hostgit.log"` but shim logs `"$*"` for git -C path fetch -> contains path. fine. Yet e2e perhaps not use shim on host? Should inspect e2e transport test. Could be false positive if PATH not forwarded. They claim checked host. Should examine functions.
+
+• One concrete gap is already visible: `install-bot.sh` clones and fetches before its generated launcher guard exists. I’m checking for parser bypasses and for tests that only appear to prove “no network operation.”fatal: not a git repository (or any of the parent directories): .git
+
+
+• Interesting cwd not git repository? Tree head but .git absent likely snapshot. Bash chain stopped before bash -n due &&. No state changed. Could run bash -n independently. No need tests because state changing and read-only. bash -n read only okay. Also command -v etc. Should not run functions that invoke ssh? `land_url_target` https no network/state, can run parser manually read only. Could test specific URLs using bash source and function. That's read-only except perhaps ssh -G reads config, no state. Allowed. Should avoid actual git repo. Could make no files. Could use `bash -c` parser table. No edits. Should detect more issues.
+
+  Potential huge bug in generated launcher install-bot quoting:
+  ```
+  if ! why="\$(land_remote_bad origin "\${LAND_REPO:-...}")"; then
+  ```
+  I'll parse generated output. Outer unquoted heredoc expands:
+  - `if ! why="\$(land_remote_bad origin "\${LAND_REPO:-...}")"; then`
+  \$ -> literal $, so output:
+  `if ! why="$(land_remote_bad origin "${LAND_REPO:-unbalancedparentheses/concrete2}")"; then`
+  Yes correct nested quotes inside command substitution in assignment. Good.
+  - `. "$HOME..."` path expanded installation. If HOME spaces quoted. Fine.
+  - LIB snapshot from installed SHA. If old commit doesn't contain lib.sh? Ref validated bot exists but lib newly introduced same branch. Fine.
+  - install from local origin passes launcher because land_remote_bad local with want arbitrary returns 0. Good.
+  - install fresh arbitrary allowed URL attempts network (test purposely fails clone), proving no guard before clone.
+
+  Potential gate transport `why="$(cd "$gc" && land_remote_bad origin)" || ...`: if cd fails, why contains cd error (stderr not captured), exit nonzero and refusal. Good. With set -uo but no -e in generated run.sh, `. lib` errors handled. land_remote_bad command substitution subshell gets cd. fine. PATH on host must have ssh for alias. No nix needed.
+
+  Potential bot mirror guard condition:
+  ```
+  if [ -n "$MIRROR" ] && git remote get-url "$MIRROR" >/dev/null 2>&1 && ! why=...; then...
+  ```
+  If mirror missing, skip, train land later refuses. But bot tick does `sync_remote` and rebase before train mirror check; no remote operations to mirror before train. Requirement guard both remotes? A missing mirror already later. Fine.
+  - bot `rebase` doesn't use mirror, yet guard foreign mirror if configured, safe.
+  - bot uses `LAND_REPO` default directly instead of REPO variable same default. Fine.
+
+  Current two remote `train build` requires `LAND_REPO` match origin. Default concrete2. If user origin=concrete2, yes. If current lambdaclass mirror uses ssh alias and origin https mixed forms separately, each passes. push-both no LAND_REPO checks, good.
+  - notes/ready no LAND_REPO so concrete2. review no.
+  - install-bot default `MIRROR_URL=git@github.com:lambdaclass` passes launcher only origin; bot later mirror. Good.
+  - install-bot if existing clone origin foreign now fetches before generated guard => finding.
+  - install-bot drops foreign push URLs, which is state-changing before refusal but installer designed mutation; user guard requirement before fetch/push only. After drop fetch URL may allowed. Good.
+
+  Potential push-both gh queries not `-R`, uses current repo resolution based on primary? Current script preexisting. Guard both remotes but does not ensure gh reads correct repo. User says land_remote_bad where gh reads LAND_REPO. push-both has no LAND_REPO and gh without -R chooses origin (not necessarily PRIMARY env). Existing current setup origin primary. If PRIMARY other allowed repo (lambdaclass) and origin concrete2, gh reads default origin perhaps mismatch. Requirement current setup only. Not new guard scope perhaps finding security outside repo? Both allowed. No outside.
+
+  Potential train `record` unguarded gh reads? cmd_record likely only local writes? Read.
+
+• The main call sites otherwise guard before their first fetch or GitHub read. I’m doing a final pass on edge-case URL handling, installer behavior, and shell portability before assigning the verdict.fatal: not a git repository (or any of the parent directories): .git
+OpenSSH_9.6p1 Ubuntu-3ubuntu13.20, OpenSSL 3.0.13 30 Jan 2024
+GNU bash, version 5.3.9(1)-release (x86_64-pc-linux-gnu)
+
+
+• Ah train `bisect` can push/fetch via subset_red build ci watch and not guarded itself. User explicitly guard train build/check/ci/watch/land, not bisect in list. Since bisect calls those guarded functions via script commands so yes each inner command guards. cmd_bisect itself no remote before inner? state only. fine. record gh reads outside guard but user specifically list excludes record with rationale CI checkout by construction. However LAND_REPO env could be arbitrary in record, gh reads any repo. User says must refuse any remote outside set before any fetch/push, gh read not fetch/push maybe okay. Changelog every script fetch/push. Not finding.
+
+  acceptance.sh unguarded clone/fetch of origin outside set; not listed user. But wording "adds ... guard to Concrete landing tooling ... used by [list]" not necessarily all scripts. No need scope expansion.
+
+  Could be issue with train `require_remote_repo` in `build --dry-run` refuses foreign remote even no network, intended tests.
+
+  Test environment no git means cannot run tests read-only anyway tests change state and forbidden. bash -n passed.
+
+  Should explore Git URL parsing mismatches more deeply. Could use installed git source/docs via man? Read only commands `git help` maybe man missing. I can run `git remote get-url` needs repo. Could use existing actual repo? cwd no .git, maybe parent? no. User forbids state changes so can't init temp. Could inspect static. Could possibly use `/usr/share/doc/git` docs. Not necessary.
+
+  Critical alias bug: `ssh -G` output can have multiple `hostname` lines? awk first. good.
+  - `ssh -G` respects `CanonicalizeHostname` and may perform DNS canonicalization? `ssh -G` may do DNS lookups? Comment "connects nowhere" but ssh -G with CanonicalizeHostname yes could DNS. Not state. Security guard resolution should match actual connection. Fine.
+  - `ProxyCommand` config could execute under ssh -G? According ssh -G causes print config and exit, does it execute proxy commands or LocalCommand? No.
+  - `Match exec` directives run shell commands during config evaluation even ssh -G. This is a state-changing/command execution concern when guard invokes `ssh -G` on arbitrary URL. But user config trusted. Could be used bypass? Host alias controlled by remote config input, `Match exec` based host already in config runs anyway actual ssh. Not issue.
+  - Known `ssh -G` with host starting `-` prevented. User `-l` plain no leading dash. Port numeric no leading. Good.
+  - Host aliases can contain `@`? OpenSSH Host names can arbitrary but guard rejects @. Current alias valid.
+  - Environment `GIT_SSH_COMMAND` may alter actual SSH config/user/port vs guard uses plain `ssh`. This is important: Git uses `GIT_SSH_COMMAND` / `core.sshCommand` which can include `-F otherconfig`, `-i`, `-p`, `-o HostName=...`, or wrapper. Guard runs `ssh -G` without those options, so it may resolve differently than Git. A malicious or just configured `GIT_SSH_COMMAND='ssh -o HostName=attacker.example'` with URL `git@github.com:lambdaclass/concrete.git`: guard runs plain ssh -G github.com => github.com and accepts, actual Git connects attacker.example. This violates "refuse other host / ssh alias for another repo before push/fetch." Pre-push also guard plain ssh and actual git honors GIT_SSH_COMMAND. This is a real security bypass. Should fix by either reject non-default SSH wrappers/options or resolve using effective `core.sshCommand`/GIT_SSH_COMMAND safely with `-G` appended, preserving options. But arbitrary GIT_SSH_COMMAND could be wrapper that ignores -G; fail closed unless output validated? Could disallow any `GIT_SSH_COMMAND`, `GIT_SSH`, `core.sshCommand`, `core.sshVariant` deviations for guarded ops or ensure actual command config. Current requirement acceptance forms no custom command. Strong finding. Is environment threat in scope? Guard fail closed against remote outside set, other host. A configured ssh alias is addressed explicitly, so effective SSH config differences matter. `core.sshCommand` is common legitimate and can select alias config. Tests don't cover. I can flag `lib.sh:95-102,126`. Fix use Git's effective SSH command/options for `ssh -G`, or reject overrides. Make sure command doesn't connect; wrapper could. Safer reject GIT_SSH/GIT_SSH_COMMAND/core.sshCommand and perhaps `GIT_SSH_VARIANT`? `GIT_SSH_VARIANT` only variant options, not host. `core.sshCommand` can just choose key no host change; rejecting could break some current setup not specified. Could parse effective command with shell? Better use `git var GIT_SSH_COMMAND`? `git var GIT_SSH_COMMAND` returns effective? Git var supports GIT_SSH_COMMAND maybe. Still executing arbitrary shell with -G might state. Fail-closed guard can reject any override. Also `~/.ssh/config` itself actual plain ssh used, okay.
+
+  But do they assume local adversary? Security bug review likely expects such bypasses. Another environment: `GIT_PROXY_COMMAND` / `core.gitProxy` for `git://` could redirect to other host. Guard accepts `git` scheme without resolving proxy. `http_proxy` can redirect HTTPS through proxy but TLS prevents other host unless cert trusted. `GIT_SSL_NO_VERIFY` etc. Probably out of scope. `GIT_SSH_COMMAND` definitely.
+
+  Also SSH alias resolution with `ssh -G` fallback behavior:
+  ```
+  h="$(ssh ... | awk...) " || h=""
+  printf "${h:-$1}"
+  ```
+  If `ssh -G` succeeds but outputs no hostname, fallback original. Direct `github.com` then accepted even resolution failed. If ssh command missing, direct github.com accepted and actual git uses same missing ssh -> cannot fetch/push, no security. If `ssh` is malicious wrapper output nothing but actual GIT_SSH different, above.
+  If `ssh -G` fails due invalid config, direct github.com accepted and actual Git also fails config no network. Alias github-lambdaclass fails closed (break current only if ssh -G unsupported). Fine.
+
+  `url.*.insteadOf` expansion can hide raw scheme etc but get-url applies actual. Good.
+
+  Potential use of `ssh -G` ignores `-F` from `GIT_SSH_COMMAND`, yes.
+
+  Another severe issue: SCP-like URLs can contain SSH options? Git scp syntax user@host:path no options. h validation catches leading dash host, user. Good.
+  SSH URL user percent encoding? valid only plain, rejects. Fine.
+
+  Credential redaction: `land_url_redact` only scheme URL with authority. Unknown scp-like URLs can contain passwords? SCP userinfo cannot contain colon? Syntax `[user@]host:path`, colon separates host/path, so password not meaningful. A string `https:user:token@github.com:repo` parsed scp auth `https`, path `user:token@github.com:repo`, host https reject, redact prints full string including token. It's an unknown/malformed scheme URL not `://`. Requirement credentials in refusals perhaps all forms? Changelog says any userinfo of scheme URL. Not important.
+
+  Potential URL credentials in mixed repo error: only prints `$first` `$path`, not URLs. safe. want `$2` may be secret but LAND_REPO not URL.
+  Remote name may contain secrets printed, not expected.
+
+  HTTP allowed is questionable security: requirement says current https, git@ and alias accepted, "other host ... unknown scheme" implies known schemes could include http? LAND doc says network URL github. They explicitly code accepts http and git. Changelog says github. No need flag unless fail-closed transport security. Focus.
+
+  Tests false reason for train network operations: They claim no fetch/push happens first but train tests don't use git shim. However actual code guard before operations, not bug. Could mention low priority but user wants tests. I should identify meaningful tests missing installer foreign origin (allowed bug). And no test for accepted current two-remote end-to-end forms? URL table okay.
+
+  Potential test URL table uses direct `land_remote_bad url-probe $repo` with unquoted `$repo`; when repo empty, correctly optional absent. Shellcheck warning SC2086 intentional. If repo contains spaces no. Fine.
+  - It checks only exit code exact 0/1. land_remote_bad internal unexpected exit 2 would fail expected, good.
+  - Stub ssh output no `hostname` validation of user port. Tests won't catch option parsing mismatch but current code okay.
+  - pre-push hook accepted URLs tests `PATH=sshstub` and input wip, expects rc0. For https URL no ssh. For alias output. Good.
+  - bad pre-push `gh-secret` passes first arg gh-secret but no remote use in hook, URL arg direct. Good.
+  - host transport test shim log assertion could pass if log contains other path but no git operation at all. Output guard proves land_remote_bad ran, so enough.
+  - Bot tests no shim to catch fetch; output guard and heads unchanged. Could fetch without changing refs and still pass; so test would pass if guard message printed but fetch happened before. Existing code guard placed before. They asked tests that could pass wrong reason; this is one: no branch or note moved does not prove no fetch/GH read. But not necessarily finding if I already have code bug. Could include one testing finding covering all train/bot/push-both network claims. Yet avoid nitpicks, desired review likely list substantial.
+
+  Could be a test bug at landing_script line 634: `git ls-remote origin` itself updates nothing. Fine.
+  - `no refused command moved origin/main` initial BASE but earlier `land` red no move, yes.
+  - push-both mirror test `MIRROR=gh-push` default PRIMARY origin local; guard loops origin then gh-push. No network. Checks origin main and fork main but not `gh-push` remote (network foreign impossible local). A malicious code could push gh-other actual network and tests would undesirable, but no shim. They should use shim for no remote op. Fine.
+
+  Could run read-only `bash -c 'source lib; land_url_target ...'` to verify parser suspected bypass around scp-like `github.com` and backslash. No need unless finding. I can reason.
+
+  Could use web search for Git environment behavior? No need external, known. I can inspect git docs installed using `git help --config`? `git help --config` lists. `git var GIT_SSH_COMMAND` outside repo may work? Read-only. Should have evidence that Git uses GIT_SSH_COMMAND. Run `git var GIT_SSH_COMMAND` with env value outside repo; no state.
+
+• A second bypass is in SSH resolution: the guard invokes plain `ssh -G`, while Git can use a different `GIT_SSH_COMMAND`/`core.sshCommand`, so the checked host need not be the connection host.usage: git var (-l | <variable>)
+usage: git var (-l | <variable>)
+https://github.com/lambdaclass/concrete.git -> 
+github.com lambdaclass/concrete
+https://attacker.example/lambdaclass/concrete.git -> 
+attacker.example lambdaclass/concrete
+git@github.com:lambdaclass/concrete.git -> 
+github.com lambdaclass/concrete
+
+
+• Git var not valid variable? Man says GIT_AUTHOR_IDENT etc, perhaps no. No matter known docs. Could inspect `/usr/share/man/man5/git-config.5.gz` via zcat bash? Dedicated Read can't gzip. Bash read-only allowed `git help --no-man-viewer`? Use `git help --config` lists core.sshCommand? It might.core.sshCommand
+core.sshCommand
+I used grep via Bash contrary tool says don't run grep; oops dedicated Grep only filesystem, command output filter legitimately shell? They said grep/rg search file contents, here command output okay. Fine.
+
+  Should inspect more for portability: BSD `sed -E` supports, `tr`, `awk`. Bash 3.2 empty array expansion idiom works. `local h args=()` perhaps under bash 3.2 yes. `printf -v` existing not diff.
+  - `for r in "$PRIMARY" ${MIRROR:+"$MIRROR"}` with `set -u` bash 3.2: parameter `:+` safe unset. MIRROR always set. With MIRROR empty expansion disappears, with spaces preserved? `${MIRROR:+"$MIRROR"}` outer expansion unquoted but inner quotes are syntactic and preserve as single word in bash, yes. Test `set -- ...`. fine.
+  - `while ... done <<< "$urls"` here-string Bash 3.
+  - `local rest=...` within case in function supported.
+  - `local mwhy; mwhy=...` within if in function supported.
+  - `${args[@]+"${args[@]}"}` under set -u empty array on bash 3.2 prevents unbound, yes.
+  - `ssh -G` OpenSSH 6.8+ macOS current.
+  - `awk '$1=="hostname"'` output may be `hostname github.com` okay.
+  - `sed -E` regex in redact `[^/]*@` greedy through last @ because * greedy, good BSD.
+  - `tr '\n' ' '` turns each newline to spaces. command substitution strips trailing newlines but tr leaves trailing space. Install log `...redact)into` redact emits trailing space, expected exactly one. If multiple URLs, trailing spaces between. Good.
+  - echo "$ORIGIN_URL" may interpret `-n` or escapes depending shell? Bash echo if URL starts -n improbable scheme local path `-n` could suppress and leak? redaction not robust. Not core.
+
+  Could find bug current HTTPS setup due LAND_REPO default: `land_remote_bad` `git remote get-url --push --all` behavior with no pushurl and multiple fetch URLs. For a single current remote good. Both fetch/push outputs same. first same.
+  - If `remote.origin.pushurl` same concrete2 and fetch same good.
+  - lambdaclass mirror fetch/push same concrete good.
+  - `land_remote_bad` when remote URL ends `.git/` strips slash then suffix good.
+  - Alias `github-lambdaclass` output `hostname github.com` and path good.
+  No break.
+
+  Potential `LAND_REPO` uppercase normalized and path lower, accepts. good.
+
+  TOCTOU and SSH override perhaps enough plus installer. Should decide verdict reject definitely.
+
+  Should have findings with exact file:line and fix. Could include tests issue tied to each. User asks "tests that could pass wrong reason." Should have at least one if found. Could list 4 findings:
+  1. install-bot unguarded clone/fetch.
+  2. SSH command override host mismatch.
+  3. Guard can be bypassed by scp-like local path? Explore more security vectors.
+
+  Remote URLs via `url.<base>.insteadOf` get-url expansion:
+  Docs `git remote get-url` applies insteadOf only first URL? It retrieves configured `remote.*.url`, expands first? Actual network uses first fetch URL and all push. Guard all okay. PushInsteadOf expansion. fine.
+
+  Pre-push direct URL guard doesn't check both fetch and push repo same. Hook gets each push URL only, so if fetch concrete and push concrete2, pre-push accepts push to concrete2, while requirement says "fetch URL at one project repository and push URL at other" refuse. They specifically say adds guard used by pre-push and "It must refuse any remote outside the set (other host, other repository, fetch URL at one project repository and push URL at the other, ...) before any fetch or push". Does pre-push need refuse mixed remote? It only sees URL and remote name `$1`; could call `land_remote_bad "$1"` to detect mixed configured remote. But direct `git push <url>` remote arg is URL not name, land_remote_bad would fail. Current implementation only validates destination, so `git push origin` with fetch concrete and push concrete2: pre-push allows because push URL is legitimate; however all landing tooling entry points call land_remote_bad and refuse before push. A manual push from checkout mixed remotes would be accepted by hook contrary broad statement "one check covers every push ... push by hand" and user says guard must refuse fetch at one/push other. They may expect pre-push just URL, but explicit current requirement could imply all. Should assess. The pre-push comment says "git passes hook URL it pushes ... any network URL not one ... refused". It doesn't promise mixed check there, but overall land_remote_bad used scripts. User explicitly includes .githooks/pre-push and mixed. A hand push using mixed remote bypasses mixed-repo refusal but target is within set. Is that a security bug? They care not pushing one repo while fetching another, perhaps manual push should refuse. Hook can detect. Could flag if strict. But avoid over-interpreting. The mixed case target both legitimate so not outside set, parenthetical calls it outside set policy. Tests only mixed train ci, no hook mixed. This could be intended catch. Should consider exact user phrasing:
+  "Read-only review... REVIEW.diff ... adds a fail-closed guard to the Concrete landing tooling: scripts/land/lib.sh LAND_REPOSITORIES ... with land_url_target/land_url_redact/land_remote_bad, used by train.sh ... and .githooks/pre-push. It must refuse any remote outside the set (other host, other repository, fetch URL at one project repository and push URL at the other, unknown scheme, ssh alias for another repo) before any fetch or push, while ACCEPTING the current two-remote setup..."
+  User likely expects review diff and tests. Pre-push gets URL not remote config, but has name. `land_remote_bad` is not used by hook, only land_url_target. Mixed remote manually push perhaps not landing tooling but hook claims every push. Could be finding low/medium. Fix hook if `$1` names configured remote, run land_remote_bad "$1" no want; if direct URL, only URL check. This would also catch mixed. But does it break local test fixtures where remote name origin local and URL arg local? land_remote_bad passes. Does it break `git push remoteName explicitURL`? Git arg remote can be name, URL arg expanded pushURL, matches config. Good. Could simply call land_remote_bad if git remote get-url "$1" exists. But source before cd root, hook current cwd at top-level per Git docs. yes.
+  However not required to check LAND_REPO in hook. Fine.
+  Could list.
+
+  More important: `land_remote_bad` allows multiple remotes separately of different allowed repos as intended two-remote. Good.
+
+  Pre-push also doesn't refuse mixed remote direct by hand. Should I include instead of generic test weakness? likely.
+
+  Another gap: install-bot launcher checks only origin, not lambdaclass before its first fetch. First fetch only origin. Bot after snapshot checks mirror before any operation. Fine.
+
+  Gate transport checks only origin all urls before fetch origin. run-at-ref then `RUN_AT_REF_SOURCE` bundle local. good.
+
+  Review.sh guard before arg validation and codex availability, no remote first. Fine.
+  - if PUSH=0 no remote network, base `$REMOTE/main` local only. good.
+
+  Ready.sh guard before remote runner invocation. Runner might push/clone elsewhere outside set, but separate transport guard. `LAND_REMOTE_RUNNER` arbitrary env can run anything, outside scope.
+  - LAND_REVIEW_CMD arbitrary can fetch foreign, arbitrary code execution env outside scope.
+
+  Train `require_remote_repo` called before `refuse_fork`; foreign remote named fork triggers missing config instead of named fork in land test? They call LAND_REMOTE=fork and configured local fork, require passes local then refuse named. good.
+  - LAND_REMOTE=gh-other valid names.
+  - Mirror guard after many GH reads and remote_main on primary, but requirement "mirror outside set before any fetch or push" Could interpret must refuse bad mirror before any remote operation at all, not just before touching mirror. Current `cmd_land` checks primary, then performs `gh run view` and `git ls-remote $REMOTE` before validating mirror at line 993. Test claims "land refuses a mirror ... before pushing anything" only no push, but user says "It must refuse any remote outside set ... before any fetch or push". A bad mirror is not used until after guard, so no fetch/push to bad remote before check. Primary remote operations allowed. Fine.
+  - Bot validates mirror before primary fetch, stronger.
+  - push-both validates both before ls remote.
+  - train land bad mirror still GH reads primary first but no mirror op. okay.
+
+  Install bot ORIGIN_URL arbitrary network and MIRROR_URL foreign gets cloned/fetch. clear.
+
+  TOCTOU perhaps not include unless need. `push-both` validates mirror once then potentially waits 70min and mirror config could change. Pre-push catches mirror push if hooks enabled? Mirror push `CONCRETE_SKIP_GATES=1` still guard hook runs and checks actual URL, so push protected. But mirror `ls-remote` could fetch from changed foreign before final push. Primary push hook guard catches changed destination, but pre-primary `ls-remote` after guard could changed. Train `push_verified` hook protects pushes but ls-remote not. Fetch commands no hook. Security guard can't be atomic. Usually local config trusted during run. Not expected.
+
+  `GIT_SSH_COMMAND` pre-push actual URL is `git@github.com` and guard direct plain ssh, actual Git connection already established before pre-push hook runs! Important: pre-push hook runs after Git connects to remote and refs advertised. So even if hook refuses push, fetch-like remote connection already happened. The guard in script before Git commands is what ensures before network. Pre-push alone cannot prevent initial remote connection, but requirement before push ref update not connection. For manual push to foreign host, Git connects before hook; impossible hook to guard before any network. They likely mean before push operation completion. Not nitpick.
+
+  SSH override means train guard accepts and git fetch connects attacker. Good.
+
+  Could other SSH config environment `GIT_SSH` also. Include both core and env.
+
+  Fix test for override: Stub `ssh` to emulate `ssh -G` and actual remote? A unit can set `GIT_SSH_COMMAND='ssh -F ...'` and verify refusal. Since executing git not needed, guard should inspect env/config. Add tests. If choose reject overrides, easy.
+
+  Potential HTTP proxy not necessary.
+
+  Tests false reason specifically installer fresh credential test expects nonzero because shim blocks clone. It would pass whether or not installer guard refuses foreign? It uses allowed URL, so only redaction. No foreign install test. I can state under finding 1 test lines 441-445 actually depends on shim's clone failure, so doesn't test guard. Add foreign origin + shim that logs clone/fetch and assert neither. This directly answers tests.
+
+  Train/bot no network tests can pass wrong reason if guard output but operation happened. Could list separate lower severity:
+  - `scripts/checks/landing_script.sh:629-645` only checks diagnostic and unchanged main. A fetch/gh read/ls-remote before guard would still pass. The generic git shim loop starts only at line 699 after these tests and covers notes etc not train. Fix wrap train/bot/push-both refusal cases with logging git/gh shims and assert no calls; include `ls-remote` and `gh`.
+  - `landing_bot.sh:408-420` same heads unchanged. Could combine file lines two locations in one finding. User wants file:line each. I can mention both in one bullet. Do I need avoid overwhelming with test-only findings? Review asks explicitly. Include.
+
+  Another test false positive URL aliases: ssh stub maps `github-lambdaclass` and `github_work` to github, all others itself, but actual code fallback if ssh missing means alias tests fail. good. Doesn't test GIT_SSH override.
+
+  Bash 3.2 no findings. I can state no additional portability issue? Respond findings only and verdict, no need.
+
+  Should verify pre-push mixed scenario logically. Suppose remote origin has fetch concrete, push concrete2. `git push origin` invokes hook args `origin https://github.com/unbalancedparentheses/concrete2.git`, land_url_target allowed, accepts. Requirement says refuse. Yes definite. Add finding `.githooks/pre-push:36-40`. Fix when `$1` is configured remote, call `land_remote_bad "$1"`; direct URL retain destination check. Add test invoking hook with gh-mixed as remote name and its concrete2 push URL. This is strong. But one could argue the mixed case is covered by train and all tools, manual push not requested? User explicitly pre-push and broad any remote. Good.
+
+  Potential hook check source lib failure handling with `set -e` absent (set -uo only), source returns nonzero and group exits. good.
+
+  Potential fail-open land_url_target with invalid `ssh -G` output? Suppose malicious alias config HostName `github.com` but `ProxyCommand` connects attacker; host is still github.com but actual proxy could route. SSH config always can proxy any host, guard can't defend against user malicious config. `GIT_SSH_COMMAND` same category but explicit override common. If threat model trusts local ssh config, why not trust GIT_SSH_COMMAND? They specifically resolve alias to detect alias for another repo, so local config not blindly trusted. Should account overrides. Strong enough.
+
+  Could simpler bypass without env using ssh `Host github.com` config `HostName attacker` and `ssh -G` catches. With `core.sshCommand='ssh -F alternate'`, misses. Good.
+
+  Another core parser issue: direct GitHub SSH URL can specify `ssh://git@github.com/lambdaclass/concrete.git` but `core.sshCommand` with `-o HostName` does OpenSSH CLI `-o HostName` override actual host? Does ssh allow HostName option command line and use it? Yes `ssh -o HostName=attacker github.com` config first obtained value? Command-line options are first and used, HostName set attacker. Confirm read-only `ssh -G -o HostName=attacker.example github.com` outputs hostname attacker. Could run to evidence no network.
+
+• The pre-push hook also validates only the push URL, not the named remote’s fetch/push pair, so a manual push through a mixed-project remote would pass despite the stated mixed-remote refusal.hostname attacker.example
+hostname github.com
+
+
+• Good.
+
+  Perhaps inspect line numbers after diff actual. Have exact.
+
+  Potential new bug install drop push URLs itself undermines guard by silently modifying foreign push URL instead of refuse. User "It must refuse any remote outside set ... fetch URL one push other". install-bot deliberately drops push URLs (changelog), so exception intended. No need flag drop. But unguarded fetch definitely.
+
+  Question: install-bot fresh clone is installation not "landing tooling fetch/push" and user only says launcher before first fetch. Yet changelog "bot and its launcher before its first fetch", not installer? User says "bot.sh and its launcher (install-bot.sh)" could mean install-bot generates launcher; "before any fetch or push" broad. They intentionally tests install fresh clone allowed and launcher foreign. Perhaps design did not intend installer origin validation? But fail-closed guard should include it. It accepts INSTALL_ORIGIN_URL local test fixture, so needs land_url_target direct. Clear.
+
+  Could there be actual bug in installer redaction `redact` sed doesn't redact multiple @ correctly on BSD? sed ERE greedy `[^/]*@` includes @ and greedy last, yes.
+  - Fresh log command `say "cloning $(echo "$ORIGIN_URL" | redact)into..."`: if redact fails, set -e behavior command substitution in argument to function doesn't trigger? no, redact simple.
+  - URLs with credentials and no path `https://user@github.com` sed matches. good.
+
+  No full test runs due read-only. I can say review static and bash -n? Respond probably findings only, no extra. Should include verification note? User wants list findings end verdict. Could say "Bash syntax checks passed; I did not run state-changing test suites." But no need and could be useful. Findings:
+  1. High: installer network before guard.
+  2. High: SSH override mismatch.
+  3. Medium: pre-push mixed remote.
+  4. Low: tests don't prove no fetch/GH for train/bot/push-both.
+  Could combine test issue with 1 and 2 tests missing rather than separate. They asked tests could pass wrong reason, include 4.
+
+  Could also point to `scripts/checks/landing_script.sh:634` guard tests invoke `git ls-remote origin` after, which is a remote operation but allowed local. no.
+
+  Test train shims absent and output guard proves guard happened before later operations by code order, but a regression inserting fetch before `require_remote_repo` would produce same output and main unchanged. Exactly test passes wrong reason. Fix use shim logs both git and gh around each. For `watch` only gh, current git shim alone insufficient. Include gh shim.
+
+  Push-both tests check refs, but an `ls-remote` to foreign mirror before refusal would pass. Add logging shim. Bot list fetch foreign could change remote tracking refs local, heads_before checks bare origin refs not local remote-tracking, so passes. Strong test issue.
+
+  Could there be test suite itself modifies actual repo when run, but I didn't run. Fine.
+
+  No need use TodoList.
+
+  Respond concise but sufficient details. Use numbered bullets, bold severity perhaps. File:line exact and fix. End exact `VERDICT: REJECT` one line. Should have no heading? Could list.
+
+  Finding 2 exact lines `scripts/land/lib.sh:95-102` and `:126`; mention guard's `ssh -G` ignores effective Git ssh command. Example:
+  `GIT_SSH_COMMAND='ssh -o HostName=attacker.example'`
+  URL `git@github.com:lambdaclass/concrete.git` accepted, actual Git resolves attacker. I confirmed `ssh -G -o HostName=attacker.example github.com` gives attacker while plain gives github. Fix reject overrides or incorporate exact effective command in resolution and fail if cannot. Add test.
+  Does Git command-line `-o HostName` apply to actual? yes.
+
+  Finding 3 mixed pre-push:
+  When `$1=origin` configured mixed, `$2` concrete2 allowed. Hook passes. Fix:
+  ```
+  if git remote get-url "$1" >/dev/null 2>&1; then
+   why=$(land_remote_bad "$1") || refuse
+  else url check
+  fi
+  ```
+  Should guard before any remote op. `git remote get-url` local. Ensure direct URL remote name same as URL not configured. Good.
+
+  Finding 1 installer fix use `land_url_target` direct for ORIGIN/MIRROR before clone and land_remote_bad existing before line59. Since script remote via ssh cannot source lib on remote, stage/extract validator before any clone or implement same validation function embedded (avoid duplicate drift) perhaps send lib alongside installer. Recommend "stage/source lib.sh and validate ORIGIN_URL/MIRROR_URL before clone/add; for existing clone run land_remote_bad after pushurl cleanup and before fetch." For local paths allowed. Test foreign URL with logging shim no clone/fetch.
+  - If ORIGIN_URL foreign fresh, direct validate. If MIRROR_URL foreign but no existing mirror, validate before add (local config change not network but policy). Existing mirror foreign, installer currently fetches only origin then launcher later bot rejects, but installer should refuse mirror before origin fetch per both remote preflight perhaps.
+  - install default ORIGIN_URL derived from `$HOME/concrete2` foreign; guard direct catches.
+  Good.
+
+  Finding 4 tests line ranges. No need separate if response 4 bullets. Mention no Bash 3.2 issue found? User asks check, response can add one sentence after findings "The changed scripts pass bash -n; no additional Bash 3.2/BSD-specific defect found by inspection." But they only want findings and verdict. Could include verification note before verdict. No tests run due read-only. I did run bash -n. "I did not run the test suites because they mutate fixtures" perhaps unnecessary. They know read-only. To avoid implying full tested, add "Static review plus bash -n only; test suites were not run under the read-only constraint." This is relevant but user wants response self-contained. Fine.
+
+  Should ensure no state changed by my bash commands. `ssh -G` can read config no state. `git help` no. `bash -n` no. Fine.
+
+  One concern: user asked no run anything changes state, my initial git status no. okay.
+
+  Response now.
+
+• 1. **`scripts/land/install-bot.sh:41-59` — the installer performs unguarded network operations.** A fresh install clones arbitrary `INSTALL_ORIGIN_URL`, and an existing installation fetches its origin before the generated launcher’s guard is installed or run. `INSTALL_MIRROR_URL` is likewise unchecked. Validate both direct URLs before cloning/adding them, and run `land_remote_bad` on an existing clone before line 59. The test at `scripts/checks/landing_bot.sh:441-445` passes because its shim deliberately makes `git clone` fail; add foreign-origin tests with logging `git` shims and assert that neither `clone` nor `fetch` occurs.
+
+  2. **`scripts/land/lib.sh:95-102,126` — SSH host validation can differ from Git’s actual connection.** The guard always runs plain `ssh -G`, but Git honors `GIT_SSH`, `GIT_SSH_COMMAND`, and `core.sshCommand`. For example, with `GIT_SSH_COMMAND='ssh -o HostName=attacker.example'`, `git@github.com:lambdaclass/concrete.git` passes the guard while Git connects to `attacker.example`. Either reject these overrides for guarded operations or resolve using Git’s exact effective SSH command and fail closed if it cannot be reproduced safely. Add an override regression test.
+
+  3. **`.githooks/pre-push:36-40` — manual pushes through mixed-repository remotes are accepted.** The hook checks only `$2`, the individual push URL. If a named remote fetches `lambdaclass/concrete` and pushes `unbalancedparentheses/concrete2`, the push URL is allowed and the hook never detects the prohibited mixed configuration. When `$1` names a configured remote, also run `land_remote_bad "$1"`; retain the direct-URL check for pushes to literal URLs. Add a hook test using the existing `gh-mixed` fixture.
+
+  4. **`scripts/checks/landing_script.sh:629-645,793-809` and `scripts/checks/landing_bot.sh:408-420` — several “refused before network use” tests can pass after network use.** They check diagnostics and unchanged refs, but an earlier `fetch`, `ls-remote`, or `gh` read would leave those assertions passing. Run these cases with logging `git` **and** `gh` shims and assert an empty log, as the later notes/review tests already do.
+
+  The changed scripts pass `bash -n`; no additional Bash 3.2/BSD portability defect was found by inspection. State-changing test suites were not run.
+
+  VERDICT: REJECT
+
+To resume this session: kimi -r session_19f760d6-fb40-40d0-bc39-0015e8911e21

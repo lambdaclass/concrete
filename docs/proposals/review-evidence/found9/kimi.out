@@ -1,0 +1,415 @@
+kimi version 2.4.1
+• I need perform detailed review no modifications. Should inspect files authoritative. I'll respond only blockers max50 each citations and final choices owner qs 1-11 14-17 one word/option letter. Should avoid splits q5 7 9 preferences but choices still. Should understand. I should use Todo perhaps multi-step. Should read proposal v3, changes, decisions, core rows json. Likely long. Start files parallel.
+
+• I’ll cross-check draft 3 against the authoritative decision rows and the disposition of round-2 findings, then report only consequential remaining issues.
+
+• I have proposal full. Should decisions remaining 824-1659 includes memory infoflow pipeline runtime etc and OD. Should read continuation. Could read full next. Also v2 perhaps to compare differences and review splits? User asks verify v3 against decisions, changes. Could inspect v2 if needed for remaining regressions, but v3 primary. Should have all relevant decisions. Read rest 824.Should rest especially OD99 etc 126 137 147. Read 1202.Rest 200 lines perhaps no more relevant except cleanup. Read.Should analyze blockers. Candidate issues noticed:
+
+  - C1 "Normal block exit, return, break and continue run deferred calls ... Ordinary locals do not acquire implicit user destructors" but OD2 says on every non-abort exit: exit value, deferred calls, loans end, remaining locals storage teardown. Proposal doesn't explicitly mention loan release ordering after cleanup and storage teardown? Says preservation including, C5. Q9.8 note release each deferred loan after call. C1 authority. Could be omission not blocker if freeze interfaces includes? Perhaps loans end not stated except deferred. Owner approval false? No.
+
+  - C1 "If cleanup aborts, stop immediately" consistent OD68. "Destruction ordinary checked call" Q2.7 yes.
+
+  - C2 bool encoded byte 0/1 char u8 roundtrips based TYPE19/20 not directly in decisions except OD126 mentions sizes. Should legacy spec if cited authoritative decisions not full? User verify decisions and json, TYPE references. Perhaps okay.
+
+  - C3 target profile separates address width pointer storage etc, proposed Q3. Fine.
+  - "Empty aggregates have size 0/alignment 1" native empty arrays okay. Struct layout decided zero-size fields. Fine.
+  - Arrays size n*size, alignment. Fine.
+  - Text owns immutable bytes never aliases another value’s buffer, linear. TYPE-3 maybe String not Text? Proposal says TYPE-3 Text maybe dynamic string. Should verify legacy spec? User only authoritative docs decisions/core rows, but citations TYPE-3. Could be blocker if actual rule String<A>. They distinguish Text maybe type name in spec. Should check.
+  - Native enum profile i32 tags from OD126 record today, answer target assumptions language rules. Question 4 proposes retain. Fine.
+  - Packed C etc good.
+  - C4 major model concerns:
+    * Pointer fragments separate from numeric bytes, Rep etc.
+    * Typed write to materialized storage encode new active value preserving bytes outside active representation incl padding. Newly inactive bytes retain previous. Enum variant changes: active representation ranges can differ. Rep decode current active. This seems coherent.
+    * Raw writes invalidate cached typed values. Reads decode every time. okay.
+    * Initialization tracked per occupied field/element vs per byte initialization state. Moving out removes typed ownership/read permission, not necessarily bytes uninit. okay.
+    * Padding cannot affect typed observations. Rep ignores padding. Fine.
+    * Raw byte copy transport provenance fragments. good.
+    * Q3.7 zero-byte access only alignment non-null address. yes.
+    * from_exposed: authoritative says unique live exposed nonempty block containing x; else unique one-past; else no prov. Proposal says "uses Q3.9's in-bounds-first, then one-past, then no-provenance rule over live, nonempty eligible exposed blocks. Do not add a new arbitrary tie-break where decided relation permits choices." Omits unique but refers. fine.
+    * Block identity never reused. not explicit decided but proposed completion.
+    * Address arithmetic no wrap. good.
+    * "Allocation failure is a typed result conserving rejected input" yes.
+    * Availability law release never reducing availability weird arenas reset but exact.
+  - C5:
+    * shared views Copy; mutable nonduplicable no exactly once destruction, consistent refs Copy? &mut linear but may be unused. yes.
+    * "A reborrow suspends conflicting access through its parent until child ends." OD2 explicitly "no reborrow concept or syntax" for passing &mut, but Q3.2 says mutable lending. Q9.5 distinct typed core cases. Proposal uses reborrow generic. Could contradict no reborrow concept? They earlier C5 authority OD15/23 not OD2. Q3.2 says downward parameters; mutable lending freezes origin. Reborrow as internal concept likely okay but phrase might introduce model forbidden? Draft says no new stacked/tree. Not blocker.
+    * "Grant narrowing consumes and intersects rights; acquisition preserves parent ... close/give-up consumes its resource on all specified outcomes." yes.
+    * "Heap handles contain a pointer and sufficient stable release context" Q1.7 stable release state raw context. Proposed erasure q6. Fine.
+  - C6:
+    * normal exit and trap 134 distinct. Missing launch grants 125. yes.
+    * output preceding trap preserved. yes OD119.
+  - C7:
+    * leakage includes allocation sizes and loop counts and exact addresses. Infoflow baseline only branches exact addresses variable-time. Additional loop counts and alloc sizes are reasonable manifestations but could overapprox. not contradiction.
+
+    * NI definition: "for equal public inputs, matched external choices and equal ordered release site/value traces, prove equal public observations (NI)" This is delimited release NI. Is release value public? Usually declassification delimited release requires equality of released values, yes.
+    * separately equal leakage traces CT under same equal release trace. Could be too strong? If declassified values control secret branch after declassify? Released values equal so okay.
+    * "Preserve wipe events as effects optimization cannot erase" SPARK yes.
+  - C8:
+    * total fuel-indexed evaluator deterministic oracle queries pure history etc. Fine proposed.
+    * Infinite adequacy compatible limits of fuel prefixes correspond to infinite maximal executions, every such execution prefixes. Potential mathematical issue fuel-indexed evaluator with outOfFuel and blocked; can construct via Kőnig if finite branching? Environment oracle uncountable but fixed. For a fixed oracle deterministic so unique prefixes, trivial. okay.
+    * Q9.9 total clock-indexed. fine.
+  - C9:
+    * Q9.7 exhaustive selected registry proposed q16. fine.
+    * postconditions ensure surviving after cleanup. yes.
+  - C10:
+    * FFI kept etc. fine.
+  - Pipeline:
+    * Decided BIR→LCB-IR adapter; proposal says BIR→LCB adapter slight shorthand. no.
+    * "Memory CFG stays single layout/ABI/provenance lowering boundary; retract P2 folding proposal." Should other_rows P2? In proposal P2 refers earlier foundation not decision P2 priority? It says retract P2's folding proposal, but decisions P2 is priority order not folding. Perhaps foundation draft v2 labels P2. Check v2 to understand. Not necessarily blocker.
+    * Frontend P1 retract parse print etc not decision P1. fine.
+    * Direct proofs validators. yes.
+    * Certificates from slice 0 first authoritative, "After slice 0 use per-edge certificates." decided after slice0 yes.
+    * Maximal behavior refinement: forward simulation with target determinism yielding backward refinement. Should sound conditions. They include finite stuttering target steps, progress etc. Could be flawed with native nondeterminism and source choices but named.
+    * "Target steps may stutter finitely" forward simulation typically source steps matched by finite target steps, target stutter? Should backward refinement all target behaviors, target can have silent steps not corresponding. Infinite silent target stuttering exclusion. okay.
+    * "P4 run LLVM LCB hybrid evaluator on every supported example and controlled test" decided backend order says every supported example through both, early fuzzer etc. Adding evaluator every controlled test qualification okay proposed Q17.
+    * "same input bytes target ... compatible scripted responses" yes.
+    * "compare complete observations ... observable final external state" okay.
+    * "Use bounded scripted environments for effectful/blocking cases." For indefinite blocking, bounded script can classify blocking without response, okay.
+  - Owner questions choices straightforward recommendations: Q1 approve; Q2 hybrid; Q3 profiles; Q4 retain; Q5 b; Q6 proof-gated; Q7 c; Q8 keep; Q9 defer; Q10 byte; Q11 defer; Q14 defer; Q15 defer; Q16 lawful; Q17 refinement. Response needs one word or option letter each. I can use "approve", "hybrid", "profiles", "retain", "b", "proof-gated", "c", "keep", "defer", "byte", "defer", "defer", "defer", "lawful", "refinement". Perhaps expected A/B choices? Questions Q1 no letters, so words okay. They ask final choice one word or option letter. Could use recommended exact compact.
+
+  But need identify remaining blockers perhaps one or more subtle. I should compare v2 to v3 changes perhaps introduced contradictions. Should systematically verify citations and claims. Could search specific relevant spec rules to detect false statements. User explicitly against decisions and core_rows authoritative. Could rely only these. But proposal references legacy spec A1 and TYPE rules, no need if not authoritative? User says verify against docs decisions and JSON authoritative. I can inspect A1 for maximal behavior potential. Also other_rows maybe P4 etc? User specifically docs decisions. Fine.
+
+  Potential blocker status line owner quote: "ok to option b then for freeze the foundation>?" Interprets approves writing shared foundation before freezing, pending recording. Is that accurate? Should context only quote. It might actually owner approves option B for freeze foundation, likely yes. They explicitly says not new questions. Not blocker.
+
+  A2i scope "Discharge four Q9.14 design theorems and A2i interaction/erasure obligations including laws below." A2i includes erasure? Decisions long-term A2i says representative interactions, semantic contract. Proof infrastructure says instrumentation erasure before slice0 authoritative. Q9.14 rep etc. C1-C10 enormous full foundation beyond integrated scopes. But question 1 asks owner approval, so not decided false if clear proposal. Could force rewriting proofs later due overfreezing full interfaces? This is purpose review.
+
+  Potential major semantic inconsistency in C4 hybrid typed read after raw write and ownership: Safe typed reads of materialized place always Rep decode current bytes. If raw write modifies active bytes to representation of a different value while typed ownership loan state remains, typed value changes. That's intended trusted raw. If invalid stuck. fine.
+
+  Materialization on "passing an address to foreign code" but call-only extern pointer can be derived from borrow. OD64 permits borrow-derived pointer call-only, and says expose refused. Materializes storage while safe loan root projection retained. Fine. Kept parameters owned allocation.
+
+  Padding oracle first raw exposure. Typed writes preserve padding. What about enum variant change active ranges: preserve bytes outside new active representation, including old active bytes now inactive. correct.
+
+  Pointer provenance raw bytes: "Raw writes update bytes/fragments and invalidate overlapping cached typed values." If raw write only writes one byte of pointer fragment, what happens to provenance metadata? Contract defines partial pointer fragments perhaps. Not detailed enough but interface. no immediate contradiction.
+
+  "Rep ignores padding but checks active tags, bool/char/text validity and pointer fragments." Text validity includes UTF-8 yes. "char" every u8 valid. okay.
+
+  Zero-byte raw access only alignment nonnull even if pointer no prov, not live. yes.
+
+  Address profile Q3.10 bound base+size ≤2^64−1. In C4 says one-past formed. At base+size=2^64−1, one-past numeric 2^64−1 representable. Last byte address max-1? If block base+size means one past. If max address u64 max, block ending max excludes address max, so address max never occupied. Decided. preserve.
+
+  Q3 generalizes pointer representation while Q3.7 pointer=(prov, addr:u64) revision clearly noted. okay.
+
+  Q4 enum tags "retain existing profile's i32 tags for now" decided record current not explicit answer? OD126 answer language rules with current record one target profile, so yes.
+
+  Q5 b no niche now. no re-raise.
+
+  Q6 release erasure revises Q1.7. proof gated. fine.
+
+  Q7 narrower internal representation with u64 semantics; on 16-bit target cannot represent u64 length in machine word but use multiword. no silent. fine.
+
+  Q8 keep milestone. yes.
+
+  Q9 defer trap constructors before first supported slice. Slice0 explicit trap arithmetic? Slice0 overflow static refusal and exit255, slice1 abort. Trap kind for abort needed slice1. "before first supported use" okay. Trap taxonomy perhaps ArithmeticError strings can be derived but explicit separate. no.
+
+  Q10 byte columns tabs one byte. owner preference. okay.
+  Q11 defer UTF8 failures to text slice, but no hidden traps already requires handled branch or evidence. Deferring classification while foundation includes text operations? C2 says UTF-8 operation failures belong to TYPE3 Q4.6/4.7 remaining classification question11. Q4.6 byte_at traps and no hidden traps evidence. Q4.7 invalid range without else traps; with else handled. Those are already decided trap behavior, not classification kind spelling. Q11 mapping to invalidRange only trap kind. fine.
+  Q14 entropy shape defer to slice6. decisions explicit capability granted main slice6 but exact shape unknown. good.
+  Q15 struct invariant spec definition before freeze source later. yes.
+  Q16 registry extensibility modifies Q9.7/Q7.10 but separate. fine.
+  Q17 per-native allowed Core observations. decided two-backend comparison full observations with each other and expected. Proposed per trace Core adds. "Preserve decided two-backend comparison" P4 says run all, compare each Core, exact deterministic implies equality. nondeterministic LLVM/LCB can differ and no direct mutual match? Last sentence preserve comparison perhaps requires comparing full observations with each other per decisions; if allowed addresses differ they can't equal. Draft explicitly says addresses padding differ and separate witness. Backend order decided CI compares full observations with each other and expected outcome, mismatch fails. That seems potential contradiction: decided says compare both native outputs with each other full observations, any mismatch fails; proposal allows exposed stack addresses and padding differ between correct runs, separate Core witnesses, so native-native direct equality cannot be required for nondeterministic raw observations. Does Q17 propose revision to decided two-backend comparison? It says preserve decided two-backend comparison, but changes semantics from direct compare to refinement each. Question17 separate owner response. If approved, it could revise earlier rule but revision register does not list backend order/early evidence under Q17. Owner could approve something false "Preserve decided two-backend comparison" while actually altering. Is this a blocker? They say "Preserve the decided two-backend comparison; testing never replaces proof." P4 still compares both to Core; direct native-native comparison might still happen on deterministic observations and allowed differences. Could classify compatible rather than exact. Earlier round2 Codex objection accepted. Q17 explicitly owner choice, so revision implied but not registered perhaps not fatal if clear. Should decide severity.
+
+  Potential P4 "exact equality where behavior deterministic" and "exposed addresses initialized padding can differ correct runs" okay nondeterministic.
+
+  Question 17 owner response chooses P4, so any revision accepted. Revision register says "No revision enacted each question own response" and table doesn't list Q17 row. Could be omission but owner sees direct text, not false. Not necessarily blocker.
+
+  Potential contradiction no hidden traps vs C1 destruction may fail to terminate. Termination permission default handles. C8 per-function evidence. okay.
+
+  A2i obligations include four Q9.14; C4 rep_roundtrip only slice1 types, but proposal C4 prove encoding/decoding roundtrip for valid typed values generally. Fine stronger.
+
+  Secret layout C3 same T. Infoflow only Secret Copy scalars, no layout decided. New semantic completion not listed in questions? Section 2 says "New semantic completions and revisions separately answerable section5; none approved." But Secret<T> has T's layout is a new rule not listed in section5 or revision register. That could be a blocker: owner might approve C1-C10 under Q1 while Q1 says neither approves other numbered questions; however section 1 says foundation comprises rules and Q1 recommends interface/law boundary. Section 2 says decided rules binding; new semantic completions separately answerable section5. If C3 includes unlisted new rules presented **Rule** (e.g., empty aggregates size 0 alignment1, arrays layout, Text internal ownership, Secret layout, native/C/packed details) some are decided by legacy rules, but Secret<T> layout same T likely not in decisions. User says foundation goal perhaps Secret layout known from legacy spec TYPE19. Should check legacy TYPE secret? Search.
+
+• The main decision rows align so far. I’m checking the remaining representation and refinement claims for hidden new rules or proof obligations that draft 3 still misstates.
+
+• Secret not in legacy types. Could be proposed in original foundation draft? It's stated Rule with no question. Does infoflow decision imply Secret representation same T? Not stated. It is an obvious transparent wrapper design but owner decision needed for observable sizeof/layout. This might be a genuine blocker under criteria owner approve something false/new hidden rule. Section 2 declares all new semantic completions in section 5. Secret layout isn't there. Also empty aggregate alignment/arrays layout perhaps FFI7 decided. Secret<T> has T layout is not recorded in docs decisions. If Q1 approves C1-C10, Q1 says "Neither approves other numbered questions" but this unnumbered rule would be approved inadvertently. This likely blocker. Should see if _review earlier reviewers noted? CHANGES_v3 no mention Secret layout. Round 3 might expect this subtle leftover. I should search decisions for Secret layout no result. Already infoflow no layout. Could report blocker: C3 freezes `Secret<T>` layout as T's, but information-flow decision only defines Copy/wiping/observer; no layout rule or owner question covers representation. This contradicts section2 claim all new completions are in §5 and would silently freeze ABI. Cite `_review/FOUNDATION_PROPOSAL.md:48`, `docs/decisions.md:834-850`. <=50 words. Is it truly blocker vs minor? It forces rewriting foundation proofs if later different release context/secret wrapper? Secret is likely newtype wrapper and zero-cost expected, but not decided. The owner asked blockers errors causing approve false/contradict decided/force proof rewrite. Unlisted rule exactly.
+
+  Other unlisted new rules could be many:
+  - "signed representation two's complement" TYPE19 likely decided.
+  - bool encoding, char roundtrip TYPE19/20.
+  - native empty aggregate size/alignment FFI7.
+  - "Shared views Copy mutable ..." Q3 view types note perhaps Copy operations but not explicit shared views Copy? Legacy refs shared Copy yes.
+  - "Grant state erases only if..." proposal under q6 perhaps Q6 release context only not grants. C5 says allocator/grant representations opaque and erasure conditional. This is a design law, not specific layout. Q6 release-context erasure perhaps includes.
+  - C7 release policy interface allowed functions/sites etc infoflow archived proposal perhaps decided under option a summary not full. The authoritative docs decisions summary says surface declassify and facts, not policy details. Could be from archive and decided option all. User says docs decisions authoritative, summary enough? No need nitpick.
+  - C8 oracle determinism completion Q2 perhaps state choice only; no separate question but C8 part foundation Q1 could approve. It's formalization completion not language observable. Fine.
+  - C10 internal calls explicit target convention no new semantics.
+  - P4 per-native witness Q17.
+  - C4 hybrid all under Q2.
+  - C3 target abstraction Q3, enum Q4, niche Q5, release context Q6, usize Q7.
+  Secret layout stands out as representation new rule under no q. Could be covered Q2 "representation completion" broadly, which includes C4 only per text. Q2 recommendation "C4's structured-place/byte-block state, coherent projection, pointer fragments and explicit initialization/padding laws." Not Secret layout. Q1 interface/law boundary includes C3 though, and owner question 1 asks approve all C1-C10; section2 says new completions separately section5. Could owner approving Q1 knowingly approve Secret rule? It's displayed Rule, but statement "none approved by draft" means questions needed. I'd flag.
+
+  Other candidate contradiction C7 constant time declassification: "for equal public inputs, matched external choices and equal ordered release site/value traces, prove equal public observations (NI), and separately equal leakage traces (CT)." Baseline CT typically declassified values are public, so same. fine.
+
+  Potential blocker C6 stack claims: "stack guarantees remain subject to exact artifact's checked bound, reservation and launcher premises" but stack bounds decision says unknown bound or over budget refused from slice0, no hidden stack. Foundation general interface accurate. no.
+
+  Potential C9 "Q9.7's exhaustive inventory becomes exhaustive coverage selected registry, not permanently closed universe." This revision Q16 separate, but stated as Rule in C9 before owner answer. It is identified authority line and question16, revision register. Fine.
+
+  C5 grant registry extensible also Q16.
+
+  C3 native enum layout until answered "retain existing profile rules" but question4 defer. Fine.
+
+  C1 assignment RHS before destination subexpression from STMT5 likely. Array repetition [e;N] decided once Copy but C1 says literal elements written order, doesn't mention repetition; omission no contradiction.
+
+  C1 ordinary locals storage teardown no destructors. good.
+
+  C2 "Zero divisors and signed MIN / -1 and MIN % -1 are errors, latter two Overflow." In plain arithmetic these are implicit traps; checked ops return errors. Wording errors generic. good.
+
+  C2 "as lossless over entire source domain" char u8 conversions? okay.
+
+  C3 "Q4.5 decides only StaticStr explicit pointer/byte-length FFI adapter" accurate.
+  "Text ownership allocator dependency" Text is owning dynamic string likely `Text` not `String<A>` core Q4 uses String. Legacy Text@2 uses no brand older, allocation decision String<A>. Proposal says Text perhaps alias? Could be spec uses Text while Q4 uses String. But they cite TYPE3 and Text. Not contradiction to call Text dynamic owning. no.
+
+  C3 "Address-space selection explicit profile metadata including program-memory text no silent cast data pointers" new target design under Q3. good.
+
+  C4 allocation starts uninitialized unless primitive contract initializes. For `alloc(a,v)` initializing value yes contract. Raw allocation uninit. good.
+
+  C4 "moving out removes slot's typed ownership/read permission" for Copy read doesn't move. fine.
+
+  C4 "Raw byte copying may transport ... provenance fragments without observing them" actual pointer bytes copying must preserve prov. good.
+
+  C4 `from_exposed` "over live, nonempty eligible exposed blocks" misses uniqueness but do not add tie-break. okay.
+
+  C4 pointer equality follows raw model. Q3.10 ptr_eq addresses only. Could state explicitly but not false.
+
+  C5 reborrow wording possible decided contradiction: OD2 says no reborrow concept or syntax; proposal explicitly uses reborrow. Could owner approve contradiction? The semantics described "suspends conflicting access through parent until child ends" is exactly lending/freezing, but calling it reborrow might introduce parent loan hierarchy, while decided Q3.2 says "Mutable lending freezes originating access until return." Core Q9.5 one surface borrow distinct typed Core cases. C5 freeze invariant includes parent loans, so reborrow as internal core concept is likely intentional formalization, not source syntax. OD2 no reborrow concept or syntax specifically "(1) passing a &mut on is plain lending, each call's use ending when it returns, with no reborrow concept or syntax". That sounds broad no reborrow concept. Proposal says "A reborrow suspends conflicting access through its parent until the child ends." If this applies passing &mut, it's a direct contradiction in name but same semantics. Does "no reborrow concept" forbid operational parent-child model or just Rust terminology? They also C5 parent loans. Could be blocker if semantics differ: Rust reborrow creates child loan with parent resume, plain lending origin frozen until return same behavior. No observable difference. Not blocker errors only, not wording preference.
+
+  C5 "shared loans freeze whole owner against mutation/move." OD15 says live borrow any part freezes whole owner. Does shared borrow freeze move? yes.
+
+  C5 "exclusive loan conflicts with every other active access to that root" includes owner access itself? They say active access perhaps owner suspended. fine.
+
+  C5 "Grant narrowing consumes and intersects rights; acquisition preserves parent as decided" open_dir uses &d parent stays. listen consumes but failure returns. close/giveup consumes specified outcomes. yes.
+
+  C6 startup missing configured grant 125 vs main parameter target doesn't offer compile error. okay.
+
+  C6 trap path and line exact. One trailing newline only Q9 runner up not decided; trap line one line implies newline. defer. no.
+
+  C7 leakage "exact addresses" exposure of allocation addresses baseline observer includes addresses even if safe language doesn't expose, timing observer can see. fine.
+
+  C7 "release-policy interface lists allowed functions/sites or forbids release, checks reachable releases through calls, permits only explicit declared values." Infoflow summary does not state release policy allowed list, but archived INFOFLOW likely decided. Could inspect to see if misstate NI. Since User says docs decisions only, perhaps no.
+
+  C8 evaluator signature includes target and layout separately, target includes layout perhaps duplication not issue.
+  "Choices explicitly cover ... exposed-pointer alternatives" Q3.9 unique so why alternatives? In generalized profiles or if duplicates exposures relation permits choices. okay.
+  "answers deterministic functions fixed oracle" yes.
+  "Native backends need not issue same queries; P4 checks allowed Core observations instead." good.
+  "Prove completeness every finite execution obtained enough fuel" total evaluator deterministic under oracle; quantify same choices. yes.
+  "trace-prefix consistency" budget traces monotonic.
+  "compatible limits of fuel-indexed execution prefixes correspond to infinite maximal executions and every such execution has prefixes" with blocked finite state no steps? They separately blocked classification. Fine.
+  "endlessly blocked run retains blocking classification" A1 maximal execution includes? A1 says finite endpoint return abort exhaust stuck or infinite. Blocking could be infinite with pending request no steps. Should model it as infinite maximal execution, event trace finite but not silent divergence. They distinguish. okay.
+  "Termination theorem all allowed runs named premises" yes.
+  "Carry per-function termination permissions evidence dependencies." no hidden traps yes.
+
+  C9 "consumed or scope-cleaned parameter unavailable" authoritative Q9.11. yes.
+  "Entry values read by requires, not implicitly saved ensures." yes.
+  "entry relations Lean theorems over entry and normal-return states" normal return state after cleanup. okay.
+  "erasure of accounting instrumentation" memory decision likely instrumentation no runtime. yes.
+  "one versioned schema" early evidence diagnostics/facts one schema. yes.
+
+  Pipeline certificates "every authoritative compilation emits ... exact source bytes ... exact emitted BIR" from decisions. yes.
+  "After slice0 per-edge" correct.
+  Refinement source/target choices: "under matched allowed choices" could be too strong native not same oracle; but P4 exception explicitly separate. The theorem refinement usually relates environments not exact allocation choices. "matched allowed choices" means admissible related not identical. Later forward default with fixed admissible choices. Fine.
+  Forward simulation to backward requires source receptiveness not target? They say "yielding backward refinement once receptiveness, progress, initial/final correspondence and required determinacy hypotheses proved" generic. A1 same. good.
+  P3 "LP0 after slice1" decisions LP0 follows slice1. yes.
+  P3 "Any validator must bind exact linked image bytes..." final closure later. good.
+  P4 evaluator on every controlled test stronger proposed Q17. no.
+  "same ... compatible scripted external responses" no exact oracle. good.
+  "complete trace allowed observation of Core execution" correct direction.
+  "Require exact equality where deterministic" yes.
+  "Failed witness search inconclusive unless exclusion proved." yes.
+  "bounded scripted environments" tests finite, complete trace within script. okay.
+
+  Revision register:
+  - Q3.10 included. yes.
+  - Q3.5 Q1.11 Q2.4 Q4.6 TYPE19 FFI7. Q7 recommendation retains u64 so why revision register says target-sized usize would revise; fine.
+  - Q4 enum changes.
+  - Q6 Q1.7.
+  - Q16 Q7.1 Q7.10 Q9.7.
+  - Q8.
+  No Q17 revision backend order as above.
+  No Q9 trap inventory revisions? runtime line fixed only no.
+  Q10 runtime decision only 1based so new convention.
+  Q11 no hidden traps failure mapping new.
+  Q14 randomness exact grant table Q7.10 fixed target no entropy yet but decision says arrives slice6 so registry question covers.
+  Q15 no new.
+  Q1 no new rules? foundation scope.
+  Q2 Q3.11 completion.
+  Q3 abstraction.
+  Secret layout unregistered.
+
+  Other unregistered revision: C3 says "Q4.5 ... StaticStr explicit adapter without internal ABI promise" exact.
+  C3 includes native/C/packed now; surface repr at slice25. FFI rules decided.
+  C4 deallocation ends all access rights old block, raw provenance. decided.
+  C4 "Block identity never reused even if address is" fresh allocation identity decided likely.
+  C5 grant state erasure proof perhaps unlisted but formalization not language observable except representation sizeof grants. They explicitly say representations opaque per resource, erasure conditional, so not fixing.
+  C6 normal exit vs trap etc decided.
+  C7 leakage detailed new events perhaps infoflow.
+  C8 oracle formalization under Q2/Q1.
+  C9 schema extension compatibility early evidence R0178.
+  C10 target convention.
+  Pipeline P1/P2 retractions refer draft1 not decisions; no issue.
+
+  Potential blocker Q4 option compact enum tag counts: u8≤256, u16≤65536, u32≤2^32 and reject larger. This algorithm tags variants declaration-order. If 256 variants, tags 0..255 fits. yes. u32 2^32 theoretical Lean Nat. okay.
+
+  Q5 niche single-pointer payload with release context proof, nullable raw ptr ineligible. fine.
+  Q6 "erasing only with ... no per-instance state" sufficient stable release context may include release code identity static and state lifetime. If allocator has global singleton state, no per instance handle needed. fine.
+  Q7 target-sized usize option a would contradict Q3.5 but explicitly revises. recommendation c.
+  Q8 native milestone keep.
+  Q9 runnerup `arithmetic(ArithmeticError)` renders cases; `abort()` same terminal trap. no.
+  Q10 byte columns; path bytes UTF8? tabs one. okay.
+  Q11 invalidRange naming camel in constructor vs invalid_range string. fine.
+  Q14 entropy grant nullary runnerup.
+  Q16 registry extension unknown refused. good.
+  Q17 runnerup staged coverage could violate decided every supported example two backends? It says staged until witness validation executable, explicitly unsupported. Core evaluator comparison staged but native-native remains. okay.
+
+  I'll report only blockers, likely 1 (Secret layout) perhaps more subtle critical: "A2i interaction/erasure obligations" claims A2i includes erasure, but decisions A2i integrates and proof infrastructure erasure before authoritative. no.
+
+  Could there be a direct contradiction in C1 cleanup with ordinary local storage teardown order omitted? No.
+
+  Could Secret layout be already decided in archived infoflow proposal under question perhaps owner accepted option a all, summary not full but docs decisions says owner accepted all questions. The archived proposal is linked and reviewed; its full details are arguably decided under "option a on every question." Should inspect INFOFLOW for representation. If it says wrapper same layout then no blocker. Search.Secret definitely undecided layout. Good blocker candidate.
+
+  Could other unlisted new rules found via comparing docs decisions? Should not over-report preferences. Should have high threshold. I'll systematically search proposal statements with no authority. Hard but can identify serious:
+
+  - C3 says "Text owns ... allocator dependency sufficient release context survive representation" Q1.7 release context, okay.
+  - Secret layout exact ABI is clear.
+  - C5 "Shared views are Copy" Core Q3.1 rec second-class shared/mutable views but no explicit Copy. Existing reference model shared references Copy; views likely shared Copy. Fine.
+  - C8 "Oracle queries pure deterministic functions ... independent fuel" this is formalization new under Q2 or Q1 not semantic source.
+  - C10 "internal calls explicit target convention" architecture.
+  - C7 "Release/reset conserve accounting" memory decision.
+  - C6 "No shortened MCU trap format" exact runtime line universal decided.
+  - C3 "no universal 64bit including 20/24" target Q3.
+
+  Potential direct contradiction: C1 "Q2.3 fixes sequence destruction in increasing index order, then backing" and then "User types follow their checked destroy bodies." okay.
+  C1 authority includes OD53 struct update removed, irrelevant but not false.
+  C2 "Nonzero remainder has dividend sign" correct.
+  C2 shifts valid signed left discards bits even if signed overflow? Decided bit discard. yes.
+  C2 plain arithmetic evidence, checked Result. good.
+  C2 `try_convert -> Result<T, OutOfRange>` exact.
+  C3 enums forbidden across extern. yes.
+  C4 "Pointer fragments carry provenance metadata separately from numeric bytes" Q3.11 includes pointer fragments. good.
+  C4 "Do not introduce poison arbitrary typed result" A1 likely.
+  C4 "Raw writes update ... invalidate cached typed values" then every read decodes so cache irrelevant. no.
+  C4 "Safe typed read of materialized place applies partial Rep current bytes..." For a structured place with active loan and raw write not allowed safe, trusted could mutate. fine.
+  C4 "Materialization encodes active fields and pointer fragments and selects allowed initialization/byte contents for padding once through C8 oracle." It also needs initialize uninit active bytes? If structured value active all init. okay.
+  C4 "padding and inactive enum storage ... cannot affect typed observations" then raw reads authorized can observe, distinguishes. good.
+  C4 "Representation simulations preserve such observed bytes, or explicitly relate same allowed padding choices" could be too stringent across native stack addresses but uses relation choices. good.
+  C4 "Nonzero accesses need ... exclusivity where required" proposal omits exclusivity in list though Q3.7 reason includes exclusivity where required. It says write permission perhaps includes. no false.
+  C4 zero-byte only alignment nonnull exact.
+  C4 "One-past pointers may be formed but not dereferenced." Zero-byte dereference at onepast? Q3.7 zero byte access needs only align nonnull, so zero-byte access at onepast permitted. Saying "not dereferenced" could contradict zero-byte raw access if zero-sized dereference counts. They clarify typed operations logical and zero-byte raw exception. Usually dereference nonzero. Not blocker.
+  C4 from_exposed unique omitted but reference exact.
+  C4 "Address collisions mean overlapping occupied bytes, not merely equal bases" exact.
+  C4 allocation failure typed result conserving input. exact.
+  C5 whole root exact.
+  C5 "Fresh brand binders nominal including reset/loop generations" exact.
+  C5 "dependencies cannot escape lifetime" exact.
+  C5 grant close/giveup all specified outcomes exact.
+  C5 Heap handles pointer + sufficient context exact decided Q1.7 (not necessarily handle contain pointer but obvious).
+  C6 event observations full. exact.
+  C6 "Normal exit and trap exit 134 remain different observations" yes.
+  C6 "Missing launch grants refuse startup with125" exact.
+  C6 "No universal resource-exhaustion trap" future inadequate stack target status own. yes.
+  C7 "Leakage means information visible baseline timing observer, not ordinary I/O" exact.
+  C7 NI public observations includes ordinary I/O; separate leakage. yes.
+  C7 release record reason/path facts exact.
+  C7 "policy interface lists allowed functions/sites or forbids release" archive says functions only, not sites. Proposal extends to sites; perhaps new unlisted rule but policy tooling not language semantics. Could be covered owner accepted general release. no.
+  C7 wipe events effects exact.
+  C7 requested bytes etc exact.
+  C8 `eval` reference evaluator qualification. Q9.9 reference interpreter new compiler. yes.
+  C8 external choices etc formalization.
+  C8 soundness/completeness standard.
+  C8 "every finite execution obtained enough fuel" yes.
+  C8 "For nondeterministic effects statements quantify same environment choices" correct.
+  C8 infinite behavior adequacy from A1.
+  C8 "An endlessly blocked run retains its blocking classification" A1 Q7.9.
+  C9 independent judgments exact.
+  C9 struct invariants exact.
+  C9 ensures exact.
+  C9 facts one graph schema exact.
+  C10 frame laws standard.
+  C10 BIR complete contract exact.
+  P frontend direct proofs exact.
+  P certificates exact.
+  P behavior exact.
+  P native closure Q8.1 exact.
+  P4 qualification proposed.
+
+  Only secret stands out. But perhaps another direct contradiction: Proposal C3 line 48 says `Secret<T>` has T layout; roadmap slice7 scalar Secret only initially. Could simply be obvious representation completion under Q2. Still unlisted.
+
+  Potential issue C7 claims CT equal leakage under equal release values, but INFOFLOW observer includes "allocation sizes" etc exactly. good.
+
+  Potential issue native image P3: "LP0 after slice 1" but long-term says after B0 and B1 before growth, yes.
+  Q8 runnerup "proved exact AArch64 linked-image validation by 0.1" not necessarily revisions early-evidence? explicitly.
+  Q4 retain i32 tag "existing profile" but target abstraction Q3 generalizes profile and enums across targets; retaining existing i32 only current profile leaves other profiles unspecified until aggregate slice. Foundation target profiles can support only existing target, future layouts lawful instances. okay.
+  Q5 b tagged layout now might imply all targets tagged with i32 now? It says tagged layout now future niches owner, Q4 only current i32. Fine.
+
+  Could choice Q5 b still preferred despite agy c? user says don't reraise splits, response likely recommendations all. Q7 recommendation c though Kimi previous b; draft3 changed. Use c. Q9 defer. Q17 refinement.
+
+  I'll cite blocker ≤50 words. Something like:
+  - `_review/FOUNDATION_PROPOSAL.md:48` freezes `Secret<T>` as layout-transparent, but the information-flow decision specifies typing, Copy/wiping and leakage only (`docs/decisions.md:834-850`). No owner question or revision covers this observable ABI rule, contradicting the promise that new completions are separately answerable (`_review/FOUNDATION_PROPOSAL.md:19`).
+  Word count ~47. Good.
+
+  Would owner approve something false if Q1 recommendation "approving interface/law boundary C1-C10" includes secret layout; yes. Could force proofs later. This is blocker.
+
+  Any issue with section 3 Q17 preservation direct comparison? Could report second if strong:
+  - P4 allows LLVM/LCB raw traces to differ with separate Core witnesses (`proposal:155`), while decided backend order says CI compares full observations "with each other ... any mismatch fails" (`decisions:487-492`). Q17 calls this preserving decided comparison without listing revision (`proposal:191`, revision table). This is direct contradiction unless owner Q17 revises. Does Q17 explicitly ask owner new qualification so approval would authorize difference; still statement "Preserve decided two-backend comparison" false. Could be blocker because contradict decided row. Should assess carefully. Draft3 text at line155: "Exposed stack addresses and initialized padding can differ between correct LLVM and LCB runs; find and validate a separate admissible Core choice witness for each, without normalizing away raw observations." Decided line491: "CI builds and runs each example through both and compares their full observations (exit status, trap line, startup refusal, later event traces), never exit codes alone, with each other and with expected outcome; any mismatch fails." If full observations include raw stack addresses? At slice0 no exposed pointers, later event traces includes output that may include addresses. Yes if program prints pointer address, outputs differ. Decided direct comparison would fail correct nondeterminism. Q17 recommendation per native trace Core refinement supersedes direct equality for nondeterminism, and says exact deterministic. This is indeed a revision of decided backend comparison, but Q17 is separately answerable owner question. It says "Preserve the decided two-backend comparison" perhaps means preserve running both and comparing behavior, not exact native-native. The exact text decided is direct each other and any mismatch. New Q17 does not mention explicit revision in revision register. The owner could approve Q17, which by its specific new rule would implicitly revise old. Project precedence requires explicitly identified owner-approved revision. Q17 identifies question but not old row. Revision register is supposed list. This might be a genuine remaining blocker round2 Codex P4 accepted but they may have overlooked direct decided native-native comparison. User asks final round likely expect detection of subtle things. I should flag if high confidence. Is it "preference" no. It would contradict decided row. Should cite. ≤50 words:
+  "`P4` permits different LLVM/LCB raw observations with separate Core witnesses, but the backend-order decision requires native full observations to match each other, with any mismatch failing. Q17 neither acknowledges nor registers that revision, so “preserve the decided two-backend comparison” is false. (`_review/...:155,191`; `docs/decisions.md:487-492`)."
+  47ish. This is strong.
+
+  But perhaps "any mismatch fails" within expected deterministic observations and full observations excludes nondeterministic raw by definition? Full observations includes raw output by language. Q17 specifically points out addresses padding can differ, so direct conflict clear. Owner question Q17 itself is explicit approval of revision if chosen, but revision register omission perhaps process not semantic blocker. User criterion "contradict a decided row" yes current draft contradicts. Even if separate question, all revisions proposed not enacted and clearly Q17 option is new. Many other questions contradict decided rows but register as revisions, that's allowed. Q17 not register, so blocker is unmarked revision not the option itself. Good.
+
+  Any other direct decision contradictions similarly:
+  - C5 reborrow vs OD2 no reborrow concept. Could flag but semantic equivalent, lower.
+  - C4 zero-size onepast no.
+  - C3 Secret new rule.
+  - C6 stack bounds from slice0 decision says unknown bound refused. Proposal C6 says stack guarantees subject premises and C10 frame accounting, no direct.
+  - Q8 keep R0505 later closure but proof infrastructure from slice0 composed theorem exact artifact conditional, consistent.
+  - Q16 registry extensible vs Q7.1 fixed target table, registered.
+  - C7 secret Destroy entries beyond sixteen not explicitly in C1 list; C1 says Q2.3 destruction not Q2.2 inventory, no contradiction.
+  - C3 Secret layout no decision.
+  - C1 cleanup order says deferred calls inner reverse, but doesn't state loans end and storage teardown, no.
+  - C5 acquisition parent stays, listen consumes but "acquisition preserves parent as decided" general could incorrectly include listen, but "as decided" covers exceptions.
+  - C6 trap missing grant startup statuses.
+  - P4 per-native witness is second.
+
+  Potential blocker "every supported example and controlled test" with exact equality deterministic includes evaluator vs native trap path project relative. okay.
+
+  Potential blocker C8 uses `eval(target, layout, environmentChoices, fuel, coreProgram, state)` but decided total clock-indexed evaluator Q9.9 and target profile no issue.
+  Potential mathematical proof issue forward simulation with "target determinism" not sufficient for backward refinement if target has behaviors not matched due infinite stutter; they include progress etc. Fine.
+
+  Potential memory model proof rewrite: typed writes preserve padding always, but C permits struct assignment may overwrite padding unspecified; language chooses preserve. This makes native lowering harder but feasible byte-wise. For enum assignment, LLVM may clobber padding but Memory CFG explicit contract must preserve. BIR backend must implement. not unsound.
+
+  Potential release context erasure "no per-instance state" Q1.7 stable release state raw context means allocations never safe refs. Erasure possible if code identity static. good.
+
+  Potential owner Q7 c "narrower internal representation wherever bounds justify using widening or fallback" may cause layout sizeof view depends runtime value, impossible struct layout if runtime bounded length. It says internal representation, not source type layout? Narrowing lengths in container could be adaptive representation with tag or fallback. Simulation possible. no.
+
+  Potential Q5 b no niche machinery required. fine.
+
+  Potential C3 `Secret<T>` same layout perhaps intended under "scalar Secret" no wrapper duplicate. Still exact layout not decided. Good.
+
+  Perhaps inspect CHANGES_v2 not provided, only v3. no.
+
+  No need tools further except perhaps lines direct exact and perhaps read decisions 483-505 already. I have citations. Could use Read to refresh exact line numbers for blockers and proposal line19 etc. Already known. Perhaps check if Q17 revision register no backend row. proposal lines161-170. Yes.
+
+  Should evaluate if response should only list blockers and choices no extra headings? User "Report ONLY remaining BLOCKERS... Then give final choice... End exactly line". I can list 2 bullets and final answer line only? User also requests choices then end exact line includes choices. Could provide blockers bullets then ANSWER line contains choices. No separate choice list needed because answer line gives. That meets. I'll keep "BLOCKERS=<short list, or none>" short list. Could use `BLOCKERS=Secret-layout,backend-comparison` or `BLOCKERS=C3-Secret-layout,P4-native-comparison`. Respond with choices.
+
+  Before responding mark todos done. I should be certain no more blockers. I'll inspect direct relevant snippets perhaps no need. Could use parallel Read lines 42-52 and 147-191 and decisions 483-505 834-850 to cite exact.
+
+• Two consequential issues remain: an unregistered `Secret<T>` layout rule, and a native-comparison change that is described as preserving the existing rule despite relaxing it.
+
+• Now decide whether final response includes both. I need not run tests as no changes. Todo mark done.Respond concise. Each blocker <=50 words. I'll count roughly.
+
+  Bullet1: "`Secret<T>`’s layout is frozen as `T`’s, but the information-flow decision covers typing, Copy/wiping and leakage—not representation. No question or revision entry authorizes this observable ABI rule, contradicting §2’s promise that new completions are separately answerable. (`_review/FOUNDATION_PROPOSAL.md:19,48`; `docs/decisions.md:834-850`)." Count 43 maybe.
+
+  Bullet2: "P4 allows correct LLVM/LCB raw observations to differ under separate Core witnesses, while the backend-order decision requires their full observations to match each other, with any mismatch failing. Q17 calls this “preserve” and registers no revision. (`_review/FOUNDATION_PROPOSAL.md:155,161-170,191`; `docs/decisions.md:487-493`)." ~44.
+
+  Respond exact `ANSWER: BLOCKERS=C3-Secret-layout,P4-native-comparison; CHOICES=1:approve,2:hybrid,3:profiles,4:retain,5:b,6:proof-gated,7:c,8:keep,9:defer,10:byte,11:defer,14:defer,15:defer,16:lawful,17:refinement`
+  One word each yes proof-gated counts one hyphen. Option letters q5/7. Q16 "lawful" one word. Q3 "profiles". Good.
+
+  Do I need final choice Q6 "proof-gated" vs "erase" recommendation retaining sufficient context erasing only proof. proof-gated apt.
+  Q8 keep.
+  Q17 refinement.
+  No header needed perhaps bullets. "BLOCKERS" only remaining. Fine.
+
+• - `Secret<T>`’s layout is frozen as `T`’s, but the information-flow decision covers typing, Copy/wiping and leakage—not representation. No question or revision authorizes this observable ABI rule, contradicting §2’s promise that new completions are separately answerable. (`_review/FOUNDATION_PROPOSAL.md:19,48`; `docs/decisions.md:834-850`)
+
+  - P4 allows correct LLVM/LCB raw observations to differ under separate Core witnesses, while the backend-order decision requires their full observations to match each other, with any mismatch failing. Q17 calls this “preserve” and registers no revision. (`_review/FOUNDATION_PROPOSAL.md:155,161-170,191`; `docs/decisions.md:487-493`)
+
+  ANSWER: BLOCKERS=C3-Secret-layout,P4-native-comparison; CHOICES=1:approve,2:hybrid,3:profiles,4:retain,5:b,6:proof-gated,7:c,8:keep,9:defer,10:byte,11:defer,14:defer,15:defer,16:lawful,17:refinement
+
+To resume this session: kimi -r session_8c5f322b-33df-4c7f-9357-3893a32666c8

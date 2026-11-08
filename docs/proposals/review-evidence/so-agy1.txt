@@ -1,0 +1,380 @@
+Review of branch wip/owner-signoff (Concrete repository, commit 2441a0e3, base origin/main 86c31477): the landing train (scripts/land/train.sh) gains a second form of review provenance, an owner sign-off (owner rule R-0618: "when a branch reaches its review-round cap, the owner may approve one exact commit SHA after Codex, Kimi and agy have all reviewed it; the approval is recorded"). scripts/land/signoff.sh records refs/owner-signoff/<sha> as a commit whose tree is record.txt (signoff, commit, date, quote, verdict-<reviewer>: <file> <sha256>) plus codex.txt, kimi.txt, agy.txt, and verifies it. review_provenance accepts, for a member without a clean refs/notes/concrete-review note, a valid sign-off at that member's exact SHA, then requires (pure_merge) the head to be exactly one clean --no-ff merge per member onto the base. The pre-push hook takes refs/owner-signoff/* pushes in its no-source-tree tier. Controls in scripts/checks/landing_script.sh and scripts/checks/review_tool.sh.
+Questions: Can a sign-off be accepted for any commit other than the one approved (wrong ref, stale local ref after a remote deletion, prefix collision in the quote check, a forged tree)? Can a train with a signed-off member land anything beyond the members' clean merge (conflict resolution, regenerated views, extra commits, a reordered or missing member)? Can verify accept a missing or REJECT verdict, a tampered file, or a malformed record? Does the hook tier let a source-carrying push skip the gates? Are the controls able to fail? Any shell bug (set -e, pipefail, quoting, macOS bash 3.2 where it matters)?
+Report findings as `file:line: problem` with a concrete failure scenario, and end with exactly one line `VERDICT: ACCEPT` or `VERDICT: REJECT`.
+
+Do not run commands or use tools; review only the diff below.
+```diff
+diff --git a/.githooks/pre-push b/.githooks/pre-push
+index d7eb97c3..d9efe8d4 100755
+--- a/.githooks/pre-push
++++ b/.githooks/pre-push
+@@ -10,7 +10,8 @@
+ #   - only refs/heads/wip/* updates or deletions: a backup of unfinished work, which can never become
+ #     main. Conflict markers are refused; nothing else runs.
+ #   - only the review-note refs (refs/notes/concrete-review, refs/notes/concrete-review-findings,
+-#     written by scripts/review/review.sh): no source tree, nothing to check.
++#     written by scripts/review/review.sh) and owner sign-off records (refs/owner-signoff/<sha>,
++#     written by scripts/land/signoff.sh): no source tree, nothing to check.
+ #   - anything else, including a by-hand run with no stdin: the full root set, and only from a full
+ #     clone (a linked worktree is refused; ISS-0015).
+ #
+@@ -45,7 +46,7 @@ while read -r _localref localsha remoteref _remotesha; do
+         *[!0]*) wip_refs=$((wip_refs+1)); wip_shas="$wip_shas $localsha" ;;
+         *) wip_dels=$((wip_dels+1)) ;;
+       esac ;;
+-    refs/notes/concrete-review|refs/notes/concrete-review-findings)
++    refs/notes/concrete-review|refs/notes/concrete-review-findings|refs/owner-signoff/*)
+       case "$localsha" in
+         *[!0]*) note_refs=$((note_refs+1)) ;;
+         *) other_refs=$((other_refs+1)) ;;   # deleting a review note takes the full tier
+@@ -70,7 +71,7 @@ if [ "$other_refs" -eq 0 ] && [ $((wip_refs + wip_dels)) -gt 0 ]; then
+   exit 0
+ fi
+ if [ "$other_refs" -eq 0 ] && [ "$note_refs" -gt 0 ]; then
+-  echo "pre-push: review-notes push — no source tree, no gates"
++  echo "pre-push: review-notes push (review notes, owner sign-offs) — no source tree, no gates"
+   exit 0
+ fi
+ 
+diff --git a/changelog.d/2026-11-08-owner-signoff.md b/changelog.d/2026-11-08-owner-signoff.md
+new file mode 100644
+index 00000000..e503e323
+--- /dev/null
++++ b/changelog.d/2026-11-08-owner-signoff.md
+@@ -0,0 +1,11 @@
++### The train accepts an owner sign-off at a member's exact SHA (2026-11-08)
++
++When a branch reaches its review-round cap, the owner may approve one exact commit after Codex, Kimi
++and agy have all reviewed it (R-0618). `scripts/land/signoff.sh record` stores the approval as
++`refs/owner-signoff/<sha>`: the owner's verbatim words, the date, the SHA and the three reviewers'
++verdict outputs with their sha256. `train.sh`'s review provenance accepts, for a member with no clean
++review note, a sign-off that `signoff.sh verify` finds valid for that exact SHA, and then requires the
++train head to be exactly the clean merge of its members onto its base. A sign-off for another commit,
++a changed verdict file, a missing reviewer, a reviewer output ending in REJECT, a quote that names no
++commit, and a head beyond the clean merge are each refused (`scripts/checks/landing_script.sh`). The
++pre-push hook takes a sign-off push in its no-source-tree tier.
+diff --git a/docs/LANDING.md b/docs/LANDING.md
+index 63cfa3bf..87e62874 100644
+--- a/docs/LANDING.md
++++ b/docs/LANDING.md
+@@ -90,7 +90,12 @@ verdict; any failing leg fails the check (see [Pipelining](#pipelining)).
+   provenance**: a clean review note at its head or, when the head has no note, a clean note on every
+   member at its exact recorded SHA (each member was reviewed at its own head). Each note is judged by
+   `scripts/review/verify.sh` on origin's notes; an absent, malformed, blocked or findings note
+-  qualifies nothing, and a head note that is not clean is not overridden by the members. Otherwise
++  qualifies nothing, and a head note that is not clean is not overridden by the members. A member
++  without a clean note qualifies instead by an **owner sign-off** at its exact SHA (R-0618: a branch
++  at its review-round cap, approved by the owner after Codex, Kimi and agy all reviewed that commit;
++  `scripts/land/signoff.sh verify`, on origin's `refs/owner-signoff/*`). A sign-off approves that
++  commit only, so a train with a signed-off member must be exactly the clean merge of its members
++  onto its base: one conflict-free merge per member and nothing else. Otherwise
+   the leg runs `LAND_REVIEW_CMD`, else `scripts/review/review.sh`, with `--base --head`, and then
+   requires provenance: a non-zero exit fails, and so does a zero exit that leaves no clean note at the
+   head. With no review command at all, `check` fails; it never disables the leg silently.
+diff --git a/docs/REVIEW.md b/docs/REVIEW.md
+index 4f98a6cf..2a8fa9f4 100644
+--- a/docs/REVIEW.md
++++ b/docs/REVIEW.md
+@@ -176,6 +176,13 @@ findings, and exits 3. Asking for another round exits 3 without calling the
+ reviewer. Do not work around the cap: split the branch into smaller branches or
+ escalate to a human reviewer, and pass on the open findings.
+ 
++The owner may then approve one exact commit (R-0618), after Codex, Kimi and agy have all reviewed
++that commit. The approval is recorded, from the owner's own words only, with
++`scripts/land/signoff.sh record <sha> --date --quote --codex --kimi --agy` (each reviewer's verdict
++output, ending in `VERDICT: ACCEPT`) and pushed to both remotes as `refs/owner-signoff/<sha>`. The
++landing train accepts it as that commit's review provenance ([LANDING.md](LANDING.md)); it approves no
++other commit.
++
+ ## verify.sh
+ 
+ ```sh
+diff --git a/scripts/checks/landing_script.sh b/scripts/checks/landing_script.sh
+index 421e8402..446d820f 100755
+--- a/scripts/checks/landing_script.sh
++++ b/scripts/checks/landing_script.sh
+@@ -1134,6 +1134,38 @@ inv_leg tin3 binv-legacy 5456
+ [ "$rc" = 5 ] && has "$out" "no rehearsal record" \
+   && ok "a change under legacy/ (inventory untouched) still needs a rehearsal" || { no "legacy change: dry-run land exit $rc"; echo "$out" | sed 's/^/      /'; }
+ 
++# An owner sign-off record (scripts/land/signoff.sh), published to origin. put-signoff <sha> <mode>
++# [<other sha>]: valid; none removes it; othersha records <other sha> and files it under <sha>;
++# tampered changes kimi.txt after recording; noagy drops agy's verdict; reject ends agy's output
++# with VERDICT: REJECT; unnamed has a quote that names no commit.
++printf '#!/usr/bin/env bash\nSIGNOFF=%q\n' "$ROOT_DIR/scripts/land/signoff.sh" > "$TMP/put-signoff"
++cat >> "$TMP/put-signoff" <<'SIGNOFF_EOF'
++set -e
++sha="$(git rev-parse "$1")"; mode="$2"; R=refs/owner-signoff
++git update-ref -d "$R/$sha" 2>/dev/null || true
++CONCRETE_SKIP_GATES=1 git push -q origin ":$R/$sha" 2>/dev/null || true
++[ "$mode" = none ] && exit 0
++d="$(mktemp -d)"
++for r in codex kimi agy; do printf 'review by %s\n  VERDICT: ACCEPT\n' "$r" > "$d/$r"; done
++[ "$mode" = reject ] && printf 'withdrawn\nVERDICT: REJECT\n' >> "$d/agy"
++q="sign off ${sha:0:8}, yes"; [ "$mode" = unnamed ] && q="sign off the branch"
++target="$sha"; [ "$mode" = othersha ] && target="$(git rev-parse "$3")"
++bash "$SIGNOFF" record "$target" --date 2026-11-08 --quote "$q" --codex "$d/codex" --kimi "$d/kimi" --agy "$d/agy" >/dev/null 2>&1 || true
++c="$(git rev-parse "$R/$target")"
++tab="$(printf '\t')"
++case "$mode" in
++  othersha) git update-ref "$R/$sha" "$c"; git update-ref -d "$R/$target" ;;
++  tampered) b="$(printf 'review by kimi, edited\nVERDICT: ACCEPT\n' | git hash-object -w --stdin)"
++    t="$(git ls-tree "$c" | sed "s/blob [0-9a-f]*${tab}kimi.txt\$/blob $b${tab}kimi.txt/" | git mktree)"
++    git update-ref "$R/$sha" "$(git commit-tree "$t" -m tampered)" ;;
++  noagy) b="$(git cat-file blob "$c:record.txt" | grep -v '^verdict-agy:' | git hash-object -w --stdin)"
++    t="$(git ls-tree "$c" | grep -v 'agy.txt$' | sed "s/blob [0-9a-f]*${tab}record.txt\$/blob $b${tab}record.txt/" | git mktree)"
++    git update-ref "$R/$sha" "$(git commit-tree "$t" -m noagy)" ;;
++esac
++rm -rf "$d"
++CONCRETE_SKIP_GATES=1 git push -q -f origin "$R/$sha"
++SIGNOFF_EOF
++
+ echo "=== review: check fails closed, land requires review provenance ==="
+ git checkout -q main && git fetch -q origin && git reset -q --hard origin/main
+ MR="$(git rev-parse HEAD)"
+@@ -1184,6 +1216,35 @@ out="$(bash "$TRAIN" check trv --no-remote 2>&1)"; rc=$?
+ [ "$rc" = 0 ] && [ ! -s "$FAKE_GH_DIR/review.log" ] \
+   && ok "check over members reviewed clean passes the review leg without running the reviewer" || { no "check over reviewed members: exit $rc, reviewer calls '$(cat "$FAKE_GH_DIR/review.log")'"; echo "$out" | sed 's/^/      /'; }
+ 
++echo "=== review: an owner sign-off at a member's exact SHA is its review provenance (R-0618) ==="
++# brv1 is reviewed clean; brv2 has no note and is signed off, or carries a record that must not count.
++so_leg(){ # label mode expect(refuse|pass) text
++  bash "$TMP/put-signoff" "$R2" "$2" "$R1"
++  prov_leg "$1" none clean none "$3" "$4"
++}
++so_leg "a member with a valid owner sign-off and a clean merge" valid pass "owner sign-off (1) at its exact SHA, and the head is their clean merge"
++so_leg "a sign-off recorded for another commit" othersha refuse "the record is for $R1, not $R2"
++so_leg "a sign-off whose verdict file was changed after recording" tampered refuse "the sha256 of kimi.txt is"
++so_leg "a sign-off without agy's verdict" noagy refuse "the record has no agy verdict"
++so_leg "a sign-off whose agy output ends in REJECT" reject refuse "the agy output's last verdict is 'VERDICT:REJECT'"
++so_leg "a sign-off whose quote names no commit" unnamed refuse "the quote does not name ${R2:0:10}"
++so_leg "a member with neither a note nor a sign-off" none refuse "$R2 has no owner sign-off"
++# The same valid sign-off, but a head beyond the clean merge of its members. train.sh already refuses
++# a head that is not the built train; pure_merge is the provenance's own check, run here on heads that
++# add a commit, or that change a merge's tree, over the built train.
++bash "$TMP/put-signoff" "$R2" valid
++BR="$MR"   # the train was built on main at MR
++git checkout -q --detach "$HR"; printf 'extra\n' > extra.txt; git add extra.txt; git commit -qm extra; HX="$(git rev-parse HEAD)"
++git checkout -q --detach "$HR"; printf 'extra\n' > extra.txt; git add extra.txt; git commit -q --amend --no-edit; HY="$(git rev-parse HEAD)"
++git checkout -q train/trv
++pm(){ bash -c 'eval "$(sed -n "/^pure_merge() {/,/^}/p" "$1")"; pure_merge "$2" "$3" "$4" "$5"' _ "$TRAIN" "$BR" "$1" "$R1" "$R2"; }
++o="$(pm "$HR")"; [ -z "$o" ] && ok "pure_merge: the built train is the clean merge of its members" || no "pure_merge refused the built train: '$o'"
++o="$(pm "$HX")"; has "$o" "${HX:0:10} is not the clean merge of its members onto ${BR:0:10}: ${HX:0:10} is not the merge of ${R2:0:10}" \
++  && ok "pure_merge refuses a head with an extra commit ($o)" || no "pure_merge on an extra commit: '$o'"
++o="$(pm "$HY")"; has "$o" "${HY:0:10} is not the clean merge of its members onto ${BR:0:10}: ${HY:0:10} differs from the clean merge of ${R2:0:10}" \
++  && ok "pure_merge refuses a merge whose tree carries an extra change ($o)" || no "pure_merge on a changed merge: '$o'"
++bash "$TMP/put-signoff" "$R2" none
++
+ echo "=== where a train runs: a full clone with the repository hook (ISS-0015) ==="
+ cd "$W" || exit 2
+ git checkout -q -f main
+diff --git a/scripts/checks/review_tool.sh b/scripts/checks/review_tool.sh
+index 7e3ee4f6..9f58bbf6 100755
+--- a/scripts/checks/review_tool.sh
++++ b/scripts/checks/review_tool.sh
+@@ -299,6 +299,9 @@ hook_out="$(cd "$W" && printf 'refs/notes/concrete-review %s refs/notes/concrete
+   "$NOTES_SHA" "$Z" "$(g rev-parse refs/notes/concrete-review-findings)" "$Z" | bash "$HOOK" 2>&1)"; rc=$?
+ check "notes-only push: hook exits 0 (got $rc)" test "$rc" -eq 0
+ check "notes-only push: hook takes the review-notes tier" grep -q "review-notes push" <<<"$hook_out"
++hook_out="$(cd "$W" && printf 'refs/owner-signoff/%s %s refs/owner-signoff/%s %s\n' "$(g rev-parse HEAD)" "$NOTES_SHA" "$(g rev-parse HEAD)" "$Z" | bash "$HOOK" 2>&1)"; rc=$?
++check "an owner sign-off push takes the review-notes tier (exit $rc)" \
++  bash -c "[ $rc -eq 0 ] && grep -q 'review-notes push' <<<'$hook_out'"
+ hook_out="$(cd "$W" && printf 'refs/heads/mixed %s refs/heads/wip/x %s\nrefs/notes/concrete-review %s refs/notes/concrete-review %s\n' \
+   "$(g rev-parse HEAD)" "$Z" "$NOTES_SHA" "$Z" | bash "$HOOK" 2>&1)"; rc=$?
+ check "notes alongside a wip push take the wip tier (exit $rc)" \
+diff --git a/scripts/land/signoff.sh b/scripts/land/signoff.sh
+new file mode 100644
+index 00000000..20551dd7
+--- /dev/null
++++ b/scripts/land/signoff.sh
+@@ -0,0 +1,120 @@
++#!/usr/bin/env bash
++# OWNER SIGN-OFF RECORDS (ROADMAP R-0618; owner, 2026-11-08: "when a branch reaches its review-round
++# cap, the owner may approve one exact commit SHA after Codex, Kimi and agy have all reviewed it; the
++# approval is recorded"). A sign-off is review provenance for that one commit, as a clean
++# refs/notes/concrete-review note is (scripts/review/verify.sh); train.sh accepts either for a member.
++#
++#   signoff.sh record <commit> --date YYYY-MM-DD --quote TEXT --codex FILE --kimi FILE --agy FILE
++#   signoff.sh verify <commit>
++#
++# THE RECORD is the ref refs/owner-signoff/<full sha>, a commit whose tree holds record.txt and the
++# three reviewers' verdict outputs, copied in byte for byte (codex.txt, kimi.txt, agy.txt), so any
++# clone that fetches the ref can check them. record.txt is `key: value` lines, each key once:
++#   signoff: owner
++#   commit: <the 40-hex SHA approved>
++#   date: YYYY-MM-DD
++#   quote: <the owner's words, verbatim; they name the commit by a prefix of at least 7 hex digits>
++#   verdict-codex: codex.txt <sha256>
++#   verdict-kimi: kimi.txt <sha256>
++#   verdict-agy: agy.txt <sha256>
++# `record` writes the ref locally and pushes nothing (push it to both remotes: the pre-push hook takes
++# refs/owner-signoff/* in its no-source-tree tier). Only the owner's recorded words go in a quote.
++#
++# `verify` accepts the record only if the ref exists, the tree holds exactly those four files, every
++# key is present once and well formed, `commit` is the commit asked about, the quote names it, each
++# file's sha256 is the recorded one, and each output's last VERDICT line is `VERDICT: ACCEPT`. It
++# judges the exact commit: a sign-off says nothing about any other commit.
++#
++# Exit codes: 0 a valid sign-off; 1 a sign-off that does not qualify (the reason is printed);
++#             2 no sign-off, or a usage error.
++set -euo pipefail
++PREFIX=refs/owner-signoff
++REVIEWERS="codex kimi agy"
++
++usage() { awk 'NR > 1 { if (!/^#/) exit; sub(/^# ?/, ""); print }' "${BASH_SOURCE[0]}"; }
++die() { echo "signoff: $*" >&2; exit 2; }
++sha256() { if command -v sha256sum >/dev/null 2>&1; then sha256sum | cut -d' ' -f1; else shasum -a 256 | cut -d' ' -f1; fi; }
++
++cmd_record() {
++  [ $# -ge 1 ] || die "record: name the commit"
++  local sha date="" quote="" r f v; sha="$(git rev-parse -q --verify "$1^{commit}")" || die "record: not a commit: $1"; shift
++  local codex="" kimi="" agy=""
++  while [ $# -gt 0 ]; do
++    [ $# -ge 2 ] || die "record: $1 needs a value"
++    case "$1" in
++      --date) date="$2" ;; --quote) quote="$2" ;;
++      --codex) codex="$2" ;; --kimi) kimi="$2" ;; --agy) agy="$2" ;;
++      *) die "record: unknown option $1" ;;
++    esac; shift 2
++  done
++  [[ "$date" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] || die "record: --date YYYY-MM-DD is required"
++  [ -n "$quote" ] && [[ "$quote" != *$'\n'* ]] || die "record: --quote is required, on one line"
++  local rec="signoff: owner
++commit: $sha
++date: $date
++quote: $quote" entries=""
++  for r in $REVIEWERS; do
++    f="${!r}"; [ -f "$f" ] || die "record: --$r FILE is required (the reviewer's verdict output)"
++    v="$(git hash-object -w -- "$f")"
++    rec="$rec
++verdict-$r: $r.txt $(sha256 < "$f")"
++    entries="${entries}100644 blob $v	$r.txt
++"
++  done
++  v="$(printf '%s\n' "$rec" | git hash-object -w --stdin)"
++  local tree commit
++  tree="$(printf '%s100644 blob %s\trecord.txt\n' "$entries" "$v" | git mktree)"
++  commit="$(git commit-tree "$tree" -m "owner sign-off of $sha ($date)")"
++  git update-ref "$PREFIX/$sha" "$commit"
++  echo "signoff: recorded $PREFIX/$sha -> ${commit:0:10}; verify, then push it to both remotes"
++  cmd_verify "$sha"
++}
++
++cmd_verify() {
++  [ $# -eq 1 ] || die "usage: signoff.sh verify <commit>"
++  local sha ref; sha="$(git rev-parse -q --verify "$1^{commit}")" || die "verify: not a commit: $1"
++  ref="$PREFIX/$sha"
++  git rev-parse -q --verify "$ref^{commit}" >/dev/null || { echo "$sha has no owner sign-off ($ref)"; exit 2; }
++  bad() { echo "$sha owner sign-off does not qualify: $*"; exit 1; }
++  local rec line k v seen=" " F_signoff="" F_commit="" F_date="" F_quote="" F_verdict_codex="" F_verdict_kimi="" F_verdict_agy=""
++  rec="$(git cat-file blob "$ref:record.txt")"
++  while IFS= read -r line; do
++    [[ "$line" =~ ^([a-z-]+):\ (.*)$ ]] || bad "record.txt line is not key: value: '$line'"
++    k="${BASH_REMATCH[1]}" v="${BASH_REMATCH[2]}"
++    case "$seen" in *" $k "*) bad "record.txt repeats $k" ;; esac
++    seen="$seen$k "
++    case "$k" in signoff|commit|date|quote|verdict-codex|verdict-kimi|verdict-agy) ;; *) bad "record.txt has the unknown key $k" ;; esac
++    printf -v "F_${k//-/_}" '%s' "$v"
++  done <<< "$rec"
++  for k in signoff commit date quote; do case "$seen" in *" $k "*) ;; *) bad "record.txt has no $k" ;; esac; done
++  [ "$F_signoff" = owner ] || bad "signoff is '$F_signoff', not owner"
++  [ "$F_commit" = "$sha" ] || bad "the record is for $F_commit, not $sha"
++  [[ "$F_date" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] || bad "date '$F_date' is not YYYY-MM-DD"
++  local named=0 w
++  for w in $(printf '%s' "$F_quote" | tr -c '0-9a-f' ' '); do
++    [ "${#w}" -ge 7 ] && [ "${sha#"$w"}" != "$sha" ] && named=1
++  done
++  [ "$named" = 1 ] || bad "the quote does not name ${sha:0:10} (a prefix of at least 7 hex digits): '$F_quote'"
++  local r n entry file hash got verdict
++  for r in $REVIEWERS; do n="F_verdict_$r"; [ -n "${!n}" ] || bad "the record has no $r verdict"; done
++  local want="agy.txt codex.txt kimi.txt record.txt" have
++  have="$(git ls-tree --name-only "$ref" | sort | tr '\n' ' ')"
++  [ "$have" = "$want " ] || bad "the record holds [${have% }], not exactly [$want]"
++  for r in $REVIEWERS; do
++    n="F_verdict_$r"; entry="${!n}"
++    file="${entry%% *}" hash="${entry#* }"
++    [ "$file" = "$r.txt" ] && [[ "$hash" =~ ^[0-9a-f]{64}$ ]] || bad "verdict-$r is '$entry', not '$r.txt <sha256>'"
++    got="$(git cat-file blob "$ref:$file" | sha256)"
++    [ "$got" = "$hash" ] || bad "the sha256 of $file is $got, not the recorded $hash"
++    verdict="$(git cat-file blob "$ref:$file" | grep -E '^[[:space:]]*VERDICT: (ACCEPT|REJECT)[[:space:]]*$' | tail -1 | tr -d '[:space:]')" || true
++    [ "$verdict" = "VERDICT:ACCEPT" ] || bad "the $r output's last verdict is '${verdict:-none}', not VERDICT: ACCEPT"
++  done
++  echo "$sha signed off by the owner ($F_date; codex, kimi and agy accepted): \"$F_quote\""
++}
++
++case "${1:-}" in
++  record) shift; cmd_record "$@" ;;
++  verify) shift; cmd_verify "$@" ;;
++  -h|--help) usage ;;
++  *) usage >&2; exit 2 ;;
++esac
+diff --git a/scripts/land/train.sh b/scripts/land/train.sh
+index 59d79cd2..5079a36f 100755
+--- a/scripts/land/train.sh
++++ b/scripts/land/train.sh
+@@ -470,7 +470,37 @@ review_cmd() {
+ # $REMOTE's notes (fetched first, replacing the local copy, as verify.sh --fetch does): an absent,
+ # malformed, blocked or findings note qualifies nothing, and a head note that is not clean is not
+ # overridden by its members. Prints what qualified; on failure prints why and returns 1.
++#
++# OWNER SIGN-OFF (R-0618). A member without a clean note qualifies instead by a valid owner sign-off
++# at its exact SHA (scripts/land/signoff.sh verify, on $REMOTE's refs/owner-signoff/*, fetched first).
++# A sign-off approves that commit only, never what the train did with it, so a train with a signed-off
++# member must be exactly the clean merge of its members onto its base: one --no-ff merge per member,
++# in order, each merge's tree the conflict-free `git merge-tree --write-tree` of its two parents, and
++# nothing else (no resolved conflict, no regenerated view, no extra commit).
+ VERIFY="$SELF_DIR/../review/verify.sh"
++SIGNOFF="$SELF_DIR/signoff.sh"
++
++# pure_merge BASE HEAD SHA... → empty when HEAD is BASE plus exactly one clean merge of each SHA, in
++# order; otherwise prints why.
++pure_merge() {
++  local base="$1" head="$2" cur="$2" i p t want; shift 2
++  local shas=("$@")
++  for ((i = ${#shas[@]} - 1; i >= 0; i--)); do
++    read -r -a p <<< "$(git rev-list --parents -n 1 "$cur")"
++    if [ "${#p[@]}" != 3 ] || [ "${p[2]}" != "${shas[i]}" ]; then
++      echo "${head:0:10} is not the clean merge of its members onto ${base:0:10}: ${cur:0:10} is not the merge of ${shas[i]:0:10}"; return 0
++    fi
++    if ! t="$(git merge-tree --write-tree "${p[1]}" "${shas[i]}" 2>/dev/null | head -1)" || [ -z "$t" ]; then
++      echo "${head:0:10} is not the clean merge of its members onto ${base:0:10}: merging ${shas[i]:0:10} conflicts"; return 0
++    fi
++    want="$(git rev-parse "$cur^{tree}")"
++    if [ "$t" != "$want" ]; then
++      echo "${head:0:10} is not the clean merge of its members onto ${base:0:10}: ${cur:0:10} differs from the clean merge of ${shas[i]:0:10}"; return 0
++    fi
++    cur="${p[1]}"
++  done
++  [ "$cur" = "$base" ] || echo "${head:0:10} is not the clean merge of its members onto ${base:0:10}: the merges start at ${cur:0:10}"
++}
+ review_provenance() { # name head
+   local name="$1" head="$2" out m n=0 bad=""
+   [ -f "$VERIFY" ] || { echo "no review verifier ($VERIFY is missing)"; return 1; }
+@@ -480,12 +510,23 @@ review_provenance() { # name head
+   if git notes --ref=refs/notes/concrete-review show "$head" >/dev/null 2>&1; then
+     echo "the head's review note does not qualify: ${out//$'\n'/ }"; return 1
+   fi
++  local signed=0 shas=() so impure
++  git fetch -q --prune "$REMOTE" "+refs/owner-signoff/*:refs/owner-signoff/*" 2>/dev/null \
++    || { echo "could not fetch refs/owner-signoff/* from $REMOTE"; return 1; }
+   for m in $(state_get_soft "$name" members | tr ',' ' '); do
+-    n=$((n + 1))
+-    out="$(bash "$VERIFY" "${m##*@}" 2>&1)" || bad="$bad; member ${m%@*}: ${out//$'\n'/ }"
++    n=$((n + 1)); shas+=("${m##*@}")
++    out="$(bash "$VERIFY" "${m##*@}" 2>&1)" && continue
++    if so="$(bash "$SIGNOFF" verify "${m##*@}" 2>&1)"; then signed=$((signed + 1)); continue; fi
++    bad="$bad; member ${m%@*}: ${out//$'\n'/ }; ${so//$'\n'/ }"
+   done
+   [ "$n" -gt 0 ] || { echo "the head ${head:0:10} has no review note and the train records no members"; return 1; }
+-  [ -z "$bad" ] || { echo "the head ${head:0:10} has no review note, and not every member has a clean one$bad"; return 1; }
++  [ -z "$bad" ] || { echo "the head ${head:0:10} has no review note, and not every member has a clean one or an owner sign-off$bad"; return 1; }
++  if [ "$signed" -gt 0 ]; then
++    impure="$(pure_merge "$(state_get_soft "$name" base)" "$head" "${shas[@]}")"
++    [ -z "$impure" ] || { echo "$signed member(s) signed off by the owner, but $impure"; return 1; }
++    echo "the head has no review note; every member ($n) carries a clean one or an owner sign-off ($signed) at its exact SHA, and the head is their clean merge"
++    return 0
++  fi
+   echo "the head has no review note; every member ($n) carries a clean one at its exact SHA"
+ }
+ 
+```

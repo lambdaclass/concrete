@@ -1,0 +1,6 @@
+Slice 0, owner decisions of 2026-11-08 ("ok go ahead with all the decisions"), as implemented on wip/slice0:
+- Gate 10 (sanitizers): UBSan dropped. UBSan's checks are inserted by clang's C front end, so on LLVM IR input it checks nothing; no C is compiled in slice 0. ASan stays (every definition marked sanitize_address; an out-of-bounds control must be reported). LLVM-level undefined behaviour of the printed IR stays under P_print.
+- P_adapter retired. The LCB backend contract is complete: LCB.emit returns Except String (Source.Function × SiteTable); a refused adaptation produces no artifact (Proof.artifact_of_emit_error, for every target); every artifact comes from a successful emit whose body's every result decodes to the BIR behaviour (Proof.emit_correct, Proof.artifact_correct). The trusted-base golden records the retirement.
+- Gate 11 extended: a report-only compile-time table per example (emit and native wall-clock ms next to their budgets, the steps' time bounds), next to binary size.
+- Gate 12: the aarch64-macos run check runs under Apple's LLDB (/usr/bin/lldb, not pinned: only Apple's signed debugserver may attach; its version is logged).
+- All slice-0 gate time bounds go through bounded_run (one re-run, then INCOMPLETE, never a pass).

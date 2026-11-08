@@ -1,0 +1,53 @@
+### PROCESS
+
+- **A.** **AGREE.** An explicit owner approval tied to an exact commit SHA after all three models review is a recorded, artifact-backed trust boundary (Rules 12, 14), not a silent cap bypass.
+- **B.** **AGREE.** Giving a mixed branch the highest applicable review cap prevents under-reviewing compiler or specification changes bundled with documentation or scripts (Rule 12).
+- **C.** **AGREE.** Holding a dedicated std placement round separates core primitives from hosted/freestanding library modules cleanly (Rule 15, R-0323/R-0324).
+- **D.** **AGREE.** Renaming `bounds` to `out_of_bounds` matches `division_by_zero`, `invalid_shift`, and `invalid_range` by naming the failure condition rather than the domain.
+
+### CHANGE CANDIDATES
+
+- **1.** **AGREE.** Removing dot method calls eliminates a second call form and implicit receiver borrowing (Rules 2, 3), leaving static associated and trait-qualified calls as the single transparent dispatch syntax; receiver shorthand migration (`Destroy`) still requires explicit spelling approval.
+- **5.** **AGREE.** Requiring `field: value` in constructors makes consumed locals and field labels visibly distinct at the use site (Rules 2, 3, 4) and eliminates punning as a second form.
+- **6.** **AGREE.** Requiring `field: binder` in patterns unifies struct construction and destructuring under one rule (Rules 2, 4), eliminating bare-field binder punning and making bound variables explicit alongside explicit field ignores (`field: _`).
+- **7.** **AGREE.** Operators otherwise share identical syntax across machine and mathematical domains with different overflow semantics; an explicit mathematical boundary in contracts makes the semantic domain visible at the use site (Rules 3, 12).
+- **8.** **DISAGREE.** Keeping expression `as` preserves a special infix operator, precedence level, range-bound delimiter exception, and dual keyword role (`import`/`bind as`). Named lossless conversion (`widen`) unifies all conversions as ordinary calls (Rules 2, 15).
+- **9.** **AGREE.** `*h` hides consuming heap deallocation behind the same glyph used for non-consuming reference/pointer dereference. A named move-out exposes ownership consumption and storage release (Rules 2, 3, 9).
+- **10.** **AGREE.** Uniform `assert(e);` (and `assume(e);` if kept) removes unparenthesized forms and the special grouped-root rule needed before `by` (Rules 2, 15).
+- **11.** **AGREE.** Using `#[link_name("sym")]` and `#[export_name("sym")]` eliminates `=` as a second attribute-argument punctuation convention (Rule 2).
+- **12.** **AGREE.** Using `::` in imports as well as path references gives module paths one separator everywhere (Rule 2).
+- **13.** **AGREE.** Because `char` is defined as a byte (`TYPE-20`) with ASCII-only literals (`OD137`), keeping `char` invites false Unicode-scalar expectations; `u8` with ASCII literals and explicit UTF-8 operations is honest (Rules 2, 3, 12).
+- **14.** **AGREE.** Removing compiler-special variadic `print`/`println`/`append` eliminates magic overloading and hidden formatting policy in favor of ordinary typed calls with explicit `Console` grants and linear `Result` handling (Rules 2, 3, 9, 11).
+- **15.** **AGREE.** Requiring explicit local types and `-> Unit` makes every binding and signature locally self-contained without reader reconstruction (Rules 3, 4), while preserving decided argument-based generic call inference (`OD46`).
+
+### ASK ITEMS
+
+- **2.** **AGREE.** Keeping only `OrderedMap` now and deferring `HashMap` until slice 23's KV workload measures a concrete need follows the pull rule and small-core principle (Rules 15, 17), without granting map names compiler privilege.
+- **16.** **AGREE.** Removing unused `Process` until a target actually supplies process operations and grants avoids carrying a dead capability atom in the closed authority set (Rules 5, 12, 15), provided no immediate foreign signature requires it.
+- **17.** **AGREE.** `defer` must keep late-read semantics (`Q9.8`, `OD2`). Eager argument capture at `defer` registration would move a linear value immediately, making `defer close(f)` unusable before subsequent operations on `f` (Rule 9).
+- **18.** **AGREE.** Refusing ordinary bodyless function prototypes removes a redundant declaration form while retaining trait signatures and `extern` declarations (Rules 2, 5); slice 17 generated interfaces can use dedicated summary artifacts.
+- **19.** **AGREE.** Removing general packed structs until a real foreign ABI requires them avoids misaligned-field proof and borrowing exceptions (`OD111`, Rules 15, 17); wire formats should be decoded explicitly.
+- **20.** **AGREE.** Removing local `assume` statements forces unproven premises onto named trusted/external contract boundaries with tracked evidence identities (Rules 11, 12, 14), avoiding ad-hoc inline holes.
+- **22.** **AGREE.** Keeping decided capture-free function values with explicit context and contracts (`OD93`, `Q2.4`) supports `drain` and explicit indirect dispatch without inventing a forbidden `total` function category (`OD116`).
+- **23.** **AGREE.** Evaluating closed total `const` initializers once at compile time and substituting their values removes surprising per-use runtime re-evaluation (`TYPE-22`) while keeping general `comptime` refused (Rules 3, 16).
+
+### ALREADY TAKEN DECISIONS
+
+- **FOUNDATION (Q1–Q18, 11 process decisions, `with(...)` + grants).** **AGREE.** These decided entries govern under the conflict order and admission test; keeping `with(...)` permissions plus linear resource grants (`31`) and the staged enum-tag/niche decisions (`Q4`, `Q5(b)`) preserves soundness and auditability.
+
+---
+
+### Further Decisions the Owner Still Has to Make (Not Mentioned by Claude)
+
+1. **Receiver parameter migration & `Destroy` signature (Item 1):** Dropping receiver shorthand (`self`, `&self`, `&mut self`) requires approving the exact typed first-parameter rule in traits and impls, especially for the consuming `Destroy` protocol.
+2. **Exact spellings and signatures for approved replacements:**
+   - **Item 7:** Exact syntax and scoping for the mathematical boundary in contracts (e.g., `math { ... }` vs `math(...)`).
+   - **Item 8 (if `as` removed) / Item 9:** Exact name and signature for lossless conversion (e.g., `widen`) and heap move-out (e.g., `into_inner(h)`), avoiding collision with removed generic `unwrap`/`free`/`take` APIs.
+   - **Item 12:** Exact multi-item import list punctuation under `::` (`OPEN-11`).
+   - **Item 13:** Lexical rules and pattern/overload rules for ASCII single-quoted `u8` literals (`OPEN-6`, `OPEN-17`).
+   - **Item 14:** Exact byte/string output and append API signatures conserving linear `Result` errors and `Console` grants (`OPEN-21`).
+   - **Item 15:** How explicit local typing applies to destructuring pattern binders, loop binders, and `ghost let` bindings (`OPEN-9`, `OPEN-18`).
+3. **Closed total subset for `const` initializers (Item 23):** Defining the exact set of operations permitted in compile-time constant initializers and confirming they cannot construct non-Copy/linear values (`OPEN-10`).
+4. **Remaining open grammar closures in `GRAMMAR_REVIEW.md`:** Closing value-branch common-prefix grammar (`Item 3` / `OPEN-16`), theorem argument grammar (`Item 4` / `OPEN-13`), and existential brand binder/escape syntax (`Item 21` / `OPEN-22`).
+
+ANSWER: DISAGREE=8; MISSING=receiver parameter migration for Destroy (1), exact spellings/signatures for math boundary (7), heap move-out (9), import list syntax (12), ASCII u8 literals (13), output/append APIs (14), pattern/ghost binder type annotations (15), closed const evaluator subset (23), and open grammar closures (OPEN-13/16/22)

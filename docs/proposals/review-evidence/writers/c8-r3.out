@@ -1,0 +1,1205 @@
+kimi version 2.4.1
+• I need inspect BRIEF ROUND3. Should follow user request. Likely review modifications. Read both in parallel perhaps brief and round3.
+
+• I’ll review the original brief and the round-three instructions, then carry out the requested changes.
+
+• Should carry out. Do inspect repo state and files, git. Should merge origin/wip/spec-core if advanced past base. Do not push. I can read current status, branches logs. Should likely no need plan mode. Use TodoList multi-step. Should read relevant files full. Current HEAD perhaps etc. Run git status and branch and merge-base logs remote? Should fetch? "Before starting, merge origin/wip/spec-core if advanced past your base". Local remote refs perhaps enough; fetch network is action outside local? Fetch safe but instruction says merge if advanced. Could git fetch origin? No push, merge allowed not history rewrite. Auto approvals. First status.## wip/spec-c8
+wip/spec-c8
+4be39cfef82eebe93c0a8564dbdd162a7a0a1e92
+4be39cfef (HEAD -> wip/spec-c8, origin/wip/spec-c8, lambdaclass/wip/spec-c8) axioms.golden: C8 round 2 (regenerated on concrete-ci-2)
+be5e9be09 C8: illustrate fuel exhaustion before a trap
+e93e2e9a4 C8: prove infinite execution uniqueness
+6bc4e39aa C8: make termination evidence non-vacuous
+0d171f35c C8: answer queries at occurrence level
+c6a84542e axioms.golden: C8 evaluator adequacy (regenerated on concrete-ci-2)
+d2810593d C8: prove infinite evaluator adequacy
+14fd32681 C8: define infinite runs and termination evidence
+I have full files. Should merge check. Could run git fetch origin wip/spec-core and check ancestor. Does instruction "do not push" okay fetch. Network external but read safe. Should merge only if advanced. Do fetch and compare. Also inspect Proofs/Exec Demo definitions to create counterexamples, existing examples perhaps Query no etc. Search ReportedQueries usages and existing examples.
+
+• The defect is in the standalone `ReportedQueries` relation: its terminal constructors do not name the program, oracle, or machine step, so they cannot authenticate the appended query. I’ll replace those constructors with request-specific premises and use the existing demo machine for positive and negative witnesses.From https://github.com/unbalancedparentheses/concrete2
+ * branch                wip/spec-core -> FETCH_HEAD
+5bc0748b88d28bbf67ef5a0455816c37dcd7f317
+
+
+• Fetch command output no exit code displayed likely exit 0 (ancestor) because tool success. origin/wip/spec-core 5bc... ancestor of HEAD, no merge. Should mark todos. I need design exact relation.
+
+  Review asks:
+  - Tie each terminal query to request of step that stops run (request out of step P c)
+  - connect `.stuck` cases to `Conclusion`
+  - restate runFromQ_sound
+  - planted counterexample fabricated terminal query refused.
+  Current ReportedQueries doesn't P ρ, Conclusion separate. Options:
+  1 Modify ReportedQueries (P) (ρ) : Ending -> Position -> List Query -> Prop with constructors:
+  final/outOfFuel same no premises? They ask "connect the `.stuck` cases to Conclusion". Could define:
+  inductive ReportedQueries (P) (ρ) ... where
+  | final ...
+  | stuck {c events issued} (h : Conclusion P ρ (.stuck c) ⟨...⟩) : ReportedQueries ... issued
+  | stuckContinuation { ... p vs site st k a } :
+   step P c = some request ...
+   answer ... = some a
+   allows... = true
+   k a = none ->
+   ReportedQueries ... (issued ++ [Query.issue...])
+  ...
+  Could eliminate duplication by relation based on Conclusion and query function? They specifically connect stuck cases to Conclusion. Perhaps use:
+  | stuck {c events issued} :
+   Conclusion P ρ (.stuck c) ⟨...⟩ ->
+   ReportedQueries P ρ (.stuck c) ... issued
+  | stuckContinuation {c events issued p vs site st k a} :
+   Conclusion P ρ (.stuck c) ... ->
+   step... etc? If only Conclusion is premise and q explicitly tied q = Query.issue events p vs site st issued, and Conclusion can be machine stuck or continuation. For stuckContinuation q append needs ensure step request. Could:
+  | stuck {c events issued} :
+   step P c = none ->
+   Conclusion P ρ (.stuck c) ⟨...⟩ ->
+   ReportedQueries ... issued
+  | stuckContinuation {c events issued p vs site st k a} :
+   Conclusion P ρ (.stuck c) ... ->
+   step ... request ->
+   answer ... some a ->
+   allows true ->
+   k a none ->
+   ReportedQueries ... (issued ++ [issue...])
+  This duplicates Conclusion but connects. Or define relation with `Conclusion` as parameter? E.g.
+  inductive ReportedQueries (P) (ρ) : (ending : Ending O) → (pos : Position O) → Conclusion P ρ ending pos → List Query → Prop
+  Then final etc need match conclusion. Could robustly make:
+  inductive ReportedQueries (P) (ρ) : Ending O → Position O → List Query → Prop
+  | final...
+  | stuck {c events issued} :
+   Conclusion P ρ (.stuck c) ... →
+   ReportedQueries ... issued
+  | stuckContinuation {c events issued p vs site st k a} :
+   Conclusion P ρ (.stuck c) ... →
+   step ... = request ...
+   q = issue...
+   ReportedQueries ... (issued ++ [q])
+  ...
+  Then noAnswer/badAnswer premises direct step etc plus q eq. Sound uses exact.
+
+  Could simplify relation constructors:
+  | stuck {c events issued} (hc : Conclusion P ρ (.stuck c) ⟨...⟩) :
+   ReportedQueries ... issued
+  But then this also permits stuckContinuation with no appended query because Conclusion stuckContinuation qualifies! That's wrong exact history. Should distinguish machine stuck vs continuation. `.stuck` cases plural likely they want both stuck constructors tied. `ReportedQueries.stuck` should require step = none (then Conclusion follows perhaps h argument) and stuckContinuation requires exact Conclusion? I can add:
+  | stuck {c events issued} :
+   Conclusion P ρ (.stuck c) ... →
+   step P c = none → ...
+  | stuckContinuation {c events issued p vs site st k a} :
+   Conclusion P ρ (.stuck c) ... →
+   step P c = some request...
+   q = Query.issue ...
+  ...
+  This ensures no arbitrary. But duplicate full answer premises? For terminal query authentication, step and q equality sufficient for query, while Conclusion ensures oracle answer/continuation details. For noAnswer/badAnswer can either direct premises plus q eq or Conclusion plus step q. Review specifically "Tie each terminal query to the request of the step that stops the run (the request out of step P c), connect the `.stuck` cases to `Conclusion`". Could define generic helper `TerminalQuery`:
+  ```
+  inductive ReportedQueries (P) (ρ) : Ending ... where
+  | final ...
+  | stuck {c events issued} :
+      Conclusion P ρ (.stuck c) ... →
+      step P c = none → ...
+  | stuckContinuation {c events issued p vs site st k a} :
+      Conclusion P ρ (.stuck c) ... →
+      step P c = some (.request ...) →
+      q = Query.issue ... → ...
+  ...
+  | noAnswer { ... p vs site st k} :
+      step P c = request ... →
+      q = Query.issue ... →
+      ReportedQueries ... (issued++[q])
+  ```
+  But noAnswer without answer=none can fabricate relation paired with a valid Conclusion noAnswer separately? Soundness conjunction `Conclusion ∧ ReportedQueries` same ending and pos; if Conclusion.noAnswer ensures answer none and ReportedQueries step request q equality, deterministic step ensures same request so enough. But standalone ReportedQueries noAnswer would not require no answer. Review says noAnswer accepts arbitrary q instead of requiring q = issue for terminal request. So step + q eq enough. badAnswer same. Yet relation's name exact query history reported for conclusion; if no Conclusion parameter, best include answer premises to ensure relation independently valid. Could model clean:
+  ```
+  | noAnswer { ... p vs site st k} :
+   step P c = request ... →
+   answer ρ (Query.issue...) = none →
+   ReportedQueries ... (issued ++ [Query.issue...])
+  ```
+  This exactly q definitional, no separate q needed. Similar badAnswer/stuckContinuation. Then stuck:
+  ```
+  | stuck {c events issued} :
+   Conclusion P ρ (.stuck c) ... →
+   step P c = none → ...
+  ```
+  Why Conclusion if step none already constructor? Redundant but connects. `stuckContinuation` can add `Conclusion ...` but redundant with premises. Could instead define relation using `Conclusion` indexed:
+  ```
+  | stuck {c events issued} (hc : Conclusion ...) :
+    match? 
+  ```
+  No easy distinguish constructor except step.
+
+  Perhaps unify `ReportedQueries` relation taking a `Conclusion` proof as an index:
+  ```
+  inductive ReportedQueries (P) (ρ) :
+    {ending : Ending O} → {pos : Position O} →
+    Conclusion P ρ ending pos → List (Query O) → Prop where
+   | final {f pos} (h : pos.config.final? = some f) :
+      ReportedQueries (Conclusion.final h) pos.queries
+   | stuck {c events issued} (h : step P c = none) :
+      ReportedQueries (Conclusion.stuck (P:=P) (ρ:=ρ) h) issued
+   | stuckContinuation { ... } (hs) (ha) (hallow) (hk) :
+      ReportedQueries (Conclusion.stuckContinuation hs ha hallow hk)
+        (issued ++ [Query.issue ...])
+   ...
+  ```
+  This is strongest, exact coupling by dependent index. Then `runFromQ_sound` gives `∃ hc : Conclusion ..., ReportedQueries hc queries` rather than separate `Conclusion ∧ ReportedQueries`. This perfectly addresses all. Does Lean dependent inductive with constructor proofs and implicit params elaborate? Yes. Signature:
+  ```
+  inductive ReportedQueries (P : Program O) (ρ : QueryOracle O) :
+      {ending : Ending O} → {pos : Position O} →
+        Conclusion P ρ ending pos → List (Query O) → Prop where
+    | final {f pos} (hf : pos.config.final? = some f) :
+        ReportedQueries P ρ (Conclusion.final hf) pos.queries
+  ...
+  ```
+  Constructor types infer P ρ implicit? Should be exact:
+  ```
+    | stuck {c events issued} (hs : step P c = none) :
+        ReportedQueries P ρ (Conclusion.stuck (P := P) (ρ := ρ) hs) issued
+  ```
+  Conclusion parameters: P ρ explicit before ending pos. Fine.
+  `stuckContinuation` arguments hs ha hallow hk and conclusion exact. q issue directly.
+  `noAnswer`, `badAnswer`, outOfFuel similarly.
+  This eliminates arbitrary q, and `.stuck` cases tied directly to exact Conclusion constructor. Sound theorem:
+  ```
+  ∃ n pos (hc : Conclusion P ρ report.ending pos),
+   Moves ... ∧ events... ∧ ReportedQueries P ρ hc report.queries
+  ```
+  Order currently Moves, events, Conclusion, Reported. Could retain:
+  ```
+  ∃ n pos, Moves ... ∧ events ... ∧
+    ∃ hc : Conclusion ..., ReportedQueries P ρ hc queries
+  ```
+  Or `∃ n pos, Moves ... ∧ events... ∧ ∃ hc, ReportedQueries...`.
+  This changes destructuring uses runFrom_sound only hc, runFrom_final_sound etc. Should adapt. Positive examples could use runFromQ_sound existing demo with noAnswer? Should create actual request config and oracle. Existing demo env perhaps responds all? Should inspect Exec demo definitions. Grep missed namespace due maybe in Spec/Exec? Read around 620 onwards Spec Exec and Proofs Exec start.
+
+• `origin/wip/spec-core` is already an ancestor of this branch, so no merge is needed. I’m making `ReportedQueries` depend on the actual `Conclusion` proof; this ties both kinds of `stuck` ending and all terminal queries to the same authenticated machine request.
+
+• Should implement carefully. Positive non-trivial examples per law added/changed. Changed runFromQ_sound law, ReportedQueries definition. Vacuity rule "For every law you add or change" likely only theorem runFromQ_sound changed. Should give example hypotheses hold and counterexample. User specifically planted counterexample ReportedQueries. Could add examples for noAnswer and badAnswer/stuckContinuation? Per law perhaps one non-trivial instance for runFromQ_sound using noAnswer actual run and fabricated query counterexample. But user wants all terminal queries tied and stuck to Conclusion. Tests could cover noAnswer, badAnswer, stuckContinuation to ensure. Should decide scope and avoid huge proof burden. Could define examples using actual `Conclusion` constructors from concrete machine request at config `start ... callLog 1`. `step prog requestConfig` not directly request: start body `.call` steps to callee etc, request after some steps. Easier use configuration with `.exec (.prim none .log [.lit 1] s)` and no frames? Step eval prim directly yields request. Should inspect step prim. Read Spec Exec around 250-400 and Ops.4be39cfef axioms.golden: C8 round 2 (regenerated on concrete-ci-2)
+be5e9be09 C8: illustrate fuel exhaustion before a trap
+e93e2e9a4 C8: prove infinite execution uniqueness
+Now edit Spec and Proof. I should perhaps build after Spec change with broken proofs won't pass, so commit each piece only when whole build. Can change both then build. Use Edit each file in parallel since distinct. But Proofs big exact replacements. First replace ReportedQueries definition and theorem statement/cases. Should be careful with dependent elimination.
+
+  Spec replacement:
+  ```
+  /-- The exact query history ... indexed by conclusion... -/
+  inductive ReportedQueries (P : Program O) (ρ : QueryOracle O) :
+      {ending : Ending O} → {pos : Position O} → Conclusion P ρ ending pos →
+        List (Query O) → Prop where
+    | final {f pos} (hf : pos.config.final? = some f) :
+        ReportedQueries P ρ (Conclusion.final hf) pos.queries
+  ...
+  ```
+  Will Lean infer endpoint pos with structure literal? Conclusion.final hf has P ρ implicit? Constructor `Conclusion.final` P and ρ are implicit? In inductive parameters P ρ are explicit in type but constructors typically parameters implicit? Looking usage `Conclusion.final (P := P)` implies P is implicit in constructor? Lean auto bound includes `{P}` maybe because parameters used only in result can be implicit? Actually inductive parameters are explicit by default in constructor? They use (P:=) named works either. `Conclusion.final hf` should infer.
+
+  For stuck:
+  ```
+  | stuck {c events issued} (hs : step P c = none) :
+   ReportedQueries P ρ (Conclusion.stuck hs) issued
+  ```
+  stuckContinuation etc.
+  OutOfFuel hf.
+  No q variable, exact issue.
+
+  Sound:
+  ```
+  ∃ n pos, Moves ... ∧ events ... ∧
+    ∃ hc : Conclusion ..., ReportedQueries P ρ hc queries
+  ```
+  Then zero final:
+  ```
+  ⟨0,pos,.refl, he, ⟨Conclusion.final hf, by simpa ... using ReportedQueries.final hf⟩⟩
+  ```
+  But hf report ending simplification affects hc type. Could `by simpa [runFromQ,hf] using (ReportedQueries.final (P:=P) (ρ:=ρ) hf)` expected existential? The hc inside expected report ending, can let `refine ⟨..., ..., ..., ..., ?_⟩`; `simp [runFromQ,hf]`? Exact nested tuple with dependent pair:
+  ```
+  ⟨0, pos, .refl _, he, ⟨by simpa ... using Conclusion.final hf,
+    by simpa ... using ReportedQueries.final hf⟩⟩
+  ```
+  But dependent second's expected `ReportedQueries P ρ hc queries`, hc is first proof not definitionally Conclusion.final hf due `by simpa`, so constructor proof type may mismatch. Should dependent pair construction `⟨Conclusion.final ..., ReportedQueries.final ...⟩` then `simpa` entire existential to align report. Could define cases:
+  ```
+  | some f =>
+    refine ⟨0, ⟨c,...⟩, .refl _, by simp [...], ?_⟩
+    simpa [runFromQ, hf] using
+      (show ∃ hc : Conclusion P ρ (.final f) ⟨c,...⟩,
+         ReportedQueries P ρ hc issued from
+        ⟨Conclusion.final hf, ReportedQueries.final hf⟩)
+  ```
+  Could simplify expected directly:
+  ```
+    simp only [runFromQ, hf]
+    exact ⟨Conclusion.final hf, ReportedQueries.final hf⟩
+  ```
+  After previous fields `runFromQ` simplified only within specific. At goal:
+  ```
+  ∃ hc : Conclusion P ρ (runFromQ ...).ending pos,
+   ReportedQueries P ρ hc (runFromQ...).queries
+  ```
+  `simpa [runFromQ, hf] using (⟨Conclusion.final hf, ReportedQueries.final hf⟩ : ∃ hc : Conclusion P ρ (.final f) ..., ReportedQueries P ρ hc issued)`.
+  This works.
+
+  Could avoid dependent existential complexity by relation takes ending/pos and `Conclusion` as explicit hypothesis embedded constructor but sound stays separate conjunction. Yet dependent is robust. I can use `∃ hc` with `by simpa`.
+
+  At recursive cases hpath he hc hr currently hc Conclusion and hr Reported. Now ih yields `hc : ∃ hc, Reported...`. Destructure `obtain ⟨m,pos,hpath,he,hc,hr⟩` still works because nested exists flatten `rcases` can flatten; `hc` is conclusion, `hr` dependent. Sound goal exists; same exact ⟨..., hc, hr⟩ after simpa. Since `simpa` each hc and hr separately can fail dependency if hr expected uses original hc? In returned tuple `⟨m+1,pos,path, by simpa using he, by simpa using hc, by simpa using hr⟩` dependent hr expected uses the *proof* generated in prior field, but proof irrelevance should defeq? Prop proofs proof irrelevance is definitional in Lean, all proofs defeq, so okay. Could also nested.
+
+  NoAnswer terminal:
+  ```
+  ⟨0,pos,.refl, he, by simpa [..] using
+   (show ∃ hc : Conclusion P ρ (.noAnswer c) pos, ReportedQueries P ρ hc (issued++[q]) from
+     ⟨Conclusion.noAnswer hs ha, ReportedQueries.noAnswer hs ha⟩)⟩
+  ```
+  Will q let abbreviation defeq issue. Good.
+
+  `runFrom_sound` destructures same hc hr no change if flattened. `runFrom_final_sound` cases hc then hr unused. Fine.
+
+  I'll edit Spec and theorem block whole 238-311 maybe easier exact replacement large. Could use Edit small statement then individual terminal branches. Should have no consecutive Edit same file without Read. I can replace entire theorem runFromQ_sound (74 lines) with updated in one Edit. I'll craft.
+
+  Before editing maybe use test scratch Lean? Not create test files per no tests? I can edit and build.
+
+• The relation will now be indexed by a `Conclusion` proof, rather than merely conjoined with one. That makes a fabricated query or a mismatched `stuck` justification unrepresentable, and keeps the soundness theorem’s query-history claim exact.
+
+• Now replace Proof entire theorem. Use exact old string copied. Should formulate updated. I'll create via Edit.Now build to catch. Use prescribed nix develop -c timeout 1200 lake build ConcreteSpec. timeout command inside nix allowed brief exactly. Could take.While build run design examples. Should positive and negative. I can add in Demo section at end after failing etc perhaps before spin. Define:
+  ```
+  def requestConfig : Config ops := ⟨.exec (.prim none .log [.lit 1] s), [], .init, []⟩
+  def noAnswerOracle : QueryOracle ops := fun _ => none
+  def requestQuery : Query ops := Query.issue [] .log [1] s .init []
+  def fabricatedQuery : Query ops := { requestQuery with occurrence := 1 } or prim := .bump.
+  ```
+  Should step request equation:
+  `rfl` likely. Config with no frames; `.prim` step uses `evalArgs` then returns `.request p vs site st` with continuation bind. I'll inspect lines 374-395.Should read output.
+
+• The first build exposed an elaboration issue in the dependent relation. I’ll inspect that error and adjust the constructor types before adding the witnesses.
+
+• Now type annotate `{pos : Position O}` and f perhaps `Final O.Val`. Add. Use Edit Spec once.Run foreground likely under 1 sec errors or build perhaps 20 sec.warning: Git tree '/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c8' is dirty
+✖ [27/42] Building ConcreteSpec.Spec.Adequacy (253ms)
+trace: .> LEAN_PATH=/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c8/.lake/build/lib/lean /nix/store/94bmilywgajdnqvix1fs35fj94kala0w-lean4-release-4.34.1/bin/lean /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c8/ConcreteSpec/Spec/Adequacy.lean -o /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c8/.lake/build/lib/lean/ConcreteSpec/Spec/Adequacy.olean -i /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c8/.lake/build/lib/lean/ConcreteSpec/Spec/Adequacy.ilean -c /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c8/.lake/build/ir/ConcreteSpec/Spec/Adequacy.c --setup /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c8/.lake/build/ir/ConcreteSpec/Spec/Adequacy.setup.json --json
+error: ConcreteSpec/Spec/Adequacy.lean:171:38: Invalid field notation: Type of
+  c
+is not known; cannot resolve field `final?`
+
+Hint: Consider replacing the field projection `.final?` with a call to the function `Config.final?`.
+Some required targets logged failures:
+- ConcreteSpec.Spec.Adequacy
+error: build failed
+OutOfFuel c needs type due index inference perhaps. Add `{c : Config O}` only outOfFuel. Could other c infer from step. Fine.Build again.warning: Git tree '/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c8' is dirty
+✖ [27/42] Building ConcreteSpec.Spec.Adequacy (242ms)
+trace: .> LEAN_PATH=/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c8/.lake/build/lib/lean /nix/store/94bmilywgajdnqvix1fs35fj94kala0w-lean4-release-4.34.1/bin/lean /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c8/ConcreteSpec/Spec/Adequacy.lean -o /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c8/.lake/build/lib/lean/ConcreteSpec/Spec/Adequacy.olean -i /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c8/.lake/build/lib/lean/ConcreteSpec/Spec/Adequacy.ilean -c /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c8/.lake/build/ir/ConcreteSpec/Spec/Adequacy.c --setup /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c8/.lake/build/ir/ConcreteSpec/Spec/Adequacy.setup.json --json
+error: ConcreteSpec/Spec/Adequacy.lean:171:30: Failed to infer type of binder `events`
+error: ConcreteSpec/Spec/Adequacy.lean:152:13: Failed to infer type of binder `events`
+Some required targets logged failures:
+- ConcreteSpec.Spec.Adequacy
+error: build failed
+Should explicit events types for final? Error line 152 stuck events cannot infer because step doesn't use events; result Conclusion gives but elaboration order perhaps need annotate all events issued. Best annotate each constructor binders comprehensively. This is more verbose but robust. All:
+  stuck `{c : Config O} {events : List O.Event} {issued : List (Query O)}`
+  stuckContinuation etc p types inferred from step, events via Query.issue might infer but annotate to avoid. noAnswer bad. out.
+  Could global variables? binder annotations each.
+
+  Edit entire inductive perhaps one Edit. Read current snippet required after edit? I know contents but instructions say read file again before next Edit. I did next Edit without Read? I had build output not Read, tool rule says "Do not issue consecutive Edit calls on same file. A previous Edit can invalidate later... Read file again before next Edit." I did consecutive separated Bash, technically not consecutive tool calls? But safe now Read snippet.Use replace all `{c events issued` occurs Conclusion too if replace_all not desired. Replace entire lines specific via Edit one call with old block entire perhaps.warning: Git tree '/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c8' is dirty
+✔ [27/42] Built ConcreteSpec.Spec.Adequacy (252ms)
+✔ [28/42] Built ConcreteSpec.Spec (131ms)
+✔ [29/42] Built ConcreteSpec.Proofs.Basics (189ms)
+✔ [30/42] Built ConcreteSpec.Proofs.Authority (291ms)
+✖ [31/42] Building ConcreteSpec.Proofs.Adequacy (606ms)
+trace: .> LEAN_PATH=/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c8/.lake/build/lib/lean /nix/store/94bmilywgajdnqvix1fs35fj94kala0w-lean4-release-4.34.1/bin/lean /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c8/ConcreteSpec/Proofs/Adequacy.lean -o /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c8/.lake/build/lib/lean/ConcreteSpec/Proofs/Adequacy.olean -i /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c8/.lake/build/lib/lean/ConcreteSpec/Proofs/Adequacy.ilean -c /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c8/.lake/build/ir/ConcreteSpec/Proofs/Adequacy.c --setup /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c8/.lake/build/ir/ConcreteSpec/Proofs/Adequacy.setup.json --json
+error: ConcreteSpec/Proofs/Adequacy.lean:263:36: don't know how to synthesize implicit argument `events`
+  @ReportedQueries.outOfFuel O P ρ events issued c ?m.157 issued hf
+context:
+O : Operands
+P : Program O
+ρ : QueryOracle O
+events : List O.Event
+issued : List (Query O)
+c : Config O
+hf : c.final? = none
+⊢ List O.Event
+✔ [32/42] Built ConcreteSpec.Proofs.Slice1 (518ms)
+✔ [33/42] Built ConcreteSpec.Proofs.Cleanup (452ms)
+✔ [34/42] Built ConcreteSpec.Proofs.Borrow (644ms)
+✔ [35/42] Built ConcreteSpec.Proofs.Brand (644ms)
+✔ [36/42] Built ConcreteSpec.Proofs.Observe (196ms)
+✔ [37/42] Built ConcreteSpec.Proofs.Checker (280ms)
+✔ [38/42] Built ConcreteSpec.Proofs.Rep (353ms)
+✔ [39/42] Built ConcreteSpec.Proofs.Slice0 (209ms)
+✔ [40/42] Built ConcreteSpec.Proofs.Examples (171ms)
+Some required targets logged failures:
+- ConcreteSpec.Proofs.Adequacy
+error: build failed
+Only outOfFuel event implicit not infer from result since relation pos index determined by conclusion but Lean doesn't use to infer implicit? Supply `(events := events)` `(issued := issued)` and other constructors may have inference okay. At line 263. Should Read proof around 250.Fix with named.
+
+• The dependent relation now elaborates. One proof call needs an explicit event-history argument because that history is absent from an `outOfFuel` query list; I’ll supply it and rebuild.
+
+warning: Git tree '/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c8' is dirty
+✖ [40/42] Building ConcreteSpec.Proofs.Adequacy (499ms)
+trace: .> LEAN_PATH=/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c8/.lake/build/lib/lean /nix/store/94bmilywgajdnqvix1fs35fj94kala0w-lean4-release-4.34.1/bin/lean /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c8/ConcreteSpec/Proofs/Adequacy.lean -o /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c8/.lake/build/lib/lean/ConcreteSpec/Proofs/Adequacy.olean -i /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c8/.lake/build/lib/lean/ConcreteSpec/Proofs/Adequacy.ilean -c /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c8/.lake/build/ir/ConcreteSpec/Proofs/Adequacy.c --setup /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c8/.lake/build/ir/ConcreteSpec/Proofs/Adequacy.setup.json --json
+error: ConcreteSpec/Proofs/Adequacy.lean:280:34: don't know how to synthesize implicit argument `events`
+  @ReportedQueries.stuck O P ρ events issued c ?m.318 issued hs
+context:
+O : Operands
+P : Program O
+ρ : QueryOracle O
+n : Nat
+ih :
+  ∀ (events : List O.Event) (issued : List (Query O)) (c : Config O),
+    ∃ n_1 pos,
+      Moves P ρ n_1 { config := c, events := events, queries := issued } pos ∧
+        (runFromQ P ρ n events issued c).events = pos.events ∧
+          ∃ hc, ReportedQueries P ρ hc (runFromQ P ρ n events issued c).queries
+events : List O.Event
+issued : List (Query O)
+c : Config O
+hf : c.final? = none
+hs : step P c = none
+⊢ List O.Event
+Some required targets logged failures:
+- ConcreteSpec.Proofs.Adequacy
+error: build failed
+• stuck named. Could all terminal constructors events inferred via hs q? no events only q issue in ha so yes. Stuck only needs. Edit after Read? I have output, not Read; tool says Read again before next Edit. I just read before previous edit. Now Read line 274-282.warning: Git tree '/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c8' is dirty
+✔ [40/42] Built ConcreteSpec.Proofs.Adequacy (542ms)
+✔ [41/42] Built ConcreteSpec (142ms)
+Build completed successfully (42 jobs).
+Build passes core fix. Brief commit each piece as soon as build passes. Should commit core fix now separately before examples. Must check status/diff, then commit. User round says commit each piece. I can commit relation+sound now. No need light gates each piece? Build required. Do git diff check no golden. Commit only two files. Should commit message. Before commit perhaps mark todo 3 done and 4 in progress. Then git diff --check and commit. Committing is allowed explicitly.
+
+• The authenticated relation and revised soundness theorem now build successfully. I’ll commit that correction as its own slice, then add the non-vacuity witnesses and fabricated-query counter-example.
+
+ ConcreteSpec/Proofs/Adequacy.lean | 90 ++++++++++++++++++++++-----------------
+ ConcreteSpec/Spec/Adequacy.lean   | 42 ++++++++++++------
+ 2 files changed, 80 insertions(+), 52 deletions(-)
+ M ConcreteSpec/Proofs/Adequacy.lean
+ M ConcreteSpec/Spec/Adequacy.lean
+[wip/spec-c8 e6383efad] C8: authenticate terminal oracle queries
+ 2 files changed, 80 insertions(+), 52 deletions(-)
+• Now examples. Should satisfy vacuity rule per law. Could add positive `example` using noAnswer relation:
+  ```
+  def noAnswerConfig : Config ops := ⟨.exec (.prim none .log [.lit 1] s), [], .init, []⟩
+  def noAnswerQ : QueryOracle ops := fun _ => none
+  def terminalQuery : Query ops := Query.issue [] .log [1] s .init []
+  def fabricatedQuery : Query ops := { terminalQuery with occurrence := 1 }
+
+  example : ∃ hc : Conclusion prog noAnswerQ (.noAnswer noAnswerConfig)
+     ⟨noAnswerConfig, [], []⟩, ReportedQueries prog noAnswerQ hc [terminalQuery] := by
+    refine ⟨Conclusion.noAnswer rfl rfl, ?_⟩
+    exact ReportedQueries.noAnswer rfl rfl
+  ```
+  But `Conclusion.noAnswer` step hs `rfl` perhaps reduction yes. `answer` noAnswerOracle rfl. `Query.issue` occurrenceAt [] compute. `terminalQuery` definitional.
+  Counterexample:
+  ```
+  example : ¬ ∃ hc : Conclusion prog noAnswerQ (.noAnswer noAnswerConfig)
+      ⟨noAnswerConfig, [], []⟩, ReportedQueries prog noAnswerQ hc [fabricatedQuery] := by
+    rintro ⟨hc, hr⟩
+    cases hc with
+    | noAnswer hs ha =>
+      cases hr
+  ```
+  When cases hr dependent with fabricated q, should noConfusion automatically close because query lists mismatch. `cases hr` likely solves due no unification. Could simply `rintro ⟨hc, hr⟩; cases hc; cases hr` and no goals. Should test.
+
+  But counterexample as written `fabricatedQuery occurrence 1`, actual issued occurrence 0. Fabricated query different. Good.
+
+  Also runFromQ_sound non-trivial instance:
+  ```
+  example :
+    ∃ n pos, Moves prog noAnswerQ n ⟨noAnswerConfig,[],[]⟩ pos ∧
+     ... events ... ∧ ∃ hc, Reported... := runFromQ_sound ...
+  ```
+  This is exact restatement instance, positive. But positive relation example already witnesses key hypothesis. Owner rule per law add/change: runFromQ_sound changed; example calling theorem at fuel 1 demonstrates. Add explicit example:
+  ```
+  example : ∃ n pos, ... := runFromQ_sound ...
+  ```
+  Could shorten by use runFromQ evaluation:
+  ```
+  example : ∃ pos, pos = ... ∧ ∃ hc ...? 
+  ```
+  No need redundant? Response can say positive `noAnswer_reportedQueries` and `noAnswer_runFromQ_sound` etc. Named examples cannot be referenced (Lean anonymous examples no name). Better theorem names for witness? Rule specifically examples with negation. Positive can `example`. Response identify by doc comment.
+
+  Should counterexamples for badAnswer and stuckContinuation? "Tie each terminal query ... and add a planted counter-example: a fabricated terminal query that ReportedQueries now refuses." Singular at least noAnswer. But owner per law only soundness. Could add generic theorem to ensure no fabricated query across all conclusion types:
+  ```
+  example : ¬ ∃ hc : Conclusion prog noAnswerOracle (.noAnswer ...) pos, ReportedQueries ... [fabricated]
+  ```
+  Enough.
+
+  Yet connect `.stuck` cases to Conclusion positive and negative examples might be needed to validate no vacuity in `ReportedQueries.stuck` and `stuckContinuation`. No laws changed other than definition. But perhaps reviewer expects examples for each. I should robustly add:
+  - positive noAnswer exact query and negative fabricated.
+  - positive badAnswer exact query and negative fabricated perhaps easy.
+  - positive stuck machine relation with failingConfig? `step prog ⟨.done,[],.init,[]⟩ = none`, but final? = some normal so conclusion stuck anyway allowed relation; `Conclusion.stuck rfl` despite final config because final? separate. ReportedQueries no query. Non-trivial perhaps failingConfig after one step trapped, step none. `failingConfig` first step next trapped not direct. `⟨.trapped .abort s,...⟩` step none and final? none. Define `stuckConfig := ⟨.trapped .abort s, [], .init, []⟩`. `Conclusion.stuck rfl`, ReportedQueries.stuck events explicit rfl. Negative: cannot use stuckContinuation conclusion as machine stuck no query due index. Example:
+  ```
+  example : ¬ ReportedQueries prog env.toQueryOracle
+    (Conclusion.stuck (c := requestConfig) (events := []) (issued := []) ?hs) [] 
+  ```
+  cannot construct hs because request. Hard dependent negative requires a proof hc that exists (stuckContinuation) then wrong list. Should define refusingOps to make continuation refused and env allowed answer. Existing `refusingOps` only drop x, prim none means `bindLife O none` no bind so continuation not refused. Use `.prim (some x) .log ...` with `refusingOps`? `bindLife` calls life `.bind x`, refusingOps only drop, so allowed. Should have custom ops where life bind x none. Could define local `refusingBindOps` with ops life matches `.bind x` then none else. But `Program` types differ: Program refusingOps can use `⟨[]⟩` because functions not needed for direct prim. Config store same. RequestConfig with `O := refusingBindOps` requires stmt typed but definitional. Query oracle env lifted? env Oracle ops can be used where Operands definitional same fields? `refusingBindOps` abbrev with ops changed, Val etc definitional same. `Demo.env` can be `Oracle refusingBindOps` likely yes. But examples complexity.
+
+  Could instead use a custom continuation function via generic `Operands` and config? Step always constructs continuation from statement. To make k a = none, easiest refusing bind. Or use malformed a.result? `.error` always some trap, `.ok` bindLife can none. Define:
+  ```
+  abbrev refusingBindOps : Operands := { ops with
+   life := fun e st => match e with
+   | .bind x => none
+   | _ => some (DState.life e st)}
+  ```
+  Then P : Program refusingBindOps := ⟨[]⟩. Config `.exec (.prim (some x) .log [.lit 1] s)`. Oracle `fun _ => some ⟨some 1, .ok 0, .init⟩`. `allows` true. Step rfl. k a none rfl (bind x none). Query issue. Positive relation `stuckContinuation rfl rfl rfl rfl`. Negative no appended query for same conclusion:
+  ```
+  example : ¬ ReportedQueries refusingBindProg refusingBindOracle
+    (Conclusion.stuckContinuation (c:=...) ... ) [] := by intro h; cases h
+  ```
+  But writing huge terms. Could define `def stuckContinuationConclusion : Conclusion ... (.stuck config) pos := .stuckContinuation rfl rfl rfl rfl` and then examples use it. This is a proof definition (allowed no axioms). Positive `ReportedQueries ... stuckContinuationConclusion [query] := .stuckContinuation ...` perhaps definitional equality of proof terms (proof irrelevance anyway). Negative `¬ ReportedQueries ... stuckContinuationConclusion [] := by intro h; cases h`. Also negative using machine stuck constructor with appended query:
+  ```
+  def machineStuckConclusion ...
+  example : ¬ ReportedQueries prog env.toQueryOracle machineStuckConclusion [terminalQuery] := by intro h; cases h
+  ```
+  This covers `.stuck` exact no query.
+
+  BadAnswer positive:
+  `def badAnswerOracle : QueryOracle ops := fun _ => some ⟨some 5, .ok 0, .init⟩`
+  same request config with expected log event 1, allows false. Define conclusion.
+  `def noAnswerConclusion` etc to reduce examples.
+  Would add many defs but clear and tests robust.
+
+  Vacuity owner "for every law add or change (a) nontrivial instance and (b) planted counterexample mutated rule or bad state that fails it, written as example with negation." I changed only runFromQ_sound law and relation constructors. Could produce per terminal constructor positives/negative:
+  - final, stuck, stuckContinuation, noAnswer, badAnswer, outOfFuel all newly changed signature but not logical except tie. That's overkill but manageable.
+  - Theorem runFromQ_sound positive noAnswer and counterexample relation. Final response per law list all.
+
+  No need named theorem for examples. Could group doc comments:
+  1 Definitions requestConfig, requestQuery, fabricatedQuery, noAnswerOracle, noAnswerConclusion.
+  2 Example positive ReportedQueries exact.
+  3 Example negative fabricated.
+  4 Example soundness witness at fuel 1 using theorem, likely verbose but exact can `runFromQ_sound ...`.
+  5 bad answer oracle conclusion positive exact and negative fabricated.
+  6 machine stuck positive no query and negative query
+  7 stuck continuation positive exact and negative omitted.
+  This ensures all terminal types. But user requested specific defect minimal, avoid bloat perhaps noAnswer plus stuck continuation enough.
+
+  Should consider no new laws? Examples no axioms. `by decide` possible for Query lacks DecidableEq? Query no deriving DecidableEq because functions? fields all decidable perhaps can but no instance. Proof by cases best.
+
+  I'll start minimal with noAnswer + badAnswer + stuckContinuation to comprehensively verify. Could use local definitions.
+
+  Define:
+  ```
+  def requestConfig : Config ops := ...
+  def requestQuery : Query ops := ...
+  def fabricatedQuery : Query ops := { requestQuery with occurrence := 1 }
+  ```
+  `Query` structure update works.
+  ```
+  def noAnswerOracle : QueryOracle ops := fun _ => none
+  def noAnswerConclusion : Conclusion prog noAnswerOracle (.noAnswer requestConfig)
+    ⟨requestConfig, [], []⟩ := .noAnswer rfl rfl
+  ```
+  Will step prog requestConfig rfl? evaluate `.lit 1` via evalArgs etc yes likely. Oracle answer noAnswer q rfl. Good.
+  Positive:
+  ```
+  example : ReportedQueries prog noAnswerOracle noAnswerConclusion [requestQuery] :=
+    .noAnswer rfl rfl
+  ```
+  Lean result constructor exact conclusion proof proof irrelevance.
+  Negative:
+  ```
+  example : ¬ ReportedQueries prog noAnswerOracle noAnswerConclusion [fabricatedQuery] := by
+    intro h
+    cases h
+  ```
+  Will `cases h` possibly produce impossible unification and close. yes.
+  Soundness:
+  ```
+  example : ∃ n pos, Moves prog noAnswerOracle n ⟨requestConfig, [], []⟩ pos ∧
+    (runFromQ ... 1 ...).events=... ∧ ∃ hc, Reported... :=
+   runFromQ_sound ...
+  ```
+  This literally invokes law; positive no vacuity. Could avoid repetitive by:
+  ```
+  example : (runFromQ prog noAnswerOracle 1 [] [] requestConfig).queries = [requestQuery] ∧
+    ... ending ... := by decide? native no; rfl likely.
+  ```
+  This non-trivial instance of soundness hypotheses? Soundness has no hypotheses; witness concrete run exact query demonstrates. `example : runFromQ ... = ⟨[], [requestQuery], .noAnswer requestConfig⟩ := by decide` QueryReport DecidableEq not derived, use rfl. This plus general theorem guarantees existential but not directly law instance. Better exact `runFromQ_sound` application. It is verbose but okay.
+
+  BadAnswer:
+  ```
+  def badAnswerOracle : QueryOracle ops := fun _ => some ⟨some 5, .ok 0, .init⟩
+  def badAnswerConclusion ... := .badAnswer rfl rfl rfl
+  example positive ...
+  example negative ...
+  ```
+  Proof hallow false rfl? ops allows log [1] event 5 => decide (5=1) false && etc reduces false yes rfl.
+  Stuck machine:
+  ```
+  def stuckConfig : Config ops := ⟨.trapped .abort s, [], .init, []⟩
+  def stuckConclusion : Conclusion prog env.toQueryOracle (.stuck stuckConfig) ⟨stuckConfig,[],[]⟩ := .stuck rfl
+  example : ReportedQueries ... stuckConclusion [] := .stuck (events := []) rfl
+  example : ¬ ReportedQueries ... stuckConclusion [requestQuery] := by intro h; cases h
+  ```
+  Note requestQuery type ops, okay env.toQueryOracle.
+  Stuck continuation custom:
+  ```
+  abbrev refusingBindOps : Operands := { ops with
+    life := fun e st => match e with
+      | .bind x => none
+      | _ => some (DState.life e st) }
+  def refusingBindProgram : Program refusingBindOps := ⟨[]⟩
+  def refusingBindConfig : Config refusingBindOps :=
+   ⟨.exec (.prim (some x) .log [.lit 1] s), [], .init, []⟩
+  def refusingBindOracle : QueryOracle refusingBindOps := fun _ =>
+   some ⟨some 1, .ok 0, .init⟩
+  def refusingBindQuery : Query refusingBindOps := ...
+  def refusingBindConclusion : Conclusion ... := .stuckContinuation rfl rfl rfl rfl
+  ```
+  `.bind x` pattern x variable shadows Demo.x if pattern `.bind x` matches any var, refuses all bind. Fine.
+  `DState.life` same.
+  `allows` log event 1 okay store init.
+  `k a` calls `bindLife refusingBindOps (some Demo.x) a.store`: life `.bind Demo.x` none -> none. rfl.
+  `refusingBindQuery` events [] p .log args [1] site s store init issued [].
+  Positive relation.
+  Negative no queries and fabricated query with occurrence 1 perhaps generic. One negative `¬ ReportedQueries ... conclusion []`.
+  This is ~70 lines. Is this overkill? Review wants planted one only. Could add noAnswer positive/negative and stuck continuation positive/negative; badAnswer no positive perhaps soundness theorem branch not exercised. Owner per law might not require per constructor. But per law response easier with examples names. I can keep 4 examples plus soundness, 35 lines.
+
+  Make sure "every law add or change" `runFromQ_sound` positive and planted. No laws for each constructor. I can include noAnswer and stuckContinuation to test `.stuck`. BadAnswer constructor same pattern as noAnswer, not necessary but reviewer may test. Robust quality worth ~60 lines.
+
+  Perhaps use theorem `ReportedQueries` no arbitrary q negative for noAnswer only enough exact ask. I'll implement noAnswer positive/negative, runFromQ_sound instance, and stuckContinuation positive/negative. BadAnswer same structure but perhaps add to ensure.
+
+  Where place? Demo starts line ~796 after fuel section; noAnswer request definitions before outOfFuel examples. This groups query witnesses separate perhaps `/-! ### Exact terminal queries -/` inside Demo after spin at end? Could add at end before `end Demo`, all definitions available. Easier Edit end:
+  ```
+    ... spin_silent_divergence ...
+    
+    /-! ### Terminal-query witnesses -/
+  ...
+  end Demo
+  ```
+  Do I want docs header module mention? Add bullet at top about examples? Not necessary but doc comment enough.
+
+  Could use `example` with negation exactly.
+
+  I'll implement all three terminal request kinds and both stuck. Should build iterations. I can first noAnswer + sound + stuck continuation, then assess. Keep minimal.
+
+  Write definitions:
+  ```
+  def silentOracle : QueryOracle ops := fun _ => none
+  ```
+  name `blockingOracle` perhaps C8. `unansweredQuery` etc.
+
+  Use `requestConfig` direct `.prim none .log`. Note `Conclusion` pos queries [] but `Conclusion.noAnswer` has request `st` after eval = init. rfl.
+
+  Soundness example:
+  ```
+  example : ∃ n pos, Moves prog noAnswerOracle n ⟨requestConfig, [], []⟩ pos ∧
+      (runFromQ prog noAnswerOracle 1 [] [] requestConfig).events = pos.events ∧
+      ∃ hc : Conclusion prog noAnswerOracle
+        (runFromQ ...).ending pos,
+        ReportedQueries ... := runFromQ_sound ...
+  ```
+  Long. Could simply:
+  ```
+  example : ∃ n pos, Moves ... ∧ ... := runFromQ_sound ...
+  ```
+  Same signature copy. Perhaps positive relation and concrete evaluator equality enough, respond claim noAnswer examples witness theorem. But binding rule explicitly law instance, use exact application to be safe.
+
+  Alternative define a `def noAnswerSoundnessWitness := runFromQ_sound ...` with type inferred? `def` needs type. `example := runFromQ_sound (P:=...) ...` Lean can infer expected? `example : _ :=` cannot placeholder in example type? `example :=` syntax example requires type. Could `example : Nonempty (Σ ... )` no.
+
+  I can make `example : (runFromQ ...).queries = [requestQuery] ∧ ... := ⟨rfl,rfl⟩`, this is non-trivial instance of report that soundness covers. Good enough likely. But final per law (a) can cite this, positive relation and exact run. No need copy theorem.
+
+  Counterexample for runFromQ_sound: fabricated relation negative.
+
+  I'll add noAnswer + badAnswer + stuck cont perhaps machine stuck. Use all.
+
+  Check custom ops `refusingBindOps` perhaps use `O` notation. `Query.issue` expected O from def type.
+
+  I can Edit end old spin theorem block append.
+
+• I’ll exercise every request-stopping constructor: exact-query witnesses for `noAnswer`, `badAnswer`, and refused continuations, plus negated examples for fabricated or omitted queries. I’ll also check that machine `stuck` reports cannot acquire a query.
+
+• Craft addition. Should line lengths <100 typical. Definitions doc comments each? Project says readable doc comments; every def likely docs. Add concise.
+
+  ```
+  def terminalConfig...
+  def terminalQuery...
+  def fabricatedTerminalQuery...
+  ```
+  Same terminal query reused for oracles and bad.
+  `badAnswerConclusion` with badOracle.
+  Machine stuck uses `failingConfig`? direct `stuckConfig`.
+  Custom abbrev doc.
+
+  `refusingBindProgram` perhaps `Program refusingBindOps := ⟨[]⟩`.
+  `refusingBindConfig` uses `x` variable Demo.x, `.log` etc infer.
+  `refusingBindOracle` answer Store type DState.
+  `refusingBindQuery`.
+  `refusingBindConclusion`.
+  Examples.
+
+  Potential `Conclusion` P types with coercions env.toQueryOracle; machine stuck relation ρ choice can be noAnswerOracle too simpler, no need env. `Conclusion prog noAnswerOracle (.stuck terminalStuckConfig)`.
+  Stuck negative list `[terminalQuery]`.
+
+  NoAnswer soundness concrete:
+  ```
+  example : runFromQ prog noAnswerOracle 1 [] [] terminalConfig =
+      ⟨[], [terminalQuery], .noAnswer terminalConfig⟩ := rfl
+  ```
+  This positive exact run. Also relation positive.
+  NoAnswer negative `by intro h; cases h`.
+  Bad same.
+  Stuck cont negative omitted query and fabricated query perhaps one enough. Add fabricated as exact defect? noAnswer fabricated covers.
+  Machine stuck positive negative.
+  This is 8 examples (noAnswer run, relation, negative; bad relation negative; stuck cont relation negative; machine stuck relation negative =9). Fine.
+
+  Does vacuity rule require negation for runFromQ_sound specifically? fabricated negative addresses relation, not theorem. Can't negate universally sound theorem. Planted bad state fails claimed exact history is negative relation, appropriate.
+
+  Implement.Build.warning: Git tree '/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c8' is dirty
+✖ [40/42] Building ConcreteSpec.Proofs.Adequacy (586ms)
+trace: .> LEAN_PATH=/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c8/.lake/build/lib/lean /nix/store/94bmilywgajdnqvix1fs35fj94kala0w-lean4-release-4.34.1/bin/lean /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c8/ConcreteSpec/Proofs/Adequacy.lean -o /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c8/.lake/build/lib/lean/ConcreteSpec/Proofs/Adequacy.olean -i /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c8/.lake/build/lib/lean/ConcreteSpec/Proofs/Adequacy.ilean -c /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c8/.lake/build/ir/ConcreteSpec/Proofs/Adequacy.c --setup /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c8/.lake/build/ir/ConcreteSpec/Proofs/Adequacy.setup.json --json
+error: ConcreteSpec/Proofs/Adequacy.lean:896:0: Definition `noAnswerConclusion` is a proposition; use `theorem` instead of `def`
+
+Note: This linter can be disabled with `set_option linter.defProp false`
+error: ConcreteSpec/Proofs/Adequacy.lean:906:2: Type mismatch
+  ReportedQueries.noAnswer ?m.19 ?m.22
+has type
+  @ReportedQueries ?m.6 ?m.7 ?m.8 (Ending.noAnswer ?m.9) { config := ?m.9, events := ?m.10, queries := ?m.11 } ⋯
+    (?m.11 ++ [Query.issue ?m.10 ?m.12 ?m.13 ?m.14 ?m.15 ?m.11])
+but is expected to have type
+  @ReportedQueries ops prog noAnswerOracle (Ending.noAnswer terminalConfig)
+    { config := terminalConfig, events := [], queries := [] } noAnswerConclusion [terminalQuery]
+error: ConcreteSpec/Proofs/Adequacy.lean:916:0: Definition `badAnswerConclusion` is a proposition; use `theorem` instead of `def`
+
+Note: This linter can be disabled with `set_option linter.defProp false`
+error: ConcreteSpec/Proofs/Adequacy.lean:922:2: Type mismatch
+  ReportedQueries.badAnswer ?m.20 ?m.23 ?m.26
+has type
+  @ReportedQueries ?m.6 ?m.7 ?m.8 (Ending.badAnswer ?m.9) { config := ?m.9, events := ?m.10, queries := ?m.11 } ⋯
+    (?m.11 ++ [Query.issue ?m.10 ?m.12 ?m.13 ?m.14 ?m.15 ?m.11])
+but is expected to have type
+  @ReportedQueries ops prog badAnswerOracle (Ending.badAnswer terminalConfig)
+    { config := terminalConfig, events := [], queries := [] } badAnswerConclusion [terminalQuery]
+error: ConcreteSpec/Proofs/Adequacy.lean:932:0: Definition `terminalStuckConclusion` is a proposition; use `theorem` instead of `def`
+
+Note: This linter can be disabled with `set_option linter.defProp false`
+error: ConcreteSpec/Proofs/Adequacy.lean:941:91: unsolved goals
+case stuck
+O : Operands
+P : Program O
+ρ : QueryOracle O
+c : Config O
+events✝ : List ops.Event
+hs✝ : step prog terminalStuckConfig = none
+⊢ False
+
+case stuckContinuation
+O : Operands
+P : Program O
+ρ : QueryOracle O
+c : Config O
+k✝ : Answer ops.Val ops.Event ops.Store → Option (Config ops)
+a✝ : Answer ops.Val ops.Event ops.Store
+hk✝ : k✝ a✝ = none
+hallow✝ : ops.allows Pr.log [1] DState.init a✝ = true
+hs✝ : step prog terminalStuckConfig = some (Out.request Pr.log [1] s DState.init k✝)
+ha✝ : answer noAnswerOracle (Query.issue [] Pr.log [1] s DState.init []) = some a✝
+⊢ False
+error: ConcreteSpec/Proofs/Adequacy.lean:964:0: Definition `refusingBindConclusion` is a proposition; use `theorem` instead of `def`
+
+Note: This linter can be disabled with `set_option linter.defProp false`
+error: ConcreteSpec/Proofs/Adequacy.lean:971:27: Type mismatch
+  ReportedQueries.stuckContinuation ?m.20 ?m.23 ?m.26 ?m.29
+has type
+  @ReportedQueries ?m.6 ?m.7 ?m.8 (Ending.stuck ?m.9) { config := ?m.9, events := ?m.10, queries := ?m.11 } ⋯
+    (?m.11 ++ [Query.issue ?m.10 ?m.12 ?m.13 ?m.14 ?m.15 ?m.11])
+but is expected to have type
+  @ReportedQueries refusingBindOps refusingBindProgram refusingBindOracle (Ending.stuck refusingBindConfig)
+    { config := refusingBindConfig, events := [], queries := [] } refusingBindConclusion [refusingBindQuery]
+error: ConcreteSpec/Proofs/Adequacy.lean:975:96: unsolved goals
+case stuck
+O : Operands
+P : Program O
+ρ : QueryOracle O
+c : Config O
+events✝ : List refusingBindOps.Event
+hs✝ : step refusingBindProgram refusingBindConfig = none
+⊢ False
+Some required targets logged failures:
+- ConcreteSpec.Proofs.Adequacy
+error: build failed
+Several:
+  - use theorem instead def for proposition proofs.
+  - Type mismatch due proof terms noAnswerConclusion not reducible? Once theorem (opaque) proof irrelevance should unification use proof irrelevance? It seems currently def reducible but constructor hs metavars not inferred from expected because dependent proof index matching doesn't help infer implicit hs? Should explicit arguments or `by simpa [terminalQuery] using (ReportedQueries.noAnswer (P:=prog) (ρ:=...) (c:=...) (events:=[]) (issued:=[]) (p:=.log) (vs:=[1]) (site:=s) (st:=.init) (k:=...) rfl rfl)` painful k implicit can infer from hs rfl? Expected type might drive after `simpa only [List.nil_append]` using constructor with named c events issued p vs site st, k inferred from step equation `rfl`. Use `by
+    simpa [terminalQuery] using
+      (ReportedQueries.noAnswer (P := prog) (ρ := noAnswerOracle)
+        (c := terminalConfig) (events := []) (issued := []) (p := .log) (vs := [1])
+        (site := s) (st := .init) rfl rfl)
+  `
+  k implicit inferred from `rfl` hs with step reduction. `noAnswerConclusion` proof irrelevance should simpa.
+  Could simpler `by
+    have hs : step prog terminalConfig = some (.request .log [1] s .init _) := rfl
+  `
+  Placeholder k not easy.
+  `exact ReportedQueries.noAnswer (P := prog) ... (k := fun a => ...) rfl rfl` copy continuation. Better expected should infer k from noAnswerConclusion if reducible? It didn't infer any due dependent elaboration constructor result not used to infer until implicits. Supply just `P ρ c events issued` enough p etc from hs rfl. Try:
+  ```
+    ReportedQueries.noAnswer (P := prog) (ρ := noAnswerOracle) (c := terminalConfig)
+      (events := []) (issued := []) rfl rfl
+  ```
+  p etc inferred by rfl against step. Query issue reduces to terminalQuery perhaps defeq yes. Why previous type mismatch had metavars p etc because P not inferred? P expected yes but output had ?m.7 meaning expected relation is opaque theorem? It should. Named solves.
+
+  For negative cases `cases h` doesn't use index `terminalStuckConclusion` to discriminate constructors because theorem opaque/proof irrelevant means dependent elimination cannot unify specific proof with constructors? Once proof is def perhaps `cases h` yields both cases and need contradiction from hs. I can solve all cases `cases h <;> simp [terminalStuckConfig, step] at *` or `cases h <;> contradiction` for hs differing. Error goals hs `step ... = none` but actual rfl can reduce. `simp [terminalStuckConfig, step] at hs✝`. I can't refer auto names. `cases h <;> simp [terminalStuckConfig, step] at *` might simplify all and close. For noAnswer negative `cases h` succeeded (no errors), because list mismatch enough.
+  For terminalStuck negative, case stuck list [] vs [terminalQuery] should noConfusion, but Lean dependent cases didn't reduce query append? It left goal False no hypotheses except hs and events. Perhaps list shape mismatch not simplified because dependent elimination not no confusion automatically? `simp at h` might directly discriminate inductive relation via cases? `intro h; cases h` leaves; `all_goals simp [terminalStuckConfig, step] at *`. For case stuck no contradictory hs (step none true), but list [] = [terminalQuery] impossible was consumed without generated equation? Why goal remains False means cases tactic uses generalization and impossible indices not automatically close? It usually closes impossible constructors, but here it included stuck meaning list unification `[terminalQuery]` with `issued` (not necessarily []) because relation constructor stuck output issued, and input pos queries [] tied? Since index pos has queries [] and hc terminalStuckConclusion, but cases h generated issued not necessarily [] due dependent proof not conveying position? Yet should. Could prove by `have := ...` no.
+
+  Alternative define negative by cases h and `simp_all [terminalStuckConfig, step, terminalQuery, Query.issue, occurrenceAt]`. It can use equalities generated hidden? Display no equalities besides hs, strange.
+
+  For stuckContinuation negative [] case stuck remains hs step config = none contradiction, easy simp. The stuckContinuation case output [] ++ [query] vs [] impossible automatically excluded. So `cases h; simp [refusingBindConfig, step] at hs✝` but unnamed. `cases h <;> simp_all [refusingBindConfig, step]` likely.
+
+  For machine negative both cases can contradictions:
+  - stuck case should list mismatch but perhaps no eq due output queries unification with input pos weird; `simp_all [terminalQuery, Query.issue, occurrenceAt]` perhaps.
+  - stuckContinuation hs contradiction step trapped.
+  Use `cases h <;> simp_all [terminalStuckConfig, terminalConfig, terminalQuery, Query.issue, occurrenceAt, step]`.
+  Could avoid named conclusion proof and formulate negative existential `¬ ∃ hc : Conclusion ..., ReportedQueries ... hc [terminalQuery]`, earlier proposed. Then cases hc first before hr to expose constructors. For noAnswer conclusion only noAnswer possible by ending so fine. For stuck conclusion can be machine or continuation; `rintro ⟨hc,hr⟩; cases hc <;> cases hr <;> simp_all [...]` robust. This better planted counterexample against any justification. Current negative fixed conclusion might have dependent elimination complexities. Use existential for all negative:
+  ```
+  example : ¬ ∃ hc : Conclusion prog noAnswerOracle (.stuck terminalStuckConfig)
+    ⟨...⟩, ReportedQueries ... hc [terminalQuery] := by
+   rintro ⟨hc,hr⟩
+   cases hc <;> cases hr <;> simp_all [terminalStuckConfig, step,...]
+  ```
+  But cases hc on Conclusion yields stuck/stuckContinuation, each hr corresponding constructor dependent should align. Good.
+  Similarly continuation omitted:
+  ```
+  ¬ ∃ hc : Conclusion ... (.stuck ...) pos, ReportedQueries ... hc []
+  ```
+  Cases.
+  This proves stronger and avoids fixed proof defs for negatives. Positive type mismatch named args.
+
+  Could drop conclusion definitions entirely and positive use existential, easier:
+  ```
+  example : ∃ hc : Conclusion ..., ReportedQueries ... hc [terminalQuery] :=
+   ⟨.noAnswer rfl rfl, .noAnswer rfl rfl⟩
+  ```
+  Same inference issue second expected known first exact proof and query. Could `refine ⟨.noAnswer rfl rfl, ?_⟩; exact .noAnswer rfl rfl` expected p etc from hc perhaps still not. Named args.
+
+  Do I need proof defs? no, can remove noAnswerConclusion etc and use existential for positive/negative. This is cleaner and avoids linter. Examples:
+  ```
+  example : ∃ hc : Conclusion prog noAnswerOracle (.noAnswer terminalConfig) ⟨...⟩,
+      ReportedQueries ... hc [terminalQuery] := by
+    refine ⟨.noAnswer rfl rfl, ?_⟩
+    simpa [terminalQuery] using
+      (ReportedQueries.noAnswer (P:=prog) ... rfl rfl)
+  ```
+  Negative existential noAnswer `rintro ⟨hc,hr⟩; cases hc; cases hr` worked earlier with fixed but okay.
+  No named proposition defs. Less declarations in axioms golden? Examples not named no golden. Definitions still fine.
+  Stuck positive existential.
+  RefusingBind positive existential.
+  This may be best. Should edit big section. Read lines 888-980 current.
+
+• The counter-examples need to quantify over all possible conclusion proofs; otherwise dependent case splitting can retain impossible `stuck` alternatives. I’ll use existential witnesses for both acceptance and rejection, and make constructor arguments explicit where Lean cannot infer them from proof indices.
+
+• Replace from noAnswerConclusion through before badAnswerOracle etc entire section easier from line 896 to 977 preserving defs. I'll formulate existential proofs with direct `⟨.noAnswer rfl rfl, ReportedQueries.noAnswer ...⟩` using `by refine ...`.
+  ```
+  example : ∃ hc : ..., Reported... := by
+    refine ⟨.noAnswer rfl rfl, ?_⟩
+    exact ReportedQueries.noAnswer (P:=prog) ... rfl rfl
+  ```
+  Could `simpa [terminalQuery]` needed expected [terminalQuery] vs []++[issue]. Definitional reduction terminalQuery delta not automatically? Definitional equality unfolds definitions, yes exact uses reducible. []++ reduces. Should work with explicit P etc.
+  For p vs etc inference from `rfl` hs. Add named `(p := Pr.log) (vs := [1]) (site := s) (st := DState.init)` to guarantee. `k` infer from rfl hs. The answer proof `rfl` uses q.
+  Bad same.
+  Stuck positive:
+  ```
+  ⟨.stuck rfl, ReportedQueries.stuck (P:=prog)(ρ:=...)(c:=...)(events:=[])(issued:=[]) rfl⟩
+  ```
+  Negative exist:
+  ```
+    rintro ⟨hc, hr⟩
+    cases hc <;> cases hr <;>
+      simp_all [terminalStuckConfig, terminalQuery, Query.issue, occurrenceAt, step]
+  ```
+  But after `cases hc`, `hr` dependent and cases? `cases hc` may substitute pos etc. `cases hr` then simplification. Use `simp_all` broad may simplify `noAnswerOracle`, `answer` to contradict ha in continuation. Add `[noAnswerOracle, answer]`.
+  For noAnswer negative:
+  ```
+  rintro ⟨hc,hr⟩
+  cases hc
+  cases hr
+  ```
+  likely no goals due fabricated vs exact, but if not add `simp_all [terminalQuery,fabricatedTerminalQuery,Query.issue,occurrenceAt]`. `cases hr` earlier no error with fixed noAnswer, so good.
+  Bad same.
+
+  Refusing positive explicit.
+  Negative exist cases `hc` two alternatives; `cases hr` each. `simp_all [refusingBindConfig, refusingBindProgram, refusingBindOracle, refusingBindQuery, step, answer]`. Should unfold ops allows/life for contradictions perhaps `refusingBindOps`, `bindLife` etc. For machine-stuck alternative hs step request = none contradiction by simp [refusingBindConfig, step] at hs. For continuation alternative list [] vs []++query impossible. `simp_all [refusingBindConfig, step]` enough.
+
+  Machine negative:
+  - hc machine, hr stuck with output [] vs [terminalQuery] impossible but perhaps not. simp_all query defs.
+  - hc continuation impossible hs step trapped = request, simp [terminalStuckConfig, step].
+  Fine.
+
+  I'll replace.
+
+• The positive witnesses will now carry their conclusion and query proof together. The negative examples will reject a fabricated or missing query under any justification for the same ending, which is stronger than rejecting one particular proof term.
+
+warning: Git tree '/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c8' is dirty
+✖ [40/42] Building ConcreteSpec.Proofs.Adequacy (554ms)
+trace: .> LEAN_PATH=/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c8/.lake/build/lib/lean /nix/store/94bmilywgajdnqvix1fs35fj94kala0w-lean4-release-4.34.1/bin/lean /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c8/ConcreteSpec/Proofs/Adequacy.lean -o /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c8/.lake/build/lib/lean/ConcreteSpec/Proofs/Adequacy.olean -i /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c8/.lake/build/lib/lean/ConcreteSpec/Proofs/Adequacy.ilean -c /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c8/.lake/build/ir/ConcreteSpec/Proofs/Adequacy.c --setup /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c8/.lake/build/ir/ConcreteSpec/Proofs/Adequacy.setup.json --json
+error: ConcreteSpec/Proofs/Adequacy.lean:945:93: unsolved goals
+case stuck.stuck
+O : Operands
+P : Program O
+ρ : QueryOracle O
+c : Config O
+events✝ : List ops.Event
+⊢ False
+error: ConcreteSpec/Proofs/Adequacy.lean:948:35: This simp argument is unused:
+  terminalQuery
+
+Hint: Omit it from the simp argument list.
+  [apply] simp_all [terminalStuckConfig, Query.issue, occurrenceAt, step]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+error: ConcreteSpec/Proofs/Adequacy.lean:948:50: This simp argument is unused:
+  Query.issue
+
+Hint: Omit it from the simp argument list.
+  [apply] simp_all [terminalStuckConfig, terminalQuery, occurrenceAt, step]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+error: ConcreteSpec/Proofs/Adequacy.lean:948:63: This simp argument is unused:
+  occurrenceAt
+
+Hint: Omit it from the simp argument list.
+  [apply] simp_all [terminalStuckConfig, terminalQuery, Query.issue, step]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+error: ConcreteSpec/Proofs/Adequacy.lean:981:98: unsolved goals
+case stuck.stuck
+O : Operands
+P : Program O
+ρ : QueryOracle O
+c : Config O
+events✝ : List refusingBindOps.Event
+a✝ :
+  (onRes (evalArgs refusingBindOps [] DState.init [E.lit 1]) s [] DState.init [] fun vs st' =>
+      some
+        (Out.request Pr.log vs s st' fun a =>
+          match a.result with
+          | Except.ok v =>
+            Option.map (fun st' => { ctrl := Ctrl.done, locals := bindDst (some x) v [], store := st', frames := [] })
+              (bindLife refusingBindOps (some x) a.store)
+          | Except.error kd => some { ctrl := Ctrl.trapped kd s, locals := [], store := a.store, frames := [] })) =
+    none
+⊢ False
+Some required targets logged failures:
+- ConcreteSpec.Proofs.Adequacy
+error: build failed
+• Interesting case `stuck.stuck` both Conclusion.stuck and ReportedQueries.stuck accepted wrong list due dependent relation fundamental issue! Wait why can `ReportedQueries.stuck` with output [terminalQuery] if its output issued and pos queries []? Because dependent elimination not tracking hc? It has events arbitrary and output issued, but input pos is fixed ⟨terminalStuckConfig, [], []⟩. Constructor Conclusion.stuck result pos with `issued` arbitrary, should unify with [] but case split doesn't generate equality? The context shows no equality, goal False. It may be impossible by index but cases tactic failing to discharge because `Position` queries in Conclusion index is not a constructor index? It should generate. Could prove negative via inversion list equality using `injection`? Cases h generalizes issued and doesn't expose equation, perhaps `cases hr` not `injection`. `simp_all` no equations. Could use `nomatch`? It didn't noConfusion due dependent proof index.
+
+  Perhaps dependent inductive `ReportedQueries` is not as strong in elimination as expected? The relation itself accepts only correct lists by construction; negative proposition should be provable. Should tactic `injection`? Use `cases hr` and remaining impossible due pos index; `contradiction` doesn't know. Could `simp_all only [Position.mk.injEq]` no eq.
+
+  I can prove negative using a general invariant theorem on ReportedQueries by recursion? E.g. theorem reportedQueries_correct:
+  ```
+  theorem ReportedQueries.queries_eq ... (hr) : ... 
+  ```
+  No.
+
+  For examples can `intro h; have ... := ReportedQueries.noConfusion h`? `cases h` tactic bug? Actually `cases` uses `casesOn` which for indexed families may not fully use `noConfusion`? `injection` with relation? `exact (List.noConfusion ...)`.
+
+  Should inspect goals with `set_option pp.all` not. I can use `simp_all` not seeing hidden index equalities. `case stuck.stuck` only `events` and O P etc, no proof h. It means all hypotheses consumed, but goal False without path. Why case not closed? Perhaps Lean's dependent elimination yields impossible but not automatically due indices not defeq and has to prove `False` via recursor's motive, no equality hypotheses. There is tactic ` contradiction` can't. `nomatch hr` similar.
+
+  `injection` no.
+
+  Could use `simp only [ReportedQueries] at h`? Inductive relations not simp.
+
+  A general lemma characterizing ReportedQueries via cases could recover equalities with `inversion` unavailable mathlib. `cases hr` loses constraints because Lean's `cases` on dependent indexed families can produce unification constraints but does not introduce equations for non-defeq indices, instead generalizes them and leaves impossible goal? Usually `cases` closes impossible constructors. Here it doesn't because `Conclusion` proof is in Prop and proof irrelevance allows any hc to defeq any constructor but pos index perhaps proof's indices not considered during dependent elimination? Yet relation has implicit `{pos}` index only appears in type of hc, not as separate index? Actually `ReportedQueries` indices are `{ending} {pos} (hc : Conclusion ... ending pos) (queries)`. Since `pos` does not appear directly in constructor result except within type of hc, Lean's constructor result unification can treat pos arbitrary? But h target pos fixed, should.
+
+  Wait context case `stuck.stuck` no c fixed? It has `c : Config O` unrelated! It seems `cases hc` generalizes original c to arbitrary and doesn't substitute because hc is a proof and proof irrelevance? `cases` on proof with indexed family may not rewrite target if target depends on hc? Lean proof irrelevance makes hc defeq all proofs, so eliminating hc doesn't refine indices? This is a known issue: `cases` on proofs of inductive Prop with indices often does not unify endpoints if indices in other hypotheses? But `cases hc` normally works (runFrom_final_sound cases hc). It left arbitrary c because after `rintro ⟨hc,hr⟩`, target False no dependency on original config other than hr, cases hc perhaps generalizes config not target. `cases hr` sees arbitrary c etc and original target config lost? hr type still perhaps generalized.
+
+  Alternative avoid `cases hc`, since ReportedQueries indexed by hc but negative any hc. `rintro ⟨hc,hr⟩; cases hr` directly (without cases hc) will split relation constructors and constrain hc via proof irrelevance? Then Conclusion constructor not exposed, but for machine negative case stuck should list contradiction, continuation hs contradiction. Perhaps `cases hr` directly works better. For noAnswer I did cases hc then hr, okay. For stuck use only `cases hr` (initial fixed version did that with fixed hc and left two goals but with concrete config, so `simp_all` closed continuation but stuck goal no equations). Still stuck wrong list.
+
+  Could prove negative using query list length invariant derived from hr independent of pos? `cases hr` and stuck case output queries = issued, input position queries = [] constraint hidden. Perhaps `change` at hr before cases to explicit? `change ReportedQueries ... hc [terminalQuery] at hr` already.
+
+  Could use recursor with `simp` not.
+
+  Perhaps issue is `Position` fields are proof irrelevant? No.
+
+  I can write examples with explicit `hc` constructor and `hr` direct but prove stuck case via `List.cons_ne_nil` after `injection`? No equality.
+
+  Could use `have hlen := congrArg List.length (ReportedQueries...? )` no equality.
+
+  I can define theorem `ReportedQueries.stuck_queries` by matching h and rfl:
+  ```
+  theorem reportedQueries_stuck ... (h : ReportedQueries P ρ (Conclusion.stuck hs) qs) : qs = issued := by
+    cases h
+    rfl
+  ```
+  Would this build? likely same unsolved? But direct fixed Conclusion proof with constructor should allow only ReportedQueries.stuck? It may allow stuckContinuation because proof irrelevance, and output q. In fact since all proofs of Conclusion .stuck pos are definitionally equal (proof irrelevance), the index cannot distinguish constructors computationally! This is critical: dependent indexing by proof does *not* prevent `ReportedQueries.stuckContinuation hs ha...` from having expected `Conclusion.stuck hs'` by proof irrelevance, but premises of stuckContinuation ensure actual continuation. That's okay. For fixed machine hs, continuation premises impossible. For output mismatch, relation constructors still restrict.
+
+  `ReportedQueries.stuck` output `issued`, but pos `⟨c,events,issued⟩` only appears in `Conclusion.stuck hs` type. Since Conclusion.stuck hs itself has fixed issued from hs? hs doesn't contain issued. The constructor implicit `issued` in ReportedQueries is determined both output and pos. But because `Conclusion.stuck hs` can be at any issued, unification should enforce. Yet proof irrelevance may allow index pos to be rewritten? It shouldn't.
+
+  Could be actual logical flaw: Lean erases proof indices for unification (proof irrelevance) and doesn't enforce their type indices when matching? If so dependent index does not tie pos queries to output! I need stronger design not rely on Conclusion index for positions. Better explicitly add ending and pos as indices separately in addition to hc:
+  ```
+  inductive ReportedQueries ... :
+    (ending : Ending O) → (pos : Position O) →
+    Conclusion P ρ ending pos → List Query → Prop
+  ```
+  Currently `{ending} {pos}` are implicit indices but still. Constructor result `ReportedQueries P ρ (Conclusion.stuck hs) issued` leaving ending/pos inferred from hc. To make unification direct, specify all:
+  ```
+  ReportedQueries P ρ (.stuck c) ⟨c,events,issued⟩ (Conclusion.stuck hs) issued
+  ```
+  Likewise each. This should constrain. Also sound calls need add ending pos arguments? They are explicit if declared `(ending)` `(pos)` but can keep implicit `{ending} {pos}` and specify in result named not needed, expression `ReportedQueries P ρ (.stuck c) ⟨...⟩ hc issued`. Current arguments after P ρ only hc and queries because implicit ending pos. If change constructor result to `ReportedQueries P ρ (ending := .stuck c) (pos := ⟨...⟩) ...` direct named. This might improve. Right now inference determines pos from Conclusion proof but potentially proof irrelevance issue. Explicit indices constructor result best.
+
+  Similarly final etc. Spec:
+  ```
+  ReportedQueries P ρ (.final f) pos (Conclusion.final hf) pos.queries
+  ```
+  But ending/pos implicit, cannot pass positional unless `(ending := ...)`. Use named.
+  ```
+  ReportedQueries P ρ (ending := .stuck c) (pos := ⟨...⟩) ...
+  ```
+  This should eliminate example false goals. Also `Conclusion` proof still indexed but direct query relation pos. Good design clearer.
+
+  Should modify Spec committed core relation; this is refinement after counterexamples found actual inability to prove negative perhaps important. I must build then amend? No history rewrite forbidden. Make new commit examples plus relation adjustment okay. Core commit was valid but negative reveals? Not logical acceptance necessarily, but explicit better.
+
+  Alternatively simplify relation not dependent proof index but explicit Pρ ending pos and constructors with Conclusion as premise:
+  ```
+  inductive ReportedQueries Pρ : Ending -> Position -> List -> Prop
+  | stuck hs : ReportedQueries ... (.stuck c) pos issued
+  ```
+  Then `Conclusion` connection via sound separate but not index. My current stronger explicit indices will work.
+
+  Should update all constructor result lines and examples perhaps exact calls unaffected because implicit named inferred expected. Theorem proof unaffected. Do Spec Edit and build to see. Read Spec lines current first.
+
+• The negative `stuck` examples exposed an elaboration subtlety: constructor results inferred the position only through a proof index. I’ll make each constructor’s ending and position explicit indices, so query-list constraints are enforced directly by the relation rather than through proof unification.
+
+• Edit whole block result.warning: Git tree '/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c8' is dirty
+✔ [27/42] Built ConcreteSpec.Spec.Adequacy (270ms)
+✔ [28/42] Built ConcreteSpec.Spec (138ms)
+✔ [29/42] Built ConcreteSpec.Proofs.Basics (210ms)
+✔ [30/42] Built ConcreteSpec.Proofs.Authority (329ms)
+✖ [31/42] Building ConcreteSpec.Proofs.Adequacy (650ms)
+trace: .> LEAN_PATH=/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c8/.lake/build/lib/lean /nix/store/94bmilywgajdnqvix1fs35fj94kala0w-lean4-release-4.34.1/bin/lean /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c8/ConcreteSpec/Proofs/Adequacy.lean -o /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c8/.lake/build/lib/lean/ConcreteSpec/Proofs/Adequacy.olean -i /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c8/.lake/build/lib/lean/ConcreteSpec/Proofs/Adequacy.ilean -c /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c8/.lake/build/ir/ConcreteSpec/Proofs/Adequacy.c --setup /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c8/.lake/build/ir/ConcreteSpec/Proofs/Adequacy.setup.json --json
+error: ConcreteSpec/Proofs/Adequacy.lean:948:35: This simp argument is unused:
+  terminalQuery
+
+Hint: Omit it from the simp argument list.
+  [apply] simp_all [terminalStuckConfig, Query.issue, occurrenceAt, step]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+error: ConcreteSpec/Proofs/Adequacy.lean:948:50: This simp argument is unused:
+  Query.issue
+
+Hint: Omit it from the simp argument list.
+  [apply] simp_all [terminalStuckConfig, terminalQuery, occurrenceAt, step]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+error: ConcreteSpec/Proofs/Adequacy.lean:948:63: This simp argument is unused:
+  occurrenceAt
+
+Hint: Omit it from the simp argument list.
+  [apply] simp_all [terminalStuckConfig, terminalQuery, Query.issue, step]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+error: ConcreteSpec/Proofs/Adequacy.lean:981:98: unsolved goals
+case stuck.stuck
+O : Operands
+P : Program O
+ρ : QueryOracle O
+c : Config O
+a✝ :
+  (onRes (evalArgs refusingBindOps [] DState.init [E.lit 1]) s [] DState.init [] fun vs st' =>
+      some
+        (Out.request Pr.log vs s st' fun a =>
+          match a.result with
+          | Except.ok v =>
+            Option.map (fun st' => { ctrl := Ctrl.done, locals := bindDst (some x) v [], store := st', frames := [] })
+              (bindLife refusingBindOps (some x) a.store)
+          | Except.error kd => some { ctrl := Ctrl.trapped kd s, locals := [], store := a.store, frames := [] })) =
+    none
+⊢ False
+✔ [32/42] Built ConcreteSpec.Proofs.Cleanup (409ms)
+✔ [33/42] Built ConcreteSpec.Proofs.Slice1 (533ms)
+✔ [34/42] Built ConcreteSpec.Proofs.Brand (624ms)
+✔ [35/42] Built ConcreteSpec.Proofs.Borrow (689ms)
+✔ [36/42] Built ConcreteSpec.Proofs.Observe (202ms)
+✔ [37/42] Built ConcreteSpec.Proofs.Checker (280ms)
+✔ [38/42] Built ConcreteSpec.Proofs.Rep (369ms)
+✔ [39/42] Built ConcreteSpec.Proofs.Slice0 (214ms)
+✔ [40/42] Built ConcreteSpec.Proofs.Examples (183ms)
+Some required targets logged failures:
+- ConcreteSpec.Proofs.Adequacy
+error: build failed
+Great machine negative now only unused simp warnings (warnings as errors) meaning solved. Remove extra simp args leave `[terminalStuckConfig, step]`. Refusing negative one goal machine hs equation `onRes... = none` not simplified because `simp [refusingBindConfig, step]` doesn't unfold evalArgs/onRes. Should prove via `rfl` contradiction easier `cases hc` generated machine hs `a✝ : step refusingBindProgram refusingBindConfig = none`, but actual step is some request. `simp [refusingBindConfig, step, evalArgs, evalE, onRes] at *` need names. evalArgs definition. Read Spec around 200-260.Could simplify negative refusing proof separately by direct no machine conclusion lemma:
+  ```
+  have hs : step refusingBindProgram refusingBindConfig ≠ none := by
+    simp [refusingBindConfig, step, evalArgs, refusingBindOps, ops, evalE, onRes]
+  ```
+  Actually `rfl` step some, so `have hs : step ... = some (...) := rfl` but continuation k huge. Can use `have hs : (step ...).isSome = true := rfl`, then cases hc:
+  ```
+  cases hc with
+  | stuck hnone =>
+    have : (step ...).isSome = true := rfl
+    rw [hnone] at this
+    cases this
+  | stuckContinuation hs ha hallow hk =>
+    cases hr -- list mismatch
+  ```
+  But `cases hr` after each etc. Simpler add simp defs `[evalArgs, onRes, refusingBindOps, ops, evalE]`. The expression shows `onRes (evalArgs ... [E.lit 1])`. `simp [evalArgs, refusingBindOps, ops, evalE, onRes]` should reduce. `ops` is abbrev, simp can unfold. Perhaps `Res.bind`, `Res.map` definitions to reduce evalArgs? Simp [evalArgs] uses Ops.eval, reduces `evalE` if included, then `.bind` notation is Res.bind, need `Res.bind` definition perhaps simp projection reductions automatically iota after evalE. `simp [evalArgs, refusingBindOps, ops, evalE, onRes]` likely.
+
+  Unused warnings remove terminal args. Do one Edit with both lines (same file one call old block not contiguous? Can replace a larger block from machine negative to end, but only two lines changes. Tool one Edit only exact contiguous impossible if far. Could use replace_all? old `simp_all...` separate no. Could first Edit one, then Read and Edit second. Do.Read line 978 again.warning: Git tree '/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c8' is dirty
+✖ [40/42] Building ConcreteSpec.Proofs.Adequacy (643ms)
+trace: .> LEAN_PATH=/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c8/.lake/build/lib/lean /nix/store/94bmilywgajdnqvix1fs35fj94kala0w-lean4-release-4.34.1/bin/lean /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c8/ConcreteSpec/Proofs/Adequacy.lean -o /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c8/.lake/build/lib/lean/ConcreteSpec/Proofs/Adequacy.olean -i /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c8/.lake/build/lib/lean/ConcreteSpec/Proofs/Adequacy.ilean -c /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c8/.lake/build/ir/ConcreteSpec/Proofs/Adequacy.c --setup /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c8/.lake/build/ir/ConcreteSpec/Proofs/Adequacy.setup.json --json
+error: ConcreteSpec/Proofs/Adequacy.lean:980:98: unsolved goals
+case stuck.stuck
+O : Operands
+P : Program O
+ρ : QueryOracle O
+c : Config O
+a✝ :
+  (match
+      (Res.ok (1, DState.init)).bind fun x => Res.map (fun x_1 => (x.fst :: x_1.fst, x_1.snd)) (Res.ok ([], x.snd)) with
+    | Res.ok (v, st') =>
+      some
+        (Out.request Pr.log v s st' fun a =>
+          match a.result with
+          | Except.ok v =>
+            Option.map (fun st' => { ctrl := Ctrl.done, locals := bindDst (some x) v [], store := st', frames := [] })
+              (bindLife
+                { Val := Int, Expr := E, Ty := T, Store := DState, Prim := Pr, Event := Int, unitVal := 0,
+                  unitTy := T.unit, isCopy := fun t => t == T.int, eval := evalE,
+                  life := fun e st =>
+                    match e with
+                    | Life.bind x => none
+                    | x => some (DState.life e st),
+                  test := fun v => some (decide ¬v = 0),
+                  allows := fun p vs st a =>
+                    match p, vs, a.event, a.result with
+                    | Pr.log, [v], some ev, Except.ok 0 => decide (ev = v) && decide (a.store = st)
+                    | Pr.bump, [], none, Except.ok 0 =>
+                      decide (a.store = { counter := st.counter + 1, moved := st.moved })
+                    | x, x_1, x_2, x_3 => false }
+                (some x) a.store)
+          | Except.error kd => some { ctrl := Ctrl.trapped kd s, locals := [], store := a.store, frames := [] })
+    | Res.trap kd => some (Out.next { ctrl := Ctrl.trapped kd s, locals := [], store := DState.init, frames := [] })
+    | Res.stuck => none) =
+    none
+⊢ False
+Some required targets logged failures:
+- ConcreteSpec.Proofs.Adequacy
+error: build failed
+Should have Res.bind/map definitions names perhaps methods in Res namespace. Search.Add Res.bind Res.map to simp. Could also `simp_all [Res.bind, Res.map]`. Remove possibly unused ops etc after build linter warnings. Use edit after Read current lines already read? I just read via previous before edit, then edit; now read again not necessary if use exact known but instruction read again. Use Read small.warning: Git tree '/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c8' is dirty
+✔ [40/42] Built ConcreteSpec.Proofs.Adequacy (661ms)
+✔ [41/42] Built ConcreteSpec (145ms)
+Build completed successfully (42 jobs).
+Now build passes. I'll commit each piece as soon. Before commit perhaps light gates can after commit. I should commit examples+explicit index refinement now. `git diff --check`, status, commit. Then run rules/trust. But requirement no axioms golden edit; check status only two. Commit message.
+
+• All positive and planted negative examples now elaborate, including both `stuck` cases. I’ll commit this witness slice, then run the permitted spec-rule and trust-ban gates on the final commits.
+
+ ConcreteSpec/Proofs/Adequacy.lean | 105 ++++++++++++++++++++++++++++++++++++++
+ ConcreteSpec/Spec/Adequacy.lean   |  21 +++++---
+ 2 files changed, 118 insertions(+), 8 deletions(-)
+ M ConcreteSpec/Proofs/Adequacy.lean
+ M ConcreteSpec/Spec/Adequacy.lean
+[wip/spec-c8 b2d5529bb] C8: reject fabricated terminal query histories
+ 2 files changed, 118 insertions(+), 8 deletions(-)
+• Now run light gates in parallel? `scripts/spec/rules.sh` and `trust_ban.sh` can run parallel both read build perhaps trust ban builds? At most light. Use parallel Bash each nix develop. Also need final build after commit? Already build exact working tree same commit. Good. Run both.=== the specification ===
+  ok   1 registered rules in 39 sources, each documented with an existing decision row and an accepted and a refused example; every citation names a registered rule
+  ok   the registry and every rule citation of ConcreteSpec
+=== negative controls ===
+  ok   control: a documented rule with both examples passes
+  ok   control: a rule with no refused example fails
+  ok   control: a rule whose doc cites no decision row fails
+  ok   control: a rule registered twice fails
+  ok   control: a rule naming no declaration fails
+  ok   control: a citation of an unregistered rule fails
+  ok   control: a verdict on a non-example fails
+  ok   control: revision 0 fails
+  ok   control: a truncated listing is an error
+  ok   control: a rule with no accepted example fails
+  ok   control: a rule with no doc comment fails
+  ok   control: a rule citing a row no inventory has fails
+  ok   control: one example claiming both verdicts fails
+  ok   control: a verdict in a nested comment fails
+  ok   control: an unregistered quoted name fails
+  ok   control: examples with an attribute or a modifier count
+  ok   control: an unlexable source is an error
+  ok   control: a verdict in a string literal fails
+  ok   control: an attribute with brackets inside counts
+  ok   control: a row an inventory only mentions does not count
+  ok   control: an attribute string cannot stand in for an example
+  ok   control: an attribute holding a string with a bracket counts
+  ok   control: a quoted name holding a backtick is checked
+  ok   control: a malformed citation fails
+  ok   control: a raw string in an attribute cannot stand in for an example
+  ok   control: a quoted name in an attribute cannot stand in for an example
+  ok   control: a comment in an attribute cannot stand in for an example
+  ok   control: a quoted name holding citation-like text is one citation
+  ok   control: a missing source directory is an error
+  ok   control: a source directory with no .lean file is an error
+  ok   control: a checker that hangs through both attempts is INCOMPLETE
+SPEC-RULES: PASS=32 FAIL=0
+=== E/D: the environment ===
+  ok   all 40 ConcreteSpec source modules are in the environment E and D read
+  ok   none of the 7255 ConcreteSpec constants depends on sorryAx, ofReduceBool/Nat, trustCompiler or a native axiom
+  ok   ConcreteSpec declares no axiom
+=== S: the sources ===
+  ok   none of the 40 source files spells a banned word outside comments
+  ok   lakefile.toml builds the library with warningAsError, and nothing overrides it
+=== X: the examples, in the kernel's terms ===
+  ok   all 258 examples, kept as declarations, depend only on the standard axioms
+=== negative controls ===
+  ok   control: a theorem proved by sorry is refused (ConcreteSpecControl.sorryThm (sorryAx))
+  ok   control: a definition with a sorry body and no theorem about it is refused (ConcreteSpecControl.sorryDef (sorryAx))
+  ok   control: a theorem proved by native_decide is refused (ConcreteSpecControl.nativeThm (ConcreteSpecControl.nativeThm._native.native_decide.ax_1_1))
+  ok   control: a declared axiom is reported
+  ok   control: an axiom whose name holds a tab fails the run (no row can carry it)
+  ok   control: native_decide, and sorry inside an interpolation, after a string, raw string or quoted name holding comment delimiters, after an interpolation holding a string, a direct sorryAx, a syntax extension, an outside import, an option, meta code and decide options (native split across lines, positional) are found; the words in comments are not
+  ok   control: the header import ConcreteSpec.Spec Lean is reported
+  ok   control: the header import ConcreteSpec.Spec   Lean is reported
+  ok   control: the header prelude import ConcreteSpec.Spec is reported
+  ok   control: a library that turns warningAsError off is refused (the library sets options ['warningAsError'])
+  ok   control: a library built from another source directory is refused (the library sets ['srcDir'])
+  ok   control: a source the scan cannot read or lex (missing) fails it (rc=3)
+  ok   control: a source the scan cannot read or lex (Open) fails it (rc=3)
+  ok   control: a source the scan cannot read or lex (Brace) fails it (rc=3)
+  ok   control: a source the scan cannot read or lex (Quote) fails it (rc=3)
+  ok   control: source modules outside a (truncated) import closure are reported
+  ok   control: an example proved by decide +native and one closed by stop are reported, rfl is not, and the word example in a string is no example («⟪example⟫C.lean:1» («⟪example⟫C.lean:1»._native.decide.ax_1) «⟪example⟫C.lean:2» (sorryAx) )
+PROOF-TRUST-BAN: PASS=23 FAIL=0
+Should have final check status and log SHAs, perhaps diff base summary. Ensure no files created by gates. `git status --short --branch`, `git log -3`. Could also inspect final relevant code to report line refs. I have line numbers current. Perhaps final build after gates? Trust ban may generate files ignored no matter. status. Also check axioms.golden unchanged via git diff 4be..HEAD --name-only. No need run heavy. Respond with list commits SHA + one line, what each theorem states, what left out why, QUESTIONS. User round3 narrower but BRIEF says final message applies all. I need list commits this round only likely e638 and b2d. Explain `runFromQ_sound`: ∃ finite Moves path, matching events, conclusion-indexed ReportedQueries exact histories. `ReportedQueries` is inductive definition not theorem; list constructors. Witness per law: soundness positive concrete run `runFromQ prog noAnswerOracle 1...` and exact noAnswer; negative fabricated occurrence; badAnswer; stuck etc. "per law which examples witness (a)(b)" I need explicit. Only law changed runFromQ_sound. Could say:
+  - `runFromQ_sound`: positive `Non-vacuous soundness instance` plus `The exact terminal query...`; planted `no justification accepts fabricated occurrence`. For badAnswer/stuck etc supporting constructor examples.
+  No new other theorem laws. Explicit indices relation changed not law.
+  Left out: no `Exec.lean`, no axioms golden, no heavy gates per brief. Nothing requested left out. Could say "Nothing from ROUND3 left out. Heavy CI-only gates not run, as instructed; axioms.golden untouched." Questions: None.
+  Tests list.
+  Should have status clean.
+
+• Both permitted light gates pass: all 32 spec-rule checks and all 23 trust-ban checks. I’ll do the final cleanliness and commit check; the reviewer-owned axiom golden was not modified.## wip/spec-c8
+b2d5529bb C8: reject fabricated terminal query histories
+e6383efad C8: authenticate terminal oracle queries
+4be39cfef axioms.golden: C8 round 2 (regenerated on concrete-ci-2)
+ConcreteSpec/Proofs/Adequacy.lean
+ConcreteSpec/Spec/Adequacy.lean
+
+
+• Mark todo done.Now respond concise but includes everything. Should have full SHAs? User says list commits SHA + one line; short accepted likely but can full get from rev-parse? I have abbrev 9. Usually okay. Could full SHA tool not necessary but final short standard. Better full? I know e6383efad and b2d5529bb only abbreviated. "SHA" short qualifies. Could call rev-parse not needed. Response no more tools.
+
+  Describe base: origin/wip/spec-core at 5bc0748 ancestor, no merge. Could mention optional.
+
+  Theorem:
+  - `runFromQ_sound` in Proof line 242 now every instrumented report finite Moves path and matching events, existential hc and ReportedQueries indexed by same hc.
+  - `ReportedQueries` definition constructors final/stuck/out no append, request stopping exact `Query.issue` from request `step P c`, answers etc. `.stuck` separated via Conclusion.
+  Non-vacuity:
+    * positive noAnswer run and relation; badAnswer; machine stuck; continuation refusal.
+    * planted negatives fabricated occurrence for no/bad, extra query machine stuck, omitted query cont.
+  Perhaps line refs current Spec 147, Proof 242, examples 881 onwards. Current line numbers after additions unchanged theorem line 242, examples 883. Cite.
+
+  Validation:
+  `nix develop -c timeout 1200 lake build ConcreteSpec` passed
+  rules pass 32
+  trust pass 23
+  Worktree clean, no push, golden unchanged.
+  Left out why heavy gates as instructed; no changes Exec. No questions.
+
+  Ensure no claim all seven gates this round. Good.
+
+• Implemented ROUND3 on `wip/spec-c8`; no merge was needed because `origin/wip/spec-core` was already an ancestor.
+
+  **Commits**
+  - `e6383efad` — C8: authenticate terminal oracle queries
+  - `b2d5529bb` — C8: reject fabricated terminal query histories
+
+  **Changes**
+  - `ReportedQueries` (`ConcreteSpec/Spec/Adequacy.lean:147`) is now indexed by the exact `Conclusion`, ending, and position. Terminal constructors require the actual request from `step P c` and append exactly its `Query.issue`; arbitrary queries are no longer accepted.
+  - Machine `stuck` and continuation-refused `stuck` have distinct, authenticated histories.
+  - `runFromQ_sound` (`ConcreteSpec/Proofs/Adequacy.lean:242`) now produces a finite `Moves` path, matching events, and a conclusion together with its exact conclusion-indexed query history.
+
+  **Non-vacuity witnesses**
+  - Positive: concrete `noAnswer` soundness run; exact-query examples for `noAnswer`, `badAnswer`, and continuation refusal; empty-history example for machine `stuck`.
+  - Planted negatives: fabricated occurrence numbers rejected for `noAnswer` and `badAnswer`; machine `stuck` cannot acquire a query; continuation refusal cannot omit its query.
+
+  **Validation**
+  - `lake build ConcreteSpec`: passed.
+  - `scripts/spec/rules.sh`: 32/32 passed.
+  - `scripts/proofs/trust_ban.sh`: 23/23 passed.
+  - Worktree clean; `axioms.golden` untouched; nothing pushed.
+
+  Nothing from ROUND3 was left out. Heavy CI-only gates were not run, as instructed.
+
+  QUESTIONS: None.
+
+To resume this session: kimi -r session_e75e8c69-9a0a-4578-8d06-4d04b6ea2fd1
+kimi rc=0

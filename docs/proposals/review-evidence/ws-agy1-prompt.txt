@@ -1,0 +1,437 @@
+You are reviewing commit e474d8f0 on branch wip/slice0-lexer-ws of the Concrete repo (on top of 7e8c926c, the unlanded lexer branch). It implements only the owner-decided item 30: "Source text: UTF-8 source. Whitespace is space, tab, LF and CR. A `//` comment ends at LF, CR or end of file. There are no block comments, BOM, shebang or NUL." It adds a declarative `Whitespace` and maximal-trivia judgment `Trivia` in ConcreteSpec/Spec/Surface0.lean and a total scanner `skipTrivia` in Concrete/Lex.lean with soundness, completeness and uniqueness proofs plus kernel-checked examples. Check: does `Trivia` faithfully encode item 30 and only it (nothing beyond the decided rule, no tokens or spellings chosen)? Is the judgment really independent of the scanner, and maximal? Are the proofs sound (no sorry/native_decide/new axioms), and are the controls meaningful? Report findings with file:line, then end with exactly one line `VERDICT: ACCEPT` or `VERDICT: REJECT`.
+
+=== diff 7e8c926c..e474d8f0 ===
+diff --git a/Concrete/Lex.lean b/Concrete/Lex.lean
+index 0e03d5c45..deaa622dd 100644
+--- a/Concrete/Lex.lean
++++ b/Concrete/Lex.lean
+@@ -3,8 +3,9 @@ import ConcreteSpec.Spec.Surface0
+ /-!
+ # Settled lexer components
+ 
+-Total byte-list UTF-8 decoding and source checking, ASCII identifier tests and line comments.
+-No tokens, literal rules, whitespace rules, shebang handling or block comments are introduced.
++Total byte-list UTF-8 decoding and source checking, ASCII identifier tests, the four settled
++whitespace scalars, line comments and maximal trivia scanning. No tokens, literal rules, shebang
++handling or block comments are introduced; no other Unicode whitespace is included.
+ Error constructors are internal data, not diagnostic wording. Offsets are zero-based byte offsets;
+ truncation points at EOF. TODO: prove the first non-extendible-prefix property of error offsets.
+ The success correspondence theorems below do not claim error-position correctness.
+@@ -344,6 +345,13 @@ theorem identStart?_iff (c : Nat) : identStart? c = true ↔ IdentStart c := by
+ theorem identContinue?_iff (c : Nat) : identContinue? c = true ↔ IdentContinue c := by
+   simp [identContinue?]
+ 
++/-- Test exactly the four settled whitespace scalars. -/
++def whitespace? (c : Nat) : Bool := decide (Whitespace c)
++
++/-- The whitespace test agrees with the declarative predicate. -/
++theorem whitespace?_iff (c : Nat) : whitespace? c = true ↔ Whitespace c := by
++  simp [whitespace?]
++
+ /-- Scan a comment body, retaining its first LF or CR in the remainder. -/
+ def scanLine : List Nat → List Nat × List Nat
+   | [] => ([], [])
+@@ -395,6 +403,149 @@ theorem lineComment_complete {cs : List Nat} {out : List Nat × List Nat}
+   cases h with
+   | intro hb => simp [lineComment, scanLine_complete hb]
+ 
++/-- A comment body's remainder is no longer than its input. -/
++theorem commentBody_rest_length_le {input body rest : List Nat}
++    (h : CommentBody input body rest) : rest.length ≤ input.length := by
++  induction h with
++  | eof => simp
++  | lf rest => simp
++  | cr rest => simp
++  | cons _ _ _ ih => simp only [List.length_cons]; omega
++
++/-- Scanning a line comment consumes at least its two slashes. -/
++theorem lineComment_rest_length_lt {input comment rest : List Nat}
++    (h : LineComment input (comment, rest)) : rest.length < input.length := by
++  cases h with
++  | intro hb =>
++    have hle := commentBody_rest_length_le hb
++    simp only [List.length_cons]
++    omega
++
++/-- Structural scanner used with fuel at least the input length. -/
++def skipTriviaAux : Nat → List Nat → List Nat × List Nat
++  | _, [] => ([], [])
++  | 0, cs => ([], cs)
++  | fuel + 1, c :: input =>
++    if _h : Whitespace c then
++      let out := skipTriviaAux fuel input
++      (c :: out.1, out.2)
++    else
++      match _hline : lineComment (c :: input) with
++      | some (comment, rest) =>
++        let out := skipTriviaAux fuel rest
++        (comment ++ out.1, out.2)
++      | none => ([], c :: input)
++
++/-- Skip a maximal run of whitespace scalars and line comments. -/
++def skipTrivia (cs : List Nat) : List Nat × List Nat := skipTriviaAux cs.length cs
++
++/-- With enough fuel, the structural scanner satisfies the maximal-trivia judgment. -/
++theorem skipTriviaAux_sound (cs : List Nat) (fuel : Nat) (hfuel : cs.length ≤ fuel) :
++    Trivia cs (skipTriviaAux fuel cs) := by
++  induction fuel generalizing cs with
++  | zero =>
++    cases cs with
++    | nil =>
++      rw [skipTriviaAux.eq_def]
++      exact .stop [] (by intro c cs h; cases h) (by intro cs h; cases h)
++    | cons c input => simp at hfuel
++  | succ fuel ih =>
++    cases cs with
++    | nil =>
++      rw [skipTriviaAux.eq_def]
++      exact .stop [] (by intro c cs h; cases h) (by intro cs h; cases h)
++    | cons c input =>
++      by_cases hw : Whitespace c
++      · rw [skipTriviaAux.eq_def]
++        simp only [hw]
++        apply Trivia.whitespace hw
++        apply ih
++        simp only [List.length_cons] at hfuel
++        omega
++      · cases hline : lineComment (c :: input) with
++        | none =>
++          rw [skipTriviaAux.eq_def]
++          simp only [hw]
++          rw [hline]
++          apply Trivia.stop
++          · intro d ds heq
++            cases heq
++            exact hw
++          · intro tail heq
++            cases heq
++            simp [lineComment] at hline
++        | some out =>
++          cases out with
++          | mk comment rest =>
++            rw [skipTriviaAux.eq_def]
++            simp only [hw]
++            rw [hline]
++            apply Trivia.comment (lineComment_sound hline)
++            apply ih
++            have hlt := lineComment_rest_length_lt (lineComment_sound hline)
++            simp only [List.length_cons] at hfuel hlt
++            omega
++
++/-- With enough fuel, every declarative decomposition is the structural scanner's result. -/
++theorem skipTriviaAux_complete {cs : List Nat} {out : List Nat × List Nat}
++    (h : Trivia cs out) (fuel : Nat) (hfuel : cs.length ≤ fuel) :
++    skipTriviaAux fuel cs = out := by
++  induction h generalizing fuel with
++  | stop rest hw hc =>
++    cases rest with
++    | nil => cases fuel <;> rfl
++    | cons c input =>
++      have hline : lineComment (c :: input) = none := by
++        unfold lineComment
++        split
++        · rename_i tail heq
++          exact (hc tail heq).elim
++        · rfl
++      cases fuel with
++      | zero => simp at hfuel
++      | succ fuel =>
++        rw [skipTriviaAux.eq_def]
++        simp only [hw c input rfl]
++        rw [hline]
++        simp
++  | whitespace hw _ ih =>
++    cases fuel with
++    | zero => simp at hfuel
++    | succ fuel =>
++      rw [skipTriviaAux.eq_def]
++      simp only [hw]
++      simp
++      have hrec := ih fuel (by simp only [List.length_cons] at hfuel; omega)
++      exact ⟨congrArg Prod.fst hrec, congrArg Prod.snd hrec⟩
++  | comment hl _ ih =>
++    cases hl with
++    | intro hb =>
++      cases fuel with
++      | zero => simp at hfuel
++      | succ fuel =>
++        have hline := lineComment_complete (LineComment.intro hb)
++        rw [skipTriviaAux.eq_def]
++        simp only [show ¬ Whitespace 47 from by decide]
++        rw [hline]
++        simp
++        have hlt := lineComment_rest_length_lt (LineComment.intro hb)
++        have hrec := ih fuel (by simp only [List.length_cons] at hfuel hlt; omega)
++        exact ⟨congrArg Prod.fst hrec, congrArg Prod.snd hrec⟩
++
++/-- The scanner's result satisfies the independent maximal-trivia judgment. -/
++theorem skipTrivia_sound (cs : List Nat) : Trivia cs (skipTrivia cs) :=
++  skipTriviaAux_sound cs cs.length (Nat.le_refl _)
++
++/-- Every declarative maximal-trivia decomposition is the scanner's result. -/
++theorem skipTrivia_complete {cs : List Nat} {out : List Nat × List Nat}
++    (h : Trivia cs out) : skipTrivia cs = out :=
++  skipTriviaAux_complete h cs.length (Nat.le_refl _)
++
++/-- Maximal-trivia decompositions are unique. -/
++theorem trivia_unique {cs : List Nat} {out₁ out₂ : List Nat × List Nat}
++    (h₁ : Trivia cs out₁) (h₂ : Trivia cs out₂) : out₁ = out₂ := by
++  rw [← skipTrivia_complete h₁, ← skipTrivia_complete h₂]
++
+ /-! ## Kernel-checked conformance cases -/
+ 
+ section Conformance
+@@ -436,6 +587,24 @@ example : lineComment [47,47,32,120,13] = some ([47,47,32,120], [13]) := by deci
+ example : lineComment [47,47,32,120] = some ([47,47,32,120], []) := by decide
+ example : lineComment [47,42,32,120,32,42,47] = none := by decide
+ 
++example : skipTrivia [32,65] = ([32], [65]) := by decide
++example : skipTrivia [9,65] = ([9], [65]) := by decide
++example : skipTrivia [10,65] = ([10], [65]) := by decide
++example : skipTrivia [13,65] = ([13], [65]) := by decide
++example : skipTrivia [13,10,65] = ([13,10], [65]) := by decide
++example : skipTrivia [47,47,120,10,65] = ([47,47,120,10], [65]) := by decide
++example : skipTrivia [47,47,120,13,65] = ([47,47,120,13], [65]) := by decide
++example : skipTrivia [47,47,120] = ([47,47,120], []) := by decide
++example : skipTrivia [9,32,47,47,120,13,10,65] =
++    ([9,32,47,47,120,13,10], [65]) := by decide
++
++example : skipTrivia [47,42,32,42,47] = ([], [47,42,32,42,47]) := by decide
++example : skipTrivia [35,33,65] = ([], [35,33,65]) := by decide
++example : skipTrivia [0xA0,32] = ([], [0xA0,32]) := by decide
++example : skipTrivia [0xFEFF,32] = ([], [0xFEFF,32]) := by decide
++example : skipTrivia [47] = ([], [47]) := by decide
++example : skipTrivia [65,32] = ([], [65,32]) := by decide
++
+ end Conformance
+ 
+ end Concrete.Lex
+diff --git a/ConcreteSpec/Spec/Surface0.lean b/ConcreteSpec/Spec/Surface0.lean
+index 3e117e93b..5f21b1d12 100644
+--- a/ConcreteSpec/Spec/Surface0.lean
++++ b/ConcreteSpec/Spec/Surface0.lean
+@@ -1,9 +1,10 @@
+ /-!
+ # Settled pieces of the slice-0 surface
+ 
+-Only UTF-8 source validity, NUL/BOM refusal, ASCII identifier characters and line comments
+-are specified here. Tokens, keywords, punctuation, literals, other whitespace, grammar,
+-diagnostics and CLI spellings are not defined. There is no shebang or block-comment rule.
++UTF-8 source validity, NUL/BOM refusal, ASCII identifier characters, the four settled
++whitespace scalars, line comments and maximal trivia runs are specified here. Tokens, keywords,
++punctuation, literals, grammar, diagnostics and CLI spellings are not defined. There is no
++shebang or block-comment rule; no other Unicode whitespace is included.
+ -/
+ 
+ namespace ConcreteSpec.Surface0
+@@ -57,6 +58,9 @@ end Utf8
+ def SourceOk (bs : List UInt8) : Prop :=
+   ∃ cs, Utf8.Decodes bs cs ∧ ∀ c ∈ cs, c ≠ 0 ∧ c ≠ 0xFEFF
+ 
++/-- Exactly space, tab, LF and CR are whitespace. -/
++def Whitespace (c : Nat) : Prop := c = 32 ∨ c = 9 ∨ c = 10 ∨ c = 13
++
+ /-- ASCII letters and underscore start identifiers. -/
+ def IdentStart (c : Nat) : Prop :=
+   (65 ≤ c ∧ c ≤ 90) ∨ (97 ≤ c ∧ c ≤ 122) ∨ c = 95
+@@ -79,8 +83,24 @@ inductive LineComment : List Nat → (List Nat × List Nat) → Prop
+   | intro {input body rest : List Nat} : CommentBody input body rest →
+       LineComment (47 :: 47 :: input) (47 :: 47 :: body, rest)
+ 
++/-- A maximal run of whitespace scalars and line comments. The result is the consumed trivia
++and the unconsumed remainder; the remainder starts with neither whitespace nor two slashes. -/
++inductive Trivia : List Nat → (List Nat × List Nat) → Prop
++  | stop (rest : List Nat) :
++      (∀ c cs, rest = c :: cs → ¬ Whitespace c) →
++      (∀ cs, rest ≠ 47 :: 47 :: cs) →
++      Trivia rest ([], rest)
++  | whitespace {c : Nat} {input trivia rest : List Nat} :
++      Whitespace c → Trivia input (trivia, rest) →
++      Trivia (c :: input) (c :: trivia, rest)
++  | comment {input comment rest trivia final : List Nat} :
++      LineComment input (comment, rest) → Trivia rest (trivia, final) →
++      Trivia input (comment ++ trivia, final)
++
+ /-- Scalar membership is decidable by its interval bounds. -/
+ instance (c : Nat) : Decidable (Utf8.Scalar c) := inferInstanceAs (Decidable (_ ∧ _))
++/-- Whitespace membership is decidable by the four scalar equalities. -/
++instance (c : Nat) : Decidable (Whitespace c) := inferInstanceAs (Decidable (_ ∨ _))
+ /-- Identifier-start membership is decidable by ASCII bounds. -/
+ instance (c : Nat) : Decidable (IdentStart c) := inferInstanceAs (Decidable (_ ∨ _))
+ /-- Identifier-continuation membership is decidable by ASCII bounds. -/
+diff --git a/changelog.d/2026-11-08-lexer-whitespace.md b/changelog.d/2026-11-08-lexer-whitespace.md
+new file mode 100644
+index 000000000..e037c219c
+--- /dev/null
++++ b/changelog.d/2026-11-08-lexer-whitespace.md
+@@ -0,0 +1,7 @@
++### Slice-0 whitespace and trivia (2026-11-08)
++
++The surface specification and lexer now cover exactly space, tab, LF and CR as whitespace, plus
++maximal runs of whitespace and `//` comments. The total scanner is proved sound and complete
++against the declarative judgment, with kernel-checked conformance cases for accepted trivia and
++non-trivia controls. No tokens, diagnostics, block comments, shebangs or other Unicode whitespace
++are introduced.
+diff --git a/scripts/proofs/axioms.golden b/scripts/proofs/axioms.golden
+index ecf41ec59..7f0529092 100644
+--- a/scripts/proofs/axioms.golden
++++ b/scripts/proofs/axioms.golden
+@@ -882,6 +882,7 @@ ConcreteSpec.Stuck.typeError.sizeOf_spec
+ ConcreteSpec.Stuck.unbound.sizeOf_spec	
+ ConcreteSpec.Stuck.wrongMode.sizeOf_spec	
+ ConcreteSpec.Surface0.CommentBody.brecOn	
++ConcreteSpec.Surface0.Trivia.brecOn	
+ ConcreteSpec.Surface0.Utf8.Decodes.brecOn	propext
+ ConcreteSpec.Surface0.Utf8.Encodes._sparseCasesOn_1.else_eq	propext
+ ConcreteSpec.Surface0.Utf8.Encodes._sparseCasesOn_2.else_eq	propext
+
+=== full ConcreteSpec/Spec/Surface0.lean ===
+/-!
+# Settled pieces of the slice-0 surface
+
+UTF-8 source validity, NUL/BOM refusal, ASCII identifier characters, the four settled
+whitespace scalars, line comments and maximal trivia runs are specified here. Tokens, keywords,
+punctuation, literals, grammar, diagnostics and CLI spellings are not defined. There is no
+shebang or block-comment rule; no other Unicode whitespace is included.
+-/
+
+namespace ConcreteSpec.Surface0
+namespace Utf8
+
+/-- A Unicode scalar value: below U+110000 and outside the surrogate interval. -/
+def Scalar (c : Nat) : Prop := c < 0x110000 ∧ (c < 0xD800 ∨ 0xE000 ≤ c)
+
+/-- Table 3-7's one-byte row. -/
+def One (a : UInt8) : Prop := a.toNat ≤ 0x7F
+
+/-- Table 3-7's two-byte row (C2..DF, 80..BF). -/
+def Two (a b : UInt8) : Prop :=
+  0xC2 ≤ a.toNat ∧ a.toNat ≤ 0xDF ∧ 0x80 ≤ b.toNat ∧ b.toNat ≤ 0xBF
+
+/-- Table 3-7's three-byte rows, including the E0 and ED restrictions. -/
+def Three (a b c : UInt8) : Prop :=
+  0xE0 ≤ a.toNat ∧ a.toNat ≤ 0xEF ∧
+  0x80 ≤ b.toNat ∧ b.toNat ≤ 0xBF ∧ 0x80 ≤ c.toNat ∧ c.toNat ≤ 0xBF ∧
+  (a.toNat = 0xE0 → 0xA0 ≤ b.toNat) ∧ (a.toNat = 0xED → b.toNat ≤ 0x9F)
+
+/-- Table 3-7's four-byte rows, including the F0 and F4 restrictions. -/
+def Four (a b c d : UInt8) : Prop :=
+  0xF0 ≤ a.toNat ∧ a.toNat ≤ 0xF4 ∧
+  0x80 ≤ b.toNat ∧ b.toNat ≤ 0xBF ∧ 0x80 ≤ c.toNat ∧ c.toNat ≤ 0xBF ∧
+  0x80 ≤ d.toNat ∧ d.toNat ≤ 0xBF ∧
+  (a.toNat = 0xF0 → 0x90 ≤ b.toNat) ∧ (a.toNat = 0xF4 → b.toNat ≤ 0x8F)
+
+/-- A scalar's encoding, expressed as byte ranges and the positional value equation;
+this judgment does not run a decoder. All other lengths are excluded. -/
+def Encodes (s : Nat) (bs : List UInt8) : Prop :=
+  match bs with
+  | [a] => One a ∧ s = a.toNat
+  | [a, b] => Two a b ∧ s = (a.toNat - 0xC0) * 64 + (b.toNat - 0x80)
+  | [a, b, c] => Three a b c ∧
+      s = (a.toNat - 0xE0) * 4096 + (b.toNat - 0x80) * 64 + (c.toNat - 0x80)
+  | [a, b, c, d] => Four a b c d ∧
+      s = (a.toNat - 0xF0) * 262144 + (b.toNat - 0x80) * 4096 +
+        (c.toNat - 0x80) * 64 + (d.toNat - 0x80)
+  | _ => False
+
+/-- Bytes decode to scalars exactly when they concatenate their encodings in order. -/
+inductive Decodes : List UInt8 → List Nat → Prop
+  | nil : Decodes [] []
+  | cons {s : Nat} {chunk bs : List UInt8} {cs : List Nat} :
+      Encodes s chunk → Decodes bs cs → Decodes (chunk ++ bs) (s :: cs)
+
+end Utf8
+
+/-- A source has a decoding with neither NUL nor BOM anywhere. -/
+def SourceOk (bs : List UInt8) : Prop :=
+  ∃ cs, Utf8.Decodes bs cs ∧ ∀ c ∈ cs, c ≠ 0 ∧ c ≠ 0xFEFF
+
+/-- Exactly space, tab, LF and CR are whitespace. -/
+def Whitespace (c : Nat) : Prop := c = 32 ∨ c = 9 ∨ c = 10 ∨ c = 13
+
+/-- ASCII letters and underscore start identifiers. -/
+def IdentStart (c : Nat) : Prop :=
+  (65 ≤ c ∧ c ≤ 90) ∨ (97 ≤ c ∧ c ≤ 122) ∨ c = 95
+
+/-- Only ASCII letters, underscore and digits continue identifiers. -/
+def IdentContinue (c : Nat) : Prop := IdentStart c ∨ (48 ≤ c ∧ c ≤ 57)
+
+/-- A comment body ends before the first LF or CR, or at EOF. The terminating line
+break stays in the remainder; every body scalar differs from both terminators. -/
+inductive CommentBody : List Nat → List Nat → List Nat → Prop
+  | eof : CommentBody [] [] []
+  | lf (rest : List Nat) : CommentBody (10 :: rest) [] (10 :: rest)
+  | cr (rest : List Nat) : CommentBody (13 :: rest) [] (13 :: rest)
+  | cons {c : Nat} {input body rest : List Nat} : c ≠ 10 → c ≠ 13 →
+      CommentBody input body rest → CommentBody (c :: input) (c :: body) rest
+
+/-- A line comment starts with two slashes. The output pair is the whole comment
+(including its slashes) and the unconsumed remainder. No other opener is admitted. -/
+inductive LineComment : List Nat → (List Nat × List Nat) → Prop
+  | intro {input body rest : List Nat} : CommentBody input body rest →
+      LineComment (47 :: 47 :: input) (47 :: 47 :: body, rest)
+
+/-- A maximal run of whitespace scalars and line comments. The result is the consumed trivia
+and the unconsumed remainder; the remainder starts with neither whitespace nor two slashes. -/
+inductive Trivia : List Nat → (List Nat × List Nat) → Prop
+  | stop (rest : List Nat) :
+      (∀ c cs, rest = c :: cs → ¬ Whitespace c) →
+      (∀ cs, rest ≠ 47 :: 47 :: cs) →
+      Trivia rest ([], rest)
+  | whitespace {c : Nat} {input trivia rest : List Nat} :
+      Whitespace c → Trivia input (trivia, rest) →
+      Trivia (c :: input) (c :: trivia, rest)
+  | comment {input comment rest trivia final : List Nat} :
+      LineComment input (comment, rest) → Trivia rest (trivia, final) →
+      Trivia input (comment ++ trivia, final)
+
+/-- Scalar membership is decidable by its interval bounds. -/
+instance (c : Nat) : Decidable (Utf8.Scalar c) := inferInstanceAs (Decidable (_ ∧ _))
+/-- Whitespace membership is decidable by the four scalar equalities. -/
+instance (c : Nat) : Decidable (Whitespace c) := inferInstanceAs (Decidable (_ ∨ _))
+/-- Identifier-start membership is decidable by ASCII bounds. -/
+instance (c : Nat) : Decidable (IdentStart c) := inferInstanceAs (Decidable (_ ∨ _))
+/-- Identifier-continuation membership is decidable by ASCII bounds. -/
+instance (c : Nat) : Decidable (IdentContinue c) := inferInstanceAs (Decidable (_ ∨ _))
+/-- The one-byte range constraint is decidable. -/
+instance (a : UInt8) : Decidable (Utf8.One a) := inferInstanceAs (Decidable (_ ≤ _))
+/-- The two-byte range constraints are decidable. -/
+instance (a b : UInt8) : Decidable (Utf8.Two a b) := inferInstanceAs (Decidable (_ ∧ _))
+/-- The three-byte range constraints are decidable. -/
+instance (a b c : UInt8) : Decidable (Utf8.Three a b c) := inferInstanceAs (Decidable (_ ∧ _))
+/-- The four-byte range constraints are decidable. -/
+instance (a b c d : UInt8) : Decidable (Utf8.Four a b c d) :=
+  inferInstanceAs (Decidable (_ ∧ _))
+
+/-- Encoding membership is decidable directly from the range constraints. -/
+instance (c : Nat) (bs : List UInt8) : Decidable (Utf8.Encodes c bs) := by
+  unfold Utf8.Encodes
+  split <;> infer_instance
+
+example : Utf8.Encodes 65 [65] := by decide
+example : Utf8.Encodes 0xA2 [0xC2, 0xA2] := by decide
+example : Utf8.Encodes 0x20AC [0xE2, 0x82, 0xAC] := by decide
+example : Utf8.Encodes 0x1F600 [0xF0, 0x9F, 0x98, 0x80] := by decide
+example : ¬ Utf8.Encodes 0 [0xC0, 0x80] := by decide
+example : ¬ Utf8.Encodes 0xD800 [0xED, 0xA0, 0x80] := by decide
+example : ¬ Utf8.Encodes 0x110000 [0xF4, 0x90, 0x80, 0x80] := by decide
+example : ¬ Utf8.Encodes 0x20AC [0xE2, 0x82] := by decide
+example : ¬ Utf8.Encodes 0x80 [0x80] := by decide
+example : Utf8.Encodes 0 [0] := by decide
+example : Utf8.Encodes 0xFEFF [0xEF, 0xBB, 0xBF] := by decide
+
+example : Utf8.Scalar 0x10FFFF := by decide
+example : ¬ Utf8.Scalar 0xD800 := by decide
+example : IdentStart 95 ∧ IdentContinue 48 ∧ ¬ IdentStart 48 := by decide
+example : ¬ IdentContinue 0xE9 := by decide
+
+example : LineComment [47, 47, 32,120,10,114] ([47, 47, 32,120], [10,114]) :=
+  .intro (.cons (by decide) (by decide) (.cons (by decide) (by decide) (.lf _)))
+example : LineComment [47, 47, 32,120,13] ([47, 47, 32,120], [13]) :=
+  .intro (.cons (by decide) (by decide) (.cons (by decide) (by decide) (.cr _)))
+example : LineComment [47, 47, 32,120] ([47, 47, 32,120], []) :=
+  .intro (.cons (by decide) (by decide) (.cons (by decide) (by decide) .eof))
+example (out : List Nat × List Nat) : ¬ LineComment [47, 42, 32,120,32,42,47] out := by
+  intro h; cases h
+
+end ConcreteSpec.Surface0

@@ -1,0 +1,15 @@
+## 2026-11-08T15:31:59Z owner (verbatim)
+"okay with your decisions"
+This answers three pending asks, with Claude's picks as shown:
+
+### Lexer spellings
+Block (a)-(d) unanimous:
+- (a) Byte-literal escapes are exactly \n \t \r \0 \\ \'. \" and \xHH are refused. Raw content is U+0020-U+007E excluding ' and \.
+- (b) Strings refuse raw: all of Cc (U+0000-U+001F, U+007F-U+009F), U+2028-U+2029, and the bidi controls (U+061C, U+200E-U+200F, U+202A-U+202E, U+2066-U+2069). This is explicitly approved as a new restriction. Byte literals allow raw U+0020-U+007E only.
+- (c) Prefixes are lowercase only (0x/0b/0o), and hex digits are lowercase only.
+- (d) The suffix set is exactly i8 i16 i32 i64 u8 u16 u32 u64, on every base, with no float suffixes. Malformed adjacent text is one refused token.
+
+The two split questions:
+1. A raw TAB inside a // comment is PERMITTED. Other Cc, U+2028/9 and bidi controls are refused in comments, and LF/CR end a comment.
+2. Suffixes are COMPLEMENTARY. A suffix is required where no expected-type position (OD138) exists, and refused where one does. This revises OD31/OD138, and the Q6.2 example becomes S { a: 200 }.
+

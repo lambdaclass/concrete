@@ -1,0 +1,54 @@
+I could read the repository and the diff under review.
+
+**Files read:**
+- [REVIEW.diff](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rev-f2/src/REVIEW.diff)
+- [.github/workflows/lean_action_ci.yml](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rev-f2/src/.github/workflows/lean_action_ci.yml)
+- [.github/workflows/oracle.yml](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rev-f2/src/.github/workflows/oracle.yml)
+- [Concrete/README.md](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rev-f2/src/Concrete/README.md)
+- [ISSUES.tsv](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rev-f2/src/ISSUES.tsv)
+- [ROADMAP.md](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rev-f2/src/ROADMAP.md)
+- [changelog.d/2026-11-08-repro-ci2.md](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rev-f2/src/changelog.d/2026-11-08-repro-ci2.md)
+- [docs/SELF_HOSTED_RUNNERS.md](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rev-f2/src/docs/SELF_HOSTED_RUNNERS.md)
+- [docs/decisions.md](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rev-f2/src/docs/decisions.md)
+- [required-checks.txt](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rev-f2/src/required-checks.txt)
+- [required-checks-transition.tsv](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rev-f2/src/required-checks-transition.tsv)
+- [scripts/checks/compiler/build_identity.sh](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rev-f2/src/scripts/checks/compiler/build_identity.sh)
+- [scripts/checks/compiler/slice0_repro.sh](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rev-f2/src/scripts/checks/compiler/slice0_repro.sh)
+- [scripts/checks/doc_links.sh](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rev-f2/src/scripts/checks/doc_links.sh)
+- [scripts/checks/issues.sh](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rev-f2/src/scripts/checks/issues.sh)
+- [scripts/checks/landing_script.sh](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rev-f2/src/scripts/checks/landing_script.sh)
+- [scripts/checks/lib/doc_links.py](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rev-f2/src/scripts/checks/lib/doc_links.py)
+- [scripts/checks/lib/repro_compare.py](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rev-f2/src/scripts/checks/lib/repro_compare.py)
+- [scripts/checks/lib/repro_manifest_compare.py](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rev-f2/src/scripts/checks/lib/repro_manifest_compare.py)
+- [scripts/checks/lib/slice0_sources.sh](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rev-f2/src/scripts/checks/lib/slice0_sources.sh)
+- [scripts/checks/root_inventory.txt](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rev-f2/src/scripts/checks/root_inventory.txt)
+- [scripts/checks/run.sh](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rev-f2/src/scripts/checks/run.sh)
+- [scripts/checks/workflow_yaml.sh](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rev-f2/src/scripts/checks/workflow_yaml.sh)
+- [scripts/land/required_checks.py](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rev-f2/src/scripts/land/required_checks.py)
+- [scripts/land/train.sh](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rev-f2/src/scripts/land/train.sh)
+
+### Review Answers & Verification
+
+1. **Mandatory concrete-ci-2 result (no substitute, skipped job, or missing artifact passes):**
+   - `Reproducibility (linux-github)`, `Reproducibility (linux-ci2)`, and `Cross-machine reproducibility (x86-64 Linux)` are all in [required-checks.txt](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rev-f2/src/required-checks.txt#L20-L23); `train.sh` (`watch`, `land`, `record`) refuses any run where a required job is missing, skipped, or non-`success`.
+   - In [.github/workflows/lean_action_ci.yml](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rev-f2/src/.github/workflows/lean_action_ci.yml#L462-L477), `linux-ci2` unconditionally requests `["self-hosted","linux","x64","concrete"]` on non-`pull_request` events (not gated on `vars.CONCRETE_SELF_HOSTED`), and step 0 refuses any non-`self-hosted` runner before `actions/checkout@v4`.
+   - `upload-artifact@v4` sets `if-no-files-found: error`, and [repro_manifest_compare.py](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rev-f2/src/scripts/checks/lib/repro_manifest_compare.py#L23-L48) fails closed if either manifest is unreadable, lacks `runner_environment` / `runner_name` (or has duplicates/empty/`unknown`), lacks `compiler_commit=`, or lacks a 64-hex SHA-256 `/lcb.exe` line.
+
+2. **Runner provenance attestation:**
+   - Provenance comes from GitHub Actions' `runner.environment` and `runner.name` context variables ([.github/workflows/lean_action_ci.yml](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rev-f2/src/.github/workflows/lean_action_ci.yml#L483-L485)), not matrix self-declaration (`workflow_yaml.sh` explicitly forbids `CONCRETE_REPRO_RUNNER_HOST`).
+   - [repro_manifest_compare.py](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rev-f2/src/scripts/checks/lib/repro_manifest_compare.py#L15-L68) enforces `runner_environment=github-hosted` on `m1` and `runner_environment=self-hosted` plus `^concrete-ci-2-gha[0-9]+$` on `m2`, rejecting any non-`concrete-ci-2` self-hosted runner.
+
+3. **`pull_request` safety:**
+   - On `pull_request`, `linux-ci2` routes to `ubuntu-24.04` and fails at step 0 before `actions/checkout@v4`, so PR code never runs on `concrete-ci-2` and never passes on a substitute. `compare-linux` runs on `ubuntu-24.04`.
+
+4. **Required checks and transition consistency:**
+   - [required-checks.txt](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rev-f2/src/required-checks.txt#L20-L21) and [required-checks-transition.tsv](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rev-f2/src/required-checks-transition.tsv#L8-L9) map `Reproducibility (linux-first)` -> `Reproducibility (linux-github)` and `Reproducibility (linux-independent)` -> `Reproducibility (linux-ci2)`, matching `required_checks.py` and `landing_script.sh`'s `required_names.py` check.
+
+5. **Controls and payload comparison:**
+   - [scripts/checks/workflow_yaml.sh](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rev-f2/src/scripts/checks/workflow_yaml.sh#L48-L160) extracts the real `compare-linux` script from the workflow YAML and runs positive and negative controls (identical, differing hashes, wrong `runner_name`, `github-hosted` on `ci2`, missing manifest, missing hashes). Both `workflow_yaml.sh` and `issues.sh` pass.
+   - [repro_compare.py](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rev-f2/src/scripts/checks/lib/repro_compare.py#L42-L46) prepends only `runner_environment` and `runner_name`, and [repro_manifest_compare.py](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rev-f2/src/scripts/checks/lib/repro_manifest_compare.py#L28-L37) strips only those two keys into `fields`, keeping `payload` as the exact build-identity and artifact-hash lines in order.
+
+No findings.
+
+REPOSITORY: readable
+VERDICT: ACCEPT

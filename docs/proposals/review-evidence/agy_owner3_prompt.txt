@@ -1,0 +1,452 @@
+Round 3 (delta-only) review of the Concrete slice-0 branch, after the first macOS run of the AArch64 stack analysis (scripts/checks/lib/stack_bound.py) refused all real Mach-O code. The diff below (9ed1e1cff..397d7811):
+(a) the Mach-O __stubs section is one unnamed symbol, so the gate appends `stub ADDR SYMBOL` lines parsed from `llvm-objdump --macho --indirect-symbols` (only the (__TEXT,__stubs) block), and a call is external only when its target address is exactly a stub entry (ELF: a PLT symbol name, `NAME@plt`, as before);
+(b) LCB saves/restores the link register with a single `str x30, [sp, #k]` / `ldr x30, [sp, #k]`: an exact 8-byte store of x30 (or x29) to an sp/x29-based slot becomes a saved slot tagged with the register's current state, and a load of x30/x29 is allowed only from an exact slot with the same tag (restoring that state); any other x30 load is still refused;
+(c) the link-register flag left the join equality key: joins take the conjunction (a call inside a loop made it differ at the loop head), and every return still requires lr valid;
+(d) the uncapped artifacts gate raises an inherited soft address-space cap to the hard limit, or fails (exit 2);
+(e) each analysed disassembly is kept in the report.
+CI results at 2ea89cab: real code accepted on both platforms; macOS LLDB measurements within bound (e.g. LLVM bound 96 measured 48-96; LCB bound 144 measured 112-144); only two controls failed, fixed in 397d7811. Two real macOS disassemblies are attached as files answer.lcb.aarch64-macos.dis and answer.llvm.aarch64-macos.dis (Codex/Kimi can read them).
+Soundness claim: for code the analysis accepts, under the module docstring's premises, the bound covers every stack byte addressed. Find accepted inputs that break it (an understated bound or an unbounded resource), especially through (b) and (c): e.g. a slot reread, an x30 restored from a stale slot, a return with a wrong lr, a stub address spoof. Findings with file:line and a concrete accepted reproducer; mark each real defect or preference. End with exactly one line: VERDICT: ACCEPT, VERDICT: ACCEPT-WITH-CHANGES or VERDICT: REJECT.
+
+You cannot read files; the diff and the LCB disassembly are below.
+```diff
+diff --git a/Concrete/README.md b/Concrete/README.md
+index 36e022545..a0522a9ab 100644
+--- a/Concrete/README.md
++++ b/Concrete/README.md
+@@ -581,7 +581,7 @@ The CLI is `concrete facts FILE [FN]` and `concrete build FILE -o OUT` (owner, 2
+ 9. **Trusted base** (owner, 2026-11-07): a golden test that `concrete facts` prints exactly the spec's premise list, so a premise added, removed or reworded anywhere fails until the golden is updated with it. Implemented provisionally in `scripts/checks/slice0_trusted_base.sh`: until `concrete facts` exists, `scripts/checks/slice0_trusted_base.lean` prints `Premises.report`: the premise registry `Concrete/Premises.lean`, the sorted axioms of each headline theorem (`Premises.theorems`) and each axiom's type; the gate appends the Lean toolchain and the Lake pins, and the result must equal `tests/golden/slice0_trusted_base.txt` byte for byte. The README's open-premise table must equal the registry's rendering (`Premises.tableRow`). Controls cover the comparison, a failing printer, the axiom collection and a drifted table. The statements are text until `FrontendPremises` and `NativePremises` land as Lean structures; each entry then names its field.
+ 10. **Sanitizers** (owner, 2026-11-07; UBSan dropped by the owner, 2026-11-08; implemented in `scripts/checks/slice0_artifacts.sh`): every LLVM example also runs built with ASan in CI, and must give the same observation with no sanitizer report. ASan instruments only functions marked `sanitize_address`, which clang's C front end adds and the printed IR lacks, so the sanitizer build adds it to every definition (`slice0_native.sh sanitize`); a control body with an out-of-bounds load must be reported. There is no UBSan leg: UBSan's checks are inserted by clang's C front end, so on LLVM IR input it checks nothing. No C is compiled in slice 0, and the LLVM-level undefined behaviour of the printed IR (poison, `unreachable`) stays P_print's.
+ 11. **Binary size** (owner, 2026-11-07; implemented, same script): the size of each example's executable (bytes and text size, pinned `llvm-size`), per backend and target, is recorded per run in `sizes.tsv`, uploaded with the job. Report-only: it never fails a run. **Compile time** (owner, 2026-11-08; same script, report-only): each example's emit step (the Lean emitter, Lean start-up included) and native step (clang and LCB's command line) in wall-clock milliseconds, next to its budget (the step's time bound), in `compile_times.tsv`.
+-12. **Stack bound** (owner, 2026-11-07; implemented in the same script and `lib/stack_bound.py`; the `aarch64-macos` run check with LLDB, 2026-11-08): a stack-bound fact for each example, derived from the final artifact (the linked executable, not the IR) for both backends, and checked against a run. The analysis follows every path of the Concrete-owned code, instruction by instruction from an explicit set of modelled instructions, (`main`, `concrete_rt_write_all`, `concrete_body`) over the disassembly's control-flow graph, tracking the stack and frame pointers' depth below `main`'s entry and every byte addressed relative to them (so the red zone), and fails closed on anything it does not model (an instruction outside the set, another stack-pointer write, frame- or link-register writeback, an indirect branch or call, a stack pointer copied out, an indexed stack address, a stack read of bytes the function has not itself written on every path since its last call (so no stale saved frame pointer is ever loaded), a saved slot read other than by the modelled restore, two depths meeting, recursion, a call to a function neither owned nor a PLT/stub). The external calls (`write`, `_exit`, `abort`) are listed with the depth at their entry; their own use, and that `_exit` and `abort` do not return, are the libc premise. On x86-64 Linux the run check single-steps the owned code under the pinned gdb and requires the measured stack-pointer depth to be within the bound, for a complete run only (stopped first at `main`, back at each external call's return address, no signal, the expected exit status). On `aarch64-macos` the run check is the same, under Apple's LLDB (`/usr/bin/lldb`, `lib/stack_measure_lldb.py`; an external call's return address is the link register); LLDB is not pinned (Apple's signed debugserver is the only one allowed to attach), so its version is printed in the gate log. `stack.tsv` records bound, measurement and externals.
++12. **Stack bound** (owner, 2026-11-07; implemented in the same script and `lib/stack_bound.py`; the `aarch64-macos` run check with LLDB, 2026-11-08): a stack-bound fact for each example, derived from the final artifact (the linked executable, not the IR) for both backends, and checked against a run. The analysis follows every path of the Concrete-owned code, instruction by instruction from an explicit set of modelled instructions, (`main`, `concrete_rt_write_all`, `concrete_body`) over the disassembly's control-flow graph, tracking the stack and frame pointers' depth below `main`'s entry and every byte addressed relative to them (so the red zone), and fails closed on anything it does not model (an instruction outside the set, another stack-pointer write, frame- or link-register writeback, an indirect branch or call, a stack pointer copied out, an indexed stack address, a stack read of bytes the function has not itself written on every path since its last call (so no stale saved frame pointer is ever loaded), a saved slot read other than by the modelled restore, two depths meeting, recursion, a call to a function neither owned nor a PLT/stub). The external calls (`write`, `_exit`, `abort`) are listed with the depth at their entry; their own use, and that `_exit` and `abort` do not return, are the libc premise. On x86-64 Linux the run check single-steps the owned code under the pinned gdb and requires the measured stack-pointer depth to be within the bound, for a complete run only (stopped first at `main`, back at each external call's return address, no signal, the expected exit status). On Mach-O each stub entry's imported symbol comes from the indirect symbol table (`llvm-objdump --macho --indirect-symbols`), since the disassembly names only the `__stubs` section. On `aarch64-macos` the run check is the same, under Apple's LLDB (`/usr/bin/lldb`, `lib/stack_measure_lldb.py`; an external call's return address is the link register); LLDB is not pinned (Apple's signed debugserver is the only one allowed to attach), so its version is printed in the gate log. `stack.tsv` records bound, measurement and externals.
+ 
+ With the front end (owner, 2026-11-07): gate 5's random-program fuzzer compares the native executables with the Lean evaluator, and a JSON schema generated from the Lean types of the `facts` output has goldens. Each gate joins `required-checks.txt` when the compiler lands.
+ 
+diff --git a/scripts/checks/lib/limits.sh b/scripts/checks/lib/limits.sh
+index 5d389c279..a59ec84dc 100644
+--- a/scripts/checks/lib/limits.sh
++++ b/scripts/checks/lib/limits.sh
+@@ -11,15 +11,20 @@
+ #     lib/limited_exec.sh. MEM_GB 0 sets no address-space cap for the gate itself: only for a gate
+ #     whose executables under test need an unbounded reservation (a sanitizer build's shadow
+ #     memory; slice0_artifacts.sh), which then caps every other command it starts through
+-#     lib/limited_exec.sh. The caps are hard limits: no descendant can raise them.
++#     lib/limited_exec.sh; it raises an inherited soft cap to the hard limit and fails (exit 2)
++#     unless that leaves the address space unlimited. The caps are hard limits: no descendant can
++#     raise them.
+ #
+-# Per-command time bounds are separate: bounded_run (lib/bounded.sh) for executables under test,
+-# `timeout -k` for builds.
++# Per-command time bounds are separate: bounded_run (lib/bounded.sh).
+ gate_limits() {
+   local mem_kb=$(($1 * 1024 * 1024)) nproc=$2 cur
+   if [ "$(uname -s)" = Linux ] && [ "$mem_kb" -gt 0 ]; then
+     cur=$(ulimit -v)
+     if [ "$cur" = unlimited ] || [ "$cur" -gt "$mem_kb" ]; then ulimit -v "$mem_kb"; fi
++  elif [ "$(uname -s)" = Linux ]; then
++    ulimit -S -v "$(ulimit -H -v)"
++    [ "$(ulimit -S -v)" = unlimited ] ||
++      { echo "gate_limits: an unlimited address space is required, the hard limit is $(ulimit -H -v) KiB" >&2; exit 2; }
+   fi
+   cur=$(ulimit -u)
+   if [ "$cur" = unlimited ] || [ "$cur" -gt "$nproc" ]; then ulimit -u "$nproc"; fi
+diff --git a/scripts/checks/lib/stack_bound.py b/scripts/checks/lib/stack_bound.py
+index 92da889e4..e4d0d1f89 100644
+--- a/scripts/checks/lib/stack_bound.py
++++ b/scripts/checks/lib/stack_bound.py
+@@ -63,21 +63,33 @@ def owned_name(sym):
+ 
+ 
+ def parse(path):
+-    """Functions: name -> list of (addr, mnemonic, operands). Also the set of stub symbols."""
+-    funcs, cur, stubs, section = {}, None, set(), ""
++    """Functions: name -> list of (addr, mnemonic, operands). Also the stubs: ELF PLT symbol names
++    (`write@plt`), and Mach-O stub entries, address -> imported symbol, from `stub ADDR SYMBOL`
++    lines the gate appends (from `llvm-objdump --macho --indirect-symbols`, since the Mach-O
++    disassembly names only the whole `__stubs` section)."""
++    funcs, cur, stubs, section = {}, None, {"names": set(), "addrs": {}}, ""
+     head = re.compile(r"^([0-9a-f]+) <([^>]+)>:$")
+     inst = re.compile(r"^\s*([0-9a-f]+):\s*(\S+)\s*(.*)$")
++    stub = re.compile(r"^stub 0x([0-9a-f]+) (\S+)$")
+     for line in open(path, encoding="utf-8", errors="replace"):
+         line = line.rstrip("\n")
++        m = stub.match(line)
++        if m:
++            addr = int(m.group(1), 16)
++            if addr in stubs["addrs"]:
++                raise Refuse(f"two stub entries at {addr:#x}")
++            stubs["addrs"][addr] = m.group(2)
++            cur = None
++            continue
+         if line.startswith("Disassembly of section"):
+-            section = line.split()[-1].rstrip(":")
++            section = line.split()[-1].rstrip(":").split(",")[-1]
+             cur = None
+             continue
+         m = head.match(line)
+         if m:
+             name = m.group(2)
+             if section in (".plt", ".plt.sec", ".plt.got", "__stubs") or name.endswith("@plt"):
+-                stubs.add(name)
++                stubs["names"].add(name)
+                 cur = None
+             else:
+                 cur = name
+@@ -109,7 +121,8 @@ class St:
+     frame pointer or link register, (lowest, highest, tag) in byte depths, tag ("fp", value) or
+     ("lr", whether it is this function's return address); kept after the stack pointer moves past
+     them and after a restore (memory keeps them) until an exact overwrite. `lr`: whether the
+-    AArch64 link register holds this function's return address. `w`: the stack bytes this
++    AArch64 link register holds this function's return address on every path (not part of the
++    key; joins take the conjunction). `w`: the stack bytes this
+     function has written since its last call, on every path (not part of the equality key). `g`
+     (AArch64): the registers holding a PC-relative address (adrp/adr, plus an immediate), on every
+     path since the last call (not part of the key): the only registers memory may be addressed
+@@ -121,7 +134,7 @@ class St:
+         self.d, self.fp, self.saved, self.lr, self.w, self.g = d, fp, saved, lr, w, g
+ 
+     def key(self):
+-        return (self.d, self.fp, self.saved, self.lr)
++        return (self.d, self.fp, self.saved)
+ 
+     def but(self, **kw):
+         s = St(self.d, self.fp, self.saved, self.lr, self.w, self.g)
+@@ -337,7 +350,7 @@ def a64_core(mn, ops, st):
+     data = args[:first_mem]
+     is_load, is_store = mn.startswith("ld"), mn.startswith("st")
+     deepest = None
+-    record = restored = False
++    record = restored = single = False
+     if first_mem < len(args):
+         mem = args[first_mem]
+         post = args[first_mem + 1] if first_mem + 1 < len(args) else None
+@@ -386,6 +399,26 @@ def a64_core(mn, ops, st):
+                 lr = bool(lr_slot and lr_slot[2] == ("lr", True))
+                 fp = fp_slot[2][1] if fp_slot and fp_slot[2][0] == "fp" else None
+                 restored = True
++            elif data in (["x30"], ["x29"]) and top - lo == 7:
++                # A single 8-byte save or restore of the link register or frame pointer (LCB's
++                # `str x30, [sp, #k]`): a saved slot, as in the frame record.
++                tag = "lr" if data == ["x30"] else "fp"
++                if is_store:
++                    w = touch(st, lo, top, "w", what)
++                    saved = cleared(saved, lo, top) | {(lo, top, (tag, lr if tag == "lr" else fp))}
++                    single = True
++                elif is_load:
++                    slot = slot_at(saved, lo, top)
++                    w = touch(st, lo, top, "r", what, restore=(slot,) if slot else ())
++                    if not slot or slot[2][0] != tag:
++                        raise Refuse(f"{data[0]} loaded from other than its saved slot: {what}")
++                    if tag == "lr":
++                        lr = slot[2][1]
++                    else:
++                        fp = slot[2][1]
++                    restored = True
++                else:
++                    raise Refuse(f"unmodelled stack memory instruction: {what}")
+             elif is_load or is_store:
+                 w = touch(st, lo, top, "r" if is_load else "w", what)
+                 if is_store:
+@@ -397,13 +430,13 @@ def a64_core(mn, ops, st):
+         elif base in A64_SP + A64_FP:
+             raise Refuse(f"unmodelled stack address: {what}")
+     if is_store:
+-        if not record and any(a in A64_SP + A64_FP for a in data):
++        if not (record or single) and any(a in A64_SP + A64_FP for a in data):
+             raise Refuse(f"stack or frame pointer stored as a value: {what}")
+         return st, deepest
+     if is_load:
+         if any(a in A64_SP for a in data):
+             raise Refuse(f"stack pointer loaded: {what}")
+-        if any(a in A64_LR for a in data) and not record:
++        if any(a in A64_LR for a in data) and not (record or restored):
+             raise Refuse(f"link register overwritten: {what}")
+         if any(a in A64_FP for a in data) and not restored:
+             st = st.but(fp=None)
+@@ -523,8 +556,8 @@ def analyse(funcs, stubs):
+             old = states[j]
+             if old.key() != st.key():
+                 raise Refuse(f"{key}+{addr:#x}: states {old.key()} and {st.key()} meet")
+-            if not (old.w <= st.w and old.g <= st.g):
+-                states[j] = old.but(w=old.w & st.w, g=old.g & st.g)
++            if not (old.w <= st.w and old.g <= st.g and (st.lr or not old.lr)):
++                states[j] = old.but(w=old.w & st.w, g=old.g & st.g, lr=old.lr and st.lr)
+                 work.append(j)
+ 
+         while work:
+@@ -562,13 +595,21 @@ def analyse(funcs, stubs):
+             if kind == "call":
+                 base = sym.split("+")[0]
+                 callee, d = owned_name(base), st.d
+-                if callee and "+" not in sym:
++                if tgt in stubs["addrs"]:
++                    # A Mach-O stub entry: the imported symbol carries one leading underscore.
++                    imported = stubs["addrs"][tgt]
++                    name = imported[1:] if imported.startswith("_") else imported
++                    add_ext(ext, {name: 0}, d + ret_push)
++                    deepest = max(deepest, d + ret_push)
++                    if name in NORETURN:
++                        continue
++                elif callee and "+" not in sym:
+                     sub_deep, sub_ext = fn_bound(callee)
+                     deepest = max(deepest, d + ret_push + sub_deep)
+                     add_ext(ext, sub_ext, d + ret_push)
+-                elif base in stubs or base.endswith("@plt"):
+-                    # ELF `write@plt`; Mach-O stubs carry one extra leading underscore.
+-                    name = base.removesuffix("@plt") if base.endswith("@plt") else base[1:]
++                elif base in stubs["names"] or base.endswith("@plt"):
++                    # An ELF PLT entry, `write@plt`.
++                    name = base.removesuffix("@plt")
+                     add_ext(ext, {name: 0}, d + ret_push)
+                     deepest = max(deepest, d + ret_push)
+                     if name in NORETURN:
+diff --git a/scripts/checks/slice0_artifacts.sh b/scripts/checks/slice0_artifacts.sh
+index d48420630..3e73f61da 100644
+--- a/scripts/checks/slice0_artifacts.sh
++++ b/scripts/checks/slice0_artifacts.sh
+@@ -19,7 +19,8 @@
+ #     stack or frame pointer (so the red zone), with external libc calls listed with their entry
+ #     depth (their own use, and that _exit and abort do not return, are premises). A run under
+ #     gdb (x86-64 Linux, lib/stack_measure.py) or LLDB (aarch64-macos, lib/stack_measure_lldb.py)
+-#     must stay within it (the run measures the stack pointer only). REPORT/stack.tsv. Controls: the analysis must refuse an unmodelled
++#     must stay within it (the run measures the stack pointer only). Each analysed disassembly is
++#     kept in REPORT/disassembly/. REPORT/stack.tsv. Controls: the analysis must refuse an unmodelled
+ #     stack-pointer write, an indirect call, recursion, a call to an unknown function, two depths
+ #     meeting, a stack pointer used as a value or written through a partial register, a partial
+ #     frame-pointer write, an indexed stack address, a saved frame pointer popped into another
+@@ -31,7 +32,9 @@
+ #     beyond the reach premise, an absolute address (memory only through sp/fp, PC-relative or fs/gs), a callee that does not restore the frame pointer, a frame record away from sp, an unmodelled
+ #     instruction (x86 `loop`) and frame- or link-register writeback (AArch64), and give the
+ #     expected bound on known functions (x86 frame, red-zone store, two AArch64 frame-record
+-#     shapes, a read of bytes written on both paths, an adrp-based load); the comparison must reject a
++#     shapes, a read of bytes written on both paths, an adrp-based load, LCB's single link-register
++#     save with a Mach-O stub call in a loop); also refuse the link register loaded from another
++#     slot and a stub call with no indirect-symbol entry; the comparison must reject a
+ #     measurement above the bound.
+ #
+ # usage: slice0_artifacts.sh [REPORT_DIR]. Run inside the nix devshell, from the repository root.
+@@ -44,6 +47,7 @@ SLICE0_GATE_MEM_GB=0
+ source scripts/checks/lib/slice0_common.sh
+ : "${CONCRETE_SLICE0_LLVM:?run inside nix develop}"
+ objdump=(bounded 60 "$CONCRETE_SLICE0_LLVM/llvm-objdump" -d --no-show-raw-insn)
++indirect=(bounded 60 "$CONCRETE_SLICE0_LLVM/llvm-objdump" --macho --indirect-symbols)
+ case "$target" in
+   x86_64-linux) arch=x86_64; objdump+=(--x86-asm-syntax=intel) ;;
+   aarch64-*) arch=aarch64 ;;
+@@ -108,6 +112,18 @@ stack_check() {
+   if ! "${objdump[@]}" "$exe" >"$dis" 2>"$dis.err"; then
+     echo "FAIL $name [$backend] stack: disassembly failed: $(head -c 300 "$dis.err")"; fail=1; return
+   fi
++  # Mach-O names only the whole __stubs section; each stub entry's imported symbol comes from the
++  # indirect symbol table, appended as `stub ADDR SYMBOL` lines (lib/stack_bound.py).
++  if [ "$target" = aarch64-macos ]; then
++    if ! "${indirect[@]}" "$exe" 2>"$dis.err" | awk '
++         /^Indirect symbols for / {s = ($0 ~ /\(__TEXT,__stubs\)/); next}
++         s && $1 ~ /^0x[0-9a-f]+$/ && NF == 3 {print "stub", $1, $3}' >>"$dis"; then
++      echo "FAIL $name [$backend] stack: indirect symbols failed: $(head -c 300 "$dis.err")"; fail=1; return
++    fi
++  fi
++  # The disassembly the bound is derived from is kept in the report (audit evidence).
++  mkdir -p "$report/disassembly"
++  cp "$dis" "$report/disassembly/$name.$backend.$target.dis"
+   if ! out=$(stack_bound "$arch" "$dis" --ranges | cap_out); then
+     echo "FAIL $name [$backend] stack: $out"; fail=1; return
+   fi
+@@ -264,6 +280,9 @@ refuse a64-pc-relative-after-call '    1010:\tstp\tx29, x30, [sp, #-0x10]!\n
+ refuse a64-pc-relative-walk '    1010:\tadr\tx8, 0x1010 <_main>\n    1014:\tsub\tx2, x1, #0xfff\n    1018:\tadd\tx8, x8, #0x8\n    101c:\tcmp\tx8, x2\n    1020:\tb.lo\t0x1018 <_main+0x8>\n    1024:\tstrb\twzr, [x8]\n    1028:\tret\n' aarch64 _main
+ refuse a64-pc-relative-far '    1010:\tadrp\tx8, 0x7fff0000\n    1014:\tstrb\twzr, [x8]\n    1018:\tret\n' aarch64 _main
+ refuse absolute-address '    1010:\tmov\tbyte ptr [0x7fffffd0], 0x0\n    1018:\tret\n'
++# The link register loaded from a slot that does not hold it, and a stub call with no stub entry.
++refuse a64-lr-from-other-slot '    1010:\tsub\tsp, sp, #0x20\n    1014:\tstr\tx30, [sp, #0x10]\n    1018:\tstr\tx0, [sp, #0x8]\n    101c:\tldr\tx30, [sp, #0x8]\n    1020:\tadd\tsp, sp, #0x20\n    1024:\tret\n' aarch64 _main
++refuse a64-unmapped-stub '    1010:\tstr\tx30, [sp, #-0x10]!\n    1014:\tbl\t0x1040 <_write+0x1040>\n    1018:\tldr\tx30, [sp], #0x10\n    101c:\tret\n' aarch64 _main
+ refuse a64-callee-residual-reread '    1010:\tstp\tx29, x30, [sp, #-0x10]!\n    1014:\tmov\tx29, sp\n    1018:\tbl\t0x1040 <_concrete_body>\n    101c:\tldr\tx0, [sp, #-0x10]\n    1020:\tstr\tx1, [x0, #-0x100]\n    1024:\tldp\tx29, x30, [sp], #0x10\n    1028:\tret\n\n0000000000001040 <_concrete_body>:\n    1040:\tstp\tx29, x30, [sp, #-0x10]!\n    1044:\tldp\tx29, x30, [sp], #0x10\n    1048:\tret\n' aarch64 _main
+ # A read of a byte written on only one path into it.
+ refuse one-path-write '    1010:\tpush\trbp\n    1011:\tmov\trbp, rsp\n    1014:\tje\t0x101e <main+0xe>\n    1016:\tmov\tqword ptr [rbp - 0x8], rax\n    101e:\tmov\trax, qword ptr [rbp - 0x8]\n    1022:\tpop\trbp\n    1023:\tret\n'
+@@ -299,6 +318,9 @@ bound_is a64-framed-main-and-leaf aarch64 'bound 32' '0000000000001000 <_main>:\
+ bound_is a64-offset-frame-record aarch64 'bound 32' '0000000000001000 <_main>:\n    1000:\tsub\tsp, sp, #0x20\n    1004:\tstp\tx29, x30, [sp, #0x10]\n    1008:\tadd\tx29, sp, #0x10\n    100c:\tstur\twzr, [x29, #-0x4]\n    1010:\tldp\tx29, x30, [sp, #0x10]\n    1014:\tadd\tsp, sp, #0x20\n    1018:\tret\n'
+ # A load PC-relative through adrp + add is not a stack access.
+ bound_is a64-pc-relative-load aarch64 'bound 0' '0000000000001000 <_main>:\n    1000:\tadrp\tx8, 0x2000 <_main+0x1000>\n    1004:\tadd\tx8, x8, #0x10\n    1008:\tldr\tw0, [x8, #0x4]\n    100c:\tret\n'
++# LCB's frame: the link register saved and restored by a single str/ldr; a Mach-O stub entry named
++# by the indirect symbol table (a `stub` line); a call made in a loop (the link register meets).
++bound_is a64-single-lr-save-and-stub aarch64 'bound 48 external write 48' '0000000000001000 <_main>:\n    1000:\tsub\tsp, sp, #0x30\n    1004:\tstr\tx30, [sp, #0x20]\n    1008:\tmov\tw0, #0x2\n    100c:\tbl\t0x1040 <_write+0x1040>\n    1010:\tcbnz\tw0, 0x1008 <_main+0x8>\n    1014:\tldr\tx30, [sp, #0x20]\n    1018:\tadd\tsp, sp, #0x30\n    101c:\tret\n\nDisassembly of section __TEXT,__stubs:\n\n0000000000001040 <__stubs>:\n    1040:\tadrp\tx16, 0x2000\n    1044:\tldr\tx16, [x16]\n    1048:\tbr\tx16\nstub 0x0000000000001040 _write\n'
+ # A read of bytes the function wrote on both paths into it is accepted.
+ bound_is both-path-write x86_64 'bound 16' '0000000000001010 <main>:\n    1010:\tpush\trbp\n    1011:\tmov\trbp, rsp\n    1014:\tje\t0x101c <main+0xc>\n    1016:\tmov\tqword ptr [rbp - 0x8], rax\n    101a:\tjmp\t0x1020 <main+0x10>\n    101c:\tmov\tqword ptr [rbp - 0x8], rcx\n    1020:\tmov\trax, qword ptr [rbp - 0x8]\n    1024:\tpop\trbp\n    1025:\tret\n'
+ if [ -n "$measuring" ]; then
+```
+```
+
+/tmp/nix-shell.YSbn90/tmp.QX1ek5eNRi/ex/answer/lcb.exe:	file format mach-o arm64
+
+Disassembly of section __TEXT,__text:
+
+0000000100003d38 <_concrete_body>:
+100003d38:     	sub	sp, sp, #0x40
+100003d3c:     	b	0x100003d40 <_concrete_body+0x8>
+100003d40:     	mov	w9, #0x14               ; =20
+100003d44:     	mov	w10, #0x16              ; =22
+100003d48:     	add	w9, w9, w10
+100003d4c:     	str	w9, [sp]
+100003d50:     	ldr	w9, [sp]
+100003d54:     	mov	w10, #0x0               ; =0
+100003d58:     	sub	w9, w9, w10
+100003d5c:     	str	w9, [sp, #0x8]
+100003d60:     	ldr	w9, [sp, #0x8]
+100003d64:     	mov	w10, #0xff              ; =255
+100003d68:     	and	w9, w9, w10
+100003d6c:     	str	w9, [sp, #0x10]
+100003d70:     	ldr	w9, [sp, #0x10]
+100003d74:     	mov	w10, #0x0               ; =0
+100003d78:     	add	w9, w9, w10
+100003d7c:     	str	w9, [sp, #0x18]
+100003d80:     	ldr	w9, [sp, #0x8]
+100003d84:     	mov	w10, #0x100             ; =256
+100003d88:     	cmp	w9, w10
+100003d8c:     	cset	w9, lo
+100003d90:     	str	w9, [sp, #0x20]
+100003d94:     	ldr	w9, [sp, #0x20]
+100003d98:     	mov	w10, #0x0               ; =0
+100003d9c:     	cmp	w9, w10
+100003da0:     	cset	w9, eq
+100003da4:     	str	w9, [sp, #0x28]
+100003da8:     	ldr	w9, [sp, #0x28]
+100003dac:     	cbnz	w9, 0x100003db4 <_concrete_body+0x7c>
+100003db0:     	b	0x100003db8 <_concrete_body+0x80>
+100003db4:     	b	0x100003dcc <_concrete_body+0x94>
+100003db8:     	ldr	w9, [sp, #0x18]
+100003dbc:     	str	w9, [sp, #0x38]
+100003dc0:     	ldr	w9, [sp, #0x38]
+100003dc4:     	str	w9, [sp, #0x30]
+100003dc8:     	b	0x100003dd8 <_concrete_body+0xa0>
+100003dcc:     	mov	w0, #0x100              ; =256
+100003dd0:     	add	sp, sp, #0x40
+100003dd4:     	ret
+100003dd8:     	ldr	w0, [sp, #0x30]
+100003ddc:     	add	sp, sp, #0x40
+100003de0:     	ret
+
+0000000100003de4 <_concrete_rt_write_all>:
+100003de4:     	sub	sp, sp, #0x60
+100003de8:     	str	x30, [sp, #0x58]
+100003dec:     	str	x0, [sp]
+100003df0:     	str	x1, [sp, #0x8]
+100003df4:     	ldr	x9, [sp, #0x8]
+100003df8:     	str	x9, [sp, #0x48]
+100003dfc:     	ldr	x9, [sp]
+100003e00:     	str	x9, [sp, #0x50]
+100003e04:     	ldr	x9, [sp, #0x48]
+100003e08:     	str	x9, [sp, #0x10]
+100003e0c:     	ldr	x9, [sp, #0x50]
+100003e10:     	str	x9, [sp, #0x18]
+100003e14:     	b	0x100003e18 <_concrete_rt_write_all+0x34>
+100003e18:     	ldr	x9, [sp, #0x10]
+100003e1c:     	mov	x10, #0x0               ; =0
+100003e20:     	cmp	x9, x10
+100003e24:     	cset	w9, eq
+100003e28:     	str	w9, [sp, #0x20]
+100003e2c:     	ldr	w9, [sp, #0x20]
+100003e30:     	cbz	w9, 0x100003e38 <_concrete_rt_write_all+0x54>
+100003e34:     	b	0x100003ebc <_concrete_rt_write_all+0xd8>
+100003e38:     	b	0x100003e3c <_concrete_rt_write_all+0x58>
+100003e3c:     	mov	w0, #0x2                ; =2
+100003e40:     	ldr	x1, [sp, #0x18]
+100003e44:     	ldr	x2, [sp, #0x10]
+100003e48:     	bl	0x100003fac <_write+0x100003fac>
+100003e4c:     	mov	x9, x0
+100003e50:     	str	x9, [sp, #0x28]
+100003e54:     	ldr	x9, [sp, #0x28]
+100003e58:     	mov	x10, #0x0               ; =0
+100003e5c:     	cmp	x9, x10
+100003e60:     	cset	w9, le
+100003e64:     	str	w9, [sp, #0x30]
+100003e68:     	ldr	w9, [sp, #0x30]
+100003e6c:     	cbz	w9, 0x100003e74 <_concrete_rt_write_all+0x90>
+100003e70:     	b	0x100003ebc <_concrete_rt_write_all+0xd8>
+100003e74:     	b	0x100003e78 <_concrete_rt_write_all+0x94>
+100003e78:     	ldr	x9, [sp, #0x18]
+100003e7c:     	ldr	x10, [sp, #0x28]
+100003e80:     	add	x9, x9, x10
+100003e84:     	str	x9, [sp, #0x38]
+100003e88:     	ldr	x9, [sp, #0x10]
+100003e8c:     	ldr	x10, [sp, #0x28]
+100003e90:     	sub	x9, x9, x10
+100003e94:     	str	x9, [sp, #0x40]
+100003e98:     	ldr	x9, [sp, #0x40]
+100003e9c:     	str	x9, [sp, #0x48]
+100003ea0:     	ldr	x9, [sp, #0x38]
+100003ea4:     	str	x9, [sp, #0x50]
+100003ea8:     	ldr	x9, [sp, #0x48]
+100003eac:     	str	x9, [sp, #0x10]
+100003eb0:     	ldr	x9, [sp, #0x50]
+100003eb4:     	str	x9, [sp, #0x18]
+100003eb8:     	b	0x100003e18 <_concrete_rt_write_all+0x34>
+100003ebc:     	ldr	x30, [sp, #0x58]
+100003ec0:     	add	sp, sp, #0x60
+100003ec4:     	ret
+
+0000000100003ec8 <_main>:
+100003ec8:     	sub	sp, sp, #0x30
+100003ecc:     	str	x30, [sp, #0x20]
+100003ed0:     	bl	0x100003d38 <_concrete_body>
+100003ed4:     	mov	w9, w0
+100003ed8:     	str	w9, [sp]
+100003edc:     	ldr	w9, [sp]
+100003ee0:     	mov	w10, #0x100             ; =256
+100003ee4:     	cmp	w9, w10
+100003ee8:     	cset	w9, lo
+100003eec:     	str	w9, [sp, #0x8]
+100003ef0:     	ldr	w9, [sp, #0x8]
+100003ef4:     	cbz	w9, 0x100003efc <_main+0x34>
+100003ef8:     	b	0x100003f00 <_main+0x38>
+100003efc:     	b	0x100003f10 <_main+0x48>
+100003f00:     	ldr	w0, [sp]
+100003f04:     	ldr	x30, [sp, #0x20]
+100003f08:     	add	sp, sp, #0x30
+100003f0c:     	ret
+100003f10:     	ldr	w9, [sp]
+100003f14:     	mov	w10, #0x100             ; =256
+100003f18:     	sub	w9, w9, w10
+100003f1c:     	str	w9, [sp, #0x10]
+100003f20:     	b	0x100003f24 <_main+0x5c>
+100003f24:     	ldr	w9, [sp, #0x10]
+100003f28:     	mov	w10, #0x0               ; =0
+100003f2c:     	cmp	w9, w10
+100003f30:     	cset	w9, eq
+100003f34:     	str	w9, [sp, #0x18]
+100003f38:     	ldr	w9, [sp, #0x18]
+100003f3c:     	cbz	w9, 0x100003f44 <_main+0x7c>
+100003f40:     	b	0x100003f48 <_main+0x80>
+100003f44:     	b	0x100003f70 <_main+0xa8>
+100003f48:     	adrp	x0, 0x100008000 <_site0>
+100003f4c:     	add	x0, x0, #0x0
+100003f50:     	mov	x1, #0x3f               ; =63
+100003f54:     	bl	0x100003de4 <_concrete_rt_write_all>
+100003f58:     	mov	w0, #0x86               ; =134
+100003f5c:     	bl	0x100003f94 <_write+0x100003f94>
+100003f60:     	mov	w0, #0x0                ; =0
+100003f64:     	ldr	x30, [sp, #0x20]
+100003f68:     	add	sp, sp, #0x30
+100003f6c:     	ret
+100003f70:     	adrp	x0, 0x100008000 <_site0>
+100003f74:     	add	x0, x0, #0x40
+100003f78:     	mov	x1, #0x27               ; =39
+100003f7c:     	bl	0x100003de4 <_concrete_rt_write_all>
+100003f80:     	bl	0x100003fa0 <_write+0x100003fa0>
+100003f84:     	mov	w0, #0x0                ; =0
+100003f88:     	ldr	x30, [sp, #0x20]
+100003f8c:     	add	sp, sp, #0x30
+100003f90:     	ret
+
+Disassembly of section __TEXT,__stubs:
+
+0000000100003f94 <__stubs>:
+100003f94:     	adrp	x16, 0x100004000 <_write+0x100004000>
+100003f98:     	ldr	x16, [x16]
+100003f9c:     	br	x16
+100003fa0:     	adrp	x16, 0x100004000 <_write+0x100004000>
+100003fa4:     	ldr	x16, [x16, #0x8]
+100003fa8:     	br	x16
+100003fac:     	adrp	x16, 0x100004000 <_write+0x100004000>
+100003fb0:     	ldr	x16, [x16, #0x10]
+100003fb4:     	br	x16
+```
+End with exactly one line: VERDICT: ACCEPT, VERDICT: ACCEPT-WITH-CHANGES or VERDICT: REJECT.

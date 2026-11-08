@@ -1,0 +1,358 @@
+kimi version 2.4.1
+• I need review read-only no modifications outside scratch. Should inspect round1, delta, files. Must not modify. Should focus exact findings. I can call the tool. Should read ../round1.txt and delta directly. Parallel.
+
+• I’ll compare the delta against each round-1 finding, then inspect the affected checks and fixtures for regressions without modifying the repository.
+
+• Should absolute cwd given. /tmp/.../scratchpad/kimi-sweep2/repo parent. call.I have delta 228 lines. Should inspect current file full, retention etc. Round1 findings last section 5. Delta addresses 1,2,3,4,5. Should evaluate fixed and new defects. Critical new chain logic vulnerabilities.
+
+  Read legacy_frozen full current with lines. Also retention relevant, changelog, decisions, ISSUES perhaps no need full. Use parallel.Should deep analyze code. New chain potential fail-open invalid lines: If invalid sweep line, echo error and `continue` without prev=st. Then final judge prev->cur with no sweep commits. If cur equals that invalid st, modifications/additions refused unless deletion etc. out includes error, so fail. Good.
+
+  But while process substitution `sed` errors? lock exists. read splits whitespace. Paths no issue lock only hashes. `while read -r sw st extra`: leading/trailing IFS trim. extra catches >3. If `st` invalid tree but valid commit sw: error prev remains previous. final outputs error. Good.
+
+  Chain sweep tree arbitrary tree object not necessarily legacy tree produced by commit, but owner line records tree and judge validates transition. Could use any tree. Ancestry source validated. Good.
+
+  Important root existence uses HEAD root for every step. If file exists at root at HEAD then old sweep now fails (desired copy left root invalid). If root path absent HEAD but existed intermediate, final valid. Fine.
+
+  Post-sweep last judge no sweep commit so additions rejected. Deletions resolved allowed. Modifications rejected. Good.
+
+  NUL parser correctness. `git diff-tree -z --name-status` output format with statuses and paths: For no-renames, each `A\0path\0`? Should recall actual `git diff-tree -z --name-status`: Does `-z` separate status from path with NUL or tab? Git docs: when --raw or --numstat or --name-only or --name-status given -z, do not munge pathnames and use NULs as output field terminators. Output likely `A\0file\0` yes. But some Git uses `A\tfile\0`? Should verify. Existing round1 used no -z `A\tpath\n`. With -z docs "use NULs as output field terminators" implies status NUL path NUL. I can test using temp repo. Current negative controls will validate. Should run in scratch allowed. I can use fixed scratch sibling? User allows scratch directory. Current repo under scratchpad/kimi-sweep2. I can create sibling `/tmp/.../scratchpad/kimi-sweep2/review2` (outside repo but scratch). User says modify nothing outside scratch directory; use sibling. Tools need absolute. I can run full script in temp git copy. No .git current. Copy current repo into temp. Should not modify repo. Use Bash mktemp in parent. Could just use `tmp=$(mktemp -d /tmp/.../kimi-sweep2/review2.XXXXXX)` cp -a repo. git init commit. Script controls then real fails base. I can get controls. Should have custom adversarial tests perhaps inspect possible hidden defects.
+
+  Major vulnerability: pipeline statuses not checked. `judge` returns while status, output emptiness used. Python failure (malformed retention, Unicode decode status? path raw surrogate handled) prints traceback stderr captured in chain real 2>&1, so out nonempty. `git diff-tree` failure stderr captured by chain. Good. But `git ls-tree` errors inside command substitutions stderr captured, want empty refused. Source git ls-tree failure returns empty and want nonempty no match. Root git ls-tree failure returns empty interpreted absent, but root validated head. path with leading weird handled --. Path invalid bytes: decoded surrogateescape then shell variable cannot contain NUL but raw path cannot NUL; invalid UTF-8 encoded to shell string? Python stdout encoding with surrogateescape default? sys.stdout errors likely surrogateescape in Linux, prints original bytes. `path.isprintable()` on surrogate false, so prints refusal repr ASCII and no ADD. fail closed. Control char check catches newline tab and all not printable, includes b slash? backslash printable and allowed now raw so safe. Path with carriage etc refused. Path with newline st D: first branch prints control refusal, doesn't allow deletion. Good. Spaces ADD read safe. Path ending spaces read -r preserves due IFS= yes. Path starts/ends tabs refused. Path containing `ADD\t` refused tab. Path with nonprintable Unicode perhaps zero-width? isprintable false for some. Fine.
+
+  Malformed `git diff-tree -z` output odd fields zip silently ignores unmatched. Git trusted. Empty diff frozen!=cur due tree same? impossible unless replace object weird. No.
+
+  Tree validation: `git cat-file -t "$st"` accepts tree object but `st` begins `-`? git cat-file -t "$st" where -something could be option. Hashes from lock could be options. Validation sw rev parse and ancestry restricts. st can be e.g `--help` cat-file behavior? output not tree likely. Could use `--` not supported position? `git cat-file -t --` etc. Not issue security unless malicious lock, and invalid outputs. Should fail-closed.
+
+  Critical chain handling invalid sweep line with valid tree but non-ancestor commit: prev not updated, final judge without source perhaps current equal sweep tree. Outputs initial error. Good.
+
+  But sweep lines count `n` counts all lines from sed including blank after "sweep " and read behavior? blank line `read` returns sw/st empty -> error. Good.
+
+  Duplicate sweep trees no changes accepted. This may allow chain where a later sweep source has root file but no changes, no issue. Duplicate same path additions no modifications.
+
+  Post-sweep deletion control passes. Round1 fixed all. Should seek new defects introduced by chain. Potential fail-open final step when last valid sweep tree equals cur but there are earlier invalid lines? out error yes. All.
+
+  Chain doesn't ensure `prev` matches actual commit legacy tree; only recorded tree OID. That's design, tree attestation via judge. Fine.
+
+  One subtle root no longer exists check with root tree HEAD and path `P` that's directory in HEAD? `git ls-tree root -- path` nonempty directory so refuses. fine.
+
+  C quote fixed. Retention row fixed. ISSUES fixed. Changelog explicitly left history accepted. Ancestry control fixed.
+
+  Could verdict accept if no new defects. Should thorough test adversarial around new chain. Should run.
+
+• The delta directly addresses all five prior findings. I’m exercising the new chain and NUL parser now, especially malformed lock lines and transitions after the last sweep, where an empty diagnostic would be treated as success.=== negative controls ===
+  ok   control: an unchanged tree passes
+  ok   control: an added file is refused
+  ok   control: a modified file is refused
+  ok   control: a deletion under an open row is refused
+  ok   control: a deletion without a status column is refused
+  ok   control: a deletion under a resolved row passes
+  ok   control: a resolved parent does not release a child with an open row
+  ok   control: a deletion outside the resolved row is refused
+  ok   control: a byte-for-byte move from a sweep commit, gone from the root, passes
+  ok   control: the same addition with no sweep line is refused
+  ok   control: a swept copy that still exists at the root is refused
+  ok   control: a modified copy of a swept file is refused
+  ok   control: a swept copy with another file mode is refused
+  ok   control: a new file with no root original is refused
+  ok   control: an edit of an existing legacy/ file is refused, even matching a sweep commit
+  ok   control: deleting a swept file under an open row is refused
+  ok   control: deleting a swept file under a resolved row passes
+  ok   control: an addition after the last sweep, with no new sweep line, is refused
+  ok   control: a lock chaining the frozen tree through a sweep to HEAD:legacy passes
+  ok   control: a sweep commit outside HEAD's history is refused
+  ok   control: a sweep line without its tree is refused
+  ok   control: deleting a swept file after its sweep, under an open row, is refused
+  ok   control: a later sweep cannot rewrite a file an earlier sweep moved
+  ok   control: an added path git would C-quote is refused when it has no original
+=== legacy/ against scripts/checks/legacy.lock ===
+  ok   the move was generated with its landing prerequisites met
+  FAIL the recorded tree 2b6b53678b6d953331f35295caf9ad00cafd359b is not the tree of the recorded base 9186ca4c9f301ec34b97e66a3677b5eb24bd06d6 (or the base is not in this clone's history)
+legacy_frozen: PASS=25 FAIL=1
+SCRATCH=/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/kimi-sweep2/review2.VETwmc
+GATE_STATUS=1
+
+
+• Controls 24 + preview 25. Good.
+
+  Should inspect actual base and sweep trees unavailable. But perhaps can fetch? No need full source commit not in archive. I can validate lock tree expected current legacy tree using git hash-object? Compute tree of legacy current in temp: `git rev-parse HEAD:legacy` should equal lock st ee... if current archive exact. Since commit current, yes. Base tree can't validate but prior. Sweep commit unavailable. Actual final `cur` likely ee702... because no changes since sweep? I'll check.a6523df09965585e376671f93f91a4a429828ff7
+338a067d911f71ad960e1d6172b08cfd72bfd415
+=== RETENTION.tsv governs the tree ===
+  ok   every tracked file (5005) has exactly one governing row
+  ok   the longest listed prefix governs (decisions.md retained inside archived docs/spec; fuzz findings migrate)
+=== negative controls ===
+  ok   an ungoverned path is refused
+  ok   an unknown disposition is refused
+  ok   an empty deletion criterion is refused
+  ok   removing the std row leaves std's files ungoverned
+  ok   a path listed twice is refused (no ambiguous deletion authority)
+  ok   a retained row that does not separate the root file from its legacy/ copy is refused
+  ok   an unknown status is refused
+  ok   after the move, legacy/ paths and the new root's paths are governed
+
+check_retention_manifest: PASS=10 FAIL=0
+I copied same AGENTS, no changes except git init commit. Already known. Current HEAD legacy differs from sweep tree because later frozen file edits? Delta only checks scripts, issues etc not legacy content. Wait current tree from archive commit includes changes to legacy? Delta doesn't include legacy changes. Why cur a652 differs sweep ee? Sweep tree is legacy tree at earlier commit 3bd? Lock sweep tree produced by sweep (branch initial) should current legacy same unless subsequent commit changed frozen legacy maybe not delta because change since round1 could include base diff? User says delta since round1 only these files, no legacy. But round1 candidate current legacy tree likely same as ee? Yet computed a652. Could be because git archive doesn't preserve executable modes? Git archive does preserve. Or current repo contents may have symlinks? cp -a and git add; .gitignore excludes files under legacy that were tracked originally, so `git add -A` in fresh repo respects .gitignore and omitted ignored files, changing tree. Many build artifacts? The initial commit 5005 files matches retention checker current expected perhaps original 5005? It says 5005, could be full. Why mismatch? `git add -A` honors .gitignore but tracked archive includes ignored files like .env? .env filtered not. There could be files skipped due `.gitignore` `*.olean` tracked originally. So reconstructed tree not reliable. Not issue.
+
+  Should have custom probes can extract functions without modifying original. Since scratch copy okay edit. Could add tests to scratch copy or write separate harness. But perhaps no new defects. Should analyze exact new code potential fail-open due invalid lock line and chain final. Already.
+
+  However significant issue: final step permits deletions with resolved retention. That's desired. Sweep step permits deletions too with resolved rows. Good.
+
+  But sweep source commit ancestry uses HEAD not previous sweep chain commit. Tree chain ordering lock lines can be arbitrary; if older source later okay. Design each line order chain. Fine.
+
+  Potential lock `sweep` lines with CRLF: st includes `tree\r` invalid -> error. fine.
+
+  Potential `read -r sw st extra` if extra multiple words only first? Bash read with 3 vars assigns remainder to extra including spaces, nonempty. good.
+
+  NUL parser path control: It catches all control characters using `not path.isprintable()`. But path containing newline produces refusal. Paths with C-quote backslash now raw and valid source check. Test only unoriginated backslash refused. Should valid backslash sweep addition passes? likely yes. Round1 asked C quote exploit, fixed. I can test to ensure decode/ADD no issues. Current stock valid spaces absent but prior manual. Could add custom using scratch script with extra controls. Should have no need for if confidence.
+
+  More serious possible: The code's `judge` ignores all statuses if output pairing differs for status. With `-z --name-status`, actual status and path separated by NUL confirmed controls pass. Rename disabled. Fine.
+
+  `path.decode("utf-8","surrogateescape")` `st.decode()` strict. Status ASCII. fine.
+
+  `isprintable` rejects valid Unicode non-control characters? Some legitimate format chars (e.g zero-width joiner) rejected by policy "control-character paths" user says refuses control-character paths. It refuses all nonprintable Unicode, including e.g U+200D category Cf (control/format) intended. Non-ASCII printable works. Shell and git support. Python output to bash uses UTF-8. Fine.
+
+  `git ls-tree "$cur" -- "$path"` does not use `-z`, but only cut first field before tab, so even C quoted path output first field same mode type hash. Root only nonempty. Source same. Paths with spaces no issue. Path with newline refused before. Path with backslash ls-tree output quoted but cut mode hash works. fine.
+
+  Fail-open root lookup errors: root valid, path safe, no errors. okay.
+
+  Chain errors: root rev-parse failure yields empty root but no diagnostic if head invalid? Called HEAD valid or controls valid. If invalid head in custom, commit ancestry fails each sweep but no sweep case final judge root empty may accept deletions, but outer real HEAD always valid. no.
+
+  A malformed lock line `sweep VALID VALID_TREE # comment` error. Good.
+
+  No verification no unknown lock lines. Existing behavior only parses prefixes. Could add arbitrary line no impact, not requirement.
+
+  No sweep lines: chain final judge frozen->cur no sweep. Same old. nsw grep -c returns 1 exit status if zero but command substitution with set -e off and assignment status ignored; output 0. okay.
+
+  `grep` missing lock already checked. fine.
+
+  New check line 191 success message only if nsw>0 out empty. If nsw=0 and out empty, next ok legacy diff. If nsw>0 invalid line out nonempty no ok. Good.
+
+  Could `chain` return status zero even errors? They inspect output not status. All errors echo stdout. Python stderr redirected. Sed stderr not redirected inside process substitution? chain real called `out="$(chain ...)"` without 2>&1 at outer; internal judge captured. `sed` error reading lock improbable after file check. If sed itself missing, shell error stderr not captured in out, no sweep processing, final judge perhaps pass; but core utility present. Not concern.
+
+  Pipeline python error with `ret` malformed: stderr is redirected by `judge ... 2>&1` inside chain so out includes traceback. For direct controls no captured stderr but controls valid. fine.
+
+  One subtle process substitution asynchronous exit and while: if sed fails, while returns 0, no error output in chain capture; but file readable. not new.
+
+  Potential retention path names with spaces not supported manifest by design. no.
+
+  Should check ISSUES exact paths now all old references moved except historical changelog explicitly excluded. My Grep failed use simple and inspect.
+
+• All 24 shipped controls pass in a disposable Git repository, and the retention checker passes 10/10. The real lock-base leg cannot be replayed from the archive because its historical Git objects are absent; I’m finishing the reference audit and a few targeted parser probes.
+
+• References root decisions cleanup historical "delete" no need update? User only specifically old changelog left history. docs decisions 1019 also dated historical approved scope, should remain. Fine.
+
+  Could be new defect with sandbox isolation expected PASS=0 FAIL=0 now controls count updated no issue regex. Running in copy not full.
+
+  Should targeted parser probes: valid C quoted addition from source passes; control character path with matching source rejected; malformed extra field rejected; post-sweep modification rejected; invalid tree etc. Existing controls cover most. I can add test harness in scratch using copy edit. But no need if code straightforward. Yet hidden bug likely chain line handling with invalid tree: It prints error but `prev` stays and final may add? out error ensures fail. Fine.
+
+  Potential new flaw: `chain` doesn't stop after invalid sweep, and can output an error but later commands could overwrite `out`? no appends all.
+
+  Potential false rejection: Existing valid lock has sweep tree ee..., current legacy differs due subsequent changes not in delta? Actual branch only delta changed nonlegacy so should cur==ee. In actual Git, yes. Reconstructed ignored files difference not relevant. Could verify using git archive compute tree including ignored via `git add -f` to see ee. My fresh git add skipped ignored. Use `git add -f .` then write tree may include .git? git add -f . doesn't add .git. It will add ignored files all archive. Then `git write-tree` and `git rev-parse`? I can compare `git write-tree` after add -f. Could produce lock tree exactly if full archive. Do that in scratch. Also base tree perhaps legacy frozen plus sweeps current. This validates current tree = ee.legacy-tree=
+ee702b031bc82e331f1b6e28e809fd18cc41de97
+index-tree=
+933177a7c4ee7cb5572c17c912784a10da087e80
+locked-tree=
+
+
+ee702b031bc82e331f1b6e28e809fd18cc41de97
+Good current legacy exact sweep. Nice. Locked tree cut includes blank due line base etc no matter.
+
+  Could reconstruct sweep source commit object by fetching remote? Not needed delta says same previous validated move. Base actual still unavailable. I can say current legacy tree matches recorded tree. That's good verification.
+
+  Perhaps use `git diff-tree` actual frozen not available. Fine.
+
+  Could run ShellCheck if available no. Should check syntax `bash -n`. stock controls covers.
+
+  Now inspect code for new bug related to control character path detection and Unicode. `path.isprintable()` returns False for spaces? Python `' '.isprintable()` true. Good.
+
+  Raw NUL parsing with path bytes containing invalid UTF-8: path decoded surrogate and not printable -> refusal, output uses repr no raw invalid. Good.
+
+  Path with `\r` not printable. Fine.
+
+  Round1 finding #4 changelog old path left per explicit user means fixed? User asks for each round1 finding say fixed. Finding 4 includes ISSUES and changelog. Delta repoints ISSUES, intentionally leaves changelog dated history. I should mark fixed, noting changelog paths intentionally retained per scope and not defect. Retention fixed. #5 ancestry control fixed.
+
+  New defects none perhaps accept. But should scrutinize owner decision recording: new docs lines 1001-1005 adds tree mechanism under "ok to1" though owner approved exactly original protocol not chain? User says delta chains etc and decisions updated. User might expect check only what approved. Original owner approved exact sweep protocol including every edit frozen. Chain is implementation to uphold it, not new policy. Good.
+
+  Could there be requirement deletion resolved RETENTION row "status" about legacy copy only. Chain judge `ret` uses current RETENTION for every historical sweep. If a row was resolved at time of old sweep but later reopened, old sweep fails; status normally monotonic. If row open now but was resolved at historical deletion, chain fails. Design likely status current, okay. Conversely if row open at historical sweep but resolved now, chain allows deletion that was not allowed then. Final current state permitted now, no issue. Freezing history not audit.
+
+  Root existence check at current HEAD for every historical step means if root file was later restored, fails. desired no root copy.
+
+  Potential "every step refuses edit" but deletion+readdition in one diff with --no-renames yields D+A not M if blob changed? `git diff-tree --no-renames` for modified file yields M, notD+A. Type change yields T. good.
+
+  Submodule/gitlink path `git diff-tree -r` perhaps mode 160000 commit, `ls-tree` mode type commit matches source. Byte-for-byte move of gitlink allowed. root no exists. Fine.
+
+  A file mode change plus content yields M, refused.
+
+  Chain `git cat-file -t "$st"` accepts replace refs? Tree OID raw. no.
+
+  Use SHA-1 vs SHA-256 length no hardcoded. substring sw 0:10 okay diagnostic.
+
+  Tree-ish ambiguity: `git rev-parse "$sw^{commit}"` accepts refs not just OIDs. Lock says commit, could name ref `main` and tree `HEAD^{tree}`? `git cat-file -t "$st"` requires tree object or tree-ish? `git cat-file -t HEAD^{tree}` returns tree, so st can be expression not static OID. `judge` accepts. Lock lines intended `<commit> <tree>` could be refs and mutable; within a single check HEAD fixed, refs could change but pre-push working repo controlled. More importantly `sw` can be `HEAD` and st `HEAD^{tree}` etc. But ancestry. Does not enforce full OIDs. Existing accepted commit names. Not defect.
+
+  Tree could be current root tree rather than legacy tree; judge transitions validates relative frozen. If coincidentally same files, fine.
+
+  Security: malicious sweep commit `sw` begins `--...` can rev-parse option injection because no `--` but syntax with ^{commit} makes not exact option perhaps. No.
+
+  Paths starting `-` safe due --. Paths containing colon safe. Git path `:(...)` after -- not pathspec magic? In Git, `--` doesn't disable pathspec magic; path `:(glob)` could be interpreted as pathspec rather than literal. Ah! This is a possible bypass/false behavior. `git ls-tree "$cur" -- "$path"` treats `path` as pathspec, and magic constructs in actual filename can match other paths. For an added legacy file named `:(glob)` etc, want could be multiple entries or wrong. `want` cut output multiple lines, source same perhaps unlikely. Root check could false positive or false negative. Could use `:(literal)` pathspec magic. Should analyze. Round1 weird paths focused C quote, new requirement refuses control-character but not pathspec. A path like `:(top,literal)foo` actual filename can be interpreted. Could cause fail-open addition? Should derive:
+  - want `git ls-tree cur -- ':(...)...'` might return entries for other paths or empty.
+  - want nonempty required.
+  - source compare same pathspec against source commit root (different tree context). If actual added path name contains pathspec magic that resolves differently between legacy cur and root source, could match source file content and accept unoriginated addition.
+  Example added path `:(glob)**`? Git pathspec magic glob `**` matches all files recursively. `git ls-tree cur -- ':(glob)**'` lists all files, want multi-line, source lists all source files, not equal unless entire trees identical. Could craft pathspec that selects one file in cur and one source same mode+hash, while actual addition arbitrary. Since actual added path itself is weird and source pathspec might match original desired file. `want` includes mode hash of matched file, not necessarily added actual. Root check same pathspec against HEAD root might return matches -> reject, unless magic matches no root file. Could use pathspec literal with root? Hard.
+
+  Pathspec `:(literal)P` treats literal string `P` (without magic prefix) rather than actual filename `:(literal)P`. So an added actual path `:(literal)p/moved` would lookup p/moved in cur, but cur legacy contains p/moved perhaps existing. For a new unoriginated actual file `:(literal)a/x`, cur also has frozen a/x original. want = hash a/x. Source commit S has a/x changed (in control), mismatch, but choose source with same a/x. Root HEAD contains a/x? root HEAD tree root includes many files including perhaps path. Root check would see a/x at root and reject. Should target root absent HEAD but present sweep, and cur legacy has swept P plus weird actual path. In initial sweep both actual weird file and P added. `want` for weird actual path `:(literal)P` finds legitimate swept P in cur. Source S has P same. Root HEAD P absent. Accept weird file based on P. There is also legitimate ADD P accepted. So arbitrary weird extra file `legacy/:(literal)P` can be smuggled with valid sweep P. This is a pathspec injection. Even if no legitimate P, use existing frozen file `a/x`, root HEAD a/x exists -> root check rejects because pathspec resolves a/x at root. Could choose prior swept P root absent, yes later sweep. Or pathspec magic `:(exclude)` etc want multiple. This is a new/unaddressed defect in both old and new but round2 asks any new defect (new finding not necessarily introduced). User explicitly "refuses unresolvable or control-character paths" but pathspec resolution can be wrong. Should see whether Git `ls-tree` supports pathspec magic literal and how. Likely yes. Could be expected hidden. Should test in scratch. This could be medium severity, legal unusual path bypass. Should use literal pathspec magic. For current first sweep, can smuggle actual file `:(literal)p/moved` alongside legitimate p/moved. `git diff-tree` emits raw path `:(literal)p/moved` and parser sees printable, ADD. `git ls-tree cur -- ":(literal)p/moved"` interprets literal p/moved, returns its blob. Root R0 p/moved absent. Source S p/moved same. So accepted. Yes.
+
+  Could simpler path `p/*` glob matching legitimate p/moved while actual file p/* (literal asterisk) added. Git pathspec wildcard matches p/moved. Actual p/* is a file named `*` under p, can coexist with p/moved. want p/moved. Root `p/*` may match other root paths? R0 none p. Source S p/moved matches. Accept. Path `p/*` is printable and no controls. This is even easier. Actual added `legacy/p/*` unoriginated accepted because ls-tree glob. `git diff-tree` raw gives `p/*`. `ls-tree` pathspec glob. `want` p/moved. Root no p. Source p/moved. Exactly. Negative controls no wildcard. This is serious and likely valid finding. Should test. I can add probe to scratch script using existing valid S,T. Create tree_with `'mkdir -p p; echo m > p/moved; echo evil > "p/*"'`; judge F T r_ok R0 S. Expected should reject but likely accepts. Root R0 no p. Source S p/moved. For ADD p/*:
+  `git ls-tree cur -- 'p/*'` by default ls-tree nonrecursive? Important `git ls-tree <tree> -- p/*` pathspec matching might select p/moved even without -r? `git ls-tree` with path p/* perhaps path matches directory? Documentation `git ls-tree -r` recurses; without -r, paths arguments can match exact file paths, outputs file. Existing `git ls-tree "$cur" -- "$path"` for nested p/moved works without -r, yes path exact. Wildcard should match p/moved. So want one line. Root none. Source same. Accept. Great.
+
+  Path with `[` etc. Fix use `git ls-tree` pathspec literal `:(literal)$path` or `:(top,literal)$path`? Git ls-tree trees are root relative. `:(literal)$path` ensures. Or `git ls-tree "$cur" -- ":(literal)$path"`. Does literal magic supported all Git yes. Better use `git ls-tree "$cur" -- ":(top,literal)$path"` but when running from subdir? Script cd root, controls cd temp root. Root. `:(literal)` sufficient. Should quote magic. Could use `git ls-tree "$cur" -- ":(literal)$path"` and same root/source. Add wildcard negative control. Also `git diff-tree` tree args not user. Good.
+
+  This likely makes CHANGES-NEEDED. Should verify with actual targeted probe. I can modify scratch script via Edit (allowed scratch). Should Read relevant scratch lines then Edit. Could simply use Bash to copy script? Already scratch. Add after C quote control. Use Edit.
+
+• The recorded sweep tree matches the archive’s complete `legacy/` tree exactly. One path-handling case remains suspicious: `git ls-tree -- "$path"` treats wildcard characters as pathspec syntax, so I’m testing whether a literal `*` filename can borrow a legitimate swept file’s blob and be admitted.
+
+• Run.=== negative controls ===
+  ok   control: an unchanged tree passes
+  ok   control: an added file is refused
+  ok   control: a modified file is refused
+  ok   control: a deletion under an open row is refused
+  ok   control: a deletion without a status column is refused
+  ok   control: a deletion under a resolved row passes
+  ok   control: a resolved parent does not release a child with an open row
+  ok   control: a deletion outside the resolved row is refused
+  ok   control: a byte-for-byte move from a sweep commit, gone from the root, passes
+  ok   control: the same addition with no sweep line is refused
+  ok   control: a swept copy that still exists at the root is refused
+  ok   control: a modified copy of a swept file is refused
+  ok   control: a swept copy with another file mode is refused
+  ok   control: a new file with no root original is refused
+  ok   control: an edit of an existing legacy/ file is refused, even matching a sweep commit
+  ok   control: deleting a swept file under an open row is refused
+  ok   control: deleting a swept file under a resolved row passes
+  ok   control: an addition after the last sweep, with no new sweep line, is refused
+  ok   control: a lock chaining the frozen tree through a sweep to HEAD:legacy passes
+  ok   control: a sweep commit outside HEAD's history is refused
+  ok   control: a sweep line without its tree is refused
+  ok   control: deleting a swept file after its sweep, under an open row, is refused
+  ok   control: a later sweep cannot rewrite a file an earlier sweep moved
+  ok   control: an added path git would C-quote is refused when it has no original
+PROBE wildcard rejected:
+A legacy/p/*: no sweep commit in the lock has p/* with this content; legacy/ admits only byte-for-byte moves
+=== legacy/ against scripts/checks/legacy.lock ===
+  ok   the move was generated with its landing prerequisites met
+  FAIL the recorded tree 2b6b53678b6d953331f35295caf9ad00cafd359b is not the tree of the recorded base 9186ca4c9f301ec34b97e66a3677b5eb24bd06d6 (or the base is not in this clone's history)
+legacy_frozen: PASS=25 FAIL=1
+GATE_STATUS=1
+It rejected. Why want perhaps literal p/*? Git pathspec wildcard doesn't match slash? p/* should match p/moved. `git ls-tree cur -- p/*` without --full-tree? It output perhaps want multiple including literal p/* and p/moved? Actually wildcard matches both actual p/* and p/moved; want two lines, source one => mismatch. If actual wildcard path doesn't itself match pathspec? It does literal * also wildcard matches * filename. Want includes actual file and moved => multi-line. No bypass with p/*. Could design pathspec that doesn't match itself but matches another. `:(literal)p/moved` actual path has slash? Actual file `:(literal)p/moved` means directory `:(literal)p`, file moved. Pathspec literal magic interprets `p/moved`, which does not match actual `:(literal)p/moved`, so want only legitimate p/moved. Great. Should test this. Path contains colon parentheses comma all printable. Actual directory named `:(literal)p`. Source S p/moved. Current includes both. Root pathspec p/moved absent. Accept. I'll test. Modify probe add T2.=== negative controls ===
+  ok   control: an unchanged tree passes
+  ok   control: an added file is refused
+  ok   control: a modified file is refused
+  ok   control: a deletion under an open row is refused
+  ok   control: a deletion without a status column is refused
+  ok   control: a deletion under a resolved row passes
+  ok   control: a resolved parent does not release a child with an open row
+  ok   control: a deletion outside the resolved row is refused
+  ok   control: a byte-for-byte move from a sweep commit, gone from the root, passes
+  ok   control: the same addition with no sweep line is refused
+  ok   control: a swept copy that still exists at the root is refused
+  ok   control: a modified copy of a swept file is refused
+  ok   control: a swept copy with another file mode is refused
+  ok   control: a new file with no root original is refused
+  ok   control: an edit of an existing legacy/ file is refused, even matching a sweep commit
+  ok   control: deleting a swept file under an open row is refused
+  ok   control: deleting a swept file under a resolved row passes
+  ok   control: an addition after the last sweep, with no new sweep line, is refused
+  ok   control: a lock chaining the frozen tree through a sweep to HEAD:legacy passes
+  ok   control: a sweep commit outside HEAD's history is refused
+  ok   control: a sweep line without its tree is refused
+  ok   control: deleting a swept file after its sweep, under an open row, is refused
+  ok   control: a later sweep cannot rewrite a file an earlier sweep moved
+  ok   control: an added path git would C-quote is refused when it has no original
+PROBE wildcard rejected:
+A legacy/p/*: no sweep commit in the lock has p/* with this content; legacy/ admits only byte-for-byte moves
+PROBE pathspec-magic unoriginated addition ACCEPTED
+=== legacy/ against scripts/checks/legacy.lock ===
+  ok   the move was generated with its landing prerequisites met
+  FAIL the recorded tree 2b6b53678b6d953331f35295caf9ad00cafd359b is not the tree of the recorded base 9186ca4c9f301ec34b97e66a3677b5eb24bd06d6 (or the base is not in this clone's history)
+legacy_frozen: PASS=25 FAIL=1
+GATE_STATUS=1
+Found real new defect. Severity Medium like C quote. I'll report all round1 fixed and new pathspec injection with file lines 68,70,74. Could there be other new defects perhaps enough. Make sure no additional more severe. I should sweep other Git pathspec handling in retention Python no. Deletion path `ok` raw path safe. Only ls-tree. Fix literal pathspec. I'll mention valid path `:(literal)p/moved` accepted with unoriginated content when legitimate p/moved sweep. This meets exact reproducible. Control add. Severity medium (integrity bypass requires unusual path). Verdict changes needed.
+
+  Should test that proposed `:(literal)$path` handles actual path beginning magic? Nested magic escaping: prefix `:(literal)` makes rest literal including `:(literal)p/moved`, yes. Good.
+
+  Could use `git ls-tree "$cur" -- ":(literal)$path"` for all. For path with newline refused. Fine.
+
+  Should check potential `git diff-tree` uses pathspec no. Good.
+
+  Any new defect chain invalid line final no? no.
+
+  Potential false acceptance if pathspec magic `:(exclude)` yields want multi etc but my concrete enough.
+
+  Should round1 status explicitly 1 fixed chain baseline etc. 2 fixed NUL plus unresolvable want; new pathspec distinct. 3 fixed archived. 4 fixed ISSUES; old changelog left as requested. 5 fixed nonancestor control. I should include line refs for fixes maybe:
+  1 `legacy_frozen.sh:80-95,147-167`.
+  2 `:35-76,168-169`.
+  3 `RETENTION.tsv:45`.
+  4 `ISSUES.tsv:8,16,18`.
+  5 `legacy_frozen.sh:153-161`.
+  New defect Medium lines 68-74.
+
+  Perhaps user asked "report any new defect with file:line and severity." I can format:
+  Round-1 findings
+  1. Fixed ...
+  ...
+  New finding
+  - Medium — Pathspec-magic filenames bypass byte-for-byte provenance. `scripts/checks/legacy_frozen.sh:68-74`. ... Reproduced... Use literal pathspec and negative control.
+  Verdict exact `Verdict: CHANGES-NEEDED` no bold? User says end with exact. Do exact plain.
+
+  Should cleanup scratch before responding? User allows scratch dir, no need remove? Instructions say after tests delete new files task does not need. I should remove scratch created, safe. It is outside repo but scratch. Remove entire review2.VETwmc. Before removal no need preserve outputs, I have evidence. Use Bash rm -rf my scratch allowed. Then respond. Perhaps no other modifications original. I didn't modify original. Good. Use `rm -rf` exact path.
+
+• The targeted probe found a separate provenance bypass: a literal filename beginning with Git pathspec magic, `:(literal)p/moved`, is looked up as `p/moved`. With a valid sweep of `p/moved`, an unoriginated file at the magic-named path was accepted. All five round-1 findings themselves are resolved.
+
+• I'll respond concise but sufficient. Include tests 24 controls and 10 retention, lock tree match. New defect severity. Round1 finding 1 description high swept edit/delete fixed. #2 C quote fixed but pathspec new. #4 historical changelog no issue. End exact.
+
+  Potential concern user says "new defect" means only introduced delta, pathspec bug preexisting round1 code. User didn't find in round1, now new finding. Fine.
+
+  Should I severity High? Round1 C quote was Medium, pathspec similarly Medium. Good.
+
+  Round1 fixed #1 chain invalid lines handling etc. #5 no ancestor control through chain yes.
+
+  "Each round1 finding say whether fixed" explicit. Use enumerated Fixed. "New defect" singular.
+
+  Mention no candidate files changed maybe not needed.
+
+  Response:
+  ## Round-1 findings
+  1 Fixed ...
+  ...
+  ## New finding
+  **Medium — Git pathspec magic bypasses sweep origin validation** `scripts/checks/legacy_frozen.sh:68-74` ...
+  `git ls-tree` interprets path. Repro with current T containing legitimate p/moved from S plus arbitrary `:(literal)p/moved`; judge emitted nothing. Because lookup of magic path returns legitimate p/moved in cur and S, root absent. All checks pass. Use `:(literal)$path` in all three and control.
+  Validation line.
+  Verdict.
+
+  Should avoid saying "all checks pass" full gate no base. Say "judge emitted no diagnostic". Good.
+  "all 24 shipped controls" counted yes. PASS25 includes preview. 24 controls. Great.
+  Current legacy matches lock tree via forced add. Include maybe useful but no need.
+
+  Respond with no extra after verdict.
+
+• ## Round-1 findings
+
+  1. **Fixed — edits and deletions after a sweep.** The lock now chains frozen → sweep trees → current tree (`scripts/checks/legacy_frozen.sh:80-95`), with controls for later edits, open/resolved deletions, and post-sweep additions (`scripts/checks/legacy_frozen.sh:147-167`).
+
+  2. **Fixed — C-quoted pathnames.** `git diff-tree -z` and NUL-safe parsing preserve raw paths; unresolved additions are refused, and control-character paths are rejected (`scripts/checks/legacy_frozen.sh:35-76`). The C-quoted-path control passes.
+
+  3. **Fixed — retention disposition.** `RETENTION.tsv:45` now consistently says `archived`, with a root-sweep criterion and protection for the legacy copy. The retention checker passes 10/10.
+
+  4. **Fixed — moved-path references.** The affected `ISSUES.tsv:8,16,18` references now point under `legacy/`. The dated 2026-11-04 changelog remains unchanged as requested.
+
+  5. **Fixed — ancestry control.** A non-ancestor sweep is exercised through `chain` and refused (`scripts/checks/legacy_frozen.sh:153-161`). Tree-less lock lines and second-sweep rewrites also have controls.
+
+  ## New finding
+
+  - **Medium — Git pathspec magic bypasses sweep-origin validation** (`scripts/checks/legacy_frozen.sh:68-74`). The three `git ls-tree -- "$path"` lookups interpret the filename as a pathspec rather than a literal path. I reproduced an unoriginated addition named `:(literal)p/moved` being accepted alongside a legitimate sweep of `p/moved`: its lookups resolve to `p/moved`, so the current and sweep blobs compare equal and `judge` emits no diagnostic. Use literal pathspecs such as `:(literal)$path` for all three lookups and add this as a negative control.
+
+  All 24 shipped controls passed in a disposable repository, and the archive’s complete `legacy/` tree matches the recorded sweep tree. The historical lock-base leg could not be replayed because the archive lacks those Git objects.
+
+  Verdict: CHANGES-NEEDED
+
+To resume this session: kimi -r session_44e56e91-e475-4db8-96d8-65a4fa055173
+kimi exit 0

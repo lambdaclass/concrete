@@ -1,0 +1,21 @@
+# review of a3352dcfeb328df7d1e1009367cc69ce15c867b6, round 3
+
+reviewer: codex; utc: 2026-11-08T01:34:30Z; base: 3bd7bc41511e0a0ba247b53231b5dc8589533d2f; diff from: ce1e882d4c1e2ab7ec795052613d40101786b5da; pieces: 2; diff bytes: 21875
+
+## piece 1 of 2: scripts (19504 bytes): findings
+
+files: ISSUES.tsv,scripts/checks/landing_script.sh,scripts/land/acceptance.sh,scripts/land/acceptance_shim.sh
+
+- scripts/land/acceptance_shim.sh:54: The `*://*` case misclassifies absolute local paths containing `://`, such as `/tmp/store://protected.git`, as remote URLs. Git treats that absolute path as local, but the shim records no protected repository identity. A push to the same repository through a differently named symlink can therefore pass the local-fixture exception and move its `main`.
+
+VERDICT: findings
+
+## piece 2 of 2: docs (2371 bytes): clean
+
+files: changelog.d/2026-11-08-acceptance-shim.md
+
+No correctness finding is evident in the supplied diff. Repository verification was blocked by a sandbox startup failure, so I could not confirm the code, tests, or owner decisions.
+
+VERDICT: clean
+
+## verdict: findings (1 piece(s) with findings, 0 blocked)

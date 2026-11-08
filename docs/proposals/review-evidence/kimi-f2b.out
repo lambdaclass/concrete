@@ -1,0 +1,697 @@
+• I’ll inspect commit 705815b95 and the current workflow/control fixtures, then patch both findings and run only the two bounded checks.
+
+• The current leg is unconditionally self-hosted and `runner_host` is only a matrix label. I’ll make PRs use GitHub-hosted `ubuntu-24.04` with an intentional first-step failure, and validate ci2 from `runner.environment` plus the registered runner-name pattern.
+
+• Both fixes and their records are patched. I’ll review the diff for stale `runner_host` claims or guard mistakes before running the two permitted gates.
+
+• The diff now drops `runner_host` everywhere and includes both new negative fixtures. I’m running the workflow gate with the repository’s watchdog, then the issues gate.
+
+• Both permitted controls pass: workflow `PASS=9 FAIL=0` and issues `PASS=5 FAIL=0`. I’ll create the requested follow-up commit and verify the branch remains unpushed.
+
+• Committed as `0d55b0554` (`ISS-0029: secure concrete-ci-2 repro runner`). No push; working tree is clean.
+
+  - `linux-ci2` uses GitHub-hosted `ubuntu-24.04` on `pull_request`, with a first-step failure explaining the intentional red leg. Main pushes and dispatch runs use concrete-ci-2.
+  - Dropped `runner_host`; provenance now requires runner-reported environment and `concrete-ci-2-gha<N>` runner names.
+  - Added structural guard assertions and fixtures rejecting invalid ci2 names and `github-hosted` ci2 provenance.
+  - Updated `ISSUES.tsv`, `Concrete/README.md`, and the changelog fragment.
+
+  Bounded controls inside `nix develop .#gates`:
+
+  - `scripts/checks/workflow_yaml.sh`: **PASS=9 FAIL=0**
+  - `scripts/checks/issues.sh`: **PASS=5 FAIL=0**
+
+kimi version 2.4.1
+• I need modify repo. Should carefully inspect status current files, commit. User explicit writer branch fix findings new commit no amend no push. Only specified gates bounded. Should comply project instructions. Perhaps branch/worktree given. I am in clone. Should use Todo list proactive multi-step. Should inspect git status no push. Read relevant workflow, scripts, issues row docs changelog. Should know commit diff. Use Bash for git status/show acceptable dedicated none. Parallel reads/search. First brief progress sentence.
+
+## wip/repro-ci2...origin/main [ahead 1]
+705815b95 (HEAD -> wip/repro-ci2) ISS-0029: compare reproducibility with concrete-ci-2
+ .github/workflows/lean_action_ci.yml         |  28 ++++---
+ Concrete/README.md                           |  10 ++-
+ ISSUES.tsv                                   |   1 +
+ changelog.d/2026-11-08-repro-ci2.md          |   9 +++
+ required-checks-transition.tsv               |   2 +
+ required-checks.txt                          |   4 +-
+ scripts/checks/compiler/slice0_repro.sh      |   4 +-
+ scripts/checks/lib/repro_compare.py          |  11 ++-
+ scripts/checks/lib/repro_manifest_compare.py |  75 +++++++++++++++++++
+ scripts/checks/workflow_yaml.sh              | 107 +++++++++++++++++++++++++++
+ 10 files changed, 231 insertions(+), 20 deletions(-)
+commit 705815b95ae337e4e133281cee8a0957701f065f
+Author:     Federico Carrone <mail@fcarrone.com>
+AuthorDate: Sun Nov 8 15:07:56 2026 +0000
+Commit:     Federico Carrone <mail@fcarrone.com>
+CommitDate: Sun Nov 8 15:07:56 2026 +0000
+
+    ISS-0029: compare reproducibility with concrete-ci-2
+
+diff --git a/.github/workflows/lean_action_ci.yml b/.github/workflows/lean_action_ci.yml
+index 4da99f7bf..4e467b470 100644
+--- a/.github/workflows/lean_action_ci.yml
++++ b/.github/workflows/lean_action_ci.yml
+@@ -456,20 +456,29 @@ jobs:
+       fail-fast: false
+       matrix:
+         include:
+-          - id: linux-first
+-            runner: ubuntu-24.04
+-          - id: linux-independent
++          - id: linux-github
+             runner: ubuntu-24.04
++            machine: github
++          - id: linux-ci2
++            runner: ${{ fromJSON('["self-hosted","linux","x64","concrete"]') }}
++            machine: concrete-ci-2
+           - id: macos
+             runner: macos-15
++            machine: github
+     runs-on: ${{ matrix.runner }}
+     timeout-minutes: 60
+     permissions:
+       contents: read
+     steps:
+       - uses: actions/checkout@v4
+-      - uses: cachix/install-nix-action@v31
++      - name: Install Nix (GitHub-hosted only)
++        if: runner.environment != 'self-hosted'
++        uses: cachix/install-nix-action@v31
+       - name: Compare every stage in distinct build directories
++        env:
++          CONCRETE_REPRO_RUNNER_ENVIRONMENT: ${{ runner.environment }}
++          CONCRETE_REPRO_RUNNER_HOST: ${{ matrix.machine }}
++          CONCRETE_REPRO_RUNNER_NAME: ${{ runner.name }}
+         run: nix develop --command timeout 3600 bash scripts/checks/compiler/slice0_repro.sh manifest.txt
+       - uses: actions/upload-artifact@v4
+         with:
+@@ -488,15 +497,14 @@ jobs:
+     permissions:
+       contents: read
+     steps:
++      - uses: actions/checkout@v4
+       - uses: actions/download-artifact@v4
+         with:
+           pattern: reproducibility-linux-*
+           path: manifests
+-      - name: Compare like targets, including compiler and toolchain identity
++      - name: Compare GitHub and concrete-ci-2 artifacts and build identity
+         run: |
+           set -eu
+-          m1=manifests/reproducibility-linux-first/manifest.txt
+-          m2=manifests/reproducibility-linux-independent/manifest.txt
+-          # Both manifests carry the identity and at least one artifact hash.
+-          for m in "$m1" "$m2"; do grep -q '^compiler_commit=' "$m"; grep -q '/lcb.exe$' "$m"; done
+-          diff -u "$m1" "$m2"
++          m1=manifests/reproducibility-linux-github/manifest.txt
++          m2=manifests/reproducibility-linux-ci2/manifest.txt
++          python3 scripts/checks/lib/repro_manifest_compare.py "$m1" "$m2"
+diff --git a/ISSUES.tsv b/ISSUES.tsv
+index f622a24eb..215d93881 100644
+--- a/ISSUES.tsv
++++ b/ISSUES.tsv
+@@ -19,3 +19,4 @@ ISS-0014	2026-11-06	spec	Unconfirmed retrospective second-review findings (Kimi,
+ ISS-0015	2026-11-06	ci	Sandboxes inherit the caller's git environment. scripts/checks/review_tool.sh isolated git config only, not the repository-locating variables; a pre-push hook of a LINKED worktree exports GIT_DIR=<repo>/.git/worktrees/<name>, so every git -C <sandbox> in the check acted on the caller. On 2026-11-06 `train.sh ci laudit` run from the linked worktree ~agent/audit-records made the hook's review_tool.sh create its test branches (nonff, capped, parse-*) and set core.bare=true in ~agent/audit-clone (kept unchanged as evidence), and push 28 commits to origin refs/notes/concrete-review (tip b4b364f4, pre-leak 5b6add0d) and 12 to refs/notes/concrete-review-findings (tip 21c56796, pre-leak fd3c6451), authored Review Gate, 17:16:49-17:17:43Z, annotating 21 sandbox commits that exist on no remote (first counted as 22, which wrongly included c54679c3, a real commit whose note at 17:21Z is legitimate); no earlier note was deleted or changed and every reader looks notes up by exact SHA, so none can count as provenance for a real commit. lambdaclass has no notes refs. Codex confirmed with a bounded reproducer on concrete-ci-2 at main f9a8c333 (caller refs and refs/notes/* changed: LEAK) and an independent GIT_DIR experiment. landing_script.sh and landing_bot.sh unset only five of git's local variables; legacy_frozen.sh, acceptance.sh, run-at-ref.sh and bot.sh unset none. Second incident, same cause: the first reproducer installed a pre-push hook that ran review_tool.sh; the leaked GIT_DIR made each nested push re-enter that hook, the recursion exhausted fede-256gb (load ~1900) and the OOM killer took down the orchestrator's session. Structural owner: the sandbox helper scripts/checks/lib/git_sandbox.sh (unsets every `git rev-parse --local-env-vars` variable), sourced by every repository-making script; reproducers and tests run with no installed hook, under timeout 120 and a 512-task / 8G systemd scope bound, or a finite cgroup memory.max plus a process limit, and never an unbounded run. Closed 2026-11-07: the fix landed at dbe838488891, where every closure part is checked in Root checks (scripts/checks/run.sh, all 11 pass: sandbox_isolation PASS=13 FAIL=0 with its structural leg over 9 scripts, the two live linked-worktree probes and the leaking control; landing_script PASS=208 FAIL=0 with the linked-worktree, hook-off, foreign-hook and identify refusal legs; also run on concrete-ci-2 at 8e62e377) (train siso from a full clone; reviewed by Codex, rounds clean at 8e62e377, and Kimi; CI run 42424663064; main CI 42425007584 on origin and 42425010605 on lambdaclass, both success). The stray notes were removed from origin by one forward fast-forward commit per ref on its then-current tip, no force: refs/notes/concrete-review d4bdcae22d50 -> dcffeea8e6cd (21 entries removed, 224 untouched at the push; Codex confirmed the list against the earlier tip 8cbb7db253f7, where 223 were untouched, and the one commit between that tip and d4bdcae22d50 only added a legitimate note for 9d6dc01a, so the removal list is identical) and refs/notes/concrete-review-findings 301e929e1bab -> 5d7c6dc3dad5 (11 removed, 105 untouched); the 40 leaked commits wrote 33 entries, one of which they removed themselves (0c04c01c); Codex confirmed the removal list and the tree diffs before the push; lambdaclass has no notes refs and none were created. ~agent/audit-clone is kept unchanged as evidence with LEAK-EVIDENCE-README.txt	R-0544	high	every repository-making script under scripts/ sources git_sandbox.sh (scripts/checks/sandbox_isolation.sh, structural leg); review_tool.sh and legacy_frozen.sh run from a linked worktree with GIT_DIR exported leave the caller's refs, refs/notes/*, core.bare and upstream unchanged while a leaking control is detected (same check, bounded); train.sh and the pre-push hook refuse a linked worktree and train.sh refuses a clone without the repository hook; and the stray notes are removed from origin by a forward fast-forward notes commit whose before and after tips are recorded here	closed
+ ISS-0016	2026-11-07	ci	CI run 42424028055 (train legacydocs at 4d0355a56e, a docs-only change over 93850111) failed Kernel replay (leanchecker): the per-module leg replayed ConcreteSpec.Spec.Ownership, a module renamed to Slice1Ownership by 44ee1231, and stopped on unknown constant 'ConcreteSpec.lookupF'. The job's lake cache had been restored through a restore-key prefix from the cache of train commit 5b894432ad, whose sources predate the rename. Non-fresh `leanchecker ConcreteSpec` picks every .olean on the search path whose name has the prefix (the toolchain's LeanChecker.lean, lines 91-94), so orphaned build files are replayed. Reproducer: build 44ee1231^, build 93850111's sources over that build directory, run scripts/proofs/kernel_replay.sh: FAIL on the Checker/Syntax orphans; a clean build of the same sources passes. Codex confirmed it with that reproducer (2026-11-07). Structural cause: the replay took its module list from the build directory's contents instead of the sources.	scripts/proofs/kernel_replay.sh	high	closed by wip/replay-source-modules: kernel_replay.sh replays a staged library holding exactly the modules the sources declare and 
+checks that the replayed set equals that list; scripts/proofs/lib.sh prunes build files of modules with no source before building; negative controls plant an orphan that fails an unfiltered replay and is ignored by the staged one	closed
+ ISS-0019	2026-11-08	ci	scripts/land/train.sh review_provenance accepts a clean head review note without checking that its reviewed range covers the train diff; scripts/review/verify.sh:59 checks `base:` only as 40 hex, and train.sh:479 accepts the clean verdict. On wip/record-signoffs (head 0b9d3cfa3, clean note with base 1547734f8 = wip/record-language), a train of record-signoffs alone would have landed record-language's unreviewed content; record-language has no clean note and lands only by owner sign-off. Not exploited; nothing landed that way. Codex confirmed 2026-11-08 (VERDICT: CONFIRMED) using local bare repositories with no hooks: main A, unreviewed B, C on B, clean note on C based at B; review_provenance accepts C, while a findings note is refused. Structural cause: the note base is validated syntactically, never against the train base.	scripts/land/train.sh review_provenance	high	review_provenance accepts a head note only when the note's base is an ancestor-or-equal of the train's recorded base (origin/main at build), and a member note only when its base is an ancestor-or-equal of the train base; verify.sh takes an explicit --required-base; the landing tool's checks gain this reproducer as a control (clean note based on an unreviewed intermediate commit is refused; a note based at main passes)	open
++ISS-0029	2026-11-08	ci	At main ea212942 the decided R-0577 cross-machine comparison did not involve concrete-ci-2: reproducibility matrix extraction gave [('linux-first','ubuntu-24.04'),('linux-independent','ubuntu-24.04')], and compare-linux diffed only those GitHub-hosted manifests. Codex reproduced the defect by running the extracted comparison with identical GitHub manifests plus a differing concrete-ci-2 manifest: it exited 0 (concrete-ci-2 differs but is not read). Found by the retroactive full-access review of slice 0's landed rounds (86c31477..ea5181b5). Structural cause: the comparison consumed two GitHub-hosted results and had no concrete-ci-2 result. Structural owner: reproducibility/compare-linux in lean_action_ci.yml and scripts/checks/compiler/slice0_repro.sh. Fixed on wip/repro-ci2 with mandatory linux-github and linux-ci2 legs, runner provenance in each manifest, and a fail-closed cross-machine comparator	R-0577	medium	workflow_yaml.sh passes its structural assertions and exact comparison-step fixtures (identical GitHub/ci2 passes; differing ci2, two GitHub manifests, a missing manifest and missing hashes fail), scripts/checks/issues.sh passes, and a green branch CI run shows Reproducibility (linux-ci2) ran on concrete-ci-2 and Cross-machine reproducibility compared its manifest with the GitHub-hosted manifest	closed
+diff --git a/changelog.d/2026-11-08-repro-ci2.md b/changelog.d/2026-11-08-repro-ci2.md
+new file mode 100644
+index 000000000..83a8356ab
+--- /dev/null
++++ b/changelog.d/2026-11-08-repro-ci2.md
+@@ -0,0 +1,9 @@
++### Cross-machine reproducibility includes concrete-ci-2 (ISS-0029) (2026-11-08)
++
++The required Linux reproducibility legs are now `linux-github` on GitHub-hosted `ubuntu-24.04` and
++`linux-ci2` on the self-hosted `concrete` runner pool, with no GitHub-hosted fallback for the latter.
++Each manifest records its runner environment, host and runner name. `compare-linux` verifies that it
++has one GitHub-hosted and one concrete-ci-2 manifest, then compares all build-identity and artifact
++SHA-256 lines. Missing manifests or hashes, wrong provenance and differing artifacts fail closed.
++The workflow check parses these requirements and runs the extracted comparison step against passing
++and failing fixture manifests.
+diff --git a/scripts/checks/workflow_yaml.sh b/scripts/checks/workflow_yaml.sh
+index 85c977405..159e85d93 100755
+--- a/scripts/checks/workflow_yaml.sh
++++ b/scripts/checks/workflow_yaml.sh
+@@ -45,6 +45,113 @@ for f in "$WF_DIR"/*.yml "$WF_DIR"/*.yaml; do
+   fi
+ done
+ 
++echo "=== cross-machine reproducibility (ISS-0029) ==="
++if python3 -I - "$WF_DIR/lean_action_ci.yml" "$GATE_TMP/compare-linux.sh" <<'PY'
++import sys
++from pathlib import Path
++import yaml
++
++workflow, output = sys.argv[1:]
++jobs = yaml.safe_load(open(workflow))["jobs"]
++repro = jobs["reproducibility"]
++rows = repro["strategy"]["matrix"]["include"]
++by_id = {row["id"]: row for row in rows}
++
++def require(condition, message):
++    if not condition:
++        raise ValueError(message)
++
++require(set(by_id) == {"linux-github", "linux-ci2", "macos"},
++        f"reproducibility legs are {sorted(by_id)}")
++require(by_id["linux-github"]["runner"] == "ubuntu-24.04",
++        "linux-github is not GitHub-hosted ubuntu-24.04")
++ci2_runner = by_id["linux-ci2"]["runner"]
++require(ci2_runner == '${{ fromJSON(\'["self-hosted","linux","x64","concrete"]\') }}',
++        f"linux-ci2 does not select only the concrete-ci-2 labels: {ci2_runner}")
++require("||" not in ci2_runner and "CONCRETE_SELF_HOSTED" not in ci2_runner,
++        "linux-ci2 has a runner fallback")
++require(by_id["linux-ci2"]["machine"] == "concrete-ci-2",
++        "linux-ci2 does not record its machine")
++require(by_id["macos"]["runner"] == "macos-15", "the macOS leg changed")
++require(repro["runs-on"] == "${{ matrix.runner }}", "reproducibility does not use matrix.runner")
++nix = [step for step in repro["steps"] if step.get("uses") == "cachix/install-nix-action@v31"]
++require(len(nix) == 1 and nix[0].get("if") == "runner.environment != 'self-hosted'",
++        "Nix installation is not GitHub-hosted-only")
++build = next(step for step in repro["steps"]
++             if "slice0_repro.sh" in step.get("run", ""))
++require(build["env"]["CONCRETE_REPRO_RUNNER_ENVIRONMENT"] == "${{ runner.environment }}",
++        "runner.environment is not recorded")
++require(build["env"]["CONCRETE_REPRO_RUNNER_HOST"] == "${{ matrix.machine }}",
++        "the matrix machine is not recorded")
++require(build["env"]["CONCRETE_REPRO_RUNNER_NAME"] == "${{ runner.name }}",
++        "runner.name is not recorded")
++compare = jobs["compare-linux"]
++require(compare["needs"] == "reproducibility", "compare-linux does not need both Linux legs")
++download = next(step for step in compare["steps"]
++                if step.get("uses") == "actions/download-artifact@v4")
++require(download["with"]["pattern"] == "reproducibility-linux-*",
++        "compare-linux does not download the Linux manifests")
++run = next(step["run"] for step in compare["steps"]
++           if "repro_manifest_compare.py" in step.get("run", ""))
++for text in ("reproducibility-linux-github/manifest.txt",
++             "reproducibility-linux-ci2/manifest.txt"):
++    require(text in run, f"compare-linux does not read {text}")
++Path(output).write_text(run)
++PY
++then
++  echo "  ok   workflow selects GitHub and concrete-ci-2, with no ci2 fallback"; PASS=$((PASS+1))
++else
++  echo "  FAIL workflow reproducibility structure"; FAIL=$((FAIL+1))
++fi
++
++write_manifest() { # PATH ENVIRONMENT HOST RUNNER_NAME HASH
++  mkdir -p "${1%/*}"
++  {
++    printf 'runner_environment=%s\n' "$2"
++    printf 'runner_host=%s\n' "$3"
++    printf 'runner_name=%s\n' "$4"
++    printf 'compiler_commit=0123456789abcdef\n'
++    printf 'target=x86_64-linux\n'
++    [ "$5" = none ] || printf '%s  example/lcb.exe\n' "$5"
++  } > "$1"
++}
++
++compare_control() { # LABEL SECOND_ENVIRONMENT SECOND_HOST SECOND_HASH SECOND_KIND EXPECTED_ERROR
++  local label=$1 env=$2 host=$3 hash=$4 kind=$5 expected=$6
++  local d="$GATE_TMP/repro-$label" rc=0
++  mkdir -p "$d/scripts/checks/lib"
++  cp scripts/checks/lib/repro_manifest_compare.py "$d/scripts/checks/lib/"
++  write_manifest "$d/manifests/reproducibility-linux-github/manifest.txt" \
++    github-hosted github github-actions aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
++  if [ "$kind" != missing ]; then
++    write_manifest "$d/manifests/reproducibility-linux-ci2/manifest.txt" \
++      "$env" "$host" concrete-ci-2-gha1 "$hash"
++  fi
++  (cd "$d" && bash "$GATE_TMP/compare-linux.sh") > "$d/output" 2>&1 |
+| rc=$?
++  if [ -z "$expected" ]; then
++    if [ "$rc" = 0 ]; then
++      echo "  ok   comparison control $label passes"; PASS=$((PASS+1))
++    else
++      echo "  FAIL comparison control $label refused"; sed 's/^/         /' "$d/output"; FAIL=$((FAIL+1))
++    fi
++  elif [ "$rc" != 0 ] && has_match -F "$expected" < "$d/output"; then
++    echo "  ok   comparison control $label is refused"; PASS=$((PASS+1))
++  else
++    echo "  FAIL comparison control $label was not refused as '$expected' (rc=$rc)"
++    sed 's/^/         /' "$d/output"; FAIL=$((FAIL+1))
++  fi
++}
++
++if [ -s "$GATE_TMP/compare-linux.sh" ]; then
++  a=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
++  b=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
++  compare_control identical self-hosted concrete-ci-2 "$a" normal ""
++  compare_control differing-ci2 self-hosted concrete-ci-2 "$b" normal "manifests differ"
++  compare_control two-github github-hosted github "$a" normal "expected runner_environment=self-hosted"
++  compare_control missing-manifest self-hosted concrete-ci-2 "$a" missing "cannot read manifest"
++  compare_control missing-hashes self-hosted concrete-ci-2 none normal "missing lcb.exe SHA-256"
++fi
++
+ echo ""
+ echo "WORKFLOW-YAML: PASS=$PASS  FAIL=$FAIL"
+ [ "$FAIL" -eq 0 ]
+• Should read comparator, repro_compare, slice0 relevant docs, issues script constraints perhaps closure check semantics. Also nested AGENTS for .github/scripts/Concrete? Glob AGENTS.I need design exact.
+
+  Finding1: on PR linux-ci2 runs GitHub-hosted runner and first step fails clear when leg machine concrete-ci-2 but runner.environment != self-hosted. Matrix runner expression can use github.event_name in include: `${{ github.event_name != 'pull_request' && fromJSON('[...]') || 'ubuntu-24.04' }}`. First step before checkout:
+  - name: Require concrete-ci-2 outside pull requests
+    if: matrix.machine == 'concrete-ci-2' && runner.environment != 'self-hosted'
+    run: |
+      echo "::error::linux-ci2 requires concrete-ci-2; pull_request legs intentionally cannot run on self-hosted runners"
+      exit 1
+  This means PR leg red by design, upload not run, compare fails. User explicitly requires first step fails. Landing push main dispatch self hosted passes. Keep provenance checks. runs-on cannot pick self hosted on pull_request structural control parse exact. Should I drop machine? Used guard, so keep matrix.machine. Finding2 runner_host drop. Keep machine for runner selection/guard. Remove CONCRETE_REPRO_RUNNER_HOST and generator. Comparator PROVENANCE = env/name. check_provenance split requirements: github env exactly github-hosted; runner_name for GitHub no regex required just nonempty/unknown check. ci2 env self-hosted and fullmatch `concrete-ci-2-gha[0-9]+`. Could general function expected environment plus runner_name_pattern optional. Exact error messages controls. Good pair passes. ci2 wrong runner_name fails. two github environment fails. Existing fixtures changed drop host args.
+
+  Docs and changelog updated. ISSUES closure condition include PR behavior and guard and fixtures. Evidence perhaps fixed description currently runner provenance okay but might update to say reported provenance. User says "Update ISS-0029 row's closure_condition, docs and changelog fragment to match." Evidence can remain though perhaps should include secure selection fix? It says Fixed ... mandatory linux legs runner provenance etc not false. Could update evidence optional. Should not scope creep. Could update docs explicit PR red. Should have no full CI.
+
+  Should structural assertions robust. They specifically "Extend step-3 controls in scripts/checks/workflow_yaml.sh: the linux-ci2 leg's runs-on cannot pick self-hosted on pull_request and has the fail-when-not-self-hosted guard". Static require exact expression plus first step and guard. Make sure first step before checkout (checkout currently first). I can assert `guard = repro["steps"][0]`, `if` exactly matrix.machine... and runner.environment. run contains exit 1 and message perhaps concrete-ci-2/self-hosted/pull_request. Static expression exact including github.event_name. They say "runs-on cannot pick self-hosted on pull_request" could assert exact conditional. Might need negative controls to validate controls? Existing just asserts current. User asks extend controls, enough structural assertions. Could add Python expression checks no self-hosted PR via exact. `ci2_runner == "${{ github.event_name != 'pull_request' && fromJSON(...) || 'ubuntu-24.04' }}"`. Guard `if == "matrix.machine == 'concrete-ci-2' && runner.environment != 'self-hosted'"`; first step and `exit 1`; message text. "must NOT pass on substitute either" guard accomplishes. On PR, runs on Github and fails. For self-hosted weird machine mismatch name comparator fails.
+
+  Potential issue GitHub Actions `if` condition with `&&` no `${{ }}` acceptable. Matrix runner expressions fromJSON support. Other jobs same idiom.
+
+  Nix install step on PR never reached because first guard fails. On self hosted first guard skipped then checkout. Good.
+
+  Manifest `runner_host` removed from repro_compare. Comparator will treat legacy runner_host as payload and compare perhaps both same/different; but generator no host. read_manifest PROVENANCE excludes host; if input has runner_host same both would pass? Not concern? "otherwise drop it." Could proactively fail runner_host? Not necessary. To ensure provenance excluded only two. Old manifests include runner_host payload causing mismatch if different (good fail) same perhaps accepted with extra identity line, but still attested actual env/name. Fine.
+
+  GitHub runner_name check not unknown. read_manifest rejects empty. good.
+
+  Fixture function simplify `write_manifest PATH ENV RUNNER_NAME HASH`. compare_control LABEL SECOND_ENV SECOND_NAME SECOND_HASH KIND EXPECTED. Existing good names etc. Add wrong-ci2-name self-hosted concrete-ci-2-worker (or gha1x) expected `runner_name does not match ^concrete-ci-2-gha[0-9]+$`. Use exact message. `compare_control two-github github-hosted concrete-ci-2-gha1...`. good pair identical. Perhaps add github wrong env? two-github covers ci2 github-hosted. Good pair passes. `differing-ci2`, missing etc. Should check error diff ordering provenance first then diff. okay.
+
+  Should update comments docstrings in scripts and workflow comments perhaps current says all required no nuance. Add concise comments near matrix/guard? User says default no comments but existing comments helpful. I can add comment why PR red intentional and no code execution self hosted. Perhaps guard name sufficient. No comments needed beyond step name.
+
+  Should edit multiple files parallel allowed one per file. I can perform all independent edits in one parallel but ISSUES exact long line. Read line already from grep full. Use Edit old exact entire line to new. For script many changes same file must one Edit covering entire block from lines 48-153 or complete Write? Existing file continuity high, use one Edit replace entire ISS block. Fine. Workflow one Edit replace matrix and steps region. Comparator one Edit entire main functions perhaps block PROVENANCE through check. Repro compare small. Docs one edit paragraph. Changelog whole body via edit. ISSUE entire row edit. I need first mark inspected done next in progress. Then edits. Could do workflow/comparator/repro first, then controls/docs all independent in parallel. 7 edits parallel okay. Make sure exact strings. I'll formulate carefully.
+
+  Workflow old matrix:
+  linux ci2 runner self... machine. new expression line long:
+  `runner: ${{ github.event_name != 'pull_request' && fromJSON('["self-hosted","linux","x64","concrete"]') || 'ubuntu-24.04' }}`
+  YAML colon etc okay. GitHub expressions within plain scalar include `:`? no.
+  First step:
+  ```
+      steps:
+        - name: Refuse a substitute for concrete-ci-2
+          if: matrix.machine == 'concrete-ci-2' && runner.environment != 'self-hosted'
+          run: |
+            echo "::error::linux-ci2 requires self-hosted concrete-ci-2; pull_request cannot use it, so this leg is intentionally red"
+            exit 1
+        - uses checkout
+  ```
+  Clear. "first step fails ... when leg's machine ... but environment not..." yes. On PR fail before checkout. Push runs self hosted, no fail. If GitHub-hosted on workflow dispatch due labels no runner then job queued, not substitute. Good.
+
+  Remove host env line.
+
+  Comparator:
+  ```
+  PROVENANCE = ('runner_environment','runner_name')
+  CI2_RUNNER_NAME = re.compile(r'concrete-ci-2-gha[0-9]+')
+  ...
+  def check_provenance(path, fields, environment, runner_name=None):
+   expected ...
+   if fields['runner_name']=='unknown'...
+   if runner_name is not None and not runner_name.fullmatch(...): fail(f'{path}: expected runner_name matching {runner_name.pattern}, got...')
+  ...
+  check github env
+  check ci2 env CI2...
+  ```
+  Error expected string `expected runner_name matching ^concrete-ci-2-gha[0-9]+$, got...` use constant string regex includes ^$ in compile. `re.compile(r'^concrete-ci-2-gha[0-9]+$')`. fullmatch plus anchors redundant fine. For github environment only and not unknown. Could avoid optional pattern function:
+  ```
+  def check_provenance(path, fields, environment):
+  ...
+  ...
+  check ...
+  if not CI2_RUNNER_NAME.fullmatch(ci2['runner_name']): fail...
+  ```
+  Simpler.
+
+  Structural workflow script entire block:
+  ```
+  ci2_runner = ...
+  require(ci2_runner == "${{ github.event_name != 'pull_request' && fromJSON(...) || 'ubuntu-24.04' }}", ...)
+  require("||" ...?) Can't keep `require("||" not in ci2_runner)` because intended OR GitHub on PR. Instead exact ensures no other fallback. require machine. 
+  steps = repro["steps"]
+  guard=steps[0]
+  require(guard.get("if") == exact)
+  require("exit 1" in guard run and "pull_request" and "concrete-ci-2"...)
+  require steps[1] checkout? first enough.
+  ...
+  require "CONCRETE_REPRO_RUNNER_HOST" not in build.get env and all workflow maybe? 
+  ```
+  Should drop host static assertion: `require("CONCRETE_REPRO_RUNNER_HOST" not in build["env"], ...)`.
+  nix uses list all.
+  Comparator extraction etc.
+
+  Fixtures:
+  ```
+  write_manifest() { # PATH ENVIRONMENT RUNNER_NAME HASH
+  ...
+  }
+  compare_control() { # LABEL SECOND_ENVIRONMENT SECOND_RUNNER_NAME SECOND_HASH SECOND_KIND EXPECTED_ERROR
+   local label=$1 env=$2 name=$3 hash=$4 kind=$5 expected=$6
+  ...
+  github-hosted github-actions ...
+  ci2 "$env" "$name" "$hash"
+  ...
+  compare_control identical self-hosted concrete-ci-2-gha1 "$a" normal ""
+  ...
+  compare_control wrong-ci2-name self-hosted concrete-ci-2-worker "$a" normal "expected runner_name matching ^concrete-ci-2-gha[0-9]+$"
+  ...
+  ```
+  Existing two-github env with name gha1. Good.
+
+  Do I need test bad GitHub runner_environment? not asked. no.
+
+  Output echo updated `workflow guards pull_request and selects...`.
+  Doc says runner env/name, CI2 name pattern, PR leg GitHub and intentionally fails guard before checkout/build, push/dispatch actual. No runner_host.
+
+  Changelog similarly.
+
+  ISSUES closure condition exact include `workflow_yaml.sh passes its structural assertions (pull_request cannot select self-hosted linux-ci2 and its first step fails on any non-self-hosted substitute) and exact comparison-step fixtures (identical GitHub/ci2 passes; differing ci2, a ci2 runner_name outside ^concrete-ci-2-gha[0-9]+$, runner_environment=github-hosted for ci2, two GitHub manifests, a missing manifest and missing hashes fail)` But two GitHub manifests same as runner_env github for ci2; redundancy user explicitly existing fixture two-github and new github env. I can phrase `differing ci2, a bad ci2 runner name, ci2 runner_environment=github-hosted, a missing manifest and missing hashes fail`. Good pair. `scripts/checks/issues.sh passes, and green push or workflow_dispatch CI ...; pull_request linux-ci2 is red by design before checkout` closure condition. User said green branch CI shows run etc. Branch push? Workflow only push main, branch CI dispatch. Say green landing-path CI run. Keep closed even PR red expected.
+
+  Perhaps severity finding security means issue severity medium remains original. no ask.
+
+  I'll edit.
+
+• Now second edit comparator must Read again per instructions no consecutive same without read. Do read relevant plus perhaps workflow not needed.Now controls and docs. Mark fix done, controls in progress. Use edits. Make sure ISSUE old string from read exact; huge but manageable. Could use Python script to modify ISSUES? Dedicated Edit mandatory. I can Edit substring closure condition only unique. Old condition exact from grep. New. Good.
+
+  Workflow script entire old block long. Could incremental multiple edits same file but one entire block safest. I'll supply old from line 48 onward exact. Could reduce edits one for structural region and fixture region impossible multiple same file same response. I can one Edit entire block 48-153. Fine.
+
+  Construct new script. Static first guard:
+  ```
+  guard = repro["steps"][0]
+  require(guard.get("if") == ...)
+  guard_run = guard.get("run","")
+  require("exit 1" in ... and all...)
+  ```
+  CI runner exact. `require("CONCRETE_SELF_HOSTED" not in ci2_runner, ...)` exact enough but no || check. Message no fallback for landing path. Could assert ubuntu PR expression exact.
+
+  No runner_host manifest. Good.
+
+  Perhaps "step-3 controls" refers round steps not code. okay.
+
+  Docs edits one paragraph. Changelog whole body.
+
+  I'll call.Should review diff, search stale runner_host and self hosted docs perhaps. Use git diff --check and diff relevant; grep runner_host etc. Should not run tests yet before inspect. Could run `git diff --check` light allowed CPU only run checks? User says "run only scripts... bounded; no..." likely means test commands only; git diff fine. Should inspect workflow expression parse issue. Use Bash git diff. Read changed comparator perhaps already enough. Grep.
+
+diff --git a/.github/workflows/lean_action_ci.yml b/.github/workflows/lean_action_ci.yml
+index 4e467b470..4123f8826 100644
+--- a/.github/workflows/lean_action_ci.yml
++++ b/.github/workflows/lean_action_ci.yml
+@@ -460,7 +460,7 @@ jobs:
+             runner: ubuntu-24.04
+             machine: github
+           - id: linux-ci2
+-            runner: ${{ fromJSON('["self-hosted","linux","x64","concrete"]') }}
++            runner: ${{ github.event_name != 'pull_request' && fromJSON('["self-hosted","linux","x64","concrete"]') || 'ubuntu-24.04' }}
+             machine: concrete-ci-2
+           - id: macos
+             runner: macos-15
+@@ -470,6 +470,11 @@ jobs:
+     permissions:
+       contents: read
+     steps:
++      - name: Refuse a substitute for concrete-ci-2
++        if: matrix.machine == 'concrete-ci-2' && runner.environment != 'self-hosted'
++        run: |
++          echo "::error::linux-ci2 requires self-hosted concrete-ci-2; pull_request cannot use it, so this leg is intentionally red"
++          exit 1
+       - uses: actions/checkout@v4
+       - name: Install Nix (GitHub-hosted only)
+         if: runner.environment != 'self-hosted'
+@@ -477,7 +482,6 @@ jobs:
+       - name: Compare every stage in distinct build directories
+         env:
+           CONCRETE_REPRO_RUNNER_ENVIRONMENT: ${{ runner.environment }}
+-          CONCRETE_REPRO_RUNNER_HOST: ${{ matrix.machine }}
+           CONCRETE_REPRO_RUNNER_NAME: ${{ runner.name }}
+         run: nix develop --command timeout 3600 bash scripts/checks/compiler/slice0_repro.sh manifest.txt
+       - uses: actions/upload-artifact@v4
+diff --git a/Concrete/README.md b/Concrete/README.md
+index 2191a438e..1f85af34a 100644
+--- a/Concrete/README.md
++++ b/Concrete/README.md
+@@ -713,11 +713,13 @@ debug information, path prefix maps, and no ELF build ID or Mach-O UUID (`ZERO_A
+ both paths). The printers traverse ordered lists/arrays (including stable first-occurrence
+ intrinsic deduplication); site paths are project-relative source data. They emit no clock,
+ hostname or temporary path. CI repeats this on x86-64 Linux and AArch64 macOS. The Linux manifests
+-record `runner_environment`, `runner_host` and `runner_name`; `compare-linux` requires one manifest
+-from GitHub-hosted `ubuntu-24.04` and one from self-hosted concrete-ci-2, excludes only that runner
+-provenance, and compares every build-identity and artifact-hash line. Different targets are never
+-compared. Changes to these pins change the build identity; no reproducibility claim spans different
+-toolchains or targets.
++record the runner-reported `runner_environment` and `runner_name`; `compare-linux` requires one
++manifest with `runner_environment=github-hosted` and one with `runner_environment=self-hosted` and
++a `concrete-ci-2-gha<N>` runner name, excludes only that provenance, and compares every
++build-identity and artifact-hash line. On `pull_request`, `linux-ci2` uses a GitHub-hosted runner
++and its first step fails rather than accepting a substitute or executing PR code on concrete-ci-2;
++pushes to main and dispatch runs use concrete-ci-2. Different targets are never compared. Changes to
++these pins change the build identity; no reproducibility claim spans different toolchains or targets.
+ 
+ Every slice-0 gate runs under `scripts/checks/lib/limits.sh` (per-process address space 64 GiB on
+ Linux, since Lake reserves far more than it uses; at most 40000 processes for the user), with
+diff --git a/ISSUES.tsv b/ISSUES.tsv
+index 215d93881..e4f43c868 100644
+--- a/ISSUES.tsv
++++ b/ISSUES.tsv
+@@ -19,4 +19,4 @@ ISS-0014	2026-11-06	spec	Unconfirmed retrospective second-review findings (Kimi,
+ ISS-0015	2026-11-06	ci	Sandboxes inherit the caller's git environment. scripts/checks/review_tool.sh isolated git config only, not the repository-locating variables; a pre-push hook of a LINKED worktree exports GIT_DIR=<repo>/.git/worktrees/<name>, so every git -C <sandbox> in the check acted on the caller. On 2026-11-06 `train.sh ci laudit` run from the linked worktree ~agent/audit-records made the hook's review_tool.sh create its test branches (nonff, capped, parse-*) and set core.bare=true in ~agent/audit-clone (kept unchanged as evidence), and push 28 commits to origin refs/notes/concrete-review (tip b4b364f4, pre-leak 5b6add0d) and 12 to refs/notes/concrete-review-findings (tip 21c56796, pre-leak fd3c6451), authored Review Gate, 17:16:49-17:17:43Z, annotating 21 sandbox commits that exist on no remote (first counted as 22, which wrongly included c54679c3, a real commit whose note at 17:21Z is legitimate); no earlier note was deleted or changed and every reader looks notes up by exact SHA, so none can count as provenance for a real commit. lambdaclass has no notes refs. Codex confirmed with a bounded reproducer on concrete-ci-2 at main f9a8c333 (caller refs and refs/notes/* changed: LEAK) and an independent GIT_DIR experiment. landing_script.sh and landing_bot.sh unset only five of git's local variables; legacy_frozen.sh, acceptance.sh, run-at-ref.sh and bot.sh unset none. Second incident, same cause: the first reproducer installed a pre-push hook that ran review_tool.sh; the leaked GIT_DIR made each nested push re-enter that hook, the recursion exhausted fede-256gb (load ~1900) and the OOM killer took down the orchestrator's session. Structural owner: the sandbox helper scripts/checks/lib/git_sandbox.sh (unsets every `git rev-parse --local-env-vars` variable), sourced by every repository-making script; reproducers and tests run with no installed hook, under timeout 120 and a 512-task / 8G systemd scope bound, or a finite cgroup memory.max plus a process limit, and never an unbounded run. Closed 2026-11-07: the fix landed at dbe838488891, where every closure part is checked in Root checks (scripts/checks/run.sh, all 11 pass: sandbox_isolation PASS=13 FAIL=0 with its structural leg over 9 scripts, the two live linked-worktree probes and the leaking control; landing_script PASS=208 FAIL=0 with the linked-worktree, hook-off, foreign-hook and identify refusal legs; also run on concrete-ci-2 at 8e62e377) (train siso from a full clone; reviewed by Codex, rounds clean at 8e62e377, and Kimi; CI run 42424663064; main CI 42425007584 on origin and 42425010605 on lambdaclass, both success). The stray notes were removed from origin by one forward fast-forward commit per ref on its then-current tip, no force: refs/notes/concrete-review d4bdcae22d50 -> dcffeea8e6cd (21 entries removed, 224 untouched at the push; Codex confirmed the list against the earlier tip 8cbb7db253f7, where 223 were untouched, and the one commit between that tip and d4bdcae22d50 only added a legitimate note for 9d6dc01a, so the removal list is identical) and refs/notes/concrete-review-findings 301e929e1bab -> 5d7c6dc3dad5 (11 removed, 105 untouched); the 40 leaked commits wrote 33 entries, one of which they removed themselves (0c04c01c); Codex confirmed the removal list and the tree diffs before the push; lambdaclass has no notes refs and none were created. ~agent/audit-clone is kept unchanged as evidence with LEAK-EVIDENCE-README.txt	R-0544	high	every repository-making script under scripts/ sources git_sandbox.sh (scripts/checks/sandbox_isolation.sh, structural leg); review_tool.sh and legacy_frozen.sh run from a linked worktree with GIT_DIR exported leave the caller's refs, refs/notes/*, core.bare and upstream unchanged while a leaking control is detected (same check, bounded); train.sh and the pre-push hook refuse a linked worktree and train.sh refuses a clone without the repository hook; and the stray notes are removed from origin by a forward fast-forward notes commit whose before and after tips are recorded here	closed
+ ISS-0016	2026-11-07	ci	CI run 42424028055 (train legacydocs at 4d0355a56e, a docs-only change over 93850111) failed Kernel replay (leanchecker): the per-module leg replayed ConcreteSpec.Spec.Ownership, a module renamed to Slice1Ownership by 44ee1231, and stopped on unknown constant 'ConcreteSpec.lookupF'. The job's lake cache had been restored through a restore-key prefix from the cache of train commit 5b894432ad, whose sources predate the rename. Non-fresh `leanchecker ConcreteSpec` picks every .olean on the search path whose name has the prefix (the toolchain's LeanChecker.lean, lines 91-94), so orphaned build files are replayed. Reproducer: build 44ee1231^, build 93850111's sources over that build directory, run scripts/proofs/kernel_replay.sh: FAIL on the Checker/Syntax orphans; a clean build of the same sources passes. Codex confirmed it with that reproducer (2026-11-07). Structural cause: the replay took its module list from the build directory's contents instead of the sources.	scripts/proofs/kernel_replay.sh	high	closed by wip/replay-source-modules: kernel_replay.sh replays a staged library holding exactly the modules the sources declare and checks that the replayed set equals that list; scripts/proofs/lib.sh prunes build files of modules with no source before building; negative controls plant an orphan that fails an unfiltered replay and is ignored by the staged one	closed
+ ISS-0019	2026-11-08	ci	scripts/land/train.sh review_provenance accepts a clean head review note without checking that its reviewed range covers the train diff; scripts/review/verify.sh:59 checks `base:` only as 40 hex, and train.sh:479 accepts the clean verdict. On wip/record-signoffs (head 0b9d3cfa3, clean note with base 1547734f8 = wip/record-language), a train of record-signoffs alone would have landed record-language's unreviewed content; record-language has no clean note and lands only by owner sign-off. Not exploited; nothing landed that way. Codex confirmed 2026-11-08 (VERDICT: CONFIRMED) using local bare repositories with no hooks: main A, unreviewed B, C on B, clean note on C based at B; review_provenance accepts C, while a findings note is refused. Structural cause: the note base is validated syntactically, never against the train base.	scripts/land/train.sh review_provenance	high	review_provenance accepts a head note only when the note's base is an ancestor-or-equal of the train's recorded base (origin/main at build), and a member note only when its base is an ancestor-or-equal of the train base; verify.sh takes an explicit --required-base; the landing tool's checks gain this reproducer as a control (clean note based on an unreviewed intermediate commit is refused; a note based at main passes)	open
+-ISS-0029	2026-11-08	ci	At main ea212942 the decided R-0577 cross-machine comparison did not involve concrete-ci-2: reproducibility matrix extraction gave [('linux-first','ubuntu-24.04'),('linux-independent','ubuntu-24.04')], and compare-linux diffed only those GitHub-hosted manifests. Codex reproduced the defect by running the extracted comparison with identical GitHub manifests plus a differing concrete-ci-2 manifest: it exited 0 (concrete-ci-2 differs but is not read). Found by the retroactive full-access review of slice 0's landed rounds (86c31477..ea5181b5). Structural cause: the comparison consumed two GitHub-hosted results and had no concrete-ci-2 result. Structural owner: reproducibility/compare-linux in lean_action_ci.yml and scripts/checks/compiler/slice0_repro.sh. Fixed on wip/repro-ci2 with mandatory linux-github and linux-ci2 legs, runner provenance in each manifest, and a fail-closed cross-machine comparator	R-0577	medium	workflow_yaml.sh passes its structural assertions and exact comparison-step fixtures (identical GitHub/ci2 passes; differing ci2, two GitHub manifests, a missing manifest and missing hashes fail), scripts/checks/issues.sh passes, and a green branch CI run shows Reproducibility (linux-ci2) ran on concrete-ci-2 and Cross-machine reproducibility compared its manifest with the GitHub-hosted manifest	closed
++ISS-0029	2026-11-08	ci	At main ea212942 the decided R-0577 cross-machine comparison did not involve concrete-ci-2: reproducibility matrix extraction gave [('linux-first','ubuntu-24.04'),('linux-independent','ubuntu-24.04')], and compare-linux diffed only those GitHub-hosted manifests. Codex reproduced the defect by running the extracted comparison with identical GitHub manifests plus a differing concrete-ci-2 manifest: it exited 0 (concrete-ci-2 differs but is not read). Found by the retro
+active full-access review of slice 0's landed rounds (86c31477..ea5181b5). Structural cause: the comparison consumed two GitHub-hosted results and had no concrete-ci-2 result. Structural owner: reproducibility/compare-linux in lean_action_ci.yml and scripts/checks/compiler/slice0_repro.sh. Fixed on wip/repro-ci2 with mandatory linux-github and linux-ci2 legs, runner provenance in each manifest, and a fail-closed cross-machine comparator	R-0577	medium	workflow_yaml.sh passes its structural assertions (linux-ci2 cannot select self-hosted on pull_request and its first step refuses a non-self-hosted substitute) and exact comparison-step fixtures (identical GitHub/ci2 passes; differing ci2, a ci2 runner_name outside ^concrete-ci-2-gha[0-9]+$, ci2 runner_environment=github-hosted, a missing manifest and missing hashes fail), scripts/checks/issues.sh passes, and a green push or workflow_dispatch CI run shows Reproducibility (linux-ci2) ran on concrete-ci-2 and Cross-machine reproducibility compared its manifest with the GitHub-hosted manifest; pull_request linux-ci2 is red by design before checkout	closed
+diff --git a/changelog.d/2026-11-08-repro-ci2.md b/changelog.d/2026-11-08-repro-ci2.md
+index 83a8356ab..52e69b471 100644
+--- a/changelog.d/2026-11-08-repro-ci2.md
++++ b/changelog.d/2026-11-08-repro-ci2.md
+@@ -1,9 +1,11 @@
+ ### Cross-machine reproducibility includes concrete-ci-2 (ISS-0029) (2026-11-08)
+ 
+ The required Linux reproducibility legs are now `linux-github` on GitHub-hosted `ubuntu-24.04` and
+-`linux-ci2` on the self-hosted `concrete` runner pool, with no GitHub-hosted fallback for the latter.
+-Each manifest records its runner environment, host and runner name. `compare-linux` verifies that it
+-has one GitHub-hosted and one concrete-ci-2 manifest, then compares all build-identity and artifact
+-SHA-256 lines. Missing manifests or hashes, wrong provenance and differing artifacts fail closed.
+-The workflow check parses these requirements and runs the extracted comparison step against passing
+-and failing fixture manifests.
++`linux-ci2` on self-hosted concrete-ci-2 for pushes to main and dispatch runs. On `pull_request`,
++`linux-ci2` selects a GitHub-hosted runner and fails in its first step rather than running PR code
++on concrete-ci-2 or passing on a substitute. Each manifest records the runner-reported environment
++and name; `compare-linux` requires GitHub-hosted provenance for one and self-hosted provenance with
++a `concrete-ci-2-gha<N>` name for the other, then compares all build-identity and artifact SHA-256
++lines. Missing manifests or hashes, wrong provenance and differing artifacts fail closed. The
++workflow check parses the runner guard and runs the extracted comparison step against passing and
++failing fixture manifests.
+diff --git a/scripts/checks/lib/repro_compare.py b/scripts/checks/lib/repro_compare.py
+index cb0621c65..bb1a03502 100755
+--- a/scripts/checks/lib/repro_compare.py
++++ b/scripts/checks/lib/repro_compare.py
+@@ -41,7 +41,6 @@ def main(argv):
+     if len(argv) == 5:
+         provenance = [
+             f"runner_environment={os.environ.get('CONCRETE_REPRO_RUNNER_ENVIRONMENT', 'unknown')}",
+-            f"runner_host={os.environ.get('CONCRETE_REPRO_RUNNER_HOST', 'unknown')}",
+             f"runner_name={os.environ.get('CONCRETE_REPRO_RUNNER_NAME', 'unknown')}",
+         ]
+         Path(argv[4]).write_text('\n'.join(provenance + lines) + '\n')
+diff --git a/scripts/checks/lib/repro_manifest_compare.py b/scripts/checks/lib/repro_manifest_compare.py
+index 97a1204ec..e268fe05f 100644
+--- a/scripts/checks/lib/repro_manifest_compare.py
++++ b/scripts/checks/lib/repro_manifest_compare.py
+@@ -11,7 +11,8 @@ import re
+ import sys
+ from pathlib import Path
+ 
+-PROVENANCE = ('runner_environment', 'runner_host', 'runner_name')
++PROVENANCE = ('runner_environment', 'runner_name')
++CI2_RUNNER_NAME = re.compile(r'^concrete-ci-2-gha[0-9]+$')
+ ARTIFACT = re.compile(r'[0-9a-f]{64}  .+')
+ 
+ 
+@@ -47,11 +48,10 @@ def read_manifest(argument):
+     return fields, payload
+ 
+ 
+-def check_provenance(path, fields, environment, hos
+t):
+-    expected = {'runner_environment': environment, 'runner_host': host}
+-    for key, value in expected.items():
+-        if fields[key] != value:
+-            fail(f'{path}: expected {key}={value}, got {fields[key]}')
++def check_provenance(path, fields, environment):
++    if fields['runner_environment'] != environment:
++        fail(f"{path}: expected runner_environment={environment}, "
++             f"got {fields['runner_environment']}")
+     if fields['runner_name'] == 'unknown':
+         fail(f'{path}: runner_name was not recorded')
+ 
+@@ -61,8 +61,11 @@ def main(argv):
+         sys.exit(__doc__)
+     github, github_payload = read_manifest(argv[1])
+     ci2, ci2_payload = read_manifest(argv[2])
+-    check_provenance(argv[1], github, 'github-hosted', 'github')
+-    check_provenance(argv[2], ci2, 'self-hosted', 'concrete-ci-2')
++    check_provenance(argv[1], github, 'github-hosted')
++    check_provenance(argv[2], ci2, 'self-hosted')
++    if not CI2_RUNNER_NAME.fullmatch(ci2['runner_name']):
++        fail(f"{argv[2]}: expected runner_name matching {CI2_RUNNER_NAME.pattern}, "
++             f"got {ci2['runner_name']}")
+     if github_payload != ci2_payload:
+         diff = difflib.unified_diff(github_payload, ci2_payload,
+                                     fromfile=argv[1], tofile=argv[2], lineterm='')
+diff --git a/scripts/checks/workflow_yaml.sh b/scripts/checks/workflow_yaml.sh
+index 159e85d93..af8f4998e 100755
+--- a/scripts/checks/workflow_yaml.sh
++++ b/scripts/checks/workflow_yaml.sh
+@@ -66,14 +66,19 @@ require(set(by_id) == {"linux-github", "linux-ci2", "macos"},
+ require(by_id["linux-github"]["runner"] == "ubuntu-24.04",
+         "linux-github is not GitHub-hosted ubuntu-24.04")
+ ci2_runner = by_id["linux-ci2"]["runner"]
+-require(ci2_runner == '${{ fromJSON(\'["self-hosted","linux","x64","concrete"]\') }}',
+-        f"linux-ci2 does not select only the concrete-ci-2 labels: {ci2_runner}")
+-require("||" not in ci2_runner and "CONCRETE_SELF_HOSTED" not in ci2_runner,
+-        "linux-ci2 has a runner fallback")
++require(ci2_runner == '${{ github.event_name != \'pull_request\' && fromJSON(\'["self-hosted","linux","x64","concrete"]\') || \'ubuntu-24.04\' }}',
++        f"linux-ci2 does not exclude self-hosted runners on pull_request: {ci2_runner}")
+ require(by_id["linux-ci2"]["machine"] == "concrete-ci-2",
+         "linux-ci2 does not record its machine")
+ require(by_id["macos"]["runner"] == "macos-15", "the macOS leg changed")
+ require(repro["runs-on"] == "${{ matrix.runner }}", "reproducibility does not use matrix.runner")
++guard = repro["steps"][0]
++require(guard.get("if") == "matrix.machine == 'concrete-ci-2' && runner.environment != 'self-hosted'",
++        "the first step does not guard a non-self-hosted concrete-ci-2 leg")
++guard_run = guard.get("run", "")
++require("exit 1" in guard_run and
++        all(text in guard_run for text in ("concrete-ci-2", "self-hosted", "pull_request")),
++        "the concrete-ci-2 substitute guard does not fail with a clear message")
+ nix = [step for step in repro["steps"] if step.get("uses") == "cachix/install-nix-action@v31"]
+ require(len(nix) == 1 and nix[0].get("if") == "runner.environment != 'self-hosted'",
+         "Nix installation is not GitHub-hosted-only")
+@@ -81,10 +86,10 @@ build = next(step for step in repro["steps"]
+              if "slice0_repro.sh" in step.get("run", ""))
+ require(build["env"]["CONCRETE_REPRO_RUNNER_ENVIRONMENT"] == "${{ runner.environment }}",
+         "runner.environment is not recorded")
+-require(build["env"]["CONCRETE_REPRO_RUNNER_HOST"] == "${{ matrix.machine }}",
+-        "the matrix machine is not recorded")
+ require(build["env"]["CONCRETE_REPRO_RUNNER_NAME"] == "${{ runner.name }}",
+         "runner.name is not recorded")
++require("CONCRETE_REPRO_RUNNER_HOST" not in build["env"],
++        "runner_host is declared by the matrix and is not runner attestation")
+ compare = jobs["compare-linux"]
+ require(compare["needs"] == "reproducibility", "compare-linux does not need both Linux legs")
+ download = next(step for step in compare["steps"]
+@@ -99,33 +104,32 @@ for text in ("reproducibility-linux-github/manifest.txt",
+ Path(output).write_text(run)
+ PY
+ then
+-  echo "  ok   workflow selects GitHub and concrete-ci-2, with no ci2 fallback"; PASS=$((PASS+1))
++  echo "  ok   workflow excludes self-hosted ci2 on pull_request and refuses substitutes"; PASS=$((PASS+1))
+ else
+   echo "  FAIL workflow reproducibility structure"; FAIL=$((FAIL+1))
+ fi
+ 
+-write_manifest() { # PATH ENVIRONMENT HOST RUNNER_NAME HASH
++write_manifest() { # PATH ENVIRONMENT RUNNER_NAME HASH
+   mkdir -p "${1%/*}"
+   {
+     printf 'runner_environment=%s\n' "$2"
+-    printf 'runner_host=%s\n' "$3"
+-    printf 'runner_name=%s\n' "$4"
++    printf 'runner_name=%s\n' "$3"
+     printf 'compiler_commit=0123456789abcdef\n'
+     printf 'target=x86_64-linux\n'
+-    [ "$5" = none ] || printf '%s  example/lcb.exe\n' "$5"
++    [ "$4" = none ] || printf '%s  example/lcb.exe\n' "$4"
+   } > "$1"
+ }
+ 
+-compare_control() { # LABEL SECOND_ENVIRONMENT SECOND_HOST SECOND_HASH SECOND_KIND EXPECTED_ERROR
+-  local label=$1 env=$2 host=$3 hash=$4 kind=$5 expected=$6
++compare_control() { # LABEL SECOND_ENVIRONMENT SECOND_RUNNER_NAME SECOND_HASH SECOND_KIND EXPECTED_ERROR
++  local label=$1 env=$2 name=$3 hash=$4 kind=$5 expected=$6
+   local d="$GATE_TMP/repro-$label" rc=0
+   mkdir -p "$d/scripts/checks/lib"
+   cp scripts/checks/lib/repro_manifest_compare.py "$d/scripts/checks/lib/"
+   write_manifest "$d/manifests/reproducibility-linux-github/manifest.txt" \
+-    github-hosted github github-actions aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
++    github-hosted github-actions aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+   if [ "$kind" != missing ]; then
+     write_manifest "$d/manifests/reproducibility-linux-ci2/manifest.txt" \
+-      "$env" "$host" concrete-ci-2-gha1 "$hash"
++      "$env" "$name" "$hash"
+   fi
+   (cd "$d" && bash "$GATE_TMP/compare-linux.sh") > "$d/output" 2>&1 || rc=$?
+   if [ -z "$expected" ]; then
+@@ -145,11 +149,14 @@ compare_control() { # LABEL SECOND_ENVIRONMENT SECOND_HOST SECOND_HASH SECOND_KI
+ if [ -s "$GATE_TMP/compare-linux.sh" ]; then
+   a=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+   b=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+-  compare_control identical self-hosted concrete-ci-2 "$a" normal ""
+-  compare_control differing-ci2 self-hosted concrete-ci-2 "$b" normal "manifests differ"
+-  compare_control two-github github-hosted github "$a" normal "expected runner_environment=self-hosted"
+-  compare_control missing-manifest self-hosted concrete-ci-2 "$a" missing "cannot read manifest"
+-  compare_control missing-hashes self-hosted concrete-ci-2 none normal "missing lcb.exe SHA-256"
++  compare_control identical self-hosted concrete-ci-2-gha1 "$a" normal ""
++  compare_control differing-ci2 self-hosted concrete-ci-2-gha1 "$b" normal "manifests differ"
++  compare_control wrong-ci2-name self-hosted concrete-ci-2-worker "$a" normal \
++    "expected runner_name matching ^concrete-ci-2-gha[0-9]+$"
++  compare_control two-github github-hosted concrete-ci-2-gha1 "$a" normal \
++    "expected runner_environment=self-hosted"
++  compare_control missing-manifest self-hosted concrete-ci-2-gha1 "$a" missing "cannot read manifest"
++  compare_control missing-hashes self-hosted concrete-ci-2-gha1 none normal "missing lcb.exe SHA-256"
+ fi
+ 
+ echo ""
+• Looks good. But think security: GitHub Actions matrix expressions: `github.event_name` available in matrix include runner. Yes.
+
+  Guard runs with default shell `bash` on GitHub hosted. echo uses :: error. Good.
+
+  Potential comparator requirement GitHub manifest `runner_environment=github-hosted`; yes. ci2 runner name matching exact. runner_host dropped. Controls.
+
+  Should run gates bounded inside nix develop .#gates. Should have "bounded" project says use bounded_run not GNU timeout. I need only scripts checks. Could invoke `nix develop .#gates --command bash scripts/checks/lib/bounded.sh`? Should understand bounded API and gate env. Usually command `nix develop .#gates --command bash scripts/checks/workflow_yaml.sh` has no external bound except script perhaps internal. User explicitly bounded. Should use `bounded_run` via source in nix shell:
+  `nix develop .#gates --command bash --noprofile --norc -c 'source scripts/checks/lib/bounded.sh; bounded_run 300 -- bash scripts/checks/workflow_yaml.sh'`
+  But bounded.sh may depend environment gate? Read file beginning and function usage.Now run each perhaps sequential in one bounded command? User says only scripts checks. Use separate commands possibly parallel? At most light. `nix develop .#gates --command bash --noprofile --norc -c 'source ...; trap ...; bounded_run -i /dev/null 300 -- bash scripts/checks/workflow_yaml.sh; rc=$?; bounded_summary; exit $rc'`. Sourcing creates tmp no cleanup unless trap; add `trap 'rm -rf "$BOUNDED_DIR"' EXIT`. Use shell variable inside single quotes. Should have `set -u`? no. `bounded_run` returns nonzero and shell no -e so capture. Fine. Could run both in same nix develop sequential with separate sourcing not ideal state. Separate parallel tool calls independent, but nix develop startup and at most not heavy. User says two checks, parallel okay. I should run workflow first because likely issue static YAML parse `on` bool irrelevant. Use one then issues. Todo controls done run in progress.
+
+warning: Git tree '/home/unbalancedparen/projects/clones/wip-repro-ci2' is dirty
+  ok   .github/workflows/lean_action_ci.yml
+  ok   .github/workflows/oracle.yml
+=== cross-machine reproducibility (ISS-0029) ===
+  ok   workflow excludes self-hosted ci2 on pull_request and refuses substitutes
+  ok   comparison control identical passes
+  ok   comparison control differing-ci2 is refused
+  ok   comparison control wrong-ci2-name is refused
+  ok   comparison control two-github is refused
+  ok   comparison control missing-manifest is refused
+  ok   comparison control missing-hashes is refused
+
+WORKFLOW-YAML: PASS=9  FAIL=0
+warning: Git tree '/home/unbalancedparen/projects/clones/wip-repro-ci2' is dirty
+=== ISSUES.tsv ===
+  ok   ISSUES.tsv is well-formed (18 issues, 10 open)
+=== negative controls ===
+  ok   an unknown area is refused
+  ok   an unknown status is refused
+  ok   an empty closure condition is refused
+  ok   a repeated id is refused
+
+check_issues: PASS=5 FAIL=0
+• Now commit new no push. Before commit verify status new files from tests none. Perhaps user asked end short report control. Should commit message. `ISS-0029: guard ci2 runner provenance` or `ISS-0029: refuse PR code on concrete-ci-2` encompasses both. "ISS-0029: secure concrete-ci-2 repro runner" good. Should git status and diff perhaps I already reviewed. Should check no merge/rebase per git safety after git operation. Before commit status. Then git add specific files and commit. User explicitly asks commit so allowed. Git add/commit Bash. Should not run gates again unless change. Perhaps need run `git diff --check` already done. After commit verify `git status --short --branch`, `git log -2`, no in-progress. Could combine commit and status? Commands dependent `git add ... && git commit ... && git status...`. Git safety after operation check status and rev-parse git dir maybe `git status --short --branch && git rev-parse --verify...` but `git status` confirms no merge. Should include no push. Do not push. Before commit todo checks done commit in progress.
+
+## wip/repro-ci2...origin/main [ahead 1]
+ M .github/workflows/lean_action_ci.yml
+ M Concrete/README.md
+ M ISSUES.tsv
+ M changelog.d/2026-11-08-repro-ci2.md
+ M scripts/checks/lib/repro_compare.py
+ M scripts/checks/lib/repro_manifest_compare.py
+ M scripts/checks/workflow_yaml.sh
+[wip/repro-ci2 0d55b0554] ISS-0029: secure concrete-ci-2 repro runner
+ 7 files changed, 60 insertions(+), 43 deletions(-)
+## wip/repro-ci2...origin/main [ahead 2]
+0d55b0554 (HEAD -> wip/repro-ci2) ISS-0029: secure concrete-ci-2 repro runner
+705815b95 ISS-0029: compare reproducibility with concrete-ci-2
+• Should have response concise report commit, changes, tests. Mark todo done. Perhaps mention no push. Could include file refs line numbers accurate after changes: workflow lines 463 etc, comparator 14, control 48. No need overdo. Perhaps ensure commit status clean from output yes. Respond with no unverified claims. I ran only allowed. "PR linux-ci2 now selects GitHub-hosted and fails first step by design; main/dispatch self-hosted." "Provenance uses actual environment/name; host dropped; invalid name/env fixtures." "Updated docs/changelog/ISSUES closure." Tests results. Commit hash. No push.
+
+  Before responding mark done.
+
+To resume this session: kimi -r session_c7ad0967-9df9-41b5-a3e4-6684a82e4867
+[unexpected] RuntimeError: workspace wd_wip-repro-ci2_bb6b80ff9f4d is not materialized
+    at RuntimeResolver.acquire (/home/runner/work/kimi-code/kimi-code/apps/kimi-code/dist-native/intermediates/main.cjs:180498:36)
+    at AgentRuntimeService.acquire (/home/runner/work/kimi-code/kimi-code/apps/kimi-code/dist-native/intermediates/main.cjs:132231:25)
+    at AgentFileHistoryService.readCurrent (/home/runner/work/kimi-code/kimi-code/apps/kimi-code/dist-native/intermediates/main.cjs:177606:31)
+    at AgentFileHistoryService.endCheckpoint (/home/runner/work/kimi-code/kimi-code/apps/kimi-code/dist-native/intermediates/main.cjs:177519:32) {
+  code: 'runtime.not_found'
+}
+kimi rc=0

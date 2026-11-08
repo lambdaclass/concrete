@@ -1,0 +1,830 @@
+kimi version 2.4.1
+• I need perform thorough review read draft and repo. I'll respond with each G1-G12 <=60 words reasons AGREE/DISAGREE, rankings change. Already covered/rejecting wrong entries citations. Missed real gaps with source problem slice why uncovered. No modify. End exact line format. Should have tools read. Large task use TodoList perhaps helpful. Should inspect _review DRAFT and prompt maybe. I need be careful not modify files including no todo? tool okay not files. I'll read draft, philosophy, decisions, roadmap, proposals spark, ideas merged foundation, spec tree, legacy types refs rationale. Parallel known files. First draft likely long.
+
+• I’ll read the draft and the normative repository documents first, then trace each proposed gap and coverage claim to concrete sections before assessing omissions.
+
+• Should locate IDEAS etc docs/proposals likely. Glob. decisions huge use grep sections terms. Also need remaining ROADMAP E F G. Read known proposal files.
+
+• The draft’s core claims are mostly about scheduling and missing boundary contracts rather than new syntax. I found the three unqualified filenames under `docs/proposals/`; next I’ll check the exact decision rows and later-phase tasks that may already cover them.
+
+• Should have exact decisions contents. Use Read beginning 1-400 and relevant ranges. Determine all anchors line numbers grep simpler targeted no headings broad.Important G6 already covered by disposition R-0283 -> R-0301 and FFI_GLUE. G7 inline asm covered archived deferred not decisions current philosophy but repository covers and proposal conflicts? User says DISAGREE if already covered cite file section. G12 covered IDEAS deferred and disposition trigger; DRAFT itself says R-0406 deferred but still candidate category gap? Their criteria candidate gaps not covered, G12 is already covered planned deferred. Could DISAGREE G12 because already covered. G11 property tests archived planned deferred? Should inspect task disposition R-? around property testing. Grep property R tasks. G3 stack already covered Q7.10 and MERGED 2 launcher reservation. G3 broad other ambient state genuine but G3 item includes stack incorrectly stated "silently depends" while decided launch refusal. Should assess whole gap perhaps agree with caveat or disagree because placed wrong slice? Should have precise task instructions each gap agree/disagree if already covered etc. G3 ambient process state is uncovered except stack/trap realization perhaps BIR contract. I can AGREE noting stack reservation not missing and trap realization already BIR R-0581. Should have ranking change likely G6/G7/G12 should drop, G4/G2 etc rank. G9 dead code list contradiction: Already covered "Dead code: OD62, OD41, Q6.4, dead stores (item29)" while G9 specifically unused imports/private items not covered. Already covered dead code entry is wrong because conflates categories, cite G9 itself? Should cite OD62 etc. G6 FFI "already covered" list says FFI ABI slice25 etc but not generated tooling. R-0283 confirms G6 a already planned. b/c FFI_GLUE likely covers all. Should read FFI_GLUE and task R-0285 etc. Also R-0301 only current summary sanitizer and validation project, disposition obligations. G6 likely fully covered. G7 current repo covers deferred legacy decision inline assembly trusted with Unsafe not no inline assembly refusal, so recommend permanent refusal is new owner decision conflicting deferred row? DISAGREE because already dispositioned not a missing feature, plus current proposed no asm "trusted included" conflicts with explicit trigger design. I can cite archived task disposition and R-0325. G12 similarly existing deferred R-0406, plus external generation already decided philosophy. G11 archived property testing is planned? Should find R IDs and disposition.
+
+• Several candidates are not new: ABI/layout round trips and C-header generation already have roadmap dispositions, inline assembly has an explicit deferred hardware rule, and EverParse-style generation is already the retained part of R-0406. I’ll now distinguish those from genuinely uncovered details such as process-launch state and proof usability.
+
+• So G11 already covered R-0190->R-0177 E and R-0191 persistence, G11 proposes slice8 earlier wrong. DISAGREE.
+
+  G6 definitely DISAGREE.
+  G7 disagree.
+  G12 disagree.
+
+  G10 spec version package declaration: R-0333 cross-version gates, R-0383 package manifest resolution, R-0603 outputs spec_version but no source declared version. Could be genuine uncovered. Should check archived R-0429 exact.Now update todo. I have read normative. Now verify each. I can mark first done second in progress. Should have G1 perhaps already covered enough? Functional models planned phase E, subject shape R-0454/R-0482 etc. Draft says nothing fixes theorem subject shape; actually disposition R-0454 -> R-0353 defines versioned canonical proof subjects and R-0482 separate identities model impl prop contract. But not functional model generated early. G1 specifically early schedule new, genuine. Proposal move part proof order item 4 to C, owner-approved order? Roadmap proof order fixed but owner can revise. AGREE, rank top perhaps.
+
+  G2 static data constants: Is read-only static data perhaps StaticStr covers text only, constants no storage decided. Genuine new owner revision. But proposal "array constant stored once read-only; shared borrow of constant is range view" conflicts with REF-6 "no constant initializer borrows". User explicitly says owner yes revises TYPE22 but also REF6; draft fails mention REF6 revision. Could DISAGREE because breaks decided row (REF6) and no acknowledgement? Task says DISAGREE if breaks decided row. It does directly propose borrowing constant, forbidden REF-6, but could be recommendation to revise both owner rows. They note Owner yes revises TYPE22 but not REF6. Is that enough to disagree? Should evaluate likely expected. G2 real gap and owner could revise. Draft problem cites REF6 refuses borrowing constant initializer, proposal implies change but owner line only TYPE22. Should say AGREE with required explicit REF6 revision? Task binary probably AGREE if gap valid despite proposal needing owner. Wording "DISAGREE if it ... breaks a decided row" strict. Any proposal that revises decided row with owner yes shouldn't automatically disagree? They explicitly G2 says Owner yes revises TYPE22, so revising decided row is permitted via owner. But breaks REF6 unacknowledged. Could disagree due to that. Should infer intended response. I need be honest.
+
+  G3 launch state: includes several already covered, but core new. No need reject whole. G4 wide primitives real unplaced explicit. G5 wiping scope real but backend wiping named premise, not overclaim? They say claim secrets wiped only under premises. Draft wants scope, good. G6 covered. G7 covered and opposite deferred design. G8 PollSet owning sockets: a PollSet that owns sockets while scoped access to one socket possible with borrow block; no concurrency. Genuine. But event readiness interfaces not covered by network std table. However single-threaded poll can block and explicit Time. No hidden scheduler. Good. G9 unused import/private items real but perhaps Q6.4 "check all written code" and no warnings not coverage. G10 version declaration new source semantics compatibility, R-0429 may imply newly declared source but no manifest version explicit. Genuine. G11 covered. G12 covered.
+
+  Already covered list wrong entries:
+  - Dead code item overbroad as said.
+  - FFI/ABI perhaps coverage claims okay as language slice but not tools. It says FFI/ABI: slice25 etc correct itself.
+  - Layout "packed removed (item23)" baseline owner removal packed yes unrecorded. Fine.
+  - "Comptime constants computed compile time (item26)" baseline says owner perhaps constants? fine.
+  - "Testing/fuzzing: #[test], differential fuzzer, ASan, capability fault simulation" accurate but G11 not contradicted because property testing separately R-0190 absent list. Could flag omission: Testing/fuzzing wrongly suggests comprehensive but property based planned R-0190.
+  - "Proof reuse R0162 R0172; Mathlib..." good.
+  - "Bounded stack/heap stack from final artifact slice0, proven at5; heap budgets" good.
+  - "Static analysis profiles predictable policy OD124 replaced profiles" OD124 actual decision says profiles chapter of refusals, not OD124 replaced profiles alone, but newer decision predictable policy replaced? Should read lines 700 etc. DRAFT may be right with newer row. Search.
+
+• The clearest false “new gap” is G11: R-0190 already specifies generated, precondition-filtered contract tests with shrinking and explicit non-proof evidence, transferred to R-0177. G6, G7, and G12 likewise have existing dispositions; the remaining candidates need narrower wording rather than wholesale rejection.
+
+• Now identify missed features. Should systematically consider many languages. I need honest fewer real gaps. Could perhaps find 3-5 high quality:
+  1. Memory/result initialization and safe partial initialization? SPARK Relaxed Initialization deferred already covered. Not.
+  2. Non-lexical token scope / typestate? Typestate in backlog research R0415? Search repo. Could be not covered and admission? Resource state machines via linear types maybe no typestate. ATS, Rust typestate, Austral? Concrete linear capabilities, could benefit from typestate protocols e.g. file open/write state, network handshake. But second-class refs, no dependent types. A typestate system adds new language feature and type-level state generic params perhaps one form? Is real workload encrypted tunnel, protocol parsers, FFI. Proposed slice14 traits/generics or 23 network? Should source and why uncovered. But may be covered by nominal structs with private fields and linear value state transition: each state distinct struct, no separate typestate machinery. No need.
+  3. Session types / protocol proofs (ATS, F*), maybe same.
+  4. Explicit cache coherence / DMA MMIO barriers: R-0325 device workload covers MMIO inline asm interrupts. Not.
+  5. Bit-level transparent endianness and packed parsing: G12 covers parser, G4 swap bytes.
+  6. Error code contextual error traces? Rust error handling no hidden; not needed.
+  7. Allocation-free lazy iterators? no closures, could use explicit loops; second form not.
+  8. Slices as range views already.
+  9. Integer `usize` decided no.
+  10. `bool` bit etc.
+  11. Floating point deterministic NaN semantics, no excess precision, FTZ/DAZ target state. Slice26 floats but repository only f32/f64 conversions and legacy R0087 includes NaN etc, floating point env not considered? Could be real gap: floating-point environment and target determinism (rounding mode, FTZ/DAZ, NaN payload, signed zero, FP exceptions, x87 excess precision, FMA contraction). Concrete fully proven needs explicit target semantics. R-0087 -> R-0512 says total float model and profile trust labels, includes NaN signed zero subnormal precision change vectors, but current slice 26 only floats conversions. Perhaps covered enough R-0087 exact includes. Read full R-0087 and legacy float docs.Repo huge, many features covered. Should have missing external features beyond those considered. Candidate missed could be hardware control-flow protections not language feature admission? Owner asks any system programming language/formal verified feature. Should pass PHILOSOPHY. More promising:
+  - Explicit stable algorithmic complexity contracts (HashMap collision DoS) perhaps resource bounds cover steps but hash module says collision/failure laws; no randomized hash seeds authority? entropy cap available. HashMap DoS via adversarial collisions is real, Rust RandomState, SPARK not. Step-count polynomial in input size would reveal worst-case O(n²), not hidden. Not gap perhaps hash/equality contract includes collision laws not resistance. Could propose deterministic worst-case OrderedMap vs HashMap policy/fact, no new language feature, std slice23. Does this pass? Real workload network parsers/store, untrusted keys. But is it necessary? HashMap can document worst-case; resource facts covers. Not strong.
+  - Non-interference only secret baseline; lockstep? Spectre excluded. Fine.
+  - Safe stack traces no.
+  - Error-handling Close EINTR semantics decided close always releases Linux. macOS close semantics differ? Target macOS AArch64 first native proof but hosted grant table Linux only. Target tables later.
+  - Filesystem durability/atomicity: file-copy at 18 and KV store at23 durability not established explicitly. Rust `sync_all`, atomic rename, fsync directory, crash consistency. KV showcase durability "not established", RocksDB uses. Is absence of persistence explicit planned not gap? Owner wants features should have. A durable storage API with `sync` and atomic replace, capability Fs, typed errors and conservation; needed actual systems and proof claims. Repository R-0052 lists rename etc, KV durability explicitly not established. Could propose slice23 or 18 std fs. This is real uncovered feature, but not a language feature per se std feature allowed question. "any system programming language ... feature" yes. Should why not covered: fs table only partial I/O errors cleanup, file-copy; showcase says durability not established. Could be deliberate deferred rather than forgotten. User asks gaps repo doesn't cover. It is explicitly not established means not covered; real. Passes visible authority, typed failure. This is good but perhaps lower priority. Source SQLite/RocksDB, Rust `File::sync_all`, `rename`, Zig fs atomic? Ada? no formal. Proposed slice23. Include fsync file and parent dir, rename exchange? Should avoid over design. Could name crash consistency/durability contract and atomic replacement. But owner explicitly accepts durability not established for embedded KV, so not conflict if opt-in later. However no workload requiring? RocksDB after25 requires durability semantics; current R0285 only open read write close. Real workload yes. Good.
+
+  - Filesystem metadata permissions and file creation mode related umask G3. fine.
+  - Timeouts and cancellation: poll G8 with Time; blocking operations can hang and may_not_terminate. No general cancellation until concurrency. Not.
+  - Monotonic clock raw u64 ns wraps? u64 centuries. fine.
+  - `O_CLOEXEC` irrelevant no spawning.
+  - nonblocking sockets readiness poll G8.
+  - byte buffers no.
+  - Static immutability tables G2.
+
+  - Platform startup: auxv, environ, locale, TZ, malloc etc ambient; G3 covers process state but misses current working directory! Filesystem rooted directory grants, relative dirfd means cwd shouldn't matter. Host timezone clock wall returns ns, locale no. G3 can expand. Inherited current directory ambient authority if absolute path helpers? Q7.10 no absolute paths perhaps legacy R0052 says ambient absolute wrappers hosted-only, but new target directory launch config resolves paths launcher before main. Current cwd is launch input, should record. Could mention G3 broader.
+
+  - Deterministic environment for build vs runtime separate. reproducible builds covers.
+  - Startup ASLR addresses observable secret leakage baseline addresses, not hidden. no.
+  - Secure memory `mlock` G5 mentions.
+  - Zeroization scalar copies G5.
+
+  - `restrict` alias not needed.
+  - C interop varargs refused.
+  - Foreign callbacks OD4.
+  - C++ interop not required adapters.
+
+  - Checked arithmetic includes gcd? wide bit operations G4.
+  - `abs(MIN)` std table audit perhaps R0034 covers.
+  - leading_zeros zero semantics G4 named total.
+
+  - Arbitrary precision spec-only bigint already R0172, not runtime.
+  - Decimal fixed point rejected.
+  - 128-bit source types no arbitrary G4 module limbs.
+
+  - Tagged pointer no.
+  - Unicode char removed baseline.
+  - ASCII operations unplaced std table.
+  - Grapheme clusters not needed systems byte text.
+
+  - Formatter static no dynamic format macros refusal.
+
+  - Structured error context no hidden allocation.
+
+  - Tuple rejected.
+
+  - Default values no.
+
+  - Pattern exhaustiveness good.
+
+  - Deferred cleanup good.
+
+  - Generators/iterators: no closures, second form of loops, reject likely.
+  - Ranges in for only integer. no range syntax others.
+  - `for` consuming collection perhaps drain covers.
+  - enum `Option Result` no ?.
+
+  - Hylo value semantics and mutable value semantics: Concrete explicit move copy and &mut. Already stronger.
+  - Austral borrow reads etc.
+  - Vale region borrow perhaps rejected.
+  - Koka Perceus reuse optimization: hidden memory behavior? Compiler optimization can reuse unique allocations with proof and no behavior except addresses. Concrete explicit malloc and linear could use reuse optimization. Not user feature, backend optimization with resource semantics. Could be missed real compiler feature: reuse analysis (Koka/Lean) can avoid allocations for linear containers, preserving authority and timing facts. But roadmap SSA optimizations generic, no explicit need. Is this necessary? Real programs Vec performance. Yet not must-have.
+  - Lean LCB has reference counting but Concrete no hidden RC; reuse does not add GC. Could propose backend optimization with proof, not surface. But no decided roadmap requirement. Might be lower priority and less strong.
+
+  - Rust `Pin` self-referential structs: raw pointers/trusted only, no need.
+  - `MaybeUninit`: trusted std, SPARK deferred Relaxed Initialization, covered.
+  - `ManuallyDrop`: linear ownership no drops; not needed.
+  - `Box` Heap.
+  - `Rc Arc` hidden RC refused.
+  - `Cow` hidden allocation and dual ownership, likely reject.
+  - Rust `Deref` implicit conversions no.
+  - `Send Sync` concurrency planned.
+  - `panic=abort` explicit abort.
+  - `no_std` freestanding planned.
+  - `global_allocator` implicit context refused.
+  - `offset_of` perhaps layout query sizeof alignof in Foundation C3. offsetof useful FFI but derived C artifacts G6. Could be missed? Language `offset_of` perhaps planned? Search.
+
+• For omissions I’m filtering out anything already pull-gated or expressible with existing private state structs, explicit loops, or Lean theorems. The remaining candidates must solve a concrete systems or verification problem without adding implicit behavior or a second language mechanism.
+
+• Interesting "guaranteed construction into destination", "validated indices stored in data", grow-only collection candidates not current roadmap perhaps missed. They are in legacy research but not disposition? Task user says repository does not cover; legacy research counts cover? User asked check IDEAS etc and repo. If legacy research has these, not missed. Should not repeat.
+
+  Could inspect archived ROADMAP_DECISIONS functional models G1 likely explicitly says no early because no source semantics? Read around 480.G4 partially covered per-slice examples bswap popcount via bit ops but not primitive. Still unplaced wide explicit.
+
+  G1 exact planned proof order already Aeneas etc, so "missed feature" not new concept but schedule earlier and subject shape. User may expect DISAGREE G1 because already covered proof order item4 and R0482 canonical subjects. Task says DISAGREE if already covered. G1 is user proof interface generated models early; functional models safe code planned in E. Already covered (planned), draft acknowledges. It proposes schedule move, so category candidate gap c includes planned? Their already covered (a) or planned (b) separate. G1 says nothing fixes theorem subject shape, but R-0482 exactly separate identities model implementation proposition contract, R-0454 canonical subjects. Should examine current R-0353/R-0495 tasks, disposition R-0454. If already planned model translation, user interface not necessarily subject shape exact. G1 still schedule issue not missing feature. User may want AGREE because early generation matters showcases before E. But phrase "for each gap say AGREE or DISAGREE; DISAGREE if already covered" could mean any planned item should disagree, unless wrong slice (then also disagree). Many draft candidates knowingly planned deferred G12. G1 proof models planned but showcases need earlier -> wrong scheduling genuine gap. G11 property tests planned E but proposes earlier slice8; could also be schedule improvement. Why treat differently? G11 low priority and existing plan enough, while G1 showcases need them earlier (ROADMAP C says each records program correctness, examples per slice F Lean theorem, so without model handwritten deep semantics). Is planned phase E too late contradictory with C program theorems, so schedule gap real. G11 property tests not required for proofs and low priority, no need early. So agree G1, disagree G11.
+
+  G12 EverParse generation phase E pulled first parser showcase. First parser showcase grep16? binary PNG21, phase E after D28, so "phase E pulled by first parser showcase" contradictory: first parser showcase before E. But R-0406 trigger only after checked combinator path; external generator not needed early. It is already deferred with trigger, so disagree.
+
+  G6 placement slice25 matches FFI, fully planned. G7 refusal new current decision could be worthwhile despite deferred old inline asm trusted. But candidate says "decisions and philosophy never mention" true current normative but repo archive mentions. Owner asked what didn't think about; User did think. Disagree.
+
+  Missed gaps likely can be none? User asks list gaps Claude missed, honest fewer real. Could respond none if no strong. But likely expected identify some. Should thorough external survey myself. I'll brainstorm categories not in draft and repository:
+  - Exception safety not.
+  - Function contracts: loops two-state / modifies clauses. SPARK P18 says frames as Lean theorems; loop invariants source. Should loop frame/loop entry relation without `Loop_Entry` banned. Could use Lean theorem but no functional model early G1. Covered.
+  - Proof by reflection/verified decision procedures: checker Lean proved, no SMT. Covered.
+  - Proof certificate exchange independent kernels covered.
+  - Compiler-checked theorem termination: spec functions total covered.
+  - Monotonicity of evidence spec versions covered.
+  - Counterexample generation R0599 deterministic bounded search plus property R0190. Covered.
+  - User-defined primitives law registry C9, no unknown. good.
+  - Interactive proof tactics Lean already.
+  - Extraction to other backend no.
+  - ABI functional models G1.
+  - Compiler validation CompCert covered.
+  - Self-hosting CakeML deferred R0303.
+  - Formally verified crypto HACL primitives G4 G1 etc.
+  - Constant-time compilation secret preservation covered.
+  - Secure declassification delimited release covered.
+  - Zeroization scope G5.
+  - Side-channel Spectre excluded.
+  - Hardware faults out scope named machine assumptions.
+  - MISRA no dynamic etc.
+  - Capability attenuation re vocation: grants narrowing consumes, close etc.
+  - Revocable capabilities / shared delegation? Linear grant value can be passed but no copy; can narrow child while parent stays. Revoking child from parent not modeled. seL4 capability derivation tree supports revoke, Fuchsia handles. Could be real gap for long-lived services/plugins, but no dynamic plugins/process spawn, linear ownership explicit close by owner. Not needed.
+  - Object-capability membrane / authority-only handles: with + values.
+  - Resource usage before granting: launcher.
+  - Filesystem race confinement openat2.
+  - Network DNS numeric scopes.
+  - Sandbox Wasm.
+  - Supply chain packages.
+  - Binary parser DSL.
+  - Archive hostile input.
+  - Versioning.
+  - Reproducible.
+  - Crash consistency perhaps indeed one.
+  - Atomic filesystem operations and metadata semantics under crash: no crash model planned explicit, but owner asks features should have; real systems language needs. Could include as missed M1 with slice23/25.
+  - `rename` and durability directory sync are APIs not language feature but std is asked any feature. Good.
+  - Symlink/hardlink metadata etc R0052 covers list etc.
+  - Sparse files, offsets? file-copy simple, RocksDB FFI. Not necessary.
+  - Async readiness G8.
+  - Cancellation with blocking I/O: single-thread poll can timeout before operations but blocking read can hang. No async cancellation without concurrency. Could add nonblocking mode as part PollSet G8. Not separate.
+  - Signal handling no safe handler, launch G3.
+  - terminal interactive settings not workload.
+  - memory maps shared memory no workload.
+  - `mmap` and file-backed linear memory perhaps needed RocksDB via FFI only.
+  - DMA no freestanding later.
+
+  - ABI stack executable marking, RELRO, PIE, fortify. Security hardening is real system compiler feature not covered? Search hardening no. Compilers Rust/Zig default PIE, stack protector, CET. Concrete no hidden traps and security should emit non-executable stack, relocations, no writable/executable segments, stack protector? Stack protector introduces hidden trap, but explicit target trap okay? Could conflict. Control-flow integrity changes indirect call target set but visible? compiler-enforced. These are important but not necessarily requested languages. Could propose target artifact hardening contract at slice0/20/25: non-exec stack, no RWX, PIE, RELRO, stack canaries? Secrets? Named artifact facts. Is absence covered? R-0505 final image validates bytes relocations, entry state, target. It could include but not explicit. Real benefit and passes admission (artifact facts). Could be a missed real gap. Source OpenBSD, Clang/Rust/Zig hardening, seL4. Problem native binaries memory corruption at trusted/FFI boundaries. Fully proven safe subset but trusted code and foreign interfaces need defense-in-depth. Owner decided OS sandbox out of compiler, but binary hardening is compiler scope not OS sandbox. Proposal slice0 ELF/Mach-O load segment audit (NX stack, no RWX), slice20 CFI for function values and CET/shadow stacks as target premises? Should avoid broad weak feature. Minimal non-executable stack and no W+X mappings at slice0, read-only relocations and PIE at25 dynamic libraries. Could mention as one. Is "must have" given small systems? yes. But formal language not necessarily security hardening required. Admission real benefit audited code, artifact facts. This could be strong missed M2.
+  - Stack canaries conflict hidden trap? explicit target trap reported but compiler-inserted checks are hidden traps rule18? They are not language operations but backend mitigation, could report. Better omit canaries. NX/W^X no semantic change.
+  - Position independent code ASLR changes exact address observations but target relation can model. Not necessary.
+  - CFI at indirect calls likely good but compiler validation overhead, named hardware assumptions. Yet no hidden targets; function values exact. Could do target allowlist at runtime, not needed if proof safe. Foreign corruption only.
+  - ELF GNU_STACK is a common defect easily audited. Real gap.
+
+  - Memory tagging / CHERI capabilities target profile future only with workload, not current.
+  - Harfware pointer auth future not.
+
+  - Linker symbol interposition: FFI calls through PLT can be interposed, so foreign contract may not correspond to intended library; exact binary binding and dependencies includes retained closure RQ8.6, reproducible. Dynamic library symbol interposition and LD_PRELOAD ambient process state not G3. Huge honest trust issue: hosted dynamic links honor LD_PRELOAD, LD_LIBRARY_PATH, audit, locale, loader state, so named foreign functions not necessarily actual implementation. Launcher descriptors etc doesn't cover dynamic loader environment. Reproducible exact binary doesn't fix runtime dependency substitution. This is a real gap from seL4 / capability systems / reproducible builds. Proposal target table/launcher: static or digest-pinned dependencies; refuse LD_PRELOAD/LD_AUDIT etc or direct-syscall no-libc R0584/R0621 later; manifest exact loaded shared library digests; slice25 for dynamic FFI, slice6 launcher. This could be considered ambient process state G3 broadly but G3 list not loader. It is missed distinct. Source Capsicum/WASI ambient authority, seL4, reproducible builds. Problem foreign behavior trusted premise but loader can replace function. Admission transparency, exact artifact. Strong M3.
+  - Environment variables only main Environment allowlist, but libc/runtime reads env before main (LD_PRELOAD etc) hidden. G3 says no life before main but target startup table. R0621 no libc later. Until then libc premise covers perhaps but not precise. Could fold into G3 recommendation rather than missed to avoid weak. Draft G3 ambient state examples not exhaustive? "not: (a)...(f)" fixed list. Loader ambient authority not named. Good missed.
+
+  - Auxiliary vector `AT_RANDOM`, stack canary pointer guard etc runtime entropy, no hidden grant. libc startup may use. no-libc later. M3 target launch contract covers.
+
+  - ABI unwinding foreign C++ no.
+  - Errno global mutable state (thread local) hidden input after foreign call; extern wrapper must capture immediately, contracts. FFI_GLUE foreign errors typed but not errno specifics. R-FFI direct extern C signatures? Legacy libc wrappers may use errno. Could be real gap: foreign calls with implicit runtime channels (errno, floating env, TLS) violate no hidden input. C10 ABI signatures registers stack clobbers preserved state not OS TLS. Extern contracts must declare hidden state effects. C primitive contract interface includes authority memory etc. General extern arbitrary C needs declare global state reads/writes. No mutable globals Concrete but foreign code may. FFI_GLUE says reentrancy/thread affinity, foreign assumptions. Covered enough.
+
+  - C signal handlers foreign global effects no.
+
+  - C header bitfields unsupported explicit diagnostics.
+
+  - Build scripts arbitrary execution: FFI_GLUE hostile-build controls. covered.
+
+  - Runtime loader not explicit likely good.
+
+  - Program args/environment invalid Unicode and NUL at launch. std table args flags invalid UTF8, environment contract. covered.
+  - Current working directory launch. G3 expand.
+  - File descriptors on exec no process spawning.
+
+  - OS resource limits beyond stack: RLIMIT_NOFILE, RLIMIT_AS, RLIMIT_CORE, RLIMIT_FSIZE. G3 stack/core but file size limit causes SIGXFSZ (hidden signal), fd exhaustion typed error. RLIMIT_FSIZE signal could kill process hidden trap. Ambient rlimits general gap. G3 mentions other ambient process state not all, proposed "each of these" list lacks RLIMIT_FSIZE. Could note G3 should include all fatal signals and rlimits not separate M. Good.
+  - SIGXFSZ, SIGSEGV from trusted code can't type.
+  - SIGPIPE specifically.
+
+  - Network SIGPIPE on macOS uses SO_NOSIGPIPE, Linux MSG_NOSIGNAL vs ignore global. G3 proposal SIGPIPE ignored okay target-specific.
+  - Stdout buffering no print builtins removed.
+  - File close errors typed.
+
+  - HashMap randomized seed ambient entropy grant explicit. std table HashMap hashing/equality no DoS. Could be M4 with slice23: deterministic versus keyed hash, collision budget. Real workloads parse untrusted keys. Resource bound step model counts operations but does not prevent huge time if bound polynomial, can see. Concrete's aim audit; require hashmap fact worst-case. Is this necessary enough? Could include lower priority.
+  - Sort algorithms adversarial worst case (OrderedMap deterministic).
+  - DEFLATE decompression bomb: memory bounded from header insufficient because header uncompressed size can lie, max output policy explicit. showcase says memory bounded from header; attacker can declare huge header and budget refuses. fine.
+  - regex linear time adopted.
+  - parsers input limits resource.
+  - recursion stack bounds.
+  - UTF8 overlong validation laws.
+
+  - Allocator OOM typed.
+  - Arenas reset.
+  - Secret swapping.
+
+  - `File` nonblocking etc.
+
+  - SIMD intrinsics: G4 wide bit primitives but no SIMD. Crypto and checksums need vectorization for performance, but constant-time table and source primitive registry can add target-specific lawful primitives. Is it must have? not yet real measured performance, pull rule. Should defer, not missed must.
+  - AES-NI/SHA intrinsics important crypto constant time; G4 says each closed CT table, no explicit AES/SHA. Source Jasmin, Rust stdarch. Problem AES without hardware is hard constant-time; ChaCha selected no AES. EVM Keccak software okay. Not current workload. no.
+  - Multiply high G4.
+
+  - Atomics concurrency planned.
+  - fences needed MMIO before concurrency, R0325 hardware primitives covers.
+  - Volatile covered.
+  - `extern "system"` calling conventions target C10.
+  - Endianness explicit numeric codecs.
+  - unaligned accesses foundation.
+  - pointer width profiles.
+  - pointer authentication no.
+
+  - Packed struct removed baseline owner but foundation says packed modes included. Baseline not repo overrides removal packed. Draft already says packed removed item23. No need.
+
+  - FFI export_name removed? baseline list says as char print dot only, export remains.
+  - WASI component model already compared.
+
+  - Stable ABI/module dynamic linking: outbound FFI R0286 covers static/shared.
+  - WASM component model only conceptual not actual backend planned R0305 says component later; already covered list says worlds ~ grant table but no canonical ABI/adapters. Is entry wrong? It claims Wasm component model already covered by analogies, but actual component model feature (WIT types, canonical ABI, resource handle tables, cross-component ownership and borrow semantics, post-return) not covered by main grant table or linear values. R-0305 explicitly says component model later. DRAFT "Already covered: Wasm component model: worlds ~ main grant table; own/borrow handles ~ linear values and second-class borrows." This is wrong/overbroad. R-0305 says component model explicitly later, and second-class references cannot be stored or returned, component `borrow<T>` handles are first-class values stored in tables (though scoped). Canonical lifting/lowering and resource destructor cross-component not covered. Good task2 entry wrong cite task disposition R-0305. Should flag. This could be a missed gap itself? Since already deferred explicitly later, not missed. Already covered entry wrong. Great.
+  - Generics/traits entry says const generics designed deferred correct.
+  - Static analysis profiles OD124 "replaced profiles" decision latest likely yes.
+  - Conditional comp correct.
+  - Error handling no `?` permanent.
+  - Units measure designed deferred.
+  - Concurrency.
+  - "Dead code" wrong.
+  - "FFI/ABI" entry perhaps says slice25 includes #[export_name] but ROADMAP slice25 no export_name (draft says includes export_name though current row only extern fn link_name repr Kept). Baseline perhaps 59 item includes exports? R0286 covers. fine.
+  - "Comptime constants computed compile time" constants TYPE22 evaluated each use at runtime, known values folded only local checker not general compile-time evaluation. Baseline owner item26 perhaps constants computed compile time? Draft already covered says "Comptime: constants computed at compile time (item 26); general comptime reopen rule." But TYPE22 decides constants evaluated each use, never start, not necessarily compile-time. Owner unrecorded baseline says 59 item includes item26 perhaps "constants computed at compile time" according draft. I should accept baseline paragraph. Can't dispute based repo due owner answers summarized. But G2 proposal static data conflicts with constants computed compile time? Could note TYPE22 governs until revision.
+  - "Dead code OD62 OD41 Q6.4 dead stores" definitely wrong because unused private/import not covered. Entry title generic dead code, G9 recognizes. Flag.
+  - "FFI/ABI slice25 OD4..." correct.
+  - "Testing/fuzzing ... capability fault simulation" fine.
+  - "Static analysis profiles predictable policy over facts (OD124 replaced profiles)" newer decided row.
+  - "Portability target profiles Linux+macOS BSD pull" accurate.
+  - "Reproducible builds slice0 decision" good.
+  - "Proof reuse" good.
+  - "Layout packed removed" owner baseline yes.
+  - "FFI export" okay.
+  - "Volatile MMIO observable event kind R0602, device grants27, freestanding" full device semantics deferred but covered planned.
+  - "No return" etc.
+
+  Recommend rejecting wrong entries:
+  - Interior mutability Cell/RefCell and Vale generational refs: rule18 says runtime borrow checks hidden traps, but Vale generational references use runtime generational checks that can be made total/fallible? Current R-0412 explicitly deferred research, not permanent rejection. So recommending reject Vale generational references contradicts deferred-with-trigger R-0412. They lump Cell/RefCell with Vale; `RefCell` can panic hidden trap but generational refs could use explicit Result. Should flag as wrong: repo deliberately leaves narrow fallback open. cite task_disposition R-0412. Also PHILOSOPHY rule18 doesn't mandate reject if failures explicit, so broad rejection unsupported. Good.
+  - Guaranteed tail calls: says second form of loop rule2 R-0303. R-0303 is deferred compiler-self-host prerequisites, not decided rejection. Guaranteed tail calls can be needed for state machines/interpreters, bounded stack and no recursion, not merely second form loop (semantically tail call is call, can optimize). Current no tail call feature, but recommend permanent? Draft says recommend rejecting not permanent wording except rule. This conflicts with deferred trigger R-0303. Flag. Could be wrong entry. Also Zig does not have `.always_tail`? Zig has `@call(.always_tail, ...)` not `.always_tail` standalone, minor source not needed. Rust `become` proposed. Repository R0303 explicitly names missing tail-call trigger. Good.
+  - Arbitrary bit-width integers and bitfields: R0303 deferred compiler workload bit-layout, R0325 device etc, not permanent. Draft says reopen device workload, consistent. Arbitrary bit-width rule15 recommendation not existing decision, okay recommend reject.
+  - include_bytes/@embedFile: says build reads files; external generator. G2 static tables may be solved generator. This rejection not already decision but philosophy. Build reading files is normal source import; include bytes is explicit at declaration and reproducible build records inputs, not hidden if manifest. Rule3/5 doesn't automatically reject; could admit with artifact binding. But recommended reject perhaps reasonable due external generator. Does repo have R-? binary embedding? Search.
+
+• Two more coverage-list errors are clear: the component model is explicitly later work, not covered by grant-table analogies; and “dead code” does not include G9’s imports/private items. In the reject list, Vale-style generational references and guaranteed tail calls are pull-gated research topics, not settled refusals.
+
+• Hash covered. Crash consistency appears legacy tasks perhaps disposition? Should check exact R? Read around 4750 and 11490 and reconciliation row.I have enough for gaps perhaps. But dynamic loader covered FFI_GLUE pin inputs but runtime loader digest not. RQ8.6 bind complete retained dependency and image closure may cover loaded libs? R0505 exact linked image, retained dependencies. For dynamic shared libraries, closure perhaps identity but not runtime loader env. Good missed.
+
+  Crash model covered deferred R0453 littlefs and KV explicit not planned, so not missed. Do not include. Hardening no repo except generic, but could be weak and not specifically languages asked. Could include 2-3 strong other gaps.
+
+  Think formal verification feature missed:
+  - Functional model G1 already.
+  - `old` banned but Lean theorem.
+  - Frame conditions loops.
+  - Ghost code.
+  - AutoCorres.
+  - SMT no.
+  - Counterexample.
+  - Invariants.
+  - Typestate deferred.
+  - Generational deferred.
+  - Miri interpreter merged.
+  - Wasm.
+  - C FFI.
+  - Verified parsers.
+  - Self-host.
+  - Equality saturation.
+  - Open modules CompCertO.
+  - C semantics external functions.
+  - Parameterized target semantics.
+
+  Perhaps "specification-only mathematical types" formal_vec, bigint etc covered.
+  - Dependent typing no, small core.
+  - Lean tactic user proofs.
+  - `Std.Do` G1.
+  - `mvcgen` G1.
+  - Refinement types no separate.
+  - Ghost permissions trusted code proof order item6.
+  - `atomic` concurrency.
+  - Data race freedom.
+  - Loops framing as Lean theorem.
+  - Type classes traits.
+  - Inductive specs no quantifiers source but Lean.
+  - Syntax annotations for overflow explicit.
+  - Aeneas forward/backward.
+
+  Systems:
+  - `no_std`, embedded linker config deferred.
+  - inline asm.
+  - MMIO.
+  - C ABI.
+  - static data.
+  - bits.
+  - floats.
+  - wide ints.
+  - packed.
+  - alignment.
+  - allocator.
+  - stack.
+  - entropy.
+  - capability.
+  - testing.
+  - fuzz.
+  - version.
+  - dead code.
+  - readiness.
+  - process ambient.
+  - wiping.
+  - CLI args unplaced.
+  - Bytes unplaced.
+  - module placements gaps explicit.
+  - cryptographic hash module unplaced explicit.
+  - CRC unplaced.
+  - path unplaced.
+  - base64 conflict.
+  - dynamic EVM memory conflict.
+  These are known not missed.
+
+  Potential "compile-time table generation" include_bytes rejection external generator, static data G2.
+  - Compile-time assertions `static_assert`: proof surface assert erased, static known violation checks. `assert` checked at compile time? yes.
+  - `offset_of`: perhaps genuine missed simple primitive. C10 layout interface sizeof/alignof only, C ABI generated layout tests. For raw memory and FFI, users need `offset_of(T, field)` to implement packed protocols, DMA, C-compatible wrappers, but raw pointer trusted can compute with field address? References second class and no exposing borrow pointer, raw address of owner then offset manually duplicates layout fact violating rule5. `offset_of` derived from one layout authority avoids magic constants. Source Zig `@offsetOf`, Rust `offset_of!`, C `offsetof`, CompCert layout. Problem no repository source surface for field offsets; Foundation C3 layout interface has field offsets internally but only sizeof/alignof named query. Slice24/25 need safe/trusted raw operations. Proposal primitive `offset_of<T>("field")` or typed field identity, returns u64 constant with proof, slice24 or 25. Not already covered: C3 layout authority and R0502 calculates offsets but no source query; G6 tests external ABI but not user raw code. Passes visible cost, one fact, simple, no hidden behavior. This is strong missed feature. Should source, problem, proposed slice, why not covered. Should have `align_of` and `size_of` existing perhaps surface decided but offset absent. Use typed field projection identity not string due rule13. Slice24 (raw pointers) or 25 FFI. Could propose 24 with layout query, FFI uses at25. This is real and clear. Include M1.
+
+  - `bit_cast` / transmute: raw trusted with explicit validity, no safe generic bitcast needed. numeric codecs explicit. not.
+  - `align_up` checked primitive perhaps std ptr mem.
+  - `offset_of` best.
+
+  - Volatile read/write primitive covered.
+  - `prefetch` no semantic benefit measured later.
+  - `likely/unlikely` hidden performance hints no semantics but measurable, not necessary.
+  - `cold` no.
+  - target feature detection: CPUID runtime dispatch. Crypto AES etc and SIMD. No current workload. no.
+  - endian compile query C3 target.
+  - pointer address expose.
+  - pointer provenance.
+  - `memcmp` constant-time ct_eq arrays.
+  - explicit memory copy: ptr/mem unplaced, safe arrays swap etc. `copy_nonoverlapping` trusted std later.
+  - `MaybeUninit` trusted std.
+  - `offset_of` definitely.
+
+  - `alloca` dynamic stack arrays: only fixed arrays compile-time N, no const generics. Runtime-sized stack allocation could be useful zero-heap parsers/network; no alloca due stack bound and no hidden allocation. Rust stack arrays const, Zig stack. Concrete fixed buffers need sizes source literal, enough. Variable-length arrays conflict predictable stack, could be admitted with explicit checked max and failure but not needed.
+  - Fixed capacity Vec no allocation retained-only IDEAS #8 says planned recommendation but std table no fixed-capacity containers other than arrays. G2 tables. Could be missed scheduling gap? IDEAS ranks #8 fixed capacity nonalloc std RETAINED-ONLY, recommendation predictable subset C. Std table does not place fixed-capacity vector. There are fixed arrays but no push/pop length. Real workloads need dynamic length within capacity (ring buffers, parser output, file paths, network). Without allocation until19 and Vec22, early slices fixed arrays can manually track length and array set via swap_at (returns value) but no convenient std type; not language feature. Repository covers idea in IDEAS but still unplaced, draft missed. Task says gaps repo does not cover: IDEAS covers, so not missed, though could note ranking G? No.
+  - Array initialization `[e;N] Copy`, `[0; N]`, fine.
+  - Static arrays top-level G2.
+  - Range views with runtime bounds, good.
+
+  - Non-copy borrow iterators not.
+
+  - `offset_of` is not elsewhere research? Search only returned no exact except many offsetof likely output omitted. Should targeted grep only offset_of.
+
+• One genuine omission is a typed `offset_of` layout query: the foundation computes field offsets, but only `sizeof`/`alignof` are exposed as queries, leaving trusted raw/FFI code to duplicate layout arithmetic. I’ll verify that and a small number of boundary-security omissions before finalizing; durability and hash-flood concerns are already explicitly covered.
+
+• FFI7 says safe observes only size align, raw trusted could offset via &field? Reference expose borrow-derived refused. Should offset_of trusted perhaps intrinsic. Strong.
+
+  Other similarly simple:
+  - `discriminant`/variant tag query for raw serialization? enums forbidden FFI and typed matching handles. no.
+  - `size_of` currently only safe, offset only repr C? Could expose offset only repr types to avoid native layout dependency. Proposal limit to `repr(C)` or repr packed, preserving native unspecified. Better design: `offset_of` only on representation-fixed structs, typed field identity, slice25. That avoids violating native layout opacity. Include.
+
+  - `String` C NUL adapter perhaps FFI_GLUE C string helper covered.
+  - `NonZero` validated wrappers.
+  - integer `NonZero` types no refinement separate, invariant.
+  - enum niche no.
+
+  - Source `#[must_use]` on types/functions: OD62 ignores Result Option only, user-defined linear resource must consume; Copy custom status can be silently discarded? `discard` accepts Copy other than Result Option. Unused function result if unbound? statement expression Unit rule OD29 likely non-Unit statement forbidden. If call returns Copy status, statement rule requires use? Should inspect. Rust `#[must_use]` useful custom error types. But one could define linear type or Result. One form no need.
+  - `#[deprecated]`: release tooling R0392 migration/deprecation covered.
+  - `#[inline]`: performance optimization hints no semantics, not must.
+  - `#[cold]`: no.
+  - `#[link_section]`: freestanding deferred.
+  - `#[no_mangle]`: exports covered.
+  - `#[repr(align)]`: pull.
+  - `#[transparent]`: newtype removed.
+  - global allocator no.
+
+  - Compiler built-in `type_name`: reflection hidden? not needed.
+  - `compile_error`: diagnostics conformance not user feature.
+  - `cfg` refused.
+  - macros refused.
+  - `log` hidden I/O capabilities explicit std no.
+  - assertion `debug_assert` contracts no runtime behavior.
+  - `unreachable` explicit abort? could use abort. no second form.
+  - `todo` no.
+  - `panic` explicit abort.
+  - `unwrap` removed OD155.
+  - `expect` deferred development-only.
+  - `dbg` hidden output no.
+
+  - Resource "offer" linear capability splits no duplication.
+
+  - Capability "with" on trait impl method exact set and variance perhaps R0601 function traits contracts. covered.
+  - Capability generic brand etc.
+  - Lifetime no.
+
+  - Systems "explicit interrupt handler calling convention" R0325.
+  - "naked functions" external ideas deferred, inline asm.
+  - "errno" FFI.
+  - "setjmp/longjmp" hidden control flow reject.
+  - "thread local storage" concurrency no mutable globals.
+  - "atomic signal handling" G3 dispositions only.
+  - "process spawning" deferred.
+  - "dynamic library loading" no.
+  - "plugins" no.
+
+  - Formally verified "time bounds" step model.
+  - "memory consumption" heap bounds.
+  - "noninterference" etc.
+  - "information flow declassification" etc.
+  - "secure erasure" G5.
+  - "side channel assembly" G7.
+  - "ABI artifacts" G6.
+  - "parser generators" G12.
+  - "proof automation" G1.
+  - "typestate" deferred.
+  - "generational" deferred.
+  - "multi kernel" deferred.
+  - "Wasm" deferred.
+  - "self hosting" deferred.
+  - "Miri" merged.
+  - "equality saturation" proof order.
+  - "formal ABI C" C10.
+
+  Could only one missed offset_of plus loader/hardening. Should have each strong enough. User explicitly asks "List gaps Claude missed" plural generic can be 1. Fewer real better. Could say 2:
+  M1 typed offset_of.
+  M2 dynamic-loader authority & dependency identity.
+  M3 final-image hardening (NX/WX) perhaps.
+  Potential M4 "C/C++ unwind and signal boundaries" FFI_GLUE covers no foreign unwinding.
+  Potential M4 "preemption/reentrancy of signal handlers" G3 inherited dispositions and launcher, no handlers installed by Concrete; if foreign code installs handlers, trusted premise. covered.
+
+  Potential M4 "monotonicity and causality of wall clock" std table explicit no unconditional monotonicity, covered.
+  Potential M4 "time representation wraparound" u64 ns.
+  Potential M4 "leap seconds" Clock Wall may backward and resolution metadata, covers.
+  Potential M4 "timeout integer units" units deferred, explicit names.
+
+  Potential M4 "filesystem atomicity and crash" covered R0453, R0529.
+  Potential M4 "process exit flushing" Q7.10 stream give_up flush, abort no deferred, OD119 buffered output.
+  Potential M4 "disk full close error" typed close.
+  Potential M4 "short writes" std.
+  Potential M4 "EPIPE" G3.
+  Potential M4 "EINTR" not explicit but hostile environment spurious refusals covers.
+  Potential M4 "TOCTOU" openat2.
+  Potential M4 "symlinks" openat2.
+  Potential M4 "hash flood" covered.
+  Potential M4 "decompression bomb" bounds.
+
+  Could dynamic loader be covered by exact dependency closure Q8.6 and FFI_GLUE pin actual library source/version, but runtime identity is not explicit. Good.
+
+  Should source for dynamic loader from formal languages? seL4 static capabilities, WASI no ambient dynamic linking, CompCert exact linked image, reproducible builds. Problem external functions contracts meaningless if LD_PRELOAD changes code. Proposed slice6 launch table for libc programs, slice25 shared libs, R0584 direct syscall removes some. Why uncovered: Q8.6 says bind dependency/image closure, R0505 final bytes but no runtime loader environment or digest. FFI_GLUE builds/pins native inputs but no runtime load authentication. Cite these. Admission transparency, authority visible, exact artifacts. Real benefit. Good.
+
+  NX hardening:
+  - sources OpenBSD W^X, Clang `-z noexecstack`, Rust/LLVM GNU-stack, seL4. Problem trusted/raw/FFI memory defects should not become code execution; missing GNU_STACK marker can make stack executable on Linux (kernel/loader behavior). Proposal slice0 final artifact check no RWX and NX stack; slice25 RELRO perhaps avoid extra. Only NX/no RWX enough. Why uncovered R0505 checks instruction bytes/relocations/entry not memory permissions, ASan test not proof. Does this pass admission? artifact-first, named facts, no semantics change. Real benefit. Good M3. But "should have" is perhaps owner decision target hardening. Fewer real okay.
+
+  Could there be more critical missed: "C ABI varargs refused" okay.
+  - Stack red zone and signals considered Concrete README implemented.
+  - "Stack clash" large fixed arrays stack probing. Stack bound measured but stack reservation alone doesn't ensure guard pages touched; large frame can jump guard page (stack clash). Rust/LLVM stack probes, Zig. Concrete final artifact stack budget reservation may use `mmap` enough and guard; a large fixed array frame could skip guard and write into unrelated mapping. G3 stack reservation not probing. Foundation C10 frame accounting, but no stack-clash probes. This is a real backend gap! Sources GCC `-fstack-clash-protection`, Rust stack probes, Zig, CompCert. Problem fixed arrays at15/large frames and recursive calls slice5, stack bound known but not sufficient with guard-page reservation; must probe each page or launcher mapping ensures committed stack (not grow-down) and bound. Proposed slice5 or 15 backend obligation/final artifact validation; launch stack reservation and probes. Not covered by stack byte bound, RLIMIT stack G3, C10 frame accounting. This is stronger than NX hardening, directly no hidden traps/memory safety. Could include M3 instead or M4. Should assess Linux main thread stack grows on access; if array > page and stores only end, skip guard. yes. Concrete fixed arrays may initialize every byte? `[e;N]` Copy lowering could memset all pages, which touches sequentially perhaps memset doesn't guarantee order, large struct return etc. Needs explicit rule. Real systems feature. Source Rust `-Z stack-probes`, LLVM `"probe-stack"`, GCC. Proposed slice5 (calls/large frames) or15 arrays. Why not covered: R0575 only max stack bytes and reservation, no touching strategy. Good. This is high quality missed. Add.
+
+  - "Stack exhaustion due signals" red zone considered.
+  - "heap guard" allocator model blocks, backend actual malloc premises.
+
+  - "Return address protection" less critical.
+  - "stack initialization" MSan no uninit reads safe.
+
+  - "integer division helpers" compiler runtime symbols ABI contract R0503 runtime helper inventory.
+  - "128-bit arithmetic helper" G4.
+
+  - "IEEE floats environment" perhaps real but covered total float model not rounding. Could include if stronger than NX. Slice26 must state rounding mode and ambient MXCSR; like G3 ambient process state but floating env is per-thread and foreign calls can change. Concrete no hidden traps, bit-exact IEEE claim examples. If foreign function changes rounding mode, later float semantics differ; optimizer constant folds assuming round-to-nearest. Should target table fixes rounding mode and denies foreign mutation or named premise; no runtime operations to set rounding. R-0087 covers NaN etc but not rounding mode, FTZ/DAZ or FMA contraction. This is real and critical for fully proven floats. Sources Rust `f32/f64` semantics issues, C `FENV_ACCESS`, MISRA, CompCert floats (round-to-nearest, no FMA unless specified), seL4. Proposed slice26: target profile fixes IEEE rounding (nearest ties-even), subnormal behavior, NaN propagation/payload and FMA contraction; startup normalizes MXCSR/x87, extern contracts preserve FP environment; disallow dynamic rounding or make it explicit capability (not needed). Why uncovered: slice26 just f32/f64 conversions; R0087 arithmetic NaN precision vectors; C3 target profile no FP env. Strong M4. This fits language feature gap. Could include instead of NX. I can list 4 missed: offset_of, dynamic loader, stack probes, floating-point environment. All real. Perhaps too many? They asked comprehensive, 4 fine.
+
+  - "C signed char etc" ABI tests.
+  - "long double" not supported explicit.
+  - "fast math" should prohibit globally, included FP env contraction.
+  - "NaN payload nondeterminism" exact bit semantics needs rules.
+  - "float constant folding" target independent host Lean semantics, no host float Lean perhaps model.
+  - "FP exceptions flags" hidden global state; target contract ignore flags or clear? If no operations inspect flags, changes not observable except foreign later. Foreign preservation.
+  - "denormals" DAZ/FTZ changes results.
+  Good.
+
+  - "time-of-check float" no.
+
+  Potential missed "Endianness of bit operations" swap bytes G4.
+
+  Potential missed "Signed integer division rounding" foundation C2 covered.
+  - "shift signed left" C2.
+  - "bool representation invalid raw" C4.
+  - "enum invalid tags" C3.
+  - "padding" C4.
+  - "uninitialized" C4.
+  Excellent.
+
+  Should check no FP environment repo exact search only my draft? earlier grep massive but specific.
+
+• The omission list now has four concrete candidates: representation-fixed `offset_of`, runtime loader/interposition identity, stack-clash probing for large frames, and the floating-point environment. Each addresses a specific missing contract; I’m checking the last two against the stack and float tasks so I don’t relabel existing obligations as discoveries.
+
+• Float covered explicitly ARITH1, VERIFIED_PIPELINE environment. So not missed. Remove. Stack probes not covered. Dynamic loader perhaps NATIVE_LIBRARIES pin planned FFI_GLUE but runtime not. offset_of might FFI7 intentionally no other window safe, but trusted only can use C layout manually. Could propose trusted query on fixed repr, owner revision small. Still real.
+
+  Check VERIFIED_PIPELINE float lines cite if needed no missed. No need response.
+
+  Could "offset_of" be intentionally excluded because safe code only size align, but raw trusted code could rely on repr offsets without query. It doesn't say trusted code can't use C offset from layout docs. User feature still missing but not necessarily should have; rule5 says no restated constants, so strong.
+
+  Stack clash protection could be avoided by launcher pre-reserving mapped stack instead of grow. Proposal G3 says launcher reserves at least budget, "reserve" may mean `mmap` with guard not RLIMIT. If fully maps all stack pages upfront (MAP_FIXED_NOREPLACE etc) no probe needed. Draft G3 target table could choose. R-0575 reservation not mapping. Missed needs explicit alternative not necessarily probes. Say stack-access strategy: either pre-mapped whole reservation or probes; target contract must not rely on RLIMIT alone. Proposed slice5/15. Good.
+
+  Dynamic loader dependency: R0621 no-libc later removes libc, not foreign shared libs. R0505 validates final image but not loaded libraries. Strong.
+
+  NX/no RWX perhaps fifth? Fewer real, 3 enough. Could include NX as optional fourth if no other. Should missed source from specified languages list: offset_of Rust/Zig/C/CompCert. Stack probes Rust/Zig/GCC/CompCert? Rust and GCC enough. Loader seL4/WASI/Capsicum, CompCert. These qualify. I can omit NX to be concise.
+
+  What about G3 says SIGPIPE kills process "silently, a hidden trap under rule18". Rule18 explicit resource exhaustion and foreign behavior named target premises. OS signal is foreign behavior, not implicit language trap technically; still target contract missing, transparency. Should AGREE with wording caveat: SIGPIPE not language trap but target behavior. Reason <=60 words can say genuine target gap; stack reservation already decided Q7.10/Q8.5 and trap realization R0581, so narrow to SIGPIPE, inherited fds, umask, signals/rlimits, loader. Good.
+
+  G2 reason decision. Should settle agree/disagree. If G2 proposal requires REF6 revision not acknowledged, I can AGREE with correction? Task says reason max60, "AGREE as a gap, but the owner revision must include REF-6 as well as TYPE-22..." This isn't DISAGREE because gap real. User instructed DISAGREE if breaks decided row. Does proposed feature "breaks" row if explicitly owner revises? Every revision breaks old row but allowed. G2 Owner line acknowledges one, not other. Could say DISAGREE with current formulation due REF6, though read-only static storage itself valuable. Which response likely desired? Should interpret user reviewing research answer. They expect precise challenge. I can mark G2 DISAGREE "as written" because no-storage TYPE22 and no constant initializer borrow REF6; proposal doesn't mention second required owner revision. But this may unfairly reject real gap; response could say replace proposal with static array view without borrowing initializer? Is there way satisfy REF6: constant initializer array stored static, use constant value copies whole array; borrow at use site of constant could be a borrow of static constant storage, not "constant initializer borrows" (REF6 phrase means initializer expression itself cannot borrow another value, e.g. `const R: &T = &x`, not borrow of constant at use). I'll parse REF6: "no constant initializer borrows (a cast to a reference type counting as a borrow)" means constant initializer cannot produce reference; G2 initializer is array, no borrow. Use `borrow TABLE as view` is at use, source constant root static. REF6 doesn't prohibit borrowing a constant value elsewhere. Draft problem says "REF-6 refuses a borrowing constant initializer" only to explain no static reference constant. Proposal does not require initializer borrow, so no conflict! It says "a shared borrow of a constant is range view into storage" allowed under general borrow rules if constants have storage and lexical root. Static lifetime root supports. No REF6 revision needed. AGREE. TYPE22 revised only. Good.
+
+  G5 proposal moves clear source slot semantics: current C4 moving out removes slot ownership/read permission, physical bytes may remain. "moves of linear secret clear source slot" changes Core observable wipe events and backend obligation. Fine. Scalar Copy secrets never wiped explicit scope. AGREE.
+  G8 PollSet owns sockets, second-class borrow access, no concurrency. AGREE. But rank should it be above G6 etc; after drop, order G1 G2 G3 G4 G5 G8 G9 G10 perhaps. G9 low severity, G10 phaseG. G8 important server at27 but later. Ranking could be G1 G2 G4 G3 G5 G8 G9 G10? G4 explicit unplaced showcase at15 vs G3 needed pipe at16, G2 at15, G3 launcher at6 should be high. Current rank G3 before G4, fine. Remove G6 G7 G11 G12, remaining order okay perhaps G10 before G9? PhaseG lower. Say keep relative order of survivors; G8 rises to6, G9 to7, G10 to8. G1-G5 unchanged. G6-G12 removed. Good.
+
+  G9 ranking low but no issue.
+  G10 source package language version: R0429 "old compiler/newly declared source rejection" implies declaration but not exact field, so genuine concrete manifest gap. AGREE.
+  G1 ranking #1 yes.
+  G4 ranking perhaps should move above G3? G3 launcher slice6 earliest, current okay.
+
+  G6 DISAGREE reason <=60 cite task disposition R0283/R0287 and R0286 FFI_GLUE lines. Current ROADMAP R0301 validation project 0.1 though FFI25 D later mismatch? Disposition says phaseC but FFI at25 D. G6 says slice25 acceptance correct. Existing task current R0301 says validation project 0.1 subset no FFI? R0283 obligation may only when FFI relevant later. Still covered. b R0286->R0490 ethlambda after28 not slice25 but generated headers planned. c FFI_GLUE direction decided implementation pending R0285. Good.
+
+  G7 cite R0325 deferred inline asm trusted with Unsafe. Proposed refusal foreign assembly objects only perhaps new design could be better but not unthought. DISAGREE as "not unconsidered; changing deferred rule needs explicit revision, not record simple refusal." Good.
+  G11 cite R0190 transfer to R0177 and R0191.
+  G12 cite R0406 and IDEAS deferred, external generation already philosophy. Proposal phase E vs trigger first parser showcase? Say already precisely planned as pull-gated generation remainder; not new. Keep existing trigger rather than automatic PhaseE. Good.
+
+  Task2 wrong entries:
+  Already covered:
+  1 Dead code overbroad: OD62 bound names, OD41 unreachable arms, Q6.4 checks written code, dead stores, none unused imports/private. G9 itself correctly finds. cite docs decisions OD62 and SPARK item4.
+  2 Wasm component model wrong: R0305 explicitly later. Analogies do not cover WIT/canonical ABI/resource tables/cross-component lifecycle. No need detailed if citations.
+  3 FFI/ABI entry perhaps not wrong, G6 overlap but list itself only language, okay.
+  4 Testing/fuzzing entry omits property tests but doesn't claim property tests. Not wrong.
+  5 "Comptime constants computed at compile time" baseline owner says so accept.
+  6 "Layout packed removed" baseline accept.
+  7 "Static analysis profiles OD124 replaced profiles" newer decision accepted.
+  8 "Refinement/range types private struct invariant slice17 and octagon" range types require per-field invariants on private struct yes.
+  9 "Concurrency Ravenscar Pony capabilities Send Sync slice28 model undecided" covered planned.
+  10 "Portability target profiles Linux macOS BSD pull" good.
+  11 "Proof reuse R0162 R0172" good.
+  12 "Panic abort trap line OD10 OD119 STMT13" good.
+  13 "Error handling" good.
+  14 "Conditional compilation" good.
+  15 "FFI/ABI" okay though `#[export_name]` roadmap row no but R0286 covers.
+  16 "Dead code" definitely.
+  Perhaps "Absence run-time errors... device events stale permissions etc SPARK decided" all correct.
+  "Information flow constant time Secret decision" correct.
+  "Allocators arenas regions allocation decision brands slice19" Regions as types rejected elsewhere, but allocation regions as arena okay.
+  "Comptime constants computed compile time" item26 unrecorded baseline.
+  "Reproducible builds" correct.
+  "Units measure" correct.
+  "Layout representation C3 declaration order packed removed alignment deferred" good.
+  "Modules visibility packages" good.
+  "Dead code" only plus Wasm.
+
+  Reject list:
+  1 Vale generational as above.
+  2 Guaranteed tail calls as above.
+  3 `include_bytes`: Is wrong because external generator means generated source huge and G2 static data. But no repo decision. It's a recommendation, not entry "wrong" unless reasoning inaccurate "build reads files" alone doesn't violate rule3 or5 if explicit and inputs tracked. Could mention as unsupported, but task name any entry wrong with citation. Without citation, don't.
+  4 Ada fixed point no workload valid rule17.
+  5 Spectre decided.
+  6 SMT rule18 yes.
+  7 interior mutability Cell RefCell hidden traps yes if panic; Vale separate wrong.
+  8 arbitrary bitwidth bitfields reopen device consistent though R0303 selfhost also trigger omitted but not wrong.
+  9 guaranteed tail calls wrong.
+  10 algebraic permanent.
+  11 errdefer second cleanup valid.
+  12 inferred error sets permanent implicit error propagation? Inferred error sets don't hide control flow more than explicit Result? `?` hides; inferred error sets only type inference at signature, signatures full rule. okay.
+  13 Odin implicit context hidden.
+  14 lifetimes rule10.
+  15 runtime contracts OD125.
+  16 Cargo features cfg.
+  17 general comptime.
+
+  Could "Vale generational refs run-time borrow checks hidden traps" not all runtime checks hidden traps if Result explicit, so wrong broad. cite R0412 checked_dynamically class. Good.
+  Guaranteed tail calls R0303 says proof interaction correction, deferred. Good.
+
+  Missed list citations repository read:
+  M1 typed offset_of:
+  - source Rust `offset_of!`, Zig `@offsetOf`, C `offsetof`, CompCert layout.
+  - problem trusted raw and C code needs field positions, manually duplicating violates one fact, native layout must remain opaque.
+  - proposed slice25 for repr-fixed structs, typed field identity, no string; perhaps slice24 if raw needs earlier? FFI slice25 and raw24. Choose slice25 because repr(C) arrives 25 and limit repr fixed. Good.
+  - why uncovered FFI7 safe observes only sizeof/alignof, C3 internal layout interface no source offset query; G6 external tests don't solve source code. Cite `legacy/docs/spec/ffi.md#FFI-7`, `docs/proposals/FOUNDATION.md` C3.
+  Admission: simple total layout query, one fact, no runtime work, transparent, typed identity.
+  M2 stack-clash:
+  - source Rust/LLVM stack probes, GCC -fstack-clash-protection, Zig compiler-rt? Use Rust and GCC.
+  - problem final byte bound and reservation insufficient if large frame skips grow-down guard page; arrays at15 and recursion at5.
+  - slice5 contract, extend large frames slice15; launcher either pre-map entire bounded stack or emit probes with proof artifact validation.
+  - not covered R0575/Q7.10 only bytes/reservation, C10 frame accounting no access strategy.
+  - passes no hidden traps, predictable execution.
+  M3 runtime loader:
+  - source seL4 static capability/dep closure, WASI/Capsicum no ambient authority, CompCert exact linked artifact, Rust/C dynamic loader interposition perhaps source not language feature but system boundary.
+  - problem LD_PRELOAD etc changes extern implementation and library code before main; runtime shared library substitution invalidates foreign contract and exact artifact claims.
+  - slice6 launch target rows for libc dynamic process, slice25 shared library identity; reject injection variables or static/pinned digest loaded dependency manifest.
+  - not covered Q8.6 says complete closure but no loader behavior; R0505 linked image only, FFI_GLUE build-time pins no runtime loader authentication, R0621 no-libc later.
+  - passes authority visible honest trust.
+  Could fold loader into G3 but still missed subcase. Fine.
+
+  Potential M4 final artifact memory permissions:
+  - source OpenBSD W^X, GCC/Clang `-z noexecstack`, Rust.
+  - problem malicious/raw FFI code exploitation, stack executable due missing note.
+  - slice0 artifact check.
+  - not covered R0505 byte/relocs not segment permissions.
+  This is real and cheap. Should include? The owner asked features not thought about, and it's good. But user says fewer real better, 4 still okay. Is hardening outside compiler due owner OS sandboxing outside? This is binary generation, not OS sandbox. Explain not general sandbox. Could include M4 as "load-segment permissions" not broader hardening. Strong and precise.
+  Would this pass PHILOSOPHY admission test? It adds compiler feature with artifact fact, real benefit, no semantic change. Yes.
+  No repo coverage exact GNU_STACK search none. R0505 final image validation could naturally include but not specified; uncovered explicit. Add.
+  Four missed, short response line MISSED=offset_of;stack-clash;loader-identity;image-permissions (need short list comma perhaps). Exactly one line at end with AGREE ids and DISAGREE ids. Format `ANSWER: AGREE=G1,G2,G3,G4,G5,G8,G9,G10; DISAGREE=G6,G7,G11,G12; MISSED=offset_of,stack-clash-probing,loader-identity,image-permissions` This line exact. User said `<gap ids>` perhaps comma okay. Could use G1,G2 etc. No extra after.
+
+  Make sure all reasons max60 words. I'll count approximate each 35-50. Structure heading G1 etc. Task response perhaps lengthy 1500-2500 words. 12*50=600 + lists 500 + missed 600 =1700. Fine.
+
+  Should complete todo before respond. I should perhaps review G1 more to ensure disagreement not required. I'll analyze current G1 "Nothing fixes what Lean term user theorem about" false R-0482 separate identities etc but no exact model term. `#[proof]` exact residual generated by checker, so subject is residual obligations and properties of function. User program theorems can already about deep Core semantics. G1 generated functional models planned item4. They propose early. Valid schedule. Mention existing plan, why early necessary. `AGREE` reason: "The concept is planned (proof-order item4; ROADMAP rule6), but placing it only in E leaves slice7/15/18 theorems on deep semantics. Pull a minimal pure model and theorem-subject contract forward; R-0482/R-0454 already cover identity and should be reused." <=60. This acknowledges covered part but gap schedule real.
+  G2 "AGREE" cite TYPE22 and slices. "Real representation/scheduling gap; TYPE22@1 evaluates each use and constants slice17 after arrays15. Read-only aggregate storage needs explicit owner revision TYPE22, while borrow block can supply scoped view; no REF6 initializer borrowing needed." Good 43 words.
+  G3 "AGREE" cite existing stack. "SIGPIPE/inherited fd/umask/dispositions are missing from Q7.10/F6. Narrow item: stack reservation/refusal already Q7.10/Q8.5 and trap realization is BIR R0581, so not discoveries. Add loader state perhaps missed separately." 45.
+  G4 "AGREE" cite std wide unplaced and examples bswap popcount via bit ops no primitives. "Roadmap explicitly says wide arithmetic unplaced; slice2 example writes bswap/popcount via bit ops, proving no primitive plan. Real slice2/15 dependency." Good.
+  G5 "AGREE" cite infoflow only scalar Copy array heap wipes and backend premises. "Residue scope not specified. Keep claim source-level and backend conditional; don't promise erasure from swap/core dumps." Good.
+  G6 DISAGREE covered.
+  G7 DISAGREE covered.
+  G8 AGREE "No existing readiness API; net row partial I/O and sequential server one connection at time, concurrency 28 doesn't address. Poll explicit blocking and grant ownership fits, no scheduler. Slice27 correct." Good.
+  G9 AGREE "OD62 bound names, OD41 arms, Q6.4 checks code; none import/private reachability. Slice17 correct; use facts optional policy for private items rather than mandatory refusal perhaps draft says refused or fact. fine."
+  G10 AGREE "R0603 stamps outputs, R0333 compatibility tests but no manifest declared source version. PhaseG correct; compiler refusal exact unsupported and record version." Good.
+  G11 DISAGREE covered property tests. "The proposed earlier slice8 scheduling not justified; existing E phase R0177. It asks wrong slice as per instruction." Good.
+  G12 DISAGREE covered deferred. "Do not schedule automatically phaseE; existing pull trigger after combinators." Good.
+
+  Rank survivors relative. Could say "Keep G1-G5 relative order; after removing four, G8-G10 become 6-8. I would not promote G11/G12." Perhaps G6 could stay as planned not candidate. Good.
+
+  Already covered wrong list citations exact path sections:
+  - Dead code: `docs/decisions.md#od62`, `docs/proposals/SPARK.md` item4, `ROADMAP.md` slice17. G9.
+  - Wasm: `docs/archive/.../task_disposition.tsv` R0305 and legacy backlog task R0305 explicitly later. Good.
+  Perhaps "Testing/fuzzing" wrong because claims fuzzing covered but user fuzz entry G11 already R0190 so not.
+  - FFI/ABI entry "slice25 OD147 Kept" doesn't mention export_name but okay.
+  - "Dead code" entry contradicts G9, call out.
+
+  Reject list:
+  - Vale cite R0412.
+  - Guaranteed tail calls cite R0303; second form loop is not enough, compiler stack safety distinct.
+  Could also "include_bytes" wrong under admission? No.
+  - "Interior mutability ... Vale" split entry.
+  No more.
+
+  Missed source details and why not covered citations:
+  M1 include FFI7, C3.
+  M2 include R0575, Q7.10.
+  M3 include Q8.6, R0505, FFI_GLUE Build cache upgrade.
+  M4 include R0505, ROADMAP B0 reproducible build, ASan. `ROADMAP.md#tasks` R0505 and R0301.
+  Should cite repo paths read no links necessary markdown `path:line`. User asks cite paths, can use anchors and line numbers. I know exact line numbers. Use `path:272` etc. Response can use sections for roadmap tasks line 545. Avoid line too many.
+
+  Should have no files modified; tools only read/todo. Good.
+
+  Could check git status? no need, no files modified and user says no modify. No builds. Don't run git status (read only okay but unnecessary).
+  I'll update todos second done third perhaps done now. I have identified. Then fourth in progress.
+
+• Verification is complete. Floating-point semantics are already covered by ARITH-1 and the verified-pipeline obligations, so I dropped that candidate; durability and hash-flood resistance are also already recorded. The final review will keep eight gaps, reject four as already covered, and add four narrower omissions.
+
+• Now mark done before responding. Could call TodoList done then respond.Now compose response careful max60 each. No intro huge. Headings 1 etc.
+
+  Detailed reasons:
+  G1 50 words:
+  "AGREE — Functional models are already planned in proof-order item 4 (`ROADMAP.md:98-116`), but phase E is too late for slice 7/15/18 program theorems. Pull a minimal model and subject contract forward, reusing the model/proposition identities in R-0482 and canonical subjects from R-0454 rather than inventing another proof object."
+  Count 56 maybe. Good.
+  G2 48:
+  "AGREE — `legacy/docs/spec/types.md:1497-1500` (TYPE-22@1) evaluates constants at each use, and `ROADMAP.md:225-228` puts arrays at 15 but constants at 17. Static aggregate storage is a real crypto/EVM need. The owner revision is TYPE-22; REF-6 need not change if the initializer remains an array and borrowing occurs at use."
+  G3 50:
+  "AGREE — Q7.10 and R4 F6 omit SIGPIPE, inherited descriptors, umask and inherited dispositions. Narrow the draft: stack reservation/refusal is already in Q7.10/Q8.5 (`docs/decisions.md:258-264`), and trap realization is in R-0581 (`ROADMAP.md:445`). Treat signals as target behavior, not implicitly as language traps."
+  G4 43:
+  "AGREE — `ROADMAP.md:328` explicitly leaves wide arithmetic unplaced, while the slice-2 example only writes bswap/popcount through bit operations (`docs/proposals/EXAMPLES.md:47`). Named total primitives at 2 and limb-based u128/u256 at 15 fill real dependencies without arbitrary-width types."
+  G5 48:
+  "AGREE — The information-flow decision specifies scalar Copy, array/heap destruction wipes and backend premises (`docs/decisions.md:846-864`), but not moved-from slots, spills, dead scalar copies, aborts or swap. Defining that scope is necessary for honest claims. Keep physical scrubbing and paging/core-dump behavior conditional, not new source guarantees."
+  G6 45:
+  "DISAGREE — Already planned in detail: R-0283/R-0287 transfer ABI probes and bidirectional call matrices to R-0301; R-0286 covers generated export headers; `legacy/docs/platform/FFI_GLUE.md:138-176,264-304` covers Clang-derived declarations, generated artifacts and native layout/call probes. Slice 25 is the right integration point, not a new gap."
+  G7 48:
+  "DISAGREE — Inline assembly was considered and dispositioned: R-0325 defers it to a device workload and specifies `trusted` plus `with(Unsafe)` (`legacy/docs/archive/roadmap-2026-11/ROADMAP_BACKLOG.md:11425-11433`). A permanent refusal may be preferable, but it is a revision of that deferred design, not an unrecorded omission."
+  G8 47:
+  "AGREE — The net std row covers partial I/O but no readiness set (`ROADMAP.md:310`), and the adopted server is explicitly one connection at a time (`docs/proposals/EXAMPLES.md:29`). A grant-backed, explicitly blocking poll API at 27 adds no scheduler, threads, async coloring or hidden runtime, so it passes the admission test."
+  G9 44:
+  "AGREE — OD62 concerns bound names, OD41 unreachable match arms, and Q6.4 checking all written code; none rejects unused imports or unreachable private declarations. Module slice 17 is the correct placement. The “dead code” coverage entry is therefore overbroad, but this narrower gap is real."
+  G10 45:
+  "AGREE — R-0603 versions outputs, and R-0333/R-0429 test cross-version compatibility, but neither declares the spec version of a package's source. A typed manifest field with fail-closed unsupported-version behavior belongs in phase G and complements, rather than duplicates, rule revisions and output `spec_version`."
+  G11 49:
+  "DISAGREE — R-0190 already specifies generated inputs satisfying `#[requires]`, contract checking, shrinking, replay metadata and explicit non-proof status, transferred to R-0177 (`docs/archive/roadmap-2026-11/task_disposition.tsv:191`). R-0191 also persists witnesses. Pulling this to slice 8 is unjustified; the existing phase-E plan covers the proposal."
+  G12 48:
+  "DISAGREE — R-0406 is precisely the EverParse-style spec→Concrete generation remainder, with external review and a pull trigger after the checked combinator path (`legacy/docs/archive/roadmap-2026-11/ROADMAP_BACKLOG.md:11122-11130`); `docs/proposals/IDEAS.md:88-97` also records it. It should remain pull-gated, not become an automatic phase-E task."
+
+  Ranking keep G1-G5 relative, survivors G8 G9 G10. Could perhaps G3 lowered after G4 because partially existing? No need change. State no ranking change beyond removal. If G11 low covered etc.
+
+  Task2 covered list:
+  - Dead code as above.
+  - Wasm component.
+  Any entry wrong in recommend rejecting:
+  - Vale gen
+  - guaranteed tail
+  Perhaps `include_bytes` cite no. Fine.
+
+  Missed:
+  M1 title typed offset query, four subparts in one bullet maybe paragraph.
+  "Source: Rust offset_of!, Zig @offsetOf, C offsetof. Problem: trusted raw/FFI code otherwise copies offsets, violating rule5. Slice25, restricted to repr-fixed structs and typed field identities. Not covered: FFI7 exposes only sizeof/alignof, and C3 computes offsets internally without source query; G6's tests don't help user code." Good.
+  M2:
+  "Source: Rust/LLVM stack probes, GCC -fstack-clash-protection. Problem: bound+reserved address range doesn't stop large frame skipping grow-down guard. Slice5 contract, extended at15. Require fully pre-mapped bounded stack or page probes and final artifact control. Not covered: R0575/Q7.10 only size/reservation; C10 accounting no touching semantics."
+  M3:
+  "Source: WASI/Capsicum ambient-authority exclusion, seL4 static dependency closure, CompCert exact artifacts. Problem: LD_PRELOAD/LD_AUDIT/DYLD_INSERT_LIBRARIES and replaceable shared objects can change foreign code before main, invalidating extern contract. Slice6 launch rows and25 loaded library identity. Reject injection and record exact loaded dependency hashes or static link. Not covered Q8.6/R0505 image closure and FFI_GLUE build pins don't specify runtime loader."
+  M4:
+  "Source: OpenBSD W^X, Clang/GCC `-z noexecstack`, Rust/LLVM emitted GNU-stack. Problem missing permissions can make stack executable or RWX segments, worsening raw/FFI defects. Slice0 final image gate for NX stack/no RWX; later RELRO only if dynamic linking needs. Not covered R0505 validates instructions/relocations/entry not load segment permissions, ASan doesn't establish. No semantics change, artifact-first."
+  All pass admission mention final sentence "All four are explicit target/compiler contracts, no new hidden mechanism." Fine.
+
+  Could source M4 OpenBSD not user list but allowed others.
+  No M FP.
+
+  Response exact one line. Should avoid ending code block after line? just raw.
+
+  Ensure no file modifications. Could mention "No files modified" not necessary.
+
+  Citations read paths yes.
+
+  Potential challenge M3 LD env is covered G3 ambient process state broad? It specifically lists inherited signal etc but not loader, so missed legitimate. If reviewer says G3 proposal ambient process state at launch broad includes loader implicitly? Title broad but problem enumerates exact and proposal each of these. My missed distinct enough.
+
+  Potential challenge M1 user can use offset from compiler facts generated interfaces? Facts report R0575 doesn't include field offsets, only layout report legacy. No source query. Good.
+
+  M4 R0505 "final image bytes relocations entry state startup validated" could include segments implicitly but not explicit. Claim "not covered" based no mention, fair.
+
+  G6 current R0301 phaseC but FFI25 phaseD, but detailed plan exists. Good.
+
+  Do I need say "AGREE or DISAGREE for each gap" my labels yes.
+
+  End response line AGREE list G1-G5 G8-G10. DISAGREE G6 G7 G11 G12. MISSED short list. Good.
+
+  I'll respond with headings light.
+
+• ## 1. G1–G12
+
+  **G1 — AGREE.** Functional models are planned in proof-order item 4 (`ROADMAP.md:98-116`), but phase E is too late for slice 7/15/18 program theorems. Pull a minimal model and subject contract forward, reusing R-0482’s model/proposition identities and R-0454’s canonical subjects rather than inventing another proof object.
+
+  **G2 — AGREE.** `legacy/docs/spec/types.md:1497-1500` (TYPE-22@1) evaluates constants at each use, and `ROADMAP.md:225-228` puts arrays at 15 but constants at 17. Static aggregate storage is a real crypto/EVM need. The owner revision concerns TYPE-22; REF-6 need not change if the initializer remains an array and borrowing occurs at use.
+
+  **G3 — AGREE.** Q7.10 and R4 F6 omit SIGPIPE, inherited descriptors, umask and inherited dispositions. Narrow the draft: stack reservation/refusal is already in Q7.10/Q8.5 (`docs/decisions.md:258-264`), and trap realization is in R-0581 (`ROADMAP.md:445`). Treat signals as target behavior, not implicitly as language traps.
+
+  **G4 — AGREE.** `ROADMAP.md:328` explicitly leaves wide arithmetic unplaced, while the slice-2 example writes bswap/popcount through bit operations (`docs/proposals/EXAMPLES.md:47`). Named total primitives at 2 and limb-based u128/u256 at 15 fill real dependencies without arbitrary-width types.
+
+  **G5 — AGREE.** The information-flow decision specifies scalar Copy, array/heap destruction wipes and backend premises (`docs/decisions.md:846-864`), but not moved-from slots, spills, dead scalar copies, aborts or swap. Defining that scope is necessary for honest claims. Keep physical scrubbing and paging/core-dump behavior conditional, not new source guarantees.
+
+  **G6 — DISAGREE.** Already planned in detail: R-0283/R-0287 transfer ABI probes and bidirectional call matrices to R-0301; R-0286 covers generated export headers; `legacy/docs/platform/FFI_GLUE.md:138-176,264-304` covers Clang-derived declarations, generated artifacts and native layout/call probes. Slice 25 is the right integration point, not a new gap.
+
+  **G7 — DISAGREE.** Inline assembly was considered and dispositioned: R-0325 defers it to a device workload and specifies `trusted` plus `with(Unsafe)` (`legacy/docs/archive/roadmap-2026-11/ROADMAP_BACKLOG.md:11425-11433`). A permanent refusal may be preferable, but it is a revision of that deferred design, not an unrecorded omission.
+
+  **G8 — AGREE.** The net std row covers partial I/O but no readiness set (`ROADMAP.md:310`), and the adopted server is explicitly one connection at a time (`docs/proposals/EXAMPLES.md:29`). A grant-backed, explicitly blocking poll API at 27 adds no scheduler, threads, async coloring or hidden runtime, so it passes the admission test.
+
+  **G9 — AGREE.** OD62 concerns bound names, OD41 unreachable match arms, and Q6.4 checking all written code; none rejects unused imports or unreachable private declarations. Module slice 17 is the correct placement. The “dead code” coverage entry is therefore overbroad, but this narrower gap is real.
+
+  **G10 — AGREE.** R-0603 versions outputs, and R-0333/R-0429 test cross-version compatibility, but neither declares the spec version of a package’s source. A typed manifest field with fail-closed unsupported-version behavior belongs in phase G and complements, rather than duplicates, rule revisions and output `spec_version`.
+
+  **G11 — DISAGREE.** R-0190 already specifies generated inputs satisfying `#[requires]`, contract checking, shrinking, replay metadata and explicit non-proof status, transferred to R-0177 (`docs/archive/roadmap-2026-11/task_disposition.tsv:191`). R-0191 also persists witnesses. Pulling this to slice 8 is unjustified; the existing phase-E plan covers the proposal.
+
+  **G12 — DISAGREE.** R-0406 is precisely the EverParse-style spec→Concrete generation remainder, with external review and a pull trigger after the checked combinator path (`legacy/docs/archive/roadmap-2026-11/ROADMAP_BACKLOG.md:11122-11130`); `docs/proposals/IDEAS.md:88-97` also records it. It should remain pull-gated, not become an automatic phase-E task.
+
+  **Ranking:** keep the relative order of G1–G5. Removing G6/G7 makes G8 sixth, G9 seventh, and G10 eighth. G11/G12 should drop out rather than merely move down.
+
+  ## 2. Errors in the coverage and rejection lists
+
+  ### “Already covered”
+
+  - **“Dead code” is overbroad.** OD62 covers bound names, OD41 covers unreachable arms, Q6.4 checks all written code, and SPARK item 4(c) concerns dead stores. None covers unused imports or unreachable private items; that is exactly G9. See `docs/decisions.md:1352` and `docs/proposals/SPARK.md:167-202`.
+
+  - **“Wasm component model” is not covered.** R-0305 explicitly lists the component model as later work (`docs/archive/roadmap-2026-11/task_disposition.tsv:306`). Worlds resembling grant tables and own/borrow resembling Concrete values do not specify WIT types, the canonical ABI, component resource tables, lifting/lowering, or cross-component destruction.
+
+  ### “Recommend rejecting”
+
+  - **Vale generational references should not be bundled with Cell/RefCell as a settled rejection.** R-0412 deliberately retains a narrow, workload-gated dynamic fallback with `checked_dynamically` evidence (`docs/archive/roadmap-2026-11/task_disposition.tsv:413`). Hidden-panic RefCell operations and an explicitly reported dynamic validity check are different designs.
+
+  - **Guaranteed tail calls are pull-gated, not rejected.** R-0303 explicitly waits for a compiler-in-Concrete workload requiring tail calls, bit layout, arenas, or typed indices (`docs/archive/roadmap-2026-11/task_disposition.tsv:304`). Its archived text also notes interactions with cleanup, borrows, frames, and observations; “just a second loop form” is not an adequate disposition.
+
+  ## 3. Genuine gaps Claude missed
+
+  ### M1. Typed `offset_of` for representation-fixed structs
+
+  - **Source:** Rust `offset_of!`, Zig `@offsetOf`, C `offsetof`, CompCert’s layout model.
+  - **Problem:** trusted raw/FFI code otherwise restates field offsets, producing a second, unchecked layout definition contrary to rule 5.
+  - **Proposed slice:** **25**, restricted to representation-fixed structs and a typed field identity, never a field-name string. Native unspecialized layout remains opaque.
+  - **Why uncovered:** FFI-7 exposes only `sizeof`/`alignof` (`legacy/docs/spec/ffi.md:269-288`). Foundation C3 computes offsets internally but specifies no source query; G6’s external ABI tests do not help Concrete code that performs raw access.
+
+  ### M2. Stack-clash policy for large frames
+
+  - **Source:** Rust/LLVM stack probes and GCC `-fstack-clash-protection`.
+  - **Problem:** a byte bound plus a reserved stack range does not prevent a large frame from jumping over a grow-down guard page into another mapping.
+  - **Proposed slice:** state the contract at **5**, extend it for large arrays at **15**. Require either a fully pre-mapped bounded stack or page probes, validated in the final artifact.
+  - **Why uncovered:** R-0575 and Q7.10 specify stack sizes and reservation, while C10 specifies frame accounting; none specifies how pages are touched. RLIMIT_STACK alone does not close this hole.
+
+  ### M3. Runtime loader identity and injection
+
+  - **Source:** WASI/Capsicum’s rejection of ambient authority, seL4’s static dependency closure, CompCert’s exact-artifact discipline.
+  - **Problem:** `LD_PRELOAD`, `LD_AUDIT`, `DYLD_INSERT_LIBRARIES`, or replaceable shared objects can change foreign code before `main`, invalidating the extern contract and exact-artifact claim.
+  - **Proposed slice:** launcher rules at **6**, loaded-library identity at **25**. Refuse loader injection and either statically link or bind the exact loaded dependency set and hashes.
+  - **Why uncovered:** Q8.6 and R-0505 bind linked images and retained dependency closure, but not runtime loader behavior. `legacy/docs/platform/FFI_GLUE.md:218-262` pins build inputs, not what the loader subsequently executes.
+
+  ### M4. Final-image memory permissions
+
+  - **Source:** OpenBSD W^X, Clang/GCC `-z noexecstack`, Rust/LLVM GNU-stack emission.
+  - **Problem:** missing load-segment metadata can produce an executable stack or writable/executable mappings, increasing the impact of defects in trusted, raw, or foreign code.
+  - **Proposed slice:** **0**, as a final-artifact fact and acceptance gate: non-executable stack and no RWX load segments. Add other policies only when a target needs them.
+  - **Why uncovered:** R-0505 validates instructions, relocations, entry state, and startup, but does not name segment permissions (`ROADMAP.md:545`). ASan does not establish them. This changes no program semantics and fits artifact-first auditability.
+
+  ANSWER: AGREE=G1,G2,G3,G4,G5,G8,G9,G10; DISAGREE=G6,G7,G11,G12; MISSED=offset_of,stack-clash-probing,loader-identity,image-permissions
+
+To resume this session: kimi -r session_235d4610-faa2-4bc7-afe9-c451827baf56
+exit 0

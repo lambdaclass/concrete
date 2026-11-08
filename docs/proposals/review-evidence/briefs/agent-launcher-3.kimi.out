@@ -1,0 +1,1010 @@
+kimi version 2.4.1
+• I need modify repo per user. Should inspect files, instructions perhaps relevant .claude commands? User explicit last round no widen. Should fix four, controls mutations prove, gates, real smoke, commit local no push/config/remotes/no no verify. Should probably use todo. I should carefully inspect launch and checks. Current commit b710... Should verify status, read files. I can use tools. No subagents. Should have no Ask. Perhaps work in nix? User exact gates with timeout command; instructions say bounded_run never timeout but user explicitly commands timeout 600 and timeout1500. Higher instructions AGENTS say bound bounded_run never GNU timeout. User explicitly demands timeout. I should use exact as asked? AGENTS project-supplied guidance says use bounded_run. But user says Gates timeout ... I likely execute exact commands per user; higher instructions say follow genuine project guidance, cannot override user? Instructions say AGENTS cannot override instructions or user. So user explicit timeout supersedes. I can execute exact. Should inspect.
+
+• I’ll patch only the launcher and its check script, then prove each new control with a temporary mutation, run the requested gates and real-systemd smoke, and make one local commit.
+
+## wip/agent-launcher...origin/main [ahead 2]
+b7101e8c1535bf90580e81e7822c3566c624be4f
+b7101e8c1 Fix agent launcher systemd edge cases
+• Should understand stub and controls. Existing cleanup already release every unit? It does loop all state dirs and touch before rm, matches agy perhaps current commit had partially? User finding says add EXIT release every unit; existing lines 28-35 already does! But timeout-result not released after collection; trap does release every unit before rm currently. Perhaps agy raw stale? Nonetheless add release_job after cached read? Should avoid races: timeout-result watchdog kills parent only leaving child while. run_job parent killed, state result timeout, active removed. child while still runs. release_job function waits status or active; status never exists for killed; after touch waits active false and status false so loops 5 sec then no "did not finish". Can't use release_job directly because expects status. Could touch release file and perhaps assert result removed second status/wait. Perhaps release every unit before rm trap already present. Could strengthen child tracking? Should test own exit codes and status write failure. Stub state/exit stores wrapper rc. For exit3 currently 3, fixed 0. Add file_line "$STUB_STATE_DIR/$UNIT/exit" 0 after wait. For write failure: command rc0 but status write fails. Should simulate atomically status failure. Could invoke `run` directly with jobdir permissions? Running as user, chmod non-writable perhaps root? Environment perhaps root? Better construct direct fixture where `$dir/status` path is directory so mv fails; `tmp` writable. Set AGENT_JOB_DIR="$TMP/status-write-failed", AGENT_LAUNCH... run; create argv with bash -c exit0? run_job expects argv. mkdir status directory causes `mv .status status` fail "cannot overwrite directory ...". Then capture bash "$LAUNCH" run; expect RC2. But requirement "job's own exit code is 0 for command that exits 3 (status=3), and 2 when status write fails." Existing stub integration wrapper own exit file enough for 3; direct run test for status write failure is valid own exit. Could also stub unit start command designed to fail status write? Should manipulate jobdir after start before command ends. Could command `mkdir "$AGENT_JOB_DIR/status"; exit 0` so mv fails because status directory. Then stub writes wrapper exit to state/exit. Start normal job, wait sees is-active inactive no status, result exit-code and returns125; own exit file 2. That gives integrated control and status write failure. But could interfere state active and result. Use command bash -c 'mkdir "$AGENT_JOB_DIR/status"; exit 0'. `AGENT_JOB_DIR` exported? Stub command inherits from subshell export yes. start writes files. Command makes status dir. run_job tmp writes, mv fails, exit2. Stub result exit-code. wait returns125, then control state/exit=2. This also verifies lost_exit. Could be simple direct run to avoid semantics. User specifically wants control job own exit2 when status write fails; integration best.
+
+  Finding1 unit_result: test empty and success. Existing lost killed control. Add test for unit unloaded result=success. Can start lost-success blocked, remove active, printf success result, wait expect unknown. Also empty result perhaps user says treat '' and success unknown with a control singular but should control both. I can modify stub show behavior to mimic real systemd unloaded: `[ -r result ] && cat || printf success` would change many? Existing missing result unknown test? no lost unit killed result explicit. Could add both manually. Start unit success-result and missing result separately. Could reduce with two fixture starts. Should keep scope. Or unit_result function not directly callable. Integration fixture with `success` enough but '' must also. Could parameter loop over success and empty: for result in success missing; start names; remove active; if success write success else rm result; wait; expect unknown; release. Each has blocking child. Fine. Test name no duplicate. Existing stub show on missing prints nothing so unknown old passes empty; success new control fails old.
+
+  Finding4 trailing slash and --dir /top. User says "and --dir /top: strip trailing slashes (keep a lone '/' refused or handled sanely), and default empty parent '/'. Add control for --dir "$TMP/new/" succeeding." Should add control for /top? Cannot create /top perhaps permissions and avoid outside working dir. Could unit-test parent computation with path? Requirement fixes --dir /top default parent; test trailing slash control only explicitly. Could test using `--dir /` refused sanely perhaps mkdir / fails already exists; not create. But --dir /top would attempt create root, not good. I could control default parent via static? Better no. Implement exact snippet. Lone "/" remains jobdir="/", parent="${jobdir%/*}"? case */* yes parent="" then :-/ so parent=/, mkdir -- / fails, clear existing refusal. Good.
+
+  Finding2 result cache: after wait, reset-failed removes result, assert gone; capture second status and wait? "a second status/wait still returns 125" perhaps do second status sufficient. Wording "a second status/wait" slash means either. User asks "after collection, stub result is gone, and a second status/wait still returns 125 with : timeout." Add second status and perhaps second wait to be thorough? status calls inspect sees result cache first only after active check: no status, is-active inactive, lost_exit cached. returns125. Both no need. Then touch release to let orphan exit. Trap already release every unit. Could perhaps adjust cleanup to release every unit including ones state removed? It loops state dirs, all remain. Good. "Release it, and make the EXIT trap release every unit before rm -rf "$TMP"." trap already does so no change needed there but I can retain. Should show complied via existing. Add touch after second status and perhaps wait for child? Could implement release_timed_out? Just `touch "$STUB_RELEASE_DIR/$UNIT"` then ok. To prove orphan released, could wait until process? State/pid is wrapper pid which exited. Child not tracked. Could just touch per requested. No need assert process. But releasing after collection and result gone second status. Perhaps capture wait again then release. Good.
+
+  Should control run_job status atomic. Existing test status no temp. Own exit0 for exit3. Own exit2 for failure.
+
+  Should header comment update run_job semantics. Top comment add "run exits 0 only after atomic status write (2 if recording fails), independent of CMD's status." Existing comment lines 12 etc.
+
+  Should consider actual systemd behavior: run_job exits 0 even command nonzero; systemd unit inactive success and auto GC? Transient service default remains loaded inactive until reset-failed? Actually default CollectMode=inactive unloads only if explicitly --collect? systemd-run default CollectMode inactive? agy says yes. Fine.
+
+  Potential race status and unit still active: wait normal_exit resets failed while active no-op but unit exits0 so no failed. Great.
+
+  Smoke real systemd needs success, exit3 wait3 no failed units, RuntimeMax kill 125 timeout. I'll construct commands with mktemp under /tmp? User asks paste outputs. Should manage job dirs, units. Real system smoke with launch start uses default ~/.cache perhaps prefer `--dir "$TMP/..."` under repo or mktemp. Instructions gate scratch mktemp. Use TMP smoke="$(mktemp -d)" perhaps no tracked. Run success start, wait; exit3 start wait capture rc; list-units failed filter agent; runtime. Make sure outputs capture. Could script Bash foreground up to perhaps 60. Runtime max1 with sleep 30 and AGENT_WAIT_INTERVAL=1, wait returns125. Systemd user available. Should have no failed agent unit from previous runs? list-units --failed could show preexisting agent units unrelated. User expects no agent-* unit; I can reset only smoke units? Since new run exits0 and auto unload no failed. For timeout unit reset-failed done by launcher. list all failed agent units may have old preexisting. I should inspect perhaps after. I can filter exact smoke units to avoid unrelated? User explicitly `systemctl --user list-units --failed` shows no agent-* unit, run full list. If preexisting, report. Could collect before? Don't reset unrelated. Fine.
+
+  Mutations: Should prove each control with temporary mutation and report result. Four findings, perhaps each fix mutation. Should create temp mutant copies via cp and python/perl modifications. Tool instructions: use Edit for incremental changes to files; for temp mutation generated via shell commands? They explicitly request temporary mutation. Could use cp launch to `$TMP` and python replace. Shell to mutate temp file is acceptable? Instructions say `sed` in-place -> Edit, Edit mandatory every incremental change. But for temporary mutation testing, common use python to create mutated copy; could use Bash `cp` plus `python3 -c` writes. This is not editing project source, okay. Better use `mktemp -d`, cp launch, use Python replacements, run `AGENT_LAUNCHER=$mutant timeout 600 bash scripts/checks/agent_launch.sh`. Should have each mutant control fail. Could be runtime ~? Checks many 1 sec waits but mostly fast. 4 mutants perhaps 5-15 sec each. Fine. Mutation 1 revert run_job exit to old. New exit3 own exit control fails; status write failure control perhaps old returns0 (and wait may? old wrapper exit0 success result but no status, wait125; own exit expected2 got0). One mutation proves both. Mutation 2 remove cache read branch? User specifically agy says if branch removed all pass. To prove new controls, mutation should make cached read fail. Could mutate `if [ -f "$JOBDIR/result" ]; then` to `if [ -f "$JOBDIR/result.cache-miss" ]; then` causing second status to query stub after result removed: `unit_result` returns empty -> unknown, collect, output unknown, expected timeout fails. Good. But orphan release control not directly testable by harness? They ask each fix with control fails without fix; finding2 includes two aspects orphan and cache. New cache control fails if cache branch removed. Orphan fix no automated assertion child gone, but cleanup existing. Could add process control to prove no orphan? They explicitly "Tests: timeout-result fixture orphans ... Release it ... Add a control cached read back". So only control required cache; release not necessarily control. Mutation2 removing cache read branch enough. Mutation3 unit_result success handling revert to printf `${result:-unknown}`; success-result control fails. Mutation4 trailing slash strip removal; new trailing control fails. Should preserve outputs summaries. I can run script loop with each mutation and collect failing labels, exit statuses. Since expected failures, Bash command overall should exit0 after verifying each mutant fails and perhaps grep expected marker. I must ensure control specifically fails not unrelated. I can capture output and check expected substrings. For mutation1 expected `"the exit-3 unit exits 0 after recording status=3: expected exit 0, got 3"` perhaps file_line not RC. I'll design control via file_line prints `FAIL ... (missing exact line: 0)` because actual exit 3. For status write fail expected own exit file 2 missing. Check output grep. Mutation2 expected `cached timeout result survives collection: unexpected stdout`. Mutation3 expected `an unloaded success result returns 125`? RC remains125, output mismatch unknown vs success. Check `unloaded Result=success is reported as unknown: unexpected stdout`. Mutation4 start trailing returns2 so expected `start in a new explicit directory with a trailing slash: expected exit 0, got 2`. Good. Should output from mutation results perhaps concise grep FAIL. I'll save logs in /tmp and print. No project files. Should have controls all pass after fixes.
+
+  Before edits perhaps inspect git diff baseline none. Good. Now implement. Could do one Edit per file. I'll construct exact changes. Launch:
+  - top comment lines 12-14 add sentence.
+  - dir block replace.
+  - run_job if block.
+  - unit_result case.
+  Can single Edit replace entire file? Multiple changes same file in one Edit requires one old string spanning huge lines or use Write entire file not allowed. I can use one Edit with broad old from comment through unit_result? Too large 140 lines but possible. Better sequential Edits require Read before each, but tool says do not issue consecutive Edit same file; previous Edit invalidates later old string; Read again. I can make one Edit replace whole `start` through unit_result chunk? 100 lines plus header not contiguous. Could use one Edit for full file old string entire content and new string entire, but Edit huge. Or multiple rounds Read/Edit. That's fine. First edit header, then read portions, second edit etc. But tools calls many. Alternatively use Edit old_string entire file, new entire file, but continuity high and Write prohibited. Edit full file technically allowed but unwieldy. I can use one Edit with old_string from line 79 to150 including run_job etc, and separately header after re-read. 72 lines manageable. I need checks one Edit with multiple modifications spanning almost full file, or sequential. Could first launch functional block, then header. Check file add new tests sequential. Use one Edit with old entire lines 235-346 to cover nonzero, lost results, timeout, trailing directory and status write test. That's 112 lines. Add direct status write failure perhaps after nonzero. I can do in one. Also top comment update in same? Should separate re-read. Could skip top comment check script? User only update launch header. Launch can edit entire relevant lines 79-150 first then header. Check comment controls list update optional to include new controls; if not updated old comment incomplete but not wrong. Could update to mention own exits and cached result, trailing slash. Not necessary but docs says sweep. Existing says normal statuses 0 and3 etc still true. Could leave.
+
+  I'll design exact check modifications.
+
+  After exit3 status assertions:
+  ```
+  file_line "$STUB_STATE_DIR/$UNIT/exit" 0 "the exit-3 unit exits 0 after recording status=3"
+
+  echo "=== failure to record status makes the job itself fail ==="
+  capture 10 bash "$LAUNCH" start unrecorded 30 -- bash -c 'mkdir "$AGENT_JOB_DIR/status"'
+  expect_rc 0 ...
+  parse_start
+  capture 15 bash "$LAUNCH" wait "$JOBDIR"
+  expect_rc 125 "an unrecorded normal exit is a lost unit"
+  expect_out "JOB $UNIT ENDED without a status ...: exit-code" ...
+  file_line .../exit 2 "a status write failure makes the job exit 2"
+  ```
+  But command `mkdir "$AGENT_JOB_DIR/status"` returns0. run_job writes out.log redirection before command. `mv tmp dir/status` when status is directory: GNU mv will move tmp *inside* directory `status/.status.$$` rather than fail! Important. `mv "$tmp" "$dir/status"` if dest existing directory, moves inside and returns0. Then run_job exit0, no actual status file, but temp inside status. This fixture doesn't cause write failure. Should induce mv failure. `status` as symlink? mv to symlink to dir also moves inside. Should make dir non-writable so printf tmp fails, but root issue. Could set `AGENT_JOB_DIR` to path with `status` as regular directory and `mv -T` not used. Can't change launcher to mv -T because requested snippet exactly no. Use jobdir on read-only filesystem? Could command `chmod 500 "$AGENT_JOB_DIR"` after shell starts, but run_job needs create tmp after command, if non-root fails. User likely unbalancedparen not root, so works. But tests should run in CI as non-root; root perhaps not. Robust use path where `$dir` is `/proc`? argv needs readable there, cannot create. Direct run can set dir to a writable argv dir then command replaces permissions? Root still bypass. Could command remove jobdir? `mv "$AGENT_JOB_DIR" "$AGENT_JOB_DIR.moved"` then mkdir? After command run_job writes to original path absent: printf fails no status. The command knows path and can `mv "$AGENT_JOB_DIR" "$AGENT_JOB_DIR.moved"` while its cwd is root (WorkingDirectory set root), out.log file is open in moved dir, fine. Then tmp original absent, write fails. Wrapper exits2. Wait load_job uses JOBDIR original which lacks unit/deadline now, fails2 not125; control only own exit can wait until state inactive and inspect exit file without launch wait. Could command `mkdir "$AGENT_JOB_DIR/status"; chmod ...` not robust. Command `rm "$AGENT_JOB_DIR/status"` nonexistent no.
+
+  Can force `printf > tmp` failure by create directory at exact `.status.$$` but PID unknown. Could run_job direct with `$$` known? I invoke bash "$LAUNCH" run, its PID can be controlled with bash -c? Use direct run where dir is a file? argv readable required dir. Could set `AGENT_JOB_DIR` to `/dev/full`? dir/argv not.
+
+  Use `ulimit -f 0` for run_job? That also command? If set before run, command writes out.log and gets SIGXFSZ, not controlled. Could command itself set? Limits inherited by shell? Command is child, can't alter parent.
+
+  Use `mv` failure via status destination non-empty directory and mv without -T succeeds. Could create `status` as file? mv replaces file success. Create status symlink loop? `ln -s status status` then mv perhaps replaces symlink success. Mount impossible.
+
+  Use `$dir/.status.$$` precreate directory for exact PID. I can know run_job PID if execute in current shell via `source`? launch main dispatch and exit, could spawn bash -c with `echo $$` and exec? Stub systemd-run can expand args but command could create .status of parent? In command, parent run_job PID accessible `$PPID`. Command can `mkdir "$AGENT_JOB_DIR/.status.$PPID"`; then `printf > "$tmp"` fails "Is a directory". Yes command runs child of run_job (via `"${argv[@]}" >...`), `$PPID` is run_job shell PID. For bash -c child, PPID should run_job bash. `mkdir "$AGENT_JOB_DIR/.status.$PPID"` creates dir exact tmp. Then command exits0. printf fails, else `rm -f "$tmp"` on dir fails ("cannot remove ... Is a directory") but script no set -e, then exit2. Temp dir remains but test not checking. Fine. Use `bash -c 'mkdir "$AGENT_JOB_DIR/.status.$PPID"'`. Stub systemd-run has intermediate? run_job executes command directly, yes. On real too not used. Then wait returns125 result exit-code (stub wrapper rc2), state exit2. Great. Could additionally assert `status` absent. Fine.
+
+  Potential `$PPID` in bash -c might be stub wrapper? Process tree: stub background subshell -> expanded `/bin/bash -c exec /bin/bash self run` execs run_job. run_job `"${argv[@]}"` invokes bash -c as child, PPID run_job. yes.
+
+  After timeout:
+  ```
+  [ ! -e result ] && ok...
+  capture 10 status
+  expect_rc125 ...
+  expect_out ...timeout
+  touch release
+  ```
+  Could `release_job` no due status missing. Use `touch` and ok "timed-out fixture's orphaned waiter is released". No check process but action. Trap handles.
+  Finding3 after lost unit test perhaps loop:
+  ```
+  echo unloaded ...
+  for reason in success empty; do
+   capture start "unloaded-$reason"...
+   ...
+   rm active
+   if success printf success else rm result
+   capture wait
+   expect_rc125 ...
+   expect_out unknown
+   release_job
+   done
+  ```
+  release_job expects status which never comes because child after release exits0 then run_job writes status0. Wait: I removed active and wait125 before actual command finishes. Then release_job touches, command exits, run_job writes status0, stub wrapper exit0 fixed, active removed. release_job works. Good. State result after wait gets removed by reset-failed. Then actual stub at completion writes result success and removes active; okay. release_job loops status present and active absent. Fine. Similar existing lost test works.
+
+  Trailing slash:
+  after exclusive perhaps:
+  ```
+  capture start --dir "$TMP/new/" trailing...
+  expect_rc0
+  parse_start
+  [ "$JOBDIR" = "$TMP/new" ] ...
+  capture wait ...
+  ```
+  Use `true` so immediate. This also parent default not tested. `--dir /` refusal perhaps:
+  ```
+  capture 10 bash "$LAUNCH" start --dir / slash 1 -- true
+  expect_rc2 "lone slash is refused as an existing job directory"
+  ```
+  Danger if bug old: parent="" -> mkdir -p "" fails before mkdir /, still2. No harm. But could try to create? Existing "/" always fails. No need.
+  For `/top` default parent, no test as not explicitly required. Code exact.
+
+  Mutation1 revert block. Fine.
+
+  I'll apply launch functional edit one chunk.
+
+• The existing EXIT trap already releases all stub units; the missing piece is releasing the timeout fixture promptly and exercising the cached result after collection. I’ll also test the job wrapper’s own exit codes through the stub’s recorded unit exit status.
+
+• Now checks edit large block. Should be careful no helper dependencies. I'll use one edit entire nonzero through trailing perhaps lines235-319, including additions. That is manageable ~100 lines. Ensure `file_line` on exit file waits? wait sees status potentially before stub writes state/exit? Stub writes exit after run_job completes; status written before run_job exits, watcher may see status and return while wrapper still active, then file_line state/exit may not yet exist. Existing normal_exit returns early on status even active. Test after wait may race reading exit. Make sure wait until unit wrapper finish before checking state/exit. Could helper `unit_exit_line` poll for file. file_line immediately perhaps often wait polls interval1 so by time sees status unit finished, but race real. Better helper:
+  ```
+  unit_exit_line() {
+   local n=0
+   while [ ! -f "$STUB_STATE_DIR/$UNIT/exit" ] && [ "$n" -lt50 ]; do sleep .1;... done
+   file_line ...
+  }
+  ```
+  Add helper near release_job. This is additional check script change. Could avoid helper by `while [ -f active ]; do sleep` before file_line inline twice. Better helper for robust. Add function via separate Edit then read before large same file. Could large block include helper? Not contiguous. I'll do helper Edit first then read file chunk then large edit. Or use file_line after capture `status` repeated? still no. Add helper.
+
+  `release_job` existing waits status and active. New `unit_exit_line` exact. Use local n. No comments perhaps match existing comment style helper. Fine.Now edit multiple sections in one Edit? I can replace from echo nonzero through before argv includes unrecorded and unloaded, and separately timeout/trailing after re-read. Fine. Should have no todo update yet still in progress. I'll edit first chunk.Should consider unrecorded wait race: wait may initially see active and no status then eventually inactive. Fine. unit result exit-code. collect reset failed removes result. unit_exit_line file remains. Good.
+
+  Read updated region timeout/exclusive then edit.Edit timeout and exclusive same old chunk 317-348. Add second wait perhaps "a second status/wait" do both? More controls but not scope widening, directly asked. I can second status only, and use wait? User specifically "a second status/wait still returns 125" ambiguous. Better run second status and second wait both, 2 checks. Mutation outputs. Then release:
+  ```
+  touch ... && ok ...
+  ```
+  No waiting for child but trap eventually. Could poll child release using release marker existence? Child loop sees and exits, run_job still alive? run_job was killed, child orphan. No way detect. `touch` enough.
+
+  Add `[ ! -e result ]`. After second status collect_unit called again (lost_exit cached branch skips collect) so result remains gone. second wait same. Good.
+  Trailing:
+  ```
+  capture start --dir "$TMP/new/" trailing 10 -- true
+  ...
+  [ "$JOBDIR" = "$TMP/new" ] ...
+  capture wait ...
+  ```
+  Parse_start EXPECTED uses stripped path, start output correct.
+  Lone slash refusal perhaps add in invalid input tests? User asked keep lone "/" refused or handled sanely, code does. No control necessary. Could add:
+  ```
+  capture start --dir / root 1 -- true
+  expect_rc2 ...
+  ```
+  This attempts `mkdir -p /`, `mkdir /` safe. But if run weird permissions still fails. Confirms sane. User only asked trailing control, avoid extra.
+
+  Edit.Now run check initial. Before perhaps bash -n and diff. I should run exact timeout600 agent check. This is part verification and to detect. Could run now. Also inspect diff in parallel? Run check and git diff independent read but diff stable. Use Bash timeout600, user exact.
+
+• All four fixes and their controls are in place. I’m running the focused check now before mutation testing, so any fixture or race issue is caught on the real patch first.=== start: exact output, properties and one job directory ===
+  ok   launch.sh parses
+  ok   bash -n has no output
+  ok   a successful start
+  ok   start prints exactly UNIT, DIR and absolute WAIT
+  ok   unit file records the unique unit
+  ok   deadline is an epoch second
+  ok   cmd records the command line
+  ok   systemd-run uses the user manager
+  ok   --collect is absent
+  ok   the sanitised unique unit is passed
+  ok   MemoryMax defaults to 8G
+  ok   TasksMax defaults to 1024
+  ok   RuntimeMaxSec is SECS
+  ok   WorkingDirectory is the caller's directory
+  ok   PATH is passed
+  ok   HOME is passed
+=== wait: normal status and the last 40 log lines ===
+  ok   wait returns 0 for a successful job
+  ok   success prints its state and exactly log lines 6-45
+  ok   the wrapped command ran in the caller's directory
+  ok   out.log retains the full stdout and stderr
+  ok   status was moved into place without a temporary file left
+  ok   status returns the successful job's status
+  ok   status prints one line and does not wait or print the log
+=== a non-zero command runs once and returns its status ===
+  ok   start of the exit-3 job
+  ok   custom start also prints exactly three lines
+  ok   --mem overrides MemoryMax
+  ok   --tasks overrides TasksMax
+  ok   wait returns the command's exit 3
+  ok   exit-3 output is its state and log
+  ok   the exit-3 unit exits 0 after recording status=3
+  ok   a failed writer has exactly one attempt
+  ok   status also returns exit 3
+  ok   status of exit 3 is one line
+=== failure to record status makes the job itself fail ===
+  ok   start of the status-write-failure job
+  ok   an unrecorded normal exit is a lost unit
+  ok   the unrecorded job reports the unit failure
+  ok   a status write failure makes the job exit 2
+=== a unit lost without status is 125 ===
+  ok   start of the lost-unit job
+  ok   a lost unit returns 125
+  ok   lost-unit output includes systemctl's result
+  ok   the lost-unit fixture cleaned up
+=== an unloaded unit's success result is unknown ===
+  ok   start of the unloaded-success-result job
+  ok   an unloaded success result returns 125
+  ok   unloaded Result=success is reported as unknown
+  ok   the unloaded-success-result fixture cleaned up
+=== an unloaded unit's empty result is unknown ===
+  ok   start of the unloaded-empty-result job
+  ok   an unloaded empty result returns 125
+  ok   unloaded Result=empty is reported as unknown
+  ok   the unloaded-empty-result fixture cleaned up
+=== still active past deadline plus grace is 124 ===
+  ok   start of the overrun job
+  ok   status of a running job is a successful observation
+  ok   status does not wait for a running job
+  ok   deadline plus grace returns 124
+  ok   overrun output is INCOMPLETE, never a pass
+  ok   the overrun fixture cleaned up
+=== argv survives systemd dollar and percent expansion ===
+  ok   start of the literal-argv job
+  ok   literal-argv job exits normally
+  ok   an argument containing ${HOME}, $1, %n and a space reaches the job byte for byte
+  ok   out.log preserves the exact literal bytes
+=== timeout result is read before explicit collection ===
+  ok   start of the timed-out job
+  ok   a systemd timeout without status returns 125
+  ok   125 reports the retained timeout result, not unknown
+  ok   the result is cached in the job directory
+  ok   reset-failed collects only after the result was read
+  ok   collection removes the stub's result
+  ok   a second status still returns 125 after collection
+  ok   a second status reads the cached timeout result
+  ok   a second wait still returns 125 after collection
+  ok   a second wait reads the cached timeout result
+  ok   the timed-out fixture's waiter is released
+=== status appearing at the inactive observation wins the TOCTOU race ===
+  ok   start of the status-race job
+  ok   a status written before is-active returns is not declared lost
+  ok   inactive triggers a second status-file check
+  ok   the status-race fixture cleaned up
+=== job directories are reserved exclusively ===
+  ok   start in a new explicit job directory
+  ok   a second start on the same directory is refused
+  ok   duplicate directory refusal has no stdout
+  ok   duplicate directory has a clear error
+  ok   the refused start leaves the first job's files untouched
+  ok   the exclusive-directory fixture cleaned up
+=== an explicit job directory may have a trailing slash ===
+  ok   start in a new explicit directory with a trailing slash
+  ok   trailing-slash start prints exactly three lines
+  ok   the trailing slash is stripped from the recorded directory
+  ok   wait succeeds in the trailing-slash directory
+  ok   the trailing-slash job completes normally
+=== the printed WAIT value is safe to eval ===
+  ok   start in a directory with spaces and shell metacharacters
+  ok   both WAIT paths are shell-quoted with printf %q
+  ok   eval of the printed WAIT value waits on the right job
+  ok   eval prints the intended job result
+  ok   eval executes nothing else
+=== systemd query failures are not lost units ===
+  ok   start of the no-user-bus job
+  ok   a user-bus query error returns 2, not 125
+  ok   a user-bus query error has no job result on stdout
+  ok   the query error includes systemctl's bus error
+  ok   a silent user-bus query failure also returns 2
+  ok   a silent query failure is identified
+  ok   the no-user-bus fixture cleaned up
+=== invalid input and unavailable systemd are exit 2 ===
+  ok   an invalid NAME is refused
+  ok   invalid NAME has no stdout
+  ok   invalid NAME explains the error on stderr
+  ok   zero SECS is refused
+  ok   zero SECS explains the error
+  ok   non-numeric SECS is refused
+  ok   non-numeric SECS explains the error
+  ok   missing systemd-run is refused
+  ok   missing systemd-run has no stdout
+  ok   missing systemd-run has the exact clear error
+
+check_agent_launch: PASS=107 FAIL=0
+ scripts/agent/launch.sh        | 16 +++++++++-----
+ scripts/checks/agent_launch.sh | 48 ++++++++++++++++++++++++++++++++++++++++++
+ 2 files changed, 59 insertions(+), 5 deletions(-)
+ M scripts/agent/launch.sh
+ M scripts/checks/agent_launch.sh
+
+
+• Great. Should have mutation tests. Before perhaps review diff for exact and no comments stale. I can do later. Mutation four. Make sure mutants run check using original checks and mutant. Create tmp via Bash. I can write script in command with Python. No new project files. Run sequential loop perhaps 4*3 sec=12. Should have mutation strings unique. For mut1 replace:
+  ```
+    if printf...; then
+      exit 0
+    fi
+    rm -f "$tmp"
+    exit 2
+  ```
+  with old. Then expected check FAIL labels. For mut2 `if [ -f "$JOBDIR/result" ]; then` -> `.result.cache-miss` but this will cause first timeout lost_exit? At first result absent so else same; second status branch checks missing cache-miss, else reason unit_result (result gone) -> unknown. Good. It also affects first timeout? no.
+  Mut3 replace case with nothing and printf `${result:-unknown}`; use exact.
+  Mut4 replace while with no-op? Remove while line only; case parent remains default. Old parent on trailing bug still with default / but for `$TMP/new/`, parent=`$TMP/new`, mkdir creates jobdir then mkdir fails. Good.
+
+  Run mutation harness output only relevant failure lines and summary. Use `AGENT_LAUNCHER="$mutant" timeout 600 bash ... > log 2>&1`; rc should1 because FAIL>0. `timeout` returns perhaps 1. Verify expected grep with `grep -F` shell prohibited? Instructions say use Grep dedicated for searching files, but Bash should not run grep/rg. I can use Python for log validation and print selected lines, avoiding grep. Tool instructions "grep/rg search file contents -> Grep". Use Python is route around? For generated test logs and automated assertion, Bash script Python reasonable but could be considered search. Better mutation command just run and output full logs (107 passes each huge). I can redirect logs and use `sed`? Dedicated tools only known path, dynamic tmp. I can run each mutation separately and output filtered via Bash `python3` arguably okay. The instruction specifically don't run grep/rg; Python okay for test harness validation. Use Python to mutate and validate output. Could write one Python script invoked from Bash that uses subprocess to run checks and prints lines containing `FAIL` and summary. It will create temp dir and copy. This is exactly test harness. Timeout=600 per subprocess. Use `subprocess.run(["timeout","600","bash",...], env=...)`. Expected markers dict. Ensure each mutant return nonzero and marker in output. Print all FAIL lines and final check summary. Exit1 if mutation unexpectedly passes or expected marker missing. Good. Temporary dirs cleaned. `AGENT_LAUNCHER` absolute mutant. Note checks uses LAUNCH file and self_dir start -> mutant run path, good. Check root stays project. All controls run.
+
+  Potential mutation1 with old run_job causes many other controls fail? Exit3 and status write. Good. Some fixture release returns3 but release only checks status and active so fine. Mut1 unit exit for success remains0. unrecorded old run_job exit0, stub result success, wait output expected exit-code fails too. Fine. Mut2 second status and wait fail expected. Mut3 success unknown output fails only. Mut4 parse_start with empty JOBDIR leads subsequent commands and FAILs; check may attempt `cat "$JOBDIR/unit"`? For trailing block after start fail:
+  - expect_rc fails
+  - parse_start sets UNIT/JOBDIR/WAIT="" EXPECTED...
+  - expect_out fails
+  - `[ "$JOBDIR" = ...]` no...
+  - `capture wait "$JOBDIR"` launch wait "" fails2
+  - expected out fails
+  Then next special resets. No dangerous. Fine.
+
+  Now update todo mark implement done mutation in progress.
+
+• The focused check passes all 107 controls. Next I’ll run four independent launcher mutants and require each one to fail its corresponding new control, not merely fail somewhere in the suite.
+
+• It hit tool timeout120 and background. Why mutation runs long? Each perhaps hangs due mutation1 old exit3 wrapper subprocess? The check script cleanup perhaps waits? Normally 3 sec. Four 12 sec. 120 means something hung likely mutation 4 causing check suite? Each capture bounded10/15 many, mutant trailing causes subsequent parse empty but not massive. Mutation1 unrecorded direct old run_job exit0 means wait125; fine. Mutation2 second status unknown but `lost_exit` attempts to cache unknown in existing result path: `mv tmp result` replaces, so second wait then unknown. Fine. Mutation3 release_job issue? For unloaded success fixture, after first wait reset-failed removes result, release command exits, run_job old? mutant unit_result only, run_job fixed0. fine. Perhaps Python buffered no output until process done and first mutation script hangs due stub orphan loops? Existing cleanup touches all. But old run_job exit3 leads stub wrapper process? No.
+
+  Should have I can do other work inspect diff while background. Also real smoke can run independently? Mutants use stubs in own tmp and PATH internal only subprocess, safe. Could run real smoke now while mutation background, but resource not heavy. Do inspect diff.diff --git a/scripts/agent/launch.sh b/scripts/agent/launch.sh
+index c535d452e..24e9b46f7 100755
+--- a/scripts/agent/launch.sh
++++ b/scripts/agent/launch.sh
+@@ -10,6 +10,8 @@
+ # RuntimeMaxSec=SECS, the caller's PATH, HOME and working directory. A fixed
+ # wrapper reads the NUL-separated argv file, so systemd cannot expand the command.
+ # The directory records cmd, argv, unit, deadline, out.log and an atomic status.
++# The job itself exits 0 only after writing status atomically, or 2 if that write
++# fails, independently of CMD's recorded status; a recorded job never ends failed.
+ # The printed UNIT, DIR and shell-quoted absolute WAIT are its only output.
+ # Writers are never retried.
+ #
+@@ -80,7 +82,8 @@ start() {
+     base="${AGENT_JOBS_DIR:-$HOME/.cache/concrete-agent-jobs}"
+     jobdir="$base/$unit"
+   fi
+-  case "$jobdir" in */*) parent="${jobdir%/*}" ;; *) parent=. ;; esac
++  while [ "${#jobdir}" -gt 1 ] && [ "${jobdir%/}" != "$jobdir" ]; do jobdir="${jobdir%/}"; done
++  case "$jobdir" in */*) parent="${jobdir%/*}"; parent="${parent:-/}" ;; *) parent=. ;; esac
+   mkdir -p -- "$parent" || fail "cannot create job directory parent: $parent"
+   mkdir -- "$jobdir" || fail "job directory already exists or cannot be created: $jobdir"
+   jobdir="$(CDPATH= cd "$jobdir" && pwd -P)" || fail "cannot resolve job directory"
+@@ -110,9 +113,11 @@ run_job() {
+   [ "${#argv[@]}" -gt 0 ] || exit 2
+   "${argv[@]}" > "$dir/out.log" 2>&1 || rc=$?
+   tmp="$dir/.status.$$"
+-  if printf '%s\n' "$rc" > "$tmp" && mv "$tmp" "$dir/status"; then :
+-  else rm -f "$tmp"; fi
+-  exit "$rc"
++  if printf '%s\n' "$rc" > "$tmp" && mv "$tmp" "$dir/status"; then
++    exit 0
++  fi
++  rm -f "$tmp"
++  exit 2
+ }
+ 
+ JOBDIR="" UNIT="" DEADLINE="" ACTION=wait DONE=0
+@@ -146,7 +151,8 @@ normal_exit() {
+ unit_result() {
+   local result=""
+   result="$(systemctl --user show "$UNIT" --property=Result --value 2>/dev/null)" || result=""
+-  printf '%s\n' "${result:-unknown}"
++  case "$result" in ''|success) result=unknown ;; esac
++  printf '%s\n' "$result"
+ }
+ 
+ lost_exit() {
+diff --git a/scripts/checks/agent_launch.sh b/scripts/checks/agent_launch.sh
+index 733167393..591e63ffa 100755
+--- a/scripts/checks/agent_launch.sh
++++ b/scripts/checks/agent_launch.sh
+@@ -191,6 +191,13 @@ release_job() { # release a stub-blocked command and observe its wrapper finishi
+   [ -f "$JOBDIR/status" ] && [ ! -f "$STUB_STATE_DIR/$UNIT/active" ] \
+     && ok "$1 cleaned up" || no "$1 did not finish after its release"
+ }
++unit_exit_line() { # exact-line label, after the stub records the job's own exit
++  local n=0
++  while [ ! -f "$STUB_STATE_DIR/$UNIT/exit" ] && [ "$n" -lt 50 ]; do
++    sleep 0.1; n=$((n+1))
++  done
++  file_line "$STUB_STATE_DIR/$UNIT/exit" "$1" "$2"
++}
+ 
+ echo "=== start: exact output, properties and one job directory ==="
+ capture 10 bash -n "$LAUNCH"
+@@ -243,12 +250,22 @@ capture 15 bash "$LAUNCH" wait "$JOBDIR"
+ expect_rc 3 "wait returns the command's exit 3"
+ expect_out "JOB $UNIT ENDED status=3
+ failed" "exit-3 output is its state and log"
++unit_exit_line 0 "the exit-3 unit exits 0 after recording status=3"
+ [ "$(wc -l < "$AGENT_JOBS_DIR/attempts" | tr -d ' ')" -eq 1 ] \
+   && ok "a failed writer has exactly one attempt" || no "the failed writer was retried"
+ capture 10 bash "$LAUNCH" status "$JOBDIR"
+ expect_rc 3 "status also returns exit 3"
+ expect_out "JOB $UNIT ENDED status=3" "status of exit 3 is one line"
+ 
++echo "=== failure to record status makes the job itself fail ==="
++capture 10 bash "$LAUNCH" start unrecorded 30 -- bash -c 'mkdir "$AGENT_JOB_DIR/.status.$PPID"'
++expect_rc 0 "start of the status-write-failure job"
++parse_start
++capture 15 bash "$LAUNCH" wait "$JOBDIR"
++expect_rc 125 "an unrecorded normal exit is a lost unit"
++expect_out "JOB $UNIT ENDED without a status (killed, timed out or OOM): exit-code" "the unrecorded job reports the unit failure"
++unit_exit_line 2 "a status write failure makes the job exit 2"
++
+ echo "=== a unit lost without status is 125 ==="
+ capture 10 bash "$LAUNCH" start vanished 30 -- bash -c 'while [ ! -e "$STUB_RELEASE_DIR/$STUB_UNIT" ]; do sleep 0.1; done'
+ expect_rc 0 "start of the lost-unit job"
+@@ -260,6 +277,19 @@ expect_rc 125 "a lost unit returns 125"
+ expect_out "JOB $UNIT ENDED without a status (killed, timed out or OOM): killed" "lost-unit output includes systemctl's result"
+ release_job "the lost-unit fixture"
+ 
++for reason in success empty; do
++  echo "=== an unloaded unit's $reason result is unknown ==="
++  capture 10 bash "$LAUNCH" start "unloaded-$reason" 30 -- bash -c 'while [ ! -e "$STUB_RELEASE_DIR/$STUB_UNIT" ]; do sleep 0.1; done'
++  expect_rc 0 "start of the unloaded-$reason-result job"
++  parse_start
++  rm -f "$STUB_STATE_DIR/$UNIT/active"
++  if [ "$reason" = success ]; then printf 'success\n' > "$STUB_STATE_DIR/$UNIT/result"; else rm -f "$STUB_STATE_DIR/$UNIT/result"; fi
++  capture 10 bash "$LAUNCH" wait "$JOBDIR"
++  expect_rc 125 "an unloaded $reason result returns 125"
++  expect_out "JOB $UNIT ENDED without a status (killed, timed out or OOM): unknown" "unloaded Result=$reason is reported as unknown"
++  release_job "the unloaded-$reason-result fixture"
++done
++
+ echo "=== still active past deadline plus grace is 124 ==="
+ capture 10 bash "$LAUNCH" start overrun 30 -- bash -c 'while [ ! -e "$STUB_RELEASE_DIR/$STUB_UNIT" ]; do sleep 0.1; done'
+ expect_rc 0 "start of the overrun job"
+@@ -293,6 +323,14 @@ expect_rc 125 "a systemd timeout without status returns 125"
+ expect_out "JOB $UNIT ENDED without a status (killed, timed out or OOM): timeout" "125 reports the retained timeout result, not unknown"
+ [ "$(cat "$JOBDIR/result")" = timeout ] && ok "the result is cached in the job directory" || no "the timeout result was not cached"
+ [ -f "$STUB_STATE_DIR/$UNIT/reset-failed" ] && ok "reset-failed collects only after the result was read" || no "the unit was not explicitly collected"
++[ ! -e "$STUB_STATE_DIR/$UNIT/result" ] && ok "collection removes the stub's result" || no "the stub's collected result remains"
++capture 10 bash "$LAUNCH" status "$JOBDIR"
++expect_rc 125 "a second status still returns 125 after collection"
++expect_out "JOB $UNIT ENDED without a status (killed, timed out or OOM): timeout" "a second status reads the cached timeout result"
++capture 10 bash "$LAUNCH" wait "$JOBDIR"
++expect_rc 125 "a second wait still returns 125 after collection"
++expect_out "JOB $UNIT ENDED without a status (killed, timed out or OOM): timeout" "a second wait reads the cached timeout result"
++touch "$STUB_RELEASE_DIR/$UNIT" && ok "the timed-out fixture's waiter is released" || no "cannot release the timed-out fixture's waiter"
+ 
+ echo "=== status appearing at the inactive observation wins the TOCTOU race ==="
+ capture 10 bash "$LAUNCH" start race 30 -- bash -c 'while [ ! -e "$STUB_RELEASE_DIR/$STUB_UNIT" ]; do sleep 0.1; done'
+@@ -317,6 +355,16 @@ after="$(cd "$JOBDIR" && sha256sum unit deadline cmd argv)"
+ [ "$after" = "$before" ] && ok "the refused start leaves the first job's files untouched" || no "the refused start changed the first job's files"
+ release_job "the exclusive-directory fixture"
+ 
++echo "=== an explicit job directory may have a trailing slash ==="
++capture 10 bash "$LAUNCH" start --dir "$TMP/new/" trailing 10 -- true
++expect_rc 0 "start in a new explicit directory with a trailing slash"
++parse_start
++expect_out "$EXPECTED" "trailing-slash start prints exactly three lines"
++[ "$JOBDIR" = "$TMP/new" ] && ok "the trailing slash is stripped from the recorded directory" || no "unexpected trailing-slash job directory: $JOBDIR"
++capture 15 bash "$LAUNCH" wait "$JOBDIR"
++expect_rc 0 "wait succeeds in the trailing-slash directory"
++expect_out "JOB $UNIT ENDED status=0" "the trailing-slash job completes normally"
++
+ echo "=== the printed WAIT value is safe to eval ==="
+ special="$TMP/job ; touch pwned ; #"
+ capture 10 bash "$LAUNCH" start --dir "$special" quoted 10 -- true
+error: list of session leaders OR effective group names must follow -g
+
+Usage:
+ ps [options]
+
+ Try 'ps --help <simple|list|output|threads|misc|all>'
+  or 'ps --help <s|l|o|t|m|a>'
+ for additional help text.
+
+For more details see ps(1).
+Should read output log dedicated Read.Whoa all mutants had massive failures same indicates concurrency/environment issue from my Bash command environment? Why did targeted pass in normal, but all mutants many start outputs unexpected, wait125. Possibly `AGENT_LAUNCHER` temp mutant extension `.sh` but source fine. Massive failures because unit names generated `agent-name-epoch-$$`; all checks invoked in rapid separate temp but unique. Perhaps Python `subprocess.run` inherits `AGENT_LAUNCHER` only. Why normal passes? All mutants likely temp directory noexec? `/tmp` mounted noexec? I invoke `bash "$LAUNCH"` so no. start self_dir script points mutant. start works mostly? "start prints exactly..." mismatch but successful start RC0 perhaps absolute WAIT expected? Mutant path length etc EXPECTED uses same. Why job lost? Should inspect full log of one to see outputs; Python only printed fails not actual outputs? expect_out prints expected actual lines with spaces not selected. Output log only selected because script. Should reproduce one manually with output to file to understand. Could be system processes from previous mutation interfering due same PID/unit names? All four start initial writer success but wait125. Perhaps root issue `AGENT_LAUNCHER` environment passed to stub job? stub uses `AGENT_LAUNCH_SELF` mutant. No.
+
+  Massive fail labels weird "the failed writer was retried" because attempts file lines not1 perhaps 0. Commands not run because mutant temp dir got removed? Not until end. Could be Python created mutant with default permissions 644; invoked bash fine.
+
+  Perhaps my mutation Python source old/new strings wrong? For mut2 source replace `if [ -f "$JOBDIR/result" ]` occurs only lost_exit, okay. No massive.
+  Could be checks launched under Python process with `AGENT_LAUNCHER` inherited by bounded_run, and `bounded.sh` uses `AGENT_LAUNCHER`? No.
+  Could be background task automatic moved due tool timeout kills process group? It continued but perhaps after 120 timeout shell environment harness sent something? Yet all four massive from beginning. Total 127s ~4*30s, likely each many 125 immediate and release waits5 sec etc.
+
+  Should investigate because mutation proof outputs polluted. Could still targeted fail valid but want clean only targeted. I should rerun one foreground with detailed log and perhaps compare normal under Python no mutation. This could reveal a test harness environmental flaw. Did `AGENT_LAUNCHER` absolute path `/tmp/...` contain slash? Fine.
+  Could be systemd-run stub's dollar expansion of `/bin/bash -c 'exec /bin/bash "$$AGENT_LAUNCH_SELF" run'`. It expands `$$` to $ then variable. Mutant path. Fine.
+
+  Why expected start output mismatch only sometimes? For first start successful output actual perhaps `WAIT=bash /tmp/... wait` with `%q` escapes mutation name? EXPECTED same LAUNCH. Hmm.
+
+  Perhaps all job commands failed because mutant file removed early? Python loop: after first run mutant still exists until temp context end. No.
+
+  Could be source `AGENT_LAUNCHER` from env not only selects mutant but passed to actual command and script check? no.
+
+  Should run a baseline through Python env AGENT_LAUNCHER original to see. Use Bash foreground timeout60 output to temp? I can run direct `AGENT_LAUNCHER="$PWD/scripts/agent/launch.sh" timeout 600 bash ...` should pass. And create temp mutant 3 only run full output. Use Bash no Python perhaps:
+  ```
+  tmp=$(mktemp -d)
+  cp ...
+  python mutate
+  AGENT... bash ... > "$tmp/log"
+  rc
+  python print relevant with context...
+  rm
+  ```
+  Time ~30 sec if massive. Use first test output entire perhaps 400 lines manageable. Better run only first 50 lines with Read known path after command? Dynamic path can write to `/tmp/agent-mutation-debug.log` fixed path but instructions gates scratch no fixed /tmp for gates; this is debug not gate? Use mktemp and print path. I can use tool output full. Run mutation3 only and full output max 10000 perhaps. I'll create via Bash and print.
+
+• The targeted mutants were rejected, but their logs also showed unrelated stub failures that the unmutated check did not have. I’m isolating that harness anomaly before treating the mutation results as valid evidence.MUTANT=/tmp/tmp.vRRvNum6dO/mutant.sh
+OUTPUT=/tmp/tmp.vRRvNum6dO/output
+RC=1
+1: === start: exact output, properties and one job directory ===
+2:   ok   launch.sh parses
+3:   ok   bash -n has no output
+4:   ok   a successful start
+5:   FAIL start prints exactly UNIT, DIR and absolute WAIT: unexpected stdout
+6:       expected:
+7:       UNIT=agent-writer-1794148856-1323261.service
+8:       DIR=/tmp/tmp.TyNDmOaiMZ/jobs/agent-writer-1794148856-1323261.service
+9:       WAIT=bash /tmp/tmp.vRRvNum6dO/mutant.sh wait /tmp/tmp.TyNDmOaiMZ/jobs/agent-writer-1794148856-1323261.service
+10:       actual:
+11:       UNIT=agent-writer-1794148856-1323261.service
+12:       DIR=/tmp/tmp.TyNDmOaiMZ/jobs/agent-writer-1794148856-1323261.service
+13:       WAIT=bash /tmp/tmp.vRRvNum6dO/launch.sh wait /tmp/tmp.TyNDmOaiMZ/jobs/agent-writer-1794148856-1323261.service
+14:   ok   unit file records the unique unit
+15:   ok   deadline is an epoch second
+16:   ok   cmd records the command line
+17:   ok   systemd-run uses the user manager
+18:   ok   --collect is absent
+19:   ok   the sanitised unique unit is passed
+20:   ok   MemoryMax defaults to 8G
+21:   ok   TasksMax defaults to 1024
+22:   ok   RuntimeMaxSec is SECS
+23:   ok   WorkingDirectory is the caller's directory
+24:   ok   PATH is passed
+25:   ok   HOME is passed
+26: === wait: normal status and the last 40 log lines ===
+27:   FAIL wait returns 0 for a successful job: expected exit 0, got 125
+28:       JOB agent-writer-1794148856-1323261.service ENDED without a status (killed, timed out or OOM): exit-code
+29:       
+30:   FAIL success prints its state and exactly log lines 6-45: unexpected stdout
+31:       expected:
+32:       JOB agent-writer-1794148856-1323261.service ENDED status=0
+33:       line-6
+34:       line-7
+35:       line-8
+36:       line-9
+37:       line-10
+38:       line-11
+39:       line-12
+40:       line-13
+41:       line-14
+42:       line-15
+43:       line-16
+44:       line-17
+45:       line-18
+46:       line-19
+47:       line-20
+48:       line-21
+49:       line-22
+50:       line-23
+51:       line-24
+52:       line-25
+53:       line-26
+54:       line-27
+55:       line-28
+56:       line-29
+57:       line-30
+58:       line-31
+59:       line-32
+60:       line-33
+61:       line-34
+62:       line-35
+63:       line-36
+64:       line-37
+65:       line-38
+66:       line-39
+67:       line-40
+68:       line-41
+69:       line-42
+70:       line-43
+71:       line-44
+72:       line-45
+73:       actual:
+74:       JOB agent-writer-1794148856-1323261.service ENDED without a status (killed, timed out or OOM): exit-code
+75: sed: can't read /tmp/tmp.TyNDmOaiMZ/jobs/agent-writer-1794148856-1323261.service/out.log: No such file or directory
+76:   FAIL the wrapped command ran elsewhere
+77: scripts/checks/agent_launch.sh: line 234: /tmp/tmp.TyNDmOaiMZ/jobs/agent-writer-1794148856-1323261.service/out.log: No such file or directory
+78: scripts/checks/agent_launch.sh: line 234: [: : integer expected
+79:   FAIL out.log is incomplete
+80:   ok   status was moved into place without a temporary file left
+
+
+• Aha self_dir always launch.sh basename, mutant named mutant.sh but start sets `script="$(self_dir)/launch.sh"`, so job tries nonexistent launch.sh. Original mutation harness expected mutants probably must be named launch.sh in separate dir. Fix harness each mutant in own subdir `/tmp/.../name/launch.sh`. Then no unrelated. Rerun all should ~12 sec. Good. No project issue. Should have mutation results clean. Use temp path / name / launch.sh mkdir. Rerun.=== 1-status-is-not-unit-exit: exit 1 (expected nonzero) ===
+  FAIL the exit-3 unit exits 0 after recording status=3 (missing exact line: 0)
+  FAIL the unrecorded job reports the unit failure: unexpected stdout
+  FAIL a status write failure makes the job exit 2 (missing exact line: 2)
+check_agent_launch: PASS=104 FAIL=3
+=== 2-ignore-cached-result: exit 1 (expected nonzero) ===
+  FAIL a second status reads the cached timeout result: unexpected stdout
+  FAIL a second wait reads the cached timeout result: unexpected stdout
+check_agent_launch: PASS=105 FAIL=2
+=== 3-accept-unloaded-success: exit 1 (expected nonzero) ===
+  FAIL unloaded Result=success is reported as unknown: unexpected stdout
+check_agent_launch: PASS=106 FAIL=1
+=== 4-keep-trailing-slash: exit 1 (expected nonzero) ===
+  FAIL start in a new explicit directory with a trailing slash: expected exit 0, got 2
+  FAIL trailing-slash start prints exactly three lines: unexpected stdout
+  FAIL unexpected trailing-slash job directory: 
+  FAIL wait succeeds in the trailing-slash directory: expected exit 0, got 2
+  FAIL the trailing-slash job completes normally: unexpected stdout
+check_agent_launch: PASS=102 FAIL=5
+All four mutants were rejected by their targeted controls.
+Good. Now run gates and smoke. User asks gates exact focused again and full run. Already focused passed before mutations unchanged. But user asks final gates both; run again alongside full? Heavy max2. Focus light, full heavy. Could run full in background because 1500 long, and smoke/focused parallel. Use Bash run_in_background true for full with timeout 1500. User asked exact command `timeout 1500 systemd-run...`. I can run foreground tool timeout300 max and command may exceed, auto background. Better run_in_background true disable? Set timeout1600 perhaps background max okay. Then while runs do smoke and focused. Should have no full local per AGENTS says full gates server never laptop, but user explicitly demands local full command. Follow user. At most2 heavy. Fine.
+
+  Smoke design. Make sure real systemd units names. `launch.sh start` output parse. Use Bash script with TMP mktemp, trap cleanup. I want paste outputs including start? Could output labeled.
+  ```
+  smoke_success=$(bash launch start --dir "$TMP/success" smoke-success 10 -- bash -c 'printf "real success\n"')
+  printf ...
+  success_dir parse
+  AGENT_WAIT_INTERVAL=1 bash launch wait; rc
+  ...
+  exit3 wait returns3, with set +e no set-e. Print rc.
+  failed_output="$(systemctl --user list-units --failed --no-legend --no-pager)" ; rc...
+  printf full; if any agent? use shell pattern while read not grep. Use awk? Don't need assert in script, manually output. Could use `systemctl --user list-units --failed 'agent-*' --no-legend --no-pager` command supports pattern unit globs? systemctl list-units [PATTERN...] yes. User explicitly command without pattern perhaps run both full. Print `systemctl --user list-units --failed --no-pager` full includes header no units perhaps other failed non-agent. Then use exact.
+  ```
+  Runtime:
+  start --dir "$TMP/timeout" smoke-timeout 1 -- bash -c 'sleep 30'
+  wait ->125. Real systemd RuntimeMaxSec=1, run_job killed, no status, result timeout, cache, reset-failed. Print rc125. Ensure unit no failed.
+  Success wait outputs command log line. Exit3 wait status3, log. Systemd own exit0. Should inspect `systemctl show` perhaps after reset unit not found; no need. `
+  systemctl list-units --failed` only loaded units; requirement shows no agent-*.
+
+  Potential list-units doesn't show failed inactive units unless `--all`? `--failed` implies all. Fine.
+
+  Trapping rm -rf TMP safe. Output captures start info perhaps unit names. Could just print waits and failed list, as smoke outputs. Use names unique? Unit includes timestamp and PID. jobdir fixed tmp unique. Fine.
+
+  Run full background.
+
+• With the mutant paths corrected to match the launcher’s `launch.sh` self-reference, each mutant now fails only its targeted regression checks (plus direct consequences). I’m starting the full gate run and will exercise real systemd while it runs.
+
+=== start: exact output, properties and one job directory ===
+  ok   launch.sh parses
+  ok   bash -n has no output
+  ok   a successful start
+  ok   start prints exactly UNIT, DIR and absolute WAIT
+  ok   unit file records the unique unit
+  ok   deadline is an epoch second
+  ok   cmd records the command line
+  ok   systemd-run uses the user manager
+  ok   --collect is absent
+  ok   the sanitised unique unit is passed
+  ok   MemoryMax defaults to 8G
+  ok   TasksMax defaults to 1024
+  ok   RuntimeMaxSec is SECS
+  ok   WorkingDirectory is the caller's directory
+  ok   PATH is passed
+  ok   HOME is passed
+=== wait: normal status and the last 40 log lines ===
+  ok   wait returns 0 for a successful job
+  ok   success prints its state and exactly log lines 6-45
+  ok   the wrapped command ran in the caller's directory
+  ok   out.log retains the full stdout and stderr
+  ok   status was moved into place without a temporary file left
+  ok   status returns the successful job's status
+  ok   status prints one line and does not wait or print the log
+=== a non-zero command runs once and returns its status ===
+  ok   start of the exit-3 job
+  ok   custom start also prints exactly three lines
+  ok   --mem overrides MemoryMax
+  ok   --tasks overrides TasksMax
+  ok   wait returns the command's exit 3
+  ok   exit-3 output is its state and log
+  ok   the exit-3 unit exits 0 after recording status=3
+  ok   a failed writer has exactly one attempt
+  ok   status also returns exit 3
+  ok   status of exit 3 is one line
+=== failure to record status makes the job itself fail ===
+  ok   start of the status-write-failure job
+  ok   an unrecorded normal exit is a lost unit
+  ok   the unrecorded job reports the unit failure
+  ok   a status write failure makes the job exit 2
+=== a unit lost without status is 125 ===
+  ok   start of the lost-unit job
+  ok   a lost unit returns 125
+  ok   lost-unit output includes systemctl's result
+  ok   the lost-unit fixture cleaned up
+=== an unloaded unit's success result is unknown ===
+  ok   start of the unloaded-success-result job
+  ok   an unloaded success result returns 125
+  ok   unloaded Result=success is reported as unknown
+  ok   the unloaded-success-result fixture cleaned up
+=== an unloaded unit's empty result is unknown ===
+  ok   start of the unloaded-empty-result job
+  ok   an unloaded empty result returns 125
+  ok   unloaded Result=empty is reported as unknown
+  ok   the unloaded-empty-result fixture cleaned up
+=== still active past deadline plus grace is 124 ===
+  ok   start of the overrun job
+  ok   status of a running job is a successful observation
+  ok   status does not wait for a running job
+  ok   deadline plus grace returns 124
+  ok   overrun output is INCOMPLETE, never a pass
+  ok   the overrun fixture cleaned up
+=== argv survives systemd dollar and percent expansion ===
+  ok   start of the literal-argv job
+  ok   literal-argv job exits normally
+  ok   an argument containing ${HOME}, $1, %n and a space reaches the job byte for byte
+  ok   out.log preserves the exact literal bytes
+=== timeout result is read before explicit collection ===
+  ok   start of the timed-out job
+  ok   a systemd timeout without status returns 125
+  ok   125 reports the retained timeout result, not unknown
+  ok   the result is cached in the job directory
+  ok   reset-failed collects only after the result was read
+  ok   collection removes the stub's result
+  ok   a second status still returns 125 after collection
+  ok   a second status reads the cached timeout result
+  ok   a second wait still returns 125 after collection
+  ok   a second wait reads the cached timeout result
+  ok   the timed-out fixture's waiter is released
+=== status appearing at the inactive observation wins the TOCTOU race ===
+  ok   start of the status-race job
+  ok   a status written before is-active returns is not declared lost
+  ok   inactive triggers a second status-file check
+  ok   the status-race fixture cleaned up
+=== job directories are reserved exclusively ===
+  ok   start in a new explicit job directory
+  ok   a second start on the same directory is refused
+  ok   duplicate directory refusal has no stdout
+  ok   duplicate directory has a clear error
+  ok   the refused start leaves the first job's files untouched
+  ok   the exclusive-directory fixture cleaned up
+=== an explicit job directory may have a trailing slash ===
+  ok   start in a new explicit directory with a trailing slash
+  ok   trailing-slash start prints exactly three lines
+  ok   the trailing slash is stripped from the recorded directory
+  ok   wait succeeds in the trailing-slash directory
+  ok   the trailing-slash job completes normally
+=== the printed WAIT value is safe to eval ===
+  ok   start in a directory with spaces and shell metacharacters
+  ok   both WAIT paths are shell-quoted with printf %q
+  ok   eval of the printed WAIT value waits on the right job
+  ok   eval prints the intended job result
+  ok   eval executes nothing else
+=== systemd query failures are not lost units ===
+  ok   start of the no-user-bus job
+  ok   a user-bus query error returns 2, not 125
+  ok   a user-bus query error has no job result on stdout
+  ok   the query error includes systemctl's bus error
+  ok   a silent user-bus query failure also returns 2
+  ok   a silent query failure is identified
+  ok   the no-user-bus fixture cleaned up
+=== invalid input and unavailable systemd are exit 2 ===
+  ok   an invalid NAME is refused
+  ok   invalid NAME has no stdout
+  ok   invalid NAME explains the error on stderr
+  ok   zero SECS is refused
+  ok   zero SECS explains the error
+  ok   non-numeric SECS is refused
+  ok   non-numeric SECS explains the error
+  ok   missing systemd-run is refused
+  ok   missing systemd-run has no stdout
+  ok   missing systemd-run has the exact clear error
+
+check_agent_launch: PASS=107 FAIL=0
+=== real systemd: success ===
+Running as unit: agent-smoke-success-1794148971-1469822.service; invocation ID: de8f7b4175254378bf79b7136aa48503
+UNIT=agent-smoke-success-1794148971-1469822.service
+DIR=/tmp/tmp.C0aEm1cXKP/success
+WAIT=bash /home/unbalancedparen/projects/clones/wip/agent-launcher/scripts/agent/launch.sh wait /tmp/tmp.C0aEm1cXKP/success
+JOB agent-smoke-success-1794148971-1469822.service ENDED status=0
+real-systemd success
+wait exit=0
+=== real systemd: command exit 3 ===
+Running as unit: agent-smoke-exit3-1794148971-1469929.service; invocation ID: 92fdbd5c30ba4cb39d11667899679302
+UNIT=agent-smoke-exit3-1794148971-1469929.service
+DIR=/tmp/tmp.C0aEm1cXKP/exit3
+WAIT=bash /home/unbalancedparen/projects/clones/wip/agent-launcher/scripts/agent/launch.sh wait /tmp/tmp.C0aEm1cXKP/exit3
+JOB agent-smoke-exit3-1794148971-1469929.service ENDED status=3
+real-systemd exit 3
+wait exit=3
+=== systemctl --user list-units --failed ===
+  UNIT                                        LOAD   ACTIVE SUB    DESCRIPTION
+● run-r19e871fe8bc5494d9b1693a5507fc170.scope loaded failed failed /home/unbalancedparen/.nix-profile/bin/make shell
+● run-r3c795a8261634ccd934516c5c13af2c3.scope loaded failed failed /home/unbalancedparen/.nix-profile/bin/make shell
+● run-r43ed351969634b88936e28e4e5f03e77.scope loaded failed failed /home/unbalancedparen/.nix-profile/bin/make test.web.unit "UNIT_AREA=landing src/lib/i18n src/lib/blog"
+● run-r5a538449ebd3485cbb141c2edc816ec3.scope loaded failed failed /home/unbalancedparen/.nix-profile/bin/make test.web.unit UNIT_AREA=../lib/i18n
+● run-r86be18062d694a19abf69f0a2417595c.scope loaded failed failed /home/unbalancedparen/.nix-profile/bin/make shell
+● run-rc27301644b4a4e098e4b0848c734ac70.scope loaded failed failed /home/unbalancedparen/.nix-profile/bin/make shell
+● run-rd6de0f5d23da4f8e907cd28f75ae3a06.scope loaded failed failed /home/unbalancedparen/.nix-profile/bin/make test.web.unit UNIT_AREA=../lib/i18n
+● run-rfdccdf8153564fe6aa6c8a1671a2926e.scope loaded failed failed /home/unbalancedparen/.nix-profile/bin/make test.web.unit UNIT_AREA=../lib/i18n
+● run-rfede2b79541c4d27840d0357cfe55565.scope loaded failed failed /nix/var/nix/profiles/default/bin/nix develop --command bash -c "npx vitest run --project unit src/lib/three/__tests__/ src/lib/store/__tests__/results-refusal-memo.test.ts 2>&1 | grep -E \"✓|×|→|Test Files|Tests\" | tail -30"
+
+Legend: LOAD   → Reflects whether the unit definition was properly loaded.
+        ACTIVE → The high-level unit activation state, i.e. generalization of SUB.
+        SUB    → The low-level unit activation state, values depend on unit type.
+
+9 loaded units listed.
+=== real systemd: RuntimeMaxSec kill ===
+Running as unit: agent-smoke-timeout-1794148972-1473093.service; invocation ID: 59ab66b699d5434683891a8c0b380571
+UNIT=agent-smoke-timeout-1794148972-1473093.service
+DIR=/tmp/tmp.C0aEm1cXKP/timeout
+WAIT=bash /home/unbalancedparen/projects/clones/wip/agent-launcher/scripts/agent/launch.sh wait /tmp/tmp.C0aEm1cXKP/timeout
+JOB agent-smoke-timeout-1794148972-1473093.service ENDED without a status (killed, timed out or OOM): timeout
+wait exit=125
+=== systemctl --user list-units --failed (final) ===
+  UNIT                                        LOAD   ACTIVE SUB    DESCRIPTION
+● run-r19e871fe8bc5494d9b1693a5507fc170.scope loaded failed failed /home/unbalancedparen/.nix-profile/bin/make shell
+● run-r3c795a8261634ccd934516c5c13af2c3.scope loaded failed failed /home/unbalancedparen/.nix-profile/bin/make shell
+● run-r43ed351969634b88936e28e4e5f03e77.scope loaded failed failed /home/unbalancedparen/.nix-profile/bin/make test.web.unit "UNIT_AREA=landing src/lib/i18n src/lib/blog"
+● run-r5a538449ebd3485cbb141c2edc816ec3.scope loaded failed failed /home/unbalancedparen/.nix-profile/bin/make test.web.unit UNIT_AREA=../lib/i18n
+● run-r86be18062d694a19abf69f0a2417595c.scope loaded failed failed /home/unbalancedparen/.nix-profile/bin/make shell
+● run-rc27301644b4a4e098e4b0848c734ac70.scope loaded failed failed /home/unbalancedparen/.nix-profile/bin/make shell
+● run-rd6de0f5d23da4f8e907cd28f75ae3a06.scope loaded failed failed /home/unbalancedparen/.nix-profile/bin/make test.web.unit UNIT_AREA=../lib/i18n
+● run-rfdccdf8153564fe6aa6c8a1671a2926e.scope loaded failed failed /home/unbalancedparen/.nix-profile/bin/make test.web.unit UNIT_AREA=../lib/i18n
+● run-rfede2b79541c4d27840d0357cfe55565.scope loaded failed failed /nix/var/nix/profiles/default/bin/nix develop --command bash -c "npx vitest run --project unit src/lib/three/__tests__/ src/lib/store/__tests__/results-refusal-memo.test.ts 2>&1 | grep -E \"✓|×|→|Test Files|Tests\" | tail -30"
+
+Legend: LOAD   → Reflects whether the unit definition was properly loaded.
+        ACTIVE → The high-level unit activation state, i.e. generalization of SUB.
+        SUB    → The low-level unit activation state, values depend on unit type.
+
+9 loaded units listed.
+• Smoke pass, list has unrelated failed scopes no agent. Response can paste relevant outputs perhaps full list huge; user says paste outputs. Could include exact full? I can show list `0 agent units listed` by pattern command too but they explicitly list-units --failed shows no agent. I have output with 9 unrelated. Response can show `<9 unrelated run-*.scope units; no agent-* units>` but "paste outputs" likely need actual relevant outputs and list summary. Could run `systemctl --user list-units --failed 'agent-*' --no-pager` now to show 0 loaded units. But requirement exact command already run, full output proves no agent. Could response quote excerpt header and "9 loaded units listed (all unrelated run-*.scope; no agent-* entries)" not paste full to avoid noise. Perhaps run filtered to clean output and paste both. Good.
+
+  Should have full gate background running. I can inspect `git status` after tests? Do once after full. Should have no commit until gate done. I can do real check own exit with systemctl? Already unit exits0 and no failed. Good.
+
+  Potential issue `unit_exit_line` helper comment says exact-line label but args reversed? It takes $1 exact line $2 label, comment okay. Fine.
+
+  Potential test status write failure uses `$PPID` but in real systemd smoke no. Good.
+
+  Potential orphan cleanup: I touched release after second wait. EXIT trap already release every unit before rm, no change but requested satisfied. Good.
+
+  Should check full gate may take. Could run `systemctl --user list-units --failed 'agent-*'` now, perhaps no agent. Also check no orphan stub loops from test? Mutants fixed path etc cleanup. Initial faulty mutant runs cleanup release all; orphan timeout child killed by stub watchdog? When run_job missing script, timeout result fixture command blocking while orphan; cleanup touches, okay. All good.
+
+  Could run bash -n both and git diff check, but agent suite includes launch parse not check parse (it executes). Fine.
+
+  Perhaps agy last review? User says last allowed round, fix and gates commit. User didn't ask review again. Do not run.
+
+  Should have full output. While waiting perhaps check task list? Notification automatic, don't poll. I can run filtered real command and inspect `git diff --check` perhaps no need but wait.  UNIT LOAD ACTIVE SUB DESCRIPTION
+
+0 loaded units listed.
+Should wait full. I should not WaitFor unless nothing else; indeed no other work until result. I can WaitFor because next step depends. It may take long, max90. Use WaitFor 90.
+
+• The real-systemd smoke passed: success returned 0, exit 3 returned 3, the runtime kill returned 125 with `timeout`, and the failed-unit query lists zero `agent-*` units. The full repository gate is still running.
+
+• Full passed. Should read output relevant agent check summary perhaps no need exit0 root all12. User wants all pass. I have output. Should check new files after tests, status. Also commit one local. Before commit need git diff review, no generated files. `git status --short`, `git diff --check`, perhaps git diff full already reviewed. Commit message. User explicitly commit local. I can `git add scripts/... && git commit -m "Fix agent launcher review edge cases"` no no-verify. Hooks may run commit? none heavy. Should check no git operation in progress? status enough. Before commit update todo gates done commit in progress. Then commit. But perhaps need test after commit? Gates ran exact working tree, commit same. Verify SHA and status. Could commit then `git status` and `git show --stat`. User wants print SHA. Do. Make sure no new files from tests. `git status --short` only 2. Good.
+
+• Both requested gates pass, including all 12 root check groups. I’ll now commit only the two reviewed files, then verify the commit and working-tree state without pushing.
+
+ M scripts/agent/launch.sh
+ M scripts/checks/agent_launch.sh
+[wip/agent-launcher bb807dd69] Fix agent launcher review edge cases
+ 2 files changed, 59 insertions(+), 5 deletions(-)
+• Should verify commit, status, perhaps no background tasks. `git rev-parse HEAD`, status branch ahead3, show. Ensure no push. Then todo done.bb807dd69d18312a8c697fdab488aceac70f764a
+## wip/agent-launcher...origin/main [ahead 3]
+bb807dd69 Fix agent launcher review edge cases
+ scripts/agent/launch.sh        | 16 +++++++++-----
+ scripts/checks/agent_launch.sh | 48 ++++++++++++++++++++++++++++++++++++++++++
+ 2 files changed, 59 insertions(+), 5 deletions(-)
+Now respond. Should have all required: SHA, per-fix summary, mutation results, smoke outputs, gates. Keep concise but enough. Mention commit local no push. Mutation results table perhaps bullets. Smoke outputs paste outputs including exact waits and list-units agent pattern. User specifically "Real-systemd smoke again (success, exit 3 -> wait 3 and systemctl --user list-units --failed shows no agent-* unit, RuntimeMaxSec kill -> 125 timeout); paste outputs." I can provide code block:
+  ```
+  JOB ... ENDED status=0
+  real-systemd success
+  wait exit=0
+  ...
+  $ systemctl --user list-units --failed 'agent-*' --no-pager
+   UNIT...
+  0 loaded units listed.
+  ...
+  ```
+  User asked `systemctl --user list-units --failed` no pattern; I did exact and it showed 9 unrelated units. Should be transparent: exact unfiltered command showed 9 pre-existing unrelated `run-*.scope`, no agent. Paste perhaps full unfiltered output? Could include code block with first lines and say 9 unrelated. "paste the outputs" means should not elide? Could paste relevant outputs and filtered command. I can state unfiltered listed 9 unrelated run scopes and no agent; then filtered output. Is that satisfying? Probably. Perhaps include unit names exact dynamic not important. Use actual names from output. Include all smoke output (start lines optional). I can paste wait outputs and query. User wants outputs evidence. Could show:
+  ```
+  === real systemd: success ===
+  JOB agent... ENDED status=0
+  real-systemd success
+  wait exit=0
+  ...
+  === systemctl --user list-units --failed ===
+  ... 9 loaded units listed. (all run-*.scope; no agent-*)
+  ...
+  ```
+  But ellipsis isn't full paste. Could include filtered query as cleaner proof and note exact unfiltered had unrelated. Since they requested outputs likely accepted.
+
+  Mutation results per fix:
+  1 exit1 PASS104 FAIL3 targeted own exit0 and write exit2 plus direct output. 2 exit1 PASS105 FAIL2 second status/wait cache. 3 exit1 PASS106 FAIL1 success unknown. 4 exit1 PASS102 FAIL5 trailing. Include names and key fail labels. Mention temporary copies removed, original restored? I never mutated original; temporary copies. Good.
+
+  Per-fix summary references code lines new line numbers. Should get exact line numbers after changes: launch dir around85, run_job115, unit_result154. Checks unit helper194, own exit 253, etc. I can cite file without lines or approximate from diff. Better `scripts/agent/launch.sh:85`, `:116`, `:156`. Current total 221? Actually added 2 header,2 run,1 unit etc. Read showed original219 +? current221? Diff +11 -5 total+6, original215? Initial Read total215, after header total219, final221. `run_job` line108 originally, +2 header +2 dir =112? function line108? I'll compute: original run_job105; header+2 ->107; dir+1 ->108. So run_job108, status lines116-122. unit_result original146 +2 header+1 dir+2 run=151. Good. Dir while line85? original83 case; +2 header and +1 extra line means while85, case86. Yes.
+  Check lines after helper etc from read current line. I have line 250 etc. Fine no need exact all.
+
+  Per fix:
+  1 `run_job` now exits0 iff atomic status written, else2; header. Controls assert exit3 command status3 but unit exit0, status write blocked with `.status.$PPID` dir unit exit2.
+  2 Timeout fixture release, trap already all units (retained). Assert stub result removed and repeated status/wait125 timeout from cache.
+  3 unit_result maps empty/success unknown controls both.
+  4 strip trailing slashes preserve lone/, empty parent /. trailing integration.
+  No scope extra.
+
+  Gates:
+  - `timeout600 ...` exit0 PASS107 FAIL0
+  - full command exit0 root checks all12 pass.
+  Commit clean (status only branch ahead no files). Say no push performed.
+
+  Should mark todo done before response.Respond structured not too long. User explicit detailed outputs. Include mutation output exact. Smoke actual. Could include unfiltered failed list in collapsible? Markdown terminal no. I can give filtered plus note. "The unfiltered command printed 9 pre-existing unrelated run-*.scope failures and no agent-* entries; the explicit agent query printed..." This is evidence and not hide. Paste all relevant smoke. Good.
+
+  Full SHA. Commit summary.
+
+  Response perhaps:
+
+  "Committed locally as `bb807...`; no push; tree clean."
+
+  Per fix numbered.
+
+  Mutation results code block exact from clean run.
+
+  Gates code block.
+
+  Smoke code block:
+  ```
+  JOB agent-smoke-success... ENDED status=0
+  ...
+  ```
+  Include Runtime unit result timeout.
+  Failed query code block exact filtered. Mention unfiltered.
+
+  Do I need show `systemctl --user list-units --failed` output no agent; if only filtered could be seen as not exact. I ran exact and output full in tool visible user, response standalone must include findings. I can include summary. Perhaps paste full 9 lines to satisfy exact. That's 14 lines, okay. Output includes descriptions long, can trim descriptions? "paste outputs" should exact. Could include unfiltered list only unit names not descriptions? Better include the exact relevant final line and statement. I can include:
+  ```
+  $ systemctl --user list-units --failed 'agent-*' --no-pager
+    UNIT LOAD ACTIVE SUB DESCRIPTION
+
+  0 loaded units listed.
+  ```
+  That's a stronger direct output. The exact unfiltered is already tool output visible, but response must stand alone. Note covers.
+
+  No need include start output `Running as unit` etc. User likely cares result outputs. Good.
+
+  I'll craft.
+
+• Committed locally as **`bb807dd69d18312a8c697fdab488aceac70f764a`** (`Fix agent launcher review edge cases`). Working tree is clean; nothing was pushed.
+
+  ### Fixes
+
+  1. **Failed-unit leak** — `scripts/agent/launch.sh:108`
+     - `run_job` now exits `0` exactly when the atomic status write succeeds, otherwise `2`.
+     - Header updated.
+     - Controls verify that a command exiting `3` records `status=3` while its unit exits `0`, and a failed status write makes the unit exit `2`.
+
+  2. **Timeout fixture and cached result** — `scripts/checks/agent_launch.sh:317`
+     - Releases the timeout fixture’s waiter; the EXIT trap continues releasing every stub unit before cleanup.
+     - Verifies collection removes the stub result.
+     - Repeats both `status` and `wait`, confirming `125` and `: timeout` come from the cached job result.
+
+  3. **Unloaded unit result** — `scripts/agent/launch.sh:151`
+     - Maps both empty and `success` results to `unknown`.
+     - Added controls for both cases.
+
+  4. **Explicit directory normalization** — `scripts/agent/launch.sh:85`
+     - Strips trailing slashes while preserving lone `/`.
+     - Defaults an empty parent to `/`.
+     - Added a successful `--dir "$TMP/new/"` end-to-end control.
+
+  ### Mutation results
+
+  Each temporary mutant was rejected by its targeted controls:
+
+  ```text
+  === 1-status-is-not-unit-exit: exit 1 ===
+    FAIL the exit-3 unit exits 0 after recording status=3
+    FAIL the unrecorded job reports the unit failure
+    FAIL a status write failure makes the job exit 2
+  check_agent_launch: PASS=104 FAIL=3
+
+  === 2-ignore-cached-result: exit 1 ===
+    FAIL a second status reads the cached timeout result
+    FAIL a second wait reads the cached timeout result
+  check_agent_launch: PASS=105 FAIL=2
+
+  === 3-accept-unloaded-success: exit 1 ===
+    FAIL unloaded Result=success is reported as unknown
+  check_agent_launch: PASS=106 FAIL=1
+
+  === 4-keep-trailing-slash: exit 1 ===
+    FAIL start in a new explicit directory with a trailing slash
+    FAIL trailing-slash start prints exactly three lines
+    FAIL unexpected trailing-slash job directory
+    FAIL wait succeeds in the trailing-slash directory
+    FAIL the trailing-slash job completes normally
+  check_agent_launch: PASS=102 FAIL=5
+  ```
+
+  ### Real-systemd smoke
+
+  ```text
+  === real systemd: success ===
+  JOB agent-smoke-success-1794148971-1469822.service ENDED status=0
+  real-systemd success
+  wait exit=0
+
+  === real systemd: command exit 3 ===
+  JOB agent-smoke-exit3-1794148971-1469929.service ENDED status=3
+  real-systemd exit 3
+  wait exit=3
+
+  === real systemd: RuntimeMaxSec kill ===
+  JOB agent-smoke-timeout-1794148972-1473093.service ENDED without a status (killed, timed out or OOM): timeout
+  wait exit=125
+  ```
+
+  The unfiltered `systemctl --user list-units --failed` showed nine unrelated pre-existing `run-*.scope` failures and no `agent-*` units. The explicit agent query returned:
+
+  ```text
+  $ systemctl --user list-units --failed 'agent-*' --no-pager
+    UNIT LOAD ACTIVE SUB DESCRIPTION
+
+  0 loaded units listed.
+  ```
+
+  ### Gates
+
+  ```text
+  timeout 600 bash scripts/checks/agent_launch.sh
+  check_agent_launch: PASS=107 FAIL=0
+  ```
+
+  ```text
+  timeout 1500 systemd-run --user --scope -q -p MemoryMax=8G -p TasksMax=1024 bash scripts/checks/run.sh
+  root checks: all 12 pass
+  ```
+
+  Both exited `0`.
+
+To resume this session: kimi -r session_c94b89d8-f9bb-4af0-b4fe-abd95b509fa0
+rc=0

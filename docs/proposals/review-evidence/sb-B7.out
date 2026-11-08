@@ -1,0 +1,23 @@
+=== structural: every repository-making script sources the sandbox helper ===
+  ok   scripts/checks/landing_bot.sh sources git_sandbox.sh (line 40) and calls it (line 41) before its first repository (line 133)
+  ok   scripts/checks/landing_script.sh sources git_sandbox.sh (line 61) and calls it (line 62) before its first repository (line 140)
+  ok   scripts/checks/legacy_frozen.sh sources git_sandbox.sh (line 55) and calls it (line 56) before its first repository (line 61)
+  ok   scripts/checks/review_tool.sh sources git_sandbox.sh (line 39) and calls it (line 40) before its first repository (line 115)
+  ok   scripts/land/acceptance.sh sources git_sandbox.sh (line 65) and calls it (line 66) before its first repository (line 195)
+  ok   scripts/land/bot.sh sources git_sandbox.sh (line 39) and calls it (line 40) before its first repository (line 258)
+  ok   scripts/land/run-at-ref.sh sources git_sandbox.sh (line 20) and calls it (line 21) before its first repository (line 42)
+  ok   scripts/oracle/build.sh sources git_sandbox.sh (line 29) and calls it (line 30) before its first repository (line 52)
+  ok   scripts/proofs/external.sh sources git_sandbox.sh (line 45) and calls it (line 46) before its first repository (line 73)
+  ok   found 9 repository-making scripts (at least the 9 known)
+=== control: the structural scan sees scripts at any depth and without a .sh suffix ===
+  ok   an unsandboxed maker three directories down is refused
+  ok   an unsandboxed maker with a bash shebang and no .sh suffix is refused
+  ok   a sandboxed maker at depth passes
+bound: a systemd user scope, TasksMax=512, MemoryMax=8G
+=== control: the harness sees a leak ===
+  ok   control (leaky script): the harness sees a write through the inherited GIT_DIR
+=== live: sandbox checks run from a linked worktree as its hook would run them ===
+  ok   review_tool.sh: the caller's refs, notes, config and upstream are unchanged
+  ok   legacy_frozen.sh: the caller's refs, notes, config and upstream are unchanged
+
+check_sandbox_isolation: PASS=16 FAIL=0

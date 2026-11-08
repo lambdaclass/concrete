@@ -1,0 +1,9 @@
+review: round 1, piece 1 of 6 (scripts, 13723 bytes)
+review: round 1, piece 2 of 6 (docs, 4569 bytes)
+review: round 1, piece 3 of 6 (docs, 59116 bytes)
+review: round 1, piece 4 of 6 (docs, 56961 bytes)
+review: round 1, piece 5 of 6 (docs, 47706 bytes)
+review: round 1, piece 6 of 6 (docs, 55675 bytes)
+review: round 1 verdict findings (6 piece(s)); raw output: .review/82e0e02e498c89cd8192db9b4eca2a4b56b70aca-1.md
+[piece 5 of 6: docs]
+- docs/proposals/FOUNDATION.md:3: The proposal is recorded as owner-approved and authoritative for PLAN steps 3+, but supplies neither the owner’s quoted answer with its date nor a quoted owner rule authorizing that status. A bare approval assertion does not meet the required provenance rule, especially while sections 4–5 leave the scope and semantic choices awaiting separate answers.

@@ -1,0 +1,1449 @@
+Reading additional input from stdin...
+OpenAI Codex v0.166.0
+--------
+workdir: /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/codexfull/00feab7a87f3890c785bf050b40493f7b4a54ff3/tree
+model: gpt-6.1-sol
+provider: openai
+approval: never
+sandbox: danger-full-access
+reasoning effort: none
+reasoning summaries: none
+session id: 01a1bbae-da53-7083-a377-7b2e471d0f91
+--------
+user
+Read-only verification review. Do not modify any file and do not run anything that changes state or uses the network. The directory you are in is a git-archive copy of commit 00feab7a87f3890c785bf050b40493f7b4a54ff3 (no .git). REVIEW.diff is the fix commit's change against 61be4bed317950e1826dfe4f26c1a2727e9fe33f, which a previous review rejected for: scripts/agent/launch.sh unit_result turned a failed 'systemctl --user show' (bus error after is-active=inactive/failed) into 'unknown', cached it, ran reset-failed and returned 125 instead of 2. Required: a show failure is an operational error (2), with no result cache and no collection, so a later wait reads the real Result; controls in scripts/checks/agent_launch.sh.
+Verify the fix is correct and complete, that its controls are load-bearing, and look for new defects in the delta. You MUST read the changed files in full from this tree (not only the diff) and name every file you read.
+List findings as file:line with a fix, marking each REAL DEFECT or PREFERENCE. Your last line must be exactly VERDICT: ACCEPT or VERDICT: REJECT.
+codex
+I’ll read the diff and both changed files in full, then check the failure path and its controls without running commands that change state or use the network.
+exec
+/bin/bash -lc 'cat REVIEW.diff' in /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/codexfull/00feab7a87f3890c785bf050b40493f7b4a54ff3/tree
+ succeeded in 0ms:
+diff --git a/AGENTS.md b/AGENTS.md
+index 25778871c..1612cf10b 100644
+--- a/AGENTS.md
++++ b/AGENTS.md
+@@ -339,8 +339,9 @@ immediately run the printed `WAIT` command as your own background task so the jo
+ you. Never start a detached unit without its watcher. A writer gets one attempt only: a killed or
+ timed-out job is investigated, never automatically re-run. Each start exclusively creates a new job
+ directory (an existing `--dir` is refused) and preserves argv through a file rather than systemd's
+-command expansion. A missing status returns 125 with systemd's retained result when known; a bus or
+-`systemctl` query failure is an operational error (2), not a completed job.
++command expansion. A missing status returns 125 with systemd's retained result when known. A failed
++`systemctl is-active` or `show` query is an operational error (2), not a completed job. A failed
++`show` writes no result cache and does not collect the unit, so a later wait can read the real result.
+ 
+ ### Orchestrating a publish: never infer state from process names
+ 
+diff --git a/changelog.d/2026-11-08-agent-launcher.md b/changelog.d/2026-11-08-agent-launcher.md
+index 5baa46f94..00e64239b 100644
+--- a/changelog.d/2026-11-08-agent-launcher.md
++++ b/changelog.d/2026-11-08-agent-launcher.md
+@@ -6,5 +6,7 @@ own background task, so completion re-invokes the agent instead of leaving a fin
+ A lost unit and a deadline overrun are distinct non-passing results, and writers are never retried
+ automatically. Job directories are exclusive, command arguments survive systemd expansion byte for
+ byte, and the quoted `WAIT` command is safe for paths containing shell metacharacters. Lost units
+-retain their timeout/signal/OOM result where systemd provides one; query failures are operational
+-errors. Stub-backed controls cover these behaviours and all watcher outcomes.
++retain their timeout/signal/OOM result where systemd provides one. Failed `systemctl is-active` or
++`show` queries are operational errors (2), not completed jobs. A failed `show` writes no result cache
++and does not collect the unit, so a later wait can read the real result. Stub-backed controls cover
++these behaviours and all watcher outcomes.
+diff --git a/scripts/agent/launch.sh b/scripts/agent/launch.sh
+index 24e9b46f7..78d41542b 100755
+--- a/scripts/agent/launch.sh
++++ b/scripts/agent/launch.sh
+@@ -149,8 +149,13 @@ normal_exit() {
+ }
+ 
+ unit_result() {
+-  local result=""
+-  result="$(systemctl --user show "$UNIT" --property=Result --value 2>/dev/null)" || result=""
++  local result="" query_rc=0
++  result="$(systemctl --user show "$UNIT" --property=Result --value 2>&1)" || query_rc=$?
++  if [ "$query_rc" -ne 0 ]; then
++    printf 'launch.sh: cannot query systemd for %s Result (systemctl exit %s): %s\n' \
++      "$UNIT" "$query_rc" "${result:-no output}" >&2
++    return 2
++  fi
+   case "$result" in ''|success) result=unknown ;; esac
+   printf '%s\n' "$result"
+ }
+@@ -161,7 +166,7 @@ lost_exit() {
+   if [ -f "$JOBDIR/result" ]; then
+     IFS= read -r reason < "$JOBDIR/result" || fail "cannot read $JOBDIR/result"
+   else
+-    reason="$(unit_result)"
++    reason="$(unit_result)" || return 2
+     tmp="$JOBDIR/.result.$$"
+     if printf '%s\n' "$reason" > "$tmp" && mv "$tmp" "$JOBDIR/result"; then :
+     else rm -f "$tmp"; fi
+@@ -191,7 +196,7 @@ inspect() {
+     inactive|unknown|failed)
+       if [ -f "$JOBDIR/status" ]; then normal_exit; return "$?"; fi
+       lost_exit
+-      return 125 ;;
++      return "$?" ;;
+     *)
+       fail "cannot query systemd for $UNIT (systemctl exit $query_rc): ${state:-no output}" ;;
+   esac
+diff --git a/scripts/checks/agent_launch.sh b/scripts/checks/agent_launch.sh
+index 591e63ffa..c0c563b10 100755
+--- a/scripts/checks/agent_launch.sh
++++ b/scripts/checks/agent_launch.sh
+@@ -139,6 +139,7 @@ case "$action" in
+       exit 1
+     fi
+     [ ! -f "$state/no-bus-empty" ] || exit 1
++    if [ -f "$state/failed-on-is-active" ]; then echo failed; exit 1; fi
+     if [ -f "$state/finish-on-is-active" ]; then
+       jobdir="$(cat "$state/jobdir")"
+       tmp="$jobdir/.status.systemd"
+@@ -148,6 +149,11 @@ case "$action" in
+     if [ -f "$state/active" ]; then echo active; exit 0; fi
+     echo inactive; exit 1 ;;
+   show)
++    if [ -f "$state/show-no-bus" ]; then
++      echo 'Failed to connect to bus: No medium found' >&2
++      exit 1
++    fi
++    [ ! -f "$state/show-no-bus-empty" ] || exit 1
+     [ -r "$state/result" ] && cat "$state/result"
+     exit 0 ;;
+   reset-failed)
+@@ -290,6 +296,44 @@ for reason in success empty; do
+   release_job "the unloaded-$reason-result fixture"
+ done
+ 
++for failure in loud silent; do
++  echo "=== a $failure Result query failure is retryable ==="
++  capture 10 bash "$LAUNCH" start "show-$failure" 30 -- bash -c 'while [ ! -e "$STUB_RELEASE_DIR/$STUB_UNIT" ]; do sleep 0.1; done'
++  expect_rc 0 "start of the $failure show-failure job"
++  parse_start
++  rm -f "$STUB_STATE_DIR/$UNIT/active"
++  printf 'killed\n' > "$STUB_STATE_DIR/$UNIT/result"
++  : > "$STUB_STATE_DIR/$UNIT/failed-on-is-active"
++  if [ "$failure" = loud ]; then
++    : > "$STUB_STATE_DIR/$UNIT/show-no-bus"
++  else
++    : > "$STUB_STATE_DIR/$UNIT/show-no-bus-empty"
++  fi
++  capture 10 bash "$LAUNCH" wait "$JOBDIR"
++  expect_rc 2 "a $failure show failure after is-active=failed returns 2"
++  expect_out "" "a $failure show failure has no job result on stdout"
++  has_match -F 'cannot query systemd' <<<"$ERR" \
++    && ok "a $failure show failure has a clear error" || no "$failure show failure is unclear: $ERR"
++  if [ "$failure" = loud ]; then
++    has_match -F 'Failed to connect to bus' <<<"$ERR" \
++      && ok "a loud show failure includes systemctl's bus error" || no "loud show error is missing: $ERR"
++  else
++    has_match -F 'no output' <<<"$ERR" \
++      && ok "a silent show failure is identified" || no "silent show failure is unclear: $ERR"
++  fi
++  [ ! -e "$JOBDIR/result" ] \
++    && ok "a $failure show failure writes no result cache" || no "a $failure show failure cached a result"
++  [ ! -e "$STUB_STATE_DIR/$UNIT/reset-failed" ] \
++    && ok "a $failure show failure does not collect the unit" || no "a $failure show failure collected the unit"
++  rm -f "$STUB_STATE_DIR/$UNIT/show-no-bus" "$STUB_STATE_DIR/$UNIT/show-no-bus-empty"
++  capture 10 bash "$LAUNCH" wait "$JOBDIR"
++  expect_rc 125 "a wait after the $failure show failure returns 125"
++  expect_out "JOB $UNIT ENDED without a status (killed, timed out or OOM): killed" \
++    "the wait after the $failure show failure reads the real Result"
++  file_line "$JOBDIR/result" killed "the recovered $failure show result is cached"
++  release_job "the $failure show-failure fixture"
++done
++
+ echo "=== still active past deadline plus grace is 124 ==="
+ capture 10 bash "$LAUNCH" start overrun 30 -- bash -c 'while [ ! -e "$STUB_RELEASE_DIR/$STUB_UNIT" ]; do sleep 0.1; done'
+ expect_rc 0 "start of the overrun job"
+
+exec
+/bin/bash -lc 'cat scripts/agent/launch.sh scripts/checks/agent_launch.sh' in /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/codexfull/00feab7a87f3890c785bf050b40493f7b4a54ff3/tree
+ succeeded in 0ms:
+#!/usr/bin/env bash
+# Run one background agent job and pair it with a bounded watcher.
+#
+#   launch.sh start [--mem SIZE] [--tasks N] [--dir DIR] NAME SECS -- CMD [ARGS...]
+#   launch.sh wait JOBDIR
+#   launch.sh status JOBDIR
+#
+# start exclusively creates a new job directory and runs CMD once in a transient
+# systemd user unit, with MemoryMax (8G by default), TasksMax (1024),
+# RuntimeMaxSec=SECS, the caller's PATH, HOME and working directory. A fixed
+# wrapper reads the NUL-separated argv file, so systemd cannot expand the command.
+# The directory records cmd, argv, unit, deadline, out.log and an atomic status.
+# The job itself exits 0 only after writing status atomically, or 2 if that write
+# fails, independently of CMD's recorded status; a recorded job never ends failed.
+# The printed UNIT, DIR and shell-quoted absolute WAIT are its only output.
+# Writers are never retried.
+#
+# wait polls until status appears, the unit becomes inactive, or deadline plus
+# grace (120s by default) passes. It re-checks status after an inactive observation.
+# A normal exit prints JOB ... ENDED status=N and the last 40 log lines, then
+# returns N. A lost unit returns 125 with the retained systemd Result (or unknown),
+# read before reset-failed collects the unit and cached in result. An overrun
+# returns 124 (INCOMPLETE); a systemd query failure returns 2. AGENT_WAIT_INTERVAL
+# and AGENT_WAIT_GRACE override the 10s poll and 120s grace. status observes once.
+set -uo pipefail
+
+usage() {
+  echo "usage: launch.sh start [--mem SIZE] [--tasks N] [--dir DIR] NAME SECS -- CMD [ARGS...] | launch.sh wait JOBDIR | launch.sh status JOBDIR" >&2
+  exit 2
+}
+
+fail() {
+  echo "launch.sh: $*" >&2
+  exit 2
+}
+
+positive_integer() {
+  case "$1" in
+    ''|*[!0-9]*) return 1 ;;
+  esac
+  [ "${#1}" -le 9 ] || return 1
+  [ "$((10#$1))" -gt 0 ]
+}
+
+self_dir() {
+  local source dir
+  source="${BASH_SOURCE[0]}"
+  case "$source" in */*) dir="${source%/*}" ;; *) dir=. ;; esac
+  (CDPATH= cd "$dir" && pwd -P)
+}
+
+start() {
+  local mem=8G tasks=1024 dir="" name="" secs="" cwd="" safe="" unit="" jobdir="" base="" parent="" script=""
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --mem) [ "$#" -ge 2 ] || usage; mem="$2"; shift 2 ;;
+      --tasks) [ "$#" -ge 2 ] || usage; tasks="$2"; shift 2 ;;
+      --dir) [ "$#" -ge 2 ] || usage; dir="$2"; shift 2 ;;
+      --) break ;;
+      -*) fail "unknown start option: $1" ;;
+      *) break ;;
+    esac
+  done
+  [ "$#" -ge 4 ] && [ "$3" = -- ] || usage
+  name="$1"; secs="$2"; shift 3
+  [ "$#" -gt 0 ] || usage
+  case "$name" in
+    ''|[!A-Za-z0-9]*|*[!A-Za-z0-9_.-]*)
+      fail "NAME must be 1-64 characters: alphanumeric, then alphanumerics, '.', '_' or '-'" ;;
+  esac
+  [ "${#name}" -le 64 ] || fail "NAME must be at most 64 characters"
+  positive_integer "$secs" || fail "SECS must be a positive integer"
+  positive_integer "$tasks" || fail "--tasks must be a positive integer"
+  [ -n "$mem" ] || fail "--mem must not be empty"
+  command -v systemd-run >/dev/null 2>&1 || fail "systemd-run --user is unavailable (systemd-run not found)"
+
+  secs="$((10#$secs))"; tasks="$((10#$tasks))"
+  cwd="$(pwd -P)" || fail "cannot determine the working directory"
+  safe="${name//[^A-Za-z0-9_.-]/-}"
+  unit="agent-${safe}-$(date +%s)-$$.service"
+  if [ -n "$dir" ]; then jobdir="$dir"; else
+    base="${AGENT_JOBS_DIR:-$HOME/.cache/concrete-agent-jobs}"
+    jobdir="$base/$unit"
+  fi
+  while [ "${#jobdir}" -gt 1 ] && [ "${jobdir%/}" != "$jobdir" ]; do jobdir="${jobdir%/}"; done
+  case "$jobdir" in */*) parent="${jobdir%/*}"; parent="${parent:-/}" ;; *) parent=. ;; esac
+  mkdir -p -- "$parent" || fail "cannot create job directory parent: $parent"
+  mkdir -- "$jobdir" || fail "job directory already exists or cannot be created: $jobdir"
+  jobdir="$(CDPATH= cd "$jobdir" && pwd -P)" || fail "cannot resolve job directory"
+  script="$(self_dir)/launch.sh"
+  printf '%s\n' "$unit" > "$jobdir/unit" || exit 2
+  printf '%s\n' "$(( $(date +%s) + secs ))" > "$jobdir/deadline" || exit 2
+  printf '%q ' "$@" > "$jobdir/cmd" || exit 2
+  printf '\n' >> "$jobdir/cmd" || exit 2
+  printf '%s\0' "$@" > "$jobdir/argv" || exit 2
+
+  if ! systemd-run --user --unit="$unit" \
+      --property=MemoryMax="$mem" --property=TasksMax="$tasks" \
+      --property=RuntimeMaxSec="$secs" --property=WorkingDirectory="$cwd" \
+      --setenv=PATH="$PATH" --setenv=HOME="$HOME" \
+      --setenv=AGENT_JOB_DIR="$jobdir" --setenv=AGENT_LAUNCH_SELF="$script" \
+      /bin/bash -c 'exec /bin/bash "$$AGENT_LAUNCH_SELF" run' >/dev/null; then
+    fail "systemd-run --user is unavailable or could not start $unit"
+  fi
+  printf 'UNIT=%s\nDIR=%s\nWAIT=bash %q wait %q\n' "$unit" "$jobdir" "$script" "$jobdir"
+}
+
+run_job() {
+  local dir="${AGENT_JOB_DIR:-}" rc=0 tmp=""
+  local -a argv=()
+  [ -n "$dir" ] && [ -r "$dir/argv" ] || exit 2
+  mapfile -d '' -t argv < "$dir/argv" || exit 2
+  [ "${#argv[@]}" -gt 0 ] || exit 2
+  "${argv[@]}" > "$dir/out.log" 2>&1 || rc=$?
+  tmp="$dir/.status.$$"
+  if printf '%s\n' "$rc" > "$tmp" && mv "$tmp" "$dir/status"; then
+    exit 0
+  fi
+  rm -f "$tmp"
+  exit 2
+}
+
+JOBDIR="" UNIT="" DEADLINE="" ACTION=wait DONE=0
+
+load_job() {
+  JOBDIR="$1"
+  [ -n "$JOBDIR" ] && [ -d "$JOBDIR" ] || fail "job directory not found: $JOBDIR"
+  [ -r "$JOBDIR/unit" ] && [ -r "$JOBDIR/deadline" ] || fail "job directory lacks unit or deadline: $JOBDIR"
+  IFS= read -r UNIT < "$JOBDIR/unit" || fail "cannot read $JOBDIR/unit"
+  IFS= read -r DEADLINE < "$JOBDIR/deadline" || fail "cannot read $JOBDIR/deadline"
+  case "$DEADLINE" in ''|*[!0-9]*) fail "invalid deadline in $JOBDIR/deadline" ;; esac
+  command -v systemctl >/dev/null 2>&1 || fail "systemctl is unavailable"
+}
+
+collect_unit() {
+  systemctl --user reset-failed "$UNIT" >/dev/null 2>&1 || :
+}
+
+normal_exit() {
+  local rc=""
+  IFS= read -r rc < "$JOBDIR/status" || fail "cannot read $JOBDIR/status"
+  case "$rc" in ''|*[!0-9]*) fail "invalid status in $JOBDIR/status" ;; esac
+  [ "$rc" -le 255 ] || fail "invalid status in $JOBDIR/status"
+  DONE=1
+  printf 'JOB %s ENDED status=%s\n' "$UNIT" "$rc"
+  if [ "$ACTION" = wait ] && [ -f "$JOBDIR/out.log" ]; then tail -n 40 "$JOBDIR/out.log"; fi
+  collect_unit
+  return "$rc"
+}
+
+unit_result() {
+  local result="" query_rc=0
+  result="$(systemctl --user show "$UNIT" --property=Result --value 2>&1)" || query_rc=$?
+  if [ "$query_rc" -ne 0 ]; then
+    printf 'launch.sh: cannot query systemd for %s Result (systemctl exit %s): %s\n' \
+      "$UNIT" "$query_rc" "${result:-no output}" >&2
+    return 2
+  fi
+  case "$result" in ''|success) result=unknown ;; esac
+  printf '%s\n' "$result"
+}
+
+lost_exit() {
+  local reason="" tmp=""
+  DONE=1
+  if [ -f "$JOBDIR/result" ]; then
+    IFS= read -r reason < "$JOBDIR/result" || fail "cannot read $JOBDIR/result"
+  else
+    reason="$(unit_result)" || return 2
+    tmp="$JOBDIR/.result.$$"
+    if printf '%s\n' "$reason" > "$tmp" && mv "$tmp" "$JOBDIR/result"; then :
+    else rm -f "$tmp"; fi
+    collect_unit
+  fi
+  printf 'JOB %s ENDED without a status (killed, timed out or OOM): %s\n' "$UNIT" "$reason"
+  return 125
+}
+
+inspect() {
+  local state="" query_rc=0 now="" grace="${AGENT_WAIT_GRACE:-120}"
+  DONE=0
+  if [ -f "$JOBDIR/status" ]; then normal_exit; return "$?"; fi
+
+  state="$(systemctl --user is-active "$UNIT" 2>&1)" || query_rc=$?
+  case "$state" in
+    active|activating|reloading|deactivating)
+      now="$(date +%s)"
+      case "$grace" in ''|*[!0-9]*) fail "AGENT_WAIT_GRACE must be a non-negative integer" ;; esac
+      if [ "$now" -gt "$((DEADLINE + 10#$grace))" ]; then
+        DONE=1
+        printf 'JOB %s STILL RUNNING past its deadline\n' "$UNIT"
+        return 124
+      fi
+      if [ "$ACTION" = status ]; then printf 'JOB %s RUNNING\n' "$UNIT"; fi
+      return 0 ;;
+    inactive|unknown|failed)
+      if [ -f "$JOBDIR/status" ]; then normal_exit; return "$?"; fi
+      lost_exit
+      return "$?" ;;
+    *)
+      fail "cannot query systemd for $UNIT (systemctl exit $query_rc): ${state:-no output}" ;;
+  esac
+}
+
+watch() {
+  local interval="${AGENT_WAIT_INTERVAL:-10}" rc=0
+  case "$interval" in ''|*[!0-9]*) fail "AGENT_WAIT_INTERVAL must be a positive integer" ;; esac
+  [ "$interval" -gt 0 ] || fail "AGENT_WAIT_INTERVAL must be a positive integer"
+  load_job "$1"
+  while :; do
+    inspect; rc=$?
+    [ "$DONE" -eq 1 ] && return "$rc"
+    [ "$ACTION" = wait ] || return 0
+    sleep "$interval"
+  done
+}
+
+[ "$#" -ge 1 ] || usage
+ACTION="$1"; shift
+case "$ACTION" in
+  start) start "$@" ;;
+  run) [ "$#" -eq 0 ] || usage; run_job ;;
+  wait) [ "$#" -eq 1 ] || usage; watch "$1" ;;
+  status) [ "$#" -eq 1 ] || usage; watch "$1" ;;
+  *) usage ;;
+esac
+#!/usr/bin/env bash
+# AGENT JOBS HAVE ONE ATTEMPT AND A BOUNDED WATCHER.
+#
+# CI has no systemd user session. These controls put systemd-run and systemctl
+# stubs on PATH. The stubs reproduce dollar/percent command expansion, runtime
+# kills, --collect unloading, result queries and collection, and user-bus errors.
+# Controls cover exact argv bytes, the status/inactive race, retained timeout
+# results, exclusive job directories, eval-safe WAIT output, normal statuses 0
+# and 3, lost units (125), deadline overruns (124), query failures (2), resource
+# properties, logs, one attempt, and input/environment refusals. Every launcher
+# invocation is bounded. AGENT_LAUNCHER selects a mutant for mutation testing.
+set -uo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh" || exit 2
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+cd "$ROOT_DIR" || exit 2
+LAUNCH="${AGENT_LAUNCHER:-$ROOT_DIR/scripts/agent/launch.sh}"
+[ -f "$LAUNCH" ] || { echo "FATAL: $LAUNCH missing" >&2; exit 2; }
+TMP="$(mktemp -d)" || exit 2
+STUB_STATE_DIR="$TMP/systemd"
+STUB_RELEASE_DIR="$TMP/release"
+mkdir -p "$STUB_STATE_DIR" "$STUB_RELEASE_DIR" "$TMP/bin" "$TMP/empty" "$TMP/work"
+export STUB_STATE_DIR STUB_RELEASE_DIR
+export AGENT_JOBS_DIR="$TMP/jobs" AGENT_WAIT_INTERVAL=1 AGENT_WAIT_GRACE=1
+PASS=0; FAIL=0
+ok(){ echo "  ok   $1"; PASS=$((PASS+1)); }
+no(){ echo "  FAIL $1"; FAIL=$((FAIL+1)); }
+
+cleanup() {
+  local d
+  if [ -d "$STUB_STATE_DIR" ]; then
+    for d in "$STUB_STATE_DIR"/*; do
+      [ -d "$d" ] && touch "$STUB_RELEASE_DIR/${d##*/}"
+    done
+  fi
+  rm -rf "$TMP"
+}
+trap cleanup EXIT
+
+cat > "$TMP/bin/systemd-run" <<'STUB'
+#!/usr/bin/env bash
+set -u
+raw="$STUB_STATE_DIR/args.$$"
+printf '%s\n' "$@" > "$raw" || exit 2
+unit="" workdir="$PWD" job_path="$PATH" job_home="$HOME" job_dir="" launch_self=""
+runtime=30 collect=0
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --user) shift ;;
+    --collect) collect=1; shift ;;
+    --unit=*) unit="${1#--unit=}"; shift ;;
+    --property=WorkingDirectory=*) workdir="${1#--property=WorkingDirectory=}"; shift ;;
+    --property=RuntimeMaxSec=*) runtime="${1#--property=RuntimeMaxSec=}"; shift ;;
+    --property=*) shift ;;
+    --setenv=PATH=*) job_path="${1#--setenv=PATH=}"; shift ;;
+    --setenv=HOME=*) job_home="${1#--setenv=HOME=}"; shift ;;
+    --setenv=AGENT_JOB_DIR=*) job_dir="${1#--setenv=AGENT_JOB_DIR=}"; shift ;;
+    --setenv=AGENT_LAUNCH_SELF=*) launch_self="${1#--setenv=AGENT_LAUNCH_SELF=}"; shift ;;
+    --setenv=*) shift ;;
+    *) break ;;
+  esac
+done
+[ -n "$unit" ] && [ "$#" -gt 0 ] || { rm -f "$raw"; exit 2; }
+state="$STUB_STATE_DIR/$unit"
+mkdir -p "$state" || exit 2
+mv "$raw" "$state/args" || exit 2
+printf '%s\n' "$job_dir" > "$state/jobdir"
+: > "$state/active"
+(
+  export PATH="$job_path" HOME="$job_home" STUB_UNIT="$unit"
+  export AGENT_JOB_DIR="$job_dir" AGENT_LAUNCH_SELF="$launch_self"
+  expand_arg() {
+    local rest="$1" out="" prefix="" name=""
+    while [[ "$rest" == *[\$%]* ]]; do
+      prefix="${rest%%[\$%]*}"
+      out+="$prefix"
+      rest="${rest:${#prefix}}"
+      case "$rest" in
+        \$\$*) out+='$'; rest="${rest:2}" ;;
+        %%*) out+='%'; rest="${rest:2}" ;;
+        %n*) out+="$unit"; rest="${rest:2}" ;;
+        \$\{*)
+          name="${rest:2}"
+          if [[ "$name" == *'}'* ]]; then
+            prefix="${name%%\}*}"
+            if [[ "$prefix" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
+              out+="${!prefix-}"; rest="${name:${#prefix}+1}"
+            else out+='$'; rest="${rest:1}"; fi
+          else out+='$'; rest="${rest:1}"; fi ;;
+        \$[A-Za-z_]*)
+          name="${rest:1}"; prefix="${name%%[^A-Za-z0-9_]*}"
+          out+="${!prefix-}"; rest="${rest:${#prefix}+1}" ;;
+        \$[0-9]*)
+          name="${rest:1}"; prefix="${name%%[^0-9]*}"
+          rest="${rest:${#prefix}+1}" ;;
+        \$*) out+='$'; rest="${rest:1}" ;;
+        %*) out+='%'; rest="${rest:1}" ;;
+      esac
+    done
+    printf '%s' "$out$rest"
+  }
+  expanded=()
+  for arg in "$@"; do expanded+=("$(expand_arg "$arg")"); done
+  rc=1
+  if cd "$workdir"; then
+    "${expanded[@]}" & command_pid=$!
+    (
+      sleep "$runtime"
+      if kill -0 "$command_pid" 2>/dev/null; then
+        : > "$state/timed-out"
+        kill -TERM "$command_pid" 2>/dev/null || :
+      fi
+    ) & watchdog_pid=$!
+    wait "$command_pid"; rc=$?
+    kill "$watchdog_pid" 2>/dev/null || :
+    wait "$watchdog_pid" 2>/dev/null || :
+  fi
+  printf '%s\n' "$rc" > "$state/exit"
+  if [ -f "$state/timed-out" ]; then result=timeout
+  elif [ "$rc" -eq 0 ]; then result=success
+  else result=exit-code; fi
+  printf '%s\n' "$result" > "$state/result"
+  rm -f "$state/active"
+  if [ "$collect" -eq 1 ]; then rm -f "$state/result"; : > "$state/collected"; fi
+  exit "$rc"
+) &
+printf '%s\n' "$!" > "$state/pid"
+exit 0
+STUB
+cat > "$TMP/bin/systemctl" <<'STUB'
+#!/usr/bin/env bash
+set -u
+[ "${1:-}" = --user ] || exit 2
+action="${2:-}"; unit="${3:-}"
+state="$STUB_STATE_DIR/$unit"
+case "$action" in
+  is-active)
+    if [ -f "$state/no-bus" ]; then
+      echo 'Failed to connect to bus: No medium found' >&2
+      exit 1
+    fi
+    [ ! -f "$state/no-bus-empty" ] || exit 1
+    if [ -f "$state/failed-on-is-active" ]; then echo failed; exit 1; fi
+    if [ -f "$state/finish-on-is-active" ]; then
+      jobdir="$(cat "$state/jobdir")"
+      tmp="$jobdir/.status.systemd"
+      cp "$state/finish-on-is-active" "$tmp" && mv "$tmp" "$jobdir/status"
+      rm -f "$state/active"
+    fi
+    if [ -f "$state/active" ]; then echo active; exit 0; fi
+    echo inactive; exit 1 ;;
+  show)
+    if [ -f "$state/show-no-bus" ]; then
+      echo 'Failed to connect to bus: No medium found' >&2
+      exit 1
+    fi
+    [ ! -f "$state/show-no-bus-empty" ] || exit 1
+    [ -r "$state/result" ] && cat "$state/result"
+    exit 0 ;;
+  reset-failed)
+    : > "$state/reset-failed"
+    [ -f "$state/active" ] || rm -f "$state/result"
+    exit 0 ;;
+  *) exit 2 ;;
+esac
+STUB
+chmod +x "$TMP/bin/systemd-run" "$TMP/bin/systemctl"
+export PATH="$TMP/bin:$PATH"
+BOUNDED_PARENT="$TMP"
+source "$ROOT_DIR/scripts/checks/lib/bounded.sh" || exit 2
+
+OUT="" ERR="" RC=0
+capture() { # budget command...; leave exact streams and status in OUT, ERR, RC
+  local budget="$1"
+  shift
+  OUT="$(bounded_run "$budget" -- "$@" 2>"$TMP/stderr")"
+  RC=$?
+  ERR="$(cat "$TMP/stderr")"
+  if bounded_is_incomplete "$RC"; then no "INCOMPLETE: $*"; fi
+}
+expect_rc() { [ "$RC" -eq "$1" ] && ok "$2" || { no "$2: expected exit $1, got $RC"; printf '%s\n' "$OUT" "$ERR" | sed 's/^/      /'; }; }
+expect_out() { [ "$OUT" = "$1" ] && ok "$2" || { no "$2: unexpected stdout"; printf 'expected:\n%s\nactual:\n%s\n' "$1" "$OUT" | sed 's/^/      /'; }; }
+file_line() { # file exact-line label
+  if has_match -F -x -- "$2" < "$1"; then ok "$3"; else no "$3 (missing exact line: $2)"; fi
+}
+parse_start() {
+  UNIT="$(printf '%s\n' "$OUT" | sed -n 's/^UNIT=//p')"
+  JOBDIR="$(printf '%s\n' "$OUT" | sed -n 's/^DIR=//p')"
+  WAIT="$(printf '%s\n' "$OUT" | sed -n 's/^WAIT=//p')"
+  EXPECTED="$(printf 'UNIT=%s\nDIR=%s\nWAIT=bash %q wait %q' "$UNIT" "$JOBDIR" "$LAUNCH" "$JOBDIR")"
+}
+release_job() { # release a stub-blocked command and observe its wrapper finishing
+  local n=0
+  touch "$STUB_RELEASE_DIR/$UNIT"
+  while { [ ! -f "$JOBDIR/status" ] || [ -f "$STUB_STATE_DIR/$UNIT/active" ]; } && [ "$n" -lt 50 ]; do
+    sleep 0.1; n=$((n+1))
+  done
+  [ -f "$JOBDIR/status" ] && [ ! -f "$STUB_STATE_DIR/$UNIT/active" ] \
+    && ok "$1 cleaned up" || no "$1 did not finish after its release"
+}
+unit_exit_line() { # exact-line label, after the stub records the job's own exit
+  local n=0
+  while [ ! -f "$STUB_STATE_DIR/$UNIT/exit" ] && [ "$n" -lt 50 ]; do
+    sleep 0.1; n=$((n+1))
+  done
+  file_line "$STUB_STATE_DIR/$UNIT/exit" "$1" "$2"
+}
+
+echo "=== start: exact output, properties and one job directory ==="
+capture 10 bash -n "$LAUNCH"
+expect_rc 0 "launch.sh parses"
+expect_out "" "bash -n has no output"
+capture 10 bash -c 'cd "$1" && bash "$2" start writer 7 -- bash -c '\''printf "cwd=%s\n" "$PWD"; i=1; while [ "$i" -le 45 ]; do printf "line-%s\n" "$i"; i=$((i+1)); done'\''' _ "$TMP/work" "$LAUNCH"
+expect_rc 0 "a successful start"
+parse_start
+expect_out "$EXPECTED" "start prints exactly UNIT, DIR and absolute WAIT"
+[ -n "$UNIT" ] && [ -n "$JOBDIR" ] && [ "$(cat "$JOBDIR/unit")" = "$UNIT" ] \
+  && ok "unit file records the unique unit" || no "unit file is missing or wrong"
+case "$(cat "$JOBDIR/deadline")" in ''|*[!0-9]*) no "deadline is not an epoch second" ;; *) ok "deadline is an epoch second" ;; esac
+has_match -F 'line-%s' < "$JOBDIR/cmd" && ok "cmd records the command line" || no "cmd does not record the command"
+ARGS="$STUB_STATE_DIR/$UNIT/args"
+file_line "$ARGS" --user "systemd-run uses the user manager"
+if has_match -F -x -- --collect < "$ARGS"; then no "--collect must not unload the result"; else ok "--collect is absent"; fi
+file_line "$ARGS" "--unit=$UNIT" "the sanitised unique unit is passed"
+file_line "$ARGS" --property=MemoryMax=8G "MemoryMax defaults to 8G"
+file_line "$ARGS" --property=TasksMax=1024 "TasksMax defaults to 1024"
+file_line "$ARGS" --property=RuntimeMaxSec=7 "RuntimeMaxSec is SECS"
+file_line "$ARGS" "--property=WorkingDirectory=$TMP/work" "WorkingDirectory is the caller's directory"
+file_line "$ARGS" "--setenv=PATH=$PATH" "PATH is passed"
+file_line "$ARGS" "--setenv=HOME=$HOME" "HOME is passed"
+
+echo "=== wait: normal status and the last 40 log lines ==="
+capture 15 bash "$LAUNCH" wait "$JOBDIR"
+expect_rc 0 "wait returns 0 for a successful job"
+EXPECTED="JOB $UNIT ENDED status=0"
+i=6; while [ "$i" -le 45 ]; do EXPECTED="$EXPECTED
+line-$i"; i=$((i+1)); done
+expect_out "$EXPECTED" "success prints its state and exactly log lines 6-45"
+[ "$(sed -n '1p' "$JOBDIR/out.log")" = "cwd=$TMP/work" ] \
+  && ok "the wrapped command ran in the caller's directory" || no "the wrapped command ran elsewhere"
+[ "$(wc -l < "$JOBDIR/out.log" | tr -d ' ')" -eq 46 ] \
+  && ok "out.log retains the full stdout and stderr" || no "out.log is incomplete"
+[ -z "$(find "$JOBDIR" -name '.status.*' -print)" ] \
+  && ok "status was moved into place without a temporary file left" || no "status temporary file remains"
+capture 10 bash "$LAUNCH" status "$JOBDIR"
+expect_rc 0 "status returns the successful job's status"
+expect_out "JOB $UNIT ENDED status=0" "status prints one line and does not wait or print the log"
+
+echo "=== a non-zero command runs once and returns its status ==="
+capture 10 bash "$LAUNCH" start --mem 2G --tasks 17 fails 5 -- bash -c 'echo attempt >> "$AGENT_JOBS_DIR/attempts"; echo failed; exit 3'
+expect_rc 0 "start of the exit-3 job"
+parse_start
+expect_out "$EXPECTED" "custom start also prints exactly three lines"
+file_line "$STUB_STATE_DIR/$UNIT/args" --property=MemoryMax=2G "--mem overrides MemoryMax"
+file_line "$STUB_STATE_DIR/$UNIT/args" --property=TasksMax=17 "--tasks overrides TasksMax"
+capture 15 bash "$LAUNCH" wait "$JOBDIR"
+expect_rc 3 "wait returns the command's exit 3"
+expect_out "JOB $UNIT ENDED status=3
+failed" "exit-3 output is its state and log"
+unit_exit_line 0 "the exit-3 unit exits 0 after recording status=3"
+[ "$(wc -l < "$AGENT_JOBS_DIR/attempts" | tr -d ' ')" -eq 1 ] \
+  && ok "a failed writer has exactly one attempt" || no "the failed writer was retried"
+capture 10 bash "$LAUNCH" status "$JOBDIR"
+expect_rc 3 "status also returns exit 3"
+expect_out "JOB $UNIT ENDED status=3" "status of exit 3 is one line"
+
+echo "=== failure to record status makes the job itself fail ==="
+capture 10 bash "$LAUNCH" start unrecorded 30 -- bash -c 'mkdir "$AGENT_JOB_DIR/.status.$PPID"'
+expect_rc 0 "start of the status-write-failure job"
+parse_start
+capture 15 bash "$LAUNCH" wait "$JOBDIR"
+expect_rc 125 "an unrecorded normal exit is a lost unit"
+expect_out "JOB $UNIT ENDED without a status (killed, timed out or OOM): exit-code" "the unrecorded job reports the unit failure"
+unit_exit_line 2 "a status write failure makes the job exit 2"
+
+echo "=== a unit lost without status is 125 ==="
+capture 10 bash "$LAUNCH" start vanished 30 -- bash -c 'while [ ! -e "$STUB_RELEASE_DIR/$STUB_UNIT" ]; do sleep 0.1; done'
+expect_rc 0 "start of the lost-unit job"
+parse_start
+rm -f "$STUB_STATE_DIR/$UNIT/active"
+printf 'killed\n' > "$STUB_STATE_DIR/$UNIT/result"
+capture 10 bash "$LAUNCH" wait "$JOBDIR"
+expect_rc 125 "a lost unit returns 125"
+expect_out "JOB $UNIT ENDED without a status (killed, timed out or OOM): killed" "lost-unit output includes systemctl's result"
+release_job "the lost-unit fixture"
+
+for reason in success empty; do
+  echo "=== an unloaded unit's $reason result is unknown ==="
+  capture 10 bash "$LAUNCH" start "unloaded-$reason" 30 -- bash -c 'while [ ! -e "$STUB_RELEASE_DIR/$STUB_UNIT" ]; do sleep 0.1; done'
+  expect_rc 0 "start of the unloaded-$reason-result job"
+  parse_start
+  rm -f "$STUB_STATE_DIR/$UNIT/active"
+  if [ "$reason" = success ]; then printf 'success\n' > "$STUB_STATE_DIR/$UNIT/result"; else rm -f "$STUB_STATE_DIR/$UNIT/result"; fi
+  capture 10 bash "$LAUNCH" wait "$JOBDIR"
+  expect_rc 125 "an unloaded $reason result returns 125"
+  expect_out "JOB $UNIT ENDED without a status (killed, timed out or OOM): unknown" "unloaded Result=$reason is reported as unknown"
+  release_job "the unloaded-$reason-result fixture"
+done
+
+for failure in loud silent; do
+  echo "=== a $failure Result query failure is retryable ==="
+  capture 10 bash "$LAUNCH" start "show-$failure" 30 -- bash -c 'while [ ! -e "$STUB_RELEASE_DIR/$STUB_UNIT" ]; do sleep 0.1; done'
+  expect_rc 0 "start of the $failure show-failure job"
+  parse_start
+  rm -f "$STUB_STATE_DIR/$UNIT/active"
+  printf 'killed\n' > "$STUB_STATE_DIR/$UNIT/result"
+  : > "$STUB_STATE_DIR/$UNIT/failed-on-is-active"
+  if [ "$failure" = loud ]; then
+    : > "$STUB_STATE_DIR/$UNIT/show-no-bus"
+  else
+    : > "$STUB_STATE_DIR/$UNIT/show-no-bus-empty"
+  fi
+  capture 10 bash "$LAUNCH" wait "$JOBDIR"
+  expect_rc 2 "a $failure show failure after is-active=failed returns 2"
+  expect_out "" "a $failure show failure has no job result on stdout"
+  has_match -F 'cannot query systemd' <<<"$ERR" \
+    && ok "a $failure show failure has a clear error" || no "$failure show failure is unclear: $ERR"
+  if [ "$failure" = loud ]; then
+    has_match -F 'Failed to connect to bus' <<<"$ERR" \
+      && ok "a loud show failure includes systemctl's bus error" || no "loud show error is missing: $ERR"
+  else
+    has_match -F 'no output' <<<"$ERR" \
+      && ok "a silent show failure is identified" || no "silent show failure is unclear: $ERR"
+  fi
+  [ ! -e "$JOBDIR/result" ] \
+    && ok "a $failure show failure writes no result cache" || no "a $failure show failure cached a result"
+  [ ! -e "$STUB_STATE_DIR/$UNIT/reset-failed" ] \
+    && ok "a $failure show failure does not collect the unit" || no "a $failure show failure collected the unit"
+  rm -f "$STUB_STATE_DIR/$UNIT/show-no-bus" "$STUB_STATE_DIR/$UNIT/show-no-bus-empty"
+  capture 10 bash "$LAUNCH" wait "$JOBDIR"
+  expect_rc 125 "a wait after the $failure show failure returns 125"
+  expect_out "JOB $UNIT ENDED without a status (killed, timed out or OOM): killed" \
+    "the wait after the $failure show failure reads the real Result"
+  file_line "$JOBDIR/result" killed "the recovered $failure show result is cached"
+  release_job "the $failure show-failure fixture"
+done
+
+echo "=== still active past deadline plus grace is 124 ==="
+capture 10 bash "$LAUNCH" start overrun 30 -- bash -c 'while [ ! -e "$STUB_RELEASE_DIR/$STUB_UNIT" ]; do sleep 0.1; done'
+expect_rc 0 "start of the overrun job"
+parse_start
+capture 10 bash "$LAUNCH" status "$JOBDIR"
+expect_rc 0 "status of a running job is a successful observation"
+expect_out "JOB $UNIT RUNNING" "status does not wait for a running job"
+printf '1\n' > "$JOBDIR/deadline"
+capture 10 bash "$LAUNCH" wait "$JOBDIR"
+expect_rc 124 "deadline plus grace returns 124"
+expect_out "JOB $UNIT STILL RUNNING past its deadline" "overrun output is INCOMPLETE, never a pass"
+release_job "the overrun fixture"
+
+echo "=== argv survives systemd dollar and percent expansion ==="
+literal='prefix ${HOME} $1 %n and a space'
+capture 10 bash "$LAUNCH" start literal 10 -- bash -c 'printf %s "$1"' _ "$literal"
+expect_rc 0 "start of the literal-argv job"
+parse_start
+capture 15 bash "$LAUNCH" wait "$JOBDIR"
+expect_rc 0 "literal-argv job exits normally"
+expect_out "JOB $UNIT ENDED status=0
+$literal" 'an argument containing ${HOME}, $1, %n and a space reaches the job byte for byte'
+[ "$(cat "$JOBDIR/out.log")" = "$literal" ] && ok "out.log preserves the exact literal bytes" || no "out.log corrupted the literal argument"
+
+echo "=== timeout result is read before explicit collection ==="
+capture 10 bash "$LAUNCH" start timeout-result 1 -- bash -c 'while [ ! -e "$STUB_RELEASE_DIR/$STUB_UNIT" ]; do sleep 0.1; done'
+expect_rc 0 "start of the timed-out job"
+parse_start
+capture 15 bash "$LAUNCH" wait "$JOBDIR"
+expect_rc 125 "a systemd timeout without status returns 125"
+expect_out "JOB $UNIT ENDED without a status (killed, timed out or OOM): timeout" "125 reports the retained timeout result, not unknown"
+[ "$(cat "$JOBDIR/result")" = timeout ] && ok "the result is cached in the job directory" || no "the timeout result was not cached"
+[ -f "$STUB_STATE_DIR/$UNIT/reset-failed" ] && ok "reset-failed collects only after the result was read" || no "the unit was not explicitly collected"
+[ ! -e "$STUB_STATE_DIR/$UNIT/result" ] && ok "collection removes the stub's result" || no "the stub's collected result remains"
+capture 10 bash "$LAUNCH" status "$JOBDIR"
+expect_rc 125 "a second status still returns 125 after collection"
+expect_out "JOB $UNIT ENDED without a status (killed, timed out or OOM): timeout" "a second status reads the cached timeout result"
+capture 10 bash "$LAUNCH" wait "$JOBDIR"
+expect_rc 125 "a second wait still returns 125 after collection"
+expect_out "JOB $UNIT ENDED without a status (killed, timed out or OOM): timeout" "a second wait reads the cached timeout result"
+touch "$STUB_RELEASE_DIR/$UNIT" && ok "the timed-out fixture's waiter is released" || no "cannot release the timed-out fixture's waiter"
+
+echo "=== status appearing at the inactive observation wins the TOCTOU race ==="
+capture 10 bash "$LAUNCH" start race 30 -- bash -c 'while [ ! -e "$STUB_RELEASE_DIR/$STUB_UNIT" ]; do sleep 0.1; done'
+expect_rc 0 "start of the status-race job"
+parse_start
+printf '0\n' > "$STUB_STATE_DIR/$UNIT/finish-on-is-active"
+capture 10 bash "$LAUNCH" wait "$JOBDIR"
+expect_rc 0 "a status written before is-active returns is not declared lost"
+expect_out "JOB $UNIT ENDED status=0" "inactive triggers a second status-file check"
+release_job "the status-race fixture"
+
+echo "=== job directories are reserved exclusively ==="
+capture 10 bash "$LAUNCH" start --dir "$TMP/exclusive" exclusive 30 -- bash -c 'while [ ! -e "$STUB_RELEASE_DIR/$STUB_UNIT" ]; do sleep 0.1; done'
+expect_rc 0 "start in a new explicit job directory"
+parse_start
+before="$(cd "$JOBDIR" && sha256sum unit deadline cmd argv)"
+capture 10 bash "$LAUNCH" start --dir "$TMP/exclusive" duplicate 30 -- true
+expect_rc 2 "a second start on the same directory is refused"
+expect_out "" "duplicate directory refusal has no stdout"
+has_match -F 'job directory already exists' <<<"$ERR" && ok "duplicate directory has a clear error" || no "duplicate directory error is unclear: $ERR"
+after="$(cd "$JOBDIR" && sha256sum unit deadline cmd argv)"
+[ "$after" = "$before" ] && ok "the refused start leaves the first job's files untouched" || no "the refused start changed the first job's files"
+release_job "the exclusive-directory fixture"
+
+echo "=== an explicit job directory may have a trailing slash ==="
+capture 10 bash "$LAUNCH" start --dir "$TMP/new/" trailing 10 -- true
+expect_rc 0 "start in a new explicit directory with a trailing slash"
+parse_start
+expect_out "$EXPECTED" "trailing-slash start prints exactly three lines"
+[ "$JOBDIR" = "$TMP/new" ] && ok "the trailing slash is stripped from the recorded directory" || no "unexpected trailing-slash job directory: $JOBDIR"
+capture 15 bash "$LAUNCH" wait "$JOBDIR"
+expect_rc 0 "wait succeeds in the trailing-slash directory"
+expect_out "JOB $UNIT ENDED status=0" "the trailing-slash job completes normally"
+
+echo "=== the printed WAIT value is safe to eval ==="
+special="$TMP/job ; touch pwned ; #"
+capture 10 bash "$LAUNCH" start --dir "$special" quoted 10 -- true
+expect_rc 0 "start in a directory with spaces and shell metacharacters"
+parse_start
+expect_out "$EXPECTED" "both WAIT paths are shell-quoted with printf %q"
+capture 15 bash -c 'cd "$1" && eval "$2"' _ "$TMP/work" "$WAIT"
+expect_rc 0 "eval of the printed WAIT value waits on the right job"
+expect_out "JOB $UNIT ENDED status=0" "eval prints the intended job result"
+[ ! -e "$TMP/work/pwned" ] && ok "eval executes nothing else" || no "eval injected the pwned command"
+
+echo "=== systemd query failures are not lost units ==="
+capture 10 bash "$LAUNCH" start no-bus 30 -- bash -c 'while [ ! -e "$STUB_RELEASE_DIR/$STUB_UNIT" ]; do sleep 0.1; done'
+expect_rc 0 "start of the no-user-bus job"
+parse_start
+: > "$STUB_STATE_DIR/$UNIT/no-bus"
+capture 10 bash "$LAUNCH" wait "$JOBDIR"
+expect_rc 2 "a user-bus query error returns 2, not 125"
+expect_out "" "a user-bus query error has no job result on stdout"
+has_match -F 'cannot query systemd' <<<"$ERR" && has_match -F 'Failed to connect to bus' <<<"$ERR" \
+  && ok "the query error includes systemctl's bus error" || no "the query error is unclear: $ERR"
+rm -f "$STUB_STATE_DIR/$UNIT/no-bus"
+: > "$STUB_STATE_DIR/$UNIT/no-bus-empty"
+capture 10 bash "$LAUNCH" wait "$JOBDIR"
+expect_rc 2 "a silent user-bus query failure also returns 2"
+has_match -F 'no output' <<<"$ERR" && ok "a silent query failure is identified" || no "silent query failure is unclear: $ERR"
+release_job "the no-user-bus fixture"
+
+echo "=== invalid input and unavailable systemd are exit 2 ==="
+capture 10 bash "$LAUNCH" start bad/name 1 -- true
+expect_rc 2 "an invalid NAME is refused"
+expect_out "" "invalid NAME has no stdout"
+has_match -F 'NAME must' <<<"$ERR" && ok "invalid NAME explains the error on stderr" || no "invalid NAME has no clear stderr"
+capture 10 bash "$LAUNCH" start valid 0 -- true
+expect_rc 2 "zero SECS is refused"
+has_match -F 'SECS must be a positive integer' <<<"$ERR" && ok "zero SECS explains the error" || no "zero SECS has no clear stderr"
+capture 10 bash "$LAUNCH" start valid nope -- true
+expect_rc 2 "non-numeric SECS is refused"
+has_match -F 'SECS must be a positive integer' <<<"$ERR" && ok "non-numeric SECS explains the error" || no "non-numeric SECS has no clear stderr"
+capture 10 env PATH="$TMP/empty" /bin/bash "$LAUNCH" start valid 1 -- true
+expect_rc 2 "missing systemd-run is refused"
+expect_out "" "missing systemd-run has no stdout"
+[ "$ERR" = 'launch.sh: systemd-run --user is unavailable (systemd-run not found)' ] \
+  && ok "missing systemd-run has the exact clear error" || no "unexpected missing-systemd-run stderr: $ERR"
+
+echo
+bounded_gate_status || FAIL=$((FAIL+1))
+echo "check_agent_launch: PASS=$PASS FAIL=$FAIL"
+[ "$FAIL" -eq 0 ]
+
+exec
+/bin/bash -lc 'cat AGENTS.md changelog.d/2026-11-08-agent-launcher.md' in /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/codexfull/00feab7a87f3890c785bf050b40493f7b4a54ff3/tree
+ succeeded in 0ms:
+# Agent and contributor workflow
+
+Status: operational procedure. How work is done in this repository: the agent playbooks, the
+rules they share, and [concurrent work](#concurrent-work-one-worktree-per-writer) (one worktree per
+writer, the server gate runs, publishing). It absorbed `CONCURRENT_WORK.md` on 2026-10-29. The
+tool manuals it points to stay separate: [LANDING.md](docs/LANDING.md) (landing trains),
+[REVIEW.md](docs/REVIEW.md) (`scripts/review/review.sh`), [WORK_QUEUE.md](legacy/docs/archive/roadmap-2026-11/WORK_QUEUE.md) (the agent work
+queue), [STATUS_PAGE.md](legacy/docs/project/STATUS_PAGE.md) and [PROMOTION_PIPELINE.md](legacy/docs/project/PROMOTION_PIPELINE.md) (the
+validation stages, CI tiers and result vocabulary).
+
+**Since the legacy/ move (R-0558).** The old compiler and its gates are frozen in `legacy/` and never
+run. Where this document names a path that is not at the root (`scripts/tests/`, `scripts/gen/`,
+`docs/bugs/`, `Concrete/` and the like), it now lives under `legacy/` and describes the old
+compiler. The checks a push, CI and the train run are `scripts/checks/run.sh`. A defect in the
+spec, the proofs, the tooling or CI is a row in [ISSUES.tsv](ISSUES.tsv); `/file-bug` and `/fix-bug`
+are archived with the old bug ledger (`legacy/.claude/commands/`).
+
+## Playbooks
+
+Project playbooks live in `.claude/commands/`. Every agent session, on the laptop or the server,
+runs the same procedure by name instead of receiving a long prompt:
+
+| command | what it does |
+|---|---|
+| `/fix-bug <N or description>` | reproduce, classify, repair or contain one bug on its own branch |
+| `/roadmap-item <R-NNNN>` | carry one roadmap task to a landable candidate |
+| `/file-bug <title>` | file a new bug with `scripts/gen/new_bug.sh` |
+| `/creview` | Codex review of the branch through `scripts/review/review.sh` |
+| `/rebase` | the safe rebase onto `origin/main` |
+| `/land` | hand a validated branch to the landing train (`scripts/land/train.sh`) |
+| `/cstatus` | where this worktree, its branch, its CI and this machine stand |
+
+`/creview` and `/cstatus` carry a `c` prefix so they do not shadow Claude Code's built-in `/review`
+and `/status`; a new playbook takes a name no built-in uses.
+
+This file owns the rules the commands share. A command links here rather than restating them, so a
+rule changes in one place.
+
+## Rules
+
+**Design questions** are decided by [PHILOSOPHY.md](docs/PHILOSOPHY.md). Any important design decision is
+put to the owner by Claude or Codex, with a recommendation reasoned from docs/PHILOSOPHY.md.
+
+**Owner decisions: never decide one.** The language decisions OD1 – OD157
+([decisions.md](docs/decisions.md#owner-decisions)) are decided only by the project owner. No
+agent, orchestrator or reviewer chooses, encodes, implements or provisionally ships any side of any
+of them, inside a bug fix or anywhere else. Agents present options and a recommendation to the owner
+and wait for an explicit answer. Behaviour already on main that took a side stays as it is, recorded
+as a conflict, until the owner answers; nobody extends or reverts it meanwhile.
+- The Codex review of every fix (`scripts/review/review.sh` asks it) also answers: "does this fix
+  pick a side on any OD in docs/decisions.md?" If yes, or if the fix cannot be made without picking
+  one, stop and report to the owner; do not land it. Recording an answer the owner explicitly gave
+  is not picking a side; what the review checks then is in
+  [REVIEW.md](docs/REVIEW.md#owner-decisions-choosing-versus-recording).
+
+**Bugs.**
+- Every bug gets a structural cause and a structural owner: the design fact that let it exist, and
+  the roadmap task or pipeline stage that removes the whole class
+  ([STRUCTURAL_CLASSES.md](legacy/docs/bugs/STRUCTURAL_CLASSES.md)). A patch without them is not a fix.
+- To file a bug, run `scripts/gen/new_bug.sh`, which writes its record and runs the ledger
+  generator. To log a change, add a `changelog.d/` fragment
+  ([changelog.d/README.md](legacy/changelog.d/README.md)). Never hand-edit a generated view (the bug
+  lists, the class table's bugs column, the generated bug dashboard, `CHANGELOG.md`,
+  `Concrete/BuildIdentity.lean`); see [scripts/tests/README.md](legacy/scripts/tests/README.md),
+  "Shared ledgers".
+- Each bug's compiler area is derived from its fix commits ([AREAS.md](legacy/docs/bugs/AREAS.md);
+  `python3 scripts/gen/bug_ledger.py report` for the stage, class, month, silent, how-found and
+  time-to-fix tables, `--json` or `--sqlite PATH` for queries). Name the bug in the subject of each
+  commit that fixes it (`bug NNN: ...`), and after committing a fix rerun
+  `scripts/gen/refresh_generated.sh` and commit the regenerated AREAS.md. Add an `area:` line to a
+  record only when the record shows the derived area is wrong
+  ([README.md](legacy/docs/bugs/README.md#bug-areas)); never fill areas in by hand otherwise.
+- For `compiler: new`, a silent defect (wrong code, unsound claim) is stopped at once by repair
+  or fail-closed containment; a loud one is filed, pinned and owned. Legacy-compiler defects
+  are recorded against `legacy-compiler-final`, never repaired, under
+  [ROADMAP's defect disposition and frozen-compiler rule](ROADMAP.md#defect-disposition-rule).
+
+**Who works on what** (owner, 2026-11-08, [decision](docs/decisions.md#decided-2026-11-08-eleven)).
+- Claude's quota goes to the critical path: the spec, slice 0 and the front end. Mechanical work
+  goes to Codex and Kimi as writers.
+- One writer edits `docs/decisions.md` and `ROADMAP.md` at a time; other workers send that writer
+  their records instead of editing those files.
+
+**Branches.**
+- Every branch's full clone is `~/projects/clones/<branch>`, removed after the branch lands (owner,
+  2026-11-08; R-0619).
+- One bug or one rule per branch, in its own worktree (`scripts/worktree-new.sh`,
+  [concurrent work](#concurrent-work-one-worktree-per-writer)). This applies to all agent work now, not only once
+  R-0545 closes. A branch that changes a language rule lands first and stays small; work that
+  depends on it waits or rebases onto it.
+- Rebase onto `origin/main` after every landing (`/rebase`), not only before your own landing, so a
+  conflict or a changed rule shows up while the branch is small.
+- Commit each validated slice. Push the branch to `wip/<branch>` at least every 5 minutes of work
+  (`git push origin HEAD:refs/heads/wip/<branch>`); the hook's wip tier only scans for conflict
+  markers.
+- Never push to `main`, `ci/*` or the remote `fork`. Landings go to both `origin` and
+  `lambdaclass`, only through the landing script (`scripts/land/train.sh`).
+  `train.sh check` runs the checks before the push, and the push runs the root hook's full set again;
+  the train's push to `ci/<name>` and both pushes of `land` are read back with `ls-remote` and
+  retried when they did not move the ref (GitHub drops the connection during long hooks); `land` checks that both remotes are at
+  the head ([LANDING.md](docs/LANDING.md#land)).
+- After any push of your own whose hook ran gates, check that the remote ref moved
+  (`git ls-remote origin refs/heads/<branch>`) and push again if it did not.
+
+**Validation.**
+- Locally, run only the impact-selected gates (pre-push runs the fast surface gates and the gates
+  selected by what the push touches). For the full set, dispatch CI on the branch
+  (`gh workflow run CI --ref <branch>`) or use the server (`concrete-remote wip/<branch> 'lake build
+  && bash scripts/checks/run.sh'`); never a full local run on the laptop.
+- Heavy legs default to the CI server (concrete-ci-2). Set `git config land.gatesHost concrete-ci-2`
+  in the clone you land from, and `train.sh check` then runs its impact gates there, bound to the
+  train head's SHA. The `ci` push still runs the root hook's full set; it reuses no remote result. An unreachable host is INCOMPLETE and blocks;
+  run locally only with `check --local-gates` (docs/LANDING.md, "Gate host").
+- At most 2 heavy runs (full suites, mutation campaigns, `lake build` of the whole tree) per machine.
+  Queue behind a running one; continue light work meanwhile. Honour a user's explicit CPU limits.
+- Run gates inside `nix develop`. A gate that passes by hand but fails under the hook: suspect an
+  inherited `GIT_*` variable first.
+- Record each result against the exact commit SHA it ran on.
+- Read the obligation, not the prose: a header says what was true when it was written. Make gates
+  assert properties, not counts, so an improvement does not read as a regression.
+
+**Before asking for review.** Each of these caused an integration failure in the week to
+2026-10-25; run them on the slice, in `nix develop`, before `/creview`:
+- `scripts/tests/test_golden.sh` after any change to compiler output or a report.
+- `scripts/tests/test_mutation.sh --check-patterns` after editing any file a mutation targets: it
+  finds an anchor the edit broke in seconds, before a mutation campaign fails on it.
+- `scripts/tests/check_type_identity.sh` and the other gates that elaborate Lean probes against the
+  compiler (`grep -l 'lake env lean' scripts/tests/check_*.sh`) after changing a signature or a
+  structure they construct.
+- A fixture's `run_ok` / `run_err` leg in `run_tests.sh` spells its file name literally: the
+  bug-corpus audit looks for each fixture's basename in `run_tests.sh`, so a name assembled from
+  parts is reported as uncovered.
+- Bound a command with `bounded_run` (`scripts/checks/lib/bounded.sh`), never GNU `timeout`: the
+  macOS job has no `timeout`, and `bounded_run` reports a second timeout as INCOMPLETE, not a pass.
+- A ledger `coverage:` line names only the gates that cover the bug: the filing check accepts a
+  `.sh` name there as the coverage claim without running or opening it.
+- File in the migrated ledger format with `scripts/gen/new_bug.sh`, which writes the `bug-ledger`
+  block, a `changelog.d/` fragment and the `discovery.tsv` row (`--batch` or `--new-batch`, with
+  `--silent`) and regenerates the views; after editing a record, regenerate with
+  `scripts/gen/bug_ledger.py --write` and `scripts/gen/bug_dashboard.py --write`. If the script fails
+  after reserving a number, rerun the `--number NNN` command it prints rather than filing by hand.
+- Have Codex confirm each bug is real (a reproducer and a verdict line in the record) before
+  filing it.
+
+**Review.** Codex reviews everything before it is published or brought to the owner, and Kimi and
+agy (Gemini) review every branch too; a reviewer's absence is recorded, never assumed
+([decision](docs/decisions.md#decided-project-review)). agy cannot read files: run it as
+`bounded_run 1500 -- agy -p "<prompt>"` with the diff and the context it needs in the prompt, ending with a
+required verdict line. Every slice gets a Codex review before it lands, through `scripts/review/review.sh`:
+at most 2 rounds for docs and the roadmap, 3 for scripts and 5 for the compiler and the spec
+(owner, 2026-11-08; `review.sh` enforces 5 until R-0618 lands), the first over the whole diff and each later round over the delta since the
+previous one. Answer each finding with a fix or a stated reason. Run Codex by hand only with
+`GIT_OPTIONAL_LOCKS=0` (and `</dev/null`): its sandboxed `git status` otherwise takes the
+worktree's `index.lock` and can leave it behind (bug 209).
+
+**Git safety.**
+- Never pipe `git rebase` (or `git merge`, `git cherry-pick`) into anything: a pipe hides the stop.
+  After every git operation, check that no merge, rebase, cherry-pick or revert is in progress
+  (`git status`; `MERGE_HEAD`, `rebase-merge`, `rebase-apply` under `git rev-parse --git-dir`).
+- No bare `git stash`; no interactive git (`-i`).
+- Check a process's working directory (`lsof -a -p <pid> -d cwd`) before killing it; many processes
+  on this machine belong to other repositories and other sessions.
+- Remove a stale `index.lock` only when no process owns it (`lsof <path>/index.lock` is empty);
+  otherwise wait and retry.
+- Preserve other sessions' edits and untracked files. Never reset or clean a shared checkout.
+
+**Language invariants.** Link to the normative documents instead of restating them:
+[OWNERSHIP_MODEL.md](legacy/docs/archive/design-records/OWNERSHIP_MODEL.md) (linear, not affine: non-Copy values are used
+exactly once), [MEMORY_SEMANTICS.md](legacy/docs/archive/design-records/MEMORY_SEMANTICS.md) (strictly second-class
+references, §15), [the spec's overview](legacy/docs/spec/overview.md),
+[STATEMENT_EXPRESSION_MODEL.md](legacy/docs/archive/design-records/STATEMENT_EXPRESSION_MODEL.md) (evaluation order, value
+vs statement position), [KNOWN_HOLES.md](legacy/docs/verification/KNOWN_HOLES.md) (the only authority on
+hole status) and [VERIFIED_PIPELINE.md](legacy/docs/compiler/VERIFIED_PIPELINE.md) (the structural owners).
+
+## Concurrent work: one worktree per writer
+
+**The default: every concurrent line of work gets its own git worktree.**
+
+```sh
+scripts/worktree-new.sh <name> [base-committish]
+```
+
+This is not an optimization. One working tree cannot serve two writers, because
+the file system is the shared mutable state and neither writer can see the
+other's intent.
+
+### What went wrong when this was not the default
+
+On 2026-07-31 two agents were found working in the same worktree
+(`.claude/worktrees/r0442-proofcore-callee`). Every symptom was initially
+misread as something else:
+
+| symptom | what it was blamed on | what it actually was |
+| --- | --- | --- |
+| an edit to `ProofCore.lean` vanished, and the file dropped out of `git status` | the mutation harness | the mutation harness restoring a backup **over a concurrent edit**, then verifying against the pre-edit hash and reporting success |
+| `origin/main` moved three times mid-session | stale fetches | the other agent pushing |
+| two `push-both.sh` runs waiting on CI for the same SHA | a duplicated invocation | two agents each publishing |
+
+The first row is the expensive one: work was destroyed *and* the tool reported
+that nothing was wrong. A postcondition that compares against a stale baseline
+confirms the corruption it was meant to catch.
+
+### What a worktree does and does not isolate
+
+| | |
+| --- | --- |
+| **Isolated** | working tree, index, `HEAD`, current branch |
+| **Shared** | object store, remotes, **the stash stack**, branch namespace |
+
+So worktrees fix file-level races, not coordination:
+
+- Pushes must still be sequenced — hence the lock in `push-both.sh`.
+- `git stash` is still unsafe across worktrees; bare `git stash` / `git stash pop`
+  is banned repo-wide. Use a temporary WIP commit, or
+  `git stash push -u -m "<unique-tag>"` and recover by SHA with `apply`, never
+  `pop`.
+- A branch name is a shared resource. `worktree-new.sh` refuses to reuse one
+  rather than let `git` fail halfway, because the existing branch may belong to
+  another writer.
+
+### Enforcement is at the point of danger, not by head-count
+
+Two heuristics for "is another agent here?" were measured and both cried wolf:
+
+- matching process names (`pgrep -lf "codex|claude"`) reported **115** — every
+  shell wrapper's command line contains the `.claude` snapshot path;
+- counting processes whose CWD is the tree reported **7** in a worktree freshly
+  created by a single agent — its own shells and background waiters all sit there.
+
+Neither distinguishes "two writers" from "one agent working normally", and a
+warning that fires on non-events trains the reader to ignore the one that
+matters. So concurrency is caught where the signal is a fact:
+
+- **`scripts/tests/test_mutation.sh`** records a hash of the content it itself
+  wrote. At restore time, content that is neither its mutation nor the original
+  means a third party wrote the file: it **refuses to restore**, preserves their
+  version under `CONCURRENT-EDIT/`, keeps its own backup for reconciliation, and
+  fails the run. It cannot silently overwrite an edit it did not make.
+- **`scripts/push-both.sh`** takes an exclusive lock in the **common** git dir
+  (`git rev-parse --git-common-dir`), not the worktree — remotes are shared, so a
+  per-worktree lock would miss two worktrees publishing at once.
+
+### Working while something long is running
+
+Long-running work does not always require an idle tree. Distinguish the phases:
+
+| phase | tree must be stable? |
+| --- | --- |
+| pre-push hook running gates | **yes** — gates read the working tree |
+| `run_ci_gates_local.sh` | **yes** — same reason |
+| `test_mutation.sh` | **yes** — it rewrites source in place |
+| `push-both.sh` waiting for remote CI | **no** — it only polls `gh` |
+
+The CI wait touches no files, so work can continue during it — in another
+worktree. Treating the whole publish as tree-freezing is over-caution; treating
+the hook phase as safe is the error that costs a run.
+
+### Landing, review and load (development throughput)
+
+On 2026-10-22 a finished branch took 6 – 10 h to reach main for about 1 h of work.
+The [development throughput](ROADMAP.md#development-throughput) track in the
+roadmap owns the repair. These rules apply to every writer now:
+
+- **One bug or one rule per branch** (R-0545). A branch that changes a language or
+  checker rule lands first and small, with the migrations of main's fixtures and
+  nothing else. A branch that needs two rules is two branches.
+- **Review per slice, delta after the first pass** (R-0544). After the first full
+  review, each round reviews only the diff since the previous round. Past the risk
+  cap (the round caps under **Review** above),
+  split the slice. Review ownership and memory-safety work with neutral prompts and
+  piecewise diffs.
+- **At most 2 heavy local runs per machine** (R-0543). Full gate sets, closure-mode
+  runs and mutation campaigns count as heavy. Agents run the fast and
+  impact-selected gates; full sets go to the servers (R-0541) or to CI. The
+  machine-wide semaphore `scripts/checks/lib/heavy_slots.sh` holds the full runners,
+  `run_tests.sh --full` and the mutation drivers to two slots; for any other heavy
+  command, check the load and queue behind a running heavy run instead of starting a third.
+- **Ready branches land together** (R-0539). Ready branches are integrated into one
+  train candidate with one CI run, rather than each rebasing onto the last landing,
+  through `scripts/land/train.sh` ([LANDING.md](docs/LANDING.md)). A train built by hand
+  follows the same rules: one integrated candidate, results recorded against its
+  exact SHA, and bisection by member only on red.
+
+### Running the full gate set on the server
+
+The full set runs on a server (or in CI), never on the laptop:
+
+```
+~/bin/concrete-remote <pushed-ref> \
+  'lake build && bash scripts/checks/run.sh'
+```
+
+`concrete-remote` checks the ref out as a `git clone --shared` (not a worktree:
+two mutation-driver gates refuse worktrees) and sets the runner's default width
+to the measured best for that host (`CONCRETE_GATE_JOBS_DEFAULT`; override with
+`CONCRETE_REMOTE_JOBS=N`, or pass `JOBS=N` in the command). The measurements and
+the critical path were taken on concrete-ci-1, since deleted (2026-10-23), and are
+in [GATE_PROFILE.md](legacy/docs/project/GATE_PROFILE.md#parallel-scaling-on-concrete-ci-1-r-0546-step-4).
+
+**A gate must be safe to run beside every other gate.** In a pass the gates run
+JOBS-wide in one checkout, and several passes run on one host. So a gate:
+
+- writes scratch only under `mktemp -d` (or a `.$$` name), never a fixed
+  `/tmp/<name>` — `check_gate_hygiene.sh` refuses fixed `/tmp` paths;
+- never edits a tracked file in place, not even to restore it a moment later.
+  A probe that perturbs a source runs in a private copy of the checkout
+  (`run_fast_surface_gates.sh --mutate`, `check_attestation_manifest.sh`). An
+  in-place edit of a `.lean` file makes every concurrent `require_fresh_binary`
+  rebuild the shared compiler from it;
+- runs sub-steps concurrently only under one lock it already holds (fresh.sh
+  refuses a second concurrent acquisition) and records each sub-step's exit
+  status, so a lost result is a failure, not a pass.
+
+A pool failure that passes on the runner's sequential re-check is listed under
+"Recovered under sequential re-run" and in `.ci-gate-timings.tsv` (stage
+`pool`, verdict `FAIL`, then stage `recheck`). Treat it as a race in that gate
+to fix, not as noise.
+
+### Killing a publish does not un-publish it
+
+`push-both.sh` runs `git push` as a CHILD process. Killing the script does not
+kill that child, and a `git push` already in flight will complete.
+
+Measured 2026-07-31: a publish was killed during its pre-push hook, `git ls-remote`
+showed the primary unchanged, and that was read as "nothing was published". The
+`git push` child was still running; it finished moments later and advanced the
+primary. The next publish was then rejected as non-fast-forward — harmless here,
+but the reasoning behind the kill was a race read as a guarantee.
+
+So: a ref check taken *at* the moment of the kill proves nothing about a push
+that has already started. If a publish must be abandoned, re-check the remote
+AFTER the process tree is gone (`pgrep -f "git push"` clear), and treat the
+remote's actual state as the answer rather than the state you saw before killing.
+
+### Background agent jobs always have a watcher
+
+Start every background writer, reviewer or gate with `scripts/agent/launch.sh start`, then
+immediately run the printed `WAIT` command as your own background task so the job's end re-invokes
+you. Never start a detached unit without its watcher. A writer gets one attempt only: a killed or
+timed-out job is investigated, never automatically re-run. Each start exclusively creates a new job
+directory (an existing `--dir` is refused) and preserves argv through a file rather than systemd's
+command expansion. A missing status returns 125 with systemd's retained result when known. A failed
+`systemctl is-active` or `show` query is an operational error (2), not a completed job. A failed
+`show` writes no result cache and does not collect the unit, so a later wait can read the real result.
+
+### Orchestrating a publish: never infer state from process names
+
+`pgrep -f "push-both"` matches the WAITER'S OWN command line, which contains that
+string. Every `until ! pgrep -f "push-both"; do sleep 30; done` loop therefore
+waits on itself forever, and a status check written the same way reports "publish
+running" when nothing is. Measured 2026-08-01: six background tasks were stuck on
+this at once, and the reported state was wrong for as long as they ran. It is the
+same failure as counting `pgrep -lf "codex|claude"` and getting 115 — a
+process-name match catches the matcher.
+
+Do this instead:
+
+* capture the launched PID and `wait "$pid"`;
+* verify completion by checking the EXACT REMOTE SHA (`git ls-remote`), which is
+  the fact you actually care about;
+* query CI for that SHA (`gh run list --commit <full-sha>` — the full SHA; the
+  short form returns nothing);
+* never infer state from a process-name match.
+
+For a one-off inspection, `ps -eo command | grep -c "[p]ush-both.sh"` excludes
+itself via the bracket, but a ref check is still the better answer.
+
+### Reviewing a branch
+
+Every agent reviews the same way: `scripts/review/review.sh`, one round per
+invocation, with the verdict recorded as a git note on the reviewed commit. The
+note is shared through `origin`, so rounds run in another worktree or by another
+agent count toward the same cap, and the next round reviews only the delta. See
+[REVIEW.md](docs/REVIEW.md).
+### Background agent jobs get a bounded watcher (2026-11-08)
+
+`scripts/agent/launch.sh` starts a writer, reviewer or gate once as a bounded transient systemd
+user unit and records its output and exit status. The agent runs the printed `WAIT` command as its
+own background task, so completion re-invokes the agent instead of leaving a finished job unnoticed.
+A lost unit and a deadline overrun are distinct non-passing results, and writers are never retried
+automatically. Job directories are exclusive, command arguments survive systemd expansion byte for
+byte, and the quoted `WAIT` command is safe for paths containing shell metacharacters. Lost units
+retain their timeout/signal/OOM result where systemd provides one. Failed `systemctl is-active` or
+`show` queries are operational errors (2), not completed jobs. A failed `show` writes no result cache
+and does not collect the unit, so a later wait can read the real result. Stub-backed controls cover
+these behaviours and all watcher outcomes.
+
+exec
+/bin/bash -lc "sed -n '1,180p' scripts/checks/agent_launch.sh" in /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/codexfull/00feab7a87f3890c785bf050b40493f7b4a54ff3/tree
+ succeeded in 0ms:
+#!/usr/bin/env bash
+# AGENT JOBS HAVE ONE ATTEMPT AND A BOUNDED WATCHER.
+#
+# CI has no systemd user session. These controls put systemd-run and systemctl
+# stubs on PATH. The stubs reproduce dollar/percent command expansion, runtime
+# kills, --collect unloading, result queries and collection, and user-bus errors.
+# Controls cover exact argv bytes, the status/inactive race, retained timeout
+# results, exclusive job directories, eval-safe WAIT output, normal statuses 0
+# and 3, lost units (125), deadline overruns (124), query failures (2), resource
+# properties, logs, one attempt, and input/environment refusals. Every launcher
+# invocation is bounded. AGENT_LAUNCHER selects a mutant for mutation testing.
+set -uo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh" || exit 2
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+cd "$ROOT_DIR" || exit 2
+LAUNCH="${AGENT_LAUNCHER:-$ROOT_DIR/scripts/agent/launch.sh}"
+[ -f "$LAUNCH" ] || { echo "FATAL: $LAUNCH missing" >&2; exit 2; }
+TMP="$(mktemp -d)" || exit 2
+STUB_STATE_DIR="$TMP/systemd"
+STUB_RELEASE_DIR="$TMP/release"
+mkdir -p "$STUB_STATE_DIR" "$STUB_RELEASE_DIR" "$TMP/bin" "$TMP/empty" "$TMP/work"
+export STUB_STATE_DIR STUB_RELEASE_DIR
+export AGENT_JOBS_DIR="$TMP/jobs" AGENT_WAIT_INTERVAL=1 AGENT_WAIT_GRACE=1
+PASS=0; FAIL=0
+ok(){ echo "  ok   $1"; PASS=$((PASS+1)); }
+no(){ echo "  FAIL $1"; FAIL=$((FAIL+1)); }
+
+cleanup() {
+  local d
+  if [ -d "$STUB_STATE_DIR" ]; then
+    for d in "$STUB_STATE_DIR"/*; do
+      [ -d "$d" ] && touch "$STUB_RELEASE_DIR/${d##*/}"
+    done
+  fi
+  rm -rf "$TMP"
+}
+trap cleanup EXIT
+
+cat > "$TMP/bin/systemd-run" <<'STUB'
+#!/usr/bin/env bash
+set -u
+raw="$STUB_STATE_DIR/args.$$"
+printf '%s\n' "$@" > "$raw" || exit 2
+unit="" workdir="$PWD" job_path="$PATH" job_home="$HOME" job_dir="" launch_self=""
+runtime=30 collect=0
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --user) shift ;;
+    --collect) collect=1; shift ;;
+    --unit=*) unit="${1#--unit=}"; shift ;;
+    --property=WorkingDirectory=*) workdir="${1#--property=WorkingDirectory=}"; shift ;;
+    --property=RuntimeMaxSec=*) runtime="${1#--property=RuntimeMaxSec=}"; shift ;;
+    --property=*) shift ;;
+    --setenv=PATH=*) job_path="${1#--setenv=PATH=}"; shift ;;
+    --setenv=HOME=*) job_home="${1#--setenv=HOME=}"; shift ;;
+    --setenv=AGENT_JOB_DIR=*) job_dir="${1#--setenv=AGENT_JOB_DIR=}"; shift ;;
+    --setenv=AGENT_LAUNCH_SELF=*) launch_self="${1#--setenv=AGENT_LAUNCH_SELF=}"; shift ;;
+    --setenv=*) shift ;;
+    *) break ;;
+  esac
+done
+[ -n "$unit" ] && [ "$#" -gt 0 ] || { rm -f "$raw"; exit 2; }
+state="$STUB_STATE_DIR/$unit"
+mkdir -p "$state" || exit 2
+mv "$raw" "$state/args" || exit 2
+printf '%s\n' "$job_dir" > "$state/jobdir"
+: > "$state/active"
+(
+  export PATH="$job_path" HOME="$job_home" STUB_UNIT="$unit"
+  export AGENT_JOB_DIR="$job_dir" AGENT_LAUNCH_SELF="$launch_self"
+  expand_arg() {
+    local rest="$1" out="" prefix="" name=""
+    while [[ "$rest" == *[\$%]* ]]; do
+      prefix="${rest%%[\$%]*}"
+      out+="$prefix"
+      rest="${rest:${#prefix}}"
+      case "$rest" in
+        \$\$*) out+='$'; rest="${rest:2}" ;;
+        %%*) out+='%'; rest="${rest:2}" ;;
+        %n*) out+="$unit"; rest="${rest:2}" ;;
+        \$\{*)
+          name="${rest:2}"
+          if [[ "$name" == *'}'* ]]; then
+            prefix="${name%%\}*}"
+            if [[ "$prefix" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
+              out+="${!prefix-}"; rest="${name:${#prefix}+1}"
+            else out+='$'; rest="${rest:1}"; fi
+          else out+='$'; rest="${rest:1}"; fi ;;
+        \$[A-Za-z_]*)
+          name="${rest:1}"; prefix="${name%%[^A-Za-z0-9_]*}"
+          out+="${!prefix-}"; rest="${rest:${#prefix}+1}" ;;
+        \$[0-9]*)
+          name="${rest:1}"; prefix="${name%%[^0-9]*}"
+          rest="${rest:${#prefix}+1}" ;;
+        \$*) out+='$'; rest="${rest:1}" ;;
+        %*) out+='%'; rest="${rest:1}" ;;
+      esac
+    done
+    printf '%s' "$out$rest"
+  }
+  expanded=()
+  for arg in "$@"; do expanded+=("$(expand_arg "$arg")"); done
+  rc=1
+  if cd "$workdir"; then
+    "${expanded[@]}" & command_pid=$!
+    (
+      sleep "$runtime"
+      if kill -0 "$command_pid" 2>/dev/null; then
+        : > "$state/timed-out"
+        kill -TERM "$command_pid" 2>/dev/null || :
+      fi
+    ) & watchdog_pid=$!
+    wait "$command_pid"; rc=$?
+    kill "$watchdog_pid" 2>/dev/null || :
+    wait "$watchdog_pid" 2>/dev/null || :
+  fi
+  printf '%s\n' "$rc" > "$state/exit"
+  if [ -f "$state/timed-out" ]; then result=timeout
+  elif [ "$rc" -eq 0 ]; then result=success
+  else result=exit-code; fi
+  printf '%s\n' "$result" > "$state/result"
+  rm -f "$state/active"
+  if [ "$collect" -eq 1 ]; then rm -f "$state/result"; : > "$state/collected"; fi
+  exit "$rc"
+) &
+printf '%s\n' "$!" > "$state/pid"
+exit 0
+STUB
+cat > "$TMP/bin/systemctl" <<'STUB'
+#!/usr/bin/env bash
+set -u
+[ "${1:-}" = --user ] || exit 2
+action="${2:-}"; unit="${3:-}"
+state="$STUB_STATE_DIR/$unit"
+case "$action" in
+  is-active)
+    if [ -f "$state/no-bus" ]; then
+      echo 'Failed to connect to bus: No medium found' >&2
+      exit 1
+    fi
+    [ ! -f "$state/no-bus-empty" ] || exit 1
+    if [ -f "$state/failed-on-is-active" ]; then echo failed; exit 1; fi
+    if [ -f "$state/finish-on-is-active" ]; then
+      jobdir="$(cat "$state/jobdir")"
+      tmp="$jobdir/.status.systemd"
+      cp "$state/finish-on-is-active" "$tmp" && mv "$tmp" "$jobdir/status"
+      rm -f "$state/active"
+    fi
+    if [ -f "$state/active" ]; then echo active; exit 0; fi
+    echo inactive; exit 1 ;;
+  show)
+    if [ -f "$state/show-no-bus" ]; then
+      echo 'Failed to connect to bus: No medium found' >&2
+      exit 1
+    fi
+    [ ! -f "$state/show-no-bus-empty" ] || exit 1
+    [ -r "$state/result" ] && cat "$state/result"
+    exit 0 ;;
+  reset-failed)
+    : > "$state/reset-failed"
+    [ -f "$state/active" ] || rm -f "$state/result"
+    exit 0 ;;
+  *) exit 2 ;;
+esac
+STUB
+chmod +x "$TMP/bin/systemd-run" "$TMP/bin/systemctl"
+export PATH="$TMP/bin:$PATH"
+BOUNDED_PARENT="$TMP"
+source "$ROOT_DIR/scripts/checks/lib/bounded.sh" || exit 2
+
+OUT="" ERR="" RC=0
+capture() { # budget command...; leave exact streams and status in OUT, ERR, RC
+  local budget="$1"
+  shift
+  OUT="$(bounded_run "$budget" -- "$@" 2>"$TMP/stderr")"
+  RC=$?
+  ERR="$(cat "$TMP/stderr")"
+  if bounded_is_incomplete "$RC"; then no "INCOMPLETE: $*"; fi
+}
+expect_rc() { [ "$RC" -eq "$1" ] && ok "$2" || { no "$2: expected exit $1, got $RC"; printf '%s\n' "$OUT" "$ERR" | sed 's/^/      /'; }; }
+
+codex
+No findings: no REAL DEFECT or PREFERENCE identified in the delta.
+
+The fix propagates a failed `show` query as exit 2 before caching or collection. `inspect` preserves that status, and `watch` returns it because `DONE=1`.
+
+The controls are load-bearing by inspection: loud and silent failures assert exit 2, empty stdout, no cache, and no collection. A subsequent wait must recover and cache `killed`. Reverting either error-propagation change would fail these assertions.
+
+Read in full: `REVIEW.diff`, `AGENTS.md`, `changelog.d/2026-11-08-agent-launcher.md`, `scripts/agent/launch.sh`, and `scripts/checks/agent_launch.sh`.
+
+Static review only; no state-changing commands or network access. This delta makes no language owner decision.
+
+VERDICT: ACCEPT
+tokens used
+50,170
+No findings: no REAL DEFECT or PREFERENCE identified in the delta.
+
+The fix propagates a failed `show` query as exit 2 before caching or collection. `inspect` preserves that status, and `watch` returns it because `DONE=1`.
+
+The controls are load-bearing by inspection: loud and silent failures assert exit 2, empty stdout, no cache, and no collection. A subsequent wait must recover and cache `killed`. Reverting either error-propagation change would fail these assertions.
+
+Read in full: `REVIEW.diff`, `AGENTS.md`, `changelog.d/2026-11-08-agent-launcher.md`, `scripts/agent/launch.sh`, and `scripts/checks/agent_launch.sh`.
+
+Static review only; no state-changing commands or network access. This delta makes no language owner decision.
+
+VERDICT: ACCEPT
+rc=0

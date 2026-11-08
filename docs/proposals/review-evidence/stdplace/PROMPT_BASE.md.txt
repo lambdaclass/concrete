@@ -1,0 +1,9 @@
+You are reviewing a PROPOSAL for Concrete's std placement round (owner-approved process item 3, 2026-11-08: "one review round on where each std item lives"). Concrete is a systems language with linear ownership, second-class references (never returned or stored), explicit capabilities (`with(...)` plus grant values), no hidden traps, and a compiler proven from a Lean spec; it grows in vertical slices 0..28. The std is built slice by slice and, with seven showcases, is how the owner checks that the language design is good.
+
+Be a hard, precise reviewer. Check, for every row and every gap recommendation:
+1. Correctness against the decided record: does any placement or API use a construct before its slice (slice table), contradict a decided row (decisions.md: foundation C1-C10, the 2026-11-08 language decisions such as no `as`, no `char`, no print builtins, always-qualified imports, no method calls/receivers, OrderedMap first/no map privilege; the authority and filesystem rules of 2026-11-02; Core rows Q1-Q9; the hosted grant table approved as Q7.10), or misstate a fact?
+2. Does it decide a LANGUAGE question it should only list as an owner question?
+3. Are the recommendations the best long-term option under the principles: one form per situation, most transparent, verbose is fine when clear, workload-driven (no module without a consumer), LLMs write and humans audit? Is the runner-up honest?
+4. Missing modules, missing consumers, wrong spec homes (C1-C10), missing laws, wrong showcase stages, technical errors (EVM, Wasm, crypto, CRC, Keccak, UTF-8 facts).
+Do not edit any file. Do not run builds. Report findings as a numbered list, each tagged [BLOCKER] (factually wrong or contradicts a decided row), [MAJOR] (wrong recommendation or missing piece) or [MINOR], with the exact proposal text it concerns and the fix. End with exactly one line:
+VERDICT: ACCEPT | ACCEPT-WITH-CHANGES | REJECT

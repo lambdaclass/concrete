@@ -1,0 +1,17 @@
+No bugs or bypasses found in commit `b7f30d36`:
+
+- **F1 & F2 Resolution (`scripts/land/signoff.sh:191-203`)**:
+  - `cmd_record` prepends `reviewed: $sha` to each `$r-request.txt` (`signoff.sh:116-118`).
+  - `check()` verifies that line 1 of `$r-request.txt` matches `^reviewed: [0-9a-f]{40}$` and equals `reviewed: $sha` (`signoff.sh:191-193`), and that the request body (`tail -n +2`) contains an unambiguous 7+ hex prefix of `$sha` (`signoff.sh:194-195`). Output mentions in `$r.txt` no longer satisfy commit binding.
+  - Verdicts are extracted solely from `$r.txt` via `grep -E '^[[:space:]]*VERDICT: (ACCEPT|REJECT)[[:space:]]*$' | tail -1` (`signoff.sh:201-203`), refusing outputs with no verdict line or ending in `VERDICT: REJECT`, and ignoring any `VERDICT:` lines in `$r-request.txt`.
+
+- **Forgery / Foreign Record / Tree Shape Checks (`scripts/land/signoff.sh:145-199`, `.githooks/pre-push:54-56`)**:
+  - `check()` enforces that `git ls-tree --format='%(objectmode) %(objecttype) %(path)' "$obj"` sorts to the exact seven `100644 blob` entries (`signoff.sh:182-184`), that all required keys in `record.txt` appear once with no unknown keys, that `F_commit` matches `$sha`, that `rounds-at` is an ancestor of `$sha` not on `$base` with a valid `review.sh` note meeting the diff class cap, and that every request and output blob matches its recorded `sha256`.
+  - `.githooks/pre-push:54-56` requires a `refs/owner-signoff/<40-hex>` push to be a parentless commit (`git rev-list --parents -n 1 "$localsha"` equals `"$localsha"`) whose tree is the exact seven `100644 blob` entries before routing to the `note_refs` tier; any other ref name, parented commit, directory entry, deletion, or 4-file legacy shape falls through to `other_refs` (full gate tier).
+
+- **Controls (`scripts/checks/landing_script.sh:1155-1280`, `scripts/checks/review_tool.sh:305-327`)**:
+  - `landing_script.sh` builds every negative variant by mutating a valid 7-file record (`otherreview`, `otherreviewed`, `noreviewed`, `unnamedbody`, `requestverdict`, `noagy`, `reject`, `tampered`, `othersha`, `unnamed`) and asserts each specific refusal reason from `signoff.sh`.
+  - `review_tool.sh` verifies both that the 7-file parentless record takes the review-notes tier and that the old 4-file shape, source commits, directory trees with matching names, and non-SHA ref names are forced into the full tier.
+
+VERDICT: ACCEPT
+rc=0

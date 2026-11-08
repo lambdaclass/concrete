@@ -1,0 +1,75 @@
+TASK: the settled pieces of the slice-0 lexer for the Concrete compiler (Lean 4.34.1, core Lean only, no
+Mathlib). You are in a full clone of the repository on branch wip/slice0-lexer, created at commit
+ea5181b5 (the slice-0 compiler, awaiting landing). Write the code and proofs, and commit them on this
+branch with `git commit` (several commits are fine). NEVER push, never change remotes or git config,
+never use --no-verify, never touch any other branch. Build with `nix develop --command lake build
+Concrete ConcreteSpec` (warnings are errors; autoImplicit is off). Bound every command you run with
+`timeout` (at most 1200 s each).
+
+Read first: Concrete/README.md (sections "Frontend specifications", the folder tree, the premise
+P_lex and "Gates"), docs/PHILOSOPHY.md, lakefile.toml, ConcreteSpec/Spec/Basics.lean for style.
+
+ONLY THESE RULES ARE SETTLED; build nothing else:
+1. The source is a byte string that must be well-formed UTF-8 (the Unicode Standard, Table 3-7:
+   no overlong forms, no surrogates U+D800..U+DFFF, nothing above U+10FFFF, no truncated sequence).
+2. NUL (U+0000) anywhere in the source is refused.
+3. A byte-order mark (U+FEFF) is refused (anywhere, including at the start).
+4. A shebang line is not supported: no special treatment of a leading `#!` (it is whatever the
+   token rules make of it later, so do not lex it; just do not add any shebang rule).
+5. Line comments: `//` up to, not including, the next LF (0x0A) or CR (0x0D), or to end of input.
+   There are NO block comments: `/*` is not a comment opener (do not give it any meaning here).
+6. Identifier characters are ASCII only: a start character is `A`-`Z`, `a`-`z` or `_`; a continue
+   character is a start character or `0`-`9`. Non-ASCII characters are never identifier characters.
+NOT SETTLED (do not define): the token set, keywords, punctuation, literals, whitespace other than
+what the comment rule needs, the Token type, error-message wording, CLI spellings. Exact spellings
+of anything user-visible go through an owner round later.
+
+DELIVERABLES
+A. ConcreteSpec/Spec/Surface0.lean (new file, spec side, declarative, readable, with doc comments and
+   `example`s as conformance cases; register it in ConcreteSpec.lean's imports the way the other
+   Spec files are). Namespace `ConcreteSpec.Surface0`. Define, declaratively (inductive relations
+   or plain Props, NOT by running a decoder):
+   - `Utf8.Scalar : Nat → Prop` (a Unicode scalar value) and `Utf8.Encodes : Nat → List UInt8 → Prop`
+     (the one well-formed encoding of a scalar, by Table 3-7's byte ranges);
+   - `Utf8.Decodes : List UInt8 → List Nat → Prop` (the byte string is the concatenation of the
+     encodings of the scalars, in order);
+   - `SourceOk : List UInt8 → Prop`: decodes, and no scalar is 0 or 0xFEFF;
+   - `IdentStart`, `IdentContinue : Nat → Prop` (rule 6, on scalars);
+   - `LineComment : List Nat → List Nat → Prop` relating a scalar sequence starting with `//` to the
+     comment's scalars (up to the first LF/CR or the end) and the rest.
+   These are the independent judgment the lexer will be proved against (README: `Lexes` is built
+   from them once the token rules exist). Put a short module docstring saying they are the settled
+   pieces only and naming what is not yet defined.
+B. Concrete/Lex.lean (new file; import it from Concrete.lean): the implementation and its proofs.
+   - `decodeUtf8 : List UInt8 → Except DecodeError (List Nat)` (or over ByteArray with a List view;
+     choose what keeps proofs simplest; total, structurally recursive, no `partial`);
+   - `checkSource : List UInt8 → Except DecodeError (List Nat)` adding the NUL and BOM refusals;
+   - `identStart?`, `identContinue? : Nat → Bool`, `lineComment : List Nat → Option (List Nat × List Nat)`;
+   - theorems, no `sorry`, no `native_decide`, no new axioms:
+     `decodeUtf8_sound : decodeUtf8 bs = .ok cs → Utf8.Decodes bs cs`,
+     `decodeUtf8_complete : Utf8.Decodes bs cs → decodeUtf8 bs = .ok cs` (decoding is deterministic),
+     the same pair for `checkSource` against `SourceOk` (with its scalars),
+     `identStart?_iff`, `identContinue?_iff` against the Props,
+     `lineComment_sound` and `lineComment_complete` against `LineComment`.
+   - `DecodeError` carries the byte offset of the first bad byte and a reason constructor
+     (truncated, overlong, surrogate, tooLarge, unexpectedContinuation, nul, bom). Prove that the
+     reported offset is that of the first byte at which no well-formed prefix extends (or, if that
+     proof is long, state it as a TODO in the docstring and say so in your report; do NOT add a sorry).
+   - Conformance `example`s by `decide` on small inputs: ASCII, a 2/3/4-byte scalar, each refusal
+     (overlong C0 80, surrogate ED A0 80, F4 90 80 80, truncated E2 82, stray 80, NUL, EF BB BF),
+     `// x\nrest`, `// x\r`, `// x` at EOF, `/* x */` is NOT a comment.
+C. Premises: Concrete/Premises.lean lists P_lex for the whole lexer; do not change the registry.
+   Add nothing to tests/golden unless the trusted-base gate requires it (scripts/checks/compiler/
+   slice0_trusted_base.sh; it compares headline theorems only).
+
+Keep the style of the existing files (Concrete/LL1.lean, Concrete/BIR.lean): doc comments on every
+definition and theorem, no Mathlib, small lemmas. Write nothing outside ConcreteSpec/Spec/Surface0.lean,
+ConcreteSpec.lean, Concrete/Lex.lean and Concrete.lean, except a changelog fragment
+changelog.d/2026-11-08-lexer-utf8.md (one paragraph, like the other fragments).
+
+REPORT at the end: the files written, the build result (the exact last lines), every theorem with
+its statement, anything you could not prove, and any choice you made that a reviewer should check.
+
+HARD RULES: do not edit docs/decisions.md or ROADMAP.md; do not decide any language question (if a
+settled rule above is ambiguous, pick nothing, write the question in your report); no sorry,
+native_decide, axiom, partial, unsafe, implemented_by or extern in your files; bound every command.

@@ -1,0 +1,544 @@
+Answer directly from the context below. Do NOT read files or use tools; the comparison is included.
+
+Concrete is a systems language rebuilt as a fully proven compiler in Lean. There is no GC; the goal is "know everything" about a program. Ownership is linear: non-Copy values are used exactly once, and Copy is declared and checked, never derived. References are second-class: never returned, with borrow views. Capabilities are explicit grants handed to main. `Secret<T>` gives constant time, and only scalar secrets are Copy. There are no hidden traps: every run-time failure is either proven impossible or explicit (checked_* returning Result<T, ArithmeticError>, abort()). The decided trap line is "concrete: trap: <kind> at <path>:<line>:<col> (site <id>)", with exit 134. Struct layout is declaration order with natural alignment. Backends: an LLVM printer (x86-64, AArch64) and the Lean Compiler Backend (verified, AArch64 first). The Lean spec is the only home of rules. Owner principles: best long-term design; one form per situation, no duplication; LLMs write the code and humans read it, so optimize for checking and reading; work is driven by real workloads; verbose is fine when clear.
+
+The owner asked for a side-by-side comparison of two capability designs for Concrete: TODAY (with(...) permission sets plus grant values) and MERGED (capabilities as values only, the object-capability model). Codex wrote CAPABILITY_COMPARISON.md, which recommends keeping TODAY for now. Its key argument: with(...) is an independent ceiling. A helper that holds a struct containing a Directory cannot start using the file system without changing its signature, whereas under MERGED an implementation edit can start using a contained capability silently. It also argues that MERGED does not reduce parameters in these examples (27 value parameters in both).
+
+Review it independently and critically:
+(1) Are the example programs fair to both designs?
+(2) Is the "independent ceiling" argument right, or can MERGED recover it cheaply? (For example: attenuated wrapper types, or checked authority summaries in public signatures — and would that just reintroduce with(...) under another name?)
+(3) Are the proof and checker claims right?
+(4) What did Codex miss?
+(5) Your recommendation: KEEP TODAY, MERGE, or a THIRD design, with the decisive reasons. At most 400 words.
+End with exactly: ANSWER: <KEEP|MERGE|THIRD>; REASON=<one line>
+
+===== CAPABILITY_COMPARISON.md =====
+# Capability designs: TODAY and MERGED
+
+This is an owner-facing comparison, not a decision or an implementation. TODAY is decided. MERGED is a proposed replacement. No decided rule is changed by this document. Links are relative to this file.
+
+## Sources and precedence
+
+The controlling source is [the 2026-11-02 authority decision](../docs/decisions.md#decided-2026-11-02-authority), qualified by [the November 5 revisions](../docs/decisions.md#decided-2026-11-05-revisions) and [Core rows](../docs/decisions.md#decided-2026-11-05-core), especially Q1, Q5 and Q7. The allocator “13s” two-tier distinction is now stated precisely by [Allocation](../docs/decisions.md#decided-2026-11-02-allocation) and [OD83](../docs/decisions.md#od83); an old milestone name is not a competing contract. Callable rules are authority rule 4, [OD92](../docs/decisions.md#od92), [OD93](../docs/decisions.md#od93), and the supersession notice in [the callable-values record](../legacy/docs/archive/design-records/CALLABLE_VALUES_AND_CAPABILITIES.md#1-the-governing-decisions).
+
+[Authority.lean](../ConcreteSpec/Spec/Authority.lean) is explicitly PROPOSED until Core freeze. It models a useful direct-call subset, not the entire decided language. In particular its introductory exclusions include grant ownership, narrowing, acquisition/unforgeability, returned values, function pointers, FFI, traits and generated cleanup. Do not treat a theorem about this subset as proof of those features.
+
+The workloads below draw on [tcpserve](../legacy/examples/tcpserve/src/main.con) (partial reads, request terminator, socket lifecycle), [httpget](../legacy/examples/httpget/src/main.con) (response parsing and network failure), and [envcfg](../legacy/examples/envcfg/src/main.con) (file parsing and environment boundary). These are frozen legacy programs, not current syntax authorities: `with(Std)`, implicit allocation, old strings and `.drop()` are not carried forward.
+
+## Exact current rules
+
+1. Permission sets and resource values are independent. An operation requires both. `with(...)` is compile-time and erased; possession of a handle never supplies permission. Pure computation, checked traps and `abort()` require neither. A permission alone opens no file, allocates nothing and reaches no service. [Authority rules 1–2, 8](../docs/decisions.md#decided-2026-11-02-authority); [audit clarifications](../docs/decisions.md#decided-2026-11-02-audit).
+2. A function declares its permission ceiling; every call requires the callee's substituted set to be included. This applies to trusted code, foreign calls, traits, generics and generated cleanup. `Unsafe` and `trusted` do not supply operational permissions. One exhaustive primitive table accounts for runtime/startup/shutdown too. No umbrellas or user capability aliases. The rule-13 list is `Fs, Network, Env, Time, Alloc, Device, Console, Process, Unsafe`; Console covers standard streams, Device covers devices. Later [randomness](../docs/decisions.md#decided-2026-11-07-stack-randomness) extends the design and must also be reconciled by a merge; these examples do not use entropy. [Rules 5–7, 12–14](../docs/decisions.md#decided-2026-11-02-authority); Q7.11.
+3. Capability variables denote sets, including empty. Generic bodies are checked parametrically; exact substitutions are checked at instantiation, inconsistent bindings refused. Every polymorphic call writes capability arguments explicitly (Q5.1–Q5.4). Equality is semantic, duplicates are refused. Function-pointer types retain exact sets without widening; a caller declares the callback's set plus its own requirements. Context values add no permission. No `with(f)` shortcut. [Core Q5](../docs/decisions.md#decided-2026-11-05-core); [OD92–93](../docs/decisions.md#od92).
+4. Grants are linear resources. Only the target mints initial grants, once; ordinary acquisition and narrowing require existing grants. Externs and minting wrappers have preserved identities and accurate contracts in the trusted base. Borrow to use; move to transfer or consume. Narrowing consumes and intersects rights; child acquisition leaves its parent grant alive. Close always consumes, including on failure, with a Copy error containing no handle; failed listen returns the grant. Grant ownership is not permission ownership. [Rules 9–11](../docs/decisions.md#decided-2026-11-02-authority); [audit](../docs/decisions.md#decided-2026-11-02-audit); Q7.2–3.
+5. `main` returns only `u8`, declares the target grants it requests as parameters, and declares concrete permissions within the target's offerings. Undeclared grants are never minted. Every received grant must be consumed before normal return; abort runs no cleanup. Missing configured grants refuse startup with exit **125**, before user code; trap status is **134**. The current target is linux-x86_64-hosted, Linux ≥5.6, with fixed grant schema/multiplicity; process spawning is deferred. [Main](../docs/decisions.md#decided-2026-11-02-main); authority rule 12; Q7.1, Q7.4, Q7.10, Q8.5.
+6. Directory lookup takes a Directory and Fs; open handles operate independently of the directory. Narrowing may remove write rights. Absolute paths, `..`, symlinks anywhere and mount crossing are refused by atomic confined lookup, never check-then-open. Numeric connect/listen scopes and a separate scoped Resolver are required; DNS does not confer connection authority. Environment is an immutable scoped launch snapshot; Clock identifies kind, resolution and guarantees. Static permission checks coexist with atomic dynamic scope checks. Events distinguish requests/responses and terminal observations. [Filesystem decision](../docs/decisions.md#decided-2026-11-02-filesystem); [audit](../docs/decisions.md#decided-2026-11-02-audit); Q7.5–9.
+7. Allocation requires `Allocator<A>` **and** Alloc. Identity is the separate erased Brand kind; fresh nominal brands, explicit brand arguments, structural dependencies and checked summaries survive generics and callbacks (Q1). Heap/container types carry that identity; release metadata contains no safe allocator reference. Destruction needs at most Alloc and no allocator argument. An allocator cannot be ended/reset with live dependents or conflicting loans; reset generates a fresh identity. Allocation/growth is fallible, preserves the rejected input and unchanged container on failure, and is not terminal OOM. [Allocation](../docs/decisions.md#decided-2026-11-02-allocation); [audit reset](../docs/decisions.md#decided-2026-11-02-audit); Core Q1–Q2.
+8. References remain second-class: no storing or returning references. Long-lived objects needing resources own those values in both designs. Callbacks are named capture-free function values plus an explicit shared, mutable or consuming context; no closures. Root-based loan restrictions and the container-not-in-context restriction still matter. [Callable record, supersession notice and governing decisions](../legacy/docs/archive/design-records/CALLABLE_VALUES_AND_CAPABILITIES.md#1-the-governing-decisions); [OD8](../docs/decisions.md#od8).
+9. Empty permissions mean no operational permission, not mathematical purity: mutation through supplied borrows, failure, traps, divergence and reading ordinary inputs remain separate facts. `concrete facts` derives capabilities used, reachable grants, allocation, failures, termination, evidence and assumptions. A complete absence claim needs completeness evidence; unknown never satisfies policy. [Facts decision](../docs/decisions.md#decided-project-facts-report).
+10. Authority containment does not establish secrecy or constant time. `Secret<T>`, `classify`, `declassify(x, "reason")`, `ct_select`, `ct_eq` retain separate information-flow rules. Secret-dependent branches/lengths are refused; scalar secrets alone are Copy, linear secret storage is wiped on destroy. Declassification is traced in facts; the decision does **not** require a Declassify grant or permission. Foreign/backend premises remain named. [Information-flow decision](../docs/decisions.md#decided-project-infoflow-2026-11-06); authority rule 14.
+
+## MERGED: precise proposed rules
+
+These are proposed normative requirements, including the conditions needed to make “values only” sound; they have not been approved.
+
+1. Delete `with(...)`, `cap` parameters, capability-set arguments and the separate permission judgment. Authority consists exactly of reachable capability values supplied to the function, including capabilities inside owned aggregates or explicit contexts. A borrowed value grants temporary access within its rights; a move transfers ownership and the associated authority. Returned capabilities confer authority on their recipient. A function pointer alone is capture-free and supplies no ambient authority.
+2. Safe code cannot construct, clone, deserialize, cast into, or reflectively mint a capability. Representation is sealed; nominal identity, not a type's spelling or a zero-byte layout, determines validity. Only startup or checked acquisition/derivation introduces one. No constant/global capability, hidden service lookup or implicit default allocator. Linker and FFI contracts preserve constructor identity.
+3. Narrowing consumes the source and yields the intersection of its rights and requested scope, never amplification. Checked acquisition may retain a parent and return a child with no greater authority. Failure returns every surviving linear obligation. Existing children are not retroactively revoked by narrowing their parent. Splitting is allowed only by an explicit primitive contract, not copying a linear value.
+4. Resource capabilities such as Directory, Socket, StdOut and Allocator carry their own authority. Do **not** add a Console token next to StdOut or Alloc next to Allocator: that would recreate the two-tier design. If a permission genuinely has no resource identity, represent it as a sealed, zero-sized, linear token, borrowed for use and consumed/derived by explicit operations. Zero-sized does not mean Copy, forgeable, globally available or irrelevant to checking. `Unsafe` remains a validity/trust obligation, not a universal resource capability; its final spelling is a separate surface reconciliation, not authority to bypass the rules.
+5. Ordinary shared/exclusive loans govern capability access; `&` versus `&mut` follows the primitive's contract. Close consumes on all outcomes; errors retain no handle. Structs and callback contexts that outlive a call own capabilities. No reference fields, returned references, closures, interior ambient state or hidden captures are introduced.
+6. One `Allocator<A>` carries authority and allocator identity. Preserve brands, release metadata, dependent-liveness checks, fresh reset identities, fallible growth, rejected inputs and availability laws. Release authority travels with the allocation's release metadata: destruction must be possible without reacquiring a separate permission or allocator borrow. This is a necessary explicit replacement for the old “Destroy needs at most Alloc” rule, not a free consequence of deleting syntax.
+7. Generic authority plumbing becomes ordinary type/brand/value plumbing. A helper with context type `C` and callback `fn(&mut C, T) -> R` can invoke it without an effect variable. Checked exported summaries describe authority reachable through `C`, callback targets and results. Abstract or opaque contexts are not presumed authority-free. Type arguments retain their decided inference rules; brand arguments remain explicit.
+8. No reachable capability means no external resource operation, under the sealed-constructor and foreign assumptions. It does **not** establish determinism, totality, noninterference, absence of mutation or constant time. Authority-bearing input that is never used is available authority, not an observed effect; facts must distinguish availability, possible use and actual execution.
+9. Derive authority facts compositionally from primitive contracts, typed value flow, aggregate reachability and callback target summaries. Public interfaces must export checked, versioned summaries; cross-module checking must not require searching other module bodies. Report reasons, provenance, scope, completeness and foreign premises. Unknown/opaque paths produce “not established,” not “pure.” These summaries are derived views, not a second programmer-written effect language.
+10. Foreign calls require explicit capability operands and contracts bounding all native effects and retained/transferred authority. `trusted` cannot justify ambient `open`, `malloc`, clocks or global C state without an accounted capability. Native compliance remains an assumption, not something an object-capability type proves. Foreign function values remain refused until a new owner decision; this merge alone admits no FFI callback ABI.
+11. Keep Secret, declassify and constant-time checking unchanged. Network authority permits a network operation, not disclosure of Secret data. Declassification permits an explicitly traced information release, not access to an output channel. No new Declassify token is implied. A secret-bearing capability/context must still obey information-flow and wiping rules.
+12. Startup requests are `main`'s value parameters, checked against the target schema/multiplicity. Missing configuration refuses before user execution with **125**; undeclared grants are not minted. Consume every owned startup capability before normal return; keep trap 134, explicit cleanup, dynamic scope checks, confinement, event accounting and named target assumptions. No Root is needed.
+
+## Example conventions
+
+All six listings are complete application bodies against the following explicit library contract. They use decided forms: named functions, structs, `&`/`&mut`, exhaustive `match`, `while`, explicit contexts and `u8` main. **ILLUSTRATIVE** applies to every import/module API name, operation spelling, associated data type, brand-binder/application spelling `brand A`/`<brand Sys>`, and termination annotation in these listings: these are not claimed to be frozen std APIs or executable fixtures. In MERGED the absence of `with` is itself the proposed change. No closures, stored references, returned references, postfix `?`, implicit allocation, or obsolete `Std` is used. The programs are bounded services/demos so termination does not need an unbounded-server exception.
+
+ILLUSTRATIVE library contract (same implementation/rights in each pair):
+
+- `narrow_read(d)` consumes Directory and returns `Result<Directory, NarrowFailure>`; failure contains the original grant. `open_read(&d, static_path)` returns File or a Copy error; reads require Fs TODAY. `listen(g)` returns Listener or a failure containing `g`; `accept(&listener)` returns Socket or a Copy error. All network operations require Network TODAY. Narrowing never makes a read-only Directory writable.
+- `receive_request(&socket)` uses a fixed stack buffer and handles partial reads; returns Copy `Request` containing a validated bounded path, or Copy error. It accepts only bounded GET requests with the header terminator. `parse_request` is a pure parser used inside it. `send_file` streams with a fixed buffer and handles short reads/writes; false reports I/O failure. `send_bad_request` sends a fixed 400 response. Neither allocates. File-open and protocol errors are handled below.
+- `write_log(&out, static_text)` and `clock_tick(&clock)` return `Result<CopyValue, CopyError>`. `finish_*` consume their resource, handle close errors explicitly and return `bool` (true means close succeeded). TODAY each requires its resource's permission. `finish_allocator` consumes only after all dependencies end. There is no silent `Result` discard. Boolean `record_*` below accumulates close failures as application status 1.
+- KV keys/values are u64. `Vec<Entry,A>` is owned; `empty_entries<brand A>()` allocates nothing; `entry_count`, `entry_copy` return Copy scalars/entries, never references. `replace_entry` and `remove_entry` mutate existing storage without allocation; `push_entry<brand A>` explicitly borrows the allocator for fallible growth, returning a rejected Copy Entry on failure with unchanged vector. `destroy_entries` releases storage (Alloc TODAY). `save_entries` atomically replaces `kv.bin` within the supplied writable directory, writes all entries and closes its file on every outcome; `load_entries<brand A>` reads that same format, grows using the supplied allocator and on failure destroys partial state and closes its file before returning a Copy error. Both report I/O/close failure, never leave an unowned handle. This is file persistence across launches, not a claim of transaction durability or crash consistency. These library implementations are obligations, not already verified std claims.
+- Each pair uses identical library operation contracts except that MERGED deletes permission requirements. Pure queries on grants do not create fresh authority. Logging/clock errors remain observable application errors, not ignored results.
+
+### (a) Sequential web server — TODAY
+
+```con
+fn serve_one(s: &Socket, d: &Directory, out: &StdOut) with(Network, Fs, Console) -> bool {
+    match receive_request(s) {
+        Result::Err { error } => {
+            discard(error);
+            return send_bad_request(s);
+        },
+        Result::Ok { value } => {
+            // value.path is bounded Copy data, not a reference into a buffer.
+            match open_read(d, value.path) {
+                Result::Err { error } => {
+                    discard(error);
+                    return send_bad_request(s);
+                },
+                Result::Ok { value: file } => {
+                    let sent: bool = send_file(s, &file);
+                    let closed: bool = finish_file(file);
+                    match write_log(out, "request served") {
+                        Result::Err { error } => { discard(error); return false; },
+                        Result::Ok { value: count } => { discard(count); },
+                    }
+                    return sent && closed;
+                },
+            }
+        },
+    }
+}
+fn main(net: ListenGrant, dir: Directory, out: StdOut) with(Network, Fs, Console) -> u8 {
+    let mut good: bool = true;
+    match narrow_read(dir) {
+        Result::Err { error } => {
+            let NarrowFailure { grant, cause } = error;
+            discard(cause);
+            discard(finish_directory(grant));
+            discard(finish_listen_grant(net));
+            discard(finish_stdout(out));
+            return 1;
+        },
+        Result::Ok { value: read_dir } => {
+            match listen(net) {
+                Result::Err { error } => {
+                    let ListenFailure { grant, cause } = error;
+                    discard(cause);
+                    discard(finish_listen_grant(grant));
+                    good = false;
+                },
+                Result::Ok { value: listener } => {
+                    let mut i: u64 = 0;
+                    while i < 100 && good {
+                        match accept(&listener) {
+                            Result::Err { error } => { discard(error); good = false; },
+                            Result::Ok { value: socket } => {
+                                let served: bool = serve_one(&socket, &read_dir, &out);
+                                let closed: bool = finish_socket(socket);
+                                good = served && closed;
+                            },
+                        }
+                        i = i + 1;
+                    }
+                    let ended: bool = finish_listener(listener);
+                    good = good && ended;
+                },
+            }
+            let ended_dir: bool = finish_directory(read_dir);
+            let ended_out: bool = finish_stdout(out);
+            if good && ended_dir && ended_out { return 0; }
+            return 1;
+        },
+    }
+}
+```
+
+### (a) Sequential web server — MERGED
+
+```con
+fn serve_one(s: &Socket, d: &Directory, out: &StdOut) -> bool {
+    match receive_request(s) {
+        Result::Err { error } => {
+            discard(error);
+            return send_bad_request(s);
+        },
+        Result::Ok { value } => {
+            match open_read(d, value.path) {
+                Result::Err { error } => {
+                    discard(error);
+                    return send_bad_request(s);
+                },
+                Result::Ok { value: file } => {
+                    let sent: bool = send_file(s, &file);
+                    let closed: bool = finish_file(file);
+                    match write_log(out, "request served") {
+                        Result::Err { error } => { discard(error); return false; },
+                        Result::Ok { value: count } => { discard(count); },
+                    }
+                    return sent && closed;
+                },
+            }
+        },
+    }
+}
+fn main(net: ListenGrant, dir: Directory, out: StdOut) -> u8 {
+    let mut good: bool = true;
+    match narrow_read(dir) {
+        Result::Err { error } => {
+            let NarrowFailure { grant, cause } = error;
+            discard(cause);
+            discard(finish_directory(grant));
+            discard(finish_listen_grant(net));
+            discard(finish_stdout(out));
+            return 1;
+        },
+        Result::Ok { value: read_dir } => {
+            match listen(net) {
+                Result::Err { error } => {
+                    let ListenFailure { grant, cause } = error;
+                    discard(cause);
+                    discard(finish_listen_grant(grant));
+                    good = false;
+                },
+                Result::Ok { value: listener } => {
+                    let mut i: u64 = 0;
+                    while i < 100 && good {
+                        match accept(&listener) {
+                            Result::Err { error } => { discard(error); good = false; },
+                            Result::Ok { value: socket } => {
+                                let served: bool = serve_one(&socket, &read_dir, &out);
+                                let closed: bool = finish_socket(socket);
+                                good = served && closed;
+                            },
+                        }
+                        i = i + 1;
+                    }
+                    let ended: bool = finish_listener(listener);
+                    good = good && ended;
+                },
+            }
+            let ended_dir: bool = finish_directory(read_dir);
+            let ended_out: bool = finish_stdout(out);
+            if good && ended_dir && ended_out { return 0; }
+            return 1;
+        },
+    }
+}
+```
+
+This serves sequentially, with at most 100 accepted clients and fail-stop handling of errors. The directory is narrowed before any request is served. A request path is still checked atomically by `open_read`; parser validation is not confinement. Neither permission design fixes HTTP parser bugs. Rejected startup grants produce 125 outside this main, not status 1 inside it.
+
+### (b) Persistent KV store — TODAY
+
+```con
+struct Copy Entry { key: u64, value: u64 }
+struct Store<brand A> { entries: Vec<Entry, A>, disk: Directory }
+fn get<brand A>(db: &Store<A>, key: u64) -> Option<u64> {
+    let mut i: u64 = 0;
+    while i < entry_count(&db.entries) {
+        let item: Entry = entry_copy(&db.entries, i);
+        if item.key == key { return Option::Some { value: item.value }; }
+        i = i + 1;
+    }
+    return Option::None;
+}
+fn put<brand A>(db: &mut Store<A>, a: &mut Allocator<A>, key: u64, val: u64) with(Alloc) -> bool {
+    let item: Entry = Entry { key: key, value: val };
+    let mut i: u64 = 0;
+    while i < entry_count(&db.entries) {
+        let prior: Entry = entry_copy(&db.entries, i);
+        if prior.key == key { replace_entry(&mut db.entries, i, item); return true; }
+        i = i + 1;
+    }
+    match push_entry<brand A>(&mut db.entries, a, item) {
+        Result::Ok { value } => { discard(value); return true; },
+        Result::Err { error } => { discard(error); return false; },
+    }
+}
+fn delete<brand A>(db: &mut Store<A>, key: u64) -> bool {
+    let mut i: u64 = 0;
+    while i < entry_count(&db.entries) {
+        let item: Entry = entry_copy(&db.entries, i);
+        if item.key == key { remove_entry(&mut db.entries, i); return true; }
+        i = i + 1;
+    }
+    return false;
+}
+fn persist<brand A>(db: &Store<A>) with(Fs) -> bool {
+    // Destructure by a scoped library view: no simultaneous sibling root loans.
+    return save_store(db);
+}
+fn close_store<brand A>(db: Store<A>) with(Fs, Alloc) -> bool {
+    let Store { entries, disk } = db;
+    destroy_entries(entries);
+    return finish_directory(disk);
+}
+fn main(a: Allocator<Sys>, disk: Directory) with(Fs, Alloc) -> u8 {
+    let mut alloc: Allocator<Sys> = a;
+    let mut ok: bool = true;
+    match load_entries<brand Sys>(&disk, &mut alloc) {
+        Result::Err { error } => {
+            discard(error);
+            discard(finish_directory(disk));
+            discard(finish_allocator(alloc));
+            return 1;
+        },
+        Result::Ok { value: loaded } => {
+            let mut db: Store<Sys> = Store { entries: loaded, disk: disk };
+            ok = put<brand Sys>(&mut db, &mut alloc, 7, 42);
+            if ok {
+                match get<brand Sys>(&db, 7) {
+                    Option::None => { ok = false; },
+                    Option::Some { value } => { ok = value == 42; },
+                }
+            }
+            // Exercise deletion without erasing the persisted key 7.
+            if ok { ok = put<brand Sys>(&mut db, &mut alloc, 9, 99); }
+            if ok { ok = delete<brand Sys>(&mut db, 9); }
+            if ok { ok = persist<brand Sys>(&db); }
+            let ended: bool = close_store<brand Sys>(db);
+            let ended_alloc: bool = finish_allocator(alloc);
+            if ok && ended && ended_alloc { return 0; }
+            return 1;
+        },
+    }
+}
+```
+
+### (b) Persistent KV store — MERGED
+
+```con
+struct Copy Entry { key: u64, value: u64 }
+struct Store<brand A> { entries: Vec<Entry, A>, disk: Directory }
+fn get<brand A>(db: &Store<A>, key: u64) -> Option<u64> {
+    let mut i: u64 = 0;
+    while i < entry_count(&db.entries) {
+        let item: Entry = entry_copy(&db.entries, i);
+        if item.key == key { return Option::Some { value: item.value }; }
+        i = i + 1;
+    }
+    return Option::None;
+}
+fn put<brand A>(db: &mut Store<A>, a: &mut Allocator<A>, key: u64, val: u64) -> bool {
+    let item: Entry = Entry { key: key, value: val };
+    let mut i: u64 = 0;
+    while i < entry_count(&db.entries) {
+        let prior: Entry = entry_copy(&db.entries, i);
+        if prior.key == key { replace_entry(&mut db.entries, i, item); return true; }
+        i = i + 1;
+    }
+    match push_entry<brand A>(&mut db.entries, a, item) {
+        Result::Ok { value } => { discard(value); return true; },
+        Result::Err { error } => { discard(error); return false; },
+    }
+}
+fn delete<brand A>(db: &mut Store<A>, key: u64) -> bool {
+    let mut i: u64 = 0;
+    while i < entry_count(&db.entries) {
+        let item: Entry = entry_copy(&db.entries, i);
+        if item.key == key { remove_entry(&mut db.entries, i); return true; }
+        i = i + 1;
+    }
+    return false;
+}
+fn persist<brand A>(db: &Store<A>) -> bool {
+    // Destructure by a scoped library view: no simultaneous sibling root loans.
+    return save_store(db);
+}
+fn close_store<brand A>(db: Store<A>) -> bool {
+    let Store { entries, disk } = db;
+    destroy_entries(entries);
+    return finish_directory(disk);
+}
+fn main(a: Allocator<Sys>, disk: Directory) -> u8 {
+    let mut alloc: Allocator<Sys> = a;
+    let mut ok: bool = true;
+    match load_entries<brand Sys>(&disk, &mut alloc) {
+        Result::Err { error } => {
+            discard(error);
+            discard(finish_directory(disk));
+            discard(finish_allocator(alloc));
+            return 1;
+        },
+        Result::Ok { value: loaded } => {
+            let mut db: Store<Sys> = Store { entries: loaded, disk: disk };
+            ok = put<brand Sys>(&mut db, &mut alloc, 7, 42);
+            if ok {
+                match get<brand Sys>(&db, 7) {
+                    Option::None => { ok = false; },
+                    Option::Some { value } => { ok = value == 42; },
+                }
+            }
+            // Exercise deletion without erasing the persisted key 7.
+            if ok { ok = put<brand Sys>(&mut db, &mut alloc, 9, 99); }
+            if ok { ok = delete<brand Sys>(&mut db, 9); }
+            if ok { ok = persist<brand Sys>(&db); }
+            let ended: bool = close_store<brand Sys>(db);
+            let ended_alloc: bool = finish_allocator(alloc);
+            if ok && ended && ended_alloc { return 0; }
+            return 1;
+        },
+    }
+}
+```
+
+`save_store(db)` is an ILLUSTRATIVE library entry point implementing `save_entries` against the owned Directory and entries inside Store, using sequential internal views. It needs Fs TODAY, no allocation in either design, and handles every opened file. This avoids a simultaneous `&db.disk` and `&db.entries` call under root-based borrowing. `load_entries` treats an absent file as an empty store; malformed existing data is an error. `remove_entry` retains capacity. Entry is an ILLUSTRATIVE Copy record (two u64 fields), so rejected entries may be explicitly discarded. In production, a linear value's failed insertion must return that value, not this boolean adapter.
+
+Store owns its directory but receives its allocator for each growth: keeping an allocator borrow inside Store would violate second-class references. A version owning its allocator would need a generative/existential package for the brand and carefully scoped access; neither design eliminates that work. `get` returns an owned Copy value. Arbitrary linear values require a scoped visitor or owned removal, not `Option<&V>`. Persistence failure leaves in-memory mutations visible; this demo does not promise rollback. Notice that TODAY `get`, `put` and `delete` cannot use Store's directory without adding Fs, while MERGED these functions possess access to it even if their present implementation never uses it.
+
+### (c) Generic retry/visit callbacks — TODAY
+
+```con
+struct VisitContext { out: StdOut, clock: Clock, last: u64 }
+fn retry_visit<T: Copy, C, cap E>(ctx: &mut C, item: T, attempts: u64,
+    callback: fn(&mut C, T) with(E) -> bool) with(E) -> bool {
+    let mut i: u64 = 0;
+    while i < attempts {
+        if callback(ctx, item) { return true; }
+        i = i + 1;
+    }
+    return false;
+}
+fn announce(ctx: &mut VisitContext, item: u64) with(Console, Time) -> bool {
+    match clock_tick(&ctx.clock) {
+        Result::Err { error } => { discard(error); return false; },
+        Result::Ok { value: tick } => { ctx.last = tick; },
+    }
+    // Sequential loans, not simultaneous borrows of sibling fields.
+    match write_log(&ctx.out, "visiting item") {
+        Result::Err { error } => { discard(error); return false; },
+        Result::Ok { value: count } => { discard(count); },
+    }
+    return item != 0;
+}
+fn visit_three(ctx: &mut VisitContext) with(Console, Time) -> bool {
+    let first: bool = retry_visit<cap {Console, Time}>(ctx, 1u64, 3, announce);
+    let second: bool = retry_visit<cap {Console, Time}>(ctx, 2u64, 3, announce);
+    let third: bool = retry_visit<cap {Console, Time}>(ctx, 3u64, 3, announce);
+    return first && second && third;
+}
+fn main(out: StdOut, clock: Clock) with(Console, Time) -> u8 {
+    let mut ctx: VisitContext = VisitContext { out: out, clock: clock, last: 0 };
+    let ok: bool = visit_three(&mut ctx);
+    let VisitContext { out: final_out, clock: final_clock, last } = ctx;
+    discard(last);
+    let closed_out: bool = finish_stdout(final_out);
+    let closed_clock: bool = finish_clock(final_clock);
+    if ok && closed_out && closed_clock { return 0; }
+    return 1;
+}
+```
+
+### (c) Generic retry/visit callbacks — MERGED
+
+```con
+struct VisitContext { out: StdOut, clock: Clock, last: u64 }
+fn retry_visit<T: Copy, C>(ctx: &mut C, item: T, attempts: u64,
+    callback: fn(&mut C, T) -> bool) -> bool {
+    let mut i: u64 = 0;
+    while i < attempts {
+        if callback(ctx, item) { return true; }
+        i = i + 1;
+    }
+    return false;
+}
+fn announce(ctx: &mut VisitContext, item: u64) -> bool {
+    match clock_tick(&ctx.clock) {
+        Result::Err { error } => { discard(error); return false; },
+        Result::Ok { value: tick } => { ctx.last = tick; },
+    }
+    // Sequential loans, not simultaneous borrows of sibling fields.
+    match write_log(&ctx.out, "visiting item") {
+        Result::Err { error } => { discard(error); return false; },
+        Result::Ok { value: count } => { discard(count); },
+    }
+    return item != 0;
+}
+fn visit_three(ctx: &mut VisitContext) -> bool {
+    let first: bool = retry_visit(ctx, 1u64, 3, announce);
+    let second: bool = retry_visit(ctx, 2u64, 3, announce);
+    let third: bool = retry_visit(ctx, 3u64, 3, announce);
+    return first && second && third;
+}
+fn main(out: StdOut, clock: Clock) -> u8 {
+    let mut ctx: VisitContext = VisitContext { out: out, clock: clock, last: 0 };
+    let ok: bool = visit_three(&mut ctx);
+    let VisitContext { out: final_out, clock: final_clock, last } = ctx;
+    discard(last);
+    let closed_out: bool = finish_stdout(final_out);
+    let closed_clock: bool = finish_clock(final_clock);
+    if ok && closed_out && closed_clock { return 0; }
+    return 1;
+}
+```
+
+The generic helper retries an explicit function pointer and mutable context; no closure captures resources. Each callback invocation may log and read the clock even when it later returns false: retries do not roll back effects (Q1.12). TODAY binds E explicitly at each use; MERGED passes exactly the same context and callback values with no effect argument. Both contexts own StdOut and Clock, and both mains reclaim and end them. Shared context mode would also permit operations whose contracts require only shared access; consuming context mode is appropriate for one-shot transfer, not repeated retries.
+
+## Comparison
+
+Counts below are physical signature lines as printed, excluding `{` bodies, and value parameters (not generic/brand parameters). They measure these applications, not a general language benchmark. All signatures except retry_visit fit one line in both versions; automatic wrapping would change line counts without changing complexity.
+
+| Signature | TODAY lines / value parameters | MERGED lines / value parameters | Other signature burden removed |
+|---|---:|---:|---|
+| server serve_one | 1 / 3 | 1 / 3 | three permission names |
+| server main | 1 / 3 | 1 / 3 | three permission names |
+| KV get | 1 / 2 | 1 / 2 | none |
+| KV put | 1 / 4 | 1 / 4 | Alloc |
+| KV delete | 1 / 2 | 1 / 2 | none |
+| KV persist | 1 / 1 | 1 / 1 | Fs |
+| KV close_store | 1 / 1 | 1 / 1 | Fs, Alloc |
+| KV main | 1 / 2 | 1 / 2 | Fs, Alloc |
+| retry_visit | 2 / 4 | 2 / 4 | one cap parameter; E on callback type and helper |
+| announce | 1 / 2 | 1 / 2 | Console, Time |
+| visit_three | 1 / 1 | 1 / 1 | Console, Time; three call-site set arguments in body |
+| callback main | 1 / 2 | 1 / 2 | Console, Time |
+
+Both have 13 physical signature lines and 27 value parameters across the 12 definitions. MERGED does not remove an allocator, directory, clock or stream parameter. A truly resource-free permission operation would replace a TODAY permission name with a MERGED token parameter, increasing value plumbing instead. Hiding parameters in a context is possible in both models and is not a fair count reduction attributable to the merge.
+
+| Question | TODAY | MERGED |
+|---|---|---|
+| What does a signature say? | A directly readable, independently checked category ceiling plus resource inputs. It does not say which declared effects actually occur or reveal runtime grant scopes. A returned resource still needs permission to use. | The inputs, including nested owned capabilities and callback contexts, bound available authority. No independent category ceiling. Opaque types require checked interface summaries. A returned capability can increase the recipient's authority. |
+| “Can X reach the network?” | No Network in a concrete checked signature rules out ordinary network operations under the primitive/FFI premises, even when X receives a Socket hidden inside a struct. If Network is present, inspect reachable grants, call paths and scopes in facts; permission alone is insufficient. Generic signatures need instantiated sets. | Trace capability reachability through inputs, fields, acquisition and callback targets in facts. No reachable network capability rules it out only with complete constructor/foreign coverage. Presence establishes availability, not that an operation will occur. Scope may need dynamic values; unknown is not “no.” |
+| Spec size and proof burden | Separate set syntax, semantic equality, subset/substitution checks, exact callback sets and value provenance. The small Lean authority part already has executable checking and containment proofs, but excludes much of resource safety. | Remove set-specific syntax/judgments/lemmas; retain ownership, identity, provenance, scope and foreign assumptions. Add a full value-flow/derivation containment theorem and sound, complete-enough summary rules. Net reduction is plausible, not measured. Merely deleting the set model produces no proof of object-capability safety. |
+| Checker complexity | Extra parametric set inclusion and explicit argument checking; no inference solver since Q5. Set checks provide local errors when a function exceeds its declared ceiling. | Fewer type forms and no set checking. Existing ownership checking handles transfer, but sealed introduction, aggregate reachability, callback summaries and derived facts must cover every route. A forgotten resource in a broad context may be an audit/policy finding instead of a type error. |
+| Generics and callbacks | Explicit `cap E`, exact callback types, explicit instantiation. No widening or `with(f)` escape hatch. Caller and callback authority remain visible independently of Ctx. | Ordinary generic Ctx and exact ordinary function types. Less ceremony and no artificial set mismatch. Authority visibility can move behind an abstract context; exported summaries must follow instantiation and indirect calls. |
+| Failure modes | Permission omitted: compilation refuses, sometimes repetitive propagation. Broad declared sets reduce usefulness. Resource scope can still be too broad. FFI lies, incomplete primitive tables and wrong cleanup contracts undermine the claim. | Passing an overpowered aggregate grants more than intended. Returning a handle also returns authority. Accidental use of an already-held capability needs no signature edit. Forged tokens, hidden FFI state or incomplete reachability summaries break containment. Narrow at boundaries and inspect authority diffs. |
+| Linear ownership | Distinguishes “owns it” from “may operate on it”; a custodian can hold a resource without operational permission. Both permissions and explicit cleanup need propagation. | Transfer and authority use one value discipline; custodian-only APIs need sealed wrappers or a restricted interface, not an effect ceiling. A sealed wrapper must expose no accessor that recovers authority. Zero-sized tokens still need linear accounting. |
+| Second-class references | Long-lived contexts own resources; passing a borrowed context is temporary. Root-based exclusivity and container-not-in-context restrictions apply. | Exactly the same restrictions. Owning capabilities is natural, but owning an allocator alongside its dependents still needs brands/dependency summaries. Values-only does not create reference fields or reusable borrowed closures. |
+| Purity, Secret and failures | Empty with is only an authority statement. Noninterference, declassification, constant time, failure and termination remain separate. | No capability inputs is only an authority statement. The same separate claims remain; owning an output capability never licenses secret disclosure. |
+| Runtime cost | Permissions erased; real grants and dynamic scope checks remain. | Most resource representations can be identical; pure tokens can erase. No promised speedup: ownership, release metadata, dynamic confinement and native adapters still exist. |
+
+### What happens to C5 and the Lean theorems?
+
+Treat “C5 authority invariant” here as the authority-containment obligation, not a theorem named C5 in the current Lean file. The concrete proofs are [Proofs/Authority.lean](../ConcreteSpec/Proofs/Authority.lean): `sub_sound`, `sub_iff`, `mem_subst`, `equiv_iff`, `exec_contained`, and `authority_contained`. [The spec](../ConcreteSpec/Spec/Authority.lean) defines `CapExpr`, `PrimOk`, `ArgsOk`, `FnOk`, `ProgOk` and execution with erased sets.
+
+TODAY `authority_contained` gives both sides: each observable operation uses a grant supplied to main and its capability belongs to main's declared set. It covers finite prefixes, including incomplete execution; it needs no termination premise. Its grant environment currently passes unchanged identities through direct calls. It does not prove narrowed rights, freshness, linear closing or wrapper integrity.
+
+Under MERGED, delete the capability-set conjunct, CapExpr machinery, capability substitution/equality lemmas and set obligations in PrimOk/ArgsOk/ProgOk. Ordinary argument/type/ownership checks stay. `exec_contained` and `authority_contained` must be replaced or generalized, not simply deleted: every event must act on a live capability rooted in startup authority through a valid acquisition/attenuation chain, with rights within that chain's scope. The proof must handle returned and stored values, moves, loans, acquired children, callback contexts and partial traces. Runtime events and launcher refusal remain in [Observation.lean](../ConcreteSpec/Spec/Observation.lean). Ownership safety, allocator dependency safety, noninterference and constant-time theorems do not go away. Authority fact soundness and absence-discovery completeness remain necessary in both designs.
+
+Thus C5 loses its separate declared-permission invariant; it retains and strengthens the provenance/attenuation obligation required for the advertised values-only claim. Comparing the line count of today's small direct-call set proof with an unspecified full object-capability theorem would be misleading.
+
+## Decided text a merge would revise
+
+The left column gives the operative old wording (short quotations or explicitly labelled summaries). The right column is proposed replacement text, not an owner answer. Shared Q7 contracts are deliberately retained rather than silently reopened.
+
+| Decided location | Old text | Proposed new text |
+|---|---|---|
+| [Authority preamble and rules 1–2](../docs/decisions.md#decided-2026-11-02-authority) | “A value is not a permission, and a permission is not a value.” “Every operation needs both a resource value and a permission.” | Authority is carried only by sealed capability values. An operation needs a live borrowed or owned capability of the required type and rights; no with clause exists. |
+| Authority rule 3 | Summary: capability variables range over sets; check exact instantiations parametrically. | Remove capability variables and set instantiation. Check ordinary generic bodies, capability-bearing values and exported authority summaries parametrically. |
+| Authority rule 4; [OD92](../docs/decisions.md#od92), [OD93](../docs/decisions.md#od93) | Summary: exact function-pointer capability sets; callback callers declare those sets; contexts add no permission; no with(f). | Function pointers are capture-free ordinary function types. Callback authority comes through explicit value arguments/context; no effect-set parameter, widening or shortcut exists. Keep foreign function values refused. |
+| Authority rule 5 | Summary: trusted and Unsafe never discharge operational capabilities; native behavior is an assumption. | Trusted and unsafe code may not bypass explicit capability operands or conceal ambient native effects. Native compliance with the capability contract is a named assumption. |
+| Authority rules 6–7 | Summary: no umbrella capabilities; exhaustive primitive effect table; checked caller/callee inclusion. | No ambient authority or implicit context. The exhaustive primitive table specifies value inputs, rights, derivations, failures and observations. Composition checks value flow and derives authority summaries; remove set inclusion. Keep conservative blocking facts. |
+| Authority rule 8 | “Returned values never supply permissions.” | Returned capability values transfer their authority, subject to the receiving ownership and scope rules. |
+| Authority rule 9; Core Q2.1 | Summary: explicit effectful cleanup; Destroy needs at most Alloc; storage release/destruction/resource cleanup distinct. | Explicit cleanup consumes capability values with the same failure guarantees. Destruction uses release authority attached to owned storage, without separate Alloc permission. Keep the three cleanup categories distinct. |
+| Authority rules 11–12; [OD38](../docs/decisions.md#od38) | Summary: unforgeable resources; main receives grants, declares permissions and consumes grants. | Unforgeable capability values arise only from startup or checked derivation/acquisition. main requests value parameters only, checked against target schema, and consumes all of them. No Root or permission set. |
+| Authority rule 13; Q7.11 | Summary: separate reserved permission names, Console for standard streams and Device for devices. | Remove separate operational permission names. Standard-stream and device capability types/contracts distinguish their authority. Decide reservation cleanup explicitly; do not accidentally make formerly reserved names silently legal. |
+| [Allocation](../docs/decisions.md#decided-2026-11-02-allocation); [OD83](../docs/decisions.md#od83); audit reset | Summary: Allocator<A> plus with(Alloc), including reset; no call-site allocator binding. | Allocator<A> supplies authority and identity; no Alloc clause or call-site binding. Preserve all Q1 brands, dependencies, reset freshness, metadata and failure contracts. |
+| [Filesystem decision](../docs/decisions.md#decided-2026-11-02-filesystem); [OD156](../docs/decisions.md#od156) | Summary: service grant plus Fs/Env/Time/Network, allocator plus Alloc when allocating. | Each operation requires its explicit service capability and allocator when allocating; remove permission clauses. Preserve confined lookup, separate Resolver and all scopes. |
+| [Q5.1–Q5.4](../docs/decisions.md#decided-2026-11-05-core); [OD45](../docs/decisions.md#od45), [OD87](../docs/decisions.md#od87), [OD108](../docs/decisions.md#od108) | Summary: explicit capability arguments, union, semantic set equality, duplicate refusal; no solver. | Retire capability-set syntax and all those obligations. Ordinary type inference and explicit brand arguments stay. No new authority inference solver is introduced. |
+| Core Q7.8 | “Static authority checks plus atomic dynamic scope checks.” | Static capability typing, provenance and ownership checks plus atomic dynamic scope checks; remove the independent permission check. |
+| Core Q7.10 and Q7.11 | Summary: approve target table with with(Console) for standard streams; missing grants exit 125. | Revise every target operation signature by deleting permission clauses. Keep stream capability operands, full table schema, close/narrow/acquire contracts, request/response observations and startup refusal 125. |
+| [OD8](../docs/decisions.md#od8) revision and [facts vocabulary](../docs/decisions.md#decided-project-facts-report) | Summary: with plus resource values supersedes tokens-only OD8; facts separate declared authority and resources. | Record a new values-only revision, without restoring a Root or old token APIs. Facts report available and possibly used authority from value reachability, alongside resources, memory effects and evidence. |
+| [Philosophy](../docs/PHILOSOPHY.md#the-rules), authority admission criterion and refusals | Summary: effects appear in with; hiding operational permissions is refused; authority visible at use sites. | Authority must be explicit in capability value flow and findable from use sites through checked interface summaries. Refuse hidden authority; replace references to mandatory with clauses. This is an owner revision, not an editorial cleanup. |
+
+Authority rules 10 and 14 need no substantive weakening. Q7.1–7.7 and Q7.9 retain their launch, scope, lifecycle and observation contracts; Q7.8/10/11 need the changes above. Secret/declassify does not need a new authority rule. Callable context modes, exact ordinary function typing, no captures and second-class references remain decided. Any entropy signatures added by the later randomness row need the same explicit reconciliation as the other primitive signatures. Generated spec chapters, typed summaries, policies and checker proofs would also need migration after an owner answer; none should be changed provisionally.
+
+## Verdict and recommendation
+
+Keep TODAY as the implementation baseline. MERGED is coherent and worth presenting, but these examples do not establish that it is the better long-term choice. Most runtime values and all lifecycle/error work already exist TODAY. Removing with primarily saves set machinery and callback annotations. It also removes a useful independent ceiling: the KV helpers can hold Store without Fs today; after merging, an implementation edit can start using the contained Directory without changing those signatures. That matters for audit review, even if derived facts expose the change afterward.
+
+The strongest reason to merge is conceptual and formal economy: one authority-transfer mechanism integrated with linear ownership, with substantially cleaner generic callbacks. The strongest reason to keep the split is a small, local, programmer-declared ceiling that remains visible when types and contexts become opaque. Neither is inherently redundant: values choose the reachable things, while TODAY's permission set independently limits the operations. Pure tokens would be useful only for genuinely resource-free authority; adding them alongside every existing grant defeats the proposed simplification.
+
+[Philosophy's conflict order and admission test](../docs/PHILOSOPHY.md#when-rules-conflict) put correctness, auditability and explicit authority ahead of brevity, and require declaration-level summaries. On that basis I recommend no language revision yet. This is not a claim that set syntax must be retained forever, or that changes are bad: the promised proof/checker reduction has not been demonstrated against the obligations it would replace.
+
+I would change my recommendation if a small formal prototype established attenuation and provenance for returned/stored capabilities and explicit callbacks, and a checked-summary prototype answered network reachability across opaque interfaces without whole-program body inspection. Measure both designs on these workloads with accurate native assumptions, incomplete-fact cases, authority diffs, and realistic broad-context mistakes. Show a meaningful reduction in specification/checker complexity and callback maintenance while preserving review visibility. Conversely, if keeping authority visible requires reintroducing programmer-written permission sets under another name, or opaque contexts routinely yield unknown facts, the case for MERGED weakens substantially. An owner may still prefer its single mechanism, but that tradeoff should be explicit.
+
+Review status: this comparison was checked by Codex against the cited decisions and the limited Lean model. An independent second review was unavailable in this session; no independent-review claim is made. The requested output is a document only. The snapshot has no Git metadata, so the repository's SHA-bound review-script workflow could not be completed. No legacy compiler gates or full builds were run; the ILLUSTRATIVE programs are not compilation claims.

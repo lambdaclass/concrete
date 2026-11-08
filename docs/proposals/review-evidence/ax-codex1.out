@@ -1,0 +1,7 @@
+review: round 1 verdict clean (4 piece(s)); raw output: .review/fce6644d9c46d4e2fb81b97572275a482560951f-1.md
+pre-push: review-notes push — no source tree, no gates
+review: round 1, piece 1 of 4 (scripts, 764 bytes)
+review: round 1, piece 2 of 4 (scripts, 59934 bytes)
+review: round 1, piece 3 of 4 (scripts, 27644 bytes)
+review: round 1, piece 4 of 4 (docs, 3026 bytes)
+rc=0

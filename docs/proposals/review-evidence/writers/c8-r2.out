@@ -1,0 +1,754 @@
+kimi version 2.4.1
+• I need read brief and round2. Must act. Should inspect.Should inspect agy, git state, files. Must commit separate each build. Should be cautious branch. Also existing commits done. I can use todo.
+
+• I’ll inspect the six review findings and the current adequacy definitions, then make and validate focused fixes in separate commits without touching the accepted execution modules or axioms golden file.
+
+wip/spec-c8
+c6a84542e axioms.golden: C8 evaluator adequacy (regenerated on concrete-ci-2)
+d2810593d C8: prove infinite evaluator adequacy
+14fd32681 C8: define infinite runs and termination evidence
+4161235a0 C8: separate fuel exhaustion from outcomes
+967064368 C8: prove finite evaluator adequacy
+5d1fb606d C8: record fuel-independent oracle queries
+d8f89ea75 axioms.golden: partial lifecycle transitions (regenerated on concrete-ci-2)
+dc015b7f4 Prove lifecycle refusals are stuck and exercise refused scope exit
+• Output clean status no lines. Should modify broad ρ types. Should understand Exec Oracle runFrom etc and demo types. Read relevant.Perhaps query conversion equivalence proof generalize runFromQ param QueryOracle, runFromQ_toReport only ρ : Oracle use conversion. Existing theorem variables ρ Oracle; need introduce qρ variable QueryOracle. Systematically replace relations and instrument proofs to qρ. Theorem runFromQ_toReport specialized Oracle. Could also prove general relation with function underlying? runFrom only Oracle cannot qρ arbitrary. Keep runFromQ_toReport at Oracle and use ρ.toQueryOracle. runFrom_sound specialized C1 Oracle, but all other instrumented generic qρ. runFrom_complete C1 specialized. infinite not_infinite C1 specialized for run. EndlesslyBlocked remains Oracle C1 run. Termination remains Oracle. Demo uses Oracle env coerced automatically? If Move expects QueryOracle and supplied env, Lean won't auto coercion unless define Coe. User suggests def Oracle.toQueryOracle and specialize. I can explicit `(Oracle.toQueryOracle env)` or `env.toQueryOracle`. Should namespace Oracle possible.
+
+  Finding 4 options: change Conclusion to exact reported queries vs Position? Could redesign Conclusion includes report query history. Current path stops before terminal request, pos.queries = issued. runFromQ_sound can strengthen ∃ later with ending-specific later. Simplest add a predicate `QueryTail`? Or define `Conclusion` takes `Position` with queries after terminal query by making request-stopping constructors position issued++[q] while config c and events unchanged. But then noAnswer Conclusion position no longer equals final machine path pos, Moves ends pre-step. runFromQ_sound can return pos with post query while Moves to pre query? Not directly. Could adjust runFromQ_sound result separates path position and conclusion? Better minimal theorem strengthen exact query histories with conditional on ending. Define `Conclusion` includes `queries : List Query` output? E.g. `Conclusion P ρ (report : QueryReport) (pos)` ensures report events=pos.events and report queries=pos.queries for final etc and pos.queries++[q] for request stopping. But impacts many proofs. Reviewer explicitly either record terminal query in Conclusion (Conclusion relates pre-step pos to exact reported queries), or strengthen runFromQ_sound later exact. I can add `ReportedQueries` relation Ending → Position → List Query → Prop with cases? Or in sound theorem conclusion disjunction/equation:
+  ```
+  ∃ later, ... ∧ (later = [] ∨ ∃ q, later=[q])
+  ```
+  too weak not tied ending. Should be exact:
+  ```
+  (∀ c', ending ≠ outOfFuel c' → ...)?
+  ```
+  Could theorem result:
+  ```
+  (∃ later, queries = pos.queries ++ later) ∧
+  ((∀ f, ending ≠ final f) ... )
+  ```
+  Clean define `QueryEnding` inductive:
+  ```
+  inductive QueryTail : Ending O → List Query O → Prop
+  | completed : final/stuck/outoffuel => []
+  | request : noAnswer/badAnswer => [q]
+  | stuckContinuation...
+  ```
+  But ending stuck could machine or continuation, and tail depends. Could just have theorem sound exact `queries` via modifying Conclusion to take `reportedQueries` parameter:
+  ```
+  inductive Conclusion ... : Ending O → Position O → List (Query O) → Prop
+  | final ... Conclusion final pos pos.queries
+  | stuck ... ...
+  | stuckContinuation ... Conclusion stuck ⟨c,...issued⟩ (issued++[q])
+  ...
+  ```
+  Then `runFromQ_sound` has `Conclusion P ρ report.ending pos report.queries`. C1 `runFrom_sound` lacks queries because ordinary run no report queries; can get Q and erase to Conclusion with explicit Q then output `∃ queries, Conclusion ... queries`. But user expects Conclusion parameterized QueryOracle. Could instead keep Conclusion as current and add separate `ReportedQueries` inductive relating ending pos queries. runFromQ_sound returns both Conclusion and exact query equality. runFrom_sound ignores exact. This satisfies strengthen sound later. A simple `def QueryHistory (ending) (pos) (queries) : Prop` pattern:
+  ```
+  def ConcludesQueries (ending) (before after) : Prop :=
+   match ending with
+   | final | outOfFuel => after=before
+   | stuck c => after=before ∨ ∃ q, after=before++[q] // doesn't distinguish
+   | noAnswer | badAnswer => ∃q after=...
+  ```
+  But exact for stuck step vs cont via Conclusion can theorem split conjunction. Better inductive `ReportedQueries` constructors final/stuck/outoffuel exact and stuckCont/noAnswer/bad query. Duplication but clear.
+
+  Could change Conclusion itself to `Ending → Position → List Query → Prop` and remove separate. But runFrom_sound can return `∃ queries, Conclusion...` less elegant. Existing API review references Conclusion no exact shape requirement. I can change to carry `queries` with field and still runFrom_sound use `(runFromQ...).queries` specialized. E.g.
+  ```
+  theorem runFrom_sound ...:
+  ∃ n pos, Moves ... ∧ events=... ∧ Conclusion P ρ.toQueryOracle ending pos (runFromQ ...).queries
+  ```
+  This leaks instrumentation but okay. Yet runFrom_final_sound destruct no issue.
+
+  Alternative define `Conclusion` with `queries` and `runFrom_sound` ∃ queries. That is enough. But broad modifications more.
+
+  I need fix termination design. Structure:
+  ```
+  function
+  Premises
+  dependencies : List FnId -- doc syntactic metadata explicit
+  admits ...
+  fuel ...
+  entry : ∀ premises ρ args st, admits ... → ∃ fn c, lookup ... ∧ enter...
+  terminates : ∀ premises ρ args st fn c, lookup... → admits... → enter... → ∃ f...
+  ```
+  Finding make conclude entry succeeds not vacuous. Better terminates:
+  ```
+  terminates : ∀ premises ρ args st, admits ... →
+    ∃ fn c f, lookup ... fn ∧ enter ... c ∧ run ... = final f
+  ```
+  Then all_allowed_runs strengthened m≥fuel and no fn c arguments:
+  ```
+  ∃ fn c f, lookup... ∧ enter... ∧ run m c final
+  ```
+  Derive exact via E.terminates and runFrom_mono on report equality. Fuel monotonicity above witness. dependencies document syntactic metadata at this stage; "names callees whose certificates are used; not semantic premise because dependency certificates are supplied via named Premises" But tie or document. I can document clearly syntactic metadata, not semantic condition, trusted composition layer must establish. Perhaps better field `dependencies` with `dependencies_present : ∀ f ∈ dependencies, ∃ fn, lookup...`? That just callee lookup not evidence. Could add `dependency_evidence` impossible recursive structure. Document enough per reviewer "tie or document". Use "syntactic composition metadata only; no recursive evidence objects yet. It does not restrict allowed runs; callers use Premises to encode dependency assumptions." This is acceptable.
+
+  Termination excludes infinite update using all_allowed_runs at fuel witness. It gets fn c etc then not infinite. No need he/hf. all_allowed_runs m hle returns final for m. excludes can use exact witness.
+
+  Finding 3 runFromQ_complete_le generic qρ; runFrom_complete_le C1. runFrom_mono C1. Could also generic Q monotonicity to avoid conversion? Existing runFrom_mono only C1, fine. runFrom_complete_le:
+  ```
+  have hexact := runFrom_complete h hf
+  have hmono := runFrom_mono n m hle ... 
+    non-out via rw hexact; simp
+  rw [hmono]; exact hexact
+  ```
+  Note pos queries empty concern remains runFrom_complete allows arbitrary pos. Fix generalized C1 starts `runFromQ` arbitrary and erasure. Finding says runFrom_complete leaves pos.queries free implicit input even though runFrom starts issued=[]; signature reviewer example still pos but indeed runFrom uses events only. Concrete fix could change runFrom_complete to initial `events c` and Moves from ⟨c,events,[]⟩. But then runFrom_complete_le signature example? User requests add/generalize exact. User explicitly flags free pos.queries. I should change runFrom_complete and _le to `{events} {c} {pos'}` h `Moves ... n ⟨c,events,[]⟩ pos'`. Then runFrom output. runFromQ_complete remains general. This is a breaking API only internal calls maybe no usages beyond. Grep later.
+
+  Finding 5 uniqueness. QueryOracle is function; deterministic runner. FuelLimit roundtrips rfl likely yes after qρ. Add:
+  ```
+  @[simp] theorem ... (X) : X.toFuelLimit.toInfiniteExecution = X := rfl
+  ...
+  theorem infiniteExecution_unique (X Y) : X=Y := by
+   rw [← X.roundtrip, ←Y.roundtrip]? 
+   have hf : X.toFuelLimit = Y.toFuelLimit := Subsingleton.elim...
+  ```
+  Should prove FuelLimit states unique by funext n using prefixes equality, since report includes outOfFuel config and events queries. `L.prefixes n` and `K.prefixes n`; congruence of QueryReport gives Position via config/events/queries. Could:
+  ```
+  have hstates : L.states = K.states := by
+   funext n
+   have h := (L.prefixes n).symm.trans (K.prefixes n)
+   cases h? QueryReport.mk.injEq yields fields. cases states with mk...
+   simp only [QueryReport.mk.injEq] at h? constructor with nested conjunction. 
+   cases h; rfl?
+  ```
+  A helper:
+  ```
+  theorem fuelLimit_states_eq (L K) : L.states=K.states := by
+   funext n
+   have h : (⟨...⟩ : QueryReport O) = ⟨...⟩ := (L.prefixes n).symm.trans ...
+   have hc := congrArg (fun r => match r.ending with | .outOfFuel c => c | _ => L.states n config) h
+  ...
+  ```
+  Better `cases hstate : L.states n; cases ...; simp_all only [QueryReport.mk.injEq, Ending.outOfFuel.injEq]` at h yields equality. Try.
+  Then FuelLimit structure only states+prefix proof Prop, cases L,K; cases states equality; rfl due proof irrelevance.
+  ```
+  theorem FuelLimit.unique (L K) : L=K := by
+   cases L with | mk ls lp =>
+   cases K ...
+   have hs : ls=ks := ...
+   cases hs
+   rfl
+  ```
+  InfiniteExecution unique via toFuelLimit injectivity roundtrip:
+  ```
+  have h : X.toFuelLimit=Y.toFuelLimit := FuelLimit.unique ..
+  calc X = X.toFuelLimit.toInfiniteExecution := (roundtrip X).symm
+   _ = ... := congrArg ... h
+   _ = Y := roundtrip Y
+  ```
+  SilentDivergence vs InfiniteInteraction:
+  ```
+  rintro ⟨X,hf⟩ ⟨Y,hi⟩
+  have : X=Y := InfiniteExecution.unique X Y
+  subst Y
+  exact finite_not...
+  ```
+  not_infinite_of_noAnswer C1 using same prefix contradiction.
+
+  Finding 6 demo one-step trap. Config `.exec (.abort s)` with no frames. At fuel 0 outOfFuel, at fuel1 `step` moves to trapped config then recursive with 0 final? Final? should see final? for trapped. Read definitions.
+
+• The findings are all actionable without changing C1. I’ll generalize the instrumented semantics to a `QueryOracle`, keep C1’s `Oracle` as an explicit specialization, and make soundness record the exact terminal query history rather than an unconstrained suffix.
+
+• Should have final?Abort config easy.
+
+  Should strategy editing huge files. Could do scripted replace via python? Instructions Edit mandatory incremental, no sed. I can use Edit replace_all broad exact tokens carefully. Should avoid multiple Edit same file sequential without Read. Could use one Edit big sections. I can rewrite entire files via Write only complete replacement? Not ideal continuity. Use Edit multiple with reads between. Many modifications. Could use initial global replace via Edit replace_all `ρ : Oracle O` to `ρ : QueryOracle O` in Spec/Adequacy then revert specific Termination and EndlesslyBlocked. In Proofs similar but specialized theorems need Oracle. Better design variables both:
+  Spec:
+  - Add `QueryOracle`, `Oracle.toQueryOracle`.
+  - remove answer or redefine answer for QueryOracle = ρ q. Keeping `answer` generic function qρ. Define `answer (ρ : QueryOracle O) q := ρ q`. C1 conversion.
+  - runFromQ ρ QueryOracle.
+  - runQ QueryOracle.
+  - Move etc QueryOracle.
+  - EndlesslyBlocked Oracle.
+  - Termination Oracle.
+
+  Proof variables `{ρ : QueryOracle O}` and introduce C1 theorems bind `(ρ₀ : Oracle O)`? Current implicit ρ used all theorems. Could keep generic default ρ QueryOracle and C1-specific theorems take `(ρ₀ : Oracle O)` explicit/implicit separate. I want existing theorem `runFrom_sound` with `{ρ : Oracle O}` shadow global? Lean cannot declare same name binder shadow section variable? Section variables command just sets implicit if used. At theorem:
+  ```
+  theorem runFromQ_toReport {ρ : Oracle O} ...
+  ```
+  ρ already section var with different type, binder annotation might error "ρ has already been declared". Can use `{ρ₀ : Oracle O}` and call ρ₀.toQueryOracle. This makes C1 theorems implicit ρ₀. Good.
+  C1-specific list: runFromQ_toReport, runFrom_sound, runFrom_events_from, runFrom_complete, runFrom_mono, runFrom_trace_prefix_le, runFrom_trace_prefix, runFrom_final_sound, not_infinite_of_final/noAnswer, endlesslyBlocked_of_noAnswer, TerminationEvidence theorems. All can use `{ρ₀ : Oracle O}` and `ρ₀.toQueryOracle` in Q calls. `runFromQ_complete` generic. `runFrom_complete_le` C1.
+  Demo global generic qρ works env inferred? At `Move prog env` env expected QueryOracle, no coercion. Add Coe:
+  ```
+  instance : Coe (Oracle O) (QueryOracle O) := ⟨Oracle.toQueryOracle⟩
+  ```
+  Brief concrete fix coercion `def` not necessarily instance. If define `instance` then Lean coerces env automatically and theorem C1 runFromQ_toReport could use `ρ₀` coercion. But definitional reductions `answer`, toQueryOracle. Simp. Explicit is clearer, but demo dozens use env. Add Coe Tail? Function type coercions can instance. `instance : Coe (Oracle O) (QueryOracle O) where coe := Oracle.toQueryOracle`. This is a small definition and convenient. Then in generic `Move prog env` elaborates coe. In theorem statements output pretty perhaps fine. C1 theorem Q relation can use `(ρ := ρ₀.toQueryOracle)`.
+
+  Potential existing `answer` theorem deterministic generic.
+
+  First Spec edit whole file? 184 lines manageable one Edit replacing specific broad section from doc answer through InfiniteInteraction. I can replace big 40-162 with new mostly same. That counts one edit. Then termination another after read. Should have no consecutive edit same file without read. I can read relevant between.
+
+  I'll edit big block exact from comment answer to InfiniteInteraction.Oops ReportedQueries design flawed unchanged excludes all stuck, terminalRequest applies any ending including final and outOfFuel, not exact. Now refine constructors explicit noAnswer/badAnswer/stuckCont. `unchanged` should only final/outOfFuel, stuck constructor. I can:
+  ```
+  | final {f pos}: ReportedQueries (.final f) pos pos.queries
+  | outOfFuel {c events issued}: ...
+  | stuck {c events issued}: ... issued
+  | stuckContinuation {c events issued q}: ReportedQueries (.stuck c) ... (issued++[q])
+  | noAnswer ...
+  | badAnswer ...
+  ```
+  No terminal generic. This is exact relation. Do edit after read. Also doc header still says fixed Oracle and answer; update later.
+
+  Proof broad global ρ type one edit. Use Edit replace_all `{ρ : Oracle O}` -> `{ρ : QueryOracle O}` only occurs variable line perhaps grep.Should fix ReportedQueries. Also header. Could single Edit for block only.replace_all says 1 because explicit parentheses don't match braces. Now edit answer_deterministic and C1 sections. I should run build to see all type mismatches now? Many runFromQ_toReport uses generic qρ against runFrom expects Oracle, errors. Should systematically modify before.
+
+  Proof line 38 answer deterministic to QueryOracle. C1 runFromQ_toReport with ρ₀. I can replace entire theorem 42-77 with new. Add query-level conversion theorem perhaps `answer_toQueryOracle` rfl and occurrence-sensitive example to show finding 1? Should show C1 special case. runFromQ_toReport does. Could also `answer_toQueryOracle` statement.
+
+  runFromQ_toReport:
+  ```
+  theorem runFromQ_toReport {ρ₀ : Oracle O} : ∀... (runFromQ P ρ₀.toQueryOracle ...).toReport = runFrom P ρ₀ ...
+  ```
+  All internal `ρ` replace `ρ₀.toQueryOracle` in runFromQ and answer, `simp [answer, Oracle.toQueryOracle, Query.issue] at ha`. `runFrom` ρ₀. ih no explicit ρ so inferred.
+  Would be large exact edit. Do.Could leverage global implicit ρ QueryOracle and theorem accepts `{ρ₀ : Oracle O}` plus let? Should have `runFromQ P ρ₀` coercion and `runFrom P ρ₀`; internal cases answer `(Oracle.toQueryOracle ρ₀)` explicit. I'll write.Now sound theorem exact queries. I'll edit entire 229-308 section. General runFromQ_sound:
+  ```
+  ∃ n pos, Moves... ∧ events... ∧ Conclusion... ∧ ReportedQueries ending pos queries
+  ```
+  Construct cases replace hq with hr.
+  final `.final`, out `.outOfFuel`, stuck `.stuck`, request `.noAnswer` etc.
+  recursive straightforward simpa.
+  C1 runFrom_sound `{ρ₀ : Oracle O}` `Moves P ρ₀.toQueryOracle`, `Conclusion ...`; calls generic with explicit.
+  Should have runFrom_events_from uses ρ₀.
+  Could replace from comment sound through runFrom_events_from in one edit. Read exact lines updated.Construct exact tuples with Conclusion and Reported. Order he, hc, hr easier. `obtain ⟨m,pos,hpath,he,hc,hr⟩`.
+  Zero final:
+  ```
+  ..., by simpa ... Conclusion.final, by simp [runFromQ,hf]; exact .final?
+  ```
+  ReportedQueries.final has implicit f pos and definitional queries. `by simpa [runFromQ,hf] using (ReportedQueries.final (O:=O) (f:=f) (pos:=⟨...⟩))` constructors params P? ReportedQueries no P ρ, O implicit. Could simply `by simp [runFromQ,hf]; exact .final` perhaps simp at goal transforms. Use `by simpa [runFromQ,hf] using (ReportedQueries.final (f:=f) (pos:=...))`. Out etc.
+  Stuck machine ReportedQueries.stuck. stuck cont q.
+  C1 sound hreport param `(ρ₀ := ρ₀)` not ρ.
+  Do edit.Now rest C1 sections. Could do big replace complete through runFrom_final_sound. Should read updated lines 335-460.
+
+• The query-level relations are in place, and soundness now uses a dedicated `ReportedQueries` relation to distinguish unchanged histories from the three request-stopping cases. Next I’m updating the C1 specializations and adding completeness for every budget at least the finite path length.
+
+• I'll replace ρ for this block with ρ₀. Could one big block exact 355-466. Add runFromQ_complete_le? I can only C1 runFrom_complete_le required. General Q enough fuel would need generic Q mono not existing. Finding says runFromQ_complete and runFrom_complete exact; concrete fix add runFrom_complete_le. But says "runFromQ_complete and runFrom_complete prove completeness only exact... Add (or generalize runFrom_complete to) n≤m statement combining..." Just C1 sufficient. Could add generic Q mono later? No need.
+
+  runFrom_complete with initial empty queries:
+  ```
+  theorem runFrom_complete {ρ₀} {n} {events} {c} {pos'} (h : Moves P ρ₀.toQueryOracle n ⟨c,events,[]⟩ pos')...
+  ```
+  runFromQ_complete h works. toReport n events [] c.
+  Complete_le same h.
+  Monotonicity use `hnot` derived exact.
+  ```
+  have hnot : ∀ c', (runFrom P ρ₀ n events c).ending ≠ .outOfFuel c' := by
+   rw [hexact]; simp
+  have hm := runFrom_mono (P:=P)(ρ₀:=ρ₀) n m hle events c hnot
+  rw [hm, hexact]
+  ```
+  runFrom_mono signature implicit ρ₀ if section variable annotation before colon:
+  `theorem runFrom_mono {ρ₀ : Oracle O} : ∀ ...`
+  All internal replace.
+
+  Trace similar.
+  Final sound.
+  I'll edit.Now C1 infinite not_infinite etc plus Termination later. Query general infinite fine. Add lemmas in same round perhaps separate commits findings. Brief commit each piece as soon build passes. Could first get query finding + sound + complete build commit. Other type errors below prevent build. Now update C1 not_infinite and blocked and termination to compile before first commit. Could make all fixes then build commit? User says commit each piece, better group coherent 1,3,4 perhaps commit after build. Should have current compile errors termination because global ρ QueryOracle used run P ρ in not_infinite and blocked, etc. Update them to ρ₀. Termination structure not yet changed still Oracle and proof all allowed explicit unaffected. `not_infinite_of_final` X generic? Want C1 X with ρ₀.toQueryOracle. Signature:
+  ```
+  theorem not_infinite_of_final {ρ₀ : Oracle O} ... (X : InfiniteExecution P ρ₀.toQueryOracle c)
+  ```
+  Proof Q conversion.
+  not_infinite_of_noAnswer add.
+  endlessly blocked ρ₀.
+  Termination excludes uses not_infinite_of_final inference.
+  Could update block 619-660 and add lemmas roundtrip etc in one later. For compile, edit C1 block not final + endlessly only, leave termination original until next commit. Read current lines.Add noAnswer now finding 5 perhaps separate later. For first compile update final and blocked only. Excludes X should ρ.toQueryOracle to match final theorem. Edit block from final to before termination.Excludes still X InfiniteExecution P ρ c coerces env Oracle to QueryOracle via Coe likely yes elaboration, so okay. all compile perhaps.
+
+  Header Spec docs outdated answer name. Not compile issue. Run lake build allowed.warning: Git tree '/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c8' is dirty
+✔ [27/42] Built ConcreteSpec.Spec.Adequacy (242ms)
+✔ [28/42] Built ConcreteSpec.Spec (129ms)
+✔ [29/42] Built ConcreteSpec.Proofs.Basics (206ms)
+✔ [30/42] Built ConcreteSpec.Proofs.Authority (314ms)
+✔ [31/42] Built ConcreteSpec.Proofs.Adequacy (623ms)
+✔ [32/42] Built ConcreteSpec.Proofs.Cleanup (447ms)
+✔ [33/42] Built ConcreteSpec.Proofs.Slice1 (522ms)
+✔ [34/42] Built ConcreteSpec.Proofs.Borrow (636ms)
+✔ [35/42] Built ConcreteSpec.Proofs.Brand (636ms)
+✔ [36/42] Built ConcreteSpec.Proofs.Observe (181ms)
+✔ [37/42] Built ConcreteSpec.Proofs.Checker (259ms)
+✔ [38/42] Built ConcreteSpec.Proofs.Rep (355ms)
+✔ [39/42] Built ConcreteSpec.Proofs.Slice0 (212ms)
+✔ [40/42] Built ConcreteSpec.Proofs.Examples (172ms)
+✔ [41/42] Built ConcreteSpec (127ms)
+Build completed successfully (42 jobs).
+Build passes. I'll commit each piece as soon. Current includes findings 1,3,4. Should update doc header old statement "A fixed Oracle answers ... pure function answer" wrong. Must sweep comments. Update Spec top and Proofs top. Also runFromQ_complete exact doc okay. `ReportedQueries` sound good. Could commit grouped review findings 1,3,4 after doc changes and perhaps rules check? Hard says commit each piece as soon build passes. I should commit now perhaps doc fix then build? Should commit validated current build includes docs prior mismatch. Fix docs then no code change but build passed before docs. Fine but should build after change? comments don't affect. I can Edit Spec top after Read. Proofs header add complete_le and exact sound perhaps. One edit each parallel. Then git diff and commit. Should git commit user asked yes. Use git diff --check, status, diff perhaps no golden. Commit message. Ensure no changelog required? Original did not add. Fine.
+
+• The build passes with the generalized oracle and exact query-history soundness. I’m recording that validated slice now, including the stronger “enough fuel” completeness theorem and the C1 empty-query-history specialization.
+
+ M ConcreteSpec/Proofs/Adequacy.lean
+ M ConcreteSpec/Spec/Adequacy.lean
+[wip/spec-c8 0d171f35c] C8: answer queries at occurrence level
+ 2 files changed, 168 insertions(+), 104 deletions(-)
+• Commit hooks fast passed. Good. Update todo item 2 done item 3 progress. Termination change Spec + Proof, build commit. Should design all_allowed_runs. Modify Spec termination block:
+  ```
+  dependencies doc in structure? doc comments overall.
+  terminates : ∀ premises ρ args st, admits →
+   ∃ fn c f, lookup ... fn ∧ enter ... c ∧ (run ...).ending=final f
+  ```
+  "dependencies names ... syntactic metadata ... Premises encode semantic assumptions ... does not constrain theorem itself" explicit. Could put field doc:
+  ```
+  /-- Callee identities used by certificate. Syntactic metadata ... -/
+  dependencies
+  ```
+  Lean doc field good.
+  Overall no "final field theorem entry succeeds" accurate.
+
+  Proof all_allowed_runs:
+  ```
+  theorem ... (m : Nat) (hm : E.fuel ... ≤ m) (ha) :
+   ∃ fn c f, lookup ... ∧ enter ... ∧ run P ρ m c final := by
+   obtain ⟨fn,c,f,hf,he,hfinal⟩ := E.terminates ... ha
+   refine ⟨fn,c,f,hf,he,?_⟩
+   have hnot : ∀ c', (run P ρ (E.fuel...) c).ending ≠ out... := by rw [hfinal]; simp
+   have hmono : run P ρ m c = run P ρ fuel c := by
+     apply runFrom_mono ... -- run is runFrom []
+   ...
+  ```
+  Simpler `runFrom_mono` h equality:
+  ```
+  have hmono := runFrom_mono (P:=P)(ρ₀:=ρ) (E.fuel...) m hm [] c ...
+  change run P ρ m c = run P ρ fuel c at hmono
+  rw [hmono]
+  exact hfinal
+  ```
+  `rw [hmono]` goal ending at m, hmono report eq. `rw [hmono, hfinal]`.
+  Perhaps exact congrArg ending hmono | trans.
+  ```
+  exact (congrArg Report.ending hmono).trans hfinal
+  ```
+  Yes hmono lhs m rhs fuel, ending equality final at fuel. Good.
+
+  excludes_infinite:
+  ```
+  (ha) (X : InfiniteExecution P ρ.toQueryOracle c)
+  obtain ⟨fn,c',f,hf,he,hfinal⟩ := E.terminates ...
+  ```
+  Should exclude divergence from entry configuration existentially, but X input c and entry proof c? If theorem no entry arg and X arbitrary c cannot link. I should retain `fn c hf he X` arguments? New theorem can:
+  ```
+  E.excludes_infinite premises ρ args st fn c hf ha he X
+  ```
+  uses all_allowed at exact fuel with same c or simply E.terminates gives potentially different entry c, cannot use. Since lookup/enter deterministic, could prove c'=c from hf/he but need lookup determinism (function) and enter function. E.terminates yields some fn' c'. Simplify via injectivity equalities. Or use old E.terminates now existential and extract, then subst. Signature retain fn c hf he ha X and obtain `fn' c' f hf' he' hfinal`; `rw [hf] at hf'; cases hf'` fn same; `rw [he] at he'; cases he'`; then not infinite. That works. But all_allowed_runs strengthened no fn c. Excludes not vacuous under failed lookup because hf required. But if entry fails, no X from successful entry anyway. Better user requested all allowed runs entry conclusion, excludes can signature just ha and `∀ fn c, lookup -> enter -> InfiniteExecution -> False`. Keep explicit same.
+
+  Alternative `excludes_infinite` with only ha fn c hf he X and call E.terminates. Good.
+
+  Could additionally all_allowed_runs m hle no fn c exactly satisfies.
+  Update doc comments.
+
+  I'll edit Spec.
+
+• The first fix is committed as `0d171f35c`. I’m now making termination evidence non-vacuous: admission must yield a successful function lookup and entry, and `all_allowed_runs` will prove the final outcome at every larger fuel budget as well.
+
+• Build.warning: Git tree '/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c8' is dirty
+✔ [27/42] Built ConcreteSpec.Spec.Adequacy (244ms)
+✔ [28/42] Built ConcreteSpec.Spec (128ms)
+✔ [29/42] Built ConcreteSpec.Proofs.Basics (185ms)
+✔ [30/42] Built ConcreteSpec.Proofs.Authority (294ms)
+✔ [31/42] Built ConcreteSpec.Proofs.Adequacy (607ms)
+✔ [32/42] Built ConcreteSpec.Proofs.Cleanup (401ms)
+✔ [33/42] Built ConcreteSpec.Proofs.Slice1 (512ms)
+✔ [34/42] Built ConcreteSpec.Proofs.Borrow (624ms)
+✔ [35/42] Built ConcreteSpec.Proofs.Brand (626ms)
+✔ [36/42] Built ConcreteSpec.Proofs.Observe (192ms)
+✔ [37/42] Built ConcreteSpec.Proofs.Checker (276ms)
+✔ [38/42] Built ConcreteSpec.Proofs.Rep (350ms)
+✔ [39/42] Built ConcreteSpec.Proofs.Slice0 (202ms)
+✔ [40/42] Built ConcreteSpec.Proofs.Examples (170ms)
+✔ [41/42] Built ConcreteSpec (131ms)
+Build completed successfully (42 jobs).
+Commit termination.[wip/spec-c8 6bc4e39aa] C8: make termination evidence non-vacuous
+ 2 files changed, 32 insertions(+), 17 deletions(-)
+Now finding 5 and 6. Add lemmas. I can perhaps separate commits infinite and demo each build. Do infinite first. Should implement roundtrip, uniqueness. Build likely.
+
+  At after infinite_iff add:
+  ```
+  theorem InfiniteExecution.toFuelLimit_toInfiniteExecution (X) :
+   X.toFuelLimit.toInfiniteExecution = X := rfl
+  ...
+  theorem FuelLimit.states_unique (L K) : L.states=K.states := by
+   funext n
+   have h := (L.prefixes n).symm.trans (K.prefixes n)
+   cases hl : L.states n with | mk lc le lq =>
+   cases hk ...
+   simp [hl,hk] at h? 
+  ```
+  Should test exact Lean. Could use congrArg projections without cases:
+  ```
+  have he : (L.states n).events = (K.states n).events :=
+    congrArg QueryReport.events h
+  ```
+  h is equality of QueryReport structures literal. `congrArg QueryReport.events h` yields exactly events equality. hq similarly.
+  hc from ending:
+  ```
+  have hend := congrArg QueryReport.ending h
+  have hc : (L.states n).config = (K.states n).config := by
+    injection hend
+  ```
+  Since `Ending.outOfFuel` constructor injective, `injection hend`. likely works. Then cases positions:
+  ```
+  cases L.states n with | mk lc le lq =>
+  cases K.states n ...
+  simp_all
+  ```
+  Simpler use Position.ext:
+  ```
+  cases hl : L.states n with | mk lc le lq =>
+   cases hk : K.states n with | mk kc ke kq =>
+   simp only [hl,hk] at he hq hc
+   cases hc; cases he; cases hq; rfl
+  ```
+  But `cases hl :` syntax okay. Or `apply Position.ext` no ext generated automatically structure ext theorem? Lean generates `Position.ext` only with @[ext]? structure has ext theorem automatically likely. Can exact:
+  ```
+  cases L.states n
+  cases K.states n
+  simp_all
+  ```
+  No access h projections? all simp. Try theorem:
+  ```
+    funext n
+    have h := (L.prefixes n).symm.trans (K.prefixes n)
+    have hc : ... := by
+      have := congrArg QueryReport.ending h
+      injection this
+    have he := congrArg QueryReport.events h
+    have hq := congrArg QueryReport.queries h
+    cases hl : L.states n with
+    | mk lc le lq =>
+      cases hk : K.states n with
+      | mk kc ke kq =>
+        simp only [hl, hk] at hc he hq
+        cases hc
+        cases he
+        cases hq
+        rfl
+  ```
+  Actually after cases hc etc goal states functions application equality; rw [hl,hk] goal before cases? At each cases `hl : L.states n = ...` does not substitute expression in goal automatically. `cases hl : L.states n` Lean generalizes? goal `(fun n =>...) n =...` and case intro perhaps rewrites? safer at end `rw [hl,hk,hc,he,hq]`? If hl is equality states n = mk, `rw [hl,hk]`; goal structures. Then exact congr. 
+  ```
+    rw [hl,hk]
+    simp only at hc he hq
+    cases hc; cases he; cases hq; rfl
+  ```
+  But after cases hl/hk hc types simplified with `change`? I'll test build.
+
+  Could avoid uniqueness FuelLimit by direct InfiniteExecution unique using toFuelLimit and `FuelLimit.unique` with states proof.
+
+  ```
+  theorem FuelLimit.unique (L K) : L=K := by
+    cases L with | mk ls lp =>
+    cases K with | mk ks kp =>
+    have hs : ls=ks := by ... L prefixes inaccessible after cases use lp kp.
+    cases hs
+    rfl
+  ```
+  Simpler retain L K and use `cases L; cases K; simp_all?` but proof irrelevance handles:
+  ```
+    cases L with
+    | mk ls lp =>
+      cases K with
+      | mk ks kp =>
+        have hs : ls = ks := by ...
+        cases hs
+        rfl
+  ```
+  Within hs `lp`, `kp`.
+  Could define helper `fuelLimit_states_unique (L K)`. Then:
+  ```
+  theorem FuelLimit.unique (L K) : L=K := by
+    cases L with | mk states prefixes =>
+    cases K ...
+    simp only [FuelLimit.mk.injEq] -- only states because proof Prop
+  ```
+  `cases L; cases K; have := fuelLimit_states_unique ...` cannot refer reconstructed perhaps.
+  ```
+    have hs := fuelLimit_states_unique L K
+    cases L
+    cases K
+    simp_all
+  ```
+  `cases L` after hs reverts? hs retains. `cases L with | mk ls lp => cases K ...; simp only [FuelLimit.mk.injEq]; exact fuelLimit_states_unique ⟨ls,lp⟩ ⟨ks,kp⟩`
+  Could just use `cases L; cases K; simp_all [fuelLimit_states_unique]` no.
+
+  Structure equality via cases:
+  ```
+    cases L with
+    | mk ls lp =>
+      cases K with
+      | mk ks kp =>
+        have hs : ls = ks := by
+           funext n ...
+        subst ks
+        rfl
+  ```
+  proof fields lp/kp of same type after subst; rfl uses proof irrelevance kernel, yes.
+
+  Write direct.
+
+  Roundtrip names requested exactly `toFuelLimit_toInfiniteExecution` and `toInfiniteExecution_toFuelLimit`, namespaced via theorem `InfiniteExecution.toFuelLimit_toInfiniteExecution` full. Fine.
+  `InfiniteExecution.unique` using h fuel limits:
+  ```
+    calc X = X.toFuelLimit.toInfiniteExecution := X.toFuelLimit_toInfiniteExecution.symm
+  ...
+  ```
+  Lean dot theorem invocation perhaps `toFuelLimit_toInfiniteExecution X`.
+  ```
+    rw [← toFuelLimit_toInfiniteExecution X, ← toFuelLimit_toInfiniteExecution Y,
+        FuelLimit.unique X.toFuelLimit Y.toFuelLimit]
+  ```
+  rw first might loop? calc safest:
+  ```
+    have h : X.toFuelLimit = Y.toFuelLimit := FuelLimit.unique _ _
+    calc
+      X = X.toFuelLimit.toInfiniteExecution := (toFuelLimit_toInfiniteExecution X).symm
+      _ = Y.toFuelLimit.toInfiniteExecution := congrArg FuelLimit.toInfiniteExecution h
+      _ = Y := toFuelLimit_toInfiniteExecution Y
+  ```
+  congrArg function implicit params inference may need `(fun L : FuelLimit P ρ c => L.toInfiniteExecution)`.
+  Silent exclusivity after finite_not.
+  noAnswer after final theorem:
+  ```
+  same proof h final; cases h
+  ```
+  Could generalize helper not_infinite_of_not_outOfFuel to avoid duplication but add straightforward.
+
+  Now add the header update: infinite roundtrip etc after build.
+
+  I'll insert roundtrip after infinite_iff with Edit, read before current lines known.
+
+• Termination evidence is committed as `6bc4e39aa`; its main theorem now returns the lookup, entry configuration, and final result for any sufficient fuel. I’m finishing the infinite-execution round trips, uniqueness and exclusion results, then adding the one-step trap example.
+
+• Now build to validate unique before further edits? Could add rest then build, but likely proof errors. Better run lake env lean? Standard build quick. I must commit each piece after passes. Run build now.warning: Git tree '/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c8' is dirty
+✖ [40/42] Building ConcreteSpec.Proofs.Adequacy (486ms)
+trace: .> LEAN_PATH=/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c8/.lake/build/lib/lean /nix/store/94bmilywgajdnqvix1fs35fj94kala0w-lean4-release-4.34.1/bin/lean /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c8/ConcreteSpec/Proofs/Adequacy.lean -o /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c8/.lake/build/lib/lean/ConcreteSpec/Proofs/Adequacy.olean -i /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c8/.lake/build/lib/lean/ConcreteSpec/Proofs/Adequacy.ilean -c /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c8/.lake/build/ir/ConcreteSpec/Proofs/Adequacy.c --setup /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c8/.lake/build/ir/ConcreteSpec/Proofs/Adequacy.setup.json --json
+error: ConcreteSpec/Proofs/Adequacy.lean:657:10: Tactic `rewrite` failed: Did not find an occurrence of the pattern
+  L.states n
+in the target expression
+  { config := lc, events := le, queries := lq } = { config := kc, events := ke, queries := kq }
+
+case mk.mk
+O : Operands
+P : Program O
+ρ : QueryOracle O
+c : Config O
+L K : FuelLimit P ρ c
+n : Nat
+h :
+  { events := (L.states n).events, queries := (L.states n).queries, ending := Ending.outOfFuel (L.states n).config } =
+    { events := (K.states n).events, queries := (K.states n).queries, ending := Ending.outOfFuel (K.states n).config }
+he :
+  { events := (L.states n).events, queries := (L.states n).queries,
+        ending := Ending.outOfFuel (L.states n).config }.events =
+    { events := (K.states n).events, queries := (K.states n).queries,
+        ending := Ending.outOfFuel (K.states n).config }.events
+hq :
+  { events := (L.states n).events, queries := (L.states n).queries,
+        ending := Ending.outOfFuel (L.states n).config }.queries =
+    { events := (K.states n).events, queries := (K.states n).queries,
+        ending := Ending.outOfFuel (K.states n).config }.queries
+hc : (L.states n).config = (K.states n).config
+lc : Config O
+le : List O.Event
+lq : List (Query O)
+hl : L.states n = { config := lc, events := le, queries := lq }
+kc : Config O
+ke : List O.Event
+kq : List (Query O)
+hk : K.states n = { config := kc, events := ke, queries := kq }
+⊢ { config := lc, events := le, queries := lq } = { config := kc, events := ke, queries := kq }
+Some required targets logged failures:
+- ConcreteSpec.Proofs.Adequacy
+error: build failed
+Goal already rewritten by cases. Remove rw [hl,hk]. hc simplification perhaps `simp only [hl,hk] at hc he hq` needed; current simp only no change! I used simp only at hc he hq doesn't rewrite hl. Should have `simp only [hl,hk] at hc he hq`; goal already structures. edit lines.Add rest before build? Could run quick after all. Should read sections for edit. Add exclusivity after finite_not; noAnswer after final. One edit can replace chunk finite_not through final theorem? Should have same file incremental after read. I just read region not finite after shifted. Could one Edit replace finite_not block adding theorem and separately noAnswer would require read between. I can do one edit with old string from finite_not to end final theorem known plus insert both. But exact current same. Use Edit small finite_not add exclusivity, then Read final, edit noAnswer. Or combine two different locations impossible one Edit. Do sequential with build after.Use single Edit replacing from finite_not comment through final with added both.Now build.warning: Git tree '/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c8' is dirty
+✔ [40/42] Built ConcreteSpec.Proofs.Adequacy (521ms)
+✔ [41/42] Built ConcreteSpec (128ms)
+Build completed successfully (42 jobs).
+Commit infinite now. Header update to mention uniqueness perhaps before commit. Build passed. Can edit doc header then commit. Should read top perhaps already known but after modifications unchanged. I can Edit based old current from earlier:
+  ```
+  - Infinite ... interconvertible
+   (`infinite_iff`). Silent...
+  ```
+  Update with roundtrip unique and blocked exclusion. Not necessary but sweep comments desired. Do edit and commit.[wip/spec-c8 e93e2e9a4] C8: prove infinite execution uniqueness
+ 1 file changed, 76 insertions(+), 5 deletions(-)
+Now demo add failingConfig and example. 1-line example requested. Define:
+  ```
+  def failingConfig : Config ops := ⟨.exec (.abort s), [], .init, []⟩
+  example :
+   isOutOfFuel(run ...0) = true ∧
+   brief(run...1)=([],some (.trapped .abort s)) := by decide
+  ```
+  Perhaps "fails/traps with one more" good. Use abort. Add after finishing example. Build and commit.
+
+• The infinite-execution fixes are committed as `e93e2e9a4`, including both definitional round trips and the blocked-run exclusion theorem. The remaining code change is the small counterexample showing that zero fuel can precede a trap rather than divergence or success.
+
+• Note existing comment finding 6 "outOfFuel is not program failure either: silent loop" actually that demonstrates no divergence/failure, but now add explicit trap. Good.warning: Git tree '/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c8' is dirty
+✔ [40/42] Built ConcreteSpec.Proofs.Adequacy (564ms)
+✔ [41/42] Built ConcreteSpec (145ms)
+Build completed successfully (42 jobs).
+[wip/spec-c8 be5e9be09] C8: illustrate fuel exhaustion before a trap
+ 1 file changed, 7 insertions(+)
+All fixes. Now run allowed checks rules and trust_ban. Could run in parallel? Independent read-only builds perhaps yes both light, at most heavy no. Use Bash separate parallel commands. Also inspect git status/log and diff base? Should review for possible subtle issues before responding. I should validate no forbidden axioms new. trust_ban checks. rules spec. Should have no axioms.sh. I can run `nix develop -c timeout 600 bash scripts/spec/rules.sh` and trust. Parallel tools.
+
+• All six findings now have committed fixes, with the final example committed as `be5e9be09`. I’m running the two remaining allowed light checks and reviewing the final diff and commit state; I will not run the heavy axiom, replay, external, or full gate suites.=== the specification ===
+  ok   1 registered rules in 39 sources, each documented with an existing decision row and an accepted and a refused example; every citation names a registered rule
+  ok   the registry and every rule citation of ConcreteSpec
+=== negative controls ===
+  ok   control: a documented rule with both examples passes
+  ok   control: a rule with no refused example fails
+  ok   control: a rule whose doc cites no decision row fails
+  ok   control: a rule registered twice fails
+  ok   control: a rule naming no declaration fails
+  ok   control: a citation of an unregistered rule fails
+  ok   control: a verdict on a non-example fails
+  ok   control: revision 0 fails
+  ok   control: a truncated listing is an error
+  ok   control: a rule with no accepted example fails
+  ok   control: a rule with no doc comment fails
+  ok   control: a rule citing a row no inventory has fails
+  ok   control: one example claiming both verdicts fails
+  ok   control: a verdict in a nested comment fails
+  ok   control: an unregistered quoted name fails
+  ok   control: examples with an attribute or a modifier count
+  ok   control: an unlexable source is an error
+  ok   control: a verdict in a string literal fails
+  ok   control: an attribute with brackets inside counts
+  ok   control: a row an inventory only mentions does not count
+  ok   control: an attribute string cannot stand in for an example
+  ok   control: an attribute holding a string with a bracket counts
+  ok   control: a quoted name holding a backtick is checked
+  ok   control: a malformed citation fails
+  ok   control: a raw string in an attribute cannot stand in for an example
+  ok   control: a quoted name in an attribute cannot stand in for an example
+  ok   control: a comment in an attribute cannot stand in for an example
+  ok   control: a quoted name holding citation-like text is one citation
+  ok   control: a missing source directory is an error
+  ok   control: a source directory with no .lean file is an error
+  ok   control: a checker that hangs through both attempts is INCOMPLETE
+SPEC-RULES: PASS=32 FAIL=0
+=== E/D: the environment ===
+  ok   all 40 ConcreteSpec source modules are in the environment E and D read
+  ok   none of the 7241 ConcreteSpec constants depends on sorryAx, ofReduceBool/Nat, trustCompiler or a native axiom
+  ok   ConcreteSpec declares no axiom
+=== S: the sources ===
+  ok   none of the 40 source files spells a banned word outside comments
+  ok   lakefile.toml builds the library with warningAsError, and nothing overrides it
+=== X: the examples, in the kernel's terms ===
+  ok   all 249 examples, kept as declarations, depend only on the standard axioms
+=== negative controls ===
+  ok   control: a theorem proved by sorry is refused (ConcreteSpecControl.sorryThm (sorryAx))
+  ok   control: a definition with a sorry body and no theorem about it is refused (ConcreteSpecControl.sorryDef (sorryAx))
+  ok   control: a theorem proved by native_decide is refused (ConcreteSpecControl.nativeThm (ConcreteSpecControl.nativeThm._native.native_decide.ax_1_1))
+  ok   control: a declared axiom is reported
+  ok   control: an axiom whose name holds a tab fails the run (no row can carry it)
+  ok   control: native_decide, and sorry inside an interpolation, after a string, raw string or quoted name holding comment delimiters, after an interpolation holding a string, a direct sorryAx, a syntax extension, an outside import, an option, meta code and decide options (native split across lines, positional) are found; the words in comments are not
+  ok   control: the header import ConcreteSpec.Spec Lean is reported
+  ok   control: the header import ConcreteSpec.Spec   Lean is reported
+  ok   control: the header prelude import ConcreteSpec.Spec is reported
+  ok   control: a library that turns warningAsError off is refused (the library sets options ['warningAsError'])
+  ok   control: a library built from another source directory is refused (the library sets ['srcDir'])
+  ok   control: a source the scan cannot read or lex (missing) fails it (rc=3)
+  ok   control: a source the scan cannot read or lex (Open) fails it (rc=3)
+  ok   control: a source the scan cannot read or lex (Brace) fails it (rc=3)
+  ok   control: a source the scan cannot read or lex (Quote) fails it (rc=3)
+  ok   control: source modules outside a (truncated) import closure are reported
+  ok   control: an example proved by decide +native and one closed by stop are reported, rfl is not, and the word example in a string is no example («⟪example⟫C.lean:1» («⟪example⟫C.lean:1»._native.decide.ax_1) «⟪example⟫C.lean:2» (sorryAx) )
+PROOF-TRUST-BAN: PASS=23 FAIL=0
+
+
+• Should have final review. Should check status new files from trust? Could create? scripts should temp. git status. Also diff from HEAD c6 to now ensure no golden. Perhaps use git diff --stat and log. Could inspect theorem statements via grep line numbers. Perhaps check no `ReportedQueries` overly permissive? It exactly maps final/stuck/out etc. sound returns correct. Good.
+
+  Potential hidden issue finding 1: QueryOracle parameterization of `Conclusion`, `InfiniteExecution`, `FuelLimit`, Move/Moves yes. `runFromQ_toReport`, runFrom_sound/complete specialize. `answer` pure. occurrence counts per site. Great.
+
+  Potential finding 3 runFromQ completeness only exact but C1 complete_le enough. User explicitly concrete fix add runFrom_complete_le signature free queries fixed. Good.
+
+  Finding 2 all_allowed_runs monotonic. dependencies doc. Nonvacuous.
+
+  Finding 5 uniqueness proof using fuel limit. Roundtrip definitional. noAnswer. Mutual exclusion.
+
+  Finding 6 small example.
+
+  Perhaps final build after last commit already done. Rules/trust after all done. Should git status clean. Also check latest commit IDs. Use `git status --short`, `git log -4`, `git diff c6a84542..HEAD --stat`, `git diff --name-only c6a...`. Could combine independent read-only commands separate parallel per instructions prefer independent. One Bash with `git status --short && git log...` dependent? Not dependent but can one call okay though instruction independent separate parallel. Use one status/log perhaps okay. I need mark todo done after. Also could `git diff --check c6..HEAD`. Use single command status/log/diff-check. No issue.be5e9be09 C8: illustrate fuel exhaustion before a trap
+e93e2e9a4 C8: prove infinite execution uniqueness
+6bc4e39aa C8: make termination evidence non-vacuous
+0d171f35c C8: answer queries at occurrence level
+ConcreteSpec/Proofs/Adequacy.lean
+ConcreteSpec/Spec/Adequacy.lean
+Status blank clean yes. Should mark done. Respond with commits list, findings 1-6 and how, new changed theorem statements, left reason, questions. Should mention no modifications golden/Exec. Tests. Should be concise but explicit. Could structure:
+  Commits 4 bullets.
+  Findings:
+  1 QueryOracle... lines spec:42, conversion 46, all relations.
+  2 TerminationEvidence... all allowed...
+  3 complete_le...
+  4 ReportedQueries...
+  5 lemmas...
+  6 failingConfig example...
+  New/changed statements summarized perhaps overlaps. Requirement "each finding fixed and how, new/changed theorem statements" can combine each finding with statements. Then validation. Anything left: dependency composition remains documented syntactic metadata, no concrete variants etc out of scope; heavy checks not run per instructions. Questions none.
+
+  Should mention all commit SHAs full? 9-10 chars enough list SHA + one line. Use exact 9 char. Tests pass at final head:
+  - lake build after each commit yes (except doc header edited after build but commit then next builds includes).
+  - rules pass 32
+  - trust 23
+  Working tree clean.
+  No heavy checks per brief.
+
+  Theorem statements precise:
+  1 QueryOracle `Query O → Option Answer`, C1 ignores occurrence, runner etc generic. answer_toQueryOracle equality. runFromQ_toReport specialized.
+  2 terminates ∀ admitted ∃ fn c f lookup ∧ enter ∧ final at witness. all_allowed ∀m≥ fuel same.
+  3 runFrom_complete_le for n≤m Moves from empty queries -> exact events/final. runFrom_complete now empty history.
+  4 runFromQ_sound path and Conclusion plus ReportedQueries exact query report. For final/machine stuck/outOfFuel no extra, noAnswer/badAnswer/stuckContinuation one q. Note machine stuck unchanged vs continuation query appended relation differentiates constructors. Good.
+  5 roundtrip equality, unique, exclusivity, noAnswer exclusion.
+  6 example 0 out fuel, 1 trap abort.
+
+  "Anything left with reason": dependencies not tied computationally to evidence but explicitly documented syntactic metadata per finding alternative. Composition layer must check; no concrete variants/costs out of scope. Heavy gates not run as prohibited; reviewer CI. Questions none.
+
+  Should have TodoList done before responding.Respond.
+
+• Implemented all six ROUND2 findings. The working tree is clean; neither `Exec.lean` nor `scripts/proofs/axioms.golden` was changed.
+
+  ### Commits
+
+  - `0d171f35c` — C8: answer queries at occurrence level
+  - `6bc4e39aa` — C8: make termination evidence non-vacuous
+  - `e93e2e9a4` — C8: prove infinite execution uniqueness
+  - `be5e9be09` — C8: illustrate fuel exhaustion before a trap
+
+  ### Findings and theorem changes
+
+  1. **Occurrence-sensitive oracles**
+     - Added `QueryOracle O := Query O → Option (Answer ...)`, so answers can inspect the complete query, including `occurrence` (`ConcreteSpec/Spec/Adequacy.lean:42`).
+     - Parameterized `runFromQ`, `Move`, `Moves`, `Conclusion`, `InfiniteExecution`, and `FuelLimit` by `QueryOracle`.
+     - `Oracle.toQueryOracle` specializes C1 by ignoring occurrence numbers.
+     - `answer_toQueryOracle` proves that specialization returns exactly C1’s answer.
+     - `runFromQ_toReport`, `runFrom_sound`, and `runFrom_complete` now explicitly use the lifted C1 oracle.
+
+  2. **Non-vacuous termination evidence**
+     - `TerminationEvidence.terminates` now concludes, for every admitted call:
+       `∃ fn c f, lookup = some fn ∧ enter fn args st = some c ∧ run ... = final f`.
+     - `TerminationEvidence.all_allowed_runs` proves the same lookup, entry, and final outcome for every `m ≥ E.fuel ...`, using fuel monotonicity (`ConcreteSpec/Proofs/Adequacy.lean:756`).
+     - `dependencies` is documented as syntactic composition metadata whose certificates must be checked by a composition layer; semantic dependency assumptions belong to `Premises`.
+     - `excludes_infinite` remains non-vacuous for successful admitted entry configurations.
+
+  3. **Completeness with sufficient fuel**
+     - Added `runFrom_complete_le`: an `n`-step final execution is reported with its exact events and final result at every budget `m ≥ n` (`ConcreteSpec/Proofs/Adequacy.lean:415`).
+     - `runFrom_complete` and `runFrom_complete_le` now start from an explicitly empty query history, matching `runFrom`.
+
+  4. **Exact query-history soundness**
+     - Added `ReportedQueries`, distinguishing unchanged histories from terminal requests that append one query.
+     - `runFromQ_sound` now returns the finite path, `Conclusion`, and the exact reported query history (`ConcreteSpec/Proofs/Adequacy.lean:241`).
+     - `noAnswer`, `badAnswer`, and continuation-refused `stuck` include their terminal query; final, machine-stuck, and out-of-fuel reports do not.
+
+  5. **Infinite execution round trips and exclusions**
+     - Added definitional equalities:
+       - `InfiniteExecution.toFuelLimit_toInfiniteExecution`
+       - `FuelLimit.toInfiniteExecution_toFuelLimit`
+     - Added `FuelLimit.unique` and `InfiniteExecution.unique`.
+     - Added `silentDivergence_not_infiniteInteraction`.
+     - Added `not_infinite_of_noAnswer`, showing an endlessly blocked run cannot also be an infinite execution.
+
+  6. **Fuel exhaustion before failure**
+     - Added `Demo.failingConfig` and a decidable example proving it reports `outOfFuel` at fuel `0` and an `abort` trap at fuel `1`.
+
+  ### Verification
+
+  - `nix develop -c timeout 1200 lake build ConcreteSpec` — passed after every committed code slice.
+  - `scripts/spec/rules.sh` — **PASS=32 FAIL=0**.
+  - `scripts/proofs/trust_ban.sh` — **PASS=23 FAIL=0**; no new axioms or banned proof mechanisms.
+  - Heavy gates were not run, as required by the brief.
+
+  Nothing from findings 1–6 remains open. Concrete dependency-certificate composition, variants, and cost models remain outside this slice.
+
+  **QUESTIONS:** None.
+
+To resume this session: kimi -r session_68f07a97-7f3d-46bc-8a12-1284cd147450
+kimi rc=0

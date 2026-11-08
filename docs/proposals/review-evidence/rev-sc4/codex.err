@@ -1,0 +1,850 @@
+Reading additional input from stdin...
+OpenAI Codex v0.166.0
+--------
+workdir: /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rev-sc4/codex
+model: gpt-6.1-sol
+provider: openai
+approval: never
+sandbox: danger-full-access
+reasoning effort: none
+reasoning summaries: none
+session id: 01a1b8e7-59be-7461-9a8f-eaee42b0e19e
+--------
+user
+READ-ONLY REVIEW, round 4. Do not modify any file. Copy of branch wip/spec-core. `_delta.diff` is the change since your round-3 review (`_inputs/codex-round3.out`: attribute skipping bypassable by raw strings, quoted names and comments; the malformed-citation scan firing inside valid citations). Check both are resolved (examples are now found on the source with comments and literals blanked by scripts/proofs/lean_lex.py at the same offsets; citations are consumed whole left to right and verdicts read from them), the new controls in scripts/spec/rules.sh test what they claim, and nothing new is bypassable or falsely refused. Reproduce in memory only. Findings as file:line with a fix, each "defect" or "preference"; last line exactly `VERDICT: ACCEPT` or `VERDICT: REVISE`.
+codex
+I’ll inspect the delta and controls, then probe the lexer and citation handling in memory without changing files.
+exec
+/bin/bash -lc 'pwd; git status --short; cat _delta.diff' in /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rev-sc4/codex
+ succeeded in 0ms:
+/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rev-sc4/codex
+fatal: not a git repository (or any of the parent directories): .git
+diff --git a/scripts/spec/rules.py b/scripts/spec/rules.py
+index 17179201..ceac3346 100644
+--- a/scripts/spec/rules.py
++++ b/scripts/spec/rules.py
+@@ -26,41 +26,48 @@ ROW = re.compile(r"\b(Q\d+(?:\.\d+)+|OD\d+|P\d+[a-z]?|R-\d{4})\b")
+ NAME = r"((?:«[^»\n]*»|[^`«\n])+)"
+ CITE_START = re.compile(r"\(rule `")
+ CITE = re.compile(r"\(rule `" + NAME + r"`\)")
+-VERDICT = re.compile(r"\b(Accepted|Refused) \(rule `" + NAME + r"`\)")
++VERDICT_BEFORE = re.compile(r"\b(Accepted|Refused) \Z")
+ MODIFIERS = re.compile(r"(?:(?:noncomputable|private|protected|unsafe|partial)\s+)*example(?![\w'!?])")
+ # A declared decision row: a list item that starts with the row in bold (`- **Q9.1** …`), or a table
+ # row whose first cell is the row (`| OD101 | …`, `| R-0607 | …`). A mention in prose is not one.
+ DECLARED = re.compile(r"^\s*(?:- \*\*(\S+?)\*\*|\| *(\S+?) *\|)", re.M)
+ 
+ 
+-def skip_attribute(src, i):
+-    """`src[i:]` starts with `@[`: the index after its closing `]`, or None. Brackets nest, and a
+-    string literal (with its escapes) is skipped whole, so a `]` inside one ends nothing."""
+-    depth, i = 0, i + 1
+-    while i < len(src):
+-        c = src[i]
+-        if c == '"':
+-            i += 1
+-            while i < len(src) and src[i] != '"':
+-                i += 2 if src[i] == "\\" else 1
+-            if i >= len(src): return None
+-        elif c == "[": depth += 1
+-        elif c == "]":
+-            depth -= 1
+-            if depth == 0: return i + 1
+-        i += 1
+-    return None
+-
+-
+-def example_follows(src, i):
+-    """What stands between a doc comment ending at `i` and the `example` it documents: whitespace,
+-    attributes and modifiers, nothing else (no comment, no other command)."""
++def example_follows(code, i):
++    """What stands between a doc comment ending at `i` and the `example` it documents: attributes
++    and modifiers. `code` is the source with every comment and literal blanked (`lean_lex`, at the
++    same offsets), so no string, raw string, quoted name or comment can close an attribute or
++    supply the `example`."""
+     while True:
+-        while i < len(src) and src[i].isspace(): i += 1
+-        if not src.startswith("@[", i): break
+-        i = skip_attribute(src, i)
+-        if i is None: return False
+-    return MODIFIERS.match(src, i) is not None
++        while i < len(code) and code[i].isspace(): i += 1
++        if not code.startswith("@[", i): break
++        depth, i = 0, i + 1
++        while i < len(code):
++            if code[i] == "[": depth += 1
++            elif code[i] == "]":
++                depth -= 1
++                if depth == 0: break
++            i += 1
++        if i >= len(code): return False
++        i += 1
++    return MODIFIERS.match(code, i) is not None
++
++
++def citations(src):
++    """Every rule citation in `src`, left to right, as (start, end, name, verdict-or-None), and the
++    offsets of every malformed one. A complete citation is consumed whole, so the text of a quoted
++    name inside it is never read as another citation; a citation is a verdict when `Accepted ` or
++    `Refused ` stands directly before it."""
++    found, bad, i = [], [], 0
++    while True:
++        m = CITE_START.search(src, i)
++        if not m: return found, bad
++        c = CITE.match(src, m.start())
++        if not c:
++            bad.append(m.start()); i = m.end(); continue
++        v = VERDICT_BEFORE.search(src[max(0, m.start() - 10):m.start()])
++        found.append((m.start(), c.end(), c.group(1), v.group(1) if v else None))
++        i = c.end()
+ 
+ 
+ def declared_rows(inventories):
+@@ -110,28 +117,25 @@ def main(rules_path, src_dir, row_paths):
+             try:
+                 src = open(path, encoding="utf-8").read(); spans = []
+                 lean_lex.lex(src, spans)
++                code = lean_lex.lex(src, literals=False)
+             except (OSError, UnicodeDecodeError, lean_lex.LexError) as e:
+                 print(f"error: {path}: {e}", file=sys.stderr); return 3
+             scanned += 1
+             # citations anywhere in the file (comments of both kinds, and literals: fail closed)
+-            for m in CITE_START.finditer(src):
+-                if not CITE.match(src, m.start()):
+-                    line = src.count("\n", 0, m.start()) + 1
+-                    fails.append(f"{path}:{line}: a malformed rule citation")
+-            for m in CITE.finditer(src):
+-                if m.group(1) not in seen:
+-                    line = src.count("\n", 0, m.start()) + 1
+-                    fails.append(f"{path}:{line}: cites unregistered rule {m.group(1)}")
+-            # a verdict anywhere outside a doc comment (code, a string literal) is stray too
+-            for m in VERDICT.finditer(src):
+-                if not any(a <= m.start() < b and src.startswith("/--", a) for a, b in spans):
+-                    line = src.count("\n", 0, m.start()) + 1
++            cites, bad = citations(src)
++            for k in bad:
++                fails.append(f"{path}:{src.count(chr(10), 0, k) + 1}: a malformed rule citation")
++            for k, _, n, v in cites:
++                line = src.count("\n", 0, k) + 1
++                if n not in seen: fails.append(f"{path}:{line}: cites unregistered rule {n}")
++                # a verdict anywhere outside a doc comment (code, a string literal) is stray too
++                if v and not any(a <= k < b and src.startswith("/--", a) for a, b in spans):
+                     fails.append(f"{path}:{line}: a verdict citation outside an example's doc comment")
+             for a, b in spans:
+                 text, line = src[a:b], src.count("\n", 0, a) + 1
+-                verdicts = VERDICT.findall(text)
++                verdicts = [(v, n) for k, _, n, v in cites if v and a <= k < b]
+                 if not verdicts: continue
+-                if not (text.startswith("/--") and example_follows(src, b)):
++                if not (text.startswith("/--") and example_follows(code, b)):
+                     fails.append(f"{path}:{line}: a verdict citation outside an example's doc comment")
+                     continue
+                 if "/-" in text[3:]:
+diff --git a/scripts/spec/rules.sh b/scripts/spec/rules.sh
+index d8427a5b..ecf72e51 100755
+--- a/scripts/spec/rules.sh
++++ b/scripts/spec/rules.sh
+@@ -179,6 +179,33 @@ $END" "$EXA
+ -- see (rule \`R.ok"
+ [ "$RC" = 1 ] && [[ "$OUT" == *"malformed rule citation"* ]] && ok "control: a malformed citation fails" \
+   || no "control: malformed citation not reported: $OUT"
++fixture rawattr "$GOOD
++$END" '/-- Accepted (rule `R.ok`). -/
++@[deprecated r#"a " ] example"#]
++def a : True := trivial
++
++/-- Refused (rule `R.ok`). -/
++@[deprecated «x ] example»]
++def b : True := trivial'
++[ "$RC" = 1 ] && [[ "$OUT" == *"outside an example"* ]] \
++  && ok "control: a raw string or quoted name in an attribute cannot stand in for an example" || no "control: raw-string attribute example not reported: $OUT"
++fixture cmtattr "$GOOD
++$END" '/-- Accepted (rule `R.ok`). -/
++@[simp /- ] example -/]
++def a : True := trivial
++
++/-- Refused (rule `R.ok`). -/
++example : True := trivial'
++[ "$RC" = 1 ] && [[ "$OUT" == *"outside an example"* ]] \
++  && ok "control: a comment in an attribute cannot stand in for an example" || no "control: comment attribute example not reported: $OUT"
++QN='{"name":"R.«a (rule ` b` c»","rev":1,"exists":true,"doc":"The rule (Q9.1)."}'
++fixture qname "$QN
++$END" '/-- Accepted (rule `R.«a (rule ` b` c»`). -/
++example : True := trivial
++
++/-- Refused (rule `R.«a (rule ` b` c»`). -/
++example : True := trivial'
++[ "$RC" = 0 ] && ok "control: a quoted name holding citation-like text is one citation" || no "control: quoted citation-like name refused: $OUT"
+ OUT=$(check 60 "$TMP/good.jsonl" "$TMP/no-such-dir" "$TMP/rows.md"); RC=$?
+ [ "$RC" = 3 ] && ok "control: a missing source directory is an error" || no "control: missing source dir gave rc=$RC: $OUT"
+ mkdir -p "$TMP/empty"
+
+exec
+/bin/bash -lc 'cat scripts/spec/rules.py; cat scripts/proofs/lean_lex.py; cat scripts/spec/rules.sh; cat _inputs/codex-round3.out' in /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rev-sc4/codex
+ succeeded in 0ms:
+#!/usr/bin/env python3
+"""The rule gate's checks (scripts/spec/rules.sh): the registered rules against the sources.
+
+  rules.py RULES.jsonl SRC_DIR ROWS...
+      RULES.jsonl is scripts/spec/rules.lean's output; SRC_DIR holds the specification's .lean
+      sources (searched recursively, at least one); each ROWS file is a decision inventory
+      (docs/decisions.md, ROADMAP.md) in which a cited decision row must appear.
+
+Prints `ok`/`FAIL` lines; exits 1 on any failure, 3 when an input cannot be read or lexed.
+A rule's doc comment must cite a decision row that an inventory declares (a list item starting
+with the row in bold, or a table row whose first cell is it; a mention in prose does not count); each rule needs one
+example whose doc comment says ``Accepted (rule `Name`)`` and a different one whose doc comment
+says ``Refused (rule `Name`)``; a verdict doc comment holds no nested comment and no rule's two
+verdicts at once; every ``(rule `Name`)`` anywhere in a source (either kind of comment, or a
+literal) must name a registered rule; no rule is registered twice; revisions are >= 1.
+"""
+import json, os, re, sys
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "proofs"))
+import lean_lex  # noqa: E402
+
+ROW = re.compile(r"\b(Q\d+(?:\.\d+)+|OD\d+|P\d+[a-z]?|R-\d{4})\b")
+# A rule name is a Lean name as `toString` prints it: dotted components, a component that needs
+# quoting written «…» (which may hold spaces and backticks). The name runs to the first backtick
+# outside a «…» component.
+NAME = r"((?:«[^»\n]*»|[^`«\n])+)"
+CITE_START = re.compile(r"\(rule `")
+CITE = re.compile(r"\(rule `" + NAME + r"`\)")
+VERDICT_BEFORE = re.compile(r"\b(Accepted|Refused) \Z")
+MODIFIERS = re.compile(r"(?:(?:noncomputable|private|protected|unsafe|partial)\s+)*example(?![\w'!?])")
+# A declared decision row: a list item that starts with the row in bold (`- **Q9.1** …`), or a table
+# row whose first cell is the row (`| OD101 | …`, `| R-0607 | …`). A mention in prose is not one.
+DECLARED = re.compile(r"^\s*(?:- \*\*(\S+?)\*\*|\| *(\S+?) *\|)", re.M)
+
+
+def example_follows(code, i):
+    """What stands between a doc comment ending at `i` and the `example` it documents: attributes
+    and modifiers. `code` is the source with every comment and literal blanked (`lean_lex`, at the
+    same offsets), so no string, raw string, quoted name or comment can close an attribute or
+    supply the `example`."""
+    while True:
+        while i < len(code) and code[i].isspace(): i += 1
+        if not code.startswith("@[", i): break
+        depth, i = 0, i + 1
+        while i < len(code):
+            if code[i] == "[": depth += 1
+            elif code[i] == "]":
+                depth -= 1
+                if depth == 0: break
+            i += 1
+        if i >= len(code): return False
+        i += 1
+    return MODIFIERS.match(code, i) is not None
+
+
+def citations(src):
+    """Every rule citation in `src`, left to right, as (start, end, name, verdict-or-None), and the
+    offsets of every malformed one. A complete citation is consumed whole, so the text of a quoted
+    name inside it is never read as another citation; a citation is a verdict when `Accepted ` or
+    `Refused ` stands directly before it."""
+    found, bad, i = [], [], 0
+    while True:
+        m = CITE_START.search(src, i)
+        if not m: return found, bad
+        c = CITE.match(src, m.start())
+        if not c:
+            bad.append(m.start()); i = m.end(); continue
+        v = VERDICT_BEFORE.search(src[max(0, m.start() - 10):m.start()])
+        found.append((m.start(), c.end(), c.group(1), v.group(1) if v else None))
+        i = c.end()
+
+
+def declared_rows(inventories):
+    return {a or b for t in inventories for a, b in DECLARED.findall(t)}
+
+
+def main(rules_path, src_dir, row_paths):
+    fails = []
+    try:
+        rules = [json.loads(l) for l in open(rules_path, encoding="utf-8") if l.strip()]
+        inventories = [open(p, encoding="utf-8").read() for p in row_paths]
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as e:
+        print(f"error: {e}", file=sys.stderr); return 3
+    if not rules or rules[-1] != {"end": True}:
+        print("error: the rule listing is truncated (no end record)", file=sys.stderr); return 3
+    if not inventories:
+        print("error: no decision inventory given", file=sys.stderr); return 3
+    if not os.path.isdir(src_dir):
+        print(f"error: {src_dir}: not a directory", file=sys.stderr); return 3
+    rules = rules[:-1]
+    declared = declared_rows(inventories)
+    names = [r["name"] for r in rules]
+    for n in sorted({n for n in names if names.count(n) > 1}):
+        fails.append(f"rule {n} is registered more than once")
+    for r in rules:
+        if not r["exists"]: fails.append(f"rule {r['name']} names no declaration")
+        if r["rev"] < 1: fails.append(f"rule {r['name']} has revision {r['rev']} (revisions start at 1)")
+        if not r["doc"].strip(): fails.append(f"rule {r['name']} has no doc comment")
+        else:
+            rows = [m.group(1) for m in ROW.finditer(r["doc"])]
+            if not rows: fails.append(f"rule {r['name']}'s doc comment cites no decision row")
+            elif not any(x in declared for x in rows):
+                fails.append(f"rule {r['name']}'s doc comment cites no existing decision row ({', '.join(rows)})")
+    seen = {n: set() for n in names}
+    scanned = 0
+
+    def walk_error(e):
+        raise e
+    try:
+        tree = sorted(os.walk(src_dir, onerror=walk_error))
+    except OSError as e:
+        print(f"error: {src_dir}: {e}", file=sys.stderr); return 3
+    for dirpath, _, files in tree:
+        for f in sorted(files):
+            if not f.endswith(".lean"): continue
+            path = os.path.join(dirpath, f)
+            try:
+                src = open(path, encoding="utf-8").read(); spans = []
+                lean_lex.lex(src, spans)
+                code = lean_lex.lex(src, literals=False)
+            except (OSError, UnicodeDecodeError, lean_lex.LexError) as e:
+                print(f"error: {path}: {e}", file=sys.stderr); return 3
+            scanned += 1
+            # citations anywhere in the file (comments of both kinds, and literals: fail closed)
+            cites, bad = citations(src)
+            for k in bad:
+                fails.append(f"{path}:{src.count(chr(10), 0, k) + 1}: a malformed rule citation")
+            for k, _, n, v in cites:
+                line = src.count("\n", 0, k) + 1
+                if n not in seen: fails.append(f"{path}:{line}: cites unregistered rule {n}")
+                # a verdict anywhere outside a doc comment (code, a string literal) is stray too
+                if v and not any(a <= k < b and src.startswith("/--", a) for a, b in spans):
+                    fails.append(f"{path}:{line}: a verdict citation outside an example's doc comment")
+            for a, b in spans:
+                text, line = src[a:b], src.count("\n", 0, a) + 1
+                verdicts = [(v, n) for k, _, n, v in cites if v and a <= k < b]
+                if not verdicts: continue
+                if not (text.startswith("/--") and example_follows(code, b)):
+                    fails.append(f"{path}:{line}: a verdict citation outside an example's doc comment")
+                    continue
+                if "/-" in text[3:]:
+                    fails.append(f"{path}:{line}: a verdict doc comment holds a nested comment")
+                    continue
+                kinds = {}
+                for v, n in verdicts: kinds.setdefault(n, set()).add(v)
+                both = sorted(n for n, k in kinds.items() if len(k) > 1)
+                if both:
+                    fails.append(f"{path}:{line}: one example is both accepted and refused by {', '.join(both)}")
+                    continue
+                for n, k in kinds.items():
+                    if n in seen: seen[n] |= k
+    if scanned == 0:
+        print(f"error: {src_dir}: no .lean source", file=sys.stderr); return 3
+    for n in names:
+        for v in ("Accepted", "Refused"):
+            if v not in seen[n]: fails.append(f"rule {n} has no example marked {v} (rule `{n}`)")
+    for f in fails: print(f"  FAIL {f}")
+    if not fails: print(f"  ok   {len(rules)} registered rules in {scanned} sources, each documented with an"
+                        " existing decision row and an accepted and a refused example; every citation"
+                        " names a registered rule")
+    return 1 if fails else 0
+
+
+if __name__ == "__main__":
+    if len(sys.argv) < 4:
+        print(f"usage: {sys.argv[0]} RULES.jsonl SRC_DIR ROWS...", file=sys.stderr); sys.exit(2)
+    sys.exit(main(sys.argv[1], sys.argv[2], sys.argv[3:]))
+#!/usr/bin/env python3
+"""A lexer for the Lean sources of ConcreteSpec, shared by the proof-integrity checks.
+
+`lex(src)` returns `src` with every comment (nested `/- -/`, `--`) blanked to spaces, newlines kept,
+so offsets and line numbers are the source's. Everything else is kept, string literals included.
+It follows Lean's literal forms, so no comment delimiter inside a literal starts a comment: a
+string with its escapes, raw strings r"…" and r#"…"#, character literals and quoted names «…».
+Whether a string interpolates depends on the parser, not the lexer, so interpolation is admitted
+only directly after `s!`, `m!` or `f!` (its `{ }` code, with its own strings and comments, is
+lexed recursively), and any other string holding `{` is an error. An unterminated string,
+comment, interpolation or name is an error too, and so is a syntax quotation `(…) (whose comments are
+syntax data; the library runs no meta code): the lexer fails closed, never skips.
+`comment_spans(src)` gives the top-level comments (the owner view, scripts/spec/lean_site.py, takes
+its doc blocks from them, so a doc comment inside an ordinary comment or a string is not one).
+
+Commands (exit 3 when a source cannot be read or lexed):
+
+  scan RE FILE...          `file:line: text` for every match of RE (over the whole lexed text,
+                           reported at the line where it starts) and for every `import` outside
+                           the header, which must be lines `import ConcreteSpec[.M…]`, one
+                           module each, ended by a command at column 0
+  examples SRC DST FILE... copies each FILE (a path relative to SRC) to DST with every `example`
+                           command turned into `noncomputable def «⟪example⟫FILE:LINE»` (no space,
+                           so listings split on spaces stay sound), so the kernel's view of it
+                           stays in the environment; prints the count. Every
+                           `example` token must start a line.
+"""
+import os, re, sys
+
+EXAMPLE_MARK = "⟪example⟫"
+
+
+class LexError(Exception):
+    pass
+
+
+def lex(src, spans=None, literals=True):
+    """`src` with its comments blanked; when `spans` is a list, each top-level comment's
+    (start, end) offsets are appended to it (a comment nested in another is part of that one).
+    With `literals=False`, string, character and name literals are blanked too (code tokens only)."""
+    n, out = len(src), []
+
+    def emit(text, literal=False):
+        if literal and not literals:
+            text = "".join("\n" if ch == "\n" else " " for ch in text)
+        out.append(text)
+
+    def ident(i):                                     # src[i] continues an identifier
+        return i >= 0 and (src[i].isalnum() or src[i] in "_'!?." or ord(src[i]) > 127)
+
+    def comment(i):                                   # at "/-": blank to the matching "-/"
+        start, depth = i, 0
+        while i < n:
+            if src.startswith("/-", i): depth += 1; out.append("  "); i += 2
+            elif src.startswith("-/", i):
+                depth -= 1; out.append("  "); i += 2
+                if depth == 0:
+                    if spans is not None: spans.append((start, i))
+                    return i
+            else: out.append("\n" if src[i] == "\n" else " "); i += 1
+        raise LexError("unterminated comment")
+
+    def string(i):                                    # at '"'
+        interp = src[i - 2:i] in ("s!", "m!", "f!") and not ident(i - 3)
+        emit('"', True); i += 1
+        while i < n:
+            c = src[i]
+            if c == "\\": emit(src[i:i + 2], True); i += 2
+            elif c == '"': emit(c, True); return i + 1
+            elif c == "{" and interp: emit(c, True); i = code(i + 1, True)
+            elif c == "{":
+                line = src.count("\n", 0, i) + 1
+                raise LexError(f"line {line}: a string holding '{{' without s!, m! or f! before it")
+            else: emit(c, True); i += 1
+        raise LexError("unterminated string")
+
+    def raw(i):                                       # at 'r' of r#*"
+        j = i + 1
+        while j < n and src[j] == "#": j += 1
+        close = '"' + "#" * (j - i - 1)
+        k = src.find(close, j + 1)
+        if k < 0: raise LexError("unterminated raw string")
+        emit(src[i:k + len(close)], True); return k + len(close)
+
+    def code(i, inner):                               # inner: inside an interpolation, stop at its '}'
+        depth = 0
+        while i < n:
+            c = src[i]
+            if src.startswith("/-", i): i = comment(i)
+            elif src.startswith("--", i):
+                j = src.find("\n", i); j = n if j < 0 else j; out.append(" " * (j - i)); i = j
+            elif c == '"': i = string(i)
+            elif c == "«":                            # a quoted name part: no comment inside it
+                k = src.find("»", i + 1)
+                if k < 0: raise LexError("unterminated «name»")
+                emit(src[i:k + 1], True); i = k + 1
+            elif src.startswith("`(", i) or src.startswith("``(", i):
+                # A syntax quotation: its comments are syntax data, not comments of the source,
+                # and the library runs no meta code, so the lexer refuses it.
+                raise LexError(f"line {src.count(chr(10), 0, i) + 1}: a syntax quotation")
+            elif c == "r" and not ident(i - 1) and re.match(r'r#*"', src[i:]): i = raw(i)
+            elif c == "'" and not ident(i - 1):
+                m = re.match(r"'(\\(x[0-9a-fA-F]{2}|u[0-9a-fA-F]{4}|.)|[^\\'\n])'", src[i:])
+                k = len(m.group(0)) if m else 1
+                emit(src[i:i + k], m is not None); i += k
+            elif inner and c == "{": depth += 1; out.append(c); i += 1
+            elif inner and c == "}":
+                out.append(c); i += 1
+                if depth == 0: return i
+                depth -= 1
+            else: out.append(c); i += 1
+        if inner: raise LexError("unterminated interpolation")
+        return i
+
+    code(0, False)
+    return "".join(out)
+
+
+def comment_spans(src):
+    """The (start, end) offsets of every top-level comment of `src`, in order."""
+    spans = []
+    lex(src, spans)
+    return spans
+
+
+HEADER = re.compile(r"import ConcreteSpec(\.[A-Za-z0-9_]+)*\s*$")
+FIRST_COMMAND = re.compile(r"(namespace|open|section|def|theorem|structure|inductive|abbrev)\b")
+
+
+def scan(pattern, paths):
+    word, rc = re.compile(pattern, re.M), 0
+    for path in paths:
+        try:
+            text = lex(open(path, encoding="utf-8").read())
+        except (OSError, UnicodeDecodeError, LexError) as e:
+            print(f"error: {path}: {e}", file=sys.stderr); rc = 3; continue
+        lines = text.split("\n")
+        # Lean lets an import list continue (`import A B`, or B on the next line), so the first
+        # line after the header must be a command at column 0.
+        k = 0
+        while k < len(lines) and (not lines[k].strip() or HEADER.match(lines[k])): k += 1
+        if k < len(lines) and not FIRST_COMMAND.match(lines[k]):
+            print(f"{path}:{k + 1}: {lines[k].strip()} (the import header must end in a command at column 0)")
+        hits = {text.count("\n", 0, m.start()) + 1 for m in word.finditer(text)}
+        hits |= {j for j, line in enumerate(lines, 1)
+                 if re.search(r"\bimport\b", line) and not (j <= k and HEADER.match(line))}
+        for j in sorted(hits):
+            print(f"{path}:{j}: {lines[j - 1].strip()}")
+    return rc
+
+
+# `example` as a command token: not part of a longer identifier (`example'`, `my.example`, `examples`)
+EXAMPLE = re.compile(r"(?<![\w.'!?])example(?![\w'!?])")
+
+
+def count_examples(src):
+    """The number of `example` commands in a source (code tokens only, not literal contents)."""
+    return len(EXAMPLE.findall(lex(src, literals=False)))
+
+
+def examples(src_dir, dst_dir, paths):
+    count = 0
+    for rel in paths:
+        src = open(os.path.join(src_dir, rel), encoding="utf-8").read()
+        text = lex(src, literals=False)          # an `example` inside a literal is not a command
+        out, last = [], 0
+        for m in EXAMPLE.finditer(text):
+            line = text.count("\n", 0, m.start()) + 1
+            if m.start() > 0 and text[m.start() - 1] != "\n":
+                raise LexError(f"{rel}:{line}: an `example` that does not start its line")
+            out.append(src[last:m.start()])
+            out.append(f"noncomputable def «{EXAMPLE_MARK}{rel}:{line}»")
+            last = m.end(); count += 1
+        out.append(src[last:])
+        dst = os.path.join(dst_dir, rel)
+        os.makedirs(os.path.dirname(dst) or ".", exist_ok=True)
+        open(dst, "w", encoding="utf-8").write("".join(out))
+    print(count)
+
+
+if __name__ == "__main__":
+    try:
+        if sys.argv[1] == "scan":
+            sys.exit(scan(sys.argv[2], sys.argv[3:]))
+        if sys.argv[1] == "examples":
+            examples(sys.argv[2], sys.argv[3], sys.argv[4:]); sys.exit(0)
+    except (OSError, UnicodeDecodeError, LexError) as e:
+        print(f"error: {e}", file=sys.stderr); sys.exit(3)
+    print(f"usage: {sys.argv[0]} scan RE FILE... | examples SRC DST FILE...", file=sys.stderr)
+    sys.exit(2)
+#!/usr/bin/env bash
+# THE RULE GATE: every registered rule (ConcreteSpec/Spec/Rules.lean) is documented, cites the
+# decision row it implements, and has an example it accepts and one it refuses; every rule citation
+# in the specification names a registered rule. The checks are scripts/spec/rules.py; the
+# registry is read from the built environment by scripts/spec/rules.lean.
+#
+# NEGATIVE CONTROLS run the same checker on small fixtures and require each failure: a rule with no
+# refused or no accepted example, no doc comment, a doc citing no decision row or one no inventory
+# holds, one registered twice, one naming no declaration, revision 0, a citation of an unregistered
+# rule (a quoted name too), a verdict outside an example's doc comment or in a nested comment, one
+# example claiming both verdicts, a truncated listing, an unlexable source, a missing or empty
+# source directory, and a checker that hangs through both bounded attempts. Fixtures that satisfy
+# every check must pass (the positive controls, attributed and modified examples included).
+set -uo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/../checks/lib/gate_env.sh" || exit 2
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+cd "$ROOT_DIR"
+CHECK_NAME=SPEC-RULES
+PASS=0; FAIL=0
+ok(){ echo "  ok   $1"; PASS=$((PASS+1)); }
+no(){ echo "  FAIL $1"; FAIL=$((FAIL+1)); }
+finish(){ echo "$CHECK_NAME: PASS=$PASS FAIL=$FAIL"; [ "$FAIL" = 0 ] && exit 0 || exit 1; }
+TMP="$(mktemp -d)" || { echo "FATAL: mktemp failed" >&2; exit 2; }
+trap 'rm -rf "$TMP"' EXIT
+export LC_ALL=C
+BOUNDED_PARENT="$TMP"; source scripts/checks/lib/bounded.sh || exit 2
+# run_bounded BUDGET CMD... → CMD's output and status, bounded: a second timeout is INCOMPLETE,
+# status 2, which no check below accepts
+run_bounded() {
+  local out rc budget="$1"; shift
+  out="$(bounded_run -i /dev/null -r "$budget" "$budget" -- "$@" 2>&1)"; rc=$?
+  if bounded_is_incomplete "$rc"; then echo "error: $CHECK_NAME: timed out twice (INCOMPLETE)" >&2; return 2; fi
+  printf '%s\n' "$out"; return "$rc"
+}
+# check BUDGET RULES-JSONL SRC-DIR ROWS... → the checker
+check() { local b="$1"; shift; run_bounded "$b" python3 -I scripts/spec/rules.py "$@"; }
+
+command -v lake >/dev/null || { echo "error: $CHECK_NAME needs Lean's lake on PATH (elan)" >&2; exit 2; }
+bounded_run -i /dev/null -r 3600 3600 -- lake build ConcreteSpec > "$TMP/build.log" 2>&1 \
+  || { tail -20 "$TMP/build.log" >&2; bounded_summary >&2; echo "error: $CHECK_NAME: lake build ConcreteSpec failed or timed out" >&2; exit 2; }
+
+echo "=== the specification ==="
+bounded_run -i /dev/null 600 -- lake env lean scripts/spec/rules.lean > "$TMP/rules.jsonl" 2> "$TMP/rules.err" \
+  || { cat "$TMP/rules.err" >&2; bounded_summary >&2; echo "error: scripts/spec/rules.lean failed or timed out" >&2; exit 2; }
+OUT=$(check 120 "$TMP/rules.jsonl" ConcreteSpec docs/decisions.md ROADMAP.md); RC=$?
+echo "$OUT"
+[ "$RC" = 0 ] && ok "the registry and every rule citation of ConcreteSpec" || no "the specification (rc=$RC)"
+
+echo "=== negative controls ==="
+# fixture NAME RULES-JSONL SOURCE → runs the checker on them, sets OUT and RC
+fixture() {
+  mkdir -p "$TMP/$1"; printf '%s\n' "$2" > "$TMP/$1.jsonl"; printf '%s\n' "$3" > "$TMP/$1/A.lean"
+  OUT=$(check 60 "$TMP/$1.jsonl" "$TMP/$1" "$TMP/rows.md"); RC=$?
+}
+printf -- '- **Q9.1** A decided row.\nR-0001 is only mentioned here.\n' > "$TMP/rows.md"
+END='{"end":true}'
+GOOD='{"name":"R.ok","rev":1,"exists":true,"doc":"The rule (Q9.1)."}'
+EXA='/-- Accepted (rule `R.ok`). -/
+example : True := trivial
+
+/-- Refused (rule `R.ok`). -/
+example : True := trivial'
+fixture good "$GOOD
+$END" "$EXA"
+[ "$RC" = 0 ] && ok "control: a documented rule with both examples passes" || no "control: the good fixture failed: $OUT"
+fixture norefused "$GOOD
+$END" '/-- Accepted (rule `R.ok`). -/
+example : True := trivial'
+[ "$RC" = 1 ] && [[ "$OUT" == *"no example marked Refused"* ]] && ok "control: a rule with no refused example fails" \
+  || no "control: missing refused example not reported: $OUT"
+fixture norow '{"name":"R.ok","rev":1,"exists":true,"doc":"The rule."}
+'"$END" "$EXA"
+[ "$RC" = 1 ] && [[ "$OUT" == *"cites no decision row"* ]] && ok "control: a rule whose doc cites no decision row fails" \
+  || no "control: missing decision row not reported: $OUT"
+fixture twice "$GOOD
+$GOOD
+$END" "$EXA"
+[ "$RC" = 1 ] && [[ "$OUT" == *"registered more than once"* ]] && ok "control: a rule registered twice fails" \
+  || no "control: duplicate registration not reported: $OUT"
+fixture absent '{"name":"R.ok","rev":1,"exists":false,"doc":"The rule (Q9.1)."}
+'"$END" "$EXA"
+[ "$RC" = 1 ] && [[ "$OUT" == *"names no declaration"* ]] && ok "control: a rule naming no declaration fails" \
+  || no "control: missing declaration not reported: $OUT"
+fixture unreg "$GOOD
+$END" "$EXA
+-- see (rule \`R.other\`)"
+[ "$RC" = 1 ] && [[ "$OUT" == *"cites unregistered rule R.other"* ]] && ok "control: a citation of an unregistered rule fails" \
+  || no "control: unregistered citation not reported: $OUT"
+fixture stray "$GOOD
+$END" "$EXA
+/-- Refused (rule \`R.ok\`). -/
+def notAnExample : Nat := 0"
+[ "$RC" = 1 ] && [[ "$OUT" == *"outside an example's doc comment"* ]] && ok "control: a verdict on a non-example fails" \
+  || no "control: stray verdict not reported: $OUT"
+fixture rev0 '{"name":"R.ok","rev":0,"exists":true,"doc":"The rule (Q9.1)."}
+'"$END" "$EXA"
+[ "$RC" = 1 ] && [[ "$OUT" == *"revision 0"* ]] && ok "control: revision 0 fails" || no "control: revision 0 not reported: $OUT"
+fixture trunc "$GOOD" "$EXA"
+[ "$RC" = 3 ] && ok "control: a truncated listing is an error" || no "control: truncated listing gave rc=$RC: $OUT"
+fixture noaccepted "$GOOD
+$END" '/-- Refused (rule `R.ok`). -/
+example : True := trivial'
+[ "$RC" = 1 ] && [[ "$OUT" == *"no example marked Accepted"* ]] && ok "control: a rule with no accepted example fails" \
+  || no "control: missing accepted example not reported: $OUT"
+fixture nodoc '{"name":"R.ok","rev":1,"exists":true,"doc":""}
+'"$END" "$EXA"
+[ "$RC" = 1 ] && [[ "$OUT" == *"has no doc comment"* ]] && ok "control: a rule with no doc comment fails" \
+  || no "control: missing doc comment not reported: $OUT"
+fixture badrow '{"name":"R.ok","rev":1,"exists":true,"doc":"The rule (Q999.999)."}
+'"$END" "$EXA"
+[ "$RC" = 1 ] && [[ "$OUT" == *"no existing decision row"* ]] && ok "control: a rule citing a row no inventory has fails" \
+  || no "control: nonexistent decision row not reported: $OUT"
+fixture both "$GOOD
+$END" '/-- Accepted (rule `R.ok`). Refused (rule `R.ok`). -/
+example : True := trivial'
+[ "$RC" = 1 ] && [[ "$OUT" == *"both accepted and refused"* ]] && ok "control: one example claiming both verdicts fails" \
+  || no "control: both verdicts on one example not reported: $OUT"
+fixture nested "$GOOD
+$END" "$EXA
+/-- Refused /- Accepted (rule \`R.ok\`) -/ -/
+example : True := trivial"
+[ "$RC" = 1 ] && [[ "$OUT" == *"nested comment"* ]] && ok "control: a verdict in a nested comment fails" \
+  || no "control: nested-comment verdict not reported: $OUT"
+fixture quoted "$GOOD
+$END" "$EXA
+-- see (rule \`R.«missing rule»\`)"
+[ "$RC" = 1 ] && [[ "$OUT" == *"cites unregistered rule R.«missing rule»"* ]] && ok "control: an unregistered quoted name fails" \
+  || no "control: quoted unregistered citation not reported: $OUT"
+fixture attr "$GOOD
+$END" '/-- Accepted (rule `R.ok`). -/
+@[simp] example : True := trivial
+
+/-- Refused (rule `R.ok`). -/
+noncomputable example : True := trivial'
+[ "$RC" = 0 ] && ok "control: examples with an attribute or a modifier count" || no "control: attributed examples refused: $OUT"
+fixture unlexable "$GOOD
+$END" '/-- Accepted (rule `R.ok`). unterminated'
+[ "$RC" = 3 ] && ok "control: an unlexable source is an error" || no "control: unlexable source gave rc=$RC: $OUT"
+fixture literal "$GOOD
+$END" "$EXA
+def s : String := \"Accepted (rule \`R.ok\`)\""
+[ "$RC" = 1 ] && [[ "$OUT" == *"outside an example's doc comment"* ]] && ok "control: a verdict in a string literal fails" \
+  || no "control: string-literal verdict not reported: $OUT"
+fixture nestedattr "$GOOD
+$END" '/-- Accepted (rule `R.ok`). -/
+@[simp, scoped [foo] bar] example : True := trivial
+
+/-- Refused (rule `R.ok`). -/
+example : True := trivial'
+[ "$RC" = 0 ] && ok "control: an attribute with brackets inside counts" || no "control: bracketed attribute refused: $OUT"
+fixture mention '{"name":"R.ok","rev":1,"exists":true,"doc":"The rule (R-0001)."}
+'"$END" "$EXA"
+[ "$RC" = 1 ] && [[ "$OUT" == *"no existing decision row"* ]] && ok "control: a row an inventory only mentions does not count" \
+  || no "control: mention-only decision row not reported: $OUT"
+fixture fakeattr "$GOOD
+$END" '/-- Accepted (rule `R.ok`). -/
+@[deprecated "] example" (since := "2026-11-08")]
+def a : True := trivial
+
+/-- Refused (rule `R.ok`). -/
+@[deprecated "] example" (since := "2026-11-08")]
+def b : True := trivial'
+[ "$RC" = 1 ] && [[ "$OUT" == *"no example marked"* || "$OUT" == *"outside an example"* ]] \
+  && ok "control: an attribute string cannot stand in for an example" || no "control: attribute-string example not reported: $OUT"
+fixture strattr "$GOOD
+$END" '/-- Accepted (rule `R.ok`). -/
+@[deprecated "a ] b" (since := "2026-11-08")] example : True := trivial
+
+/-- Refused (rule `R.ok`). -/
+example : True := trivial'
+[ "$RC" = 0 ] && ok "control: an attribute holding a string with a bracket counts" || no "control: string attribute refused: $OUT"
+fixture backtick "$GOOD
+$END" "$EXA
+-- see (rule \`R.«missing\`rule»\`)"
+[ "$RC" = 1 ] && [[ "$OUT" == *"cites unregistered rule R.«missing\`rule»"* ]] && ok "control: a quoted name holding a backtick is checked" \
+  || no "control: backtick quoted citation not reported: $OUT"
+fixture malformed "$GOOD
+$END" "$EXA
+-- see (rule \`R.ok"
+[ "$RC" = 1 ] && [[ "$OUT" == *"malformed rule citation"* ]] && ok "control: a malformed citation fails" \
+  || no "control: malformed citation not reported: $OUT"
+fixture rawattr "$GOOD
+$END" '/-- Accepted (rule `R.ok`). -/
+@[deprecated r#"a " ] example"#]
+def a : True := trivial
+
+/-- Refused (rule `R.ok`). -/
+@[deprecated «x ] example»]
+def b : True := trivial'
+[ "$RC" = 1 ] && [[ "$OUT" == *"outside an example"* ]] \
+  && ok "control: a raw string or quoted name in an attribute cannot stand in for an example" || no "control: raw-string attribute example not reported: $OUT"
+fixture cmtattr "$GOOD
+$END" '/-- Accepted (rule `R.ok`). -/
+@[simp /- ] example -/]
+def a : True := trivial
+
+/-- Refused (rule `R.ok`). -/
+example : True := trivial'
+[ "$RC" = 1 ] && [[ "$OUT" == *"outside an example"* ]] \
+  && ok "control: a comment in an attribute cannot stand in for an example" || no "control: comment attribute example not reported: $OUT"
+QN='{"name":"R.«a (rule ` b` c»","rev":1,"exists":true,"doc":"The rule (Q9.1)."}'
+fixture qname "$QN
+$END" '/-- Accepted (rule `R.«a (rule ` b` c»`). -/
+example : True := trivial
+
+/-- Refused (rule `R.«a (rule ` b` c»`). -/
+example : True := trivial'
+[ "$RC" = 0 ] && ok "control: a quoted name holding citation-like text is one citation" || no "control: quoted citation-like name refused: $OUT"
+OUT=$(check 60 "$TMP/good.jsonl" "$TMP/no-such-dir" "$TMP/rows.md"); RC=$?
+[ "$RC" = 3 ] && ok "control: a missing source directory is an error" || no "control: missing source dir gave rc=$RC: $OUT"
+mkdir -p "$TMP/empty"
+OUT=$(check 60 "$TMP/good.jsonl" "$TMP/empty" "$TMP/rows.md"); RC=$?
+[ "$RC" = 3 ] && ok "control: a source directory with no .lean file is an error" || no "control: empty source dir gave rc=$RC: $OUT"
+OUT=$(run_bounded 1 python3 -I -c 'import time; time.sleep(30)' 2>&1); RC=$?
+[ "$RC" = 2 ] && ok "control: a checker that hangs through both attempts is INCOMPLETE" || no "control: hung checker gave rc=$RC"
+
+finish
+1. **Defect — scripts/spec/rules.py:40–50:** Attribute skipping remains bypassable through raw strings, quoted identifiers and comments. In-memory checking returns **0** when both verdicts precede definitions using:
+   ```lean
+   @[deprecated r#"a " ] example"#]
+   def a : True := trivial
+   ```
+   The scanner treats an interior quote as the string’s end and accepts the interior `example`. **Fix:** skip all Lean literal forms and comments while balancing attribute brackets; add negative controls for these forms.
+
+2. **Defect — scripts/spec/rules.py:117–120:** The malformed-citation scan searches inside already valid citations. A registered name such as ``R.«a (rule ` b` c»`` is parsed correctly by `CITE`, but its interior citation-like text triggers “malformed rule citation.” In-memory checking returns **1** for otherwise valid accepted and refused examples. **Fix:** consume complete citations before searching for another start, excluding their quoted-name contents; add a positive control.
+
+The three original round-2 reproductions are addressed, and the added shell controls test their stated cases. Inventory checking now rejects prose-only mentions; the two unmatched combined bold labels have their identifiers declared elsewhere in the inventories.
+
+Reproductions were entirely in memory; no files were modified.
+
+VERDICT: REVISE
+
+exec
+/bin/bash -lc "PYTHONDONTWRITEBYTECODE=1 python3 - <<'PY'
+import sys, types, pathlib, io, contextlib
+from unittest.mock import patch
+lex=types.ModuleType('lean_lex'); exec(compile(pathlib.Path('scripts/proofs/lean_lex.py').read_text(),'lean_lex.py','exec'),lex.__dict__); sys.modules['lean_lex']=lex
+r=types.ModuleType('rules'); r.__file__=str(pathlib.Path('scripts/spec/rules.py').absolute()); exec(compile(pathlib.Path(r.__file__).read_text(),r.__file__,'exec'),r.__dict__)
+def check(src,name='R.ok'):
+ import json
+ files={'rules':json.dumps(dict(name=name,rev=1,exists=True,doc='Q9.1'))+'\\n{\"end\":true}', 'rows':'- **Q9.1** Yes', 'src/A.lean':src}
+ with patch('builtins.open',side_effect=lambda p,**kw:io.StringIO(files[p])), patch.object(r.os.path,'isdir',return_value=True),patch.object(r.os,'walk',return_value=[('src',[],['A.lean'])]),contextlib.redirect_stdout(io.StringIO()) as out:
+  rc=r.main('rules','src',['rows'])
+ return rc,out.getvalue()
+for kind,attr in [('raw','@[deprecated r#\"a \" ] example\"#]'),('quoted','@[deprecated «x ] example»]'),('comment','@[simp /- ] example -/]')]:
+ src='\\n'.join('/-- '+v+' (rule "'`R.ok`). -/'"\\n'+attr+'\\ndef a : True := trivial' for v in ['Accepted','Refused'])
+ print(kind,check(src))
+n='R.«a (rule "'` b` c»'"'; src='\\n'.join('/-- '+v+' (rule "'`'"'+n+'"'`). -/'"\\nexample : True := trivial' for v in ['Accepted','Refused']); print('quoted citation',check(src,n))
+for s in ['Accepted (rule "'`R.ok`)'"','xAccepted (rule "'`R.ok`)'"','Refused (rule "'`R.ok`)'"','Accepted (rule "'`R.«Refused (rule `missing`)»`)'"']:
+ print('citation',repr(s),r.citations(s))
+PY" in /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rev-sc4/codex
+ succeeded in 0ms:
+raw (1, "  FAIL src/A.lean:1: a verdict citation outside an example's doc comment\n  FAIL src/A.lean:4: a verdict citation outside an example's doc comment\n  FAIL rule R.ok has no example marked Accepted (rule `R.ok`)\n  FAIL rule R.ok has no example marked Refused (rule `R.ok`)\n")
+quoted (1, "  FAIL src/A.lean:1: a verdict citation outside an example's doc comment\n  FAIL src/A.lean:4: a verdict citation outside an example's doc comment\n  FAIL rule R.ok has no example marked Accepted (rule `R.ok`)\n  FAIL rule R.ok has no example marked Refused (rule `R.ok`)\n")
+comment (1, "  FAIL src/A.lean:1: a verdict citation outside an example's doc comment\n  FAIL src/A.lean:4: a verdict citation outside an example's doc comment\n  FAIL rule R.ok has no example marked Accepted (rule `R.ok`)\n  FAIL rule R.ok has no example marked Refused (rule `R.ok`)\n")
+quoted citation (0, '  ok   1 registered rules in 1 sources, each documented with an existing decision row and an accepted and a refused example; every citation names a registered rule\n')
+citation 'Accepted (rule `R.ok`)' ([(9, 22, 'R.ok', 'Accepted')], [])
+citation 'xAccepted (rule `R.ok`)' ([(10, 23, 'R.ok', None)], [])
+citation 'Refused (rule `R.ok`)' ([(8, 21, 'R.ok', 'Refused')], [])
+citation 'Accepted (rule `R.«Refused (rule `missing`)»`)' ([(9, 46, 'R.«Refused (rule `missing`)»', 'Accepted')], [])
+
+exec
+/bin/bash -lc "nl -ba scripts/spec/rules.sh | sed -n '180,212p'" in /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rev-sc4/codex
+ succeeded in 0ms:
+   180	[ "$RC" = 1 ] && [[ "$OUT" == *"malformed rule citation"* ]] && ok "control: a malformed citation fails" \
+   181	  || no "control: malformed citation not reported: $OUT"
+   182	fixture rawattr "$GOOD
+   183	$END" '/-- Accepted (rule `R.ok`). -/
+   184	@[deprecated r#"a " ] example"#]
+   185	def a : True := trivial
+   186	
+   187	/-- Refused (rule `R.ok`). -/
+   188	@[deprecated «x ] example»]
+   189	def b : True := trivial'
+   190	[ "$RC" = 1 ] && [[ "$OUT" == *"outside an example"* ]] \
+   191	  && ok "control: a raw string or quoted name in an attribute cannot stand in for an example" || no "control: raw-string attribute example not reported: $OUT"
+   192	fixture cmtattr "$GOOD
+   193	$END" '/-- Accepted (rule `R.ok`). -/
+   194	@[simp /- ] example -/]
+   195	def a : True := trivial
+   196	
+   197	/-- Refused (rule `R.ok`). -/
+   198	example : True := trivial'
+   199	[ "$RC" = 1 ] && [[ "$OUT" == *"outside an example"* ]] \
+   200	  && ok "control: a comment in an attribute cannot stand in for an example" || no "control: comment attribute example not reported: $OUT"
+   201	QN='{"name":"R.«a (rule ` b` c»","rev":1,"exists":true,"doc":"The rule (Q9.1)."}'
+   202	fixture qname "$QN
+   203	$END" '/-- Accepted (rule `R.«a (rule ` b` c»`). -/
+   204	example : True := trivial
+   205	
+   206	/-- Refused (rule `R.«a (rule ` b` c»`). -/
+   207	example : True := trivial'
+   208	[ "$RC" = 0 ] && ok "control: a quoted name holding citation-like text is one citation" || no "control: quoted citation-like name refused: $OUT"
+   209	OUT=$(check 60 "$TMP/good.jsonl" "$TMP/no-such-dir" "$TMP/rows.md"); RC=$?
+   210	[ "$RC" = 3 ] && ok "control: a missing source directory is an error" || no "control: missing source dir gave rc=$RC: $OUT"
+   211	mkdir -p "$TMP/empty"
+   212	OUT=$(check 60 "$TMP/good.jsonl" "$TMP/empty" "$TMP/rows.md"); RC=$?
+
+codex
+- **Preference — scripts/spec/rules.sh:190:** The combined raw-string/quoted-name control passes when either case is rejected, masking a regression in the other. Fix: split them into independent fixtures, each requiring its own rejection.
+
+Both round-3 defects are resolved in in-memory reproductions: raw strings, quoted names and comments cannot supply an attribute’s closing bracket or `example`; complete citations consume interior citation-like text without false failures or extra verdicts. The comment and quoted-citation controls test their stated cases. No new functional defect found.
+
+No files were modified.
+
+VERDICT: ACCEPT
+tokens used
+23,830
+codex exit 0

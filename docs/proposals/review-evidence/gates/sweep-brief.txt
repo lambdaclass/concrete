@@ -1,0 +1,52 @@
+You are the writer for a ROADMAP sweep on branch wip/roadmap-sweep (current directory). It is stacked on wip/record-signoffs and wip/record-language; do not change anything those branches recorded except to add to it. Edit only ROADMAP.md, docs/decisions.md and a new changelog.d/2026-11-08-roadmap-sweep.md. Do NOT commit, push, or run nix/builds. Do not edit or keep .sweep-inputs/ (delete that directory at the very end).
+
+Sources, all in .sweep-inputs/: PENDING_RECORDS.md (owner's verbatim answers and the MORNING QUEUE sections; the authoritative list), STD_COVERAGE.md (G1-G6, S1-S5, D1-D4, P0, F0-F8; proposal on wip/std-placement @abc648e4d), STD_OWNER_QUESTIONS.md and STD_PLACEMENT.md (O1-O12, same branch), OWNER_QUESTIONS_REVIEW.md (the ten reviewed questions L1-L4, S1-scope, S1-move, S1-abort, S1-toml, R0600, F-NaN, with options and three-model picks; wip/owner-questions-review @11d9e6ee2).
+
+Hard rules:
+- The owner decides. Never encode an answer to an open question. Open questions are written as questions with their options and, at most, the reviewers' recommendation labelled as a recommendation.
+- Never invent owner quotes. Quote exactly from PENDING_RECORDS.md, typos kept.
+- No status tags ([DONE], [PARTIAL], NEXT, etc.). Done goes to the changelog; next is shown by ordering; what remains is prose.
+- Every new ROADMAP task row: | task | objective | done when | depends on |, with the phase/slice named, "Home: …", "Gate: …" (a negative control where there is a gate), and an owner (workstream branch or worker). New R-IDs start at R-0632 and go up consecutively; no other branch uses R-0632+.
+- Plain English, short sentences, house style; read neighbouring rows first. Keep additions compact.
+
+What to add:
+
+1. Four test gates (owner 2026-11-08: "do this with kimi, codex and agy and review it" and "we should have ci or gates for scaling, determinism, comparison in the spec and the compiler"; then "ok wuith this but we have to add it to the roadmap or a slice", about: "the comparison ships now and compares at the back-end level (spec semantics vs LLVM binary vs proven-path binary and its evaluator); it leaves a fixed hook for the full path, and the branch that adds lowering must also switch on the full spec comparison"; and "ok let's make sure the roadmap has all this and the slices"):
+   R-0632 A spec-vs-compiler comparison with a seeded generator that grows each slice; back-end level now with a fixed hook; owner wip/gate-spec-diff. Gate: a planted spec/binary mismatch fails.
+   R-0633 B one test manifest and one runner; owner wip/test-manifest. Gate: a test absent from the manifest fails.
+   R-0634 C scaling (1x/10x/100x, super-linear growth fails) and determinism (two compiles byte-identical); owner wip/gate-scaling-determinism. Gate: planted quadratic step / planted nondeterministic byte fail.
+   R-0635 D a maintained trusted-base list; owner wip/trusted-base. Gate: a trusted item missing from the list fails.
+   Place them in "### B. Cumulative slices up to LP0" and add them to the B0 queue row's task list. In the slice table, slice 1's row (it adds Core→BIR lowering) gets an exit: "the full spec-vs-native comparison (R-0632) over generated and manifest programs is required and green". After the "**The slice shape**" paragraph add: "**Every slice also** extends the comparison generator (R-0632) with its new constructs, adds its tests to the manifest (R-0633), and states what it adds to the trusted-base list (R-0635); scaling and determinism (R-0634) stay green ([decision](docs/decisions.md#decided-2026-11-08-gates))."
+   docs/decisions.md: a row with anchor decided-2026-11-08-gates (place it after the last 2026-11-08 row in the "Project and architecture decisions" section, i.e. after the row with anchor decided-2026-11-08-writers), quoting the four owner quotes above with that meaning; and a "## Recent decisions" line.
+
+2. "yes to 6 things" (2026-11-08 ~14:00 UTC; meaning in PENDING_RECORDS.md). decisions.md: a row anchor decided-2026-11-08-six quoting it with its six-item meaning (process "how" is not part of the decision), plus a Recent line. ROADMAP rows:
+   R-0636 vacuity rule: every spec law has a non-trivial instance and a planted counter-example that must fail; reviewers check each law; audit of already accepted contracts. Phase A2i (before the A2c freeze). Owner: the spec worker.
+   R-0637 accepted foundation contracts merge into wip/spec-core continuously, the start of A2i (A2i row of the queue references it). Owner: the spec worker. Include the status prose of item 6 below in this row's done-when or right after the A2i queue row as prose.
+   R-0638 the axioms golden becomes a property check (only the standard axioms) with only named theorems pinned; owner wip/axioms-property (fce6644d, in review). Phase B0.
+   R-0639 one shared launcher pairs every background job with a bounded watcher; owner: the migration worker. Phase T.
+   R-0640 process tooling frozen once owner-signoff (with its split follow-up) and landing-shrink (R-0617) land; independent branches land independently instead of being chained. Phase T.
+   R-0641 every owner question gets a Codex+Kimi+agy round before it reaches the owner. Phase T (process; AGENTS.md text is a follow-up, say so).
+
+3. Issues with fixes, phase T:
+   R-0642 fix ISS-0019 (review_provenance accepts a clean note whose base does not cover the train diff): the ISS-0019 done-when (note base ancestor-or-equal of the train base for head and member notes; verify.sh --required-base; the reproducer as a control). Owner: the owner of scripts/land.
+   R-0643 fix the sign-off tool bug: `scripts/review/signoff.sh verify` requires all three verdicts ACCEPT, but the sign-off decision (item 1) records outstanding verdicts; Codex confirmed with a reproducer; the slice-0 worker files the issue after owner-signoff lands (no ISS number yet; say "issue to be filed by the slice-0 worker"). Done when verify accepts a sign-off that records non-ACCEPT verdicts as outstanding and refuses a missing verdict, with controls.
+
+4. Foundation status (prose, no tags), right after the A2i/A2c queue rows or in R-0637: C1 and C2 accepted in round 4 at d62d6cac1 (spec-core head 5bc0748b8); the C1 lifecycle change (life : Life → Store → Option Store, a refused lifecycle event is stuck) accepted by reviewers at d8f89ea75 on wip/spec-c1-life and pending the owner's confirmation; C4 accepted at b9c3aeaaf; C6 at 738500fb; C7 at 4d146992; C3 to confirm; C5 (b5fff070), C8 (be5e9be09), C9 (f898f298) and C10 (46211bbd) in fix rounds; the integration head 6157005eb on wip/spec-integrate does not build yet. The A2c freeze stays gated on A2i.
+
+5. Lexer: in R-0620's row add prose: the lexer has comments, whitespace, identifiers, string escapes and decimal literals; blocked on the spelling round (R-0625): the keyword/reserved table, builtin-name table, operator/punctuation set (L1), the second escape list (L2), raw control characters in strings (L3), integer suffixes and base prefixes (L4). Also add these six to R-0625's row as named contents of the spelling round.
+
+6. Slice-1 brief: R-0644 the slice-1 brief (wip/slice1-brief, a draft proposal; nothing launches from it until the owner answers S1-scope/S1-move/S1-abort/S1-toml): first piece of work is abort() in the slice-1 spec (spelling-free); then the lowering passes (Core→BIR for slice 1); exit criteria per the slice shape including the full spec comparison (R-0632). Phase B1; add R-0644 to the B1 queue row.
+
+7. Std coverage: R-0645 the std coverage gaps G1-G6 and design probes D1-D4 and P0 (from STD_COVERAGE.md), each placed in its proposed slice as listed there, all marked as proposed and pending the owner's answers to O1-O12 and S1-S5. Owner: wip/std-placement. Keep it to one row plus, if needed, a short list.
+
+8. Floats/NaN: in slice 26's row (or the std table where floats sit), add: NaN semantics pending the owner (F-NaN, S5).
+
+9. R-0646 placeholder: "CLI question audit; its gaps are placed when it reports" (owner: wip/cli-question-audit, not pushed yet). Phase T or B, as fits.
+
+10. R-0600: keep both rows; add a note in R-0600's row and the B1 queue row: "placement (slice 1 or the functions-and-calls slice 5) is an open owner question (R0600 below)". Do not move it.
+
+11. Open owner questions: add a section "### Open owner questions" right after "### Questions for the Core session" in ROADMAP.md, listed as questions with a one-line pointer each and no answers encoded: foundation Q1 (fallible op in const init), Q2 (forward const references), Q3 (pointer from partial bytes) [PENDING_RECORDS spec worker ~06:30]; S1-S5 and O1-O12 [STD_COVERAGE.md, STD_OWNER_QUESTIONS.md; one line each]; the ten reviewed questions L1-L4, S1-scope, S1-move, S1-abort, S1-toml, R0600, F-NaN [OWNER_QUESTIONS_REVIEW.md; one line each, with the three-model picks as recommendations]; the C1 lifecycle change confirmation; showcase sketches before the freeze (item 1 of the gates list, not approved: "NOT included: item 1 (showcase sketches before freeze)"). Name where each source lives (branch @ SHA, path).
+
+12. changelog.d/2026-11-08-roadmap-sweep.md: a short fragment listing what was recorded, quoting the owner where a decision was recorded.
+
+When done print `git diff --stat` and a per-item summary with line numbers.

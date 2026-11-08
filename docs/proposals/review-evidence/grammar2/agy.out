@@ -1,0 +1,68 @@
+### Review Findings (Errors & Citations to Verify)
+
+1. **`discard` missing from grammar and reserved/contextual lists (Section 1 / Section 2 / Section 4).**
+   Slice 3 table lists `discard` and Section 9 mentions "dropping linear/Result/Option via `_` or discard", yet `discard` is absent from the reserved list, contextual words, `statement_core`, and `OPEN-18`. Verify its decided spelling/status in `docs/decisions.md` (Slice 3 / audit).
+
+2. **`for` lower bound `from expr` has an unnoted LL(1) `FIRST/FOLLOW` conflict on `{` (Section 4 / Section 8).**
+   `loop = "for", IDENT, "from", expr, "until", head_expr, statement_block ;` uses unrestricted `expr` after `from` instead of `head_expr`, although `until` uses `head_expr`. Check if `from` must also use `head_expr` for consistency, or verify in `OD47`/`OD50`.
+
+3. **`argument` has a missed LL(1) `FIRST/FIRST` conflict between `type` and `+ cap_name` (Section 3 / Section 8).**
+   In `argument = "{" "}" | type, ["+", cap_name, {"+", cap_name}]`, `type` expands to `named_type`, which accepts `IDENT | cap_type_token` (the exact tokens in `cap_name`). This hides an internal ambiguity: `cap_name + cap_name` is parsed with the first capability as a `type`.
+
+4. **`impl` item head has a missed LL(1) `FIRST/FIRST` conflict on `<` and `cap_type_token` (Section 3 / Section 8).**
+   In `"impl", [parameters], named_type, impl_tail`, `named_type` begins with `type_name = IDENT | cap_type_token`. Thus `impl Console { ... }` is syntactically accepted, and `named_type` permits generic `arguments` on the trait in `impl Trait<T> for Type`, violating `OD148` (trait parameters forbidden).
+
+5. **`let_head` destructuring conflict and contradiction with `OPEN-17` (Section 4).**
+   `let_head = "let", ["mut"], IDENT, let_after_name` allows `let mut S { x } = e;` (mutable struct name before field binders) and cannot parse module-qualified destructuring `let m::S { x } = e;` at all, though `OPEN-17` treats module-qualified `let` heads as supported/open. Verify `OD84`.
+
+6. **`method_params` has an unfactored LL(1) `FIRST/FIRST` conflict on `&` (Section 3 / Section 8).**
+   In `method_params = "&", ["mut"], "self", ... | IDENT, ...`, if `self` is a contextual `IDENT` (`OPEN-3`), it works only because the first alternative starts with `&`, NOT `IDENT`; however, if a non-`self` parameter starts with `IDENT`, why can't a method have no receiver and first param `&T`? Because `param` starts with `IDENT : type`, not `&`. Still, `"self"` in `method_params` is a contextual `IDENT` test not noted in Section 3's prose on `method_params` (which only mentions `method_ident_tail`).
+
+7. **`cast` postfix continuation contradicts the precedence table (Section 2 vs Section 5).**
+   Section 2 places `as` at level 11 and postfix operations at level 13 (tighter), yet Section 5 writes `cast = unary, {"as", cast_type, {postfix_suffix}} ;`, allowing `x as T.f()` without parentheses—effectively interleaving level 13 inside level 11. Verify against `SYN-2` and `OD91`.
+
+8. **`place_base` has an LL(1) `FIRST/FIRST` conflict in parenthesized expressions / borrow sources (Section 5 / Section 6).**
+   In `borrow_statement = "borrow", ["mut"], place, borrow_tail`, `place` allows `("*", place_base)` and `("(", place, ")")`, which is a separate parser from `expr`. Moreover, `place_base = IDENT | "(", place, ")" | "*", place_base` forbids `*(p.f)` while allowing `(*p).f`, contradicting standard dereference projection unless checked against `OD121`.
+
+9. **`attributes` on `statement` vs `attributed_postfix` has a missed LL(1) conflict inside `statement_core` (Section 4 / Section 5 / Section 8).**
+   `statement = attributes, statement_core` consumes leading `attributes`, and `statement_core` dispatches to `expr_statement_start`. Section 4 says `expr_statement_start` excludes leading attributes, but `unary` (inside `expr_statement_start` after any prefix operator like `-` or `*`, or at root if not refactored through the entire 12-level ladder) still reaches `attributed_postfix = attributes, postfix`.
+
+10. **`assert` LL(1) conflict between `assert(e) by ...` and `assert(e) && ...` (Section 4 / Section 8).**
+    Section 4 proposes checking whether the `contract_expr` after `assert` is parenthesized to allow `by`. In `(a) == b`, the leading token is `(`, so a predictive parser after `assert (` cannot tell if `(` wraps the whole `contract_expr` or just the left operand of a binary operator until after `)`. Verify `OD79`/SPARK.
+
+11. **Citations needing manual verification against `docs/decisions.md` (Cannot be checked from sheet alone):**
+    - Check `OD86` vs `arm_body`: sheet allows `"return", [expr], ";"` inside `arm`, creating double-semicolon/comma ambiguity `=> return x;,`.
+    - Check `Q4.7`/`Q9.5`: verify exact `borrow` clause optionality (`else` with/without `from...until`).
+    - Check `OD115`, `OD79`, `OD91`, `OD147`, `OD128`, `OD153`, and `OPEN-25` (`?`, `while...else`, `->`).
+
+---
+
+### Choices for Numbered OPEN Items
+
+1. **OPEN-1:** Agree: valid UTF-8, ASCII space/tab/LF/CR whitespace, `//` to LF/EOF, and reject BOM, shebang, CR-only line endings, NUL, and block comments.
+2. **OPEN-2:** Agree: ASCII `[A-Za-z_][A-Za-z0-9_]*`, case-sensitive, with no casing-based syntactic categories (`OD152`).
+3. **OPEN-3:** Disagree: reserve `spec`, `by`, `kept`, `self`, and `discard` as full keywords (one form, no contextual-IDENT ambiguity), and approve `Entropy`.
+4. **OPEN-4:** Agree: one explicit closed table of all builtin types, grant types, primitives, functions, and reserved compiler prefixes (`__`, `user_main`).
+5. **OPEN-5:** Agree: lowercase `0x`/`0b`/`0o` only, no numeric separators or type suffixes, `digits.digits` floats without exponents, and no leading-zero decimals.
+6. **OPEN-6:** Agree: exact 6 escapes (`\n`, `\t`, `\r`, `\\`, `\0`, plus `\"` or `\'`), no raw line breaks or control chars, closed-char scan before label.
+7. **OPEN-7:** Agree: section 2 punctuation set with maximal munch and contextual splitting of `>>` only when closing generic parameter/argument lists.
+8. **OPEN-8:** Disagree: ratify the `SYN-2` precedence table, but make comparison/equality operators (`==`, `!=`, `<`, `<=`, `>`, `>=`) non-associative in the grammar and remove trailing `{postfix_suffix}` from `cast`.
+9. **OPEN-9:** Disagree: fix modifier order (`attributes`, `pub`, `trusted`), disallow optional trailing commas (one canonical form per list), and allow bodyless `fn ... ;` only on trait methods and `extern fn`.
+10. **OPEN-10:** Agree: `type N = T;` (nongeneric) and `const N: T = e;` with mandatory type annotation.
+11. **OPEN-11:** Disagree: `import a.b.{x, y as z};` with mandatory dot before `{` and no optional trailing comma (one canonical form).
+12. **OPEN-12:** Agree: `impl Trait for Type` and `impl Type`, receiver shorthand `self` / `&self` / `&mut self` only, no `where` clauses or associated types.
+13. **OPEN-13:** Disagree: require parentheses on `assert(e);`, `assert(e) by path(args);`, and `assume(e);` (one form per construct, eliminating the `(` / `by` LL(1) conflict), with `spec fn f(...) -> T = e;`.
+14. **OPEN-14:** Disagree: require type/brand parameters before `cap` parameters, parenthesized generic cast targets, `[T; INT]`, and restrict `named_type` so capability tokens only appear in explicit capability/generic-argument grammar rather than general `type`.
+15. **OPEN-15:** Agree: closed 10-attribute table from section 3, `#[link_name = "..."]` / `#[export_name = "..."]`, and parameterless `#[test] fn name() -> u8`.
+16. **OPEN-16:** Disagree: require all statements in blocks to end with `;` (including statement `if;`, `match;`, or forbid tail `if`/`match` without explicit `return` or parentheses) so statement vs. tail-value blocks are strictly LL(1) without delayed mode classification.
+17. **OPEN-17:** Disagree: require qualified `Enum::Variant` in `match` (forbidding bare fieldless variants to prevent typos shadowing `_`), forbid trailing commas in field/pattern lists, and require comma after non-block match arms.
+18. **OPEN-18:** Disagree: require explicit type annotations on all `let` bindings (`let [mut] x: T = e;`, matching "know everything" / Slice 0 clarity), `'label: while/for`, `break 'label;`, `continue 'label;`, and add explicit `discard expr;` statement.
+19. **OPEN-19:** Agree: place-only borrow source, no top-level `as` cast inside `range_bound` (casts parenthesized), `else` only on ranged borrows, and `defer` restricted to a syntactic Unit call.
+20. **OPEN-20:** Disagree: require explicit `field: expr` in struct/variant constructors (no field puns—one form per situation, maximum clarity for readers) and disallow trailing commas.
+21. **OPEN-21:** Agree: `View<T>` and `ViewMut<T>` second-class type constructors, ordinary function calls for secret/text/container APIs, and `conv::<Target>(x)` for float conversions.
+22. **OPEN-22:** Agree: explicit `<brand A>`, `brand A { ... }`, `exists<brand A> T`, `pack::<A>(e)`, `unpack p as <brand A> x { ... }`, named parameter binders on `fn` types for `#[requires(...)]`, and explicit context parameters for function values.
+23. **OPEN-23:** Agree: `kept p: *mut T` (default call-only when unmarked), `ptr::*` qualification with `read_owned(p)` kept as decided, paired `Kept<H>` release calls, and no `extern "C" { ... }` blocks.
+24. **OPEN-24:** Agree: review scoped `spawn`/`join` with linear ownership transfer first before committing surface tokens for Slice 28.
+25. **OPEN-25:** Agree: ratify the refusal of postfix `?`, value `while ... else`, and postfix `->`, keeping `->` solely for function/method return types.
+
+ANSWER: ERRORS=10; OPEN_DISAGREE=3,8,9,11,13,14,16,17,18,20

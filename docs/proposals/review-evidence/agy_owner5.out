@@ -1,0 +1,13 @@
+Both Round 2 findings are cleanly resolved:
+
+1. **`expected_timeout` and `EXIT` trap (`scripts/checks/lib/slice0_common.sh:27,67-70`, `scripts/checks/slice0_backends.sh:47`, `scripts/checks/slice0_repro.sh:25`):**
+   - `expected_timeout` scopes `local BOUNDED_LOG="$work/expected-timeouts.log"` around `check control-loop`, diverting the intentional double-timeout log entries away from the gate's main `$BOUNDED_LOG` while `observe` still checks `BOUNDED_OUTCOME_FILE` via `bounded_is_incomplete` and writes `incomplete` to `$2.status` as required by `judge`.
+   - Note that the build step inside `check control-loop` (`slice0_Common.sh` / `slice0_backends.sh:24`) also runs under `expected_timeout`, but if that build ever times out twice, `bounded` returns `124` and `build` immediately exits `1` (`slice0_common.sh:87`), so an incomplete build still fails the gate rather than passing silently.
+   - Switching `grep -qs` to `grep -Eqs "^(incomplete|runner-failed)"` in both `slice0_common.sh:27` and `slice0_repro.sh:25` is portable POSIX ERE and avoids the BRE `\|` extension.
+
+2. **`compile_spec` equation in `Concrete/README.md:387`:**
+   - `LCB.emit out.bir = .ok (out.lcb, out.bir.sites)` now matches `Concrete.Backend.LCB.emit : Program → Except String (Source.Function × SiteTable)` (`Concrete/Backend/LCB.lean:196-198`) and `Output.lcb : LCB.Source.Function` (`Concrete/README.md:372`).
+
+No defects or preferences found in the delta.
+
+VERDICT: ACCEPT

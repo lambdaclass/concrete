@@ -1,0 +1,1 @@
+Owner rule (verbatim: "ALWAYS tell the reviewrs to do the best long term thing rather than cuitting corners"): judge and fix by the best long-term design. Never cut corners for speed, a smaller diff, or fewer rounds. A reviewer reports any shortcut or containment patch as a REAL DEFECT and states the long-term fix. A writer implements the structural fix, not a containment patch.

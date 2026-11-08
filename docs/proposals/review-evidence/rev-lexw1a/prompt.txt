@@ -1,0 +1,14 @@
+Read-only review. Do not modify, create or delete any file in this directory, do not run git, do not push or use the network. You may read files and run read-only or bounded local commands (temporary files only outside this directory).
+
+The current directory is a plain copy (git archive) of the Concrete repository at commit 7e8c926c03c1609f9b264ea0bad8d45422d778da. REVIEW.diff holds the change under review (ea5181b535fd2983abfcafe31b3ff7bf59ec6439..7e8c926c03c1609f9b264ea0bad8d45422d778da). Review it against the repository as a whole: read the files it touches and the code, docs, checks and decisions (docs/decisions.md, ROADMAP.md) it relies on.
+
+OWNER RULE (2026-11-08, verbatim: "ALWAYS tell the reviewrs to do the best long term thing rather than cuitting corners"): judge and fix by the best long-term design. Never cut corners for speed, a smaller diff or fewer rounds. As a reviewer, report any shortcut, containment patch or corner cut as a real finding and say what the long-term fix is. As a writer, implement the structural fix, not a containment patch; if staging is truly unavoidable, record the long-term design and name its roadmap row.
+
+CHANGE: branch wip/slice0-lexer, commits 9cec9dff7, afd274d8d, 7e8c926c0 (written by Codex, so Codex does not review it): the slice-0 lexer foundation. ConcreteSpec/Spec/Surface0.lean states the declarative surface judgments (UTF-8 decoding, source validity with NUL/BOM refusal, ASCII identifier start/continue); Concrete/Lex.lean gives the executable decoder and predicates with soundness/completeness theorems; imports; scripts/proofs/axioms.golden entries; a changelog fragment.
+QUESTIONS: Are the judgments a faithful statement of the decided surface rules (read docs/decisions.md and the owner decisions of 2026-11-08 if present) and do they encode any rule or spelling that is NOT decided? Are the theorems the right ones (soundness, completeness, determinism), non-vacuous, and at the right layer for the long term (spec vs implementation)? Is the decoder correct on edge cases (overlongs, surrogates, > U+10FFFF, truncation, error offsets)? Is the axiom golden consistent (propext or none)? Anything that would let a wrong lexer pass the gates?
+CPU RULE: this host is contended; you may build only the touched Lean modules if needed (lake build Concrete.Lex), bounded; no full suites.
+
+
+Report findings with file:line, severity and the long-term fix. Start your answer by stating whether you could read the repository and list the files you read. End with exactly two lines:
+REPOSITORY: readable   (or REPOSITORY: unreadable)
+VERDICT: ACCEPT   (or VERDICT: REJECT)

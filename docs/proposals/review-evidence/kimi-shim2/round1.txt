@@ -1,0 +1,54 @@
+• ### High — aliases bypass the shim completely
+
+  `scripts/land/acceptance_shim.sh:31-36` only recognizes a literal `push` argument. If none exists, it delegates to real Git, where an alias can subsequently expand to `push`.
+
+  Reproduced under `timeout 10` against a scratch protected bare repository:
+
+  ```bash
+  G -C w -c alias.p=push p origin main
+  ```
+
+  This returned 0 and created `refs/heads/main` on the protected repository. The environment-only spelling also succeeded:
+
+  ```bash
+  GIT_CONFIG_COUNT=1 \
+  GIT_CONFIG_KEY_0=alias.p \
+  GIT_CONFIG_VALUE_0=push \
+  G -C w p origin main
+  ```
+
+  Thus `GIT_CONFIG_PARAMETERS`-style configuration can bypass the shim without any literal `push` argument. The control at `scripts/checks/landing_script.sh:1062-1084` does not exercise aliases.
+
+  ### High — a protected non-bare repository is exposed through `.git`
+
+  `scripts/land/acceptance_shim.sh:64-82` compares canonical URL directory paths, not the actual Git repository directory. Protecting `/tmp/.../nonbare` does not protect `/tmp/.../nonbare/.git`, although both name the same repository.
+
+  With the shim protecting `$S/nonbare` and a remote pointing at `$S/nonbare/.git`, this succeeded under `timeout 10`:
+
+  ```bash
+  G -C w push --force nonbare +main
+  ```
+
+  Git reported:
+
+  ```text
+  + 9d86fd6...0ac54ff main -> main (forced update)
+  ```
+
+  The canonical paths `$S/nonbare` and `$S/nonbare/.git` differ, so the destination is incorrectly classified as an unprotected fixture. The new control only protects and addresses a bare repository, missing this case.
+
+  ### Low — closure and changelog claims are premature
+
+  `ISSUES.tsv:21` marks ISS-0017 closed and claims protected remotes are refused “however it is spelled.” `changelog.d/2026-11-08-acceptance-shim.md:7-12` makes the equivalent claim. Both are contradicted by the reproduced bypasses above.
+
+  Validation performed:
+
+  - `landing_script.sh`: `PASS=210 FAIL=0`
+  - `issues.sh`: `PASS=5 FAIL=0`
+  - Shell syntax checks passed.
+  - `insteadOf`, protected symlinks, `remote.pushDefault`, explicit `--git-dir`, and mixed positional/`--repo` destination probes behaved safely.
+
+  Verdict: CHANGES-NEEDED
+
+To resume this session: kimi -r session_f2d5a3e1-c9d1-47c2-a859-5d3c25373a22
+kimi exit 0

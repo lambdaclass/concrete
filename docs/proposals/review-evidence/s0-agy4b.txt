@@ -1,0 +1,6 @@
+No correctness defects found in the delta:
+- `tests` is added to `scripts/checks/root_inventory.txt` in alphabetical order among the top-level entries.
+- `scripts/checks/slice0_native.sh` is moved intact (100% similarity) to `scripts/checks/lib/slice0_native.sh` alongside `repro_compare.py`, so `scripts/checks/*.sh` globs no longer pick it up as a standalone check.
+- All call sites and documentation references (`Concrete/README.md`, `flake.nix`, `scripts/checks/build_identity.sh`, `scripts/checks/slice0_artifacts.sh`, `scripts/checks/slice0_backends.sh`, and `scripts/checks/slice0_repro.sh`) are updated consistently to `scripts/checks/lib/slice0_native.sh`.
+
+VERDICT: ACCEPT

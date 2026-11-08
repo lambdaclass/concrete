@@ -1,0 +1,3 @@
+DISAGREE with (b-fixed): `import a::b;` adds a second `import` form alongside `import a::b::{x};`, creates multiple ways to reach one declaration (`import a::b::{x}` + `x`, `import a::b` + `b::x`, `import a` + `a::b::x`), and violates MOD-2, which requires importing declarations themselves so every used item is listed in the import manifest.
+
+ANSWER: DISAGREE=b-fixed; NOTE=module import adds a second import form, creates multiple ways to reach one item, and violates MOD-2's explicit item-manifest rule

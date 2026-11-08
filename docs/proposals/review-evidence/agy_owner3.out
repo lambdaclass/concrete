@@ -1,0 +1,74 @@
+### Findings
+
+1. **[Real defect — stub-target spoofing and mid/post-stub calls accepted on Mach-O and ELF]** (`scripts/checks/lib/stack_bound.py:90-91`, `scripts/checks/lib/stack_bound.py:596,606,610`)
+   - **Cause:**
+     1. In `parse` (`scripts/checks/lib/stack_bound.py:90-91`), `if section in (".plt", ".plt.sec", ".plt.got", "__stubs") or name.endswith("@plt"):` still includes `"__stubs"`, so the Mach-O section symbol `0000000100003f94 <__stubs>:` adds `"__stubs"` to `stubs["names"]`.
+     2. In `analyse` (`scripts/checks/lib/stack_bound.py:596,606,610`), `base = sym.split("+")[0]` strips any `+<offset>`. While the owned-callee branch checks `elif callee and "+" not in sym:` (line 606), the PLT/stub-name branch `elif base in stubs["names"] or base.endswith("@plt"):` (line 610) does **not** check `"+" not in sym`.
+   - **Impact:**
+     - **Mach-O:** Any `bl` whose target symbol `llvm-objdump` formats relative to `<__stubs>`—including an unmapped stub `bl 0x1040 <__stubs>` with no `stub` indirect-symbol line, a mid-stub jump `bl 0x1044 <__stubs+0x4>`, or a call to an unlabelled function past `__stubs` `bl 0x104c <__stubs+0xc>`—misses `tgt in stubs["addrs"]` and falls through to `base in stubs["names"]` (`base == "__stubs"`), where it is accepted as an external call to `__stubs`.
+     - **ELF:** Any `call`/`bl` to `<NAME@plt+0xOFFSET>` (into the middle of a PLT entry or into unlabelled code after `.plt`) matches `base.endswith("@plt")`. If `NAME` is `_exit` or `abort` (`NORETURN`), the analyzer treats the call as non-returning (`if name in NORETURN: continue`) and ignores all stack usage after the call.
+   - **Accepted reproducer (Mach-O unmapped/mid-stub call):**
+     ```
+     0000000000001000 <_main>:
+         1000:	sub	sp, sp, #0x10
+         1004:	str	x30, [sp]
+         1008:	bl	0x1044 <__stubs+0x4>
+         100c:	ldr	x30, [sp]
+         1010:	add	sp, sp, #0x10
+         1014:	ret
+
+     Disassembly of section __TEXT,__stubs:
+
+     0000000000001040 <__stubs>:
+         1040:	adrp	x16, 0x2000
+         1044:	ldr	x16, [x16]
+         1048:	br	x16
+     ```
+     Accepted as `bound 16 external __stubs 16` despite having no `stub` entry and targeting `0x1044` (`<__stubs+0x4>`).
+   - **Accepted reproducer (ELF `@plt+offset` spoofing `NORETURN` to hide arbitrary stack usage):**
+     ```
+     0000000000001000 <main>:
+         1000:	call	0x1044 <_exit@plt+0x4>
+         1005:	sub	rsp, 0x1000
+         100c:	mov	byte ptr [rsp], 0x0
+         1010:	add	rsp, 0x1000
+         1017:	ret
+
+     Disassembly of section .plt:
+
+     0000000000001040 <_exit@plt>:
+         1040:	ret
+         1044:	ret
+     ```
+     Accepted with `bound 8 external _exit 8`, ignoring the 4096-byte frame after `1000`.
+   - **Fix:** In `parse`, do not add `name` to `stubs["names"]` when `section == "__stubs"` (only set `cur = None`). In `analyse`, require `"+" not in sym` on line 610: `elif (base in stubs["names"] or base.endswith("@plt")) and "+" not in sym:`.
+
+2. **[Real defect — saved `x29`/`x30` slots below `sp` (`top > d`) survive calls and bypass `st.w` via `restore`]** (`scripts/checks/lib/stack_bound.py:402-419`, `scripts/checks/lib/stack_bound.py:595-620`)
+   - **Cause:**
+     1. In `a64_core` (`scripts/checks/lib/stack_bound.py:402-409`), the new single-register save branch `elif data in (["x30"], ["x29"]) and top - lo == 7:` records `(lo, top, (tag, ...))` in `saved` without checking that the slot is within the current frame (`top <= d`), so `stur x29, [sp, #-0x8]` / `stur x30, [sp, #-0x8]` can save `fp`/`lr` in the red zone below `sp`. Even when saved at a positive offset (`sub sp, sp, #0x10; str x29, [sp]; add sp, sp, #0x10`), `saved` keeps slots after `sp` moves above them (`top > d`).
+     2. Across a `call` (`bl`), the callee overwrites stack bytes below the caller's `sp` (depths `> st.d`). While `st.w` is cleared on a call (`a64-callee-residual-reread`), `st.saved` is not pruned of slots with `top > st.d`, and `ldr x29` / `ldr x30` passes `restore=(slot,)` to `touch` (line 411), exempting `slot` from the `st.w` check.
+   - **Impact:** A function can save `x29` or `x30` at depths `> st.d` (either via `stur x29, [sp, #-0x8]` or by moving `sp` up before `bl`), call `_concrete_body` which overwrites those bytes in its own frame, and then execute `ldur x29, [sp, #-0x8]` / `ldr x29, [sp]`. The analyzer restores `st.fp` (or `st.lr = True`) from the stale `saved` tag while runtime `x29` (or `x30`) holds the callee's residual value, allowing subsequent `[x29, #imm]` accesses to address arbitrary stack depths beyond the reported bound (or `ret` to branch to a clobbered return address).
+   - **Accepted reproducer (understated stack bound via callee-clobbered `x29` slot):**
+     ```
+     0000000000001000 <_main>:
+         1000:	stur	x29, [sp, #-0x8]
+         1004:	mov	x29, sp
+         1008:	bl	0x1040 <_concrete_body>
+         100c:	ldur	x29, [sp, #-0x8]
+         1010:	stur	wzr, [x29, #-0x4]
+         1014:	ret
+
+     0000000000001040 <_concrete_body>:
+         1040:	sub	sp, sp, #0x10
+         1044:	str	x30, [sp]
+         1048:	sub	x9, sp, #0xfff
+         104c:	str	x9, [sp, #0x8]
+         1050:	ldr	x30, [sp]
+         1054:	add	sp, sp, #0x10
+         1058:	ret
+     ```
+     (Or the non-red-zone variant wrapping `1000` and `100c` in `sub sp, sp, #0x10` / `str x29, [sp, #0x8]` / `add sp, sp, #0x10`.)
+     Accepted with `bound 16`, because `ldur x29, [sp, #-0x8]` restores `st.fp = 0` from `saved` (depths `1..8`), so `stur wzr, [x29, #-0x4]` is analysed at depth `1..4`. At runtime, `_concrete_body` overwrote `[entry_sp - 8]` (depths `1..8`) with `entry_sp - 0x100f`, so `stur wzr, [x29, #-0x4]` writes at depth `4115` (`entry_sp - 0x1013`).
+   - **Fix:** Require `top <= d` when recording a saved slot in `a64_core` (just as for frame records), and on every `call` in `analyse`, prune any saved slots below the call-site stack pointer (`saved = frozenset(s for s in st.saved if s[1] <= d)`).
+
+VERDICT: REJECT

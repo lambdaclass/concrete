@@ -1,0 +1,35 @@
+You are the writer for branch wip/signoff-reject of the Concrete repo, in this clone (~/projects/clones/wip-signoff-reject), from main d3811a74 (the owner sign-off mechanism, R-0618, just landed). Fix one confirmed bug, ISS-0020.
+
+THE BUG (Codex confirmed it with a reproducer; its output is quoted at the end). scripts/land/signoff.sh check() refuses a sign-off unless every reviewer's output ends in `VERDICT: ACCEPT` (the verdict loop near line 201-203). The decided rule (owner, 2026-11-08, item 1, "Sign-off when the review cap is reached") is: "The owner may approve one exact SHA after Codex, Kimi and agy have all reviewed it. The approval and every outstanding finding and verdict are recorded. It never replaces a gate or a proof obligation." A sign-off exists precisely for the case where a reviewer still rejects at the cap.
+
+THE FIX:
+1. verify must require that all three reviewed the exact SHA (unchanged: the request's `reviewed: <full sha>` line, the request body naming a prefix, the seven files, the hashes) and that each output HAS a last verdict line, `VERDICT: ACCEPT` or `VERDICT: REJECT`. An output with no verdict line is still refused (an incomplete review is not a review). A REJECT is accepted and reported.
+2. The success line must state each reviewer's verdict verbatim instead of "codex, kimi and agy accepted", e.g. "verdicts: codex ACCEPT, kimi REJECT, agy ACCEPT" (outstanding findings are in the stored outputs, which the record keeps byte for byte).
+3. Update the header comment of signoff.sh, docs/REVIEW.md and docs/LANDING.md wherever they say all three must accept. Do not edit docs/decisions.md or ROADMAP.md.
+4. Controls in scripts/checks/landing_script.sh: the existing "reject" control (around line 1204 and its assertion near 1279) currently asserts the refusal; change it so that a record whose agy (or kimi) output's last verdict is REJECT at the cap is ACCEPTED by verify and by the train's review_provenance, and its success line names that REJECT. Keep or add: a missing reviewer (no files for one reviewer / a record without its keys) is refused with its exact message; an output with no verdict line is refused; a request naming another SHA is still refused. Run the controls and require their exact messages, in the existing style.
+5. ISSUES.tsv: add the row ISS-0020 (id, date 2026-11-08, area ci, evidence: one sentence plus "Codex reproducer: all-ACCEPT verify exits 0; a kimi REJECT exits 1 with 'the kimi output's last verdict is VERDICT:REJECT, not VERDICT: ACCEPT'", owner R-0618, severity medium, closure_condition: verify accepts and reports a REJECT at the cap and refuses a missing reviewer or a verdict-less output, with landing_script.sh controls, status closed) matching the file's existing columns; run its checker (scripts/checks/check_issues.sh or whatever the header names).
+6. changelog.d/2026-11-08-signoff-reject.md, short.
+
+Run inside `nix develop .#gates`: bash scripts/checks/landing_script.sh, bash scripts/checks/review_tool.sh, and the issues checker; all must pass. Commit on wip/signoff-reject (do not push). End with a short report: files changed, controls and their results, checks run with results, anything left open.
+
+Codex's reproducer output:
+Observed output:
+
+```text
+all-ACCEPT verify exit: 0
+8eec4516cd630b3a581c07ec5a4f487d765eaa58 owner sign-off does not qualify: the kimi output's last verdict is 'VERDICT:REJECT', not VERDICT: ACCEPT
+Kimi-REJECT verify exit: 1
+```
+
+Exact lines at fault:
+
+- [scripts/land/signoff.sh:201](/home/unbalancedparen/projects/clones/signoff-reject-confirm/scripts/land/signoff.sh:201) parses either verdict; line **203** then rejects anything except `VERDICT:ACCEPT`.
+- [scripts/checks/landing_script.sh:1204](/home/unbalancedparen/projects/clones/signoff-reject-confirm/scripts/checks/landing_script.sh:1204) constructs the hash-consistent REJECT variant for agy; [line 1279](/home/unbalancedparen/projects/clones/signoff-reject-confirm/scripts/checks/landing_script.sh:1279) explicitly asserts its refusal.
+
+Under the supplied owner decision, completed reviews and recorded outstanding verdicts satisfy the review requirement without unanimous acceptance.
+
+VERDICT: CONFIRMED
+Reading additional input from stdin...
+OpenAI Codex v0.166.0
+--------
+workdir: /home/unbalancedparen/projects/clones/signoff-reject-confirm

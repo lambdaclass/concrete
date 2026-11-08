@@ -1,0 +1,283 @@
+warning: Git tree '/home/unbalancedparen/projects/review-blockers' is dirty
+=== resolution: generated views regenerated, ledgers union-merged ===
+  ok   build t1 (b1 b2) succeeds despite four conflicting files
+  ok   no merge left in progress
+  ok   the four conflicts were real and each took its route
+  ok   CHANGELOG carries both members' entries
+  ok   corpus map carries [201] and [202]
+  ok   generated block regenerated from both members' records
+  ok   BuildIdentity regenerated over the merged sources
+  ok   no conflict markers committed
+  ok   merge commits name member and SHA
+  ok   state binds head and member SHAs
+  ok   build row logged
+=== refusal: real conflicts stop the merge and leave nothing in progress ===
+  ok   a source conflict stops with exit 3 and names the file
+  ok   the stopped merge was aborted (no MERGE_HEAD)
+  ok   tree clean after the stop
+  ok   train/t2 holds the members merged before the conflict
+  ok   a prose conflict outside the generated block is refused
+  ok   a merge that duplicates a corpus key is refused
+  ok   two edits of one ledger entry are a real conflict, not a union
+  ok   code inserted outside the corpus maps is never unioned
+  ok   a map line carrying code after its key is never unioned
+  ok   a generated block whose generator will not run is a real conflict
+  ok   a generator's refusal fails the build and leaves the tree clean
+  ok   a refused build records no head
+  ok   an existing train is not overwritten without --force
+  ok   a train name with '/' is refused
+  ok   a dirty tree is refused
+  ok   a merge already in progress is refused
+  ok   a rebase in progress is refused
+=== pipeline: check -> ci -> watch -> land, with a fake gh ===
+  ok   ci refuses a train with no passing check
+  ok   check feeds the hook exactly base..head on ci/t1
+  ok   check fails when the hook's selection fails
+  ok   a failed re-check withdraws the earlier pass
+=== gate host: check's impact leg on the gate host, bound to the SHA; INCOMPLETE blocks ===
+  ok   check runs the impact leg on the gate host, from a bundle holding exactly the train head
+  ok   with a gate host the gates do not run on this machine
+  ok   the host runs the hook's selection over exactly base..head on ci/t1
+  ok   CONCRETE_* is forwarded quoted; the bypass is never forwarded and is cleared first
+  ok   the pass is attested for the train head, with the host's log kept
+  ok   the check row names the gate host; the train is checked at its head
+  ok   a run at another SHA is no result: INCOMPLETE, and the old attestation is withdrawn
+  ok   an incomplete check is logged as incomplete and withdraws the earlier pass
+  ok   ci refuses after an incomplete check
+  ok   an unreachable gate host is INCOMPLETE, blocks, and never falls back to a local run
+  ok   a log without its exit line (lost connection) is INCOMPLETE
+  ok   gates that fail on the host at the head fail the check (not incomplete)
+  ok   a pass without a remote record passes, attests nothing, says the push runs the gates
+  ok   --local-gates is the explicit opt-in to run the gates on this machine
+  ok   git config land.gatesHost names the gate host
+  ok   dry-run check names the gate host
+  ok   an empty LAND_GATES_HOST overrides the config (no gate host)
+  ok   run-at-ref.sh runs exactly the bundled head and prints sha= on both lines
+=== gate host: the pushing hook reuses the attestation only for this exact push ===
+  ok   the hook reuses an attested pass for exactly this push
+  ok   a push of another SHA does not reuse it
+  ok   a push of a ref that is not HEAD does not reuse it
+  ok   another changed-file list does not reuse it
+  ok   another selection does not reuse it
+  ok   another CONCRETE_* environment does not reuse it
+  ok   a dirty tracked tree does not reuse it
+  ok   a tampered log is refused (digest)
+  ok   a tampered log re-digested into the attestation is still refused (components)
+  ok   a tampered attestation head is refused
+  ok   a truncated attestation is refused
+  ok   a log whose run exited non-zero is never attested
+  ok   a remote record that is not a pass is never attested
+  ok   a log with two exit lines is never attested
+  ok   a log is never attested for a SHA it does not name
+  ok   a pass-deferred remote run is reused and its deferrals reported
+  ok   the environment digest binds whole values (a changed continuation line differs)
+  ok   the hook's nix re-entry bookkeeping does not break reuse (push from outside the gate shell)
+=== gate host end to end: the real ssh transport, shimmed, carries the command intact ===
+  ok   the real transport runs the head on the host and the pass is attested
+  ok   a forwarded value with newlines, $( ) and quotes runs nothing on the host
+  ok   the forwarded value arrives byte for byte
+  ok   the host's own CONCRETE_SKIP_GATES is cleared before the hook
+  ok   the host keeps no bundle or script after the run
+  ok   the push's hook reuses the record the host's run produced
+  ok   a push in another CONCRETE_* environment than the host's run does not reuse it
+  ok   a root login on the gate host is refused before it fetches (INCOMPLETE)
+  ok   a gate host login that id cannot read is refused, not taken as non-root (INCOMPLETE)
+  ok   a gate login without its gate clone is INCOMPLETE and names the account and path
+  ok   a gate clone that is a linked worktree runs the gates
+  ok   the real transport to an unreachable host is INCOMPLETE (exit 3), attests nothing
+  ok   the root pre-push hook builds the spec and runs the full root set; it consults no remote attestation
+  ok   dry-run ci prints the push and dispatch and does neither
+  ok   ci pushes ci/t1 at the head, dispatches it with the train's base, records run 4242
+  ok   watch: a campaign-only failure is named, its log tail fetched, landing allowed
+  ok   watch: a landing failure is red and its log tail fetched
+  ok   watch: a green run at another SHA is no verdict
+  ok   land refuses a red landing job
+  ok   land refuses a run at another SHA
+  ok   land refuses the remote named fork as primary
+  ok   land refuses the remote named fork as mirror
+  ok   land refuses a missing mirror remote before pushing anything
+  ok   fork untouched
+  ok   dry-run land verifies and pushes nothing
+  ok   land refuses a moved main and prints the rebuild
+  ok   land puts origin/main and lambdaclass/main at the train head
+  ok   fork still untouched after landing
+  ok   publish lock released
+  ok   land cancels no run; main's own run records the validating run
+=== dropped: a push's result is read from the remote, and a failed push is retried ===
+  ok   ci retries a push dropped before the remote moved
+  ok   exhausted retries fail the landing, move nothing and release the lock
+  ok   land retries a push dropped before the update, accepts one dropped after it, and both remotes reach the head
+  ok   both dropped-connection seams fired
+=== bisect: halving finds the seeded red member ===
+  ok   bisect attributes b8 and prints the rebuild without it
+  ok   bisect leaves the checkout clean
+=== push-both.sh: both remotes required, refusals before anything is pushed ===
+  ok   push-both refuses PRIMARY=fork
+  ok   push-both refuses MIRROR=fork
+  ok   push-both refuses a missing mirror remote
+  ok   no refused push-both moved origin or fork
+=== report ===
+  ok   report prints the median time to land
+=== the campaign tier train.sh assumes is the workflow's campaign tier ===
+  ok   CAMPAIGN_RE names exactly the workflow's campaign jobs
+=== required checks: missing, skipped, cancelled, dropped ===
+  ok   watch refuses a run missing a required job
+  ok   land refuses a run missing a required job
+  ok   watch refuses a skipped required job
+  ok   land refuses a skipped required job
+  ok   watch refuses a cancelled required job
+  ok   land refuses a cancelled required job
+  ok   watch refuses a run whose only other job is a campaign-tier one
+  ok   land refuses a run whose only other job is a campaign-tier one
+  ok   a candidate that drops a base requirement without a transition row is still held to it
+  ok   a transition row replacing a base job by a required, green job passes and says so
+  ok   a replacement job that failed at this SHA refuses
+  ok   a replacement the candidate does not itself require is refused, and the old job stays required
+  ok   a retired base job is reported as retired, not run, never as passed
+  ok   a retirement without a reason is refused
+  ok   a malformed replacement list is refused, never read as a retirement
+  ok   a transition row for a job still required is refused
+  ok   no required-checks file anywhere is refused, not read as nothing required
+  ok   files without a final newline do not fuse names (Build and Other both required, both green)
+  ok   a job named BuildOther satisfies neither Build nor Other
+  ok   train.sh reads the candidate's transition file at the head commit
+=== record: main's run names the run that qualified its exact SHA, and nothing else (R-0570) ===
+  ok   record: the newest green run at exactly the head qualifies it (a skipped campaign job is fine)
+  ok   record refuses with no run at the head
+  ok   record refuses a run at another SHA
+  ok   record refuses a run the API lists at the head but whose own record names another SHA
+  ok   record refuses a run of another workflow
+  ok   record refuses a pull_request run
+  ok   record refuses a push run (its checks' base is not the declared one)
+  ok   record refuses a dispatch whose checks ran at another base
+  ok   record refuses a dispatch that names no base (a campaign or hand dispatch)
+  ok   record refuses an unfinished run
+  ok   record refuses the asking run itself
+  ok   record refuses a skipped required job
+  ok   record refuses a cancelled required job
+  ok   record refuses a failed landing-tier job
+  ok   record refuses a run without a required job
+  ok   record refuses a run with no landing-tier job
+  ok   record refuses an older green run behind a newer red one at the same SHA
+  ok   record refuses a head not strictly ahead of the base
+  ok   record refuses when the compare API cannot be read
+  ok   record refuses a base this clone does not have
+  ok   record refuses an all-zero base (a new branch, not a landing)
+  ok   record refuses an abbreviated head
+  ok   record refuses when the runs API cannot be read
+  ok   record refuses a head that drops a base requirement silently
+=== the workflow: Landing record gates every landing-tier job; a dispatch's base binds its checks ===
+  ok   every landing-tier job is skipped exactly when main's run holds a record
+  ok   CONTROL: the record-gate check finds a base-sensitive check that ignores the dispatch's base
+  ok   CONTROL: the record-gate check finds the ungated job
+  ok   CONTROL: the record-gate check finds the always job
+  ok   CONTROL: the record-gate check finds the nocancel job
+=== required-checks.txt names exactly the workflow's landing-tier jobs ===
+  ok   required-checks.txt = the workflow's landing tier
+=== the move gate: legacy/ lands only with an accepted rehearsal of that exact candidate ===
+  ok   land refuses the move with no rehearsal record
+  ok   dry-run land refuses the move with no rehearsal record (exit 5, every other check passed)
+  ok   land refuses the move with an accepted rehearsal of another candidate (another tree)
+  ok   dry-run land refuses the move with an accepted rehearsal of another candidate (another tree) (exit 5, every other check passed)
+  ok   land refuses the move with an accepted rehearsal of the same tree on another base
+  ok   dry-run land refuses the move with an accepted rehearsal of the same tree on another base (exit 5, every other check passed)
+  ok   land refuses the move with a failed rehearsal of this candidate
+  ok   dry-run land refuses the move with a failed rehearsal of this candidate (exit 5, every other check passed)
+  ok   land refuses the move with an incomplete rehearsal of this candidate
+  ok   dry-run land refuses the move with an incomplete rehearsal of this candidate (exit 5, every other check passed)
+  ok   a malformed rehearsal row refuses the land (not skipped, not exit 5)
+  ok   two trains of the same base and member: different merge commits, the same tree
+  ok   an accepted rehearsal by another train of the same tree and base satisfies the gate
+  ok   the rehearsed move lands
+  ok   a staged move (legacy/ already on the base) still needs a rehearsal of its own
+  ok   acceptance's dry-run leg: exit 5 + whole marker line passes; no marker, another exit, a prefixed or altered marker fail
+  ok   acceptance refuses --name with a record delimiter and writes no row
+  ok   acceptance refuses --ref with a record delimiter and writes no row
+  ok   acceptance: check keeps the review leg; both build legs run nix develop --command lake build
+  ok   an acceptance run that fails before building a train writes no rehearsal row
+  ok   a candidate adding scripts/checks/root_inventory.txt is a move too
+  ok   an inventory change of nested entries, comments and order only (docs/proposals) needs no rehearsal
+  ok   an inventory change that adds a top-level entry still needs a rehearsal
+  ok   a change under legacy/ (inventory untouched) still needs a rehearsal
+=== review: check fails closed, land requires review provenance ===
+  ok   check with no review command fails instead of skipping the leg
+  ok   a reviewer that exits 0 leaving no note fails check
+  ok   a reviewer that exits 0 leaving a malformed note fails check
+  ok   a reviewer that exits 0 leaving a blocked note fails check
+  ok   a reviewer that exits 0 leaving a findings note fails check
+  ok   a failed review leg leaves no pass for ci
+  ok   land refuses no review note anywhere
+  ok   land refuses an unreviewed head over a malformed member note
+Overwriting existing notes for object 734fcc7201af52f59df8acc691deab6dd3771e7a
+Overwriting existing notes for object 4eded9f9e1d23b2f02fffb323f18b26124e57582
+  ok   land refuses a malformed head note, whatever the members
+Overwriting existing notes for object 734fcc7201af52f59df8acc691deab6dd3771e7a
+Overwriting existing notes for object 4eded9f9e1d23b2f02fffb323f18b26124e57582
+  ok   land refuses an unreviewed head over a blocked member note
+Overwriting existing notes for object 734fcc7201af52f59df8acc691deab6dd3771e7a
+Overwriting existing notes for object 4eded9f9e1d23b2f02fffb323f18b26124e57582
+  ok   land refuses a blocked head note, whatever the members
+Overwriting existing notes for object 734fcc7201af52f59df8acc691deab6dd3771e7a
+Overwriting existing notes for object 4eded9f9e1d23b2f02fffb323f18b26124e57582
+  ok   land refuses an unreviewed head over a findings member note
+Overwriting existing notes for object 734fcc7201af52f59df8acc691deab6dd3771e7a
+Overwriting existing notes for object 4eded9f9e1d23b2f02fffb323f18b26124e57582
+  ok   land refuses a findings head note, whatever the members
+Overwriting existing notes for object 734fcc7201af52f59df8acc691deab6dd3771e7a
+  ok   land refuses an unreviewed head with one member unreviewed
+Overwriting existing notes for object 734fcc7201af52f59df8acc691deab6dd3771e7a
+  ok   land accepts an unreviewed head whose every member is clean at its exact SHA
+  ok   land accepts a clean head note
+  ok   check over members reviewed clean passes the review leg without running the reviewer
+=== review: an owner sign-off at a member's exact SHA is its review provenance (R-0618) ===
+Overwriting existing notes for object 4eded9f9e1d23b2f02fffb323f18b26124e57582
+Overwriting existing notes for object 734fcc7201af52f59df8acc691deab6dd3771e7a
+Overwriting existing notes for object 4eded9f9e1d23b2f02fffb323f18b26124e57582
+  ok   land accepts a member with a valid owner sign-off and a clean merge
+Overwriting existing notes for object 4eded9f9e1d23b2f02fffb323f18b26124e57582
+Overwriting existing notes for object 734fcc7201af52f59df8acc691deab6dd3771e7a
+Overwriting existing notes for object 4eded9f9e1d23b2f02fffb323f18b26124e57582
+  ok   land refuses a sign-off recorded for another commit
+Overwriting existing notes for object 4eded9f9e1d23b2f02fffb323f18b26124e57582
+Overwriting existing notes for object 734fcc7201af52f59df8acc691deab6dd3771e7a
+Overwriting existing notes for object 4eded9f9e1d23b2f02fffb323f18b26124e57582
+  ok   land refuses a sign-off whose verdict file was changed after recording
+Overwriting existing notes for object 4eded9f9e1d23b2f02fffb323f18b26124e57582
+Overwriting existing notes for object 734fcc7201af52f59df8acc691deab6dd3771e7a
+Overwriting existing notes for object 4eded9f9e1d23b2f02fffb323f18b26124e57582
+  ok   land refuses a sign-off without agy's verdict
+Overwriting existing notes for object 4eded9f9e1d23b2f02fffb323f18b26124e57582
+Overwriting existing notes for object 734fcc7201af52f59df8acc691deab6dd3771e7a
+Overwriting existing notes for object 4eded9f9e1d23b2f02fffb323f18b26124e57582
+  ok   land refuses a sign-off whose agy output ends in REJECT
+Overwriting existing notes for object 4eded9f9e1d23b2f02fffb323f18b26124e57582
+Overwriting existing notes for object 734fcc7201af52f59df8acc691deab6dd3771e7a
+Overwriting existing notes for object 4eded9f9e1d23b2f02fffb323f18b26124e57582
+  ok   land refuses a sign-off whose quote names no commit
+Overwriting existing notes for object 734fcc7201af52f59df8acc691deab6dd3771e7a
+  ok   land refuses a member with neither a note nor a sign-off
+  ok   a docs-only member signed off after 2 rounds is accepted
+  ok   record refuses a scripts member after 2 rounds and writes nothing
+Overwriting existing notes for object 62682544977db96caa948c9f105e0818714306ba
+  ok   verify refuses a scripts member's sign-off after 2 rounds
+  ok   record refuses a compiler member after 2 rounds and writes nothing
+Overwriting existing notes for object 001f3aee45ba8fc2a7a249e7d8c79f54db254d89
+  ok   verify refuses a compiler member's sign-off after 2 rounds
+  ok   pure_merge: the built train is the clean merge of its members
+  ok   pure_merge refuses a head with an extra commit (93a414936b is not the clean merge of its members onto 8a213aa57e: 93a414936b is not the merge of 4eded9f9e1)
+  ok   pure_merge refuses a merge whose tree carries an extra change (d6261bb73a is not the clean merge of its members onto 8a213aa57e: d6261bb73a differs from the clean merge of 4eded9f9e1)
+=== where a train runs: a full clone with the repository hook (ISS-0015) ===
+  ok   train.sh refuses a linked worktree before doing anything
+  ok   train.sh status (read-only) still runs in a linked worktree
+  ok   the pre-push hook refuses a gated push from a linked worktree (before any check runs)
+  ok   a wip/* backup push from a linked worktree still passes (it runs nothing)
+  ok   train.sh record (CI's Landing record job: no hook there) is not refused for the hook
+  ok   train.sh refuses when the pre-push hook is not executable
+  ok   train.sh refuses when core.hooksPath names a directory with no pre-push
+  ok   train.sh refuses a pre-push hook that does not run the repository's
+  ok   train.sh refuses a hook that only mentions .githooks/pre-push
+  ok   the repository hook answers who it is with its real path and runs nothing
+  ok   a real push never takes the identify answer (no environment switch exists)
+  ok   no refused run left train state behind
+
+check_landing_script: PASS=228 FAIL=0

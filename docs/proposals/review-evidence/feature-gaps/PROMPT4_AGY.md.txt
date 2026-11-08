@@ -1,0 +1,25 @@
+Answer directly from the context below. Do NOT read files or use any tools (headless mode denies them). Do not modify anything.
+
+OWNER RULE (verbatim, 2026-11-08): "ALWAYS tell the reviewrs to do the best long term thing rather than cuitting corners". Judge by the best long-term design, not the cheapest now. Report any shortcut (Claude's, the repository's or your own) as a real finding and name the long-term alternative.
+
+Concrete is (a fully proven systems language; Lean 4 is the specification; a new compiler is built slice by slice; the old compiler is frozen under legacy/). The candidates L1-L8 are below.
+
+Tasks:
+1. For each L1-L8: AGREE or DISAGREE (reason at most 60 words); whether it already exists or is planned (cite the task/row/file); the slice or queue row it belongs in; whether it must START BEFORE SLICE 1 (B1); and the best long-term design if it differs from the candidate.
+2. Anything still missing that should be checked from the beginning to make the compiler excellent, with source, problem, slice and why not covered.
+
+End with exactly one line:
+ANSWER: AGREE=<ids>; DISAGREE=<ids or none>; BEFORE_SLICE1=<ids>; MISSED=<short list or none>
+
+Context (from the repository): legacy/ is byte-frozen; RETENTION.tsv lists retained assets (corpora, regressions, examples, std, bug ledger) that migrate as slices need them; legacy defects are retired with the old implementation at B3 and keep reproducers, rulings and structural classes; 'a legacy ruling that states language behaviour becomes a conformance example when its construct's slice lands'. B2 qualifies slices 0-1 with differential (Lean semantics, native, legacy oracle built from tag legacy-compiler-final, R-0564). Legacy external checker: proofs re-checked by con-leche + nanoda. Facts report R-0575; diagnostics R-0593; rule revisions and spec_version R-0603 (0.x before freeze, 1.0 at A2c); C3 foundation: read-only target profiles with layout laws proved for native, C and packed algorithms; Q7.10 hosted target table linux-x86_64; first proof profile macOS AArch64 through LCB. SPARK.md item 5: deterministic bounded counterexample search replayed through the Lean evaluator, never affects admission, 'refuted, replayed' vs 'no witness within N cases' (internal, B1). Refusals: source-generating macros, general comptime (constants only), broad cfg. No SMT for admission. LLMs write most code (PHILOSOPHY). Claude's DRAFT2 R8 proposes Concrete.toml declares the spec version a package targets.
+
+# Part 3: what else to check from the beginning (owner, 2026-11-08, verbatim: "anything else we should check from the beginning that we aren't to make the compiler amazing?")
+
+L1. Port the legacy corpus as targets: the old compiler's workload programs (base64_cli, png_chunks, envcfg, wordfreq, httpget, tcpserve, ...) and every legacy bug reproducer (bugs 024-079 and others) go into the new test manifest, each tagged with the slice at which it must pass, so we know when we are back at the old compiler's level and old bugs cannot silently return.
+L2. An LLM-writability benchmark: models get task specs and write Concrete programs; track compile and proof success rates and how many rounds of reading our diagnostics they need, with history. Tests the language design and K13's error quality together.
+L3. Counterexamples for failed obligations (Dafny, SPARK, Kani): when an obligation (overflow, bounds, contract) fails, show concrete input values that break it. Decide the architecture early: the kernel is the judge, the counterexample finder is untrusted.
+L4. Independent proof re-checking: every proof re-checked by an independent kernel (legacy used con-leche and nanoda), as a gate in the new layout, so trust does not rest on one Lean kernel build.
+L5. Compiling never executes untrusted code: no build scripts, no macros with IO, no package hooks; compile-time evaluation stays in its closed grammar (owner item 18). Stated as a property (a supply-chain guarantee).
+L6. A migration tool: `concrete migrate` codemods driven by the real parser, so each syntax revision ships its own automatic rewrite. New CLI surface, an owner question.
+L7. Targets as data: data layout, ABI and calling convention per target triple declared as data with proofs, not scattered in code, so adding aarch64 or wasm later does not touch every pass.
+L8. A language and spec versioning policy: editions or versions, what a compatible change means, and how proofs and facts survive a spec revision. Decide before users exist. (Compare R8 in DRAFT2.md.)

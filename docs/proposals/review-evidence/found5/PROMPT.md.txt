@@ -1,0 +1,10 @@
+Concrete is a systems language rebuilt as a fully proven compiler in Lean. There is no GC; the goal is "know everything" about a program. Ownership is linear: non-Copy values are used exactly once, and Copy is declared and checked, never derived. References are second-class: never returned, with borrow views. Capabilities are explicit grants handed to main. `Secret<T>` gives constant time, and only scalar secrets are Copy. There are no hidden traps: every run-time failure is either proven impossible or explicit (checked_* returning Result<T, ArithmeticError>, abort()). The decided trap line is "concrete: trap: <kind> at <path>:<line>:<col> (site <id>)", with exit 134. Struct layout is declaration order with natural alignment. Backends: an LLVM printer (x86-64, AArch64) and the Lean Compiler Backend (verified, AArch64 first). The Lean spec is the only home of rules. Owner principles: best long-term design; one form per situation, no duplication; LLMs write the code and humans read it, so optimize for checking and reading; work is driven by real workloads; verbose is fine when clear.
+
+Review _review/FOUNDATION_PROPOSAL.md (a proposal written by Codex for the owner) critically and independently. Check it against docs/decisions.md (authoritative decided rows), ConcreteSpec/, ROADMAP.md and legacy/docs/spec/. Do not modify files.
+
+For each of section 1, C1–C10, section 3, the revision register (section 4) and the owner decisions (section 5), say AGREE or DISAGREE.
+- When you disagree, give the specific fix and the decisive reason (at most 60 words).
+- Hunt in particular for: (a) a claim that something is decided when it is not, or a citation that does not support it; (b) a new rule or spelling that should be an owner decision but is not flagged; (c) a contradiction between contracts; (d) anything still missing that would force rewriting foundation proofs later; (e) anything over-specified that should be left to a slice.
+
+End with exactly this line:
+ANSWER: S1=..; C=<numbers you disagree with, or none>; S3=..; REG=<rows you disagree with, or none>; DEC=<1-4 verdicts>; UNFLAGGED=<short list, or none>

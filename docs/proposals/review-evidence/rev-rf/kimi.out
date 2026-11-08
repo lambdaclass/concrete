@@ -1,0 +1,56 @@
+• I’ll compare the branch against the owner’s verbatim answers and the approved proposal, then trace the roadmap and spec-unification dependencies before reporting only evidence-backed findings.
+
+• The roadmap already shows an explicit dependency cycle: R-0571 requires R-0608, while R-0608 requires R-0571. I’ll check whether the step plan contains the same inversion and whether any other new tasks inherit cycles through older rows.
+
+• The spec plan also retains pre-approval material that now conflicts with the answers: exact trap constructors appear before the deferred owner decision, and several decision-table step numbers still use the old numbering. I’m doing a full reference and link sweep next so the findings distinguish stale text from merely historical review notes.
+
+• The owner’s quotes are transcribed correctly, and the excluded “ok to 1” / “ok to 2” answers do not appear in the branch records. Two process additions are not supported by the supplied answer text: “Claude reviews it” and the “highest class governs” rule for mixed diffs.
+
+• The porting map has two structural inconsistencies: the module graph omits `Brand` even though step 16 ports it, and it still lists `Cleanup` after step 14 deletes `Cleanup.*`. I’m checking the actual spec tree and task graph now to distinguish naming omissions from missing work.
+
+• The tree confirms that `Ident` and `Rules` do not exist yet, despite the plan and R-0615 calling step 2 “done.” That is a factual scheduling error, not just a naming issue; the foundation steps must depend on landing those modules first.
+
+• The F7 wording itself is verbatim in all three requested files. One closure detail needs checking: ISS-0014 originally also named the no-hidden-traps changelog, so I’m verifying whether the old phrase remains there before treating the issue as fully dispositioned.
+
+• The roadmap audit is complete: all new rows name a home and gate, but there are two explicit dependency cycles, plus scheduling contradictions for the front end and no-libc work. The approved per-native-trace Core refinement check also has no corresponding qualification gate.
+
+• The spec order is not internally sound as written: step 6’s primitive contracts refer to event and leakage types defined later, exact trap constructors remain despite deferral, and the module graph disagrees with the port/delete steps. All named old fragments otherwise have an explicit port or retirement path.
+
+• I’ve finished the review. The quotes and affected decision-row revisions are faithful, and the proposal’s links resolve, but the dependency cycles, stale plan text, and unsupported process additions require revision.
+
+• The three owner quotes are verbatim, “ok to 1” / “ok to 2” are not recorded, and the revised decision rows match the proposal’s section 4. All links in `docs/proposals/FOUNDATION.md` resolve. The F7 wording is correct in the three requested files.
+
+  ## Findings
+
+  1. **The foundation task graph contains dependency cycles.** `ROADMAP.md:366` makes R-0571 depend on R-0608, while `ROADMAP.md:372` makes R-0608 depend on R-0571. There is another cycle through `ROADMAP.md:366`, `ROADMAP.md:377`, and `ROADMAP.md:368`: R-0571 → R-0613 → R-0592 → R-0571. Also, R-0612 delivers R-0602 (`ROADMAP.md:376`), but R-0602 waits for R-0571 (`ROADMAP.md:369`), which itself waits for R-0612. **Fix:** remove R-0608’s dependency on integration, make R-0602 depend on R-0612, and make R-0592’s acceptance depend on the foundation tasks that deliver its checker, leakage, and accounting parts rather than on R-0571.
+
+  2. **The C1/C5/C9 dependencies do not match the prescribed implementation order.** Step 6 supplies primitive contracts before C1 (`docs/proposals/SPEC_UNIFICATION.md:952-956`), C1’s step relation precedes C5’s dynamic invariant (`docs/proposals/SPEC_UNIFICATION.md:1002-1008`, `docs/proposals/SPEC_UNIFICATION.md:1014-1016`), and C9’s final evidence work follows both. Yet R-0607 waits for C5, R-0611 does not wait for C1, and R-0615 waits for C1 (`ROADMAP.md:371`, `ROADMAP.md:375`, `ROADMAP.md:379`). **Fix:** split early interfaces from late integrated-proof acceptance, then encode the step-6 → C1 → C5 → C9-final order explicitly.
+
+  3. **R-0620 prevents the front end from starting “now.”** R-0620 depends on R-0593 (`ROADMAP.md:414`), which depends on R-0592 and R-0575 (`ROADMAP.md:415`); R-0592 in turn waits for full integration through R-0571 (`ROADMAP.md:368`). This contradicts the approved parallel start at `docs/decisions.md:1117-1118`. **Fix:** depend on the lexical/grammar and foundational diagnostics work instead of the complete B0 R-0593 deliverable; split the later JSON goldens and parser integration from that prerequisite.
+
+  4. **The no-libc task lacks its proven-path prerequisite.** R-0621 is scheduled around slices 24–25 with only R-0509 as a dependency (`ROADMAP.md:466`). Its gate removes libc from the proven path’s trusted base, but the existing task removing libc startup is R-0584, after R-0505 (`ROADMAP.md:497-498`). **Fix:** reconcile or merge R-0621 and R-0584, and make R-0621 depend on the required verified-launcher/native-path work, with any schedule revision recorded explicitly.
+
+  5. **The approved Q17 Core-refinement check has no qualification gate.** `docs/decisions.md:1079-1081` adds a per-native-trace Core refinement check. B0 and R-0578 still require only LLVM/LCB equality with each other and the expected outcome (`ROADMAP.md:180`, `ROADMAP.md:403`). **Fix:** extend B0/R-0578 with the per-native-trace Core check and the slice-24 treatment of allocation-dependent observations.
+
+  6. **R-0617 contradicts the unamended legacy-freeze rule.** It moves old copies into `legacy/` and expects `legacy_frozen` to pass (`ROADMAP.md:539`), while P5 permits only authorized deletions and refuses every other change (`docs/decisions.md:290`, `docs/decisions.md:377-380`). **Fix:** record the owner-approved landing-script move as a targeted revision/exception to P5 and specify the corresponding `legacy_frozen`, inventory, and retention changes.
+
+  7. **Step 2 is incorrectly called done.** `docs/proposals/SPEC_UNIFICATION.md:914` and `docs/proposals/SPEC_UNIFICATION.md:929` say the foundation builds on completed `Ident`/`Rules`; R-0615 repeats that claim (`ROADMAP.md:379`). But `ConcreteSpec/Spec.lean:1-14` imports neither module, neither file exists, and step 2’s own entry does not create `Rules` (`docs/proposals/SPEC_UNIFICATION.md:906-907`). **Fix:** mark step 2 pending, add `Rules` to its deliverables, and require it to land before step 3.
+
+  8. **The plan still invents trap constructors before the deferred owner decision.** `docs/proposals/SPEC_UNIFICATION.md:267-280` enumerates `arith`, `index`, `range`, `byteAt`, and `abort`, and `docs/proposals/SPEC_UNIFICATION.md:936-939` carries old-fragment kinds forward. Q9 defers the names and renderings (`docs/decisions.md:1066-1067`). **Fix:** keep `TrapKind` abstract or explicitly provisional without selecting constructors/renderings; obtain the owner’s inventory before step 24.
+
+  9. **Step 6 uses types defined only later.** The primitive interface includes events and leakage (`docs/proposals/SPEC_UNIFICATION.md:952-955`), but events arrive in step 12 and leakage in step 17 (`docs/proposals/SPEC_UNIFICATION.md:991-992`, `docs/proposals/SPEC_UNIFICATION.md:1026-1029`). The graph likewise places `Primitives` before both (`docs/proposals/SPEC_UNIFICATION.md:640-647`). **Fix:** parameterize the early contract over abstract event/leakage types, or split the early operation signatures from the complete contract assembled after steps 12 and 17.
+
+  10. **The module graph disagrees with fragment porting.** It retains `Cleanup` and omits `Brand` (`docs/proposals/SPEC_UNIFICATION.md:652-654`), although step 14 deletes `Cleanup.*` (`docs/proposals/SPEC_UNIFICATION.md:1005-1008`) and step 16 ports `Brand` into a named `Brand` module (`docs/proposals/SPEC_UNIFICATION.md:925`, `docs/proposals/SPEC_UNIFICATION.md:1014-1022`). **Fix:** add `Brand`, remove or explicitly redefine `Cleanup`, and update the import rules and module count.
+
+  11. **Stale step references remain outside the review-history section.** D10 still says steps 2/9 instead of 2/11 (`docs/proposals/SPEC_UNIFICATION.md:787`), and D19 says steps 6/7 instead of 8/9 (`docs/proposals/SPEC_UNIFICATION.md:796`). O8/O10 still refer to slices 14/19 instead of foundation steps 14/16 (`docs/proposals/SPEC_UNIFICATION.md:735-736`), `ghost_log_adequate` still says 19 instead of step 17 (`docs/proposals/SPEC_UNIFICATION.md:788`), and the oracle correspondence points to phase C rather than the new porting paragraph (`docs/proposals/SPEC_UNIFICATION.md:335`). **Fix:** update all five references to the new order.
+
+  12. **Two process additions lack support in the owner’s answer.** “and Claude reviews it” (`AGENTS.md:80`) is absent from item 4 (`_inputs/PENDING_RECORDS.md:116`). The “highest class governs” mixed-diff rule (`AGENTS.md:148-150`, `ROADMAP.md:540`) is absent from item 7 (`_inputs/PENDING_RECORDS.md:119`). **Fix:** remove these additions or obtain and record an explicit owner answer for them.
+
+  13. **ISS-0014 is closed although one F7 location remains unchanged.** The issue itself names the no-hidden-traps changelog and now claims every finding is dispositioned (`ISSUES.tsv:18`), but `changelog.d/2026-11-06-no-hidden-traps-decision.md:6` still says “Termination is known before a program runs.” **Fix:** apply the approved replacement wording there too, or leave the issue open with an explicit disposition for that file.
+
+  14. **The proposal copy contains edits beyond the stated allowance.** The source title at `_inputs/FOUNDATION_PROPOSAL.md:1` was changed at `docs/proposals/FOUNDATION.md:1`, and `docs/proposals/FOUNDATION.md:5` adds an approval paragraph. These are not the specified status-line, link, or question-anchor edits. **Fix:** restore the source title and remove the additional paragraph, or explicitly include those header changes in the permitted edit set.
+
+  15. **The revised status paragraph is grammatically broken.** `docs/proposals/SPEC_UNIFICATION.md:3-4` inserts the revision into “Draft 3 folds in …”, leaving “Draft 3 folds in Revised … the Codex…” rather than two coherent sentences. **Fix:** keep the original draft-3 sentence intact and put the 2026-11-08 revision in a separate sentence or paragraph.
+
+  VERDICT: REVISE
+

@@ -1,0 +1,2 @@
+# utc	verdict	train_head	train_head_tree	base	ref	name (scripts/land/acceptance.sh; read by train.sh require_rehearsal)
+2026-11-08T01:15:35Z	failed	728001c002bbc4ac5536431b316a06fb85f08c9f	257de4b2ebccbb1ae2138af8ec84399b86094429	3bd7bc41511e0a0ba247b53231b5dc8589533d2f	origin/wip/legacy-sweep-2	accept-56ad6ab21d

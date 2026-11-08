@@ -1,0 +1,1099 @@
+kimi version 2.4.1
+• I need act. Should read brief and round3, perhaps round2 foundation relevant. Should follow instructions. User explicitly asks carry out. Should have no subagent unless AGENTS skill asks no. I need inspect.
+
+• I’ll read the original brief and round-three instructions, then implement and verify the requested changes.
+
+• Should carry out two items. Should inspect files, git state current, AGENTS subdirs perhaps none. Use Todo multi-step.## wip/spec-integrate
+e115d8bef axioms.golden: A2i integration of C8 (regenerated on concrete-ci-2)
+a8f7a2995 Merge C8 adequacy into integrated spec core
+6c24007ef axioms.golden: C8 round 3 (regenerated on concrete-ci-2)
+b2d5529bb C8: reject fabricated terminal query histories
+e6383efad C8: authenticate terminal oracle queries
+I need substantial Lean design.
+
+  Item1 classifications over projected histories. Adequacy currently imports Exec only. Cannot edit C6 Observe but may import Observe into Adequacy? Spec/Adequacy can import ConcreteSpec.Spec.Observe, no cycle (Observe Exec only). Proofs/Adequacy import spec Adequacy and Exec proofs. To connect C6 observation likely need import Proofs Observe? I can use Spec Observe definitions. External classifications parameterized adapter A. Should have exact projected history and C6 observation of run. InfiniteExecution positions raw events. Define projection to C6 execution steps? I only have positions and Move, can derive per-step raw event increment; projected C6 Step list possibly multiple events per raw answer. C6 Execution.infinite steps Nat→Step S only at most one event per step. A C1 answer A.events returns list possibly multiple, so need expand each Move into finite sequence of C6 steps (one per projected event; silent if none). Then prove HasFullObservation of resulting execution matches classifications. Could define external classifications directly over projected histories and connection using existence of C6 execution with observation. Should have precise expected "prove connection to C6's observation (the projected classification of a run agrees with C6's observation of that run)". Could add `InfiniteExecution.execution A` conversion and theorem if FiniteEvents projected -> HasFullObservation (.infinite ...) (.finiteDivergence projected finite events), and InfiniteEvents projected -> exists infinite trace HasFullObservation infiniteDivergence. This is involved but feasible.
+
+  Alternative classify `ExternalFiniteEvents A X`, `ExternalInfiniteEvents A X`; `SilentDivergence A...`, `InfiniteInteraction A...` changed to adapter param. Internal retain names `InternalFiniteEvents` etc. Then define `InfiniteExecution.observedSteps A` mapping each raw transition to what? Position events at Nat states; can use raw per-position history diff. Should construct C6 infinite execution from raw event-history deltas using `List.drop` of previous length: `(X.states (n+1)).events.drop (X.states n).events.length`. Move guarantees final.events = initial.events ++ a.event.toList or same, so delta. Projection flatMap. Each C1 transition may project multiple C6 events. Should encode C6 Step allowing one event. Can flatten with global index mapping event emissions plus silent raw steps. Or use at each Nat step a list? C6 Execution.infinite specifically Step one optional event. Could define an observation relation directly `HasFullObservation` for some execution not necessarily canonical derived; construct by flattening per raw steps with padding. General utility from per-transition lists `Nat → List (Event S)` to steps where finite chunks emitted sequentially and no-event chunks silent. More proof heavy.
+
+  Could perhaps define external classifications using C6 `Execution` directly instead of InfiniteExecution? `ExternalSilentDivergence P A ... := ∃ steps, Compatible projected history and HasFullObservation...`. But requirement external classifications over projected histories C6 observes and connection. Could define `projectedExecution A X : Execution S` with steps `Nat → Step S` selecting at most one event per raw event? Adapter maps to List, so need robust all.
+
+  Perhaps can use C6 `SameInfiniteObservation` with steps generated from raw history but no conversion needed? To prove finite: if projected lengths bounded, history stabilizes, get terminal finite list E and SameInfiniteObservation observed steps finiteDivergenceSteps E. Infinite: construct events sequence from monotone growing list histories and SameInfiniteObservation with emit trace. Significant.
+
+  Alternative external classifications can quantify directly C6 observations of projected finite prefixes:
+  - `ProjectedFiniteEvents A X := ∃ events, SameInfiniteObservation (projectedSteps...) ...`.
+  But vacuity etc.
+
+  Could simplify C6 conversion by define steps at flattened raw *event* level using state position events not transition. At index n, choose nth raw event and A.events gives list. Again flatten.
+
+  Perhaps build `InfiniteExecution.observationSteps A` by each raw position at step n maps first projected event? Not preserve all.
+
+  Should inspect existing modules utilities for flatten. Grep.
+
+• The defect is confirmed: C8’s divergence classes use raw event counts. I’m checking the available list/trace lemmas so the fix can preserve every projected event, including adapters that expand one raw event into several C6 events.
+
+• Should plan architecture manageable. I can modify Spec Adequacy import Observe. Define projected finite/infinite events. Connection can perhaps prove by relating to C6 classification using functions from event histories not explicit conversion? I need satisfy reviewer likely rigorous.
+
+  I need execution-level laws for occurrences:
+  - repeated silent requests at one site get distinct occurrences.
+  - interleaved sites separate counts.
+  - lifting oracle preserves answers actual run.
+
+  Can create general theorems over actual `runFromQ` reports, not Demo only:
+  1 `runFromQ_repeated_occurrences` if two successful requests at same site at indexes? Generic query history issued already guarantees occurrence count. Existing issue_next is list-level. Should have execution-level laws actual run. Could prove theorem about two sequential `Move.prim` with no events and same site: occurrences second = first+1. But "repeated silent requests at one site get distinct occurrences" can use actual `runFromQ` two requests. Generic Moves path and projections perhaps.
+
+  Best structural: instrument `Position` query history, prove for any `Moves`, occurrence numbering per site; any consecutive queries at same site occurrence increments; interleaved sites unaffected. Could theorem:
+  `Move.issued_occurrence` for prim: q = Query.issue etc, occurrence = occurrenceAt issued site. That's still unfolds? Should have actual run-level:
+  `runFromQ_occurrences`: For any run, for all q ∈ reported queries beyond initial, q.occurrence = occurrenceAt (queries before q) q.site. This captures actual execution. Prove via list All? Could formulate adjacent indexing:
+  For all i q with `(runFromQ ...).queries[i]? = some q` and `issued.length ≤ i`, q.occurrence = occurrenceAt ((run...).queries.take i) q.site.
+  Then distinct same-site occurrence corollary. Quite proof-heavy but manageable induction run.
+
+  Alternative `runFromQ_two_requests` using two-step configuration transition:
+  If `step P c = request ...`, answer succeeds k a = c1, then step c1 request same site, answer succeeds, runFromQ 2 c queries = [q1,q2] ∧ q1.occurrence = occurrenceAt issued site ∧ q2.occurrence=q1.occurrence+1. This directly execution-level, general and easy via simp. Interleaved sites similar 2-step with site1≠site2 q2 occurrence=occurrenceAt issued site2. Lifting oracle actual run: already runFromQ_toReport proves reports equality, but reviewer wants "preserves answers of an actual run" likely add `runFromQ_toQueryOracle_queries` that all query answers equal ρ0 fields; or run equality including queries. Existing runFromQ_toReport only erases queries, could still lifting oracle answer at occurrence wrong? Since definition ignores occurrence it's obvious. Should have execution-level law: if actual instrumented run has q in queries and answered/successful, `answer lifted q = ρ0...`; but noAnswer etc also. Could theorem `runFromQ_toQueryOracle_answer` for each query from report perhaps answer can be none/some and equal by definition—unfold adapter vacuity. Instead actual run equality with an occurrence-independent instrumented oracle using ordinary oracle? Existing report law exactly actual run preserves events and ending. User explicitly says standing in for "lifting an oracle to a query oracle preserves the answers of an actual run." I can prove `runFromQ_toQueryOracle_answers`: for all queries issued by actual run, `answer ρ0.toQueryOracle q = ρ0 q.events ...`. That's still adapter unfold, likely rejected. Better show `runFromQ` with lifted oracle equals run with another QueryOracle that agrees on ordinary fields on actual issued queries, including query history. Or `runFromQ_toReport` already execution-level and not vacuous. Demote helper and add named theorem referencing runFromQ_toReport with explicit actual answer preservation at successful Move: `Move.toQueryOracle_answer` for any `Move P ρ0.toQueryOracle pos pos'`, if step request then ordinary ρ0 ... = some a. This is from h answer and rfl but actual execution-level. Add examples actual run, planted occurrence-dependent oracle yields different run (e.g first answer, second no answer vs ordinary constant answer). That law could state equality `runFromQ_toReport` plus queries have correct ordinary answers. Perhaps acceptable.
+
+  Focus item1 hardest. I can choose representation with external classifications directly defined via `Observe.FullObservation` of `InfiniteExecution` using projected event prefix relation. I can define an adapter-level C6 Execution that uses one C6 event per raw transition only if lists? Can't change C6. I can expand using "schedule" based on global projected history and raw step counts. I can produce steps with at most one event by flattening each projected per-move chunk and inserting silence for empty chunk. Define chunk `projectedDelta A X n`. Then general `chunksSteps` enumeration where each chunk emitted over consecutive steps, empty chunks one silent step. Compute offsets as cumulative `max 1 chunk.length`. Define `offset chunks n := ∑ i in range n, max 1 (chunks i).length`. At flattened step m, find n with offset n ≤ m < offset(n+1), emit chunk n index (m-offset n) if nonempty. Proving SameInfiniteObservation very hard.
+
+  Alternative avoid explicit steps and use axiomatic existence? No new axioms. Could define projected classifications as existence of C6 Execution whose visible prefixes match projected raw prefixes. Connection then by definition? Vacuity rule no restatement. Should non-vacuous examples but law connection perhaps definitional criticized.
+
+  I can leverage C6 `SameInfiniteObservation` with an easier step mapping if assume A.events at most one? But general structure allows multiple, requirement no weakening. Could define external classifications using C6 `Execution` built not from InfiniteExecution but `Exec.Steps`? Same issue.
+
+  Could define C6 connection at level of observation classifications without explicit exact step conversion: `InfiniteExecution.hasFiniteObservation A X events` defined as `∃ execution, HasFullObservation execution ... ∧ ...` and equivalence. Not enough.
+
+  Perhaps extend Spec Adequacy with own `projectedSteps` mapping each raw *position* to Step by taking only last projected event? Incorrect.
+
+  Could instead parameterize `InfiniteExecution` transitions to C6 `Step` list and define a generic C6 observation relation for "list steps" in Adequacy, then theorem to `FullObservation` can use a new `Execution.infinite`? Can't edit C6 files, but can define conversion function with classical choice based on observed finite/infinite histories, not computational. For finite projected history E, canonical `finiteDivergenceSteps E` already HasFullObservation trivially (SameInfiniteObservation refl). I can prove existence of observation based purely on FiniteEvents projected, without constructing original execution: choose final stable projected history E, then `.infinite (finiteDivergenceSteps E)` HasFullObservation finiteDivergence E. But does that count "C6 observation of that run"? Should link E to X explicitly: E is eventual projected history of X. Then theorem: if finite projected, ∃ events, Eventually (project histories = events) ∧ HasFullObservation (.infinite (finiteDivergenceSteps events)) (.finiteDivergence events). This is C6 observation corresponding to run's finite history. For infinite, construct infinite trace as event-indexed selection from monotone histories and show every finite prefix eventually matches. Could use classical choice and list prefix. Could state observation trace is `projectedTrace A X` with nth event from first position with length > n. Prove SameInfiniteObservation between canonical emit trace and some step representation? Again if just C6 canonical `.infinite (fun n => .emit (trace n))`, HasFullObservation is refl. Should show projected histories prefixes eventually equal trace prefixes. This is doable list monotone math. Finite similar using canonical finiteDivergence. No need construct exact execution from X; connection states canonical C6 execution with same projected history. Might be accepted as "projected classification of a run agrees with C6's observation of that run" if theorem named `infiniteExecution_finiteObservation` and `infiniteExecution_infiniteObservation`, with agreement properties.
+
+  Could define general `ObservedBy` relation between `InfiniteExecution` and `Observe.Execution`:
+  `ProjectedObservation A X execution : Prop` perhaps `∀ n, ∃ m rest, visiblePrefix steps m = A.project (X.states n).events ++ rest` and converse? For finite/infinite canonical, this exactly SameInfiniteObservation if we had steps of X. Instead relation directly prefixes:
+  `ProjectedPrefixes A X steps := (∀ n, ∃ m rest, visiblePrefix steps m = A.project (X.states n).events ++ rest) ∧ (∀ m, ∃ n rest, A.project (X.states n).events = visiblePrefix steps m ++ rest)`.
+  Then theorem exists C6 steps with this relation and HasFullObservation. This robustly connects. Finite/infinite proofs list.
+
+  Could simplify by define external classifications themselves using existence `ExternalObservation A X obs` with projected prefix agreement. But no need.
+
+  Should have examples erasing adapter loop producing one raw event per iteration. Existing Demo spin is silent no primitive. Should create infinite request loop with event answer each iteration. I can build config looping `.prim none .log [.lit 1]` with demo ops/env. env log answer event? Read demo.
+
+• I’ll keep raw-event predicates under explicit internal names, add adapter-projected external classes, and connect them to canonical C6 infinite observations by matching projected prefixes in both directions. Then I’ll add run-level occurrence and lifted-oracle laws with concrete accepted and mutated executions./nix/var/nix/profiles/default/bin/nix
+/nix/store/94bmilywgajdnqvix1fs35fj94kala0w-lean4-release-4.34.1/bin/lake
+
+
+• I can implement in iterations.
+
+  First item1 definitions perhaps no full canonical conversion initially. Rename:
+  `InternalFiniteEvents`, `InternalInfiniteEvents`; keep FiniteEvents as projected requiring A? ROUND says keep raw explicitly named internal. Use `FiniteEvents A X` projected, `InfiniteEvents A X`. `SilentDivergence P A ρ c`; `InfiniteInteraction P A ρ c`. Internal classes `InternalInfiniteInteraction` perhaps required examples. Existing spin_silent update with adapter? Could keep raw SilentDivergence renamed `InternalSilentDivergence`, add new external. Current theorems finite_or... generalized over arbitrary history function to avoid duplicate. Could define general `Eventually...`.
+
+  Spec:
+  import Observe
+  open Observe? Namespace Exec, references `Observe.ExecAdapter`.
+
+  ```
+  def InternalFiniteEvents X ...
+  def InternalInfiniteEvents X ...
+  def FiniteEvents (A) X := ∃ bound, ∀ n, (A.project ...).length ≤ bound
+  ...
+  def InternalSilentDivergence ...
+  def InternalInfiniteInteraction ...
+  def SilentDivergence (P) (A) ...
+  ```
+
+  Connection:
+  ```
+  def ProjectedPrefixes (A) X (steps : Nat → Observe.Step S) : Prop :=
+   (∀ n, ∃ m rest, Observe.visiblePrefix steps m = A.project (X.states n).events ++ rest) ∧
+   (∀ m, ∃ n rest, A.project (X.states n).events = Observe.visiblePrefix steps m ++ rest)
+  ```
+  Call `MatchesProjectedHistory`.
+
+  Theorems:
+  - projected histories prefix monotone: Move events prefix and A.project_append.
+  - FiniteEvents gives stable exact list: bounded monotone nat lengths -> eventually constant. Should prove. Could avoid finite exact stabilization by define events = projected history at position `N` chosen where length = bound maximum. Bound exists and lengths monotone, choose n max length via finite search classical. There is a theorem exists max for bounded set. Can use Classical.choose of finite events bound and `Nat.findGreatest`? `Nat.findGreatest (fun n => length) bound` not index bound. Should choose N achieving maximal length among sequence bounded. Well-order max via supremum finite range. I can use bound induction to prove any bounded monotone sequence stabilizes. Lemma:
+  ```
+  theorem eventually_constant_of_monotone_bounded (f:Nat→Nat)(mono)(∃B∀n f n≤B) : ∃N, ∀m≥N, f m=f N
+  ```
+  induction bound B general f:
+  by_cases ∃n, f n = B. choose N, monotonic and ≤ B gives all later B.
+  else all f n < B => ≤ B-1, apply ih with B-1. Base B=0 all 0 choose 0.
+  Then lengths stable, list prefix + same length => equal. Choose events at N, all later projected = events. For canonical finiteDivergenceSteps events, visiblePrefix at m:
+  if m ≤ len => events.take m
+  if m≥len => events. Should lemma visiblePrefix_finiteDivergenceSteps. Prove by induction m or using visible definitions. Could add in Proofs/Adequacy with simp. Existing finiteDivergenceSteps if n<events.length. `visiblePrefix ... m = events.take m` likely true for all m (take beyond length = events). Prove induction m:
+  ```
+  rw [visiblePrefix_succ, ih, finiteDivergenceSteps]
+  by_cases h:m<events.length
+   simp [h, List.take_succ, ...]
+  ...
+  ```
+  Lean List.take_succ equation uses get? `List.take_succ` perhaps simp. Test.
+
+  Then matching:
+  for any raw n, choose m=max n N? Raw projected prefix equals events if n≥N else prefix of events due monotonic; C6 visiblePrefix events.length = events. So first direction choose m=events.length and rest = drop raw.length events. From raw prefix of events.
+  second any C6 m, choose raw N and rest drop m events? visiblePrefix canonical m = events.take m, raw at N=events, so events = take m ++ drop m. Easy.
+  HasFullObservation canonical finiteDivergence is SameInfiniteObservation.refl. So theorem:
+  ```
+  ∃ execution events, MatchesProjectedHistory A X execution? execution is infinite steps; HasFullObservation (.infinite steps) (.finiteDivergence events)
+  ```
+  Define Matches over steps, then ⟨steps, events, hmatch, refl⟩.
+
+  InfiniteEvents: define trace by choice first raw position with length > event index. `projectedEvent A X i := (A.project (X.states (Nat.find ... i)).events)[i]!`? Using get with proof dependent awkward. `List.getD ... default` needs Inhabited Event no. Option trace? C6 infinite trace requires Event. Classical choose event from exists list member due infinite. Could define noncomputable `projectedTrace` using `Classical.choose` of existence `∃ e, e ∈ ... at index`. Use `List.get?` returns Option and choose some. `Classical.choose (show ∃ e, (history at N)[i]?=some e)`. Should have existence from InfiniteEvents i gives n with i < length, List.getElem?_eq_some_iff gives. Define:
+  ```
+  noncomputable def projectedTrace ... (i) : Event S :=
+   Classical.choose (show ∃ e, ... from ...)
+  ```
+  choose position too `projectedTraceIndex A X i := Nat.find (InfiniteEvents proof i)` requires proof argument. Classification theorem has hi so can define local `N i := Nat.find (hi i)`, event with get. Noncomputable def taking `hi : InfiniteEvents A X` as explicit:
+  ```
+  noncomputable def InfiniteEvents.trace (hi) (i) : Event S :=
+    (A.project (X.states (Nat.find (hi i))).events)[i]'(Nat.find_spec...)
+  ```
+  Lean getElem dependent proof works:
+  ```
+  (hist)[i]'(by have := Nat.find_spec (hi i); omega)
+  ```
+  Then prove for each n raw history = List.ofFn? trace.take length? If every earlier index stable across larger histories due prefix, yes. Show for any m ≥ N i, history m [i]? = some trace. Prefix property. Then any raw history h at n, for all i<h.length, h[i]=trace i. h = (List.range h.length).map trace perhaps `List.ofFn`. And canonical visiblePrefix (fun n => emit(trace n)) m = (List.range m).map trace. Prove visiblePrefix_emit = range map. Then match directions:
+  - for raw n choose C6 m = h.length; visiblePrefix = range h.length map trace = h.
+  - for C6 m choose raw n from hi m with m < h.length; visiblePrefix canonical m = h.take m; h = visible ++ rest (drop m).
+  So no need equality full range raw for first direction choose m = h.length and prove map. This requires each i<h.length trace at i = h[i]. Since choose N i ≤? h has length >i but N i may >n. Prefix monotonic between n and N i in either direction yields get equality. I can prove generic `getElem?_eq_of_prefix` when same i in both.
+  Could define trace using `Classical.choose` of combined ∃n e and get. Simpler:
+  ```
+  noncomputable def projectedTrace (hi) i :=
+   Classical.choose (hi i) ??? hi i is ∃n, i<length not event
+  ```
+  Use `Nat.find`.
+
+  Should have Lean effort moderate.
+
+  Examples external:
+  construct loop infinite execution producing raw event per 5 steps. Similar spin but body primitive adds an extra primitive step? I can define direct periodic `Move` with configurations and query histories; repeated same config with growing events queries. Could create InfiniteExecution via runQ prefixes? I can use a simple custom Operands where statement `.prim` then `.done` no frames becomes final after one request, not loop. Should loop config from spin modified body `.prim none .log...`. Cycle six steps: loop→condition skip→test→body primitive→done→loop. Define event loop configs with state store same and frames. Position histories n not periodic because grow. Should define states by fuel `runFromQ`? InfiniteExecution can be constructed from states based on n with position = runFromQ outOfFuel at n, but proving Move is exactly `move_of_fuel_succ` circular theorem earlier available in proofs. Could define `eventInfinite` using `FuelLimit.toInfiniteExecution` with states from `runQ` outOfFuel and prefix rfl if computation each n. Choose states:
+  ```
+  def eventPosition n := 
+   let r := runQ prog env n eventConfig
+   ⟨match r.ending with outOfFuel c=>c|_=>eventConfig, r.events,r.queries⟩
+  ```
+  prefix proof by cases run report? More complex.
+
+  Direct recurrence position iterated successful `Move` function:
+  Define `eventStepPosition : Position ops → Position ops` executing one `runFromQ 1` but dependent endpoint. Could define 6-phase cycle function and histories from count iterations. n /6 and n%6. Raw events = List.replicate (n/6) 1 (after primitive at appropriate phase perhaps floor). Queries similarly. I can define phase index and completed iterations:
+  states n config = configs[n%6], events = replicate ((n+4)/6?) 1. Starting phase0 initial. primitive transition phase3→4 appends event. At state phase:
+  0 before loop,1 cond skip,2 done test,3 body prim,4 done body,5? Actually transitions:
+  0 loop -> 1 exec skip test
+  1 skip ->2 done test
+  2 test ->3 exec body prim bodyframe
+  3 prim ->4 done bodyframe
+  4 done body ->0 loop
+  Cycle 5 still (replace body skip with prim) and event on 3→4. queries at states phase4 and phase0 next includes query. I can define position based on n with `iter=n/5`, phase=n%5. events count = if phase≤3 then iter else iter+1. queries same occurrence list requires query records events history etc site. Query at each iteration includes previous events replicate iter 1, occurrence iter, store init. Define `eventQuery i`. Then `queries = (List.range count).map eventQuery`.
+  At transition prove by cases phase and simp, use `Move.prim rfl rfl rfl rfl` and list identities. Lots arithmetic but spin pattern adaptable.
+
+  Could avoid direct infinite witness with general `InfiniteExecution` constructed using `FuelLimit` and exact run prefixes by choose states recursively along actual deterministic evaluator:
+  Define `runPosition P ρ c : Nat → Position O` recursively:
+  ```
+  0 => ⟨c,[],[]⟩
+  n+1 => if h : (runQ ... n).ending outOfFuel and next... ...
+  ```
+  Not easy.
+
+  Could add example only finite prefix? Requirement explicitly erasing adapter classified silent divergence external and internal infinite interaction, need actual infinite execution.
+
+  Perhaps reuse spin_infinite but raw events zero won't internal infinite. Could mutate semantics so each silent spin transition emits raw event? Move.silent never events. Should primitive.
+
+  Alternative define a toy `Operands` with `Stmt.loop` same. Direct 5-phase as above.
+
+  Should also demo adapter WellFormed.internal empty outputs and request none. env events raw int. `erasingAdapter events := fun _=>[] request:=none`. WellFormed internal for env requires for every answered primitive, A.request none, output empty. For log and bump yes projection [] = [].map. `answered` impossible request none, blocked env never none. prove.
+
+  keepingAdapter events n => [.output (toString n)] or C6 signature can simple EventSignature with Unit kind etc. Use existing Observe.Demo.signature? It has output String and request types. Keep event output. WellFormed not needed for classification example. `keepingAdapter`. Raw infinite internal and projected infinite.
+
+  I can use `Observe.Demo.signature`, output string. Erasing adapter same S. Examples:
+  ```
+  theorem event_silent_divergence : SilentDivergence prog erasingAdapter env eventConfig := ⟨event_infinite, ⟨0,...⟩⟩⟩
+  theorem event_internal_infinite : InternalInfiniteInteraction prog env eventConfig := ...
+  theorem event_infinite_interaction : InfiniteInteraction prog keepingAdapter env eventConfig ...
+  example : ¬ (InternalInfiniteEvents event_infinite → FiniteEvents erasingAdapter event_infinite?) planted raw classification disagrees: `InternalInfiniteInteraction ... ∧ ¬ InfiniteInteraction ... ∧ SilentDivergence...`.
+  ```
+  This suffices.
+
+  Occurrence examples easier use finite two request configs without full loop:
+  `twoSameConfig = .exec (.seq (.prim none .log ... s) (.prim none .log ... s))`. runFromQ fuel? transitions seq, prim, done seq, prim = 4 steps. First request occurrence0 second1. events [1,1] not silent raw events though "silent requests" means adapter erases events? Query occurrence request emits no event can use `.bump` no args event none; same site. demo ops env bump. Config seq bump bump at s, fuel 4. Queries occurrence [0,1]. Interleaved sites need primitives at s and s2; seq bump bump site other. query occurrence both0. Actual run examples by decide/rfl.
+  General theorem `runFromQ_occurrenceAt_reported` perhaps use exact two transitions general enough. I can state law using actual report indexes:
+  ```
+  theorem runFromQ_occurrence_zero_at_new_site ... (h: issued filter site=[]) : q.occurrence=0 ...
+  ```
+  No.
+
+  I can add general law about `runFromQ` query occurrence invariant by proving all issued query occurrence = count earlier. This best. Define in Spec `QueryHistoryValid issued`:
+  ```
+  def QueryHistoryValid : List Query → Prop
+  | [] => True
+  | q::qs => q.occurrence = occurrenceAt qs? 
+  ```
+  Issued appended. Use list induction with `List.Forall`? Could define:
+  ```
+  def QueryHistory (issued) : Prop :=
+   ∀ i q, issued[i]?=some q → q.occurrence=occurrenceAt (issued.take i) q.site
+  ```
+  Initial history might not satisfy if arbitrary. run theorem requires valid initial, proves valid report. Then repeated/interleaved corollaries.
+  Prove appending issued query preserves:
+  - lemma occurrenceAt_append and take append. Existing issue_next helps.
+  `QueryHistoryValid (issued++[q])` given valid issued and q = issue ... issued. For i:
+  if i<issued.length use original and take append left.
+  if i=issued.length q and take = issued, rfl.
+  No i> due get some.
+  Can write list lemmas.
+
+  Then run induction all branches, recursive IH with append valid. This is manageable ~100 lines.
+  Execution-level corollary:
+  ```
+  theorem runFromQ_repeated_silent_requests_distinct ... 
+   (hvalid) (hi get q_i) (hj get q_j) (i<j) (same site) : q_i.occurrence < q_j.occurrence
+  ```
+  Is it always strictly occurrence counts earlier at same site; with q_i at i, q_j at j, occurrenceAt take j site ≥ occurrenceAt take i site +1. Should list counting lemma. Could state equality to counts and distinct using an actual two successive requests law easier. Requirement repeated silent requests at one site get distinct occurrences general corollary strong but prove list count.
+
+  Alternative theorem for two actual `runFromQ` queries at indices i<j same site:
+  q_i ≠ q_j occurrence via occurrenceAt monotonic.
+  Should prove occurrenceAt take j site > occurrenceAt take i site given i<j and query i site. `occurrenceAt (qs.take j) = occurrenceAt (qs.take i) + occurrenceAt ((qs.drop i).take (j-i))` and first element in latter q. List lemmas complex but can use filter/take:
+  `List.take_append_take` etc. Could prove generic by induction list and i,j. Or simpler `occurrenceAt` count ≤ and q included.
+
+  Perhaps formulate execution law only consecutive requests:
+  ```
+  theorem runFromQ_consecutive_same_site
+   (hvalid) (hi at i q) (hj at i+1 q') (same) :
+   q'.occurrence=q.occurrence+1
+  ```
+  Because take(i+1)=take i++[q]. Easy `List.take_succ` with get. This captures repeated consecutive queries, but silent machine steps may occur between requests indexes still query list consecutive. Great. Interleaved sites:
+  queries at i site1, i+1 site2 distinct -> q2 occurrence = occurrenceAt take i site2, not necessarily separate counts? If previous site2 count perhaps >0. "interleaved sites keep separate occurrence counts" general law if only prior queries site1? Could corollary with issued initial and two queries. Better general consecutive different site theorem `occurrenceAt ((take i)++[q1]) site2 = occurrenceAt take i site2` using issue_next. This is precise separate counts. Examples show 0 and0 from empty.
+
+  One theorem `runFromQ_occurrences` execution-level plus two corollaries:
+  `runFromQ_consecutive_occurrence_same`, `_other`. Non-trivial examples and planted mutations.
+  Demote issue_occurrence etc doc helper. Could retain helpers.
+
+  Lift oracle actual run law already runFromQ_toReport, add:
+  `runFromQ_toQueryOracle_answered` perhaps generic query validity doesn't address answers. Could state:
+  ```
+  theorem Move.toQueryOracle_answer {ρ0} (h : Move P ρ0.toQueryOracle pos pos') :
+  ∀ request at source ... ∃a, ρ0 pos.events p vs site st = some a ∧ ...
+  ```
+  cases h; silent no request hypothesis contradiction; prim exact.
+  More direct:
+  ```
+  theorem runFromQ_toQueryOracle_success {ρ0} ... 
+   (hstep...) (hanswer: ρ0 events...=some a) ... :
+   (runFromQ ... (fuel+1)...)= runFromQ ... fuel (events++...) (issued++[q]) c'
+  ```
+  just execution rule not preservation.
+
+  Existing `runFromQ_toReport` is precisely lifting preserves answers of actual run at report level. I can rename/demote answer helper and add theorem `runFromQ_toQueryOracle_queries_answered`:
+  ```
+  ∀ q ∈ report.queries, answer ρ0.toQueryOracle q = ρ0 ... 
+  ```
+  vacuous definition. Better law compare lifted oracle to arbitrary occurrence-independent `QueryOracle`:
+  ```
+  def QueryOracle.OracleBacked (ρq) (ρ0) := ∀ hist p args site store, ρq (Query.issue hist ... issued?)...
+  ```
+  Occurrence irrelevant.
+
+  Perhaps user expects simply replace three vacuity theorems with three meaningful laws, existing runFromQ_toReport can serve third if add examples. They explicitly request "lifting an oracle to a query oracle preserves the answers of an actual run." `runFromQ_toReport` says whole actual run same. I can add `runFromQ_toQueryOracle_answers_of_run`:
+  For any actual Move with lifted oracle, source request and answer from h gives ordinary answer. Non-trivial example actual query report and planted occurrence-sensitive oracle run differs. Good.
+
+  I need start coding definitions and proofs in chunks. Could first change Spec Adequacy and Proofs references then build to see.
+
+  Use Edit one file at time.
+
+• The occurrence fix will prove an invariant for every query produced by `runFromQ`: its occurrence equals the number of earlier queries at that site. Consecutive same-site and different-site corollaries then give the requested execution-level laws, rather than restating `Query.issue`.
+
+• Update inspection done, item2 in progress. Edit block definitions.Should have QueryHistoryValid spec addition near Query issue. Also later. For now proofs update references. Can global Edit replace names carefully. Read around 690.Replace generalized with A and add internal versions perhaps existing spin internal. Theorem external. Also raw finite_or internal perhaps helpful examples. Use generic history lemma:
+  ```
+  finite_or_infinite_lengths (f) ...
+  ```
+  Then internal/external wrappers. Simpler adapt current external A and add internal theorem separately. spin becomes InternalSilentDivergence or need adapter. Existing spin no events, can use erasing adapter later defined, but currently before definitions. Keep `spin_internal_silent_divergence`.
+
+  Edit block.I'll fix the spin name. Read the lines around it.Now implement C6 connection in proofs before finite dichotomy. Should prove prefix raw:
+  `Move.events_prefix` from toStep or cases.
+  ```
+  theorem Move.events_prefix hm : ∃rest,pos'.events=pos.events++rest
+  ```
+  cases.
+  `InfiniteExecution.events_prefix X {m n} h` induction difference via Moves? Can build Moves from steps and use toSteps. Easier recursively n-m.
+  ```
+  obtain ⟨d,rfl⟩
+  induction d ...
+  ```
+  Should have m + (d+1) indexing. rest append.
+  Projected prefix via project_append.
+  Length monotone from prefix.
+
+  Canonical visible prefix lemmas. I'll insert before finite_or block. Use Edit insertion after unique.
+
+• The external definitions are now adapter-projected, with the old raw notions retained as `Internal*`. I’m adding the prefix-matching proofs that tie finite and infinite projected histories to actual C6 `HasFullObservation` witnesses.
+
+• Add lemmas in one edit big. Should have Lean syntax. For `visiblePrefix_finiteDivergenceSteps` induction:
+  ```
+    induction m with
+    zero => rfl? simp [Observe.visiblePrefix]
+    succ m ih =>
+     rw [Observe.visiblePrefix_succ, ih]
+     by_cases h : m < events.length
+     · rw [List.take_succ]
+       simp [Observe.finiteDivergenceSteps, h]
+  ```
+  List.take_succ yields take m ++ (events[m]?.toList). simp likely.
+  else `List.take_of_length_le (Nat.le_of_not_gt h)`? For m+1 take = take m if m≥len. `List.take_succ` simp h.
+  Try.
+
+  visiblePrefix_emit:
+  ```
+  induction m; simp [visiblePrefix]; succ rw visiblePrefix_succ,ih; simp [Step.event?,List.range_succ]
+  ```
+
+  prefix get equality:
+  ```
+  theorem getElem?_eq_of_prefix {xs ys} (h:xs<+:ys) {i} (hi:i<xs.length) :
+   ys[i]?=xs[i]? := by obtain ⟨rest,rfl⟩:=h; rw[List.getElem?_append_left hi]
+  ```
+
+  eventual constant bounded monotone:
+  Could use `Nat.exists_max_image`? I'll write induction bound:
+  ```
+  theorem eventually_constant ... (bound) (hb:∀n f n≤bound)(mono) :
+  ∃N,∀n,N≤n→f n=f N := by
+   induction bound with
+   zero => ⟨0,... Nat.eq_zero_of_le...⟩
+   succ b ih =>
+    by_cases h : ∃n, f n=b+1
+    obtain ⟨N,hN⟩; refine ⟨N,... Nat.le_antisymm (hb n) (mono hle) ... hN⟩
+    have hb' : ∀n,f n≤b := fun n => Nat.le_of_lt_succ (Nat.lt_of_le_of_ne (hb n) ?)
+    exact ih hb'
+  ```
+  Mono `∀{m n},m≤n→f m≤f n`.
+  At succ not exists: f n ≠ b+1, hb≤b+1 -> <b+1 ->≤b omega.
+  Base f n=0 and f0=0.
+
+  Raw prefix lemma plus projected length monotone. finite observation:
+  ```
+  theorem finite_projected_observation (hf) :
+  ∃ steps events, Matches... ∧ HasFullObservation (.infinite steps) (.finiteDivergence events)
+  ```
+  choose f lengths, bound. get N stable.
+  events = A.project state N.
+  steps = finiteDivergenceSteps events.
+  matching first:
+  for n, choose events.length.
+  have pref : A.project state n <+: events.
+  if n≤N prefix, else equality stable + prefix reflexive.
+  Use prefix equality to get rest by definition. C6 visible at events.length = events.take len=events via lemma and take_all.
+  ```
+  obtain ⟨rest, hr⟩ := pref
+  refine ⟨events.length, rest, ?_⟩
+  rw [visiblePrefix_finite, List.take_all, hr]
+  ```
+  List.take_all perhaps `List.take_of_length_le (Nat.le_refl _)`.
+  second m choose N, `rest=events.drop m`; visible=take m; `List.take_append_drop`.
+  HasFullObservation `SameInfiniteObservation.refl`.
+
+  Infinite trace definition inside theorem using let:
+  ```
+  let index : Nat → Nat := fun i => Nat.find (hi i)
+  let trace : Nat → Event S := fun i =>
+    (A.project ...)[i]'(Nat.find_spec (hi i))
+  ```
+  Lean dependent let proof.
+  To show get:
+  ```
+  have trace_get (i) {n} (hn:i<h_n.length) : h_n[i]?=some(trace i) := by
+    have hiN := Nat.find_spec (hi i)
+    have pref : h_index i <+: h_n ∨ h_n <+: h_index i := based le
+    ...
+  ```
+  trace defined getElem with proof, getElem?_eq_getElem perhaps simp `[trace, List.getElem?_eq_getElem hn]`. In Lean `List.getElem?_eq_getElem` simp.
+  At equality if prefix h_n<+:h_index:
+  `getElem?_eq_of_prefix pref hn` yields h_index[i]?=h_n[i]?.
+  Then unfold trace; simp [List.getElem?_eq_getElem, hiN] perhaps.
+  Can define trace via `getD` with `Classical.choice` no.
+  Use `List.get` dependent:
+  ```
+  (trace i) = h_index[i]'...
+  ```
+  Then `simp only [trace, List.getElem?_eq_getElem hn]` after derive equality of get values.
+
+  Should prove map range:
+  `h = (List.range h.length).map trace` from get equality. There is `List.ext_getElem` theorem:
+  ```
+  apply List.ext_getElem
+   · simp
+   · intro i hi1 hi2
+     simp at ...
+     have := trace_get i hi1
+     rw [List.getElem?_eq_some_iff] at this? 
+  ```
+  Simpler List.ext_get:
+  Lean 4 List.ext_getElem? Existing uses. Search core theorem #check via scratch lean. I can create temporary /tmp? allowed within workdir only, use `_review/Check.lean` temporary then delete. But don't create unsolicited docs, lean scratch okay delete. Use `nix develop -c lake env lean` with `#check`. Bash command here-doc disallowed? Write tool. Could use `nix develop -c lean --run` no. I can query `#check` with `lake env lean /dev/stdin` piping printf disallowed per tools says printf talk user; but shell semantics for code perhaps Write better. Use Write `_review/Check.lean`.
+
+• Before writing the trace proof, I’m checking the exact Lean 4.34 list lemma signatures to keep the proof idiomatic and avoid relying on newer library APIs.
+
+warning: Git tree '/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/integ' is dirty
+List.ext_getElem.{u_1} {α : Type u_1} {l₁ l₂ : List α} (hl : l₁.length = l₂.length)
+  (h : ∀ (i : Nat) (h₁ : i < l₁.length) (h₂ : i < l₂.length), l₁[i] = l₂[i]) : l₁ = l₂
+List.ext_get.{u_1} {α : Type u_1} {l₁ l₂ : List α} (hl : l₁.length = l₂.length)
+  (h : ∀ (n : Nat) (h₁ : n < l₁.length) (h₂ : n < l₂.length), l₁.get ⟨n, h₁⟩ = l₂.get ⟨n, h₂⟩) : l₁ = l₂
+List.getElem?_eq_getElem.{u_1} {α : Type u_1} {l : List α} {i : Nat} (h : i < l.length) : l[i]? = some l[i]
+List.getElem?_eq_some_iff.{u_1} {α : Type u_1} {i : Nat} {a : α} {l : List α} : l[i]? = some a ↔ ∃ h, l[i] = a
+List.take_succ.{u_1} {α : Type u_1} {l : List α} {i : Nat} : List.take (i + 1) l = List.take i l ++ l[i]?.toList
+List.take_append_drop.{u_1} {α : Type u_1} (i : Nat) (l : List α) : List.take i l ++ List.drop i l = l
+List.take_of_length_le.{u_1} {α : Type u_1} {i : Nat} {l : List α} (h : l.length ≤ i) : List.take i l = l
+List.getElem_range {j n : Nat} (h : j < (List.range n).length) : (List.range n)[j] = j
+List.getElem_map.{u_1, u_2} {α : Type u_1} {β : Type u_2} (f : α → β) {l : List α} {i : Nat}
+  {h : i < (List.map f l).length} : (List.map f l)[i] = f l[i]
+List.length_range {n : Nat} : (List.range n).length = n
+List.ext_getElem?.{u_1} {α : Type u_1} {l₁ l₂ : List α} (h : ∀ (i : Nat), l₁[i]? = l₂[i]?) : l₁ = l₂
+_review/Check.lean:13:7: error(lean.unknownIdentifier): Unknown constant `Nat.find_spec`
+• Interesting Nat.find not imported? Classical `Nat.find_spec` unknown perhaps `Nat.find_spec` only open classical? #check Nat.find.Why reminders frequent. Fine.
+
+• The needed list extensionality lemmas are available. I’ll use classical choice only to select the first position containing each projected event; the proof still uses no new axioms beyond the permitted logical principles.warning: Git tree '/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/integ' is dirty
+List.ext_getElem.{u_1} {α : Type u_1} {l₁ l₂ : List α} (hl : l₁.length = l₂.length)
+  (h : ∀ (i : Nat) (h₁ : i < l₁.length) (h₂ : i < l₂.length), l₁[i] = l₂[i]) : l₁ = l₂
+List.ext_get.{u_1} {α : Type u_1} {l₁ l₂ : List α} (hl : l₁.length = l₂.length)
+  (h : ∀ (n : Nat) (h₁ : n < l₁.length) (h₂ : n < l₂.length), l₁.get ⟨n, h₁⟩ = l₂.get ⟨n, h₂⟩) : l₁ = l₂
+List.getElem?_eq_getElem.{u_1} {α : Type u_1} {l : List α} {i : Nat} (h : i < l.length) : l[i]? = some l[i]
+List.getElem?_eq_some_iff.{u_1} {α : Type u_1} {i : Nat} {a : α} {l : List α} : l[i]? = some a ↔ ∃ h, l[i] = a
+List.take_succ.{u_1} {α : Type u_1} {l : List α} {i : Nat} : List.take (i + 1) l = List.take i l ++ l[i]?.toList
+List.take_append_drop.{u_1} {α : Type u_1} (i : Nat) (l : List α) : List.take i l ++ List.drop i l = l
+List.take_of_length_le.{u_1} {α : Type u_1} {i : Nat} {l : List α} (h : l.length ≤ i) : List.take i l = l
+List.getElem_range {j n : Nat} (h : j < (List.range n).length) : (List.range n)[j] = j
+List.getElem_map.{u_1, u_2} {α : Type u_1} {β : Type u_2} (f : α → β) {l : List α} {i : Nat}
+  {h : i < (List.map f l).length} : (List.map f l)[i] = f l[i]
+List.length_range {n : Nat} : (List.range n).length = n
+List.ext_getElem?.{u_1} {α : Type u_1} {l₁ l₂ : List α} (h : ∀ (i : Nat), l₁[i]? = l₂[i]?) : l₁ = l₂
+_review/Check.lean:13:7: error(lean.unknownIdentifier): Unknown constant `Nat.find`
+_review/Check.lean:14:7: error(lean.unknownIdentifier): Unknown constant `Nat.find_min'`
+Classical.choose_spec.{u} {α : Sort u} {p : α → Prop} (h : ∃ x, p x) : p (Classical.choose h)
+List.getElem?_range {i n : Nat} (h : i < n) : (List.range n)[i]? = some i
+List.getElem?_map.{u_1, u_2} {α : Type u_1} {β : Type u_2} {f : α → β} {l : List α} {i : Nat} :
+  (List.map f l)[i]? = Option.map f l[i]?
+
+
+• Core no Nat.find. Use Classical.choose hi i directly:
+  `index i := Classical.choose (hi i)`, spec `Classical.choose_spec (hi i)`.
+  Works.
+
+  Add lemmas first finite proof.Build to check now before infinite.warning: Git tree '/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/integ' is dirty
+✔ [30/47] Built ConcreteSpec.Spec.Adequacy (269ms)
+✔ [31/47] Built ConcreteSpec.Spec (130ms)
+✔ [32/47] Built ConcreteSpec.Proofs.Basics (205ms)
+✔ [33/47] Built ConcreteSpec.Proofs.Authority (369ms)
+✔ [34/47] Built ConcreteSpec.Proofs.Cleanup (491ms)
+✖ [35/47] Building ConcreteSpec.Proofs.Adequacy (749ms)
+trace: .> LEAN_PATH=/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/integ/.lake/build/lib/lean /nix/store/94bmilywgajdnqvix1fs35fj94kala0w-lean4-release-4.34.1/bin/lean /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/integ/ConcreteSpec/Proofs/Adequacy.lean -o /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/integ/.lake/build/lib/lean/ConcreteSpec/Proofs/Adequacy.olean -i /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/integ/.lake/build/lib/lean/ConcreteSpec/Proofs/Adequacy.ilean -c /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/integ/.lake/build/ir/ConcreteSpec/Proofs/Adequacy.c --setup /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/integ/.lake/build/ir/ConcreteSpec/Proofs/Adequacy.setup.json --json
+error: ConcreteSpec/Proofs/Adequacy.lean:710:32: Tactic `rewrite` failed: Did not find an occurrence of the pattern
+  (X.states (m + d)).events ++ next
+in the target expression
+  (X.states m).events ++ (rest ++ next) = (X.states (m + (d + 1))).events
+
+O : Operands
+P : Program O
+ρ : QueryOracle O
+c : Config O
+X : InfiniteExecution P ρ c
+m d : Nat
+ih : m ≤ m + d → (X.states m).events <+: (X.states (m + d)).events
+h : m ≤ m + (d + 1)
+rest : List O.Event
+hrest : (X.states m).events ++ rest = (X.states (m + d)).events
+next : List O.Event
+hnext : (X.states (m + d)).events ++ next = (X.states (m + d + 1)).events
+⊢ (X.states m).events ++ (rest ++ next) = (X.states (m + (d + 1))).events
+error: ConcreteSpec/Proofs/Adequacy.lean:717:32: Tactic `rewrite` failed: Did not find an occurrence of the pattern
+  (X.states m).events ++ rest
+in the target expression
+  A.project (X.states m).events ++ A.project rest = A.project (X.states n).events
+
+O : Operands
+P : Program O
+ρ : QueryOracle O
+c : Config O
+S : Observe.EventSignature
+A : Observe.ExecAdapter O S
+X : InfiniteExecution P ρ c
+m n : Nat
+h : m ≤ n
+rest : List O.Event
+hrest : (X.states m).events ++ rest = (X.states n).events
+⊢ A.project (X.states m).events ++ A.project rest = A.project (X.states n).events
+error: ConcreteSpec/Proofs/Adequacy.lean:733:8: Unknown identifier `Observe.visiblePrefix_succ`
+error: ConcreteSpec/Proofs/Adequacy.lean:745:23: Unknown identifier `Observe.visiblePrefix_succ`
+error: ConcreteSpec/Proofs/Adequacy.lean:745:14: unsolved goals
+case succ
+S : Observe.EventSignature
+trace : Observe.InfiniteTrace S
+n : Nat
+ih : Observe.visiblePrefix (fun i => Observe.Step.emit (trace i)) n = List.map trace (List.range n)
+⊢ Observe.visiblePrefix (fun i => Observe.Step.emit (trace i)) (n + 1) = List.map trace (List.range n) ++ [trace n]
+error: ConcreteSpec/Proofs/Adequacy.lean:745:51: This simp argument is unused:
+  ih
+
+Hint: Omit it from the simp argument list.
+  [apply] simp [Observe.visiblePrefix_succ, Observe.Step.event?, List.range_succ]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+error: ConcreteSpec/Proofs/Adequacy.lean:745:55: This simp argument is unused:
+  Observe.Step.event?
+
+Hint: Omit it from the simp argument list.
+  [apply] simp [Observe.visiblePrefix_succ, ih, List.range_succ]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+error: ConcreteSpec/Proofs/Adequacy.lean:759:49: Application type mismatch: The argument
+  bounded n
+has type
+  f n ≤ bound + 1
+but is expected to have type
+  f n ≤ f start
+in the application
+  Nat.le_antisymm (bounded n)
+error: ConcreteSpec/Proofs/Adequacy.lean:760:10: Tactic `rewrite` failed: Did not find an occurrence of the pattern
+  bound + 1
+in the target expression
+  f start ≤ f n
+
+case pos
+f : Nat → Nat
+mono : ∀ {m n : Nat}, m ≤ n → f m ≤ f n
+bound : Nat
+ih : (∀ (n : Nat), f n ≤ bound) → ∃ start, ∀ (n : Nat), start ≤ n → f n = f start
+bounded : ∀ (n : Nat), f n ≤ bound + 1
+start : Nat
+hs : f start = bound + 1
+n : Nat
+hn : start ≤ n
+⊢ f start ≤ f n
+error: ConcreteSpec/Proofs/Adequacy.lean:780:8: Tactic `rewrite` failed: Did not find an occurrence of the pattern
+  A.project (X.states m).events ++ rest
+in the target expression
+  lengths m ≤ lengths n
+
+O : Operands
+P : Program O
+ρ : QueryOracle O
+c : Config O
+S : Observe.EventSignature
+A : Observe.ExecAdapter O S
+X : InfiniteExecution P ρ c
+bound : Nat
+bounded : ∀ (n : Nat), (A.project (X.states n).events).length ≤ bound
+lengths : Nat → Nat := fun n => (A.project (X.states n).events).length
+m n : Nat
+h : m ≤ n
+rest : List (Observe.Event S)
+hr : A.project (X.states m).events ++ rest = A.project (X.states n).events
+⊢ lengths m ≤ lengths n
+error: ConcreteSpec/Proofs/Adequacy.lean:785:35: Unknown constant `ConcreteSpec.Core.Observe.SameInfiniteObservation.refl`
+error: ConcreteSpec/Proofs/Adequacy.lean:797:12: `simp` made no progress
+error: ConcreteSpec/Proofs/Adequacy.lean:799:10: Type mismatch: After simplification, term
+  hr
+ has type
+  A.project (X.states start).events = A.project (X.states n).events
+but is expected to have type
+  A.project (X.states n).events = events
+error: ConcreteSpec/Proofs/Adequacy.lean:796:27: This simp argument is unused:
+  events
+
+Hint: Omit it from the simp argument list.
+  [apply] simp [lengths] at sameLength
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+✔ [36/47] Built ConcreteSpec.Proofs.Slice1 (591ms)
+✔ [37/47] Built ConcreteSpec.Proofs.Memory (549ms)
+✔ [38/47] Built ConcreteSpec.Proofs.Brand (675ms)
+✔ [39/47] Built ConcreteSpec.Proofs.Borrow (710ms)
+✔ [40/47] Built ConcreteSpec.Proofs.Observe (199ms)
+✔ [41/47] Built ConcreteSpec.Proofs.Checker (293ms)
+✔ [42/47] Built ConcreteSpec.Proofs.Rep (366ms)
+✔ [43/47] Built ConcreteSpec.Proofs.Hybrid (349ms)
+✔ [44/47] Built ConcreteSpec.Proofs.Slice0 (225ms)
+✔ [45/47] Built ConcreteSpec.Proofs.Examples (174ms)
+Some required targets logged failures:
+- ConcreteSpec.Proofs.Adequacy
+error: build failed
+Namespace theorem visiblePrefix_succ in Observe2 module not imported! Proofs Adequacy imports Spec Adequacy and Proofs Exec, not Observe2. Could import Proofs Observe2, no cycle. Add import. Then available. This also matches C6 laws. Fix rw directions hrest are prefix equality oriented xs++rest=ys. Should rw [←hnext,...] etc.
+
+  events_prefix goal m++rest++next=state m+(d+1). `rw [← List.append_assoc, hrest, show m+(d+1)=m+d+1 by omega, hnext]` Wait hrest rewrite state m++rest -> state m+d yes after append assoc. hnext direction forward state m+d++next -> state m+d+1. Good.
+  projected: rw [← Observe.project_append, hrest].
+  mono: change lengths; rw [←hr,List.length_append].
+  eventually antisymm order: want f n=f start. `Nat.le_antisymm (hs ▸ bounded n) (hs ▸ mono hn)` perhaps:
+  ```
+  apply Nat.le_antisymm
+  · rw [hs]; exact bounded n
+  · rw [hs]; exact mono hn
+  ```
+  First target f n≤f start rw hs. second.
+  stable hr direction and length: hr : projected start++rest=projected n. Want n=start. hnil from lengths stable n = lengths start. congrArg length hr gives len start+rest=len n. `have hl := congrArg ... hr; simp only[List.length_append] at hl; have hnil ... by change ... at sameLength; omega`. Then want n=events from hr.symm with rest nil. `simpa [events, hnil] using hr.symm`.
+  Current simp weird. Fix.
+
+  Import Observe2 allowed and no cycles.
+
+• The first build exposed only proof-level issues: prefix equalities were oriented in the opposite direction, and the C6 prefix lemmas live in `Proofs/Observe2`. I’m correcting those and tightening the bounded-sequence proof.
+
+• Should read block again then edit multiple issues one call.
+
+• I’m applying the build fixes now; the specification changes themselves elaborated successfully.
+
+• Edit entire block small replacements one call using old entire perhaps large. Can replace unique snippets all in one Edit not possible multiple old. Tool only one. I must no consecutive without read. Could replace whole 100 lines modified easier. But do one giant old exact from 702-807 and new. Token cost okay. Or use replace_all single `rw [hr` not. I can use Edit whole block. I'll do individual then read each? Tools costly reminders but okay. One edit block.
+
+• The remaining corrections are localized to the new proof block; no definitions need to change.
+
+warning: Git tree '/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/integ' is dirty
+✖ [45/47] Building ConcreteSpec.Proofs.Adequacy (594ms)
+trace: .> LEAN_PATH=/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/integ/.lake/build/lib/lean /nix/store/94bmilywgajdnqvix1fs35fj94kala0w-lean4-release-4.34.1/bin/lean /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/integ/ConcreteSpec/Proofs/Adequacy.lean -o /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/integ/.lake/build/lib/lean/ConcreteSpec/Proofs/Adequacy.olean -i /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/integ/.lake/build/lib/lean/ConcreteSpec/Proofs/Adequacy.ilean -c /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/integ/.lake/build/ir/ConcreteSpec/Proofs/Adequacy.c --setup /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/integ/.lake/build/ir/ConcreteSpec/Proofs/Adequacy.setup.json --json
+error: ConcreteSpec/Proofs/Adequacy.lean:735:40: `List.take_succ` has been deprecated: Use `List.take_add_one` instead
+error: ConcreteSpec/Proofs/Adequacy.lean:737:4: unsolved goals
+case pos
+S : Observe.EventSignature
+events : List (Observe.Event S)
+n : Nat
+ih : Observe.visiblePrefix (Observe.finiteDivergenceSteps events) n = List.take n events
+h : n < events.length
+⊢ List.take n events ++ (Observe.Step.emit events[n]).event?.toList = List.take (n + 1) events
+error: ConcreteSpec/Proofs/Adequacy.lean:738:4: unsolved goals
+case neg
+S : Observe.EventSignature
+events : List (Observe.Event S)
+n : Nat
+ih : Observe.visiblePrefix (Observe.finiteDivergenceSteps events) n = List.take n events
+h : ¬n < events.length
+⊢ Observe.Step.silent.event? = none
+error: ConcreteSpec/Proofs/Adequacy.lean:737:46: This simp argument is unused:
+  List.getElem?_eq_getElem
+
+Hint: Omit it from the simp argument list.
+  [apply] simp [Observe.finiteDivergenceSteps, h]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+error: ConcreteSpec/Proofs/Adequacy.lean:738:46: This simp argument is unused:
+  List.getElem?_eq_none_iff
+
+Hint: Omit it from the simp argument list.
+  [apply] simp [Observe.finiteDivergenceSteps, h, Nat.le_of_not_gt h]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+error: ConcreteSpec/Proofs/Adequacy.lean:738:73: This simp argument is unused:
+  Nat.le_of_not_gt h
+
+Hint: Omit it from the simp argument list.
+  [apply] simp [Observe.finiteDivergenceSteps, h, List.getElem?_eq_none_iff]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+error: ConcreteSpec/Proofs/Adequacy.lean:765:8: Type mismatch
+  mono hn
+has type
+  f start ≤ f n
+but is expected to have type
+  bound + 1 ≤ f n
+Some required targets logged failures:
+- ConcreteSpec.Proofs.Adequacy
+error: build failed
+• Use List.take_add_one check. #check. Also rw [hs] direction target second after apply? hs f start=bound+1, rw[hs] rewrites f start to bound but goal f start≤f n? Error expected bound+1 ≤ f n but mono gives f start means rw hs actually rewrote f start to bound? Wait mono has f start should match after rw, error says expected bound+1 and mono f start. `rw [hs]` perhaps hs orientation got rewritten at hs? Hmm target displayed likely rw [hs] rewrites f start? mono should then defeq? Could exact hs ▸ mono hn perhaps substitution direction:
+  Goal f start≤f n, exact mono hn no need rw! First goal f n≤f start, rw [hs]; bounded. Second exact mono hn. Remove second rw.
+
+  visible proof use `List.take_add_one`, Step.event? simp and take. 
+  ```
+  rw [Observe.visiblePrefix_succ, ih, List.take_add_one]
+  by_cases h...
+  · simp [finiteDivergenceSteps,h, Step.event?, List.getElem?_eq_getElem h]
+  ...
+  ```
+  Current List.take_succ rewrite turned RHS? Actually goal after rw weird RHS take(n+1), List.take_succ perhaps rewrite failed due deprecation warning errors stops? warningAsError. Use `List.take_add_one` likely same.
+  #check quick edit Check.
+
+• Lean 4.34 deprecates `List.take_succ`; I’ll switch to its replacement and simplify the final monotonicity step directly.
+
+• Do build check signature and edit need read Adeq relevant.
+
+• I’m checking that replacement lemma’s shape, then rerunning the build.List.ext_getElem.{u_1} {α : Type u_1} {l₁ l₂ : List α} (hl : l₁.length = l₂.length)
+  (h : ∀ (i : Nat) (h₁ : i < l₁.length) (h₂ : i < l₂.length), l₁[i] = l₂[i]) : l₁ = l₂
+List.ext_get.{u_1} {α : Type u_1} {l₁ l₂ : List α} (hl : l₁.length = l₂.length)
+  (h : ∀ (n : Nat) (h₁ : n < l₁.length) (h₂ : n < l₂.length), l₁.get ⟨n, h₁⟩ = l₂.get ⟨n, h₂⟩) : l₁ = l₂
+List.getElem?_eq_getElem.{u_1} {α : Type u_1} {l : List α} {i : Nat} (h : i < l.length) : l[i]? = some l[i]
+List.getElem?_eq_some_iff.{u_1} {α : Type u_1} {i : Nat} {a : α} {l : List α} : l[i]? = some a ↔ ∃ h, l[i] = a
+List.take_add_one.{u_1} {α : Type u_1} {l : List α} {i : Nat} : List.take (i + 1) l = List.take i l ++ l[i]?.toList
+List.take_append_drop.{u_1} {α : Type u_1} (i : Nat) (l : List α) : List.take i l ++ List.drop i l = l
+List.take_of_length_le.{u_1} {α : Type u_1} {i : Nat} {l : List α} (h : l.length ≤ i) : List.take i l = l
+List.getElem_range {j n : Nat} (h : j < (List.range n).length) : (List.range n)[j] = j
+List.getElem_map.{u_1, u_2} {α : Type u_1} {β : Type u_2} (f : α → β) {l : List α} {i : Nat}
+  {h : i < (List.map f l).length} : (List.map f l)[i] = f l[i]
+List.length_range {n : Nat} : (List.range n).length = n
+List.ext_getElem?.{u_1} {α : Type u_1} {l₁ l₂ : List α} (h : ∀ (i : Nat), l₁[i]? = l₂[i]?) : l₁ = l₂
+_review/Check.lean:13:7: error(lean.unknownIdentifier): Unknown constant `Nat.find`
+_review/Check.lean:14:7: error(lean.unknownIdentifier): Unknown constant `Nat.find_min'`
+Classical.choose_spec.{u} {α : Sort u} {p : α → Prop} (h : ∃ x, p x) : p (Classical.choose h)
+List.getElem?_range {i n : Nat} (h : i < n) : (List.range n)[i]? = some i
+List.getElem?_map.{u_1, u_2} {α : Type u_1} {β : Type u_2} {f : α → β} {l : List α} {i : Nat} :
+  (List.map f l)[i]? = Option.map f l[i]?
+
+
+• Edit block visible only + mono in same old range perhaps entire.
+
+• The replacement has the expected `take`/`getElem?` form. I’m applying it with explicit handling of the emitting and silent cases.
+
+warning: Git tree '/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/integ' is dirty
+✖ [45/47] Building ConcreteSpec.Proofs.Adequacy (608ms)
+trace: .> LEAN_PATH=/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/integ/.lake/build/lib/lean /nix/store/94bmilywgajdnqvix1fs35fj94kala0w-lean4-release-4.34.1/bin/lean /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/integ/ConcreteSpec/Proofs/Adequacy.lean -o /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/integ/.lake/build/lib/lean/ConcreteSpec/Proofs/Adequacy.olean -i /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/integ/.lake/build/lib/lean/ConcreteSpec/Proofs/Adequacy.ilean -c /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/integ/.lake/build/ir/ConcreteSpec/Proofs/Adequacy.c --setup /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/integ/.lake/build/ir/ConcreteSpec/Proofs/Adequacy.setup.json --json
+error: ConcreteSpec/Proofs/Adequacy.lean:737:67: This simp argument is unused:
+  List.getElem?_eq_getElem h
+
+Hint: Omit it from the simp argument list.
+  [apply] simp [Observe.finiteDivergenceSteps, Observe.Step.event?, h]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+error: ConcreteSpec/Proofs/Adequacy.lean:738:67: This simp argument is unused:
+  List.getElem?_eq_none_iff
+
+Hint: Omit it from the simp argument list.
+  [apply] simp [Observe.finiteDivergenceSteps, Observe.Step.event?, h, Nat.le_of_not_gt h]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+error: ConcreteSpec/Proofs/Adequacy.lean:739:8: This simp argument is unused:
+  Nat.le_of_not_gt h
+
+Hint: Omit it from the simp argument list.
+  [apply] simp [Observe.finiteDivergenceSteps, Observe.Step.event?, h, List.getElem?_eq_none_iff]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+Some required targets logged failures:
+- ConcreteSpec.Proofs.Adequacy
+error: build failed
+• Just simp only h.
+
+• The proof now closes; only warning-as-error lint remains for redundant simp arguments. I’m removing those.
+
+• Now add infinite observation. Could test current build after adding? Current likely pass. But time. Add theorem after finite. Should construct trace and proofs.
+
+  Detailed Lean code:
+
+  ```
+  theorem infinite_projected_observation ... (hi:InfiniteEvents A X):
+   ∃ steps trace, Matches... ∧ HasFullObservation ... := by
+   classical
+   let first : Nat→Nat := fun i => Classical.choose (hi i)
+   have first_spec (i): i < (...first i...).length := Classical.choose_spec (hi i)
+   let trace : InfiniteTrace S := fun i =>
+     (A.project ...)[i]'(first_spec i)
+   have trace_get (i:Nat) {n:Nat} (hn:i<len n) : (hist n)[i]?=some(trace i) := by
+     rw [List.getElem?_eq_getElem hn]
+     have hi' := first_spec i
+     by_cases h : n ≤ first i
+     · have eq := getElem?_eq_of_prefix (X.projected_prefix A h) hn
+       rw [List.getElem?_eq_getElem hn, List.getElem?_eq_getElem hi'] at eq
+       exact congrArg Option.some ? no
+  ```
+  Goal some histn=some trace. `rw [List.getElem?_eq_getElem hn, List.getElem?_eq_getElem hi'] at eq` eq: some histFirst = some histn (since getElem?_eq_of_prefix returns larger[first]? = smaller[n]?). If n≤first: prefix hist n hist first -> result histFirst[i]?=histn[i]?. eq = some first = some n. Goal some n = some trace(first). exact eq.symm maybe after trace unfold. `change some _ = some ((hist first)[i]'...)`; exact eq.symm.
+  If first≤n: prefix hist first hist n, get eq histn=histfirst directly.
+  ```
+     · exact (getElem... ).symm? 
+  ```
+  Case h n≤first:
+  ```
+  have e := getElem?_eq_of_prefix ... hn
+  -- e: histFirst[i]?=histn[i]?
+  rw [List.getElem?_eq_getElem (first_spec i), List.getElem?_eq_getElem hn] at e
+  change some _ = some _
+  exact e.symm
+  ```
+  Goal after rw get = some get n = some trace. change trace unfolds? `change some _ = some ((A.project ... first)[i]'...)`.
+  Else h gives first≤n via Nat.le_of_not_ge.
+  ```
+  exact e
+  ```
+
+  Then `trace_prefix (n)`:
+  ```
+  have hlist : A.project state n = (List.range len).map trace := by
+   apply List.ext_getElem
+   · simp
+   · intro i hi1 hi2
+     have hg := trace_get i hi1
+     rw [List.getElem?_eq_some_iff] at hg
+     obtain ⟨bound,hbound⟩:=hg
+     -- hbound hist[i]=trace i
+     simp only[List.getElem_map,List.getElem_range]
+     exact hbound
+  ```
+  Can simpler use List.ext_getElem?:
+  ```
+  apply List.ext_getElem?
+  intro i
+  by_cases h:i<len
+  · rw [trace_get i h, List.getElem?_map, List.getElem?_range h]
+    rfl/simp
+  · have hr : (List.range len)[i]?=none := List.getElem?_eq_none_iff.mpr (by simp; omega)
+    rw [List.getElem?_eq_none_iff.mpr (by simpa using h), List.getElem?_map, hr]
+    rfl
+  ```
+  After rw trace_get left some trace; RHS map range at i some trace. `simp [List.getElem?_map,List.getElem?_range h]`.
+  Second `simp [List.getElem?_eq_none_iff, h]` likely.
+  ```
+    apply List.ext_getElem?
+    intro i
+    by_cases h:i<...
+    · rw [trace_get i h]
+      simp [List.getElem?_map,List.getElem?_range h]
+    · have hn : len≤i := by omega
+      simp [List.getElem?_eq_none_iff, hn]
+  ```
+  Simp RHS get map etc.
+
+  Then steps emit trace.
+  First direction n choose m=len, rest=[]; visiblePrefix emit len = range map = hist by hlist.
+  ```
+  ⟨len,[], by rw[visiblePrefix_emitTrace,←hlist]; simp⟩
+  ```
+  Goal visible = hist++[]. rw hlist? visible=range; `rw [←hlist]; simp`.
+  Second m choose n=first m with m<len; rest=drop m hist; visible=take? range m map = hist.take m. Should have lemma map range take:
+  `(List.range m).map trace = hist.take m` if m≤len and trace_prefix for full hist. Could derive from hlist:
+  congrArg List.take m hlist:
+  `hist.take m = ((range len).map trace).take m = (range m).map trace` if m≤len. simp [List.take_map, List.take_range, Nat.min_eq_left...] maybe.
+  Check List.take_range. #check. Or List ext using trace_get:
+  ```
+  have htake : (List.range m).map trace = hist.take m := by
+   apply List.ext_getElem?
+   intro i
+   by_cases him:i<m
+   · have hin:i<len:=by omega
+     rw [List.getElem?_map,List.getElem?_range him]
+     simp [trace_get i hin, List.getElem?_take_of_lt him] 
+  ...
+  ```
+  `List.getElem?_take_of_lt` used earlier no arg signature. Simp likely `[List.getElem?_map,List.getElem?_range,List.getElem?_take, him,hin]`.
+  Could use hlist and `List.take_append_drop` for second without explicit take if choose raw n and m = len? To match arbitrary C6 prefix m, need raw history extends visible. I know visible = range m map trace. Raw hist first m has full list range len map trace. Could show `(range m).map trace` prefix of `(range len).map trace` via range prefix. There is List.range prefix for m≤len, `List.range_eq_take`. Use htake.
+
+  Can state generic `trace_take`:
+  ```
+  have htake {n m} (hmn:m≤len n) : (List.range m).map trace=(hist n).take m := by
+    rw [hlist n]
+    simp [List.take_map, List.take_range, Nat.min_eq_left hmn]
+  ```
+  Check simplifier. #check List.take_range.
+
+• The finite-history connection is in place. For infinite interaction, I’m constructing the C6 trace entry by entry from the first projected history that contains it, then proving all finite prefixes agree.
+
+List.ext_getElem.{u_1} {α : Type u_1} {l₁ l₂ : List α} (hl : l₁.length = l₂.length)
+  (h : ∀ (i : Nat) (h₁ : i < l₁.length) (h₂ : i < l₂.length), l₁[i] = l₂[i]) : l₁ = l₂
+List.ext_get.{u_1} {α : Type u_1} {l₁ l₂ : List α} (hl : l₁.length = l₂.length)
+  (h : ∀ (n : Nat) (h₁ : n < l₁.length) (h₂ : n < l₂.length), l₁.get ⟨n, h₁⟩ = l₂.get ⟨n, h₂⟩) : l₁ = l₂
+List.getElem?_eq_getElem.{u_1} {α : Type u_1} {l : List α} {i : Nat} (h : i < l.length) : l[i]? = some l[i]
+List.getElem?_eq_some_iff.{u_1} {α : Type u_1} {i : Nat} {a : α} {l : List α} : l[i]? = some a ↔ ∃ h, l[i] = a
+List.take_add_one.{u_1} {α : Type u_1} {l : List α} {i : Nat} : List.take (i + 1) l = List.take i l ++ l[i]?.toList
+List.take_append_drop.{u_1} {α : Type u_1} (i : Nat) (l : List α) : List.take i l ++ List.drop i l = l
+List.take_of_length_le.{u_1} {α : Type u_1} {i : Nat} {l : List α} (h : l.length ≤ i) : List.take i l = l
+List.getElem_range {j n : Nat} (h : j < (List.range n).length) : (List.range n)[j] = j
+List.getElem_map.{u_1, u_2} {α : Type u_1} {β : Type u_2} (f : α → β) {l : List α} {i : Nat}
+  {h : i < (List.map f l).length} : (List.map f l)[i] = f l[i]
+List.length_range {n : Nat} : (List.range n).length = n
+List.ext_getElem?.{u_1} {α : Type u_1} {l₁ l₂ : List α} (h : ∀ (i : Nat), l₁[i]? = l₂[i]?) : l₁ = l₂
+List.take_range {i n : Nat} : List.take i (List.range n) = List.range (min i n)
+_review/Check.lean:14:7: error(lean.unknownIdentifier): Unknown constant `List.take_map`
+Classical.choose_spec.{u} {α : Sort u} {p : α → Prop} (h : ∃ x, p x) : p (Classical.choose h)
+List.getElem?_range {i n : Nat} (h : i < n) : (List.range n)[i]? = some i
+List.getElem?_map.{u_1, u_2} {α : Type u_1} {β : Type u_2} {f : α → β} {l : List α} {i : Nat} :
+  (List.map f l)[i]? = Option.map f l[i]?
+• Simp List.take_map likely theorem `List.map_take`. #check but can simp. Add theorem.
+
+• I’m inserting the infinite-history theorem now; the finite case already elaborates apart from lint cleanup.
+
+• The trace construction will preserve both prefix directions, so the C6 observation cannot invent or drop events.
+
+warning: Git tree '/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/integ' is dirty
+✖ [45/47] Building ConcreteSpec.Proofs.Adequacy (687ms)
+trace: .> LEAN_PATH=/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/integ/.lake/build/lib/lean /nix/store/94bmilywgajdnqvix1fs35fj94kala0w-lean4-release-4.34.1/bin/lean /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/integ/ConcreteSpec/Proofs/Adequacy.lean -o /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/integ/.lake/build/lib/lean/ConcreteSpec/Proofs/Adequacy.olean -i /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/integ/.lake/build/lib/lean/ConcreteSpec/Proofs/Adequacy.ilean -c /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/integ/.lake/build/ir/ConcreteSpec/Proofs/Adequacy.c --setup /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/integ/.lake/build/ir/ConcreteSpec/Proofs/Adequacy.setup.json --json
+error: ConcreteSpec/Proofs/Adequacy.lean:837:29: Application type mismatch: The argument
+  (X.states n).events.length
+has type
+  Nat
+but is expected to have type
+  List O.Event
+in the application
+  A.project (X.states n).events.length
+error: ConcreteSpec/Proofs/Adequacy.lean:841:4: unsolved goals
+case pos
+O : Operands
+P : Program O
+ρ : QueryOracle O
+c : Config O
+S : Observe.EventSignature
+A : Observe.ExecAdapter O S
+X : InfiniteExecution P ρ c
+hi : InfiniteEvents A X
+first : Nat → Nat := fun i => Classical.choose ⋯
+first_spec : ∀ (i : Nat), i < (A.project (X.states (first i)).events).length
+trace : Observe.InfiniteTrace S := fun i => (A.project (X.states (first i)).events)[i]
+trace_get :
+  ∀ (i : Nat) {n : Nat},
+    i < (A.project (X.states n).events).length → (A.project (X.states n).events)[i]? = some (trace i)
+n i : Nat
+h : i < (A.project (X.states n).events).length
+⊢ some (trace i) = Option.map trace (List.range (sorry ()))[i]?
+error: ConcreteSpec/Proofs/Adequacy.lean:843:4: unsolved goals
+case neg
+O : Operands
+P : Program O
+ρ : QueryOracle O
+c : Config O
+S : Observe.EventSignature
+A : Observe.ExecAdapter O S
+X : InfiniteExecution P ρ c
+hi : InfiniteEvents A X
+first : Nat → Nat := fun i => Classical.choose ⋯
+first_spec : ∀ (i : Nat), i < (A.project (X.states (first i)).events).length
+trace : Observe.InfiniteTrace S := fun i => (A.project (X.states (first i)).events)[i]
+trace_get :
+  ∀ (i : Nat) {n : Nat},
+    i < (A.project (X.states n).events).length → (A.project (X.states n).events)[i]? = some (trace i)
+n i : Nat
+h : ¬i < (A.project (X.states n).events).length
+hn : (A.project (X.states n).events).length ≤ i
+⊢ none = Option.map trace (List.range (sorry ()))[i]?
+error: ConcreteSpec/Proofs/Adequacy.lean:846:75: unsolved goals
+O : Operands
+P : Program O
+ρ : QueryOracle O
+c : Config O
+S : Observe.EventSignature
+A : Observe.ExecAdapter O S
+X : InfiniteExecution P ρ c
+hi : InfiniteEvents A X
+first : Nat → Nat := fun i => Classical.choose ⋯
+first_spec : ∀ (i : Nat), i < (A.project (X.states (first i)).events).length
+trace : Observe.InfiniteTrace S := fun i => (A.project (X.states (first i)).events)[i]
+trace_get :
+  ∀ (i : Nat) {n : Nat},
+    i < (A.project (X.states n).events).length → (A.project (X.states n).events)[i]? = some (trace i)
+history_eq_range : ∀ (n : Nat), A.project (X.states n).events = List.map trace (List.range sorry)
+n m : Nat
+hm : m ≤ (A.project (X.states n).events).length
+⊢ List.map trace (List.range m) = List.take m (List.map trace (List.range (sorry ())))
+error: ConcreteSpec/Proofs/Adequacy.lean:842:31: This simp argument is unused:
+  List.getElem?_range h
+
+Hint: Omit it from the simp argument list.
+  [apply] simp [List.getElem?_map]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+error: ConcreteSpec/Proofs/Adequacy.lean:844:12: This simp argument is unused:
+  List.getElem?_eq_none_iff
+
+Hint: Omit it from the simp argument list.
+  [apply] simp [hn]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+error: ConcreteSpec/Proofs/Adequacy.lean:848:10: This simp argument is unused:
+  List.take_range
+
+Hint: Omit it from the simp argument list.
+  [apply] simp [Nat.min_eq_left hm]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+error: ConcreteSpec/Proofs/Adequacy.lean:848:27: This simp argument is unused:
+  Nat.min_eq_left hm
+
+Hint: Omit it from the simp argument list.
+  [apply] simp [List.take_range]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+Some required targets logged failures:
+- ConcreteSpec.Proofs.Adequacy
+error: build failed
+• Parentheses parse `List.range (A.project ...).length` interpreted A.project arg length due dot precedence. Should have `(A.project ...).length` inside range. Currently:
+  `List.range (A.project (X.states n).events.length)` indeed missing parentheses around project. Fix to `List.range ((A.project (X.states n).events).length)`.
+  Then simp may work. Read lines.
+
+• The infinite proof has one parsing issue around `List.range ((...).length)`; I’m fixing that precedence error and rechecking the remaining simp goals.
+
+• Build.
+
+• The precedence fix is applied; I’m rerunning the full target to expose any remaining proof errors.warning: Git tree '/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/integ' is dirty
+✖ [45/47] Building ConcreteSpec.Proofs.Adequacy (615ms)
+trace: .> LEAN_PATH=/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/integ/.lake/build/lib/lean /nix/store/94bmilywgajdnqvix1fs35fj94kala0w-lean4-release-4.34.1/bin/lean /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/integ/ConcreteSpec/Proofs/Adequacy.lean -o /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/integ/.lake/build/lib/lean/ConcreteSpec/Proofs/Adequacy.olean -i /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/integ/.lake/build/lib/lean/ConcreteSpec/Proofs/Adequacy.ilean -c /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/integ/.lake/build/ir/ConcreteSpec/Proofs/Adequacy.c --setup /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/integ/.lake/build/ir/ConcreteSpec/Proofs/Adequacy.setup.json --json
+error: ConcreteSpec/Proofs/Adequacy.lean:848:4: `simp` made no progress
+error: ConcreteSpec/Proofs/Adequacy.lean:844:12: This simp argument is unused:
+  List.getElem?_eq_none_iff
+
+Hint: Omit it from the simp argument list.
+  [apply] simp [hn]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+Some required targets logged failures:
+- ConcreteSpec.Proofs.Adequacy
+error: build failed
+
+
+• take map simplification no lemma. Should prove via induction m general n? Easy:
+  ```
+  induction m with
+  zero rfl
+  succ m ih =>
+   rw [List.range_succ,List.map_append,List.take_add_one, ih (le...)]
+   have hlt:m<len:=by omega
+   rw[List.getElem?_eq_getElem hlt, trace_get m hlt]
+   rfl
+  ```
+  Goal map range m = hist.take m. At succ:
+  LHS map range(m+1) = map range m ++ [trace m].
+  RHS take(m+1)=take m ++ hist[m]?.
+  Use ih with m≤len. 
+  ```
+    induction m with
+    | zero => rfl
+    | succ m ih =>
+      rw [List.range_succ, List.map_append, List.take_add_one, ih (by omega),
+        trace_get m (by omega)]
+      rfl
+  ```
+  `List.map_append` perhaps simp. rw trace_get changes get option to some. `[trace m]` vs (some).toList simp.
+  Negative history range simp only [List.getElem?_map,List.getElem?_range?]. Current `simp [hn]` likely enough. Remove eq none arg.
+
+  Edit block.
+
+• Only the `take`/`map` identity remains. I’ll prove it inductively using the trace-entry theorem instead of relying on a missing simplification lemma.
+
+• The induction will use exactly the needed bounds, with no additional axioms or premises.
+
+warning: Git tree '/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/integ' is dirty
+✔ [45/47] Built ConcreteSpec.Proofs.Adequacy (662ms)
+✔ [46/47] Built ConcreteSpec (136ms)
+Build completed successfully (47 jobs).
+• Great. Should have examples item1. Construct event infinite.
+
+  Perhaps simpler use infinite execution generated from periodic positions with histories. I'll implement in Demo after spin. Should type adapter signature. I can define raw event loop and prove.
+
+  Definitions:
+  ```
+  def eventBody : Stmt ops := .prim none .log [.lit 1] s
+  def eventConfig := start fn with loop body eventBody
+  eventStore=spinStore same.
+  eventScope etc spinScope same.
+  eventTest = .test ⟨0⟩ .skip (.lit 1) eventBody s []
+  eventBodyFrame = .body ...
+  configs 0...4
+  eventQuery (i) := Query.issue (List.replicate i 1) .log [1] s spinStore ((List.range i).map eventQuery)? circular definition occurrence simply structure:
+  ⟨List.replicate i 1, .log,[1],s,spinStore,i⟩
+  ```
+  At request state store after eval literal = spinStore yes.
+  events in positions count `eventCount n := n/5 + if 3 < n%5 then 1 else 0` since phase4 has event. queries same count.
+  `eventPosition n := ⟨eventConfigAt(n%5), List.replicate (eventCount n) 1, (List.range(eventCount n)).map eventQuery⟩`.
+  Initial n0 count0.
+
+  Moves:
+  01 silent rfl etc configs.
+  prim 34:
+  source phase3 eventConfig3 `.exec eventBody` frames body,scope. `step` request rfl. answer env with events history replicate k 1. `answer env.toQueryOracle (Query.issue ... issued)` reduces env -> some event1 result0 store. allows rfl. k done.
+  Target expected eventPosition at n phase4. Should show events append [1] = replicate(k+1) and queries append [Query.issue hist...] = range(k+1) map eventQuery. Query.issue occurrenceAt issued s = k. Should prove occurrenceAt of generated queries = k. Could simp [occurrenceAt,eventQuery] perhaps `List.filter_map` and decide eq. occurrenceAt map eventQuery range k at s = k. Since all site s, simp [occurrenceAt,eventQuery] yields filter all true, length map/range. Test.
+  Move prim with explicit `.prim rfl rfl rfl rfl`, target simplification `simpa [eventPosition,eventCount,..., List.replicate_succ, ...]`. Arithmetic counts n.
+  Rather than theorem arbitrary n directly use phase lemmas parameter k:
+  ```
+  def eventPositionAt phase count...
+  event_move_34 (k) :
+   Move prog env ⟨eventConfig3,replicate k, range k⟩ ⟨eventConfig4,replicate(k+1),range(k+1)⟩ := by
+    apply Move.prim ... 
+  ```
+  After apply need ha occurrence. `simp [eventQuery,Query.issue,occurrenceAt]` perhaps.
+
+  Define `eventPositionAt phase count` separate and eventPosition n uses count. Move phase theorems all same histories arbitrary:
+  01 etc `Move.silent rfl`.
+  phase40 target eventConfig with same history.
+  spin_move general arithmetic eventCount transitions. I can prove simp [eventPosition,eventCount,h,hn] using move lemmas. For phase3 hn next phase4 and count next = count+1 by omega eventCount with divisions? h n%5=3, need n/5 same (n+1)/5 and count formula. omega supports mod. `have hc : eventCount(n+1)=eventCount n+1 := by simp[eventCount,h,hn]` omega perhaps.
+  Other phases counts equal by simp[eventCount,h,hn].
+  Could simplify eventPosition based on n directly with omega.
+
+  Then infinite internal:
+  raw length = eventCount n. InfiniteEvents bound choose n=5*(bound+1) -> count=bound+1 (phase0) by simp [eventCount,eventPosition,event_infinite]; omega. `⟨5*(bound+1), by simp [eventCount]; omega⟩`.

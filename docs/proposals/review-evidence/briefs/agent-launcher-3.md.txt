@@ -1,0 +1,59 @@
+FOLLOW-UP round 3 (the LAST allowed round) on your commit b7101e8c1 (wip/agent-launcher, this clone). Codex review.sh round 2: clean.
+agy round 2: REJECT with the four findings below; I checked them and all four are real. Fix each one, with a control in
+scripts/checks/agent_launch.sh that fails without the fix (prove each with a temporary mutation and report the result).
+Keep every existing control passing. Do not widen scope.
+
+1. Failed units leak. run_job writes status and then `exit "$rc"`, so for rc!=0 the watcher can see status while the unit is
+   still active. Its reset-failed then does nothing, and the unit ends `failed` and stays loaded. Fix: status is the single
+   source of truth. run_job exits 0 exactly when status was written atomically, and 2 otherwise, so a recorded job never
+   leaves a failed unit. Update the header comment to match. Add a control asserting the job's own exit code is 0 for a
+   command that exits 3 (status=3), and 2 when the status write fails.
+2. Tests: the timeout-result fixture orphans its `while [ ! -e "$STUB_RELEASE_DIR/$STUB_UNIT" ]` child. Release it, and make
+   the EXIT trap release every unit before rm -rf "$TMP". Add a control that the cached $JOBDIR/result is read back:
+   after collection, the stub result is gone, and a second status/wait still returns 125 with `: timeout`.
+3. unit_result: on an unloaded or not-found unit, real systemd prints Result=success. Treat '' and 'success' as `unknown`
+   (a lost unit is never a success), with a control.
+4. --dir with a trailing slash, and --dir /top: strip trailing slashes (keep a lone '/' refused or handled sanely), and
+   default an empty parent to '/'. Add a control for `--dir "$TMP/new/"` succeeding.
+
+Real-systemd smoke again (success, exit 3 -> wait 3 and `systemctl --user list-units --failed` shows no agent-* unit,
+RuntimeMaxSec kill -> 125 timeout); paste the outputs.
+Gates: timeout 600 bash scripts/checks/agent_launch.sh, and
+       timeout 1500 systemd-run --user --scope -q -p MemoryMax=8G -p TasksMax=1024 bash scripts/checks/run.sh (all pass).
+Commit locally (one commit), never push, never change git config/remotes, no --no-verify. Print the SHA, per-fix summary,
+the mutation results and the smoke outputs.
+
+agy's raw findings, for reference:
+1. **`scripts/agent/launch.sh:111-115` and `scripts/agent/launch.sh:130-143` — REAL DEFECT (leaked failed units on normal non-zero exit / unrecorded status on `rc=0` write failure):**
+   `run_job` writes `$dir/status` **before** calling `exit "$rc"`. When a job exits non-zero (e.g. `rc=3`), `inspect()` can observe `[ -f "$JOBDIR/status" ]` at line 171 while the unit process is still exiting (`active`/`deactivating`). `normal_exit()` then runs `systemctl --user reset-failed "$UNIT"` while the unit is still active (which is a no-op both in real systemd and in the stub's `[ -f "$state/active" ] || rm -f "$state/result"` at `scripts/checks/agent_launch.sh:155`), and moments later `run_job` executes `exit 3`, putting the unit into `failed` forever after `wait` has already returned. Conversely, if writing `$dir/status` fails when `rc=0`, `run_job` still does `exit 0`, so systemd garbage-collects the transient unit (`Result=success`) even though no `status` file was written.
+   - **Fix:** Since `$dir/status` already carries the command's exit status `$rc` for `normal_exit()`, have `run_job` exit `0` iff `$dir/status` was atomically written, and exit `2` otherwise:
+     ```bash
+     if printf '%s\n' "$rc" > "$tmp" && mv "$tmp" "$dir/status"; then
+       exit 0
+     fi
+     rm -f "$tmp"
+     exit 2
+     ```
+     Then every job that records `status` exits `0` (so systemd's default `CollectMode=inactive` unloads the transient unit automatically on exit without ever entering `failed`), and only jobs that fail to write `status` enter `failed` for `lost_exit()`.
+
+2. **`scripts/checks/agent_launch.sh:106-112` and `scripts/checks/agent_launch.sh:287-295` — REAL DEFECT (orphaned infinite-loop process leaked on every run + untested `$JOBDIR/result` readback):**
+   - In the `timeout-result` test, the watchdog kills only `$command_pid` (`bash "$LAUNCH" run`), not its child `bash -c 'while [ ! -e "$STUB_RELEASE_DIR/$STUB_UNIT" ]; do sleep 0.1; done'`. Unlike the other fixtures, `timeout-result` never touches `"$STUB_RELEASE_DIR/$UNIT"`, so when `EXIT` removes `$TMP`, `[ ! -e "$STUB_RELEASE_DIR/$STUB_UNIT" ]` stays true forever and the orphaned `while` loop leaks after `agent_launch.sh` exits.
+   - Line 295 only checks `[ -f "$STUB_STATE_DIR/$UNIT/reset-failed" ]`; it never checks `[ ! -e "$STUB_STATE_DIR/$UNIT/result" ]` and never runs a second `status`/`wait` against `$JOBDIR` after collection. If the `if [ -f "$JOBDIR/result" ]` read branch in `lost_exit()` (`scripts/agent/launch.sh:155-156`) were removed, all tests in `agent_launch.sh` would still pass.
+   - **Fix:** Touch `"$STUB_RELEASE_DIR/$UNIT"` at the end of the `timeout-result` test (and/or in the `EXIT` trap before `rm -rf "$TMP"`), assert `[ ! -e "$STUB_STATE_DIR/$UNIT/result" ]`, and run `capture 10 bash "$LAUNCH" status "$JOBDIR"` (or `wait`) a second time to verify it still returns `125` with `: timeout` from the cached `$JOBDIR/result`.
+
+3. **`scripts/agent/launch.sh:146-150` — REAL DEFECT (`unit_result` reports `success` when a killed/stopped unit is already unloaded):**
+   In real systemd, `systemctl --user show "$UNIT" --property=Result --value` on an unloaded unit (e.g. stopped via `systemctl stop` or already garbage-collected) prints `success` (the default `Service.Result` property on an unloaded unit), not an empty string, producing `JOB ... ENDED without a status (killed, timed out or OOM): success`.
+   - **Fix:** Treat `""` and `"success"` as `unknown` in `unit_result()`:
+     ```bash
+     case "$result" in ''|success) result=unknown ;; esac
+     printf '%s\n' "$result"
+     ```
+
+4. **`scripts/agent/launch.sh:83-85` — REAL DEFECT (`--dir` with a trailing slash always fails on a new directory):**
+   If `--dir /path/to/newdir/` is passed with a trailing slash, `parent="${jobdir%/*}"` sets `parent="/path/to/newdir"`. `mkdir -p -- "$parent"` then creates `/path/to/newdir`, causing the immediately following `mkdir -- "$jobdir"` to fail with `File exists` on a brand-new directory (and for `--dir /top`, `parent` becomes `""` and `mkdir -p -- ""` fails).
+   - **Fix:** Strip trailing slashes from `jobdir` before computing `parent` (and default an empty `parent` for `/name` to `/`):
+     ```bash
+     while [ "${#jobdir}" -gt 1 ] && [ "${jobdir%/}" != "$jobdir" ]; do jobdir="${jobdir%/}"; done
+     case "$jobdir" in */*) parent="${jobdir%/*}"; parent="${parent:-/}" ;; *) parent=. ;; esac
+     ```
+

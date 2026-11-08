@@ -1,0 +1,6 @@
+No issues found in this diff part (`docs/proposals/FOUNDATION.md`):
+
+- **Faithfulness to approved proposal**: The text of sections 1–5 matches the approved `FOUNDATION_PROPOSAL` verbatim, updating only the top status line to reflect the 2026-11-08 owner approval while keeping the Lean spec as the sole authoritative home of rules.
+- **Link and anchor resolution**: Relative links are properly adjusted for the `docs/proposals/` directory (`../decisions.md`, `../PHILOSOPHY.md`, `../archive/decisions-2026-11-05/core_rows.json`, `../../legacy/docs/...`), and `<a id="q1"></a>`–`<a id="q18"></a>` anchors are added for all numbered owner questions in section 5.
+
+VERDICT: ACCEPT

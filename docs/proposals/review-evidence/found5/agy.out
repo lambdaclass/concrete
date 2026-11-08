@@ -1,0 +1,71 @@
+### Citations Requiring Verification Against `docs/decisions.md`
+Because `docs/decisions.md` and `legacy/docs/spec/*` are not in context, the following citations and claims must be verified before accepting their authority claims:
+- **Pipeline date/anchor**: whether `decided-project-pipeline-2026-11-06` actually records the 14-stage pipeline, Memory CFG boundary, and validator options attributed to it.
+- **Core rows (`Q1`–`Q9`) & `OD*` anchors**: `OD10`, `OD11`, `OD15`, `OD23`, `OD53`, `OD69`, `OD72`, `OD81`, `OD99`, `OD106`, `OD110`, `OD111`, `OD114`, `OD125`, `OD126`, `OD147`, plus `STMT-4/5`, `TYPE-19`, `FFI-4/7/8/10`.
+- **Specific rules claimed as decided**: exit code `125` on missing launch grants (C6), `from_exposed` tie-breaking in `Q3.9` (C4), `kept`/`Kept<H>` foreign retention in `Q8.5–Q8.6` (C10), and `A2i` / `Q9.14` theorem inventories (S1).
+
+---
+
+### Section-by-Section Review
+
+#### **Section 1 (The freeze boundary): AGREE**
+Freezing extensible interfaces, state, preconditions, and preservation laws—and requiring their Lean proofs before Slice 1—is the right architectural boundary.
+
+#### **Contracts C1–C10**
+
+- **C1 (Execution, calls and cleanup): DISAGREE**
+  - **Fix:** Remove `OrderedMap` and heap-array element/backing destruction orders from C1; defer collection destruction order to their defining slices, or flag array element destruction order (forward vs. reverse of initialization) as an owner decision.
+  - **Reason:** Over-specifies slice-level library collection behavior (`OrderedMap`) in the core operational foundation (e) and introduces forward-index array destruction without an owner decision (b).
+
+- **C2 (Scalars, failure and arithmetic): DISAGREE**
+  - **Fix:** Define the exact error type returned by checked conversions (or unify `OutOfRange` with `ArithmeticError` / `TrapKind`), and flag the mapping of UTF-8 boundary failures to `invalidRange` for owner approval.
+  - **Reason:** Introducing `OutOfRange` for checked conversions without placing it in `ArithmeticError` or `TrapKind` leaves error/trap types inconsistent (c) and adds unflagged rules/spellings (b).
+
+- **C3 (Target, layout and representation): DISAGREE**
+  - **Fix:** Parameterize pre–Memory CFG semantics by the read-only target/layout interface where layout queries (`sizeof`/`alignof`) or raw/packed validity checks occur, and move the `u8`/`u16`/`u32` enum tag sizing change into an explicit owner decision.
+  - **Reason:** Saying semantics above Memory CFG "never depends on layout" contradicts `sizeof`/`alignof` and C4's byte/provenance rules (c), and native enum tag layout is a new design rule (b).
+
+- **C4 (Byte memory and value validity): DISAGREE**
+  - **Fix:** Explicitly connect C1's structured `places` with C4's byte/provenance memory (via a unified place-to-byte projection or hybrid state) before Memory CFG.
+  - **Reason:** If Core/Place MIR uses only structured values (C3/C10) while C4 models byte memory, `expose`/`from_exposed`, padding, and raw pointer operations cannot be evaluated in the Core evaluator without rewriting the state model later (c, d).
+
+- **C5 (Dynamic borrow, brands and authority): DISAGREE**
+  - **Fix:** Remove the concrete declaration that `Entropy` is a nullary launch-grant type with a named source premise from C5 until the `Q7.10` Entropy contract is decided.
+  - **Reason:** Directly contradicts the Revision Register (`Q7.10`), which states that Entropy's detailed resource contract is not yet decided and must not be invented now (a, c).
+
+- **C6 (Observations, environment and concurrency extension): DISAGREE**
+  - **Fix:** Promote the six `<kind>` trap string spellings (`overflow`, `division_by_zero`, `invalid_shift`, `bounds`, `invalid_range`, `abort`) to Section 5 as an explicit owner decision, and drop premature concurrency event fields until Slice 28.
+  - **Reason:** Exact trap `<kind>` spellings are user-visible surface rules buried in prose rather than flagged in Section 5 (b), and event tags alone will not prevent concurrent memory rewrites (d, e).
+
+- **C7 (Secret leakage and accounting): DISAGREE**
+  - **Fix:** Require constant-time leakage equality unconditionally for all `Secret<T>` operations (no separate variable-time non-interference tier), and flag declassification site/reason metadata if not already in `infoflow-2026-11-06`.
+  - **Reason:** Concrete's rule is that `Secret<T>` gives constant time; wording constant time as an "additional" requirement beyond public-observation equivalence weakens or splits the guarantee (c).
+
+- **C8 (Evaluator adequacy and termination): DISAGREE**
+  - **Fix:** Include an explicit deterministic environment/choice-stream oracle parameter in the frozen fuel-indexed evaluator signature, and state which IR(s) the evaluator executes.
+  - **Reason:** A total function in Lean cannot execute nondeterministic environment steps or satisfy adequacy quantification over environment choices unless the environment stream is an explicit input in the frozen interface (d).
+
+- **C9 (Identities, primitive contracts, evidence and ghost erasure): DISAGREE**
+  - **Fix:** Move source struct invariant rules (construction/mutation/module-boundary rules) and `ensures` post-cleanup observation timing to Slice 17 or flag them as explicit owner decisions.
+  - **Reason:** Freezes unflagged source-language contract semantics (post-cleanup `ensures` and module-boundary struct invariants) that belong to Slice 17 and require owner approval (b, e).
+
+- **C10 (Frames and ABI): DISAGREE**
+  - **Fix:** Reconcile the claim that structured values lower to byte/provenance memory "once at Memory CFG" with C4's byte/provenance primitives and C8/P4's Core evaluator.
+  - **Reason:** Deferring all layout and byte/provenance semantics to Memory CFG contradicts evaluating C4 byte/pointer contracts and `sizeof`/`alignof` in earlier stages and in the reference evaluator (c, d).
+
+#### **Section 3 (Pipeline and validation contract): DISAGREE**
+- **Fix:** Specify which IR the Lean reference evaluator in P4 executes (Core vs. Memory CFG/BIR) so that layout/byte/ABI behaviors are actually testable against LLVM and LCB.
+- **Reason:** If the Lean evaluator runs on Core (which C3 claims is layout-independent), P4 qualification cannot compare layout-, byte-, or ABI-dependent behavior across the three paths (c, d).
+
+#### **Section 4 (Decided-row revision register): DISAGREE**
+- **Rows disagreed with (`OD126`, `FFI-7`, `Q7.10`):**
+  - **`OD126` & `FFI-7`:** Bundling the new `u8`/`u16`/`u32` native enum tag sizing and payload-alignment algorithm into the target-profile revision hides a substantive layout rule change inside a routine register approval; it should be separated for explicit owner choice alongside the niche rule.
+  - **`Q7.10`:** Claims Entropy's contract is deferred and not invented here, contradicting C5 which freezes `Entropy` as a nullary launch-grant type now.
+
+#### **Section 5 (Owner decisions requested)**
+- **Decision 1: DISAGREE** — Do not approve C1–C10 until the C3/C4/C10 structured-vs-byte memory contradiction, C8's environment oracle signature, and unflagged rules in C1/C2/C5/C6/C7/C9 are fixed.
+- **Decision 2: DISAGREE** — Split native enum tag layout (`OD126`/`FFI-7`) into a separate decision and resolve the `Q7.10`/C5 Entropy contradiction before approving the register.
+- **Decision 3: DISAGREE** — Recommend **no niches, permanently** instead of the single pointer-niche exception. The owner principle is "one form per situation, no duplication" and optimizing for human reading/checking; a special-case enum layout violates uniform tagged representation.
+- **Decision 4: AGREE** — Advancing the proved AArch64 final-image validator to 0.1 and requiring 3-way trace qualification (once the evaluator IR level is specified) aligns with the "know everything" verification goal.
+
+ANSWER: S1=AGREE; C=1,2,3,4,5,6,7,8,9,10; S3=DISAGREE; REG=OD126,FFI-7,Q7.10; DEC=1:DISAGREE,2:DISAGREE,3:DISAGREE,4:AGREE; UNFLAGGED=trap <kind> spellings (C6), OutOfRange conversion error & UTF-8->invalidRange mapping (C2), native enum u8/u16/u32 tag sizing (C3/OD126), array/OrderedMap destruction order (C1), Entropy nullary launch-grant shape (C5), struct invariant boundary & post-cleanup ensures rules (C9)

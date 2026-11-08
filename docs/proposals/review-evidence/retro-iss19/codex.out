@@ -1,0 +1,445 @@
+I could read the repository files. The supplied snapshot and REVIEW.diff contain only the issue filing and changelog, not the described fix or new controls.
+
+scripts/land/train.sh:479: **High** — ISS-0019 remains reproducible. For history A→B→C, with train base A and a clean note on C reviewing only B..C, `verify.sh` returns 0 and this line accepts provenance despite B being unreviewed. I confirmed the verifier’s acceptance in a temporary repository. The member path at line 485 likewise supplies no required base. The requested ancestor checks and regression controls are absent.
+
+VERDICT: REJECT
+Reading additional input from stdin...
+OpenAI Codex v0.166.0
+--------
+workdir: /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/retro-iss19/src
+model: gpt-6.1-sol
+provider: openai
+approval: never
+sandbox: danger-full-access
+reasoning effort: none
+reasoning summaries: none
+session id: 01a1bba2-93e3-77b3-bb4a-1e592ccff9a1
+--------
+user
+RETROACTIVE VERIFICATION PASS of exact SHA 890734b7d1d699598c62f29ebaa6ee6c39d647c3 (Concrete repository), now on main. Its earlier Codex review.sh rounds ran in a sandbox that could not read the repository and judged only the diff, so this pass is the first Codex review with repository access. The current directory is a git-archive copy of 890734b7d1d699598c62f29ebaa6ee6c39d647c3 (no .git); REVIEW.diff is `git diff b6a647beaf..890734b7d1` (the change under review). Read any file you need, and state in your answer that you could read the repository files.
+
+Scope: the fix for ISS-0019 (train.sh review_provenance accepted a clean note whose base..head did not cover the train diff; the fix requires note bases to be ancestor-or-equal of the train base, with controls), landed on main.
+
+Look for correctness bugs, unsoundness (anything that could make a check pass when it should fail, or claim a proof/property that does not hold), owner-decision violations (docs/decisions.md is authoritative), and controls that do not prove what they claim. Do not re-raise documented limitations unless they are wrong. Report findings as `file:line: problem` with a concrete failure scenario and a severity (high/medium/low), and end with exactly one line `VERDICT: ACCEPT` or `VERDICT: REJECT`.
+codex
+I’ll read the diff and repository context, then check the provenance logic, regression controls, and owner-decision constraints.
+exec
+/bin/bash -lc 'cat REVIEW.diff' in /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/retro-iss19/src
+ succeeded in 0ms:
+diff --git a/ISSUES.tsv b/ISSUES.tsv
+index 608ca3769..f622a24eb 100644
+--- a/ISSUES.tsv
++++ b/ISSUES.tsv
+@@ -17,4 +17,5 @@ ISS-0012	2026-11-06	ci	Three decision-recording trains landed on 2026-11-06 afte
+ ISS-0013	2026-11-06	spec	docs/decisions.md:440, the long-term-changes row (decided-project-long-term-2026-11-06), recorded five plan revisions as owner-approved with "option 1: accept all five" but without the owner's answer quoted; found by the retrospective Codex review of ac8e50404b and by Kimi. Structural cause: the recording rule asked for provenance but no review checked it (ISS-0011). Fixed on wip/landing-audit-2026-11-06: the row quotes the owner's answer "1" (2026-11-06), given after the owner asked "is this the best long term design"	R-0544	medium	the row quotes the owner's dated answer and the change is on main	open
+ ISS-0014	2026-11-06	spec	Unconfirmed retrospective second-review findings (Kimi, 2026-11-06) on landed decision rows. docs-2026-11-06 at ac8e50404b: decisions.md:482 records rule detail beside 'the checking rules are left to R-0574' (and PHILOSOPHY.md:143); decisions.md:446 cites README obligations O7/O9 with no referent (ROADMAP.md:168, 258); ROADMAP.md:168-169 A2i/A2c acceptance omits R-0574; ROADMAP.md:13 places native proof in phase E against the LP0 pilot; changelog.d/2026-11-06-direction-docs.md:4 and decisions.md:436 state certificate-discharged trust without the retained assumptions. nht-decision at d20e3ab333: README.md:10 drops the 'safe code' qualifier; decisions.md:530 (and README.md:12, PHILOSOPHY.md:134, the changelog) say termination is known beforehand where a d-site permission leaves it unresolved. Structural cause: these rows landed without the automated review leg and without a second reviewer (ISS-0012). Codex verdicts (2026-11-06, against main 583c9d91, numbered F1-F8): F1 (rule detail beside the R-0574 deferral) REJECTED: the row states a direction and defers the rules explicitly; F2 (O7/O9 with no referent) CONFIRMED, wording: now linked to ConcreteSpec/README.md; F3 (A2i/A2c acceptance omits R-0574) PARTLY: the dependency exists in R-0567, the A2i summary now names the pre-freeze part of R-0574; F4 (native proof placed in phase E against LP0) CONFIRMED, wording: ROADMAP now names LP0 as the bounded exception; F5 (certificate trust without retained assumptions) PARTLY: the row keeps the assumptions, the two summaries now say so; F6 (README drops the safe-code qualifier) CONFIRMED, wording: the README now says accepted safe code; F7 (termination is known where a permission leaves it unresolved) CONFIRMED as misleading wording in decisions.md (the Q13 d-site row heading), README.md, PHILOSOPHY.md and the no-hidden-traps changelog, held for the owner because the phrase is the recorded decision's own; F8 (the structural-cause claim) REJECTED as unsubstantiated by the snapshots alone (the train records are in docs/archive/landing-audit-2026-11-06/ and ISS-0012). F2-F6 fixed on wip/iss0014-wording. F7 answered by the owner 2026-11-08 ("ok go ahead with all the decisions", item 11): the wording "every function has termination evidence with its premises, or a report naming the explicitly permitted unresolved obligations" replaces it in decisions.md, README.md, PHILOSOPHY.md and the no-hidden-traps changelog fragment (decisions.md#decided-2026-11-08-f7); every finding is now dispositioned	R-0544	medium	Codex confirms or rejects each finding with a recorded verdict; confirmed wording changes to recorded decisions go to the owner and land through a normal train	closed
+ ISS-0015	2026-11-06	ci	Sandboxes inherit the caller's git environment. scripts/checks/review_tool.sh isolated git config only, not the repository-locating variables; a pre-push hook of a LINKED worktree exports GIT_DIR=<repo>/.git/worktrees/<name>, so every git -C <sandbox> in the check acted on the caller. On 2026-11-06 `train.sh ci laudit` run from the linked worktree ~agent/audit-records made the hook's review_tool.sh create its test branches (nonff, capped, parse-*) and set core.bare=true in ~agent/audit-clone (kept unchanged as evidence), and push 28 commits to origin refs/notes/concrete-review (tip b4b364f4, pre-leak 5b6add0d) and 12 to refs/notes/concrete-review-findings (tip 21c56796, pre-leak fd3c6451), authored Review Gate, 17:16:49-17:17:43Z, annotating 21 sandbox commits that exist on no remote (first counted as 22, which wrongly included c54679c3, a real commit whose note at 17:21Z is legitimate); no earlier note was deleted or changed and every reader looks notes up by exact SHA, so none can count as provenance for a real commit. lambdaclass has no notes refs. Codex confirmed with a bounded reproducer on concrete-ci-2 at main f9a8c333 (caller refs and refs/notes/* changed: LEAK) and an independent GIT_DIR experiment. landing_script.sh and landing_bot.sh unset only five of git's local variables; legacy_frozen.sh, acceptance.sh, run-at-ref.sh and bot.sh unset none. Second incident, same cause: the first reproducer installed a pre-push hook that ran review_tool.sh; the leaked GIT_DIR made each nested push re-enter that hook, the recursion exhausted fede-256gb (load ~1900) and the OOM killer took down the orchestrator's session. Structural owner: the sandbox helper scripts/checks/lib/git_sandbox.sh (unsets every `git rev-parse --local-env-vars` variable), sourced by every repository-making script; reproducers and tests run with no installed hook, under timeout 120 and a 512-task / 8G systemd scope bound, or a finite cgroup memory.max plus a process limit, and never an unbounded run. Closed 2026-11-07: the fix landed at dbe838488891, where every closure part is checked in Root checks (scripts/checks/run.sh, all 11 pass: sandbox_isolation PASS=13 FAIL=0 with its structural leg over 9 scripts, the two live linked-worktree probes and the leaking control; landing_script PASS=208 FAIL=0 with the linked-worktree, hook-off, foreign-hook and identify refusal legs; also run on concrete-ci-2 at 8e62e377) (train siso from a full clone; reviewed by Codex, rounds clean at 8e62e377, and Kimi; CI run 42424663064; main CI 42425007584 on origin and 42425010605 on lambdaclass, both success). The stray notes were removed from origin by one forward fast-forward commit per ref on its then-current tip, no force: refs/notes/concrete-review d4bdcae22d50 -> dcffeea8e6cd (21 entries removed, 224 untouched at the push; Codex confirmed the list against the earlier tip 8cbb7db253f7, where 223 were untouched, and the one commit between that tip and d4bdcae22d50 only added a legitimate note for 9d6dc01a, so the removal list is identical) and refs/notes/concrete-review-findings 301e929e1bab -> 5d7c6dc3dad5 (11 removed, 105 untouched); the 40 leaked commits wrote 33 entries, one of which they removed themselves (0c04c01c); Codex confirmed the removal list and the tree diffs before the push; lambdaclass has no notes refs and none were created. ~agent/audit-clone is kept unchanged as evidence with LEAK-EVIDENCE-README.txt	R-0544	high	every repository-making script under scripts/ sources git_sandbox.sh (scripts/checks/sandbox_isolation.sh, structural leg); review_tool.sh and legacy_frozen.sh run from a linked worktree with GIT_DIR exported leave the caller's refs, refs/notes/*, core.bare and upstream unchanged while a leaking control is detected (same check, bounded); train.sh and the pre-push hook refuse a linked worktree and train.sh refuses a clone without the repository hook; and the stray notes are removed from origin by a forward fast-forward notes commit whose before and after tips are recorded here	closed
+-ISS-0016	2026-11-07	ci	CI run 42424028055 (train legacydocs at 4d0355a56e, a docs-only change over 93850111) failed Kernel replay (leanchecker): the per-module leg replayed ConcreteSpec.Spec.Ownership, a module renamed to Slice1Ownership by 44ee1231, and stopped on unknown constant 'ConcreteSpec.lookupF'. The job's lake cache had been restored through a restore-key prefix from the cache of train commit 5b894432ad, whose sources predate the rename. Non-fresh `leanchecker ConcreteSpec` picks every .olean on the search path whose name has the prefix (the toolchain's LeanChecker.lean, lines 91-94), so orphaned build files are replayed. Reproducer: build 44ee1231^, build 93850111's sources over that build directory, run scripts/proofs/kernel_replay.sh: FAIL on the Checker/Syntax orphans; a clean build of the same sources passes. Codex confirmed it with that reproducer (2026-11-07). Structural cause: the replay took its module list from the build directory's contents instead of the sources.	scripts/proofs/kernel_replay.sh	high	closed by wip/replay-source-modules: kernel_replay.sh replays a staged library holding exactly the modules the sources declare and checks that the replayed set equals that list; scripts/proofs/lib.sh prunes build files of modules with no source before building; negative controls plant an orphan that fails an unfiltered replay and is ignored by the staged one	closed
+\ No newline at end of file
++ISS-0016	2026-11-07	ci	CI run 42424028055 (train legacydocs at 4d0355a56e, a docs-only change over 93850111) failed Kernel replay (leanchecker): the per-module leg replayed ConcreteSpec.Spec.Ownership, a module renamed to Slice1Ownership by 44ee1231, and stopped on unknown constant 'ConcreteSpec.lookupF'. The job's lake cache had been restored through a restore-key prefix from the cache of train commit 5b894432ad, whose sources predate the rename. Non-fresh `leanchecker ConcreteSpec` picks every .olean on the search path whose name has the prefix (the toolchain's LeanChecker.lean, lines 91-94), so orphaned build files are replayed. Reproducer: build 44ee1231^, build 93850111's sources over that build directory, run scripts/proofs/kernel_replay.sh: FAIL on the Checker/Syntax orphans; a clean build of the same sources passes. Codex confirmed it with that reproducer (2026-11-07). Structural cause: the replay took its module list from the build directory's contents instead of the sources.	scripts/proofs/kernel_replay.sh	high	closed by wip/replay-source-modules: kernel_replay.sh replays a staged library holding exactly the modules the sources declare and checks that the replayed set equals that list; scripts/proofs/lib.sh prunes build files of modules with no source before building; negative controls plant an orphan that fails an unfiltered replay and is ignored by the staged one	closed
++ISS-0019	2026-11-08	ci	scripts/land/train.sh review_provenance accepts a clean head review note without checking that its reviewed range covers the train diff; scripts/review/verify.sh:59 checks `base:` only as 40 hex, and train.sh:479 accepts the clean verdict. On wip/record-signoffs (head 0b9d3cfa3, clean note with base 1547734f8 = wip/record-language), a train of record-signoffs alone would have landed record-language's unreviewed content; record-language has no clean note and lands only by owner sign-off. Not exploited; nothing landed that way. Codex confirmed 2026-11-08 (VERDICT: CONFIRMED) using local bare repositories with no hooks: main A, unreviewed B, C on B, clean note on C based at B; review_provenance accepts C, while a findings note is refused. Structural cause: the note base is validated syntactically, never against the train base.	scripts/land/train.sh review_provenance	high	review_provenance accepts a head note only when the note's base is an ancestor-or-equal of the train's recorded base (origin/main at build), and a member note only when its base is an ancestor-or-equal of the train base; verify.sh takes an explicit --required-base; the landing tool's checks gain this reproducer as a control (clean note based on an unreviewed intermediate commit is refused; a note based at main passes)	open
+diff --git a/changelog.d/2026-11-08-iss-0019.md b/changelog.d/2026-11-08-iss-0019.md
+new file mode 100644
+index 000000000..0c90b36d4
+--- /dev/null
++++ b/changelog.d/2026-11-08-iss-0019.md
+@@ -0,0 +1,3 @@
++### Review-provenance gap filed as ISS-0019 (2026-11-08)
++
++The issue ledger records a high-severity review-provenance gap: `train.sh` accepts a clean review note without checking that its base covers the train diff, so an unreviewed intermediate commit could bypass review and the owner sign-off path. Codex confirmed the defect with a bounded local reproducer; it was not exploited and nothing landed that way.
+
+exec
+/bin/bash -lc "rg -n 'required-base|review_provenance|ISS-0019|note_base' scripts/land/train.sh scripts/review/verify.sh scripts/checks/landing_script.sh docs/decisions.md; cat scripts/review/verify.sh; sed -n '410,550p' scripts/land/train.sh" in /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/retro-iss19/src
+ succeeded in 0ms:
+scripts/land/train.sh:26:#     leg, and a train lands only with review provenance (review_provenance: a verified clean review
+scripts/land/train.sh:474:review_provenance() { # name head
+scripts/land/train.sh:497:  if why="$(review_provenance "$1" "$3")"; then echo "review: $why; not reviewed again"; return 0; fi
+scripts/land/train.sh:500:  why="$(review_provenance "$1" "$3")" || { echo "review: the reviewer exited 0, but $why"; return 1; }
+scripts/land/train.sh:989:  if ! prov="$(review_provenance "$name" "$head")"; then
+#!/usr/bin/env bash
+# R-0544 — does a commit carry a clean review verdict? See docs/REVIEW.md.
+#
+#   scripts/review/verify.sh [--fetch] <commit>
+#
+# Reads the git note that scripts/review/review.sh wrote on <commit> under
+# refs/notes/concrete-review. The verdict counts only for that exact commit: a
+# clean note on an ancestor says nothing about the commits after it.
+#
+#   --fetch  first fetch refs/notes/concrete-review from $REVIEW_REMOTE (default
+#            origin), replacing the local copy (a reader, not a writer).
+#
+# Exit codes: 0 clean; 1 reviewed, not clean (findings or blocked);
+#             2 no note, a malformed note, or a usage error.
+
+set -euo pipefail
+
+NOTES_REF="refs/notes/concrete-review"
+REMOTE="${REVIEW_REMOTE:-origin}"
+FETCH=0
+if [ "${1:-}" = --fetch ]; then FETCH=1; shift; fi
+[ $# -eq 1 ] || { echo "usage: verify.sh [--fetch] <commit>" >&2; exit 2; }
+
+if [ "$FETCH" = 1 ]; then
+  git fetch -q "$REMOTE" "+$NOTES_REF:$NOTES_REF" \
+    || { echo "verify: could not fetch $NOTES_REF from $REMOTE" >&2; exit 2; }
+fi
+
+SHA="$(git rev-parse -q --verify "$1^{commit}")" || { echo "verify: not a commit: $1" >&2; exit 2; }
+NOTE="$(git notes --ref="$NOTES_REF" show "$SHA" 2>/dev/null)" || {
+  echo "$SHA unreviewed: no note under $NOTES_REF"
+  exit 2
+}
+
+# The note must carry each of the six fields review.sh writes exactly once, each well formed. Two
+# optional keys are the landing pipeline's (scripts/land/notes.sh, docs/LANDING.md):
+# `carried-from: <sha>`, written by the landing bot when it carries a clean verdict across a
+# conflict-free rebase, and `order: N`. Any other key, a repeated key, or a line that is not
+# `key: value` makes the note malformed. Keys are matched by name, not position, because notes.sh
+# `put` (the bot's writer) appends `utc` last.
+malformed() {
+  echo "$SHA malformed review note${1:+ ($1)}:"
+  printf '%s\n' "$NOTE" | sed 's/^/  /'
+  exit 2
+}
+# Plain variables F_<key>, not an associative array: macOS /bin/bash is 3.2.
+SEEN=" "
+while IFS= read -r line; do
+  [[ "$line" =~ ^([a-z-]+):\ (.*)$ ]] || malformed "not key: value: '$line'"
+  k="${BASH_REMATCH[1]}" v="${BASH_REMATCH[2]}"
+  case "$SEEN" in *" $k "*) malformed "repeated key $k" ;; esac
+  SEEN="$SEEN$k "
+  printf -v "F_${k//-/_}" '%s' "$v"
+  case "$k" in
+    verdict)      [[ "$v" =~ ^(clean|findings|blocked)$ ]] ;;
+    rounds)       [[ "$v" =~ ^[1-9][0-9]*$ ]] ;;
+    reviewer)     [[ "$v" =~ ^[^[:space:]]+$ ]] ;;
+    utc)          [[ "$v" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$ ]] ;;
+    base)         [[ "$v" =~ ^[0-9a-f]{40}$ ]] ;;
+    pieces)       [[ "$v" =~ ^[0-9]+$ ]] ;;
+    carried-from) [[ "$v" =~ ^[0-9a-f]{40}$ ]] ;;
+    order)        [[ "$v" =~ ^[0-9]+$ ]] ;;
+    *)            false ;;
+  esac || malformed "bad $k"
+done <<< "$NOTE"
+for k in verdict rounds reviewer utc base pieces; do
+  case "$SEEN" in *" $k "*) ;; *) malformed "missing $k" ;; esac
+done
+
+field() { local n="F_${1//-/_}"; printf '%s' "${!n:-}"; }
+VERDICT="$(field verdict)"
+CARRIED=""; [ -z "$(field carried-from)" ] || CARRIED=", carried from $(field carried-from)"
+echo "$SHA $VERDICT (round $(field rounds), reviewer $(field reviewer), $(field utc), base $(field base), $(field pieces) piece(s)$CARRIED)"
+[ "$VERDICT" = clean ] && exit 0
+exit 1
+    refuse_fork "$REMOTE"
+    # One ref per run, created only if absent (no --force), so concurrent checks never share one.
+    # Created only if ABSENT. An empty lease is not enough: git reports a ref that already holds
+    # this SHA as "up to date" (success) before it looks at the lease, so ownership is taken only
+    # from --porcelain's `*` (new ref) line; `=` is another run's ref and gets a fresh name.
+    local try ok=0 out
+    for try in 1 2 3; do
+      ref="${LAND_REMOTE_REF_FIRST:-wip/land-$name-${head:0:12}-$$-$RANDOM$RANDOM}"; LAND_REMOTE_REF_FIRST=""
+      out="$(git push --porcelain --force-with-lease="refs/heads/$ref:" "$REMOTE" "$head:refs/heads/$ref" 2>&1)" || true
+      case $'\n'"$out"$'\n' in *$'\n*\t'"$head:refs/heads/$ref"$'\t'*) ok=1; break ;; esac
+      echo "remote: refs/heads/$ref was not created by this run (${out//$'\n'/ | }); trying another name"
+    done
+    [ "$ok" = 1 ] || return 1
+    # Removed even when the leg is interrupted. A deletion publishes nothing, so it skips the gates
+    # (the hook's wip tier exempts only non-deletions), and the lease removes only this run's ref.
+    trap 'CONCRETE_SKIP_GATES=1 git push -q --force-with-lease="refs/heads/'"$ref"':'"$head"'" "'"$REMOTE"'" ":refs/heads/'"$ref"'" 2>/dev/null || true' EXIT
+  fi
+  local rc=0 out
+  out="$("$runner" "$ref" "${LAND_FULL_GATES_CMD:-lake build && bash scripts/checks/run.sh}" 2>&1)" || rc=$?
+  printf '%s\n' "$out"
+  if [ "${LAND_REMOTE_PUSH:-1}" = 1 ]; then
+    # The normal-path deletion, logged; the EXIT trap above stays as the backstop for interruptions.
+    local dout
+    # The backstop is disarmed BEFORE this one attempt, which is never retried: a push that fails
+    # may still have deleted the ref, and a later run may have re-created the name at the same SHA,
+    # where a retry's lease would match. An unconfirmed deletion is reported and left alone.
+    trap - EXIT
+    if dout="$(CONCRETE_SKIP_GATES=1 git push --force-with-lease="refs/heads/$ref:$head" "$REMOTE" ":refs/heads/$ref" 2>&1)"; then
+      echo "remote: deleted refs/heads/$ref"
+    else
+      echo "remote: deletion of refs/heads/$ref NOT confirmed; left for a human (not retried): ${dout//$'\n'/ | }"
+    fi
+  fi
+  case "$out" in *"sha=$head"*) ;; *) echo "remote: the runner did not report running ${head:0:10}; no result"; return 1 ;; esac
+  return "$rc"
+}
+
+# The gate host (heavy legs default to concrete-ci-2, docs/LANDING.md "Gate host"):
+# LAND_GATES_HOST if set (empty = none), else `git config land.gatesHost`. With a gate host the impact
+# leg runs there through scripts/land/gates_remote.sh, for the exact head SHA, and its pass is
+# attested so the `ci` push's hook reuses it. An unreachable host is INCOMPLETE and fails the check;
+# running the gates on this machine instead takes the explicit `check --local-gates`.
+gates_host() {
+  if [ -n "${LAND_GATES_HOST+x}" ]; then echo "$LAND_GATES_HOST"
+  else git config --get land.gatesHost 2>/dev/null || true; fi
+  return 0
+}
+
+# The review command: LAND_REVIEW_CMD, else scripts/review/review.sh, called with --base --head.
+# Empty when there is neither, which `check` refuses (it never skips the leg silently).
+review_cmd() {
+  if [ -n "${LAND_REVIEW_CMD:-}" ]; then echo "$LAND_REVIEW_CMD"
+  elif [ -f scripts/review/review.sh ]; then echo "bash scripts/review/review.sh"; fi
+  return 0
+}
+
+# REVIEW PROVENANCE (fail closed; docs/LANDING.md, "check" and "land"). A train is reviewed when its
+# head carries a clean review note, or when its head carries no review note and every member carries
+# one at its exact recorded SHA (each member was reviewed at its own head: the landing bot's trains,
+# and a train rebuilt from reviewed branches). Every note is judged by scripts/review/verify.sh, on
+# $REMOTE's notes (fetched first, replacing the local copy, as verify.sh --fetch does): an absent,
+# malformed, blocked or findings note qualifies nothing, and a head note that is not clean is not
+# overridden by its members. Prints what qualified; on failure prints why and returns 1.
+VERIFY="$SELF_DIR/../review/verify.sh"
+review_provenance() { # name head
+  local name="$1" head="$2" out m n=0 bad=""
+  [ -f "$VERIFY" ] || { echo "no review verifier ($VERIFY is missing)"; return 1; }
+  git fetch -q "$REMOTE" "+refs/notes/concrete-review:refs/notes/concrete-review" 2>/dev/null \
+    || { echo "could not fetch refs/notes/concrete-review from $REMOTE"; return 1; }
+  if out="$(bash "$VERIFY" "$head" 2>&1)"; then echo "the head ${head:0:10} carries a clean review note"; return 0; fi
+  if git notes --ref=refs/notes/concrete-review show "$head" >/dev/null 2>&1; then
+    echo "the head's review note does not qualify: ${out//$'\n'/ }"; return 1
+  fi
+  for m in $(state_get_soft "$name" members | tr ',' ' '); do
+    n=$((n + 1))
+    out="$(bash "$VERIFY" "${m##*@}" 2>&1)" || bad="$bad; member ${m%@*}: ${out//$'\n'/ }"
+  done
+  [ "$n" -gt 0 ] || { echo "the head ${head:0:10} has no review note and the train records no members"; return 1; }
+  [ -z "$bad" ] || { echo "the head ${head:0:10} has no review note, and not every member has a clean one$bad"; return 1; }
+  echo "the head has no review note; every member ($n) carries a clean one at its exact SHA"
+}
+
+# Codex review leg. It passes without running the reviewer when the train already has review
+# provenance. Otherwise it runs the review command; a non-zero exit fails, and so does a zero exit
+# that leaves no provenance (no note, or a malformed, blocked or findings note at the head).
+review_leg() { # name base head
+  local why
+  if why="$(review_provenance "$1" "$3")"; then echo "review: $why; not reviewed again"; return 0; fi
+  echo "review: $why; running the reviewer"
+  bash -c "$(review_cmd) --base $2 --head $3" || return $?
+  why="$(review_provenance "$1" "$3")" || { echo "review: the reviewer exited 0, but $why"; return 1; }
+  echo "review: $why"
+}
+
+cmd_check() {
+  local name="" remote=1 review=1 local_gates=0
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --no-remote) remote=0 ;;
+      --no-review) review=0 ;;
+      --local-gates) local_gates=1 ;;
+      -*) die "check: unknown option $1" ;;
+      *) name="$1" ;;
+    esac; shift
+  done
+  valid_name "$name"
+  require_train_checkout "$name"
+  stage_start
+  local base head; base="$(state_get "$name" base)"; head="$(git rev-parse HEAD)"
+  # A new check withdraws the previous one: a failing re-run must not leave an old pass standing.
+  [ "$DRY" = 1 ] || state_set "$name" checked ""
+  if [ "$remote" = 1 ] && [ -z "$(remote_runner)" ]; then remote=0; fi
+  if [ "$review" = 1 ] && [ -z "$(review_cmd)" ]; then
+    log_row "$name" check failed "no review command"
+    die "check: no review command (LAND_REVIEW_CMD is unset and scripts/review/review.sh is missing); the review leg is required and is never skipped silently. Restore the reviewer, or pass --no-review explicitly (land still requires review provenance)"
+  fi
+  local ghost=""; [ "$local_gates" = 1 ] || ghost="$(gates_host)"
+  local impact_cmd=(bash "$SELF_DIR/impact_gates.sh") impact_where="here"
+  if [ -n "$ghost" ]; then impact_cmd=(bash "$SELF_DIR/gates_remote.sh" --host "$ghost"); impact_where="on $ghost"
+  elif [ "$local_gates" = 0 ]; then note "no gate host configured (LAND_GATES_HOST / git config land.gatesHost): the impact gates run on this machine"; fi
+  # The attestation describes one run; a new check withdraws the previous one before it starts.
+  [ "$DRY" = 1 ] || rm -f "$(git rev-parse --git-path concrete-prepush-remote-record)" \
+    "$(git rev-parse --git-path concrete-prepush-remote-record).log"
+
+  # The legs are independent, so they run AT THE SAME TIME and are all collected (LANDING.md,
+  # "Pipelining"): the impact selection over exactly the range the `ci` push will present
+  # (base..head on ci/<name>, so that push reuses the hook's record), the remote full set, and the
+  # Codex review. Any failing leg fails the check.
+  if [ "$DRY" = 1 ]; then
+    note "(dry-run) would run in parallel: impact gates $impact_where (hook line 'refs/heads/train/$name $head refs/heads/ci/$name $base')"
+    if [ "$remote" = 1 ]; then note "(dry-run)   + remote full gates: $(remote_runner) <ref of ${head:0:10}> '${LAND_FULL_GATES_CMD:-lake build && bash scripts/checks/run.sh}'"; fi
+    if [ "$review" = 1 ]; then note "(dry-run)   + review: the train's review provenance, else $(review_cmd) --base $base --head $head"; fi
+    return 0
+  fi
+  local dir="$STATE_ROOT/$name/check-${head:0:12}"; mkdir -p "$dir"
+  local t0; t0="$(date +%s)"
+  legs_start impact "$dir/impact.log" "${impact_cmd[@]}" --base "$base" --head "$head" \
+    --src-ref "refs/heads/train/$name" --dst-ref "refs/heads/ci/$name"
+  if [ "$remote" = 1 ]; then legs_start remote "$dir/remote.log" remote_leg "$name" "$head"; fi
+  if [ "$review" = 1 ]; then legs_start review "$dir/review.log" review_leg "$name" "$base" "$head"; fi
+  legs_wait
+
+exec
+/bin/bash -lc "rg -n 'provenance|review note|review.*base' scripts/checks/landing_script.sh; sed -n '1,85p' docs/decisions.md; nl -ba scripts/land/train.sh | sed -n '474,491p'; nl -ba scripts/review/verify.sh | sed -n '54,80p'" in /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/retro-iss19/src
+ succeeded in 0ms:
+106:# A review note as scripts/review/review.sh writes it (scripts/review/verify.sh's six keys), published
+126:# The review command of every check (LAND_REVIEW_CMD): called with --base B --head H, it logs the
+1137:echo "=== review: check fails closed, land requires review provenance ==="
+1166:    [ "$r" = 1 ] && has "$o" "has no review provenance" && has "$o" "${6:-}" && [ "$(git ls-remote origin refs/heads/main | cut -f1)" = "$MR" ] \
+1172:prov_leg "no review note anywhere" none none none refuse "member brv1:"
+1175:  prov_leg "a $m head note, whatever the members" "$m" clean clean refuse "the head's review note does not qualify"
+1179:prov_leg "a clean head note" clean none none pass "the head ${HR:0:10} carries a clean review note"
+1180:# check over reviewed members takes the members' provenance and does not run the reviewer again.
+# Owner Decisions
+
+This chapter records the language questions that only the project owner decides, OD1 to OD157 of
+[the decision record](#owner-decisions), and how each was answered. Every one is answered:
+OD1 to OD32 and OD47 on 2026-10-29, the entries OPEN-33 to OPEN-157 on 2026-10-31 and 2026-11-01
+(OD94 was withdrawn: MOD-1 already refuses its case, bug 337), and the questions raised while
+recording them on 2026-11-02. The entry IDs are retired and never
+reused; their anchors stay, so links to them land on the answer.
+
+The answers of 2026-10-31, 2026-11-01 and 2026-11-02 are recorded here before the rules that carry them are written.
+The chapters state these decided rules now (owner revision, 2026-11-03), before being rewritten as Lean, the only normative source of the language
+([ROADMAP.md](../ROADMAP.md#phases), phases B–D); until then, where a chapter still describes
+the earlier behaviour, the answer below governs, and the code follows as its new-compiler slice lands.
+
+The shape of Core was approved provisionally on 2026-11-05 ([stage A2a](#decided-2026-11-05)): it binds the design, and the owner freezes Core at stage A2c, after the four design theorems are proved against the proposed `Spec.lean` and the integration stage A2i (2026-11-06) is accepted. The project and architecture decisions are recorded here too, [below](#decided-project).
+
+<a id="waiting-for-the-owner"></a>
+## Waiting for the owner
+
+Links only; each item's text lives where it is linked.
+
+1. The spec read and the Core freeze, A2c ([queue](../ROADMAP.md#the-queue)).
+2. The items the reviews leave open until they are fully dispositioned: SPARK review items 4(b) and
+   4(c) ([SPARK review](proposals/SPARK.md)). Quantitative step and time bounds were decided on
+   2026-11-07 ([row](#decided-2026-11-07-step-bounds)); the reviews' remaining disposition is unchanged.
+
+A decided proposal moves to `docs/archive/<topic>-<date>/`.
+
+<a id="recent-decisions"></a>
+## Recent decisions
+
+Each row records a decision and its reason. A language rule itself is its Lean definition in
+[ConcreteSpec/](../ConcreteSpec/), which governs once it lands.
+
+- The core statement ([row](#decided-project-core-statement)).
+- Proof infrastructure from the first commit ([row](#decided-project-proof-infrastructure)).
+- No hidden traps, and termination evidence or a report of the permitted unresolved obligations ([row](#decided-project-no-hidden-traps)).
+- The `checked_*`, `#[proof]` and `#[may_not_terminate]` spellings ([row](#decided-project-no-hidden-traps)).
+- The per-function facts report and query ([row](#decided-project-facts-report)).
+- The predictable policy ([row](#decided-project-predictable-policy)).
+- Reproducible builds from slice 0 ([row](#decided-project-reproducible-builds)).
+- The spec layout: one library in modules ([row](#decided-project-long-term-2026-11-06)).
+- A minimal root ([row](#decided-project-lean-root)).
+- The LCB joins slice 0 ([row](#decided-project-proof-infrastructure)).
+- Policies and declared assumptions in `Concrete.toml` ([row](#decided-project-concrete-toml)).
+- `legacy/` kept until the new compiler implements a full real program such as RocksDB or ethrex ([row](#decided-project-restart)).
+- OS-level sandboxing is outside the compiler's scope ([row](#decided-project-os-sandboxing)).
+- Diagnostics are checker outputs ([row](#decided-project-diagnostics-2026-11-06)).
+- Heap facts and memory policies ([row](#decided-project-memory-2026-11-06)).
+- Secrets, noninterference and constant time ([row](#decided-project-infoflow-2026-11-06)).
+- The new compiler pipeline ([row](#decided-project-pipeline-2026-11-06)).
+- Thin vertical slices and their order ([row](#decided-project-vertical-slices-2026-11-06)).
+- What Concrete takes from SPARK ([row](#decided-project-spark-2026-11-06)).
+- Trap line, default layout and spec version ([row](#decided-project-runtime-2026-11-06)).
+- The slice-0 surface: `concrete build`, `concrete facts`, unsupported-form refusals, leading zeros ([row](#decided-slice0-surface-2026-11-06)).
+- The outside readers' model-first ordering ([row](#decided-project-outside-readers)).
+- Step bounds: the model at slices 4–5 and proofs at slice 8 ([row](#decided-2026-11-07-step-bounds)).
+- All seven showcases and their slices ([row](#decided-2026-11-07-showcases)).
+- Concurrency at final slice 28, then ethlambda and the encrypted tunnel ([row](#decided-2026-11-07-final-slices)).
+- Struct invariants in source at slice 17 ([revision](#decided-project-spark-2026-11-06)).
+- Test runner at slice 8, formatter at 17, LSP later ([row](#decided-2026-11-07-tools)).
+- Flagship and compiler speed tracking ([row](#decided-2026-11-07-performance)).
+- Stack bounds from slice 0 and randomness from slice 6 ([row](#decided-2026-11-07-stack-randomness)).
+- Where the decisions and their work are tracked, with a home and a gate per item ([row](#decided-2026-11-07-tracking)).
+- The trusted-base statement, differential fuzzer, sanitizers, binary-size tracking and frozen JSON schema ([row](#decided-2026-11-07-early-evidence)).
+- The documentation and tooling cleanup is approved, not performed by that record ([row](#decided-2026-11-07-cleanup)).
+- The shared foundation is written and frozen in Lean first, then each slice adds its rules ([row](#decided-2026-11-07-foundation-first)).
+- The Lean foundation, contracts C1–C10, and the answers to its sixteen questions ([row](#decided-2026-11-08-foundation)).
+- A std-per-slice table in the roadmap; no user-guide chapter per slice for now; the written grammar before the parser; a speed target against C at slice 16 ([row](#decided-2026-11-08-std-table)).
+- Capabilities stay as decided, `with(...)` permission sets plus grant values; confirmed, no revision ([row](#decided-2026-11-08-capabilities-kept)).
+- Every branch gets an agy review too ([row](#decided-project-review)).
+- Eleven plan and process decisions: UBSan dropped, a complete adapter theorem, smaller landing scripts, Claude's quota on the critical path, the front end now, one decisions writer, risk-capped reviews, one clones folder, a later no-libc runtime, a compile-speed budget and the termination wording ([row](#decided-2026-11-08-eleven)).
+
+<a id="rules-a-decision-changed"></a>
+## Rules a decision has changed
+
+The chapters were brought into line on 2026-11-03 under the owner's explicit prose-cleanup
+revision of the Lean-only source decision. The table records the audit and its disposition; an
+undecided dependency remains explicitly linked to the target Core proposal rather than designed here.
+
+| Rules | What the audit found | Governing decision | Disposition |
+|---|---|---|---|
+| TRUST-9 | `main` receives a root resource, splits it, and resources descend from it. | authority rule 12; revised OD8/38 | Fixed in prose 2026-11-03. |
+| TRUST-8/9/10 | Tokens model resources, effects appear as token parameters, and there is no separate effect system. | Authority introduction and rules 1–2, 8, 11 | Fixed in prose 2026-11-03. |
+| TRUST-D1/4 | Capabilities include `File`, `Console`, and `Random`. | authority rule 13 | Fixed in prose 2026-11-03. |
+   474	review_provenance() { # name head
+   475	  local name="$1" head="$2" out m n=0 bad=""
+   476	  [ -f "$VERIFY" ] || { echo "no review verifier ($VERIFY is missing)"; return 1; }
+   477	  git fetch -q "$REMOTE" "+refs/notes/concrete-review:refs/notes/concrete-review" 2>/dev/null \
+   478	    || { echo "could not fetch refs/notes/concrete-review from $REMOTE"; return 1; }
+   479	  if out="$(bash "$VERIFY" "$head" 2>&1)"; then echo "the head ${head:0:10} carries a clean review note"; return 0; fi
+   480	  if git notes --ref=refs/notes/concrete-review show "$head" >/dev/null 2>&1; then
+   481	    echo "the head's review note does not qualify: ${out//$'\n'/ }"; return 1
+   482	  fi
+   483	  for m in $(state_get_soft "$name" members | tr ',' ' '); do
+   484	    n=$((n + 1))
+   485	    out="$(bash "$VERIFY" "${m##*@}" 2>&1)" || bad="$bad; member ${m%@*}: ${out//$'\n'/ }"
+   486	  done
+   487	  [ "$n" -gt 0 ] || { echo "the head ${head:0:10} has no review note and the train records no members"; return 1; }
+   488	  [ -z "$bad" ] || { echo "the head ${head:0:10} has no review note, and not every member has a clean one$bad"; return 1; }
+   489	  echo "the head has no review note; every member ($n) carries a clean one at its exact SHA"
+   490	}
+   491	
+    54	  case "$k" in
+    55	    verdict)      [[ "$v" =~ ^(clean|findings|blocked)$ ]] ;;
+    56	    rounds)       [[ "$v" =~ ^[1-9][0-9]*$ ]] ;;
+    57	    reviewer)     [[ "$v" =~ ^[^[:space:]]+$ ]] ;;
+    58	    utc)          [[ "$v" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$ ]] ;;
+    59	    base)         [[ "$v" =~ ^[0-9a-f]{40}$ ]] ;;
+    60	    pieces)       [[ "$v" =~ ^[0-9]+$ ]] ;;
+    61	    carried-from) [[ "$v" =~ ^[0-9a-f]{40}$ ]] ;;
+    62	    order)        [[ "$v" =~ ^[0-9]+$ ]] ;;
+    63	    *)            false ;;
+    64	  esac || malformed "bad $k"
+    65	done <<< "$NOTE"
+    66	for k in verdict rounds reviewer utc base pieces; do
+    67	  case "$SEEN" in *" $k "*) ;; *) malformed "missing $k" ;; esac
+    68	done
+    69	
+    70	field() { local n="F_${1//-/_}"; printf '%s' "${!n:-}"; }
+    71	VERDICT="$(field verdict)"
+    72	CARRIED=""; [ -z "$(field carried-from)" ] || CARRIED=", carried from $(field carried-from)"
+    73	echo "$SHA $VERDICT (round $(field rounds), reviewer $(field reviewer), $(field utc), base $(field base), $(field pieces) piece(s)$CARRIED)"
+    74	[ "$VERDICT" = clean ] && exit 0
+    75	exit 1
+
+exec
+/bin/bash -lc "python3 - <<'PY'
+import pathlib, tempfile, subprocess, os
+src=pathlib.Path.cwd()
+with tempfile.TemporaryDirectory(prefix='iss19-review-') as d:
+ def run(*args):
+  return subprocess.check_output(args,cwd=d,text=True).strip()
+ run('git','init','-q'); run('git','config','user.name','Review'); run('git','config','user.email','review@example.invalid')
+ for label in ['A','B','C']:
+  pathlib.Path(d,'file').write_text(label)
+  run('git','add','file'); run('git','commit','-qm',label)
+  if label=='B': base=run('git','rev-parse','HEAD')
+ head=run('git','rev-parse','HEAD')
+ note=f'verdict: clean\\nrounds: 1\\nreviewer: codex\\nutc: 2026-11-08T00:00:00Z\\nbase: {base}\\npieces: 1'
+ run('git','notes','--ref=concrete-review','add','-m',note,head)
+ p=subprocess.run(['bash',str(src/'scripts/review/verify.sh'),head],cwd=d,text=True,capture_output=True)
+ print('A = train base; B = unreviewed intermediate; C = head reviewed only over B..C')
+ print('Verifier exit:',p.returncode); print(p.stdout)
+PY" in /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/retro-iss19/src
+ succeeded in 0ms:
+A = train base; B = unreviewed intermediate; C = head reviewed only over B..C
+Verifier exit: 0
+aa5df8687cc87ea98cfd8d1b087eeced825df8df clean (round 1, reviewer codex, 2026-11-08T00:00:00Z, base 0b7f4033c13c412b7290ca2ffeed719fdaa9a302, 1 piece(s))
+
+
+codex
+I could read the repository files. The supplied snapshot and REVIEW.diff contain only the issue filing and changelog, not the described fix or new controls.
+
+scripts/land/train.sh:479: **High** — ISS-0019 remains reproducible. For history A→B→C, with train base A and a clean note on C reviewing only B..C, `verify.sh` returns 0 and this line accepts provenance despite B being unreviewed. I confirmed the verifier’s acceptance in a temporary repository. The member path at line 485 likewise supplies no required base. The requested ancestor checks and regression controls are absent.
+
+VERDICT: REJECT
+tokens used
+21,152

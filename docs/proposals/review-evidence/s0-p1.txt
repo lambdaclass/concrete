@@ -1,0 +1,682 @@
+Review a change to the Concrete compiler's slice-0 gates (Python 3.9-compatible scripts run inside gdb and Apple LLDB, bash, a GitHub workflow). Context:
+- scripts/checks/lib/stack_bound.py is a fail-closed static stack-bound analysis over llvm-objdump disassembly of a linked executable (x86-64 Intel syntax, AArch64). The bound is the deepest stack byte below main's entry stack pointer that the stack pointer reaches or any instruction addresses. NEW: it takes a TARGET (x86_64-linux, aarch64-macos, aarch64-linux) with a red zone (128, 128, 0) and refuses an access deeper than the red zone below the current stack pointer (taking the larger depth of before/after the instruction, for pre/post-indexed and push forms). --ranges also prints `redzone N`.
+- The run check single-steps the Concrete-owned code under gdb (stack_measure.py, x86-64 Linux) or LLDB (stack_measure_lldb.py, aarch64-macos) and must stay within the bound. It used to track only the stack pointer, so a red-zone access (e.g. `mov qword ptr [rsp-0x80], 0` with sp unchanged) measured 0. NEW: lib/stack_access.py computes each stepped instruction's memory operand effective addresses (the lowest byte of an access is its address) and counts the lowest one within 8 MiB below sp0; an access deeper than the red zone below sp is an error.
+- slice0_native.sh gains `control DIRECTORY` (builds control.s with the examples' exact policy); slice0_artifacts.sh adds static controls and a linked run control: main stores at [sp-128] and returns 7; analysis must give bound 128, the run must measure 128, and with a 120-byte red zone the run must give an error.
+- Gate 9 (slice0_trusted_base.sh) replaced a GNU-only `sed '0,/re/...'` with POSIX awk, and its CI job now runs on ubuntu-latest and macos-15.
+Review for correctness defects: wrong address arithmetic, operand forms the parser mishandles silently (rather than raising), ways a measurement could be under-counted, the control passing without testing the new behaviour, LLDB/gdb API misuse, bash errors. Format each finding as file:line, defect, concrete failing scenario; label preferences "preference". End with exactly one line: VERDICT: ACCEPT or VERDICT: FINDINGS.
+--- DIFF ---
+diff --git a/.github/workflows/slice0.yml b/.github/workflows/slice0.yml
+index 957a6865..0dbd268f 100644
+--- a/.github/workflows/slice0.yml
++++ b/.github/workflows/slice0.yml
+@@ -67,8 +67,16 @@ jobs:
+           if-no-files-found: error
+ 
+   trusted-base:
+-    name: Slice 0 trusted base (gate 9)
+-    runs-on: ubuntu-latest
++    name: Slice 0 trusted base (gate 9, ${{ matrix.arch }})
++    strategy:
++      fail-fast: false
++      matrix:
++        include:
++          - arch: x86-64
++            runner: ubuntu-latest
++          - arch: aarch64-macos
++            runner: macos-15
++    runs-on: ${{ matrix.runner }}
+     timeout-minutes: 60
+     permissions:
+       contents: read
+diff --git a/Concrete/README.md b/Concrete/README.md
+index a0522a9a..6c7da89b 100644
+--- a/Concrete/README.md
++++ b/Concrete/README.md
+@@ -581,7 +581,7 @@ The CLI is `concrete facts FILE [FN]` and `concrete build FILE -o OUT` (owner, 2
+ 9. **Trusted base** (owner, 2026-11-07): a golden test that `concrete facts` prints exactly the spec's premise list, so a premise added, removed or reworded anywhere fails until the golden is updated with it. Implemented provisionally in `scripts/checks/slice0_trusted_base.sh`: until `concrete facts` exists, `scripts/checks/slice0_trusted_base.lean` prints `Premises.report`: the premise registry `Concrete/Premises.lean`, the sorted axioms of each headline theorem (`Premises.theorems`) and each axiom's type; the gate appends the Lean toolchain and the Lake pins, and the result must equal `tests/golden/slice0_trusted_base.txt` byte for byte. The README's open-premise table must equal the registry's rendering (`Premises.tableRow`). Controls cover the comparison, a failing printer, the axiom collection and a drifted table. The statements are text until `FrontendPremises` and `NativePremises` land as Lean structures; each entry then names its field.
+ 10. **Sanitizers** (owner, 2026-11-07; UBSan dropped by the owner, 2026-11-08; implemented in `scripts/checks/slice0_artifacts.sh`): every LLVM example also runs built with ASan in CI, and must give the same observation with no sanitizer report. ASan instruments only functions marked `sanitize_address`, which clang's C front end adds and the printed IR lacks, so the sanitizer build adds it to every definition (`slice0_native.sh sanitize`); a control body with an out-of-bounds load must be reported. There is no UBSan leg: UBSan's checks are inserted by clang's C front end, so on LLVM IR input it checks nothing. No C is compiled in slice 0, and the LLVM-level undefined behaviour of the printed IR (poison, `unreachable`) stays P_print's.
+ 11. **Binary size** (owner, 2026-11-07; implemented, same script): the size of each example's executable (bytes and text size, pinned `llvm-size`), per backend and target, is recorded per run in `sizes.tsv`, uploaded with the job. Report-only: it never fails a run. **Compile time** (owner, 2026-11-08; same script, report-only): each example's emit step (the Lean emitter, Lean start-up included) and native step (clang and LCB's command line) in wall-clock milliseconds, next to its budget (the step's time bound), in `compile_times.tsv`.
+-12. **Stack bound** (owner, 2026-11-07; implemented in the same script and `lib/stack_bound.py`; the `aarch64-macos` run check with LLDB, 2026-11-08): a stack-bound fact for each example, derived from the final artifact (the linked executable, not the IR) for both backends, and checked against a run. The analysis follows every path of the Concrete-owned code, instruction by instruction from an explicit set of modelled instructions, (`main`, `concrete_rt_write_all`, `concrete_body`) over the disassembly's control-flow graph, tracking the stack and frame pointers' depth below `main`'s entry and every byte addressed relative to them (so the red zone), and fails closed on anything it does not model (an instruction outside the set, another stack-pointer write, frame- or link-register writeback, an indirect branch or call, a stack pointer copied out, an indexed stack address, a stack read of bytes the function has not itself written on every path since its last call (so no stale saved frame pointer is ever loaded), a saved slot read other than by the modelled restore, two depths meeting, recursion, a call to a function neither owned nor a PLT/stub). The external calls (`write`, `_exit`, `abort`) are listed with the depth at their entry; their own use, and that `_exit` and `abort` do not return, are the libc premise. On x86-64 Linux the run check single-steps the owned code under the pinned gdb and requires the measured stack-pointer depth to be within the bound, for a complete run only (stopped first at `main`, back at each external call's return address, no signal, the expected exit status). On Mach-O each stub entry's imported symbol comes from the indirect symbol table (`llvm-objdump --macho --indirect-symbols`), since the disassembly names only the `__stubs` section. On `aarch64-macos` the run check is the same, under Apple's LLDB (`/usr/bin/lldb`, `lib/stack_measure_lldb.py`; an external call's return address is the link register); LLDB is not pinned (Apple's signed debugserver is the only one allowed to attach), so its version is printed in the gate log. `stack.tsv` records bound, measurement and externals.
++12. **Stack bound** (owner, 2026-11-07; implemented in the same script and `lib/stack_bound.py`; the `aarch64-macos` run check with LLDB, 2026-11-08): a stack-bound fact for each example, derived from the final artifact (the linked executable, not the IR) for both backends, and checked against a run. The analysis follows every path of the Concrete-owned code, instruction by instruction from an explicit set of modelled instructions, (`main`, `concrete_rt_write_all`, `concrete_body`) over the disassembly's control-flow graph, tracking the stack and frame pointers' depth below `main`'s entry and every byte addressed relative to them (so the red zone), refusing an access deeper than the target's red zone below the stack pointer (128 bytes on x86-64 System V and on Apple arm64, none under AAPCS64 on Linux: deeper bytes may be overwritten by a signal handler), and fails closed on anything it does not model (an instruction outside the set, another stack-pointer write, frame- or link-register writeback, an indirect branch or call, a stack pointer copied out, an indexed stack address, a stack read of bytes the function has not itself written on every path since its last call (so no stale saved frame pointer is ever loaded), a saved slot read other than by the modelled restore, two depths meeting, recursion, a call to a function neither owned nor a PLT/stub). The external calls (`write`, `_exit`, `abort`) are listed with the depth at their entry; their own use, and that `_exit` and `abort` do not return, are the libc premise. On x86-64 Linux the run check single-steps the owned code under the pinned gdb and requires the measured depth to be within the bound, for a complete run only (stopped first at `main`, back at each external call's return address, no signal, the expected exit status). The measured depth is the lowest of the stack pointer and every stack byte a stepped instruction addresses (`lib/stack_access.py` evaluates each memory operand), so a red-zone access is counted, and one deeper than the red zone is an error. A control links a `main` that stores at the red zone's edge without moving the stack pointer and requires bound 128 and measured 128; with a 120-byte red zone the same run gives no measurement. On Mach-O each stub entry's imported symbol comes from the indirect symbol table (`llvm-objdump --macho --indirect-symbols`), since the disassembly names only the `__stubs` section. On `aarch64-macos` the run check is the same, under Apple's LLDB (`/usr/bin/lldb`, `lib/stack_measure_lldb.py`; an external call's return address is the link register); LLDB is not pinned (Apple's signed debugserver is the only one allowed to attach), so its version is printed in the gate log. `stack.tsv` records bound, measurement and externals.
+ 
+ With the front end (owner, 2026-11-07): gate 5's random-program fuzzer compares the native executables with the Lean evaluator, and a JSON schema generated from the Lean types of the `facts` output has goldens. Each gate joins `required-checks.txt` when the compiler lands.
+ 
+diff --git a/changelog.d/2026-11-08-slice0.md b/changelog.d/2026-11-08-slice0.md
+new file mode 100644
+index 00000000..f5c8f197
+--- /dev/null
++++ b/changelog.d/2026-11-08-slice0.md
+@@ -0,0 +1,21 @@
++### Slice 0: the proof spine through two native backends (2026-11-08)
++
++`Concrete/` holds the slice-0 compiler (PROVISIONAL, ROADMAP B0; `Concrete/README.md` is its
++design and gate list). The hand-written BIR examples run through the LLVM path and the LCB path
++(`Concrete/Backend/`), and each executable's observation is compared with the BIR semantics on
++x86-64 Linux and AArch64 macOS (`.github/workflows/slice0.yml`). The BIR → LCB-IR adapter is
++proved against LCB's own semantics, and the backend contract is complete: `LCB.emit`
++represents adaptation failure, `Proof.emit_correct`, `Proof.artifact_of_emit_error` and
++`Proof.artifact_correct` state that a refusal produces no artifact and every artifact comes from a
++correct `emit`, so `P_adapter` is retired. The premises live in one registry
++(`Concrete/Premises.lean`); the trusted-base gate compares it, the headline theorems' axioms, the
++toolchain and the Lake pins with `tests/golden/slice0_trusted_base.txt`, on both platforms.
++The artifact gates add ASan (UBSan dropped by the owner: on IR input it checks nothing),
++report-only binary size and compile time, and a stack bound derived from the linked executable's
++disassembly, fail closed (`scripts/checks/lib/stack_bound.py`), checked by single-stepping a run
++under gdb (x86-64 Linux) or LLDB (aarch64-macos). The run check counts every stack byte a stepped
++instruction addresses, not only the stack pointer, so red-zone use is measured; the analysis
++refuses an access deeper than the target's red zone (128 bytes on x86-64 System V and Apple
++arm64, none under AAPCS64 on Linux), and a linked control that stores at the red zone's edge must
++be measured at 128 bytes. Reproducibility is checked across build directories and machines. Every
++gate run is bounded by `bounded_run`; a twice-timed-out run is INCOMPLETE, never a pass.
+diff --git a/scripts/checks/lib/stack_access.py b/scripts/checks/lib/stack_access.py
+new file mode 100644
+index 00000000..597734ee
+--- /dev/null
++++ b/scripts/checks/lib/stack_access.py
+@@ -0,0 +1,113 @@
++# The memory addresses one instruction accesses, for the run checks (stack_measure.py under gdb,
++# stack_measure_lldb.py under LLDB; README gate 12). PROVISIONAL. Plain Python 3.9 (Apple's LLDB
++# runs its own), no imports beyond re.
++#
++# The run check counts the lowest byte each stepped instruction of the Concrete-owned code
++# addresses, not only the stack pointer: code may use the target's red zone, below the stack
++# pointer, without moving it (stack_bound.py counts the same bytes). An access's lowest byte is its
++# effective address, whatever its size, so only the address is computed. Fail closed: an operand
++# this module cannot evaluate is an error, never "no access".
++import re
++
++MASK = (1 << 64) - 1
++NUM = re.compile(r"(?:0x[0-9a-f]+|\d+)$")
++
++
++def _num(text):
++    return int(text, 0)
++
++
++def x86_addresses(asm, reg, next_pc):
++    """Effective addresses of the memory operands of one instruction in gdb's Intel syntax
++    (`mov QWORD PTR [rsp-0x80],0x0`). reg(name) reads a register. lea and nop compute an address
++    without accessing it; fs:/gs: operands address the thread block, not the stack."""
++    asm = asm.split("#", 1)[0].strip().lower()
++    mn = asm.split(None, 1)[0] if asm else ""
++    if mn == "lea" or mn.startswith("nop") or mn.startswith("prefetch"):
++        return []
++    out = []
++    for m in re.finditer(r"(?:(\w\w):)?\[([^\]]*)\]", asm):
++        if m.group(1) in ("fs", "gs"):
++            continue
++        inner = m.group(2).replace(" ", "")
++        if not inner or inner[0] not in "+-":
++            inner = "+" + inner
++        terms = re.findall(r"([+-])([^+-]+)", inner)
++        if "".join(s + t for s, t in terms) != inner:
++            raise ValueError(f"unparsed memory operand [{m.group(2)}] in {asm}")
++        addr = 0
++        for sign, term in terms:
++            if "*" in term:
++                r, scale = term.split("*", 1)
++                v = reg(r) * _num(scale)
++            elif NUM.match(term):
++                v = _num(term)
++            elif term == "rip":
++                v = next_pc
++            else:
++                v = reg(term)
++            addr += v if sign == "+" else -v
++        out.append(addr & MASK)
++    if not out and re.search(r"\b(movs|stos|lods|cmps|scas)", mn):
++        raise ValueError(f"string instruction with implicit memory operands: {asm}")
++    return out
++
++
++def _a64_index(text, reg):
++    """Value of an AArch64 index operand: `x9`, `x9, lsl #3`, `w9, sxtw #2`, `w9, uxtw`."""
++    parts = [p.strip() for p in text.split(",")]
++    r = parts[0]
++    v = reg("x" + r[1:]) if r.startswith("w") else reg(r)
++    if r.startswith("w"):
++        v &= 0xFFFFFFFF
++    shift = 0
++    if len(parts) > 1:
++        m = re.fullmatch(r"(lsl|sxtw|uxtw|sxtx|uxtx)(?:\s+#(\d+))?", parts[1])
++        if not m:
++            raise ValueError(f"unparsed index extension {parts[1]}")
++        if m.group(1) == "sxtw" and v & 0x80000000:
++            v -= 1 << 32
++        shift = int(m.group(2) or 0)
++    if len(parts) > 2:
++        raise ValueError(f"unparsed index {text}")
++    return v << shift
++
++
++def a64_addresses(mnemonic, operands, reg):
++    """Effective addresses of one AArch64 instruction in LLDB's syntax (`stp x29, x30, [sp,
++    #-0x10]!`, `ldr x30, [sp], #0x10`, `ldr w8, [x9, x10, lsl #2]`). A post-indexed access is at the
++    base; a pre-indexed or offset one at base plus offset. prfm/prfum only hint."""
++    mn, ops = mnemonic.lower(), operands.lower().split("//", 1)[0]
++    if mn.startswith("prf"):
++        return []
++    m = re.search(r"\[([^\]]*)\](!?)", ops)
++    if not m:
++        return []
++    parts = [p.strip() for p in m.group(1).split(",", 1)]
++    base = reg(parts[0])
++    post = ops[m.end():].strip()
++    if post:
++        if not re.fullmatch(r",\s*(#-?(0x[0-9a-f]+|\d+)|x\d+)", post) or len(parts) > 1:
++            raise ValueError(f"unparsed post-index in {mn} {operands}")
++        return [base & MASK]
++    if len(parts) == 1:
++        return [base & MASK]
++    off = parts[1]
++    if off.startswith("#"):
++        return [(base + _num(off[1:])) & MASK]
++    return [(base + _a64_index(off, reg)) & MASK]
++
++
++def lowest_stack(addresses, sp, sp0, red_zone, span):
++    """The lowest of `addresses` that lies on the stack below main's entry stack pointer sp0
++    (within `span` bytes of it; the analysis' premise puts the image farther away), or None. An
++    access deeper than the red zone below the current stack pointer is an error: no bound holds
++    for bytes a signal handler may overwrite."""
++    low = None
++    for a in addresses:
++        if sp0 - span <= a < sp0:
++            if a < sp - red_zone:
++                raise ValueError(f"an access {sp - a} bytes below the stack pointer, beyond the "
++                                 f"{red_zone}-byte red zone")
++            low = a if low is None else min(low, a)
++    return low
+diff --git a/scripts/checks/lib/stack_bound.py b/scripts/checks/lib/stack_bound.py
+index fbc9b93f..159fcbcb 100644
+--- a/scripts/checks/lib/stack_bound.py
++++ b/scripts/checks/lib/stack_bound.py
+@@ -1,9 +1,10 @@
+ #!/usr/bin/env python3
+ """Stack bound of a slice-0 executable, from its disassembly (README gate 12). PROVISIONAL.
+ 
+-usage: stack_bound.py ARCH DISASM             -> prints `bound N` and one `external SYM DEPTH` per call
+-       stack_bound.py ARCH DISASM --ranges    -> also prints `range SYM LO HI` per Concrete function
+-ARCH is x86_64 or aarch64; DISASM is `llvm-objdump -d --no-show-raw-insn` output of the LINKED
++usage: stack_bound.py TARGET DISASM           -> prints `bound N` and one `external SYM DEPTH` per call
++       stack_bound.py TARGET DISASM --ranges  -> also prints `redzone N` (the target's) and
++                                                `range SYM LO HI` per Concrete function
++TARGET is a key of TARGETS (x86_64-linux, aarch64-macos, aarch64-linux); DISASM is `llvm-objdump -d --no-show-raw-insn` output of the LINKED
+ executable (x86-64 in Intel syntax).
+ 
+ The Concrete-owned code is `main` (the runtime entry), `concrete_rt_write_all` and the body
+@@ -30,7 +31,10 @@ save (`push rbp`, `stp x29, x30`) puts one in memory. Saved slots may be read on
+ by the modelled restore (`pop rbp`, `leave`, `ldp x29, x30` with base sp). Any other stack read
+ must be of bytes the function itself wrote, on every path, since its last call: so no stale value
+ (a callee's or the caller's saved frame pointer, libc's scratch) is ever loaded. Accesses must lie
+-below the entry stack pointer (never the return address or the caller's frame), returns must be at
++below the entry stack pointer (never the return address or the caller's frame) and at most the
++target's red zone below the current stack pointer (TARGETS: 128 bytes on x86-64 System V and on
++Apple arm64, none under AAPCS64 on Linux; deeper bytes may be overwritten asynchronously, by a
++signal handler, so code using them has no bound), returns must be at
+ depth 0 with the caller's frame pointer restored and, on AArch64, with the link register holding
+ the return address.
+ 
+@@ -194,6 +198,11 @@ MEM = re.compile(r"\[([^\]]*)\]")
+ # the access's own offset (at most A64_OFF_REACH): the premise that the stack lies farther than
+ # that from the image's code makes such an access never a stack access.
+ PC_REACH = 16 << 20
++# TARGET -> (architecture, red zone in bytes): how far below the stack pointer code may address
++# memory without moving it. x86-64 System V ABI section 3.2.2 (128); Apple, "Writing ARM64 code for
++# Apple platforms" (128); AAPCS64 has none (0).
++TARGETS = {"x86_64-linux": ("x86_64", 128), "aarch64-macos": ("aarch64", 128),
++           "aarch64-linux": ("aarch64", 0)}
+ A64_OFF_REACH = 32760
+ 
+ 
+@@ -571,10 +580,16 @@ def analyse(funcs, stubs):
+             if kind is None:
+                 if not plain.match(mn):
+                     raise Refuse(f"{key}+{addr:#x}: unmodelled instruction: {mn} {ops}")
++                before = st.d
+                 try:
+                     st, touched = inst(mn, ops, st, addr)
+                 except Refuse as e:
+                     raise Refuse(f"{key}+{addr:#x}: {e}") from None
++                # The stack pointer either side of the instruction (a pre-indexed or pushing access
++                # is at the new one, a post-indexed one at the old).
++                if touched is not None and touched > max(before, st.d) + RED_ZONE:
++                    raise Refuse(f"{key}+{addr:#x}: an access {touched - max(before, st.d)} bytes below the "
++                                 f"stack pointer, beyond the {RED_ZONE}-byte red zone of {TARGET}: {mn} {ops}")
+                 if st.d < 0:
+                     raise Refuse(f"{key}+{addr:#x}: stack above the entry")
+                 deepest = max(deepest, st.d, touched or 0)
+@@ -639,9 +654,10 @@ def analyse(funcs, stubs):
+ 
+ 
+ if __name__ == "__main__":
+-    if len(sys.argv) not in (3, 4) or sys.argv[1] not in ("x86_64", "aarch64"):
+-        sys.exit("usage: stack_bound.py x86_64|aarch64 DISASM [--ranges]")
+-    ARCH = sys.argv[1]
++    if len(sys.argv) not in (3, 4) or sys.argv[1] not in TARGETS:
++        sys.exit(f"usage: stack_bound.py {'|'.join(TARGETS)} DISASM [--ranges]")
++    TARGET = sys.argv[1]
++    ARCH, RED_ZONE = TARGETS[TARGET]
+     try:
+         funcs, stubs = parse(sys.argv[2])
+         total, ext, owned = analyse(funcs, stubs)
+@@ -652,6 +668,7 @@ if __name__ == "__main__":
+     for name, depth in sorted(ext.items()):
+         print(f"external {name} {depth}")
+     if len(sys.argv) == 4 and sys.argv[3] == "--ranges":
++        print(f"redzone {RED_ZONE}")
+         for key, name in sorted(owned.items()):
+             code = funcs[name]
+             print(f"range {key} {code[0][0]:#x} {code[-1][0]:#x}")
+diff --git a/scripts/checks/lib/stack_measure.py b/scripts/checks/lib/stack_measure.py
+index 388de39a..82e29dee 100644
+--- a/scripts/checks/lib/stack_measure.py
++++ b/scripts/checks/lib/stack_measure.py
+@@ -1,7 +1,9 @@
+ # gdb -batch -nx -x stack_measure.py EXE (README gate 12, x86-64 Linux). PROVISIONAL.
+ #
+ # Measures the stack depth one complete run of EXE reaches, below the stack pointer at `main`'s
+-# entry, by single-stepping every instruction of the Concrete-owned functions (STACK_RANGES:
++# entry: the lowest of the stack pointer and every stack byte an instruction addresses (so the red
++# zone, used below the stack pointer without moving it; lib/stack_access.py), by single-stepping
++# every instruction of the Concrete-owned functions (STACK_RANGES:
+ # "LO:HI,..." in the executable's link-time addresses, from stack_bound.py --ranges; STACK_MAIN:
+ # main's LO). An external function (entered through a call, so its return address is at the stack
+ # pointer) runs at full speed to that return address; its own use is outside the bound, as in
+@@ -10,16 +12,23 @@
+ #
+ # Fail closed: the measurement counts only for a run that stopped first at main's runtime address,
+ # stopped after each external call exactly at its return address (or exited inside it), received
+-# no signal, and exited normally with status STACK_EXPECT. Prints `measured N` and `steps N`, or
++# no signal, exited normally with status STACK_EXPECT, and addressed no stack byte deeper than the
++# target's red zone (STACK_RED_ZONE, from stack_bound.py) below the stack pointer. Prints `measured N` and `steps N`, or
+ # `error ...` (the gate fails on anything but a measurement).
+ import os
++import sys
+ 
+ import gdb
+ 
++sys.path.insert(0, os.environ["STACK_LIB"])
++import stack_access  # noqa: E402 - the path is the gate's lib directory
++
+ LIMIT = 2_000_000
+ ranges = [tuple(int(x, 16) for x in r.split(":")) for r in os.environ["STACK_RANGES"].split(",")]
+ main_lo = int(os.environ["STACK_MAIN"], 16)
+ expect = int(os.environ["STACK_EXPECT"])
++red_zone = int(os.environ["STACK_RED_ZONE"])
++SPAN = 8 << 20  # stack bytes counted below main's entry (stack_access.lowest_stack)
+ state = {"exit": None, "signal": None}
+ 
+ 
+@@ -37,6 +46,7 @@ gdb.events.stop.connect(on_stop)
+ gdb.execute("set pagination off")
+ gdb.execute("set confirm off")
+ gdb.execute("set disable-randomization on")
++gdb.execute("set disassembly-flavor intel")
+ 
+ 
+ def reg(name):
+@@ -61,6 +71,7 @@ try:
+     sp0 = reg("sp")
+     low, steps = sp0, 0
+     inferior = gdb.selected_inferior()
++    arch = gdb.selected_frame().architecture()
+     gdb.execute("delete", to_string=True)
+     while live():
+         pc, sp = reg("pc"), reg("sp")
+@@ -69,6 +80,15 @@ try:
+             continue
+         low = min(low, sp)
+         if any(lo + offset <= pc <= hi + offset for lo, hi in ranges):
++            insn = arch.disassemble(pc)[0]
++            try:
++                touched = stack_access.lowest_stack(
++                    stack_access.x86_addresses(insn["asm"], reg, pc + insn["length"]),
++                    sp, sp0, red_zone, SPAN)
++            except ValueError as e:
++                raise RuntimeError(f"at {pc:#x} ({insn['asm']}): {e}") from None
++            if touched is not None:
++                low = min(low, touched)
+             gdb.execute("stepi", to_string=True)
+             steps += 1
+             if steps > LIMIT:
+diff --git a/scripts/checks/lib/stack_measure_lldb.py b/scripts/checks/lib/stack_measure_lldb.py
+index a2f97533..39ff5786 100644
+--- a/scripts/checks/lib/stack_measure_lldb.py
++++ b/scripts/checks/lib/stack_measure_lldb.py
+@@ -3,22 +3,30 @@
+ #
+ # The LLDB counterpart of stack_measure.py (same contract, same environment: STACK_EXE, the
+ # executable; STACK_RANGES "LO:HI,..." in link-time addresses, from stack_bound.py --ranges;
+-# STACK_MAIN, main's LO; STACK_EXPECT, the expected exit status). It measures the stack depth one
+-# complete run reaches, below the stack pointer at `main`'s entry, by single-stepping every
+-# instruction of the Concrete-owned functions. An external function (entered by `bl`, so its
++# STACK_MAIN, main's LO; STACK_EXPECT, the expected exit status; STACK_RED_ZONE; STACK_LIB, the
++# directory of stack_access.py). It measures the stack depth one complete run reaches, below the
++# stack pointer at `main`'s entry: the lowest of the stack pointer and every stack byte an
++# instruction addresses (so the red zone), by single-stepping every instruction of the
++# Concrete-owned functions. An external function (entered by `bl`, so its
+ # return address is in the link register) runs at full speed to that return address; its own use
+ # is outside the bound, as in stack_bound.py, but the depth at its entry is measured. Once main has
+ # returned, the rest runs freely.
+ #
+ # Fail closed: the measurement counts only for a run that stopped first at main's runtime address,
+ # stopped after each external call exactly at its return address (or exited inside it), received
+-# no signal, and exited normally with status STACK_EXPECT. Prints `measured N` and `steps N`, or
++# no signal, exited normally with status STACK_EXPECT, and addressed no stack byte deeper than the
++# red zone below the stack pointer. Prints `measured N` and `steps N`, or
+ # `error ...` (the gate fails on anything but a measurement).
+ import os
++import sys
+ 
+ import lldb
+ 
++sys.path.insert(0, os.environ["STACK_LIB"])
++import stack_access  # noqa: E402 - the path is the gate's lib directory
++
+ LIMIT = 2_000_000
++SPAN = 8 << 20  # stack bytes counted below main's entry (stack_access.lowest_stack)
+ 
+ 
+ def measure(debugger):
+@@ -73,7 +81,18 @@ def check_live(process):
+     return True
+ 
+ 
++def register(frame, name):
++    """A general register's value (`sp`, `x0`..`x30`, `fp`, `lr`); unknown names fail closed."""
++    v = frame.FindRegister(name)
++    if not v.IsValid() and name in ("x29", "x30"):
++        v = frame.FindRegister({"x29": "fp", "x30": "lr"}[name])
++    if not v.IsValid():
++        raise ValueError(f"no register {name}")
++    return v.GetValueAsUnsigned()
++
++
+ def run(process, target, bp, ranges, main_lo, main_rt, expect):
++    red_zone = int(os.environ["STACK_RED_ZONE"])
+     if not check_live(process):
+         raise RuntimeError("exited before main")
+     thread = process.GetSelectedThread()
+@@ -101,6 +120,16 @@ def run(process, target, bp, ranges, main_lo, main_rt, expect):
+             continue
+         low = min(low, sp)
+         if owned(pc):
++            insn = target.ReadInstructions(lldb.SBAddress(pc, target), 1).GetInstructionAtIndex(0)
++            mn, ops = insn.GetMnemonic(target), insn.GetOperands(target)
++            try:
++                touched = stack_access.lowest_stack(
++                    stack_access.a64_addresses(mn, ops, lambda r: register(frame, r)),
++                    sp, sp0, red_zone, SPAN)
++            except ValueError as e:
++                raise RuntimeError(f"at {pc:#x} ({mn} {ops}): {e}") from None
++            if touched is not None:
++                low = min(low, touched)
+             thread.StepInstruction(False)
+             steps += 1
+             if steps > LIMIT:
+diff --git a/scripts/checks/slice0_artifacts.sh b/scripts/checks/slice0_artifacts.sh
+index 2255bb65..0a25102b 100644
+--- a/scripts/checks/slice0_artifacts.sh
++++ b/scripts/checks/slice0_artifacts.sh
+@@ -19,7 +19,8 @@
+ #     stack or frame pointer (so the red zone), with external libc calls listed with their entry
+ #     depth (their own use, and that _exit and abort do not return, are premises). A run under
+ #     gdb (x86-64 Linux, lib/stack_measure.py) or LLDB (aarch64-macos, lib/stack_measure_lldb.py)
+-#     must stay within it (the run measures the stack pointer only). Each analysed disassembly is
++#     must stay within it (the run counts the stack pointer and every stack byte a stepped
++#     instruction addresses, lib/stack_access.py, so the red zone). Each analysed disassembly is
+ #     kept in REPORT/disassembly/. REPORT/stack.tsv. Controls: the analysis must refuse an unmodelled
+ #     stack-pointer write, an indirect call, recursion, a call to an unknown function, two depths
+ #     meeting, a stack pointer used as a value or written through a partial register, a partial
+@@ -36,7 +37,9 @@
+ #     save with a Mach-O stub call in a loop); also refuse the link register loaded from another
+ #     slot, a stub call with no indirect-symbol entry, into a stub entry's middle or to the bare stub
+ #     section; the comparison must reject a
+-#     measurement above the bound.
++#     measurement above the bound; refuse an access beyond the target's red zone (x86-64, Apple
++#     arm64) and any below the stack pointer on aarch64-linux; and a linked main storing at the red
++#     zone's edge must be measured at 128 (bound 128), and with a 120-byte red zone not at all.
+ #
+ # usage: slice0_artifacts.sh [REPORT_DIR]. Run inside the nix devshell, from the repository root.
+ set -euo pipefail
+@@ -78,7 +81,7 @@ printf 'example\tbackend\ttarget\tbound\tmeasured\texternals\n' >"$stack"
+ asan=abort_on_error=0:symbolize=0
+ [ "$(uname -s)" != Linux ] || asan="$asan:hard_rss_limit_mb=1024:detect_leaks=1"
+ san_env=("ASAN_OPTIONS=$asan")
+-# stack_bound ARCH DISASM [--ranges]: the analysis, capped and bounded in time.
++# stack_bound TARGET DISASM [--ranges]: the analysis, capped and bounded in time.
+ stack_bound() { bounded 60 python3 -I "$root/scripts/checks/lib/stack_bound.py" "$@"; }
+ fail=0
+ examples=0
+@@ -92,15 +95,19 @@ within() { [ "$1" -gt 0 ] && [ "$1" -le "$2" ]; }
+ # LLDB (lib/stack_measure_lldb.py, the same contract; Apple's LLDB runs its own Python, so the
+ # shell's Python variables are removed).
+ measure() {
+-  local ranges main
++  local ranges main redzone
+   ranges=$(awk '$1 == "range" {printf "%s%s:%s", sep, $3, $4; sep=","}' <<<"$2")
+   main=$(awk '$1 == "range" && $2 == "main" {print $3}' <<<"$2")
++  redzone=$(awk '$1 == "redzone" {print $2}' <<<"$2")
++  [ -n "$redzone" ] || { echo "error the analysis names no red zone"; return; }
+   if [ -n "$gdb" ]; then
+-    STACK_RANGES=$ranges STACK_MAIN=$main STACK_EXPECT=$3 \
++    STACK_RANGES=$ranges STACK_MAIN=$main STACK_EXPECT=$3 STACK_RED_ZONE=$redzone \
++      STACK_LIB="$root/scripts/checks/lib" \
+       bounded 300 "$gdb" -batch -nx -x "$root/scripts/checks/lib/stack_measure.py" \
+       "$1" 2>"$1.gdb.err" | awk '$1 == "measured" || $1 == "error" {print}' | cap_out || true
+   else
+-    STACK_EXE=$1 STACK_RANGES=$ranges STACK_MAIN=$main STACK_EXPECT=$3 \
++    STACK_EXE=$1 STACK_RANGES=$ranges STACK_MAIN=$main STACK_EXPECT=$3 STACK_RED_ZONE=$redzone \
++      STACK_LIB="$root/scripts/checks/lib" \
+       bounded 300 env -u PYTHONPATH -u PYTHONHOME "$lldb" --batch --no-lldbinit \
+       -o "command script import $root/scripts/checks/lib/stack_measure_lldb.py" \
+       2>"$1.gdb.err" | awk '$1 == "measured" || $1 == "error" {print}' | cap_out || true
+@@ -125,7 +132,7 @@ stack_check() {
+   # The disassembly the bound is derived from is kept in the report (audit evidence).
+   mkdir -p "$report/disassembly"
+   cp "$dis" "$report/disassembly/$name.$backend.$target.dis"
+-  if ! out=$(stack_bound "$arch" "$dis" --ranges | cap_out); then
++  if ! out=$(stack_bound "$target" "$dis" --ranges | cap_out); then
+     echo "FAIL $name [$backend] stack: $out"; fail=1; return
+   fi
+   bound=$(awk '$1 == "bound" {print $2}' <<<"$out")
+@@ -230,16 +237,16 @@ known=$(ctl_dis known <<'D'
+ D
+ )
+ # main: 8 + 0x20 = 40 deep; the call pushes 8; the body goes 8 + 0x10 = 24 deeper: 72.
+-if [ "$(stack_bound x86_64 "$known")" = "$(printf 'bound 72\nexternal write 48')" ]; then
++if [ "$(stack_bound x86_64-linux "$known")" = "$(printf 'bound 72\nexternal write 48')" ]; then
+   echo "ok   control: stack bound of a known function"
+ else
+-  echo "FAIL control: stack bound of a known function: $(stack_bound x86_64 "$known")"
++  echo "FAIL control: stack bound of a known function: $(stack_bound x86_64-linux "$known")"
+   fail=1
+ fi
+-refuse() { # refuse NAME BODY [ARCH [MAIN]]: BODY (printf format) follows the main header
++refuse() { # refuse NAME BODY [TARGET [MAIN]]: BODY (printf format) follows the main header
+   local f
+   f=$(ctl_dis "$1" <<<"$(printf "\n0000000000001010 <${4:-main}>:\n$2")")
+-  if stack_bound "${3:-x86_64}" "$f" >"$f.out"; then
++  if stack_bound "${3:-x86_64-linux}" "$f" >"$f.out"; then
+     echo "FAIL control: stack analysis accepts $1: $(head -c 2000 "$f.out")"; fail=1
+   else
+     echo "ok   control: stack analysis refuses $1"
+@@ -258,36 +265,36 @@ refuse loop-instruction '    1010:\tmov\tecx, 0x2\n    1015:\tloop\t0x1018 <main
+ refuse saved-frame-pointer-popped '    1010:\tpush\trbp\n    1011:\tmov\trbp, rsp\n    1014:\tpush\trbp\n    1015:\tpop\trax\n    1016:\tmov\tdword ptr [rax - 0x100], ecx\n    101c:\tpop\trbp\n    101d:\tret\n'
+ refuse stack-address-taken '    1010:\tpush\trbp\n    1011:\tmov\trbp, rsp\n    1014:\tlea\trax, [rbp - 0x10]\n    1018:\tpop\trbp\n    1019:\tret\n'
+ refuse return-address-overwrite '    1010:\tmov\tqword ptr [rsp], rax\n    1014:\tret\n'
+-refuse a64-frame-pointer-stored '    1010:\tmov\tx29, sp\n    1014:\tstr\tx29, [x0]\n    1018:\tret\n' aarch64 _main
+-refuse a64-ret-register '    1010:\tret\tx0\n' aarch64 _main
+-refuse a64-link-register-lost '    1010:\tstp\tx29, x30, [sp, #-0x10]!\n    1014:\tbl\t0x1020 <_concrete_body>\n    1018:\tadd\tsp, sp, #0x10\n    101c:\tret\n\n0000000000001020 <_concrete_body>:\n    1020:\tret\n' aarch64 _main
++refuse a64-frame-pointer-stored '    1010:\tmov\tx29, sp\n    1014:\tstr\tx29, [x0]\n    1018:\tret\n' aarch64-macos _main
++refuse a64-ret-register '    1010:\tret\tx0\n' aarch64-macos _main
++refuse a64-link-register-lost '    1010:\tstp\tx29, x30, [sp, #-0x10]!\n    1014:\tbl\t0x1020 <_concrete_body>\n    1018:\tadd\tsp, sp, #0x10\n    101c:\tret\n\n0000000000001020 <_concrete_body>:\n    1020:\tret\n' aarch64-macos _main
+ refuse freed-slot-reread '    1010:\tpush\trbp\n    1011:\tmov\trbp, rsp\n    1014:\tpush\trbp\n    1015:\tadd\trsp, 0x8\n    1019:\tmov\trax, qword ptr [rsp - 0x8]\n    101e:\tmov\tdword ptr [rax - 0x100], ecx\n    1024:\tpop\trbp\n    1025:\tret\n'
+ refuse callee-clobbers-frame-pointer '    1010:\tpush\trbp\n    1011:\tmov\trbp, rsp\n    1014:\tcall\t0x1040 <concrete_body>\n    1019:\tmov\tdword ptr [rbp - 0x100], ecx\n    101f:\tpop\trbp\n    1020:\tret\n\n0000000000001040 <concrete_body>:\n    1040:\tsub\trsp, 0x1000\n    1047:\tmov\trbp, rsp\n    104a:\tadd\trsp, 0x1000\n    1051:\tret\n'
+-refuse a64-frame-record-elsewhere '    1010:\tldp\tx29, x30, [x0]\n    1014:\tret\n' aarch64 _main
++refuse a64-frame-record-elsewhere '    1010:\tldp\tx29, x30, [x0]\n    1014:\tret\n' aarch64-macos _main
+ refuse restored-slot-reread '    1010:\tpush\trbp\n    1011:\tmov\trbp, rsp\n    1014:\tpush\trbp\n    1015:\tpop\trbp\n    1016:\tmov\trax, qword ptr [rsp - 0x8]\n    101b:\tmov\tdword ptr [rax - 0x1000], ecx\n    1021:\tpop\trbp\n    1022:\tret\n'
+-refuse a64-restored-record-reread '    1010:\tstp\tx29, x30, [sp, #-0x10]!\n    1014:\tmov\tx29, sp\n    1018:\tstp\tx29, x30, [sp, #-0x10]!\n    101c:\tldp\tx29, x30, [sp], #0x10\n    1020:\tldr\tx0, [sp, #-0x10]\n    1024:\tstr\tx1, [x0, #-0x1000]\n    1028:\tldp\tx29, x30, [sp], #0x10\n    102c:\tret\n' aarch64 _main
+-refuse a64-w29-writeback-load '    1010:\tsub\tsp, sp, #0x10\n    1014:\tmov\tx29, sp\n    1018:\tldr\tw29, [sp], #0x10\n    101c:\tstr\tx0, [x29, #-0x100]\n    1020:\tret\n' aarch64 _main
+-refuse a64-frame-writeback '    1010:\tmov\tx29, sp\n    1014:\tstr\tx0, [x29], #-0x100\n    1018:\tstr\tx0, [x29]\n    101c:\tadd\tx29, x29, #0x100\n    1020:\tret\n' aarch64 _main
++refuse a64-restored-record-reread '    1010:\tstp\tx29, x30, [sp, #-0x10]!\n    1014:\tmov\tx29, sp\n    1018:\tstp\tx29, x30, [sp, #-0x10]!\n    101c:\tldp\tx29, x30, [sp], #0x10\n    1020:\tldr\tx0, [sp, #-0x10]\n    1024:\tstr\tx1, [x0, #-0x1000]\n    1028:\tldp\tx29, x30, [sp], #0x10\n    102c:\tret\n' aarch64-macos _main
++refuse a64-w29-writeback-load '    1010:\tsub\tsp, sp, #0x10\n    1014:\tmov\tx29, sp\n    1018:\tldr\tw29, [sp], #0x10\n    101c:\tstr\tx0, [x29, #-0x100]\n    1020:\tret\n' aarch64-macos _main
++refuse a64-frame-writeback '    1010:\tmov\tx29, sp\n    1014:\tstr\tx0, [x29], #-0x100\n    1018:\tstr\tx0, [x29]\n    101c:\tadd\tx29, x29, #0x100\n    1020:\tret\n' aarch64-macos _main
+ # A callee's saved frame pointer, left below the caller's stack pointer, reread by the caller.
+ refuse callee-residual-reread '    1010:\tpush\trbp\n    1011:\tmov\trbp, rsp\n    1014:\tcall\t0x1040 <concrete_body>\n    1019:\tmov\trax, qword ptr [rsp - 0x10]\n    101e:\tmov\tdword ptr [rax - 0x1000], ecx\n    1024:\tpop\trbp\n    1025:\tret\n\n0000000000001040 <concrete_body>:\n    1040:\tpush\trbp\n    1041:\tpop\trbp\n    1042:\tret\n'
+ # Writeback through the link register changes the return address.
+-refuse a64-link-register-writeback '    1010:\tstp\tx29, x30, [sp, #-0x10]!\n    1014:\tbl\t0x1040 <_concrete_body>\n    1018:\tldp\tx29, x30, [sp], #0x10\n    101c:\tret\n\n0000000000001040 <_concrete_body>:\n    1040:\tldr\tx0, [x30], #-0x8\n    1044:\tret\n' aarch64 _main
+-refuse a64-link-register-store-writeback '    1010:\tstr\tx0, [x30, #0x8]!\n    1014:\tret\n' aarch64 _main
++refuse a64-link-register-writeback '    1010:\tstp\tx29, x30, [sp, #-0x10]!\n    1014:\tbl\t0x1040 <_concrete_body>\n    1018:\tldp\tx29, x30, [sp], #0x10\n    101c:\tret\n\n0000000000001040 <_concrete_body>:\n    1040:\tldr\tx0, [x30], #-0x8\n    1044:\tret\n' aarch64-macos _main
++refuse a64-link-register-store-writeback '    1010:\tstr\tx0, [x30, #0x8]!\n    1014:\tret\n' aarch64-macos _main
+ # main's argv (rsi, x1) points into the stack: memory is not addressed through it.
+ refuse argv-store '    1010:\tmov\tbyte ptr [rsi - 0x1000], 0x0\n    1017:\txor\teax, eax\n    1019:\tret\n'
+-refuse a64-argv-store '    1010:\tstrb\twzr, [x1, #-0x100]\n    1014:\tret\n' aarch64 _main
+-refuse a64-pc-relative-after-call '    1010:\tstp\tx29, x30, [sp, #-0x10]!\n    1014:\tadrp\tx8, 0x2000 <_main+0xff0>\n    1018:\tbl\t0x1040 <_concrete_body>\n    101c:\tldr\tw0, [x8, #0x10]\n    1020:\tldp\tx29, x30, [sp], #0x10\n    1024:\tret\n\n0000000000001040 <_concrete_body>:\n    1040:\tret\n' aarch64 _main
++refuse a64-argv-store '    1010:\tstrb\twzr, [x1, #-0x100]\n    1014:\tret\n' aarch64-macos _main
++refuse a64-pc-relative-after-call '    1010:\tstp\tx29, x30, [sp, #-0x10]!\n    1014:\tadrp\tx8, 0x2000 <_main+0xff0>\n    1018:\tbl\t0x1040 <_concrete_body>\n    101c:\tldr\tw0, [x8, #0x10]\n    1020:\tldp\tx29, x30, [sp], #0x10\n    1024:\tret\n\n0000000000001040 <_concrete_body>:\n    1040:\tret\n' aarch64-macos _main
+ # PC-relative provenance through repeated adds (a loop walking toward the stack).
+-refuse a64-pc-relative-walk '    1010:\tadr\tx8, 0x1010 <_main>\n    1014:\tsub\tx2, x1, #0xfff\n    1018:\tadd\tx8, x8, #0x8\n    101c:\tcmp\tx8, x2\n    1020:\tb.lo\t0x1018 <_main+0x8>\n    1024:\tstrb\twzr, [x8]\n    1028:\tret\n' aarch64 _main
+-refuse a64-pc-relative-far '    1010:\tadrp\tx8, 0x7fff0000\n    1014:\tstrb\twzr, [x8]\n    1018:\tret\n' aarch64 _main
++refuse a64-pc-relative-walk '    1010:\tadr\tx8, 0x1010 <_main>\n    1014:\tsub\tx2, x1, #0xfff\n    1018:\tadd\tx8, x8, #0x8\n    101c:\tcmp\tx8, x2\n    1020:\tb.lo\t0x1018 <_main+0x8>\n    1024:\tstrb\twzr, [x8]\n    1028:\tret\n' aarch64-macos _main
++refuse a64-pc-relative-far '    1010:\tadrp\tx8, 0x7fff0000\n    1014:\tstrb\twzr, [x8]\n    1018:\tret\n' aarch64-macos _main
+ refuse absolute-address '    1010:\tmov\tbyte ptr [0x7fffffd0], 0x0\n    1018:\tret\n'
+ # The link register loaded from a slot that does not hold it, and a stub call with no stub entry.
+-refuse a64-lr-from-other-slot '    1010:\tsub\tsp, sp, #0x20\n    1014:\tstr\tx30, [sp, #0x10]\n    1018:\tstr\tx0, [sp, #0x8]\n    101c:\tldr\tx30, [sp, #0x8]\n    1020:\tadd\tsp, sp, #0x20\n    1024:\tret\n' aarch64 _main
+-refuse a64-unmapped-stub '    1010:\tstr\tx30, [sp, #-0x10]!\n    1014:\tbl\t0x1040 <_write+0x1040>\n    1018:\tldr\tx30, [sp], #0x10\n    101c:\tret\n' aarch64 _main
++refuse a64-lr-from-other-slot '    1010:\tsub\tsp, sp, #0x20\n    1014:\tstr\tx30, [sp, #0x10]\n    1018:\tstr\tx0, [sp, #0x8]\n    101c:\tldr\tx30, [sp, #0x8]\n    1020:\tadd\tsp, sp, #0x20\n    1024:\tret\n' aarch64-macos _main
++refuse a64-unmapped-stub '    1010:\tstr\tx30, [sp, #-0x10]!\n    1014:\tbl\t0x1040 <_write+0x1040>\n    1018:\tldr\tx30, [sp], #0x10\n    101c:\tret\n' aarch64-macos _main
+ # A call into the middle of a Mach-O stub entry, and to the stub section with no entry mapped.
+-refuse a64-mid-stub-call '    1010:\tstr\tx30, [sp, #-0x10]!\n    1014:\tbl\t0x1044 <__stubs+0x4>\n    1018:\tldr\tx30, [sp], #0x10\n    101c:\tret\n\nDisassembly of section __TEXT,__stubs:\n\n0000000000001040 <__stubs>:\n    1040:\tadrp\tx16, 0x2000\n    1044:\tldr\tx16, [x16]\n    1048:\tbr\tx16\nstub 0x0000000000001040 _write\n' aarch64 _main
+-refuse a64-unmapped-stub-section '    1010:\tstr\tx30, [sp, #-0x10]!\n    1014:\tbl\t0x1040 <__stubs>\n    1018:\tldr\tx30, [sp], #0x10\n    101c:\tret\n\nDisassembly of section __TEXT,__stubs:\n\n0000000000001040 <__stubs>:\n    1040:\tadrp\tx16, 0x2000\n    1044:\tldr\tx16, [x16]\n    1048:\tbr\tx16\n' aarch64 _main
+-refuse a64-callee-residual-reread '    1010:\tstp\tx29, x30, [sp, #-0x10]!\n    1014:\tmov\tx29, sp\n    1018:\tbl\t0x1040 <_concrete_body>\n    101c:\tldr\tx0, [sp, #-0x10]\n    1020:\tstr\tx1, [x0, #-0x100]\n    1024:\tldp\tx29, x30, [sp], #0x10\n    1028:\tret\n\n0000000000001040 <_concrete_body>:\n    1040:\tstp\tx29, x30, [sp, #-0x10]!\n    1044:\tldp\tx29, x30, [sp], #0x10\n    1048:\tret\n' aarch64 _main
++refuse a64-mid-stub-call '    1010:\tstr\tx30, [sp, #-0x10]!\n    1014:\tbl\t0x1044 <__stubs+0x4>\n    1018:\tldr\tx30, [sp], #0x10\n    101c:\tret\n\nDisassembly of section __TEXT,__stubs:\n\n0000000000001040 <__stubs>:\n    1040:\tadrp\tx16, 0x2000\n    1044:\tldr\tx16, [x16]\n    1048:\tbr\tx16\nstub 0x0000000000001040 _write\n' aarch64-macos _main
++refuse a64-unmapped-stub-section '    1010:\tstr\tx30, [sp, #-0x10]!\n    1014:\tbl\t0x1040 <__stubs>\n    1018:\tldr\tx30, [sp], #0x10\n    101c:\tret\n\nDisassembly of section __TEXT,__stubs:\n\n0000000000001040 <__stubs>:\n    1040:\tadrp\tx16, 0x2000\n    1044:\tldr\tx16, [x16]\n    1048:\tbr\tx16\n' aarch64-macos _main
++refuse a64-callee-residual-reread '    1010:\tstp\tx29, x30, [sp, #-0x10]!\n    1014:\tmov\tx29, sp\n    1018:\tbl\t0x1040 <_concrete_body>\n    101c:\tldr\tx0, [sp, #-0x10]\n    1020:\tstr\tx1, [x0, #-0x100]\n    1024:\tldp\tx29, x30, [sp], #0x10\n    1028:\tret\n\n0000000000001040 <_concrete_body>:\n    1040:\tstp\tx29, x30, [sp, #-0x10]!\n    1044:\tldp\tx29, x30, [sp], #0x10\n    1048:\tret\n' aarch64-macos _main
+ # A read of a byte written on only one path into it.
+ refuse one-path-write '    1010:\tpush\trbp\n    1011:\tmov\trbp, rsp\n    1014:\tje\t0x101e <main+0xe>\n    1016:\tmov\tqword ptr [rbp - 0x8], rax\n    101e:\tmov\trax, qword ptr [rbp - 0x8]\n    1022:\tpop\trbp\n    1023:\tret\n'
+ # A read never written (stale bytes of whatever ran before).
+@@ -303,10 +310,10 @@ redzone=$(ctl_dis redzone <<'D'
+     1018:	ret
+ D
+ )
+-if [ "$(stack_bound x86_64 "$redzone")" = "bound 56" ]; then
++if [ "$(stack_bound x86_64-linux "$redzone")" = "bound 56" ]; then
+   echo "ok   control: a red-zone store is inside the bound"
+ else
+-  echo "FAIL control: red-zone bound: $(stack_bound x86_64 "$redzone")"
++  echo "FAIL control: red-zone bound: $(stack_bound x86_64-linux "$redzone")"
+   fail=1
+ fi
+ # bound_is NAME ARCH EXPECTED BODY: the analysis of the synthetic function(s) BODY (printf format,
+@@ -318,15 +325,15 @@ bound_is() {
+   if [ "$got" = "$3 " ]; then echo "ok   control: stack bound of $1"
+   else echo "FAIL control: stack bound of $1: ${got:-refused}, expected $3"; fail=1; fi
+ }
+-bound_is a64-framed-main-and-leaf aarch64 'bound 32' '0000000000001000 <_main>:\n    1000:\tstp\tx29, x30, [sp, #-0x10]!\n    1004:\tmov\tx29, sp\n    1008:\tbl\t0x1020 <_concrete_body>\n    100c:\tldp\tx29, x30, [sp], #0x10\n    1010:\tret\n\n0000000000001020 <_concrete_body>:\n    1020:\tsub\tsp, sp, #0x10\n    1024:\tstr\tw0, [sp, #0xc]\n    1028:\tadd\tsp, sp, #0x10\n    102c:\tret\n'
+-bound_is a64-offset-frame-record aarch64 'bound 32' '0000000000001000 <_main>:\n    1000:\tsub\tsp, sp, #0x20\n    1004:\tstp\tx29, x30, [sp, #0x10]\n    1008:\tadd\tx29, sp, #0x10\n    100c:\tstur\twzr, [x29, #-0x4]\n    1010:\tldp\tx29, x30, [sp, #0x10]\n    1014:\tadd\tsp, sp, #0x20\n    1018:\tret\n'
++bound_is a64-framed-main-and-leaf aarch64-macos 'bound 32' '0000000000001000 <_main>:\n    1000:\tstp\tx29, x30, [sp, #-0x10]!\n    1004:\tmov\tx29, sp\n    1008:\tbl\t0x1020 <_concrete_body>\n    100c:\tldp\tx29, x30, [sp], #0x10\n    1010:\tret\n\n0000000000001020 <_concrete_body>:\n    1020:\tsub\tsp, sp, #0x10\n    1024:\tstr\tw0, [sp, #0xc]\n    1028:\tadd\tsp, sp, #0x10\n    102c:\tret\n'
++bound_is a64-offset-frame-record aarch64-macos 'bound 32' '0000000000001000 <_main>:\n    1000:\tsub\tsp, sp, #0x20\n    1004:\tstp\tx29, x30, [sp, #0x10]\n    1008:\tadd\tx29, sp, #0x10\n    100c:\tstur\twzr, [x29, #-0x4]\n    1010:\tldp\tx29, x30, [sp, #0x10]\n    1014:\tadd\tsp, sp, #0x20\n    1018:\tret\n'
+ # A load PC-relative through adrp + add is not a stack access.
+-bound_is a64-pc-relative-load aarch64 'bound 0' '0000000000001000 <_main>:\n    1000:\tadrp\tx8, 0x2000 <_main+0x1000>\n    1004:\tadd\tx8, x8, #0x10\n    1008:\tldr\tw0, [x8, #0x4]\n    100c:\tret\n'
++bound_is a64-pc-relative-load aarch64-macos 'bound 0' '0000000000001000 <_main>:\n    1000:\tadrp\tx8, 0x2000 <_main+0x1000>\n    1004:\tadd\tx8, x8, #0x10\n    1008:\tldr\tw0, [x8, #0x4]\n    100c:\tret\n'
+ # LCB's frame: the link register saved and restored by a single str/ldr; a Mach-O stub entry named
+ # by the indirect symbol table (a `stub` line); a call made in a loop (the link register meets).
+-bound_is a64-single-lr-save-and-stub aarch64 'bound 48 external write 48' '0000000000001000 <_main>:\n    1000:\tsub\tsp, sp, #0x30\n    1004:\tstr\tx30, [sp, #0x20]\n    1008:\tmov\tw0, #0x2\n    100c:\tbl\t0x1040 <_write+0x1040>\n    1010:\tcbnz\tw0, 0x1008 <_main+0x8>\n    1014:\tldr\tx30, [sp, #0x20]\n    1018:\tadd\tsp, sp, #0x30\n    101c:\tret\n\nDisassembly of section __TEXT,__stubs:\n\n0000000000001040 <__stubs>:\n    1040:\tadrp\tx16, 0x2000\n    1044:\tldr\tx16, [x16]\n    1048:\tbr\tx16\nstub 0x0000000000001040 _write\n'
++bound_is a64-single-lr-save-and-stub aarch64-macos 'bound 48 external write 48' '0000000000001000 <_main>:\n    1000:\tsub\tsp, sp, #0x30\n    1004:\tstr\tx30, [sp, #0x20]\n    1008:\tmov\tw0, #0x2\n    100c:\tbl\t0x1040 <_write+0x1040>\n    1010:\tcbnz\tw0, 0x1008 <_main+0x8>\n    1014:\tldr\tx30, [sp, #0x20]\n    1018:\tadd\tsp, sp, #0x30\n    101c:\tret\n\nDisassembly of section __TEXT,__stubs:\n\n0000000000001040 <__stubs>:\n    1040:\tadrp\tx16, 0x2000\n    1044:\tldr\tx16, [x16]\n    1048:\tbr\tx16\nstub 0x0000000000001040 _write\n'
+ # A read of bytes the function wrote on both paths into it is accepted.
+-bound_is both-path-write x86_64 'bound 16' '0000000000001010 <main>:\n    1010:\tpush\trbp\n    1011:\tmov\trbp, rsp\n    1014:\tje\t0x101c <main+0xc>\n    1016:\tmov\tqword ptr [rbp - 0x8], rax\n    101a:\tjmp\t0x1020 <main+0x10>\n    101c:\tmov\tqword ptr [rbp - 0x8], rcx\n    1020:\tmov\trax, qword ptr [rbp - 0x8]\n    1024:\tpop\trbp\n    1025:\tret\n'
++bound_is both-path-write x86_64-linux 'bound 16' '0000000000001010 <main>:\n    1010:\tpush\trbp\n    1011:\tmov\trbp, rsp\n    1014:\tje\t0x101c <main+0xc>\n    1016:\tmov\tqword ptr [rbp - 0x8], rax\n    101a:\tjmp\t0x1020 <main+0x10>\n    101c:\tmov\tqword ptr [rbp - 0x8], rcx\n    1020:\tmov\trax, qword ptr [rbp - 0x8]\n    1024:\tpop\trbp\n    1025:\tret\n'
+ if [ -n "$measuring" ]; then
+   # A run that does not end as expected gives no measurement.
+   wrong=$(( ($(head -c 16 "$(dirname "$last_exe")/status") + 1) % 256 ))
+@@ -339,6 +346,43 @@ fi
+ if within 73 72; then echo "FAIL control: a measurement above the bound is accepted"; fail=1
+ else echo "ok   control: a measurement above the bound is rejected"; fi
+ 
++# The red zone (stack_bound.py TARGETS: 128 bytes on x86-64 System V and Apple arm64, none under
++# AAPCS64 on Linux): a store at its edge is in the bound, one past it is refused.
++refuse x86-beyond-red-zone '    1010:\tmov\tqword ptr [rsp - 0x88], 0x0\n    101c:\tret\n'
++bound_is x86-red-zone-edge x86_64-linux 'bound 128' '0000000000001010 <main>:\n    1010:\tmov\tqword ptr [rsp - 0x80], 0x0\n    1019:\tret\n'
++refuse a64-beyond-red-zone '    1010:\tstur\txzr, [sp, #-0x88]\n    1014:\tret\n' aarch64-macos _main
++bound_is a64-red-zone-edge aarch64-macos 'bound 128' '0000000000001010 <_main>:\n    1010:\tstur\txzr, [sp, #-0x80]\n    1014:\tret\n'
++refuse a64-linux-no-red-zone '    1010:\tstur\txzr, [sp, #-0x8]\n    1014:\tret\n' aarch64-linux main
++if [ -n "$measuring" ]; then
++  # The run check counts the bytes an instruction addresses below the stack pointer, not only the
++  # stack pointer: a main that stores at the red zone's edge without moving the stack pointer
++  # (built like the examples, slice0_native.sh control) is measured at 128 bytes, not 0. With a
++  # smaller red zone the same run is an error, not a measurement.
++  rz="$work/ctl/redzone"; mkdir -p "$rz"
++  case "$target" in
++    x86_64-linux) printf '\t.intel_syntax noprefix\n\t.text\n\t.globl\tmain\n\t.type\tmain,@function\nmain:\n\tmov\tqword ptr [rsp - 0x80], 0\n\tmov\teax, 7\n\tret\n\t.size\tmain, .-main\n\t.section\t.note.GNU-stack,"",@progbits\n' ;;
++    aarch64-macos) printf '\t.text\n\t.globl\t_main\n\t.p2align\t2\n_main:\n\tstur\txzr, [sp, #-0x80]\n\tmov\tw0, #7\n\tret\n' ;;
++  esac >"$rz/control.s"
++  if ! bounded "$native_secs" bash "$root/scripts/checks/slice0_native.sh" control "$rz" >"$rz/build.log" 2>&1; then
++    echo "FAIL control: the red-zone executable does not build: $(head -c 1000 "$rz/build.log")"; fail=1
++  else
++    "${objdump[@]}" "$rz/control.exe" >"$rz/control.exe.dis"
++    rza=$(stack_bound "$target" "$rz/control.exe.dis" --ranges | cap_out) || true
++    rzm=$(measure "$rz/control.exe" "$rza" 7)
++    if [ "$(awk '$1 == "bound" {print $2}' <<<"$rza")" = 128 ] && [ "$rzm" = "measured 128" ]; then
++      echo "ok   control: a red-zone store is measured (bound 128, measured 128)"
++    else
++      echo "FAIL control: red-zone run: analysis ${rza:-none}; run ${rzm:-none} $(head -c 300 "$rz/control.exe.gdb.err")"; fail=1
++    fi
++    rzm=$(measure "$rz/control.exe" "$(sed 's/^redzone .*/redzone 120/' <<<"$rza")" 7)
++    if grep -q '^error .*beyond the 120-byte red zone' <<<"$rzm"; then
++      echo "ok   control: a run beyond the red zone gives no measurement"
++    else
++      echo "FAIL control: a run beyond the red zone: ${rzm:-none}"; fail=1
++    fi
++  fi
++fi
++
+ [ "$examples" -gt 0 ] || { echo "slice0_artifacts: no examples ran" >&2; exit 1; }
+ echo "slice0_artifacts: $examples examples; sizes in $sizes, compile times in $times, stack bounds in $stack"
+ column -t -s "$(printf '\t')" "$sizes" 2>/dev/null || cat "$sizes"
+diff --git a/scripts/checks/slice0_native.sh b/scripts/checks/slice0_native.sh
+index b35d7c6c..5c4861eb 100755
+--- a/scripts/checks/slice0_native.sh
++++ b/scripts/checks/slice0_native.sh
+@@ -10,9 +10,13 @@ case "$(uname -s)-$(uname -m)" in
+   *) echo 'slice0_native: unsupported target' >&2; exit 2 ;;
+ esac
+ if [ "${1:-}" = target ]; then echo "$target"; exit; fi
++# `control DIRECTORY` links DIRECTORY/control.s alone into control.exe, under the same policy: the run
++# checks' controls (slice0_artifacts.sh) are hand-written assembly built exactly like the examples.
++control=0
++if [ "${1:-}" = control ] && [ "$#" = 2 ]; then control=1; set -- "$2" -; fi
+ # `sanitize` builds only llvm.san.exe: the LLVM example with ASan (README gate 10; no UBSan, see there).
+ [ "$#" = 2 ] || { [ "$#" = 3 ] && [ "$3" = sanitize ]; } ||
+-  { echo 'usage: slice0_native.sh DIRECTORY LCB [sanitize]' >&2; exit 2; }
++  { echo 'usage: slice0_native.sh DIRECTORY LCB [sanitize] | control DIRECTORY | target' >&2; exit 2; }
+ lcb=$2
+ cd "$1"
+ # Fixed epoch rather than wall clock or caller environment. No debug data is requested, and
+@@ -35,6 +39,11 @@ if [ "${3:-}" = sanitize ]; then
+   "${cc[@]}" "${san[@]}" "${link[@]}" llvm.san.o -o llvm.san.exe
+   exit
+ fi
++if [ "$control" = 1 ]; then
++  "${cc[@]}" -c control.s -o control.o
++  "${cc[@]}" "${link[@]}" control.o -o control.exe
++  exit
++fi
+ "${cc[@]}" -c llvm.ll -o llvm.o
+ "${cc[@]}" -c lcb_body.s -o lcb_body.o
+ "${clean[@]}" "$lcb" -t "$target" lcb_rt.ssa -o lcb_rt.s
+diff --git a/scripts/checks/slice0_trusted_base.sh b/scripts/checks/slice0_trusted_base.sh
+index fc0d7154..0c7b4ea8 100644
+--- a/scripts/checks/slice0_trusted_base.sh
++++ b/scripts/checks/slice0_trusted_base.sh
+@@ -91,7 +91,8 @@ differs() { # differs NAME FILE: FILE must not equal the current trusted base
+ }
+ sed '1d' "$work/current" >"$work/c1"; differs "a premise removed" "$work/c1"
+ sed '1s/$/ (reworded)/' "$work/current" >"$work/c2"; differs "a premise reworded" "$work/c2"
+-sed '0,/^theorem /s/^\(theorem .*\)$/\1, sorryAx/' "$work/current" >"$work/c3"
++# POSIX awk, not GNU sed's `0,/re/` range (BSD sed has none): the first theorem line gains an axiom.
++awk '!done && /^theorem / { $0 = $0 ", sorryAx"; done = 1 } { print }' "$work/current" >"$work/c3"
+ differs "an extra axiom" "$work/c3"
+ mkdir -p "$work/ctl"
+ printf '#eval IO.println "premise"\n#eval (throw (IO.userError "control") : IO Unit)\n' >"$work/ctl/fails.lean"

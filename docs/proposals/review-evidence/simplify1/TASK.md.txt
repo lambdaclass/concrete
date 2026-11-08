@@ -1,0 +1,11 @@
+The owner asks: "is there anything in the language that should be removed or simplified?" Owner principles: one form per situation, never two ways to do one thing; the most transparent long-term option; LLMs write the code and humans read and audit it, so optimize for checking and reading, never for writing effort; verbose is fine when clear and safe; no hidden traps; know everything about a program.
+
+The full surface grammar sheet (GRAMMAR_REVIEW.md) lists every construct with the decided row behind it. Review the whole language (surface syntax, type system, ownership, capabilities and grants, contracts and proofs, arithmetic families, strings and views, cleanup, attributes) for:
+(a) DUPLICATION: two constructs doing the same job;
+(b) features whose cost (spec size, proof burden, reader confusion) exceeds their value for the showcases (grep, QOI/PNG, EVM, KV store, Wasm, crypto, web server);
+(c) concepts that could be unified into one;
+(d) anything a reader could misread.
+
+For each candidate give: what it is, the decided row it would revise (anchor), the proposed removal or simplification, what is lost, and a verdict: STRONG (should change), WORTH ASKING, or KEEP (looks redundant but is not, with the reason). Be honest. Do not propose change for its own sake, and say KEEP when the current design is right. At most 12 candidates, most important first. Do not modify files.
+
+End with exactly: ANSWER: STRONG=<list or none>; ASK=<list or none>

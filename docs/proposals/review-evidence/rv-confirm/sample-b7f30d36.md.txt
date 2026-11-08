@@ -1,0 +1,23 @@
+# review of b7f30d3601521b74e431f629809b09e35e439055, round 1
+
+reviewer: codex; utc: 2026-11-08T06:48:37Z; base: fb097fa4e5ae0e58e400ce577c62c55df880c700; diff from: fb097fa4e5ae0e58e400ce577c62c55df880c700; pieces: 2; diff bytes: 28003
+
+## piece 1 of 2: scripts (23753 bytes): clean
+
+files: .githooks/pre-push,scripts/checks/landing_script.sh,scripts/checks/review_tool.sh,scripts/land/signoff.sh
+
+No correctness findings in the supplied diff. Repository reads failed because the sandbox could not start, so I could not verify owner-decision compliance against docs/decisions.md.
+
+VERDICT: clean
+
+## piece 2 of 2: docs (4250 bytes): clean
+
+files: changelog.d/2026-11-08-owner-signoff.md,docs/REVIEW.md
+
+No correctness findings in the supplied diff. The changes do not visibly choose an owner-decision outcome.
+
+Repository verification was blocked by a sandbox execution failure, so I could not check the implementation or docs/decisions.md.
+
+VERDICT: clean
+
+## verdict: clean (0 piece(s) with findings, 0 blocked)

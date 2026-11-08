@@ -1,0 +1,13 @@
+• - `scripts/land/install-bot.sh:123` — migration is skipped when **any** canonical `LAND_REPO` line exists, even if another line still names concrete2. With `LAND_REPO=lambdaclass/concrete` followed by `LAND_REPO=unbalancedparentheses/concrete2`, systemd uses the stale value and the installed bot refuses to run. **Fix:** migrate whenever any `LAND_REPO` line differs from the canonical value, e.g. `grep '^LAND_REPO=' "$ENVF" | grep -Fvx 'LAND_REPO=lambdaclass/concrete'`. Add duplicate-line controls in both orders.
+
+  - `scripts/checks/landing_script.sh:867` — the positive `push-both.sh` control proves the destination ref moves, but does not assert the final `published` message or that the successful path leaves `fork/main` unchanged. Thus a success-only regression that also pushes `fork` would pass, and the fifth prior finding is not completely closed. **Fix:** also check `has "$out" "push-both: published $(git rev-parse --short=8 HEAD) on pb-ok/main"` and `fork/main == "$BASE"` after the successful push.
+
+  - `scripts/checks/landing_bot.sh:456` — the comment says an existing clone pointing at another repository is refused, contradicting the repoint-and-migrate behavior tested immediately above and implemented by the installer. **Fix:** limit this comment to fresh-install URL refusal; describe existing clones as repointed and then guarded before fetch.
+
+  - `scripts/push-both.sh:92` — the comment still refers to “the primary verification” and a “parity check”; neither exists in the one-remote script. **Fix:** describe the destination read-back and optional CI wait instead.
+
+  The other prior findings are resolved: acceptance checks its source before cloning, `record` uses the common remote/`LAND_REPO` guard, installer URLs are expanded and checked before clone/fetch, and env-file permissions are preserved. No unintended operational concrete2 references or new Bash 4-only syntax were found. Syntax-only `bash -n` checks passed; no state-changing tests were run.
+
+  VERDICT: REJECT
+
+To resume this session: kimi -r session_50c896c6-ce95-4a47-9a20-7106e80573ea

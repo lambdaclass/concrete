@@ -1,0 +1,65 @@
+TASK: the split request/output format for owner sign-off records (Concrete repository). You are the
+writer. You are in a full clone on branch wip/owner-signoff-split, created at fb097fa4 (branch
+wip/owner-signoff, not yet landed). Implement, run the checks below, and COMMIT on this branch
+(`git commit`). NEVER push, never change remotes or git config, never use --no-verify, never touch
+another branch, never write under refs/owner-signoff in any real repository (only inside the test
+sandboxes the checks build). Bound every command with `timeout` (at most 1800 s each).
+
+READ FIRST: scripts/land/signoff.sh (the whole header), scripts/land/train.sh (review_provenance,
+pure_merge), .githooks/pre-push (the refs/owner-signoff/* case), scripts/checks/landing_script.sh
+(sections "review: an owner sign-off ..." and the put-signoff helper), scripts/checks/review_tool.sh
+(the pre-push hook sign-off legs), docs/REVIEW.md ("The cap"), docs/LANDING.md (review leg),
+changelog.d/2026-11-08-owner-signoff.md.
+
+WHY. Two review findings against fb097fa4 (both must be closed, each with a control):
+ F1 A transcript is bound to the signed commit by ANY mention of its SHA: a review of commit B whose
+    request says "the change since A" passes as A's transcript.
+ F2 The verdict is read from the whole transcript: a request containing a line that is exactly
+    `VERDICT: ACCEPT`, followed by no reviewer output, passes as an acceptance.
+
+THE NEW FORMAT (replace the current one; there are no existing records to migrate):
+- The record commit's tree holds exactly seven 100644 blobs: record.txt, and for each reviewer r in
+  codex, kimi, agy: `r-request.txt` (what the reviewer was asked) and `r.txt` (its output only).
+- record.txt keys, each once: signoff, commit, date, quote, rounds-at (unchanged), and for each r:
+  `request-r: r-request.txt <sha256>` and `verdict-r: r.txt <sha256>`.
+- A request file's FIRST line is `reviewed: <the full 40-hex SHA of the commit the reviewer was run
+  on>` (a structured field the recorder writes, attesting the commit); every following line is the
+  request exactly as sent. verify requires that first line to equal the signed commit exactly, and
+  the request body (after that line) to name the commit by an unambiguous prefix of 7+ hex digits
+  (the existing `names` helper). Mentions in the OUTPUT no longer count for binding.
+- The verdict is read ONLY from the output file r.txt: its last line matching
+  `^[[:space:]]*VERDICT: (ACCEPT|REJECT)[[:space:]]*$` must be `VERDICT: ACCEPT`; an output with no
+  such line is refused ("the r output has no verdict"). Lines in the request never count.
+- `signoff.sh record` takes, per reviewer, `--codex-request FILE --codex FILE` (and kimi, agy). The
+  request FILE given to record is the verbatim request; record itself prepends the `reviewed: <sha>`
+  line (the commit being signed) when it stores r-request.txt, and hashes what it stores. Keep:
+  record verifies before writing the ref; hash-object --no-filters; the cap by diff class; quote
+  naming by unambiguous prefix; rounds-at judged by scripts/review/verify.sh.
+- .githooks/pre-push: a refs/owner-signoff/* push takes the notes tier only for a parentless commit
+  under a 40-hex name whose tree is exactly those seven 100644 blobs; anything else takes the full
+  tier (update its comment).
+
+CONTROLS (scripts/checks/landing_script.sh, through `train.sh --dry-run land` like the existing so_leg
+cases, or `signoff.sh verify` where the existing tests do): keep every existing case, adapted to the
+new format, and add:
+ - F1: a record whose kimi-request.txt has `reviewed: <another commit>` while its body and output
+   mention the signed SHA: refused (message names the reviewed line).
+ - F1b: a request whose first line is not a `reviewed:` line: refused.
+ - F2: a record whose agy-request.txt contains a line `VERDICT: ACCEPT` and whose agy.txt has no
+   verdict line: refused ("the agy output has no verdict").
+ - a request body that names no prefix of the commit: refused.
+ - the hook (scripts/checks/review_tool.sh): a seven-file record takes the review-notes tier; the old
+   four-file shape now takes the full tier; keep the source-commit, directory and non-SHA-name legs.
+Each control must be able to fail: check its refusal message, not just a non-zero exit.
+
+DOCS: update signoff.sh's header, docs/REVIEW.md ("The cap" paragraph on recording), docs/LANDING.md if
+it mentions the files, and changelog.d/2026-11-08-owner-signoff.md (one or two sentences on the split
+format and the two findings). Do NOT edit docs/decisions.md or ROADMAP.md.
+
+CHECKS THAT MUST PASS before you commit (they are light; run them here):
+  timeout 1800 nix develop .#gates --command bash scripts/checks/landing_script.sh
+  timeout 1800 nix develop .#gates --command bash scripts/checks/review_tool.sh
+Then commit, and after the commit run (it reads the committed hook):
+  timeout 1800 nix develop .#gates --command bash scripts/checks/run.sh
+and if anything fails, fix it and commit again. Report: the commit SHA(s), the exact final tallies of
+the three runs, every new control with its message, and any choice a reviewer should check.

@@ -1,0 +1,1715 @@
+kimi version 2.4.1
+• I need read files. Should comply user asks read brief done then carry round3. Should inspect. Call the tool. I have project constraints. Should probably document review not code? Read both in parallel known paths.Should substantial task. Must read audits full, philosophy etc perhaps brief says original done but need state. First todo. Should git status branch, files, perhaps other project file contents. Must merge origin spec core first. Before merge inspect status ensure clean. Read audits full likely moderate. Use TodoList and parallel read audits, git status log perhaps Bash.
+
+• I’ll first inspect the branch and both audit reports, then merge `wip/spec-core` with the required conflict resolutions before changing the C7 laws.
+
+## wip/spec-c7
+4d1469925 (HEAD -> wip/spec-c7, origin/wip/spec-c7, lambdaclass/wip/spec-c7) axioms.golden: C7 round 2 (regenerated on concrete-ci-2)
+7e411f4a1 C7: simplify leakage example programs
+a04c52d31 C7: make lineage reports function-local
+e02e177fc axioms.golden: C7 leakage and accounting (regenerated on concrete-ci-2)
+e61585723 proofs: establish C7 security examples and accounting conservation
+wip/spec-c7
+• Should merge first. I read both. Could read docs decisions/proposal later if design concern. Now git fetch/merge authorized user. No rewrite. Do merge. First mark task done next.From https://github.com/unbalancedparentheses/concrete2
+ * branch                wip/spec-core -> FETCH_HEAD
+   5bc0748b8..07c16bb5f  wip/spec-core -> origin/wip/spec-core
+Auto-merging ConcreteSpec.lean
+CONFLICT (content): Merge conflict in ConcreteSpec.lean
+Auto-merging ConcreteSpec/Spec.lean
+Auto-merging scripts/proofs/axioms.golden
+CONFLICT (content): Merge conflict in scripts/proofs/axioms.golden
+Recorded preimage for 'ConcreteSpec.lean'
+Recorded preimage for 'scripts/proofs/axioms.golden'
+Automatic merge failed; fix conflicts and then commit the result.
+Expected. Now keep every module both ConcreteSpec.lean conflicts, Spec.lean no conflict apparently auto merged. Now take theirs axioms. Read conflict ConcreteSpec.lean and Spec.lean perhaps. git checkout --theirs axioms per user okay no history rewriting. Then edit ConcreteSpec.lean. Read.UU ConcreteSpec.lean
+A  ConcreteSpec/Proofs/Hybrid.lean
+A  ConcreteSpec/Proofs/Memory.lean
+A  ConcreteSpec/Proofs/Observe2.lean
+M  ConcreteSpec/README.md
+M  ConcreteSpec/Spec.lean
+M  ConcreteSpec/Spec/Const.lean
+A  ConcreteSpec/Spec/Hybrid.lean
+M  ConcreteSpec/Spec/Ident.lean
+M  ConcreteSpec/Spec/Memory.lean
+A  ConcreteSpec/Spec/Observe.lean
+M  ConcreteSpec/Spec/Scalar.lean
+M  ISSUES.tsv
+A  changelog.d/2026-11-08-c4-memory.md
+A  changelog.d/2026-11-08-spec-c6-observations.md
+UU scripts/proofs/axioms.golden
+Updated 1 path from the index
+Should have exact conflict resolution remove markers keep Leak blank Memory Hybrid. Edit.
+
+• The merge has the expected conflicts in `ConcreteSpec.lean` and `scripts/proofs/axioms.golden`; `ConcreteSpec/Spec.lean` auto-merged with every module retained. I’m keeping `Leak`, `Memory`, and `Hybrid`, and taking the spec-core golden file as instructed.
+
+• Now stage commit merge with resolutions only. Should make build before commit? instruction "Commit merge resolutions only... then make tree build". Commit first. Should git diff check no conflict markers. Use git diff --check then add files commit. User explicitly commit merge. no need build before merge? says commit merge then build. Do.scripts/proofs/axioms.golden:1217: trailing whitespace.
++ConcreteSpec.Core.Hybrid.Cell.Projected.eq_1	
+scripts/proofs/axioms.golden:1218: trailing whitespace.
++ConcreteSpec.Core.Hybrid.Cell.mk.inj	
+scripts/proofs/axioms.golden:1220: trailing whitespace.
++ConcreteSpec.Core.Hybrid.Cell.mk.sizeOf_spec	
+scripts/proofs/axioms.golden:1221: trailing whitespace.
++ConcreteSpec.Core.Hybrid.Place.mk.inj	
+scripts/proofs/axioms.golden:1223: trailing whitespace.
++ConcreteSpec.Core.Hybrid.Place.mk.sizeOf_spec	
+scripts/proofs/axioms.golden:1224: trailing whitespace.
++ConcreteSpec.Core.Hybrid.Range.mk.inj	
+scripts/proofs/axioms.golden:1226: trailing whitespace.
++ConcreteSpec.Core.Hybrid.Range.mk.sizeOf_spec	
+scripts/proofs/axioms.golden:1231: trailing whitespace.
++ConcreteSpec.Core.Hybrid.State.memory_set	
+scripts/proofs/axioms.golden:1232: trailing whitespace.
++ConcreteSpec.Core.Hybrid.State.mk.inj	
+scripts/proofs/axioms.golden:1234: trailing whitespace.
++ConcreteSpec.Core.Hybrid.State.mk.sizeOf_spec	
+scripts/proofs/axioms.golden:1235: trailing whitespace.
++ConcreteSpec.Core.Hybrid.State.places_memory	
+scripts/proofs/axioms.golden:1236: trailing whitespace.
++ConcreteSpec.Core.Hybrid.State.places_set	
+scripts/proofs/axioms.golden:1239: trailing whitespace.
++ConcreteSpec.Core.Hybrid.Storage.materialized.inj	
+scripts/proofs/axioms.golden:1241: trailing whitespace.
++ConcreteSpec.Core.Hybrid.Storage.materialized.sizeOf_spec	
+scripts/proofs/axioms.golden:1242: trailing whitespace.
++ConcreteSpec.Core.Hybrid.Storage.structured.inj	
+scripts/proofs/axioms.golden:1244: trailing whitespace.
++ConcreteSpec.Core.Hybrid.Storage.structured.sizeOf_spec	
+scripts/proofs/axioms.golden:1250: trailing whitespace.
++ConcreteSpec.Core.Hybrid.encode.eq_1	
+scripts/proofs/axioms.golden:1251: trailing whitespace.
++ConcreteSpec.Core.Hybrid.encode.eq_2	
+scripts/proofs/axioms.golden:1252: trailing whitespace.
++ConcreteSpec.Core.Hybrid.encode.eq_3	
+scripts/proofs/axioms.golden:1256: trailing whitespace.
++ConcreteSpec.Core.Hybrid.instDecidableEqPlace.decEq._proof_1	
+scripts/proofs/axioms.golden:1257: trailing whitespace.
++ConcreteSpec.Core.Hybrid.instDecidableEqPlace.decEq._proof_2	
+scripts/proofs/axioms.golden:1258: trailing whitespace.
++ConcreteSpec.Core.Hybrid.instDecidableStorable._proof_1	
+scripts/proofs/axioms.golden:1259: trailing whitespace.
++ConcreteSpec.Core.Hybrid.instDecidableStorable._proof_2	
+scripts/proofs/axioms.golden:1279: trailing whitespace.
++ConcreteSpec.Core.Hybrid.sizeof.eq_1	
+scripts/proofs/axioms.golden:1280: trailing whitespace.
++ConcreteSpec.Core.Hybrid.sizeof.eq_2	
+scripts/proofs/axioms.golden:1281: trailing whitespace.
++ConcreteSpec.Core.Hybrid.sizeof.eq_3	
+scripts/proofs/axioms.golden:1341: trailing whitespace.
++ConcreteSpec.Core.Mem.Block.Candidate.eq_1	
+scripts/proofs/axioms.golden:1342: trailing whitespace.
++ConcreteSpec.Core.Mem.Block.Overlaps.eq_1	
+scripts/proofs/axioms.golden:1343: trailing whitespace.
++ConcreteSpec.Core.Mem.Block.geometry.eq_1	
+scripts/proofs/axioms.golden:1364: trailing whitespace.
++ConcreteSpec.Core.Mem.Memory.block.eq_1	
+scripts/proofs/axioms.golden:1365: trailing whitespace.
++ConcreteSpec.Core.Mem.Memory.empty.eq_1	
+scripts/proofs/axioms.golden:1366: trailing whitespace.
++ConcreteSpec.Core.Mem.Memory.expose.eq_1	
+scripts/proofs/axioms.golden:1371: trailing whitespace.
++ConcreteSpec.Core.Mem.Memory.modify.eq_1	
+scripts/proofs/axioms.golden:1373: trailing whitespace.
++ConcreteSpec.Core.Mem.Ptr.eqAddr.eq_1	
+scripts/proofs/axioms.golden:1391: trailing whitespace.
++ConcreteSpec.Core.Mem.block_modify	
+scripts/proofs/axioms.golden:1392: trailing whitespace.
++ConcreteSpec.Core.Mem.candidate.eq_1	
+scripts/proofs/axioms.golden:1413: trailing whitespace.
++ConcreteSpec.Core.Mem.encodeBool.eq_1	
+scripts/proofs/axioms.golden:1414: trailing whitespace.
++ConcreteSpec.Core.Mem.encodeInt.eq_1	
+scripts/proofs/axioms.golden:1416: trailing whitespace.
++ConcreteSpec.Core.Mem.encodePtr.congr_simp	
+scripts/proofs/axioms.golden:1417: trailing whitespace.
++ConcreteSpec.Core.Mem.encodePtr.eq_1	
+scripts/proofs/axioms.golden:1420: trailing whitespace.
++ConcreteSpec.Core.Mem.expose_geometry	
+scripts/proofs/axioms.golden:1422: trailing whitespace.
++ConcreteSpec.Core.Mem.expose_result	
+scripts/proofs/axioms.golden:1454: trailing whitespace.
++ConcreteSpec.Core.Mem.intByte_power	
+scripts/proofs/axioms.golden:1455: trailing whitespace.
++ConcreteSpec.Core.Mem.intBytes.eq_1	
+scripts/proofs/axioms.golden:1457: trailing whitespace.
++ConcreteSpec.Core.Mem.leBytes.eq_1	
+scripts/proofs/axioms.golden:1458: trailing whitespace.
++ConcreteSpec.Core.Mem.leBytes.eq_2	
+scripts/proofs/axioms.golden:1459: trailing whitespace.
++ConcreteSpec.Core.Mem.leBytes.eq_def	
+scripts/proofs/axioms.golden:1461: trailing whitespace.
++ConcreteSpec.Core.Mem.leValue.eq_1	
+scripts/proofs/axioms.golden:1462: trailing whitespace.
++ConcreteSpec.Core.Mem.leValue.eq_2	
+scripts/proofs/axioms.golden:1463: trailing whitespace.
++ConcreteSpec.Core.Mem.leValue.eq_def	
+scripts/proofs/axioms.golden:1473: trailing whitespace.
++ConcreteSpec.Core.Mem.octets.eq_1	
+scripts/proofs/axioms.golden:1474: trailing whitespace.
++ConcreteSpec.Core.Mem.octets.eq_2	
+scripts/proofs/axioms.golden:1475: trailing whitespace.
++ConcreteSpec.Core.Mem.octets.eq_3	
+scripts/proofs/axioms.golden:1476: trailing whitespace.
++ConcreteSpec.Core.Mem.octets.eq_def	
+scripts/proofs/axioms.golden:1479: trailing whitespace.
++ConcreteSpec.Core.Mem.ordered.eq_1	
+scripts/proofs/axioms.golden:1480: trailing whitespace.
++ConcreteSpec.Core.Mem.ordered.eq_2	
+scripts/proofs/axioms.golden:1502: trailing whitespace.
++ConcreteSpec.Core.Observe.AdapterDemo.Op.double.sizeOf_spec	
+scripts/proofs/axioms.golden:1510: trailing whitespace.
++ConcreteSpec.Core.Observe.Answer.blocked.sizeOf_spec	
+scripts/proofs/axioms.golden:1511: trailing whitespace.
++ConcreteSpec.Core.Observe.Answer.response.inj	
+scripts/proofs/axioms.golden:1513: trailing whitespace.
++ConcreteSpec.Core.Observe.Answer.response.sizeOf_spec	
+scripts/proofs/axioms.golden:1514: trailing whitespace.
++ConcreteSpec.Core.Observe.CompleteTrace.eq_1	
+scripts/proofs/axioms.golden:1515: trailing whitespace.
++ConcreteSpec.Core.Observe.Demo.Op.double.sizeOf_spec	
+scripts/proofs/axioms.golden:1517: trailing whitespace.
++ConcreteSpec.Core.Observe.Demo.sp._proof_1	
+scripts/proofs/axioms.golden:1518: trailing whitespace.
++ConcreteSpec.Core.Observe.Demo.sp._proof_2	
+scripts/proofs/axioms.golden:1519: trailing whitespace.
++ConcreteSpec.Core.Observe.Event.output.inj	
+scripts/proofs/axioms.golden:1521: trailing whitespace.
++ConcreteSpec.Core.Observe.Event.output.sizeOf_spec	
+scripts/proofs/axioms.golden:1522: trailing whitespace.
++ConcreteSpec.Core.Observe.Event.request.inj	
+scripts/proofs/axioms.golden:1524: trailing whitespace.
++ConcreteSpec.Core.Observe.Event.request.sizeOf_spec	
+scripts/proofs/axioms.golden:1525: trailing whitespace.
++ConcreteSpec.Core.Observe.Event.response.inj	
+scripts/proofs/axioms.golden:1527: trailing whitespace.
++ConcreteSpec.Core.Observe.Event.response.sizeOf_spec	
+scripts/proofs/axioms.golden:1528: trailing whitespace.
++ConcreteSpec.Core.Observe.EventSignature.mk.inj	
+scripts/proofs/axioms.golden:1530: trailing whitespace.
++ConcreteSpec.Core.Observe.EventSignature.mk.sizeOf_spec	
+scripts/proofs/axioms.golden:1531: trailing whitespace.
++ConcreteSpec.Core.Observe.ExecAdapter.WellFormed.answered	
+scripts/proofs/axioms.golden:1532: trailing whitespace.
++ConcreteSpec.Core.Observe.ExecAdapter.WellFormed.blocked	
+scripts/proofs/axioms.golden:1533: trailing whitespace.
++ConcreteSpec.Core.Observe.ExecAdapter.WellFormed.internal	
+scripts/proofs/axioms.golden:1534: trailing whitespace.
++ConcreteSpec.Core.Observe.ExecAdapter.mk.inj	
+scripts/proofs/axioms.golden:1536: trailing whitespace.
++ConcreteSpec.Core.Observe.ExecAdapter.mk.sizeOf_spec	
+scripts/proofs/axioms.golden:1537: trailing whitespace.
++ConcreteSpec.Core.Observe.ExecAdapter.project.eq_1	
+scripts/proofs/axioms.golden:1542: trailing whitespace.
++ConcreteSpec.Core.Observe.Execution.blocked.inj	
+scripts/proofs/axioms.golden:1544: trailing whitespace.
++ConcreteSpec.Core.Observe.Execution.blocked.sizeOf_spec	
+scripts/proofs/axioms.golden:1545: trai
+ling whitespace.
++ConcreteSpec.Core.Observe.Execution.finite.inj	
+scripts/proofs/axioms.golden:1547: trailing whitespace.
++ConcreteSpec.Core.Observe.Execution.finite.sizeOf_spec	
+scripts/proofs/axioms.golden:1548: trailing whitespace.
++ConcreteSpec.Core.Observe.Execution.infinite.inj	
+scripts/proofs/axioms.golden:1550: trailing whitespace.
++ConcreteSpec.Core.Observe.Execution.infinite.sizeOf_spec	
+scripts/proofs/axioms.golden:1551: trailing whitespace.
++ConcreteSpec.Core.Observe.FullObservation.blocked.inj	
+scripts/proofs/axioms.golden:1553: trailing whitespace.
++ConcreteSpec.Core.Observe.FullObservation.blocked.sizeOf_spec	
+scripts/proofs/axioms.golden:1554: trailing whitespace.
++ConcreteSpec.Core.Observe.FullObservation.finiteDivergence.inj	
+scripts/proofs/axioms.golden:1556: trailing whitespace.
++ConcreteSpec.Core.Observe.FullObservation.finiteDivergence.sizeOf_spec	
+scripts/proofs/axioms.golden:1557: trailing whitespace.
++ConcreteSpec.Core.Observe.FullObservation.infiniteDivergence.inj	
+scripts/proofs/axioms.golden:1559: trailing whitespace.
++ConcreteSpec.Core.Observe.FullObservation.infiniteDivergence.sizeOf_spec	
+scripts/proofs/axioms.golden:1560: trailing whitespace.
++ConcreteSpec.Core.Observe.FullObservation.terminal.inj	
+scripts/proofs/axioms.golden:1562: trailing whitespace.
++ConcreteSpec.Core.Observe.FullObservation.terminal.sizeOf_spec	
+scripts/proofs/axioms.golden:1589: trailing whitespace.
++ConcreteSpec.Core.Observe.Observation.mk.inj	
+scripts/proofs/axioms.golden:1591: trailing whitespace.
++ConcreteSpec.Core.Observe.Observation.mk.sizeOf_spec	
+scripts/proofs/axioms.golden:1592: trailing whitespace.
++ConcreteSpec.Core.Observe.OperationContract.mk.inj	
+scripts/proofs/axioms.golden:1594: trailing whitespace.
++ConcreteSpec.Core.Observe.OperationContract.mk.sizeOf_spec	
+scripts/proofs/axioms.golden:1597: trailing whitespace.
++ConcreteSpec.Core.Observe.RequestResponse.kind	
+scripts/proofs/axioms.golden:1598: trailing whitespace.
++ConcreteSpec.Core.Observe.Responds.allows	
+scripts/proofs/axioms.golden:1599: trailing whitespace.
++ConcreteSpec.Core.Observe.Responds.matches	
+scripts/proofs/axioms.golden:1601: trailing whitespace.
++ConcreteSpec.Core.Observe.SameInfiniteObservation.symm	
+scripts/proofs/axioms.golden:1613: trailing whitespace.
++ConcreteSpec.Core.Observe.SilentInsertion.brecOn	
+scripts/proofs/axioms.golden:1614: trailing whitespace.
++ConcreteSpec.Core.Observe.SilentInsertion.visible	
+scripts/proofs/axioms.golden:1615: trailing whitespace.
++ConcreteSpec.Core.Observe.Step.emit.inj	
+scripts/proofs/axioms.golden:1617: trailing whitespace.
++ConcreteSpec.Core.Observe.Step.emit.sizeOf_spec	
+scripts/proofs/axioms.golden:1618: trailing whitespace.
++ConcreteSpec.Core.Observe.Step.event?.eq_1	
+scripts/proofs/axioms.golden:1619: trailing whitespace.
++ConcreteSpec.Core.Observe.Step.event?.eq_2	
+scripts/proofs/axioms.golden:1620: trailing whitespace.
++ConcreteSpec.Core.Observe.Step.silent.sizeOf_spec	
+scripts/proofs/axioms.golden:1629: trailing whitespace.
++ConcreteSpec.Core.Observe.Terminal.exited.inj	
+scripts/proofs/axioms.golden:1631: trailing whitespace.
++ConcreteSpec.Core.Observe.Terminal.exited.sizeOf_spec	
+scripts/proofs/axioms.golden:1632: trailing whitespace.
++ConcreteSpec.Core.Observe.Terminal.startupRefused.sizeOf_spec	
+scripts/proofs/axioms.golden:1633: trailing whitespace.
++ConcreteSpec.Core.Observe.Terminal.trapped.inj	
+scripts/proofs/axioms.golden:1635: trailing whitespace.
++ConcreteSpec.Core.Observe.Terminal.trapped.sizeOf_spec	
+scripts/proofs/axioms.golden:1637: trailing whitespace.
++ConcreteSpec.Core.Observe.ValidTrace.brecOn	
+scripts/proofs/axioms.golden:1640: trailing whitespace.
++ConcreteSpec.Core.Observe.byteColumn.eq_1	
+scripts/proofs/axioms.golden:1661: trailing whitespace.
++ConcreteSpec.Core.Observe.visible.eq_1	
+scripts/proofs/axioms.golden:1662: trailing whitespace.
++ConcreteSpec.Core.Observe.visiblePrefix.eq_1	
+scripts/proofs/axioms.golden:1691: trailing whitespace.
++ConcreteSpec.Core.Span.mk.congr_simp	
+scripts/proofs/axioms.golden:1705: trailing whitespace.
++ConcreteSpec.Core.TrapKind.all.eq_1	
+scripts/proofs/axioms.golden:2604: trailing whitespace.
++Except.toOption.eq_1	
+scripts/proofs/axioms.golden:2605: trailing whitespace.
++Except.toOption.eq_2	
+scripts/proofs/axioms.golden:2850: trailing whitespace.
++_private.ConcreteSpec.Proofs.Hybrid.0.ConcreteSpec.Core.Hybrid.State.materialize.match_3.eq_1	
+scripts/proofs/axioms.golden:2851: trailing whitespace.
++_private.ConcreteSpec.Proofs.Hybrid.0.ConcreteSpec.Core.Hybrid.State.materialize.match_3.eq_2	
+scripts/proofs/axioms.golden:2852: trailing whitespace.
++_private.ConcreteSpec.Proofs.Hybrid.0.ConcreteSpec.Core.Hybrid.decode.match_1.eq_1	
+scripts/proofs/axioms.golden:2853: trailing whitespace.
++_private.ConcreteSpec.Proofs.Hybrid.0.ConcreteSpec.Core.Hybrid.decode.match_1.eq_2	
+scripts/proofs/axioms.golden:2854: trailing whitespace.
++_private.ConcreteSpec.Proofs.Hybrid.0.ConcreteSpec.Core.Hybrid.decode.match_1.eq_3	
+scripts/proofs/axioms.golden:2855: trailing whitespace.
++_private.ConcreteSpec.Proofs.Hybrid.0.ConcreteSpec.Core.Hybrid.encode.match_1.eq_1	
+scripts/proofs/axioms.golden:2856: trailing whitespace.
++_private.ConcreteSpec.Proofs.Hybrid.0.ConcreteSpec.Core.Hybrid.encode.match_1.eq_2	
+scripts/proofs/axioms.golden:2857: trailing whitespace.
++_private.ConcreteSpec.Proofs.Hybrid.0.ConcreteSpec.Core.Hybrid.encode.match_1.eq_3	
+scripts/proofs/axioms.golden:2858: trailing whitespace.
++_private.ConcreteSpec.Proofs.Hybrid.0.ConcreteSpec.Core.Hybrid.instReprStorage.repr.match_1.eq_1	
+scripts/proofs/axioms.golden:2859: trailing whitespace.
++_private.ConcreteSpec.Proofs.Hybrid.0.ConcreteSpec.Core.Hybrid.instReprStorage.repr.match_1.eq_2	
+scripts/proofs/axioms.golden:2860: trailing whitespace.
++_private.ConcreteSpec.Proofs.Hybrid.0.ConcreteSpec.Core.Hybrid.sizeof.match_1.eq_1	
+scripts/proofs/axioms.golden:2861: trailing whitespace.
++_private.ConcreteSpec.Proofs.Hybrid.0.ConcreteSpec.Core.Hybrid.sizeof.match_1.eq_2	
+scripts/proofs/axioms.golden:2862: trailing whitespace.
++_private.ConcreteSpec.Proofs.Hybrid.0.ConcreteSpec.Core.Hybrid.sizeof.match_1.eq_3	
+scripts/proofs/axioms.golden:2863: trailing whitespace.
++_private.ConcreteSpec.Proofs.Hybrid.0.ConcreteSpec.Core.instReprCVal.repr.match_1.eq_1	
+scripts/proofs/axioms.golden:2864: trailing whitespace.
++_private.ConcreteSpec.Proofs.Hybrid.0.ConcreteSpec.Core.instReprCVal.repr.match_1.eq_2	
+scripts/proofs/axioms.golden:2865: trailing whitespace.
++_private.ConcreteSpec.Proofs.Hybrid.0.ConcreteSpec.Core.instReprCVal.repr.match_1.eq_3	
+scripts/proofs/axioms.golden:2866: trailing whitespace.
++_private.ConcreteSpec.Proofs.Hybrid.0.Except.toBool.match_1.eq_1	
+scripts/proofs/axioms.golden:2867: trailing whitespace.
++_private.ConcreteSpec.Proofs.Hybrid.0.Except.toBool.match_1.eq_2	
+scripts/proofs/axioms.golden:2868: trailing whitespace.
++_private.ConcreteSpec.Proofs.Memory.0.ConcreteSpec.Core.AList.lookup.match_1.eq_1	
+scripts/proofs/axioms.golden:2869: trailing whitespace.
++_private.ConcreteSpec.Proofs.Memory.0.ConcreteSpec.Core.AList.lookup.match_1.eq_2	
+scripts/proofs/axioms.golden:2870: trailing whitespace.
++_private.ConcreteSpec.Proofs.Memory.0.ConcreteSpec.Core.AList.update.match_1.eq_1	
+scripts/proofs/axioms.golden:2871: trailing whitespace.
++_private.ConcreteSpec.Proofs.Memory.0.ConcreteSpec.Core.AList.update.match_1.eq_2	
+scripts/proofs/axioms.golden:2872: trailing whitespace.
++_private.ConcreteSpec.Proofs.Memory.0.ConcreteSpec.Core.Mem.Memory.access.match_1.eq_1	
+scripts/proofs/axioms.golden:2873: trailing whitespace.
++_private.ConcreteSpec.Proofs.Memory.0.ConcreteSpec.Core.Mem.Memory.access.match_1.eq_2	
+scripts/proofs/axioms.golden:2874: trailing whitespace.
++_private.ConcreteSpec.Proofs.Memory.0.ConcreteSpec.Core.Mem.Memory.access.match_3.eq_1	
+scripts/proofs/axioms.golden:2875: trailing whitespace.
++_private.ConcreteSpec.Proofs.Memory.0.ConcreteSpec.Core.Mem.Memory.access.match_3.eq_2	
+scripts/proofs/axioms.golden:2876: trailing whitespace.
++_private.ConcreteSpec.Proofs.Memory.0.ConcreteSpec.Core.Mem.Memory.free.match_1.eq_1	
+scripts/proofs/axioms.golden:2877: trailing whitespace.
++_private.ConcreteSpec.Proofs.Memory.0.ConcreteSpec.Core.Mem.Memory.free.match_1.eq_2	
+scripts/proofs/axioms.golden:2878: trailing whitespace.
++_private.ConcreteSpec.Proofs.Memory.0.ConcreteSpec.Core.Mem.Memory.fromExposed.match_1.eq_1	
+scripts/proofs/axioms.golden:2879: trailing whitespace.
++_private.ConcreteSpec.Proofs.Memory.0.ConcreteSpec.Core.Mem.Memory.fromExposed.match_1.eq_2	
+scripts/proofs/axioms.golden:2880: trailing whitespace.
++_private.ConcreteSpec.Proofs.Memory.0.ConcreteSpec.Core.Mem.Memory.load.match_1.eq_1	
+scripts/proofs/axioms.golden:2881: trailing whitespace.
++_private.ConcreteSpec.Proofs.Memory.0.ConcreteSpec.Core.Mem.Memory.load.match_1.eq_2	
+scripts/proofs/axioms.golden:2882: trailing whitespace.
++_private.ConcreteSpec.Proofs.Memory.0.ConcreteSpec.Core.Mem.Memory.load.match_1.eq_3	
+scripts/proofs/axioms.golden:2888: trailing whitespace.
++_private.ConcreteSpec.Proofs.Memory.0.ConcreteSpec.Core.Mem.leBytes.match_1.eq_1	
+scripts/proofs/axioms.golden:2889: trailing whitespace.
++_private.ConcreteSpec.Proofs.Memory.0.ConcreteSpec.Core.Mem.leBytes.match_1.eq_2	
+scripts/proofs/axioms.golden:2890: trailing whitespace.
++_private.ConcreteSpec.Proofs.Memory.0.ConcreteSpec.Core.Mem.leValue.match_1.eq_1	
+scripts/proofs/axioms.golden:2891: trailing whitespace.
++_private.ConcreteSpec.Proofs.Memory.0.ConcreteSpec.Core.Mem.leValue.match_1.eq_2	
+scripts/proofs/axioms.golden:2892: trailing whitespace.
++_private.ConcreteSpec.Proofs.Memory.0.ConcreteSpec.Core.Mem.octets.match_1.eq_1	
+scripts/proofs/axioms.golden:2893: trailing whitespace.
++_private.ConcreteSpec.Proofs.Memory.0.ConcreteSpec.Core.Mem.octets.match_1.eq_2	
+scripts/proofs/axioms.golden:2894: trailing whitespace.
++_private.ConcreteSpec.Proofs.Memory.0.ConcreteSpec.Core.Mem.octets.match_1.eq_3	
+scripts/proofs/axioms.golden:2895: trailing whitespace.
++_private.ConcreteSpec.Proofs.Memory.0.ConcreteSpec.Core.Mem.ordered.match_1.eq_1	
+scripts/proofs/axioms.golden:2896: trailing whitespace.
++_private.ConcreteSpec.Proofs.Memory.0.ConcreteSpec.Core.Mem.ordered.match_1.eq_2	
+scripts/proofs/axioms.golden:2897: trailing whitespace.
++_private.ConcreteSpec.Proofs.Memory.0.ConcreteSpec.Core.Mem.overlaps_symm	
+scripts/proofs/axioms.golden:2920: trailing whitespace.
++_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.Exec.runFrom.match_1.eq_1	
+scripts/proofs/axioms.golden:2921: trailing whitespace.
++_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.Exec.runFrom.match_1.eq_2	
+scripts/proofs/axioms.golden:2922: trailing whitespace.
++_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.Exec.runFrom.match_3.eq_1	
+scripts/proofs/axioms.golden:2923: trailing whitespace.
++_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.Exec.runFrom.match_3.eq_2	
+scripts/proofs/axioms.golden:2924: trailing whitespace.
++_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.Exec.runFrom.match_5.eq_1	
+scripts/proofs/axioms.golden:2925: trailing whitespace.
++_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.Exec.runFrom.match_5.eq_2	
+scripts/proofs/axioms.golden:2926: trailing whitespace.
++_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.Exec.runFrom.match_5.eq_3	
+scripts/proofs/axioms.golden:2927: trailing whitespace.
++_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.Exec.runFrom.match_7.eq_1	
+scripts/proofs/axioms.golden:2928: trailing whitespace.
++_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.Exec.runFrom.match_7.eq_2	
+scripts/proofs/axioms.golden:2929: trailing whitespace.
++_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.Exec.runFrom.match_7.eq_3	
+scripts/proofs/axioms.golden:2930: trailing whitespace.
++_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.Exec.runFrom.match_9.eq_1	
+scripts/proofs/axioms.golden:2931: trailing whitespace.
++_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.Observe.ExecAdapter.terminal?.match_1.eq_1	
+scripts/proofs/axioms.golden:2932: trailing whitespace.
++_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.Observe.ExecAdapter.terminal?.match_1.eq_2	
+scripts/proofs/axioms.golden:2933: trailing whitespace.
++_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.Observe.ExecAdapter.terminal?.match_1.eq_3	
+scripts/proofs/axioms.golden:2943: trailing whitespace.
++_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.Observe.Step.event?.match_1.eq_1	
+scripts/proofs/axioms.golden:2944: trailing whitespace.
++_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.Observe.Step.event?.match_1.eq_2	
+scripts/proofs/axioms.golden:2950: trailing whitespace.
++_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.Observe.decodeKinds.match_1.eq_1	
+scripts/proofs/axioms.golden:2951: trailing whitespace.
++_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.Observe.decodeKinds.match_1.eq_2	
+scripts/proofs/axioms.golden:2952: trailing whitespace.
++_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.Observe.decodeKinds.match_3.eq_1	
+scripts/proofs/axioms.golden:2953: trailing whitespace.
++_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.Observe.decodeKinds.match_3.eq_2	
+scripts/proofs/axioms.golden:2958: trailing whitespace.
++_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.Observe.parseRevNat.eq_1	
+scripts/proofs/axioms.golden:2960: trailing whitespace.
++_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.Observe.stripPrefix.eq_1	
+scripts/proofs/axioms.golden:2961: trailing whitespace.
++_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.Observe.stripPrefix.eq_2	
+scripts/proofs/axioms.golden:2962: trailing whitespace.
++_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.Observe.stripPrefix.eq_3	
+scripts/proofs/axioms.golden:2963: trailing whitespace.
++_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.Observe.stripPrefix.eq_def	
+scripts/proofs/axioms.golden:2964: trailing whitespace.
++_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.Observe.stripPrefix.match_1.eq_1	
+scripts/proofs/axioms.golden:2965: trailing whitespace.
++_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.Observe.stripPrefix.match_1.eq_2	
+scripts/proofs/axioms.golden:2966: trailing whitespace.
++_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.Observe.stripPrefix.match_1.eq_3	
+scripts/proofs/axioms.golden:2969: trailing whitespace.
++_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.instReprTrapKind.repr.match_1.eq_1	
+scripts/proofs/axioms.golden:2970: trailing whitespace.
++_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.instReprTrapKind.repr.match_1.eq_2	
+scripts/proofs/axioms.golden:2971: trailing whitespace.
++_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.instReprTrapKind.repr.match_1.eq_3	
+scripts/proofs/axioms.golden:2972: trailing whitespace.
++_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.instReprTrapKind.repr.match_1.eq_4	
+scripts/proofs/axioms.golden:2973: trailing whitespace.
++_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.instReprTrapKind.repr.match_1.eq_5	
+scripts/proofs/axioms.golden:2974: trailing whitespace.
++_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.instReprTrapKind.repr.match_1.eq_6	
+diff check blocked by inherited golden whitespace. I shouldn't edit golden. Just add commit. git add wasn't executed due &&. Do add commit.Recorded resolution for 'ConcreteSpec.lean'.
+Recorded resolution for 'scripts/proofs/axioms.golden'.
+[wip/spec-c7 
+72b35810b] Merge remote-tracking branch 'origin/wip/spec-core' into wip/spec-c7
+Should build integrated. Run allowed exact nix develop timeout 1200. Tool max timeout 300 but background? user says run with timeout 1200. Bash foreground timeout max300; command timeout1200 could tool move background after300. Better run background disable? "commit each piece after nix develop -c timeout 1200 lake build ConcreteSpec passes". Use run background timeout 1200 perhaps. Build perhaps 30 sec. Do foreground timeout300 command timeout1200.
+
+• The merge is committed as `72b35810b`. I’m checking the integrated tree now; any failures caused by the new C4/C6 APIs will be resolved before the individual C7 repair commits.✔ [16/47] Built ConcreteSpec.Spec.Ident (504ms)
+✔ [17/47] Built ConcreteSpec.Spec.Target (229ms)
+✔ [18/47] Built ConcreteSpec.Spec.Outcome (201ms)
+✔ [19/47] Built ConcreteSpec.Spec.Scalar (491ms)
+✔ [20/47] Built ConcreteSpec.Spec.Const (407ms)
+✔ [21/47] Built ConcreteSpec.Spec.Memory (482ms)
+✔ [22/47] Built ConcreteSpec.Spec.Rules (115ms)
+✔ [23/47] Built ConcreteSpec.Proofs.Scalar (680ms)
+✔ [24/47] Built ConcreteSpec.Spec.Exec (1.1s)
+✔ [25/47] Built ConcreteSpec.Proofs.Const (565ms)
+✔ [26/47] Built ConcreteSpec.Spec.Hybrid (319ms)
+✔ [27/47] Built ConcreteSpec.Spec.Leak (452ms)
+✔ [28/47] Built ConcreteSpec.Spec.Observe (715ms)
+✔ [29/47] Built ConcreteSpec.Proofs.Exec (749ms)
+✔ [30/47] Built ConcreteSpec.Spec (144ms)
+✔ [31/47] Built ConcreteSpec.Proofs.Basics (213ms)
+✔ [32/47] Built ConcreteSpec.Proofs.Leak (667ms)
+✔ [33/47] Built ConcreteSpec.Proofs.Authority (399ms)
+✔ [34/47] Built ConcreteSpec.Proofs.Cleanup (589ms)
+✔ [35/47] Built ConcreteSpec.Proofs.Slice1 (645ms)
+✔ [36/47] Built ConcreteSpec.Proofs.Memory (636ms)
+✔ [37/47] Built ConcreteSpec.Proofs.Brand (756ms)
+✔ [38/47] Built ConcreteSpec.Proofs.Borrow (829ms)
+✔ [39/47] Built ConcreteSpec.Proofs.Observe (223ms)
+✔ [40/47] Built ConcreteSpec.Proofs.Checker (320ms)
+✔ [41/47] Built ConcreteSpec.Proofs.Rep (386ms)
+✔ [42/47] Built ConcreteSpec.Proofs.Hybrid (363ms)
+✔ [43/47] Built ConcreteSpec.Proofs.Slice0 (236ms)
+✔ [44/47] Built ConcreteSpec.Proofs.Examples (193ms)
+✔ [45/47] Built ConcreteSpec.Proofs.Observe2 (1.6s)
+✔ [46/47] Built ConcreteSpec (148ms)
+Build completed successfully (47 jobs).
+
+
+• Now big changes. Should best design structural. Should plan myself. User wants each item own commit, all audit rows C7. Could group security fixes and other examples. Should carefully redesign reset to remove recorded released field. Action.reset lineage only. Then apply resets m live. resetBytes currently action sequence cannot derive released amounts without state. Best long-term design: derive outflow from transition itself not action. Could change resetBytes to executed trace? Options:
+  - Action.reset lineage no released; apply m reset -> reset m account. Define resetBytes lineage m actions maybe recursive based on run states. Then run_conservation h use `resetBytes lineage m actions`. That derives from state. Should signature and proofs. Or derive conservation using a `released` projection of transitions. Could define `resetBytes (lineage) (m) : List Action → Nat`, rec follows only successful apply? If invalid actions, how count? For successful run h, define `resetBytes` with state. For each action:
+    | [] 0
+    | a::rest => match apply m a with
+       | none => 0
+       | some m' => outflow m a + resetBytes lineage m' rest
+  where outflow reset current.live if matching. This is total and independent from actual transition. Then run conservation with resetBytes lineage m actions. Report net change uses state-aware resetBytes. That is structural.
+  Could define `released (m) (a) := if reset l then (m l).live else 0`, `resetBytes lineage m` recursively `apply m a` maybe if none stop. For successful run straightforward. Or resetBytes over list of `(Action × Memory)` actual trace? State-aware function best.
+
+  C4 refinement after merge now C4 present. Brief originally abstract if C4 not base. ROUND3 says derive transition OR prove refinement. I can derive reset from transition. Update doc C4 present now? Merge C4 now so header claims C4 not base outdated. Should update. Scope C7 only okay. Could say C4 successful operations instantiate abstract actions; resets derive current live bytes. No need direct refinement. Perhaps import Memory? no.
+
+  Reports: best long-term define an analysis report independently of actual quantities from action sequence and entry. Report `analyze lineage entry footprint actions` computing `allocated`, net using actual run? If build report from action sequence independent of quantities, local net resets state dependent. I can prove generic soundness theorem `run_report_sound` for arbitrary bounds satisfying hreq etc plus actual run. Non-trivial concrete independent report limits 8,5,10. Entry historical100 live2; actions alloc8 free3 (no reset maybe) exit live7 local peak10; net5. footprint some10 bound12. Mixed statuses: requested established8, net not established placeholder -100, peak established10, footprint established12 with actual some10. `established_report_sound` generic theorem with run h, entry account and arbitrary bounds. Should formulate report independently of exit, constraints use quantities from action seq and actual run maybe no exit in bound premises. I can make:
+  theorem established_report_sound {m m' actions lineage footprint requestedLimit netLimit peakLimit footprintLimit}
+   (h : run m actions = some m')
+   (entry := m lineage?) Need entry Account separate equality.
+   (hentry : m lineage = entry)
+   (hrequested : allocated lineage actions ≤ requestedLimit)
+   (hnet : (allocated... : Int) - freed... - resetBytes lineage m actions ≤ netLimit)
+   (hpeak : (m' lineage).functionPeak ≤ peakLimit) still uses actual exit to bound. Requirement report built independently from quantities from action sequence or analysis and connect entry exit actual run. Could use independently fixed report r with premises Bounds.Sound calculated action quantities? But `LineageReport.Sound` already exact fields. Should avoid x<=x by making report arbitrary and run connection. Generic theorem:
+  theorem established_report_sound {entry exit footprint r m m' actions lineage}
+   (hentry : m lineage = entry)
+   (hrun : run m actions = some m')
+   (hexit : m' lineage = exit)
+   (hrequested : allocated lineage actions ≤ r.requested.limit)
+   (hnet : ... ≤ r.netChange.limit)
+   (hpeak : ??? computed localPeak from run independent maybe `localPeak lineage entry.live actions` ≤ r.peak.limit)
+   (hstatuses equality established) ...
+   -> Sound entry exit footprint r
+  This can be tautological via hpeak from exit if using actual. Better define analysis quantities from action sequence independent of exit, including local peak. Should state-dependent peak simulation. Define `Analysis` structure requested net peak maybe based on actions and entry live. `analyze` processes actions abstractly independent of final accounts. This may duplicate apply but can derive quantities independently. I could define `localPeak (lineage) (entryLive) (m) actions` recursively using state transitions; still uses exit? no. Or define `functionPeak` theorem `exit.functionPeak = max entry.live (...)` via run. Simpler generic `run_report_sound` takes `r` arbitrary, h `LineageReport.Sound`? no.
+
+  Could define `FunctionAnalysis` computed from entry `Account` and actions:
+  - `requested := allocated lineage actions`
+  - `netChange := (allocated : Int) - freed - resetBytes lineage (Memory.set Memory.empty lineage entry) actions` maybe memory context needed other lineages irrelevant. ResetBytes state dependent on m.
+  - `peak` := localPeak entry.live actions for target lineage. For valid run, local peak can compute using alloc/free/reset, where reset live=0. Should guard invalid. Could use `Account` transition sequence rather than Memory. `Account.apply` operations: Option Account, reset no guard except free. `Account.run`. Then abstract `Memory.apply` is set from Account.apply. That structural redesign improves proofs. `Account.peakAfter` exit functionPeak available but analysis computing exit from actions is same actual quantities if report limits exact? Yet independent report fixed numbers and generic theorem any limits okay. The main issue vacuity exact bound x≤x resolved by fixed underbounds. Generic soundness can use `allocated` and `localPeak` from actions.
+  Define `localPeak` as maximum across sequence. I can compute `Account.run` from entry then functionPeak final. But using run itself and actual exit in theorem okay if bounds arbitrary. Example suffices owner likely. Should have robust theorem with arbitrary independent limits:
+  ```
+  theorem established_report_sound
+   {m m' entry actions lineage requestedLimit netLimit peakLimit}
+   (hentry : m lineage = entry)
+   (hrun : run m actions = some m')
+   (hrequested : allocated lineage actions ≤ requestedLimit)
+   (hnet : (allocated... - freed... - resetBytes lineage m actions : Int) ≤ netLimit)
+   (hpeak : (m' lineage).functionPeak ≤ peakLimit)
+   (hfp : ∃ fp, footprint = some fp ∧ fp ≤ footprintLimit) :
+   Sound entry (m' lineage) footprint { limits..., established...}
+  ```
+  hpeak still actual quantity, but bound is independent, not copy. Requirement "report built independently ... from action sequence or analysis result". Could hpeak use `peakAfter lineage entry actions` not exit. But theorem connects by actual run and uses run conservation to convert requested/net; peak arbitrary premise. This is a sound report independently established if hpeak derived by analysis external. Concrete instance exact numbers 10. Good. Could generalize `r` mixed statuses separately.
+
+  Perhaps best define `ReportAnalysis` with `requested`, `netChange`, `peak`, `footprint`, independently computed from entry/action sequence and an allocator footprint input. Then `LineageReport.analysis` established bounds exact analysis. Soundness theorem from actual run and `peak_analysis` equality. But exact x≤x still if analysis matches actual by computation, substantive because independent. Planted underbounds fail. However more code. Best long-term likely function:
+  ```
+  def localPeak (entry : Account) (lineage) (m) actions := (run ...).map ...?
+  ```
+  Report analysis can be `Option LineageReport` only when run success:
+  ```
+  def analyze (lineage) (m) (actions) (footprint) : Option LineageReport :=
+   (run m actions).map fun m' => { requested limit := allocated..., netChange limit := ..., peak limit := (m' lineage).functionPeak ...}
+  ```
+  Then `established_report_sound` if `analyze ... = some r` and `run...` proves Sound. Though report depends on exit via analysis but independently generated from actions and run. Vacuity? not vacuous because computation. Yet theorem may still restate definitions. Concrete non-trivial and negatives are required. Better generic bound theorem is stronger and clearly substantive.
+
+  Should have security NI degenerate. Must fix all rows including NI/CT per agy. Should redesign examples. Should secret-dependent release equal releases needed for NI. Fundamental issue if secret-dependent release and low-equivalence hides secret, equal releases premise can equate secrets if release output same. For secure pair s1,s2 arbitrary cannot have equal releases unless secrets equal. `secure_ni` theorem quantifies runs with equal releases, so can prove output equal by extracting release values. The instrumentation releases actual value; secure program releases secret and outputs secret. Then `secure_ni` proof uses release equality to show s1=s2. `secure_ct` for same program would then also hold under equal releases, but that's a bit CT premise includes releases, so yes. Should separate NI but not CT program that outputs constant but variableTime secret without release equality forcing equality. Existing leakyStart outputs secret, fails both. Add `timingStart` body release 0 output constant but extra variable time on secret? Current all prims leak operands, output constant/release0 no secret. Could create `Prim.poke` with no observation and allowed answer 0, body release0, `consume secret`, output7. Then NI holds because output public constant regardless releases; CT fails due leakage secret. But more constructors/program steps uniqueness complexity. Alternative reuse `body .secret` leaky program and prove `DelimitedReleaseNI` under equal releases: releases zero currently not secret; outputs differ so cannot. If change release actual secret and output7 for secure -> secure NI relies releases, CT also. To separate NI/CT use `timingStart` with `.release [.lit 0]`, `.output [.lit 7]` but instrument leakage special based on initial secret even if no primitive secret? Could instrumentation leak `secret` at first silent step based on store; legitimate leakage branch/loop maybe. Instrumentation `leakage :=` if request none and config start? Could add `.variableTime ⟨2⟩ [st]` on first silent transition. Then all programs leak secret -> secure_ct no longer. Not good.
+
+  Add primitive `.work` no event allowed answer, output unaffected. Program `.seq (.prim none .work [.secret] ⟨2⟩) (body (.lit7))` has extra 2 steps; run uniqueness similar. Can avoid full run unique proof by adding a separate tiny instrumentation/operand model? Could simplify with general definitions and concrete Run `timingRun`. Prove NI using a `timing_run_unique` full 6 steps, CT counter using timingRun1/2. That's ~150 lines. Could instead redefine `secure` program release secret output secret and `leaky` output secret release0, and use secureRun for CT/NI. Add `publicStart` as start? To demonstrate NI not CT, use same `leakyStart` but modify instrumentation for leaky to observations constant? Not same P instrumentation in definitions. Could prove existence of an Instrumentation/program pair abstract example using simple Run construction maybe easier.
+
+  Perhaps satisfy agy "NI vs CT not separated" by show leaky pair with equal releases after making secure release secret? If leaky release secret and output7 then CT fails but NI holds; secure could release secret output secret. Use one body function `(release : Expr) (result : Expr)`:
+  - secure = release secret, output secret. secure NI uses releases equality, CT also.
+  - timing/leaky? `timingStart = release 0, output 7` but leak secret at work.
+  Current leakyStart release0 output secret used authorization counterexamples both. Keep.
+  Add `publicTimingStart` program maybe `body (.lit7)` but instrumentation leaks secret at output even when operand7? Could alter instrumentation leakage to include shared store as an operand only for a distinct `.output` at site? That would break secure_ct. Should distinct prim.
+
+  I can add Prim `work`, eval etc; general body (work? optional). More code but manageable.
+
+  Low equivalence: change labelling `PublicValue := Int`, `project := fun _ => some?` no locals anyway, `lowStore := fun _ _ => True`. Should mixed locals example separate with secret/public local? Labelling is global per value not var, can't label same Int secret in store and public in local? `project := fun _ => some` makes all locals public and lowStore true. Existing secure initial locals empty, fine. `leaky_low` remains trivial store but publicLocals empty. Add example configs with locals x and y, project maybe public only non-negative? Labelling projection based value, not sensitivity type. Could define `mixedLabelling` project `fun v => if v=0 then none else some v`, then locals `[(x,0),(y,1)]`, public only y. Show secret x may differ 0 both? To allow secret change use values 0 only because project none only 0. Use project based on sign: if v<0 none else some v; secret -1 vs -2, public 7 same. lowStore True. Show LowEquivalent with locals x=-1 y=7 vs x=-2 y=7; negative public y=8. That exercises selective. Use labelling for main maybe `PublicValue Int`, `project := fun _ => none` still audit says demo partially vacuous but companion mixed addresses. Better set main `labelling.project := fun _ => none` still `leaky_low` D/M row can point mixed. Could define `labelling` as mixed and lowStore True. Initial locals empty no difference; leaky_low still. Use same mixed labelling with project negative secret. Then public locals examples use it. Great.
+
+  Release records: change `releaseZero` to `releaseValue v` actual. secure release secret. leaky release0 remains. Policy same.
+  `allowed .release [_] => ok0` unaffected.
+  `body release result`.
+  `start = body .secret .secret`, `leakyStart = body (.lit0) .secret`. afterSeq etc take release expr and result. secure_run_unique releases `[releaseValue secret]`, leakage `[secret],[secret]`, observations output secret. secure_ni proof needs release equality gives secret equality. secure_run_unique each yields releases, then h equality `releaseValue s1 = releaseValue s2` -> s1=s2. Could cases secure_run_unique; simp [releaseValue] at hrel yields. Then subst.
+  secure_ct also can use hrel, but CT also under release equality. Alternatively output public 7 and release secret -> secure NI output7 independent but releases equality still secret; CT leakage includes release secret but equality releases -> secrets equal. To genuinely NI relies releases, output secret needed. Good.
+  secureRun update.
+
+  `authorized_release_not_ni` leaky releases zero unchanged. Good.
+  `secure_run_unique` uniqueness helper negative controls? Add permissive answers example and step nondeterminism. Owner rule "for every law add/change witnesses". Existing laws not change maybe examples to address M. I need all C7 audit rows. Many examples can be small.
+
+  Could produce comprehensive `Spec/Leak.lean` examples for definitions and `Proofs/Leak.lean` theorem negative controls. User expects each law changed with (a)/(b). I need not overdo unrelated C1.
+
+  Approach commits:
+  1 security & trace definitions/examples (NI CT etc) maybe own commit after build.
+  2 reset conservation own
+  3 report soundness own (depends reset)
+  4 wipe own
+  5 remaining audit row examples (accounting/helper controls).
+  Order specified 1 reports 2 unest 3 reset 4 wipe 5 others but says each own not necessarily strict. Could do reset first to enable report. Response list.
+
+  Should understand Lean version, no Mathlib, can use omega, decide. Build fast.
+
+  Now mark merge done next reset maybe reports first requires reset redesign. Todo order update with reset in progress.
+
+• The integrated build passes. The main structural change is to remove the caller-supplied reset byte count: reset outflow will be computed from the actual pre-transition account, so conservation no longer relies on a guard that checks the claimed answer.
+
+• I'll edit Spec Leak reset. Must read before each edit same file requirement no consecutive edits without read. Could use one large Edit replacing block from Action through resetBytes with new. Should design precise Lean recursive state function.
+
+  Action:
+  ```
+  | reset (lineage)
+  ```
+  apply reset => some set reset no if.
+  resetBytes:
+  ```
+  def resetBytes (lineage : LineageId) (m : Memory) : List Action → Nat
+   | [] => 0
+   | action :: rest =>
+     match apply m action with
+     | none => 0
+     | some m' =>
+       (match action with
+        | .reset l => if l=lineage then (m l).live else 0
+        | _ => 0) + resetBytes lineage m' rest
+  ```
+  Termination structural rest despite match okay.
+  Perhaps `released` helper:
+  ```
+  def Action.resetOutflow (m) lineage : Action -> Nat ...
+  ```
+  Then resetBytes uses it.
+  ```
+  def released (lineage) (m) : Action → Nat
+   | .reset l => if l=lineage then (m l).live else 0
+   | _ =>0
+  ```
+  Name `resetOutflow`.
+  ```
+  def resetBytes lineage m : List Action → Nat
+   | [] =>0
+   | a::rest =>
+      match apply m a with
+      | none => 0
+      | some m' => resetOutflow lineage m a + resetBytes lineage m' rest
+  ```
+  The function uses actual apply transitions. On failure returns 0 for entire remaining sequence. For successful runs good. Reset misrecord planted cannot exist syntax. Should independent conservation obligation fails for bad recorded outflow: example with m live5, actual reset yields0 but equation `0 = 5 - 4` false. Add example negation in Spec or Proofs. Could define `ConservesReset (before after : Account) (recordedOutflow)` as substantive obligation independent of apply:
+  ```
+  def ResetConservation (before after) (released) : Prop :=
+   after.requested=before.requested ∧ after.live = before.live - released ∧ ...
+  ```
+  Then theorem reset_conservation can be `ResetConservation ... (m lineage).live` no action claimed. Planted example `¬ ResetConservation ⟨100,5,12,5⟩ (Account.reset ...) 4`. This satisfies explicit obligation fail. Could avoid new def but example `¬ ((Memory.set ...).live = ... - 4...)`. Best long-term `ResetConservation` named independent contract. `reset_conservation` h apply reset derives exact before live. Statement conjunction includes requested/live/peak/functionPeak and other lineages preservation. The outflow derived transition `released = (m lineage).live` not field.
+  ```
+  theorem reset_conservation ... :
+    ResetConservation (m lineage) (m' lineage) (m lineage).live := ...
+  ```
+  No need h other than m'=set.
+  `ResetConservation` definition includes live `after.live = before.live - released`; if released=live proof. Add history/local peak. Also frames untouched? include in theorem separately `∀ l, l ≠ lineage → m' l=m l`. Same free theorem.
+
+  `run_conservation` updated resetBytes with m. Induction proof more complex but manageable. In cons, hc := ih hr (m:=m₁). Goal resetBytes lineage m (action::rest) simplification using ha to `resetOutflow... + resetBytes lineage m₁ rest`. Should have `simp [resetBytes, ha]` perhaps match equation compiler. Since `resetBytes` recursive uses `apply`, simp [resetBytes, ha]. Then cases action.
+
+  Alloc goal after simp [allocated, freed, resetBytes, ha, resetOutflow...] etc. I can see.
+
+  Spec example `.reset ⟨0⟩` and resetBytes new args perhaps report later old compile fails until proofs updated. I can edit both spec and proofs in same reset commit.
+
+  Now update doc header C4 merged. Spec module says C4 not base false. Change relevant paragraphs and action docs in same Edit broad? Multiple incremental require read between. Could do whole `Write` full file not allowed incremental. I can one Edit replace large exact chunks perhaps one call only supports one old/new. Could target block 212-260 and later re-read for docs. Fine. First edit block.
+
+• I’ll introduce an explicit `ResetConservation` predicate over independently supplied before/after accounts and recorded outflow. The transition theorem will instantiate it with the actual pre-reset live bytes, while a planted wrong outflow will falsify the predicate directly.
+
+• Should example update later. Proofs edit large accounting block easiest replace from free_conservation through run_peak_monotone? Should reset, run. I'll do one Edit block free+reset only first then build to see rest errors? Should read relevant current after no changes Proofs already read. Can edit free/reset block. Add functionPeak and untouched. Statements:
+  ```
+  theorem free_conservation ... :
+   requested... ∧ live... ∧ peak... ∧ functionPeak... ∧ ∀ l, l≠lineage → m' l=m l
+  ```
+  Proof simp [Memory.set, Account.free] likely handles ∀ via `intro l hl; simp [Memory.set, hl]`. Could produce refine ⟨rfl,rfl,rfl,rfl,?_⟩ after cases h. simp.
+  Reset:
+  ```
+  theorem reset_conservation {..} (h : apply m (.reset lineage)=some m') :
+   ResetConservation ... (m lineage).live ∧ ∀ l,... := by
+   cases h
+   constructor
+   · simp [ResetConservation, Memory.set, Account.reset]
+   · intro l hl; simp [Memory.set, hl]
+  ```
+  After `cases h`, m' substituted. `simp [ResetConservation,...]`.
+  Positive example actual m with live5 reset. Negative independent:
+  ```
+  example : ResetConservation ⟨100,5,12,5⟩ (Account.reset ...) 5 := by decide
+  example : ¬ ResetConservation ... 4 := by decide
+  ```
+  All fields Nat decidable. Could include in Proofs as examples.
+
+  Should run conservation update. I can replace whole block from doc free through end run_conservation with new statements/proofs using current old exact. That's long ~75 lines but manageable. Better incremental separate edit free/reset then read. Do.Should read run block after edit before next same file.Replace run_conservation. Perhaps first define simp lemma resetBytes_cons to simplify proof:
+  ```
+  @[simp] theorem resetBytes_cons ... (ha : apply m action = some m') :
+   resetBytes lineage m (action::rest) = resetOutflow lineage m action + resetBytes lineage m' rest := by simp [resetBytes,ha]
+  ```
+  Could in Spec as theorem? Proofs helper. Then run proof use `rw [resetBytes_cons _ _ ha]` perhaps implicit.
+  Statement uses resetBytes lineage m actions.
+  At induction nil simp.
+  Cons after ha, hc:
+  ```
+  rw [resetBytes_cons lineage ha]
+  ```
+  lemma arguments.
+  ```
+  theorem resetBytes_cons ... (h : apply m action=some m') ...
+  ```
+  Then cases action, ha gives m1.
+  Alloc target expression `m'.live = m.live + (if...) + allocated rest - freed... - (0 + resetBytes...)`. resetOutflow alloc=0.
+  Can `simp [Memory.set, Account.alloc, allocated, freed, resetOutflow] at hc ⊢` after rw. omega.
+  Free same.
+  Reset:
+  ```
+  cases ha; subst? 
+  simp only [apply, Option.some.injEq] at ha; subst m₁
+  by_cases...
+   rw [resetBytes_cons ...] done before action cases? rewrite with ha general then case.
+  ```
+  At start after hc:
+  ```
+  rw [resetBytes_cons lineage ha]
+  ```
+  Will rewrite occurrence in goal only, hc contains m1 rest unchanged.
+  cases action:
+  alloc: `simp only [apply, Option.some.injEq] at ha; subst m₁` etc.
+  reset no guard.
+  Should negative controls run conservation lose allocation etc examples later.
+  I'll edit.Should apply_wf reset branch and peak reset compile. Reports resetBytes usage only currently none except run. Spec example. Now read spec around header/examples for one edit perhaps replace all `.reset ⟨0⟩ 5` unique with edit. And proofs apply wf/peak patterns. Use Grep all reset references.Now edit Proofs apply_wf block. Read lines 360-385 perhaps.Now peak read and edit plus extend functionPeak perhaps same commit scope conservation. I can update apply_peak_monotone to both peaks now. Statement conjunction; run follows. Proof for alloc both max. Free/reset simp. Do one replacement whole apply+run block from line 493 etc. Should read after edit same file before new edit.Should line doc preceding 487 known. Use exact from previous read. Replace.Spec example update and header. Should read relevant spec lines before edit (changed file already, must read).I can edit header C4/C6 merged too. C6 instrumentation remains param but says can instantiate. New:
+  "C6's observation and environment contracts can supply..." no out base.
+  "C4's successful... reset ... actual live bytes" etc. One edit.
+
+• The reset model and conservation proofs are updated, including function-local peak preservation. I’m also removing stale header text from before the C4/C6 merge, then I’ll compile this slice and resolve any remaining reset-call sites.
+
+• Should example edit read spec lines 315.Build.warning: Git tree '/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c7' is dirty
+✔ [30/47] Built ConcreteSpec.Spec.Leak (412ms)
+✔ [31/47] Built ConcreteSpec.Spec (133ms)
+✔ [32/47] Built ConcreteSpec.Proofs.Basics (196ms)
+✖ [33/47] Building ConcreteSpec.Proofs.Leak (516ms)
+trace: .> LEAN_PATH=/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c7/.lake/build/lib/lean /nix/store/94bmilywgajdnqvix1fs35fj94kala0w-lean4-release-4.34.1/bin/lean /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c7/ConcreteSpec/Proofs/Leak.lean -o /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c7/.lake/build/lib/lean/ConcreteSpec/Proofs/Leak.olean -i /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c7/.lake/build/lib/lean/ConcreteSpec/Proofs/Leak.ilean -c /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c7/.lake/build/ir/ConcreteSpec/Proofs/Leak.c --setup /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c7/.lake/build/ir/ConcreteSpec/Proofs/Leak.setup.json --json
+error: ConcreteSpec/Proofs/Leak.lean:409:27: Application type mismatch: The argument
+  rfl
+has type
+  ?m.98 = ?m.98
+but is expected to have type
+  (m.set lineage ((m lineage).free bytes) lineage).functionPeak = (m lineage).functionPeak
+in the application
+  And.intro rfl
+error: ConcreteSpec/Proofs/Leak.lean:427:84: failed to synthesize
+  Decidable
+    (ResetConservation { requested := 100, live := 5, peak := 12, functionPeak := 5 }
+      { requested := 100, live := 5, peak := 12, functionPeak := 5 }.reset 5)
+
+Hint: Additional diagnostic information may be available using the `set_option diagnostics true` command.
+error: ConcreteSpec/Proofs/Leak.lean:430:86: failed to synthesize
+  Decidable
+    ¬ResetConservation { requested := 100, live := 5, peak := 12, functionPeak := 5 }
+        { requested := 100, live := 5, peak := 12, functionPeak := 5 }.reset 4
+
+Hint: Additional diagnostic information may be available using the `set_option diagnostics true` command.
+✔ [34/47] Built ConcreteSpec.Proofs.Authority (371ms)
+✔ [35/47] Built ConcreteSpec.Proofs.Cleanup (489ms)
+✔ [36/47] Built ConcreteSpec.Proofs.Memory (539ms)
+✔ [37/47] Built ConcreteSpec.Proofs.Slice1 (580ms)
+✔ [38/47] Built ConcreteSpec.Proofs.Borrow (725ms)
+✔ [39/47] Built ConcreteSpec.Proofs.Brand (680ms)
+✔ [40/47] Built ConcreteSpec.Proofs.Observe (214ms)
+✔ [41/47] Built ConcreteSpec.Proofs.Checker (300ms)
+✔ [42/47] Built ConcreteSpec.Proofs.Hybrid (359ms)
+✔ [43/47] Built ConcreteSpec.Proofs.Rep (382ms)
+✔ [44/47] Built ConcreteSpec.Proofs.Slice0 (218ms)
+✔ [45/47] Built ConcreteSpec.Proofs.Examples (187ms)
+Some required targets logged failures:
+- ConcreteSpec.Proofs.Leak
+error: build failed
+Fix free function peak not rfl due set reduction need simp. refine first 3 rfl then `by simp [Memory.set, Account.free]`. Or `all_goals simp`. After cases h `simp only [Memory.set, ↓reduceIte, Account.free]` perhaps can solve all and ∀? easiest:
+  ```
+    next =>
+      cases h
+      simp only [Memory.set, ↓reduceIte, Account.free]
+      refine ⟨rfl,rfl,rfl,rfl,?_⟩...
+  ```
+  Error at fourth because Memory.set not reduced. Add `change ...`? `simp [Memory.set, Account.free]` can solve first 4 and forall maybe simp can solve forall l l≠lineage -> ... using `simp [Memory.set, Account.free]` likely simp under forall uses condition. I originally had refine. Replace `refine ⟨rfl,rfl,rfl,rfl,?_⟩` with `refine ⟨by simp [Memory.set,Account.free], by simp...,...⟩` verbose. Could `constructor...`. Better before refine `simp only [Memory.set, ↓reduceIte, Account.free]` reduces target m'. But Memory.set at other l in ∀ perhaps remains. Then rfl first four. Add simp only. `simp only [Memory.set, ↓reduceIte, Account.free]` might simplify whole ∀? simp only with Memory.set expands inside but ite l=lineage not reduce under ≠? simp uses hl assumptions. Might close goal entirely? If goal solved then following refine error no goals. Keep first fourth `by simp [Memory.set, Account.free]` only.
+
+  Reset examples `by simp [ResetConservation, Account.reset]` positive; negative `by simp [ResetConservation, Account.reset]` should show 0=5-4 false decide via simp. Use `by decide` lacks prop Decidable because not deriving. I could `deriving DecidableEq` doesn't automatically decidable predicate. `by simp [ResetConservation, Account.reset]` works.
+  Now Read same proofs before edit.One Edit multiple changes same file can replace whole chunk 407-430.
+
+• The first compile found two small proof issues: `Memory.set` needed simplification for the local-peak equality, and the concrete reset examples should use `simp` rather than rely on an automatically inferred decidable predicate.
+
+• Build again.warning: Git tree '/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c7' is dirty
+✖ [45/47] Building ConcreteSpec.Proofs.Leak (438ms)
+trace: .> LEAN_PATH=/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c7/.lake/build/lib/lean /nix/store/94bmilywgajdnqvix1fs35fj94kala0w-lean4-release-4.34.1/bin/lean /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c7/ConcreteSpec/Proofs/Leak.lean -o /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c7/.lake/build/lib/lean/ConcreteSpec/Proofs/Leak.olean -i /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c7/.lake/build/lib/lean/ConcreteSpec/Proofs/Leak.ilean -c /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c7/.lake/build/ir/ConcreteSpec/Proofs/Leak.c --setup /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c7/.lake/build/ir/ConcreteSpec/Proofs/Leak.setup.json --json
+error: ConcreteSpec/Proofs/Leak.lean:409:22: Application type mismatch: The argument
+  rfl
+has type
+  ?m.93 = ?m.93
+but is expected to have type
+  (m.set lineage ((m lineage).free bytes) lineage).peak = (m lineage).peak
+in the application
+  And.intro rfl
+Some required targets logged failures:
+- ConcreteSpec.Proofs.Leak
+error: build failed
+peak too. requested/live reduced by elaborator? just simp first four all. Replace refine with `refine ⟨by simp [Memory.set, Account.free], by simp..., by simp..., by simp..., ?_⟩`. Or `simp only [Memory.set, ↓reduceIte]` at goal then refine. `simp only [Memory.set, ↓reduceIte]` also simplifies ∀ with conditions? It rewrites m.set lineage ... lineage to account and m.set ... l to if. Should not close. Then refine first4 rfl. I'll do insert `simp only [Memory.set, ↓reduceIte]` before refine, fourth by simp becomes rfl. This will transform Account.free fields maybe projections reduce. Then ∀ remains `∀ l, l≠lineage -> (if l=lineage then ... else m l)=m l`. good. Use. Read line then edit.Build.warning: Git tree '/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c7' is dirty
+✖ [45/47] Building ConcreteSpec.Proofs.Leak (444ms)
+trace: .> LEAN_PATH=/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c7/.lake/build/lib/lean /nix/store/94bmilywgajdnqvix1fs35fj94kala0w-lean4-release-4.34.1/bin/lean /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c7/ConcreteSpec/Proofs/Leak.lean -o /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c7/.lake/build/lib/lean/ConcreteSpec/Proofs/Leak.olean -i /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c7/.lake/build/lib/lean/ConcreteSpec/Proofs/Leak.ilean -c /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c7/.lake/build/ir/ConcreteSpec/Proofs/Leak.c --setup /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c7/.lake/build/ir/ConcreteSpec/Proofs/Leak.setup.json --json
+error: ConcreteSpec/Proofs/Leak.lean:412:10: This simp argument is unused:
+  Memory.set
+
+Hint: Omit it from the simp argument list.
+  [apply] simp [hl]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+Some required targets logged failures:
+- ConcreteSpec.Proofs.Leak
+error: build failed
+Warning as error. remove Memory.set last. Read required.
+
+• The reset proofs now elaborate; the remaining failure is only the repository’s unused-`simp`-argument warning. I’m removing that argument and rebuilding before the commit.
+
+warning: Git tree '/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c7' is dirty
+✔ [45/47] Built ConcreteSpec.Proofs.Leak (471ms)
+✔ [46/47] Built ConcreteSpec (125ms)
+Build completed successfully (47 jobs).
+• Should add run conservation non-trivial + planted before commit? Owner every law changed need examples. Reset has. run_conservation changed needs positive and negative. apply_peak/run_peak changed needs positives negatives. Free_conservation changed needs positive negative. Should add now. Should examples perhaps named theorems to reference in response. Add near relevant:
+  - free positive:
+  ```
+  def accountingBefore : Memory := fun l => if l=⟨0⟩ then ⟨100,5,12,5⟩ else ⟨7,2,2,2⟩
+  ```
+  But Account other lineage WF perhaps requested7 live2 peak2 etc okay.
+  Could use `Memory.set Memory.empty ⟨0⟩ ⟨100,5,12,5⟩`.
+  ```
+  example : ∃ m', apply ... free3=some m' ∧ ... requested=100 live2 peak12 functionPeak5 ∧ m' ⟨1⟩=... := ...
+  ```
+  Simpler direct evaluate `apply ... = some ...` expected function with set not decide equality functions no DecidableEq. Use map `(·⟨0⟩)`:
+  ```
+  example : (apply (Memory.set ... ) (.free 0 3)).map (·0) = some ⟨100,2,12,5⟩ := by decide
+  ```
+  Memory functions with decidable equality ids, evaluation decide works. Negative planted history corruption:
+  ```
+  example : ¬ Reset... no
+  example : ¬ (let after := {(before) with live:=2, requested:=99...}; ...) 
+  ```
+  For free conservation law h cannot satisfy bad after due apply deterministic, so planted mutated predicate direct `¬ (after.requested=... ∧ ...)`. Better define `FreeConservation` independent like Reset? Not necessary audit asks planted decrement requested or peak while freeing. Example:
+  ```
+  example : ¬ ((Account.free ⟨100,5,12,5⟩ 3).requested = 99 ∧ ...) := by simp
+  ```
+  But only first false and rest? It demonstrates corrupted requested fails. Use exact full predicate with before after. Could define `FreeConservation` too for symmetry best long-term. Currently theorem conjunction. Example:
+  ```
+  example : ¬ (99 = (⟨...⟩).requested ∧ ... ) := by decide
+  ```
+  Perhaps ugly. Define helper `FreeConservation` in Spec? Scope reset commit could add but best long-term yes. Yet user item only reset. Could leave examples after remaining audit. But owner every law add/change says witnesses now final enough. Can add later commit. But commit each piece reset should contain witnesses for run and peaks.
+
+  Define in Proofs named examples:
+  ```
+  def conservationStart : Memory := Memory.set Memory.empty 0 ⟨100,5,12,5⟩
+  def conservationActions := [alloc0 8, free0 3, reset0]
+  example (h : run ... = some ...) ... 
+  ```
+  To witness run_conservation need instantiate theorem and prove equalities. Direct:
+  ```
+  example : run conservationStart conservationActions |>.map ... = some ⟨108,0,12,12⟩ := by decide
+  example : resetBytes 0 conservationStart conservationActions = 10 := by decide
+  example : ¬ (0 = 5 + 8 -3 -4) := by decide -- misrecord 4?
+  ```
+  Whole conservation equation actual initial live5 + alloc8 -free3 -reset10=0. If lost allocation `0=5+?` etc.
+  Positive theorem:
+  ```
+  example (m') (h : run ...=some m') :
+   m'0.requested=108 ∧ m'0.live=0 := by
+   have hc := run_conservation h 0
+   norm_num [conservationStart, conservationActions, allocated, freed, resetBytes,...] at hc? 
+  ```
+  Simpler `have hrun : run ... = some (Memory.set ... after) := by decide` function equality no decide? run returns Memory function, equality some functions no DecidableEq. Can't decide equality of functions. Existing uses `.map`. I can define final memory explicitly and prove run equality via `rfl` because functions definitionally same? `run` returns `Memory.set` chains, final explicit same perhaps funext needed. I can use `run_conservation` with existentials obtained from `run` not need concrete final:
+  ```
+  example : ∃ m', run start actions=some m' ∧ (m'0).requested=108 ∧ ... := by
+    cases hr : run start actions with
+    | none => simp [start,actions,run,apply] at hr -- contradiction
+    | some m' =>
+      refine ⟨m',hr,?_,?_⟩
+      have hc := run_conservation hr 0
+      norm_num [start,actions,allocated,freed,resetBytes,resetOutflow,apply,Memory.set,Account... ] at hc? 
+  ```
+  Could compute `resetBytes` by native decide? equality Nat `resetBytes ...=10` by decide (function evaluation decidable nat). `allocated ...=8` by decide. Then hc simplify with these and known start account.
+  ```
+  have ha : allocated 0 actions=8 := by decide
+  ...
+  simp [ha,hf,hb,conservationStart,Memory.set] at hc
+  exact ...
+  ```
+  requested RHS (start0).requested +8 =108 by rfl. hc after simp should direct. positive.
+  But `hr` evaluate run none via `simp [run, apply, conservationStart, conservationActions, Memory.set, Account...] at hr` perhaps simp can evaluate Option. Instead define `m'` as actual final function and hrun by `rfl` if I set m' to `Memory.set (Memory.set (Memory.set start 0 account alloc) 0 free) 0 reset`. That is exact result after run, rfl. Define:
+  ```
+  def conservationExit : Memory := (Memory.set (Memory.set (Memory.set ...)))
+  ```
+  Not need name, `let` in example.
+  Could define `def accountingRunStart`, `def accountingRunExit` with direct `Memory.set Memory.empty 0 ⟨108,0,12,12⟩` but run result set functions definitional all sets same lineage collapse to final set perhaps rfl? `Memory.set m l a` then set same l b reduces to fun l' => if l'=l then b else if ...; final set empty not definitional because else previous set vs empty but if condition false then previous if false reduces; function not definitional ext. run equality `rfl` compares functions lambda with nested else vs single else, not defeq. Use exact computed form:
+  ```
+  def accountingRunExit : Memory :=
+   Memory.set (Memory.set (Memory.set accountingRunStart 0 ((start0).alloc 8)) 0 (((start0).alloc8).free3)) 0 (((start0).alloc8).free3).reset
+  ```
+  Then run rfl. But requested result 108 etc simp. Good.
+  Simpler define generic helper theorem examples not evaluated via actual run? Non-trivial instance can use h with m' computed as above and use run_conservation.
+
+  I can defer until remaining rows to avoid time. But commit reset now passed and core requirement. Git diff review then commit.
+
+• The reset/conservation slice builds successfully. It now derives reset outflow from intermediate states, includes both peaks and untouched lineages, extends peak monotonicity to function-local peaks, and has explicit good/bad reset records. ConcreteSpec/Proofs/Leak.lean | 138 +++++++++++++++++++++++-------------------
+ ConcreteSpec/Spec/Leak.lean   |  51 ++++++++++------
+ 2 files changed, 108 insertions(+), 81 deletions(-)
+diff --git a/ConcreteSpec/Proofs/Leak.lean b/ConcreteSpec/Proofs/Leak.lean
+index 555da8631..f3ff840fe 100644
+--- a/ConcreteSpec/Proofs/Leak.lean
++++ b/ConcreteSpec/Proofs/Leak.lean
+@@ -368,17 +368,13 @@ theorem apply_wf {m : Memory} {action : Action} {m' : Memory}
+         simpa [Memory.set] using Account.free_wf (m lineage) bytes (hwf lineage)
+       · simpa [Memory.set, hl] using hwf l
+     next => cases h
+-  | reset lineage released =>
+-    simp only [apply] at h
+-    split at h
+-    next heq =>
+-      cases h
+-      intro l
+-      by_cases hl : l = lineage
+-      · subst l
+-        simpa [Memory.set] using Account.reset_wf (m lineage)
+-      · simpa [Memory.set, hl] using hwf l
+-    next => cases h
++  | reset lineage =>
++    cases h
++    intro l
++    by_cases hl : l = lineage
++    · subst l
++      simpa [Memory.set] using Account.reset_wf (m lineage)
++    · simpa [Memory.set, hl] using hwf l
+ 
+ /-- Every successful sequence preserves well-formedness. -/
+ theorem run_wf {m m' : Memory} {actions : List Action}
+@@ -397,42 +393,60 @@ theorem apply_alloc_zero {m : Memory} (hwf : ∀ l, (m l).WF) (lineage : Lineage
+     apply m (.alloc lineage 0) = some m := by
+   simp only [apply, Account.alloc_zero (m lineage) (hwf lineage), Memory.set_same]
+ 
+-/-- A successful free conserves cumulative requested bytes and peak, and its net change is exactly
+-the freed bytes. -/
++/-- A successful free conserves cumulative requested bytes and both peaks, changes live bytes by
++exactly the freed amount, and leaves every other lineage unchanged. -/
+ theorem free_conservation {m m' : Memory} {lineage : LineageId} {bytes : Nat}
+     (h : apply m (.free lineage bytes) = some m') :
+     (m' lineage).requested = (m lineage).requested ∧
+       (m' lineage).live = (m lineage).live - bytes ∧
+-      (m' lineage).peak = (m lineage).peak := by
++      (m' lineage).peak = (m lineage).peak ∧
++      (m' lineage).functionPeak = (m lineage).functionPeak ∧
++      ∀ l, l ≠ lineage → m' l = m l := by
+   simp only [apply] at h
+   split at h
+   next hle =>
+     cases h
+-    simp [Memory.set, Account.free]
++    simp only [Memory.set, ↓reduceIte]
++    refine ⟨rfl, rfl, rfl, rfl, ?_⟩
++    intro l hl
++    simp [hl]
+   next => cases h
+ 
+-/-- A successful reset conserves cumulative requested bytes and peak, and releases exactly the live
+-bytes named by the action. -/
+-theorem reset_conservation {m m' : Memory} {lineage : LineageId} {released : Nat}
+-    (h : apply m (.reset lineage released) = some m') :
+-    (m' lineage).requested = (m lineage).requested ∧
+-      (m' lineage).live = (m lineage).live - released ∧
+-      (m' lineage).peak = (m lineage).peak := by
+-  simp only [apply] at h
+-  split at h
+-  next heq =>
+-    cases h
+-    simp [Memory.set, Account.reset, heq]
+-  next => cases h
++/-- A successful reset satisfies the independent conservation predicate with the actual live bytes
++before the transition as its outflow. Other lineages are unchanged. -/
++theorem reset_conservation {m m' : Memory} {lineage : LineageId}
++    (h : apply m (.reset lineage) = some m') :
++    ResetConservation (m lineage) (m' lineage) (m lineage).live ∧
++      ∀ l, l ≠ lineage → m' l = m l := by
++  cases h
++  constructor
++  · simp [ResetConservation, Memory.set, Account.reset]
++  · intro l hl
++    simp [Memory.set, hl]
++
++/-- Non-trivial reset conservation: five live bytes are released and all history is retained. -/
++example : ResetConservation ⟨100, 5, 12, 5⟩ (Account.reset ⟨100, 5, 12, 5⟩) 5 := by
++  simp [ResetConservation, Account.reset]
++
++/-- Planted bad reset record: four bytes cannot account for the five bytes actually released. -/
++example : ¬ ResetConservation ⟨100, 5, 12, 5⟩ (Account.reset ⟨100, 5, 12, 5⟩) 4 := by
++  simp [ResetConservation, Account.reset]
++
++@[simp] theorem resetBytes_cons {m m' : Memory} {action : Action} {rest : List Action}
++    (lineage : LineageId) (h : apply m action = some m') :
++    resetBytes lineage m (action :: rest) =
++      resetOutflow lineage m action + resetBytes lineage m' rest := by
++  simp [resetBytes, h]
+ 
+ /-- **Whole-sequence conservation.** Requested bytes increase by exactly the sequence's allocation
+-requests. Net live bytes equal allocations minus explicit frees and reset outflows. The statement
+-holds independently for every allocator lineage, including lineages the sequence never touches. -/
++requests. Net live bytes equal allocations minus explicit frees and reset outflows read from the
++actual intermediate states. The statement holds independently for every allocator lineage,
++including lineages the sequence never touches. -/
+ theorem run_conservation {m m' : Memory} {actions : List Action}
+     (h : run m actions = some m') (lineage : LineageId) :
+     (m' lineage).requested = (m lineage).requested + allocated lineage actions ∧
+       (m' lineage).live = (m lineage).live + allocated lineage actions -
+-        freed lineage actions - resetBytes lineage actions := by
++        freed lineage actions - resetBytes lineage m actions := by
+   induction actions generalizing m with
+   | nil => cases h; simp [allocated, freed, resetBytes]
+   | cons action rest ih =>
+@@ -441,15 +455,16 @@ theorem run_conservation {m m' : Memory} {actions : List Action}
+     | some m₁ =>
+       have hr : run m₁ rest = some m' := by simpa [run, ha] using h
+       have hc := ih hr
++      rw [resetBytes_cons lineage ha]
+       cases action with
+       | alloc l bytes =>
+         simp only [apply, Option.some.injEq] at ha
+         subst m₁
+         by_cases hl : l = lineage
+         · subst l
+-          simp [Memory.set, Account.alloc, allocated, freed, resetBytes] at hc ⊢
++          simp [Memory.set, Account.alloc, allocated, freed, resetOutflow] at hc ⊢
+           omega
+-        · simp [Memory.set, hl, Ne.symm hl, allocated, freed, resetBytes] at hc ⊢
++        · simp [Memory.set, hl, Ne.symm hl, allocated, freed, resetOutflow] at hc ⊢
+           omega
+       | free l bytes =>
+         by_cases hle : bytes ≤ (m l).live
+@@ -457,34 +472,32 @@ theorem run_conservation {m m' : Memory} {actions : List Action}
+           subst m₁
+           by_cases hl : l = lineage
+           · subst l
+-            simp [Memory.set, Account.free, allocated, freed, resetBytes] at hc ⊢
++            simp [Memory.set, Account.free, allocated, freed, resetOutflow] at hc ⊢
+             omega
+-          · simp [Memory.set, hl, Ne.symm hl, allocated, freed, resetBytes] at hc ⊢
++          · simp [Memory.set, hl, Ne.symm hl, allocated, freed, resetOutflow] at hc ⊢
+             omega
+         · simp [apply, hle] at ha
+-      | reset l released =>
+-        by_cases heq : released = (m l).live
+-        · simp only [apply, heq, ↓reduceIte, Option.some.injEq] at ha
+-          subst m₁
+-          by_cases hl : l = lineage
+-          · subst l
+-            simp [Memory.set, Account.reset, allocated, freed, resetBytes, heq] at hc ⊢
+-            omega
+-          · simp [Memory.set, hl, Ne.symm hl, allocated, freed, resetBytes] at hc ⊢
+-            omega
+-        · simp [apply, heq] at ha
++      | reset l =>
++        simp only [apply, Option.some.injEq] at ha
++        subst m₁
++        by_cases hl : l = lineage
++        · subst l
++          simp [Memory.set, Account.reset, allocated, freed, resetOutflow] at hc ⊢
++          omega
++        · simp [Memory.set, hl, Ne.symm hl, allocated, freed, resetOutflow] at hc ⊢
++          omega
+ 
+-/-- No successful action lowers any lineage's historical peak. -/
++/-- No successful action lowers either the historical or function-local peak of any lineage. -/
+ theorem apply_peak_monotone {m m' : Memory} {action : Action}
+     (h : apply m action = some m') (lineage : LineageId) :
+-    (m lineage).peak ≤ (m' lineage).peak := by
++    (m lineage).peak ≤ (m' lineage).peak ∧
++      (m lineage).functionPeak ≤ (m' lineage).functionPeak := by
+   cases action with
+   | alloc l bytes =>
+     cases h
+     by_cases hl : l = lineage
+     · subst l
+-      simpa [Memory.set, Account.alloc] using
+-        Nat.le_max_left (m lineage).peak ((m lineage).live + bytes)
++      simp [Mem
+ory.set, Account.alloc, Nat.le_max_left]
+     · simp [Memory.set, Ne.symm hl]
+   | free l bytes =>
+     simp only [apply] at h
+@@ -495,28 +508,27 @@ theorem apply_peak_monotone {m m' : Memory} {action : Action}
+       · subst l; simp [Memory.set, Account.free]
+       · simp [Memory.set, Ne.symm hl]
+     next => cases h
+-  | reset l released =>
+-    simp only [apply] at h
+-    split at h
+-    next =>
+-      cases h
+-      by_cases hl : l = lineage
+-      · subst l; simp [Memory.set, Account.reset]
+-      · simp [Memory.set, Ne.symm hl]
+-    next => cases h
++  | reset l =>
++    cases h
++    by_cases hl : l = lineage
++    · subst l; simp [Memory.set, Account.reset]
++    · simp [Memory.set, Ne.symm hl]
+ 
+-/-- No successful sequence lowers any lineage's historical peak. -/
++/-- No successful sequence lowers either the historical or function-local peak of any lineage. -/
+ theorem run_peak_monotone {m m' : Memory} {actions : List Action}
+     (h : run m actions = some m') (lineage : LineageId) :
+-    (m lineage).peak ≤ (m' lineage).peak := by
++    (m lineage).peak ≤ (m' lineage).peak ∧
++      (m lineage).functionPeak ≤ (m' lineage).functionPeak := by
+   induction actions generalizing m with
+-  | nil => cases h; exact Nat.le_refl _
++  | nil => cases h; exact ⟨Nat.le_refl _, Nat.le_refl _⟩
+   | cons action rest ih =>
+     cases ha : apply m action with
+     | none => simp [run, ha] at h
+     | some m₁ =>
+       have hr : run m₁ rest = some m' := by simpa [run, ha] using h
+-      exact Nat.le_trans (apply_peak_monotone ha lineage) (ih hr)
++      have ha' := apply_peak_monotone ha lineage
++      have hr' := ih hr
++      exact ⟨Nat.le_trans ha'.1 hr'.1, Nat.le_trans ha'.2 hr'.2⟩
+ 
+ /-- Exact function-local requested, net-change and peak limits establish a sound report. With no
+ allocator-defined footprint, its footprint status remains unestablished. -/
+diff --git a/ConcreteSpec/Spec/Leak.lean b/ConcreteSpec/Spec/Leak.lean
+index b885d98ef..f80f5d0d3 100644
+--- a/ConcreteSpec/Spec/Leak.lean
++++ b/ConcreteSpec/Spec/Leak.lean
+@@ -10,18 +10,18 @@ owner on 2026-11-08), under the information-flow and memory decisions of 2026-11
+ Leakage is what the baseline timing observer sees, not ordinary output. It is separate from public
+ observations. `InstrumentedSteps` instruments C1's existing `Exec.Step` relation without changing
+ the machine: each step contributes public observations, leakage, ordered release records and the
+-external choices on which it depended. C6 is not on this base, so observations and choices are
+-parameters of the instrumentation rather than a launcher-specific type.
++external choices on which it depended. C6's observation and environment contracts can supply the
++observation and choice instances; the instrumentation keeps those types explicit at this boundary.
+ 
+ `DelimitedReleaseNI` and `ConstantTime` are different claims about executions. Both assume low-equivalent
+ initial states, matched external choices and the same ordered release sites and values. NI requires
+ the same public observations; CT requires the same leakage. A release policy authorizes sites; it
+ does not discharge either claim. No scalar secret typing rule is chosen here (slice 7).
+ 
+-The accounting half is an abstract per-lineage alloc/free/reset model. C4 is not on this base: its
+-successful sized allocation and free operations instantiate `Action.alloc` and `Action.free`, and a
+-reset instantiates `Action.reset` with the live bytes it releases. Addresses, provenance and failed
+-operations are C4's concern; a failed operation has no accounting action. Requested bytes, net
++The accounting half is an abstract per-lineage alloc/free/reset model. C4's successful sized
++allocation and free operations instantiate `Action.alloc` and `Action.free`; a reset instantiates
++`Action.reset`, whose outflow is read from the actual pre-transition account. Addresses, provenance
++and failed operations are C4's concern; a failed operation has no accounting action. Requested bytes, net
+ change, peak logical bytes and an allocator-defined footpr
+int have independent evidence statuses.
+ Stack accounting is separate. Wipes are effects, and `WipePreservation` states the obligation that
+ erasure and optimization preserve them. Arrays, wiping implementations, heaps, hardware timing,
+@@ -209,12 +209,12 @@ remain. -/
+ def Account.reset (a : Account) : Account :=
+   { a with live := 0 }
+ 
+-/-- An abstract C4 accounting action. Reset carries exactly the live bytes it releases, making the
+-outflow explicit in the execution history. -/
++/-- An abstract C4 accounting action. A reset names only its lineage: the amount released is a fact
++of the transition, not a caller-supplied field that the transition could be asked to confirm. -/
+ inductive Action where
+   | alloc (lineage : LineageId) (bytes : Nat)
+   | free (lineage : LineageId) (bytes : Nat)
+-  | reset (lineage : LineageId) (released : Nat)
++  | reset (lineage : LineageId)
+   deriving DecidableEq, Repr
+ 
+ /-- Abstract memory is only the accounting projection of C4 state. Every lineage starts empty. -/
+@@ -227,14 +227,13 @@ def Memory.set (m : Memory) (lineage : LineageId) (a : Account) : Memory :=
+ /-- The empty accounting projection. -/
+ def Memory.empty : Memory := fun _ => Account.empty
+ 
+-/-- Apply an action. Freeing more than the lineage's live bytes, or misstating a reset's released
+-bytes, has no transition; C4's successful operations must satisfy these guards. -/
++/-- Apply an action. Freeing more than the lineage's live bytes has no transition. A reset releases
++exactly the lineage's current live bytes by setting that account's live field to zero. -/
+ def apply (m : Memory) : Action → Option Memory
+   | .alloc lineage bytes => some (Memory.set m lineage ((m lineage).alloc bytes))
+   | .free lineage bytes =>
+       if bytes ≤ (m lineage).live then some (Memory.set m lineage ((m lineage).free bytes)) else none
+-  | .reset lineage released =>
+-      if released = (m lineage).live then some (Memory.set m lineage (m lineage).reset) else none
++  | .reset lineage => some (Memory.set m lineage (m lineage).reset)
+ 
+ /-- A successful sequence of abstract C4 accounting actions. -/
+ def run (m : Memory) : List Action → Option Memory
+@@ -253,11 +252,27 @@ def freed (lineage : LineageId) : List Action → Nat
+   | .free l bytes :: rest => (if l = lineage then bytes else 0) + freed lineage rest
+   | _ :: rest => freed lineage rest
+ 
+-/-- Bytes released by resets of `lineage` in a sequence. -/
+-def resetBytes (lineage : LineageId) : List Action → Nat
++/-- The reset outflow of one action, read from the account immediately before that action. -/
++def resetOutflow (lineage : LineageId) (m : Memory) : Action → Nat
++  | .reset l => if l = lineage then (m l).live else 0
++  | _ => 0
++
++/-- Bytes released by resets of `lineage` while executing a sequence from `m`. Each outflow comes
++from the actual intermediate state. An unsuccessful suffix contributes nothing. -/
++def resetBytes (lineage : LineageId) (m : Memory) : List Action → Nat
+   | [] => 0
+-  | .reset l bytes :: rest => (if l = lineage then bytes else 0) + resetBytes lineage rest
+-  | _ :: rest => resetBytes lineage rest
++  | action :: rest =>
++      match apply m action with
++      | none => 0
++      | some m' => resetOutflow lineage m action + resetBytes lineage m' rest
++
++/-- Independent conservation obligation for a reset. The recorded outflow is not an input to the
++account transition, so a wrong record makes this predicate false rather than making the reset
++inadmissible. Cumulative history and both peaks must be conserved. -/
++def ResetConservation (before after : Account) (recordedOutflow : Nat) : Prop :=
++  after.requested = before.requested ∧
++    after.live = before.live - recordedOutflow ∧
++    after.peak = before.peak ∧ after.functionPeak = before.functionPeak
+ 
+ /-- Evidence for a reported bound. A bound is either established, with its stated limit, or not
+ established. The latter never turns an unknown into a reassuring numeric claim. -/
+@@ -304,7 +319,7 @@ def LineageReport.Sound (entry exit : Account) (footprint : Option Nat)
+ /-- Accepted: a valid allocate/free/reset sequence. Refused: freeing a byte not owned by the
+ lineage has no accounting transition. -/
+ example : (run Memory.empty
+-    [.alloc ⟨0⟩ 8, .free ⟨0⟩ 3, .reset ⟨0⟩ 5]).map (· ⟨0⟩) = some ⟨8, 0, 8, 8⟩ := by decide
++    [.alloc ⟨0⟩ 8, .free ⟨0⟩ 3, .reset ⟨0⟩]).map (· ⟨0⟩) = some ⟨8, 0, 8, 8⟩ := by decide
+ 
+ example : apply Memory.empty (.free ⟨0⟩ 1) = none := by decide
+ 
+ M ConcreteSpec/Proofs/Leak.lean
+ M ConcreteSpec/Spec/Leak.lean
+
+
+• Perhaps best structural `resetBytes` unsuccessful suffix contributes nothing but recursion only on success yes. Good.
+
+  Commit.[wip/spec-c7 287ce863c] C7: derive reset outflow from accounting transitions
+ 2 files changed, 108 insertions(+), 81 deletions(-)
+Now reports. Now design and implement. Mark.Report theorem should be substantive. I can define `FunctionAnalysis` in Spec with quantities from action sequence and entry memory:
+  ```
+  structure FunctionAnalysis where requested:Nat netChange:Int peak:Nat footprint:Option Nat
+  ```
+  `analyze` needs actual run to get exit and functionPeak, so if report exact bounds from analysis theorem may be definitional but report independently computed from actions, okay. Generic `established_report_sound` arbitrary bounds stronger. I'll design generic theorem:
+  ```
+  theorem established_report_sound
+   {m m' : Memory} {actions} {lineage}
+   {requestedLimit : Nat} {netLimit : Int} {peakLimit footprintLimit : Nat} {footprint}
+   (h : run m actions=some m')
+   (hrequested : allocated lineage actions ≤ requestedLimit)
+   (hnet : ((allocated...:Int) - freed... - resetBytes lineage m actions) ≤ netLimit)
+   (hpeak : (m' lineage).functionPeak ≤ peakLimit)
+   (hfootprint : ∃ bytes, footprint=some bytes ∧ bytes≤footprintLimit) :
+   LineageReport.Sound (m lineage) (m' lineage) footprint
+    ⟨lineage,⟨requestedLimit, established⟩,...⟩
+  ```
+  Proof:
+  - `run_conservation h lineage` gives requested and live Nat equation.
+  - requested actual exit.requested - entry.requested = allocated via Nat add subtraction. omega.
+  - net Int actual exit.live-entry.live = allocated - freed - resetBytes. Nat subtraction complicates but run conservation and guards ensures no truncation; omega handles Int/Nat? omega supports Int and Nat casts. Have hc. `simp [LineageReport.Sound,Bound.Sound,Bound.SoundOptional]` perhaps intro statuses and omega.
+  ```
+    have hc := run_conservation h lineage
+    refine ⟨?_,?_,?_,?_⟩ ...
+  ```
+  Unfold:
+  ```
+    constructor
+    · intro _; dsimp; omega
+  ...
+  ```
+  Should have `change Bound.Sound ... ⟨...⟩ ∧...`; `simp only [LineageReport.Sound]`.
+  ```
+    refine ⟨?_,?_,?_,hfootprint⟩
+    · intro _; exact Nat.le_of_eq? 
+  ```
+  Bound.Sound with status established reduces `intro _`.
+  Requested goal `(m'...).requested - (m...).requested ≤ requestedLimit`, hc.1 and hreq; omega.
+  Net goal `(m'live:Int)-(m live:Int)≤netLimit`; hc.2 hnet; omega.
+  Peak hpeak.
+  Footprint hfootprint exact after intro.
+  `simpa [LineageReport.Sound, Bound.Sound, Bound.SoundOptional]`? Could use `refine ⟨?_,?_,?_,?_⟩` after `simp only [LineageReport.Sound]`, then `intro`.
+  No statuses premises false, all established. Good.
+
+  This theorem still hpeak actual bound arbitrary. report independently fixed. Example concrete:
+  entry m account `⟨100,2,100,2⟩` (enter from historical `⟨100,2,100,12⟩` to local2 perhaps requirement historical100). Actions alloc8 free3. exit account `⟨108,7,100,10⟩`. Report requested8 net5 peak10 footprint bound12 with actual some10.
+  Should hrun concrete m'. Define `reportEntryMemory`, `reportExitMemory` as Memory.set Memory.empty 0 entry/exit. `run` result nested set same lineage vs single set not defeq. Define exit as exact:
+  ```
+  def reportEntry := ⟨100,2,100,2⟩
+  def reportActions := [alloc0 8,free0 3]
+  def reportEntryMemory := Memory.set Memory.empty 0 reportEntry
+  def reportExitMemory := Memory.set (Memory.set reportEntryMemory 0 (reportEntry.alloc 8)) 0 ((reportEntry.alloc 8).free3)
+  ```
+  Then hrun rfl. report exit account reduces.
+  Could simplify `def reportExitMemory := Memory.set reportEntryMemory 0 ⟨108,7,100,10⟩`; hrun by `funext`? run equality of functions, prove `rfl` if define nested. Use nested.
+
+  `def establishedReport : LineageReport := ...`
+  `def mixedStatusReport` requested8 established net -99 notEstablished peak10 established footprint12 established.
+  `def underrequestedReport` 7 etc.
+
+  Theorems:
+  ```
+  theorem independent_report_sound :
+   LineageReport.Sound reportEntry (reportExitMemory 0) (some10) establishedReport := by
+    apply established_report_sound (m:=reportEntryMemory) (actions:=reportActions) (m':=reportExitMemory) (h:=rfl)
+    all_goals decide? 
+  ```
+  hrequested 8≤8 decide; hnet 8-3-0≤5 decide; hpeak 10≤10 decide; footprint exists 10.
+  ```
+    · decide
+  ...
+    · exact ⟨10,rfl,by decide⟩
+  ```
+  run h rfl perhaps reportExitMemory exact.
+
+  Positive mixed:
+  requested8 established, net not, peak10 established, footprint12 established -> same theorem cannot because net bound notEstablished but generic theorem expects established. Prove by `simp [LineageReport.Sound,..., mixed, reportEntry, reportExitMemory,...]` perhaps computes direct; no vacuity because established fields constrain. To connect actual run for mixed, could add generic `run_report_sound` taking arbitrary report statuses and bounds:
+  ```
+  theorem run_report_sound {r} (h:run...) 
+   (hrequested : Bound.Sound (allocated...) r.requested)
+   (hnet : Bound.Sound (...) r.netChange)
+   (hpeak : Bound.Sound (m'...).functionPeak r.peak)
+   (hfp : Bound.SoundOptional footprint r.footprint)
+   : LineageReport.Sound ...
+  ```
+  This is substantive translation from action-based actual quantities to account-based, but hpeak same. Then `established_report_sound` can be specialization or direct. Mixed statuses can use generic `run_report_sound` with established and unknown. This avoids duplicating run proof and `unestablished_report_sound` remains representation lemma documented. Best design:
+  - `run_report_sound`: arbitrary report `r`, actual run, independent bounds against action-derived request/net and exit peak, footprint. It connects actual run.
+  - `established_report_sound`: all four established with numeric bounds and inequalities, invokes run_report_sound.
+  - `unestablished_report_sound`: representation only, explicitly vacuous not evidence. Keep as theorem.
+  - mixed example uses run_report_sound; positive established fields.
+  - empty_function_report_sound uses actual `run entry [] = some entry` and zero limits; can invoke established_report_sound with footprint? empty previously footprint none unestablished, so use `run_report_sound` and `simp`.
+  - underbounds 7,4,9 each ¬Sound.
+  - footprint underbounds 9 vs10, footprint established none rejection, established evidence none.
+  Could define concrete `reportExit : Account := ⟨108,7,100,10⟩` and reportExitMemory nested reduces projection to this.
+  - independent reports definitions.
+  `underNetReport` net4, `underPeakReport` peak9.
+  - `underFootprintReport` footprint9.
+  - `missingFootprintReport` footprint limit10 established actual none.
+  Should bound SoundOptional examples `some10` bound12, reject9, established none. Those can be in remaining audit commit or now relevant.
+
+  The theorem `run_report_sound` hnet expression uses Int subtraction of Nat `resetBytes` coerces. `((allocated lineage actions : Int) - (freed lineage actions : Int) - (resetBytes lineage m actions : Int))`.
+  Original suggested `(allocated : Int) - freed - resetBytes`. Lean coercions insert.
+  `LineageReport.Sound` actual net. run conservation Nat subtraction valid. omega can show equality of actual net to analytic expression then Bound.Sound. I need transform hnet with equality:
+  ```
+  have hnetEq : ((m' live:Int) - (m live:Int)) = ... := by omega
+  rw [hnetEq]
+  exact hnet
+  ```
+  Requested equality similarly `Nat.sub_eq_iff_eq_add` not needed omega.
+  Peak exact hpeak.
+  ```
+    simp only [LineageReport.Sound]
+    have hc := run_conservation h lineage
+    have hr : exit.requested-entry.requested = allocated := by omega
+    have hn : ... = ... := by omega
+    rw [hr, hn]
+    exact ⟨hrequested,hnet,hpeak,hfootprint⟩
+  ```
+  After `rw` targets inside Bound.Sound should rewrite. Good.
+
+  `established_report_sound` signature hreq etc limits implicit:
+  ```
+  theorem established_report_sound {m...} {requestedLimit...} ... (h) (hr)(hn)(hp)(hf) : Sound ... ⟨...⟩ := by
+   apply run_report_sound h
+   · intro _; exact hr
+  ...
+  ```
+  `run_report_sound` r implicit inference from conclusion.
+  Footprint `intro _; exact hf`.
+
+  Empty:
+  ```
+  theorem empty_function_report_sound :
+   Sound (Account.enter ⟨100,0,100,0⟩) same none report... := by
+    apply run_report_sound (m:=Memory.set Memory.empty 0 (Account.enter...)) (actions:=[]) (m':=same) rfl
+    all_goals simp [Bound.Sound, Bound.SoundOptional,...]
+  ```
+  But conclusion entry `(m lineage)` defeq Account.enter; m' same. `simpa` using generic.
+  Could simply prove with run_report_sound:
+  ```
+    apply run_report_sound (m:=Memory.set Memory.empty ⟨0⟩ (Account.enter...)) (m':=...) (actions:=[]) rfl <;> simp [...]
+  ```
+  `apply` unification may see m0 projection not reducible? Memory.set same l reduces. `simpa` using `(run_report_sound (r:=...) (m:=...) ... )`.
+  Better eliminate empty theorem? Round says every law V fix. Replace with theorem actual empty run. Could define `reportEmptyStart`, etc to simplify. Perhaps concrete independent example itself enough empty report optional. Keep.
+
+  `unestablished_report_sound` unchanged proof doc representation. No numeric claims. Add negative status guard? mixed covers.
+
+  I'll edit report block only Proofs, no Spec new defs needed. Use large replacement from line doc established to end. Read current block after modifications to get exact.
+
+• Next I’m replacing the tautological report theorem with a run-connected theorem for arbitrary independently chosen limits. The concrete report will use historical requested bytes 100, entry live bytes 2, allocation 8 and free 3, with separate underbounds for requested, net, peak, and footprint.
+
+• Construct new block. Definitions:
+  ```
+  def reportEntry : Account := ⟨100,2,100,2⟩
+  def reportEntryMemory := Memory.set Memory.empty ⟨0⟩ reportEntry
+  def reportActions...
+  def reportExitMemory := Memory.set (Memory.set reportEntryMemory 0 (reportEntry.alloc8)) 0 ((reportEntry.alloc8).free3)
+  ```
+  At reportExitMemory0 projection reduces to `(reportEntry.alloc8).free3` = ⟨108,7,100,10⟩.
+  `reportExit` abbrev Account perhaps use `(reportExitMemory ⟨0⟩)` directly in theorems.
+  `establishedReport`, `mixedStatusReport`, under...
+  Should reduce duplicated definitions perhaps function `reportWith requested net peak footprintLimit` with all statuses established:
+  ```
+  def establishedReportWith (requested:Nat)(net:Int)(peak footprint:Nat) : LineageReport := ...
+  def establishedReport := establishedReportWith 8 5 10 12
+  ```
+  Underdefs easy. Mixed custom.
+  Theorems negative:
+  ```
+  example : ¬ LineageReport.Sound reportEntry (reportExitMemory 0) (some10)
+   (establishedReportWith 7 5 10 12) := by
+    simp [LineageReport.Sound, Bound.Sound,..., establishedReportWith, reportEntry,reportExitMemory,reportEntryMemory,Memory.set,Account.alloc,Account.free]
+  ```
+  Will simp calculate actual requested subtraction etc and show conjunction false due 8≤7. `simp` perhaps proves negation. Should have Int net 5≤4. decide cannot since SoundOptional has existential Decidable not available. `simp` solves.
+  `by simp [LineageReport.Sound, Bound.Sound, Bound.SoundOptional, establishedReportWith, reportEntry, reportExitMemory, reportEntryMemory, Memory.set, Account.alloc, Account.free]` common long.
+  Could make theorem `report_exit : reportExitMemory 0 = ⟨108,7,100,10⟩ := rfl` and rewrite `[report_exit]`, but `reportExitMemory` def nested Memory.set projection rfl yes. Then simp only uses reportExit.
+  ```
+  def reportExit : Account := ⟨108,7,100,10⟩
+  theorem reportExit_eq : reportExitMemory 0=reportExit := rfl
+  ```
+  Then examples `simp [LineageReport.Sound,..., establishedReportWith, reportEntry, reportExit_eq]` rewrites? simp uses theorem name if included `[reportExit_eq]`. `reportExit` def values. Good.
+  Sound theorem target reportEntry reportExit not memory projection; established_report_sound conclusion exit `(reportExitMemory0)`, `simpa only [reportExit_eq] using ...`.
+  Independent:
+  ```
+  theorem independent_report_sound : Sound reportEntry reportExit (some10) establishedReport := by
+    have h := established_report_sound (m:=reportEntryMemory)(m':=reportExitMemory)(actions:=reportActions)
+      (lineage:=0) (requestedLimit:=8)... (footprint:=some10) rfl (by decide)...
+    simpa [reportEntryMemory,Memory.set,reportExit_eq,establishedReport] using h
+  ```
+  Actually entry `(reportEntryMemory0)` defeq reportEntry; exit rewrite.
+  hnet resetBytes computes 0 by decide. hpeak `(reportExitMemory0).functionPeak≤10` by decide. h requested etc by decide.
+  `exact ⟨10,rfl,by decide⟩`.
+  `establishedReport` delta perhaps inferred conclusion h report literal defeq establishedReport.
+  ```
+    simpa only [reportExit_eq, establishedReport] using h
+  ```
+  `establishedReport` is def not theorem simp only can unfold. `reportEntryMemory` not in h entry after reduction? type h displays reportEntryMemory0; simp [reportEntryMemory,Memory.set].
+  Add.
+
+  run_report_sound general:
+  ```
+    have hc := run_conservation h lineage
+    have hreqEq ... := by omega
+    have hnetEq ... := by omega
+    simp only [LineageReport.Sound]
+    rw [hreqEq, hnetEq]
+    exact ⟨hrequested,hnet,hpeak,hfootprint⟩
+  ```
+  Will omega with Nat subtraction hc live and resetBytes. yes.
+
+  established:
+  ```
+    apply run_report_sound h
+    · intro _; exact hrequested
+  ...
+  ```
+  Unification arbitrary r with literal.
+  Empty:
+  Define `emptyEntry`, `emptyMemory`? Use reportEntry? Example historical100 live0:
+  ```
+  theorem empty_function_report_sound :
+   let entry := Account.enter ...
+   Sound entry entry none ... := by
+  ```
+  No let needed.
+  ```
+    let entry := Account.enter ...
+    let m := Memory.set Memory.empty 0 entry
+    have h := run_report_sound (m:=m)(m':=m)(actions:=[])(lineage:=0)(r:=...) (footprint:=none) rfl ...
+    simpa [m,Memory.set] using h
+  ```
+  Proofs h args `by simp [Bound.Sound, allocated]`, etc.
+  Can just direct `simpa [LineageReport.Sound,...,Account.enter]` old but now no actual run violates audit. Should use run theorem.
+  Write term:
+  ```
+    apply run_report_sound
+      (m := Memory.set Memory.empty ⟨0⟩ (Account.enter ⟨100,0,100,0⟩))
+      (m' := same) (actions:=[]) (lineage:=⟨0⟩) rfl
+    · simp [Bound.Sound, allocated]
+    · simp [Bound.Sound, freed, resetBytes]
+    · simp [Bound.Sound, Account.enter, Memory.set]
+    · simp [Bound.SoundOptional]
+  ```
+  apply unifies conclusion entry/exit with m0 projections definitional yes.
+  Mixed:
+  ```
+  theorem mixed_status_report_sound : Sound reportEntry reportExit (some10) mixed := by
+   have h := run_report_sound (m...)(r:=mixed) rfl ...
+   ...
+  ```
+  Bound.Sound requested established 8≤8, net notEstablished `simp [mixedStatusReport,Bound.Sound]`; peak 10; footprint exists.
+  Could avoid h using independent theorem and modify net status? Since Sound ignores net unknown and other fields same, prove from independent_report_sound by simp. But run connected already independent. Mixed theorem via run_report_sound best.
+  Negative missing footprint actual none using report establishedWith and `some?` no, target `footprint none`, all other fields valid. simp.
+
+  Under bounds examples perhaps name `understated_requested_unsound` etc theorem for final witnesses. Use theorem not anonymous so references easier. Round says planted example with negation; theorem qualifies? They specifically "written as an `example` with a negation" owner. Use `example : ¬...`. For positive can theorem. Names not required.
+
+  Representation lemma keep name and doc explicitly "Representation helper only; vacuous as soundness evidence". Good.
+
+  I'll Edit huge.
+
+• The report design will also support mixed evidence statuses through the same run-connected theorem. The old all-unestablished result will remain only as an explicitly labelled representation helper, not as soundness evidence.
+
+• Build.warning: Git tree '/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c7' is dirty
+✖ [45/47] Building ConcreteSpec.Proofs.Leak (516ms)
+trace: .> LEAN_PATH=/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c7/.lake/build/lib/lean /nix/store/94bmilywgajdnqvix1fs35fj94kala0w-lean4-release-4.34.1/bin/lean /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c7/ConcreteSpec/Proofs/Leak.lean -o /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c7/.lake/build/lib/lean/ConcreteSpec/Proofs/Leak.olean -i /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c7/.lake/build/lib/lean/ConcreteSpec/Proofs/Leak.ilean -c /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c7/.lake/build/ir/ConcreteSpec/Proofs/Leak.c --setup /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c7/.lake/build/ir/ConcreteSpec/Proofs/Leak.setup.json --json
+error: ConcreteSpec/Proofs/Leak.lean:549:4: omega could not prove the goal:
+a possible counterexample may satisfy the constraints
+  e ≥ 0
+  d ≥ 0
+  c ≥ 0
+  b ≥ 0
+  b + c - d - e ≤ -1
+  a ≥ 0
+  a + b ≥ 0
+where
+ a := ↑(m lineage).requested
+ b := ↑((m' lineage).requested - (m lineage).requested)
+ c := ↑(m lineage).live
+ d := ↑(freed lineage actions)
+ e := ↑(resetBytes lineage m actions)
+Some required targets logged failures:
+- ConcreteSpec.Proofs.Leak
+error: build failed
+At hnetEq omega uses wrong hc? hc.1/.2 not automatically in context? `have hc := run_conservation...` conjunction not split, omega may use? It should use hc perhaps not decomposition. Error variables weird hnet goal plus only hc.2? hnet equality live; why requested variables included? Line 549 check exact.Omega can't derive Int equality from Nat subtraction equality without ensuring sub terms no truncation? Run conservation ensures exact but equation `m'live = m live + alloc - freed - reset`. This indeed implies int equality given sequential run ensures `freed+reset<=m+alloc`, but not from equation alone due truncation. Perhaps extra no-truncation theorem `freed + resetBytes ≤ m.live + allocated`. I can prove by omega from hc.2 plus m'live Nat? Counterexample truncated allows equality with too large outflow and m'=0. Should derive run_outflow_le separately by induction or from conservation not enough. Best long-term state an exact integer conservation law directly rather than Nat subtraction. Change `run_conservation` conclusion to requested equality ∧ `(m'live:Int) = (m live:Int)+allocated-freed-resetBytes`. This avoids truncation and is more informative, and run proof omega can use hle guards. Current run proof Nat subtraction works. Could add third conjunct `run_net_conservation` with actual Int equality, or replace Nat live equality with Int. Reports needs int. Existing audit criticized Nat truncation; best replace with Int equality structural. The live equation in Nat is exact but hides underflow. Int equation stronger/clearer. `run_conservation` statement:
+  ```
+  requested=... ∧ ((m' live:Int) = (m live:Int)+allocated - freed - resetBytes)
+  ```
+  Proof induction should omega with hc. In reset/alloc free cases same. `hc` conjunction second int. All omega. Nil simp. Then hnetEq omega works (linear).
+  Existing no users besides report. Do this in report commit? It modifies run conservation again but best. Should negative controls later.
+
+  Change statement lines and report perhaps hnetEq straightforward. Use Edit after Read current run statement perhaps read.
+
+• The report proof exposed the audit’s remaining natural-subtraction issue: the old whole-run live equation does not imply the integer net-change equation when subtraction truncates. I’m strengthening `run_conservation` to state net live-byte conservation directly over `Int`, rather than adding a workaround in the report proof.
+
+• Edit statement doc explicit integer.Build.warning: Git tree '/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c7' is dirty
+✔ [45/47] Built ConcreteSpec.Proofs.Leak (487ms)
+✔ [46/47] Built ConcreteSpec (142ms)
+Build completed successfully (47 jobs).
+Good. Should commit after perhaps run rules? Only build required each. Git diff stat, commit.
+
+• The report slice now builds with integer net conservation. It includes run-connected general soundness, the 8/5/10/12 instance, mixed statuses, an actual empty run, and planted underbounds for every established field.[wip/spec-c7 0cd3c1c05] C7: connect independent lineage reports to actual runs
+ 1 file changed, 130 insertions(+), 17 deletions(-)
+
+
+• Now wipe. I'll implement related source/target with nonzero wipe, prove preservation, planted target drop/change/reorder. Add compositionality law perhaps substantive with witnesses and negatives. Should have every law changed has examples. WipePreservation currently def no law. I can create simple source/target programs:
+  ```
+  structure WipeSource where wipes : List WipeEvent; observations : List Nat
+  structure WipeTarget ...
+  def wipeRelated source target := source.observations=target.observations
+  ```
+  But if related only observations, WipePreservation fails even good pair globally. Should have relation certifies exact wipe equality:
+  ```
+  def wipeRelated (source target : List WipeEvent) : Prop := source=target
+  def sourceWipes id targetWipes id
+  ```
+  Then preservation theorem trivially restates relation (vacuous by construction). Avoid. Should have actual transformation relation e.g. source/target AST optimization preserving wipe construct by definition and theorem structural induction. If relation includes equality of wipes, WipePreservation restates relation. Should meaningful related pair with pass simplification pure expressions and wipes unchanged as syntax. Define:
+  ```
+  inductive WipeStmt
+   | pure (n:Nat)
+   | wipe (event:WipeEvent)
+  abbrev WipeProgram := List WipeStmt
+  def erasePure : WipeProgram -> WipeProgram := filter ...
+  def wipes : ... filterMap
+  def related s t := t = erasePure s -- relation pass
+  theorem erasePure_preserves : WipePreservation (fun s t => t=erasePure s) wipes wipes := by ...
+  ```
+  Proof induction, not restating def. Nontrivial source `[pure0,wipe event,pure1,wipe event2]`, target erasePure. Good.
+  Planted target drop/change/reorder and relation? Owner says "planted a target that drops, changes or reorders the wipe and show it fails." If target not related, failure `WipePreservation` global cannot show from unrelated pair. Should planted transformation relation `fun s t => t = dropFirstWipe s` and show `¬ WipePreservation` using source. Or for same relation `related` certifies source/target pair including bad target? If related = observation preservation only, good pass and bad pass both related; theorem WipePreservation fails because bad pair. To prove preservation of actual pass relation, use `related` as t=erasePure s, bad target not related cannot be counterexample to preservation. User specifically "give a related source/target pair ... plant a target that drops ... and show it fails" likely can define `related` observation-only, then WipePreservation can't prove for good pair globally. Better make per-pair obligation `sourceWipes source = targetWipes target`; examples directly positive and negative without global WipePreservation? Item asks prove preservation and planted target fails. I can:
+  ```
+  def wipeRelated (s t) := t = erasePure s
+  theorem preserving_pass ... : WipePreservation wipeRelated...
+  example : sourceWipes source = targetWipes target -- nonzero
+  example : ¬ sourceWipes source = targetWipes (sourceWipes source).tail -- direct
+  example : ¬ WipePreservation observationRelated ... := by ...
+  ```
+  This gives bad related pair under observation-only relation and proves global obligation fails. Best covers all.
+  Should have no comments overexplaining? doc comments required spec readable.
+
+  Place in Proofs/Leak.lean after report before end or Spec examples? WipeEvent definitions Spec, proof pass Proofs appropriate. Add:
+  ```
+  inductive WipeSyntax where | pure (value:Nat) | wipe (event)
+  deriving DecidableEq, Repr
+  abbrev WipeProgram := List WipeSyntax
+  def erasePure ...
+  def programWipes ...
+  def wipeSource : WipeProgram := [.pure 1, .wipe ⟨0,0,4⟩, .pure2, .wipe⟨1,0,2⟩]
+  def wipeTarget := erasePure wipeSource
+  def optimized (s t) := t=erasePure s
+  theorem erasePure_wipe_preservation : WipePreservation optimized programWipes programWipes := by
+   intro source target h
+   subst target
+   induction source with ...
+  ```
+  Proof `erasePure` filter:
+  ```
+  def erasePure : WipeProgram -> WipeProgram
+   | []=>[]
+   | .pure _::rest => erasePure rest
+   | .wipe w::rest => .wipe w::erasePure rest
+  def programWipes ...
+   | [][]
+   | .pure_::rest => programWipes rest
+   | .wipe w::rest => w::...
+  ```
+  theorem induction simp [optimized, erasePure, programWipes] etc.
+  ```
+    intro source target h
+    subst target
+    induction source with
+    | nil => rfl
+    | cons stmt rest ih => cases stmt <;> simp [erasePure, programWipes, *]
+  ```
+  `optimized` unfolds at h `change target=erasePure source at h`.
+  Positive example:
+  ```
+  example : programWipes wipeTarget = [wipe1,wipe2] := by decide
+  example : optimized wipeSource wipeTarget ∧ programWipes...=... := ⟨rfl,rfl⟩
+  ```
+  Nonzero wipe bytes 4 and2.
+  Observation preserving relation:
+  ```
+  def observations : WipeProgram -> List Nat := filterMap pure values
+  def observationRelated s t := observations s=observations t
+  def droppedWipeTarget := erasePure wipeSource |>.tail? 
+  ```
+  Want same ordinary observations source vs target: source has pure1,pure2, target only wipes has [] observations -> not same. Choose source `wipeSource` includes pure and target bad should retain pure events. `dropFirstWipe` transformation:
+  ```
+  def dropFirstWipe : WipeProgram -> WipeProgram
+   | [] []
+   | .wipe _::rest => rest -- drops first, retains rest pure
+   | s::rest => s::drop...
+  ```
+  Then target `badWipeTarget := [.pure1, .wipe second, .pure2]` retains observations [1,2].
+  Define manually target `[.pure 1, .wipe event2, .pure2]`.
+  `observationRelated wipeSource badTarget` by decide/rfl.
+  ```
+  example : observationRelated wipeSource badWipeTarget ∧
+   programWipes wipeSource ≠ programWipes badWipeTarget := by decide
+  example : ¬ WipePreservation observationRelated programWipes programWipes := by
+   intro h
+   have := h wipeSource badWipeTarget (by decide)
+   simp [wipeSource,bad...,programWipes,...] at this
+  ```
+  Could just `intro h; have heq := h ... (by decide); cases ...` contradiction decide `exact (by decide : list≠list) heq`.
+  ```
+    exact (by decide : programWipes wipeSource ≠ programWipes badWipeTarget)
+      (h _ _ (by decide))
+  ```
+  This is concise.
+  Changed/reordered controls direct examples:
+  - bad changed target same first wipe but bytes5; `programWipes ...≠...` by decide.
+  - reordered target wipes swapped while pure same.
+  I can define three bad targets and a global observation relation counterexample one dropped; direct examples changed/reordered.
+  Composition law optional agy and/or so preservation proof enough. No need add law requiring controls.
+
+  Should have current end read then Edit insert before end.
+
+• I’ll model a small pure-instruction erasure pass and prove that it preserves the ordered wipe trace by induction. Negative controls will use observation-equivalent targets that drop, alter, or reorder nonzero wipes, showing that observation preservation alone is insufficient.
+
+• Add namespace WipeDemo to avoid generic names. `Pure` syntax name `opaque`? `pure` constructor conflicts Lean pure function but `.pure` okay.
+  ```
+  inductive Statement where | ordinary (observation:Nat) | wipe (event)
+  ```
+  Use `ordinary` clearer. eraseOrdinary. Observations list ordinary.
+  Source `[ordinary1,wipe4,ordinary2,wipe2]`.
+  optimized target erase = [wipe4,wipe2], observations target [] not same; for bad targets preserve ordinary.
+  Bad drop `[ordinary1,wipe2,ordinary2]`.
+  Changed `[ordinary1,wipe⟨0,0,5⟩,ordinary2,wipe2]`.
+  Reordered `[ordinary1,wipe2,ordinary2,wipe4]` also ordinary [1,2].
+  Actual target no ordinary, optimization intentionally erases observations too? Ordinary "pure" observations should not be called observations if erased. Call `ordinary (result:Nat)` and `results` not ordinary observations? Audit negative requires observation preservation. If erasePure changes ordinary outputs, weird. Better pass removes `dead (n)` no observable effects. `observations` function separately sums dead n as ordinary observation? Contradiction. Define `ordinary (n)` is pure arithmetic, and `publicObservations` function perhaps always fixed `[]` for all? Then observation equivalence trivial. Better use source with `output n` constructor retained by pass, plus `pure n` erased. More constructors:
+  ```
+  | pure (n)
+  | output (n)
+  | wipe
+  ```
+  erasePure retains output/wipe.
+  source `[pure0,wipe4,output7,pure1,wipe2]`.
+  target `[wipe4,output7,wipe2]`.
+  bad drop `[pure0,wipe2,output7,pure1]` (drops first, retains pure okay)
+  changed similar, reorder.
+  observations collects output.
+  Proof cases three.
+  Good.
+  `programWipes`, `programObservations`.
+  `observationRelated`.
+  Positive `optimized wipeSource wipeTarget ∧ wipe lists equal ∧ nonzero` can exact.
+  `theorem erasePure_preserves_wipes`.
+  `example : programWipes wipeTarget = [wipe4,wipe2] := by decide`.
+  Negative global observationRelated.
+  All deriving DecidableEq for Statement and WipeEvent already. Good.
+  Add.Build.warning: Git tree '/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c7' is dirty
+✖ [45/47] Building ConcreteSpec.Proofs.Leak (490ms)
+trace: .> LEAN_PATH=/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c7/.lake/build/lib/lean /nix/store/94bmilywgajdnqvix1fs35fj94kala0w-lean4-release-4.34.1/bin/lean /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c7/ConcreteSpec/Proofs/Leak.lean -o /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c7/.lake/build/lib/lean/ConcreteSpec/Proofs/Leak.olean -i /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c7/.lake/build/lib/lean/ConcreteSpec/Proofs/Leak.ilean -c /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c7/.lake/build/ir/ConcreteSpec/Proofs/Leak.c --setup /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c7/.lake/build/ir/ConcreteSpec/Proofs/Leak.setup.json --json
+error: ConcreteSpec/Proofs/Leak.lean:740:93: failed to synthesize
+  Decidable (observationRelated source droppedTarget ∧ wipes source ≠ wipes droppedTarget)
+
+Hint: Additional diagnostic information may be available using the `set_option diagnostics true` command.
+error: ConcreteSpec/Proofs/Leak.lean:741:93: failed to synthesize
+  Decidable (observationRelated source changedTarget ∧ wipes source ≠ wipes changedTarget)
+
+Hint: Additional diagnostic information may be available using the `set_option diagnostics true` command.
+error: ConcreteSpec/Proofs/Leak.lean:742:97: failed to synthesize
+  Decidable (observationRelated source reorderedTarget ∧ wipes source ≠ wipes reorderedTarget)
+
+Hint: Additional diagnostic information may be available using the `set_option diagnostics true` command.
+error: ConcreteSpec/Proofs/Leak.lean:747:85: failed to synthesize
+  Decidable (observationRelated source droppedTarget)
+
+Hint: Additional diagnostic information may be available using the `set_option diagnostics true` command.
+Some required targets logged failures:
+- ConcreteSpec.Proofs.Leak
+error: build failed
+Should unfold observationRelated for decide `by simp [observationRelated,...]` or `by decide` doesn't unfold semireducible? Decide doesn't unfold definitions for Decidable synthesis. Use `by simp [observationRelated, observations, source, droppedTarget, wipes,...]` all. Could add `@[simp] def observationRelated`? Not. `by decide +kernel` no banned only native. `by simp [observationRelated, source, ..., observations, wipes]` should.
+  For pair examples:
+  ```
+  by constructor <;> decide? 
+  ```
+  first `by rfl` observationRelated defeq yes. second decide. `by exact ⟨rfl, by decide⟩` observationRelated source target defeq equality observations; rfl. wiped != decide. So replace `by decide` with `by exact ⟨rfl, by decide⟩`.
+  global h arg `(by decide)` observationRelated use `(by rfl : observationRelated source droppedTarget)`.
+  Do Edit after read relevant.
+
+• The wipe preservation proof itself elaborates. The remaining errors are only decidable synthesis for the observation-relation wrapper; I’ll expose those concrete equalities with `rfl` and keep `decide` for the trace disequalities.
+
+• Build.warning: Git tree '/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c7' is dirty
+✔ [45/47] Built ConcreteSpec.Proofs.Leak (584ms)
+✔ [46/47] Built ConcreteSpec (133ms)
+Build completed successfully (47 jobs).
+Commit.[wip/spec-c7 bd13ea776] C7: witness and challenge wipe preservation
+ 1 file changed, 82 insertions(+)
+Now security + every remaining row. This is huge. Perhaps split security commit and accounting witnesses commit and definitions examples commit. Todo "repair security examples and remaining" can have sub-tasks update list. Must all C7 rows. I should systematically list rows and actions. Should not literally all Exec rows excluded. Only Leak.
+
+  Codex table security:
+  allowed_unique D/M add permissive contract control two answers. Could define `permissiveAllowed` in Demo:
+  ```
+  def permissiveAllowed ... := match p,vs with release/output etc true?
+  example : ∃ a b, ... a≠b := ...
+  ```
+  But allowed_unique theorem about ops.allowed; negative control cannot use different contract and expect theorem applies. Show uniqueness fails for permissive alternative, qualifies mutated rule. Add:
+  ```
+  def permissiveAllowed ... := match ... with release/output => true ...
+  example : ∃ a b,

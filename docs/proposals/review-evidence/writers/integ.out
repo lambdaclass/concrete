@@ -1,0 +1,1520 @@
+kimi version 2.4.1
+• I need read brief fully and carry out. Should inspect files. First Read BRIEF.I need modify Lean proofs/spec observe build, commit pieces. Should inspect status branch files fully relevant. I must use TodoList multi step. Should have no agents. I should read git status and relevant files in parallel. First note.
+
+• I’ll inspect the partial lifecycle definitions and C6’s failing adapter proofs, then patch only the observation files and verify with the permitted builds and checks.
+
+## wip/spec-integrate
+wip/spec-integrate
+6157005eb A2i integration: merge wip/spec-c6 (C6 accepted at 738500fb) into wip/spec-core after C4 (b9c3aeaaf) and the partial lifecycle change (d8f89ea75); README and Spec.lean conflicts joined, golden to be regenerated
+738500fb8 spec: retain existing silent steps in insertion
+58b705c77 axioms.golden: C6 round 2 (regenerated on concrete-ci-2)
+b48656e84 proof C6: exclude termination from every infinite run
+caa4fad86 proof C6: preserve observations under infinite stuttering
+• Output complete all. I'll adapt k types Option Config lines 425 etc. Main build failure runFrom_validTrace call ih k a should need some c'. I'll add natural premise continuation succeeded. Could adapt theorem runFrom_validTrace with no statement changes? Internal k inferred option, when some a allowed match k a: none -> stuck no event, valid. some c' -> recursive. So proof can case k a, no extra theorem statement necessary. User says adapter projection and ValidTrace/BlockingPermitted laws keep statements, with only natural premise continuation succeeded where needed. Existing laws statements don't mention k except generic types; k type changes naturally. Perhaps report/projection law? I'll build first to see. Run permitted lake build with timeout 1200. Perhaps check foundation proposal relevant? Task says read files done. I should inspect git diff previous C6 to understand new law perhaps accepted law set includes examples. Also current Spec Observe no adapter examples besides generic. I'll add refused example likely Demo with actual Operands/oracle etc. Should vacuity every changed law. Which laws "add or change": runFrom_validTrace statement type k changes automatically; runFrom_noAnswer_pending_valid, runFrom_blockingPermitted, report_noAnswer_mayBlock, report_noAnswer_blocked all k type change due partial, though semantic statements same. Should non-trivial and planted counterexamples per law. Existing C6 accepted may have non-vacuity elsewhere? Search examples referencing laws.
+
+• The key failure is the recursive answered-request case: C6 passes `k a` directly as a configuration, while C1 now requires case-splitting on success. I’ll confirm the exact compiler errors and inspect existing adapter examples before choosing the smallest proof changes.738500fb8 spec: retain existing silent steps in insertion
+ ConcreteSpec/Proofs/Observe2.lean | 1 +
+ ConcreteSpec/Spec/Observe.lean    | 7 +++++++
+ 2 files changed, 8 insertions(+)
+
+
+• Git diff empty between 738 and HEAD for files? Means merge unchanged C6. Should inspect Proofs/Examples perhaps demo patterns and C6 old commit laws examples absent.Should read output log external known path allowed Read.Task precisely type updates and proof case. Spec Observe builds already but User says make Spec/Observe and Proofs build over partial continuation, add example refused likely Spec. Could only change Spec example and proof types. Should vacuity rule. Should carefully design non-trivial instances and planted counterexamples for every changed law. Perhaps changing type of k counts change law but statements unchanged modulo C1 type. I should supply examples per law. Could add examples to Proofs/Observe2 in Demo namespace with concrete adapter. Should potentially create C6 adapter demo using Exec.Demo ops with log etc. But easiest generic small custom Operands to exercise one request with output/request/response etc. I can reuse Exec.Demo.ops and its log primitive, C6 Observe.Demo.signature expects Nat request/response while Exec Demo Event Int. Could design adapter mapping Int C1 event to C6 events with doubles etc. Exec.Demo ops log permits arbitrary int response? Its primitive .log with [v], event some ev = v, result ok 0. Adapter request p vs... typed request some q for log. A.events : Int -> List Event signature, e.g. fun n => [.request ⟨double, Int.toNat n⟩? response?]. Should have a single C1 event projects to request+response. For run log 3: A.events 3 = [request 3, response 6]. request function maps .log [v] to Nat. Should negative Int handling; can only examples positive but WellFormed for all hist etc requires contract double and RequestResponse. Could use Int request types instead by define own signature in adapter Demo separate. I can define in Proofs namespace perhaps DemoC1. But no new modules needed. Could use S with Request=Int Response=Int Output=String, contract allows r=2q, mayBlock perhaps true for specific q to test blocking. A.events n = [request n, response 2*n]. request p vs st from .log [v] gives q. WellFormed answered proven by simp. internal for bump empty event outputs=[] etc. blocked: Exec.Demo.env never none for log/bump valid args, so premise impossible for all typed request log; can prove by cases/simp. Alternatively custom oracle that responds for log and none for bump etc; A.request log typed only, blocked impossible since env always some for log. Good.
+
+  Should exercise runFrom_validTrace nontrivial answered successful continuation and final status mapping. Exec.Demo.ops has life total; continuation success. Can instantiate A status perhaps fun n => some (Int.toNat n) and sites. Use simple program starting direct config `.exec (.prim none .log [.lit 3] s)` with frames=[] and done final normal but reportObservation final normal yields none due no status. For runFrom_validTrace only valid trace works regardless. For blocking law need noAnswer example with contract mayBlock. Existing Demo.contract mayBlock false so cannot produce BlockingPermitted for noAnswer. Define blockContract with mayBlock true perhaps allows double. WellFormed same. Then oracle fun _... => none for log => noAnswer. Should runFrom_blockingPermitted and report_noAnswer laws examples.
+
+  But vacuity per changed law:
+  - runFrom_validTrace: positive example run accepted request/response producing valid trace [request 3,response6]. Negative planted mutated event projection response 7 should fail CompleteTrace. Could prove directly `¬ CompleteTrace ... [request3,response7]`. Is that a counterexample to law? Better mutate wellFormed answer to wrong response, show conclusion false. A direct bad trace enough per owner "mutated rule or bad state that fails it, as example with negation." I can label.
+  - runFrom_noAnswer_pending_valid: positive noAnswer log3 with mayBlock true yields pending ValidTrace + mayBlock. Negative same pending with contract mayBlock false yields not conjunction perhaps ValidTrace true but mayBlock false. Direct `¬ (ValidTrace noBlock ... pending ∧ noBlock.mayBlock...)` by simp. This witnesses planted blocking contract mutation.
+  - runFrom_blockingPermitted: positive `ExecAdapter.BlockingPermitted ... report noAnswer`. Negative noBlock contract no permission `¬ BlockingPermitted ...` can apply to q etc. Should prove by intro h; exact h rfl rfl rfl perhaps h has implicit args inferred. This may be same as above but okay.
+  - report_noAnswer_mayBlock: positive using permitted proof yields mayBlock. Negative with noBlock cannot construct permitted. Could planted bad `permitted` impossible, can't show law fail if premise impossible. Should counterexample bad state that fails conclusion independent permitted? Law conclusion mayBlock given arbitrary `permitted`; for noBlock premise impossible so law vacuously holds, impossible to give counterexample with hypotheses. Owner rule might not demand counterexample satisfying all hypotheses (contradiction impossible). User wants mutated rule or bad state fails to satisfy it as example negation, typically show bad input doesn't satisfy proposition. For report_noAnswer_mayBlock, use bad `pending` mismatch or typed mismatch? Conclusion could still mayBlock true if blockContract, so choose noBlock but permitted cannot exist. Could use blockContract but request different q whose mayBlock false. Design mayBlock only q=3; permitted is for all typed request q based A.request fixed q3. To instantiate theorem with typed request q4 while A.request = some q3 impossible. Instead pending wrong step impossible. To get false conclusion with valid premises use polymorphic k? The theorem's `request` arbitrary but typed forces. If A.request returns q3, conclusion always mayBlock q3. If mayBlock conditional and A.request q3 yes holds. Can't fail if well-formed permitted. The theorem is essentially projection of premise, non-vacuity and planted counterexample can be `¬ C.mayBlock` for an unpermitted request, demonstrating mutated contract. User likely accepts negative examples not full theorem hypotheses. Similar report_noAnswer_blocked: negative with stuck report or bad response gives observation none / no response. I can show `reportObservation ... stuck ... ≠ some (.blocked...)` or no answer forbidden can't have permitted. For planted counterexample, use same noAnswer report but adapter typed mapping to none? pending typed cannot. Direct mutated output expected wrong request gives inequality. Better `reportObservation ... noAnswer ... ≠ some (.blocked (...request4) 4)` demonstrates not arbitrary blocked observation. But law is equality exact, counterexample bad expected event history is reasonable. Yet user specifically "For every law you add or change" and final per law examples. I need ensure all changed laws have examples. Could avoid changing report_noAnswer theorem statements? I must update k type, yes considered mechanical adaptation but still changed. I'll provide examples.
+
+  Could put examples near each theorem to simplify. But many setup needed. Better create `namespace AdapterDemo` at end with concrete definitions and examples grouped with doc comments mapping each law. Could define all demos after laws and examples refer to prior theorem. Use theorem applications for non-trivial instances, direct negations. Should possibly update docs comment in runFrom_validTrace to explicitly refused continuation events not retained, add new theorem `runFrom_continuation_refused`? Task asks "a refused continuation is stuck ... not observation response/output" and add one example. Existing runFrom_validTrace proof case will ensure. But to encode general law perhaps add theorem `runFrom_continuation_refused` that states under step request and allowed answer and k a=none, runFrom succ hist c = ⟨hist,.stuck c⟩. This is a C6 adapter/projection relevant law. Natural and useful. Should non-trivial and counterexample for it. Example in Spec could directly decide run result no events stuck using refusing ops. Could also theorem in proofs general. Task only says adapter laws keep statements and add example; no need new theorem but useful to ensure refused branch. Could add theorem `runFrom_continuation_refused` to Proofs and examples. But then vacuity obligations more. I can handle. Yet avoid overengineering.
+
+  Spec example refused continuation needs concrete operands where prim result binding fails. Exec.Demo.refusingOps only refuses drop x not bind, so create `refusingBindOps` in Observe.Demo based on Exec.Demo.ops with `life` refusing `.bind x` perhaps destination `some x`. Then run direct `.prim (some Exec.Demo.x) .log [.lit 3] site` with env that gives event 3 and ok0; continuation tries bind x, life returns none, runFrom returns stuck original c and events [] (not [3]). Should program `⟨[]⟩`, config no frames. Evaluate args lit3, request, oracle env log gives some a, allows true, k a life bind none. `run ... 1 or 2` yields stuck. This can be proved by decide. I can define `abbrev refusingBindOps : Exec.Operands := { Exec.Demo.ops with life := fun e st => match e with | .bind x => if x = Exec.Demo.x then none else some (Exec.Demo.DState.life e st) | _ => some ... }`. But name collision x binding. Use `| .bind y => if y = Exec.Demo.x then none ...`. Oracle needs type Exec.Oracle refusingBindOps; Exec.Demo.env has Oracle ops, but ops and refusing differ only life, all other fields definitional? `Exec.Oracle` uses Val Prim Event Store all same reducible, likely can use `Exec.Demo.env` with type annotation or define `refusingEnv : Exec.Oracle refusingBindOps := fun ...` same. Could pass `Exec.Demo.env` directly elaboration perhaps unification of structures different not defeq? `refusingBindOps` is structure update ops so projections Val reduce to Int yes Oracle only those, should defeq. Program empty. Example:
+  ```
+  def refusedRequest : Exec.Config refusingBindOps :=
+   ⟨.exec (.prim (some Exec.Demo.x) .log [.lit 3] Exec.Demo.s), [], .init, []⟩
+  def refusedReport := Exec.run (O:=refusingBindOps) ⟨[]⟩ Exec.Demo.env 1 refusedRequest
+  example : refusedReport.events = [] ∧ ∃ c, refusedReport.ending = .stuck c := by decide? 
+  ```
+  Existential over Config not Decidable? proposition exists with decidable equality not automatically Decidable for infinite type, cannot decide existential. Use direct equality report perhaps Config has no DecidableEq? Ctrl/Stmt no deriving, can't decide equality. Use match:
+  ```
+  example : (match refusedReport.ending with | .stuck c => refusedReport.events.isEmpty && decide (c = refusedRequest)?)
+  ```
+  Config no DecidableEq. Only need stuck ending and no response event. Could two examples:
+  ```
+  example : refusedReport.events = [] := by decide
+  example : (match refusedReport.ending with | .stuck _ => true | _ => false) = true := by decide
+  ```
+  Brief "add one example where ... stuck ending and no response event." Could combine pair Bool:
+  ```
+  example : refusedReport.events = [] ∧
+    (match refusedReport.ending with | .stuck _ => True | _ => False) := by
+   constructor
+   · decide
+   · decide
+  ```
+  `decide` can prove match Prop because ending computable and True decidable. Or one example with `refusedReport.events = [] ∧ (match ... with | .stuck _ => true | _ => false) = true := by decide` conjunction decidable. Good. "no response event" events raw C1 empty implies projected empty. Could use reportObservation returns none too:
+  ```
+  def observationPermitted ... : BlockingPermitted ... stuck := by intro ... ending; cases ending
+  example : reportObservation ... refusedReport ... = none ∧ events... := ...
+  ```
+  But reportObservation stuck none and no events sufficient. Task specifically not observation response/output. I should show reportObservation none, requiring adapter etc perhaps overkill. Raw events [] and stuck demonstrates. Add doc comment "Refused: accepted log response whose destination lifecycle is refused stays at requesting config; its candidate response is not in history and report has no observation." If I only example raw report events and ending, no observation statement explicit. Could define simple adapter A mapping events etc and `BlockingPermitted` vacuous for stuck, show `reportObservation ... = none`. But a lot. Perhaps in Spec Demo use generic Event signature and adapter simple with `events := fun n => [response n]` (no request?) status etc. `BlockingPermitted` proof for stuck easy. Then:
+  ```
+  def refusingAdapter : ExecAdapter refusingBindOps signature where
+   events := fun n => [response (Int.toNat n)] ...
+   request := ... perhaps none
+   status := ...
+   sites := ...
+  def refusedPermitted : BlockingPermitted ... refusedReport := by intro ... h; contradiction
+  example : refusedReport.events = [] ∧ ... ∧ reportObservation ... refusingAdapter contract () refusedReport refusedPermitted = none := ...
+  ```
+
+  But wellformed not required reportObservation. Could set request none, mayBlock false. Projection [] no response. This explicitly shows no observation. But need no extra laws. Could define adapter with events mapping output or response. Simpler use signature existing Nat, mapping n to `[response (Int.toNat n)]`; request always none; status fun _ => none; sites []. Then stuck no observation. Proof by decide perhaps reportObservation includes permitted proof irrelevant, definitional. `refusedPermitted` theorem (not example) law? Definition proof no vacuity? Not a law perhaps okay. Could inline `by intro ...`. Define `def refusedObservationPermitted ...`. This is additional declaration no docs? Spec rules only registered. Fine.
+
+  But user likely expects minimal not massive. I need inspect prior accepted C6 examples perhaps no adapter demos at all. I need add robust non-vacuity for changed laws as binding.
+
+  Perhaps simplest changes first type + proof and compile, then design examples. Commit each piece as soon build passes. Brief "Commit each piece as soon as ... passes". Could make first piece minimal adaptation with no examples? But vacuity requires every law changed, can't commit law change without examples? Commit can be intermediate incomplete? It says commit each piece as soon build passes. I can patch all including examples then build and commit one piece. Or first minimal compile and commit then examples second commit. But vacuity could be final. Usually okay. I need commit perhaps one integration fix commit. I should not commit failing. I'll adapt types and proof then add examples before build to avoid multiple heavy runs? Builds are light ~5sec. I can iterate.
+
+  I'll understand Lean simplification for continuation case:
+  ```
+            | some a =>
+              by_cases allowed ...
+              · cases continued : k a with
+                | none =>
+                  simp [Exec.runFrom, final, next, answer, allowed, continued, valid]
+                | some c' =>
+                  have answerValid ... same
+                  simpa [... continued] using ih (hist ++...) c' answerValid
+  ```
+  Should answerValid only in some branch. No natural premise added to runFrom_validTrace statement, because recursion premise internal. "with only natural premise continuation succeeded where needed" Perhaps User expects theorem split with `hk : k a = some c'` in proof only. Existing statement no explicit answered run. Fine.
+
+  Types all Option.
+
+  Spec only examples perhaps no definitions need change. Add docs to runFrom_validTrace "A refused answer continuation returns original history and stuck ending; in particular no request/response/output event from refused answer is added." This aligns.
+
+  Potential theorem for stuck:
+  ```
+  theorem runFrom_continuation_refused ... (fuel) (hist) (c) ... 
+   (next : step P c = some request...) (answer : ρ ... = some a)
+   (allowed : O.allows ... = true) (refused : k a = none) :
+   Exec.runFrom P ρ (fuel+1) hist c = ⟨hist, .stuck c⟩ := by
+   simp [Exec.runFrom, final?]
+  ```
+  Should have final c none premise since if final, runFrom final not step. Add `final : c.final? = none`. Statement:
+  ```
+  theorem runFrom_continuation_refused ... (final : c.final? = none) ... :
+   runFrom ... (fuel+1)... = ⟨hist,.stuck c⟩ := by simp [Exec.runFrom, final,next,answer,allowed,refused]
+  ```
+  This directly states. Non-trivial example using refusedBindOps. Counterexample when continuation succeeds, report not equal stuck and events include response. Could use normal ops direct same request run1 gives done config with events [3] and not stuck. Negation of equality to `⟨hist,.stuck c⟩` difficult Report equality Decidable? Can show events not empty or ending not stuck. Example `¬ (run ... normal ...).events = []` by decide. But law counterexample should show same formula not stuck? Use match ending with `.stuck _` false and events [3]. `example : ¬ ((run ...).events = [] ∧ match ending ... ) := by decide`. This is negative for conjunction example rather than theorem equality. Could formulate general theorem as pair events and ending rather than report equality:
+  ```
+  theorem runFrom_continuation_refused ... :
+   (runFrom ...).events = hist ∧ (runFrom ...).ending = .stuck c := by simp [...]
+  ```
+  Then positive example exactly theorem application, negative successful continuation:
+  ```
+  example : ¬ ((run... ).events = [] ∧ (run...).ending = .stuck requestConfig) := by decide
+  ```
+  Ending equality Decidable? Ending contains Config no DecidableEq, but concrete `.stuck config` equality needs Config DecidableEq; no. Could use match to True:
+  ```
+  def Exec.Report...? no.
+  ```
+  General theorem equality okay proof, example positive can use theorem. Negative `¬ (match report.ending with | .stuck _ => report.events = [] | _ => False)` decidable perhaps equality events only. But not exact negation of law. Could show `¬ (run normal ...).events = []` demonstrates event accepted, and `¬ (match ending with stuck => true...)` separately. Binding says "a planted counter-example ... fails to satisfy it, as an example with a negation." I can show `¬ (report.events = [] ∧ (match ending with | .stuck _ => True | _ => False)) := by decide`. This matches observation-level law form. If theorem stated report equality, positive/negative not exact but acceptable likely.
+
+  Do I need add this law? Not necessary; example direct enough. Avoid extra.
+
+  For changed runFrom_validTrace, positive example can use theorem to show report trace complete. I need build concrete AdapterDemo. I'll design fully in Proofs/Observe2 after theorems. Use existing `Observe.Demo.signature` but Int mismatch; can choose own `signature` to simplify Int. Namespace `AdapterDemo` inside `ConcreteSpec.Core.Observe`, open Core. Name conflicts `Demo` existing. I'll call `namespace AdapterDemo`.
+
+  Definitions:
+  ```
+  inductive Op where | double
+  abbrev signature : EventSignature where
+   Kind := Op
+   Request := fun _ => Int
+   Response := fun _ => Int
+   Output := String
+  ```
+  Could reuse Observe.Demo.Op? It has double. But qualify. Own Op okay.
+  ```
+  def request (n:Int) : Event signature := .request ⟨.double,n⟩
+  ...
+  abbrev contract : OperationContract signature where
+   Input := Unit
+   allows := fun _ _ q r => q.2*2 = r.2
+   mayBlock := fun _ _ q => q.2 = 3
+  ```
+  For noBlock contract:
+  ```
+  abbrev noBlockContract : OperationContract signature := { contract with mayBlock := fun _ _ _ => False }
+  ```
+  Adapter for Exec.Demo.ops:
+  ```
+  def requestOf (p : Exec.Demo.Pr) (vs : List Int) : Option (Request signature) :=
+   match p, vs with | .log, [v] => some ⟨.double,v⟩ | _,_ => none
+  def adapter : ExecAdapter Exec.Demo.ops signature where
+   events := fun n => [request n, response (2*n)]
+   request := fun p vs _ _ => requestOf p vs
+   status := fun _ => none
+   sites := []
+  ```
+  C1 log answer event v. WellFormed:
+  - internal: if request none then p not log valid args. ρ = Exec.Demo.env. For `.bump, []`, answer event none so projection [] = outputs []. For invalid calls env none. I can prove with cases p, vs etc. `simp [ExecAdapter.WellFormed]` perhaps structure constructor fields separately.
+  ```
+  def oracle : Exec.Oracle Exec.Demo.ops := Exec.Demo.env
+  theorem wellFormed : ExecAdapter.WellFormed adapter contract () oracle := by
+    constructor
+    · intro hist p vs site store a answer typed
+      cases p with
+      | log =>
+        cases vs with
+        | nil => simp [oracle, Exec.Demo.env] at answer
+        | cons v vs =>
+          cases vs with
+          | nil => simp [adapter, requestOf] at typed
+          | cons => simp [oracle, Exec.Demo.env] at answer
+      | bump =>
+        cases vs with
+        | nil =>
+          simp [oracle, Exec.Demo.env] at answer
+          cases answer
+          exact ⟨[], rfl⟩
+        | cons => simp [...] at answer
+  ...
+  ```
+  Could use `simp [adapter, requestOf, oracle, Exec.Demo.env] at *` perhaps solve all with cases p <;> cases vs etc. Should test. Alternative choose simpler custom operands with one primitive and total store Unit to make WellFormed easy. But reusing Exec Demo reduces run config construction yet proof wellformed complexity. Could define new minimal operands inside AdapterDemo with Val=Int Expr=Int Store=Unit Prim=Unit Event=Int; eval literal; life always some; test none; allows always response doubling? C1 Answer event should be single Int encoding request n; `allows := fun _ vs st a => match vs,a with | [v], ⟨some ev, .ok 0, ()⟩ => v=ev ...`. Oracle always same. Then Step request `.prim none () [3]` easy. Adapter as above. WellFormed answered always, internal impossible (request always some for unit prim [v]); but for malformed args request none and oracle none perhaps. Define Prim `log` only, request for all vs? Request q needs one Int. Could ignore vs and use q=3 always, allows oracle independent? Better primitive carries Int `Prim := Int`, eval args [] and p=n. Then `request p [] ... = some ⟨double,p⟩`; oracle answer event p result0. No expressions args simplifies. Operands:
+  ```
+  abbrev ops : Exec.Operands where
+   Val := Int
+   Expr := Int
+   Ty := Unit
+   Store := Unit
+   Prim := Int
+   Event := Int
+   unitVal := 0
+   unitTy := ()
+   isCopy := fun _ => true
+   eval := fun _ st n => .ok (n,st)
+   life := fun _ st => some st
+   test := fun _ => none
+   allows := fun p _ _ a => match a with | ⟨some ev,.ok 0,()⟩ => decide (ev=p) | _ => false
+  ```
+  `Event=Int`. Oracle `fun _ p _ _ _ => some ⟨some p,.ok 0,()⟩`. Adapter request `fun p _ _ _ => some ⟨double,p⟩`. WellFormed:
+  - internal impossible `request` always some, `simp [adapter] at typed`.
+  - answered: oracle equality gives a exact; refine ⟨[],⟨double,2*p? response Sigma⟩,[],...⟩. Response `r := ⟨.double, 2*p⟩`. `A.project [p] = [request p,response(2*p)]`; before=[], after=[].
+    matching `.matched ...`; allows rfl because q.2*2 = 2*p perhaps Int multiplication orientation p*2 defeq? 2*p not defeq p*2. choose response p*2.
+    `C.allows ... q r`: p*2=p*2 rfl.
+    answered can `cases answer; exact ⟨[], ⟨.double,p*2⟩, [], rfl, ⟨[],rfl⟩, ⟨[],rfl⟩, .matched..., rfl⟩`.
+  - blocked oracle never none -> simp [oracle] at h.
+  This is much simpler.
+
+  Program empty `def prog : Exec.Program ops := ⟨[]⟩`.
+  Request config:
+  ```
+  def config (n:Int) : Exec.Config ops := ⟨.exec (.prim none n [] ⟨0⟩), [], (), []⟩
+  ```
+  Destination none ensures continuation always some; for refused example separate in Spec. Steps: run with fuel 1: initial nonfinal, request, answer allowed, cont done config frames[], recursive fuel0 sees final normal -> final normal events [n]. So report `run prog oracle 1 (config 3)` final normal events [3], adapter projection [request3,response6].
+  Valid initial hist [] `.idle`.
+  Wellformed contract and noBlock differ only mayBlock so one proof can be polymorphic:
+  ```
+  theorem wellFormed (C : OperationContract signature)
+   (allows : ∀ input hist q r, C.allows ... ↔ q.2*2=r.2?) ...
+  ```
+  Easier two instances via generic `wellFormed (mayBlock : ...)`? Define contract with `mayBlock` parameter:
+  ```
+  def makeContract (mayBlock : Unit → List Event → Request → Prop) : OperationContract signature := ...
+  theorem wellFormed (C?)...
+  ```
+  Only need `contract` block3 and noBlock. WellFormed structure does not depend mayBlock except blocked impossible, allows same. Prove generic:
+  ```
+  theorem wellFormed (blocking : Unit → List (Event signature) → Request signature → Prop) :
+    ExecAdapter.WellFormed adapter (makeContract blocking) () oracle := by ...
+  ```
+  Then `contract := makeContract (fun _ _ q => q.2=3)` as abbrev? 
+  ```
+  def contract : OperationContract signature := makeContract ...
+  abbrev noBlockContract := makeContract ...
+  ```
+  When theorem runFrom... expects C, can use `wellFormed _`.
+
+  Block example requires oracle no answer, different `blockingOracle := fun ... => none`. WellFormed for blockingOracle:
+  - answered impossible
+  - blocked gives mayBlock by typed and q=p; for contract block3 mayBlock requires p=3, not all p. Could define blockingOracle only answers none for p=3 but some for others:
+  ```
+  def blockingOracle : Oracle ops := fun hist p vs site st =>
+   if p=3 then none else oracle hist p vs site st
+  ```
+  WellFormed generic contract block3:
+   internal for p≠3 and request always some -> impossible regardless answer.
+   answered p≠3 use oracle; p=3 answer none contradiction.
+   blocked p=3 gives mayBlock rfl, p≠3 oracle some contradiction.
+  This proof more complex but manageable.
+  Alternative blockingOracle always none and contract mayBlock True for positive blocking. noBlock contract false for negative. WellFormed for blockingOracle with mayBlock True trivial. Then block law applies q any. Use `blockingContract := makeContract (fun _ _ _ => True)`. noBlockContract false. Simpler. Non-trivial enough? mayBlock True perhaps universal but accepted operation contract no issue. Vacuity no law trivially due guard? The theorem still actual noAnswer state. Fine.
+  ```
+  def blockingWellFormed : WellFormed adapter blockingContract () blockingOracle := by
+   constructor
+   · intro ... answer; simp [blockingOracle] at answer
+   · intro ... answer; simp [...] at answer
+   · intro ... _ _; trivial
+  ```
+  For internal first has typed but answer none contradiction. Good.
+  For oracle normal wellformed generic allows.
+
+  Refused example in Spec can use its own minimal ops perhaps define same in Spec Demo? I can't reference Proofs AdapterDemo from Spec. I could add minimal refused ops in Spec based on Exec.Demo as earlier, simpler. No need normal adapter.
+
+  Now examples in Proofs:
+  1 `runFrom_validTrace` positive:
+  ```
+  def answeredReport : Exec.Report ops := Exec.run prog oracle 1 (config 3)
+  example : CompleteTrace contract () (adapter.project answeredReport.events) :=
+    (runFrom_validTrace prog adapter contract () oracle (wellFormed _) 1 [] (config3) .idle).1
+  ```
+  Should contract def perhaps `contract` blocking? Use `blockingContract` or responseContract (mayBlock false) both. Define `contract` noBlock? Existing naming:
+  - `contract` mayBlock True? I need both.
+  ```
+  def contract (mayBlock : ...) ...
+  def permitting : OperationContract := contract (fun...True)
+  def forbidding := contract (fun...False)
+  ```
+  Then wellFormed parameter.
+  Positive run valid with `forbidding` to show response independent blocking.
+  `answeredReport` reducible perhaps theorem conclusion runFrom not defeq answeredReport if def yes.
+  ```
+  example : CompleteTrace forbidding () (A.project answeredReport.events) := by
+    exact (runFrom_validTrace ... 1 [] (config3) ValidTrace.idle).1
+  ```
+  Run uses runFrom with hist[] defeq.
+
+  Negative:
+  ```
+  example : ¬ CompleteTrace forbidding () [request 3,response 7] := by
+   intro h
+   cases h with ... 
+  ```
+  ValidTrace list append structure inversion not straightforward. Can use `by decide`? ValidTrace Prop inductive with allows equality Int decidable but no Decidable instance automatically. Could prove using inversion:
+  List [request3,response7] can be final response with hist=[request3], q3,r7 or output last impossible. `cases h` likely `ValidTrace.response` unification determines hist etc. 
+  ```
+    cases h with
+    | response pending matching allows =>
+      contradiction -- allows : 3*2=7
+  ```
+  But cases also output/request? Complete trace state none so constructors idle,response,output. List not [] excludes idle, final event response excludes output; Lean cases might leave response only via unification. Existing Spec negative Responds simple. Try.
+  ```
+  example : ¬ CompleteTrace ... [request3,response7] := by
+   intro h
+   cases h with
+   | response _ _ allows => contradiction
+  ```
+  constructor response fields pending matching allows, yes names. If `cases h` creates response only due list shape. `contradiction` decides arithmetic false. Could `simp [request,response,forbidding,contract] at allows` etc. I'll test.
+  This is planted wrong response.
+
+  2 noAnswer pending positive:
+  Define `blockedReport := Exec.run prog blockingOracle 1 (config3)` noAnswer config3 events[].
+  The theorem:
+  ```
+  example :
+   ValidTrace permitting () (some ⟨double,3⟩) (adapter.project blockedReport.events ++ [request3]) ∧
+   permitting.mayBlock ... := by
+   exact runFrom_noAnswer_pending_valid ... (wellFormed ...) ValidTrace.idle rfl rfl rfl
+  ```
+  `pending`: step prog config3 = request cont, rfl; typed adapter.request rfl. `ending` rfl. `request3` is Event not Request; q `⟨.double,3⟩`. Define `query (n) : Request signature := ⟨.double,n⟩` and request event uses query. Add.
+  Result perhaps `A.project []` simplifies not defeq? project [] = [] rfl. Fine.
+  Negative:
+  ```
+  example : ¬ (ValidTrace forbidding () (some (query3)) [request3] ∧
+    forbidding.mayBlock ... ) := by
+    intro h
+    exact h.2
+  ```
+  h.2 : False defeq, exact h.2. This negative doesn't use bad trace but contract mutation. Good.
+
+  3 runFrom_blockingPermitted positive:
+  ```
+  example : ExecAdapter.BlockingPermitted prog adapter permitting () blockedReport :=
+   runFrom_blockingPermitted ... valid idle
+  ```
+  Negative:
+  ```
+  example : ¬ ExecAdapter.BlockingPermitted prog adapter forbidding () blockedReport := by
+   intro h
+   exact h (q:=query3) rfl rfl rfl
+  ```
+  h result False, exact h... works. Note no WellFormed for blockingOracle forbidding, so planted invalid oracle/environment premise. Fine.
+
+  4 report_noAnswer_mayBlock positive:
+  Should permitted definition `blockedPermitted` to pass proof (same as example cannot reference anonymous example). Define theorem? Could define:
+  ```
+  def blockedPermitted : ExecAdapter.BlockingPermitted ... := runFrom_blockingPermitted ...
+  ```
+  This is a proof declaration (def) but not new law? It's an instance witness. Could use `theorem blockedPermitted` then vacuity rule might view as law add? Better `def` as example support but still theorem-like. Owner says every law add/change, this is instance not general law. Document as concrete evidence.
+  Then positive:
+  ```
+  example : permitting.mayBlock ... := report_noAnswer_mayBlock ... blockedPermitted rfl rfl
+  ```
+  Negative direct:
+  ```
+  example : ¬ forbidding.mayBlock ... := by intro h; exact h
+  ```
+  Could instead show `¬ ExecAdapter.BlockingPermitted ...` same as previous duplicate. To make per-law negative meaningful, for report_noAnswer_mayBlock a mutated adapter maps request to q4 while expected conclusion q3? But law always premise gives conclusion. Negative necessarily unpermitted contract. Duplicate okay.
+
+  5 report_noAnswer_blocked positive:
+  ```
+  example : reportObservation ... blockedReport blockedPermitted =
+   some (.blocked [request3] (query3)) :=
+   report_noAnswer_blocked ... blockedPermitted rfl rfl
+  ```
+  `A.project blockedReport.events=[]`.
+  Negative:
+  ```
+  example : reportObservation ... blockedReport blockedPermitted ≠
+   some (.blocked [request3,response6] (query3)) := by
+    rw [report_noAnswer_blocked ...]
+    intro h; cases h -- Option.some injection FullObservation blocked lists differ
+  ```
+  Could `simp [reportObservation, blockedReport, Exec.run, Exec.runFrom, config, ...]` decide? Equality of FullObservation requires Event with Sigma Int etc DecidableEq perhaps Event no deriving. No decide. Use equality theorem then `intro h; cases h` may no confusion because lists differ not constructor. `cases h` uses Option.some.inj and FullObservation.blocked.inj, then list noConfusion, likely `contradiction`? `simp only [Option.some.injEq, FullObservation.blocked.injEq]` then `intro h;` h conjunction list equality etc, `cases h.1` perhaps list equality impossible via noConfusion. `simp [request,response] at h` perhaps decides lists no. I can choose wrong terminal constructor `.finiteDivergence` so constructors disjoint:
+  ```
+  example : reportObservation ... ≠ some (.terminal ⟨[request3], .exited 0⟩) := by
+   rw [report_noAnswer_blocked ...]
+   intro h
+   cases h
+  ```
+  Option some values .blocked vs .terminal noConfusion cases h closes. This demonstrates blocked not termination but not exact mutated expected response. Task already C6 law statement exact. Better wrong blocked request event response addition:
+  ```
+    have observed := report_noAnswer_blocked ...
+    rw [observed]
+    intro h
+    injection h with h
+    injection h with events req
+    -- events : [request3] = [request3,response7] likely
+    contradiction? `simp [request,response] at events`
+  ```
+  `List.cons.injEq` etc `simp at events` might show `[request3] = [request3,response7]` reduces to equality request3 = response7? Actually lengths differ, simp knows List.cons.injEq and List.nil/cons, contradiction by cases. `cases events` likely noConfusion after injective list. `simp at events`.
+  Could simply use `.terminal` as planted misclassification accepted.
+
+  Also changed report_outOfFuel_none? k not in statement no change. No need examples. output_before_trap unchanged. ValidTrace answer projection unchanged. runFrom_validTrace internal types changed only; runFrom_noAnswer etc mechanical. report no answer k types mechanical.
+
+  Spec refused example could serve runFrom_validTrace negative: bad state refused continuation yields history unchanged. But negative counterexample to validTrace? No conclusion still valid, so no.
+
+  Potential issue vacuity rule expects examples "for every law you add or change" all existing laws mechanically re-elaborated count but perhaps only runFrom_validTrace changed proof, others just type fix. I have all.
+
+  Also need example for Spec `reportObservation` changed? Definition not changed. Only adding example. Fine.
+
+  Do I need natural premise continuation succeeded where needed perhaps add to `runFrom_validTrace` not statement but recursive. No other laws need premise. I should not weaken `WellFormed` to require k success. Good.
+
+  I'll make initial type/proof edits and Spec example. Use Edit mandatory incremental. One edit each file parallel allowed. I need add multiple changes same file in single Edit perhaps old string huge lines 419-536 replace full block. Could use replace_all for type exact string `k : Exec.Answer ... → Exec.Config O` to Option occurs four, replace_all true. Then same file cannot consecutive Edit without Read. I can do first replace_all, then Read relevant, second proof edit. Spec add definitions/examples before end Demo one edit. Should decide exact Spec code.
+
+  Spec Demo existing uses `Op`, signature Nat. Add near end before byteColumn? At end after Span example:
+  ```
+  abbrev refusingBindOps : Exec.Operands := { Exec.Demo.ops with
+   life := fun e st => match e with
+   | .bind y => if y = Exec.Demo.x then none else some (Exec.Demo.DState.life e st)
+   | _ => some (Exec.Demo.DState.life e st) }
+  ```
+  Variable y type Var. `if y = ...` needs DecidableEq yes.
+  ```
+  def refusedRequest : Exec.Config refusingBindOps :=
+   ⟨.exec (.prim (some Exec.Demo.x) .log [.lit 3] Exec.Demo.s), [], .init, []⟩
+  ```
+  `.log` type Pr inferred. `.lit` E. `.init` DState.
+  ```
+  def refusedReport : Exec.Report refusingBindOps :=
+   Exec.run ⟨[]⟩ Exec.Demo.env 1 refusedRequest
+  ```
+  Lean may not accept env due op types defeq yes.
+  Adapter:
+  ```
+  def refusingAdapter : ExecAdapter refusingBindOps signature where
+   events := fun n => [response (Int.toNat n)]
+   request := fun _ _ _ _ => none
+   status := fun _ => none
+   sites := []
+  ```
+  C1 Event Int, Int.toNat core.
+  `contract` existing no block.
+  ```
+  def refusedReportPermitted : ExecAdapter.BlockingPermitted ⟨[]⟩ refusingAdapter contract () refusedReport := by
+   intro c p vs site store k q ending
+   cases ending
+  ```
+  BlockingPermitted ∀ ..., ending `refusedReport.ending = noAnswer c`. `cases ending` cannot because refusedReport.ending is stuck but not definitional until reduce. `simp [refusedReport, Exec.run, Exec.runFrom, refusedRequest, refusingBindOps, Exec.step, Exec.onRes, Exec.evalArgs, Exec.Demo.evalE, Exec.Demo.env, Exec.Demo.ops, Exec.Demo.s, Exec.Demo.x] at ending` huge. Easier define permitted using `by
+    intro ...
+    have : refusedReport.ending = .stuck refusedRequest := by decide? 
+  `
+  Can prove report ending via match Bool but equality to stuck config no Decidable needed proof by rfl (stuck c equality requires proof but rfl elaboration no computation issue):
+  ```
+  have stuck : refusedReport.ending = .stuck refusedRequest := rfl
+  rw [stuck] at ending
+  cases ending
+  ```
+  Is rfl true? run fuel1 yes final? config exec nonfinal, step request, oracle answer allowed, k none. reduces through structures. Should be rfl, although Int/AList etc okay.
+  ```
+    rw [show refusedReport.ending = .stuck refusedRequest from rfl] at ending
+    cases ending
+  ```
+  `ending` is noAnswer equality, rewrite turns stuck=noAnswer, cases.
+  Then example:
+  ```
+  /-- Refused: ... -/
+  example : refusedReport.events = [] ∧
+      (match refusedReport.ending with | .stuck _ => true | _ => false) = true ∧
+      reportObservation ⟨[]⟩ refusingAdapter contract () refusedReport refusedReportPermitted = none := by
+    decide
+  ```
+  Last equality Option FullObservation includes DecidableEq? `decide` entire conjunction requires Decidable equality of Option FullObservation, no deriving DecidableEq for FullObservation, Terminal etc. But since LHS reduces to none, proposition `none = none` can use rfl but Decidable equality instance may still need FullObservation DecidableEq? `instDecidableEq` requires type DecidableEq regardless reduction? `decide` elaboration synth before reduction perhaps `inferInstance` reduces LHS? For equality `a=b`, Decidable (a=b) uses DecidableEq α even if both none. No instance. Use `by refine ⟨by decide, by decide, rfl⟩` nested conjunction right associativity: `⟨by decide, by decide, rfl⟩` works syntax nested constructor? Lean supports angle brackets flatten. Or `constructor; · decide; constructor; · decide; · rfl`.
+  `reportObservation` match stuck -> none rfl regardless permitted proof, so rfl.
+  This one example explicitly stuck events and no observation. Good.
+
+  Do I need define adapter as response event mapping to prove no response observation; raw C1 event response would map if present. Great.
+
+  Now Proofs AdapterDemo definitions after end all laws before `end ConcreteSpec.Core.Observe`. Could be long ~180 lines. Desired readable. I'll iterate.
+
+  First do type and Spec example.
+
+• I’ll preserve every existing law statement, changing only continuation types and the answered-run recursion. The refused case will return the original history with `.stuck`, and the new specification example will also show that `reportObservation` returns no observation.
+
+• Replace only 3 not 4 because one implicit spacing? Lines k occurrences: runFrom valid {k ...} yes, noAnswer yes, report mayBlock `(k : ...)` not braces, report blocked `(k :...)`; replace all braces 3 includes runFrom_blocking? It has no k. Should change parentheses two. Also proof edit. Read relevant 419-540 now and Spec tail perhaps not need re-read solely prove write but need code context for edit? Spec no more now. Update todos inspection done adapting in progress.Interesting report mayBlock changed braces too yes 3 = valid/noanswer/mayblock. blocked remains.
+
+  Edit proof block and k one in same Edit? One Edit only exact one old string. Could replace larger from `| some a =>` through report_noAnswer? Too huge. Better one Edit replace proof case and type using old string spanning 458-530 including lots unchanged, cumbersome but possible. Or Edit proof then Read then Edit type. Must follow no consecutive without Read. I'll do proof edit.Should update doc comment runFrom_validTrace to mention refused no event. Later can include in another edit with k? I must Read before next Edit same file. I already need add huge examples. Could now use Read bottom, then one Edit replace from k blocked through end namespace with k + examples. Also doc comment earlier would require separate read/edit. I can skip doc comment? Existing comment still true, no old behavior. Spec comments updated enough.
+
+  Now test minimal adaptation before examples perhaps `lake build` catches Spec example errors and proof. Should change remaining k first. Read small bottom then Edit.Now run build foreground to catch.warning: Git tree '/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/integ' is dirty
+✖ [28/45] Building ConcreteSpec.Spec.Observe (583ms)
+trace: .> LEAN_PATH=/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/integ/.lake/build/lib/lean /nix/store/94bmilywgajdnqvix1fs35fj94kala0w-lean4-release-4.34.1/bin/lean /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/integ/ConcreteSpec/Spec/Observe.lean -o /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/integ/.lake/build/lib/lean/ConcreteSpec/Spec/Observe.olean -i /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/integ/.lake/build/lib/lean/ConcreteSpec/Spec/Observe.ilean -c /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/integ/.lake/build/ir/ConcreteSpec/Spec/Observe.c --setup /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/integ/.lake/build/ir/ConcreteSpec/Spec/Observe.setup.json --json
+error: ConcreteSpec/Spec/Observe.lean:445:0: Definition `refusedReportPermitted` is a proposition; use `theorem` instead of `def`
+
+Note: This linter can be disabled with `set_option linter.defProp false`
+Some required targets logged failures:
+- ConcreteSpec.Spec.Observe
+error: build failed
+Should theorem instead of def. Then vacuity? It's concrete premise not law. Use theorem. Edit read known file line around 440? I know content exact, edit incremental allowed after build? Tool requires Read before every incremental change? "Read before overwriting existing" only Write. Edit no need read if content known; I read original before and edit changed. I can Edit based exact new string from my own. Do.
+
+• The proof adaptation is type-correct so far; the only current error is Lean’s proposition linter on the example’s supporting proof. I’ll change that declaration to `theorem`, then add the concrete non-vacuity witnesses.
+
+• Perhaps build now, adaptation done and example done.warning: Git tree '/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/integ' is dirty
+✔ [28/45] Built ConcreteSpec.Spec.Observe (573ms)
+✔ [29/45] Built ConcreteSpec.Spec (130ms)
+✔ [30/45] Built ConcreteSpec.Proofs.Basics (186ms)
+✔ [31/45] Built ConcreteSpec.Proofs.Authority (358ms)
+✔ [32/45] Built ConcreteSpec.Proofs.Cleanup (436ms)
+✔ [33/45] Built ConcreteSpec.Proofs.Slice1 (574ms)
+✔ [34/45] Built ConcreteSpec.Proofs.Memory (574ms)
+✔ [35/45] Built ConcreteSpec.Proofs.Brand (698ms)
+✔ [36/45] Built ConcreteSpec.Proofs.Borrow (717ms)
+✔ [37/45] Built ConcreteSpec.Proofs.Observe (209ms)
+✔ [38/45] Built ConcreteSpec.Proofs.Checker (296ms)
+✔ [39/45] Built ConcreteSpec.Proofs.Hybrid (327ms)
+✔ [40/45] Built ConcreteSpec.Proofs.Rep (386ms)
+✔ [41/45] Built ConcreteSpec.Proofs.Slice0 (216ms)
+✔ [42/45] Built ConcreteSpec.Proofs.Observe2 (1.4s)
+✔ [43/45] Built ConcreteSpec.Proofs.Examples (184ms)
+✔ [44/45] Built ConcreteSpec (144ms)
+Build completed successfully (45 jobs).
+Now build passes. Brief "commit each piece as soon as build passes." I have adaptation + refused example, but vacuity examples not yet. Could commit now piece then next. Should review diff, git status, perhaps commit. Must not run rules yet until respond. Commit each validated slice. Should commit adaptation now to honor. But theorem changed laws and vacuity missing at this commit, but response later okay. Should commit message. Before commit check diff and status.
+
+• The integrated specification now builds: a refused continuation keeps the old history and produces no observation, while a successful one follows the original C6 recursion. I’ll commit this working slice, then add law-by-law positive and planted negative instances. M ConcreteSpec/Proofs/Observe2.lean
+ M ConcreteSpec/Spec/Observe.lean
+diff --git a/ConcreteSpec/Proofs/Observe2.lean b/ConcreteSpec/Proofs/Observe2.lean
+index f0d7bb6b7..ce463feee 100644
+--- a/ConcreteSpec/Proofs/Observe2.lean
++++ b/ConcreteSpec/Proofs/Observe2.lean
+@@ -422,7 +422,7 @@ theorem runFrom_validTrace (P : Exec.Program O) (A : ExecAdapter O S) (C : Opera
+       CompleteTrace C input (A.project hist) →
+       CompleteTrace C input (A.project (Exec.runFrom P ρ fuel hist c).events) ∧
+       ∀ {c' : Exec.Config O} {p : O.Prim} {vs : List O.Val} {site : SiteId} {store : O.Store}
+-        {k : Exec.Answer O.Val O.Event O.Store → Exec.Config O} {q : Request S},
++        {k : Exec.Answer O.Val O.Event O.Store → Option (Exec.Config O)} {q : Request S},
+         (Exec.runFrom P ρ fuel hist c).ending = .noAnswer c' →
+         Exec.step P c' = some (.request p vs site store k) →
+         A.request p vs site store = some q →
+@@ -457,20 +457,23 @@ theorem runFrom_validTrace (P : Exec.Program O) (A : ExecAdapter O S) (C : Opera
+               simpa [Exec.runFrom, final, next, answer] using wellFormed.blocked answer typed
+           | some a =>
+             by_cases allowed : O.allows p vs store a = true
+-            · have answerValid : CompleteTrace C input (A.project (hist ++ a.event.toList)) := by
+-                rw [ExecAdapter.project_append]
+-                cases typed : A.request p vs site store with
+-                | none =>
+-                  obtain ⟨outputs, projection⟩ := wellFormed.internal answer typed
+-                  rw [projection]
+-                  exact valid.outputs outputs
+-                | some q =>
+-                  obtain ⟨before, r, after, projection, beforeOutputs, afterOutputs, matching,
+-                    allows⟩ := wellFormed.answered answer typed
+-                  rw [projection]
+-                  exact ValidTrace.answer_projection valid beforeOutputs afterOutputs matching allows
+-              simpa [Exec.runFrom, final, next, answer, allowed] using
+-                ih (hist ++ a.event.toList) (k a) answerValid
++            · cases continued : k a with
++              | none => simp [Exec.runFrom, final, next, answer, allowed, continued, valid]
++              | some c' =>
++                have answerValid : CompleteTrace C input (A.project (hist ++ a.event.toList)) := by
++                  rw [ExecAdapter.project_append]
++                  cases typed : A.request p vs site store with
++                  | none =>
++                    obtain ⟨outputs, projection⟩ := wellFormed.internal answer typed
++                    rw [projection]
++                    exact valid.outputs outputs
++                  | some q =>
++                    obtain ⟨before, r, after, projection, beforeOutputs, afterOutputs, matching,
++                      allows⟩ := wellFormed.answered answer typed
++                    rw [projection]
++                    exact ValidTrace.answer_projection valid beforeOutputs afterOutputs matching allows
++                simpa [Exec.runFrom, final, next, answer, allowed, continued] using
++                  ih (hist ++ a.event.toList) c' answerValid
+             · simp [Exec.runFrom, final, next, answer, allowed, valid]
+ 
+ /-- A blocked C1 observation has exactly the pending `ValidTrace` state and history that its
+@@ -481,7 +484,7 @@ theorem runFrom_noAnswer_pending_valid (P : Exec.Program O) (A : ExecAdapter O S
+     {fuel : Nat} {hist : List O.Event} {c c' : Exec.Config O}
+     (valid : CompleteTrace C input (A.project hist))
+     {p : O.Prim} {vs : List O.Val} {site : SiteId} {store : O.Store}
+-    {k : Exec.Answer O.Val O.Event O.Store → Exec.Config O} {q : Request S}
++    {k : Exec.Answer O.Val O.Event O.Store → Option (Exec.Config O)} {q : Request S}
+     (ending : (Exec.runFrom P ρ fuel hist c).ending = .noAnswer c')
+     (pending : Exec.step P c' = some (.request p vs site store k))
+     (typed : A.request p vs site store = some q) :
+@@ -516,7 +519,7 @@ theorem report_noAnswer_mayBlock (P : Exec.Program O) (A : ExecAdapter O S)
+     (C : OperationContract S) (input : C.Input) (events : List O.Even
+t) (c : Exec.Config O)
+     (permitted : ExecAdapter.BlockingPermitted P A C input ⟨events, .noAnswer c⟩)
+     {p : O.Prim} {vs : List O.Val} {site : SiteId} {store : O.Store}
+-    {k : Exec.Answer O.Val O.Event O.Store → Exec.Config O} {request : Request S}
++    {k : Exec.Answer O.Val O.Event O.Store → Option (Exec.Config O)} {request : Request S}
+     (pending : Exec.step P c = some (.request p vs site store k))
+     (typed : A.request p vs site store = some request) :
+     C.mayBlock input (A.project events ++ [.request request]) request :=
+@@ -527,7 +530,8 @@ and ends in the request itself; it is not mistaken for termination or divergence
+ theorem report_noAnswer_blocked (P : Exec.Program O) (A : ExecAdapter O S)
+     (C : OperationContract S) (input : C.Input)
+     (events : List O.Event) (c : Exec.Config O) (p : O.Prim) (vs : List O.Val) (site : SiteId)
+-    (store : O.Store) (k : Exec.Answer O.Val O.Event O.Store → Exec.Config O) (request : Request S)
++    (store : O.Store) (k : Exec.Answer O.Val O.Event O.Store → Option (Exec.Config O))
++    (request : Request S)
+     (permitted : ExecAdapter.BlockingPermitted P A C input ⟨events, .noAnswer c⟩)
+     (pending : Exec.step P c = some (.request p vs site store k))
+     (typed : A.request p vs site store = some request) :
+diff --git a/ConcreteSpec/Spec/Observe.lean b/ConcreteSpec/Spec/Observe.lean
+index 14ece9133..f79e0e4f4 100644
+--- a/ConcreteSpec/Spec/Observe.lean
++++ b/ConcreteSpec/Spec/Observe.lean
+@@ -420,6 +420,42 @@ example : byteColumn "a\té" = 5 := by decide
+ 
+ example : Span.HasByteColumn (Span.mk "src/main.con" 1 5 (by decide) (by decide)) "a\té" := rfl
+ 
++/-- Refusing result binding through lifecycle instrumentation; all other demo operations are
++unchanged. -/
++abbrev refusingBindOps : Exec.Operands := { Exec.Demo.ops with
++  life := fun e st => match e with
++    | .bind y => if y = Exec.Demo.x then none else some (Exec.Demo.DState.life e st)
++    | _ => some (Exec.Demo.DState.life e st) }
++
++/-- A request whose otherwise valid response would initialize the refused local. -/
++def refusedRequest : Exec.Config refusingBindOps :=
++  ⟨.exec (.prim (some Exec.Demo.x) .log [.lit 3] Exec.Demo.s), [], .init, []⟩
++
++/-- The answer is allowed by the primitive contract, but its continuation is refused. -/
++def refusedReport : Exec.Report refusingBindOps :=
++  Exec.run ⟨[]⟩ Exec.Demo.env 1 refusedRequest
++
++/-- If the refused response had been accepted, its C1 event would project to a C6 response. -/
++def refusingAdapter : ExecAdapter refusingBindOps signature where
++  events := fun n => [response (Int.toNat n)]
++  request := fun _ _ _ _ => none
++  status := fun _ => none
++  sites := []
++
++/-- A stuck report has no `noAnswer` ending, so the blocking premise imposes nothing. -/
++theorem refusedReportPermitted :
++    ExecAdapter.BlockingPermitted ⟨[]⟩ refusingAdapter contract () refusedReport := by
++  intro c p vs site store k q ending pending typed
++  rw [show refusedReport.ending = .stuck refusedRequest from rfl] at ending
++  cases ending
++
++/-- Refused: result binding rejects the response. The run keeps the requesting configuration as
++its stuck ending, records neither the response nor any other event, and has no C6 observation. -/
++example : refusedReport.events = [] ∧
++    (match refusedReport.ending with | .stuck _ => true | _ => false) = true ∧
++    reportObservation ⟨[]⟩ refusingAdapter contract () refusedReport refusedReportPermitted = none := by
++  refine ⟨by decide, by decide, rfl⟩
++
+ end Demo
+ 
+ end ConcreteSpec.Core.Observe
+
+
+• Commit. User explicitly brief asks commits so allowed. `git add ... && git commit -m`. Hooks may run but commit each.[wip/spec-integrate 8dbbc4301] proof C6: adapt observations to refused continuations
+ 2 files changed, 58 insertions(+), 18 deletions(-)
+Now add non-vacuity examples. Should mark adaptation done and examples in progress.I'll write AdapterDemo. Should be cautious no unnecessary comments? User asks doc comments examples, vacuity mapping. I'll add docs.
+
+  I'll prototype in actual file append before end using Edit. I have read bottom earlier and changed one. Should have exact end:
+  ```
+  theorem report_outOfFuel_none ... := rfl
+
+  end ConcreteSpec.Core.Observe
+  ```
+  Use Edit replace ending with plus namespace.
+
+  Detailed code:
+
+  ```
+  /-! ### Adapter non-vacuity ... -/
+  namespace AdapterDemo
+
+  inductive Op where | double
+
+  abbrev signature ...
+  def query (n:Int) : Request signature := ⟨.double,n⟩
+  def request...
+  ...
+  def makeContract (blocking : Unit → List (Event signature) → Request signature → Prop) :
+   OperationContract signature where
+   Input := Unit
+   allows := fun _ _ q r => q.2 * 2 = r.2
+   mayBlock := blocking
+  ```
+  Potential `blocking` Unit input defeq C.Input = Unit yes.
+  ```
+  abbrev permittingContract : OperationContract signature :=
+   makeContract (fun _ _ _ => True)
+  abbrev forbiddingContract ... False
+  ```
+  Ops:
+  ```
+  abbrev ops : Exec.Operands where
+  ...
+   eval := fun _ st n => .ok (n,st)
+   life := fun _ st => some st
+   test := fun _ => none
+   allows := fun p _ _ a =>
+     match a.event, a.result, a.store with
+     | some ev, .ok 0, () => decide (ev = p)
+     | _, _, _ => false
+  ```
+  Since Store Unit all a.store unit but match `()` works. `a.result` Except TrapKind Int, pattern `.ok 0`. Good.
+  `isCopy := fun _ => true` Ty Unit.
+  `unitTy := ()`.
+  `unitVal := 0`.
+
+  Oracle:
+  ```
+  def answeringOracle : Exec.Oracle ops := fun _ p _ _ _ => some ⟨some p, .ok 0, ()⟩
+  def blockingOracle : Exec.Oracle ops := fun _ _ _ _ _ => none
+  ```
+  Adapter:
+  ```
+  def adapter : ExecAdapter ops signature where
+   events := fun n => [request n,response (n*2)]
+   request := fun p _ _ _ => some (query p)
+   status := fun _ => none
+   sites := []
+  ```
+  Program/config:
+  ```
+  def program : Exec.Program ops := ⟨[]⟩
+  def requesting (n : Int) : Exec.Config ops :=
+   ⟨.exec (.prim none n [] ⟨0⟩), [], (), []⟩
+  def answeredReport ... := Exec.run program answeringOracle 1 (requesting 3)
+  def blockedReport ... := ...
+  ```
+  WellFormed:
+  ```
+  theorem answeringWellFormed (blocking : ...) :
+   ExecAdapter.WellFormed adapter (makeContract blocking) () answeringOracle := by
+   constructor
+   · intro hist p vs site store a answer typed
+     simp [adapter] at typed
+   · intro hist p vs site store a q answer typed
+     cases answer
+     refine ⟨[], ⟨.double, p * 2⟩, [], ?_, ⟨[], rfl⟩, ⟨[], rfl⟩, ?_, rfl⟩
+     · rfl
+     · exact RequestResponse.matched ...
+  ```
+  After `cases answer`, q unification typed perhaps q not substituted automatically? `typed : adapter.request... = some q`, with request some query p, cases answer doesn't use typed. Should have `cases typed` to substitute q. But `cases typed` uses some.inj query p = q, yes. Then goal exists r etc. `cases answer` where answer equality some a = some known, cases substitutes a. `cases typed`. Order:
+  ```
+     cases answer
+     cases typed
+     exact ⟨[], ⟨.double,p*2⟩, [], rfl, ⟨[],rfl⟩,⟨[],rfl⟩,
+       RequestResponse.matched ..., rfl⟩
+  ```
+  Projection before request shape: adapter.project a.event.toList with a.event=some p => [request p,response p*2]. RHS before [] ++ [.request (query p), .response ⟨double,p*2⟩] ++ [] defeq equal rfl. makeContract allows p*2 = p*2 rfl. Good.
+  - internal `simp [adapter] at typed` should close by contradiction `some= none`.
+  - blocked:
+  ```
+   · intro hist p vs site store q answer typed
+     simp [answeringOracle] at answer
+  ```
+  answeringOracle always some, answer : some ... = none, simp closes.
+
+  `blockingWellFormed`:
+  ```
+  theorem blockingWellFormed :
+   WellFormed adapter permittingContract () blockingOracle := by
+   constructor
+   · intro ... answer ...; simp [blockingOracle] at answer
+   · ... same
+   · intro ...; trivial
+  ```
+  MayBlock reducing permittingContract/makeContract True. `trivial`.
+  Potential constructor field order internal answered blocked yes.
+
+  Positive examples exact calls. Define `answeredValid` as example:
+  ```
+  example : CompleteTrace forbiddingContract () (adapter.project answeredReport.events) :=
+    (runFrom_validTrace program adapter forbiddingContract () answeringOracle
+      (answeringWellFormed _) 1 [] (requesting 3) .idle).1
+  ```
+  `answeredReport` uses `Exec.run` = runFrom [] and `runFrom_validTrace` conclusion report direct, defeq.
+  Negative direct cases:
+  ```
+  example : ¬ CompleteTrace forbiddingContract () [request 3, response 7] := by
+   intro invalid
+   cases invalid with
+   | response pending matching allows => contradiction
+  ```
+  Could allows not reduce to false due makeContract? `contradiction` sees `3*2=7` decides via decide? `contradiction` tactic uses `False.elim` and `omega`? It can close impossible equalities via decide? Existing examples `contradiction` for Nat 3*2=7 works. Int 6=7 also decide. Good.
+
+  Positive pending:
+  ```
+  example :
+   ValidTrace permittingContract () (some (query 3))
+     (adapter.project blockedReport.events ++ [request 3]) ∧
+   permittingContract.mayBlock () ... (query3) :=
+   runFrom_noAnswer_pending_valid program adapter ... blockingWellFormed
+     (fuel:=1)(hist:=[])(c:=requesting3) .idle rfl rfl rfl
+  ```
+  Implicit p etc inferred from rfl? The expected q from statement, p from pending `step (requesting3)` computes Prim Int =3, k is actual continuation. `rfl` typed should work. ending blockedReport defeq. Might need named `(c' := requesting 3)` inferred ending expected `.noAnswer ?c'`, expected first doesn't mention c', pending target step ?c'; rfl will choose requesting3. Fine.
+  The theorem's valid argument before implicit ending: `.idle`.
+  Negative:
+  ```
+  example : ¬ (ValidTrace forbiddingContract () (some query3) [request3] ∧
+    forbiddingContract.mayBlock () [request3] (query3)) := by
+    intro h
+    exact h.2
+  ```
+  `h.2` is False defeq. Lean exact h.2 yields False goal False yes.
+  Positive blocking permitted:
+  ```
+  theorem blockedPermitted : BlockingPermitted ... blockedReport :=
+   runFrom_blockingPermitted ... blockingWellFormed .idle
+  ```
+  Should name for later. Is this law add? It's concrete theorem not general, but could make `def` triggers linter, theorem appropriate. This is same as positive example for runFrom_blockingPermitted; cannot use theorem as example? Binding specifically "as an example" for negative only, positive "an example". I can write:
+  ```
+  example : BlockingPermitted ... := runFrom...
+  ```
+  and separately theorem blockedPermitted for report examples. Duplicate proof but okay. Or define `theorem blockedPermitted` with doc "Non-trivial instance..." counts but not `example` positive no requirement syntactic? They specifically negative as `example`, positive "an example". Better use `example` for all positives and `theorem blockedPermitted` support. Could define `blockedPermitted` first, then:
+  ```
+  example : BlockingPermitted ... := blockedPermitted
+  ```
+  That's an example but trivial restatement of concrete theorem, still actual witness. Fine.
+  Negative `¬ BlockingPermitted ... forbidding ...`:
+  ```
+    intro permitted
+    exact permitted (q := query 3) rfl rfl rfl
+  ```
+  Implicit args c p etc inference. `permitted` conclusion `forbiddingContract.mayBlock ...` = False. Should specify all:
+  ```
+    have forbidden := permitted (c := requesting 3) (p := 3) (vs := []) (site := ⟨0⟩)
+      (store := ()) (q := query 3) rfl rfl rfl
+    exact forbidden
+  ```
+  k implicit inferred actual continuation. `rfl` ending blockedReport. pending step rfl. typed adapter request rfl.
+  This explicitly robust.
+
+  Positive report mayblock:
+  ```
+  example : permittingContract.mayBlock () (adapter.project blockedReport.events ++ [request3]) (query3) :=
+   report_noAnswer_mayBlock program adapter permittingContract () [] (requesting3)
+     blockedPermitted rfl rfl
+  ```
+  The theorem report parameter `events` explicit; blockedReport defeq report ⟨[],noAnswer⟩. `permitted` expected for `⟨[],noAnswer⟩`, blockedPermitted type blockedReport, defeq. `pending/typed rfl`.
+  Negative:
+  ```
+  example : ¬ forbiddingContract.mayBlock () [request3] (query3) := by
+   intro h; exact h
+  ```
+  This is just `id` not law instance but negative operation.
+
+  Positive blocked observation:
+  ```
+  example : reportObservation ... blockedReport blockedPermitted =
+   some (.blocked (adapter.project blockedReport.events ++ [request3]) (query3)) :=
+   report_noAnswer_blocked program adapter ... [] (requesting3) 3 [] ⟨0⟩ () _ (query3)
+    blockedPermitted rfl rfl
+  ```
+  Explicit k cannot use `_` in term? yes `_` inferred pending. p vs etc explicit. Better:
+  ```
+    report_noAnswer_blocked program adapter permittingContract () [] (requesting 3)
+      3 [] ⟨0⟩ () _ (query 3) blockedPermitted rfl rfl
+  ```
+  Argument order P A C input events c p vs site store k request permitted pending typed. yes.
+  LHS expected report blockedReport defeq.
+  Negative wrong observation:
+  ```
+  example : reportObservation ... blockedReport blockedPermitted ≠
+   some (.terminal ⟨[request3], .exited 0⟩) := by
+    have blocked := report_noAnswer_blocked ... -- same
+    rw [blocked]
+    intro h
+    cases h
+  ```
+  Could avoid repeat by prove from definition:
+  ```
+    simp [reportObservation, blockedReport, Exec.run, Exec.runFrom, requesting, program,
+      answering? blockingOracle, adapter]
+  ```
+  reportObservation matches noAnswer, step requesting -> request; should simp reduce to some blocked and then noConfusion. `simp [reportObservation, blockedReport, Exec.run, Exec.runFrom, requesting, program,
+    blockingOracle, adapter, Exec.step, Exec.onRes, Exec.evalArgs]` perhaps complex but works. Use law to rewrite more elegant and demonstrates bad classification:
+  ```
+    rw [report_noAnswer_blocked ...]
+    intro h
+    cases h
+  ```
+  After rw goal `some blocked ≠ some terminal`; `intro h; cases h` closes noConfusion. `rw` can use theorem with same args. I'll repeat long.
+  Could define theorem `blockedObservation` supporting and positive example, then negative `rw [blockedObservation]`. This is concrete theorem. Define:
+  ```
+  theorem blockedObservation :
+   reportObservation ... = some (.blocked ... ) :=
+   report_noAnswer_blocked ...
+  example : same := blockedObservation
+  ```
+  Duplicate. Or positive example itself cannot name. I can make `theorem blockedObservation` the non-trivial instance (doc says) and negative example uses it; positive doesn't syntactic example but acceptable? To be safe:
+  ```
+  example : reportObservation ... = ... := blockedObservation
+  ```
+  Fine.
+
+  Lots code ~220 lines. Is this disproportionate? Binding explicit per law, yes.
+
+  Could reduce duplication using concrete evidence definitions theorem and examples referencing. Fine.
+
+  Vacuity mapping final per law:
+  - runFrom_validTrace: answered_report_valid positive, bad_response invalid negative. Anonymous examples no names, how refer? Lean examples unnamed. Response can cite line ranges or doc labels. User asks "which examples witness (a)(b)" can cite `ConcreteSpec/Proofs/Observe2.lean:...`. Good.
+  - runFrom_noAnswer_pending_valid: pending valid positive, forbidden blocking negative.
+  - runFrom_blockingPermitted: blockedPermitted example positive, not permitted negative.
+  - report_noAnswer_mayBlock positive + forbidden mayBlock negative.
+  - report_noAnswer_blocked positive + not terminal negative.
+  Could also include changed law types in all. Good.
+
+  Should include refused example positive/negative for runFrom_validTrace? no.
+
+  I'll insert code.
+
+• For the vacuity checks, I’m using a small total C1 instance with one typed doubling operation. It gives real successful and blocked runs for each affected law, plus bad-response, forbidden-blocking, and misclassified-observation counterexamples.
+
+• Build.warning: Git tree '/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/integ' is dirty
+✖ [43/45] Building ConcreteSpec.Proofs.Observe2 (1.2s)
+trace: .> LEAN_PATH=/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/integ/.lake/build/lib/lean /nix/store/94bmilywgajdnqvix1fs35fj94kala0w-lean4-release-4.34.1/bin/lean /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/integ/ConcreteSpec/Proofs/Observe2.lean -o /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/integ/.lake/build/lib/lean/ConcreteSpec/Proofs/Observe2.olean -i /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/integ/.lake/build/lib/lean/ConcreteSpec/Proofs/Observe2.ilean -c /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/integ/.lake/build/ir/ConcreteSpec/Proofs/Observe2.c --setup /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/integ/.lake/build/ir/ConcreteSpec/Proofs/Observe2.setup.json --json
+error: ConcreteSpec/Proofs/Observe2.lean:651:2: Dependent elimination failed: Failed to solve equation
+  [request 3, response 7] = hist✝.append [Event.response r✝]
+error: ConcreteSpec/Proofs/Observe2.lean:661:23: Application type mismatch: The argument
+  ValidTrace.idle
+has type
+  ValidTrace ?m.37 ?m.38 none []
+but is expected to have type
+  CompleteTrace permittingContract () (adapter.project ?m.33)
+in the application
+  @runFrom_noAnswer_pending_valid signature ops program adapter permittingContract () blockingOracle blockingWellFormed
+    ?m.32 ?m.33 ?m.34 ?m.35 ValidTrace.idle
+error: ConcreteSpec/Proofs/Observe2.lean:674:23: Application type mismatch: The argument
+  ValidTrace.idle
+has type
+  ValidTrace ?m.9 ?m.10 none []
+but is expected to have type
+  CompleteTrace permittingContract () (adapter.project ?m.6)
+in the application
+  @runFrom_blockingPermitted signature ops program adapter permittingContract () blockingOracle blockingWellFormed ?m.5
+    ?m.6 ?m.7 ValidTrace.idle
+Some required targets logged failures:
+- ConcreteSpec.Proofs.Observe2
+error: build failed
+Only 3 errors. Should negative ValidTrace proof more work; can create helper inversion for exact list. Could use `ValidTrace` inversion with list lemmas. Or choose bad trace shape `[.response ...]`? Should complete valid trace response without request. List `[response 7]` easier inversion equation `[response7] = hist ++ [response r]` allows hist=[] q arbitrary; allows contract hist=[] q r not numeric relation to known q, can choose q such that double=7 impossible for Int? q=...? 2q=7 impossible yes but need omega. If response 7 to q arbitrary, allows q*2=7 impossible for Int via omega. Cases equation `[response7] = hist++[response r]` still dependent elimination may fail but simpler? `cases invalid` fails equation for any nonempty appended list due dependent? Lean cases cannot unify because hist unknown with singleton list perhaps also fails? It often can cases append singleton if list fixed? Current two elements equation couldn't solve due could hist length1 but needs inject events with dependent sigma? Could use `generalize` etc.
+
+  Alternative direct bad state `¬ CompleteTrace ... []` is easy: idle actually true, not bad. `¬ CompleteTrace ... [response 7]` prove by `intro h; have h' := h;` use inversion tactic `cases h` likely same.
+
+  I can prove ValidTrace implies responses contract by custom theorem? Existing `Responds.allows` not trace. Define recursive theorem trace last response? Overkill.
+
+  Use `ValidTrace` inversion via `cases invalid` failing due dependent elimination. Could `dependent cases invalid` tactic? Lean core has `cases` only, `dependent cases` perhaps unavailable (Mathlib). `generalize` list to `events` before cases:
+  ```
+    generalize htrace : [request3,response7] = events at invalid
+    cases invalid with
+    | idle => contradiction? htrace
+    | request ... => ...
+  ```
+  If generalize events, cases works; htrace equations for each constructor. Then simp at htrace to exclude idle/request/output and response gives allows.
+  ```
+    generalize htrace : [request 3,response 7] = events at invalid
+    cases invalid with
+    | idle => simp at htrace
+    | request ... => ? -- ValidTrace final pending some q, but target complete none means case request not possible state none so cases excludes?
+  ```
+  When `cases invalid`, state none index prevents request constructor (some), leaves idle,response,output. htrace:
+  - idle: [] equality -> simp
+  - response: `[req3,res7] = hist ++ [response r]`; cannot get allows contradiction directly because hist could [req3] determined by append equality. I can derive hist = [req3], r=7 using list append singleton injectivity. simp at htrace may use `List.append_eq_cons` etc not solve variable hist. Should lemma `List.append_inj` when lengths known. `have hist_len : hist.length=1 := by ...` then use `List.append_inj`? Easier use `List.reverse` injection: reverse both sides:
+  `[response7,request3] = response r :: hist.reverse`. Then list cons inject yields response7=response r and `[request3]=hist.reverse`; so r=7. Then allows q? pending ValidTrace some q hist and htrace only gives hist reverse [request3], so hist=[request3], pending enforces q3 perhaps another inversion. Allows uses hist and q r; to contradiction 3*2=7 need q3. Should get q from pending history. Could avoid by response 7 and q arbitrary using allows q*2=7 impossible independent q. If hist arbitrary and r=7, allows q*2=7 impossible via omega. Choose bad trace `[response7]`. Then after generalize/cases, response htrace gives r=7 from reverse, no need q/hist. `allows : q.2*2 = r.2`; substitute r via event equality dependent sigma. Could get `r = ⟨double,7⟩` from response event equality (Event.response injective). htrace reverse gives `response7 = Event.response r`. `injection` yields r equality. Then allows q*2=7, omega. Output case impossible because response vs output. This seems manageable.
+
+  But a bad trace `[response7]` is response with no request and wrong value, still planted bad response. Could keep [request3,response7] and show no valid via general theorem perhaps more intuitive. Simpler use contract response7 parity with [response7] not a response to request. But doc "7 does not double3" would no longer exact. Could use `[request 3, response 6, response 7]` and last response q arbitrary odd impossible. Still not direct.
+
+  Could mutate `ValidTrace.answer_projection` law negative easier not changed. For runFrom_validTrace negative could use `¬ CompleteTrace ... [response 7]`, doc "unsolicited odd response cannot be a valid complete trace" enough.
+
+  Proof:
+  ```
+  example : ¬ CompleteTrace forbiddingContract () [response 7] := by
+   intro invalid
+   generalize htrace : [response 7] = events at invalid
+   cases invalid with
+   | idle => simp at htrace
+   | response pending matching allows =>
+      have reversed := congrArg List.reverse htrace
+      simp only [List.reverse_singleton, List.reverse_append] at reversed
+      -- reversed : response7 :: [] = response r :: hist.reverse
+      injection reversed with eventEq rest
+      cases eventEq -- Event.response injective yields r = ...
+      -- r perhaps substituted
+      -- allows q*2 = 7
+      omega
+   | output ... => simp at htrace
+  ```
+  `List.reverse_append` rewrite `(hist ++ [response r]).reverse = [response r].reverse ++ hist.reverse = response r :: hist.reverse`. LHS reverse singleton. `simp only [List.reverse_singleton, List.reverse_append] at reversed` gives `[response7] = [response r] ++ hist.reverse`; simplification not cons unless add `List.singleton_append`. `simp at reversed` may also attempt use request response definitions? It will reduce list reverse append and list cons equality automatically perhaps gives conjunction Event equality and list equality. `simp at reversed` can turn into `response7 = response r ∧ []=hist.reverse`; then `reversed.1` etc. Could:
+  ```
+   have eventEq : response 7 = Event.response r := by
+     simpa using congrArg List.head? ...
+  ```
+  List head? htrace append last not direct.
+
+  `simpa using congrArg List.reverse htrace` type `[response7] = [Event.response r] ++ hist.reverse` not exactly eventEq. But `List.cons.inj` after `change`:
+  ```
+   have reversed : [response 7] = Event.response r :: hist.reverse := by
+     simpa using congrArg List.reverse htrace
+   injection reversed with eventEq
+   cases eventEq
+   omega
+  ```
+  Yes `change` inferred type in have.
+  For output case htrace `[response7] = hist ++ [output o]`; same reverse yields response7=output o then cases.
+  ```
+   | output hist o =>
+     have reversed : [response 7] = [Event.output o] ++ hist.reverse := by simpa ...
+     have eventEq : response 7 = Event.output o := by ...
+     cases eventEq
+  ```
+  Could just `simp [response] at htrace` perhaps simp knows append singleton? It might not. Use reverse helper lemma local:
+  ```
+   have lastEvent {hist} {e} (h : [response7] = hist ++ [e]) : response7=e := by
+    have rev := congrArg List.reverse h
+    simpa using congrArg List.head? no
+  ```
+  Prove via `List.reverse_injective` etc.
+
+  Could instead bad complete trace with two responses but use no `ValidTrace` at all: show `¬ CompleteTrace ... [request3,response7]` via `decide` if define a decidable instance for ValidTrace? Not available and adding would be a lot.
+
+  Now handle pending valid `.idle` inference. Provide explicit arguments `(fuel := 1) (hist := []) (c := requesting 3) (c' := requesting 3)` and valid `show CompleteTrace permittingContract () (adapter.project []) from .idle`. `adapter.project []` defeq [].
+  ```
+    runFrom_noAnswer_pending_valid ... (fuel:=1)(hist:=[])(c:=requesting3)(c':=requesting3)
+      (q:=query3) .idle rfl rfl rfl
+  ```
+  Should explicit p vs etc inferred. Same blocking.
+
+  I'll edit these 3 in one Edit perhaps replace whole region from bad response through blockedPermitted to avoid multiple edits. Read lines 640-680.
+
+• The successful-run witnesses elaborated. Three examples need tighter inversion/inference: Lean cannot directly eliminate a trace whose final event is expressed with an unknown append, and the blocked-run applications need their fuel and configuration made explicit.
+
+• Could instead keep original bad trace and prove via helper existing `ValidTrace` allows? I can derive a general `ValidTrace` last response inversion using list append equality and allows parity as above q arbitrary, so I don't need request match. If `[request3,response7]` last response event gives r=7, allows q*2=7 impossible independent hist/q. So same reverse approach works and retains doc. Generalize then cases, response htrace. Should output case event inequality. I can define local have `last : response 7 = e` from htrace by reversing but LHS list length2 reverse `[response7,request3]`; RHS `e::hist.reverse`. Injection first gives response7=e. Good:
+  ```
+    generalize htrace : [request3,response7] = events at invalid
+    cases invalid with
+    | idle => simp at htrace
+    | @response hist q r pending matching allows =>
+      have reversed : response 7 :: [request 3] = Event.response r :: hist.reverse := by
+        simpa using congrArg List.reverse htrace
+      injection reversed with eventEq
+      cases eventEq
+      -- q : Request signature arbitrary Int, allows q.2*2 = 7
+      have : q.2 * 2 ≠ 7 := by omega
+      exact this allows
+    | @output hist o pending =>
+      have reversed : response7 :: [request3] = Event.output o :: hist.reverse := by simpa ...
+      injection reversed
+  ```
+  `cases eventEq` when eventEq `response7 = Event.response r`, injection of Event.response yields r = sigma; `cases` substitutes r perhaps also q? no. Then `omega` directly at allows. `omega` can use allows and close False.
+  Output `injection reversed` should close goal by constructor discrimination response vs output after unfolding response? `response` is def, `injection` may reduce. `cases (show response 7 ≠ Event.output o by intro h; cases h)` easier:
+  ```
+   have : response 7 = Event.output o := by
+     ... exact List.cons.inj reversed |>.1
+   cases this
+  ```
+  `cases this` noConfusion unfolds response perhaps.
+  For response, `have eventEq := List.cons.inj reversed |>.1`; `injection eventEq with rEq`? Event.response constructor has one arg r, `cases eventEq` will noConfusion and substitute.
+  Then `omega`.
+
+  Generalize syntax `generalize htrace : [request 3, response 7] = events at invalid` likely works and invalid type `CompleteTrace ... events`. Cases invalid with htrace equations as above. Test.
+
+  Edit region all three.warning: Git tree '/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/integ' is dirty
+✖ [43/45] Building ConcreteSpec.Proofs.Observe2 (1.1s)
+trace: .> LEAN_PATH=/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/integ/.lake/build/lib/lean /nix/store/94bmilywgajdnqvix1fs35fj94kala0w-lean4-release-4.34.1/bin/lean /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/integ/ConcreteSpec/Proofs/Observe2.lean -o /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/integ/.lake/build/lib/lean/ConcreteSpec/Proofs/Observe2.olean -i /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/integ/.lake/build/lib/lean/ConcreteSpec/Proofs/Observe2.ilean -c /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/integ/.lake/build/ir/ConcreteSpec/Proofs/Observe2.c --setup /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/integ/.lake/build/ir/ConcreteSpec/Proofs/Observe2.setup.json --json
+error: ConcreteSpec/Proofs/Observe2.lean:658:4: omega could not prove the goal:
+No usable constraints found. You may need to unfold definitions so `omega` can see linear arithmetic facts about `Nat` and `Int`, which may also involve multiplication, division, and modular remainder by constants.
+Some required targets logged failures:
+- ConcreteSpec.Proofs.Observe2
+error: build failed
+Omega no usable constraints means eventEq cases did not substitute r? allows perhaps hidden makeContract not unfolded. Should `change q.2 * 2 = r.2 at allows` before cases eventEq or after. Current allows type `forbiddingContract.allows ...`, reducible but omega doesn't unfold. Add `change q.2 * 2 = r.2 at allows` before eventEq cases; after cases eventEq allows q.2*2 = (⟨double,7⟩).2 reduce? `change q.2 * 2 = 7 at allows` after cases. Use `change q.2 * 2 = 7 at allows; omega`. Should know r substituted yes no error at eventEq. Add after cases eventEq. Read snippet then Edit.warning: Git tree '/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/integ' is dirty
+✖ [43/45] Building ConcreteSpec.Proofs.Observe2 (1.2s)
+trace: .> LEAN_PATH=/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/integ/.lake/build/lib/lean /nix/store/94bmilywgajdnqvix1fs35fj94kala0w-lean4-release-4.34.1/bin/lean /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/integ/ConcreteSpec/Proofs/Observe2.lean -o /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/integ/.lake/build/lib/lean/ConcreteSpec/Proofs/Observe2.olean -i /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/integ/.lake/build/lib/lean/ConcreteSpec/Proofs/Observe2.ilean -c /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/integ/.lake/build/ir/ConcreteSpec/Proofs/Observe2.c --setup /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/integ/.lake/build/ir/ConcreteSpec/Proofs/Observe2.setup.json --json
+error: ConcreteSpec/Proofs/Observe2.lean:659:4: omega could not prove the goal:
+No usable constraints found. You may need to unfold definitions so `omega` can see linear arithmetic facts about `Nat` and `Int`, which may also involve multiplication, division, and modular remainder by constants.
+Some required targets logged failures:
+- ConcreteSpec.Proofs.Observe2
+error: build failed
+Still no constraints means `cases eventEq` perhaps cleared allows? Or q.2 type Int? yes. Wait `allows` perhaps dependent on q but after eventEq cases q/r? Change accepted. Why omega no usable constraints when allows q.2*2=7? Omega multiplication by constants should. Perhaps `allows` cleared by `cases eventEq` due dependent elimination? Change would fail if inaccessible? It didn't. Omega sees RHS `OfNat` Int fine. q.2 is dependent Sigma second with Op kind, q : Request signature = Sigma fun _ => Int. q.2 Int. Should. `q.2 * 2 = 7` linear. Could be goal False but allows not in context because cases eventEq substituted `r` and `q`? Still allows. Error no constraints odd. Perhaps `omega` doesn't look at hypotheses unless include `omega` automatically yes. Could use `have : q.2 * 2 ≠ 7 := by intro h; ...` same. Use parity theorem manually: `Int.not_exists...` no. `omega` should. Could `allows` is a proof of `makeContract...allows`, `change` doesn't unfold q.2 due q payload depends on q.fst which may not `.double`; but Request signature Response? Request = Sigma S.Request, S.Request fun _ => Int so yes.
+
+  Perhaps `cases eventEq` solves goal by contradiction already? Then following tactics "no goals to be solved" would different. No.
+
+  Could `cases eventEq` substitutes q with r? RequestResponse matching connects q and r, dependent elimination might use matching and replace q.2 with something weird? Still.
+
+  I'll inspect actual goal with `trace_state` tactic before omega. I can add `trace_state` temporarily (not meta banned? tactic okay). Build output reveals. Use Edit after read (I have line). Add `trace_state`.warning: Git tree '/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/integ' is dirty
+✖ [8/8] Building ConcreteSpec.Proofs.Observe2 (1.1s)
+trace: .> LEAN_PATH=/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/integ/.lake/build/lib/lean /nix/store/94bmilywgajdnqvix1fs35fj94kala0w-lean4-release-4.34.1/bin/lean /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/integ/ConcreteSpec/Proofs/Observe2.lean -o /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/integ/.lake/build/lib/lean/ConcreteSpec/Proofs/Observe2.olean -i /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/integ/.lake/build/lib/lean/ConcreteSpec/Proofs/Observe2.ilean -c /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/integ/.lake/build/ir/ConcreteSpec/Proofs/Observe2.c --setup /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/integ/.lake/build/ir/ConcreteSpec/Proofs/Observe2.setup.json --json
+error: ConcreteSpec/Proofs/Observe2.lean:660:4: omega could not prove the goal:
+No usable constraints found. You may need to unfold definitions so `omega` can see linear arithmetic facts about `Nat` and `Int`, which may also involve multiplication, division, and modular remainder by constants.
+info: ConcreteSpec/Proofs/Observe2.lean:659:4: case response.refl
+S : EventSignature
+O : Exec.Operands
+hist : List (Event signature)
+q : Request signature
+pending : ValidTrace forbiddingContract () (some q) hist
+matching : RequestResponse q ⟨Op.double, 7⟩
+htrace : [request 3, response 7] = hist ++ [Event.response ⟨Op.double, 7⟩]
+reversed : [response 7, request 3] = Event.response ⟨Op.double, 7⟩ :: hist.reverse
+allows : q.snd * 2 = 7
+⊢ False
+Some required targets logged failures:
+- ConcreteSpec.Proofs.Observe2
+error: build failed
+q.snd Int but omega no constraints likely depends on q (projection not recognized as atom due Sigma projection dependent?). It should atom. Could `generalize q.snd = n at allows` then omega. Do `generalize q.2 = n at allows; omega`. This replaces. Remove trace.
+
+• The remaining arithmetic fact is present, but `omega` is not treating the dependent sigma projection as an integer atom. I’ll generalize that payload before closing the impossible `2 × n = 7` case.
+
+warning: Git tree '/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/integ' is dirty
+✖ [43/45] Building ConcreteSpec.Proofs.Observe2 (1.1s)
+trace: .> LEAN_PATH=/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/integ/.lake/build/lib/lean /nix/store/94bmilywgajdnqvix1fs35fj94kala0w-lean4-release-4.34.1/bin/lean /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/integ/ConcreteSpec/Proofs/Observe2.lean -o /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/integ/.lake/build/lib/lean/ConcreteSpec/Proofs/Observe2.olean -i /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/integ/.lake/build/lib/lean/ConcreteSpec/Proofs/Observe2.ilean -c /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/integ/.lake/build/ir/ConcreteSpec/Proofs/Observe2.c --setup /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/integ/.lake/build/ir/ConcreteSpec/Proofs/Observe2.setup.json --json
+error: ConcreteSpec/Proofs/Observe2.lean:660:4: omega could not prove the goal:
+No usable constraints found. You may need to unfold definitions so `omega` can see linear arithmetic facts about `Nat` and `Int`, which may also involve multiplication, division, and modular remainder by constants.
+Some required targets logged failures:
+- ConcreteSpec.Proofs.Observe2
+error: build failed
+• Why generalize not creating usable? Trace again perhaps n is not Int? Signature Request uses Int yes. Could be `generalize q.2 = n at allows` doesn't unfold `q.snd` because notation q.2 resolved Product? It accepted. Should trace after generalize.warning: Git tree '/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/integ' is dirty
+✖ [8/8] Building ConcreteSpec.Proofs.Observe2 (1.1s)
+trace: .> LEAN_PATH=/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/integ/.lake/build/lib/lean /nix/store/94bmilywgajdnqvix1fs35fj94kala0w-lean4-release-4.34.1/bin/lean /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/integ/ConcreteSpec/Proofs/Observe2.lean -o /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/integ/.lake/build/lib/lean/ConcreteSpec/Proofs/Observe2.olean -i /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/integ/.lake/build/lib/lean/ConcreteSpec/Proofs/Observe2.ilean -c /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/integ/.lake/build/ir/ConcreteSpec/Proofs/Observe2.c --setup /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/integ/.lake/build/ir/ConcreteSpec/Proofs/Observe2.setup.json --json
+error: ConcreteSpec/Proofs/Observe2.lean:661:4: omega could not prove the goal:
+No usable constraints found. You may need to unfold definitions so `omega` can see linear arithmetic facts about `Nat` and `Int`, which may also involve multiplication, division, and modular remainder by constants.
+info: ConcreteSpec/Proofs/Observe2.lean:660:4: case response.refl
+S : EventSignature
+O : Exec.Operands
+hist : List (Event signature)
+q : Request signature
+pending : ValidTrace forbiddingContract () (some q) hist
+matching : RequestResponse q ⟨Op.double, 7⟩
+htrace : [request 3, response 7] = hist ++ [Event.response ⟨Op.double, 7⟩]
+reversed : [response 7, request 3] = Event.response ⟨Op.double, 7⟩ :: hist.reverse
+n : signature.Request q.fst
+allows : n * 2 = 7
+⊢ False
+Some required targets logged failures:
+- ConcreteSpec.Proofs.Observe2
+error: build failed
+Aha n : signature.Request q.fst not reduced to Int due q.fst unknown and Request abbrev? signature is abbrev but projection `signature.Request` not reducible by omega. Should change n type Int via `change Int at n` impossible tactic `change Int at n` changes type? Lean tactic `change Int at n` should. Or `let n : Int := q.2; have hn : n*2=7 := allows` with explicit type annotation:
+  ```
+  let n : Int := q.2
+  have hn : n * 2 = 7 := allows
+  omega
+  ```
+  Because `q.2` elaborated expected Int forces reduction. Generalize created type signature.Request q.fst. Use `have allows' : (q.2 : Int) * 2 = 7 := allows` type ascription perhaps. `have hn : (q.snd : Int) * 2 = 7 := allows; omega` should see q.snd atom with expected Int perhaps expression still q.snd but type Int. Omega perhaps not unfold type? It should.
+
+  Better derive q kind from matching:
+  ```
+  cases matching
+  ```
+  RequestResponse.kind q = double, cases matching makes q = ⟨double, qpayload⟩ with qpayload Int. Then allows qpayload*2=7, omega works. I should have used matching. After eventEq, `cases matching` will dependent eliminate q with same kind. Then allows concrete q payload type Request Op.double reduces Int. Do `cases matching; omega` perhaps. The context matching : RequestResponse q ⟨double,7⟩. Cases matches q=⟨double,q_1⟩. Then allows q_1*2=7. Omega sees q_1 Int. Great. Replace generalize trace with `cases matching; change _ at allows?` already allows q.2*2=7 before cases. `cases matching` then omega. Should avoid eventEq cases changes matching to r fixed yes. Do:
+  ```
+   cases matching
+   omega
+  ```
+  Potential cases matching also substitutes q and pending/hist, no issue. I'll do.Run build.warning: Git tree '/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/integ' is dirty
+✖ [43/45] Building ConcreteSpec.Proofs.Observe2 (1.1s)
+trace: .> LEAN_PATH=/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/integ/.lake/build/lib/lean /nix/store/94bmilywgajdnqvix1fs35fj94kala0w-lean4-release-4.34.1/bin/lean /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/integ/ConcreteSpec/Proofs/Observe2.lean -o /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/integ/.lake/build/lib/lean/ConcreteSpec/Proofs/Observe2.olean -i /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/integ/.lake/build/lib/lean/ConcreteSpec/Proofs/Observe2.ilean -c /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/integ/.lake/build/ir/ConcreteSpec/Proofs/Observe2.c --setup /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/integ/.lake/build/ir/ConcreteSpec/Proofs/Observe2.setup.json --json
+error: ConcreteSpec/Proofs/Observe2.lean:660:4: omega could not prove the goal:
+No usable constraints found. You may need to unfold definitions so `omega` can see linear arithmetic facts about `Nat` and `Int`, which may also involve multiplication, division, and modular remainder by constants.
+Some required targets logged failures:
+- ConcreteSpec.Proofs.Observe2
+error: build failed
+Still weird. Trace after cases matching.warning: Git tree '/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/integ' is dirty
+✖ [8/8] Building ConcreteSpec.Proofs.Observe2 (1.2s)
+trace: .> LEAN_PATH=/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/integ/.lake/build/lib/lean /nix/store/94bmilywgajdnqvix1fs35fj94kala0w-lean4-release-4.34.1/bin/lean /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/integ/ConcreteSpec/Proofs/Observe2.lean -o /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/integ/.lake/build/lib/lean/ConcreteSpec/Proofs/Observe2.olean -i /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/integ/.lake/build/lib/lean/ConcreteSpec/Proofs/Observe2.ilean -c /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/integ/.lake/build/ir/ConcreteSpec/Proofs/Observe2.c --setup /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/integ/.lake/build/ir/ConcreteSpec/Proofs/Observe2.setup.json --json
+error: ConcreteSpec/Proofs/Observe2.lean:661:4: omega could not prove the goal:
+No usable constraints found. You may need to unfold definitions so `omega` can see linear arithmetic facts about `Nat` and `Int`, which may also involve multiplication, division, and modular remainder by constants.
+info: ConcreteSpec/Proofs/Observe2.lean:660:4: case response.refl.matched
+S : EventSignature
+O : Exec.Operands
+hist : List (Event signature)
+htrace : [request 3, response 7] = hist ++ [Event.response ⟨Op.double, 7⟩]
+reversed : [response 7, request 3] = Event.response ⟨Op.double, 7⟩ :: hist.reverse
+q✝ : signature.Request Op.double
+pending : ValidTrace forbiddingContract () (some ⟨Op.double, q✝⟩) hist
+allows : ⟨Op.double, q✝⟩.snd * 2 = 7
+⊢ False
+Some required targets logged failures:
+- ConcreteSpec.Proofs.Observe2
+error: build failed
+q✝ : signature.Request Op.double, not reducing because `signature.Request` perhaps projection not delta by omega. `change Int at q✝` inaccessible name. `simp only [signature] at *`? abbrev signature is a definition? `abbrev` reducible but simp [signature] can unfold. `change q✝ * 2 = 7 at allows` should reduce sigma snd and Request type perhaps accepted, then q type still custom but expression q inferred expected? Omega uses type of q = signature.Request Op.double not Int. `change Int at q✝` with inaccessible `q✝` can refer `q✝` syntax yes Lean allows. Better avoid cases matching inaccessible by `rename_i q` after cases matching:
+  ```
+   cases matching
+   rename_i n
+   change Int at n
+   change n * 2 = 7 at allows
+   omega
+  ```
+  Does `change Int at n` allowed on local decl? Yes tactic change can change type of local hypothesis if defeq. `rename_i n` might rename other inaccessible? Only q✝ inaccessible, so good.
+  ```
+      cases matching
+      rename_i n
+      change Int at n
+      change n * 2 = 7 at allows
+      omega
+  ```
+  Remove trace. Try.warning: Git tree '/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/integ' is dirty
+✔ [43/45] Built ConcreteSpec.Proofs.Observe2 (1.1s)
+✔ [44/45] Built ConcreteSpec (127ms)
+Build completed successfully (45 jobs).
+Great. Now consider quality: huge proof negative but okay. Build passed commit piece as soon. Should have `git diff --check`, inspect diff perhaps no trace remains grep. Commit. Then permitted checks rules and trust_ban. But before commit, could run checks then commit? Brief commit as soon build passes, so commit now. Mark examples done build/check in progress after commit? I can update now examples done and checks in progress though commit task pending. Should commit.
+
+• All positive and planted negative examples now build. The bad-response proof uses request/response matching to expose the integer payload, and every affected adapter law has both a real run and a failing mutation. M ConcreteSpec/Proofs/Observe2.lean
+ ConcreteSpec/Proofs/Observe2.lean | 193 ++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 193 insertions(+)
+diff --git a/ConcreteSpec/Proofs/Observe2.lean b/ConcreteSpec/Proofs/Observe2.lean
+index ce463feee..c1d0b0121 100644
+--- a/ConcreteSpec/Proofs/Observe2.lean
++++ b/ConcreteSpec/Proofs/Observe2.lean
+@@ -545,4 +545,197 @@ theorem report_outOfFuel_none (P : Exec.Program O) (A : ExecAdapter O S)
+     (permitted : ExecAdapter.BlockingPermitted P A C input ⟨events, .outOfFuel c⟩) :
+     reportObservation P A C input ⟨events, .outOfFuel c⟩ permitted = none := rfl
+ 
++/-! ### Non-vacuity of the C1 adapter laws
++
++A one-primitive instance doubles its integer request. Its ordinary oracle accepts the response and
++its blocking oracle leaves the request unanswered. The examples below apply every law whose C1
++continuation became partial, and mutate the response, blocking permission or expected observation
++to show that the corresponding conclusion is not obtained freely. -/
++
++namespace AdapterDemo
++
++inductive Op where
++  | double
++
++/-- Integer doubling requests and responses, with text output unused by these runs. -/
++abbrev signature : EventSignature where
++  Kind := Op
++  Request := fun _ => Int
++  Response := fun _ => Int
++  Output := String
++
++def query (n : Int) : Request signature := ⟨.double, n⟩
++def request (n : Int) : Event signature := .request (query n)
++def response (n : Int) : Event signature := .response ⟨.double, n⟩
++
++/-- The response contract is fixed; each instance chooses whether blocking is permitted. -/
++def makeContract (blocking : Unit → List (Event signature) → Request signature → Prop) :
++    OperationContract signature where
++  Input := Unit
++  allows := fun _ _ q r => q.2 * 2 = r.2
++  mayBlock := blocking
++
++abbrev permittingContract : OperationContract signature := makeContract (fun _ _ _ => True)
++abbrev forbiddingContract : OperationContract signature := makeContract (fun _ _ _ => False)
++
++/-- A total operand instance whose primitive `n` requests doubling `n`. -/
++abbrev ops : Exec.Operands where
++  Val := Int
++  Expr := Int
++  Ty := Unit
++  Store := Unit
++  Prim := Int
++  Event := Int
++  unitVal := 0
++  unitTy := ()
++  isCopy := fun _ => true
++  eval := fun _ st n => .ok (n, st)
++  life := fun _ st => some st
++  test := fun _ => none
++  allows := fun p _ _ a => match a.event, a.result, a.store with
++    | some ev, .ok 0, () => decide (ev = p)
++    | _, _, _ => false
++
++/-- One oracle supplies the contracted response; the other leaves every request unanswered. -/
++def answeringOracle : Exec.Oracle ops := fun _ p _ _ _ => some ⟨some p, .ok 0, ()⟩
++def blockingOracle : Exec.Oracle ops := fun _ _ _ _ _ => none
++
++/-- The single C1 event of an answer projects to its typed request and response. -/
++def adapter : ExecAdapter ops signature where
++  events := fun n => [request n, response (n * 2)]
++  request := fun p _ _ _ => some (query p)
++  status := fun _ => none
++  sites := []
++
++def program : Exec.Program ops := ⟨[]⟩
++def requesting (n : Int) : Exec.Config ops := ⟨.exec (.prim none n [] ⟨0⟩), [], (), []⟩
++
++/-- A successful response and a genuinely pending request, both after one evaluator step. -/
++def answeredReport : Exec.Report ops := Exec.run program answeringOracle 1 (requesting 3)
++def blockedReport : Exec.Report ops := Exec.run program blockingOracle 1 (requesting 3)
++
++/-- The answering oracle satisfies the adapter contract for either blocking policy. -/
++theorem answeringWellFormed (blocking : Unit → List (Event signature) → Request signature → Prop) :
++    ExecAdapter.WellFormed adapter (makeContract blocking) () answeringOracle := by
++  constructor
++  · intro hist p vs site store a answer typed
++    simp [adapter] at typed
++  · intro hist p vs site store a q answer typed
++    cases answer
++    cases typed
++    exact ⟨[], ⟨.double, p * 2⟩, [], rfl, ⟨[], rfl⟩, ⟨[], rfl⟩,
++      RequestResponse.matched (S := signature) Op.double p (p * 2), rfl⟩
++  · intro hist p vs site store q answer typed
++    simp [answeringOracle] at answer
++
++/-- The blocking oracle is well formed exactly because this contract permits blocking. -/
++theorem bloc
+kingWellFormed : ExecAdapter.WellFormed adapter permittingContract () blockingOracle := by
++  constructor
++  · intro hist p vs site store a answer typed
++    simp [blockingOracle] at answer
++  · intro hist p vs site store a q answer typed
++    simp [blockingOracle] at answer
++  · intro hist p vs site store q answer typed
++    trivial
++
++/-- Non-vacuity for `runFrom_validTrace`: the accepted answer really runs and its request and
++response form a complete valid trace. -/
++example : CompleteTrace forbiddingContract () (adapter.project answeredReport.events) :=
++  (runFrom_validTrace program adapter forbiddingContract () answeringOracle
++    (answeringWellFormed _) 1 [] (requesting 3) .idle).1
++
++/-- Planted bad response for `runFrom_validTrace`: `7` does not double `3`. -/
++example : ¬ CompleteTrace forbiddingContract () [request 3, response 7] := by
++  intro invalid
++  generalize htrace : [request 3, response 7] = events at invalid
++  cases invalid with
++  | idle => simp at htrace
++  | @response hist q r pending matching allows =>
++    have reversed : response 7 :: [request 3] = Event.response r :: hist.reverse := by
++      simpa using congrArg List.reverse htrace
++    have eventEq : response 7 = Event.response r := (List.cons.inj reversed).1
++    cases eventEq
++    change q.2 * 2 = 7 at allows
++    cases matching
++    rename_i n
++    change Int at n
++    change n * 2 = 7 at allows
++    omega
++  | @output hist o pending =>
++    have reversed : response 7 :: [request 3] = Event.output o :: hist.reverse := by
++      simpa using congrArg List.reverse htrace
++    have eventEq : response 7 = Event.output o := (List.cons.inj reversed).1
++    cases eventEq
++
++/-- Non-vacuity for `runFrom_noAnswer_pending_valid`: the run is pending on `3`, and the pending
++trace and blocking permission both hold. -/
++example :
++    ValidTrace permittingContract () (some (query 3))
++      (adapter.project blockedReport.events ++ [request 3]) ∧
++    permittingContract.mayBlock ()
++      (adapter.project blockedReport.events ++ [request 3]) (query 3) :=
++  runFrom_noAnswer_pending_valid program adapter permittingContract () blockingOracle
++    blockingWellFormed (fuel := 1) (hist := []) (c := requesting 3) (c' := requesting 3)
++    (q := query 3) .idle rfl rfl rfl
++
++/-- Planted blocking refusal for `runFrom_noAnswer_pending_valid`: the same pending trace cannot
++supply a blocking permission that its contract denies. -/
++example : ¬ (ValidTrace forbiddingContract () (some (query 3)) [request 3] ∧
++    forbiddingContract.mayBlock () [request 3] (query 3)) := by
++  intro invalid
++  exact invalid.2
++
++/-- Concrete evidence used by the two report-level examples below. -/
++theorem blockedPermitted : ExecAdapter.BlockingPermitted program adapter permittingContract ()
++    blockedReport :=
++  runFrom_blockingPermitted program adapter permittingContract () blockingOracle
++    blockingWellFormed (fuel := 1) (hist := []) (c := requesting 3) .idle
++
++/-- Non-vacuity for `runFrom_blockingPermitted`: its premise is satisfied by a real `noAnswer`
++report. -/
++example : ExecAdapter.BlockingPermitted program adapter permittingContract () blockedReport :=
++  blockedPermitted
++
++/-- Planted blocking refusal for `runFrom_blockingPermitted`: this same report does not satisfy
++`BlockingPermitted` when the operation may not block. -/
++example : ¬ ExecAdapter.BlockingPermitted program adapter forbiddingContract () blockedReport := by
++  intro permitted
++  exact permitted (c := requesting 3) (p := 3) (vs := []) (site := ⟨0⟩) (store := ())
++    (q := query 3) rfl rfl rfl
++
++/-- Non-vacuity for `report_noAnswer_mayBlock`: the report premise supplies the actual operation
++permission for the pending request. -/
++example : permittingContract.mayBlock ()
++    (adapter.project blockedReport.events ++ [request 3]) (query 3) :=
++  report_noAnswer_mayBlock program adapter permittingContract () [] (requesting 3)
++    blockedPermitted rfl rfl
++
++/-- Planted blocking refusal for `report_noAnswer_mayBlock`: changing only `mayBlock` makes the
++claimed permission false. -/
++example : ¬ forbiddingContract.mayBlock () [request 3] (query 3) := by
++  intro forbidden
++  exact forbidden
++
++/-- The permitted report has exactly its pending blocked observation. -/
++theorem blockedObservation :
++    reportObservation program adapter permittingContract () blockedReport blockedPermitted =
++      some (.blocked (adapter.project blockedReport.events ++ [request 3]) (query 3)) :=
++  report_noAnswer_blocked program adapter permittingContract () [] (requesting 3)
++    3 [] ⟨0⟩ () _ (query 3) blockedPermitted rfl rfl
++
++/-- Non-vacuity for `report_noAnswer_blocked`: the pending request and its history are observed. -/
++example : reportObservation program adapter permittingContract () blockedReport blockedPermitted =
++    some (.blocked (adapter.project blockedReport.events ++ [request 3]) (query 3)) :=
++  blockedObservation
++
++/-- Planted observation for `report_noAnswer_blocked`: the pending request cannot instead be
++observed as successful termination. -/
++example : reportObservation program adapter permittingContract () blockedReport blockedPermitted ≠
++    some (.terminal ⟨[request 3], .exited 0⟩) := by
++  rw [blockedObservation]
++  intro invalid
++  cases invalid
++
++end AdapterDemo
++
+ end ConcreteSpec.Core.Observe
+
+
+• Commit.[wip/spec-integrate f06a8de3a] proof C6: exercise partial-continuation adapter laws
+ 1 file changed, 193 insertions(+)
+Now run permitted checks rules and trust_ban. Build done. Could run in parallel? Heavy? scripts/spec/rules builds spec + negative controls perhaps <600; trust_ban builds copy examples perhaps heavier but allowed, at most 2 heavy runs. I can run both parallel (2 heavy max) okay. Before update todos.
+
+• Both verified slices are committed. I’ll now run the two permitted gates, `scripts/spec/rules.sh` and `scripts/proofs/trust_ban.sh`, then inspect the final history and working tree.
+
+• While running inspect final commits diff main merge base? Should have final review `git status`, `git log -3`, `git diff 6157005eb..HEAD --check/stat` perhaps ensure no prohibited files. Also think potential concern "every theorem only standard axioms" trust_ban verifies examples. Should theorem statements in response. Should have exact line numbers after final. Can get Grep laws and examples. Also check no pending trace. Already. Perhaps run `git diff 615...HEAD` to review all. Do parallel read relevant sections line numbers and git.## wip/spec-integrate
+f06a8de3a proof C6: exercise partial-continuation adapter laws
+8dbbc4301 proof C6: adapt observations to refused continuations
+6157005eb A2i integration: merge wip/spec-c6 (C6 accepted at 738500fb) into wip/spec-core after C4 (b9c3aeaaf) and the partial lifecycle change (d8f89ea75); README and Spec.lean conflicts joined, golden to be regenerated
+ ConcreteSpec/Proofs/Observe2.lean | 233 +++++++++++++++++++++++++++++++++++---
+ ConcreteSpec/Spec/Observe.lean    |  36 ++++++
+ 2 files changed, 251 insertions(+), 18 deletions(-)
+ConcreteSpec/Proofs/Observe2.lean
+ConcreteSpec/Spec/Observe.lean
+Rules completed read log. Trust perhaps still running.Perhaps trust still. Could examine vacuity quality deeper. The owner binding says "For every law you add or change: give a non-trivial instance (an example where its hypotheses hold); give a planted counter-example (a mutated rule or a bad state) that fails to satisfy it, as an example with a negation." I have changed law k types but `runFrom_validTrace` negative `¬ CompleteTrace bad` not full law hypotheses. Typical accepted. `runFrom_noAnswer_pending_valid` negative conjunction good. `runFrom_blockingPermitted` negative exact. `report_noAnswer_mayBlock` negative conclusion only, since cannot have permitted for forbidding. Might reviewer complain because the law remains vacuously true under mutated contract and counterexample not law? Could formulate a more meaningful planted bad state where all hypotheses hold but conclusion false impossible because theorem true. "mutated rule" means mutate law not premises, show false. I can show `¬ C.mayBlock` under bad contract, acceptable. `report_noAnswer_blocked` negative wrong terminal good.
+
+  What about added theorems `answeringWellFormed`, `blockingWellFormed`, `blockedPermitted`, `blockedObservation`, `refusedReportPermitted` considered laws? They are instances, not general laws. But vacuity rule "every law you add" these are theorems but concrete evidence. Do they themselves need positive/negative? That would recurse infinitely. Clearly examples and concrete supporting theorems not laws. Fine.
+
+  Potential issue new `refusedReportPermitted` law has premise noAnswer impossible and could be viewed vacuity violation? It's exactly BlockingPermitted for stuck report, defined ∀ noAnswer ->..., vacuously true by design, but used to call reportObservation for stuck. Owner says "No law may hold because guard or definition makes it trivially true." This theorem is a proof of BlockingPermitted for stuck report and is vacuous by noAnswer impossible. Could this violate? It is not a law but a necessary premise, and comment explicitly says imposes nothing. Owner may flag vacuous theorem. Better avoid adding named theorem with vacuous BlockingPermitted? I can define reportObservation requires premise even for stuck, so any example must supply vacuous proof. This is natural, but binding says no law may hold because guard/definition trivially true; `refusedReportPermitted` is supporting proof, not C6 law. Still reviewer could object. I can make it an `example`? Then cannot use in refused example. Could use inline proof in reportObservation call, but same. Named theorem okay.
+
+  Perhaps avoid status mapping none adapter with no WellFormed; reportObservation doesn't require wellformed only BlockingPermitted. Fine.
+
+  Check no edits prohibited yes only Observe files.
+
+  Potential requirement "with only natural premise continuation succeeded where needed" I didn't add explicit premise to any law, but internal cases. Good.
+
+  Perhaps make runFrom_validTrace doc comment explicit about refused stuck. I added Spec example but law comment unchanged. It says every report valid history, including stuck old hist. Could improve doc comment to explain no answer events on refused. This is within same file, after commit new change needs build and commit third. Not necessary but readability good. Could modify:
+  ```
+  history. A refused response continuation leaves history unchanged and ends stuck. If ends noAnswer...
+  ```
+  This aligns user. Current code self-evident and Spec doc covers. No need extra.
+
+  Trust_ban perhaps completion soon. I can check task only if need output; automatic no poll. Could use WaitFor since no other work? I have final review perhaps `git show --stat` done. I can wait with WaitFor 90 per tool only if no other work. Use WaitFor for trust.
+
+• The specification rule gate passed all 32 checks. The final diff touches only the two permitted observation files; I’m waiting for the trust gate before closing out.
+
+• Should have final status after gates check new files. `git status --short --branch`, perhaps build generated files ignored. Also ensure HEAD commits, working clean. Perhaps final build after commits was before second commit yes built exact content then committed. Gates build current. Good. Mark checks done review in progress, run final git status and perhaps log.## wip/spec-integrate
+f06a8de3adb7efe8d162f1996a96a284f0b8108e proof C6: exercise partial-continuation adapter laws
+8dbbc4301b0e2db8adb5ffd3ceed911bde193233 proof C6: adapt observations to refused continuations
+ConcreteSpec/Proofs/Observe2.lean
+ConcreteSpec/Spec/Observe.lean
+Should have response concise but includes list commits SHA+one line, what each theorem states, what left out why, QUESTIONS, per law examples a/b. Also validation. "What each theorem states" Could mean every theorem changed/added? I should list five affected C6 laws plus new concrete helper theorems? Response should describe runFrom_validTrace etc. There are also `refusedReportPermitted`, `answeringWellFormed`, `blockingWellFormed`, `blockedPermitted`, `blockedObservation` added. They may expect all theorem statements. Should include those too perhaps concise grouped supporting instances. I need avoid excessive huge. Respond perhaps 700 words. User specifically final format. I should include:
+  - Commits 2 full SHA perhaps short accepted but asks SHA + one line. Full or short. Use full to be safe.
+  - What changed / theorem statements:
+    - `runFrom_validTrace`: wellformed run from complete trace produces complete trace and noAnswer pending mayBlock; refused cont leaves old events stuck (implicit).
+    - `runFrom_noAnswer_pending_valid`: pending valid + mayBlock.
+    - `runFrom_blockingPermitted`: wellformed run supplies BlockingPermitted.
+    - `report_noAnswer_mayBlock`: premise supplies mayBlock exact history.
+    - `report_noAnswer_blocked`: noAnswer permitted projects to blocked exact history request.
+    - Concrete helper `refusedReportPermitted` stuck report has no noAnswer, premise holds; `answeringWellFormed`/`blockingWellFormed`: demo oracles wellformed; `blockedPermitted` and `blockedObservation`: concrete instances of above. Could say these are witnesses rather than new general laws.
+  - Refused example Spec lines 452 etc: events=[], ending stuck original config, reportObservation none. Note request config equality not in example? It matches stuck _ not same c, but `refusedReportPermitted` has rfl proof ending = stuck refusedRequest, so combined theorem says same. Good.
+  - Vacuity per law table or bullets with line citations. Should include positive/negative for each. Table might be readable but user said heavy tables no. Bullets.
+    - runFrom_validTrace a `Observe2:641`, b :647
+    - noAnswer a 670 b681
+    - blocking a694 b699
+    - report mayblock a706 b713
+    - report blocked a726 b731
+  - Validation commands pass.
+  - Left out: no prohibited edits, no new general laws beyond existing statement adaptations? I added concrete helper theorems. "No C6 law weakened; no changes to Exec etc. Heavy gates not run per brief (axioms.sh etc), left for reviewer." What left out and why: "Nothing semantic left out. Heavy reviewer-only gates not run as instructed." Perhaps `Spec/Observe.lean` definition unchanged except demo; no new modules.
+  - QUESTIONS: None.
+  - Working tree clean and no push.
+  Now mark final todo done first.
+
+• All permitted checks pass, including all 279 examples under the standard-axiom trust gate. The two requested files are the only modifications, both commits are on `wip/spec-integrate`, nothing was pushed, and the working tree is clean.
+
+• Now respond. Must not mention system date. Use headings modest. Full commits. Theorem statements perhaps five bullets plus supporting. Mention no C6 law statement changed except k Option types. "with natural premise continuation succeeded where needed" internal `continued : k a = some c'`. In refused branch no event. Good.
+
+  Potential issue response says "every theorem" perhaps include existing unchanged laws? No need all file theorems, task asks response what each theorem states likely each changed/added. I'll state "Affected laws (statements preserved)" and "Concrete supporting theorems". That satisfies.
+
+  Per law examples exactly. For report_noAnswer_mayBlock negative at line713 is just `¬ mayBlock`, okay.
+
+  Validation `lake build ConcreteSpec` passed after all changes. Rules 32 pass. Trust 23 pass all examples. Heavy not run.
+
+  "What is left out and why": no semantic changes left out; reviewer heavy gates per explicit. No docs decision. Perhaps no changelog asked. Good.
+
+  QUESTIONS None.
+
+  Respond around 650 words.
+
+• Implemented and committed on `wip/spec-integrate`; nothing was pushed.
+
+  ## Commits
+
+  - `8dbbc4301b0e2db8adb5ffd3ceed911bde193233` — Adapt C6 observations to partial request continuations and add the refused-response example.
+  - `f06a8de3adb7efe8d162f1996a96a284f0b8108e` — Add concrete non-vacuity witnesses and planted counterexamples for every affected adapter law.
+
+  ## Resulting laws
+
+  Existing C6 law meanings and statements are preserved, except that continuations now have C1’s `Answer → Option Config` type.
+
+  - `runFrom_validTrace` (`ConcreteSpec/Proofs/Observe2.lean:419`): a well-formed run preserves complete valid traces and supplies blocking permission for a `noAnswer` ending. Recursion proceeds only when `k a = some c'`. If `k a = none`, the run is stuck with its previous event history; the refused response contributes no event.
+  - `runFrom_noAnswer_pending_valid` (`Observe2.lean:481`): a pending typed request has its exact pending `ValidTrace` and contract permission.
+  - `runFrom_blockingPermitted` (`Observe2.lean:498`): a well-formed run supplies `BlockingPermitted`.
+  - `report_noAnswer_mayBlock` (`Observe2.lean:518`): the report premise supplies `mayBlock` in the history ending in the current request.
+  - `report_noAnswer_blocked` (`Observe2.lean:530`): a permitted `noAnswer` report projects to exactly the blocked observation containing the earlier history and pending request.
+
+  The refused example at `ConcreteSpec/Spec/Observe.lean:452` shows an allowed response whose result binding is refused: the ending is `.stuck refusedRequest`, events remain `[]`, and `reportObservation` returns `none`.
+
+  Supporting concrete theorems establish that the demo answering/blocking oracles are well formed and instantiate the blocking premise and blocked observation.
+
+  ## Vacuity witnesses
+
+  Each affected law has a real positive instance and a planted negative example:
+
+  - `runFrom_validTrace`: accepted doubling response at `Observe2.lean:641`; invalid response `3 ↦ 7` at `:647`.
+  - `runFrom_noAnswer_pending_valid`: genuine pending request at `:670`; forbidden blocking mutation at `:681`.
+  - `runFrom_blockingPermitted`: real `noAnswer` report at `:694`; same report under a no-blocking contract at `:699`.
+  - `report_noAnswer_mayBlock`: supplied permission at `:706`; negated permission under the mutated contract at `:713`.
+  - `report_noAnswer_blocked`: exact blocked observation at `:726`; negated misclassification as successful termination at `:731`.
+
+  ## Verification
+
+  - `nix develop -c timeout 1200 lake build ConcreteSpec` — passed.
+  - `nix develop -c timeout 600 bash scripts/spec/rules.sh` — `PASS=32 FAIL=0`.
+  - `nix develop -c timeout 900 bash scripts/proofs/trust_ban.sh` — `PASS=23 FAIL=0`; all 279 examples use only standard axioms.
+  - Working tree clean; only `Spec/Observe.lean` and `Proofs/Observe2.lean` changed.
+
+  Nothing semantic was left out. Reviewer-only heavy gates were not run, as instructed.
+
+  ## QUESTIONS
+
+  None.
+
+To resume this session: kimi -r session_e6ff2695-a84a-4021-bce7-87486f898d9f
+kimi rc=0

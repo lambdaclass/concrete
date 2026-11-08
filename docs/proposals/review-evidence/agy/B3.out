@@ -1,0 +1,10 @@
+No defects or preferences found in DELTA:
+
+- `scripts/land/lib.sh`: `land_ssh_host` now captures the `ssh -G` output before piping to `awk` so non-zero exit statuses fail closed even without `pipefail`, and removes the missing-`ssh` fallback so an absent `ssh` binary fails closed (`return 1`).
+- `scripts/land/lib.sh`: `land_url_target` keeps the full userinfo for SSH schemes and rejects empty userinfo (`ssh://@host`) or colons/non-plain characters (`ssh://user:opt@host`), and lowercases the path before stripping `.git` so uppercase `.GIT` suffixes normalize properly.
+- `scripts/land/lib.sh`: `land_remote_bad` redacts credentials when reporting an unconfigured remote name (e.g., when a literal URL with credentials is passed as a remote name).
+- `scripts/checks/landing_bot.sh` & `scripts/checks/landing_script.sh`: `git@github-old:...` test cases now use `lambdaclass/concrete.git` so they test host-alias refusal in isolation rather than passing because of the stale repository path, and new cases cover `ssh -G` lying before exiting non-zero, missing `ssh`, malformed SSH userinfo, `.GIT` suffix casing, reciprocal `insteadOf` in `pre-push`, and credential redaction.
+- `docs/LANDING.md`: Matches the updated guard list (`record`, `acceptance.sh`) and `ssh -G` failure semantics.
+
+VERDICT: ACCEPT
+rc=0

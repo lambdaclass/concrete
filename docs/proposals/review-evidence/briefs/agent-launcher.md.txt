@@ -1,0 +1,63 @@
+TASK: one shared launcher for background agent jobs (branch wip/agent-launcher, this clone, on main b6a647be).
+
+Why (owner-approved, 2026-11-08, "yes to 6 things", item 5): orchestrating agents start writers (codex exec, kimi -p, agy -p),
+reviewers and gates as background systemd units. A systemd unit does not notify the agent that started it when it ends, so
+tonight a worker sat finished-but-unnoticed three times for 1-2 hours. Every background job must be paired with a bounded
+watcher that the agent runs as its own background task, so the agent is re-invoked when the job ends.
+
+Build:
+1. scripts/agent/launch.sh, small and readable (bash, must also parse on bash 3.2):
+   launch.sh start [--mem SIZE] [--tasks N] [--dir DIR] NAME SECS -- CMD [ARGS...]
+     - runs CMD as a transient systemd user unit: `systemd-run --user --collect` with properties
+       MemoryMax (default 8G), TasksMax (default 1024) and RuntimeMaxSec=SECS, --setenv=PATH="$PATH" --setenv=HOME="$HOME",
+       working directory = the caller's current directory; a unique unit name derived from NAME (sanitised) and a timestamp;
+     - the job's stdout+stderr go to <jobdir>/out.log; when CMD exits, its exit status is written atomically to
+       <jobdir>/status (write to a temp file then mv); <jobdir>/cmd records the command line, <jobdir>/unit the unit name,
+       <jobdir>/deadline the epoch second by which it must have ended; jobdir defaults to
+       ${AGENT_JOBS_DIR:-$HOME/.cache/concrete-agent-jobs}/<unit>;
+     - ONE attempt only: a writer has side effects, so a timed-out job is never re-run (do not use bounded_run's retry here);
+     - prints, on stdout, exactly these lines and nothing else:
+         UNIT=<unit>
+         DIR=<jobdir>
+         WAIT=bash scripts/agent/launch.sh wait <jobdir>
+       (use an absolute path to launch.sh in WAIT so it works from any directory);
+     - refuses clearly (exit 2, message on stderr) when `systemd-run --user` is unavailable or NAME/SECS are invalid.
+   launch.sh wait JOBDIR
+     - the watcher the caller runs as a background task; polls (a short interval, e.g. 10 s) until <jobdir>/status exists,
+       or the unit is no longer active without a status (killed, timed out by RuntimeMaxSec, OOM), or the deadline plus a grace
+       period (e.g. 120 s) has passed; it must never wait forever;
+     - on completion prints `JOB <unit> ENDED status=<N>` and the last 40 lines of out.log, exits with the job's status;
+     - unit gone without a status: prints `JOB <unit> ENDED without a status (killed, timed out or OOM): <systemctl --user
+       show result if available>` and exits 125;
+     - deadline passed with the unit still active: prints `JOB <unit> STILL RUNNING past its deadline` and exits 124
+       (INCOMPLETE, never a pass);
+   launch.sh status JOBDIR prints the same one-line state without waiting.
+   Keep it one file, plain, with a header comment explaining the contract above.
+2. Controls: scripts/checks/agent_launch.sh (run.sh runs every scripts/checks/*.sh). CI has no systemd user session, so the
+   check puts a stub `systemd-run` (and `systemctl` if you use it) on PATH that honours the interface launch.sh uses (it runs
+   the wrapped command in the background as a plain process and records the properties it was given). Assert, each on its
+   exact output: start prints exactly the three lines; the properties MemoryMax/TasksMax/RuntimeMaxSec/--collect/PATH/HOME
+   are passed; wait returns 0 and prints `ENDED status=0` for a job that succeeds; returns 3 for a job that exits 3; returns
+   125 for a unit that disappears without a status; returns 124 for a job still running past deadline+grace (use tiny SECS
+   and grace via environment overrides for the test only, e.g. AGENT_WAIT_INTERVAL and AGENT_WAIT_GRACE); start refuses
+   invalid NAME/SECS and a missing systemd-run with exit 2. Prove each control is load-bearing by temporarily breaking the
+   code it covers and seeing it fail, then restore; report what you ran. Bound every test run.
+   Follow the conventions of the existing checks: `source lib/gate_env.sh`, ok/no counters, a final
+   `check_agent_launch: PASS=N FAIL=M` line, exit non-zero on any failure; if the check creates a git repository it must
+   use lib/git_sandbox.sh (sandbox_isolation.sh enforces this); prefer not creating one.
+3. Docs: in AGENTS.md add a short subsection (near the existing "Orchestrating a publish" / bounded_run guidance) saying:
+   every background writer, reviewer or gate job is started with `scripts/agent/launch.sh start`, and the agent immediately
+   runs the printed WAIT command as its own background task, so it is re-invoked when the job ends; never start a detached
+   unit without its watcher; one attempt only for writers. Keep it short, in the file's style. Add a changelog fragment
+   changelog.d/2026-11-08-agent-launcher.md (### title with date, short prose; see the other fragments for the form).
+4. If scripts/checks/root_inventory.txt or RETENTION.tsv must list the new directory/files for the gates to pass, update them
+   the way the gates require.
+
+Gates (bounded):
+   timeout 600 bash scripts/checks/agent_launch.sh
+   timeout 1500 systemd-run --user --scope -q -p MemoryMax=8G -p TasksMax=1024 bash scripts/checks/run.sh   (all must pass)
+Out of scope: docs/decisions.md, ROADMAP.md, legacy/, anything under scripts/land or scripts/review. No new process machinery
+beyond this launcher.
+Hard rules: commit locally with a clear message; never push; no --no-verify; no git config or remote changes; bounded runs; do
+not run real long jobs; no network. When done print the commit SHA, the files changed, the controls with their exact
+assertions and the mutation results.

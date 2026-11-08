@@ -1,0 +1,12 @@
+OWNER RULE (verbatim, 2026-11-08): "ALWAYS tell the reviewrs to do the best long term thing rather than cuitting corners". Judge every item by the best long-term design, not by what is cheapest to add now. Report any shortcut (in Claude's proposals, in the repository's plan, or in your own suggestions) as a real finding and name the long-term alternative.
+
+You are reviewing, round 2, a research answer for the owner of Concrete, a fully proven systems language with no GC (linear ownership, second-class references, with(...) permissions plus grant values, no hidden traps; Lean 4 is the specification; a new compiler is built slice by slice, both an LLVM printer path and the Lean Compiler Backend (LCB) path). The current directory is a git-archive copy of origin/main. Read _review/DRAFT2.md (revised language-gap list R1-R10, with the round-1 verdicts and the corrections Claude accepted; round-1 draft is _review/DRAFT.md) and _review/KLIST.md (part 2: compiler-architecture candidates K1-K12). Check both against the repository: docs/PHILOSOPHY.md, docs/decisions.md, ROADMAP.md (queue rows, slice table, task rows), docs/proposals/*.md (MERGED.md is the pipeline review), Concrete/README.md (slice-0 compiler design), ConcreteSpec/, legacy/docs/spec/, docs/archive/roadmap-2026-11/task_disposition.tsv, docs/archive/decisions-2026-11-05/R4_RATIONALE.md.
+
+Tasks:
+1. R1-R10: AGREE or DISAGREE each, reason at most 60 words (cite file/row if already covered, wrong, breaks a decided row, or wrongly placed). Say whether the stated design is the best long-term one, and if not, what is.
+2. K1-K12: for each, AGREE or DISAGREE that it should be done; whether it already exists or is planned (cite the ROADMAP task/row or file); the slice or queue row it belongs in; and whether it must START BEFORE SLICE 1 (B1) or can wait. Reason at most 60 words each.
+3. List anything missed in either part (language features or early compiler-architecture work), with source, problem, slice and why it is not covered.
+Do not modify files. Cite repository paths you read.
+
+End with exactly one line:
+ANSWER: R_AGREE=<ids>; R_DISAGREE=<ids or none>; K_AGREE=<ids>; K_DISAGREE=<ids or none>; K_BEFORE_SLICE1=<ids>; MISSED=<short list or none>

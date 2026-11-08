@@ -1,0 +1,9 @@
+The owner asked for a side-by-side comparison of two capability designs for Concrete: TODAY (with(...) permission sets plus grant values) and MERGED (capabilities as values only, the object-capability model). Codex wrote CAPABILITY_COMPARISON.md, which recommends keeping TODAY for now. Its key argument: with(...) is an independent ceiling. A helper that holds a struct containing a Directory cannot start using the file system without changing its signature, whereas under MERGED an implementation edit can start using a contained capability silently. It also argues that MERGED does not reduce parameters in these examples (27 value parameters in both).
+
+Review it independently and critically:
+(1) Are the example programs fair to both designs?
+(2) Is the "independent ceiling" argument right, or can MERGED recover it cheaply? (For example: attenuated wrapper types, or checked authority summaries in public signatures — and would that just reintroduce with(...) under another name?)
+(3) Are the proof and checker claims right?
+(4) What did Codex miss?
+(5) Your recommendation: KEEP TODAY, MERGE, or a THIRD design, with the decisive reasons. At most 400 words.
+End with exactly: ANSWER: <KEEP|MERGE|THIRD>; REASON=<one line>

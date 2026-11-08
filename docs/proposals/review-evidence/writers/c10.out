@@ -1,0 +1,2598 @@
+kimi version 2.4.1
+• I need act on brief. Should read fully and relevant other docs perhaps. Start Read.
+
+• I’ll read the review brief, then inspect the referenced repository material before making the requested changes.
+
+• Should complex implement. Should read files fully. AGENTS provided but user says read first, can Read. ConcreteSpec README, proposal section C10 (read entire perhaps manageable), Memory Spec Proof, Hybrid, Target, Exec. Should have decisions decided rows perhaps brief says decided but need understand conventions. Inspect file sizes. Could parallel reads max 100k each huge. Use wc via Bash? Known files read direct in parallel. Also git branch/status required. Should have TODO.wip/spec-c10
+Output status clean (only branch). Now read rest AGENTS lines 292-351. Hybrid, Target, Exec potentially huge. Read parallel.Should design robust. Must implement Spec + proofs separately commits each piece. Ambiguity "commit each piece separately" likely Spec Frame then Proofs Frame. Should have imports Spec.lean part spec commit, Proofs import with proof. Could possibly 3 pieces corresponding numbered. User explicitly "Write ConcreteSpec/Spec/Frame.lean (+ Proofs/Frame.lean); commit each piece separately: 1 ... 2 ... 3" Could mean each numbered item commit separately, but each requires spec + proofs? It says commit each piece separately, likely separate Spec and Proof files? Should infer existing branch commits conventions. git log maybe. No rewriting. Can inspect Proofs Exec for relevant theorem and proof styles. Also decisions exact C10 rows needed FFI safe kept etc. Must not edit decisions but can read. Search relevant text. Also LANGUAGE_DECISIONS maybe context? User read list excludes but could useful. Should have no owner question decisions. C10 includes launcher entry/exit relations in proposal but brief numbered ABI interface doesn't explicitly launcher; probably include in interface. Should satisfy fully. I'll develop carefully.
+
+  Footprint set of (block, byte range) plus places. Existing Hybrid Range includes ptr extent align; footprint ranges could use Range, disjointness includes block? Range.Disjoint currently ignores provenance and only numeric. Brief "(block, byte range)" implies ByteFootprint structure block MemBlockId offset length; separate Place set. Should memory state plus places. Generic state param with projection to Mem.Memory and Hybrid.State places? I can define `Footprint` as `List MemRange` and `List Place` and generic observation relation. Operations preserve every byte and place disjoint from F. Could define for Hybrid.State:
+  - ByteRange b off length
+  - `ByteRange.Disjoint`
+  - `Footprint` bytes : List ByteRange, places : List Place
+  - `State.ByteAt` uses memory block b bytes[offset]?
+  - `State.PlaceUnchanged` equality st'.places p = st.places p (whole cell).
+  - `Outside f b off` no range containing byte b off.
+  - `Preserves st st' f` ∀ b off outside byte -> byteAt eq; ∀ p not in places -> place eq.
+  Frame law operation with footprint F preserves every byte and place disjoint. For alloc fresh block disjoint from everything: old bytes/place equality; new block nonexistent in old. If after allocation `Outside f` evaluated same F fixed, new block isn't in F unless range includes it; preservation statement only old bytes? Quantify if old block exists and byte outside F. Better generic frame relation with `BytePreserved` requiring mapping bytes at all b i if b existed? Since new block can be considered disjoint and preservation of none to some not desired. Define `Mem.BytePreserved m m' b i` = m.block b = none ∨ ...? Better `ByteAt m b i` option (option MByte)? m.block map bytes[i]? gives Option (Option MByte). `FrameBytes m m' f` ∀ b i, m.block b ≠ none -> Outside -> (m'.block b).map ... = (m.block b).map ... . New blocks unconstrained. For place unchanged straightforward.
+
+  Store operation footprint exact accessed range + no places. Prove for Hybrid.State.rawWrite or Mem.Memory.store. Brief C4 store, free, expose, alloc. Use Memory operations and places? Could define generic `State` as memory and cells, operations memory leave cells unchanged. Could prove Memory frame only then lift to Hybrid rawWrite maybe. "plus places" means operation footprints include places and state law both. I should prove all for a unified `Hybrid.State`, including alloc that operates memory and leaves places. Or Memory only and separate Place operations seq/call generic. Better unified generic `MachineState` structure with `memory : Mem.Memory`, `places : AList ...`? Hybrid.State exactly. Use State for frame law and define wrappers:
+  - `store` = `State.rawWrite`
+  - `free` wrapper updates memory
+  - `expose` wrapper raw pointer no materialize? State.expose may materialize place; but C4 expose is Memory.expose. Could theorem on Mem Memory then generic `Preserves` structure separate byte/place state via class? Simpler define `Footprint.Frame (before after : Hybrid.State) F`, theorems Memory.store with state `{ st with memory := m' }`. For alloc same. Free/expose similarly. This proves operation with state changes and all places unaffected.
+
+  Sequential composition footprints union generic theorem from frame relations.
+
+  Calls whose callee footprint contract: Need define `CallContract` generic on Exec O maybe: footprint for args? `calleeFootprint : List O.Val → Footprint`, `frame : ∀ caller callee ...`? Could use relation `Exec.Steps` and Hybrid store only if O.Store = Hybrid.State, endpoints. Theorem if `Steps P c tr c'` and callee contract says every c c' with entry/return shape satisfies Frame c.store c'.store F then Frame. But that's tautological unpacking contract. Should meaningful compose caller/callee footprints union and local restoration. Could define `Contract O` with `footprint : Footprint` and `frame : ∀ {c c'}, CallRun ... → Frame ...` and theorem. It can be an interface law premise, not axiom. No new axioms. A structure containing proposition fields is fine. Then theorem uses field. Perhaps accepted interface contract laws by structure. "prove ... for C1 calls whose callee footprint is given by its contract" Should state contract as `Exec.Steps` endpoints and frame. Define `CallRun` predicate relating initial `.exec (.call ...)` config to returned `.done` config same continuation and restored caller locals. Then `CallContract` has `callee : Footprint` and `callee_frame : CallRun → Frame store store' callee`. `call_frame` theorem gives same. But could be considered trivial; can prove union if caller before/after? Perhaps include eval args footprint? Contract has entire call footprint. Requirement specifically callee footprint given by contract, so theorem simply contract projection expected.
+
+  Frame ownership restoration: define `CallRun` including exact caller locals and preserved state? C1 ret frames preserves locals but shared store intentionally changed. "entering and leaving a frame restores caller's locals and preserved state exactly (relate to C1 ret frame)." Preserved state may be ABI registers separate. For C1 call, local restoration theorem directly `step` on `.exiting (.ret v)` with `.ret dst caller :: k`, life success -> next `.done`, bindDst dst v caller. Prove locals exactly `bindDst`, frames k, store after life/bindLife. "preserved state" in C1 store is not saved, only life events; preserved machine state belongs ABI. Could define `Preserved` generic state projection relation in CallRun. ABI proves preserved regs. For C1 call theorem as above and unit return.
+
+  Should inspect Proofs/Exec for existing `step_ret` etc to reuse.
+
+• The existing C1 machine restores caller locals at `.ret` frames but deliberately threads shared memory through calls. I’ll keep those separate: logical footprints cover hybrid memory/places, while the ABI interface separately specifies preserved registers and stack state.
+
+• Should read the exact full Q3.12 from core rows. FFI rules no enum etc. Search in legacy spec.a8eb252a Merge wip/spec-c1-life into wip/spec-c10 (C10 needs C4 and partial lifecycle; README conflict joined)
+d8f89ea7 axioms.golden: partial lifecycle transitions (regenerated on concrete-ci-2)
+b9c3aeaa axioms.golden: C4 round 2 (regenerated on concrete-ci-2)
+ccaa0c9e spec: require validity evidence before encoding pointers
+7b1a7c35 proofs: assert target validity for every successful access
+dc015b7f Prove lifecycle refusals are stuck and exercise refused scope exit
+f331d641 proofs: state typed-write frames using disjoint byte intervals
+a386b6cd spec: share scalar types and values between constants and hybrid storage
+2209101d Make C1 lifecycle transitions partial and propagate refusal
+e4508a53 proofs: preserve first materialized reads and frame other hybrid places
+f6b91f11 proofs: preserve hybrid well-formedness through all state operations
+65ebf5c3 spec: state hybrid projection invariant and prove byte-store observation laws
+Could use Python JSON extraction via Bash allowed? Should not use grep shell. Python read file is known data not secret, dedicated Read one-line impossible truncated. Bash command parse json fine.{
+  "id": "Q3.12",
+  "question": "How are extern pointer parameters marked, and how does C keep memory past the call?",
+  "options": "(a) parameter marker `kept buf: H` (no marker = call-only) / (b) attribute `#[kept]` / (c) markers on both forms",
+  "reason": "OD64 fixes call-only as the default and kept as the exception; the receipt-based ownership design is a new owner decision. A kept parameter takes an owned allocation by value and returns a linear receipt Kept<H> that only its paired extern can turn back into H. The default is the safe case and the exception is visible at the declaration.",
+  "rec": "(a) `kept` parameter marker; `Kept<H>` receipt ended only by the paired extern",
+  "agree": "Y",
+  "revises": "New design + spelling: owner decision",
+  "note": "R4 F5.4. extern fn ring_submit(kept buf: HeapArray<u8, Sys>) -> Kept<HeapArray<u8, Sys>>; extern fn ring_complete(r: Kept<HeapArray<u8, Sys>>) -> HeapArray<u8, Sys>. Kept<H> is linear, has no operations, is not Destroy, and keeps its allocator alive. That C stops using the memory before the paired call returns is a listed trusted-base assumption. Borrow-derived pointers can never reach a kept parameter. A call-only parameter permits reads, and writes only when the argument came from a &mut or an owned allocation, during the call only; no access after return is a named trusted-base assumption. The submitting extern's contract names its paired completion extern, and the checker verifies the pair takes exactly Kept<H> and returns H. C receives the ABI pointer and length.",
+  "upd": true,
+  "new": true
+}
+{
+  "id": "Q8.5",
+  "question": "What launcher ABI and observations are fixed?",
+  "options": "exact profile contract / host defaults / stdout convention",
+  "reason": "Observe returned value or terminal trap under a stated resource premise; launcher diagnostics and host failures are separately attributed.",
+  "rec": "Pinned launcher ABI, inputs, startup and trap mapping",
+  "agree": "Y",
+  "revises": "No"
+}
+{
+  "id": "Q8.6",
+  "question": "What artifacts does the claim bind?",
+  "options": "complete dependency/image closure / source hash only / build label",
+  "reason": "Bind identities through authenticated retained artifacts; a theorem about another build cannot qualify this image.",
+  "rec": "Bind complete retained dependency and image closure",
+  "agree": "Y",
+  "revises": "No"
+}
+Now proceed. I have enough. Should detailed design and implementation.
+
+  Could create entire Spec first with footprint, call restoration definitions, ABI. Proofs entire after. Commits two pieces. But user says commit each piece separately possibly 3. I can commit logical spec + proofs? To ensure each numbered separately maybe 6 commits excessive. Typical tasks foundation previous commit patterns: each spec slice then proofs separate. Brief "Write ... Spec ... (+ Proofs...); commit each piece separately: 1 ... 2 ... 3" Could be 3 commits each piece includes spec+proof and builds. I can implement all then commit in 3 sequential groups, but each commit as soon as build passes requirement. I could do first logical footprint Spec + Proofs and imports, commit; second call ownership Spec + proofs edit commit; third ABI spec + proofs edit commit. This is safest literal. Should not write whole spec then commit proofs separately. But initial TODO only Spec and Proofs generic; adjust to three parts. Each new module imported Spec.lean first commit and Proofs root first commit. Build after each. I'll do 3 commits.
+
+  Should use Edit incremental. Create Spec/Frame with part1 first; Proofs/Frame part1; update imports. Then build. Then commit. Then append part2 via Edit and proofs; build commit. Then part3 etc.
+
+  Make sure module header can initially mention future parts? Final header updated each part if old comments stale. Fine.
+
+  Part1 definitions precise.
+
+  Namespace `ConcreteSpec.Core.Frame`, open Mem Hybrid perhaps.
+
+  ```
+  structure ByteRange where
+   block : MemBlockId
+   offset : Nat
+   extent : Nat
+   deriving DecidableEq, Repr
+
+  def ByteRange.Contains (r) (b) (i) : Prop := r.block=b ∧ r.offset ≤ i ∧ i < r.offset+r.extent
+  instance ...
+  def ByteRange.Disjoint (r s) := r.block ≠ s.block ∨ r.extent=0 ∨ s.extent=0 ∨ r.offset+r.extent≤s.offset ∨ ...
+  ```
+  Requirement disjoint bytes. Use block identity not numeric addresses. Good.
+
+  `structure Footprint where bytes : List ByteRange; places : List Hybrid.Place`
+  `empty`, `union`, `bytesOnly`, `placesOnly`.
+  `Footprint.ByteOutside f b i := ∀ r∈f.bytes, ¬r.Contains b i`
+  `PlaceOutside := p∉ f.places`.
+  `MemByte m b i := (m.block b).map fun x => x.bytes[i]?`
+  `Frame st st' f`: 
+  ```
+  (∀ b i x, st.memory.block b = some x → f.ByteOutside b i →
+     (st'.memory.block b).map (...) = some (x.bytes[i]?)) ∧
+  (∀ p, f.PlaceOutside p → st'.places p = st.places p)
+  ```
+  This only old blocks and exact old byte. New blocks fresh. Does this ensure every byte disjoint from F preserved, including nonexistent old block? Nonexistent no byte, so okay. At free, target block footprint should include all block bytes, but free also changes liveness/exposure metadata, not bytes. Frame law only bytes and places, so free with empty footprint would preserve bytes but metadata changed. Operation permitted footprint should reflect metadata? Brief footprint set byte ranges + places, free only lifecycle no byte change, can use `blockOnly`? To convey free touches block lifecycle, perhaps Footprint also blocks? Brief exactly set of (block, byte range) plus places, no block metadata component. I can define fullBlock b x size range. `free` footprint full block range, and theorem only bytes outside full range; bytes inside unchanged too but no need. Other blocks and all places preserved. Expose same. alloc fresh block footprint its range and all old disjoint. Fresh block disjoint from everything means fresh ID inequality ensures any old ByteRange with different block Disjoint automatically; prove `alloc_fresh_disjoint`. Should prove allocated block ID differs from every footprint range whose block existed. If footprint ranges could refer nonexisting arbitrary block same new id, freshness only old memory blocks. Statement `∀ r∈f.bytes, st.memory.block r.block ≠ none → newBlock ≠ r.block` or `r.block` existing x. "fresh block disjoint from everything" means fresh block disjoint all old blocks. Theorem `alloc_fresh_disjoint` given m.block r.block = some x proves ByteRange.Disjoint new r. Could prove via `alloc_ne_existing` and `.inl`.
+
+  Store footprint requires access result to know b/off. Theorem:
+  ```
+  theorem store_frame ... ha hs :
+   Frame st {st with memory := m'} { bytes := [⟨b,off,bs.length⟩], places := []}
+  ```
+  Actually no hw needed using Mem.store_same_block_frame requires hw. Could prove byte equality with `store_other_block` and `store_same_block_frame`, need old block x, outside. For b target and i outside range contains neg gives i<off ∨ off+len≤i by omega. Other block c ≠ b. m'.block c = m.block c then rw hx. Place rfl. `State` st arbitrary memory st.memory. h : st.memory.store ... = some m'. after `{st with memory := m'}`. `ha`. Good.
+
+  Zero-length access `store` yields some m and access = some none, no b/off. Could theorem for `some none` empty footprint. Could include `store_zero_frame`. Brief store general should cover both. Could define footprint function from access:
+  ```
+  def accessFootprint : Option (Option (MemBlockId×Nat)) -> Nat -> Footprint
+  | some (some(b,off)), n => byte ...
+  | _,_ => empty
+  ```
+  Theorem h plus ha, cases. But Frame with operation if access fails no state. Could split. Better `storeFootprint (r : Option (Option ...)) n`. Then single theorem handles both. Readability perhaps two theorems okay full coverage.
+
+  Free theorem with `fullBlock` needs know size x from free_retains. F = `[⟨b,0,x.size⟩]`. For other blocks same via `block_modify`, target outside full range means i≥size (since offset0), bytes[i]? for target unchanged anyway but can prove all bytes actually; easier use m' modify and simp. Use free_retains yields x, hx, hx' and m' next. But need entire m' equality to modify for other blocks. `free_result` only expose_result style not free. Unfold h and cases to subst m'. Could derive:
+  ```
+  unfold Mem.Memory.free at h
+  split at h ...
+  ```
+  Then m' = modify. Proof with cases. Use F fullBlock. For byte target outside range, but can prove m'.block map = old for all i, even inside. `simp [Mem.block_modify]` with conditions. Should manage.
+
+  Expose theorem similarly `expose_result` gives m' = modify b, footprint full block. Byte unchanged all. Place rfl.
+
+  Alloc theorem with F new block range. `alloc_result` gives b = next, m' exact. Could prove old block lookups with list. Existing alloc_result and alloc_fresh. Use h to `obtain ⟨rfl, rfl, hf⟩`. New b `⟨m.next⟩`, F offset0 size. For old c x hx, need c ≠ new via alloc_ne_existing (requires hw) or fresh id via hw.fresh. `simp [Frame,..., Mem.Memory.block, AList.lookup]` likely. I can use `alloc_ne_existing` to c inequality. m' formula. `Memory.block` on cons simplification:
+  ```
+  have hc : c ≠ ⟨m.next⟩ := (alloc_ne_existing ... h ... hx).symm? alloc gives new ≠ c. need new? AList lookup checks new = c. If hne new ≠ c, simp [Memory.block, AList.lookup, hne].
+  ```
+  After subst h lost original h? Can retain before obtain. Better theorem proof `have hfresh := alloc_fresh ...` etc and `alloc_result`. 
+  ```
+  obtain ⟨hb, hm, hfits⟩ := alloc_result...
+  subst b; subst m'
+  ...
+  have hne : (⟨m.next⟩ : MemBlockId) ≠ c := alloc_ne_existing ... h ... hx
+  simp [Mem.Memory.block, AList.lookup, hne, hx]
+  ```
+  F uses candidate size. Outside doesn't matter old other block. For target c=new impossible hx by alloc_fresh. So all old c differ. Great. places rfl.
+
+  Fresh disjoint:
+  ```
+  theorem alloc_fresh_disjoint ... r x (hr : r∈f.bytes) hx : (⟨b,0,size⟩).Disjoint r := .inl (alloc_ne_existing ... h hx)
+  ```
+  block inequality b ≠ r.block. Good.
+
+  `seq_frame` theorem:
+  ```
+  Frame st st' f -> Frame st' st'' g -> Frame st st'' (f.union g)
+  ```
+  For bytes outside union implies outside f/g by intro r hr; hr in append cases. Should get old x from st. First equality st' = some x bytes using h1. Then h2 needs old block in st' to relate st''. From h1 result at byte map only some x.bytes[i]? implies st'.block b exists; can extract `Option.map_eq_some_iff` maybe simp. Easier h1 with x gives map eq; cases hy : st'.memory.block b; none => simp [hy] at eq; some y => map equality gives y.bytes[i]? = x.bytes[i]?. Then h2 y hy. Combine.
+  ```
+  have e1 := h1.1 b i x hx (outside union left)
+  cases hy : st'.memory.block b with
+  | none => simp [hy] at e1
+  | some y =>
+    simp only [hy, Option.map_some, Option.some.injEq] at e1
+    have e2 := h2.1 b i y hy outsideg
+    simp only [hy, Option.map_some, Option.some.injEq] at e2? e2 LHS st'' map = some y...
+    exact e2.trans (congrArg some e1)?? 
+  ```
+  e1 after simp is y.bytes[i]? = x.bytes[i]?.
+  e2 raw `(st''...).map = some (y.bytes[i]?)`.
+  Then `e2.trans (congrArg some e1)`.
+  Place outside union list append, h1/h2 trans.
+
+  Call contract in part1:
+  Define `Steps` generic state not only Hybrid? `Frame` tied Hybrid. Could define
+  ```
+  structure CallContract (O : Exec.Operands) where
+    footprint : Footprint
+    frames : ∀ {before after : Exec.Config O}, O.Store = Hybrid.State? 
+  ```
+  Cannot store equality conveniently. Define only for `O` with `Store := Hybrid.State` using named `O : Exec.Operands` and `O.Store` not definitional. Can define `CallContract (P : Exec.Program (hybridOperands?))` no concrete Operands exists. Instead make generic `StoreFrame (Store : Type) (mem : Store→Mem.Memory) ...` too complicated.
+
+  Could parameterize `Footprint.Relation (Store : Type) (project : Store→Hybrid.State)`? But operations use actual Hybrid. C1 call theorem can be for any `O` where `O.Store = Hybrid.State` via explicit `store : O.Store → Hybrid.State` and `before after : O.Store`. Contract:
+  ```
+  structure CallContract (O : Exec.Operands) (project : O.Store → Hybrid.State) where
+   footprint : Footprint
+   law : ∀ {st st' : O.Store}, footprint.Frame (project st) (project st')
+  ```
+  This law quantifies all states making impossible if project not complete and footprint bounded; too strong. Should conditioned on call relation.
+  ```
+  structure CallContract (O) (projection) (P : Program O) (before after : Config O) where
+   footprint
+   callee_frame : Frame (projection before.store) (projection after.store) footprint
+  ```
+  Then theorem call_frame exact field. Very trivial and per-run not reusable.
+
+  Better define generic `Footprint.Contract (State : Type) (obs : State→Hybrid.State) (R : State→State→Prop)` with field:
+  ```
+  footprint : Footprint
+  frame : ∀ s s', R s s' → Frame (obs s) (obs s') footprint
+  ```
+  Then C1 `callContract` R defined as specific `Steps` endpoints. 
+  ```
+  def ExecCall (P) (entry return : Config O) : Prop :=
+   ∃ caller... etc, entry = ..., after=..., Steps...
+  ```
+  Contract `C1CallContract O projection P entry return` contains footprint and law `ExecCall ... → Frame`. theorem uses. Still contract interface useful and theorem not wholly trivial but exact elimination.
+
+  Alternatively use a generic `Operation` structure:
+  ```
+  structure Contract (State : Type) where
+    footprint : Footprint
+    step : State → State → Prop
+    project : State → Hybrid.State
+    frame : ∀...
+  ```
+  No axioms, law required. `C1Call` relation instantiated. theorem:
+  ```
+  theorem c1_call_frame (C : CallContract ...) (h : C1Call ...) : Frame ... C.footprint := C.frame h
+  ```
+  Fine.
+
+  But part2 define `C1Call` including local restoration and preserved state exactly. Could use `Exec.Steps` from call initial to final and endpoint shapes as predicate:
+  ```
+  def CallRun (P) (before after) : Prop :=
+   ∃ dst f args site L st k stArgs fn stEnter caller result? ...
+  ```
+  Complex to represent entire call and return. Simpler `C1Return` relation for one step at ret frame. Contract footprint for `Steps` with entry and return shapes:
+  ```
+  def C1Call (P) (entry exit : Config O) : Prop :=
+   ∃ dst caller L v stLeave stBind k tr,
+     entry.frames = .ret dst caller :: k? entry is after entry? 
+  ```
+  A call's footprint from callee entry (after call step) to return step; entry ctrl exec body, frames scope::ret; exit done bindDst. Could define `CalleeRun`:
+  ```
+  def CalleeRun (P) (caller dst k entry final) :=
+   entry.frames = .scope fn... :: .ret dst caller :: k ...
+   final.locals = bindDst ...
+   final.frames=k
+   Steps P entry tr final
+  ```
+  Hard existentials but manageable:
+  ```
+  def C1Call (P) (c c' : Config O) : Prop :=
+   ∃ fn dst caller k tr v stLeave stBind,
+     c.frames = .scope fn.block (fn.params.map Prod.fst) [] :: .ret dst caller :: k ∧
+     c'.locals = bindDst dst v caller ∧ c'.frames = k ∧
+     O.life .leave ... etc?
+  ```
+  Steps alone plus endpoint shape enough, no need life fields. c.ctrl = exec fn.body, c'.ctrl done. Return result v. This relation covers explicit return but not unit falloff. Could generalize `result : O.Val` covers both. 
+  ```
+  ∃ (fn) (dst) (caller) (k) (tr) (v),
+   c = ⟨.exec fn.body, (params...).zip ???, st, scope...⟩ ...
+  ```
+  Arguments unknown list; use c.locals arbitrary and c.store arbitrary with only frames/ctrl constraints:
+  ```
+  c.ctrl = .exec fn.body
+  c.frames = ...
+  c'.ctrl=.done
+  c'.locals=bindDst ...
+  c'.frames=k
+  Steps P c tr c'
+  ```
+  Good. Contract projection from O.Store to Hybrid.State. Frame law from C1Call.
+
+  But call frame ownership restoration part2 could theorem directly using `step_return_caller` reuse, plus `return_reaches_caller` maybe theorem in Proofs Frame importing Proofs Exec. I can define `Preserved` in C1 call? The caller locals exactly restored except dst. For dst none exact caller. theorem `step_return_caller_locals` dst none yields caller. For some dst expected bindDst. This satisfies. `preserved state` at logical C1 is frames and locals; shared state not preserved by design. Could define `CallerState` structure locals and frames? no need. Doc clear.
+
+  Part3 ABI design more challenging. Should typed args/results related to regs, stack slots preserved machine state. Generic types:
+  - `Reg` and `Word` parameters, perhaps `Value` type `Hybrid.Value` only scalar int/bool unit. ABI typed args `List CTy`, result CTy. Locations:
+  ```
+  inductive Location (Reg : Type) where
+   | register (r : Reg) (word : Nat)
+   | stack (slot : Nat) (word : Nat)
+  ```
+  Each typed arg could occupy multiple locations. `Argument` signature `List (CTy × List (Location Reg))`; result same. Machine state generic:
+  ```
+  structure Machine (Reg Word : Type) where
+   regs : Reg → Word
+   stack : Nat → Word
+  ```
+  stack slots could list bytes, but Word values at slot index. No concrete target. preserved machine state include callee-saved registers and stack pointer. Add `stackPointer : Nat` or Word. Generic stack slots indexed Nat. 
+  ```
+  structure State (Reg Word) where
+   regs : Reg → Word
+   slots : Nat → Word
+   stackPointer : Nat
+  ```
+  Clobber set list Reg; preserved list Reg. `Signature` fields:
+  ```
+  args : List (CTy × List Location)
+  result : ReturnConvention Reg
+  frameSize frameAlign : Nat
+  clobbers preserved : List Reg
+  calleeFrameBound : Nat
+  ```
+  frame size alignment law: IsPow2 align ∧ frameSize % frameAlign = 0. Return convention typed result mapping. `Location` each includes `words`? easiest each typed value mapped to List locations and values to List Word via relation supplied `encode : CTy → Hybrid.Value → List Word`? Value universe lacks type-safe FFI full. Interface generic `Value` and `Ty` parameters with `encode : Ty→Value→List Word` as parameter structure. Use `Signature (Ty Val Reg Word)` includes `encode : Ty → Val → List Word`, `args : List (Ty × List (Location Reg))`, result `Option (Ty × List Location)`? Unit return convention no locations. Use `result : Ty × List Location` includes unit empty. `TypedLocations` relation:
+  ```
+  def LocationsHold (ty) (v) (locs) (before) :=
+   encode ty v = locs.map (read state)
+  ```
+  Should have decode result? typed args/results related to locations using same `encode`, relation enough. `ArgumentList` all args values length types signature etc:
+  ```
+  def ArgsHold sig values state := ∀ i ...? List.Forall₂
+  ```
+  Core List.Forall₂? Lean core has List.Forall₂? likely `List.Forall₂` in Init.Data.List.Basic? Existing uses search.
+
+• The C10 contract also requires foreign retention and stack handoff. I’ll model `kept` as an ownership-transition interface with a linear receipt and paired completion, without adding extern syntax or choosing a concrete register table.
+
+• I should implement part1 now. Perhaps include C1Call definition later part2. Start Spec Frame part1 imports Hybrid only. Header C10. Definitions and examples accepted/refused. Rules registry? "Every rule a diagnostic can name" C10 interface no diagnostic names likely no register. Examples Accepted/Refused ordinary no `(rule ...)` unless register. Fine.
+
+  Naming conflict namespace Frame and Exec.Frame okay `ConcreteSpec.Core.Frame.Frame` structure if named `Footprint.Frame`. Avoid `Frame` structure directly namespace. Use `Footprint.Preserves`.
+
+  Spec:
+
+  ```
+  def Footprint.Preserves (before after : Hybrid.State) (f : Footprint) : Prop := ...
+  ```
+  Readable.
+
+  Use `Mem.Memory.byte` helper perhaps define `byte`.
+  ```
+  def Memory.byteAt (m) (b) (i) : Option (Option MByte) := (m.block b).map ...
+  ```
+  Namespace nested conflicts use `byteAt` global.
+
+  `fullBlock b size`.
+  `byte b off extent` smart constructor optional no need.
+
+  Examples:
+  - Accepted: disjoint same block adjacent.
+  - Refused: overlap not disjoint, zero extent? accepted zero.
+  - Footprint union example membership.
+  - preserve simple raw store concrete perhaps proof by decide hard with function propositions no. Use examples on Contains.
+  No accepted/refused rules required but brief examples. Include:
+  ```
+  example : (⟨⟨0⟩,4,4⟩ : ByteRange).Contains ⟨0⟩ 5 := by decide
+  example : ¬ ...Contains... := by decide
+  example : Disjoint ... := by decide
+  example : ¬ Disjoint overlap := by decide
+  ```
+  Doc Accepted/Refused.
+
+  Write.Proofs part1. Should have imports Spec Frame and Proofs Memory Hybrid? Memory enough plus Exec later. Use Mem lemma names open.
+
+  Write theorems. I'll develop via lean build iterative. Include helpers outside_union.
+
+  `byteOutside_union` theorem:
+  ```
+  theorem byteOutside_union {f g} ... (h : (f.union g).ByteOutside b i) : f.ByteOutside... ∧ g... := by
+   constructor <;> intro r hr <;> exact h r (by simp [Footprint.union, hr]) 
+  ```
+  simp [Footprint.union, hr] might prove r ∈ f.bytes ++ g.bytes. Use `List.mem_append_left` etc. Core lemma names. `simp [Footprint.union, hr]`.
+
+  Place similarly.
+
+  Preserves refl perhaps useful.
+  `preserves_refl`.
+  `preserves_seq`.
+
+  Store:
+  ```
+  theorem store_frame (tgt) (st : State) (m') (p) bs a access
+   (ha : st.memory.access ... = access)
+   (h : st.memory.store ... = some m') :
+   Footprint.Preserves st {st with memory := m'} (accessFootprint access bs.length) := by
+   constructor...
+  ```
+  Cases access:
+  - none impossible h.
+  - some none => bs.length=0 and m'=st.memory; derive via simp [Memory.store, ha] at h; after subst m', bytes same, outside irrelevant.
+  - some (some (b,off)) => h target.
+  Could write cases access with `cases ha`? Simplify `unfold Memory.store at h; rw [ha] at h`; cases access.
+  ```
+  cases access with
+  | none => simp at h
+  | some r =>
+   cases r with
+   | none =>
+     cases h
+     constructor <;> simp [accessFootprint,...]
+   | some pair =>
+     obtain ⟨b,off⟩ := pair
+     cases h
+     constructor
+     · intro c i x hx ho
+       by_cases hc : c = b
+       · subst c
+         apply Mem.store_same_block_frame ... ha hx rfl
+         have hn := ho ⟨b,off,bs.length⟩ (by simp [accessFootprint]) 
+         simp [ByteRange.Contains] at hn
+         omega
+       · rw [Mem.store_other_block ... ha rfl hc, hx]
+     · intro q hq; rfl
+  ```
+  `h` after cases h cannot pass rfl perhaps yes.
+  `store_same_block_frame` arguments h `rfl`.
+  ha uses st.memory. Good.
+  Outside access footprint simplification:
+  ```
+  have hn : ¬ ByteRange.Contains ⟨b,off,bs.length⟩ b i := ho _ (by simp [accessFootprint])
+  simp [ByteRange.Contains] at hn
+  omega
+  ```
+  Will `simp [accessFootprint]` show membership. yes.
+
+  Place side all after.places = before rfl regardless.
+
+  Free:
+  ```
+  theorem free_frame (st) b m' x size? h :
+   ∃ r? 
+  ```
+  F needs x size unknown. Theorem existential `∃ x, Preserves ... (fullBlock b x.size)` perhaps statement weird. Better parameters x and hx:
+  ```
+  theorem free_frame (st) b x m'
+   (hx : st.memory.block b = some x) (h : st.memory.free b = some m') :
+   Preserves ... (.byte (fullBlock b x.size))
+  ```
+  Unfold free at h, rw hx at h, split live, cases h. Then `m'=modify`.
+  Proof bytes:
+  ```
+  intro c i y hy ho
+  by_cases hc : c=b
+  · subst c; simp [Mem.block_modify, hy] 
+  ```
+  hy after subst c: before block b = some y and hx some x -> y=x cases. I can `rw [hx] at hy; cases hy; simp [Mem.block_modify, hx]`.
+  For other c `simp [Mem.block_modify, hc, hy]`.
+  No need outside.
+  Simp `[Memory.modify]`? `Mem.block_modify` simp theorem in Proofs Memory tagged simp. `simp [hc, hy]`.
+  After `cases h`, goal after memory is `(st.memory.modify b ...)`. `simp [Mem.block_modify, hc, hy]`.
+  For target same, `simp [Mem.block_modify, hx]` should LHS map f x bytes = x bytes yes.
+  Free place rfl.
+
+  Expose similar h + expose_result yields ∃ b x but theorem takes b x:
+  ```
+  obtain ⟨b',x',hp,hx',hl,hm⟩ := Mem.expose_result...
+  hp determines b? p.prov = some b input theorem. Use expose_result and cases equalities.
+  ```
+  Simpler theorem existential:
+  ```
+  theorem expose_frame (st) p b x m' (hp:p.prov=some b) (hx...) h ...
+  obtain ⟨c,y,hp',hx',hl,rfl⟩ := expose_result
+  rw [hp] at hp'; cases hp'; rw[hx] at hx'; cases hx'
+  ...
+  ```
+  Option some inj `cases hp'` works replaces c b? yes.
+
+  Alloc:
+  ```
+  theorem alloc_frame (tgt) (st) hw ... b m' h :
+   Preserves st {st with memory:=m'} (.byte (fullBlock b size))
+  ```
+  get result hb hm. `subst b; subst m'` but h original needed for fresh inequality; save `have hne ...` before subst? `alloc_ne_existing ... h` used per c before subst.
+  ```
+  intro c i x hx ho
+  have hne : b ≠ c := Mem.alloc_ne_existing ... h hx
+  obtain ⟨hb, hm, _⟩ := Mem.alloc_result ... h
+  subst b
+  rw [hm]
+  simp [Memory.block, AList.lookup, hne, hx]
+  ```
+  If subst b after hne updates. `rw [hm]` perhaps hm dependent candidate b? hm m' no b except candidate. good.
+  `hb : b = ⟨st.memory.next⟩`; subst b uses. hne now new ≠ c.
+  Simp list lookup `(⟨next⟩,candidate)::...` checks new=c. hne. then hx. Goal map x = some x byte. simp.
+  No need hw other than fresh.
+
+  `alloc_fresh_disjoint` theorem F any old range:
+  ```
+  (hx : st.memory.block r.block = some x) :
+   (fullBlock b size).Disjoint r :=
+   .inl (Mem.alloc_ne_existing ... h hx)
+  ```
+  fullBlock block b yes.
+
+  Preserves_seq proof details. `f.union g` outside split helper.
+  ```
+  have e1 := h1.1 b i x hx (byteOutside_union.mp ho).1
+  cases hy : st'.memory.block b with
+  | none => simp [hy] at e1
+  | some y =>
+    simp only [hy, Option.map_some, Option.some.injEq] at e1
+    have e2 := h2.1 b i y hy ...
+    exact e2.trans (congrArg some e1)
+  ```
+  e1 after simp at h? `simp only [hy, Option.map_some, Option.some.injEq] at e1` turns some... equality yes.
+  Place:
+  ```
+  have ho' := placeOutside_union.mp ho
+  exact (h2.2 p ho'.2).trans (h1.2 p ho'.1)
+  ```
+
+  Write imports root edits.
+
+• I’ve defined footprints by block identity and byte offset, so address reuse cannot create false overlap. Next I’m proving the store/free/expose/allocation frame laws and composition, including the zero-byte store case.
+
+• Potential preserves_refl type mismatch: theorem empty only, store access none reduces accessFootprint some none = empty definitional yes exact preserves_refl after after st memory st memory good.
+
+  Unused variables warnings warningAsError? Lean doesn't warn unused theorem binders generally no. `hfits` perhaps unused variable linter warns unusedVariables in tactic? Lean linter unusedVariables warns variables in declarations? Usually unused variable warnings for `let` not theorem parameters, tactic have perhaps no. `hl` etc fine.
+
+  Import edits Spec.lean and ConcreteSpec.lean.Build exact command permitted `nix develop -c timeout 1200 lake build ConcreteSpec`, Bash timeout 300 max foreground, but command itself timeout1200; tool max300 will move background. Use run background true timeout? brief says run with timeout1200. I can Bash foreground timeout300; build perhaps <2m. Do.warning: Git tree '/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c10' is dirty
+✔ [2/45] Built ConcreteSpec.Spec.Basics (169ms)
+✔ [3/45] Built ConcreteSpec.Spec.Cleanup (409ms)
+✔ [4/45] Built ConcreteSpec.Spec.Authority (466ms)
+✔ [5/45] Built ConcreteSpec.Spec.Slice1Syntax (366ms)
+✔ [6/45] Built ConcreteSpec.Spec.Ident (487ms)
+✔ [7/45] Built ConcreteSpec.Spec.Statics (156ms)
+✔ [8/45] Built ConcreteSpec.Spec.Brand (480ms)
+✔ [9/45] Built ConcreteSpec.Spec.Slice1Semantics (323ms)
+✔ [10/45] Built ConcreteSpec.Spec.Borrow (676ms)
+✔ [11/45] Built ConcreteSpec.Spec.Target (226ms)
+✔ [12/45] Built ConcreteSpec.Spec.Outcome (201ms)
+✔ [13/45] Built ConcreteSpec.Spec.Slice1Ownership (272ms)
+✔ [14/45] Built ConcreteSpec.Spec.Rep (209ms)
+✔ [15/45] Built ConcreteSpec.Spec.Observation (162ms)
+✔ [16/45] Built ConcreteSpec.Spec.Slice1Checker (191ms)
+✔ [17/45] Built ConcreteSpec.Spec.Scalar (475ms)
+✔ [18/45] Built ConcreteSpec.Spec.Slice0 (263ms)
+✔ [19/45] Built ConcreteSpec.Spec.Const (413ms)
+✔ [20/45] Built ConcreteSpec.Spec.Examples (663ms)
+✔ [21/45] Built ConcreteSpec.Spec.Memory (468ms)
+✔ [22/45] Built ConcreteSpec.Spec.Rules (126ms)
+✔ [23/45] Built ConcreteSpec.Proofs.Scalar (679ms)
+✔ [24/45] Built ConcreteSpec.Spec.Exec (1.1s)
+✔ [25/45] Built ConcreteSpec.Proofs.Const (526ms)
+✔ [26/45] Built ConcreteSpec.Spec.Hybrid (282ms)
+✔ [27/45] Built ConcreteSpec.Spec.Frame (203ms)
+✔ [28/45] Built ConcreteSpec.Spec (125ms)
+✔ [29/45] Built ConcreteSpec.Proofs.Exec (679ms)
+✔ [30/45] Built ConcreteSpec.Proofs.Basics (177ms)
+✔ [31/45] Built ConcreteSpec.Proofs.Cleanup (439ms)
+✔ [32/45] Built ConcreteSpec.Proofs.Authority (353ms)
+✔ [33/45] Built ConcreteSpec.Proofs.Slice1 (555ms)
+✔ [34/45] Built ConcreteSpec.Proofs.Memory (558ms)
+✔ [35/45] Built ConcreteSpec.Proofs.Borrow (733ms)
+✔ [36/45] Built ConcreteSpec.Proofs.Brand (685ms)
+✔ [37/45] Built ConcreteSpec.Proofs.Observe (212ms)
+✖ [38/45] Building ConcreteSpec.Proofs.Frame (209ms)
+trace: .> LEAN_PATH=/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c10/.lake/build/lib/lean /nix/store/94bmilywgajdnqvix1fs35fj94kala0w-lean4-release-4.34.1/bin/lean /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c10/ConcreteSpec/Proofs/Frame.lean -o /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c10/.lake/build/lib/lean/ConcreteSpec/Proofs/Frame.olean -i /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c10/.lake/build/lib/lean/ConcreteSpec/Proofs/Frame.ilean -c /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c10/.lake/build/ir/ConcreteSpec/Proofs/Frame.c --setup /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c10/.lake/build/ir/ConcreteSpec/Proofs/Frame.setup.json --json
+error: ConcreteSpec/Proofs/Frame.lean:16:73: unsolved goals
+case left
+st : State
+⊢ ∀ (b : MemBlockId) (i : Nat) (x : Block),
+    st.memory.block b = some x → ∃ a, st.memory.block b = some a ∧ a.bytes[i]? = x.bytes[i]?
+error: ConcreteSpec/Proofs/Frame.lean:17:24: This simp argument is unused:
+  Footprint.Preserves
+
+Hint: Omit it from the simp argument list.
+  [apply] simp [Footprint.ByteOutside, Footprint.PlaceOutside, Footprint.empty]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+error: ConcreteSpec/Proofs/Frame.lean:72:59: Tactic `assumption` failed
+
+tgt : Target
+st : State
+p : Ptr
+bs : List MByte
+a : Nat
+b : MemBlockId
+off : Nat
+ha : Memory.access tgt st.memory p bs.length a = some (some (b, off))
+i : Nat
+x : Block
+hx : st.memory.block b = some x
+ho : (accessFootprint (some (some (b, off))) bs.length).ByteOutside b i
+⊢ Memory.WellFormed tgt st.memory
+error: ConcreteSpec/Proofs/Frame.lean:77:66: Application type mismatch: The argument
+  rfl
+has type
+  ?m.236 = ?m.236
+but is expected to have type
+  Memory.store tgt st.memory p bs a =
+    some
+      { cells := st.cells,
+          memory :=
+            st.memory.modify b fun x =>
+              { space := x.space, base := x.base, size := x.size, align := x.align, live := x.live,
+                exposed := x.exposed,
+                bytes := List.take off x.bytes ++ bs ++ List.drop (off + bs.length) x.bytes } }.memory
+in the application
+  store_other_block tgt st.memory
+    { cells := st.cells,
+        memory :=
+          st.memory.modify b fun x =>
+            { space := x.space, base := x.base, size := x.size, align := x.align, live := x.live, exposed := x.exposed,
+              bytes := List.take off x.bytes ++ bs ++ List.drop (off + bs.length) x.bytes } }.memory
+    p bs a b off c ha rfl
+error: ConcreteSpec/Proofs/Frame.lean:90:4: Dependent elimination failed: Failed to solve equation
+  some m' =
+    Decidable.rec (fun h => (fun x => none) h)
+      (fun h =>
+        (fun x =>
+            some
+              (st.memory.modify b fun x =>
+                { space := x.space, base := x.base, size := x.size, align := x.align, live := false, exposed := false,
+                  bytes := x.bytes }))
+          h)
+      (instDecidableEqBool x✝.live true)
+error: ConcreteSpec/Proofs/Frame.lean:116:4: unsolved goals
+case pos.refl
+st : State
+p : Ptr
+b : MemBlockId
+x : Block
+hp : p.prov = some b
+hx : st.memory.block b = some x
+h :
+  st.memory.expose p =
+    some
+      (st.memory.modify b fun y =>
+        { space := y.space, base := y.base, size := y.size, align := y.align, live := y.live, exposed := true,
+          bytes := y.bytes })
+hl : x.live = true
+i : Nat
+ho : (Footprint.byte (fullBlock b x.size)).ByteOutside b i
+⊢ ∃ a, st.memory.block b = some a ∧ a.bytes[i]? = x.bytes[i]?
+error: ConcreteSpec/Proofs/Frame.lean:132:2: unsolved goals
+case left
+tgt : Target
+st : State
+hw : Memory.WellFormed tgt st.memory
+space : AddrSpace
+base size align : Nat
+m' : Memory
+hfits : Memory.Fits tgt st.memory (candidate space base size align)
+c : MemBlockId
+i : Nat
+x : Block
+hx : st.memory.block c = some x
+h : Memory.alloc tgt st.memory space base size align = Except.ok ({ id := st.memory.next }, m')
+hm :
+  m' =
+    { blocks := ({ id := st.memory.next }, candidate space base size align) :: st.memory.blocks,
+      next := st.memory.next + 1 }
+ho : (Footprint.byte (fullBlock { id := st.memory.next } size)).ByteOutside c i
+hne : { id := st.memory.next } ≠ c
+⊢ ∃ a, st.memory.blocks.lookup c = some a ∧ a.bytes[i]? = x.bytes[i]?
+error: ConcreteSpec/Proofs/Frame.lean:136:43: This simp argument is unused:
+  hx
+
+Hint: Omit it from the simp argument list.
+  [apply] simp [Memory.block, AList.lookup, hne]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+✔ [39/45] Built ConcreteSpec.Proofs.Checker (314ms)
+✔ [40/45] Built ConcreteSpec.Proofs.Rep (384ms)
+✔ [41/45] Built ConcreteSpec.Proofs.Hybrid (348ms)
+✔ [42/45] Built ConcreteSpec.Proofs.Slice0 (213ms)
+✔ [43/45] Built ConcreteSpec.Proofs.Examples (171ms)
+Some required targets logged failures:
+- ConcreteSpec.Proofs.Frame
+error: build failed
+Should fix. I forgot hw parameter store. Add `hw : st.memory.WellFormed tgt`. Requirement C4 store frame needs. Could avoid by direct splice proof but add. Store after cases h issue expected after memory m' not defeq modify due projections. Don't cases h before theorem calls; keep m' equality and pass h. But `unfold ... at h; rw... at h` h transformed. In some pair branch h : some modify = some m' orientation. `cases h` substitutes m' weird but rfl not match due state projection. Instead `have hm : m' = st.memory.modify ... := Option.some.inj h` and `subst m'` maybe same issue. Could avoid cases and use store_other_block with original store equality `show st.memory.store ... = some m' from by simp [Memory.store, ha]` reconstruct. Simpler don't unfold h at all; cases access and use simp [Memory.store, ha] at h to derive, then in pair:
+  ```
+  have hs : st.memory.store ... = some m' := h (original)
+  cases access...
+  ```
+  Original h unchanged if `cases ha`? I can case access but h original remains. For none `simp [Memory.store, ha] at h`. some none `simp [Memory.store, ha] at h; cases h` perhaps m'=st.memory straightforward. some pair h original still if not simp. Use `cases access` no h change; for each:
+  ```
+  none => simp [Memory.store, ha] at h
+  some none => simp [Memory.store, ha] at h; cases h; exact preserves_refl
+  some some => 
+    ... store_same... h
+  ```
+  No need unfold/rw. Good.
+
+  preserves_refl direct:
+  ```
+  constructor
+  · intro b i x hx ho; simp [hx]
+  · intro p hp; rfl
+  ```
+  not simp whole.
+
+  Free dependent elimination due split if. Use expose/free `free_retains` lacks m' exact but can use unfold with `cases hb : st.memory.block b` style like Memory proofs. I have hx fixed. 
+  ```
+  unfold Memory.free at h
+  rw [hx] at h
+  by_cases hl : x.live = true
+  · simp only [hl, ↓reduceIte, Option.some.injEq] at h
+    subst m' -- may work
+  ...
+  ```
+  Existing free_retains uses same and `subst m'`. do. Could avoid subst by `rw [← h]` goal and proof. h after simp is `m' = modify` or `some...=some m'` simplified gives `modify = m'`? Existing `Option.some.injEq` at h and subst works. Use their pattern exact.
+
+  Expose target same unsolved simp leaves ∃ due simplification map equality. Should explicit rw [block_modify] etc:
+  After subst and hx=hz:
+  Goal `(modify...).block b map = some x.byte`. 
+  ```
+  rw [block_modify]
+  simp [hx]
+  ```
+  Actually `simp` reduced Option.map eq some to ∃ a lookup=some a ∧ bytes=, because `Option.map_eq_some_iff` simp. `simp only [block_modify, ↓reduceIte, hx, Option.map_some]` as existing avoids map_eq_some. Use everywhere. Other branch `simp only [block_modify, if_neg hd, hz]`. For free similar.
+
+  Alloc after rw hm goal map over lookup simplification becomes exists due simp broad. Use `simp only [Memory.block, AList.lookup, hne, ↓reduceIte, hx, Option.map_some]` but AList.lookup on cons uses if new=c; `simp only [Memory.block, AList.lookup, hne, ↓reduceIte]` perhaps recursive lookup unfolds too much. Use `simp only [Memory.block, AList.lookup, hne, ↓reduceIte, hx]` yields exact. Avoid `simp` removing hx unused warning.
+
+  preserves_seq likely built no errors.
+
+  Apply edits multiple same file cannot consecutive without read; I need one Edit replacing large sections or full Write? Existing file incremental mandatory Edit. I can one Edit whole content segments? Only one call can old_string entire file new entire file but Edit okay incremental though big. I can use Edit replace all specific patterns in one call impossible multiple. Could Read then one Edit broad from preserves_refl to end? easiest entire file old content? I have known content but can Edit old first chunk and all proof modifications one giant old string from theorem preserves_refl through end with new complete. That is complete replacement via Edit, acceptable. Or use Python no prohibited. Better Read file again (known but required after edit only if consecutive) then one Edit whole file maybe. I already no edits to proof since Write, can one Edit replacing from preserves_refl to end with revised. Keep imports header. Use old_string entire remainder huge ~6k okay. New same. Could simpler use Write complete replacement allowed "complete replacements" but instruction Edit mandatory every incremental. This is incremental fixes so Edit. Use one Edit target entire theorem store plus etc? I can replace whole file via Edit old full known. Time tokens okay but huge. Alternative first Edit `preserves_refl` only, then Read and next Edit etc, many steps. Could group all changes with single old_string starting `theorem preserves_refl` through end, new content full ~6k. Do.
+
+• The first build found only proof-script issues: the store theorem needs C4’s well-formedness premise, and several `simp` forms were unfolding `Option.map` too aggressively. I’m tightening those proofs without changing the interface.
+
+• Rebuild.warning: Git tree '/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c10' is dirty
+✖ [43/45] Building ConcreteSpec.Proofs.Frame (164ms)
+trace: .> LEAN_PATH=/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c10/.lake/build/lib/lean /nix/store/94bmilywgajdnqvix1fs35fj94kala0w-lean4-release-4.34.1/bin/lean /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c10/ConcreteSpec/Proofs/Frame.lean -o /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c10/.lake/build/lib/lean/ConcreteSpec/Proofs/Frame.olean -i /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c10/.lake/build/lib/lean/ConcreteSpec/Proofs/Frame.ilean -c /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c10/.lake/build/ir/ConcreteSpec/Proofs/Frame.c --setup /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c10/.lake/build/ir/ConcreteSpec/Proofs/Frame.setup.json --json
+error: ConcreteSpec/Proofs/Frame.lean:75:18: unsolved goals
+tgt : Target
+st : State
+hw : Memory.WellFormed tgt st.memory
+m' : Memory
+p : Ptr
+bs : List MByte
+a : Nat
+h : Memory.store tgt st.memory p bs a = some m'
+b : MemBlockId
+off : Nat
+ha : Memory.access tgt st.memory p bs.length a = some (some (b, off))
+i : Nat
+x : Block
+hx : st.memory.block b = some x
+ho : (accessFootprint (some (some (b, off))) bs.length).ByteOutside b i
+⊢ { block := b, offset := off, extent := bs.length } ∈
+    (Footprint.byte { block := b, offset := off, extent := bs.length }).bytes
+error: ConcreteSpec/Proofs/Frame.lean:78:8: unsolved goals
+case neg
+tgt : Target
+st : State
+hw : Memory.WellFormed tgt st.memory
+m' : Memory
+p : Ptr
+bs : List MByte
+a : Nat
+h : Memory.store tgt st.memory p bs a = some m'
+b : MemBlockId
+off : Nat
+ha : Memory.access tgt st.memory p bs.length a = some (some (b, off))
+c : MemBlockId
+i : Nat
+x : Block
+hx : st.memory.block c = some x
+ho : (accessFootprint (some (some (b, off))) bs.length).ByteOutside c i
+hc : ¬c = b
+⊢ Option.map (fun y => y.bytes[i]?) (some x) = some x.bytes[i]?
+error: ConcreteSpec/Proofs/Frame.lean:99:33: `if_neg` has been deprecated: Use `ite_eq_right` instead
+error: ConcreteSpec/Proofs/Frame.lean:99:6: unsolved goals
+case neg
+st : State
+b : MemBlockId
+x : Block
+hx : st.memory.block b = some x
+hl : x.live = true
+c : MemBlockId
+i : Nat
+y : Block
+hy : st.memory.block c = some y
+ho : (Footprint.byte (fullBlock b x.size)).ByteOutside c i
+hc : ¬c = b
+⊢ Option.map (fun y => y.bytes[i]?) (some y) = some y.bytes[i]?
+error: ConcreteSpec/Proofs/Frame.lean:121:31: `if_neg` has been deprecated: Use `ite_eq_right` instead
+error: ConcreteSpec/Proofs/Frame.lean:121:4: unsolved goals
+case neg
+st : State
+p : Ptr
+b : MemBlockId
+x : Block
+hp : p.prov = some b
+hx : st.memory.block b = some x
+h :
+  st.memory.expose p =
+    some
+      (st.memory.modify b fun y =>
+        { space := y.space, base := y.base, size := y.size, align := y.align, live := y.live, exposed := true,
+          bytes := y.bytes })
+hl : x.live = true
+d : MemBlockId
+i : Nat
+z : Block
+hz : st.memory.block d = some z
+ho : (Footprint.byte (fullBlock b x.size)).ByteOutside d i
+hd : ¬d = b
+⊢ Option.map (fun y => y.bytes[i]?) (some z) = some z.bytes[i]?
+error: ConcreteSpec/Proofs/Frame.lean:133:2: unsolved goals
+case left
+tgt : Target
+st : State
+hw : Memory.WellFormed tgt st.memory
+space : AddrSpace
+base size align : Nat
+m' : Memory
+hfits : Memory.Fits tgt st.memory (candidate space base size align)
+c : MemBlockId
+i : Nat
+x : Block
+hx : st.memory.block c = some x
+h : Memory.alloc tgt st.memory space base size align = Except.ok ({ id := st.memory.next }, m')
+hm :
+  m' =
+    { blocks := ({ id := st.memory.next }, candidate space base size align) :: st.memory.blocks,
+      next := st.memory.next + 1 }
+ho : (Footprint.byte (fullBlock { id := st.memory.next } size)).ByteOutside c i
+hne : { id := st.memory.next } ≠ c
+⊢ Option.map (fun y => y.bytes[i]?) (st.memory.blocks.lookup c) = some x.bytes[i]?
+error: ConcreteSpec/Proofs/Frame.lean:137:60: This simp argument is unused:
+  hx
+
+Hint: Omit it from the simp argument list.
+  [apply] simp only [Memory.block, AList.lookup, hne, ↓reduceIte, Option.map_some]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+error: ConcreteSpec/Proofs/Frame.lean:137:64: This simp argument is unused:
+  Option.map_some
+
+Hint: Omit it from the simp argument list.
+  [apply] simp only [Memory.block, AList.lookup, hne, ↓reduceIte, hx]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+Some required targets logged failures:
+- ConcreteSpec.Proofs.Frame
+error: build failed
+Should fix trivial simp. Membership need `[Footprint.byte]`: `by rfl` perhaps membership list reduces decide? proposition r∈[r] simp [Footprint.byte]. `by simp [Footprint.byte]`. accessFootprint not unfolded by simp? Goal shows Footprint.byte, so add.
+
+  After rw store other block then hx leaves map some = some, exact rfl or simp only Option.map_some. `rw [..., hx]; rfl` perhaps rw automatically tries rfl? It didn't closed because Option.map some not reduced by rw. `simp only [Option.map_some]`.
+
+  free/expose other branches same add Option.map_some and avoid if_neg deprecated: `simp only [block_modify, hc, ↓reduceIte, hy, Option.map_some]` using hc simp not if_neg. `simp only [block_modify, hc, ↓reduceIte, hy, Option.map_some]` likely works and no unused.
+  alloc Memory.block unfolds st.memory.block in hx? `rw [hm]` goal block c on literal. `simp only [Memory.block,...]` doesn't rewrite hx because hx still st.memory.block not unfolded? simp at goal not hx unless `hx` simp uses as rewrite but lhs `AList.lookup` vs hx `Memory.block`. I can `change AList.lookup st.memory.blocks c = some x at hx` before simp. Or use have `hx' : AList.lookup ... = some x := hx` defeq. Then simp only [Memory.block, AList.lookup, hne, ↓reduceIte, hx', Option.map_some]. Should have AList lookup reduction may rewrite all recursive and hx accepted. Add `change AList.lookup st.memory.blocks c = some x at hx`. `Memory.block` is def so change works.
+
+  I need Edit same file after Read mandatory. Read relevant lines 65-145.Build.warning: Git tree '/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c10' is dirty
+✔ [43/45] Built ConcreteSpec.Proofs.Frame (166ms)
+✔ [44/45] Built ConcreteSpec (126ms)
+Build completed successfully (45 jobs).
+Part1 needs C1 call footprint not yet, I deferred part2 but numbered part1 requires call. Should include call contract in part1 before commit. I must not commit incomplete. Implement call contract definition and theorem now as part1. Spec import Hybrid includes Exec so can refer.
+
+  Define:
+  ```
+  def C1Call (O : Exec.Operands) (P : Exec.Program O) (entry exit : Exec.Config O) : Prop :=
+   ∃ fn dst caller k tr result,
+   entry.ctrl = .exec fn.body ∧
+   entry.frames = .scope ... :: .ret dst caller :: k ∧
+   exit.ctrl = .done ∧ exit.locals = Exec.bindDst dst result caller ∧
+   exit.frames = k ∧ Exec.Steps P entry tr exit
+  ```
+  `caller` type inferred AList Var O.Val, k List Exec.Frame O, tr List O.Event, result O.Val. Lean autoImplicit off but existential types inferred from uses perhaps `∃ fn dst caller k tr result,` binder types inferred by elaboration expected from subsequent, yes Lean supports. Could explicit to readable.
+  ```
+  ∃ (fn : Exec.Fn O) (dst : Option Var) (caller : AList Var O.Val)
+   (k : List (Exec.Frame O)) (tr : List O.Event) (result : O.Val), ...
+  ```
+  C1Call covers c entry locals arbitrary, store arbitrary, cleanup etc. Scope frame at entry assumes initial entry; could re-enter after some execution? fine.
+
+  `structure C1CallContract (O) (P) (entry exit) (project : O.Store → State) where
+   footprint : Footprint
+   frame : C1Call O P entry exit → footprint.Preserves (project entry.store) (project exit.store)
+  `
+  This contract per exact entry/exit not all possible args. Better universally:
+  ```
+  structure C1CallContract (O) (P) (project) where
+   footprint : Footprint
+   frame : ∀ {entry exit}, C1Call ... → ...
+  ```
+  One footprint for all calls program, conservative. Requirement "callee footprint given by its contract" perhaps should per function:
+  ```
+  structure CalleeContract ... (f : FnId) ...
+  ```
+  C1Call includes fn not identity. Contract can per entry/exit simplest not ideal. Add `callee : FnId` and C1Call f P relation initial config `.exec (.call ...)`? Hmm.
+
+  General contract indexed by `fn : FnId` and entry/exit. C1Call relation has function body but not id. Could include P lookup f = some fn in C1Call. Then structure `C1CallContract O P project f` footprint law for all entry exit C1Call f. Good.
+  ```
+  C1Call (f : FnId) ...
+  ∃ fn..., AList.lookup P.fns f = some fn ∧ ...
+  ```
+  This models calls to f.
+
+  Theorem:
+  ```
+  theorem c1_call_frame ... (contract) {entry exit} (h:C1Call f P entry exit) :
+   contract.footprint.Preserves ... := contract.frame h
+  ```
+  It's direct but proves contract use. Perhaps also sequential caller composition:
+  `preserves_seq` already covers.
+
+  No new axioms. Example perhaps no need. Add Spec definitions before examples. Update header already says C1. Proof import only Spec Frame and Proofs Memory, no Proofs Exec needed. Theorem direct.
+
+  Should have edits Spec after Read.
+
+• The primitive memory laws now build. Before committing this slice, I’m adding the C1 callee-contract interface so a complete call can use the footprint and frame law supplied by its typed function contract.
+
+• Edit spec and proof parallel different files. Proof append before end via Edit old last theorem plus end? Can just replace `end ConcreteSpec.Core.Frame` with new theorem + end unique. Same Spec.Build.warning: Git tree '/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c10' is dirty
+✔ [28/45] Built ConcreteSpec.Spec.Frame (202ms)
+✔ [29/45] Built ConcreteSpec.Spec (128ms)
+✔ [30/45] Built ConcreteSpec.Proofs.Basics (178ms)
+✔ [31/45] Built ConcreteSpec.Proofs.Authority (345ms)
+✔ [32/45] Built ConcreteSpec.Proofs.Cleanup (483ms)
+✔ [33/45] Built ConcreteSpec.Proofs.Slice1 (554ms)
+✔ [34/45] Built ConcreteSpec.Proofs.Memory (541ms)
+✔ [35/45] Built ConcreteSpec.Proofs.Brand (653ms)
+✔ [36/45] Built ConcreteSpec.Proofs.Borrow (734ms)
+✔ [37/45] Built ConcreteSpec.Proofs.Observe (215ms)
+✔ [38/45] Built ConcreteSpec.Proofs.Frame (198ms)
+✔ [39/45] Built ConcreteSpec.Proofs.Checker (265ms)
+✔ [40/45] Built ConcreteSpec.Proofs.Hybrid (335ms)
+✔ [41/45] Built ConcreteSpec.Proofs.Rep (369ms)
+✔ [42/45] Built ConcreteSpec.Proofs.Slice0 (205ms)
+✔ [43/45] Built ConcreteSpec.Proofs.Examples (169ms)
+✔ [44/45] Built ConcreteSpec (125ms)
+Build completed successfully (45 jobs).
+Now commit part1. Before commit git status and diff perhaps check. User explicitly commits authorized. Run git status no rewrite then git add specific and commit. Commit hooks might run, never no verify. Perhaps hook requires changelog? Previous commits no. Use `git add ... && git commit -m "spec: add logical frame footprints and laws"` then git status. Could include root imports. Do.
+
+• The logical-footprint slice now passes the full `ConcreteSpec` build. I’m committing that validated slice before adding call-frame restoration.[wip/spec-c10 6d1181df] spec: add logical frame footprints and laws
+ 4 files changed, 299 insertions(+)
+ create mode 100644 ConcreteSpec/Proofs/Frame.lean
+ create mode 100644 ConcreteSpec/Spec/Frame.lean
+
+
+• 299 lines? Spec 145 Proof 160 = ~299 yes.
+
+  Part2 call restoration. Existing C1Call definition endpoint restoration. Should theorem relates to ret frame. Import Proofs.Exec to use step_return_caller and return_reaches_caller. I can add:
+  - `step_return_restores_caller` perhaps restate existing with exact locals/frames and state, no need new proof duplication but required theorem in Frame.
+  - `return_cleanup_restores_caller` using `Exec.return_reaches_caller` proves after cleanup exact.
+  - `c1Call_restores_caller` directly from relation existential exit locals/frames.
+  - `c1Call_shared_state`? "preserved state exactly" caller locals and preserved state. C1 ret frame state after lifecycle not exact old shared. Could define `CallerPreserved` structure with locals/frames and a generic `preserved : O.Store → P` projection? The ABI will handle preserved machine state. At logical C1, caller's locals and continuation exactly. The theorem should say `dst = none` -> locals exactly caller. For dst some, old caller entries exactly except new dst shadows. `bindDst` exact. State preserved? I can state caller local association list and continuation only; C1 shared state deliberately not preserved. Brief "entering and leaving a frame restores caller's locals and preserved state exactly (relate to C1's ret frame)" likely User expects generic preserved state relation in ABI, not shared memory. I can add `Exec.CallPreserves` structure? Hmm.
+
+  Call-frame ownership includes entry and leave lifecycle: step call entry theorem shows saved caller in ret and new params, lifecycle enter. Then return theorem. Should prove both directions:
+  ```
+  theorem step_enter_frame ... lookup fn, evalArgs, params length, life enter -> step call = next config with ret dst caller.
+  ```
+  C1 already definition direct. This establishes entering saves caller locals and continuation.
+  ```
+  theorem step_call_saves_caller ... (hv : evalArgs ... = .ok(vs,stArgs)) (hf : lookup...) (hlen) (hlife) :
+   step P ⟨.exec (.call dst f args site), caller,st,k⟩ =
+   some (.next ⟨.exec fn.body, zip..., stEnter, scope...::ret dst caller::k⟩)
+  ```
+  Proof simp [step,onRes,hv,hf,hlen,hlife].
+  - return with dst none gives exact caller. Use existing `step_return_caller` imported.
+  ```
+  theorem step_return_restores ... hl hb:
+   step ... = some next done caller...
+  ```
+  For dst none bindLife none stLeave = some stLeave, hb can be equality stBind=stLeave. Use general step_return_caller and simp [Exec.bindDst].
+  - `return_after_cleanup_restores` for dst none using return_reaches_caller. Might be redundant but important cleanup. Use same parameters pre etc and `tr`, output Steps with []? existing returns tr cleanup. `simpa using ...`.
+  - `c1Call_restores` h gives ∃... exit locals bindDst and frames. Theorem:
+  ```
+  theorem c1Call_caller ... (h) : ∃ result k, exit.locals=... ∧ exit.frames=k := ...
+  ```
+  Not needed because C1Call is definition. Could theorem `c1Call_restores_without_destination` h dst none yields ∃ caller k result, exit.locals=caller ∧ exit.frames=k. Good meaningful.
+
+  "preserved state exactly" define generic `PreservedBy` for ABI later. Fine.
+
+  Doc comments in Spec Frame header already covers. Add examples demonstrating C1? Could reuse Exec.Demo but proof example by decide expensive but simple:
+  ```
+  example : Exec.bindDst none 7 [(x,1)] = [(x,1)] := rfl
+  example : Exec.bindDst (some y) ... = ... := rfl
+  ```
+  Accepted: return no dst exact caller. Refused? call non-return break cannot pass ret frame by stepExit none:
+  ```
+  example {O} ... : Exec.stepExit ... (.brk l) (.ret dst caller::k)=none := rfl
+  ```
+  This is a meaningful Refused non-return exits don't restore call frame. Add examples in Spec Frame:
+  ```
+  /-- Accepted: ... -/ example ...
+  /-- Refused: a break cannot cross ... -/ example ...
+  ```
+  Should type variables explicit universes? `{O : Exec.Operands}` example with variables values. 
+  ```
+  example {O : Exec.Operands} (dst...) ... : Exec.stepExit ... = none := rfl
+  ```
+  stepExit uses O implicit inferred from L st e frames. Should have `st : O.Store`, etc.
+
+  No extern concerns.
+
+  Edit Spec insert before Examples and add examples perhaps at end before end. Proof import Proofs.Exec edit import. Then append theorems before c1_call_frame perhaps after okay. Use two Edits same proof file? Can one Edit replace import plus append not same call multiple. Could edit import first, read file then append. Or one Edit old `import ConcreteSpec.Proofs.Memory` -> with Exec then build existing, then separate later after read. I can use Write? no. Use one Edit whole initial import through header? Should have both disjoint impossible one replacement unless replace entire file. I can first Edit import then Read last section then Edit append. Fine.
+
+  Spec one Edit insert definitions/examples by replacing `/!-! ### Examples -/` with C1 examples? I can just add two examples near existing no new defs. Use Edit at end zero example + end to append. Proof import Edit parallel spec.
+
+• The footprint commit is `6d1181df`. For call-frame ownership, I’m proving both entry (caller locals saved in `.ret`) and return after cleanup (locals and continuation restored exactly), including the no-destination case.
+
+• Read proof tail for Edit.Add before c1_call_frame perhaps. Proof step call simplification. Theorem:
+  ```
+  theorem step_call_saves_caller {O} (P) ... (vs) (stArgs stEnter) (fn) 
+   (hv : Exec.evalArgs O caller st args = .ok(vs,stArgs))
+   (hf : AList.lookup...=some fn)
+   (hlen : fn.params.length=vs.length)
+   (hl : O.life (.enter ...) stArgs=some stEnter) :
+   Exec.step ... = ...
+  by simp [Exec.step, Exec.onRes, hv, hf, hlen, hl]
+  ```
+  Should have `onRes` with `evalArgs` returns Res (List Val × Store), `.ok` yes.
+  Use `.ok` notation inferred.
+  The output exact.
+
+  Return:
+  ```
+  theorem step_return_restores_caller ... (hlife : O.life .leave st=some st') :
+   step ... dst none = next done caller st' k
+  by
+    apply Exec.step_return_caller ... st' st' hlife
+    rfl -- bindLife none
+  ```
+  Call named args easier:
+  ```
+  simpa using Exec.step_return_caller (O:=O) P v none caller callee st k st' st' hlife rfl
+  ```
+  Existing theorem implicit O variable `{O : Operands}` from namespace, explicit `(O := O)` accepted.
+  After cleanup:
+  ```
+  theorem return_cleanup_restores_caller ... (h : Exec.Cleans...) (hp...) (hlife...) :
+   Exec.Steps P ... tr ⟨.done, caller, st', k⟩ := by
+    simpa using Exec.return_reaches_caller (O:=O) P v none caller k h hp st' st' hlife rfl
+  ```
+  Note bindLife none stLeave = some stLeave rfl yes.
+
+  C1Call no dst:
+  ```
+  theorem c1Call_restores_without_destination ... (h : C1Call O f P entry exit) (dst? relation includes existential arbitrary; cannot assume dst=none outside)
+  ```
+  Define premise `h` plus `hno : ∃ ...?` not easy. Could pattern h and cases dst:
+  ```
+  theorem c1Call_restores_caller ... (h) :
+   ∃ dst result caller k, exit.locals=... ∧ exit.frames=k := by
+    obtain ⟨fn,dst,caller,k,tr,result,hf,hc,hfentry,hce,hcl,hcframes,hs⟩ := h
+    exact ⟨dst,result,caller,k,hcl,hcframes⟩
+  ```
+  This is direct relation unpacking but useful theorem statement. For exact no dst:
+  ```
+  theorem c1Call_restores_exact ... (h) (hnone : ???) 
+  ```
+  I can cases dst in proof and produce existential including dst, but not exact caller unless h includes dst none. Define another relation `C1CallNoDst`? no. I already step return exact. Enough.
+
+  Entry/return after cleanup and C1Call caller shape theorem perhaps response lists.
+
+  Add `c1Call_restores_caller` existential with dst. This meets.
+
+  Edit.
+
+• I’m reusing C1’s reviewed return theorem rather than duplicating its semantics; the new laws specialize it to exact restoration and expose the same guarantee after arbitrary successful cleanup.
+
+• Build.warning: Git tree '/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c10' is dirty
+✔ [28/45] Built ConcreteSpec.Spec.Frame (207ms)
+✖ [43/45] Building ConcreteSpec.Proofs.Frame (164ms)
+trace: .> LEAN_PATH=/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c10/.lake/build/lib/lean /nix/store/94bmilywgajdnqvix1fs35fj94kala0w-lean4-release-4.34.1/bin/lean /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c10/ConcreteSpec/Proofs/Frame.lean -o /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c10/.lake/build/lib/lean/ConcreteSpec/Proofs/Frame.olean -i /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c10/.lake/build/lib/lean/ConcreteSpec/Proofs/Frame.ilean -c /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c10/.lake/build/ir/ConcreteSpec/Proofs/Frame.c --setup /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c10/.lake/build/ir/ConcreteSpec/Proofs/Frame.setup.json --json
+error: ConcreteSpec/Proofs/Frame.lean:172:2: Type mismatch: After simplification, term
+  Exec.step_return_caller P v none caller callee st k st' st' hl rfl
+ has type
+  @Eq (Option (Exec.Out O))
+    (Exec.step P
+      { ctrl := Exec.Ctrl.exiting (Exec.Exit.ret v), locals := callee, store := st,
+        frames := Exec.Frame.ret none caller :: k })
+    (some (Exec.Out.next { ctrl := Exec.Ctrl.done, locals := Exec.bindDst none v caller, store := st', frames := k }))
+but is expected to have type
+  @Eq (Option (Exec.Out O))
+    (Exec.step P
+      { ctrl := Exec.Ctrl.exiting (Exec.Exit.ret v), locals := callee, store := st,
+        frames := Exec.Frame.ret none caller :: k })
+    (some (Exec.Out.next { ctrl := Exec.Ctrl.done, locals := caller, store := st', frames := k }))
+error: ConcreteSpec/Proofs/Frame.lean:183:2: Type mismatch: After simplification, term
+  Exec.return_reaches_caller P v none caller k h hp stLeave stLeave hl rfl
+ has type
+  @Exec.Steps O P
+    { ctrl := Exec.Ctrl.exiting (Exec.Exit.ret v), locals := L, store := st,
+      frames := pre ++ Exec.Frame.ret none caller :: k }
+    tr { ctrl := Exec.Ctrl.done, locals := Exec.bindDst none v caller, store := stLeave, frames := k }
+but is expected to have type
+  @Exec.Steps O P
+    { ctrl := Exec.Ctrl.exiting (Exec.Exit.ret v), locals := L, store := st,
+      frames := pre ++ Exec.Frame.ret none caller :: k }
+    tr { ctrl := Exec.Ctrl.done, locals := caller, store := stLeave, frames := k }
+Some required targets logged failures:
+- ConcreteSpec.Proofs.Frame
+error: build failed
+Simp doesn't unfold bindDst. Add `[Exec.bindDst]` in simpa. Read lines then edit both at once by replacing `simpa using Exec.` all occurrences? replace_all old `simpa using Exec.` new `simpa [Exec.bindDst] using Exec.` occurs exactly two and perhaps others? Grep file only those. replace_all allowed every occurrence. Should Read before edit; just did build not read but previous edit requires read again per instruction. Read lines 160-190.Edit replace_all.Build commit.warning: Git tree '/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c10' is dirty
+✔ [43/45] Built ConcreteSpec.Proofs.Frame (172ms)
+✔ [44/45] Built ConcreteSpec (126ms)
+Build completed successfully (45 jobs).
+Commit second.[wip/spec-c10 2f0e8290] proofs: restore C1 caller frames exactly
+ 2 files changed, 52 insertions(+)
+Now ABI major. Should design final fully enough, prove laws callee saved equal, clobbers only changed registers, stack accounting call = caller frame + callee bound, typed args/results locations, frame size/alignment return convention, extern validity/retention kept, launcher entry/exit relations. Interface only no concrete ABI. Should have no source extern syntax etc.
+
+  I'll carefully formulate in Lean core with generic types and executable examples.
+
+  Potential structure:
+
+  ```
+  namespace ABI
+
+  inductive Location (Reg : Type) where
+   | reg (r : Reg)
+   | stack (slot : Nat)
+   deriving DecidableEq, Repr
+
+  structure Machine (Reg Word : Type) where
+   regs : Reg → Word
+   slots : Nat → Word
+   stackPointer : Nat
+
+  def Location.read ...
+  ```
+  Machine state functions no DecidableEq, examples use Nat functions and equality propositions by decide not possible functions. Can prove examples ext/rfl.
+
+  `TypedValue Ty Val` structure `ty val`. 
+  `Binding Ty Val Reg` structure `ty : Ty`, `locations : List (Location Reg)`.
+  `Signature`:
+  ```
+  structure Signature (Ty Val Reg Word : Type) where
+    encode : Ty → Val → List Word
+    arguments : List (Binding Ty Val Reg)
+    result : Binding ...
+    frameSize : Nat
+    frameAlign : Nat
+    calleeSaved : List Reg
+    clobbers : List Reg
+    stackBound : Nat
+  ```
+  `stackBound` callee bound includes frame + max nested? "stack-accounting handoff; stack accounting of a call = caller frame + callee bound" Define `callStackUsage callerFrame calleeBound := callerFrame + calleeBound`. Signature `frameSize` and `stackBound` with law `frameSize ≤ stackBound` to include nested/spills cleanup? Frame size/alignment wellformed. `stackBound` is final artifact total callee contribution incl frame spills cleanup and runtime? Doc explicit supplied final artifact. `StackAccount` structure:
+  ```
+  callerFrame : Nat
+  calleeBound : Nat
+  ```
+  `callStackAccount callerFrame sig := callerFrame + sig.stackBound`.
+  The theorem exactly rfl. More meaningful `stack_call_eq` returns. Launcher adds runtime contribution? C10 "final artifact including launcher/runtime contributions" define `ArtifactStack` fields launcherReserve, programBound, `bound := launcher + program`; but brief example only caller frame+callee. Could include `StackHandoff` fields callerFrame calleeBound launcherRuntime and definitions callBound/artifactBound. The ABI signature stackBound is calleeBound. Theorem `call_stack_account` callerFrame + calleeBound. Another `artifact_stack_account` launcher + call. But no need perhaps doc.
+
+  Machine preservation:
+  ```
+  def Machine.Preserved (before after) (saved : List Reg) : Prop :=
+   (∀ r ∈ saved, after.regs r = before.regs r) ∧ after.slots = before.slots ∧ after.stackPointer=before.stackPointer
+  ```
+  Preserved machine state includes caller stack slots and SP; arguments/result stack slots can be written? On return, caller stack slots should preserved except stack outgoing arg area perhaps can be changed; requiring all slots equality too strong if result returned via stack slot. I need stack results related after, so cannot all slots equal. Define preserved stack below caller frame:
+  ```
+  slotsPreserved (limit : Nat) := ∀ slot, slot < limit → after.slots slot=before.slots slot
+  ```
+  Machine state with `stackPointer` before as boundary:
+  ```
+  Preserved before after sig :=
+   ∀ r∈calleeSaved eq
+   ∧ ∀ slot, slot < before.stackPointer → after.slots slot = before.slots slot
+   ∧ after.stackPointer = before.stackPointer
+  ```
+  Stack slots at or above SP arg/result may change. Good. `stackPointer : Nat` logical used slots count not machine word; generic interface no concrete target. Word register values.
+
+  Clobbers only changed registers:
+  ```
+  def Machine.RegisterFrame (before after) clobbers :=
+   ∀ r, r ∉ clobbers → after.regs r = before.regs r
+  ```
+  This implies saved equality only if saved disjoint clobbers. `Signature.WellFormed`:
+  - frameAlign IsPow2
+  - frameSize % frameAlign =0
+  - frameSize ≤ stackBound
+  - calleeSaved disjoint clobbers (`∀ r, r∈saved → r∉clobbers`)
+  - perhaps argument/result type validity separate.
+  - result convention explicit via binding list.
+  `Call` relation structure? 
+  ```
+  structure Call (sig) (before after) (args : List Val) (result : Val) : Prop where
+    arguments : sig.ArgumentsHold args before
+    result : sig.ResultHold result after
+    preserved : Machine.Preserved ...
+    registerFrame : Machine.RegisterFrame ...
+    stackPointer ...
+  ```
+  But a `structure` in Prop with fields, defines valid ABI call relation as record. Theorems call_saved etc project. Better define `Signature.Call` inductive/structure:
+  ```
+  structure Signature.Call (sig) (before after) (args result) : Prop where
+   arguments : ...
+   result : ...
+   preserved : ...
+   clobbered : ...
+  ```
+  Then `callee_saved_after_return (h : sig.Call...) : ∀...` exact `h.preserved.1`.
+  `clobbers_only_changed_registers` h direct.
+  `caller_stack_preserved` etc.
+  `stack_account` independent.
+
+  ArgumentsHold:
+  ```
+  def Binding.Holds (encode) (binding) (value) (state) : Prop :=
+   encode binding.ty value = binding.locations.map (Location.read state)
+  ```
+  Arguments list `List (Binding...)` and values:
+  ```
+  def ArgumentsHold : List Binding -> List Val -> Prop
+   | [],[] => True
+   | b::bs,v::vs => b.Holds ... ∧ ...
+   | _,_ => False
+  ```
+  This ensures arity and each typed.
+  Result `sig.result.Holds encode result after`. Unit encoding can empty and result locations empty chosen by signature. No concrete target.
+
+  "typed arguments/results related to registers, stack slots and preserved machine state" yes.
+
+  Extern validity/FFI safe:
+  I need type universe generic cannot decide enums. Define inductive `ForeignTy (Native : Type)`:
+  ```
+  | int | float | bool | char | unit | rawPointer (pointee : Native) | cStruct (fields : List ForeignTy)
+  ```
+  But char removed 2026-11-08 item16, brief says FFI-safe types no enums. Existing FFI spec char outdated; use no char. C2 floats later but FFI-safe includes floats. `rawPointer` needs no reference predicate. I could model type descriptor:
+  ```
+  inductive FFIType where
+   | int | float | bool | unit | pointer (pointee : FFIType) | cStruct (fields : List FFIType)
+  ```
+  Recursive pointer pointee allows pointer to pointer value no references. No reference constructor, no enum constructor, by construction FFI-safe. `cStruct` fields recursive. This does not map CTy values but ABI `Ty` generic with `ffiSafe : Ty → Prop` parameter. Simpler define `ForeignType` as inductive and show no enum impossible because no enum ctor. But `kept` H arbitrary owned allocation types not FFI-safe themselves? Extern kept parameter marker takes owned allocation H and C receives ABI pointer+length, while logical signature has H + receipt type. Should interface distinguishes logical extern types vs ABI types. Could model:
+  ```
+  inductive ForeignTy where
+   | integer | float | bool | unit | pointer (pointee : ForeignTy) | cStruct (fields : List ForeignTy)
+  ```
+  No enums/references. `cStruct` is FFI-safe recursively. Unit result. `FFIType.Valid` trivial true by construction not useful. But requirement "extern validity" includes no enums across FFI. Define external descriptor in larger `ExternTy`:
+  ```
+  inductive ExternTy where
+   | ffi (t : FFIType)
+   | enum
+   | kept (H : Type)?? Types cannot in deriving
+  ```
+  Should have no enum accepted via validity:
+  ```
+  inductive BoundaryTy (H : Type) where
+   | ffi (t : FFITy)
+   | enum
+   | owned (h:H)
+   | receipt (h:H)
+  ```
+  `BoundaryTy.FFISafe : ... Prop`
+  | ffi => True
+  | enum => False
+  | owned/receipt => True? Kept logical parameters are not raw FFI values but valid extern parameter with marker and C ABI pointer+length. Separate `ExternParam` with retention mode:
+  ```
+  structure Parameter where
+   ty : FFITy -- actual ABI pointer type
+   retention : Retention
+  ```
+  For kept H need identity and pair.
+
+  Could define general extern signature over logical types `H` and FFI:
+  ```
+  inductive Retention where | callOnly | kept
+  structure ExternParam (H : Type) where
+    abi : FFITy
+    retention : Retention
+    owner : Option H -- required if kept
+  ```
+  No enum constructor in FFITy ensures no enums. But call-only raw pointers from borrow restrictions not modeled (OD64) need extern validity/retention decided:
+  - `CallOnly` permission read/write during call only, no access after return trusted premise.
+  - kept no borrow-derived, consumes owned allocation, returns receipt paired.
+  Could state `Retention` and `ForeignContract` fields. No source syntax, just logical interface.
+
+  Perhaps:
+  ```
+  inductive FFITy where ...
+  inductive ForeignTy (Handle : Type) where
+   | abi (t:FFITy)
+   | owned (h:Handle)
+   | receipt (h:Handle)
+   | enum
+  ```
+  `ForeignTy.Valid` for extern? `enum` false, others true. `ABIType` maps owned H to rawPointer u8 and receipt H to unit? C receives pointer and length for kept; completion receives receipt logically but ABI pointer? Q3.12 submitting extern C receives ABI pointer+length; completing extern receipt converted back H likely C returns pointer+length. No concrete mapping allowed? Interface can state logical receipt not direct ABI FFI type. No need map.
+
+  Simpler use type descriptor with validity predicate:
+  ```
+  inductive ForeignType (Handle : Type) where
+   | int | float | bool | unit | rawPointer (t : ForeignType) | cStruct ...
+   | owned (h : Handle) | keptReceipt (h : Handle) | enum
+  ```
+  But rawPointer recursive could point to owned/ref etc; FFI safety must reject pointer to references/enum. `FFISafe` inductive:
+  ```
+  def FFISafe : ForeignType H → Prop
+  | int...=>True
+  | rawPointer t => FFISafe t ∧ ¬ IsReceipt? ...
+  | cStruct fields => ∀ t∈fields, FFISafe t
+  | owned/receipt/enum => False
+  ```
+  Extern logical parameter can owned with kept marker, but raw ABI values must FFISafe. `ExternParam` logical type ForeignType and retention; validity:
+  - callOnly: FFISafe type
+  - kept: ∃ h, type=owned h
+  - completion parameter receipt? paired extern takes exactly Kept<H> returns H. Model separate `Submit` and `Complete`.
+
+  This is bigger but doable.
+
+  Use separate `FFIType` for direct ABI safe and `LogicalType` for extern:
+  ```
+  inductive FFIType where
+  | int | float | bool | unit | pointer (pointee : FFIType) | cStruct (fields : List FFIType)
+  ```
+  No references/enums in pointee. Enum refusal example needs a type universe with enum. Add `ExternType Handle` with constructors `ffi (t : FFIType) | owned (h) | receipt (h) | enum`.
+  ```
+  def ExternType.Valid := match with | enum => False | _=>True
+  ```
+  Extern params:
+  ```
+  inductive Retention | callOnly | kept
+  structure ExternParam H where
+   ty : ExternType H
+   retention : Retention
+  def ExternParam.Valid : Prop :=
+   match ty, retention with
+   | .ffi _, .callOnly => True
+   | .owned _, .kept => True
+   | _,_ => False
+  ```
+  This disallows kept ffi direct (correct kept takes owned H), callOnly owned (owned allocation may be passed call-only? Q3.12 call-only can owned allocation but logical param likely raw pointer FFI type, not H; okay).
+  No enum across FFI: `.enum` any retention invalid.
+  Extern result:
+  ```
+  def ExternResult.Valid : ExternType H → Prop
+  | .ffi t => True
+  | .receipt h => True -- submit
+  | _=>False (owned only completion returns H, so owned valid too)
+  ```
+  All non-enum valid (receipt/owned/ffi). Could just `≠ enum`.
+
+  Paired contract:
+  ```
+  structure KeptPair (H : Type) where
+    submitted : H
+    submitResult : ExternType H -- must receipt submitted
+    completionParam : ExternType H -- receipt submitted
+    completionResult : ExternType H -- owned submitted
+    -- linear receipt fields laws by definition
+  ```
+  `structure RetentionContract (H)`:
+  ```
+  submitParam : ExternParam H
+  submitResult : ExternType H
+  completeParam : ExternType H
+  completeResult : ExternType H
+  def Valid :=
+   ∃ h, submitParam = ⟨.owned h,.kept⟩ ∧ submitResult=.receipt h ∧ completeParam=.receipt h ∧ completeResult=.owned h
+  ```
+  This exactly pair. `Kept<H>` linear no operations not Destroy and allocator alive: type descriptor alone cannot encode linearity. Add doc and `ReceiptLaw` structure:
+  ```
+  structure Receipt (H : Type) where
+    handle : H
+  ```
+  But linearity is a logical judgment: no duplicate operation defined. Could define transitions:
+  ```
+  inductive ForeignEvent (H) where
+   | submit (h:H)
+   | complete (h:H)
+  inductive Ownership (H) where
+   | owned (h:H)
+   | kept (h:H)
+   | released (h:H)
+  def RetentionStep : Ownership → ForeignEvent → Ownership → Prop
+   | owned h, submit h, kept h => True
+   | kept h, complete h, owned h => True
+   | _,_,_ => False
+  ```
+  This enforces only submit owned and complete kept same H; cannot submit kept again or complete owned. It models linear receipt and pairing. No allocator field though doc says receipt retains allocator dependency; can generic H include owner+allocator. Define `Owned (H : Type)` no operations. This is sufficient interface.
+
+  Could simplify `RetentionState H`:
+  ```
+  inductive RetentionState H where
+   | owned (h:H) | kept (h:H) | consumed
+  ```
+  Transitions `submit h`/`complete h`.
+  `RetentionStep` as def Prop with cases. Theorems:
+  - `kept_only_completion` if step (.kept h) event post then event=.complete h ∧ post=.owned h
+  - `owned_only_submission`
+  - `no_duplicate_completion`: ¬ RetentionStep (.owned h) (.complete h) post
+  - receipt keeps identity theorem same h.
+  Extern Valid pair ties submit/completion names? Use event only paired by h, no function IDs. Q3.12 paired extern identity important. Add `ExternId` generic `F : Type`, structure `RetentionContract F H` fields `submit complete : F`, handle : H. Then `RetentionStep` parameter contract? 
+  ```
+  inductive ForeignEvent F H where
+   | call (f:F) (h:H)
+  ```
+  Transitions require f = pair.submit/complete.
+  ```
+  def KeptStep (pair : KeptPair F H) : RetentionState H → ForeignEvent F H → RetentionState H → Prop
+  | owned h, .call f h', kept h'' => f=pair.submit ∧ h=pair.handle ∧ h'=h ∧ h''=h
+  | kept h, .call f h', owned h'' => f=pair.complete ∧ ...
+  | ... => False
+  ```
+  Too detailed but good.
+  `structure KeptPair F H where submit completion : F; handle:H`.
+  `KeptStep` only allowed transitions as above.
+  Theorems same handle and wrong function refused.
+
+  Extern validity:
+  ```
+  structure ExternParam H where ty : ExternType H; retention...
+  ```
+  No F needed.
+
+  Launcher entry/exit relations:
+  Generic `Launcher (Reg Word)`? Use ABI Signature and machine:
+  ```
+  structure Launcher (Artifact Input Output Observation : Type) where
+    artifact : Artifact
+    entry : Input → Machine ...? 
+  ```
+  C10 asks launcher entry/exit relations and complete retained closure. I can define:
+  ```
+  structure LauncherContract (Artifact Input Result Obs : Type) where
+    retainedClosure : Artifact → Prop
+    entry : Artifact → Input → Prop
+    exit : Artifact → Result → Obs → Prop
+  ```
+  No axioms, just relations fields, laws perhaps theorem entry/exit exact relation is trivial. Better define `LauncherRel` as defs:
+  ```
+  structure LauncherState (Reg Word) ...
+  def Launcher.Entry (signature) (args) (machine) := sig.ArgumentsHold ... ∧ machine... stack pointer etc
+  def Launcher.Exit ... 
+  ```
+  But main arguments types grant not generic. Proposal C10 includes launcher entry/exit, brief says ABI typed arguments/results etc. Generic `LauncherContract` with `entry : Input → Machine → Prop`, `exit : Result → Machine → Observation → Prop`, `artifactBound`, `reservedStack`. Laws:
+  - `SufficientStack` reserved ≥ artifact bound
+  - `RefusedStartup` reserved < bound -> outcome status125 (decided)
+  - `Adequate` reserved ≥ bound -> no stack exhaustion as premise? Can't prove no exhaustion from relation unless contract field.
+  Define structure with law fields:
+  ```
+  structure LauncherContract ... where
+    bound : Artifact → Nat
+    entry : Artifact → Input → Prop
+    exit : Artifact → Result → Observation → Prop
+    stackRefusal : ∀ art input reserved, reserved < bound art → ¬ entry art input? entry doesn't include reserved
+  ```
+  Should model startup:
+  ```
+  inductive Launch (Obs) where | refused (status:Nat) | run (obs:Obs)
+  structure LauncherContract ... where
+   bound
+   launch : Artifact→Input→Nat→Option Observation? 
+   launch law if reserved < bound then launch = .refused 125; if adequate and normal result...
+  ```
+  This chooses representation interface, not concrete behavior. Use `LaunchOutcome Obs = .refused (status) | .completed (obs) | .stackFailure` defined outcome inadequate future? Decision says second defined outcome inadequate future, don't invent. Avoid model inadequate beyond refusal if reserved smaller bound always refused, so no inadequate allowed run. `launch` relation:
+  ```
+  inductive Start (Input) where | refuse125 | enter Input
+  def Startup (bound reserved) : Start ... 
+  ```
+  No need execute.
+
+  Could define:
+  ```
+  def Launcher.StackAdmission bound reserved : Prop :=
+   if reserved < bound then ... 
+  ```
+  Actually executable:
+  ```
+  inductive Startup (Input) where | refused125 | admitted (input)
+  def Launcher.start (bound reserved) (input) :=
+   if reserved < bound then .refused125 else .admitted input
+  ```
+  Theorem under-reserved refused, adequate admitted. This is decided stack budget refusal. But Q8.5 pinned launcher ABI not concrete syntax. Fine.
+  `LauncherContract` fields:
+  ```
+  entry : Artifact → Input → Prop
+  exit : Artifact → Result → Observation → Prop
+  retained : Artifact → Prop
+  bound : Artifact → Nat
+  ```
+  `Launch` combines entry + stack:
+  ```
+  def LauncherContract.Admit ... reserved input := entry art input ∧ ¬ reserved < bound art
+  ```
+  No need.
+  "launcher entry/exit relations" literally fields entry exit enough, plus `entry_exit` theorem if `Run` structure:
+  ```
+  structure LauncherContract.Run ... where
+   start : entry artifact input
+   finish : exit artifact result observation
+   retainedClosure : retained artifact
+   adequateStack : bound artifact ≤ reserved
+  ```
+  Theorems projections. Could be overengineering. I can define structure `Launcher` with relations and laws as fields, and theorem stack refusal for executable admission.
+
+  Should focus on part3 expected reviewer likely wants conventional structures not huge. Aim ~250 lines spec + 100 proof.
+
+  I'll settle:
+
+  Definitions:
+  1. `ABI.Location`, `ABI.Machine`, `ABI.Binding`, `ABI.Signature` nested namespace `ConcreteSpec.Core.Frame.ABI`.
+  2. `ArgumentsHold` recursive.
+  3. `Signature.WellFormed`, `Signature.Call` Prop.
+  4. `StackAccount` functions.
+  5. FFI types + Retention (perhaps same namespace).
+  6. Launcher.
+
+  Signature result typed Binding includes arbitrary Ty and Val encode. `Call` arguments before result after, preserved and clobber.
+  `Machine.Preserved` takes saved list and uses `before.stackPointer`.
+  `Signature.WellFormed` saved disjoint clobbers needed to prove callee saved via RegisterFrame too but h.preserved independently. Add:
+  ```
+  def DisjointRegs xs ys := ∀ r, r∈xs → r∉ys
+  ```
+  No DecidableEq needed Props.
+  `Call` includes `preserved` with all saved regs, stack below SP and SP. `clobberFrame` only outside clobbers. Theorem `nonclobbered_registers_equal`, `callee_saved_registers_equal`, `caller_stack_slots_equal`, `stack_pointer_equal`.
+  `Call.wellFormed` not needed.
+
+  Stack `callStack callerFrame sig := callerFrame + sig.stackBound`; theorem exact.
+  `artifactStack launcherRuntime call := launcherRuntime+call` and theorem expansion with associativity perhaps.
+  ```
+  def artifactStack launcherRuntime callerFrame sig := launcherRuntime + callStack callerFrame sig
+  theorem artifact_stack_account : ... = launcherRuntime + callerFrame + sig.stackBound := rfl
+  ```
+  Nat + left associative defeq, yes.
+  Wellformed frameSize≤stackBound ensures own frame accounted.
+
+  FFI:
+  ```
+  inductive FFIType where | int | float | bool | unit | rawPointer (pointee : FFIType) | cStruct (fields : List FFIType)
+  ```
+  Deriving Repr, DecidableEq recursive okay.
+  `ExternType H` with `.ffi .owned .receipt .enum`.
+  `Retention` callOnly kept.
+  `ExternParam.Valid`.
+  `ExternResult.Valid` all except enum perhaps define:
+  ```
+  def ExternType.Valid : ... | .enum=>False | _=>True
+  ```
+  Then param match ensures owned kept etc and result valid. 
+  Examples Accepted FFI pointer struct, callOnly and kept pair; Refused enum and kept raw pointer.
+  `KeptPair` fields submit completion typed `F`, handle H.
+  `RetentionState` `owned | kept | released` perhaps after completion owned, no released needed.
+  `ForeignEvent F H` `.call (function:F) (handle:H)`.
+  `KeptStep` cases:
+  ```
+  | .owned h, .call f h', .kept h'' =>
+   f=pair.submit ∧ h=pair.handle ∧ h'=h ∧ h''=h
+  | .kept h, .call f h', .owned h'' =>
+   f=pair.complete ∧ h=pair.handle ∧ h'=h ∧ h''=h
+  | _,_,_ => False
+  ```
+  After complete returns owned H (not consumed) yes. Submit consumes owned and produces kept. Could resubmit after complete allowed, correct new cycle. Kept receipt linear no Destroy not modeled but no transition discards. `RetentionState` only transitions through call, no other operations. Doc.
+  Theorems:
+  - `kept_receipt_only_paired_completion`: h : KeptStep pair (.kept h) event post -> event=.call pair.complete h ∧ post=.owned pair.handle. Does h unify pair.handle via step. Proof cases event and states? `KeptStep` def matches event and post etc. `cases event with | call f h' =>` then h reduces conditions. Should after simplification subst.
+  - `kept_submit_consumes_owned` similar.
+  - `kept_no_other_transition`: for kept state if f≠complete, no step. theorem easy.
+  - `extern_param_kept_valid` etc examples by decide (H type Nat and FFITypes Decidable). Valid Prop Decidable instance define by unfold infer. `ExternType.Valid` instance.
+  - `KeptStep` decidable perhaps no need examples by decide need derive instance via unfold + infer if [DecidableEq F/H]. Add instance.
+
+  Launcher:
+  ```
+  structure Launcher (Artifact Input Result Observation : Type) where
+    retainedClosure : Artifact → Prop
+    entry : Artifact → Input → Prop
+    exit : Artifact → Result → Observation → Prop
+    stackBound : Artifact → Nat
+  ```
+  No concrete target ABI, closure relation explicit.
+  `inductive Admission (Input) | refused125 | admitted (input) deriving...`
+  ```
+  def Launcher.admit (l) art reserved input : Option Input? 
+  ```
+  Use `Startup Input` constructors `.refused (status:Nat)` generic status? fixed `.refused125`.
+  ```
+  inductive Startup Input where | refused125 | entered Input
+  def start (bound reserved) (input) := if reserved < bound then .refused125 else .entered input
+  ```
+  `Launcher.start` ignores entry relation; admission should require entry. Define:
+  ```
+  def Launcher.start ... : Startup Input :=
+   if l.retainedClosure art ∧ l.entry art input ∧ l.stackBound art ≤ reserved then .entered input else .refused125
+  ```
+  This conflates bad closure/entry with stack budget status125 (wrong missing grants also125 perhaps okay but not decided). Better separate stack function only, and Run structure ensures relations:
+  ```
+  def stackAdmission bound reserved input := ...
+  structure Launcher.Run ... where
+    closure : retainedClosure art
+    entry : entry art input
+    exit : exit art result obs
+    stack : stackAdmission ... = .entered input
+  ```
+  Theorems adequate start and under refused.
+  `Run` has final relation. `launcher_entry_exit` theorem h returns conjunction entry/exit exact.
+  No need `Run` stack field perhaps `reserved` and adequate. Define:
+  ```
+  structure Launcher.Run ... (reserved) where
+   closure
+   entry
+   exit
+   adequate : l.stackBound art ≤ reserved
+  ```
+  Theorem `launcher_run_stack_admitted` h => stackAdmission ... = entered input by simp [stackAdmission, Nat.not_lt_of_ge h.adequate].
+  Under-reserved theorem separate.
+  This includes retained closure and final artifact bound.
+
+  Examples:
+  ```
+  example : stackAdmission 64 32 () = .refused125 := by decide
+  example : stackAdmission 64 64 7 = .entered 7 := by decide
+  ```
+  Accepted/refused.
+
+  Should derive DecidableEq Startup requires [DecidableEq Input] deriving works with param? `deriving DecidableEq, Repr` generates instance requiring DecidableEq Input. okay.
+
+  No new registered rules because no diagnostics.
+
+  Proofs all direct.
+
+  Potential concern use `Machine.slots` function equality below SP. Fine.
+
+  ArgumentsHold proof examples: instantiate simple:
+  ```
+  inductive DemoReg | r0 | r1 deriving...
+  def demoSignature : Signature CTy CVal DemoReg Nat where
+   encode ...
+  ```
+  Encoding CVal to Nat list perhaps int values Int cannot to Nat without target; use `Ty=Nat Val=Nat Word=Nat`, encode `fun _ v => [v]`. args `[(0,[.register .r0]),(1,[.stack 0])]`; result etc. Machine before regs fun ... => 42, slots fun _=>7, SP=1. `ArgumentsHold` example by native no decide functions but equality lists computes rfl. `example : ArgumentsHold encode ... [10,20] before := by exact ⟨rfl,rfl,True.intro?⟩` recursive def ends True, simp [ArgumentsHold,Binding.Holds,Location.read, Machine...]`. Define example local defs? Can just direct example with encode function:
+  ```
+  example : ArgumentsHold (fun (_:Nat) (v:Nat)=>[v]) [(0,[.register 0]),(1,[.stack 0])] [11,12]
+   ⟨fun _=>11, fun _=>12, 1⟩ := by decide? 
+  ```
+  Decide evaluates function applications equality Nat lists, Decidable proposition reduces yes `by decide` can decide equality even functions applied. Should work.
+  Refused wrong value:
+  ```
+  ¬ ArgumentsHold ... [11,99] ... := by decide
+  ```
+  This demonstrates typed values location relation. Could add after definitions.
+  Frame WellFormed example `Signature` no need.
+
+  Extern types no actual mapping to ABI signature Ty. Generic signature `Ty` can be `ExternType H`, no law all args extern valid. Define `ExternSignature` wrapper:
+  ```
+  structure ExternSignature ... extends Signature? 
+  ```
+  Could define `Signature.ExternValid (extern : Ty → ExternType H)`? Too much. Requirement extern validity covered independently.
+
+  Frame size alignment examples perhaps:
+  ```
+  def Signature.FrameValid ...
+  ```
+  Theorem `frame_size_aligned` h : sig.frameSize % sig.frameAlign=0 := h.2.1 etc.
+  WellFormed fields nesting:
+  ```
+  def Signature.WellFormed sig :=
+   IsPow2 sig.frameAlign ∧ sig.frameSize % sig.frameAlign=0 ∧
+   sig.frameSize ≤ sig.stackBound ∧ ∀r, r∈sig.calleeSaved → r∉sig.clobbers
+  ```
+  Theorems.
+
+  Call structure namespace:
+  ```
+  structure Signature.Call (sig : Signature ...) ... : Prop where
+   arguments : ArgumentsHold sig.encode sig.arguments args before
+   result : Binding.Holds sig.encode sig.result result after
+   preserved : Machine.Preserved before after sig.calleeSaved
+   clobbers : Machine.RegisterFrame before after sig.clobbers
+  ```
+  Naming field clobbers and sig clobbers okay.
+
+  `Machine.Preserved` def conjunction.
+  `Machine.RegisterFrame`.
+  Call args `args : List Val` result single Val.
+
+  Result convention return `Binding`. No unit special but `FFIType.unit` and encoding empty can define; interface sufficient.
+
+  Stack slot reads at `after` result.
+
+  Foreign `ExternParam.Valid` callOnly .ffi; kept .owned. What about normal extern returns `.owned` completion and `.receipt` submission valid yes.
+  `ExternType.Valid` enum false only. No refs constructor. FFI type cStruct fields recursive inherently safe. No enums across direct FFI. Example `.enum` rejected.
+  `FFIType.rawPointer` pointee FFIType ensures no reference or enum. Good.
+
+  Potential char removal no char included correct.
+
+  Now implement by append to Spec before end. Large Edit after read required last read spec prior edit? I edited spec then built, need Read. Read tail.
+
+• The call-frame commit is `2f0e8290`. I’m now adding the target-independent ABI: typed location bindings, register/stack preservation, final-artifact stack accounting, foreign type validity, linear `kept` transitions, and launcher entry/exit relations.
+
+• Edit replace end with ABI all. Should have no syntax errors structure default etc. Use `Nat.not_lt_of_ge` in proofs later.
+
+  `ArgumentsHold` recursion:
+  ```
+  def ArgumentsHold (encode) : List (Binding...) → List Val → Machine...→Prop
+   | [],[],_=>True
+   | b::bs,v::vs,st => b.Holds ... ∧ ArgumentsHold ... bs vs st
+   | _,_,_=>False
+  ```
+  Overlapping patterns complete.
+  `Binding.Holds` uses `Location.read`.
+  `Machine.Preserved` slot threshold before.stackPointer.
+  Instances for Valid ExternParam require Decidable H? Equality not used, match only, infer instance no H decidable.
+  KeptStep instance needs [DecidableEq F] [DecidableEq H].
+  `KeptStep` match h equalities all.
+
+  Launcher.Run structure parameters:
+  ```
+  structure Launcher.Run (l : Launcher A I R Obs) (artifact:A) (reserved:Nat)
+   (input:I) (result:R) (observation:Obs) : Prop where ...
+  ```
+  Result only in exit relation yes.
+  `stackAdmission` generic Input deriving.
+  No uppercase names warnings okay.
+
+  Add.Should have proofs append ABI before response end. Read proof tail because last edit + read? I read then edit and built; need read.Proof theorems:
+  ```
+  namespace ABI
+  theorem callee_saved_registers_equal ... (h : sig.Call...) : ∀r∈... after.regs... := h.preserved.1
+  theorem clobbers_only_changed_registers ... (h) : ∀r, r∉sig.clobbers... := h.clobbers
+  theorem caller_stack_preserved ... := h.preserved.2.1
+  theorem stack_pointer_restored ... := h.preserved.2.2
+  theorem typed_arguments_at_entry ... := h.arguments
+  theorem typed_result_at_return ... := h.result
+  theorem frame_size_aligned (h: sig.WellFormed) := h.2.1
+  theorem frame_within_stack_bound := h.2.2.1
+  theorem call_stack_account ... : callStack = callerFrame+... := rfl
+  artifact rfl.
+  ```
+  These are projection theorems but exactly requested.
+
+  Kept:
+  ```
+  theorem kept_only_paired_completion {pair} {h event after}
+   (hs : KeptStep pair (.kept h) event after) :
+   event = .call pair.complete h ∧ after = .owned pair.handle := by
+   cases event with | call f h' =>
+     cases after with
+     | owned h'' =>
+        simp only [KeptStep] at hs
+        obtain ⟨hf,hh,hh',hh''⟩ := hs
+        subst f; subst h;? 
+  ```
+  h is handle in initial `.kept h`, pair.handle arbitrary. hs fields h=pair.handle, h'=h, h''=h. Goal `.call f h' = .call pair.complete h` and `.owned h'' = .owned pair.handle`. `cases hf; cases hh; cases hh'; cases hh''; exact ⟨rfl,rfl⟩` but cases hh substitutes h perhaps dependent hs. `obtain ⟨rfl,rfl,rfl,rfl⟩ := hs; exact ⟨rfl,rfl⟩` likely works. after `.kept` case KeptStep False (kept->kept no match) `cases hs`.
+  ```
+  cases after with
+  | owned h'' => obtain ...; exact...
+  | kept h'' => cases hs
+  ```
+  KeptStep matching before `.kept h`, after `.kept` falls False. good.
+  Submission theorem:
+  ```
+  event=.call pair.submit h ∧ after=.kept pair.handle
+  ```
+  after must `.kept`; if owned False. same.
+  Wrong completion:
+  ```
+  theorem kept_receipt_not_submit ... (hf : f ≠ pair.complete) : ¬ KeptStep pair (.kept h) (.call f h') after := by intro hs; ... get hf' contradiction
+  ```
+  Not necessary examples enough. Add `kept_handle_preserved` included equality above.
+  `no_receipt_discard` state transition only to owned, theorem after shape included.
+
+  Launcher:
+  ```
+  theorem stack_under_reservation ... (h : reserved < bound) : stackAdmission ...=.refused125 := by simp [stackAdmission,h]
+  theorem stack_adequate ... (h:bound≤reserved) := by simp [stackAdmission, Nat.not_lt_of_ge h]
+  ```
+  `Nat.not_lt_of_ge` exists.
+  `launcher_entry_exit (run) : l.retainedClosure art ∧ l.entry ... ∧ l.exit ... := ⟨run.closure,...⟩`
+  `launcher_run_admitted run : stackAdmission ... = entered input := stack_adequate ... run.adequateStack`.
+  No axioms.
+
+  Perhaps prove `callee_saved` also via clobber using WellFormed, but preserved direct. Good.
+
+  Append.
+
+• The ABI definitions are in place. I’m proving the return-preservation laws, exact stack equations, paired-receipt transitions, and launcher admission/entry/exit laws; these are interface laws, not an x86-64 implementation.
+
+• One theorem `kept_receipt_rejects_other_extern` proof bogus `hf (...).1 ▸ rfl` type. Should be:
+  ```
+  have he := (kept_only...).1
+  exact hf (by cases he; rfl) maybe he : call f h' = call complete h, congrArg ForeignEvent.f? Constructor field f not projection. `injection he with hfeq ...; exact hf hfeq`.
+  ```
+  After hs get he, `cases he` substitutes f/h', then hf rfl. `exact hf (by cases he; rfl)` goal f=complete, cases he makes f replaced? likely. Simpler:
+  ```
+  have he := ...
+  cases he
+  exact hf rfl
+  ```
+  After cases he, goal False, hf : complete ≠ complete. exact hf rfl. Use. Current `hf he ▸ rfl` parse suspicious. Build see.warning: Git tree '/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c10' is dirty
+✖ [28/45] Building ConcreteSpec.Spec.Frame (369ms)
+trace: .> LEAN_PATH=/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c10/.lake/build/lib/lean /nix/store/94bmilywgajdnqvix1fs35fj94kala0w-lean4-release-4.34.1/bin/lean /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c10/ConcreteSpec/Spec/Frame.lean -o /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c10/.lake/build/lib/lean/ConcreteSpec/Spec/Frame.olean -i /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c10/.lake/build/lib/lean/ConcreteSpec/Spec/Frame.ilean -c /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c10/.lake/build/ir/ConcreteSpec/Spec/Frame.c --setup /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c10/.lake/build/ir/ConcreteSpec/Spec/Frame.setup.json --json
+error: ConcreteSpec/Spec/Frame.lean:252:11: None of the deriving handlers for class `DecidableEq` applied to `FFIType`
+error: ConcreteSpec/Spec/Frame.lean:281:28: failed to synthesize instance of type class
+  Decidable
+    (match p with
+    | { ty := ExternType.ffi t, retention := Retention.callOnly } => True
+    | { ty := ExternType.owned h, retention := Retention.kept } => True
+    | x => False)
+
+Hint: Type class instance resolution failures can be inspected with the `set_option trace.Meta.synthInstance true` command.
+error: ConcreteSpec/Spec/Frame.lean:290:29: failed to synthesize instance of type class
+  Decidable
+    (match t with
+    | ExternType.enum => False
+    | x => True)
+
+Hint: Type class instance resolution failures can be inspected with the `set_option trace.Meta.synthInstance true` command.
+error: ConcreteSpec/Spec/Frame.lean:322:19: failed to synthesize instance of type class
+  Decidable
+    (match before, event, after with
+    | RetentionState.owned h, ForeignEvent.call f h', RetentionState.kept h'' =>
+      f = pair.submit ∧ h = pair.handle ∧ h' = h ∧ h'' = h
+    | RetentionState.kept h, ForeignEvent.call f h', RetentionState.owned h'' =>
+      f = pair.complete ∧ h = pair.handle ∧ h' = h ∧ h'' = h
+    | x, x_1, x_2 => False)
+
+Hint: Type class instance resolution failures can be inspected with the `set_option trace.Meta.synthInstance true` command.
+error: ConcreteSpec/Spec/Frame.lean:341:51: Unknown identifier `Input`
+
+Note: It is not possible to treat `Input` as an implicitly bound variable here because the `autoImplicit` option is set to `false`.
+error: ConcreteSpec/Spec/Frame.lean:341:68: Unknown identifier `Input`
+
+Note: It is not possible to treat `Input` as an implicitly bound variable here because the `autoImplicit` option is set to `false`.
+error: ConcreteSpec/Spec/Frame.lean:351:16: Application type mismatch: The argument
+  result
+has type
+  Result
+but is expected to have type
+  Artifact
+in the application
+  l.exit result
+error: ConcreteSpec/Spec/Frame.lean:358:5: Application type mismatch: The argument
+  (0, [?m.14])
+has type
+  ?m.11 × List ?m.15
+but is expected to have type
+  Binding Nat ?m.3
+in the application
+  List.cons (0, [?m.14])
+error: ConcreteSpec/Spec/Frame.lean:358:25: Application type mismatch: The argument
+  (1, [?m.22])
+has type
+  ?m.19 × List ?m.23
+but is expected to have type
+  Binding Nat ?m.3
+in the application
+  List.cons (1, [?m.22])
+error: ConcreteSpec/Spec/Frame.lean:358:10: Invalid dotted identifier notation: The expected type of `.register` could not be determined
+
+Hint: Using one of these would be unambiguous:
+  [apply] `Exec.register`
+  [apply] `Location.register`
+error: ConcreteSpec/Spec/Frame.lean:358:30: Invalid dotted identifier notation: The expected type of `.stack` could not be determined
+
+Hint: Using `Location.stack would be unambiguous:
+  [apply] `Location.stack`
+error: ConcreteSpec/Spec/Frame.lean:364:5: Application type mismatch: The argument
+  (0, [?m.14])
+has type
+  ?m.11 × List ?m.15
+but is expected to have type
+  Binding Nat ?m.3
+in the application
+  List.cons (0, [?m.14])
+error: ConcreteSpec/Spec/Frame.lean:364:25: Application type mismatch: The argument
+  (1, [?m.22])
+has type
+  ?m.19 × List ?m.23
+but is expected to have type
+  Binding Nat ?m.3
+in the application
+  List.cons (1, [?m.22])
+error: ConcreteSpec/Spec/Frame.lean:364:10: Invalid dotted identifier notation: The expected type of `.register` could not be determined
+
+Hint: Using one of these would be unambiguous:
+  [apply] `Exec.register`
+  [apply] `Location.register`
+error: ConcreteSpec/Spec/Frame.lean:364:30: Invalid dotted identifier notation: The expected type of `.stack` could not be determined
+
+Hint: Using `Location.stack would be unambiguous:
+  [apply] `Location.stack`
+error: ConcreteSpec/Spec/Frame.lean:369:54: Tactic `decide` failed for proposition
+  { ty := ExternType.ffi FFIType.int.rawPointer, retention := Retention.callOnly }.Valid ∧
+    { ty := ExternType.owned 7, retention := Retention.kept }.Valid
+because its `Decidable` instance
+  instDecidableAnd
+did not reduce to `isTrue` or `isFalse`.
+
+After unfolding the instances `instDecidableAnd` and `instDecidableValid`, reduction got stuck at the `Decidable` instance
+  sorry
+error: ConcreteSpec/Spec/Frame.lean:374:58: Tactic `decide` failed for proposition
+  ¬{ ty := ExternType.enum, retention := Retention.callOnly }.Valid ∧
+    ¬{ ty := ExternType.ffi FFIType.int.rawPointer, retention := Retention.kept }.Valid ∧
+      ¬ExternResult.Valid ExternType.enum
+because its `Decidable` instance
+  instDecidableAnd
+did not reduce to `isTrue` or `isFalse`.
+
+After unfolding the instances `instDecidableAnd`, `instDecidableNot`, and `instDecidableValid`, reduction got stuck at the `Decidable` instance
+  sorry
+error: ConcreteSpec/Spec/Frame.lean:377:68: Tactic `decide` failed for proposition
+  KeptStep { submit := 0, complete := 1, handle := 7 } (RetentionState.owned 7) (ForeignEvent.call 0 7)
+    (RetentionState.kept 7)
+because its `Decidable` instance
+  instDecidableKeptStepOfDecidableEq { submit := 0, complete := 1, handle := 7 } (RetentionState.owned 7)
+    (ForeignEvent.call 0 7) (RetentionState.kept 7)
+did not reduce to `isTrue` or `isFalse`.
+
+After unfolding the instance `instDecidableKeptStepOfDecidableEq`, reduction got stuck at the `Decidable` instance
+  sorry
+error: ConcreteSpec/Spec/Frame.lean:380:70: Tactic `decide` failed for proposition
+  ¬KeptStep { submit := 0, complete := 1, handle := 7 } (RetentionState.kept 7) (ForeignEvent.call 0 7)
+      (RetentionState.owned 7)
+because its `Decidable` instance
+  instDecidableNot
+did not reduce to `isTrue` or `isFalse`.
+
+After unfolding the instances `instDecidableNot` and `instDecidableKeptStepOfDecidableEq`, reduction got stuck at the `Decidable` instance
+  sorry
+error: ConcreteSpec/Spec/Frame.lean:383:0: declaration uses `sorry`
+error: ConcreteSpec/Spec/Frame.lean:386:0: declaration uses `sorry`
+Some required targets logged failures:
+- ConcreteSpec.Spec.Frame
+error: build failed
+Many simple.
+  FFIType recursive deriving DecidableEq fails because recursive occurrence in List needs `deriving DecidableEq` usually supports nested? Lean deriving fails recursive with List? Implement manual decidable equality via `deriving Repr` only and define instance by recursion? Examples decide FFIType equality not needed, only ExternType pattern matching validity doesn't need equality. Remove DecidableEq FFIType, just Repr. KeptStep only F H eq no FFI. Fine.
+
+  Instances pattern matching infer_instance doesn't reduce match due dependent? Should `cases p` etc.
+  ```
+  instance ... := by
+    cases p with | mk ty retention =>
+      cases ty <;> cases retention <;> simp [ExternParam.Valid] <;> infer_instance
+  ```
+  Actually after cases `isTrue trivial` via `infer_instance` after `unfold`. 
+  ```
+    cases p with
+    | mk ty r => cases ty <;> cases r <;> unfold ExternParam.Valid <;> infer_instance
+  ```
+  Unfold at goal after cases works.
+  ExternResult `cases t <;> unfold ... <;> infer_instance`.
+  KeptStep `cases before <;> cases event <;> cases after <;> unfold KeptStep <;> infer_instance`.
+  `Input` needs `{Input : Type}` binder stackAdmission.
+  Launcher exit defined `exit : Artifact → Result → Observation → Prop` but Run uses `l.exit result observation` missing artifact. Error expected Artifact. Either intended exit artifact relation includes artifact. Use `l.exit artifact result observation` in Run and proofs. Good.
+  Bindings need explicit `⟨0,[...]⟩` not tuple because structure. Replace `[(0,...)]` with `[⟨0,...⟩,...]`.
+  Startup examples errors cascade.
+  Kept proof fix later.
+
+  Should read relevant spec chunks before Edit (required). Read 240-390.
+
+• The ABI build exposed elaboration issues rather than semantic problems: recursive type derivation, pattern-matching decidability, a missing launcher artifact argument, and structure literals in examples. I’m correcting those explicitly.
+
+• One Edit chunk old entire shown new corrected. Could smaller old string from deriving FFI through examples; huge. I can use one Edit with replace all? Different changes same file forbidden consecutive unless Read. I can use one Edit replace entire chunk 245-365 plus keep. I'll do old string from `inductive FFIType` through second arg example new. Include Launcher corrections etc. Long but manageable. Alternatively one Edit replace `deriving DecidableEq, Repr` with `deriving Repr` replace_all would affect Retention Startup undesired. No. Big.
+
+  Use old exactly section from FFI to examples. New.I'll proof launcher l.exit artifact corrections and kept proof. Read proof ABI tail.Edit both in one chunk.Should have l.exit second edit same file requires read again. Could build first gives only l.exit then read fix, or read now. Read lines 318.Edit.Build.warning: Git tree '/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c10' is dirty
+✖ [28/45] Building ConcreteSpec.Spec.Frame (367ms)
+trace: .> LEAN_PATH=/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c10/.lake/build/lib/lean /nix/store/94bmilywgajdnqvix1fs35fj94kala0w-lean4-release-4.34.1/bin/lean /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c10/ConcreteSpec/Spec/Frame.lean -o /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c10/.lake/build/lib/lean/ConcreteSpec/Spec/Frame.olean -i /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c10/.lake/build/lib/lean/ConcreteSpec/Spec/Frame.ilean -c /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c10/.lake/build/ir/ConcreteSpec/Spec/Frame.c --setup /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c10/.lake/build/ir/ConcreteSpec/Spec/Frame.setup.json --json
+error: ConcreteSpec/Spec/Frame.lean:361:40: failed to synthesize
+  Decidable
+    (ArgumentsHold (fun x v => [v])
+      [{ ty := 0, locations := [Location.register 0] }, { ty := 1, locations := [Location.stack 0] }] [11, 12]
+      { regs := fun x => 11, slots := fun x => 12, stackPointer := 1 })
+
+Hint: Additional diagnostic information may be available using the `set_option diagnostics true` command.
+error: ConcreteSpec/Spec/Frame.lean:367:40: failed to synthesize
+  Decidable
+    ¬ArgumentsHold (fun x v => [v])
+        [{ ty := 0, locations := [Location.register 0] }, { ty := 1, locations := [Location.stack 0] }] [11, 99]
+        { regs := fun x => 11, slots := fun x => 12, stackPointer := 1 }
+
+Hint: Additional diagnostic information may be available using the `set_option diagnostics true` command.
+Some required targets logged failures:
+- ConcreteSpec.Spec.Frame
+error: build failed
+No Decidable ArgumentsHold. Can prove by `rfl`? ArgumentsHold on values yields `[11]=[11] ∧ ([12]=[12] ∧ True)` proposition not defeq True, `by exact ⟨rfl,rfl,trivial⟩`. Refused `by intro h; exact ...` simp. `by simp [ArgumentsHold, Binding.Holds, Location.read]` likely solves both. Use `by decide` -> `by simp [ArgumentsHold, Binding.Holds, Location.read]`. Read spec examples before edit.Edit both by replace all exact `:= by decide` would affect all examples not. Chunk.Contradiction between h' [99]=[12] not automatically contradiction tactic does injection? `contradiction` sees equality of distinct constructors? Lists `[99]` vs `[12]`, reduces to impossible perhaps `contradiction` uses decide? Better `simp [ArgumentsHold, Binding.Holds, Location.read] at h` will solve. Current `h'` is list equality and contradiction tactic may kernel reduce to False via contradiction. Lean contradiction can handle disequality by decide? It uses injection recursively likely yes. Build.warning: Git tree '/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c10' is dirty
+✖ [28/45] Building ConcreteSpec.Spec.Frame (357ms)
+trace: .> LEAN_PATH=/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c10/.lake/build/lib/lean /nix/store/94bmilywgajdnqvix1fs35fj94kala0w-lean4-release-4.34.1/bin/lean /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c10/ConcreteSpec/Spec/Frame.lean -o /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c10/.lake/build/lib/lean/ConcreteSpec/Spec/Frame.olean -i /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c10/.lake/build/lib/lean/ConcreteSpec/Spec/Frame.ilean -c /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c10/.lake/build/ir/ConcreteSpec/Spec/Frame.c --setup /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c10/.lake/build/ir/ConcreteSpec/Spec/Frame.setup.json --json
+error: ConcreteSpec/Spec/Frame.lean:371:2: Tactic `contradiction` failed
+
+h :
+  ArgumentsHold (fun x v => [v])
+    [{ ty := 0, locations := [Location.register 0] }, { ty := 1, locations := [Location.stack 0] }] [11, 99]
+    { regs := fun x => 11, slots := fun x => 12, stackPointer := 1 }
+h' :
+  Binding.Holds (fun x v => [v]) { ty := 1, locations := [Location.stack 0] } 99
+    { regs := fun x => 11, slots := fun x => 12, stackPointer := 1 }
+⊢ False
+Some required targets logged failures:
+- ConcreteSpec.Spec.Frame
+error: build failed
+I'll unfold at h'. `simp [Binding.Holds, Location.read] at h'`. Read before edit.
+
+• Only the negative ABI example remains: its proof needs to unfold `Binding.Holds` before the mismatched words can contradict each other.
+
+• Build.warning: Git tree '/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c10' is dirty
+✔ [28/45] Built ConcreteSpec.Spec.Frame (407ms)
+✔ [29/45] Built ConcreteSpec.Spec (125ms)
+✔ [30/45] Built ConcreteSpec.Proofs.Basics (183ms)
+✔ [31/45] Built ConcreteSpec.Proofs.Authority (350ms)
+✔ [32/45] Built ConcreteSpec.Proofs.Cleanup (434ms)
+✔ [33/45] Built ConcreteSpec.Proofs.Slice1 (566ms)
+✔ [34/45] Built ConcreteSpec.Proofs.Memory (545ms)
+✔ [35/45] Built ConcreteSpec.Proofs.Borrow (703ms)
+✔ [36/45] Built ConcreteSpec.Proofs.Brand (692ms)
+✔ [37/45] Built ConcreteSpec.Proofs.Observe (216ms)
+✖ [38/45] Building ConcreteSpec.Proofs.Frame (223ms)
+trace: .> LEAN_PATH=/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c10/.lake/build/lib/lean /nix/store/94bmilywgajdnqvix1fs35fj94kala0w-lean4-release-4.34.1/bin/lean /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c10/ConcreteSpec/Proofs/Frame.lean -o /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c10/.lake/build/lib/lean/ConcreteSpec/Proofs/Frame.olean -i /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c10/.lake/build/lib/lean/ConcreteSpec/Proofs/Frame.ilean -c /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c10/.lake/build/ir/ConcreteSpec/Proofs/Frame.c --setup /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c10/.lake/build/ir/ConcreteSpec/Proofs/Frame.setup.json --json
+error: ConcreteSpec/Proofs/Frame.lean:258:0: Not a definitional equality: the left-hand side
+  artifactStack launcherRuntime callerFrame sig
+is not definitionally equal to the right-hand side
+  launcherRuntime + callerFrame + sig.stackBound
+error: ConcreteSpec/Proofs/Frame.lean:263:2: Type mismatch
+  rfl
+has type
+  ?m.19 = ?m.19
+but is expected to have type
+  artifactStack launcherRuntime callerFrame sig = launcherRuntime + callerFrame + sig.stackBound
+✔ [39/45] Built ConcreteSpec.Proofs.Checker (279ms)
+✔ [40/45] Built ConcreteSpec.Proofs.Rep (387ms)
+✔ [41/45] Built ConcreteSpec.Proofs.Hybrid (355ms)
+✔ [42/45] Built ConcreteSpec.Proofs.Slice0 (211ms)
+✔ [43/45] Built ConcreteSpec.Proofs.Examples (169ms)
+Some required targets logged failures:
+- ConcreteSpec.Proofs.Frame
+error: build failed
+Nat addition not defeq because `launcherRuntime + (callerFrame + stack)` vs `(launcherRuntime + callerFrame)+stack` associativity. Should have theorem by `simp [artifactStack, callStack, Nat.add_assoc]`. Statement currently RHS left assoc. Do. Read proof lines.Build.
+
+• The spec now builds; the remaining proof adjustment is just natural-number associativity in whole-artifact stack accounting.warning: Git tree '/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c10' is dirty
+✔ [43/45] Built ConcreteSpec.Proofs.Frame (193ms)
+✔ [44/45] Built ConcreteSpec (141ms)
+Build completed successfully (45 jobs).
+
+
+• Should scrutinize semantics and requirements before commit. Could run permitted rules/trust later. Should possible flaw kept_receipt_rejects_other_extern proof logically accepted built yes.
+
+  Potential issue FFIType no `char` due decision correct. "FFI-safe types, no enums across FFI." Good.
+
+  Potential issue no extern validity connecting signature. Fine.
+
+  Potential issue call frame preserved state exactly with dst some not exact caller but expected result binding. no dst exact.
+
+  Potential issue `Footprint.Preserves` only byte contents, not block metadata outside footprint. Requirement preserves every byte/place, okay.
+
+  Potential issue free/expose frame full block based x.size. yes.
+
+  Potential issue `alloc_frame` footprint fullBlock size but actual candidate bytes size; yes.
+
+  Potential issue fresh block disjoint everything only ranges whose block existed. good.
+
+  Potential issue sequential composition after first state may free/reuse identity? Block identity never reused, proof h2 uses st' old block exists inferred from h1. good.
+
+  Potential issue C1Call relation no argument eval from call statement; starts callee body, contract covers callee footprint only. requirement exactly callee. good.
+
+  Potential issue C1Call doesn't include callee stores project relation and C1Call contract given per f. good.
+
+  Potential issue ABI Machine slots only Nat→Word no byte/provenance; interface typed words enough no concrete target. "typed arguments/results related to registers, stack slots and preserved machine state" yes.
+
+  Potential issue no stack accounting law using sig.Call and callerFrame; independent theorem enough.
+
+  Potential issue artifactStack RHS `launcherRuntime + callerFrame + sig.stackBound` matches left assoc by simp. yes.
+
+  Potential issue launcher retainedClosure relation field but no proof of complete closure; interface only.
+
+  Potential issue kept pair validity not defined for extern declaration signatures (checker verifies pair takes exactly receipt returns H) but `KeptStep` models, `ExternParam.Valid` not connecting pair submit result. Requirement "extern validity/retention (kept)" likely enough but perhaps need `KeptPair.WellFormed` with param/result descriptors. My KeptPair only IDs and handle, no typed signature check. The Q3.12 exact requires submitting extern contract names paired completion and checker verifies pair takes exactly Kept<H> returns H. My transition enforces handle and IDs, but not signature types. `ExternType` descriptors separate. Reviewer might flag missing typed pairing. I should add `KeptPair` fields `submitResult`, `completeParam`, etc? Could define `KeptPair.Valid (submitParam :ExternParam H) (submitResult : ExternType H) (completeParam : ExternParam H) (completeResult : ExternType H) : Prop :=
+   submitParam = ⟨.owned pair.handle,.kept⟩ ∧ submitResult=.receipt pair.handle ∧
+   completeParam=⟨.receipt pair.handle,.callOnly⟩? Retention marker for receipt no marker callOnly but `ExternParam.Valid` currently receipt fresh inputs refused. Completion must take Kept<H>, so validity should allow receipt completion. Current generic `ExternParam.Valid` rejects all receipts, contradicts Q3.12 paired completion takes Kept<H>. Should fix. Important. Model validity should allow `.receipt _, .callOnly`? But then any extern can take receipt, pairing restriction elsewhere. I can add parameter role:
+  ```
+  inductive ExternParam.Valid` ordinary parameters no receipts; separate `CompletionParam.Valid`.
+  ```
+  `KeptPair.Valid` uses descriptors not ExternParam.Valid for completion. This is okay if doc says receipts as fresh inputs refused except completion. Define:
+  ```
+  def KeptPair.WellFormed ... (submitParam submitResult completeParam completeResult) :=
+   submitParam = ⟨owned handle, kept⟩ ∧ submitResult=receipt handle ∧
+   completeParam=⟨receipt handle, callOnly⟩ ∧ completeResult=owned handle
+  ```
+  Doc states completion receipt admitted only here. `ExternParam.Valid` doc clarify ordinary submit/call-only not paired completion. Add examples accepted pair wellformed and refused mismatched handle perhaps decide equalities need DecidableEq ExternType and FFIType? Proposition equality structures needs DecidableEq if decide; can prove by exact ⟨rfl...⟩ for accepted, refused by intro h and cases. Could avoid examples to not derive. But required accepted/refused examples for rule not registered no need. I have kept examples. Add theorem `kept_pair_types` projection direct perhaps.
+  Better change `ExternParam.Valid` to include `.receipt _, .callOnly` valid? Then ordinary foreign functions could accept receipt without pair check but `ExternSignature.Valid` can ensure only completion. More complexity. Keep separate.
+
+  Also call-only owned allocation parameter Q3.12 call-only can owned allocation passed by pointer not H, fine.
+
+  `KeptPair.WellFormed` arguments names typed and exact. Add definition and theorem in proofs `kept_pair_signature` direct h. This meets interface.
+
+  FFI validity direct `ExternResult.Valid` owned accepted any extern result not only completion; could note generic result descriptor and pair checks restrict. Fine.
+
+  I'll add `ExternParam.Valid` doc "Outside paired completion..." receipts refused.
+  `KeptPair.WellFormed` includes submission and completion exact signature. This is important before commit. Use Edit Spec after Read. Read around KeptPair.
+
+• The full ABI slice builds. One retention detail needs tightening before commit: the interface must explicitly verify that submission returns `Kept<H>` and the paired completion takes exactly that receipt and returns `H`, so I’m adding that signature law.
+
+• Add definition after structure. Also adjust doc valid. Single Edit old chunk 273-300. New includes.Add examples pair accepted/refused. Could prove accepted with `by exact ⟨rfl,rfl,rfl,rfl⟩`; refused mismatch `¬ pair.WellFormed ⟨owned 8,...⟩...` intro h; have h.1 gives equality of struct owned7 vs owned8; `cases h.1` might fail because noConfusion handles. Use `by intro h; cases h.1` should eliminate false equality. For complete param wrong result `.ffi .unit` cases h.2.2.2. Add after kept submission examples. Read spec lines 375 etc then Edit.Add combined:
+  ```
+  example : (⟨0,1,7⟩ : KeptPair Nat Nat).WellFormed ⟨owned7,kept⟩ (receipt7) (receipt7) (owned7) := by exact...
+  example : ¬ ... completeParam receipt8 ... := by intro h; have hc:=h.2.2.1; cases hc
+  ```
+  Refused mismatch handle receipt8. Good.Proof add `kept_pair_signature` perhaps not needed but theorem statements User wants every theorem; more is burden. But law as def enough, examples prove. Build then commit.
+
+• The retention interface now checks the exact declaration types as well as the runtime ownership transitions. I’m rebuilding before committing the ABI slice.warning: Git tree '/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c10' is dirty
+✔ [28/45] Built ConcreteSpec.Spec.Frame (410ms)
+✔ [29/45] Built ConcreteSpec.Spec (121ms)
+✔ [30/45] Built ConcreteSpec.Proofs.Basics (178ms)
+✔ [31/45] Built ConcreteSpec.Proofs.Authority (334ms)
+✔ [32/45] Built ConcreteSpec.Proofs.Cleanup (418ms)
+✔ [33/45] Built ConcreteSpec.Proofs.Slice1 (585ms)
+✔ [34/45] Built ConcreteSpec.Proofs.Memory (548ms)
+✔ [35/45] Built ConcreteSpec.Proofs.Borrow (722ms)
+✔ [36/45] Built ConcreteSpec.Proofs.Brand (721ms)
+✔ [37/45] Built ConcreteSpec.Proofs.Observe (185ms)
+✔ [38/45] Built ConcreteSpec.Proofs.Checker (298ms)
+✔ [39/45] Built ConcreteSpec.Proofs.Frame (249ms)
+✔ [40/45] Built ConcreteSpec.Proofs.Rep (352ms)
+✔ [41/45] Built ConcreteSpec.Proofs.Slice0 (213ms)
+✔ [42/45] Built ConcreteSpec.Proofs.Hybrid (352ms)
+✔ [43/45] Built ConcreteSpec.Proofs.Examples (170ms)
+✔ [44/45] Built ConcreteSpec (123ms)
+Build completed successfully (45 jobs).
+
+
+• Commit ABI.[wip/spec-c10 969918b9] spec: add frame ABI and foreign retention contracts
+ 2 files changed, 406 insertions(+)
+406 insertions since second huge spec 267 proof 139. Total files ~750 lines. Fine.
+
+  Now run permitted checks rules.sh and trust_ban. But before response check documentation header Spec.lean list needs update to include Frame (comment now old says from Target ... Hybrid each module header). Instructions sweep comments. Spec.lean foundation list should include Frame. README O11 says C5-C10 remain now C10 written part1, must update? User did not forbid README. Task says write Frame only + imports. Existing README C5-C10 remain would be stale. Should update to "C5–C9 remain; C10... interface ... concrete target ABI later." Also Spec.lean header include `Frame` C10. These are comments/docs but within required consistency. This change should be committed as fourth? User "commit each piece separately" could amend prohibited rewrite. New commit `docs: record C10 frame interface` perhaps okay. But no need extra commit? I already commit ABI then can modify docs and final commit "docs: mark C10 frame interface" with build. However task expected 3 commits perhaps extra fine. Alternatively include doc updates in final validation commit. Should have no uncommitted changes. Do update.
+
+  Also Proofs/Frame module header says only footprint allocation, now incomplete describes not ABI and call. Must update header to list all. Spec/Frame header good.
+
+  Spec.lean header lines 54-60 update.
+  ConcreteSpec/README O11 update. It says C5-C10 remain. Add C10 description and what left. User explicitly final what left. No generated prose? "Lean IS spec readable doc comments no generated prose." README updates not generated prose, but User asks no generated prose perhaps means don't produce docs instead Lean. Existing instructions require comments updated. Minimal.
+
+  Perhaps scripts/spec/lean_site reads modules automatically. rules registry not needed.
+  `scripts/proofs/axioms.golden` stale reviewer regenerates explicitly do not.
+  Changelog? Not asked, don't.
+
+  Should inspect git log commits and status clean. Update docs and proof header, build commit. Is that overkill? Fine.
+
+  Before docs, run rules/trust perhaps docs changes don't affect. Better docs then build/checks in response. Use parallel Reads known lines for exact Edit.
+
+• The ABI commit is `969918b9`. I’m updating the module and reading-guide summaries so they no longer describe C10 as absent, then I’ll run the two permitted lightweight gates.
+
+969918b9 spec: add frame ABI and foreign retention contracts
+2f0e8290 proofs: restore C1 caller frames exactly
+6d1181df spec: add logical frame footprints and laws
+a8eb252a Merge wip/spec-c1-life into wip/spec-c10 (C10 needs C4 and partial lifecycle; README conflict joined)
+• Update three parallel. README text:
+  "C10 (`Frame`) now covers logical footprints, C1 restoration, target-independent ABI, foreign kept retention and launcher relations; concrete ABI implementations, extern syntax, packed access, source frame clauses/snapshots remain out. C5-C9 remain." This is precise. Frame is Spec+Proofs but name.
+  Spec.lean formatting line wrap.
+  Proof header list.Now build + rules perhaps independent but both build and could race .lake; don't parallel builds. Run build then rules.sh (it builds) then trust. Rules permitted timeout command exact. `nix develop -c timeout 600 bash scripts/spec/rules.sh`. This script itself has 3600 but outer600 permitted. Trust perhaps heavy but allowed. Run sequential calls.warning: Git tree '/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c10' is dirty
+✔ [29/45] Built ConcreteSpec.Spec (127ms)
+✔ [30/45] Built ConcreteSpec.Proofs.Basics (181ms)
+✔ [31/45] Built ConcreteSpec.Proofs.Authority (329ms)
+✔ [32/45] Built ConcreteSpec.Proofs.Cleanup (425ms)
+✔ [33/45] Built ConcreteSpec.Proofs.Slice1 (570ms)
+✔ [34/45] Built ConcreteSpec.Proofs.Memory (546ms)
+✔ [35/45] Built ConcreteSpec.Proofs.Brand (689ms)
+✔ [36/45] Built ConcreteSpec.Proofs.Borrow (700ms)
+✔ [37/45] Built ConcreteSpec.Proofs.Observe (218ms)
+✔ [38/45] Built ConcreteSpec.Proofs.Frame (240ms)
+✔ [39/45] Built ConcreteSpec.Proofs.Checker (301ms)
+✔ [40/45] Built ConcreteSpec.Proofs.Rep (385ms)
+✔ [41/45] Built ConcreteSpec.Proofs.Hybrid (359ms)
+✔ [42/45] Built ConcreteSpec.Proofs.Slice0 (210ms)
+✔ [43/45] Built ConcreteSpec.Proofs.Examples (170ms)
+✔ [44/45] Built ConcreteSpec (126ms)
+Build completed successfully (45 jobs).
+Run rules.
+
+• The documentation updates build cleanly. I’m running the rule-registry gate and trust ban now; the heavy axiom replay and external checkers remain for the reviewer as requested.warning: Git tree '/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c10' is dirty
+=== the specification ===
+  ok   1 registered rules in 42 sources, each documented with an existing decision row and an accepted and a refused example; every citation names a registered rule
+  ok   the registry and every rule citation of ConcreteSpec
+=== negative controls ===
+  ok   control: a documented rule with both examples passes
+  ok   control: a rule with no refused example fails
+  ok   control: a rule whose doc cites no decision row fails
+  ok   control: a rule registered twice fails
+  ok   control: a rule naming no declaration fails
+  ok   control: a citation of an unregistered rule fails
+  ok   control: a verdict on a non-example fails
+  ok   control: revision 0 fails
+  ok   control: a truncated listing is an error
+  ok   control: a rule with no accepted example fails
+  ok   control: a rule with no doc comment fails
+  ok   control: a rule citing a row no inventory has fails
+  ok   control: one example claiming both verdicts fails
+  ok   control: a verdict in a nested comment fails
+  ok   control: an unregistered quoted name fails
+  ok   control: examples with an attribute or a modifier count
+  ok   control: an unlexable source is an error
+  ok   control: a verdict in a string literal fails
+  ok   control: an attribute with brackets inside counts
+  ok   control: a row an inventory only mentions does not count
+  ok   control: an attribute string cannot stand in for an example
+  ok   control: an attribute holding a string with a bracket counts
+  ok   control: a quoted name holding a backtick is checked
+  ok   control: a malformed citation fails
+  ok   control: a raw string in an attribute cannot stand in for an example
+  ok   control: a quoted name in an attribute cannot stand in for an example
+  ok   control: a comment in an attribute cannot stand in for an example
+  ok   control: a quoted name holding citation-like text is one citation
+  ok   control: a missing source directory is an error
+  ok   control: a source directory with no .lean file is an error
+  ok   control: a checker that hangs through both attempts is INCOMPLETE
+SPEC-RULES: PASS=32 FAIL=0
+
+
+• Trust.warning: Git tree '/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c10' is dirty
+=== E/D: the environment ===
+  ok   all 43 ConcreteSpec source modules are in the environment E and D read
+  ok   none of the 7833 ConcreteSpec constants depends on sorryAx, ofReduceBool/Nat, trustCompiler or a native axiom
+  ok   ConcreteSpec declares no axiom
+=== S: the sources ===
+  ok   none of the 43 source files spells a banned word outside comments
+  ok   lakefile.toml builds the library with warningAsError, and nothing overrides it
+=== X: the examples, in the kernel's terms ===
+  ok   all 270 examples, kept as declarations, depend only on the standard axioms
+=== negative controls ===
+  ok   control: a theorem proved by sorry is refused (ConcreteSpecControl.sorryThm (sorryAx))
+  ok   control: a definition with a sorry body and no theorem about it is refused (ConcreteSpecControl.sorryDef (sorryAx))
+  ok   control: a theorem proved by native_decide is refused (ConcreteSpecControl.nativeThm (ConcreteSpecControl.nativeThm._native.native_decide.ax_1_1))
+  ok   control: a declared axiom is reported
+  ok   control: an axiom whose name holds a tab fails the run (no row can carry it)
+  ok   control: native_decide, and sorry inside an interpolation, after a string, raw string or quoted name holding comment delimiters, after an interpolation holding a string, a direct sorryAx, a syntax extension, an outside import, an option, meta code and decide options (native split across lines, positional) are found; the words in comments are not
+  ok   control: the header import ConcreteSpec.Spec Lean is reported
+  ok   control: the header import ConcreteSpec.Spec   Lean is reported
+  ok   control: the header prelude import ConcreteSpec.Spec is reported
+  ok   control: a library that turns warningAsError off is refused (the library sets options ['warningAsError'])
+  ok   control: a library built from another source directory is refused (the library sets ['srcDir'])
+  ok   control: a source the scan cannot read or lex (missing) fails it (rc=3)
+  ok   control: a source the scan cannot read or lex (Open) fails it (rc=3)
+  ok   control: a source the scan cannot read or lex (Brace) fails it (rc=3)
+  ok   control: a source the scan cannot read or lex (Quote) fails it (rc=3)
+  ok   control: source modules outside a (truncated) import closure are reported
+  ok   control: an example proved by decide +native and one closed by stop are reported, rfl is not, and the word example in a string is no example («⟪example⟫C.lean:1» («⟪example⟫C.lean:1»._native.decide.ax_1) «⟪example⟫C.lean:2» (sorryAx) )
+PROOF-TRUST-BAN: PASS=23 FAIL=0
+I'll commit docs. But before final inspect diff full, theorem inventory, no new files generated. `git status --short`, `git diff --stat`, `git diff --check`, perhaps `git diff` review. Should record results against exact SHA. Docs not committed yet, checks on working tree not exact SHA. Must commit docs then rerun build? Requirement record exact commit. I can commit docs after checks and run build at final SHA (rules/trust results technically previous SHA plus uncommitted docs). Should run gates after commit perhaps trust not necessary? Instructions say record each result exact SHA. To report gates exact SHA, commit docs then run build+rules+trust again? It is only ~55s. Do. First inspect diff docs and commit. Then final checks perhaps run build and trust only? rules also docs affects rule scan no citations, but exact SHA requirement rerun. I'll do all after final commit. But first code review to ensure no semantic issues. Should inspect complete new files perhaps Read max 100k can read spec/proof now ~400 lines each, use parallel. Also git diff main? Should base branch diff from a8eb. `git diff --stat a8eb..HEAD` plus uncommitted. I can inspect theorem statements via Grep. Make sure no new test files. status.
+
+  I'll commit docs after diff check.
+
+• Both permitted gates pass. I’m committing the summary updates, then I’ll rerun them on the exact final SHA and inspect the completed diff and working tree. ConcreteSpec/Proofs/Frame.lean | 6 ++++--
+ ConcreteSpec/README.md         | 5 ++++-
+ ConcreteSpec/Spec.lean         | 7 ++++---
+ 3 files changed, 12 insertions(+), 6 deletions(-)
+ M ConcreteSpec/Proofs/Frame.lean
+ M ConcreteSpec/README.md
+ M ConcreteSpec/Spec.lean
+
+
+• I'll commit docs.[wip/spec-c10 c0e77b0d] docs: record the C10 frame interface
+ 3 files changed, 12 insertions(+), 6 deletions(-)
+Now rerun checks exact final. Build.Build completed successfully (45 jobs).
+Rules.=== the specification ===
+  ok   1 registered rules in 42 sources, each documented with an existing decision row and an accepted and a refused example; every citation names a registered rule
+  ok   the registry and every rule citation of ConcreteSpec
+=== negative controls ===
+  ok   control: a documented rule with both examples passes
+  ok   control: a rule with no refused example fails
+  ok   control: a rule whose doc cites no decision row fails
+  ok   control: a rule registered twice fails
+  ok   control: a rule naming no declaration fails
+  ok   control: a citation of an unregistered rule fails
+  ok   control: a verdict on a non-example fails
+  ok   control: revision 0 fails
+  ok   control: a truncated listing is an error
+  ok   control: a rule with no accepted example fails
+  ok   control: a rule with no doc comment fails
+  ok   control: a rule citing a row no inventory has fails
+  ok   control: one example claiming both verdicts fails
+  ok   control: a verdict in a nested comment fails
+  ok   control: an unregistered quoted name fails
+  ok   control: examples with an attribute or a modifier count
+  ok   control: an unlexable source is an error
+  ok   control: a verdict in a string literal fails
+  ok   control: an attribute with brackets inside counts
+  ok   control: a row an inventory only mentions does not count
+  ok   control: an attribute string cannot stand in for an example
+  ok   control: an attribute holding a string with a bracket counts
+  ok   control: a quoted name holding a backtick is checked
+  ok   control: a malformed citation fails
+  ok   control: a raw string in an attribute cannot stand in for an example
+  ok   control: a quoted name in an attribute cannot stand in for an example
+  ok   control: a comment in an attribute cannot stand in for an example
+  ok   control: a quoted name holding citation-like text is one citation
+  ok   control: a missing source directory is an error
+  ok   control: a source directory with no .lean file is an error
+  ok   control: a checker that hangs through both attempts is INCOMPLETE
+SPEC-RULES: PASS=32 FAIL=0
+Trust.=== E/D: the environment ===
+  ok   all 43 ConcreteSpec source modules are in the environment E and D read
+  ok   none of the 7833 ConcreteSpec constants depends on sorryAx, ofReduceBool/Nat, trustCompiler or a native axiom
+  ok   ConcreteSpec declares no axiom
+=== S: the sources ===
+  ok   none of the 43 source files spells a banned word outside comments
+  ok   lakefile.toml builds the library with warningAsError, and nothing overrides it
+=== X: the examples, in the kernel's terms ===
+  ok   all 270 examples, kept as declarations, depend only on the standard axioms
+=== negative controls ===
+  ok   control: a theorem proved by sorry is refused (ConcreteSpecControl.sorryThm (sorryAx))
+  ok   control: a definition with a sorry body and no theorem about it is refused (ConcreteSpecControl.sorryDef (sorryAx))
+  ok   control: a theorem proved by native_decide is refused (ConcreteSpecControl.nativeThm (ConcreteSpecControl.nativeThm._native.native_decide.ax_1_1))
+  ok   control: a declared axiom is reported
+  ok   control: an axiom whose name holds a tab fails the run (no row can carry it)
+  ok   control: native_decide, and sorry inside an interpolation, after a string, raw string or quoted name holding comment delimiters, after an interpolation holding a string, a direct sorryAx, a syntax extension, an outside import, an option, meta code and decide options (native split across lines, positional) are found; the words in comments are not
+  ok   control: the header import ConcreteSpec.Spec Lean is reported
+  ok   control: the header import ConcreteSpec.Spec   Lean is reported
+  ok   control: the header prelude import ConcreteSpec.Spec is reported
+  ok   control: a library that turns warningAsError off is refused (the library sets options ['warningAsError'])
+  ok   control: a library built from another source directory is refused (the library sets ['srcDir'])
+  ok   control: a source the scan cannot read or lex (missing) fails it (rc=3)
+  ok   control: a source the scan cannot read or lex (Open) fails it (rc=3)
+  ok   control: a source the scan cannot read or lex (Brace) fails it (rc=3)
+  ok   control: a source the scan cannot read or lex (Quote) fails it (rc=3)
+  ok   control: source modules outside a (truncated) import closure are reported
+  ok   control: an example proved by decide +native and one closed by stop are reported, rfl is not, and the word example in a string is no example («⟪example⟫C.lean:1» («⟪example⟫C.lean:1»._native.decide.ax_1) «⟪example⟫C.lean:2» (sorryAx) )
+PROOF-TRUST-BAN: PASS=23 FAIL=0
+Should final inspect status, diff base, exact log, no generated files. Could `git status --short`, `git diff --check a8eb...HEAD`, `git diff --stat a8eb...HEAD`, `git rev-parse HEAD`. Also perhaps review `git diff a8eb...HEAD -- ConcreteSpec/Spec.lean ConcreteSpec/README` not necessary. Full code read already chunks but should inspect for issue kept theorem proof correct. Trust passed.
+
+  Potential requirement "No new axioms every theorem only standard" trust ban doesn't enforce only standard per theorem, axioms.sh does, but my proofs use Classical? no. `by decide` examples standard none. I cannot run axioms.sh per brief. Fine.
+
+  Should have final message list every theorem states. 31 theorems. Task explicitly every theorem, need list grouped concise. Include 31 bullets perhaps long. Could combine related theorem names per bullet but "what each theorem states" each named and statement. I can group helper two in one bullet each described. Ensure all.
+
+  Should have QUESTIONS section. None? "QUESTIONS: None; no unresolved language decision encountered." Left out why concrete target ABI etc per brief. Mention heavy checks not run as instructed and golden stale reviewer. Commits four SHA+one line. Tests exact final c0e77b0d. Working tree clean. No push.
+
+  But before responding need `TodoList` done and final git status. Also perhaps user expected only 3 commits? Extra docs commit okay. Should note 4 commits.
+
+  Should have exact final status.
+
+• All permitted checks pass on `c0e77b0d`. I’m doing the final clean-tree and branch-diff checks; no heavy gates or axiom-golden regeneration were run, per the brief. ConcreteSpec.lean              |   1 +
+ ConcreteSpec/Proofs/Frame.lean | 340 +++++++++++++++++++++++++++++++++
+ ConcreteSpec/README.md         |   5 +-
+ ConcreteSpec/Spec.lean         |   8 +-
+ ConcreteSpec/Spec/Frame.lean   | 417 +++++++++++++++++++++++++++++++++++++++++
+ 5 files changed, 767 insertions(+), 4 deletions(-)
+c0e77b0d docs: record the C10 frame interface
+969918b9 spec: add frame ABI and foreign retention contracts
+2f0e8290 proofs: restore C1 caller frames exactly
+6d1181df spec: add logical frame footprints and laws
+c0e77b0db6f8359d4797cff5a0c31f34555ccee4
+
+
+• Clean (no status output). Good. I'll respond now, mark todos done.Now respond. Should stand-alone details, no emoji. Structure headings light. Commits list, content theorem statements grouped. 31 theorem names. Could cite `ConcreteSpec/Proofs/Frame.lean` lines ranges but changed final lines known Grep. Use references perhaps `ConcreteSpec/Proofs/Frame.lean:19`, `:156`, `:206`, `:269`, `:313`. Spec `:29`, `:103`, `:154`, `:245`, `:339`.
+
+  Validation exact final full SHA perhaps short enough. Mention 45 jobs, 32, 23. Working tree clean. No push.
+
+  Theorem statements:
+  1 preserves_refl empty footprint frames st st.
+  2 byteOutside_union outside union iff? theorem only implies outside both, state exactly "splits..."
+  3 placeOutside_union.
+  4 preserves_seq.
+  5 store_frame given wellformed access equality and store success, preserves outside accessFootprint including zero.
+  6 free_frame block full footprint.
+  7 expose_frame.
+  8 alloc_frame.
+  9 alloc_fresh_disjoint.
+  10 step_call_saves_caller.
+  11 step_return_restores_caller.
+  12 return_cleanup_restores_caller.
+  13 c1Call_restores_caller.
+  14 c1_call_frame.
+  15 callee_saved_registers_equal.
+  16 clobbers_only_changed_registers.
+  17 caller_stack_slots_equal.
+  18 stack_pointer_restored.
+  19 typed_arguments_at_entry.
+  20 typed_result_at_return.
+  21 frame_size_aligned conjunction.
+  22 frame_within_stack_bound.
+  23 call_stack_account.
+  24 artifact_stack_account.
+  25 kept_only_paired_completion event exactly paired complete same handle and after owned.
+  26 submit_produces_paired_receipt.
+  27 kept_receipt_rejects_other_extern.
+  28 stack_under_reservation.
+  29 stack_adequate.
+  30 launcher_entry_exit.
+  31 launcher_run_admitted.
+
+  Also KeptPair.WellFormed is def law not theorem, mention ABI interface includes exact signature pairing and FFI types no enums. Could mention examples.
+
+  Left out:
+  - concrete linux-x86_64 ABI table/reg assignment, target implementation and packed semantics (brief later)
+  - extern syntax and source frame clause/snapshot (not allowed)
+  - stronger program-wide frame proofs and actual MemoryCFG/BIR lowering later
+  - merged axioms golden not regenerated and heavy scripts not run per instruction.
+  Potential pointer qualification left from LANGUAGE_DECISIONS item52? Brief says "no extern syntax", pointer qualification left open. I didn't decide. Questions none because out of scope. Perhaps "QUESTIONS: None. Pointer qualification remains later extern syntax work, not a question encountered." Could mention in left out.
+  - FFI safe float descriptor but no semantics floats C2 later, no new.
+  - Foreign trusted assumptions no access after return etc not modeled? My retention transitions don't state call-only no foreign access after return trusted premise. C10 requires extern validity/retention, Q3.12 notes call-only no access after return named trusted-base assumption. Did I include? I only Retention doc "call-only by default or kept" and valid, no explicit trusted premise. This could be omission against brief. Should add interface field `ForeignPremises` perhaps callOnlyNoAccessAfterReturn and keptNoAccessBeforeCompletion as Prop trusted premises. C10 says extern validity/retention, decided Q3.12 includes those. I should include now rather than response. I'm already final checks but can new commit and rerun if change. Should assess if necessary. Q3.12 exact note: call-only parameter permits reads/writes during call only; no access after return named trusted-base assumption. kept C stops using memory before paired call returns trusted-base assumption. Borrow-derived pointers never kept. My model doesn't encode borrow-derived kept refusal (ExternParam owned H logically not borrow-derived, doc perhaps owned allocation implies no borrow). Could doc state no borrow-derived kept. Should interface explicitly:
+  ```
+  structure ForeignTrustedPremises where
+    callOnlyNoAccessAfterReturn : Prop
+    keptNoAccessBeforeCompletion : Prop
+  ```
+  Fields of Prop are propositions not evidence; as structure type, instantiation requires proofs, so named assumptions. But no relation to states, generic logical flags are vacuous. Better `structure ForeignContract (F H) where pair... callOnly...` with fields `callOnlyNoAccessAfterReturn : ...` relation generic `ForeignAccess` states. Could be overkill. Brief only interface, named premises can be doc comments. Add doc Retention:
+  ```
+  call-only grants only during-call access; foreign no access after return and kept no access before completion are trusted-base premises, not proved by transition.
+  ```
+  This documents without claiming theorem. `ExternParam` owned H no borrow-derived doc. This is enough interface. Currently Retention doc only default. Update comments would require commit fifth and checks. Do I need? Desired thoroughness. Could include in response left out "foreign memory access behavior remains named trusted premises" but not in spec docs, violates Lean spec requirement. Better add now.
+
+  Also ABI interface does not model actual argument type FFI validity connection but acceptable.
+
+  Potential `kept_receipt_rejects_other_extern` proof has weird but verified.
+
+  Should I change now? Add doc comment no code, commit docs perhaps include in previous docs commit impossible no rewrite. Fifth small `docs: name foreign retention premises`. Could avoid extra commits by no change but semantic review perhaps important. User asked commit each piece separately, extra doc commits already okay.
+
+  Also `KeptPair` doesn't model C receives pointer+length, but no concrete ABI target, typed mapping generic can map H to locations, okay.
+
+  Call-only borrow-derived pointer default and kept owned allocation by construction. Doc comment update Retention enough. I can do it and final rerun build only? Exact final rules/trust previous SHA not final if doc changes; must rerun all ~55s. Fine. I have time. Should not endlessly. Add comment only and perhaps no fifth commit? Could leave uncommitted forbidden final response. Commit.
+
+  But user final response list commits becomes five, okay.
+
+  Do I need no further? Another issue `Footprint.place` unused but fine.
+
+  I should avoid unnecessary post-final changes after checks per instructions "repeat only when new change..." new change justifies. Do.
+
+  Read Retention lines then Edit.
+
+• One final contract clarification is needed in the Lean documentation: call-only and kept foreign-memory guarantees are trusted-base premises, not consequences proved by the ownership transition. I’m recording that explicitly before closing.
+
+• Edit comment.Commit after build required as soon build passes. Run build then commit.warning: Git tree '/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c10' is dirty
+✔ [28/45] Built ConcreteSpec.Spec.Frame (406ms)
+✔ [29/45] Built ConcreteSpec.Spec (124ms)
+✔ [30/45] Built ConcreteSpec.Proofs.Basics (178ms)
+✔ [31/45] Built ConcreteSpec.Proofs.Authority (357ms)
+✔ [32/45] Built ConcreteSpec.Proofs.Slice1 (578ms)
+✔ [33/45] Built ConcreteSpec.Proofs.Cleanup (518ms)
+✔ [34/45] Built ConcreteSpec.Proofs.Memory (560ms)
+✔ [35/45] Built ConcreteSpec.Proofs.Brand (671ms)
+✔ [36/45] Built ConcreteSpec.Proofs.Borrow (691ms)
+✔ [37/45] Built ConcreteSpec.Proofs.Checker (301ms)
+✔ [38/45] Built ConcreteSpec.Proofs.Observe (216ms)
+✔ [39/45] Built ConcreteSpec.Proofs.Frame (247ms)
+✔ [40/45] Built ConcreteSpec.Proofs.Rep (377ms)
+✔ [41/45] Built ConcreteSpec.Proofs.Hybrid (350ms)
+✔ [42/45] Built ConcreteSpec.Proofs.Slice0 (216ms)
+✔ [43/45] Built ConcreteSpec.Proofs.Examples (169ms)
+✔ [44/45] Built ConcreteSpec (127ms)
+Build completed successfully (45 jobs).
+[wip/spec-c10 72d109b0] docs: name foreign memory retention premises
+ 1 file changed, 5 insertions(+), 1 deletion(-)
+Now rerun rules/trust final 72d. Build already final exact. Rules/trust.=== the specification ===
+  ok   1 registered rules in 42 sources, each documented with an existing decision row and an accepted and a refused example; every citation names a registered rule
+  ok   the registry and every rule citation of ConcreteSpec
+=== negative controls ===
+  ok   control: a documented rule with both examples passes
+  ok   control: a rule with no refused example fails
+  ok   control: a rule whose doc cites no decision row fails
+  ok   control: a rule registered twice fails
+  ok   control: a rule naming no declaration fails
+  ok   control: a citation of an unregistered rule fails
+  ok   control: a verdict on a non-example fails
+  ok   control: revision 0 fails
+  ok   control: a truncated listing is an error
+  ok   control: a rule with no accepted example fails
+  ok   control: a rule with no doc comment fails
+  ok   control: a rule citing a row no inventory has fails
+  ok   control: one example claiming both verdicts fails
+  ok   control: a verdict in a nested comment fails
+  ok   control: an unregistered quoted name fails
+  ok   control: examples with an attribute or a modifier count
+  ok   control: an unlexable source is an error
+  ok   control: a verdict in a string literal fails
+  ok   control: an attribute with brackets inside counts
+  ok   control: a row an inventory only mentions does not count
+  ok   control: an attribute string cannot stand in for an example
+  ok   control: an attribute holding a string with a bracket counts
+  ok   control: a quoted name holding a backtick is checked
+  ok   control: a malformed citation fails
+  ok   control: a raw string in an attribute cannot stand in for an example
+  ok   control: a quoted name in an attribute cannot stand in for an example
+  ok   control: a comment in an attribute cannot stand in for an example
+  ok   control: a quoted name holding citation-like text is one citation
+  ok   control: a missing source directory is an error
+  ok   control: a source directory with no .lean file is an error
+  ok   control: a checker that hangs through both attempts is INCOMPLETE
+SPEC-RULES: PASS=32 FAIL=0
+=== E/D: the environment ===
+  ok   all 43 ConcreteSpec source modules are in the environment E and D read
+  ok   none of the 7833 ConcreteSpec constants depends on sorryAx, ofReduceBool/Nat, trustCompiler or a native axiom
+  ok   ConcreteSpec declares no axiom
+=== S: the sources ===
+  ok   none of the 43 source files spells a banned word outside comments
+  ok   lakefile.toml builds the library with warningAsError, and nothing overrides it
+=== X: the examples, in the kernel's terms ===
+  ok   all 270 examples, kept as declarations, depend only on the standard axioms
+=== negative controls ===
+  ok   control: a theorem proved by sorry is refused (ConcreteSpecControl.sorryThm (sorryAx))
+  ok   control: a definition with a sorry body and no theorem about it is refused (ConcreteSpecControl.sorryDef (sorryAx))
+  ok   control: a theorem proved by native_decide is refused (ConcreteSpecControl.nativeThm (ConcreteSpecControl.nativeThm._native.native_decide.ax_1_1))
+  ok   control: a declared axiom is reported
+  ok   control: an axiom whose name holds a tab fails the run (no row can carry it)
+  ok   control: native_decide, and sorry inside an interpolation, after a string, raw string or quoted name holding comment delimiters, after an interpolation holding a string, a direct sorryAx, a syntax extension, an outside import, an option, meta code and decide options (native split across lines, positional) are found; the words in comments are not
+  ok   control: the header import ConcreteSpec.Spec Lean is reported
+  ok   control: the header import ConcreteSpec.Spec   Lean is reported
+  ok   control: the header prelude import ConcreteSpec.Spec is reported
+  ok   control: a library that turns warningAsError off is refused (the library sets options ['warningAsError'])
+  ok   control: a library built from another source directory is refused (the library sets ['srcDir'])
+  ok   control: a source the scan cannot read or lex (missing) fails it (rc=3)
+  ok   control: a source the scan cannot read or lex (Open) fails it (rc=3)
+  ok   control: a source the scan cannot read or lex (Brace) fails it (rc=3)
+  ok   control: a source the scan cannot read or lex (Quote) fails it (rc=3)
+  ok   control: source modules outside a (truncated) import closure are reported
+  ok   control: an example proved by decide +native and one closed by stop are reported, rfl is not, and the word example in a string is no example («⟪example⟫C.lean:1» («⟪example⟫C.lean:1»._native.decide.ax_1) «⟪example⟫C.lean:2» (sorryAx) )
+PROOF-TRUST-BAN: PASS=23 FAIL=0
+Final status exact log one call.72d109b0 docs: name foreign memory retention premises
+c0e77b0d docs: record the C10 frame interface
+969918b9 spec: add frame ABI and foreign retention contracts
+2f0e8290 proofs: restore C1 caller frames exactly
+6d1181df spec: add logical frame footprints and laws
+72d109b00827ce07134ffa8a356fad87480e3cd3
+Now respond with 5 commits. No need Todo already done though after final change todo report still done okay.
+
+  I should mention no questions. No hidden concerns.
+
+  Response concise but full theorem list. Use 4 headings: Commits, Theorems, Validation, Left out, QUESTIONS. Light nesting perhaps bullets grouped by paragraph with semicolon names. 31 bullets might be heavy but requested. Could group by categories and use compact lines each one. No table due terminal.
+
+  "Implemented C10 part 1 on wip/spec-c10; no push; clean tree."
+
+  Commit one line each.
+
+  Theorem statements group:
+  - logical: list 9 bullets
+  - C1: 5
+  - ABI: 10? 15-24 =10
+  - retention 3
+  - launcher2? stack 2+launcher2 =4
+  Total 31.
+
+  Can combine `byteOutside_union` and `placeOutside_union` in one bullet but "each theorem" names and statements both. Fine. Combine stack call and artifact? each statement. Keep 29 bullets.
+
+  Validation exact final:
+  - build pass
+  - rules pass 32
+  - trust 23 no new axioms 7833 constants and 270 examples standard
+  - not run heavy per brief.
+
+  Left out reasons: concrete ABI target, packed semantics, extern syntax/source constructs, stronger proofs/lowerings. Axioms golden stale reviewer regenerates. Mention trusted premises documented, not proved.
+
+  "QUESTIONS: None." No owner decision.
+
+  Should avoid saying all theorem axioms only standard based trust examples only and no banned, but proof terms use standard tactics likely. Can state trust_ban confirms no new axioms and examples standard. Good.
+
+  Respond with citations path lines may shifted docs +4 only later than Retention, earlier unaffected. Proof lines shifted header +2 vs Grep, not critical use paths no lines perhaps. Code references desirable `ConcreteSpec/Spec/Frame.lean`, `Proofs`. Good.
+
+  I'll formulate.
+
+• Implemented C10 part 1 on `wip/spec-c10`. The working tree is clean; nothing was pushed.
+
+  ### Commits
+
+  - `6d1181df` — `spec: add logical frame footprints and laws`
+  - `2f0e8290` — `proofs: restore C1 caller frames exactly`
+  - `969918b9` — `spec: add frame ABI and foreign retention contracts`
+  - `c0e77b0d` — `docs: record the C10 frame interface`
+  - `72d109b0` — `docs: name foreign memory retention premises`
+
+  ### Theorems
+
+  `ConcreteSpec/Proofs/Frame.lean` now proves:
+
+  **Logical footprints**
+
+  - `preserves_refl`: the empty footprint preserves a state.
+  - `byteOutside_union`: a byte outside a union is outside both component footprints.
+  - `placeOutside_union`: a place outside a union is outside both component footprints.
+  - `preserves_seq`: sequential operations preserve everything outside the union of their footprints.
+  - `store_frame`: a successful C4 store preserves every old byte outside its access range and every place; zero-byte stores have an empty footprint.
+  - `free_frame`: releasing a block preserves everything outside its full-block footprint and all places.
+  - `expose_frame`: exposure preserves everything outside the exposed block’s footprint and all places.
+  - `alloc_frame`: fresh allocation preserves every old byte and place.
+  - `alloc_fresh_disjoint`: the fresh block is disjoint from every range belonging to an old block.
+
+  **C1 calls and restoration**
+
+  - `step_call_saves_caller`: call entry saves caller locals in `.ret`, binds evaluated arguments, and preserves the continuation.
+  - `step_return_restores_caller`: return without a destination restores caller locals and continuation exactly.
+  - `return_cleanup_restores_caller`: successful deferred cleanup preserves that exact return restoration.
+  - `c1Call_restores_caller`: every complete `C1Call` binds its result into the saved caller locals at the saved continuation.
+  - `c1_call_frame`: a complete call satisfies the footprint frame law supplied by its callee contract.
+
+  **ABI**
+
+  - `callee_saved_registers_equal`: callee-saved registers are equal after return.
+  - `clobbers_only_changed_registers`: every register outside the clobber set is unchanged.
+  - `caller_stack_slots_equal`: caller stack slots below its stack pointer are unchanged.
+  - `stack_pointer_restored`: return restores the caller’s stack pointer.
+  - `typed_arguments_at_entry`: typed arguments occupy their declared register/stack locations.
+  - `typed_result_at_return`: the typed result occupies its return-convention locations.
+  - `frame_size_aligned`: frame alignment is a positive power of two and frame size is a multiple of it.
+  - `frame_within_stack_bound`: the callee frame is included in its final-artifact stack bound.
+  - `call_stack_account`: call stack use is exactly caller frame plus callee bound.
+  - `artifact_stack_account`: whole-artifact accounting adds launcher/runtime bytes to that handoff.
+
+  **Foreign retention**
+
+  - `kept_only_paired_completion`: only the paired completion consumes a receipt, returning the same handle to Concrete ownership.
+  - `submit_produces_paired_receipt`: submission consumes an owned handle and produces its paired receipt.
+  - `kept_receipt_rejects_other_extern`: no other extern can consume a kept receipt.
+
+  The separate `KeptPair.WellFormed` law requires submission to take `kept H` and return `Kept<H>`, and completion to take exactly that receipt and return `H`.
+
+  **Launcher**
+
+  - `stack_under_reservation`: a reservation below the artifact bound refuses startup with status 125.
+  - `stack_adequate`: an adequate reservation admits the same input.
+  - `launcher_entry_exit`: a launcher run carries its retained closure and stated entry/exit relations.
+  - `launcher_run_admitted`: every `Launcher.Run` passes stack admission with its recorded reservation.
+
+  ### Validation
+
+  All run against final commit `72d109b00827ce07134ffa8a356fad87480e3cd3`:
+
+  - `lake build ConcreteSpec`: passed, 45 jobs.
+  - `scripts/spec/rules.sh`: passed, `PASS=32 FAIL=0`.
+  - `scripts/proofs/trust_ban.sh`: passed, `PASS=23 FAIL=0`; no declared axioms or banned dependencies, and all 270 examples use only standard axioms.
+
+  Heavy checks and axiom-golden regeneration were left for the reviewer as instructed.
+
+  ### Left out
+
+  - Concrete target ABI implementations, including the linux-x86_64 register table.
+  - Packed-access semantics, extern syntax, pointer-qualification syntax, source frame clauses, and snapshot constructs.
+  - Stronger program-wide frame proofs and Memory CFG/BIR lowering instances.
+  - Foreign call-only and kept memory-access guarantees remain explicitly documented trusted-base premises, not proved transition laws.
+
+  ### QUESTIONS
+
+  None. No undecided language question was encountered.
+
+To resume this session: kimi -r session_d730df5d-52eb-4ccd-9d3e-c72831117249
+[unexpected] RuntimeError: workspace wd_c10_5f2d53c9265a is not materialized
+    at RuntimeResolver.acquire (/home/runner/work/kimi-code/kimi-code/apps/kimi-code/dist-native/intermediates/main.cjs:180498:36)
+    at AgentRuntimeService.acquire (/home/runner/work/kimi-code/kimi-code/apps/kimi-code/dist-native/intermediates/main.cjs:132231:25)
+    at AgentFileHistoryService.readCurrent (/home/runner/work/kimi-code/kimi-code/apps/kimi-code/dist-native/intermediates/main.cjs:177606:31)
+    at AgentFileHistoryService.endCheckpoint (/home/runner/work/kimi-code/kimi-code/apps/kimi-code/dist-native/intermediates/main.cjs:177519:32) {
+  code: 'runtime.not_found'
+}
+kimi rc=0

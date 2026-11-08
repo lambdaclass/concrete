@@ -1,0 +1,22 @@
+You are the writer for branch wip/axioms-property of the Concrete repo, in this clone (~/projects/clones/wip-axioms-property), branched from origin/main (independent of slice 0). The owner approved replacing the exact per-theorem axiom golden list with a property check.
+
+Read first: scripts/proofs/axioms.sh, scripts/proofs/axioms.golden, scripts/proofs/lib.sh, scripts/proofs/theorems.lean (the enumerator; its PROOF_MODE views), scripts/proofs/trust_ban.sh, .github/workflows/lean_action_ci.yml (the "Proof axioms" step), .githooks/pre-push and scripts/checks/run.sh (find out whether and how the hook runs the proof checks), and any doc that describes axioms.golden or `axioms.sh --update` (grep the repo outside legacy/, including AGENTS.md, docs/, ConcreteSpec/README.md, changelog.d is history and stays).
+
+New design for scripts/proofs/axioms.sh (keep the P population checks as they are):
+- A (unchanged meaning): fail iff some theorem in the checked population depends transitively on an axiom outside {propext, Quot.sound, Classical.choice}. Find out whether any exception mechanism exists today (e.g. native-trust entries); if one exists keep its exact semantics via an explicit, justified exception file; if none exists, do not invent one.
+- Replace G (the byte-for-byte golden) by a pinned list: a new file scripts/proofs/pinned_theorems.txt with one fully-qualified public theorem name per line, each with a short `# reason` comment, and the check fails if any pinned name is missing from the population (or is not a theorem). Generated or private names (`_private.…`, `match_N`, `eq_N`, `brecOn`, `casesOn`, `proof_N`, `_sparseCasesOn`, instance `_proof_N`, …) are never pinned and never listed anywhere; the check must refuse a pinned name of that shape.
+- Pin exactly these, after verifying each exists on main under its full name (if one does not exist, leave it out and report it): the four A2b design theorems reset_fresh, defer_cleanup_releases, open_mut_freezes_root, rep_roundtrip; and the slice-1 theorems check_iff, checked_never_stuck, checked_no_implicit_traps, checked_exits. Do not add others.
+- Delete scripts/proofs/axioms.golden and the `--update` mode (an `--update` invocation should exit 2 with a one-line message saying the golden is gone), and update every doc/comment that mentions them.
+
+Controls (inside axioms.sh, the same negative-control style it already uses, running the real code on bad inputs and requiring the exact failure):
+1. a planted `sorryAx` use (a theorem proved by `sorry`) fails A naming that theorem;
+2. a planted custom axiom used by a theorem fails A naming it (keep the existing control);
+3. removing a pinned theorem fails (e.g. run the pinned check against a pinned list containing a name absent from the population, and against the population with one pinned name filtered out);
+4. a pinned list containing a generated-shape name is refused;
+5. adding new theorems, private or generated (e.g. a control module declaring a public theorem, a private theorem and something producing match/eq lemmas), passes the pinned check, i.e. no golden-style difference is reported.
+
+Keep CI (the "Proof axioms" step) and the hook path consistent: whatever runs axioms.sh must still run it with the same command and no golden file. Run, inside `nix develop .#gates` with `export PATH="$HOME/.elan/bin:$PATH"`: `lake build`, `bash scripts/proofs/axioms.sh` (must pass with all controls), `bash scripts/proofs/trust_ban.sh`, and `bash scripts/checks/run.sh` if it is cheap enough (report if not run). Add changelog.d/2026-11-08-axioms-property.md (short, cite the owner approval "yes to 6 things", 2026-11-08). Do not edit docs/decisions.md or ROADMAP.md.
+
+Note for your report: wip/slice0-lexer* branches regenerate axioms.golden; whichever lands second must drop those edits. Say nothing in the repo about it; just mention it in your report.
+
+If anything requires a decision not given here (e.g. what counts as "the checked libraries" beyond today's ConcreteSpec population), keep today's behaviour and list the question in your final answer. Commit on wip/axioms-property (do not push). End with a short report: files changed, the pinned list, controls and their results, checks run with results, open questions.

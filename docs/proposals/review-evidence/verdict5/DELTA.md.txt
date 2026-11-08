@@ -1,0 +1,12 @@
+Round 5. In round 4 on removing `as` entirely, Kimi and agy agreed with all of 11-full; Codex agreed with (a), (c), (d) and disagreed with (b): "OD139 requires imports; MOD-3 rejects two imports binding `parse`. Thus importing both functions fails before `json::parse` or `csv::parse` can help. OPEN-11 must explicitly revise what imports bind, or revise the import requirement." Kimi and agy made (b) conditional on the same prerequisite. Claude accepts and proposes this fix to (b):
+
+(b-fixed) Import renaming is removed. An import names either items or a module, never an alias:
+  - `import a::b::{x, y};` binds the item names x and y (as today, minus `as`).
+  - `import std::json;` binds the module's own last segment `json`, so its items are used qualified as `json::parse` (this is the module's own name, not a whole-module alias; there is no way to choose a different name).
+  - Two imports that bind the same name are still refused (MOD-3 unchanged). On a clash between items, import the modules instead and qualify: `import std::json; import std::csv;` then `json::parse(...)`, `csv::parse(...)`. Two modules whose last segments clash (`a::util`, `b::util`) are imported by their parent modules and qualified one level higher (`a::util::f`, `b::util::f`).
+  - OD139 (imports required) is kept: every name used, qualified or not, starts from an import.
+  This revises OPEN-11 explicitly; its exact punctuation goes to the owner in the spelling round.
+
+TASK: AGREE or DISAGREE with (b-fixed) (DISAGREE only with a concrete reason, at most 50 words: LL(1), a decided row such as OD139/MOD-2/MOD-3/OD151/OD152, resolution ambiguity, or a second form). Check particularly whether "import a module" is already allowed or is itself a new form, and whether it creates two ways to reach one item (`import a::b::{x}` + `x` versus `import a::b` + `b::x`). Do not modify files.
+End with exactly one line:
+ANSWER: DISAGREE=<b-fixed or none>; NOTE=<short or none>

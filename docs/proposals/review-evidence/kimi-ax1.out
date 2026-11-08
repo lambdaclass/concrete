@@ -1,0 +1,1397 @@
+• I’ll inspect the current axiom checks, their CI/hook wiring, and documentation before changing the implementation.
+
+• The current hook does not run proof checks; CI invokes `axioms.sh` directly. The existing axiom script has no exception path, and all eight requested names appear in the current theorem inventory. I’ll confirm their declarations and check for any separate exception mechanism before implementing the pinned check.
+
+• All eight declarations are present on `origin/main` under their expected full names. No native-trust or other axiom exception mechanism exists, so the replacement will have no exception file and will keep A fail-closed.
+
+• I’m replacing only G: P and A remain intact, while T checks eight public theorem names and ignores additions to the wider theorem population. The controls will exercise `sorryAx`, a custom axiom, missing and malformed pins, and added public/private/generated declarations.
+
+• The implementation and documentation are updated, and `--update` now exits 2 with exactly one explanatory line. I’ll check for stale golden references, then run the requested Lean build and proof checks.
+
+• The first axiom run passed P, A, T, and five controls but failed the added-declarations control because its private-theorem grep used `\t` in an ERE. I’m correcting that assertion to match a literal tab via `[[:space:]]`, then rerunning the full script.
+
+• The revised axiom check now passes all 11 assertions, including every requested control. Next I’m running the trust ban and the root check suite.
+
+• All requested checks now pass: `lake build`, the axiom script with all controls, the trust ban, and all 11 root checks. I’m reviewing the final diff for scope and stale references before creating the requested local commit.
+
+• The final diff is limited to the axiom script, its pinned list, the golden deletion, CI/documentation wording, and the requested changelog. I’m committing that exact validated content on `wip/axioms-property`; no push will be made.
+
+• Implemented and committed on `wip/axioms-property` as `fce6644d9c46d4e2fb81b97572275a482560951f`. The tree is clean and nothing was pushed.
+
+  ### Changes
+
+  - Replaced the golden comparison in `scripts/proofs/axioms.sh` with pinned-theorem property T; P and A retain their existing behavior.
+  - Added `scripts/proofs/pinned_theorems.txt`.
+  - Deleted `scripts/proofs/axioms.golden`.
+  - Removed `--update`; it now exits 2 with one line explaining that the golden is gone.
+  - Updated CI wording, `ConcreteSpec/README.md`, and `docs/proposals/SPEC_UNIFICATION.md`.
+  - Added `changelog.d/2026-11-08-axioms-property.md`, citing the owner’s “yes to 6 things” approval.
+  - CI still runs `bash scripts/proofs/axioms.sh`. The pre-push hook does not run proof checks, so its behavior is unchanged.
+  - No existing axiom exception mechanism was found; none was added.
+
+  ### Pinned theorems
+
+  All eight were verified on `origin/main`:
+
+  - `ConcreteSpec.Brand.reset_fresh`
+  - `ConcreteSpec.Cleanup.defer_cleanup_releases`
+  - `ConcreteSpec.Borrow.open_mut_freezes_root`
+  - `ConcreteSpec.Rep.rep_roundtrip`
+  - `ConcreteSpec.check_iff`
+  - `ConcreteSpec.checked_never_stuck`
+  - `ConcreteSpec.checked_no_implicit_traps`
+  - `ConcreteSpec.checked_exits`
+
+  ### Verification
+
+  Inside `nix develop .#gates` with the requested Elan path:
+
+  - `lake build`: passed, 29 jobs.
+  - `bash scripts/proofs/axioms.sh`: **PASS=11 FAIL=0**.
+    - Planted `sorryAx`: A fails naming `ConcreteSpecControl.sorryThm`.
+    - Planted custom axiom: A fails naming `ConcreteSpecControl.usesExtra`.
+    - Absent pin and population filtered to remove `reset_fresh`: both fail T.
+    - Generated-shape pin: refused.
+    - Added public, private, and match/eq-generated theorems: T passes without a golden-style difference.
+    - Existing population negative control also passes.
+  - `bash scripts/proofs/trust_ban.sh`: **PASS=23 FAIL=0**.
+  - `bash scripts/checks/run.sh`: **all 11 root checks pass**.
+  - `git diff --check`: passed.
+
+  Open questions: none; the checked population remains today’s `ConcreteSpec` population.
+
+  Integration note: `wip/slice0-lexer*` branches regenerate `axioms.golden`; whichever lands second must drop those edits.
+
+kimi version 2.4.1
+• I need modify repo commit no push. Carefully inspect. Should follow user exact. Should use todo due multi-step. Should have no agents. Should read files parallel. First inspect git status branch to preserve edits; read required. Could use Bash git status read-only and Read. Should potentially have AGENTS in scripts etc. Glob AGENTS subdirs. I have root instructions. Should find nested. Do Glob AGENTS.md perhaps pattern specific scripts/**/AGENTS.md and docs etc. Use parallel read known scripts files + workflow etc. Large files. I'll initiate short progress.
+
+## wip/axioms-property...origin/main
+• I got all relevant. Grep excluded docs no matches? Perhaps AGENTS no mentions. Changelog history stays. Should have docs perhaps README no mention. Should have exceptions native trust entries in other scripts? Search axioms exceptions. User specifically find any exception mechanism today e.g. native-trust entries. axioms.sh no. But perhaps native_trust file and exception? Should search scripts/proofs listing and terms. Also verify main full names via golden confirms all eight? reset, defer, open, rep, check etc all there. Should source and type theorem perhaps golden from current main. Branch origin/main exact no edits. But I should inspect git log perhaps base. Theorem existence confirmed golden and actual enumerator when run. Should pinned list full names as above.
+
+  Should design robust pinned checks including public theorem and generated refusal, controls exact. Should understand script semantics no set -e, finish counters. `--update` must exit 2 one-line before population (to avoid build). Should reject other args? Existing no. Keep no new. Should have no golden.
+
+  Core property:
+  - P unchanged meaning exact lines ideally.
+  - A unchanged.
+  - pinned list one fully qualified public theorem per line each short # reason comment. Interpret "with one fully-qualified public theorem name per line, each with a short `# reason` comment" Could be each line `ConcreteSpec... # reason` or separate comments? Likely inline. Parser should support inline comments. Should have no generated/private names anywhere pinned. Must refuse shape robustly. Should not list generated names in file. Controls temp list includes generated names, okay "never listed anywhere" could mean generated/private names never pinned and never listed anywhere perhaps specifically pinned file; control necessarily contains shape. User asks control with generated shape. Fine.
+  - fails if pinned missing or not theorem. Population only theorems, so compare against inventory ensures both. Should distinguish absent name from not theorem perhaps optional message. A pinned name might be non-theorem constant, missing population. Could use constants mode to distinguish, but requirement only fail. No need additional enumerator. Pinned compare exact first field.
+  - Public: `_private.` any component? Private names start `_private`. Could reject if starts `_private.` or contains `._private.`? Lean private starts `_private`. generated shape detection any component `match_N`, `eq_N`, `brecOn`, `casesOn`, `proof_N`, `_sparseCasesOn`, instance `_proof_N`, plus ellipses. Should decide comprehensive. I can define regex over dot-separated components:
+  `(^|[.])(_private([.]|$)|match_[0-9]+([.]|$)|eq_[0-9]+([.]|$)|proof_[0-9]+([.]|$)|_proof_[0-9]+([.]|$)|_sparseCasesOn(_[0-9]+)?([.]|$)|brecOn(_[0-9]+)?([.]|$)|casesOn([.]|$))`
+  But generated shapes include `inj`, `injEq`, `sizeOf_spec`, `ofNat_ctorIdx`, `_sizeOf_2_eq`, `_simp_...`, etc ellipsis implies broad. User specifically names these and "Generated or private names (`_private.…`, `match_N`, `eq_N`, `brecOn`, `casesOn`, `proof_N`, `_sparseCasesOn`, instance `_proof_N`, …) are never pinned and never listed anywhere; the check must refuse a pinned name of that shape." Could detect many Lean-generated theorem patterns. Should avoid over-rejecting legitimate public names? only pin eight. Could define general enough. "public theorem name" perhaps reject all compiler generated names: components matching `_private`, `match_\d+`, `eq_\d+`, `proof_\d+`, `_proof_\d+`, `_sparseCasesOn.*`, `brecOn.*`, `casesOn`, `inj`, `injEq`, `sizeOf_spec`, `ofNat_ctorIdx`, `_sizeOf_\d+_eq`, `_simp_\d+.*`, `_proof_\d+.*`, `else_eq`, etc. Also `brecOn.eq`, `brecOn_1.eq`, `eq_def`, `congr_simp`, `_proof_N_N`, `_sparseCasesOn_N.else_eq`. Should have no generated list anywhere except control. I can keep exact requested plus common. Important regex reject `ConcreteSpec.Brand.reset_fresh`? no.
+
+  Perhaps name validation also fully qualified: require `ConcreteSpec.`? "fully-qualified public theorem" population is ConcreteSpec. Could require at least a dot and no whitespace. Full name parser strips inline comment. Comments and blank lines allowed? Each entry inline. I can enforce every non-comment nonempty line matches `^[^[:space:]#]+[[:space:]]+#[[:space:]]+...` perhaps reasons required. Requirement each with reason. Should have function to parse. Simplicity awk extracts first field if not #. `awk 'NF && $1 !~ /^#/ {print $1}'`. If inline comments. Could allow standalone comments. Should detect malformed? Could enforce valid pinned list no duplicates perhaps not asked but good property. Avoid invent exception.
+
+  Controls:
+  1 planted sorry theorem fails A naming that theorem: create c-sorry.lean with `theorem ConcreteSpecControl.sorryThm : 1 = 2 := sorry`; population theorems; `nonstandard` output exact `ConcreteSpecControl.sorryThm (sorryAx)`; similar existing. Lean warning goes stderr; ignore or include error diagnostics. Must require exact failure. "fails A naming that theorem" yes.
+  2 existing custom exact.
+  3 removing pinned theorem fails both examples: temp list containing absent name and population filtered one pinned name. User phrase "e.g. run ... and against population with one pinned name filtered out" controls asks removing a pinned theorem fails. Implement both to be thorough. Should pinned_check function returning output and nonzero? Should design negative control exact. I want functions produce diagnostics and status. `pinned_errors INVENTORY PINNED` prints lines for invalid shapes/missing etc. Then main `[ -z "$(pinned_errors ...)" ]`. Controls require exact string. Generated shape exact. Extra theorem passes pinned check: use c-clean inventory plus standard pinned list -> missing all pins, so can't compare c-clean alone against pinned because original population not included (control file inserted into enumerator plus ConcreteSpec imports, actually c-clean population includes entire original + controls! Yes `population` imports ConcreteSpec and control added, so pinned passes. Great. For sorry control, original + control and nonstandard only sorry. Custom same. c-clean adds public private and inductive/match eq. Use e.g.
+  ```
+  theorem ConcreteSpecControl.clean : 1 = 1 := rfl
+  private theorem ConcreteSpecControl.hidden : 2 = 2 := rfl
+  inductive ConcreteSpecControl.Choice where | left | right
+  def ConcreteSpecControl.pick : ConcreteSpecControl.Choice → Nat
+    | .left => 0
+    | .right => 1
+  ```
+  Will produce match/eq theorems. Existing c-clean public/private only; extend with inductive and def pattern match. Requirement "adding new theorems, private or generated (e.g. ... something producing match/eq lemmas), passes pinned check no golden difference". Could assert generated names actually present to ensure control meaningful. Should not output them? "never listed anywhere" weird control code can grep generic shapes, no hardcoded generated names. Use grep -Eq '(^|[.])match_[0-9]+([.]|$)|...' c-clean.tsv and check private row. Then `[ -z "$(pinned_errors "$TMP/c-clean.tsv" "$PINNED")" ]` plus shapes present and public and private. Could `grep -q $'^ConcreteSpecControl.clean\t'`; private name variable random so regex. I need ensure `match_N` output is private theorem. Pattern def will produce equation lemmas and private matcher, yes. `inductive` itself generates recursors etc perhaps theorem population includes `.rec`? recInfo not thm so no. Pattern matching def yields eq_1 etc public generated thm and private match. Good.
+
+  Control missing pinned name absent from population:
+  ```
+  printf '%s\n' 'ConcreteSpecControl.absent # ...' > c-p-absent
+  E=$(pinned_errors inv c-p-absent)
+  [ "$E" = "pinned theorem missing: ConcreteSpecControl.absent" ]...
+  ```
+  This is fully qualified public shape, absent.
+  Filtered population: `FIRST=$(cut -f1 PIN list | head -1)`; `awk -F'\t' -v n="$FIRST" '$1 != n' inv > filtered`; `pinned_errors filtered PINNED` exact missing. Ensure exactly.
+  Generated list: `printf 'ConcreteSpecControl.match_1 # generated\n'`. pinned_errors exact `"refusing generated or private pinned name: ConcreteSpecControl.match_1"`. This name absent too; function should only report generated error not also missing? Use loop if shape then print refusal and continue. Exact.
+  Perhaps test private too? Control requirement generated-shape only. Could include two entries but output exact multiple. One enough.
+  Sorry exact.
+
+  `pinned_errors` parser:
+  ```
+  pinned_names() {
+   awk '
+     /^[[:space:]]*($|#)/ {next}
+     {print $1}
+   ' "$1"
+  }
+  generated_name() {
+    local n=$1 component
+    [[ $n == *... ]]
+  }
+  pinned_errors() {
+   local inventory=$1 pinned=$2 name
+   [ -f "$pinned" ] || { echo "$pinned is missing"; return; }
+   while IFS= read -r name; do
+     if is_generated_or_private "$name"; then ...
+     elif ! awk -F'\t' -v n="$name" '$1 == n {found=1; exit} END {exit !found}' inventory; then echo "pinned theorem missing: $name"; fi
+   done < <(pinned_names "$pinned")
+  }
+  ```
+  Process substitution failures? fine. Public fully qualified validation:
+  ```
+  case "$name" in ConcreteSpec.*) ;; *) echo "pinned name is not fully qualified..." ;;
+  esac
+  ```
+  Controls use `ConcreteSpecControl` for absent/generated, if require ConcreteSpec prefix would fail different. Use actual `ConcreteSpec.notPinned` absent and `ConcreteSpec.Control.match_1` generated. c-control namespace inserted declarations but pinned list doesn't need declaration. Use `ConcreteSpec.Control.absent` generated shape? fine.
+  Fully qualified means has dot. Could require `ConcreteSpec.` population all. For control use `ConcreteSpec.Control.absent`.
+  `is_generated_name` using bash regex:
+  ```
+  [[ $1 =~ (^|\.)(_private|match_[0-9]+|eq_[0-9]+|proof_[0-9]+|_proof_[0-9]+|brecOn(_[0-9]+)?|casesOn|_sparseCasesOn(_[0-9]+)?)(\.|$) ]]
+  ```
+  Note `_private.Concrete...` matches. `proof_N` might be component `proof_1` yes. `instance _proof_N` component `_proof_1` matched. `match_N.eq_N` both. `brecOn` public theorem shape e.g. `ConcreteSpec.Borrow.Ok.brecOn`. `casesOn` perhaps recInfo not theorem but reject anyway.
+  Additional generated shapes perhaps `eq_def`, `injEq`, etc. User ellipsis means I should robustly reject. Could use Lean name structure? Shell regex. "Generated or private names ... never pinned and never listed anywhere" Perhaps they intend filter pinned candidates only. I can detect obvious. Full generator list impossible. But exact specified enough plus extras. I should include common generated declarations:
+  - `_private`
+  - `match_[0-9]+`
+  - `eq_[0-9]+`
+  - `proof_[0-9]+`
+  - `_proof_[0-9]+`
+  - `_sparseCasesOn.*`
+  - `brecOn.*`
+  - `casesOn`
+  - `inj`, `injEq`
+  - `sizeOf_spec`
+  - `ofNat_ctorIdx`
+  - `_sizeOf_[0-9]+_eq`
+  - `_simp_[0-9]+.*`
+  - `else_eq`
+  - `eq_def`
+  - `congr_simp`
+  Perhaps generated theorem `brecOn.eq` caught brecOn.
+  - `_proof_1_1` regex `[0-9]+(_[0-9]+)*` to catch suffix.
+  - `_simp_1_12`
+  - `_sparseCasesOn_3`
+  - `match_1` public private.
+  - `.eq_1` etc.
+  - `.sizeOf_spec`.
+  - `.inj` constructor generated.
+  Would `checked_no_implicit_traps` none.
+
+  Should pin file comments reasons. Example:
+  ```
+  # Public specification theorems whose continued presence is required by scripts/proofs/axioms.sh.
+  ConcreteSpec.Brand.reset_fresh # A2b: resetting a brand produces a fresh capability.
+  ...
+  ```
+  "one fully-qualified public theorem name per line, each with a short # reason comment" Header comment okay. Use exactly eight no others. Reasons concise. Should know actual theorem semantics to not misstate. Read source around declarations. Use Grep theorem names. Also search exceptions and docs outside legacy including git grep perhaps Grep done. Search `native.trust|native_trust|exception|allow` scripts/proofs and axiom. Also read README ConcreteSpec and scripts/proofs README perhaps Glob.
+
+b6a647beaf2c9b88899743bf64b645d4b9a6edbe
+b6a647beaf2c9b88899743bf64b645d4b9a6edbe
+b6a647beaf2c9b88899743bf64b645d4b9a6edbe train/recfound: merge origin/wip/record-foundation (3be01c7458)
+• Docs proposal SPEC_UNIFICATION line mentions axiom golden. User "any doc describes axioms.golden or --update (grep repo outside legacy including ... changelog history stays)." Should update docs/proposals/SPEC_UNIFICATION.md even if proposal. Should read surrounding. Also root_inventory might pin file list hashes? Should inspect root_inventory manifest. Grep axioms golden only found those. Workflow comment update. ConcreteSpec README update. `theorems.lean` comments inventory general okay perhaps "none dropped from inventory" remains enumerator, not golden. No update needed except possibly axiom wording? Fine.
+  Should read docs snippet. Also required checks scripts may assert comments in workflow? `workflow_yaml` checks job steps not descriptions perhaps no concern. root_inventory requires tracked inventory auto check, new file okay? Should check root inventory. Read script perhaps it expects exact root files not scripts. Probably no.
+
+  Should inspect current actual inventory via running perhaps later. Could quickly run enumerator but needs nix. User requires build. Before edits can run pinned verification with existing golden enough plus declarations. They specifically "after verifying each exists on main under full name". I have HEAD=origin/main and golden entries. Could verify via `awk` command no raw grep use dedicated Grep perhaps enough. I can state all. Actual check after implementation ensures. No missing.
+
+  Should plan implementation. Could full rewrite axioms.sh via Write because replacing most content and little continuity? I have ~100 lines, P and nonstandard retained, negative controls mostly changed. Write acceptable complete replacement. But instructions Edit mandatory incremental especially small. This is substantial rewrite ~50%; could Write complete replacement after read. Yet "Use Write only ... complete replacements, or content with little continuity; use Edit every incremental". I can use Write full replacement to avoid multiple edits. Should not have comments default? Existing script heavily comments and user requires docs/comments update; fit idiom. I should preserve detailed style.
+
+  Perhaps split functions. I'll design exact script carefully.
+
+  Header:
+  ```
+  # AXIOM PROPERTIES: every theorem ... standard 3 ... and eight design/safety theorems remain in population.
+  # P unchanged
+  # A ...
+  # T pinned... every name in pinned_theorems.txt is present in theorem population. Additions... do not change result. Private/generated names refused as pins.
+  # NEGATIVE CONTROLS ... sorry, declared axiom ... missing pin, generated pin rejected; public private generated additions pass T; closure P.
+  ``` Call property `T` or `N`? User says Replace G by pinned list no specified letter. Could use `T` for pinned theorem presence. CI comment "standard-axiom property and pinned public design theorems". Keep same command.
+
+  At top before sourcing gate_env? `--update` invocation should exit 2 one-line. If outside gate shell, if source first exits gate refusal rather than message. Requirement "an --update invocation should exit 2 with one-line message saying golden is gone". Best handle first after `set` before gate_env:
+  ```
+  if [ "${1:-}" = --update ]; then
+   echo "error: --update is gone: the axiom golden has been replaced by scripts/proofs/pinned_theorems.txt" >&2
+   exit 2
+  fi
+  ```
+  One line. Should mention golden gone exactly. `error: the axiom golden is gone; --update no longer exists (edit scripts/proofs/pinned_theorems.txt)` one line. No extra. Works anywhere.
+  Other args ignored as before; no need.
+
+  PINNED path.
+
+  nonstandard unchanged.
+
+  Functions:
+  ```
+  pinned_names() {
+    awk 'NF && $1 !~ /^#/ { print $1 }' "$1"
+  }
+  ```
+  If line `foo#bar` not correct but file controlled. Could require reasons? Pinned file entries inline comments. No need validate format beyond names. To make malformed safe, parser should not allow extra arbitrary second token? Perhaps every line with reason. But not requested check. Could add duplicate checks? no.
+
+  `generated_or_private()`:
+  ```
+    [[ $1 =~ (^|\.)(_private|match_[0-9]+|eq_[0-9]+|eq_def|proof_[0-9]+|_proof_[0-9]+(_[0-9]+)*|_sparseCasesOn(_[0-9]+)?|brecOn(_[0-9]+)?|casesOn|inj|injEq|sizeOf_spec|ofNat_ctorIdx|_sizeOf_[0-9]+_eq|_simp_[0-9]+(_[0-9]+)*|else_eq|congr_simp)(\.|$) ]]
+  ```
+  Bash regex quoting no. Dot escaped. `_private` followed dot. `match_1` etc. `proof_N` user says proof_N not `_proof_N`; covered.
+  What about `ConcreteSpec.Foo.brecOn` matches. `casesOn` recursor not theorem but refuses.
+  Could include `noConfusion`, `noConfusionType` but not thm perhaps.
+  "Generated names ... never listed anywhere" pinned list has only explicit names, okay.
+
+  `pinned_errors INVENTORY LIST`:
+  ```
+    local inventory=$1 pins=$2 name
+    if [ ! -f "$pins" ]; then printf ...; return; fi
+    while IFS= read -r name; do
+      if generated_or_private "$name"; then
+        printf 'refusing generated or private pinned name: %s\n' "$name"
+        continue
+      fi
+      case "$name" in
+        ConcreteSpec.*) ;;
+        *) printf 'pinned name is not a fully-qualified ConcreteSpec theorem: %s\n' "$name"; continue ;;
+      esac
+      if ! awk -F'\t' -v name="$name" '$1 == name { found=1; exit } END { exit !found }' "$inventory"; then ...
+      fi
+    done < <(pinned_names "$pins")
+  ```
+  Potential awk END overwrites exit? In awk `exit` then END runs exit !found; found=1 so 0 yes. Good. Empty inventory errors all pins.
+  Public `ConcreteSpec.` only aligns population. Control absent name `ConcreteSpec.Control.absent` fully qual.
+  Could detect non-theorem by inventory only, message missing or not theorem:
+  `printf 'pinned theorem is missing or not a theorem: %s\n'`. Controls exact accordingly. This meets fail if missing or not theorem. Main failure message `T`.
+  Should make sure pin file has names exactly no CR? no.
+  Duplicates not issue.
+  Reason comments short.
+
+  Main:
+  ```
+  echo "=== T: pinned public theorems ==="
+  [ -f "$PINNED" ] || { no "$PINNED is missing"; finish; }
+  NP=$(pinned_names "$PINNED" | grep -c .) with pipefail grep no matches returns 1 but command substitution no set -e so fine. [ "$NP" -eq 8 ]? Do not assert count per project says properties not counts. No count requirement besides exactly list; no need count threshold. `T=$(pinned_errors ...)`; `[ -z "$T" ] && ok "all $(...) pinned..." || no ...`.
+  ```
+  If missing file, pinned_errors emits file missing and no finish needed. Better no special, but `pinned_names` process substitution awk error may print stderr plus pinned_errors file check returns. main no exit. `NP` perhaps awk missing errors. Simpler explicit file check as before no update reference.
+  ```
+  T=$(pinned_errors ...)
+  ```
+
+  Controls:
+  - sorry and custom. Use helper perhaps exact.
+  ```
+  cat > c-sorry...
+  population theorems...
+  SB=$(nonstandard...)
+  [ "$SB" = "ConcreteSpecControl.sorryThm (sorryAx)" ] ...
+  ```
+  Lean sorry warning captured in err, if population exit nonzero? Existing ignores rc. Should "requiring exact failure", ensure output exact. Fine.
+  - custom same.
+  - missing:
+  ```
+  printf 'ConcreteSpec.Control.absent # negative control\n' > ...
+  P=$(pinned_errors inv ...)
+  [ "$P" = "pinned theorem is missing or not a theorem: ConcreteSpec.Control.absent" ] ...
+  ```
+  - filtered:
+  ```
+  FIRST=$(pinned_names "$PINNED" | head -1)
+  awk -F'\t' -v name="$FIRST" '$1 != name' inv > ...
+  P=...
+  [ "$P" = ... ]...
+  ```
+  - generated:
+  ```
+  printf 'ConcreteSpec.Control.match_1 # negative control\n'
+  P=...
+  [ "$P" = "refusing generated or private pinned name: ConcreteSpec.Control.match_1" ]
+  ```
+  This uses generated name in control temp only as asked.
+  - clean:
+  ```
+  cat:
+  theorem public...
+  private theorem...
+  inductive ConcreteSpecControl.Variant where
+   | zero
+   | succ (n : Nat)
+  def ... : Variant → Nat
+   | .zero => 0
+   | .succ n => n
+  ```
+  `inductive` perhaps name `Variant` and `encode` patterns generates `.eq_1`, `.eq_2`, private match. All theorems original + controls.
+  `population theorems ... 2>err` check command success? Existing ignores. Add:
+  ```
+  population ... || { no "control enumerator failed..."; finish; }
+  ```
+  Would abort remaining controls if failure, okay. But controls expected pass enumerator. Existing style no.
+  Check:
+  ```
+  C=$(pinned_errors c-clean PINNED)
+  grep -q $'^ConcreteSpecControl.clean\t' ...
+  grep -qE '^_private\..*ConcreteSpecControl\.hidden\t' ...
+  grep -qE '(^|\.)match_[0-9]+(\.|$)|(^|\.)eq_[0-9]+(\.|$)' ...
+  [ -z "$C" ] && shapes... && ok ...
+  ```
+  `grep -qE` private regex with random `_private..0...` yes. I don't need assert public separately? pinned check passing even if enumerator missing control additions would be vacuous, so assert. Requirement controls run real code. Ensure generated eq lemmas shape. `def choose` equation lemmas likely `.eq_1` only if non recursive? Lean equation lemmas perhaps `ConcreteSpecControl.choose.eq_1` generated theorem yes. Private matcher theorem `...match_1...` likely. Could check only `eq_` public to avoid assumptions; user "private or generated" private theorem already. Use `grep -Eq '(^|[.])match_[0-9]+([.]|$)|(^|[.])eq_[0-9]+([.]|$)'`. likely.
+
+  Potential population with `sorry` triggers warning as not error because enumerator Lean file not warningAsError? Running `lake env lean tmp` options from lake? Existing trust ban does it so yes.
+
+  No exception file because none. Mention final no exceptions added. No native trust entries.
+
+  Delete golden via Bash `rm`? Dedicated tools no delete. Bash `rm scripts/proofs/axioms.golden` is allowed. Local reversible. I can do after write. Should create pinned and changelog with Write. Edit docs files separately parallel allowed distinct. Axioms full Write and pinned and changelog perhaps same response parallel. But before code read docs snippet.
+
+• Changelog history stays don't edit 11-06. RETENTION "axiom inventory" still true general enumerator no need. kernel replay inventory still true. theorems comments still true.
+
+  Perhaps run shellcheck? no.
+
+  I'll write script. Should be careful bash regex line lengths style existing ~120. `generated_or_private` with `[[ ... ]]`; shell regex uses `=~` unquoted. Component grouping. Use local n? 
+  ```
+  generated_or_private() {
+    [[ $1 =~ (^|[.])(_private|match_[0-9]+|...)([.]|$) ]]
+  }
+  ```
+  Inside bracket `[.]` safe.
+  `_proof_[0-9]+(_[0-9]+)*` matching prefix `_proof_1` then next `_1` group. Fine.
+  `_simp_[0-9]+(_[0-9]+)*`.
+  `eq_def` generated; `else_eq`.
+  `injEq` etc.
+  `on` perhaps `brecOn` exact suffix optional numeric; `.brecOn.eq` matches brecOn then dot.
+  `casesOn` optional numeric? no but can `_ [0-9]` not necessary.
+  `_sparseCasesOn` optional numeric.
+  `_private` could have numeric? private prefix `_private` followed dot exact.
+
+  Check `pinned_names`: comments lines with leading whitespace:
+  `awk '/^[[:space:]]*($|#)/ { next } { print $1 }'`.
+  This accepts `foo` no reason, but actual file all comments. Fine.
+  Reason parser not needed.
+
+  `pinned_errors` uses process substitution. Missing pinned file early prints. `return 0` implicit after printf, so command substitution success with error text. Good.
+  Check duplicates not needed.
+  `pinned_errors` checks invalid fully qual after generated; generated `ConcreteSpec.Control.match_1` gets generated exact.
+  Missing error string choose `"pinned theorem missing or not a theorem: ..."` concise. Controls exact.
+
+  Main no `D` golden.
+  Control output message head errors perhaps `head` existing. Fine.
+
+  Should c-clean generation code syntax Lean:
+  ```
+  inductive ConcreteSpecControl.Shape where
+    | leaf
+    | node (n : Nat)
+  def ConcreteSpecControl.shapeSize : ConcreteSpecControl.Shape → Nat
+    | .leaf => 0
+    | .node n => n + 1
+  ```
+  Will autoImplicit off? all typed. Fine.
+  Public theorem clean private hidden. Private fully qualified syntax allowed existing.
+  Check generated rows grep. The enumerator includes all ConcreteSpec plus Control declarations inserted. The control `def` itself not theorem but generated equation theorems included due inPopulation: for declarations in current file `getModuleIdxFor?` perhaps none and privateToUserName root Control yes. Good.
+
+  Control sorry inserted theorem uses `sorry` warning; output includes warnings stdout? Lean warnings typically stdout? Existing trust controls filter nonstandard output, warnings not tabs so no effect. I capture stderr separate.
+
+  `NP=$(pinned_names "$PINNED" | grep -c .)` grep counts, pipefail irrelevant.
+  Main pinned errors T command substitution may include newline, echo compress.
+  No `grep` shell instruction says don't run grep via shell tools for search, but writing code grep is existing idiom allowed obviously. Tools only no raw search.
+
+  `--update` output no gate_env so exit exact. Add negative control for `--update`? User controls list 5 no need. Could test manually later. No script self-control invoking itself due expensive and env. Not needed.
+
+  Full script Write.
+
+• Now update docs/workflow, delete golden. Use Edit each file one per response parallel and Bash rm independent? yes. Edits distinct. Concrete README replace lines 37-40. Workflow line comment. Proposal. No hook changes because doesn't run proof; user "Keep CI and hook path consistent: whatever runs axioms.sh same command no golden". Hook doesn't run. No need add proof checks. Good.
+
+  Should check new script syntax before full run `bash -n` cheap. Also test --update exit 2 one line outside nix. Use Bash commands. First edits.rc=2 lines=1
+error: the axiom golden is gone; --update no longer exists (edit scripts/proofs/pinned_theorems.txt)
+Now run required. But first perhaps inspect diff and grep docs. Then run lake build etc in nix develop .#gates export PATH. Commands potentially long. User specifically run `lake build`, `bash axioms`, trust, run if cheap. Should do in nix shell. Could single Bash with `nix develop .#gates --command bash --noprofile --norc -eo pipefail -c 'export PATH...; lake build && bash axioms...'` but need exact record each SHA later after commit? They say record exact SHA; I can report tests precommit working tree and perhaps rerun after commit? Standard usually test before commit okay but AGENTS says record result exact commit SHA. Should commit then potentially tests on commit? User says commit no push, report checks. Could run before commit and commit exact diff no changes, but SHA doesn't exist yet. To strictly record exact SHA run after commit perhaps expensive. Could commit then run required, amend fixes if needed. But task wants commit after validations. Could run now and mention tree. I can run after response too if needed. Likely no issue.
+
+  Should budget heavy runs max2 per machine. `lake build` whole tree one heavy, axioms builds ConcreteSpec and many Lean enumerator runs ~7, trust ban builds examples copy perhaps heavy. At most 2 heavy runs means user explicitly requests both so okay. scripts/checks run root is cheap. Run sequential all perhaps timeout max300 foreground. Axioms could take >300. Background with 600 etc. User says no full local run on laptop but explicitly asks in this clone, likely User expects. `lake build` spec only root. trust_ban explicit. I'll follow.
+
+  Before run update Todo implementation done docs done. Could do quick Grep golden refs, git diff --check and diff summary. Use tools.
+
+ M .github/workflows/lean_action_ci.yml
+ M ConcreteSpec/README.md
+ M docs/proposals/SPEC_UNIFICATION.md
+ D scripts/proofs/axioms.golden
+ M scripts/proofs/axioms.sh
+?? changelog.d/2026-11-08-axioms-property.md
+?? scripts/proofs/pinned_theorems.txt
+ .github/workflows/lean_action_ci.yml |    2 +-
+ ConcreteSpec/README.md               |    8 +-
+ docs/proposals/SPEC_UNIFICATION.md   |    4 +-
+ scripts/proofs/axioms.golden         | 1438 ----------------------------------
+ scripts/proofs/axioms.sh             |  119 ++-
+ 5 files changed, 86 insertions(+), 1485 deletions(-)
+• Diff stat excludes untracked expected. Stale refs only intentional and history. Good.
+
+  Run lake build and axioms perhaps separate to capture results and no over timeout. `nix develop .#gates --command bash --noprofile --norc -eo pipefail -c 'export PATH="$HOME/.elan/bin:$PATH"; lake build'`. Use background perhaps user asked long. I need next step depends, foreground max300. Likely lake build quick (already built). Do foreground.warning: Git tree '/home/unbalancedparen/projects/clones/wip-axioms-property' is dirty
+✔ [2/29] Built ConcreteSpec.Spec.Basics (182ms)
+✔ [3/29] Built ConcreteSpec.Spec.Cleanup (421ms)
+✔ [4/29] Built ConcreteSpec.Spec.Slice1Syntax (396ms)
+✔ [5/29] Built ConcreteSpec.Spec.Authority (507ms)
+✔ [6/29] Built ConcreteSpec.Spec.Brand (473ms)
+✔ [7/29] Built ConcreteSpec.Spec.Statics (158ms)
+✔ [8/29] Built ConcreteSpec.Spec.Borrow (653ms)
+✔ [9/29] Built ConcreteSpec.Spec.Slice1Semantics (331ms)
+✔ [10/29] Built ConcreteSpec.Spec.Slice1Ownership (264ms)
+✔ [11/29] Built ConcreteSpec.Spec.Observation (163ms)
+✔ [12/29] Built ConcreteSpec.Spec.Rep (212ms)
+✔ [13/29] Built ConcreteSpec.Spec.Slice1Checker (201ms)
+✔ [14/29] Built ConcreteSpec.Spec.Slice0 (273ms)
+✔ [15/29] Built ConcreteSpec.Spec.Examples (618ms)
+✔ [16/29] Built ConcreteSpec.Spec (140ms)
+✔ [17/29] Built ConcreteSpec.Proofs.Basics (197ms)
+✔ [18/29] Built ConcreteSpec.Proofs.Authority (379ms)
+✔ [19/29] Built ConcreteSpec.Proofs.Cleanup (481ms)
+✔ [20/29] Built ConcreteSpec.Proofs.Slice1 (624ms)
+✔ [21/29] Built ConcreteSpec.Proofs.Brand (729ms)
+✔ [22/29] Built ConcreteSpec.Proofs.Borrow (767ms)
+✔ [23/29] Built ConcreteSpec.Proofs.Observe (185ms)
+✔ [24/29] Built ConcreteSpec.Proofs.Checker (276ms)
+✔ [25/29] Built ConcreteSpec.Proofs.Rep (355ms)
+✔ [26/29] Built ConcreteSpec.Proofs.Slice0 (206ms)
+✔ [27/29] Built ConcreteSpec.Proofs.Examples (173ms)
+✔ [28/29] Built ConcreteSpec (132ms)
+Build completed successfully (29 jobs).
+Run axioms.warning: Git tree '/home/unbalancedparen/projects/clones/wip-axioms-property' is dirty
+=== P: population ===
+  ok   all 27 ConcreteSpec source modules are in the root's import closure
+  ok   1436 theorems from all 12 source modules that declare one
+=== A: standard axioms only ===
+  ok   every theorem's transitive axioms are among Classical.choice Quot.sound propext (Classical.choice 10, Quot.sound 138, propext 499)
+=== T: pinned public theorems ===
+  ok   all 8 names in scripts/proofs/pinned_theorems.txt are public theorems in the population
+=== negative controls ===
+  ok   control: a theorem proved by sorry fails A naming it (ConcreteSpecControl.sorryThm (sorryAx))
+  ok   control: a theorem using a declared axiom fails A naming it, and only it (ConcreteSpecControl.usesExtra (ConcreteSpecControl.extra))
+  ok   control: a pin absent from the population fails T (pinned theorem missing or not a theorem: ConcreteSpec.Control.absent)
+  ok   control: removing pinned theorem ConcreteSpec.Brand.reset_fresh from the population fails T
+  ok   control: a generated-shape pin is refused (refusing generated or private pinned name: ConcreteSpec.Control.match_1)
+grep: warning: stray \ before t
+  FAIL control: added public, private and generated theorems did not all pass T: '' 
+  ok   control: source modules outside a (truncated) import closure are reported
+PROOF-AXIOMS: PASS=10 FAIL=1
+Failure grep warning stray \ before t from private pattern `\t` in ERE doesn't mean tab. I'll fix. Public grep `$'^...\t'` okay. Private `grep -qE '^_private\..*ConcreteSpecControl\.hidden\t'` \t stray and doesn't match. Use `grep -qE '^_private\..*ConcreteSpecControl\.hidden[[:space:]]'` but theorem names no spaces, next tab. `[[:space:]]` matches tab. Or `$'^_private\\..*ConcreteSpecControl\\.hidden\t'` with -F? Dynamic regex. `grep -qE $'^_private\\..*ConcreteSpecControl\\.hidden\t'`. Better `[[:space:]]` but could match space in name? names ctrl free can spaces but this control no. use `$(printf '\t')` not necessary. Use `grep -qE '^_private\..*ConcreteSpecControl\.hidden[[:space:]]'`. Exact. Edit. Then rerun axioms. Could inspect control output not accessible TMP removed. The failure P empty indicates pinned passed and only assertion failed likely private grep. Warning confirms. No generated shape could also fail but likely private. Fix and rerun.
+
+warning: Git tree '/home/unbalancedparen/projects/clones/wip-axioms-property' is dirty
+=== P: population ===
+  ok   all 27 ConcreteSpec source modules are in the root's import closure
+  ok   1436 theorems from all 12 source modules that declare one
+=== A: standard axioms only ===
+  ok   every theorem's transitive axioms are among Classical.choice Quot.sound propext (Classical.choice 10, Quot.sound 138, propext 499)
+=== T: pinned public theorems ===
+  ok   all 8 names in scripts/proofs/pinned_theorems.txt are public theorems in the population
+=== negative controls ===
+  ok   control: a theorem proved by sorry fails A naming it (ConcreteSpecControl.sorryThm (sorryAx))
+  ok   control: a theorem using a declared axiom fails A naming it, and only it (ConcreteSpecControl.usesExtra (ConcreteSpecControl.extra))
+  ok   control: a pin absent from the population fails T (pinned theorem missing or not a theorem: ConcreteSpec.Control.absent)
+  ok   control: removing pinned theorem ConcreteSpec.Brand.reset_fresh from the population fails T
+  ok   control: a generated-shape pin is refused (refusing generated or private pinned name: ConcreteSpec.Control.match_1)
+  ok   control: added public, private and generated theorems pass T without a golden-style difference
+  ok   control: source modules outside a (truncated) import closure are reported
+PROOF-AXIOMS: PASS=11 FAIL=0
+• Continue trust ban and root checks. Trust likely perhaps 30 sec. Use tool.
+
+warning: Git tree '/home/unbalancedparen/projects/clones/wip-axioms-property' is dirty
+=== E/D: the environment ===
+  ok   all 27 ConcreteSpec source modules are in the environment E and D read
+  ok   none of the 3641 ConcreteSpec constants depends on sorryAx, ofReduceBool/Nat, trustCompiler or a native axiom
+  ok   ConcreteSpec declares no axiom
+=== S: the sources ===
+  ok   none of the 27 source files spells a banned word outside comments
+  ok   lakefile.toml builds the library with warningAsError, and nothing overrides it
+=== X: the examples, in the kernel's terms ===
+  ok   all 157 examples, kept as declarations, depend only on the standard axioms
+=== negative controls ===
+  ok   control: a theorem proved by sorry is refused (ConcreteSpecControl.sorryThm (sorryAx))
+  ok   control: a definition with a sorry body and no theorem about it is refused (ConcreteSpecControl.sorryDef (sorryAx))
+  ok   control: a theorem proved by native_decide is refused (ConcreteSpecControl.nativeThm (ConcreteSpecControl.nativeThm._native.native_decide.ax_1_1))
+  ok   control: a declared axiom is reported
+  ok   control: an axiom whose name holds a tab fails the run (no row can carry it)
+  ok   control: native_decide, and sorry inside an interpolation, after a string, raw string or quoted name holding comment delimiters, after an interpolation holding a string, a direct sorryAx, a syntax extension, an outside import, an option, meta code and decide options (native split across lines, positional) are found; the words in comments are not
+  ok   control: the header import ConcreteSpec.Spec Lean is reported
+  ok   control: the header import ConcreteSpec.Spec   Lean is reported
+  ok   control: the header prelude import ConcreteSpec.Spec is reported
+  ok   control: a library that turns warningAsError off is refused (the library sets options ['warningAsError'])
+  ok   control: a library built from another source directory is refused (the library sets ['srcDir'])
+  ok   control: a source the scan cannot read or lex (missing) fails it (rc=3)
+  ok   control: a source the scan cannot read or lex (Open) fails it (rc=3)
+  ok   control: a source the scan cannot read or lex (Brace) fails it (rc=3)
+  ok   control: a source the scan cannot read or lex (Quote) fails it (rc=3)
+  ok   control: source modules outside a (truncated) import closure are reported
+  ok   control: an example proved by decide +native and one closed by stop are reported, rfl is not, and the word example in a string is no example («⟪example⟫C.lean:1» («⟪example⟫C.lean:1»._native.decide.ax_1) «⟪example⟫C.lean:2» (sorryAx) )
+PROOF-TRUST-BAN: PASS=23 FAIL=0
+• Now root run.warning: Git tree '/home/unbalancedparen/projects/clones/wip-axioms-property' is dirty
+=== scripts/checks/doc_links.sh ===
+=== controls: the checker on throwaway trees ===
+  ok   positive control: slugs (literal underscore, emphasis), duplicate suffix, explicit id, code skipped, root-relative fragment links and a sibling fragment's heading pass
+  ok   a link to a missing heading fails
+  ok   a duplicate suffix past the last repeated heading fails
+  ok   a heading inside a code fence is not an anchor
+  ok   a heading inside an HTML comment is not an anchor
+  ok   an id written inside a code span is not an anchor
+  ok   an image inside a link's text is checked
+  ok   a link to a missing file fails
+  ok   outside changelog.d/ a link resolves against its own directory
+  ok   a changelog.d/ fragment resolves against the root, not changelog.d/
+  ok   a fragment's anchor is checked too
+=== the repository ===
+  ok   DOC-LINKS: PASS CHECKED=1098 ANCHORS=890
+
+DOC-LINKS-GATE: PASS=12 FAIL=0 INCOMPLETE=0
+--- scripts/checks/doc_links.sh: pass (1s)
+=== scripts/checks/issues.sh ===
+=== ISSUES.tsv ===
+  ok   ISSUES.tsv is well-formed (16 issues, 9 open)
+=== negative controls ===
+  ok   an unknown area is refused
+  ok   an unknown status is refused
+  ok   an empty closure condition is refused
+  ok   a repeated id is refused
+
+check_issues: PASS=5 FAIL=0
+--- scripts/checks/issues.sh: pass (0s)
+=== scripts/checks/landing_bot.sh ===
+=== ready: both notes, at the exact head ===
+  ok   list runs
+  ok   a head with clean review and passing gates is ready
+  ok   wip/nogates is not ready
+  ok   wip/findings is not ready
+  ok   wip/gatefail is not ready
+  ok   wip/stale is not ready
+  ok   wip/land-x is not ready
+  ok   other/x is not ready
+=== ordering ===
+  ok   explicit orders (5, then 0800 read as decimal 800) before the rule change, then the rest by size
+  ok   the rule branch is recognized by its new E-code
+  ok   a Check/Elab edit reusing an existing E-code is not a rule change
+=== dry-run, kill switch, lock ===
+  ok   dry-run prints the train and changes nothing
+  ok   the kill switch stops the tick
+  ok   the pause is acknowledged in the event log (and notified)
+  ok   a second paused tick does not acknowledge the same pause again
+  ok   a live holder of the kernel lock stops a second instance
+  ok   CONTROL: the leaked-ref probe sees a planted wip/land-* ref
+=== train: the tick lands every ready branch, in order, on both remotes ===
+  ok   once the holder lets go, the next tick takes the lock and runs
+  ok   all five ready branches are in origin/main
+  ok   lambdaclass/main equals origin/main
+  ok   fork untouched
+  ok   the train merged members in landing order
+  ok   the remote leg ran on a per-run wip/land-* ref, and the ref is gone afterwards
+  ok   notify.sh was called with the landing
+  ok   state is idle after landing
+=== bisect: a red check ejects the culprit and the rest lands ===
+  ok   the good members landed
+  ok   the red member did not land
+  ok   the culprit is ejected by name
+  ok   gates: fail published at the culprit's SHA
+  ok   the ejection was notified
+  ok   the ejected head is no longer ready
+=== bisect: a red CI run ejects the culprit ===
+  ok   CI-red member ejected, the rest landed
+=== kill switch reaches bisection; a block waits for a human ===
+  ok   a pause during bisection stops it: nothing ejected, nothing landed, not blocked
+  ok   a bisection that names no culprit blocks the bot
+  ok   the next tick keeps the block (no automatic retry)
+  ok   after reset the culprit is ejected and the rest lands
+=== resume: a restart while the train is in CI does not dispatch again ===
+  ok   the kill switch between CI and land holds the train in CI
+  ok   the restarted bot resumed the run and landed with one dispatch
+=== kill switch inside a bisection probe ===
+  ok   a pause during the halving probe stops the bisection; nothing attributed
+  ok   after the pause, the same train is bisected and the rest lands
+  ok   a pause during a --ci probe's check dispatches nothing more; the red train stays in CI
+  ok   resumed: the red run is re-read, bisected, the culprit ejected
+  ok   a pause raised DURING the red culprit probe attributes nothing
+  ok   after the pause the culprit is ejected and the rest lands
+=== remote leg: a same-SHA ref of another run is never adopted ===
+  ok   an existing ref at the same SHA is refused, a fresh name is used, and only the run's own ref is deleted
+=== dispatch: a restart between dispatch and recording the run reconciles, never re-dispatches ===
+  ok   a failed run lookup is no answer: the train stays dispatching
+  ok   an empty answer inside the grace period waits instead of re-dispatching
+  ok   the run was found by its head SHA and landed with no second dispatch
+=== auto-rebase: skip rules, scratch clone, refreshed notes, conflicts ===
+  ok   heads with activity in the last 10 minutes are not rebased
+  ok   a quiet ready head is rebased onto the new main and pushed
+  ok   the rebased head carries the review verdict (naming the reviewed SHA) and a fresh gates note
+  ok   a real conflict is notified with its files and the branch is left alone
+  ok   the conflict was notified
+  ok   no rebase left in progress, no worktree, scratch clones removed, clone clean
+  ok   a tried (head, main) pair is not retried
+=== ready.sh: legs in parallel; any failed leg (the review included) publishes gates: fail ===
+  ok   a failed review leg revokes readiness even over an older clean verdict
+  ok   the bot no longer sees wip/rv as ready
+  ok   passing legs publish gates: pass and the head becomes ready
+=== main is never force-pushed ===
+  ok   no forced push of refs/heads/main in scripts/land
+=== the bot's snapshot holds every path the landing scripts read ===
+  ok   the snapshot (scripts/land scripts/review/verify.sh scripts/checks/lib/git_sandbox.sh scripts/checks/lib/prepush_record.sh scripts/checks/lib/treestate.sh) covers every path the landing scripts read
+  ok   control: a snapshot without scripts/land is reported
+  ok   control: a snapshot without scripts/review/verify.sh is reported
+  ok   the launcher extracts exactly $SNAPSHOT
+=== the launcher rebuilds an incomplete cached snapshot ===
+  ok   a missing snapshot is built with every listed file
+  ok   a cached snapshot without scripts/land/bot.sh is rebuilt
+  ok   a complete cached snapshot is kept
+
+check_landing_bot: PASS=66 FAIL=0
+--- scripts/checks/landing_bot.sh: pass (16s)
+=== scripts/checks/landing_script.sh ===
+=== resolution: generated views regenerated, ledgers union-merged ===
+  ok   build t1 (b1 b2) succeeds despite four conflicting files
+  ok   no merge left in progress
+  ok   the four conflicts were real and each took its route
+  ok   CHANGELOG carries both members' entries
+  ok   corpus map carries [201] and [202]
+  ok   generated block regenerated from both members' records
+  ok   BuildIdentity regenerated over the merged sources
+  ok   no conflict markers committed
+  ok   merge commits name member and SHA
+  ok   state binds head and member SHAs
+  ok   build row logged
+=== refusal: real conflicts stop the merge and leave nothing in progress ===
+  ok   a source conflict stops with exit 3 and names the file
+  ok   the stopped merge was aborted (no MERGE_HEAD)
+  ok   tree clean after the stop
+  ok   train/t2 holds the members merged before the conflict
+  ok   a prose conflict outside the generated block is refused
+  ok   a merge that duplicates a corpus key is refused
+  ok   two edits of one ledger entry are a real conflict, not a union
+  ok   code inserted outside the corpus maps is never unioned
+  ok   a map line carrying code after its key is never unioned
+  ok   a generated block whose generator will not run is a real conflict
+  ok   a generator's refusal fails the build and leaves the tree clean
+  ok   a refused build records no head
+  ok   an existing train is not overwritten without --force
+  ok   a train name with '/' is refused
+  ok   a dirty tree is refused
+  ok   a merge already in progress is refused
+  ok   a rebase in progress is refused
+=== pipeline: check -> ci -> watch -> land, with a fake gh ===
+  ok   ci refuses a train with no passing check
+  ok   check feeds the hook exactly base..head on ci/t1
+  ok   check fails when the hook's selection fails
+  ok   a failed re-check withdraws the earlier pass
+=== gate host: check's impact leg on the gate host, bound to the SHA; INCOMPLETE blocks ===
+  ok   check runs the impact leg on the gate host, from a bundle holding exactly the train head
+  ok   with a gate host the gates do not run on this machine
+  ok   the host runs the hook's selection over exactly base..head on ci/t1
+  ok   CONCRETE_* is forwarded quoted; the bypass is never forwarded and is cleared first
+  ok   the pass is attested for the train head, with the host's log kept
+  ok   the check row names the gate host; the train is checked at its head
+  ok   a run at another SHA is no result: INCOMPLETE, and the old attestation is withdrawn
+  ok   an incomplete check is logged as incomplete and withdraws the earlier pass
+  ok   ci refuses after an incomplete check
+  ok   an unreachable gate host is INCOMPLETE, blocks, and never falls back to a local run
+  ok   a log without its exit line (lost connection) is INCOMPLETE
+  ok   gates that fail on the host at the head fail the check (not incomplete)
+  ok   a pass without a remote record passes, attests nothing, says the push runs the gates
+  ok   --local-gates is the explicit opt-in to run the gates on this machine
+  ok   git config land.gatesHost names the gate host
+  ok   dry-run check names the gate host
+  ok   an empty LAND_GATES_HOST overrides the config (no gate host)
+  ok   run-at-ref.sh runs exactly the bundled head and prints sha= on both lines
+=== gate host: the pushing hook reuses the attestation only for this exact push ===
+  ok   the hook reuses an attested pass for exactly this push
+  ok   a push of another SHA does not reuse it
+  ok   a push of a ref that is not HEAD does not reuse it
+  ok   another changed-file list does not reuse it
+  ok   another selection does not reuse it
+  ok   another CONCRETE_* environment does not reuse it
+  ok   a dirty tracked tree does not reuse it
+  ok   a tampered log is refused (digest)
+  ok   a tampered log re-digested into the attestation is still refused (components)
+  ok   a tampered attestation head is refused
+  ok   a truncated attestation is refused
+  ok   a log whose run exited non-zero is never attested
+  ok   a remote record that is not a pass is never attested
+  ok   a log with two exit lines is never attested
+  ok   a log is never attested for a SHA it does not name
+  ok   a pass-deferred remote run is reused and its deferrals reported
+  ok   the environment digest binds whole values (a changed continuation line differs)
+  ok   the hook's nix re-entry bookkeeping does not break reuse (push from outside the gate shell)
+=== gate host end to end: the real ssh transport, shimmed, carries the command intact ===
+  ok   the real transport runs the head on the host and the pass is attested
+  ok   a forwarded value with newlines, $( ) and quotes runs nothing on the host
+  ok   the forwarded value arrives byte for byte
+  ok   the host's own CONCRETE_SKIP_GATES is cleared before the hook
+  ok   the host keeps no bundle or script after the run
+  ok   the push's hook reuses the record the host's run produced
+  ok   a push in another CONCRETE_* environment than the host's run does not reuse it
+  ok   a root login on the gate host is refused before it fetches (INCOMPLETE)
+  ok   a gate host login that id cannot read is refused, not taken as non-root (INCOMPLETE)
+  ok   a gate login without its gate clone is INCOMPLETE and names the account and path
+  ok   a gate clone that is a linked worktree runs the gates
+  ok   the real transport to an unreachable host is INCOMPLETE (exit 3), attests nothing
+  ok   the root pre-push hook builds the spec and runs the full root set; it consults no remote attestation
+  ok   dry-run ci prints the push and dispatch and does neither
+  ok   ci pushes ci/t1 at the head, dispatches it with the train's base, records run 4242
+  ok   watch: a campaign-only failure is named, its log tail fetched, landing allowed
+  ok   watch: a landing failure is red and its log tail fetched
+  ok   watch: a green run at another SHA is no verdict
+  ok   land refuses a red landing job
+  ok   land refuses a run at another SHA
+  ok   land refuses the remote named fork as primary
+  ok   land refuses the remote named fork as mirror
+  ok   land refuses a missing mirror remote before pushing anything
+  ok   fork untouched
+  ok   dry-run land verifies and pushes nothing
+  ok   land refuses a moved main and prints the rebuild
+  ok   land puts origin/main and lambdaclass/main at the train head
+  ok   fork still untouched after landing
+  ok   publish lock released
+  ok   land cancels no run; main's own run records the validating run
+=== dropped: a push's result is read from the remote, and a failed push is retried ===
+  ok   ci retries a push dropped before the remote moved
+  ok   exhausted retries fail the landing, move nothing and release the lock
+  ok   land retries a push dropped before the update, accepts one dropped after it, and both remotes reach the head
+  ok   both dropped-connection seams fired
+=== bisect: halving finds the seeded red member ===
+  ok   bisect attributes b8 and prints the rebuild without it
+  ok   bisect leaves the checkout clean
+=== push-both.sh: both remotes required, refusals before anything is pushed ===
+  ok   push-both refuses PRIMARY=fork
+  ok   push-both refuses MIRROR=fork
+  ok   push-both refuses a missing mirror remote
+  ok   no refused push-both moved origin or fork
+=== report ===
+  ok   report prints the median time to land
+=== the campaign tier train.sh assumes is the workflow's campaign tier ===
+  ok   CAMPAIGN_RE names exactly the workflow's campaign jobs
+=== required checks: missing, skipped, cancelled, dropped ===
+  ok   watch refuses a run missing a required job
+  ok   land refuses a run missing a required job
+  ok   watch refuses a skipped required job
+  ok   land refuses a skipped required job
+  ok   watch refuses a cancelled required job
+  ok   land refuses a cancelled required job
+  ok   watch refuses a run whose only other job is a campaign-tier one
+  ok   land refuses a run whose only other job is a campaign-tier one
+  ok   a candidate that drops a base requirement without a transition row is still held to it
+  ok   a transition row replacing a base job by a required, green job passes and says so
+  ok   a replacement job that failed at this SHA refuses
+  ok   a replacement the candidate does not itself require is refused, and the old job stays required
+  ok   a retired base job is reported as retired, not run, never as passed
+  ok   a retirement without a reason is refused
+  ok   a malformed replacement list is refused, never read as a retirement
+  ok   a transition row for a job still required is refused
+  ok   no required-checks file anywhere is refused, not read as nothing required
+  ok   files without a final newline do not fuse names (Build and Other both required, both green)
+  ok   a job named BuildOther satisfies neither Build nor Other
+  ok   train.sh reads the candidate's transition file at the head commit
+=== record: main's run names the run that qualified its exact SHA, and nothing else (R-0570) ===
+  ok   record: the newest green run at exactly the head qualifies it (a skipped campaign job is fine)
+  ok   record refuses with no run at the head
+  ok   record refuses a run at another SHA
+  ok   record refuses a run the API lists at the head but whose own record names another SHA
+  ok   record refuses a run of another workflow
+  ok   record refuses a pull_request run
+  ok   record refuses a push run (its checks' base is not the declared one)
+  ok   record refuses a dispatch whose checks ran at another base
+  ok   record refuses a dispatch that names no base (a campaign or hand dispatch)
+  ok   record refuses an unfinished run
+  ok   record refuses the asking run itself
+  ok   record refuses a skipped required job
+  ok   record refuses a cancelled required job
+  ok   record refuses a failed landing-tier job
+  ok   record refuses a run without a required job
+  ok   record refuses a run with no landing-tier job
+  ok   record refuses an older green run behind a newer red one at the same SHA
+  ok   record refuses a head not strictly ahead of the base
+  ok   record refuses when the compare API cannot be read
+  ok   record refuses a base this clone does not have
+  ok   record refuses an all-zero base (a new branch, not a landing)
+  ok   record refuses an abbreviated head
+  ok   record refuses when the runs API cannot be read
+  ok   record refuses a head that drops a base requirement silently
+=== the workflow: Landing record gates every landing-tier job; a dispatch's base binds its checks ===
+  ok   every landing-tier job is skipped exactly when main's run holds a record
+  ok   CONTROL: the record-gate check finds a base-sensitive check that ignores the dispatch's base
+  ok   CONTROL: the record-gate check finds the ungated job
+  ok   CONTROL: the record-gate check finds the always job
+  ok   CONTROL: the record-gate check finds the nocancel job
+=== required-checks.txt names exactly the workflow's landing-tier jobs ===
+  ok   required-checks.txt = the workflow's landing tier
+=== the move gate: legacy/ lands only with an accepted rehearsal of that exact candidate ===
+  ok   land refuses the move with no rehearsal record
+  ok   dry-run land refuses the move with no rehearsal record (exit 5, every other check passed)
+  ok   land refuses the move with an accepted rehearsal of another candidate (another tree)
+  ok   dry-run land refuses the move with an accepted rehearsal of another candidate (another tree) (exit 5, every other check passed)
+  ok   land refuses the move with an accepted rehearsal of the same tree on another base
+  ok   dry-run land refuses the move with an accepted rehearsal of the same tree on another base (exit 5, every other check passed)
+  ok   land refuses the move with a failed rehearsal of this candidate
+  ok   dry-run land refuses the move with a failed rehearsal of this candidate (exit 5, every other check passed)
+  ok   land refuses the move with an incomplete rehearsal of this candidate
+  ok   dry-run land refuses the move with an incomplete rehearsal of this candidate (exit 5, every other check passed)
+  ok   a malformed rehearsal row refuses the land (not skipped, not exit 5)
+  ok   two trains of the same base and member: different merge commits, the same tree
+  ok   an accepted rehearsal by another train of the same tree and base satisfies the gate
+  ok   the rehearsed move lands
+  ok   a staged move (legacy/ already on the base) still needs a rehearsal of its own
+  ok   acceptance's dry-run leg: exit 5 + whole marker line passes; no marker, another exit, a prefixed or altered marker fail
+  ok   acceptance refuses --name with a record delimiter and writes no row
+  ok   acceptance refuses --ref with a record delimiter and writes no row
+  ok   acceptance: check keeps the review leg; both build legs run nix develop --command lake build
+  ok   an acceptance run that fails before building a train writes no rehearsal row
+  ok   a candidate adding scripts/checks/root_inventory.txt is a move too
+  ok   an inventory change of nested entries, comments and order only (docs/proposals) needs no rehearsal
+  ok   an inventory change that adds a top-level entry still needs a rehearsal
+  ok   a change under legacy/ (inventory untouched) still needs a rehearsal
+=== review: check fails closed, land requires review provenance ===
+  ok   check with no review command fails instead of skipping the leg
+  ok   a reviewer that exits 0 leaving no note fails check
+  ok   a reviewer that exits 0 leaving a malformed note fails check
+  ok   a reviewer that exits 0 leaving a blocked note fails check
+  ok   a reviewer that exits 0 leaving a findings note fails check
+  ok   a failed review leg leaves no pass for ci
+  ok   land refuses no review note anywhere
+  ok   land refuses an unreviewed head over a malformed member note
+Overwriting existing notes for object 571c512bb3df8346c50ec887392a856eaf03e5ba
+Overwriting existing notes for object 5c2b4db3bb68075476f76b0717fb5a08fc41827e
+  ok   land refuses a malformed head note, whatever the members
+Overwriting existing notes for object 571c512bb3df8346c50ec887392a856eaf03e5ba
+Overwriting existing notes for object 5c2b4db3bb68075476f76b0717fb5a08fc41827e
+  ok   land refuses an unreviewed head over a blocked member note
+Overwriting existing notes for object 571c512bb3df8346c50ec887392a856eaf03e5ba
+Overwriting existing notes for object 5c2b4db3bb68075476f76b0717fb5a08fc41827e
+  ok   land refuses a blocked head note, whatever the members
+Overwriting existing notes for object 571c512bb3df8346c50ec887392a856eaf03e5ba
+Overwriting existing notes for object 5c2b4db3bb68075476f76b0717fb5a08fc41827e
+  ok   land refuses an unreviewed head over a findings member note
+Overwriting existing notes for object 571c512bb3df8346c50ec887392a856eaf03e5ba
+Overwriting existing notes for object 5c2b4db3bb68075476f76b0717fb5a08fc41827e
+  ok   land refuses a findings head note, whatever the members
+Overwriting existing notes for object 571c512bb3df8346c50ec887392a856eaf03e5ba
+  ok   land refuses an unreviewed head with one member unreviewed
+Overwriting existing notes for object 571c512bb3df8346c50ec887392a856eaf03e5ba
+  ok   land accepts an unreviewed head whose every member is clean at its exact SHA
+  ok   land accepts a clean head note
+  ok   check over members reviewed clean passes the review leg without running the reviewer
+=== where a train runs: a full clone with the repository hook (ISS-0015) ===
+  ok   train.sh refuses a linked worktree before doing anything
+  ok   train.sh status (read-only) still runs in a linked worktree
+  ok   the pre-push hook refuses a gated push from a linked worktree (before any check runs)
+  ok   a wip/* backup push from a linked worktree still passes (it runs nothing)
+  ok   train.sh record (CI's Landing record job: no hook there) is not refused for the hook
+  ok   train.sh refuses when the pre-push hook is not executable
+  ok   train.sh refuses when core.hooksPath names a directory with no pre-push
+  ok   train.sh refuses a pre-push hook that does not run the repository's
+  ok   train.sh refuses a hook that only mentions .githooks/pre-push
+  ok   the repository hook answers who it is with its real path and runs nothing
+  ok   a real push never takes the identify answer (no environment switch exists)
+  ok   no refused run left train state behind
+
+check_landing_script: PASS=213 FAIL=0
+--- scripts/checks/landing_script.sh: pass (14s)
+=== scripts/checks/legacy_frozen.sh ===
+=== negative controls ===
+  ok   control: an unchanged tree passes
+  ok   control: an added file is refused
+  ok   control: a modified file is refused
+  ok   control: a deletion under an open row is refused
+  ok   control: a deletion without a status column is refused
+  ok   control: a deletion under a resolved row passes
+  ok   control: a resolved parent does not release a child with an open row
+  ok   control: a deletion outside the resolved row is refused
+=== legacy/ against scripts/checks/legacy.lock ===
+  ok   the move was generated with its landing prerequisites met
+  ok   legacy.lock: tree 2b6b53678b is the tree of base 9186ca4c9f
+  ok   legacy/ is byte-identical to the frozen tree
+legacy_frozen: PASS=11 FAIL=0
+--- scripts/checks/legacy_frozen.sh: pass (0s)
+=== scripts/checks/oracle_fetch.sh ===
+=== a good published artifact installs and verifies (positive control) ===
+  ok   fetch.sh installs the good artifact (exit 0)
+  ok   the installed oracle verifies against the lock
+=== no published artifact, a failed download, other bytes, a failed verification: INCOMPLETE ===
+  ok   an empty artifact_url is INCOMPLETE (3)
+  ok   a failed download is INCOMPLETE (3)
+  ok   an artifact with other bytes (corrupted) is INCOMPLETE (3)
+  ok   the corrupted artifact left no install behind
+  ok   an install that fails verification (manifest not locked) is INCOMPLETE (3)
+  ok   the unverifiable artifact left no install behind
+=== ci_check.sh: INCOMPLETE without a verified oracle, FAILED on a wrong smoke result ===
+  ok   no published artifact: the oracle check is INCOMPLETE (3), never passed
+  ok   a corrupted artifact: the oracle check is INCOMPLETE (3)
+  ok   a failed verification: the oracle check is INCOMPLETE (3)
+  ok   run.sh refuses an altered install (125) before running anything
+  ok   end to end: fetch, verify, compile, run to 42 passes (positive control)
+  ok   end to end, wrong: FAILED (1), never passed
+  ok   end to end, compile42: FAILED (1), never passed
+  ok   end to end, compile1: FAILED (1), never passed
+  ok   end to end, noout: FAILED (1), never passed
+  ok   a failed download: the oracle check is INCOMPLETE (3) even with a working toolchain
+  ok   an install altered after fetch: the oracle check is INCOMPLETE (3) via run.sh's refusal
+
+check_oracle_fetch: 19 passed, 0 failed
+--- scripts/checks/oracle_fetch.sh: pass (0s)
+=== scripts/checks/retention_manifest.sh ===
+=== RETENTION.tsv governs the tree ===
+  ok   every tracked file (5011) has exactly one governing row
+  ok   the longest listed prefix governs (decisions.md retained inside archived docs/spec; fuzz findings migrate)
+=== negative controls ===
+  ok   an ungoverned path is refused
+  ok   an unknown disposition is refused
+  ok   an empty deletion criterion is refused
+  ok   removing the std row leaves std's files ungoverned
+  ok   a path listed twice is refused (no ambiguous deletion authority)
+  ok   a retained row that does not separate the root file from its legacy/ copy is refused
+  ok   an unknown status is refused
+  ok   after the move, legacy/ paths and the new root's paths are governed
+
+check_retention_manifest: PASS=10 FAIL=0
+--- scripts/checks/retention_manifest.sh: pass (1s)
+=== scripts/checks/review_tool.sh ===
+=== round 1: full diff, findings, note written and pushed ===
+  ok   findings exit 1 (got 1)
+  ok   one reviewer call
+  ok   reviewer runs with --sandbox read-only
+  ok   reviewer runs with GIT_OPTIONAL_LOCKS=0
+  ok   no reviewer call ran with optional locks
+  ok   round 1 prompt carries the verdict rule
+  ok   round 1 reviews the full diff from the merge-base
+  ok   note has exactly the six fields, in order
+  ok   note: verdict findings
+  ok   note: rounds 1
+  ok   note: base is the merge-base
+  ok   note: pieces 1
+  ok   raw output at .review/<sha>-1.md
+  ok   findings recorded under the findings ref
+  ok   notes ref pushed to origin
+  ok   .review/ stays untracked
+  ok   verify.sh: findings is not clean (exit 1, got 1)
+=== same HEAD again: nothing to review ===
+  ok   re-review of a reviewed HEAD exits 4 (got 4)
+  ok   and calls no reviewer
+=== --head: the callers' contract (train.sh, ready.sh pass --base --head) ===
+  ok   --head at the checkout's HEAD is accepted (reviewed HEAD exits 4, got 4)
+  ok   --base --head <sha> as train.sh calls it is accepted (got 4)
+  ok   --head other than the checkout refuses (exit 2, got 2)
+  ok   and says why
+  ok   an empty --head refuses (exit 2, got 2)
+  ok   and calls no reviewer
+=== round 2: only the delta, with the previous findings ===
+  ok   clean exit 0 (got 0)
+  ok   round 2 diff holds only the delta (new.txt, old.txt fix)
+  ok   round 2 diff does not resend the round-1 hunk
+  ok   round 2 prompt names the delta start
+  ok   round 2 prompt carries the previous findings
+  ok   note: rounds 2, verdict clean
+  ok   verify.sh: clean exit 0 (got 0)
+  ok   verify.sh prints the verdict
+  ok   verify.sh judges the exact commit, not the branch (R1 still 1)
+  ok   an already-clean HEAD reports clean without a call (exit 0)
+=== verify.sh: missing and malformed notes ===
+  ok   no note: exit 2 (got 2)
+  ok   malformed note (verdict line alone): exit 2 (got 2)
+Overwriting existing notes for object 1c5bc822e4eacf14471982ca9437099b2cd71349
+  ok   the landing bot's carried note verifies clean (exit 0, got 0)
+  ok   a carried verdict says where it came from
+Overwriting existing notes for object 1c5bc822e4eacf14471982ca9437099b2cd71349
+  ok   an unknown key is malformed: exit 2 (got 2)
+Overwriting existing notes for object 1c5bc822e4eacf14471982ca9437099b2cd71349
+  ok   a repeated key is malformed: exit 2 (got 2)
+=== verdict parsing ===
+  ok   markdown-emphasised verdict line is accepted (exit 0, verdict clean)
+  ok   text after the verdict line is not a verdict (exit 5, verdict blocked)
+  ok   a reply with no verdict line is blocked, not clean (exit 5, verdict blocked)
+  ok   a reviewer that exits nonzero is blocked (exit 5, verdict blocked)
+  ok   a real review that mentions content filters is not a refusal (exit 0, verdict clean)
+=== content-filter refusal: one neutral retry on smaller pieces ===
+  ok   refused then reviewed neutrally: clean (exit 0)
+  ok   first call standard, retries neutral
+  ok   retry pieces are smaller (384 < 523)
+  ok   neutral prompt avoids the project framing
+  ok   raw output records the refusal
+  ok   refused twice: blocked, exit 5 (got 5)
+  ok   note: verdict blocked
+  ok   no loop: one standard call and one retry pass (3 calls)
+  ok   blocked piece listed in the output
+  ok   a blocked HEAD may be re-run; it counts as round 2
+  ok   the re-run reviews the whole branch again (blocked does not advance the delta)
+=== findings in one piece, another piece blocked ===
+  ok   blocked wins over findings: verdict blocked, exit 5 (got 5, blocked)
+  ok   the reviewed piece's findings are still recorded
+  ok   next round restarts from the base, not after the blocked round
+  ok   and carries the blocked round's findings forward
+  ok   a blocked round with no findings of its own records the carried ones
+  ok   after two blocked rounds in a row the finding still reaches the prompt
+=== pre-push hook: a review-notes push runs no gates ===
+  ok   notes-only push: hook exits 0 (got 0)
+  ok   notes-only push: hook takes the review-notes tier
+  ok   notes alongside a wip push take the wip tier (exit 0)
+=== splitting by file group and size ===
+  ok   split review is clean (exit 0)
+  ok   several pieces (7)
+  ok   one call per piece
+  ok   no piece mixes file groups
+  ok   every piece within the size limit
+  ok   the big file is split across pieces
+  ok   compiler pieces come first
+  ok   each split part repeats the file header and starts a hunk
+  ok   --pieces N sizing: a third of the diff gives about three pieces (6)
+  ok   a limit of the whole diff still separates the four groups (4)
+  ok   split loses no diff line
+  ok   --pieces 3 on one file gives three pieces (3)
+  ok   split parts carry correct, contiguous @@ headers
+=== the round cap ===
+  ok   round 1 of 2: findings (exit 1)
+  ok   round 2 of 2 with findings: cap exit 3 (got 3)
+  ok   cap message says split or escalate
+  ok   cap message lists the open findings
+  ok   round 2 note was still written
+  ok   no round 3: refused with exit 3 (got 3)
+  ok   and no reviewer call
+  ok   no note written on the refused round
+=== notes push: non-fast-forward is fetched, merged and retried ===
+  ok   review after a concurrent notes push succeeds (exit 0)
+  ok   origin keeps the other writer's note
+  ok   origin has our note
+  ok   push rejected once, then merged and pushed (exit 0)
+  ok   the retry path ran
+  ok   origin holds the racing note
+  ok   origin holds our note
+=== notes push: any other refusal stops at once (exit 6) ===
+  ok   a refused (not non-fast-forward) push exits 6 (got 6)
+  ok   and is not retried as if it were a race
+  ok   the note is still recorded locally
+=== usage errors ===
+  ok   bad --pieces: exit 2 (got 2)
+  ok   unknown flag: exit 2 (got 2)
+
+check_review_tool: PASS=99 FAIL=0
+--- scripts/checks/review_tool.sh: pass (2s)
+=== scripts/checks/root_inventory.sh ===
+=== negative controls ===
+  ok   control: exactly the listed set passes
+  ok   control: an unlisted top-level entry is refused
+  ok   control: an unlisted docs/ entry is refused
+  ok   control: a missing listed entry is refused
+=== the tracked root against scripts/checks/root_inventory.txt ===
+  ok   the root holds exactly the day-one set
+root_inventory: PASS=5 FAIL=0
+--- scripts/checks/root_inventory.sh: pass (0s)
+=== scripts/checks/sandbox_isolation.sh ===
+=== structural: every repository-making script sources the sandbox helper ===
+  ok   scripts/checks/landing_bot.sh sources git_sandbox.sh (line 40) and calls it (line 41) before its first repository (line 133)
+  ok   scripts/checks/landing_script.sh sources git_sandbox.sh (line 60) and calls it (line 61) before its first repository (line 139)
+  ok   scripts/checks/legacy_frozen.sh sources git_sandbox.sh (line 55) and calls it (line 56) before its first repository (line 61)
+  ok   scripts/checks/review_tool.sh sources git_sandbox.sh (line 39) and calls it (line 40) before its first repository (line 115)
+  ok   scripts/land/acceptance.sh sources git_sandbox.sh (line 65) and calls it (line 66) before its first repository (line 191)
+  ok   scripts/land/bot.sh sources git_sandbox.sh (line 39) and calls it (line 40) before its first repository (line 260)
+  ok   scripts/land/run-at-ref.sh sources git_sandbox.sh (line 20) and calls it (line 21) before its first repository (line 42)
+  ok   scripts/oracle/build.sh sources git_sandbox.sh (line 29) and calls it (line 30) before its first repository (line 52)
+  ok   scripts/proofs/external.sh sources git_sandbox.sh (line 45) and calls it (line 46) before its first repository (line 73)
+  ok   found 9 repository-making scripts (at least the 9 known)
+=== control: the structural scan sees scripts at any depth and without a .sh suffix ===
+  ok   an unsandboxed maker three directories down is refused
+  ok   an unsandboxed maker with a bash shebang and no .sh suffix is refused
+  ok   a sandboxed maker at depth passes
+bound: a systemd user scope, TasksMax=512, MemoryMax=8G
+=== control: the harness sees a leak ===
+  ok   control (leaky script): the harness sees a write through the inherited GIT_DIR
+=== live: sandbox checks run from a linked worktree as its hook would run them ===
+  ok   review_tool.sh: the caller's refs, notes, config and upstream are unchanged
+  ok   legacy_frozen.sh: the caller's refs, notes, config and upstream are unchanged
+
+check_sandbox_isolation: PASS=16 FAIL=0
+--- scripts/checks/sandbox_isolation.sh: pass (5s)
+=== scripts/checks/workflow_yaml.sh ===
+  ok   .github/workflows/lean_action_ci.yml
+  ok   .github/workflows/oracle.yml
+
+WORKFLOW-YAML: PASS=2  FAIL=0
+--- scripts/checks/workflow_yaml.sh: pass (0s)
+
+root checks: all 11 pass
+All pass. Now review diff thoroughly and commit. Also requirement "Codex reviews everything before published or owner" user didn't ask review and no push, but AGENTS says review everything before published/brought owner. User wants response report, no explicit /creview. Do I need run review? Project says every slice Codex before lands; not necessarily now. I should not invoke external perhaps no. Commit only.
+
+  Should review script code for subtle issues. Read diff via Bash `git diff -- scripts/proofs/axioms.sh ...` output perhaps large golden skip. Use `git diff -- . ':(exclude)scripts/proofs/axioms.golden'` plus untracked not included; Read pinned/changelog not needed write outputs known. I should use `git diff` Bash allowed. Make sure file mode executable remains. Write likely preserves existing mode? tool Write overwrite likely mode preserved. `git diff --summary` check. Now stage and inspect cached before commit. But first consider control "not a theorem" specifically check fails if pinned name refers def. I only missing controls not non-theorem. User controls not require non-theorem control. Implementation handles. "Pinned name is missing from population (or is not a theorem)" yes inventory only theorem. Good.
+
+  "Generated or private names ... never pinned and never listed anywhere" pinned file only 8. Regex covers shapes. Good.
+  "one fully-qualified public theorem name per line, each with short # reason comment" yes.
+  "Pin exactly these after verifying exists on main" eight yes.
+  "Delete --update invocation exit2 one line golden gone" yes.
+  "Keep P population as they are" P code exactly unchanged? I rewrote but copied same. Yes.
+  "A unchanged meaning fail iff some theorem in checked population depends outside standard" yes. `nonstandard` unchanged. No exceptions.
+  "Control 1 fails A naming theorem" exact.
+  "Control 5 adding new theorems private or generated passes pinned check" yes asserts shapes.
+  "whatever runs axioms.sh same command no golden file" CI unchanged command, comment updated. Hook doesn't run proof checks. Fine.
+  "changelog cite yes to 6 things" exact.
+  "No docs decisions ROADMAP" not touched.
+  "Commit wip branch no push" do.
+  "Run lake build etc" all done, root cheap run pass. Should handle after build tests new files check git status. Build may create tracked modifications? status before commit to see. I should not delete .lake ignored. No untracked logs except expected. `git status`. Should remove test output none.
+  Potential test on --update after latest edit unaffected. Already tested. `bash -n` after latest edit trivial no need but perhaps final diff check.
+
+  Open questions: user says if anything requires decision e.g. checked libraries beyond today keep behavior list question final. No decision needed. Could say open questions none; population remains today's ConcreteSpec. Note slice0 branches in response. No open question. Perhaps "whether additional libraries should join checked population remains out of scope; current ConcreteSpec behavior retained" Is that an open question? User said if anything requires decision not given keep today's and list question. I did not face. Could list "None; checked population remains ConcreteSpec." Good.
+
+  Should have exact SHA tests: after commit could report "validated working tree before commit; commit ...". Project asks exact SHA. Could run quick `git diff` then commit and perhaps `git show` tests not after. The check results technically on working tree identical to commit, so can record commit SHA after as same content. I can state checks run on content committed as SHA. That's accurate because no changes between tests and commit. Fine.
+
+  Perhaps ensure no staging other files. `git status --short`. `git diff --name-only` etc. Stage explicit list. Commit message "proofs: replace axiom golden with pinned properties" no bug. Git commit user requested. Before commit check branch exact. Use Bash read-only review and then stage/commit. Perhaps one call `git diff --check && git diff -- ...` outputs. I'll do diff excluding golden.
+
+diff --git a/.github/workflows/lean_action_ci.yml b/.github/workflows/lean_action_ci.yml
+index b9998104a..fb919f71f 100644
+--- a/.github/workflows/lean_action_ci.yml
++++ b/.github/workflows/lean_action_ci.yml
+@@ -162,7 +162,7 @@ jobs:
+           fi
+ 
+   # PROOF INTEGRITY (scripts/proofs). Four jobs, each required, each with its own negative controls:
+-  # the per-theorem axiom inventory against its golden list, the transitive sorry/native_decide ban,
++  # the standard-axiom property and pinned public theorems, the transitive sorry/native_decide ban,
+   # the fresh kernel replay (leanchecker) and the independent re-check (con-leche, nanoda). The spec
+   # is built in each (lean-action); a failed build fails the job before the check runs.
+   proof-axioms:
+diff --git a/ConcreteSpec/README.md b/ConcreteSpec/README.md
+index ee1c60bd6..b084f3a03 100644
+--- a/ConcreteSpec/README.md
++++ b/ConcreteSpec/README.md
+@@ -34,10 +34,10 @@ archived prose specification [legacy/docs/spec](../legacy/docs/spec)).
+   `run`, the checker `check` and the other executable definitions use `propext` alone, so they
+   stay executable and the examples are decided by running them; `Classical.choice` appears only
+   in proofs (`rep_roundtrip` through the core lemma `Nat.mod_mul`, and the range proofs).
+-- These rules are checked in CI by [scripts/proofs](../scripts/proofs): the per-theorem axiom
+-  inventory against its golden list, the transitive ban on `sorry` and `native_decide`, a fresh
+-  kernel replay with `leanchecker`, and an independent re-check of the exported theorems by
+-  con-leche and nanoda.
++- These rules are checked in CI by [scripts/proofs](../scripts/proofs): every theorem's transitive
++  axioms and the presence of the pinned public design and safety theorems, the transitive ban on
++  `sorry` and `native_decide`, a fresh kernel replay with `leanchecker`, and an independent re-check
++  of the exported theorems by con-leche and nanoda.
+ - The judgments (inductive relations) are the normative form; the checker is proved to agree with
+   them (`check_iff`).
+ - Build: `lake build ConcreteSpec`. The external checker re-checks every theorem.
+diff --git a/docs/proposals/SPEC_UNIFICATION.md b/docs/proposals/SPEC_UNIFICATION.md
+index e28d29522..0da5546ad 100644
+--- a/docs/proposals/SPEC_UNIFICATION.md
++++ b/docs/proposals/SPEC_UNIFICATION.md
+@@ -862,8 +862,8 @@ If one does, it goes to the owner (P1).
+ 
+ - `lake build ConcreteSpec` with `warningAsError`;
+ - no `sorry` and no `native_decide`; axioms only `propext`, `Quot.sound`, `Classical.choice`;
+-- `scripts/proofs` green: the axiom golden updated in the same commit, the trust ban, the kernel
+-  replay and the external checker;
++- `scripts/proofs` green: the standard-axiom and pinned-theorem properties, the trust ban, the
++  kernel replay and the external checker;
+ - Codex review per step or per small group, until ACCEPT; pushed to both remotes.
+ - phase A steps land on main through the train (review leg on) as soon as they pass; later steps
+   land in small groups.
+diff --git a/scripts/proofs/axioms.sh b/scripts/proofs/axioms.sh
+index 51208f6b9..174d8f963 100644
+--- a/scripts/proofs/axioms.sh
++++ b/scripts/proofs/axioms.sh
+@@ -1,44 +1,60 @@
+ #!/usr/bin/env bash
+-# AXIOM INVENTORY: every theorem of the specification depends, transitively, on no axiom beyond
+-# propext, Quot.sound and Classical.choice (Q9.17), and the per-theorem inventory equals the golden
+-# list scripts/proofs/axioms.golden.
++# AXIOM PROPERTIES: every theorem of the specification depends, transitively, on no axiom beyond
++# propext, Quot.sound and Classical.choice (Q9.17), and the public design and safety theorems pinned
++# in scripts/proofs/pinned_theorems.txt remain in the theorem population.
+ #
+ #   P  population: every module the ConcreteSpec sources declare is in the root's import closure (a
+ #      module outside it is neither built by default nor read here), and every module whose file
+ #      declares a theorem contributes one, so the population cannot shrink unnoticed;
+ #   A  every theorem's transitive axioms (Lean.collectAxioms) are among the standard three;
+-#   G  the inventory (`<theorem>\t<axioms>`) equals axioms.golden byte for byte. A theorem added,
+-#      removed or renamed, or one that starts or stops using an axiom, changes the golden in the same
+-#      commit, where review sees it. `--update` rewrites it from the build.
++#   T  every name in pinned_theorems.txt is a public theorem in the population. Adding other
++#      theorems, private or generated ones included, changes nothing; a pinned name is refused when
++#      it has a private or generated shape.
+ #
+-# NEGATIVE CONTROLS run the same code on bad inputs and require the failure: an axiom declared and
+-# used by a control theorem fails A naming it; new theorems, a private one included, differ from the
+-# golden; a golden missing a theorem, carrying an extra one, or
+-# recording other axioms fails G; a control module outside the import closure fails P.
++# NEGATIVE CONTROLS run the same code on bad inputs and require the exact failure: a theorem proved
++# by sorry and one using a declared axiom fail A naming it; a missing pinned theorem fails T, whether
++# the pin or the population entry was removed; a generated pin is refused; new public, private and
++# generated theorems pass T; a control module outside the import closure fails P.
+ set -uo pipefail
++if [ "${1:-}" = --update ]; then
++  echo "error: the axiom golden is gone; --update no longer exists (edit scripts/proofs/pinned_theorems.txt)" >&2
++  exit 2
++fi
+ source "$(dirname "${BASH_SOURCE[0]}")/../checks/lib/gate_env.sh" || exit 2
+ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+ cd "$ROOT_DIR"
+ CHECK_NAME=PROOF-AXIOMS
+ source scripts/proofs/lib.sh
+-GOLDEN=scripts/proofs/axioms.golden
++PINNED=scripts/proofs/pinned_theorems.txt
+ 
+ population theorems > "$TMP/inv.tsv" 2> "$TMP/inv.err" \
+   || { cat "$TMP/inv.err" >&2; echo "error: the enumerator failed" >&2; exit 2; }
+-if [ "${1:-}" = --update ]; then
+-  { echo "# Per-theorem transitive axioms of ConcreteSpec (scripts/proofs/axioms.sh). Regenerate with"
+-    echo "# bash scripts/proofs/axioms.sh --update; review every changed line."
+-    cat "$TMP/inv.tsv"; } > "$GOLDEN"
+-  echo "wrote $GOLDEN ($(grep -c . "$TMP/inv.tsv") theorems)"; exit 0
+-fi
+ 
+ # nonstandard FILE → the theorems of an inventory with an axiom outside the standard three
+ nonstandard() {
+   awk -F'\t' -v std=" $STANDARD_AXIOMS " '{ n = split($2, a, " ")
+     for (i = 1; i <= n; i++) if (index(std, " " a[i] " ") == 0) { print $1 " (" a[i] ")"; break } }' "$1"
+ }
+-# golden_diff INVENTORY GOLDEN → the differing lines, empty when equal
+-golden_diff() { diff <(grep -v '^#' "$2") "$1" | grep '^[<>]'; }
++# pinned_names FILE → one pinned name per non-comment, non-empty line
++pinned_names() { awk '/^[[:space:]]*($|#)/ { next } { print $1 }' "$1"; }
++# Lean's generated theorem helpers and private constants are not stable public specification names.
++generated_or_private() {
++  [[ $1 =~ (^|[.])(_private|match_[0-9]+|eq_[0-9]+|eq_def|proof_[0-9]+|_proof_[0-9]+(_[0-9]+)*|_sparseCasesOn(_[0-9]+)?|brecOn(_[0-9]+)?|casesOn|inj|injEq|sizeOf_spec|ofNat_ctorIdx|_sizeOf_[0-9]+_eq|_simp_[0-9]+(_[0-9]+)*|else_eq|congr_simp)([.]|$) ]]
++}
++# pinned_errors INVENTORY PINNED → every malformed or absent pin; empty when all are public theorems
++pinned_errors() {
++  local inventory=$1 pinned=$2 name
++  [ -f "$pinned" ] || { echo "$pinned is missing"; return; }
++  while IFS= read -r name; do
++    if generated_or_private "$name"; then
++      echo "refusing generated or private pinned name: $name"
++    elif [[ $name != ConcreteSpec.* ]]; then
++      echo "pinned name is not fully qualified under ConcreteSpec: $name"
++    elif ! awk -F'\t' -v name="$name" '$1 == name { found = 1; exit } END { exit !found }' "$inventory"; then
++      echo "pinned theorem missing or not a theorem: $name"
++    fi
++  done < <(pinned_names "$pinned")
++}
+ 
+ echo "=== P: population ==="
+ population imported > "$TMP/imported.txt" || { no "PROOF_MODE=imported failed"; finish; }
+@@ -59,13 +75,20 @@ BAD=$(nonstandard "$TMP/inv.tsv")
+ [ -z "$BAD" ] && ok "every theorem's transitive axioms are among $STANDARD_AXIOMS ($(cut -f2 "$TMP/inv.tsv" | tr ' ' '\n' | grep . | sort | uniq -c | awk '{printf "%s%s %s", s, $2, $1; s=", "}'))" \
+   || no "theorems using a non-standard axiom: $(echo $BAD | cut -c1-400)"
+ 
+-echo "=== G: golden list ==="
+-[ -f "$GOLDEN" ] || { no "$GOLDEN is missing (bash scripts/proofs/axioms.sh --update)"; finish; }
+-D=$(golden_diff "$TMP/inv.tsv" "$GOLDEN")
+-[ -z "$D" ] && ok "the inventory equals $GOLDEN ($NTHM theorems)" \
+-  || no "the inventory differs from $GOLDEN (< golden, > build; regenerate with --update and review): $(printf '%s\n' "$D" | head -10 | tr '\t\n' ' |')"
++echo "=== T: pinned public theorems ==="
++T=$(pinned_errors "$TMP/inv.tsv" "$PINNED")
++[ -z "$T" ] && ok "all $(pinned_names "$PINNED" | grep -c .) names in $PINNED are public theorems in the population" \
++  || no "pinned theorem check failed: $(echo $T | cut -c1-400)"
+ 
+ echo "=== negative controls ==="
++cat > "$TMP/c-sorry.lean" <<'EOF'
++theorem ConcreteSpecControl.sorryThm : 1 = 2 := sorry
++EOF
++population theorems "$TMP/c-sorry.lean" > "$TMP/c-sorry.tsv" 2> "$TMP/c-sorry.err"
++SB=$(nonstandard "$TMP/c-sorry.tsv")
++[ "$SB" = "ConcreteSpecControl.sorryThm (sorryAx)" ] \
++  && ok "control: a theorem proved by sorry fails A naming it ($SB)" \
++  || no "control: the sorry theorem was not refused alone by A: '$SB' $(head -2 "$TMP/c-sorry.err")"
+ cat > "$TMP/c-axiom.lean" <<'EOF'
+ axiom ConcreteSpecControl.extra : 1 = 2
+ theorem ConcreteSpecControl.usesExtra : 2 = 1 := ConcreteSpecControl.extra.symm
+@@ -73,26 +96,42 @@ EOF
+ population theorems "$TMP/c-axiom.lean" > "$TMP/c-axiom.tsv" 2>"$TMP/c-axiom.err"
+ CB=$(nonstandard "$TMP/c-axiom.tsv")
+ [ "$CB" = "ConcreteSpecControl.usesExtra (ConcreteSpecControl.extra)" ] \
+-  && ok "control: a theorem using a declared axiom is refused, and only it ($CB)" \
+-  || no "control: the extra-axiom theorem was not refused alone: '$CB' $(head -2 "$TMP/c-axiom.err")"
++  && ok "control: a theorem using a declared axiom fails A naming it, and only it ($CB)" \
++  || no "control: the extra-axiom theorem was not refused alone by A: '$CB' $(head -2 "$TMP/c-axiom.err")"
++printf 'ConcreteSpec.Control.absent # negative control\n' > "$TMP/p-absent.txt"
++P=$(pinned_errors "$TMP/inv.tsv" "$TMP/p-absent.txt")
++[ "$P" = "pinned theorem missing or not a theorem: ConcreteSpec.Control.absent" ] \
++  && ok "control: a pin absent from the population fails T ($P)" \
++  || no "control: an absent pin gave '$P'"
++FIRST=$(pinned_names "$PINNED" | head -1)
++awk -F'\t' -v name="$FIRST" '$1 != name' "$TMP/inv.tsv" > "$TMP/inv-filtered.tsv"
++P=$(pinned_errors "$TMP/inv-filtered.tsv" "$PINNED")
++[ "$P" = "pinned theorem missing or not a theorem: $FIRST" ] \
++  && ok "control: removing pinned theorem $FIRST from the population fails T" \
++  || no "control: removing $FIRST from the population gave '$P'"
++printf 'ConcreteSpec.Control.match_1 # negative control\n' > "$TMP/p-generated.txt"
++P=$(pinned_errors "$TMP/inv.tsv" "$TMP/p-generated.txt")
++[ "$P" = "refusing generated or private pinned name: ConcreteSpec.Control.match_1" ] \
++  && ok "control: a generated-shape pin is refused ($P)" \
++  || no "control: a generated-shape pin gave '$P'"
+ cat > "$TMP/c-clean.lean" <<'EOF'
+ theorem ConcreteSpecControl.clean : 1 = 1 := rfl
+ private theorem ConcreteSpecControl.hidden : 2 = 2 := rfl
++inductive ConcreteSpecControl.Shape where
++  | leaf
++  | node (n : Nat)
++def ConcreteSpecControl.shapeSize : ConcreteSpecControl.Shape → Nat
++  | .leaf => 0
++  | .node n => n + 1
+ EOF
+-population theorems "$TMP/c-clean.lean" > "$TMP/c-clean.tsv" 2>/dev/null
+-# A private name carries the file it was declared in (`_private.<file>.0.…`); the temporary copy's
+-# name is random, so it is normalized before the comparison.
+-D=$(golden_diff "$TMP/c-clean.tsv" "$GOLDEN" | sed -E 's/^> _private\..*\.0\.ConcreteSpecControl\./> _private.0.ConcreteSpecControl./')
+-[ "$D" = "$(printf '> ConcreteSpecControl.clean\t\n> _private.0.ConcreteSpecControl.hidden\t')" ] \
+-  && ok "control: a new theorem, even axiom-free and even private, is a golden difference" \
+-  || no "control: new public and private theorems gave the diff '$D'"
+-FIRST=$(head -1 "$TMP/inv.tsv" | cut -f1)
+-grep -vF -- "$FIRST	" "$GOLDEN" > "$TMP/g-missing"
+-[ -n "$(golden_diff "$TMP/inv.tsv" "$TMP/g-missing")" ] \
+-  && ok "control: a golden missing a theorem ($FIRST) differs" || no "control: a golden missing $FIRST compared equal"
+-awk -F'\t' 'BEGIN{OFS="\t"} !/^#/ && !done && $2 == "" { $2 = "propext"; done = 1 } { print }' "$GOLDEN" > "$TMP/g-axiom"
+-! cmp -s "$GOLDEN" "$TMP/g-axiom" && [ -n "$(golden_diff "$TMP/inv.tsv" "$TMP/g-axiom")" ] \
+-  && ok "control: a golden recording other axioms for a theorem differs" || no "control: a changed axiom set compared equal"
++population theorems "$TMP/c-clean.lean" > "$TMP/c-clean.tsv" 2> "$TMP/c-clean.err"
++P=$(pinned_errors "$TMP/c-clean.tsv" "$PINNED")
++[ -z "$P" ] \
++  && grep -q $'^ConcreteSpecControl.clean\t' "$TMP/c-clean.tsv" \
++  && grep -qE '^_private\..*ConcreteSpecControl\.hidden[[:space:]]' "$TMP/c-clean.tsv" \
++  && grep -qE '(^|[.])match_[0-9]+([.]|$)|(^|[.])eq_[0-9]+([.]|$)' "$TMP/c-clean.tsv" \
++  && ok "control: added public, private and generated theorems pass T without a golden-style difference" \
++  || no "control: added public, private and generated theorems did not all pass T: '$P' $(head -2 "$TMP/c-clean.err")"
+ printf '%s\n' ConcreteSpec ConcreteSpec.Spec > "$TMP/imp-short.txt"
+ [ -n "$(closure_gap "$TMP/imp-short.txt")" ] \
+   && ok "control: source modules outside a (truncated) import closure are reported" || no "control: a truncated closure reported no gap"
+ delete mode 100644 scripts/proofs/axioms.golden
+## wip/axioms-property...origin/main
+ M .github/workflows/lean_action_ci.yml
+ M ConcreteSpec/README.md
+ M docs/proposals/SPEC_UNIFICATION.md
+ D scripts/proofs/axioms.golden
+ M scripts/proofs/axioms.sh
+?? changelog.d/2026-11-08-axioms-property.md
+?? scripts/proofs/pinned_theorems.txt
+• Review good. But potential generated/private name refusal requirement "never listed anywhere" My header comment says private generated generic okay. No generated names in pinned. Good.
+
+  One concern pinned_errors only checks name shape with Bash regex but uses `local inventory=$1 pinned=$2 name` unquoted assignments safe in local? Shell assignments no splitting. fine.
+  `pinned_names` inline comments parse any `#` reasons. good.
+  T main if pin file missing: `pinned_errors` output missing then failure no exit. `pinned_names` only called if T empty; not empty so short-circuit no second awk. good.
+  If empty pin file, T empty and success "all 0". Does that undermine pinned list missing all? Pinned exactly file tracked; empty modified would pass, which is undesirable property. Original G would fail. Requirements says check fails if any pinned name missing population but if list emptied, no pins. Do they expect pinned list itself exact eight and cannot empty? "Pin exactly these" means file should contain eight, but property check with empty list would pass if someone deletes all pins. A pinned list property generally can't protect deletion of pins from list itself absent review. Could require at least one or exactly eight? User said pin exactly these, no others. The check should perhaps validate list expected count? Counts discouraged in AGENTS "Make gates assert properties, not counts, so improvement does not read regression." Here exact eight is policy, count could be appropriate but not requested. Empty pin list could be considered invalid. However no requirement control for emptied list. I should consider robust design: A pinned list is source of truth, removing a pinned theorem from list would bypass. But control 3 "removing a pinned theorem fails (e.g. run pinned check against a pinned list containing a name absent from population, and against population with one pinned name filtered out)" User intentionally tests absent pin and filtered population, not removing line from pin file (impossible to detect). User accepts list as trusted reviewed input. Fine.
+
+  Could `pinned_names` allow private/generated in comments? no actual pins. Fine.
+
+  Perhaps no extra full docs stale `changelog.d history stays` okay.
+
+  Should stage explicit including new files. Commit. Before commit perhaps test `git diff --check` done. `bash -n` latest edit only grep no issue, actual run passed. All good.
+
+  Commit command explicit paths and git commit. User said commit on branch. Use `git add ... && git diff --cached --check && git commit -m ... && git status... && git log -1`. This mutates index and commit allowed. No push. Do it.
+
+[wip/axioms-property fce6644d9] proofs: replace axiom golden with pinned properties
+ 7 files changed, 102 insertions(+), 1485 deletions(-)
+ create mode 100644 changelog.d/2026-11-08-axioms-property.md
+ delete mode 100644 scripts/proofs/axioms.golden
+ create mode 100644 scripts/proofs/pinned_theorems.txt
+## wip/axioms-property...origin/main [ahead 1]
+fce6644d9c46d4e2fb81b97572275a482560951f proofs: replace axiom golden with pinned properties
+• Should have final status clean yes output no lines after branch. Perhaps verify exact commit test evidence tree same; no changes after. Good. Mark todo done.Now respond with a concise but detailed report: files changed, pinned list, controls results, checks run with results, open questions. Mention commit no push, clean. Note slice0 regenerate golden second drop edits. No repo mention. Should mention no exceptions found. CI/hook consistency: CI command unchanged, hook doesn't invoke proof checks. Perhaps important. Include first axiom run failed due test grep then fixed? Response checks only pass; user asks controls results, no need narrate intermediate. Could mention all controls pass 11. Files changed seven:
+  - scripts/proofs/axioms.sh
+  - pinned new
+  - golden deleted
+  - workflow
+  - README
+  - proposal
+  - changelog
+  No lib/theorems changes. Commit hash.
+  Pinned full 8 list exactly.
+  Checks `lake build` 29 jobs pass; axioms PASS=11 FAIL=0; trust PASS=23; root all 11. `--update` exit2 one line. Controls list 5:
+  1 sorry named
+  2 custom named
+  3 absent pin + filtered reset fails
+  4 match shape refused
+  5 additions public/private/generated pass.
+  P closure control too.
+  Open questions none, population unchanged ConcreteSpec. No exceptions mechanism existed so none added. Note branch slice0. Respond with no extraneous content. Could use headings (small) appropriate. Cite code paths with line numbers? I know pinned lines 2-9, axioms line numbers approximated from new script: --update 18? T 78 etc. Could avoid line numbers or cite paths only. Instructions say code locations as path:42. If referencing files changed not necessarily line. Could use `scripts/proofs/pinned_theorems.txt:2` etc. Should have accurate lines from content. axioms: count header 1-17, set18, if19-22, source23, root24, cd26? I'll not line cite unless useful. Files list paths sufficient? "Cite code locations as path..." expected if pointing code. I can use pinned at :2 and axioms at :19, approximate. Avoid risk.
+  Response "Open questions: none; checked population remains today's ConcreteSpec, no exception mechanism found/added."
+  Note slice0 exact wording "wip/slice0-lexer* branches regenerate axioms.golden; whichever lands second must drop those edits." Include under integration note.
+  No mention docs decisions untouched perhaps can say not touched.
+  No push.
+  Perhaps "root checks all 11 pass" root suite itself has 11 scripts. Good.
+  Respond concise ~500 words, aim for ~350.
+
+To resume this session: kimi -r session_d2167550-dd44-4c91-b074-2cda08ce8db2
+[unexpected] RuntimeError: workspace wd_wip-axioms-property_cc6f3631b3f1 is not materialized
+    at RuntimeResolver.acquire (/home/runner/work/kimi-code/kimi-code/apps/kimi-code/dist-native/intermediates/main.cjs:180498:36)
+    at AgentRuntimeService.acquire (/home/runner/work/kimi-code/kimi-code/apps/kimi-code/dist-native/intermediates/main.cjs:132231:25)
+    at AgentFileHistoryService.readCurrent (/home/runner/work/kimi-code/kimi-code/apps/kimi-code/dist-native/intermediates/main.cjs:177606:31)
+    at AgentFileHistoryService.endCheckpoint (/home/runner/work/kimi-code/kimi-code/apps/kimi-code/dist-native/intermediates/main.cjs:177519:32) {
+  code: 'runtime.not_found'
+}
+kimi rc=0

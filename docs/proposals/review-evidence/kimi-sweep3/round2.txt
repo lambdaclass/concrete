@@ -1,0 +1,22 @@
+• ## Round-1 findings
+
+  1. **Fixed — edits and deletions after a sweep.** The lock now chains frozen → sweep trees → current tree (`scripts/checks/legacy_frozen.sh:80-95`), with controls for later edits, open/resolved deletions, and post-sweep additions (`scripts/checks/legacy_frozen.sh:147-167`).
+
+  2. **Fixed — C-quoted pathnames.** `git diff-tree -z` and NUL-safe parsing preserve raw paths; unresolved additions are refused, and control-character paths are rejected (`scripts/checks/legacy_frozen.sh:35-76`). The C-quoted-path control passes.
+
+  3. **Fixed — retention disposition.** `RETENTION.tsv:45` now consistently says `archived`, with a root-sweep criterion and protection for the legacy copy. The retention checker passes 10/10.
+
+  4. **Fixed — moved-path references.** The affected `ISSUES.tsv:8,16,18` references now point under `legacy/`. The dated 2026-11-04 changelog remains unchanged as requested.
+
+  5. **Fixed — ancestry control.** A non-ancestor sweep is exercised through `chain` and refused (`scripts/checks/legacy_frozen.sh:153-161`). Tree-less lock lines and second-sweep rewrites also have controls.
+
+  ## New finding
+
+  - **Medium — Git pathspec magic bypasses sweep-origin validation** (`scripts/checks/legacy_frozen.sh:68-74`). The three `git ls-tree -- "$path"` lookups interpret the filename as a pathspec rather than a literal path. I reproduced an unoriginated addition named `:(literal)p/moved` being accepted alongside a legitimate sweep of `p/moved`: its lookups resolve to `p/moved`, so the current and sweep blobs compare equal and `judge` emits no diagnostic. Use literal pathspecs such as `:(literal)$path` for all three lookups and add this as a negative control.
+
+  All 24 shipped controls passed in a disposable repository, and the archive’s complete `legacy/` tree matches the recorded sweep tree. The historical lock-base leg could not be replayed because the archive lacks those Git objects.
+
+  Verdict: CHANGES-NEEDED
+
+To resume this session: kimi -r session_44e56e91-e475-4db8-96d8-65a4fa055173
+kimi exit 0

@@ -1,0 +1,51 @@
+• I’ll inspect the diff, the Lean definitions and gate implementation, then trace CI and proposal requirements against exact lines.
+
+• The plan requires `Ident` to stay downstream-free and the gate to bind documentation and examples to registered `RuleId`s. I’m now checking the Lean semantics and probing whether the source scanner can count something other than a real per-rule example.
+
+• The Lean sources elaborate successfully when fed directly to Lean without producing build artifacts. Two semantic documentation issues are visible so far; I’m also exercising the checker in memory so the review remains read-only.
+
+• The checker confirms a real vacuity bug: one `example` carrying both verdicts satisfies the two-example requirement. It also accepts an invented decision-row ID, and its citation regex misses valid quoted Lean names containing whitespace.
+
+• The build and required-job wiring are correct. I’m finishing the consistency pass and separating substantive gate failures from smaller documentation and control-coverage issues.
+
+• The review is complete: CI and the overall module plan are wired as intended, but the gate has reproducible bypasses and its controls miss several failure branches.
+
+• ## Findings
+
+  1. **One example can satisfy both the Accepted and Refused requirements.**  
+     `scripts/spec/rules.py:52-63` records verdicts only as a per-rule set; it does not retain which example supplied each verdict. A single comment containing both `Accepted (rule \`R.ok\`)` and `Refused (rule \`R.ok\`)` before one `example` passes. I reproduced this with exit status 0.  
+     **Fix:** track the example/comment span for each verdict and require distinct Accepted and Refused examples, or reject both verdicts for one rule on the same example. Add a combined-verdict negative control near `scripts/spec/rules.sh:60-64`.
+
+  2. **Quoted Lean names containing whitespace bypass citation validation.**  
+     `scripts/spec/rules.py:18-19` excludes all whitespace from rule names. Consequently, `scripts/spec/rules.py:48-51` does not recognize a citation such as `(rule \`R.«not registered»\`)`, although `R.«not registered»` is a valid quoted Lean name. I reproduced an unregistered citation of this form passing alongside an otherwise valid registry. Dotted names and quoted names without whitespace work.  
+     **Fix:** parse Lean names, including `«…»` components containing whitespace, rather than using `[^`\s]+`. Add positive controls for dotted/quoted names and a negative control for an unregistered quoted name containing whitespace.
+
+  3. **A nonexistent decision row satisfies the documentation check.**  
+     `scripts/spec/rules.py:17,35-36` checks only the shape of an identifier. A rule whose documentation cites only `R-9999` passes, which does not establish that it cites an actual decision row.  
+     **Fix:** validate matched Q/OD/P identifiers against `docs/decisions.md` and R identifiers against `ROADMAP.md`; add an unknown-row negative control.
+
+  4. **The negative controls do not cover every implemented failure branch.**  
+     `scripts/spec/rules.sh:57-93` covers missing Refused, missing row text, duplicates, absent declarations, unregistered citations, a block-comment verdict on a non-example, revision zero, and truncation. It lacks controls for an empty doc comment (`scripts/spec/rules.py:35`), missing Accepted (`scripts/spec/rules.py:61-63`), the two bypasses above, and timeout handling. Also, verdicts in line comments are not examined because only block-comment spans are inspected at `scripts/spec/rules.py:52-58`; a stray registered-rule verdict in a line comment passes despite the intended outside-example rejection.  
+     **Fix:** add controls for these branches and either scan line comments for stray verdicts or narrow the documented rejection requirement explicitly.
+
+  5. **`Span.PathOk` does not fully establish its “relative path” claim.**  
+     `ConcreteSpec/Spec/Ident.lean:144-149` accepts `C:/main.con`: it is nonempty, does not start with `/`, and contains no backslash, but is a Windows absolute path. Lean evaluation confirmed that `PathOk` returns `true` for it.  
+     **Fix:** reject drive-absolute forms and add a refused example. Consider also specifying whether `..` segments are permitted.
+
+  6. **Two `Ident` example comments are inaccurate.**
+     - `ConcreteSpec/Spec/Ident.lean:179-185` says the variant comparison uses `Some` and `Ok`, but the proof uses `A` and `B`. Rename the constructors in the proof or correct the comment.
+     - `ConcreteSpec/Spec/Ident.lean:201-203` says `Var.mk "x" 0` and `Var.mk "y" 0` can never arise “from a program.” The stated numbering invariant at `ConcreteSpec/Spec/Ident.lean:33-36` guarantees uniqueness only within one function, so it does not justify that program-wide claim. Scope the comment to one function/context or state a global freshness invariant.
+
+  ## Confirmed
+
+  - The new Lean sources elaborate successfully when supplied directly through `lean --stdin`; all included examples kernel-check. No `sorry` or `native_decide` occurs in the new Lean files.
+  - `Span` leaves column units abstract as a `Nat` and explicitly records the unit as undecided at `ConcreteSpec/Spec/Ident.lean:131-142`; it does not choose bytes or Unicode scalar values.
+  - `Ident` imports only `Basics`, while `Rules` imports only `Ident` (`ConcreteSpec/Spec/Ident.lean:1`, `ConcreteSpec/Spec/Rules.lean:1`), preserving the plan’s downstream-free requirement. `SliceId = Fin 29`, `RuleId`, and `specVersion` match the step-2 design.
+  - Duplicate names, revisions below 1, missing declarations, and truncated listings are rejected. Nested comments and string literals cannot be used to supply examples. Attributes or modifiers between the doc comment and `example` are rejected rather than miscounted.
+  - Timeout handling fails closed: `scripts/spec/rules.sh:28-30` converts checker incompleteness to status 2, which neither the specification check nor controls accept; build/listing timeouts exit nonzero at `scripts/spec/rules.sh:34-39`.
+  - CI runs the gate after the specification build at `.github/workflows/lean_action_ci.yml:156-166`, and `Spec build` is required at `required-checks.txt:6`.
+  - The README description at `ConcreteSpec/README.md:41-44` matches the intended gate. The axiom-golden additions contain only the expected generated identity declarations, with no nonstandard axioms.
+  - Full `rules.sh` was not run because it creates build and fixture artifacts; its Python checker and the bypass cases were exercised read-only in memory.
+
+  VERDICT: REVISE
+

@@ -1,0 +1,7 @@
+review: round 2, piece 1 of 2 (scripts, 27655 bytes)
+review: round 2, piece 2 of 2 (docs, 4228 bytes)
+review: round 2 verdict findings (2 piece(s)); raw output: .review/ce2803ec0a6f8b05dffe7081a158eaabe8896567-2.md
+[piece 1 of 2: scripts]
+- scripts/land/signoff.sh:143: The cap check accepts any note containing `rounds: 5`, without validating that it is a review.sh record. Even a malformed note consisting solely of that line qualifies, allowing a sign-off without valid evidence that the member exhausted its review rounds. Validate the note’s required fields and structure before using its round count.
+pre-push: review-notes push (review notes, owner sign-offs) — no source tree, no gates
+codex rc=1

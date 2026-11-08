@@ -1,0 +1,24 @@
+Write the full surface grammar of the Concrete language as a review sheet for the owner. The owner reviews every syntax and spelling choice personally. This sheet is what the owner approves before the grammar is encoded in Lean (the independent grammar judgment required by Core Q8.3) and before the parser is built.
+
+Sources, in this directory:
+- docs/decisions.md: authoritative; every OD, Q and other decided row about syntax and spellings.
+- ConcreteSpec/ (Spec/Slice1Syntax.lean and the others).
+- legacy/docs/spec/ (the old grammar and the TYPE/STMT/FFI/CON/ARITH rows).
+- legacy/ compiler parser and examples, for what existed.
+- ROADMAP.md (slices 0–28).
+Do not modify repo files. Write _review/GRAMMAR_REVIEW.md and nothing else.
+
+The sheet must contain:
+1. Lexical grammar: source encoding, whitespace, comments, identifiers, keywords (the full reserved list), integer/char/string literals and escapes, punctuation and operators, with precedence and associativity.
+2. Syntactic grammar in EBNF, LL(1), covering every construct the decided rows admit:
+   - items: fn, struct, enum, type aliases, constants, modules/imports, extern/FFI, attributes such as #[proof(T)], #[may_not_terminate("reason")], #[invariant], repr;
+   - generics and bounds; types; patterns; statements; expressions; blocks and trailing values; loops and labels; defer; with(...) capabilities; contracts (requires/ensures);
+   - Secret<T>, declassify, checked_*/wrapping_*/saturating_*, try_convert;
+   - borrows and views; raw pointers (slice 24).
+   For each production give the slice where it arrives.
+3. For EVERY construct: the decided row that fixes its spelling (anchor link). If no row decides it, mark it **OPEN** with a recommended spelling, one alternative and a one-line reason.
+4. An LL(1) check: list any conflict (FIRST/FIRST or FIRST/FOLLOW) and how the grammar resolves it. Do not change a decided spelling to fix one; flag it instead.
+5. A short list of syntax that the decided rows explicitly REMOVED or refused (for example postfix ?, value while…else, postfix ->, implicit returns if decided), so the parser refuses them with a diagnostic.
+6. At the end: the numbered list of OPEN items, each with its recommendation, for the owner.
+
+Plain English, precise, no invented decisions. Cite anchors exactly.

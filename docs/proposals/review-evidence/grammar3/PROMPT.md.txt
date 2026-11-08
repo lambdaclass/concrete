@@ -1,0 +1,15 @@
+Two jobs, both for the owner. Inputs are in _review/; the repo (docs/decisions.md authoritative, legacy/docs/spec/, ConcreteSpec/) is in this directory. Do not modify repo files.
+
+JOB 1. Revise the grammar sheet. _review/GRAMMAR_REVIEW_v1.md was reviewed by Codex, Kimi and agy (_review/grammar_review_{codex,kimi,agy}.out; use their final sections; agy could not read the repo). Verify EVERY reported error against the repo. Fix the real ones, and reject the wrong ones with a reason.
+- For each OPEN item, record each reviewer's choice. Keep or change the recommendation on the merits, and show the split.
+- Write _review/GRAMMAR_REVIEW.md (v2) and _review/GRAMMAR_CHANGES.md (one line per finding: accepted, rejected or partly, with the reason).
+
+JOB 2. Merge the simplification reviews into one owner list. Sources: _review/simplify_{codex,kimi,agy}.out. The owner asked "is there anything in the language that should be removed or simplified?", under these principles: one form per situation; transparent; checking and reading over writing effort; verbose is fine when clear.
+- Deduplicate the candidates across reviewers: for example, method-call syntax was raised by all three.
+- For each candidate give: what it is, today's decided row (anchor, verified), the proposed change, what is lost, each reviewer's verdict (STRONG / ASK / KEEP / not raised), and your merged recommendation (CHANGE / ASK OWNER / KEEP), with a reason in at most 60 words.
+- Order them by consensus and importance. Show code before/after for each CHANGE candidate (2–6 lines; mark undecided spellings ILLUSTRATIVE).
+- Note interactions with the grammar OPEN items (a simplification may remove an OPEN item).
+- Note that the owner decided on 2026-11-08 to keep with(...) plus grants (the capability comparison), so don't reopen that.
+- Write _review/SIMPLIFY_MERGED.md.
+
+Plain English, precise, no invented decisions, accurate anchors.

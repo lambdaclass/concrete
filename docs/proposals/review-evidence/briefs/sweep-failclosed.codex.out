@@ -1,0 +1,2806 @@
+Reading additional input from stdin...
+OpenAI Codex v0.166.0
+--------
+workdir: /home/unbalancedparen/projects/clones/wip/legacy-sweep-2
+model: gpt-6.1-sol
+provider: openai
+approval: never
+sandbox: danger-full-access
+reasoning effort: none
+reasoning summaries: none
+session id: 01a1b9b9-66fb-7902-816a-ed510c8f4400
+--------
+user
+TASK: make scripts/checks/legacy_frozen.sh and its lock parser fail closed (branch wip/legacy-sweep-2, this clone, head 903fd3dab).
+
+Background. legacy/ is a frozen copy of the old tree. scripts/checks/legacy_frozen.sh enforces that it changes only by byte-for-byte
+sweeps recorded in scripts/checks/legacy.lock. scripts/checks/lib/legacy_lock.py is the lock's ONE parser and reader (read its
+docstring: the format, `rows FILE|-`, `history LOCK PATH TRUSTED`). legacy_frozen.sh calls it via lock_rows / lock_history;
+scripts/checks/lib/doc_links.py imports it. Read both files in full first.
+
+Two confirmed real defects to fix (from review of 903fd3dab):
+
+1. legacy_lock.py parse() accepts a lock that has only `base <oid>` (no `tree <oid>` line 2), and also an empty-after-base lock.
+   history() therefore accepts such a malformed trusted version without a diagnostic. Fix: a lock must have at least the two
+   header rows (line 1 base, line 2 tree); a lock missing line 2 is refused with an exact diagnostic in the existing
+   NAME:LINE: style (for a missing line, name the line that is missing, e.g. "<name>:2: missing: line 2 must be 'tree <tree>'").
+
+2. Fail-open on a failing parser or helper. In legacy_frozen.sh:
+   - chain(): `rows="$(lock_rows "$lock")" || { printf '%s\n' "$rows"; return 0; }` prints nothing when the parser exits
+     non-zero with empty stdout (a Python traceback goes to stderr, python3 missing, exit 2 on an I/O error), so chain's output
+     is empty and the lock is judged clean.
+   - the main section ignores lock_history's exit status (`hist="$(lock_history ...; history_identity ...)"`): a crash with no
+     stdout passes.
+   - AUDIT every other external command whose output is judged by emptiness: history_identity's python heredoc, judge()'s
+     `git diff-tree ... | python3 -I -c ...` pipeline into a while loop, trusted_base, and any git command whose failure would
+     produce empty output that reads as "no problems". Every such call must fail closed: a non-zero exit (or a failed pipeline
+     stage) becomes an explicit refusal line naming the step, never silence.
+   Decide one consistent mechanism (for example: helpers print a refusal and the caller also checks the exit status) and apply
+   it to every site.
+
+Controls (in legacy_frozen.sh's negative-control section, each asserting its EXACT diagnostic, each failing for its intended
+reason):
+   - a lock with only a base row is refused by chain() and, as a trusted version, by lock_history;
+   - a parser that exits non-zero with no stdout (point LOCKPY at a stub script that writes only to stderr and exits 1, and one
+     that exits 2) makes chain() and lock_history refuse, with the exact message;
+   - for each other fail-closed site you change, a control that forces its command to fail (a stub on PATH or a bad argument)
+     and asserts the refusal.
+   After adding the controls, prove each is load-bearing: temporarily revert each fix and confirm its control fails, then
+   restore. Report which mutation you ran and what failed.
+
+Gates that must pass (run each under timeout, bounded):
+   timeout 600 systemd-run --user --scope -q -p MemoryMax=4G -p TasksMax=512 bash scripts/checks/legacy_frozen.sh
+   timeout 1500 systemd-run --user --scope -q -p MemoryMax=8G -p TasksMax=1024 bash scripts/checks/run.sh   (all 11 pass)
+
+Out of scope: do not touch legacy/, scripts/checks/legacy.lock, docs/decisions.md, ROADMAP.md, or any file not needed for
+this fix. Keep the existing controls passing. If you change wording visible in the header comment of legacy_frozen.sh or in
+changelog.d/2026-11-08-legacy-sweep.md, keep them accurate.
+
+Hard rules: never push (the orchestrator pushes); you may commit locally with a clear message (no co-author lines needed);
+never use --no-verify, never force anything, never change git config or remotes; bound every test with timeout and
+systemd-run limits as above; do not connect to the network.
+
+When done, print: the commit SHA, a summary of each change by file, each control added with its exact diagnostic, and the
+mutation results.
+codex
+I’ll read both files in full, audit the commands whose empty output means success, then add failure controls and test that each one catches its corresponding regression. I’ll keep all work local and run tests with the requested bounds.
+exec
+/bin/bash -lc 'cat scripts/checks/lib/legacy_lock.py scripts/checks/legacy_frozen.sh' in /home/unbalancedparen/projects/clones/wip/legacy-sweep-2
+ succeeded in 0ms:
+#!/usr/bin/env python3
+"""The one reader of scripts/checks/legacy.lock, the record legacy_frozen.sh judges legacy/ against.
+
+No other code reads the lock's bytes: legacy_frozen.sh and doc_links.py take its rows from here, and
+legacy_frozen.sh's controls refuse any other reader. One parser means every consumer sees the same
+rows, so no byte can be a row to one check and not to another.
+
+THE FORMAT. Every line ends with a newline (LF) and is exactly one row:
+  line 1     base <commit>            the move's base commit
+  line 2     tree <tree>              that commit's tree: the frozen legacy/
+  line 3...  sweep <commit> <tree>    one per sweep: its source commit and the legacy/ tree it produced
+An <oid> is 40 or 64 lowercase hex digits; one space separates the fields. Nothing else is a row:
+no blank line, comment, NUL, CR, tab, leading or trailing space, non-ASCII byte, repeated row, or
+last line without its newline. A `preview` line (a move generated by --preview) is refused with
+its own message. Every problem is reported, one diagnostic per line, as NAME:LINE: message.
+
+Usage:
+  legacy_lock.py rows FILE|-              print the rows, one per line; exit 1 with the diagnostics
+  legacy_lock.py history LOCK PATH TRUSTED
+      every row of every version of PATH in TRUSTED's first-parent history (each commit read
+      against its first parent) is a row of LOCK: rows are only ever added. A malformed trusted
+      version is refused, not skipped. Prints one refusal per problem; exit 1 if any.
+Exit 2 on a usage or I/O error.
+"""
+
+import re
+import subprocess
+import sys
+
+LOCK_PATH = "scripts/checks/legacy.lock"
+OID = r"(?:[0-9a-f]{40}|[0-9a-f]{64})"
+FORMS = {
+    "base": re.compile(rf"base {OID}"),
+    "tree": re.compile(rf"tree {OID}"),
+    "sweep": re.compile(rf"sweep {OID} {OID}"),
+}
+PREVIEW = re.compile(r"preview(?: .*)?")
+
+
+class LockError(ValueError):
+    """The lock is malformed; .problems holds one diagnostic per problem."""
+
+    def __init__(self, problems):
+        super().__init__("\n".join(problems))
+        self.problems = problems
+
+
+def parse(data, name):
+    """The rows of a lock's bytes, as strings ('base X', 'tree X', 'sweep X Y'), in order."""
+    if not data:
+        raise LockError([f"{name}: empty: line 1 must be 'base <commit>'"])
+    lines = data.split(b"\n")
+    last_unterminated = lines[-1] != b""
+    if not last_unterminated:
+        lines.pop()
+    problems, rows, seen = [], [], {}
+    for n, raw in enumerate(lines, 1):
+        where = f"{name}:{n}"
+        if b"\0" in raw:
+            problems.append(f"{where}: holds a NUL byte: the lock is text"); continue
+        if b"\r" in raw:
+            problems.append(f"{where}: holds a carriage return: a line ends with a newline (LF) alone"); continue
+        try:
+            line = raw.decode("ascii")
+        except UnicodeDecodeError:
+            problems.append(f"{where}: holds a non-ASCII byte"); continue
+        if n == len(lines) and last_unterminated:
+            problems.append(f"{where}: has no newline: every line, the last too, ends with one"); continue
+        want = "base" if n == 1 else "tree" if n == 2 else "sweep"
+        if PREVIEW.fullmatch(line):
+            problems.append(f"{where}: the move is a --preview build ({line}); a lock may only record a move "
+                            "generated with its landing prerequisites met (the generator is "
+                            "legacy/scripts/land/legacy_move.sh since the 2026-11-08 sweep)"); continue
+        if not FORMS[want].fullmatch(line):
+            shape = {"base": "'base <commit>'", "tree": "'tree <tree>'", "sweep": "'sweep <commit> <tree>'"}[want]
+            problems.append(f"{where}: is not a lock row: line {n} must be {shape}, one space between "
+                            "fields, each oid 40 or 64 lowercase hex digits"); continue
+        if line in seen:
+            problems.append(f"{where}: repeats line {seen[line]}: a row is recorded once"); continue
+        seen[line] = n
+        rows.append(line)
+    if problems:
+        raise LockError(problems)
+    return rows
+
+
+def read(path):
+    """The rows of the lock file at path ('-' is stdin)."""
+    if path == "-":
+        return parse(sys.stdin.buffer.read(), "<stdin>")
+    with open(path, "rb") as f:
+        return parse(f.read(), path)
+
+
+def git(*args):
+    r = subprocess.run(["git", *args], capture_output=True)
+    return r.returncode, r.stdout
+
+
+def history(lock, lpath, trusted):
+    """Refusals: rows of trusted versions of lpath that lock lacks, and malformed trusted versions."""
+    current = set(read(lock))
+    rc, out = git("log", "--first-parent", "--diff-merges=first-parent", "--no-patch", "--format=%H",
+                  trusted, "--", lpath)
+    if rc != 0:
+        return [f"lock: cannot list the trusted history of {lpath} through {trusted[:10]}"]
+    refusals, reported = [], set()
+    for c in out.decode().split():
+        rc, blob = git("cat-file", "blob", f"{c}:{lpath}")
+        if rc != 0:
+            continue  # that commit deleted the lock; the lock it had is in an older version
+        try:
+            rows = parse(blob, f"{c[:10]}:{lpath}")
+        except LockError as e:
+            refusals += [f"lock: a trusted version is malformed: {p}" for p in e.problems]
+            continue
+        for row in rows:  # newest first, so the commit named is the newest that has the row
+            if row not in current and row not in reported:
+                reported.add(row)
+                refusals.append(f"lock: '{row}' (in {c[:10]}, trusted history) is not in the lock: "
+                                "recorded lines are only ever added, never rewritten or removed")
+    return refusals
+
+
+def main(argv):
+    try:
+        if len(argv) == 2 and argv[0] == "rows":
+            for row in read(argv[1]):
+                print(row)
+            return 0
+        if len(argv) == 4 and argv[0] == "history":
+            refusals = history(*argv[1:])
+            for r in refusals:
+                print(r)
+            return 1 if refusals else 0
+    except LockError as e:
+        print("\n".join(e.problems))
+        return 1
+    except OSError as e:
+        print(f"legacy_lock.py: {e}", file=sys.stderr)
+        return 2
+    print("usage: legacy_lock.py rows FILE|- | history LOCK PATH TRUSTED", file=sys.stderr)
+    return 2
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))
+#!/usr/bin/env bash
+# legacy/ IS FROZEN (ROADMAP R-0558, R-0562).
+#
+# legacy/ is a byte-for-byte copy of main's tree at the move's base commit, plus the files later
+# sweeps moved into it byte for byte. scripts/checks/legacy.lock records that commit and its tree, and
+# each sweep; its format, and its one reader, is lib/legacy_lock.py (no code here reads the lock's
+# bytes itself). This check holds five things:
+#   1. the recorded tree is the recorded commit's tree (legacy/ is that snapshot, nothing else);
+#   2. HEAD:legacy differs from it only by deletions and by sweeps: a modified path is refused, and an
+#      added path is refused unless a sweep moved it (below);
+#   3. each deleted path is covered by at least one RETENTION.tsv row, and every row covering it
+#      (its own path or an ancestor directory) has `status` = `resolved` (the row's deletion
+#      criterion holds): a resolved parent never releases a child with its own unresolved row.
+#      Until RETENTION.tsv has a status column, every deletion is refused.
+#   4. SWEEPS (owner, 2026-11-08: "ok to 1"). Each `sweep <commit> <tree>` line of the lock records
+#      one move into legacy/: the commit of HEAD's history it took files from, and the legacy/ tree
+#      it produced. The trees form a chain, frozen tree -> sweep 1 -> ... -> HEAD:legacy. Each step
+#      to a sweep tree may add a path P only if P has the same mode and blob at that sweep's commit
+#      and P no longer exists at the root of HEAD; the last step, to HEAD:legacy, adds nothing. Every
+#      step refuses an edit of a legacy/ file and admits only the deletions RETENTION.tsv allows, so
+#      a swept file, once in a sweep tree, is protected like a frozen one.
+#   5. TRUSTED HISTORY. The steps above judge the lock this commit carries, so on their own a rewritten
+#      lock line, or a file deleted by one sweep and re-added with other bytes by the next, would pass.
+#      History settles both. The trusted history is main's landed states: the first-parent chain of
+#      the merge base of HEAD and LEGACY_TRUSTED_REF (default origin/main), each commit read against
+#      its first parent, or HEAD's own first-parent chain when that ref is absent (on main and on a
+#      train head, whose first parent is main, the same thing; on a bare branch tip it is stricter:
+#      the branch's own commits count, so a branch that corrected its own lock fails there). A train's member commits are second parents: a line a branch wrote and then
+#      corrected before it landed is not trusted history. (a) Every base, tree and sweep line of every trusted version of
+#      the lock is still in the lock: lines are only ever added. (b) Every version a legacy/ path ever
+#      had in trusted history is the version it has now, if it still exists: a frozen or swept file
+#      is never rewritten, by an edit or by deletion and re-addition. A candidate's own commits are
+#      not trusted history; they are what the review and this gate judge.
+# Negative controls run the same judgment on synthetic trees first, so a judge that accepts
+# everything fails here before the real check.
+set -uo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh" || exit 2
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+SELF="$ROOT_DIR/scripts/checks/${BASH_SOURCE[0]##*/}"
+cd "$ROOT_DIR"
+LOCK=scripts/checks/legacy.lock
+LOCKPY="$ROOT_DIR/scripts/checks/lib/legacy_lock.py"
+PASS=0; FAIL=0
+ok(){ echo "  ok   $1"; PASS=$((PASS+1)); }
+no(){ echo "  FAIL $1"; FAIL=$((FAIL+1)); }
+
+# judge FROZEN_TREE CURRENT_TREE RETENTION_FILE (in the current repository): prints one problem per line.
+judge() { # FROZEN CUR RETENTION ROOT-TREE [SWEEP-COMMIT...]
+  local frozen="$1" cur="$2" ret="$3" root="$4"; shift 4
+  [ "$frozen" = "$cur" ] && return 0
+  # -z: paths arrive raw, never C-quoted, so the ls-tree lookups below see the real path.
+  git diff-tree -z -r --no-renames --name-status "$frozen" "$cur" | python3 -I -c '
+import sys
+ret = sys.argv[1]
+rows = [l.rstrip("\n").split("\t") for l in open(ret) if l.strip() and not l.startswith("#")]
+hdr, rows = rows[0], rows[1:]
+# (path, resolved?) for every path a row names. With no status column, nothing is resolved.
+named = []
+if "path" in hdr:
+    pi = hdr.index("path"); si = hdr.index("status") if "status" in hdr else None
+    for r in rows:
+        res = si is not None and len(r) > si and r[si].strip() == "resolved"
+        named += [(p.rstrip("/"), res) for p in r[pi].split()]
+def ok(p):
+    # Every row covering p (its own path or an ancestor) must be resolved, and at least one must:
+    # a resolved parent does not release a child that has its own unresolved row.
+    cover = [res for n, res in named if p == n or p.startswith(n + "/")]
+    return bool(cover) and all(cover)
+f = sys.stdin.buffer.read().split(b"\0")
+if f and f[-1] == b"": f.pop()
+for st, raw in zip(f[0::2], f[1::2]):
+    st, path = st.decode(), raw.decode("utf-8", "surrogateescape")
+    if "\n" in path or "\t" in path or not path.isprintable():
+        print(f"{st} legacy/{path!r}: legacy/ admits no path with control characters")
+    elif st == "A":
+        print(f"ADD\t{path}")
+    elif st != "D":
+        print(f"{st} legacy/{path}: legacy/ admits no modification")
+    elif not ok(path):
+        print(f"D legacy/{path}: no resolved RETENTION.tsv row allows this deletion")
+' "$ret" | while IFS= read -r line || [ -n "$line" ]; do
+    case "$line" in ADD$'\t'*) ;; *) printf '%s\n' "$line"; continue ;; esac
+    local path="${line#ADD$'\t'}" want s found=""
+    local -x GIT_LITERAL_PATHSPECS=1 # a path is a path: ":(literal)p/x" must not resolve to p/x
+    want="$(git ls-tree "$cur" -- "$path" | cut -f1)"
+    [ -n "$want" ] || { echo "A legacy/$path: cannot resolve the added path; refused"; continue; }
+    if [ -n "$(git ls-tree "$root" -- "$path")" ]; then
+      echo "A legacy/$path: a swept file must no longer exist at the root, and $path does"; continue
+    fi
+    for s in "$@"; do
+      [ "$(git ls-tree "$s" -- "$path" | cut -f1)" = "$want" ] && { found=1; break; }
+    done
+    [ -n "$found" ] || echo "A legacy/$path: no sweep commit in the lock has $path with this content; legacy/ admits only byte-for-byte moves"
+  done
+}
+
+chain() { # LOCK FROZEN CUR RETENTION HEAD-COMMIT: judges frozen -> each sweep tree -> CUR; prints refusals
+  local lock="$1" prev="$2" cur="$3" ret="$4" head="$5" root rows kind sw st n=0 step
+  rows="$(lock_rows "$lock")" || { printf '%s\n' "$rows"; return 0; }
+  root="$(git rev-parse "$head^{tree}")"
+  while read -r kind sw st || [ -n "$kind" ]; do # rows are the parser's, one per line
+    [ "$kind" = sweep ] || continue
+    n=$((n+1))
+    if ! git rev-parse -q --verify "$sw^{commit}" >/dev/null \
+       || ! git merge-base --is-ancestor "$sw" "$head" || [ "$(git cat-file -t "$st" 2>/dev/null)" != tree ]; then
+      echo "sweep line $n: needs a commit of HEAD's history and a tree: $sw $st"; continue
+    fi
+    step="$(judge "$prev" "$st" "$ret" "$root" "$sw" 2>&1)"
+    [ -z "$step" ] || printf 'sweep %s (%s):\n%s\n' "$n" "${sw:0:10}" "$step"
+    prev="$st"
+  done <<<"$rows"
+  step="$(judge "$prev" "$cur" "$ret" "$root" 2>&1)"
+  [ -z "$step" ] || printf 'since the last sweep:\n%s\n' "$step"
+}
+
+# trusted_base HEAD-COMMIT: the newest commit whose history is trusted (see 5 above).
+trusted_base() {
+  local ref="${LEGACY_TRUSTED_REF:-origin/main}" mb
+  if git rev-parse -q --verify "$ref^{commit}" >/dev/null && mb="$(git merge-base "$1" "$ref" 2>/dev/null)"; then
+    echo "$mb"
+  else
+    git rev-parse "$1^{commit}"
+  fi
+}
+
+# lock_rows LOCK-FILE: the lock's rows, from its one parser (lib/legacy_lock.py); exit 1 with one
+# diagnostic per problem. No code here reads the lock's bytes itself.
+lock_rows() { python3 -I "$LOCKPY" rows "$1"; }
+# lock_history LOCK-FILE LOCK-PATH TRUSTED: every row of every version of LOCK-PATH in TRUSTED's
+# first-parent history is still a row of LOCK-FILE; a malformed trusted version is refused. Prints
+# one refusal per problem, naming the newest trusted commit that has a missing row.
+lock_history() { python3 -I "$LOCKPY" history "$1" "$2" "$3"; }
+
+# history_identity PREFIX HEAD-COMMIT TRUSTED: every version PREFIX/<path> had in TRUSTED's history is
+# the version it has at HEAD-COMMIT, for each path HEAD-COMMIT still has. Prints one refusal per path.
+history_identity() {
+  local prefix="$1" head="$2" trusted="$3"
+  python3 -I - "$prefix" \
+    3< <(git log --first-parent --diff-merges=first-parent -z --raw --no-renames --no-abbrev --format= "$trusted" -- "$prefix/") \
+    4< <(git ls-tree -r -z --full-tree "$head" -- "$prefix/") <<'PY'
+import os, sys
+prefix = sys.argv[1] + "/"
+def tokens(fd):
+    with os.fdopen(fd, "rb") as f:
+        return [t for t in f.read().split(b"\0")]
+seen = {}
+t = tokens(3); i = 0
+while i < len(t):
+    tok = t[i].lstrip(b"\n")
+    if tok.startswith(b":") and i + 1 < len(t):
+        _, newmode, _, newsha, st = tok[1:].decode().split(" ")
+        path = t[i + 1].decode("utf-8", "surrogateescape")
+        if not st.startswith("D"):
+            seen.setdefault(path, set()).add((newmode, newsha))
+        i += 2
+    else:
+        i += 1
+for ent in tokens(4):
+    if not ent:
+        continue
+    meta, path = ent.split(b"\t", 1)
+    mode, _, sha = meta.decode().split(" ")
+    path = path.decode("utf-8", "surrogateescape")
+    other = sorted(v for v in seen.get(path, ()) if v != (mode, sha))
+    if other:
+        print(f"{path}: was {other[0][1][:10]} (mode {other[0][0]}) in trusted history and is {sha[:10]} (mode {mode}) now: a frozen or swept file is never rewritten, by an edit or by deletion and re-addition")
+PY
+}
+
+echo "=== negative controls ==="
+# The controls build a throwaway repository: none of git's repository variables may reach it (ISS-0015).
+source "$ROOT_DIR/scripts/checks/lib/git_sandbox.sh" || exit 2
+git_sandbox || exit 2
+TMP="$(mktemp -d)" || exit 2
+trap 'rm -rf "$TMP"' EXIT
+(
+  set -e
+  cd "$TMP"; git init -q c; cd c
+  mkdir -p a b; echo 1 > a/x; echo 2 > b/y; echo 3 > top
+  git add -A; git -c user.name=t -c user.email=t@t commit -qm frozen
+) || { echo "FATAL: control repository"; exit 2; }
+cd "$TMP/c"
+# The sweep controls make commits: give the control repository its own identity, so they do not
+# depend on the host's git config (a CI runner has none).
+git config user.name t; git config user.email t@t
+F="$(git rev-parse HEAD^{tree})"
+tree_with() { # shell snippet applied to a copy of the frozen tree; prints the new tree
+  git read-tree "$F"; git checkout-index -a -f; git clean -fdq; eval "$1"; git add -A >/dev/null; git write-tree; }
+printf 'path\tstatus\nb\topen\n' > "$TMP/r_open.tsv"
+printf 'path\tstatus\nb\tresolved\n' > "$TMP/r_ok.tsv"
+printf 'path\tkind\nb\tx\n' > "$TMP/r_nostatus.tsv"
+[ -z "$(judge "$F" "$F" "$TMP/r_open.tsv" "$F")" ] && ok "control: an unchanged tree passes" || no "control: unchanged tree"
+T="$(tree_with 'echo new > a/z')"
+[ -n "$(judge "$F" "$T" "$TMP/r_ok.tsv" "$F")" ] && ok "control: an added file is refused" || no "control: addition accepted"
+T="$(tree_with 'echo changed > a/x')"
+[ -n "$(judge "$F" "$T" "$TMP/r_ok.tsv" "$F")" ] && ok "control: a modified file is refused" || no "control: modification accepted"
+T="$(tree_with 'rm -rf b')"
+[ -n "$(judge "$F" "$T" "$TMP/r_open.tsv" "$F")" ] && ok "control: a deletion under an open row is refused" || no "control: open-row deletion accepted"
+[ -n "$(judge "$F" "$T" "$TMP/r_nostatus.tsv" "$F")" ] && ok "control: a deletion without a status column is refused" || no "control: status-less deletion accepted"
+[ -z "$(judge "$F" "$T" "$TMP/r_ok.tsv" "$F")" ] && ok "control: a deletion under a resolved row passes" || no "control: resolved-row deletion refused"
+printf 'path\tstatus\nb\tresolved\nb/y\topen\n' > "$TMP/r_child.tsv"
+T="$(tree_with 'rm -rf b')"
+[ -n "$(judge "$F" "$T" "$TMP/r_child.tsv" "$F")" ] && ok "control: a resolved parent does not release a child with an open row" || no "control: open child released by resolved parent"
+T="$(tree_with 'rm -f a/x')"
+[ -n "$(judge "$F" "$T" "$TMP/r_ok.tsv" "$F")" ] && ok "control: a deletion outside the resolved row is refused" || no "control: unrelated deletion accepted"
+# Sweep controls. S is a root commit holding p/moved (and an a/x unlike the frozen one); a sweep
+# moves p/moved into legacy/ byte for byte. R0 is a root tree without p/moved, RS one that still has it.
+S="$(git commit-tree "$(tree_with 'mkdir -p p; echo m > p/moved; echo changed > a/x')" -m sweep-source)"
+R0="$(tree_with 'rm -rf a b top; echo r > rootfile')"
+[ -n "$S" ] && [ -n "$R0" ] || { echo "FATAL: sweep control commit"; exit 2; }
+RS="$(git rev-parse "$S^{tree}")"
+T="$(tree_with 'mkdir -p p; echo m > p/moved')"
+[ -z "$(judge "$F" "$T" "$TMP/r_ok.tsv" "$R0" "$S")" ] && ok "control: a byte-for-byte move from a sweep commit, gone from the root, passes" || no "control: a valid sweep was refused: $(judge "$F" "$T" "$TMP/r_ok.tsv" "$R0" "$S")"
+[ -n "$(judge "$F" "$T" "$TMP/r_ok.tsv" "$R0")" ] && ok "control: the same addition with no sweep line is refused" || no "control: sweep-less addition accepted"
+[ -n "$(judge "$F" "$T" "$TMP/r_ok.tsv" "$RS" "$S")" ] && ok "control: a swept copy that still exists at the root is refused" || no "control: copy kept at the root accepted"
+T="$(tree_with 'mkdir -p p; echo m2 > p/moved')"
+[ -n "$(judge "$F" "$T" "$TMP/r_ok.tsv" "$R0" "$S")" ] && ok "control: a modified copy of a swept file is refused" || no "control: modified swept copy accepted"
+T="$(tree_with 'mkdir -p p; echo m > p/moved; chmod +x p/moved')"
+[ -n "$(judge "$F" "$T" "$TMP/r_ok.tsv" "$R0" "$S")" ] && ok "control: a swept copy with another file mode is refused" || no "control: mode change accepted"
+T="$(tree_with 'mkdir -p p; echo n > p/new')"
+[ -n "$(judge "$F" "$T" "$TMP/r_ok.tsv" "$R0" "$S")" ] && ok "control: a new file with no root original is refused" || no "control: unoriginated addition accepted"
+T="$(tree_with 'echo changed > a/x')"
+[ -n "$(judge "$F" "$T" "$TMP/r_ok.tsv" "$R0" "$S")" ] && ok "control: an edit of an existing legacy/ file is refused, even matching a sweep commit" || no "control: edit of a frozen file accepted via a sweep"
+# After a sweep, the sweep tree is the baseline: deleting a swept file needs a resolved row.
+SW1="$(tree_with 'mkdir -p p; echo m > p/moved')"
+printf 'path\tstatus\np\topen\n' > "$TMP/r_popen.tsv"; printf 'path\tstatus\np\tresolved\n' > "$TMP/r_pok.tsv"
+[ -n "$(judge "$SW1" "$F" "$TMP/r_popen.tsv" "$R0")" ] && ok "control: deleting a swept file under an open row is refused" || no "control: swept file deleted under an open row"
+[ -z "$(judge "$SW1" "$F" "$TMP/r_pok.tsv" "$R0")" ] && ok "control: deleting a swept file under a resolved row passes" || no "control: resolved deletion of a swept file refused"
+[ -n "$(judge "$SW1" "$(tree_with 'mkdir -p p; echo m > p/moved; echo q > p/other')" "$TMP/r_ok.tsv" "$R0")" ] && ok "control: an addition after the last sweep, with no new sweep line, is refused" || no "control: post-sweep addition accepted"
+# Lock-chain controls: H is a commit with S in its history; X is a commit outside it.
+H="$(git commit-tree "$R0" -p "$S" -m head)"
+# X has the would-be moved file (tree RS), so only its ancestry can refuse it.
+X="$(git commit-tree "$RS" -m unrelated)"
+[ -n "$H" ] && [ -n "$X" ] || { echo "FATAL: chain control commits"; exit 2; }
+# A control lock: its base and tree rows, then the sweep rows given.
+HDR="base $S"$'\n'"tree $F"
+printf '%s\nsweep %s %s\n' "$HDR" "$S" "$SW1" > "$TMP/l_ok"
+[ -z "$(chain "$TMP/l_ok" "$F" "$SW1" "$TMP/r_ok.tsv" "$H")" ] && ok "control: a lock chaining the frozen tree through a sweep to HEAD:legacy passes" || no "control: valid chain refused: $(chain "$TMP/l_ok" "$F" "$SW1" "$TMP/r_ok.tsv" "$H")"
+printf '%s\nsweep %s %s\n' "$HDR" "$X" "$SW1" > "$TMP/l_x"
+o="$(chain "$TMP/l_x" "$F" "$SW1" "$TMP/r_ok.tsv" "$H")"
+# The refused row is skipped, so its addition is then refused too, as an unoriginated one.
+[ "$o" = "sweep line 1: needs a commit of HEAD's history and a tree: $X $SW1"$'\n'"since the last sweep:"$'\n'"A legacy/p/moved: no sweep commit in the lock has p/moved with this content; legacy/ admits only byte-for-byte moves" ] && ok "control: a sweep commit outside HEAD's history is refused, as such" || no "control: non-ancestor sweep: '$o'"
+[ -n "$(chain "$TMP/l_ok" "$F" "$F" "$TMP/r_popen.tsv" "$H")" ] && ok "control: deleting a swept file after its sweep, under an open row, is refused" || no "control: post-sweep deletion accepted"
+# The lock's one parser (lib/legacy_lock.py). Each malformed lock is refused by chain() with the
+# parser's exact diagnostic, before any sweep is judged: no byte is a row to one reader and not to another.
+ROW="is not a lock row: line 3 must be 'sweep <commit> <tree>', one space between fields, each oid 40 or 64 lowercase hex digits"
+refused_lock() { # NAME CONTENT-PRINTF-FORMAT EXPECTED [ARGS...]: chain() on that lock prints EXPECTED exactly
+  local name="$1" fmt="$2" want="$3"; shift 3
+  printf "$fmt" "$@" > "$TMP/$name"
+  o="$(chain "$TMP/$name" "$F" "$F" "$TMP/r_popen.tsv" "$H")"
+  [ "$o" = "$want" ] && ok "control: $name is refused by the lock parser, as such" || no "control: $name: '$o'"
+}
+# A landed sweep row with a NUL in front: GNU grep -x matches the row behind the NUL, sed skips it.
+refused_lock "a NUL-prefixed sweep row" '%s\n\0sweep %s %s\n' "$TMP/a NUL-prefixed sweep row:3: holds a NUL byte: the lock is text" "$HDR" "$S" "$SW1"
+refused_lock "a CR line ending" '%s\nsweep %s %s\r\n' "$TMP/a CR line ending:3: holds a carriage return: a line ends with a newline (LF) alone" "$HDR" "$S" "$SW1"
+refused_lock "a sweep row without its tree" '%s\nsweep %s\n' "$TMP/a sweep row without its tree:3: $ROW" "$HDR" "$S"
+refused_lock "a sweep row with a trailing space" '%s\nsweep %s %s \n' "$TMP/a sweep row with a trailing space:3: $ROW" "$HDR" "$S" "$SW1"
+refused_lock "a sweep row with a third field" '%s\nsweep %s %s %s\n' "$TMP/a sweep row with a third field:3: $ROW" "$HDR" "$S" "$SW1" "$SW1"
+refused_lock "a blank line" '%s\n\nsweep %s %s\n' "$TMP/a blank line:3: $ROW" "$HDR" "$S" "$SW1"
+refused_lock "a repeated sweep row" '%s\nsweep %s %s\nsweep %s %s\n' "$TMP/a repeated sweep row:4: repeats line 3: a row is recorded once" "$HDR" "$S" "$SW1" "$S" "$SW1"
+refused_lock "a last row without its newline" '%s\nsweep %s %s' "$TMP/a last row without its newline:3: has no newline: every line, the last too, ends with one" "$HDR" "$S" "$SW1"
+refused_lock "a lock without its base row" 'tree %s\n' "$TMP/a lock without its base row:1: is not a lock row: line 1 must be 'base <commit>', one space between fields, each oid 40 or 64 lowercase hex digits" "$F"
+refused_lock "a preview lock" '%s\npreview missing: P2\n' "$TMP/a preview lock:3: the move is a --preview build (preview missing: P2); a lock may only record a move generated with its landing prerequisites met (the generator is legacy/scripts/land/legacy_move.sh since the 2026-11-08 sweep)" "$HDR"
+S2="$(git commit-tree "$(tree_with 'mkdir -p p; echo m2 > p/moved')" -p "$S" -m sweep-2)"
+H2="$(git commit-tree "$R0" -p "$S2" -m head2)"
+[ -n "$S2" ] && [ -n "$H2" ] || { echo "FATAL: second sweep control commits"; exit 2; }
+SW2="$(tree_with 'mkdir -p p; echo m2 > p/moved')"
+printf '%s\nsweep %s %s\nsweep %s %s\n' "$HDR" "$S" "$SW1" "$S2" "$SW2" > "$TMP/l_two"
+[ -n "$(chain "$TMP/l_two" "$F" "$SW2" "$TMP/r_ok.tsv" "$H2")" ] && ok "control: a later sweep cannot rewrite a file an earlier sweep moved" || no "control: second sweep rewrote a swept file"
+T="$(tree_with 'mkdir -p p; printf m > "p/odd\\name"')"
+[ -n "$(judge "$F" "$T" "$TMP/r_ok.tsv" "$R0" "$S")" ] && ok "control: an added path git would C-quote is refused when it has no original" || no "control: C-quoted path accepted"
+# A legitimate sweep of p/moved plus a file at ":(literal)p/moved": read as pathspec magic, that path
+# would resolve to p/moved, match the sweep commit and pass.
+T="$(tree_with 'mkdir -p p ":(literal)p"; echo m > p/moved; echo m > ":(literal)p/moved"')"
+[ -n "$(judge "$F" "$T" "$TMP/r_ok.tsv" "$R0" "$S")" ] && ok "control: an added path spelled as pathspec magic is refused" || no "control: pathspec-magic path accepted"
+# Trusted-history controls: real commits with legacy/ and the lock. M1 freezes legacy/ = F; M2 sweeps
+# p/moved (m) into it. Both are trusted (main's). The candidate commits after them are not.
+commit_of() { # parent tree-of-legacy root-file-content lock-text -> commit
+  local idx="$TMP/idx.$$" t
+  rm -f "$idx"; GIT_INDEX_FILE="$idx" git read-tree --prefix=legacy/ "$2"
+  printf '%s' "$3" > "$TMP/rootf"; printf '%s\n' "$4" > "$TMP/lockf"
+  GIT_INDEX_FILE="$idx" git update-index --add --cacheinfo "100644,$(git hash-object -w "$TMP/rootf"),rootfile" \
+    --cacheinfo "100644,$(git hash-object -w "$TMP/lockf"),L"
+  t="$(GIT_INDEX_FILE="$idx" git write-tree)"; rm -f "$idx"
+  if [ -n "$1" ]; then git commit-tree "$t" -p "$1" -m c; else git commit-tree "$t" -m c; fi
+}
+LK1="$(printf 'base %s\ntree %s\n' "$S" "$F")"
+M1="$(commit_of "" "$F" r "$LK1")"
+M2="$(commit_of "$M1" "$SW1" r "$LK1"$'\n'"sweep $S $SW1")"
+[ -n "$M1" ] && [ -n "$M2" ] || { echo "FATAL: trusted-history control commits"; exit 2; }
+git show "$M2:L" > "$TMP/lock_same"
+[ -z "$(lock_history "$TMP/lock_same" L "$M2")" ] && ok "control: a lock that keeps every trusted line passes" || no "control: unchanged lock refused: $(lock_history "$TMP/lock_same" L "$M2")"
+printf '%s\nsweep %s %s\n' "$LK1" "$S2" "$SW2" > "$TMP/lock_rewritten"   # the M2 row replaced
+o="$(lock_history "$TMP/lock_rewritten" L "$M2")"
+[ "$o" = "lock: 'sweep $S $SW1' (in ${M2:0:10}, trusted history) is not in the lock: recorded lines are only ever added, never rewritten or removed" ] \
+  && ok "control: rewriting a trusted sweep line is refused, naming the line" || no "control: rewritten sweep line: '$o'"
+printf '%s\n' "$LK1" > "$TMP/lock_dropped"
+o="$(lock_history "$TMP/lock_dropped" L "$M2")"
+[ "$o" = "lock: 'sweep $S $SW1' (in ${M2:0:10}, trusted history) is not in the lock: recorded lines are only ever added, never rewritten or removed" ] \
+  && ok "control: removing a trusted sweep line is refused, naming the line" || no "control: removed sweep line: '$o'"
+printf 'base %s\ntree %s\nsweep %s %s\n' "$S2" "$F" "$S" "$SW1" > "$TMP/lock_rebased"
+o="$(lock_history "$TMP/lock_rebased" L "$M2")"
+[ "$o" = "lock: 'base $S' (in ${M2:0:10}, trusted history) is not in the lock: recorded lines are only ever added, never rewritten or removed" ] \
+  && ok "control: changing the trusted base line is refused, naming the line" || no "control: changed base line: '$o'"
+# The NUL attack on history: the landed row kept behind a NUL. The parser refuses the lock itself,
+# so no row of it can match a trusted row.
+printf '%s\n\0sweep %s %s\n' "$LK1" "$S" "$SW1" > "$TMP/lock_nul"
+o="$(lock_history "$TMP/lock_nul" L "$M2")"
+[ "$o" = "$TMP/lock_nul:3: holds a NUL byte: the lock is text" ] \
+  && ok "control: a trusted sweep row kept behind a NUL byte is refused by trusted history" || no "control: NUL-prefixed trusted row: '$o'"
+# A malformed version in trusted history is refused, not skipped.
+MB="$(commit_of "$M2" "$SW1" r "$LK1"$'\n'"sweep $S $SW1"$'\r')"
+o="$(lock_history "$TMP/lock_same" L "$MB")"
+[ "$o" = "lock: a trusted version is malformed: ${MB:0:10}:L:3: holds a carriage return: a line ends with a newline (LF) alone" ] \
+  && ok "control: a malformed lock in trusted history is refused, not skipped" || no "control: malformed trusted lock: '$o'"
+[ -z "$(history_identity legacy "$M2" "$M2")" ] && ok "control: a legacy/ that kept every trusted version passes" || no "control: unchanged history refused: $(history_identity legacy "$M2" "$M2")"
+# The attacks. (1) the row rewrite: the candidate replaces M2's row and p/moved's bytes together.
+C1="$(commit_of "$M2" "$SW2" r "$LK1"$'\n'"sweep $S2 $SW2")"
+o="$(history_identity legacy "$C1" "$M2")"
+[ "$o" = "legacy/p/moved: was $(git rev-parse "$SW1:p/moved" | cut -c1-10) (mode 100644) in trusted history and is $(git rev-parse "$SW2:p/moved" | cut -c1-10) (mode 100644) now: a frozen or swept file is never rewritten, by an edit or by deletion and re-addition" ] \
+  && ok "control: a swept file rewritten with its lock row is refused by trusted history" || no "control: row-rewrite attack: '$o'"
+# (2) delete then re-add: a trusted commit deletes p/moved (a resolved deletion); the candidate re-adds
+# it with other bytes under a new sweep line. Each chain step passes; history refuses.
+M3="$(commit_of "$M2" "$F" r "$LK1"$'\n'"sweep $S $SW1")"
+C2="$(commit_of "$M3" "$SW2" r "$LK1"$'\n'"sweep $S $SW1"$'\n'"sweep $S2 $SW2")"
+o="$(history_identity legacy "$C2" "$M3")"
+case "$o" in "legacy/p/moved: was $(git rev-parse "$SW1:p/moved" | cut -c1-10) (mode 100644) in trusted history and is $(git rev-parse "$SW2:p/moved" | cut -c1-10) (mode 100644) now: "*)
+  ok "control: a frozen file deleted and re-added with other bytes is refused by trusted history" ;; *) no "control: delete-then-re-add attack: '$o'" ;; esac
+# The same re-addition with the same bytes is no rewrite.
+C3="$(commit_of "$M3" "$SW1" r "$LK1"$'\n'"sweep $S $SW1")"
+[ -z "$(history_identity legacy "$C3" "$M3")" ] && ok "control: re-adding a file with its trusted bytes passes" || no "control: identical re-addition refused"
+# A branch that rewrote its own lock line and corrected it before landing: its commits are the merge's
+# second parent, so the corrected line is no trusted line and the landed lock passes.
+B1="$(commit_of "$M2" "$SW1" r "$LK1"$'\n'"sweep $S2 $SW2")"
+B2="$(commit_of "$B1" "$SW1" r "$LK1"$'\n'"sweep $S $SW1")"
+MM="$(git commit-tree "$(git rev-parse "$B2^{tree}")" -p "$M2" -p "$B2" -m landed)"
+[ -n "$MM" ] || { echo "FATAL: merge control commit"; exit 2; }
+[ -z "$(lock_history "$TMP/lock_same" L "$MM")" ] && [ -z "$(history_identity legacy "$MM" "$MM")" ] \
+  && ok "control: a member branch's corrected intermediate lock is not trusted history (first parents only)" || no "control: second-parent history trusted: $(lock_history "$TMP/lock_same" L "$MM")"
+# trusted_base: the merge base with the trusted ref; HEAD itself when the ref is absent.
+[ "$(LEGACY_TRUSTED_REF="$M2" trusted_base "$C1")" = "$M2" ] && [ "$(LEGACY_TRUSTED_REF=refs/heads/no-such trusted_base "$C1")" = "$C1" ] \
+  && ok "control: the trusted base is the merge base with the trusted ref, else HEAD (everything trusted)" || no "control: trusted_base"
+# Every shell read loop here reads a last line that has no newline: `read` fails on it, so a bare
+# `while read` silently drops it. (The loops' behaviour is checked above; this keeps a new one honest.)
+loops="$(grep -nE '^[^#]*while[^#]*[[:space:]]read[[:space:]]' "$SELF")" || { echo "FATAL: cannot read $SELF"; exit 2; }
+bad="$(printf '%s\n' "$loops" | grep -vF '|| [ -n "$' | grep -vF 'grep -nE')"
+[ "$(printf '%s\n' "$loops" | grep -cF '|| [ -n "$')" -ge 3 ] && [ -z "$bad" ] && ok "control: every read loop in this check reads a last line without a newline" || no "control: a read loop drops an unterminated last line: $bad"
+cd "$ROOT_DIR"
+# The parser is the lock's one reader. Outside legacy/ (frozen, never run) and comments, the lock's
+# path is named only by the parser and by this check's LOCK=, and every use of LOCK here hands it to
+# the parser (lock_rows, lock_history) or only tests or names it.
+named="$(git ls-files -z -- scripts .githooks .github | xargs -0 grep -nIE 'legacy[.]lock' -- 2>/dev/null \
+  | grep -vE '^[^:]+:[0-9]+:[[:space:]]*#' | grep -vE '^scripts/checks/lib/legacy_lock[.]py:' \
+  | grep -vE '^scripts/checks/legacy_frozen[.]sh:[0-9]+:LOCK=scripts/checks/legacy[.]lock$')"
+uses="$(grep -nE '"\$(LOCK|lock)"' "$SELF" | grep -vE '^[0-9]+:[[:space:]]*#' \
+  | grep -vE '(lock_rows|lock_history|chain) "\$(LOCK|lock)"|\[ -f "\$LOCK" \]|echo "=== |no "\$LOCK |local lock="\$1"')"
+[ -z "$named" ] && [ -z "$uses" ] && [ "$(grep -c '' "$SELF")" -gt 0 ] \
+  && ok "control: lib/legacy_lock.py is the lock's one reader: no other code names or reads the lock" \
+  || no "control: another reader of the lock: ${named}${uses:+ / in this check: $uses}"
+
+echo "=== legacy/ against $LOCK ==="
+[ -f "$LOCK" ] || { no "$LOCK is missing"; echo "legacy_frozen: PASS=$PASS FAIL=$FAIL"; exit 1; }
+rows="$(lock_rows "$LOCK")" && lock_ok=1 || lock_ok=""
+base="" frozen="" nsw=0
+while read -r kind a _ || [ -n "$kind" ]; do
+  case "$kind" in base) base="$a" ;; tree) frozen="$a" ;; sweep) nsw=$((nsw+1)) ;; esac
+done <<<"$rows"
+if [ -z "$lock_ok" ]; then
+  no "$LOCK is malformed (lib/legacy_lock.py is its format):"; printf '%s\n' "$rows" | sed 's/^/      /'
+elif [ "$(git rev-parse -q --verify "$base^{tree}" 2>/dev/null)" != "$frozen" ]; then
+  no "the recorded tree $frozen is not the tree of the recorded base $base (or the base is not in this clone's history)"
+else
+  ok "the lock parses (base, tree, $nsw sweep row(s), nothing else), and tree ${frozen:0:10} is the tree of base ${base:0:10}"
+  cur="$(git rev-parse -q --verify HEAD:legacy 2>/dev/null)"
+  if [ -z "$cur" ]; then
+    no "HEAD has no legacy/ directory"
+  else
+    [ -f RETENTION.tsv ] || { no "RETENTION.tsv is missing"; }
+    out="$(chain "$LOCK" "$frozen" "$cur" "${RETENTION:-RETENTION.tsv}" HEAD)"
+    tb="$(trusted_base HEAD)"
+    hist="$(lock_history "$LOCK" "$LOCK" "$tb"; history_identity legacy HEAD "$tb")"
+    [ -z "$hist" ] && ok "trusted history (through ${tb:0:10}): every lock line kept, no legacy/ file rewritten" \
+      || { no "legacy/ or its lock rewrote trusted history (through ${tb:0:10}):"; echo "$hist" | sed 's/^/      /'; }
+    [ "$nsw" = 0 ] || [ -n "$out" ] || ok "the lock's $nsw sweep line(s) name commits of HEAD's history and chain to HEAD:legacy"
+    if [ -z "$out" ]; then
+      [ "$cur" = "$frozen" ] && ok "legacy/ is byte-identical to the frozen tree" \
+                            || ok "legacy/ differs from the frozen tree only by byte-for-byte sweeps and deletions RETENTION.tsv allows"
+    else
+      no "legacy/ changed:"; echo "$out" | sed 's/^/      /'
+    fi
+  fi
+fi
+echo "legacy_frozen: PASS=$PASS FAIL=$FAIL"
+[ "$FAIL" -eq 0 ]
+
+exec
+/bin/bash -lc 'git status --short; git rev-parse HEAD; cat scripts/checks/lib/doc_links.py' in /home/unbalancedparen/projects/clones/wip/legacy-sweep-2
+ succeeded in 0ms:
+903fd3dab68dac6a6e5218ab7d8154600f3127be
+#!/usr/bin/env python3
+"""Every local Markdown link names a path that exists and, into Markdown, a heading that exists.
+
+Usage: doc_links.py [--root DIR]
+  --root  the tree to check (default: this repository); a test seam for the gate's controls
+
+A LINK is an inline `[text](target)` / `![alt](target)` or a reference definition `[id]: target`,
+outside fenced code and code spans (GitHub renders neither as a link). External targets
+(http:, https:, mailto:, Zola's `@/`) are not checked.
+
+THE PATH. A target resolves against the directory of the file that holds it, with two exceptions
+that resolve against the repository root: a target with a leading `/` (GitHub reads it that way),
+and any target in a changelog.d/ fragment, because scripts/gen/changelog.py folds fragments
+verbatim into the root CHANGELOG.md and their links are written for that place.
+
+THE ANCHOR. `#frag` (same file) or `path.md#frag` must name an anchor of that Markdown file:
+  - a heading's GitHub slug: the heading's rendered text, lowercased, every character that is not a
+    letter, mark, digit, space, hyphen or underscore removed, each space turned into a hyphen; the
+    second heading with one slug gets `-1`, the third `-2` (github-slugger, which GitHub uses);
+  - an explicit HTML id (`<a id="REF-3"></a>`, `name=` too), matched exactly.
+Into CHANGELOG.md, and from a fragment to its own `#frag`, the anchors are those of CHANGELOG.md with
+the pending fragments folded in by scripts/gen/changelog.py (its fold, not a copy of it).
+HTML comments, fenced code and code spans hold no headings, ids or links.
+A heading slug is compared case-insensitively (GitHub lowercases the fragment before its lookup);
+a fragment is URL-decoded first. An anchor into a file that is not Markdown (`Foo.lean#L10`) or into
+a directory is not checked: GitHub's line anchors are not headings.
+"""
+
+import argparse
+import html
+import re
+import subprocess
+import sys
+import unicodedata
+from pathlib import Path
+from urllib.parse import unquote
+
+DEFAULT_ROOT = Path(__file__).resolve().parents[3]
+SKIP_PARTS = {".git", ".lake", ".cache", "node_modules"}
+FRAGMENT_DIRS = ("changelog.d",)  # folded into the root CHANGELOG.md, so root-relative
+INLINE = re.compile(r"!?\[(?:[^\[\]]|\[[^\[\]]*\])*\]\(\s*(<[^>\n]*>|[^)\s]+)(?:\s+[\"'(][^)\n]*)?\)")
+IMAGE = re.compile(r"!\[[^\[\]]*\]\(\s*(<[^>\n]*>|[^)\s]+)(?:\s+[\"'(][^)\n]*)?\)")
+REFDEF = re.compile(r"^ {0,3}\[[^\]\n]+\]:\s*(<[^>\n]*>|\S+)", re.MULTILINE)
+EXTERNAL = re.compile(r"^(?:[a-zA-Z][a-zA-Z0-9+.-]*:|@/|//)")
+FENCE = re.compile(r"^ {0,3}(`{3,}|~{3,})")
+ATX = re.compile(r"^ {0,3}(#{1,6})(?:[ \t]+(.*?))?(?:[ \t]+#+)?[ \t]*$")
+SETEXT = re.compile(r"^ {0,3}(=+|-+)[ \t]*$")
+HTML_ID = re.compile(r"<[a-zA-Z][^>]*?\s(?:id|name)\s*=\s*[\"']([^\"']+)[\"']")
+# A code span: a backtick run, then the same run again, never across a blank line (a paragraph ends).
+CODE_SPAN = re.compile(r"(?<!`)(`+)(?!`)((?:(?!\n[ \t]*\n).)+?)(?<!`)\1(?!`)", re.DOTALL)
+COMMENT = re.compile(r"<!--.*?-->", re.DOTALL)
+
+
+def _spaces(m):
+    """The match with every character but a newline turned into a space (offsets and lines kept)."""
+    return re.sub(r"[^\n]", " ", m.group(0))
+
+
+def blank_blocks(text):
+    """The text with fenced code blocks and HTML comments blanked: neither holds headings or links."""
+    out, fence = [], None
+    for line in text.split("\n"):
+        m = FENCE.match(line)
+        if fence is None and m:
+            fence = (m.group(1)[0], len(m.group(1)))
+            out.append(" " * len(line))
+        elif fence is not None:
+            if m and m.group(1)[0] == fence[0] and len(m.group(1)) >= fence[1] \
+                    and not line.strip().strip(fence[0]):
+                fence = None
+            out.append(" " * len(line))
+        else:
+            out.append(line)
+    return COMMENT.sub(_spaces, "\n".join(out))
+
+
+def blank_code(text):
+    """blank_blocks, and code spans blanked too (a span may cross lines within a paragraph)."""
+    return CODE_SPAN.sub(_spaces, blank_blocks(text))
+
+
+def _strip_emphasis(s):
+    """Remove paired emphasis delimiters; an unpaired `_` or `*` is a literal character."""
+    for pat in (r"(?<![^\W_])(__?)(?=\S)(.+?)(?<=\S)\1(?![^\W_])", r"(\*{1,3})(?=\S)(.+?)(?<=\S)\1"):
+        while True:
+            t = re.sub(pat, r"\2", s)
+            if t == s:
+                break
+            s = t
+    return s
+
+
+def heading_text(raw):
+    """The rendered text of a heading's inline Markdown (what GitHub slugs)."""
+    parts, pos = [], 0
+    for m in CODE_SPAN.finditer(raw):
+        parts.append(("md", raw[pos:m.start()]))
+        parts.append(("code", m.group(2).strip() if m.group(2).strip() else m.group(2)))
+        pos = m.end()
+    parts.append(("md", raw[pos:]))
+    out = []
+    for kind, s in parts:
+        if kind == "md":
+            s = re.sub(r"\\([!-/:-@\[-`{-~])", lambda e: "\x00%d\x00" % ord(e.group(1)), s)
+            s = re.sub(r"!\[[^\]]*\]\([^)]*\)", "", s)
+            s = re.sub(r"\[([^\]]*)\]\([^)]*\)", r"\1", s)
+            s = re.sub(r"\[([^\]]*)\]\[[^\]]*\]", r"\1", s)
+            s = re.sub(r"<[^>]+>", "", s)
+            s = _strip_emphasis(s)
+            s = html.unescape(s)
+            s = re.sub(r"\x00(\d+)\x00", lambda e: chr(int(e.group(1))), s)
+        out.append(s)
+    return "".join(out).strip()
+
+
+def slug(text):
+    keep = []
+    for ch in text.lower():
+        cat = unicodedata.category(ch)
+        if ch in "-_ " or cat[0] in "LMN":
+            keep.append("-" if ch == " " else ch)
+    return "".join(keep)
+
+
+def anchors(text):
+    """(heading slugs, explicit ids) of a Markdown file, as GitHub assigns them."""
+    seen, slugs = {}, set()
+    prev = ""
+    for line in blank_blocks(text).split("\n"):
+        m = ATX.match(line)
+        heading = None
+        if m:
+            heading = m.group(2) or ""
+        elif SETEXT.match(line) and prev.strip() and not re.match(r"^ {0,3}([-*+>|#]|\d+[.)])", prev) \
+                and not SETEXT.match(prev):
+            heading = prev.strip()
+        if heading is not None:
+            base = slug(heading_text(heading))
+            s, n = base, seen.get(base, 0)
+            while s in slugs:
+                n += 1
+                s = f"{base}-{n}"
+            seen[base] = n
+            slugs.add(s)
+        prev = line if not m else ""
+    ids = set(HTML_ID.findall(blank_code(text)))
+    return slugs, ids
+
+
+def folded_changelog(root):
+    """CHANGELOG.md as it reads with the pending fragments folded in, by changelog.py's own fold
+    (the one owner of the fold order), or None when the tree has no foldable changelog."""
+    sys.path.insert(0, str(DEFAULT_ROOT / "scripts" / "checks" / "lib"))
+    try:
+        import changelog
+        path = root / "CHANGELOG.md"
+        _, body = changelog.split(changelog.read(str(path)), str(path))
+        return changelog.folded(body, changelog.fragments(str(root)))
+    except (SystemExit, ImportError, OSError, ValueError):
+        return None
+    finally:
+        sys.path.pop(0)
+
+
+def swept_files(root):
+    """legacy/ paths not in the frozen tree the lock records (its `tree` row): the files sweeps moved
+    there. The lock is read by its one parser, legacy_lock.py; a malformed lock raises its LockError.
+    Empty without a lock or a git repository."""
+    sys.path.insert(0, str(DEFAULT_ROOT / "scripts" / "checks" / "lib"))
+    try:
+        import legacy_lock
+    finally:
+        sys.path.pop(0)
+    lock = root / legacy_lock.LOCK_PATH
+    if not lock.is_file():
+        return set()
+    tree = next(r.split()[1] for r in legacy_lock.read(str(lock)) if r.startswith("tree "))
+    def ls(spec):
+        r = subprocess.run(["git", "-C", str(root), "ls-tree", "-r", "-z", "--name-only", spec],
+                           capture_output=True)
+        return {n for n in r.stdout.decode(errors="surrogateescape").split("\0") if n} if r.returncode == 0 else None
+    frozen, now = ls(tree), ls("HEAD:legacy")
+    if frozen is None or now is None:
+        return set()
+    return {"legacy/" + n for n in now - frozen}
+
+
+def markdown_files(root):
+    if (root / ".git").exists():
+        r = subprocess.run(["git", "-C", str(root), "ls-files", "-z", "--cached", "--others",
+                            "--exclude-standard", "--", "*.md"], capture_output=True)
+        if r.returncode == 0:
+            names = [n for n in r.stdout.decode().split("\0") if n]
+            # legacy/ is frozen and was checked at the tag; its root-relative links point at the old root.
+            # A file a sweep moved into legacy/ later (one not in the lock's frozen tree) is read where it
+            # now is, so its links must resolve from there.
+            swept = swept_files(root)
+            return sorted(root / n for n in names if (root / n).is_file()
+                          and (not n.startswith("legacy/") or n in swept))
+    return sorted(p for p in root.rglob("*.md")
+                  if not any(part in SKIP_PARTS for part in p.relative_to(root).parts))
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
+    ap.add_argument("--root", type=Path, default=DEFAULT_ROOT)
+    root = ap.parse_args().root.resolve()
+
+    cache = {}
+    changelog = (root / "CHANGELOG.md").resolve()
+
+    def anchors_of(p):
+        """The anchors a link into p lands on. CHANGELOG.md is read with the pending fragments folded
+        in, since that is the document a fragment's link (or a link to the changelog) reaches."""
+        if p not in cache:
+            text = folded_changelog(root) if p == changelog else None
+            cache[p] = anchors(text if text is not None else p.read_text(errors="replace"))
+        return cache[p]
+
+    failures, links, frags = [], 0, 0
+    try:
+        files = markdown_files(root)
+    except ValueError as e:  # legacy_lock.LockError: which legacy/ files to read is unknown
+        print(f"FAIL the legacy lock is malformed:\n{e}")
+        print("DOC-LINKS: FAIL=1 CHECKED=0 ANCHORS=0")
+        return 1
+    for path in files:
+        rel = path.relative_to(root)
+        text = path.read_text(errors="replace")
+        scan = blank_code(text)
+        fragment = rel.parts[0] in FRAGMENT_DIRS and len(rel.parts) == 2 and rel.name != "README.md"
+        base = root if fragment else path.parent
+        # An image inside a link's text ([![badge](img)](target)) is a second link; key by position.
+        found = {}
+        for rx in (INLINE, IMAGE, REFDEF):
+            for m in rx.finditer(scan):
+                found.setdefault(m.start(1), m.group(1))
+        for pos, target in sorted(found.items()):
+            if target.startswith("<") and target.endswith(">"):
+                target = target[1:-1]
+            if EXTERNAL.match(target):
+                continue
+            local, _, frag = target.partition("#")
+            local = unquote(local.split("?", 1)[0])
+            line = text.count("\n", 0, pos) + 1
+            if local.startswith("/"):  # GitHub reads a leading slash as the repository root
+                dest = (root / local.lstrip("/")).resolve()
+            elif local:
+                dest = (base / local).resolve()
+            else:  # same file; a fragment's own `#x` lands, once folded, in CHANGELOG.md
+                dest = changelog if fragment and changelog.is_file() else path
+            links += 1
+            if local and not dest.exists():
+                failures.append(f"{rel}:{line}: missing local link {target}")
+                continue
+            if not frag or not dest.is_file() or dest.suffix.lower() != ".md":
+                continue
+            frags += 1
+            want = unquote(frag)
+            slugs, ids = anchors_of(dest)
+            if want in ids or want.lower() in slugs:
+                continue
+            where = dest.relative_to(root) if dest.is_relative_to(root) else dest
+            failures.append(f"{rel}:{line}: no anchor #{want} in {where} (link {target})")
+
+    for f in failures:
+        print(f"FAIL {f}")
+    if failures:
+        print(f"DOC-LINKS: FAIL={len(failures)} CHECKED={links} ANCHORS={frags}")
+        return 1
+    print(f"DOC-LINKS: PASS CHECKED={links} ANCHORS={frags}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
+
+exec
+/bin/bash -lc 'cat scripts/checks/legacy_frozen.sh' in /home/unbalancedparen/projects/clones/wip/legacy-sweep-2
+ succeeded in 0ms:
+#!/usr/bin/env bash
+# legacy/ IS FROZEN (ROADMAP R-0558, R-0562).
+#
+# legacy/ is a byte-for-byte copy of main's tree at the move's base commit, plus the files later
+# sweeps moved into it byte for byte. scripts/checks/legacy.lock records that commit and its tree, and
+# each sweep; its format, and its one reader, is lib/legacy_lock.py (no code here reads the lock's
+# bytes itself). This check holds five things:
+#   1. the recorded tree is the recorded commit's tree (legacy/ is that snapshot, nothing else);
+#   2. HEAD:legacy differs from it only by deletions and by sweeps: a modified path is refused, and an
+#      added path is refused unless a sweep moved it (below);
+#   3. each deleted path is covered by at least one RETENTION.tsv row, and every row covering it
+#      (its own path or an ancestor directory) has `status` = `resolved` (the row's deletion
+#      criterion holds): a resolved parent never releases a child with its own unresolved row.
+#      Until RETENTION.tsv has a status column, every deletion is refused.
+#   4. SWEEPS (owner, 2026-11-08: "ok to 1"). Each `sweep <commit> <tree>` line of the lock records
+#      one move into legacy/: the commit of HEAD's history it took files from, and the legacy/ tree
+#      it produced. The trees form a chain, frozen tree -> sweep 1 -> ... -> HEAD:legacy. Each step
+#      to a sweep tree may add a path P only if P has the same mode and blob at that sweep's commit
+#      and P no longer exists at the root of HEAD; the last step, to HEAD:legacy, adds nothing. Every
+#      step refuses an edit of a legacy/ file and admits only the deletions RETENTION.tsv allows, so
+#      a swept file, once in a sweep tree, is protected like a frozen one.
+#   5. TRUSTED HISTORY. The steps above judge the lock this commit carries, so on their own a rewritten
+#      lock line, or a file deleted by one sweep and re-added with other bytes by the next, would pass.
+#      History settles both. The trusted history is main's landed states: the first-parent chain of
+#      the merge base of HEAD and LEGACY_TRUSTED_REF (default origin/main), each commit read against
+#      its first parent, or HEAD's own first-parent chain when that ref is absent (on main and on a
+#      train head, whose first parent is main, the same thing; on a bare branch tip it is stricter:
+#      the branch's own commits count, so a branch that corrected its own lock fails there). A train's member commits are second parents: a line a branch wrote and then
+#      corrected before it landed is not trusted history. (a) Every base, tree and sweep line of every trusted version of
+#      the lock is still in the lock: lines are only ever added. (b) Every version a legacy/ path ever
+#      had in trusted history is the version it has now, if it still exists: a frozen or swept file
+#      is never rewritten, by an edit or by deletion and re-addition. A candidate's own commits are
+#      not trusted history; they are what the review and this gate judge.
+# Negative controls run the same judgment on synthetic trees first, so a judge that accepts
+# everything fails here before the real check.
+set -uo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh" || exit 2
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+SELF="$ROOT_DIR/scripts/checks/${BASH_SOURCE[0]##*/}"
+cd "$ROOT_DIR"
+LOCK=scripts/checks/legacy.lock
+LOCKPY="$ROOT_DIR/scripts/checks/lib/legacy_lock.py"
+PASS=0; FAIL=0
+ok(){ echo "  ok   $1"; PASS=$((PASS+1)); }
+no(){ echo "  FAIL $1"; FAIL=$((FAIL+1)); }
+
+# judge FROZEN_TREE CURRENT_TREE RETENTION_FILE (in the current repository): prints one problem per line.
+judge() { # FROZEN CUR RETENTION ROOT-TREE [SWEEP-COMMIT...]
+  local frozen="$1" cur="$2" ret="$3" root="$4"; shift 4
+  [ "$frozen" = "$cur" ] && return 0
+  # -z: paths arrive raw, never C-quoted, so the ls-tree lookups below see the real path.
+  git diff-tree -z -r --no-renames --name-status "$frozen" "$cur" | python3 -I -c '
+import sys
+ret = sys.argv[1]
+rows = [l.rstrip("\n").split("\t") for l in open(ret) if l.strip() and not l.startswith("#")]
+hdr, rows = rows[0], rows[1:]
+# (path, resolved?) for every path a row names. With no status column, nothing is resolved.
+named = []
+if "path" in hdr:
+    pi = hdr.index("path"); si = hdr.index("status") if "status" in hdr else None
+    for r in rows:
+        res = si is not None and len(r) > si and r[si].strip() == "resolved"
+        named += [(p.rstrip("/"), res) for p in r[pi].split()]
+def ok(p):
+    # Every row covering p (its own path or an ancestor) must be resolved, and at least one must:
+    # a resolved parent does not release a child that has its own unresolved row.
+    cover = [res for n, res in named if p == n or p.startswith(n + "/")]
+    return bool(cover) and all(cover)
+f = sys.stdin.buffer.read().split(b"\0")
+if f and f[-1] == b"": f.pop()
+for st, raw in zip(f[0::2], f[1::2]):
+    st, path = st.decode(), raw.decode("utf-8", "surrogateescape")
+    if "\n" in path or "\t" in path or not path.isprintable():
+        print(f"{st} legacy/{path!r}: legacy/ admits no path with control characters")
+    elif st == "A":
+        print(f"ADD\t{path}")
+    elif st != "D":
+        print(f"{st} legacy/{path}: legacy/ admits no modification")
+    elif not ok(path):
+        print(f"D legacy/{path}: no resolved RETENTION.tsv row allows this deletion")
+' "$ret" | while IFS= read -r line || [ -n "$line" ]; do
+    case "$line" in ADD$'\t'*) ;; *) printf '%s\n' "$line"; continue ;; esac
+    local path="${line#ADD$'\t'}" want s found=""
+    local -x GIT_LITERAL_PATHSPECS=1 # a path is a path: ":(literal)p/x" must not resolve to p/x
+    want="$(git ls-tree "$cur" -- "$path" | cut -f1)"
+    [ -n "$want" ] || { echo "A legacy/$path: cannot resolve the added path; refused"; continue; }
+    if [ -n "$(git ls-tree "$root" -- "$path")" ]; then
+      echo "A legacy/$path: a swept file must no longer exist at the root, and $path does"; continue
+    fi
+    for s in "$@"; do
+      [ "$(git ls-tree "$s" -- "$path" | cut -f1)" = "$want" ] && { found=1; break; }
+    done
+    [ -n "$found" ] || echo "A legacy/$path: no sweep commit in the lock has $path with this content; legacy/ admits only byte-for-byte moves"
+  done
+}
+
+chain() { # LOCK FROZEN CUR RETENTION HEAD-COMMIT: judges frozen -> each sweep tree -> CUR; prints refusals
+  local lock="$1" prev="$2" cur="$3" ret="$4" head="$5" root rows kind sw st n=0 step
+  rows="$(lock_rows "$lock")" || { printf '%s\n' "$rows"; return 0; }
+  root="$(git rev-parse "$head^{tree}")"
+  while read -r kind sw st || [ -n "$kind" ]; do # rows are the parser's, one per line
+    [ "$kind" = sweep ] || continue
+    n=$((n+1))
+    if ! git rev-parse -q --verify "$sw^{commit}" >/dev/null \
+       || ! git merge-base --is-ancestor "$sw" "$head" || [ "$(git cat-file -t "$st" 2>/dev/null)" != tree ]; then
+      echo "sweep line $n: needs a commit of HEAD's history and a tree: $sw $st"; continue
+    fi
+    step="$(judge "$prev" "$st" "$ret" "$root" "$sw" 2>&1)"
+    [ -z "$step" ] || printf 'sweep %s (%s):\n%s\n' "$n" "${sw:0:10}" "$step"
+    prev="$st"
+  done <<<"$rows"
+  step="$(judge "$prev" "$cur" "$ret" "$root" 2>&1)"
+  [ -z "$step" ] || printf 'since the last sweep:\n%s\n' "$step"
+}
+
+# trusted_base HEAD-COMMIT: the newest commit whose history is trusted (see 5 above).
+trusted_base() {
+  local ref="${LEGACY_TRUSTED_REF:-origin/main}" mb
+  if git rev-parse -q --verify "$ref^{commit}" >/dev/null && mb="$(git merge-base "$1" "$ref" 2>/dev/null)"; then
+    echo "$mb"
+  else
+    git rev-parse "$1^{commit}"
+  fi
+}
+
+# lock_rows LOCK-FILE: the lock's rows, from its one parser (lib/legacy_lock.py); exit 1 with one
+# diagnostic per problem. No code here reads the lock's bytes itself.
+lock_rows() { python3 -I "$LOCKPY" rows "$1"; }
+# lock_history LOCK-FILE LOCK-PATH TRUSTED: every row of every version of LOCK-PATH in TRUSTED's
+# first-parent history is still a row of LOCK-FILE; a malformed trusted version is refused. Prints
+# one refusal per problem, naming the newest trusted commit that has a missing row.
+lock_history() { python3 -I "$LOCKPY" history "$1" "$2" "$3"; }
+
+# history_identity PREFIX HEAD-COMMIT TRUSTED: every version PREFIX/<path> had in TRUSTED's history is
+# the version it has at HEAD-COMMIT, for each path HEAD-COMMIT still has. Prints one refusal per path.
+history_identity() {
+  local prefix="$1" head="$2" trusted="$3"
+  python3 -I - "$prefix" \
+    3< <(git log --first-parent --diff-merges=first-parent -z --raw --no-renames --no-abbrev --format= "$trusted" -- "$prefix/") \
+    4< <(git ls-tree -r -z --full-tree "$head" -- "$prefix/") <<'PY'
+import os, sys
+prefix = sys.argv[1] + "/"
+def tokens(fd):
+    with os.fdopen(fd, "rb") as f:
+        return [t for t in f.read().split(b"\0")]
+seen = {}
+t = tokens(3); i = 0
+while i < len(t):
+    tok = t[i].lstrip(b"\n")
+    if tok.startswith(b":") and i + 1 < len(t):
+        _, newmode, _, newsha, st = tok[1:].decode().split(" ")
+        path = t[i + 1].decode("utf-8", "surrogateescape")
+        if not st.startswith("D"):
+            seen.setdefault(path, set()).add((newmode, newsha))
+        i += 2
+    else:
+        i += 1
+for ent in tokens(4):
+    if not ent:
+        continue
+    meta, path = ent.split(b"\t", 1)
+    mode, _, sha = meta.decode().split(" ")
+    path = path.decode("utf-8", "surrogateescape")
+    other = sorted(v for v in seen.get(path, ()) if v != (mode, sha))
+    if other:
+        print(f"{path}: was {other[0][1][:10]} (mode {other[0][0]}) in trusted history and is {sha[:10]} (mode {mode}) now: a frozen or swept file is never rewritten, by an edit or by deletion and re-addition")
+PY
+}
+
+echo "=== negative controls ==="
+# The controls build a throwaway repository: none of git's repository variables may reach it (ISS-0015).
+source "$ROOT_DIR/scripts/checks/lib/git_sandbox.sh" || exit 2
+git_sandbox || exit 2
+TMP="$(mktemp -d)" || exit 2
+trap 'rm -rf "$TMP"' EXIT
+(
+  set -e
+  cd "$TMP"; git init -q c; cd c
+  mkdir -p a b; echo 1 > a/x; echo 2 > b/y; echo 3 > top
+  git add -A; git -c user.name=t -c user.email=t@t commit -qm frozen
+) || { echo "FATAL: control repository"; exit 2; }
+cd "$TMP/c"
+# The sweep controls make commits: give the control repository its own identity, so they do not
+# depend on the host's git config (a CI runner has none).
+git config user.name t; git config user.email t@t
+F="$(git rev-parse HEAD^{tree})"
+tree_with() { # shell snippet applied to a copy of the frozen tree; prints the new tree
+  git read-tree "$F"; git checkout-index -a -f; git clean -fdq; eval "$1"; git add -A >/dev/null; git write-tree; }
+printf 'path\tstatus\nb\topen\n' > "$TMP/r_open.tsv"
+printf 'path\tstatus\nb\tresolved\n' > "$TMP/r_ok.tsv"
+printf 'path\tkind\nb\tx\n' > "$TMP/r_nostatus.tsv"
+[ -z "$(judge "$F" "$F" "$TMP/r_open.tsv" "$F")" ] && ok "control: an unchanged tree passes" || no "control: unchanged tree"
+T="$(tree_with 'echo new > a/z')"
+[ -n "$(judge "$F" "$T" "$TMP/r_ok.tsv" "$F")" ] && ok "control: an added file is refused" || no "control: addition accepted"
+T="$(tree_with 'echo changed > a/x')"
+[ -n "$(judge "$F" "$T" "$TMP/r_ok.tsv" "$F")" ] && ok "control: a modified file is refused" || no "control: modification accepted"
+T="$(tree_with 'rm -rf b')"
+[ -n "$(judge "$F" "$T" "$TMP/r_open.tsv" "$F")" ] && ok "control: a deletion under an open row is refused" || no "control: open-row deletion accepted"
+[ -n "$(judge "$F" "$T" "$TMP/r_nostatus.tsv" "$F")" ] && ok "control: a deletion without a status column is refused" || no "control: status-less deletion accepted"
+[ -z "$(judge "$F" "$T" "$TMP/r_ok.tsv" "$F")" ] && ok "control: a deletion under a resolved row passes" || no "control: resolved-row deletion refused"
+printf 'path\tstatus\nb\tresolved\nb/y\topen\n' > "$TMP/r_child.tsv"
+T="$(tree_with 'rm -rf b')"
+[ -n "$(judge "$F" "$T" "$TMP/r_child.tsv" "$F")" ] && ok "control: a resolved parent does not release a child with an open row" || no "control: open child released by resolved parent"
+T="$(tree_with 'rm -f a/x')"
+[ -n "$(judge "$F" "$T" "$TMP/r_ok.tsv" "$F")" ] && ok "control: a deletion outside the resolved row is refused" || no "control: unrelated deletion accepted"
+# Sweep controls. S is a root commit holding p/moved (and an a/x unlike the frozen one); a sweep
+# moves p/moved into legacy/ byte for byte. R0 is a root tree without p/moved, RS one that still has it.
+S="$(git commit-tree "$(tree_with 'mkdir -p p; echo m > p/moved; echo changed > a/x')" -m sweep-source)"
+R0="$(tree_with 'rm -rf a b top; echo r > rootfile')"
+[ -n "$S" ] && [ -n "$R0" ] || { echo "FATAL: sweep control commit"; exit 2; }
+RS="$(git rev-parse "$S^{tree}")"
+T="$(tree_with 'mkdir -p p; echo m > p/moved')"
+[ -z "$(judge "$F" "$T" "$TMP/r_ok.tsv" "$R0" "$S")" ] && ok "control: a byte-for-byte move from a sweep commit, gone from the root, passes" || no "control: a valid sweep was refused: $(judge "$F" "$T" "$TMP/r_ok.tsv" "$R0" "$S")"
+[ -n "$(judge "$F" "$T" "$TMP/r_ok.tsv" "$R0")" ] && ok "control: the same addition with no sweep line is refused" || no "control: sweep-less addition accepted"
+[ -n "$(judge "$F" "$T" "$TMP/r_ok.tsv" "$RS" "$S")" ] && ok "control: a swept copy that still exists at the root is refused" || no "control: copy kept at the root accepted"
+T="$(tree_with 'mkdir -p p; echo m2 > p/moved')"
+[ -n "$(judge "$F" "$T" "$TMP/r_ok.tsv" "$R0" "$S")" ] && ok "control: a modified copy of a swept file is refused" || no "control: modified swept copy accepted"
+T="$(tree_with 'mkdir -p p; echo m > p/moved; chmod +x p/moved')"
+[ -n "$(judge "$F" "$T" "$TMP/r_ok.tsv" "$R0" "$S")" ] && ok "control: a swept copy with another file mode is refused" || no "control: mode change accepted"
+T="$(tree_with 'mkdir -p p; echo n > p/new')"
+[ -n "$(judge "$F" "$T" "$TMP/r_ok.tsv" "$R0" "$S")" ] && ok "control: a new file with no root original is refused" || no "control: unoriginated addition accepted"
+T="$(tree_with 'echo changed > a/x')"
+[ -n "$(judge "$F" "$T" "$TMP/r_ok.tsv" "$R0" "$S")" ] && ok "control: an edit of an existing legacy/ file is refused, even matching a sweep commit" || no "control: edit of a frozen file accepted via a sweep"
+# After a sweep, the sweep tree is the baseline: deleting a swept file needs a resolved row.
+SW1="$(tree_with 'mkdir -p p; echo m > p/moved')"
+printf 'path\tstatus\np\topen\n' > "$TMP/r_popen.tsv"; printf 'path\tstatus\np\tresolved\n' > "$TMP/r_pok.tsv"
+[ -n "$(judge "$SW1" "$F" "$TMP/r_popen.tsv" "$R0")" ] && ok "control: deleting a swept file under an open row is refused" || no "control: swept file deleted under an open row"
+[ -z "$(judge "$SW1" "$F" "$TMP/r_pok.tsv" "$R0")" ] && ok "control: deleting a swept file under a resolved row passes" || no "control: resolved deletion of a swept file refused"
+[ -n "$(judge "$SW1" "$(tree_with 'mkdir -p p; echo m > p/moved; echo q > p/other')" "$TMP/r_ok.tsv" "$R0")" ] && ok "control: an addition after the last sweep, with no new sweep line, is refused" || no "control: post-sweep addition accepted"
+# Lock-chain controls: H is a commit with S in its history; X is a commit outside it.
+H="$(git commit-tree "$R0" -p "$S" -m head)"
+# X has the would-be moved file (tree RS), so only its ancestry can refuse it.
+X="$(git commit-tree "$RS" -m unrelated)"
+[ -n "$H" ] && [ -n "$X" ] || { echo "FATAL: chain control commits"; exit 2; }
+# A control lock: its base and tree rows, then the sweep rows given.
+HDR="base $S"$'\n'"tree $F"
+printf '%s\nsweep %s %s\n' "$HDR" "$S" "$SW1" > "$TMP/l_ok"
+[ -z "$(chain "$TMP/l_ok" "$F" "$SW1" "$TMP/r_ok.tsv" "$H")" ] && ok "control: a lock chaining the frozen tree through a sweep to HEAD:legacy passes" || no "control: valid chain refused: $(chain "$TMP/l_ok" "$F" "$SW1" "$TMP/r_ok.tsv" "$H")"
+printf '%s\nsweep %s %s\n' "$HDR" "$X" "$SW1" > "$TMP/l_x"
+o="$(chain "$TMP/l_x" "$F" "$SW1" "$TMP/r_ok.tsv" "$H")"
+# The refused row is skipped, so its addition is then refused too, as an unoriginated one.
+[ "$o" = "sweep line 1: needs a commit of HEAD's history and a tree: $X $SW1"$'\n'"since the last sweep:"$'\n'"A legacy/p/moved: no sweep commit in the lock has p/moved with this content; legacy/ admits only byte-for-byte moves" ] && ok "control: a sweep commit outside HEAD's history is refused, as such" || no "control: non-ancestor sweep: '$o'"
+[ -n "$(chain "$TMP/l_ok" "$F" "$F" "$TMP/r_popen.tsv" "$H")" ] && ok "control: deleting a swept file after its sweep, under an open row, is refused" || no "control: post-sweep deletion accepted"
+# The lock's one parser (lib/legacy_lock.py). Each malformed lock is refused by chain() with the
+# parser's exact diagnostic, before any sweep is judged: no byte is a row to one reader and not to another.
+ROW="is not a lock row: line 3 must be 'sweep <commit> <tree>', one space between fields, each oid 40 or 64 lowercase hex digits"
+refused_lock() { # NAME CONTENT-PRINTF-FORMAT EXPECTED [ARGS...]: chain() on that lock prints EXPECTED exactly
+  local name="$1" fmt="$2" want="$3"; shift 3
+  printf "$fmt" "$@" > "$TMP/$name"
+  o="$(chain "$TMP/$name" "$F" "$F" "$TMP/r_popen.tsv" "$H")"
+  [ "$o" = "$want" ] && ok "control: $name is refused by the lock parser, as such" || no "control: $name: '$o'"
+}
+# A landed sweep row with a NUL in front: GNU grep -x matches the row behind the NUL, sed skips it.
+refused_lock "a NUL-prefixed sweep row" '%s\n\0sweep %s %s\n' "$TMP/a NUL-prefixed sweep row:3: holds a NUL byte: the lock is text" "$HDR" "$S" "$SW1"
+refused_lock "a CR line ending" '%s\nsweep %s %s\r\n' "$TMP/a CR line ending:3: holds a carriage return: a line ends with a newline (LF) alone" "$HDR" "$S" "$SW1"
+refused_lock "a sweep row without its tree" '%s\nsweep %s\n' "$TMP/a sweep row without its tree:3: $ROW" "$HDR" "$S"
+refused_lock "a sweep row with a trailing space" '%s\nsweep %s %s \n' "$TMP/a sweep row with a trailing space:3: $ROW" "$HDR" "$S" "$SW1"
+refused_lock "a sweep row with a third field" '%s\nsweep %s %s %s\n' "$TMP/a sweep row with a third field:3: $ROW" "$HDR" "$S" "$SW1" "$SW1"
+refused_lock "a blank line" '%s\n\nsweep %s %s\n' "$TMP/a blank line:3: $ROW" "$HDR" "$S" "$SW1"
+refused_lock "a repeated sweep row" '%s\nsweep %s %s\nsweep %s %s\n' "$TMP/a repeated sweep row:4: repeats line 3: a row is recorded once" "$HDR" "$S" "$SW1" "$S" "$SW1"
+refused_lock "a last row without its newline" '%s\nsweep %s %s' "$TMP/a last row without its newline:3: has no newline: every line, the last too, ends with one" "$HDR" "$S" "$SW1"
+refused_lock "a lock without its base row" 'tree %s\n' "$TMP/a lock without its base row:1: is not a lock row: line 1 must be 'base <commit>', one space between fields, each oid 40 or 64 lowercase hex digits" "$F"
+refused_lock "a preview lock" '%s\npreview missing: P2\n' "$TMP/a preview lock:3: the move is a --preview build (preview missing: P2); a lock may only record a move generated with its landing prerequisites met (the generator is legacy/scripts/land/legacy_move.sh since the 2026-11-08 sweep)" "$HDR"
+S2="$(git commit-tree "$(tree_with 'mkdir -p p; echo m2 > p/moved')" -p "$S" -m sweep-2)"
+H2="$(git commit-tree "$R0" -p "$S2" -m head2)"
+[ -n "$S2" ] && [ -n "$H2" ] || { echo "FATAL: second sweep control commits"; exit 2; }
+SW2="$(tree_with 'mkdir -p p; echo m2 > p/moved')"
+printf '%s\nsweep %s %s\nsweep %s %s\n' "$HDR" "$S" "$SW1" "$S2" "$SW2" > "$TMP/l_two"
+[ -n "$(chain "$TMP/l_two" "$F" "$SW2" "$TMP/r_ok.tsv" "$H2")" ] && ok "control: a later sweep cannot rewrite a file an earlier sweep moved" || no "control: second sweep rewrote a swept file"
+T="$(tree_with 'mkdir -p p; printf m > "p/odd\\name"')"
+[ -n "$(judge "$F" "$T" "$TMP/r_ok.tsv" "$R0" "$S")" ] && ok "control: an added path git would C-quote is refused when it has no original" || no "control: C-quoted path accepted"
+# A legitimate sweep of p/moved plus a file at ":(literal)p/moved": read as pathspec magic, that path
+# would resolve to p/moved, match the sweep commit and pass.
+T="$(tree_with 'mkdir -p p ":(literal)p"; echo m > p/moved; echo m > ":(literal)p/moved"')"
+[ -n "$(judge "$F" "$T" "$TMP/r_ok.tsv" "$R0" "$S")" ] && ok "control: an added path spelled as pathspec magic is refused" || no "control: pathspec-magic path accepted"
+# Trusted-history controls: real commits with legacy/ and the lock. M1 freezes legacy/ = F; M2 sweeps
+# p/moved (m) into it. Both are trusted (main's). The candidate commits after them are not.
+commit_of() { # parent tree-of-legacy root-file-content lock-text -> commit
+  local idx="$TMP/idx.$$" t
+  rm -f "$idx"; GIT_INDEX_FILE="$idx" git read-tree --prefix=legacy/ "$2"
+  printf '%s' "$3" > "$TMP/rootf"; printf '%s\n' "$4" > "$TMP/lockf"
+  GIT_INDEX_FILE="$idx" git update-index --add --cacheinfo "100644,$(git hash-object -w "$TMP/rootf"),rootfile" \
+    --cacheinfo "100644,$(git hash-object -w "$TMP/lockf"),L"
+  t="$(GIT_INDEX_FILE="$idx" git write-tree)"; rm -f "$idx"
+  if [ -n "$1" ]; then git commit-tree "$t" -p "$1" -m c; else git commit-tree "$t" -m c; fi
+}
+LK1="$(printf 'base %s\ntree %s\n' "$S" "$F")"
+M1="$(commit_of "" "$F" r "$LK1")"
+M2="$(commit_of "$M1" "$SW1" r "$LK1"$'\n'"sweep $S $SW1")"
+[ -n "$M1" ] && [ -n "$M2" ] || { echo "FATAL: trusted-history control commits"; exit 2; }
+git show "$M2:L" > "$TMP/lock_same"
+[ -z "$(lock_history "$TMP/lock_same" L "$M2")" ] && ok "control: a lock that keeps every trusted line passes" || no "control: unchanged lock refused: $(lock_history "$TMP/lock_same" L "$M2")"
+printf '%s\nsweep %s %s\n' "$LK1" "$S2" "$SW2" > "$TMP/lock_rewritten"   # the M2 row replaced
+o="$(lock_history "$TMP/lock_rewritten" L "$M2")"
+[ "$o" = "lock: 'sweep $S $SW1' (in ${M2:0:10}, trusted history) is not in the lock: recorded lines are only ever added, never rewritten or removed" ] \
+  && ok "control: rewriting a trusted sweep line is refused, naming the line" || no "control: rewritten sweep line: '$o'"
+printf '%s\n' "$LK1" > "$TMP/lock_dropped"
+o="$(lock_history "$TMP/lock_dropped" L "$M2")"
+[ "$o" = "lock: 'sweep $S $SW1' (in ${M2:0:10}, trusted history) is not in the lock: recorded lines are only ever added, never rewritten or removed" ] \
+  && ok "control: removing a trusted sweep line is refused, naming the line" || no "control: removed sweep line: '$o'"
+printf 'base %s\ntree %s\nsweep %s %s\n' "$S2" "$F" "$S" "$SW1" > "$TMP/lock_rebased"
+o="$(lock_history "$TMP/lock_rebased" L "$M2")"
+[ "$o" = "lock: 'base $S' (in ${M2:0:10}, trusted history) is not in the lock: recorded lines are only ever added, never rewritten or removed" ] \
+  && ok "control: changing the trusted base line is refused, naming the line" || no "control: changed base line: '$o'"
+# The NUL attack on history: the landed row kept behind a NUL. The parser refuses the lock itself,
+# so no row of it can match a trusted row.
+printf '%s\n\0sweep %s %s\n' "$LK1" "$S" "$SW1" > "$TMP/lock_nul"
+o="$(lock_history "$TMP/lock_nul" L "$M2")"
+[ "$o" = "$TMP/lock_nul:3: holds a NUL byte: the lock is text" ] \
+  && ok "control: a trusted sweep row kept behind a NUL byte is refused by trusted history" || no "control: NUL-prefixed trusted row: '$o'"
+# A malformed version in trusted history is refused, not skipped.
+MB="$(commit_of "$M2" "$SW1" r "$LK1"$'\n'"sweep $S $SW1"$'\r')"
+o="$(lock_history "$TMP/lock_same" L "$MB")"
+[ "$o" = "lock: a trusted version is malformed: ${MB:0:10}:L:3: holds a carriage return: a line ends with a newline (LF) alone" ] \
+  && ok "control: a malformed lock in trusted history is refused, not skipped" || no "control: malformed trusted lock: '$o'"
+[ -z "$(history_identity legacy "$M2" "$M2")" ] && ok "control: a legacy/ that kept every trusted version passes" || no "control: unchanged history refused: $(history_identity legacy "$M2" "$M2")"
+# The attacks. (1) the row rewrite: the candidate replaces M2's row and p/moved's bytes together.
+C1="$(commit_of "$M2" "$SW2" r "$LK1"$'\n'"sweep $S2 $SW2")"
+o="$(history_identity legacy "$C1" "$M2")"
+[ "$o" = "legacy/p/moved: was $(git rev-parse "$SW1:p/moved" | cut -c1-10) (mode 100644) in trusted history and is $(git rev-parse "$SW2:p/moved" | cut -c1-10) (mode 100644) now: a frozen or swept file is never rewritten, by an edit or by deletion and re-addition" ] \
+  && ok "control: a swept file rewritten with its lock row is refused by trusted history" || no "control: row-rewrite attack: '$o'"
+# (2) delete then re-add: a trusted commit deletes p/moved (a resolved deletion); the candidate re-adds
+# it with other bytes under a new sweep line. Each chain step passes; history refuses.
+M3="$(commit_of "$M2" "$F" r "$LK1"$'\n'"sweep $S $SW1")"
+C2="$(commit_of "$M3" "$SW2" r "$LK1"$'\n'"sweep $S $SW1"$'\n'"sweep $S2 $SW2")"
+o="$(history_identity legacy "$C2" "$M3")"
+case "$o" in "legacy/p/moved: was $(git rev-parse "$SW1:p/moved" | cut -c1-10) (mode 100644) in trusted history and is $(git rev-parse "$SW2:p/moved" | cut -c1-10) (mode 100644) now: "*)
+  ok "control: a frozen file deleted and re-added with other bytes is refused by trusted history" ;; *) no "control: delete-then-re-add attack: '$o'" ;; esac
+# The same re-addition with the same bytes is no rewrite.
+C3="$(commit_of "$M3" "$SW1" r "$LK1"$'\n'"sweep $S $SW1")"
+[ -z "$(history_identity legacy "$C3" "$M3")" ] && ok "control: re-adding a file with its trusted bytes passes" || no "control: identical re-addition refused"
+# A branch that rewrote its own lock line and corrected it before landing: its commits are the merge's
+# second parent, so the corrected line is no trusted line and the landed lock passes.
+B1="$(commit_of "$M2" "$SW1" r "$LK1"$'\n'"sweep $S2 $SW2")"
+B2="$(commit_of "$B1" "$SW1" r "$LK1"$'\n'"sweep $S $SW1")"
+MM="$(git commit-tree "$(git rev-parse "$B2^{tree}")" -p "$M2" -p "$B2" -m landed)"
+[ -n "$MM" ] || { echo "FATAL: merge control commit"; exit 2; }
+[ -z "$(lock_history "$TMP/lock_same" L "$MM")" ] && [ -z "$(history_identity legacy "$MM" "$MM")" ] \
+  && ok "control: a member branch's corrected intermediate lock is not trusted history (first parents only)" || no "control: second-parent history trusted: $(lock_history "$TMP/lock_same" L "$MM")"
+# trusted_base: the merge base with the trusted ref; HEAD itself when the ref is absent.
+[ "$(LEGACY_TRUSTED_REF="$M2" trusted_base "$C1")" = "$M2" ] && [ "$(LEGACY_TRUSTED_REF=refs/heads/no-such trusted_base "$C1")" = "$C1" ] \
+  && ok "control: the trusted base is the merge base with the trusted ref, else HEAD (everything trusted)" || no "control: trusted_base"
+# Every shell read loop here reads a last line that has no newline: `read` fails on it, so a bare
+# `while read` silently drops it. (The loops' behaviour is checked above; this keeps a new one honest.)
+loops="$(grep -nE '^[^#]*while[^#]*[[:space:]]read[[:space:]]' "$SELF")" || { echo "FATAL: cannot read $SELF"; exit 2; }
+bad="$(printf '%s\n' "$loops" | grep -vF '|| [ -n "$' | grep -vF 'grep -nE')"
+[ "$(printf '%s\n' "$loops" | grep -cF '|| [ -n "$')" -ge 3 ] && [ -z "$bad" ] && ok "control: every read loop in this check reads a last line without a newline" || no "control: a read loop drops an unterminated last line: $bad"
+cd "$ROOT_DIR"
+# The parser is the lock's one reader. Outside legacy/ (frozen, never run) and comments, the lock's
+# path is named only by the parser and by this check's LOCK=, and every use of LOCK here hands it to
+# the parser (lock_rows, lock_history) or only tests or names it.
+named="$(git ls-files -z -- scripts .githooks .github | xargs -0 grep -nIE 'legacy[.]lock' -- 2>/dev/null \
+  | grep -vE '^[^:]+:[0-9]+:[[:space:]]*#' | grep -vE '^scripts/checks/lib/legacy_lock[.]py:' \
+  | grep -vE '^scripts/checks/legacy_frozen[.]sh:[0-9]+:LOCK=scripts/checks/legacy[.]lock$')"
+uses="$(grep -nE '"\$(LOCK|lock)"' "$SELF" | grep -vE '^[0-9]+:[[:space:]]*#' \
+  | grep -vE '(lock_rows|lock_history|chain) "\$(LOCK|lock)"|\[ -f "\$LOCK" \]|echo "=== |no "\$LOCK |local lock="\$1"')"
+[ -z "$named" ] && [ -z "$uses" ] && [ "$(grep -c '' "$SELF")" -gt 0 ] \
+  && ok "control: lib/legacy_lock.py is the lock's one reader: no other code names or reads the lock" \
+  || no "control: another reader of the lock: ${named}${uses:+ / in this check: $uses}"
+
+echo "=== legacy/ against $LOCK ==="
+[ -f "$LOCK" ] || { no "$LOCK is missing"; echo "legacy_frozen: PASS=$PASS FAIL=$FAIL"; exit 1; }
+rows="$(lock_rows "$LOCK")" && lock_ok=1 || lock_ok=""
+base="" frozen="" nsw=0
+while read -r kind a _ || [ -n "$kind" ]; do
+  case "$kind" in base) base="$a" ;; tree) frozen="$a" ;; sweep) nsw=$((nsw+1)) ;; esac
+done <<<"$rows"
+if [ -z "$lock_ok" ]; then
+  no "$LOCK is malformed (lib/legacy_lock.py is its format):"; printf '%s\n' "$rows" | sed 's/^/      /'
+elif [ "$(git rev-parse -q --verify "$base^{tree}" 2>/dev/null)" != "$frozen" ]; then
+  no "the recorded tree $frozen is not the tree of the recorded base $base (or the base is not in this clone's history)"
+else
+  ok "the lock parses (base, tree, $nsw sweep row(s), nothing else), and tree ${frozen:0:10} is the tree of base ${base:0:10}"
+  cur="$(git rev-parse -q --verify HEAD:legacy 2>/dev/null)"
+  if [ -z "$cur" ]; then
+    no "HEAD has no legacy/ directory"
+  else
+    [ -f RETENTION.tsv ] || { no "RETENTION.tsv is missing"; }
+    out="$(chain "$LOCK" "$frozen" "$cur" "${RETENTION:-RETENTION.tsv}" HEAD)"
+    tb="$(trusted_base HEAD)"
+    hist="$(lock_history "$LOCK" "$LOCK" "$tb"; history_identity legacy HEAD "$tb")"
+    [ -z "$hist" ] && ok "trusted history (through ${tb:0:10}): every lock line kept, no legacy/ file rewritten" \
+      || { no "legacy/ or its lock rewrote trusted history (through ${tb:0:10}):"; echo "$hist" | sed 's/^/      /'; }
+    [ "$nsw" = 0 ] || [ -n "$out" ] || ok "the lock's $nsw sweep line(s) name commits of HEAD's history and chain to HEAD:legacy"
+    if [ -z "$out" ]; then
+      [ "$cur" = "$frozen" ] && ok "legacy/ is byte-identical to the frozen tree" \
+                            || ok "legacy/ differs from the frozen tree only by byte-for-byte sweeps and deletions RETENTION.tsv allows"
+    else
+      no "legacy/ changed:"; echo "$out" | sed 's/^/      /'
+    fi
+  fi
+fi
+echo "legacy_frozen: PASS=$PASS FAIL=$FAIL"
+[ "$FAIL" -eq 0 ]
+
+exec
+/bin/bash -lc "cat > /tmp/edit-legacy.py <<'PY'
+from pathlib import Path
+p=Path('scripts/checks/lib/legacy_lock.py')
+s=p.read_text().replace('    if problems:\\n', '    if len(lines) < 2 and lines[0].startswith(b\"base \"):\\n        problems.append(f\"{name}:2: missing: line 2 must be \\'tree <tree>\\'\")\\n    if problems:\\n',1)
+# distinguish deletion from failed blob read
+s=s.replace('            continue  # that commit deleted the lock; the lock it had is in an older version', '''            rc, entries = git(\"ls-tree\", c, \"--\", lpath)
+            if rc "'!= 0 or entries:
+                refusals.append(f"lock: cannot read trusted version {c[:10]}:{lpath}")
+            continue  # an absent path is a deletion; older versions are still checked'"''')
+p.write_text(s)
+p=Path('scripts/checks/legacy_frozen.sh');s=p.read_text();pos=s.index('# judge FROZEN')
+s=s[:pos]+'''# checked STEP COMMAND...: preserve semantic diagnostics; execution failures always print a refusal.
+# Helpers use stdout as the refusal channel, including when the failed command printed nothing.
+checked() {
+  local label=\""'$1" output rc; shift
+  output="$("$@")"; rc=$?
+  [ -z "$output" ] || printf '"'%s\\\\n' \""'$output"
+  if [ "$rc" -ne 0 ] && { [ "$rc" -ne 1 ] || [ -z "$output" ]; }; then
+    printf '"'refused: %s failed (exit %s)\\\\n' \""'$label" "$rc"
+  fi
+}
+
+'"'''+s[pos:]
+s=s.replace('  git diff-tree -z', '  git diff-tree -z',1).replace(\"' \\\""'$ret'"\\\" | while\", \"' \\\""'$ret'"\\\" | while\",1)
+s=s.replace('    local path=\""'${line#ADD'"', '    local path=\""'${line#ADD'"',1).replace('want s found=\"\"','want s entry found=\"\"',1)
+s=s.replace('    want=\""'$(git ls-tree "$cur" -- "$path" | cut -f1)"'"','    want=\""'$(git ls-tree "$cur" -- "$path" | cut -f1)" || { echo "refused: judge added-path lookup failed"; continue; }'"')
+s=s.replace('    if [ -n \""'$(git ls-tree "$root" -- "$path")" ]; then'"','    entry=\""'$(git ls-tree "$root" -- "$path")" || { echo "refused: judge root lookup failed"; continue; }'"\\n    if [ -n \""'$entry" ]; then'"')
+s=s.replace('      [ \""'$(git ls-tree "$s" -- "$path" | cut -f1)" = "$want" ]'"', '      entry=\""'$(git ls-tree "$s" -- "$path" | cut -f1)" || { echo "refused: judge sweep lookup failed"; continue; }'"\\n      [ \""'$entry" = "$want" ]'"')
+s=s.replace('  done\\n}\\n\\nchain()', '  done || echo \"refused: judge diff/retention pipeline failed\"\\n}\\n\\nchain()',1)
+s=s.replace('  root=\""'$(git rev-parse "$head''^{tree}")"'"','  root=\""'$(git rev-parse "$head''^{tree}")" || { echo "refused: chain HEAD tree lookup failed"; return; }'"')
+start=s.index('  local ref=',s.index('trusted_base()'));end=s.index('\\n}\\n',start)
+s=s[:start]+'''  local ref=\""'${LEGACY_TRUSTED_REF:-origin/main}" mb rc
+  git rev-parse -q --verify "$ref''^{commit}" >/dev/null; rc=$?
+  if [ "$rc" = 0 ]; then
+    git merge-base "$1" "$ref" || echo "refused: trusted_base merge-base failed"
+  elif [ "$rc" = 1 ]; then
+    git rev-parse "$1''^{commit}" || echo "refused: trusted_base HEAD lookup failed"
+  else
+    echo "refused: trusted_base ref lookup failed"
+  fi'"'''+s[end:]
+s=s.replace('lock_rows() { python3 -I \""'$LOCKPY" rows "$1"; }'"','lock_rows() { checked lock_rows python3 -I \""'$LOCKPY" rows "$1"; }'"')
+# chain must stop if parser diagnostic (wrapper returns success); separate raw rows checked status
+s=s.replace('  rows=\""'$(lock_rows "$lock")" || { printf '"\\'%s\\\\n\\' \""'$rows"; return 0; }'"','  rows=\""'$(python3 -I "$LOCKPY" rows "$lock")"; local rc=$?'"\\n  if [ \""'$rc" -ne 0 ]; then'"\\n    [ -z \""'$rows" ] || printf '"\\'%s\\\\n\\' \""'$rows"'"\\n    if [ -z \""'$rows" ] || [ "$rc" -ne 1 ]; then echo "refused: lock_rows failed (exit $rc)"; fi'"\\n    return 0\\n  fi')
+s=s.replace('lock_history() { python3 -I \""'$LOCKPY" history "$1" "$2" "$3"; }'"','lock_history() { checked lock_history python3 -I \""'$LOCKPY" history "$1" "$2" "$3"; }'"')
+s=s.replace('  python3 -I - \""'$prefix" '"\\\\\\n    3< <(git log --first-parent --diff-merges=first-parent -z --raw --no-renames --no-abbrev --format= \""'$trusted" -- "$prefix/") '"\\\\\\n    4< <(git ls-tree -r -z --full-tree \""'$head" -- "$prefix/") <<'"\\'PY\\'','  checked history_identity python3 -I - \""'$prefix" "$head" "$trusted" <<'"\\'PY\\'')
+s=s.replace('import os, sys\\nprefix', 'import subprocess, sys\\nprefix')
+a=s.index('def tokens(fd):');b=s.index('seen = {}',a)
+s=s[:a]+'''def tokens(args):
+    return subprocess.check_output([\"git\", *args]).split(b\"\\\\0\")
+'''+s[b:]
+s=s.replace('t = tokens(3); i = 0','t = tokens([\"log\", \"--first-parent\", \"--diff-merges=first-parent\", \"-z\", \"--raw\", \"--no-renames\", \"--no-abbrev\", \"--format=\", sys.argv[3], \"--\", prefix]); i = 0').replace('for ent in tokens(4):','for ent in tokens([\"ls-tree\", \"-r\", \"-z\", \"--full-tree\", sys.argv[2], \"--\", prefix]):')
+# main rows needs raw status
+s=s.replace('rows=\""'$(lock_rows "$LOCK")" && lock_ok=1 || lock_ok=""'"','rows=\""'$(python3 -I "$LOCKPY" rows "$LOCK")" && lock_ok=1 || lock_ok=""'"')
+p.write_text(s)
+PY
+python3 /tmp/edit-legacy.py" in /home/unbalancedparen/projects/clones/wip/legacy-sweep-2
+ succeeded in 0ms:
+codex
+I found two more failure paths: `history_identity` hides Git failures in process substitutions, and the lock-history reader treats every blob-read failure as a deletion. I’m making both report refusals, along with failures in the diff pipeline and tree lookups.
+exec
+/bin/bash -lc "cat > /tmp/controls-legacy.py <<'PY'
+from pathlib import Path
+p=Path('scripts/checks/legacy_frozen.sh');s=p.read_text()
+# existing one-row malformed control now also missing header; don't duplicate errors for invalid base (parser condition does that)
+s=s.replace('rows=\""'$(python3 -I "$LOCKPY" rows "$LOCK")" && lock_ok=1 || lock_ok=""'"','rows=\""'$(python3 -I "$LOCKPY" rows "$LOCK")" && lock_ok=1 || { lock_ok=""; rows="${rows}${rows:+$'"\\'\\\\n\\'}refused: main lock_rows failed\"; }')
+# parser one-reader control permits raw parser invocation
+s=s.replace('(lock_rows|lock_history|chain) \\\\\"', '(lock_rows|lock_history|chain) \\\\\"') if False else s
+s=s.replace('(lock_rows|lock_history|chain) \"\\\\"'$(LOCK|lock)"'"', '(lock_rows|lock_history|chain) \"\\\\"'$(LOCK|lock)"|python3 -I "'"\\\\"'$LOCKPY" rows "'"\\\\"'$(LOCK|lock)"'"')
+# add controls after trusted_base controls before read loops
+pos=s.index('# Every shell read loop')
+controls='''# Exact failure controls: command stubs affect only the subshell invoking the helper.
+expect_refusal() {
+  local name=\""'$1" want="$2" got; shift 2
+  got="$("$@" 2>/dev/null)"
+  [ "$got" = "$want" ] && ok "control: $name" || no "control: $name: '"'"'$got'"' (wanted '"'$want'"')\"
+}
+printf 'base %s\\\\n' \""'$S" > "$TMP/base_only"
+expect_refusal "base-only chain" "$TMP/base_only:2: missing: line 2 must be '"'tree <tree>'\" chain \""'$TMP/base_only" "$F" "$F" "$TMP/r_ok.tsv" "$H"
+MB0="$(commit_of "" "$F" r "base $S")"
+expect_refusal "base-only trusted lock" "lock: a trusted version is malformed: ${MB0:0:10}:L:2: missing: line 2 must be '"'tree <tree>'\" lock_history \""'$TMP/lock_dropped" L "$MB0"
+for rc in 1 2; do
+  printf '"'import sys\\\\nprint(\"stub error\", file=sys.stderr)\\\\nsys.exit(%s)\\\\n' \""'$rc" > "$TMP/parser_stub.py"
+  expect_refusal "silent parser exit $rc chain" "refused: lock_rows failed (exit $rc)" env_chain_stub "$TMP/parser_stub.py"
+  expect_refusal "silent parser exit $rc history" "refused: lock_history failed (exit $rc)" env_history_stub "$TMP/parser_stub.py"
+done
+'"'''
+# functions before uses
+controls=controls.replace(\"printf 'base %s\",'''env_chain_stub() { local LOCKPY=\""'$1"; chain "$TMP/l_ok" "$F" "$F" "$TMP/r_ok.tsv" "$H"; }
+env_history_stub() { local LOCKPY="$1"; lock_history "$TMP/lock_dropped" L "$M1"; }
+printf '"'base %s''',1)
+controls+='''expect_refusal \"chain HEAD lookup failure\" \"refused: chain HEAD tree lookup failed\" chain \""'$TMP/l_ok" "$F" "$F" "$TMP/r_ok.tsv" no-such-head
+expect_refusal "judge diff failure" "refused: judge diff/retention pipeline failed" judge no-such-tree "$F" "$TMP/r_ok.tsv" "$F"
+expect_refusal "judge retention failure" "refused: judge diff/retention pipeline failed" judge "$SW1" "$F" "$TMP/no-retention" "$F"
+expect_refusal "judge root lookup failure" "refused: judge root lookup failed" judge "$F" "$SW1" "$TMP/r_ok.tsv" no-such-tree "$S"
+expect_refusal "judge sweep lookup failure" "refused: judge sweep lookup failed"$'"'\\\\n'\"A legacy/p/moved: no sweep commit in the lock has p/moved with this content; legacy/ admits only byte-for-byte moves\" judge \""'$F" "$SW1" "$TMP/r_ok.tsv" "$R0" no-such-commit
+expect_refusal "identity log failure" "refused: history_identity failed (exit 1)" history_identity legacy "$M1" no-such-commit
+expect_refusal "identity tree failure" "refused: history_identity failed (exit 1)" history_identity legacy no-such-commit "$M1"
+expect_refusal "trusted merge-base failure" "refused: trusted_base merge-base failed" env LEGACY_TRUSTED_REF="$M1" bash -c "$(declare -f trusted_base); trusted_base no-such-head"
+expect_refusal "trusted HEAD failure" "refused: trusted_base HEAD lookup failed" env LEGACY_TRUSTED_REF=refs/heads/no-such bash -c "$(declare -f trusted_base); trusted_base no-such-head"
+# Selectively fail one command while letting all other Git/Python calls run normally.
+fail_command() (
+  local target="$1"; shift
+  git() { if [ "$1" = "$target" ]; then return 2; else command git "$@"; fi; }
+  python3() { if [ "$target" = python3 ]; then return 2; else command python3 "$@"; fi; }
+  "$@"
+)
+expect_refusal "judge Python failure" "refused: judge diff/retention pipeline failed" fail_command python3 judge "$SW1" "$F" "$TMP/r_ok.tsv" "$F"
+expect_refusal "judge added-path lookup failure" "refused: judge added-path lookup failed" fail_command ls-tree judge "$F" "$SW1" "$TMP/r_ok.tsv" "$R0" "$S"
+expect_refusal "identity Python failure" "refused: history_identity failed (exit 2)" fail_command python3 history_identity legacy "$M1" "$M1"
+expect_refusal "trusted ref lookup failure" "refused: trusted_base ref lookup failed" fail_command rev-parse trusted_base "$M1"
+'"'''
+s=s[:pos]+controls+s[pos:]
+p.write_text(s)
+PY
+python3 /tmp/controls-legacy.py
+timeout 600 systemd-run --user --scope -q -p MemoryMax=4G -p TasksMax=512 bash scripts/checks/legacy_frozen.sh > /tmp/legacy-result 2>&1
+cat /tmp/legacy-result" in /home/unbalancedparen/projects/clones/wip/legacy-sweep-2
+ succeeded in 1180ms:
+=== negative controls ===
+  ok   control: an unchanged tree passes
+  ok   control: an added file is refused
+  ok   control: a modified file is refused
+  ok   control: a deletion under an open row is refused
+  ok   control: a deletion without a status column is refused
+  ok   control: a deletion under a resolved row passes
+  ok   control: a resolved parent does not release a child with an open row
+  ok   control: a deletion outside the resolved row is refused
+  ok   control: a byte-for-byte move from a sweep commit, gone from the root, passes
+  ok   control: the same addition with no sweep line is refused
+  ok   control: a swept copy that still exists at the root is refused
+  ok   control: a modified copy of a swept file is refused
+  ok   control: a swept copy with another file mode is refused
+  ok   control: a new file with no root original is refused
+  ok   control: an edit of an existing legacy/ file is refused, even matching a sweep commit
+  ok   control: deleting a swept file under an open row is refused
+  ok   control: deleting a swept file under a resolved row passes
+  ok   control: an addition after the last sweep, with no new sweep line, is refused
+  ok   control: a lock chaining the frozen tree through a sweep to HEAD:legacy passes
+  ok   control: a sweep commit outside HEAD's history is refused, as such
+  ok   control: deleting a swept file after its sweep, under an open row, is refused
+  ok   control: a NUL-prefixed sweep row is refused by the lock parser, as such
+  ok   control: a CR line ending is refused by the lock parser, as such
+  ok   control: a sweep row without its tree is refused by the lock parser, as such
+  ok   control: a sweep row with a trailing space is refused by the lock parser, as such
+  ok   control: a sweep row with a third field is refused by the lock parser, as such
+  ok   control: a blank line is refused by the lock parser, as such
+  ok   control: a repeated sweep row is refused by the lock parser, as such
+  ok   control: a last row without its newline is refused by the lock parser, as such
+  ok   control: a lock without its base row is refused by the lock parser, as such
+  ok   control: a preview lock is refused by the lock parser, as such
+  ok   control: a later sweep cannot rewrite a file an earlier sweep moved
+  ok   control: an added path git would C-quote is refused when it has no original
+  ok   control: an added path spelled as pathspec magic is refused
+  ok   control: a lock that keeps every trusted line passes
+  ok   control: rewriting a trusted sweep line is refused, naming the line
+  ok   control: removing a trusted sweep line is refused, naming the line
+  ok   control: changing the trusted base line is refused, naming the line
+  ok   control: a trusted sweep row kept behind a NUL byte is refused by trusted history
+  ok   control: a malformed lock in trusted history is refused, not skipped
+  ok   control: a legacy/ that kept every trusted version passes
+  ok   control: a swept file rewritten with its lock row is refused by trusted history
+  ok   control: a frozen file deleted and re-added with other bytes is refused by trusted history
+  ok   control: re-adding a file with its trusted bytes passes
+  ok   control: a member branch's corrected intermediate lock is not trusted history (first parents only)
+  ok   control: the trusted base is the merge base with the trusted ref, else HEAD (everything trusted)
+  ok   control: base-only chain
+  ok   control: base-only trusted lock
+  ok   control: silent parser exit 1 chain
+  ok   control: silent parser exit 1 history
+  ok   control: silent parser exit 2 chain
+  ok   control: silent parser exit 2 history
+  ok   control: chain HEAD lookup failure
+  ok   control: judge diff failure
+  ok   control: judge retention failure
+  ok   control: judge root lookup failure
+  ok   control: judge sweep lookup failure
+  ok   control: identity log failure
+  ok   control: identity tree failure
+  ok   control: trusted merge-base failure
+  FAIL control: trusted HEAD failure: 'no-such-head^{commit}
+refused: trusted_base HEAD lookup failed' (wanted 'refused: trusted_base HEAD lookup failed')
+  ok   control: judge Python failure
+  ok   control: judge added-path lookup failure
+  ok   control: identity Python failure
+  ok   control: trusted ref lookup failure
+  ok   control: every read loop in this check reads a last line without a newline
+  ok   control: lib/legacy_lock.py is the lock's one reader: no other code names or reads the lock
+=== legacy/ against scripts/checks/legacy.lock ===
+  ok   the lock parses (base, tree, 2 sweep row(s), nothing else), and tree 2b6b53678b is the tree of base 9186ca4c9f
+  ok   trusted history (through 3bd7bc4151): every lock line kept, no legacy/ file rewritten
+  ok   the lock's 2 sweep line(s) name commits of HEAD's history and chain to HEAD:legacy
+  ok   legacy/ differs from the frozen tree only by byte-for-byte sweeps and deletions RETENTION.tsv allows
+legacy_frozen: PASS=70 FAIL=1
+
+exec
+/bin/bash -lc "cat > /tmp/audit-legacy.py <<'PY'
+from pathlib import Path
+p=Path('scripts/checks/legacy_frozen.sh');s=p.read_text().replace('git rev-parse \""'$1''^{commit}" || echo'"','git rev-parse -q --verify \""'$1''^{commit}" || echo'"')
+# shared checks guarantee pipeline status and explicit refusal, while grep 1 means no matches.
+a=s.index('named=\""'$(git ls-files'"');b=s.index('\\n[ -z \""'$named" ]'"',a)
+old=s[a:b]
+new=old.replace('named=\""'$('"','named_readers() {\\n  ').replace('uses=\""'$('"','lock_uses() {\\n  ')
+new=new.replace('xargs -0 grep','xargs -0 -r grep')
+new=new.replace(\"legacy[.]lock"'$'"')\\\"\", \"legacy[.]lock"'$'"'\\n  local statuses=(\\\""'${PIPESTATUS[@]}'"\\\") rc\\n  [ \\\""'${statuses[0]}'"\\\" = 0 ] || echo \\\"refused: reader file listing failed\\\"\\n  for rc in \\\""'${statuses[@]:1}'"\\\"; do [ \\\""'$rc'"\\\" -le 1 ] || { echo \\\"refused: reader scan failed\\\"; break; }; done\\n}\")
+# actual suffix check
+if 'named_readers' in new and 'reader file listing' not in new:
+ print(new); raise SystemExit('suffix mismatch')
+new=new.replace(\"local lock=\\\"\\\\"'$1'"\\\"')\\\"\", \"local lock=\\\"\\\\"'$1'"\\\"'\\n  local rc\\n  for rc in \\\""'${PIPESTATUS[@]}'"\\\"; do [ \\\""'$rc'"\\\" -le 1 ] || { echo \\\"refused: lock-use scan failed\\\"; break; }; done\\n}\")
+# move functions before controls, calls at old site
+s=s[:a]+'named=\""'$(named_readers)"'"\\nuses=\""'$(lock_uses)"'"'+s[b:]
+pos=s.index('echo \"=== negative controls ===\"');s=s[:pos]+new+'\\n\\n'+s[pos:]
+# git pipeline statuses for self loops fail errors (already loops failure catches anything non0)
+s=s.replace('bad=\""'$(printf '"\\'%s\\\\n\\' \""'$loops" | grep -vF '"\\'|| [ -n \""'$'"\\' | grep -vF \\'grep -nE\\')\"', 'bad=\""'$(printf '"\\'%s\\\\n\\' \""'$loops" | grep -vF '"\\'|| [ -n \""'$'"\\' | grep -vF \\'grep -nE\\'; for rc in \""'${PIPESTATUS[@]}"; do [ "$rc" -le 1 ] || echo "refused: read-loop scan failed"; done)"'"')
+# caller checks execution of helpers even though their normal convention prints refusals
+s=s.replace('out=\""'$(chain "$LOCK" "$frozen" "$cur" "${RETENTION:-RETENTION.tsv}" HEAD)"'"','out=\""'$(checked chain chain "$LOCK" "$frozen" "$cur" "${RETENTION:-RETENTION.tsv}" HEAD)"'"')
+s=s.replace('tb=\""'$(trusted_base HEAD)"'"','tb=\""'$(checked trusted_base trusted_base HEAD)"'"')
+s=s.replace('hist=\""'$(lock_history "$LOCK" "$LOCK" "$tb"; history_identity legacy HEAD "$tb")"'"','hist=\""'$(checked lock_history lock_history "$LOCK" "$LOCK" "$tb"; checked history_identity history_identity legacy HEAD "$tb")"'"')
+# reader controls function stub supports grep
+s=s.replace('  python3() {', '  grep() { if [ \""'$target" = grep ]; then return 2; else command grep "$@"; fi; }'"\\n  python3() {')
+pos=s.index('# Every shell read loop');s=s[:pos]+'''expect_refusal \"reader listing failure\" \"refused: reader file listing failed\" fail_command ls-files named_readers
+expect_refusal \"reader scan failure\" \"refused: reader scan failed\" fail_command grep named_readers
+expect_refusal \"lock-use scan failure\" \"refused: lock-use scan failed\" fail_command grep lock_uses
+'''+s[pos:]
+p.write_text(s)
+PY
+python3 /tmp/audit-legacy.py
+rg -n 'named_readers|lock_uses|PIPESTATUS' scripts/checks/legacy_frozen.sh" in /home/unbalancedparen/projects/clones/wip/legacy-sweep-2
+ succeeded in 0ms:
+188:named_readers() {
+192:  local statuses=("${PIPESTATUS[@]}") rc
+196:lock_uses() {
+200:  for rc in "${PIPESTATUS[@]}"; do [ "$rc" -le 1 ] || { echo "refused: lock-use scan failed"; break; }; done
+414:expect_refusal "reader listing failure" "refused: reader file listing failed" fail_command ls-files named_readers
+415:expect_refusal "reader scan failure" "refused: reader scan failed" fail_command grep named_readers
+416:expect_refusal "lock-use scan failure" "refused: lock-use scan failed" fail_command grep lock_uses
+420:bad="$(printf '%s\n' "$loops" | grep -vF '|| [ -n "$' | grep -vF 'grep -nE'; for rc in "${PIPESTATUS[@]}"; do [ "$rc" -le 1 ] || echo "refused: read-loop scan failed"; done)"
+426:named="$(named_readers)"
+427:uses="$(lock_uses)"
+
+exec
+/bin/bash -lc "sed -n '180,207p' scripts/checks/legacy_frozen.sh; cat scripts/checks/run.sh | head -65; cat scripts/checks/lib/gate_env.sh; git diff --stat" in /home/unbalancedparen/projects/clones/wip/legacy-sweep-2
+ succeeded in 0ms:
+    mode, _, sha = meta.decode().split(" ")
+    path = path.decode("utf-8", "surrogateescape")
+    other = sorted(v for v in seen.get(path, ()) if v != (mode, sha))
+    if other:
+        print(f"{path}: was {other[0][1][:10]} (mode {other[0][0]}) in trusted history and is {sha[:10]} (mode {mode}) now: a frozen or swept file is never rewritten, by an edit or by deletion and re-addition")
+PY
+}
+
+named_readers() {
+  git ls-files -z -- scripts .githooks .github | xargs -0 -r grep -nIE 'legacy[.]lock' -- 2>/dev/null \
+  | grep -vE '^[^:]+:[0-9]+:[[:space:]]*#' | grep -vE '^scripts/checks/lib/legacy_lock[.]py:' \
+  | grep -vE '^scripts/checks/legacy_frozen[.]sh:[0-9]+:LOCK=scripts/checks/legacy[.]lock$'
+  local statuses=("${PIPESTATUS[@]}") rc
+  [ "${statuses[0]}" = 0 ] || echo "refused: reader file listing failed"
+  for rc in "${statuses[@]:1}"; do [ "$rc" -le 1 ] || { echo "refused: reader scan failed"; break; }; done
+}
+lock_uses() {
+  grep -nE '"\$(LOCK|lock)"' "$SELF" | grep -vE '^[0-9]+:[[:space:]]*#' \
+  | grep -vE '(lock_rows|lock_history|chain) "\$(LOCK|lock)"|python3 -I "\$LOCKPY" rows "\$(LOCK|lock)"|\[ -f "\$LOCK" \]|echo "=== |no "\$LOCK |local lock="\$1"'
+  local rc
+  for rc in "${PIPESTATUS[@]}"; do [ "$rc" -le 1 ] || { echo "refused: lock-use scan failed"; break; }; done
+}
+
+echo "=== negative controls ==="
+# The controls build a throwaway repository: none of git's repository variables may reach it (ISS-0015).
+source "$ROOT_DIR/scripts/checks/lib/git_sandbox.sh" || exit 2
+git_sandbox || exit 2
+TMP="$(mktemp -d)" || exit 2
+#!/usr/bin/env bash
+# Every root check, in order; the one entry point the pre-push hook, CI's "Root checks" job and the
+# landing tools (scripts/land/train.sh, ready.sh: LAND_FULL_GATES_CMD) run.
+#
+# The set is every scripts/checks/*.sh except this file, so a new check cannot be written and then
+# forgotten here. REQUIRED names the checks that must exist: deleting one fails the run instead of
+# shrinking it. Each check runs to completion; the run fails if any check failed.
+set -uo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh" || exit 2
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+cd "$ROOT_DIR"
+REQUIRED="legacy_frozen root_inventory workflow_yaml doc_links landing_script landing_bot review_tool sandbox_isolation retention_manifest issues oracle_fetch"
+missing=""
+for c in $REQUIRED; do [ -f "scripts/checks/$c.sh" ] || missing="$missing $c"; done
+[ -z "$missing" ] || { echo "run.sh: required check(s) missing:$missing" >&2; exit 1; }
+failed="" n=0
+for f in scripts/checks/*.sh; do
+  [ "$f" = scripts/checks/run.sh ] && continue
+  n=$((n+1))
+  echo "=== $f ==="
+  s="$(date +%s)"
+  if bash "$f"; then echo "--- $f: pass ($(( $(date +%s) - s ))s)"
+  else echo "--- $f: FAIL ($(( $(date +%s) - s ))s)"; failed="$failed ${f##*/}"; fi
+done
+echo
+if [ -n "$failed" ]; then echo "root checks: FAILED:$failed (of $n)"; exit 1; fi
+echo "root checks: all $n pass"
+#!/usr/bin/env bash
+# The gate environment guard. Every gate sources this first:
+#
+#   source "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh" || exit 2
+#
+# Gates run in three places: the dev shell, Linux CI runners and the macOS CI runner. When each took
+# coreutils, sed, grep, python and the rest from whatever host it landed on, a gate could pass on one
+# and fail on another for reasons unrelated to what it tests: macOS has no `timeout`, and BSD `sed -i`,
+# `stat`, `date` and `readlink` take other flags. flake.nix now defines that userland once (the
+# `gates` shell), CI runs every step inside it, and the dev shells include it. Each of those shells
+# exports CONCRETE_GATES_SHELL=1; a gate started anywhere else refuses here, before it can produce a
+# verdict about the wrong environment.
+#
+# Use `nix develop .#gates` (no Lean; what CI uses, with elan's Lean on PATH) or `nix develop` (the
+# dev shell, with its own Lean). An entry point that must start outside both, like the pre-push
+# hook, re-executes itself inside `nix develop` before it runs a gate.
+#
+# check_gate_hygiene.sh proves every gate sources this file.
+
+if [ "${CONCRETE_GATES_SHELL:-}" != 1 ]; then
+  echo "error: ${0##*/} refuses to run outside the gate shell: run inside nix develop .#gates (CI) or nix develop" >&2
+  exit 2
+fi
+
+# Every gate matches text with has_match, never a pipe into grep -q (bug 283).
+source "$(dirname "${BASH_SOURCE[0]}")/has_match.sh" || exit 2
+ scripts/checks/legacy_frozen.sh   | 135 +++++++++++++++++++++++++++++---------
+ scripts/checks/lib/legacy_lock.py |   7 +-
+ 2 files changed, 109 insertions(+), 33 deletions(-)
+
+exec
+/bin/bash -lc "cat > /tmp/finalize-legacy.py <<'PY'
+from pathlib import Path
+p=Path('scripts/checks/legacy_frozen.sh');s=p.read_text().replace('  local rc\\n  for rc in \""'${PIPESTATUS[@]}";'"', '  local statuses=(\""'${PIPESTATUS[@]}") rc'"\\n  for rc in \""'${statuses[@]}";'"')
+# portable xargs: no GNU -r; input always includes tracked files except negative control
+s=s.replace('xargs -0 -r grep','xargs -0 grep')
+# instead of xargs no-input issue use stdin /dev/null to grep? xargs grep with no input reads stdin EOF succeeds 1 ->123.
+# retain -r supported nix gates GNU, current env yes. revert
+s=s.replace('xargs -0 grep','xargs -0 -r grep')
+# scans read loop standalone helper
+pos=s.index('named_readers()')
+s=s[:pos]+'''read_loop_scan() {
+  printf '%s\\\\n' \""'$1" | grep -vF '"'|| [ -n \""'$'"' | grep -vF 'grep -nE'
+  local statuses=(\""'${PIPESTATUS[@]}") rc
+  for rc in "${statuses[@]}"; do [ "$rc" -le 1 ] || { echo "refused: read-loop scan failed"; break; }; done
+}
+'"'''+s[pos:]
+a=s.index('bad=\""'$(printf'"');b=s.index('\\n',a);s=s[:a]+'bad=\""'$(read_loop_scan "$loops")"'"'+s[b:]
+# need 3 while loops still true judge chain main
+pos=s.index('# Every shell read loop')
+s=s[:pos]+'''expect_refusal \"read-loop scan failure\" \"refused: read-loop scan failed\" fail_command grep read_loop_scan 'while read x || [ -n \""'$x" ]'"'
+# Subprocess Git failures must not be mistaken for absent history or a deleted lock.
+mkdir \""'$TMP/bin"
+REAL_GIT="$(command -v git)"
+cat > "$TMP/bin/git" <<'"'STUB'
+#"'!/usr/bin/env bash
+if [ "$1" = "$FAIL_GIT_COMMAND" ]; then exit 2; fi
+exec "$REAL_GIT" "$@"
+STUB
+chmod +x "$TMP/bin/git"
+export REAL_GIT
+path_failure() { local PATH="$TMP/bin:$PATH"; export FAIL_GIT_COMMAND="$1"; shift; "$@"; }
+expect_refusal "lock history log failure" "lock: cannot list the trusted history of L through ${M1:0:10}" path_failure log lock_history "$TMP/lock_dropped" L "$M1"
+expect_refusal "lock history blob failure" "lock: cannot read trusted version ${M1:0:10}:L" path_failure cat-file lock_history "$TMP/lock_dropped" L "$M1"
+expect_refusal "lock history tree failure" "lock: cannot read trusted version ${M1:0:10}:L" path_failure ls-tree lock_history "$TMP/lock_dropped" no-such-path "$M1"
+'"'''.replace('\"lock: cannot read trusted version "'${M1:0:10}:L" path_failure ls-tree lock_history "$TMP/lock_dropped" no-such-path'"', '\"lock: cannot read trusted version "'${M1:0:10}:no-such-path" path_failure ls-tree lock_history "$TMP/lock_dropped" no-such-path'"')+s[pos:]
+# no-such-path has no history so never catfile -> remove tree control instead force both via stub option
+s=s.replace('if [ \""'$1" = "$FAIL_GIT_COMMAND" ]; then exit 2; fi'"','if [ \""'$1" = "$FAIL_GIT_COMMAND" ] || { [ "$FAIL_GIT_COMMAND" = blob-and-tree ] && { [ "$1" = cat-file ] || [ "$1" = ls-tree ]; }; }; then exit 2; fi'"')
+s=s.replace('\"lock: cannot read trusted version "'${M1:0:10}:no-such-path" path_failure ls-tree lock_history "$TMP/lock_dropped" no-such-path'"', '\"lock: cannot read trusted version "'${M1:0:10}:L" path_failure blob-and-tree lock_history "$TMP/lock_dropped" L'"')
+p.write_text(s)
+PY
+python3 /tmp/finalize-legacy.py
+timeout 600 systemd-run --user --scope -q -p MemoryMax=4G -p TasksMax=512 bash scripts/checks/legacy_frozen.sh > /tmp/legacy-result 2>&1
+rg 'FAIL|PASS=' /tmp/legacy-result" in /home/unbalancedparen/projects/clones/wip/legacy-sweep-2
+ succeeded in 1209ms:
+legacy_frozen: PASS=78 FAIL=0
+
+exec
+/bin/bash -lc 'cat scripts/checks/oracle_fetch.sh | head -90; cat docs/REVIEW.md | head -95; git diff --check; git diff -- scripts/checks/legacy_frozen.sh' in /home/unbalancedparen/projects/clones/wip/legacy-sweep-2
+ succeeded in 0ms:
+#!/usr/bin/env bash
+# A RUNNER WITHOUT A VERIFIED ORACLE NEVER PASSES THE ORACLE CHECK (ISS-0005, P13; ROADMAP R-0564).
+#
+# scripts/oracle/ci_check.sh is the required oracle job on GitHub-hosted runners: fetch.sh downloads
+# the published artifact and verifies it, then run.sh runs smoke.con through it. This gate runs the
+# real fetch.sh, run.sh and ci_check.sh on a scratch copy of scripts/oracle with a test lock, a test
+# artifact built with the real packer (lib.sh oracle_pack) and a fake `curl` (no network), and holds
+# them to: a good artifact installs and verifies (positive control); a lock with no published
+# artifact, a failed download, an artifact with other bytes, and an artifact whose install fails
+# verification (manifest not the locked one) each leave fetch.sh and ci_check.sh INCOMPLETE (exit 3),
+# never passed; an installed oracle whose files were altered is refused by run.sh (125) before
+# anything runs, and ci_check.sh reports that as INCOMPLETE (an install altered after fetch.sh); a verified oracle whose smoke run exits
+# other than 42, a compile failure (whatever its status, 42 included) and a compile that writes no
+# program are FAILED (1), through the real run.sh with a fake `nix`. Each refusal is a negative
+# control with its expected reason.
+set -uo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh" || exit 2
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+cd "$ROOT_DIR" || exit 2
+for f in fetch.sh run.sh ci_check.sh lib.sh smoke.con; do
+  [ -f "scripts/oracle/$f" ] || { echo "FATAL: scripts/oracle/$f missing" >&2; exit 2; }
+done
+TMP="$(mktemp -d)" || exit 2
+trap 'rm -rf "$TMP"' EXIT
+PASS=0; FAIL=0
+ok(){ echo "  ok   $1"; PASS=$((PASS+1)); }
+no(){ echo "  FAIL $1"; FAIL=$((FAIL+1)); }
+has(){ case "$1" in *"$2"*) return 0;; esac; return 1; }
+
+COMMIT=1111111111111111111111111111111111111111
+mkdir -p "$TMP/oracle" "$TMP/bin" "$TMP/art"
+cp scripts/oracle/fetch.sh scripts/oracle/run.sh scripts/oracle/ci_check.sh scripts/oracle/lib.sh \
+   scripts/oracle/smoke.con "$TMP/oracle/"
+# shellcheck source=scripts/oracle/lib.sh
+. "$TMP/oracle/lib.sh"
+
+# A test artifact in the real format: bin/concrete, std/, shell/, MANIFEST.sha256 (oracle_pack).
+stage() {  # stage DIR BINARY_TEXT
+  mkdir -p "$1/bin" "$1/std" "$1/shell"
+  printf '#!/bin/sh\n# %s\nexit 0\n' "$2" > "$1/bin/concrete"; chmod +x "$1/bin/concrete"
+  printf 'mod std;\n' > "$1/std/lib.con"
+  printf '{ }\n' > "$1/shell/flake.nix"; printf '{}\n' > "$1/shell/flake.lock"
+  printf 'leanprover/lean4:v4.34.1\n' > "$1/shell/lean-toolchain"
+}
+stage "$TMP/good" "the test oracle"
+oracle_pack "$TMP/good" "$TMP/art/good.tar.gz" || { echo "FATAL: oracle_pack failed" >&2; exit 2; }
+GOOD_SHA="$(sha256sum "$TMP/art/good.tar.gz" | cut -d' ' -f1)"
+MAN_SHA="$(sha256sum "$TMP/good/MANIFEST.sha256" | cut -d' ' -f1)"
+BIN_SHA="$(sha256sum "$TMP/good/bin/concrete" | cut -d' ' -f1)"
+# An artifact that unpacks but whose manifest is not the locked one (another std file).
+stage "$TMP/bad" "the test oracle"; printf 'mod other;\n' > "$TMP/bad/std/lib.con"
+oracle_pack "$TMP/bad" "$TMP/art/badman.tar.gz" || { echo "FATAL: oracle_pack failed" >&2; exit 2; }
+BADMAN_SHA="$(sha256sum "$TMP/art/badman.tar.gz" | cut -d' ' -f1)"
+printf 'not the artifact\n' > "$TMP/art/other.bin"
+
+write_lock() {  # write_lock URL ARTIFACT_SHA
+  cat > "$TMP/oracle/ORACLE.lock" <<EOF
+tag=test-tag
+commit=$COMMIT
+platform=x86_64-linux
+binary_sha256=$BIN_SHA
+manifest_sha256=$MAN_SHA
+artifact_sha256=$2
+artifact_url=$1
+EOF
+}
+URL=https://example.invalid/oracle-test-tag-x86_64-linux.tar.gz
+
+# The fake curl serves $FAKE_SERVE to -o, or fails when FAKE_SERVE is empty.
+cat > "$TMP/bin/curl" <<'EOF'
+#!/usr/bin/env bash
+out=""; while [ $# -gt 0 ]; do [ "$1" = -o ] && { out="$2"; shift; }; shift; done
+[ -n "${FAKE_SERVE:-}" ] || { echo "curl: (6) Could not resolve host" >&2; exit 6; }
+cp "$FAKE_SERVE" "$out"
+EOF
+chmod +x "$TMP/bin/curl"
+
+H="$TMP/home"
+fetch() { rm -rf "$H"; PATH="$TMP/bin:$PATH" ORACLE_HOME="$H" FAKE_SERVE="${1:-}" bash "$TMP/oracle/fetch.sh" 2>&1; }
+
+echo "=== a good published artifact installs and verifies (positive control) ==="
+write_lock "$URL" "$GOOD_SHA"
+out="$(fetch "$TMP/art/good.tar.gz")"; rc=$?
+[ "$rc" = 0 ] && has "$out" "verified" && ok "fetch.sh installs the good artifact (exit 0)" || no "good artifact: rc=$rc '$out'"
+v="$(ORACLE_HOME="$H" bash -c '. "$1"; oracle_verify_install "$2"' _ "$TMP/oracle/lib.sh" "$H/$COMMIT")" \
+  && ok "the installed oracle verifies against the lock" || no "install does not verify: $v"
+
+echo "=== no published artifact, a failed download, other bytes, a failed verification: INCOMPLETE ==="
+write_lock "" "$GOOD_SHA"
+out="$(fetch "$TMP/art/good.tar.gz")"; rc=$?
+# Review: one procedure for every agent
+
+Status: stable reference (R-0544)
+
+Every branch is reviewed by `scripts/review/review.sh` before it lands. The
+script picks the diff, splits it, runs the reviewer, records the verdict as a
+git note on the reviewed commit, and enforces the round cap.
+`scripts/review/verify.sh` validates that note. The landing tools in `scripts/land/`
+([LANDING.md](LANDING.md)) read its verdict through `scripts/land/notes.sh`: a branch is
+ready to land only when its head carries a clean review note, and the landing bot carries
+a clean verdict across a conflict-free rebase.
+
+## Why one script
+
+Measured on 2026-10-22:
+
+- Reviews took 8 to 34 rounds per branch, and every round re-reviewed the whole
+  growing diff. Most of each round's cost was re-reading code that an earlier
+  round had already accepted.
+- The reviewer's content filter refused whole rounds on ownership and memory
+  diffs. The same diffs went through once the prompt described the work neutrally
+  ("a compiler ownership-checker review") and the diff was sent in smaller pieces.
+
+Each agent had been solving both problems by hand, differently. The script does
+it the same way every time, and its note is the record the landing bot checks.
+
+## Usage
+
+```sh
+scripts/review/review.sh [--base <ref>] [--head <ref>] [--max-rounds 5] [--pieces auto|N] [--prompt-extra "..."]
+scripts/review/verify.sh [--fetch] <commit>
+```
+
+One invocation runs **one round** on `HEAD`. Commit fixes between rounds; the
+uncommitted tree is never reviewed, and the script warns when it is dirty.
+
+| option | meaning |
+| --- | --- |
+| `--base <ref>` | base of round 1. Default: the merge-base of `HEAD` with `origin/main`. |
+| `--head <ref>` | the commit the caller means to review; it must be the checkout's HEAD, or nothing runs (exit 2). `train.sh` and `ready.sh` pass it. |
+| `--max-rounds N` | the round cap (default 5). |
+| `--pieces auto\|N` | `auto` splits at 60000 bytes per piece (`REVIEW_PIECE_BYTES`); `N` aims for N pieces. File groups are never merged, so a diff touching more groups than N still gets one piece per group. |
+| `--prompt-extra "..."` | text appended to every prompt, such as what the branch is for. |
+
+| exit | meaning |
+| --- | --- |
+| 0 | clean |
+| 1 | findings: fix, commit, run again |
+| 2 | usage or environment error; nothing recorded |
+| 3 | round cap reached; split the branch or escalate (open findings are printed) |
+| 4 | nothing to review: `HEAD` was already reviewed with findings, or the diff is empty |
+| 5 | blocked: a piece could not be reviewed, even after the retry |
+| 6 | recorded locally, but the notes ref could not be pushed |
+
+## What each round reviews
+
+- **Round 1** reviews the full diff from the base to `HEAD`.
+- **Round N > 1** reviews only the delta since the last reviewed commit. The
+  script finds that commit by walking the branch (`base..HEAD`) for the newest
+  note under `refs/notes/concrete-review`. The prompt includes the previous
+  round's findings and asks the reviewer to list each one that is still open.
+- A `blocked` round does not count as having reviewed its diff, so the next
+  round starts from the last `clean` or `findings` round, or from the base.
+  Running again on a blocked `HEAD` is allowed and counts as a round. A round
+  with both findings and a blocked piece is `blocked` for this reason; its
+  findings are still recorded and carried into the next prompt, together with
+  those of the last fully reviewed round.
+- A `HEAD` that is already `clean` exits 0 without calling the reviewer.
+
+Rounds are counted from the notes, so the cap holds across invocations,
+worktrees and agents. Rebasing creates new commits without notes, which
+restarts the count; say so when you hand the branch over.
+
+## Splitting and the neutral prompt
+
+The diff is split by file group first, in this order: compiler sources
+(`Concrete/`, `std/`, `proofs/`, `grammar/`, top-level Lean and Lake files),
+tests (`tests/`, `lean_tests/`, `examples/`, `bench/`, `scripts/tests/`),
+scripts (everything else), docs (`docs/`, `paper/`, `site/`, `research/`,
+`*.md`). Within a group, files are packed into pieces at or under the size
+limit. A file larger than the limit is cut at hunk boundaries, and a hunk larger
+than the limit is cut into parts with renumbered `@@` headers, so each piece is a
+well-formed diff. `scripts/review/split_diff.py` does the splitting.
+
+The prompt describes the repository as a compiler and asks for correctness
+findings: wrong behaviour, logic errors, regressions, unhandled cases, tests that
+do not check what they claim, and docs that contradict the code. It runs
+`codex exec --sandbox read-only` from the repository root, with the piece on
+stdin, so the reviewer can open other files for context but cannot change them.
+It runs with `GIT_OPTIONAL_LOCKS=0`: the sandbox does not stop git from taking the
+worktree's `index.lock` for an index refresh, and a reviewer command stopped
+mid-refresh left that lock behind (bug 209).
+
+The reply must end with a line that is exactly `VERDICT: clean` or
+`VERDICT: findings`. Markdown emphasis around it is tolerated; anything after it
+diff --git a/scripts/checks/legacy_frozen.sh b/scripts/checks/legacy_frozen.sh
+index 681c27a7..d9744035 100755
+--- a/scripts/checks/legacy_frozen.sh
++++ b/scripts/checks/legacy_frozen.sh
+@@ -44,6 +44,17 @@ PASS=0; FAIL=0
+ ok(){ echo "  ok   $1"; PASS=$((PASS+1)); }
+ no(){ echo "  FAIL $1"; FAIL=$((FAIL+1)); }
+ 
++# checked STEP COMMAND...: preserve semantic diagnostics; execution failures always print a refusal.
++# Helpers use stdout as the refusal channel, including when the failed command printed nothing.
++checked() {
++  local label="$1" output rc; shift
++  output="$("$@")"; rc=$?
++  [ -z "$output" ] || printf '%s\n' "$output"
++  if [ "$rc" -ne 0 ] && { [ "$rc" -ne 1 ] || [ -z "$output" ]; }; then
++    printf 'refused: %s failed (exit %s)\n' "$label" "$rc"
++  fi
++}
++
+ # judge FROZEN_TREE CURRENT_TREE RETENTION_FILE (in the current repository): prints one problem per line.
+ judge() { # FROZEN CUR RETENTION ROOT-TREE [SWEEP-COMMIT...]
+   local frozen="$1" cur="$2" ret="$3" root="$4"; shift 4
+@@ -80,24 +91,31 @@ for st, raw in zip(f[0::2], f[1::2]):
+         print(f"D legacy/{path}: no resolved RETENTION.tsv row allows this deletion")
+ ' "$ret" | while IFS= read -r line || [ -n "$line" ]; do
+     case "$line" in ADD$'\t'*) ;; *) printf '%s\n' "$line"; continue ;; esac
+-    local path="${line#ADD$'\t'}" want s found=""
++    local path="${line#ADD$'\t'}" want s entry found=""
+     local -x GIT_LITERAL_PATHSPECS=1 # a path is a path: ":(literal)p/x" must not resolve to p/x
+-    want="$(git ls-tree "$cur" -- "$path" | cut -f1)"
++    want="$(git ls-tree "$cur" -- "$path" | cut -f1)" || { echo "refused: judge added-path lookup failed"; continue; }
+     [ -n "$want" ] || { echo "A legacy/$path: cannot resolve the added path; refused"; continue; }
+-    if [ -n "$(git ls-tree "$root" -- "$path")" ]; then
++    entry="$(git ls-tree "$root" -- "$path")" || { echo "refused: judge root lookup failed"; continue; }
++    if [ -n "$entry" ]; then
+       echo "A legacy/$path: a swept file must no longer exist at the root, and $path does"; continue
+     fi
+     for s in "$@"; do
+-      [ "$(git ls-tree "$s" -- "$path" | cut -f1)" = "$want" ] && { found=1; break; }
++      entry="$(git ls-tree "$s" -- "$path" | cut -f1)" || { echo "refused: judge sweep lookup failed"; continue; }
++      [ "$entry" = "$want" ] && { found=1; break; }
+     done
+     [ -n "$found" ] || echo "A legacy/$path: no sweep commit in the lock has $path with this content; legacy/ admits only byte-for-byte moves"
+-  done
++  done || echo "refused: judge diff/retention pipeline failed"
+ }
+ 
+ chain() { # LOCK FROZEN CUR RETENTION HEAD-COMMIT: judges frozen -> each sweep tree -> CUR; prints refusals
+   local lock="$1" prev="$2" cur="$3" ret="$4" head="$5" root rows kind sw st n=0 step
+-  rows="$(lock_rows "$lock")" || { printf '%s\n' "$rows"; return 0; }
+-  root="$(git rev-parse "$head^{tree}")"
++  rows="$(python3 -I "$LOCKPY" rows "$lock")"; local rc=$?
++  if [ "$rc" -ne 0 ]; then
++    [ -z "$rows" ] || printf '%s\n' "$rows"
++    if [ -z "$rows" ] || [ "$rc" -ne 1 ]; then echo "refused: lock_rows failed (exit $rc)"; fi
++    return 0
++  fi
++  root="$(git rev-parse "$head^{tree}")" || { echo "refused: chain HEAD tree lookup failed"; return; }
+   while read -r kind sw st || [ -n "$kind" ]; do # rows are the parser's, one per line
+     [ "$kind" = sweep ] || continue
+     n=$((n+1))
+@@ -115,36 +133,36 @@ chain() { # LOCK FROZEN CUR RETENTION HEAD-COMMIT: judges frozen -> each sweep t
+ 
+ # trusted_base HEAD-COMMIT: the newest commit whose history is trusted (see 5 above).
+ trusted_base() {
+-  local ref="${LEGACY_TRUSTED_REF:-origin/main}" mb
+-  if git rev-parse -q --verify "$ref^{commit}" >/dev/null && mb="$(git merge-base "$1" "$ref" 2>/dev/null)"; then
+-    echo "$mb"
++  local ref="${LEGACY_TRUSTED_REF:-origin/main}" mb rc
++  git rev-parse -q --verify "$ref^{commit}" >/dev/null; rc=$?
++  if [ "$rc" = 0 ]; then
++    git merge-base "$1" "$ref" || echo "refused: trusted_base merge-base failed"
++  elif [ "$rc" = 1 ]; then
++    git rev-parse -q --verify "$1^{commit}" || echo "refused: trusted_base HEAD lookup failed"
+   else
+-    git rev-parse "$1^{commit}"
++    echo "refused: trusted_base ref lookup failed"
+   fi
+ }
+ 
+ # lock_rows LOCK-FILE: the lock's rows, from its one parser (lib/legacy_lock.py); exit 1 with one
+ # diagnostic per problem. No code here reads the lock's bytes itself.
+-lock_rows() { python3 -I "$LOCKPY" rows "$1"; }
++lock_rows() { checked lock_rows python3 -I "$LOCKPY" rows "$1"; }
+ # lock_history LOCK-FILE LOCK-PATH TRUSTED: every row of every version of LOCK-PATH in TRUSTED's
+ # first-parent history is still a row of LOCK-FILE; a malformed trusted version is refused. Prints
+ # one refusal per problem, naming the newest trusted commit that has a missing row.
+-lock_history() { python3 -I "$LOCKPY" history "$1" "$2" "$3"; }
++lock_history() { checked lock_history python3 -I "$LOCKPY" history "$1" "$2" "$3"; }
+ 
+ # history_identity PREFIX HEAD-COMMIT TRUSTED: every version PREFIX/<path> had in TRUSTED's history is
+ # the version it has at HEAD-COMMIT, for each path HEAD-COMMIT still has. Prints one refusal per path.
+ history_identity() {
+   local prefix="$1" head="$2" trusted="$3"
+-  python3 -I - "$prefix" \
+-    3< <(git log --first-parent --diff-merges=first-parent -z --raw --no-renames --no-abbrev --format= "$trusted" -- "$prefix/") \
+-    4< <(git ls-tree -r -z --full-tree "$head" -- "$prefix/") <<'PY'
+-import os, sys
++  checked history_identity python3 -I - "$prefix" "$head" "$trusted" <<'PY'
++import subprocess, sys
+ prefix = sys.argv[1] + "/"
+-def tokens(fd):
+-    with os.fdopen(fd, "rb") as f:
+-        return [t for t in f.read().split(b"\0")]
++def tokens(args):
++    return subprocess.check_output(["git", *args]).split(b"\0")
+ seen = {}
+-t = tokens(3); i = 0
++t = tokens(["log", "--first-parent", "--diff-merges=first-parent", "-z", "--raw", "--no-renames", "--no-abbrev", "--format=", sys.argv[3], "--", prefix]); i = 0
+ while i < len(t):
+     tok = t[i].lstrip(b"\n")
+     if tok.startswith(b":") and i + 1 < len(t):
+@@ -155,7 +173,7 @@ while i < len(t):
+         i += 2
+     else:
+         i += 1
+-for ent in tokens(4):
++for ent in tokens(["ls-tree", "-r", "-z", "--full-tree", sys.argv[2], "--", prefix]):
+     if not ent:
+         continue
+     meta, path = ent.split(b"\t", 1)
+@@ -167,6 +185,26 @@ for ent in tokens(4):
+ PY
+ }
+ 
++read_loop_scan() {
++  printf '%s\n' "$1" | grep -vF '|| [ -n "$' | grep -vF 'grep -nE'
++  local statuses=("${PIPESTATUS[@]}") rc
++  for rc in "${statuses[@]}"; do [ "$rc" -le 1 ] || { echo "refused: read-loop scan failed"; break; }; done
++}
++named_readers() {
++  git ls-files -z -- scripts .githooks .github | xargs -0 -r grep -nIE 'legacy[.]lock' -- 2>/dev/null \
++  | grep -vE '^[^:]+:[0-9]+:[[:space:]]*#' | grep -vE '^scripts/checks/lib/legacy_lock[.]py:' \
++  | grep -vE '^scripts/checks/legacy_frozen[.]sh:[0-9]+:LOCK=scripts/checks/legacy[.]lock$'
++  local statuses=("${PIPESTATUS[@]}") rc
++  [ "${statuses[0]}" = 0 ] || echo "refused: reader file listing failed"
++  for rc in "${statuses[@]:1}"; do [ "$rc" -le 1 ] || { echo "refused: reader scan failed"; break; }; done
++}
++lock_uses() {
++  grep -nE '"\$(LOCK|lock)"' "$SELF" | grep -vE '^[0-9]+:[[:space:]]*#' \
++  | grep -vE '(lock_rows|lock_history|chain) "\$(LOCK|lock)"|python3 -I "\$LOCKPY" rows "\$(LOCK|lock)"|\[ -f "\$LOCK" \]|echo "=== |no "\$LOCK |local lock="\$1"'
++  local statuses=("${PIPESTATUS[@]}") rc
++  for rc in "${statuses[@]}"; do [ "$rc" -le 1 ] || { echo "refused: lock-use scan failed"; break; }; done
++}
++
+ echo "=== negative controls ==="
+ # The controls build a throwaway repository: none of git's repository variables may reach it (ISS-0015).
+ source "$ROOT_DIR/scripts/checks/lib/git_sandbox.sh" || exit 2
+@@ -340,27 +378,80 @@ MM="$(git commit-tree "$(git rev-parse "$B2^{tree}")" -p "$M2" -p "$B2" -m lande
+ # trusted_base: the merge base with the trusted ref; HEAD itself when the ref is absent.
+ [ "$(LEGACY_TRUSTED_REF="$M2" trusted_base "$C1")" = "$M2" ] && [ "$(LEGACY_TRUSTED_REF=refs/heads/no-such trusted_base "$C1")" = "$C1" ] \
+   && ok "control: the trusted base is the merge base with the trusted ref, else HEAD (everything trusted)" || no "control: trusted_base"
++# Exact failure controls: command stubs affect only the subshell invoking the helper.
++expect_refusal() {
++  local name="$1" want="$2" got; shift 2
++  got="$("$@" 2>/dev/null)"
++  [ "$got" = "$want" ] && ok "control: $name" || no "control: $name: '$got' (wanted '$want')"
++}
++env_chain_stub() { local LOCKPY="$1"; chain "$TMP/l_ok" "$F" "$F" "$TMP/r_ok.tsv" "$H"; }
++env_history_stub() { local LOCKPY="$1"; lock_history "$TMP/lock_dropped" L "$M1"; }
++printf 'base %s\n' "$S" > "$TMP/base_only"
++expect_refusal "base-only chain" "$TMP/base_only:2: missing: line 2 must be 'tree <tree>'" chain "$TMP/base_only" "$F" "$F" "$TMP/r_ok.tsv" "$H"
++MB0="$(commit_of "" "$F" r "base $S")"
++expect_refusal "base-only trusted lock" "lock: a trusted version is malformed: ${MB0:0:10}:L:2: missing: line 2 must be 'tree <tree>'" lock_history "$TMP/lock_dropped" L "$MB0"
++for rc in 1 2; do
++  printf 'import sys\nprint("stub error", file=sys.stderr)\nsys.exit(%s)\n' "$rc" > "$TMP/parser_stub.py"
++  expect_refusal "silent parser exit $rc chain" "refused: lock_rows failed (exit $rc)" env_chain_stub "$TMP/parser_stub.py"
++  expect_refusal "silent parser exit $rc history" "refused: lock_history failed (exit $rc)" env_history_stub "$TMP/parser_stub.py"
++done
++expect_refusal "chain HEAD lookup failure" "refused: chain HEAD tree lookup failed" chain "$TMP/l_ok" "$F" "$F" "$TMP/r_ok.tsv" no-such-head
++expect_refusal "judge diff failure" "refused: judge diff/retention pipeline failed" judge no-such-tree "$F" "$TMP/r_ok.tsv" "$F"
++expect_refusal "judge retention failure" "refused: judge diff/retention pipeline failed" judge "$SW1" "$F" "$TMP/no-retention" "$F"
++expect_refusal "judge root lookup failure" "refused: judge root lookup failed" judge "$F" "$SW1" "$TMP/r_ok.tsv" no-such-tree "$S"
++expect_refusal "judge sweep lookup failure" "refused: judge sweep lookup failed"$'\n'"A legacy/p/moved: no sweep commit in the lock has p/moved with this content; legacy/ admits only byte-for-byte moves" judge "$F" "$SW1" "$TMP/r_ok.tsv" "$R0" no-such-commit
++expect_refusal "identity log failure" "refused: history_identity failed (exit 1)" history_identity legacy "$M1" no-such-commit
++expect_refusal "identity tree failure" "refused: history_identity failed (exit 1)" history_identity legacy no-such-commit "$M1"
++expect_refusal "trusted merge-base failure" "refused: trusted_base merge-base failed" env LEGACY_TRUSTED_REF="$M1" bash -c "$(declare -f trusted_base); trusted_base no-such-head"
++expect_refusal "trusted HEAD failure" "refused: trusted_base HEAD lookup failed" env LEGACY_TRUSTED_REF=refs/heads/no-such bash -c "$(declare -f trusted_base); trusted_base no-such-head"
++# Selectively fail one command while letting all other Git/Python calls run normally.
++fail_command() (
++  local target="$1"; shift
++  git() { if [ "$1" = "$target" ]; then return 2; else command git "$@"; fi; }
++  grep() { if [ "$target" = grep ]; then return 2; else command grep "$@"; fi; }
++  python3() { if [ "$target" = python3 ]; then return 2; else command python3 "$@"; fi; }
++  "$@"
++)
++expect_refusal "judge Python failure" "refused: judge diff/retention pipeline failed" fail_command python3 judge "$SW1" "$F" "$TMP/r_ok.tsv" "$F"
++expect_refusal "judge added-path lookup failure" "refused: judge added-path lookup failed" fail_command ls-tree judge "$F" "$SW1" "$TMP/r_ok.tsv" "$R0" "$S"
++expect_refusal "identity Python failure" "refused: history_identity failed (exit 2)" fail_command python3 history_identity legacy "$M1" "$M1"
++expect_refusal "trusted ref lookup failure" "refused: trusted_base ref lookup failed" fail_command rev-parse trusted_base "$M1"
++expect_refusal "reader listing failure" "refused: reader file listing failed" fail_command ls-files named_readers
++expect_refusal "reader scan failure" "refused: reader scan failed" fail_command grep named_readers
++expect_refusal "lock-use scan failure" "refused: lock-use scan failed" fail_command grep lock_uses
++expect_refusal "read-loop scan failure" "refused: read-loop scan failed" fail_command grep read_loop_scan 'while read x || [ -n "$x" ]'
++# Subprocess Git failures must not be mistaken for absent history or a deleted lock.
++mkdir "$TMP/bin"
++REAL_GIT="$(command -v git)"
++cat > "$TMP/bin/git" <<'STUB'
++#!/usr/bin/env bash
++if [ "$1" = "$FAIL_GIT_COMMAND" ] || { [ "$FAIL_GIT_COMMAND" = blob-and-tree ] && { [ "$1" = cat-file ] || [ "$1" = ls-tree ]; }; }; then exit 2; fi
++exec "$REAL_GIT" "$@"
++STUB
++chmod +x "$TMP/bin/git"
++export REAL_GIT
++path_failure() { local PATH="$TMP/bin:$PATH"; export FAIL_GIT_COMMAND="$1"; shift; "$@"; }
++expect_refusal "lock history log failure" "lock: cannot list the trusted history of L through ${M1:0:10}" path_failure log lock_history "$TMP/lock_dropped" L "$M1"
++expect_refusal "lock history blob failure" "lock: cannot read trusted version ${M1:0:10}:L" path_failure cat-file lock_history "$TMP/lock_dropped" L "$M1"
++expect_refusal "lock history tree failure" "lock: cannot read trusted version ${M1:0:10}:L" path_failure blob-and-tree lock_history "$TMP/lock_dropped" L "$M1"
+ # Every shell read loop here reads a last line that has no newline: `read` fails on it, so a bare
+ # `while read` silently drops it. (The loops' behaviour is checked above; this keeps a new one honest.)
+ loops="$(grep -nE '^[^#]*while[^#]*[[:space:]]read[[:space:]]' "$SELF")" || { echo "FATAL: cannot read $SELF"; exit 2; }
+-bad="$(printf '%s\n' "$loops" | grep -vF '|| [ -n "$' | grep -vF 'grep -nE')"
++bad="$(read_loop_scan "$loops")"
+ [ "$(printf '%s\n' "$loops" | grep -cF '|| [ -n "$')" -ge 3 ] && [ -z "$bad" ] && ok "control: every read loop in this check reads a last line without a newline" || no "control: a read loop drops an unterminated last line: $bad"
+ cd "$ROOT_DIR"
+ # The parser is the lock's one reader. Outside legacy/ (frozen, never run) and comments, the lock's
+ # path is named only by the parser and by this check's LOCK=, and every use of LOCK here hands it to
+ # the parser (lock_rows, lock_history) or only tests or names it.
+-named="$(git ls-files -z -- scripts .githooks .github | xargs -0 grep -nIE 'legacy[.]lock' -- 2>/dev/null \
+-  | grep -vE '^[^:]+:[0-9]+:[[:space:]]*#' | grep -vE '^scripts/checks/lib/legacy_lock[.]py:' \
+-  | grep -vE '^scripts/checks/legacy_frozen[.]sh:[0-9]+:LOCK=scripts/checks/legacy[.]lock$')"
+-uses="$(grep -nE '"\$(LOCK|lock)"' "$SELF" | grep -vE '^[0-9]+:[[:space:]]*#' \
+-  | grep -vE '(lock_rows|lock_history|chain) "\$(LOCK|lock)"|\[ -f "\$LOCK" \]|echo "=== |no "\$LOCK |local lock="\$1"')"
++named="$(named_readers)"
++uses="$(lock_uses)"
+ [ -z "$named" ] && [ -z "$uses" ] && [ "$(grep -c '' "$SELF")" -gt 0 ] \
+   && ok "control: lib/legacy_lock.py is the lock's one reader: no other code names or reads the lock" \
+   || no "control: another reader of the lock: ${named}${uses:+ / in this check: $uses}"
+ 
+ echo "=== legacy/ against $LOCK ==="
+ [ -f "$LOCK" ] || { no "$LOCK is missing"; echo "legacy_frozen: PASS=$PASS FAIL=$FAIL"; exit 1; }
+-rows="$(lock_rows "$LOCK")" && lock_ok=1 || lock_ok=""
++rows="$(python3 -I "$LOCKPY" rows "$LOCK")" && lock_ok=1 || { lock_ok=""; rows="${rows}${rows:+$'\n'}refused: main lock_rows failed"; }
+ base="" frozen="" nsw=0
+ while read -r kind a _ || [ -n "$kind" ]; do
+   case "$kind" in base) base="$a" ;; tree) frozen="$a" ;; sweep) nsw=$((nsw+1)) ;; esac
+@@ -376,9 +467,9 @@ else
+     no "HEAD has no legacy/ directory"
+   else
+     [ -f RETENTION.tsv ] || { no "RETENTION.tsv is missing"; }
+-    out="$(chain "$LOCK" "$frozen" "$cur" "${RETENTION:-RETENTION.tsv}" HEAD)"
+-    tb="$(trusted_base HEAD)"
+-    hist="$(lock_history "$LOCK" "$LOCK" "$tb"; history_identity legacy HEAD "$tb")"
++    out="$(checked chain chain "$LOCK" "$frozen" "$cur" "${RETENTION:-RETENTION.tsv}" HEAD)"
++    tb="$(checked trusted_base trusted_base HEAD)"
++    hist="$(checked lock_history lock_history "$LOCK" "$LOCK" "$tb"; checked history_identity history_identity legacy HEAD "$tb")"
+     [ -z "$hist" ] && ok "trusted history (through ${tb:0:10}): every lock line kept, no legacy/ file rewritten" \
+       || { no "legacy/ or its lock rewrote trusted history (through ${tb:0:10}):"; echo "$hist" | sed 's/^/      /'; }
+     [ "$nsw" = 0 ] || [ -n "$out" ] || ok "the lock's $nsw sweep line(s) name commits of HEAD's history and chain to HEAD:legacy"
+
+exec
+/bin/bash -lc "python3 - <<'PY'
+from pathlib import Path
+p=Path('scripts/checks/legacy_frozen.sh');s=p.read_text().replace(\"    printf 'refused: %s failed (exit %s)\\\\n' \\\""'$label'"\\\" \\\""'$rc'"\\\"\\n  fi\\n}\",\"    printf 'refused: %s failed (exit %s)\\\\n' \\\""'$label'"\\\" \\\""'$rc'"\\\"\\n  fi\\n  return \\\""'$rc'"\\\"\\n}\")
+a=s.index('  rows=\""'$(python3'"',s.index('chain()'));b=s.index('  root=',a)
+s=s[:a]+'''  rows=\""'$(lock_rows "$lock")" || { printf '"'%s\\\\n' \""'$rows"; return 0; }
+'"'''+s[b:]
+s=s.replace('local ref=\""'${LEGACY_TRUSTED_REF:-origin/main}" mb rc'"','local ref=\""'${LEGACY_TRUSTED_REF:-origin/main}" rc'"')
+s=s.replace('rows=\""'$(python3 -I "$LOCKPY" rows "$LOCK")" && lock_ok=1 || { lock_ok=""; rows="${rows}${rows:+$'"\\'\\\\n\\'}refused: main lock_rows failed\"; }','rows=\""'$(lock_rows "$LOCK")" && lock_ok=1 || lock_ok=""'"')
+s=s.replace('|python3 -I \"\\\\"'$LOCKPY" rows "'"\\\\"'$(LOCK|lock)"'"','')
+p.write_text(s)
+PY
+timeout 600 systemd-run --user --scope -q -p MemoryMax=4G -p TasksMax=512 bash scripts/checks/legacy_frozen.sh > /tmp/legacy-result 2>&1
+rg 'FAIL|PASS=' /tmp/legacy-result" in /home/unbalancedparen/projects/clones/wip/legacy-sweep-2
+ succeeded in 1221ms:
+legacy_frozen: PASS=78 FAIL=0
+
+codex
+The focused gate passes with all 78 checks. The new controls cover silent parser exits 1 and 2, a missing tree header, Git and Python failures in the judges, trusted-base lookup failures, and failures in the reader-audit scans. Next I’ll temporarily remove each safeguard and confirm its control fails.
+exec
+/bin/bash -lc "cat > /tmp/mutate-legacy.py <<'PY'
+from pathlib import Path
+import subprocess
+sh=Path('scripts/checks/legacy_frozen.sh'); py=Path('scripts/checks/lib/legacy_lock.py')
+original={sh:sh.read_text(),py:py.read_text()}
+mutations=[]
+def mutation(name,p,old,new):
+    assert old in original[p], (name,old)
+    mutations.append((name,p,old,new))
+mutation('missing-tree header',py,'''    if len(lines) < 2 and lines[0].startswith(b\"base \"):
+        problems.append(f\"{name}:2: missing: line 2 must be 'tree <tree>'\")
+''','')
+mutation('silent command failure fallback',sh,'''    printf 'refused: %s failed (exit %s)\\\\n' \""'$label" "$rc"'"''',':')
+for label in ['judge diff/retention pipeline','chain HEAD tree lookup','judge added-path lookup','judge root lookup','judge sweep lookup','trusted_base merge-base','trusted_base HEAD lookup','trusted_base ref lookup','reader file listing','reader scan','lock-use scan','read-loop scan']:
+    mutation(label,sh,f'echo \"refused: {label} failed\"',':')
+mutation('identity subprocess status',sh,'subprocess.check_output([\"git\", *args])','subprocess.run([\"git\", *args], stdout=subprocess.PIPE).stdout')
+mutation('trusted lock blob read',py,'''            if rc "'!= 0 or entries:
+                refusals.append(f"lock: cannot read trusted version {c[:10]}:{lpath}")'"''','''            if False:
+                refusals.append(f\"lock: cannot read trusted version {c[:10]}:{lpath}\")''')
+mutation('trusted lock log status',py,'    if rc "'!= 0:'"\\n        return [f\"lock: cannot list', '    if False:\\n        return [f\"lock: cannot list')
+try:
+    with open('/tmp/legacy-mutations.txt','w') as report:
+        for name,p,old,new in mutations:
+            p.write_text(original[p].replace(old,new,1))
+            r=subprocess.run(['timeout','600','systemd-run','--user','--scope','-q','-p','MemoryMax=4G','-p','TasksMax=512','bash',str(sh)],stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True)
+            failed=[l.strip() for l in r.stdout.splitlines() if 'FAIL control:' in l]
+            result=f'{name}: exit {r.returncode}; '+ ' | '.join(failed)
+            print(result,flush=True);report.write(result+'\\n');report.flush()
+            p.write_text(original[p])
+            if r.returncode==0 or not failed: raise RuntimeError('mutation not detected: '+result)
+finally:
+    for p,content in original.items(): p.write_text(content)
+PY
+timeout 600 systemd-run --user --scope -q -p MemoryMax=4G -p TasksMax=512 python3 /tmp/mutate-legacy.py" in /home/unbalancedparen/projects/clones/wip/legacy-sweep-2
+ succeeded in 24882ms:
+missing-tree header: exit 1; FAIL control: base-only chain: '' (wanted '/tmp/tmp.iW39wDnYQk/base_only:2: missing: line 2 must be 'tree <tree>'') | FAIL control: base-only trusted lock: '' (wanted 'lock: a trusted version is malformed: e191691a58:L:2: missing: line 2 must be 'tree <tree>'')
+silent command failure fallback: exit 1; FAIL control: silent parser exit 1 chain: '' (wanted 'refused: lock_rows failed (exit 1)') | FAIL control: silent parser exit 1 history: '' (wanted 'refused: lock_history failed (exit 1)') | FAIL control: silent parser exit 2 chain: '' (wanted 'refused: lock_rows failed (exit 2)') | FAIL control: silent parser exit 2 history: '' (wanted 'refused: lock_history failed (exit 2)') | FAIL control: identity log failure: '' (wanted 'refused: history_identity failed (exit 1)') | FAIL control: identity tree failure: '' (wanted 'refused: history_identity failed (exit 1)') | FAIL control: identity Python failure: '' (wanted 'refused: history_identity failed (exit 2)')
+judge diff/retention pipeline: exit 1; FAIL control: judge diff failure: '' (wanted 'refused: judge diff/retention pipeline failed') | FAIL control: judge retention failure: '' (wanted 'refused: judge diff/retention pipeline failed') | FAIL control: judge Python failure: '' (wanted 'refused: judge diff/retention pipeline failed')
+chain HEAD tree lookup: exit 1; FAIL control: chain HEAD lookup failure: '' (wanted 'refused: chain HEAD tree lookup failed')
+judge added-path lookup: exit 1; FAIL control: judge added-path lookup failure: '' (wanted 'refused: judge added-path lookup failed')
+judge root lookup: exit 1; FAIL control: judge root lookup failure: '' (wanted 'refused: judge root lookup failed')
+judge sweep lookup: exit 1; FAIL control: judge sweep lookup failure: 'A legacy/p/moved: no sweep commit in the lock has p/moved with this content; legacy/ admits only byte-for-byte moves' (wanted 'refused: judge sweep lookup failed
+trusted_base merge-base: exit 1; FAIL control: trusted merge-base failure: '' (wanted 'refused: trusted_base merge-base failed')
+trusted_base HEAD lookup: exit 1; FAIL control: trusted HEAD failure: '' (wanted 'refused: trusted_base HEAD lookup failed')
+trusted_base ref lookup: exit 1; FAIL control: trusted ref lookup failure: '' (wanted 'refused: trusted_base ref lookup failed')
+reader file listing: exit 1; FAIL control: reader listing failure: '' (wanted 'refused: reader file listing failed')
+reader scan: exit 1; FAIL control: reader scan failure: '' (wanted 'refused: reader scan failed')
+lock-use scan: exit 1; FAIL control: lock-use scan failure: '' (wanted 'refused: lock-use scan failed')
+read-loop scan: exit 1; FAIL control: read-loop scan failure: '' (wanted 'refused: read-loop scan failed')
+identity subprocess status: exit 1; FAIL control: identity log failure: '' (wanted 'refused: history_identity failed (exit 1)') | FAIL control: identity tree failure: '' (wanted 'refused: history_identity failed (exit 1)')
+trusted lock blob read: exit 1; FAIL control: lock history blob failure: '' (wanted 'lock: cannot read trusted version c404226336:L') | FAIL control: lock history tree failure: '' (wanted 'lock: cannot read trusted version c404226336:L')
+trusted lock log status: exit 1; FAIL control: lock history log failure: '' (wanted 'lock: cannot list the trusted history of L through e7fd00c8dd')
+
+codex
+All 17 mutations were detected: removing each safeguard made its exact-diagnostic control fail. I’ve restored the fixes. I’ll now commit the slice locally and run both required gates against that commit. The review script requires network access, so I won’t run it under your no-network constraint.
+exec
+/bin/bash -lc 'git diff --check; git status --short --branch; git diff -- scripts/checks/lib/legacy_lock.py; cat .githooks/pre-commit' in /home/unbalancedparen/projects/clones/wip/legacy-sweep-2
+ exited 1 in 0ms:
+## wip/legacy-sweep-2...origin/wip/legacy-sweep-2
+ M scripts/checks/legacy_frozen.sh
+ M scripts/checks/lib/legacy_lock.py
+diff --git a/scripts/checks/lib/legacy_lock.py b/scripts/checks/lib/legacy_lock.py
+index 6817cd86..aa13c102 100644
+--- a/scripts/checks/lib/legacy_lock.py
++++ b/scripts/checks/lib/legacy_lock.py
+@@ -79,6 +79,8 @@ def parse(data, name):
+             problems.append(f"{where}: repeats line {seen[line]}: a row is recorded once"); continue
+         seen[line] = n
+         rows.append(line)
++    if len(lines) < 2 and lines[0].startswith(b"base "):
++        problems.append(f"{name}:2: missing: line 2 must be 'tree <tree>'")
+     if problems:
+         raise LockError(problems)
+     return rows
+@@ -108,7 +110,10 @@ def history(lock, lpath, trusted):
+     for c in out.decode().split():
+         rc, blob = git("cat-file", "blob", f"{c}:{lpath}")
+         if rc != 0:
+-            continue  # that commit deleted the lock; the lock it had is in an older version
++            rc, entries = git("ls-tree", c, "--", lpath)
++            if rc != 0 or entries:
++                refusals.append(f"lock: cannot read trusted version {c[:10]}:{lpath}")
++            continue  # an absent path is a deletion; older versions are still checked
+         try:
+             rows = parse(blob, f"{c[:10]}:{lpath}")
+         except LockError as e:
+cat: .githooks/pre-commit: No such file or directory
+
+exec
+/bin/bash -lc "python3 - <<'PY'
+from pathlib import Path
+p=Path('scripts/checks/lib/legacy_lock.py');s=p.read_text().replace('if len(lines) < 2 and lines[0].startswith(b\"base \"):','if len(lines) < 2:');p.write_text(s)
+p=Path('scripts/checks/legacy_frozen.sh');s=p.read_text().replace('refused_lock \"a lock without its base row\" \\'tree %s\\\\n\\'', 'refused_lock \"a lock without its base row\" \\'tree %s\\\\ntree %s\\\\n\\'');line=next(l for l in s.splitlines() if l.startswith('refused_lock \"a lock without'))
+s=s.replace(line,line+' \""'$F"'"');p.write_text(s)
+PY
+timeout 600 systemd-run --user --scope -q -p MemoryMax=4G -p TasksMax=512 bash scripts/checks/legacy_frozen.sh > /tmp/legacy-result 2>&1
+rg 'FAIL|PASS=' /tmp/legacy-result" in /home/unbalancedparen/projects/clones/wip/legacy-sweep-2
+ succeeded in 1350ms:
+legacy_frozen: PASS=78 FAIL=0
+
+exec
+/bin/bash -lc "python3 - <<'PY'
+from pathlib import Path
+p=Path('/tmp/mutate-legacy.py');s=p.read_text().replace('if len(lines) < 2 and lines[0].startswith(b\"base \"):','if len(lines) < 2:').replace(\"with open('/tmp/legacy-mutations.txt','w') as report:\",\"with open('/tmp/legacy-header-mutation.txt','w') as report:\").replace('for name,p,old,new in mutations:', 'for name,p,old,new in mutations[:1]:');p=Path('/tmp/mutate-header.py');p.write_text(s)
+PY
+timeout 600 systemd-run --user --scope -q -p MemoryMax=4G -p TasksMax=512 python3 /tmp/mutate-header.py
+git add scripts/checks/legacy_frozen.sh scripts/checks/lib/legacy_lock.py
+timeout 600 systemd-run --user --scope -q -p MemoryMax=4G -p TasksMax=512 git commit -m 'Fail closed on malformed legacy locks and failed freeze checks'
+git status --short; git rev-parse HEAD" in /home/unbalancedparen/projects/clones/wip/legacy-sweep-2
+ succeeded in 2674ms:
+missing-tree header: exit 1; FAIL control: base-only chain: '' (wanted '/tmp/tmp.Jm5qeqbjtf/base_only:2: missing: line 2 must be 'tree <tree>'') | FAIL control: base-only trusted lock: '' (wanted 'lock: a trusted version is malformed: 2e7472bf98:L:2: missing: line 2 must be 'tree <tree>'')
+[wip/legacy-sweep-2 123f03aa] Fail closed on malformed legacy locks and failed freeze checks
+ 2 files changed, 124 insertions(+), 32 deletions(-)
+123f03aa87632fe462dcc2abf7666f4158e64b7b
+
+exec
+/bin/bash -lc 'timeout 600 systemd-run --user --scope -q -p MemoryMax=4G -p TasksMax=512 bash scripts/checks/legacy_frozen.sh > /tmp/legacy-final-gate.log 2>&1' in /home/unbalancedparen/projects/clones/wip/legacy-sweep-2
+ succeeded in 1757ms:
+exec
+/bin/bash -lc 'timeout 1500 systemd-run --user --scope -q -p MemoryMax=8G -p TasksMax=1024 bash scripts/checks/run.sh > /tmp/legacy-final-all.log 2>&1' in /home/unbalancedparen/projects/clones/wip/legacy-sweep-2
+exec
+/bin/bash -lc "tail -4 /tmp/legacy-final-gate.log; tail -6 /tmp/legacy-final-all.log; git status --short; git rev-parse --git-path MERGE_HEAD; git rev-parse --git-path rebase-merge; rg '"'^expect_refusal '"' scripts/checks/legacy_frozen.sh" in /home/unbalancedparen/projects/clones/wip/legacy-sweep-2
+ succeeded in 0ms:
+  ok   trusted history (through 3bd7bc4151): every lock line kept, no legacy/ file rewritten
+  ok   the lock's 2 sweep line(s) name commits of HEAD's history and chain to HEAD:legacy
+  ok   legacy/ differs from the frozen tree only by byte-for-byte sweeps and deletions RETENTION.tsv allows
+legacy_frozen: PASS=78 FAIL=0
+  ok   after reset the culprit is ejected and the rest lands
+=== resume: a restart while the train is in CI does not dispatch again ===
+  ok   the kill switch between CI and land holds the train in CI
+  ok   the restarted bot resumed the run and landed with one dispatch
+=== kill switch inside a bisection probe ===
+  ok   a pause during the halving probe stops the bisection; nothing attributed
+.git/MERGE_HEAD
+.git/rebase-merge
+expect_refusal "base-only chain" "$TMP/base_only:2: missing: line 2 must be 'tree <tree>'" chain "$TMP/base_only" "$F" "$F" "$TMP/r_ok.tsv" "$H"
+expect_refusal "base-only trusted lock" "lock: a trusted version is malformed: ${MB0:0:10}:L:2: missing: line 2 must be 'tree <tree>'" lock_history "$TMP/lock_dropped" L "$MB0"
+expect_refusal "chain HEAD lookup failure" "refused: chain HEAD tree lookup failed" chain "$TMP/l_ok" "$F" "$F" "$TMP/r_ok.tsv" no-such-head
+expect_refusal "judge diff failure" "refused: judge diff/retention pipeline failed" judge no-such-tree "$F" "$TMP/r_ok.tsv" "$F"
+expect_refusal "judge retention failure" "refused: judge diff/retention pipeline failed" judge "$SW1" "$F" "$TMP/no-retention" "$F"
+expect_refusal "judge root lookup failure" "refused: judge root lookup failed" judge "$F" "$SW1" "$TMP/r_ok.tsv" no-such-tree "$S"
+expect_refusal "judge sweep lookup failure" "refused: judge sweep lookup failed"$'\n'"A legacy/p/moved: no sweep commit in the lock has p/moved with this content; legacy/ admits only byte-for-byte moves" judge "$F" "$SW1" "$TMP/r_ok.tsv" "$R0" no-such-commit
+expect_refusal "identity log failure" "refused: history_identity failed (exit 1)" history_identity legacy "$M1" no-such-commit
+expect_refusal "identity tree failure" "refused: history_identity failed (exit 1)" history_identity legacy no-such-commit "$M1"
+expect_refusal "trusted merge-base failure" "refused: trusted_base merge-base failed" env LEGACY_TRUSTED_REF="$M1" bash -c "$(declare -f trusted_base); trusted_base no-such-head"
+expect_refusal "trusted HEAD failure" "refused: trusted_base HEAD lookup failed" env LEGACY_TRUSTED_REF=refs/heads/no-such bash -c "$(declare -f trusted_base); trusted_base no-such-head"
+expect_refusal "judge Python failure" "refused: judge diff/retention pipeline failed" fail_command python3 judge "$SW1" "$F" "$TMP/r_ok.tsv" "$F"
+expect_refusal "judge added-path lookup failure" "refused: judge added-path lookup failed" fail_command ls-tree judge "$F" "$SW1" "$TMP/r_ok.tsv" "$R0" "$S"
+expect_refusal "identity Python failure" "refused: history_identity failed (exit 2)" fail_command python3 history_identity legacy "$M1" "$M1"
+expect_refusal "trusted ref lookup failure" "refused: trusted_base ref lookup failed" fail_command rev-parse trusted_base "$M1"
+expect_refusal "reader listing failure" "refused: reader file listing failed" fail_command ls-files named_readers
+expect_refusal "reader scan failure" "refused: reader scan failed" fail_command grep named_readers
+expect_refusal "lock-use scan failure" "refused: lock-use scan failed" fail_command grep lock_uses
+expect_refusal "read-loop scan failure" "refused: read-loop scan failed" fail_command grep read_loop_scan 'while read x || [ -n "$x" ]'
+expect_refusal "lock history log failure" "lock: cannot list the trusted history of L through ${M1:0:10}" path_failure log lock_history "$TMP/lock_dropped" L "$M1"
+expect_refusal "lock history blob failure" "lock: cannot read trusted version ${M1:0:10}:L" path_failure cat-file lock_history "$TMP/lock_dropped" L "$M1"
+expect_refusal "lock history tree failure" "lock: cannot read trusted version ${M1:0:10}:L" path_failure blob-and-tree lock_history "$TMP/lock_dropped" L "$M1"
+
+exec
+/bin/bash -lc 'tail -8 /tmp/legacy-final-all.log; git status --porcelain; for state in MERGE_HEAD rebase-merge rebase-apply CHERRY_PICK_HEAD REVERT_HEAD; do if test -e "$(git rev-parse --git-path "$state")"; then printf '"'in progress: %s\\n' \""'$state"; fi; done' in /home/unbalancedparen/projects/clones/wip/legacy-sweep-2
+ succeeded in 0ms:
+Overwriting existing notes for object 8704be6bfecdd3f80175464be110a6b9801783c4
+Overwriting existing notes for object 7317e6b74e9b7e18c453dcd6fc6981adb976e57a
+  ok   land refuses a blocked head note, whatever the members
+Overwriting existing notes for object 8704be6bfecdd3f80175464be110a6b9801783c4
+Overwriting existing notes for object 7317e6b74e9b7e18c453dcd6fc6981adb976e57a
+  ok   land refuses an unreviewed head over a findings member note
+Overwriting existing notes for object 8704be6bfecdd3f80175464be110a6b9801783c4
+Overwriting existing notes for object 7317e6b74e9b7e18c453dcd6fc6981adb976e57a
+
+codex
+Commit `123f03aa87632fe462dcc2abf7666f4158e64b7b` is local, and the focused gate passes on it (`PASS=78 FAIL=0`). The full gate run is still progressing through the landing-tool controls. The working tree is clean; nothing has been pushed.
+ exited 1 in 48345ms:
+exec
+/bin/bash -lc 'tail -10 /tmp/legacy-final-all.log' in /home/unbalancedparen/projects/clones/wip/legacy-sweep-2
+ succeeded in 0ms:
+check_sandbox_isolation: PASS=12 FAIL=2
+--- scripts/checks/sandbox_isolation.sh: FAIL (6s)
+=== scripts/checks/workflow_yaml.sh ===
+  ok   .github/workflows/lean_action_ci.yml
+  ok   .github/workflows/oracle.yml
+
+WORKFLOW-YAML: PASS=2  FAIL=0
+--- scripts/checks/workflow_yaml.sh: pass (0s)
+
+root checks: FAILED: sandbox_isolation.sh (of 11)
+
+exec
+/bin/bash -lc "rg -n -C 4 'FAIL' /tmp/legacy-final-all.log; cat scripts/checks/sandbox_isolation.sh" in /home/unbalancedparen/projects/clones/wip/legacy-sweep-2
+ succeeded in 0ms:
+13-  ok   a fragment's anchor is checked too
+14-=== the repository ===
+15-  ok   DOC-LINKS: PASS CHECKED=914 ANCHORS=714
+16-
+17:DOC-LINKS-GATE: PASS=12 FAIL=0 INCOMPLETE=0
+18---- scripts/checks/doc_links.sh: pass (1s)
+19-=== scripts/checks/issues.sh ===
+20-=== ISSUES.tsv ===
+21-  ok   ISSUES.tsv is well-formed (16 issues, 10 open)
+--
+24-  ok   an unknown status is refused
+25-  ok   an empty closure condition is refused
+26-  ok   a repeated id is refused
+27-
+28:check_issues: PASS=5 FAIL=0
+29---- scripts/checks/issues.sh: pass (0s)
+30-=== scripts/checks/landing_bot.sh ===
+31-=== ready: both notes, at the exact head ===
+32-  ok   list runs
+--
+101-  ok   passing legs publish gates: pass and the head becomes ready
+102-=== main is never force-pushed ===
+103-  ok   no forced push of refs/heads/main in scripts/land
+104-
+105:check_landing_bot: PASS=59 FAIL=0
+106---- scripts/checks/landing_bot.sh: pass (20s)
+107-=== scripts/checks/landing_script.sh ===
+108-=== resolution: generated views regenerated, ledgers union-merged ===
+109-  ok   build t1 (b1 b2) succeeds despite four conflicting files
+--
+344-  ok   the repository hook answers who it is with its real path and runs nothing
+345-  ok   a real push never takes the identify answer (no environment switch exists)
+346-  ok   no refused run left train state behind
+347-
+348:check_landing_script: PASS=209 FAIL=0
+349---- scripts/checks/landing_script.sh: pass (15s)
+350-=== scripts/checks/legacy_frozen.sh ===
+351-=== negative controls ===
+352-  ok   control: an unchanged tree passes
+--
+427-  ok   the lock parses (base, tree, 2 sweep row(s), nothing else), and tree 2b6b53678b is the tree of base 9186ca4c9f
+428-  ok   trusted history (through 3bd7bc4151): every lock line kept, no legacy/ file rewritten
+429-  ok   the lock's 2 sweep line(s) name commits of HEAD's history and chain to HEAD:legacy
+430-  ok   legacy/ differs from the frozen tree only by byte-for-byte sweeps and deletions RETENTION.tsv allows
+431:legacy_frozen: PASS=78 FAIL=0
+432---- scripts/checks/legacy_frozen.sh: pass (2s)
+433-=== scripts/checks/oracle_fetch.sh ===
+434-=== a good published artifact installs and verifies (positive control) ===
+435-  ok   fetch.sh installs the good artifact (exit 0)
+--
+440-  ok   an artifact with other bytes (corrupted) is INCOMPLETE (3)
+441-  ok   the corrupted artifact left no install behind
+442-  ok   an install that fails verification (manifest not locked) is INCOMPLETE (3)
+443-  ok   the unverifiable artifact left no install behind
+444:=== ci_check.sh: INCOMPLETE without a verified oracle, FAILED on a wrong smoke result ===
+445-  ok   no published artifact: the oracle check is INCOMPLETE (3), never passed
+446-  ok   a corrupted artifact: the oracle check is INCOMPLETE (3)
+447-  ok   a failed verification: the oracle check is INCOMPLETE (3)
+448-  ok   run.sh refuses an altered install (125) before running anything
+449-  ok   end to end: fetch, verify, compile, run to 42 passes (positive control)
+450:  ok   end to end, wrong: FAILED (1), never passed
+451:  ok   end to end, compile42: FAILED (1), never passed
+452:  ok   end to end, compile1: FAILED (1), never passed
+453:  ok   end to end, noout: FAILED (1), never passed
+454-  ok   a failed download: the oracle check is INCOMPLETE (3) even with a working toolchain
+455-  ok   an install altered after fetch: the oracle check is INCOMPLETE (3) via run.sh's refusal
+456-
+457-check_oracle_fetch: 19 passed, 0 failed
+--
+469-  ok   a retained row that does not separate the root file from its legacy/ copy is refused
+470-  ok   an unknown status is refused
+471-  ok   after the move, legacy/ paths and the new root's paths are governed
+472-
+473:check_retention_manifest: PASS=10 FAIL=0
+474---- scripts/checks/retention_manifest.sh: pass (0s)
+475-=== scripts/checks/review_tool.sh ===
+476-=== round 1: full diff, findings, note written and pushed ===
+477-  ok   findings exit 1 (got 1)
+--
+589-=== usage errors ===
+590-  ok   bad --pieces: exit 2 (got 2)
+591-  ok   unknown flag: exit 2 (got 2)
+592-
+593:check_review_tool: PASS=99 FAIL=0
+594---- scripts/checks/review_tool.sh: pass (5s)
+595-=== scripts/checks/root_inventory.sh ===
+596-=== negative controls ===
+597-  ok   control: exactly the listed set passes
+--
+599-  ok   control: an unlisted docs/ entry is refused
+600-  ok   control: a missing listed entry is refused
+601-=== the tracked root against scripts/checks/root_inventory.txt ===
+602-  ok   the root holds exactly the day-one set
+603:root_inventory: PASS=5 FAIL=0
+604---- scripts/checks/root_inventory.sh: pass (0s)
+605-=== scripts/checks/sandbox_isolation.sh ===
+606-=== structural: every repository-making script sources the sandbox helper ===
+607-  ok   scripts/checks/landing_bot.sh sources git_sandbox.sh (line 40) and calls it (line 41) before its first repository (line 133)
+--
+618-=== control: the harness sees a leak ===
+619-  ok   control (leaky script): the harness sees a write through the inherited GIT_DIR
+620-=== live: sandbox checks run from a linked worktree as its hook would run them ===
+621-  ok   review_tool.sh: the caller's refs, notes, config and upstream are unchanged
+622:  FAIL legacy_frozen.sh: exit 1 (an early failure would make 'unchanged' vacuous)
+623-        ok   the lock parses (base, tree, 2 sweep row(s), nothing else), and tree 2b6b53678b is the tree of base 9186ca4c9f
+624:        FAIL legacy/ or its lock rewrote trusted history (through 30ee576d9f):
+625-            lock: 'sweep 3bd7bc41511e0a0ba247b53231b5dc8589533d2f ee702b031bc82e331f1b6e28e809fd18cc41de97' (in 006b252204, trusted history) is not in the lock: recorded lines are only ever added, never rewritten or removed
+626-            lock: a trusted version is malformed: 8695cc0e34:scripts/checks/legacy.lock:3: is not a lock row: line 3 must be 'sweep <commit> <tree>', one space between fields, each oid 40 or 64 lowercase hex digits
+627-            legacy/docs/archive/bugs-2026-11/README.md: was 3b177e814e (mode 100644) in trusted history and is 90be797bca (mode 100644) now: a frozen or swept file is never rewritten, by an edit or by deletion and re-addition
+628-        ok   the lock's 2 sweep line(s) name commits of HEAD's history and chain to HEAD:legacy
+629-        ok   legacy/ differs from the frozen tree only by byte-for-byte sweeps and deletions RETENTION.tsv allows
+630:      legacy_frozen: PASS=77 FAIL=1
+631:  FAIL legacy_frozen.sh: its final tally ('^legacy_frozen: PASS=[0-9]* FAIL=0$') is missing: it stopped early, so 'unchanged' proves nothing
+632-
+633:check_sandbox_isolation: PASS=12 FAIL=2
+634:--- scripts/checks/sandbox_isolation.sh: FAIL (6s)
+635-=== scripts/checks/workflow_yaml.sh ===
+636-  ok   .github/workflows/lean_action_ci.yml
+637-  ok   .github/workflows/oracle.yml
+638-
+639:WORKFLOW-YAML: PASS=2  FAIL=0
+640---- scripts/checks/workflow_yaml.sh: pass (0s)
+641-
+642:root checks: FAILED: sandbox_isolation.sh (of 11)
+#!/usr/bin/env bash
+# SANDBOXES NEVER TOUCH THE CALLER'S REPOSITORY (ISS-0015).
+#
+# A pre-push hook of a linked worktree runs with GIT_DIR=<repo>/.git/worktrees/<name> exported. On
+# 2026-11-06 review_tool.sh, run that way, did its sandbox work in the caller's clone and pushed 28 +
+# 12 test notes to GitHub. The owner of the fix is the sandbox helper, scripts/checks/lib/
+# git_sandbox.sh, which unsets every variable `git rev-parse --local-env-vars` names.
+#
+# Legs:
+#   structural  every script under scripts/ that makes a repository
+#               (git init, git clone, git worktree add) sources the helper and calls git_sandbox.
+#   live        a throwaway CALLER (bare upstream, full clone, linked worktree; no hook installed
+#               anywhere) runs review_tool.sh and legacy_frozen.sh, at this checkout's version, from
+#               the linked worktree with GIT_DIR exported exactly as a hook sees it. The caller's
+#               refs (refs/notes/* included), core.bare, worktree HEAD and its upstream's refs must be
+#               byte-for-byte unchanged.
+#   control     the same harness around a script that writes through an inherited GIT_DIR (as the
+#               unfixed review_tool.sh did) must report the change, so the live leg cannot pass by
+#               not looking.
+#
+# Every run is bounded in time (120 s per attempt, bounded_run) and in aggregate: a systemd user
+# scope with TasksMax=512 and MemoryMax=8G (fede-256gb, concrete-ci-2 logins), or, where there is
+# none (a CI runner service), the cgroup the check already runs in when it has a finite memory.max
+# (concrete-ci-2's runners: 28G per runner) plus `ulimit -u` of 512 more processes. With neither, the
+# live probes do not run and the check fails as INCOMPLETE: never an unbounded run. macOS has
+# neither (no unprivileged aggregate memory limit), so there the root checks are INCOMPLETE by design
+# and a gated push from a macOS clone is refused: gated pushes (trains) are made from a Linux clone
+# with a bound (fede-256gb or concrete-ci-2; no laptop builds), and CI runs on bounded runners. The 2026-11-06
+# reproducer had no such bound, recursed through a test hook and exhausted the machine.
+set -uo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh" || exit 2
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+cd "$ROOT_DIR" || exit 2
+HELPER="scripts/checks/lib/git_sandbox.sh"
+[ -f "$HELPER" ] || { echo "FATAL: $HELPER missing" >&2; exit 2; }
+PASS=0; FAIL=0
+ok(){ echo "  ok   $1"; PASS=$((PASS+1)); }
+no(){ echo "  FAIL $1"; FAIL=$((FAIL+1)); }
+
+echo "=== structural: every repository-making script sources the sandbox helper ==="
+# Two exceptions, neither a sandbox: install-bot.sh runs on the gate host as `bash -s <
+# install-bot.sh` (no sibling files to source) and makes the bot's persistent clone, and
+# worktree-new.sh makes a worktree OF the caller's repository by design.
+EXEMPT=" scripts/land/install-bot.sh scripts/worktree-new.sh "
+makers=0
+for f in scripts/*.sh scripts/*/*.sh; do
+  [ "$f" = scripts/checks/sandbox_isolation.sh ] && continue
+  grep -qE 'git( -C [^ ]+)? (init|clone)\b|worktree add' "$f" || continue
+  case "$EXEMPT" in *" $f "*) continue ;; esac
+  makers=$((makers+1))
+  # The helper must be sourced and called, as statements, before the first repository is made.
+  first_make="$(grep -nE 'git( -C [^ ]+)? (init|clone)\b|worktree add' "$f" | grep -vE '^[0-9]+:[[:space:]]*#' | head -n 1 | cut -d: -f1)"
+  src_line="$(grep -nE '^[[:space:]]*(source|\.) .*checks/lib/git_sandbox\.sh' "$f" | head -n 1 | cut -d: -f1)"
+  call_line="$(grep -nE '^[[:space:]]*git_sandbox( |$)' "$f" | head -n 1 | cut -d: -f1)"
+  if [ -n "$src_line" ] && [ -n "$call_line" ] && [ -n "$first_make" ] \
+     && [ "$src_line" -lt "$call_line" ] && [ "$call_line" -lt "$first_make" ]; then
+    ok "$f sources git_sandbox.sh (line $src_line) and calls it (line $call_line) before its first repository (line $first_make)"
+  else
+    no "$f makes a repository (line ${first_make:-?}) without sourcing (line ${src_line:-none}) and calling git_sandbox (line ${call_line:-none}) before it"
+  fi
+done
+[ "$makers" -ge 9 ] && ok "found $makers repository-making scripts (at least the 9 known)" \
+  || no "found only $makers repository-making scripts; the scan is not seeing them"
+
+# The harness itself is a sandbox: it must not be steered by whatever environment started it.
+source "$HELPER" || exit 2
+TMP="$(mktemp -d)" || exit 2
+trap 'rm -rf "$TMP"' EXIT
+git_sandbox "$TMP/gitconfig" || exit 2
+printf '[user]\n\tname = isolation gate\n\temail = isolation@example.invalid\n[init]\n\tdefaultBranch = main\n[advice]\n\tdetachedHead = false\n' > "$GIT_CONFIG_GLOBAL"
+
+BOUNDED_PARENT="$TMP"
+source "$ROOT_DIR/scripts/checks/lib/bounded.sh" || exit 2
+# bounded <cmd...>: at most 120 s per attempt (the portable bounded_run: its own watchdog kills the
+# whole process group; one re-run), inside an aggregate task and memory bound (above). Without one
+# the command does not run and the result is 125.
+cgroup_memory_max() { # the finite memory.max of this process's cgroup v2 or an ancestor, else fails
+  local cg f
+  cg="$(sed -n 's/^0:://p' /proc/self/cgroup 2>/dev/null)"; [ -n "$cg" ] || return 1
+  while :; do
+    f="/sys/fs/cgroup$cg/memory.max"
+    if [ -r "$f" ] && [ "$(cat "$f")" != max ]; then cat "$f"; return 0; fi
+    [ "$cg" = / ] && return 1
+    cg="$(dirname "$cg")"
+  done
+}
+BOUND=none
+if command -v systemd-run >/dev/null 2>&1 \
+   && systemd-run --user --scope -q -p TasksMax=512 -p MemoryMax=8G true >/dev/null 2>&1; then BOUND=scope
+elif CGMEM="$(cgroup_memory_max)"; then BOUND=cgroup; fi
+case "$BOUND" in
+  scope)  echo "bound: a systemd user scope, TasksMax=512, MemoryMax=8G" ;;
+  cgroup) echo "bound: this cgroup's memory.max ($CGMEM bytes, aggregate) and ulimit -u (512 more processes)" ;;
+  none)   echo "bound: none available (no systemd user scope, no finite cgroup memory.max; macOS has neither): the live probes will not run; run the root checks and gated pushes from a bounded Linux host (fede-256gb, concrete-ci-2) or in CI" ;;
+esac
+bounded() {
+  case "$BOUND" in
+    scope) bounded_run -i /dev/null -r 120 120 -- systemd-run --user --scope -q -p TasksMax=512 -p MemoryMax=8G "$@" ;;
+    cgroup)
+      local n; n="$(ps -o pid= -U "$(id -u)" 2>/dev/null | wc -l | tr -d ' ')"
+      ( ulimit -u $(( ${n:-0} + 512 )) 2>/dev/null || { echo "sandbox_isolation: ulimit -u refused; not running $*"; exit 125; }
+        bounded_run -i /dev/null -r 120 120 -- "$@" ) ;;
+    *) echo "sandbox_isolation: no aggregate task and memory bound here; not running $*"; return 125 ;;
+  esac
+}
+
+# A caller: bare upstream, a full clone of this checkout's HEAD, a linked worktree of it, with this
+# checkout's scripts/ (the version under test) copied over the worktree's. No hook is installed:
+# hooksPath points at an empty directory.
+mk_caller() { # dir
+  local d="$1"
+  mkdir -p "$d/nohooks"
+  git clone -q --bare "$ROOT_DIR" "$d/up.git" || return 1
+  git clone -q "$d/up.git" "$d/caller" || return 1
+  git -C "$d/caller" config core.hooksPath "$d/nohooks"
+  git -C "$d/caller" worktree add -q -b isolation-probe "$d/linked" || return 1
+  cp -R "$ROOT_DIR/scripts/." "$d/linked/scripts/" || return 1
+  git -C "$d/linked" add -A scripts && git -C "$d/linked" commit -q --allow-empty -m "scripts under test" || return 1
+}
+snap() { # dir
+  local d="$1"
+  git -C "$d/caller" for-each-ref --format='caller %(refname) %(objectname)'
+  echo "caller core.bare=$(git -C "$d/caller" config core.bare)"
+  echo "linked HEAD=$(git -C "$d/linked" rev-parse HEAD) $(git -C "$d/linked" symbolic-ref -q HEAD)"
+  git -C "$d/caller" worktree list --porcelain | grep '^worktree '
+  git -C "$d/up.git" for-each-ref --format='upstream %(refname) %(objectname)'
+}
+# run_as_hook <dir> <script relative to the linked worktree>: GIT_DIR exported as a linked
+# worktree's hook sees it; prints the script's exit code.
+run_as_hook() {
+  local d="$1" s="$2" gd
+  gd="$(git -C "$d/linked" rev-parse --absolute-git-dir)"
+  ( cd "$d/linked" && GIT_DIR="$gd" && export GIT_DIR && bounded bash "$s" ) > "$d/run.log" 2>&1
+  echo $?
+}
+probe() { # label script expect-change [completion-marker]
+  local label="$1" s="$2" want="$3" marker="${4:-}" d rc
+  d="$(mktemp -d "$TMP/caller.XXXXXX")"
+  mk_caller "$d" || { no "$label: could not build the caller"; return; }
+  [ -z "$(ls "$d/nohooks")" ] || { no "$label: a hook is installed"; return; }
+  snap "$d" | LC_ALL=C sort > "$d/before"
+  rc="$(run_as_hook "$d" "$s")"
+  snap "$d" | LC_ALL=C sort > "$d/after"
+  if [ "$want" = 0 ]; then
+    [ "$rc" = 125 ] && { no "$label: INCOMPLETE: no task and memory bound available, so it was not run"; return; }
+    bounded_is_incomplete "$rc" && { no "$label: INCOMPLETE: timed out twice (120 s each)"; tail -n 5 "$d/run.log" | sed 's/^/      /'; return; }
+    [ "$rc" = 0 ] || { no "$label: exit $rc (an early failure would make 'unchanged' vacuous)"; tail -n 8 "$d/run.log" | sed 's/^/      /'; }
+    grep -q "$marker" "$d/run.log" || { no "$label: its final tally ('$marker') is missing: it stopped early, so 'unchanged' proves nothing"; return; }
+    if cmp -s "$d/before" "$d/after"; then ok "$label: the caller's refs, notes, config and upstream are unchanged"
+    else no "$label: the caller changed"; diff "$d/before" "$d/after" | sed 's/^/      /' | head -20; fi
+  else
+    [ "$rc" = 125 ] && { no "$label: INCOMPLETE: no task and memory bound available, so it was not run"; return; }
+    bounded_is_incomplete "$rc" && { no "$label: INCOMPLETE: timed out twice"; return; }
+    grep -q 'refs/notes/' "$d/after" && ! cmp -s "$d/before" "$d/after" \
+      && ok "$label: the harness sees a write through the inherited GIT_DIR" \
+      || no "$label: a leaking script left the caller unchanged; the harness is blind"
+  fi
+}
+
+echo "=== control: the harness sees a leak ==="
+mkdir -p "$TMP/ctl"
+cat > "$TMP/ctl/leaky.sh" <<'EOF'
+#!/usr/bin/env bash
+# What the unfixed review_tool.sh did: build a sandbox without clearing GIT_DIR, then write to it.
+T="$(mktemp -d)"; git init -q "$T/w"
+git -C "$T/w" commit -q --allow-empty -m leaked
+git -C "$T/w" notes --ref=refs/notes/concrete-review add -m "verdict: clean" HEAD
+EOF
+probe "control (leaky script)" "$TMP/ctl/leaky.sh" 1
+
+echo "=== live: sandbox checks run from a linked worktree as its hook would run them ==="
+probe "review_tool.sh" scripts/checks/review_tool.sh 0 "^check_review_tool: PASS=[0-9]* FAIL=0$"
+probe "legacy_frozen.sh" scripts/checks/legacy_frozen.sh 0 "^legacy_frozen: PASS=[0-9]* FAIL=0$"
+
+echo
+bounded_summary
+echo "check_sandbox_isolation: PASS=$PASS FAIL=$FAIL"
+[ "$FAIL" -eq 0 ]
+
+codex
+The full run passed 10 of 11 gates. `sandbox_isolation.sh` failed because its temporary clone resolves `origin/main` to this clone’s older local `main`, whose history contains lock rewrites the freeze check correctly refuses.
+
+I’ll rerun with `LEGACY_TRUSTED_REF` pinned to this clone’s actual `origin/main` SHA, so the temporary clones use the same trust boundary as the focused gate. This changes no refs or configuration.
+exec
+/bin/bash -lc 'git rev-parse origin/main main; export LEGACY_TRUSTED_REF="$(git rev-parse origin/main)"
+timeout 1500 systemd-run --user --scope -q -p MemoryMax=8G -p TasksMax=1024 bash scripts/checks/run.sh > /tmp/legacy-final-all-pinned.log 2>&1' in /home/unbalancedparen/projects/clones/wip/legacy-sweep-2
+exec
+/bin/bash -lc "git show-ref --heads; git show-ref --verify refs/remotes/origin/main; git log -1 --format='%H %s' origin/main; git merge-base HEAD origin/main; git show-ref | head -15; tail -2 /tmp/legacy-final-all-pinned.log" in /home/unbalancedparen/projects/clones/wip/legacy-sweep-2
+ succeeded in 0ms:
+123f03aa87632fe462dcc2abf7666f4158e64b7b refs/heads/wip/legacy-sweep-2
+86c31477d3c4f3569138eb20b4d4cf0836912136 refs/remotes/origin/main
+86c31477d3c4f3569138eb20b4d4cf0836912136 train/botsnap: merge origin/wip/bot-snapshot-files (f0816b149c)
+3bd7bc41511e0a0ba247b53231b5dc8589533d2f
+123f03aa87632fe462dcc2abf7666f4158e64b7b refs/heads/wip/legacy-sweep-2
+86c31477d3c4f3569138eb20b4d4cf0836912136 refs/remotes/origin/HEAD
+03ed4aeaf8b64f28190bff0c2e3a29196bc64268 refs/remotes/origin/ci/accept-2b56b8e353
+728001c002bbc4ac5536431b316a06fb85f08c9f refs/remotes/origin/ci/accept-56ad6ab21d
+874aa566363e1db68895b982ff193636cc9a3c42 refs/remotes/origin/ci/accept-6929a96106
+d3ccb708c064be36ae2c0c8f4770308e11d8743e refs/remotes/origin/ci/accept-cee9385c84
+a6a4e24ad08e2459ad8ebd651d28aa0573aa4b11 refs/remotes/origin/ci/accept-feb372698e
+86c31477d3c4f3569138eb20b4d4cf0836912136 refs/remotes/origin/ci/botsnap
+952f2aa3b401288572e119df0db8b386efd3bc88 refs/remotes/origin/ci/decisions-1107
+d257e9361038caa909050f37999d2e81bd9b9dab refs/remotes/origin/ci/decisions-2026-11-05
+f9a8c333448a5cb60a07cd98d30118d4dc6d77ae refs/remotes/origin/ci/decisions-followup
+ac8e50404be13f71363aa13cbd01ba254c9e6cd8 refs/remotes/origin/ci/docs-2026-11-06
+ab537833d7615b43cb8616741b7bd5a4df0ac08b refs/remotes/origin/ci/facts-decision
+4de277fed79cf9c59fd7abaeac831ac4f300c1be refs/remotes/origin/ci/flm
+a5b6f0aad3f8c412c2b68f8a396d19da28f0c15d refs/remotes/origin/ci/ghlogin
+  ok   the ejected head is no longer ready
+=== bisect: a red CI run ejects the culprit ===
+
+codex
+The ref inspection clarifies the cause: the temporary clone has no `origin/main`, so the gate falls back to trusting the branch’s own history. Pinning the SHA preserves the caller’s trust boundary. The rerun is underway.
+ succeeded in 46517ms:
+fatal: ambiguous argument 'main': unknown revision or path not in the working tree.
+Use '--' to separate paths from revisions, like this:
+'git <command> [<revision>...] -- [<file>...]'
+86c31477d3c4f3569138eb20b4d4cf0836912136
+main
+
+exec
+/bin/bash -lc 'tail -4 /tmp/legacy-final-all-pinned.log' in /home/unbalancedparen/projects/clones/wip/legacy-sweep-2
+ succeeded in 0ms:
+WORKFLOW-YAML: PASS=2  FAIL=0
+--- scripts/checks/workflow_yaml.sh: pass (0s)
+
+root checks: all 11 pass
+
+exec
+/bin/bash -lc 'git status --short; git rev-parse HEAD; git diff --check; for state in MERGE_HEAD rebase-merge rebase-apply CHERRY_PICK_HEAD REVERT_HEAD; do if test -e "$(git rev-parse --git-path "$state")"; then printf '"'in progress: %s\\n' \""'$state"; fi; done' in /home/unbalancedparen/projects/clones/wip/legacy-sweep-2
+ succeeded in 0ms:
+123f03aa87632fe462dcc2abf7666f4158e64b7b
+
+codex
+Committed locally: `123f03aa87632fe462dcc2abf7666f4158e64b7b`. Working tree clean; nothing pushed.
+
+- `scripts/checks/lib/legacy_lock.py`: requires both header rows; distinguishes failed trusted-blob reads from deletions.
+- `scripts/checks/legacy_frozen.sh`: reports command and pipeline failures explicitly; checks Git subprocesses in the history judge; adds 26 exact-diagnostic controls.
+
+Both bounded gates passed on that SHA:
+
+- `legacy_frozen.sh`: **PASS=78 FAIL=0**
+- `run.sh`: **all 11 pass**, with `LEGACY_TRUSTED_REF=86c31477d3c4f3569138eb20b4d4cf0836912136` exported. The default run passed 10/11: its sandbox clone lacks `origin/main`, causing the documented fallback to trust malformed intermediate branch history.
+
+The added controls assert these exact diagnostics. `$TMP` and commit prefixes below are generated fixture values.
+
+| Control(s) | Exact diagnostic |
+|---|---|
+| Base-only chain | `$TMP/base_only:2: missing: line 2 must be 'tree <tree>'` |
+| Base-only trusted lock | `lock: a trusted version is malformed: ${MB0:0:10}:L:2: missing: line 2 must be 'tree <tree>'` |
+| Silent parser exit 1, chain | `refused: lock_rows failed (exit 1)` |
+| Silent parser exit 2, chain | `refused: lock_rows failed (exit 2)` |
+| Silent parser exit 1, history | `refused: lock_history failed (exit 1)` |
+| Silent parser exit 2, history | `refused: lock_history failed (exit 2)` |
+| Chain HEAD lookup | `refused: chain HEAD tree lookup failed` |
+| Judge diff, retention, and Python failures | `refused: judge diff/retention pipeline failed` |
+| Judge added-path lookup | `refused: judge added-path lookup failed` |
+| Judge root lookup | `refused: judge root lookup failed` |
+| Identity log and tree failures | `refused: history_identity failed (exit 1)` |
+| Identity Python failure | `refused: history_identity failed (exit 2)` |
+| Trusted merge-base | `refused: trusted_base merge-base failed` |
+| Trusted HEAD lookup | `refused: trusted_base HEAD lookup failed` |
+| Trusted ref lookup | `refused: trusted_base ref lookup failed` |
+| Reader listing | `refused: reader file listing failed` |
+| Reader scan | `refused: reader scan failed` |
+| Lock-use scan | `refused: lock-use scan failed` |
+| Read-loop scan | `refused: read-loop scan failed` |
+| Lock-history log | `lock: cannot list the trusted history of L through ${M1:0:10}` |
+| Lock-history blob and tree failures | `lock: cannot read trusted version ${M1:0:10}:L` |
+
+The judge sweep-lookup control asserts exactly two lines:
+
+```text
+refused: judge sweep lookup failed
+A legacy/p/moved: no sweep commit in the lock has p/moved with this content; legacy/ admits only byte-for-byte moves
+```
+
+All **17 mutations exited 1**, failing their intended controls:
+
+| Safeguard temporarily removed | Controls that failed |
+|---|---|
+| Missing-tree check | Both base-only controls |
+| Silent-failure diagnostic | Four parser controls and three identity controls |
+| Diff/retention pipeline refusal | Diff, retention, Python |
+| Chain HEAD refusal | Chain HEAD |
+| Added-path refusal | Added-path lookup |
+| Root refusal | Root lookup |
+| Sweep refusal | Sweep lookup |
+| Trusted merge-base refusal | Trusted merge-base |
+| Trusted HEAD refusal | Trusted HEAD |
+| Trusted ref refusal | Trusted ref |
+| Reader-listing refusal | Reader listing |
+| Reader-scan refusal | Reader scan |
+| Lock-use refusal | Lock-use scan |
+| Read-loop refusal | Read-loop scan |
+| Identity subprocess status check | Identity log and tree |
+| Trusted-blob failure check | Lock-history blob and tree |
+| Trusted-log status check | Lock-history log |
+
+Every mutation was restored. Network-dependent independent review was not run under the no-network constraint.
+tokens used
+72,775
+Committed locally: `123f03aa87632fe462dcc2abf7666f4158e64b7b`. Working tree clean; nothing pushed.
+
+- `scripts/checks/lib/legacy_lock.py`: requires both header rows; distinguishes failed trusted-blob reads from deletions.
+- `scripts/checks/legacy_frozen.sh`: reports command and pipeline failures explicitly; checks Git subprocesses in the history judge; adds 26 exact-diagnostic controls.
+
+Both bounded gates passed on that SHA:
+
+- `legacy_frozen.sh`: **PASS=78 FAIL=0**
+- `run.sh`: **all 11 pass**, with `LEGACY_TRUSTED_REF=86c31477d3c4f3569138eb20b4d4cf0836912136` exported. The default run passed 10/11: its sandbox clone lacks `origin/main`, causing the documented fallback to trust malformed intermediate branch history.
+
+The added controls assert these exact diagnostics. `$TMP` and commit prefixes below are generated fixture values.
+
+| Control(s) | Exact diagnostic |
+|---|---|
+| Base-only chain | `$TMP/base_only:2: missing: line 2 must be 'tree <tree>'` |
+| Base-only trusted lock | `lock: a trusted version is malformed: ${MB0:0:10}:L:2: missing: line 2 must be 'tree <tree>'` |
+| Silent parser exit 1, chain | `refused: lock_rows failed (exit 1)` |
+| Silent parser exit 2, chain | `refused: lock_rows failed (exit 2)` |
+| Silent parser exit 1, history | `refused: lock_history failed (exit 1)` |
+| Silent parser exit 2, history | `refused: lock_history failed (exit 2)` |
+| Chain HEAD lookup | `refused: chain HEAD tree lookup failed` |
+| Judge diff, retention, and Python failures | `refused: judge diff/retention pipeline failed` |
+| Judge added-path lookup | `refused: judge added-path lookup failed` |
+| Judge root lookup | `refused: judge root lookup failed` |
+| Identity log and tree failures | `refused: history_identity failed (exit 1)` |
+| Identity Python failure | `refused: history_identity failed (exit 2)` |
+| Trusted merge-base | `refused: trusted_base merge-base failed` |
+| Trusted HEAD lookup | `refused: trusted_base HEAD lookup failed` |
+| Trusted ref lookup | `refused: trusted_base ref lookup failed` |
+| Reader listing | `refused: reader file listing failed` |
+| Reader scan | `refused: reader scan failed` |
+| Lock-use scan | `refused: lock-use scan failed` |
+| Read-loop scan | `refused: read-loop scan failed` |
+| Lock-history log | `lock: cannot list the trusted history of L through ${M1:0:10}` |
+| Lock-history blob and tree failures | `lock: cannot read trusted version ${M1:0:10}:L` |
+
+The judge sweep-lookup control asserts exactly two lines:
+
+```text
+refused: judge sweep lookup failed
+A legacy/p/moved: no sweep commit in the lock has p/moved with this content; legacy/ admits only byte-for-byte moves
+```
+
+All **17 mutations exited 1**, failing their intended controls:
+
+| Safeguard temporarily removed | Controls that failed |
+|---|---|
+| Missing-tree check | Both base-only controls |
+| Silent-failure diagnostic | Four parser controls and three identity controls |
+| Diff/retention pipeline refusal | Diff, retention, Python |
+| Chain HEAD refusal | Chain HEAD |
+| Added-path refusal | Added-path lookup |
+| Root refusal | Root lookup |
+| Sweep refusal | Sweep lookup |
+| Trusted merge-base refusal | Trusted merge-base |
+| Trusted HEAD refusal | Trusted HEAD |
+| Trusted ref refusal | Trusted ref |
+| Reader-listing refusal | Reader listing |
+| Reader-scan refusal | Reader scan |
+| Lock-use refusal | Lock-use scan |
+| Read-loop refusal | Read-loop scan |
+| Identity subprocess status check | Identity log and tree |
+| Trusted-blob failure check | Lock-history blob and tree |
+| Trusted-log status check | Lock-history log |
+
+Every mutation was restored. Network-dependent independent review was not run under the no-network constraint.
+rc=0

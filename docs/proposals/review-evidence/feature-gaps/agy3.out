@@ -1,0 +1,60 @@
+### 1. Evaluation of Points (a–f) and Language Comparisons
+
+* **a. Structured data with one renderer — AGREE (with structural refinement).**
+  Already decided (`decided-project-diagnostics-2026-11-06`, R-0593, R-0603): typed checker results, `RuleId@rev` (no rustc `E0382` numeric codes), `false` (with counterexample witness) vs `not_established`, one record rendering `--format=human|json`, no warnings. **Shortcut in (a):** free-form "plain-language explanation" strings drift. Best long-term design: explanations are deterministic projections of the typed witness and rule structure—taking rustc/Gleam's multi-span labelling and Elm's visual clarity, never ad-hoc prose construction.
+
+* **b. Provenance (K1) carrying ends, pass origins, and type-origins — AGREE.**
+  Already decided/planned (`decided-project-diagnostics-2026-11-06`, `docs/proposals/MERGED.md` item 5, `Concrete/README.md`): byte offsets + line/byte-col (tab = 1 byte), tokens with spans, typed `SiteId`/span/origin edges preserved to BIR. Take Elm/Roc's type-expectation provenance ("expected `u8` because of this annotation/call") and rustc's obligation cause chains across Mono/lowering. Reject heuristic span guessing or string-based origin tags.
+
+* **c. Single-source explanation per rule ID — AGREE on single source; DISAGREE on deferring CLI.**
+  Already decided (`R-0603`, `PHILOSOPHY.md` single source of truth): rule IDs are Lean rule names + revisions (`StmtOk.let_.admitted@2`). Generating explanations from the Lean rule's doc comment + verified negative/positive conformance fixtures is the right long-term design. Reject rustc's hand-maintained separate markdown registry, which drifts from the checker.
+
+* **d. Style guide and verified hints — AGREE.**
+  Already decided (`decided-project-diagnostics-2026-11-06`): fixes offered only after full recheck, auto-applied only with a meaning-preservation lemma. Take Elm's conversational clarity and Gleam's uncluttered snippet layout. Explicitly reject Elm's and rustc's unverified heuristic hints ("did you mean...?" that fails to compile when applied). In Concrete, if a candidate edit does not pass full recheck, it is omitted.
+
+* **e. Stopping at the first error per file — DISAGREE.**
+  Stopping at the first error per file is a short-term shortcut that hurts multi-function edits and agent repair loops. On the other hand, Roc's and rustc's full continue-after-errors via poisoned/error types (`Ty::Error`) leaks synthetic states into downstream passes and risks cascade noise or soundness bugs. Best long-term rule: stop per phase at the **independent checking unit** (per item/function after syntax, or per independent syntax item), never continuing a downstream pass on a failed unit.
+
+* **f. Golden diagnostics + model reviewer gate — AGREE on deterministic goldens; DISAGREE on live model scoring in CI.**
+  Already planned (`R-0593`, `R-0575`): frozen versioned JSON schema and golden diagnostics from the first front-end output. A live LLM scorer in CI is non-deterministic, slow, and violates Concrete's reproducible gate design. Long-term design: enforce structural style invariants mechanically (schema, span presence, witness completeness, rechecked fix) plus deterministic `.human`/`.json` goldens, with multi-agent review (`review.sh`) at branch review time.
+
+---
+
+### 2. Point (c): How Explanations Should Be Reached
+
+**Recommendation: No `concrete explain <rule>` CLI subcommand; embed the rule's generated explanation directly in the diagnostic record (rendered in `--format=json` and linked/shown in `--format=human` and the browsable owner view).**
+- Adding `concrete explain` creates a second workflow (run compiler $\rightarrow$ copy ID $\rightarrow$ run explain) and extra CLI surface (`PHILOSOPHY.md`: one way per thing).
+- Because every refusal already carries `RuleId@rev`, its Lean doc summary and minimal failing/fixed conformance pair belong in the generated spec/owner view and directly in the diagnostic payload.
+
+---
+
+### 3. Point (e): Long-Term Cascade Rule
+
+**Recommendation: Phase-gated, per-independent-item isolation without poison types.**
+1. **Lex/Parse:** Fail fast on the first syntax error in a file (or synchronization boundary only at top-level item keywords if proven non-cascading; safest is first syntax error per file).
+2. **Name/Type/Linearity/Lowering:** Check each top-level declaration/function independently. If function `f` fails, abort all later passes on `f` (never synthesize dummy/poison types like Roc/rustc), but continue checking independent sibling items `g`, `h` whose signatures are valid.
+3. **Cross-file:** Never check downstream modules whose imported signature failed.
+
+---
+
+### 4. What K1 Provenance Must Carry, and Timing (`BEFORE_SLICE1`)
+
+**Must start before Slice 1 (`yes`):** Slice 0 (`Concrete/README.md`) already mints tokens with spans, and lexer/parser refusals and `R-0593` schema goldens are being written now. Retrofitting K1 across AST/HIR/Core/MIR/SSA/BIR later is high-churn debt.
+
+**What K1 must carry from the start:**
+1. **`Span`:** `(FileId, start_byte, end_byte)` with a deterministic side-table (`LineMap`) computing 1-based line and byte-column (tab = 1 byte).
+2. **`SiteId`:** Typed, compiler-minted stable identity (`docs/proposals/MERGED.md` item 5) created at lex/parse and preserved through HIR $\rightarrow$ Core $\rightarrow$ MIR $\rightarrow$ CFG $\rightarrow$ SSA $\rightarrow$ BIR, matching runtime trap lines (`concrete: trap: <kind> at <path>:<line>:<col> (site <id>)`).
+3. **`OriginChain` (Pass Provenance):** Parent `SiteId` + transformation step tag (e.g., monomorphization instance `(fn_site, call_site, type_args)` or lowering rule), so post-elaboration/Mono/BIR refusals trace back to exact written source sites.
+4. **`ReasonSpan` (Constraint/Value Provenance):** Attached to inferred/checked types and linear bindings (`declared_at`, `expected_because_of`, `moved_at`, `branched_at`) to populate secondary labels and witnesses without heuristics.
+
+---
+
+### 5. What K13 Missed
+
+1. **`false` (with witness) vs `not_established` distinction (`decided-project-diagnostics-2026-11-06`):** K13's record omits the decided epistemic status and the structured counterexample witness (e.g., the specific execution path where a linear variable is unconsumed or a proof obligation fails).
+2. **Runtime trap-line & `SiteId` unification:** K13 treats compile-time diagnostics in isolation, missing that K1's `SiteId` and `<path>:<line>:<col>` must be the exact same provenance spine used by runtime trap lines and fact/policy outputs.
+3. **No-warnings / Facts integration (`decided-project-diagnostics-2026-11-06`):** When a policy refuses a build over a weaker fact, the refusal diagnostic must cite the emitted fact record and its `SiteId`, not invent a parallel warning renderer.
+4. **Source-snippet rendering invariants:** Multi-byte UTF-8 vs byte-column alignment and tab-as-1-byte rendering rules must be specified once in the renderer so human carets and JSON byte spans never diverge.
+
+ANSWER: AGREE=a,b,d; DISAGREE=c,e,f; EXPLAIN=other: embed generated rule doc and conformance example in the diagnostic record and browsable spec/owner view (no explain CLI subcommand); CASCADE=abort failed item/pass immediately (no poison types), check independent top-level items; BEFORE_SLICE1=yes; MISSED=false-vs-not_established witness field, trap-line SiteId unification, policy-refused facts rendering, UTF-8 vs byte-column caret alignment
+exit 0

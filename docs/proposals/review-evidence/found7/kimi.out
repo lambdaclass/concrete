@@ -1,0 +1,460 @@
+kimi version 2.4.1
+• I need review documents. Should have no modify. Should understand task thorough. Should read draft2, v1, changes, authoritative decisions, specs archives. Should likely many files. Kimi needs to perform a careful delta review and deliver a concise response. I should use TodoList for multi-step. Should have no subagents unless user explicitly asks? User mentions three reviewers but not asking subagents. No. Should read files in parallel. Start inspect proposal docs perhaps sizes.
+
+• I’ll compare draft 2 with the round-1 findings, then verify its technical claims and all 17 recommendations against the authoritative decisions and specifications.
+
+• I have draft. Should verify. Should inspect decisions entire perhaps huge. Use Grep anchors and Read relevant. Should find specs list and archive files. I should gather relevant docs. Read decisions perhaps 100k and > lines. First wc via bash? Could use Read chunks. Use Grep patterns anchors to locate. Should authoritative actual core rows JSON. Also old specs for claims. I need focus user explicitly hybrid C4/C8 coherence/provable, certificates/maximal paragraph, citations. All Q recommendations. Should analyze all.
+
+  I need understand authoritative decisions. Read relevant sections. Grep headings.Important immediate new finding: Q2.3 already decides destruction order, draft2 Q13 recommends defer arrays/collections. CHANGES says no cited row establishes orders, false. Q2.3 explicitly does. This is blocker. User says handled wrongly: Codex C1/Kimi etc claim unrecorded collection orders. Draft2 lines 27 Q13 defers and runner-up exactly decided. Must flag. They may intentionally want discovery. Good.
+
+  Should have more potential. Q1 scope vs Q9.19 freeze process? Owner option b perhaps foundation before slice1 vs A2i. Should have no.
+
+  Should inspect decisions project sections. Read around 171-309 (Core text likely duplicates), 309 onward. I can Read chunks 309-650 etc.
+
+• The change log already contains one clear factual error: destruction order is decided by Core Q2.3, so question 13 cannot defer it as undecided. I’m checking the remaining claims for similar mismatches and for semantic gaps in the hybrid model.
+
+• Potential new errors:
+
+  - C8 evaluator determinism with fixed inputs and nondeterministic address/padding/exposed choices. Signature environmentChoices explicit covers. "Fixed inputs make evaluation deterministic." If choices oracle perhaps fixed deterministic function. okay.
+
+  - Hybrid state: typed writes update represented range, raw writes invalidate typed validity until checked decoding restores. Problems with safe typed storage partial places and moved-out slots. Coherence projection: "partial place-to-block/range projection and Rep" singular? Materialization on address-taking fixed padding. Raw writes to any byte invalidates entire typed validity until checked decoding. But safe raw byte writes to padding should not invalidate typed value? Could be overconservative but coherent. More severe: raw reads of pointer fragments require initialization and pointer provenance, okay. "raw writes invalidate affected typed validity until checked decoding restores it" could mean every raw write requires decoding entire typed value. Provable possible.
+
+  - One hybrid state with structured places plus raw byte blocks, typed writes update represented range. For non-materialized safe values no range. Address-taking materializes. Later raw memory all allocations. Coherence requires updates in both directions. But pointer values stored in structured places with provenance separately and Rep; raw bytes may change provenance fragments; checked decoding can restore. Fine.
+
+  - Distinguish typed equality/control/observations padding not affect; raw initialized padding may observed output. C4 "Representation simulations preserve such observed bytes, or explicitly relate the same allowed padding choices; they cannot erase a raw observation as irrelevant nondeterminism." Should handle if target allowed different padding nondeterminism, refinement of maximal behaviors and matched choices. If source allows padding choice, target can choose subset; raw observation output differs but source has matching behavior. "preserve such observed bytes, or explicitly relate same allowed padding choices" vague. Qualification "matched allowed nondeterministic choices" perhaps okay.
+
+  - C3 says safe typed operations representation-independent where premises permit. C4 raw pointers Core meanings. okay.
+
+  - C8 total fuel evaluator over infinite/oracle environmentChoices and exposed-pointer alternatives. "Fixed inputs make evaluation deterministic" yes if environment choices all. But soundness/completeness "for nondeterministic effects quantify same environment choices" fine. Monotonicity trace-prefix consistency. Potential issue maximal behaviors of each lowering including infinite execution: refinement of maximal behaviors with nondeterministic source and target. Should clarify direction and environment matching; "matched allowed choices" but certificates only source→BIR; no per-runtime input cert necessary. Perhaps no error.
+
+  - Certificates paragraph: says "every authoritative compilation emits kernel-checked certificates binding exact source bytes ... exact emitted BIR" decisions yes. "After slice 0 use decided per-edge certificates." yes.
+
+  - Maximal behavior: Q9.9 only says "Define maximal behaviors and adequacy" not explicitly each lowering. Draft says Q9.9 calls for maximal behaviors, makes proof obligation explicit. Is per-edge maximal refinement decided by proof per stage preservation? Proposed extension okay not attributed as fully decided? Wording "Each lowering proves refinement of maximal behaviors" stronger than decisions perhaps desirable. But potential theoretical error: refinement of maximal behaviors "including ... infinite execution" is too strong in usual compiler correctness for nondeterministic source? Maximal trace refinement typically target behaviors subset source, preserves all. Termination preserved by may-diverge? If target can diverge where source terminates forbidden. Good. Infinite silent stutter note needed.
+
+  - Could be issue certificates bind exact source bytes to BIR but parser rejections? "every authoritative compilation" likely accepted only. okay.
+
+  - Native closure Q8 runner-up etc.
+
+  Should read legacy specs and decisions ODs. Use Grep for rule IDs.Huge but relevant found Q12 wrong: conversion error already decided `OutOfRange` (not ConversionError) by OD106 and ARITH-10. Draft2 question 12 "Recommend deciding type ... Runner-up distinct builtin ConversionError with OutOfRange, outside ArithmeticError and TrapKind. No unplaced OutOfRange constructor is frozen." This contradicts decided OutOfRange. CHANGES agy says isolate checked-conversion error type but should retain decided OutOfRange. User expects flag. Q12 recommendation should instead retain Result<T, OutOfRange> as decided, not defer. Runner-up ConversionError would revise OD106. Should read OD106 exact. Also trap kind perhaps legacy spellings not authority okay.
+
+  Q13 definitely.
+
+  Perhaps Q7 `usize`: Q3.5 note "meaning of a program never depends on target." Target-sized usize could cause program semantics target-dependent; proposal says target-sized lengths. This would revise more than Q3.5; still owner asked explicit. Recommended? I need assess. Owner principle one index type u64 across profiles with checked target limits ensures meaning independent. Target-sized usize could make literal range, overflow behavior differ across targets. Best long-term likely runner-up u64 to preserve cross-profile semantics. I need choose per question. Draft rec target-sized usize common systems but decided principle explicit. I may disagree Q7. Should reason decisive. The question asks whether AGREE or runner-up. Could agree if revision better. Should consider. Q3.5 was owner deliberate after pushback. New proposal hasn't demonstrated need besides small targets. Target abstraction includes 20/24-bit addresses, mandatory u64 lengths adds storage overhead and operations. But program semantics should be target independent. Using usize inherently semantics target-dependent, contrary note. The owner can revise. Best long-term design? Many languages use usize. However Concrete explicit fixed widths and no hidden traps; index types target-specific common. "meaning of a program never depends on target" strong authoritative decided. Unless proposal marks revision (it does). As reviewer can recommend runner-up to preserve. Likely expected Q7 runner-up. Should evaluate other Q choices.
+
+  Q2 hybrid perhaps runner-up all bytes? Should assess coherence/provability. There might be fundamental flaw in hybrid and evaluator: address-taking materializes coherent representation "for that execution" but C8 choices include padding materialization. If address-taking itself chooses padding nondeterministically, safe typed operations after raw observation etc. Works. But no relation between structured places and allocation memory before materialization, raw pointers already Core. Could be okay.
+
+  Yet draft C4 raw writes invalidate "affected typed validity until checked decoding restores it." Raw write to a place via raw pointer then safe typed read: Under unsafe operations, validity proof needed. But checked decoding as a run-time operation? No defined primitive. It says until checked decoding restores it, perhaps static proof. Hybrid semantics must support partially uninitialized/invalid typed places, and Rep ignores padding but checks validity. Fine.
+
+  One issue "address-taking materializes ... fixed padding choices for that execution" conflicts with unexposed allocation numeric addresses quasi-concrete. Raw address-taking & as pointer not expose? It materializes bytes, not address. okay.
+
+  "Raw pointers, expose/from_exposed and sizeof/alignof therefore already have Core meanings." Q3.11 indeed raw store. good.
+
+  Potential soundness gap: "typed writes update the represented range" alone is not enough for raw observation coherence: typed writes must define padding behavior and pointer fragment writes. If Rep ignores padding, a typed write may leave old padding (preserve raw observation), okay. For raw writes, invalidating typed validity until checked decoding. But what about writes through one typed place to another alias? Whole-root borrow no safe alias, raw alias can violate premises. no.
+
+  Deallocation and structured places: blocks plus safe places ownership, projection lifetime. "partial place-to-block/range projection and Rep relate the two." If every safe typed place not necessarily allocated, deallocation only raw. okay.
+
+  Potential impossible evaluator completeness: Total fuel-indexed deterministic evaluator with environmentChoices as oracle can produce all finite small-step executions if choices include allocation/address/padding/from_exposed/external. But does choices cover scheduler? sequential no. FFI foreign behavior external responses. Fine. Blocking represented. Should distinguish allocator availability perhaps nondeterministic system allocator failure included external responses/allocation choices. yes.
+
+  Monotonicity "extra fuel preserves a completed result" standard. Trace-prefix consistency with oracle environment: output effects consumed incrementally. yes.
+
+  Question 1 freeze entire C1-C10 before slice1 might conflict A2i integrated scopes and owner choice. They qualify. Agree likely.
+
+  Question 3 profile generalization. Agree. Q4 retain i32. Agree. Q5 b vs a/c. Should decide perhaps prefer a single niche as long-term predictable and avoid future changes. Round1 Kimi preferred a. I need independent. Owner principle one form, best long-term. b defers not permanent. likely agree b because no current workload and layout representation laws general. Q6 erasure proof agree. Q7 perhaps runner-up. Q8 retain schedule agree. Q9 defer trap constructors. But exact trap line required from slice0 and arithmetic operations. Defer until before first supported slice is now (slice 0 has overflow and abort) so recommendation says "defer ... until trap semantics needs them, before their first supported slice." Since slice 0 needs arithmetic overflow and abort now, effectively decide now for those. Runner-up complete inventory perhaps better freeze exact outputs reproducibility. Existing spec has labels arithmetic_overflow, division_by_zero, shift_amount_out_of_range, out_of_bounds. Runtime decision does not fix kind spellings. Best long-term define total TrapKind early to avoid ad hoc. Q9 runner-up likely. They propose arithmetic wrapper etc, simple. Could agree defer to semantic slice, but foundation C1-C10 should freeze interfaces not concrete inventory. Extensible trap kind? Exact kind needed diagnostics. Owner questions perhaps desired recommendation. I need not contrarian without strong.
+
+  Q10 byte columns vs Unicode scalar. Agree byte easy deterministic lexer. Q11 UTF8 failure mapping defer. Agree perhaps runner-up? No hidden traps requires explicit handled branches; range form no else traps. Mapping to invalidRange natural but defer okay.
+  Q12 definitely disagree other: retain decided OutOfRange. Q13 disagree other: retain Q2.3. Q14 entropy defer exact shape but randomness decision already says explicit entropy capability granted main. "nullary" only unspecified. Agree.
+  Q15 invariant defer implementation but spec definition before freeze agree.
+  Q16 registry extensibility vs closed inventory. Agree lawful extension, architecture. Q17 every supported example/test three-way vs runner-up staged. Decided CI from slice0 compares two native + expected, evaluator differential fuzzer; P4 extends every controlled test to evaluator. Is it feasible? "every supported controlled example/test" across all 3 with effect cases. Owner principle real workloads, thorough. Agree perhaps runner-up staged due unverified LCB unsupported cases. It says supported examples so yes.
+
+  Should identify more wrong round1 dispositions:
+  - C7 NI hypothesis includes equal public inputs, matched external choices, equal ordered release site/value. INFOFLOW original says public inputs + release traces; "matched external choices" added. For noninterference under nondeterministic environment, matching external choices needed. okay. But public output itself external choices? They distinguish environment responses and public observations. Fine.
+  - C7 release policy interface "lists allowed functions/sites or forbids release" INFOFLOW policies can forbid or allow only listed functions. okay.
+  - C7 says release record carries ordered (typed site, released value), reason/path metadata for facts. okay.
+  - C3 native struct empty size 0 align1: decided runtime zero-sized fields, Q9.14 rep roundtrip empty struct perhaps existing profile. Should check OD126. Also array n=0 while TYPE-7 array literal at least one but semantic arrays can zero. okay.
+  - C2 bool byte0/1: OD126 perhaps yes. Text etc.
+
+  - C4 zero-byte raw access needs only alignment and non-null. Wording line 64 "Nonzero accesses need provenance... Q3.7 zero-byte ... only alignment and non-null" correct.
+  - Q3.9 from_exposed "over live, nonempty eligible exposed blocks" correct.
+  - C4 allocation failure typed result etc. good.
+
+  - C1 array destruction contradiction major.
+
+  - C2 checked conversion contradiction major.
+
+  - C6 trap output complete observations. Could output trailing newline not decided deferred. okay.
+
+  - C9 struct invariants correct.
+
+  - Revision register fails list Q2.3 revision? They currently propose deferring decided order but don't list Q2.3. This amplifies: revision register incomplete. Q12 OD106 also missing revision register. I'll mention.
+
+  - Revision register Q7.1/Q7.10 Q9.7 question16,14. Fine.
+  - C4 state choice new owner question but MEM-1 already decides structured values + raw store Rep. Hybrid completion no revision.
+  - C3 target abstraction revision Q3.5 note meaning target independent etc.
+
+  Citations support claims:
+  C1 authority Core Q2.1–2.7 includes Q2.3 contradiction; OD69? perhaps cleanup abort. fine.
+  C2 Authority OD106 actually contradicts question12 and C2 wording "left to question". Flag citation doesn't support.
+  C3 runtime decision default layout only structs, not empty aggregate alignment etc. They call "Rule" proposal. fine.
+  C3 OD126 existing profile i32. good.
+  C4 Q1.8-Q1.12 includes Q1.13 omitted irrelevant.
+  C5 randomness anchor supports entropy schedule. good.
+  C6 stack bounds same anchor random. fine.
+  C7 infoflow support. good.
+  C8 bounded execution + step bounds support. Q9.9 supports maximal behaviors but not lowering. Wording carefully "Q9.9 already calls for maximal behaviors; this makes proof obligation explicit" yes.
+  C9 SPARK decision spec. good.
+  C10 contracts P18 supports no frame clause. good.
+
+  Potential certificate issue: "After slice 0 use decided per-edge certificates." Decision says from slice0 first authoritative each compilation cert connecting exact input to BIR through proved judgments or validators, and after slice0 per-edge replace whole compiler decide. Correct.
+
+  Maximal behavior paragraph could be insuffciently precise about blocked requests/infinite traces. "refinement of maximal behaviors including blocking and infinite execution with their traces under matched allowed choices." Target steps finite stutter; progress argument excludes infinite silent target stuttering replacing source progress/completion. For source divergence with silent internal steps, target may also diverge silently, refinement allows. For source finite completion target infinite stutter forbidden by maximal trace inclusion anyway if maximal behaviors include infinite. Their extra condition redundant but okay. Could there be "refinement of maximal behaviors" wrong for compiler optimization that removes nondeterminism? Refinement is target subset source so okay. Per lowering environment choices: each has different choice spaces, need simulation not "matched allowed choices" equality. They say under matched allowed choices not explicit relation. Accept high-level contract.
+
+  Could source→BIR certificates themselves bind maximal behavior? Cert connects through independent judgments/validated edges, and each lowering proves refinement. okay.
+
+  Hybrid state might be "not provable as stated" due conflating raw-byte observations with typed observation equivalence and representation independence. I'll inspect archive design memory semantics for two-layer and representation proof constraints perhaps hybrid exactly decided.
+
+• Two more decided-rule conflicts are now confirmed: `try_convert` already returns `Result<T, OutOfRange>` (OD106/ARITH-10), and Q2.3 fixes container destruction order. Both draft-2 deferrals would therefore be revisions, but neither appears in the revision register.
+
+• Potential C1 cleanup effects while evaluating exit value O8 currently omitted, proposal to complete good.
+
+  Should verify Q2.3 in decisions.md not just JSON authoritative incorporated. Search.I need continue. Could inspect Rep.Perhaps "deferred operands read cleanup" etc good.
+
+  Could be Q2.3 is exact decided array + OrderedMap, no need ask owner. Big blockers.
+
+  Other already-decided things deferred:
+  - Trap inventory perhaps legacy existing trap labels but decisions not fixed. Q6.7 only categories. Q7.10 says trap(kind) no inventory. Fine.
+  - columns not fixed. fine.
+  - UTF8 mapping not fixed. fine.
+  - Entropy exact shape not fixed. fine.
+  - Enum layout OD126 says current compiler i32 tag and language rules other targets profiles. Does it decide i32 tag or only facts 64-bit etc? Row says options and final language rules. All listed facts language rules including i32. yes retain.
+  - Niches: no decision. fine.
+  - Release context Q1.7 says stable state raw context no safe references. Erasure with proof revision. okay.
+  - native milestone. okay.
+  - Struct invariants. okay.
+  - Registry Q9.7 fixed exhaustive inventory; extension revision explicit. okay.
+  - qualification two backends decided, three-way proposed. okay.
+  - target abstraction other profiles already OD126, read-only interface formalization no semantic change except address domain. okay.
+  - hybrid MEM-1 already two layers; pointer fragments etc Q3.11. good.
+
+  New errors perhaps C3 native aggregate layout says arrays size n*size including n=0, but empty enum source refusal. Fine.
+  - "StaticStr and views use their decided pointer/length adapters" Q4.5 FFI adapter explicit pointer length for StaticStr, but views? Q4.6 view byte offsets, no decided representation pointer/length. Draft1 "Text/StaticStr and views are pointer plus length" corrected to "StaticStr and views use their decided pointer/length adapters". Is there a decided pointer/length adapter for views? Q4.5 only literal's FFI representation StaticStr explicit adapter. Q4.6/Q4.7 dynamic view scopes, byte offsets. There may be authority decision or spec types. Search "view pointer length".Search was broad. Should specific views representation perhaps Q3.1 "second class shared/mutable array views" no pointer length. C3 sentence says decided adapters plural perhaps only StaticStr FFI adapter and shared/mutable views share representation with each other. Could be an unsupported citation. Draft line48: "StaticStr and views use their decided pointer/length adapters" likely overclaims views. Q4.5 is literal static string adapter, not all views. Kimi round1 C3 only Text. New wording may be introduced to avoid Text but still wrong for views. I should flag unless evidence elsewhere. Q3.12 note C receives ABI pointer and length for HeapArray kept. That is a pointer+length adapter for array buffer, not views. Q4.5 only StaticStr. So dynamic TextView has no decided FFI adapter and second-class views cannot cross FFI as references (FFI-3 only raw pointers etc). "views use their decided pointer/length adapters" definitely unsupported. Could be intended "StaticStr and views use their decided pointer/length adapters" referencing Q4.5 and Q3.1? Q3.1 only second-class views no representation. So flag new error citation.
+
+  Also "Shared/mutable views share representation." Is that decided? Draft1 same. No explicit decision. Could be proposal not claimed authority? Under **Rule** with authority Q3.5–3.11 Q4.1–4.5. Those don't say representation. C3 proposes completions requiring owner Q1? But Q3 target only, Q4 enum etc, no owner question for view representation. So it silently freezes new layout rule without separate question (Q1 umbrella covers C1-C10 though yes owner can approve foundation). They say C1-C10 normative completions approved Q1. But claim "decided" adapters false.
+
+  Text ownership correct.
+
+  Check C3 "Fixed-width integer storage respects value width" yes.
+
+  Potential C1 ordinary locals "remaining locals destroyed" OD2 says after deferred calls loans end then remaining locals destroyed. Draft says ordinary locals do not acquire implicit user destructors, explicit consumption storage teardown resource destruction separate. Q2.1 separate. okay.
+
+  Potential C1 collection destruction order deferred conflicts. done.
+
+  C2 "UTF-8 failure mapping question11" okay.
+
+  C4 "padding ... cannot affect typed observations" raw output can. good.
+
+  C5 "Shared views are Copy" Q3.1 says second-class shared/mutable views; references shared Copy likely OWN-D1. mutable nonduplicable. okay.
+
+  C5 "Heap handles contain pointer and sufficient stable release context, with any erasure requiring question6" Q1.7 stable release state and raw context. okay.
+
+  C6 "normal exit and trap exit 134 different observations" Observation note yes.
+
+  C7 "release-policy interface lists allowed functions/sites or forbids release" good.
+  C7 "for equal public inputs, matched external choices and equal ordered release site/value traces" exactly plus external. good.
+  C7 "separately equal leakage traces CT" good.
+
+  C9 "ensures observes result and surviving parameters after cleanup" good.
+
+  C10 "At Memory CFG lower hybrid ... simulation against C4 projection." good.
+
+  Section3 P4: "run LLVM, LCB and hybrid Core Lean evaluator on every supported example and controlled test, with matched ... allowed nondeterministic choices." A universally quantified nondeterministic program cannot be tested on all choices. They say bounded scripted environments. "every supported test" means each test case with specified choices. okay. "Representation simulations relate raw-byte/layout observations to both native paths." LLVM unverified cannot have representation simulation proof relating it? It can have a relation established by tests? Wording under qualification not proof. They earlier "Keep direct proofs representation" for Memory CFG to BIR, but LLVM printer unverified, so no proved simulation to LLVM. "representation simulations relate its raw-byte/layout observations to both native paths" could falsely imply proved simulation for LLVM, contradict "LLVM remains unverified". Perhaps simulations relate Core to MemoryCFG/BIR common, then tests native paths. Since both from same BIR, okay common representation simulation to BIR, backend assumptions separate. Fine.
+
+  Certificates paragraph says "exact source bytes through independent judgments/validated edges to exact emitted BIR" yes. "After slice0 use decided per-edge certificates" good.
+
+  Maximal behavior paragraph: one potential new error is target refinement must allow more behaviors for checked operations? No.
+
+  Should investigate existing semantic contract in docs perhaps maximal behavior uses may-vs-must. Search R-0496.Interesting ROADMAP R-0508 already maximal behavior, so citation Q9.9 incomplete but claim supported by ROADMAP. User specifically check docs/decisions legacy spec archive not necessarily ROADMAP but I can mention no issue.
+
+  Should read A1 boundaries relevant to hybrid and evaluator for missing requirements. This can expose C8 incomplete: adequacy for infinite behaviors requires limits of prefixes, not just finite execution completeness + trace-prefix consistency. Draft C8 proves soundness/completeness finite only, monotonicity, trace-prefix. C8 "evaluator adequacy and termination" Freeze small-step and total evaluator. It claims evaluator adequacy but only finite soundness/completeness and trace-prefix. A1 says "Adequacy relates completed runs and compatible limits of prefixes to maximal executions. ... silent divergence..." Draft2 C8 omits infinite-run adequacy (compatible limits of prefixes) even though section3 requires maximal behaviors and Q9.9. This may be key user emphasis C4/C8 and certificates/maximal paragraph. They may expect new error: evaluator adequacy not enough to establish maximal behavior/infinite execution. Should assess. Draft C8 explicitly:
+  "Prove evaluator soundness (a reported result has a matching finite execution), completeness (every finite execution is obtained with enough fuel), monotonicity (extra fuel preserves a completed result) and trace-prefix consistency." It does not prove that an infinite chain of evaluator prefixes corresponds to an infinite small-step execution (though with small-step relation and deterministic oracle one could derive via infinite recursion/König? Not automatically). It defines divergence as infinite execution but no evaluator adequacy for divergence. Q9.9 "Define maximal behaviors and adequacy". Legacy A1 explicitly demands compatible limits. Round1 agy C8 asked explicit choices and Core IR, draft addressed but incomplete maximal adequacy. Section3 maximal behavior paragraph does not repair evaluator. This is a substantive finding. Could be blocker Q1/C8. I'll mention. User "especially hybrid state in C4/C8 (is coherent and provable?), certificates/maximal-behaviour paragraph" likely hints at such. Carefully formulate.
+
+  Hybrid C4/C8: perhaps more fundamental issues with "fixed inputs deterministic" and maximal behavior under oracle. A1 legacy already says total evaluator deterministic fixed admissible environment/allocation oracle and adequacy infinite. Draft C8 adds choices good. Should include infinite prefix adequacy and receptive/determinacy hypotheses for forward-to-backward simulation. Section3 "Target steps may stutter finitely; progress or well-founded excludes infinite silent..." Legacy says "Pass proofs include clock transport or well-founded stuttering; conversion forward to backward only after receptiveness/determinacy hypotheses or equivalent oracle theorem." Draft3 omits finite observed target prefixes requirement and related initial states/obs relation. But it's a proposal high-level, perhaps no need all details? It says each lowering proves maximal behaviors including infinite, enough statement implies all. Evaluator list incomplete explicit.
+
+  Also "Fixed inputs make evaluation deterministic" requires oracle answers fixed, but small-step relation could still be nondeterministic if from_exposed choices not determined by environmentChoices? They explicitly include exposed alternatives. Good. All nondeterminism covered external responses, allocation/address, exposed, padding. What about literal pooling/static addresses? Q4.4 pooling allowed no safe identity but raw FFI static bytes addresses observable under contract. Allocation/address choices covers. Foreign behavior external. Good.
+
+  Hybrid C4 issue perhaps initialization + typed writes coherence:
+  - They require typed writes update represented range, raw writes invalidate validity. But no law for materialization freshness and no guarantee projection remains stable across moving or copying. Address-taking materializes fixed padding. Moving a value after address taken? Ownership/loans prevent moving borrowed root, but raw pointer does not necessarily create loan? Raw address-taking from owned value without borrow? In unsafe code can take raw pointer then move value; pointer provenance remains old block. Structured place move could transfer representation to another range, leaving old pointer to old range; deallocation/lifetime handles. Should explicit memory semantics. Could be provable with detailed invariants. Proposal interface not full formalization.
+
+  - One state but structured places for safe typed storage plus raw/exposed blocks. If safe typed storage always has allocation identity per MEM-1, projection partial for not represented. Address-taking materializes. Coherent.
+  - Raw writes to padding: invalidate typed validity until decoding, decoding ignores padding so immediate restore. Fine.
+  - Typed writes update bytes but raw observers may see padding stay unchanged. Rep allows allowed padding choices. okay.
+  - "Address-taking materializes coherent representation with fixed padding choices for that execution." If materialization happens after raw pointer already points into block? First address-taking is when raw pointer formed. Fine.
+  - "Pointer fragments carry provenance metadata separately from numeric bytes." Rep encode/decode valid pointer values roundtrip requires provenance. fine.
+
+  Perhaps contradiction: Q3.11 says structured values + raw store joined Rep, MEM-1 says safe values live in allocations with identities. C4 says structured places + byte blocks partial projection. Compatible.
+
+  I can conclude hybrid is coherent in principle, but C8 missing infinite adequacy. Also perhaps raw writes invalidating "typed validity until checked decoding restores it" means decoding must be an explicit state transition, not just Rep proof, else a typed read could use stale structured value after raw write. They say until checked decoding restores, implies state transition. Should require projection/Rep invariant in every step and decode updates structured place, not just validation. Could mention as necessary precision not blocker? User asks findings only errors. I can say C4 coherent only if decoding writes back the structured place and typed writes preserve padding/provenance; draft doesn't state write-back. Is absence actual incoherence? "A partial place-to-block/range projection and Rep relate the two... raw writes invalidate affected typed validity until checked decoding restores it." Restoring typed validity logically likely updates place. Could be understood. Don't overflag.
+
+  Certificates/maximal paragraph citation:
+  - Draft says Q9.9 calls maximal behaviors yes. ROADMAP R-0508 supports.
+  - "each lowering proves refinement of maximal behaviors" decided R-0508, proof per stage decisions. Good.
+  - Infinite silent target stuttering exclusion: legacy A1 demands well-founded stuttering. Good.
+  - Missing "finite observed target prefixes" in refinement paragraph? Maximal behavior inclusion alone does not guarantee every finite target prefix has a compatible source prefix. A1 explicit says relate every finite observed prefix as well; finite target prefixes must extend compatible source executions, infinite limits adequacy. Is maximal trace refinement alone sufficient for finite prefix? In general maximal trace inclusion does not imply prefix inclusion for target prefixes that cannot yet extend? If target semantics total/receptive all prefixes extend to maximal, but environment may block. With receptiveness perhaps yes. They include blocking as infinite behavior. But to compose simulations and evaluator, explicit prefix refinement needed. Could flag incomplete citation? The paragraph says "refinement of maximal behaviors ... with traces". Standard maximal behavior refinement includes finite prefixes? No, maximal trace inclusion alone does not ensure all finite prefixes if target has stuck states (unsafe) but accepted safe no stuck except trusted. A1 explicitly requires. User specifically mentions paragraph likely expects this nuance and infinite stutter. Draft added stutter from round1, but omitted source/target related states, finite prefixes. Perhaps round1 Codex S3 maximal behavior finding requested each edge excludes infinite silent stutter. Draft did exactly. Could be accepted. I shouldn't invent blocker if high-level statement adequate.
+
+  Should read round1 actual findings? Only CHANGES summary not full review. I only have docs. They want check handling. I can identify rejected agy C7 wrong? CHANGES rejected agy CT tier and release metadata; rejections correct. Others accepted but wrong as above. Should have no need for repeat agreement.
+
+  Could be C7 new formulation not theorem for every accepted program due release policy. It says "for equal public inputs, matched external choices and equal ordered release site/value traces, prove equal public observations (NI), separately equal leakage (CT)." Correct. "Policy authorization alone does not establish either theorem" good.
+
+  Could be "explicit release-site records" includes release value potentially secret instrumentation ghost. Fine.
+
+  Check C1 Q13 handling wrong and Q12 wrong are clear.
+
+  C3 view citation clear.
+
+  Other citation not support:
+  - C2 Authority OD106 actually refutes deferral.
+  - C3 Q4.5 refutes universal adapters.
+  - C8 Q9.9 doesn't by itself support lowering maximal behavior but ROADMAP supports. I can note citation incomplete but not false claim. User wants any citation not support claim, view one enough.
+  - C6 "runtime stack bounds" citation stack bounds anchor supports. yes.
+  - C5 randomness anchor called randomness but includes stack. yes.
+  - C1 Q9.11 postconditions irrelevant but cleanup. fine.
+  - C3 runtime/layout decision supports native struct but not enums, they separate. good.
+  - C4 memory decision is heap accounting not memory model; authority also Q rows. okay.
+  - C10 P18 contracts supports frame theorem no source clause. yes.
+
+  Owner Q recommendations need one line each. I can keep 17 lines brief. For Q12 other: "Other—keep decided Result<T,OutOfRange>; no new question." Q13 other: "Other—retain Q2.3 exact orders; only implementation timing defers." Q7 perhaps runner-up. Q5 perhaps option (a)? Should decide based technical. Q2 hybrid agree with adequacy fix. Q9 perhaps runner-up? I should determine final disagreements deliberately.
+
+  I'll examine owner question Q1: recommends complete C1-C10 foundation, but includes wrong deferrals. I can agree scope conditional corrections. In response Q list can "AGREE—freeze integrated interfaces/laws after proofs, not unexercised architecture." fine.
+  Q2 "AGREE, with C8 infinite adequacy obligation" decisive reason. If C4 needs writeback mention in findings not Q.
+  Q3 agree.
+  Q4 agree.
+  Q5 b vs a. Long-term "best design" niche optimization Option pointer ubiquitous. b means tagged now future owner approval; no permanent. It defers compact Option<Heap> until later aggregate slice; memory savings real systems but not current workload. Q4 retain i32 now. b consistent. Agree.
+  Q6 agree.
+  Q7 runner-up because target independence decided and no demonstrated workload. Could note target-sized usize reduces storage but changes semantics across targets and Q3.5 explicit. Good.
+  Q8 agree.
+  Q9 recommendation defer until needs, slice0 already needs overflow and slice1 abort, so no actual delay. Runner-up gives complete taxonomy including bounds/invalidRange future. Foundation extensible interfaces not exhaustive inventory. Defer is best to avoid inventing kinds. Agree but note must decide overflow before slice0 and abort before slice1. This could be one line decisive. Q9 recommended answer "defer concrete constructors/renderings until trap semantics needs them, before first supported slice." It is already needed, so recommendation effectively now. AGREE.
+  Q10 agree.
+  Q11 agree.
+  Q12 other.
+  Q13 other.
+  Q14 agree.
+  Q15 agree.
+  Q16 agree.
+  Q17 agree.
+
+  Could disagree Q17 runner-up because controlled tests across effectful backend LCB premises not all supported? But every supported controlled test explicit choices is good and decided two backends plus evaluator fuzzer. No.
+
+  Could disagree Q4 prefer compact runner-up as best long-term? Defer avoids premature change. good.
+
+  Blockers list likely "Q12/OD106, Q13/Q2.3, C8 infinite adequacy, C3 view adapter". Are all blockers? User asks ANSWER blockers short list or none. I can label blockers 4. Hybrid itself not blocker if adequacy fixed. Certificates no error. Perhaps C8 infinite adequacy a blocker to freeze. C3 unsupported adapter can be corrected. Q12/Q13 clear blockers.
+
+  Should ensure no more critical contradictions:
+  - C4 allocation starts uninitialized unless primitive contract initializes. MEM-3 safe binding always init. okay.
+  - C4 "Q3.7 zero-byte only alignment non-null" correct.
+  - C4 "nonzero accesses need ... initialization for reads and write permission for writes." It omits authority/loan permission for nonzero? says write permission, perhaps read needs access permission too? Q3.7 "provenance, bounds, liveness, alignment, initialization(read), write access(write)" no general authority read. okay.
+  - C4 "Raw byte copying may transport uninitialized padding and provenance fragments without observing them; observing a byte requires init." Copying uninitialized bytes in source semantics allowed raw operation contract; okay.
+  - C4 "Reading typed value requires active representation bytes initialized valid" for unmaterialized structured values? Reading safe typed value before address taken has no active representation bytes. Wording "active representation bytes" could mean if materialized. Should clarify but not fatal.
+  - C4 "moves transfer ownership exactly once" with byte copy of linear raw values not safe. okay.
+  - C3 "Zero-size fields have empty byte ranges may share offsets." Native layout field round to alignment: offset round each field, zero fields could offset after prior. okay.
+  - C3 empty aggregates size0 align1 includes empty enum? Source empty enum refused, semantic zero variant uninhabited no layout needed. Empty structs only. "aggregates" arrays n=0 align element not1, contradiction? Layout rule says "Empty aggregates have size 0/alignment 1" then arrays including n=0 alignment align(T). If an empty array `[T;0]` is an empty aggregate, first sentence says align1, second says align(T). This is a new internal inconsistency introduced draft1 and retained. Draft C3:
+  "native structs ... aggregate alignment max (1 for empty)... Empty aggregates have size 0/alignment 1. Arrays have size... alignment align(T), including n=0." "Empty aggregates" likely empty structs, but wording broad includes zero-length arrays and perhaps empty enum. Could flag? It says "Empty aggregates" after struct rule, perhaps refers empty struct. But arrays explicitly including n=0 indicates exception. Ambiguity could be error. User wants brief major. Could mention if no stronger. C3 native struct empty size 0 align1 from Q9.14/OD126 Unit. Arrays zero align T decided? Not explicit. Proposal can choose. Better say "empty structs" to avoid contradiction. New error introduced draft2? It existed v1 so not new, round1 not flagged perhaps still finding category round1 unhandled? User asks report only round1 handled wrong/new errors. Could identify new? Not introduced by draft2 so outside unless incomplete round1 general. Don't include minor old unflagged perhaps.
+
+  - C2 `MIN % -1` Overflow yes.
+  - C2 "as lossless entire source domain" OutOfRange contradiction.
+  - C2 "bool encoded byte 0/1" good.
+
+  - C1 "deferred operands read cleanup dependencies kept alive" Q9.8.
+  - C1 "collection destruction order deferred under q13" false.
+  - C1 "destruction ordinary checked call may itself fail terminate" Q2.6.
+
+  - C6 "observable final external state" good.
+  - C6 "no universal resource exhaustion trap" no hidden traps stack defined future. okay.
+
+  - C7 "public/secret state equivalence" release traces. good.
+  - C7 wipe events preservation ordinary maximal observations includes protected events. SPARK says observable. good.
+
+  - C9 "Q9.7 exhaustive inventory becomes ... selected registry" owner q16. fine.
+
+  - Section4 revision register missing Q2.3 and OD106 as said. Could combine findings.
+
+  - Section4 Q3.5 TYPE-19 FFI-7 Add usize; replace u64 index/length/sizeof results only if approved. Also Q2.4 drain `at:u64`, Q1.11 counts u64, Q4.6 byte offsets, etc consequential uses not listed. If Q7 approved target usize, many Core row notes signatures use u64 (`drained.at`, clock u64 nanoseconds shouldn't change, allocation count etc). Revision register says replace u64 index/length/sizeof results only; would include Q2.4 `at`, Q4.6, Q3.5. It only lists Q3.5 TYPE19 FFI7, not Q2.4/Q4.6 etc. Could be incomplete revision register. Owner Q7 recommends usize for all indices lengths capacities allocation sizes. Q2.4 `at` index should become usize, Q4.6 offsets, Q1.11 count above u64 should change to target max, array layout. These are notes to rows authoritative. Should flag? This is important if recommending Q7. Since I disagree Q7, still draft revision completeness issue. They explicitly say all revisions separate. Revision register Q3.5/TYPE19/FFI7 insufficient to enact. Q3.5 summary u64 lengths indices across profiles, row note governs. Q2.4 at u64 exact API and Q4.6 operations likely implied u64. Q1.11 "A count above u64" should become count above usize max perhaps. Also Q7.6 clock u64 stays time not length. Q3.10 u64 address abstraction separately Q3. Could mention as incompleteness in Q7 proposal. But user wants brief and main blockers. Could be useful new error introduced draft2? Draft1 register Q3.5 only too, so not new but round1 handled incomplete: CHANGES accepted Q3.5 without noting downstream. Round1 finding was just make explicit, they did. Still incomplete normative revisions. Should I include? Yes if thorough but desired brief. Perhaps one bullet "Q7's revision is also incomplete: Q2.4/Q4.6 and Q1.11 contain u64 index/count contracts." Should confirm these notes are authoritative and row notes govern CHANGES itself says notes govern. This is strong. Add blocker? Could list under revision register. It doesn't change my Q choice.
+
+  - Q16 registry extensibility revision Q7.1 fixed target grant table and Q7.10; Q9.7 primitive. Also FFI-6 exhaustive primitive table, authority rule 7 etc. Revision register only Q7.1/Q7.10 Q9.7. Could require FFI-6 wording update, but C9 states no unknown primitive. Proposal interface extension is compatible exhaustive selected registry. FFI-6 "effects fixed by exhaustive primitive table" can be selected table, no contradiction. Fine.
+
+  - Q6 release erasure Q1.7 plus MEM-5, MEM-7 recorded release info; revision register only Q1.7 but "including owning Text where applicable" TYPE-3 ownership. Not necessarily revise.
+  - Q4 enum OD126/FFI7 plus ConcreteSpec Rep doc? proposed no authority. fine.
+  - Q3 target generalization Q3.10 explicit 2^64-1 note, revision register only Q3.7/Q3.9 and OD126, omits Q3.10. C4 generalizes address exhaustion and arithmetic cannot wrap. Q3.10 note "Every block base+size ≤2^64−1" must be generalized to target address width. This is clear incomplete revision register. Also Q1.11 MaxAlign current target no issue. So target Q3 revision should include Q3.10. CHANGES Kimi Q3.7 accepted generalize address but Q3.10 missed. New draft revision row says OD126; Q3.7/Q3.9 only. This is a substantive missed consequential revision. I should flag. Q3 recommendation still agree, but register must add Q3.10. C2 "pointer differences math signed" fine.
+  - Q7 usize Q1.11 etc as above.
+  - C3 Text pointer length etc.
+
+  - Q8 early evidence and proof infrastructure plus ROADMAP R-0505 named. okay.
+  - Q13 should Q2.3 revision register but no revision needed.
+  - Q12 OD106 missing.
+
+  Potential Q5 niche if option a revises OD126/FFI7 too, question4/5 says separate. Revision register only enum layout Q4 includes native tag/payload, niches Q5 not listed explicitly. Row says OD126; FFI7 native enum tag/payload layout changes Q4. Q5 niche also layout changes, should register question4/5 or 5. They phrase row scope "Native enum tag/payload layout changes ... separately" question4 only. If owner chooses Q5(a), it also revises OD126/FFI7 but not register. That's an incompleteness. Recommended b means no current revision, but runner-up a should be properly registered. Could mention if brief? Many revision register omissions suggest register not exhaustive. I can consolidate: "Revision register is not complete: add OD106 and Q2.3 corrections (actually no defer), Q3.10 for target, downstream u64 rows, Q5(a)." But Q2.3 shouldn't add revision if retain decided. Saying add Q2.3 revision only if they insist defer; recommended should no question. Q12 no revision if retain OutOfRange. Main.
+
+  Perhaps C3 enum layout Q4 runner-up "smallest tag u8 <=256 u16 <=65536 u32 <=2^32" number of variants exactly 2^32 cannot represent tag values 0..2^32-1 with u32 yes mathematically can have 2^32 variants though impossible finite compiler memory, no issue. Declaration order tags explicit. fine.
+
+  - Q5 niche single pointer payload handles with stable context no per-instance. It says pointer-size/provenance/ownership/release proofs. okay.
+
+  Question Q7 recommended target usize might conflict target profile length width already introduced Q3; revision explicit. My choice runner-up.
+
+  Question Q16 extensible registry vs owner decisions every language change: "lawful typed extensions" could allow compiler adding new primitives/grants without owner language decision. It says owner approval Q16 general registry extensions preserving entries, unknown refused. Future new operations likely still language owner decisions; later slices supply lawful instances. It could be interpreted as blanket approval arbitrary extension. Section1 "Every admitted instance required laws; unknown refused" and Q16 "lawful typed extensions" not explicit owner per new language feature. Owner principle all language decisions owner. Runner-up "closed inventory seek owner amendment each addition" ensures. Is recommended registry extensibility compatible if each extension still owner-approved? It says later slices lawful instances, decided vertical slices already list future features. New future feature not in decided plan would need owner anyway. Q16 is architecture not permission. Could agree conditional that registry extensibility doesn't waive owner approval. No need disagree.
+
+  Q1 similar.
+
+  Hybrid proof: Should formulate infinite adequacy precisely with citations legacy A1 lines153-158. I should Read specific file around 140-160 and 190-224 to cite accurate.
+
+• The hybrid store is viable as a single coherent semantics, but C8 does not yet discharge Q9.9’s full adequacy obligation: its four lemmas cover finite runs only. The archived semantic contract also requires adequacy for compatible limits of prefixes, hence for silent divergence and infinite interaction.
+
+• This supports a maximal paragraph incompleteness: finite prefixes not included. Could report as new error/incomplete round1 S3. Draft2 only says maximal behavior and stutter. A1 says finite prefixes and infinite limits. Since User specifically "certificates/maximal-behaviour paragraph", I should state certificate half correct; maximal half still incomplete: add related initial states/admissible env, finite prefix refinement and infinite-limit adequacy, plus stutter. But is it necessary to list all? I can focus on finite prefix and evaluator infinite. Certificates okay no repeat agreement? User says do not repeat agreement on unchanged text. But paragraph changed, can say "Certificate claims are supported; no finding" perhaps not needed. Report only findings. No need mention correct certificate. Could mention maximal issue only.
+
+  C8 evaluator completeness finite and trace-prefix consistency doesn't guarantee compatible limits. This pairs with section3 omission finite prefixes. One finding.
+
+  Hybrid C4 perhaps adequate with C8 fixed. Should I mention no fundamental incoherence? User explicitly asks whether coherent/provable, so response should answer yes in principle, with conditions. User said report only findings; I can say in finding "C4/C8: hybrid is coherent in principle, but not yet provably adequate as written..." This addresses.
+
+  Potential Rep roundtrip in C4 "encoding/decoding roundtrip for valid typed values, with allowed padding choices" needs both decode(encode v)=v and encode(decode bytes) relation for valid bytes? They say decoding yields only valid values, so enough. Load/store correspondence and allocation/release preservation missing from C4? Freeze says partial decoding access validity disjoint composition. Rule prove roundtrip. A1 requires load/store, allocation/release, injectivity live objects, target memory validity. C4 typed writes update range, raw invalidation etc; laws not explicitly allocation release preservation/injectivity. Foundation C4 says disjoint memory composition laws. C10 frames. Could be high-level not exhaustive. Q9.14 only one values-to-bytes lemma. No need.
+
+  C8 signature `eval(target, layout, environmentChoices, fuel, coreProgram, state)`: layout read-only, target includes profile. deterministic fixed inputs. State includes structured/bytes. Fine.
+
+  C4 raw byte observed padding output and simulation: Source Core materializes padding nondeterministically. Lowering representation can choose different padding as long behavior refinement per matched choice. Qualification with matched choices must ensure matching source padding choice to target. They include padding choices in environmentChoices. good.
+
+  Could fixed padding choices "for that execution" mean once address-taking always same across all values? It says fixed padding choices for that execution, environmentChoices materialization. Fine.
+
+  Potential C4 pointer expose semantics mismatch MEM-2: "A block has no numeric address until pointer exposed" vs C4 "blocks with base" and address-taking materializes, expose records. Base can be quasi-concrete optional assigned at expose. C8 allocation/address choices. okay.
+
+  Revision omissions I should include. Should verify Q3.10 row note authoritative through CHANGES line3. yes.
+
+  C3 view adapter new error citation strong. Should line cite `_review/FOUNDATION_PROPOSAL.md:48`, `docs/decisions.md:229` etc. Response references concise.
+
+  Perhaps Q12 proposal says "No unplaced OutOfRange constructor is frozen" directly false. OutOfRange is a builtin error type, not necessarily constructor? OD106 `Result<T, OutOfRange>` treats OutOfRange as type (error names reason), ARITH10 same. Draft runner-up "distinct builtin ConversionError with OutOfRange" uses OutOfRange as constructor, and "No unplaced OutOfRange constructor is frozen." In decided spec `OutOfRange` appears as error type, not constructor. They may exploit distinction: question "checked-conversion error type" decided Result<T, OutOfRange> already. Runner-up changes error type to ConversionError with constructor OutOfRange, a revision. So clear. Should phrase exact: Existing `OutOfRange` is the error type; not merely an unplaced constructor. Their statement false.
+
+  Q13 "runner-up freeze increasing array indices then backing..." exactly existing Q2.3. Recommendation defer would not preserve decided rules contrary section5 intro. So blocker.
+
+  Question Q7 target usize: Existing Q3.5 note not in decisions.md but JSON authoritative. I can cite `docs/archive/.../core_rows.json` no line (line1 huge). Better cite `docs/decisions.md:217` for u64 and mention its incorporated row note. Response line no need detailed path for Q rec perhaps "runner-up—preserves Q3.5's target-independent meaning; no workload justifies revising it." Fine.
+
+  Question Q12 response choice "other (keep decided)" not runner-up. Q13 "other (no owner question; keep Q2.3)" not runner-up? Runner-up is freeze exact orders, which matches decided. User asks prefer runner-up or another option. I can choose runner-up because it says freeze same orders. But recommendation vs runner-up: runner-up "freeze increasing array indices then backing, ascending OrderedMap..." exactly Q2.3. So choose runner-up. However it says defer arrays and collections to slices vs freeze now; decided rule already freeze. So runner-up. Q12 runner-up is ConversionError wrong; choose other retain OutOfRange. Final response Q=7 runner-up,12 other,13 runner-up. Could Q13 choice "runner-up (already decided)" concise.
+
+  Blockers perhaps "decided-rule regressions (Q12,Q13), incomplete C8/maximal adequacy, unsupported view layout, incomplete revision register". Short list labels.
+
+  Should assess Q3 target revision omission: Is it blocker to owner approval? Yes revision register claims all independent changes. Add bullet:
+  - Revision register still incomplete beyond Q12/Q13: Q3 generalizes addresses but omits Q3.10's 64-bit block bound; Q7 omits Q1.11/Q2.4/Q4.6 u64 count/index APIs; Q5(a) would also change OD126/FFI7 though register assigns only Q4. These must be recorded before approval. This is detailed and valuable. Could be seen overkill but exactly task check draft against decisions. Include.
+
+  Question Q4 existing i32 profile retains. Q5(a) niche revision separate question but register scope could be interpreted Q4 "Native enum tag/payload layout changes existing ... separately from target abstraction" includes all enum layout changes and question column only 4 incorrectly. Yes mention perhaps too much. I can list Q3.10 and u64 downstream only incontrovertible. Q5(a) also straightforward. But keep brief.
+
+  Any other revision omissions Q9 trap runner-up if approved would revise existing legacy trap spellings? Legacy spec not decided exact labels per CHANGES, so new decision not revision. Fine.
+  Q10 columns no.
+  Q11 invalidRange depends Q9 runner-up; if Q9 defer and Q11 runner-up map to proposed invalidRange nonexistent, but independent questions runner-ups can conflict if chosen separately. Section4 says each independently answerable. Q11 runner-up "map ... to proposed invalidRange" requires Q9 runner-up or adding constructor. If owner chooses Q9 defer and Q11 runner-up, impossible because invalidRange not approved. This is a coherence issue in independently answerable questions. Similarly Q12 runner-up outside TrapKind independent fine. Q5(a) requires Q4? Q5(a) niche layout exception with Q4 i32 tagged other enums works. Q11 dependency should be noted? User asks all owner questions independent. "No revision enacted; each question own answer; umbrella cannot choose independently." They are separately answerable but Q11 runner-up explicitly conditional on proposed invalidRange. Could say Q11 runner-up is conditional on Q9 approving invalidRange, so not fully independent. But recommendation defer avoids. Not blocker to recommendation. Could include new error minor if space. Desired brief likely focus major.
+
+  Q9 runner-up TrapKind arithmetic(ArithmeticError) includes abort, bounds invalidRange. Explicit abort as TrapKind okay.
+  Q11 mapping invalidRange only available runner-up. They call proposed. Owner can understand dependency. no.
+
+  Q17 P4 across three implementations matched allowed nondeterministic choices: target native cannot control allocation addresses easily, raw address output tests can script allocator? Controlled tests can. unsupported reported. fine.
+
+  Potential owner Q1 complete foundation scope includes raw pointer semantics before slice24, target profiles etc and violates A2i not untested whole architecture. They qualify representative interactions but C1-C10 massive. Runner-up smaller integrated scopes incrementally may be more consistent. Owner option b explicitly write shared foundation before slice1. So agree.
+
+  Potential Q2 all bytes runner-up simpler one state avoids hybrid coherence. Hybrid decided MEM-1 and Q3.11 structured + raw Rep, so hybrid recommendation preserves decided. All bytes would revise. Agree.
+
+  Q3 separate semantics per profile runner-up violates one authoritative semantics. agree.
+
+  Q6 erasure per-instance no state. agree.
+
+  Q8 later closure. agree.
+
+  Q16 extension. agree.
+
+  Now Todo update technical done and assess questions in progress. I have assessments. Could use one update then final response prep. Should have no further tools perhaps check line numbers exact and read questions already. I can update tasks technical done, assess in progress.
+
+• The remaining authority check also shows an incomplete revision register: target abstraction omits Q3.10’s 64-bit address bound, and `usize` omits other u64 index/count contracts. I’ve finished the question-by-question assessment.
+
+• Should formulate the response concise but enough. Perhaps ensure no tests since no modifications. No git status necessary? Instructions after builds only. Fine.
+
+  Structure:
+  **Round-1 handling / new findings**
+  1. Q12 conversion already decided. CHANGES agy C2 acceptance wrong. draft lines35,182; decisions OD106 line1221 and ARITH10 511. Runner-up would be revision absent register.
+  2. Q13 destruction decided Q2.3. CHANGES Codex C1/Kimi C1/agy C1 assertion no cited row false. draft27,183. Must remove owner question or mark only implementation schedule; register cannot defer.
+  3. C8 and maximal: hybrid coherent in principle (single projection and invalidation) and explicit choices make deterministic evaluation possible, but C8 lemmas finite only; add compatible-prefix-limit adequacy for infinite silent/interacting and finite target prefix refinement in section3. Cite A1 151-158,219-224. This is incomplete S3/C8 handling, blocker before freeze.
+  4. C3 citation view adapters unsupported Q4.5 only StaticStr FFI adapter, Q4.6 views semantics not representation. Remove decided claim or propose owner completion.
+  5. Revision register omissions Q3.10, Q7 downstream. Could combine with 1/2? separate.
+  No certificate error. User especially asks certificate paragraph perhaps expects mention supported. "No certificate error found; maximal part incomplete" but User says report only findings, no need. However User may wonder. I can phrase finding 3 "The certificate sentences are supported, but the maximal-behavior addition remains incomplete..." That repeats agreement on changed text but okay. User said do not repeat agreement on unchanged text. This is changed and important to explicitly address. Brief.
+
+  Question one-liners 17. To save, ordered list with **1** etc. One line each. AGREE uppercase as requested. Q2 "AGREE—hybrid is provable provided C8 gains infinite/prefix adequacy." decisive.
+  Q7 "RUNNER-UP—keep u64; target-sized usize makes accepted meaning/overflow target-dependent, contrary Q3.5, without a workload need."
+  Q12 "OTHER—retain decided Result<T,OutOfRange>; ConversionError would be an unjustified revision."
+  Q13 "RUNNER-UP—those are exactly Q2.3's existing rules; only implementation may wait."
+  Others reasons short.
+
+  Q9 "AGREE—defer inventory but decide overflow/abort before slices0/1 respectively." Is this a caveat perhaps recommendation says before first supported. Good.
+  Q17 "AGREE—common explicit choices make three-way observation comparison meaningful; tests remain qualification."
+  Q5 "AGREE (b)—defers optimization without permanent prohibition; representation laws already general."
+  Q6 "AGREE—proof-gated erasure preserves release identity and allocator lifetimes."
+  Q8 "AGREE—LP0/R-0505 schedule already separates pilot and final image closure."
+  Q14 "AGREE—slice6 is where complete entropy contract belongs; source premise alone not shape."
+  Q15 "AGREE—exposure rule is already decided and must be specified now; source feature waits."
+  Q16 "AGREE—closed selected registry with lawful extensions preserves exhaustiveness without freezing universe." Note owner approval still needed new rules perhaps no.
+  Q4 "AGREE—retain decided i32 until layout workload justifies revision."
+  Q3 "AGREE—one parameterized semantics avoids per-profile semantic duplication."
+  Q1 "AGREE—integrated proved interfaces, not speculative full-language freeze."
+  Q10 "AGREE—byte columns match source bytes and are simplest deterministic conformance rule."
+  Q11 "AGREE—operation contracts should classify UTF8 failures; no need invent global mapping now."
+  Q2 "AGREE—preserves decided structured+Rep model and makes raw execution possible; adequacy fix above."
+
+  Blockers exact short list at the end. Example:
+  ANSWER: BLOCKERS=Q12/OD106 decided OutOfRange, Q13/Q2.3 decided destruction order, C8+§3 missing infinite/finite-prefix adequacy, C3 unsupported view adapters, incomplete revision register; Q=7 runner-up (u64), 12 other (keep OutOfRange), 13 runner-up (keep Q2.3)
+  Must exactly line starts ANSWER. User requires exactly this line format not literal placeholders. Good.
+
+  Do all blockers need appear list short. Fine.
+
+  Before responding mark todo done.Now respond with concise 5 findings + 17 lines. Ensure citations actual lines. `_review/FOUNDATION_PROPOSAL.md:182`, `docs/decisions.md:1221`, `legacy/docs/spec/arithmetic.md:511`. Q2.3 docs line207. C8 line107, section3 line145. A1 154 etc. View line48 docs229. Revision lines157-159.
+
+  "Round1 handled wrongly/incomplete and new errors" no need split each perhaps two headings.
+  Potential new error "C3 decided pointer/length adapters" existed draft1 pointer length all Text/views, round1 partial fix Text but still wrong views, so incomplete round1 C3. Good.
+
+  Maximal finite-prefix requirement from A1 is legacy boundary draft but decisions says technical refinement obligations binding (decisions146-148), so authoritative enough. Cite docs/decisions.md:146 perhaps. Good.
+
+  C4/C8 hybrid state "coherent and provable?" I say yes in principle no inherent flaw found; missing adequacy means not complete. This isn't agreement unchanged; new analysis.
+
+  Do I call C8 blocker or not? Foundation freeze requires Q9.9 maximal behaviors and adequacy, so blocker yes.
+
+  Revision register omissions include Q7 Q1.11 count above u64, Q2.4 at:u64, Q4.6 u64 offsets from row notes not decisions summary. Since authoritative notes in core_rows line1, cite `docs/archive/decisions-2026-11-05/core_rows.json` no line perhaps line1. Q3.10 note same. Say "row notes" to precise. Q5(a) perhaps omit to avoid too many. Add Q5(a) to incomplete register? Short bullet with "likewise Q5(a) needs enum rows" might be worthwhile. But 5 findings enough.
+
+  Question 7 runner-up is a recommendation disagreement based target meaning. Could target-sized usize not necessarily make meaning target dependent if profiles considered language semantics separate? Q3.5 says across profiles meaning never depends target. My reason valid.
+
+  Question 13 runner-up exact existing. Good.
+
+  Kimi has enough to respond now.
+
+• ## Findings
+
+  - **Q12 reopens a decided rule.** OD106 and ARITH-10 already specify `try_convert -> Result<T, OutOfRange>` (`docs/decisions.md:1221`, `legacy/docs/spec/arithmetic.md:511`). `OutOfRange` is the decided error type, not an “unplaced constructor.” The proposed `ConversionError` runner-up would be a revision absent from the register. CHANGES_v2’s conversion-error disposition is therefore wrong.
+
+  - **Q13 incorrectly defers decided destruction orders.** Q2.3 already specifies increasing indices then backing, and ascending OrderedMap keys, key before value then nodes (`docs/decisions.md:207`). The runner-up merely restates existing law. CHANGES_v2’s claim that no cited row establishes these orders is false.
+
+  - **C4’s hybrid state is coherent in principle, but C8 is not yet adequate.** Structured places with a coherent byte projection and invalidation/write-back can support executable raw operations. However, C8’s lemmas cover only finite executions (`_review/FOUNDATION_PROPOSAL.md:107`). Q9.9 adequacy also requires relating compatible limits of fuel-indexed prefixes to infinite maximal executions—silent divergence and infinite interaction (`legacy/docs/compiler/A1_BOUNDARIES.md:151`). Section 3 should additionally require finite-target-prefix refinement, not only maximal behaviors and stuttering (`legacy/docs/compiler/A1_BOUNDARIES.md:219`). The certificate claims themselves are supported; the maximal-behavior formalization remains incomplete.
+
+  - **The view-layout citation does not support its claim.** C3 says StaticStr “and views” use decided pointer/length adapters (`_review/FOUNDATION_PROPOSAL.md:48`). Q4.5 decides only StaticStr’s explicit FFI adapter; Q4.6/Q4.7 define view behavior, not a universal view representation. The Text repair is therefore incomplete.
+
+  - **The revision register remains incomplete.** Target abstraction must include Q3.10’s row-note bound `base + size ≤ 2^64−1`, not only Q3.7/Q3.9. The `usize` proposal must also address u64 count/index contracts in Q1.11, Q2.4 and Q4.6’s authoritative row notes. These are consequential revisions, not merely implementations of Q3.5.
+
+  ## Owner questions
+
+  1. **AGREE** — Freeze integrated, proved interfaces and laws, not an unexercised whole-language architecture.
+  2. **AGREE** — The hybrid preserves the decided structured-value/`Rep` model, subject to the C8 adequacy repair.
+  3. **AGREE** — One parameterized semantics avoids duplicating rules across target profiles.
+  4. **AGREE** — Retain decided i32 tags until a concrete layout need justifies revision.
+  5. **AGREE (b)** — Defer niche optimization without imposing a permanent prohibition.
+  6. **AGREE** — Proof-gated erasure preserves release behavior and allocator dependencies.
+  7. **RUNNER-UP** — Retain u64; target-sized `usize` makes program meaning target-dependent, contrary to Q3.5’s deliberate cross-profile rule.
+  8. **AGREE** — LP0 and R-0505 already provide the appropriate staged native-proof closure.
+  9. **AGREE** — Defer the inventory, deciding overflow and abort before their slice-0/1 uses.
+  10. **AGREE** — Byte columns directly match source bytes and give simple conformance tests.
+  11. **AGREE** — UTF-8 failures belong to the relevant operation contracts, not an early global mapping.
+  12. **OTHER** — Retain the already-decided `Result<T, OutOfRange>`; no new error type is justified.
+  13. **RUNNER-UP** — Keep Q2.3’s existing orders; only their implementation belongs to later slices.
+  14. **AGREE** — Slice 6 should supply the complete entropy instance contract.
+  15. **AGREE** — Specify the decided exposure rule now; implement source invariants at slice 17.
+  16. **AGREE** — Lawful registries preserve exhaustive selected-instance coverage without freezing the universe.
+  17. **AGREE** — Explicit matched choices make three-way complete-observation qualification meaningful.
+
+  ANSWER: BLOCKERS=Q12/OD106 decided OutOfRange, Q13/Q2.3 decided destruction order, C8/§3 missing infinite and finite-prefix adequacy, C3 unsupported view adapters, incomplete revision register; Q=7 runner-up (retain u64), 12 other (retain OutOfRange), 13 runner-up (retain Q2.3)
+
+To resume this session: kimi -r session_d6b5536a-aa47-4683-a357-b35beecadaf4

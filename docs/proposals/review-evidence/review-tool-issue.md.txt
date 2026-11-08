@@ -1,0 +1,37 @@
+# review.sh reported findings outside the candidate's diff (2026-11-08)
+
+## What happened
+
+`train.sh check slice0` ran `review.sh --base 3bd7bc41 --head 9ebdda15`. Here 9ebdda15 is the train
+merge of wip/slice0@0e2950e7 onto main 3bd7bc41. It ran as **round 2**, and its 43 pieces included
+`scripts/checks/sandbox_isolation.sh` and `scripts/land/install-bot.sh`. Neither file is in the
+candidate's diff (`git diff --name-only 3bd7bc41 9ebdda15`). Their two findings made the verdict
+`findings`.
+
+## Cause (verified)
+
+For round N > 1, review.sh starts the delta at the newest commit in
+`git rev-list HEAD ^BASE` that carries a clean or findings note. Walking the train head reached
+c394b99f, an old wip/slice0 commit reviewed clean in round 1, from before main moved. The "delta"
+was therefore `git diff c394b99f 9ebdda15`. That diff contains every change main made since
+c394b99f's base, plus the member's later commits. The reviewer saw main's code as though the
+candidate had changed it.
+
+## Proposal (not implemented; for the owner of scripts/review)
+
+1. **Delta against a virtual merge.** For round N > 1, diff `HEAD` against
+   `git merge-tree --write-tree REVIEWED_SHA BASE_SHA` instead of against `REVIEWED_SHA`, so main's
+   own changes cancel out. If that merge conflicts, review the full `BASE..HEAD` diff (round-1
+   scope) instead of a wrong delta.
+2. **Route findings outside the candidate.** A finding whose file is not in
+   `git diff --name-only BASE HEAD` is recorded in the note under its own key
+   (`outside: <file:line> <text>`). It does not count toward the candidate's verdict. It is filed
+   for main's owner through the existing issue path (ISSUES.tsv / KNOWN_HOLES pattern), with the
+   reviewer's text and the SHA it was seen at. The candidate's verdict counts only findings inside
+   its diff.
+3. **Control in check_review_tool.sh.** A branch reviewed at an old commit, then a train merged onto
+   a main that changed another file, must give a round-2 delta without that file. A finding planted
+   in that file must come out as `outside`, not as `findings`.
+
+This time the two findings outside the diff were real. They were fixed on their own branch
+(wip/review-blockers), which lands before slice 0, so nothing was waived.

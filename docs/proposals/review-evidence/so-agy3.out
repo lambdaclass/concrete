@@ -1,0 +1,11 @@
+All Round 2 findings are resolved:
+- **Cap evidence (`scripts/land/signoff.sh:154-160`)**: `rounds-at` is verified via `scripts/review/verify.sh` (`vrc=0` or `vrc=1`), ensuring a well-formed `review.sh` note (clean, findings, or blocked) with `rounds >= cap`. Covered by control in `scripts/checks/landing_script.sh:1270-1275`.
+- **Reviewer transcript commit binding (`scripts/land/signoff.sh:63-69`, `173`)**: Each transcript must contain a hex token of at least 7 digits that is a prefix of `$sha` and resolves unambiguously to `$sha` via `git rev-parse -q --verify "$w^{commit}"`. Covered by `otherreview` control in `scripts/checks/landing_script.sh:1176-1178`, `1249`.
+- **Pre-push hook tree validation (`.githooks/pre-push:53-55`)**: Checks `git rev-list --parents -n 1 "$localsha"` for a root commit, a 40-hex ref suffix, and `git ls-tree --format='%(objectmode) %(objecttype) %(path)'` sorted under `LC_ALL=C` matching the exact four `100644 blob` entries (`agy.txt`, `codex.txt`, `kimi.txt`, `record.txt`). Covered by controls in `scripts/checks/review_tool.sh:302-324`.
+- **Pure merge & provenance (`scripts/land/train.sh:487-534`)**: `git fetch -q --prune "$REMOTE" "+refs/owner-signoff/*:refs/owner-signoff/*"` prevents stale local sign-off refs after remote deletion; `pure_merge` verifies exact 2-parent conflict-free `--no-ff` merges per member in order onto `base`.
+- **Shell safety**: `set -euo pipefail` in `signoff.sh`, no `bash 4+` features required on macOS (`printf -v`, `[[ =~ ]]`, `read -r -a`, `${!var}` all work in bash 3.2), `bad()` exits the `check` subshell cleanly in `cmd_record` and the process in `cmd_verify`.
+
+No issues found.
+
+VERDICT: ACCEPT
+agy rc=0

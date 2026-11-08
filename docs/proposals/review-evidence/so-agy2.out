@@ -1,0 +1,12 @@
+All round 1 findings are resolved in `ce2803ec`:
+
+- **Cap & review-round provenance (`scripts/land/signoff.sh:50-69`, `135-146`)**: `record` and `verify` now require `--base`, classify all paths changed between `$(git merge-base "$base" "$sha")` and `"$sha"` (docs 2, scripts 3, compiler/unknown 5, highest wins), verify that `rounds-at` is a 40-hex commit that is an ancestor of `"$sha"` and not an ancestor of `"$base"`, and require its `refs/notes/concrete-review` note to record `rounds >= cap`.
+- **Pre-build verification & filter bypass (`scripts/land/signoff.sh:94-106`, `115`)**: `record` hashes blobs with `git hash-object -w --no-filters`, runs `check` on the constructed commit before touching `refs/owner-signoff/$sha`, and `check` verifies `record.txt` is a `blob` before reading it.
+- **Pure merge check (`scripts/land/train.sh:487-506`)**: `pure_merge` captures `git merge-tree --write-tree` directly without piping into `head`, so a non-zero exit on conflict is reliably caught alongside the 40-hex tree and `$cur^{tree}` equality checks.
+- **Pre-push hook tier (`/.githooks/pre-push:49-59`)**: `refs/owner-signoff/*` takes the notes tier only when the ref suffix is 40 lowercase hex digits, `localsha` is a parentless commit (`git rev-list --parents -n 1`), and its top-level tree entries are sorted as `agy.txt codex.txt kimi.txt record.txt`. Deletions, source commits, and non-SHA ref names fall through to the full tier.
+- **Controls (`scripts/checks/landing_script.sh`, `scripts/checks/review_tool.sh`)**: Cover cap enforcement per path class (`docs`, `scripts`, `compiler` mixed), `pure_merge` rejections, tampered/missing/rejected/mismatched sign-off records, and pre-push hook tier routing.
+
+No blocking issues found.
+
+VERDICT: ACCEPT
+agy rc=0

@@ -1,0 +1,12 @@
+Owner instruction 2026-11-08, verbatim: "can you have kimi, codex and agy implement things and we just review it".
+From now on you do not write implementation yourself. For every piece of work (Lean spec, compiler code, scripts, tests, docs):
+1. Write a precise task brief (goal, files, decided rows to follow, what is out of scope, the gates it must pass, the hard rules below).
+2. Hand it to a writer in its own fresh full clone on its own wip/ branch:
+   - Codex: `codex exec -s danger-full-access` (good for Lean and compiler code);
+   - Kimi: `kimi -p` (edits files and runs commands; never --yolo/--auto with -p);
+   - agy: `agy -p` for self-contained pieces whose inputs fit inline (it cannot read files reliably); you apply its output.
+   Launch under systemd-run --user with TasksMax/MemoryMax and --setenv=PATH="$PATH" --setenv=HOME="$HOME", and under timeout. Heavy builds/gates on concrete-ci-2. At most two heavy runs per machine.
+3. Review the diff yourself, run the gates, and get the other two models to cross-review (the writer never reviews its own work as one of the three).
+4. Send findings back to the writer to fix; you commit (if the writer did not) and push to origin and lambdaclass immediately; land only via the train.
+You may write a fix yourself only when a reviewer pinpointed a small change and a writer round would cost more; say so in your report.
+Never give a writer work overlapping another worker's uncommitted tree. All existing rules stand (no force-push, no --no-verify, hook on, both remotes, never `fork`, bounded runs, decisions.md/ROADMAP only by the decisions writer, language questions go to the owner).

@@ -1,0 +1,13 @@
+• 1. **`scripts/land/install-bot.sh:41-59` — the installer performs unguarded network operations.** A fresh install clones arbitrary `INSTALL_ORIGIN_URL`, and an existing installation fetches its origin before the generated launcher’s guard is installed or run. `INSTALL_MIRROR_URL` is likewise unchecked. Validate both direct URLs before cloning/adding them, and run `land_remote_bad` on an existing clone before line 59. The test at `scripts/checks/landing_bot.sh:441-445` passes because its shim deliberately makes `git clone` fail; add foreign-origin tests with logging `git` shims and assert that neither `clone` nor `fetch` occurs.
+
+  2. **`scripts/land/lib.sh:95-102,126` — SSH host validation can differ from Git’s actual connection.** The guard always runs plain `ssh -G`, but Git honors `GIT_SSH`, `GIT_SSH_COMMAND`, and `core.sshCommand`. For example, with `GIT_SSH_COMMAND='ssh -o HostName=attacker.example'`, `git@github.com:lambdaclass/concrete.git` passes the guard while Git connects to `attacker.example`. Either reject these overrides for guarded operations or resolve using Git’s exact effective SSH command and fail closed if it cannot be reproduced safely. Add an override regression test.
+
+  3. **`.githooks/pre-push:36-40` — manual pushes through mixed-repository remotes are accepted.** The hook checks only `$2`, the individual push URL. If a named remote fetches `lambdaclass/concrete` and pushes `unbalancedparentheses/concrete2`, the push URL is allowed and the hook never detects the prohibited mixed configuration. When `$1` names a configured remote, also run `land_remote_bad "$1"`; retain the direct-URL check for pushes to literal URLs. Add a hook test using the existing `gh-mixed` fixture.
+
+  4. **`scripts/checks/landing_script.sh:629-645,793-809` and `scripts/checks/landing_bot.sh:408-420` — several “refused before network use” tests can pass after network use.** They check diagnostics and unchanged refs, but an earlier `fetch`, `ls-remote`, or `gh` read would leave those assertions passing. Run these cases with logging `git` **and** `gh` shims and assert an empty log, as the later notes/review tests already do.
+
+  The changed scripts pass `bash -n`; no additional Bash 3.2/BSD portability defect was found by inspection. State-changing test suites were not run.
+
+  VERDICT: REJECT
+
+To resume this session: kimi -r session_19f760d6-fb40-40d0-bc39-0015e8911e21

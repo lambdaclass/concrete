@@ -1,0 +1,20 @@
+Observed output:
+
+```text
+all-ACCEPT verify exit: 0
+8eec4516cd630b3a581c07ec5a4f487d765eaa58 owner sign-off does not qualify: the kimi output's last verdict is 'VERDICT:REJECT', not VERDICT: ACCEPT
+Kimi-REJECT verify exit: 1
+```
+
+Exact lines at fault:
+
+- [scripts/land/signoff.sh:201](/home/unbalancedparen/projects/clones/signoff-reject-confirm/scripts/land/signoff.sh:201) parses either verdict; line **203** then rejects anything except `VERDICT:ACCEPT`.
+- [scripts/checks/landing_script.sh:1204](/home/unbalancedparen/projects/clones/signoff-reject-confirm/scripts/checks/landing_script.sh:1204) constructs the hash-consistent REJECT variant for agy; [line 1279](/home/unbalancedparen/projects/clones/signoff-reject-confirm/scripts/checks/landing_script.sh:1279) explicitly asserts its refusal.
+
+Under the supplied owner decision, completed reviews and recorded outstanding verdicts satisfy the review requirement without unanimous acceptance.
+
+VERDICT: CONFIRMED
+Reading additional input from stdin...
+OpenAI Codex v0.166.0
+--------
+workdir: /home/unbalancedparen/projects/clones/signoff-reject-confirm

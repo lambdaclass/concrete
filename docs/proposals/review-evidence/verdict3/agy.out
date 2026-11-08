@@ -1,0 +1,12 @@
+### Revised & New Items
+
+- **11:** **AGREE.** Explicitly keeping `as` as a binder keyword for import renaming, `borrow ... as view`, and `unpack ... as` resolves the round-2 note cleanly.
+- **40:** **AGREE.** Reserving `self` with no valid grammar use gives clear diagnostics after item 7 removes special receiver forms, and dropping obsolete reservations keeps the keyword table minimal.
+- **49:** **AGREE.** Supporting `'label:` uniformly on both `while` and `for` loops removes an arbitrary asymmetry.
+- **59:** **AGREE.** Grouping the remaining OPEN sub-rules into the item 55 before/after spelling review ensures no grammar or API corner case is silently dropped.
+
+### Unaddressed from Round 2
+
+- **None.** The round-2 note on `as` binders is directly addressed in revised item 11, and the parenthesized `assume(e);` spelling alongside `assert(e);` falls under the item 55/59 before/after spelling pass.
+
+ANSWER: DISAGREE=none; UNADDRESSED=none

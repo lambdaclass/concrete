@@ -1,0 +1,85 @@
+# DRAFT, NOT APPLIED: server-side protection of main on lambdaclass/concrete
+
+Read on 2026-11-08 (read-only `gh api`):
+- classic branch protection on main: force pushes and deletions blocked, conversation resolution on,
+  no required status checks, admins NOT enforced;
+- ruleset 19117072 "PR required for non-admins" (~DEFAULT_BRANCH): deletion, non_fast_forward,
+  pull_request (1 approval); bypass: OrganizationAdmin and RepositoryRole 5 (admin), "always".
+So today any admin, including the account the train pushes with, can update main with anything.
+
+Goal: main moves only by a train's fast-forward push of a commit whose required checks are green,
+from one landing identity; nobody (admins included) can push main by hand, force-push or delete it.
+
+## Ruleset 1 "main: required checks, no rewrite" (no bypass actors)
+
+Applies to everyone. Requires each job in required-checks.txt to have succeeded on the exact commit
+before the ref update (the train runs CI on ci/<name> at that SHA, so the landing push satisfies it).
+
+    gh api -X POST repos/lambdaclass/concrete/rulesets --input - <<'JSON'
+    {
+      "name": "main: required checks, no rewrite",
+      "target": "branch",
+      "enforcement": "active",
+      "conditions": {"ref_name": {"include": ["~DEFAULT_BRANCH"], "exclude": []}},
+      "bypass_actors": [],
+      "rules": [
+        {"type": "deletion"},
+        {"type": "non_fast_forward"},
+        {"type": "required_status_checks", "parameters": {
+          "strict_required_status_checks_policy": false,
+          "do_not_enforce_on_create": false,
+          "required_status_checks": [
+            {"context": "Root checks", "integration_id": 15368},
+            {"context": "Spec build", "integration_id": 15368},
+            {"context": "Oracle (GitHub-hosted fetch + smoke)", "integration_id": 15368},
+            {"context": "Landing record", "integration_id": 15368},
+            {"context": "Proof axioms", "integration_id": 15368},
+            {"context": "Proof trust ban (sorry, native_decide)", "integration_id": 15368},
+            {"context": "Kernel replay (leanchecker)", "integration_id": 15368},
+            {"context": "External re-check (con-leche, nanoda)", "integration_id": 15368}
+          ]}}
+      ]
+    }
+    JSON
+
+integration_id 15368 is GitHub Actions, so a status posted by anything else cannot satisfy a check.
+The list must stay equal to required-checks.txt; a follow-up gate can compare them read-only.
+
+## Ruleset 2 "main: updates only by the landing key"
+
+Restricts who may update main at all. The only bypass is the landing clone's deploy key, so a
+person (admin or not) cannot push main by hand; the train's push still has to pass ruleset 1.
+
+    gh api -X POST repos/lambdaclass/concrete/rulesets --input - <<'JSON'
+    {
+      "name": "main: updates only by the landing key",
+      "target": "branch",
+      "enforcement": "active",
+      "conditions": {"ref_name": {"include": ["~DEFAULT_BRANCH"], "exclude": []}},
+      "bypass_actors": [{"actor_id": null, "actor_type": "DeployKey", "bypass_mode": "always"}],
+      "rules": [{"type": "update", "parameters": {"update_allows_fetch_and_merge": false}}]
+    }
+    JSON
+
+Prerequisites (owner): a dedicated write deploy key for the landing clone (`gh repo deploy-key add
+<pub> --repo lambdaclass/concrete --title landing-train --allow-write`), the landing clone's
+lambdaclass remote using it (an ssh host alias), and no other write deploy key on the repository
+(DeployKey bypass covers every write deploy key): `gh repo deploy-key list --repo lambdaclass/concrete`.
+
+## Then
+
+- Remove the superseded PR ruleset once both are active and a train has landed through them:
+  `gh api -X DELETE repos/lambdaclass/concrete/rulesets/19117072`. Its admin bypass is the hole.
+- Classic protection can stay (it duplicates deletion/force-push blocking) or be removed:
+  `gh api -X DELETE repos/lambdaclass/concrete/branches/main/protection`. Recommended: remove, so
+  one place holds the rules.
+- Verify, read-only: `gh api repos/lambdaclass/concrete/rules/branches/main` lists the rules that
+  apply to main; a hand push of a test commit from a non-landing identity must be refused, and a
+  train landing must succeed.
+- Order relative to the switch: apply after B lands (lambdaclass is then the one repository), and
+  before the small local guard, which only refuses mistakes early.
+
+Risks to weigh: an admin can still edit or disable the rulesets (that is the owner's emergency
+path, and it is audited); a required check renamed in the workflow blocks every landing until the
+ruleset is updated (fail closed); `strict` is off because the train already lands only on the main
+it was built on (it refuses a moved main), and strict would add nothing for a fast-forward.

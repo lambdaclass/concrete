@@ -1,0 +1,5 @@
+_review/FOUNDATION_PROPOSAL_v3.md is draft 3 of Concrete's foundation proposal. _review/FOUNDATION_PROPOSAL.md is the same text after Claude's small edits, which fix two round-3 blockers:
+(1) the P4 qualification paragraph and Q17 now keep the decided backend-order rule (LLVM and LCB full observations equal each other, and any mismatch fails; docs/decisions.md around line 483), and defer allocation-dependent observations to slice 24;
+(2) a new Q18 for the Secret<T> layout, plus a C3 wording change.
+Run `diff _review/FOUNDATION_PROPOSAL_v3.md _review/FOUNDATION_PROPOSAL.md` and check only those edits against docs/decisions.md. Do not modify files. Report any error in at most 80 words total.
+End with exactly: ANSWER: OK or ANSWER: FIX=<short>

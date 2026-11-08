@@ -1,0 +1,7 @@
+- **Preference — scripts/spec/rules.sh:190:** The combined raw-string/quoted-name control passes when either case is rejected, masking a regression in the other. Fix: split them into independent fixtures, each requiring its own rejection.
+
+Both round-3 defects are resolved in in-memory reproductions: raw strings, quoted names and comments cannot supply an attribute’s closing bracket or `example`; complete citations consume interior citation-like text without false failures or extra verdicts. The comment and quoted-citation controls test their stated cases. No new functional defect found.
+
+No files were modified.
+
+VERDICT: ACCEPT

@@ -1,0 +1,25 @@
+I have reviewed `LANGUAGE_DECISIONS_2026-11-08.md` and the unified diff across `ROADMAP.md`, `changelog.d/2026-11-08-record-language.md`, and `docs/decisions.md` against all five checklist criteria:
+
+1. **Faithful recording of items 1–59 & exact quotes:**
+   - Every item 1–59 (sections A–F) is faithfully recorded in `docs/decisions.md#decided-2026-11-08-language` without invention or overstatement.
+   - The three verbatim quotes (`"record, yes to all recommended"`, `"i prefer fully gone, self and as are irrelevant from what i see"`, `"i like 3"`) match character-for-character in `docs/decisions.md` and `changelog.d/2026-11-08-record-language.md`.
+   - Item 11(b) is recorded as decided option 3 with all rules intact (item-list imports, MOD-2 and OD139 kept, `<last segment of its module>::name` everywhere and never bare, same-module items and builtin types bare, same-named items from different modules allowed revising MOD-3, same last segment refused, local named like an imported segment refused).
+
+2. **Explicit revision notes on every revised row:**
+   - Every required row (`OD6`/`OD32`/`OD60`, `OD130`, `OD11`/`OD91`, `OD59`, `TYPE-20`/`OD137`/`OD42`, `Q9.8` kept, `OD39`/`OD77`, `OD111`/`OD147`, `OD80`, `Q6.4`/`TYPE-22` pending preconditions, `OD62`, `Q4.6`/`Q4.7`/`Q9.5`, `MOD-2`/`MOD-3`/`OD151`, `OD90`, `OD23`, `OD30`, `Q6.2`, foundation Q9 trap names, and review caps) is explicitly listed in `#decided-2026-11-08-language-revisions` and annotated at its respective row in `docs/decisions.md`.
+
+3. **ROADMAP alignment:**
+   - `R-0625` (the spelling round, items 55 and 59) is added with home, gate, and dependency, and `R-0622` (the Lean grammar) depends on `R-0625`.
+   - Foundation rows `R-0607` (C1: typed first-parameter calls, no receivers), `R-0608` (C2: trap names and explicit math boundary in contracts), `R-0609` (C3: native and C layout algorithms only, packed excluded unless reopened), `R-0614` (C8: compile-time `Copy` constants with closed total initializer subset and reopening conditions checked before revising Q6.4/TYPE-22), and `R-0615` (C9: dead-store refusal extending OD62 and checked `#[depends(result <- a, b)]`) are all updated.
+   - `R-0626` (`Process` foreign-declaration audit, wired into `A2i`, `R-0567`, `R-0571`) and `R-0627` (local `assume` replacement shown before removal, from slice 8 on) are added as tasks with slice/phase context, home, and gate.
+   - `R-0618` is updated with the highest-cap rule for mixed-class diffs and the owner SHA sign-off path.
+
+4. **No stale contradictions:**
+   - The slice table (slices 0, 1, 2, 3, 5, 8, 9, 13, 14, 15, 16, 17, 19, 22, 23, 24, 25), phase E summary, std-per-slice intro, and live decision rows in `docs/decisions.md` are all updated to remove stale `as`, method calls/receivers, `char`, `HashMap`, `packed`, `print`/`println`/`append` builtins, and `*h`.
+
+5. **Links:**
+   - All newly added and referenced markdown anchors (`#decided-2026-11-08-language`, `#decided-2026-11-08-process`, `#decided-2026-11-08-imports-qualified`, `#decided-2026-11-08-spelling-round`, `#decided-2026-11-08-language-revisions`, `#od6`, `#od9`, `#od11`, `#od12`, `#od23`, `#od30`, `#od32`, `#od39`, `#od42`, `#od59`, `#od60`, `#od62`, `#od77`, `#od80`, `#od90`, `#od91`, `#od111`, `#od130`, `#od137`, `#od139`, `#od145`, `#od147`, `#od151`, `#foundation-q9`, `#decided-2026-11-08-review-caps`, `#decided-2026-11-08-std-table`, `#decided-2026-11-07-tracking`, `#decided-2026-11-02-authority`, `#decided-2026-11-02-allocation`) resolve cleanly.
+
+No findings.
+
+VERDICT: ACCEPT

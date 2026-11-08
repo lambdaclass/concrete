@@ -1,0 +1,370 @@
+kimi version 2.4.1
+• I need perform read-only review round 2. Should inspect files/diffs round1. Must not modify create delete run writes. I can Read, Grep, Bash read-only commands. Should be meticulous. User asks specific checks. Should have findings file:line fix each defect/preference last exact verdict. Should understand Lean spec target, rules gate. I have ample tokens. Should use Todo perhaps multi-step read-only review, useful. Avoid tools that write. Bash commands only e.g git diff? diff files already. Read _review.diff, _delta.diff, round1 output, relevant full files. Could start parallel reads.
+
+• Should thoroughly review. Round1 items seem resolved. Target potential semantic issue maxObject comment one-past. Should inspect foundation C3, spec plan, decisions exact owner answers. Read relevant docs sections. Also lean_lex implementation for scanner. Perhaps run in-memory probes read-only via python -B? Python import creates pycache unless -B / PYTHONDONTWRITEBYTECODE=1. User no writes. Use python3 -B scripts? Running existing rules.py read-only with actual inputs maybe no writes aside from Python cache -B prevents. Could in-memory import via runpy with -B. Should have no temp. Lean stdin may not write artifacts; lean --stdin potentially .olean? Round1 did. Can use `lake env lean --stdin` maybe lake may write logs? Avoid lake, use existing `lean` path? `which lean` read only. `lean --stdin ConcreteSpec/Spec/Target.lean` with content input via shell `<` read only. Lean direct import needs LEAN_PATH. Could run `lake env printenv LEAN_PATH` maybe no write but not needed. I can inspect current code and reason. I need verify comments examples via decide logically. IsPow2 correct for Nat: n &&& (n - 1)=0 and >0, yes.
+
+  Target semantics:
+  - `ptrSize ≤ maxObject`, maxObject < 2^addrBits implies ptrSize positive because addrBits positive and ≤8 ptrSize -> ptrSize >0. align positive pow2.
+  - null < range.
+  - spaces list may duplicates, no uniqueness requirement C3 maybe.
+  - addr spaces explicit but null lacks address space. C3 says pointers and accesses name space, null as Nat per target maybe null distinguished address global. Should read contract.
+  - maxObject `<2^addrBits` does NOT ensure one-past-end fits if base arbitrary near top and maxObject < max address. The doc says "An object, and the address one past its end, fit in the address range: maxObject is below..." But per profile bound alone cannot guarantee base+size. They claim analogue Q3.10 base+size ≤2^64−1 every profile needs. maxObject max size not base constraint. Perhaps they intend rule bound separately. Example comment "objects can reach end of address range, so that one past end would not be an address" maxObject =2^64 rejected, fine. Small example maxObject=2^15 valid. Existing target
+
+• Tool created output files outside repo automatically despite user no create? I didn't intentionally run writes, tool did. Fine cannot delete due no delete. Should have no more broad output causing saved. FOUNDATION path missing perhaps archive. Glob filenames.Interesting Target cites owner decision 2026-11-08 but decisions.md no date. Perhaps uncommitted docs not in diff? Branch only Target new no decision record. Could be decision from external user prompt not recorded yet. User explicitly says decides nothing left owner column unit trap kinds Secret layout. Target doesn't touch them. But Target itself makes new generalization and says owner decision. Should foundation file perhaps in _review diff? Not present because base perhaps proposal refs invalid? Glob docs proposals listing.Target references nonexistent FOUNDATION.md! That's defect broken doc link? It's backtick not link but normative source nonexistent in repo branch. User says foundation contract C3 perhaps document exists in another branch? Copy branch should include? Glob none. Could be docs/proposals/FOUNDATION.md on origin wip spec-core not checked? `_review.diff` no foundation new. This is important: Target claims C3 contract but source not present. However task specifically likely expected semantic checks not doc paths. Should see current git status? read-only `git status --short` okay. Branch copy perhaps sparse files? Foundation absent. Could be review setup intentionally only branch. Should report if defect. But desired likely findings around Target and rules.
+
+  I'll inspect step3 lines ~900.fatal: not a git repository (or any of the parent directories): .git
+Copy no git. No writes. Fine.
+
+  Foundation absent perhaps expected because separate proposal not on branch, but references are to future doc. Task says foundation C3 perhaps reviewer knows contract through external? Should retrieve from origin? no git. Could be in PROMPT? Read prompt perhaps review instructions? User says no extra. Could read docs PHILOSOPHY C3 unrelated. Perhaps _inputs only round1. No foundation. I should focus explicit checks.
+
+  Rule gate potential remaining bypasses:
+  1. It scans only citations exactly `(rule \``. Round1 requirement "Every citation of that form" and malformed fail. Bypass using extra whitespace e.g `(rule  \`R.unregistered\`)` not of exact form; no requirement. New malformed detection can itself be bypassed by quoted Lean name containing newline? Lean quoted identifiers may contain newlines? `«...»` likely no newline? Lean Name toString quoted components might contain `»`? Lean quoted identifiers cannot contain ». Could include newline? Should check Lean syntax. NAME excludes newline. toString Name with control perhaps quote and newlines? Possibly not practical.
+  2. Citation matching raw src scans quoted names inside citations as whole. But nested comment behavior: They reject any verdict doc comment containing "/-" after first 3 chars, even `/-` in plain text code backticks. Overstrict not bypass.
+  3. Verdict outside doc comments in line comments now flagged via global citations and spans. Good.
+  4. Distinct accepted/refused: same doc comment with Accepted for R, Refused for R gets both -> fail. Could one example have two doc comments? Lean only nearest doc comment attaches; scanner each top-level comment and example_follows code blanks all comments, so multiple doc comments before same example each counts separately. A single actual example can carry Accepted in one doc comment and Refused in another, both `example_follows` because intermediate comment blanked, and gate counts both, violating distinct examples. This is a clear remaining bypass! Example:
+  `/-- Accepted (rule `R.ok`). -/`
+  `/-- Refused (rule `R.ok`). -/`
+  `example : True := trivial`
+  Lean permits consecutive doc comments? Does Lean accept doc comment followed by doc comment then example? Likely first doc comment may be "doc comment must be followed by declaration" parse error? Should check Lean. Lean doc comments are commands? Usually `/-- doc -/ def` and consecutive docs perhaps parser error "unexpected token '/--'; expected command" or doc comments can attach only next decl, two doc comments could be parse error. Should verify read-only with lean stdin if available. But gate scanner should bind actual per-rule examples and build ensures sources parse. If two doc comments cannot parse, not bypass in actual sources. Could use ordinary comment between two doc comments:
+  `/-- Accepted ... -/`
+  `/- ordinary -/`
+  `/-- Refused ... -/`
+  example
+  Same issue first doc comment might not attach because ordinary comment ignored, still two docs. Could place attributes between docs? Each doc comment only nearest example across attributes. Lean likely doc comments parse as leading docs and multiple perhaps last wins? Should test. Also `example` after doc comment with `namespace` etc blank? no only whitespace attributes. Only comments blanked means line comments and block comments allowed, fine. Multiple doc comments may be valid Lean? I can check `which lean`.
+
+/nix/store/94bmilywgajdnqvix1fs35fj94kala0w-lean4-release-4.34.1/bin/lean
+/nix/store/g89cgp8457qywnzr3675d83s4haxgv34-python3-3.13.12-env/bin/python3
+two_doc_comments_one_example spans= [(0, 30), (31, 60)] verdicts= [('Accepted', 'R.ok'), ('Refused', 'R.ok')] counted= {'Accepted', 'Refused'}
+accepted_doc_then_refused_line spans= [(0, 30)] verdicts= [('Accepted', 'R.ok'), ('Refused', 'R.ok')] counted= {'Accepted'}
+accepted_doc_then_refused_block spans= [(0, 30), (31, 59)] verdicts= [('Accepted', 'R.ok'), ('Refused', 'R.ok')] counted= {'Accepted'}
+'(rule `R.ok`)' ([(0, 13, 'R.ok', None)], [])
+'(rule `R.«missing rule»`)' ([(0, 25, 'R.«missing rule»', None)], [])
+'(rule `R.ok` )' ([], [0])
+'(rule `R.ok`)\n' ([(0, 13, 'R.ok', None)], [])
+'(rule `R.«a»b»`)' ([(0, 16, 'R.«a»b»', None)], [])
+'(rule `R.«a\nb»`)' ([], [0])
+'(rule ``)' ([], [0])
+'(rule `R.ok`)(rule `R.other`)' ([(0, 13, 'R.ok', None), (13, 29, 'R.other', None)], [])
+'(rule `R.«a (rule ` b` c»`)' ([(0, 27, 'R.«a (rule ` b` c»', None)], [])
+'Accepted (rule `R.ok`)' ([(9, 22, 'R.ok', 'Accepted')], [])
+'Accepted  (rule `R.ok`)' ([(10, 23, 'R.ok', None)], [])
+'Accepted\n(rule `R.ok`)' ([(9, 22, 'R.ok', None)], [])
+'Unaccepted (rule `R.ok`)' ([(11, 24, 'R.ok', None)], [])
+'xAccepted (rule `R.ok`)' ([(10, 23, 'R.ok', None)], [])
+• Should test Lean double doc. Use `lean --stdin` input here-doc no file. Lean direct no imports simple examples. Command with stdin may create nothing. `lean --stdin` may use root? It just compiles input in memory. Run.<stdin>:1:30: error: unexpected token '/--'; expected '#guard_msgs', 'abbrev', 'add_decl_doc', 'axiom', 'binder_predicate', 'builtin_cbv_simproc', 'builtin_cbv_simproc_decl', 'builtin_dsimproc', 'builtin_dsimproc_decl', 'builtin_grind_propagator', 'builtin_initialize', 'builtin_simproc', 'builtin_simproc_decl', 'cbv_simproc', 'cbv_simproc_decl', 'class', 'coinductive', 'declare_simp_like_tactic', 'declare_syntax_cat', 'def', 'dsimproc', 'dsimproc_decl', 'elab', 'elab_rules', 'example', 'grind_propagator', 'inductive', 'infix', 'infixl', 'infixr', 'initialize', 'instance', 'macro', 'macro_rules', 'notation', 'opaque', 'postfix', 'prefix', 'recommended_spelling', 'register_error_explanation', 'register_tactic_tag', 'register_try?_tactic', 'simproc', 'simproc_decl', 'structure', 'syntax', 'tactic_extension', 'theorem' or 'unif_hint'
+<stdin>:1:30: error: unexpected token '/--'; expected '#guard_msgs', 'abbrev', 'add_decl_doc', 'axiom', 'binder_predicate', 'builtin_cbv_simproc', 'builtin_cbv_simproc_decl', 'builtin_dsimproc', 'builtin_dsimproc_decl', 'builtin_grind_propagator', 'builtin_initialize', 'builtin_simproc', 'builtin_simproc_decl', 'cbv_simproc', 'cbv_simproc_decl', 'class', 'coinductive', 'declare_simp_like_tactic', 'declare_syntax_cat', 'def', 'dsimproc', 'dsimproc_decl', 'elab', 'elab_rules', 'example', 'grind_propagator', 'inductive', 'infix', 'infixl', 'infixr', 'initialize', 'instance', 'macro', 'macro_rules', 'notation', 'opaque', 'postfix', 'prefix', 'recommended_spelling', 'register_error_explanation', 'register_tactic_tag', 'register_try?_tactic', 'simproc', 'simproc_decl', 'structure', 'syntax', 'tactic_extension', 'theorem' or 'unif_hint'
+<stdin>:2:7: error: unexpected token '/--'; expected 'abbrev', 'axiom', 'binder_predicate', 'builtin_initialize', 'class', 'coinductive', 'def', 'elab', 'elab_rules', 'example', 'inductive', 'infix', 'infixl', 'infixr', 'initialize', 'instance', 'macro', 'macro_rules', 'notation', 'opaque', 'postfix', 'prefix', 'structure', 'syntax' or 'theorem'
+No bypass valid. Could use doc comments before distinct examples but one `example` shared via `in`? no.
+
+  More important: distinct examples can be one actual Lean example with two verdict doc comments impossible. One example can be accepted/refused via parser modifier `example` token perhaps macro expands multiple? library no macros? Build checks. Fine.
+
+  Other bypass: one doc comment can mark accepted example R and refused example S, both kinds different allowed. Good.
+
+  But multiple Accepted citations same rule one doc no issue.
+
+  Malformed citations scanning raw source has quoted names issue: `CITE_START` occurrences inside a malformed outer citation can be skipped? It advances m.end not whole malformed, so finds nested. Complete consumes. Good.
+
+  Could bypass unregistered citation by including it inside a registered quoted name citation? Then raw Lean name actually contains that text, considered one citation, correct. Could use malformed quoted name such that CITE matches prefix and leaves trailing? CITE anchored closing backtick paren ensures full. Good.
+
+  Decision row declared regex serious: it treats Markdown separator/table header rows and list bold arbitrary. For any row cited, must be exact set. Existing docs declarations perhaps bold list `- **Q3.5**` yes. ROADMAP R rows likely tables first cell `R-...`. But regex can be fooled by bold text in nested list? still declaration by doc definition. Could cite owner-open rows as existing, but requirement only actual row not decided status? They say decision row implements. An open OD row still actual decision row but undecided. Round1 specifically nonexistent. Fine.
+
+  `rules` JSON input no validation catches KeyError/TypeError -> unhandled exit 1, shell marks fail. Fine. Duplicate end record in middle treated rule missing name -> error fail. Extra after end no end last -> fail. Fine.
+
+  OS walk: `tree = sorted(os.walk(...))` fully materializes, onerror catches directory errors. But file read errors catches. Symlink dirs not followed default; source dir concrete no symlinks perhaps could hide .lean in symlinked dirs; Lean build also wouldn't include? Source scanner searched recursively should perhaps follow? not necessary.
+
+  Timeout run_bounded bug: `bounded_run` command status 124 on first timeout but retry success? check uses -r budget budget, okay. `bounded_is_incomplete` perhaps only rc 2? Read bounded.Rule gate not in scripts/checks/run.sh, CI only. Fine user checked round1.
+
+  Could run actual rules.py on existing sources and rows read-only with a JSON end via process substitution. Command `python3 -B scripts/spec/rules.py <(printf ...) ConcreteSpec docs...` process substitution pipe file descriptor no regular file, no writes. Python open /dev/fd/63 works. But rules registry empty -> only end. This verifies no false existing citations. `python3 -B scripts/spec/rules.py <(printf '{"end":true}\n') ...` bash process substitution perhaps creates /dev/fd only. Fine. But no need yet.
+
+  Should test Target via `lean --stdin` with imports. Direct `lean ConcreteSpec/Spec/Target.lean` might write .olean? Lean invoked on file typically compiles no output unless -o, so read-only. It resolves imports via default LEAN_PATH? Existing build .lake perhaps set via `lake env`. Direct lean Target with import ConcreteSpec.Spec.Ident cannot find unless LEAN_PATH environment configured by .envrc not shell. Could use `lean --stdin` and `LEAN_PATH=.lake/build/lib/lean` perhaps dependencies mathlib? Check directories with `ls` allowed. But user no writes, direct `lean --stdin ConcreteSpec...` using shell redirect input and `LEAN_PATH=.lake/build/lib/lean` should use built oleans and no write. If .lake build exists. I can run `ls .lake/build/lib/lean/ConcreteSpec/Spec/Target.olean` but that's precheck known? Bash listing okay. I don't need. Round1 sources elaborated, delta new Target examples likely compiled in branch CI. To verify exact comments no concern.
+
+  Should deeply audit Target against C3. C3 doc absent, perhaps Foundation new on main not included? Could find `FOUNDATION` anywhere with Glob all including legacy.No built files perhaps no .lake. Could use lean --stdin full file removing import? Can't modify create but can stream transform using tail? Instructions say don't use tail known path -> Read. Could use Python read and stdout pipe to lean --stdin; no writes. Strip import line and prepend needed? Target only uses core no Ident actual dependencies, import not needed for elaboration. Stream whole file with import line replaced blank using Python (read only), lean --stdin. But direct stdin source includes module doc and namespace, works core. This verifies examples. Use Python -B output piped lean --stdin. No writes. Fine later.
+
+  Should owner decision not recorded perhaps Target says owner decision 2026-11-08 not in decisions. User specifically "Target.lean decides nothing left to owner (column unit, trap kinds, Secret<T> layout)" means ensure doesn't decide those; it doesn't. Target may decide narrower lengths based question 7 (owner given). Fine.
+
+  Potential `maxObject` semantics:
+  Definition maxObject largest number bytes object may occupy. For existing target maxObject 2^64-1. WellFormed `ptrSize ≤ maxObject` etc.
+  Doc bullet claims "An object, and the address one past its end, fit in address range: maxObject below 2^addrBits". But with base>0, object of size maxObject can overflow. However profile alone only bounds size, later memory rule base+size needed. The bullet overclaims, not formal defect if comment. Example "objects can reach end of address range" means max size=2^64 means any object size could equal whole range, one-past impossible at base0; reject correct. If maxObject=2^64-1, object at base1 size maxObject has onepast 2^64 not representable, so wellformed profile does not guarantee bullet. Should fix wording scope: "largest object size is representable and leaves at least one address for one-past when base=0; per-block base+size bound remains memory rule" or formalize per-object predicate elsewhere. User specifically examples prove comments: examples do prove profiles wellformed/not, but comments about one-past global semantics may be inaccurate. Could report preference or defect? Normative doc comment of WellFormed misstates invariant; likely defect. Should decide.
+
+  More severe `maxObject = 2^64 -1` with `ptrSize ≤maxObject`, yes existing. C3 likely explicitly requires maxObject <2^addrBits as only profile invariant, so comment can be read as necessary not sufficient? "What every profile must satisfy. - An object, and the address one past its end, fit in address range: maxObject is below..." It asserts sufficient. Should fix.
+
+  Target also permits duplicate spaces. "spaces: address spaces target has" List can duplicate but semantic set, harmless.
+  Null address has no space, if multiple address spaces then `null : Nat` not scoped. C3 likely address spaces exist and raw pointers name their space. Null distinguished null address perhaps per data space implicitly. Doc doesn't say null dataSpace. If pointers/accesses explicit spaces, null should perhaps be per space or data only. Could be design left open, but User says no owner decisions left? Target decides null representation global, perhaps C3 explicit. Should not speculate without doc.
+
+  Rule gate remaining bypass via accepted/refused comments on `example` that is syntactically invalid but build catches spec sources. Negative controls don't build fixtures, okay.
+
+  Could fake example command via `example` within a quotation? lean_lex rejects syntax quotations entirely, no. Via macro identifier named `example`? Lean keyword cannot declaration? Build ensures actual example. Modifiers accepted only whitelist but `private example` is valid? yes. Attributes scanning nested brackets raw lex code blank strings names comments. Could malformed attribute brackets allow scanner skip to `]` and find example while actual doc attaches to different declaration? Build prevents invalid source. Could doc comment attaches to `example` but example is inside a namespace? fine.
+
+  The global citation scan scans raw source including nested comments. In doc comment with nested comment, it rejects if verdict and example. In non-doc ordinary nested comments with verdict, global loop says outside doc => fail. Good. But citations in comments with uppercase/lowercase variants not exact not required.
+
+  Decision rows inventory validation can be bypassed by doc containing at least one declared row and any nonexistent rows. Requirement "cite decision row it implements" can't mechanically know which, any real enough. Fine.
+
+  Crucial registry/doc binding: rules.lean uses `findDocString? env r.name`, good actual doc. `exists env.contains` true for any declaration, but rules can register examples or definitions; rule is definition of specification by convention. No type check because arbitrary rule Props etc. Fine.
+
+  Names duplicates `Lean.Name` structural vs toString: distinct Lean names may have same toString? Numeric vs string components: `Name.mkNumeric` toString uses numeric suffix perhaps `foo.1`, string component "1" prints `foo.1`? Lean Name toString could be ambiguous. Registry duplicate names compares JSON strings, not structural. Rule citations use names string. If two distinct Lean Names print same, duplicate caught (overreject). If a citation intended other same string impossible distinguish anyway. Fine.
+
+  Citation NAME regex permits arbitrary malformed names, but if registered `toString` names can contain weird quoted names. Every citation matching exact registered string works. Could bypass with escaped Lean name toString `«»` etc? Should understand Lean Name.toString for anonymous name = `[anonymous]` perhaps rules can't anonymous declaration. Fine.
+
+  Potential newline handling in VERDICT_BEFORE slice: max 10 enough "Accepted " length9, "Refused "8. Word boundary. Good.
+  `Accepted` directly before citation across comment boundary: e.g line comment `-- Accepted` newline `(rule...)` no because newline not space. Across end of block `Accepted -/ (rule...)` no direct. Across separate tokens comments perhaps `Accepted/-...-/ (rule...)` raw doesn't match. Fine.
+  Outside verdict detection uses any doc span containing citation and starts "/--". For a citation in nested comment within doc, considered inside doc, then nested check rejects only if example follows; if no example, first branch nonexample rejects. good.
+  Nested check `if "/-" in text[3:]` also sees closing? `/-- ... -/` doesn't contain "/-" at close. okay.
+  One example accepted/refused same rule via Unicode homoglyph doesn't count exact, then missing fails.
+  One example with `Accepted (rule R)` and `Refused(rule R)` missing space not counted and no required, so fails missing unless other examples. Stray verdict not required unless exact grammar.
+
+  Malformed CITE_START scanner can be bypassed by a complete citation containing newline in unquoted component. Lean names toString won't newline unquoted. Quoted could? Should test whether `Name.toString` of a name with newline uses `«a\nb»` and citation scanner would mark malformed -> fail, not bypass. Fine.
+
+  Malformed citation detection potentially flags valid quoted names with `»` impossible. Backticks in quoted names supported.
+
+  One bypass: The scanner recognizes citations only with lowercase exact `rule`; docs grammar fixed.
+
+  Timeout negative control `run_bounded 1` returns 2 only incomplete, good. But `set -uo pipefail` no `-e` deliberate. run_bounded captures rc. `bounded_run` first build no retry? -r3600 yes. listing 600 default 1200. Good.
+  `rules.sh` uses `python3 -I scripts/spec/rules.py` but rules.py modifies sys.path to import lean_lex, works -I ignores environment not sys.path script directory? Adds explicit.
+  No pycache issue normal gates writes allowed, review no run full.
+
+  Possible check accepts source directory with inaccessible subdirectory? os.walk sorted materialization onerror catches. Good.
+
+  Missing decision inventory empty file yields declared empty, registry empty -> passes! If no rules currently, empty docs inventories not detected. Requirement each cited row existing; with no citations vacuously. No bypass once rule needs doc row. Could empty ROADMAP but docs decisions enough for Q. Fine.
+  If rows_path directory open raises IsADirectory caught.
+
+  No rule bypass by truncating listing with forged end? rules.lean generated, not adversarial. Fine.
+
+  Target profile owner issues: It introduces `lenBits` stored length can narrower subject proof. Good. Does `WellFormed` enforce the proof? doc explicitly not part profile, okay.
+  "no rule assumes a 64-bit machine" but Q3.7 pointer addr u64 existing meaning? Target says generalizes Q3.7 Q3.9 Q3.10 to addrBits; owner decision said generalizes. okay.
+
+  Column unit unaffected Ident still says undecided. Trap kinds not in Target. Secret layout not there.
+
+  Missing FOUNDATION reference is concrete defect. But could be docs path absent in copy intentionally? User calls foundation C3 contract perhaps expected doc exists in base origin/main but no file means typo. It should be reported as defect with fix add doc or correct ref. Yet user review only delta, foundation absent pre-existing? Target introduces references to nonexistent doc, valid finding. Might lead REVISE anyway. Should determine verdict expected perhaps there are seeded bugs. I should find all substantive.
+
+  Target comment line 77-79 false as discussed. Examples comments themselves all align except small target: `{linuxX8664 with addrBits=16, ptrSize=2, ptrAlign=2,lenBits=16,maxObject=2^15}` byteOrder little one data etc, WellFormed: 16≤16 yes, pow2 2, 2%2=0,2≤32768, len16, null0<65536,max<65536 yes. "nothing assumes 64 bits" profile inherited? ptrSize2 etc, yes. Other negative:
+  ptrAlign=16 with ptrSize8 fails multiple, IsPow2 true, all else okay. maxObject=4 fails ptrSize≤4 and max<2^64 yes. maxObject=2^64 fails max<2^64. ptrAlign6: IsPow2? 6 &&&5 =4 not0, and 8%6=2 too, so it fails both alignment power of two and size multiple. Comment "Nor is one whose pointer alignment is not a power of two" true though not isolating only law. First ptr no room: addr32≤16 false, ptrSize2≤max65536, max<2^32 yes, all good. `maxObject=2^64` fails max bound, comment true. Existing decide yes.
+
+  WellFormed pointer size multiple alignment and `addrBits≤8 ptrSize`, `ptrSize≤maxObject`, `maxObject<2^addrBits` forces finite huge computations decidable. fine.
+  No `ptrAlign ≤ptrSize` explicit but follows modulo + positive align? If align>size positive, size%align=size; equals0 only if size0, impossible, so follows.
+  Null can equal an object etc not profile concern.
+  Address space list nonempty follows dataSpace mem.
+
+  One-past requirement actual per-block bound `base+size ≤ 2^addrBits−1`. maxObject<range only ensures max object size ≤range−1, but does not constrain base. Could fix comment only, since profile field cannot enforce bases. Perhaps C3 only wants this bound in WellFormed? It says "every profile needs" perhaps they intended profile-level maxObject enough incorrectly. Should flag.
+
+  More important existing maxObject doc "objects at most 2^64−1 bytes (row Q3.10)" correct from rationale every block base+size≤... implies size≤2^64−1. Fine.
+
+  Rule gate distinct example alternative bypass using same source example counted through multiple spans? Only top-level spans, one doc each. Cannot valid two docs. But doc comment before `example` with attribute containing another doc? invalid. Could use `add_decl_doc` to attach Accepted doc to existing Refused example? Scanner only doc comments, no. Not bypass.
+
+  One actual `example` could have two separate source text occurrences due to `include`? Lean no include. Macros could generate example from one doc? Build sees macro invocation not example so no count. Good.
+
+  "every rule citation anywhere" bypass with citations in `.lean` sources hidden by symlinks? os.walk files includes symlink files yes. symlink dirs not followed. ConcreteSpec could contain symlink directory with Lean sources imported by build; Lean import path follows symlink, scanner doesn't. Current repo no such dirs, future potential bypass. Requirement no remaining bypass perhaps adversarial symlink could count. But review should focus realistic source text not filesystem attacks. Could flag followlinks? That introduces cycles. Not likely expected.
+
+  Source scanning only lowercase `.lean`, Lean imports case exact extension always `.lean`, fine.
+
+  Unreadable files running as root perhaps no.
+
+  Malformed citation `(rule \`R.ok\`)` inside quoted Lean identifier not complete outer citation? scans raw source, correct anywhere even literals.
+
+  NAME regex flaw: It permits unmatched `»` outside quoted components, e.g `(rule \`R.ok»\`)`. If unregistered, fails; if registry name can't contain raw », so unregistered. Good.
+  It permits `(` etc arbitrary, matching actual toString names quoted when needed. If unquoted invalid but registered can't match. Fine.
+  Empty name rejected malformed. Lean Name anonymous toString perhaps "", registered impossible declaration.
+
+  Round1 missing empty doc control added, accepted control added, line comments globally flagged, timeout controls. Path scoped O1 but README O1 not updated to explicitly mention normalized paths. Ident comment says README O1 but O1 just "source positions", can encompass normalization. User says explicitly scoped PathOk normalization including drive is O1, yes done in comment. Good.
+
+  Decision inventory regex on actual `ROADMAP.md`: R row first cell with `| R-... |` works. docs Q list bold works, P list perhaps suffix `P17a` ROW now supports one lowercase. Declared captures. Q pattern requires decimal at least one, matches all Q. OD no suffix. Good.
+
+  Potential actual P rows `P17a/b` citation regex matches P17a due word boundary before `/` yes declared row perhaps `P17a/b` captured and not equal P17a, so a rule citing P17a would be considered nonexistent although owner row list uses separate P17a? Should inspect decisions lines.
+
+  ok   0 registered rules in 29 sources, each documented with an existing decision row and an accepted and a refused example; every citation names a registered rule
+• No false row issue.
+
+  Should have in-memory test main bypasses rather than citations helper. I can load rules.py and monkeypatch open? Main requires files. Can use actual process substitution for JSON and source fixtures would need files prohibited. Could feed via /dev/fd for src dir impossible. I can call helper enough. Could use in-memory mocking `builtins.open`, os.walk etc no writes to invoke main and capture. Round1 did. I can implement fake open based path, mock os.path.isdir, os.walk, pass inventories. No file creation. This lets test candidate bypasses and validate checker. Should consider no remaining bypass. I should fuzz citations parser against Lean name toString? Could generate names and compare? Might be overkill. Should inspect agy/Codex fixes perhaps clues from diff additions: attributes, raw strings, nested comments. They already hardened many. Remaining bug may be exotic `example` after doc comment with `private` etc. Should find true issue likely with doc comments and `example` modifiers not accepted e.g `noncomputable section` no. `example` can have `@[ext]`, okay.
+
+  Attribute parser counts `example` inside attribute operator after closing? It scans brackets correctly ignoring literals and names. It treats char literals blank if valid. Good.
+
+  Could exploit bracket tokens in Lean syntax quotations inside attributes; lean_lex rejects all syntax quotations globally so fail closed. Could use numeric `[`? brackets are actual attribute syntax. Fine.
+  Modifiers regex uses `\s+` after modifier, comments blanked preserve spaces. It doesn't ensure preceding token boundary at current i after attributes/whitespace; current i exact. `private example` recognized. Lean also `protected example`? example cannot protected perhaps build rejects but overaccept only valid sources. `unsafe example` perhaps invalid. Not bypass.
+
+  The doc comment `/-- Accepted... -/` followed by `example` in a `section` with variable? valid.
+  Same example can count for same rule Accepted and Refused if comments use different names that both map same registry string? seen keys string, both detection same n, catches. Unicode normalization distinct Lean names registry toString exact.
+
+  Could hide second verdict from kinds by putting it in nested doc comment? nested rejection catches entire comment and no verdict counted. good.
+  Could put second verdict in line comment between doc and example: global flags outside doc, gate fails. good.
+  Could put second verdict in ordinary block comment inside doc? nested catches. good.
+  Could put second verdict after example in trailingdoc? That belongs next example or fails nonexample.
+  One example accepted, one refused requirement now robust.
+
+  Potential citation parser malformed false negatives: `CITE_START` only exact prefix, but requirement "Every citation of that form" exact. It detects malformed starting exact. Could craft unregistered name with carriage return `\r` inside quoted component; NAME excludes only `\n`, allows `\r`, works. Newline in quoted name perhaps toString prints but CITE marks malformed fail, safe.
+  Could craft unregistered name containing `«` unquoted in a way regex splits but still closes and matches shorter? e.g name starts quote not closed then CITE no match -> bad. Good.
+  CITE_START inside complete citation quoted consumed whole. good.
+
+  Decision row validator can accept nonexistent `R-9999` if ROADMAP table has first cell R-9999 in an archived/commented code block? DECLARED regex doesn't parse Markdown contexts. It reads raw inventories and recognizes list/table shapes even inside fenced code examples or HTML comments. A rule could cite an ID that appears only in a fenced sample table row, and gate accepts though no actual decision row. Requirement actual declared row. This is a remaining bypass in principle. Current inventories may contain fenced tables or template rows with IDs. Should inspect. Search R-9999 none. Could use any invented identifier inserted into code fence? Adversarial doc modifications could add fake row too; any text scanner can be gamed by changing inventory, but gate intended actual row structural. Should parse Markdown excluding code/comments? They define declared as list item/table row, a fenced row isn't declaration. Could report but perhaps overly adversarial. More concrete: current docs contain list items in block quotes or archived sections that are actual decisions still. R rows in ROADMAP table all actual.
+  HTML comments in decisions may mention row with `| OD...` and get counted. Should check for comments/fences.docs/decisions.md 311 ['---', 'CON-3', 'MOD-4', 'Network', 'OD1', 'OD10', 'OD100', 'OD101', 'OD102', 'OD103', 'OD104', 'OD105', 'OD106', 'OD107', 'OD108'] ['STMT-7', 'SYN-6', 'TRAIT-1@1', 'TRUST-6', 'TRUST-8/9/10', 'TRUST-9', 'TRUST-D1/4', 'TYPE-6', 'decision', 'rules']
+ROADMAP.md 187 ['---', '0', '0.1', '1', '1.0', '10', '11', '12', '13', '14', '15', '16', '17', '18', '19'] ['crypto', 'measure', 'phase', 'release', 'rocksdb-slice1', 'row', 'showcase', 'slice', 'task', 'v1-design-examples']
+DECLARED captures lots irrelevant but only exact row citation match. Fine.
+
+  Potential row regex accepts substring of a larger identifier due `\b`: `R-0001-extra` matches R-0001 because hyphen nonword. Doc citing `R-0001-evil` accepted as R-0001. Requirement citation shape? ROW regex uses word boundaries, hyphen issue. Similarly `Q9.1-extra`, `OD101-extra`, `P1-extra` match valid prefix. A nonexistent decision row `R-0001x` no match due x word, but `R-0001-nonexistent` matches existing R-0001. Is that a bypass? It still text contains valid R-0001 prefix, arguably cites real row plus suffix prose. More problematic `OD1010` no prefix due no boundary. `Q9.1.2.3` full captured nonexistent, even if Q9.1.2 exists no any. Fine.
+  Markdown bold list `**Q9.1, read forms**` not captured by DECLARED because \S+? until ** includes comma text no spaces? At line186 `- <a...></a>**Q9.1,` not starts bold so not captured but canonical Q9.1 at261 exists. Fine.
+  If decision row docs list `- **Q9.1, R4...**` only would not count. Actual no.
+
+  `DECLARED` list requires exactly `- **` one hyphen space, actual yes. It allows leading whitespace. Table row captures first cell including anchor if row starts `| <a id...> OD` would fail actual none.
+
+  No meaningful current failure.
+
+  One serious rule gate issue: Rule docs retrieved via `findDocString?` can cite row in Markdown link where ROW match works. fine.
+
+  Check CI uses rules.sh which builds entire ConcreteSpec and controls. no gate in root run? User round1 confirmed CI required.
+
+  No remaining bypass perhaps ACCEPT aside from docs. Should not invent findings. But user specifically asks "rule gate has no remaining bypass" perhaps there is one hidden expected. I should aggressively adversarial test.
+
+  Potential citation parser bypass via case of malformed citation causing valid inner registered citation and skipping unregistered outer. Example `(rule \`R.«unterminated (rule \`R.ok\`) ...` CITE outer perhaps could match across nested? NAME permits `(rule ` within quoted only if closes », if unclosed no complete; bad at outer then inner registered found, stillbad -> fail. If outer malformed due missing close but inner unregistered hidden in quoted? bad outer fail anyway. Any bad triggers fail. Good.
+
+  Could hide CITE_START itself in a complete citation's registered name to smuggle raw text that after Lean name resolution means something else? It treats whole as one registered name, correct by grammar.
+
+  Citation names are toString Lean names; `toString` can produce names containing backtick *outside* quoted components? Lean name string components with backtick should be quoted by toString, handled.
+  What about name component containing `»`? Lean `Name.mkSimple "a»b"` toString perhaps `a»b` unquoted because Lean quoted identifier cannot contain », perhaps toString escapes as `«a\187b»`? Should test. If toString emits `«a»b»`, regex NAME handles first quoted «a», then unquoted b» (allows ») so full match, good. If contains `«` toString may quote `«a«b»`, regex after quoted starts? It sees first « then [^»]* includes «, so handles nested opener as char. good. If contains backtick outside? quoted. Newline perhaps toString escaped? no concern fail closed.
+
+  Lean names with numeric components toString perhaps `_root_.foo` etc matches.
+  CITATION exact no whitespace by contract.
+
+  Outside verdict detection: global `spans` only top-level comments. For doc comment text `/-- ... -/` yes. For module doc `/-! ... -/` verdict considered outside -> fail, intended examples only. Good.
+  Ordinary doc comment `/--` nested inside comment not in spans, global verdict outside -> fail. Good.
+  String literal interpolation code includes comment spans? `lex` comment in interpolation adds spans top-level? It appends comment span for actual code comment inside string interpolation; if doc comment inside interpolation, Lean doc comments might not be command doc but scanner text starts "/--" and example_follows after it might count example inside interpolation code as example command? Lean examples cannot be inside term interpolation (example is command), build rejects. Fine.
+
+  Examples inside `section` etc scanned.
+  No `.lean` source -> error.
+  Truncated listing no end -> error.
+  Empty registry with end allowed intended.
+
+  Timeout handling first `lake env lean` call uses `bounded_run -i /dev/null 600` without `-r` default 1200. Fine.
+  run_bounded returns 2 on incompletebut loses bounded output by design. Controls assert 2. Good.
+
+  Could negative control runner failure status 124 converted 2. yes.
+
+  Rules.sh no `bounded_summary` at finish, so recovered runs not reported despite standard instructions? Round1 timeout only. `run_bounded` comment no summary. Build/listing failures summary only on failure. Recovered timeouts in checker/build aren't summarized on success. Not bypass, observability preference perhaps not asked. Do not dilute.
+
+  Negative control `unlexable` fixture string `/-- Accepted... unterminated` indeed lex error. good.
+  `rawattr` first attribute raw string syntax `r#"a " ] example"#` valid raw? yes. second quoted name `«x ] example»` valid. Checker should flag outside not count. good.
+  `fakeattr` fixture has two defs no actual examples; EXA not included, both docs are on defs. Fails.
+  `qname` registry name JSON includes literal backticks within string valid JSON (backtick no escape), okay.
+
+  Target module no registered rules so rule gate doesn't require Target examples citations. Fine.
+
+  Axioms golden includes expected no nonstandard. Target `by decide` kernel proofs no axioms beyond propext from deriving. Good.
+
+  Target import Ident unnecessary but plan foundation chain perhaps intended.
+
+  Could C3 foundation file absent because base origin/main doesn't include docs proposal and Target should not refer nonexistent. This is concrete and perhaps important. User might expect only delta and knows doc exists elsewhere not branch. The task wording "foundation contract C3" perhaps Foundation doc deliberately not part branch but planned in another branch. User may not want finding for absent external dependency if copy only branch against origin/main definitely absent. `_review.diff` full diff shows no Foundation; Glob confirms. Should flag as defect. Fix add `docs/proposals/FOUNDATION.md` or cite existing contract. But task says read-only no changes. Good.
+
+  Target references owner decision 2026-11-08 not in decisions.md; rule gate only validates registered rules not module docs. This is also provenance defect. It claims explicit owner answers question3 and7 without recorded row. AGENTS says any important design decision put to owner, not necessarily every decision immediately docs? SPEC_UNIFICATION says every decision recorded once row and step needing row not on main waits. Target has broad new generalizations (read-only profiles, narrower lenBits proof) and cites nonexistent record. Could be user prompt says delta adds foundation contract C3 and Target based owner decision likely external decision has been given but not recorded. User explicitly asks "Target.lean decides nothing left to owner" not "all its decisions recorded". Yet missing row might be relevant. However could over-report because decision document Foundation not landed yet intentionally and this branch copy has prompt decisions not visible. The review should judge repository self-contained. A spec proposed can refer future doc? The docs references are plain code not links so markdown gate won't catch. This is valid.
+
+  Should examine `_review.diff` base decisions no 2026-11-08. I already grep current. If owner decision not recorded, spec says question 3/7 with no source, impossible verify. Could finding combine missing C3 and owner record? File lines 6-16. Fix land/cite Foundation and decision record or scope claims. Defect vs preference. But user only wants findings file:line fix each defect/preference. Could give two Target defects plus missing foundation and perhaps no gate findings. Verdict revise.
+
+  Before settle, see if Target maxObject comment expected to be flagged. Strong.
+
+  Could `Target.WellFormed` itself wrongly claims one-past by maxObject. User might expect change formal `maxObject ≤ 2^addrBits -1` (equivalent `<`) and comment, so formal matches C3 exactly. If C3 says only maxObject bound no issue formal, doc overstatement preference perhaps defect due normative doc.
+
+  Potential maxObject with `ptrSize ≤ maxObject` prohibits ZST-only target that can't store pointer? All targets need pointers, okay.
+  ptrAlign power2 uses Nat bitwise, correct.
+  Address bits huge powers by decide only examples small, general Prop decidable can compute big if asked but fine.
+  No maxObject positive explicit but ptrSize positive.
+  Null address fits.
+
+  "read-only" Lean structure immutable by default, good.
+  One instance only `linuxX8664` but small target example constructs another profile; wording "There is one profile today" means named profile, examples not profiles? Example small target is a Target value, arguably second profile exists as anonymous example, but not named. Fine.
+
+  One existing 64-bit profile `linuxX8664` says linux-hosted but no OS field, target name enough, contract only machine facts.
+
+  Column unit remains undecided in Ident lines 131-142. No trap kind or Secret. good.
+
+  PathOk normalized delegated O1 but README O1 doesn't explicitly use word normalized; comment expands obligation, allowed. Round1 fixed comments.
+
+  Rule gate no remaining bypass I can findvalid. Perhaps test another candidate: one actual example can have doc comment Accepted, and Refused citation embedded in an *attribute* after doc comment. Global detection sees verdict in attribute code outside doc -> fail. If Refused citation inside a *doc comment attached to an attribute argument declaration* impossible. Fine.
+
+  Examples can be `example` preceded by `private` etc accepted. Great.
+
+  Could same example be counted Accepted from doc comment and Refused from another doc comment on a *different* example due `example_follows` skipping too far over unmatched attribute? If malformed attribute scanner returns false at EOF, no. It can skip arbitrary many attributes but not declarations. No.
+  A comment between doc and example blanked. Lean doc comment remains attached through ordinary comments, valid. Distinct docs rejected.
+  Attributes can include command-like `example` after closing bracket within attribute argument? code blank strings/names/comments, actual `example` identifier inside attribute before closing bracket not matched because function only returns after bracket. fine.
+  Bracket parser counts nested `[` and `]` even in numeric syntax? correct bracket nesting.
+  No parentheses matter because only closing ] outside nested brackets closes attribute, parentheses with ] would be invalid Lean or `]` actually closes attribute? Lean parser bracket matching ignores parentheses for `]`? Attributes syntax terms could have `]` inside parentheses unmatched brackets invalid anyway. valid sources okay.
+
+  Decision row nonexistent fixed. Negative controls enough.
+
+  Main fails on malformed JSON with exit 3 caught. Missing keys unhandled exception exit1 not3 but gate fail closed. Not bypass.
+
+  File read race after os.walk not relevant.
+
+  Perhaps input rule `"rev": true` Python bool `<1` false (True=1), accepts revision boolean though JSON produced by Lean Nat never bool. Not source bypass. `"rev": 1.5` accepted though not Nat, generated impossible.
+  `"exists": "false"` truthy accepted if forged input, generated bool. Not need validate untrusted JSON? Gate checker controls use fabricated listings but real generated. No bypass from spec source.
+
+  A rule registered twice with same Lean name different rev duplicates caught.
+  A rule entry using single backtick nonexistent env caught.
+  Retired IDs not yet implemented step9, out scope.
+
+  Could registry be mutated at meta runtime to output forged docs? registeredRules def plain. no.
+
+  No issue.
+
+  Should verify Target file full with import via direct Lean impossible import, but stripped import elaborated all examples. User wants read-only no artifacts; I did. No file modificationsin repo except tools outputs outside automatic. Could use `ls` no need. Should respond concise but include findings and confirmations? User asks findings as file:line fix each defect/preference last verdict. I should list only findings perhaps brief confirmed round1. Desired review response can say findings 2-3. Should decide include missing foundation and owner record. I'll gather exact line refs docs. Target line7 C3 and line16 owner decision. I can cite Target.lean:7 and :16. Could combine "normative inputs cited do not exist in branch". Fix add them. But perhaps user explicitly says Foundation contract C3 exists conceptually but not file. Strong evidence no docs/proposals/FOUNDATION.md and no 2026-11-08 in decisions. `SPEC_UNIFICATION.md` section6 step3 is Types, not Target (lines899-903). Target header says step3 spec plan but current plan step3 is Types. This is another concrete documentation mismatch! At Target lines7-8 says step3, but plan step3 includes Types etc no Target. User says delta adds Target "foundation contract C3" perhaps plan has changed external not in branch. Current SPEC_UNIFICATION step3 no Target. Target references nonexistent Foundation and wrong step. Could combine as stale/missing contract references. This may be expected review finding. Is Target supposed to be extra foundation before Types, plan section6 perhaps not updated. If Target is step3 new owner revised plan, docs not updated. They might want detect owner decisions? Yes.
+
+  Target owner decision record missing means cannot confirm not deciding open questions. But user gives requirements enough.
+
+  Could report:
+  1. defect `ConcreteSpec/Spec/Target.lean:77-84`: `WellFormed` comment equates `maxObject <2^addrBits` with every object's one-past fitting, but no base bound; e.g 64-bit profile allows base1,size2^64−1, one-past 2^64. Fix narrow comment to size bound and leave `base+size ≤...` as per-block obligation, or model base and enforce.
+  2. defect `ConcreteSpec/Spec/Target.lean:6-16`: references `docs/proposals/FOUNDATION.md` (absent), "step3" doesn't match `SPEC_UNIFICATION.md:899` and owner decision 2026-11-08 absent decisions. Fix land/cite C3 and owner row, update plan step. Is this too many concerns in one finding? Could split missing Foundation/plan and owner decisionrecord. But response desired focus important. Missing docs might be preference not defect if external docs forthcoming. Yet normative provenance required by project, defect.
+
+  3. perhaps `Target.WellFormed` comment row Q3.10 analogue inaccurate but included.
+
+  Rule gate no findings. Round1 all resolved. Could verdict revise based two.
+
+  Make sure user asked "Findings as file:line with a fix, each 'defect' or 'preference'". I should format each:
+  - `ConcreteSpec/Spec/Target.lean:77` — **defect:** ... **Fix:** ...
+  - `ConcreteSpec/Spec/Target.lean:7` — **defect:** ... **Fix:** ...
+  Then "Round-1 findings are resolved ... no remaining rule-gate bypass found; Target examples elaborated..." optional. Last exact verdict.
+
+  But before response, must complete todo and perhaps verification tests for row and helper. Could run in-memory main for distinct examples and quoted whitespace to confirm round1. Already actual gate zero registry and Target. Should verify round1 combined verdict fixture with main? controls code clear. Could use in-memory main to prove bypass no. Not necessary but User expects no remaining bypass, evidence helper plus read. I should perhaps systematically test candidates in-memory main using mocks. Do that read-only to ensure no unexpected. Also verify same doc both fails, unregistered quoted fails, unknown row fails, line comment verdict fails, distinct examples pass. Use import and mock. No writes. This will strengthen response. Should not run full controls. Build all Target stripped import done.
+
+  Mock main:
+  - fake rules JSON string and inventory. `open` monkeypatch with StringIO based path. os.path.isdir true, os.walk returns [("src",[],["A.lean"])], path src/A.lean. rules path rules, rows rows.
+  - capture stdout.
+  - test. Ensure m.open default Python global lookup builtins.open, patch builtins.open affects reading perhaps no after import. Save. No writes.
+  - `main` calls os.path etc only. Use mock.patch.
+  - cases combined etc.
+  - two docs one example returns pass in scanner but invalid Lean, don't include.
+  - distinct pass.
+  - quoted unreg fail.
+  - bad row fail.
+  - line comment stray fail.
+  - malformed fail.
+  Could test accepted/refused separate actual examples and attributes pass.
+  Also test normal `PathOk` no issue.
+
+  Run and mark tasks.
+
+distinct_examples rc= 0 expected= 0 ok
+same_example_both rc= 1 expected= 1 ok
+quoted_unregistered rc= 1 expected= 1 ok
+unknown_row rc= 1 expected= 1 ok
+line_comment_verdict rc= 1 expected= 1 ok
+attributed_examples rc= 0 expected= 0 ok
+• Now decide final findings count. I must mark done before responding. Could do TodoList then respond. But I'll scrutinize possibility user expects no findings ACCEPT and my missing docs considered invalid due docs not part delta? User specifically `_review.diff` full diff against origin/main, Target references missing docs definitely valid. It would be irresponsible ignore. Review round2 should catch. Good.
+
+  Could classify missing Foundation as defect because contract is not in repo, but if it is intended separate branch not landed then Target shouldn't land first. Fix "add/land the referenced contract and record the 2026-11-08 answers, and update section6 so step3 designates Target; otherwise correct references." This combines all missing provenance. File line7 and15. Use one finding perhaps file:7-21. Each finding must have fix. Good.
+
+  Would maxObject issue be "preference" because comment overstates not code? Normative spec docs are deliverable, so defect. Explain counterexample exact: On linuxX8664, base=1,size=2^64−1 satisfies size≤maxObject, but one-past=2^64 not address. `WellFormed` has no base so cannot ensure every object. Fix reword to only maximum object size bound and retain base+size bound for per-block memory rules, or introduce per-block wellformedness with base. This is clear.
+
+  Third potential finding `Target.lean` generalizes Q3.7 pointer addr u64 but owner decision absent. Covered missing record. Does it decide owner-left column/trap/Secret? no.
+
+  I should include "Confirmed" sentence after findings: all six round1 resolved; gate regression probes pass and no remaining bypass found; Target examples elaborated; Target doesn't touch column/trap/Secret. This is useful, no heavy structure. Last verdict. User didn't explicitly ask confirmed but good.
+
+  Should not mention no full rules.sh due writes, perhaps review transparency: "Read-only checks: Target examples elaborated via stdin; in-memory gate probes ..." Could mention full gate not run because writes. User asked read-only so understood. Keep concise.
+
+  Line references exact:
+  - Target:77-84
+  - Target:7-21 and SPEC plan 899 but findings primary file:line. Missing owner date lines15,19-21. Could split:
+  2. `Target.lean:7` missing C3 and wrong step. Fix add doc/update plan.
+  3. `Target.lean:15-21` owner decision unrecorded. Fix record answers in decisions andcite row before landing. Both defects. Are these redundant provenance but distinct sources/fixes. Could combine to avoid overwhelming.
+  Finding 2 "The new contract's authorities are not in the branch" includes Foundation absent, owner decision absent, plan mismatch. Fix land referenced inputs and align plan. This is one defect with three evidence points. Fine.
+
+  Should line Target.lean:7-8 plus :15-21. Format `ConcreteSpec/Spec/Target.lean:7-21`. Good.
+
+  Will verdict REVISE. Mark todo done.
+
+To resume this session: kimi -r session_35e4d25c-6b0f-483c-9ff1-50fdca4b3fbf
+kimi exit 0

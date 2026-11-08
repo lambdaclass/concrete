@@ -1,0 +1,12 @@
+TASK (writer round 2, branch wip/slice0-lexer in this full clone, head afd274d8). CI job "Proof axioms"
+failed: scripts/proofs/axioms.golden lacks the declarations the new ConcreteSpec/Spec/Surface0.lean
+adds (brecOn, _sparseCasesOn, instDecidableEncodes._proof_N, ...). Their axioms are all among the
+standard three (the job's own check says so). Regenerate the golden and commit it:
+1. `timeout 1800 nix develop .#gates --command bash -c 'export PATH="$HOME/.elan/bin:$PATH"; bash scripts/proofs/axioms.sh --update'`
+2. Review the diff of scripts/proofs/axioms.golden: every added line must be a ConcreteSpec.Surface0.*
+   declaration, every axiom listed must be one of Classical.choice, Quot.sound, propext, and no
+   existing line may change or disappear. If anything else changed, STOP and report it; do not commit.
+3. Re-run the check without --update (same command, no flag) and confirm `PROOF-AXIOMS: PASS=N FAIL=0`.
+4. `git commit -am "lexer: the axiom golden lists the Surface0 declarations (all on the standard axioms)"`.
+NEVER push, never edit any other file, never change git config, never use --no-verify. Bound every
+command. Report the exact last lines of step 3 and the number of golden lines added.

@@ -1,0 +1,2077 @@
+Reading additional input from stdin...
+OpenAI Codex v0.166.0
+--------
+workdir: /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rev-sc2/codex
+model: gpt-6.1-sol
+provider: openai
+approval: never
+sandbox: danger-full-access
+reasoning effort: none
+reasoning summaries: none
+session id: 01a1b8df-eed3-7970-a0e4-e572dc16a372
+--------
+user
+READ-ONLY REVIEW, round 2. Do not modify any file. This directory is a copy of branch wip/spec-core of the Concrete repository (a Lean 4.34.1 specification, ConcreteSpec/). `_review.diff` is the full diff against origin/main; `_delta.diff` is everything since the rule-gate commit you reviewed in round 1 (`_inputs/codex-round1.out`; Kimi's round-1 findings are `_inputs/kimi-round1.out`). The delta adds ConcreteSpec/Spec/Target.lean (foundation contract C3, target profiles; `_inputs/FOUNDATION.md` is the approved plan, question 3 and question 7) and the fixes for both round-1 reviews and for an agy review (rule gate: quoted names, distinct accepted/refused examples, cited rows must exist in docs/decisions.md or ROADMAP.md, verdicts outside doc comments refused, attributes and modifiers before `example`, unreadable sources fail closed, 23 controls).
+
+Check: (1) each round-1 finding (both files) is resolved or explicitly scoped; (2) Target.lean: does `Target.WellFormed` say what its doc says, is anything decided that the plan leaves open (the column unit, trap kinds and Secret<T> layout are owner questions), do the examples prove what their comments claim; (3) the rule gate: any remaining way a rule passes without a real decision row and two distinct examples, or a stray citation passes; fail-closed on timeouts and unreadable input. Findings as file:line with a fix, each "defect" or "preference"; last line exactly `VERDICT: ACCEPT` or `VERDICT: REVISE`.
+codex
+I’ll compare the delta with both round-1 reviews and the approved plan, then inspect the target contract and rule gate. I’ll keep the review read-only.
+exec
+/bin/bash -lc 'pwd; git status --short; cat _inputs/codex-round1.out _inputs/kimi-round1.out; cat _delta.diff' in /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rev-sc2/codex
+ succeeded in 0ms:
+/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rev-sc2/codex
+fatal: not a git repository (or any of the parent directories): .git
+The Lean definitions match the intended step-2 structure: identities are distinct types, fields include their owners, spans require positive coordinates, and slices use `Fin 29`. The column unit remains explicitly undecided (`ConcreteSpec/Spec/Ident.lean:131–141`). I found no `sorry` or `native_decide` in the new modules.
+
+CI wiring is correct: the rule gate follows the build (`.github/workflows/lean_action_ci.yml:156–166`), and `Spec build` is required (`required-checks.txt:6`). Timeout handling fails closed: incomplete checker runs return 2, which neither the positive nor negative controls accept (`scripts/spec/rules.sh:26–30`).
+
+The architecture agrees with the proposal’s sections 1.2, 1.10, 2.2 and step 2, using the proposal text preserved in `_review.diff`; the proposal file itself is absent. Lifecycle checks are correctly deferred to step 9. The empty registry is intentional at this stage (`ConcreteSpec/Spec/Rules.lean:20–27`).
+
+I reproduced the Python issues below using in-memory inputs. No files were written; I did not run builds or the shell gate because they create files.
+
+Findings:
+
+1. **Rule citations with quoted names can escape checking.** `scripts/spec/rules.py:18–19` excludes whitespace inside names. Adding `(rule `R.«missing rule»`)` passes without reporting the unregistered rule. Ordinary dotted names work, but valid Lean quoted components containing spaces do not. **Fix:** parse backticked Lean names with quoted-component support, canonicalize them against registry names, and add negative controls.
+
+2. **One example can satisfy both example obligations.** `scripts/spec/rules.py:54–60` credits every verdict found in a doc block. A single `/-- Accepted (rule …). Refused (rule …). -/ example : True := trivial` passes. Nested-comment verdict text is credited too. **Fix:** identify example commands separately, require distinct accepted and refused examples for each rule, and define how nested comment text is treated.
+
+3. **Valid example modifiers are rejected.** `scripts/spec/rules.py:20,56` requires `example` immediately after whitespace. Documentation directly attached to `@[simp] example` or `noncomputable example` fails. **Fix:** recognize Lean declaration prefixes before the `example` command, with positive controls for attributes and modifiers.
+
+4. **A decision-shaped string substitutes for an actual decision row.** `scripts/spec/rules.py:17,36` accepts nonexistent `Q999.999`; I reproduced a complete passing fixture with that doc string. This does not establish the README’s decision-row claim (`ConcreteSpec/README.md:43`). **Fix:** validate extracted identifiers against the authoritative decision inventories.
+
+5. **Source enumeration can pass vacuously.** `scripts/spec/rules.py:38` silently accepts a nonexistent source directory. With only the end record, it reports success for zero rules and scans nothing. Unreadable directories can likewise be skipped by `os.walk`. **Fix:** require the source directory, propagate traversal errors, and verify that the expected source population was scanned.
+
+6. **Negative controls do not cover every failure path.** `scripts/spec/rules.sh:60–93` tests missing Refused, but omits missing Accepted, missing documentation, lexical failure, source-enumeration failure and timeout behavior. It also lacks the parser edge cases above. **Fix:** add isolated controls for those paths, including a checker that hangs through both bounded attempts and must leave the gate nonzero.
+
+7. **The field example’s comment names different variants from its proof.** `ConcreteSpec/Spec/Ident.lean:179–185` promises `Some` versus `Ok`, while the example proves `E.A` versus `E.B`. **Fix:** align the comment and example names.
+
+VERDICT: REVISE
+• I’ll inspect the diff, the Lean definitions and gate implementation, then trace CI and proposal requirements against exact lines.
+
+• The plan requires `Ident` to stay downstream-free and the gate to bind documentation and examples to registered `RuleId`s. I’m now checking the Lean semantics and probing whether the source scanner can count something other than a real per-rule example.
+
+• The Lean sources elaborate successfully when fed directly to Lean without producing build artifacts. Two semantic documentation issues are visible so far; I’m also exercising the checker in memory so the review remains read-only.
+
+• The checker confirms a real vacuity bug: one `example` carrying both verdicts satisfies the two-example requirement. It also accepts an invented decision-row ID, and its citation regex misses valid quoted Lean names containing whitespace.
+
+• The build and required-job wiring are correct. I’m finishing the consistency pass and separating substantive gate failures from smaller documentation and control-coverage issues.
+
+• The review is complete: CI and the overall module plan are wired as intended, but the gate has reproducible bypasses and its controls miss several failure branches.
+
+• ## Findings
+
+  1. **One example can satisfy both the Accepted and Refused requirements.**  
+     `scripts/spec/rules.py:52-63` records verdicts only as a per-rule set; it does not retain which example supplied each verdict. A single comment containing both `Accepted (rule \`R.ok\`)` and `Refused (rule \`R.ok\`)` before one `example` passes. I reproduced this with exit status 0.  
+     **Fix:** track the example/comment span for each verdict and require distinct Accepted and Refused examples, or reject both verdicts for one rule on the same example. Add a combined-verdict negative control near `scripts/spec/rules.sh:60-64`.
+
+  2. **Quoted Lean names containing whitespace bypass citation validation.**  
+     `scripts/spec/rules.py:18-19` excludes all whitespace from rule names. Consequently, `scripts/spec/rules.py:48-51` does not recognize a citation such as `(rule \`R.«not registered»\`)`, although `R.«not registered»` is a valid quoted Lean name. I reproduced an unregistered citation of this form passing alongside an otherwise valid registry. Dotted names and quoted names without whitespace work.  
+     **Fix:** parse Lean names, including `«…»` components containing whitespace, rather than using `[^`\s]+`. Add positive controls for dotted/quoted names and a negative control for an unregistered quoted name containing whitespace.
+
+  3. **A nonexistent decision row satisfies the documentation check.**  
+     `scripts/spec/rules.py:17,35-36` checks only the shape of an identifier. A rule whose documentation cites only `R-9999` passes, which does not establish that it cites an actual decision row.  
+     **Fix:** validate matched Q/OD/P identifiers against `docs/decisions.md` and R identifiers against `ROADMAP.md`; add an unknown-row negative control.
+
+  4. **The negative controls do not cover every implemented failure branch.**  
+     `scripts/spec/rules.sh:57-93` covers missing Refused, missing row text, duplicates, absent declarations, unregistered citations, a block-comment verdict on a non-example, revision zero, and truncation. It lacks controls for an empty doc comment (`scripts/spec/rules.py:35`), missing Accepted (`scripts/spec/rules.py:61-63`), the two bypasses above, and timeout handling. Also, verdicts in line comments are not examined because only block-comment spans are inspected at `scripts/spec/rules.py:52-58`; a stray registered-rule verdict in a line comment passes despite the intended outside-example rejection.  
+     **Fix:** add controls for these branches and either scan line comments for stray verdicts or narrow the documented rejection requirement explicitly.
+
+  5. **`Span.PathOk` does not fully establish its “relative path” claim.**  
+     `ConcreteSpec/Spec/Ident.lean:144-149` accepts `C:/main.con`: it is nonempty, does not start with `/`, and contains no backslash, but is a Windows absolute path. Lean evaluation confirmed that `PathOk` returns `true` for it.  
+     **Fix:** reject drive-absolute forms and add a refused example. Consider also specifying whether `..` segments are permitted.
+
+  6. **Two `Ident` example comments are inaccurate.**
+     - `ConcreteSpec/Spec/Ident.lean:179-185` says the variant comparison uses `Some` and `Ok`, but the proof uses `A` and `B`. Rename the constructors in the proof or correct the comment.
+     - `ConcreteSpec/Spec/Ident.lean:201-203` says `Var.mk "x" 0` and `Var.mk "y" 0` can never arise “from a program.” The stated numbering invariant at `ConcreteSpec/Spec/Ident.lean:33-36` guarantees uniqueness only within one function, so it does not justify that program-wide claim. Scope the comment to one function/context or state a global freshness invariant.
+
+  ## Confirmed
+
+  - The new Lean sources elaborate successfully when supplied directly through `lean --stdin`; all included examples kernel-check. No `sorry` or `native_decide` occurs in the new Lean files.
+  - `Span` leaves column units abstract as a `Nat` and explicitly records the unit as undecided at `ConcreteSpec/Spec/Ident.lean:131-142`; it does not choose bytes or Unicode scalar values.
+  - `Ident` imports only `Basics`, while `Rules` imports only `Ident` (`ConcreteSpec/Spec/Ident.lean:1`, `ConcreteSpec/Spec/Rules.lean:1`), preserving the plan’s downstream-free requirement. `SliceId = Fin 29`, `RuleId`, and `specVersion` match the step-2 design.
+  - Duplicate names, revisions below 1, missing declarations, and truncated listings are rejected. Nested comments and string literals cannot be used to supply examples. Attributes or modifiers between the doc comment and `example` are rejected rather than miscounted.
+  - Timeout handling fails closed: `scripts/spec/rules.sh:28-30` converts checker incompleteness to status 2, which neither the specification check nor controls accept; build/listing timeouts exit nonzero at `scripts/spec/rules.sh:34-39`.
+  - CI runs the gate after the specification build at `.github/workflows/lean_action_ci.yml:156-166`, and `Spec build` is required at `required-checks.txt:6`.
+  - The README description at `ConcreteSpec/README.md:41-44` matches the intended gate. The axiom-golden additions contain only the expected generated identity declarations, with no nonstandard axioms.
+  - Full `rules.sh` was not run because it creates build and fixture artifacts; its Python checker and the bypass cases were exercised read-only in memory.
+
+  VERDICT: REVISE
+
+diff --git a/ConcreteSpec/Spec.lean b/ConcreteSpec/Spec.lean
+index 0d838710..e377e825 100644
+--- a/ConcreteSpec/Spec.lean
++++ b/ConcreteSpec/Spec.lean
+@@ -14,6 +14,7 @@ import ConcreteSpec.Spec.Brand
+ import ConcreteSpec.Spec.Authority
+ import ConcreteSpec.Spec.Observation
+ import ConcreteSpec.Spec.Rules
++import ConcreteSpec.Spec.Target
+ 
+ /-!
+ # The Concrete specification
+diff --git a/ConcreteSpec/Spec/Ident.lean b/ConcreteSpec/Spec/Ident.lean
+index d05ba083..aca45f73 100644
+--- a/ConcreteSpec/Spec/Ident.lean
++++ b/ConcreteSpec/Spec/Ident.lean
+@@ -142,7 +142,10 @@ structure Span where
+   deriving DecidableEq, Repr
+ 
+ /-- A span's path is relative to the project root and uses forward slashes: it is not empty,
+-does not start with `/`, and holds no `\`. -/
++does not start with `/`, and holds no `\`. This is the minimal syntactic check; that the path is
++the one normalized path of its file (no drive prefix such as `C:`, no `.` or `..` segment, no
++empty segment) is part of
++elaboration's site-table obligation (README obligation O1). -/
+ def Span.PathOk (sp : Span) : Prop :=
+   sp.path.toList ≠ [] ∧ sp.path.toList.head? ≠ some '/' ∧ '\\' ∉ sp.path.toList
+ 
+@@ -177,7 +180,7 @@ def specVersion : SpecVersion := ⟨0, 1⟩
+ example : DeclId.mk ⟨["a"]⟩ "Pair" ≠ DeclId.mk ⟨["b"]⟩ "Pair" := by decide
+ 
+ /-- A field belongs to its owner: `a` of `Pair` is not `a` of `Point`, and `value` of variant
+-`Some` is not `value` of variant `Ok`. -/
++`E.A` is not `value` of variant `E.B`. -/
+ example : FieldId.mk (.struct ⟨⟨[]⟩, "Pair"⟩) "a" ≠ FieldId.mk (.struct ⟨⟨[]⟩, "Point"⟩) "a" := by
+   decide
+ 
+@@ -198,8 +201,8 @@ example : ¬ (Span.mk "src\\main.con" 3 5 (by decide) (by decide)).PathOk := by
+ different locals. -/
+ example : Var.mk "x" 0 ≠ Var.mk "x" 1 := by decide
+ 
+-/-- The hint is part of the identity too; elaboration never gives two locals one number, so this
+-pair never arises from a program. -/
++/-- The hint is part of the identity too; elaboration never gives two locals of one function one
++number, so this pair never arises within one function. -/
+ example : Var.mk "x" 0 ≠ Var.mk "y" 0 := by decide
+ 
+ /-- A revised rule is a different rule identity. -/
+diff --git a/ConcreteSpec/Spec/Rules.lean b/ConcreteSpec/Spec/Rules.lean
+index c469afd0..2a20215e 100644
+--- a/ConcreteSpec/Spec/Rules.lean
++++ b/ConcreteSpec/Spec/Rules.lean
+@@ -17,7 +17,9 @@ by CI) requires of each registered rule:
+ 
+ Every citation of that form (`(rule`, a backticked name, `)`) written anywhere in the
+ specification must name a registered rule. A rule's entry is written with a double-backtick name,
+-so Lean refuses an entry for a name that does not exist. The registry is empty until the first
++so Lean refuses an entry for a name that does not exist; the gate also checks that each registered
++name is a declaration of the built environment, which catches an entry written with a single
++backtick. The registry is empty until the first
+ rules are ported (phase A, step 3 onward); each step registers the rules it adds.
+ -/
+ 
+diff --git a/ConcreteSpec/Spec/Target.lean b/ConcreteSpec/Spec/Target.lean
+new file mode 100644
+index 00000000..1ddda45b
+--- /dev/null
++++ b/ConcreteSpec/Spec/Target.lean
+@@ -0,0 +1,137 @@
++import ConcreteSpec.Spec.Ident
++
++/-!
++# Target profiles
++
++PROPOSED: not normative until the owner freezes Core (ROADMAP A2c). Part of `ConcreteSpec.Spec`;
++see `ConcreteSpec/README.md`. Foundation contract C3 (docs/proposals/FOUNDATION.md), step 3 of the
++spec plan (docs/proposals/SPEC_UNIFICATION.md, section 6).
++
++A *target profile* is the read-only description of the machine a program is compiled for. Every
++rule that depends on the machine reads it as a parameter; no rule assumes a 64-bit machine. The
++profile keeps apart facts that a 64-bit desktop happens to make equal: how wide an address is, how
++many bytes a stored pointer takes and how it is aligned, how wide a stored length is, the byte
++order, and which address spaces exist. None of them is inferred from another, or from the width of
++the CPU's arithmetic (owner decision 2026-11-08, question 3: read-only profiles; this generalizes
++rows Q3.7, Q3.9 and Q3.10 and OD126's profile without changing the existing one).
++
++The *meaning* of a length or an index does not depend on the profile: it is a `u64` everywhere
++(row Q3.5, kept by question 7). A profile's `lenBits` is only the width a length is *stored* in on
++that target; a width narrower than 64 is allowed only where a proof shows that every length the
++program can have fits (question 7, option (c)), and that proof is not part of the profile.
++
++There is one profile today, `linuxX8664`, the existing 64-bit little-endian target of row Q7.1,
++unchanged. Another target is another profile (OD126), and must satisfy `Target.WellFormed`.
++-/
++
++namespace ConcreteSpec.Core
++
++/-- The order in which a multi-byte value's bytes are stored. -/
++inductive ByteOrder where
++  | little
++  | big
++  deriving DecidableEq, Repr
++
++/-- An address space of a target: data memory, or for example a separate program memory. Raw
++pointers and accesses name their space explicitly; there is no silent conversion between spaces
++(FOUNDATION C3). -/
++structure AddrSpace where
++  id : Nat
++  deriving DecidableEq, Repr
++
++/-- `n` is a positive power of two. -/
++def IsPow2 (n : Nat) : Prop := 0 < n ∧ n &&& (n - 1) = 0
++
++instance (n : Nat) : Decidable (IsPow2 n) := by unfold IsPow2; infer_instance
++
++/-- A target profile. Every field is read-only: rules read it and never change it.
++
++- `addrBits`: the width of an address, in bits.
++- `ptrSize`, `ptrAlign`: the bytes a stored pointer occupies and its alignment.
++- `lenBits`: the width, in bits, a length or index is stored in (its meaning stays `u64`, Q3.5).
++- `byteOrder`: the order of a stored value's bytes.
++- `spaces`: the address spaces the target has; `dataSpace` is the one ordinary values live in.
++- `null`: the distinguished null address.
++- `maxObject`: the largest number of bytes one object may occupy. -/
++structure Target where
++  addrBits : Nat
++  ptrSize : Nat
++  ptrAlign : Nat
++  lenBits : Nat
++  byteOrder : ByteOrder
++  spaces : List AddrSpace
++  dataSpace : AddrSpace
++  null : Nat
++  maxObject : Nat
++  deriving DecidableEq, Repr
++
++/-- What every profile must satisfy.
++
++- An address has at least one bit, and a stored pointer has room for all of them.
++- A stored pointer's alignment is a power of two, and its size is a multiple of it (the layout law
++  that a size is a multiple of its alignment, FOUNDATION C3).
++- A stored pointer fits in one object.
++- A stored length has between 1 and 64 bits, since its meaning is a `u64` (Q3.5).
++- The data space is one of the target's spaces.
++- The null address is an address.
++- An object, and the address one past its end, fit in the address range: `maxObject` is below
++  `2 ^ addrBits`, the analogue of row Q3.10's one-past bound `base + size ≤ 2^64 − 1` that every
++  profile needs (question 3). -/
++def Target.WellFormed (t : Target) : Prop :=
++  0 < t.addrBits ∧ t.addrBits ≤ 8 * t.ptrSize ∧ IsPow2 t.ptrAlign ∧ t.ptrSize % t.ptrAlign = 0 ∧
++  t.ptrSize ≤ t.maxObject ∧
++  0 < t.lenBits ∧ t.lenBits ≤ 64 ∧ t.dataSpace ∈ t.spaces ∧
++  t.null < 2 ^ t.addrBits ∧ t.maxObject < 2 ^ t.addrBits
++
++instance (t : Target) : Decidable t.WellFormed := by unfold Target.WellFormed; infer_instance
++
++/-- The existing target, linux-x86_64-hosted (row Q7.1): 64-bit addresses, 8-byte pointers aligned
++to 8, 64-bit lengths, little-endian, one data space, null at address 0, and objects of at most
++`2^64 − 1` bytes (row Q3.10). -/
++def linuxX8664 : Target where
++  addrBits := 64
++  ptrSize := 8
++  ptrAlign := 8
++  lenBits := 64
++  byteOrder := .little
++  spaces := [⟨0⟩]
++  dataSpace := ⟨0⟩
++  null := 0
++  maxObject := 2 ^ 64 - 1
++
++/-! ### Examples -/
++
++/-- The existing profile is well formed. -/
++example : linuxX8664.WellFormed := by decide
++
++/-- A profile whose pointers have no room for its addresses is not: 32-bit addresses in a 2-byte
++pointer. -/
++example : ¬ ({ linuxX8664 with
++    addrBits := 32
++    ptrSize := 2
++    ptrAlign := 2
++    maxObject := 2 ^ 16 } : Target).WellFormed := by decide
++
++/-- Nor is one whose pointer alignment is not a power of two. -/
++example : ¬ ({ linuxX8664 with ptrAlign := 6 } : Target).WellFormed := by decide
++
++/-- Nor one whose pointer size is not a multiple of its alignment. -/
++example : ¬ ({ linuxX8664 with ptrAlign := 16 } : Target).WellFormed := by decide
++
++/-- Nor one whose objects are too small to hold a pointer. -/
++example : ¬ ({ linuxX8664 with maxObject := 4 } : Target).WellFormed := by decide
++
++/-- Nor one whose objects can reach the end of the address range, so that one past the end would
++not be an address. -/
++example : ¬ ({ linuxX8664 with maxObject := 2 ^ 64 } : Target).WellFormed := by decide
++
++/-- A small target with 16-bit addresses and 16-bit stored lengths is well formed: nothing assumes
++64 bits. -/
++example : ({ linuxX8664 with
++    addrBits := 16
++    ptrSize := 2
++    ptrAlign := 2
++    lenBits := 16
++    maxObject := 2 ^ 15 } : Target).WellFormed := by decide
++
++end ConcreteSpec.Core
+diff --git a/scripts/proofs/axioms.golden b/scripts/proofs/axioms.golden
+index f7b46721..32d0705d 100644
+--- a/scripts/proofs/axioms.golden
++++ b/scripts/proofs/axioms.golden
+@@ -647,12 +647,18 @@ ConcreteSpec.Core.AList.update.eq_1
+ ConcreteSpec.Core.AList.update.eq_2	
+ ConcreteSpec.Core.AList.update.eq_def	
+ ConcreteSpec.Core.AList.update_cons	
++ConcreteSpec.Core.AddrSpace.mk.inj	
++ConcreteSpec.Core.AddrSpace.mk.injEq	propext
++ConcreteSpec.Core.AddrSpace.mk.sizeOf_spec	
+ ConcreteSpec.Core.BlockId.mk.inj	
+ ConcreteSpec.Core.BlockId.mk.injEq	propext
+ ConcreteSpec.Core.BlockId.mk.sizeOf_spec	
+ ConcreteSpec.Core.BrandId.mk.inj	
+ ConcreteSpec.Core.BrandId.mk.injEq	propext
+ ConcreteSpec.Core.BrandId.mk.sizeOf_spec	
++ConcreteSpec.Core.ByteOrder.big.sizeOf_spec	
++ConcreteSpec.Core.ByteOrder.little.sizeOf_spec	
++ConcreteSpec.Core.ByteOrder.ofNat_ctorIdx	
+ ConcreteSpec.Core.CapVarId.mk.inj	
+ ConcreteSpec.Core.CapVarId.mk.injEq	propext
+ ConcreteSpec.Core.CapVarId.mk.sizeOf_spec	
+@@ -706,6 +712,9 @@ ConcreteSpec.Core.Span.mk.sizeOf_spec
+ ConcreteSpec.Core.SpecVersion.mk.inj	
+ ConcreteSpec.Core.SpecVersion.mk.injEq	propext
+ ConcreteSpec.Core.SpecVersion.mk.sizeOf_spec	
++ConcreteSpec.Core.Target.mk.inj	
++ConcreteSpec.Core.Target.mk.injEq	propext
++ConcreteSpec.Core.Target.mk.sizeOf_spec	
+ ConcreteSpec.Core.TheoremId.mk.inj	
+ ConcreteSpec.Core.TheoremId.mk.injEq	propext
+ ConcreteSpec.Core.TheoremId.mk.sizeOf_spec	
+@@ -715,10 +724,14 @@ ConcreteSpec.Core.Var.mk.sizeOf_spec
+ ConcreteSpec.Core.VariantId.mk.inj	
+ ConcreteSpec.Core.VariantId.mk.injEq	propext
+ ConcreteSpec.Core.VariantId.mk.sizeOf_spec	
++ConcreteSpec.Core.instDecidableEqAddrSpace.decEq._proof_1	
++ConcreteSpec.Core.instDecidableEqAddrSpace.decEq._proof_2	
+ ConcreteSpec.Core.instDecidableEqBlockId.decEq._proof_1	
+ ConcreteSpec.Core.instDecidableEqBlockId.decEq._proof_2	
+ ConcreteSpec.Core.instDecidableEqBrandId.decEq._proof_1	
+ ConcreteSpec.Core.instDecidableEqBrandId.decEq._proof_2	
++ConcreteSpec.Core.instDecidableEqByteOrder._proof_1	
++ConcreteSpec.Core.instDecidableEqByteOrder._proof_2	
+ ConcreteSpec.Core.instDecidableEqCapVarId.decEq._proof_1	
+ ConcreteSpec.Core.instDecidableEqCapVarId.decEq._proof_2	
+ ConcreteSpec.Core.instDecidableEqDeclId.decEq._proof_1	
+@@ -763,6 +776,16 @@ ConcreteSpec.Core.instDecidableEqSpan.decEq._proof_5
+ ConcreteSpec.Core.instDecidableEqSpecVersion.decEq._proof_1	
+ ConcreteSpec.Core.instDecidableEqSpecVersion.decEq._proof_2	
+ ConcreteSpec.Core.instDecidableEqSpecVersion.decEq._proof_3	
++ConcreteSpec.Core.instDecidableEqTarget.decEq._proof_1	
++ConcreteSpec.Core.instDecidableEqTarget.decEq._proof_10	
++ConcreteSpec.Core.instDecidableEqTarget.decEq._proof_2	
++ConcreteSpec.Core.instDecidableEqTarget.decEq._proof_3	
++ConcreteSpec.Core.instDecidableEqTarget.decEq._proof_4	
++ConcreteSpec.Core.instDecidableEqTarget.decEq._proof_5	
++ConcreteSpec.Core.instDecidableEqTarget.decEq._proof_6	
++ConcreteSpec.Core.instDecidableEqTarget.decEq._proof_7	
++ConcreteSpec.Core.instDecidableEqTarget.decEq._proof_8	
++ConcreteSpec.Core.instDecidableEqTarget.decEq._proof_9	
+ ConcreteSpec.Core.instDecidableEqTheoremId.decEq._proof_1	
+ ConcreteSpec.Core.instDecidableEqTheoremId.decEq._proof_2	
+ ConcreteSpec.Core.instDecidableEqVar.decEq._proof_1	
+diff --git a/scripts/spec/rules.py b/scripts/spec/rules.py
+index b9247451..b1d5c271 100644
+--- a/scripts/spec/rules.py
++++ b/scripts/spec/rules.py
+@@ -1,30 +1,52 @@
+ #!/usr/bin/env python3
+ """The rule gate's checks (scripts/spec/rules.sh): the registered rules against the sources.
+ 
+-  rules.py RULES.jsonl SRC_DIR   RULES.jsonl is scripts/spec/rules.lean's output; SRC_DIR holds the
+-                                 specification's .lean sources (searched recursively).
++  rules.py RULES.jsonl SRC_DIR ROWS...
++      RULES.jsonl is scripts/spec/rules.lean's output; SRC_DIR holds the specification's .lean
++      sources (searched recursively, at least one); each ROWS file is a decision inventory
++      (docs/decisions.md, ROADMAP.md) in which a cited decision row must appear.
+ 
+ Prints `ok`/`FAIL` lines; exits 1 on any failure, 3 when an input cannot be read or lexed.
+-A rule's doc comment must cite a decision row; each rule needs an example whose doc comment says
+-``Accepted (rule `Name`)`` and one that says ``Refused (rule `Name`)``; every ``(rule `Name`)``
+-anywhere in a source (either kind of comment, or a literal) must name a registered rule; no rule is registered twice; revisions are >= 1.
++A rule's doc comment must cite a decision row that exists in an inventory; each rule needs one
++example whose doc comment says ``Accepted (rule `Name`)`` and a different one whose doc comment
++says ``Refused (rule `Name`)``; a verdict doc comment holds no nested comment and no rule's two
++verdicts at once; every ``(rule `Name`)`` anywhere in a source (either kind of comment, or a
++literal) must name a registered rule; no rule is registered twice; revisions are >= 1.
+ """
+ import json, os, re, sys
+ 
+ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "proofs"))
+ import lean_lex  # noqa: E402
+ 
+-ROW = re.compile(r"\b(Q\d+(\.\d+)+|OD\d+|P\d+|R-\d{4})\b")
+-CITE = re.compile(r"\(rule `([^`\s]+)`\)")
+-VERDICT = re.compile(r"\b(Accepted|Refused) \(rule `([^`\s]+)`\)")
+-EXAMPLE_AFTER = re.compile(r"\s*example(?![\w'!?])")
++ROW = re.compile(r"\b(Q\d+(?:\.\d+)+|OD\d+|P\d+[a-z]?|R-\d{4})\b")
++# A rule name is a Lean name as `toString` prints it: dotted components, a component that needs
++# quoting written «…» (which may hold spaces). Anything up to the closing backtick is the name.
++CITE = re.compile(r"\(rule `([^`\n]+)`\)")
++VERDICT = re.compile(r"\b(Accepted|Refused) \(rule `([^`\n]+)`\)")
++# What may stand between a doc comment and the `example` it documents: attributes and modifiers.
++EXAMPLE_AFTER = re.compile(
++    r"\s*(?:@\[(?:[^\[\]]|\[[^\[\]]*\])*\]\s*)*(?:(?:noncomputable|private|protected|unsafe|partial)\s+)*"
++    r"example(?![\w'!?])")
+ 
+ 
+-def main(rules_path, src_dir):
++def row_exists(row, inventories):
++    pat = re.compile(r"(?<![\w.-])" + re.escape(row) + r"(?![\w-]|\.\d)")
++    return any(pat.search(t) for t in inventories)
++
++
++def main(rules_path, src_dir, row_paths):
+     fails = []
+-    rules = [json.loads(l) for l in open(rules_path, encoding="utf-8") if l.strip()]
++    try:
++        rules = [json.loads(l) for l in open(rules_path, encoding="utf-8") if l.strip()]
++        inventories = [open(p, encoding="utf-8").read() for p in row_paths]
++    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as e:
++        print(f"error: {e}", file=sys.stderr); return 3
+     if not rules or rules[-1] != {"end": True}:
+         print("error: the rule listing is truncated (no end record)", file=sys.stderr); return 3
++    if not inventories:
++        print("error: no decision inventory given", file=sys.stderr); return 3
++    if not os.path.isdir(src_dir):
++        print(f"error: {src_dir}: not a directory", file=sys.stderr); return 3
+     rules = rules[:-1]
+     names = [r["name"] for r in rules]
+     for n in sorted({n for n in names if names.count(n) > 1}):
+@@ -33,9 +55,21 @@ def main(rules_path, src_dir):
+         if not r["exists"]: fails.append(f"rule {r['name']} names no declaration")
+         if r["rev"] < 1: fails.append(f"rule {r['name']} has revision {r['rev']} (revisions start at 1)")
+         if not r["doc"].strip(): fails.append(f"rule {r['name']} has no doc comment")
+-        elif not ROW.search(r["doc"]): fails.append(f"rule {r['name']}'s doc comment cites no decision row")
++        else:
++            rows = [m.group(1) for m in ROW.finditer(r["doc"])]
++            if not rows: fails.append(f"rule {r['name']}'s doc comment cites no decision row")
++            elif not any(row_exists(x, inventories) for x in rows):
++                fails.append(f"rule {r['name']}'s doc comment cites no existing decision row ({', '.join(rows)})")
+     seen = {n: set() for n in names}
+-    for dirpath, _, files in os.walk(src_dir):
++    scanned = 0
++
++    def walk_error(e):
++        raise e
++    try:
++        tree = sorted(os.walk(src_dir, onerror=walk_error))
++    except OSError as e:
++        print(f"error: {src_dir}: {e}", file=sys.stderr); return 3
++    for dirpath, _, files in tree:
+         for f in sorted(files):
+             if not f.endswith(".lean"): continue
+             path = os.path.join(dirpath, f)
+@@ -44,11 +78,17 @@ def main(rules_path, src_dir):
+                 lean_lex.lex(src, spans)
+             except (OSError, UnicodeDecodeError, lean_lex.LexError) as e:
+                 print(f"error: {path}: {e}", file=sys.stderr); return 3
++            scanned += 1
+             # citations anywhere in the file (comments of both kinds, and literals: fail closed)
+             for m in CITE.finditer(src):
+                 if m.group(1) not in seen:
+                     line = src.count("\n", 0, m.start()) + 1
+                     fails.append(f"{path}:{line}: cites unregistered rule {m.group(1)}")
++            # a verdict anywhere outside a doc comment (code, a string literal) is stray too
++            for m in VERDICT.finditer(src):
++                if not any(a <= m.start() < b and src.startswith("/--", a) for a, b in spans):
++                    line = src.count("\n", 0, m.start()) + 1
++                    fails.append(f"{path}:{line}: a verdict citation outside an example's doc comment")
+             for a, b in spans:
+                 text, line = src[a:b], src.count("\n", 0, a) + 1
+                 verdicts = VERDICT.findall(text)
+@@ -56,18 +96,30 @@ def main(rules_path, src_dir):
+                 if not (text.startswith("/--") and EXAMPLE_AFTER.match(src, b)):
+                     fails.append(f"{path}:{line}: a verdict citation outside an example's doc comment")
+                     continue
+-                for v, n in verdicts:
+-                    if n in seen: seen[n].add(v)
++                if "/-" in text[3:]:
++                    fails.append(f"{path}:{line}: a verdict doc comment holds a nested comment")
++                    continue
++                kinds = {}
++                for v, n in verdicts: kinds.setdefault(n, set()).add(v)
++                both = sorted(n for n, k in kinds.items() if len(k) > 1)
++                if both:
++                    fails.append(f"{path}:{line}: one example is both accepted and refused by {', '.join(both)}")
++                    continue
++                for n, k in kinds.items():
++                    if n in seen: seen[n] |= k
++    if scanned == 0:
++        print(f"error: {src_dir}: no .lean source", file=sys.stderr); return 3
+     for n in names:
+         for v in ("Accepted", "Refused"):
+             if v not in seen[n]: fails.append(f"rule {n} has no example marked {v} (rule `{n}`)")
+     for f in fails: print(f"  FAIL {f}")
+-    if not fails: print(f"  ok   {len(rules)} registered rules, each documented with a decision row and"
+-                        " an accepted and a refused example; every citation names a registered rule")
++    if not fails: print(f"  ok   {len(rules)} registered rules in {scanned} sources, each documented with an"
++                        " existing decision row and an accepted and a refused example; every citation"
++                        " names a registered rule")
+     return 1 if fails else 0
+ 
+ 
+ if __name__ == "__main__":
+-    if len(sys.argv) != 3:
+-        print(f"usage: {sys.argv[0]} RULES.jsonl SRC_DIR", file=sys.stderr); sys.exit(2)
+-    sys.exit(main(sys.argv[1], sys.argv[2]))
++    if len(sys.argv) < 4:
++        print(f"usage: {sys.argv[0]} RULES.jsonl SRC_DIR ROWS...", file=sys.stderr); sys.exit(2)
++    sys.exit(main(sys.argv[1], sys.argv[2], sys.argv[3:]))
+diff --git a/scripts/spec/rules.sh b/scripts/spec/rules.sh
+index 84f48510..b2535541 100755
+--- a/scripts/spec/rules.sh
++++ b/scripts/spec/rules.sh
+@@ -5,9 +5,12 @@
+ # registry is read from the built environment by scripts/spec/rules.lean.
+ #
+ # NEGATIVE CONTROLS run the same checker on small fixtures and require each failure: a rule with no
+-# refused example, one whose doc cites no decision row, one registered twice, one naming no
+-# declaration, a citation of an unregistered rule, a verdict outside an example's doc comment and a
+-# truncated listing. A fixture that satisfies every check must pass (the positive control).
++# refused or no accepted example, no doc comment, a doc citing no decision row or one no inventory
++# holds, one registered twice, one naming no declaration, revision 0, a citation of an unregistered
++# rule (a quoted name too), a verdict outside an example's doc comment or in a nested comment, one
++# example claiming both verdicts, a truncated listing, an unlexable source, a missing or empty
++# source directory, and a checker that hangs through both bounded attempts. Fixtures that satisfy
++# every check must pass (the positive controls, attributed and modified examples included).
+ set -uo pipefail
+ source "$(dirname "${BASH_SOURCE[0]}")/../checks/lib/gate_env.sh" || exit 2
+ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+@@ -21,14 +24,16 @@ TMP="$(mktemp -d)" || { echo "FATAL: mktemp failed" >&2; exit 2; }
+ trap 'rm -rf "$TMP"' EXIT
+ export LC_ALL=C
+ BOUNDED_PARENT="$TMP"; source scripts/checks/lib/bounded.sh || exit 2
+-# check BUDGET RULES-JSONL SRC-DIR → the checker's output and status, bounded: a second timeout is
+-# INCOMPLETE, status 2, which no check below accepts
+-check() {
+-  local out rc
+-  out="$(bounded_run -i /dev/null "$1" -- python3 -I scripts/spec/rules.py "$2" "$3" 2>&1)"; rc=$?
+-  if bounded_is_incomplete "$rc"; then bounded_summary >&2; echo "error: $CHECK_NAME: the checker timed out (INCOMPLETE)" >&2; return 2; fi
++# run_bounded BUDGET CMD... → CMD's output and status, bounded: a second timeout is INCOMPLETE,
++# status 2, which no check below accepts
++run_bounded() {
++  local out rc budget="$1"; shift
++  out="$(bounded_run -i /dev/null -r "$budget" "$budget" -- "$@" 2>&1)"; rc=$?
++  if bounded_is_incomplete "$rc"; then echo "error: $CHECK_NAME: timed out twice (INCOMPLETE)" >&2; return 2; fi
+   printf '%s\n' "$out"; return "$rc"
+ }
++# check BUDGET RULES-JSONL SRC-DIR ROWS... → the checker
++check() { local b="$1"; shift; run_bounded "$b" python3 -I scripts/spec/rules.py "$@"; }
+ 
+ command -v lake >/dev/null || { echo "error: $CHECK_NAME needs Lean's lake on PATH (elan)" >&2; exit 2; }
+ bounded_run -i /dev/null -r 3600 3600 -- lake build ConcreteSpec > "$TMP/build.log" 2>&1 \
+@@ -37,7 +42,7 @@ bounded_run -i /dev/null -r 3600 3600 -- lake build ConcreteSpec > "$TMP/build.l
+ echo "=== the specification ==="
+ bounded_run -i /dev/null 600 -- lake env lean scripts/spec/rules.lean > "$TMP/rules.jsonl" 2> "$TMP/rules.err" \
+   || { cat "$TMP/rules.err" >&2; bounded_summary >&2; echo "error: scripts/spec/rules.lean failed or timed out" >&2; exit 2; }
+-OUT=$(check 120 "$TMP/rules.jsonl" ConcreteSpec); RC=$?
++OUT=$(check 120 "$TMP/rules.jsonl" ConcreteSpec docs/decisions.md ROADMAP.md); RC=$?
+ echo "$OUT"
+ [ "$RC" = 0 ] && ok "the registry and every rule citation of ConcreteSpec" || no "the specification (rc=$RC)"
+ 
+@@ -45,8 +50,9 @@ echo "=== negative controls ==="
+ # fixture NAME RULES-JSONL SOURCE → runs the checker on them, sets OUT and RC
+ fixture() {
+   mkdir -p "$TMP/$1"; printf '%s\n' "$2" > "$TMP/$1.jsonl"; printf '%s\n' "$3" > "$TMP/$1/A.lean"
+-  OUT=$(check 60 "$TMP/$1.jsonl" "$TMP/$1"); RC=$?
++  OUT=$(check 60 "$TMP/$1.jsonl" "$TMP/$1" "$TMP/rows.md"); RC=$?
+ }
++printf 'Q9.1 is a decided row.\n' > "$TMP/rows.md"
+ END='{"end":true}'
+ GOOD='{"name":"R.ok","rev":1,"exists":true,"doc":"The rule (Q9.1)."}'
+ EXA='/-- Accepted (rule `R.ok`). -/
+@@ -91,5 +97,63 @@ fixture rev0 '{"name":"R.ok","rev":0,"exists":true,"doc":"The rule (Q9.1)."}
+ [ "$RC" = 1 ] && [[ "$OUT" == *"revision 0"* ]] && ok "control: revision 0 fails" || no "control: revision 0 not reported: $OUT"
+ fixture trunc "$GOOD" "$EXA"
+ [ "$RC" = 3 ] && ok "control: a truncated listing is an error" || no "control: truncated listing gave rc=$RC: $OUT"
++fixture noaccepted "$GOOD
++$END" '/-- Refused (rule `R.ok`). -/
++example : True := trivial'
++[ "$RC" = 1 ] && [[ "$OUT" == *"no example marked Accepted"* ]] && ok "control: a rule with no accepted example fails" \
++  || no "control: missing accepted example not reported: $OUT"
++fixture nodoc '{"name":"R.ok","rev":1,"exists":true,"doc":""}
++'"$END" "$EXA"
++[ "$RC" = 1 ] && [[ "$OUT" == *"has no doc comment"* ]] && ok "control: a rule with no doc comment fails" \
++  || no "control: missing doc comment not reported: $OUT"
++fixture badrow '{"name":"R.ok","rev":1,"exists":true,"doc":"The rule (Q999.999)."}
++'"$END" "$EXA"
++[ "$RC" = 1 ] && [[ "$OUT" == *"no existing decision row"* ]] && ok "control: a rule citing a row no inventory has fails" \
++  || no "control: nonexistent decision row not reported: $OUT"
++fixture both "$GOOD
++$END" '/-- Accepted (rule `R.ok`). Refused (rule `R.ok`). -/
++example : True := trivial'
++[ "$RC" = 1 ] && [[ "$OUT" == *"both accepted and refused"* ]] && ok "control: one example claiming both verdicts fails" \
++  || no "control: both verdicts on one example not reported: $OUT"
++fixture nested "$GOOD
++$END" "$EXA
++/-- Refused /- Accepted (rule \`R.ok\`) -/ -/
++example : True := trivial"
++[ "$RC" = 1 ] && [[ "$OUT" == *"nested comment"* ]] && ok "control: a verdict in a nested comment fails" \
++  || no "control: nested-comment verdict not reported: $OUT"
++fixture quoted "$GOOD
++$END" "$EXA
++-- see (rule \`R.«missing rule»\`)"
++[ "$RC" = 1 ] && [[ "$OUT" == *"cites unregistered rule R.«missing rule»"* ]] && ok "control: an unregistered quoted name fails" \
++  || no "control: quoted unregistered citation not reported: $OUT"
++fixture attr "$GOOD
++$END" '/-- Accepted (rule `R.ok`). -/
++@[simp] example : True := trivial
++
++/-- Refused (rule `R.ok`). -/
++noncomputable example : True := trivial'
++[ "$RC" = 0 ] && ok "control: examples with an attribute or a modifier count" || no "control: attributed examples refused: $OUT"
++fixture unlexable "$GOOD
++$END" '/-- Accepted (rule `R.ok`). unterminated'
++[ "$RC" = 3 ] && ok "control: an unlexable source is an error" || no "control: unlexable source gave rc=$RC: $OUT"
++fixture literal "$GOOD
++$END" "$EXA
++def s : String := \"Accepted (rule \`R.ok\`)\""
++[ "$RC" = 1 ] && [[ "$OUT" == *"outside an example's doc comment"* ]] && ok "control: a verdict in a string literal fails" \
++  || no "control: string-literal verdict not reported: $OUT"
++fixture nestedattr "$GOOD
++$END" '/-- Accepted (rule `R.ok`). -/
++@[simp, scoped [foo] bar] example : True := trivial
++
++/-- Refused (rule `R.ok`). -/
++example : True := trivial'
++[ "$RC" = 0 ] && ok "control: an attribute with brackets inside counts" || no "control: bracketed attribute refused: $OUT"
++OUT=$(check 60 "$TMP/good.jsonl" "$TMP/no-such-dir" "$TMP/rows.md"); RC=$?
++[ "$RC" = 3 ] && ok "control: a missing source directory is an error" || no "control: missing source dir gave rc=$RC: $OUT"
++mkdir -p "$TMP/empty"
++OUT=$(check 60 "$TMP/good.jsonl" "$TMP/empty" "$TMP/rows.md"); RC=$?
++[ "$RC" = 3 ] && ok "control: a source directory with no .lean file is an error" || no "control: empty source dir gave rc=$RC: $OUT"
++OUT=$(run_bounded 1 python3 -I -c 'import time; time.sleep(30)' 2>&1); RC=$?
++[ "$RC" = 2 ] && ok "control: a checker that hangs through both attempts is INCOMPLETE" || no "control: hung checker gave rc=$RC"
+ 
+ finish
+
+exec
+/bin/bash -lc "cat _inputs/FOUNDATION.md; cat scripts/proofs/lean_lex.py; cat scripts/spec/rules.lean; nl -ba scripts/spec/rules.py; rg -n 'Q3.5|Q3.7|Q3.9|Q3.10|Q7.1|OD126|P[0-9]|Q[0-9]' docs/decisions.md | head -65; cat scripts/checks/lib/bounded.sh" in /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rev-sc2/codex
+ succeeded in 0ms:
+# Concrete Lean foundation proposal — draft 3
+
+Status: approved by the owner 2026-11-08; the plan for PLAN steps 3+; the Lean spec stays the only home of rules.
+
+The [A2i decision](../decisions.md#decided-project-long-term-2026-11-06) freezes integrated scopes, "not an untested whole-language architecture". Here the frozen foundation means interfaces and laws implemented, proved and tested together, with representative interactions. It does not mean designing every future slice before slice 1. Later slices supply lawful instances; changes to decided rules return to the owner.
+
+References below use the actual anchors in this checkout. **Core rows** means [Q1–Q9](../decisions.md#decided-2026-11-05-core). The pipeline referred to in the brief as the 2026-11-07 decision is recorded here under [the 2026-11-06 pipeline anchor](../decisions.md#decided-project-pipeline-2026-11-06); there is no `decided-2026-11-07-pipeline` anchor. The [authoritative core-row notes](../archive/decisions-2026-11-05/core_rows.json) supplement these rows. Proposed additions without a decided row are identified as such.
+
+## 1. The freeze boundary
+
+Freeze **extensible interfaces and their laws**, not an exhaustive list of future types, grants, instructions or events. Every admitted instance must provide the required laws; an unknown instance is refused, never silently given semantics. Extensions must preserve the old fragment's judgments and executions. A new operation cannot change what an old operation means.
+
+The foundation comprises target profiles; typed identities; types, values and places; control and calls; scalar operations; layout and representation; byte memory; ownership, loans, brands and authority; observations and leakage; evaluator adequacy; primitive contracts; frames and ABI; evidence, facts and diagnostics. An interface includes its state, preconditions, results and preservation laws, not just a record of names.
+
+Before freezing, implement these contracts in the authoritative Lean library, with readable comments, accepted/refused examples and counterexamples to invalid premises. Discharge the four Q9.14 design theorems and the [A2i interaction/erasure obligations](../decisions.md#decided-project-long-term-2026-11-06), including the laws below. Tests alone do not establish them. Existing `ConcreteSpec` fragments are starting material, not evidence that omitted pointer fragments, external frames, initialization or cleanup interactions are already covered. Review and owner approval precede the freeze. This is a writing proposal, not that completed review or approval.
+
+## 2. Contracts to finish before the freeze
+
+These are contracts to complete, not declarations that the proofs exist. Decided rules remain binding. New semantic completions and revisions are separately answerable in section 5; none is approved by this draft.
+
+### C1. Execution, calls and cleanup
+
+**Freeze:** machine configurations with current command, locals, places, call frames and structured continuations; a labeled single-step relation; results for ordinary completion, return, labeled break/continue and terminal abort. A continuation says where execution resumes. Prove sequencing, scope restoration and cleanup preservation, including effects while evaluating an exit value.
+
+**Rule:** evaluate subexpressions completely left to right: receiver before arguments, left operand before right, literal fields/elements in written order, base before index. Assignment evaluates its RHS before any destination subexpression. `&&` evaluates its RHS only if the LHS is true; `||` only if false; both operands are still checked. Resolve calls by typed identity; evaluate arguments before entering the callee. Moves transfer ownership exactly once; copies require a declared, checked Copy instance.
+
+Keep the decided Core loop condition region, counted-loop bound snapshots and counter advancement. Preserve the restrictions on exits inside operands. Return evaluates its result before leaving scopes. Normal block exit, return, break and continue run the deferred calls of each exited scope, inner scope first and reverse registration order within a scope. Deferred operands are read at cleanup, with dependencies kept alive. If cleanup aborts, stop immediately; no remaining cleanup runs. Explicit abort runs no deferred call and does not unwind. Ordinary locals do not acquire implicit user destructors: explicit consumption, storage teardown and resource destruction remain different operations. Q2.3 fixes sequence destruction in increasing index order, then backing; OrderedMap in ascending key order, key before value, then nodes; Heap payload before cell; Option/Result destroy the present payload. User types follow their checked destroy bodies. Q3.8 explicitly preserves index order for zero-sized elements. Destruction is an ordinary checked call and may itself fail to terminate unless stronger evidence exists.
+
+**Authority:** Core Q2.1–Q2.7, Q6.5, Q9.1, Q9.3–Q9.4, Q9.8, Q9.11; [OD10](../decisions.md#od10), [OD53](../decisions.md#od53), [OD69](../decisions.md#od69); STMT-4/5. **Later:** source constructs and their lowering, loop/call bounds and destructor bodies at their slices. No postfix `?`, exceptions or implicit error propagation is introduced.
+
+### C2. Scalars, failure and arithmetic
+
+**Freeze:** mathematical scalar values, finite bit representations, operation contracts and error classification; representation and operation correspondence laws. Integer widths remain those named by `i8`…`i64` and `u8`…`u64`; proposed `usize` is separate. A bool has only false/true, encoded as byte 0/1. TYPE-20 makes char a one-byte code unit: every u8 round-trips through char. OD137 restricts character literals to ASCII; it does not restrict stored char values to ASCII.
+
+**Rule:** signed representation is two's complement. Division truncates toward zero; nonzero remainder has the dividend's sign. Zero divisors and signed `MIN / -1` and `MIN % -1` are errors, the latter two `Overflow`. Shift counts satisfy `0 ≤ count < width`; valid shifts discard outgoing bits, signed right shift sign-fills and unsigned right shift zero-fills. Plain arithmetic needs closed safety evidence. Checked operations return the decided `Result<T, ArithmeticError>`; wrapping operations compute modulo the width and saturating operations clamp to bounds. `as` is lossless over the entire source domain; lossy conversions use named operations. OD106 and ARITH-10 fix `try_convert -> Result<T, OutOfRange>`, separate from ArithmeticError.
+
+Keep Q6.7's separation of traps, unsafe stuckness, allocation failure and evaluator fuel exhaustion. Handled checked errors are values, not traps; explicit abort is terminal. Safe admission requires evidence excluding implicit traps. The exact trap taxonomy is question 9; ArithmeticError does not determine it. UTF-8 operation failures belong to TYPE-3 and Q4.6–Q4.7, with the remaining classification in question 11.
+
+
+**Authority:** [no hidden traps](../decisions.md#decided-project-no-hidden-traps), [OD11](../decisions.md#od11), [OD99](../decisions.md#od99), [OD106](../decisions.md#od106), [OD114](../decisions.md#od114), TYPE-19, Core Q6.7. **Later:** operation syntax and admission instances; float rules at slice 26. The interface admits float instances but does not invent their unsettled details. No `isize` is added by implication: pointer differences use a mathematical signed offset in the model and an explicitly contracted representable result in source APIs.
+
+### C3. Target, layout and representation
+
+**Freeze:** a well-formed target profile and a layout interface. Separate address width, pointer storage size/alignment, length width, byte order and address spaces; do not infer any from CPU arithmetic width. The profile specifies pointer encoding, distinguished null, accessible spaces and maximum object sizes. Require representable sizes/offsets and checked layout arithmetic; reject an unrepresentable layout rather than wrap. No universal 64-bit assumption, including for 20/24-bit addresses.
+
+Layout laws: positive power-of-two alignment; size a multiple of aggregate alignment; occupied field bytes in bounds and non-overlapping; required field alignment in native/C modes; unique discriminants; and valid tag decoding. Only if question 5 adopts niches (unused encodings used for variants), require sound niche decoding and eligibility proofs. No niche machinery is required while niches are absent. Zero-size fields have empty byte ranges and may share offsets. Packed mode replaces natural field alignment with explicit unaligned-access premises; it must not falsely prove packed fields naturally aligned. Core uses the hybrid state in C4, with target/layout as a read-only parameter for sizeof/alignof and raw access. Safe typed operations are proved representation-independent where their premises permit it. The concrete algorithm below is one implementation proving these laws, not the premise of every earlier proof.
+
+**Rule:** native structs retain declaration order, each field rounded up to its alignment, aggregate alignment the maximum (1 for empty), and final size rounded up. Empty aggregates have size 0/alignment 1. Arrays have size `n × size(T)` and alignment `align(T)`, including `n = 0`. Fixed-width integer storage respects value width; alignment is target-defined. Q4.5 decides only StaticStr’s explicit pointer/byte-length FFI adapter, without an internal ABI promise. Q3.1–Q3.4 and Q4.6–Q4.7 decide view roots, loans and ranges, not their physical representation. Text length counts UTF-8 bytes. TYPE-3 Text owns immutable bytes, never aliases another value’s buffer, and is linear. Its ownership, allocator dependency and sufficient release context must survive representation; Q4.5’s FFI adapter does not fix Text’s internal size. No universal two-word Text layout is frozen. A common shared/mutable view representation is a proposal, not a decided rule. Defer its concrete layout to the view/layout slice, preserving the decided second-class semantics; no two-word view ABI is frozen. Address-space selection is explicit profile metadata, including program-memory text: no silent cast to data pointers. `Secret<T>` has T's layout if question 18 approves it; layout never implies constant time.
+
+Native enum layout and niche policy are separate questions 4 and 5. Until answered, retain the existing profile rules; OD72 still refuses empty-enum source declarations. Invalid raw tags do not become valid typed values.
+
+Include native, C and packed modes now. C layout/calling details come from the selected ABI; enums remain forbidden across extern boundaries. Packed structs use declaration order/no padding/alignment 1; C+packed uses C order with packing overriding alignment. Misaligned fields are permitted but references to them are refused. Direct field access uses an explicitly justified unaligned operation, possibly lowered to byte accesses. Preserve FFI-4's existing `align(N)` restriction; surface repr forms wait for slice 25. Stronger over-alignment, MMIO and section-placement syntax remain deferred to workloads. No shortened MCU trap format is adopted.
+
+**Authority:** [runtime/layout decision](../decisions.md#decided-project-runtime-2026-11-06), Core Q3.5–Q3.11, Q4.1–Q4.5; [OD72](../decisions.md#od72), [OD110](../decisions.md#od110), [OD111](../decisions.md#od111), [OD126](../decisions.md#od126), [OD147](../decisions.md#od147); FFI-4/7/8/10. Revisions are listed below. **Later:** syntax, additional target/ABI implementations, concrete allocation and FFI operations; not the layout laws or alignment premises.
+
+### C4. Byte memory and value validity
+
+**Freeze:** blocks with fresh allocation identity, address space, base, extent, alignment and lifetime; byte initialization state; pointer provenance (the allocation a pointer originates from); a typed representation relation `Rep`; partial decoding, access validity and disjoint-memory composition laws. Pointer fragments carry provenance metadata separately from numeric bytes. Do not introduce a poison value that can become an arbitrary typed result.
+
+**State choice (question 2):** Core and its Lean evaluator use one hybrid state: structured places for safe typed storage, plus byte/provenance blocks for raw and exposed storage. A partial place-to-block/range projection and Rep relate the two. They are not independently writable copies. Safe borrow-view formation retains the structured root/projection and does not itself materialize bytes. Raw address-taking, expose, or passing an address to foreign code materializes the containing storage with a stable block/range mapping; existing materialized storage is reused. sizeof/alignof query layout without materializing storage. Materialization encodes active fields and pointer fragments and selects allowed initialization/byte contents for padding once through C8’s oracle.
+
+On a typed write to materialized storage, encode the new active value and update its bytes, initialization and provenance; preserve every byte, initialization bit and fragment outside the new active representation, including padding. Do not query fresh padding choices on this write. Newly active bytes must be initialized by the write; newly inactive bytes retain their previous contents. Lowerings must prove this store rule, including enum variant changes. An explicit raw copy follows its own byte-copy contract.
+
+Raw writes update bytes/fragments and invalidate overlapping cached typed values. Every safe typed read of a materialized place itself applies partial Rep decoding to the current bytes, initialization, provenance and permissions; no user-level decode instruction is needed. Successful decoding supplies the valid value. Failure is unsafe stuckness, never a fabricated value or implicit repair; safe-admission preservation must exclude it under the stated trusted premises. Unmaterialized typed reads use structured values. Raw pointers, expose/from_exposed and sizeof/alignof therefore already have Core meanings. Layout is a read-only parameter. Memory CFG makes this representation and ABI explicit for every operation; it does not introduce raw memory for the first time. This keeps typed proofs abstract while allowing slice 24 to execute without replacing Core state.
+
+**Rule:** memory bytes are initialized octets or uninitialized. Allocation starts uninitialized unless its primitive contract initializes it. Track initialization per occupied field/element; moving out removes that slot's typed ownership/read permission. Reading a typed value requires its active representation bytes initialized and valid. Padding and inactive enum storage need not be initialized and cannot affect typed equality, typed control or typed observations. Initialized padding may be observed through authorized raw byte reads and then affect output. Representation simulations preserve such observed bytes, or explicitly relate the same allowed padding choices; they cannot erase a raw observation as irrelevant nondeterminism. Raw byte copying may transport uninitialized padding and provenance fragments without observing them; observing a byte requires initialization. `Rep` ignores padding but checks active tags, bool/char/text validity and pointer fragments. Prove encoding/decoding round-trip for valid typed values, with allowed padding choices, and that decoding yields only valid values.
+
+Block identity is never reused, even if an address is. Deallocation ends all access rights to the old block. Nonzero accesses need provenance, bounds, liveness, alignment (or justified unaligned mode), initialization for reads and write permission for writes. Q3.7’s zero-byte raw access needs only alignment and a non-null address. One-past pointers may be formed but not dereferenced. Address arithmetic cannot silently wrap into another allocation. Integers carry no provenance; `expose` records the block in the address space, and `from_exposed` uses Q3.9's in-bounds-first, then one-past, then no-provenance rule over live, nonempty eligible exposed blocks. Do not add a new arbitrary tie-break where the decided relation permits choices. Pointer equality follows the decided raw model, not equality of allocation identities alone.
+
+Zero-size slots own distinct logical obligations, are destroyed in index order (Q3.8), occupy no bytes and may share addresses; address equality does not merge owners. Typed operations still discharge their logical ownership obligations; this does not strengthen the zero-byte raw-access rule. Address collisions mean overlapping occupied bytes, not merely equal bases. Address exhaustion belongs to allocator availability. Allocation failure is a typed result conserving the rejected input, not an implicit trap. Require Q1.11's allocator availability laws: progress under availability, unchanged allocator state on failure, release never reducing availability, and a concrete success witness. Callback effects are not rolled back; every element remains accounted for in its typed result. Raw/foreign writes must re-establish validity before safe typed use; violating a trusted premise yields no safety claim, not a fabricated valid value.
+
+**Authority:** Core Q1.8–Q1.12, Q3.7–Q3.11; [memory decision](../decisions.md#decided-project-memory-2026-11-06). Hybrid state, initialization/padding and pointer-fragment completions require question 2; they do not revise Q3.7’s exception. **Later:** raw-pointer syntax (24), allocator algorithms (19–23), FFI operations (25). They instantiate this model rather than replace it.
+
+### C5. Dynamic borrow, brands and authority
+
+**Freeze:** a preservation invariant relating owner slots, moves, root/projection identities, active loans and parent loans, generative brands, dependency lifetimes, grant/resource identities and operation rights. Prove preservation on each step and across calls, including ghost erasure.
+
+**Rule:** loans retain the original root and projection. Keep **whole-root** conflicts, including disjoint fields: an exclusive loan conflicts with every other active access to that root; shared loans freeze the whole owner against mutation/move. A reborrow suspends conflicting access through its parent until the child ends. A loan-derived pointer is valid only during the loan. Shared views are Copy; mutable views are nonduplicable and end by borrow discipline, without an exactly-once destruction obligation. No optimization exploits exclusivity before the checker guarantee is proved.
+
+Fresh brand binders are nominal, including reset/loop generations; dependencies cannot escape their lifetime. Child allocators own backing and expose parent dependence. Grant narrowing consumes and intersects rights; acquisition preserves the parent as decided; close/give-up consumes its resource on all specified outcomes. Zero representation size never removes linear obligations. Permissions in `with(...)` are erased sets, distinct from runtime grants. `GrantTy` describes launch-grant types; File/Socket/Listener are acquired handles. Clock kind has separate identity/resolution/guarantee metadata. Entropy’s source is a named premise under the randomness decision; its exact grant shape and ending contract wait for slice 6 (question 14).
+
+Heap handles contain a pointer and sufficient stable release context, with any erasure requiring question 6 and a proof that release is statically known and needs no per-instance information. Allocator/grant representations are opaque per resource; grant state erases only if stream/device identity, rights and lifecycle are statically determined and all authority transitions are preserved. Prove erasure, rather than assuming one allocator or one capability means zero state.
+
+**Authority:** Core Q1.1–Q1.7, Q3.1–Q3.4, Q7.1–Q7.11; [OD15](../decisions.md#od15), [OD23](../decisions.md#od23), [authority decision](../decisions.md#decided-2026-11-02-authority), [randomness](../decisions.md#decided-2026-11-07-stack-randomness). **Later:** concrete loan/grant operations and source rules; no choice of a new stacked/tree borrow model replacing whole-root rules.
+
+### C6. Observations, environment and concurrency extension
+
+**Freeze:** extensible typed event signatures, request/response matching, finite and infinite traces, terminal observations and an environment relation. A trace is the ordered externally relevant history. Prove preservation of full observations, allowing internal steps that emit no event, without turning infinite internal execution into successful termination.
+
+**Rule:** model startup, capability requests and responses (including blocking), external/FFI effects, public output, logical terminal actions and shutdown. Bind external choices to a shared input/environment history. Error, partial-delivery and blocking behavior belongs to each operation contract; do not assume a hostile environment cooperates. Preserve output preceding a trap and externally visible final state. Normal exit and trap exit 134 remain different observations. Missing launch grants refuse startup with 125. Traps retain kind, typed site and the exact decided line `concrete: trap: <kind> at <path>:<line>:<col> (site <id>)`, project-relative forward-slash path, 1-based line and column; no per-build abbreviated variant. The kind inventory/rendering and byte-column/tab convention are questions 9–10. No abbreviated MCU format is introduced.
+
+An environment response may be nondeterministic but must satisfy its contract. Distinguish modeled failure, unmodeled foreign behavior and broken premises. Exhaustion of an allocator can return its specified error; stack guarantees remain subject to the exact artifact's checked bound, reservation and launcher premises. Do not invent a universal resource-exhaustion trap. Fuel exhaustion is an evaluator report, never an external event.
+
+Concurrency is deferred to slice 28. Sequential theorems assume a single thread and no interference. Any future extension must preserve complete executions of that fragment under those premises; deleting synchronization events from interfering executions is insufficient. No concurrent memory model is chosen here.
+
+**Authority:** Core Q6.7, Q7.5–Q7.10, Q8.4–Q8.6; [runtime](../decisions.md#decided-project-runtime-2026-11-06), [stack bounds](../decisions.md#decided-2026-11-07-stack-randomness), [concurrency last](../decisions.md#decided-2026-11-07-final-slices). The sequential preservation obligation is an interface law, not a chosen concurrent model. **Later:** grant-specific events and adapters; concurrency and atomic laws at slice 28, last. Public environment effects are not deterministic merely because input replay is deterministic.
+
+### C7. Secret leakage and accounting
+
+**Freeze:** a separate leakage trace and public-observation relation; public/secret state equivalence; explicit release-site records; byte/resource accounting and their preservation/erasure laws. Leakage means information visible to the baseline timing observer, not ordinary I/O.
+
+**Rule:** leakage records branch decisions, exact addresses, allocation sizes, loop counts and operands of variable-time operations, with public lengths and contracted external effects. A release record carries ordered (typed site, released value), with reason/path metadata for facts. The release-policy interface lists allowed functions/sites or forbids release, checks reachable releases through calls, and permits only explicit declared values. Its security obligation is delimited release: for equal public inputs, matched external choices and equal ordered release site/value traces, prove equal public observations (NI), and separately equal leakage traces (CT). Policy authorization alone does not establish either theorem or allow other secret effects. These are distinct decided claims, not an optional variable-time Secret tier.
+
+Preserve wipe events as effects optimization cannot erase. Per allocator lineage report requested bytes, net change and peak logical bytes, plus allocator-defined footprint, each a sound bound with status or “not established”. Release/reset conserve accounting, and zero-size ownership adds no invented bytes. Bounds use polynomials with max over counts, lengths and depths; stack remains separate. This is the A2i instrumentation of R-0592, not later slice analysis.
+
+
+**Authority:** [information flow](../decisions.md#decided-project-infoflow-2026-11-06), [memory/accounting](../decisions.md#decided-project-memory-2026-11-06), Core Q9.10. **Later:** scalar secret rules/proofs at 7, arrays/wipes at 15 and heaps at 19. Binary constant time, hardware timing and actual wiping remain named backend premises until proved; speculative leakage is outside the decided observer model.
+
+### C8. Evaluator adequacy and termination
+
+**Freeze:** both the small-step relation and Q9.9's total fuel-indexed evaluator over instrumented hybrid Core state: `eval(target, layout, environmentChoices, fuel, coreProgram, state)`. This is the reference evaluator for qualification; it executes Core, not BIR or source text. Choices explicitly cover external responses, allocation/address choices, exposed-pointer alternatives and padding materialization. A choice input can be an oracle rather than a finite stream; each answer is checked against the operation contract. Oracle queries are pure deterministic functions of the Core execution history, request kind, logical site and occurrence number, independent of fuel budget; answers are deterministic functions of those queries and the fixed oracle. Materialization queries occur only at C4’s first raw exposure, not on safe borrowing or typed rewrites. Fixed inputs make evaluation deterministic. Native backends need not issue the same queries; P4 checks allowed Core observations instead. Prove evaluator soundness (a reported result has a matching finite execution), completeness (every finite execution is obtained with enough fuel), monotonicity (extra fuel preserves a completed result) and trace-prefix consistency. For nondeterministic effects these statements quantify over the same environment choices.
+
+Prove infinite-behavior adequacy too: compatible limits of fuel-indexed execution prefixes correspond to infinite maximal executions, and every such execution has those prefixes. Carry states and steps as well as event traces: silent divergence has infinitely many steps but only finitely many events; infinite interaction has infinitely many events. An endlessly blocked run retains its blocking classification. Independent finite witnesses do not establish a compatible infinite run. This follows Q9.9 and [A1, “Fuel and divergence”](../../legacy/docs/compiler/A1_BOUNDARIES.md).
+
+**Rule:** `outOfFuel` means only insufficient simulation budget. It proves neither divergence nor program failure. Divergence is an infinite execution; a blocked request is separately represented. Termination evidence is a theorem about all allowed runs under its named premises, not the evaluator returning once. Carry per-function termination permissions and evidence dependencies. Resource bounds count specified abstract operations; they are neither elapsed time nor evaluator implementation fuel.
+
+**Authority:** Core Q6.6–Q6.7, Q9.9, [bounded execution](../decisions.md#decided-project-no-hidden-traps), [step bounds](../decisions.md#decided-2026-11-07-step-bounds). **Later:** concrete variants, loop/call cost instances and user proofs. Q9.9 is retained, not replaced by small-step semantics.
+
+### C9. Identities, primitive contracts, evidence and ghost erasure
+
+**Freeze:** distinct typed identities for declarations/types, functions, binders/places, fields/variants, instances, sites, loans, brands, blocks, grants and obligations; capture-avoiding substitution and renaming laws. Names are presentation only. One primitive-contract interface supplies parameter/result types, authority, ownership/dependencies, pre/postconditions, memory footprint, initialization/validity, failures, events/leakage, resource effects and termination obligations. Every registered primitive supplies a complete contract; there is no catch-all unknown primitive.
+
+**Rule:** use independent typing, ownership, authority and execution judgments, with checker equivalence and elaborator correspondence. Keep safety evidence bound to typed identities, target, contracts and checker/spec versions. Recheck generic substitutions and Mono admission; compose checked summaries across calls/modules without reading bodies to guess effects. Struct-invariant rules remain those in the SPARK decision: private-field struct invariants hold at every exposure, with the spec definition written before freeze; the source feature waits for slice 17 (question 15). Contracts are erased logical assertions. Q9.11 and OD144 put ensures after all deferred cleanup, observing the result and only surviving parameter state. A consumed or scope-cleaned parameter is unavailable; body locals are never in function-contract scope. Entry values are read by requires, not implicitly saved for ensures. Q9.11’s authoritative row notes, [OD117](../decisions.md#od117) and [CON-3](../../legacy/docs/spec/contracts.md#CON-3) explicitly forbid `old` and snapshot constructs. Express relations to pre-state values of consumed parameters as Lean theorems over entry and normal-return states, without retaining a runtime owner or reviving cleaned storage. Safety admission needs closed evidence; assumptions cannot manufacture it.
+
+Prove erasure of ownership/brand/loan and accounting instrumentation and ghost computation: projected concrete executions and observations agree, and ghost state cannot alter runtime branches, authority or resources. Preserve diagnostic/evidence links even where code erases. Facts and diagnostics use one typed evidence graph and one versioned schema, with stable source sites; machine JSON views derive from it. A schema extension does not reinterpret old records.
+
+**Authority:** Core Q1.5, Q6.3, Q9.1–Q9.2, Q9.6–Q9.7, Q9.10–Q9.13; [OD81](../decisions.md#od81), [OD125](../decisions.md#od125), [pipeline](../decisions.md#decided-project-pipeline-2026-11-06), [early evidence](../decisions.md#decided-2026-11-07-early-evidence). **Later:** primitive instances and syntax, module/invariant checking at 17. Q9.7's exhaustive inventory becomes exhaustive coverage of the selected registry, not a permanently closed universe.
+
+### C10. Frames and ABI
+
+**Freeze:** logical memory footprints and the frame law (an operation preserves disjoint memory outside its permitted footprint); call-frame ownership/restoration; ABI signatures relating typed arguments/results to registers, stack slots and preserved machine state. Include frame size/alignment, return convention, clobbers, stack-accounting handoff, extern validity/retention and launcher entry/exit relations.
+
+**Rule:** internal calls use an explicit target convention proved compatible with these contracts. At Memory CFG, lower the hybrid Core representation to explicit byte/provenance operations and ABI calls, proving its simulation against C4’s projection. BIR carries the complete resulting contract. Frame accounting binds to the final artifact, including spills, cleanup and launcher/runtime contributions, not merely source locals. Stack facts are separate from heap accounting. Foreign retention needs the decided `kept`/`Kept<H>` contract; FFI-safe types and no-enum restriction remain. Logical frame theorems do not add a source frame clause or snapshot construct.
+
+**Authority:** Core Q3.12, Q8.5–Q8.6, [pipeline](../decisions.md#decided-project-pipeline-2026-11-06), [contracts/P18](../decisions.md#decided-project-contracts), [stack bounds](../decisions.md#decided-2026-11-07-stack-randomness). **Later:** ABI implementations, extern syntax at 25, stronger program frame proofs. Neither the frame interface nor packed access waits until then.
+
+## 3. Pipeline and validation contract
+
+Retain the decided stages:
+
+`bytes → lexer → LL(1) parser → AST → resolve → HIR → elaboration → Core → checker → CheckedCore → Mono Core → Place MIR → Memory CFG → SSA → BIR`.
+
+BIR feeds the LLVM printer or the proved BIR→LCB adapter. **Memory CFG stays the single layout/ABI/provenance lowering boundary**; retract P2's folding proposal. Earlier semantics uses C4’s hybrid state and read-only layout interface; representation simulations relate it to this explicit lowering boundary.
+
+**Frontend:** retract P1's parse/print criterion. Define byte/token/grammar acceptance independently of the lexer/parser implementation, and source binding, typing and source-to-Core correspondence independently of resolve/elaboration. Prove lexer/parser correspondence to the independent grammar, resolution's binding preservation and elaboration's preservation of meaning, sequencing, cleanup, identities and source sites. Prove checker equivalence to independent admission judgments. Parse/print tests can supplement these proofs but cannot replace them. This retains Core Q8.3/Q9.13 and the decided direct frontend proofs.
+
+Keep direct proofs for sequencing, cleanup, representation and the BIR→LCB adapter. Preserve the decided option of **proved validators for Mono and SSA**, as well as SSA optimizations, register allocation and linking. A validator's acceptance theorem establishes the required correspondence; running a checker without that theorem is not proof. Mono re-admits its output.
+
+**Certificates and maximal behavior:** retain the [compiler-execution decision](../decisions.md#decided-project-long-term-2026-11-06): every authoritative compilation emits kernel-checked certificates binding the exact source bytes through independent judgments/validated edges to the exact emitted BIR, and binding the actual backend input to it. A digest establishes identity, not semantic correspondence. Native execution of proved Lean definitions is not itself proof; any gap retains explicit compiler/runtime/toolchain assumptions. After slice 0 use the decided per-edge certificates.
+
+Each lowering proves refinement of maximal behaviors, including termination, abort/trap, blocking and infinite execution with their traces under matched allowed choices. Target steps may stutter finitely; a progress or well-founded argument excludes infinite silent target stuttering that replaces source progress or completion. Also relate each finite target prefix to compatible source prefixes; their limits must satisfy C8’s infinite-behavior adequacy, not use unrelated witnesses. The default method is forward simulation with finite stuttering and target determinism under fixed admissible choices, yielding backward refinement once receptiveness, progress, initial/final correspondence and the required determinacy hypotheses are proved. Where choices cannot be fixed compatibly or these hypotheses fail, prove backward simulation directly (or an equivalent behavior-inclusion theorem). Do not assume all source programs terminate to justify stuttering. See [A1, “Fuel and divergence” and “Behaviour refinement”](../../legacy/docs/compiler/A1_BOUNDARIES.md).
+
+**Native closure (P3):** retain Q8.1’s proved source→BIR, qualified native and conditional image claim, LP0 after slice 1 and R-0505’s later final-image closure. Question 8 separately asks whether to advance it to 0.1. Any validator must bind exact linked image bytes, encodings, relocations, symbols, entry state, launcher/ABI, retained dependencies and target to LCB instruction semantics. Hardware/ISA correspondence, loader/OS/environment, foreign/runtime code, adequate stack and timing/wipe premises remain named unless discharged. LLVM stays unverified.
+
+**Qualification (P4):** run LLVM, LCB and the hybrid Core Lean evaluator on **every supported example and controlled test**, with the same input bytes, target/layout profile, grant configuration and compatible scripted external responses. Frontend certificates bind this Core program to the source; representation simulations relate its raw-byte/layout observations to both native paths. For each native run, check that its complete trace is an allowed observation of a Core execution under those inputs: this is a refinement check. The decided backend-order rule stays: LLVM and LCB full observations must equal each other and the expected outcome on every supported example, and any mismatch fails (question 17). Supported examples therefore do not observe allocation-dependent values such as exposed addresses or initialized padding. Native execution cannot be forced to follow the evaluator’s oracle, so the Core check finds and validates an admissible choice witness per native run, without normalizing away raw observations. Qualifying programs that legitimately observe such values is decided at slice 24. Failed witness search is inconclusive unless exclusion is proved. Compare complete observations: ordered requests/responses/output, terminal classification, trap kind/site/line and observable final external state. Use bounded scripted environments for effectful/blocking cases. Report unsupported or inconclusive runs explicitly; do not count `outOfFuel` as agreement or divergence. Compare leakage separately where the claimed backend evidence supports it. Never require arbitrary user programs to execute three times. Tests qualify implementations; the LCB path is **proved under named premises**, and LLVM remains unverified. Keep the two premise sets separate.
+
+## 4. Revision register
+
+No revision is enacted here. Each question in section 5 has its own answer; an umbrella approval cannot choose these independently.
+
+| Rows | Scope and status | Question |
+|---|---|---|
+| OD126; Q3.7/Q3.9/Q3.10 | Generalize address/profile interface, preserving provenance rules and zero-byte exception; existing 64-bit little-endian profile unchanged, including Q3.10’s `base + size ≤ 2^64−1` one-past bound. Any generalized profile needs an analogous checked bound. | 3 |
+| Q3.5; Q1.11/Q2.4/Q4.6; TYPE-19; FFI-7 | Q3.5 fixes u64 lengths/indices across profiles. Q1.11 rejects counts above u64 as TooLarge; Q2.4 fixes Drained.at: u64; Q4.6 byte offsets/lengths use that index contract. Target-sized usize would revise these and layout-query results. Recommendation retains these semantics and permits only proved narrower representations. | 7 |
+| OD126; FFI-7 | Native enum tag/payload layout changes existing i32-tag profile separately from target abstraction. | 4 |
+| Q1.7 | Proved release-context erasure, including owning Text where applicable; no unconditional one-pointer claim. | 6 |
+| Q7.1/Q7.10; Q9.7 | Lawful registry instances rather than a permanently closed inventory; preserve existing grant contracts. Entropy details deferred. | 16, 14 |
+| FFI-7/10 | Natural native struct layout already supersedes unspecified-layout prose under runtime decision; retain repr restrictions. | Retained clarification |
+| Q8.1; early-evidence decision; R-0505 | Keep current conditional endpoint and later closure; advancing it requires separate approval. | 8 |
+
+Q9.11/OD144 already decide post-cleanup ensures timing. The SPARK decision already decides source struct invariants. Neither is a new rule. C4’s hybrid/representation completion is a proposed formalization choice, not authority to revise raw access. Exact trap constructors and byte columns are not inferred from Q6.7 or ArithmeticError. OD106/ARITH-10 already fix conversion errors; Q2.3 and Q3.8 already fix destruction orders. Questions 12 and 13 are removed as fully decided; later question numbers are retained for review tracking.
+
+## 5. Separately answerable owner questions
+
+Each recommendation is a proposal, not an implemented language decision. “Defer” preserves existing decided rules and leaves detailed instances to the named slice.
+
+<a id="q1"></a>**Q1. Foundation scope.** Recommend approving the interface/law boundary of C1–C10, with freeze only after implementation, kernel proofs, interaction tests, independent review and owner acceptance. Runner-up: freeze smaller integrated scopes incrementally. Neither approves the other numbered questions.
+<a id="q2"></a>**Q2. Hybrid state and representation completion.** Recommend C4’s structured-place/byte-block state, coherent projection, pointer fragments and explicit initialization/padding laws. Runner-up: use byte blocks for all Core storage. The hybrid keeps typed proofs small while raw operations remain executable; both must preserve Q3.7 and raw observations.
+<a id="q3"></a>**Q3. Target abstraction.** Recommend read-only profiles separating address width, pointer representation, length width, byte order and address spaces; generalize Q3.7/Q3.9/Q3.10 without changing existing profile constants or reconstruction policy. Runner-up: separate semantics per profile under OD126. No usize or enum change is included.
+<a id="q4"></a>**Q4. Enum layout.** Recommend retaining the existing profile’s i32 tags for now, deferring a compact u8/u16/u32 algorithm to the aggregate/layout slice and a separate owner answer. Runner-up: approve now the smallest tag fitting the variant count (u8 ≤256, u16 ≤65,536, u32 ≤2^32), declaration-order tags, aligned common payload and rounded aggregate size, rejecting larger counts. This changes OD126/FFI-7 independently of question 3.
+<a id="q5"></a>**Q5. Niches.** Three options: (a) exactly one null-empty/non-null single-pointer-payload niche, with pointer-size, provenance, ownership and release-context proofs; (b) tagged layout now, future niches only by owner decision; (c) no niches permanently. Recommend **(b)**: the foundation needs representation laws, not a permanent optimization inventory. Runner-up **(a)** gives compact optional ownership but adds a special eligibility proof; multiword release contexts and nullable raw pointers are ineligible. Round-2 reviewers split: Codex and Kimi prefer (b); agy prefers (c). (c) is uniform but unnecessarily permanent.
+<a id="q6"></a>**Q6. Release-context erasure.** Recommend retaining sufficient stable context and erasing only with a release/identity/dependency preservation proof and no per-instance state. Runner-up: always store context. This separately revises Q1.7; it does not fix Text’s internal word count.
+<a id="q7"></a>**Q7. usize.** Three options: (a) target-sized usize avoids 64-bit lengths/storage/arithmetic on 8/16/32-bit chips, but changes the cross-profile meaning deliberately fixed by Q3.5 and the dependent contracts in section 4; (b) retain u64 semantics everywhere, with explicit checked target limits, at a cost on small targets; (c) retain those u64 semantics and prove a narrower internal representation wherever bounds justify it, using widening or fallback when they do not. Recommend **(c)**, following [PHILOSOPHY](../PHILOSOPHY.md)’s explicit, checkable semantics and Q3.5. This cannot promise all lengths fit a machine word: zero-sized collections can have large logical counts. Representation narrowing needs a simulation preserving arithmetic, failures and observations, not silent truncation or new target-dependent overflow. Codex and agy favor (a); Kimi favors (b). A new source usize remains a separately approved revision; no isize is implied.
+<a id="q8"></a>**Q8. Native-image milestone.** Recommend keeping R-0505’s later closure and Q8.1’s conditional endpoint. Runner-up: require proved exact AArch64 linked-image validation by 0.1, explicitly revising Q8.1, early-evidence and proof-infrastructure milestones while retaining all undischarged premises. Qualification is question 17, not bundled here.
+<a id="q9"></a>**Q9. Trap inventory and spellings.** Recommend deferring concrete constructors/renderings until trap semantics needs them, before their first supported slice. Runner-up: approve `arithmetic(ArithmeticError) | bounds | invalidRange | abort`, rendered `overflow`, `division_by_zero`, `invalid_shift`, `bounds`, `invalid_range`, `abort`, with one trailing newline. ArithmeticError’s decided cases do not decide this wrapper or its strings. Preserve the runtime line format and exits either way. Codex and Kimi support deferral before first use; agy wants the inventory and spellings approved now to avoid churn.
+<a id="q10"></a>**Q10. Columns and tabs.** Recommend byte columns, tabs counting one byte, with conformance tests; runner-up: Unicode-scalar columns, tabs counting one scalar. The runtime decision fixes only 1-based columns, so neither convention is already decided.
+<a id="q11"></a>**Q11. UTF-8 failure classification.** Recommend deferring mapping to the text slice’s operation contracts while preserving UTF-8 validity and no hidden traps. Runner-up: map unchecked UTF-8 boundary failures to proposed invalidRange. This does not turn handled checked errors into traps.
+<a id="q14"></a>**Q14. Entropy shape.** Recommend deferring exact launch-grant type, operations and ending contract to slice 6, consistent with Q7.10 and the randomness schedule. Runner-up: approve a nullary Entropy grant only together with a complete instance contract. No nullary shape is assumed by C5.
+<a id="q15"></a>**Q15. Struct-invariant implementation.** Recommend deferring the source feature to slice 17, while writing the decided SPARK exposure definition in the spec before freeze and retaining Q9.11/OD144 post-cleanup ensures semantics. Runner-up: implement the source feature earlier if an interaction proof needs it. There is no new timing choice to approve.
+<a id="q16"></a>**Q16. Registry extensibility.** Recommend lawful typed extensions preserving existing primitive/grant entries and exhaustive coverage of every selected instance; unknown operations are refused. Runner-up: retain closed Q9.7/Q7.10 inventories and seek an owner amendment for each addition. Schema compatibility must preserve old records; no new source spelling is implied.
+<a id="q17"></a>**Q17. Differential qualification.** Recommend keeping the decided [backend-order](../decisions.md#decided-project-pipeline-2026-11-06) rule unchanged: on every supported example, LLVM and LCB full observations must equal each other and the expected outcome, and any mismatch fails. Add, on top of it, the check that each native trace is an allowed observation of the Core semantics. Supported examples must not observe allocation-dependent values (exposed addresses, initialized padding), so equality stays meaningful. How to qualify programs that legitimately observe such values (raw pointers, slice 24) is an open question for that slice, not relaxed now. Runner-up: relax cross-backend equality to per-backend refinement for such programs now, which revises the backend-order row. Kimi found draft 3 relaxed that decided rule without registering it; this fixes that.
+
+<a id="q18"></a>**Q18. Secret<T> layout.** Recommend that `Secret<T>` has exactly the layout of T (zero-cost wrapper). Layout does not establish constant time; the information-flow rules do. The [information-flow decision](../decisions.md#decided-project-infoflow-2026-11-06) covers typing, Copy, wiping and leakage, not representation, so this is a new rule (Kimi, round 3). Runner-up: an opaque representation fixed per slice. All three reviewers chose identical layout in the earlier step-3 round.
+#!/usr/bin/env python3
+"""A lexer for the Lean sources of ConcreteSpec, shared by the proof-integrity checks.
+
+`lex(src)` returns `src` with every comment (nested `/- -/`, `--`) blanked to spaces, newlines kept,
+so offsets and line numbers are the source's. Everything else is kept, string literals included.
+It follows Lean's literal forms, so no comment delimiter inside a literal starts a comment: a
+string with its escapes, raw strings r"…" and r#"…"#, character literals and quoted names «…».
+Whether a string interpolates depends on the parser, not the lexer, so interpolation is admitted
+only directly after `s!`, `m!` or `f!` (its `{ }` code, with its own strings and comments, is
+lexed recursively), and any other string holding `{` is an error. An unterminated string,
+comment, interpolation or name is an error too, and so is a syntax quotation `(…) (whose comments are
+syntax data; the library runs no meta code): the lexer fails closed, never skips.
+`comment_spans(src)` gives the top-level comments (the owner view, scripts/spec/lean_site.py, takes
+its doc blocks from them, so a doc comment inside an ordinary comment or a string is not one).
+
+Commands (exit 3 when a source cannot be read or lexed):
+
+  scan RE FILE...          `file:line: text` for every match of RE (over the whole lexed text,
+                           reported at the line where it starts) and for every `import` outside
+                           the header, which must be lines `import ConcreteSpec[.M…]`, one
+                           module each, ended by a command at column 0
+  examples SRC DST FILE... copies each FILE (a path relative to SRC) to DST with every `example`
+                           command turned into `noncomputable def «⟪example⟫FILE:LINE»` (no space,
+                           so listings split on spaces stay sound), so the kernel's view of it
+                           stays in the environment; prints the count. Every
+                           `example` token must start a line.
+"""
+import os, re, sys
+
+EXAMPLE_MARK = "⟪example⟫"
+
+
+class LexError(Exception):
+    pass
+
+
+def lex(src, spans=None, literals=True):
+    """`src` with its comments blanked; when `spans` is a list, each top-level comment's
+    (start, end) offsets are appended to it (a comment nested in another is part of that one).
+    With `literals=False`, string, character and name literals are blanked too (code tokens only)."""
+    n, out = len(src), []
+
+    def emit(text, literal=False):
+        if literal and not literals:
+            text = "".join("\n" if ch == "\n" else " " for ch in text)
+        out.append(text)
+
+    def ident(i):                                     # src[i] continues an identifier
+        return i >= 0 and (src[i].isalnum() or src[i] in "_'!?." or ord(src[i]) > 127)
+
+    def comment(i):                                   # at "/-": blank to the matching "-/"
+        start, depth = i, 0
+        while i < n:
+            if src.startswith("/-", i): depth += 1; out.append("  "); i += 2
+            elif src.startswith("-/", i):
+                depth -= 1; out.append("  "); i += 2
+                if depth == 0:
+                    if spans is not None: spans.append((start, i))
+                    return i
+            else: out.append("\n" if src[i] == "\n" else " "); i += 1
+        raise LexError("unterminated comment")
+
+    def string(i):                                    # at '"'
+        interp = src[i - 2:i] in ("s!", "m!", "f!") and not ident(i - 3)
+        emit('"', True); i += 1
+        while i < n:
+            c = src[i]
+            if c == "\\": emit(src[i:i + 2], True); i += 2
+            elif c == '"': emit(c, True); return i + 1
+            elif c == "{" and interp: emit(c, True); i = code(i + 1, True)
+            elif c == "{":
+                line = src.count("\n", 0, i) + 1
+                raise LexError(f"line {line}: a string holding '{{' without s!, m! or f! before it")
+            else: emit(c, True); i += 1
+        raise LexError("unterminated string")
+
+    def raw(i):                                       # at 'r' of r#*"
+        j = i + 1
+        while j < n and src[j] == "#": j += 1
+        close = '"' + "#" * (j - i - 1)
+        k = src.find(close, j + 1)
+        if k < 0: raise LexError("unterminated raw string")
+        emit(src[i:k + len(close)], True); return k + len(close)
+
+    def code(i, inner):                               # inner: inside an interpolation, stop at its '}'
+        depth = 0
+        while i < n:
+            c = src[i]
+            if src.startswith("/-", i): i = comment(i)
+            elif src.startswith("--", i):
+                j = src.find("\n", i); j = n if j < 0 else j; out.append(" " * (j - i)); i = j
+            elif c == '"': i = string(i)
+            elif c == "«":                            # a quoted name part: no comment inside it
+                k = src.find("»", i + 1)
+                if k < 0: raise LexError("unterminated «name»")
+                emit(src[i:k + 1], True); i = k + 1
+            elif src.startswith("`(", i) or src.startswith("``(", i):
+                # A syntax quotation: its comments are syntax data, not comments of the source,
+                # and the library runs no meta code, so the lexer refuses it.
+                raise LexError(f"line {src.count(chr(10), 0, i) + 1}: a syntax quotation")
+            elif c == "r" and not ident(i - 1) and re.match(r'r#*"', src[i:]): i = raw(i)
+            elif c == "'" and not ident(i - 1):
+                m = re.match(r"'(\\(x[0-9a-fA-F]{2}|u[0-9a-fA-F]{4}|.)|[^\\'\n])'", src[i:])
+                k = len(m.group(0)) if m else 1
+                emit(src[i:i + k], m is not None); i += k
+            elif inner and c == "{": depth += 1; out.append(c); i += 1
+            elif inner and c == "}":
+                out.append(c); i += 1
+                if depth == 0: return i
+                depth -= 1
+            else: out.append(c); i += 1
+        if inner: raise LexError("unterminated interpolation")
+        return i
+
+    code(0, False)
+    return "".join(out)
+
+
+def comment_spans(src):
+    """The (start, end) offsets of every top-level comment of `src`, in order."""
+    spans = []
+    lex(src, spans)
+    return spans
+
+
+HEADER = re.compile(r"import ConcreteSpec(\.[A-Za-z0-9_]+)*\s*$")
+FIRST_COMMAND = re.compile(r"(namespace|open|section|def|theorem|structure|inductive|abbrev)\b")
+
+
+def scan(pattern, paths):
+    word, rc = re.compile(pattern, re.M), 0
+    for path in paths:
+        try:
+            text = lex(open(path, encoding="utf-8").read())
+        except (OSError, UnicodeDecodeError, LexError) as e:
+            print(f"error: {path}: {e}", file=sys.stderr); rc = 3; continue
+        lines = text.split("\n")
+        # Lean lets an import list continue (`import A B`, or B on the next line), so the first
+        # line after the header must be a command at column 0.
+        k = 0
+        while k < len(lines) and (not lines[k].strip() or HEADER.match(lines[k])): k += 1
+        if k < len(lines) and not FIRST_COMMAND.match(lines[k]):
+            print(f"{path}:{k + 1}: {lines[k].strip()} (the import header must end in a command at column 0)")
+        hits = {text.count("\n", 0, m.start()) + 1 for m in word.finditer(text)}
+        hits |= {j for j, line in enumerate(lines, 1)
+                 if re.search(r"\bimport\b", line) and not (j <= k and HEADER.match(line))}
+        for j in sorted(hits):
+            print(f"{path}:{j}: {lines[j - 1].strip()}")
+    return rc
+
+
+# `example` as a command token: not part of a longer identifier (`example'`, `my.example`, `examples`)
+EXAMPLE = re.compile(r"(?<![\w.'!?])example(?![\w'!?])")
+
+
+def count_examples(src):
+    """The number of `example` commands in a source (code tokens only, not literal contents)."""
+    return len(EXAMPLE.findall(lex(src, literals=False)))
+
+
+def examples(src_dir, dst_dir, paths):
+    count = 0
+    for rel in paths:
+        src = open(os.path.join(src_dir, rel), encoding="utf-8").read()
+        text = lex(src, literals=False)          # an `example` inside a literal is not a command
+        out, last = [], 0
+        for m in EXAMPLE.finditer(text):
+            line = text.count("\n", 0, m.start()) + 1
+            if m.start() > 0 and text[m.start() - 1] != "\n":
+                raise LexError(f"{rel}:{line}: an `example` that does not start its line")
+            out.append(src[last:m.start()])
+            out.append(f"noncomputable def «{EXAMPLE_MARK}{rel}:{line}»")
+            last = m.end(); count += 1
+        out.append(src[last:])
+        dst = os.path.join(dst_dir, rel)
+        os.makedirs(os.path.dirname(dst) or ".", exist_ok=True)
+        open(dst, "w", encoding="utf-8").write("".join(out))
+    print(count)
+
+
+if __name__ == "__main__":
+    try:
+        if sys.argv[1] == "scan":
+            sys.exit(scan(sys.argv[2], sys.argv[3:]))
+        if sys.argv[1] == "examples":
+            examples(sys.argv[2], sys.argv[3], sys.argv[4:]); sys.exit(0)
+    except (OSError, UnicodeDecodeError, LexError) as e:
+        print(f"error: {e}", file=sys.stderr); sys.exit(3)
+    print(f"usage: {sys.argv[0]} scan RE FILE... | examples SRC DST FILE...", file=sys.stderr)
+    sys.exit(2)
+-- Emits one JSON object per registered rule (ConcreteSpec/Spec/Rules.lean), for scripts/spec/rules.py.
+-- Run from the repository root: `lake env lean scripts/spec/rules.lean > rules.jsonl`.
+import ConcreteSpec
+import Lean
+open Lean Elab Command
+
+#eval show CommandElabM Unit from do
+  let env ← getEnv
+  for r in ConcreteSpec.Core.registeredRules do
+    let doc := (← findDocString? env r.name).getD ""
+    IO.println (Json.compress (Json.mkObj [("name", toString r.name), ("rev", r.rev),
+      ("exists", toJson (env.contains r.name)), ("doc", doc)]))
+  IO.println (Json.compress (Json.mkObj [("end", toJson true)]))
+     1	#!/usr/bin/env python3
+     2	"""The rule gate's checks (scripts/spec/rules.sh): the registered rules against the sources.
+     3	
+     4	  rules.py RULES.jsonl SRC_DIR ROWS...
+     5	      RULES.jsonl is scripts/spec/rules.lean's output; SRC_DIR holds the specification's .lean
+     6	      sources (searched recursively, at least one); each ROWS file is a decision inventory
+     7	      (docs/decisions.md, ROADMAP.md) in which a cited decision row must appear.
+     8	
+     9	Prints `ok`/`FAIL` lines; exits 1 on any failure, 3 when an input cannot be read or lexed.
+    10	A rule's doc comment must cite a decision row that exists in an inventory; each rule needs one
+    11	example whose doc comment says ``Accepted (rule `Name`)`` and a different one whose doc comment
+    12	says ``Refused (rule `Name`)``; a verdict doc comment holds no nested comment and no rule's two
+    13	verdicts at once; every ``(rule `Name`)`` anywhere in a source (either kind of comment, or a
+    14	literal) must name a registered rule; no rule is registered twice; revisions are >= 1.
+    15	"""
+    16	import json, os, re, sys
+    17	
+    18	sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "proofs"))
+    19	import lean_lex  # noqa: E402
+    20	
+    21	ROW = re.compile(r"\b(Q\d+(?:\.\d+)+|OD\d+|P\d+[a-z]?|R-\d{4})\b")
+    22	# A rule name is a Lean name as `toString` prints it: dotted components, a component that needs
+    23	# quoting written «…» (which may hold spaces). Anything up to the closing backtick is the name.
+    24	CITE = re.compile(r"\(rule `([^`\n]+)`\)")
+    25	VERDICT = re.compile(r"\b(Accepted|Refused) \(rule `([^`\n]+)`\)")
+    26	# What may stand between a doc comment and the `example` it documents: attributes and modifiers.
+    27	EXAMPLE_AFTER = re.compile(
+    28	    r"\s*(?:@\[(?:[^\[\]]|\[[^\[\]]*\])*\]\s*)*(?:(?:noncomputable|private|protected|unsafe|partial)\s+)*"
+    29	    r"example(?![\w'!?])")
+    30	
+    31	
+    32	def row_exists(row, inventories):
+    33	    pat = re.compile(r"(?<![\w.-])" + re.escape(row) + r"(?![\w-]|\.\d)")
+    34	    return any(pat.search(t) for t in inventories)
+    35	
+    36	
+    37	def main(rules_path, src_dir, row_paths):
+    38	    fails = []
+    39	    try:
+    40	        rules = [json.loads(l) for l in open(rules_path, encoding="utf-8") if l.strip()]
+    41	        inventories = [open(p, encoding="utf-8").read() for p in row_paths]
+    42	    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as e:
+    43	        print(f"error: {e}", file=sys.stderr); return 3
+    44	    if not rules or rules[-1] != {"end": True}:
+    45	        print("error: the rule listing is truncated (no end record)", file=sys.stderr); return 3
+    46	    if not inventories:
+    47	        print("error: no decision inventory given", file=sys.stderr); return 3
+    48	    if not os.path.isdir(src_dir):
+    49	        print(f"error: {src_dir}: not a directory", file=sys.stderr); return 3
+    50	    rules = rules[:-1]
+    51	    names = [r["name"] for r in rules]
+    52	    for n in sorted({n for n in names if names.count(n) > 1}):
+    53	        fails.append(f"rule {n} is registered more than once")
+    54	    for r in rules:
+    55	        if not r["exists"]: fails.append(f"rule {r['name']} names no declaration")
+    56	        if r["rev"] < 1: fails.append(f"rule {r['name']} has revision {r['rev']} (revisions start at 1)")
+    57	        if not r["doc"].strip(): fails.append(f"rule {r['name']} has no doc comment")
+    58	        else:
+    59	            rows = [m.group(1) for m in ROW.finditer(r["doc"])]
+    60	            if not rows: fails.append(f"rule {r['name']}'s doc comment cites no decision row")
+    61	            elif not any(row_exists(x, inventories) for x in rows):
+    62	                fails.append(f"rule {r['name']}'s doc comment cites no existing decision row ({', '.join(rows)})")
+    63	    seen = {n: set() for n in names}
+    64	    scanned = 0
+    65	
+    66	    def walk_error(e):
+    67	        raise e
+    68	    try:
+    69	        tree = sorted(os.walk(src_dir, onerror=walk_error))
+    70	    except OSError as e:
+    71	        print(f"error: {src_dir}: {e}", file=sys.stderr); return 3
+    72	    for dirpath, _, files in tree:
+    73	        for f in sorted(files):
+    74	            if not f.endswith(".lean"): continue
+    75	            path = os.path.join(dirpath, f)
+    76	            try:
+    77	                src = open(path, encoding="utf-8").read(); spans = []
+    78	                lean_lex.lex(src, spans)
+    79	            except (OSError, UnicodeDecodeError, lean_lex.LexError) as e:
+    80	                print(f"error: {path}: {e}", file=sys.stderr); return 3
+    81	            scanned += 1
+    82	            # citations anywhere in the file (comments of both kinds, and literals: fail closed)
+    83	            for m in CITE.finditer(src):
+    84	                if m.group(1) not in seen:
+    85	                    line = src.count("\n", 0, m.start()) + 1
+    86	                    fails.append(f"{path}:{line}: cites unregistered rule {m.group(1)}")
+    87	            # a verdict anywhere outside a doc comment (code, a string literal) is stray too
+    88	            for m in VERDICT.finditer(src):
+    89	                if not any(a <= m.start() < b and src.startswith("/--", a) for a, b in spans):
+    90	                    line = src.count("\n", 0, m.start()) + 1
+    91	                    fails.append(f"{path}:{line}: a verdict citation outside an example's doc comment")
+    92	            for a, b in spans:
+    93	                text, line = src[a:b], src.count("\n", 0, a) + 1
+    94	                verdicts = VERDICT.findall(text)
+    95	                if not verdicts: continue
+    96	                if not (text.startswith("/--") and EXAMPLE_AFTER.match(src, b)):
+    97	                    fails.append(f"{path}:{line}: a verdict citation outside an example's doc comment")
+    98	                    continue
+    99	                if "/-" in text[3:]:
+   100	                    fails.append(f"{path}:{line}: a verdict doc comment holds a nested comment")
+   101	                    continue
+   102	                kinds = {}
+   103	                for v, n in verdicts: kinds.setdefault(n, set()).add(v)
+   104	                both = sorted(n for n, k in kinds.items() if len(k) > 1)
+   105	                if both:
+   106	                    fails.append(f"{path}:{line}: one example is both accepted and refused by {', '.join(both)}")
+   107	                    continue
+   108	                for n, k in kinds.items():
+   109	                    if n in seen: seen[n] |= k
+   110	    if scanned == 0:
+   111	        print(f"error: {src_dir}: no .lean source", file=sys.stderr); return 3
+   112	    for n in names:
+   113	        for v in ("Accepted", "Refused"):
+   114	            if v not in seen[n]: fails.append(f"rule {n} has no example marked {v} (rule `{n}`)")
+   115	    for f in fails: print(f"  FAIL {f}")
+   116	    if not fails: print(f"  ok   {len(rules)} registered rules in {scanned} sources, each documented with an"
+   117	                        " existing decision row and an accepted and a refused example; every citation"
+   118	                        " names a registered rule")
+   119	    return 1 if fails else 0
+   120	
+   121	
+   122	if __name__ == "__main__":
+   123	    if len(sys.argv) < 4:
+   124	        print(f"usage: {sys.argv[0]} RULES.jsonl SRC_DIR ROWS...", file=sys.stderr); sys.exit(2)
+   125	    sys.exit(main(sys.argv[1], sys.argv[2], sys.argv[3:]))
+122:These items were undesigned when the chapters were cleaned up on 2026-11-03. **The owner approved their design provisionally on 2026-11-05** ([the decided rows](#decided-2026-11-05-core): allocator identities Q1, allocation contracts Q1–Q2, the heap-array view Q3, static text Q4, capability inference Q5, unsafe contracts Q3.7–Q3.12, static refusal Q6, grants Q7, semantic objects Q8–Q9). Where a chapter still says **undecided: see the target Core proposal**, read the decided row; the rule is rewritten in Lean at stage A2b and frozen at A2c. The proposal is owned by
+128:  allocation requirements stand, but the discipline expressing them, undecided on 2026-11-03, is provisionally decided by rows Q1.1–Q1.13 ([rows](#decided-2026-11-05-core)).
+131:  when payload cleanup needs effects beyond `Alloc`, undecided on 2026-11-03, are provisionally decided by rows Q1.8–Q1.12 and Q2.1–Q2.8 ([rows](#decided-2026-11-05-core)).
+133:  mutability and permitted positions, undecided on 2026-11-03, are provisionally decided by rows Q3.1–Q3.6 and Q4.7 ([rows](#decided-2026-11-05-core)); opening never yields an element reference.
+135:  allocator-branded strings, undecided on 2026-11-03, are provisionally decided by rows Q4.1–Q4.6 ([rows](#decided-2026-11-05-core)); static text requires no allocation.
+137:  APIs, including the resource backing process services, undecided on 2026-11-03, are provisionally decided by rows Q7.1–Q7.11 ([rows](#decided-2026-11-05-core); process spawning is deferred).
+138:- <a id="core-capability-inference"></a>[Core-session question 5](../ROADMAP.md#questions-for-the-core-session). **Capability inference:** decided 2026-11-05 (row Q5.1/Q5.4): there is
+142:  and foreign-mutation taxonomy and call-only annotation syntax, undecided on 2026-11-03, are provisionally decided by rows Q3.7–Q3.12 and Q9.7 ([rows](#decided-2026-11-05-core)); OD64's confinement
+145:  to Core acceptance, undecided on 2026-11-03, are provisionally decided by rows Q6.1–Q6.7 ([rows](#decided-2026-11-05-core)); recorded proven-violation refusals apply in trusted code too.
+147:  observations, resource relations and theorem endpoint, undecided on 2026-11-03, are provisionally decided by rows Q8.1–Q8.7 and Q9.1–Q9.19 ([rows](#decided-2026-11-05-core)); technical adequacy and
+173:The owner answered every row of the 2026-11-05 decision page, in the terminal. The rows that revise a recorded rule were answered one by one: Q5.1/Q5.4, Q6.4, Q2.8, Q9.15 with P3, Q7.11 and Q4.7. Q3.12, Q9.19, Q7.10, Q1.6, P2, P4, P9, P13, P16 and P17a/b were also answered directly. The remaining Core rows were accepted as recommended, and the remaining project rows were approved on the owner's condition that Claude and Codex agree and that each is the best long-term design (both confirmed; every row carries Codex agreement). The full rows (question, options, reason, recommendation, agreement, revision and notes) are in [core_rows.json](archive/decisions-2026-11-05/core_rows.json) and [other_rows.json](archive/decisions-2026-11-05/other_rows.json); the concrete rules behind them are in [R4_RATIONALE.md](archive/decisions-2026-11-05/R4_RATIONALE.md), and where R4 and a row differ, the row governs.
+175:**The Core rows are a provisional approval (stage A2a).** They bind the design without freezing it. Stage A2b formalizes them in a proposed `ConcreteSpec/Spec.lean` and proves the four design theorems; any row the formalization changes returns to the owner; stage A2i integrates the parts (2026-11-06); the owner freezes Core at A2c (row Q9.19 as revised). Until a rule is written in Lean, the answer below governs over any chapter text that differs.
+179:- **OD45 and OD87** (rows Q5.1, Q5.4): capability arguments are written explicitly at every polymorphic call and checked against the callee; there is no capability inference and no inference solver. OD46 (type arguments from checked argument types) is unchanged.
+180:- **TYPE-22@1's examples** (row Q6.4): a constant whose initializer provably fails is refused at compile time whether or not it is used (OD118); both examples, `unused-constant-never-runs` and `constant-traps-at-use`, become reject examples. When a constant is evaluated (at each use, never at start) is unchanged.
+181:- **TRAIT-1@1** (row Q2.8): two impls with equal heads may coexist only when Copy/Destroy disjointness (OD28) makes their domains disjoint, as in `impl<T: Copy> Destroy for Vec<T, A>` beside `impl<T: Destroy> Destroy for Vec<T, A>`. No other coherence or orphan rule changes, and no disjunctive bound syntax is added.
+182:- **The generated-chapter requirement** (rows Q9.15, P3): Lean is the specification, in one main normative file with doc comments and examples; no prose is generated from it. This confirms the [2026-11-04 decision](#decided-project-lean-is-the-spec). The "one main normative file" wording is revised 2026-11-06 by the [long-term changes](#decided-project-long-term-2026-11-06): one authoritative specification library in cohesive modules, with `ConcreteSpec/Spec.lean` as its public import.
+183:- **Authority rules 13, 5 and 7** (row Q7.11): `Console` joins the reserved capability set, for operations on the `StdIn`, `StdOut` and `StdErr` grants; rule 5's operational list and rule 7's primitive table include it. `Device` stays for device grants.
+184:- **The text-only slice of R4 F4.3** (row Q4.7) is replaced before it was recorded: one scoped form opens every view, `borrow [mut] source [from a until b] as view { … } [else { … }]`. Without `else` an invalid range traps, like indexing; with `else` it is handled; a proven invalid range without `else` is refused (OD118). Arrays need `a ≤ b ≤ len`; text also needs UTF-8 scalar boundaries at both byte offsets.
+185:- <a id="decided-2026-11-05-q6-2-fields"></a>**Q6.2 and R4 F12, known values through structs** (owner-approved revision, 2026-11-05, made during A2b): known values propagate field by field through immutable struct construction and destructuring. The checker tracks an abstract value for each binding: unknown, a known scalar, or a constructor whose fields carry their own abstract values. Constructing a struct records each field's fact independently; an immutable binding keeps the fact; destructuring hands each field's fact, recursively, to the corresponding immutable binder; an unknown component stays unknown without discarding its known siblings; an ownership transfer keeps the facts for the receiving binding without permitting reuse of the consumed one. Q6.2's exclusions stay (mutable state, branches and paths, user-function calls, calls outside the table, elaborator temporaries). So `let S { a } = S { a: 200u8 }; a + 100` is refused, in trusted and unreachable code too (OD118 as revised by Q6.4). Before this revision a field bound by destructuring was not known and that program was accepted and trapped.
+186:- <a id="decided-2026-11-05-q9-1-reads"></a>**Q9.1, read forms** (owner-confirmed, 2026-11-05): `copy x` is allowed only when `x` has a Copy type and `move x` only when it has a non-Copy (linear) type. Each read has one form; `move` of a Copy value and `copy` of a linear value are both refused.
+188:<a id="decided-2026-11-05-new-rules"></a>**New rules** (P4): duplicate variant names in one enum and duplicate method names in one impl are refused, like duplicate fields (bug 313); the rule gets its ID and diagnostic when it is written in Lean.
+192:- **Q1.1** What is an allocator brand? — Separate erased `Brand` kind.
+193:- **Q1.2** How are fresh brands introduced, including loop resets? — Generative binders; existential loop state.
+194:- **Q1.3** How are packages formed and opened? — Explicit pack; lexical unpack; repackage escapes.
+195:- **Q1.4** How are brands compared and supplied? — Nominal brand equality; explicit brand arguments.
+196:- **Q1.5** How are allocator dependencies tracked across calls? — Structural dependencies; checked interface summaries.
+197:- **Q1.6** Who owns a child allocator’s backing? — Child owns backing; parent brand exposed in type. *Revises or adds: Clarify/extend allocator interface.*
+198:- **Q1.7** Where does release information live? — Stable release state and raw context; no safe references.
+199:- **Q1.8** What if creating allocator state fails? — Fallible allocator construction conserving surviving inputs.
+200:- **Q1.9** What do allocation failures contain? — `AllocFailure<T>` returns rejected `T`; operation-specific recovery.
+201:- **Q1.10** Are capacity and addresses observable? — Observable capacity; explicit raw-address exposure.
+202:- **Q1.11** What does “unchanged” require of allocator state? — Availability predicate plus four laws: progress, unchanged state on failure, release never reduces availability, a concrete success witness.
+203:- **Q1.12** What rolls back around callbacks? — No rollback of callback effects; every element accounted for in a typed result.
+204:- **Q1.13** Can resetting the system allocator return `Allocator<Sys>` again? — Fresh brand after any supported system reset.
+205:- **Q2.1** Are storage release, destruction and resource cleanup separate? — Separate storage release, destruction and resource cleanup.
+206:- **Q2.2** Which containers implement `Destroy`? — Exactly sixteen named Destroy impls: Array (T: Destroy); Heap, HeapArray and Vec (two each: T: Copy; T: Destroy); String (unconditional); Option (T: Destroy); Result (three: T: Destroy/E: Copy, T: Destroy/E: Destroy, T: Copy/E: Destroy); OrderedMap (four: each of K and V Copy or Destroy). HashMap excluded. <a id="q2-2-revision"></a>Revised 2026-11-06 by [information flow](#decided-project-infoflow-2026-11-06): `Secret<T>` is `Copy` only for scalar `T`; secret arrays and heap secrets are linear and their destruction wipes them.
+207:- **Q2.3** In what order are contents destroyed? — Index order 0..len−1, then the backing; OrderedMap in ascending key order, key then value, then the nodes.
+208:- **Q2.4** How does a container of non-`Destroy` resources release its storage? — `drain(v, ctx, f)` with `f: fn(&mut C, T) with(K) -> Step<T, E>`; the only way to empty a container of non-Destroy elements.
+209:- **Q2.5** What happens when drain processing fails? — On Stop, `Drained { at, survivor, rest, err }`; `map_into` returns `Stopped { done, survivor, rest, err }`.
+210:- **Q2.6** Must `destroy` terminate and avoid traps? — Ordinary partial correctness; prove stronger guarantees separately.
+211:- **Q2.7** Does user destruction have special execution semantics? — Ordinary consuming checked `destroy`; at most `Alloc`.
+212:- **Q2.8** How is 'Copy or Destroy' written for container impls? — (a) separate impls for every admitted combination of Copy/Destroy payload bounds, no disjunctive-bound syntax: two each for Heap, HeapArray and Vec, three for Result, four for OrderedMap; coherence may use Copy/Destroy disjointness. *Revises or adds: TRAIT-1@1 (under OD6): equal generic impl heads allowed only when Copy/Destroy disjointness makes their domains disjoint; all other coherence and orphan rules unchanged. Option (b) would also add new bound syntax.*
+213:- **Q3.1** What does opening a heap array produce? — Second-class shared/mutable array views; no element references.
+214:- **Q3.2** How are views passed and lent? — Downward parameters; mutable lending freezes origin.
+215:- **Q3.3** What is a view’s root identity? — Original owner identity plus projection path.
+216:- **Q3.4** Which view accesses conflict? — Existing whole-root conflict rules.
+217:- **Q3.5** What is the index type? — `u64` lengths/indices across profiles; checked target limits.
+218:- **Q3.6** How are nested linear elements traversed without substitutes? — `drain` / `map_into` for consuming traversal; `swap_at(v, i, x) -> T` for in-place replacement.
+219:- **Q3.7** What is the raw-memory model and validity taxonomy? — Blocks with provenance; pointer = (prov: Option<BlockId>, addr: u64); integers carry no provenance; every access needs explicit validity premises.
+220:- **Q3.8** How do zero-sized elements behave? — Zero-sized slots own their obligations; they occupy no bytes and may share addresses.
+221:- **Q3.9** What do pointer equality and integer round trips mean? — `expose` records the block; `from_exposed` picks in-bounds, then one-past, else no provenance.
+222:- **Q3.10** What happens when address space runs out? — A collision means overlapping occupied bytes; address exhaustion is part of Avail.
+223:- **Q3.11** How are typed values related to raw bytes? — Structured values and raw store joined by `Rep`.
+224:- **Q3.12** How are extern pointer parameters marked, and how does C keep memory past the call? — (a) `kept` parameter marker; `Kept<H>` receipt ended only by the paired extern. *Revises or adds: New design + spelling: owner decision.*
+225:- **Q4.1** What is a literal’s type? — Copy `StaticStr`; explicit fallible dynamic conversion.
+226:- **Q4.2** Which encoding and NUL policy apply? — UTF-8 including embedded NUL.
+227:- **Q4.3** What do length and comparison mean? — Byte length; content equality; lexicographic byte order.
+228:- **Q4.4** Are literal addresses observable and literals mergeable? — Content semantics; pooling allowed; no safe address identity.
+229:- **Q4.5** What is the FFI representation? — Explicit pointer/byte-length FFI adapter.
+230:- **Q4.6** What are dynamic string views? — Byte offsets; `byte_at` traps out of range; subviews only through the scoped borrow form of Q4.7 (`borrow t from a until b as s { … } [else { … }]`). *Revised 2026-11-06 by [no hidden traps](#decided-project-no-hidden-traps): byte_at needs evidence of an in-range offset.*
+231:- **Q4.7** How are scoped views and range subviews introduced? — (a) borrow [mut] source [from a until b] as view { … } [else { … }]; no else = trap (like indexing); proven invalid range without else refused (OD118). *Revises or adds: Replaces R4 F4.3 text-only mandatory-else form; extends Q3.1/Q3.2 with subview formation; preserves OD36/OD118.* *Revised 2026-11-06 by [no hidden traps](#decided-project-no-hidden-traps): the form without `else` needs evidence of a valid range; a provably out-of-range view index is covered by the same rule.*
+232:- **Q5.1** Should capability arguments ever be inferred? — Explicit capability arguments on every polymorphic call. *Revises or adds: OD45, OD87.*
+233:- **Q5.2** May explicit arguments contain the caller’s capability variables? — Explicit symbolic capability expressions and union.
+234:- **Q5.3** What is capability-set equality and normal form? — Canonical semantic equality; refuse repeated names.
+235:- **Q5.4** Is a capability inference solver still normative? — Explicit substitution checking; no inference solver. *Revises or adds: OD45, OD87.*
+#!/usr/bin/env bash
+# Bounded runs: a timeout is INCOMPLETE, never a failure and never a pass.
+#
+# The rule (docs/project/PROMOTION_PIPELINE.md, result vocabulary): a test that exceeds its time budget
+# has produced no observation. Under machine load a freshly linked binary or a compile can overrun
+# a budget sized for an idle machine (test_ssa.sh once reported hundreds of 5-second alarms as
+# failures), so a timeout is re-run once, alone, with a larger budget:
+#   - the re-run completes      -> its result is judged normally (pass or FAIL), recorded "recovered";
+#   - the re-run times out too  -> INCOMPLETE: not a pass, not a failure. A gate with an incomplete
+#                                  result exits nonzero, and a qualifying run contains none.
+#
+# Each attempt runs under lib/bounded_exec.py, which makes the command the leader of a new process
+# group, reports its outcome through a status file (never through the command's own streams, so
+# nothing the command prints can fake or hide a timeout) and, when the budget expires, sends SIGTERM
+# and then SIGKILL to the whole group, so no descendant outlives the attempt into the retry.
+#
+# Sourcing (`BOUNDED_PARENT="$TMP"; source scripts/checks/lib/bounded.sh`) gives the gate PRIVATE
+# state: a fresh directory (mktemp under BOUNDED_PARENT, else $TMPDIR) with an outcome file and a
+# log. Every sourcing creates its own directory, so nested or parallel gates never share state.
+# With BOUNDED_PARENT under the gate's own scratch directory, its cleanup removes the state too.
+#
+#   bounded_run [-i STDIN_FILE] [-r RETRY_SECS] SECS -- CMD [ARGS...]
+#     Runs CMD (an executable, not a shell function). Its stdout and stderr are buffered per
+#     attempt and only a COMPLETED attempt's output is written: an incomplete run writes nothing,
+#     so output-matching checks never pass on the partial output of a run that hung. Without -i the
+#     command inherits stdin, which a re-run cannot replay: callers that feed input pass -i.
+#     Returns CMD's status, or 124 when it timed out on both attempts or the runner reported no
+#     outcome. SECS and RETRY_SECS are positive decimal seconds. A command may itself exit
+#     124, so test with `bounded_is_incomplete "$rc"`, which also reads the outcome bounded_run
+#     recorded (this works across `( cd dir && bounded_run ... )` subshells; run one bounded_run
+#     at a time per sourcing). RETRY_SECS defaults to BOUNDED_RETRY_FACTOR (2) times SECS.
+#   bounded_summary
+#     Lists this gate's recovered and incomplete runs; gates print it before their final tally.
+#   bounded_watchdog SECS  -> sets the array TO for the watchdog form: "${TO[@]}" CMD [ARGS...]
+#     runs CMD through `bash bounded.sh SECS` in a separate process with the same retry; on a second
+#     timeout it writes no command output, prints "INCOMPLETE: ..." on stderr and exits 124. Its
+#     recovered and incomplete lines go to this gate's log (handed over on its command line).
+#   bounded_gate_status
+#     The end-of-gate verdict for a gate using the watchdog form: lists recovered, incomplete and
+#     runner-failed runs, removes the state directory, and returns 1 when any run was incomplete or
+#     the runner failed, so the gate exits nonzero whatever its own checks concluded from a hung
+#     command's empty output. Last line:
+#       bounded_gate_status && [ "$FAIL" -eq 0 ]
+#
+# If the runner itself fails (no outcome reported), the command's output is discarded and the run
+# is incomplete (status 124, a "runner-failed" log line): never a pass. If the runner is cancelled (the
+# gate is interrupted or terminated), it kills the command's group first.
+#
+# Without python3 commands run directly with no watchdog: one warning when the gate sources this
+# file, never inside a command's output, and the watchdog form then runs commands directly too.
+# Such a run is never incomplete.
+
+BOUNDED_RETRY_FACTOR="${BOUNDED_RETRY_FACTOR:-2}"
+if [[ "$BOUNDED_RETRY_FACTOR" =~ ^[0-9]+(\.[0-9]+)?$ ]] && awk -v f="$BOUNDED_RETRY_FACTOR" 'BEGIN { exit !(f + 0 >= 1) }'; then :
+else echo "bounded.sh: BOUNDED_RETRY_FACTOR must be a number >= 1; using 2" >&2; BOUNDED_RETRY_FACTOR=2; fi
+# _bounded_secs_ok S: S is a positive decimal number of seconds (fractions allowed).
+_bounded_secs_ok() { [[ "$1" =~ ^[0-9]+(\.[0-9]+)?$ ]] && awk -v s="$1" 'BEGIN { exit !(s + 0 > 0) }'; }
+# Fixed-point, trailing zeros trimmed: never scientific notation, which _bounded_secs_ok rejects.
+_bounded_mul() { awk -v s="$1" -v f="$2" 'BEGIN { r = sprintf("%.6f", s * f); sub(/0+$/, "", r); sub(/\.$/, "", r); print r }'; }
+BOUNDED_SH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")"
+BOUNDED_EXEC="$(dirname "$BOUNDED_SH")/bounded_exec.py"
+BOUNDED_DIR="$(mktemp -d "${BOUNDED_PARENT:-${TMPDIR:-/tmp}}/bounded.XXXXXX")"
+BOUNDED_OUTCOME_FILE="$BOUNDED_DIR/outcome"
+BOUNDED_LOG="$BOUNDED_DIR/log"
+# The watchdog form appends to its caller's log, handed over explicitly on its command line.
+if [ "${BASH_SOURCE[0]}" = "$0" ]; then
+  # A standalone watchdog removes its state however it ends.
+  trap 'rm -rf "$BOUNDED_DIR"' EXIT
+  [ -z "${BOUNDED_WATCHDOG_LOG:-}" ] || BOUNDED_LOG="$BOUNDED_WATCHDOG_LOG"
+fi
+: >> "$BOUNDED_LOG"
+BOUNDED_HAVE_WATCHDOG=1
+if ! command -v python3 >/dev/null 2>&1; then
+  BOUNDED_HAVE_WATCHDOG=0
+  [ "${BASH_SOURCE[0]}" = "$0" ] || echo "  warn python3 not found — commands run without a hang watchdog" >&2
+fi
+
+bounded_is_incomplete() {
+  [ "$1" = 124 ] && [ "$(cat "$BOUNDED_OUTCOME_FILE" 2>/dev/null)" = incomplete ]
+}
+
+bounded_run() {
+  local stdin_file="" retry="" secs="" rc tries=0 budget tmp outcome
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      -i) stdin_file="$2"; shift 2 ;;
+      -r) retry="$2"; shift 2 ;;
+      --) shift; break ;;
+      *) if [ -z "$secs" ]; then secs="$1"; shift; else break; fi ;;
+    esac
+  done
+  [ -n "$secs" ] && [ $# -gt 0 ] || { echo "bounded_run: usage: bounded_run [-i FILE] [-r SECS] SECS -- CMD..." >&2; return 2; }
+  [ -n "$retry" ] || retry="$(_bounded_mul "$secs" "$BOUNDED_RETRY_FACTOR")"
+  if ! _bounded_secs_ok "$secs" || ! _bounded_secs_ok "$retry"; then
+    echo "bounded_run: budgets must be positive numbers of seconds (got $secs, retry $retry)" >&2; return 2
+  fi
+  echo done > "$BOUNDED_OUTCOME_FILE"
+  if [ "$BOUNDED_HAVE_WATCHDOG" != 1 ]; then
+    if [ -n "$stdin_file" ]; then "$@" < "$stdin_file"; else "$@"; fi
+    return $?
+  fi
+  tmp="$(mktemp -d "$BOUNDED_DIR/run.XXXXXX")"
+  budget="$secs"
+  while :; do
+    tries=$((tries + 1))
+    rm -f "$tmp/status"
+    if [ -n "$stdin_file" ]; then
+      python3 -I "$BOUNDED_EXEC" --timeout "$budget" --kill-after "${BOUNDED_KILL_AFTER:-10}" --status "$tmp/status" -- "$@" < "$stdin_file" > "$tmp/out" 2> "$tmp/err"
+    else
+      python3 -I "$BOUNDED_EXEC" --timeout "$budget" --kill-after "${BOUNDED_KILL_AFTER:-10}" --status "$tmp/status" -- "$@" > "$tmp/out" 2> "$tmp/err"
+    fi
+    outcome="$(cat "$tmp/status" 2>/dev/null)"
+    case "$outcome" in
+      "exit "*) break ;;
+      timeout) [ "$tries" = 1 ] || break; budget="$retry" ;;
+      *) outcome=runner-failed; break ;;
+    esac
+  done
+  if [ "$outcome" = timeout ]; then
+    echo incomplete > "$BOUNDED_OUTCOME_FILE"
+    echo "incomplete ${secs}s+${retry}s $*" >> "$BOUNDED_LOG"
+    rc=124
+  elif [ "$outcome" = runner-failed ]; then
+    # The runner reported nothing (it failed or was cancelled): no observation, so the run is
+    # incomplete exactly as a double timeout is (status 124, bounded_is_incomplete true).
+    echo "bounded_run: the runner reported no outcome for: $*" >&2
+    echo incomplete > "$BOUNDED_OUTCOME_FILE"
+    echo "runner-failed ${secs}s $*" >> "$BOUNDED_LOG"
+    rc=124
+  else
+    cat "$tmp/out"; cat "$tmp/err" >&2
+    rc="${outcome#exit }"
+    [ "$tries" = 2 ] && echo "recovered ${secs}s $*" >> "$BOUNDED_LOG"
+  fi
+  rm -rf "$tmp"
+  return "$rc"
+}
+
+bounded_summary() {
+  local nrec ninc
+  nrec=$(grep -c '^recovered' "$BOUNDED_LOG" 2>/dev/null || true); nrec=${nrec:-0}
+  ninc=$(grep -c '^incomplete\|^runner-failed' "$BOUNDED_LOG" 2>/dev/null || true); ninc=${ninc:-0}
+  [ "$nrec" -gt 0 ] || [ "$ninc" -gt 0 ] || return 0
+  echo "Bounded runs: $nrec recovered (timed out, then completed alone), $ninc incomplete (timed out twice, or the runner failed):"
+  sed 's/^/  /' "$BOUNDED_LOG"
+}
+
+bounded_watchdog() {
+  if [ "$BOUNDED_HAVE_WATCHDOG" = 1 ]; then
+    TO=(env "BOUNDED_WATCHDOG_LOG=$BOUNDED_LOG" "BOUNDED_PARENT=$BOUNDED_DIR" bash "$BOUNDED_SH" "$1")
+  else
+    TO=(env)  # no python3: run commands directly (the gate warned once when it sourced this file)
+  fi
+}
+
+bounded_gate_status() {
+  local ninc
+  bounded_summary
+  ninc=$(grep -c '^incomplete\|^runner-failed' "$BOUNDED_LOG" 2>/dev/null || true); ninc=${ninc:-0}
+  [ "$ninc" -eq 0 ] || echo "INCOMPLETE: $ninc command(s) timed out twice or lost their runner: this run is incomplete, not passed"
+  rm -rf "$BOUNDED_DIR"
+  [ "$ninc" -eq 0 ]
+}
+
+# Watchdog form: `bash bounded.sh SECS CMD...` (through bounded_watchdog's TO array).
+if [ "${BASH_SOURCE[0]}" = "$0" ]; then
+  [ $# -ge 2 ] || { echo "usage: bash $0 SECS CMD [ARGS...]" >&2; exit 2; }
+  secs="$1"; shift
+  bounded_run "$secs" -- "$@"; rc=$?
+  if bounded_is_incomplete "$rc"; then
+    echo "INCOMPLETE: timed out twice (${secs}s, then $(_bounded_mul "$secs" "$BOUNDED_RETRY_FACTOR")s alone) or lost its runner: $*" >&2
+  fi
+  exit "$rc"
+fi
+
+exec
+/bin/bash -lc "cat scripts/proofs/lean_lex.py; cat scripts/spec/rules.lean; sed -n '200,290p' _inputs/FOUNDATION.md; nl -ba scripts/spec/rules.py; rg -n 'O1|PathOk|normalized' ConcreteSpec/README.md; rg -n 'Q[0-9]+\\.[0-9]+|OD[0-9]+' docs/decisions.md | tail -8" in /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rev-sc2/codex
+ succeeded in 0ms:
+#!/usr/bin/env python3
+"""A lexer for the Lean sources of ConcreteSpec, shared by the proof-integrity checks.
+
+`lex(src)` returns `src` with every comment (nested `/- -/`, `--`) blanked to spaces, newlines kept,
+so offsets and line numbers are the source's. Everything else is kept, string literals included.
+It follows Lean's literal forms, so no comment delimiter inside a literal starts a comment: a
+string with its escapes, raw strings r"…" and r#"…"#, character literals and quoted names «…».
+Whether a string interpolates depends on the parser, not the lexer, so interpolation is admitted
+only directly after `s!`, `m!` or `f!` (its `{ }` code, with its own strings and comments, is
+lexed recursively), and any other string holding `{` is an error. An unterminated string,
+comment, interpolation or name is an error too, and so is a syntax quotation `(…) (whose comments are
+syntax data; the library runs no meta code): the lexer fails closed, never skips.
+`comment_spans(src)` gives the top-level comments (the owner view, scripts/spec/lean_site.py, takes
+its doc blocks from them, so a doc comment inside an ordinary comment or a string is not one).
+
+Commands (exit 3 when a source cannot be read or lexed):
+
+  scan RE FILE...          `file:line: text` for every match of RE (over the whole lexed text,
+                           reported at the line where it starts) and for every `import` outside
+                           the header, which must be lines `import ConcreteSpec[.M…]`, one
+                           module each, ended by a command at column 0
+  examples SRC DST FILE... copies each FILE (a path relative to SRC) to DST with every `example`
+                           command turned into `noncomputable def «⟪example⟫FILE:LINE»` (no space,
+                           so listings split on spaces stay sound), so the kernel's view of it
+                           stays in the environment; prints the count. Every
+                           `example` token must start a line.
+"""
+import os, re, sys
+
+EXAMPLE_MARK = "⟪example⟫"
+
+
+class LexError(Exception):
+    pass
+
+
+def lex(src, spans=None, literals=True):
+    """`src` with its comments blanked; when `spans` is a list, each top-level comment's
+    (start, end) offsets are appended to it (a comment nested in another is part of that one).
+    With `literals=False`, string, character and name literals are blanked too (code tokens only)."""
+    n, out = len(src), []
+
+    def emit(text, literal=False):
+        if literal and not literals:
+            text = "".join("\n" if ch == "\n" else " " for ch in text)
+        out.append(text)
+
+    def ident(i):                                     # src[i] continues an identifier
+        return i >= 0 and (src[i].isalnum() or src[i] in "_'!?." or ord(src[i]) > 127)
+
+    def comment(i):                                   # at "/-": blank to the matching "-/"
+        start, depth = i, 0
+        while i < n:
+            if src.startswith("/-", i): depth += 1; out.append("  "); i += 2
+            elif src.startswith("-/", i):
+                depth -= 1; out.append("  "); i += 2
+                if depth == 0:
+                    if spans is not None: spans.append((start, i))
+                    return i
+            else: out.append("\n" if src[i] == "\n" else " "); i += 1
+        raise LexError("unterminated comment")
+
+    def string(i):                                    # at '"'
+        interp = src[i - 2:i] in ("s!", "m!", "f!") and not ident(i - 3)
+        emit('"', True); i += 1
+        while i < n:
+            c = src[i]
+            if c == "\\": emit(src[i:i + 2], True); i += 2
+            elif c == '"': emit(c, True); return i + 1
+            elif c == "{" and interp: emit(c, True); i = code(i + 1, True)
+            elif c == "{":
+                line = src.count("\n", 0, i) + 1
+                raise LexError(f"line {line}: a string holding '{{' without s!, m! or f! before it")
+            else: emit(c, True); i += 1
+        raise LexError("unterminated string")
+
+    def raw(i):                                       # at 'r' of r#*"
+        j = i + 1
+        while j < n and src[j] == "#": j += 1
+        close = '"' + "#" * (j - i - 1)
+        k = src.find(close, j + 1)
+        if k < 0: raise LexError("unterminated raw string")
+        emit(src[i:k + len(close)], True); return k + len(close)
+
+    def code(i, inner):                               # inner: inside an interpolation, stop at its '}'
+        depth = 0
+        while i < n:
+            c = src[i]
+            if src.startswith("/-", i): i = comment(i)
+            elif src.startswith("--", i):
+                j = src.find("\n", i); j = n if j < 0 else j; out.append(" " * (j - i)); i = j
+            elif c == '"': i = string(i)
+            elif c == "«":                            # a quoted name part: no comment inside it
+                k = src.find("»", i + 1)
+                if k < 0: raise LexError("unterminated «name»")
+                emit(src[i:k + 1], True); i = k + 1
+            elif src.startswith("`(", i) or src.startswith("``(", i):
+                # A syntax quotation: its comments are syntax data, not comments of the source,
+                # and the library runs no meta code, so the lexer refuses it.
+                raise LexError(f"line {src.count(chr(10), 0, i) + 1}: a syntax quotation")
+            elif c == "r" and not ident(i - 1) and re.match(r'r#*"', src[i:]): i = raw(i)
+            elif c == "'" and not ident(i - 1):
+                m = re.match(r"'(\\(x[0-9a-fA-F]{2}|u[0-9a-fA-F]{4}|.)|[^\\'\n])'", src[i:])
+                k = len(m.group(0)) if m else 1
+                emit(src[i:i + k], m is not None); i += k
+            elif inner and c == "{": depth += 1; out.append(c); i += 1
+            elif inner and c == "}":
+                out.append(c); i += 1
+                if depth == 0: return i
+                depth -= 1
+            else: out.append(c); i += 1
+        if inner: raise LexError("unterminated interpolation")
+        return i
+
+    code(0, False)
+    return "".join(out)
+
+
+def comment_spans(src):
+    """The (start, end) offsets of every top-level comment of `src`, in order."""
+    spans = []
+    lex(src, spans)
+    return spans
+
+
+HEADER = re.compile(r"import ConcreteSpec(\.[A-Za-z0-9_]+)*\s*$")
+FIRST_COMMAND = re.compile(r"(namespace|open|section|def|theorem|structure|inductive|abbrev)\b")
+
+
+def scan(pattern, paths):
+    word, rc = re.compile(pattern, re.M), 0
+    for path in paths:
+        try:
+            text = lex(open(path, encoding="utf-8").read())
+        except (OSError, UnicodeDecodeError, LexError) as e:
+            print(f"error: {path}: {e}", file=sys.stderr); rc = 3; continue
+        lines = text.split("\n")
+        # Lean lets an import list continue (`import A B`, or B on the next line), so the first
+        # line after the header must be a command at column 0.
+        k = 0
+        while k < len(lines) and (not lines[k].strip() or HEADER.match(lines[k])): k += 1
+        if k < len(lines) and not FIRST_COMMAND.match(lines[k]):
+            print(f"{path}:{k + 1}: {lines[k].strip()} (the import header must end in a command at column 0)")
+        hits = {text.count("\n", 0, m.start()) + 1 for m in word.finditer(text)}
+        hits |= {j for j, line in enumerate(lines, 1)
+                 if re.search(r"\bimport\b", line) and not (j <= k and HEADER.match(line))}
+        for j in sorted(hits):
+            print(f"{path}:{j}: {lines[j - 1].strip()}")
+    return rc
+
+
+# `example` as a command token: not part of a longer identifier (`example'`, `my.example`, `examples`)
+EXAMPLE = re.compile(r"(?<![\w.'!?])example(?![\w'!?])")
+
+
+def count_examples(src):
+    """The number of `example` commands in a source (code tokens only, not literal contents)."""
+    return len(EXAMPLE.findall(lex(src, literals=False)))
+
+
+def examples(src_dir, dst_dir, paths):
+    count = 0
+    for rel in paths:
+        src = open(os.path.join(src_dir, rel), encoding="utf-8").read()
+        text = lex(src, literals=False)          # an `example` inside a literal is not a command
+        out, last = [], 0
+        for m in EXAMPLE.finditer(text):
+            line = text.count("\n", 0, m.start()) + 1
+            if m.start() > 0 and text[m.start() - 1] != "\n":
+                raise LexError(f"{rel}:{line}: an `example` that does not start its line")
+            out.append(src[last:m.start()])
+            out.append(f"noncomputable def «{EXAMPLE_MARK}{rel}:{line}»")
+            last = m.end(); count += 1
+        out.append(src[last:])
+        dst = os.path.join(dst_dir, rel)
+        os.makedirs(os.path.dirname(dst) or ".", exist_ok=True)
+        open(dst, "w", encoding="utf-8").write("".join(out))
+    print(count)
+
+
+if __name__ == "__main__":
+    try:
+        if sys.argv[1] == "scan":
+            sys.exit(scan(sys.argv[2], sys.argv[3:]))
+        if sys.argv[1] == "examples":
+            examples(sys.argv[2], sys.argv[3], sys.argv[4:]); sys.exit(0)
+    except (OSError, UnicodeDecodeError, LexError) as e:
+        print(f"error: {e}", file=sys.stderr); sys.exit(3)
+    print(f"usage: {sys.argv[0]} scan RE FILE... | examples SRC DST FILE...", file=sys.stderr)
+    sys.exit(2)
+-- Emits one JSON object per registered rule (ConcreteSpec/Spec/Rules.lean), for scripts/spec/rules.py.
+-- Run from the repository root: `lake env lean scripts/spec/rules.lean > rules.jsonl`.
+import ConcreteSpec
+import Lean
+open Lean Elab Command
+
+#eval show CommandElabM Unit from do
+  let env ← getEnv
+  for r in ConcreteSpec.Core.registeredRules do
+    let doc := (← findDocString? env r.name).getD ""
+    IO.println (Json.compress (Json.mkObj [("name", toString r.name), ("rev", r.rev),
+      ("exists", toJson (env.contains r.name)), ("doc", doc)]))
+  IO.println (Json.compress (Json.mkObj [("end", toJson true)]))
+     1	#!/usr/bin/env python3
+     2	"""The rule gate's checks (scripts/spec/rules.sh): the registered rules against the sources.
+     3	
+     4	  rules.py RULES.jsonl SRC_DIR ROWS...
+     5	      RULES.jsonl is scripts/spec/rules.lean's output; SRC_DIR holds the specification's .lean
+     6	      sources (searched recursively, at least one); each ROWS file is a decision inventory
+     7	      (docs/decisions.md, ROADMAP.md) in which a cited decision row must appear.
+     8	
+     9	Prints `ok`/`FAIL` lines; exits 1 on any failure, 3 when an input cannot be read or lexed.
+    10	A rule's doc comment must cite a decision row that exists in an inventory; each rule needs one
+    11	example whose doc comment says ``Accepted (rule `Name`)`` and a different one whose doc comment
+    12	says ``Refused (rule `Name`)``; a verdict doc comment holds no nested comment and no rule's two
+    13	verdicts at once; every ``(rule `Name`)`` anywhere in a source (either kind of comment, or a
+    14	literal) must name a registered rule; no rule is registered twice; revisions are >= 1.
+    15	"""
+    16	import json, os, re, sys
+    17	
+    18	sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "proofs"))
+    19	import lean_lex  # noqa: E402
+    20	
+    21	ROW = re.compile(r"\b(Q\d+(?:\.\d+)+|OD\d+|P\d+[a-z]?|R-\d{4})\b")
+    22	# A rule name is a Lean name as `toString` prints it: dotted components, a component that needs
+    23	# quoting written «…» (which may hold spaces). Anything up to the closing backtick is the name.
+    24	CITE = re.compile(r"\(rule `([^`\n]+)`\)")
+    25	VERDICT = re.compile(r"\b(Accepted|Refused) \(rule `([^`\n]+)`\)")
+    26	# What may stand between a doc comment and the `example` it documents: attributes and modifiers.
+    27	EXAMPLE_AFTER = re.compile(
+    28	    r"\s*(?:@\[(?:[^\[\]]|\[[^\[\]]*\])*\]\s*)*(?:(?:noncomputable|private|protected|unsafe|partial)\s+)*"
+    29	    r"example(?![\w'!?])")
+    30	
+    31	
+    32	def row_exists(row, inventories):
+    33	    pat = re.compile(r"(?<![\w.-])" + re.escape(row) + r"(?![\w-]|\.\d)")
+    34	    return any(pat.search(t) for t in inventories)
+    35	
+    36	
+    37	def main(rules_path, src_dir, row_paths):
+    38	    fails = []
+    39	    try:
+    40	        rules = [json.loads(l) for l in open(rules_path, encoding="utf-8") if l.strip()]
+    41	        inventories = [open(p, encoding="utf-8").read() for p in row_paths]
+    42	    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as e:
+    43	        print(f"error: {e}", file=sys.stderr); return 3
+    44	    if not rules or rules[-1] != {"end": True}:
+    45	        print("error: the rule listing is truncated (no end record)", file=sys.stderr); return 3
+    46	    if not inventories:
+    47	        print("error: no decision inventory given", file=sys.stderr); return 3
+    48	    if not os.path.isdir(src_dir):
+    49	        print(f"error: {src_dir}: not a directory", file=sys.stderr); return 3
+    50	    rules = rules[:-1]
+    51	    names = [r["name"] for r in rules]
+    52	    for n in sorted({n for n in names if names.count(n) > 1}):
+    53	        fails.append(f"rule {n} is registered more than once")
+    54	    for r in rules:
+    55	        if not r["exists"]: fails.append(f"rule {r['name']} names no declaration")
+    56	        if r["rev"] < 1: fails.append(f"rule {r['name']} has revision {r['rev']} (revisions start at 1)")
+    57	        if not r["doc"].strip(): fails.append(f"rule {r['name']} has no doc comment")
+    58	        else:
+    59	            rows = [m.group(1) for m in ROW.finditer(r["doc"])]
+    60	            if not rows: fails.append(f"rule {r['name']}'s doc comment cites no decision row")
+    61	            elif not any(row_exists(x, inventories) for x in rows):
+    62	                fails.append(f"rule {r['name']}'s doc comment cites no existing decision row ({', '.join(rows)})")
+    63	    seen = {n: set() for n in names}
+    64	    scanned = 0
+    65	
+    66	    def walk_error(e):
+    67	        raise e
+    68	    try:
+    69	        tree = sorted(os.walk(src_dir, onerror=walk_error))
+    70	    except OSError as e:
+    71	        print(f"error: {src_dir}: {e}", file=sys.stderr); return 3
+    72	    for dirpath, _, files in tree:
+    73	        for f in sorted(files):
+    74	            if not f.endswith(".lean"): continue
+    75	            path = os.path.join(dirpath, f)
+    76	            try:
+    77	                src = open(path, encoding="utf-8").read(); spans = []
+    78	                lean_lex.lex(src, spans)
+    79	            except (OSError, UnicodeDecodeError, lean_lex.LexError) as e:
+    80	                print(f"error: {path}: {e}", file=sys.stderr); return 3
+    81	            scanned += 1
+    82	            # citations anywhere in the file (comments of both kinds, and literals: fail closed)
+    83	            for m in CITE.finditer(src):
+    84	                if m.group(1) not in seen:
+    85	                    line = src.count("\n", 0, m.start()) + 1
+    86	                    fails.append(f"{path}:{line}: cites unregistered rule {m.group(1)}")
+    87	            # a verdict anywhere outside a doc comment (code, a string literal) is stray too
+    88	            for m in VERDICT.finditer(src):
+    89	                if not any(a <= m.start() < b and src.startswith("/--", a) for a, b in spans):
+    90	                    line = src.count("\n", 0, m.start()) + 1
+    91	                    fails.append(f"{path}:{line}: a verdict citation outside an example's doc comment")
+    92	            for a, b in spans:
+    93	                text, line = src[a:b], src.count("\n", 0, a) + 1
+    94	                verdicts = VERDICT.findall(text)
+    95	                if not verdicts: continue
+    96	                if not (text.startswith("/--") and EXAMPLE_AFTER.match(src, b)):
+    97	                    fails.append(f"{path}:{line}: a verdict citation outside an example's doc comment")
+    98	                    continue
+    99	                if "/-" in text[3:]:
+   100	                    fails.append(f"{path}:{line}: a verdict doc comment holds a nested comment")
+   101	                    continue
+   102	                kinds = {}
+   103	                for v, n in verdicts: kinds.setdefault(n, set()).add(v)
+   104	                both = sorted(n for n, k in kinds.items() if len(k) > 1)
+   105	                if both:
+   106	                    fails.append(f"{path}:{line}: one example is both accepted and refused by {', '.join(both)}")
+   107	                    continue
+   108	                for n, k in kinds.items():
+   109	                    if n in seen: seen[n] |= k
+   110	    if scanned == 0:
+   111	        print(f"error: {src_dir}: no .lean source", file=sys.stderr); return 3
+   112	    for n in names:
+   113	        for v in ("Accepted", "Refused"):
+   114	            if v not in seen[n]: fails.append(f"rule {n} has no example marked {v} (rule `{n}`)")
+   115	    for f in fails: print(f"  FAIL {f}")
+   116	    if not fails: print(f"  ok   {len(rules)} registered rules in {scanned} sources, each documented with an"
+   117	                        " existing decision row and an accepted and a refused example; every citation"
+   118	                        " names a registered rule")
+   119	    return 1 if fails else 0
+   120	
+   121	
+   122	if __name__ == "__main__":
+   123	    if len(sys.argv) < 4:
+   124	        print(f"usage: {sys.argv[0]} RULES.jsonl SRC_DIR ROWS...", file=sys.stderr); sys.exit(2)
+   125	    sys.exit(main(sys.argv[1], sys.argv[2], sys.argv[3:]))
+56:- **O1 Elaboration** from surface syntax to Core: how literals get a type, how names become
+64:  location (needs O1's positions), and of the startup refusal.
+82:- **O10 Part 5** abstracts the condition of `while`: loop test number `k` takes the outcome
+1641:  freezing with loans keyed by the root binding, is REF-11@3 (it tightens OD2's part 2; partial, bug 319,
+1642:  for OD23's re-lent case).
+1645:- **OPEN-16** (OD16, a struct literal in a condition head): decided 2026-10-29, refused unless
+1648:- **OPEN-17** (OD17, field writes and `mut`): decided 2026-10-29. Now OWN-10@2 (partial, bug 216).
+1649:- **OPEN-8** (OD8, global state): decided 2026-10-29, constants only and global resources as linear
+1652:- **OPEN-20** (OD20, the visibility of std's `std.libc` bindings): decided 2026-10-29, private to std.
+1654:- **OPEN-21** (OD21, a parent module's rights over its child): decided 2026-10-29, only the declaring
+1657:- **OPEN-22** (OD22, trust on an `impl` block): decided 2026-10-29, per method only. Now TRUST-5@2 of
+
+codex
+The round-1 fixes are mostly in place, including the explicit scope for path normalization and function-local IDs. I’m checking two remaining gate risks: whether an attribute’s string can be mistaken for an `example` command, and whether inventory matching establishes a row’s existence rather than just finding its ID in prose.
+exec
+/bin/bash -lc "rg -n '"'^###? .*3'"\\.|"'^###? .*7'"\\.|\\*\\*3\\.|\\*\\*7\\.|question 3|question 7' _inputs/FOUNDATION.md; sed -n '155,200p' _inputs/FOUNDATION.md; sed -n '50,65p' ConcreteSpec/README.md; ls -a | head; command -v lean; command -v lake; rg -n 'P[0-9]+[a-z]?' docs/decisions.md | head -20; nl -ba ConcreteSpec/Spec/Target.lean | tail -75" in /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rev-sc2/codex
+ succeeded in 0ms:
+42:### C3. Target, layout and representation
+98:### C7. Secret leakage and accounting
+137:## 3. Pipeline and validation contract
+180:<a id="q4"></a>**Q4. Enum layout.** Recommend retaining the existing profile’s i32 tags for now, deferring a compact u8/u16/u32 algorithm to the aggregate/layout slice and a separate owner answer. Runner-up: approve now the smallest tag fitting the variant count (u8 ≤256, u16 ≤65,536, u32 ≤2^32), declaration-order tags, aligned common payload and rounded aggregate size, rejecting larger counts. This changes OD126/FFI-7 independently of question 3.
+**Qualification (P4):** run LLVM, LCB and the hybrid Core Lean evaluator on **every supported example and controlled test**, with the same input bytes, target/layout profile, grant configuration and compatible scripted external responses. Frontend certificates bind this Core program to the source; representation simulations relate its raw-byte/layout observations to both native paths. For each native run, check that its complete trace is an allowed observation of a Core execution under those inputs: this is a refinement check. The decided backend-order rule stays: LLVM and LCB full observations must equal each other and the expected outcome on every supported example, and any mismatch fails (question 17). Supported examples therefore do not observe allocation-dependent values such as exposed addresses or initialized padding. Native execution cannot be forced to follow the evaluator’s oracle, so the Core check finds and validates an admissible choice witness per native run, without normalizing away raw observations. Qualifying programs that legitimately observe such values is decided at slice 24. Failed witness search is inconclusive unless exclusion is proved. Compare complete observations: ordered requests/responses/output, terminal classification, trap kind/site/line and observable final external state. Use bounded scripted environments for effectful/blocking cases. Report unsupported or inconclusive runs explicitly; do not count `outOfFuel` as agreement or divergence. Compare leakage separately where the claimed backend evidence supports it. Never require arbitrary user programs to execute three times. Tests qualify implementations; the LCB path is **proved under named premises**, and LLVM remains unverified. Keep the two premise sets separate.
+
+## 4. Revision register
+
+No revision is enacted here. Each question in section 5 has its own answer; an umbrella approval cannot choose these independently.
+
+| Rows | Scope and status | Question |
+|---|---|---|
+| OD126; Q3.7/Q3.9/Q3.10 | Generalize address/profile interface, preserving provenance rules and zero-byte exception; existing 64-bit little-endian profile unchanged, including Q3.10’s `base + size ≤ 2^64−1` one-past bound. Any generalized profile needs an analogous checked bound. | 3 |
+| Q3.5; Q1.11/Q2.4/Q4.6; TYPE-19; FFI-7 | Q3.5 fixes u64 lengths/indices across profiles. Q1.11 rejects counts above u64 as TooLarge; Q2.4 fixes Drained.at: u64; Q4.6 byte offsets/lengths use that index contract. Target-sized usize would revise these and layout-query results. Recommendation retains these semantics and permits only proved narrower representations. | 7 |
+| OD126; FFI-7 | Native enum tag/payload layout changes existing i32-tag profile separately from target abstraction. | 4 |
+| Q1.7 | Proved release-context erasure, including owning Text where applicable; no unconditional one-pointer claim. | 6 |
+| Q7.1/Q7.10; Q9.7 | Lawful registry instances rather than a permanently closed inventory; preserve existing grant contracts. Entropy details deferred. | 16, 14 |
+| FFI-7/10 | Natural native struct layout already supersedes unspecified-layout prose under runtime decision; retain repr restrictions. | Retained clarification |
+| Q8.1; early-evidence decision; R-0505 | Keep current conditional endpoint and later closure; advancing it requires separate approval. | 8 |
+
+Q9.11/OD144 already decide post-cleanup ensures timing. The SPARK decision already decides source struct invariants. Neither is a new rule. C4’s hybrid/representation completion is a proposed formalization choice, not authority to revise raw access. Exact trap constructors and byte columns are not inferred from Q6.7 or ArithmeticError. OD106/ARITH-10 already fix conversion errors; Q2.3 and Q3.8 already fix destruction orders. Questions 12 and 13 are removed as fully decided; later question numbers are retained for review tracking.
+
+## 5. Separately answerable owner questions
+
+Each recommendation is a proposal, not an implemented language decision. “Defer” preserves existing decided rules and leaves detailed instances to the named slice.
+
+<a id="q1"></a>**Q1. Foundation scope.** Recommend approving the interface/law boundary of C1–C10, with freeze only after implementation, kernel proofs, interaction tests, independent review and owner acceptance. Runner-up: freeze smaller integrated scopes incrementally. Neither approves the other numbered questions.
+<a id="q2"></a>**Q2. Hybrid state and representation completion.** Recommend C4’s structured-place/byte-block state, coherent projection, pointer fragments and explicit initialization/padding laws. Runner-up: use byte blocks for all Core storage. The hybrid keeps typed proofs small while raw operations remain executable; both must preserve Q3.7 and raw observations.
+<a id="q3"></a>**Q3. Target abstraction.** Recommend read-only profiles separating address width, pointer representation, length width, byte order and address spaces; generalize Q3.7/Q3.9/Q3.10 without changing existing profile constants or reconstruction policy. Runner-up: separate semantics per profile under OD126. No usize or enum change is included.
+<a id="q4"></a>**Q4. Enum layout.** Recommend retaining the existing profile’s i32 tags for now, deferring a compact u8/u16/u32 algorithm to the aggregate/layout slice and a separate owner answer. Runner-up: approve now the smallest tag fitting the variant count (u8 ≤256, u16 ≤65,536, u32 ≤2^32), declaration-order tags, aligned common payload and rounded aggregate size, rejecting larger counts. This changes OD126/FFI-7 independently of question 3.
+<a id="q5"></a>**Q5. Niches.** Three options: (a) exactly one null-empty/non-null single-pointer-payload niche, with pointer-size, provenance, ownership and release-context proofs; (b) tagged layout now, future niches only by owner decision; (c) no niches permanently. Recommend **(b)**: the foundation needs representation laws, not a permanent optimization inventory. Runner-up **(a)** gives compact optional ownership but adds a special eligibility proof; multiword release contexts and nullable raw pointers are ineligible. Round-2 reviewers split: Codex and Kimi prefer (b); agy prefers (c). (c) is uniform but unnecessarily permanent.
+<a id="q6"></a>**Q6. Release-context erasure.** Recommend retaining sufficient stable context and erasing only with a release/identity/dependency preservation proof and no per-instance state. Runner-up: always store context. This separately revises Q1.7; it does not fix Text’s internal word count.
+<a id="q7"></a>**Q7. usize.** Three options: (a) target-sized usize avoids 64-bit lengths/storage/arithmetic on 8/16/32-bit chips, but changes the cross-profile meaning deliberately fixed by Q3.5 and the dependent contracts in section 4; (b) retain u64 semantics everywhere, with explicit checked target limits, at a cost on small targets; (c) retain those u64 semantics and prove a narrower internal representation wherever bounds justify it, using widening or fallback when they do not. Recommend **(c)**, following [PHILOSOPHY](../PHILOSOPHY.md)’s explicit, checkable semantics and Q3.5. This cannot promise all lengths fit a machine word: zero-sized collections can have large logical counts. Representation narrowing needs a simulation preserving arithmetic, failures and observations, not silent truncation or new target-dependent overflow. Codex and agy favor (a); Kimi favors (b). A new source usize remains a separately approved revision; no isize is implied.
+<a id="q8"></a>**Q8. Native-image milestone.** Recommend keeping R-0505’s later closure and Q8.1’s conditional endpoint. Runner-up: require proved exact AArch64 linked-image validation by 0.1, explicitly revising Q8.1, early-evidence and proof-infrastructure milestones while retaining all undischarged premises. Qualification is question 17, not bundled here.
+<a id="q9"></a>**Q9. Trap inventory and spellings.** Recommend deferring concrete constructors/renderings until trap semantics needs them, before their first supported slice. Runner-up: approve `arithmetic(ArithmeticError) | bounds | invalidRange | abort`, rendered `overflow`, `division_by_zero`, `invalid_shift`, `bounds`, `invalid_range`, `abort`, with one trailing newline. ArithmeticError’s decided cases do not decide this wrapper or its strings. Preserve the runtime line format and exits either way. Codex and Kimi support deferral before first use; agy wants the inventory and spellings approved now to avoid churn.
+<a id="q10"></a>**Q10. Columns and tabs.** Recommend byte columns, tabs counting one byte, with conformance tests; runner-up: Unicode-scalar columns, tabs counting one scalar. The runtime decision fixes only 1-based columns, so neither convention is already decided.
+<a id="q11"></a>**Q11. UTF-8 failure classification.** Recommend deferring mapping to the text slice’s operation contracts while preserving UTF-8 validity and no hidden traps. Runner-up: map unchecked UTF-8 boundary failures to proposed invalidRange. This does not turn handled checked errors into traps.
+<a id="q14"></a>**Q14. Entropy shape.** Recommend deferring exact launch-grant type, operations and ending contract to slice 6, consistent with Q7.10 and the randomness schedule. Runner-up: approve a nullary Entropy grant only together with a complete instance contract. No nullary shape is assumed by C5.
+<a id="q15"></a>**Q15. Struct-invariant implementation.** Recommend deferring the source feature to slice 17, while writing the decided SPARK exposure definition in the spec before freeze and retaining Q9.11/OD144 post-cleanup ensures semantics. Runner-up: implement the source feature earlier if an interaction proof needs it. There is no new timing choice to approve.
+<a id="q16"></a>**Q16. Registry extensibility.** Recommend lawful typed extensions preserving existing primitive/grant entries and exhaustive coverage of every selected instance; unknown operations are refused. Runner-up: retain closed Q9.7/Q7.10 inventories and seek an owner amendment for each addition. Schema compatibility must preserve old records; no new source spelling is implied.
+<a id="q17"></a>**Q17. Differential qualification.** Recommend keeping the decided [backend-order](../decisions.md#decided-project-pipeline-2026-11-06) rule unchanged: on every supported example, LLVM and LCB full observations must equal each other and the expected outcome, and any mismatch fails. Add, on top of it, the check that each native trace is an allowed observation of the Core semantics. Supported examples must not observe allocation-dependent values (exposed addresses, initialized padding), so equality stays meaningful. How to qualify programs that legitimately observe such values (raw pointers, slice 24) is an open question for that slice, not relaxed now. Runner-up: relax cross-backend equality to per-backend refinement for such programs now, which revises the backend-order row. Kimi found draft 3 relaxed that decided rule without registering it; this fixes that.
+
+<a id="q18"></a>**Q18. Secret<T> layout.** Recommend that `Secret<T>` has exactly the layout of T (zero-cost wrapper). Layout does not establish constant time; the information-flow rules do. The [information-flow decision](../decisions.md#decided-project-infoflow-2026-11-06) covers typing, Copy, wiping and leakage, not representation, so this is a new rule (Kimi, round 3). Runner-up: an opaque representation fixed per slice. All three reviewers chose identical layout in the earlier step-3 round.
+
+The parts are separate Core fragments, each defined only as far as its theorems need (R4 F8);
+unifying them into one Core is A2i work (R-0571).
+
+Open obligations, by name:
+
+- **O1 Elaboration** from surface syntax to Core: how literals get a type, how names become
+  identities, how nested expressions and grouping become A-normal form, source positions, and that
+  acceptance of a source program does not depend on how the elaborator names temporaries.
+- **O2 The lexer, model-translation and native-image obligations.**
+- **O3 Instrumentation erasure** (Q9.10): the ownership instrumentation (`Slot.moved`, the
+  `used`, `live`, `known` and `kfields` fields of `Entry`) is stated as intent, with no erasure
+  definition or theorem yet. (Brand erasure, part 5, is done.)
+- **O4 Trap diagnostics** (Q7.10, OD101): the bytes of the trap line, including the trap's source
+  location (needs O1's positions), and of the startup refusal.
+- **O5 Target observations** (the launcher contract): every result here is about the model's
+.
+..
+AGENTS.md
+changelog.d
+CHANGELOG.md
+.claude
+CLAUDE.md
+ConcreteSpec
+ConcreteSpec.lean
+_delta.diff
+/nix/store/94bmilywgajdnqvix1fs35fj94kala0w-lean4-release-4.34.1/bin/lean
+/nix/store/94bmilywgajdnqvix1fs35fj94kala0w-lean4-release-4.34.1/bin/lake
+173:The owner answered every row of the 2026-11-05 decision page, in the terminal. The rows that revise a recorded rule were answered one by one: Q5.1/Q5.4, Q6.4, Q2.8, Q9.15 with P3, Q7.11 and Q4.7. Q3.12, Q9.19, Q7.10, Q1.6, P2, P4, P9, P13, P16 and P17a/b were also answered directly. The remaining Core rows were accepted as recommended, and the remaining project rows were approved on the owner's condition that Claude and Codex agree and that each is the best long-term design (both confirmed; every row carries Codex agreement). The full rows (question, options, reason, recommendation, agreement, revision and notes) are in [core_rows.json](archive/decisions-2026-11-05/core_rows.json) and [other_rows.json](archive/decisions-2026-11-05/other_rows.json); the concrete rules behind them are in [R4_RATIONALE.md](archive/decisions-2026-11-05/R4_RATIONALE.md), and where R4 and a row differ, the row governs.
+182:- **The generated-chapter requirement** (rows Q9.15, P3): Lean is the specification, in one main normative file with doc comments and examples; no prose is generated from it. This confirms the [2026-11-04 decision](#decided-project-lean-is-the-spec). The "one main normative file" wording is revised 2026-11-06 by the [long-term changes](#decided-project-long-term-2026-11-06): one authoritative specification library in cohesive modules, with `ConcreteSpec/Spec.lean` as its public import.
+188:<a id="decided-2026-11-05-new-rules"></a>**New rules** (P4): duplicate variant names in one enum and duplicate method names in one impl are refused, like duplicate fields (bug 313); the rule gets its ID and diagnostic when it is written in Lean.
+283:- **P1** Where agent discretion ends — Claude and Codex reason every question from the philosophy and recommend; they never pick a language answer through code, fixtures, diagnostics or docs. 'Important' = anything that revises a decided rule, changes observable language meaning you have not ruled on, or that you reserved. Every important decision comes to you.
+284:- **P2** Priority order when principles conflict — Soundness and provability > transparency (with auditability, honest trust boundaries and compiler-owned identity) > one authoritative definition (checked derived views allowed) > explicitness at the use site > brevity. The philosophy guides open choices and never silently reopens decided rules.
+285:- **P3** Lean is the spec: confirm the amendment — Lean is the specification: confirmed together with Q9.15 (revision below).
+286:- **P4** Duplicate enum variants or methods (bug 313) — Refuse duplicate variant names in one enum and duplicate method names in one impl, with a new rule and diagnostic, the same as duplicate fields.
+287:- **P5** legacy/ is a byte-frozen snapshot, never patched or run — legacy/ is main's tree at the move commit, byte-frozen. A root check compares its tree hash, allowing only deletions a satisfied RETENTION.tsv entry authorizes. No legacy gate ever runs. The oracle is the tag-built artifact (P13), not the legacy/ copy.
+288:- **P6** Retention manifest gates deleting legacy/ — RETENTION.tsv at the root gives every legacy asset (corpus, regressions, examples, std, bug ledger, site, docs, research) a destination and deletion criterion. Revised 2026-11-06 ([restart row](#decided-project-restart)): nothing is deleted at B3; legacy/, the old pipeline included, is deleted way later (LD: once the new compiler implements a full real program such as RocksDB, ethrex or similar), when RETENTION.tsv has no live entry, a final ideas sweep has dispositioned every idea and the owner explicitly approves.
+289:- **P7** Prove the new landing path before moving — T0: land beside the old tree the new root CI, required-checks.txt (enforced by train watch and land), RETENTION.tsv, the task disposition table, ORACLE.lock with the oracle artifact, and ISSUES.tsv. T1: rehearse the move on a throwaway branch: fresh clone, build, hook, exact-SHA CI, train --dry-run land; a broken build, a failing gate and a missing required check must each be refused. T2: the move in one train.
+290:- **P8** Server services under scripts/ — Keep only landing services: train, review, hook, landing bot. The status page, work queue, fuzz farm, perf tracking and nightly campaign all stop and are recorded as archived in RETENTION.tsv; each returns only with a roadmap task.
+291:- **P9** Website during the transition — The website goes down at the move and is redone from scratch with the new compiler; no frozen playground is served. Unpublishing the live site is an outward action whose moment the owner confirms.
+292:- **P10** What 'closed' means for old-compiler bugs — Old-compiler defects become 'retired with the old implementation', never 'fixed'. Each keeps its reproducer, ruling and structural class; 106 reproducers feed the oracle comparisons. Bugs the frozen browser compiler still shows stay visible while the site serves it.
+293:- **P11** Std bugs and rulings are carried — Add a 'std' class: 12 std bugs move with std as contracts plus regressions. The 112 language rulings (26 still open) keep their ruling and become conformance examples.
+294:- **P12** Issue record from day one — From day one, ISSUES.tsv at the root: id, date, area (spec|proof|compiler|launcher|ci|migration), evidence, owner, severity, closure condition, status, with a small root check. Spec, proof, launcher, CI and migration defects go there. The full bug ledger and tool return with slice 1.
+295:- **P13** concrete-ci-2 as the only CI host — CI runs on concrete-ci-2 (self-hosted) and on GitHub-hosted runners as a regular second pool, not only a fallback. Jobs that need ci-2 caches run there; the oracle is fetched as a release asset verified by digest; a check neither pool can run is incomplete and blocks landing. Self-hosted runners never run pull_request jobs.
+296:- **P14** ci-3 handover: an exception to the archive requirement — Done by the owner on 2026-11-04: concrete-ci-3 was handed to stabileo; its fuzz corpus, perf history and leanprof data were not copied (an exception to the archive requirement).
+297:- **P15** New roadmap: retiring obligations — Accept the new single-file ROADMAP.md (wip/new-roadmap, reconciled: prepare → rehearse → move, assurance wording per Q8.1, Phase E per P18, decides nothing itself): 79 tasks kept as rows, 345 folded into area tasks with their obligations, 109 deferred with triggers, 7 retired, 15 done.
+298:- **P16** Status changes in the refusal list — Accept the new statuses in PHILOSOPHY.md. Now Permanent: operator overloading (OD26), capability hiding (authority rule 5), derived equality, mutable global state (OD8), umbrella capabilities and aliases, old/quantifiers in contracts (OD117), lexical shadowing (OD67), and ghost code that affects execution. Ghost code itself is admitted as decided (OD81). Foreign function values reopen when typed extern fn types are admitted (OD4); concurrency reopens on R-0399's trigger.
+299:- **P17a** Default arguments — Default arguments: a Permanent refusal, reopened only by a new decision from you. They conflict with visible arguments.
+    63	  dataSpace : AddrSpace
+    64	  null : Nat
+    65	  maxObject : Nat
+    66	  deriving DecidableEq, Repr
+    67	
+    68	/-- What every profile must satisfy.
+    69	
+    70	- An address has at least one bit, and a stored pointer has room for all of them.
+    71	- A stored pointer's alignment is a power of two, and its size is a multiple of it (the layout law
+    72	  that a size is a multiple of its alignment, FOUNDATION C3).
+    73	- A stored pointer fits in one object.
+    74	- A stored length has between 1 and 64 bits, since its meaning is a `u64` (Q3.5).
+    75	- The data space is one of the target's spaces.
+    76	- The null address is an address.
+    77	- An object, and the address one past its end, fit in the address range: `maxObject` is below
+    78	  `2 ^ addrBits`, the analogue of row Q3.10's one-past bound `base + size ≤ 2^64 − 1` that every
+    79	  profile needs (question 3). -/
+    80	def Target.WellFormed (t : Target) : Prop :=
+    81	  0 < t.addrBits ∧ t.addrBits ≤ 8 * t.ptrSize ∧ IsPow2 t.ptrAlign ∧ t.ptrSize % t.ptrAlign = 0 ∧
+    82	  t.ptrSize ≤ t.maxObject ∧
+    83	  0 < t.lenBits ∧ t.lenBits ≤ 64 ∧ t.dataSpace ∈ t.spaces ∧
+    84	  t.null < 2 ^ t.addrBits ∧ t.maxObject < 2 ^ t.addrBits
+    85	
+    86	instance (t : Target) : Decidable t.WellFormed := by unfold Target.WellFormed; infer_instance
+    87	
+    88	/-- The existing target, linux-x86_64-hosted (row Q7.1): 64-bit addresses, 8-byte pointers aligned
+    89	to 8, 64-bit lengths, little-endian, one data space, null at address 0, and objects of at most
+    90	`2^64 − 1` bytes (row Q3.10). -/
+    91	def linuxX8664 : Target where
+    92	  addrBits := 64
+    93	  ptrSize := 8
+    94	  ptrAlign := 8
+    95	  lenBits := 64
+    96	  byteOrder := .little
+    97	  spaces := [⟨0⟩]
+    98	  dataSpace := ⟨0⟩
+    99	  null := 0
+   100	  maxObject := 2 ^ 64 - 1
+   101	
+   102	/-! ### Examples -/
+   103	
+   104	/-- The existing profile is well formed. -/
+   105	example : linuxX8664.WellFormed := by decide
+   106	
+   107	/-- A profile whose pointers have no room for its addresses is not: 32-bit addresses in a 2-byte
+   108	pointer. -/
+   109	example : ¬ ({ linuxX8664 with
+   110	    addrBits := 32
+   111	    ptrSize := 2
+   112	    ptrAlign := 2
+   113	    maxObject := 2 ^ 16 } : Target).WellFormed := by decide
+   114	
+   115	/-- Nor is one whose pointer alignment is not a power of two. -/
+   116	example : ¬ ({ linuxX8664 with ptrAlign := 6 } : Target).WellFormed := by decide
+   117	
+   118	/-- Nor one whose pointer size is not a multiple of its alignment. -/
+   119	example : ¬ ({ linuxX8664 with ptrAlign := 16 } : Target).WellFormed := by decide
+   120	
+   121	/-- Nor one whose objects are too small to hold a pointer. -/
+   122	example : ¬ ({ linuxX8664 with maxObject := 4 } : Target).WellFormed := by decide
+   123	
+   124	/-- Nor one whose objects can reach the end of the address range, so that one past the end would
+   125	not be an address. -/
+   126	example : ¬ ({ linuxX8664 with maxObject := 2 ^ 64 } : Target).WellFormed := by decide
+   127	
+   128	/-- A small target with 16-bit addresses and 16-bit stored lengths is well formed: nothing assumes
+   129	64 bits. -/
+   130	example : ({ linuxX8664 with
+   131	    addrBits := 16
+   132	    ptrSize := 2
+   133	    ptrAlign := 2
+   134	    lenBits := 16
+   135	    maxObject := 2 ^ 15 } : Target).WellFormed := by decide
+   136	
+   137	end ConcreteSpec.Core
+
+exec
+/bin/bash -lc "python3 -B - <<'PY'
+import importlib.util,sys,io,json,contextlib
+from unittest.mock import patch
+s=importlib.util.spec_from_file_location('rules','scripts/spec/rules.py'); m=importlib.util.module_from_spec(s);s.loader.exec_module(m)
+good='\\n'.join(json.dumps(x) for x in [{'name':'R.ok','rev':1,'exists':True,'doc':'Q9.1'},{'end':True}])
+base='/-- Accepted (rule "'`R.ok`). -/'"\\nexample : True := trivial\\n/-- Refused (rule "'`R.ok`). -/'"\\nexample : True := trivial\\n'
+def test(label,src,inventory='- **Q9.1** actual row'):
+ files={'rules':good,'rows':inventory,'src/A.lean':src}
+ with patch('builtins.open',lambda p,*a,**kw:io.StringIO(files[p])),patch.object(m.os.path,'isdir',return_value=True),patch.object(m.os,'walk',return_value=iter([('src',[],['A.lean'])])):
+  print(label, 'rc=',m.main('rules','src',['rows']))
+test('attributes containing example text','/-- Accepted (rule "'`R.ok`). -/'"\\n@[deprecated \"] example\" (since := \"2026-11-08\")] def a : True := trivial\\n/-- Refused (rule "'`R.ok`). -/'"\\n@[deprecated \"] example\" (since := \"2026-11-08\")] def b : True := trivial')
+test('multiline quoted name',base+'-- (rule "'`R.«missing'"\\nrule»"'`)'"\\n')
+test('inventory mere mention',base,'This document mentions Q9.1 as a nonexistent row; no decision is recorded.')
+PY" in /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rev-sc2/codex
+ succeeded in 0ms:
+  ok   1 registered rules in 1 sources, each documented with an existing decision row and an accepted and a refused example; every citation names a registered rule
+attributes containing example text rc= 0
+  ok   1 registered rules in 1 sources, each documented with an existing decision row and an accepted and a refused example; every citation names a registered rule
+multiline quoted name rc= 0
+  ok   1 registered rules in 1 sources, each documented with an existing decision row and an accepted and a refused example; every citation names a registered rule
+inventory mere mention rc= 0
+
+exec
+/bin/bash -lc "python3 -B - <<'PY'
+import importlib.util
+s=importlib.util.spec_from_file_location('rules','scripts/spec/rules.py');m=importlib.util.module_from_spec(s);s.loader.exec_module(m)
+for x in ['(rule "'`R.«missing`rule»`)'"','(rule "'`R.«missing'"\\nrule»"'`)'"']:
+ print(repr(x),list(m.CITE.finditer(x)))
+PY
+rg -n 'Q[0-9]+\\.[0-9]+' ROADMAP.md | head -6; sed -n '54,62p' ConcreteSpec/README.md; sed -n '1,45p' scripts/spec/rules.sh; cat ConcreteSpec/Spec/Rules.lean" in /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/rev-sc2/codex
+ succeeded in 0ms:
+'(rule `R.«missing`rule»`)' []
+'(rule `R.«missing\nrule»`)' []
+158:| B. Cumulative slices 0 and 1, then LP0 | Slice 0 establishes the running proof infrastructure: a closed `u8` arithmetic subset through every used IR to two unverified native builds, with per-lowering proofs and the composed conditional theorem. Then `ConcreteSpec` and the new compiler for slice 1 (the approved linear component, row Q8.2), on the same path; then LP0. See [vertical slices](#vertical-slices). | Each slice meets the [slice shape](#vertical-slices). Every judgment, semantics and pass is total. Fuel exhaustion is distinct from divergence. The native builds are qualified by tests, not proved: the LLVM output is labelled unverified, and its assumptions are listed with the lexer, model-translation and native-image obligations; a native-image claim, if any, is stated separately as conditional on those assumptions. Minimal provenance accompanies the first authoritative proof claims. The outside-reader test passes on the Lean rules. Phase B closes after slice 1, LP0 and B2/B3 acceptance; `legacy/` stays until LD. |
+168:**Active:** A2i (integrating the proposed spec), B0 (the slice-0 design is done; building it is next) and folding the decided diagnostics, memory and information-flow interfaces into A2i (R-0592). What waits for the owner is [listed in the decisions](docs/decisions.md#waiting-for-the-owner). **Next:** A2c (the owner's spec read and freeze), then B1. The legacy move (T0–T2) has landed; A1 and A2b feed A2i. A2a (provisional approval of the Core shape, decision row Q9.19) is done: the owner approved every Core row on 2026-11-05 ([record](docs/decisions.md#decided-2026-11-05)); the approval binds the design without freezing it.
+204:process spawning (Q7.4), foreign function values (OD4). Concurrency is the final language slice;
+210:| 1 | the approved component (row Q8.2): an empty non-`Copy` struct, its literal, a move, the use-after-move refusal, a struct-destructuring `let`, one checked operation, a return; explicit `abort()` as the runtime trap example and the refused `200 + 56` control; the component and bound launcher; the predictable policy; `Concrete.toml` `[policy]` and `[assumptions]`; the Lean I/O driver infrastructure | B1 |
+213:| 3 | `bool`, comparisons (OD42), `&&`, `\|\|`, `!` (Q6.5), `Unit`, value `if`/`else`, trailing value expressions and the Unit statement rule (OD29), the head rule (OD16, OD34), `let mut`, assignment, no shadowing (OD67), `discard` (OD62); the octagon checker through branches and joins; `checked_no_implicit_traps`; the may-abort fact | C |
+221:| 11 | generics, `T: Copy`, type-argument inference (OD46, OD129), capability parameters and arguments (Q5.1–Q5.4), OD132; Mono Core, its validator and re-admission (Q6.3) | C |
+Open obligations, by name:
+
+- **O1 Elaboration** from surface syntax to Core: how literals get a type, how names become
+  identities, how nested expressions and grouping become A-normal form, source positions, and that
+  acceptance of a source program does not depend on how the elaborator names temporaries.
+- **O2 The lexer, model-translation and native-image obligations.**
+- **O3 Instrumentation erasure** (Q9.10): the ownership instrumentation (`Slot.moved`, the
+  `used`, `live`, `known` and `kfields` fields of `Entry`) is stated as intent, with no erasure
+  definition or theorem yet. (Brand erasure, part 5, is done.)
+#!/usr/bin/env bash
+# THE RULE GATE: every registered rule (ConcreteSpec/Spec/Rules.lean) is documented, cites the
+# decision row it implements, and has an example it accepts and one it refuses; every rule citation
+# in the specification names a registered rule. The checks are scripts/spec/rules.py; the
+# registry is read from the built environment by scripts/spec/rules.lean.
+#
+# NEGATIVE CONTROLS run the same checker on small fixtures and require each failure: a rule with no
+# refused or no accepted example, no doc comment, a doc citing no decision row or one no inventory
+# holds, one registered twice, one naming no declaration, revision 0, a citation of an unregistered
+# rule (a quoted name too), a verdict outside an example's doc comment or in a nested comment, one
+# example claiming both verdicts, a truncated listing, an unlexable source, a missing or empty
+# source directory, and a checker that hangs through both bounded attempts. Fixtures that satisfy
+# every check must pass (the positive controls, attributed and modified examples included).
+set -uo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/../checks/lib/gate_env.sh" || exit 2
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+cd "$ROOT_DIR"
+CHECK_NAME=SPEC-RULES
+PASS=0; FAIL=0
+ok(){ echo "  ok   $1"; PASS=$((PASS+1)); }
+no(){ echo "  FAIL $1"; FAIL=$((FAIL+1)); }
+finish(){ echo "$CHECK_NAME: PASS=$PASS FAIL=$FAIL"; [ "$FAIL" = 0 ] && exit 0 || exit 1; }
+TMP="$(mktemp -d)" || { echo "FATAL: mktemp failed" >&2; exit 2; }
+trap 'rm -rf "$TMP"' EXIT
+export LC_ALL=C
+BOUNDED_PARENT="$TMP"; source scripts/checks/lib/bounded.sh || exit 2
+# run_bounded BUDGET CMD... → CMD's output and status, bounded: a second timeout is INCOMPLETE,
+# status 2, which no check below accepts
+run_bounded() {
+  local out rc budget="$1"; shift
+  out="$(bounded_run -i /dev/null -r "$budget" "$budget" -- "$@" 2>&1)"; rc=$?
+  if bounded_is_incomplete "$rc"; then echo "error: $CHECK_NAME: timed out twice (INCOMPLETE)" >&2; return 2; fi
+  printf '%s\n' "$out"; return "$rc"
+}
+# check BUDGET RULES-JSONL SRC-DIR ROWS... → the checker
+check() { local b="$1"; shift; run_bounded "$b" python3 -I scripts/spec/rules.py "$@"; }
+
+command -v lake >/dev/null || { echo "error: $CHECK_NAME needs Lean's lake on PATH (elan)" >&2; exit 2; }
+bounded_run -i /dev/null -r 3600 3600 -- lake build ConcreteSpec > "$TMP/build.log" 2>&1 \
+  || { tail -20 "$TMP/build.log" >&2; bounded_summary >&2; echo "error: $CHECK_NAME: lake build ConcreteSpec failed or timed out" >&2; exit 2; }
+
+echo "=== the specification ==="
+bounded_run -i /dev/null 600 -- lake env lean scripts/spec/rules.lean > "$TMP/rules.jsonl" 2> "$TMP/rules.err" \
+  || { cat "$TMP/rules.err" >&2; bounded_summary >&2; echo "error: scripts/spec/rules.lean failed or timed out" >&2; exit 2; }
+OUT=$(check 120 "$TMP/rules.jsonl" ConcreteSpec docs/decisions.md ROADMAP.md); RC=$?
+import ConcreteSpec.Spec.Ident
+
+/-!
+# The rule registry
+
+Every rule of the specification that a diagnostic can name is registered here, by its Lean name
+and its revision (`RuleId`; the diagnostics decision, 2026-11-06: per-rule ids that are Lean
+names). A rule is a definition of the specification. The rule gate (`scripts/spec/rules.sh`, run
+by CI) requires of each registered rule:
+
+- its definition carries a doc comment that cites the decision row it implements (`Q9.1`,
+  `OD101`, `R-0496`, …);
+- at least one example says in its doc comment that the rule accepts it, and at least one that the
+  rule refuses it: the comment holds the word `Accepted` (or `Refused`), then `(rule`, then the
+  rule's full Lean name between backticks, then `)`;
+- no two entries name the same rule.
+
+Every citation of that form (`(rule`, a backticked name, `)`) written anywhere in the
+specification must name a registered rule. A rule's entry is written with a double-backtick name,
+so Lean refuses an entry for a name that does not exist; the gate also checks that each registered
+name is a declaration of the built environment, which catches an entry written with a single
+backtick. The registry is empty until the first
+rules are ported (phase A, step 3 onward); each step registers the rules it adds.
+-/
+
+namespace ConcreteSpec.Core
+
+/-- The registered rules, in the order the specification introduces them. -/
+def registeredRules : List RuleId := []
+
+end ConcreteSpec.Core
+
+codex
+1. **Defect — `scripts/spec/rules.py:27–29`: attribute strings can supply fake example commands.**  
+   The checker accepts both verdicts attached to definitions such as:
+   ```lean
+   /-- Accepted (rule `R.ok`). -/
+   @[deprecated "] example" (since := "2026-11-08")]
+   def a : True := trivial
+   ```
+   Repeat with `Refused` and `def b`: the checker returns 0 without either example. The regex treats the `]` inside the string as the attribute’s end. **Fix:** recognize declaration prefixes using lexical tokens, respecting strings and balanced brackets; require an actual `example` command. Add this negative control.
+
+2. **Defect — `scripts/spec/rules.py:24–25`: quoted-name citations still escape validation.**  
+   A citation containing a backtick inside a quoted component, such as ``(rule `R.«missing`rule»`)``, produces no match. Consequently an unregistered citation—or stray verdict using it—is ignored. **Fix:** parse quoted Lean components before interpreting the closing backtick, and fail closed on malformed citations. Add corresponding controls.
+
+3. **Defect — `scripts/spec/rules.py:32–34`: an inventory mention substitutes for an actual decision row.**  
+   `row_exists` searches unrestricted prose in either inventory. In-memory testing confirmed that “Q9.1 is a nonexistent row” suffices. This only partially resolves both reviewers’ decision-row finding. **Fix:** extract identifiers from authoritative row declarations in their respective files, then check membership; add a mention-only negative control.
+
+The other round-1 findings are resolved or explicitly scoped: distinct verdicts, ordinary quoted names, declaration prefixes, outside-doc verdicts, source-enumeration errors, expanded controls, and the Ident comments. Path normalization is explicitly deferred to elaboration.
+
+`Target.WellFormed` matches its listed profile constraints, and the examples express their stated propositions. Its size bound is a profile capacity constraint; allocation placement still needs the later `base + size` obligation. I found no choice of column unit, trap taxonomy, or `Secret<T>` layout.
+
+Timeouts and unreadable inputs fail closed by inspection. Reproductions used in-memory inputs; no files were modified. Lean and the full shell gate were not run.
+
+VERDICT: REVISE
+tokens used
+63,971
+codex exit 0

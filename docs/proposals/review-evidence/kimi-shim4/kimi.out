@@ -1,0 +1,769 @@
+kimi version 2.4.1
+• I need conduct read-only review, scratch /tmp only. Should inspect files ../round3.txt ../codex-round3.md ../delta.diff. Should be careful path working dir repo no .git. Should not modify repo. I can create scratch /tmp. Should assess each round3 finding fixed, hunt git shim bypass / false rejects. Reproduce timeout. Check ISS-0017 and changelog accuracy/counts. Should understand repo scripts shim. Should use tools read known paths. I should TodoList because complex. Initial brief progress note then parallel read. Paths current repo. ../ round3 resolves scratchpad/kimi-shim4/round3.txt. delta same. I can Read parallel.
+
+• I’ll compare the round-3 findings with the delta, then exercise the shim in a `/tmp` scratch copy under timeouts and verify the issue/changelog counts.
+
+• Should have absolute paths. Working known full. /tmp/claude.../scratchpad/kimi-shim4/round3. Use path parent.Should inspect full acceptance_shim current, landing tests sections, acceptance guards, git call sites. Should understand potential bypass. I should read entire shim ~200 lines and test relevant 1000-1120, acceptance. Also perhaps scripts checks review .githooks grep invocations to assess ordinary commands false rejects. Shim passes non-push mostly aliases etc. Potential issues global options fixed list. Should inspect.I have possible issue fixed list includes --force-with-lease=* accepted. No main bypass? options all recognized. Should have exhaustive examine Git push syntax nuances.
+
+  Push refspec classification:
+  for each s:
+  t strip leading + only one; d="${t##*:}" last colon. empty d -> source before colon. case t glob * only '*' not ? or [ glob. Git refspec globs only *? According git refspec glob pattern one * perhaps fnmatch allows ? and []? Documentation refspec glob: one * in pattern, can match any substring; ? [] perhaps pathspec? Should check. A refspec destination can be shorthand? main covered */main. HEAD, @. A push to HEAD on protected bare whose HEAD main. Could HEAD^? no refspec dest. --delete no refspec main covered. Delete with refspec ":refs/heads/main" d main covered. ":main" main. Negative refspec "^..."? Git push supports negative refspec? push has negative refspec only for fetch? Could no refspec + push.default something. No refspec always local check. Config push.default matching etc main moves protected if fixture? Protected URLs all resolved.
+
+  Could push to remote name that resolves local via `remote get-url --push --all`, raw protected remote names only compared URL. identity. InsteadOf refused config any. Multiple URLs checked. Push URL command line direct local.
+
+  Potential URL parsing bugs:
+  local_url_path absolute first handles any absolute containing :// local correct.
+  file://localhost absolute. file://host拒绝.
+  Tilde expansion: Does git push destination actually support ~? Yes test.
+  Paths beginning scheme regex. Git accepts `file://localhost` perhaps exact without slash? repository no.
+  Local URL `file://localhost/tmp` yes.
+  file:// with percent encoding? Git doesn't decode likely.
+  SCP-like paths: case relative u and first component colon returns remote. Absolute bypass. Tilde with colon? Expansion after scheme check and before relative check; `~user/repo` home. Fine.
+  Windows not relevant Linux.
+  `//path` absolute, git local.
+  Path newline? arrays and URLs read lines could parse remote get-url outputs line. Git URLs cannot newline? Config can contain newline via -c quoting and remote name? Possible multi-line URL weird.
+  Identity compares pwd -P common. protected raw if remote get-url output same. protected local resolved creation.
+
+  Global options fixed:
+  `-C` missing value: pre adds empty and skips. Real git will fail. Could argument confusion result bypass? e.g. git -C push ... interpreted push as dir and next main? Shim sets pre -C push, sub next. Real same. Unknown fails closed.
+  `--exec-path` no arg treated no arg and next sub; real `--exec-path` stops and ignores rest? pass harmless.
+  `--bare` sets git dir current .git; repo_identity unsets GIT_DIR but pre used remote get-url could change repo. It then identity local. Could protected raw comparisons bypass using alternate worktree config? Identity absolute good.
+  `-c` options config alias etc parsed. Missing value could be issue but real fail.
+  `--config-env` may execute environment? real config reads.
+  Non-push commands delegated, external command detection:
+  BUILTINS exact list; `command -v git-$sub` PATH can find attacker executable, but same as git. Pass external arbitrary code out scope? Could external command invoke shim recursively. If named git-push external? Git built-in push bypass alias logic because sub==push direct. Fine.
+  Alias expansion read simplistic refuses quotes slash etc. Could shell metachar alias no quotes interpreted by shim as arguments not shell. Real git alias split shell-like and aliases with semicolon? Non-shell aliases split_cmdline recognizes single/double quotes and backslash only, semicolon ordinary? Should no bypass.
+  Alias with environment assignments? `alias.x = GIT_DIR=... push` real tries command GIT_DIR=...? no.
+  Alias expansion using global options included before alias: `git -c alias.x=... x`. words appended rest. Shim `$0` found absolute? $0 /tmp/bin/git yes. ACCEPT_SHIM_DEPTH user can set high triggers refusal. Good.
+
+  Push options fixed list: need compare git push -h current. Could legitimate commands use `--force-with-lease=ref:sha` accepted. `--force-with-lease` no arg accepted. `--signed` accepted, signed= accepted. `-o` value skipped. Missing values could allow bypass? Eg `git push --receive-pack origin main`: Git treats origin as receive-pack and main as repository no refspec => shim also skip origin, repo main, no specs -> moves main, remote get-url main fails urls main, local_url_path relative fails => refuse. Good.
+  `--repo` semantics: actual git push --repo <repository> option? Check current Git push: --repo=<repository> only, perhaps separate not accepted but shim allows (false accept? not ordinary). Their parse optrepo even if positional present. Actual --repo is repository option, if positional both? Comment says missing only. Should confirm. Could bypass via multiple --repo with no positional etc no.
+  `--` after push handled as positional, and any dash token as repo/spec. Git push `-- origin main` valid and shim refuses main if protected, fixture allowed. Good.
+  Short options bundled all refused, ordinary scripts use `-q`, `-f` separately. Could `-u` with value? no.
+  `--force-with-lease=*` accepts arbitrary abbreviations? only exact prefix.
+  `--signed=*` any value real rejects invalid.
+  Missing `--force-with-lease` separate argument? optional only = accepted. good.
+  Missing option `--no-force-if-includes` valid.
+  Push options from git 2.39 `--recurse-submodules=check|on-demand|only|no`; check safe no recursive push? check ensures submodule commits pushed but doesn't push. no safe.
+  `push.recurseSubmodules` config parsing only first value `--get`. Git config multi-valued last? git push uses git_config_get_string maybe last? `git config --get` outputs last? Should check. If multiple values and --get returns last perhaps yes. `git config --get` with multiple values outputs all? I think git config --get name outputs last value only? Actually git config --get-regexp all, --get maybe last? Could test. Config bool case case-sensitive: values `false`, `no` may be case-insensitive (`False`, `OFF`, `0`). Shim only allows exact no/false/check and empty; safe false positives for False. Config values "on-demand" refused. `push.recurseSubmodules=false` allows. `push.recurseSubmodules=0` refused though valid false ordinary? Could finding low false refusal. But User asks ordinary command/fixture push landing scripts use, not arbitrary ordinary config. I should focus used calls. They all no config. New option list could wrongly refuse fixture push e.g. `git push -q --force-with-lease="..."` accepted. `--porcelain` accepted. `--force` accepted. `-f` accepted. no-verify accepted.
+  Potential serious bypass through config `remote.<name>.push` refspec. No command refspec => moves_main=1, identity protected catches. If non-main specs supplied, remote.<name>.push ignored. Good.
+  `push.default` no specs catches.
+  `remote.pushDefault` repo omitted refuses regardless.
+  `--follow-tags` with non-main refspec can push annotated tag named refs/heads/main? Tags refs/tags not main. Tag refspec could point main? Destination d refs/tags/main doesn't match. no.
+  `--tags` with non-main refspec no heads main except if main explicitly specs. flagall not set for tags. Could `--tags` push a local ref outside refs/tags to same namespace? only tags.
+  `--delete` with non-main refspec and config? no.
+
+  `--prune` now all.
+  `--all` all.
+  `--branches` all.
+  `--mirror` all.
+  `HEAD` classification all any lone HEAD even destination not main safe.
+  Glob only '*' recognized. Should explore `?` and bracket in refspec. `git check-ref-format`? Git refspec matching code `check_refname_component` etc. `parse_ref_spec` uses `glob` if `*`, only star triggers. `?` not wildcard likely literal invalid refname (cannot ?), [ invalid. no.
+  Multiple leading ++ t only strips one; d `+...` not main real invalid.
+  Refs/heads/main with leading colon etc covered.
+  Colon in scp path as refspec? First positional repo. Subsequent spec containing colon parsed last colon; safe conservative.
+  Refspec `HEAD:main` d main.
+  `HEAD:refs/heads/main/` invalid.
+  `main` source/dest shorthand could push to refs/heads/main if source main. covered.
+  `refs/remotes/origin/main` d */main covered.
+  `refs/tags/main` d */main covered (conservative).
+  `heads/main` covered.
+  Full ref `refs/heads/main` covered.
+  `main^{commit}` source d main^{commit} not match, but lone source `main^{commit}`: Git push to branch? If source is SHA expression and no colon, what destination? Git requires destination? `git push origin main^{commit}` likely src refspec with no dest and push.default simple? Should investigate. Important! Push refspec with source only can be arbitrary SHA or revision expression; when no destination, updates same branch? Git docs: `<src>` without `:<dst>` means update same ref as source, but `<src>` may be arbitrary "SHA1 expression" such as master~4 or HEAD, then destination must be specified? Docs: "The <src> is often the name of the branch you would want to push, but it can be any arbitrary 'SHA-1 expression', such as master~4 or HEAD (see gitrevisions(7))." "The <dst> tells which ref on remote side is updated with this push. Arbitrary expressions cannot be used here, an actual ref must be named. If :<dst> is omitted, same ref as <src> will be updated." For HEAD special push current branch? Shim catches HEAD exact but `HEAD^{commit}` no dest likely error "dst refspec HEAD^{commit} matches more than one"? I can test real in scratch. If `main^{commit}` destination remote `main^{commit}` invalid so no main. But git may derive branch from source. `HEAD` is special resolves current branch, caught. `HEAD~0` might push to current branch? Should test.
+  Also source `@~0` alias HEAD, not caught. Could move main on protected. Common bypass candidates `HEAD:`, empty dest: d empty -> t%%:* = HEAD => caught. `HEAD~0:` d empty source HEAD~0 not caught; if empty dst then same? remote ref invalid perhaps no.
+  `@` caught, `@{0}` perhaps HEAD expression with no dest and git push default behavior? likely invalid dst.
+
+  Namespace options `--namespace=foo` could hide identity? Protected identity same repo, remote get-url pre with namespace okay. Push refspec destination `main` under namespace becomes refs/namespaces/foo/refs/heads/main not actual main perhaps conservative.
+
+  Receive pack can be malicious command that moves main separately out scope? Shim allows arbitrary receive-pack if destination fixture local. Round3 bypass used receive-pack with mirror protected. Fixed. Could use `--receive-pack='git receive-pack ...'` arbitrary command on local protected but dest identity fixture so only fixture command runs. Not protected. For remote protected URL, refuses.
+
+  Could direct push to protected via `ext::` remote helpers etc classified remote and refused.
+  Local path through `file://localhost` allowed identity check.
+  Remote name resolution `git remote get-url --push --all` could be manipulated by `-c remote.origin.pushurl` etc outputs correctly.
+  `url insteadOf` any refuses (could false reject fixtures if global insteadOf unrelated). Docs explicitly says any fail closed. Acceptance environment may have global insteadOf common in user config causing all fixture pushes wrongly refused. But check scripts isolate config in landing_script etc (HOME temp). Acceptance clone inherits user config. Yet design intentional.
+  Config includes `url.<...>.insteadOf` from global any refuses, not asked ordinary used in environment? no.
+
+  Potential protected local raw passed relative path. Shim creation resolves with PWD source top. Raw stores relative prot.git; push remote get-url outputs absolute configured. Identity. fine.
+
+  Protected remote `~` resolution uses HOME at creation baked IDs. Push destination with `~` uses current HOME, which is Git expansion semantics current HOME. correct. But `~user` uses getent. Git's tilde expansion for remote URLs? Test.
+
+  Now run existing bounded checks perhaps heavy landing_script full (210 tests, heavy?) User explicitly reproduce under timeout. Could run only shim harness custom quicker and issues.sh. Full landing_script potentially minutes but round previous ran. I can run full under timeout perhaps 300 max tool, command timeout 240. But this is read-only script likely creates /tmp. Should inspect header uses mktemp. Fine. Running full landing_script under shim? Standard check itself creates temp. I should run `timeout 240 bash scripts/checks/landing_script.sh` perhaps heavy but explicit user wants. Environment likely bash git. I can run background? Better foreground 300. But before, custom fuzz.
+
+  Should verify exact counts:
+  Allowed lines 1069-73 now 17? Count: original 14? I'll count:
+  1 push -q fix main
+  2 abs
+  3 file
+  4 HEAD main
+  5 :
+  6 origin wip/x
+  7 -o main origin wip/x
+  8 --repo=fix fix main
+  9 p
+  10 pp
+  11 q
+  12 -c alias z
+  13 status
+  14 -c alias st
+  15 file localhost
+  16 force lease
+  17 no-verify --. Then second-shim fixture =18. Yes.
+  Refused lines:
+  1077 four: origin main, abs prot, file prot, repo=origin main =4
+  1078 four: HEAD, +wip main, wip refs main, refs main =4 total8
+  1079 four: --all, --mirror, -o ci.skip origin main, origin no specs =4 total12
+  1080 four: mirror main, ../prot, push no args, @ =4 total16
+  1081 four: :, +:, refs glob, wip:heads/main =4 total20
+  1082 four: :main, --delete main, nb/.git, nb =4 total24
+  1083 four: file nb, link, p, pp =4 total28
+  1084 four: q, -c z, qq, sh =4 total32
+  1084 last insteadof =1 total33
+  1085 four: --mir, -qf, --branches, --prune =4 total37
+  1086 recurse =1 total38
+  1087 config recurse, -- origin =2 total40.
+  Then standalone environment alias 1092 =1 total41
+  CFG separate 1093 =1 total42
+  CFG equals 1094 =1 total43
+  unknown global 1095 =1 total44
+  second shim p2,p3,p4 =3 refused invocations total47 if docs 45 refused plus 3 more protected URL spellings. Changelog says 45 refused invocations, three more protected URL spellings. ISSUES says 45 refused invocations (list includes :// paths?) and protected file localhost, ~ and ://-holding path URLs. Should interpret count:
+  44 first shim refusals, plus 3 second shim =47 total. But docs distinguishes 45 refused invocations and "three more protected URL spellings". Why 45? Perhaps standalone 4 included, initial for 40 =44; second-shim fixture? Protected p2 p3 p4 are 3, would 47. Where 45 comes? Could be counting 42? I'll recalc carefully original round3 says 38 refused invocations separately listed protected URL cases and 2 refused creations accurate. Original before delta allowed 14+1=15. Refused original list lines 1077-84 33 + env alias + CFG2 + unknown global =4 =37. Plus perhaps make_git_shim with remote? Wait original round3 says 38 refused. Delta adds 7 to refused for loop: --mir, -qf, branches, prune, recurse option, recurse config, -- origin =7. 38+7=45. So their base 38 includes p2,p3 two protected URL cases? They said "The 38 refused invocations, separately listed protected-URL cases, and two refused shim creations are counted accurately." Ambiguous "38 refused invocations, separately listed protected-URL cases" means 38 refused plus separate. I counted 37 base. Could missing one allowed? I'll enumerate current script with AST simple perhaps instrument generated? Count docs 45 likely current first shim 44 + one? Should original count from delta base not accessible except diff can reconstruct mentally. Current for refusals 40, standalone 4 =44, second protected 3 =47. They claim 45 refused invocations, three more protected URL spellings. Could be 45 = first shim 44 + one second-shim fixture? No allowed second-shim separately 18. Or 45 includes 42? Should precisely derive with a script parse? I can manually create list count via Python hardcoded but no need. Why round3 old 38 vs my base 37? Perhaps original list had `push --recurse-submodules` no. Delta hunk says at 1084 adds 7. Prior round3 38. Current should 45 if simply adds 7, so they retained counting scheme. Added p4 increases separately listed protected URL spellings from 2 to 3. So count 45 refers first-shim refused invocations, and separately protected 3. But my count first-shim 44. Perhaps allowed list count originally 14 yes. I'll inspect original round3 count claims could have been off? User explicitly check accuracy and counts, likely hidden off-by-one remains or fixed to 45 based 38+7. Should identify exact discrepancy perhaps 45 vs actual 44 + 3. Should understand whether unknown global option counts refused invocation even command returns nonzero real? Shim refuses yes. Environment alias cases: each `&& bad` without else doesn't verify refusal by shim but they are refused. Count all.
+
+  Current refused for loop count perhaps 41 not 40? I'll use script parse strings robust or copy. Read lines already. I'll manually number exact:
+  Line1077:
+  1 push origin main
+  2 push $S/prot.git main
+  3 push file://$S/prot.git main
+  4 push --repo=origin main
+  1078:
+  5 push origin HEAD
+  6 +wip/x:main
+  7 wip/x:refs/heads/main
+  8 refs/heads/main
+  1079:
+  9 origin --all
+  10 --mirror origin
+  11 -o ci.skip origin main
+  12 push origin
+  1080:
+  13 mirror main
+  14 ../prot.git main
+  15 push
+  16 origin @
+  17 origin :
+  18 origin +:
+  Wait line 1080 actually has **six**? Read: `"push mirror main" "push ../prot.git main" "push" "push origin @" "push origin :" "push origin +:" \` yes six, not four. I collapsed line 1080+1081. So:
+  1081:
+  19 refs heads glob
+  20 wip:heads/main
+  21 :main
+  22 --delete main
+  1082:
+  23 nb/.git
+  24 nb
+  25 file nb
+  26 link
+  1083:
+  27 p
+  28 pp
+  29 q
+  30 -c z
+  1084:
+  31 qq
+  32 sh
+  33 insteadOf
+  1085:
+  34 --mir
+  35 -qf
+  36 branches
+  37 prune
+  1086:
+  38 recurse option
+  1087:
+  39 config recurse
+  40 -- origin
+  So 40 indeed. Original before 7 =33. Standalone4=37. Original p2,p3 =2 =>39 total. Round3 says 38 refused perhaps excluding? Hmm original "38 refused invocations, separately listed protected-URL cases" might mean 38 includes 37 first +? not. I'll inspect perhaps `-c url...` original count and standalone unknown global 4 yes. 33+4=37. Docs old claimed 38, round3 said accurate incorrectly? User now wants check counts perhaps expects me to catch previous miscount? Should not trust prior. Current 40+4=44 first. Plus second 3 =47. Refused shim creations2 separate. So correct description could "44 refused invocations, three protected URL spellings, two refused shim creations and 18 allowed..." They claim 45. Off by one first, or total 47. Should verify actual harness execution logs instrument? Could count loop items by shell extraction. But manually clear. Perhaps one more `make_git_shim "$S/bin3" ...` refused invocation not git invocation? They distinguish 2 refused shim creations. no.
+  Perhaps second-shim allowed one =18. yes.
+
+  Could count allowed original: line 1069 4, 1070 4 =8, 1071 5? `"p"`1 `"pp"`2 `"q"`3 `"-c alias.z"`4 `"status"`5 =>13, 1072 `"-c alias.st"`1 =>14. +3=17. second=18. fine.
+
+  ISSUES claims 45 refused and changelog same. Could finding low docs count. Should determine if new findings more serious.
+
+  Run checks.
+
+• The three round-3 code fixes are present. I’m now checking parser edge cases against real Git behavior and recounting the test invocations directly; the documented counts need particular scrutiny.=== resolution: generated views regenerated, ledgers union-merged ===
+  ok   build t1 (b1 b2) succeeds despite four conflicting files
+  ok   no merge left in progress
+  ok   the four conflicts were real and each took its route
+  ok   CHANGELOG carries both members' entries
+  ok   corpus map carries [201] and [202]
+  ok   generated block regenerated from both members' records
+  ok   BuildIdentity regenerated over the merged sources
+  ok   no conflict markers committed
+  ok   merge commits name member and SHA
+  ok   state binds head and member SHAs
+  ok   build row logged
+=== refusal: real conflicts stop the merge and leave nothing in progress ===
+  ok   a source conflict stops with exit 3 and names the file
+  ok   the stopped merge was aborted (no MERGE_HEAD)
+  ok   tree clean after the stop
+  ok   train/t2 holds the members merged before the conflict
+  ok   a prose conflict outside the generated block is refused
+  ok   a merge that duplicates a corpus key is refused
+  ok   two edits of one ledger entry are a real conflict, not a union
+  ok   code inserted outside the corpus maps is never unioned
+  ok   a map line carrying code after its key is never unioned
+  ok   a generated block whose generator will not run is a real conflict
+  ok   a generator's refusal fails the build and leaves the tree clean
+  ok   a refused build records no head
+  ok   an existing train is not overwritten without --force
+  ok   a train name with '/' is refused
+  ok   a dirty tree is refused
+  ok   a merge already in progress is refused
+  ok   a rebase in progress is refused
+=== pipeline: check -> ci -> watch -> land, with a fake gh ===
+  ok   ci refuses a train with no passing check
+  ok   check feeds the hook exactly base..head on ci/t1
+  ok   check fails when the hook's selection fails
+  ok   a failed re-check withdraws the earlier pass
+=== gate host: check's impact leg on the gate host, bound to the SHA; INCOMPLETE blocks ===
+  ok   check runs the impact leg on the gate host, from a bundle holding exactly the train head
+  ok   with a gate host the gates do not run on this machine
+  ok   the host runs the hook's selection over exactly base..head on ci/t1
+  ok   CONCRETE_* is forwarded quoted; the bypass is never forwarded and is cleared first
+  ok   the pass is attested for the train head, with the host's log kept
+  ok   the check row names the gate host; the train is checked at its head
+  ok   a run at another SHA is no result: INCOMPLETE, and the old attestation is withdrawn
+  ok   an incomplete check is logged as incomplete and withdraws the earlier pass
+  ok   ci refuses after an incomplete check
+  ok   an unreachable gate host is INCOMPLETE, blocks, and never falls back to a local run
+  ok   a log without its exit line (lost connection) is INCOMPLETE
+  ok   gates that fail on the host at the head fail the check (not incomplete)
+  ok   a pass without a remote record passes, attests nothing, says the push runs the gates
+  ok   --local-gates is the explicit opt-in to run the gates on this machine
+  ok   git config land.gatesHost names the gate host
+  ok   dry-run check names the gate host
+  ok   an empty LAND_GATES_HOST overrides the config (no gate host)
+  ok   run-at-ref.sh runs exactly the bundled head and prints sha= on both lines
+=== gate host: the pushing hook reuses the attestation only for this exact push ===
+  ok   the hook reuses an attested pass for exactly this push
+  ok   a push of another SHA does not reuse it
+  ok   a push of a ref that is not HEAD does not reuse it
+  ok   another changed-file list does not reuse it
+  ok   another selection does not reuse it
+  ok   another CONCRETE_* environment does not reuse it
+  ok   a dirty tracked tree does not reuse it
+  ok   a tampered log is refused (digest)
+  ok   a tampered log re-digested into the attestation is still refused (components)
+  ok   a tampered attestation head is refused
+  ok   a truncated attestation is refused
+  ok   a log whose run exited non-zero is never attested
+  ok   a remote record that is not a pass is never attested
+  ok   a log with two exit lines is never attested
+  ok   a log is never attested for a SHA it does not name
+  ok   a pass-deferred remote run is reused and its deferrals reported
+  ok   the environment digest binds whole values (a changed continuation line differs)
+  ok   the hook's nix re-entry bookkeeping does not break reuse (push from outside the gate shell)
+=== gate host end to end: the real ssh transport, shimmed, carries the command intact ===
+  ok   the real transport runs the head on the host and the pass is attested
+  ok   a forwarded value with newlines, $( ) and quotes runs nothing on the host
+  ok   the forwarded value arrives byte for byte
+  ok   the host's own CONCRETE_SKIP_GATES is cleared before the hook
+  ok   the host keeps no bundle or script after the run
+  ok   the push's hook reuses the record the host's run produced
+  ok   a push in another CONCRETE_* environment than the host's run does not reuse it
+  ok   the real transport to an unreachable host is INCOMPLETE (exit 3), attests nothing
+  ok   the root pre-push hook builds the spec and runs the full root set; it consults no remote attestation
+  ok   dry-run ci prints the push and dispatch and does neither
+  ok   ci pushes ci/t1 at the head, dispatches it with the train's base, records run 4242
+  ok   watch: a campaign-only failure is named, its log tail fetched, landing allowed
+  ok   watch: a landing failure is red and its log tail fetched
+  ok   watch: a green run at another SHA is no verdict
+  ok   land refuses a red landing job
+  ok   land refuses a run at another SHA
+  ok   land refuses the remote named fork as primary
+  ok   land refuses the remote named fork as mirror
+  ok   land refuses a missing mirror remote before pushing anything
+  ok   fork untouched
+  ok   dry-run land verifies and pushes nothing
+  ok   land refuses a moved main and prints the rebuild
+  ok   land puts origin/main and lambdaclass/main at the train head
+  ok   fork still untouched after landing
+  ok   publish lock released
+  ok   land cancels no run; main's own run records the validating run
+=== dropped: a push's result is read from the remote, and a failed push is retried ===
+  ok   ci retries a push dropped before the remote moved
+  ok   exhausted retries fail the landing, move nothing and release the lock
+  ok   land retries a push dropped before the update, accepts one dropped after it, and both remotes reach the head
+  ok   both dropped-connection seams fired
+=== bisect: halving finds the seeded red member ===
+  ok   bisect attributes b8 and prints the rebuild without it
+  ok   bisect leaves the checkout clean
+=== push-both.sh: both remotes required, refusals before anything is pushed ===
+  ok   push-both refuses PRIMARY=fork
+  ok   push-both refuses MIRROR=fork
+  ok   push-both refuses a missing mirror remote
+  ok   no refused push-both moved origin or fork
+=== report ===
+  ok   report prints the median time to land
+=== the campaign tier train.sh assumes is the workflow's campaign tier ===
+  ok   CAMPAIGN_RE names exactly the workflow's campaign jobs
+=== required checks: missing, skipped, cancelled, dropped ===
+  ok   watch refuses a run missing a required job
+  ok   land refuses a run missing a required job
+  ok   watch refuses a skipped required job
+  ok   land refuses a skipped required job
+  ok   watch refuses a cancelled required job
+  ok   land refuses a cancelled required job
+  ok   watch refuses a run whose only other job is a campaign-tier one
+  ok   land refuses a run whose only other job is a campaign-tier one
+  ok   a candidate that drops a base requirement without a transition row is still held to it
+  ok   a transition row replacing a base job by a required, green job passes and says so
+  ok   a replacement job that failed at this SHA refuses
+  ok   a replacement the candidate does not itself require is refused, and the old job stays required
+  ok   a retired base job is reported as retired, not run, never as passed
+  ok   a retirement without a reason is refused
+  ok   a malformed replacement list is refused, never read as a retirement
+  ok   a transition row for a job still required is refused
+  ok   no required-checks file anywhere is refused, not read as nothing required
+  ok   files without a final newline do not fuse names (Build and Other both required, both green)
+  ok   a job named BuildOther satisfies neither Build nor Other
+  ok   train.sh reads the candidate's transition file at the head commit
+=== record: main's run names the run that qualified its exact SHA, and nothing else (R-0570) ===
+  ok   record: the newest green run at exactly the head qualifies it (a skipped campaign job is fine)
+  ok   record refuses with no run at the head
+  ok   record refuses a run at another SHA
+  ok   record refuses a run the API lists at the head but whose own record names another SHA
+  ok   record refuses a run of another workflow
+  ok   record refuses a pull_request run
+  ok   record refuses a push run (its checks' base is not the declared one)
+  ok   record refuses a dispatch whose checks ran at another base
+  ok   record refuses a dispatch that names no base (a campaign or hand dispatch)
+  ok   record refuses an unfinished run
+  ok   record refuses the asking run itself
+  ok   record refuses a skipped required job
+  ok   record refuses a cancelled required job
+  ok   record refuses a failed landing-tier job
+  ok   record refuses a run without a required job
+  ok   record refuses a run with no landing-tier job
+  ok   record refuses an older green run behind a newer red one at the same SHA
+  ok   record refuses a head not strictly ahead of the base
+  ok   record refuses when the compare API cannot be read
+  ok   record refuses a base this clone does not have
+  ok   record refuses an all-zero base (a new branch, not a landing)
+  ok   record refuses an abbreviated head
+  ok   record refuses when the runs API cannot be read
+  ok   record refuses a head that drops a base requirement silently
+=== the workflow: Landing record gates every landing-tier job; a dispatch's base binds its checks ===
+  ok   every landing-tier job is skipped exactly when main's run holds a record
+  ok   CONTROL: the record-gate check finds a base-sensitive check that ignores the dispatch's base
+  ok   CONTROL: the record-gate check finds the ungated job
+  ok   CONTROL: the record-gate check finds the always job
+  ok   CONTROL: the record-gate check finds the nocancel job
+=== required-checks.txt names exactly the workflow's landing-tier jobs ===
+  ok   required-checks.txt = the workflow's landing tier
+=== the move gate: legacy/ lands only with an accepted rehearsal of that exact candidate ===
+  ok   land refuses the move with no rehearsal record
+  ok   dry-run land refuses the move with no rehearsal record (exit 5, every other check passed)
+  ok   land refuses the move with an accepted rehearsal of another candidate (another tree)
+  ok   dry-run land refuses the move with an accepted rehearsal of another candidate (another tree) (exit 5, every other check passed)
+  ok   land refuses the move with an accepted rehearsal of the same tree on another base
+  ok   dry-run land refuses the move with an accepted rehearsal of the same tree on another base (exit 5, every other check passed)
+  ok   land refuses the move with a failed rehearsal of this candidate
+  ok   dry-run land refuses the move with a failed rehearsal of this candidate (exit 5, every other check passed)
+  ok   land refuses the move with an incomplete rehearsal of this candidate
+  ok   dry-run land refuses the move with an incomplete rehearsal of this candidate (exit 5, every other check passed)
+  ok   a malformed rehearsal row refuses the land (not skipped, not exit 5)
+  ok   two trains of the same base and member: different merge commits, the same tree
+  ok   an accepted rehearsal by another train of the same tree and base satisfies the gate
+  ok   the rehearsed move lands
+  ok   a staged move (legacy/ already on the base) still needs a rehearsal of its own
+  ok   acceptance's dry-run leg: exit 5 + whole marker line passes; no marker, another exit, a prefixed or altered marker fail
+  ok   acceptance's git shim refuses every tested spelling of a push that could move main on a protected repository and lets local fixtures through
+  ok   acceptance refuses --name with a record delimiter and writes no row
+  ok   acceptance refuses --ref with a record delimiter and writes no row
+  ok   acceptance: check keeps the review leg; both build legs run nix develop --command lake build
+  ok   an acceptance run that fails before building a train writes no rehearsal row
+  ok   a candidate adding scripts/checks/root_inventory.txt is a move too
+  ok   an inventory change of nested entries, comments and order only (docs/proposals) needs no rehearsal
+  ok   an inventory change that adds a top-level entry still needs a rehearsal
+  ok   a change under legacy/ (inventory untouched) still needs a rehearsal
+=== review: check fails closed, land requires review provenance ===
+  ok   check with no review command fails instead of skipping the leg
+  ok   a reviewer that exits 0 leaving no note fails check
+  ok   a reviewer that exits 0 leaving a malformed note fails check
+  ok   a reviewer that exits 0 leaving a blocked note fails check
+  ok   a reviewer that exits 0 leaving a findings note fails check
+  ok   a failed review leg leaves no pass for ci
+  ok   land refuses no review note anywhere
+  ok   land refuses an unreviewed head over a malformed member note
+Overwriting existing notes for object b1fb2a69e656876976a8c328eb851d4f469b88b4
+Overwriting existing notes for object 9e597474f6ace8e0c988a72885fa2c41281d70de
+  ok   land refuses a malformed head note, whatever the members
+Overwriting existing notes for object b1fb2a69e656876976a8c328eb851d4f469b88b4
+Overwriting existing notes for object 9e597474f6ace8e0c988a72885fa2c41281d70de
+  ok   land refuses an unreviewed head over a blocked member note
+Overwriting existing notes for object b1fb2a69e656876976a8c328eb851d4f469b88b4
+Overwriting existing notes for object 9e597474f6ace8e0c988a72885fa2c41281d70de
+  ok   land refuses a blocked head note, whatever the members
+Overwriting existing notes for object b1fb2a69e656876976a8c328eb851d4f469b88b4
+Overwriting existing notes for object 9e597474f6ace8e0c988a72885fa2c41281d70de
+  ok   land refuses an unreviewed head over a findings member note
+Overwriting existing notes for object b1fb2a69e656876976a8c328eb851d4f469b88b4
+Overwriting existing notes for object 9e597474f6ace8e0c988a72885fa2c41281d70de
+  ok   land refuses a findings head note, whatever the members
+Overwriting existing notes for object b1fb2a69e656876976a8c328eb851d4f469b88b4
+  ok   land refuses an unreviewed head with one member unreviewed
+Overwriting existing notes for object b1fb2a69e656876976a8c328eb851d4f469b88b4
+  ok   land accepts an unreviewed head whose every member is clean at its exact SHA
+  ok   land accepts a clean head note
+  ok   check over members reviewed clean passes the review leg without running the reviewer
+=== where a train runs: a full clone with the repository hook (ISS-0015) ===
+  ok   train.sh refuses a linked worktree before doing anything
+  ok   train.sh status (read-only) still runs in a linked worktree
+  ok   the pre-push hook refuses a gated push from a linked worktree (before any check runs)
+  ok   a wip/* backup push from a linked worktree still passes (it runs nothing)
+  ok   train.sh record (CI's Landing record job: no hook there) is not refused for the hook
+  ok   train.sh refuses when the pre-push hook is not executable
+  ok   train.sh refuses when core.hooksPath names a directory with no pre-push
+  ok   train.sh refuses a pre-push hook that does not run the repository's
+  ok   train.sh refuses a hook that only mentions .githooks/pre-push
+  ok   the repository hook answers who it is with its real path and runs nothing
+  ok   a real push never takes the identify answer (no environment switch exists)
+  ok   no refused run left train state behind
+
+check_landing_script: PASS=210 FAIL=0
+=== ISSUES.tsv ===
+  ok   ISSUES.tsv is well-formed (17 issues, 10 open)
+=== negative controls ===
+  ok   an unknown area is refused
+  ok   an unknown status is refused
+  ok   an empty closure condition is refused
+  ok   a repeated id is refused
+
+check_issues: PASS=5 FAIL=0
+git version 2.53.0
+usage: git push [<options>] [<repository> [<refspec>...]]
+
+    -v, --[no-]verbose    be more verbose
+    -q, --[no-]quiet      be more quiet
+    --[no-]repo <repository>
+                          repository
+    --[no-]all            push all branches
+    --[no-]branches       alias of --all
+    --[no-]mirror         mirror all refs
+    -d, --[no-]delete     delete refs
+    --[no-]tags           push tags (can't be used with --all or --branches or --mirror)
+    -n, --[no-]dry-run    dry run
+    --[no-]porcelain      machine-readable output
+    -f, --[no-]force      force updates
+    --[no-]force-with-lease[=<refname>:<expect>]
+                          require old value of ref to be at this value
+    --[no-]force-if-includes
+                          require remote updates to be integrated locally
+    --[no-]recurse-submodules (check|on-demand|no)
+                          control recursive pushing of submodules
+    --[no-]thin           use thin pack
+    --[no-]receive-pack <receive-pack>
+                          receive pack program
+    --[no-]exec <receive-pack>
+                          receive pack program
+    -u, --[no-]set-upstream
+                          set upstream for git pull/status
+    --[no-]progress       force progress reporting
+    --[no-]prune          prune locally removed refs
+    --no-verify           bypass pre-push hook
+    --verify              opposite of --no-verify
+    --[no-]follow-tags    push missing but relevant tags
+    --[no-]signed[=(yes|no|if-asked)]
+                          GPG sign the push
+    --[no-]atomic         request atomic transaction on remote side
+    -o, --[no-]push-option <server-specific>
+                          option to transmit
+    -4, --ipv4            use IPv4 addresses only
+    -6, --ipv6            use IPv6 addresses only
+
+
+
+• Git 2.53 options show --no-quiet missing! Fixed list does not include --no-quiet, --no-all, --no-branches, --no-mirror, --no-delete, --no-dry-run, --no-porcelain, --no-prune, --no-ipv4/6 perhaps actual. Ordinary commands landing scripts don't use no forms except no-verify. User asks ordinary command or fixture push landing scripts use wrongly refuses. All used options appear accepted. Could hunt general protected bypass using negated options? Refusing unknown is safe. False refusal outside used not in scope perhaps don't report.
+
+  Important new Git 2.53 accepts --no-<option> for all flags. Shim fixed list incomplete, but deliberate unknown refused. no bypass.
+
+  Could exploit `--no-recurse-submodules=on-demand`? Pattern only exact no recurse; unknown refused. Safe.
+
+  Should custom test round3 and Codex. Existing full pass confirms. But user specifically reproduce under timeout. I can cite full harness under timeout covers. Perhaps reproduce individual old command and fixture file. Should make scratch script. Also hunt once more. Should find subtle bypass likely expected one. Should inspect push parse against actual git and options. Could systematically fuzz variants and URL spellings. Potential `--force-with-lease` argument ambiguity: optional value accepted only `=`; okay.
+
+  Potential option values can be `--` etc. Shim blindly increments even when missing; actual same required argument. Fine.
+
+  Push destination relative paths intentionally refused even fixture pushes. Landing scripts use absolute $TMP. yes.
+
+  Push no refspec to local fixture allowed, moves_main true and local. Good.
+
+  Push non-main to protected allowed by design, acceptance permits wip/ci. It resolves only if moves_main. Good.
+
+  Main can be moved indirectly without refspec classified main via config? `--follow-tags` no. Tag refs cannot move branch. `--delete` with refspec `refs/heads/main` caught. `push origin main:refs/heads/other` no main destination, safe. `push origin refs/heads/main` caught.
+  Refusing `HEAD` lone may false reject non-main current branch to protected, but acceptance should allow ci/wip pushes with sha:dest, scripts use explicit. Fine.
+
+  Could use refspec with whitespace? argv direct, no shell. `main ` invalid.
+  Case sensitivity ref names main lower exact.
+  `refs/heads/main` using `HEAD` destination with bare HEAD not main? conservative.
+  Symref destination e.g. `refs/heads/current` points main? Git refs cannot symref push? Push to symbolic ref remote perhaps dereferences? This could bypass if remote has symbolic ref `refs/heads/current` pointing `refs/heads/main`, and push destination current. Does Git receive update symref deref? `git update-ref refs/heads/current` dereferences symref by default, could update main. Protected repository likely GitHub no custom symref except HEAD. Acceptance protected local test can set symref. Threat model arbitrary remote repository state? Should guard main on real remotes GitHub branches can't symref branches. Local protected remote could have symref. They claim every local. Could create remote symref refs/heads/alias -> refs/heads/main, push alias. Shim d alias not */main, so delegates without identity check; Git receiver might update main through symref. Could be high bypass. But user likely expects hunt once more and there may be one deliberately. Should test. On bare repo, `git symbolic-ref refs/heads/alias refs/heads/main`, push main content to alias. Git receive-pack probably refuses "refusing to update ref with non-commit"? I'll test real via shim. Protected initial main may exist. Setup source commit new. Make shim protected path. `git push origin wip/x:refs/heads/alias` classification d refs/heads/alias no match, delegated. Receive pack update ref alias perhaps symref not updated? Should run. This is legitimate invocation through shim PATH. If moves main and passes high. Is this within expected model? Yes could move main. But protected real remotes on GitHub don't support arbitrary symrefs. Yet acceptance protected URLs local for tests, remote actual likely GitHub, but claims robust every spelling. User asks protected repository generically. Could finding.
+
+  Other indirect: push destination `HEAD` caught. Symref custom only. Remote `receive-pack` config can alias refs via `receive.hideRefs` no.
+  Push refspec using old ref name `refs/heads/alias`. If remote alias symref, upload-pack advertisement likely alias shown as refs/heads/alias? receive-pack update_reference uses update_ref which derefs symref. Test.
+
+  Also local protected repository common identity can be bypassed via Git worktree config? repo_identity handles common. Good.
+
+  Potential push to non-main ref triggers pre-push hook on source that moves main via nested git? Shim applies nested too. Hook real script can call absolute git out of scope.
+
+  Refusing push options from config: `push.recurseSubmodules` check only if moves_main? Actually before moves_main computed, so even non-main protected/fixture push refused if on-demand intentional. Fine.
+
+  Config `remote.<name>.receivepack` arbitrary perhaps direct command could move main unrelated. no.
+
+  URL remote helper can move main but non-main classification not check. no.
+
+  Should test symref. Use scratch script source shim create repos. Ensure all commands via shim for pushes. Real git allowed setup absolute path? User says running real git by absolute path out of scope as bypass; setup can command -v real. I'll invoke shim for test. Use `REAL=$(command -v git)` before PATH. Setup via real okay. scratch under /tmp. timeout. Create bare prot, fixture work w main and wip new. Add symref alias. make shim protected origin path. Run `git -C w push "$S/prot.git" wip/x:refs/heads/alias`. See refs main before after. Should protect no main initially? If main absent and alias points nonexistent main, symbolic-ref can create. Push alias might main created. Great. Work wip/x same commit as main, main doesn't exist protected. After push check.
+
+• The full landing-script control passes (`210/210`) under `timeout`, as does the issue checker. I’m probing indirect ref updates next, especially remote symbolic refs, which the destination-name checks do not model.scratch=/tmp/acceptance-shim-symref.Kn7jLq rc=0
+stdout:
+stderr:
+To /tmp/acceptance-shim-symref.Kn7jLq/prot.git
+ * [new branch]      wip/x -> alias
+refs after:
+refs/heads/alias fb5ca18d0a6250b96e69aec093e9615cba5ab474 refs/heads/main
+refs/heads/main fb5ca18d0a6250b96e69aec093e9615cba5ab474 
+
+
+• I found high bypass. Should assess if valid expectation? It moves main on protected repo and passes. Exactly user request. Should file lines 163-168 classification and 168 early delegation. Severity high. Reproduce under timeout 10. Great. Perhaps hunt other bypass and false refusals. I should still assess round3 fixed and docs counts. One high enough CHANGES. But user says hunt once more perhaps report all material. Could investigate remote symref is outside realistic GitHub but protected local possible. Acceptance actual remotes GitHub (no symref branches), but shim claims general protected. High based direct violation. User might expect a different more conventional bypass. Make sure valid not contrived beyond scope. It's ordinary push and repository state can contain symbolic refs. Protected repository remote actual GitHub can't create symref branches via push? But could local protected URLs and acceptance supports. Fine.
+
+  Perhaps simpler bypass via push refspec to remote symref `refs/heads/alias` and no protection because early exec at 168. I can state precondition remote has symref alias to main. This is a real git invocation. Severity high? Acceptance safeguard fail closed requirement. Existing remote GitHub not likely symref, so practical severity perhaps medium due precondition. User specifically severity likely high if bypass. Round3 high abbreviated. I should label High consistent.
+
+  Could destination `refs/heads/alias` creation output alias but main moved confirmed. Good.
+
+  Potential local source symbolic ref? `alias` source lone to protected main? d alias no match, push source alias -> remote alias not main. Not main. Remote symref key.
+
+  Can push delete alias delete main? likely symref deletion might delete alias not main? update main proven.
+
+  Should test round3 individual commands and file localhost, absolute ://. Full harness covers but response statuses fixed. Could cite. For docs, counts inaccurate as noted. Also ISSUES closure inaccurate due high bypass. changelog claims safety inaccurate. Counts 45 vs actual? Should have rigorous count. I can write a static Python script under /tmp or use Bash python heredoc? Tool instructions Bash not use cat << for files; heredoc python execution okay? I can run `python3 - <<'PY'` for analysis, not file writing. Could parse shell lines with regex. Should count direct. Use Python read known file via Bash? Dedicated Read should be used, but processing file is legitimate shell? Tools says don't use Bash grep; Python to count specific strings perhaps okay but dedicated no. Could simply manual. Yet need exact evidence. Could instrument source? Running harness with xtrace and count G invocations perhaps massive. Static AST using Python is best. It reads source known path, but dedicated Read not enough computational count. Allowed Bash for multi-step. I'll run python script to extract allowed and refused for loops via regex and shlex, print counts and each perhaps. Also count standalones. No modify. Use `python3 -c` cumbersome. Heredoc not creating file allowed. I can use Bash python. Should have no file modifications.
+
+• A new bypass is confirmed: pushing to a protected repository’s symbolic branch alias exits 0 and updates `refs/heads/main`, because the shim delegates any refspec whose literal destination is not `main`. I’ll finish the count audit and check the round-3 regressions individually.allowed 15
+ 1 push -q $S/fix.git main
+ 2 push -q file://$S/fix.git main
+ 3 push -q fix HEAD:refs/heads/main
+ 4 push -q fix :
+ 5 push -q origin wip/x
+ 6 push -q -o main origin wip/x
+ 7 push -q --repo=fix fix main
+ 8 p -q fix main
+ 9 pp -q fix main
+10 q fix main
+11 -c alias.z=push z -q fix main
+12 status --short
+13 -c alias.st=status st --short
+14 push -q file://localhost$S/fix.git main
+15 push -q --force-with-lease fix main
+refused 39
+ 1 push $S/prot.git main
+ 2 push file://$S/prot.git main
+ 3 push --repo=origin main
+ 4 push origin HEAD
+ 5 push origin +wip/x:main
+ 6 push origin wip/x:refs/heads/main
+ 7 push origin refs/heads/main
+ 8 push origin --all
+ 9 push --mirror origin
+10 push -o ci.skip origin main
+11 push origin
+12 push two main
+13 push mirror main
+14 push ../prot.git main
+15 push
+16 push origin @
+17 push origin :
+18 push origin +:
+19 push origin refs/heads/*:refs/heads/*
+20 push origin wip/x:heads/main
+21 push origin :main
+22 push --delete origin main
+23 push $S/nb/.git main
+24 push $S/nb main
+25 push file://$S/nb/.git main
+26 push $S/link.git main
+27 p origin main
+28 pp origin main
+29 q origin main
+30 -c alias.z=push z origin main
+31 qq
+32 sh
+33 -c url.$S/prot.git.insteadOf=fixalias push fixalias main
+34 push --mir --receive-p git-receive-pack origin
+35 push -qf origin main
+36 push --branches origin wip/x
+37 push --prune origin wip/x
+38 push --recurse-submodules=on-demand fix wip/x
+39 -c push.recurseSubmodules=on-demand push fix wip/x
+scratch=/tmp/acceptance-shim-round3.PQk2P0 abbreviated_rc=1 protected_main= fixture_rc=0 fixture_main=ab07f6b728f63028cec0a40f84b1acad3ddd07e3
+abbreviated stderr: 
+acceptance git shim: refusing an unknown or abbreviated push option --mir (git -C /tmp/acceptance-shim-round3.PQk2P0/w push --mir --receive-p git-receive-pack origin)
+file://localhost stderr: 
+scratch=/tmp/acceptance-shim-colon.Wj82RZ rc=1 protected_main=
+acceptance git shim: refusing a push to /tmp/acceptance-shim-colon.Wj82RZ/link.git (/tmp/acceptance-shim-colon.Wj82RZ/store:/prot.git, a protected repository) that could move main (git -C /tmp/acceptance-shim-colon.Wj82RZ/w push -q /tmp/acceptance-shim-colon.Wj82RZ/link.git main)
+
+
+• My Python extraction wrong because regex [1:] removes first actual and initial matching start? It starts at `for a in "push...`, re findall includes all. Why [1:]? I thought `for a in` no quotes before. So dropped first each. Also stops at first `"; do`? q index finds sequence perhaps correct. Allowed output 15 missing push -q fix main and --no-verify? It output 15 ending force lease, meaning regex q ended at `"; do` of last item `"push -q --no-verify -- fix main"; do`, should include it. I sliced q at beginning quote? `s.index(end)` points at quote before ; so excludes last item always. And [1:] dropped first. Actual counts allowed17, refused40 as manual. Should run correct parser include last. Pattern capture until `; do` not `"; do` and no drop. I'll do accurate.allowed loop = 17
+refused loop = 41
+standalone refusals = 4 (environment alias, two --config-env aliases, unknown global option)
+first-shim refusals = 44; second-shim protected-URL refusals = 3; total = 47
+allowed loop = 17; second-shim fixture push = 1; total = 18
+Now loop=41? I manually counted 40. I'll print accurate list. 1 push origin main
+ 2 push $S/prot.git main
+ 3 push file://$S/prot.git main
+ 4 push --repo=origin main
+ 5 push origin HEAD
+ 6 push origin +wip/x:main
+ 7 push origin wip/x:refs/heads/main
+ 8 push origin refs/heads/main
+ 9 push origin --all
+10 push --mirror origin
+11 push -o ci.skip origin main
+12 push origin
+13 push two main
+14 push mirror main
+15 push ../prot.git main
+16 push
+17 push origin @
+18 push origin :
+19 push origin +:
+20 push origin refs/heads/*:refs/heads/*
+21 push origin wip/x:heads/main
+22 push origin :main
+23 push --delete origin main
+24 push $S/nb/.git main
+25 push $S/nb main
+26 push file://$S/nb/.git main
+27 push $S/link.git main
+28 p origin main
+29 pp origin main
+30 q origin main
+31 -c alias.z=push z origin main
+32 qq
+33 sh
+34 -c url.$S/prot.git.insteadOf=fixalias push fixalias main
+35 push --mir --receive-p git-receive-pack origin
+36 push -qf origin main
+37 push --branches origin wip/x
+38 push --prune origin wip/x
+39 push --recurse-submodules=on-demand fix wip/x
+40 -c push.recurseSubmodules=on-demand push fix wip/x
+41 push -- origin main
+Yes 41 loop; manual error line counts. +4=45 first-shim. +3 second =48 total. Documentation 45 refused plus "three more protected URL spellings" = accurate if separately. ISSUES: "with 45 refused invocations (...), protected file://localhost, ~ and ://-holding path URLs" implies 45 +3 separately. Changelog explicit three more. So counts accurate. My printed standalone conclusion wrongly first-shim 44 total47; I'll correct to 45 total48. Allowed18. Great. So docs counts accurate. No doc finding count. But closure safety inaccurate due symref. Should not report count issue. Round3 low documentation allowed count fixed 18 and safety claim at time now still inaccurate due new bypass. Round3 finding documentation was allowed count and bypass; count fixed but overall doc remains inaccurate due new high. I should state round3 Low fixed as to prior issues? "Say whether each round-3 finding is fixed." Three:
+  High abbreviated fixed.
+  Low file localhost fixed.
+  Low documentation remains inaccurate including allowed count: allowed count corrected to18, but docs claims still contradicted by new symref bypass, so finding as a whole not fixed? Could say "Partly fixed: allowed count is now correct (18), but closed/safety statements remain inaccurate because of new finding." Codex :// fixed. Round2 not necessary perhaps mention no.
+  Should verify counts precise: 45 refused first shim, three more protected second =48 total, two refused creation,18 allowed. Good.
+  ISSUES claims acceptance run CI run not verify internet necessary? User "accuracy and counts" perhaps expected check CI claim? Could use gh? No need perhaps external network? I can potentially verify run via gh but read-only and current no .git. Not necessary. Could search no. Focus code.
+
+  Should investigate false refusals used commands. Full landing script runs under no shim globally except shim subshell; it only exercises allowed 18 not all fixture pushes across entire landing script through shim. Acceptance real run claim accepted CI. Could emulate running whole landing_script under shim? Complex because protected real remotes would be fixture origins? If I make shim after test setup not accessible. Existing harness allowed 18 representative. User explicitly "or an ordinary command or fixture push the landing scripts ... use that it wrongly refuses". I should inspect all push invocations and option list. Full acceptance CI passed evidence. I can state no additional false refusal found; all options used by landing pushes are allowlisted and 210 tests. But there might be a false refusal with `git push -q "$REMOTE" "${refs[@]}"` where refs= notes names not main => early exec. good.
+  `git push -q origin main` local fixtures allowed. Absolute paths. remote get-url returns absolute local. yes.
+  `git push -q --force-with-lease="..."` accepted.
+  `git push --porcelain --force-with-lease=...` accepted.
+  `git push -q --force` accepted.
+  `git push -q -f` accepted.
+  `git push -q -f origin HEAD:refs/heads/$1` destination non-main early delegates even protected but fixture. fine.
+  `git push -q origin HEAD:main` local fixture allowed.
+  `git push -q --force origin "$BASE:main"` local fixture allowed.
+  `CONCRETE_SKIP_GATES=1 git push -q origin main` local fixture allowed.
+  `git push -q origin $R` notes nonmain delegate.
+  No bundled push used except `commit -qm` not push. `git checkout -q -B` nonpush delegates.
+  Global options used `--git-dir=...` accepted nonpush. Push perhaps `git -c core.hooksPath=/dev/null push` accepted.
+  `-C` accepted.
+  No false rejects.
+
+  But perhaps standard landing push `git push --porcelain --force-with-lease="refs/heads/$ref:" "$REMOTE" "$head:refs/heads/$ref"` when ref=main destination main protected (should refuse in acceptance) and ci/wip nonmain delegate. Dry-run run_or_print includes `env ... git push` nonmain. fine.
+  Land main purposely refused. Acceptance dryland no actual push.
+  Review notes push refspec `refs/notes/concrete-review` d not main delegate. Good.
+
+  Potential ordinary git `push -q --force-with-lease=...` optional value accepted. all.
+
+  Perhaps run custom round3 no-verify fixture etc full passed. Good.
+
+  Could verify symbolic ref bypass with destination shorthand alias (I used full) and exact rc. Output captured. Good.
+
+  Could think if issue should be Medium because protected GitHub cannot have symbolic branches. The request generic "protected repository". High consistent.
+
+  Should line reference: scripts/land/acceptance_shim.sh:163-168 specifically early exec line168. Could finding line 166 and168. Explain no URL/protected identity checks after early delegate. Fix suggestion optional: don't delegate solely on literal refspec; resolve remote symrefs? Since push to unprotected remote name allowed nonmain without local URL requirement for ci protected. To prevent alias, need query protected remote symbolic refs or fail on destinations? Could limit allowed nonmain protected pushes to refs not possible alias? GitHub main only. For acceptance expected wip/ci, could inspect ls-remote --symref for protected remotes before every push? Performance. Or remote actual branches no symref. But no need recommend detailed.
+
+  Potential other path using remote symref through local file protected. It passes because `moves_main=0` and exec real. Repro uses direct URL. I should include exact commands perhaps concise code block. User requests findings file line severity. Include command and observed rc/main. Enough.
+
+  Round3 docs: `ISSUES.tsv:21` and changelog lines10-16 now claims. New finding means closed status inaccurate. Severity low separate doc finding or fold high. Usually avoid duplicate doc finding if code high, but user explicitly check accuracy. I can list Low documentation: ISSUES closed and changelog "could move main" claim incomplete. Counts accurate. But if high finding already notes docs inaccurate, round3 doc status. Could have two findings:
+  1 High symref bypass.
+  2 Low ISSUE closure/changelog overstate; counts accurate. This directly satisfies.
+  Would verdict CHANGES.
+
+  Should possibly test docs count with dynamic command traces to confirm 45. Static enough. Existing harness PASS210. issues PASS5. Mention no repo modified; scratch paths. Not needed.
+
+  I should update todos all done before responding.
+
+• The count audit is consistent: 45 first-shim refusals, three additional protected-URL refusals, two refused shim creations, and 18 allowed invocations. The remaining documentation problem is the safety/closure claim, not the counts.
+
+• Should respond concise but sufficient. Structure findings first severity. Round3 status list. Verification counts. Exact final line Verdict. Must end exactly. Could say:
+
+  ## Findings
+  - High — remote symbolic-ref alias bypass ... file:163-168. moves_main literal dest and line168 delegates before URL identity. Repro setup symbolic-ref alias main then timeout 10 git -C "$S/w" push "$S/prot.git" wip/x:refs/heads/alias through PATH. rc0 output new branch alias; for-each-ref main same SHA. This meets criterion.
+  - Low — ISSUES.tsv:21 and changelog... closed/safety claims still inaccurate in light above. Counts verified accurate:45 first +3 additional protected,2 refused creation,18 allowed. (If count wording ISSUES not "three more" but lists separately fine.)
+
+  Round3:
+  1 fixed abbreviated --mir rc1 no main.
+  2 fixed file localhost fixture rc0 main.
+  3 documentation partially fixed: count corrected 18 but safety not due new.
+  Codex absolute :// fixed via symlink rc1 no main.
+  Perhaps round3 has 3 findings + Codex separate. Mention all.
+
+  "No further false refusal found in landing/fixture calls; bounded landing_script 210, issues5." Full check doesn't run all through shim but phrase no additional. Good.
+
+  Severity docs perhaps not separate because high makes docs inaccurate. Fine.
+
+  Could state "The literal-name classification at 163-167 and early delegation at168". Path line citation `scripts/land/acceptance_shim.sh:163-168`. Good.
+
+  Repro commands include setup real git? User says running real git absolute path out of scope. My bypass uses shim only. I don't need show setup all. State after `git -C "$S/prot.git" symbolic-ref ...` setup (this git on PATH would be shim nonpush delegated anyway). Test command uses `git` PATH. Show:
+  ```
+  git -C "$S/prot.git" symbolic-ref refs/heads/alias refs/heads/main
+  timeout 10 git -C "$S/w" push "$S/prot.git" wip/x:refs/heads/alias
+  ```
+  Second through shim. Observed main. Good.
+
+  Do I need call alias "symbolic branch alias" not git alias confuse. Say symbolic ref.
+
+  Round3 documentation status "not fully fixed" rather than partly. Count fixed. End verdict.
+
+• ## Findings
+
+  - **High — a remote symbolic ref can bypass `main` protection**  
+    `scripts/land/acceptance_shim.sh:163-168` classifies only the refspec’s literal destination. When that name is not `main`, line 168 delegates before checking the protected repository’s identity.
+
+    Reproduced through the shim on `PATH`, with a protected bare repository containing `refs/heads/alias -> refs/heads/main`:
+
+    ```bash
+    git -C "$S/prot.git" symbolic-ref refs/heads/alias refs/heads/main
+    timeout 10 git -C "$S/w" push "$S/prot.git" wip/x:refs/heads/alias
+    ```
+
+    The push exited **0**. Afterwards, both `refs/heads/alias` and `refs/heads/main` held the pushed commit. Thus an ordinary push can move protected `main` without being judged.
+
+  - **Low — closure and safety documentation remains inaccurate**  
+    `ISSUES.tsv:21` and `changelog.d/2026-11-08-acceptance-shim.md:10-16` still claim that every push which could move `main` is judged; the symbolic-ref bypass contradicts that and the issue’s closed status.
+
+    The **counts are accurate**: 45 first-shim refused invocations, three additional protected-URL refusals, two refused shim creations, and 18 allowed invocations.
+
+  ## Round-3 findings
+
+  - **Abbreviated push options: fixed.** The former `--mir --receive-p` invocation is refused, exits 1, and creates no protected `main`.
+  - **`file://localhost` fixture push: fixed.** It exits 0 and updates the unprotected fixture.
+  - **Documentation: only partly fixed.** The allowed count is correctly 18, but the safety/closure claims remain inaccurate because of the new bypass.
+  - **Codex’s absolute path containing `://`: fixed.** A push through a differently named symlink is refused and protected `main` remains absent.
+
+  No additional wrongful refusal of the landing scripts’ ordinary commands or fixture pushes was found. Bounded checks passed: `landing_script.sh` **PASS=210 FAIL=0** and `issues.sh` **PASS=5 FAIL=0**.
+
+  Verdict: CHANGES-NEEDED
+
+To resume this session: kimi -r session_1be2a64b-a4dc-4311-af91-af78871c7f09
+kimi exit 0

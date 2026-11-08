@@ -1,0 +1,78 @@
+Concrete is a systems language rebuilt as a fully proven compiler in Lean (no GC, linear ownership, second-class references, explicit capabilities, no hidden traps, "know everything"). Owner principles: best long-term design; one form per situation; LLMs write, humans read and audit; verbose is fine when clear. You may read the repository here (docs/decisions.md, docs/PHILOSOPHY.md, docs/proposals/SPARK.md, ConcreteSpec/, legacy/docs/spec/) and the _review/ files.
+
+Round 2. In round 1 you (Codex, Kimi, agy) reviewed Claude's recommendations (round-1 outputs: _review/codex.out, _review/kimi.out, _review/agy.out; codex.out's final section is at its end). Claude accepted the objections and revised. Items marked * were revised after round 1. This is the complete list now proposed to the owner. Grammar items 30-53 refer to the numbered OPEN items in _review/GRAMMAR_REVIEW.md section 10; simplification items refer to _review/SIMPLIFY_MERGED.md.
+
+A. Process
+1. Review-round cap reached: the owner may approve one exact SHA after Codex, Kimi and agy all reviewed it; the approval and every outstanding finding/verdict are recorded; it never replaces gates or proof obligations. Yes.
+2. A branch mixing classes gets the highest cap (docs 2 / scripts 3 / compiler-spec 5), classified by the actual diff. Yes.
+3. One review round on where each std item lives. Yes.
+4. Trap names: overflow, division_by_zero, invalid_shift, out_of_bounds, invalid_range, abort (diagnostic categories, distinct from checked-operation error types). Yes.
+5. Land slice 0 at 0e2950e7 (3 reviewers ACCEPT, CI 9/9 green). Yes.
+
+B. Language simplifications
+6. Remove dot method calls; Type::f(x) or Trait::f(x). Yes.
+7.* Replace self/&self/&mut self receiver forms with an ordinary typed first parameter, preserving one consuming Destroy protocol. Yes.
+8. Constructors always field: value. Yes.
+9. Patterns always field: binder (revises OD130; ignored-field rules and linear consumption preserved). Yes.
+10. Contracts mark exact mathematical arithmetic explicitly (spelling/scope later; OD12, OD145 preserved). Yes.
+11.* Remove expression `as` casts; one canonical named lossless conversion (OD11 value-domain rule and provenance restrictions preserved); `as` stays only for import renaming. Yes.
+12. Replace consuming *h on heap boxes with one named move-out (allocator identity, conservation, distinct from destruction). Yes.
+13. assert(e); always parenthesized (optional `by` suffix). Yes.
+14. #[link_name("sym")] / #[export_name("sym")]. Yes.
+15. Imports use ::. Yes.
+16. Remove char; u8 plus explicit UTF-8 operations; quoted ASCII literals, patterns, comparisons migrate explicitly. Yes.
+17.* Remove print/println/append builtins. Output: ordinary calls needing Console and its grant, linear errors kept. String append: ordinary allocating operation under with(Alloc), not Console. Yes.
+18. Every local has a written type and every function a result arrow incl. -> Unit; argument-based generic inference kept; destructuring/ghost-binding typing rules defined later (item 55). Yes.
+
+C. Removals and keeps
+19. OrderedMap only now; HashMap when the KV store (slice 23) measures need; no compiler privilege for map names. Yes.
+20.* Process: audit every foreign declaration first; remove only if none needs it. Yes.
+21. defer keeps late reads (Q9.8), with reserved by-value arguments, held loans and cleanup order preserved. Keep.
+22.* Refuse handwritten ordinary bodyless functions; compiler-generated interfaces (OD9/OD39) keep bodyless declarations, as do trait signatures and extern. Yes.
+23. Remove general packed structs until a real packed foreign ABI needs them (revises OD111/OD147; a demonstrated ABI reopens). Yes.
+24.* Local assume: remove only after a replacement (named trusted contracts with evidence identity) is shown on real examples, including point-local conditional facts; until then it stays explicit, tracked and never admits a safety obligation. Yes.
+25. Function values: keep decided fn pointer + explicit context with contracts. Keep.
+26.* Constants: direction = computed at compile time; constant values must be Copy; the closed total initializer subset is defined, and the decided comptime reopening conditions checked, before revising Q6.4/TYPE-22. Yes.
+27.* Explicitly keep value-producing if/match, both proof scopes, existential brands. Keep.
+28.* SPARK 4(b): optional #[depends(result <- a, b)], checked against the derived fact, never trusted. Yes.
+29.* SPARK 4(c): refuse a dead store to a mut local (extends OD62). Yes.
+
+D. Grammar items all agreed (OPEN numbers in parentheses)
+30. (OPEN-1) UTF-8 source; space/tab/LF/CR whitespace; // comments ending at LF, CR or EOF; no block comments/BOM/shebang/NUL.
+31. (OPEN-2) ASCII case-sensitive identifiers.
+32. (OPEN-4) one closed builtin-name table, no aliases.
+33. (OPEN-6) exactly two escape lists; no raw line breaks in quotes.
+34. (OPEN-7) longest-match tokens; >> split only in generic closers.
+35. (OPEN-10) type N = T; and const N: T = e;
+36. (OPEN-15) closed attribute set.
+37. (OPEN-19) borrow/defer restrictions as proposed.
+38. (OPEN-21) views and constant-time APIs as ordinary calls.
+39. (OPEN-24) no concurrency syntax until the model is reviewed.
+
+E. Grammar choices
+40. (OPEN-3) reserve spec, by, kept, Self, while, Entropy; self contextual. Yes.
+41. (OPEN-5) keep typed number suffixes like 200u8; exact suffix grammar later. Yes.
+42. (OPEN-8) keep the legacy precedence table (chained comparisons parse); agy preferred refusing chains. Yes.
+43. (OPEN-9) attributes, pub, item; mandatory commas, optional trailing comma. Yes.
+44. (OPEN-11) import a::b::{x, y as z}; nonempty list. Yes.
+45. (OPEN-13) spec fn f(...) -> T = e; assert(e) by path(args); pure spec subset; ghost let name-restriction fixed. Yes.
+46. (OPEN-14) type params before cap params, cap C, + unions, {} empty; cap names never ordinary types. Yes.
+47. (OPEN-16) keep decided statement/value block behaviour; common-prefix LL(1) grammar proved. Yes.
+48. (OPEN-17) qualified enum patterns; every arm ends with a comma. Yes.
+49. (OPEN-18) 'label: while, break 'label;, continue 'label;; no empty statements. Yes.
+50. (OPEN-20) no empty array literals; empty structs kept. Yes.
+51. (OPEN-22) explicit exists/pack/unpack brand surface and named binder contracts on fn types. Yes.
+52. (OPEN-23) kept buf: H, paired Kept<H> completion, no borrow-derived kept arguments (full Q3.12); only pointer qualification left. Yes.
+53. (OPEN-25) ratify refusal of value while...else and postfix member ->. Yes.
+
+F. Later, no decision now
+54. Core freeze A2c after spec-core proofs and A2i integration.
+55. Exact names/signatures: lossless conversion, move-out, math boundary, output/append, typed destructuring/ghost rules, and all spellings from B, C, E, shown to the owner as before/after code.
+56. Entropy grant shape at slice 6.
+57. Concurrency model at slice 28.
+58. Niches / smaller enum tags only if a workload needs them.
+
+TASK: For each item 1-58 say AGREE or DISAGREE (DISAGREE only with a concrete reason, at most 40 words: wrong, inconsistent, breaks a decided row, linear ownership, a proof or a showcase, or introduces a second form). You may list AGREE items compactly as ranges. Then list any decision still missing. Do not modify files.
+
+End with exactly one line:
+ANSWER: DISAGREE=<item numbers or none>; MISSING=<short list or none>

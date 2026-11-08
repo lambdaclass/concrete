@@ -1,0 +1,10 @@
+# Part 3: what else to check from the beginning (owner, 2026-11-08, verbatim: "anything else we should check from the beginning that we aren't to make the compiler amazing?")
+
+L1. Port the legacy corpus as targets: the old compiler's workload programs (base64_cli, png_chunks, envcfg, wordfreq, httpget, tcpserve, ...) and every legacy bug reproducer (bugs 024-079 and others) go into the new test manifest, each tagged with the slice at which it must pass, so we know when we are back at the old compiler's level and old bugs cannot silently return.
+L2. An LLM-writability benchmark: models get task specs and write Concrete programs; track compile and proof success rates and how many rounds of reading our diagnostics they need, with history. Tests the language design and K13's error quality together.
+L3. Counterexamples for failed obligations (Dafny, SPARK, Kani): when an obligation (overflow, bounds, contract) fails, show concrete input values that break it. Decide the architecture early: the kernel is the judge, the counterexample finder is untrusted.
+L4. Independent proof re-checking: every proof re-checked by an independent kernel (legacy used con-leche and nanoda), as a gate in the new layout, so trust does not rest on one Lean kernel build.
+L5. Compiling never executes untrusted code: no build scripts, no macros with IO, no package hooks; compile-time evaluation stays in its closed grammar (owner item 18). Stated as a property (a supply-chain guarantee).
+L6. A migration tool: `concrete migrate` codemods driven by the real parser, so each syntax revision ships its own automatic rewrite. New CLI surface, an owner question.
+L7. Targets as data: data layout, ABI and calling convention per target triple declared as data with proofs, not scattered in code, so adding aarch64 or wasm later does not touch every pass.
+L8. A language and spec versioning policy: editions or versions, what a compatible change means, and how proofs and facts survive a spec revision. Decide before users exist. (Compare R8 in DRAFT2.md.)

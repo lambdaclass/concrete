@@ -1,0 +1,33 @@
+FOLLOW-UP on your commit fc2c0670 (wip/agent-launcher, this clone). Review round 1: Codex (review.sh) and agy both REJECT with
+real defects. Fix all of them, each with a control in scripts/checks/agent_launch.sh that fails without the fix (prove it with a
+mutation, then restore), and make the stub model the real systemd behaviour that matters:
+
+1. systemd-run expands ${VAR}/$VAR in the command line (ExecStart specifier and environment expansion), so CMD arguments
+   containing `$` or `%` are corrupted. Pass the command so it reaches the job byte for byte (for example write the argv to a
+   file in the job directory with printf %q or NUL-separated, and have the unit run a fixed wrapper that reads it; or use
+   systemd-run's own option to disable expansion if it exists in the installed version — check `systemd-run --help` and
+   `man systemd-run`, and do not rely on an option older systemd lacks without a fallback). Control: an argument containing
+   `${HOME}`, `$1`, `%n` and a space reaches the job unchanged (the stub must reproduce systemd's expansion so the control is real).
+2. TOCTOU in inspect: a job can write its status and exit between the status check and `systemctl is-active`. After observing
+   an inactive/unknown unit, re-check for the status file before declaring 125. Control: a stub where the unit becomes
+   inactive exactly between the two checks.
+3. --collect unloads a failed or killed unit immediately, so `systemctl show Result` after the fact reports nothing useful,
+   and the stub hid that. Either drop --collect and collect explicitly after reading the result, or record the result another
+   way (e.g. an ExecStopPost that writes $SERVICE_RESULT/$EXIT_STATUS into the job directory). Make the 125 message carry the
+   real reason (timeout, oom-kill, signal) when it is known, and "unknown" otherwise. Model it in the stub.
+4. --dir accepts an existing directory (an active job's, or a killed one's without a status) and overwrites it; two jobs then
+   share a status file. Reserve the job directory exclusively (mkdir of a new directory that must not exist; refuse an existing
+   one). Control: a second start on the same --dir is refused with exit 2 and the first job's files are untouched.
+5. The printed WAIT line does not shell-quote its paths: quote both with printf %q so a path with spaces or metacharacters is
+   safe to run. Control: a job dir with a space and a `;` in its name; running the printed WAIT value with `eval` waits on
+   the right job and executes nothing else.
+6. Also handle `systemctl --user is-active` failing because there is no user bus (it prints nothing or an error): that is not
+   "the unit ended"; report it as an error with its own exit code (e.g. 2, "cannot query systemd") rather than 125.
+
+Keep launch.sh small and readable; update its header and AGENTS.md if behaviour changed. Gates (bounded):
+   timeout 600 bash scripts/checks/agent_launch.sh
+   timeout 1500 systemd-run --user --scope -q -p MemoryMax=8G -p TasksMax=1024 bash scripts/checks/run.sh   (all pass)
+Also run one short REAL systemd-user smoke job through start + wait (success, exit 3, and a job killed by RuntimeMaxSec=2) and
+report what wait printed for each.
+Hard rules as before: commit locally, never push, no --no-verify, no git config/remote changes, bounded runs, no network.
+Print the commit SHA, the changes, each new control with its exact assertion, the mutation results and the smoke results.

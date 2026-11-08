@@ -1,0 +1,23 @@
+FOLLOW-UP on your commit 123f03aa in this clone (wip/legacy-sweep-2). The orchestrator ran
+`bash scripts/checks/run.sh` here: 10/11 pass; scripts/checks/sandbox_isolation.sh FAILS in its live probe of legacy_frozen.sh
+(the "trusted history" step), exactly as you noticed. Cause: sandbox_isolation.sh's mk_caller makes `git clone --bare "$ROOT_DIR"`,
+which copies only local branches and tags, so the probe's caller has no origin/main; legacy_frozen.sh's trusted_base then falls
+back to HEAD's own first-parent chain, which includes this branch's earlier lock versions (8695cc0e3's malformed row and a row
+later corrected), and refuses. The probe's verdict therefore depends on whether the clone running it has a local `main` (the
+orchestrator's older clone did, and passed). That is an environment-dependent gate result, a real defect.
+
+Fix (the structural one): the sandbox probe must judge the same trusted base the real run in $ROOT_DIR judges. In
+sandbox_isolation.sh, compute the trusted base in $ROOT_DIR the way legacy_frozen.sh does (merge-base of HEAD and
+${LEGACY_TRUSTED_REF:-origin/main}, else HEAD of $ROOT_DIR), as a full commit SHA, and pass it to the probe as
+LEGACY_TRUSTED_REF (the SHA exists in the probe's clone, since it is a clone of $ROOT_DIR). Make sure the variable actually
+reaches the probed script through run_as_hook / bounded. Do not weaken legacy_frozen.sh's own fallback. If computing it fails,
+the probe must fail with an explicit message (no silent fallback). Add a control in sandbox_isolation.sh showing the probe
+receives that exact SHA (for example by probing a tiny script that prints LEGACY_TRUSTED_REF, asserting the value). Also
+update the header comment of legacy_frozen.sh item 5 if it needs to mention that harnesses pass the trusted base explicitly.
+
+Then confirm in THIS clone (which has no local main): all 11 checks pass:
+   timeout 1500 systemd-run --user --scope -q -p MemoryMax=8G -p TasksMax=1024 bash scripts/checks/run.sh
+and legacy_frozen.sh alone passes (timeout 600 systemd-run --user --scope -q -p MemoryMax=4G -p TasksMax=512 bash scripts/checks/legacy_frozen.sh).
+
+Hard rules as before: commit locally, never push, no --no-verify, no git config/remote changes, bounded runs, no network.
+Print the commit SHA, the change, the control and its exact assertion, and the gate results.

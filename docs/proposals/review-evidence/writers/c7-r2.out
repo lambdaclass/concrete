@@ -1,0 +1,264 @@
+kimi version 2.4.1
+• I need act read files. Should follow. First read brief round2 likely foundation.
+
+• I’ll review the original brief and the round-two instructions, then implement and verify the requested changes.
+
+• Should inspect files. Should use todo likely 3 findings, build, commits. Should read relevant files + git status branch log perhaps independent. Use todo then reads.wip/spec-c7
+e02e177fc axioms.golden: C7 leakage and accounting (regenerated on concrete-ci-2)
+e61585723 proofs: establish C7 security examples and accounting conservation
+01cc0f23e spec: index C7 security claims by entry configurations
+af05c7358 spec: add C7 leakage release and accounting contracts
+d8f89ea75 axioms.golden: partial lifecycle transitions (regenerated on concrete-ci-2)
+Should have correction design. Sound currently entry exit only cannot know per-function max between unless add account "peak since entry" field or LineageReport.Sound entry exit plus new account segmentPeak. Review explicitly may need account record peak since entry. Should have robust solution likely add functionPeak field Account reset at entry? Should understand requested expectations: requested own exit-entry. peak function maximum live bytes observed between entry and exit. Could define Account with requested live peak localPeak? Existing account peak global. Should represent per-function peak in Sound without execution history impossible. Should add "functionPeak" (or "sinceEntry") to Account reset at function entry, update on alloc/free/reset. This changes all examples and constructions. Could instead change Sound signature add `peak : Nat` argument representing per-function peak? Review "which may need the account to record a peak since entry. Prove report-soundness theorem for corrected definitions" Existing unestablished theorem trivial but they want prove report soundness theorem corrected defs likely add established_report_sound with constructed limits? I should implement Account with `sinceEntry` field reset method and update. Then `Sound entry exit` uses `exit.sinceEntry` requiring entry set? Should be careful: `entry` account might have sinceEntry whatever, if function enters via Account.enter resetting. Sound should actual `exit.sinceEntry`. Add `Account.enter` resets `peakSinceEntry := live` preserving historical requested live peak. All operations update this field. Sound requested `exit.requested - entry.requested` Nat subtraction problematic cumulative monotonic; successful ensures no decrease. Direct Nat diff correct. `peak` actual exit.functionPeak. This records max since last `enter`, docs. Per function report expects entry was entered. No extra premise needed because actual field. But nested function calls? Account supports one current function only. Review wants per-function. Perhaps function report instrumentation enter resets field; nested not in scope. Should state contract. Could instead Account add `localPeak` initialized 0; `Account.enter` sets live. At entry Account entry is output of enter. Sound ignores entry.localPeak. Good.
+
+  Should decide theorem established report sound. `LineageReport.Sound` definition conjunction trivial by limits. Could add theorem `established_report_sound` that constructs exact bounds and proves. Existing `unestablished_report_sound` adjusted. Finding "Prove the report-soundness theorem for the corrected definitions" perhaps refers existing `unestablished_report_sound`, just updates. But stronger test with nonzero entry, no allocs establish zero. Add example or theorem to prove zero bound now possible. e.g.
+  theorem established_report_sound (lineage entry exit footprint) :
+   Sound entry exit footprint ⟨lineage,
+    ⟨exit.requested-entry.requested,boundEstablished⟩,
+    ⟨...⟩,
+    ⟨exit.functionPeak,...⟩,
+    ⟨footprint.getD 0, if footprint.isSome then established else not?⟩⟩...
+  Optional tricky. Could theorem only numeric report footprint none notEstablished. Better generic actual:
+  theorem exact_report_sound (lineage entry exit) :
+   Sound entry exit none ⟨lineage, exact req, exact net, exact peak, ⟨0, notEstablished⟩⟩ := by simp [Sound...].
+  This shows all statuses exact. Perhaps named `established_report_sound`.
+
+  Also test zero allocation from entry with requested 100:
+  example : LineageReport.Sound (Account.empty? entry with 100 etc) same ... report requested 0 established peak 0 etc. Could be covered exact.
+
+  Should remove Spec example duplicate lines 291-294. Proof Account.alloc_zero currently `_h` unused? uses simp_all so h actually used to max live peak. Change h not underscore warning? Existing accepted build no warning? They use _h but simp_all can use. Fine.
+
+  Demo collapse secure/leaky to program. Replace all names. This is broad within same file. Should avoid consecutive Edit same file; can one Edit per file using entire? I can use Edit replace_all for Program then additional after Read required. Could batch large blocks in one edit? One edit old whole file impossible. Could use `Edit` replace_all `secureProgram` -> `program` then next read, etc. Many operations. Could write Python? prohibited incremental via Bash. Must Edit. I can do replace_all once per file per response but multiple calls same file not same response. Sequential with reads. Or single Edit large old block spanning line 82 through end replacing all would be huge. Better perhaps use replace_all `secureProgram|leakyProgram` impossible two patterns. Could choose keep secureProgram name and replace_all leakyProgram -> secureProgram then docs update secureProgram and starts; one subsequent edit. This collapses by aliasing leaky to secure, all references. First Edit replace_all leakyProgram to secureProgram results duplicate defs `def secureProgram` twice. Now remove second and comments in same edit? If replacing whole doc+defs block and all later refs separate cannot same Edit. Could first replace all `leakyProgram` -> `secureProgram`, then Read, second Edit remove duplicate def block and adjust docs. That's okay. Or replace all `secureProgram` -> `program` then `leakyProgram` -> `program`, etc 3 edits. Keeping secureProgram less intuitive since leaky uses too. Rename to `program`, update docs. 2 replace_all + block edit. Not costly.
+
+  Main Account field edits can one large replacement section 170-299 encompassing definitions and Sound, remove example. Then proof file update constructions `some ⟨8,0,8⟩` etc in spec included. No other Account direct ctors search.
+
+• The accounting defect is real: the current report uses cumulative program-wide requested bytes and historical peak. I’ll add a per-function peak reset at entry, make allocations update it, and base report soundness on function-local requests and that local peak.
+
+• Should design field names perhaps `functionPeak`. Account WF also live ≤ functionPeak? At all times if `enter` called yes empty 0, alloc max, free preserves, reset. This stronger invariant desirable ensures local peak >= live. Then Account.alloc_wf proof conjunction. Existing `Account.WF` only global. Add both? `a.live ≤ a.peak ∧ a.live ≤ a.functionPeak`. This impacts proofs but manageable. Could avoid stronger WF to minimize. Per-function field starts at 0, if not `enter`, after direct free? initial empty good. alloc max local ensures. All ops maintain anyway. Add `Account.enter` resets local. Should have `Account.alloc_zero` equality needs global h live≤peak; functionPeak max existing with live must equal existing only if live≤functionPeak. If WF only global, zero alloc would alter local peak upward when entry not reset. To preserve identity under WF need WF include local. Good.
+
+  Define:
+  structure Account requested live peak functionPeak
+  WF := live ≤ peak ∧ live ≤ functionPeak
+  enter a := {a with functionPeak := a.live}
+  alloc peak max..., functionPeak max a.functionPeak ...
+  free/reset preserve both.
+  At enter WF preserved obvious.
+  Spec examples update 4 fields.
+
+  Theorem exact report sound trivial. Add regression:
+  theorem empty_function_report_sound (entry : Account) (h : entry.live = entry.functionPeak)? Entry already `enter` output. I can use entry `Account.enter ⟨100,0,100,0⟩`, exit same. report requested 0 net 0 peak 0 footprint not. This establishes zero despite history. `by decide` for Sound? Props implications equal etc Decidable? Bound.Sound with equality/status and ≤ decidable yes perhaps `by native no`. `by decide` okay. But no need extra example perhaps theorem `established_report_sound` general demonstrates. Review specific defect regression useful.
+  ```
+  theorem established_report_sound ... :
+   Sound ... exact bounds ... := by
+   simp [LineageReport.Sound, Bound.Sound, Bound.SoundOptional]
+  ```
+  footprint `none`, footprint notEstablished. Good.
+
+  `Account.enter` conservation? Not accounting action, only marker; no requested/live/global change. Add theorem `enter_conservation` perhaps not required. Could docs enough. Add proof perhaps strengthens.
+  ```
+  theorem Account.enter_wf ... := ⟨h.1, le_refl _⟩
+  ```
+  No need.
+
+  `LineageReport.Sound`: requested actual `exit.requested - entry.requested`, net as before, peak `exit.functionPeak`.
+  Doc entry must be result of `enter` at function entry and no nested reset before exit. Could "For a function report, `entry` and `exit` are the accounts at its boundaries and `Account.enter` was applied at entry, with no intervening nested entry." The actual local peak independent of entry.functionPeak. If not reset, semantics caller local but doc contract.
+
+  Potential per-lineage and per function Account memory reset at each function for every lineage. Fine abstract.
+
+  Should update module docs line 24. Could mention function local. Main big Edit.
+
+• The inspection is complete. I’ll update the accounting model and its soundness proofs first, then handle the two cleanup findings separately.
+
+• Now proofs adjustments WF. I can Edit block account lemmas + unestablished add theorem. Should read current relevant 340 onward; perhaps already read, but Spec edit doesn't affect Proof read validity? Tool says Read before next Edit same file only after edit. I haven't edited proof yet. Can one Edit account WF block.Now run build to see errors before theorem additions. Standard build timeout 1200. `nix develop -c timeout 1200 lake build ConcreteSpec` exact. Heavy allowed one.I can while build add theorems, but build reads tree concurrently! Tree must stable for heavy run. Started background build while need edits problematic. Could wait notification no polling, do planning no edits. I should not modify during build. Can read proof tail and plan.
+
+• The accounting model is updated; the build is checking the accompanying well-formedness proofs. Once it finishes, I’ll add the exact-bound and zero-request regression proofs.
+
+• Should read output.Add theorem exact and regression. Should think use `by decide` examples. Could have:
+  ```
+  theorem established_report_sound ... :
+   Sound entry exit none exact := by
+   simp [...]
+  ```
+  At footprint notEstablished Bound.SoundOptional none not works simp.
+  ```
+  theorem empty_function_establishes_zero_request_bound :
+   let entry := Account.enter ⟨100,0,100,0⟩
+   Sound entry entry none ⟨0, requested 0 est, net 0, peak 0, footprint 0 not⟩ := by decide
+  ```
+  Lineage ⟨0⟩. Note account historical global valid. `let` statement perhaps decide simp. Simpler example:
+  ```
+  example : LineageReport.Sound
+   (Account.enter ⟨100,0,100,0⟩) (Account.enter ...) none ... := by decide
+  ```
+  The theorem should be named for review. `empty_function_report_sound` with explicit no args. The user asks theorem statement changes in response. New theorem okay. I can combine edit replace unestablished block with new before/after. Also doc top accounting theorem update per function. I can include in same Edit? old block from line 541 to end only. Top doc separate later after read. Fine.Should update docs module comments. Can later. Commit each piece as soon build passes. Accounting piece now build. Do build foreground (2 sec) then commit.warning: Git tree '/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c7' is dirty
+✖ [40/42] Building ConcreteSpec.Proofs.Leak (451ms)
+trace: .> LEAN_PATH=/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c7/.lake/build/lib/lean /nix/store/94bmilywgajdnqvix1fs35fj94kala0w-lean4-release-4.34.1/bin/lean /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c7/ConcreteSpec/Proofs/Leak.lean -o /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c7/.lake/build/lib/lean/ConcreteSpec/Proofs/Leak.olean -i /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c7/.lake/build/lib/lean/ConcreteSpec/Proofs/Leak.ilean -c /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c7/.lake/build/ir/ConcreteSpec/Proofs/Leak.c --setup /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c7/.lake/build/ir/ConcreteSpec/Proofs/Leak.setup.json --json
+error: ConcreteSpec/Proofs/Leak.lean:556:2: failed to synthesize
+  Decidable
+    (LineageReport.Sound { requested := 100, live := 0, peak := 100, functionPeak := 0 }.enter
+      { requested := 100, live := 0, peak := 100, functionPeak := 0 }.enter none
+      { lineage := { id := 0 }, requested := { limit := 0, status := BoundStatus.boundEstablished },
+        netChange := { limit := 0, status := BoundStatus.boundEstablished },
+        peak := { limit := 0, status := BoundStatus.boundEstablished },
+        footprint := { limit := 0, status := BoundStatus.notEstablished } })
+
+Hint: Additional diagnostic information may be available using the `set_option diagnostics true` command.
+Some required targets logged failures:
+- ConcreteSpec.Proofs.Leak
+error: build failed
+Decidable not derived for Props. Use `by simp [LineageReport.Sound, Bound.Sound, Bound.SoundOptional, Account.enter]`. Should Read relevant before edit.
+
+• The exact-bound theorem compiles. The concrete regression proof needs simplification rather than `decide`, because report soundness has no `Decidable` instance; I’ll make that proof-only adjustment.
+
+warning: Git tree '/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c7' is dirty
+✔ [40/42] Built ConcreteSpec.Proofs.Leak (461ms)
+✔ [41/42] Built ConcreteSpec (127ms)
+Build completed successfully (42 jobs).
+• I'll commit accounting now as hard. Before commit docs top update? Could do now to ensure accurate. Proof top currently zero etc no local mention not stale except report not. Spec top no stale. Good. `git diff --check`, status, diff perhaps inspect. Then git add/commit allowed user explicitly original brief commit each. Use Bash.
+
+• The corrected accounting model and both soundness proofs now build. I’ll commit this review fix before making the demo cleanups. M ConcreteSpec/Proofs/Leak.lean
+ M ConcreteSpec/Spec/Leak.lean
+ ConcreteSpec/Proofs/Leak.lean | 24 ++++++++++++++++++++--
+ ConcreteSpec/Spec/Leak.lean   | 48 +++++++++++++++++++++++++------------------
+ 2 files changed, 50 insertions(+), 22 deletions(-)
+[wip/spec-c7 a04c52d31] C7: make lineage reports function-local
+ 2 files changed, 50 insertions(+), 22 deletions(-)
+
+
+• Now cleanup todo.I already removed duplicate spec example in accounting commit. Now demo collapse and unused lemma. Do replace_all secureProgram -> program then leaky -> program. Tool says after Edit read. I'll do first replace all.Now replace leakyProgram -> program.Now read block and remove duplicate def, adjust start comments, policy both programs to both executions, step unique both example programs -> this example? Could update doc all stale "both programs" top. Now remove lemma block and comments one Edit perhaps spans 78-215 including huge not ideal but I can small edits sequential reads. First read top and 78-220, then edit duplicate/start block.Can Edit large block from program through start.Remove lemma. Should Read again relevant.
+
+• The two cleanup edits are underway: both executions now share one `program`, with their behavioral differences documented on `start` and `leakyStart`. I’ll remove the unused final-step lemma and refresh the affected comments.
+
+• Now comments read top, etc.One Edit top comment only then read then comments other. Could combine old string from 9 to 19 update both top and account docs.Now comments line 155 and 171. Read again small.Could single Edit old includes both comments with code between ~15 lines; use exact.
+
+• The unused lemma and duplicate zero-allocation example are removed. I’m finishing the comment sweep so the documentation describes shared programs and function-local peaks accurately.
+
+• Now build.warning: Git tree '/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c7' is dirty
+✔ [40/42] Built ConcreteSpec.Proofs.Leak (461ms)
+✔ [41/42] Built ConcreteSpec (126ms)
+Build completed successfully (42 jobs).
+Commit cleanups. M ConcreteSpec/Proofs/Leak.lean
+[wip/spec-c7 7e411f4a1] C7: simplify leakage example programs
+ 1 file changed, 38 insertions(+), 58 deletions(-)
+Should verify final checks rules and trust_ban allowed. Must run standard build already final commit same content. Now run spec/rules and trust_ban, perhaps in parallel? Independent read-only? Scripts may write temp. Can parallel light, yes. Then git status. Should consider deeper correctness accounting functionPeak reset per Account but no Memory.enter function? C4 instantiate mention perhaps enough. Review says per function peak max between entry and exit. I added `Account.enter` but apply actions no function entry action. Report docs caller applies. Good.
+
+  Potential issue requested subtraction Nat and established bound can be trivially 0 if exit < entry; but valid function sequence monotonic. Sound definition actual truncated could hide invalid exit. But report against valid execution ensures exit requested>=entry. Could use Int difference to avoid but Bound Nat demands Nat. Review specifically says exit - entry likely Nat. Fine.
+
+  Potential "prove report-soundness theorem corrected definitions" exact theorem is tautological but expected. Regression confirms.
+
+  Potential Account.enter_wf used? New theorem no issue unused accepted. No docs stale `peak` in free_conservation says peak historical singular but both? Statement only historical, accurate. Reset same.
+
+  Should trust_ban may detect new theorem axioms? no. Run.
+
+• Both review-fix commits are in place. I’ll run the permitted spec and trust checks on the final tree, then confirm it is clean.=== the specification ===
+  ok   1 registered rules in 39 sources, each documented with an existing decision row and an accepted and a refused example; every citation names a registered rule
+  ok   the registry and every rule citation of ConcreteSpec
+=== negative controls ===
+  ok   control: a documented rule with both examples passes
+  ok   control: a rule with no refused example fails
+  ok   control: a rule whose doc cites no decision row fails
+  ok   control: a rule registered twice fails
+  ok   control: a rule naming no declaration fails
+  ok   control: a citation of an unregistered rule fails
+  ok   control: a verdict on a non-example fails
+  ok   control: revision 0 fails
+  ok   control: a truncated listing is an error
+  ok   control: a rule with no accepted example fails
+  ok   control: a rule with no doc comment fails
+  ok   control: a rule citing a row no inventory has fails
+  ok   control: one example claiming both verdicts fails
+  ok   control: a verdict in a nested comment fails
+  ok   control: an unregistered quoted name fails
+  ok   control: examples with an attribute or a modifier count
+  ok   control: an unlexable source is an error
+  ok   control: a verdict in a string literal fails
+  ok   control: an attribute with brackets inside counts
+  ok   control: a row an inventory only mentions does not count
+  ok   control: an attribute string cannot stand in for an example
+  ok   control: an attribute holding a string with a bracket counts
+  ok   control: a quoted name holding a backtick is checked
+  ok   control: a malformed citation fails
+  ok   control: a raw string in an attribute cannot stand in for an example
+  ok   control: a quoted name in an attribute cannot stand in for an example
+  ok   control: a comment in an attribute cannot stand in for an example
+  ok   control: a quoted name holding citation-like text is one citation
+  ok   control: a missing source directory is an error
+  ok   control: a source directory with no .lean file is an error
+  ok   control: a checker that hangs through both attempts is INCOMPLETE
+SPEC-RULES: PASS=32 FAIL=0
+=== E/D: the environment ===
+  ok   all 40 ConcreteSpec source modules are in the environment E and D read
+  ok   none of the 7568 ConcreteSpec constants depends on sorryAx, ofReduceBool/Nat, trustCompiler or a native axiom
+  ok   ConcreteSpec declares no axiom
+=== S: the sources ===
+  ok   none of the 40 source files spells a banned word outside comments
+  ok   lakefile.toml builds the library with warningAsError, and nothing overrides it
+=== X: the examples, in the kernel's terms ===
+  ok   all 251 examples, kept as declarations, depend only on the standard axioms
+=== negative controls ===
+  ok   control: a theorem proved by sorry is refused (ConcreteSpecControl.sorryThm (sorryAx))
+  ok   control: a definition with a sorry body and no theorem about it is refused (ConcreteSpecControl.sorryDef (sorryAx))
+  ok   control: a theorem proved by native_decide is refused (ConcreteSpecControl.nativeThm (ConcreteSpecControl.nativeThm._native.native_decide.ax_1_1))
+  ok   control: a declared axiom is reported
+  ok   control: an axiom whose name holds a tab fails the run (no row can carry it)
+  ok   control: native_decide, and sorry inside an interpolation, after a string, raw string or quoted name holding comment delimiters, after an interpolation holding a string, a direct sorryAx, a syntax extension, an outside import, an option, meta code and decide options (native split across lines, positional) are found; the words in comments are not
+  ok   control: the header import ConcreteSpec.Spec Lean is reported
+  ok   control: the header import ConcreteSpec.Spec   Lean is reported
+  ok   control: the header prelude import ConcreteSpec.Spec is reported
+  ok   control: a library that turns warningAsError off is refused (the library sets options ['warningAsError'])
+  ok   control: a library built from another source directory is refused (the library sets ['srcDir'])
+  ok   control: a source the scan cannot read or lex (missing) fails it (rc=3)
+  ok   control: a source the scan cannot read or lex (Open) fails it (rc=3)
+  ok   control: a source the scan cannot read or lex (Brace) fails it (rc=3)
+  ok   control: a source the scan cannot read or lex (Quote) fails it (rc=3)
+  ok   control: source modules outside a (truncated) import closure are reported
+  ok   control: an example proved by decide +native and one closed by stop are reported, rfl is not, and the word example in a string is no example («⟪example⟫C.lean:1» («⟪example⟫C.lean:1»._native.decide.ax_1) «⟪example⟫C.lean:2» (sorryAx) )
+PROOF-TRUST-BAN: PASS=23 FAIL=0
+
+
+• Should have final status and log, perhaps diff base summary. Use Bash git status log 3 show names.7e411f4a1 C7: simplify leakage example programs
+a04c52d31 C7: make lineage reports function-local
+e02e177fc axioms.golden: C7 leakage and accounting (regenerated on concrete-ci-2)
+Status clean. Todo mark build done commit done.I'll respond with commits SHA line, what changed each theorem statement, findings fixed, anything left reason, QUESTIONS. Should include tests. Should be concise but complete. "Theorem statement changes": LineageReport.Sound not theorem but definition. `Account.WF` changed, `unestablished_report_sound` statement same except type internals, established new, empty new, Account.enter_wf new, alloc_wf etc same. Other theorem statements secure etc renamed program only no semantic. Should list what each theorem states? Round2 says "what changed in each theorem statement" likely describe:
+  - `LineageReport.Sound`: requested exit-entry, peak exit.functionPeak; net/footprint unchanged.
+  - `Account.WF`: now also live ≤ functionPeak.
+  - New `Account.enter_wf`: enter preserves WF.
+  - New `established_report_sound`: exact bounds established.
+  - New `empty_function_report_sound`: no allocations establishes zero despite history 100.
+  - Existing `Account.alloc_zero`, `alloc_wf`, `free_wf`, `reset_wf`, apply/run WF etc retain same signatures except expanded Account/WF meaning; proof updated. `unestablished_report_sound` same signature, Sound meaning corrected.
+  - `secure_run_unique`, `secure_ni`, `secure_ct`, `leakyRun` type now shared `program`, logical statements unchanged.
+  - removed unused step_none.
+  No leftover except forbidden heavy gates not run and axioms.golden unchanged per instruction. Should mention build and checks pass, clean, no push. QUESTIONS None. Anything left: heavy CI/axioms not run per brief, reviewer handles. No axioms golden edited. Good.
+
+  Should have exact file refs perhaps new lines shifted; not necessary but can cite paths. Response structure light.
+
+• Implemented all ROUND2 findings on `wip/spec-c7`.
+
+  **Commits**
+  - `a04c52d31` — C7: make lineage reports function-local
+  - `7e411f4a1` — C7: simplify leakage example programs
+
+  **Changes**
+  - `LineageReport.Sound` now measures requested bytes as `exit.requested - entry.requested`, excluding pre-entry allocations.
+  - `Account` now records `functionPeak`; `Account.enter` resets it to current live bytes, and allocations update it. Report peak soundness uses `exit.functionPeak`, not whole-program history.
+  - `Account.WF` additionally requires `live ≤ functionPeak`. Existing WF and conservation theorem statements retain their signatures under this strengthened invariant.
+  - Added `Account.enter_wf`: entering a function preserves account well-formedness.
+  - Added `established_report_sound`: exact function-local requested, net-change and peak limits establish sound bounds.
+  - Added `empty_function_report_sound`: a function allocating nothing establishes zero request and peak bounds despite 100 previously requested bytes.
+  - `unestablished_report_sound` retains its statement, now using the corrected soundness definition.
+  - Replaced `secureProgram` and `leakyProgram` with one shared `program`; secure and leaky behavior is documented on `start` and `leakyStart`. NI/CT theorem meanings are unchanged.
+  - Removed unused `Demo.step_none_of_final` and the duplicate zero-allocation example; `Account.alloc_zero` remains canonical.
+  - Did not modify `scripts/proofs/axioms.golden`.
+
+  **Verification**
+  - `lake build ConcreteSpec`: passed, 42 jobs.
+  - `scripts/spec/rules.sh`: 32 passed, 0 failed.
+  - `scripts/proofs/trust_ban.sh`: 23 passed, 0 failed.
+  - Working tree clean; nothing pushed.
+
+  Nothing else left locally. Heavy CI and axiom-golden regeneration remain for the reviewer as directed.
+
+  **QUESTIONS:** None.
+
+To resume this session: kimi -r session_6e131be0-1a12-4d2f-bbdb-2ae9db7bf374
+kimi rc=0

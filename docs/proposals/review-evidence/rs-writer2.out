@@ -1,0 +1,708 @@
+kimi version 2.4.1
+• I need modify files limited, no commit push nix builds. Should read pending authoritative, git diff branch, relevant files sections. I must carefully inspect. Should probably use TodoList multi-step. User says writer review-round fixes. I can execute. Should have no plan approval needed. Should comply quotes exact. I should start todo list then parallel read pending, git diff/status maybe Bash. I need current directory. Must not edit pending. Read file known. Should have docs/decisions.md specific sections including anchors and P5; ROADMAP multiple. Use Read calls parallel for known paths perhaps large ranges. Should have git diff 1547734f8 HEAD via Bash (allowed read only). Should check status perhaps. Use TodoList and parallel? I can call TodoList then reads. Since independent calls in parallel one response. I can use multi_tool parallel for Read pending, Bash git diff and git status perhaps two Bash independent. Also Read changelog. I'll do.
+
+• I’ll inspect the authoritative answers and this branch’s diff, then make only the requested review fixes.
+
+diff --git a/AGENTS.md b/AGENTS.md
+index cc5728d02..514d56aed 100644
+--- a/AGENTS.md
++++ b/AGENTS.md
+@@ -76,8 +76,10 @@ as a conflict, until the owner answers; nobody extends or reverts it meanwhile.
+   [ROADMAP's defect disposition and frozen-compiler rule](ROADMAP.md#defect-disposition-rule).
+ 
+ **Who works on what** (owner, 2026-11-08, [decision](docs/decisions.md#decided-2026-11-08-eleven)).
+-- Claude's quota goes to the critical path: the spec, slice 0 and the front end. Mechanical work
+-  goes to Codex and Kimi as writers.
++- Claude's quota goes to the critical path: the spec, slice 0 and the front end. Codex, Kimi and agy
++  write in their own fresh full clones on their own `wip/` branches. Claude briefs, reviews, runs the
++  gates and lands. The other two models cross-review each diff; a writer never reviews its own work
++  ([decision](docs/decisions.md#decided-2026-11-08-writers)).
+ - One writer edits `docs/decisions.md` and `ROADMAP.md` at a time; other workers send that writer
+   their records instead of editing those files.
+ 
+diff --git a/ROADMAP.md b/ROADMAP.md
+index f18056472..3a11c4ab1 100644
+--- a/ROADMAP.md
++++ b/ROADMAP.md
+@@ -177,7 +177,7 @@ and owned by the task that removes its structural class.
+ | A2i | Integrate the proposed spec before the freeze ([decision](docs/decisions.md#decided-project-long-term-2026-11-06)) | R-0571, R-0574, R-0496, R-0560, R-0555, R-0559, R-0588, R-0592, R-0602, R-0603, R-0607, R-0608, R-0609, R-0610, R-0611, R-0612, R-0613, R-0614, R-0615, R-0616, R-0626 | The shared foundation, contracts C1–C10 ([decision](docs/decisions.md#decided-2026-11-08-foundation)), is written in Lean with its laws proved, before slice 1 builds on it; each later slice adds its rules without rewriting it ([foundation first](docs/decisions.md#decided-2026-11-07-foundation-first)). The separately proved parts share Core interfaces and one integrated semantics. Interaction proofs hold for a borrow across deferred cleanup, an allocator reset with outstanding loans and cleanup that needs authority, and the README obligations [O7 and O9](ConcreteSpec/README.md) are discharged. The semantic contract is stated. The normative definitions are one library in cohesive modules with `Spec.lean` as the public import. The browsable owner view exists. The pre-freeze part of R-0574 (no hidden traps and bounded execution) is in the proposed spec. An outside reader has read the integrated spec through that view. |
+ | A2c | Core freeze | R-0567 | The owner approves the freeze of the integrated scopes after A2b's four theorems, A2i's integration proofs and an outside-reader pass. Only then is PROPOSED removed. A3 sends Core back only as a recovery when it exposes a substantive change. |
+ | A3 | State the theorem and the trusted base in Lean | R-0502, R-0506, R-0508, R-0509, R-0500, R-0588 | The contract and the modular layout from A2i are on main. The theorem, with its holes, the named values-to-bytes boundary and the trusted-base inventory, is on main. The theorem skeleton uses concrete slice interfaces; its semantic-premise inventory is separate from the axiom audit. Before slice 0's authoritative claim, its actual Core fragment is connected to the frozen definitions and any instrumentation erasure it uses is proved; later features require integration proofs into that same Core. Slice 0 starts after A2c and the applicable A3 foundations for its authoritative claims; a provisional skeleton may start earlier and claims nothing normative. |
+-| B0 | Build and qualify slice 0, the proof spine ([decision](docs/decisions.md#decided-project-proof-infrastructure)) | R-0501, R-0581, R-0580, R-0583, R-0503, R-0578, R-0579, R-0425, R-0499, R-0493, R-0507, R-0521, R-0552, R-0118, R-0498, R-0553, R-0573, R-0575, R-0585, R-0588, R-0593, R-0594, R-0577, R-0272, R-0301, R-0550, R-0620 | Slice 0 runs through every used IR to two unverified native builds, LLVM and the LCB, whose full observations CI compares with each other and with the expected outcome, with per-lowering proofs, independent supported-subset coverage, the composed conditional image theorem, artifact binding, example correctness, including transport to the exact native artifact under the named premises, and classified differential and refusal controls. The per-function facts report (R-0575) is produced for every slice-0 function, each fact and obligation with its source location. The BIR → LCB-IR adapter proof (R-0579) is the first backend proof. Reproducible builds, final-artifact stack facts, the trusted-base statement, the front-end differential fuzzer, ASan runs (UBSan dropped, [decision](docs/decisions.md#decided-2026-11-08-ubsan)), binary-size tracking and the frozen, versioned JSON schema start here. This does not trigger legacy deletion. |
++| B0 | Build and qualify slice 0, the proof spine ([decision](docs/decisions.md#decided-project-proof-infrastructure)) | R-0630, R-0501, R-0581, R-0580, R-0583, R-0503, R-0578, R-0579, R-0425, R-0499, R-0493, R-0507, R-0521, R-0552, R-0118, R-0498, R-0553, R-0573, R-0575, R-0585, R-0588, R-0593, R-0594, R-0577, R-0272, R-0301, R-0550, R-0620 | Slice 0 runs through every used IR to two unverified native builds, LLVM and the LCB, whose full observations CI compares with each other and with the expected outcome, with per-lowering proofs, independent supported-subset coverage, the composed conditional image theorem, artifact binding, example correctness, including transport to the exact native artifact under the named premises, and classified differential and refusal controls. The per-function facts report (R-0575) is produced for every slice-0 function, each fact and obligation with its source location. The BIR → LCB-IR adapter proof (R-0579) is the first backend proof. Reproducible builds, final-artifact stack facts, the trusted-base statement, the front-end differential fuzzer, ASan runs (UBSan dropped, [decision](docs/decisions.md#decided-2026-11-08-ubsan)), binary-size tracking and the frozen, versioned JSON schema start here. This does not trigger legacy deletion. |
+ | B1 | Build `ConcreteSpec` and slice 1 with its theorem | R-0425, R-0499, R-0492, R-0493, R-0514, R-0501, R-0503, R-0497, R-0504, R-0507, R-0521, R-0552, R-0528, R-0479, R-0118, R-0573, R-0576, R-0577, R-0579, R-0580, R-0582, R-0586, R-0588, R-0589, R-0599, R-0600 | [Slice 1](#vertical-slices) meets the slice shape: it runs from parsing to both native builds, its judgments are independent, its correspondence and soundness are proved, its obligations are explicit and its provenance is minimal. |
+ | LP0 | The LCB pilot: bound the LLVM hole ([decision](docs/decisions.md#decided-project-long-term-2026-11-06)) | R-0572 | The LCB already runs unverified from slice 0 (R-0578) and its adapter is proved first (R-0579). After slice 1 (B1) and before any growth: the slice-0 and slice-1 subset compiles through BIR → LCB → native code with the adapter proof composed with the LCB's theorems and the slice theorem under named premises, kept separate from the LLVM premises. Every remaining backend obligation is a task with a milestone. |
+ | B2 | Qualify slices 0 and 1 | R-0491, R-0498, R-0272, R-0550 | Differential (Lean semantics, native build, legacy oracle), refusal and gate-integrity controls hold. The fuzzers target the new compiler. The outside-reader test passes. |
+@@ -478,6 +478,7 @@ archive. Rows for C–G are summaries. Each is refined when its phase becomes ne
+ | R-0498 | Every enforcement claim maps to its gate leg and a targeted mutation | an unmapped claim fails; shape checks are labelled unproved; B0 includes pipeline-edge coverage and controls for missing proofs, unregistered premises, wrong artifact substitution and reject-all compilation | R-0118 |
+ | R-0272 | Restart fuzzing against the new compiler on concrete-ci-2, including the random-program differential against the Lean evaluator from the slice-0 front end ([early decision](docs/decisions.md#decided-2026-11-07-early-evidence)), seeded from the regressions and examples that survive in the repository and from newly generated programs (the ci-3 corpus and findings were not copied before the handover, decision row P14, and are lost), with reduction and counterexample-to-regression persistence | the random-program differential starts with the slice-0 front end and grows one feature per slice; the generators emit slice-supported programs, the oracle is Lean semantics against native code, and findings become regressions; legacy fuzzing stopped at the move; Home: tooling. Gate: the fuzzer, short in CI and long nightly on concrete-ci-2 ([tracking](docs/decisions.md#decided-2026-11-07-tracking)) | R-0425 |
+ | R-0550 | Compiler speed, scaling and binary-size tracking from slice 0 ([speed decision](docs/decisions.md#decided-2026-11-07-performance), [early decision](docs/decisions.md#decided-2026-11-07-early-evidence)) | wall time, per-stage time and memory are recorded by exact SHA, backend and target from slice 0; binary size is tracked per example per commit next to speed tracking and is report-only; a compile-speed budget is tracked per example, report-only like binary size ([decision](docs/decisions.md#decided-2026-11-08-compile-budget)); speed measurements are report-only until their noise is understood, then scaling gates hold for each stage and a planted regression is caught; Home: tooling. Gate: speed and binary size, report-only ([tracking](docs/decisions.md#decided-2026-11-07-tracking)) | R-0503 |
++| R-0630 | Gate 2 for `Concrete/`: axioms and trust over the compiler | over every constant of `Concrete/`: only the three axioms, no `sorry`, no `native_decide`/`ofReduceBool`, the totality ban (no `partial`, `unsafe`, `@[implemented_by]`, `@[extern]` or `opaque` outside `Premises.lean`) and the external-checker replay; today only the trusted-base golden covers the headline theorems' axioms (slice-0 worker, 2026-11-08); Home: tooling (CI). Gate: the job itself, with a planted `sorry`, a planted `partial` and a planted axiom refused ([tracking](docs/decisions.md#decided-2026-11-07-tracking)) | R-0553 |
+ | R-0553 | Totality audit: every semantics, checker, validator and pass is total and runs as proved | no partial definition; opaque execution gaps controlled; totality and execution-gap checks apply from B0; B3 performs the cumulative audit after B2 | R-0501 |
+ | R-0562 | The retention manifest `RETENTION.tsv` at the root, written before the move and checked before any deletion under `legacy/` | every legacy asset (corpora, regressions, examples, std, the bug ledger, the site, docs and the archived services) has a row with a destination and a deletion condition; deleting a path under `legacy/` whose row is unresolved is refused (control); the manifest and the task disposition table stay at the root and survive the deletion of `legacy/` (LD) | — |
+ | R-0561 | Bug ledger by compiler | legacy defects are marked retired with the old implementation, never fixed, each keeping its reproducer, ruling and structural class; std defects move with std as contracts and regressions; every legacy ruling that states language behaviour becomes a conformance example or a recorded owner question; the minimal issue record of the day-one root becomes the new ledger with the first slice | R-0425 |
+@@ -589,9 +590,12 @@ archive. Rows for C–G are summaries. Each is refined when its phase becomes ne
+ | R-0543 | Load control: at most 2 heavy local runs per machine | a third heavy run waits (control) | — |
+ | R-0542 | Generated ledgers with a single hand-edited source | two branches adding records rebase without conflicts | — |
+ | R-0540 | CI tiers: a landing tier for merge, campaigns on schedule | landing tier median ≤ 40 min over 10 runs | — |
+-| R-0617 | Smaller landing scripts ([decision](docs/decisions.md#decided-2026-11-08-landing-shrink)) | `scripts/land/` keeps the train, its review leg, the gates and the `legacy/` protection; the landing bot, notify, install-bot, the systemd units and duplicate helpers are removed and their old copies moved to `legacy/` as byte-identical additions, the one kind of addition `legacy_frozen` accepts once legacy sweep question 1 ("ok to 1", recorded by the legacy-sweep branch) lands; Home: tooling. Gate: the roo
+t checks (`landing_script`, `legacy_frozen`, the root inventory) pass without them | — |
++| R-0617 | Smaller landing scripts ([decision](docs/decisions.md#decided-2026-11-08-landing-shrink)) | `scripts/land/` keeps the train, its review leg, the gates and the `legacy/` protection; the landing bot, notify, install-bot, the systemd units and duplicate helpers are removed and their old copies moved to `legacy/` as byte-identical additions, the one kind of addition `legacy_frozen` accepts once legacy sweep question 1 ("ok to 1", [sweep row](docs/decisions.md#decided-2026-11-08-legacy-sweep)) lands; Home: tooling. Gate: the root checks (`landing_script`, `legacy_frozen`, the root inventory) pass without them | — |
+ | R-0618 | Review rounds capped by risk ([decision](docs/decisions.md#decided-2026-11-08-review-caps)) | `scripts/review/review.sh` derives the round cap from what the diff touches: docs and roadmap 2, scripts 3, compiler and spec 5; a diff touching several classes takes the highest cap, classified by the files it changes, and at the cap the owner may sign off one exact SHA that Codex, Kimi and agy have all reviewed, with the approval and every outstanding finding recorded and never replacing a gate or proof obligation ([decision](docs/decisions.md#decided-2026-11-08-process), items 1 and 2); AGENTS.md and REVIEW.md state it; Home: tooling. Gate: `review_tool.sh` with a control per class | R-0544 |
+ | R-0619 | One clones folder ([decision](docs/decisions.md#decided-2026-11-08-clones)) | every branch's full clone is `~/projects/clones/<branch>`, made by one script and removed after the branch lands; AGENTS.md states it; Home: tooling. Gate: the script's negative controls (a reused branch name, a clone outside the folder) | — |
++| R-0628 | Server-side protection of `main` ([decision](docs/decisions.md#decided-2026-11-08-landing-redesign)) | after the landing-script shrink (R-0617) and one repository (`wip/one-repository`) land, GitHub rulesets or branch protection let only a train merge with the required checks green update `main`; this is the real boundary; Home: repository settings, recorded as tooling. Gate: a refused direct push and a refused merge with a required check missing, recorded as controls ([tracking](docs/decisions.md#decided-2026-11-07-tracking)) | R-0617 |
++| R-0629 | A much smaller local guard, as a convenience ([decision](docs/decisions.md#decided-2026-11-08-landing-redesign)) | after R-0628, a small local guard warns before a push that the server would refuse; it is not the boundary; `wip/remote-guard` and `wip/acceptance-shim` are superseded; Home: tooling. Gate: its controls in the landing-script checks ([tracking](docs/decisions.md#decided-2026-11-07-tracking)) | R-0628 |
++| R-0631 | Move all of `docs/archive/` under `legacy/` ([decision](docs/decisions.md#decided-2026-11-08-archive-move)) | every file under `docs/archive/` is added under `legacy/` by the byte-for-byte sweep ([sweep row](docs/decisions.md#decided-2026-11-08-legacy-sweep)) and removed from the root; P21, `RETENTION.tsv` and the links that cite these files are updated; a path that already exists under `legacy/` with other content is reported, never overwritten; Home: tooling. Gate: `legacy_frozen.sh` with its sweep controls, and the link check ([tracking](docs/decisions.md#decided-2026-11-07-tracking)) | the byte-for-byte sweep check |
+ | R-0539 | Landing trains through `scripts/land/train.sh` | three trains of two or more branches land, median under 2 h | R-0542, R-0540 |
+ | R-0541 | Self-hosted runners never for `pull_request`; heavy runs on the servers | the workflow check and its negative control | R-0543, R-0540 |
+ | R-0513 | Gates that are trustworthy and affordable: inventories over counts, impact-selected pre-push | pre-push median ≤ 10 min, and no gate failure first seen in CI over 20 landings | R-0547 |
+diff --git a/changelog.d/2026-11-08-record-signoffs.md b/changelog.d/2026-11-08-record-signoffs.md
+new file mode 100644
+index 000000000..9bd051d6c
+--- /dev/null
++++ b/changelog.d/2026-11-08-record-signoffs.md
+@@ 
+-0,0 +1,24 @@
++### Sign-offs, the landing redesign and the legacy sweeps (2026-11-08)
++
++`docs/decisions.md` records:
++- **The owner's sign-offs at the review cap** ("sign off ea5181b5, 1547734f8, a27fbb842, yes
++  redesign"): `wip/slice0` at `ea5181b5`, `wip/record-language` at `1547734f8` and
++  `wip/one-repository` at `a27fbb842`, each with its three verdicts.
++- **The landing protection redesign** ("yes redesign"). The landing scripts shrink first. Then one
++  repository lands, before the foundation freeze. Then server-side protection of `main` becomes the
++  real boundary (R-0628), and a much smaller local guard follows as a convenience (R-0629).
++  `wip/remote-guard` and `wip/acceptance-shim` are superseded.
++- **Commit and push everything all the time** ("commit and push everything all the time"):
++  every piece is committed when it builds and its checks pass, and pushed to both remotes at once.
++- **Codex, Kimi and agy write; Claude reviews** ("can you have kimi, codex and agy implement things and
++  we just review it"): the writers use their own clones and branches. Claude briefs, reviews, runs the
++  gates and lands. The other two models cross-review each diff; a writer never reviews its own work.
++- **Byte-for-byte sweeps into `legacy/`** ("ok to 1"): an addition under `legacy/` is accepted only
++  if it is byte-identical to the same root path at a named commit and is gone from the root. P5 and
++  the restart row are revised.
++- **All of `docs/archive/` moves under `legacy/`** ("ok to 2"), by that sweep (R-0631). P21 is
++  revised. Where a decided proposal goes after the move waits for the owner.
++
++ROADMAP adds R-0630: gate 2 for `Concrete/`, the axioms, trust, totality and replay checks over the
++compiler, which are not built yet. ISSUES.tsv files ISS-0018, review.sh reviewing changes outside a
++train candidate's diff.
+diff --git a/docs/decisions.md b/docs/decisions.md
+index 6f2cdcc3f..61e5d4357 100644
+--- a/docs/decisions.md
++++ b/docs/decisions.md
+@@ -22,8 +22,10 @@ Links only; each item's text lives where it is linked.
+ 1. The spec read and the Core freeze, A2c ([queue](../ROADMAP.md#the-queue)).
+ 2. The spelling round: exact names, signatures and spellings, shown as before/after code
+    ([row](#decided-2026-11-08-spelling-round)).
++3. Where a decided proposal is kept once `docs/archive/` is under `legacy/`
++   ([archive move](#decided-2026-11-08-archive-move)).
+ 
+-A decided proposal moves to `docs/archive/<topic>-<date>/`.
++A decided proposal moves to `docs/archive/<topic>-<date>/` until the [archive move](#decided-2026-11-08-archive-move) lands; after that, waiting item 3 decides where it goes.
+ 
+ <a id="recent-decisions"></a>
+ ## Recent decisions
+@@ -68,6 +70,11 @@ Each row records a decision and its reason. A language rule itself is its Lean d
+ - A std-per-slice table in the roadmap; no user-guide chapter per slice for now; the written grammar before the parser; a speed target against C at slice 16 ([row](#decided-2026-11-08-std-table)).
+ - Capabilities stay as decided, `with(...)` permission sets plus grant values; confirmed, no revision ([row](#decided-2026-11-08-capabilities-kept)).
+ - Language and process decisions: no method calls or receivers, no `as`, always-qualified imports, no `char`, trap names, review sign-off ([row](#decided-2026-11-08-language)).
++- Owner sign-offs of slice 0, record-language and one repository ([row](#decided-2026-11-08-signoffs)).
++- The landing protection redesign: server-side protection of `main` ([row](#decided-2026-11-08-landing-redesign)).
++- Commit and push everything all the time ([row](#decided-2026-11-08-commit-push)).
++- Codex, Kimi and agy write; Claude reviews ([row](#decided-2026-11-08-writers)).
++- Byte-for-byte sweeps into `legacy/`, and `docs/archive/` moves there ([sweep](#decided-2026-11-08-legacy-sweep), [archive](#decided-2026-11-08-archive-move)).
+ - Every branch gets an agy review too ([row](#decided-project-review)).
+ - Eleven plan and process decisions: UBSan dropped, a complete adapter theorem, smaller landing scripts, Claude's quota on the critical path, the front end now, one decisions writer, risk-capped reviews, one clones folder, a later no-libc runtime, a compile-speed budget and the termination wording ([row](#decided-2026-11-08-eleven)).
+ 
+@@ -290,7 +297,7 @@ The owner answered every row of the 2026-11-05 decision page, in the terminal. T
+ - **P2** Priority order when principles conflict — Soundness and provability > transparency (with auditability, honest trust boundaries and compiler-owned identity) > one authoritative definition (checked derived views allowed) > explicitness at the use site > brevity. The philosophy guides open choices and never silently reopens decided rules.
+ - **P3** Lean is the spec: confirm the amendment — Lean is the specification: confirmed together with Q9.15 (revision below).
+ - **P4** Duplicate enum variants or methods (bug 313) — Refuse duplicate variant names in one enum and duplicate method names in one impl, with a new rule and diagnostic, the same as duplicate fields.
+-- **P5** legacy/ is a byte-frozen snapshot, never patched or run — legacy/ is main's tree at the move commit, byte-frozen. A root check compares its tree hash, allowing only deletions a satisfied RETENTION.tsv entry authorizes. No legacy gate ever runs. The oracle is the tag-built artifact (P13), not the legacy/ copy.
++- **P5** legacy/ is a byte-frozen snapshot, never patched or run — legacy/ is main's tree at the move commit, byte-frozen. A root check compares its tree hash, allowing only deletions a satisfied RETENTION.tsv entry authorizes. No legacy gate ever runs. The oracle is the tag-built artifact (P13), not the legacy/ copy. *Revised 2026-11-08 (owner, "ok to 1"): legacy/ also grows by byte-for-byte sweeps recorded in scripts/checks/legacy.lock; no file, once frozen or swept, is ever rewritten ([sweep row](#decided-2026-11-08-legacy-sweep)).*
+ - **P6** Retention manifest gates deleting legacy/ — RETENTION.tsv at the root gives every legacy asset (corpus, regressions, examples, std, bug ledger, site, docs, research) a destination and deletion criterion. Revised 2026-11-06 ([restart row](#decided-project-restart)): nothing is deleted at B3; legacy/, the old pipeline included, is deleted way later (LD: once the new compiler implements a full real program such as RocksDB, ethrex or similar), when RETENTION.tsv has no live entry, a final ideas sweep has dispositioned every idea and the owner explicitly approves.
+ - **P7** Prove the new landing path before moving — T0: land beside the old tree the new root CI, required-checks.txt (enforced by train watch and land), RETENTION.tsv, the task disposition table, ORACLE.lock with the oracle artifact, and ISSUES.tsv. T1: rehearse the move on a throwaway branch: fresh clone, build, hook, exact-SHA CI, train --dry-run land; a broken build, a failing gate and a missing required check must each be refused. T2: the move in one train.
+ - **P8** Server services under scripts/ — Keep only landing services: train, review, hook, landing bot. The status page, work queue, fuzz farm, perf tracking and nightly campaign all stop and are recorded as archived in RETENTION.tsv; each returns only with a roadmap task.
+@@ -307,7 +314,7 @@ The owner answered every row of the 2026-11-05 decision page, in the terminal. T
+ - **P18** Phase E: contracts and termination within OD115–OD117 — Phase E: no source old, quantifier, implication or snapshot construct (OD117); entry/exit and frame properties are Lean theorems (a source frame clause would be a new decision for you); spec functions have a body and are total (OD115); ordinary functions have no total category (OD116) and get per-function termination theorems where wanted. R-0524 becomes 'Frame and entry/exit theorems in Lean, no old'; R-0526 stays 'checked totality of spec functions'.
+ - **P19** Mutation testing for the new compiler — Retire the old mutation-harness defect work (R-0518). The new compiler gets its own mutation harness under R-0498, not a port of the old one.
+ - **P20** One home for binding decisions — Move the still-binding roadmap decisions (new compiler, retention contract, authority, allocation, Lean as the spec) into docs/decisions.md beside your language answers. The dated log becomes history; ROADMAP.md links to decisions.md and restates nothing.
+-- **P21** Retention records outlive legacy/ — RETENTION.tsv, ISSUES.tsv, required-checks.txt, scripts/oracle/ and docs/archive/roadmap-2026-11/ (with task_disposition.tsv) are part of the day-one root, outside legacy/, so they survive deleting it. *Revised 2026-11-06 (owner, verbatim: "do the whole movement"): of docs/archive/roadmap-2026-11/, the files that are decision sources or disposition records stay at the root (task_disposition.tsv, the decision log ROADMAP_DECISIONS.md, the task register ROADMAP_TASKS.md, ROADMAP_RECONCILIATION.md, ROADMAP_RESTRUCTURE.md with its table, and the archive README); the old control plane ROADMAP.md, ROADMAP_BACKLOG.md, ROADMAP_DIRECTION.md and WORK_QUEUE.md were duplicates of their frozen legacy/ copies apart from the move's mechanical rewrites, and nothing cites them as a decision source, so their root copies were removed and links point at the legacy/ copies, which stay until the legacy deletion point. The other docs/archive/ records (the site takedown record, the old bug ledger's disposition, the landing audit and the dated decision archives) stay at the root.*
++- **P21** Retention records outlive legacy/ — RETENTION.tsv, ISSUES.tsv, required-checks.txt, scripts/oracle/ and docs/archive/roadmap-2026-11/ (with task_disposition.tsv) are part of the day-one root, outside legacy/, so they survive deleting it. *Revised 2026-11-06 (owner, verbatim: "do the whole movement"): of docs/archive/roadmap-2026-11/, the files that are decision sources or disposition records stay at the root (task_disposition.tsv, the decision log ROADMAP_DECISIONS.md, the task register ROADMAP_TASKS.md, ROADMAP_RECONCILIATION.md, ROADMAP_RESTRUCTURE.md with its table, and the archive README); the old control plane ROADMAP.md, ROADMAP_BACKLOG.md, ROADMAP_DIRECTION.md and WORK_QUEUE.md were duplicates of their frozen legacy/ copies apart from the move's mechanical rewrites, and nothing cites them as a decision source, so their root copies were removed and links point at the legacy/ copies, which stay until the legacy deletion point. The other docs/archive/ records (the site takedown record, the old bug ledger's disposition, the landing audit and the dated decision archives) stay at the root.* *Revised 2026-11-08 (owner, "ok to 2"): all of docs/archive/ moves under legacy/, these retained records included, so docs/archive/roadmap-2026-11/ is no longer part of the day-one root; docs/decisions.md stays the one home of decisions and their quotes, and git history keeps the originals ([archive move](#decided-2026-11-08-archive-move)).*
+ - **P22** The work-queue dispatcher — Stop the dispatcher for the lean start. Agents are started by hand from the roadmap; bring the dispatcher back only when there is enough parallel work to need it.
+ - **P23** Precedence between decisions, rows and drafts — Recorded decisions govern. An accepted row supersedes a recorded rule only through an explicitly identified, owner-approved revision (Q5.1/Q5.4 for OD45/OD87, Q6.4 for TYPE-22, Q2.8 for TRAIT-1, Q9.15/P3 for generated chapters). R4's replacements govern conflicting draft recommendations. Before your acceptance is recorded, every passage R4 F18 lists is reconciled (capability inference, generated chapters, roadmap authority, assurance wording, restart order and retention, Phase E, freeze dependencies, superseded Core recommendations), and historical conflicting text is marked superseded.
+ 
+@@ -379,7 +386,8 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
+ - <a id="decided-project-restart"></a>**The restart and the `legacy/` folder** (owner, 2026-11-04;
+   details rows P5–P8, P21, P22, 2026-11-05). Everything old moves under `legacy/` on main in one
+   train. `legacy/` is a byte-frozen snapshot of main's tree at the move commit, never patched and
+-  never run; one root check refuses any change under it except a deletion its retention row allows,
++  never run; one root check refuses any change under it except a deletion its retention row allows
++  (revised 2026-11-08: or a recorded byte-for-byte sweep, see P5),
+   and no legacy gate runs (P5). Every legacy asset has a row in the root `RETENTION.tsv` with a
+   destination and deletion condition (P6). Revised 2026-11-06 by the owner ("i would delete legacy way later, we want to check it to see if
+   we fogot any idea right?"): `legacy/` is kept much longer, as the reference for ideas the new
+@@ -1345,6 +1353,57 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
+     - [Foundation question 9](#foundation-q9) (item 4): the trap names above.
+     - [Review caps](#decided-2026-11-08-review-caps) (items 1, 2): the sign-off path and the cap
+       for a diff that mixes classes.
++- <a id="decided-2026-11-08-signoffs"></a>**Owner sign-offs at the review cap** (owner, 2026-11-08:
++  "sign off ea5181b5, 1547734f8, a27fbb842, yes redesign"), under [process item 1](#decided-2026-11-08-process). Each sign-off approves one exact SHA
++  that Codex, Kimi and agy all reviewed. It never replaces a gate or a proof obligation.
++  - `wip/slice0` at `ea5181b535fd2983abfcafe31b3ff7bf59ec6439`: Codex ACCEPT (verification), Kimi
++    ACCEPT, agy ACCEPT after withdrawing its findings; branch CI run 42451061873, 18 of 18 jobs green.
++  - `wip/record-language` at `1547734f86e83d381f6cac2f25d2810b083bc9ed`: Codex and Kimi ACCEPT
++    (verification of the round-2 fixes), agy ACCEPT.
++  - `wip/one-repository` at `a27fbb842`: all three ACCEPT, at the scripts cap of 3 rounds.
++  None of the three has an outstanding finding.
++- <a id="decided-2026-11-08-landing-redesign"></a>**The landing protection redesign** (owner, 2026-11-08,
++  the same answer: "yes redesign"). The local remote guard ("guard A") and the acceptance shim are
++  replaced by this order:
++  1. the [landing scripts shrink](#decided-2026-11-08-landing-shrink) (R-0617: the bot, notify,
++     install-bot and the systemd units go);
++  2. then one repository, `lambdaclass/concrete` only (`wip/one-repository`), lands before the
++     foundation freeze;
++  3. then server-side protection of `main` becomes the real boundary: GitHub rulesets or branch
++     protection let only a train merge with the required checks green update `main` (R-0628);
++  4. then a much smaller local guard, as a convenience only (R-0629).
++  `wip/remote-guard` (`b60670804`) and `wip/acceptance-shim` (`eca268078`) are superseded and do not
++  land.
++- <a id="decided-2026-11-08-commit-push"></a>**Commit and push everything all the time** (owner,
++  2026-11-08: "commit and push everything all the time"). Every piece is committed as soon as it
++  builds and its checks pass, and pushed to `origin` and `lambdaclass` at once: on `wip/` branches,
++  from a full clone, with the hook on, and never force-pushed. `main` changes only through the train.
++  A candidate under review stays fixed; new work goes in new commits or branches.
++- <a id="decided-2026-11-08-writers"></a>**Codex, Kimi and agy write; Claude reviews** (owner,
++  2026-11-08: "can you have kimi, codex and agy implement things and we just review it"). This extends
++  [Claude's quota on the critical path](#decided-2026-11-08-quota), which named only Codex and Kimi as
++  writers. Codex, Kimi and agy implement. Each works in its own fresh full clone on its own `wip/`
++  branch. Codex uses `codex exec -s danger-full-access`; Kimi uses `kimi -p`, never `--yolo` or
++  `--auto`; agy uses `agy -p` with its inputs inline because it cannot read files. Runs are bounded by
++  `systemd-run` with `TasksMax` and `MemoryMax`, under `timeout`, with at most two heavy runs per
++  machine. Claude briefs, reviews the diff, runs the gates and lands. The two models that did not write
++  the diff cross-review it. A writer never reviews its own work, and findings go back to the writer.
++  Claude writes a fix itself only when a reviewer pinpointed a small change, and says so. For decision
++  records, K
+imi or Codex drafts the text, Claude checks it against the quotes and the others review.
++  The one decisions writer still owns `docs/decisions.md` and `ROADMAP.md`.
++- <a id="decided-2026-11-08-legacy-sweep"></a>**Byte-for-byte sweeps into `legacy/`** (owner,
++  2026-11-08: "ok to 1", answering legacy sweep question 1). `legacy_frozen.sh` may accept an addition
++  under `legacy/` only if it is byte-identical to the same root path at a named commit, and the file
++  is gone from the root. Every other addition or edit stays refused, and the rule has negative
++  controls. The sweeps are recorded in `scripts/checks/legacy.lock`. The check judges the history
++  that landed on `main`: no lock line is rewritten or removed, and no `legacy/` file changes from a
++  version it once had there. No file, once frozen or swept, is ever rewritten ([P5](#decided-project-restart)).
++- <a id="decided-2026-11-08-archive-move"></a>**All of `docs/archive/` moves under `legacy/`** (owner,
++  2026-11-08: "ok to 2", answering legacy sweep question 2). This includes the decision sources and the
++  reconciliation and restructure records that P21 kept at the root. It is done by the byte-for-byte
++  sweep above (R-0631), and P21 is revised to match. `docs/decisions.md` stays the one home of
++  decisions and their verbatim quotes. Git history keeps the originals, and the final ideas sweep
++  before LD checks them.
+ - <a id="decided-project-spark-2026-11-06"></a>**What Concrete takes from SPARK** (owner, 2026-11-06: "ok do everything", after Claude, Codex, agy and Kimi chose unanimously; the
+   [review](proposals/SPARK.md) items 1, 2, 3, 6, 7, 9 and 10).
+   - *Function values with safety preconditions.* A function whose `#[requires]` is a safety
+## wip/record-signoffs...origin/wip/record-signoffs
+?? .pending_records_for_writer.md
+• I have relevant. Now inspect full exact current sections AGENTS lines 80-105 and 130, decisions 60-80, 290-302, 1320-1410 perhaps quota row elsewhere anchor. ROADMAP ranges 60-100, 145-195, rows R-0558 etc. Use Grep for anchors/RIDs. Parallel reads.Should have full rows R-0628 etc read 578-605. Also understand phase/queue table near 153-190 lists IDs for T: T0 T1 T2 only? R-0628/29/31 sit T section. User "If the phase/queue table near lines 153-190 lists IDs for T, add them there" likely T0 T1 T2 only existing tasks lists, add to appropriate? R-0628 etc not T0/T1/T2 perhaps new row T3? User wants add IDs to T queue. Could add to T? Existing T2 is move old tree and includes R-0558/0565. R-0628/29 landing redesign not related to T2. Could add a T3 row? User says "If the phase/queue table near lines 153-190 lists IDs for T, add them there" likely add them to T0? Should interpret carefully. User likely reviewer notes new R-IDs missing from phase table; "R-0628, R-0629 and R-0631 sit in section '### T. Development throughput'. If the phase/queue table near lines 153-190 lists IDs for T, add them there" So likely add new T3 row with those three IDs, goal perhaps "Protect main and finish legacy sweeps" and done when summary. Or append R-0628 etc to T2 tasks? T2 "Move old tree to legacy" R-0631 related but R-0628/29 not. Better add T3 row. But user says no change R-ID anchor etc. Adding T3 isn't R-ID. Surrounding style. I need inspect base ROADMAP history perhaps earlier rows or pattern. Could be table only T0/T1/T2, all other T tasks not listed either (R-0617 etc newly added branch, R-054x omitted). Hmm user conditional "If phase/queue table near lines 153-190 lists IDs for T, add them there" yes table lists IDs. User wants those three added, likely to T2 or new T3. Should infer from review fix expectation. Could use git diff previous branch commits to see reviewers perhaps comments not accessible. I should satisfy by adding T3 row. But "Do not change ... decided substance" T3 new queue phase okay. Should plain English short. Could add `| T3 | Protect main and move the remaining archives | R-0628, R-0629, R-0631 | ... |` with done when exact enough. But perhaps simpler append these tasks to T2? That would wrongly include landing protection in old tree move. T3 natural. I must not invent dependency R-0631 uses prose. User specifically "R-0631's 'depends on' column: use R-IDs or '—' plus prose only if the column already allows prose elsewhere; keep the sweep check as a named dependency in the done-when text instead." Current depends `the byte-for-byte sweep check` prose not R-ID. Should use `—` since no R-ID for check, done when includes "depends on the byte-for-byte sweep check" or "after the byte-for-byte sweep check" named dependency. They say "use R-IDs or '—' plus prose only if the column already allows prose elsewhere" Column does allow `owner: approval...`, `T0`, etc. But explicit keep sweep check as named dependency in done-when text. So depends `—`. Done when currently "every file ... by sweep" plus Gate. Add "it starts only after the byte-for-byte sweep check has landed" perhaps named dependency. Should have exact phrase.
+
+  R-0630 row should say applies at slice 0 (B0). Add `at slice 0 (B0), over every constant...` perhaps `at slice 0 (B0): over every constant...`. Short.
+
+  Fix 1:
+  - decisions commit-push row now quote in list. Should have "pieces are pushed at once to the push remotes in force (today origin and lambdaclass; lambdaclass/concrete only once one repository lands, see landing-redesign row's step 2)." Current says origin/lambdaclass. Should avoid conflict with one repo. Wording: "Every piece is committed as soon as it builds and its checks pass. It is pushed at once to the push remotes in force: today `origin` and `lambdaclass`; after [one repository lands](#decided-2026-11-08-landing-redesign), `lambdaclass/concrete` only. Pushes use `wip/` branches from a full clone, with the hook on, and are never forced. `main` changes only through the train." Should link specifically step 2 perhaps text "(step 2)" link. `lambdaclass/concrete` only once one repository lands ([landing redesign](#...), step 2). This preserves rest. Recent line ~75 should reflect remotes in force. `- Commit and push everything all the time to the push remotes in force ([row]...).` Could say "Commit each validated piece and push it at once to the remotes in force ([row])". Quote not needed recent. Changelog bullet similarly. "every piece ... pushed at once to the push remotes in force: today origin and lambdaclass, then lambdaclass/concrete only after one repository lands." Keep concise. Link perhaps not necessary changelog.
+  - AGENTS wip-push line to both remotes in force commands, linking row. "Commit each validated slice. Push the branch to `wip/<branch>` at least every 5 minutes of work, to each push remote in force ([decision](...)): `git push origin HEAD:refs/heads/wip/<branch>` and the same command to `lambdaclass` today; the hook's wip tier only scans for conflict markers." Could be lines long but okay. Should have "and the same to lambdaclass" exactly. Perhaps commands both explicit? User says "(`git push ...` and the same to `lambdaclass`)" not necessarily two commands. Could say `git push origin ...` and `git push lambdaclass ...` for clarity. After one repo lands only one. "Push ... to both remotes in force today, `origin` and `lambdaclass` ([decision]...): ... . Use the remotes in force after the one-repository change." This captures.
+  - After push line ~104 only checks origin. User didn't name specific preexisting line except AGENTS ~95-97. "Edit only ... plus specific pre-existing lines named below." Don't touch after push line. Though conflict? Could leave since scope. Fine.
+
+  Fix 2 decisions writers row restrict. Could be:
+  `- <a ...></a>**Codex, Kimi and agy write; Claude reviews** ... Codex, Kimi and agy implement. Claude briefs, reviews, runs the gates and lands. This revises [Claude's quota...] ...` But fix3 explicit revision note at quota, no need writers says extends. Keep only quote decided meaning. Remove fresh clones and all procedure. Perhaps exactly:
+  `... Codex, Kimi and agy implement. Claude briefs, reviews, runs the gates and lands.` That's it. This also avoids duplication. Changelog bullet keep quote and decided meaning: currently includes clones and cross-review. Change to:
+  `- **Codex, Kimi and agy write; Claude reviews** ("quote"): Codex, Kimi and agy implement. Claude briefs, reviews, runs the gates and lands.`
+  - AGENTS Who works on what: process not owner decision. Header currently owner decision links eleven. Should have "keep AGENTS.md text free of quoted owner authority for those details." Header may stay owner for quota. Bullet could separate decided meaning and process:
+  `- Claude's quota... Codex, Kimi and agy implement; Claude briefs, reviews, runs the gates and lands ([decision](...)).`
+  `- Each writer works in its own fresh full clone on its own wip/ branch. The other two models cross-review each diff; a writer never reviews its own work. Long-running writer commands use bounded_run, never GNU timeout.` This is process with no owner authority. But user says "put it, briefly, only in AGENTS.md's 'Who works on what' block, using bounded_run (never GNU timeout, per AGENTS.md line ~135)" They refer operational practice includes each writer clone branch, cross review. CLI flags etc dropped decision row. Should AGENTS include CLI flags? "The operational practice (each writer in its own clone and wip/ branch; the writer never reviews its own work, the other models cross-review) is process, not an owner decision: put it, briefly, only in AGENTS.md's 'Who works on what' block, using bounded_run (never GNU timeout, per AGENTS.md line ~135), and keep the AGENTS.md text free of quoted owner authority for those details." This could mean include bounded_run for writer commands, no need CLI flags. They explicitly drop CLI flags/sandbox etc from decision row, not necessarily AGENTS. But "operational practice ... put it briefly only ... using bounded_run" suggests add process with bounded_run, perhaps include model invocation? Existing AGENTS Review says agy bounded_run. Should inspect around 147.
+
+• The main issues are confirmed: the writers row includes operational detail beyond the quote, and several ROADMAP rows still state the pre-sweep rules. I’ll keep owner decisions separate from writer process.
+
+• Should edit multiple same file cannot consecutive Edit same file without read. I can do one Edit per file with large old/new chunk? I need multiple disjoint modifications in docs decisions. Tool says multiple Edit calls may run one response only not same file, do not consecutive Edit same file; previous edit invalidates later old string, read file again before next. I can do sequential read/edit per file. Could use one Edit per file if replace large sections but docs decisions sections far apart (75, 300, 1128, 1377). I need multiple edits, sequential with reads in between. Could use Edit replace_all if small strings unique? One Edit only replaces one old string. Could replace entire file with Write? Not allowed incremental. Must Edit each change and re-read before next. I can do iterative many calls. I can parallel edits different files in each response. Plan:
+  1. Edit AGENTS Who works + branches in one large contiguous chunk lines 78-97 (includes unchanged) single edit. Edit decisions perhaps entire recent line first or quota etc. Edit changelog one big chunk lines 11-15. Edit ROADMAP one big initial section lines 70-93 or separate later. I can parallel first edits across four files.
+  Then read relevant updated docs and next edit. Should not re-read after successful Edit solely prove write; but for next edit same file required read. I can read target next section before next Edit. I already read before first. Fine.
+  Could consolidate docs decisions by one huge old string from line 75 through 1393 impossible 50k but doable 100k max? Edit parameters not limited but would reproduce 1300 lines enormous, not ideal. Sequential.
+
+  ROADMAP multiple disjoint sections: initial 70-93 one Edit, queue 172-185 perhaps another, R-0630/0562 lines 480-483 one contiguous edit, R-0590 one, R-0558 one, R-0628-31 one. Many sequential. Could use one Edit with replace_all for phrases repeated? Should specific revision notes differ. I can edit large from 478 to 598 ~120 lines, 30k chars, but unnecessary. Sequential read each.
+
+  I need exact content design.
+
+  AGENTS block:
+  ```
+  **Who works on what** (owner...).
+  - Claude's quota ... Codex, Kimi and agy
+    implement. Claude briefs, reviews, runs the gates and lands
+    ([decision](...writers)).
+  - Each writer works in its own fresh full clone on its own `wip/` branch. The other two models
+    cross-review each diff; a writer never reviews its own work. Bound writer commands with
+    `bounded_run`, never GNU `timeout`.
+  - One writer...
+  ...
+  - Commit each validated slice. Push ... to the remotes in force
+    ([decision](...commit-push)), today both `origin` and `lambdaclass`:
+    `git push origin HEAD:refs/heads/wip/<branch>` and
+    `git push lambdaclass HEAD:refs/heads/wip/<branch>`. The hook's wip tier only scans for conflict
+    markers.
+  ```
+  "keep AGENTS text free of quoted owner authority for those details": The second bullet no decision link or owner, good. First bullet owner link to decision for decided meaning. Header owner applies block broadly but okay? User might interpret process bullet under header with owner date means quoted owner authority. Could restructure header:
+  ```
+  **Who works on what.**
+  - Claude's quota ... (owner, 2026-11-08, [decision](...eleven)). Codex... ([decision](...writers)).
+  - Writer process: ...
+  ```
+  This keeps process not under owner header. But initial specific pre-existing line header changed branch content from previous commits; allowed. User "only in AGENTS.md's Who works on what block ... keep AGENTS.md text free of quoted owner authority for those details." Better remove owner attribution from block header and put links only decision bullet. Existing header owner 2026... refers quota. I can do:
+  `**Who works on what.**`
+  `- Claude's quota goes ... (owner, 2026-11-08, [decision](...eleven)). Codex, Kimi and agy implement; Claude briefs, reviews, runs the gates and lands ([decision](...writers)).`
+  `- Writer process: each writer... Bound each writer run with bounded_run...`
+  No quotes. Good.
+  But one writer decisions owner link? Existing no owner in bullet, block header used to supply owner. If remove header, this bullet loses attribution. Could add `(owner, 2026-11-08, [decision](...one-writer))` to preserve decided substance/authority. However user says only specific lines named, this is branch's existing context not changed? It was pre-existing before branch. User didn't ask modify one-writer bullet, and I can leave. Header removal may affect. Alternative header keep, process bullet explicitly `Process, not an owner decision: ...` This meets clear. "keep ... free of quoted owner authority for those details" no quotes. Owner header doesn't quote. Might be okay. Simpler minimal:
+  ```
+  **Who works on what** (owner...).
+  - Claude... ([decision] writers).
+  - As process, each writer works ... ... bounded_run...
+  - One writer...
+  ```
+  The word "As process" makes separation. But "owner" block still. Better:
+  ```
+  **Who works on what.**
+  - Claude's quota ... (owner, 2026-11-08, [decision](...eleven)).
+    Codex... ([decision](...writers)).
+  - Writer process: ...
+  - One writer... (owner, 2026-11-08, [decision](...one-writer)).
+  ```
+  This is robust and no overstating. Does this exceed requested? It's within Who works block and needed to separate authority. Fine.
+
+  Bound writer commands: "Run each writer through `bounded_run`, never GNU `timeout`." User said using bounded_run. Good. `bounded_run` path perhaps link existing? Plain inline enough.
+  Fresh full clones are already branch rule owner R-0619; process repeats but requested.
+
+  Docs decisions:
+  Recent commit line:
+  `- Commit each validated piece and push it at once to the push remotes in force ([row]...).`
+  Recent writers line already accurate no change needed? Fix says "Writers row..." not recent. Changelog. Keep recent.
+  P5 add anchor at start of its text:
+  `- <a id="decided-2026-11-05-p5"></a>**P5** legacy...`
+  Legacy sweep last `[P5](#decided-project-restart)` change to `[P5](#decided-2026-11-05-p5)`.
+  Quota:
+  ```
+  and the front end. Mechanical work goes to Codex and Kimi as writers. Revised 2026-11-08
+       ([writers](#...)): agy writes too; Claude briefs, reviews, runs the gates and lands.
+  ```
+  User explicit note exact. Use exact capitalization and punctuation. Good.
+  Commit push:
+  ```
+  ... Every piece is committed as soon as it
+    builds and its checks pass, then pushed at once to the push remotes in force: today `origin` and
+    `lambdaclass`; `lambdaclass/concrete` only after one repository lands ([landing redesign](#...), step 2).
+    Pushes use `wip/` branches, from a full clone, with the hook on, and are never force-pushed. ...
+  ```
+  "pieces are pushed at once to push remotes in force" yes. Plain short.
+  Could avoid saying "never force-pushed" grammar "and never force-pushed" as original.
+  Writers row:
+  ```
+  ... "). Codex, Kimi and agy implement. Claude
+    briefs, reviews, runs the gates and lands.
+  ```
+  Do I retain quota link? Fix 3 has revision, no need. Drop all. Good.
+
+  Changelog:
+  Commit bullet same remotes.
+  Writers bullet exact.
+  No other changes.
+
+  ROADMAP:
+  Rule 4 lines 74-76:
+  ```
+  patched and never run. One root check refuses any modification or addition under it, except an
+  addition recorded as a byte-for-byte sweep in `scripts/checks/legacy.lock` (revised 2026-11-08,
+  [sweep](...)), and any deletion except...
+  ```
+  Should note grammar. "One root check refuses any modification or addition under it, and any deletion except one its retention row allows. Additions are also accepted when ... (revised...)" clearer:
+  ```
+  patched and never run. One root check refuses any modification or addition under it, and any
+  deletion except one its retention row (below) allows. A recorded byte-for-byte sweep
+  (`scripts/checks/legacy.lock`) may also add a file (revised 2026-11-08, [sweep](...)). Its gates...
+  ```
+  But "never patched" then additions okay not patch. This exactly. User says additions accepted when recorded byte-for-byte sweep per sweep row. Should include same root path/gone? Not necessary linked decision. "except an addition recorded as a byte-for-byte sweep" enough. Could keep one sentence:
+  `One root check refuses any modification or addition under it, except a recorded byte-for-byte sweep (legacy.lock) (revised...), and any deletion except ...` Ambiguous modification exception. Better two sentences.
+
+  Retention:
+  ```
+  Retained assets ... migrate...
+  The manifest stays at the root and survives deletion. The task disposition table moves under legacy/ with docs/archive/ (R-0631; revised 2026-11-08, [archive move](...)); git history preserves it after legacy deletion.
+  ```
+  Link path should update to `legacy/docs/archive/...`? User says "specific pre-existing lines named below" and task disposition table no longer lives outside. I should change link target to `legacy/docs/archive/roadmap-2026-11/task_disposition.tsv` since move. R-0631 not landed yet? ROADMAP plan anticipates. Current actual file exists root. But task says "it moves under legacy/ with docs/archive (R-0631)" future. Should I say "moves under" and link current root? Could use `[task disposition table](legacy/docs/archive/...)` though not exists yet until task lands, link checker might fail now. Branch only docs records, R-0631 future; links should perhaps remain current path until move. User specifically "the task disposition table under docs/archive/ no longer lives outside legacy/; it moves under legacy/ with docs/archive (R-0631), and git history preserves it after legacy deletion." User likely wants `The [task disposition table](docs/archive/...) moves under legacy/ ...` no link update needed now? Wording "no longer lives outside legacy/" suggests decided future state. Existing branch decisions says moves, R-0631 not landed. ROADMAP should plan. I can write:
+  `That manifest stays at the root and survives the deletion. The [task disposition table](docs/archive/...) moves under legacy/ with docs/archive/ (R-0631; revised 2026-11-08, [archive move](...)); git history preserves it after legacy deletion.`
+  This retains valid current link. User may expect link changed later by R-0631. Fine. User said "RETENTION.tsv at root". Good.
+
+  R-0562:
+  `...; the manifest stays at the root and survives deletion; the task disposition table moves under legacy/ with docs/archive/ (R-0631; revised...), and git history preserves it after deletion`.
+  Only contradicting clause. Use exact revision note.
+  R-0590:
+  `... and the retention records at the root survive it` contradicts. Change `and RETENTION.tsv stays at the root and survives it; the task disposition table is under legacy/ by then (R-0631), with git history preserving it (revised 2026-11-08, [archive move](...))`. This is longer but precise. "wherever ... docs/archive task-disposition/records survive at root, align same way." Could say `and the root RETENTION.tsv survives it, while the records moved under legacy/ by R-0631 remain in git history (revised...)`.
+  R-0558:
+  Objective includes archive root in day-one list. User says "wherever ... docs/archive task-disposition/records survive at root, align same way. Read each row and change only contradicting clause." R-0558 day-one list originally correct at move time before R-0631. Does it contradict? It says day one root holds archive; later move doesn't change historical day one. But user specifically names R-0558 and wants align. Could add revision note after archive clause: `and the [2026-11 roadmap archive](...) with its task disposition table (the archive later moves under legacy/ with all of docs/archive/, R-0631; revised 2026-11-08, [archive move](...)).` This retains day-one fact and aligns later. Or remove archive from day-one list? That would falsify historical. Better note.
+  Done-when every addition refused:
+  `a root check refuses any modification or addition under legacy/, except an addition accepted as a recorded byte-for-byte sweep (revised...), and any deletion...`. Should be precise "refuses any modification, and any addition except ...". Write:
+  `a root check refuses any modification under legacy/, any addition not recorded as a byte-for-byte sweep in scripts/checks/legacy.lock (revised 2026-11-08, [sweep](...)), and any deletion...`
+  This changes only clause.
+  R-0562 as above.
+  R-0590 root records.
+
+  Queue T3:
+  Could perhaps add tasks to T2? Should decide. New row:
+  `| T3 | Protect main and finish the archive move | R-0628, R-0629, R-0631 | Server-side protection is the real boundary, the smaller local guard follows, and docs/archive/ has moved under legacy/ by the recorded byte-for-byte sweep. |`
+  This is plain. Does user say no new anchor IDs? No. T3 not R-ID. Fine. However "Do not change ... decided substance" adding queue summary of decided rows not new substance. Good. Place after T2 before A1. Perhaps T0-T2 landed, T3 next. Active line could mention T3? Not asked, don't.
+  R-0630 done when add `at slice 0 (B0), ...`.
+  R-0631 depends `—`, done when add `the byte-for-byte sweep check lands first;` at beginning. Named dependency exact. Perhaps `the byte-for-byte sweep check is a dependency and lands first; every file...` redundant. "after the byte-for-byte sweep check lands, every file ..." is enough. User says keep sweep check as a named dependency in done-when text. Could say `depends on the byte-for-byte sweep check landing first; ...` unnatural done when. Better `the byte-for-byte sweep check has landed; every file...`. Named dependency in done-when. Depends `—`. Good.
+
+  Potential R-0617 wording "one kind addition accepts once ... lands" now sweep has landed as decision not check. Not requested. Leave.
+
+  Should check AGENTS wip push both remotes in force and commit row says lambdaclass/concrete after one repo. Fine.
+
+  I should perform edits systematically. First parallel AGENTS block, changelog two bullets in one contiguous, decisions recent line, ROADMAP initial rule big chunk. Then next reads etc. I need track todo after reading done. Mark first done second in_progress before edits.Now docs decisions read P5 again before edit. ROADMAP read queue before edit. Could edit P5 and queue in parallel after read calls. Should have no need for read AGENTS/changelog now done. I'll read decisions P5 and ROADMAP 168-187.AGENTS changed by me, reminder. Perhaps read current, whole relevant not whole? Says read current file(s), should read AGENTS perhaps current entire 370 lines, already know only my change. To follow latest read relevant lines perhaps enough? "Read current file(s)" call Read full or chunks. I'll do later perhaps now alongside? Now continue. Edit P5 anchor only, ROADMAP queue insert T3. Also read AGENTS full perhaps max chars 100k. Use parallel with edits? Independent read and edits yes.Now docs quota next read, ROADMAP R-0630/0562 next read. I can parallel.Now Edit quota and ROADMAP R-0630+R0562 contiguous including R0553 unchanged. Use exact two rows perhaps one Edit old string from R0630 through R0562. Good.Should continue. Docs decisions commit+writers+P5 link one contiguous edit after read. ROADMAP R0590 read. Todo second not finished until decisions done. Fine.
+
+• The decision text now distinguishes the owner’s direction from day-to-day writer process. Next I’m finishing the commit/push wording and the remaining ROADMAP revisions.
+
+• Now edit contiguous docs commit/writers/sweep P5 link all one old string. New:
+  ```
+  ... Every piece is committed as soon as it
+   builds and its checks pass, then pushed at once to the push remotes in force. Today those are
+   origin and lambdaclass. Once one repository lands, only lambdaclass/concrete remains
+   ([landing redesign](#...), step 2). Pushes use wip/ branches from a full clone, with the hook on,
+   and are never force-pushed. main...
+  ```
+  "pieces pushed at once to remotes in force" clear.
+  Could keep one sentence for today/after as user requested parentheses. Short sentences.
+  Writers no quota extension note, fix3 covers.
+  P5 link corrected.
+  ROADMAP R0590 new clause:
+  `... deleted in one change; RETENTION.tsv stays at the root and survives it, while the records moved under legacy/ by R-0631 remain in git history (revised 2026-11-08, [archive move](...))`
+  This names root manifest. "retention records at root survive" removed. Good.Docs/AGENTS/changelog done. Mark second done third in progress. Should have ROADMAP R0558 and R0631. Read R0558 current and R0628-31.I can edit R0558 now. Then read before next R0631. Should design R0558:
+  Objective day-one archive:
+  `... and the [2026-11 roadmap archive](...) with its task disposition table. That archive later moves under legacy/ with all of docs/archive/ (R-0631; revised 2026-11-08, [archive move](...)). Everything else...`
+  This adds new sentence not "only contradicting clause" but necessary.
+  Done when:
+  `the root holds only that set; a root check refuses any modification under legacy/, any addition except one recorded as a byte-for-byte sweep in scripts/checks/legacy.lock (revised 2026-11-08, [sweep](...)), and any deletion...`
+  This says check refuses any addition except sweep. Good. Does "root holds only that set" conflict after archive move? Historical day-one done when. Fine.
+  Perhaps user expects no addition unqualified, mine exact.
+
+  Edit whole R0558 row one.Now read R0631 again (required) then edit.Edit R0631:
+  `the byte-for-byte sweep check has landed; every file...` depends —.
+  No other dependencies.Now all requested implemented. Should verify diff carefully no unintended and all requirements. No builds/nix. I can run git diff --check (not build, okay) and git diff --stat final requested, git status, perhaps custom Python read-only checks anchors and quotes? Could use Grep to ensure old operational details absent in decisions and every addition contradictions. Should inspect full working diff vs HEAD and branch diff? `git diff -- docs...` gives my review fixes only. I should read it. Also `git diff --check`. User asked when done print git diff --stat; response include exact output. I can run Bash `git diff --check && git diff --stat` plus `git status --short` independent perhaps in parallel. Also Grep for banned content and old clauses. But before responding, todo mark third done fourth in progress. Then tools.
+
+• All requested text edits are in place. I’ll now check the patch for formatting problems, stale contradictions and out-of-scope changes; no builds or Nix commands will run.
+
+ AGENTS.md                                 | 20 +++++++++++++-------
+ ROADMAP.md                                | 24 +++++++++++++++---------
+ changelog.d/2026-11-08-record-signoffs.md |  8 +++++---
+ docs/decisions.md                         | 29 ++++++++++++-----------------
+ 4 files changed, 45 insertions(+), 36 deletions(-)
+diff --git a/AGENTS.md b/AGENTS.md
+index 514d56aed..ff152ae80 100644
+--- a/AGENTS.md
++++ b/AGENTS.md
+@@ -75,13 +75,17 @@ as a conflict, until the owner answers; nobody extends or reverts it meanwhile.
+   are recorded against `legacy-compiler-final`, never repaired, under
+   [ROADMAP's defect disposition and frozen-compiler rule](ROADMAP.md#defect-disposition-rule).
+ 
+-**Who works on what** (owner, 2026-11-08, [decision](docs/decisions.md#decided-2026-11-08-eleven)).
+-- Claude's quota goes to the critical path: the spec, slice 0 and the front end. Codex, Kimi and agy
+-  write in their own fresh full clones on their own `wip/` branches. Claude briefs, reviews, runs the
+-  gates and lands. The other two models cross-review each diff; a writer never reviews its own work
++**Who works on what.**
++- Claude's quota goes to the critical path: the spec, slice 0 and the front end (owner, 2026-11-08,
++  [decision](docs/decisions.md#decided-2026-11-08-eleven)). Codex, Kimi and agy implement; Claude
++  briefs, reviews, runs the gates and lands
+   ([decision](docs/decisions.md#decided-2026-11-08-writers)).
++- Writer process: each writer works in its own fresh full clone on its own `wip/` branch. The other
++  two models cross-review each diff; a writer never reviews its own work. Run each writer through
++  `bounded_run`, never GNU `timeout`.
+ - One writer edits `docs/decisions.md` and `ROADMAP.md` at a time; other workers send that writer
+-  their records instead of editing those files.
++  their records instead of editing those files (owner, 2026-11-08,
++  [decision](docs/decisions.md#decided-2026-11-08-one-writer)).
+ 
+ **Branches.**
+ - Every branch's full clone is `~/projects/clones/<branch>`, removed after the branch lands (owner,
+@@ -92,8 +96,10 @@ as a conflict, until the owner answers; nobody extends or reverts it meanwhile.
+   depends on it waits or rebases onto it.
+ - Rebase onto `origin/main` after every landing (`/rebase`), not only before your own landing, so a
+   conflict or a changed rule shows up while the branch is small.
+-- Commit each validated slice. Push the branch to `wip/<branch>` at least every 5 minutes of work
+-  (`git push origin HEAD:refs/heads/wip/<branch>`); the hook's wip tier only scans for conflict
++- Commit each validated slice. Push the branch to `wip/<branch>` at least every 5 minutes of work,
++  to the push remotes in force ([decision](docs/decisions.md#decided-2026-11-08-commit-push)), today
++  both `origin` and `lambdaclass`: `git push origin HEAD:refs/heads/wip/<branch>` and
++  `git push lambdaclass HEAD:refs/heads/wip/<branch>`. The hook's wip tier only scans for conflict
+   markers.
+ - Never push to `main`, `ci/*` or the remote `fork`. Landings go to both `origin` and
+   `lambdaclass`, only through the landing script (`scripts/land/train.sh`) or the landing bot.
+diff --git a/ROADMAP.md b/ROADMAP.md
+index 3a11c4ab1..042b36cb9 100644
+--- a/ROADMAP.md
++++ b/ROADMAP.md
+@@ -73,7 +73,9 @@ verbosity that buys clarity) get one home in `PHILOSOPHY.md` when the `wip/philo
+    In one train, everything old moves under `legacy/`: the compiler, its scripts, tests, examples, std, proofs, gates, docs, research, site
+    and bug ledger. `legacy/` is a byte-frozen snapshot of main's tree at the move commit. It is never
+    patched and never run. One root check refuses any modification or addition under it, and any
+-   deletion except one its retention row (below) allows. Its gates are not
++   deletion except one its retention row (below) allows. An addition is also accepted when it is a
++   recorded byte-for-byte sweep in `scripts/checks/legacy.lock` (revised 2026-11-08,
++   [sweep](docs/decisions.md#decided-2026-11-08-legacy-sweep)). Its gates are not
+    re-run: they were qualified at `legacy-compiler-final`, and its evidence stays replayable from that
+    tag. The differential oracle is built from the tag in its own isolated checkout, not from
+    `legacy/` (R-0564). The infrastructure for the new root is prepared beside the old tree (T0,
+@@ -88,9 +90,12 @@ verbosity that buys clarity) get one home in `PHILOSOPHY.md` when the `wip/philo
+    slice plan the earliest is the RocksDB acceptance program after slice 25), and only when a final ideas sweep has dispositioned every idea (carried, planned,
+    deferred or dropped on purpose), every row of the root retention manifest `RETENTION.tsv`
+    (R-0562) is resolved, and the owner explicitly approves. Retained assets (corpora, regressions,
+-   examples, std, the bug ledger, the site and docs) migrate as slices need them. That manifest and
+-   the [task disposition table](docs/archive/roadmap-2026-11/task_disposition.tsv) live outside
+-   `legacy/` and survive its deletion.
++   examples, std, the bug ledger, the site and docs) migrate as slices need them. That manifest stays
++   at the root and survives the deletion. The
++   [task disposition table](docs/archive/roadmap-2026-11/task_disposition.tsv) moves under `legacy/`
++   with `docs/archive/` (R-0631; revised 2026-11-08,
++   [archive move](docs/decisions.md#decided-2026-11-08-archive-move)); git history preserves it after
++   the `legacy/` deletion.
+ 5. **Authority uses permissions and values.** `with(...)` is compile-time permission, and linear values
+    are the resources. An operation needs both. `main` consumes the target's grant values. Allocation
+    takes an allocator value and can fail. Filesystem access goes through directory values
+@@ -172,6 +177,7 @@ and owned by the task that removes its structural class.
+ | T0 | Prepare the restart beside the old tree (decision row P7, approved 2026-11-05) | R-0568, R-0564 | Checklist, each item on main before T1: (1) the new root's CI jobs; (2) `required-checks.txt`, enforced by `train.sh watch` and `train.sh land`; (3) the required-check transition mechanism, an explicit old-to-new job mapping that is validated and needs the replacement checks to pass at the exact candidate SHA, never marking a dropped legacy check passed; (4) `ISSUES.tsv` and its validator; (5) `RETENTION.tsv` and the task disposition table; (6) `scripts/oracle/ORACLE.lock` with the oracle release artifact and its digest; (7) the archive records of the stopped services. |
+ | T1 | Rehearse the move on the candidate root | R-0563 | On a throwaway branch holding the exact proposed day-one root, a fresh clone builds the candidate, hooks, runs exact-SHA CI and passes a dry-run landing, and the negative controls are refused for the expected reason. |
+ | T2 | Move the old tree to `legacy/` in one train, after T0 and the T1 rehearsal | R-0558, R-0565 | The root holds only the day-one set. `legacy/` is byte-frozen and checked. The move itself lands on both remotes. The website is down. |
++| T3 | Protect `main` and finish the archive move | R-0628, R-0629, R-0631 | Server-side protection is the real boundary. The smaller local guard follows. All of `docs/archive/` moves under `legacy/` by the recorded byte-for-byte sweep. |
+ | A1 | Dispose of the spec audit and draft the boundaries Core must satisfy | R-0555, R-0312, R-0316 | Each audit finding, gap and duplication has an owner and an acceptance artifact. The [boundary drafts](legacy/docs/compiler/A1_BOUNDARIES.md) exist. |
+ | A2b | Formalize the approved design in a proposed `Spec.lean` (current work) | R-0511 | Exit to A2i: `ConcreteSpec/Spec.lean`, aligned with the decided rows, is headed "PROPOSED: not normative until Core freeze"; the four design theorems are kernel-checked. The four design theorems (`reset_fresh`, `defer_cleanup_releases`, `open_mut_freezes_root`, `rep_roundtrip`) and their full obligations are kernel-checked without `native_decide`. Every row the formalization changes returns to the owner. This is separate from slice 1's soundness theorems. |
+ | A2i | Integrate the proposed spec before the freeze ([decision](docs/decisions.md#decided-project-long-term-2026-11-06)) | R-0571, R-0574, R-0496, R-0560, R-0555, R-0559, R-0588, R-0592, R-0602, R-0603, R-0607, R-0608, R-0609, R-0610, R-0611, R-0612, R-0613, R-0614, R-0615, R-0616, R-0626 | The shared foundation, contracts C1–C10 ([decision](docs/decisions.md#decided-2026-11-08-foundation)), is written in Lean with its laws proved, before slice 1 builds on it; each later slice adds its rules without rewriting it ([foundation first](docs/decisions.md#decided-2026-11-07-foundation-first)). The separately proved parts share Core interfaces and one integrated semantics. Interaction proofs hold for a borrow across deferred cleanup, an allocator reset with outstanding loans and cleanup that needs authority, and the README obligations [O7 and O9](ConcreteSpec/README.md) are discharged. The semantic contract is stated. The normative definitions are one library in cohesive modules with `Spec.lean` as the public import. The browsable owner view exists. The pre-freeze part of R-0574 (no hidden traps and bounded execution) is in the proposed spec. An outside reader has read the integrated spec through that view. |
+@@ -478,9 +484,9 @@ archive. Rows for C–G are summaries. Each is refined when its phase becomes ne
+ | R-0498 | Every enforcement claim maps to its gate leg and a targeted mutation | an unmapped claim fails; shape checks are labelled unproved; B0 includes pipeline-edge coverage and controls for missing proofs, unregistered premises, wrong artifact substitution and reject-all compilation | R-0118 |
+ | R-0272 | Restart fuzzing against the new compiler on concrete-ci-2, including the random-program differential against the Lean evaluator from the slice-0 front end ([early decision](docs/decisions.md#decided-2026-11-07-early-evidence)), seeded from the regressions and examples that survive in the repository and from newly generated programs (the ci-3 corpus and findings were not copied before the handover, decision row P14, and are lost), with reduction and counterexample-to-regression persistence | the random-program differential starts with the slice-0 front end and grows one feature per slice; the generators emit slice-supported programs, the oracle is Lean semantics against native code, and findings become regressions; legacy fuzzing stopped at the move; Home: tooling. Gate: the fuzzer, short in CI and long nightly on concrete-ci-2 ([tracking](docs/decisions.md#decided-2026-11-07-tracking)) | R-0425 |
+ | R-0550 | Compiler speed, scaling and binary-size tracking from slice 0 ([speed decision](docs/decisions.md#decided-2026-11-07-performance), [early decision](docs/decisions.md#decided-2026-11-07-early-evidence)) | wall time, per-stage time and memory are recorded by exact SHA, backend and target from slice 0; binary size is tracked per example per commit next to speed tracking and is report-only; a compile-speed budget is tracked per example, report-only like binary size ([decision](docs/decisions.md#decided-2026-11-08-compile-budget)); speed measurements are report-only until their noise is understood, then scaling gates hold for each stage and a planted regression is caught; Home: tooling. Gate: speed and binary size, report-only ([tracking](docs/decisions.md#decided-2026-11-07-tracking)) | R-0503 |
+-| R-0630 | Gate 2 for `Concrete/`: axioms and trust over the compiler | over every constant of `Concrete/`: only the three axioms, no `sorry`, no `native_decide`/`ofReduceBool`, the totality ban (no `partial`, `unsafe`, `@[implemented_by]`, `@[extern]` or `opaque` outside `Premises.lean`) and the external-checker replay; today only the trusted-base golden covers the headline theorems' axioms (slice-0 worker, 2026-11-08); Home: tooling (CI). Gate: the job itself, with a planted `sorry`, a planted `partial` and a planted axiom refused ([tracking](docs/decisions.md#decided-2026-11-07-tracking)) | R-0553 |
++| R-0630 | Gate 2 for `Concrete/`: axioms and trust over the compiler | at slice 0 (B0), over every constant of `Concrete/`: only the three axioms, no `sorry`, no `native_decide`/`ofReduceBool`, the totality ban (no `partial`, `unsafe`, `@[implemented_by]`, `@[extern]` or `opaque` outside `Premises.lean`) and the external-checker replay; today only the trusted-base golden covers the headline theorems' axioms (slice-0 worker, 2026-11-08); Home: tooling (CI). Gate: the job itself, with a planted `sorry`, a planted `partial` and a planted axiom refused ([tracking](docs/decisions.md#decided-2026-11-07-tracking)) | R-0553 |
+ | R-0553 | Totality audit: every semantics, checker, validator and pass is total and runs as proved | no partial definition; opaque execution gaps controlled; totality and execution-gap checks apply from B0; B3 performs the cumulative audit after B2 | R-0501 |
+-| R-0562 | The retention manifest `RETENTION.tsv` at the root, written before the move and checked before any deletion under `legacy/` | every legacy asset (corpora, regressions, examples, std, the bug ledger, the site, docs and the archived services) has a row with a destination and a deletion condition; deleting a path under `legacy/` whose row is unresolved is refused (control); the manifest and the task disposition table stay at the root and survive the deletion of `legacy/` (LD) | — |
++| R-0562 | The retention manifest `RETENTION.tsv` at the root, written before the move and checked before any deletion under `legacy/` | every legacy asset (corpora, regressions, examples, std, the bug ledger, the site, docs and the archived services) has a row with a destination and a deletion condition; deleting a path under `legacy/` whose row is unresolved is refused (control); the manifest stays at the root and survives the deletion of `legacy/` (LD); the task disposition table moves under `legacy/` with `docs/archive/` (R-0631; revised 2026-11-08, [archive move](docs/decisions.md#decided-2026-11-08-archive-move)), and git history preserves it after the deletion | — |
+ | R-0561 | Bug ledger by compiler | legacy defects are marked retired with the old implementation, never fixed, each keeping its reproducer, ruling and structural class; std defects move with std as contracts and regressions; every legacy ruling that states language behaviour becomes a conformance example or a recorded owner question; the minimal issue record of the day-one root becomes the new ledger with the first slice | R-0425 |
+ | R-0569 | A new website, built from scratch with the new compiler (decision row P9) | the site is designed anew around the decided language; its playground runs the new compiler; it teaches and links the Lean rules and states no rule of its own; no page describes the legacy compiler or the language before the 2026-11 decisions as current | B1 |
+ 
+@@ -531,7 +537,7 @@ archive. Rows for C–G are summaries. Each is refined when its phase becomes ne
+ 
+ | task | objective | done when | depends on |
+ |---|---|---|---|
+-| R-0590 | Delete `legacy/` (LD) once the new compiler implements a full real program ([decision](docs/decisions.md#decided-project-restart), revised 2026-11-06) | the new compiler implements a full real program such as RocksDB, ethrex or similar (in the slice plan the earliest is the RocksDB acceptance program after slice 25); the sweeps for the areas of C, D and E (R-0591, R-0597, R-0598) have all run, each possibly earlier than its phase, and a final ideas sweep of `legacy/` dispositions every idea (carried, planned, deferred or dropped on purpose); every `RETENTION.tsv` row is resolved; the owner explicitly approves at the time; `legacy/`, the old pipeline included, is then deleted in one change, and the retention records at the root survive it | R-0591, R-0597, R-0598, R-0562, R-0561, owner: approval at the time |
++| R-0590 | Delete `legacy/` (LD) once the new compiler implements a full real program ([decision](docs/decisions.md#decided-project-restart), revised 2026-11-06) | the new compiler implements a full real program such as RocksDB, ethrex or similar (in the slice plan the earliest is the RocksDB acceptance program after slice 25); the sweeps for the areas of C, D and E (R-0591, R-0597, R-0598) have all run, each possibly earlier than its phase, and a final ideas sweep of `legacy/` dispositions every idea (carried, planned, deferred or dropped on purpose); every `RETENTION.tsv` row is resolved; the owner explicitly approves at the time; `legacy/`, the old pipeline included, is then deleted in one change; `RETENTION.tsv` stays at the root and survives it, while the records moved under `legacy/` by R-0631 remain in git history (revised 2026-11-08, [archive move](docs/decisions.md#decided-2026-11-08-archive-move)) | R-0591, R-0597, R-0598, R-0562, R-0561, owner: approval at the time |
+ 
+ ### E. Verified growth
+ 
+@@ -580,7 +586,7 @@ archive. Rows for C–G are summaries. Each is refined when its phase becomes ne
+ | task | objective | done when | depends on |
+ |---|---|---|---|
+ | R-0568 | Day-one root infrastructure (T0) | on main beside the old tree: the new root's CI jobs; `required-checks.txt` enforced by `train.sh watch` and `land`; a required-check transition mechanism (an explicit, validated old-to-new job mapping; replacement checks must pass at the exact candidate SHA; a control that dropping a requirement without a mapping is refused; no legacy check is ever marked passed); `ISSUES.tsv` (ID, evidence, owner, severity, closure condition) with its validator and controls; the archive records of the stopped services | R-0562, R-0564 |
+-| R-0558 | Move the old tree to `legacy/` in one train and set up the minimal root. Day one, the root holds the README, this file, AGENTS.md, an empty CHANGELOG, LICENSE, the new build files, `ConcreteSpec/Spec.lean`, `docs/PHILOSOPHY.md`, `docs/decisions.md`, the landing, review and hook scripts, `scripts/oracle/`, `required-checks.txt` and its job mapping, `RETENTION.tsv`, the minimal issue record `ISSUES.tsv` with its validator, and the [2026-11 roadmap archive](docs/archive/roadmap-2026-11/README.md) with its task disposition table. Everything else comes back from `legacy/` when a slice needs it. The status page, the work-queue dispatcher, the fuzz farm, perf tracking and the nightly campaign stop, and each is listed in `RETENTION.tsv` as archived; each returns only with a roadmap task. The ci-3 fuzz corpus, perf history and leanprof data were not copied before the handover (decision row P14) and are not archived. | the root holds only that set; a root check refuses any modification or addition under `legacy/`, and any deletion its `RETENTION.tsv` row does not allow (controls for each); no legacy gate runs; the move lands on both remotes | T0, R-0563, R-0565, owner: approval of the move inventory |
++| R-0558 | Move the old tree to `legacy/` in one train and set up the minimal root. Day one, the root holds the README, this file, AGENTS.md, an empty CHANGELOG, LICENSE, the new build files, `ConcreteSpec/Spec.lean`, `docs/PHILOSOPHY.md`, `docs/decisions.md`, the landing, review and hook scripts, `scripts/oracle/`, `required-checks.txt` and its job mapping, `RETENTION.tsv`, the minimal issue record `ISSUES.tsv` with its validator, and the [2026-11 roadmap archive](docs/archive/roadmap-2026-11/README.md) with its task disposition table. That archive later moves under `legacy/` with all of `docs/archive/` (R-0631; revised 2026-11-08, [archive move](docs/decisions.md#decided-2026-11-08-archive-move)). Everything else comes back from `legacy/` when a slice needs it. The status page, the work-queue dispatcher, the fuzz farm, perf tracking and the nightly campaign stop, and each is listed in `RETENTION.tsv` as archived; each returns only with a roadmap task. The ci-3 fuzz corpus, perf history and leanprof data were not copied before the handover (decision row P14) and are not archived. | the root holds only that set; a root check refuses any modification under `legacy/`, any addition except one recorded as a byte-for-byte sweep in `scripts/checks/legacy.lock` (revised 2026-11-08, [sweep](docs/decisions.md#decided-2026-11-08-legacy-sweep)), and any deletion its `RETENTION.tsv` row does not allow (controls for each); no legacy gate runs; the move lands on both remotes | T0, R-0563, R-0565, owner: approval of the move inventory |
+ | R-0565 | Take the website down at the move (decision row P9, 2026-11-05) | the site's build and Pages deployment stop in the move's change; the published site is unpublished as a documented manual step whose moment the owner confirms (an outward action, never automatic); no frozen playground is served; the old site's sources stay archived under `legacy/` with a `RETENTION.tsv` row | R-0564 |
+ | R-0563 | Operational migration acceptance test (T1), before the move | T0 is on main; on a throwaway branch holding the exact proposed day-one root, a fresh clone builds the candidate (after `train.sh build`, so the candidate tree is what builds) with the candidate's own landing tooling, hooks, runs exact-SHA CI and passes a dry-run landing; negative controls (a broken build, a failing hook gate, a failed required CI job, a missing, skipped or cancelled required check, a SHA mismatch) are each refused for the expected reason at the expected SHA; a check that cannot run on a fallback runner is reported incomplete and blocks landing, never passed; the two-remote landing is proved by the move itself | R-0568, owner: approval of the move inventory |
+ | R-0564 | A pinned, reproducible legacy oracle, independent of `legacy/` | `legacy-compiler-final` builds in an isolated checkout of the tag from a pinned toolchain (`scripts/oracle/ORACLE.lock`) into a recorded digest; the build is published as a release artifact whose identity and SHA-256 are in the lock, fetched and verified by digest on any runner, cached on concrete-ci-2 and rebuildable from the tag alone with a hash check; a missing or mismatched artifact makes the oracle check incomplete, which blocks landing; runner criteria (decision row P13, owner 2026-11-05: concrete-ci-2 and GitHub-hosted runners as a regular second pool): the lock records the release tarball's SHA-256 with the toolchain and flake-lock hashes; landing and oracle runs use separate pools with per-pool CPU and memory limits and at most two heavy runs per machine; jobs that need ci-2's caches run there, and the build, the spec, the gates and the oracle diff also run on the GitHub-hosted x86_64-linux pool, which takes them over when ci-2 is down; a check neither pool can run is incomplete and blocks landing, and a heavy campaign the GitHub pool cannot run is recorded as skipped, never passed; self-hosted runners never run pull-request jobs; a weekly from-scratch rebuild matches the digest; the differential harness invokes it by digest when the new compiler changes; an unexplained difference fails, and the oracle's agreement never overrides the Lean semantics | — |
+@@ -595,7 +601,7 @@ archive. Rows for C–G are summaries. Each is refined when its phase becomes ne
+ | R-0619 | One clones folder ([decision](docs/decisions.md#decided-2026-11-08-clones)) | every branch's full clone is `~/projects/clones/<branch>`, made by one script and removed after the branch lands; AGENTS.md states it; Home: tooling. Gate: the script's negative controls (a reused branch name, a clone outside the folder) | — |
+ | R-0628 | Server-side protection of `main` ([decision](docs/decisions.md#decided-2026-11-08-landing-redesign)) | after the landing-script shrink (R-0617) and one repository (`wip/one-repository`) land, GitHub rulesets or branch protection let only a train merge with the required checks green update `main`; this is the real boundary; Home: repository settings, recorded as tooling. Gate: a refused direct push and a refused merge with a required check missing, recorded as controls ([tracking](docs/decisions.md#decided-2026-11-07-tracking)) | R-0617 |
+ | R-0629 | A much smaller local guard, as a convenience ([decision](docs/decisions.md#decided-2026-11-08-landing-redesign)) | after R-0628, a small local guard warns before a push that the server would refuse; it is not the boundary; `wip/remote-guard` and `wip/acceptance-shim` are superseded; Home: tooling. Gate: its controls in the landing-script checks ([tracking](docs/decisions.md#decided-2026-11-07-tracking)) | R-0628 |
+-| R-0631 | Move all of `docs/archive/` under `legacy/` ([decision](docs/decisions.md#decided-2026-11-08-archive-move)) | every file under `docs/archive/` is added under `legacy/` by the byte-for-byte sweep ([sweep row](docs/decisions.md#decided-2026-11-08-legacy-sweep)) and removed from the root; P21, `RETENTION.tsv` and the links that cite these files are updated; a path that
+ already exists under `legacy/` with other content is reported, never overwritten; Home: tooling. Gate: `legacy_frozen.sh` with its sweep controls, and the link check ([tracking](docs/decisions.md#decided-2026-11-07-tracking)) | the byte-for-byte sweep check |
++| R-0631 | Move all of `docs/archive/` under `legacy/` ([decision](docs/decisions.md#decided-2026-11-08-archive-move)) | the byte-for-byte sweep check has landed; every file under `docs/archive/` is added under `legacy/` by the byte-for-byte sweep ([sweep row](docs/decisions.md#decided-2026-11-08-legacy-sweep)) and removed from the root; P21, `RETENTION.tsv` and the links that cite these files are updated; a path that already exists under `legacy/` with other content is reported, never overwritten; Home: tooling. Gate: `legacy_frozen.sh` with its sweep controls, and the link check ([tracking](docs/decisions.md#decided-2026-11-07-tracking)) | — |
+ | R-0539 | Landing trains through `scripts/land/train.sh` | three trains of two or more branches land, median under 2 h | R-0542, R-0540 |
+ | R-0541 | Self-hosted runners never for `pull_request`; heavy runs on the servers | the workflow check and its negative control | R-0543, R-0540 |
+ | R-0513 | Gates that are trustworthy and affordable: inventories over counts, impact-selected pre-push | pre-push median ≤ 10 min, and no gate failure first seen in CI over 20 landings | R-0547 |
+diff --git a/changelog.d/2026-11-08-record-signoffs.md b/changelog.d/2026-11-08-record-signoffs.md
+index 9bd051d6c..6bec44f2f 100644
+--- a/changelog.d/2026-11-08-record-signoffs.md
++++ b/changelog.d/2026-11-08-record-signoffs.md
+@@ -9,10 +9,12 @@
+   real boundary (R-0628), and a much smaller local guard follows as a convenience (R-0629).
+   `wip/remote-guard` and `wip/acceptance-shim` are superseded.
+ - **Commit and push everything all the time** ("commit and push everything all the time"):
+-  every piece is committed when it builds and its checks pass, and pushed to both remotes at once.
++  every piece is committed when it builds and its checks pass, and pushed at once to the push remotes
++  in force. Today those are `origin` and `lambdaclass`; after one repository lands, only
++  `lambdaclass/concrete`.
+ - **Codex, Kimi and agy write; Claude reviews** ("can you have kimi, codex and agy implement things and
+-  we just review it"): the writers use their own clones and branches. Claude briefs, reviews, runs the
+-  gates and lands. The other two models cross-review each diff; a writer never reviews its own work.
++  we just review it"): Codex, Kimi and agy implement. Claude briefs, reviews, runs the gates and
++  lands.
+ - **Byte-for-byte sweeps into `legacy/`** ("ok to 1"): an addition under `legacy/` is accepted only
+   if it is byte-identical to the same root path at a named commit and is gone from the root. P5 and
+   the restart row are revised.
+diff --git a/docs/decisions.md b/docs/decisions.md
+index 61e5d4357..fb08d2b68 100644
+--- a/docs/decisions.md
++++ b/docs/decisions.md
+@@ -72,7 +72,7 @@ Each row records a decision and its reason. A language rule itself is its Lean d
+ - Language and process decisions: no method calls or receivers, no `as`, always-qualified imports, no `char`, trap names, review sign-off ([row](#decided-2026-11-08-language)).
+ - Owner sign-offs of slice 0, record-language and one repository ([row](#decided-2026-11-08-signoffs)).
+ - The landing protection redesign: server-side protection of `main` ([row](#decided-2026-11-08-landing-redesign)).
+-- Commit and push everything all the time ([row](#decided-2026-11-08-commit-push)).
++- Commit each validated piece and push it at once to the push remotes in force ([row](#decided-2026-11-08-commit-push)).
+ - Codex, Kimi and agy write; Claude reviews ([row](#decided-2026-11-08-writers)).
+ - Byte-for-byte sweeps into `legacy/`, and `docs/archive/` moves there ([sweep](#decided-2026-11-08-legacy-sweep), [archive](#decided-2026-11-08-archive-move)).
+ - Every branch gets an agy review too ([row](#decided-project-review)).
+@@ -297,7 +297,7 @@ The owner answered every row of the 2026-11-05 decision page, in the terminal. T
+ - **P2** Priority order when principles conflict — Soundness and provability > transparency (with auditability, honest trust boundaries and compiler-owned identity) > one authoritative definition (checked derived views allowed) > explicitness at the use site > brevity. The philosophy guides open choices and never silently reopens decided rules.
+ - **P3** Lean is the spec: confirm the amendment — Lean is the specification: confirmed together with Q9.15 (revision below).
+ - **P4** Duplicate enum variants or methods (bug 313) — Refuse duplicate variant names in one enum and duplicate method names in one impl, with a new rule and diagnostic, the same as duplicate fields.
+-- **P5** legacy/ is a byte-frozen snapshot, never patched or run — legacy/ is main's tree at the move commit, byte-frozen. A root check compares its tree hash, allowing only deletions a satisfied RETENTION.tsv entry authorizes. No legacy gate ever runs. The oracle is the tag-built artifact (P13), not the legacy/ copy. *Revised 2026-11-08 (owner, "ok to 1"): legacy/ also grows by byte-for-byte sweeps recorded in scripts/checks/legacy.lock; no file, once frozen or swept, is ever rewritten ([sweep row](#decided-2026-11-08-legacy-sweep)).*
++- <a id="decided-2026-11-05-p5"></a>**P5** legacy/ is a byte-frozen snapshot, never patched or run — legacy/ is main's tree at the move commit, byte-frozen. A root check compares its tree hash, allowing only deletions a satisfied RETENTION.tsv entry authorizes. No legacy gate ever runs. The oracle is the tag-built artifact (P13), not the legacy/ copy. *Revised 2026-11-08 (owner, "ok to 1"): legacy/ also grows by byte-for-byte sweeps recorded in scripts/checks/legacy.lock; no file, once frozen or swept, is ever rewritten ([sweep row](#decided-2026-11-08-legacy-sweep)).*
+ - **P6** Retention manifest gates deleting legacy/ — RETENTION.tsv at the root gives every legacy asset (corpus, regressions, examples, std, bug ledger, site, docs, research) a destination and deletion criterion. Revised 2026-11-06 ([restart row](#decided-project-restart)): nothing is deleted at B3; legacy/, the old pipeline included, is deleted way later (LD: once the new compiler implements a full real program such as RocksDB, ethrex or similar), when RETENTION.tsv has no live entry, a final ideas sweep has dispositioned every idea and the owner explicitly approves.
+ - **P7** Prove the new landing path before moving — T0: land beside the old tree the new root CI, required-checks.txt (enforced by train watch and land), RETENTION.tsv, the task disposition table, ORACLE.lock with the oracle artifact, and ISSUES.tsv. T1: rehearse the move on a throwaway branch: fresh clone, build, hook, exact-SHA CI, train --dry-run land; a broken build, a failing gate and a missing required check must each be refused. T2: the move in one train.
+ - **P8** Server services under scripts/ — Keep only landing services: train, review, hook, landing bot. The status page, work queue, fuzz farm, perf tracking and nightly campaign all stop and are recorded as archived in RETENTION.tsv; each returns only with a roadmap task.
+@@ -1126,7 +1126,9 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
+      review leg, the gates and the `legacy/` protection; drop the landing bot, notify, install-bot,
+      the systemd units and duplicate helpers; the old copies move to `legacy/` (R-0617).
+   4. <a id="decided-2026-11-08-quota"></a>*Claude's quota goes to the critical path:* the spec, slice 0
+-     and the front end. Mechanical work goes to Codex and Kimi as writers.
++     and the front end. Mechanical work goes to Codex and Kimi as writers. Revised 2026-11-08
++     ([writers](#decided-2026-11-08-writers)): agy writes too; Claude briefs, reviews, runs the gates
++     and lands.
+   5. <a id="decided-2026-11-08-front-end"></a>*The front end starts now.* The lexer and the LL(1)
+      parser are written now, in parallel with the foundation (R-0620); since the later answer "ok do
+      the written grammar", the parser wait
+s for the owner-approved written grammar and its Lean
+@@ -1376,28 +1378,21 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
+   land.
+ - <a id="decided-2026-11-08-commit-push"></a>**Commit and push everything all the time** (owner,
+   2026-11-08: "commit and push everything all the time"). Every piece is committed as soon as it
+-  builds and its checks pass, and pushed to `origin` and `lambdaclass` at once: on `wip/` branches,
+-  from a full clone, with the hook on, and never force-pushed. `main` changes only through the train.
++  builds and its checks pass, then pushed at once to the push remotes in force. Today those are
++  `origin` and `lambdaclass`. Once one repository lands, only `lambdaclass/concrete` remains
++  ([landing redesign](#decided-2026-11-08-landing-redesign), step 2). Pushes use `wip/` branches,
++  from a full clone, with the hook on, and are never force-pushed. `main` changes only through the train.
+   A candidate under review stays fixed; new work goes in new commits or branches.
+ - <a id="decided-2026-11-08-writers"></a>**Codex, Kimi and agy write; Claude reviews** (owner,
+-  2026-11-08: "can you have kimi, codex and agy implement things and we just review it"). This extends
+-  [Claude's quota on the critical path](#decided-2026-11-08-quota), which named only Codex and Kimi as
+-  writers. Codex, Kimi and agy implement. Each works in its own fresh full clone on its own `wip/`
+-  branch. Codex uses `codex exec -s danger-full-access`; Kimi uses `kimi -p`, never `--yolo` or
+-  `--auto`; agy uses `agy -p` with its inputs inline because it cannot read files. Runs are bounded by
+-  `systemd-run` with `TasksMax` and `MemoryMax`, under `timeout`, with at most two heavy runs per
+-  machine. Claude briefs, reviews the diff, runs the gates and lands. The two models that did not write
+-  the diff cross-review it. A writer never reviews its own work, and findings go back to the writer.
+-  Claude writes a fix itself only when a reviewer pinpointed a small change, and says so. For decision
+-  records, Kimi or Codex drafts the text, Claude checks it against the quotes and the others review.
+-  The one decisions writer still owns `docs/decisions.md` and `ROADMAP.md`.
++  2026-11-08: "can you have kimi, codex and agy implement things and we just review it"). Codex, Kimi
++  and agy implement. Claude briefs, reviews, runs the gates and lands.
+ - <a id="decided-2026-11-08-legacy-sweep"></a>**Byte-for-byte sweeps into `legacy/`** (owner,
+   2026-11-08: "ok to 1", answering legacy sweep question 1). `legacy_frozen.sh` may accept an addition
+   under `legacy/` only if it is byte-identical to the same root path at a named commit, and the file
+   is gone from the root. Every other addition or edit stays refused, and the rule has negative
+   controls. The sweeps are recorded in `scripts/checks/legacy.lock`. The check judges the history
+   that landed on `main`: no lock line is rewritten or removed, and no `legacy/` file changes from a
+-  version it once had there. No file, once frozen or swept, is ever rewritten ([P5](#decided-project-restart)).
++  version it once had there. No file, once frozen or swept, is ever rewritten ([P5](#decided-2026-11-05-p5)).
+ - <a id="decided-2026-11-08-archive-move"></a>**All of `docs/archive/` moves under `legacy/`** (owner,
+   2026-11-08: "ok to 2", answering legacy sweep question 2). This includes the decision sources and the
+   reconciliation and restructure records that P21 kept at the root. It is done by the byte-for-byte
+ M AGENTS.md
+ M ROADMAP.md
+ M changelog.d/2026-11-08-record-signoffs.md
+ M docs/decisions.md
+?? .pending_records_for_writer.md
+• Should evaluate potential issues in diff. User says "Do not change ... record-language content below this branch's commits ... only touch those plus specific pre-existing lines". I touched only branch lines and named preexisting. Added T3 new row okay. Added owner attribution to one writer line pre-existing? It is within AGENTS block but line not named except Who works block. Fine.
+
+  Concern Fix 5 initial ROADMAP sentence still "One root check refuses any modification or addition under it" followed "An addition also accepted..." contradiction explicit exception in next sentence but user asked "rules in force: one root check refuses any modification or addition under legacy/): additions also accepted..." User explicitly expects this structure, okay.
+
+  Fix 5 R0558 "root holds only that set" still includes archive day one and later note, okay.
+
+  Fix 5 R0562 no sweep issue. R0590 no addition issue.
+
+  Fix 6 T3 might be unwanted? Should think more. User said "R-0628, R-0629 and R-0631 sit in section '### T. Development throughput'. If the phase/queue table near lines 153-190 lists IDs for T, add them there". T3 is correct. R0630 at slice 0 B0 done. Depends column — done.
+
+  Should check owner quotes exactly. I used same. No invented quotes. Good.
+
+  Potential issue AGENTS "Run each writer through bounded_run" applies to all writer commands, whereas bounded_run takes duration argument, no exact command. Fine.
+
+  Potential requirement "drop CLI flags, sandbox mode, systemd-run/TasksMax/MemoryMax/timeout, and drafting procedure from decision row." All gone. I also dropped small fix procedure, okay. "operational practice ... put it briefly only in AGENTS ... using bounded_run ...". Changelog no operational. Decisions none. Good.
+  Potential "commit-and-push row ... say pieces are pushed at once to the push remotes in force (today origin and lambdaclass; lambdaclass/concrete only once one repository lands, see landing-redesign row's step 2)." Exactly.
+  Recent line updated. Changelog bullet updated.
+  AGENTS line both remotes. Good.
+  P5 anchor exact.
+  Quota revision exact except line break, text exactly. Good.
+
+  Should verify Markdown anchors uniqueness and local links maybe use script? No builds. Could use Python custom read to assert required text and changed files only. `git diff --check` passed. I should maybe inspect `git diff --name-only` ensures only four. Status shows pending untracked authoritative file unchanged. I must not delete. Good.
+
+  Do I need run tests? User said no builds/nix. `git diff --check` enough. Could run a small Python script for explicit assertions no file writes. Not necessary but useful to verify exact requirements. I can use Bash python reading files (dedicated Read should be used for reading known files; Bash should not use to read? Tool instructions say dedicated tool before raw shell. I already used Read. Could use Grep for anchors and exact rows. No need.
+
+  Should have final `git diff --stat` already printed tool output, user wants when done print and short per-fix summary. Response should include stat in code block and 6 bullets. Mention `git diff --check` passed and no commit/push/build. Should I include untracked pending not touched? Can mention not modified. No need.
+
+  Before responding mark todo done. Perhaps get line numbers for final references? Not necessary but helpful per-fix file paths. I can cite anchors no line numbers. User wants short. I can respond with 6 numbered summary matching. Stat. Tests note. No further changes.
+
+  But should scrutinize one subtlety: User said "Do not change any R-ID, anchor id, decided substance, or the record-language content below this branch's commits". I added T3 ID not R-ID. Good.
+  "Edit only docs/decisions.md, ROADMAP.md, AGENTS.md and changelog..." status only those + preexisting pending. Good.
+  "Do NOT edit .pending" didn't.
+  "Never invent owner quotes; quote exactly" quotes unchanged.
+  "Do not change ... decided substance" I altered AGENTS process not decision. ROADMAP revisions decided. Good.
+
+  Potential "R-0631's 'depends on' column: use R-IDs or '—' plus prose only if the column already allows prose elsewhere" Could parse as use R-IDs, or use "—" plus prose only if prose allowed elsewhere. I used —. Good.
+  "keep the sweep check as a named dependency in done-when text instead" yes `the byte-for-byte sweep check has landed`.
+
+  Could there be review issue with "the byte-for-byte sweep check has landed" done-when is state not dependency phrasing, but named. Fine.
+
+  Potential P5 anchor at start of its text: I inserted after `- ` before `**P5**`, exactly.
+  No existing anchor. Good.
+
+  No tests needed docs only but diff check. Response maybe "Validation: `git diff --check` passed. Per instruction, no build/Nix, commit or push." Fine.
+
+  I'll respond with `git diff --stat` exact output from tool. Summary 6 items:
+  1 remotes aligned across recent/row/changelog/AGENTS.
+  2 writers decision limited, process in AGENTS bounded_run.
+  3 quota revision.
+  4 P5 anchor/link.
+  5 legacy sweep/archive revisions in ROADMAP rows.
+  6 T3 queue and R0630 B0, R0631 dependency.
+  No commit etc.
+
+  Mark done.
+
+• The final patch touches only the four permitted files, and `git diff --check` passes. The authoritative answers file remains untouched.
+
+• Now respond concise.
+
+• Implemented all six review fixes:
+
+  1. **Commit and push:** aligned the decision, recent-decisions line and changelog with the push remotes in force. `AGENTS.md` now pushes wip branches to both current remotes.
+  2. **Writers:** restricted the owner decision to implementation by Codex, Kimi and agy, with Claude briefing, reviewing, gating and landing. Operational writer practice now lives only in `AGENTS.md`, using `bounded_run`.
+  3. **Quota revision:** added the explicit agy revision note to the quota row.
+  4. **P5 link:** added `decided-2026-11-05-p5` and corrected the sweep row’s P5 link.
+  5. **Legacy revisions:** updated the named ROADMAP rules and R-0558, R-0562 and R-0590 for recorded sweeps, the archive move and git-history retention.
+  6. **Phase naming:** added T3 with R-0628, R-0629 and R-0631; marked R-0630 as slice 0 (B0); moved R-0631’s sweep dependency into its done-when text.
+
+  `git diff --stat`:
+
+  ```text
+   AGENTS.md                                 | 20 +++++++++++++-------
+   ROADMAP.md                                | 24 +++++++++++++++---------
+   changelog.d/2026-11-08-record-signoffs.md |  8 +++++---
+   docs/decisions.md                         | 29 ++++++++++++-----------------
+   4 files changed, 45 insertions(+), 36 deletions(-)
+  ```
+
+  `git diff --check` passes. No commit, push, Nix command or build was run.
+
+To resume this session: kimi -r session_185a8b8a-70ca-4fd9-a4be-75626ea6dbac
+[unexpected] RuntimeError: workspace wd_rs-writer_3534ea0e2cbe is not materialized
+    at RuntimeResolver.acquire (/home/runner/work/kimi-code/kimi-code/apps/kimi-code/dist-native/intermediates/main.cjs:180498:36)
+    at AgentRuntimeService.acquire (/home/runner/work/kimi-code/kimi-code/apps/kimi-code/dist-native/intermediates/main.cjs:132231:25)
+    at AgentFileHistoryService.readCurrent (/home/runner/work/kimi-code/kimi-code/apps/kimi-code/dist-native/intermediates/main.cjs:177606:31)
+    at AgentFileHistoryService.endCheckpoint (/home/runner/work/kimi-code/kimi-code/apps/kimi-code/dist-native/intermediates/main.cjs:177519:32) {
+  code: 'runtime.not_found'
+}
+EXIT 0

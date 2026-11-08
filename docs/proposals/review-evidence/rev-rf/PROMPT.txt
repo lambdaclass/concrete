@@ -1,0 +1,14 @@
+READ-ONLY REVIEW. Do not modify, create or delete any file; do not run git commands that write. You are reviewing a documentation branch of the Concrete language repository (this directory is a copy of the branch head; `_review.diff` is the full diff against origin/main; `_inputs/` holds the source material).
+
+The branch records owner decisions. Inputs: `_inputs/PENDING_RECORDS.md` (the owner's verbatim answers; this branch records the 2026-11-07 "ok to option b then for freeze the foundation>?", the 2026-11-08 "ok all recommended" and the 2026-11-08 "ok go ahead with all the decisions" entries, and must skip "ok to 1"/"ok to 2") and `_inputs/FOUNDATION_PROPOSAL.md` (the approved proposal, copied to docs/proposals/FOUNDATION.md with links fixed for its new location, question anchors added and its status line set to "approved by the owner 2026-11-08; the plan for PLAN steps 3+; the Lean spec stays the only home of rules").
+
+Check, citing file:line:
+1. Every recorded quote is verbatim and every recorded answer matches what the owner approved; nothing is decided that the owner did not decide (the project rule: agents never choose a side of an undecided question; recording an explicit answer is not choosing). Flag any invented rule, spelling or slice placement.
+2. docs/proposals/FOUNDATION.md equals the source except for the stated edits; its links resolve from docs/proposals/.
+3. The revisions of decided rows (Q3.7/Q3.9/Q3.10 and OD126 generalized to target profiles; Q1.7 erasure only with proof; Q7.1/Q7.10/Q9.7 extensible registries) are recorded exactly as the proposal's section 4 states them, at each affected row.
+4. ROADMAP R-0607..R-0621: each has a home and a gate, dependencies are sound and acyclic, nothing contradicts decisions.md.
+5. docs/proposals/SPEC_UNIFICATION.md section 6 (steps 3 onward) is a sound dependency order for writing C1–C10 in Lean on top of Ident/Rules, consistent with FOUNDATION.md and with the owner's option (b) (foundation written and frozen before slice 1 builds; slices add rules on top). Check that no step uses something defined only in a later step, that every old fragment is ported somewhere, and that stale step-number references remain nowhere outside the review-history section 7.
+6. AGENTS.md: the process rules (items 4, 6, 7, 8 of the 11) are stated correctly and nothing else changed in meaning; the ISS-0014 F7 wording is applied faithfully in decisions.md, README.md and docs/PHILOSOPHY.md.
+7. Prose quality: clear plain English, no contradictions with the rest of decisions.md and ROADMAP.md.
+
+End with a list of findings (each with file:line and a concrete fix) and a final line exactly `VERDICT: ACCEPT` or `VERDICT: REVISE`.

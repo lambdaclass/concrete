@@ -1,0 +1,1115 @@
+kimi version 2.4.1
+• I need modify repo carefully follow user. Should inspect commit/status relevant files. I have AGENTS instructions. Should have no subagents. Multi-step use todo. Should run oracle checks find docs perhaps script. Should have gates command exact timeout 1500 systemd-run user scope... full local normally AGENT says never full local laptop, user explicitly demands gates so do. Commit locally no push. Should print SHA every line changed. Make sure current HEAD likely 11938145 and clean? Check. I should announce concise. Tools independent status/read relevant files perhaps first git status + show stat and grep links. I need inspect commit all places. Use Bash git status/show allowed read only. Grep dedicated content. Read files known. Should check subdir AGENTS in docs scripts changelog perhaps Glob AGENTS. Root given. Glob **/AGENTS.md might legacy large but okay perhaps specific docs/AGENTS etc use parallel Glob patterns? I can use Glob **/AGENTS.md current. Should have no precheck known file read. First todo.
+
+• I’ll audit the rebased commit for every “recorded in decisions.md” claim, make only the two documentation corrections, run the oracle and required checks, then commit without pushing.
+
+## wip/one-repository-2...origin/main [ahead 1]
+11938145 (HEAD -> wip/one-repository-2, origin/wip/one-repository-2, lambdaclass/wip/one-repository-2) one repository: land on lambdaclass/concrete only
+ .claude/commands/land.md                 |   2 +-
+ .github/workflows/lean_action_ci.yml     |   2 +-
+ AGENTS.md                                |  10 +-
+ README.md                                |   2 +-
+ changelog.d/2026-11-08-one-repository.md |  19 +++
+ docs/LANDING.md                          |  39 +++---
+ docs/REVIEW.md                           |   2 +-
+ docs/SELF_HOSTED_RUNNERS.md              |  38 +++---
+ docs/proposals/SPEC_UNIFICATION.md       |   2 +-
+ scripts/checks/landing_script.sh         |  76 +++++++----
+ scripts/land/acceptance.sh               |  10 +-
+ scripts/land/signoff.sh                  |   4 +-
+ scripts/land/train.sh                    |  50 ++------
+ scripts/oracle/ORACLE.lock               |   9 +-
+ scripts/oracle/build.sh                  |   4 +-
+ scripts/push-both.sh                     | 213 +++++++------------------------
+ 16 files changed, 190 insertions(+), 292 deletions(-)
+.claude/commands/land.md
+.github/workflows/lean_action_ci.yml
+AGENTS.md
+README.md
+changelog.d/2026-11-08-one-repository.md
+docs/LANDING.md
+docs/REVIEW.md
+docs/SELF_HOSTED_RUNNERS.md
+docs/proposals/SPEC_UNIFICATION.md
+scripts/checks/landing_script.sh
+scripts/land/acceptance.sh
+scripts/land/signoff.sh
+scripts/land/train.sh
+scripts/oracle/ORACLE.lock
+scripts/oracle/build.sh
+scripts/push-both.sh
+• Should scope commit not whole repo. Should inspect exact diff commit for occurrences decisions and concrete2. Use git show 119... piped? Dedicated Grep can't inspect git object. Bash git show --format= 119 files relevant perhaps output manageable. Use git show -U3 commit -- AGENTS docs LANDING SELF scripts/land/train.sh changelog etc and grep? Instruction don't run grep via shell. Could git show to temp file then Grep dedicated? That creates file undesired. Better `git diff 119^ 119 -- ...` output read via Bash; relevant limited. Also Grep current on specific files for "one repository|decision|concrete2" each parallel. Should inspect AGENTS changes lines. Read AGENTS known entire maybe 360 lines manageable. train grep. Also `git show --format= --unified=0 11938145` maybe full 500 lines manageable to identify all additions containing decisions links. Could use Bash `git show ...` no pipe. I can read relevant files parallel. I need "every other place in this commit that claims or links them as recorded decisions.md". Could be current content references decisions links added by commit. Identify via `git diff 119^ 119 --word-diff=porcelain` etc. I can git show files with additions and look. I saw LANDING line 166, SELF lines 89,102. AGENTS likely line 116? Read around 105-145. train grep decisions. Other changed files .claude command etc maybe. Use `git show --format= --unified=2 11938145` could output all changed ~482 lines + context maybe okay 50k. Better specific all occurrences using `git show --format= --unified=0 11938145` and examine. Bash output likely <50k? 190 insertions 292 deletions ~500 lines around 70k maybe truncated but all decision additions maybe enough. Could use `git diff 119^ 119 -G'decisions\.md|\[decision|\[decisions|concrete2' -- ...` Git -G limits hunks with matches and gives all. That's git itself search not Grep? Dedicated Grep only working tree not commit, legitimate Bash. No piping. I'll do `git show --format= --unified=3 -G... 119`. Also Grep current changed files separately for decision. Should ORACLE checks identify scripts/checks names. Glob scripts/checks/*oracle* and scripts/oracle/*. Read README? list known dir `ls scripts/oracle` allowed. Use parallel.
+
+• The tree is clean at `11938145`. The incorrect links are present in the changelog, runner documentation, and landing documentation; I’m checking the complete commit diff so no equivalent reference is missed.diff --git a/.github/workflows/lean_action_ci.yml b/.github/workflows/lean_action_ci.yml
+index 4da99f7b..87feb9e3 100644
+--- a/.github/workflows/lean_action_ci.yml
++++ b/.github/workflows/lean_action_ci.yml
+@@ -77,7 +77,7 @@ jobs:
+           GH_TOKEN: ${{ github.token }}
+           BEFORE: ${{ github.event.before }}
+           HEAD_SHA: ${{ github.sha }}
+-          LAND_REPO: unbalancedparentheses/concrete2
++          LAND_REPO: ${{ github.repository }}
+           LAND_NO_NIX: "1"
+         run: |
+           recorded=false run=""
+diff --git a/AGENTS.md b/AGENTS.md
+index aee5c25c..4ae905f7 100644
+--- a/AGENTS.md
++++ b/AGENTS.md
+@@ -93,11 +93,13 @@ as a conflict, until the owner answers; nobody extends or reverts it meanwhile.
+ - Commit each validated slice. Push the branch to `wip/<branch>` at least every 5 minutes of work
+   (`git push origin HEAD:refs/heads/wip/<branch>`); the hook's wip tier only scans for conflict
+   markers.
+-- Never push to `main`, `ci/*` or the remote `fork`. Landings go to both `origin` and
+-  `lambdaclass`, only through the landing script (`scripts/land/train.sh`).
++- The one repository is lambdaclass/concrete (owner, 2026-11-06), and `origin` is it in every
++  clone; unbalancedparentheses/concrete2 is archived (after the first landing here).
++- Never push to `main`, `ci/*` or the remote `fork`. Landings go to `origin` only through the
++  landing script (`scripts/land/train.sh`).
+   `train.sh check` runs the checks before the push, and the push runs the root hook's full set again;
+-  the train's push to `ci/<name>` and both pushes of `land` are read back with `ls-remote` and
+-  retried when they did not move the ref (GitHub drops the connection during long hooks); `land` checks that both remotes are at
++  the train's push to `ci/<name>` and the push of `land` are read back with `ls-remote` and
++  retried when they did not move the ref (GitHub drops the connection during long hooks); `land` checks that main is at
+   the head ([LANDING.md](docs/LANDING.md#land)).
+ - After any push of your own whose hook ran gates, check that the remote ref moved
+   (`git ls-remote origin refs/heads/<branch>`) and push again if it did not.
+diff --git a/README.md b/README.md
+index 33b0cbc0..15711497 100644
+--- a/README.md
++++ b/README.md
+@@ -1,6 +1,6 @@
+ # The Concrete Programming Language
+ 
+-[![CI](https://github.com/unbalancedparentheses/concrete2/actions/workflows/lean_action_ci.yml/badge.svg)](https://github.com/unbalancedparentheses/concrete2/actions/workflows/lean_action_ci.yml)
++[![CI](https://github.com/lambdaclass/concrete/actions/workflows/lean_action_ci.yml/badge.svg)](https://github.com/lambdaclass/concrete/actions/workflows/lean_action_ci.yml)
+ [![license](https://img.shields.io/github/license/lambdaclass/concrete)](LICENSE)
+ 
+ **Concrete is a fully proven systems programming language with no garbage collector, where you can
+diff --git a/changelog.d/2026-11-08-one-repository.md b/changelog.d/2026-11-08-one-repository.md
+new file mode 100644
+index 00000000..af1590e7
+--- /dev/null
++++ b/changelog.d/2026-11-08-one-repository.md
+@@ -0,0 +1,19 @@
++### One repository: lambdaclass/concrete (2026-11-08)
++
++The owner approved migrating everything to lambdaclass/concrete and archiving
++unbalancedparentheses/concrete2, and accepted that every lambdaclass org member with push (44
++accounts) reaches the self-hosted runners through branch pushes and `workflow_dispatch` ("A"; both in
++`docs/decisions.md`). The `pull_request` guard on every self-hosted job stays.
++
++- **No mirror.** `origin` is lambdaclass/concrete in every clone. `scripts/land/train.sh` lands on
++  `origin` only (`LAND_MIRROR` and `land --no-mirror` are gone), `LAND_REPO` defaults to
++  lambdaclass/concrete, and `acceptance.sh` follows. `push-both.sh` keeps its name, shared lock and
++  optional CI wait, and pushes one remote. Main will be protected server-side; the smaller local
++  remote guard is a separate later branch and is not part of this switch.
++- **CI.** The Landing record job reads runs from `github.repository`. The concrete-ci-2 runners are
++
+  registered on lambdaclass/concrete, with `CONCRETE_SELF_HOSTED=true` there.
++- **Oracle.** The release `oracle-legacy-compiler-final` is republished on lambdaclass/concrete with
++  the same asset (sha256 `74d8f1e3…`), and `scripts/oracle/ORACLE.lock` points at it; `mirror_url`
++  is gone.
++- **Review notes.** `refs/notes/concrete-review*` were copied to lambdaclass/concrete after the
++  stray-notes cleanup.
+diff --git a/docs/LANDING.md b/docs/LANDING.md
+index 450c8c1d..36469736 100644
+--- a/docs/LANDING.md
++++ b/docs/LANDING.md
+@@ -13,7 +13,7 @@ scripts/land/train.sh build  <name> <ref>...   # train/<name> = origin/main + ea
+ scripts/land/train.sh check  <name>            # fast surface + impact-selected gates on the gate host (+ remote full set)
+ scripts/land/train.sh ci     <name>            # push ci/<name>, dispatch CI, record the run id
+ scripts/land/train.sh watch  <name>            # poll to a verdict; failing jobs' log tails
+-scripts/land/train.sh land   <name>            # verify, then push the exact SHA to origin and lambdaclass
++scripts/land/train.sh land   <name>            # verify, then push the exact SHA to origin main
+ scripts/land/report.sh                         # median time to land, per-stage medians
+ ```
+ 
+@@ -118,7 +118,7 @@ verdict; any failing leg fails the check (see [Pipelining](#pipelining)).
+ 
+   Without the first step, a new branch has no remote base and the hook would select gates by
+   diffing the whole tree.
+-- Dispatches `gh workflow run CI -R unbalancedparentheses/concrete2 --ref ci/<name> -f
++- Dispatches `gh workflow run CI -R lambdaclass/concrete --ref ci/<name> -f
+   base=<base>`. The base-sensitive checks compare with the train's base, and the run's title records
+   it (`ci/<name> at base <sha>`), which main's Landing record requires (see `land`). It finds the
+   run whose head SHA is the train's, records the run id and prints the run URL.
+@@ -145,7 +145,6 @@ before anything is pushed:
+ - the CI run's `headSha` is the local HEAD, and the run is completed;
+ - every landing-tier job concluded `success`, and a run with no landing-tier jobs is refused;
+ - `origin/main`, read with `ls-remote`, is still the train's base;
+-- the mirror's main is an ancestor of the train, so no half-landing happens;
+ - the train has review provenance (as in `check`'s review leg), read again from origin's notes
+   rather than trusted from `check`: a check run with `--no-review` lands only on a clean note at the
+   train head or, when the head has none, clean notes on every member;
+@@ -163,16 +162,10 @@ The push sequence:
+    is **never force-pushed**, not even with a lease. A plain push is a fast-forward or a refusal,
+    so a publisher that moved main without taking the lock makes the push fail. Nothing it pushed
+    is undone.
+-2. Pushes the same SHA to `lambdaclass main`. The mirror's main was checked to be an ancestor of
+-   the train, so the push is a fast-forward. Both remotes are required (the owner's decision of
+-   2026-10-22, which supersedes the 2026-07-31 "stop pushing to lambdaclass" note in
+-   `push-both.sh`): a missing `lambdaclass` remote is refused before anything is pushed. Following
+-   `push-both.sh` policy, this push runs with the hook
+-   skipped, because the identical commit was just accepted by the primary's hook. If it fails after
+-   the primary landed, the command says so and exits non-zero.
+-3. Checks both remotes with `ls-remote` once more; the landing is complete only when both are at
+-   the head.
+-4. Cancels nothing. The push to main starts CI on main at the landed SHA, and that run's first job,
++2. Checks `origin/main` with `ls-remote` once more; the landing is complete only when it is at the
++   head. There is no mirror: since 2026-11-06 lambdaclass/concrete is the one repository
++   ([decision](decisions.md)), and `origin` is it in every clone.
++3. Cancels nothing. The push to main starts CI on main at the landed SHA, and that run's first job,
+    **Landing record**, runs `train.sh record <head> --base <before>` (R-0570). It finds the newest
+    completed `workflow_di
+spatch` run of CI at exactly that SHA whose title says it ran at base
+    `<before>`: `ci` dispatches with `-f base=<train base>`, the workflow's `run-name` writes
+@@ -184,22 +177,20 @@ The push sequence:
+    its summary links the qualifying run. When it does not (a hand push, a run at another SHA, a
+    skipped, cancelled or failed job, an unreadable API), nothing is skipped and main's run runs
+    every job itself. So main shows green only on a result at its exact SHA, and a landing still
+-   costs one full run. The mirror's CI reads the record from this repository, which both remotes
+-   share commit for commit. Confirm with `gh run list --workflow CI --branch main`.
++   costs one full run. Confirm with `gh run list --workflow CI --branch main`.
+ 
+ #### Verified pushes
+ 
+ A push's exit status is not its result. GitHub drops the connection during a long pre-push hook, so
+-a push can fail after the remote moved, or before. The train's push to `ci/<name>` and both pushes
++a push can fail after the remote moved, or before. The train's push to `ci/<name>` and the push
+ of `land` are followed by an `ls-remote` of the ref: at the head, it is done, whatever git reported; still at its old value, it is
+ retried (`LAND_PUSH_ATTEMPTS`, default 3, `LAND_PUSH_RETRY_SLEEP` seconds apart); moved to anything
+ else, it stops at once. A retry to main is still a plain push, a fast-forward or a refusal, and the
+ hook runs the full root set again. The reset of `ci/<name>` to the base skips the hook and is
+ not retried; a failure there stops `ci` before anything is dispatched.
+ 
+-A remote named `fork` is refused as primary or mirror. `--no-mirror` (or `LAND_MIRROR=`) lands on
+-origin only. That is a deliberate exception, and the landing is not complete until the same SHA
+-reaches `lambdaclass`. `push-both.sh` follows the same rule: it mirrors to `lambdaclass` by default.
++A remote named `fork` is refused. There is no mirror or `--no-mirror` option. `push-both.sh`, the
++by-hand publisher, likewise pushes only origin.
+ 
+ ### bisect
+ 
+@@ -228,7 +219,7 @@ With a gate host, `check`'s impact leg is `scripts/land/gates_remote.sh`:
+ 2. The transport (`scripts/land/gates_transport_ssh.sh`) copies one directory to the host: the
+    bundle, this checkout's `run-at-ref.sh`, and a script that quotes the command for bash. The
+    host's login shell sees only `bash land-remote-<id>/run.sh`. That script runs `git fetch origin`
+-   in the host's gate clone (`~/concrete2`), runs `run-at-ref.sh` on the bundle, and removes the
++   in the host's gate clone (`~/concrete2`, a path name only: its origin is lambdaclass/concrete), runs `run-at-ref.sh` on the bundle, and removes the
+    directory. The host therefore needs no GitHub credentials and no copy of the landing scripts.
+ 3. In a fresh clone of exactly the head, the host runs `impact_gates.sh`: the same hook, with the
+    same input line the `ci` push will present. The command first unsets `CONCRETE_SKIP_GATES`
+@@ -387,9 +378,8 @@ The server was shared with other full runs at a load average of 15 to 32.
+ ## Configuration
+ | variable | default | meaning |
+ |---|---|---|
+-| `LAND_REPO` | `unbalancedparentheses/concrete2` | repository for `gh` |
+-| `LAND_REMOTE` | `origin` | primary remote |
+-| `LAND_MIRROR` | `lambdaclass` | required mirror, pushed after the primary; a missing remote is refused; empty (or `--no-mirror`) skips it deliberately |
++| `LAND_REPO` | `lambdaclass/concrete` | repository for `gh` |
++| `LAND_REMOTE` | `origin` | the one repository's remote |
+ | `LAND_CAMPAIGN_JOBS` | `^(Gate mutation\|Weekly clean-checkout proof replay\|Nightly differential fuzz\|Checker pin freshness \(campaign finding\))` | job names in the campaign tier; the default must match exactly the workflow's campaign jobs (`check_landing_script.sh`) |
+ | `LAND_STATE_DIR`, `LAND_LOG_DIR` | under the git common directory | state and log location |
+ | `LAND_NO_NIX` | unset | `1` never re-enters `nix develop` |
+@@ -411,6 +401,9 @@ script against a throwaway repository with bare-repo remotes and a fake `gh`. It
+   or rebase already
+ in progress, a dirty tree, an existing train, a head-SHA mismatch, a red
+   landing job, a moved main and a remote named `fork`;
+ - the check → ci → watch → land pipeline, with both dry-runs;
++- one repository: with no `lambdaclass` remote configured, `land` succeeds and its exact push log is
++  one push to origin; `ci` defaults `LAND_REPO` to lambdaclass/concrete; `push-both.sh` makes exactly
++  one push and reports its destination;
+ - `ci` dispatches with the train's base; `land` cancels no run; `record` names the qualifying run
+   only for the newest completed dispatch of CI at exactly the head and the base with every
+   landing-tier and required job green, and refuses each of: no run, a run at another SHA or base, a
+diff --git a/docs/SELF_HOSTED_RUNNERS.md b/docs/SELF_HOSTED_RUNNERS.md
+index 61b3c0eb..eb19bf08 100644
+--- a/docs/SELF_HOSTED_RUNNERS.md
++++ b/docs/SELF_HOSTED_RUNNERS.md
+@@ -77,29 +77,35 @@ back to GitHub-hosted. So turn the variable off before taking the servers down.
+ 
+ ```sh
+ # on (landing tier)
+-gh variable set CONCRETE_SELF_HOSTED --body true -R unbalancedparentheses/concrete2
++gh variable set CONCRETE_SELF_HOSTED --body true -R lambdaclass/concrete
+ # off (back to GitHub-hosted)
+-gh variable delete CONCRETE_SELF_HOSTED -R unbalancedparentheses/concrete2
++gh variable delete CONCRETE_SELF_HOSTED -R lambdaclass/concrete
+ # campaign tier, separately (normally left off)
+-gh variable set CONCRETE_SELF_HOSTED_CAMPAIGN --body true -R unbalancedparentheses/concrete2
++gh variable set CONCRETE_SELF_HOSTED_CAMPAIGN --body true -R lambdaclass/concrete
+ ```
+ 
+ The variable is read when a run starts. Runs already queued keep the routing they started with.
+ 
+-**lambdaclass/concrete** is a separate repository. Variables and repository-level runners do not
+-carry over: it stays on GitHub-hosted runners until it gets its own runners (registered against
+-`https://github.com/lambdaclass/concrete`, or through an org runner group that grants that repo the
+-`concrete` label) and its own `CONCRETE_SELF_HOSTED` variable. The nightly campaign (`nightly.yml`,
+-which dispatches CI with `campaign=true` on `main`) runs there, so `CONCRETE_SELF_HOSTED_CAMPAIGN`
+-matters there for the nightly campaign. On concrete2 the nightly runs only when the variable
+-`CONCRETE_NIGHTLY_QUALIFICATION` is `true`; otherwise the campaign variable only affects campaign
+-runs you dispatch with `-f campaign=true`.
++**One repository.** Since 2026-11-06 the runners serve lambdaclass/concrete only
++([decision](decisions.md)); concrete2, where they were registered until
++then, is archived once a full landing has run on lambdaclass/concrete. Variables and repository-level runners belong to one repository: the move
++re-registered each runner there (the dotfiles `servers/runners.sh`, `RUNNER_REINSTALL=1`, which
++reinstalls the runner into a fresh user), and `CONCRETE_SELF_HOSTED=true` is set on
++lambdaclass/concrete. The root has no nightly campaign yet; `CONCRETE_SELF_HOSTED_CAMPAIGN` matters
++only when one returns.
+ 
+ ## Security rules (public repository)
+ 
+ GitHub's own guidance is that self-hosted runners should not be used with public repositories,
+ because a pull request can run arbitrary code on them. We use them anyway, under these rules:
+ 
++**Who can reach the runners at all** (owner, 2026-11-06, "A";
++[decisions](decisions.md)). On lambdaclass/concrete every org member
++has push: 44 accounts. A push of any branch, or a `workflow_dispatch`, runs the workflow file of that
++branch, so any of them can put a job on these runners with no approval; the rules below do not
++change that. The owner accepted this exposure, as for stabileo's runners. On concrete2 one account
++had push.
++
+ 1. **No `pull_request` event runs on a self-hosted runner.** The `runs-on` expression enforces this
+    for the workflow as written. But a pull request runs the workflow file **from the PR branch**, so
+    a fork PR can rewrite `runs-on` to `[self-hosted]` and the guard is gone. The guard prevents
+@@ -114,7 +120,7 @@ because a pull request can run arbitrary code on the
+m. We use them anyway, under
+    stay on the machine. Isolation comes from destroying the VM or container after each job and
+    starting a fresh one from a clean image, which registers a new ephemeral runner. Automate that
+    with actions-runner-controller, or with a supervisor **outside** the job's VM or container that
+-   calls `gh api -X POST repos/unbalancedparentheses/concrete2/actions/runners/registration-token`.
++   calls `gh api -X POST repos/lambdaclass/concrete/actions/runners/registration-token`.
+    The supervisor's admin token must never be readable from inside a job. Persistent runners (or
+    `--ephemeral` re-registered on the same machine, which is the same thing) are acceptable only
+    with rule 2, the cleanup hook below and a dedicated low-privilege user, and with the
+@@ -199,8 +205,8 @@ mkdir actions-runner && cd actions-runner
+ # Take the current version and checksum from Settings, Actions, Runners, New self-hosted runner.
+ curl -o actions-runner.tar.gz -L https://github.com/actions/runner/releases/download/v<VERSION>/actions-runner-linux-x64-<VERSION>.tar.gz
+ tar xzf actions-runner.tar.gz
+-# The token is shown on that settings page (or: gh api -X POST repos/unbalancedparentheses/concrete2/actions/runners/registration-token)
+-./config.sh --url https://github.com/unbalancedparentheses/concrete2 --token <TOKEN> \
++# The token is shown on that settings page (or: gh api -X POST repos/lambdaclass/concrete/actions/runners/registration-token)
++./config.sh --url https://github.com/lambdaclass/concrete --token <TOKEN> \
+   --name "$(hostname)-runner1" --labels concrete --unattended   # add --ephemeral (recommended)
+ exit
+ cd /home/runner1/actions-runner
+@@ -261,8 +267,8 @@ already handles, and what the host has to handle.
+ 
+ 1. Settings, Actions, Runners lists each runner as Idle, with labels
+    `self-hosted, Linux, X64, concrete`.
+-2. `gh variable set CONCRETE_SELF_HOSTED --body true -R unbalancedparentheses/concrete2`.
+-3. `gh workflow run CI --ref main -R unbalancedparentheses/concrete2` (landing tier only), then
++2. `gh variable set CONCRETE_SELF_HOSTED --body true -R lambdaclass/concrete`.
++3. `gh workflow run CI --ref main -R lambdaclass/concrete` (landing tier only), then
+    check in the run's job pages that "Runner name" is one of yours and that `Install clang` printed
+    `self-hosted runner, using preinstalled clang`.
+ 4. To turn it off, delete the variable. Queued jobs that are still waiting for a self-hosted
+diff --git a/scripts/land/acceptance.sh b/scripts/land/acceptance.sh
+index 368325ed..c5b94e9f 100755
+--- a/scripts/land/acceptance.sh
++++ b/scripts/land/acceptance.sh
+@@ -11,7 +11,7 @@
+ # independent guards: a `git` shim first on PATH for every leg refuses any push whose destination is
+ # main (or --all, --mirror, a bare HEAD), whatever flags the candidate's scripts pass, --no-verify
+ # included; the clone's hooks path is a pre-push guard that refuses the same before it runs the real
+-# hook; and both remotes' main is read before and after, a move to the train head being a failure.
++# hook; and main is read before and after, a move to the train head being a failure.
+ # The train head's publishing scripts are also refused if they run `git push ... --no-verify`. It refuses to start with any LAND_* or CONCRETE_SKIP_* variable set, since those
+ # redirect remotes, swap the hook or skip the gates.
+ #
+@@ -25,7 +25,7 @@
+ #   --keep         keep the clone
+ #
+ # Legs, in order (each stops the run when it fails, except the negative controls, which all run):
+-#   clone    git clone of origin, both remotes configured, the guarded hooks path installed
++#   clone    git clone of origin, the guarded hooks path installed
+ #   train    train.sh build <name> <ref>; the train head is the SHA every later result is bound to
+ #   build    ACCEPT_BUILD_CMD in the clone, at the train head (default: nix develop --command lake
+ #            build, the root's build)
+@@ -90,7 +90,6 @@ BUILD_CMD="${ACCEPT_BUILD_CMD:-nix develop --command lake build}"
+ 
+ SRC_REPO="$(git rev-parse --show-toplevel 2>/dev/null)" || { echo
+ "acceptance: run inside a clone" >&2; exit 2; }
+ ORIGIN_URL="$(git -C "$SRC_REPO" remote get-url origin)"
+-MIRROR_URL="$(git -C "$SRC_REPO" remote get-url lambdaclass 2>/dev/null || true)"
+ WORK="$(mktemp -d "${TMPDIR:-/tmp}/acceptance.XXXXXX")"
+ [ "$KEEP" = 1 ] || trap 'rm -rf "$WORK"' EXIT
+ C="$WORK/clone"
+@@ -110,7 +109,7 @@ leg() { # name cmd... — runs unless skipped; a failure ends the run (the negat
+   fi
+   row "$n" failed "see $log"; tail -n 30 "$log" | sed 's/^/      /'; FAILED=1; finish
+ }
+-main_heads() { local r; for r in origin lambdaclass; do git -C "$C" ls-remote "$r" refs/heads/main 2>/dev/null | cut -f1; done | tr '\n' ' '; }
++main_heads() { git -C "$C" ls-remote origin refs/heads/main 2>/dev/null | cut -f1 | tr '\n' ' '; }
+ finish() {
+   if [ -n "$MAIN_BEFORE" ]; then
+     local after; after="$(main_heads)"
+@@ -189,7 +188,6 @@ GUARD
+ }
+ do_clone() {
+   git clone --quiet "$ORIGIN_URL" "$C" && cd "$C" || return 1
+-  [ -z "$MIRROR_URL" ] || git remote add lambdaclass "$MIRROR_URL"
+   make_guard
+   git config core.hooksPath "$WORK/guard-hooks"
+   MAIN_BEFORE="$(main_heads)"
+@@ -303,7 +301,7 @@ do_negative() {
+   if [ -n "${SKIP[negative]:-}" ]; then row negative skipped "--skip"; SKIPPED=1; return 0; fi
+   local rid rsha
+   rid="$(cd "$C" && sed -n 's/^run_id=//p' "$(git rev-parse --git-common-dir)/concrete-landing/$NAME/train.env" | tail -1)"
+-  rsha="$(gh run view "$rid" -R "${ACCEPT_REPO:-unbalancedparentheses/concrete2}" --json headSha 2>/dev/null | python3 -I -c 'import json,sys; print(json.load(sys.stdin).get("headSha",""))' 2>/dev/null)"
++  rsha="$(gh run view "$rid" -R "${ACCEPT_REPO:-lambdaclass/concrete}" --json headSha 2>/dev/null | python3 -I -c 'import json,sys; print(json.load(sys.stdin).get("headSha",""))' 2>/dev/null)"
+   if [ "$rsha" != "$HEAD" ]; then row neg:run failed "run ${rid:-?} is at ${rsha:-?}, not the train head $HEAD: the controls would test another SHA"; FAILED=1; return 0; fi
+   row neg:run passed "run $rid is at the train head ${HEAD:0:10}"
+   make_tamper_gh
+diff --git a/scripts/land/train.sh b/scripts/land/train.sh
+index 8729abe9..6917495f 100755
+--- a/scripts/land/train.sh
++++ b/scripts/land/train.sh
+@@ -1,13 +1,13 @@
+ #!/usr/bin/env bash
+ # Landing trains (ROADMAP R-0539): integrate every ready branch into ONE candidate, validate it once,
+-# and land it on both remotes. Stage timestamps go to the landing log (R-0547). docs/LANDING.md
++# and land it on main. Stage timestamps go to the landing log (R-0547). docs/LANDING.md
+ # is the manual; this header is the contract.
+ #
+ #   train.sh [--dry-run] build  <name> [--force] [--no-fetch] <ref>...
+ #   train.sh [--dry-run] check  <name> [--no-remote] [--no-review] [--local-gates]
+ #   train.sh [--dry-run] ci     <name> [--skip-check]
+ #   train.sh             watch  <name> [--interval S] [--timeout S]
+-#   train.sh [--dry-run] land   <name> [--no-mirror]
++#   train.sh [--dry-run] land   <name>
+ #   train.sh             bisect <name> (--test '<cmd>' | --ci)
+ #   train.sh             status <name>
+ #   train.sh             record <head> --base <sha> [--exclude-run <id>]   (main's CI, R-0570)
+@@ -36,14 +36,15 @@
+ #     refused only by that gate exits 5.
+ #   * pushes name the exact SHA, never `HEAD` (push-both.sh: HEAD can move during a wait), and a
+ #     remote named `fork` is refused outright.
++#   * (2026-11-06, the owner's decision: one repository, lambdaclass/concrete) there is no mirror:
++#     origin is that repository and `land` pushes it only.
+ #   * (2026-10-25) a push's exit status is not its result: GitHub drops the connection during a long
+ #     hook, so a push can fail after the remote moved, or before. The train's push to ci/<name> and
+-#     both pushes of `land` are followed by an `ls-remote` of the ref, and one that did not move it
++#     the push of `land` are followed by an `ls-remote` of the ref, and one that did not move it
+ #     is retried (LAND_PUSH_ATTEMPTS). The ci/<name> reset to the base skips the hook; not retried.
+ #
+ # ENVIRONMENT (test seams and overrides): LAND_REPO (owner/name for gh, default
+-#
+ unbalancedparentheses/concrete2), LAND_GH (gh binary), LAND_REMOTE (primary, default origin),
+-# LAND_MIRROR (default lambdaclass, required: a missing remote is refused; empty or --no-mirror skips),
++# lambdaclass/concrete), LAND_GH (gh binary), LAND_REMOTE (the repository's remote, default origin),
+ # LAND_STATE_DIR (default <git common dir>/concrete-landing), LAND_LOG_DIR (default
+ # $LAND_STATE_DIR/log), LAND_NO_NIX=1 (never re-enter `nix develop`), LAND_CAMPAIGN_JOBS (regex of
+ # campaign-tier job names), LAND_HOOK (pre-push hook path, default .githooks/pre-push),
+@@ -95,10 +96,9 @@ where_ok() {
+ }
+ STATE_ROOT="${LAND_STATE_DIR:-$COMMON/concrete-landing}"
+ LOG_DIR="${LAND_LOG_DIR:-$STATE_ROOT/log}"
+-REPO="${LAND_REPO:-unbalancedparentheses/concrete2}"
++REPO="${LAND_REPO:-lambdaclass/concrete}"
+ GH="${LAND_GH:-gh}"
+ REMOTE="${LAND_REMOTE:-origin}"
+-MIRROR="${LAND_MIRROR-lambdaclass}"
+ HOOK="${LAND_HOOK:-.githooks/pre-push}"
+ # Must name exactly the workflow's campaign jobs (an `if:` on `inputs.campaign`, and the jobs that `needs:`
+ # one): check_landing_script.sh derives that set from lean_action_ci.yml and fails on any difference.
+@@ -817,8 +817,7 @@ cmd_watch() {
+ # When it does not hold, nothing is skipped: main's run runs every job itself. So main is green
+ # only on a result obtained AT ITS EXACT SHA, by this workflow, under land's own rule:
+ #   * the NEWEST completed workflow_dispatch run of .github/workflows/lean_action_ci.yml in $REPO
+-#     (the train's repository, read by the mirror's CI too: both are public and a SHA names the same
+-#     tree in both) whose head SHA is exactly <head> and whose title says it ran at base <base>
++#     (the train's repository, the one CI runs in) whose head SHA is exactly <head> and whose title says it ran at base <base>
+ #     (`<ref> at base <sha>`, written by the workflow's run-name from the `base` input `train.sh ci`
+ #     passes), other than the asking run. The base binds the base-sensitive checks (LL1_BASE,
+ #     TOTALITY_BASE, CONFORMANCE_BASE, SPEC_BASE) to the very base main had before the push, as a
+@@ -954,10 +953,9 @@ require_rehearsal() { # name base head
+ }
+ 
+ cmd_land() {
+-  local name="" mirror_on=1
++  local name=""
+   while [ $# -gt 0 ]; do
+     case "$1" in
+-      --no-mirror) mirror_on=0 ;;
+       -*) die "land: unknown option $1" ;;
+       *) name="$1" ;;
+     esac; shift
+@@ -1013,20 +1011,6 @@ cmd_land() {
+   fi
+   git merge-base --is-ancestor "$base" "$head" || die "land: the train does not descend from its base"
+ 
+-  local mirror="" mmain=""
+-  # Both remotes are required (owner's decision, 2026-10-22): a missing mirror remote is a refusal
+-  # before anything is pushed, not a silent origin-only landing. --no-mirror is the explicit opt-out.
+-  if [ "$mirror_on" = 1 ] && [ -n "$MIRROR" ]; then
+-    refuse_fork "$MIRROR"
+-    git remote get-url "$MIRROR" >/dev/null 2>&1 \
+-      || die "land: mirror remote '$MIRROR' is not configured; both remotes are required (add it, or pass --no-mirror deliberately)"
+-    mirror="$MIRROR"
+-    mmain="$(git ls-remote "$mirror" refs/heads/main | cut -f1)"
+-    if [ -n "$mmain" ] && ! git merge-base --is-ancestor "$mmain" "$head" 2>/dev/null; then
+-      die "land: $mirror/main (${mmain:0:10}) is not an ancestor of the train; reconcile the mirror first (nothing pushed)"
+-    fi
+-  fi
+-
+   # Review provenance, read now and not trusted from `check`: a check run with --no-review, or a
+   # reviewer that wrote no clean note, leaves none, and nothing lands without it.
+   local prov
+@@ -1048,22 +1032,12 @@ cmd_land() {
+   if [ "$DRY" = 0 ]; then
+     [ "$(remote_main)" = "$head" ] || die "land: $REMOTE/main is not at ${head:0:10} after the push"
+   fi
+-  if [ -n "$mirror" ]; then
+-    # The mirror receives exactly the commit the primary's hook just accepted (push-both.sh policy).
+-    ( push_verified "$mirror" "$head" main CONCRETE_SKIP_GATES=1 ) || {
+-      log_row "$name" land failed "mirror $mirror not at head"
+-      die "land: $REMOTE landed, but $mirror/main is not at ${head:0:10}"
+-    }
+-  fi
+   [ "$DRY" = 1 ] && re
+turn 0
+-  # Both remotes, read back once more: the landing is complete only when each is at the head.
++  # Read back once more: the landing is complete only when main is at the head.
+   [ "$(remote_main)" = "$head" ] || die "land: $REMOTE/main is not at ${head:0:10}"
+-  if [ -n "$mirror" ] && [ "$(git ls-remote "$mirror" refs/heads/main | cut -f1)" != "$head" ]; then
+-    die "land: $mirror/main is not at ${head:0:10}"
+-  fi
+   state_set "$name" landed_utc "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+-  log_row "$name" land passed "$REMOTE${mirror:+ + $mirror}"
+-  note "landed ${head:0:10} on $REMOTE/main${mirror:+ and $mirror/main}. Members (result: CI run $id at ${head:0:10}):"
++  log_row "$name" land passed "$REMOTE"
++  note "landed ${head:0:10} on $REMOTE/main. Members (result: CI run $id at ${head:0:10}):"
+   state_get "$name" members | tr ',' '\n' | sed 's/^/    /'
+   note "main's own CI run at ${head:0:10} records run $id in its Landing record job (train.sh record) and"
+   note "skips the jobs that run already passed; confirm: gh run list --workflow CI --branch main -R $REPO"
+diff --git a/scripts/oracle/ORACLE.lock b/scripts/oracle/ORACLE.lock
+index 046c3e55..7522bb96 100644
+--- a/scripts/oracle/ORACLE.lock
++++ b/scripts/oracle/ORACLE.lock
+@@ -5,10 +5,11 @@
+ # before each use. Change this file only to re-pin deliberately (a new tag is a new oracle).
+ # artifact_url is the published release asset (owner approval P13; published 2026-11-05, release tag
+ # release_tag pointing at commit). fetch.sh downloads it and trusts it only through artifact_sha256.
++# Republished on lambdaclass/concrete on 2026-11-07 (the one repository since 2026-11-06), the same
++# asset (same artifact_sha256); the first publication stays on the archived concrete2.
+ tag=legacy-compiler-final
+ commit=066c9d9b8836a2b176aa37f6c8313195a4b4ee29
+-url=https://github.com/unbalancedparentheses/concrete2.git
+-mirror_url=https://github.com/lambdaclass/concrete.git
++url=https://github.com/lambdaclass/concrete.git
+ build_command=nix develop <checkout> --command lake build concrete
+ binary=.lake/build/bin/concrete (bin/concrete in the artifact)
+ lean_toolchain=leanprover/lean4:v4.34.1
+@@ -23,9 +24,9 @@ binary_sha256=fa25a30a585d63faa8e65abbc5bd74b668b22f3c0a33731f8d1316b9470aab74
+ manifest_sha256=7d70da4d74de97e6c54833297b6811597612ee7821d97ecdea6b6afe83fa36fd
+ artifact_sha256=74d8f1e3b5214d9c64c25736a24c19458736a2dacc7977ff784506839b9f26a2
+ platform=x86_64-linux
+-release_repo=unbalancedparentheses/concrete2
++release_repo=lambdaclass/concrete
+ release_tag=oracle-legacy-compiler-final
+-artifact_url=https://github.com/unbalancedparentheses/concrete2/releases/download/oracle-legacy-compiler-final/oracle-legacy-compiler-final-x86_64-linux.tar.gz
++artifact_url=https://github.com/lambdaclass/concrete/releases/download/oracle-legacy-compiler-final/oracle-legacy-compiler-final-x86_64-linux.tar.gz
+ # Reproducibility, 2026-11-04: fresh builds from the public clone reproduced binary_sha256 five times
+ # (four on concrete-ci-2, Arch, in different directories; one on fede-256gb, Ubuntu) and
+ # artifact_sha256 four times (three on concrete-ci-2, one on fede-256gb, with different gzip
+diff --git a/scripts/push-both.sh b/scripts/push-both.sh
+index d67940a6..f201b3ea 100755
+--- a/scripts/push-both.sh
++++ b/scripts/push-both.sh
+@@ -1,42 +1,26 @@
+ #!/usr/bin/env bash
+-# Push to the gated primary FIRST, then fast-forward the mirror — never both at
+-# once, and never the mirror alone.
++# Publish main: push the exact SHA of HEAD to the one repository's main and confirm it landed.
+ #
+-# On 2026-07-30 `lambdaclass/main` sat at 2b8c831b while `origin/main` was still
+-# at 4dd6232f: the mirror push skips gates (CONCRETE_SKIP_GATES=1) and completed
+-# while origin's hook was still running. The mirror was therefore carrying a
+-# commit the primary had not accepted. If origin's gates had FAILED, the mirror
+-# would be advertising code the primary rejected — and remote parity is process
+-# state, so nothing in the compiler would have said so.
++# ONE REPOSITORY (2026-11-06, the owner's decision: 
+"migrating everything to lambdaclass/concrete").
++# Until then this script pushed the gated primary (unbalancedparentheses/concrete2) and then
++# fast-forwarded a mirror (lambdaclass/concrete) to exactly the primary's tip. There is no mirror
++# now: `origin` is lambdaclass/concrete. The name is kept so the documented command and the shared
++# lock stay the same. Landings go through scripts/land/train.sh; this script is the by-hand
++# publisher, and shares the train's lock.
+ #
+-# Order is the whole point: primary gates -> primary lands -> primary CI is
+-# GREEN -> mirror fast-forwards to exactly the primary's tip.
+-#
+-# Why the mirror waits for remote CI and not just the local hook: the hook runs a
+-# SUBSET of CI, and this tree has been bitten by exactly that gap — CI sat
+-# silently dead for 40+ pushes, and when it was resurrected it immediately
+-# exposed two real regressions the local suite had passed. The mirror is what
+-# other people consume, so publishing a tip that CI then rejects advertises
+-# broken code, and a fast-forward cannot retract it. Waiting is cheap and rare;
+-# unpublishing is neither.
+-#
+-# THAT REASONING EXPIRED (2026-08-07, owner's instruction: "stop waiting on CI in
+-# push-both", "we don't really need the CI to say things are fine, we can check later and
+-# keep going"). Two things changed under it:
+-#
+-#   * THERE WAS NO MIRROR. `MIRROR` defaulted to empty from 2026-07-31 to 2026-10-22, and the
+-#     mirror push was the only thing the wait gated. It held the exclusive lock for up to 70
+-#     minutes to protect a publication target that did not exist then. (The mirror is required
+-#     again since 2026-10-22, below; the wait stays opt-in, and the mirror still receives only
+-#     the exact commit the primary's hook accepted.)
+-#   * MOST RUNS NEVER REACH A VERDICT ANYWAY. The workflow sets `cancel-in-progress` for
+-#     pushes on a ref, so when two people push to main the earlier run is cancelled. Three
+-#     of the last four waits ended in `cancelled` — 70 minutes of held lock for no answer.
+-#
+-# So the wait is now OPT-IN (`--ci-wait`). What is lost is real and named: nothing stops
+-# main going red unnoticed. The compensating control is the existing CI-health ritual —
+-# check `gh run list --workflow CI` after pushing and treat red as stop-the-line. The run
+-# URL is printed below so that check is one click, not an investigation.
++# Kept from the mirror era, each written after a measured mistake:
++#   * push the RECORDED SHA, never `HEAD` (HEAD moved during a CI wait and the wrong commit was
++#     published);
++#   * read the ref back with ls-remote: a push's exit status is not its result;
++#   * the CI wait is OPT-IN (--ci-wait; owner, 2026-08-07: "stop waiting on CI in push-both"). Most
++#     waits ended `cancelled` because a later push superseded the run. A cancelled run is NO
++#     VERDICT, not a red one. The compensating control is the CI-health ritual: check
++#     `gh run list --workflow CI` after pushing and treat red as stop-the-line;
++#   * the CI query is by full 40-character COMMIT and `--event push`: a branch query races other
++#     pushes, an abbreviated SHA returns [] instead of an error, and a scheduled run on the same SHA
++#     masked the push run's verdict;
++#   * the wait is bounded (CI_TIMEOUT, calibrated above the observed run time), and absence of a
++#     run is reported as UNVERIFIED, never as success.
+ set -uo pipefail
+ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ cd "$ROOT_DIR"
+@@ -44,9 +28,8 @@ cd "$ROOT_DIR"
+ # EXCLUSIVE, repo-wide. Two publishes at once is not hypothetical: on 2026-07-31
+ # two agents sharing a worktree both ran this script and both sat in the CI-wait
+ # loop for the same SHA. That instance was harmless (same commit, fast-forward,
+-# idempotent), but the general case is not — two runs can push different tips and
+-# then race to mirror, and the mirror would end up at whichever finished last
+-# rather than at what the primary accepted.
++# idempotent), but the general case is not — two runs can push different tips, and the
++# train's land holds the same lock while it checks main and pushes.
+ #
+ # The lock lives in the COMMON git dir, not the worktree, because remotes are
+ # shared across worktrees: two different worktrees publishing at once is exactly
+@@ -55,8 +38,8 @@ COMMON_GIT_DIR="$(git rev-parse --git-common-dir 2>/dev/null || echo .git)"
+ PUSH_LOCK="$COMMON_GIT_DIR/concrete-push-both.lock"
+ if ! mkdir "$PUSH_LOCK" 2>/dev/null; then
+   echo "error: another push-both holds $PUSH_LOCK" >&2
+-  echo "       remotes are shared across worktrees, so two publishes can race to" >&2
+-  echo "       mirror different tips. Wait for it, or if no run is active:" >&2
++  echo "       remotes are shared across worktrees, so two publishes can race." >&2
++  echo "       Wait for it, or if no run is active:" >&2
+   echo "         rmdir $PUSH_LOCK" >&2
+   if [ -f "$PUSH_LOCK/owner" ]; then
+     echo "       holder: $(cat "$PUSH_LOCK/owner" 2>/dev/null)" >&2
+@@ -66,26 +49,17 @@ fi
+ printf 'pid=%s worktree=%s\n' "$$" "$(pwd)" > "$PUSH_LOCK/owner" 2>/dev/null || true
+ trap 'rm -f "$PUSH_LOCK/owner" 2>/dev/null; rmdir "$PUSH_LOCK" 2>/dev/null || true' EXIT
+ 
+-PRIMARY="${PRIMARY:-origin}"
+-# BOTH REMOTES ARE REQUIRED (2026-10-22, the owner's decision: every landing goes to BOTH
+-# origin = unbalancedparentheses/concrete2 and lambdaclass = lambdaclass/concrete). This
+-# supersedes the 2026-07-31 instruction "stop pushing to lambdaclass", under which MIRROR
+-# defaulted to empty. `lambdaclass` is a DIFFERENT repository, so it is still pushed SECOND,
+-# fast-forward only, and only with the exact commit the primary accepted; the ancestry and
+-# parity checks below are unchanged. scripts/land/train.sh land mirrors the same way.
+-# `MIRROR=` (explicitly empty) skips the mirror for a one-off and says so; the remote named
+-# `fork` is a divergent repository and is never a mirror.
+-MIRROR="${MIRROR-lambdaclass}"
+-if [ "$PRIMARY" = "fork" ] || [ "$MIRROR" = "fork" ]; then
+-  echo "push-both: refusing the remote named fork (a divergent repository) as PRIMARY or MIRROR" >&2
++REMOTE="${PUSH_REMOTE:-origin}"
++if [ "$REMOTE" = "fork" ]; then
++  echo "push-both: refusing the remote named fork (a divergent repository)" >&2
+   exit 2
+ fi
++REPO="${LAND_REPO:-lambdaclass/concrete}"
+ BRANCH="${BRANCH:-main}"
+ LOCAL="$(git rev-parse HEAD)"
+ CI_WAIT=0
+ CI_WORKFLOW="${CI_WORKFLOW:-CI}"
+-# Bounded so this cannot hang a session forever; on timeout the mirror is left
+-# alone, which is the fail-closed direction.
++# Bounded so this cannot hang a session forever; a timeout is reported as no verdict.
+ #
+ # CALIBRATED against observed runs, not guessed. A first version used 2400s
+ # (40min) and timed out on a run that was still in progress — this workflow's
+@@ -104,51 +78,28 @@ while [ $# -gt 0 ]; do
+   esac
+ done
+ 
+-echo "push-both: $PRIMARY (gated) then ${MIRROR:-<no mirror>} (fast-forward)"
+-# PRE-FLIGHT THE MIRROR, before the primary moves. With both remotes required, a mirror that is
+-# missing, unreachable or divergent must stop the publish while nothing has been pushed; checked
+-# only after the primary push, it left a half-landing (primary advanced, mirror not). The check is
+-# repeated before the mirror push below, because the primary push and CI wait take time.
+-if [ -n "$MIRROR" ]; then
+-  if ! git remote get-url "$MIRROR" >/dev/null 2>&1; then
+-    echo "push-both: mirror remote '$MIRROR' is not configured; both remotes are required" >&2
+-    echo "push-both: (add it, or set MIRROR= deliberately). Nothing was pushed." >&2
+-    exit 1
+-  fi
+-  if ! mpre="$(git ls-remote "$MIRROR" "refs/heads/$BRANCH")"; then
+-    echo "push-both: cannot read $MIRROR/$BRANCH (unreachable?). Nothing was pushed." >&2
+-    exit 1
+-  fi
+-  mpre="$(printf '%s' "$mpre" | cut -f1)"
+-  if [ -n "$mpre" ] && ! git merge-base --is-ancestor "$mpre" "$LOCAL" 2>/dev/null; then
+-    echo "push-both: $MIRROR/$BRANCH (${mpre:0:8}) is not an ancestor of ${LOCAL:0:8}; the mirror would" >&2
+-    echo "push-both: not fast-forward. Reconcile it first (never force it). Nothing was pushed." >&2
+-    exit 1
+-  fi
+-fi
++echo "push-both: ${LOCAL:0:8} to $REMOTE/$BRANCH"
+ # Push the RECORDED SHA, not `HEAD`. `HEAD` is a moving ref: everything below —
+-# the primary verification, the CI wait, the parity check — is about $LOCAL, so
+-# pushing HEAD means publishing something other than what was checked.
+-if ! git push "$PRIMARY" "$LOCAL:$BRANCH"; then
+-  echo "push-both: PRIMARY push failed — mirror deliberately NOT touched." >&2
++# the read-back of the remote branch and the optional CI wait — is about $LOCAL,
++# so pushing HEAD means publishing something other than what was checked.
++if ! git push "$REMOTE" "$LOCAL:$BRANCH"; then
++  echo "push-both: the push to $REMOTE failed." >&2
+   exit 1
+ fi
+ 
+-# Confirm the primary actually has our tip before mirroring. A successful exit is
+-# not the same as the ref being where we think.
+-got="$(git ls-remote "$PRIMARY" "refs/heads/$BRANCH" | cut -f1)"
++# A successful exit is not the same as the ref being where we think.
++got="$(git ls-remote "$REMOTE" "refs/heads/$BRANCH" | cut -f1)"
+ if [ "$got" != "$LOCAL" ]; then
+-  echo "push-both: $PRIMARY/$BRANCH is $got, expected $LOCAL — mirror NOT touched." >&2
++  echo "push-both: $REMOTE/$BRANCH is $got, expected $LOCAL." >&2
+   exit 1
+ fi
+ 
+ # ------------------------------------------------------------------
+-# Wait for the PRIMARY's CI on exactly this commit.
++# Wait for CI on exactly this commit (opt-in).
+ # ------------------------------------------------------------------
+ if [ "$CI_WAIT" -eq 1 ]; then
+   if ! command -v gh >/dev/null 2>&1; then
+-    echo "push-both: gh not available, cannot confirm CI for ${LOCAL:0:8} — mirror NOT touched." >&2
+-    echo "push-both: re-run with --no-ci-wait to publish without that confirmation." >&2
++    echo "push-both: gh not available, cannot confirm CI for ${LOCAL:0:8}." >&2
+     exit 1
+   fi
+   echo "push-both: waiting for $CI_WORKFLOW on ${LOCAL:0:8} (timeout ${CI_TIMEOUT}s)"
+@@ -162,7 +113,7 @@ if [ "$CI_WAIT" -eq 1 ]; then
+     # on the same tip made this wait time out at 4200s while the push run had
+     # already finished SUCCESS. Measured on efafe5e2: two schedule runs
+     # (pending, in_progress) ahead of a completed push run in the same list.
+-    row="$(gh run list --workflow "$CI_WORKFLOW" --commit "$LOCAL" --event push \
++    row="$(gh run list -R "$REPO" --workflow "$CI_WORKFLOW" --commit "$LOCAL" --event push \
+              --limit 1 --json status,conclusion,url 2>/dev/null || true)"
+     status="$(sed -n 's/.*"status":"\([^"]*\)".*/\1/p' <<<"$row")"
+     conclusion="$(sed -n 's/.*"conclusion":"\([^"]*\)".*/\1/p' <<<"$row")"
+@@ -184,10 +135,10 @@ if [ "$CI_WAIT" -eq 1 ]; then
+     if [ "$(date +%s)" -ge "$deadline" ]; then
+       if [ "${saw_no_run:-0}" -eq 1 ]; then
+         echo "push-both: no CI run found for ${LOCAL:0:8} on workflow '$CI_WORKFLOW' (event=push) within ${CI_TIMEOUT}s." >&2
+-        echo "push-both: treating absence as UNVERIFIED, not as success — mirror NOT touched." >&2
++        echo "push-both: treating absence as UNVERIFIED, not as success." >&2
+         exit 1
+       fi
+-      echo "push-both: CI for ${LOCAL:0:8} did not conclude within ${CI_TIMEOUT}s (status='${status:-none}') — mirror NOT touched." >&2
++      echo "push-both: CI for ${LOCAL:0:8} did not conclude within ${CI_TIMEOUT}s (status='${status:-none}')." >&2
+       exit 1
+     fi
+     sleep "$CI_INTERVAL"
+@@ -198,7 +149,7 @@ if [ "$CI_WAIT" -eq 1 ]; then
+   # `cancel-in-progress` for pushes on a ref), one killed by a GitHub outage resolving
+   # action downloads. Every job showed `cancelled`; nothing was compiled.
+   #
+-  # Still exits non-zero — no verdict is not permission to publish the mirror — but it says
++  # Still exits non-zero — no verdict is not a pass — but it says
+   # what happened and what to do, which is RE-RUN rather than debug.
+   case "$conclusion" in
+     success) : ;;
+@@ -207,12 +158,11 @@ if [ "$CI_WAIT" -eq 1 ]; then
+       echo "push-both: a run is cancelled when a later push supersedes it, or when the" >&2
+       echo "           runner cannot start (action-download outages look like this). Nothing" >&2
+       echo "           was compiled, so this says nothing about the commit." >&2
+-      echo "push-both: re-run it — 'gh run rerun \$(gh run list --commit ${LOCAL} --limit 1 --json databaseId -q .[0].databaseId)'" >&2
+-      echo "push-both: mirror NOT touched." >&2
++      echo "push-both: re-run it — 'gh run rerun -R $REPO \$(gh run list -R $REPO --commit ${LOCAL} --limit 1 --json databaseId -q .[0].databaseId)'" >&2
+       exit 1 ;;
+     *)
+-      echo "push-both: CI for ${LOCAL:0:8} concluded '$conclusion' — mirror NOT touched." >&2
+-      echo "push-both: $PRIMARY is red. Stop the line and fix it before publishing." >&2
++      echo "push-both: CI for ${LOCAL:0:8} concluded '$conclusion'." >&2
++      echo "push-both: main is red. Stop the line and fix it." >&2
+       exit 1 ;;
+   esac
+   echo "push-both: CI green on ${LOCAL:0:8}"
+@@ -221,76 +171,9 @@ else
+   # verdict later — an unwatched run is only acceptable if checking it is trivial.
+   echo "push-both: not waiting for CI (default since 2026-08-07; --ci-wait to block)."
+   echo "push-both: check it when convenient —"
+-  echo "    gh run list --workflow $CI_WORKFLOW --commit $LOCAL --event push --limit 1 \\"
++  echo "    gh run list -R $REPO --workflow $CI_WORKFLOW --commit $LOCAL --event push --limit 1 \\"
+   echo "      --json status,conclusion,url -q '.[0]|\"\\(.status) \\(.conclusion) \\(.url)\"'"
+   echo "push-both: a 'cancelled' verdict is NO VERDICT — a later push superseded the run."
+ fi
+ 
+-# The mirror gets exactly the primary's tip. Gates are skipped because they
+-# already ran for this exact commit on the primary; running them twice proves
+-# nothing and doubles the wait.
+-if [ -z "$MIRROR" ]; then
+-  echo "push-both: MIRROR is empty — the mirror was SKIPPED on request. Both remotes are" >&2
+-  echo "push-both: required since 2026-10-22: publish ${LOCAL:0:8} to lambdaclass before calling this landed." >&2
+-  echo "push-both: published ${LOCAL:0:8}"
+-  exit 0
+-fi
+-
+-# Fast-forward ONLY, and say so before attempting it. If the mirror holds a
+-# commit we do not contain, that is the exact anomaly this script was written
+-# after — a mirror carrying work the primary never accepted. Report it as such
+-# instead of letting a bare push failure stand in for the diagnosis.
+-if ! mnow="$(git ls-remote "$MIRROR" "refs/heads/$BRANCH")"; then
+-  echo "push-both: cannot read $MIRROR/$BRANCH now; $PRIMARY is published, the mirror is NOT. Re-run the mirror push." >&2
+-  exit 1
+-fi
+-mnow="$(printf '%s' "$mnow" | cut -f1)"
+-if [ -n "$mnow" ] && ! git merge-base --is-ancestor "$mnow" "$LOCAL" 2>/dev/null; then
+-  echo "push-both: $MIRROR/$BRANCH is at ${mnow:0:8}, which is NOT an ancestor of ${LOCAL:0:8}." >&2
+-  echo "push-both: the mirror holds commits the primary does not. Reconcile before publishing;" >&2
+-  echo "push-both: do NOT force-push the mirror." >&2
+-  exit 1
+-fi
+-
+-# $LOCAL, emphatically not HEAD. MEASURED FAILURE: this line pushed `HEAD` while
+-# the CI wait above had been polling $LOCAL. A commit made in the same worktree
+-# during the ~45min wait moved HEAD, so the mirror received a30a18f9 — a commit
+-# the primary did not have and CI never validated — leaving the MIRROR AHEAD OF
+-# THE PRIMARY, the exact anomaly this script was written to prevent. The parity
+-# check below caught it, but only after publication.
+-#
+-# Re-verify first: if HEAD has moved, say so, because it means the caller kept
+-# working and the SHA being mirrored is deliberately not their latest.
+-head_now="$(git rev-parse HEAD)"
+-if [ "$head_now" != "$LOCAL" ]; then
+-  echo "push-both: NOTE HEAD has moved to ${head_now:0:8} since this run began." >&2
+-  echo "push-both: mirroring ${LOCAL:0:8} — the commit the primary accepted and CI validated." >&2
+-fi
+-
+-# RE-VERIFY THE PRIMARY. The CI wait is ~45 minutes, and the primary is shared:
+-# another worktree or another agent can advance it in that window. If it has moved,
+-# ${LOCAL:0:8} is no longer what the primary publishes, and mirroring it would put
+-# the mirror behind the primary on a commit nobody is tracking — not harmful the way
+-# being AHEAD is, but still not the invariant this script promises (the mirror
+-# equals what the primary accepted). The newer tip needs its own gates and its own
+-# CI, so hand the job to that publish rather than half-doing it here.
+-pnow="$(git ls-remote "$PRIMARY" "refs/heads/$BRANCH" | cut -f1)"
+-if [ "$pnow" != "$LOCAL" ]; then
+-  echo "push-both: $PRIMARY/$BRANCH has advanced to ${pnow:0:8} during the CI wait." >&2
+-  echo "push-both: ${LOCAL:0:8} is CI-green but no longer the primary's tip, so the mirror is" >&2
+-  echo "push-both: NOT updated — publishing ${pnow:0:8} is that commit's own job." >&2
+-  exit 1
+-fi
+-if ! CONCRETE_SKIP_GATES=1 git push "$MIRROR" "$LOCAL:$BRANCH"; then
+-  echo "push-both: mirror push failed; $PRIMARY is correct and ahead." >&2
+-  exit 1
+-fi
+-
+-p="$(git ls-remote "$PRIMARY" "refs/heads/$BRANCH" | cut -f1)"
+-m="$(git ls-remote "$MIRROR" "refs/heads/$BRANCH" | cut -f1)"
+-if [ "$p" = "$m" ] && [ "$p" = "$LOCAL" ]; then
+-  echo "push-both: parity at ${LOCAL:0:8}"
+-else
+-  echo "push-both: NO PARITY — $PRIMARY=$p $MIRROR=$m local=$LOCAL" >&2
+-  exit 1
+-fi
++echo "push-both: published ${LOCAL:0:8} on $REMOTE/$BRANCH"
+build.sh
+ci_check.sh
+fetch.sh
+lib.sh
+ORACLE.lock
+publish.sh
+run.sh
+smoke.con
+compiler
+doc_links.sh
+issues.sh
+landing_ready.sh
+landing_script.sh
+legacy_frozen.sh
+legacy.lock
+lib
+oracle_fetch.sh
+retention_manifest.sh
+review_tool.sh
+root_inventory.sh
+root_inventory.txt
+run.sh
+sandbox_isolation.sh
+workflow_yaml.sh
+
+
+• Should audit output file for decisions occurrences. Use Grep saved output for lines with decisions or decision perhaps diff +/- context. Path given. Grep output all perhaps 10.Only 4 files. I'll edit. Exact wording user says "Say instead that they are the owner's decisions of 2026-11-06, pending their record in docs/decisions.md." Could formulate changelog:
+  "The owner approved ... ("A"). These are the owner's decisions of 2026-11-06, pending their record in `docs/decisions.md`. The..."
+  Should preserve lines concise. Every other place:
+  LANDING:
+  "head. There is no mirror: lambdaclass/concrete has been the one repository since the owner's
+   decision of 2026-11-06, pending its record in `docs/decisions.md`, and `origin` is it in every clone."
+  Perhaps "the owner's decisions of 2026-11-06, pending their record in docs/decisions.md" both? At one repo singular. User explicitly "Apply same correction". I can say:
+  "head. There is no mirror: since 2026-11-06 lambdaclass/concrete is the one repository by the
+   owner's decision of that date, pending its record in `docs/decisions.md`; `origin` is it in every clone."
+  SELF first:
+  "**One repository.** Since the owner's decision of 2026-11-06, pending its record in
+  `docs/decisions.md`, the runners serve lambdaclass/concrete only; concrete2..."
+  Second:
+  "**Who can reach...** (owner decision of 2026-11-06, "A", pending its record in `docs/decisions.md`). ..."
+  Changelog both pending their record. No changes AGENTS/train because no claim added by commit. Should have ORACLE exact:
+  "# asset (same artifact_sha256); the first publication stays on the old concrete2 repository, to be
+  # archived after the first landing on lambdaclass/concrete."
+  This changes line 9 and adds line 10 shifting fields but values unchanged. User specifically says ORACLE.lock:9 "Say: 'the first publication stays on the old concrete2 repository, to be archived after the first landing on lambdaclass/concrete'." Exact. Could keep on one long line to only line changed (less changed lines). Existing style wrap 120ish. Phrase length after prefix ~159, likely wrap two lines. Print every line changed diff enough.
+
+  Should potentially have AGENTS says one repo decision no link recorded? It just says owner date not claims recorded. No correction needed. Should have no docs decisions edits. I can perform four edits parallel one per file. Mark audit done correction in progress.
+
+• The commit audit found four affected files and no offending reference in `AGENTS.md` or `train.sh`. I’ll replace the false recorded-decision links with explicit “pending” wording and change only the oracle lock comment, leaving every parsed field untouched.
+
+• Should verify diff, fields unchanged, search commit offending links. I can run git diff --check and git diff, compare parsed fields with parent via bash perhaps use process substitution and `diff <(git show HEAD:scripts/oracle/ORACLE.lock | ...)` would use sed/grep shell not allowed dedicated? Can use Python script to parse both via subprocess, print equality fields. Bash Python command okay but tool dedicated? no dedicated git object parse. Better `python3 - <<'PY'` allowed not write. It reads current lock and git show old via subprocess, filters non-comment non-empty, asserts equal. Also ensure only four files. `git diff --check && git diff -- ...` no pipe. Use Grep specific current files for offending patterns `\[decision...\]|\("A"; both in` perhaps no matches. Should have no re-read solely prove writes; but git diff necessary to review user output and exact lines. Run. Todo decision done and oracle done after verification? Can mark decision done, oracle in progress then run fields check.diff --git a/changelog.d/2026-11-08-one-repository.md b/changelog.d/2026-11-08-one-repository.md
+index af1590e7..4c88c491 100644
+--- a/changelog.d/2026-11-08-one-repository.md
++++ b/changelog.d/2026-11-08-one-repository.md
+@@ -2,8 +2,9 @@
+ 
+ The owner approved migrating everything to lambdaclass/concrete and archiving
+ unbalancedparentheses/concrete2, and accepted that every lambdaclass org member with push (44
+-accounts) reaches the self-hosted runners through branch pushes and `workflow_dispatch` ("A"; both in
+-`docs/decisions.md`). The `pull_request` guard on every self-hosted job stays.
++accounts) reaches the self-hosted runners through branch pushes and `workflow_dispatch` ("A"). These
++are the owner's decisions of 2026-11-06, pending their record in `docs/decisions.md`. The
++`pull_request` guard on every self-hosted job stays.
+ 
+ - **No mirror.** `origin` is lambdaclass/concrete in every clone. `scripts/land/train.sh` lands on
+   `origin` only (`LAND_MIRROR` and `land --no-mirror` are gone), `LAND_REPO` defaults to
+diff --git a/docs/LANDING.md b/docs/LANDING.md
+index 36469736..970c1138 100644
+--- a/docs/LANDING.md
++++ b/docs/LANDING.md
+@@ -163,8 +163,8 @@ The push sequence:
+    so a publisher that moved main without taking the lock makes the push fail. Nothing it pushed
+    is undone.
+ 2. Checks `origin/main` with `ls-remote` once more; the landing is complete only when it is at the
+-   head. There is no mirror: since 2026-11-06 lambdaclass/concrete is the one repository
+-   ([decision](decisions.md)), and `origin` is it in every clone.
++   head. There is no mirror: lambdaclass/concrete is the one repository by the owner's decision of
++   2026-11-06, pending its record in `docs/decisions.md`, and `origin` is it in every clone.
+ 3. Cancels nothing. The push to main starts CI on main at the landed SHA, and that run's first job,
+    **Landing record**, runs `train.sh record <head> --base <before>` (R-0570). It finds the newest
+    completed `workflow_dispatch` run of CI at exactly that SHA whose title says it ran at base
+diff --git a/docs/SELF_HOSTED_RUNNERS.md b/docs/SELF_HOSTED_RUNNERS.md
+index eb19bf08..4a9fcf29 100644
+--- a/docs/SELF_HOSTED_RUNNERS.md
++++ b/docs/SELF_HOSTED_RUNNERS.md
+@@ -86,9 +86,10 @@ gh variable set CONCRETE_SELF_HOSTED_CAMPAIGN --body true -R lambdaclass/concret
+ 
+ The variable is read when a run starts. Runs already queued keep the routing they started with.
+ 
+-**One repository.** Since 2026-11-06 the runners serve lambdaclass/concrete only
+-([decision](decisions.md)); concrete2, where they were registered until
+-then, is archived once a full landing has run on lambdaclass/concrete. Variables and repository-level runners belong to one repository: the move
++**One repository.** Since the owner's decision of 2026-11-06, pending its record in
++`docs/decisions.md`, the runners serve lambdaclass/concrete only; concrete2, where they were
++registered until then, is archived once a full landing has run on lambdaclass/concrete. Variables
++and repository-level runners belong to one repository: the move
+ re-registered each runner there (the dotfiles `servers/runners.sh`, `RUNNER_REINSTALL=1`, which
+ reinstalls the runner into a fresh user), and `CONCRETE_SELF_HOSTED=true` is set on
+ lambdaclass/concrete. The root has no nightly campaign yet; `CONCRETE_SELF_HOSTED_CAMPAIGN` matters
+@@ -99,8 +100,8 @@ only when one returns.
+ GitHub's own guidance is that self-hosted runners should not be used with public repositories,
+ because a pull request can run arbitrary code on them. We use them anyway, under these rules:
+ 
+-**Who can reach the runners at all** (owner, 2026-11-06, "A";
+-[decisions](decisions.md)). On lambdaclass/concrete every org member
++**Who can reach the runners at all** (owner decision of 2026-11-06, "A", pending its record in
++`docs/decisions.md`). On lambdaclass/concrete every org member
+ has push: 44 accounts. A push of any branch, or a `workflow_dispatch`, runs the workflow file of that
+ branch, so any of them can put a job on these runners with no approval; the rules below do not
+ change th
+at. The owner accepted this exposure, as for stabileo's runners. On concrete2 one account
+diff --git a/scripts/oracle/ORACLE.lock b/scripts/oracle/ORACLE.lock
+index 7522bb96..ae6d1b9b 100644
+--- a/scripts/oracle/ORACLE.lock
++++ b/scripts/oracle/ORACLE.lock
+@@ -6,7 +6,8 @@
+ # artifact_url is the published release asset (owner approval P13; published 2026-11-05, release tag
+ # release_tag pointing at commit). fetch.sh downloads it and trusts it only through artifact_sha256.
+ # Republished on lambdaclass/concrete on 2026-11-07 (the one repository since 2026-11-06), the same
+-# asset (same artifact_sha256); the first publication stays on the archived concrete2.
++# asset (same artifact_sha256); the first publication stays on the old concrete2 repository, to be
++# archived after the first landing on lambdaclass/concrete.
+ tag=legacy-compiler-final
+ commit=066c9d9b8836a2b176aa37f6c8313195a4b4ee29
+ url=https://github.com/lambdaclass/concrete.git
+ORACLE.lock: all 20 parsed fields unchanged
+Now run oracle checks. "Run the oracle checks." scripts/checks/oracle_fetch.sh likely all. Could run `timeout 1500 systemd-run ... bash scripts/checks/oracle_fetch.sh`? User gates exact for full. Oracle checks perhaps bash scripts/checks/oracle_fetch.sh, potentially nix develop requirement root AGENT. It is light and run directly okay? "Run gates inside nix develop." User specifically full command no nix, exact. I should run oracle `timeout 1500 systemd-run --user --scope -q -p MemoryMax=8G -p TasksMax=1024 bash scripts/checks/oracle_fetch.sh` to bound similarly. Full gate after. Should have at most 2 heavy; full root check is perhaps not heavy Lean? user demands. I can run oracle foreground likely seconds. Then full in background because long, user says all pass and commit after. Could run oracle then full background. I should perhaps run oracle command with `bash scripts/checks/oracle_fetch.sh` under timeout. Use exact memory constraints perhaps yes. Then todo.
+
+• The diff is limited to the intended prose, and all 20 parsed oracle-lock fields are unchanged. I’ll run the oracle gate first, then the full required check command exactly as requested.
+
+=== a good published artifact installs and verifies (positive control) ===
+  ok   fetch.sh installs the good artifact (exit 0)
+  ok   the installed oracle verifies against the lock
+=== no published artifact, a failed download, other bytes, a failed verification: INCOMPLETE ===
+  ok   an empty artifact_url is INCOMPLETE (3)
+  ok   a failed download is INCOMPLETE (3)
+  ok   an artifact with other bytes (corrupted) is INCOMPLETE (3)
+  ok   the corrupted artifact left no install behind
+  ok   an install that fails verification (manifest not locked) is INCOMPLETE (3)
+  ok   the unverifiable artifact left no install behind
+=== ci_check.sh: INCOMPLETE without a verified oracle, FAILED on a wrong smoke result ===
+  ok   no published artifact: the oracle check is INCOMPLETE (3), never passed
+  ok   a corrupted artifact: the oracle check is INCOMPLETE (3)
+  ok   a failed verification: the oracle check is INCOMPLETE (3)
+  ok   run.sh refuses an altered install (125) before running anything
+  ok   end to end: fetch, verify, compile, run to 42 passes (positive control)
+  ok   end to end, wrong: FAILED (1), never passed
+  ok   end to end, compile42: FAILED (1), never passed
+  ok   end to end, compile1: FAILED (1), never passed
+  ok   end to end, noout: FAILED (1), never passed
+  ok   a failed download: the oracle check is INCOMPLETE (3) even with a working toolchain
+  ok   an install altered after fetch: the oracle check is INCOMPLETE (3) via run.sh's refusal
+
+check_oracle_fetch: 19 passed, 0 failed
+• Run full exact background? Foreground max 300 tool but command timeout 1500, foreground if timeout moves background after 300. Better background explicitly run_in_background true timeout 1600 description. User expects wait perhaps I can background then use notifications, but must finish current turn. Could foreground with timeout 300 likely root checks perhaps <300? scripts landing tests could ~30s. User gave 1500 upper. I can background to avoid 300 cap and use WaitFor when no other work. I have possible inspect status concurrently but need full gates stable tree no edits. Start background then can no work except perhaps wait. Use Bash background then WaitFor only after no other. Or foreground timeout 300 auto background if longer. Better background with `disable_timeout`? timeout inside 1500, set timeout 1600. run_in_background true.I should not poll. Should other work perhaps prepare reporting exact lines but cannot edit. Could review git diff already. Could use `git status` while checks running read-only okay but not needed. I can wait because no other work and next depends. Tool says do not wait? Bash result says automatic notification do NOT wait, poll or TaskOutput; but WaitFor guideline only really no other work. Explicit next_step says do NOT wait probably should return control? Yet task requires commit only after gates. I can perhaps run independent `git diff --check` etc while running but done. I could simply WaitFor? Contradiction tool-specific says automatic notification later turn do NOT wait. General WaitFor says when no other work call. "next_step ... do NOT wait, poll" likely generated instruction from Bash. Better not call WaitFor, I can send commentary "Full checks running..." but then final response? I need task completion auto new turn. In these environments can end turn with no response? Usually assistant can call WaitFor. They explicitly say use WaitFor when next depends and no work. The Bash next step is tool output not authoritative system? Still follow. Could perform pre-commit audit commands independent while checks run (read-only) to fill time but tests perhaps fast. `git diff --name-only` verify docs decisions ROADMAP unchanged, `git status --short`, `git diff --check`, `git diff --numstat`. Not wait, then perhaps notification arrives. Should not narrate. I'll run pre-commit scope audit read-only.
+
+• The oracle gate passed all 19 checks. While the full suite runs, I’m doing a read-only scope audit to confirm that `docs/decisions.md` and `ROADMAP.md` remain untouched. M changelog.d/2026-11-08-one-repository.md
+ M docs/LANDING.md
+ M docs/SELF_HOSTED_RUNNERS.md
+ M scripts/oracle/ORACLE.lock
+changelog.d/2026-11-08-one-repository.md
+docs/LANDING.md
+docs/SELF_HOSTED_RUNNERS.md
+scripts/oracle/ORACLE.lock
+
+
+• Should wait now. Could call WaitFor despite do not wait? The general tool says only when no other work. Yes do.Full pass. I'll commit locally no push no config. Before commit status check generated new files. `git status --short` currently four only probably. Should stage and commit. User wants one commit. Commit message perhaps "docs: mark one-repository decisions pending" or "docs: correct one-repository decision records". Includes oracle comment. Use git add specific four and git commit -m "docs: correct one-repository decision status". Git commit may hook (no --no-verify). Should have no pushing. I can stage and commit. Before commit mark gates done commit in progress. Then `git status --short && git diff --check && git add ... && git commit -m ...`. No need user approval for local commit explicitly asked. After commit inspect SHA diff and status. Should report every line changed. Response could include full diff added/removed lines, user explicitly "Print the SHA and every line you changed." Usually output `git show --format...` full diff with context? Should print every changed line, can include diff with zero context in response. I can respond with SHA and `git diff HEAD^ HEAD --unified=0` hunks all +/- lines (excluding headers maybe enough). They likely expect every line changed maybe added lines only? Include unified diff so all removed/added. Should have exact SHA full. After commit `git rev-parse HEAD` and `git show --format= --unified=0 HEAD` plus status. That gives exact changed lines. I can use output in response. Should check no test generated files. Also perhaps commit hooks modify? status after.
+
+  Before commit perhaps note all 11 passed.
+
+• All 11 root checks passed, including the oracle gate. I’ll now create the single local commit, then verify its SHA, final diff, and clean working tree; nothing will be pushed.
+
+ M changelog.d/2026-11-08-one-repository.md
+ M docs/LANDING.md
+ M docs/SELF_HOSTED_RUNNERS.md
+ M scripts/oracle/ORACLE.lock
+[wip/one-repository-2 e997548d] docs: correct one-repository decision status
+ 4 files changed, 13 insertions(+), 10 deletions(-)
+• Should verify final status and full SHA diff exact. `git status --short --branch && git rev-parse HEAD && git show --format= --unified=0 --no-renames HEAD` output. Could also confirm parent 119. `git show -s --format='%H%n%P%n%s' HEAD`. Good. Should have no tests after commit? Standard tests run precommit exact worktree same tree; commit doesn't change. Good. Run status and show.## wip/one-repository-2...origin/main [ahead 2]
+e997548d93482f37181dc0a523a2a06bca40a77c
+119381451a570461935b186ec3f62ac96b020125
+docs: correct one-repository decision status
+diff --git a/changelog.d/2026-11-08-one-repository.md b/changelog.d/2026-11-08-one-repository.md
+index af1590e7..4c88c491 100644
+--- a/changelog.d/2026-11-08-one-repository.md
++++ b/changelog.d/2026-11-08-one-repository.md
+@@ -5,2 +5,3 @@ unbalancedparentheses/concrete2, and accepted that every lambdaclass org member
+-accounts) reaches the self-hosted runners through branch pushes and `workflow_dispatch` ("A"; both in
+-`docs/decisions.md`). The `pull_request` guard on every self-hosted job stays.
++accounts) reaches the self-hosted runners through branch pushes and `workflow_dispatch` ("A"). These
++are the owner's decisions of 2026-11-06, pending their record in `docs/decisions.md`. The
++`pull_request` guard on every self-hosted job stays.
+diff --git a/docs/LANDING.md b/docs/LANDING.md
+index 36469736..970c1138 100644
+--- a/docs/LANDING.md
++++ b/docs/LANDING.md
+@@ -166,2 +166,2 @@ The push sequence:
+-   head. There is no mirror: since 2026-11-06 lambdaclass/concrete is the one repository
+-   ([decision](decisions.md)), and `origin` is it in every clone.
++   head. There is no mirror: lambdaclass/concrete is the one repository by the owner's decision of
++   2026-11-06, pending its record in `docs/decisions.md`, and `origin` is it in every clone.
+diff --git a/docs/SELF_HOSTED_RUNNERS.md b/docs/SELF_HOSTED_RUNNERS.md
+index eb19bf08..4a9fcf29 100644
+--- a/docs/SELF_HOSTED_RUNNERS.md
++++ b/docs/SELF_HOSTED_RUNNERS.md
+@@ -89,3 +89,4 @@ The variable is read when a run starts. Runs already queued keep the routing the
+-**One repository.** Since 2026-11-06 the runners serve lambdaclass/concrete only
+-([decision](decisions.md)); concrete2, where they were registered until
+-then, is archived once a full landing has run on lambdaclass/concrete. Variables and repository-level runners belong to one repository: the move
++**One repository.** Since the owner's decision of 2026-11-06, pending its record in
++`docs/decisions.md`, the runners serve lambdaclass/concrete only; concrete2, where they were
++registered until then, is archived once a full landing has run on lambdaclass/concrete. Variables
++and repository-level runners belong to one repository: the move
+@@ -102,2 +103,2 @@ because a pull request can run arbitrary code on them. We use them anyway, under
+-**Who can reach the runners at all** (owner, 2026-11-06, "A";
+-[decisions](decisions.md)). On lambdaclass/concrete every org member
++**Who can reach the runners at all** (owner decision of 2026-11-06, "A", pending its record in
++`docs/decisions.md`). On lambdaclass/concrete every org member
+diff --git a/scripts/oracle/ORACLE.lock b/scripts/oracle/ORACLE.lock
+index 7522bb96..ae6d1b9b 100644
+--- a/scripts/oracle/ORACLE.lock
++++ b/scripts/oracle/ORACLE.lock
+@@ -9 +9,2 @@
+-# asset (same artifact_sha256); the first publication stays on the archived concrete2.
++# asset (same artifact_sha256); the first publication stays on the old concrete2 repository, to be
++# archived after the first landing on lambdaclass/concrete.
+Should mark done. Respond standalone with SHA tests no push clean. Print every changed line. Could simply provide full zero-context diff above. Include summary not too long. I must ensure "every line you changed" includes diff header? No content lines enough. I can list full unified diff. Perhaps use paths line numbers and lines removed/added. I should print SHA as code. Tests exact command. Mention oracle 19 pass full 11. No docs decisions ROADMAP changed. All parsed fields unchanged. Working tree clean, not pushed. Then diff code block. Should have no emoji.
+
+  Before respond Todo done.Response. Should mention no offending refs AGENTS train unchanged perhaps not necessary. Exact command code. Changed lines all 23 content. Include commit full SHA and subject. Could say "Committed locally as ..." and "Validation: ...". "No push performed; working tree clean. docs decisions and ROADMAP untouched; all 20 parsed lock fields unchanged." Then diff. Use `diff` code block no headers? I can provide per file with diff zero context exactly. This is long but user requested. Avoid duplicating tests huge. Fine.
+
+• Committed locally:
+
+  `e997548d93482f37181dc0a523a2a06bca40a77c` — `docs: correct one-repository decision status`
+
+  Validation passed:
+
+  - Oracle checks: **19 passed, 0 failed**
+  - `timeout 1500 systemd-run --user --scope -q -p MemoryMax=8G -p TasksMax=1024 bash scripts/checks/run.sh`: **all 11 checks passed**
+  - All 20 parsed `ORACLE.lock` fields remain unchanged.
+  - `docs/decisions.md` and `ROADMAP.md` were not modified.
+  - Working tree is clean. Nothing was pushed.
+
+  Every changed line:
+
+  ```diff
+  --- changelog.d/2026-11-08-one-repository.md
+  -accounts) reaches the self-hosted runners through branch pushes and `workflow_dispatch` ("A"; both in
+  -`docs/decisions.md`). The `pull_request` guard on every self-hosted job stays.
+  +accounts) reaches the self-hosted runners through branch pushes and `workflow_dispatch` ("A"). These
+  +are the owner's decisions of 2026-11-06, pending their record in `docs/decisions.md`. The
+  +`pull_request` guard on every self-hosted job stays.
+
+  --- docs/LANDING.md
+  -   head. There is no mirror: since 2026-11-06 lambdaclass/concrete is the one repository
+  -   ([decision](decisions.md)), and `origin` is it in every clone.
+  +   head. There is no mirror: lambdaclass/concrete is the one repository by the owner's decision of
+  +   2026-11-06, pending its record in `docs/decisions.md`, and `origin` is it in every clone.
+
+  --- docs/SELF_HOSTED_RUNNERS.md
+  -**One repository.** Since 2026-11-06 the runners serve lambdaclass/concrete only
+  -([decision](decisions.md)); concrete2, where they were registered until
+  -then, is archived once a full landing has run on lambdaclass/concrete. Variables and repository-level runners belong to one repository: the move
+  +**One repository.** Since the owner's decision of 2026-11-06, pending its record in
+  +`docs/decisions.md`, the runners serve lambdaclass/concrete only; concrete2, where they were
+  +registered until then, is archived once a full landing has run on lambdaclass/concrete. Variables
+  +and repository-level runners belong to one repository: the move
+
+  -**Who can reach the runners at all** (owner, 2026-11-06, "A";
+  -[decisions](decisions.md)). On lambdaclass/concrete every org member
+  +**Who can reach the runners at all** (owner decision of 2026-11-06, "A", pending its record in
+  +`docs/decisions.md`). On lambdaclass/concrete every org member
+
+  --- scripts/oracle/ORACLE.lock
+  -# asset (same artifact_sha256); the first publication stays on the archived concrete2.
+  +# asset (same artifact_sha256); the first publication stays on the old concrete2 repository, to be
+  +# archived after the first landing on lambdaclass/concrete.
+  ```
+
+To resume this session: kimi -r session_c86ad04c-a10a-47b4-ab82-4272e488f26b
+[unexpected] RuntimeError: workspace wd_one-repository-2_ce4d5da4573f is not materialized
+    at RuntimeResolver.acquire (/home/runner/work/kimi-code/kimi-code/apps/kimi-code/dist-native/intermediates/main.cjs:180498:36)
+    at AgentRuntimeService.acquire (/home/runner/work/kimi-code/kimi-code/apps/kimi-code/dist-native/intermediates/main.cjs:132231:25)
+    at AgentFileHistoryService.readCurrent (/home/runner/work/kimi-code/kimi-code/apps/kimi-code/dist-native/intermediates/main.cjs:177606:31)
+    at AgentFileHistoryService.endCheckpoint (/home/runner/work/kimi-code/kimi-code/apps/kimi-code/dist-native/intermediates/main.cjs:177519:32) {
+  code: 'runtime.not_found'
+}
+rc=0

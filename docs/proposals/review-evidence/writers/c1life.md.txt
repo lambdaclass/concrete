@@ -1,0 +1,12 @@
+# Task: C1 interface change — partial lifecycle transitions (needed by C5)
+
+Read first: AGENTS.md, ConcreteSpec/README.md, ConcreteSpec/Spec/Exec.lean and ConcreteSpec/Proofs/Exec.lean (C1, accepted in review round 4), _review/C5_QUESTIONS.md (why C5 needs this), _review/FOUNDATION_PROPOSAL.md sections C1 and C5.
+
+Decision (coordinator, spec-structure only, no language rule changes): `Operands.life` becomes `Life → Store → Option Store`. `none` means the instrumentation refuses the lifecycle event (for C5: e.g. dropping a root while a loan of it is active), and the machine step that performs that event is stuck (`step` returns `none`, or the existing stuck outcome the step uses for a refused operation — use whatever C1 already uses for unsafe stuckness, not a trap and not a new outcome). Every lifecycle call site propagates it: binding/assignment (`bindLife`), call entry (`enter`, including the initial entry of main), return (`leave`), scope and test-frame exit (`dropOut`), primitive-result binding (the request continuation: if it is total today, make the refusal visible without inventing a new answer kind; explain the choice in a doc comment), and anywhere else `O.life` is called. Erased instances use `fun _ st => some st`; the demo instrumentation never refuses unless an example needs it.
+
+Requirements:
+1. Change Spec/Exec.lean minimally; keep every existing theorem in Proofs/Exec.lean with the same meaning, adding the natural premise where needed (e.g. "the lifecycle event succeeds", or state the law for instances whose life is total). Prefer stating laws over a hypothesis `hlife : ∀ e st, ∃ st', O.life e st = some st'` only where a law cannot hold otherwise; say which laws gained a premise.
+2. Add one law: if `O.life e st = none` at a step's lifecycle event, that step is stuck (one theorem per call-site family, or one general theorem).
+3. Add one Exec example with a refusing instrumentation (e.g. a demo where dropping a flagged local is refused) whose run ends in the stuck ending, and confirm the existing examples still evaluate to the same results.
+4. Keep the README's C1 text accurate (one or two sentences).
+Out of scope: C5 itself, any other interface change. If something else in C1 would need to change, stop and list it under QUESTIONS.

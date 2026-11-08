@@ -1,0 +1,5 @@
+- **ROADMAP.md:512 — defect:** Kimi finding 4 remains unresolved. R-0621 now delegates libc startup removal to R-0584, but still depends only on R-0509 and requires a golden with libc entirely absent. R-0584 remains scheduled in phase E (line 544). **Fix:** make final R-0621 acceptance depend on R-0584; distinguish runtime implementation around slices 24–25 from closure of the no-libc claim.
+
+The round-2 anchor finding is fixed. The other delta changes reasonably address the reviews, preserve owner authority, and place `Termination` before its use. Roadmap task dependencies are acyclic; added local links resolve.
+
+VERDICT: REVISE

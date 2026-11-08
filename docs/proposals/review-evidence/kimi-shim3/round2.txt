@@ -1,0 +1,41 @@
+  ## New findings
+
+  ### High — `--config-env` bypasses alias and push inspection
+
+  `scripts/land/acceptance_shim.sh:67-69` does not account for `--config-env` consuming a separate argument. The shim treats `alias.e=CFG` as the subcommand and delegates to real Git at line 78; real Git then processes the option and expands the alias to `push`.
+
+  Reproduced under `timeout 10`, with the shim first on `PATH`:
+
+  ```bash
+  CFG=push git --config-env alias.e=CFG -C w e origin main
+  ```
+
+  Observed: exit 0 and `refs/heads/main` created on the protected bare repository.
+
+  ### High — valid local protected URL forms receive no protected identity
+
+  At `scripts/land/acceptance_shim.sh:34-39,48-50`, only `file://` is stripped and every remaining non-absolute spelling is treated as relative to `$PWD`. Consequently:
+
+  - `file://localhost/tmp/.../prot.git` becomes a nonexistent `$PWD/localhost/tmp/...` path.
+  - `~/prot.git` becomes a nonexistent `$PWD/~/prot.git` path.
+
+  Real Git accepts both forms and resolves them to the protected repository, confirmed with `ls-remote`. With either form supplied as the protected URL to `make_git_shim`, this invocation succeeded:
+
+  ```bash
+  git -C w push /tmp/.../prot.git main
+  ```
+
+  The absolute spelling did not match `PROTECTED_RAW`, no corresponding entry existed in `PROTECTED_ID`, and the push exited 0 after creating protected `main`. Both cases were reproduced independently under `timeout 10`.
+
+  ### Low — ISS-0017 and the changelog remain inaccurate
+
+  `ISSUES.tsv:21` marks the issue closed and says protected local URLs are resolved at creation. `changelog.d/2026-11-08-acceptance-shim.md:7-14` says a main-moving push passes only to a repository that is neither real remote. The two bypass classes above contradict those statements.
+
+  The stated **35 refused and 14 allowed** test counts are accurate, and the existing gate passes; it simply lacks these cases. No additional wrongful fixture refusal was found.
+
+  Validation: `landing_script.sh` **PASS=210 FAIL=0**, `issues.sh` **PASS=5 FAIL=0**, and shell syntax checks passed. All reproductions used scratch repositories under `/tmp`; the archive was not modified.
+
+  Verdict: CHANGES-NEEDED
+
+To resume this session: kimi -r session_dc083997-1123-498e-9d62-589ca825b69d
+kimi exit 0

@@ -1,0 +1,1259 @@
+I could read the repository files, including `docs/decisions.md`. Both scenarios below reproduced using the actual scripts in a temporary Git repository.
+
+- **scripts/land/signoff.sh:194: high — Request binding still accepts incidental SHA mentions.** A request saying “Review exact commit A. Do not review B; that is a later unreviewed change” qualifies for signing B. `record` prepends `reviewed: B` automatically, and `names B` accepts the excluded SHA’s mention. With accepting outputs, recording succeeds and claims all three reviewers accepted B. The new control tests a mismatched header, but does not establish that the original request actually targeted B.
+
+- **scripts/land/signoff.sh:201: medium — Verdict filtering can discard the final verdict.** An output ending with `VERDICT: ACCEPT` followed by `VERDICT: BLOCKED` records successfully. The parser selects the last *recognized ACCEPT/REJECT* line, ignoring the actual final verdict. This violates the documented last-verdict rule and treats a blocked review as acceptance. Select the final `VERDICT:` line first, then require it to be `VERDICT: ACCEPT`.
+
+VERDICT: REJECT
+Reading additional input from stdin...
+OpenAI Codex v0.166.0
+--------
+workdir: /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/retro-split/src
+model: gpt-6.1-sol
+provider: openai
+approval: never
+sandbox: danger-full-access
+reasoning effort: none
+reasoning summaries: none
+session id: 01a1bba0-a78d-71a0-b6df-9418f96c90b5
+--------
+user
+RETROACTIVE VERIFICATION PASS of exact SHA b7f30d3601521b74e431f629809b09e35e439055 (Concrete repository), now on main. Its earlier Codex review.sh rounds ran in a sandbox that could not read the repository and judged only the diff, so this pass is the first Codex review with repository access. The current directory is a git-archive copy of b7f30d3601521b74e431f629809b09e35e439055 (no .git); REVIEW.diff is `git diff fb097fa4e5..b7f30d3601` (the change under review). Read any file you need, and state in your answer that you could read the repository files.
+
+Scope: the owner sign-off split format (scripts/land/signoff.sh, .githooks/pre-push, controls in scripts/checks/landing_script.sh and scripts/checks/review_tool.sh, docs), landed on main via train signoff (d3811a74). The record holds seven files: record.txt and for each of codex, kimi, agy a request (first line 'reviewed: <full sha>' prepended by record, then the verbatim request naming a prefix) and an output (verdict read only from its last VERDICT line).
+
+Look for correctness bugs, unsoundness (anything that could make a check pass when it should fail, or claim a proof/property that does not hold), owner-decision violations (docs/decisions.md is authoritative), and controls that do not prove what they claim. Do not re-raise documented limitations unless they are wrong. Report findings as `file:line: problem` with a concrete failure scenario and a severity (high/medium/low), and end with exactly one line `VERDICT: ACCEPT` or `VERDICT: REJECT`.
+codex
+I’ll read the diff, implementation, controls, and owner-decision docs, then check concrete failure scenarios against the claimed properties.
+exec
+/bin/bash -lc 'cat REVIEW.diff' in /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/retro-split/src
+ succeeded in 0ms:
+diff --git a/.githooks/pre-push b/.githooks/pre-push
+index 4f135ca40..b81d67a62 100755
+--- a/.githooks/pre-push
++++ b/.githooks/pre-push
+@@ -48,11 +48,12 @@ while read -r _localref localsha remoteref _remotesha; do
+       esac ;;
+     refs/owner-signoff/*)
+       # Only a record takes the notes tier: a parentless commit, under its subject's 40-hex name, whose
+-      # tree is exactly the sign-off's four plain files (scripts/land/signoff.sh), no directory among them. Anything else pushed here,
+-      # a source commit included, takes the full tier, as does a deletion.
++      # tree is exactly the sign-off's seven plain files (record.txt plus each reviewer's request and
++      # output), no directory among them. Anything else pushed here, including the old four-file shape
++      # or a source commit, takes the full tier, as does a deletion.
+       if [[ "${remoteref#refs/owner-signoff/}" =~ ^[0-9a-f]{40}$ ]] && [ "$(git rev-list --parents -n 1 "$localsha" 2>/dev/null)" = "$localsha" ] \
+          && [ "$(git ls-tree --format='%(objectmode) %(objecttype) %(path)' "$localsha" 2>/dev/null | LC_ALL=C sort | tr '\n' ' ')" \
+-              = "100644 blob agy.txt 100644 blob codex.txt 100644 blob kimi.txt 100644 blob record.txt " ]; then
++              = "100644 blob agy-request.txt 100644 blob agy.txt 100644 blob codex-request.txt 100644 blob codex.txt 100644 blob kimi-request.txt 100644 blob kimi.txt 100644 blob record.txt " ]; then
+         note_refs=$((note_refs+1))
+       else
+         other_refs=$((other_refs+1))
+diff --git a/changelog.d/2026-11-08-owner-signoff.md b/changelog.d/2026-11-08-owner-signoff.md
+index 296bf7c40..0219000a6 100644
+--- a/changelog.d/2026-11-08-owner-signoff.md
++++ b/changelog.d/2026-11-08-owner-signoff.md
+@@ -2,13 +2,15 @@
+ 
+ When a branch reaches its review-round cap, the owner may approve one exact commit after Codex, Kimi
+ and agy have all reviewed it (R-0618). `scripts/land/signoff.sh record` stores the approval as
+-`refs/owner-signoff/<sha>`: the owner's verbatim words, the date, the SHA and the three reviewers'
+-transcripts (each naming that commit) with their sha256. `train.sh`'s review provenance accepts, for a member with no clean
+-review note, a sign-off that `signoff.sh verify` finds valid for that exact SHA (the member used the
+-review cap of its diff's class: docs 2 rounds, scripts 3, compiler and spec 5), and then requires the
+-train head to be exactly the clean merge of its members onto its base. A sign-off for another commit,
+-a changed verdict file, the review of another commit, cap evidence that is not a
+-well-formed review.sh note, a missing reviewer, a reviewer output ending in REJECT, a quote that names no
+-commit, a scripts or mixed docs-and-compiler member after 2 rounds, and a head beyond the clean merge
+-are each refused (`scripts/checks/landing_script.sh`). The
+-pre-push hook takes a sign-off push in its no-source-tree tier only when the object is a record.
++`refs/owner-signoff/<sha>`, with `record.txt` and a separate hashed request and output for each
++reviewer. A structured `reviewed:` line plus a commit name in each request body binds the review to
++the signed SHA, and verdicts come only from the output, closing F1 (binding by any transcript
++mention) and F2 (acceptance supplied by the request). `train.sh`'s review provenance accepts, for a
++member with no clean review note, a sign-off that `signoff.sh verify` finds valid for that exact SHA
++(the member used the review cap of its diff's class: docs 2 rounds, scripts 3, compiler and spec 5),
++and then requires the train head to be exactly the clean merge of its members onto its base. A
++sign-off for another commit, a changed verdict file, the review of another commit, cap evidence that
++is not a well-formed review.sh note, a missing reviewer, a reviewer output ending in REJECT, a quote
++that names no commit, a scripts or mixed docs-and-compiler member after 2 rounds, and a head beyond
++the clean merge are each refused (`scripts/checks/landing_script.sh`). The pre-push hook takes a
++sign-off push in its no-source-tree tier only when the object is a seven-file record.
+diff --git a/docs/REVIEW.md b/docs/REVIEW.md
+index 0f86186cf..b2d486508 100644
+--- a/docs/REVIEW.md
++++ b/docs/REVIEW.md
+@@ -181,12 +181,13 @@ that commit. The cap is the class of the branch's diff against its base, by path
+ present winning: docs and roadmap 2 rounds, scripts 3, compiler and spec 5 (an unclassified path
+ counts as compiler and spec); it counts the rounds used, whatever their verdicts. The approval is
+ recorded, from the owner's own words only, with `scripts/land/signoff.sh record <sha> --base <base>
+---rounds-at <the review.sh-noted commit> --date --quote --codex --kimi --agy` (each reviewer's
+-transcript: the request naming that commit and the output, ending in `VERDICT: ACCEPT`), which
+-refuses a record that does not qualify, and
+-pushed to both remotes as `refs/owner-signoff/<sha>`. The
+-landing train accepts it as that commit's review provenance ([LANDING.md](LANDING.md)); it approves no
+-other commit.
++--rounds-at <the review.sh-noted commit> --date --quote`, plus `--codex-request <request> --codex
++<output>` and the corresponding kimi and agy options. For each reviewer `r`, the recorder stores the
++verbatim request as `r-request.txt` after prepending `reviewed: <sha>`, and the output separately as
++`r.txt`. The request body must name that commit by an unambiguous prefix, and only the output's last
++verdict line counts; it must be `VERDICT: ACCEPT`. Recording refuses a record that does not qualify.
++Push the resulting `refs/owner-signoff/<sha>` to both remotes. The landing train accepts it as that
++commit's review provenance ([LANDING.md](LANDING.md)); it approves no other commit.
+ 
+ ## verify.sh
+ 
+diff --git a/scripts/checks/landing_script.sh b/scripts/checks/landing_script.sh
+index b5bfdeace..0dc3565a6 100755
+--- a/scripts/checks/landing_script.sh
++++ b/scripts/checks/landing_script.sh
+@@ -1136,9 +1136,11 @@ inv_leg tin3 binv-legacy 5456
+ 
+ # An owner sign-off record (scripts/land/signoff.sh), published to origin. put-signoff <sha> <mode>
+ # [<other sha>]: valid; none removes it; othersha records <other sha> and files it under <sha>;
+-# tampered changes kimi.txt after recording; otherreview replaces kimi.txt (and its hash) with the
+-# review of <other sha>; noagy drops agy's verdict; reject ends agy's output with VERDICT: REJECT;
+-# unnamed has a quote that names no commit.
++# tampered changes kimi.txt after recording; otherreview makes kimi's request body name <other sha>;
++# otherreviewed gives that request a reviewed line for <other sha> while its body and output name
++# <sha>; noreviewed removes its reviewed line; requestverdict puts ACCEPT only in agy's request;
++# unnamedbody gives kimi's request no commit name; noagy drops agy's verdict; reject ends agy's output
++# with VERDICT: REJECT; unnamed has a quote that names no commit.
+ printf '#!/usr/bin/env bash\nSIGNOFF=%q\n' "$ROOT_DIR/scripts/land/signoff.sh" > "$TMP/put-signoff"
+ cat >> "$TMP/put-signoff" <<'SIGNOFF_EOF'
+ set -e
+@@ -1150,34 +1152,56 @@ CONCRETE_SKIP_GATES=1 git push -q origin ":$R/$sha" 2>/dev/null || true
+ # The member's own review.sh note: the rounds it used (any verdict), which the cap is judged against.
+ bash "$(dirname "$0")/put-review" "$sha" "findings@$rounds"
+ d="$(mktemp -d)"
+-for r in codex kimi agy; do printf 'review of %s by %s\n  VERDICT: ACCEPT\n' "$sha" "$r" > "$d/$r"; done
++for r in codex kimi agy; do
++  printf 'review of %s by %s\n' "$sha" "$r" > "$d/$r-request"
++  printf '  VERDICT: ACCEPT\n' > "$d/$r"
++done
+ bash "$SIGNOFF" record "$sha" --base "$base" --rounds-at "$sha" --date 2026-11-08 --quote "sign off ${sha:0:8}, yes" \
+-  --codex "$d/codex" --kimi "$d/kimi" --agy "$d/agy" >/dev/null
++  --codex-request "$d/codex-request" --codex "$d/codex" \
++  --kimi-request "$d/kimi-request" --kimi "$d/kimi" \
++  --agy-request "$d/agy-request" --agy "$d/agy" >/dev/null
+ c="$(git rev-parse "$R/$sha")"
+-# variant SED [drop:FILE | set:FILE:BLOB]: the valid record with record.txt edited by SED and one file
++# variant SED [drop:FILE | set:FILE:BLOB]...: the valid record with record.txt edited by SED and files
+ # dropped or replaced (record writes only valid records, so every refused variant is built from one).
+ variant() {
+-  local rec entries t f b
++  local rec entries t f b change
+   rec="$(git cat-file blob "$c:record.txt" | sed "$1" | git hash-object -w --stdin)"
+   entries="$(git ls-tree "$c" | grep -v "${tab}record.txt\$")"
+-  case "${2:-}" in
+-    drop:*) entries="$(printf '%s\n' "$entries" | grep -v "${tab}${2#drop:}\$")" ;;
+-    set:*) f="${2#set:}"; f="${f%%:*}"; b="${2##*:}"
+-      entries="$(printf '%s\n' "$entries" | sed "s/blob [0-9a-f]*${tab}${f}\$/blob ${b}${tab}${f}/")" ;;
+-  esac
++  shift
++  for change in "$@"; do
++    case "$change" in
++      drop:*) entries="$(printf '%s\n' "$entries" | grep -v "${tab}${change#drop:}\$")" ;;
++      set:*) f="${change#set:}"; f="${f%%:*}"; b="${change##*:}"
++        entries="$(printf '%s\n' "$entries" | sed "s/blob [0-9a-f]*${tab}${f}\$/blob ${b}${tab}${f}/")" ;;
++    esac
++  done
+   t="$(printf '%s\n100644 blob %s\trecord.txt\n' "$entries" "$rec" | git mktree)"
+   git update-ref "$R/$sha" "$(git commit-tree "$t" -m variant)"
+ }
++set_request() { # reviewer stored-request-file
++  local r="$1" q="$2"
++  variant "s/^request-$r: .*/request-$r: $r-request.txt $(sha256sum < "$q" | cut -d' ' -f1)/" \
++    "set:$r-request.txt:$(git hash-object -w "$q")"
++}
+ case "$mode" in
+   valid) ;;
+   othersha) variant "s/^commit: .*/commit: $(git rev-parse "$3")/" ;;
+   unnamed) variant "s/^quote: .*/quote: sign off the branch/" ;;
+-  tampered) variant "" "set:kimi.txt:$(printf 'review of %s by kimi, edited\n  VERDICT: ACCEPT\n' "$sha" | git hash-object -w --stdin)" ;;
+-  otherreview) printf 'review of %s by kimi\nVERDICT: ACCEPT\n' "$(git rev-parse "$3")" > "$d/kimi-o"
+-    variant "s/^verdict-kimi: .*/verdict-kimi: kimi.txt $(sha256sum < "$d/kimi-o" | cut -d' ' -f1)/" \
+-      "set:kimi.txt:$(git hash-object -w "$d/kimi-o")" ;;
++  tampered) variant "" "set:kimi.txt:$(printf 'edited output\n  VERDICT: ACCEPT\n' | git hash-object -w --stdin)" ;;
++  otherreview) printf 'reviewed: %s\nreview of %s by kimi\n' "$sha" "$(git rev-parse "$3")" > "$d/kimi-o"
++    set_request kimi "$d/kimi-o" ;;
++  otherreviewed) printf 'reviewed: %s\nreview of %s by kimi\n' "$(git rev-parse "$3")" "$sha" > "$d/kimi-q"
++    printf 'review of %s by kimi\nVERDICT: ACCEPT\n' "$sha" > "$d/kimi-o"
++    variant "s/^request-kimi: .*/request-kimi: kimi-request.txt $(sha256sum < "$d/kimi-q" | cut -d' ' -f1)/;s/^verdict-kimi: .*/verdict-kimi: kimi.txt $(sha256sum < "$d/kimi-o" | cut -d' ' -f1)/" \
++      "set:kimi-request.txt:$(git hash-object -w "$d/kimi-q")" "set:kimi.txt:$(git hash-object -w "$d/kimi-o")" ;;
++  noreviewed) printf 'review of %s by kimi\n' "$sha" > "$d/kimi-q"; set_request kimi "$d/kimi-q" ;;
++  unnamedbody) printf 'reviewed: %s\nreview the branch\n' "$sha" > "$d/kimi-q"; set_request kimi "$d/kimi-q" ;;
++  requestverdict) printf 'reviewed: %s\nreview of %s by agy\nVERDICT: ACCEPT\n' "$sha" "$sha" > "$d/agy-q"
++    printf 'agy output without a verdict\n' > "$d/agy-o"
++    variant "s/^request-agy: .*/request-agy: agy-request.txt $(sha256sum < "$d/agy-q" | cut -d' ' -f1)/;s/^verdict-agy: .*/verdict-agy: agy.txt $(sha256sum < "$d/agy-o" | cut -d' ' -f1)/" \
++      "set:agy-request.txt:$(git hash-object -w "$d/agy-q")" "set:agy.txt:$(git hash-object -w "$d/agy-o")" ;;
+   noagy) variant "/^verdict-agy:/d" "drop:agy.txt" ;;
+-  reject) printf 'review of %s by agy\nVERDICT: REJECT\n' "$sha" > "$d/agy-r"
++  reject) printf 'VERDICT: REJECT\n' > "$d/agy-r"
+     variant "s/^verdict-agy: .*/verdict-agy: agy.txt $(sha256sum < "$d/agy-r" | cut -d' ' -f1)/" \
+       "set:agy.txt:$(git hash-object -w "$d/agy-r")" ;;
+   *) echo "put-signoff: unknown mode $mode" >&2; exit 2 ;;
+@@ -1246,7 +1270,11 @@ so_leg(){ # label mode expect(refuse|pass) text
+ so_leg "a member with a valid owner sign-off and a clean merge" valid pass "owner sign-off (1) at its exact SHA, and the head is their clean merge"
+ so_leg "a sign-off recorded for another commit" othersha refuse "the record is for $R1, not $R2"
+ so_leg "a sign-off whose verdict file was changed after recording" tampered refuse "the sha256 of kimi.txt is"
+-so_leg "a sign-off carrying kimi's review of another commit" otherreview refuse "the kimi transcript does not name ${R2:0:10}"
++so_leg "a sign-off whose kimi request body names another commit" otherreview refuse "the kimi request body does not name ${R2:0:10}"
++so_leg "F1: a reviewed line for another commit despite body and output naming the signed SHA" otherreviewed refuse "the kimi request's reviewed line is '$R1', not $R2"
++so_leg "F1b: a request without a reviewed first line" noreviewed refuse "the kimi request's first line is not a 'reviewed: <full 40-hex SHA>' line"
++so_leg "F2: ACCEPT in agy's request but no verdict in its output" requestverdict refuse "the agy output has no verdict"
++so_leg "a request body that names no commit" unnamedbody refuse "the kimi request body does not name ${R2:0:10}"
+ so_leg "a sign-off without agy's verdict" noagy refuse "the record has no agy verdict"
+ so_leg "a sign-off whose agy output ends in REJECT" reject refuse "the agy output's last verdict is 'VERDICT:REJECT'"
+ so_leg "a sign-off whose quote names no commit" unnamed refuse "the quote does not name ${R2:0:10}"
+diff --git a/scripts/checks/review_tool.sh b/scripts/checks/review_tool.sh
+index 964f792cf..e0b928300 100755
+--- a/scripts/checks/review_tool.sh
++++ b/scripts/checks/review_tool.sh
+@@ -299,24 +299,29 @@ hook_out="$(cd "$W" && printf 'refs/notes/concrete-review %s refs/notes/concrete
+   "$NOTES_SHA" "$Z" "$(g rev-parse refs/notes/concrete-review-findings)" "$Z" | bash "$HOOK" 2>&1)"; rc=$?
+ check "notes-only push: hook exits 0 (got $rc)" test "$rc" -eq 0
+ check "notes-only push: hook takes the review-notes tier" grep -q "review-notes push" <<<"$hook_out"
+-# Owner sign-off refs: only a record (parentless, its subject's 40-hex name, exactly the four files)
++# Owner sign-off refs: only a record (parentless, its subject's 40-hex name, exactly the seven files)
+ # takes the notes tier. Anything else takes the full tier, which a linked worktree refuses before it
+ # runs anything: that refusal is how these legs see the tier without running the gates.
+ SO_BLOB="$(printf 'x\n' | g hash-object -w --stdin)"
+-SO_TREE="$(printf '100644 blob %s\tagy.txt\n100644 blob %s\tcodex.txt\n100644 blob %s\tkimi.txt\n100644 blob %s\trecord.txt\n' "$SO_BLOB" "$SO_BLOB" "$SO_BLOB" "$SO_BLOB" | g mktree)"
++SO_TREE="$(printf '100644 blob %s\tagy-request.txt\n100644 blob %s\tagy.txt\n100644 blob %s\tcodex-request.txt\n100644 blob %s\tcodex.txt\n100644 blob %s\tkimi-request.txt\n100644 blob %s\tkimi.txt\n100644 blob %s\trecord.txt\n' "$SO_BLOB" "$SO_BLOB" "$SO_BLOB" "$SO_BLOB" "$SO_BLOB" "$SO_BLOB" "$SO_BLOB" | g mktree)"
+ SO_REC="$(g commit-tree "$SO_TREE" -m record)"; SO_SUBJ="$(g rev-parse HEAD)"
++SO_OLD_TREE="$(printf '100644 blob %s\tagy.txt\n100644 blob %s\tcodex.txt\n100644 blob %s\tkimi.txt\n100644 blob %s\trecord.txt\n' "$SO_BLOB" "$SO_BLOB" "$SO_BLOB" "$SO_BLOB" | g mktree)"
++SO_OLD_REC="$(g commit-tree "$SO_OLD_TREE" -m old-record)"
+ g worktree add -q --detach "$T/so-wt" HEAD
+ so_hook(){ (cd "$T/so-wt" && printf '%s %s %s %s\n' "$1" "$2" "$1" "$Z" | CONCRETE_GATES_SHELL= bash "$HOOK" origin x 2>&1); }
+ hook_out="$(so_hook "refs/owner-signoff/$SO_SUBJ" "$SO_REC")"; rc=$?
+-check "an owner sign-off record takes the review-notes tier (exit $rc)" \
++check "a seven-file owner sign-off record takes the review-notes tier (exit $rc)" \
+   bash -c "[ $rc -eq 0 ] && grep -q 'review-notes push' <<<'$hook_out'"
++hook_out="$(so_hook "refs/owner-signoff/$SO_SUBJ" "$SO_OLD_REC")"; rc=$?
++check "the old four-file owner sign-off shape takes the full tier (exit $rc)" \
++  bash -c "[ $rc -eq 1 ] && grep -q 'is a linked worktree' <<<'$hook_out'"
+ hook_out="$(so_hook "refs/owner-signoff/$SO_SUBJ" "$SO_SUBJ")"; rc=$?
+ check "a source commit pushed as a sign-off takes the full tier (exit $rc)" \
+   bash -c "[ $rc -eq 1 ] && grep -q 'is a linked worktree' <<<'$hook_out'"
+ SO_DTREE="$(printf '100644 blob %s\tsrc.lean\n' "$SO_BLOB" | g mktree)"
+-SO_DIRS="$(g commit-tree "$(printf '040000 tree %s\tagy.txt\n040000 tree %s\tcodex.txt\n040000 tree %s\tkimi.txt\n040000 tree %s\trecord.txt\n' "$SO_DTREE" "$SO_DTREE" "$SO_DTREE" "$SO_DTREE" | g mktree)" -m dirs)"
++SO_DIRS="$(g commit-tree "$(printf '040000 tree %s\tagy-request.txt\n040000 tree %s\tagy.txt\n040000 tree %s\tcodex-request.txt\n040000 tree %s\tcodex.txt\n040000 tree %s\tkimi-request.txt\n040000 tree %s\tkimi.txt\n040000 tree %s\trecord.txt\n' "$SO_DTREE" "$SO_DTREE" "$SO_DTREE" "$SO_DTREE" "$SO_DTREE" "$SO_DTREE" "$SO_DTREE" | g mktree)" -m dirs)"
+ hook_out="$(so_hook "refs/owner-signoff/$SO_SUBJ" "$SO_DIRS")"; rc=$?
+-check "four directories named like a record's files take the full tier (exit $rc)" \
++check "seven directories named like a record's files take the full tier (exit $rc)" \
+   bash -c "[ $rc -eq 1 ] && grep -q 'is a linked worktree' <<<'$hook_out'"
+ hook_out="$(so_hook "refs/owner-signoff/not-a-sha" "$SO_REC")"; rc=$?
+ check "a record under a name that is no SHA takes the full tier (exit $rc)" \
+diff --git a/scripts/land/signoff.sh b/scripts/land/signoff.sh
+index 3dd3e0a67..cba6e3fbf 100644
+--- a/scripts/land/signoff.sh
++++ b/scripts/land/signoff.sh
+@@ -5,24 +5,30 @@
+ # refs/notes/concrete-review note is (scripts/review/verify.sh); train.sh accepts either for a member.
+ #
+ #   signoff.sh record <commit> --base BASE --rounds-at NOTED --date YYYY-MM-DD --quote TEXT
+-#                     --codex FILE --kimi FILE --agy FILE
++#                     --codex-request FILE --codex FILE --kimi-request FILE --kimi FILE
++#                     --agy-request FILE --agy FILE
+ #   signoff.sh verify <commit> --base BASE
+ #
+-# THE RECORD is the ref refs/owner-signoff/<full sha>, a commit whose tree holds record.txt and the
+-# three reviewers' transcripts (the request each was given and its output, which names the commit
+-# reviewed), copied in byte for byte (codex.txt, kimi.txt, agy.txt), so any
+-# clone that fetches the ref can check them. record.txt is `key: value` lines, each key once:
++# THE RECORD is the ref refs/owner-signoff/<full sha>, a parentless commit whose tree holds exactly
++# seven plain files: record.txt and, for each reviewer r in codex, kimi and agy, r-request.txt and
++# r.txt. The output is copied byte for byte. The request is copied verbatim after a structured first
++# line, `reviewed: <full sha>`, which `record` prepends to attest the commit reviewed. Thus a clone
++# that fetches the ref can check what each reviewer was asked and its output separately. record.txt
++# is `key: value` lines, each key once:
+ #   signoff: owner
+ #   commit: <the 40-hex SHA approved>
+ #   date: YYYY-MM-DD
+ #   quote: <the owner's words, verbatim; they name the commit by an unambiguous prefix of 7+ hex digits>
+ #   rounds-at: <the 40-hex SHA of the commit whose scripts/review/review.sh note records the rounds used>
++#   request-codex: codex-request.txt <sha256>
+ #   verdict-codex: codex.txt <sha256>
++#   request-kimi: kimi-request.txt <sha256>
+ #   verdict-kimi: kimi.txt <sha256>
++#   request-agy: agy-request.txt <sha256>
+ #   verdict-agy: agy.txt <sha256>
+ # `record` builds the record, verifies it, and only then writes the ref locally; it pushes nothing
+-# (push the ref to both remotes: the pre-push hook takes refs/owner-signoff/* in its no-source-tree
+-# tier). Only the owner's recorded words go in a quote.
++# (push the ref to both remotes: the pre-push hook takes a refs/owner-signoff/* record in its
++# no-source-tree tier). Only the owner's recorded words go in a quote.
+ #
+ # THE CAP (R-0618) comes from the class of the member's diff against its base, classified by path,
+ # the highest class present winning: docs and roadmap 2, scripts 3, compiler and spec 5; a path in no
+@@ -32,11 +38,13 @@
+ # blocked) whose round is at least the cap, whatever its verdict
+ # (the cap counts rounds used: the other reviewers' rejections are why a branch reaches it).
+ #
+-# `verify` accepts the record only if the ref exists, the tree holds exactly those four files, every
+-# key is present once and well formed, `commit` is the commit asked about, the quote names it, the
+-# cap was reached, each file's sha256 is the recorded one, each transcript names the commit, and each
+-# output's last VERDICT line is `VERDICT: ACCEPT` (all three reviewed the signed commit and accepted it). It judges the exact
+-# commit: a sign-off says nothing about any other commit.
++# `verify` accepts the record only if the ref exists, the tree holds exactly those seven 100644 blobs,
++# every key is present once and well formed, `commit` is the commit asked about, the quote names it,
++# the cap was reached, and every file's sha256 is the recorded one. Each request's `reviewed:` line
++# must equal the signed commit, and its body must name that commit by an unambiguous prefix of 7+
++# hex digits; output mentions do not bind a review to a commit. Each output's last VERDICT line must
++# be `VERDICT: ACCEPT`, and an output without one is refused; request lines never count as verdicts.
++# The sign-off judges the exact commit and says nothing about any other commit.
+ #
+ # Exit codes: 0 a valid sign-off; 1 a sign-off that does not qualify (the reason is printed);
+ #             2 no sign-off, or a usage error.
+@@ -82,13 +90,14 @@ diff_class() {
+ 
+ cmd_record() {
+   [ $# -ge 1 ] || die "record: name the commit"
+-  local sha date="" quote="" base="" at="" r f v; sha="$(git rev-parse -q --verify "$1^{commit}")" || die "record: not a commit: $1"; shift
+-  local codex="" kimi="" agy=""
++  local sha date="" quote="" base="" at="" r f q v; sha="$(git rev-parse -q --verify "$1^{commit}")" || die "record: not a commit: $1"; shift
++  local codex="" kimi="" agy="" codex_request="" kimi_request="" agy_request=""
+   while [ $# -gt 0 ]; do
+     [ $# -ge 2 ] || die "record: $1 needs a value"
+     case "$1" in
+       --date) date="$2" ;; --quote) quote="$2" ;; --base) base="$2" ;; --rounds-at) at="$2" ;;
+       --codex) codex="$2" ;; --kimi) kimi="$2" ;; --agy) agy="$2" ;;
++      --codex-request) codex_request="$2" ;; --kimi-request) kimi_request="$2" ;; --agy-request) agy_request="$2" ;;
+       *) die "record: unknown option $1" ;;
+     esac; shift 2
+   done
+@@ -102,7 +111,13 @@ date: $date
+ quote: $quote
+ rounds-at: $at" entries=""
+   for r in $REVIEWERS; do
++    q="${r}_request"; q="${!q}"; [ -f "$q" ] || die "record: --$r-request FILE is required (the verbatim review request)"
+     f="${!r}"; [ -f "$f" ] || die "record: --$r FILE is required (the reviewer's verdict output)"
++    v="$({ printf 'reviewed: %s\n' "$sha"; cat -- "$q"; } | git hash-object -w --no-filters --stdin)"
++    rec="$rec
++request-$r: $r-request.txt $({ printf 'reviewed: %s\n' "$sha"; cat -- "$q"; } | sha256)"
++    entries="${entries}100644 blob $v	$r-request.txt
++"
+     v="$(git hash-object -w --no-filters -- "$f")"
+     rec="$rec
+ verdict-$r: $r.txt $(sha256 < "$f")"
+@@ -125,14 +140,15 @@ check() {
+   local sha="$1" obj="$2" base="$3"
+   bad() { echo "$sha owner sign-off does not qualify: $*"; exit 1; }
+   [ "$(git cat-file -t "$obj:record.txt" 2>/dev/null)" = blob ] || bad "the record holds no record.txt"
+-  local rec line k v seen=" " F_signoff="" F_commit="" F_date="" F_quote="" F_rounds_at="" F_verdict_codex="" F_verdict_kimi="" F_verdict_agy=""
++  local rec line k v seen=" " F_signoff="" F_commit="" F_date="" F_quote="" F_rounds_at=""
++  local F_request_codex="" F_verdict_codex="" F_request_kimi="" F_verdict_kimi="" F_request_agy="" F_verdict_agy=""
+   rec="$(git cat-file blob "$obj:record.txt")"
+   while IFS= read -r line; do
+     [[ "$line" =~ ^([a-z-]+):\ (.*)$ ]] || bad "record.txt line is not key: value: '$line'"
+     k="${BASH_REMATCH[1]}" v="${BASH_REMATCH[2]}"
+     case "$seen" in *" $k "*) bad "record.txt repeats $k" ;; esac
+     seen="$seen$k "
+-    case "$k" in signoff|commit|date|quote|rounds-at|verdict-codex|verdict-kimi|verdict-agy) ;; *) bad "record.txt has the unknown key $k" ;; esac
++    case "$k" in signoff|commit|date|quote|rounds-at|request-codex|verdict-codex|request-kimi|verdict-kimi|request-agy|verdict-agy) ;; *) bad "record.txt has the unknown key $k" ;; esac
+     printf -v "F_${k//-/_}" '%s' "$v"
+   done <<< "$rec"
+   for k in signoff commit date quote rounds-at; do case "$seen" in *" $k "*) ;; *) bad "record.txt has no $k" ;; esac; done
+@@ -158,21 +174,33 @@ check() {
+   [ -n "$rounds" ] || bad "rounds-at ${at:0:10}: no round count in '$vout'"
+   [ "$rounds" -ge "$cap" ] \
+     || bad "the review cap was not reached: a $cls change has cap $cap, and ${at:0:10} records $rounds round(s)"
+-  local r n entry file hash got verdict
+-  for r in $REVIEWERS; do n="F_verdict_$r"; [ -n "${!n}" ] || bad "the record has no $r verdict"; done
+-  local want="agy.txt codex.txt kimi.txt record.txt" have
+-  have="$(git ls-tree --name-only "$obj" | sort | tr '\n' ' ')"
+-  [ "$have" = "$want " ] || bad "the record holds [${have% }], not exactly [$want]"
++  local r n entry file hash got reviewed verdict
+   for r in $REVIEWERS; do
++    n="F_request_$r"; [ -n "${!n}" ] || bad "the record has no $r request"
++    n="F_verdict_$r"; [ -n "${!n}" ] || bad "the record has no $r verdict"
++  done
++  local want="100644 blob agy-request.txt 100644 blob agy.txt 100644 blob codex-request.txt 100644 blob codex.txt 100644 blob kimi-request.txt 100644 blob kimi.txt 100644 blob record.txt " have
++  have="$(git ls-tree --format='%(objectmode) %(objecttype) %(path)' "$obj" | LC_ALL=C sort | tr '\n' ' ')"
++  [ "$have" = "$want" ] || bad "the record tree is not exactly the seven sign-off files as 100644 blobs"
++  for r in $REVIEWERS; do
++    n="F_request_$r"; entry="${!n}"
++    file="${entry%% *}" hash="${entry#* }"
++    [ "$file" = "$r-request.txt" ] && [[ "$hash" =~ ^[0-9a-f]{64}$ ]] || bad "request-$r is '$entry', not '$r-request.txt <sha256>'"
++    got="$(git cat-file blob "$obj:$file" | sha256)"
++    [ "$got" = "$hash" ] || bad "the sha256 of $file is $got, not the recorded $hash"
++    reviewed="$(git cat-file blob "$obj:$file" | sed -n '1p')"
++    [[ "$reviewed" =~ ^reviewed:\ [0-9a-f]{40}$ ]] || bad "the $r request's first line is not a 'reviewed: <full 40-hex SHA>' line"
++    [ "$reviewed" = "reviewed: $sha" ] || bad "the $r request's reviewed line is '${reviewed#reviewed: }', not $sha"
++    git cat-file blob "$obj:$file" | tail -n +2 | names "$sha" \
++      || bad "the $r request body does not name ${sha:0:10} (an unambiguous prefix of at least 7 hex digits)"
+     n="F_verdict_$r"; entry="${!n}"
+     file="${entry%% *}" hash="${entry#* }"
+     [ "$file" = "$r.txt" ] && [[ "$hash" =~ ^[0-9a-f]{64}$ ]] || bad "verdict-$r is '$entry', not '$r.txt <sha256>'"
+-    [ "$(git cat-file -t "$obj:$file" 2>/dev/null)" = blob ] || bad "$file is not a file"
+     got="$(git cat-file blob "$obj:$file" | sha256)"
+     [ "$got" = "$hash" ] || bad "the sha256 of $file is $got, not the recorded $hash"
+-    git cat-file blob "$obj:$file" | names "$sha" || bad "the $r transcript does not name ${sha:0:10}: it is the review of another commit"
+     verdict="$(git cat-file blob "$obj:$file" | grep -E '^[[:space:]]*VERDICT: (ACCEPT|REJECT)[[:space:]]*$' | tail -1 | tr -d '[:space:]')" || true
+-    [ "$verdict" = "VERDICT:ACCEPT" ] || bad "the $r output's last verdict is '${verdict:-none}', not VERDICT: ACCEPT"
++    [ -n "$verdict" ] || bad "the $r output has no verdict"
++    [ "$verdict" = "VERDICT:ACCEPT" ] || bad "the $r output's last verdict is '$verdict', not VERDICT: ACCEPT"
+   done
+   echo "$sha signed off by the owner ($F_date; $cls change, cap $cap reached at ${at:0:10} with $rounds round(s); codex, kimi and agy accepted): \"$F_quote\""
+ }
+
+exec
+/bin/bash -lc "cat scripts/land/signoff.sh; cat scripts/review/verify.sh; rg -n 'sign.off|R-0618|OD15[0-9]|owner' docs/decisions.md docs/REVIEW.md docs/LANDING.md | tail -90" in /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/retro-split/src
+ succeeded in 0ms:
+#!/usr/bin/env bash
+# OWNER SIGN-OFF RECORDS (ROADMAP R-0618; owner, 2026-11-08: "when a branch reaches its review-round
+# cap, the owner may approve one exact commit SHA after Codex, Kimi and agy have all reviewed it; the
+# approval is recorded"). A sign-off is review provenance for that one commit, as a clean
+# refs/notes/concrete-review note is (scripts/review/verify.sh); train.sh accepts either for a member.
+#
+#   signoff.sh record <commit> --base BASE --rounds-at NOTED --date YYYY-MM-DD --quote TEXT
+#                     --codex-request FILE --codex FILE --kimi-request FILE --kimi FILE
+#                     --agy-request FILE --agy FILE
+#   signoff.sh verify <commit> --base BASE
+#
+# THE RECORD is the ref refs/owner-signoff/<full sha>, a parentless commit whose tree holds exactly
+# seven plain files: record.txt and, for each reviewer r in codex, kimi and agy, r-request.txt and
+# r.txt. The output is copied byte for byte. The request is copied verbatim after a structured first
+# line, `reviewed: <full sha>`, which `record` prepends to attest the commit reviewed. Thus a clone
+# that fetches the ref can check what each reviewer was asked and its output separately. record.txt
+# is `key: value` lines, each key once:
+#   signoff: owner
+#   commit: <the 40-hex SHA approved>
+#   date: YYYY-MM-DD
+#   quote: <the owner's words, verbatim; they name the commit by an unambiguous prefix of 7+ hex digits>
+#   rounds-at: <the 40-hex SHA of the commit whose scripts/review/review.sh note records the rounds used>
+#   request-codex: codex-request.txt <sha256>
+#   verdict-codex: codex.txt <sha256>
+#   request-kimi: kimi-request.txt <sha256>
+#   verdict-kimi: kimi.txt <sha256>
+#   request-agy: agy-request.txt <sha256>
+#   verdict-agy: agy.txt <sha256>
+# `record` builds the record, verifies it, and only then writes the ref locally; it pushes nothing
+# (push the ref to both remotes: the pre-push hook takes a refs/owner-signoff/* record in its
+# no-source-tree tier). Only the owner's recorded words go in a quote.
+#
+# THE CAP (R-0618) comes from the class of the member's diff against its base, classified by path,
+# the highest class present winning: docs and roadmap 2, scripts 3, compiler and spec 5; a path in no
+# class counts as compiler and spec. A sign-off qualifies only when the review rounds recorded on the
+# member's own commits reach that cap: `rounds-at` must be the commit itself or one of its ancestors
+# not on BASE, and carry a well-formed review.sh note (scripts/review/verify.sh: clean, findings or
+# blocked) whose round is at least the cap, whatever its verdict
+# (the cap counts rounds used: the other reviewers' rejections are why a branch reaches it).
+#
+# `verify` accepts the record only if the ref exists, the tree holds exactly those seven 100644 blobs,
+# every key is present once and well formed, `commit` is the commit asked about, the quote names it,
+# the cap was reached, and every file's sha256 is the recorded one. Each request's `reviewed:` line
+# must equal the signed commit, and its body must name that commit by an unambiguous prefix of 7+
+# hex digits; output mentions do not bind a review to a commit. Each output's last VERDICT line must
+# be `VERDICT: ACCEPT`, and an output without one is refused; request lines never count as verdicts.
+# The sign-off judges the exact commit and says nothing about any other commit.
+#
+# Exit codes: 0 a valid sign-off; 1 a sign-off that does not qualify (the reason is printed);
+#             2 no sign-off, or a usage error.
+set -euo pipefail
+PREFIX=refs/owner-signoff
+NOTES_REF=refs/notes/concrete-review
+REVIEWERS="codex kimi agy"
+VERIFY="$(cd "$(dirname "${BASH_SOURCE[0]}")/../review" && pwd)/verify.sh"
+
+usage() { awk 'NR > 1 { if (!/^#/) exit; sub(/^# ?/, ""); print }' "${BASH_SOURCE[0]}"; }
+die() { echo "signoff: $*" >&2; exit 2; }
+sha256() { if command -v sha256sum >/dev/null 2>&1; then sha256sum | cut -d' ' -f1; else shasum -a 256 | cut -d' ' -f1; fi; }
+
+# path_class PATH → docs | scripts | compiler (anything unlisted is compiler: the highest class)
+path_class() {
+  case "$1" in
+    docs/*|changelog.d/*|ROADMAP.md|CHANGELOG.md|README.md|AGENTS.md|CLAUDE.md) echo docs ;;
+    scripts/*|.githooks/*|.github/*|.claude/*|required-checks.txt|required-checks-transition.tsv) echo scripts ;;
+    *) echo compiler ;;
+  esac
+}
+# names SHA → reads text on stdin; succeeds when a hex word of at least 7 digits in it is an
+# unambiguous name of SHA in this repository (git refuses an ambiguous prefix)
+names() {
+  local w
+  for w in $(tr -c '0-9a-f' ' '); do
+    [ "${#w}" -ge 7 ] && [ "${1#"$w"}" != "$1" ] && [ "$(git rev-parse -q --verify "$w^{commit}" 2>/dev/null)" = "$1" ] && return 0
+  done
+  return 1
+}
+class_cap() { case "$1" in docs) echo 2 ;; scripts) echo 3 ;; *) echo 5 ;; esac; }
+# diff_class SHA BASE → the highest class among the paths SHA changes against its merge base with BASE
+diff_class() {
+  local mb p c best=docs
+  mb="$(git merge-base "$2" "$1")" || return 1
+  while IFS= read -r p; do
+    [ -n "$p" ] || continue
+    c="$(path_class "$p")"
+    case "$c" in compiler) best=compiler ;; scripts) [ "$best" = compiler ] || best=scripts ;; esac
+  done < <(git diff --no-renames --name-only "$mb" "$1")
+  echo "$best"
+}
+
+cmd_record() {
+  [ $# -ge 1 ] || die "record: name the commit"
+  local sha date="" quote="" base="" at="" r f q v; sha="$(git rev-parse -q --verify "$1^{commit}")" || die "record: not a commit: $1"; shift
+  local codex="" kimi="" agy="" codex_request="" kimi_request="" agy_request=""
+  while [ $# -gt 0 ]; do
+    [ $# -ge 2 ] || die "record: $1 needs a value"
+    case "$1" in
+      --date) date="$2" ;; --quote) quote="$2" ;; --base) base="$2" ;; --rounds-at) at="$2" ;;
+      --codex) codex="$2" ;; --kimi) kimi="$2" ;; --agy) agy="$2" ;;
+      --codex-request) codex_request="$2" ;; --kimi-request) kimi_request="$2" ;; --agy-request) agy_request="$2" ;;
+      *) die "record: unknown option $1" ;;
+    esac; shift 2
+  done
+  [[ "$date" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] || die "record: --date YYYY-MM-DD is required"
+  [ -n "$quote" ] && [[ "$quote" != *$'\n'* ]] || die "record: --quote is required, on one line"
+  [ -n "$base" ] || die "record: --base BASE is required"
+  at="$(git rev-parse -q --verify "$at^{commit}")" || die "record: --rounds-at must name the noted commit"
+  local rec="signoff: owner
+commit: $sha
+date: $date
+quote: $quote
+rounds-at: $at" entries=""
+  for r in $REVIEWERS; do
+    q="${r}_request"; q="${!q}"; [ -f "$q" ] || die "record: --$r-request FILE is required (the verbatim review request)"
+    f="${!r}"; [ -f "$f" ] || die "record: --$r FILE is required (the reviewer's verdict output)"
+    v="$({ printf 'reviewed: %s\n' "$sha"; cat -- "$q"; } | git hash-object -w --no-filters --stdin)"
+    rec="$rec
+request-$r: $r-request.txt $({ printf 'reviewed: %s\n' "$sha"; cat -- "$q"; } | sha256)"
+    entries="${entries}100644 blob $v	$r-request.txt
+"
+    v="$(git hash-object -w --no-filters -- "$f")"
+    rec="$rec
+verdict-$r: $r.txt $(sha256 < "$f")"
+    entries="${entries}100644 blob $v	$r.txt
+"
+  done
+  v="$(printf '%s\n' "$rec" | git hash-object -w --no-filters --stdin)"
+  local tree commit
+  tree="$(printf '%s100644 blob %s\trecord.txt\n' "$entries" "$v" | git mktree)"
+  commit="$(git commit-tree "$tree" -m "owner sign-off of $sha ($date)")"
+  local out
+  out="$( check "$sha" "$commit" "$base" )" || { printf '%s\nsignoff: not recorded (nothing written)\n' "$out" >&2; exit 1; }
+  git update-ref "$PREFIX/$sha" "$commit"
+  echo "$out"
+  echo "signoff: recorded $PREFIX/$sha -> ${commit:0:10}; push it to both remotes"
+}
+
+# check SHA RECORD BASE: judge the record commit RECORD as a sign-off of SHA (exit 1 with the reason)
+check() {
+  local sha="$1" obj="$2" base="$3"
+  bad() { echo "$sha owner sign-off does not qualify: $*"; exit 1; }
+  [ "$(git cat-file -t "$obj:record.txt" 2>/dev/null)" = blob ] || bad "the record holds no record.txt"
+  local rec line k v seen=" " F_signoff="" F_commit="" F_date="" F_quote="" F_rounds_at=""
+  local F_request_codex="" F_verdict_codex="" F_request_kimi="" F_verdict_kimi="" F_request_agy="" F_verdict_agy=""
+  rec="$(git cat-file blob "$obj:record.txt")"
+  while IFS= read -r line; do
+    [[ "$line" =~ ^([a-z-]+):\ (.*)$ ]] || bad "record.txt line is not key: value: '$line'"
+    k="${BASH_REMATCH[1]}" v="${BASH_REMATCH[2]}"
+    case "$seen" in *" $k "*) bad "record.txt repeats $k" ;; esac
+    seen="$seen$k "
+    case "$k" in signoff|commit|date|quote|rounds-at|request-codex|verdict-codex|request-kimi|verdict-kimi|request-agy|verdict-agy) ;; *) bad "record.txt has the unknown key $k" ;; esac
+    printf -v "F_${k//-/_}" '%s' "$v"
+  done <<< "$rec"
+  for k in signoff commit date quote rounds-at; do case "$seen" in *" $k "*) ;; *) bad "record.txt has no $k" ;; esac; done
+  [ "$F_signoff" = owner ] || bad "signoff is '$F_signoff', not owner"
+  [ "$F_commit" = "$sha" ] || bad "the record is for $F_commit, not $sha"
+  [[ "$F_date" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] || bad "date '$F_date' is not YYYY-MM-DD"
+  printf '%s' "$F_quote" | names "$sha" \
+    || bad "the quote does not name ${sha:0:10} (an unambiguous prefix of at least 7 hex digits): '$F_quote'"
+  # The cap: the class of the member's diff, and the rounds review.sh recorded on its own commits.
+  local cls cap at rounds
+  cls="$(diff_class "$sha" "$base")" || bad "no merge base of ${sha:0:10} and ${base:0:10}"
+  cap="$(class_cap "$cls")"
+  at="$F_rounds_at"
+  [[ "$at" =~ ^[0-9a-f]{40}$ ]] || bad "rounds-at '$at' is not a full commit SHA"
+  { git merge-base --is-ancestor "$at" "$sha" 2>/dev/null && ! git merge-base --is-ancestor "$at" "$base" 2>/dev/null; } \
+    || bad "rounds-at ${at:0:10} is not one of ${sha:0:10}'s own commits (an ancestor or itself, not on ${base:0:10})"
+  # verify.sh judges the note as review.sh wrote it: 0 clean, 1 findings or blocked (both well formed,
+  # and both count: the cap is rounds used); 2 is no note or a malformed one.
+  local vout vrc=0
+  vout="$(bash "$VERIFY" "$at" 2>&1)" || vrc=$?
+  [ "$vrc" = 0 ] || [ "$vrc" = 1 ] || bad "rounds-at ${at:0:10} carries no well-formed review.sh note: ${vout//$'\n'/ }"
+  rounds="$(printf '%s\n' "$vout" | sed -n 's/.*(round \([1-9][0-9]*\), reviewer .*/\1/p' | head -1)"
+  [ -n "$rounds" ] || bad "rounds-at ${at:0:10}: no round count in '$vout'"
+  [ "$rounds" -ge "$cap" ] \
+    || bad "the review cap was not reached: a $cls change has cap $cap, and ${at:0:10} records $rounds round(s)"
+  local r n entry file hash got reviewed verdict
+  for r in $REVIEWERS; do
+    n="F_request_$r"; [ -n "${!n}" ] || bad "the record has no $r request"
+    n="F_verdict_$r"; [ -n "${!n}" ] || bad "the record has no $r verdict"
+  done
+  local want="100644 blob agy-request.txt 100644 blob agy.txt 100644 blob codex-request.txt 100644 blob codex.txt 100644 blob kimi-request.txt 100644 blob kimi.txt 100644 blob record.txt " have
+  have="$(git ls-tree --format='%(objectmode) %(objecttype) %(path)' "$obj" | LC_ALL=C sort | tr '\n' ' ')"
+  [ "$have" = "$want" ] || bad "the record tree is not exactly the seven sign-off files as 100644 blobs"
+  for r in $REVIEWERS; do
+    n="F_request_$r"; entry="${!n}"
+    file="${entry%% *}" hash="${entry#* }"
+    [ "$file" = "$r-request.txt" ] && [[ "$hash" =~ ^[0-9a-f]{64}$ ]] || bad "request-$r is '$entry', not '$r-request.txt <sha256>'"
+    got="$(git cat-file blob "$obj:$file" | sha256)"
+    [ "$got" = "$hash" ] || bad "the sha256 of $file is $got, not the recorded $hash"
+    reviewed="$(git cat-file blob "$obj:$file" | sed -n '1p')"
+    [[ "$reviewed" =~ ^reviewed:\ [0-9a-f]{40}$ ]] || bad "the $r request's first line is not a 'reviewed: <full 40-hex SHA>' line"
+    [ "$reviewed" = "reviewed: $sha" ] || bad "the $r request's reviewed line is '${reviewed#reviewed: }', not $sha"
+    git cat-file blob "$obj:$file" | tail -n +2 | names "$sha" \
+      || bad "the $r request body does not name ${sha:0:10} (an unambiguous prefix of at least 7 hex digits)"
+    n="F_verdict_$r"; entry="${!n}"
+    file="${entry%% *}" hash="${entry#* }"
+    [ "$file" = "$r.txt" ] && [[ "$hash" =~ ^[0-9a-f]{64}$ ]] || bad "verdict-$r is '$entry', not '$r.txt <sha256>'"
+    got="$(git cat-file blob "$obj:$file" | sha256)"
+    [ "$got" = "$hash" ] || bad "the sha256 of $file is $got, not the recorded $hash"
+    verdict="$(git cat-file blob "$obj:$file" | grep -E '^[[:space:]]*VERDICT: (ACCEPT|REJECT)[[:space:]]*$' | tail -1 | tr -d '[:space:]')" || true
+    [ -n "$verdict" ] || bad "the $r output has no verdict"
+    [ "$verdict" = "VERDICT:ACCEPT" ] || bad "the $r output's last verdict is '$verdict', not VERDICT: ACCEPT"
+  done
+  echo "$sha signed off by the owner ($F_date; $cls change, cap $cap reached at ${at:0:10} with $rounds round(s); codex, kimi and agy accepted): \"$F_quote\""
+}
+
+cmd_verify() {
+  local sha base=""
+  [ $# -ge 1 ] || die "usage: signoff.sh verify <commit> --base BASE"
+  sha="$(git rev-parse -q --verify "$1^{commit}")" || die "verify: not a commit: $1"; shift
+  while [ $# -gt 0 ]; do
+    case "$1" in --base) [ $# -ge 2 ] || die "verify: --base needs a value"; base="$2"; shift 2 ;; *) die "verify: unknown option $1" ;; esac
+  done
+  [ -n "$base" ] || die "verify: --base BASE is required (the cap is the class of the diff against it)"
+  base="$(git rev-parse -q --verify "$base^{commit}")" || die "verify: --base is not a commit"
+  git rev-parse -q --verify "$PREFIX/$sha^{commit}" >/dev/null || { echo "$sha has no owner sign-off ($PREFIX/$sha)"; exit 2; }
+  check "$sha" "$(git rev-parse "$PREFIX/$sha^{commit}")" "$base"
+}
+
+case "${1:-}" in
+  record) shift; cmd_record "$@" ;;
+  verify) shift; cmd_verify "$@" ;;
+  -h|--help) usage ;;
+  *) usage >&2; exit 2 ;;
+esac
+#!/usr/bin/env bash
+# R-0544 — does a commit carry a clean review verdict? See docs/REVIEW.md.
+#
+#   scripts/review/verify.sh [--fetch] <commit>
+#
+# Reads the git note that scripts/review/review.sh wrote on <commit> under
+# refs/notes/concrete-review. The verdict counts only for that exact commit: a
+# clean note on an ancestor says nothing about the commits after it.
+#
+#   --fetch  first fetch refs/notes/concrete-review from $REVIEW_REMOTE (default
+#            origin), replacing the local copy (a reader, not a writer).
+#
+# Exit codes: 0 clean; 1 reviewed, not clean (findings or blocked);
+#             2 no note, a malformed note, or a usage error.
+
+set -euo pipefail
+
+NOTES_REF="refs/notes/concrete-review"
+REMOTE="${REVIEW_REMOTE:-origin}"
+FETCH=0
+if [ "${1:-}" = --fetch ]; then FETCH=1; shift; fi
+[ $# -eq 1 ] || { echo "usage: verify.sh [--fetch] <commit>" >&2; exit 2; }
+
+if [ "$FETCH" = 1 ]; then
+  git fetch -q "$REMOTE" "+$NOTES_REF:$NOTES_REF" \
+    || { echo "verify: could not fetch $NOTES_REF from $REMOTE" >&2; exit 2; }
+fi
+
+SHA="$(git rev-parse -q --verify "$1^{commit}")" || { echo "verify: not a commit: $1" >&2; exit 2; }
+NOTE="$(git notes --ref="$NOTES_REF" show "$SHA" 2>/dev/null)" || {
+  echo "$SHA unreviewed: no note under $NOTES_REF"
+  exit 2
+}
+
+# The note must carry each of the six fields review.sh writes exactly once, each well formed. Two
+# optional keys are the landing pipeline's (scripts/land/notes.sh, docs/LANDING.md):
+# `carried-from: <sha>`, written by the landing bot when it carries a clean verdict across a
+# conflict-free rebase, and `order: N`. Any other key, a repeated key, or a line that is not
+# `key: value` makes the note malformed. Keys are matched by name, not position, because notes.sh
+# `put` (the bot's writer) appends `utc` last.
+malformed() {
+  echo "$SHA malformed review note${1:+ ($1)}:"
+  printf '%s\n' "$NOTE" | sed 's/^/  /'
+  exit 2
+}
+# Plain variables F_<key>, not an associative array: macOS /bin/bash is 3.2.
+SEEN=" "
+while IFS= read -r line; do
+  [[ "$line" =~ ^([a-z-]+):\ (.*)$ ]] || malformed "not key: value: '$line'"
+  k="${BASH_REMATCH[1]}" v="${BASH_REMATCH[2]}"
+  case "$SEEN" in *" $k "*) malformed "repeated key $k" ;; esac
+  SEEN="$SEEN$k "
+  printf -v "F_${k//-/_}" '%s' "$v"
+  case "$k" in
+    verdict)      [[ "$v" =~ ^(clean|findings|blocked)$ ]] ;;
+    rounds)       [[ "$v" =~ ^[1-9][0-9]*$ ]] ;;
+    reviewer)     [[ "$v" =~ ^[^[:space:]]+$ ]] ;;
+    utc)          [[ "$v" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$ ]] ;;
+    base)         [[ "$v" =~ ^[0-9a-f]{40}$ ]] ;;
+    pieces)       [[ "$v" =~ ^[0-9]+$ ]] ;;
+    carried-from) [[ "$v" =~ ^[0-9a-f]{40}$ ]] ;;
+    order)        [[ "$v" =~ ^[0-9]+$ ]] ;;
+    *)            false ;;
+  esac || malformed "bad $k"
+done <<< "$NOTE"
+for k in verdict rounds reviewer utc base pieces; do
+  case "$SEEN" in *" $k "*) ;; *) malformed "missing $k" ;; esac
+done
+
+field() { local n="F_${1//-/_}"; printf '%s' "${!n:-}"; }
+VERDICT="$(field verdict)"
+CARRIED=""; [ -z "$(field carried-from)" ] || CARRIED=", carried from $(field carried-from)"
+echo "$SHA $VERDICT (round $(field rounds), reviewer $(field reviewer), $(field utc), base $(field base), $(field pieces) piece(s)$CARRIED)"
+[ "$VERDICT" = clean ] && exit 0
+exit 1
+docs/decisions.md:1209:| OD94 | <a id="od94"></a>Names in `with(...)` that are not capabilities (added 2026-10-30, raised while absorbing CALLABLE_VALUES and HANDLE_CAPABILITIES). Question: Whether a name in `with(...)` that is not a capability, a capability alias or a capability variable in scope is refused. Bears on TRUST-D1, TYPE-D1, TRUST-4. The current compiler: accepted as a capability of its own: `fn main() with(Foo) -> Int` compiles and runs, and a call to a function that requires `Foo` is refused only in a caller that does not list it (E0520). The compiler's `validCaps`, TRUST-4's rationale and [SAFETY.md](../legacy/docs/verification/SAFETY.md) name nine capabilities. Options: (a) refuse an unknown name; (b) an open vocabulary. Austral: not applicable (capabilities are values). Pick: none given (raised by the absorption of 2026-10-30). | [MOD-1](../legacy/docs/spec/modules.md#MOD-1) refuses the name; the current compiler accepts it (bug 337) | MOD-1@1 | withdrawn 2026-10-30: not an owner question; MOD-1@1 refuses the name (bug 337) |
+docs/decisions.md:1210:| OD95 | <a id="od95"></a>What `Time`, `Env`, `Process` and `Alloc` mean (added 2026-10-30, raised while absorbing CALLABLE_VALUES and HANDLE_CAPABILITIES). Question: What authority each of `Time`, `Env`, `Process` and `Alloc` names. Bears on TRUST-D1, TRUST-4. The current compiler: no document states them; HANDLE_CAPABILITIES §2 defined `Console`, `File` and `Network`, and SAFETY.md `Random` (TRUST-D1). std requires `Time` for its clock and sleep functions, `Env` for environment variables and for `std.net`'s `bind` and `connect`, `Process` for exit, spawn, wait and kill, and `Alloc` for heap allocation. Options: state each as std uses it, or narrow or split it (std's `Env` on socket functions is the case to settle). Austral: not applicable (capabilities are values). Pick: none given (raised by the absorption of 2026-10-30). | see OPEN-95 | see OPEN-95 | decided 2026-11-01 by the owner (final set): State each; move socket `bind`/`connect` from `Env` to `Network` |
+docs/decisions.md:1211:| OD96 | <a id="od96"></a>Two foreign bindings of one C symbol (added 2026-10-30, raised while absorbing CALLABLE_VALUES and HANDLE_CAPABILITIES). Question: Whether two foreign bindings of one C symbol (`#[link_name]`) must agree on its C signature. Bears on FFI-3, FFI-5. The current compiler: accepted: `abs_a(x: i32) with() -> i32` and `abs_b(x: i64) with() -> i64`, both bound to `abs`, compile and the binary runs, while the interpreter stops at run time on the mismatched width. HANDLE_CAPABILITIES §5 (encoding A, one binding per effect for one C symbol) planned to refuse a mismatch with a diagnostic. Options: (a) refuse; (b) allow, each binding's signature trusted on its own. Austral: not applicable. Pick: none given (raised by the absorption of 2026-10-30). | see OPEN-96 | see OPEN-96 | decided 2026-11-01 by the owner (final set): Refuse |
+docs/decisions.md:1212:| OD97 | <a id="od97"></a>A build profile that omits or demands an overflow check (added 2026-10-30, raised while absorbing ARITHMETIC_POLICY and VALUE_MODEL). Question: Whether a build profile may omit the run-time check of an integer operation that no proof discharges, or refuse such an operation at compile time. Bears on ARITH-3, ARITH-9. The current compiler: every profile emits every check, and no option turns one off; ARITH-3's rationale says a profile changes reports, never code generation, and OD10 decided that arithmetic is checked "by default". The archived [ARITHMETIC_POLICY.md](../legacy/docs/archive/design-records/ARITHMETIC_POLICY.md) §3.1 instead let a release profile omit a check that is "explicitly configured off and reported", and a provable or high-integrity profile refuse an unproved overflow site. Options: (a) every profile keeps every check that no discharged proof removes; (b) a release profile may turn checks off when configured and reported, never wrapping; (c) as (a), and a profile may also refuse an operation whose no-overflow obligation is not discharged. Austral: not checked. Raised by the absorption of ARITHMETIC_POLICY.md (2026-10-30). | see OPEN-97 | see OPEN-97 | decided 2026-11-01 by the owner (final set): Keep every check; a profile may refuse undischarged ops **Subsumed 2026-11-06 by [no hidden traps](#decided-project-no-hidden-traps): every build refuses an operation without discharged evidence.** |
+docs/decisions.md:1213:| OD98 | <a id="od98"></a>Pointer and reference conversions written with `as` (added 2026-10-30, raised while absorbing ARITHMETIC_POLICY and VALUE_MODEL). Question: Which conversions between raw pointers and references `as` writes (`&x as *const T`, `p as &T`, `p as &mut T`, `p as *mut U`). Bears on TRUST-1, TRUST-3, REF-5, ARITH-5. The current compiler: `&x as *const T` is accepted in safe code, `p as &T` from a raw pointer is accepted in trusted or `Unsafe` code (the binary and `--interp` agree), and a reference cast between different pointee types (`a as &Int` with `a: &A`) is refused (E0553). No entry states these: TRUST-3 forms a reference from a raw pointer with `&*p`, and REF-5 lists borrowing and projection as the ways a reference is formed. The archived [ARITHMETIC_POLICY.md](../legacy/docs/archive/design-records/ARITHMETIC_POLICY.md) §8 kept `as` "the spelling of pointer and reference casts (`as *const T`, `as *mut T`, `as &K`, `as &mut V`)", 281 lines of std. Options: (a) `as` keeps every one of them; (b) `as` converts only a reference to a raw pointer, and a reference is formed from a raw pointer only by `&*p` (TRUST-3); (c) pointer conversions become named functions. Austral: not checked. Raised by the absorption of ARITHMETIC_POLICY.md (2026-10-30). | see OPEN-98 | see OPEN-98 | decided 2026-11-01 by the owner (final set): Reference to raw pointer conversion only in trusted/Unsafe code (equal to Austral) |
+docs/decisions.md:1214:| OD99 | <a id="od99"></a>The names of the named conversions (added 2026-10-30, raised while absorbing ARITHMETIC_POLICY and VALUE_MODEL). Question: The spellings of the named conversions of ARITH-5, ARITH-10 and ARITH-11 (`try_convert`, `truncate`, `reinterpret`, the integer-to-float and `f64`-to-`f32` conversions, and the float roundings `trunc`, `round`, `floor`, `ceil`). Bears on ARITH-5, ARITH-10, ARITH-11. The current compiler: none of them exists (E0101). ARITH-5's sentence names `truncate` and `reinterpret`, while the archived [ARITHMETIC_POLICY.md](../legacy/docs/archive/design-records/ARITHMETIC_POLICY.md) §8.2 calls its spellings indicative, to be fixed by the API's owner; it names the integer-to-float and `f64`-to-`f32` conversions by their rounding only. Options: (a) the spellings above, as builtins; (b) other names, or std functions rather than builtins. Austral: not checked. Raised by the absorption of ARITHMETIC_POLICY.md (2026-10-30). | see OPEN-99 | see OPEN-99 | decided 2026-11-01 by the owner (final set): These spellings, as builtins |
+docs/decisions.md:1215:| OD100 | <a id="od100"></a>Comparisons on a type parameter (added 2026-10-30, raised while absorbing ARITHMETIC_POLICY and VALUE_MODEL). Question: Whether a comparison on a value of a `Copy`-bounded type parameter is accepted and checked again at each instantiation, or refused in the generic body. Bears on TYPE-6, TYPE-9, PASS-1, OPEN-42. The current compiler: `a < b` with `a, b: T` and `T: Copy` is accepted, and an instantiation at a type with no comparison is refused after monomorphization (E0229, `post-mono`); without the `Copy` bound it is refused in the body (E0229, `check`). TYPE-9's rationale says a generic body is checked once, from its bounds, which a per-instantiation check departs from. Options: (a) keep the current compiler's per-instantiation check; (b) refuse a comparison on a type parameter until a bound states it (a comparison trait); (c) refuse it. Austral: not checked. Raised by the absorption of ARITHMETIC_POLICY.md §8a (2026-10-30). | see OPEN-100 | see OPEN-100 | decided 2026-10-31 by the owner's rule (every reviewer agreed, as strict as Austral or stricter): Refuse until a bound states it |
+docs/decisions.md:1216:| OD101 | <a id="od101"></a>What a trap writes (added 2026-10-30, raised while absorbing ARITHMETIC_POLICY and VALUE_MODEL). Question: Whether a run-time trap writes a message naming the operation, its operands and its source location before the process ends, and in what form. Bears on STMT-2, STMT-7, ARITH-3. The current compiler: the binary writes nothing and ends by `SIGABRT`, and `--interp` reports a run-time error naming the trap (`arithmetic overflow (checked +)`). The archived [ARITHMETIC_POLICY.md](../legacy/docs/archive/design-records/ARITHMETIC_POLICY.md) §9.2 described a message `concrete: arithmetic overflow in function 'f' at file:line` with the operation, the operands and the policy. Options: (a) the binary writes nothing; (b) it writes one line naming the trap and its location; (c) the §9.2 form. Austral: not checked. Raised by the absorption of ARITHMETIC_POLICY.md (2026-10-30). | see OPEN-101 | see OPEN-101 | decided 2026-10-31 by the owner's rule (every reviewer agreed, as strict as Austral or stricter): One line naming the trap and location. Its form, decided 2026-11-06: [runtime row](#decided-project-runtime-2026-11-06) |
+docs/decisions.md:1217:| OD102 | <a id="od102"></a>`Float32` and `Char` as type spellings (added 2026-10-30, raised while absorbing ARITHMETIC_POLICY and VALUE_MODEL). Question: Whether `Float32` and `Char` are other spellings of `f32` and `char`, as `Float64` and `Bool` are of `f64` and `bool`. Bears on TYPE-19, SYN-3. The current compiler: the parser maps `Float64` and `Bool` to `f64` and `bool` but not `Float32` or `Char`, so `fn g(x: f32) -> Float32 { return x; }` is refused (E0220) while the resolver's `tyFromName` maps all four. The archived [ARITHMETIC_POLICY.md](../legacy/docs/archive/design-records/ARITHMETIC_POLICY.md) §1 names `Float32`/`f32` as two spellings. Options: (a) `Float32` and `Char` become spellings of `f32` and `char`; (b) neither, keeping the current compiler's `Float64` and `Bool`; (c) `Float32` and `Char` decided separately. Whether every capitalized spelling (`Int`, `Uint`, `Float64`, `Bool`) is removed is a separate removal question, not asked here. Austral: not checked. Raised by the absorption of ARITHMETIC_POLICY.md (2026-10-30). | see OPEN-102 | see OPEN-102 | decided 2026-11-01 by the owner (final set): No `Float32` or `Char` aliases. Completed 2026-11-02 by the owner: the aliases `Int`, `Uint`, `Float64` and `Bool` are removed too ([decisions](decisions.md#decided-2026-11-02-aliases)) |
+docs/decisions.md:1218:| OD103 | <a id="od103"></a>`as` between reference types (added 2026-10-30, raised while absorbing MEMORY_SEMANTICS). Question: Whether `as` may convert a reference type to a reference type, given that REF-5 lists borrowing and projecting as the only operations that form a reference. Bears on REF-5, REF-6, ARITH-5, TRUST-4. The current compiler: an identity cast between equal reference types is accepted and denotes the operand's place (`read(r as &Int)` with `r: &Int`, and `read(&v as &Int)`, exit 42 on both consumers); every other cast between reference types, `&mut Int as &Int` included, is E0553 at core-check under ARITH-5's tag, whose sentence covers only numeric, `bool` and `char` conversions; a cast from a reference to a raw pointer is allowed (TRUST-4). The design record (MEMORY_SEMANTICS §15.3) listed a cast of a traced reference binding (`r as &U`) among the reference-forming operations. Options: (a) refuse `as` between reference types; (b) allow the identity cast as a no-op on the operand's place. Conversions between a reference and a raw pointer are OPEN-98's, not this question's. Austral: not checked. Pick: none given (raised by the MEMORY_SEMANTICS absorption, 2026-10-30). | see OPEN-103 | see OPEN-103 | decided 2026-10-31 by the owner's rule (every reviewer agreed, as strict as Austral or stricter): Refuse |
+docs/decisions.md:1219:| OD104 | <a id="od104"></a>A `#[variant]` written on a counted loop (added 2026-10-30, from the Codex and Kimi review of the OD47 loop rules). Question: whether a `#[variant]` attribute written on a counted loop is refused, checked like any loop variant, or ignored. Options: (a) refused, the loop's own measure being its only variant; (b) allowed and checked as a loop variant (CON-2); (c) allowed and ignored. No pick given | the counted loop is not in the current compiler (bug 331) | STMT-12, CON-2 | decided 2026-11-01 by the owner (final set): Refuse |
+docs/decisions.md:1220:| OD105 | <a id="od105"></a>Where a counted loop's `#[invariant]` is checked (added 2026-10-30, from the same review). Question: where an `#[invariant]` on a counted loop is checked, given that CON-2 checks a loop invariant before the loop and after every iteration. Options: (a) as CON-2 says for every loop; (b) at each entry to the body, so nothing is checked when the loop runs no iteration. No pick given; (b) needs proof requirement 2 | the counted loop is not in the current compiler (bug 331) | STMT-12, CON-2 | decided 2026-11-01 by the owner (final set): As CON-2: before the loop and after every iteration |
+docs/decisions.md:1221:| OD106 | <a id="od106"></a>The result type of a checked conversion (added 2026-10-30, from the Codex and Kimi review of the absorption). Question: Whether a checked conversion (`try_convert`) reports a value it cannot preserve as `Option::None` or as a `Result` error carrying the reason. Bears on ARITH-5, ARITH-10. The current compiler: no checked conversion exists (E0101, R-0500). The archived [ARITHMETIC_POLICY.md](../legacy/docs/archive/design-records/ARITHMETIC_POLICY.md) §8.2 wrote `try_convert::<T>(x) -> Option<T>` "(or a `Result` with a reason)" and left the choice to the API's owner. Options: (a) `Option<T>`; (b) a `Result` whose error names the reason (out of range, not integral, NaN, infinite, not representable). Austral: not checked. Pick: none given (raised by the Codex and Kimi review of the absorption, 2026-10-30). | no checked conversion exists (E0101, R-0500) | ARITH-5, ARITH-10 | decided 2026-11-01 by the owner (final set): `Result<T, OutOfRange>` (failure, not absence) |
+docs/decisions.md:1222:| OD107 | <a id="od107"></a>What a float-to-integer rounding gives for NaN, infinities and out-of-range values (added 2026-10-30, from the Codex and Kimi review of the absorption). Question: Whether each float-to-integer rounding operation (`trunc`, `round`, `floor`, `ceil`) gives a value or an error for NaN, an infinity or a result outside the target type's range, and which value. Bears on ARITH-1, ARITH-11. The current compiler: the rounding operations do not exist (R-0500); a float-to-integer `as` truncates toward zero and aborts on NaN, an infinity or a value out of range, natively and in `--interp`. The archived [ARITHMETIC_POLICY.md](../legacy/docs/archive/design-records/ARITHMETIC_POLICY.md) §8.2 required a stated result for every input, "either as a value or as an error". Options: (a) an error, as `try_convert` reports; (b) a value: the nearest value of the type for an out-of-range input or an infinity, and 0 for NaN; (c) a trap, as `as` does today. Austral: not checked. Pick: none given (raised by the Codex and Kimi review of the absorption, 2026-10-30). | the rounding operations do not exist; a float-to-integer `as` truncates toward zero and aborts on NaN, an infinity or a value out of range | ARITH-1, ARITH-11 | decided 2026-10-31 by the owner's rule (every reviewer agreed, as strict as Austral or stricter): An error, as `try_convert` |
+docs/decisions.md:1223:| OD108 | <a id="od108"></a>A capability listed twice in a set (added 2026-10-30, from the Codex and Kimi review of the absorption). Question: Whether a capability set that lists one capability twice (`with(Console, Console)`) is the same set as the one that lists it once, is refused, or is a different set. Bears on TYPE-D1, TYPE-17, TYPE-4. The current compiler: accepted where it is written, and a different type: `fn(Int) with(Console) -> Int` is not a `fn(Int) with(Console, Console) -> Int`, in either direction (E0220), because `CapSet.normalize` sorts a set and does not remove a repeated name. The callable-values design ([CALLABLE_VALUES_AND_CAPABILITIES.md](../legacy/docs/archive/design-records/CALLABLE_VALUES_AND_CAPABILITIES.md)) calls the capabilities of a function type a set. Options: (a) the same set; (b) refuse a repeated capability where it is written; (c) a different set, as in the current compiler. Austral: not applicable (capabilities are values). Pick: none given (raised by the Codex and Kimi review of the absorption, 2026-10-30). | accepted, and a different set: `with(Console, Console)` is not `with(Console)` (E0220) | TYPE-D1, TYPE-17, TYPE-4 | decided 2026-11-01 by the owner (final set): Refuse a repeated capability |
+docs/decisions.md:1224:| OD109 | <a id="od109"></a>Specializations that differ only in a function type's capabilities (added 2026-10-30, from the Codex and Kimi review of the absorption). Question: Whether the symbol of a generic function's instantiation includes the capability set of a function-type argument, so that two instantiations that differ only in that set have distinct symbols. Bears on TYPE-17, TYPE-18. The current compiler: one: `pick<T: Copy>` instantiated at `fn(Int) -> Int` and at `fn(Int) with(Console) -> Int` emits the single function `pick_for_Fn_T_Int_to_Int_E`, because Mono's `tyToSuffix` drops a function type's capability set while it keeps a struct's capability arguments (E0809's history), and the program runs correctly since capabilities have no run-time representation (TYPE-18). The archived [HANDLE_CAPABILITIES.md](../legacy/docs/archive/design-records/HANDLE_CAPABILITIES.md) R8 required collision-free symbol identity across instantiations and left code sharing to its own argument. Options: (a) the set is part of the symbol, as for struct capability arguments; (b) it is not, one symbol serving both, stated as erasure with its correctness argument. Whether two symbols share one body stays an implementation choice (TYPE-18). Austral: not applicable (capabilities are values). Pick: none given (raised by the Codex and Kimi review of the absorption, 2026-10-30). | one specialization: Mono's symbol drops a function type's capability set | TYPE-17, TYPE-18 | decided 2026-11-01 by the owner (final set): Set is part of the symbol |
+docs/decisions.md:1225:| OD110 | <a id="od110"></a>Enums at the foreign boundary (added 2026-10-30, from the Codex and Kimi review of the absorption). Question: Whether a value of enum type may cross an `extern fn` boundary, and if so in what representation. Bears on FFI-3, FFI-7. The current compiler: refused: `extern fn f(x: E)` with `enum Copy E { A, B }` is E0574 (a non-FFI-safe parameter); only scalars, raw pointers and `repr(C)` structs cross. The design record [LAYOUT_CONTRACT.md](../legacy/docs/archive/design-records/LAYOUT_CONTRACT.md) says enums must not cross (§3.2); before it was archived it also said they cross as integers. Options: (a) refused, as in the current compiler; (b) a fieldless enum crosses as an integer of a stated width, which needs a stated discriminant for each variant. Austral: not checked. Pick: none given (raised by the Codex and Kimi review of the absorption, 2026-10-30). | refused (E0574) | FFI-3, FFI-7 | decided 2026-10-31 by the owner's rule (every reviewer agreed, as strict as Austral or stricter): Refused |
+docs/decisions.md:1226:| OD111 | <a id="od111"></a>Misaligned fields of a packed struct (added 2026-10-30, from the Codex and Kimi review of the absorption). Question: Whether a `#[repr(packed)]` struct may hold a field whose alignment exceeds the alignment of its offset, and whether such a field may be borrowed. Bears on FFI-4, FFI-8, REF-5. The current compiler: both accepted: `#[repr(packed)] struct P { v: u8, l: u32 }` places `l` at offset 1, and `&p.l` is accepted and reads the field correctly in the binary and in `--interp`. [LAYOUT_CONTRACT.md](../legacy/docs/archive/design-records/LAYOUT_CONTRACT.md) §2 restricts a packed struct to fields whose alignment does not exceed their position, without saying what enforces it. Options: (a) refuse such a field; (b) accept it and refuse a reference to it; (c) accept both, as in the current compiler. Austral: not checked. Pick: none given (raised by the Codex and Kimi review of the absorption, 2026-10-30). | both accepted on both consumers | FFI-4, FFI-8, REF-5 | decided 2026-11-01 by the owner (final set): Accept field, refuse a reference to it |
+docs/decisions.md:1227:| OD112 | <a id="od112"></a>Mutation through a shared reference (added 2026-10-30, from the Codex and Kimi review of the absorption). Question: Whether a value reached through a shared reference `&T` may be changed, by a write through a raw pointer derived from the reference or by a cell type. Bears on REF-10, OWN-10, TRUST-2, TRUST-5. The current compiler: safe code changes a value only through a `mut` binding or a `&mut` reference, and there is no cell type; a trusted function may convert `r: &Int` to `*mut Int` (`r as *const Int as *mut Int`) and store through it: the binary does the store, and `--interp` stops ("deref-assign through immutable ref"). The archived [MEMORY_SEMANTICS.md](../legacy/docs/archive/design-records/MEMORY_SEMANTICS.md) §12 said there is no `Cell`, `RefCell` or `UnsafeCell` equivalent and that mutation flows from `let mut` through `&mut`; the [overview](../legacy/docs/spec/overview.md) lists no interior mutability in safe code, with a later `UnsafeCell<T>` gated by `Unsafe`. Options: (a) never: a write through a pointer derived from a `&T` is undefined behaviour, a premise trusted code keeps (TRUST-2); (b) as (a), with a cell type gated by `Unsafe` as the one exception; (c) a trusted write through such a pointer is allowed. Austral: not checked. Pick: none given (raised by the Codex and Kimi review of the absorption, 2026-10-30). | safe code cannot; a trusted write through `r as *const T as *mut T` runs in the binary and stops `--interp` | REF-10, OWN-10, TRUST-2, TRUST-5 | decided 2026-10-31 by the owner's rule (every reviewer agreed, as strict as Austral or stricter): Never; UB premise trusted code keeps |
+docs/decisions.md:1228:| OD113 | <a id="od113"></a>The ownership exceptions of trusted code (added 2026-10-30, from the Codex and Kimi review of the absorption). Question: Whether trusted code keeps its two exceptions to the ownership rules, destroying a value through a reference and releasing with `vec_free` a vector whose elements are not Copy. Bears on TRUST-5, TRUST-12, OWN-5, OWN-8. The current compiler: both are accepted in trusted code only (elsewhere E0290 under OWN-8 and E0287 under OWN-5): std's collections destroy an element through `(p as &T)` in drop glue after its owner was consumed, and a trusted function may free a buffer it has emptied. The archived [MEMORY_SEMANTICS.md](../legacy/docs/archive/design-records/MEMORY_SEMANTICS.md) §11 said that `trusted` does not relax linearity, and TRUST-5's rationale says the same. Options: (a) keep both, each a named trusted operation with its premise (the owner was consumed; the vector is empty); (b) remove both, drop glue moving the element out of raw memory instead (TRUST-7); (c) keep only destruction through a reference; (d) keep only `vec_free` of an emptied vector. Austral: not checked. Pick: none given (raised by the Codex and Kimi review of the absorption, 2026-10-30). | both accepted in trusted code only (E0290, E0287 elsewhere) | TRUST-5, TRUST-12, OWN-5, OWN-8 | decided 2026-10-31 by the owner's rule (every reviewer agreed, as strict as Austral or stricter): Remove both |
+docs/decisions.md:1229:| OD114 | <a id="od114"></a>How integer division rounds (added 2026-10-30, from the Codex and Kimi review of the absorption). Question: How an integer division that does not abort rounds its quotient, and which sign a nonzero remainder takes. Bears on ARITH-3. The current compiler: the quotient is truncated toward zero and a nonzero remainder has the sign of the dividend, as C99 and LLVM's `sdiv` and `srem` give (`-7 / 2` is `-3`, `-7 % 2` is `-1`, `7 % -2` is `1`), in the binary, the interpreter and the constant folder (`IntArith.evalIntBinOp`). The archived [ARITHMETIC_POLICY.md](../legacy/docs/archive/design-records/ARITHMETIC_POLICY.md) states when division aborts (§5) but not how it rounds. Options: (a) truncation toward zero, as in the current compiler; (b) floored division, the remainder taking the divisor's sign; (c) Euclidean division, the remainder never negative. Austral: not checked. Pick: none given (raised by the Codex and Kimi review of the absorption, 2026-10-30). | the quotient is truncated toward zero and a remainder has the dividend's sign (C99) | ARITH-3 | decided 2026-10-31 by the owner's rule (every reviewer agreed, as strict as Austral or stricter): Truncation toward zero |
+docs/decisions.md:1230:| OD115 | <a id="od115"></a>The body and totality of a specification function (added 2026-10-30, raised while absorbing the verification documents). Question: Whether a `spec fn` may be declared without a body, and whether its body must be shown total. Bears on CON-3, CON-5, CON-1. The current compiler: both `spec fn big(x: Int) -> bool;` and `spec fn big(x: Int) -> bool = x > 10;` are accepted, and so is a recursive body that never terminates (`spec fn loopy(x: Int) -> bool = loopy(x + 1);`), with no check. [CONTRACTS_GUIDE.md](../legacy/docs/verification/CONTRACTS_GUIDE.md) calls a `spec fn` "an erased mathematical specification, no body"; contracts.md's examples (CON-3) give it a body; [CONTRACTS_AND_VCS.md](../legacy/docs/verification/CONTRACTS_AND_VCS.md) (Soundness Bridge) requires it to be total. Options: (a) a body is required and must be total (structural recursion or a checked measure); (b) a body is optional, a body-less one an uninterpreted function a proof must constrain, and a body must be total; (c) as in the current compiler, no totality check. Austral: not applicable. Pick: none given (raised by the absorption of docs/verification, 2026-10-30). | see OPEN-115 | see OPEN-115 | decided 2026-11-01 by the owner (final set): Body required and total |
+docs/decisions.md:1231:| OD116 | <a id="od116"></a>A checked total function category (added 2026-10-30, raised while absorbing the verification documents). Question: Whether the language has a `total fn` category, a runtime function checked to terminate without trapping that contracts may then call. Bears on CON-1, CON-3, CON-5. The current compiler: there is no such category (`total fn f(..)` is a parse error, E0001); a contract clause may still call a capability-free runtime function until CON-3's judgment lands. [CONTRACTS_AND_VCS.md](../legacy/docs/verification/CONTRACTS_AND_VCS.md) (Design Principles) distinguishes `spec fn`, a checked `total fn`, ordinary and trusted functions, and admits a `total fn` into contracts once its obligations close. Options: (a) add the category; (b) no category: contracts call only `spec fn` (CON-3's full judgment). Austral: not checked. Pick: none given (raised by the absorption of docs/verification, 2026-10-30). | see OPEN-116 | see OPEN-116 | decided 2026-11-01 by the owner (final set): No category |
+docs/decisions.md:1232:| OD117 | <a id="od117"></a>`old`, quantifiers and implication in contracts (added 2026-10-30, raised while absorbing the verification documents). Question: Whether contract expressions gain `old(x)`, quantifiers and an implication or equivalence operator, and with what syntax. Bears on CON-2, CON-3, SYN-1. The current compiler: `#[ensures(result == old(x))]` compiles and runs, and `--report contracts` marks the clause `invalid_contract_expression` (unknown function `old`); `forall i: Int, ...` is a parse error (E0001); there is no implication operator. [CONTRACTS_AND_VCS.md](../legacy/docs/verification/CONTRACTS_AND_VCS.md) (Contract Expression V1) lists all three as deferred. Options: (a) add each, with a syntax decided per form; (b) keep them out, a claim needing one being a Lean theorem; (c) refuse `old(..)` now as an unknown name, deciding the rest later. Austral: not checked. Pick: none given (raised by the absorption of docs/verification, 2026-10-30). | see OPEN-117 | see OPEN-117 | decided 2026-11-01 by the owner (final set): No `old`, quantifiers or implication in contracts; state such properties as Lean theorems |
+docs/decisions.md:1233:| OD118 | <a id="od118"></a>A proven run-time violation in trusted code (added 2026-10-30, raised while absorbing the verification documents). Question: Whether an index the compiler proves out of bounds, or a division it proves to be by zero, is refused in `trusted` and `with(Unsafe)` code as in safe code. Bears on MEM-6, ARITH-3, TRUST-5, TRUST-12. The current compiler: `a[5]` on a `[Int; 3]`, or `x / 0`, is refused in safe code (E0900, `error[runtime-safety]`) and compiles in a `trusted fn` (the index also in a function declaring `Unsafe`), where it aborts at run time on both consumers. MEM-6 states the refusal with no exemption; [KNOWN_HOLES.md](../legacy/docs/verification/KNOWN_HOLES.md) C7 records the exemption as intended. Options: (a) refuse everywhere, as MEM-6 reads; (b) keep the exemption and state it in MEM-6. Austral: not checked. Pick: none given (raised by the absorption of docs/verification, 2026-10-30). | see OPEN-118 | see OPEN-118 | decided 2026-10-31 by the owner's rule (every reviewer agreed, as strict as Austral or stricter): Refuse everywhere **Subsumed 2026-11-06 by [no hidden traps](#decided-project-no-hidden-traps): refusal of proven violations becomes refusal of unproven safety, everywhere.** |
+docs/decisions.md:1234:| OD119 | <a id="od119"></a>Buffered output when the process aborts (added 2026-10-30, raised while absorbing the verification documents). Question: Whether output the program wrote before a trap or abort is flushed before the process ends. Bears on STMT-1, STMT-2, PASS-13, OPEN-101. The current compiler: print builtins write through C's buffered stdio, and `abort` does not flush it on glibc (a binary that prints `hello` and then traps prints nothing on Linux) while it does on Darwin; the interpreter models the same buffer and the same platform difference. STMT-2 says a failure ends the process at once and is silent on output already written, so the observable trace of a trapping program differs by platform. Recorded by [INTERPRETER_TRUST.md](../legacy/docs/verification/INTERPRETER_TRUST.md) §2. Options: (a) everything written before the trap is output (flush on abort, or unbuffered output); (b) what was written is unspecified on a trap, and PASS-13 compares output only for exiting runs. Austral: not checked. Pick: none given (raised by the absorption of docs/verification, 2026-10-30). | see OPEN-119 | see OPEN-119 | decided 2026-10-31 by the owner's rule (every reviewer agreed, as strict as Austral or stricter): Everything written before the trap is output |
+docs/decisions.md:1235:| OD120 | <a id="od120"></a>A vacuous contract (added 2026-10-30, raised while absorbing the verification documents). Question: Whether a contract whose precondition is unsatisfiable is refused by the language or only reported, under a project policy. Bears on CON-1, CON-2. The current compiler: `#[requires(x > 5 && x < 3)]` compiles; a decided-unsatisfiable precondition makes the claim `vacuous`, never `proved`, and E0613 refuses it only under the `forbid-vacuous` policy (`Concrete.Policy`), not in a plain build. [CONTRACTS_AND_VCS.md](../legacy/docs/verification/CONTRACTS_AND_VCS.md) (Soundness Bridge) states the reporting rule. Options: (a) a language refusal in every build; (b) tooling only: always reported `vacuous`, refused under a policy, as in the current compiler. Austral: not checked. Pick: none given (raised by the absorption of docs/verification, 2026-10-30). | see OPEN-120 | see OPEN-120 | decided 2026-11-01 by the owner (final set): Tooling: reported `vacuous`, refused under policy **Qualified 2026-11-06 by [no hidden traps](#decided-project-no-hidden-traps): a vacuous precondition used for safety admission is refused in every build.** |
+docs/decisions.md:1236:| OD121 | <a id="od121"></a>Projections from a base that is not a traceable place (added 2026-10-30, raised while absorbing the verification documents). Question: Whether a field access, index or `*` whose base is not a traceable place (an `if` or `match` value, `**r`, a reference read out of storage) is refused, or accepted once the checker can trace it. Bears on REF-5, MEM-4, MEM-8, TYPE-7. The current compiler: refused (E0238, `untraceablePlace`), whether the projection reads a Copy value or forms a reference: `(if c { a } else { b }).f`, `(**r).f`, `*w.r`. No entry states the refusal: REF-5 forbids a branch value or a stored reference as a reference's root, and MEM-4, MEM-8 and TYPE-7 do not restrict a projection's base. [KNOWN_HOLES.md](../legacy/docs/verification/KNOWN_HOLES.md) H28 calls it a deliberate restriction until R-0499's checker on Core. Options: (a) state the restriction as a rule (a projection's base is a place: a binding, its fields and elements, or `*` of a named reference); (b) accept such projections of owned values and Copy reads once the checker traces them, refusing only what REF-5 refuses. Austral: not checked. Pick: none given (raised by the absorption of docs/verification, 2026-10-30). | see OPEN-121 | see OPEN-121 | decided 2026-10-31 by the owner's rule (every reviewer agreed, as strict as Austral or stricter): State the restriction as a rule |
+docs/decisions.md:1237:| OD122 | <a id="od122"></a>A `repr(C)` struct returned from an extern function (added 2026-10-30, raised while absorbing the platform and stdlib documents). Question: Whether a `#[repr(C)]` struct returned from an `extern fn` is returned as the platform's C calling convention returns it, at every size. Bears on FFI-2, FFI-11. The current compiler: a returned struct of at most 8 bytes comes back as one 64-bit integer, stored as 8 bytes into the struct's slot even when the struct is smaller (a 4-byte `in_addr` returned by `inet_makeaddr` reads back wrong natively); a larger one is returned as an LLVM aggregate, which matches C on x86-64 and AArch64 only for some layouts. [ABI.md](../legacy/docs/platform/ABI.md) promised returns of at most 8 bytes and listed larger ones as not promised. Options: (a) every size, as C, classified by the `Layout` authority (R-0502); (b) at most 8 bytes (or 16), a larger return refused in an `extern fn` signature; (c) none, a returned struct going through an out-pointer the binding declares. Austral: not checked. Pick: none given (raised by the absorption of docs/platform and docs/stdlib, 2026-10-30). | see OPEN-122 | see OPEN-122 | decided 2026-11-01 by the owner (final set): Every size per C ABI via `Layout` |
+docs/decisions.md:1238:| OD123 | <a id="od123"></a>`as` on a newtype outside its module (added 2026-10-30, raised while absorbing the platform and stdlib documents). Question: Whether `v as N` and `n as T`, between a newtype `N` and its inner type `T`, are accepted outside the module that declares `N`, where TYPE-11 refuses `N(v)`. Bears on TYPE-11, TYPE-24, ARITH-5, OPEN-54. The current compiler: both accepted in any module, so `x as Id` builds a foreign newtype that `Id(x)` may not (E0296), and a validated wrapper's smart constructor can be bypassed. [VALIDATED_WRAPPERS.md](../legacy/docs/stdlib/VALIDATED_WRAPPERS.md) §8 describes the cast rule as guarding the wrapper contract from an `as` bypass, which holds for casts to unrelated types only. Options: (a) accepted anywhere, as in the current compiler; (b) accepted only where `N(v)` and `.0` are (TYPE-11, with R-0500's follow-on for `.0`); (c) `as` never names a newtype, the conversions being `N(v)` and `.0`. Austral: no newtype (OPEN-54's comparison). Pick: none given (raised by the absorption of docs/platform and docs/stdlib, 2026-10-30). | see OPEN-123 | see OPEN-123 | decided 2026-11-01 by the owner (final set): `as` never names a newtype |
+docs/decisions.md:1239:| OD124 | <a id="od124"></a>Profiles in the specification (added 2026-10-30, raised while absorbing the platform and stdlib documents). Question: Whether the profiles (the admission profiles Safe, Predictable and Proof, and the build profiles) belong to the language specification, in a chapter of their own, and whether a profile may change what an accepted program does. Bears on ARITH-9, OPEN-97, PASS-3, PASS-4. The current compiler: a profile only refuses or reports: `--check predictable` reports its five gates (no recursion, bounded loops, no allocation, no extern calls, no `File`, `Network` or `Process`), `[policy] predictable = true` in `Concrete.toml` turns a violation into E0610, and no profile changes the behaviour of a program it accepts; ARITH-9 states that for arithmetic. [PROFILES.md](../legacy/docs/platform/PROFILES.md) says a profile never changes what a program means, while OPEN-97 asks whether a build profile may omit a run-time check. Options: (a) no profiles chapter: profiles are tooling, and the spec states only that no profile changes an accepted program's behaviour; (b) a profiles chapter whose entries state each profile's admission rules as refusals, with that same guarantee; (c) as (b), with build profiles allowed to differ as OPEN-97 decides. Austral: not checked. Pick: none given (raised by the absorption of docs/platform and docs/stdlib, 2026-10-30). | see OPEN-124 | see OPEN-124 | decided 2026-11-01 by the owner (final set): Profiles chapter of refusals; no behaviour change |
+docs/decisions.md:1240:| OD125 | <a id="od125"></a>Contracts at run time (added 2026-10-30, raised while absorbing the platform and stdlib documents). Question: Whether a `#[requires]`, `#[ensures]` or loop `#[invariant]` that no proof discharges is checked at run time, trapping when it fails, or is only a claim. Bears on CON-1, CON-2, STMT-2. The current compiler: contracts are erased metadata: a call that violates `#[requires(x > 0)]` runs normally, in the binary and in `--interp`, and `assert` elaborates to proof evidence only (syntax chapter introduction). [ERROR_CONVENTIONS.md](../legacy/docs/stdlib/ERROR_CONVENTIONS.md) lists contract-violation traps among the fatal failures. Options: (a) claims only, never checked at run time, as in the current compiler; (b) checked at run time and trapping unless discharged; (c) checked under a build profile only (OPEN-97, OPEN-124). Austral: not checked. Pick: none given (raised by the absorption of docs/platform and docs/stdlib, 2026-10-30). | see OPEN-125 | see OPEN-125 | decided 2026-11-01 by the owner (final set): Claims only **Qualified 2026-11-06 by [no hidden traps](#decided-project-no-hidden-traps): a claim used for safety admission needs closed evidence.** |
+docs/decisions.md:1241:| OD126 | <a id="od126"></a>Target assumptions (added 2026-10-30, raised while absorbing the platform and stdlib documents). Question: Which target facts are language rules: 64-bit pointers, little-endian byte order, POSIX hosts, and the sizes of `bool`, `Unit` and pointers. Bears on FFI-2, FFI-7, TYPE-19, TYPE-20. The current compiler: one target profile: `Layout` hardcodes 8-byte pointers and references, `bool` of 1 byte, `Unit` of 0 bytes, an `i32` enum tag, and assumes little-endian POSIX hosts; FFI-2 names AAPCS64 for the native profile, and the integer types' widths follow from their names (TYPE-19). [EXECUTION_MODEL.md](../legacy/docs/platform/EXECUTION_MODEL.md) and [ABI.md](../legacy/docs/platform/ABI.md) state these as platform facts. Options: (a) language rules, a 32-bit or big-endian target being another language profile; (b) target facts, observable only through `sizeof`, `alignof` (FFI-7) and named target constants; (c) as (b), with the sizes of `bool` and `Unit` fixed by the language. Austral: not checked. Pick: none given (raised by the absorption of docs/platform and docs/stdlib, 2026-10-30). | see OPEN-126 | see OPEN-126 | decided 2026-11-01 by the owner (final set): Language rules; other targets are other profiles |
+docs/decisions.md:1242:| OD127 | <a id="od127"></a>UTF-8 in every `String` (added 2026-10-30, raised while absorbing the platform and stdlib documents). Question: Whether every `String` value that safe code can reach holds valid UTF-8, as a language guarantee. Bears on TYPE-3, SYN-5, TRUST-2. The current compiler: literals are UTF-8 (SYN-5), but nothing keeps a `String` valid: `push_char` appends a byte unchecked, `Bytes::to_string` transfers bytes without validation, and std's `read_to_string` does not validate. [STRING_TEXT_CONTRACT.md](../legacy/docs/stdlib/STRING_TEXT_CONTRACT.md) §1 states the invariant as a target, and [UNICODE_POLICY.md](../legacy/docs/stdlib/UNICODE_POLICY.md) has a validating `Bytes::to_string` returning `Option`. Options: (a) a language guarantee, every safe constructor validating and an unchecked one being a trusted operation with that premise; (b) a std convention only, `String` being bytes to the language. Austral: not checked. Pick: none given (raised by the absorption of docs/platform and docs/stdlib, 2026-10-30). | see OPEN-127 | see OPEN-127 | decided 2026-10-31 by the owner's rule (every reviewer agreed, as strict as Austral or stricter): Language guarantee |
+docs/decisions.md:1243:| OD128 | <a id="od128"></a>`->` between a match arm's pattern and body (added 2026-10-30, raised while absorbing the compiler documents and the grammar comments). Question: Whether a match arm may separate its pattern from its body with `->` as well as `=>`. Bears on SYN-1 and PAT-7. The current compiler: the parser accepts both (`parseMatchArms`; `2 -> { return 42; }` exits 42 on both consumers), and the grammar's `match_arm` has only `=>`. The syntax freeze review (2026-04, [SYNTAX_FREEZE_REVIEW.md](../legacy/docs/archive/design-records/SYNTAX_FREEZE_REVIEW.md) §1.5) recommended `=>` as the canonical form with a warning for `->`, which also spells a return type. Options: (a) `=>` only, `->` refused; (b) both accepted; (c) both accepted, with a warning on `->`, as the freeze review recommended. Austral: not applicable. Pick: none given (raised by the absorption of docs/compiler, 2026-10-30). | see OPEN-128 | see OPEN-128 | decided 2026-11-01 by the owner (final set): `=>` only |
+docs/decisions.md:1244:| OD129 | <a id="od129"></a>Type arguments of an enum literal taken from its expected type (added 2026-10-30, raised while absorbing the compiler documents and the grammar comments). Question: Whether an enum literal or variant written without type arguments (`Option::Some { value: 42 }`, `Option::None`) takes them from the type its position expects, and from which positions. Bears on TYPE-7, TYPE-15 and OPEN-46, which asks the same of a generic call's type arguments and whose pick excludes the expected result type. The current compiler: the type arguments come from the expected type of a `return` (the function's result type), of an annotated `let` and of a call argument (the parameter's type); all three exit 42 on both consumers, and spec examples rely on it (PAT-1). The syntax freeze review (§1.3, kill-list items 1, 4 and 5) proposed this inference for enum literals and for constructor calls such as `Vec::new()`. Options: (a) explicit type arguments always; (b) from the expected type in the positions the current compiler uses; (c) the answer to OPEN-46, applied to enum literals. Austral: type parameters are inferred from the arguments, and a declaration's type can disambiguate. Pick: none given (raised by the absorption of docs/compiler, 2026-10-30). | see OPEN-129 | see OPEN-129 | decided 2026-11-01 by the owner (final set): Same rule as OD46: type arguments from the arguments, otherwise explicit (`None::<i32>`) |
+docs/decisions.md:1245:| OD130 | <a id="od130"></a>Unlabeled pattern binders: by position or by name (added 2026-10-30, raised while absorbing the compiler documents and the grammar comments). Question: Whether an unlabeled binder in a struct or variant pattern (`E::V { y, x }`) binds the field of its own name or the field at its position. Bears on PAT-1, PAT-3 and PAT-10. The current compiler disagrees with itself: with `enum E { V { x: Int, y: Int } }` and `E::V { x: 40, y: 2 }`, the arm `E::V { y, x } => y` gives 40 in `match` and in `if let` (binders zip the variant's fields in declaration order, `Concrete/Elab/Elab.lean` `bindings.zip ev.fields`), while the struct destructuring `let S { y, x } = s; y` gives 2 (by name); both consumers agree. PAT-1's `field: binder` form and the grammar's `binding_list` comment ("positional") point different ways. Options: (a) by name (field punning) everywhere; (b) by position everywhere; (c) refuse an unlabeled list whose order differs from the declaration. Austral: not applicable (no punning). Pick: none given (raised by the absorption of docs/compiler, 2026-10-30; the variant-pattern disagreement may also be filed as a bug). | see OPEN-130 | see OPEN-130 | decided 2026-10-31 by the owner's rule (every reviewer agreed, as strict as Austral or stricter): By name everywhere |
+docs/decisions.md:1246:| OD131 | <a id="od131"></a>`union` declarations (added 2026-10-30, raised while absorbing the compiler documents and the grammar comments). Question: Whether the language has `union` declarations, and if so what reading a field other than the one last written means. Bears on SYN-1, TYPE-7, FFI-7 and FFI-8. The current compiler: `union U { a: Int, b: Uint }` parses (`Concrete/Frontend/Parser.lean`, as a struct whose fields share storage) and compiles; a value built as `U { a: 42 }` is linear, and `union` is neither a keyword nor in the grammar. No document specifies it. Options: (a) remove it; (b) keep it, for the foreign boundary only, with its layout and read rules specified. Austral: no unions. Pick: none given (raised by the absorption of docs/compiler, 2026-10-30). | see OPEN-131 | see OPEN-131 | decided 2026-10-31 by the owner's rule (every reviewer agreed, as strict as Austral or stricter): Remove |
+docs/decisions.md:1247:| OD132 | <a id="od132"></a>Polymorphic recursion (added 2026-10-30, raised while absorbing the compiler documents and the grammar comments). Question: Whether a generic function that calls itself at a strictly larger type argument (`f::<Box<T>>` inside `f<T>`) is refused, and by which check. Bears on TYPE-13, PASS-7 and PASS-12. The current compiler: such a program is not refused; compilation does not terminate (more than 200 s and 2 GB on 2026-10-30, natively and with `--interp`), since monomorphization specializes without a bound on function instances (the bound `closeInstances` has covers only generic type definitions). [PASSES.md](../legacy/docs/compiler/PASSES.md) §7 lists unbounded polymorphic recursion as Mono's error. Options: (a) refuse a call cycle whose type arguments grow, before Mono; (b) refuse at Mono when specialization exceeds a stated limit. Austral: not checked. Pick: none given (raised by the absorption of docs/compiler, 2026-10-30; the non-termination may also be filed as a bug). | see OPEN-132 | see OPEN-132 | decided 2026-11-01 by the owner (final set): Refuse growing call cycles before Mono |
+docs/decisions.md:1248:| OD133 | <a id="od133"></a>User functions named `print`, `println` or `append` (added 2026-10-30, raised while absorbing the compiler documents and the grammar comments). Question: Whether a program may declare a function named `print`, `println` or `append`, which then replaces the builtin of that name in calls the program writes. Bears on MOD-3, MOD-8 and TYPE-10. The current compiler: accepted; with `fn print(x: Int) -> Int`, `print(42)` calls it (exit 42 on both consumers), because Elab desugars the variadic builtins only when no function of that name is visible, and MOD-3's reserved names do not include them. MOD-8 already binds the calls the compiler itself generates by identity. Options: (a) reserve the three names (MOD-3); (b) allow the replacement, as the current compiler does. Austral: not applicable. Pick: none given (raised by the absorption of docs/compiler, 2026-10-30). | see OPEN-133 | see OPEN-133 | decided 2026-11-01 by the owner (final set): Reserve the three names |
+docs/decisions.md:1249:| OD134 | <a id="od134"></a>The capabilities of a container's generated destruction (added 2026-10-30, raised while reviewing the absorption of docs/stdlib). Question: Whether the destruction a generic container generates for its elements may require the capabilities of those elements' `Destroy` implementations beyond `Alloc`, or every `Destroy` implementation stays limited to `Alloc`. Bears on OWN-13, TYPE-D1 and TRUST-4. The current compiler: OWN-13 is enforced, so a `Destroy` implementation requires no capability beyond `Alloc`, and a container's generated destruction is `with(Alloc)`. [RUNTIME_COLLECTIONS.md](../legacy/docs/stdlib/RUNTIME_COLLECTIONS.md) rule 3 describes a different model, in which the generated destruction requires the union of its element, key and value destructors' capabilities, computed per instantiation, and calls today's limit a first-release restriction. Options: (a) keep OWN-13's limit, so destruction never needs more than `Alloc`; (b) lift it, so a `Destroy` implementation may require further capabilities and a container's destruction requires their union per instantiation. Austral: not assessed. Pick: none given (raised by the review of the absorption of docs/stdlib, 2026-10-30). | see OPEN-134 | see OPEN-134 | decided 2026-11-01 by the owner (final set): Keep `Alloc` limit |
+docs/decisions.md:1250:| OD135 | <a id="od135"></a>A method's `Type_method` name in its module's namespace (added 2026-10-30, raised while reviewing the absorption of docs/compiler and docs/platform). Question: Whether an impl method `m` of a type `T` also occupies the name `T_m` in its module, so that a free function of that name is refused. Bears on MOD-3 and MOD-8. The current compiler: refused: `fn P_get(a: Int) -> Int` beside `impl P { fn get(&self) -> Int }` is E0299 under MOD-3@2 ("a function named 'P_get' is also declared in this module as an impl method"), on both consumers, because the method is entered under its mangled name. MOD-3's reserved names are the `__` prefix, `user_main` and the builtins, which do not include such names. Options: (a) keep it, listing `T_m` among the names MOD-3 reserves; (b) stop entering methods under `T_m`, so the free function is accepted. Austral: not applicable (no methods). Pick: none given (raised by the review of the absorption of docs/compiler, 2026-10-30). | see OPEN-135 | see OPEN-135 | decided 2026-11-01 by the owner (final set): Stop entering methods under `T_m` |
+docs/decisions.md:1251:| OD136 | <a id="od136"></a>std's `process_exit` (added 2026-10-30, raised while reviewing the absorption of docs/compiler and docs/platform). Question: Whether std keeps `process_exit`, which ends the process through libc `exit` without running any deferred call or consuming the caller's owned values. Bears on STMT-7, OWN-2 and TRUST-4. The current compiler: `std.process.process_exit(code: i32) with(Process)` exists and calls libc `exit`; the language itself has no exit operation (STMT-7). The design record [MAIN_EXIT_MODEL.md](../legacy/docs/platform/MAIN_EXIT_MODEL.md) calls an exit operation deliberately absent, since in a linear language it would bypass the proof that every owned value is consumed. Options: (a) keep it, stating that it skips cleanup and that `Process` is what grants it; (b) remove it, status flowing back through `main`'s return only. Austral: not checked. Pick: none given (raised by the review of the absorption of docs/platform, 2026-10-30). | see OPEN-136 | see OPEN-136 | decided 2026-10-31 by the owner's rule (every reviewer agreed, as strict as Austral or stricter): Remove |
+docs/decisions.md:1252:| OD137 | <a id="od137"></a>Character literals outside ASCII (added 2026-10-30, raised by the spec quality audit of 2026-10-30). Question: Which byte a char literal denotes when its character is not ASCII. Bears on SYN-6, TYPE-20 and SYN-5. The current compiler: the literal silently takes the low byte of the character's code point: `'é'` (U+00E9) is 233, `'ā'` (U+0101) is 1 and `'€'` (U+20AC) is 172 as `u8`, on both consumers, and SYN-6 says only that a char literal is a token. Options: (a) refuse a char literal whose character is not ASCII, so every accepted literal is the one byte of its ASCII character; (b) accept U+0000 to U+00FF as that byte (Latin-1) and refuse anything above; (c) make `char` a Unicode scalar value, which changes TYPE-20's one-byte `char`. Austral: not checked. Pick: none given (raised by the spec quality audit, 2026-10-30). | see OPEN-137 | see OPEN-137 | decided 2026-10-31 by the owner's rule (every reviewer agreed, as strict as Austral or stricter): Refuse non-ASCII |
+docs/decisions.md:1253:| OD138 | <a id="od138"></a>Which positions give a literal its expected type (added 2026-10-30, raised by the spec quality audit of 2026-10-30). Question: Which positions give an integer literal operand its expected type under ARITH-2@3 (and a float literal's, should OPEN-63 give floats the same rule). Bears on ARITH-2, TYPE-4 and TYPE-6. The current compiler: an unconstrained integer literal is typed `Int` and a float literal `Float64` (bug 327); with `x: u8`, a literal beside `x` takes `u8` as the other operand of `+`, `<` and `&` and as the count of `>>`: `x + 300`, `x < 300`, `x & 300` and `x >> 300` are each refused natively with E0227 (`integer literal 300 is out of range for type 'u8'`), and `300 as Int` is accepted, whether through `as` or the `Int` default the probe does not show. ARITH-2@3 refuses an integer literal with no expected type but does not list the positions that supply one. Options: (a) declared positions (an annotated binding, a parameter, a return, a field) and the other operand of a binary operator, as the probe shows the current compiler doing for `+`, `<`, `&` and a shift count (other operators were not probed); (b) declared positions only, so a literal beside a typed operand needs a typed binding; (c) option (a), plus the target type of an `as` for its literal operand. Austral: not checked. Pick: none given (raised by the spec quality audit, 2026-10-30). | see OPEN-138 | see OPEN-138 | decided 2026-11-01 by the owner (final set): Declared positions + other operand of a binary op |
+docs/decisions.md:1254:| OD139 | <a id="od139"></a>A qualified call to a function that is not imported (added 2026-10-30, raised by the spec quality audit of 2026-10-30). Question: Whether `a::f()` may call a `pub` function of another module that the caller has not imported. Bears on MOD-2, SYN-10 and MOD-4. The current compiler: accepted: `mod a { pub fn answer() -> u8 { return 42; } }` and `a::answer()` in `main` exits 42 with no import, as MOD-4's and SYN-10's accepted examples also do, while MOD-2's sentence says another module uses a declaration only by importing it. Options: (a) a qualified path to a `pub` declaration is a use in its own right, and MOD-2 says so; (b) an import is required, and the unimported qualified call is refused. Austral: not checked. Pick: none given (raised by the spec quality audit, 2026-10-30). | see OPEN-139 | see OPEN-139 | decided 2026-10-31 by the owner's rule (every reviewer agreed, as strict as Austral or stricter): Import required |
+docs/decisions.md:1255:| OD140 | <a id="od140"></a>Implicitly dropped results of `free` and of a deferred call (added 2026-10-30, raised by the spec quality audit of 2026-10-30). Question: Whether the result of `free(h)` (the pointee, of type `T`) when `T` is Copy, and a deferred call's Copy result, may be dropped without `discard`, as exceptions to OWN-7@3 (OD29). Bears on OWN-7, OWN-17, MEM-5 and OWN-15. The current compiler: both accepted: `free(h);` on a `Heap<Int>` (whose result is the `Int` moved out of the cell: `let v: Int = free(h);` after `alloc(42)` gives 42 on both consumers) and `defer f();` with `fn f() -> u8` compile and run, while OWN-7@3 (decided OD29) drops a non-Unit result only through `discard(e)`. OWN-17 states the current compiler's drop of a deferred call's result, and MEM-5 and OWN-15 describe `free(h);` as a statement; neither is named as an exception in OWN-7. Options: (a) both are exceptions, stated in OWN-7; (b) neither is, so each needs `discard`; (c) `free` is an exception and a deferred call's result is not. Austral: not checked. Pick: none given (raised by the spec quality audit, 2026-10-30). | see OPEN-140 | see OPEN-140 | decided 2026-11-01 by the owner (final set): Neither; each needs `discard`. Earlier clarification of 2026-11-02: `free` no longer exists (OD59); a deferred call's Copy result is dropped with `discard`, while a `Result` or `Option` cannot be discarded (OD62) and is handled by a named function that returns `Unit` ([decisions](decisions.md#decided-2026-11-02-authority)). Revised 2026-11-02: `defer` takes a call whose result is `Unit` ([decisions](decisions.md#decided-2026-11-02-audit)) **Canonical current deferred-result rule: the Unit-only audit rule below; the earlier discard-inside-defer fragment is superseded, and authority rule 9 refers to the Unit-only rule.** |
+docs/decisions.md:1256:| OD141 | <a id="od141"></a>More than one `main` in a program (added 2026-10-30, raised by the spec quality audit of 2026-10-30). Question: Which function is the entry point when more than one module of a program declares `main`. Bears on STMT-7, MOD-3 and PASS-10. The current compiler: `mod a { pub fn main() -> u8 { return 7; } }` beside `mod b { pub fn main() -> u8 { return 9; } }` fails natively inside LLVM (`redefinition of global '@__concrete_argc'`) and prints 7 under `--interp`, which runs the first, also when the second `main` is the root module's; MOD-3 makes a name unique within one module only. Options: (a) only the root module's `main` is the entry point, and others are ordinary functions; (b) a program with more than one `main` is refused; (c) a `main` outside the root module is refused. Austral: not checked. Pick: none given (raised by the spec quality audit, 2026-10-30). | see OPEN-141 | see OPEN-141 | decided 2026-11-01 by the owner (final set): A `main` outside the root module is refused |
+docs/decisions.md:1257:| OD142 | <a id="od142"></a>`X.con` beside `X/mod.con` (added 2026-10-30, raised by the spec quality audit of 2026-10-30). Question: Which file `mod X;` loads when both `X.con` and `X/mod.con` exist. Bears on MOD-4. The current compiler: `X.con` is loaded and `X/mod.con` is ignored without a diagnostic (with `X.con` returning 7 and `X/mod.con` 9, the program exits 7 on both consumers). MOD-4 says one module is loaded from either file. Options: (a) refuse the pair; (b) `X.con` takes precedence, as the current compiler does; (c) `X/mod.con` takes precedence. Austral: not checked. Pick: none given (raised by the spec quality audit, 2026-10-30). | see OPEN-142 | see OPEN-142 | decided 2026-11-01 by the owner (final set): One module layout: `X.con`, children in directory `X/`; no `mod.con` |
+docs/decisions.md:1258:| OD143 | <a id="od143"></a>What a contract may read (added 2026-10-30, raised by the spec quality audit of 2026-10-30). Question: Which names each contract position (`requires`, `ensures`, `invariant`, `variant`) may read. Bears on CON-2, CON-3 and CON-4. The current compiler: CON-3 says a contract reads parameters and `result`, CON-4 lets contracts read `ghost let` bindings, and CON-2's accepted loop invariant reads the local `i`; the checker accepts all three. Options: (a) per position: `requires` the parameters, `ensures` the parameters, `result` and ghost bindings, and a loop's `invariant` and `variant` every binding in scope, with CON-3 amended; (b) every position reads every binding in scope at that point; (c) CON-3 as written, with loop contracts and ghost reads refused. Austral: not checked. Pick: none given (raised by the spec quality audit, 2026-10-30). | see OPEN-143 | see OPEN-143 | decided 2026-11-01 by the owner (final set): A contract reads exactly the names in scope at its position, plus `result` in `ensures` |
+docs/decisions.md:1259:| OD144 | <a id="od144"></a>Postconditions and deferred calls (added 2026-10-30, raised by the spec quality audit of 2026-10-30). Question: Whether an `ensures` clause is about the state before or after the function's deferred calls run. Bears on CON-2 and STMT-11. The current compiler: `#[ensures(result == *r)]` on a function whose `defer inc(r)` runs after the result is computed is accepted and runs (contracts are erased at run time); the probe does not show which state the postcondition's proof obligation reads, no rule says, and STMT-11 computes the result before the deferred calls run. Options: (a) after every deferred call, the state the caller sees; (b) when the result is computed, before deferred calls; (c) refuse an `ensures` in a function with a deferred call that may write what the clause reads. Austral: not checked. Pick: none given (raised by the spec quality audit, 2026-10-30). | see OPEN-144 | see OPEN-144 | decided 2026-11-01 by the owner (final set): After every deferred call |
+docs/decisions.md:1260:| OD145 | <a id="od145"></a>How a contract names machine arithmetic (added 2026-10-30, raised by the spec quality audit of 2026-10-30). Question: How a contract expression names machine arithmetic, which CON-3 allows in place of its default mathematical arithmetic. Bears on CON-3 and ARITH-4. The current compiler: `#[ensures(result == wrapping_add(x, 1))]` is accepted and the program runs (contracts are erased at run time); what the proof pipeline makes of the named operation was not probed. CON-3 says a contract's integer arithmetic is mathematical unless it names a machine operation, and no rule or example names one. Options: (a) the named operations of ARITH-4 (`wrapping_add`, `saturating_add` and the rest) are the machine operations in a contract; (b) a contract-only spelling; (c) contracts have only mathematical arithmetic, and CON-3 drops the exception. Austral: not checked. Pick: none given (raised by the spec quality audit, 2026-10-30). | see OPEN-145 | see OPEN-145 | decided 2026-11-01 by the owner (final set): ARITH-4 named operations |
+docs/decisions.md:1261:| OD146 | <a id="od146"></a>The result type of a test function (added 2026-10-30, raised by the spec quality audit of 2026-10-30). Question: Whether a `#[test]` function returns `i32` (STMT-10) or follows `main`'s decided `u8` or `Unit` (OD24). Bears on STMT-10 and STMT-7. The current compiler: `#[test] fn t() -> Int` is refused with E0319 (`#[test] function 't' must return i32`), and a test's result is its exit status under `concrete test`. Options: (a) keep `i32`; (b) `u8` or `Unit`, as `main` (STMT-7@3); (c) `Unit` only, a failing test aborting. Austral: not checked. Pick: none given (raised by the spec quality audit, 2026-10-30). | see OPEN-146 | see OPEN-146 | decided 2026-11-01 by the owner (final set): `u8` or `Unit`, as `main`. Revised 2026-11-02: `u8` only, as `main` ([decisions](decisions.md#decided-2026-11-02-main)) |
+docs/decisions.md:1262:| OD147 | <a id="od147"></a>`repr(C, packed)` together (added 2026-10-30, raised by the spec quality audit of 2026-10-30). Question: Whether `#[repr(C, packed)]` is accepted, and what layout it gives. Bears on FFI-4 and FFI-8. The current compiler: accepted: `#[repr(C, packed)] struct Copy P { a: u8, b: u32 }` has size 5, so packing overrides C alignment. FFI-4 refuses only `packed` with `align(N)`, and FFI-8 states C layout and packed layout separately. Options: (a) refuse the combination; (b) accept it as C field order with no padding and alignment 1, as the current compiler does, and FFI-8 says so. Austral: not checked. Pick: none given (raised by the spec quality audit, 2026-10-30). | see OPEN-147 | see OPEN-147 | decided 2026-11-01 by the owner (final set): Accept: C order, no padding, align 1, stated in FFI-8 |
+docs/decisions.md:1263:| OD148 | <a id="od148"></a>Type parameters on a trait (added 2026-10-30, raised by the spec quality audit of 2026-10-30). Question: Whether a trait declaration may have type parameters, and if so what binds them at a bound and an impl. Bears on TRAIT-1, TRAIT-9 and SYN-1. The current compiler: `trait Tr<T> { fn get(&self, x: T) -> T; }` parses, but no bound or impl head can supply `T`, so `impl Tr for S { fn get(&self, x: u8) -> u8 ... }` is refused with E0582 and E0587 (`expected return type T, got u8`). OPEN-77 lists generic trait methods among the grammar's stale items; it covers only the productions, while this entry covers what the parameters mean and what binds them. Options: (a) refuse type parameters on a trait declaration; (b) allow them, with type arguments at bounds and impl heads (`impl Tr<u8> for S`). Austral: not checked. Pick: none given (raised by the spec quality audit, 2026-10-30). | see OPEN-148 | see OPEN-148 | decided 2026-10-31 by the owner's rule (every reviewer agreed, as strict as Austral or stricter): Refuse type parameters on a trait |
+docs/decisions.md:1264:| OD149 | <a id="od149"></a>How `[e; N]` evaluates `e` (added 2026-10-30, raised by the spec quality audit of 2026-10-30). Question: How many times an array repetition `[e; N]` evaluates `e`, and which `e` it accepts. Bears on STMT-4, OWN-15 and TYPE-7. The current compiler: `e` is evaluated once per element, in index order (`[bump(&mut n); 3]` gives `[1, 2, 3]` on both consumers), and whether a linear `e` is accepted was not shown (an array of a linear type that is never consumed is refused with E0208 either way). OWN-15 says only that an array literal moves each element in, and STMT-4 orders written elements. Options: (a) `e` is evaluated once and copied, so it must be Copy; (b) `e` is evaluated `N` times in index order, as the current compiler does; (c) `e` must be a constant expression. Austral: not checked. Pick: none given (raised by the spec quality audit, 2026-10-30). | see OPEN-149 | see OPEN-149 | decided 2026-11-01 by the owner (final set): Evaluated once, must be Copy |
+docs/decisions.md:1265:| OD150 | <a id="od150"></a>Which text governs the grammar until it is resynchronized (added 2026-10-30, raised by the spec quality audit of 2026-10-30). Question: Whether, until OPEN-77's resynchronization, `grammar/concrete.ebnf` or the rule entries govern where they disagree. Bears on SYN-1 and OPEN-77. The current compiler: the parser accepts forms the EBNF does not derive (`import a.{f};`, `m::f()`, `f::<T>(x)`, value `if` and `match`, `pub` fields, bodyless declarations) and the EBNF keeps forms the entries removed (`E#V`, the C-style `for`, `break <expr>`); SYN-1 calls the EBNF the grammar, and the LL(1) checkers read it. Options: (a) the rule entries govern, and the EBNF is descriptive until the resync; (b) the EBNF governs, and an entry that disagrees is pending; (c) neither: each disagreement is decided one by one under OPEN-77. Austral: not checked. Pick: none given (raised by the spec quality audit, 2026-10-30). | see OPEN-150 | see OPEN-150 | decided 2026-11-01 by the owner (final set): Rule entries govern |
+docs/decisions.md:1266:| OD151 | <a id="od151"></a>Module paths of more than one level (added 2026-10-31, raised while absorbing SYNTAX_FREEZE_REVIEW §1.1). Question: Whether a qualified path may name a member of a module nested more than one level deep (`a::b::f()`). Bears on SYN-10, MOD-4 and OPEN-139. The current compiler: the parser's lowercase module-path branch accepts one qualification pair: `a::b::f()`, with `f` in `mod b` inside `mod a`, is a parse error on both consumers (E0001, `expected <, got ident(f)`), because after `a::b` it accepts only `::<` (explicit type arguments). SYNTAX_FREEZE_REVIEW §1.1 gives `std::fs::read_to_string` as an example of module qualification, which this parser does not accept. Options: (a) one qualification pair, as in the current compiler, and SYN-10 says so; (b) any depth, every segment before the last naming a module (a repetition, which stays LL(1)). Austral: not checked. Pick: none given (raised while absorbing SYNTAX_FREEZE_REVIEW §1.1, 2026-10-31). | see OPEN-151 | see OPEN-151 | decided 2026-11-01 by the owner (final set): Allow multi-level module paths `a::b::f` |
+docs/decisions.md:1267:| OD152 | <a id="od152"></a>Whether a path's first letter decides its syntactic form (added 2026-10-31, raised while absorbing SYNTAX_FREEZE_REVIEW §1.1). Question: Whether the first letter of a path's first segment decides the syntactic form of `X::y`, or one path form leaves to name resolution whether `X` is a type or a module. Bears on SYN-10, SYN-1 and MOD-1. The current compiler: the parser chooses by the first letter of `X`: an uppercase `X` gives an associated-function call or an enum literal, and a lowercase `X` the flattened name `X_y`, which name resolution looks up as one identifier (bug 343); a module named with an uppercase letter goes through the associated-function form, and `M::f()` on `mod M` builds and runs on both consumers. SYNTAX_FREEZE_REVIEW §1.1 presents the case split as how the parse stays LL(1). Options: (a) the first letter decides the syntactic form, as in the current compiler, and SYN-10 states it; (b) the parser reads `X::y` as one path form, which is also LL(1), and name resolution decides whether `X` is a type or a module. Austral: not checked. Pick: none given (raised while absorbing SYNTAX_FREEZE_REVIEW §1.1, 2026-10-31). | see OPEN-152 | see OPEN-152 | decided 2026-11-01 by the owner (final set): Resolve `X::y` by declaration, not by the first letter |
+docs/decisions.md:1268:| OD153 | <a id="od153"></a>Program functions named like a builtin (added 2026-10-31, raised while reviewing the builtins catalog of spec readability 2). Question: Whether a program may declare a function whose name is a builtin's, other than `print`, `println` and `append` (OPEN-133) and the names MOD-3 reserves, and which function the program's calls of that name reach. Bears on MOD-3, MOD-1, MOD-8 and OPEN-133. The current compiler: a program function `string_length` is called by the program's calls on both consumers, and so are program functions named `string_len` and `String_len` (`string_len` returns 7 and `String_len` returns 9; a program that calls both exits 79 on both consumers), while `destroy`, `discard`, `abort`, `alloc`, `free`, `alloc_array`, `free_array` and `realloc_array` are reserved (E0578). The calls the compiler itself generates are bound by identity (MOD-8), so only the program's own calls change. Options: (a) reserve every remaining builtin's name, aliases included, and MOD-3 lists them (`print`, `println` and `append` stay with OPEN-133); (b) allow the declaration, and the program's own calls reach it, as the current compiler does, and MOD-3 says so; (c) allow the declaration, and a program reaches the builtin by a qualified name. Austral: not checked. Pick: none given (raised while reviewing the builtins catalog of spec readability 2, 2026-10-31). | see OPEN-153 | see OPEN-153 | decided 2026-11-01 by the owner (final set): Refuse program functions named like builtins |
+docs/decisions.md:1269:| OD154 | <a id="od154"></a>Whether the string builtins require `Alloc` (added 2026-10-31, raised while reviewing the builtins catalog of spec readability 2). Question: Whether `string_concat`, `string_slice`, `string_substr`, `string_trim`, `int_to_string`, `bool_to_string`, `float_to_string`, `string_push_char`, `string_append`, `string_append_int` and `string_append_bool` require the `Alloc` capability. Bears on MEM-7, TRUST-4 and OPEN-133. The current compiler: Check gives none of these builtins a capability, and a function with no capabilities calls `string_concat` and `string_append_int` and exits 42 on both consumers (the other names were not probed). MEM-7@1 lists `string_reserve` and `append` among the builtins that require `Alloc`; `append` is accepted without `Alloc` (bug 349), and it expands into `string_append`, `string_append_int`, `string_append_bool` and `string_push_char`. MEM-7's rationale says allocation is an effect a signature shows. Options: (a) each builtin named above requires `Alloc`, and MEM-7 lists it; (b) a stated subset of them requires `Alloc`, and MEM-7 lists that subset; (c) only the builtins MEM-7 already lists require `Alloc`, so `string_reserve` and `append` do and the names above do not, and MEM-7 says so; (d) no string builtin requires `Alloc`, `string_reserve` and `append` included, and MEM-7 drops those two. Austral: not checked. Pick: none given (raised while reviewing the builtins catalog of spec readability 2, 2026-10-31). | see OPEN-154 | see OPEN-154 | decided 2026-11-01 by the owner (final set): Allocating string builtins need `Alloc` (MEM-7; closes bug 349) |
+docs/decisions.md:1270:| OD155 | <a id="od155"></a>`unwrap` beside TYPE-24's conversions (added 2026-10-31, raised while reviewing the builtins catalog of spec readability 2). Question: Whether `unwrap` stays an intrinsic beside the conversions TYPE-24 lists (`n.0` and `n as T`), becomes one of those conversions, or is removed. Bears on TYPE-24, TYPE-11, TYPE-10 and OPEN-54. The current compiler: Check gives `unwrap(m)` the newtype's inner type (E0270 when the argument is not a newtype); `return unwrap(m);` exits 42 on both consumers, and `let x: Int = unwrap(m);` followed by `if x == 42` fails the native build at SSA verification (E0715, bug 345). TYPE-24 lists `n.0` and `n as T` and does not list `unwrap`. OPEN-54 decides this only if its answer removes newtypes; while newtypes stay, this question stays. Options: (a) keep `unwrap` as an intrinsic and leave it off TYPE-24's list, as the current compiler and TYPE-24 do; (b) `unwrap(n)` is a conversion, TYPE-24 lists it, and TYPE-11 restricts it as it restricts `n.0`; (c) remove `unwrap`, leaving `n.0` and `n as T`. Austral: not checked. Pick: none given (raised while reviewing the builtins catalog of spec readability 2, 2026-10-31). | see OPEN-155 | see OPEN-155 | decided 2026-11-01 by the owner (final set): No builtin `unwrap`; use `match` |
+docs/decisions.md:1271:| OD156 | <a id="od156"></a>The capability of `get_args` (added 2026-10-31, raised while reviewing the builtins catalog of spec readability 2). Question: Which capability the builtin `get_args` requires, or whether the builtin is removed. Bears on TRUST-4, STMT-7, TRUST-9 and OPEN-136. The current compiler: Check gives `get_args()` the result `HeapArray<String>` and requires `Process` (E0520 with `Env` only); the builtin has no implementation on either consumer (bug 347). STMT-7's rationale says command-line arguments come from `std.args` with `Env`, and OD8 gives `main` the root resource value (TRUST-9). Options: (a) `Env`, as `std.args` requires; (b) `Process`, as the current compiler's signature says; (c) another capability, or none; (d) remove the builtin, and command-line arguments come from `std.args`. Austral: not checked. Pick: none given (raised while reviewing the builtins catalog of spec readability 2, 2026-10-31). | see OPEN-156 | see OPEN-156 | decided 2026-11-01 by the owner (final set): Superseded by the authority decision of 2026-11-01: `get_args` requires `with(Env)`, and `with(Alloc)` when it allocates. Revised 2026-11-02 by the owner's rule: it also takes the `Environment` grant, and an allocator when it allocates ([decisions](decisions.md#decided-2026-11-02-filesystem)) |
+docs/decisions.md:1272:| OD157 | <a id="od157"></a>How the type `Unit` is written (added 2026-10-31, raised while reviewing the builtins catalog of spec readability 2). Question: Whether the type `Unit`, which STMT-7 names as a result type of `main` and which other rules and the builtins catalog also name, has a spelling in type positions, and which spelling. Bears on STMT-7, TYPE-4, SYN-1 and OPEN-66. The current compiler: a function with no result type returns no value, and `fn main() { return; }` exits 0; `fn main() -> Unit` and `let x: Unit = f();` are refused at resolve (E0108, unknown type 'Unit'); `fn main() -> ()` is a parse error (E0001, `expected type`). STMT-7@3 says `main`'s result type is `u8` or `Unit`. OPEN-66 concerns the unit value's literal; this entry concerns the type in type positions, and the two cross-reference each other. Options: (a) no spelling: the type is written only by omitting the result type, and STMT-7 says so; (b) `Unit` is a builtin type name, accepted wherever a type is; (c) `()` is the type's spelling; (d) both `Unit` and `()` are accepted. Austral: not checked. Pick: none given (raised while reviewing the builtins catalog of spec readability 2, 2026-10-31). | see OPEN-157 | see OPEN-157 | decided 2026-11-01 by the owner (final set): The type is written `Unit`, its value `()` |
+docs/decisions.md:1277:These entries were retired when the owner answered them; their IDs are never reused.
+docs/decisions.md:1285:  (what is allowed); in the owner's words, "one is the parameter to modify, the other the permission",
+docs/decisions.md:1288:  suggesting the exact set needed. It supersedes OD38's and OD156's readings through a `Root` value
+docs/decisions.md:1297:**Decided 2026-11-02 by the owner's rule** (the owner: "anything where you and codex agree that is the
+docs/decisions.md:1299:long-term answer, Codex having read the repository; the owner answered the first four directly on
+docs/decisions.md:1333:   `Time`, `Alloc`, `Device`, `Console`, `Process`; `Console` added by the [owner revision, 2026-11-05](#decided-2026-11-05-revisions), row Q7.11). Effect checking applies inside trusted bodies and at foreign
+docs/decisions.md:1345:   grants (row Q7.11, [owner revision, 2026-11-05](#decided-2026-11-05-revisions)).
+docs/decisions.md:1347:   ownership and its effect requirements, but no permission.
+docs/decisions.md:1350:   input or returns every ownership obligation that remains: a cleanup that can leave a resource live
+docs/decisions.md:1372:    `StdErr` grants, added by the [owner revision, 2026-11-05](#decided-2026-11-05-revisions), row Q7.11; there is no `Net` spelling and no alias). They are reserved everywhere,
+docs/decisions.md:1400:  (OD154) take an allocator and report failure; static text needs no allocation.
+docs/decisions.md:1403:the former authority rule 9 of 2026-11-01 on `get_args`, and OD156):
+docs/decisions.md:1450:- **Traits cross modules like any other declaration** (owner, 2026-11-02): a `pub` trait is exported,
+docs/decisions.md:1481:**Decided 2026-10-31 by the owner's rule** (every reviewer agreed, and the answer is as strict as
+docs/decisions.md:1518:- <a id="OPEN-113"></a>**OPEN-113** (OD113, The ownership exceptions of trusted code): See [OD113](#od113).
+docs/decisions.md:1531:**Decided 2026-11-01 by the owner** (the final set, reviewed by Claude, Codex and Grok, checked
+docs/decisions.md:1603:- <a id="OPEN-150"></a>**OPEN-150** (OD150, Which text governs the grammar until it is resynchronized): See [OD150](#od150).
+docs/decisions.md:1604:- <a id="OPEN-151"></a>**OPEN-151** (OD151, Module paths of more than one level): See [OD151](#od151).
+docs/decisions.md:1605:- <a id="OPEN-152"></a>**OPEN-152** (OD152, Whether a path's first letter decides its syntactic form): See [OD152](#od152).
+docs/decisions.md:1606:- <a id="OPEN-153"></a>**OPEN-153** (OD153, Program functions named like a builtin): See [OD153](#od153).
+docs/decisions.md:1607:- <a id="OPEN-154"></a>**OPEN-154** (OD154, Whether the string builtins require `Alloc`): See [OD154](#od154).
+docs/decisions.md:1608:- <a id="OPEN-155"></a>**OPEN-155** (OD155, `unwrap` beside TYPE-24's conversions): See [OD155](#od155).
+docs/decisions.md:1609:- <a id="OPEN-156"></a>**OPEN-156** (OD156, The capability of `get_args`): See [OD156](#od156).
+docs/decisions.md:1610:- <a id="OPEN-157"></a>**OPEN-157** (OD157, How the type `Unit` is written): See [OD157](#od157).
+docs/decisions.md:1629:- **OPEN-13** (OD13, raw-pointer ownership): decided 2026-10-29. Now TRUST-7.
+docs/decisions.md:1640:- **OPEN-15** (OD15, freezing and `&mut` exclusivity): decided 2026-10-29. Part (a), whole-owner
+
+exec
+/bin/bash -lc "rg -n 'sign.off|R-0618|limitation|authentic|trust|F1|F2' docs/REVIEW.md docs/LANDING.md docs/decisions.md ROADMAP.md scripts/checks/landing_script.sh scripts/land/train.sh; sed -n '155,200p' docs/REVIEW.md; sed -n '1,115p' .githooks/pre-push" in /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/retro-split/src
+ succeeded in 0ms:
+scripts/land/train.sh:474:# OWNER SIGN-OFF (R-0618). A member without a clean note qualifies instead by a valid owner sign-off
+scripts/land/train.sh:478:# A sign-off approves that commit only, never what the train did with it, so a train with a signed-off
+scripts/land/train.sh:526:  [ -z "$bad" ] || { echo "the head ${head:0:10} has no review note, and not every member has a clean one or an owner sign-off$bad"; return 1; }
+scripts/land/train.sh:530:    echo "the head has no review note; every member ($n) carries a clean one or an owner sign-off ($signed) at its exact SHA, and the head is their clean merge"
+scripts/land/train.sh:1030:  # Review provenance, read now and not trusted from `check`: a check run with --no-review, or a
+docs/REVIEW.md:179:The owner may then approve one exact commit (R-0618), after Codex, Kimi and agy have all reviewed
+scripts/checks/landing_script.sh:911:# The record trusts a dispatch's title for its base: the title must come from the base input, and
+scripts/checks/landing_script.sh:1137:# An owner sign-off record (scripts/land/signoff.sh), published to origin. put-signoff <sha> <mode>
+scripts/checks/landing_script.sh:1159:bash "$SIGNOFF" record "$sha" --base "$base" --rounds-at "$sha" --date 2026-11-08 --quote "sign off ${sha:0:8}, yes" \
+scripts/checks/landing_script.sh:1189:  unnamed) variant "s/^quote: .*/quote: sign off the branch/" ;;
+scripts/checks/landing_script.sh:1263:echo "=== review: an owner sign-off at a member's exact SHA is its review provenance (R-0618) ==="
+scripts/checks/landing_script.sh:1270:so_leg "a member with a valid owner sign-off and a clean merge" valid pass "owner sign-off (1) at its exact SHA, and the head is their clean merge"
+scripts/checks/landing_script.sh:1271:so_leg "a sign-off recorded for another commit" othersha refuse "the record is for $R1, not $R2"
+scripts/checks/landing_script.sh:1272:so_leg "a sign-off whose verdict file was changed after recording" tampered refuse "the sha256 of kimi.txt is"
+scripts/checks/landing_script.sh:1273:so_leg "a sign-off whose kimi request body names another commit" otherreview refuse "the kimi request body does not name ${R2:0:10}"
+scripts/checks/landing_script.sh:1274:so_leg "F1: a reviewed line for another commit despite body and output naming the signed SHA" otherreviewed refuse "the kimi request's reviewed line is '$R1', not $R2"
+scripts/checks/landing_script.sh:1275:so_leg "F1b: a request without a reviewed first line" noreviewed refuse "the kimi request's first line is not a 'reviewed: <full 40-hex SHA>' line"
+scripts/checks/landing_script.sh:1276:so_leg "F2: ACCEPT in agy's request but no verdict in its output" requestverdict refuse "the agy output has no verdict"
+scripts/checks/landing_script.sh:1278:so_leg "a sign-off without agy's verdict" noagy refuse "the record has no agy verdict"
+scripts/checks/landing_script.sh:1279:so_leg "a sign-off whose agy output ends in REJECT" reject refuse "the agy output's last verdict is 'VERDICT:REJECT'"
+scripts/checks/landing_script.sh:1280:so_leg "a sign-off whose quote names no commit" unnamed refuse "the quote does not name ${R2:0:10}"
+scripts/checks/landing_script.sh:1281:so_leg "a member with neither a note nor a sign-off" none refuse "$R2 has no owner sign-off"
+scripts/checks/landing_script.sh:1297:    && ok "verify refuses a $cls member's sign-off after 2 rounds" || { no "verify of a $cls member after 2 rounds (exit $r)"; echo "$o" | sed 's/^/      /'; }
+scripts/checks/landing_script.sh:1309:# The same valid sign-off, but a head beyond the clean merge of its members. train.sh already refuses
+docs/LANDING.md:94:  without a clean note qualifies instead by an **owner sign-off** at its exact SHA (R-0618: a branch
+docs/LANDING.md:96:  reviewed that commit; `scripts/land/signoff.sh verify --base`, on origin's `refs/owner-signoff/*`). A sign-off approves that
+docs/LANDING.md:151:  rather than trusted from `check`: a check run with `--no-review` lands only on a clean note at the
+docs/LANDING.md:426:- `gh` authentication, to dispatch CI;
+ROADMAP.md:109:   6. Ghost permissions for trusted code.
+ROADMAP.md:157:| A. Core and theorem | Dispose of the spec audit. The owner decides the whole Core shape before implementation, in four stages: provisional approval (A2a), a proposed `Spec.lean` with four checked design theorems (A2b), integration of its parts with their interaction proofs, the modular layout and the browsable owner view (A2i), and the owner's freeze of the integrated scopes (A2c). State the semantic contract and the end-to-end theorem in Lean, and list the trusted base. | Core frozen by the owner after the four design theorems and the integration proofs are kernel-checked. The theorem, its holes and the trusted base on main. |
+ROADMAP.md:179:| A3 | State the theorem and the trusted base in Lean | R-0502, R-0506, R-0508, R-0509, R-0500, R-0588 | The contract and the modular layout from A2i are on main. The theorem, with its holes, the named values-to-bytes boundary and the trusted-base inventory, is on main. The theorem skeleton uses concrete slice interfaces; its semantic-premise inventory is separate from the axiom audit. Before slice 0's authoritative claim, its actual Core fragment is connected to the frozen definitions and any instrumentation erasure it uses is proved; later features require integration proofs into that same Core. Slice 0 starts after A2c and the applicable A3 foundations for its authoritative claims; a provisional skeleton may start earlier and claims nothing normative. |
+ROADMAP.md:180:| B0 | Build and qualify slice 0, the proof spine ([decision](docs/decisions.md#decided-project-proof-infrastructure)) | R-0501, R-0581, R-0580, R-0583, R-0503, R-0578, R-0579, R-0425, R-0499, R-0493, R-0507, R-0521, R-0552, R-0118, R-0498, R-0553, R-0573, R-0575, R-0585, R-0588, R-0593, R-0594, R-0577, R-0272, R-0301, R-0550 | Slice 0 runs through every used IR to two unverified native builds, LLVM and the LCB, whose full observations CI compares with each other and with the expected outcome, with per-lowering proofs, independent supported-subset coverage, the composed conditional image theorem, artifact binding, example correctness, including transport to the exact native artifact under the named premises, and classified differential and refusal controls. The per-function facts report (R-0575) is produced for every slice-0 function, each fact and obligation with its source location. The BIR → LCB-IR adapter proof (R-0579) is the first backend proof. Reproducible builds, final-artifact stack facts, the trusted-base statement, the front-end differential fuzzer, ASan/UBSan runs, binary-size tracking and the frozen, versioned JSON schema start here. This does not trigger legacy deletion. |
+ROADMAP.md:203:scheduled: `free` (OD59), `trusted mod` (OD61), mutable global cells (OD8), `process_exit` (OD136),
+ROADMAP.md:209:| 0 | `main -> u8`, immutable typed `u8` lets, decimal literals (leading zero refused), reads, parentheses, checked `+`, return; `concrete build` and `concrete facts`; the diagnostics record; both backends; reproducible builds; each program's maximum stack use, measured from the final binary on both backends, with the `Concrete.toml` stack budget; the trusted-base statement in facts; the random-program differential fuzzer; AddressSanitizer and UndefinedBehaviorSanitizer; binary-size tracking; the frozen, versioned JSON schema for diagnostics and facts from the first front-end output | B0 |
+ROADMAP.md:217:| 7 | `Secret<T>` on scalars: `classify` (of a value passed in), `declassify(x, "reason")`, `ct_select`, secret comparisons giving `Secret<bool>`, the closed constant-time operation table; plain arithmetic, secret control flow, divisors and shift counts refused; noninterference and source constant-time theorems; release sites traced; secret policies; backend constant time and wiping as named premises; entropy output as `Secret<T>`, with its source named as a trusted premise in facts | C |
+ROADMAP.md:234:| 24 | raw pointers and the raw memory model (Q3.7–Q3.11), `trusted fn`, `with(Unsafe)` (OD64, OD98) | D |
+ROADMAP.md:259:`Secret<T>` at 7 and gains fill-bytes at 15; its source is a named trusted premise in facts
+ROADMAP.md:260:([decision](docs/decisions.md#decided-2026-11-07-stack-randomness)). The trusted-base statement,
+ROADMAP.md:340:- **An explicit trusted base.** The machine, loader and operating-system models the claim relies on
+ROADMAP.md:376:| R-0509 | The trusted-base inventory, evidence binding, assumption lifecycle and axiom replay | the inventory is on main; from slice 0 `concrete facts` states what is not proven: the Lean kernel, LLVM printer and LLVM, LCB's MIR→assembly step, linker, OS and named runtime premises ([early decision](docs/decisions.md#decided-2026-11-07-early-evidence)); every claim's axioms are recorded and replayed from a clean checkout; CI audits semantic-premise closure separately from logical axioms and rejects unapproved assumption additions or strengthening; Home: spec (the trusted-premise list). Gate: a trusted-base golden ([tracking](docs/decisions.md#decided-2026-11-07-tracking)) | R-0506 |
+ROADMAP.md:398:| R-0521 | Minimal provenance and one canonical verification task for the first authoritative claims | a claim names its compiler, source, theorem and executable digest; minimal provenance and kernel-checked per-compilation evidence accompany the first authoritative slice-0 claim; the evidence connects the exact input to the exact emitted BIR without trusting native evaluation, the backend input is bound to that BIR, and the Lean compiler, runtime and toolchain are listed as execution assumptions wherever the evidence does not close the gap (2026-11-06) | R-0509 |
+ROADMAP.md:399:| R-0552 | Per-compilation certificates (owner-approved 2026-10-25) | a build emits a certificate per output, and the kernel checks it; minimal provenance and kernel-checked per-compilation evidence accompany the first authoritative slice-0 claim; each certificate connects the exact input to the exact emitted BIR through proved judgments or validators, checked by the kernel without trusting native evaluation; the backend input is bound to that BIR (a digest is identity, not correspondence); residual Lean compiler, runtime and toolchain trust is listed as explicit execution assumptions; LCB verification of compiled programs is not counted as verification of the compiler's execution (2026-11-06) | R-0504 |
+ROADMAP.md:403:| R-0575 | The per-function facts report and query from slice 0 ([decision](docs/decisions.md#decided-project-facts-report), 2026-11-06) | every function of each slice has a report derived from the Lean rules, with a versioned schema: capabilities and the grants and resources actually reachable, allocation and allocator, trusted, foreign and opaque boundaries with their assumptions, each operation that could fail and how it is handled, termination (evidence with its named premises, or the responsible source permission and the call path to it), recursion depth and stack bound or why none is established, proof status per obligation, and completeness, each with its reason, evidence and source location; a permission that justifies nothing is reported as a fact, which a `Concrete.toml` policy may refuse (the decided refusals of an unmatched `#[proof]` and a duplicate `#[may_not_terminate]` stay) (carried from slice 0 into CheckedCore and the schema, spec obligations O1 and O4); the schema already has fields for what memory a function writes (frames) and what its outputs depend on (dependency flow), reported "not established" until derived: definite, maybe and never writes per `&mut` place and the output-to-input dependencies (control dependence, cleanup and opaque calls included) are derived into these fields as soon as `&mut` lands, not in E–G, while R-0524, R-0473 and R-0383 keep source frames, contracts and package summaries; facts are preserved across indirect calls, specialization and package boundaries (R-0588); from slice 0 the compiler answers a query about one function or module from the same facts, as readable text and in the machine format (the command is `concrete facts`); the report never claims what the rules do not establish; every fact is a typed judgment in Lean with a derivation-soundness theorem (and obligation-discovery completeness where it claims absence), one derivation feeds the readable view, the machine format and every policy, each fact has a closed status (established, conditional, refuted, not established, not applicable) with per-fact coverage, unknown never satisfies a policy, and answers carry typed identities, versioned schema and semantics and artifact digests; from slice 0 the report also carries the build identity (compiler SHA, toolchain pins and target), each program's maximum stack use, measured from the final binary on both backends, and the trusted-base statement naming the Lean kernel, LLVM printer and LLVM, LCB's MIR→assembly step, linker, OS and named runtime premises as not proven ([early decisions](docs/decisions.md#decided-2026-11-07-early-evidence)); the diagnostics and facts JSON schema is frozen and versioned from the first front-end output, with golden tests; a planted wrong fact and a planted unknown version are caught; Home: spec (the stack-bound claim and, from slice 0, the refusal of an unknown or over-budget bound against the `Concrete.toml` stack budget) and tooling (the report). Gate: stack, the final-artifact bound checked against the claim and the budget ([tracking](docs/decisions.md#decided-2026-11-07-tracking)) | R-0499 |
+ROADMAP.md:409:| R-0589 | Declared assumptions in `Concrete.toml`, with a change-detecting check ([decision](docs/decisions.md#decided-project-concrete-toml), 2026-11-06) | a project declares its target, heap, stack, foreign-function and trusted-surface assumptions in its `Concrete.toml` only where the facts cannot derive them; the section is typed, versioned data and an unknown key or version is refused; the facts query reports each assumption with the facts that rely on it; any change to the declared set is reported as an assumption diff and fails CI until the diff is recorded with the change; the sections are the typed, versioned `[policy]` and `[assumptions]` tables | R-0575 |
+ROADMAP.md:411:| R-0576 | The predictable policy ([decision](docs/decisions.md#decided-project-predictable-policy), 2026-11-06) | an optional module or project policy, built on the per-function facts (R-0575), refuses at compile time any function in its scope that allocates, blocks or calls foreign code, and, when the policy demands it, any function without termination evidence or a stack bound; admission requires established evidence of no allocation, no blocking and no foreign calls, so an unknown or incomplete fact is refused; the policy explicitly states whether named trusted assumptions are acceptable (Q13); a violation names the function, the fact and its source; the query reports which policy covers each function; a planted violation and a planted unknown fact are both refused; the policy is declared in the project's `Concrete.toml` ([decision](docs/decisions.md#decided-project-concrete-toml)) as typed, versioned data, a module may tighten it but never relax it, and dependencies are checked against the consumer's policy transitively and fail-closed; Home: tooling (the optional `Concrete.toml` policy over the facts; the mandatory slice-0 stack-budget refusal is R-0575's). Gate: the policy's refusal controls ([tracking](docs/decisions.md#decided-2026-11-07-tracking)) | R-0575 |
+ROADMAP.md:447:| R-0596 | `Secret<T>` with its noninterference and constant-time proofs, from slice 7 ([decision](docs/decisions.md#decided-project-infoflow-2026-11-06)) | at slice 7, scalar `Secret<T>`, `classify` (of a value passed in), `declassify(x, "reason")`, `ct_select` and secret comparisons land; secret control flow, secret indices and secret lengths are refused; scalar secrets are `Copy`; under the randomness decision, the entropy capability arrives at slice 6, its output is `Secret<T>` at slice 7 and fill-bytes arrives at slice 15, with its source a named trusted premise in facts ([decision](docs/decisions.md#decided-2026-11-07-stack-randomness)); later increments add `ct_eq` on arrays and views and linear, wiped secret arrays at slice 15, wiped heap secrets at slice 19, and grant-backed sources at slices 16, 18 and 27; noninterference and constant time are proved for the type system under the baseline observer model; each `declassify` is traced in the facts; the legacy `constant_time_tag` is rewritten with `ct_eq`; the LCB plan gains constant-time and wipe preservation, and CI checks the binary constant-time premise; Home: spec (the entropy capability and its trusted premise). Gate: the slice's own acceptance gates ([tracking](docs/decisions.md#decided-2026-11-07-tracking)) | R-0592, R-0575 |
+ROADMAP.md:454:| R-0321 | The unsafe and trusted profile, with its VM pressure workload | the workload runs in the normal and checked profiles | C |
+ROADMAP.md:485:| R-0505 | The native AArch64 profile: linking and final-image validation | the image theorem holds; the final image's bytes, relocations, entry state and startup are validated against LCB's ISA model and the recorded adapter output, so assembler, linker and loader behaviour leaves the trusted base except where named in the profile | R-0517 |
+ROADMAP.md:486:| R-0584 | A minimal direct-syscall launcher written in Concrete | the launcher that mints `main`'s grants is a small Concrete program compiled through the verified path and making system calls directly, so no C runtime or libc start-up stays in the trusted base; OS-level sandboxing (seccomp/landlock, Capsicum, pledge/unveil) is outside the compiler's scope; users may apply it themselves. | R-0505 |
+ROADMAP.md:499:| R-0201 | Audit commands over the slice-0 facts query (R-0575): `audit`, `explain`, `why`, `diff` and trust-diff gates | the package-scale audit bundle passes; the per-function query itself is R-0575 (B0/B1), not this task | R-0178 |
+ROADMAP.md:508:| R-0383 | Packages: manifest, resolution, interfaces, provenance, trust policy | the multi-package workspace passes | F |
+ROADMAP.md:529:| R-0513 | Gates that are trustworthy and affordable: inventories over counts, impact-selected pre-push | pre-push median ≤ 10 min, and no gate failure first seen in CI over 20 landings | R-0547 |
+ROADMAP.md:570:- open blockers, accepted limitations and deferred increments, as three separate lists with owners;
+ROADMAP.md:579:- An accepted limitation never contradicts an advertised guarantee.
+docs/decisions.md:65:- The trusted-base statement, differential fuzzer, sanitizers, binary-size tracking and frozen JSON schema ([row](#decided-2026-11-07-early-evidence)).
+docs/decisions.md:93:| TRUST-6 | Trusted functions, externs, and raw operations require `trusted mod`. | OD61 | Fixed in prose 2026-11-03. |
+docs/decisions.md:103:| TRUST-13, TRUST-4 exception; accepted example  | Reference-to-pointer conversion is safe and needs neither trust nor `Unsafe`. | OD98 | Fixed in prose 2026-11-03. |
+docs/decisions.md:104:| MEM-9, ARITH-13 | Proven runtime violations are refused only outside trusted/`Unsafe` functions. | OD118 | Fixed in prose 2026-11-03. |
+docs/decisions.md:145:  to Core acceptance, undecided on 2026-11-03, are provisionally decided by rows Q6.1–Q6.7 ([rows](#decided-2026-11-05-core)); recorded proven-violation refusals apply in trusted code too.
+docs/decisions.md:185:- <a id="decided-2026-11-05-q6-2-fields"></a>**Q6.2 and R4 F12, known values through structs** (owner-approved revision, 2026-11-05, made during A2b): known values propagate field by field through immutable struct construction and destructuring. The checker tracks an abstract value for each binding: unknown, a known scalar, or a constructor whose fields carry their own abstract values. Constructing a struct records each field's fact independently; an immutable binding keeps the fact; destructuring hands each field's fact, recursively, to the corresponding immutable binder; an unknown component stays unknown without discarding its known siblings; an ownership transfer keeps the facts for the receiving binding without permitting reuse of the consumed one. Q6.2's exclusions stay (mutable state, branches and paths, user-function calls, calls outside the table, elaborator temporaries). So `let S { a } = S { a: 200u8 }; a + 100` is refused, in trusted and unreachable code too (OD118 as revised by Q6.4). Before this revision a field bound by destructuring was not known and that program was accepted and trapped.
+docs/decisions.md:284:- **P2** Priority order when principles conflict — Soundness and provability > transparency (with auditability, honest trust boundaries and compiler-owned identity) > one authoritative definition (checked derived views allowed) > explicitness at the use site > brevity. The philosophy guides open choices and never silently reopens decided rules.
+docs/decisions.md:306:- **P23** Precedence between decisions, rows and drafts — Recorded decisions govern. An accepted row supersedes a recorded rule only through an explicitly identified, owner-approved revision (Q5.1/Q5.4 for OD45/OD87, Q6.4 for TYPE-22, Q2.8 for TRAIT-1, Q9.15/P3 for generated chapters). R4's replacements govern conflicting draft recommendations. Before your acceptance is recorded, every passage R4 F18 lists is reconciled (capability inference, generated chapters, roadmap authority, assurance wording, restart order and retention, Phase E, freeze dependencies, superseded Core recommendations), and historical conflicting text is marked superseded.
+docs/decisions.md:332:  trust boundaries and compiler-owned identity; then one authoritative definition (checked derived
+docs/decisions.md:426:  permissions for trusted code; SMT-checked lowering; proof-producing equality saturation. Parsing,
+docs/decisions.md:459:    trust and model/environment contracts. Authoritative proofs use no `sorry`, `native_decide` or
+docs/decisions.md:496:    concrete-ci-2, which would add an unmodelled emulator to the execution trust and runs only Linux
+docs/decisions.md:518:    certificates are strengthened to discharge compiler-execution trust where they cover it, any gap they
+docs/decisions.md:547:  - *Compiler-execution trust.* Proving the compiler's Lean definitions does not prove that their
+docs/decisions.md:550:    validators, without trusting native evaluation; the backend input is bound to that BIR (a digest
+docs/decisions.md:582:    and foreign behaviour are named target and trust premises. The Core semantics keeps its trap
+docs/decisions.md:595:    `#[ensures]` counts only when proved (or a named trusted assumption) for the state after all
+docs/decisions.md:611:    proved, conditional on named trusted assumptions, or not established with its reason:
+docs/decisions.md:636:    no blocking, no foreign code), states whether named trusted assumptions are acceptable, and reads
+docs/decisions.md:703:  trusted, and a program's own correctness is proved by Lean theorems about it. The statement says
+docs/decisions.md:712:  the allocator; trusted, foreign and opaque boundaries and the assumptions they carry; every
+docs/decisions.md:737:    `assume`, unproved invariants, trusted or foreign contracts); refuted (with a witness path); not
+docs/decisions.md:749:    may establish a bound using final-artifact frame sizes, while a bound relying on named trusted
+docs/decisions.md:770:  unknown or incomplete fact is refused. The policy explicitly states whether named trusted
+docs/decisions.md:793:  heap, stack, foreign functions and the trusted surface) are written in the project's
+docs/decisions.md:849:  `Secret<T>` at slice 7 and gains fill-bytes at slice 15, with its source named as a trusted premise
+docs/decisions.md:962:    arrays at slice 15. Its source (for example `getrandom`) is a named trusted premise in facts.
+docs/decisions.md:983:    entropy capability and its premise, the trusted-premise list, and the diagnostics and facts
+docs/decisions.md:988:  final-artifact bound against the claim); a trusted-base golden; the fuzzer (short in CI, long
+docs/decisions.md:1091:[189](../legacy/docs/bugs/189_trusted_impl_confers_trust.md) (OD22, since decided by the owner on 2026-10-29:
+docs/decisions.md:1116:| OD1 | <a id="od1"></a>References: the Austral model. A reference is formed by borrowing a variable or projecting through a reference; `&s.f` is sugar; a temporary is never a root; loans are keyed by the root variable; a raw-pointer dereference needs a trusted validity premise | D2 and §4.5; implemented in landing train 6 (REF-5, REF-11) | exit 2i (G12), so every deliverable; bug 182's repair (exit 0b); V2 (row 6) | decided 2026-10-29 by the owner: the Austral model: a reference is formed by borrowing a variable or projecting through a reference; `&s.f` is sugar; a temporary is never a root; references are second-class, never stored or returned; a raw-pointer dereference needs a trusted validity premise; loans are keyed by the root variable (confirmed by OD15 (a), decided 2026-10-29) |
+docs/decisions.md:1122:| OD7 | <a id="od7"></a>An unsafe-module marker in source (for example `trusted mod`), which never confers trust by itself; a gate lists the marked modules | D10; pending (TRUST-6, R-0509) | R-0509's trusted-base inventory; RocksDB slice 1 (where its `extern` declarations live); V6 | decided 2026-10-29 by the owner: an unsafe-module marker in source (for example `trusted mod`) never confers trust by itself, a gate lists the marked modules, and trust stays per method (OD22) **Revised 2026-11-03: this historical module-marker requirement was superseded by OD61 (2026-11-01), which removed `trusted mod`; trust and inventory remain per declaration.** |
+docs/decisions.md:1123:| OD8 | <a id="od8"></a>Global state: immutable globals everywhere; mutable state only as declared cells in unsafe-marked modules, reached through capabilities; no `static mut` | D8; pending (TRUST-6, R-0509) | R-0509, R-0496; V6 | decided 2026-10-29 by the owner: Austral's capability model, extended. (1) Constants only: no mutable global state of any kind (no `static mut`, no cells); a constant is truly immutable, has no interior mutability and never contains a capability, token or handle. (2) Global resources are linear tokens minted at startup: `main` receives a root resource value (in the spirit of Austral's `RootCapability`) and splits it; hardware and runtime singletons (allocator arena, UART and MMIO, panic buffer, errno, C libraries with internal state) are produced or taken only by `trusted fn` wrappers returning or taking linear tokens, and a gate lists those wrappers. (3) Tokens are ordinary values: every effect shows as a token parameter, under the existing loan and exclusivity rules (OD1, OD2, OD15), with no separate effect system. (4) Interrupt handlers, FFI callbacks and future threads get only the tokens explicitly given to them, by installation, transfer or a lock granting a borrow. (5) No life before `main`, no cleanup protocol for global state, and abort runs nothing (OD10). (6) An implicit-context mechanism, if ergonomics later demands one, is a new owner decision, never a hidden global. The cell variant was rejected after the Codex and Grok reviews (interrupts, FFI re-entrancy, linear cell contents, effect polymorphism, concurrency). Now TRUST-8 to TRUST-10 (pending, R-0557) Revised 2026-11-01 – 11-02: items 2 and 3 are superseded by the authority decision (grants handed to `main`; `with(...)` plus resource values); item 5 stands ([decisions](decisions.md#decided-2026-11-02-authority)) |
+docs/decisions.md:1128:| OD13 | <a id="od13"></a>Raw-pointer ownership: `ptr::read_owned`, an explicit replace or take through `&mut T`, a trusted ownership obligation for a raw address | T-RAWDUP and §4.5; implemented in landing train 6 (TRUST-7). **Provisional (bug 198):** the current compiler refuses a by-value `*p` of a non-Copy pointee through a raw pointer (E0311) and moves the value out only with the intrinsic `read_owned(p)`, with 26 std sites migrated; provisional until the owner answers | RocksDB slice 1 (its trusted binding code); R-0509, R-0514; V6 | decided 2026-10-29 by the owner: a value moves out of raw memory only through `read_owned(p)` or an explicit replace or take through `&mut T`, and a raw address carries a trusted ownership obligation; bug 198's provisional repair is final |
+docs/decisions.md:1137:| OD22 | <a id="od22"></a>Trust on an `impl` block (added 2026-10-25, from bug 189). Bug 189's repair made the parser refuse `trusted impl` (E0001) and moved trust onto each method (`trusted fn`, 175 methods marked), while TRUST-5@1 in [the specification](../legacy/docs/spec/trusted.md#TRUST-5) still says a `trusted fn` or `trusted impl` may perform raw-pointer operations. Two options: keep the refusal and amend TRUST-5 to drop `trusted impl`, or restore `trusted impl` as TRUST-5@1 states it and revert bug 189's refusal | **Provisional (bug 189):** the current compiler refuses `trusted impl` and trusts only methods declared `trusted fn`; the specification text is unchanged, so the current compiler and TRUST-5@1 disagree; bug 189's record cites the 2026-10-23 rule that a marker never confers trust (D10, itself OD7, proposed); provisional until the owner answers | bug 189's repair (exit 0b) and its pins (`error_189_trusted_impl_refused.con`, `check_trusted_method.sh`); TRUST-5; R-0509's trusted-base inventory; OD7 | decided 2026-10-29 by the owner: trust is per method, `trusted fn` only; `trusted impl` stays refused, so bug 189's provisional repair is final |
+docs/decisions.md:1141:| OD26 | <a id="od26"></a>TYPE-6 with TRUST-1: operators take numbers only (added 2026-10-29, from a Grok review of the spec) | trusted and `Unsafe` code may compare raw pointers and add an integer to one; bug 322 | exit 2q; R-0502 | decided 2026-10-29 by the owner ("strict across the board"): arithmetic, shifts and comparisons take numbers only; pointer offset, difference and ordering are `ptr::offset` and named functions. Now TYPE-6@2 (partial, bug 322) |
+docs/decisions.md:1152:| OD37 | <a id="od37"></a>The names of the pointer difference and ordering functions (added 2026-10-29, while recording OD26). Options: `ptr::diff(p, q) -> Int` and `ptr::cmp(p, q) -> Ordering` beside `ptr::offset`; or no ordering at all, only `ptr::addr(p)` (via `ptr::expose`) compared as integers. Recommendation: `ptr::diff` and `ptr::cmp`, both trusted, each with its provenance premise (same allocation) stated as an obligation; Austral has no named pointer-difference or ordering functions, and its `Pointer` and `Address` types are compared with the ordering operators Reviewed pick (2026-10-30, a recommendation that supersedes the recommendation above where they differ): one trusted `ptr::diff` (same-allocation premise), ordering read from its sign, no `ptr::cmp`; specify the representability of its result, one-past pointers included (Q8 is marked agreed in the picks; ROADMAP records no owner answer for it) | trusted code compares raw pointers with `==` and `<` today (bug 322) | bug 322's repair (TYPE-6, TRUST-1) | decided 2026-11-01 by the owner (final set): One trusted `ptr::diff`, ordering from its sign, no `ptr::cmp` |
+docs/decisions.md:1153:| OD38 | <a id="od38"></a>The root resource API (added 2026-10-29, while recording OD8). Options: `fn main(root: Root) -> u8` with trusted splitting functions (`root.split_alloc()`, `root.split_console()`, ...) returning linear tokens; or a fixed set of token parameters `main` may declare (`fn main(alloc: Alloc, io: Console)`). Recommendation: the single `Root` value, as Austral's `RootCapability`, split by trusted functions the wrapper gate lists Reviewed pick (2026-10-30, a recommendation that supersedes the recommendation above where they differ): `fn main(root: Root) -> u8` (or Unit), `Root` split into linear tokens by trusted functions; specify the split functions and how leftover authority is consumed | `main` takes no parameters today (STMT-7) | R-0557 (TRUST-9) and STMT-7 | decided 2026-11-01 by the owner (final set): Superseded by the authority decision of 2026-11-01: there is no `Root` type; `main`'s parameters are the target's singletons, hosted `fn main() with(...) -> u8` and freestanding `fn main(uart: Uart, arena: Arena) with(Device, Alloc) -> u8`; revised 2026-11-02: `main` receives the target's grants and returns `u8` only ([decisions](decisions.md#decided-2026-11-02-authority)) |
+docs/decisions.md:1176:| OD61 | <a id="od61"></a>One coordinated removal list (added 2026-10-30, item review new 7 of the owner picks of that day). Question: Whether the decided and proposed removals (inline `mod`, the C-style `for`, `if let` / `while let` / `let ... else`, `newtype`, `..base`, range patterns, guards, `in R`, `break <expr>` and the `trusted mod` marker) are migrated as one coordinated list. Options: (a) one list, migrated in exit 2q's single transition; (b) each removal on its own schedule. Pick (the coordinator's pick after the Kimi, Codex and Grok review of 2026-10-30, a recommendation and not a decision): (a) one list, including dropping TRUST-6's `trusted mod` marker, which S14 removes (S14 is marked agreed in the picks; ROADMAP records no owner answer for it). Austral: not applicable | TRUST-6 (pending) still requires the `trusted mod` marker, which S14's pick would drop (no owner answer is recorded for S14) | TRUST-6, STMT-6, PAT-6, PAT-7, PAT-4, TYPE-7, MOD-4, SYN-1 | decided 2026-11-01 by the owner (final set): One list (incl. dropping `trusted mod`) |
+docs/decisions.md:1211:| OD96 | <a id="od96"></a>Two foreign bindings of one C symbol (added 2026-10-30, raised while absorbing CALLABLE_VALUES and HANDLE_CAPABILITIES). Question: Whether two foreign bindings of one C symbol (`#[link_name]`) must agree on its C signature. Bears on FFI-3, FFI-5. The current compiler: accepted: `abs_a(x: i32) with() -> i32` and `abs_b(x: i64) with() -> i64`, both bound to `abs`, compile and the binary runs, while the interpreter stops at run time on the mismatched width. HANDLE_CAPABILITIES §5 (encoding A, one binding per effect for one C symbol) planned to refuse a mismatch with a diagnostic. Options: (a) refuse; (b) allow, each binding's signature trusted on its own. Austral: not applicable. Pick: none given (raised by the absorption of 2026-10-30). | see OPEN-96 | see OPEN-96 | decided 2026-11-01 by the owner (final set): Refuse |
+docs/decisions.md:1213:| OD98 | <a id="od98"></a>Pointer and reference conversions written with `as` (added 2026-10-30, raised while absorbing ARITHMETIC_POLICY and VALUE_MODEL). Question: Which conversions between raw pointers and references `as` writes (`&x as *const T`, `p as &T`, `p as &mut T`, `p as *mut U`). Bears on TRUST-1, TRUST-3, REF-5, ARITH-5. The current compiler: `&x as *const T` is accepted in safe code, `p as &T` from a raw pointer is accepted in trusted or `Unsafe` code (the binary and `--interp` agree), and a reference cast between different pointee types (`a as &Int` with `a: &A`) is refused (E0553). No entry states these: TRUST-3 forms a reference from a raw pointer with `&*p`, and REF-5 lists borrowing and projection as the ways a reference is formed. The archived [ARITHMETIC_POLICY.md](../legacy/docs/archive/design-records/ARITHMETIC_POLICY.md) §8 kept `as` "the spelling of pointer and reference casts (`as *const T`, `as *mut T`, `as &K`, `as &mut V`)", 281 lines of std. Options: (a) `as` keeps every one of them; (b) `as` converts only a reference to a raw pointer, and a reference is formed from a raw pointer only by `&*p` (TRUST-3); (c) pointer conversions become named functions. Austral: not checked. Raised by the absorption of ARITHMETIC_POLICY.md (2026-10-30). | see OPEN-98 | see OPEN-98 | decided 2026-11-01 by the owner (final set): Reference to raw pointer conversion only in trusted/Unsafe code (equal to Austral) |
+docs/decisions.md:1227:| OD112 | <a id="od112"></a>Mutation through a shared reference (added 2026-10-30, from the Codex and Kimi review of the absorption). Question: Whether a value reached through a shared reference `&T` may be changed, by a write through a raw pointer derived from the reference or by a cell type. Bears on REF-10, OWN-10, TRUST-2, TRUST-5. The current compiler: safe code changes a value only through a `mut` binding or a `&mut` reference, and there is no cell type; a trusted function may convert `r: &Int` to `*mut Int` (`r as *const Int as *mut Int`) and store through it: the binary does the store, and `--interp` stops ("deref-assign through immutable ref"). The archived [MEMORY_SEMANTICS.md](../legacy/docs/archive/design-records/MEMORY_SEMANTICS.md) §12 said there is no `Cell`, `RefCell` or `UnsafeCell` equivalent and that mutation flows from `let mut` through `&mut`; the [overview](../legacy/docs/spec/overview.md) lists no interior mutability in safe code, with a later `UnsafeCell<T>` gated by `Unsafe`. Options: (a) never: a write through a pointer derived from a `&T` is undefined behaviour, a premise trusted code keeps (TRUST-2); (b) as (a), with a cell type gated by `Unsafe` as the one exception; (c) a trusted write through such a pointer is allowed. Austral: not checked. Pick: none given (raised by the Codex and Kimi review of the absorption, 2026-10-30). | safe code cannot; a trusted write through `r as *const T as *mut T` runs in the binary and stops `--interp` | REF-10, OWN-10, TRUST-2, TRUST-5 | decided 2026-10-31 by the owner's rule (every reviewer agreed, as strict as Austral or stricter): Never; UB premise trusted code keeps |
+docs/decisions.md:1228:| OD113 | <a id="od113"></a>The ownership exceptions of trusted code (added 2026-10-30, from the Codex and Kimi review of the absorption). Question: Whether trusted code keeps its two exceptions to the ownership rules, destroying a value through a reference and releasing with `vec_free` a vector whose elements are not Copy. Bears on TRUST-5, TRUST-12, OWN-5, OWN-8. The current compiler: both are accepted in trusted code only (elsewhere E0290 under OWN-8 and E0287 under OWN-5): std's collections destroy an element through `(p as &T)` in drop glue after its owner was consumed, and a trusted function may free a buffer it has emptied. The archived [MEMORY_SEMANTICS.md](../legacy/docs/archive/design-records/MEMORY_SEMANTICS.md) §11 said that `trusted` does not relax linearity, and TRUST-5's rationale says the same. Options: (a) keep both, each a named trusted operation with its premise (the owner was consumed; the vector is empty); (b) remove both, drop glue moving the element out of raw memory instead (TRUST-7); (c) keep only destruction through a reference; (d) keep only `vec_free` of an emptied vector. Austral: not checked. Pick: none given (raised by the Codex and Kimi review of the absorption, 2026-10-30). | both accepted in trusted code only (E0290, E0287 elsewhere) | TRUST-5, TRUST-12, OWN-5, OWN-8 | decided 2026-10-31 by the owner's rule (every reviewer agreed, as strict as Austral or stricter): Remove both |
+docs/decisions.md:1231:| OD116 | <a id="od116"></a>A checked total function category (added 2026-10-30, raised while absorbing the verification documents). Question: Whether the language has a `total fn` category, a runtime function checked to terminate without trapping that contracts may then call. Bears on CON-1, CON-3, CON-5. The current compiler: there is no such category (`total fn f(..)` is a parse error, E0001); a contract clause may still call a capability-free runtime function until CON-3's judgment lands. [CONTRACTS_AND_VCS.md](../legacy/docs/verification/CONTRACTS_AND_VCS.md) (Design Principles) distinguishes `spec fn`, a checked `total fn`, ordinary and trusted functions, and admits a `total fn` into contracts once its obligations close. Options: (a) add the category; (b) no category: contracts call only `spec fn` (CON-3's full judgment). Austral: not checked. Pick: none given (raised by the absorption of docs/verification, 2026-10-30). | see OPEN-116 | see OPEN-116 | decided 2026-11-01 by the owner (final set): No category |
+docs/decisions.md:1233:| OD118 | <a id="od118"></a>A proven run-time violation in trusted code (added 2026-10-30, raised while absorbing the verification documents). Question: Whether an index the compiler proves out of bounds, or a division it proves to be by zero, is refused in `trusted` and `with(Unsafe)` code as in safe code. Bears on MEM-6, ARITH-3, TRUST-5, TRUST-12. The current compiler: `a[5]` on a `[Int; 3]`, or `x / 0`, is refused in safe code (E0900, `error[runtime-safety]`) and compiles in a `trusted fn` (the index also in a function declaring `Unsafe`), where it aborts at run time on both consumers. MEM-6 states the refusal with no exemption; [KNOWN_HOLES.md](../legacy/docs/verification/KNOWN_HOLES.md) C7 records the exemption as intended. Options: (a) refuse everywhere, as MEM-6 reads; (b) keep the exemption and state it in MEM-6. Austral: not checked. Pick: none given (raised by the absorption of docs/verification, 2026-10-30). | see OPEN-118 | see OPEN-118 | decided 2026-10-31 by the owner's rule (every reviewer agreed, as strict as Austral or stricter): Refuse everywhere **Subsumed 2026-11-06 by [no hidden traps](#decided-project-no-hidden-traps): refusal of proven violations becomes refusal of unproven safety, everywhere.** |
+docs/decisions.md:1242:| OD127 | <a id="od127"></a>UTF-8 in every `String` (added 2026-10-30, raised while absorbing the platform and stdlib documents). Question: Whether every `String` value that safe code can reach holds valid UTF-8, as a language guarantee. Bears on TYPE-3, SYN-5, TRUST-2. The current compiler: literals are UTF-8 (SYN-5), but nothing keeps a `String` valid: `push_char` appends a byte unchecked, `Bytes::to_string` transfers bytes without validation, and std's `read_to_string` does not validate. [STRING_TEXT_CONTRACT.md](../legacy/docs/stdlib/STRING_TEXT_CONTRACT.md) §1 states the invariant as a target, and [UNICODE_POLICY.md](../legacy/docs/stdlib/UNICODE_POLICY.md) has a validating `Bytes::to_string` returning `Option`. Options: (a) a language guarantee, every safe constructor validating and an unchecked one being a trusted operation with that premise; (b) a std convention only, `String` being bytes to the language. Austral: not checked. Pick: none given (raised by the absorption of docs/platform and docs/stdlib, 2026-10-30). | see OPEN-127 | see OPEN-127 | decided 2026-10-31 by the owner's rule (every reviewer agreed, as strict as Austral or stricter): Language guarantee |
+docs/decisions.md:1332:5. **`trusted` and `with(Unsafe)` never discharge an operational capability** (`Fs`, `Network`, `Env`,
+docs/decisions.md:1333:   `Time`, `Alloc`, `Device`, `Console`, `Process`; `Console` added by the [owner revision, 2026-11-05](#decided-2026-11-05-revisions), row Q7.11). Effect checking applies inside trusted bodies and at foreign
+docs/decisions.md:1361:    the trusted base, with its identity preserved through interfaces, specialization and linking.
+docs/decisions.md:1375:    separate claims with separate assumptions; none implies another. The trusted base is an explicit
+docs/decisions.md:1431:- **Who introduces primitives.** Any library may declare externs, in trusted code, each listed in the
+docs/decisions.md:1432:  trusted base with an accurate primitive contract. Only the compiler introduces intrinsics. Only the
+docs/decisions.md:1518:- <a id="OPEN-113"></a>**OPEN-113** (OD113, The ownership exceptions of trusted code): See [OD113](#od113).
+docs/decisions.md:1520:- <a id="OPEN-118"></a>**OPEN-118** (OD118, A proven run-time violation in trusted code): See [OD118](#od118).
+docs/decisions.md:1650:  tokens. Now TRUST-8, TRUST-9 and TRUST-10 of [trusted.md](../legacy/docs/spec/trusted.md#TRUST-8) (pending, R-0557).
+docs/decisions.md:1657:- **OPEN-22** (OD22, trust on an `impl` block): decided 2026-10-29, per method only. Now TRUST-5@2 of
+docs/decisions.md:1658:  [trusted.md](../legacy/docs/spec/trusted.md#TRUST-5).
+output of every round is written to `.review/<sha>-<round>.md`, which git
+ignores.
+
+A non-fast-forward rejection (another agent pushed notes in the meantime) is
+handled by fetching the remote notes, merging them (`git notes merge -s ours`: on
+a conflict for the same commit the local, newer note wins), and retrying, up to
+three attempts. Any other push failure stops at once with exit 6. The script also
+fetches and merges the remote notes before each round, so it counts rounds that
+were run elsewhere.
+
+The pre-push hook (`.githooks/pre-push`) runs no gates for a push that updates
+only these two notes refs: a notes commit holds one blob per annotated commit and
+no source tree. A push that also carries a branch takes that branch's tier.
+Until this hook reaches `main`, a hook installed from an older `main` still runs
+the gates on a note push, and the push fails outside `nix develop`.
+
+## The cap
+
+At most `--max-rounds` rounds (default 5). When the last allowed round ends with
+findings or blocked pieces, the script records the note, prints the open
+findings, and exits 3. Asking for another round exits 3 without calling the
+reviewer. Do not work around the cap: split the branch into smaller branches or
+escalate to a human reviewer, and pass on the open findings.
+
+The owner may then approve one exact commit (R-0618), after Codex, Kimi and agy have all reviewed
+that commit. The cap is the class of the branch's diff against its base, by path, the highest class
+present winning: docs and roadmap 2 rounds, scripts 3, compiler and spec 5 (an unclassified path
+counts as compiler and spec); it counts the rounds used, whatever their verdicts. The approval is
+recorded, from the owner's own words only, with `scripts/land/signoff.sh record <sha> --base <base>
+--rounds-at <the review.sh-noted commit> --date --quote`, plus `--codex-request <request> --codex
+<output>` and the corresponding kimi and agy options. For each reviewer `r`, the recorder stores the
+verbatim request as `r-request.txt` after prepending `reviewed: <sha>`, and the output separately as
+`r.txt`. The request body must name that commit by an unambiguous prefix, and only the output's last
+verdict line counts; it must be `VERDICT: ACCEPT`. Recording refuses a record that does not qualify.
+Push the resulting `refs/owner-signoff/<sha>` to both remotes. The landing train accepts it as that
+commit's review provenance ([LANDING.md](LANDING.md)); it approves no other commit.
+
+## verify.sh
+
+```sh
+scripts/review/verify.sh <commit>          # exit 0 clean, 1 findings/blocked, 2 none or malformed
+scripts/review/verify.sh --fetch <commit>  # fetch the notes ref from origin first
+```
+
+It judges the exact commit. A clean note on an ancestor says nothing about the
+commits after it, so a branch that gains a commit after its clean round needs
+#!/usr/bin/env bash
+# Pre-push gate for the restarted root.
+#
+# A push that can reach main or a ci/* candidate builds the specification and runs every root check
+# (scripts/checks/run.sh), the same set CI's "Root checks" and "Spec build" jobs run. The set is small
+# and fast, so there is no selection: everything runs on every such push. legacy/ is frozen and never
+# run; scripts/checks/legacy_frozen.sh is the only check that looks at it.
+#
+# Tiers decided from git's ref lines on stdin (`<local ref> <local sha> <remote ref> <remote sha>`):
+#   - only refs/heads/wip/* updates or deletions: a backup of unfinished work, which can never become
+#     main. Conflict markers are refused; nothing else runs.
+#   - only the review-note refs (refs/notes/concrete-review, refs/notes/concrete-review-findings,
+#     written by scripts/review/review.sh) and owner sign-off records (refs/owner-signoff/<sha>,
+#     written by scripts/land/signoff.sh): no source tree, nothing to check.
+#   - anything else, including a by-hand run with no stdin: the full root set, and only from a full
+#     clone (a linked worktree is refused; ISS-0015).
+#
+# Deliberate bypass:  CONCRETE_SKIP_GATES=1 git push   (you then own the CI result)
+set -uo pipefail
+HOOK_SELF="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")"
+# train.sh asks the hook git would run which hook it is (ISS-0015): called with the single argument
+# --concrete-identify (git always passes a remote name and URL, never this), this one answers with
+# its real path and runs nothing. A wrapper that passes its arguments on to it (acceptance.sh's
+# guard) gets the same answer; a hook that never runs this one gives none. An argument, not an
+# environment variable, so nothing a push inherits can turn the gates off.
+if [ "$#" = 1 ] && [ "$1" = --concrete-identify ]; then
+  echo "concrete-pre-push $(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)/$(basename "${BASH_SOURCE[0]}")"
+  exit 0
+fi
+ROOT_DIR="$(git rev-parse --show-toplevel)"
+cd "$ROOT_DIR"
+
+if [ "${CONCRETE_SKIP_GATES:-0}" = "1" ]; then
+  echo "pre-push: gates SKIPPED by CONCRETE_SKIP_GATES=1 — you own the CI result." >&2
+  exit 0
+fi
+
+wip_refs=0; wip_dels=0; note_refs=0; other_refs=0; wip_shas=""; full_shas=""
+# Kept whole so the hook can hand the same lines to itself when it re-enters the gate shell (below).
+HOOK_STDIN="$(cat)"
+while read -r _localref localsha remoteref _remotesha; do
+  [ -z "${localsha:-}" ] && continue
+  case "${remoteref:-}" in
+    refs/heads/wip/*)
+      case "$localsha" in
+        *[!0]*) wip_refs=$((wip_refs+1)); wip_shas="$wip_shas $localsha" ;;
+        *) wip_dels=$((wip_dels+1)) ;;
+      esac ;;
+    refs/owner-signoff/*)
+      # Only a record takes the notes tier: a parentless commit, under its subject's 40-hex name, whose
+      # tree is exactly the sign-off's seven plain files (record.txt plus each reviewer's request and
+      # output), no directory among them. Anything else pushed here, including the old four-file shape
+      # or a source commit, takes the full tier, as does a deletion.
+      if [[ "${remoteref#refs/owner-signoff/}" =~ ^[0-9a-f]{40}$ ]] && [ "$(git rev-list --parents -n 1 "$localsha" 2>/dev/null)" = "$localsha" ] \
+         && [ "$(git ls-tree --format='%(objectmode) %(objecttype) %(path)' "$localsha" 2>/dev/null | LC_ALL=C sort | tr '\n' ' ')" \
+              = "100644 blob agy-request.txt 100644 blob agy.txt 100644 blob codex-request.txt 100644 blob codex.txt 100644 blob kimi-request.txt 100644 blob kimi.txt 100644 blob record.txt " ]; then
+        note_refs=$((note_refs+1))
+      else
+        other_refs=$((other_refs+1))
+        case "$localsha" in *[!0]*) full_shas="$full_shas $localsha" ;; esac
+      fi ;;
+    refs/notes/concrete-review|refs/notes/concrete-review-findings)
+      case "$localsha" in
+        *[!0]*) note_refs=$((note_refs+1)) ;;
+        *) other_refs=$((other_refs+1)) ;;   # deleting a review note takes the full tier
+      esac ;;
+    *) other_refs=$((other_refs+1))
+       case "$localsha" in *[!0]*) full_shas="$full_shas $localsha" ;; esac ;;
+  esac
+done <<< "$HOOK_STDIN"
+
+if [ "$other_refs" -eq 0 ] && [ $((wip_refs + wip_dels)) -gt 0 ]; then
+  bad=""
+  for sha in $wip_shas; do
+    rc=0; git grep -qE '^(<{7}|>{7}|\|{7})( |$)|^={7}$' "$sha" -- . ':(exclude)legacy/' >/dev/null 2>&1 || rc=$?
+    case "$rc" in
+      0) bad="$bad $sha" ;;
+      1) ;;
+      *) echo "pre-push (wip tier): could not scan $sha (git grep exit $rc) — refusing"; exit 1 ;;
+    esac
+  done
+  [ -z "$bad" ] || { echo "pre-push (wip tier): conflict markers in$bad — refusing"; exit 1; }
+  echo "pre-push: wip/* backup push ($wip_refs update(s), $wip_dels deletion(s)) — conflict-marker check only; the full set runs on ci/* and main"
+  exit 0
+fi
+if [ "$other_refs" -eq 0 ] && [ "$note_refs" -gt 0 ]; then
+  echo "pre-push: review-notes push (review notes, owner sign-offs) — no source tree, no gates"
+  exit 0
+fi
+
+# The checks build sandbox repositories, and a linked worktree hands its hook
+# GIT_DIR=<repo>/.git/worktrees/<name>: on 2026-11-06 that turned a review-tool check into writes on a
+# real clone and on GitHub (ISS-0015). Every repository-making script now clears git's variables, and
+# as a second wall a push that runs the checks must come from a full clone. The wip and notes tiers
+# above run nothing, so a worktree may still back up its branch.
+if [ "$(cd "$(git rev-parse --git-dir)" && pwd -P)" != "$(cd "$(git rev-parse --git-common-dir)" && pwd -P)" ]; then
+  echo "pre-push: refusing: this push runs the root checks, and $ROOT_DIR is a linked worktree; push it from a full clone (git clone), never a worktree." >&2
+  exit 1
+fi
+
+# The checks run in the gate shell (scripts/checks/lib/gate_env.sh refuses anywhere else). From
+# outside it, the hook re-executes itself inside `nix develop` with the same arguments and stdin.
+if [ "${CONCRETE_GATES_SHELL:-}" != 1 ] || ! command -v lake >/dev/null 2>&1; then
+  if [ "${CONCRETE_PREPUSH_REENTERED:-0}" = 1 ]; then
+    echo "pre-push: nix develop did not provide the gate shell with Lean — refusing to push." >&2; exit 1
+  fi
+  command -v nix >/dev/null 2>&1 || {
+    echo "pre-push: the checks run inside nix develop, and nix is not on PATH — refusing to push." >&2; exit 1; }
+  echo "pre-push: entering nix develop for the checks"
+  CONCRETE_PREPUSH_REENTERED=1 exec nix develop "$ROOT_DIR" --command bash "$HOOK_SELF" "$@" <<< "$HOOK_STDIN"
+fi
+
+# The checks judge the work tree, so it must be the commit being pushed, unmodified.
+head="$(git rev-parse HEAD)"
+for sha in $full_shas; do
+
+exec
+/bin/bash -lc "rg -n -i 'sign.off|R-0618' docs/decisions.md ROADMAP.md; sed -n '470,535p' scripts/land/train.sh; rg -n 'limitation|authentic|trust|F1|F2' scripts/land/signoff.sh docs/REVIEW.md changelog.d/2026-11-08-owner-signoff.md; nl -ba scripts/land/signoff.sh | sed -n '188,217p'; sed -n '1,42p' scripts/checks/landing_script.sh" in /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/retro-split/src
+ succeeded in 0ms:
+# $REMOTE's notes (fetched first, replacing the local copy, as verify.sh --fetch does): an absent,
+# malformed, blocked or findings note qualifies nothing, and a head note that is not clean is not
+# overridden by its members. Prints what qualified; on failure prints why and returns 1.
+#
+# OWNER SIGN-OFF (R-0618). A member without a clean note qualifies instead by a valid owner sign-off
+# at its exact SHA (scripts/land/signoff.sh verify --base <the train's base>, on $REMOTE's
+# refs/owner-signoff/*, fetched first): the member reached the review cap of its diff's class and all
+# three reviewers accepted that commit.
+# A sign-off approves that commit only, never what the train did with it, so a train with a signed-off
+# member must be exactly the clean merge of its members onto its base: one --no-ff merge per member,
+# in order, each merge's tree the conflict-free `git merge-tree --write-tree` of its two parents, and
+# nothing else (no resolved conflict, no regenerated view, no extra commit).
+VERIFY="$SELF_DIR/../review/verify.sh"
+SIGNOFF="$SELF_DIR/signoff.sh"
+
+# pure_merge BASE HEAD SHA... → empty when HEAD is BASE plus exactly one clean merge of each SHA, in
+# order; otherwise prints why.
+pure_merge() {
+  local base="$1" head="$2" cur="$2" i p t want; shift 2
+  local shas=("$@")
+  for ((i = ${#shas[@]} - 1; i >= 0; i--)); do
+    read -r -a p <<< "$(git rev-list --parents -n 1 "$cur")"
+    if [ "${#p[@]}" != 3 ] || [ "${p[2]}" != "${shas[i]}" ]; then
+      echo "${head:0:10} is not the clean merge of its members onto ${base:0:10}: ${cur:0:10} is not the merge of ${shas[i]:0:10}"; return 0
+    fi
+    # No pipe: a conflicted merge-tree exits 1 (after printing a tree), whether or not pipefail is set.
+    if ! t="$(git merge-tree --write-tree "${p[1]}" "${shas[i]}" 2>/dev/null)" || ! [[ "$t" =~ ^[0-9a-f]{40}$ ]]; then
+      echo "${head:0:10} is not the clean merge of its members onto ${base:0:10}: merging ${shas[i]:0:10} conflicts"; return 0
+    fi
+    want="$(git rev-parse "$cur^{tree}")"
+    if [ "$t" != "$want" ]; then
+      echo "${head:0:10} is not the clean merge of its members onto ${base:0:10}: ${cur:0:10} differs from the clean merge of ${shas[i]:0:10}"; return 0
+    fi
+    cur="${p[1]}"
+  done
+  [ "$cur" = "$base" ] || echo "${head:0:10} is not the clean merge of its members onto ${base:0:10}: the merges start at ${cur:0:10}"
+}
+review_provenance() { # name head
+  local name="$1" head="$2" out m n=0 bad=""
+  [ -f "$VERIFY" ] || { echo "no review verifier ($VERIFY is missing)"; return 1; }
+  git fetch -q "$REMOTE" "+refs/notes/concrete-review:refs/notes/concrete-review" 2>/dev/null \
+    || { echo "could not fetch refs/notes/concrete-review from $REMOTE"; return 1; }
+  if out="$(bash "$VERIFY" "$head" 2>&1)"; then echo "the head ${head:0:10} carries a clean review note"; return 0; fi
+  if git notes --ref=refs/notes/concrete-review show "$head" >/dev/null 2>&1; then
+    echo "the head's review note does not qualify: ${out//$'\n'/ }"; return 1
+  fi
+  local signed=0 shas=() so impure
+  git fetch -q --prune "$REMOTE" "+refs/owner-signoff/*:refs/owner-signoff/*" 2>/dev/null \
+    || { echo "could not fetch refs/owner-signoff/* from $REMOTE"; return 1; }
+  for m in $(state_get_soft "$name" members | tr ',' ' '); do
+    n=$((n + 1)); shas+=("${m##*@}")
+    out="$(bash "$VERIFY" "${m##*@}" 2>&1)" && continue
+    if so="$(bash "$SIGNOFF" verify "${m##*@}" --base "$(state_get_soft "$name" base)" 2>&1)"; then signed=$((signed + 1)); continue; fi
+    bad="$bad; member ${m%@*}: ${out//$'\n'/ }; ${so//$'\n'/ }"
+  done
+  [ "$n" -gt 0 ] || { echo "the head ${head:0:10} has no review note and the train records no members"; return 1; }
+  [ -z "$bad" ] || { echo "the head ${head:0:10} has no review note, and not every member has a clean one or an owner sign-off$bad"; return 1; }
+  if [ "$signed" -gt 0 ]; then
+    impure="$(pure_merge "$(state_get_soft "$name" base)" "$head" "${shas[@]}")"
+    [ -z "$impure" ] || { echo "$signed member(s) signed off by the owner, but $impure"; return 1; }
+    echo "the head has no review note; every member ($n) carries a clean one or an owner sign-off ($signed) at its exact SHA, and the head is their clean merge"
+    return 0
+  fi
+  echo "the head has no review note; every member ($n) carries a clean one at its exact SHA"
+}
+
+changelog.d/2026-11-08-owner-signoff.md:7:the signed SHA, and verdicts come only from the output, closing F1 (binding by any transcript
+changelog.d/2026-11-08-owner-signoff.md:8:mention) and F2 (acceptance supplied by the request). `train.sh`'s review provenance accepts, for a
+   188	    [ "$file" = "$r-request.txt" ] && [[ "$hash" =~ ^[0-9a-f]{64}$ ]] || bad "request-$r is '$entry', not '$r-request.txt <sha256>'"
+   189	    got="$(git cat-file blob "$obj:$file" | sha256)"
+   190	    [ "$got" = "$hash" ] || bad "the sha256 of $file is $got, not the recorded $hash"
+   191	    reviewed="$(git cat-file blob "$obj:$file" | sed -n '1p')"
+   192	    [[ "$reviewed" =~ ^reviewed:\ [0-9a-f]{40}$ ]] || bad "the $r request's first line is not a 'reviewed: <full 40-hex SHA>' line"
+   193	    [ "$reviewed" = "reviewed: $sha" ] || bad "the $r request's reviewed line is '${reviewed#reviewed: }', not $sha"
+   194	    git cat-file blob "$obj:$file" | tail -n +2 | names "$sha" \
+   195	      || bad "the $r request body does not name ${sha:0:10} (an unambiguous prefix of at least 7 hex digits)"
+   196	    n="F_verdict_$r"; entry="${!n}"
+   197	    file="${entry%% *}" hash="${entry#* }"
+   198	    [ "$file" = "$r.txt" ] && [[ "$hash" =~ ^[0-9a-f]{64}$ ]] || bad "verdict-$r is '$entry', not '$r.txt <sha256>'"
+   199	    got="$(git cat-file blob "$obj:$file" | sha256)"
+   200	    [ "$got" = "$hash" ] || bad "the sha256 of $file is $got, not the recorded $hash"
+   201	    verdict="$(git cat-file blob "$obj:$file" | grep -E '^[[:space:]]*VERDICT: (ACCEPT|REJECT)[[:space:]]*$' | tail -1 | tr -d '[:space:]')" || true
+   202	    [ -n "$verdict" ] || bad "the $r output has no verdict"
+   203	    [ "$verdict" = "VERDICT:ACCEPT" ] || bad "the $r output's last verdict is '$verdict', not VERDICT: ACCEPT"
+   204	  done
+   205	  echo "$sha signed off by the owner ($F_date; $cls change, cap $cap reached at ${at:0:10} with $rounds round(s); codex, kimi and agy accepted): \"$F_quote\""
+   206	}
+   207	
+   208	cmd_verify() {
+   209	  local sha base=""
+   210	  [ $# -ge 1 ] || die "usage: signoff.sh verify <commit> --base BASE"
+   211	  sha="$(git rev-parse -q --verify "$1^{commit}")" || die "verify: not a commit: $1"; shift
+   212	  while [ $# -gt 0 ]; do
+   213	    case "$1" in --base) [ $# -ge 2 ] || die "verify: --base needs a value"; base="$2"; shift 2 ;; *) die "verify: unknown option $1" ;; esac
+   214	  done
+   215	  [ -n "$base" ] || die "verify: --base BASE is required (the cap is the class of the diff against it)"
+   216	  base="$(git rev-parse -q --verify "$base^{commit}")" || die "verify: --base is not a commit"
+   217	  git rev-parse -q --verify "$PREFIX/$sha^{commit}" >/dev/null || { echo "$sha has no owner sign-off ($PREFIX/$sha)"; exit 2; }
+#!/usr/bin/env bash
+# THE LANDING SCRIPT RESOLVES ONLY WHAT IS MECHANICAL AND REFUSES EVERYTHING ELSE (R-0539).
+#
+# scripts/land/train.sh builds one integrated candidate from several branches and lands it. The
+# hand-run version of that job, on 2026-10-22, made the mistakes this gate pins down: a rebase piped
+# to `tail` kept going and a commit was made mid-rebase; union-merged ledgers kept stale entries
+# (two OPEN corpus entries for fixed bugs); and candidates were pushed without checking that the CI
+# result described them. Each leg below drives the real script against a THROWAWAY repository with
+# bare-repo remotes and a fake `gh`, so nothing here can touch this repository, its remotes or CI.
+#
+#   resolution  generated views (a ROADMAP generated block, a whole generated file) are regenerated,
+#               ledgers are union-merged; the train carries both members' entries
+#   refusal     a conflict in source or in prose outside a generated block aborts the merge (no
+#               MERGE_HEAD left, exit 3); a union that duplicates a corpus key is refused; a
+#               merge or rebase already in progress, a dirty tree and an existing train are refused
+#   pipeline    check feeds the hook exactly base..head on ci/<name>; ci pushes and records the run
+#   watch       a campaign-only failure is reported as such; a landing failure fetches log tails
+#   land        refused on a head-SHA mismatch, a red landing job, a moved main, a remote named fork;
+#               dry-run pushes nothing; a real land puts both remotes at the train head and cancels
+#               no run (main's own run records the train's, R-0570)
+#   record      (2026-11-06, R-0570) main's run names the run that qualified its exact SHA only when
+#               the newest completed dispatch of the CI workflow at that SHA AND at that base (its
+#               title, from the base input train.sh ci passes) passed every landing-tier and required
+#               job and the head is ahead of the base; a missing run, a run at another SHA or base, of
+#               another workflow or event, unfinished or excluded, a skipped,
+#               cancelled or failed job, an older green run behind a newer red one, a diverged or
+#               absent base: no record. The workflow gates every job on it (structure check)
+#   dropped     (2026-10-25) a push that fails before the remote moved is retried; one that fails
+#               after it moved is accepted from ls-remote; exhausted retries fail and move nothing
+#   bisect      halving finds a seeded red member
+#   report      the median time to land is computed from the log
+#   gate host   (2026-11-05) check's impact leg on the gate host: bound to the train head's SHA (a
+#               run at another SHA, an unreachable host or a lost log is INCOMPLETE and blocks; only
+#               --local-gates runs here); the hook reuses the attestation only for this exact push, and
+#               a tampered log or attestation is refused
+#   review      (2026-11-06) review fails closed: check with no review command fails; a reviewer that
+#               exits 0 but leaves no note, a malformed, blocked or findings note fails the leg; check
+#               skips the reviewer when every member is reviewed clean; land requires a clean head
+#               note, or (head unreviewed) a clean note on every member, and refuses an absent,
+#               malformed, blocked or findings note in either place
+#   required    (2026-11-04) a required job (required-checks.txt) that is missing, skipped or
+#               cancelled refuses watch and land; a candidate drops a requirement main imposes only
+
+codex
+The request and output files are checked separately as intended. I found a possible gap in the SHA binding: `record` creates the `reviewed:` line itself, while the body check accepts any mention of the signed SHA. I’ll test whether a request to review another commit can still pass.
+exec
+/bin/bash -lc "python3 - <<'PY'
+import tempfile,pathlib,subprocess,shutil
+root=pathlib.Path.cwd(); d=pathlib.Path(tempfile.mkdtemp(prefix='signoff-review-'))
+for name in ['land/signoff.sh','review/verify.sh']:
+ p=d/'scripts'/name;p.parent.mkdir(parents=True,exist_ok=True);shutil.copyfile(root/'scripts'/name,p)
+def run(*a,check=True):
+ r=subprocess.run(a,cwd=d,text=True,stdout=subprocess.PIPE,stderr=subprocess.STDOUT)
+ if check and r.returncode:raise RuntimeError(r.stdout)
+ return r.stdout.strip()
+run('git','init','-q');run('git','config','user.name','Review');run('git','config','user.email','review@example.invalid')
+(d/'README.md').write_text('base\\n');run('git','add','README.md');run('git','commit','-qm','base');base=run('git','rev-parse','HEAD')
+(d/'README.md').write_text('changed\\n');run('git','commit','-qam','subject');sha=run('git','rev-parse','HEAD')
+note=f'verdict: findings\\nrounds: 2\\nreviewer: codex\\nutc: 2026-11-08T00:00:00Z\\nbase: {base}\\npieces: 1'
+run('git','notes','--ref=refs/notes/concrete-review','add','-m',note,sha)
+q=d/'request';o=d/'output';o.write_text('VERDICT: ACCEPT\\n')
+q.write_text(f'Review exact commit {base}. Do not review {sha}; that is a later unreviewed change.\\n')
+args=['bash',str(d/'scripts/land/signoff.sh'),'record',sha,'--base',base,'--rounds-at',sha,'--date','2026-11-08','--quote',f'sign off {sha}']
+for r in ['codex','kimi','agy']:args+=['--'+r+'-request',str(q),'--'+r,str(o)]
+print('REQUEST FOR OTHER COMMIT:');print(run(*args))
+q.write_text(f'Review {sha}\\n');o.write_text('VERDICT: ACCEPT\\nVERDICT: BLOCKED\\n')
+print('LAST VERDICT BLOCKED:');print(run(*args))
+print('Temporary reproduction repository:',d)
+PY" in /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/retro-split/src
+ succeeded in 0ms:
+REQUEST FOR OTHER COMMIT:
+7a032d748a916fb4b9210d61a23a698df3ef90ae signed off by the owner (2026-11-08; docs change, cap 2 reached at 7a032d748a with 2 round(s); codex, kimi and agy accepted): "sign off 7a032d748a916fb4b9210d61a23a698df3ef90ae"
+signoff: recorded refs/owner-signoff/7a032d748a916fb4b9210d61a23a698df3ef90ae -> a672beede9; push it to both remotes
+LAST VERDICT BLOCKED:
+7a032d748a916fb4b9210d61a23a698df3ef90ae signed off by the owner (2026-11-08; docs change, cap 2 reached at 7a032d748a with 2 round(s); codex, kimi and agy accepted): "sign off 7a032d748a916fb4b9210d61a23a698df3ef90ae"
+signoff: recorded refs/owner-signoff/7a032d748a916fb4b9210d61a23a698df3ef90ae -> 36086b38a0; push it to both remotes
+Temporary reproduction repository: /tmp/signoff-review-zjk8bwqe
+
+codex
+I could read the repository files, including `docs/decisions.md`. Both scenarios below reproduced using the actual scripts in a temporary Git repository.
+
+- **scripts/land/signoff.sh:194: high — Request binding still accepts incidental SHA mentions.** A request saying “Review exact commit A. Do not review B; that is a later unreviewed change” qualifies for signing B. `record` prepends `reviewed: B` automatically, and `names B` accepts the excluded SHA’s mention. With accepting outputs, recording succeeds and claims all three reviewers accepted B. The new control tests a mismatched header, but does not establish that the original request actually targeted B.
+
+- **scripts/land/signoff.sh:201: medium — Verdict filtering can discard the final verdict.** An output ending with `VERDICT: ACCEPT` followed by `VERDICT: BLOCKED` records successfully. The parser selects the last *recognized ACCEPT/REJECT* line, ignoring the actual final verdict. This violates the documented last-verdict rule and treats a blocked review as acceptance. Select the final `VERDICT:` line first, then require it to be `VERDICT: ACCEPT`.
+
+VERDICT: REJECT
+tokens used
+63,437

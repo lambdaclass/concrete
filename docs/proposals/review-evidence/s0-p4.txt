@@ -1,0 +1,131 @@
+Round 4 of the review of the Concrete slice-0 branch (stack gates; context as before). Delta: the landing train's root checks (scripts/checks/run.sh runs every scripts/checks/*.sh) failed on two things: (1) root_inventory: the top-level tests/ (tests/golden/slice0_trusted_base.txt) was not in scripts/checks/root_inventory.txt; it is added. (2) scripts/checks/slice0_native.sh is a build helper, not a check, and failed under run.sh with its usage message; it moves to scripts/checks/lib/slice0_native.sh and every reference follows. Review the delta for correctness defects only (a missed reference, a path that resolves differently after the move, anything the move breaks); format file:line, defect, concrete failing scenario; preferences labelled. End with exactly one line: VERDICT: ACCEPT or VERDICT: FINDINGS.
+--- DELTA ---
+diff --git a/Concrete/README.md b/Concrete/README.md
+index deb24558..10771cc8 100644
+--- a/Concrete/README.md
++++ b/Concrete/README.md
+@@ -704,7 +704,7 @@ all objects and both executables. Negative controls check that the comparator re
+ byte, a missing artifact and a differing inventory. The slice-0 front end is not implemented yet, so
+ this gate starts at the hand-written BIR contract.
+ 
+-Both native gates use `slice0_native.sh`: the Nix-pinned clang 21 (`CONCRETE_SLICE0_CLANG`; the
++Both native gates use `scripts/checks/lib/slice0_native.sh` (a build helper, not a check: every `scripts/checks/*.sh` is a root check): the Nix-pinned clang 21 (`CONCRETE_SLICE0_CLANG`; the
+ shell's general `clang` is unchanged), an environment reduced to `PATH`, `HOME` and `TMPDIR`
+ (reduced, not hermetic), fixed relative object names and link order, epoch 1, UTC/C locale, no
+ debug information, path prefix maps, and no ELF build ID or Mach-O UUID (`ZERO_AR_DATE=1` on
+diff --git a/flake.nix b/flake.nix
+index 95463fda..f6a9d4e9 100644
+--- a/flake.nix
++++ b/flake.nix
+@@ -122,7 +122,7 @@
+           # pays for them unless they run `--report multi-kernel`.
+           default = pkgs.mkShell ({
+             packages = base;
+-            # Slice-0 native builds name their compiler explicitly (scripts/checks/slice0_native.sh),
++            # Slice-0 native builds name their compiler explicitly (scripts/checks/lib/slice0_native.sh),
+             # pinned here so the shell's general clang can move without changing their identity.
+             CONCRETE_SLICE0_CLANG = "${pkgs.llvmPackages_21.clang}/bin/clang";
+             # The artifact gates (scripts/checks/slice0_artifacts.sh) read the linked executables
+diff --git a/scripts/checks/build_identity.sh b/scripts/checks/build_identity.sh
+index eedef907..f505e0c7 100755
+--- a/scripts/checks/build_identity.sh
++++ b/scripts/checks/build_identity.sh
+@@ -24,7 +24,7 @@ h=hashlib.sha256()
+ for p in paths:
+     h.update(hashlib.sha256(open(p,"rb").read()).hexdigest().encode()+b"  "+p+b"\n")
+ print("source_sha256="+h.hexdigest())'
+-printf 'target=%s\n' "$(bash scripts/checks/slice0_native.sh target)"
++printf 'target=%s\n' "$(bash scripts/checks/lib/slice0_native.sh target)"
+ printf 'lean_pin=%s\n' "$(cat lean-toolchain)"
+ printf 'lean_version=%s\n' "$(lean --version)"
+ printf 'clang_version=%s\n' "$("$CONCRETE_SLICE0_CLANG" --version | head -1)"
+diff --git a/scripts/checks/slice0_native.sh b/scripts/checks/lib/slice0_native.sh
+similarity index 100%
+rename from scripts/checks/slice0_native.sh
+rename to scripts/checks/lib/slice0_native.sh
+diff --git a/scripts/checks/root_inventory.txt b/scripts/checks/root_inventory.txt
+index c6d63400..85110154 100644
+--- a/scripts/checks/root_inventory.txt
++++ b/scripts/checks/root_inventory.txt
+@@ -31,6 +31,7 @@ legacy
+ required-checks-transition.tsv
+ required-checks.txt
+ scripts
++tests
+ docs/LANDING.md
+ docs/PHILOSOPHY.md
+ docs/REVIEW.md
+diff --git a/scripts/checks/slice0_artifacts.sh b/scripts/checks/slice0_artifacts.sh
+index 11c1d5e4..319cba78 100644
+--- a/scripts/checks/slice0_artifacts.sh
++++ b/scripts/checks/slice0_artifacts.sh
+@@ -165,11 +165,11 @@ for name in $names; do
+   t0=$(now_ms)
+   "${emitter[@]}" emit "$name" "$d" "$target"
+   t1=$(now_ms)
+-  build "$name" "$d/build.log" bounded "$native_secs" bash "$root/scripts/checks/slice0_native.sh" "$d" "$lcb"
++  build "$name" "$d/build.log" bounded "$native_secs" bash "$root/scripts/checks/lib/slice0_native.sh" "$d" "$lcb"
+   t2=$(now_ms)
+   printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$name" "$target" $((t1 - t0)) $((emit_secs * 1000)) $((t2 - t1)) $((native_secs * 1000)) >>"$times"
+   build "$name" "$d/build-san.log" \
+-    bounded "$native_secs" bash "$root/scripts/checks/slice0_native.sh" "$d" "$lcb" sanitize
++    bounded "$native_secs" bash "$root/scripts/checks/lib/slice0_native.sh" "$d" "$lcb" sanitize
+   observe "$d/llvm.san.exe" "$d/san" 30 30 0 "${san_env[@]}"
+   if judge "$d" "$d/san"; then
+     echo "ok   $name [llvm+asan]: status $(cat "$d/san.status")"
+@@ -200,9 +200,9 @@ entry:
+   ret i32 %r
+ }
+ LL
+-build control-asan "$c/build.log" bounded "$native_secs" bash "$root/scripts/checks/slice0_native.sh" "$c" "$lcb"
++build control-asan "$c/build.log" bounded "$native_secs" bash "$root/scripts/checks/lib/slice0_native.sh" "$c" "$lcb"
+ build control-asan "$c/build-san.log" \
+-  bounded "$native_secs" bash "$root/scripts/checks/slice0_native.sh" "$c" "$lcb" sanitize
++  bounded "$native_secs" bash "$root/scripts/checks/lib/slice0_native.sh" "$c" "$lcb" sanitize
+ observe "$c/llvm.san.exe" "$c/san" 30 30 0 "${san_env[@]}"
+ if ! judge "$c" "$c/san" && grep -q 'AddressSanitizer' "$c/san.stderr"; then
+   echo "ok   control: ASan reports an out-of-bounds load"
+@@ -365,7 +365,7 @@ if [ -n "$measuring" ]; then
+     x86_64-linux) rzdepth=128; printf '\t.intel_syntax noprefix\n\t.text\n\t.globl\tmain\n\t.type\tmain,@function\nmain:\n\tmov\tqword ptr [rsp - 0x80], 0\n\tmov\teax, 7\n\tret\n\t.size\tmain, .-main\n\t.section\t.note.GNU-stack,"",@progbits\n' ;;
+     aarch64-macos) rzdepth=144; printf '\t.text\n\t.globl\t_main\n\t.p2align\t2\n_main:\n\tstp\tx29, x30, [sp, #-0x90]!\n\tldp\tx29, x30, [sp], #0x90\n\tstur\txzr, [sp, #-0x80]\n\tmov\tw0, #7\n\tret\n' ;;
+   esac >"$rz/control.s"
+-  if ! bounded "$native_secs" bash "$root/scripts/checks/slice0_native.sh" control "$rz" >"$rz/build.log" 2>&1; then
++  if ! bounded "$native_secs" bash "$root/scripts/checks/lib/slice0_native.sh" control "$rz" >"$rz/build.log" 2>&1; then
+     echo "FAIL control: the red-zone executable does not build: $(head -c 1000 "$rz/build.log")"; fail=1
+   else
+     "${objdump[@]}" "$rz/control.exe" >"$rz/control.exe.dis"
+diff --git a/scripts/checks/slice0_backends.sh b/scripts/checks/slice0_backends.sh
+index bed0218f..0d20e7b5 100755
+--- a/scripts/checks/slice0_backends.sh
++++ b/scripts/checks/slice0_backends.sh
+@@ -21,7 +21,7 @@ examples=0
+ # check NAME DIR SECS RETRY: build both backends in DIR, run them and judge them.
+ check() {
+   local name=$1 d=$2 backend
+-  build "$name" "$d/build.log" bounded "$native_secs" bash "$root/scripts/checks/slice0_native.sh" "$d" "$lcb"
++  build "$name" "$d/build.log" bounded "$native_secs" bash "$root/scripts/checks/lib/slice0_native.sh" "$d" "$lcb"
+   for backend in llvm lcb; do
+     observe "$d/$backend.exe" "$d/$backend" "$3" "$4"
+     count=$((count + 1))
+diff --git a/scripts/checks/slice0_repro.sh b/scripts/checks/slice0_repro.sh
+index 20284365..e6992dac 100755
+--- a/scripts/checks/slice0_repro.sh
++++ b/scripts/checks/slice0_repro.sh
+@@ -48,7 +48,7 @@ compare=(python3 "$root/scripts/checks/lib/repro_compare.py")
+ # which build_identity.sh checks before anything is built.
+ bounded 600 lake env true
+ bash scripts/checks/build_identity.sh > "$work/identity"
+-target=$(bash scripts/checks/slice0_native.sh target)
++target=$(bash scripts/checks/lib/slice0_native.sh target)
+ # Working source edits are included (the identity records their digest); no build product is.
+ for side in first second; do
+   d="$work/$side/checkout-with-$side-path"
+@@ -74,7 +74,7 @@ for side in first second; do
+     [ -s names ] || { echo 'slice0_repro: no examples' >&2; exit 1; }
+     while read -r name; do
+       bounded 120 lake env lean --run scripts/checks/slice0_bir.lean emit "$name" "$d/out/$name" "$target"
+-      bounded 120 bash scripts/checks/slice0_native.sh "$d/out/$name" "$lcb"
++      bounded 120 bash scripts/checks/lib/slice0_native.sh "$d/out/$name" "$lcb"
+     done < names
+   )
+ done

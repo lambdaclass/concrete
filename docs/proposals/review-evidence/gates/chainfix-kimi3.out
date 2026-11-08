@@ -1,0 +1,104 @@
+kimi version 2.4.1
+• I need execute task carefully. Should read inputs and files. Must not commit push nix. Edit only specified files, delete inputs at end. Should first run exact grep highest. I can use Grep? User explicitly "first run grep -o ...". Bash okay command specific. Should inspect statuses? I need understand. Use Todo list proactive. First tool should grep. Could parallel with Todo? "New R-IDs: first run..." likely first actual file command exact Bash. I'll do Bash command.
+
+• I’ll first find the next available roadmap ID, then read the supplied records and the existing decision, roadmap, and changelog formats before editing.R-0652
+
+
+• Should next R-0653 onward. Set todos. Read PENDING and ARCH, decision file perhaps huge max chars. Should find relevant sections via Grep, changelog fragments read. Parallel reads.Should read precise file ranges. Decisions 1-200, project bottom where last 2026-11-08 rows ~1450-1600. Roadmap top ~1-240, open owner questions and R rows. Should targeted grep smaller.
+
+• The inputs approve C5 Q1–Q3, all K1–K12, the K13 diagnostics direction, and the runner label; only K5’s architecture choice and K13’s CLI surface remain owner questions. I’m now locating the exact insertion points and every stale C5 reference.?? .fix-inputs3/
+
+
+• Should design edits. I can use Python? Instructions Edit mandatory incremental. I can do large Edit for decisions removing full rows and adding at project. Should multiple edits same file not consecutive without Read. I can consolidate into one Edit? Edit only one exact replacement per call. Could replace huge region from recent line 36 to after long-term row with index pointers + new full yes row? But new full yes should project not recent likely yes anchor full row project. Requirement move full rows unchanged to project after last 2026-11-08 row there. Last 2026-11-08 row in project likely archive move at 1621 before SPARK. So move rows unchanged after archive move, plus new yes row. Recent pointers remain lines 36-37. Add new recent line 39 perhaps. Then remove full rows from recent. This requires two separate edits on decisions, with Read in between. Can do step 1 remove block lines 86-180 and replace with nothing, leaving index. Then Read target and second Edit insert rows after archive. This moves unchanged content exactly (I can reuse entire block). New row content all K items.
+
+  But perhaps easier first add pointer + yes content at target and remove recent in same replacement? Can't non-contiguous. Must multiple.
+
+  Make sure C5 stale line in moved twenty-nine row "three C5 questions ... remain open." Requirement full rows unchanged conflicts need update status? They explicitly move both full rows unchanged. Then row still says C5 open, but new yes row supersedes dated later. I can append to moved twenty-nine? That violates unchanged. Better new yes row explicitly says "This supersedes the earlier note ...". Roadmap only asks status wherever C5 appears. Docs can retain historical as-of? Could change line 179 to "At that time, ... remained open; C5 was decided ..." but row no longer unchanged. "Move both full rows, unchanged" strict. So leave row historical and new row clarifies. Gate tier still open. Fine.
+
+  Should have R IDs allocation. Highest R-0652. K1-K13 = 13 IDs R-0653 through R-0665 (mapping sequential K1 653, K2 654, K3 655, K4 656, K5 657, K6 658, K7 659, K8 660, K9 661, K10 662, K11 663, K12 664, K13 665); runner label R-0666. I'll add queue placements. "rows for K1-K13 (one row per item, or grouped rows if file groups them), each naming plan's placement as proposed in file but final placement OPEN, owned by survey agent (say so)" Each task row can have objective "K1... Proposed placement: identity work... Final placement OPEN, owned by survey agent." Perhaps K5 open choice and K13 CLI in open owner questions. Runner row phase T owner migration worker private dotfiles. Add to appropriate sections based proposed placements? K1 etc before slice 1 under B tasks perhaps. K9 K10 "now" under A tasks. But if final placement open, grouping under B might accidentally decide. Could place all K tasks in B section or a dedicated architecture section? User says row each naming proposed placement final open. Existing tasks sections by phase. Best long-term structural: add all K rows under B. But K9/10 now A2i should be in A; K4 etc later slices in D/G. Yet placement open means sectioning could imply placement. Could add rows in B as a block "Architecture items K1-K13; proposed placements below are not final" and dependencies —. But queue B0/B1 tasks need list? Requirement each naming placement proposed. Could add all to B0? That would schedule K4 daily later contradict. I should map into existing phase sections and not queue if proposed. But user explicitly "each naming plan's placement as proposed ... final placement OPEN". That covers. I need decide where to insert rows. I can insert K1,K2,K3,K5,K9,K10,K12,K13 under A or B. K9/K10 under A because now, K1 etc under B0 before slice 1. K4 under C/G? showcases across. K6 B backend gate. K7 G incremental, K8 B scaling, K11 C own slice, K4 G release ecosystem benchmarks perhaps. Could simply all under B table after R-0652 with each proposed placement text, regardless section "B. Cumulative slices up to LP0" wrongly K4 later. Better place architecture tasks in A? "Phase A/B/C/D/G as proposed" objective overrides section. Hmm.
+
+  Could create new subsection "### Architecture items K1–K13 (placements open)" under Tasks before A. But user only edit ROADMAP allowed. This structurally avoids accidental phase assignment and makes survey ownership clear. Task table with all 13, each proposed placement. Then queue need not include until survey final. This is best. But "one row per item, or grouped rows if file groups them" file uses one per item. New subsection is reasonable. Each depends "survey agent: final placement" or "—; final placement: survey agent". User wants owner survey agent say so. Objective includes "owner: survey agent" all. K5 choice open owner question, not survey agent deciding choice. Wording "owner: the survey agent for design and placement; K5 choice remains owner-open". K13 same.
+
+  Runner row in T existing table R-0666. Add T3 queue? "A row for runner label (phase T, owner migration worker)" no queue necessary. Add T section. Decision row runner label approved repo settings. Note potential conflict item 28 "agents never apply GitHub settings" but owner specifically authorized repository-settings change. I should record explicit exception? Input says approved and owner-authorized as repository-settings change. Migration worker executes? "runner label row owner migration worker; provisioning private dotfiles servers/" implies yes. Decisions should mention authorization. Do not invent quote beyond. Fine.
+
+  Open questions read 330-370.
+
+• I’ll use R-0653–R-0665 for K1–K13 and R-0666 for the runner label. The K rows will live in a dedicated roadmap table so their proposed phases do not prematurely become final scheduling decisions; each will explicitly assign final placement to the survey agent.
+
+• I'll edit the changelog links. Also the new changelog lines. Can I do one Edit of the whole small file? Existing file incremental, use Edit replacing line 1 title perhaps third pass and append bullets. Could replace entire content via Edit old_string full file with new full content. Allowed incremental? Edit mandatory. Fine. I'll later do one Edit to update all at once. First decisions move. I'll mark the read task done, fix in progress.Now execute. I can Edit decisions remove full block using start at line 86 and end 180 huge content ~14k. old_string must exact. Could simpler replace unique prefix "\n- <a id=twenty..." through before long term but need include full entire block. I have content. Could use Bash python not allowed incremental; must Edit. Could move in steps using exact start and end only if old string includes all. Should paste all 95 lines. Token cost okay. Alternative keep full rows in recent but add HTML comment? No must move. Use Edit with old_string entire block from Read. Should be careful and exact. I can construct old_string from line 86 to 180 copied. New_string "" (or perhaps no). This will remove. Then insert same full block after archive via second Edit. New yes row huge. Could split move into remove twenty-nine only and long-term separately requiring reads. But one block best.
+
+  I'll do changelog Edit parallel with decisions removal independent. Changelog entire full replacement via Edit. Add third pass title, prior bullets retained, new bullets:
+  - Correct fragment links and move full rows etc? Changelog lines requirement likely record decisions not editorial. Add:
+  - Record C5 Q1-Q3... quote "yes to everythiong" confirmations.
+  - Record K1-K12 plan and K13 quote, R IDs. final placement open survey, K5 and K13 CLI open.
+  - Add concrete-ci-2 label R-0666...
+  - durable decision records link includes yes row.
+  Should line length okay.
+  Use links without ../.
+  I'll call parallel.Now read target before next Edit per instruction. Also add recent pointer can combine with insertion? Different region no. I need one edit insertion moved rows+new. Then read recent and add pointer. That's fine. I have to paste moved full block again. New yes row detailed.
+
+  Construct new decision row:
+  - anchor **C5, K1–K13 and the runner label** (owner, 2026-11-08, 15:21:26 UTC): "yes to everythiong"; confirmations at 15:21:44... exact slash quoted.
+  "The three pending asks are decided as follows. This supersedes the earlier note in the 29... that C5 questions remain open; gate tier assignment remains open."
+  1 C5:
+   Q1...
+   Q2...
+   Q3...
+  2 runner...
+  3 K1-K12 plan:
+  Should have each wording from ARCH exactly. Could nested list 1-13 with bold K1 etc, placement. K13 owner quote separate.
+  K5 status OPEN owner question after 3-model before slice1 sets passes.
+  "Survey agent's three-model round settles how each is built and final placement. Proposed placements below not final (R...)."
+  K13 quote 15:20:52 and CLI open.
+  Use exact wording all items. Ensure K12 "Extends owner item 16." okay.
+  Should I include owner question initial quote from ARCH? User only requires quotes yes and K13. Not necessary. Avoid extraneous.
+  K1-K13 decision row with R IDs mapping.
+  Runner label R-0666.
+  C5 R-0611 link maybe.
+  Decision full row inserted after last 2026-11-08 row archive and after moved full rows? Requirement move both full rows after last 2026-11-08 row there. If insert moved twenty-nine, long-term, yes then all after archive. Good. New yes is also 2026-11-08 but after, okay.
+
+  Perhaps read target.Now Edit replace archive end + next spark with same + rows. Huge. Make sure twenty-nine unchanged exactly. I'll paste. New yes content perhaps 100 lines. This is large but okay.
+
+• The two full decision rows have been removed from the Recent-decisions index without changing their text. I’m inserting them into the architecture section now, together with the new authoritative C5/K/runner record and its open-question boundaries.
+
+• Should have Recent pointer. Read top around 30-45 then edit.Add pointer after long-term or gate? "Add a Recent-decisions line." do after long term perhaps C5... Good.Now update todos task 2 done task 3 done (I did decision record), task4 in progress. Changelog partially task5 but okay. Next Roadmap edits. Should multiple edits same file with read between. Can do one large insertion architecture table after intro before A. Then read open questions and edit. Then read R-0637 and edit. Then read R-0611 and edit perhaps C5 status wherever status/questions appears. R-0611 doesn't say open but add decided link and semantics perhaps requirement wherever C5 status/questions. R-0637 mention C5 in fix rounds add note. Open questions replacement. Also std C5 references are contract names not status no need. Could add to R-0611 explicit decided Q1-Q3 and erasure. Best.
+
+  Runner row T separate edit after read.
+
+  Architecture table content each row full done when. Should match wording from ARCH in decisions already. Roadmap rows can shorter but each naming proposed placement final open survey. Perhaps common paragraph:
+  "K1–K13 are approved architecture work ([decision]...). The placements written in these rows are the proposed plan only; every final placement is OPEN and owned by the survey agent's three-model round. K5's choice and K13 CLI remain [open owner questions]."
+  Then each row:
+  R-0653 | K1 source provenance...; owner: survey agent | Every node... ; Proposed placement ...; final placement OPEN, owned by survey agent. Home... Gate... | survey agent: final placement
+  ...
+  Done when should include actual deliverable wording. Proposed placement in objective perhaps.
+  Avoid dependencies invalid "survey agent: final placement" fits owner decision pattern? Not owner exactly but acceptable text. Could use — for depends. Each row explicitly owner.
+  K5 open question "owner: survey agent for plan; optimization choice owner". Done when cannot say done without choice perhaps depends "owner: K5 optimization architecture; survey agent: final placement". Good.
+  K13 depends owner CLI only if new surface proposed; not blocks core diagnostics. "—; any CLI surface: owner decision".
+  R IDs in dedicated subsection before A.
+
+  Open owner:
+  Answered paragraph add C5 Q1–Q3 under yes row. Remove 3 bullets replace one line "- **C5 Q1–Q3:** decided 2026-11-08 by ...; R-0611 owns spec integration." User says remove three C5 questions now decided; one line pointing row. Good.
+  Add K5 question and K13 CLI bullets. Exact:
+  - **K5 optimization architecture (R-0657):** choose verified BIR passes, translation validation, or LLVM on printer path only, and what LCB path promises performance. Three-model round first, before slice1 sets passes.
+  - **K13 CLI surface (R-0665):** whether to add any new CLI surface, e.g. concrete explain. Elm-quality diagnostics itself decided.
+  Gate tiers stays.
+
+  R-0637 add "C5's three design questions were decided 2026-11-08 ([decision]); its fix-round/integration status is unchanged." Important not misrepresent accepted contract. Append near C5. R-0611 objective add decisions details.
+
+  Could do open questions + R-0637 + R-0611 + runner via one massive Edit? Different regions no. Should have sequence.
+
+  First architecture table insertion.
+
+• The decision record and Recent-decisions pointer are now in place. Next I’m adding the thirteen roadmap tasks, replacing the three resolved C5 questions with the two remaining K questions, and annotating C5’s implementation rows without implying its fix rounds are complete.
+
+• Should open questions edit. Read first.Edit block.Should have R-0637 and R-0611 edits. Could read both ranges in parallel, then two Edit same file cannot same response, sequential with Read between. I already know lines shifted +20 and open questions no net? Now R-0637 line 454 perhaps. Grep targeted gets content. Use Grep not Read? Instruction Read file again before next Edit same file. Must Read. Read range 450-465.Could one Edit replace entire contiguous lines 454-463 including other lines unchanged to update both? That is huge unnecessary. Better edit R-0637 now, then read R-0611 again then edit. Use small old unique substring in line, no need full. For R-0637 replace "C5 (`b5fff070`), C8..." with "C5 (`...`; Q1–Q3 decided ...), C8..." This meets note decided dated. Do.Now continue. Read R-0611 line.Edit R-0611 entire line or substring. Add link in objective and done details after first sentence.:
+  Foundation ... ([contract], [C5 Q1-Q3 decision]) | ... ; Q1... decided etc; release-context... C1 erasure unconditional ... ; ...
+  Should have Q3 associated C1 not C5 but include. Use text exact.Runner row insert. Read around T start now 630.Add R-0666 after R-0650 perhaps. Text:
+  Phase T dedicated label owner migration worker decision. Done label on origin gha1-3 etc recorded private dotfiles servers; no provisioning in repository. Home private dotfiles servers + repo settings. Gate CI selects exactly labeled runners? Could say "a CI scheduling control selects the dedicated label and provisioning lists all six". Fine no invent decision? Gate is plan natural.Should AGENTS links only if break. Anchors unchanged so no edit necessary. User says edit only allowed not must all. Changelog done. Perhaps AGENTS should not change. Should verify. Before verification perhaps roadmap queue include K IDs? Not required, but task rows dedicated no queue. Fine.
+
+  Should check decisions moved rows unchanged. I can compare git show HEAD version extract vs current? I can use Bash Python read only. Should run doc_links.sh as fix found? User mentions found by doc_links.sh; standard check probably scripts/checks/doc_links.sh. Should locate with Glob dedicated. Use Glob "scripts/**/doc_links.sh". Also check git diff --check, maybe markdown table structure via script. Should not nix. Use Bash git diff --check, maybe doc links script if no nix. Should read script before run? Could run bash scripts/checks/doc_links.sh likely. Find.
+
+  Also verify only allowed files modified. git status. Grep C5 stale all ROADMAP. Grep full rows recent ensure no anchors before project. Grep R IDs duplicates counts. Grep exact quotes. Could use Bash for custom anchor validation and table pipes. Should not overdo but task explicit doc links. I'll run doc_links. First mark task 4 done task 5 done (AGENTS unchanged because links anchors stable, changelog done) verification in progress.
+
+• The roadmap now has all K tasks and R-0666, the C5 questions are closed with links to their decision, and K5/K13’s remaining choices are explicit. The existing AGENTS links still use the unchanged anchors, so AGENTS.md needs no edit; I’m checking links, IDs, quotes, table structure, and the final diff next.
+

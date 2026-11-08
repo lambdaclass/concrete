@@ -1,0 +1,336 @@
+kimi version 2.4.1
+• I need perform review read-only delta plus files stack_bound.py current disassemblies. Should identify soundness accepted inputs especially b c etc. Should concrete reproducer file lines. Must not modify. Can run scripts perhaps temp no modification? Should inspect. I should perhaps todo for multi-step review? Yes. Should avoid subagents no ask. I need understand delta-only only findings introduced changed. Read DELTA.diff and stack_bound.py. Also perhaps LCB emission diff to know accepted. Use parallel Read.
+
+• I’ll trace the changed parser and stack-state rules against the attached macOS disassemblies, then test any suspected escape with concrete accepted inputs.
+
+• I need thoroughly analyze potential bugs. Delta b single lr slots, c joins lr, a stub exact address. Perhaps obvious stale saved slot after call. User tags saved slots persist after calls, while w clears below d. On store x30 before call tagged lr True. Call sets lr False but saved remains tag True. After call, load x30 from saved slot restores True legitimate because memory preserved? Premise external callee may write below SP? The slot at sp+offset within current frame above current SP (lower depth) so external shouldn't clobber per ABI? User clears w only b>d (below sp) preserving own frame. saved persist. Fine.
+
+  Potential bug: saved slot tag value ("lr", st.lr) captures whether current lr return address. If st.lr False (after call), storing x30 saves return address of most recent call (callsite) tagged False. Loading it sets False so ret refused. Fine. But stale saved slot with tag True can be restored after overwriting actual saved lr? If exact overwrite updates. Partial touching refused. Slot persists after stack pointer moves and function calls, but memory could be overwritten by callee if below current SP only. saved slot may be below current SP after sp add (deallocate). Then call at lower d with stale saved slot below SP, callee may clobber, but saved persists. Later restore from stale slot and ret accepted. This seems key: slot reread / stale slot. Example:
+  sub sp,sp,#0x20 (d32)
+  str x30,[sp,#0x10] saved depths 9-16? d=48? I'll carefully depth: sp depth d. address sp+k => depth d-k, 8 bytes lo=d-k-7 top=d-k. Save x30 at sp+0x10 when d32 => lo9 top16.
+  add sp,sp,#0x20 => d0. saved persists.
+  bl external at d0. External may use stack below entry sp (depth >0) including old slot 9..16, clobber saved lr. Then sub sp,sp,#0x20 -> d32
+  ldr x30,[sp,#0x10] exact saved tag True, touch restore bypass w read requirement (st.w after call only b<=d at call d0 none, so empty); accepted restores true; add sp; ret accepted wrong lr. This is concrete accepted. Even without external call, owned callee may clobber stale slot; saved persists across call and restore accepted. User explicitly ask stale slot. Should verify by run. No files modify. Could use Python in-memory import and parse via tempfile? They say do not modify files likely no files anywhere? I can run functions directly constructing funcs/stubs or use existing controls. Use python importlib and call analyse with constructed list. No file writes. I can invoke script with process substitution? `python stack_bound.py aarch64 <(printf...)` no file regular perhaps pipe fd. But instructions say use Bash for semantics okay. Don't use printf talk to user restriction? It says echo/printf talk to user just output directly; for process feeding okay. Could use Python `python3 - <<'PY'` import module and funcs direct. No modifications. Should concrete accepted disassembly reproducer with lines. Run direct via parse on io? parse open requires path. Could instantiate. Better use subprocess input via `/dev/stdin`: `python3 scripts/checks/lib/stack_bound.py aarch64 /dev/stdin <<'EOF'...` uses heredoc shell, not file modification. Bash allowed. I'll do after inspect more.
+
+  Other bug: after single save str x30 in loop, repeated store with lr False overwrites saved slot tagged False, later ret refused; sound. But joins with saved equality and lr conjunction could cause unsound due saved tags depending on lr not in key? saved is in key includes tags. At join old.lr/st.lr conjunction. If old saved tags same. Fine. But dataflow update issue due lr not in key and monotone? lr bool can go True -> False at join, not back. flow update condition `(st.lr or not old.lr)` means if old.lr True and st.lr True no update (fine); old False st True no update; old True st False update. old False st False no. monotone. saved tags immutable per key. Good.
+
+  Potential incorrect external call noreturn after stub spoof mapping: any imported symbol accepted as external, not only write/_exit/abort. Existing behavior allowed any PLT symbol too. Soundness claim bound covers every stack byte addressed by owned code, external own use premise maybe external names list only expected? Stub address spoof possible address mapping can label arbitrary direct branch/call target as external if appended stub line at owned function address. Gate generates mapping from actual Mach-O indirect table only __stubs, so cannot spoof legitimate binary except malformed indirect symbols. Should assess parser accepts stub lines anywhere and `tgt in stubs["addrs"]` takes precedence over owned callee. But actual generator obtains only __stubs. Could malformed Mach-O indirect symbol table entries at addresses overlapping __text? `llvm-objdump` block only stubs addresses. Not likely. More direct: calls into middle of stub entry accepted if target address exactly any stub mapping? mappings actual entries only. Fine. But if call target inside __stubs with no map refused unless symbol base in stubs["names"] fallback. Ah parse adds "__stubs" to stubs["names"], and call to e.g. `0x1044 <__stubs+0x4>` base `__stubs`; callee None; `elif base in stubs["names"]` true, accepts as external with name "__stubs". This existed pre-delta? Old parse stubs set names includes "__stubs", old call base in stubs accepted name base[1:] = "_stubs" (!) Actually delta changed name base.removesuffix no underscore stripping for ELF; but Mach-O unmapped call to section with + offset still accepted due stubs names. New control only no indirect entry uses symbol `_write+...` so not `__stubs`; actual objdump call into `__stubs+0x4` yields base "__stubs" and accepted despite exact stub entry requirement. User explicitly says "a call is external only when its target address is exactly a stub entry" but implementation still fallback names accepts any `__stubs+offset`. That is real defect introduced? Delta only: old accepted all real code? Old refused all real code because calls targets `_write+ADDR` base `_write` not in stubs. But section `__stubs` fallback pre-existing. Round delta-only findings should focus changed code or interactions. The new claim exact stub entries but fallback path remains and now name no underscore stripping. It may be pre-existing defect but within modified branch condition? `elif base in stubs["names"]` is changed line and intended ELF. Could flag because violates (a) and lets call into middle of stub treated external; concrete accepted reproducer. Should see soundness impact: call to second instruction `ldr x16,[x16]; br x16` external? If entered mid-stub with x16 arbitrary, indirect branch can go anywhere including stack, unbounded resource, so accepted direct BL to stub+4 bypasses analysis. On real Mach-O, branch target disassembly symbol could be `<__stubs+0x4>`. Gate stub map only entry addresses. `base in stubs["names"]` accepts. This is real defect. User especially stub address spoof. Could produce direct input with stub map for 1040 _write but call 1044 <__stubs+0x4>, accepted external "__stubs". It returns? actual stub no ret, br x16. Bound meaningless. Should verify. Fix: Mach-O should only use addrs, names fallback limited ELF PLT names / `@plt`, exclude section names on Mach-O or require target corresponds to function start? Could distinguish.
+
+  Also ELF `base.endswith("@plt")` allows arbitrary `foo@plt+offset` call as external, preexisting. Not delta maybe no need.
+
+  Potential a issue awk silently produces no stub lines if `llvm-objdump` fails? Pipeline if ! `"${indirect[@]}" ... | awk ...` without pipefail? Script likely set -euo pipefail via common? Should inspect top. Could be no pipefail? Read.
+
+• The new single-slot state survives stack deallocation and calls, so I’m checking whether a later “restore” can read storage a callee was allowed to reuse. I also found a second path that still accepts Mach-O calls by section name rather than exact stub address.
+
+refused: main+0x1014: reads stack bytes this function has not written: ldr x30, [sp, #0x10]
+bound 16
+external __stubs 16
+• Interesting stale restore refused because touch read needs w even restore. At initial save then add sp, w retains saved bytes. Call at d0 clears all w b<=0 none. Reallocate, restore calls touch restore slot but still read written requirement, empty -> refuses. So not accepted. What if rewrite same bytes after call as ordinary data to set w while saved remains? To write exact saved slot, generic store exact overwrite clears saved. Should set w without clearing saved? Perhaps saved slot stored again via single store updates tag to current lr False, so ret refused. Could call owned function? w clear same. Could external call before stack deallocation? At call d32 preserves w <=32 including saved slot, so restore valid memory protected above sp. If deallocate after call and reallocate no additional call, w retains saved, memory not clobbered by callee while protected at call; valid. Should have clobber below SP then w reestablished without exact overwrite? Could enlarge write covering saved slot: touch allows containing write clears saved via cleared; no. Could partial write? touch saved overlap refuses unless exact or containing. Can't. So stale slot protection through w works. But possible saved slots restored then read again? w remains, saved persists, accepted reread as restore intentionally? Gate comments says freed or restored saved slot reread refused? Actually touch restore allows, saved not cleared after restore, so reread accepted? Existing control maybe x86 saved slot reread not restore. For lr repeated ldr from same slot accepted, no soundness issue memory same. After call if slot protected w remains. Fine.
+
+  But more subtle stale slot at same address across frames? Saved slots are per function, w cleared after calls below SP. Caller stale saved from callee? `fn_bound` separate state, no.
+
+  Potential b flaw: single x29 save accepted although user only x30. Stores fp tagged current fp; loads x29 allowed. Similar safety.
+
+  Potential single store classification accepts any mn starting "st" with data ["x30"] and size 8, including `stur x30` legitimate, `stp` data one impossible. Could accept `stxr`? A64_PLAIN excludes. Fine.
+
+  Loads `ldursw` data x30? size 4 not single. `ldp` data one impossible. `ldraa` excluded. Fine.
+
+  Saved slots and w interactions at joins: saved in key, lr not. w intersection. Could stale tag True survive path where slot overwritten by call while w says written due join with path no call? At join w intersection removes bytes if call path w cleared (if below SP). So restore requires w, refuses unless another path wrote after call on all paths. Good.
+
+  But c lr join may be unsound in loops due conjunction and saved tag? Should explore. On loop head initial lr True, back edge after call lr False -> join False, good. Save before loop tagged True, key same. Restore after loop sets lr from saved True, good. Calls in loop and saved slot protected. Fine.
+
+  Could lr false at join get strengthened incorrectly by loading from saved slot tagged true on only one path then merging? Saved key same and lr join false if other path false. ret refused unless both valid. Fine.
+
+  Return with wrong lr through slot tag capturing stale True after x30 changed by something not modeled? All x30 writes refused except load restore, calls set false. Branch to owned callee sets caller lr false and callee has initial true independently. Correct.
+
+  But there may be unsound external NORETURN unknown symbols allowed: any stub symbol named `_exit` treated no return, premise only listed `_exit` and abort. okay. Mach-O symbols can be `__exit` -> strip one => `_exit` good. `abort` etc.
+
+  Stub mapping with symbols like `_write$stub` actual llvm output third column perhaps `_write`; attached no lines but likely. Fine.
+
+  Address exact map issue definitely confirmed. Should see if further defects in d limits. User focuses soundness but asks all diff perhaps d bug. Should review limits: `ulimit -S -v "$(ulimit -H -v)"`, if hard unlimited, sets soft unlimited. If Bash `ulimit -S -v unlimited` works. If hard numeric sets to hard then check `[ soft = unlimited ] || fail` so always fails finite as intended. exit 2. Fine. If `ulimit -S -v` fails due hard? setting soft to hard always permitted. `ulimit -H -v` maybe "unlimited". okay.
+
+  (e) artifacts copied before analysis good. Name path injection? examples names fixed.
+
+  (a) awk only checks NF==3 lines. Should indirect output format perhaps entries with 3 cols; attached real accepted. It doesn't ensure entries for every stubs, analyzer refuses unmapped except section fallback bug. It doesn't ensure all entries unique? parser duplicates refuses. No map address size? int. Good.
+
+  Stub spoof exact: Direct call to any address listed in indirect table accepted external regardless whether call instruction target is actually __stubs code? Since mapping from real binary table block. Exact addresses valid. Could call to stub for `_exit` treated noreturn even if malformed stub not actually exit, but binary structural validity premise? The Mach-O indirect table can be manipulated. Threat model accepted disassembly arbitrary? Existing analyzer accepts any ELF symbol `exit@plt` as noreturn too, same trust symbols. Not delta.
+
+  Perhaps serious bug in new stubs mapping precedence: If direct call target owned function address happens to be in stub map impossible in genuine binary sections nonoverlap. no.
+
+  Potential parser issue: section parsing `line.split()[-1].rstrip(":").split(",")[-1]`. LLVM Mach-O line "Disassembly of section __TEXT,__text:" -> split last __TEXT,__text: -> rstrip -> split -> __text. okay. ELF `.text:` -> .text. Fine.
+
+  Should inspect original context tests controls for freed/restored saved etc to understand invariants and find more.
+
+• The stale-slot reproducer was correctly refused: the written-byte intersection still catches it after a call. The section-name fallback is confirmed unsound, however: `bl ... <__stubs+0x4>` is accepted as `external __stubs` even though only entry `0x1040` is mapped.
+
+• Should hunt b/c deeper. I can formal reason abstract state. b introduces saved single slots tag. Existing pair record had same possible bugs, but delta single extends. Should find accepted input where x30 restore from slot with same tag but wrong state due alias/overlap and address depths. `slot_at` exact depths, touch ensures no overlap except exact write. Could save x30 at one SP depth, move SP without call, restore from same absolute address via different depth computed same. fine. Could x29-based addressing with fp changes produce same depth but actual different? fp int depth tracks. If fp ENTRY or None refuses. Saved slot tag includes fp value. Good.
+
+  Single x30 save with post-index/writeback: `str x30, [sp], #-0x10` allowed? base sp, post not None, d = d - imm(post). If post negative, d increases. top=st.d. Save current return address at old SP then SP decreases (depth increases) valid. Restore `ldr x30,[sp,#...]` etc. Accepted. No underbound? deepest touched top old d maybe after d new > deepest st.d picks new. fine.
+
+  Pre-index `str x30,[sp,#-0x10]!` d = d - (-16)=d+16 top=d; saved. good. Post ldr d updates. `restored` true, load x30 okay. w touch at old st, saved found. good.
+
+  Stores x29 permitted now single, tag fp; could store caller's fp ENTRY and later restore. okay. Could store x29 with fp=None, tag ("fp",None), load gives None, ret refuses or frame use refuses. okay.
+
+  Calls external may clobber x30? bl itself sets false. saved true remains. okay.
+
+  Join c key excludes lr but saved includes lr tag values. Suppose at join one path has lr=True, other false. conjunction false. If restore from slot tagged ("lr", True), sets true regardless incoming. correct if slot genuinely saved original lr and still written. w check. Fine.
+
+  Potential issue `lr` initial state for main true on macOS? main called by libc with LR return yes. Owned functions true. Fine.
+
+  External noreturn path: call sets no successor, so lr false irrelevant. okay.
+
+  A key algorithmic issue with lr removed from key but update check `if not (old.w <= st.w and old.g <= st.g and (st.lr or not old.lr))`. Consider old.lr=True and st.lr=False plus w/g conditions: update false. Then work reprocess. fine. If old.lr=False and st.lr=True, condition st.lr true means if old.w<=st.w etc true no update. correct (remains false). If old.lr=True and st.lr=True no change. Good.
+
+  Worklist states st object copies? st.but copies. saved frozenset. no.
+
+  Bound understate due no deepest on external stack? External use premise. no.
+
+  Could return with wrong LR from slot saved in called owned function? Each function analysis initial saved empty, cannot. caller's slot not in callee. fine.
+
+  Could save LR after a call when false then later join make lr true incorrectly? Join conjunction never true if any false. Saved tag false if store on false path; if other path saved true at same slot, saved keys differ and refuse. If store only false path and no saved other path, keys differ and refuse. Good.
+
+  Slot reread with a regular load into x30 is allowed only exact. If regular load into other reg from saved slot touch no restore refuses. fine.
+
+  One possible b: use `ldr x30, [sp,#k]` to restore from exact slot tagged LR true, but `touch` validates bytes written since last call using `st.w`. After restoring once, then call at same SP (slot protected) w preserves, can restore same original LR after second call. That's valid: slot not clobbered above sp. After restoring LR, then call overwrites LR, restore again valid. no.
+
+  Stack slot could be in red zone below current SP (depth>d) at call; w clears. If no call, still valid. no.
+
+  A malformed sequence changes SP to skip call clear? `mov sp,x29` sets d but w not clear; no call. Fine.
+
+  Frame pointer single save restore may allow frame pointer stored as value? `str x29,[sp]` is both saving current FP and potentially leaking stack address into memory. But saved slot only load x29 exact, other reads refused. External calls could read own stack? It's in current frame, external could scan? Outside bound? no.
+
+  Single x29 store `single=True` bypasses `stack or frame pointer stored as value` but saved slot tags. Same as pair. okay.
+
+  Perhaps accepted unbounded resource through Mach-O arbitrary external symbol not in whitelist. The doc says external functions (`write`, `_exit`, `abort`) listed; analyser accepts any indirect symbol. Existing ELF accepts any @plt. Not delta, but new Mach-O addrs path likewise any symbol. User says "call external only target exactly stub entry" not whitelist. Bound claim external own stack use premise all external? Doc only write etc. Could accepted input call `stack_overflow` stub and gate bound excludes it; external use premise not established. But this is same design for ELF. Delta-only no.
+
+  Stub section-name fallback definitely changed behavior and explicit requirement. Should likely enough to reject. But perhaps expected multiple findings especially b/c. I should search systematically with fuzz/model? Could generate sequences and see suspicious accepted wrong lr. Perhaps reason around stale slot on no external call but owned call clobber below SP and w preserves incorrectly due d captured before call. At call `d=st.d`, clears w b<=d. On AArch64 callee stack entry same SP; slots depth <=d protected (above/equal SP). Good. Callee can address below its own entry only depth>=1, so cannot touch caller slot. analyzer ensures owned callee accesses depth>=1. external ABI cannot write above SP. fine.
+
+  Understated bound via single x29 save to [x29] with frame pointer not SP? data ["x29"], base x29, exact 8, record false, single. It saves FP into own frame slot and tags. touch depth>=1. okay.
+
+  `record` is set for pair x29,x30 base sp, but single branch handles `data=["x29"]`. It permits `str x29` without LR save, then calls and restore fp. valid.
+
+  Any other x30 load still refused? PC-relative load into x30: base not sp/x29, after memory no stack accounting, then is_load any A64_LR and not record/restored -> refused. Good.
+
+  Could load x30 paired with x29 using `ldp x29,x30` record true even if base sp but data size? yes existing. `ldp x30,x29` not record, restored false => refuse. fine.
+
+  Could `ldp x30,x30` weird size16 data list not single and A64_LR refuse. fine.
+
+  Could single restore from slot tagged "lr" true with w forged by `str x30` when lr false but join saved keys somehow ignores tag? saved is frozenset with tuple bool, key includes. no.
+
+  One nuance: Python bool `True` equals int 1 and ENTRY = "entry", no. fp values int depths and ENTRY. saved tags can collide `("fp", True)` with ("fp",1) since bool==int; fp only ENTRY int None never bool. lr bool only. no.
+
+  Potential issue branch into middle of owned function direct `b` accepted only exact instruction index. calls require callee symbol no +, so direct call to owned exact address but symbol with `+0x0` refused. okay.
+
+  Stub exact address but parse target_of regex accepts not necessarily branch target? For AArch64 ops `0x1040 <...>` yes. Could comments mislead? ops strips // only, semicolon comment stays but regex first target likely actual. no.
+
+  Objdump symbols can contain `>`? no.
+
+   awk indirect symbols appends after all disassembly. parse stub line sets cur None, so if appended in middle no following instructions parsed until header; appended end. fine.
+
+  Check real disassemblies attached don't include stub lines (User says attachments raw); actual report augmented. no issue.
+
+  Resource cap d: `ulimit -S -v "$(ulimit -H -v)"` when current hard limit is unlimited and shell builtin `ulimit -v unlimited` may fail for unprivileged? Lowering/raising soft to hard allowed. yes.
+
+  Perhaps exit 2 in function under `set -e` and if conditions? explicit exit. okay.
+
+  Artifacts disassembly copy leaves `.dis` temporary next to exe too but existing. report path name collisions examples/backends target unique. okay.
+
+  Should inspect git diff actual maybe DELTA is full. No need.
+
+  Should test control suite? Cannot run full slice0_artifacts because builds etc modifies reports and User says do not modify files. Could run `python` tests no file. Already validated one. Should validate b/c potentially find accepted path via exhaustive small instruction sequences with abstract interpretation and semantic cross-check. Could write Python in memory enumerating maybe not necessary but User expects deep review. I'll inspect git show base version maybe old logic to isolate defects. I have DELTA. No modifications. I can use Bash git status? Not needed until response since no changes. Could run `git diff --...` read-only maybe not.
+
+  Could find issue with section fallback accepts all `__stubs` calls including exact start without indirect mapping too. New control unmapped uses `<_write+...>`, but `<__stubs>` exact also accepted with external "__stubs". Concrete simplest:
+  main saves lr, bl 1040 <__stubs>, restore ret; Disassembly __stubs; no stub lines. parse stubs["names"] {"__stubs"} and accepts. This directly contradicts new "refuse stub call no indirect-symbol entry" and doesn't require mid-stub. Soundness? Calling actual stub with unknown imported symbol treated external `__stubs`; external own use not listed correctly and NORETURN not applied if actually `_exit`. More concrete unbounded resource: if stub actually `_exit`, analyzer expects return and then accepts paths but bound still okay? Unknown external stack use. Mid-stub stronger control hijack. I can present mid-entry as accepted and arbitrary indirect branch escapes. Lines 610-615. Should mention parser line 91 adds section name. Fix restrict fallback to ELF; Mach-O only stubs["addrs"].
+
+  Could there be a b defect tied to `restored` set for x29 single load and then LR? data only one so no.
+
+  What about `is_store = mn.startswith("st")`, `is_load=mn.startswith("ld")`; `single` only set on store, restored on load. In store return check `if not (record or single)` but doesn't include `restored` impossible store. Fine.
+
+  Saved slots tagged register current state but when storing x30 in non stack memory via g (PC relative), not record/single, store check rejects? After memory block base g, no stack, is_store and data includes x30 but A64_SP+A64_FP excludes A64_LR! Existing only prohibits stack/frame not LR as value. Could store LR to global then later load x30 from global is refused. Not relevant.
+
+  Stack bound excludes arbitrary global accesses by premise. no.
+
+  Can save x30 to stack via pair with other reg `stp x30,x0`? Not record/single, generic store allowed because data no SP/FP. It writes lr as raw value but saved not tagged; loading x30 refused. Could load into x0 then move x0,x30 refused. okay.
+
+  Could save LR to stack, then overwrite via pair stp x29,x30 record and tag based current FP/LR; valid.
+
+  Potential wrong LR accepted via `ret` on path that skips call due NORETURN name spoof only. Not b/c.
+
+  The User likely seeded known defects perhaps expects at least two. Wording "especially through (b) and (c): e.g. a slot reread, an x30 restored from a stale slot, a return with a wrong lr, a stub address spoof" suggests there may be intentionally subtle bug in (b)/(c). Should scrutinize abstract state saved tags and w at joins, call semantics.
+
+  Single save at st.lr True, call sets lr False but saved remains. At loop head before save? Example test:
+  sub sp 48
+  str x30 slot True
+  loop:
+  mov...
+  bl -> lr False
+  cbnz back to mov (lr join initial? initial at mov lr True, back false -> false)
+  after loop ldr x30 sets true.
+  Works.
+  But worklist initial saved slot tag True. At join key saved same. okay.
+
+  Now loop includes `str x30,[sp,#k]` after call. First iteration enters store with lr True, back edge enters with lr False. At loop head keys differ saved before store? If store at loop head and saved initially absent, back saved slot False/True? keys differ -> refuse. If save before loop and save again inside loop: at second store first path old saved True; after first call lr False, store sets saved False; back to loop head old saved True vs False -> refuse. Good.
+
+  Could remove lr from key allow return wrong at `ret` because states dictionary update doesn't propagate if only lr differs? I saw update condition. Evaluate logic carefully: `if not (old.w <= st.w and old.g <= st.g and (st.lr or not old.lr))`
+  Cases:
+  old.lr=True st.lr=False: (False or not True=False)=False, entire false, not=>true update.
+  old.lr=False st.lr=True: (True or True)=True, if w/g superset no update; old false safe.
+  old.lr=False st.lr=False: (False or True)=True no update safe.
+  old=True st=True true no update safe.
+  Works.
+
+  `flow` called for new j sets st directly; no issue.
+
+  Returns checked whenever processed, state can later be updated to lr=False and ret reprocessed because work append. yes. If ret processed lr True and continue, later update false reprocess and refuse. good.
+
+  Memoization of functions independent call lr initial true; correct ABI owned calls direct BL sets callee LR to return always. Recursion refused.
+
+  Perhaps stale slot w can be preserved incorrectly across call because `d` variable overwritten by `fn_bound`? In call `callee, d = owned_name(base), st.d`, d int. After fn_bound(callee) recursive call has its own local d, no impact. st.but w filter <=d. good.
+
+  `w` records bytes "since its last call" but saved slots persist. At a call with d lower than slot (deallocated), w clears. At join after call, w intersects. Good.
+
+  Could write to w after call without clearing saved by using a memory instruction classified as `record`/`single` restore? Load mode doesn't add w (touch returns st.w if no "w"), so cannot. Store always updates saved tag. For LR, store when lr false tags false. But perhaps save x29 over LR slot then restore x30: `cleared` removes old and adds ("fp", fp), slot tag mismatch refuses. Generic store exact clears saved and w adds, then no slot refuses. So cannot forge w with saved true except storing x30 when lr true. If lr true, value actually current function return address (abstract invariant), so fine. Sound.
+
+  Could current LR be wrong even when lr true due external callee not preserving LR? On AArch64 LR caller-saved and BL overwrites; analysis sets false regardless. Restore from original valid. no.
+
+  `lr` tag is whether this function return address. Initial true, any non-call instructions can't modify LR due checks. Loads from LR slot restore tag. Invariant solid.
+
+  Slot saved memory could be modified by external even above SP due ABI not guaranteed external doesn't write caller frame, but standard premise callee can't. owned analyzer ensures. fine.
+
+  Stack depth bound with single save pre/post uses touched and st.d correct.
+
+  Perhaps `touch` called on restore with old st not updated d for pre-index? For pre-index load `ldr x30,[sp,#0x10]!` (positive pre means d=d-16 decreases, possibly stack above entry). It computes d new, top new. `touch(st,...)` uses old st.w and saved, okay depths absolute. st but d new. Then generic st.d<0 check. valid.
+  Post-index load uses top old st.d and d new. touch old state. good.
+
+  Single store pre-index updates saved using current lr/fp, w old but depths absolute. okay.
+
+  Slot reread accepted but not unsound. The request examples may be hints not guaranteed.
+
+  Potential frame pointer restoration bug with single `ldr x29` sets `restored=True`; is_load check for any A64_FP includes data x29 so doesn't set fp None. good.
+
+  Single x30 restore sets `restored=True`, no FP effects. good.
+
+  Single x29 store `single=True` and no LR state changes. good.
+
+  A64 `stur x29` supported by A64_PLAIN? stur yes. okay.
+
+  Perhaps store of `w30` 4-byte is not single, generic is_store data w30 not in A64_SP/FP/LR checks, allowed to write stack. Later load x30 from same 8-byte slot might find stale saved slot if partial overwrite? touch prevents partial saved overlap. good.
+
+  Load `w30` from stack generic then is_load any a in A64_LR includes w30 -> refuse unless record/restored. single only exact 8 data ["x30"], so w30 refused. good.
+
+  One issue saved slots and `g` joins update when lr differs only; no problem.
+
+  I should inspect d perhaps `ulimit` hard value "unlimited" and comparison under set -e no. Not soundness stack.
+
+  Potential (a) resource issue: external calls no whitelist and arbitrary symbol names can be `_exit` NORETURN. Stub address spoof via indirect symbols map can claim address of `concrete_body` as `_exit` if malicious disassembly input. Gate generated real table prevents. Section fallback definitely valid actual binary.
+
+  Could direct `bl` into `__stubs+0x4` appear in real compiler output? Not currently, but soundness claim all accepted inputs. Reproducer accepted. Mark real defect. Verdict REJECT likely one soundness defect enough. Should I keep exploring other delta issues to provide complete review. Perhaps test actual b/c reproducer with saved slot stale in loop using SP movement and call at different depths could bypass w because w depths preserved incorrectly when d at call high. Suppose saved slot deallocated relative to SP? If d at call high means SP deep, saved slot depth >d below SP -> cleared. If d at call low means slot depth <=d protected. correct.
+
+  Bound external call entry depth uses d current. no.
+
+  Could restore stale slot after external call at depth high but w not clear due bytes b<=d condition reversed? w depth b; protected caller frame addresses above SP have depth <d, yes preserves b<=d. below SP depth>d clears. correct.
+
+  Callee own writes might touch caller saved slots if its addressing depth lo>=1 but at entry stack d=0, max depths below entry. no.
+
+  No b/c defects.
+
+  Wait x86 also has saved slot persistence and calls ret_push; not delta.
+
+  Check lines for concrete reproducer output already. Perhaps use no raw files modification and response include exact full disasm. I should validate with no stub lines exact start and mid. Already mid accepted. Good.
+
+  Could report "P1 real defect" with file lines 610-615 and parse line 91. Accepted output bound16 external __stubs16. Explain BL enters at `ldr x16,[x16]`, skips ADRP initializing x16, then `br x16`; analysis treats as returning external and does not analyze indirect branch. This breaks fail-closed and bound/unbounded control. Reproducer uses `str x30,[sp,#-0x10]!` which new single rule accepts, tying b/a. It saves at depth16? main entry d0 pre -16 => d16 top16 lo9, bound16. Call at d16 external __stubs16. After call lr false, ldr post from slot True restores, d0, ret. yes.
+
+  This one uses both new b and stub bug. Perfect. I should maybe ensure no `x16` initialization before call? At main x16 arbitrary. At stub+4 ldr x16,[x16] might segfault or arbitrary; then br. Soundness fail. Exact disassembly:
+  000...1000<_main>:
+  1000 str x30,[sp,#-0x10]!
+  1004 bl 0x1044 <__stubs+0x4>
+  1008 ldr x30,[sp],#0x10
+  100c ret
+  Disassembly...
+  stub mapping entry.
+  Output confirmed.
+
+  Would parser classify `__stubs` instructions not owned; yes. No indirect symbol for 1044. `base in names`. external name "__stubs" due removesuffix. It doesn't strip underscore now but name irrelevant. Good.
+
+  Perhaps another defect: Mach-O stub call to exact address but symbolic base happens owned, e.g. stub address equals no. no.
+
+  Do I need mention no findings b/c after test? Could state no additional defect found in join/single slot beyond this. But response focus findings. I should mark severity and preference exactly. End exact verdict line. Should have no text after.
+
+  Before response I should update todo and maybe run a few validation probes to be confident no other issues. Perhaps test proposed fixes? No modifications. Could run current control for exact start no map, and b/c cases accepted/refused to ensure. Already stale refused. I can explore a different attack: "slot reread" perhaps an unbounded memory address through saved FP restored from stale slot but w after call preserved when slot below SP? same logic. no.
+
+  Potential issue in stub parsing awk regex addresses only lowercase hex. llvm outputs lowercase. okay.
+
+  Check report copy before stack analysis but `cp` unbounded? `capped` not used for cp, but small file. d unbounded address-space gate every other command capped claim cp not capped? Existing mkdir cp etc not all capped. Not soundness.
+
+  `ulimit -S -v "$(ulimit -H -v)"` if hard unlimited output unlimited, okay. "or fails exit2" if hard finite yes. No defect.
+
+  Perhaps keeping disassembly report uses unsanitized `$name` from example path could traversal, names fixed. no.
+
+  I should perhaps read slice0_common to see target values and gate limits not needed.
+
+  Review only delta, one real defect enough REJECT. But User might expect deeper b/c bug not found; don't invent. I can explicitly note "I did not find a separate unsound transition in (b)/(c); written-byte intersection refused deallocate/call/reallocate stale restore." This is helpful but response desired findings maybe concise. Could include validation note after finding. Ensure verdict REJECT due soundness. No need preferences.
+
+  I'll consider if section fallback pre-existing means delta-only reviewer should not flag? Changed line `elif base in stubs["names"] or base.endswith("@plt")` and new requirement exact. Although behavior for `__stubs` pre-existing, before delta real macOS all refused except this loophole. Round 3 delta-only means findings caused by diff, not pre-existing. The diff preserves fallback but modifies it; is this considered delta defect? Yes change intended to enforce exact mapping but incomplete. User explicitly "(a) ... a call is external only when target address exactly a stub entry". Current delta violates new stated invariant. Valid. If strict only regressions, it was existing but now relevant changed code. I can phrase "The new exact-address check is bypassed by retained name fallback in the rewritten call dispatch". Good.
+
+  Could there be more direct regression due stripping underscores in names fallback: Mach-O section name external "__stubs" now vs old "_stubs"; not central.
+
+  Potential issue `base in stubs["names"]` also accepts call to `<__stubs>` with no indirect mapping, new control insufficient. This is unequivocally delta incomplete fix. I can include both variants in same finding, with mid-offset reproducer.
+
+  I'll maybe run exact start no map to output and record.
+
+• The single-slot save/restore and link-register join otherwise preserve the key invariant in the cases tested: a deallocated slot read after a call loses its written bytes and is refused, and a restored slot can only make `lr` valid when its saved tag was valid. I’m doing one final check of the unmapped-stub bypass before reporting.
+
+bound 16
+external __stubs 16
+fatal: not a git repository (or any of the parent directories): .git
+• No git repository scratch copy. No modifications. Now update todo done and respond. Could include one finding with severity. End exactly verdict. Should I mention git status irrelevant no. Should satisfy "Find accepted inputs ... Findings ... mark each real defect or preference." One real defect. "End with exactly one line: VERDICT..." yes response last line exactly. No extra code after.
+
+  Detailed reproducer full. Explain run command `python3 scripts/checks/lib/stack_bound.py aarch64 repro.dis` output. I didn't create file but phrase given input. Include output. Lines stack_bound.py:91 and 610-615. This is real defect. Mention missing map accepted even exact section start. Mid stub skips ADRP. Recommended correction optional: On Mach-O ignore stubs names fallback; require tgt in addrs. Could say add control using `<__stubs+0x4>` and no mapping. Keep concise but enough.
+
+  Do I need note b/c tested no separate issues? Yes one sentence after finding "I did not find..." but not necessary. Perhaps useful to demonstrate review scope. Also CI controls missing this variant.
+
+  Severity P1? Real defect. Use `**Real defect — Mach-O stub exactness is bypassed...**`. No heavy headings. Include file citations.
+
+  Respond around 500 words? 350. I should not overstate arbitrary code execution as stack bound resource; say unanalysed control transfer, bound cannot cover subsequent execution. Accepted input includes ret but actual may not return. The soundness claim "for code analysis accepts bound covers every stack byte addressed" broken because br can target code that addresses stack. Even if x16 arbitrary, accepted machine has unbounded behavior. Good.
+
+  Potential critique: stub+4 x16 at process main could be known? Not relevant can target arbitrary. The direct branch into mid stub is accepted; no analysis of `br x16`. Enough.
+
+  Update todos.
+
+• **Real defect — Mach-O calls can still bypass exact stub-entry validation.**  
+  `scripts/checks/lib/stack_bound.py:91` records `__stubs` as a stub *name*, and the fallback at `scripts/checks/lib/stack_bound.py:610-615` accepts any call whose symbolic base matches that name. Consequently, both an unmapped call to `<__stubs>` and a call into the middle of an entry are accepted without a corresponding `stub ADDR SYMBOL` line.
+
+  Concrete accepted reproducer:
+
+  ```text
+  0000000000001000 <_main>:
+      1000: str x30, [sp, #-0x10]!
+      1004: bl 0x1044 <__stubs+0x4>
+      1008: ldr x30, [sp], #0x10
+      100c: ret
+
+  Disassembly of section __TEXT,__stubs:
+
+  0000000000001040 <__stubs>:
+      1040: adrp x16, 0x2000
+      1044: ldr x16, [x16]
+      1048: br x16
+  stub 0x0000000000001040 _write
+  ```
+
+  Running the analyzer on this input produces:
+
+  ```text
+  bound 16
+  external __stubs 16
+  ```
+
+  Only `0x1040` is a mapped stub entry; the call targets `0x1044`. It skips the `adrp` that establishes `x16`, reaches the unanalysed `br x16`, and is nevertheless treated as a returning external call. Subsequent execution and stack accesses are therefore outside the claimed bound. The same fallback also accepts `bl 0x1040 <__stubs>` with no indirect-symbol lines at all, so the new unmapped-stub control does not cover this spelling.
+
+  For Mach-O, external-call recognition should use only `stubs["addrs"]`; the section-name fallback must be restricted to ELF PLT handling. Add controls for both `<__stubs>` without a mapping and `<__stubs+0x4>` with only the entry address mapped.
+
+  I found no separate unsound transition in the single-slot or link-register join changes: the tested deallocate/call/reallocate stale-slot restore was refused because its written-byte state had been cleared.
+
+  VERDICT: REJECT
+
+To resume this session: kimi -r session_37d40670-af71-49ff-8850-dde851355f91

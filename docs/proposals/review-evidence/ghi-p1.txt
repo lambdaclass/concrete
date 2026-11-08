@@ -1,0 +1,69 @@
+Review a small bash change in the Concrete repository's landing tooling. scripts/land/gates_transport_ssh.sh writes run.sh, which is copied to a gate host over scp and run there by ssh; it runs the impact gates in the host's gate clone and any failure exits 255, which the caller reports as INCOMPLETE (never a pass). NEW: before anything else on the host, run.sh refuses a root login (`id -u` is 0) and a login with no gate clone directory ($RUN_AT_REF_REPO or ~/concrete2 lacking .git), naming the user@host and path. Cause: a train run from an account whose ssh alias for the CI host logs in as root looked for /root/concrete2 and only said "fetch failed". scripts/checks/landing_script.sh adds two end-to-end cases through the real transport with ssh/scp shims (a fake `id` printing 0/root on the host's PATH; the gate clone moved away), each must be INCOMPLETE, name the cause, and fetch nothing.
+Note the echo lines produce run.sh code: single-quoted strings are host-side code. Review for correctness defects: quoting, a check that can pass without looking, a way a root or missing-clone login could still run gates or report a pass, and portability to the hosts' bash (Linux) — and whether the tests really exercise the new lines. Format: file:line, defect, concrete failing scenario; label preferences "preference". End with exactly one line: VERDICT: ACCEPT or VERDICT: FINDINGS.
+--- DIFF ---
+diff --git a/changelog.d/2026-11-08-gate-host-identity.md b/changelog.d/2026-11-08-gate-host-identity.md
+new file mode 100644
+index 00000000..df0e3dad
+--- /dev/null
++++ b/changelog.d/2026-11-08-gate-host-identity.md
+@@ -0,0 +1,9 @@
++### The gate host refuses a root login and names a missing gate clone (2026-11-08)
++
++A landing check run from an account whose `concrete-ci-2` ssh alias is the root admin login
++(by design: the provisioned gate identity is `agent` on fede-256gb, which logs into `dev` with the
++`ci_gates` key) looked for `/root/concrete2` and reported only that the fetch failed, as
++INCOMPLETE. `scripts/land/gates_transport_ssh.sh` now checks the login on the host before
++anything else: a root login is refused (gates never run as root) and a login without its gate
++clone names the account and the path, both INCOMPLETE. `scripts/checks/landing_script.sh` covers
++both through the real transport, and neither fetches.
+diff --git a/scripts/checks/landing_script.sh b/scripts/checks/landing_script.sh
+index 04a6a08e..85aa73e4 100755
+--- a/scripts/checks/landing_script.sh
++++ b/scripts/checks/landing_script.sh
+@@ -585,6 +585,19 @@ git -C "$HH/concrete2" remote set-url origin "$TMP/ri-origin.git"
+ [ "$rc" = 3 ] && has "$out" "INCOMPLETE" && has "$out" "the gate clone" && has "$out" "not one of the project's repositories" \
+   && ! grep -q "$HH/concrete2" "$TMP/hostgit.log" \
+   && ok "a gate clone whose origin is another repository is refused on the host before it fetches (INCOMPLETE)" || { no "foreign gate clone: exit $rc"; echo "$out" | sed 's/^/      /'; }
++# The login is checked on the host: a root login, or one without its gate clone, is INCOMPLETE and
++# named, and nothing is fetched (2026-11-08: the root admin alias looked for /root/concrete2).
++mkdir -p "$TMP/hostroot"
++printf '#!/bin/sh\ncase "$1" in -u) echo 0 ;; -un) echo root ;; *) exec /usr/bin/env -i id "$@" ;; esac\n' > "$TMP/hostroot/id"
++chmod +x "$TMP/hostroot/id"; : > "$TMP/hostgit.log"
++PATH="$TMP/hostroot:$TMP/hostgit:$PATH" e2e
++[ "$rc" = 3 ] && has "$out" "INCOMPLETE" && has "$out" "gate host login is root@" && [ ! -s "$TMP/hostgit.log" ] \
++  && ok "a root login on the gate host is refused before it fetches (INCOMPLETE)" || { no "root gate login: exit $rc"; echo "$out" | sed 's/^/      /'; }
++mv "$HH/concrete2" "$HH/concrete2.away"; : > "$TMP/hostgit.log"
++PATH="$TMP/hostgit:$PATH" e2e
++mv "$HH/concrete2.away" "$HH/concrete2"
++[ "$rc" = 3 ] && has "$out" "INCOMPLETE" && has "$out" "no gate clone at $HH/concrete2 for " && [ ! -s "$TMP/hostgit.log" ] \
++  && ok "a gate login without its gate clone is INCOMPLETE and names the account and path" || { no "missing gate clone: exit $rc"; echo "$out" | sed 's/^/      /'; }
+ touch "$HH/unreachable"; e2e; rm -f "$HH/unreachable"
+ [ "$rc" = 3 ] && has "$out" "INCOMPLETE" && [ ! -f "$RIATT" ] && ok "the real transport to an unreachable host is INCOMPLETE (exit 3), attests nothing" || { no "e2e unreachable: exit $rc"; echo "$out" | sed 's/^/      /'; }
+ hook="$ROOT_DIR/.githooks/pre-push"
+diff --git a/scripts/land/gates_transport_ssh.sh b/scripts/land/gates_transport_ssh.sh
+index e613715c..650a7fda 100755
+--- a/scripts/land/gates_transport_ssh.sh
++++ b/scripts/land/gates_transport_ssh.sh
+@@ -10,7 +10,7 @@
+ # brings it up to date with its origin (so base, which is on main, is there) and runs run-at-ref.sh with
+ # RUN_AT_REF_SOURCE=<the bundle>, <ref> and <command>. The ref and command are quoted for bash HERE,
+ # into that file, so the host's login shell only ever sees `bash land-remote-<id>/run.sh`, whatever
+-# the command contains. Output is run-at-ref.sh's. The host needs its gate clone (RUN_AT_REF_REPO,
++# the command contains. Output is run-at-ref.sh's. The login must not be root. The host needs its gate clone (RUN_AT_REF_REPO,
+ # default ~/concrete2) and nix; it needs no GitHub credentials and no copy of the landing scripts.
+ #
+ # Env: LAND_GATES_SSH (default `ssh -o BatchMode=yes -o ServerAliveInterval=20 -o ServerAliveCountMax=120`),
+@@ -37,6 +37,13 @@ cp "$bundle" "$tmp/$id/c.bundle" && cp "$SELF_DIR/run-at-ref.sh" "$tmp/$id/scrip
+   # fetches: a gate clone at another repository is a transport failure (INCOMPLETE).
+   echo '. "$dir/scripts/land/lib.sh" || { echo "transport: cannot read lib.sh" >&2; exit 255; }'
+   echo 'gc="${RUN_AT_REF_REPO:-$HOME/concrete2}"'
++  # Who the ssh destination logged in as, checked ON THE HOST: gates never run as root, and a login
++  # without its gate clone names the account and path. (2026-11-08: a train run from an account
++  # whose `concrete-ci-2` alias is the root admin login looked for /root/concrete2 and reported only
++  # "fetch in the gate clone failed".) Both are transport failures: INCOMPLETE, never a pass.
++  echo 'who="$(id -un)@$(hostname)"'
++  echo '[ "$(id -u)" != 0 ] || { echo "transport: the gate host login is $who (root); gates run as the gate user (dev on the CI hosts), never root: check the ssh destination User" >&2; exit 255; }'
++  echo '[ -d "$gc/.git" ] || { echo "transport: no gate clone at $gc for $who (RUN_AT_REF_REPO); is the ssh destination the gate user?" >&2; exit 255; }'
+   echo 'why="$(cd "$gc" && land_remote_bad origin)" || { echo "transport: the gate clone $gc: $why" >&2; exit 255; }'
+   echo 'git -C "$gc" fetch -q origin || { echo "transport: fetch in the gate clone failed" >&2; exit 255; }'
+   printf 'RUN_AT_REF_SOURCE="$dir/c.bundle" bash "$dir/scripts/land/run-at-ref.sh" %q %q\n' "$ref" "$cmd"

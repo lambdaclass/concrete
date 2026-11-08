@@ -1,0 +1,12 @@
+### Review Summary (Part 2: `ROADMAP.md`)
+
+- **Owner answers & scope**: All recorded changes in `ROADMAP.md` (foundation C1–C10 before slice 1, dropping UBSan while keeping ASan, complete BIR → LCB-IR adapter theorem, compile-speed budget, written surface grammar before the parser, lexer/parser in parallel with the foundation, performance target against C at slice 16, no-libc runtime around slices 24–25, landing-script shrink, risk-based review caps, single clones folder, and the std-per-slice table) match the owner's verbatim answers without deciding anything beyond them.
+- **Work items (`R-0607`..`R-0623`)**: All 17 items are present, each defines both a `Home:` and a `Gate:`, and the dependency graph across `R-0607`..`R-0623` and their dependents (`R-0567`, `R-0571`, `R-0593`) is acyclic.
+- **Std-per-slice table & showcases**: Module placements agree with the vertical-slice table and the showcase progressions (`grep` 16 → 18 → 22, QOI 19 → 21, PNG 21–22, EVM 15 → 21 → 23, KV store 23, Wasm 21 → 23 → 26, crypto 7 → 15 → 18, static web server 27), and stages needing unplaced or later modules are explicitly flagged without making unapproved design choices.
+
+### Findings
+
+- `ROADMAP.md:302` - preference - `hash` is listed as `not placed` while needed by `HashMap 23` (which backs KV store 23, EVM 23, and Wasm host tables 23), and `path` / `ascii / parse / fmt / hex` are `not placed` with helper usage unfixed; the unplaced-dependencies bullet (`ROADMAP.md:325-327`) only calls out endian codecs, CRC32, and Keccak - mention `hash` (for `HashMap` at 23) and the optional text/path helpers alongside the unplaced codec/crypto modules in `ROADMAP.md:325-327`.
+- `ROADMAP.md:325-326` - preference - repeated identical parenthetical links `(the [showcase plan](docs/proposals/EXAMPLES.md#showcases), the [showcase plan](docs/proposals/EXAMPLES.md#showcases), ...)` in two bullets - deduplicate each parenthetical to a single link `(the [showcase plan](docs/proposals/EXAMPLES.md#showcases))`.
+
+VERDICT: ACCEPT

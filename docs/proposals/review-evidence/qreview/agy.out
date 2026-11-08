@@ -1,0 +1,83 @@
+### L1. Operator/punctuation token set (OPEN-7)
+* **Pick:** **(a)**
+* **Runner-up:** (c)
+* **Cited:** 2026-11-08 items 34 (OPEN-7), 55, 59; `PHILOSOPHY.md` rule 5 (every fact once) & rule 15 (small analyzable core); `SYN-7`.
+* **Reason (47 words):** Item 34 ratified OPEN-7 ("Recommend exactly section 2's token set, longest match, contextual `>>` splitting only in generic closers"), and item 59 omits OPEN-7 from the spelling round. Furthermore, items 6 (`::`), 11 (removes keyword `as`), 15 (`::`), and 49 (`'label`) did not change punctuation tokens.
+* **Missing option:** None.
+
+### L2. Second escape list and single-quoted literals (OPEN-6, item 16)
+* **Pick:** **(a)**
+* **Runner-up:** (b)
+* **Cited:** 2026-11-08 items 16, 33 (OPEN-6), 49 (OPEN-18); `decisions.md` OD137, Core Q4.2; `PHILOSOPHY.md` rule 2 (one form) & rule 3 (transparency).
+* **Reason (52 words):** Item 16 explicitly states "quoted ASCII literals, patterns, comparisons migrate explicitly" to `u8`, and item 33 keeps "exactly two escape lists". Retaining `'a'` as an ASCII `u8` literal with `\'` preserves both items verbatim, adheres to OD137 (ASCII-only), and cleanly disambiguates `'a'` from `'label` by closing-quote lookahead.
+* **Missing option:** Unified 7-escape list (`\n \t \r \0 \\ \" \'`) shared across both string and ASCII byte literals (revising item 33 to one list while keeping `'a'` literals).
+
+### L3. Raw control characters in string literals (OPEN-6)
+* **Pick:** **(a)**
+* **Runner-up:** (b)
+* **Cited:** 2026-11-08 item 30 (OPEN-1), item 33 (OPEN-6); `decisions.md` Core Q4.1–Q4.4; `PHILOSOPHY.md` rule 3 (transparency) & rule 4 (verbosity never argues against clarity).
+* **Reason (44 words):** OPEN-6 explicitly recommends "no raw line breaks/control characters". Refusing raw tabs and control bytes (0x00–0x1F, 0x7F) inside string literals ensures every non-printable byte is visibly written as `\t`, `\0`, etc., preventing invisible source-text ambiguity between spaces, tabs, and control codes during audit.
+* **Missing option:** None.
+
+### L4. Integer suffix grammar and base prefixes (OPEN-5)
+* **Pick:** **(a)**
+* **Runner-up:** (b)
+* **Cited:** 2026-11-08 items 41 (OPEN-5), 59; `decisions.md` slice-0 surface (leading-zero refusal), Q6.2 (`200u8`), OD31, OD63, OD138; `PHILOSOPHY.md` rule 2 (one form).
+* **Reason (51 words):** OPEN-5 recommends lowercase base prefixes (`0x`/`0b`/`0o`), no `_` separators, no float suffixes, and retaining typed integer suffixes (`i8`..`u64`) directly adjacent to digits. Allowing suffixes across all four bases (`0xffu8`) avoids arbitrary base-specific exceptions while keeping one canonical spelling per base and width.
+* **Missing option:** Require expected-type inference everywhere and drop suffixes by rewriting Q6.2's example (already rejected by item 41).
+
+### S1-scope. Slice 1 relation to existing slice-1 spec
+* **Pick:** **(a)**
+* **Runner-up:** (b)
+* **Cited:** `decisions.md` Q8.2, vertical slices (2026-11-06), foundation-first (2026-11-07); `PHILOSOPHY.md` rule 1 (long-term structural solution), rule 5 (every fact once), rule 6 (Lean is the specification).
+* **Reason (51 words):** Defining the slice-1 compiler input via an explicit subset predicate over `ConcreteSpec` (with a pass-preservation proof) matches slice 0's `toCore` pattern, honors foundation-first stability, avoids churning rules needed immediately at slices 2, 3, and 9, and keeps one authoritative specification.
+* **Missing option:** None.
+
+### S1-move. Source text for reading a linear (non-Copy) value
+* **Pick:** **(a)**
+* **Runner-up:** (b)
+* **Cited:** `decisions.md` Q9.1 (read forms), OD62; `PHILOSOPHY.md` rule 2 (one form), rule 3 (transparency), rule 4 (verbosity), rule 9 (linear ownership), conflict priority 2 & 4 (transparency & explicitness beat brevity).
+* **Reason (53 words):** In Concrete, most code is written by models and audited by humans (`PHILOSOPHY.md`). Writing `move t` in source makes ownership transfer and use-site consumption immediately visible without looking up `t`'s declaration to check `Copy`, matching Core Q9.1 directly and satisfying conflict priorities 2 (transparency) and 4 (explicitness).
+* **Missing option:** None.
+
+### S1-abort. Where `abort()` may appear in a slice-1 body and its result type
+* **Pick:** **(a)**
+* **Runner-up:** (b)
+* **Cited:** 2026-11-08 item 4, item 18; `decisions.md` Q8.2, OD10, OD29, TYPE-4; `PHILOSOPHY.md` rule 2 (one form), rule 15 (small analyzable core), rule 18 (no hidden traps).
+* **Reason (54 words):** In slice 1, bodies are `let` bindings followed by `return`, and every `let` requires a concrete written value type (item 18). Restricting `abort()` to `return abort();` with bottom/never divergence typing (TYPE-4) avoids dead bindings (`let x: u8 = abort();`) and defers statement expressions (`OD29`) cleanly to slice 3.
+* **Missing option:** Make `abort;` a dedicated terminal statement keyword rather than a builtin call (conflicts with Q8.2's decided `abort()`).
+
+### S1-toml. `Concrete.toml` `[policy]` and `[assumptions]` schema
+* **Pick:** **(a)**
+* **Runner-up:** (b)
+* **Cited:** `decisions.md` Concrete.toml (2026-11-06), predictable policy (2026-11-06), facts report (2026-11-06); `ROADMAP.md` R-0576, R-0589; `PHILOSOPHY.md` rule 2 (one form), rule 5 (every fact once), rule 12 (honest trust boundaries).
+* **Reason (53 words):** A single top-level `version = 1` avoids skew between table versions in one manifest, and `[policy] predictable = true` (plus explicit boolean keys for termination/stack/trusted-assumptions when tightened) composes orthogonally as modules tighten policies, whereas a single string `profile = "predictable"` obscures individual policy toggles.
+* **Missing option:** Combine top-level `version = 1` with structured sub-tables (`[policy.predictable] enabled = true, allow_trusted_assumptions = false`).
+
+### R0600. Placement of R-0600 (derived always-aborts fact)
+* **Pick:** **(b)**
+* **Runner-up:** (c)
+* **Cited:** `ROADMAP.md` B1, R-0575, R-0600; `decisions.md` OD116, TYPE-4@2, facts report (2026-11-06); `PHILOSOPHY.md` rule 5 (every fact once), rule 16 (predictable execution).
+* **Reason (49 words):** R-0600's definition explicitly states "the checker uses it to prune paths after a call to an abort wrapper within the decided divergence typing (TYPE-4@2)... due with the functions-and-calls slice". Slice 1 has no user functions, calls, or branches; reporting `abort` in `main` is already covered by R-0575/R-0576.
+* **Missing option:** None.
+
+### F-NaN. Float NaN policy and float equality (`==`)
+* **Pick:** **(c)** (with `==` as reflexive mathematical value equality on proven-non-NaN floats, plus a total bitwise comparison function)
+* **Runner-up:** (d)
+* **Cited:** `decisions.md` no hidden traps (2026-11-06), OD10, OD63, OD99, OD106, OD107, ARITH-3; `PHILOSOPHY.md` rule 1 (structural solution), rule 12 (honest trust boundaries), rule 14 (reproducibility/auditability), rule 18 (no hidden traps), conflict priority 1 (soundness and provability).
+* **Reason (58 words):** Under rule 18 (no hidden traps) and priority 1 (soundness/provability), silent NaN creation/propagation is an unannounced arithmetic failure. Option (c) bars unproven NaN-producing operations unless wrapped in explicit `Result`/checked forms, and requires validation at bit-cast/FFI/Wasm boundaries, keeping `f32`/`f64` NaN-free by invariant and preserving reflexive `==`.
+* **Missing option:** Separate types `f32`/`f64` (proven finite: no NaN, no `+-inf`) vs `RawFloat32`/`RawFloat64` (arbitrary IEEE payloads at Wasm/FFI boundaries).
+
+#### Explicit Comparison: (c) alone vs (d), Finiter Tracking Cost, and Float `==`
+1. **(c) alone vs (d):**
+   * Under **(d)**, NaN can still inhabit `f32`/`f64` via bit reinterpretation, FFI, or Wasm guest inputs, and every float operation must canonicalize NaN payloads. Because `f32`/`f64` may still hold NaN at runtime, every theorem about `f32`/`f64` must still carry "assuming `x` is not NaN" hypotheses, and native backends on x86/ARM (where hardware instructions propagate quiet NaN payloads rather than canonicalizing to a single bit pattern) would have to emit post-op canonicalization sequences on every float instruction to match Wasm/Lean bit-for-bit reproducibility (`R-0577`).
+   * Under **(c) alone** (strictly enforced at bit-cast/FFI/Wasm boundaries via checked conversion `from_bits(u32) -> Result<f32, FloatError>`), `f32` and `f64` values are **guaranteed non-NaN by type invariant**. Hardware instructions need no NaN-canonicalization tax because NaN never enters a register of type `f32`/`f64`. Wasm guest values use a distinct raw/guest representation or canonicalize only inside the Wasm interpreter's guest ops.
+2. **Proof cost of tracking finiteness and whether a separate finite-float type is needed:**
+   * NaN arises from non-NaN operands only in four places: `0.0 / 0.0` (and `rem`), `0.0 * +-inf`, `inf - inf` (`+-inf + -+inf`), and `sqrt(x)` for `x < 0`.
+   * If `+-inf` is allowed in `f32`/`f64`, proving `a - b` or `a * b` does not produce NaN requires proving the operands are not opposite infinities or `0 * inf`—which in practice forces tracking finiteness anyway, because any `a + b` can overflow to `inf` and feed a later `inf - inf` or `0 * inf`.
+   * Therefore, **finiteness should be the invariant of `f32`/`f64` itself** (no separate `FiniteF64` type needed: `f32`/`f64` *are* finite IEEE floats; overflow to `+-inf` is treated like integer overflow under OD10/no-hidden-traps, requiring range evidence or explicit `checked_*` / `saturating_*` / `ieee_*` functions). That collapses both overflow-to-inf and `inf - inf` / `0 * inf` into the same bounded-range obligation already used for integers.
+3. **What float `==` should mean for NaN given proofs (`EQ`):**
+   * With `f32`/`f64` guaranteed non-NaN (or finite) by invariant, `==` is standard IEEE numeric equality (`-0.0 == +0.0`), which is **total, reflexive (`x == x` is always `true`), symmetric, and transitive** in Lean proofs!
+   * For raw bit identity (distinguishing `-0.0` from `+0.0`, or comparing raw IEEE bit patterns at Wasm/FFI boundaries), provide a separate named operation (`f64::bits_eq(a, b)` or `f64::to_bits(a) == f64::to_bits(b)`). If NaN is ever permitted inside `f32`/`f64` (under (a) or (d)), `==` should be **refused on unproven-non-NaN floats** (or require non-NaN evidence) rather than silently breaking reflexivity `x == x` in Lean specifications or silently diverging from hardware `ucomisd` via bitwise equality.
+
+ANSWER: L1=a; L2=a; L3=a; L4=a; S1-scope=a; S1-move=a; S1-abort=a; S1-toml=a; R0600=b; F-NaN=c; EQ=reflexive-on-non-NaN-plus-named-bits_eq

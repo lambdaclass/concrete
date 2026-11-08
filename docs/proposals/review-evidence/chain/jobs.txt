@@ -1,0 +1,8 @@
+codex-rl
+agy-rl
+codex-rs
+agy-rs
+codex-sw
+agy-sw
+kimi-rl
+kimi-rs

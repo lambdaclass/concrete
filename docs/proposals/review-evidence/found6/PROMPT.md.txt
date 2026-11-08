@@ -1,0 +1,23 @@
+Revise the Concrete foundation proposal into draft 2. Inputs, in this directory:
+- _review/FOUNDATION_PROPOSAL_v1.md: draft 1, which you wrote.
+- _review/review_v1_{codex,kimi,agy}.out: three independent reviews of it. Use the final verdict sections; agy could not read the repo.
+- The repo: docs/decisions.md (authoritative), legacy/docs/spec/, docs/archive/, ROADMAP.md.
+
+Write _review/FOUNDATION_PROPOSAL.md (draft 2) and _review/CHANGES_v2.md. CHANGES_v2.md has one line per review finding: accepted / rejected / partly accepted, with the reason. Do not modify any other file.
+
+Required:
+1. Verify every finding against the repo before accepting it. In particular:
+   - Kimi says TYPE-20 makes char a one-byte code unit, and that Q3.7 has a zero-byte access exception.
+   - Kimi says the decided infoflow/memory instrumentation includes allocation sizes, loop counts, ordered release site/value traces, and requested/net/peak logical bytes per lineage.
+   - Codex says TYPE-3 Text is owning and linear.
+   - Codex notes the option-b approval is not yet in decisions.md. The owner said it on 2026-11-07, verbatim: "ok to option b then for freeze the foundation>?". Cite that quote and say it is pending recording. Also reconcile it with the A2i row ("not an untested whole-language architecture"): the frozen foundation is interfaces and laws, proved and tested, not an untested whole-language design.
+   Where a review is right, fix the text. Where it is wrong, say why in CHANGES.
+2. Resolve agy's structured-vs-byte-memory contradiction explicitly. Core has raw pointers (slice 24), expose/from_exposed and sizeof/alignof, so say exactly which state the Core semantics and the Lean evaluator use: for example, structured places for safe typed storage plus byte/provenance blocks for raw and exposed storage, with a stated projection and the layout interface as a read-only parameter. Also say which IR the reference evaluator runs, so the three-way comparison is meaningful. Make one decision and justify it. Don't leave options.
+3. C8: the evaluator takes an explicit environment/choice input.
+4. S3: add per-compilation, kernel-checked certificates binding the exact source bytes to the emitted BIR and to the backend input, and maximal-behaviour refinement (including no infinite silent target stuttering), if consistent with the decided rows.
+5. C4: make padding independence apply to typed observations, and specify raw byte observation separately.
+6. C7: include the release-policy interface and its noninterference obligation, plus the decided instrumentation.
+7. Move every new rule or spelling that is not a decided row into section 5 as its own numbered owner question, each with a recommended answer and the runner-up. This includes: the TrapKind inventory and trap kind spellings; the byte column and tab counting; the UTF-8→invalidRange mapping; the checked-conversion error type (OutOfRange: where does it live?); enum tag sizing (separate from the target-profile revision); destruction order for arrays and collections (or defer it to their slices); the Entropy shape (or defer it to slice 6, consistently with Q7.10); and the struct-invariant and post-cleanup ensures timing (or defer them to slice 17). Prefer deferring slice-level details over freezing them, unless a foundation proof needs them.
+8. Split section 5 so each independent change is separately answerable: target abstraction, usize, enum layout, release-context erasure, registry extensibility, and native-image milestone vs differential qualification.
+9. Niche policy: present three options, (a) the single non-null pointer niche, (b) tagged layout now with future niches only by owner decision, (c) no niches permanently. Recommend one, with reasons, and note that the reviewers split.
+10. Keep concise, plain English, accurate anchors.

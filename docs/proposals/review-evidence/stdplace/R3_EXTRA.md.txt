@@ -1,0 +1,2 @@
+
+ROUND 3 (final). This is draft 3. DELTA_2_3.diff shows exactly what changed since draft 2, which you reviewed in round 2; section 7 records the dispositions. Check that each of your round-2 findings is fixed and that the delta introduced no new error. Report only remaining or new findings. If none remain at BLOCKER or MAJOR level, the verdict is ACCEPT or ACCEPT-WITH-CHANGES.

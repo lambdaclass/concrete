@@ -1,0 +1,14 @@
+OWNER RULE (verbatim, 2026-11-08): "ALWAYS tell the reviewrs to do the best long term thing rather than cuitting corners". Judge by the best long-term design, not the cheapest now. Report any shortcut (Claude's, the repository's or your own) as a real finding and name the long-term alternative.
+
+The current directory is a git-archive copy of Concrete's origin/main (a fully proven systems language; Lean 4 is the specification; the new compiler is built slice by slice). Read _review/K13.md (a diagnostics design the owner asked for, tied to K1 source provenance in _review/KLIST.md). Check it against the repository: docs/decisions.md (the diagnostics row "decided-project-diagnostics-2026-11-06", the runtime/trap-line row, rule IDs and revisions R-0603), docs/archive/crucial-2026-11-06/DIAGNOSTICS.md, ROADMAP.md (R-0593, R-0575, slice 0 and 1 rows), docs/proposals/MERGED.md item 5 (typed SiteId and spans), Concrete/README.md (slice-0 design, tokens with spans), docs/PHILOSOPHY.md.
+
+Tasks:
+1. For each of points a-f: AGREE or DISAGREE with a reason (at most 70 words), saying what is already decided or planned (cite), and the best long-term design. Compare concretely with Elm, rustc, Gleam and Roc: what each does well that Concrete should take, and what it should not (for example rustc's error codes, Elm's hint heuristics, Roc's continue-after-errors).
+2. Point c: should `concrete explain <rule>` exist, or should the explanation be reachable another single way (a link or path in every diagnostic, the browsable owner view)? Recommend one way.
+3. Point e: is first-error-per-file enough? Recommend the long-term rule.
+4. What must K1 provenance carry to support this, and must it start before slice 1?
+5. Anything missed.
+Do not modify files. Cite repository paths you read.
+
+End with exactly one line:
+ANSWER: AGREE=<points>; DISAGREE=<points or none>; EXPLAIN=<command|other: what>; CASCADE=<rule in a few words>; BEFORE_SLICE1=<yes|no>; MISSED=<short list or none>

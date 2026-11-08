@@ -1,0 +1,29 @@
+Revise the Concrete foundation proposal into draft 3. Inputs, in this directory:
+- _review/FOUNDATION_PROPOSAL_v2.md: draft 2.
+- _review/CHANGES_v2.md.
+- _review/review_v2_{codex,kimi,agy}.out: the round-2 delta reviews. Use their final sections. agy could not read the repo.
+- The repo: docs/decisions.md and docs/archive/decisions-2026-11-05/core_rows.json (authoritative row notes), legacy/docs/spec/, legacy/docs/compiler/A1_BOUNDARIES.md.
+
+Write _review/FOUNDATION_PROPOSAL.md (draft 3) and _review/CHANGES_v3.md (one line per round-2 finding: accepted / rejected / partly accepted, with the reason). Do not modify any other file. Verify each finding in the repo first. Required:
+
+1. Restore decided rules that draft 2 wrongly reopened:
+   - OD106/ARITH-10's `try_convert -> Result<T, OutOfRange>`;
+   - Q2.3's destruction orders;
+   - Q3.8's zero-sized index-order note.
+   Remove questions 12 and 13 if they are fully decided. Correct CHANGES_v2's wrong dispositions in CHANGES_v3.
+2. C8 / section 3: add infinite-behaviour adequacy, i.e. compatible limits of fuel-indexed prefixes related to infinite maximal executions (silent divergence and infinite interaction), as A1_BOUNDARIES and Q9.9 require. Also state the simulation method: forward simulation plus target determinism with finite stuttering gives backward refinement, or say what replaces it.
+3. C3: fix the view-representation claim. Q4.5 only decides StaticStr's FFI adapter. Say what view representation is decided (if anything) and what is a proposal or deferred. Make the niche-decoding law conditional on question 5 (no niche machinery if niches are not adopted).
+4. C4 hybrid state, made precise enough to prove:
+   - (a) What triggers byte materialization: safe borrow views vs raw address-taking or expose.
+   - (b) What a typed write does to already-materialized padding.
+   - (c) That a safe typed read of a materialized place applies Rep decoding and validity, and what happens when the decode fails (stuck, not a fabricated value).
+   - (d) That the oracle queries are deterministic functions of the execution history.
+5. P4 / Q17: native executions can't be forced to realize the same choices (exposed stack addresses, padding). Replace mandatory three-way equality with: each native trace is checked to be an allowed observation of the Core semantics under the same inputs (a refinement check), with exact equality where behaviour is deterministic. State this, and set the question's recommendation accordingly.
+6. C9: specify how ensures refers to consumed parameters (pre-state values, `old`-style, per the decided rows) and to scope-cleaned parameters.
+7. Revision register: add Q3.10's `base + size ≤ 2^64−1` bound for target abstraction, and Q1.11 / Q2.4 / Q4.6's u64 count and index contracts for usize.
+8. Question 7 (usize): Kimi argues that Q3.5 deliberately keeps program meaning target-independent across profiles, which target-sized usize breaks. Present both sides fairly:
+   - usize: no 64-bit lengths on small chips;
+   - u64: the same meaning everywhere, at a cost on 8/16/32-bit targets.
+   Give a recommendation. Consider a third option if one is better, for example u64 semantics with checked target limits and a proved narrower representation.
+9. Keep the reviewer splits visible in questions 5 (niches: Codex and Kimi (b), agy (c)) and 9 (agy wants the spellings now).
+10. Concise, plain English, accurate anchors.

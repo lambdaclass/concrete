@@ -1,0 +1,12 @@
+The previous effective-rewrite and dry-run findings are resolved. Local multiple URLs and push URLs are also handled.
+
+VERDICT: FINDINGS
+tokens used
+10,796
+- servers/dev-home.sh:43 — An empty or absent URL does not prove `origin` is missing: it can still have a fetch refspec or push URL. `remote add origin` then fails with “already exists.” Fix: detect whether the remote exists separately; set its URL when present and add it only when absent. The previous missing-origin finding is only partly resolved.
+
+- servers/dev-home.sh:44 — Reads include inherited configuration, but writes affect only `.git/config`. Inherited origin URLs survive `--replace-all`; inherited push URLs make line 47’s `--unset-all` fail under `set -e`. Fix: inspect configuration scope and explicitly reject inherited origin settings with an actionable diagnostic, or normalize them at their source.
+
+The previous effective-rewrite and dry-run findings are resolved. Local multiple URLs and push URLs are also handled.
+
+VERDICT: FINDINGS

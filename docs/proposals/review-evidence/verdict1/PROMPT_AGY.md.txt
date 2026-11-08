@@ -1,0 +1,921 @@
+Answer directly from the context below. Do NOT read files or use tools; the merged simplification list and philosophy are included at the end.
+
+Concrete is a systems language rebuilt as a fully proven compiler in Lean (no GC, linear ownership, second-class references, explicit capabilities, no hidden traps, "know everything"). Owner principles: best long-term design; one form per situation; LLMs write, humans read and audit, so optimize for checking and reading; verbose is fine when clear.
+
+You may read the repository here (docs/decisions.md, docs/PHILOSOPHY.md, ConcreteSpec/, legacy/docs/spec/) and _review/SIMPLIFY_MERGED.md and _review/GRAMMAR_REVIEW.md.
+
+The owner asked Claude: "are all these the best long term decisions and go with the philosophy?" Claude answered with the recommendations below. The owner now asks that every recommendation be reviewed by the other models. Review Claude's answer critically against docs/PHILOSOPHY.md (rules 1-18, the conflict order and the admission test) and the decided rows in docs/decisions.md. The merged simplification list (_review/SIMPLIFY_MERGED.md) and the grammar sheet (_review/GRAMMAR_REVIEW.md) give the candidates' details and anchors.
+
+For EVERY numbered item, say AGREE or DISAGREE with Claude's recommendation, with at most 40 words of reason. Disagree where Claude is wrong, inconsistent or misses a consequence (for example: a change that breaks linear ownership, a proof, a decided row, a showcase workload, or introduces a second form). Be honest; do not disagree for its own sake. Then list any further decision the owner still has to make that Claude did not mention. Do not modify files.
+
+=== Claude's recommendations ===
+
+PROCESS
+A. Owner sign-off path for the review cap: when a branch reaches its review-round cap, the owner may approve one exact commit SHA after Codex, Kimi and agy have all reviewed it; the approval is recorded. Claude: approve (not a bypass; honest, visible trust boundary).
+B. A branch mixing classes (docs cap 2 / scripts cap 3 / compiler-spec cap 5) gets the highest cap. Claude: approve.
+C. Hold a std placement round (which std items live where). Claude: approve.
+D. Trap kind names: overflow, division_by_zero, invalid_shift, bounds, invalid_range, abort. Claude: approve but rename `bounds` to `out_of_bounds` (the others name what went wrong).
+
+CHANGE CANDIDATES (numbers from SIMPLIFY_MERGED.md)
+1. Remove dot method calls; keep associated and trait-qualified calls. Claude: yes.
+5. Require `field: value` in constructors (no punning). Claude: yes, AND extend to 6.
+6. Require `field: binder` in patterns too, so one rule covers constructors and patterns (merged list said keep pattern punning). Claude: yes.
+7. Explicit mathematical-arithmetic boundary spelling in contracts. Claude: yes, strongly.
+8. Replace expression `as` casts with named conversions. Claude: NO, keep `as` (already the single explicit lossless-only conversion; try_convert covers checked; renaming adds names without removing duplication).
+9. Replace consuming heap `*h` with a named move-out. Claude: yes, strongly (same glyph as non-consuming deref hides a move).
+10. Uniform `assert(e);` / `assume(e);` parentheses. Claude: yes.
+11. `#[link_name("sym")]` / `#[export_name("sym")]`. Claude: yes.
+12. `::` for module paths in imports too. Claude: yes.
+13. Remove `char` (it is exactly a byte per TYPE-20; name suggests Unicode); u8 plus explicit UTF-8 ops. Claude: yes.
+14. Remove special print/println/append builtins; ordinary calls through the Console grant. Claude: yes.
+15. Require explicit local types and every result arrow including `-> Unit`; keep argument-based generic inference. Claude: yes.
+
+ASK ITEMS
+2. Keep only OrderedMap now; HashMap when the KV store (slice 23) measures a need; no compiler privilege for map names. Claude: yes.
+16. Remove Process until a target supplies process operations. Claude: yes.
+17. defer late reads: KEEP today's semantics (deferred statement runs as written at scope exit). Capturing arguments at registration would move a linear resource immediately, breaking `defer close(f)` followed by uses of f. Claude: keep.
+18. Refuse ordinary bodyless functions (keep trait signatures and extern). Claude: yes.
+19. Remove general packed structs until a real foreign ABI needs them. Claude: yes.
+20. Remove local `assume`; assumptions only in named trusted contracts with evidence identity. Claude: yes. (Note: if adopted, item 10 covers only assert.)
+22. Callbacks: KEEP decided function values (fn pointer + explicit context, with contracts). Claude: keep.
+23. Constants: closed total initializers evaluated at compile time, values substituted; no per-use runtime evaluation. Claude: yes.
+
+ALREADY TAKEN DECISIONS (foundation Q1-Q18, 11 process decisions, capabilities kept as with(...) plus grants). Claude: they hold; Q4 (i32 enum tags for now) and Q5(b) (no niches now, owner-only later) are deliberate "for now" choices.
+
+End with exactly one line:
+ANSWER: DISAGREE=<item ids or none>; MISSING=<short list or none>
+
+===== PHILOSOPHY.md =====
+# Concrete Philosophy
+
+Status: standing policy, the one home of the project's design rules. Every other document links
+here instead of restating them. The language rules themselves are the
+[specification](../legacy/docs/spec/README.md) and the owner's [decision record](decisions.md); where this
+document cites one, those are authoritative, and nothing here overrides a decided entry.
+
+It absorbs, as of 2026-11-04, the principles and design policy of [PROJECT.md](../legacy/docs/project/PROJECT.md), the
+refusal list of `ANTI_FEATURES.md` and the "no" and "not yet" entries of PROJECT.md's language
+decisions. The per-language comparisons that used to sit beside each refusal are in
+[INFLUENCES.md](../legacy/docs/project/INFLUENCES.md#how-other-languages-answer-concretes-refusals).
+
+Contents:
+
+1. [What Concrete is for](#what-concrete-is-for)
+2. [The rules](#the-rules)
+3. [When rules conflict](#when-rules-conflict)
+4. [Admission test](#admission-test)
+5. [What Concrete refuses](#what-concrete-refuses)
+6. [Where the earlier rules went](#where-the-earlier-rules-went)
+
+## What Concrete is for
+
+**Concrete is a fully proven systems programming language with no garbage collector, where you can
+know everything a program does: what it does, what it may touch, whether it can fail or stop, and
+what is proved about it.** "Fully proven" means compiler correctness proved end to end, with every
+unproven step named as an explicit assumption and never silently trusted, and a program's own
+correctness proved by Lean theorems about it. This states the project's goal: each guarantee holds
+only as its evidence lands, and native claims remain conditional on their named assumptions
+([decision](decisions.md#decided-project-core-statement)).
+
+Concrete is a small systems language for code that must be reviewed, audited, bounded and proved:
+no garbage collector and no hidden runtime, linear ownership, second-class references, and
+authority that is visible in every signature. Its aim is that a reader can answer "what does this
+code do, what may it touch, and what is actually proved about it" from the source, the compiler's
+reports and the Lean theorems, without trusting anything that is not named. Lean 4 is the language
+the semantics and proofs are written in and the language the compiler is built in; Concrete itself
+stays a systems language, not a proof assistant.
+
+Most Concrete code is expected to be written by language models, not typed by hand. What matters
+is that everything is checkable and easy to understand: the cost that counts is the cost for a
+reviewer, an auditor or a checker to understand what code does and what it may touch. Rule 4
+draws the consequence for verbosity.
+
+## The rules
+
+Each rule states what holds and why. Its history is in the changelog and the decision record.
+
+1. **Pick the best long-term structural solution.** A design question is answered by the structure
+   that removes the whole class of problem, not by the smallest local patch, and once that answer is
+   known it is chosen rather than offered as one option among several. *Why:* a patch fixes one
+   instance and leaves the class to recur; the language is still small enough to change shape.
+
+2. **One form per situation.** There are never two ways to write one thing. A second spelling, an
+   alias or a convenience form beside an existing one is removed, not added. *Why:* every extra form
+   is one more thing a reader, a checker and a proof must cover, and two forms drift apart. The
+   decided removals are listed in [OD61](decisions.md#od61) and the entries it names.
+
+3. **The most transparent long-term option wins.** Between two designs, prefer the one that leaves
+   nothing for the reader to reconstruct: no hidden control flow, data flow, allocation, dispatch,
+   authority or cleanup. *Why:* Concrete's value is that behaviour can be read off the source.
+
+4. **Verbosity never argues against a clearer or safer design.** Writing more is acceptable when it
+   makes behaviour, authority or failure visible. "It is longer" is not a reason to reject a
+   design; "it hides something" is. *Why:* most code is now written by tools, where writing explicit
+   forms is cheap and reviewing them is the expensive part.
+
+5. **Every fact once.** Every fact that affects behavior or authority has exactly one authoritative
+   definition, at a place the reader can find from the use site. Views checked against that
+   definition (a signature, a compiler report, a derived table or registry) and explanatory
+   examples are not second definitions. A restated fact that nothing checks (a size copied into a
+   constant, a rule copied into a second document, a capability implied rather than declared) is a
+   defect waiting to drift. This document is itself an instance: other documents link here.
+
+6. **Lean is the specification.** The language's syntax, typing, ownership, effects and semantics
+   are defined in Lean. Each rule is a readable definition with a plain-words doc comment and its
+   conformance examples, and the reference interpreter is built from those definitions. No prose is
+   generated from them. Machine views (the rule registry, rule IDs, manifests) are derived from them
+   and checked for staleness. A guide may teach and link the rules but states none of its own. Until
+   a rule lands in Lean, its prose chapter states the decided rule, and the chapter retires once its
+   rules are covered
+   ([Lean-source decision](archive/roadmap-2026-11/ROADMAP_DECISIONS.md#2026-11-01--lean-as-the-only-source),
+   [revised 2026-11-04](archive/roadmap-2026-11/ROADMAP_DECISIONS.md#2026-11-04--lean-is-the-specification)). *Why:* one
+   definition that machines check cannot silently disagree with itself, and a second prose
+   rendering would be a second text to keep in step.
+
+7. **Systems first, not theorem-prover first.** Source code reads as systems programming. Proofs
+   attach to real Concrete functions through the semantics, not to a parallel reimplementation.
+   *Why:* the point is evidence about the code that runs.
+
+8. **No hidden runtime.** No garbage collector, no hidden reference counting, no hidden scheduler or
+   executor, no life before `main`. What the target does at startup, at shutdown and on a trap is a
+   named entry in the target's table. *Why:* memory, time and authority behaviour must be auditable
+   and boundable.
+
+9. **Ownership is linear, not affine.** A non-Copy value is used exactly once; it is never dropped
+   silently at the end of a scope. Copy means "may be duplicated", nothing more. `_` names an unused
+   binding and never discards a linear value, a `Result` or an `Option`
+   ([OD62](decisions.md#od62), [OWN-5](../legacy/docs/spec/ownership.md#OWN-5)). Cleanup is an explicit
+   consuming operation. *Why:* every resource has one visible owner and one visible end.
+
+10. **References are second-class.** A reference may be passed down into a call or held inside a
+    borrow block; no function, trusted or not, returns one and no value stores one
+    ([REF-1](../legacy/docs/spec/references.md#REF-1), [REF-3](../legacy/docs/spec/references.md#REF-3)). Raw pointers, used
+    in `trusted` code or under `with(Unsafe)`, are the only escape, and every use carries stated
+    validity premises; the full raw-memory taxonomy is still
+    [undecided](decisions.md#core-unsafe-premises). *Why:* scoped access
+    needs no lifetime language, and the checker and the proofs stay local.
+
+11. **Authority and trust are visible.** A function's permissions are declared in `with(...)`; a
+    resource is a value it holds; an operation on a resource needs both. Nothing discharges or hides
+    an operational capability, `trusted` and `with(Unsafe)` included, and there are no umbrella
+    capabilities ([authority rules](decisions.md#decided-2026-11-02-authority)). *Why:* a
+    reviewer reads what a function may do from its signature alone.
+
+12. **Trust boundaries are honest.** Every claim says which of these it is: enforced by the compiler,
+    reported by analysis, proved in Lean, or assumed at a named source, backend, toolchain or target
+    boundary. Being listed in the trusted base proves nothing; an unknown is never reported as a
+    reassuring default ([ABSENCE_IS_NOT_A_FACT.md](../legacy/docs/project/ABSENCE_IS_NOT_A_FACT.md)). New kinds of fact
+    (frames, dependencies, ghost state, resource bounds) are reported through the one obligation and
+    evidence ledger, never a parallel system. *Why:* evidence that overstates itself is worse than
+    none.
+
+13. **The compiler owns semantic identity.** A name, a link symbol or a restated constant is a
+    representation of an entity, never the entity. Every pass preserves an entity's identity or
+    creates a checked derivation from it, and identity claims are tested structurally, not by
+    observed values. *Why:* using a representation as identity, and re-interpreting it in a later
+    pass, is the single largest class of past compiler defects. (Older documents and comments
+    call this "principle 12".)
+
+14. **Artifact-first auditability.** The compiler emits facts, evidence and replay commands that
+    people, CI and tools consume directly. Auditing never means reading the compiler's source.
+    *Why:* an audit that depends on the auditor's reading of the implementation is not repeatable.
+
+15. **A small analyzable core over feature growth.** A smaller language with strong boundaries
+    beats a larger one with weaker analysis. Removing a feature is an improvement when what remains
+    is more coherent; each refusal makes the rest easier to check, teach and prove. *Why:* every
+    feature is paid for in grammar, checker, semantics, proofs and review.
+
+16. **Predictable execution and a separable core.** Recursion, loop bounds, allocation, blocking and
+    foreign calls stay visible, so a bounded, analyzable core can be told apart from an effectful
+    shell, and writing code that way is natural. Termination is known before a program runs: every
+    loop, recursive cycle, indirect call and blocking or foreign boundary either has termination
+    evidence or carries a written permission at that source, which every report traces to its
+    callers. Recursion depth, stack use, allocation, blocking, foreign calls and possible aborts are
+    reported per function with their evidence, and a module or project policy may require them;
+    these are reported facts, not function categories
+    ([decision](decisions.md#decided-project-no-hidden-traps), 2026-11-06). *Why:* resource bounds
+    and proofs need a core they can reach, and an unexplained infinite loop is a hidden behaviour.
+
+17. **Real programs test the shape.** A design is validated by serious workloads, not by thought
+    experiments alone, and a refused or deferred feature reopens only on such evidence. *Why:*
+    hypothetical convenience is not a cost; measured pain is.
+
+18. **No hidden traps.** Accepted safe code has no reachable implicit language trap: every operation
+    that could fail at run time carries checked evidence that it cannot, or its failure is handled by
+    a branch written in the source. An explicit `abort()` remains terminal behaviour and is reported
+    transitively; resource exhaustion and foreign behaviour are named target and trust premises.
+    Evidence comes from a small decidable checker proved correct in Lean, contracts whose evidence is
+    closed, and Lean theorems, never from an unpredictable solver
+    ([decision](decisions.md#decided-project-no-hidden-traps), 2026-11-06). *Why:* an inserted trap
+    is an exit the reader of the operation cannot see, which rule 3 refuses for the same reason
+    exceptions are refused.
+
+## When rules conflict
+
+**Decided by the owner on 2026-11-05** (row P2, [record](decisions.md#decided-project-priority)). When two rules pull in different directions, the earlier
+item in this order wins:
+
+1. soundness and provability, which includes honest trust boundaries (rule 12) and compiler-owned
+   semantic identity (rule 13): a claim that overstates its evidence, or an entity known only by
+   its spelling, is unsound;
+2. transparency: nothing hidden, and every claim backed by an artifact a reader can inspect and
+   replay (rules 3, 8, 11, 14);
+3. a single source of truth: one authoritative definition per fact (rule 5);
+4. explicitness at the use site;
+5. brevity.
+
+The third item is read with rule 5's definition: every fact that affects behavior or authority has
+one authoritative definition, at a place the reader can find from the use site. So "write it once"
+and "show it at the use site" agree whenever the use site can reach that definition, directly or
+through a checked view such as a signature or a report; a fact that can be found only by searching
+the whole program fails both.
+
+**This order guides choices that are still open. It never reopens a decided rule.** The owner's
+answers in [decisions.md](decisions.md) stand as recorded, whatever this order would
+suggest; changing one is a new owner decision. When the order argues for changing a decided rule,
+the change goes to the owner as a proposed revision and the decided rule stands meanwhile. For
+example, type arguments are inferred from the checked argument types
+([OD46](decisions.md#od46)), and that stands. Capability arguments were inferred the same
+way ([OD45](decisions.md#od45), [OD87](decisions.md#od87)) until the owner
+approved, on 2026-11-05, the revision that writes them on every capability-polymorphic call,
+checked against the callee, because a call's authority should be read rather than solved for
+([revision](decisions.md#decided-2026-11-05-revisions)).
+
+## Admission test
+
+A proposed language feature, compiler feature or borrowed idea is admitted only if every question
+below has a good answer. Each question is a rule above applied to the proposal; failing one is
+grounds for rejection.
+
+1. **One form?** Does it add a second way to do something already expressible? (rule 2)
+2. **Visible?** Does it expose ownership, effects, dispatch, layout, allocation or control flow, or
+   hide work behind familiar syntax? (rules 3, 8)
+3. **One fact, one place?** Is every fact it introduces written once and findable from the use site?
+   (rule 5)
+4. **A simple invariant?** Can it be stated as one Lean judgment without "except when" clauses, and
+   does it elaborate into simpler Core forms? (rules 6, 15)
+5. **Declaration-level and phase-separated?** Does it keep cross-module dependence on declarations
+   and summaries, never on another module's bodies, and early phases independent of later semantic
+   information? (rule 15)
+6. **Static or explicitly indirect dispatch?** Is every call target known at compile time or visibly
+   indirect at the call site? (rule 3)
+7. **Predictable code?** Can a reader form a rough model of the generated work from the source?
+   (rule 16)
+8. **One owner?** Does exactly one pass or judgment own it, with one diagnostic when it fails? (rules
+   5, 13)
+9. **Authority intact?** Does every effect still appear in `with(...)` and every resource as a
+   value, with no way to hide either? (rule 11)
+10. **Through the contract boundary?** Do its safety, behaviour, effects, failure modes and resource
+    consequences appear in summaries and obligations, rather than disappear at a function boundary?
+    (rules 12, 14)
+11. **Fails visibly?** Does an unsupported use produce a precise diagnostic or a named hole, never
+    silence? (rule 12)
+12. **Identity kept?** Does every entity, claim and piece of evidence it introduces have a typed
+    identity of its own (subject, claim, dependencies, artifacts, checker rule, freshness), never a
+    string, a display name, a first-match lookup or one status standing for several independently
+    degradable claims? Does it keep apart identities that change independently (implementation,
+    model, exported contract, proposition, policy, claim scope) and say which one moves under each
+    change? An exact digest prevents substitution but says nothing about whether a model is
+    faithful; an identity key holds the subject of a fact, never alternative answers, so
+    contradictory rows (trusted and proved, refinement and equivalence) cannot coexist under
+    different keys. (rule 13)
+13. **Honest under hostile input?** For an evidence or tooling feature: does it treat proof
+    modules, generated artifacts, receipts and checker output as adversarial, define limits,
+    malformed, duplicate and surplus input behaviour, negative controls and mutation tests, and say
+    how a revoked checker or assumption degrades only the claims that depend on it? Silence creates
+    a missing obligation, never an assumption. (rule 12)
+14. **A real benefit for audited code?** Is the gain more than writing speed? Convenience alone is
+    not enough, and brevity alone never outweighs a visibility loss. (rules 4, 17)
+
+**In one line.** A feature is promising when it makes the language and the compiler easier to
+explain at the same time: explicit, local, phase-separated, summary-friendly and easy to lower
+away, never implicit, global, inference-heavy, body-dependent or hard to model formally.
+
+**Ordering.** Architecture before ornament; visibility in tooling before convenience syntax;
+layout and ABI credibility before feature expansion; proof-friendly boundaries before richer
+abstractions; replayable evidence alongside each new contract family. The roadmap applies this
+order; it does not restate it.
+
+**Borrowed ideas.** Copy constraints before copying features: Zig, Austral, SPARK and Odin are
+most useful where they say no. [INFLUENCES.md](../legacy/docs/project/INFLUENCES.md) records what is copied, adapted and
+rejected.
+
+**Recording a refusal.** A rejected feature with its reason is worth more than a feature added
+without one. A new refusal gets an entry in the next section, with its research note when there is
+one. A refusal that is a language rule is an owner decision first ([decisions.md](decisions.md)).
+
+## What Concrete refuses
+
+Each refusal is either **Permanent**, with the reason, or **Reopens when** a named condition holds.
+"Under the pull rules" means that a real workload, bug report, pilot or user need runs into the
+refusal and measures its cost; a hypothetical convenience never counts (rule 17). Reopening a
+refusal that is a decided language rule is an owner decision, recorded in
+[decisions.md](decisions.md).
+
+Some former "not yet" entries are planned work, not refusals, and live in the roadmap: freestanding
+targets (the [allocation decision](decisions.md#decided-2026-11-02-allocation) already
+covers their allocators; [R-0323](../legacy/docs/archive/roadmap-2026-11/ROADMAP_BACKLOG.md#task-r-0323) and
+[R-0324](../legacy/docs/archive/roadmap-2026-11/ROADMAP_BACKLOG.md#task-r-0324) split std and its capabilities), package management
+(decided 2026-10-17, in the [task register](archive/roadmap-2026-11/ROADMAP_TASKS.md)), and the richer contract layer
+(dependency-flow contracts, mature loop invariant and variant authoring, the specification
+library, and package and release evidence summaries, phase E of the
+[roadmap](../ROADMAP.md#phases)). That layer's syntax is frozen only after a flagship or external
+workload needs its facts, and its facts are reported through the one evidence ledger (rule 12).
+Within that layer the decided rules hold: no `old`, quantifier or implication in contracts
+([OD117](decisions.md#od117)), specification functions with a required, total body
+([OD115](decisions.md#od115)) and no total-function category
+([OD116](decisions.md#od116)). How frames, entry-state facts and termination are stated
+inside those rules was decided on 2026-11-05 (row P18, [record](decisions.md#decided-project-contracts)): no snapshot construct, frame
+and entry/exit properties as Lean theorems (a source frame clause would be a new owner decision),
+and per-function termination theorems for ordinary functions.
+
+**Hidden runtime and hidden work**
+
+- **Garbage collection and hidden reference counting.** Permanent. They hide when memory is
+  reclaimed and whether a call allocates; linear ownership and explicit cleanup replace them.
+- **A hidden async runtime, executor or scheduler, and function colouring.** Permanent. They hide
+  concurrency and scheduling behind calls that look ordinary.
+- **Explicit structured concurrency.** Reopens when [R-0399](../legacy/docs/archive/roadmap-2026-11/ROADMAP_BACKLOG.md#task-r-0399)'s pull
+  trigger holds: a workload needs concurrency after the new compiler's v1 surface is frozen. Any
+  design keeps authority in `with(...)` and handles as linear values; single-threaded execution
+  until then.
+- **Exceptions and unwinding.** Permanent. They turn every call into a hidden exit. Recoverable
+  failure is a `Result` handled by an exhaustive `match`, running out of memory included
+  ([allocation decision](decisions.md#decided-2026-11-02-allocation)); an abort is terminal
+  and runs no deferred call ([OD10](decisions.md#od10)).
+- **Postfix `?` and any implicit error propagation or conversion.** Permanent. It hides a function
+  exit, a cleanup boundary and a conversion behind one character; the error arm is written.
+- **Mutable global state of any kind.** Permanent ([OD8](decisions.md#od8)). Constants are
+  truly immutable; resources reach code only as values handed to it.
+
+**Implicit conversions and inference**
+
+- **Implicit numeric conversions.** Permanent. They hide data loss. `as` converts only when no
+  value can be lost ([OD11](decisions.md#od11)); every other conversion is a named function
+  ([OD99](decisions.md#od99)), and a checked one reports failure as a `Result`
+  ([OD106](decisions.md#od106)).
+- **Truthiness.** Permanent. A condition is a `bool`; no other value stands in for one.
+- **Implicit string conversion** (`Display`/`ToString`-style hooks). Permanent. It hides
+  allocation and dispatch. The reserved output and append forms ([OD133](decisions.md#od133))
+  accept a closed list of types, expand to typed calls and keep their authority visible.
+- **Global (Hindley–Milner) inference and inference from the expected result type.** Permanent.
+  Signatures are written in full. A generic call's type arguments are inferred only from the checked
+  types of its arguments ([OD46](decisions.md#od46), [OD129](decisions.md#od129));
+  what no argument determines is written explicitly. Capability arguments are not inferred at all: they
+  are written on every capability-polymorphic call and checked (owner revision of
+  [OD45](decisions.md#od45) and [OD87](decisions.md#od87), 2026-11-05,
+  [record](decisions.md#decided-2026-11-05-revisions)).
+
+**Dispatch and abstraction**
+
+- **Closures and anonymous functions with capture.** Permanent. Captured data and control flow are
+  invisible at the call site. Named functions, capture-free function values, monomorphized generics
+  and an explicit context parameter replace them ([detail](../legacy/research/language/no-closures.md)).
+- **Trait objects and hidden dynamic dispatch.** Permanent. An opaque vtable hides the call target
+  from the reader, the analyses and the prover. Enums, monomorphized generics and explicit function
+  values replace them ([detail](../legacy/research/language/no-trait-objects.md)).
+- **Implicit trait resolution beyond monomorphization.** Permanent. Traits are coherent, an
+  ambiguous call is qualified, and resolution is by typed identity ([OD6](decisions.md#od6)),
+  so adding an impl elsewhere cannot change what a call means.
+- **Class inheritance.** Permanent. It makes the call target depend on a hierarchy instead of the
+  source; structs, enums, traits and composition replace it.
+- **User-defined operator overloading.** Permanent. An operator would hide allocation or effects
+  behind arithmetic syntax; operators take primitive operands only
+  ([OD26](decisions.md#od26), [OD42](decisions.md#od42)), and user types use named
+  functions.
+- **Hiding an operational capability**, for example a trusted wrapper that uses `Fs` or `Alloc`
+  without declaring it. Permanent ([authority rule 5](decisions.md#decided-2026-11-02-authority)).
+  A caller must see what authority a call uses. A `trusted fn` absorbs `Unsafe` only, which is a
+  caller safety obligation, not authority ([TRUST-5](../legacy/docs/spec/trusted.md#TRUST-5)).
+- **Umbrella capabilities and capability aliases** (`Std`, user `cap X = ...`). Permanent
+  ([authority rule 6](decisions.md#decided-2026-11-02-authority),
+  [audit decisions](decisions.md#decided-2026-11-02-audit)). A signature lists its real
+  capabilities.
+- **An effect system beyond `with(...)`** (algebraic effects and handlers). Permanent. Permissions
+  are compile-time sets over a fixed, reserved list of capabilities and resources are linear values;
+  that needs no runtime support and keeps signatures readable.
+- **Foreign function values.** Refused ([OD4](decisions.md#od4)). Reopens when the owner
+  admits typed `extern "C" fn` types, which OD4 leaves for later, with the permissions of foreign
+  callbacks decided at that point ([authority rule 4](decisions.md#decided-2026-11-02-authority));
+  [R-0283](../legacy/docs/archive/roadmap-2026-11/ROADMAP_BACKLOG.md#task-r-0283) reviews the C interop requirements when phase C becomes
+  active or next.
+
+**Generation and metaprogramming**
+
+- **Source-generating macros, derive helpers and in-language source generation.** Permanent. They
+  break file-local parsing and phase separation and make audit output describe code nobody wrote.
+  Generics, ordinary functions and external generators whose output is reviewed as ordinary source
+  replace them; attributes classify, never generate.
+- **Derived structural equality.** Permanent as language machinery, for the same reason; equality
+  is written or generated as reviewable source.
+- **General compile-time evaluation** (`comptime`, `constexpr`-style). Reopens when a workload under
+  the pull rules needs compile-time values beyond constant declarations; any design stays
+  constants-only and states its interaction with the semantics.
+- **Broad in-source conditional compilation** (`#[cfg]` throughout files). It hides control flow,
+  authority and target assumptions behind build configuration. Target-specific code is selected by
+  module and file per target profile in `Concrete.toml`, and audit output names what was selected
+  and excluded. Reopens when, with the project model, target profiles and the hosted/freestanding
+  std split ([R-0323](../legacy/docs/archive/roadmap-2026-11/ROADMAP_BACKLOG.md#task-r-0323)) in place, a workload under the pull rules
+  shows that module and file selection is not enough; any form is narrow and appears in audit
+  output.
+
+**Calls and declarations**
+
+- **User-defined and C-style variadic functions.** Permanent. They are unchecked or complicate
+  every signature. The reserved output and append forms are the only multi-argument forms, and they
+  are not a function type and cannot be passed as values.
+- **Default arguments.** Permanent (owner, 2026-11-05, row P17a,
+  [record](decisions.md#decided-project-refusals)), reopened only by a new owner decision. A
+  call shows every argument it passes; defaults conflict with visible arguments and with one form per
+  situation. General compile-time evaluation and broad conditional compilation (above) keep their
+  evidence-based reopening (row P17b).
+- **Lexical shadowing of a visible local, parameter or top-level name.** Permanent
+  ([SCOPE-1](../legacy/docs/spec/scope.md#SCOPE-1), [OD67](decisions.md#od67)). One name, one binding
+  in a scope; the compiler still never recovers identity from spellings (rule 13).
+
+**Contracts and ghost code**
+
+- **Decorative contracts.** Permanent. A contract is a claim that lowers to an obligation and is
+  reported with its evidence; contracts never change what a program does at run time
+  ([OD125](decisions.md#od125)), and a vacuous one is reported as such
+  ([OD120](decisions.md#od120)).
+- **`old`, quantifiers and implication in contracts.** Permanent ([OD117](decisions.md#od117)).
+  Such properties are stated as Lean theorems, keeping the contract language small.
+- **Ghost code that affects execution.** Permanent. Ghost code itself is admitted as decided:
+  `ghost let` with `ghost` reserved ([OD81](decisions.md#od81)) and specification
+  functions whose body is required and total ([OD115](decisions.md#od115)). How ghost state
+  is represented in Core and erased was approved provisionally by the owner on 2026-11-05 (row
+  Q9.10, [decided rows](decisions.md#decided-2026-11-05-core)): ghost ownership
+  instrumentation with proved erasure; Core freezes at stage A2c
+  ([roadmap](../ROADMAP.md#questions-for-the-core-session)).
+
+## Where the earlier rules went
+
+Nothing from the documents this one absorbed was dropped silently. The former principles of
+PROJECT.md (numbered as they were) and its fifteen admission criteria map as follows; "AT" is the
+[admission test](#admission-test).
+
+| former rule | here |
+|---|---|
+| principle 1, systems first | rule 7 |
+| principle 2, no hidden runtime | rule 8 |
+| principle 3, linearity and ownership | rule 9 |
+| principle 4, second-class references | rule 10 |
+| principle 5, visible capabilities and trust | rule 11 |
+| principle 6, predictable execution | rule 16 |
+| principle 7, core/shell separation | rule 16 |
+| principle 8, artifact-first auditability | rule 14; conflict order item 2 |
+| principle 9, proofs attach to real code | rule 7 |
+| principle 10, small analyzable core | rule 15 |
+| principle 11, honest trust boundaries | rule 12; conflict order item 1 |
+| principle 12, compiler-owned identity | rule 13; conflict order item 1 |
+| criterion 1, a simple invariant | AT 4 |
+| criterion 2, more visible | AT 2 |
+| criterion 3, less phase coupling | AT 5 |
+| criterion 4, declaration-level dependencies | AT 5 |
+| criterion 5, static or explicit dispatch | AT 6 |
+| criterion 6, predictable code generation | AT 7 |
+| criterion 7, clear diagnostics | AT 8 |
+| criterion 8, one owning pass | AT 8 |
+| criterion 9, the proof story | AT 4 |
+| criterion 10, real benefit for audited code | AT 14 |
+| criterion 11, crosses a contract boundary | AT 10 |
+| criterion 12, fails visibly | AT 11 |
+| criterion 13, evidence as precise as its claim | AT 12 |
+| criterion 14, honest under hostile input | AT 13 |
+| criterion 15, independent semantic identities | AT 12 |
+| admission principle, quick decision rule, one-line test | AT, "In one line" |
+| main rule for borrowed ideas | AT, "Borrowed ideas" |
+| ordering principle | AT, "Ordering" |
+| shape principles (features earn admission, removals improve, constraints compound, real programs test shape, record refusals) | rules 15, 17; AT, "Recording a refusal" |
+| high-leverage priorities | not a design rule: the [roadmap](../ROADMAP.md) owns priority |
+| ANTI_FEATURES.md entries and PROJECT.md's "no" and "not yet" decisions | [What Concrete refuses](#what-concrete-refuses); comparisons in [INFLUENCES.md](../legacy/docs/project/INFLUENCES.md#how-other-languages-answer-concretes-refusals) |
+===== SIMPLIFY_MERGED.md =====
+# Simplification candidates — merged owner list
+
+2026-11-08. Sources: final sections of [Codex](simplify_codex.out), [Kimi](simplify_kimi.out), and [agy](simplify_agy.out). “ASK” normalizes “WORTH ASKING.” “not raised” means no verdict on that specific candidate in that reviewer’s simplification answer; broader KEEP comments are not manufactured into votes on every subproposal. Overlapping bundles are split where their verdicts or effects differ.
+
+All anchors below were checked against the repository. Decisions govern over legacy prose and implementation. CHANGE means **recommend an owner-approved revision**, not a decision or permission to implement. Exact unapproved replacement spellings are marked ILLUSTRATIVE. Reasons are at most 60 words each; workload benefits are judgments, not measured results. No language changes have been made.
+
+Ordered first by cross-review agreement and owner importance, then actionable surface reductions, unresolved semantic changes, and confirmed KEEP distinctions. The three reviewers have not reviewed this merged artifact.
+
+## 1. Method calls and receiver shorthand
+
+**Today (verified):** [OD6](../docs/decisions.md#od6) fixes coherent dispatch and Trait::method qualification; [OD32](../docs/decisions.md#od32) fixes explicit receiver borrowing; [OD60](../docs/decisions.md#od60) and [TRAIT-9](../legacy/docs/spec/traits.md#TRAIT-9) fix one consuming receiver.
+
+**Proposed change:** Remove dot calls; keep inherent associated calls and trait-qualified calls. Separately replace receiver shorthand with ordinary typed first parameters, preserving the consuming Destroy protocol. **Lost:** Chaining and receiver shorthand.
+
+**Verdicts:** Codex **STRONG**; Kimi **STRONG**; agy **ASK**.
+
+**Merged: CHANGE.** Two reviewers strongly favor explicit call targets; the third asks the same question. Qualified calls expose dispatch without removing traits or bounds. Receiver declaration migration needs its own explicit approval, especially Destroy.
+
+**Grammar interaction:** OPEN-12 receiver alternatives and part of OPEN-3 disappear; field projection remains OPEN-20.
+
+```con
+// Before
+ (&s).m(x);
+ // After: same trait implementation
+ Tr::m(&s, x);
+```
+## 2. Two map families and their compiler status
+
+**Today (verified):** [approved slices](../ROADMAP.md#vertical-slices) includes both maps at 23; Q2.2 in [Core rows](../docs/decisions.md#decided-2026-11-05-core) excludes HashMap from the initial Destroy inventory; Q2.3 specifies OrderedMap destruction order. Q9.2/Q9.6 distinguish ordinary owning definitions from irreducible primitives.
+
+**Proposed change:** Defer HashMap pending a measured need and complete contracts; retain OrderedMap. Review whether map names need compiler privilege independently. **Lost:** Expected constant-time lookup and potentially useful performance.
+
+**Verdicts:** Codex **not raised**; Kimi **ASK**; agy **ASK**.
+
+**Merged: ASK OWNER.** Two reviewers question map scope. Ordered lookup is not a proven substitute for hashing workloads. Neither the reserved-name proposal nor slice placement proves both maps must be compiler primitives; decide workload and semantic obligations before representation.
+
+**Grammar interaction:** OPEN-4 builtin inventory and OPEN-21 signatures shrink if HashMap is deferred.
+## 3. Value blocks and statement/value if/match
+
+**Today (verified):** [OD77](../docs/decisions.md#od77) retains value forms and explicit function returns; [OD86](../docs/decisions.md#od86) narrows arm bodies; [approved slices](../ROADMAP.md#vertical-slices) explicitly adds branch tails at slice 3.
+
+**Proposed change:** agy offers single-expression branches, explicit yield, or removal of value forms; retain value forms and complete their common-prefix grammar. **Lost:** If removed: immutable branch construction and direct production of one linear owner per path.
+
+**Verdicts:** Codex **KEEP**; Kimi **not raised**; agy **STRONG**.
+
+**Merged: KEEP.** Value branches express an ownership distinction useful to readers and checking. Parser difficulty alone does not justify outer mutable temporaries or a new yield construct. agy’s proposed uninitialized outer let is also not established syntax. Keep behavior while closing the grammar.
+
+**Grammar interaction:** OPEN-16 remains; none of agy’s restrictions is silently adopted.
+## 4. Point-local proofs versus function proof attributes
+
+**Today (verified):** [OD79](../docs/decisions.md#od79) extended by [SPARK](../docs/decisions.md#decided-project-spark-2026-11-06) adds assert(e) by thm(...); [no hidden traps](../docs/decisions.md#decided-project-no-hidden-traps) defines function-level #[proof(path)].
+
+**Proposed change:** Keep both evidence scopes; agy asks whether one hint mechanism can replace them. **Lost:** Removing either loses a local proved fact or a way to discharge/functionally describe a function obligation.
+
+**Verdicts:** Codex **KEEP**; Kimi **KEEP**; agy **ASK**.
+
+**Merged: KEEP.** The scopes and claims differ: a local assertion introduces a fact at that point; a function attribute connects a theorem to function obligations or properties. Shared infrastructure is appropriate, but one spelling cannot be removed merely because both name theorems.
+
+**Grammar interaction:** OPEN-13 theorem argument grammar and OPEN-15 attachment remain.
+## 5. Constructor field punning
+
+**Today (verified):** [OD25](../docs/decisions.md#od25)/[OD84](../docs/decisions.md#od84)/[OD130](../docs/decisions.md#od130) establish named patterns and explicit ignore handling; expression puns remain proposed in grammar OPEN-20, not a separately verified deciding row.
+
+**Proposed change:** Require field: expression in construction; keep pattern policy separate. **Lost:** Only abbreviated constructors when field and local names coincide.
+
+**Verdicts:** Codex **not raised**; Kimi **not raised**; agy **STRONG**.
+
+**Merged: CHANGE.** Explicit constructor values separate labels from consumed locals. This is a small surface reduction with little cost to checking or reading. Codex’s grammar review also favors it, but that is not a simplification-review verdict and is not counted as consensus here.
+
+**Grammar interaction:** Closes the expression-pun choice in OPEN-20 if approved.
+
+```con
+// Before (v1 proposal)
+let s: S = S { x };
+// After
+let s: S = S { x: x };
+```
+## 6. Pattern field punning
+
+**Today (verified):** [OD84](../docs/decisions.md#od84) and [OD77](../docs/decisions.md#od77) retain destructuring/renaming; [OD25](../docs/decisions.md#od25) fixes explicit ignored fields; [PAT-10/11](../legacy/docs/spec/patterns.md#PAT-10) use bare field binders.
+
+**Proposed change:** agy proposes field: binder everywhere; retain the existing same-name binder form. **Lost:** If removed: concise same-name destructuring and familiar binding syntax.
+
+**Verdicts:** Codex **not raised**; Kimi **not raised**; agy **STRONG**.
+
+**Merged: KEEP.** In a pattern, a field name already introduces its same-name binder; it does not silently consume an existing local. Duplicating every binder offers less clarity than explicit constructor values. The decided rename and ignore forms remain visible alternatives for genuinely different bindings.
+
+**Grammar interaction:** OPEN-17 retained; do not infer pattern-pun removal from constructor-pun removal.
+## 7. Mathematical versus machine arithmetic notation
+
+**Today (verified):** [OD12](../docs/decisions.md#od12) distinguishes contract mathematics from machine arithmetic; [OD145](../docs/decisions.md#od145) selects named ARITH-4 machine operations inside contracts.
+
+**Proposed change:** Keep both domains, but require an explicit mathematical boundary spelling in contracts. **Lost:** Compact unmarked mathematical expressions.
+
+**Verdicts:** Codex **STRONG**; Kimi **not raised**; agy **not raised**.
+
+**Merged: CHANGE.** The same operator has different overflow meaning in runtime and contract positions. Marking the domain makes review safer without deleting mathematical reasoning. Exact boundary syntax and its scope need owner approval; this is a proposed revision, not the current rule.
+
+**Grammar interaction:** OPEN-13 contract grammar gains an explicit domain boundary if approved.
+
+```con
+// Before
+#[ensures(result == x + y)]
+// After — ILLUSTRATIVE: math spelling undecided
+#[ensures(math { result == x + y })]
+```
+## 8. Expression as casts
+
+**Today (verified):** [OD11](../docs/decisions.md#od11) admits only lossless-domain as conversions; [OD91](../docs/decisions.md#od91) requires generic-target parentheses; [OD98](../docs/decisions.md#od98) gates reference-to-raw conversion; Q3.9 in [Core rows](../docs/decisions.md#decided-2026-11-05-core) uses expose/from_exposed.
+
+**Proposed change:** Replace expression as with named exact conversion operations; retain as for binding aliases. **Lost:** Infix cast notation.
+
+**Verdicts:** Codex **not raised**; Kimi **not raised**; agy **STRONG**.
+
+**Merged: CHANGE.** Named exact conversion can remove a precedence level and the range-bound delimiter exception. agy overstates today’s casts: pointer/integer round trips are explicit provenance operations, not blanket as casts, and there is no verified trait-conversion as mechanism. Keep every conversion’s existing safety and provenance contract.
+
+**Grammar interaction:** Removes cast-target portions of OPEN-8/14 and cast-delimiter portion of OPEN-19, not the remaining borrow/defer questions.
+
+```con
+// Before
+let n: u64 = x as u64;
+// After — ILLUSTRATIVE: widen name undecided
+let n: u64 = widen::<u64>(x);
+```
+## 9. Heap move-out written *h
+
+**Today (verified):** [OD59](../docs/decisions.md#od59) explicitly chooses *h plus destroy(h); [OD13](../docs/decisions.md#od13) separately requires read_owned for raw ownership transfer; [OD36](../docs/decisions.md#od36) fixes scoped heap opening.
+
+**Proposed change:** Replace consuming heap-star with one named move-out operation; keep reference/raw dereference. **Lost:** One-character heap unboxing.
+
+**Verdicts:** Codex **not raised**; Kimi **not raised**; agy **STRONG**.
+
+**Merged: CHANGE.** Heap move-out also releases storage, unlike an ordinary reference dereference. A named operation exposes that effect while retaining the distinction between move-out and destruction. The name must avoid reviving the removed generic unwrap/free/take APIs without an explicit decision.
+
+**Grammar interaction:** OPEN-20 dereference classification becomes smaller; OPEN-21 needs the new signature.
+
+```con
+// Before
+let value: T = *h;
+// After — ILLUSTRATIVE: into_inner name undecided
+let value: T = into_inner(h);
+```
+## 10. Parentheses on assertions and assumptions
+
+**Today (verified):** [OD79](../docs/decisions.md#od79) adds assert; [OD80](../docs/decisions.md#od80) keeps tracked assume, qualified by [no hidden traps](../docs/decisions.md#decided-project-no-hidden-traps); [SPARK](../docs/decisions.md#decided-project-spark-2026-11-06) fixes the parenthesized assert(e) by suffix.
+
+**Proposed change:** Require assert(e); and assume(e); uniformly, retaining the theorem suffix only on assert. **Lost:** Unparenthesized forms.
+
+**Verdicts:** Codex **not raised**; Kimi **not raised**; agy **STRONG**.
+
+**Merged: CHANGE.** One delimited condition grammar is easier to read and avoids the special grouped-root eligibility rule for by. This revises accepted forms; v2 therefore keeps the existing proposal until the owner chooses, rather than presenting new parentheses as already decided.
+
+**Grammar interaction:** Closes the assertion-parenthesis part of OPEN-13, not spec bodies or proof scopes.
+
+```con
+// Before
+assert x > 0;
+assume ready;
+// After
+assert(x > 0);
+assume(ready);
+```
+## 11. Link/export attribute payload punctuation
+
+**Today (verified):** [OD96](../docs/decisions.md#od96) and [FFI-5](../legacy/docs/spec/ffi.md#FFI-5) fix foreign symbol identity; exact = versus parentheses payload remains OPEN-15.
+
+**Proposed change:** Use #[link_name("symbol")] and #[export_name("symbol")], like other parameterized attributes. **Lost:** The = payload spelling proposed in v1.
+
+**Verdicts:** Codex **not raised**; Kimi **not raised**; agy **STRONG**.
+
+**Merged: CHANGE.** This removes an unnecessary attribute-argument convention. Symbol meaning and linkage stay the same. No existing decision is being claimed to approve the replacement punctuation.
+
+**Grammar interaction:** Closes the link/export payload part of OPEN-15.
+
+```con
+// Before (v1 proposal)
+#[link_name = "c_read"]
+// After — ILLUSTRATIVE: payload punctuation unapproved
+#[link_name("c_read")]
+```
+## 12. Different import and reference path separators
+
+**Today (verified):** [SYN-10](../legacy/docs/spec/syntax.md#SYN-10) documents dotted imports; [OD77](../docs/decisions.md#od77) approves import-related grammar resync; [OD151](../docs/decisions.md#od151) admits multilevel :: references.
+
+**Proposed change:** Use :: for module paths in imports as well. **Lost:** Dotted import notation.
+
+**Verdicts:** Codex **not raised**; Kimi **not raised**; agy **STRONG**.
+
+**Merged: CHANGE.** Modules have one path structure; sharing its separator across imports and references removes a needless reading convention. This is independent of whether imports bind bare names or aliases. Final list punctuation still requires approval.
+
+**Grammar interaction:** Replaces the dot-boundary question in OPEN-11 with one :: list form.
+
+```con
+// Before
+import a.b.{f};
+// After — ILLUSTRATIVE: import separator unapproved
+import a::b::{f};
+```
+## 13. char as a distinct byte type
+
+**Today (verified):** [TYPE-20](../legacy/docs/spec/types.md#TYPE-20) defines a byte code unit and u8 round trips; [OD137](../docs/decisions.md#od137) restricts literal characters to ASCII; [OD42](../docs/decisions.md#od42) defines comparisons.
+
+**Proposed change:** Remove char; retain ASCII quoted literals typed u8 and explicit UTF-8 text operations. **Lost:** A distinct type suggesting textual intent.
+
+**Verdicts:** Codex **not raised**; Kimi **STRONG**; agy **not raised**.
+
+**Merged: CHANGE.** Today char carries no Unicode-scalar invariant and invites that misreading. A byte type plus ASCII literal notation is clearer for byte-oriented code. This changes literal and pattern typing and overloads, not UTF-8 validity of String or StaticStr.
+
+**Grammar interaction:** Simplifies OPEN-4/6/17/21, but quoted-token lexical rules still need approval.
+
+```con
+// Before
+let c: char = 'A';
+// After — ILLUSTRATIVE: revised literal typing
+let c: u8 = 'A';
+```
+## 14. Special output and append forms
+
+**Today (verified):** [OD133](../docs/decisions.md#od133) reserves print/println/append; [OD154](../docs/decisions.md#od154) requires Alloc for allocating strings; Q7.10/11 in [Core rows](../docs/decisions.md#decided-2026-11-05-core) require grants and Console for streams.
+
+**Proposed change:** Remove special variadic/closed-overload forms; use ordinary byte output and typed string operations. **Lost:** Concise formatting, newline sugar and special append overloading.
+
+**Verdicts:** Codex **not raised**; Kimi **STRONG**; agy **not raised**.
+
+**Merged: CHANGE.** Ordinary typed calls expose allocation, failure and authority using mechanisms already needed elsewhere. The replacement API must conserve linear errors and grants; no candidate signature is presumed already decided. An ordinary function may still provide a useful operation without compiler-special variadic syntax.
+
+**Grammar interaction:** Shrinks OPEN-4/21 name and signature closure; does not remove Console or grants.
+
+```con
+// Before: special-form sketch
+println("ok");
+// After — ILLUSTRATIVE: byte-output API/signature undecided
+match write_bytes(&mut out, "ok\n") { Result::Ok { value: _ } => {}, Result::Err { err } => { handle_io(err); }, }
+```
+## 15. Omitted binding and result types
+
+**Today (verified):** [slice-0 decision](../docs/decisions.md#decided-slice0-surface-2026-11-06) requires typed lets; [OD157](../docs/decisions.md#od157) names Unit; ordinary local/result omission is described in the inherited grammar, with closure OPEN-9/18.
+
+**Proposed change:** Require explicit local types and every result arrow, including -> Unit. Preserve decided argument-based generic inference. **Lost:** Shorter declarations.
+
+**Verdicts:** Codex **not raised**; Kimi **STRONG**; agy **not raised**.
+
+**Merged: CHANGE.** Local type visibility helps reading and keeps declaration style uniform across slices. This is a proposal to extend the slice-0 discipline, not evidence that OD157 already bans omitted Unit results. Pattern binder annotations and ghost typing need a specific compatible rule.
+
+**Grammar interaction:** Closes ordinary omission choices in OPEN-9/18 and part of OPEN-22 function types.
+
+```con
+// Before
+fn f() { let n = make_n(); discard(n); return; }
+// After
+fn f() -> Unit { let n: u64 = make_n(); discard(n); return; }
+```
+## 16. Process as a currently unused capability
+
+**Today (verified):** [authority rule 13](../docs/decisions.md#decided-2026-11-02-authority) reserves Process; [OD136](../docs/decisions.md#od136) removes process_exit; [OD156](../docs/decisions.md#od156) moves args to Env; Q7.4 in [Core rows](../docs/decisions.md#decided-2026-11-05-core) defers spawning.
+
+**Proposed change:** Remove Process only until a target supplies process operations and grants. **Lost:** A future-facing capability name and the ability for foreign declarations to name it today.
+
+**Verdicts:** Codex **not raised**; Kimi **STRONG**; agy **not raised**.
+
+**Merged: ASK OWNER.** A reserved but unused permission is questionable, but deleting it changes the closed authority universe and potentially foreign signatures. Confirm that no intended foreign boundary needs it before removal. This narrowly concerns an atom; it does not reopen capabilities plus grants.
+
+**Grammar interaction:** OPEN-3/4/14 tables shrink if approved.
+## 17. Late-read deferred arguments
+
+**Today (verified):** Q9.8 in [Core rows](../docs/decisions.md#decided-2026-11-05-core) explicitly chooses late reads and nested deferred scopes; [OD2](../docs/decisions.md#od2) holds deferred loans; [OD144](../docs/decisions.md#od144) places ensures after cleanup.
+
+**Proposed change:** Consider evaluating/capturing arguments when defer is registered, retaining explicit ownership and loans. **Lost:** Mutating a resource after scheduling cleanup that will later read its final state.
+
+**Verdicts:** Codex **ASK**; Kimi **not raised**; agy **not raised**.
+
+**Merged: ASK OWNER.** The call-like spelling invites eager-evaluation expectations, but late reads enable important cleanup patterns. Test concrete buffer/file examples before changing ownership timing. Keep defer; removing it would repeat cleanup across exits.
+
+**Grammar interaction:** OPEN-19 syntax can remain; semantics and loan timing would change.
+## 18. Ordinary bodyless functions
+
+**Today (verified):** [OD77](../docs/decisions.md#od77) explicitly retains bodyless ; syntax; trait and extern declarations already have specific roles.
+
+**Proposed change:** Refuse ordinary prototypes unless a demonstrated checked-interface format requires them; retain trait signatures and extern declarations. **Lost:** Standalone prototypes or a future separate-interface form.
+
+**Verdicts:** Codex **ASK**; Kimi **not raised**; agy **not raised**.
+
+**Merged: ASK OWNER.** Definitions can be collected independently of source order, reducing declaration/definition matching. Generated interfaces at slice 17 may justify a precise use, however; verify that requirement before deleting an already-decided form.
+
+**Grammar interaction:** Can close ordinary bodyless placement in OPEN-9.
+## 19. General packed structures
+
+**Today (verified):** [OD111](../docs/decisions.md#od111) permits misaligned fields but refuses borrowing them; [OD147](../docs/decisions.md#od147) permits combined C/packed layout.
+
+**Proposed change:** Remove general packed records unless a real packed foreign ABI requires them; decode wire formats explicitly. **Lost:** Packed C ABI compatibility and compact records.
+
+**Verdicts:** Codex **ASK**; Kimi **not raised**; agy **not raised**.
+
+**Merged: ASK OWNER.** Alignment exceptions add real proof and access obligations. File formats alone do not require packed language records or define endianness. A required packed C interface would justify keeping this feature; collect that evidence first.
+
+**Grammar interaction:** Would remove packed alternatives and some validation from OPEN-15.
+## 20. Local assume statements
+
+**Today (verified):** [OD80](../docs/decisions.md#od80) keeps assumed claims tracked; [no hidden traps](../docs/decisions.md#decided-project-no-hidden-traps) forbids assume from admitting safe operations.
+
+**Proposed change:** Remove local assume; put necessary assumptions in named external/trusted contracts with propagated evidence identities. **Lost:** Local proof exploration and conditional non-safety claims.
+
+**Verdicts:** Codex **ASK**; Kimi **not raised**; agy **not raised**.
+
+**Merged: ASK OWNER.** Named assumptions are easier to audit, but local assumptions may express legitimate conditional theorems. Moving them into wrappers can add boilerplate without removing any uncertainty. Require a concrete example and evidence-scope comparison.
+
+**Grammar interaction:** Would remove assume grammar from OPEN-13; assumptions in evidence remain.
+## 21. First-class existential brands
+
+**Today (verified):** Q1.1–Q1.4/Q1.13 in [Core rows](../docs/decisions.md#decided-2026-11-05-core) decide erased brands, existential loop state, explicit packing and fresh post-reset identity.
+
+**Proposed change:** agy proposes lexical brands only, removing user existential packaging; preserve decided freshness and packaging pending a viable replacement. **Lost:** Heterogeneously branded storage and loop-carried fresh-brand state.
+
+**Verdicts:** Codex **KEEP**; Kimi **not raised**; agy **ASK**.
+
+**Merged: KEEP.** Fresh reset generations cannot safely be replaced by reusing a brand merely because no views are active. agy’s workaround conflicts with Q1.13 and does not establish equivalent expressiveness. Surface syntax can remain small while preserving existential meaning.
+
+**Grammar interaction:** OPEN-22 still needs binder/escape grammar; removal would require revising Core Q1.
+## 22. Function values and higher-order safety contracts
+
+**Today (verified):** [OD93](../docs/decisions.md#od93) fixes exact function capability sets; Q2.4 in [Core rows](../docs/decisions.md#decided-2026-11-05-core) uses a callback for drain; [SPARK](../docs/decisions.md#decided-project-spark-2026-11-06) and [approved slices](../ROADMAP.md#vertical-slices) require function-type safety contracts before slice 20. [OD116](../docs/decisions.md#od116) admits no ordinary total-function category; agy’s total-callback option would need to respect that or explicitly revise it.
+
+**Proposed change:** agy proposes no function values or only precondition-free total callbacks; retain decided values while asking whether a restricted subset meets drain/map_into workloads. **Lost:** Indirect handlers, callbacks with preconditions or nontermination permissions.
+
+**Verdicts:** Codex **not raised**; Kimi **not raised**; agy **ASK**.
+
+**Merged: ASK OWNER.** Indirect dispatch is explicit and useful. Restricting callbacks might reduce contract complexity, but must preserve resource-conserving drain and stated termination policy. No proof was supplied that showcase dispatch and cleanup fit the proposed subset; do not assert removal is free.
+
+**Grammar interaction:** Could narrow OPEN-22 contracts and OPEN-15 expression permissions; neither disappears automatically.
+## 23. Constants evaluated at each runtime use
+
+**Today (verified):** [TYPE-22](../legacy/docs/spec/types.md#TYPE-22) gives per-use runtime evaluation; Q6.4 in [full Core rows](../docs/archive/decisions-2026-11-05/core_rows.json) expressly keeps it, while Q6.2 memoizes static known-value evaluation.
+
+**Proposed change:** Consider closed total constant initializers and substitution of checked values; otherwise use named functions for repeated computation. **Lost:** Pure named computations outside the closed evaluator and per-use evaluation semantics.
+
+**Verdicts:** Codex **not raised**; Kimi **ASK**; agy **not raised**.
+
+**Merged: ASK OWNER.** Distinguish the compile-time fact evaluator from runtime initializer evaluation; they are not contradictory decisions. Restricting const could make cost clearer, but broad compile-time execution remains refused. Define the admitted total subset and verify ownership before changing semantics.
+
+**Grammar interaction:** OPEN-10 declaration spelling remains; semantic initializer closure becomes smaller.
+## 24. Counted loops versus while
+
+**Today (verified):** [OD47](../docs/decisions.md#od47) fixes both forms and one Core lowering; [OD49](../docs/decisions.md#od49) makes the counted measure mathematical, never runtime subtraction.
+
+**Proposed change:** Retain counted loops; remove no loop form. **Lost:** If removed: once-evaluated bounds, immutable index and structural termination evidence.
+
+**Verdicts:** Codex **KEEP**; Kimi **not raised**; agy **KEEP**.
+
+**Merged: KEEP.** The counted form exposes a stronger iteration contract that handwritten while obscures. The Core already has one loop form, so shared lowering supplies implementation simplicity without losing reader-visible restrictions.
+
+**Grammar interaction:** OPEN-18 labels remain; no new loop variant is suggested.
+## 25. Plain, checked, wrapping and saturating arithmetic
+
+**Today (verified):** [OD10](../docs/decisions.md#od10)/[OD145](../docs/decisions.md#od145), Q6.2 in [Core rows](../docs/decisions.md#decided-2026-11-05-core) and [no hidden traps](../docs/decisions.md#decided-project-no-hidden-traps) define distinct outcomes; [OD99](../docs/decisions.md#od99)/[OD106](../docs/decisions.md#od106)/[OD107](../docs/decisions.md#od107) distinguish lossy conversions.
+
+**Proposed change:** Keep the outcome families and named conversion distinctions. **Lost:** If collapsed: safety evidence, explicit recoverable failure, modular intent or clamping intent.
+
+**Verdicts:** Codex **KEEP**; Kimi **KEEP**; agy **KEEP**.
+
+**Merged: These operations solve different situations rather than offer duplicate spellings. Parsers need recoverable failure and crypto needs modular arithmetic. Uniform implementation definitions and a closed inventory simplify checking without concealing intent..** OPEN-21 exact signatures remain; this KEEP does not oppose replacing the as spelling with a named exact conversion.
+
+**Grammar interaction:** None.
+## 26. Inline references versus scoped borrow/views
+
+**Today (verified):** [OD1](../docs/decisions.md#od1)/[OD58](../docs/decisions.md#od58)/[OD36](../docs/decisions.md#od36), Q3/Q4.7/Q9.5 in [Core rows](../docs/decisions.md#decided-2026-11-05-core) distinguish call-duration loans and scoped heap/array/text views.
+
+**Proposed change:** Keep inline reference arguments and the single scoped borrow family. **Lost:** If collapsed: short call loans or named multi-statement/view access.
+
+**Verdicts:** Codex **KEEP**; Kimi **KEEP**; agy **KEEP**.
+
+**Merged: These scopes serve different use cases. References cannot simply become ordinary stored let values. The decided one scoped form already unifies heap opening and ranges; removing it would weaken visible lifetime and bounds handling..** OPEN-19 bound details and OPEN-21 view type names remain.
+
+**Grammar interaction:** None.
+## 27. defer versus explicit Destroy/resource cleanup
+
+**Today (verified):** [OD2](../docs/decisions.md#od2)/[OD60](../docs/decisions.md#od60)/[OD69](../docs/decisions.md#od69)/[OD144](../docs/decisions.md#od144) and Q2.1 in [Core rows](../docs/decisions.md#decided-2026-11-05-core) separate scheduling, destruction and resource cleanup.
+
+**Proposed change:** Keep explicit cleanup plus defer; one consuming Destroy protocol. **Lost:** If merged or removed: structured cleanup across early exits or honest resource-specific failure handling.
+
+**Verdicts:** Codex **KEEP**; Kimi **not raised**; agy **KEEP**.
+
+**Merged: defer schedules an explicit call; Destroy specifies a consuming operation. They do not substitute for one another, and no implicit drop fills the gap. Preserve linear conservation and explicit close errors..** OPEN-19 target grammar remains; independent eager-versus-late capture question stays above.
+
+**Grammar interaction:** None.
+## 28. Storage release, destruction, draining and secret wiping
+
+**Today (verified):** [OD28](../docs/decisions.md#od28)/[OD59](../docs/decisions.md#od59)/[OD60](../docs/decisions.md#od60), Q2 in [Core rows](../docs/decisions.md#decided-2026-11-05-core), and [information flow](../docs/decisions.md#decided-project-infoflow-2026-11-06) fix distinct obligations.
+
+**Proposed change:** Keep semantic distinctions; share infrastructure where proofs permit. **Lost:** If unified: owned payload recovery, fallible cleanup, non-Destroy element conservation or honest wiping guarantees.
+
+**Verdicts:** Codex **KEEP**; Kimi **not raised**; agy **not raised**.
+
+**Merged: KEEP.** Different ownership outcomes and external effects require different contracts. A single cleanup verb cannot safely replace consuming move-out, resource close, draining and secret erasure. This KEEP concerns meanings, not the separate proposal to rename *h.
+
+**Grammar interaction:** OPEN-21 API closure remains.
+## 29. Static/dynamic text and nominal distinctions
+
+**Today (verified):** [OD65](../docs/decisions.md#od65)/[OD127](../docs/decisions.md#od127), Q4/Q9.2 in [Core rows](../docs/decisions.md#decided-2026-11-05-core) and [TYPE-12](../legacy/docs/spec/types.md#TYPE-12) distinguish nominal identity, transparent aliases, UTF-8 and allocation.
+
+**Proposed change:** Keep static text versus allocating strings, bytes versus UTF-8, and wrapper types versus transparent aliases. **Lost:** If collapsed: visible allocation/encoding differences or nominal identity, including zero-sized tokens.
+
+**Verdicts:** Codex **KEEP**; Kimi **not raised**; agy **not raised**.
+
+**Merged: KEEP.** These distinctions carry invariants or ownership facts instead of merely alternative notation. Uniform operations and documentation can simplify the surface without erasing identity or implying hidden allocation.
+
+**Grammar interaction:** OPEN-10 aliases and OPEN-21 text API details remain.
+## 30. Specification functions, ghost names and Lean theorems
+
+**Today (verified):** [OD81](../docs/decisions.md#od81) admits erased ghost bindings; [OD115](../docs/decisions.md#od115) requires total spec-function bodies; [OD117](../docs/decisions.md#od117) and P18 in [Core rows](../docs/decisions.md#decided-2026-11-05-core) place richer frame/entry properties in Lean.
+
+**Proposed change:** Keep these distinct specification mechanisms rather than collapsing them into executable functions. **Lost:** If collapsed: erased intermediate facts, reusable total specification definitions or richer external proofs.
+
+**Verdicts:** Codex **KEEP**; Kimi **not raised**; agy **not raised**.
+
+**Merged: KEEP.** A ghost binding names a local proof value, a spec function defines a reusable total computation for specifications, and a Lean theorem carries proof. They occupy different scopes and evidence roles; removing their distinction would obscure erasure or proof obligations.
+
+**Grammar interaction:** OPEN-13 still closes ghost/name grammar and spec-body punctuation.
+## 31. with(...) permissions plus resource grants — closed
+
+**Today (verified):** [authority rules 1–2](../docs/decisions.md#decided-2026-11-02-authority) and Q7.11 in [Core rows](../docs/decisions.md#decided-2026-11-05-core); owner reaffirmed KEEP on 2026-11-08 in the instruction for this review.
+
+**Proposed change:** Retain with(...) plus grants, including Console distinct from Device; do not reopen the capability comparison. **Lost:** Nothing under KEEP; collapse would lose operation-class summaries or resource-scope precision.
+
+**Verdicts:** Codex **KEEP**; Kimi **KEEP**; agy **not raised**.
+
+**Merged: KEEP.** This is already the owner’s answer, not a candidate for another vote. Permissions describe what operations a function may perform; grant values identify accessible resources. Brands and foreign receipts separately carry allocator identity and retained ownership.
+
+**Grammar interaction:** OPEN-4 transcription and OPEN-14 capability syntax remain; no capability/grant redesign proposed.

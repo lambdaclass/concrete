@@ -1,0 +1,118 @@
+=== round 1: full diff, findings, note written and pushed ===
+  ok   findings exit 1 (got 1)
+  ok   one reviewer call
+  ok   reviewer runs with --sandbox read-only
+  ok   reviewer runs with GIT_OPTIONAL_LOCKS=0
+  ok   no reviewer call ran with optional locks
+  ok   round 1 prompt carries the verdict rule
+  ok   round 1 reviews the full diff from the merge-base
+  ok   note has exactly the six fields, in order
+  ok   note: verdict findings
+  ok   note: rounds 1
+  ok   note: base is the merge-base
+  ok   note: pieces 1
+  ok   raw output at .review/<sha>-1.md
+  ok   findings recorded under the findings ref
+  ok   notes ref pushed to origin
+  ok   .review/ stays untracked
+  ok   verify.sh: findings is not clean (exit 1, got 1)
+=== same HEAD again: nothing to review ===
+  ok   re-review of a reviewed HEAD exits 4 (got 4)
+  ok   and calls no reviewer
+=== --head: the callers' contract (train.sh, ready.sh pass --base --head) ===
+  ok   --head at the checkout's HEAD is accepted (reviewed HEAD exits 4, got 4)
+  ok   --base --head <sha> as train.sh calls it is accepted (got 4)
+  ok   --head other than the checkout refuses (exit 2, got 2)
+  ok   and says why
+  ok   an empty --head refuses (exit 2, got 2)
+  ok   and calls no reviewer
+=== round 2: only the delta, with the previous findings ===
+  ok   clean exit 0 (got 0)
+  ok   round 2 diff holds only the delta (new.txt, old.txt fix)
+  ok   round 2 diff does not resend the round-1 hunk
+  ok   round 2 prompt names the delta start
+  ok   round 2 prompt carries the previous findings
+  ok   note: rounds 2, verdict clean
+  ok   verify.sh: clean exit 0 (got 0)
+  ok   verify.sh prints the verdict
+  ok   verify.sh judges the exact commit, not the branch (R1 still 1)
+  ok   an already-clean HEAD reports clean without a call (exit 0)
+=== verify.sh: missing and malformed notes ===
+  ok   no note: exit 2 (got 2)
+  ok   malformed note (verdict line alone): exit 2 (got 2)
+Overwriting existing notes for object 627ef6cc23e61bb324257f5d10f5ae16360221b0
+  ok   the landing bot's carried note verifies clean (exit 0, got 0)
+  ok   a carried verdict says where it came from
+Overwriting existing notes for object 627ef6cc23e61bb324257f5d10f5ae16360221b0
+  ok   an unknown key is malformed: exit 2 (got 2)
+Overwriting existing notes for object 627ef6cc23e61bb324257f5d10f5ae16360221b0
+  ok   a repeated key is malformed: exit 2 (got 2)
+=== verdict parsing ===
+  ok   markdown-emphasised verdict line is accepted (exit 0, verdict clean)
+  ok   text after the verdict line is not a verdict (exit 5, verdict blocked)
+  ok   a reply with no verdict line is blocked, not clean (exit 5, verdict blocked)
+  ok   a reviewer that exits nonzero is blocked (exit 5, verdict blocked)
+  ok   a real review that mentions content filters is not a refusal (exit 0, verdict clean)
+=== content-filter refusal: one neutral retry on smaller pieces ===
+  ok   refused then reviewed neutrally: clean (exit 0)
+  ok   first call standard, retries neutral
+  ok   retry pieces are smaller (384 < 523)
+  ok   neutral prompt avoids the project framing
+  ok   raw output records the refusal
+  ok   refused twice: blocked, exit 5 (got 5)
+  ok   note: verdict blocked
+  ok   no loop: one standard call and one retry pass (3 calls)
+  ok   blocked piece listed in the output
+  ok   a blocked HEAD may be re-run; it counts as round 2
+  ok   the re-run reviews the whole branch again (blocked does not advance the delta)
+=== findings in one piece, another piece blocked ===
+  ok   blocked wins over findings: verdict blocked, exit 5 (got 5, blocked)
+  ok   the reviewed piece's findings are still recorded
+  ok   next round restarts from the base, not after the blocked round
+  ok   and carries the blocked round's findings forward
+  ok   a blocked round with no findings of its own records the carried ones
+  ok   after two blocked rounds in a row the finding still reaches the prompt
+=== pre-push hook: a review-notes push runs no gates ===
+  ok   notes-only push: hook exits 0 (got 0)
+  ok   notes-only push: hook takes the review-notes tier
+  ok   notes alongside a wip push take the wip tier (exit 0)
+=== splitting by file group and size ===
+  ok   split review is clean (exit 0)
+  ok   several pieces (7)
+  ok   one call per piece
+  ok   no piece mixes file groups
+  ok   every piece within the size limit
+  ok   the big file is split across pieces
+  ok   compiler pieces come first
+  ok   each split part repeats the file header and starts a hunk
+  ok   --pieces N sizing: a third of the diff gives about three pieces (6)
+  ok   a limit of the whole diff still separates the four groups (4)
+  ok   split loses no diff line
+  ok   --pieces 3 on one file gives three pieces (3)
+  ok   split parts carry correct, contiguous @@ headers
+=== the round cap ===
+  ok   round 1 of 2: findings (exit 1)
+  ok   round 2 of 2 with findings: cap exit 3 (got 3)
+  ok   cap message says split or escalate
+  ok   cap message lists the open findings
+  ok   round 2 note was still written
+  ok   no round 3: refused with exit 3 (got 3)
+  ok   and no reviewer call
+  ok   no note written on the refused round
+=== notes push: non-fast-forward is fetched, merged and retried ===
+  ok   review after a concurrent notes push succeeds (exit 0)
+  ok   origin keeps the other writer's note
+  ok   origin has our note
+  ok   push rejected once, then merged and pushed (exit 0)
+  ok   the retry path ran
+  ok   origin holds the racing note
+  ok   origin holds our note
+=== notes push: any other refusal stops at once (exit 6) ===
+  ok   a refused (not non-fast-forward) push exits 6 (got 6)
+  ok   and is not retried as if it were a race
+  ok   the note is still recorded locally
+=== usage errors ===
+  ok   bad --pieces: exit 2 (got 2)
+  ok   unknown flag: exit 2 (got 2)
+
+check_review_tool: PASS=99 FAIL=0

@@ -1,0 +1,1974 @@
+Reading additional input from stdin...
+OpenAI Codex v0.166.0
+--------
+workdir: /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/gates-review
+model: gpt-6.1-sol
+provider: openai
+approval: never
+sandbox: danger-full-access
+reasoning effort: none
+reasoning summaries: none
+session id: 01a1b879-2107-7152-9545-c6fa92f17438
+--------
+user
+Review ./REVIEW.diff: Concrete compiler slice-0 artifact gates 10-12 (owner decisions 2026-11-07: ASan/UBSan on every LLVM example; binary size per example, report-only; a stack-bound fact derived from the final artifact for both backends, checked against a run). New: scripts/checks/slice0_artifacts.sh, lib/stack_bound.py (static, fail-closed stack analysis of llvm-objdump output of the LINKED executable), lib/stack_measure.py (gdb run check, x86-64 Linux), lib/slice0_common.sh (shared machinery moved out of slice0_backends.sh), sanitize mode in slice0_native.sh, limits.sh now sets the address-space cap as a SOFT limit and limited_exec.sh 0 lifts it for sanitizer runs, flake pins llvm-objdump/llvm-size/gdb, a CI job, README gate text. On concrete-ci-2 (x86-64 Linux) all pass: 32 examples, 32 sanitizer runs, 64 stack checks, 11 controls (ASan OOB control reports; synthetic disassembly controls refused). Example measured vs bound: llvm bound 64 measured 16..64, lcb bound 160..216 measured 56..216.
+Check carefully: (1) soundness of stack_bound.py as an upper bound on Concrete-owned stack use (any path through the CFG it misses, mis-modelled instruction, aarch64 semantics for Apple arm64 incl. pre/post-index writeback and x29 handling, red-zone accounting via [rbp-k]/[sp,#k], call return-address accounting, noreturn handling, PLT/stub detection, symbol-name normalization, parsing of llvm-objdump output, `#` comment stripping on x86 vs immediates on aarch64); (2) whether the gdb measurement is a meaningful check and fails closed (offset computation for PIE, external-call skipping via return address at [sp], main-return detection by sp > sp0, exit handling); (3) the sanitizer leg: is adding sanitize_address to every define a correct way to get ASan on IR input; the honesty of the UBSan statement; memory bounding with the soft-limit change (can anything else now escape the cap?); (4) shell robustness (set -e, pipefail, quoting, macOS sed -i.orig, emit_examples in $(...)); (5) README accuracy. Do not modify files. Findings with file:line and severity; verdict ACCEPT / ACCEPT-WITH-CHANGES / REJECT.
+codex
+I’ll read the diff and supporting files, focusing on stack-bound soundness, fail-closed measurement, and the sanitizer and resource-limit claims. I won’t modify files.
+exec
+/bin/bash -lc "wc -l REVIEW.diff; git status --short; rg '"'^diff --git'"' REVIEW.diff" in /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/gates-review
+ succeeded in 0ms:
+929 REVIEW.diff
+fatal: not a git repository (or any of the parent directories): .git
+diff --git a/.github/workflows/slice0.yml b/.github/workflows/slice0.yml
+diff --git a/Concrete/README.md b/Concrete/README.md
+diff --git a/flake.nix b/flake.nix
+diff --git a/scripts/checks/lib/limited_exec.sh b/scripts/checks/lib/limited_exec.sh
+diff --git a/scripts/checks/lib/limits.sh b/scripts/checks/lib/limits.sh
+diff --git a/scripts/checks/lib/slice0_common.sh b/scripts/checks/lib/slice0_common.sh
+diff --git a/scripts/checks/lib/stack_bound.py b/scripts/checks/lib/stack_bound.py
+diff --git a/scripts/checks/lib/stack_measure.py b/scripts/checks/lib/stack_measure.py
+diff --git a/scripts/checks/slice0_artifacts.sh b/scripts/checks/slice0_artifacts.sh
+diff --git a/scripts/checks/slice0_backends.sh b/scripts/checks/slice0_backends.sh
+diff --git a/scripts/checks/slice0_native.sh b/scripts/checks/slice0_native.sh
+
+exec
+/bin/bash -lc 'cat REVIEW.diff' in /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/gates-review
+ succeeded in 0ms:
+diff --git a/.github/workflows/slice0.yml b/.github/workflows/slice0.yml
+index 8455cadd1..5a7ceff5f 100644
+--- a/.github/workflows/slice0.yml
++++ b/.github/workflows/slice0.yml
+@@ -1,6 +1,6 @@
+ name: Slice 0 backends
+ 
+-# PROVISIONAL (ROADMAP B0, Concrete/README.md gates 4, 6 and 6a). The slice-0 backend gate,
++# PROVISIONAL (ROADMAP B0, Concrete/README.md gates 4, 6, 6a, 8, 10, 11 and 12). The slice-0 backend gate,
+ # scripts/checks/slice0_backends.sh: every hand-written BIR example through the LLVM path and the
+ # LCB path, each executable's observation (exit status plus the fd-2 trap line) compared with the
+ # BIR semantics, plus LCB's own evaluator on the adapted body. It runs natively on x86-64 Linux and
+@@ -39,6 +39,33 @@ jobs:
+       - name: Backend gate (LLVM and LCB, native)
+         run: nix develop --command bash scripts/checks/slice0_backends.sh
+ 
++  artifacts:
++    name: Slice 0 artifacts (${{ matrix.arch }})
++    strategy:
++      fail-fast: false
++      matrix:
++        include:
++          - arch: x86-64
++            runner: ubuntu-latest
++          - arch: aarch64-macos
++            runner: macos-15
++    runs-on: ${{ matrix.runner }}
++    timeout-minutes: 60
++    permissions:
++      contents: read
++    steps:
++      - uses: actions/checkout@v4
++      - name: Install Nix
++        uses: cachix/install-nix-action@v31
++      - name: Sanitizers, binary size (report-only) and stack bound (gates 10, 11, 12)
++        run: nix develop --command timeout 3000 bash scripts/checks/slice0_artifacts.sh report
++      - uses: actions/upload-artifact@v4
++        if: always()
++        with:
++          name: artifacts-${{ matrix.arch }}
++          path: report
++          if-no-files-found: error
++
+   reproducibility:
+     name: Reproducibility (${{ matrix.id }})
+     strategy:
+diff --git a/Concrete/README.md b/Concrete/README.md
+index aaefb2537..42ea69f79 100644
+--- a/Concrete/README.md
++++ b/Concrete/README.md
+@@ -579,9 +579,9 @@ The CLI is `concrete facts FILE [FN]` and `concrete build FILE -o OUT` (owner, 2
+ 7. **Certificates:** the kernel checks every acceptance and refusal certificate, with measured budgets.
+ 8. **Reproducibility** (implemented, `scripts/checks/slice0_repro.sh`): two independent builds give byte-identical outputs at every stage, on each target, and two independent Linux runners give identical manifests. See [Reproducible builds](#reproducible-builds-owner-2026-11-07).
+ 9. **Trusted base** (owner, 2026-11-07): a golden test that `concrete facts` prints exactly the spec's premise list, so a premise added, removed or reworded anywhere fails until the golden is updated with it.
+-10. **Sanitizers** (owner, 2026-11-07): every LLVM example also runs built with ASan and UBSan in CI, and must give the same observation with no sanitizer report.
+-11. **Binary size** (owner, 2026-11-07): the size of each example's executable, per backend and target, is recorded per run. Report-only: it never fails a run.
+-12. **Stack bound** (owner, 2026-11-07): a stack-bound fact for each example, derived from the final artifact (the linked executable, not the IR) for both backends, and checked against a run.
++10. **Sanitizers** (owner, 2026-11-07; implemented, `scripts/checks/slice0_artifacts.sh`): every LLVM example also runs built with ASan and UBSan in CI, and must give the same observation with no sanitizer report. ASan instruments only functions marked `sanitize_address`, which clang's C front end adds and the printed IR lacks, so the sanitizer build adds it to every definition (`slice0_native.sh sanitize`); a control body with an out-of-bounds load must be reported. UBSan's checks are inserted by clang's C front end, so on IR input it links only its runtime and checks nothing: no runtime C is compiled in slice 0, and the LLVM-level undefined behaviour of the printed IR (poison, `unreachable`) is P_print's.
++11. **Binary size** (owner, 2026-11-07; implemented, same script): the size of each example's executable (bytes and text size, pinned `llvm-size`), per backend and target, is recorded per run in `sizes.tsv`, uploaded with the job. Report-only: it never fails a run.
++12. **Stack bound** (owner, 2026-11-07; implemented, same script, `lib/stack_bound.py`): a stack-bound fact for each example, derived from the final artifact (the linked executable, not the IR) for both backends, and checked against a run. The analysis follows every path of the Concrete-owned code (`main`, `concrete_rt_write_all`, `concrete_body`) over the disassembly's control-flow graph, tracking the stack and frame pointers' depth below `main`'s entry and every byte addressed relative to them (so the red zone), and fails closed on anything it does not model (another stack-pointer write, an indirect branch or call, a stack pointer copied out, an indexed stack address, two depths meeting, recursion, a call to a function neither owned nor a PLT/stub). The external calls (`write`, `_exit`, `abort`) are listed with the depth at their entry; their own use, and that `_exit` and `abort` do not return, are the libc premise. On x86-64 Linux the run check single-steps the owned code under the pinned gdb and requires the measured stack-pointer depth to be within the bound; on `aarch64-macos` the bound is derived and the run check is not run (no debugger in the pinned shell). `stack.tsv` records bound, measurement and externals.
+ 
+ With the front end (owner, 2026-11-07): gate 5's random-program fuzzer compares the native executables with the Lean evaluator, and a JSON schema generated from the Lean types of the `facts` output has goldens. Each gate joins `required-checks.txt` when the compiler lands.
+ 
+diff --git a/flake.nix b/flake.nix
+index d2032ea1b..aad6cd4f3 100644
+--- a/flake.nix
++++ b/flake.nix
+@@ -125,6 +125,12 @@
+             # Slice-0 native builds name their compiler explicitly (scripts/checks/slice0_native.sh),
+             # pinned here so the shell's general clang can move without changing their identity.
+             CONCRETE_SLICE0_CLANG = "${pkgs.llvmPackages_21.clang}/bin/clang";
++            # The artifact gates (scripts/checks/slice0_artifacts.sh) read the linked executables
++            # with the same LLVM release's llvm-objdump and llvm-size, and on Linux measure a run
++            # under gdb.
++            CONCRETE_SLICE0_LLVM = "${pkgs.llvmPackages_21.llvm}/bin";
++          } // pkgs.lib.optionalAttrs pkgs.stdenv.isLinux {
++            CONCRETE_SLICE0_GDB = "${pkgs.gdb}/bin/gdb";
+           } // gatesMarker);
+ 
+           # `nix develop .#gates` — what CI runs every gate step in: the gate userland, the marker,
+diff --git a/scripts/checks/lib/limited_exec.sh b/scripts/checks/lib/limited_exec.sh
+index d3812992a..aaf7fc0ca 100755
+--- a/scripts/checks/lib/limited_exec.sh
++++ b/scripts/checks/lib/limited_exec.sh
+@@ -4,9 +4,14 @@
+ # bounded_run, which bounds their time and kills their process group; the process count is
+ # bounded by the gate's lib/limits.sh. Once exec succeeds, CMD's status and streams pass through
+ # unchanged; an executable that needs more than the cap fails differently, which the gate reports
+-# as a mismatch (fail closed), never as a pass.
++# as a mismatch (fail closed), never as a pass. MEM_MB 0 lifts the gate's soft address-space cap
++# to the hard limit (lib/limits.sh): a sanitizer build reserves terabytes of shadow address space,
++# so its memory is bounded by the sanitizer's own hard_rss_limit_mb and the job's memory instead
++# (slice0_artifacts.sh).
+ set -eu
+ mem_kb=$(($1 * 1024)); shift
+-if [ "$(uname -s)" = Linux ]; then ulimit -v "$mem_kb"; fi
++if [ "$(uname -s)" = Linux ]; then
++  if [ "$mem_kb" -gt 0 ]; then ulimit -v "$mem_kb"; else ulimit -S -v "$(ulimit -H -v)"; fi
++fi
+ ulimit -c 0
+ exec "$@"
+diff --git a/scripts/checks/lib/limits.sh b/scripts/checks/lib/limits.sh
+index d4044670c..28c433d7d 100644
+--- a/scripts/checks/lib/limits.sh
++++ b/scripts/checks/lib/limits.sh
+@@ -8,15 +8,17 @@
+ #     a limit is always allowed; a limit already below the requested one is kept. Lake reserves
+ #     far more address space than it uses (a cold `lake build` fails to create threads under
+ #     32 GiB), so gates pass 64 here and bound the executables under test tightly, through
+-#     lib/limited_exec.sh.
++#     lib/limited_exec.sh. The address-space cap is the SOFT limit: it binds every process, and
++#     only limited_exec.sh 0 (a sanitizer build, whose shadow reservation needs terabytes of
++#     address space; slice0_artifacts.sh) raises it back to the hard limit for one executable.
+ #
+ # Per-command time bounds are separate: bounded_run (lib/bounded.sh) for executables under test,
+ # `timeout -k` for builds.
+ gate_limits() {
+   local mem_kb=$(($1 * 1024 * 1024)) nproc=$2 cur
+   if [ "$(uname -s)" = Linux ]; then
+-    cur=$(ulimit -v)
+-    if [ "$cur" = unlimited ] || [ "$cur" -gt "$mem_kb" ]; then ulimit -v "$mem_kb"; fi
++    cur=$(ulimit -S -v)
++    if [ "$cur" = unlimited ] || [ "$cur" -gt "$mem_kb" ]; then ulimit -S -v "$mem_kb"; fi
+   fi
+   cur=$(ulimit -u)
+   if [ "$cur" = unlimited ] || [ "$cur" -gt "$nproc" ]; then ulimit -u "$nproc"; fi
+diff --git a/scripts/checks/lib/slice0_common.sh b/scripts/checks/lib/slice0_common.sh
+new file mode 100644
+index 000000000..a8b7337fd
+--- /dev/null
++++ b/scripts/checks/lib/slice0_common.sh
+@@ -0,0 +1,56 @@
++# shellcheck shell=bash
++# Shared machinery of the slice-0 example gates (PROVISIONAL): slice0_backends.sh (gates 4, 6, 6a)
++# and slice0_artifacts.sh (gates 10, 11, 12). Source it from the repository root, inside the nix
++# devshell, with `set -euo pipefail`. It builds the compiler and LCB's command line under the
++# gate's limits and defines:
++#   root, work (removed on exit), lcb, target, emitter (the Lean emitter command, an array);
++#   observe EXE OUT SECS RETRY [MEM_MB [ENV...]]: run EXE under bounded_run (and limited_exec.sh
++#     MEM_MB, default 1024) with ENV assignments; OUT.status (status or "incomplete"),
++#     OUT.stdout, OUT.stderr;
++#   judge EXPECTED_DIR OBS: the observation OBS.* equals the expectation, byte for byte;
++#   build NAME LOG CMD...: run CMD, or print LOG and fail the gate;
++#   emit_examples: the example names, one per line, failing if there are none.
++root=$(pwd)
++work=$(mktemp -d)
++trap 'rm -rf "${work:?}"' EXIT
++BOUNDED_PARENT="$work"
++# shellcheck source=scripts/checks/lib/bounded.sh
++source scripts/checks/lib/bounded.sh
++[ "$BOUNDED_HAVE_WATCHDOG" = 1 ] || { echo "slice0: python3 is required for bounded runs" >&2; exit 2; }
++# shellcheck source=scripts/checks/lib/limits.sh
++source scripts/checks/lib/limits.sh
++gate_limits 64 40000
++timeout -k 30 1800 lake build Concrete lean-compiler-backend/lcb >/dev/null
++lcb="$root/.lake/packages/lean-compiler-backend/.lake/build/bin/lcb"
++case "$(uname -s)-$(uname -m)" in
++  Linux-x86_64) target=x86_64-linux ;;
++  Linux-aarch64) target=aarch64-linux ;;
++  Darwin-arm64) target=aarch64-macos ;;
++  *) echo "slice0: unsupported host $(uname -s)-$(uname -m)" >&2; exit 2 ;;
++esac
++emitter=(timeout -k 10 120 lake env lean --run scripts/checks/slice0_bir.lean)
++
++observe() {
++  local rc=0 mem=${5:-1024}
++  local envs=("${@:6}")
++  bounded_run -i /dev/null -r "$4" "$3" -- env ${envs[@]+"${envs[@]}"} \
++    bash "$root/scripts/checks/lib/limited_exec.sh" "$mem" "$1" \
++    >"$2.stdout" 2>"$2.stderr" || rc=$?
++  if bounded_is_incomplete "$rc"; then echo incomplete >"$2.status"; else echo "$rc" >"$2.status"; fi
++}
++
++judge() {
++  cmp -s "$1/status" "$2.status" && cmp -s "$1/stderr" "$2.stderr" && [ ! -s "$2.stdout" ]
++}
++
++build() {
++  local name=$1 log=$2; shift 2
++  "$@" >"$log" 2>&1 || { cat "$log" >&2; echo "slice0: $name: build failed: $*" >&2; exit 1; }
++}
++
++emit_examples() {
++  local names
++  names=$("${emitter[@]}" list) || { echo "slice0: listing the examples failed" >&2; exit 1; }
++  [ -n "$names" ] || { echo "slice0: no examples listed" >&2; exit 1; }
++  printf '%s\n' "$names"
++}
+diff --git a/scripts/checks/lib/stack_bound.py b/scripts/checks/lib/stack_bound.py
+new file mode 100644
+index 000000000..d6ea64d45
+--- /dev/null
++++ b/scripts/checks/lib/stack_bound.py
+@@ -0,0 +1,363 @@
++#!/usr/bin/env python3
++"""Stack bound of a slice-0 executable, from its disassembly (README gate 12). PROVISIONAL.
++
++usage: stack_bound.py ARCH DISASM             -> prints `bound N` and one `external SYM DEPTH` per call
++       stack_bound.py ARCH DISASM --ranges    -> also prints `range SYM LO HI` per Concrete function
++ARCH is x86_64 or aarch64; DISASM is `llvm-objdump -d --no-show-raw-insn` output of the LINKED
++executable (x86-64 in Intel syntax).
++
++The Concrete-owned code is `main` (the runtime entry), `concrete_rt_write_all` and the body
++(`concrete_body`), with or without the Mach-O underscore. From `main`'s entry, every path through
++them is followed over the control-flow graph, tracking the stack pointer's depth below its value
++at `main`'s entry (and the frame pointer's). The bound is the deepest point reached, by the stack
++pointer or by any byte addressed relative to it or the frame pointer (the red zone below the
++stack pointer is used without moving it), counting each
++internal callee's own bound and the depth at which each external function (libc's `write`,
++`_exit`, `abort`) is entered; the external functions' own use is outside it (a premise, listed),
++and so is that `_exit` and `abort` do not return (a path ends at a call to one).
++
++Fail closed: any instruction that writes the stack pointer in a way not modelled here, an indirect
++branch or call, a branch leaving its function, two different depths at one address, a return at a
++nonzero depth, recursion, or a call to a function that is neither Concrete-owned nor a PLT/stub
++symbol is an error (exit 1), never a bound.
++"""
++import re
++import sys
++
++OWNED = ("main", "concrete_body", "concrete_rt_write_all")
++# External functions that do not return (part of the libc premise): a path ends at a call to one.
++NORETURN = ("exit", "_exit", "_Exit", "abort")
++
++
++class Refuse(Exception):
++    pass
++
++
++def owned_name(sym):
++    s = sym[1:] if sym.startswith("_") and sym[1:] in OWNED else sym
++    return s if s in OWNED else None
++
++
++def parse(path):
++    """Functions: name -> list of (addr, mnemonic, operands). Also the set of stub symbols."""
++    funcs, cur, stubs, section = {}, None, set(), ""
++    head = re.compile(r"^([0-9a-f]+) <([^>]+)>:$")
++    inst = re.compile(r"^\s*([0-9a-f]+):\s*(\S+)\s*(.*)$")
++    for line in open(path, encoding="utf-8", errors="replace"):
++        line = line.rstrip("\n")
++        if line.startswith("Disassembly of section"):
++            section = line.split()[-1].rstrip(":")
++            cur = None
++            continue
++        m = head.match(line)
++        if m:
++            name = m.group(2)
++            if section in (".plt", ".plt.sec", ".plt.got", "__stubs") or name.endswith("@plt"):
++                stubs.add(name)
++                cur = None
++            else:
++                cur = name
++                funcs.setdefault(name, [])
++            continue
++        m = inst.match(line)
++        if m and cur is not None:
++            ops = m.group(3).split("#", 1)[0] if ARCH == "x86_64" else m.group(3).split("//")[0]
++            funcs[cur].append((int(m.group(1), 16), m.group(2).lower(), ops.strip()))
++    return funcs, stubs
++
++
++def target_of(ops):
++    m = re.search(r"0x([0-9a-f]+)\s*<([^>]+)>", ops)
++    if not m:
++        m2 = re.search(r"\b([0-9a-f]+)\s*<([^>]+)>", ops)
++        if not m2:
++            return None, None
++        m = m2
++    return int(m.group(1), 16), m.group(2)
++
++
++def imm(s):
++    t = s.strip().lstrip("#")
++    try:
++        return int(t, 16) if t.lower().startswith(("0x", "-0x")) else int(t)
++    except ValueError:
++        raise Refuse(f"not an immediate: {s}") from None
++
++
++def x86_step(mn, ops, d, fp):
++    """New (d, fp) after a non-control x86 instruction."""
++    args = [a.strip() for a in ops.split(",")] if ops else []
++    dst = args[0] if args else ""
++    if mn == "push":
++        return d + 8, fp
++    if mn == "pop":
++        return d - 8, (None if dst == "rbp" else fp)
++    if mn == "leave":
++        if fp is None:
++            raise Refuse("leave with an unknown frame pointer")
++        return fp - 8, None
++    if mn in ("sub", "add") and dst == "rsp":
++        n = imm(args[1])
++        return (d + n if mn == "sub" else d - n), fp
++    if mn == "mov" and dst == "rbp" and args[1:] == ["rsp"]:
++        return d, d
++    if mn == "mov" and dst == "rsp" and args[1:] == ["rbp"]:
++        if fp is None:
++            raise Refuse("mov rsp, rbp with an unknown frame pointer")
++        return fp, fp
++    if mn in ("enter", "pushf", "pushfq", "popf", "popfq") or dst in ("rsp", "esp", "sp", "spl"):
++        raise Refuse(f"unmodelled stack-pointer write: {mn} {ops}")
++    if dst in ("rbp", "ebp"):
++        return d, None
++    return d, fp
++
++
++MEM = re.compile(r"\[([^\]]*)\]")
++X86_STACK = ("rsp", "rbp", "esp", "ebp")
++# x86 instructions whose stack-register operands the depth tracking itself models.
++X86_MODELLED = {("push", "rbp"), ("pop", "rbp"), ("mov", "rbp, rsp"), ("mov", "rsp, rbp"),
++                ("leave", "")}
++
++
++def x86_access(mn, ops, d, fp):
++    """The deepest byte an x86 instruction touches or addresses through the stack or frame
++    pointer (a memory operand or `lea`), or None. The red zone below the stack pointer is used
++    without moving it, so this, not only the stack pointer, is what the bound must cover.
++    Refuses an indexed stack address and a stack or frame pointer copied out as a value."""
++    deepest = None
++    for inner in MEM.findall(ops):
++        terms = re.findall(r"[+-]?\s*[^+\-\s]+", inner)
++        regs = [t.strip(" +-") for t in terms if not re.fullmatch(r"[+-]?\s*(0x[0-9a-f]+|\d+)", t)]
++        base = [r for r in regs if r in X86_STACK]
++        if not base:
++            continue
++        if len(regs) != 1:
++            raise Refuse(f"indexed stack address: {mn} {ops}")
++        k = sum(int(t.replace(" ", ""), 0) for t in terms if t.strip(" +-") not in regs)
++        if base[0] in ("rbp", "ebp"):
++            if fp is None:
++                raise Refuse(f"frame-relative address with an unknown frame pointer: {mn} {ops}")
++            depth = fp - k
++        else:
++            depth = d - k
++        deepest = depth if deepest is None else max(deepest, depth)
++    outside = MEM.sub("", ops)
++    if (mn, ops) not in X86_MODELLED and not (mn in ("sub", "add") and ops.startswith("rsp,")):
++        if any(re.search(rf"\b{r}\b", outside) for r in X86_STACK):
++            raise Refuse(f"stack or frame pointer used as a value: {mn} {ops}")
++    return deepest
++
++
++def a64_access(mn, ops, d, fp):
++    """As x86_access, for AArch64: `[sp, #k]` and `[x29, #k]` operands (writeback on sp is the
++    depth tracking's); refuses a register offset from sp or x29, writeback on x29, and sp or x29
++    copied out as a value (other than the frame setup the depth tracking models)."""
++    deepest = None
++    for inner in MEM.findall(ops):
++        parts = [p.strip() for p in inner.split(",")]
++        if parts[0] not in ("sp", "x29"):
++            continue
++        if len(parts) > 2 or (len(parts) == 2 and not parts[1].startswith("#")):
++            raise Refuse(f"register-offset stack address: {mn} {ops}")
++        k = imm(parts[1]) if len(parts) == 2 else 0
++        if parts[0] == "x29":
++            if fp is None:
++                raise Refuse(f"frame-relative address with an unknown frame pointer: {mn} {ops}")
++            if re.search(r"\[x29[^\]]*\]!", ops):
++                raise Refuse(f"writeback on the frame pointer: {mn} {ops}")
++            depth = fp - k
++        else:
++            depth = d - k
++        deepest = depth if deepest is None else max(deepest, depth)
++    args = [a.strip() for a in re.split(r",(?![^\[]*\])", MEM.sub("[]", ops))] if ops else []
++    modelled = (args[:1] in (["sp"], ["x29"]) or (mn.startswith(("stp", "ldp")) and "x29" in args[:2])
++                or (mn.startswith(("str", "ldr")) and args[:1] == ["x29"]))
++    if not modelled and any(a in ("sp", "x29", "wsp", "w29") for a in args[1:]):
++        raise Refuse(f"stack or frame pointer used as a value: {mn} {ops}")
++    return deepest
++
++
++SPWB_PRE = re.compile(r"\[sp(?:,\s*#(-?(?:0x)?[0-9a-f]+))?\]!")
++SPWB_POST = re.compile(r"\[sp\],\s*#(-?(?:0x)?[0-9a-f]+)")
++
++
++def a64_step(mn, ops, d, fp):
++    """New (d, fp) after a non-control AArch64 instruction."""
++    args = [a.strip() for a in re.split(r",(?![^\[]*\])", ops)] if ops else []
++    dst = args[0] if args else ""
++    m = SPWB_PRE.search(ops)
++    if m:
++        d = d - (imm(m.group(1)) if m.group(1) else 0)
++    m = SPWB_POST.search(ops)
++    if m:
++        d = d - imm(m.group(1))
++    if SPWB_PRE.search(ops) or SPWB_POST.search(ops):
++        return d, (None if "x29" in args[:2] and mn.startswith("ld") else fp)
++    if dst in ("sp", "wsp"):
++        if mn in ("sub", "add") and len(args) == 3 and args[1] == "sp":
++            n = imm(args[2])
++            return (d + n if mn == "sub" else d - n), fp
++        if mn == "mov" and args[1:] == ["x29"]:
++            if fp is None:
++                raise Refuse("mov sp, x29 with an unknown frame pointer")
++            return fp, fp
++        if mn in ("sub", "add") and len(args) == 3 and args[1] == "x29":
++            if fp is None:
++                raise Refuse("sp from an unknown frame pointer")
++            n = imm(args[2])
++            return (fp + n if mn == "sub" else fp - n), fp
++        raise Refuse(f"unmodelled stack-pointer write: {mn} {ops}")
++    if dst in ("x29", "w29"):
++        if mn == "mov" and args[1:] == ["sp"]:
++            return d, d
++        if mn == "add" and len(args) == 3 and args[1] == "sp":
++            return d, d - imm(args[2])
++        return d, None
++    if mn.startswith("ldp") and "x29" in args[:2]:
++        return d, None
++    return d, fp
++
++
++X86_JCC = re.compile(r"^j(?!mp$)[a-z]+$")
++A64_COND = re.compile(r"^b\.[a-z]+$")
++
++
++def control(mn, ops):
++    """(kind, target) for a control instruction, or (None, None)."""
++    if ARCH == "x86_64":
++        if mn == "call":
++            return "call", ops
++        if mn == "jmp":
++            return "jmp", ops
++        if X86_JCC.match(mn):
++            return "jcc", ops
++        if mn == "ret":
++            return "ret", None
++        if mn in ("ud2", "hlt", "int3"):
++            return "stop", None
++        return None, None
++    if mn == "bl":
++        return "call", ops
++    if mn == "b":
++        return "jmp", ops
++    if A64_COND.match(mn) or mn in ("cbz", "cbnz", "tbz", "tbnz"):
++        return "jcc", ops
++    if mn in ("blr", "br", "braa", "blraa", "braaz", "blraaz"):
++        return "indirect", ops
++    if mn in ("ret", "retaa", "retab"):
++        return "ret", None
++    if mn in ("brk", "udf", "hlt"):
++        return "stop", None
++    return None, None
++
++
++def analyse(funcs, stubs):
++    """(bound, externals, owned): main's bound, each external's deepest entry depth, both from
++    main's entry, and the owned functions' names."""
++    owned = {owned_name(n): n for n in funcs if owned_name(n)}
++    if "main" not in owned:
++        raise Refuse("no main")
++    memo, active = {}, set()
++    ret_push = 8 if ARCH == "x86_64" else 0
++    step = x86_step if ARCH == "x86_64" else a64_step
++    access = x86_access if ARCH == "x86_64" else a64_access
++
++    def add_ext(ext, sub, base):
++        for name, depth in sub.items():
++            ext[name] = max(ext.get(name, 0), base + depth)
++
++    def fn_bound(key):
++        """(deepest, externals) of owned function `key`, relative to its own entry."""
++        if key in memo:
++            return memo[key]
++        if key in active:
++            raise Refuse(f"recursion through {key}")
++        active.add(key)
++        code = funcs[owned[key]]
++        if not code:
++            raise Refuse(f"{key}: no instructions")
++        index = {a: i for i, (a, _, _) in enumerate(code)}
++        seen, work, deepest, ext = {}, [(0, 0, None)], 0, {}
++        while work:
++            i, d, fp = work.pop()
++            while True:
++                if i >= len(code):
++                    raise Refuse(f"{key}: runs off its end")
++                addr, mn, ops = code[i]
++                if addr in seen:
++                    if seen[addr] != (d, fp):
++                        raise Refuse(f"{key}+{addr:#x}: depths {seen[addr]} and {(d, fp)} meet")
++                    break
++                seen[addr] = (d, fp)
++                kind, arg = control(mn, ops)
++                if kind is None:
++                    touched = access(mn, ops, d, fp)
++                    if touched is not None:
++                        deepest = max(deepest, touched)
++                    d, fp = step(mn, ops, d, fp)
++                    if d < 0:
++                        raise Refuse(f"{key}+{addr:#x}: stack above the entry")
++                    deepest = max(deepest, d)
++                    i += 1
++                    continue
++                if kind == "indirect":
++                    raise Refuse(f"{key}+{addr:#x}: indirect branch {mn} {ops}")
++                if kind == "ret":
++                    if d != 0:
++                        raise Refuse(f"{key}+{addr:#x}: return at depth {d}")
++                    break
++                if kind == "stop":
++                    break
++                tgt, sym = target_of(arg)
++                if tgt is None:
++                    raise Refuse(f"{key}+{addr:#x}: indirect {mn} {ops}")
++                if kind == "call":
++                    base = sym.split("+")[0]
++                    callee = owned_name(base)
++                    if callee and "+" not in sym:
++                        sub_deep, sub_ext = fn_bound(callee)
++                        deepest = max(deepest, d + ret_push + sub_deep)
++                        add_ext(ext, sub_ext, d + ret_push)
++                    elif base in stubs or base.endswith("@plt"):
++                        # ELF `write@plt`; Mach-O stubs carry one extra leading underscore.
++                        name = base.removesuffix("@plt") if base.endswith("@plt") else base[1:]
++                        add_ext(ext, {name: 0}, d + ret_push)
++                        deepest = max(deepest, d + ret_push)
++                        if name in NORETURN:
++                            break
++                    else:
++                        raise Refuse(f"{key}+{addr:#x}: call to {sym}, neither owned nor a stub")
++                    i += 1
++                    continue
++                if tgt not in index:
++                    raise Refuse(f"{key}+{addr:#x}: branch leaves the function: {mn} {ops}")
++                if kind == "jmp":
++                    i = index[tgt]
++                    continue
++                work.append((index[tgt], d, fp))
++                i += 1
++        active.discard(key)
++        memo[key] = (deepest, ext)
++        return memo[key]
++
++    total, ext = fn_bound("main")
++    return total, ext, owned
++
++
++if __name__ == "__main__":
++    if len(sys.argv) not in (3, 4) or sys.argv[1] not in ("x86_64", "aarch64"):
++        sys.exit("usage: stack_bound.py x86_64|aarch64 DISASM [--ranges]")
++    ARCH = sys.argv[1]
++    try:
++        funcs, stubs = parse(sys.argv[2])
++        total, ext, owned = analyse(funcs, stubs)
++    except Refuse as e:
++        print(f"refused: {e}")
++        sys.exit(1)
++    print(f"bound {total}")
++    for name, depth in sorted(ext.items()):
++        print(f"external {name} {depth}")
++    if len(sys.argv) == 4 and sys.argv[3] == "--ranges":
++        for key, name in sorted(owned.items()):
++            code = funcs[name]
++            print(f"range {key} {code[0][0]:#x} {code[-1][0]:#x}")
+diff --git a/scripts/checks/lib/stack_measure.py b/scripts/checks/lib/stack_measure.py
+new file mode 100644
+index 000000000..37d623bfe
+--- /dev/null
++++ b/scripts/checks/lib/stack_measure.py
+@@ -0,0 +1,56 @@
++# gdb -batch -nx -x stack_measure.py EXE (README gate 12, x86-64 Linux). PROVISIONAL.
++#
++# Measures the stack depth one run of EXE reaches, below the stack pointer at `main`'s entry, by
++# single-stepping every instruction of the Concrete-owned functions (STACK_RANGES: "LO:HI,..." in
++# the executable's link-time addresses, from stack_bound.py --ranges; STACK_MAIN: main's LO).
++# An external function (entered through a call, so its return address is at the stack pointer)
++# runs at full speed to its return; its own use is outside the bound, as in stack_bound.py, but
++# the depth at its entry is measured. Once main has returned, the rest runs freely. Prints
++# `measured N` and `steps N`, or `error ...` (the gate fails on it).
++import os
++
++import gdb
++
++LIMIT = 2_000_000
++ranges = [tuple(int(x, 16) for x in r.split(":")) for r in os.environ["STACK_RANGES"].split(",")]
++main_lo = int(os.environ["STACK_MAIN"], 16)
++exited = [False]
++gdb.events.exited.connect(lambda _e: exited.__setitem__(0, True))
++gdb.execute("set pagination off")
++gdb.execute("set confirm off")
++gdb.execute("set disable-randomization on")
++
++
++def reg(name):
++    return int(gdb.parse_and_eval(f"(unsigned long) ${name}"))
++
++
++try:
++    gdb.execute("break *main", to_string=True)
++    gdb.execute("run </dev/null >/dev/null 2>/dev/null", to_string=True)
++    if exited[0]:
++        raise RuntimeError("exited before main")
++    offset = reg("pc") - main_lo
++    sp0 = reg("sp")
++    low, steps = sp0, 0
++    inferior = gdb.selected_inferior()
++    while not exited[0]:
++        pc, sp = reg("pc"), reg("sp")
++        if sp > sp0:  # main has returned
++            gdb.execute("continue", to_string=True)
++            continue
++        low = min(low, sp)
++        if any(lo + offset <= pc <= hi + offset for lo, hi in ranges):
++            gdb.execute("stepi", to_string=True)
++            steps += 1
++            if steps > LIMIT:
++                raise RuntimeError(f"more than {LIMIT} steps")
++        else:
++            ret = int.from_bytes(inferior.read_memory(sp, 8).tobytes(), "little")
++            gdb.execute("delete", to_string=True)
++            gdb.execute(f"tbreak *{ret:#x}", to_string=True)
++            gdb.execute("continue", to_string=True)
++    print(f"measured {sp0 - low}")
++    print(f"steps {steps}")
++except Exception as e:  # noqa: BLE001 - every failure is reported, the gate fails closed
++    print(f"error {e}")
+diff --git a/scripts/checks/slice0_artifacts.sh b/scripts/checks/slice0_artifacts.sh
+new file mode 100644
+index 000000000..3bfde315f
+--- /dev/null
++++ b/scripts/checks/slice0_artifacts.sh
+@@ -0,0 +1,210 @@
++#!/usr/bin/env bash
++# Slice-0 artifact gates (PROVISIONAL, Concrete/README.md gates 10, 11 and 12), over every
++# hand-written BIR example, on the executables slice0_native.sh links:
++#
++# 10. Sanitizers: the LLVM example also built with ASan and UBSan (slice0_native.sh sanitize: ASan
++#     instruments the printed IR once every definition carries sanitize_address; UBSan's checks
++#     come from clang's C front end, so on IR only its runtime is linked) must
++#     give the same observation as the BIR semantics (status, exact fd-2 bytes, empty fd 1), so no
++#     sanitizer report. Its memory is bounded by ASan's hard_rss_limit_mb (the shadow reservation
++#     rules out an address-space cap). Control: a body with an out-of-bounds load must be reported.
++# 11. Binary size (report-only, never fails on a size): bytes and text size of each executable,
++#     per backend and target, in REPORT/sizes.tsv.
++# 12. Stack bound: lib/stack_bound.py derives, from the linked executable's disassembly, a bound on
++#     the Concrete-owned stack below main's entry, covering every byte addressed relative to the
++#     stack or frame pointer (so the red zone), with external libc calls listed with their entry
++#     depth (their own use, and that _exit and abort do not return, are premises). On x86-64
++#     Linux, a run under gdb (lib/stack_measure.py) must stay within it (the run measures the
++#     stack pointer only). REPORT/stack.tsv. Controls: the analysis must refuse an unmodelled
++#     stack-pointer write, an indirect call, recursion, a call to an unknown function, two depths
++#     meeting, a stack pointer used as a value and an indexed stack address, and give the
++#     expected bound on a known function and on a red-zone store; the comparison must reject a
++#     measurement above the bound.
++#
++# usage: slice0_artifacts.sh [REPORT_DIR]. Run inside the nix devshell, from the repository root.
++set -euo pipefail
++report=${1:-}
++# shellcheck source=scripts/checks/lib/slice0_common.sh
++source scripts/checks/lib/slice0_common.sh
++: "${CONCRETE_SLICE0_LLVM:?run inside nix develop}"
++objdump=("$CONCRETE_SLICE0_LLVM/llvm-objdump" -d --no-show-raw-insn)
++case "$target" in
++  x86_64-linux) arch=x86_64; objdump+=(--x86-asm-syntax=intel) ;;
++  aarch64-*) arch=aarch64 ;;
++esac
++gdb=
++if [ "$target" = x86_64-linux ]; then gdb=${CONCRETE_SLICE0_GDB:?the x86-64 Linux shell pins gdb}; fi
++[ -n "$report" ] || report="$work/report"
++mkdir -p "$report"
++sizes="$report/sizes.tsv"
++stack="$report/stack.tsv"
++printf 'example\tbackend\ttarget\tbytes\ttext\n' >"$sizes"
++printf 'example\tbackend\ttarget\tbound\tmeasured\texternals\n' >"$stack"
++# hard_rss_limit_mb and LeakSanitizer are Linux-only (ASan on Darwin refuses detect_leaks); on
++# macOS RLIMIT_AS is not enforced either, so there the job's memory is the bound, as for all runs.
++asan=abort_on_error=0:symbolize=0
++[ "$(uname -s)" != Linux ] || asan="$asan:hard_rss_limit_mb=1024:detect_leaks=1"
++san_env=("ASAN_OPTIONS=$asan" UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=0:symbolize=0)
++analyse=(timeout -k 10 60 python3 -I "$root/scripts/checks/lib/stack_bound.py" "$arch")
++fail=0
++examples=0
++
++# within MEASURED BOUND: the run stayed within the static bound (and actually ran).
++within() { [ "$1" -gt 0 ] && [ "$1" -le "$2" ]; }
++
++# stack_check NAME BACKEND EXE: derive the bound, measure a run where supported, record both.
++stack_check() {
++  local name=$1 backend=$2 exe=$3 dis="$3.dis" out bound ext measured=not-run
++  if ! timeout -k 10 60 "${objdump[@]}" "$exe" >"$dis" 2>"$dis.err"; then
++    echo "FAIL $name [$backend] stack: disassembly failed: $(head -c 300 "$dis.err")"; fail=1; return
++  fi
++  if ! out=$("${analyse[@]}" "$dis" --ranges); then
++    echo "FAIL $name [$backend] stack: $out"; fail=1; return
++  fi
++  bound=$(awk '$1 == "bound" {print $2}' <<<"$out")
++  ext=$(awk '$1 == "external" {printf "%s%s@%s", sep, $2, $3; sep=","}' <<<"$out")
++  if [ -n "$gdb" ]; then
++    local ranges main m
++    ranges=$(awk '$1 == "range" {printf "%s%s:%s", sep, $3, $4; sep=","}' <<<"$out")
++    main=$(awk '$1 == "range" && $2 == "main" {print $3}' <<<"$out")
++    m=$(STACK_RANGES=$ranges STACK_MAIN=$main timeout -k 10 300 \
++      "$gdb" -batch -nx -x "$root/scripts/checks/lib/stack_measure.py" "$exe" 2>"$exe.gdb.err" |
++      awk '$1 == "measured" || $1 == "error" {print}') || true
++    measured=$(awk '$1 == "measured" {print $2}' <<<"$m")
++    if [ -z "$measured" ] || ! within "$measured" "$bound"; then
++      echo "FAIL $name [$backend] stack: bound $bound, run: ${m:-no measurement} $(head -c 300 "$exe.gdb.err")"
++      fail=1
++    fi
++  fi
++  printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$name" "$backend" "$target" "$bound" "$measured" "$ext" >>"$stack"
++  echo "ok   $name [$backend] stack: bound $bound, measured $measured, externals ${ext:-none}"
++}
++
++size_report() { # size_report NAME BACKEND EXE
++  local bytes text
++  bytes=$(wc -c <"$3" | tr -d ' ')
++  text=$(timeout -k 10 60 "$CONCRETE_SLICE0_LLVM/llvm-size" "$3" 2>/dev/null | awk 'NR == 2 {print $1}') || true
++  printf '%s\t%s\t%s\t%s\t%s\n' "$1" "$2" "$target" "$bytes" "${text:-unavailable}" >>"$sizes"
++}
++
++names=$(emit_examples)
++mkdir -p "$work/ctl"
++for name in $names; do
++  d="$work/ex/$name"
++  "${emitter[@]}" emit "$name" "$d" "$target"
++  build "$name" "$d/build.log" timeout -k 10 300 bash "$root/scripts/checks/slice0_native.sh" "$d" "$lcb"
++  build "$name" "$d/build-san.log" \
++    timeout -k 10 300 bash "$root/scripts/checks/slice0_native.sh" "$d" "$lcb" sanitize
++  observe "$d/llvm.san.exe" "$d/san" 30 30 0 "${san_env[@]}"
++  if judge "$d" "$d/san"; then
++    echo "ok   $name [llvm+asan+ubsan]: status $(cat "$d/san.status")"
++  else
++    echo "FAIL $name [llvm+asan+ubsan]: status $(cat "$d/san.status") (expected $(cat "$d/status")), stderr" \
++      "$(head -c 600 "$d/san.stderr")"
++    fail=1
++  fi
++  for backend in llvm lcb; do
++    size_report "$name" "$backend" "$d/$backend.exe"
++    stack_check "$name" "$backend" "$d/$backend.exe"
++  done
++  examples=$((examples + 1))
++done
++
++# Control (gate 10): an out-of-bounds load in the body must be reported by ASan.
++c="$work/ctl/asan"
++"${emitter[@]}" emit "${names%%$'\n'*}" "$c" "$target"
++sed -i.orig 's/^define i32 @concrete_body() {$/define i32 @concrete_body_orig() {/' "$c/llvm.ll"
++cat >>"$c/llvm.ll" <<'LL'
++
++@concrete_ctl = global [4 x i8] zeroinitializer
++define i32 @concrete_body() {
++entry:
++  %p = getelementptr i8, ptr @concrete_ctl, i64 4
++  %v = load volatile i8, ptr %p
++  %r = call i32 @concrete_body_orig()
++  ret i32 %r
++}
++LL
++build control-asan "$c/build.log" timeout -k 10 300 bash "$root/scripts/checks/slice0_native.sh" "$c" "$lcb"
++build control-asan "$c/build-san.log" \
++  timeout -k 10 300 bash "$root/scripts/checks/slice0_native.sh" "$c" "$lcb" sanitize
++observe "$c/llvm.san.exe" "$c/san" 30 30 0 "${san_env[@]}"
++if ! judge "$c" "$c/san" && grep -q 'AddressSanitizer' "$c/san.stderr"; then
++  echo "ok   control: ASan reports an out-of-bounds load"
++else
++  echo "FAIL control: ASan did not report an out-of-bounds load (status $(cat "$c/san.status"))"; fail=1
++fi
++
++# Controls (gate 12): the analysis on synthetic disassembly.
++ctl_dis() { # ctl_dis NAME: write a synthetic x86-64 disassembly from stdin
++  { echo "Disassembly of section .text:"; cat; } >"$work/ctl/$1.dis"
++  echo "$work/ctl/$1.dis"
++}
++known=$(ctl_dis known <<'D'
++
++0000000000001000 <concrete_body>:
++    1000:	push	rbp
++    1001:	mov	rbp, rsp
++    1004:	sub	rsp, 0x10
++    1008:	add	rsp, 0x10
++    100c:	pop	rbp
++    100d:	ret
++
++0000000000001010 <main>:
++    1010:	push	rbp
++    1011:	mov	rbp, rsp
++    1014:	sub	rsp, 0x20
++    1018:	call	0x1000 <concrete_body>
++    101d:	je	0x1024 <main+0x14>
++    101f:	call	0x2000 <write@plt>
++    1024:	leave
++    1025:	ret
++D
++)
++# main: 8 + 0x20 = 40 deep; the call pushes 8; the body goes 8 + 0x10 = 24 deeper: 72.
++if [ "$(python3 -I scripts/checks/lib/stack_bound.py x86_64 "$known")" = "$(printf 'bound 72\nexternal write 48')" ]; then
++  echo "ok   control: stack bound of a known function"
++else
++  echo "FAIL control: stack bound of a known function: $(python3 -I scripts/checks/lib/stack_bound.py x86_64 "$known")"
++  fail=1
++fi
++refuse() { # refuse NAME: stdin is the main function's body after its header
++  local f
++  f=$(ctl_dis "$1" <<<"$(printf '\n0000000000001010 <main>:\n'; cat)")
++  if python3 -I scripts/checks/lib/stack_bound.py x86_64 "$f" >"$f.out"; then
++    echo "FAIL control: stack analysis accepts $1: $(cat "$f.out")"; fail=1
++  else
++    echo "ok   control: stack analysis refuses $1"
++  fi
++}
++printf '    1010:\tsub\trsp, rax\n    1013:\tret\n' | refuse dynamic-sp
++printf '    1010:\tcall\trax\n    1012:\tret\n' | refuse indirect-call
++printf '    1010:\tpush\trbp\n    1011:\tcall\t0x1010 <main>\n    1016:\tpop\trbp\n    1017:\tret\n' | refuse recursion
++printf '    1010:\tcall\t0x3000 <helper>\n    1015:\tret\n' | refuse unknown-call
++printf '    1010:\tje\t0x1014 <main+0x4>\n    1012:\tpush\trax\n    1013:\tnop\n    1014:\tret\n' | refuse depths-meet
++printf '    1010:\tmov\trax, rsp\n    1013:\tret\n' | refuse stack-pointer-escape
++printf '    1010:\tmov\teax, dword ptr [rsp + 4*rcx - 0x8]\n    1014:\tret\n' | refuse indexed-stack-address
++# A leaf's red-zone store, below the stack pointer, is inside the bound: 8 + 0x30.
++redzone=$(ctl_dis redzone <<'D'
++
++0000000000001010 <main>:
++    1010:	push	rbp
++    1011:	mov	rbp, rsp
++    1014:	mov	dword ptr [rbp - 0x30], eax
++    1017:	pop	rbp
++    1018:	ret
++D
++)
++if [ "$(python3 -I scripts/checks/lib/stack_bound.py x86_64 "$redzone")" = "bound 56" ]; then
++  echo "ok   control: a red-zone store is inside the bound"
++else
++  echo "FAIL control: red-zone bound: $(python3 -I scripts/checks/lib/stack_bound.py x86_64 "$redzone")"
++  fail=1
++fi
++if within 73 72; then echo "FAIL control: a measurement above the bound is accepted"; fail=1
++else echo "ok   control: a measurement above the bound is rejected"; fi
++
++[ "$examples" -gt 0 ] || { echo "slice0_artifacts: no examples ran" >&2; exit 1; }
++echo "slice0_artifacts: $examples examples; sizes in $sizes, stack bounds in $stack"
++column -t -s "$(printf '\t')" "$sizes" 2>/dev/null || cat "$sizes"
++exit "$fail"
+diff --git a/scripts/checks/slice0_backends.sh b/scripts/checks/slice0_backends.sh
+index efd65ac9f..16fc7c21d 100755
+--- a/scripts/checks/slice0_backends.sh
++++ b/scripts/checks/slice0_backends.sh
+@@ -12,43 +12,8 @@
+ # itself must reject a missing or extra newline, a wrong status with the right stderr, and stray
+ # stdout. Run inside the nix devshell, from the repository root.
+ set -euo pipefail
+-root=$(pwd)
+-work=$(mktemp -d)
+-trap 'rm -rf "${work:?}"' EXIT
+-BOUNDED_PARENT="$work"
+-# shellcheck source=scripts/checks/lib/bounded.sh
+-source scripts/checks/lib/bounded.sh
+-[ "$BOUNDED_HAVE_WATCHDOG" = 1 ] || { echo "slice0_backends: python3 is required for bounded runs" >&2; exit 2; }
+-# shellcheck source=scripts/checks/lib/limits.sh
+-source scripts/checks/lib/limits.sh
+-gate_limits 64 40000
+-timeout -k 30 1800 lake build Concrete lean-compiler-backend/lcb >/dev/null
+-lcb="$root/.lake/packages/lean-compiler-backend/.lake/build/bin/lcb"
+-case "$(uname -s)-$(uname -m)" in
+-  Linux-x86_64) target=x86_64-linux ;;
+-  Linux-aarch64) target=aarch64-linux ;;
+-  Darwin-arm64) target=aarch64-macos ;;
+-  *) echo "slice0_backends: unsupported host $(uname -s)-$(uname -m)" >&2; exit 2 ;;
+-esac
+-emitter=(timeout -k 10 120 lake env lean --run scripts/checks/slice0_bir.lean)
+-
+-# observe EXE OUT SECS RETRY: OUT.status (status or "incomplete"), OUT.stdout, OUT.stderr.
+-observe() {
+-  local rc=0
+-  bounded_run -i /dev/null -r "$4" "$3" -- bash "$root/scripts/checks/lib/limited_exec.sh" 1024 "$1" \
+-    >"$2.stdout" 2>"$2.stderr" || rc=$?
+-  if bounded_is_incomplete "$rc"; then echo incomplete >"$2.status"; else echo "$rc" >"$2.status"; fi
+-}
+-
+-# judge EXPECTED_DIR OBS: the observation OBS.* equals the expectation, byte for byte.
+-judge() {
+-  cmp -s "$1/status" "$2.status" && cmp -s "$1/stderr" "$2.stderr" && [ ! -s "$2.stdout" ]
+-}
+-
+-build() { # build NAME LOG CMD...
+-  local name=$1 log=$2; shift 2
+-  "$@" >"$log" 2>&1 || { cat "$log" >&2; echo "slice0_backends: $name: build failed: $*" >&2; exit 1; }
+-}
++# shellcheck source=scripts/checks/lib/slice0_common.sh
++source scripts/checks/lib/slice0_common.sh
+ 
+ fail=0
+ count=0
+@@ -71,8 +36,7 @@ check() {
+   done
+ }
+ 
+-names=$("${emitter[@]}" list) || { echo "slice0_backends: listing the examples failed" >&2; exit 1; }
+-[ -n "$names" ] || { echo "slice0_backends: no examples listed" >&2; exit 1; }
++names=$(emit_examples)
+ for name in $names; do
+   d="$work/ex/$name"
+   "${emitter[@]}" emit "$name" "$d" "$target"
+diff --git a/scripts/checks/slice0_native.sh b/scripts/checks/slice0_native.sh
+index 8a1533eb9..552f414e5 100755
+--- a/scripts/checks/slice0_native.sh
++++ b/scripts/checks/slice0_native.sh
+@@ -10,7 +10,9 @@ case "$(uname -s)-$(uname -m)" in
+   *) echo 'slice0_native: unsupported target' >&2; exit 2 ;;
+ esac
+ if [ "${1:-}" = target ]; then echo "$target"; exit; fi
+-[ "$#" = 2 ] || { echo 'usage: slice0_native.sh DIRECTORY LCB' >&2; exit 2; }
++# `sanitize` builds only llvm.san.exe: the LLVM example with ASan and UBSan (README gate 10).
++[ "$#" = 2 ] || { [ "$#" = 3 ] && [ "$3" = sanitize ]; } ||
++  { echo 'usage: slice0_native.sh DIRECTORY LCB [sanitize]' >&2; exit 2; }
+ lcb=$2
+ cd "$1"
+ # Fixed epoch rather than wall clock or caller environment. No debug data is requested, and
+@@ -22,6 +24,18 @@ cc=("${clean[@]}" "$CONCRETE_SLICE0_CLANG" --no-default-config
+   -fdebug-compilation-dir=.)
+ # Do not derive the deployment target from the macOS version on the build host.
+ [ "$target" != aarch64-macos ] || cc+=(--target=arm64-apple-macosx15.0 -mmacosx-version-min=15.0)
++if [ "${3:-}" = sanitize ]; then
++  # ASan instruments only functions carrying `sanitize_address`, which clang's C front end adds and
++  # the printed IR does not; the sanitizer build adds it to every definition (llvm.san.ll). UBSan's
++  # checks are inserted by the C front end, so on IR input only its runtime is linked.
++  sed -E 's/^(define .*\)) \{$/\1 sanitize_address {/' llvm.ll >llvm.san.ll
++  [ "$(grep -c '^define ' llvm.san.ll)" = "$(grep -c '^define .* sanitize_address {$' llvm.san.ll)" ] ||
++    { echo 'slice0_native: a definition lacks sanitize_address' >&2; exit 1; }
++  san=(-fsanitize=address,undefined -fno-sanitize-recover=all)
++  "${cc[@]}" "${san[@]}" -c llvm.san.ll -o llvm.san.o
++  "${cc[@]}" "${san[@]}" "${link[@]}" llvm.san.o -o llvm.san.exe
++  exit
++fi
+ "${cc[@]}" -c llvm.ll -o llvm.o
+ "${cc[@]}" -c lcb_body.s -o lcb_body.o
+ "${clean[@]}" "$lcb" -t "$target" lcb_rt.ssa -o lcb_rt.s
+
+exec
+/bin/bash -lc "ls -la; sed -n '260,535p' REVIEW.diff" in /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/gates-review
+ succeeded in 0ms:
+total 312
+drwx------  11 unbalancedparen unbalancedparen  4096 Nov  8 00:05 .
+drwx------ 242 unbalancedparen unbalancedparen 36864 Nov  8 00:05 ..
+-rw-------   1 unbalancedparen unbalancedparen 21654 Nov  8 00:04 AGENTS.md
+drwx------   2 unbalancedparen unbalancedparen  4096 Nov  8 00:04 changelog.d
+-rw-------   1 unbalancedparen unbalancedparen   513 Nov  8 00:04 CHANGELOG.md
+drwx------   3 unbalancedparen unbalancedparen  4096 Nov  8 00:04 .claude
+-rw-------   1 unbalancedparen unbalancedparen  2401 Nov  8 00:04 CLAUDE.md
+drwx------   4 unbalancedparen unbalancedparen  4096 Nov  8 00:04 Concrete
+-rw-------   1 unbalancedparen unbalancedparen   238 Nov  8 00:04 Concrete.lean
+drwx------   4 unbalancedparen unbalancedparen  4096 Nov  8 00:04 ConcreteSpec
+-rw-------   1 unbalancedparen unbalancedparen   335 Nov  8 00:04 ConcreteSpec.lean
+drwx------   3 unbalancedparen unbalancedparen  4096 Nov  8 00:04 docs
+-rw-------   1 unbalancedparen unbalancedparen    10 Nov  8 00:04 .envrc
+-rw-------   1 unbalancedparen unbalancedparen   567 Nov  8 00:04 flake.lock
+-rw-------   1 unbalancedparen unbalancedparen  8226 Nov  8 00:04 flake.nix
+-rw-------   1 unbalancedparen unbalancedparen    29 Nov  8 00:04 .gitattributes
+drwx------   2 unbalancedparen unbalancedparen  4096 Nov  8 00:04 .githooks
+drwx------   3 unbalancedparen unbalancedparen  4096 Nov  8 00:04 .github
+-rw-------   1 unbalancedparen unbalancedparen   351 Nov  8 00:04 .gitignore
+-rw-------   1 unbalancedparen unbalancedparen  6166 Nov  8 00:04 ISSUES.tsv
+-rw-------   1 unbalancedparen unbalancedparen   887 Nov  8 00:04 lakefile.toml
+-rw-------   1 unbalancedparen unbalancedparen   518 Nov  8 00:04 lake-manifest.json
+-rw-------   1 unbalancedparen unbalancedparen    25 Nov  8 00:04 lean-toolchain
+drwx------  20 unbalancedparen unbalancedparen  4096 Nov  8 00:04 legacy
+-rw-------   1 unbalancedparen unbalancedparen 11357 Nov  8 00:04 LICENSE
+-rw-------   1 unbalancedparen unbalancedparen  3515 Nov  8 00:04 README.md
+-rw-------   1 unbalancedparen unbalancedparen   606 Nov  8 00:04 required-checks-transition.tsv
+-rw-------   1 unbalancedparen unbalancedparen   573 Nov  8 00:04 required-checks.txt
+-rw-------   1 unbalancedparen unbalancedparen 12452 Nov  8 00:04 RETENTION.tsv
+-rw-------   1 unbalancedparen unbalancedparen 45315 Nov  8 00:05 REVIEW.diff
+-rw-------   1 unbalancedparen unbalancedparen 57098 Nov  8 00:04 ROADMAP.md
+drwx------   8 unbalancedparen unbalancedparen  4096 Nov  8 00:04 scripts
++    return funcs, stubs
++
++
++def target_of(ops):
++    m = re.search(r"0x([0-9a-f]+)\s*<([^>]+)>", ops)
++    if not m:
++        m2 = re.search(r"\b([0-9a-f]+)\s*<([^>]+)>", ops)
++        if not m2:
++            return None, None
++        m = m2
++    return int(m.group(1), 16), m.group(2)
++
++
++def imm(s):
++    t = s.strip().lstrip("#")
++    try:
++        return int(t, 16) if t.lower().startswith(("0x", "-0x")) else int(t)
++    except ValueError:
++        raise Refuse(f"not an immediate: {s}") from None
++
++
++def x86_step(mn, ops, d, fp):
++    """New (d, fp) after a non-control x86 instruction."""
++    args = [a.strip() for a in ops.split(",")] if ops else []
++    dst = args[0] if args else ""
++    if mn == "push":
++        return d + 8, fp
++    if mn == "pop":
++        return d - 8, (None if dst == "rbp" else fp)
++    if mn == "leave":
++        if fp is None:
++            raise Refuse("leave with an unknown frame pointer")
++        return fp - 8, None
++    if mn in ("sub", "add") and dst == "rsp":
++        n = imm(args[1])
++        return (d + n if mn == "sub" else d - n), fp
++    if mn == "mov" and dst == "rbp" and args[1:] == ["rsp"]:
++        return d, d
++    if mn == "mov" and dst == "rsp" and args[1:] == ["rbp"]:
++        if fp is None:
++            raise Refuse("mov rsp, rbp with an unknown frame pointer")
++        return fp, fp
++    if mn in ("enter", "pushf", "pushfq", "popf", "popfq") or dst in ("rsp", "esp", "sp", "spl"):
++        raise Refuse(f"unmodelled stack-pointer write: {mn} {ops}")
++    if dst in ("rbp", "ebp"):
++        return d, None
++    return d, fp
++
++
++MEM = re.compile(r"\[([^\]]*)\]")
++X86_STACK = ("rsp", "rbp", "esp", "ebp")
++# x86 instructions whose stack-register operands the depth tracking itself models.
++X86_MODELLED = {("push", "rbp"), ("pop", "rbp"), ("mov", "rbp, rsp"), ("mov", "rsp, rbp"),
++                ("leave", "")}
++
++
++def x86_access(mn, ops, d, fp):
++    """The deepest byte an x86 instruction touches or addresses through the stack or frame
++    pointer (a memory operand or `lea`), or None. The red zone below the stack pointer is used
++    without moving it, so this, not only the stack pointer, is what the bound must cover.
++    Refuses an indexed stack address and a stack or frame pointer copied out as a value."""
++    deepest = None
++    for inner in MEM.findall(ops):
++        terms = re.findall(r"[+-]?\s*[^+\-\s]+", inner)
++        regs = [t.strip(" +-") for t in terms if not re.fullmatch(r"[+-]?\s*(0x[0-9a-f]+|\d+)", t)]
++        base = [r for r in regs if r in X86_STACK]
++        if not base:
++            continue
++        if len(regs) != 1:
++            raise Refuse(f"indexed stack address: {mn} {ops}")
++        k = sum(int(t.replace(" ", ""), 0) for t in terms if t.strip(" +-") not in regs)
++        if base[0] in ("rbp", "ebp"):
++            if fp is None:
++                raise Refuse(f"frame-relative address with an unknown frame pointer: {mn} {ops}")
++            depth = fp - k
++        else:
++            depth = d - k
++        deepest = depth if deepest is None else max(deepest, depth)
++    outside = MEM.sub("", ops)
++    if (mn, ops) not in X86_MODELLED and not (mn in ("sub", "add") and ops.startswith("rsp,")):
++        if any(re.search(rf"\b{r}\b", outside) for r in X86_STACK):
++            raise Refuse(f"stack or frame pointer used as a value: {mn} {ops}")
++    return deepest
++
++
++def a64_access(mn, ops, d, fp):
++    """As x86_access, for AArch64: `[sp, #k]` and `[x29, #k]` operands (writeback on sp is the
++    depth tracking's); refuses a register offset from sp or x29, writeback on x29, and sp or x29
++    copied out as a value (other than the frame setup the depth tracking models)."""
++    deepest = None
++    for inner in MEM.findall(ops):
++        parts = [p.strip() for p in inner.split(",")]
++        if parts[0] not in ("sp", "x29"):
++            continue
++        if len(parts) > 2 or (len(parts) == 2 and not parts[1].startswith("#")):
++            raise Refuse(f"register-offset stack address: {mn} {ops}")
++        k = imm(parts[1]) if len(parts) == 2 else 0
++        if parts[0] == "x29":
++            if fp is None:
++                raise Refuse(f"frame-relative address with an unknown frame pointer: {mn} {ops}")
++            if re.search(r"\[x29[^\]]*\]!", ops):
++                raise Refuse(f"writeback on the frame pointer: {mn} {ops}")
++            depth = fp - k
++        else:
++            depth = d - k
++        deepest = depth if deepest is None else max(deepest, depth)
++    args = [a.strip() for a in re.split(r",(?![^\[]*\])", MEM.sub("[]", ops))] if ops else []
++    modelled = (args[:1] in (["sp"], ["x29"]) or (mn.startswith(("stp", "ldp")) and "x29" in args[:2])
++                or (mn.startswith(("str", "ldr")) and args[:1] == ["x29"]))
++    if not modelled and any(a in ("sp", "x29", "wsp", "w29") for a in args[1:]):
++        raise Refuse(f"stack or frame pointer used as a value: {mn} {ops}")
++    return deepest
++
++
++SPWB_PRE = re.compile(r"\[sp(?:,\s*#(-?(?:0x)?[0-9a-f]+))?\]!")
++SPWB_POST = re.compile(r"\[sp\],\s*#(-?(?:0x)?[0-9a-f]+)")
++
++
++def a64_step(mn, ops, d, fp):
++    """New (d, fp) after a non-control AArch64 instruction."""
++    args = [a.strip() for a in re.split(r",(?![^\[]*\])", ops)] if ops else []
++    dst = args[0] if args else ""
++    m = SPWB_PRE.search(ops)
++    if m:
++        d = d - (imm(m.group(1)) if m.group(1) else 0)
++    m = SPWB_POST.search(ops)
++    if m:
++        d = d - imm(m.group(1))
++    if SPWB_PRE.search(ops) or SPWB_POST.search(ops):
++        return d, (None if "x29" in args[:2] and mn.startswith("ld") else fp)
++    if dst in ("sp", "wsp"):
++        if mn in ("sub", "add") and len(args) == 3 and args[1] == "sp":
++            n = imm(args[2])
++            return (d + n if mn == "sub" else d - n), fp
++        if mn == "mov" and args[1:] == ["x29"]:
++            if fp is None:
++                raise Refuse("mov sp, x29 with an unknown frame pointer")
++            return fp, fp
++        if mn in ("sub", "add") and len(args) == 3 and args[1] == "x29":
++            if fp is None:
++                raise Refuse("sp from an unknown frame pointer")
++            n = imm(args[2])
++            return (fp + n if mn == "sub" else fp - n), fp
++        raise Refuse(f"unmodelled stack-pointer write: {mn} {ops}")
++    if dst in ("x29", "w29"):
++        if mn == "mov" and args[1:] == ["sp"]:
++            return d, d
++        if mn == "add" and len(args) == 3 and args[1] == "sp":
++            return d, d - imm(args[2])
++        return d, None
++    if mn.startswith("ldp") and "x29" in args[:2]:
++        return d, None
++    return d, fp
++
++
++X86_JCC = re.compile(r"^j(?!mp$)[a-z]+$")
++A64_COND = re.compile(r"^b\.[a-z]+$")
++
++
++def control(mn, ops):
++    """(kind, target) for a control instruction, or (None, None)."""
++    if ARCH == "x86_64":
++        if mn == "call":
++            return "call", ops
++        if mn == "jmp":
++            return "jmp", ops
++        if X86_JCC.match(mn):
++            return "jcc", ops
++        if mn == "ret":
++            return "ret", None
++        if mn in ("ud2", "hlt", "int3"):
++            return "stop", None
++        return None, None
++    if mn == "bl":
++        return "call", ops
++    if mn == "b":
++        return "jmp", ops
++    if A64_COND.match(mn) or mn in ("cbz", "cbnz", "tbz", "tbnz"):
++        return "jcc", ops
++    if mn in ("blr", "br", "braa", "blraa", "braaz", "blraaz"):
++        return "indirect", ops
++    if mn in ("ret", "retaa", "retab"):
++        return "ret", None
++    if mn in ("brk", "udf", "hlt"):
++        return "stop", None
++    return None, None
++
++
++def analyse(funcs, stubs):
++    """(bound, externals, owned): main's bound, each external's deepest entry depth, both from
++    main's entry, and the owned functions' names."""
++    owned = {owned_name(n): n for n in funcs if owned_name(n)}
++    if "main" not in owned:
++        raise Refuse("no main")
++    memo, active = {}, set()
++    ret_push = 8 if ARCH == "x86_64" else 0
++    step = x86_step if ARCH == "x86_64" else a64_step
++    access = x86_access if ARCH == "x86_64" else a64_access
++
++    def add_ext(ext, sub, base):
++        for name, depth in sub.items():
++            ext[name] = max(ext.get(name, 0), base + depth)
++
++    def fn_bound(key):
++        """(deepest, externals) of owned function `key`, relative to its own entry."""
++        if key in memo:
++            return memo[key]
++        if key in active:
++            raise Refuse(f"recursion through {key}")
++        active.add(key)
++        code = funcs[owned[key]]
++        if not code:
++            raise Refuse(f"{key}: no instructions")
++        index = {a: i for i, (a, _, _) in enumerate(code)}
++        seen, work, deepest, ext = {}, [(0, 0, None)], 0, {}
++        while work:
++            i, d, fp = work.pop()
++            while True:
++                if i >= len(code):
++                    raise Refuse(f"{key}: runs off its end")
++                addr, mn, ops = code[i]
++                if addr in seen:
++                    if seen[addr] != (d, fp):
++                        raise Refuse(f"{key}+{addr:#x}: depths {seen[addr]} and {(d, fp)} meet")
++                    break
++                seen[addr] = (d, fp)
++                kind, arg = control(mn, ops)
++                if kind is None:
++                    touched = access(mn, ops, d, fp)
++                    if touched is not None:
++                        deepest = max(deepest, touched)
++                    d, fp = step(mn, ops, d, fp)
++                    if d < 0:
++                        raise Refuse(f"{key}+{addr:#x}: stack above the entry")
++                    deepest = max(deepest, d)
++                    i += 1
++                    continue
++                if kind == "indirect":
++                    raise Refuse(f"{key}+{addr:#x}: indirect branch {mn} {ops}")
++                if kind == "ret":
++                    if d != 0:
++                        raise Refuse(f"{key}+{addr:#x}: return at depth {d}")
++                    break
++                if kind == "stop":
++                    break
++                tgt, sym = target_of(arg)
++                if tgt is None:
++                    raise Refuse(f"{key}+{addr:#x}: indirect {mn} {ops}")
++                if kind == "call":
++                    base = sym.split("+")[0]
++                    callee = owned_name(base)
++                    if callee and "+" not in sym:
++                        sub_deep, sub_ext = fn_bound(callee)
++                        deepest = max(deepest, d + ret_push + sub_deep)
++                        add_ext(ext, sub_ext, d + ret_push)
++                    elif base in stubs or base.endswith("@plt"):
++                        # ELF `write@plt`; Mach-O stubs carry one extra leading underscore.
++                        name = base.removesuffix("@plt") if base.endswith("@plt") else base[1:]
++                        add_ext(ext, {name: 0}, d + ret_push)
++                        deepest = max(deepest, d + ret_push)
++                        if name in NORETURN:
++                            break
++                    else:
++                        raise Refuse(f"{key}+{addr:#x}: call to {sym}, neither owned nor a stub")
++                    i += 1
++                    continue
++                if tgt not in index:
++                    raise Refuse(f"{key}+{addr:#x}: branch leaves the function: {mn} {ops}")
++                if kind == "jmp":
++                    i = index[tgt]
++                    continue
++                work.append((index[tgt], d, fp))
++                i += 1
++        active.discard(key)
++        memo[key] = (deepest, ext)
++        return memo[key]
+
+exec
+/bin/bash -lc "nl -ba scripts/checks/lib/stack_bound.py | sed -n '145,355p'; nl -ba scripts/checks/slice0_artifacts.sh | sed -n '155,205p'; cat scripts/checks/slice0_native.sh" in /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/gates-review
+ succeeded in 0ms:
+   145	    if (mn, ops) not in X86_MODELLED and not (mn in ("sub", "add") and ops.startswith("rsp,")):
+   146	        if any(re.search(rf"\b{r}\b", outside) for r in X86_STACK):
+   147	            raise Refuse(f"stack or frame pointer used as a value: {mn} {ops}")
+   148	    return deepest
+   149	
+   150	
+   151	def a64_access(mn, ops, d, fp):
+   152	    """As x86_access, for AArch64: `[sp, #k]` and `[x29, #k]` operands (writeback on sp is the
+   153	    depth tracking's); refuses a register offset from sp or x29, writeback on x29, and sp or x29
+   154	    copied out as a value (other than the frame setup the depth tracking models)."""
+   155	    deepest = None
+   156	    for inner in MEM.findall(ops):
+   157	        parts = [p.strip() for p in inner.split(",")]
+   158	        if parts[0] not in ("sp", "x29"):
+   159	            continue
+   160	        if len(parts) > 2 or (len(parts) == 2 and not parts[1].startswith("#")):
+   161	            raise Refuse(f"register-offset stack address: {mn} {ops}")
+   162	        k = imm(parts[1]) if len(parts) == 2 else 0
+   163	        if parts[0] == "x29":
+   164	            if fp is None:
+   165	                raise Refuse(f"frame-relative address with an unknown frame pointer: {mn} {ops}")
+   166	            if re.search(r"\[x29[^\]]*\]!", ops):
+   167	                raise Refuse(f"writeback on the frame pointer: {mn} {ops}")
+   168	            depth = fp - k
+   169	        else:
+   170	            depth = d - k
+   171	        deepest = depth if deepest is None else max(deepest, depth)
+   172	    args = [a.strip() for a in re.split(r",(?![^\[]*\])", MEM.sub("[]", ops))] if ops else []
+   173	    modelled = (args[:1] in (["sp"], ["x29"]) or (mn.startswith(("stp", "ldp")) and "x29" in args[:2])
+   174	                or (mn.startswith(("str", "ldr")) and args[:1] == ["x29"]))
+   175	    if not modelled and any(a in ("sp", "x29", "wsp", "w29") for a in args[1:]):
+   176	        raise Refuse(f"stack or frame pointer used as a value: {mn} {ops}")
+   177	    return deepest
+   178	
+   179	
+   180	SPWB_PRE = re.compile(r"\[sp(?:,\s*#(-?(?:0x)?[0-9a-f]+))?\]!")
+   181	SPWB_POST = re.compile(r"\[sp\],\s*#(-?(?:0x)?[0-9a-f]+)")
+   182	
+   183	
+   184	def a64_step(mn, ops, d, fp):
+   185	    """New (d, fp) after a non-control AArch64 instruction."""
+   186	    args = [a.strip() for a in re.split(r",(?![^\[]*\])", ops)] if ops else []
+   187	    dst = args[0] if args else ""
+   188	    m = SPWB_PRE.search(ops)
+   189	    if m:
+   190	        d = d - (imm(m.group(1)) if m.group(1) else 0)
+   191	    m = SPWB_POST.search(ops)
+   192	    if m:
+   193	        d = d - imm(m.group(1))
+   194	    if SPWB_PRE.search(ops) or SPWB_POST.search(ops):
+   195	        return d, (None if "x29" in args[:2] and mn.startswith("ld") else fp)
+   196	    if dst in ("sp", "wsp"):
+   197	        if mn in ("sub", "add") and len(args) == 3 and args[1] == "sp":
+   198	            n = imm(args[2])
+   199	            return (d + n if mn == "sub" else d - n), fp
+   200	        if mn == "mov" and args[1:] == ["x29"]:
+   201	            if fp is None:
+   202	                raise Refuse("mov sp, x29 with an unknown frame pointer")
+   203	            return fp, fp
+   204	        if mn in ("sub", "add") and len(args) == 3 and args[1] == "x29":
+   205	            if fp is None:
+   206	                raise Refuse("sp from an unknown frame pointer")
+   207	            n = imm(args[2])
+   208	            return (fp + n if mn == "sub" else fp - n), fp
+   209	        raise Refuse(f"unmodelled stack-pointer write: {mn} {ops}")
+   210	    if dst in ("x29", "w29"):
+   211	        if mn == "mov" and args[1:] == ["sp"]:
+   212	            return d, d
+   213	        if mn == "add" and len(args) == 3 and args[1] == "sp":
+   214	            return d, d - imm(args[2])
+   215	        return d, None
+   216	    if mn.startswith("ldp") and "x29" in args[:2]:
+   217	        return d, None
+   218	    return d, fp
+   219	
+   220	
+   221	X86_JCC = re.compile(r"^j(?!mp$)[a-z]+$")
+   222	A64_COND = re.compile(r"^b\.[a-z]+$")
+   223	
+   224	
+   225	def control(mn, ops):
+   226	    """(kind, target) for a control instruction, or (None, None)."""
+   227	    if ARCH == "x86_64":
+   228	        if mn == "call":
+   229	            return "call", ops
+   230	        if mn == "jmp":
+   231	            return "jmp", ops
+   232	        if X86_JCC.match(mn):
+   233	            return "jcc", ops
+   234	        if mn == "ret":
+   235	            return "ret", None
+   236	        if mn in ("ud2", "hlt", "int3"):
+   237	            return "stop", None
+   238	        return None, None
+   239	    if mn == "bl":
+   240	        return "call", ops
+   241	    if mn == "b":
+   242	        return "jmp", ops
+   243	    if A64_COND.match(mn) or mn in ("cbz", "cbnz", "tbz", "tbnz"):
+   244	        return "jcc", ops
+   245	    if mn in ("blr", "br", "braa", "blraa", "braaz", "blraaz"):
+   246	        return "indirect", ops
+   247	    if mn in ("ret", "retaa", "retab"):
+   248	        return "ret", None
+   249	    if mn in ("brk", "udf", "hlt"):
+   250	        return "stop", None
+   251	    return None, None
+   252	
+   253	
+   254	def analyse(funcs, stubs):
+   255	    """(bound, externals, owned): main's bound, each external's deepest entry depth, both from
+   256	    main's entry, and the owned functions' names."""
+   257	    owned = {owned_name(n): n for n in funcs if owned_name(n)}
+   258	    if "main" not in owned:
+   259	        raise Refuse("no main")
+   260	    memo, active = {}, set()
+   261	    ret_push = 8 if ARCH == "x86_64" else 0
+   262	    step = x86_step if ARCH == "x86_64" else a64_step
+   263	    access = x86_access if ARCH == "x86_64" else a64_access
+   264	
+   265	    def add_ext(ext, sub, base):
+   266	        for name, depth in sub.items():
+   267	            ext[name] = max(ext.get(name, 0), base + depth)
+   268	
+   269	    def fn_bound(key):
+   270	        """(deepest, externals) of owned function `key`, relative to its own entry."""
+   271	        if key in memo:
+   272	            return memo[key]
+   273	        if key in active:
+   274	            raise Refuse(f"recursion through {key}")
+   275	        active.add(key)
+   276	        code = funcs[owned[key]]
+   277	        if not code:
+   278	            raise Refuse(f"{key}: no instructions")
+   279	        index = {a: i for i, (a, _, _) in enumerate(code)}
+   280	        seen, work, deepest, ext = {}, [(0, 0, None)], 0, {}
+   281	        while work:
+   282	            i, d, fp = work.pop()
+   283	            while True:
+   284	                if i >= len(code):
+   285	                    raise Refuse(f"{key}: runs off its end")
+   286	                addr, mn, ops = code[i]
+   287	                if addr in seen:
+   288	                    if seen[addr] != (d, fp):
+   289	                        raise Refuse(f"{key}+{addr:#x}: depths {seen[addr]} and {(d, fp)} meet")
+   290	                    break
+   291	                seen[addr] = (d, fp)
+   292	                kind, arg = control(mn, ops)
+   293	                if kind is None:
+   294	                    touched = access(mn, ops, d, fp)
+   295	                    if touched is not None:
+   296	                        deepest = max(deepest, touched)
+   297	                    d, fp = step(mn, ops, d, fp)
+   298	                    if d < 0:
+   299	                        raise Refuse(f"{key}+{addr:#x}: stack above the entry")
+   300	                    deepest = max(deepest, d)
+   301	                    i += 1
+   302	                    continue
+   303	                if kind == "indirect":
+   304	                    raise Refuse(f"{key}+{addr:#x}: indirect branch {mn} {ops}")
+   305	                if kind == "ret":
+   306	                    if d != 0:
+   307	                        raise Refuse(f"{key}+{addr:#x}: return at depth {d}")
+   308	                    break
+   309	                if kind == "stop":
+   310	                    break
+   311	                tgt, sym = target_of(arg)
+   312	                if tgt is None:
+   313	                    raise Refuse(f"{key}+{addr:#x}: indirect {mn} {ops}")
+   314	                if kind == "call":
+   315	                    base = sym.split("+")[0]
+   316	                    callee = owned_name(base)
+   317	                    if callee and "+" not in sym:
+   318	                        sub_deep, sub_ext = fn_bound(callee)
+   319	                        deepest = max(deepest, d + ret_push + sub_deep)
+   320	                        add_ext(ext, sub_ext, d + ret_push)
+   321	                    elif base in stubs or base.endswith("@plt"):
+   322	                        # ELF `write@plt`; Mach-O stubs carry one extra leading underscore.
+   323	                        name = base.removesuffix("@plt") if base.endswith("@plt") else base[1:]
+   324	                        add_ext(ext, {name: 0}, d + ret_push)
+   325	                        deepest = max(deepest, d + ret_push)
+   326	                        if name in NORETURN:
+   327	                            break
+   328	                    else:
+   329	                        raise Refuse(f"{key}+{addr:#x}: call to {sym}, neither owned nor a stub")
+   330	                    i += 1
+   331	                    continue
+   332	                if tgt not in index:
+   333	                    raise Refuse(f"{key}+{addr:#x}: branch leaves the function: {mn} {ops}")
+   334	                if kind == "jmp":
+   335	                    i = index[tgt]
+   336	                    continue
+   337	                work.append((index[tgt], d, fp))
+   338	                i += 1
+   339	        active.discard(key)
+   340	        memo[key] = (deepest, ext)
+   341	        return memo[key]
+   342	
+   343	    total, ext = fn_bound("main")
+   344	    return total, ext, owned
+   345	
+   346	
+   347	if __name__ == "__main__":
+   348	    if len(sys.argv) not in (3, 4) or sys.argv[1] not in ("x86_64", "aarch64"):
+   349	        sys.exit("usage: stack_bound.py x86_64|aarch64 DISASM [--ranges]")
+   350	    ARCH = sys.argv[1]
+   351	    try:
+   352	        funcs, stubs = parse(sys.argv[2])
+   353	        total, ext, owned = analyse(funcs, stubs)
+   354	    except Refuse as e:
+   355	        print(f"refused: {e}")
+   155	    1011:	mov	rbp, rsp
+   156	    1014:	sub	rsp, 0x20
+   157	    1018:	call	0x1000 <concrete_body>
+   158	    101d:	je	0x1024 <main+0x14>
+   159	    101f:	call	0x2000 <write@plt>
+   160	    1024:	leave
+   161	    1025:	ret
+   162	D
+   163	)
+   164	# main: 8 + 0x20 = 40 deep; the call pushes 8; the body goes 8 + 0x10 = 24 deeper: 72.
+   165	if [ "$(python3 -I scripts/checks/lib/stack_bound.py x86_64 "$known")" = "$(printf 'bound 72\nexternal write 48')" ]; then
+   166	  echo "ok   control: stack bound of a known function"
+   167	else
+   168	  echo "FAIL control: stack bound of a known function: $(python3 -I scripts/checks/lib/stack_bound.py x86_64 "$known")"
+   169	  fail=1
+   170	fi
+   171	refuse() { # refuse NAME: stdin is the main function's body after its header
+   172	  local f
+   173	  f=$(ctl_dis "$1" <<<"$(printf '\n0000000000001010 <main>:\n'; cat)")
+   174	  if python3 -I scripts/checks/lib/stack_bound.py x86_64 "$f" >"$f.out"; then
+   175	    echo "FAIL control: stack analysis accepts $1: $(cat "$f.out")"; fail=1
+   176	  else
+   177	    echo "ok   control: stack analysis refuses $1"
+   178	  fi
+   179	}
+   180	printf '    1010:\tsub\trsp, rax\n    1013:\tret\n' | refuse dynamic-sp
+   181	printf '    1010:\tcall\trax\n    1012:\tret\n' | refuse indirect-call
+   182	printf '    1010:\tpush\trbp\n    1011:\tcall\t0x1010 <main>\n    1016:\tpop\trbp\n    1017:\tret\n' | refuse recursion
+   183	printf '    1010:\tcall\t0x3000 <helper>\n    1015:\tret\n' | refuse unknown-call
+   184	printf '    1010:\tje\t0x1014 <main+0x4>\n    1012:\tpush\trax\n    1013:\tnop\n    1014:\tret\n' | refuse depths-meet
+   185	printf '    1010:\tmov\trax, rsp\n    1013:\tret\n' | refuse stack-pointer-escape
+   186	printf '    1010:\tmov\teax, dword ptr [rsp + 4*rcx - 0x8]\n    1014:\tret\n' | refuse indexed-stack-address
+   187	# A leaf's red-zone store, below the stack pointer, is inside the bound: 8 + 0x30.
+   188	redzone=$(ctl_dis redzone <<'D'
+   189	
+   190	0000000000001010 <main>:
+   191	    1010:	push	rbp
+   192	    1011:	mov	rbp, rsp
+   193	    1014:	mov	dword ptr [rbp - 0x30], eax
+   194	    1017:	pop	rbp
+   195	    1018:	ret
+   196	D
+   197	)
+   198	if [ "$(python3 -I scripts/checks/lib/stack_bound.py x86_64 "$redzone")" = "bound 56" ]; then
+   199	  echo "ok   control: a red-zone store is inside the bound"
+   200	else
+   201	  echo "FAIL control: red-zone bound: $(python3 -I scripts/checks/lib/stack_bound.py x86_64 "$redzone")"
+   202	  fail=1
+   203	fi
+   204	if within 73 72; then echo "FAIL control: a measurement above the bound is accepted"; fail=1
+   205	else echo "ok   control: a measurement above the bound is rejected"; fi
+#!/usr/bin/env bash
+# Shared native build policy. Input/output names and link order are fixed, relative to cwd.
+# Use the pinned Nix compiler; discard ambient compiler/linker flags and wrapper injections.
+set -euo pipefail
+: "${CONCRETE_SLICE0_CLANG:?run inside nix develop}"
+case "$(uname -s)-$(uname -m)" in
+  Linux-x86_64) target=x86_64-linux; link=(-Wl,--build-id=none) ;;
+  Linux-aarch64) target=aarch64-linux; link=(-Wl,--build-id=none) ;;
+  Darwin-arm64) target=aarch64-macos; link=(-Wl,-no_uuid) ;;
+  *) echo 'slice0_native: unsupported target' >&2; exit 2 ;;
+esac
+if [ "${1:-}" = target ]; then echo "$target"; exit; fi
+# `sanitize` builds only llvm.san.exe: the LLVM example with ASan and UBSan (README gate 10).
+[ "$#" = 2 ] || { [ "$#" = 3 ] && [ "$3" = sanitize ]; } ||
+  { echo 'usage: slice0_native.sh DIRECTORY LCB [sanitize]' >&2; exit 2; }
+lcb=$2
+cd "$1"
+# Fixed epoch rather than wall clock or caller environment. No debug data is requested, and
+# prefix maps also cover future debug additions. Separate objects avoid random linker temp names.
+clean=(env -i "PATH=$PATH" "HOME=$HOME" "TMPDIR=${TMPDIR:-/tmp}"
+  LC_ALL=C TZ=UTC SOURCE_DATE_EPOCH=1 ZERO_AR_DATE=1)
+cc=("${clean[@]}" "$CONCRETE_SLICE0_CLANG" --no-default-config
+  -O0 -g0 -w "-ffile-prefix-map=$PWD=." "-fdebug-prefix-map=$PWD=."
+  -fdebug-compilation-dir=.)
+# Do not derive the deployment target from the macOS version on the build host.
+[ "$target" != aarch64-macos ] || cc+=(--target=arm64-apple-macosx15.0 -mmacosx-version-min=15.0)
+if [ "${3:-}" = sanitize ]; then
+  # ASan instruments only functions carrying `sanitize_address`, which clang's C front end adds and
+  # the printed IR does not; the sanitizer build adds it to every definition (llvm.san.ll). UBSan's
+  # checks are inserted by the C front end, so on IR input only its runtime is linked.
+  sed -E 's/^(define .*\)) \{$/\1 sanitize_address {/' llvm.ll >llvm.san.ll
+  [ "$(grep -c '^define ' llvm.san.ll)" = "$(grep -c '^define .* sanitize_address {$' llvm.san.ll)" ] ||
+    { echo 'slice0_native: a definition lacks sanitize_address' >&2; exit 1; }
+  san=(-fsanitize=address,undefined -fno-sanitize-recover=all)
+  "${cc[@]}" "${san[@]}" -c llvm.san.ll -o llvm.san.o
+  "${cc[@]}" "${san[@]}" "${link[@]}" llvm.san.o -o llvm.san.exe
+  exit
+fi
+"${cc[@]}" -c llvm.ll -o llvm.o
+"${cc[@]}" -c lcb_body.s -o lcb_body.o
+"${clean[@]}" "$lcb" -t "$target" lcb_rt.ssa -o lcb_rt.s
+"${cc[@]}" -c lcb_rt.s -o lcb_rt.o
+"${cc[@]}" "${link[@]}" llvm.o -o llvm.exe
+"${cc[@]}" "${link[@]}" lcb_body.o lcb_rt.o -o lcb.exe
+
+codex
+I found a shell issue that can let failed refusal controls pass the gate: they set `fail=1` inside pipeline subshells, so the parent never sees it. I’m also testing synthetic instruction sequences for paths the stack analyzer may accept with an understated bound.
+exec
+/bin/bash -lc "python3 -B - <<'PY'
+import runpy
+m=runpy.run_path('scripts/checks/lib/stack_bound.py',run_name='review'); a=m['analyse']; g=a.__globals__
+cases=[('x86-loop','x86_64',[(0x1000,'mov','ecx, 2'),(0x1005,'loop','0x1010 <main+0x10>'),(0x1007,'ret',''),(0x1010,'sub','rsp, 0x100'),(0x1017,'add','rsp, 0x100'),(0x101e,'ret','')]),('a64-x29-post','aarch64',[(0x1000,'mov','x29, sp'),(0x1004,'str','x0, [x29], #-256'),(0x1008,'str','x0, [x29]'),(0x100c,'ret','')]),('a64-fp-alias','aarch64',[(0x1000,'mov','fp, sp'),(0x1004,'stur','x0, [fp, #-256]'),(0x1008,'ret','')])]
+for name,arch,code in cases:
+ g['ARCH']=arch
+ try: print(name,a({'main':code},set())[:2])
+ except Exception as e: print(name,type(e).__name__,str(e))
+PY
+bash -c 'set -euo pipefail; fail=0; printf x | { cat >/dev/null; fail=1; }; echo \"parent fail="'$fail"'"'
+command -v llvm-objdump; command -v clang; command -v gdb; rg -n 'alias|objdump|stack' docs/decisions.md | head" in /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/gates-review
+ succeeded in 0ms:
+x86-loop (0, {})
+a64-x29-post (0, {})
+a64-fp-alias Refuse stack or frame pointer used as a value: mov fp, sp
+parent fail=0
+/nix/store/344zmxispaqv91c7wlsfqyf7gvpv3wj2-llvm-21.1.8/bin/llvm-objdump
+/nix/store/y8xj70yyzsml4z3aa5gsn9pvpx4za1py-clang-wrapper-21.1.8/bin/clang
+/usr/bin/gdb
+64:| Conformance examples across all 15 rule chapters; e.g. | Unqualified accepted fixtures use removed aliases/forms, wrong `main` results, or unused named bindings. | Alias/main decisions; OD33/52–57/62 and others above | Fixed in prose 2026-11-03. |
+90:- <a id="core-unsafe-premises"></a>[Core-session question 3, 9](../ROADMAP.md#questions-for-the-core-session). **Unsafe contracts:** the complete validity, provenance, aliasing
+247:- **P16** Status changes in the refusal list — Accept the new statuses in PHILOSOPHY.md. Now Permanent: operator overloading (OD26), capability hiding (authority rule 5), derived equality, mutable global state (OD8), umbrella capabilities and aliases, old/quantifiers in contracts (OD117), lexical shadowing (OD67), and ghost code that affects execution. Ghost code itself is admitted as decided (OD81). Foreign function values reopen when typed extern fn types are admitted (OD4); concurrency reopens on R-0399's trigger.
+489:    and has a static stack bound) and why. A counted loop (`for i from a until b`, [OD47](#od47))
+493:    theorem (row P18); a static stack bound needs its own evidence, which the proposal must define.
+572:| OD15 | <a id="od15"></a>G10: whole-owner freezing under a shared borrow stays. G19: no pass assumes `&mut` exclusivity, and the operational loan rules are defined now | T-G10 (keep the freeze) and T-G19 (the policy sentence) | exit 2i (the G10 decision record), so every deliverable; R-0496, R-0505 | decided 2026-10-29 by the owner. (a) Whole-owner freezing: a live borrow of any part of a value freezes the whole owner, and loans are keyed by the root binding (REF-11 as in the current compiler); this tightens OD2's part 2: at a call, two arguments that borrow the same root conflict whenever one is exclusive, even disjoint fields (`h(&mut a.f, &mut a.g)` is refused, as in the current compiler); OD1's "keyed by the root variable" stands. (b) The strict option: the language guarantees `&mut` exclusivity, which the checker enforces (OD2, OD15a), and no compiler pass or optimization may assume or exploit it until the checker's guarantee is proven in Lean (R-0499 with the Core semantics R-0496); until then the operational loan rules are defined now, G19 included: a pointer or alias derived from a loan is valid only while that loan lives. Now REF-11@3 (partial, bug 319, which OD23 adds) and REF-14 (pending, R-0496) **Canonical current root-based exclusivity subject: REF-11 (including OD23’s re-lent case); OD2 and OD23 refer here rather than defining separate variants.** |
+600:| OD43 | <a id="od43"></a>How a type position resolves a name (added 2026-10-29, from the spec gap bug 229's ruling found). Options: (a) the current compiler's rules: type positions search the type namespace only, a user `enum Option` is always the builtin, and a parent sees its child's newtypes; (b) a user declaration shadows a builtin of the same name, with a warning; (c) a user type may not take a builtin type's name (refused). Recommendation: (c), which removes the shadowing question entirely; Austral reserves its builtin type names the same way Reviewed pick (2026-10-30, a recommendation that supersedes the recommendation above where they differ): (c) refused, for builtin-name collisions only, with the complete reserved set published (also for aliases and import renames); this answer would not retire OD43, whose type-versus-value lookup and child-module questions stay open in it. A user `struct Copy HeapArray` is treated as linear today | the current compiler follows (a) | MOD-1; bug 229's record | decided 2026-10-31 by the owner's rule (every reviewer agreed, as strict as Austral or stricter): Refuse builtin-name collisions, publish reserved set. Completed 2026-11-02 by the owner: one namespace per module, and a child module's declarations only through `child::T` or an import ([decisions](decisions.md#decided-2026-11-02-namespace)) |
+621:| OD64 | <a id="od64"></a>Raw pointers derived from a borrow (added 2026-10-30, item G19 of the owner picks of that day). Question: What a raw pointer derived from a borrow may do: whether it is valid only while the borrow lives, may escape the borrow block, may be passed to C, and how extern parameters say so. Options: (a) valid only while the borrow lives and never escaping it; (b) the operational loan rules of REF-14 only. Pick (the coordinator's pick after the Kimi, Codex and Grok review of 2026-10-30, a recommendation and not a decision): (a): no returning, no escaping storage (a local `let` inside the block stays allowed), no converting to an integer and no capturing in an outer `defer`; borrow-derived pointers go only to call-only `extern` parameters; C uses it only during a call (memory C keeps must come from an allocation with its own owner); `extern` parameters say call-only (the default) or kept; field pointers come from the same borrow of the whole owner; deferred calls in the block run before the borrow ends; provenance survives copies, offsets, field pointers, helpers and indirect calls; a shared borrow never yields write access; `ptr::expose` is refused on such a pointer; the annotation's syntax gets an LL(1) check. Austral: not checked | no pass assumes `&mut` exclusivity (OD15); REF-14 bounds aliases by their loan | REF-14, TRUST-1, TRUST-3, FFI-3, OWN-12 | decided 2026-10-31 by the owner's rule (every reviewer agreed, as strict as Austral or stricter): Valid only inside the borrow; call-only extern params |
+624:| OD67 | <a id="od67"></a>Locals that reuse a top-level name (added 2026-10-30, item review new 4 (SCOPE-4) of the owner picks of that day). Question: Whether a local binding may reuse the name of a top-level function, an import alias or an intrinsic (MEMORY_SEMANTICS §15.4 also lists constants). Options: (a) allowed, as today; (b) refused, as SCOPE-1 refuses shadowing a local. Pick (the coordinator's pick after the Kimi, Codex and Grok review of 2026-10-30, a recommendation and not a decision): none given (raised by the review). Austral: not checked | allowed | SCOPE-1, SCOPE-2, MOD-1 | decided 2026-10-31 by the owner's rule (every reviewer agreed, as strict as Austral or stricter): Refuse |
+651:| OD94 | <a id="od94"></a>Names in `with(...)` that are not capabilities (added 2026-10-30, raised while absorbing CALLABLE_VALUES and HANDLE_CAPABILITIES). Question: Whether a name in `with(...)` that is not a capability, a capability alias or a capability variable in scope is refused. Bears on TRUST-D1, TYPE-D1, TRUST-4. The current compiler: accepted as a capability of its own: `fn main() with(Foo) -> Int` compiles and runs, and a call to a function that requires `Foo` is refused only in a caller that does not list it (E0520). The compiler's `validCaps`, TRUST-4's rationale and [SAFETY.md](../legacy/docs/verification/SAFETY.md) name nine capabilities. Options: (a) refuse an unknown name; (b) an open vocabulary. Austral: not applicable (capabilities are values). Pick: none given (raised by the absorption of 2026-10-30). | [MOD-1](../legacy/docs/spec/modules.md#MOD-1) refuses the name; the current compiler accepts it (bug 337) | MOD-1@1 | withdrawn 2026-10-30: not an owner question; MOD-1@1 refuses the name (bug 337) |
+
+web search: 
+web search: site.llvm.org AddressSanitizer sanitize_address LLVM IR attribute ...
+exec
+/bin/bash -lc "nl -ba scripts/checks/lib/limits.sh | head -45; nl -ba scripts/checks/lib/stack_measure.py; nl -ba Concrete/README.md | sed -n '578,589p'; nl -ba .github/workflows/slice0.yml | sed -n '45,72p'; rg -n 'OD.*|2026-11-07|Sanitizer|stack.bound|UBSan' docs/decisions.md | tail -15; sed -n '1,85p' scripts/checks/lib/limits.sh" in /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/gates-review
+ succeeded in 0ms:
+     1	#!/usr/bin/env bash
+     2	# Resource limits for a gate and everything it starts (sourced; the limits are inherited).
+     3	#
+     4	#   gate_limits MEM_GB NPROC
+     5	#     Caps the address space of each process at MEM_GB GiB (Linux; Darwin does not enforce
+     6	#     RLIMIT_AS, so there the CI job's memory is the bound) and the number of processes of this
+     7	#     user at NPROC, so a runaway fork loop stops at the cap instead of taking the machine. Lowering
+     8	#     a limit is always allowed; a limit already below the requested one is kept. Lake reserves
+     9	#     far more address space than it uses (a cold `lake build` fails to create threads under
+    10	#     32 GiB), so gates pass 64 here and bound the executables under test tightly, through
+    11	#     lib/limited_exec.sh. The address-space cap is the SOFT limit: it binds every process, and
+    12	#     only limited_exec.sh 0 (a sanitizer build, whose shadow reservation needs terabytes of
+    13	#     address space; slice0_artifacts.sh) raises it back to the hard limit for one executable.
+    14	#
+    15	# Per-command time bounds are separate: bounded_run (lib/bounded.sh) for executables under test,
+    16	# `timeout -k` for builds.
+    17	gate_limits() {
+    18	  local mem_kb=$(($1 * 1024 * 1024)) nproc=$2 cur
+    19	  if [ "$(uname -s)" = Linux ]; then
+    20	    cur=$(ulimit -S -v)
+    21	    if [ "$cur" = unlimited ] || [ "$cur" -gt "$mem_kb" ]; then ulimit -S -v "$mem_kb"; fi
+    22	  fi
+    23	  cur=$(ulimit -u)
+    24	  if [ "$cur" = unlimited ] || [ "$cur" -gt "$nproc" ]; then ulimit -u "$nproc"; fi
+    25	}
+     1	# gdb -batch -nx -x stack_measure.py EXE (README gate 12, x86-64 Linux). PROVISIONAL.
+     2	#
+     3	# Measures the stack depth one run of EXE reaches, below the stack pointer at `main`'s entry, by
+     4	# single-stepping every instruction of the Concrete-owned functions (STACK_RANGES: "LO:HI,..." in
+     5	# the executable's link-time addresses, from stack_bound.py --ranges; STACK_MAIN: main's LO).
+     6	# An external function (entered through a call, so its return address is at the stack pointer)
+     7	# runs at full speed to its return; its own use is outside the bound, as in stack_bound.py, but
+     8	# the depth at its entry is measured. Once main has returned, the rest runs freely. Prints
+     9	# `measured N` and `steps N`, or `error ...` (the gate fails on it).
+    10	import os
+    11	
+    12	import gdb
+    13	
+    14	LIMIT = 2_000_000
+    15	ranges = [tuple(int(x, 16) for x in r.split(":")) for r in os.environ["STACK_RANGES"].split(",")]
+    16	main_lo = int(os.environ["STACK_MAIN"], 16)
+    17	exited = [False]
+    18	gdb.events.exited.connect(lambda _e: exited.__setitem__(0, True))
+    19	gdb.execute("set pagination off")
+    20	gdb.execute("set confirm off")
+    21	gdb.execute("set disable-randomization on")
+    22	
+    23	
+    24	def reg(name):
+    25	    return int(gdb.parse_and_eval(f"(unsigned long) ${name}"))
+    26	
+    27	
+    28	try:
+    29	    gdb.execute("break *main", to_string=True)
+    30	    gdb.execute("run </dev/null >/dev/null 2>/dev/null", to_string=True)
+    31	    if exited[0]:
+    32	        raise RuntimeError("exited before main")
+    33	    offset = reg("pc") - main_lo
+    34	    sp0 = reg("sp")
+    35	    low, steps = sp0, 0
+    36	    inferior = gdb.selected_inferior()
+    37	    while not exited[0]:
+    38	        pc, sp = reg("pc"), reg("sp")
+    39	        if sp > sp0:  # main has returned
+    40	            gdb.execute("continue", to_string=True)
+    41	            continue
+    42	        low = min(low, sp)
+    43	        if any(lo + offset <= pc <= hi + offset for lo, hi in ranges):
+    44	            gdb.execute("stepi", to_string=True)
+    45	            steps += 1
+    46	            if steps > LIMIT:
+    47	                raise RuntimeError(f"more than {LIMIT} steps")
+    48	        else:
+    49	            ret = int.from_bytes(inferior.read_memory(sp, 8).tobytes(), "little")
+    50	            gdb.execute("delete", to_string=True)
+    51	            gdb.execute(f"tbreak *{ret:#x}", to_string=True)
+    52	            gdb.execute("continue", to_string=True)
+    53	    print(f"measured {sp0 - low}")
+    54	    print(f"steps {steps}")
+    55	except Exception as e:  # noqa: BLE001 - every failure is reported, the gate fails closed
+    56	    print(f"error {e}")
+   578	6a. **AArch64:** a GitHub-hosted AArch64 macOS job (`macos-15`) builds the LCB output for `aarch64-macos`, runs gates 4 and 6 there natively, and compares against Lean. LLVM-native also runs there, as a third cross-check. Gates 4 and 6 for x86-64 run on concrete-ci-2.
+   579	7. **Certificates:** the kernel checks every acceptance and refusal certificate, with measured budgets.
+   580	8. **Reproducibility** (implemented, `scripts/checks/slice0_repro.sh`): two independent builds give byte-identical outputs at every stage, on each target, and two independent Linux runners give identical manifests. See [Reproducible builds](#reproducible-builds-owner-2026-11-07).
+   581	9. **Trusted base** (owner, 2026-11-07): a golden test that `concrete facts` prints exactly the spec's premise list, so a premise added, removed or reworded anywhere fails until the golden is updated with it.
+   582	10. **Sanitizers** (owner, 2026-11-07; implemented, `scripts/checks/slice0_artifacts.sh`): every LLVM example also runs built with ASan and UBSan in CI, and must give the same observation with no sanitizer report. ASan instruments only functions marked `sanitize_address`, which clang's C front end adds and the printed IR lacks, so the sanitizer build adds it to every definition (`slice0_native.sh sanitize`); a control body with an out-of-bounds load must be reported. UBSan's checks are inserted by clang's C front end, so on IR input it links only its runtime and checks nothing: no runtime C is compiled in slice 0, and the LLVM-level undefined behaviour of the printed IR (poison, `unreachable`) is P_print's.
+   583	11. **Binary size** (owner, 2026-11-07; implemented, same script): the size of each example's executable (bytes and text size, pinned `llvm-size`), per backend and target, is recorded per run in `sizes.tsv`, uploaded with the job. Report-only: it never fails a run.
+   584	12. **Stack bound** (owner, 2026-11-07; implemented, same script, `lib/stack_bound.py`): a stack-bound fact for each example, derived from the final artifact (the linked executable, not the IR) for both backends, and checked against a run. The analysis follows every path of the Concrete-owned code (`main`, `concrete_rt_write_all`, `concrete_body`) over the disassembly's control-flow graph, tracking the stack and frame pointers' depth below `main`'s entry and every byte addressed relative to them (so the red zone), and fails closed on anything it does not model (another stack-pointer write, an indirect branch or call, a stack pointer copied out, an indexed stack address, two depths meeting, recursion, a call to a function neither owned nor a PLT/stub). The external calls (`write`, `_exit`, `abort`) are listed with the depth at their entry; their own use, and that `_exit` and `abort` do not return, are the libc premise. On x86-64 Linux the run check single-steps the owned code under the pinned gdb and requires the measured stack-pointer depth to be within the bound; on `aarch64-macos` the bound is derived and the run check is not run (no debugger in the pinned shell). `stack.tsv` records bound, measurement and externals.
+   585	
+   586	With the front end (owner, 2026-11-07): gate 5's random-program fuzzer compares the native executables with the Lean evaluator, and a JSON schema generated from the Lean types of the `facts` output has goldens. Each gate joins `required-checks.txt` when the compiler lands.
+   587	
+   588	**Negative controls**, each a mutation the matching gate must refuse:
+   589	- a deleted pass theorem;
+    45	      fail-fast: false
+    46	      matrix:
+    47	        include:
+    48	          - arch: x86-64
+    49	            runner: ubuntu-latest
+    50	          - arch: aarch64-macos
+    51	            runner: macos-15
+    52	    runs-on: ${{ matrix.runner }}
+    53	    timeout-minutes: 60
+    54	    permissions:
+    55	      contents: read
+    56	    steps:
+    57	      - uses: actions/checkout@v4
+    58	      - name: Install Nix
+    59	        uses: cachix/install-nix-action@v31
+    60	      - name: Sanitizers, binary size (report-only) and stack bound (gates 10, 11, 12)
+    61	        run: nix develop --command timeout 3000 bash scripts/checks/slice0_artifacts.sh report
+    62	      - uses: actions/upload-artifact@v4
+    63	        if: always()
+    64	        with:
+    65	          name: artifacts-${{ matrix.arch }}
+    66	          path: report
+    67	          if-no-files-found: error
+    68	
+    69	  reproducibility:
+    70	    name: Reproducibility (${{ matrix.id }})
+    71	    strategy:
+    72	      fail-fast: false
+1074:- **OPEN-19** (OD19, the provable subset): decided 2026-10-29. Now the scope of [PROVABLE_V1.md](../legacy/docs/verification/PROVABLE_V1.md), not a language rule.
+1075:- **OPEN-2** (OD2, `&mut` arguments, deferred loans and the exit order): decided 2026-10-29. Now
+1076:  REF-10@2 (lending), REF-11@3 (exclusivity at a call, keyed by the root as OD15 (a) tightened it), REF-13 (a `&mut` refers to the
+1078:- **OPEN-9** (OD9, modules and interfaces): decided 2026-10-29. Now MOD-7 (pending, R-0556).
+1079:- **OPEN-3** (OD3, pattern binders through a borrowed scrutinee): decided 2026-10-29, as enforced.
+1082:- **OPEN-15** (OD15, freezing and `&mut` exclusivity): decided 2026-10-29. Part (a), whole-owner
+1083:  freezing with loans keyed by the root binding, is REF-11@3 (it tightens OD2's part 2; partial, bug 319,
+1084:  for OD23's re-lent case).
+1087:- **OPEN-16** (OD16, a struct literal in a condition head): decided 2026-10-29, refused unless
+1090:- **OPEN-17** (OD17, field writes and `mut`): decided 2026-10-29. Now OWN-10@2 (partial, bug 216).
+1091:- **OPEN-8** (OD8, global state): decided 2026-10-29, constants only and global resources as linear
+1094:- **OPEN-20** (OD20, the visibility of std's `std.libc` bindings): decided 2026-10-29, private to std.
+1095:  Now MOD-6 of [modules.md](../legacy/docs/spec/modules.md#MOD-6) (enforced by bug 226's fix).
+1096:- **OPEN-21** (OD21, a parent module's rights over its child): decided 2026-10-29, only the declaring
+1099:- **OPEN-22** (OD22, trust on an `impl` block): decided 2026-10-29, per method only. Now TRUST-5@2 of
+#!/usr/bin/env bash
+# Resource limits for a gate and everything it starts (sourced; the limits are inherited).
+#
+#   gate_limits MEM_GB NPROC
+#     Caps the address space of each process at MEM_GB GiB (Linux; Darwin does not enforce
+#     RLIMIT_AS, so there the CI job's memory is the bound) and the number of processes of this
+#     user at NPROC, so a runaway fork loop stops at the cap instead of taking the machine. Lowering
+#     a limit is always allowed; a limit already below the requested one is kept. Lake reserves
+#     far more address space than it uses (a cold `lake build` fails to create threads under
+#     32 GiB), so gates pass 64 here and bound the executables under test tightly, through
+#     lib/limited_exec.sh. The address-space cap is the SOFT limit: it binds every process, and
+#     only limited_exec.sh 0 (a sanitizer build, whose shadow reservation needs terabytes of
+#     address space; slice0_artifacts.sh) raises it back to the hard limit for one executable.
+#
+# Per-command time bounds are separate: bounded_run (lib/bounded.sh) for executables under test,
+# `timeout -k` for builds.
+gate_limits() {
+  local mem_kb=$(($1 * 1024 * 1024)) nproc=$2 cur
+  if [ "$(uname -s)" = Linux ]; then
+    cur=$(ulimit -S -v)
+    if [ "$cur" = unlimited ] || [ "$cur" -gt "$mem_kb" ]; then ulimit -S -v "$mem_kb"; fi
+  fi
+  cur=$(ulimit -u)
+  if [ "$cur" = unlimited ] || [ "$cur" -gt "$nproc" ]; then ulimit -u "$nproc"; fi
+}
+
+exec
+/bin/bash -lc "python3 -B - <<'PY'
+import subprocess,runpy
+src='.text\\n.globl main\\nmain:\\nmov x29, sp\\nstr x0, [x29], #-256\\nstr x0, [x29]\\nadd x29, x29, #256\\nret\\n'
+p=subprocess.run(['clang','-target','aarch64-linux-gnu','-x','assembler','-c','-o','-','-'],input=src.encode(),capture_output=True)
+r=subprocess.run(['llvm-objdump','-d','--no-show-raw-insn','-'],input=p.stdout,capture_output=True)
+print(r.stdout.decode()); print(p.stderr.decode(),r.stderr.decode())
+PY
+bash -c 'source scripts/checks/lib/limits.sh; gate_limits 1 40000; printf \"soft before: \"; ulimit -S -v; ulimit -S -v \""'$(ulimit -H -v)"; printf "soft after child raises it: "; ulimit -S -v'"'" in /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/gates-review
+ succeeded in 0ms:
+
+<stdin>:	file format elf64-littleaarch64
+
+Disassembly of section .text:
+
+0000000000000000 <main>:
+       0:      	mov	x29, sp
+       4:      	str	x0, [x29], #-0x100
+       8:      	str	x0, [x29]
+       c:      	add	x29, x29, #0x100
+      10:      	ret
+
+Warning: supplying the --target aarch64-linux-gnu != x86_64-unknown-linux-gnu argument to a nix-wrapped compiler may not work correctly - cc-wrapper is currently not designed with multi-target compilers in mind. You may want to use an un-wrapped compiler instead.
+clang: warning: argument unused during compilation: '-fstack-clash-protection' [-Wunused-command-line-argument]
+clang: warning: argument unused during compilation: '-fzero-call-used-regs=used-gpr' [-Wunused-command-line-argument]
+clang: warning: argument unused during compilation: '-D _LIBCPP_HARDENING_MODE=_LIBCPP_HARDENING_MODE_EXTENSIVE' [-Wunused-command-line-argument]
+clang: warning: argument unused during compilation: '-fstack-protector-strong' [-Wunused-command-line-argument]
+clang: warning: argument unused during compilation: '--param ssp-buffer-size=4' [-Wunused-command-line-argument]
+clang: warning: argument unused during compilation: '-O2' [-Wunused-command-line-argument]
+clang: warning: argument unused during compilation: '-U _FORTIFY_SOURCE' [-Wunused-command-line-argument]
+clang: warning: argument unused during compilation: '-fwrapv' [-Wunused-command-line-argument]
+clang: warning: argument unused during compilation: '-fno-omit-frame-pointer' [-Wunused-command-line-argument]
+clang: warning: argument unused during compilation: '-mno-omit-leaf-frame-pointer' [-Wunused-command-line-argument]
+clang: warning: argument unused during compilation: '-U _FORTIFY_SOURCE' [-Wunused-command-line-argument]
+clang: warning: argument unused during compilation: '-D _FORTIFY_SOURCE=2' [-Wunused-command-line-argument]
+clang: warning: argument unused during compilation: '-idirafter /nix/store/j8irrc0mpx029dw0rmadsjylg7h31ync-glibc-2.42-51-dev/include' [-Wunused-command-line-argument]
+clang: warning: argument unused during compilation: '-fmacro-prefix-map=/nix/store/j8irrc0mpx029dw0rmadsjylg7h31ync-glibc-2.42-51-dev/include=/nix/store/eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee-glibc-2.42-51-dev/include' [-Wunused-command-line-argument]
+clang: warning: argument unused during compilation: '-nostdlibinc' [-Wunused-command-line-argument]
+clang: warning: argument unused during compilation: '-frandom-seed=gsiv8wbprc' [-Wunused-command-line-argument]
+clang: warning: argument unused during compilation: '-isystem /nix/store/94bmilywgajdnqvix1fs35fj94kala0w-lean4-release-4.34.1/include' [-Wunused-command-line-argument]
+clang: warning: argument unused during compilation: '-isystem /nix/store/94bmilywgajdnqvix1fs35fj94kala0w-lean4-release-4.34.1/include' [-Wunused-command-line-argument]
+clang: warning: argument unused during compilation: '-isystem /nix/store/g8r229mkcdkkgfg5h90dp51a9rakvhfg-llvm-21.1.8-dev/include' [-Wunused-command-line-argument]
+clang: warning: argument unused during compilation: '-isystem /nix/store/g8r229mkcdkkgfg5h90dp51a9rakvhfg-llvm-21.1.8-dev/include' [-Wunused-command-line-argument]
+clang: warning: argument unused during compilation: '-isystem /nix/store/f1ahhmizr4qi79k2hh0aaryrzzjivf0h-ncurses-6.6-dev/include' [-Wunused-command-line-argument]
+clang: warning: argument unused during compilation: '-isystem /nix/store/f1ahhmizr4qi79k2hh0aaryrzzjivf0h-ncurses-6.6-dev/include' [-Wunused-command-line-argument]
+clang: warning: argument unused during compilation: '-isystem /nix/store/87y9237m9c9m9mxk9ajwdfmn78vz6w2y-zlib-1.3.1-dev/include' [-Wunused-command-line-argument]
+clang: warning: argument unused during compilation: '-isystem /nix/store/87y9237m9c9m9mxk9ajwdfmn78vz6w2y-zlib-1.3.1-dev/include' [-Wunused-command-line-argument]
+clang: warning: argument unused during compilation: '-isystem /nix/store/v6xrz7xk3xz0fl9yv96r4d7gp7nfyiv9-z3-4.15.8-dev/include' [-Wunused-command-line-argument]
+clang: warning: argument unused during compilation: '-isystem /nix/store/v6xrz7xk3xz0fl9yv96r4d7gp7nfyiv9-z3-4.15.8-dev/include' [-Wunused-command-line-argument]
+clang: warning: argument unused during compilation: '-isystem /nix/store/g0gpayn2aq0v5nn5i4vpw00jjbbnb24a-rocksdb-10.9.1/include' [-Wunused-command-line-argument]
+clang: warning: argument unused during compilation: '-isystem /nix/store/g0gpayn2aq0v5nn5i4vpw00jjbbnb24a-rocksdb-10.9.1/include' [-Wunused-command-line-argument]
+clang: warning: argument unused during compilation: '-isystem /nix/store/f2zvkh7iizs8y2r443kv9c2vk4h2y90m-bzip2-1.0.8-dev/include' [-Wunused-command-line-argument]
+clang: warning: argument unused during compilation: '-isystem /nix/store/f2zvkh7iizs8y2r443kv9c2vk4h2y90m-bzip2-1.0.8-dev/include' [-Wunused-command-line-argument]
+clang: warning: argument unused during compilation: '-isystem /nix/store/f6scy031khvii6sz809g69vznjjk49z0-lz4-1.10.0-dev/include' [-Wunused-command-line-argument]
+clang: warning: argument unused during compilation: '-isystem /nix/store/f6scy031khvii6sz809g69vznjjk49z0-lz4-1.10.0-dev/include' [-Wunused-command-line-argument]
+clang: warning: argument unused during compilation: '-isystem /nix/store/9zqdp6xblw4yn0z63razbhra53mzhml2-snappy-1.2.2-dev/include' [-Wunused-command-line-argument]
+clang: warning: argument unused during compilation: '-isystem /nix/store/9zqdp6xblw4yn0z63razbhra53mzhml2-snappy-1.2.2-dev/include' [-Wunused-command-line-argument]
+clang: warning: argument unused during compilation: '-isystem /nix/store/dszpfwzkz14xd19bwm2yhs3cbvkpw88s-zstd-1.5.7-dev/include' [-Wunused-command-line-argument]
+clang: warning: argument unused during compilation: '-isystem /nix/store/dszpfwzkz14xd19bwm2yhs3cbvkpw88s-zstd-1.5.7-dev/include' [-Wunused-command-line-argument]
+clang: warning: argument unused during compilation: '-isystem /nix/store/pg04l21ca5xaif9hplyi09lhqxbipkcx-bash-interactive-5.3p9-dev/include' [-Wunused-command-line-argument]
+clang: warning: argument unused during compilation: '-isystem /nix/store/pg04l21ca5xaif9hplyi09lhqxbipkcx-bash-interactive-5.3p9-dev/include' [-Wunused-command-line-argument]
+clang: warning: argument unused during compilation: '-isystem /nix/store/gf7b4yz4vhd0y2hnnrimhh875ghwzzzj-gawk-5.3.2/include' [-Wunused-command-line-argument]
+clang: warning: argument unused during compilation: '-isystem /nix/store/gf7b4yz4vhd0y2hnnrimhh875ghwzzzj-gawk-5.3.2/include' [-Wunused-command-line-argument]
+clang: warning: argument unused during compilation: '-isystem /nix/store/l25bjz1dfh8kkpg5x08vh4szydp3sib5-xz-5.8.2-dev/include' [-Wunused-command-line-argument]
+clang: warning: argument unused during compilation: '-isystem /nix/store/l25bjz1dfh8kkpg5x08vh4szydp3sib5-xz-5.8.2-dev/include' [-Wunused-command-line-argument]
+clang: warning: argument unused during compilation: '-isystem /nix/store/w1w4facn1vvjrnwp5r2m1lbbplzb6d11-file-5.45-dev/include' [-Wunused-command-line-argument]
+clang: warning: argument unused during compilation: '-isystem /nix/store/w1w4facn1vvjrnwp5r2m1lbbplzb6d11-file-5.45-dev/include' [-Wunused-command-line-argument]
+clang: warning: argument unused during compilation: '-isystem /nix/store/d0irz6jq0d16h6iggq1mcwwvvxzi4lvy-gnumake-4.4.1/include' [-Wunused-command-line-argument]
+clang: warning: argument unused during compilation: '-isystem /nix/store/d0irz6jq0d16h6iggq1mcwwvvxzi4lvy-gnumake-4.4.1/include' [-Wunused-command-line-argument]
+clang: warning: argument unused during compilation: '-isystem /nix/store/1m6s8nd3x7s7jddjdgydq10c5wj4dj4h-jq-1.8.1-dev/include' [-Wunused-command-line-argument]
+clang: warning: argument unused during compilation: '-isystem /nix/store/1m6s8nd3x7s7jddjdgydq10c5wj4dj4h-jq-1.8.1-dev/include' [-Wunused-command-line-argument]
+clang: warning: argument unused during compilation: '-isystem /nix/store/g93whx8466047n5r84vd2cyaqxbx5i5i-libxcrypt-4.5.2/include' [-Wunused-command-line-argument]
+clang: warning: argument unused during compilation: '-isystem /nix/store/g93whx8466047n5r84vd2cyaqxbx5i5i-libxcrypt-4.5.2/include' [-Wunused-command-line-argument]
+clang: warning: argument unused during compilation: '-isystem /nix/store/g89cgp8457qywnzr3675d83s4haxgv34-python3-3.13.12-env/include' [-Wunused-command-line-argument]
+clang: warning: argument unused during compilation: '-isystem /nix/store/g89cgp8457qywnzr3675d83s4haxgv34-python3-3.13.12-env/include' [-Wunused-command-line-argument]
+clang: warning: argument unused during compilation: '-isystem /nix/store/k870vxfbxawhyx2726aygb5v5is4si4b-procps-4.0.6/include' [-Wunused-command-line-argument]
+clang: warning: argument unused during compilation: '-isystem /nix/store/k870vxfbxawhyx2726aygb5v5is4si4b-procps-4.0.6/include' [-Wunused-command-line-argument]
+clang: warning: argument unused during compilation: '-isystem /nix/store/k0rhbhlsbi3g2wmgsjshjg2k4kp4r22p-util-linux-2.41.3-dev/include' [-Wunused-command-line-argument]
+clang: warning: argument unused during compilation: '-isystem /nix/store/k0rhbhlsbi3g2wmgsjshjg2k4kp4r22p-util-linux-2.41.3-dev/include' [-Wunused-command-line-argument]
+clang: warning: argument unused during compilation: '-isystem /nix/store/jrvj1y7w8slim5xgbbly7hhpadsym63g-compiler-rt-libc-21.1.8-dev/include' [-Wunused-command-line-argument]
+clang: warning: argument unused during compilation: '-isystem /nix/store/jrvj1y7w8slim5xgbbly7hhpadsym63g-compiler-rt-libc-21.1.8-dev/include' [-Wunused-command-line-argument]
+clang: warning: argument unused during compilation: '-isystem /nix/store/94bmilywgajdnqvix1fs35fj94kala0w-lean4-release-4.34.1/include' [-Wunused-command-line-argument]
+clang: warning: argument unused during compilation: '-isystem /nix/store/94bmilywgajdnqvix1fs35fj94kala0w-lean4-release-4.34.1/include' [-Wunused-command-line-argument]
+clang: warning: argument unused during compilation: '-isystem /nix/store/g8r229mkcdkkgfg5h90dp51a9rakvhfg-llvm-21.1.8-dev/include' [-Wunused-command-line-argument]
+clang: warning: argument unused during compilation: '-isystem /nix/store/g8r229mkcdkkgfg5h90dp51a9rakvhfg-llvm-21.1.8-dev/include' [-Wunused-command-line-argument]
+clang: warning: argument unused during compilation: '-isystem /nix/store/f1ahhmizr4qi79k2hh0aaryrzzjivf0h-ncurses-6.6-dev/include' [-Wunused-command-line-argument]
+clang: warning: argument unused during compilation: '-isystem /nix/store/f1ahhmizr4qi79k2hh0aaryrzzjivf0h-ncurses-6.6-dev/include' [-Wunused-command-line-argument]
+clang: warning: argument unused during compilation: '-isystem /nix/store/87y9237m9c9m9mxk9ajwdfmn78vz6w2y-zlib-1.3.1-dev/include' [-Wunused-command-line-argument]
+clang: warning: argument unused during compilation: '-isystem /nix/store/87y9237m9c9m9mxk9ajwdfmn78vz6w2y-zlib-1.3.1-dev/include' [-Wunused-command-line-argument]
+clang: warning: argument unused during compilation: '-isystem /nix/store/v6xrz7xk3xz0fl9yv96r4d7gp7nfyiv9-z3-4.15.8-dev/include' [-Wunused-command-line-argument]
+clang: warning: argument unused during compilation: '-isystem /nix/store/v6xrz7xk3xz0fl9yv96r4d7gp7nfyiv9-z3-4.15.8-dev/include' [-Wunused-command-line-argument]
+clang: warning: argument unused during compilation: '-isystem /nix/store/g0gpayn2aq0v5nn5i4vpw00jjbbnb24a-rocksdb-10.9.1/include' [-Wunused-command-line-argument]
+clang: warning: argument unused during compilation: '-isystem /nix/store/g0gpayn2aq0v5nn5i4vpw00jjbbnb24a-rocksdb-10.9.1/include' [-Wunused-command-line-argument]
+clang: warning: argument unused during compilation: '-isystem /nix/store/f2zvkh7iizs8y2r443kv9c2vk4h2y90m-bzip2-1.0.8-dev/include' [-Wunused-command-line-argument]
+clang: warning: argument unused during compilation: '-isystem /nix/store/f2zvkh7iizs8y2r443kv9c2vk4h2y90m-bzip2-1.0.8-dev/include' [-Wunused-command-line-argument]
+clang: warning: argument unused during compilation: '-isystem /nix/store/f6scy031khvii6sz809g69vznjjk49z0-lz4-1.10.0-dev/include' [-Wunused-command-line-argument]
+clang: warning: argument unused during compilation: '-isystem /nix/store/f6scy031khvii6sz809g69vznjjk49z0-lz4-1.10.0-dev/include' [-Wunused-command-line-argument]
+clang: warning: argument unused during compilation: '-isystem /nix/store/9zqdp6xblw4yn0z63razbhra53mzhml2-snappy-1.2.2-dev/include' [-Wunused-command-line-argument]
+clang: warning: argument unused during compilation: '-isystem /nix/store/9zqdp6xblw4yn0z63razbhra53mzhml2-snappy-1.2.2-dev/include' [-Wunused-command-line-argument]
+clang: warning: argument unused during compilation: '-isystem /nix/store/dszpfwzkz14xd19bwm2yhs3cbvkpw88s-zstd-1.5.7-dev/include' [-Wunused-command-line-argument]
+clang: warning: argument unused during compilation: '-isystem /nix/store/dszpfwzkz14xd19bwm2yhs3cbvkpw88s-zstd-1.5.7-dev/include' [-Wunused-command-line-argument]
+clang: warning: argument unused during compilation: '-isystem /nix/store/pg04l21ca5xaif9hplyi09lhqxbipkcx-bash-interactive-5.3p9-dev/include' [-Wunused-command-line-argument]
+clang: warning: argument unused during compilation: '-isystem /nix/store/pg04l21ca5xaif9hplyi09lhqxbipkcx-bash-interactive-5.3p9-dev/include' [-Wunused-command-line-argument]
+clang: warning: argument unused during compilation: '-isystem /nix/store/gf7b4yz4vhd0y2hnnrimhh875ghwzzzj-gawk-5.3.2/include' [-Wunused-command-line-argument]
+clang: warning: argument unused during compilation: '-isystem /nix/store/gf7b4yz4vhd0y2hnnrimhh875ghwzzzj-gawk-5.3.2/include' [-Wunused-command-line-argument]
+clang: warning: argument unused during compilation: '-isystem /nix/store/l25bjz1dfh8kkpg5x08vh4szydp3sib5-xz-5.8.2-dev/include' [-Wunused-command-line-argument]
+clang: warning: argument unused during compilation: '-isystem /nix/store/l25bjz1dfh8kkpg5x08vh4szydp3sib5-xz-5.8.2-dev/include' [-Wunused-command-line-argument]
+clang: warning: argument unused during compilation: '-isystem /nix/store/w1w4facn1vvjrnwp5r2m1lbbplzb6d11-file-5.45-dev/include' [-Wunused-command-line-argument]
+clang: warning: argument unused during compilation: '-isystem /nix/store/w1w4facn1vvjrnwp5r2m1lbbplzb6d11-file-5.45-dev/include' [-Wunused-command-line-argument]
+clang: warning: argument unused during compilation: '-isystem /nix/store/d0irz6jq0d16h6iggq1mcwwvvxzi4lvy-gnumake-4.4.1/include' [-Wunused-command-line-argument]
+clang: warning: argument unused during compilation: '-isystem /nix/store/d0irz6jq0d16h6iggq1mcwwvvxzi4lvy-gnumake-4.4.1/include' [-Wunused-command-line-argument]
+clang: warning: argument unused during compilation: '-isystem /nix/store/1m6s8nd3x7s7jddjdgydq10c5wj4dj4h-jq-1.8.1-dev/include' [-Wunused-command-line-argument]
+clang: warning: argument unused during compilation: '-isystem /nix/store/1m6s8nd3x7s7jddjdgydq10c5wj4dj4h-jq-1.8.1-dev/include' [-Wunused-command-line-argument]
+clang: warning: argument unused during compilation: '-isystem /nix/store/g93whx8466047n5r84vd2cyaqxbx5i5i-libxcrypt-4.5.2/include' [-Wunused-command-line-argument]
+clang: warning: argument unused during compilation: '-isystem /nix/store/g93whx8466047n5r84vd2cyaqxbx5i5i-libxcrypt-4.5.2/include' [-Wunused-command-line-argument]
+clang: warning: argument unused during compilation: '-isystem /nix/store/g89cgp8457qywnzr3675d83s4haxgv34-python3-3.13.12-env/include' [-Wunused-command-line-argument]
+clang: warning: argument unused during compilation: '-isystem /nix/store/g89cgp8457qywnzr3675d83s4haxgv34-python3-3.13.12-env/include' [-Wunused-command-line-argument]
+clang: warning: argument unused during compilation: '-isystem /nix/store/k870vxfbxawhyx2726aygb5v5is4si4b-procps-4.0.6/include' [-Wunused-command-line-argument]
+clang: warning: argument unused during compilation: '-isystem /nix/store/k870vxfbxawhyx2726aygb5v5is4si4b-procps-4.0.6/include' [-Wunused-command-line-argument]
+clang: warning: argument unused during compilation: '-isystem /nix/store/k0rhbhlsbi3g2wmgsjshjg2k4kp4r22p-util-linux-2.41.3-dev/include' [-Wunused-command-line-argument]
+clang: warning: argument unused during compilation: '-isystem /nix/store/k0rhbhlsbi3g2wmgsjshjg2k4kp4r22p-util-linux-2.41.3-dev/include' [-Wunused-command-line-argument]
+clang: warning: argument unused during compilation: '-isystem /nix/store/jrvj1y7w8slim5xgbbly7hhpadsym63g-compiler-rt-libc-21.1.8-dev/include' [-Wunused-command-line-argument]
+clang: warning: argument unused during compilation: '-isystem /nix/store/jrvj1y7w8slim5xgbbly7hhpadsym63g-compiler-rt-libc-21.1.8-dev/include' [-Wunused-command-line-argument]
+clang: warning: argument unused during compilation: '-cxx-isystem /nix/store/sca0pf46jmxva40qahkcwys5c1lvk6n2-gcc-15.2.0/include/c++/15.2.0' [-Wunused-command-line-argument]
+clang: warning: argument unused during compilation: '-fmacro-prefix-map=/nix/store/sca0pf46jmxva40qahkcwys5c1lvk6n2-gcc-15.2.0/include/c++/15.2.0=/nix/store/eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee-gcc-15.2.0/include/c++/15.2.0' [-Wunused-command-line-argument]
+clang: warning: argument unused during compilation: '-cxx-isystem /nix/store/sca0pf46jmxva40qahkcwys5c1lvk6n2-gcc-15.2.0/include/c++/15.2.0/x86_64-unknown-linux-gnu' [-Wunused-command-line-argument]
+clang: warning: argument unused during compilation: '-fmacro-prefix-map=/nix/store/sca0pf46jmxva40qahkcwys5c1lvk6n2-gcc-15.2.0/include/c++/15.2.0/x86_64-unknown-linux-gnu=/nix/store/eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee-gcc-15.2.0/include/c++/15.2.0/x86_64-unknown-linux-gnu' [-Wunused-command-line-argument]
+ 
+soft before: 1048576
+soft after child raises it: unlimited
+
+codex
+**Verdict: REJECT.** The stack analysis accepts understated bounds, and some failed controls cannot fail the gate.
+
+1. **P1 — AArch64 post-index writeback on x29 silently understates the bound.** `scripts/checks/lib/stack_bound.py:166` rejects only pre-index `[x29, #k]!`; `a64_step` never updates x29 for post-index addressing. I reproduced acceptance of:
+   ```asm
+   mov x29, sp
+   str x0, [x29], #-256
+   str x0, [x29]
+   add x29, x29, #256
+   ret
+   ```
+   The analyzer returns **bound 0**, although the second store addresses 256 bytes below entry SP. LLVM 21’s disassembler emits this syntax. Reject both forms of x29 writeback, or model them.
+
+2. **P1 — Unrecognized control-flow instructions become ordinary fallthrough.** `scripts/checks/lib/stack_bound.py:238` returns no control classification for x86 `loop`, `loope`, and `loopne`; the analysis then advances to the next instruction at line 301. A synthetic `mov ecx,2; loop deep; ret; deep: sub rsp,256; add rsp,256; ret` returns **bound 0**, missing the reachable 256-byte frame. The default acceptance of unknown instructions contradicts the fail-closed claim. Explicitly whitelist supported instruction semantics and reject unsupported control transfers.
+
+3. **P1 — Refusal-control failures are lost in pipeline subshells.** `scripts/checks/slice0_artifacts.sh:180` through line 186 invoke `refuse` as the last pipeline component. Under normal Bash settings, `fail=1` at line 175 changes only the subshell. The failure branch’s assignment succeeds, so `pipefail` does not rescue this: the script can print `FAIL control` and ultimately exit zero. Run these controls through redirection/here-strings in the parent shell, or propagate a nonzero status explicitly.
+
+4. **P1 — Abnormal termination can produce an accepted measurement.** `scripts/checks/lib/stack_measure.py:18` treats every inferior exit alike, and line 53 prints a measurement without checking the exit reason, expected status, or successful completion. For example, after accumulating a positive depth, an inferior can terminate from a fatal signal during external-call skipping and still produce `measured N`. `slice0_artifacts.sh:76` accepts that number whenever it fits the bound. This checks a possibly truncated execution. Require an expected termination outcome and validate debugger stops; also verify that execution actually reached the entry breakpoint before deriving the PIE offset.
+
+5. **P2 — The shared memory cap is now escapable by every descendant.** `scripts/checks/lib/limits.sh:21` leaves the hard address-space limit unchanged. Any unprivileged child can raise its soft limit to that hard limit; `limited_exec.sh 0` has no exclusive ability to do so. I confirmed a shell inheriting `gate_limits 1 ...` could restore its soft limit to `unlimited`. The “only limited_exec.sh 0” claim at lines 11–13 is false. Scope this exception to the sanitizer execution path rather than weakening the shared gate limit.
+
+6. **P2 — README marks incomplete owner requirements as implemented.** `Concrete/README.md:582` calls gate 10 implemented while acknowledging that UBSan checks nothing; line 584 similarly calls gate 12 implemented while skipping the run check on macOS. Those qualifications are candid, but they do not satisfy the stated sanitizer and artifact-versus-run obligations. Mark the missing coverage explicitly as incomplete, or obtain an owner-approved scope change.
+
+Adding `sanitize_address` is appropriate for enabling ASan instrumentation on these IR definitions; it does not supply UBSan checks. LLVM documents it as the ASan function attribute. [LLVM attribute definition](https://github.com/llvm/llvm-project/blob/main/llvm/include/llvm/IR/Attributes.td)
+
+Validation was limited to source inspection, in-memory analyzer reproducers, an LLVM disassembly probe, and shell behavior checks. I did not rerun the full gate suite or modify files. No independent second reviewer was used.
+tokens used
+49,879
+**Verdict: REJECT.** The stack analysis accepts understated bounds, and some failed controls cannot fail the gate.
+
+1. **P1 — AArch64 post-index writeback on x29 silently understates the bound.** `scripts/checks/lib/stack_bound.py:166` rejects only pre-index `[x29, #k]!`; `a64_step` never updates x29 for post-index addressing. I reproduced acceptance of:
+   ```asm
+   mov x29, sp
+   str x0, [x29], #-256
+   str x0, [x29]
+   add x29, x29, #256
+   ret
+   ```
+   The analyzer returns **bound 0**, although the second store addresses 256 bytes below entry SP. LLVM 21’s disassembler emits this syntax. Reject both forms of x29 writeback, or model them.
+
+2. **P1 — Unrecognized control-flow instructions become ordinary fallthrough.** `scripts/checks/lib/stack_bound.py:238` returns no control classification for x86 `loop`, `loope`, and `loopne`; the analysis then advances to the next instruction at line 301. A synthetic `mov ecx,2; loop deep; ret; deep: sub rsp,256; add rsp,256; ret` returns **bound 0**, missing the reachable 256-byte frame. The default acceptance of unknown instructions contradicts the fail-closed claim. Explicitly whitelist supported instruction semantics and reject unsupported control transfers.
+
+3. **P1 — Refusal-control failures are lost in pipeline subshells.** `scripts/checks/slice0_artifacts.sh:180` through line 186 invoke `refuse` as the last pipeline component. Under normal Bash settings, `fail=1` at line 175 changes only the subshell. The failure branch’s assignment succeeds, so `pipefail` does not rescue this: the script can print `FAIL control` and ultimately exit zero. Run these controls through redirection/here-strings in the parent shell, or propagate a nonzero status explicitly.
+
+4. **P1 — Abnormal termination can produce an accepted measurement.** `scripts/checks/lib/stack_measure.py:18` treats every inferior exit alike, and line 53 prints a measurement without checking the exit reason, expected status, or successful completion. For example, after accumulating a positive depth, an inferior can terminate from a fatal signal during external-call skipping and still produce `measured N`. `slice0_artifacts.sh:76` accepts that number whenever it fits the bound. This checks a possibly truncated execution. Require an expected termination outcome and validate debugger stops; also verify that execution actually reached the entry breakpoint before deriving the PIE offset.
+
+5. **P2 — The shared memory cap is now escapable by every descendant.** `scripts/checks/lib/limits.sh:21` leaves the hard address-space limit unchanged. Any unprivileged child can raise its soft limit to that hard limit; `limited_exec.sh 0` has no exclusive ability to do so. I confirmed a shell inheriting `gate_limits 1 ...` could restore its soft limit to `unlimited`. The “only limited_exec.sh 0” claim at lines 11–13 is false. Scope this exception to the sanitizer execution path rather than weakening the shared gate limit.
+
+6. **P2 — README marks incomplete owner requirements as implemented.** `Concrete/README.md:582` calls gate 10 implemented while acknowledging that UBSan checks nothing; line 584 similarly calls gate 12 implemented while skipping the run check on macOS. Those qualifications are candid, but they do not satisfy the stated sanitizer and artifact-versus-run obligations. Mark the missing coverage explicitly as incomplete, or obtain an owner-approved scope change.
+
+Adding `sanitize_address` is appropriate for enabling ASan instrumentation on these IR definitions; it does not supply UBSan checks. LLVM documents it as the ASan function attribute. [LLVM attribute definition](https://github.com/llvm/llvm-project/blob/main/llvm/include/llvm/IR/Attributes.td)
+
+Validation was limited to source inspection, in-memory analyzer reproducers, an LLVM disassembly probe, and shell behavior checks. I did not rerun the full gate suite or modify files. No independent second reviewer was used.

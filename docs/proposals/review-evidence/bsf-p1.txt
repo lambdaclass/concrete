@@ -1,0 +1,64 @@
+Review a small bash change to the Concrete repository's landing bot installer. scripts/land/install-bot.sh writes a launcher via an unquoted heredoc (\$ is launcher-runtime, bare $ is install-time). The launcher keeps immutable snapshots of the landing scripts per commit and used to treat a cached snapshot as complete when each listed SNAPSHOT path existed; a cache lacking scripts/land/bot.sh was then kept and failed forever. NEW: complete means every file git ls-tree lists under SNAPSHOT at that commit exists; otherwise it is rebuilt. scripts/checks/landing_bot.sh extracts the launcher's cache step from install-bot.sh, expands it as the installer would, and runs it on a missing, incomplete and complete cache. Review for correctness defects (quoting across the heredoc, the extraction in the test really matching the generated code, failure modes); format file:line, defect, concrete failing scenario; preferences labelled. End with exactly one line: VERDICT: ACCEPT or VERDICT: FINDINGS.
+--- DIFF ---
+diff --git a/changelog.d/2026-11-08-bot-snapshot-files.md b/changelog.d/2026-11-08-bot-snapshot-files.md
+new file mode 100644
+index 00000000..f8868112
+--- /dev/null
++++ b/changelog.d/2026-11-08-bot-snapshot-files.md
+@@ -0,0 +1,7 @@
++### The bot's launcher rebuilds a cached snapshot missing any file (2026-11-08)
++
++The launcher `scripts/land/install-bot.sh` writes judged a cached snapshot complete when each listed
++`SNAPSHOT` path existed, so a cache that had `scripts/land/` but lacked `scripts/land/bot.sh` was
++kept and failed on every run (Kimi, review of the slice-0 branch). It now requires every file the
++commit has under those paths (`git ls-tree`), and rebuilds otherwise. `scripts/checks/landing_bot.sh`
++runs the launcher's own cache step on a missing, an incomplete and a complete cache.
+diff --git a/scripts/checks/landing_bot.sh b/scripts/checks/landing_bot.sh
+index 6ee7a05a..64ebf983 100755
+--- a/scripts/checks/landing_bot.sh
++++ b/scripts/checks/landing_bot.sh
+@@ -463,6 +463,26 @@ else
+     && ok "the launcher extracts exactly \$SNAPSHOT" || no "the launcher does not extract \$SNAPSHOT"
+ fi
+ 
++echo "=== the launcher rebuilds an incomplete cached snapshot ==="
++# The launcher's cache step (install-bot.sh, from `complete=1` to its `fi`), run as the launcher would
++# (install-time $SNAPSHOT expanded, \$ unescaped) against this checkout's HEAD: a cached snapshot that
++# lacks one file (scripts/land/bot.sh) is rebuilt, and a complete one is kept.
++step="$(awk '/^complete=1$/ {on=1} on {print} on && /^fi$/ {exit}' "$ROOT_DIR/scripts/land/install-bot.sh" \
++  | sed -e "s|\$SNAPSHOT|$SNAP_LIST|g" -e 's/\\\$/$/g')"
++if [ -z "$step" ] || ! grep -q 'git archive' <<<"$step"; then no "the launcher's cache step was not found in install-bot.sh"
++else
++  snaps="$TMP/snaps"; sha="$(git -C "$ROOT_DIR" rev-parse HEAD)"; snap="$snaps/$sha"
++  run_step() { (cd "$ROOT_DIR" && snaps="$snaps" sha="$sha" snap="$snap" bash -c "set -euo pipefail; $step") >/dev/null 2>&1; }
++  rm -rf "${snaps:?}"; mkdir -p "$snaps"
++  run_step && [ -f "$snap/scripts/land/bot.sh" ] && [ -f "$snap/scripts/review/verify.sh" ] \
++    && ok "a missing snapshot is built with every listed file" || no "the cache step did not build the snapshot"
++  rm -f "$snap/scripts/land/bot.sh"; touch "$snap/marker"
++  run_step && [ -f "$snap/scripts/land/bot.sh" ] && [ ! -e "$snap/marker" ] \
++    && ok "a cached snapshot without scripts/land/bot.sh is rebuilt" || no "an incomplete cached snapshot was kept"
++  touch "$snap/marker"
++  run_step && [ -e "$snap/marker" ] && ok "a complete cached snapshot is kept" || no "a complete snapshot was rebuilt"
++fi
++
+ echo
+ echo "check_landing_bot: PASS=$PASS FAIL=$FAIL"
+ [ "$FAIL" -eq 0 ]
+diff --git a/scripts/land/install-bot.sh b/scripts/land/install-bot.sh
+index 355b6b6d..c8a59469 100755
+--- a/scripts/land/install-bot.sh
++++ b/scripts/land/install-bot.sh
+@@ -68,8 +68,12 @@ git fetch -q origin
+ sha="\$(git rev-parse --verify "\${BOT_SOURCE_REF:-$REF}^{commit}")"
+ snaps="\$HOME/.local/state/concrete-landing-bot/snap"
+ snap="\$snaps/\$sha"
++# Complete means every FILE the commit has under the SNAPSHOT paths is there (not only the listed
++# directories): a snapshot missing scripts/land/bot.sh, say, is rebuilt, not run.
+ complete=1
+-for p in $SNAPSHOT; do [ -e "\$snap/\$p" ] || complete=0; done
++files="\$(git ls-tree -r --name-only "\$sha" -- $SNAPSHOT)"
++[ -n "\$files" ] || { echo "concrete-landing-bot: \$sha has none of the snapshot paths" >&2; exit 1; }
++while IFS= read -r p; do [ -f "\$snap/\$p" ] || { complete=0; break; }; done <<< "\$files"
+ if [ "\$complete" = 0 ]; then
+   rm -rf "\${snap:?}" "\$snap.tmp"; mkdir -p "\$snap.tmp"
+   git archive "\$sha" $SNAPSHOT | tar -x -C "\$snap.tmp"

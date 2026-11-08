@@ -1,0 +1,347 @@
+# Std coverage audit against Rust, Zig, Go and C/POSIX (PROPOSED, draft 2, 2026-11-08)
+
+Status: PROPOSED. An audit; it decides nothing. It answers the owner's question "isn't many things
+of stdlib missing?" by comparing the current std plan, category by category, with the standard
+libraries of Rust (core/alloc/std), Zig, Go and C/POSIX (current stable releases as of 2026-11; for
+C, C23 and POSIX.1-2024; library extensions and external packages are marked as such). Language
+questions are listed for the owner in section 6 and are not decided here. Draft 2 applies the
+round-1 review of Codex, Kimi and agy (section 7).
+
+Read against (branch `wip/record-language` at `1547734f`): `ROADMAP.md` ("Vertical slices",
+"Showcases", "Std per slice"); `docs/PHILOSOPHY.md`; `docs/decisions.md` (Core rows Q1–Q9, OD13,
+OD51, OD136, OD148, the 2026-11-02 filesystem rule, the 2026-11-06 no-hidden-traps rule, the
+2026-11-08 rows); `docs/proposals/EXAMPLES.md`; the hosted grant table approved as Q7.10 (R4 F6 in
+`legacy/docs/archive/decisions-2026-11-05/R4_RATIONALE.md`); `legacy/docs/spec/` (OWN-9, REF-5,
+TRUST-7, ARITH-1/6/11/12); `legacy/std/src/*.con`; and the scratch proposals `STD_PLACEMENT.md`
+(draft 3) and `OWNER_QUESTIONS.md` (O1–O12), with `LANGUAGE_DECISIONS_2026-11-08.md`.
+
+## 1. The short answer
+
+Yes: measured by module count, the plan carries a small fraction of what Rust, Zig or Go ship. Most
+of that is on purpose. Rule 17 and the placement rule P1 admit a module only when an adopted
+showcase stage consumes it, and a few features are refused outright: closures, collection loop
+syntax for now (OD51), variadic functions and format machinery, implicit conversions, and
+concurrency before slice 28.
+
+Module count is the wrong measure of risk. The audit finds three kinds of real issue:
+
+1. **A small number of definite gaps where an adopted stage needs something the plan does not place
+   or schedule** (section 4.1). The most important: OD13 decided that a value may move out "through
+   an explicit replace or take through `&mut T`", but no slice schedules that operation in safe code,
+   and Q3.6's `swap_at` needs a substitute value in hand. `OrderedMap` at 23 (ordinary safe std code,
+   before `trusted fn` at 24) rotates `Heap` nodes behind `&mut` and needs it. Agy points out that the
+   heap move-out of item 12 cannot replace it: it consumes the `Heap` and releases its storage, so a
+   rotation would have to re-allocate fallibly mid-operation. Legacy std never tested this: its
+   `OrderedMap`, `Vec`, deque and binary heap were all `trusted` raw-pointer code
+   (`legacy/std/src/ordered_map.con` is a sorted array behind `*mut K`). Other definite gaps: line
+   framing over partial reads (grep 16), the unscheduled operation registry for already-decided
+   filesystem operations, the float operations Wasm 26 needs beyond ARITH-1/6/11/12, and the
+   large-file strategy of the file encryptor at zero heap.
+2. **Conditional needs** (section 4.2): items an adopted stage needs only if its implementation
+   chooses a particular design (a bitset, byte-string keys, `pread`, buffered output). These are
+   showcase design choices, not gaps, until the showcase chooses.
+3. **Design questions no adopted showcase exercises**: sorting and heaps of linear elements, graphs
+   with parent links, borrowing traversal with early exit, one stream interface across capabilities.
+   Section 5 proposes small probes. Compiled probes are the validation (rule 17). Paper sketches
+   before the Core freeze (A2c, before slice 1) only find questions; they validate nothing.
+
+## 2. Classification
+
+- **(a) covered**: placed in the plan (slice given), or showcase-local under P2 (the showcase's own
+  subject stays in it).
+- **(b) deliberately out**: a decided row or a recorded refusal excludes exactly that feature
+  (cited).
+- **(c) real gap**: an adopted showcase stage needs it and the plan does not place or schedule it
+  (stage named). **(c?)** marks a conditional need that depends on a showcase design choice.
+- **(d) design validation**: no showcase needs it; either a probe is proposed (section 5) or a reason
+  is given why one is not worth it.
+
+Risk tags follow `STD_PLACEMENT.md`: **R-ref** second-class references at scale, **R-lin** linear
+ownership in containers, **R-trap** the proof cost of no hidden traps, **R-err** explicit error
+propagation, **R-cb** callbacks with contracts, **R-grant** grants and `with(...)`, **R-ct**
+constant time and secrets.
+
+## 3. Category table
+
+The second column names what people expect from each reference library; it does not claim
+exhaustive coverage. "ext." marks an external package or an OS extension.
+
+| category | Rust / Zig / Go / C-POSIX | Concrete plan | class |
+|---|---|---|---|
+| growable sequence | `Vec` / `ArrayList` / slices + `append` / none | `vec::Vec<T, A>` at 22 (representation O3); EVM memory at 21 grows by replacement of a `HeapArray` (`STD_PLACEMENT.md` gap 3) | a |
+| deque, ring buffer | `VecDeque` / ring-buffer types / `container/ring` / none | not carried; ring buffer is the slice-24 *proposed* trusted example | d: no probe; a safe deque can use `Vec<Option<T>>` or `HeapArray<Option<T>>` at a per-slot tag cost (note N3) |
+| linked lists | `LinkedList` / `SinglyLinkedList`, `DoublyLinkedList` / `container/list` / none | not carried | d: not worth a module. A singly linked owned chain (`Option<Heap<Node>>`) is expressible; a doubly linked list needs index links (probe D3) or raw pointers (24) |
+| sets | `HashSet`, `BTreeSet` / hash maps with `void` values / `map[K]struct{}` / none | not carried (legacy `set`, `ordered_set`) | d: not worth it; `OrderedMap<K, Unit>` serves, and a second form is refused by rule 2 |
+| ordered map | `BTreeMap` / `Treap`, sorted arrays / none / `tsearch` | `ordered_map` at 23, ordinary std code over `Heap` nodes | a, blocked by gap G1 (in-place displacement) |
+| hash map | `HashMap` / `HashMap`, `ArrayHashMap` / built-in `map` / `hsearch` | only when the KV store's measurements need it (item 19) | a (conditional) |
+| priority queue | `BinaryHeap` / `PriorityQueue`, `PriorityDequeue` / `container/heap` / none | not carried (legacy `BinaryHeap` in `heap.con`) | d: probe D2b at 22 |
+| bitset | none / `std.bit_set` / none (`math/bits` only) / none | not carried | c?: a representation choice for grep 16 (NFA state sets) and EVM 15 (JUMPDEST validation), item K1 |
+| tries, other trees | none / none / none / none | none | d: not worth it |
+| index arenas, graphs, parent links | ext. (`slotmap`, `petgraph`) / `SegmentedList`, `MultiArrayList` / none / none | allocator arenas at 19 are memory arenas; grep's NFA is a read-only index graph (showcase-local) | d: probe D3 at 15 (R-ref) |
+| sort, stable sort | `sort`, `sort_unstable` / `std.sort` / `slices.Sort`, `SortStableFunc` / `qsort` | none; insertion sort of `Copy` elements is the slice-15 *proposed* example | d: probe D2a at 15 |
+| binary search, partition, dedup, reverse, rotate | slice methods / `std.sort.binarySearch`, `std.mem.reverse`, `rotate` / `slices` / `bsearch` | binary search is the slice-15 *proposed* example | d: covered by D2a; no module. On linear elements, removal operations either destroy removed `T: Destroy` values explicitly or return or hand removed non-`Destroy` values to a consuming callback (rule 9, Q2.1–Q2.4) |
+| min/max | `cmp::min/max` / `std.math.min/max` / built-in `min`/`max` / none | proposed examples at 3 and 11 (`Copy`) | d: in D2a; for non-`Copy` `T`, `max(a, b) -> T` would leave the other value unconsumed, so it returns both or takes a destroy step |
+| permutations | ext. / none / none / none | none | d: not worth it |
+| iteration | `Iterator` + closures / iterator structs / `range` / pointer loops | counted loop and `while` only; no collection loop syntax now (OD51); consuming traversal `drain`/`map_into` at 20 (Q2.4, Q3.6); element access O4 | b for collection loop syntax and closures (OD51; PHILOSOPHY "Closures"); d for traversal APIs: probe D4 at 20 |
+| string builder | `String` / `ArrayList(u8)` / `strings.Builder` / none | `string::String<A>` at 22; append under `with(Alloc)` (item 17) | a |
+| split, trim, search | `str` methods / `std.mem.split*`, `trim`, `indexOf` / `strings`, `bytes` / `strtok`, `strstr`, `memchr` | `bytes::find` (one byte) at 15; text boundaries at 16; splitting as coordinates (P4) | a; multi-byte search: c? (K4) |
+| ASCII | `u8::is_ascii_*` / `std.ascii` / none / `ctype.h` | `ascii` at 16 | a; `eq_ignore_case`: c? (K4) |
+| Unicode beyond UTF-8 | `char` methods / UTF-8/16 helpers / `unicode` tables / `wchar_t` | UTF-8 validation and decoding at 16; no `char` (item 16) | a for UTF-8; d (not worth it): case mapping, normalization and grapheme tables have no consumer and add a Unicode-version premise |
+| integer parse/format | `parse`, `Display` / `std.fmt.parseInt`, `formatInt` / `strconv` / `strtol`, `printf` | `parse`, `fmt` at 27; user code before (slice 16: "integers printed by user code") | a |
+| float parse/format | `parse::<f64>`, `Display` / `parseFloat`, `formatFloat` / `strconv` / `strtod`, `printf` | none | d: not worth it now (no consumer; shortest round-trip formatting is a large proof); note N4 |
+| format strings | `format!` / `std.fmt` / `fmt` / `printf` | none | b: user-defined and C-style variadic functions are refused permanently (PHILOSOPHY "Calls and declarations"); the print builtins are removed (item 17); derived formatting is refused (PHILOSOPHY "Derived structural equality" and "Source-generating macros, derive helpers") |
+| logging | `log` (ext.) / `std.log` / `log`, `log/slog` / `syslog` | none | d: no consumer and no refusal; output is ordinary calls on `StdErr` under `Console` |
+| checked/wrapping/saturating math | integer methods / builtins and `std.math` / `math/bits` carries, wide products / C23 `<stdckdint.h>` | slice 2 (`wrapping_*`, `saturating_*`), slice 12 (`checked_*`) | a |
+| gcd, pow, isqrt | `pow`, `isqrt` / `std.math` / `math/big`, `math/bits` / none | proposed examples at 4–5; `U256` `exp` at 15 | d: not worth a module |
+| bit operations | integer methods / `std.math.rotl`, `@clz`, `@popCount` / `math/bits` / C23 `<stdbit.h>` | rotations by public counts on `Secret` operands are in the slice-7 constant-time table; nothing for public integers | c: Keccak 21, Wasm 21 (gap G5) |
+| wide and big integers | `u128`, bignum ext. / `u128`, `std.math.big.int` / `math/big` / none | `u256` limbs at 15; field limbs inside the crypto modules; no `u128` (O5) | a; general bignum: d, no consumer |
+| floats | `f32`/`f64` / same / same / `math.h` | `f32`/`f64` at 26 with IEEE rounding and no contraction (ARITH-1), comparisons (ARITH-6), conversions and float-to-integer roundings (ARITH-11), remainder (ARITH-12); OD63, OD107 | a for those; c for the rest Wasm 26 needs (gap G6) |
+| fixed point | ext. / none / none / none | none | d: not worth it |
+| memory and bytes | `ptr`, `mem`, `copy_within` / `std.mem` / `copy` / `memcpy`, `memmove`, `memcmp` | `bytes` (`eq`, `copy`, `fill`, `find`, endian codecs) at 15; `ptr`/`mem` at 24 | a; in-buffer copy: c (gap G3); byte comparison: c? (K2) |
+| error conventions | `Result`, `?` / error unions, `try` / `error` values / `errno` | builtin `Result` at 12; typed errors per module | a; `?` and implicit error conversion are b (PHILOSOPHY "Postfix `?`") |
+| buffered input, line framing | `BufReader`, `lines()` / buffered readers / `bufio.Scanner` / `FILE*`, `getline` | raw partial `read`, `read_exact`, `copy_stream` | c: grep 16/18 (gap G2) |
+| buffered output | `BufWriter` / buffered writers / `bufio.Writer` / `FILE*` | `write_all` | c?: a performance choice to measure at grep 16 (K5) |
+| stream abstraction | `Read`/`Write` traits / reader and writer interfaces / `io.Reader`, `io.Writer` / file descriptors | one `write_all` per grant family (console, fs, net) | d: probe D5 (one interface across capabilities) |
+| seek, positional I/O | `Seek` / `seekTo`, `pread` / `Seek`, `ReadAt` / `lseek`, `pread` | none | c?: KV 23 only if its index stores log offsets (K3) |
+| fs operations, path | `fs`, `path` / `std.fs` / `os`, `path/filepath` / POSIX | `fs` at 18; `path` at 27; the 2026-11-02 rule authorizes opening, creating, listing, probing, removing, renaming, linking and metadata lookup | a for the rule; c for the missing operation contracts (gap G4) |
+| process, args, env | `process`, `env` / `std.process` / `os`, `os/exec` / `exec`, `getenv` | `env` at 18 (scoped views, O2); no spawning (Q7.4); `process_exit` removed (OD136) | a + b |
+| time, clock | `time` / `std.time` / `time` / `clock_gettime` | `time` at 27 if used (Q7.6) | a |
+| dates, calendars | ext. (`chrono`) / `std.time.epoch` / `time` / `gmtime`, `strftime` | none | d: not worth it; note N2 (HTTP `Date`) |
+| randomness | none in std (`getrandom` and `rand` are ext.) / `std.Random`, `std.crypto.random` / `math/rand`, `crypto/rand` / `rand`; `getrandom` is a Linux ext. | entropy grant at 6, `Secret<T>` draw at 7 (O12), fill at 15 | a; seeded PRNG: d, no consumer (tests are theorems; the fuzzer is tooling) |
+| checksums | ext. / `std.hash.crc` / `hash/crc32`, `hash/adler32` / none | `checksum` (CRC-32) at 21; Adler-32 local to PNG | a |
+| non-cryptographic hashing | `Hash`, SipHash / `std.hash` / `hash/fnv`, `hash/maphash` / none | `hash` with `HashMap` only | a (conditional); a keyed hash needs an entropy draw, so creating such a map shows `Entropy` in its signature |
+| cryptographic hashes, MAC | ext. / `std.crypto` / `crypto/sha256`, `crypto/hmac` / none | `keccak` at 21; SHA-256, BLAKE2s, HKDF after 28 with the tunnel | a |
+| AEAD, key exchange | ext. / `std.crypto` / `crypto/cipher`, `crypto/ecdh`; ChaCha20-Poly1305 in `golang.org/x/crypto` / none | `chacha20`, `poly1305`, `x25519` at 15; `aead` at 18 | a; large files at zero heap: c (gap G7) |
+| signatures, AES, password hashing | ext. / `std.crypto` / `crypto/ed25519`, `crypto/aes` / none | none | d: not worth it (no consumer; ethlambda after 28 is subject to the R-0604 audit) |
+| hex, base64 | ext. / `std.fmt.hex`, `std.base64` / `encoding/hex`, `encoding/base64` / none | hex parsing in `parse` at 27; base64 only in the slice-17 *proposed* example | a for hex parsing; d otherwise |
+| varint | ext. / `std.leb128` / `encoding/binary` / none | LEB128 in `bytes` at 21 (Wasm) | a |
+| UTF-16 | `encode_utf16` / `std.unicode` / `unicode/utf16` / `wchar_t` | none | d: not worth it (no consumer) |
+| JSON, CBOR, protobuf | `serde` (ext.) / `std.json` / `encoding/json` / none | none | d: not worth it now (note N1) |
+| compression | ext. / `std.compress` / `compress/flate`, `gzip`, `zlib` / none | DEFLATE decoder local to the PNG showcase (P2) | a; an encoder: d, not worth it |
+| TCP, DNS | `net` / `std.net` / `net` / sockets, `getaddrinfo` | `net` at 27 (connect, listen, accept, scoped resolver) | a; socket timeouts: flag F3 |
+| UDP | `UdpSocket` / `std.net` / `net` / sockets | not in the grant table | d: not worth it |
+| HTTP, TLS | ext. / `std.http`, `std.crypto.tls` / `net/http`, `crypto/tls` / none | HTTP local to the server and httpget (P2); no TLS (the tunnel uses Noise) | a; TLS: d, not worth it |
+| concurrency, atomics | `thread`, `sync`, `atomic` / `std.Thread`, `std.atomic` / goroutines, `sync`, `sync/atomic` / pthreads, C11 atomics | none until slice 28 (owner, 2026-11-07; item 39) | b |
+| testing, benchmarking | `#[test]`, benches / `std.testing` / `testing` / none | `#[test]` and `assert` at 8 (no std helper module); speed tracking is tooling (2026-11-07) | a |
+| state machines, parsers | enums + `match`, combinators (ext.) / tagged unions / `text/scanner` / none | enums and `match` at 10; parsers local to their showcases | a; closure-style combinators b (PHILOSOPHY "Closures"); explicit-context combinators (function values at 20) d, no consumer |
+
+## 4. Gaps
+
+### 4.1 Definite gaps: an adopted stage needs it, and nothing places or schedules it
+
+- **G1. Displacing a linear value behind `&mut` in safe code (owner, S1). Stage: `OrderedMap` at
+  23, consumed by KV 23, EVM 23 and Wasm 23.** OD13 (2026-10-29) decides that "a value moves out of
+  raw memory only through `read_owned(p)` or an explicit replace or take through `&mut T`", and
+  TRUST-7's accepted example writes that replace in `trusted` code with `read_owned`. No slice
+  schedules a safe `replace`/`take` before `trusted fn` arrives at 24. Q3.6 gives `swap_at(v, i, x)`
+  for elements, with `x` already in hand. OWN-9 refuses overwriting a live linear value. Item 12's
+  heap move-out consumes a `Heap` and releases its storage. A rotation of `Heap` nodes behind
+  `&mut OrderedMap` therefore has no decided safe step. For an `Option` slot, `None` is a ready
+  substitute, so a place-level `replace` covers `take` as well.
+- **G2. Line framing over partial reads (std `io`, a module from 17; code inside grep at 16).
+  Stages: grep 16 (stdin), grep 18 (file); likely also KV 23 (log replay) and server 27 (request
+  head).** `read` may return any prefix, and lines cross read boundaries. The second-class shape is a
+  `Copy`-coordinate scanner over a caller-owned buffer: `fill(scan, buf, stream)`, then
+  `next_line(scan, buf) -> Option<Range>`, with the caller forming the subview by the one borrow
+  form (P4). The showcase must also state what it does with a line longer than its buffer (flag F1).
+- **G3. Copy inside one buffer (std `bytes`). Stages: PNG 21–22 (DEFLATE back-references); Wasm 21
+  only if its profile includes bulk memory (`memory.copy`, flag F8); EVM 21 only if its fork has
+  `MCOPY` (flag F5).** `bytes::copy(dst, src)` cannot copy within one buffer, because a mutable and a
+  shared view of one root conflict (Q3.4). Two contracts differ:
+  - `memory.copy` and `MCOPY` behave as if the source were copied first (`memmove`);
+  - DEFLATE copies forward byte by byte, so an overlapping copy replicates recent bytes (distance 1,
+    length 5 repeats one byte).
+
+  Proposal: `bytes::copy_within(v, src, dst, len)` with the `memmove` law, placed when one of those
+  stages adopts it. DEFLATE's replicating copy is a loop in the PNG showcase (P2), which needs no
+  std change, so G3 is definite only for the Wasm and EVM profiles that include those instructions.
+- **G4. Operation contracts for decided filesystem operations (owner: an operation registry, not
+  policy).** The 2026-11-02 filesystem rule already authorizes "opening, creating, listing, probing,
+  removing, renaming, linking and metadata lookup", each with a `Directory` and `with(Fs)`. R4 F6 is
+  an incomplete registry: it gives rights and the `Directory`, `File` and grant lifecycles, but no
+  signatures for those operations (`STD_PLACEMENT.md` sketches only `open`, `read`, `write` and
+  `close`). Before slice 18 closes, the registry needs exact contracts for at least the operations a
+  stage uses: `open` with its modes, `read`, `write`, metadata lookup if the server uses
+  `Content-Length` (chunked or close-delimited responses are alternatives, RFC 9112 §6.3), and
+  `rename`/`remove` if the KV store compacts. Only genuinely new semantics need fresh owner
+  treatment: append mode, positional I/O, and socket read timeouts (flag F3).
+- **G5. Bit operations on public integers (std placement; Q9.6). Stages: Keccak 21 (64-bit lane
+  rotations), Wasm 21 (`clz`, `ctz`, `popcnt`, `rotl`, `rotr`); later SHA-256 and BLAKE2s.** ChaCha20
+  rotates `Secret<u32>` words with the slice-7 constant-time table (O7), so it is not a consumer of the
+  public form. All are reducible, so Q9.6 already answers that they are ordinary std code: a small
+  `bits` module, code at 21. A primitive (an LLVM intrinsic) would be a recorded revision of Q9.6
+  with measured need.
+- **G6. Float operations beyond ARITH-1/6/11/12 (owner, S6). Stage: Wasm 26.** Covered already:
+  rounding and no contraction, comparisons, conversions and the float-to-integer roundings that
+  return `try_convert` errors, and remainder. Missing for Wasm:
+  - the operations themselves: `sqrt`; `nearest` as a float result; `min` and `max` with Wasm's NaN
+    and signed-zero rules; `copysign`, `abs` and `neg` as sign-bit operations; bit reinterpretation;
+    and the saturating `trunc_sat` conversions;
+  - an observation policy. Wasm lets an arithmetic NaN result have a nondeterministic sign and, in
+    the relevant cases, a nondeterministic payload, while `abs`, `neg` and `copysign` are
+    deterministic on bits. Reinterpretation and stores can expose those bits to later output, so
+    "exclude NaNs from the comparison" is not sound.
+
+  Wasm 21 also needs `i32/i64.rem_s` to return 0 for `MIN % -1`, and `div_s` there to be a Wasm trap.
+  The interpreter handles both explicitly with `checked_*` (slice 12): no gap, but a conformance item
+  for the showcase.
+- **G7. Large files at zero heap (showcase claim, owner). Stage: file encryptor at 18.** The sketched
+  `aead::seal/open` and `poly1305::mac` are one-shot over in-memory buffers, and slice 18 has no heap.
+  For files larger than the fixed buffer:
+  - **two passes** (incremental Poly1305 to verify, then decrypt) keep "no plaintext before the tag
+    verifies" only under a premise that the file does not change between passes. Nothing decided
+    guarantees that, and zero heap cannot retain the authenticated bytes;
+  - **a chunked construction** (each chunk sealed under a counter nonce, with a last-chunk flag
+    against truncation and reordering) changes the release law from per-file to per-chunk;
+  - **a stated maximum file size** that fits the buffer.
+
+### 4.2 Conditional needs: showcase design choices
+
+These become gaps only when the showcase picks the design, and are placed then (P1, P2: a substrate
+with one adopted consumer goes in std).
+
+- **K1. Bitset.** grep 16's NFA state sets and EVM 15's JUMPDEST validation may use bit sets.
+  JUMPDEST validation is mandatory; a bitmap is one representation. At zero heap the size matters:
+  the EIP-170 code limit of 24,576 bytes is 3 KiB as bits, or 24 KiB as `[bool; N]`, beside a 32 KiB
+  operand stack, under the stack budget.
+- **K2. Lexicographic byte comparison.** Needed if KV 23 keys are byte strings: `bytes::cmp`, and
+  `Ord` impls for `Vec<u8, A>` and `String<A>` (Q4.3 fixes lexicographic byte order).
+- **K3. Positional read and append mode.** Needed if KV 23's index maps keys to log offsets, or if the
+  log is reopened for appending. Replaying to the end of the file can also establish the write
+  position.
+- **K4. HTTP helpers.** `ascii::eq_ignore_case` (case-insensitive header names) and a multi-byte
+  `bytes::find_seq` (CRLF CRLF), at 27, if the server or httpget code uses them.
+- **K5. Buffered output.** The speed target is set from grep's slice-16 measurements (R-0623) and is
+  report-only until then. Measure first; a showcase-local buffer is the first experiment, and a std
+  writer follows only if a target or the measurements need one. Its shape is flag F0.
+
+## 5. Design probes (category d)
+
+A probe is **not a std module**. Its declared consumer is design validation, and its output is an
+answer or a sharper owner question. Compiled probes at their slice are the validation (rule 17). A
+paper sketch written before the Core freeze (A2c, before slice 1) is a question-finding exercise:
+it can show that a decided construct is missing, and nothing more. The case for doing the sketches
+early is that a missing Core operation found at slice 23 would reopen a frozen row.
+
+| probe | form and slice | design risk | failure would be |
+|---|---|---|---|
+| **P0. Pre-freeze sketches** | paper, before A2c | R-lin, R-ref: `OrderedMap` insert/remove with rotations behind `&mut` (G1); a buffered writer that owns or borrows a stream (F0) | a step with no decided construct, stated with the exact line; not evidence of validity |
+| **D2a. Sorting linear elements** | compiled at 15 (arrays; `Ord` at 14): extends the *proposed* slice-15 insertion sort and binary search to non-`Copy` `T` | R-lin, R-ref, R-trap: comparing two elements of one view by shared reference (S2); swapping two elements without a substitute (S1); a permutation theorem over linear elements; min/max of linear values | cannot be written without a substitute, or the permutation proof cannot name elements without copying |
+| **D2b. Binary heap of linear values** | compiled at 22 (`Vec`) | R-lin, R-err: sift with swaps (S1); push failure conserving the vector and the element; pop returning ownership | needs a construct outside 22, or loses conservation on a failure path |
+| **D3. Parent links by index** | compiled at 15: a fixed array of nodes with `u64` parent/child indices and generation counters; `reparent`, `remove` with a free list | R-ref: graphs without stored references; two updates in one array, which the whole-root conflict rule (Q3.4) serializes; "no stale handle is followed" as a theorem over the model (a stale index is a logic error, not a memory error). Linear payloads and union-find are optional extensions at 22 | needs raw pointers, or the stale-handle invariant cannot be stated |
+| **D4. Borrowing traversal with early exit** | compiled at 20: extends the *proposed* slice-20 "callback-based iteration with explicit context" | R-cb, R-trap: a borrowing callback that returns a stop value (Q2.5 defines `Step` for `drain` only), compared with a coordinate cursor that stores a key or an index path and takes the container on each call; termination under the decided policy (evidence or a written permission at the indirect call) | early exit, or either shape, needs a construct outside 20 |
+| **D5. One stream interface** | compiled at 18 (`StdOut` and `File`), extended at 27 (`Socket`) | R-grant: one `write_all` law over streams needing different capabilities, using existing forms (a generic stream type with an explicit capability parameter, the write operation as a function value at 20, or per-family functions with one Lean law) | none of the existing forms can state the law once (S4) |
+
+Not worth a probe:
+
+- **N1. JSON or another recursive format.** The risks are parsing untrusted nesting (stack bounds,
+  termination) and destroying a deep owned tree. grep 22's regex parser (nested groups) and Wasm 21's
+  nested blocks cover the first; `OrderedMap`'s `Destroy` at 23 covers bounded-depth recursive
+  destruction. If grep 22 does not build its syntax tree from `Heap` nodes, add iterative
+  destruction of a deep owned chain to D2b.
+- **Linked lists, tries, permutations, fixed point, general bignum, UTF-16, Unicode tables, float
+  formatting, seeded PRNGs, calendars, compression encoders, TLS, UDP, logging, sets, parser
+  combinators.** No consumer, and no risk that a probe above or an adopted stage does not already
+  test. Float formatting would test proof cost, but at a size that needs a consumer.
+- **N3. A deque as a module.** A safe deque fits `Vec<Option<T>>` or `HeapArray<Option<T>>`: one tag
+  per slot, which with today's `i32` enum tags (foundation question 4) is a large overhead for small
+  `T`. That is a representation and performance tradeoff to answer with O3 and niches (item 58), not a
+  language gap.
+
+## 6. Questions for the owner
+
+Language questions, with options and a recommendation each; none is decided here.
+
+- **S1. Scheduling OD13's replace/take in safe code, and a two-index swap on views.** Options:
+  - (a) a safe place-level `replace(p: &mut T, x: T) -> T` at slice 13, the safe form of OD13's
+    "explicit replace or take through `&mut T`", which also covers `take` of an `Option` slot; plus
+    `swap(v: ViewMut<T>, i, j)` at 15, needed to permute non-`Option` linear elements (sort, heap
+    sift, reverse) without a substitute;
+  - (b) `replace` only, with permutations of linear elements done by `drain`/`map_into` rebuilds;
+  - (c) neither before 24, with `OrderedMap` written over by-value APIs that thread the map
+    (`insert(m: OrderedMap<…>, …) -> Inserted<…>`). This revises the `&mut` API `STD_PLACEMENT.md`
+    sketches, and leaves rotations needing either re-allocation (fallible, against remove's
+    infallibility) or OD13's operation.
+
+  Recommendation: (a). It schedules a decided operation rather than inventing one, and both forms
+  return every displaced value explicitly. It extends Q3.6, so it is a recorded Core revision before
+  A2c. Exact names belong to the spelling round.
+- **S2. Shared references to two elements of one view** (extends O4). May a borrow over a view take
+  shared references to two of its elements at once, for `Ord::cmp`? Q3.1's "no element references"
+  is about heap-array opening; REF-5 allows index projection through a reference. Tree nodes are not
+  affected (field projection through heap borrows). Options: (a) yes, shared element references from
+  a view inside a borrow block, never returned or stored; (b) no, comparison by a callback receiving
+  the two elements (20). Recommendation: (a), which is consistent with REF-5 and needs no function
+  value.
+- **S4. One stream interface.** The existing forms suffice for one law. Options: (a) per-family
+  functions (`console`, `fs`, `net`), with the partial-write law stated once in Lean over an abstract
+  writer; (b) one generic function with an explicit capability parameter, taking the write operation
+  as a function value (20); (c) an associated-capability trait (new language; OD148 refuses trait type
+  parameters). Recommendation: (a) at 18, with (b) tried in D5 at 27; (c) only if D5 fails.
+- **S6. Float operations and NaN observations at 26** (G6). Options for NaNs: (a) a canonical NaN
+  for arithmetic results in the Lean semantics, with the backends made to match and sign-bit
+  operations exact; (b) Wasm-style allowed-result sets, with a relational comparison of observations
+  that follows bits through reinterpretation and memory; (c) bit-exact backend payloads as a named
+  premise. For the operations: which are primitives (`sqrt` is a correctly rounded IEEE operation;
+  `min`/`max` have incompatible NaN and signed-zero definitions). Recommendation: (a), the most
+  transparent; the Wasm interpreter then implements Wasm's set by choosing its canonical member,
+  which the Wasm specification allows.
+- **S8. A borrowing traversal callback type** (extends O4 and Q2.4). Termination is already decided
+  (evidence, or a written permission at the indirect call; 2026-11-06). Open: the callback type for
+  non-consuming traversal and its stop value. Options: (a) reuse `Step` with a borrowing callback;
+  (b) a coordinate cursor only (no new callback type). Recommendation: decide after D4 compares them.
+
+Not language questions, flagged for the owner:
+
+- **F0.** The shape of a buffered reader or writer: owning its stream by value (returned with any
+  error by `finish`) or taking the stream on every call. Both are expressible; rule 2 needs one.
+- **F1.** grep's behaviour on a line longer than its fixed buffer at 16 and 18 (refuse with a typed
+  error, or match a prefix), stated in its claim.
+- **F2.** The file encryptor's large-file strategy (G7), with the already-flagged nonce scheme.
+- **F3.** New grant-table semantics (G4): append mode, positional I/O, socket read timeouts. Without
+  timeouts, one idle client stops the sequential server at 27, a liveness limit its claims should
+  state. Also whether the server sends an HTTP `Date` header, which needs a civil-date conversion
+  (note N2).
+- **F4.** Whether the KV store at 23 supports ordered scans or compaction (traversal, S8; `rename`).
+- **F5.** The EVM fork, that is, its opcode set (`MCOPY`, transient storage, `CLZ`), for G3 and G5.
+- **F6.** The slice-26 *proposed* mean/variance example: no float formatting is planned (note N4),
+  so it should report bits or integer parts.
+- **F7.** Std placement of the conditional items K1–K5 when their showcase chooses them.
+- **F8.** The Wasm profile: version and extensions (bulk memory, saturating conversions, sign
+  extension, SIMD, the deterministic profile), for G3, G5 and G6.
+
+## 7. Review record
+
+Round 1 (Codex REJECT, Kimi REJECT, agy ACCEPT-WITH-CHANGES). Applied in draft 2:
+
+- C1 rewritten as G1 around OD13 and TRUST-7: the operation is decided, but it is unscheduled in safe
+  code (Codex, Kimi). Agy's point added: the heap move-out releases storage, so rotations cannot use
+  it, and `None` is a free substitute for `Option` slots.
+- C2 restricted to views (S2); tree-key comparison is not blocked (Codex, Kimi).
+- C11 rewritten as G4: the 2026-11-02 rule already authorizes those operations, so R4 F6 is an
+  incomplete registry; open/read/write are not in F6 either (Kimi). The `list` right is no longer
+  omitted (agy).
+- Conditional items moved to 4.2 (bitset, byte keys, `pread`, append, HTTP helpers), and P2's
+  one-consumer rule stated correctly (Codex, Kimi).
+- Buffered output made a measurement question (Codex, Kimi).
+- C6 narrowed to what ARITH-1/6/11/12 do not cover; NaN sign added; the "exclude from comparison"
+  option replaced; `trunc_sat` and the `rem_s`/`div_s` cases added (Codex, Kimi, agy).
+- Wasm profile flag F8 added (Kimi).
+- Parser combinators, logging and iteration (b) narrowed to the refused features (Codex, Kimi, agy).
+- Absolutes about cursors and doubly linked lists removed; D4 compares callbacks with coordinate
+  cursors (Codex, Kimi).
+- S7 dropped as a language question (safe `Option`-slot representations exist) and became N3 (Codex,
+  Kimi).
+- S4 reframed: only an associated capability would be new language (Codex, Kimi). S5 dropped: Q9.6
+  answers it, so G5 is std placement (Kimi). S8 reduced to the callback type, since termination is
+  decided (Codex).
+- Paper sketches relabelled question-finding; D5 made compiled (Kimi). D1 split into P0 and D2b, and
+  D3 shrunk and moved to 15 (Codex, Kimi).
+- Options and recommendations completed for every owner question (Kimi).
+- C12 two-pass premise added (Codex). Removal semantics for `Destroy` elements corrected (Codex).
+- EVM 21 memory now cites `STD_PLACEMENT.md` gap 3 (agy). ChaCha20's rotation attributed to O7 (agy).
+- Reference cells corrected: C23 `<stdckdint.h>` and `<stdbit.h>`, Go `math/bits`, Rust `getrandom` as
+  external, Linux `getrandom` as an extension; a version baseline stated (Codex, Kimi).
+- Numbering made consistent (agy).
+
+Disputed: none in round 1.

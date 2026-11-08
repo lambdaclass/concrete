@@ -1,0 +1,26 @@
+### Review of `fce6644d` (`wip/axioms-property`)
+
+- **Standard-axiom property & `--update` removal (`scripts/proofs/axioms.sh:19-22`, `scripts/proofs/axioms.sh:34-37`, `scripts/proofs/axioms.sh:73-76`)**:
+  - `--update` immediately exits with status `2` and a clear error message pointing to `scripts/proofs/pinned_theorems.txt`.
+  - `nonstandard` checks the second column of `$TMP/inv.tsv` (from `population theorems`) and reports any theorem whose transitive axiom list includes an axiom outside `$STANDARD_AXIOMS` (`propext`, `Quot.sound`, `Classical.choice`). Combined with the unchanged population check (`scripts/proofs/axioms.sh:59-71`), no theorem in `ConcreteSpec` can use a non-standard axiom or `sorryAx` without failing step `A`.
+
+- **Pinned public theorem check (`scripts/proofs/axioms.sh:39-57`, `scripts/proofs/axioms.sh:78-81`, `scripts/proofs/pinned_theorems.txt:1-9`)**:
+  - `pinned_names` extracts the first token of each non-empty, non-comment line, allowing inline `#` comments in `scripts/proofs/pinned_theorems.txt:2-9`.
+  - `pinned_errors` fails if `$PINNED` is missing, if any pinned name has a generated/private shape, if it is not under `ConcreteSpec.*`, or if no exact match `$1 == name` exists in the theorem inventory `$TMP/inv.tsv`.
+  - Because `population theorems` only emits theorems and Lean prefixes private declarations with `_private.<module>.0.`, neither turning a pinned theorem into a `def`/`axiom` nor marking it `private` can pass step `T`.
+
+- **Generated/private name filter soundness (`scripts/proofs/axioms.sh:41-43`)**:
+  - `generated_or_private` anchors every pattern to dot boundaries (`(^|[.])...([.]|$)`), matching `_private` and Lean's equation/splitter/recursor/simp helper segments (`match_[0-9]+`, `eq_[0-9]+`, `eq_def`, `proof_[0-9]+`, `_proof_[0-9]+(_[0-9]+)*`, `_sparseCasesOn(_[0-9]+)?`, `brecOn(_[0-9]+)?`, `casesOn`, `inj`, `injEq`, `sizeOf_spec`, `ofNat_ctorIdx`, `_sizeOf_[0-9]+_eq`, `_simp_[0-9]+(_[0-9]+)*`, `else_eq`, `congr_simp`) without falsely rejecting normal public theorem names that merely contain substrings like `eq_` or `inj`.
+
+- **Negative and positive controls (`scripts/proofs/axioms.sh:83-138`)**:
+  - `scripts/proofs/axioms.sh:84-91`: planted `sorry` theorem fails `nonstandard` with `ConcreteSpecControl.sorryThm (sorryAx)`.
+  - `scripts/proofs/axioms.sh:92-100`: planted custom `axiom` fails `nonstandard` with `ConcreteSpecControl.usesExtra (ConcreteSpecControl.extra)`.
+  - `scripts/proofs/axioms.sh:101-111`: both adding an absent pin and removing the first real pinned theorem (`$FIRST`) from `$TMP/inv.tsv` fail `pinned_errors` naming the missing theorem (which also ensures `$PINNED` cannot be empty without failing the control).
+  - `scripts/proofs/axioms.sh:112-116`: pinning `ConcreteSpec.Control.match_1` is rejected by `generated_or_private`.
+  - `scripts/proofs/axioms.sh:117-134`: adding a public theorem (`clean`), a `private theorem` (`hidden`), and an inductive + pattern-matched function (`Shape`, `shapeSize`) verifies that all three categories appear in `c-clean.tsv` (including generated `match_`/`eq_` theorems) while `pinned_errors` still passes.
+
+- **CI, documentation, and stale golden references (`.github/workflows/lean_action_ci.yml:165`, `ConcreteSpec/README.md:37-40`, `docs/proposals/SPEC_UNIFICATION.md:865-866`, `changelog.d/2026-11-08-axioms-property.md:1-7`)**:
+  - All documentation and CI workflow comments are updated consistently, `axioms.golden` is deleted, and no stale references to the golden remain.
+
+VERDICT: ACCEPT
+rc=0

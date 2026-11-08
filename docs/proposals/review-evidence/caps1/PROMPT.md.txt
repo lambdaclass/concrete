@@ -1,0 +1,23 @@
+The owner asked for a side-by-side comparison of two capability designs for Concrete:
+- **TODAY (decided):** compile-time `with(...)` permission sets on functions, checked up to main and erased, PLUS runtime grant values handed to main (linear, narrowable, consumed on close). Allocators are two-tier: authority via the capability, identity via an explicit allocator value. Callbacks declare capabilities at the use site.
+- **MERGED (proposed, undecided):** capabilities are values only, the object-capability model. There is no `with(...)`. A function's authority is exactly the capability values it receives (borrowed for use, moved to give away or close). Pure permissions are zero-sized unforgeable tokens. main receives the startup grants as parameters. Narrowing derives weaker values. One allocator value carries both authority and identity. Callbacks carry capabilities in their explicit context. Long-lived structs own their capabilities, because references are second-class. Authority facts are derived and reported by the compiler.
+
+Use the repo (docs/decisions.md, authoritative: the authority decision decided-2026-11-02-authority, the Q7 rows, the allocator 13s decision, the callable-values rows; ConcreteSpec/Spec/Authority.lean; legacy examples such as tcpserve/httpget/envcfg). Do not modify repo files. Write _review/CAPABILITY_COMPARISON.md and nothing else. It must contain:
+
+1. The exact current rules, with citations, and the merged design stated as precise rules: unforgeability, derivation, borrowing vs moving, purity, facts, FFI, generics, Secret and declassify interaction, and startup refusal (exit 125).
+2. THREE full example programs, each written BOTH ways in the currently decided surface syntax (mark any spelling that is not decided as ILLUSTRATIVE):
+   (a) a sequential web server: listen, accept loop, parse request, read a file under a narrowed directory, log to console, respond;
+   (b) a KV store with an explicit allocator: put/get/delete, persisted to a file, growth via the allocator;
+   (c) a callback-heavy example: a generic retry/visit helper that takes a callback which needs Console and Clock.
+3. A comparison table:
+   - lines and parameters per signature;
+   - what a reader learns from a signature;
+   - what an auditor can answer, and how ("can X reach the network?");
+   - spec size and proof burden (which theorems go away or change, e.g. the authority invariant C5);
+   - checker complexity;
+   - generic and callback ergonomics;
+   - failure modes and footguns in each design;
+   - fit with linear ownership and second-class references.
+4. The decided rows the merge would revise, with old and new text.
+5. An honest verdict with a recommendation, and what would change your mind. Do not favor change for its own sake.
+Plain English, precise, cite anchors.

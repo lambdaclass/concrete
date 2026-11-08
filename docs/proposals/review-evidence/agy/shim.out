@@ -1,0 +1,38 @@
+### Findings
+
+1. **`scripts/land/acceptance_shim.sh:146` (high) — Unstuck `--recurse-submodules` consumes the next argument in the shim, desynchronizing positional parsing from Git and allowing pushes to `main` on a protected remote.**
+   In Git (`builtin/push.c`), `--recurse-submodules` is registered with `PARSE_OPT_OPTARG`: it takes a value **only** in the stuck form `--recurse-submodules=<val>`. When passed as a bare `--recurse-submodules`, Git does not consume the following argument; it enables `on-demand` recursion and parses the next token as the next option or positional argument (`<repository>` / `<refspec>`).
+   The shim instead writes:
+   ```bash
+   --recurse-submodules) j=$((j+1)); submod "${rest[$j]:-}" ;;
+   ```
+   When `--recurse-submodules` is followed by `no` or `check`, `submod` accepts and consumes that token, shifting all positional arguments by one in the shim:
+   - `git -c remote.check.url="$S/prot.git" push --recurse-submodules check main wip/x` (or using a configured remote named `no` or `check`) makes the shim consume `check` as the submodule mode, read `main` as `repo`, and read `wip/x` as the sole refspec (`moves_main=0`). Line 168 then `exec`s real `git` without checking `repo`, while real `git` treats `check` (`$S/prot.git`) as the destination repository and `main` and `wip/x` as the refspecs, moving `main` on the protected remote.
+   - Even on `git push --recurse-submodules no "$S/fix.git" wip/x`, the shim allows the command thinking recursion is `no` and the repo is `$S/fix.git`, whereas real `git` enables `--recurse-submodules=on-demand` and treats `no` as the target repository.
+
+2. **`scripts/land/acceptance_shim.sh:163-168` (high) — Colon-less refspecs (`git push <repo> <src>`) ignore `remote.<name>.push` config and skip destination checking.**
+   For any refspec `s` without `:`, lines 163–167 set `d` to `<src>` (e.g. `wip/x`). Because `wip/x` does not match `main|*/main|HEAD|@`, `moves_main` remains `0` and line 168 immediately `exec`s `$REAL` without checking whether `$repo` is protected.
+   In Git (`builtin/push.c:set_refspecs` and `git-push(1)`), a colon-less `<src>` on the command line is mapped through `remote.<repository>.push` when that config is present. Thus:
+   ```bash
+   git -c remote.origin.push=wip/x:main push origin wip/x
+   # or
+   git -c remote.origin.push='refs/heads/*:refs/heads/main' push origin wip/x
+   ```
+   passes the shim with `moves_main=0` while real `git` pushes `wip/x` to `refs/heads/main` on the protected `origin` remote.
+
+3. **`scripts/land/acceptance_shim.sh:39-46`, `scripts/land/acceptance_shim.sh:178-179` (high) — `repo_identity` uses `git -C "$u" rev-parse --git-common-dir` instead of Git's `enter_repo` rules, walking up into parent worktrees and missing `<path>.git` resolution.**
+   When `git push` opens a local destination, `git-receive-pack` calls `enter_repo(path, 0)` (`path.c`), which never walks up parent directories and checks `"$u/.git"`, `"$u"`, `"$u.git/.git"`, and `"$u.git"`. By contrast, `repo_identity` runs `"$real" -C "$u" rev-parse --path-format=absolute --git-common-dir`, which walks **up** parent directories to any enclosing worktree and never checks `"$u.git"`:
+   - **Bypass**: If `"$u"` is a plain non-repo directory inside an unprotected worktree (e.g., `mkdir "$S/w/target"`) and `"$u.git"` resolves to a protected repository (e.g., `ln -s "$S/prot.git" "$S/w/target.git"`, or if `prot.git` itself sits inside an enclosing worktree and `mkdir prot` exists beside it), `repo_identity "$REAL" "$S/w/target"` walks up to `$S/w/.git` (unprotected) and allows `git -C w push "$S/w/target" main`. Real `git-receive-pack` then opens `$S/w/target.git` (`$S/prot.git`) via `enter_repo` and updates `main` on the protected repository.
+   - **False refusal / doc mismatch**: If a fixture push or `make_git_shim` argument omits the `.git` suffix on a bare repo (e.g., `"$S/fix"` for `"$S/fix.git"`), `git push` accepts it via `enter_repo`, but `[ -e "$u" ]` in `repo_identity` fails and refuses the push or shim creation (contrary to lines 7–8: "in any spelling git accepts").
+
+4. **`scripts/land/acceptance_shim.sh:157-159` (medium) — Submodule recursion via `submodule.recurse` is not checked.**
+   Line 157 only inspects `git config --get push.recurseSubmodules`. In `builtin/push.c:git_push_config`, `git push` also honours `submodule.recurse`: passing `-c submodule.recurse=true` (or setting `submodule.recurse=true` in config) enables `on-demand` submodule recursion while `push.recurseSubmodules` remains unset, bypassing the check.
+
+5. **`scripts/land/acceptance_shim.sh:125` (low) — `read -r -a words <<< "$al"` drops lines after a newline in multi-line aliases.**
+   Git's `split_cmdline` splits aliases across all whitespace including `\n`, whereas `read -r -a` without `-d ''` reads only up to the first newline, silently truncating multi-line alias values before re-executing at line 126.
+
+6. **`scripts/checks/landing_script.sh:1092-1095`, `scripts/checks/landing_script.sh:1101-1103` (low) — Seven refused-push test cases redirect stderr to `$S/err` without asserting that the shim refused them.**
+   Unlike the loop at lines 1089–1090 (which checks `grep -q 'acceptance git shim: refusing' "$S/err"`), lines 1092–1095 and 1101–1103 write `2>"$S/err"` but never inspect `$S/err`, so those checks would still pass if real `git` exited non-zero for an unrelated reason.
+
+Verdict: CHANGES-NEEDED
+agy exit 0

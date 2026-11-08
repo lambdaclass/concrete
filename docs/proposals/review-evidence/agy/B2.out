@@ -1,0 +1,6 @@
+No real defects found. The documentation, workflow (`LAND_REPO: ${{ github.repository }}`), roadmap, decision entries/anchors (`#decided-project-repository`, `#decided-project-runner-exposure`), and changelog entry are consistent with the single-repository migration and fail-closed guard behavior.
+
+- `docs/LANDING.md:188` (PREFERENCE): The list of guarded entrypoints (`build`, `check`, `ci`, `watch` and `land`, ...) omits `train.sh record` and `acceptance.sh`, which also check the remote first in Branch B. Consider adding `record` and `acceptance.sh` to the list for completeness.
+
+VERDICT: ACCEPT
+rc=0

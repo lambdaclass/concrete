@@ -1,0 +1,154 @@
+kimi version 2.4.1
+• I need execute exact merge. Should be careful. Should understand git status perhaps command exact step 1 run merge. User explicitly asks. Should use tools. Should not ask. I should probably verify initial branch SHA? User says exact. Do command merge. Should conflict handling. Only ROADMAP, abort if any other. I can run merge.
+
+• I’ll run the merge, inspect the conflict, and resolve only the two specified roadmap rows.Auto-merging ROADMAP.md
+CONFLICT (content): Merge conflict in ROADMAP.md
+Auto-merging docs/decisions.md
+Recorded preimage for 'ROADMAP.md'
+Automatic merge failed; fix conflicts and then commit the result.
+
+
+• Should inspect status and diff. Parallel status, git diff perhaps Read ROADMAP conflict. User says check with git diff. Run git status --short and git diff -- ROADMAP. Could call parallel.M  .claude/commands/land.md
+M  .githooks/pre-push
+M  .github/workflows/lean_action_ci.yml
+M  AGENTS.md
+A  Concrete.lean
+A  Concrete/BIR.lean
+A  Concrete/BIR/Progress.lean
+A  Concrete/Backend/LCB.lean
+A  Concrete/Backend/LLVM.lean
+A  Concrete/Backend/Runtime.lean
+A  Concrete/LL1.lean
+A  Concrete/Premises.lean
+A  Concrete/README.md
+M  ISSUES.tsv
+UU ROADMAP.md
+A  changelog.d/2026-11-08-bot-snapshot-files.md
+A  changelog.d/2026-11-08-gate-host-login.md
+A  changelog.d/2026-11-08-iss-0019.md
+A  changelog.d/2026-11-08-landing-shrink.md
+A  changelog.d/2026-11-08-owner-signoff.md
+M  changelog.d/2026-11-08-record-foundation.md
+A  changelog.d/2026-11-08-review-blockers.md
+A  changelog.d/2026-11-08-slice0.md
+M  docs/LANDING.md
+M  docs/REVIEW.md
+M  docs/decisions.md
+M  docs/proposals/FOUNDATION.md
+M  flake.nix
+M  lake-manifest.json
+M  lakefile.toml
+M  required-checks.txt
+A  scripts/checks/compiler/build_identity.sh
+A  scripts/checks/compiler/slice0_artifacts.sh
+A  scripts/checks/compiler/slice0_backends.sh
+A  scripts/checks/compiler/slice0_bir.lean
+A  scripts/checks/compiler/slice0_premise_table.lean
+A  scripts/checks/compiler/slice0_repro.sh
+A  scripts/checks/compiler/slice0_trusted_base.lean
+A  scripts/checks/compiler/slice0_trusted_base.sh
+D  scripts/checks/landing_bot.sh
+A  scripts/checks/landing_ready.sh
+M  scripts/checks/landing_script.sh
+A  scripts/checks/lib/limited_exec.sh
+A  scripts/checks/lib/limits.sh
+A  scripts/checks/lib/repro_compare.py
+A  scripts/checks/lib/slice0_common.sh
+A  scripts/checks/lib/slice0_native.sh
+A  scripts/checks/lib/slice0_sources.sh
+A  scripts/checks/lib/stack_access.py
+A  scripts/checks/lib/stack_bound.py
+A  scripts/checks/lib/stack_measure.py
+A  scripts/checks/lib/stack_measure_lldb.py
+M  scripts/checks/review_tool.sh
+M  scripts/checks/root_inventory.txt
+M  scripts/checks/run.sh
+M  scripts/checks/sandbox_isolation.sh
+D  scripts/land/bot.sh
+M  scripts/land/gates_transport_ssh.sh
+M  scripts/land/impact_gates.sh
+D  scripts/land/install-bot.sh
+M  scripts/land/notes.sh
+D  scripts/land/notify.env.example
+D  scripts/land/notify.sh
+M  scripts/land/run-at-ref.sh
+A  scripts/land/signoff.sh
+D  scripts/land/systemd/concrete-landing-bot.service
+D  scripts/land/systemd/concrete-landing-bot.timer
+M  scripts/land/train.sh
+M  scripts/proofs/trust_ban.sh
+M  scripts/review/review.sh
+M  scripts/review/verify.sh
+A  tests/golden/slice0_trusted_base.txt
+diff --cc ROADMAP.md
+index f18056472,14fc26987..000000000
+--- a/ROADMAP.md
++++ b/ROADMAP.md
+@@@ -460,8 -456,7 +460,14 @@@ archive. Rows for C–G are summaries. 
+  | R-0528 | Resource limits on input size, memory, time and import closure | each input class has a limit and a hostile fixture | R-0503 |
+  | R-0573 | Small adversarial interaction workloads from the first slices on, alongside file-copy (decided 2026-11-06) | each slice adds programs that combine its features with earlier ones in difficult ways (for example borrows across cleanup, authority in cleanup, nested views), each with its expected outcome and Lean/native differential check | R-0425, R-0503 |
+  | R-0575 | The per-function facts report and query from slice 0 ([decision](docs/decisions.md#decided-project-facts-report), 2026-11-06) | every function of each slice has a report derived from the Lean rules, with a versioned schema: capabilities and the grants and resources actually reachable, allocation and allocator, trusted, foreign and opaque boundaries with their assumptions, each operation that could fail and how it is handled, termination (evidence with its named premises, or the responsible source permission and the call path to it), recursion depth and stack bound or why none is established, proof status per obligation, and completeness, each with its reason, evidence and source location; a permission that justifies nothing is reported as a fact, which a `Concrete.toml` policy may refuse (the decided refusals of an unmatched `#[proof]` and a duplicate `#[may_not_terminate]` stay) (carried from slice 0 into CheckedCore and the schema, spec obligations O1 and O4); the schema already has fields for what memory a function writes (frames) and what its outputs depend on (dependency flow), reported "not established" until derived: definite, maybe and never writes per `&mut` place and the output-to-input dependencies (control dependence, cleanup and opaque calls included) are derived into these fields as soon as `&mut` lands, not in E–G, while R-0524, R-0473 and R-0383 keep source frames, contracts and package summaries; facts are preserved across indirect calls, specialization and package boundaries (R-0588); from slice 0 the compiler answers a query about one function or module from the same facts, as readable text and in the machine format (the command is `concrete facts`); the report never claims what the rules do not establish; every fact is a typed judgment in Lean with a derivation-soundness theorem (and obligation-discovery completeness where it claims absence), one derivation feeds the readable view, the machine format and every policy, each fact has a closed status (established, conditional, refuted, not established, not applicable) with per-fact coverage, unknown never satisfies a policy, and answers carry typed identities, versioned schema and semantics and artifact digests; from slice 0 the report also carries the build identity (compiler SHA, toolchain pins and target), each program's maximum stack use, measured from the final binary on both backends, and the trusted-base statement naming the Lean kernel, LLVM printer and LLVM, LCB's MIR→assembly step, linker, OS and named runtime premises as not proven ([early decisions](docs/decisions.md#decided-2026-11-07-early-evidence)); the diagnostics and facts JSON schema is frozen and versioned from the first front-end output, with golden tests; a planted wrong fact and a planted unknown version are caught; Home: spec (the stack-bound claim and, from slice 0, the refusal of an unknown or over-budget bound against the `Concrete.toml` stack budget) and tooling (the report). Gate: stack, the final-artifact bound checked against the claim and the budget ([tracking](docs/decisions.md#decided-2026-11-07-tracking)) | R-0499 |
+++<<<<<<< HEAD
+ +| R-0625 | The spelling round ([decision](docs/decisions.md#decided-2026-11-08-spelling-round), items 55 and 59) | the exact names and signatures of the lossless conversion, the move-out, the mathematical-arithmetic boundary, output and append, the typing rules for destructuring and ghost bindings, every spelling from the 2026-11-08 items 6–29 and 40–53, and the remaining grammar sub-rules of item 59 are shown to the owner as before/after code and approved before the Lean grammar is written; Home: a review sheet, then spec (`Grammar`). Gate: the owner's recorded approval ([tracking](docs/decisions.md#decided-2026-11-07-tracking)) | owner: the spelling round |
+ +| R-0622 | The written grammar before the parser ([decision](docs/decisions.md#decided-2026-11-08-written-grammar)) | the full surface grammar is written down for the owner's review, every construct with its decided row and the open spellings flagged; the owner approves it; it is encoded in Lean as the independent grammar judgment (row Q8.3, SPEC_UNIFICATION step 8's `Grammar`); only then is the parser built against it; Home: spec (`Grammar`), after a review sheet outside the repository. Gate: the owner's recorded approval, then the grammar's conformance examples and `ll1_sound` | R-0625, owner: the grammar review |
+++||||||| 82e0e02e4
+++| R-0622 | The written grammar before the parser ([decision](docs/decisions.md#decided-2026-11-08-written-grammar)) | the full surface grammar is written down for the owner's review, every construct with its decided row and the open spellings flagged; the owner approves it; it is encoded in Lean as the independent grammar judgment (row Q8.3, SPEC_UNIFICATION step 8's `Grammar`); only then is the parser built against it; Home: spec (`Grammar`), after a review sheet outside the repository. Gate: the owner's recorded approval, then the grammar's conformance examples and `ll1_sound` | owner: the grammar review |
+++=======
++ | R-0622 | The written grammar before the parser ([decision](docs/decisions.md#decided-2026-11-08-written-grammar)) | the full surface grammar is written down for the owner's review, every construct with its decided row and the open spellings flagged; the owner approves it; it is encoded in Lean as the independent grammar judgment (row Q8.3, SPEC_UNIFICATION step 8's `Grammar`); only then is the parser built against it; this applies before slice 0's parser and blocks B0's R-0620 completion; Home: spec (`Grammar`), after a review sheet outside the repository. Gate: the owner's recorded approval, then the grammar's conformance examples and `ll1_sound` | owner: the grammar review |
+++>>>>>>> origin/main
+  | R-0620 | The lexer and the LL(1) parser, started now in parallel with the foundation ([decision](docs/decisions.md#decided-2026-11-08-front-end)) | the lexer for slice 0's surface runs against the spec's `Lexical` rules as they land (SPEC_UNIFICATION step 8) and does not wait for R-0622, which only the parser and so this task's completion wait for; and the parser is built against the Lean grammar judgment once the owner has approved the written grammar (R-0622), with refusals as diagnostics records (R-0593, which this task feeds rather than waits for); correspondence to the grammar is proved as part of B0; Home: tooling (the compiler's front end), against the spec. Gate: the conformance examples of slice 0's lexical and grammar rules, accepted and refused | R-0622 |
+  | R-0593 | The diagnostic and facts records, their frozen, versioned JSON schema, goldens and the parser's diagnostics from the first front-end output ([diagnostics decision](docs/decisions.md#decided-project-diagnostics-2026-11-06), [early decision](docs/decisions.md#decided-2026-11-07-early-evidence)) | every slice-0 refusal is one typed record rendered as human text and JSON lines (`--format=human|json`), with rule IDs from the Lean rule name and that rule's own revision (R-0603); the diagnostics and facts JSON schema is frozen and versioned from the first front-end output, and golden tests cover it and both diagnostic renderings; the LL(1) parser fills its expected-token set from the grammar data; B0's classified refusal controls use the records; Home: spec (the diagnostics and facts types are the schema source). Gate: the JSON schema generated from the Lean types, with goldens ([tracking](docs/decisions.m
+d#decided-2026-11-07-tracking)) | R-0592, R-0575 |
+  | R-0594 | Zero-heap facts proved in slice 0 ([decision](docs/decisions.md#decided-project-memory-2026-11-06)) | every slice-0 function's heap facts are 0, established by the derivation (no allocator is reachable), not by schema defaults; a planted reachable allocator flips them | R-0575, R-0592 |
+I see only UU ROADMAP. Many changes merged staged normal. Should read current AGENTS per reminder. Should have exact conflict. I have all. Should edit union. Use Edit mandatory incremental. But must read current AGENTS. Also perhaps ROADMAP exact relevant read. I already have diff sufficient but Edit requires Read? says old string from Read output view. Should Read both in parallel AGENTS and ROADMAP segment.I'll edit the exact conflict block into two lines: R625 exact, R622 origin main with R625 last. Use Edit replacing whole block. Must ensure nothing else.
+
+• Only `ROADMAP.md` is conflicted. I’ll keep the R-0625 row and combine the specified R-0622 text and dependency.
+
+• Should verify no markers, only roadmap conflict, perhaps diff to ensure exact. User step 4 stage and commit. Before commit can run git diff --check? and grep conflict markers perhaps git diff. User says change nothing else any file, but merge itself many expected. Make sure my resolution. Could run git diff -- ROADMAP, git diff --name-only --diff-filter=U, grep markers dedicated Grep perhaps use Grep. Since commands independent, run parallel status? Perhaps inspect git diff now. User explicitly stage commit. I should validate with git diff --check and diff. Could use Bash git diff -- ROADMAP and Grep markers. Also perhaps git status. No need overdo. I need commit no nix no push. Could stage then commit. Make sure no other file conflict. Status showed only UU roadmap. Fine.
+
+  Potential nuance merge commit with git -c core.hooksPath=.githooks commit --no-edit will run hooks perhaps commit-msg generating? User explicitly exact. Do it after perhaps diff verification. Should follow "After every git operation check no merge rebase etc" but merge ongoing intentionally. Could run git diff --check ROADMAP and Grep conflict markers. `git diff --check` exits perhaps leftover conflict marker elsewhere no. I'll run parallel git diff -- ROADMAP and Grep conflict marker path.diff --cc ROADMAP.md
+index f18056472,14fc26987..000000000
+--- a/ROADMAP.md
++++ b/ROADMAP.md
+@@@ -460,8 -456,7 +460,8 @@@ archive. Rows for C–G are summaries. 
+  | R-0528 | Resource limits on input size, memory, time and import closure | each input class has a limit and a hostile fixture | R-0503 |
+  | R-0573 | Small adversarial interaction workloads from the first slices on, alongside file-copy (decided 2026-11-06) | each slice adds programs that combine its features with earlier ones in difficult ways (for example borrows across cleanup, authority in cleanup, nested views), each with its expected outcome and Lean/native differential check | R-0425, R-0503 |
+  | R-0575 | The per-function facts report and query from slice 0 ([decision](docs/decisions.md#decided-project-facts-report), 2026-11-06) | every function of each slice has a report derived from the Lean rules, with a versioned schema: capabilities and the grants and resources actually reachable, allocation and allocator, trusted, foreign and opaque boundaries with their assumptions, each operation that could fail and how it is handled, termination (evidence with its named premises, or the responsible source permission and the call path to it), recursion depth and stack bound or why none is established, proof status per obligation, and completeness, each with its reason, evidence and source location; a permission that justifies nothing is reported as a fact, which a `Concrete.toml` policy may refuse (the decided refusals of an unmatched `#[proof]` and a duplicate `#[may_not_terminate]` stay) (carried from slice 0 into CheckedCore and the schema, spec obligations O1 and O4); the schema already has fields for what memory a function writes (frames) and what its outputs depend on (dependency flow), reported "not established" until derived: definite, maybe and never writes per `&mut` place and the output-to-input dependencies (control dependence, cleanup and opaque calls included) are derived into these fields as soon as `&mut` lands, not in E–G, while R-0524, R-0473 and R-0383 keep source frames, contracts and package summaries; facts are preserved across indirect calls, specialization and package boundaries (R-0588); from slice 0 the compiler answers a query about one function or module from the same facts, as readable text and in the machine format (the command is `concrete facts`); the report never claims what the rules do not establish; every fact is a typed judgment in Lean with a derivation-soundness theorem (and obligation-discovery completeness where it claims absence), one derivation feeds the readable view, the machine format and every policy, each fact has a closed status (established, conditional, refuted, not established, not applicable) with per-fact coverage, unknown never satisfies a policy, and answers carry typed identities, versioned schema and semantics and artifact digests; from slice 0 the report also carries the build identity (compiler SHA, toolchain pins and target), each program's maximum stack use, measured from the final binary on both backends, and the trusted-base statement naming the Lean kernel, LLVM printer and LLVM, LCB's MIR→assembly step, linker, OS and named runtime premises as not proven ([early decisions](docs/decisions.md#decided-2026-11-07-early-evidence)); the diagnostics and facts JSON schema is frozen and versioned from the first front-end output, with golden tests; a planted wrong fact and a planted unknown version are caught; Home: spec (the stack-bound claim and, from slice 0, the refusal of an unknown or over-budget bound against the `Concrete.toml` stack budget) and tooling (the report). Gate: stack, the final-artifact bound checked against the claim and the budget ([tracking](docs/decisions.md#decided-2026-11-07-tracking)) | R-0499 |
+ -| R-0622 | The written grammar before the parser ([decision](docs/decisions.md#decided-2026-11-08-written-grammar)) | the full surface grammar is written down for the owner's review, every construct with its decided row and the open spellings flagged; the owner approves it; it is encoded in Lean as the independent grammar judgment (row Q8.3, SPEC_UNIFICATION step 8's `Grammar`); only then is the parser built against it; this applies before slice 0's parser and blocks B0's R-0620 completion; Home: spec (`Grammar`), after a review sheet outside the repository. Gate: the owner's recorded approval, then the grammar's conformance examples and `ll1_sound` | owner: the grammar review |
+ +| R-0625 | The spelling round ([decision](docs/decisions.md#decided-2026-11-08-spelling-round), items 55 and 59) | the exact names and signatures of the lossless conversion, the move-out, the mathematical-arithmetic boundary, output and append, the typing rules for destructuring and ghost bindings, every spelling from the 2026-11-08 items 6–29 and 40–53, and the remaining grammar sub-rules of item 59 are shown to the owner as before/after code and approved before the Lean grammar is written; Home: a review sheet, then spec (`Grammar`). Gate: the owner's recorded approval ([tracking](docs/decisions.md#decided-2026-11-07-tracking)) | owner: the spelling round |
+- | R-0622 | The written grammar before the parser ([decision](docs/decisions.md#decided-2026-11-08-written-grammar)) | the full surface grammar is written down for the owner's review, every construct with its decided row and the open spellings flagged; the owner approves it; it is encoded in Lean as the independent grammar judgment (row Q8.3, SPEC_UNIFICATION step 8's `Grammar`); only then is the parser built against it; Home: spec (`Grammar`), after a review sheet outside the repository. Gate: the owner's recorded approval, then the grammar's conformance examples and `ll1_sound` | R-0625, owner: the grammar review |
+++| R-0622 | The written grammar before the parser ([decision](docs/decisions.md#decided-2026-11-08-written-grammar)) | the full surface grammar is written down for the owner's review, every construct with its decided row and the open spellings flagged; the owner approves it; it is encoded in Lean as the independent grammar judgment (row Q8.3, SPEC_UNIFICATION step 8's `Grammar`); only then is the parser built against it; this applies before slice 0's parser and blocks B0's R-0620 completion; Home: spec (`Grammar`), after a review sheet outside the repository. Gate: the owner's recorded approval, then the grammar's conformance examples and `ll1_sound` | R-0625, owner: the grammar review |
+  | R-0620 | The lexer and the LL(1) parser, started now in parallel with the foundation ([decision](docs/decisions.md#decided-2026-11-08-front-end)) | the lexer for slice 0's surface runs against the spec's `Lexical` rules as they land (SPEC_UNIFICATION step 8) and does not wait for R-0622, which only the parser and so this task's completion wait for; and the parser is built against the Lean grammar judgment once the owner has approved the written grammar (R-0622), with refusals as diagnostics records (R-0593, which this task feeds rather than waits for); correspondence to the grammar is proved as part of B0; Home: tooling (the compiler's front end), against the spec. Gate: the conformance examples of slice 0's lexical and grammar rules, accepted and refused | R-0622 |
+  | R-0593 | The diagnostic and facts records, their frozen, versioned JSON schema, goldens and the parser's diagnostics from the first front-end output ([diagnostics decision](docs/decisions.md#decided-project-diagnostics-2026-11-06), [early decision](docs/decisions.md#decided-2026-11-07-early-evidence)) | every slice-0 refusal is one typed record rendered as human text and JSON lines (`--format=human|json`), with rule IDs from the Lean rule name and that rule's own revision (R-0603); the diagnostics and facts JSON schema is frozen and versioned from the first front-end output, and golden tests cover it and both diagnostic renderings; the LL(1) parser fills its expected-token set from the grammar data; B0's classified refusal controls use the records; Home: spec (the diagnostics and facts types are the schema source). Gate: the JSON schema generated from the Lean types, with goldens ([tracking](docs
+/decisions.md#decided-2026-11-07-tracking)) | R-0592, R-0575 |
+  | R-0594 | Zero-heap facts proved in slice 0 ([decision](docs/decisions.md#decided-project-memory-2026-11-06)) | every slice-0 function's heap facts are 0, established by the derivation (no allocator is reachable), not by schema defaults; a planted reachable allocator flips them | R-0575, R-0592 |
+Looks exact. Now git add && commit. Use exact.
+
+• The resolution now contains only the requested union, with no conflict markers. I’ll stage it and create the merge commit without pushing or running Nix.Recorded resolution for 'ROADMAP.md'.
+[wip/record-language-r 
+09d2821e7] Merge remote-tracking branch 'origin/main' into wip/record-language-r
+
+
+• Should step5 print git log and diff grep exact. User specifically requests print `git log --oneline -3`, and `git diff HEAD^1 HEAD -- ROADMAP.md | grep '^[-+]| R-062[25]'`. Now run exact perhaps separate commands or one Bash. Also after git operation check status no merge in progress per AGENT. I need perhaps run status plus outputs. User says print commands. Use one Bash command `git log --oneline -3 && git diff ... | grep ... && git status --short` but pipe status etc no issue only merges not pipe. Exact grep regex basic: '^[-+]| R-062[25]' in BRE means alternation? In GNU grep without -E `\|` needed for alternation; user wrote grep '^[-+]| R-062[25]' shell single quote with literal |, BRE | literal likely won't match? I'll examine: GNU grep basic regex, `|` literal. Pattern '^[-+]| R-062[25]' matches line beginning one +/- then literal "| R-0622" or 5. Indeed intended: after first +/- line begins `| R...`, so literal | good. `[-+]` char class. fine. Run exactly and perhaps git status --short separate parallel? Should have outputs. Do one command log then diff grep. Could also status after commit in same. User explicitly print outputs, response can include. Tool outputs enough but response should stand alone with relevant. Run two independent Bash in parallel? git log and diff can parallel. But "Print" combined perhaps exact. Use Bash command with both separated `git log --oneline -3 && git diff ... | grep ...`. Make sure pipeline precedence: && and |; okay. Then status separate call parallel perhaps no need. Do status to ensure clean. Could use one Bash after output `&& git status --short`. But user requested print only those perhaps extra status no harm. Better run command exact plus git status separately in parallel.09d2821e7 Merge remote-tracking branch 'origin/main' into wip/record-language-r
+ea212942f train/slice0: merge origin/wip/slice0 (ea5181b535)
+f65b91217 train/shrink: merge origin/wip/landing-shrink (e9b6096a62)
+-| R-0622 | The written grammar before the parser ([decision](docs/decisions.md#decided-2026-11-08-written-grammar)) | the full surface grammar is written down for the owner's review, every construct with its decided row and the open spellings flagged; the owner approves it; it is encoded in Lean as the independent grammar judgment (row Q8.3, SPEC_UNIFICATION step 8's `Grammar`); only then is the parser built against it; Home: spec (`Grammar`), after a review sheet outside the repository. Gate: the owner's recorded approval, then the grammar's conformance examples and `ll1_sound` | R-0625, owner: the grammar review |
++| R-0622 | The written grammar before the parser ([decision](docs/decisions.md#decided-2026-11-08-written-grammar)) | the full surface grammar is written down for the owner's review, every construct with its decided row and the open spellings flagged; the owner approves it; it is encoded in Lean as the independent grammar judgment (row Q8.3, SPEC_UNIFICATION step 8's `Grammar`); only then is the parser built against it; this applies before slice 0's parser and blocks B0's R-0620 completion; Home: spec (`Grammar`), after a review sheet outside the repository. Gate: the owner's recorded approval, then the grammar's conformance examples and `ll1_sound` | R-0625, owner: the grammar review |
+Task done. I'll respond concise but include log and diff requested. R625 not shown because diff vs ours R625 unchanged, expected. Mention merge commit hash, clean, not pushed, no nix. Could output code block with log and diff lines. User explicitly step 5 print, tool output visible but response stand alone. Should not have huge rows? User asked print. Include exactly output. No need heading heavy. "Merge committed as ... Worktree clean; nothing pushed; Nix not run." Then code block. Full two lines long. Good.
+
+  Check no issue: log second ea212... third f65... surprising HEAD^1 perhaps 1547734 not log top? Log shows previous history, okay. Merge commit succeeded. `git diff HEAD^1 HEAD` R622 old from ours lacks clause, new has. R625 doesn't appear as unchanged. Fine.
+
+  Respond in English.
+
+• Merge committed as `09d2821e7`. Worktree is clean; nothing was pushed and Nix was not run.
+
+  ```text
+  09d2821e7 Merge remote-tracking branch 'origin/main' into wip/record-language-r
+  ea212942f train/slice0: merge origin/wip/slice0 (ea5181b535)
+  f65b91217 train/shrink: merge origin/wip/landing-shrink (e9b6096a62)
+  -| R-0622 | The written grammar before the parser ([decision](docs/decisions.md#decided-2026-11-08-written-grammar)) | the full surface grammar is written down for the owner's review, every construct with its decided row and the open spellings flagged; the owner approves it; it is encoded in Lean as the independent grammar judgment (row Q8.3, SPEC_UNIFICATION step 8's `Grammar`); only then is the parser built against it; Home: spec (`Grammar`), after a review sheet outside the repository. Gate: the owner's recorded approval, then the grammar's conformance examples and `ll1_sound` | R-0625, owner: the grammar review |
+  +| R-0622 | The written grammar before the parser ([decision](docs/decisions.md#decided-2026-11-08-written-grammar)) | the full surface grammar is written down for the owner's review, every construct with its decided row and the open spellings flagged; the owner approves it; it is encoded in Lean as the independent grammar judgment (row Q8.3, SPEC_UNIFICATION step 8's `Grammar`); only then is the parser built against it; this applies before slice 0's parser and blocks B0's R-0620 completion; Home: spec (`Grammar`), after a review sheet outside the repository. Gate: the owner's recorded approval, then the grammar's conformance examples and `ll1_sound` | R-0625, owner: the grammar review |
+  ```
+
+To resume this session: kimi -r session_2b27ab81-c7f2-4087-bfa5-95139931bbcb
+EXIT 0

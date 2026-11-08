@@ -1,0 +1,40 @@
+The owner asked Claude: "are all these the best long term decisions and go with the philosophy?" Claude answered with the recommendations below. The owner now asks that every recommendation be reviewed by the other models. Review Claude's answer critically against docs/PHILOSOPHY.md (rules 1-18, the conflict order and the admission test) and the decided rows in docs/decisions.md. The merged simplification list (_review/SIMPLIFY_MERGED.md) and the grammar sheet (_review/GRAMMAR_REVIEW.md) give the candidates' details and anchors.
+
+For EVERY numbered item, say AGREE or DISAGREE with Claude's recommendation, with at most 40 words of reason. Disagree where Claude is wrong, inconsistent or misses a consequence (for example: a change that breaks linear ownership, a proof, a decided row, a showcase workload, or introduces a second form). Be honest; do not disagree for its own sake. Then list any further decision the owner still has to make that Claude did not mention. Do not modify files.
+
+=== Claude's recommendations ===
+
+PROCESS
+A. Owner sign-off path for the review cap: when a branch reaches its review-round cap, the owner may approve one exact commit SHA after Codex, Kimi and agy have all reviewed it; the approval is recorded. Claude: approve (not a bypass; honest, visible trust boundary).
+B. A branch mixing classes (docs cap 2 / scripts cap 3 / compiler-spec cap 5) gets the highest cap. Claude: approve.
+C. Hold a std placement round (which std items live where). Claude: approve.
+D. Trap kind names: overflow, division_by_zero, invalid_shift, bounds, invalid_range, abort. Claude: approve but rename `bounds` to `out_of_bounds` (the others name what went wrong).
+
+CHANGE CANDIDATES (numbers from SIMPLIFY_MERGED.md)
+1. Remove dot method calls; keep associated and trait-qualified calls. Claude: yes.
+5. Require `field: value` in constructors (no punning). Claude: yes, AND extend to 6.
+6. Require `field: binder` in patterns too, so one rule covers constructors and patterns (merged list said keep pattern punning). Claude: yes.
+7. Explicit mathematical-arithmetic boundary spelling in contracts. Claude: yes, strongly.
+8. Replace expression `as` casts with named conversions. Claude: NO, keep `as` (already the single explicit lossless-only conversion; try_convert covers checked; renaming adds names without removing duplication).
+9. Replace consuming heap `*h` with a named move-out. Claude: yes, strongly (same glyph as non-consuming deref hides a move).
+10. Uniform `assert(e);` / `assume(e);` parentheses. Claude: yes.
+11. `#[link_name("sym")]` / `#[export_name("sym")]`. Claude: yes.
+12. `::` for module paths in imports too. Claude: yes.
+13. Remove `char` (it is exactly a byte per TYPE-20; name suggests Unicode); u8 plus explicit UTF-8 ops. Claude: yes.
+14. Remove special print/println/append builtins; ordinary calls through the Console grant. Claude: yes.
+15. Require explicit local types and every result arrow including `-> Unit`; keep argument-based generic inference. Claude: yes.
+
+ASK ITEMS
+2. Keep only OrderedMap now; HashMap when the KV store (slice 23) measures a need; no compiler privilege for map names. Claude: yes.
+16. Remove Process until a target supplies process operations. Claude: yes.
+17. defer late reads: KEEP today's semantics (deferred statement runs as written at scope exit). Capturing arguments at registration would move a linear resource immediately, breaking `defer close(f)` followed by uses of f. Claude: keep.
+18. Refuse ordinary bodyless functions (keep trait signatures and extern). Claude: yes.
+19. Remove general packed structs until a real foreign ABI needs them. Claude: yes.
+20. Remove local `assume`; assumptions only in named trusted contracts with evidence identity. Claude: yes. (Note: if adopted, item 10 covers only assert.)
+22. Callbacks: KEEP decided function values (fn pointer + explicit context, with contracts). Claude: keep.
+23. Constants: closed total initializers evaluated at compile time, values substituted; no per-use runtime evaluation. Claude: yes.
+
+ALREADY TAKEN DECISIONS (foundation Q1-Q18, 11 process decisions, capabilities kept as with(...) plus grants). Claude: they hold; Q4 (i32 enum tags for now) and Q5(b) (no niches now, owner-only later) are deliberate "for now" choices.
+
+End with exactly one line:
+ANSWER: DISAGREE=<item ids or none>; MISSING=<short list or none>

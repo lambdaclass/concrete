@@ -1,0 +1,1074 @@
+Reading additional input from stdin...
+OpenAI Codex v0.166.0
+--------
+workdir: /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/tb-review1
+model: gpt-6.1-sol
+provider: openai
+approval: never
+sandbox: danger-full-access
+reasoning effort: none
+reasoning summaries: none
+session id: 01a1b898-ff03-7dd2-a41a-d9a3d3c0923e
+--------
+user
+Review of a new gate in this copy of the Concrete repository (slice 0, provisional compiler in Lean 4.34.1): the trusted-base golden, Concrete/README.md gate 9 ("a golden test that `concrete facts` prints exactly the spec's premise list, so a premise added, removed or reworded anywhere fails until the golden is updated with it"; read the gate's README paragraph and the "open premises for slice 0" table).
+New files: Concrete/Premises.lean (the premise registry and the headline theorem list), scripts/checks/slice0_trusted_base.lean (printer, stands in for `concrete facts`), scripts/checks/slice0_trusted_base.sh (the gate, with controls), tests/golden/slice0_trusted_base.txt (golden, generated on the CI server), the CI job `trusted-base` in .github/workflows/slice0.yml. The gate sources scripts/checks/lib/slice0_common.sh.
+Check: (1) does the gate fail closed (any way a premise change, an axiom change such as sorryAx, a printer failure, or a README-table drift passes silently?); (2) does the registry faithfully match the README's premise table and the premise statements in the README's Lean design block (trust classes, retired-by text, statements); (3) is anything in the trusted base missing that the gate claims to cover; (4) shell robustness (set -euo pipefail, pipes, bounded output, the awk table extraction). You cannot run Lean here (no toolchain), reason from the source. Do not modify files. Verdict ACCEPT / ACCEPT-WITH-CHANGES / REJECT, findings with file:line.
+codex
+I’ll read the gate contract, registry, printer, and CI wiring, then trace the failure paths from source. I won’t modify files or run Lean.
+exec
+/bin/bash -lc "pwd; git status --short; rg --files -g 'AGENTS.md' -g '*slice0*' -g 'Premises.lean' -g 'README.md' Concrete scripts/checks tests/golden .github/workflows" in /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/tb-review1
+ succeeded in 0ms:
+/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/tb-review1
+fatal: not a git repository (or any of the parent directories): .git
+.github/workflows/slice0.yml
+Concrete/Premises.lean
+Concrete/README.md
+scripts/checks/slice0_trusted_base.sh
+scripts/checks/slice0_trusted_base.lean
+scripts/checks/slice0_bir.lean
+tests/golden/slice0_trusted_base.txt
+scripts/checks/slice0_backends.sh
+scripts/checks/slice0_repro.sh
+scripts/checks/slice0_native.sh
+scripts/checks/slice0_artifacts.sh
+scripts/checks/lib/slice0_common.sh
+scripts/checks/lib/slice0_sources.sh
+
+exec
+/bin/bash -lc 'nl -ba Concrete/Premises.lean; nl -ba scripts/checks/slice0_trusted_base.lean; nl -ba scripts/checks/slice0_trusted_base.sh; nl -ba scripts/checks/lib/slice0_common.sh; nl -ba .github/workflows/slice0.yml; nl -ba tests/golden/slice0_trusted_base.txt' in /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/tb-review1
+ succeeded in 0ms:
+     1	/-
+     2	The slice-0 trusted base (PROVISIONAL): the open premises and the headline theorems whose axiom
+     3	closure the trusted-base golden records (Concrete/README.md gate 9).
+     4	
+     5	This is the premise REGISTRY: one entry per open premise, with its trust class, what retires it,
+     6	and its statement. The statements are text until the structures that state them as Lean
+     7	propositions (`FrontendPremises`, `NativePremises`, designed in Concrete/README.md) land with the
+     8	front end; each entry then names its field instead. `scripts/checks/slice0_trusted_base.sh` prints
+     9	this registry and the axioms of `theorems` and compares them with `tests/golden/slice0_trusted_base.txt`,
+    10	so a premise added, removed or reworded fails until the golden is updated with it.
+    11	-/
+    12	import Concrete.BIR.Progress
+    13	import Concrete.Backend.LCB
+    14	
+    15	namespace Concrete.Premises
+    16	
+    17	inductive Trust where
+    18	  | implementation | toolchain | environment
+    19	  deriving Repr, DecidableEq
+    20	
+    21	def Trust.name : Trust → String
+    22	  | .implementation => "implementation"
+    23	  | .toolchain => "toolchain"
+    24	  | .environment => "environment"
+    25	
+    26	structure Premise where
+    27	  id : String
+    28	  trust : Trust
+    29	  retiredBy : String
+    30	  statement : String
+    31	
+    32	/-- The open premises for slice 0, in the README's order. -/
+    33	def all : List Premise := [
+    34	  ⟨"P_lex", .implementation, "lex_correct",
+    35	    "every token list the lexer returns for a source is one the source lexes to"⟩,
+    36	  ⟨"P_parse", .implementation, "the generic table-parser theorem",
+    37	    "every tree the parser returns for a token list is one the grammar derives from it"⟩,
+    38	  ⟨"P_print", .implementation, "an LLVM-IR semantics; not planned for slice 0",
+    39	    "the printed LLVM text of a WF BIR means at most the BIR behaviour, encoded"⟩,
+    40	  ⟨"P_adapter", .implementation,
+    41	    "adapter_correct (proved for accepted programs); retired once emit carries the adapter's Except result",
+    42	    "the adapted LCB function of a WF BIR means at most the BIR behaviour, encoded"⟩,
+    43	  ⟨"P_toolchain[llvm]", .toolchain, "not planned",
+    44	    "every result the linked LLVM body produces is one its text means"⟩,
+    45	  ⟨"P_toolchain[lcb]", .toolchain, "LCB's own proofs (C01-C03 and beyond)",
+    46	    "every result the linked LCB body produces is one its function means (LCB's named trust boundaries)"⟩,
+    47	  ⟨"P_rt", .implementation, "a proof of the decoding entry against a libc model; not planned for slice 0",
+    48	    "a launch whose body returns w has behaviour decode w; a diverging body gives a diverging launch"⟩,
+    49	  ⟨"P_trap_site", .implementation, "the same runtime-entry proof",
+    50	    "a launch whose body returns 256 + i writes exactly trapLine tbl[i] and a newline on fd 2"⟩,
+    51	  ⟨"P_launch", .environment, "not planned",
+    52	    "an admitted launch of a WF image within the frame bound is never killed, and fd 2 accepts the trap line"⟩,
+    53	  ⟨"P_live", .environment, "not planned",
+    54	    "an admitted launch happens and has a behaviour"⟩
+    55	]
+    56	
+    57	/-- The headline theorems, whose axioms the golden records. -/
+    58	def theorems : List Lean.Name := [
+    59	  ``Concrete.BIR.decode_encode,
+    60	  ``Concrete.BIR.run_progress,
+    61	  ``Concrete.BIR.behaviour_diverges_iff,
+    62	  ``Concrete.Backend.LCB.Proof.adapter_correct
+    63	]
+    64	
+    65	def Premise.line (p : Premise) : String :=
+    66	  s!"premise {p.id} [{p.trust.name}] retired-by: {p.retiredBy} :: {p.statement}"
+    67	
+    68	end Concrete.Premises
+     1	import Lean.Elab.Command
+     2	import Concrete
+     3	
+     4	/-!
+     5	Printer for the slice-0 trusted-base golden (`scripts/checks/slice0_trusted_base.sh`, README gate
+     6	9). PROVISIONAL: it stands in for `concrete facts` until the compiler's command line exists.
+     7	
+     8	`lake env lean scripts/checks/slice0_trusted_base.lean` prints, one per line, every open premise
+     9	of `Concrete.Premises.all` (id, trust class, what retires it, statement) and, for each theorem of
+    10	`Concrete.Premises.theorems`, the axioms it depends on (sorted).
+    11	-/
+    12	
+    13	open Lean Elab Command Concrete.Premises in
+    14	#eval show CommandElabM Unit from do
+    15	  for p in all do
+    16	    IO.println p.line
+    17	  for n in theorems do
+    18	    let axs ← liftCoreM (collectAxioms n)
+    19	    let names := (axs.map toString).qsort (· < ·)
+    20	    IO.println s!"theorem {n} axioms: {", ".intercalate names.toList}"
+     1	#!/usr/bin/env bash
+     2	# Slice-0 trusted-base golden (PROVISIONAL, Concrete/README.md gate 9). The trusted base, printed
+     3	# by scripts/checks/slice0_trusted_base.lean (until `concrete facts` exists), followed by the Lean
+     4	# toolchain and the LCB pin, must equal tests/golden/slice0_trusted_base.txt byte for byte: a
+     5	# premise added, removed or reworded, a headline theorem gaining an axiom (sorryAx included), or a
+     6	# toolchain or pin change fails until the golden is updated with it. The premise ids must also be
+     7	# exactly the README's open-premise table, in order.
+     8	#
+     9	# Controls: the comparison must reject the golden with a premise line removed, with a premise
+    10	# reworded and with an extra axiom; the table check must reject a table missing a premise.
+    11	#
+    12	# usage: slice0_trusted_base.sh [update]. Run inside the nix devshell, from the repository root;
+    13	# `update` rewrites the golden (review the diff before committing it).
+    14	set -euo pipefail
+    15	# shellcheck source=scripts/checks/lib/slice0_common.sh
+    16	source scripts/checks/lib/slice0_common.sh
+    17	golden=tests/golden/slice0_trusted_base.txt
+    18	
+    19	current() {
+    20	  "${capped[@]}" timeout -k 10 300 lake env lean scripts/checks/slice0_trusted_base.lean | cap_out
+    21	  printf 'lean-toolchain %s\n' "$(head -c 200 lean-toolchain)"
+    22	  python3 -I -c 'import json,sys
+    23	for p in json.load(open(sys.argv[1]))["packages"]: print("pin", p["name"], p["rev"])' lake-manifest.json
+    24	}
+    25	
+    26	# The premise ids of the README's open-premise table, in order.
+    27	readme_ids() {
+    28	  awk '/^\*\*The open premises for slice 0:\*\*/{t=1; next} t && /^\| P_/{print $2} t && /^$/ && n++{exit}' "$1"
+    29	}
+    30	
+    31	current >"$work/current" || { head -c 20000 "$work/current"; echo "slice0_trusted_base: printing the trusted base failed" >&2; exit 1; }
+    32	if [ "${1:-}" = update ]; then
+    33	  mkdir -p "$(dirname "$golden")"
+    34	  cp "$work/current" "$golden"
+    35	  echo "slice0_trusted_base: golden updated; review: git diff -- $golden"
+    36	  exit 0
+    37	fi
+    38	
+    39	fail=0
+    40	if cmp -s "$golden" "$work/current"; then
+    41	  echo "ok   trusted base equals $golden"
+    42	else
+    43	  echo "FAIL trusted base differs from $golden (run with update after review):"
+    44	  diff "$golden" "$work/current" | head -c 20000 || true
+    45	  fail=1
+    46	fi
+    47	grep '^premise ' "$work/current" | sed 's/^premise \([^ ]*\) .*/\1/' >"$work/lean_ids"
+    48	readme_ids Concrete/README.md >"$work/readme_ids"
+    49	if [ -s "$work/lean_ids" ] && cmp -s "$work/lean_ids" "$work/readme_ids"; then
+    50	  echo "ok   premise ids equal the README's open-premise table"
+    51	else
+    52	  echo "FAIL premise ids differ from the README's open-premise table:"
+    53	  diff "$work/readme_ids" "$work/lean_ids" | head -c 20000 || true
+    54	  fail=1
+    55	fi
+    56	
+    57	# Controls.
+    58	differs() { # differs NAME FILE: FILE must not equal the current trusted base
+    59	  if cmp -s "$2" "$work/current"; then echo "FAIL control: comparison accepts $1"; fail=1
+    60	  else echo "ok   control: comparison rejects $1"; fi
+    61	}
+    62	sed '1d' "$work/current" >"$work/c1"; differs "a premise removed" "$work/c1"
+    63	sed '1s/$/ (reworded)/' "$work/current" >"$work/c2"; differs "a premise reworded" "$work/c2"
+    64	sed '/^theorem /{s/$/, sorryAx/;q}' "$work/current" >"$work/c3"
+    65	sed -n '/^theorem /,$p' "$work/current" | sed '1d' >>"$work/c3"
+    66	differs "an extra axiom" "$work/c3"
+    67	grep -v '^| P_live ' Concrete/README.md >"$work/readme_short"
+    68	if cmp -s "$work/lean_ids" <(readme_ids "$work/readme_short"); then
+    69	  echo "FAIL control: table check accepts a table missing a premise"; fail=1
+    70	else echo "ok   control: table check rejects a table missing a premise"; fi
+    71	
+    72	[ "$fail" = 0 ] && echo "PASS slice0_trusted_base" || { echo "FAIL slice0_trusted_base"; exit 1; }
+     1	# shellcheck shell=bash
+     2	# Shared machinery of the slice-0 example gates (PROVISIONAL): slice0_backends.sh (gates 4, 6, 6a)
+     3	# and slice0_artifacts.sh (gates 10, 11, 12). Source it from the repository root, inside the nix
+     4	# devshell, with `set -euo pipefail`. It builds the compiler and LCB's command line under the
+     5	# gate's limits (lib/limits.sh: an address-space cap of SLICE0_GATE_MEM_GB GiB, default 64; 0 for
+     6	# a gate whose executables under test need no cap, slice0_artifacts.sh) and defines:
+     7	#   capped (a command prefix, an array): run under a 64 GiB address-space cap of its own, so
+     8	#     every build and analysis command is capped whatever the gate's cap;
+     9	#   root, work (removed on exit), lcb, target, emitter (the Lean emitter command, an array);
+    10	#   observe EXE OUT SECS RETRY [MEM_MB [ENV...]]: run EXE under bounded_run (and limited_exec.sh
+    11	#     MEM_MB, default 1024) with ENV assignments; OUT.status (status or "incomplete"),
+    12	#     OUT.stdout, OUT.stderr;
+    13	#   judge EXPECTED_DIR OBS: the observation OBS.* equals the expectation, byte for byte;
+    14	#   build NAME LOG CMD...: run CMD, or print LOG and fail the gate;
+    15	#   emit_examples: the example names, one per line, failing if there are none;
+    16	#   cap_out: copy stdin to stdout, failing above 1 MiB: every command output a gate captures
+    17	#     into a variable goes through it, so no producer can grow the gate's shell (which may run
+    18	#     with no address-space cap, see SLICE0_GATE_MEM_GB) without bound.
+    19	root=$(pwd)
+    20	work=$(mktemp -d)
+    21	trap 'rm -rf "${work:?}"' EXIT
+    22	BOUNDED_PARENT="$work"
+    23	# shellcheck source=scripts/checks/lib/bounded.sh
+    24	source scripts/checks/lib/bounded.sh
+    25	[ "$BOUNDED_HAVE_WATCHDOG" = 1 ] || { echo "slice0: python3 is required for bounded runs" >&2; exit 2; }
+    26	# shellcheck source=scripts/checks/lib/limits.sh
+    27	source scripts/checks/lib/limits.sh
+    28	gate_limits "${SLICE0_GATE_MEM_GB:-64}" 40000
+    29	capped=(bash "$root/scripts/checks/lib/limited_exec.sh" 65536)
+    30	"${capped[@]}" timeout -k 30 1800 lake build Concrete lean-compiler-backend/lcb >/dev/null
+    31	lcb="$root/.lake/packages/lean-compiler-backend/.lake/build/bin/lcb"
+    32	case "$(uname -s)-$(uname -m)" in
+    33	  Linux-x86_64) target=x86_64-linux ;;
+    34	  Linux-aarch64) target=aarch64-linux ;;
+    35	  Darwin-arm64) target=aarch64-macos ;;
+    36	  *) echo "slice0: unsupported host $(uname -s)-$(uname -m)" >&2; exit 2 ;;
+    37	esac
+    38	emitter=("${capped[@]}" timeout -k 10 120 lake env lean --run scripts/checks/slice0_bir.lean)
+    39	
+    40	observe() {
+    41	  local rc=0 mem=${5:-1024}
+    42	  local envs=("${@:6}")
+    43	  bounded_run -i /dev/null -r "$4" "$3" -- env ${envs[@]+"${envs[@]}"} \
+    44	    bash "$root/scripts/checks/lib/limited_exec.sh" "$mem" "$1" \
+    45	    >"$2.stdout" 2>"$2.stderr" || rc=$?
+    46	  if bounded_is_incomplete "$rc"; then echo incomplete >"$2.status"; else echo "$rc" >"$2.status"; fi
+    47	}
+    48	
+    49	judge() {
+    50	  cmp -s "$1/status" "$2.status" && cmp -s "$1/stderr" "$2.stderr" && [ ! -s "$2.stdout" ]
+    51	}
+    52	
+    53	build() {
+    54	  local name=$1 log=$2; shift 2
+    55	  "$@" >"$log" 2>&1 || { cat "$log" >&2; echo "slice0: $name: build failed: $*" >&2; exit 1; }
+    56	}
+    57	
+    58	cap_out() {
+    59	  local LC_ALL=C out
+    60	  out=$(head -c 1048577; echo x)
+    61	  out=${out%x}
+    62	  [ "${#out}" -le 1048576 ] || { echo "slice0: captured output over 1 MiB" >&2; return 1; }
+    63	  printf '%s' "$out"
+    64	}
+    65	
+    66	emit_examples() {
+    67	  local names
+    68	  names=$("${emitter[@]}" list | cap_out) || { echo "slice0: listing the examples failed" >&2; exit 1; }
+    69	  [ -n "$names" ] || { echo "slice0: no examples listed" >&2; exit 1; }
+    70	  printf '%s\n' "$names"
+    71	}
+     1	name: Slice 0 backends
+     2	
+     3	# PROVISIONAL (ROADMAP B0, Concrete/README.md gates 4, 6, 6a, 8, 9, 10, 11 and 12). The slice-0 backend gate,
+     4	# scripts/checks/slice0_backends.sh: every hand-written BIR example through the LLVM path and the
+     5	# LCB path, each executable's observation (exit status plus the fd-2 trap line) compared with the
+     6	# BIR semantics, plus LCB's own evaluator on the adapted body. It runs natively on x86-64 Linux and
+     7	# on AArch64 macOS (GitHub-hosted; LCB's first native proof profile is Apple AArch64), so the LCB
+     8	# output is executed on both targets. It joins
+     9	# required-checks.txt when the compiler lands on main; until then it runs on the slice-0 branches.
+    10	
+    11	on:
+    12	  push:
+    13	    branches: ['wip/slice0', 'wip/slice0-*']
+    14	  workflow_dispatch:
+    15	
+    16	concurrency:
+    17	  group: slice0-${{ github.ref }}
+    18	  cancel-in-progress: true
+    19	
+    20	jobs:
+    21	  backends:
+    22	    name: Slice 0 backends (${{ matrix.arch }})
+    23	    strategy:
+    24	      fail-fast: false
+    25	      matrix:
+    26	        include:
+    27	          - arch: x86-64
+    28	            runner: ubuntu-latest
+    29	          - arch: aarch64-macos
+    30	            runner: macos-15
+    31	    runs-on: ${{ matrix.runner }}
+    32	    timeout-minutes: 60
+    33	    permissions:
+    34	      contents: read
+    35	    steps:
+    36	      - uses: actions/checkout@v4
+    37	      - name: Install Nix
+    38	        uses: cachix/install-nix-action@v31
+    39	      - name: Backend gate (LLVM and LCB, native)
+    40	        run: nix develop --command bash scripts/checks/slice0_backends.sh
+    41	
+    42	  artifacts:
+    43	    name: Slice 0 artifacts (${{ matrix.arch }})
+    44	    strategy:
+    45	      fail-fast: false
+    46	      matrix:
+    47	        include:
+    48	          - arch: x86-64
+    49	            runner: ubuntu-latest
+    50	          - arch: aarch64-macos
+    51	            runner: macos-15
+    52	    runs-on: ${{ matrix.runner }}
+    53	    timeout-minutes: 60
+    54	    permissions:
+    55	      contents: read
+    56	    steps:
+    57	      - uses: actions/checkout@v4
+    58	      - name: Install Nix
+    59	        uses: cachix/install-nix-action@v31
+    60	      - name: Sanitizers, binary size (report-only) and stack bound (gates 10, 11, 12)
+    61	        run: nix develop --command timeout 3000 bash scripts/checks/slice0_artifacts.sh report
+    62	      - uses: actions/upload-artifact@v4
+    63	        if: always()
+    64	        with:
+    65	          name: artifacts-${{ matrix.arch }}
+    66	          path: report
+    67	          if-no-files-found: error
+    68	
+    69	  trusted-base:
+    70	    name: Slice 0 trusted base (gate 9)
+    71	    runs-on: ubuntu-latest
+    72	    timeout-minutes: 60
+    73	    permissions:
+    74	      contents: read
+    75	    steps:
+    76	      - uses: actions/checkout@v4
+    77	      - name: Install Nix
+    78	        uses: cachix/install-nix-action@v31
+    79	      - name: Trusted-base golden (premises, axioms, toolchain and LCB pin)
+    80	        run: nix develop --command timeout 3000 bash scripts/checks/slice0_trusted_base.sh
+    81	
+    82	  reproducibility:
+    83	    name: Reproducibility (${{ matrix.id }})
+    84	    strategy:
+    85	      fail-fast: false
+    86	      matrix:
+    87	        include:
+    88	          - id: linux-first
+    89	            runner: ubuntu-24.04
+    90	          - id: linux-independent
+    91	            runner: ubuntu-24.04
+    92	          - id: macos
+    93	            runner: macos-15
+    94	    runs-on: ${{ matrix.runner }}
+    95	    timeout-minutes: 60
+    96	    permissions:
+    97	      contents: read
+    98	    steps:
+    99	      - uses: actions/checkout@v4
+   100	      - uses: cachix/install-nix-action@v31
+   101	      - name: Compare every stage in distinct build directories
+   102	        run: nix develop --command timeout 3600 bash scripts/checks/slice0_repro.sh manifest.txt
+   103	      - uses: actions/upload-artifact@v4
+   104	        with:
+   105	          name: reproducibility-${{ matrix.id }}
+   106	          path: manifest.txt
+   107	          if-no-files-found: error
+   108	
+   109	  compare-linux:
+   110	    name: Cross-machine reproducibility (x86-64 Linux)
+   111	    needs: reproducibility
+   112	    runs-on: ubuntu-24.04
+   113	    permissions:
+   114	      contents: read
+   115	    steps:
+   116	      - uses: actions/download-artifact@v4
+   117	        with:
+   118	          pattern: reproducibility-linux-*
+   119	          path: manifests
+   120	      - name: Compare like targets, including compiler and toolchain identity
+   121	        run: |
+   122	          set -eu
+   123	          m1=manifests/reproducibility-linux-first/manifest.txt
+   124	          m2=manifests/reproducibility-linux-independent/manifest.txt
+   125	          # Both manifests carry the identity and at least one artifact hash.
+   126	          for m in "$m1" "$m2"; do grep -q '^compiler_commit=' "$m"; grep -q '/lcb.exe$' "$m"; done
+   127	          diff -u "$m1" "$m2"
+     1	premise P_lex [implementation] retired-by: lex_correct :: every token list the lexer returns for a source is one the source lexes to
+     2	premise P_parse [implementation] retired-by: the generic table-parser theorem :: every tree the parser returns for a token list is one the grammar derives from it
+     3	premise P_print [implementation] retired-by: an LLVM-IR semantics; not planned for slice 0 :: the printed LLVM text of a WF BIR means at most the BIR behaviour, encoded
+     4	premise P_adapter [implementation] retired-by: adapter_correct (proved for accepted programs); retired once emit carries the adapter's Except result :: the adapted LCB function of a WF BIR means at most the BIR behaviour, encoded
+     5	premise P_toolchain[llvm] [toolchain] retired-by: not planned :: every result the linked LLVM body produces is one its text means
+     6	premise P_toolchain[lcb] [toolchain] retired-by: LCB's own proofs (C01-C03 and beyond) :: every result the linked LCB body produces is one its function means (LCB's named trust boundaries)
+     7	premise P_rt [implementation] retired-by: a proof of the decoding entry against a libc model; not planned for slice 0 :: a launch whose body returns w has behaviour decode w; a diverging body gives a diverging launch
+     8	premise P_trap_site [implementation] retired-by: the same runtime-entry proof :: a launch whose body returns 256 + i writes exactly trapLine tbl[i] and a newline on fd 2
+     9	premise P_launch [environment] retired-by: not planned :: an admitted launch of a WF image within the frame bound is never killed, and fd 2 accepts the trap line
+    10	premise P_live [environment] retired-by: not planned :: an admitted launch happens and has a behaviour
+    11	theorem Concrete.BIR.decode_encode axioms: Quot.sound, propext
+    12	theorem Concrete.BIR.run_progress axioms: Classical.choice, Quot.sound, propext
+    13	theorem Concrete.BIR.behaviour_diverges_iff axioms: Classical.choice, Quot.sound, propext
+    14	theorem Concrete.Backend.LCB.Proof.adapter_correct axioms: Classical.choice, Quot.sound, propext
+    15	lean-toolchain leanprover/lean4:v4.34.1
+    16	pin «lean-compiler-backend» 4bea4b3ffd8a43a73a0016012d865044067b3275
+
+exec
+/bin/bash -lc "rg -n 'gate|open premises|P_lex|P_parse|P_print|P_adapter|P_toolchain|P_rt|P_trap_site|P_launch|P_live|theorem|axiom|trusted' Concrete/README.md; nl -ba Concrete.lean; rg -n '"'^theorem|''^axiom|sorry|''^opaque'"' Concrete; nl -ba scripts/checks/lib/limits.sh; cat lakefile.toml" in /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/tb-review1
+ succeeded in 0ms:
+3:PROVISIONAL. This is a design sketch, revision 8, written after eight Codex and agy review rounds. It folds in the Codex/agy/Kimi pipeline review and the owner's answers (2026-11-06). Build step 1 (BIR as the shared backend contract) is implemented: `Concrete/BIR.lean` and `Concrete/Backend/`, gate `scripts/checks/slice0_backends.sh`. Slice 0 is the first compiler slice. It is built before the owner freezes Core (A2c) and makes no normative claim before that freeze ([decision](../docs/decisions.md#decided-project-proof-infrastructure)). Branch `wip/slice0` depends on `wip/spec-root`, which puts `ConcreteSpec` on the new root, and is rebased onto main (under a new branch name) once that lands.
+7:This document describes **the compiler**: its stages, IRs, proof strategy, premises and gates. Language rules are not restated here. They live in `ConcreteSpec`, and this document links to them:
+9:- its behaviour theorems: [`ConcreteSpec/Proofs/Slice0.lean`](../ConcreteSpec/Proofs/Slice0.lean);
+17:Each arrow is a total Lean function of the compiler. **Proved** means a kernel-checked theorem. **Premise** means a field of one of the two premise structures (frontend, native) in the one file `Concrete/Premises.lean`.
+22:  ▼                                   until done: premise P_lex (implementation)
+25:  ▼                                   premise P_parse (implementation) until the generic theorem lands
+48:  ▼ (unverified: premise P_print)              ▼ (first backend proof target: adapter_correct
+49:.ll text  (`out.ll`)                           │  against LCB's imported semantics; P_adapter until proved)
+51:  │ (premise P_toolchain[llvm])                │ to LCB IN PROCESS (no text on this path);
+53:  ▼                                            ▼ (premise P_toolchain[lcb]: LCB's named trust boundaries)
+55:  │ run: premises P_launch, P_live (environment), under the target profile
+60:**`compile` is defined as the composition of the stage functions listed in `Stages.lean`**, so a pass that isn't registered can't be in the pipeline. `Output` is pure data with `DecidableEq`: `{ toks, ast, p, sites, tokens, mir, mem, bir, ll, lcb }`. There are no proofs inside it, and every theorem is stated *about* `compile`.
+66:**Place MIR** is where later slices put evaluation order, cleanup edges and the expansion of residual checks. In slice 0, an add with no valid token becomes an explicit `add.ovf` plus a branch to a trap site, and an add with a valid token becomes a plain add. Every accepted slice-0 program has tokens on all its adds, so its generated IR (MIR through BIR and both backend inputs) contains no trap path. Whether the executable contains trap code is an artifact fact, not established yet. Unchecked well-scoped programs, such as `200 + 56` in gate 6, have no tokens, so the check-and-trap path is still proved and tested.
+77:| Parser | one direct theorem for the generic table-driven LL(1) parser |
+85:**One Core, no slice-0 syntax.** The spec has one Core syntax; a slice is two decidable predicates, `Fragment.surface` (the grammar productions it supports) and `Fragment.core` (the Core constructors it supports) (A2i plan, item I3). Elaboration produces the spec's Core directly. Admission checks `Fragment.core s0 p` together with the spec's `check`, and the slice theorems (`slice0_exits`, `slice0_never_traps`) are stated over `Fragment.core s0 p ∧ Checked p`. The "not supported in slice 0" refusal comes from `Fragment.surface s0`. The compiler keeps no Core syntax of its own and no `toCore`.
+91:- **layout, endianness, alignment and zero-sized values**, all taken from Memory CFG's `Layout` (little-endian; no aggregates and no ZSTs in slice 0);
+107:The **LLVM printer** is unverified and stays a premise (`P_print`) until an LLVM-IR semantics exists.
+109:The **BIR → LCB-IR adapter** is the first backend proof target. `adapter_correct` states that the adapter's output, under **LCB's own semantics** (`LeanCompilerBackend.Verified.Source`, the `ssa-int-v2` profile, imported and never restated), has the BIR behaviour. It is proved (`Proof.adapter_correct`) for every WF program the adapter accepts (`adapt p = .ok f`; the adapter refuses the rest, so no artifact exists for them). It supplies semantic preservation for successful adaptation; `P_adapter` stays in the premise list until the backend contract is resolved: `lcb`'s `emit` must represent adaptation failure (`adapt` returns `Except String Source.Function`) or the contract must be restricted to accepted programs, and the theorem composed into `NativePremises lcb`. The trusted-base golden (gate 9) then records the retirement.
+111:The adapter's output is handed to LCB **in process**, as the value: on `aarch64-macos` through LCB's verified first path (`Verified.compileFunction`), on the Linux targets through LCB's compatibility backends (`Verified.reify`, then `AMD64`/`AArch64.emitModuleValidated`). No printer or importer sits between the adapter and LCB. The QBE text of the body is a debug dump only. The gate also runs the first path's admission on every example on every host.
+126:LCB's own lowering, assembler and linker are LCB's named trust boundaries, carried as `P_toolchain[lcb]` until LCB's preservation theorem covers the slice-0 domain.
+140:A fixed runtime entry, `Backend/Runtime.lean`, is emitted per backend as LLVM text and as QBE text for LCB's command line (the runtime is not on the adapter's proof path; it is premise `P_rt`). It calls `concrete_body`, and then:
+144:The decoding lives in this one place for both backends. Its correctness is premise `P_rt` (implementation, over libc `write`/`_exit`): an image whose `concrete_body` returns word `w` has the behaviour `decode w`, and a body that diverges gives a run that diverges.
+161:- The gates and runners (conformance, the two differentials, certificates, the premise registry, negative controls) are files in the existing `scripts/checks/`. No `scripts/compiler/` is added.
+174:  Lex.lean             UTF-8 decode + lexer, and its theorem against Surface0.Lexes
+178:  Elab.lean            resolve + elaborate to the spec's Core (one stage edge), and its theorems
+183:    LLVM.lean          BIR → LLVM text printer (unverified; P_print)
+198:- Each stage's definitions and theorems live in the same file, so each fact has one home.
+200:- Every entry has exactly one home: tests are in `tests/`, gates in `scripts/checks/`, the spec in `ConcreteSpec/`. Conformance has one home, `tests/`.
+201:- The stage table, the premise table and the fact-kind table in this README become **generated views** of the Lean registries in `Stages.lean`, `Premises.lean` and `Facts.lean` once the code exists. A gate fails when a view drifts from its registry.
+212:- **`Elab : Surface.Program → Core.Program → Prop`**, with the compiler's theorems `elab_fresh` (temporaries never collide with user names) and `elab_rename_invariant` (renaming temporaries changes neither acceptance nor outcome).
+219:- **`Denotes src p := ∃ toks ast, Lexes src toks ∧ Derives toks ast ∧ Elab ast p`.** Its theorem is `denotes_behaviour_det` (see the theorem section).
+242:/-- Claims about fixed frontend implementations, used only by the universal theorem.
+245:  /-- P_lex (implementation), until `lex_correct` lands. -/
+247:  /-- P_parse (implementation), until the generic table-parser theorem lands. -/
+275:    semantics, so the emit obligation is a theorem target. For LLVM it is a parameter (a premise). -/
+290:    an `initial` fault, a `.long` return and a stuck fault. It is covered by the digest gate. -/
+306:      LLVM: premise P_print. LCB: premise P_adapter until `adapter_correct` is proved, after
+307:      which this field is filled by the theorem and the premise is deleted. -/
+309:  /-- P_toolchain[B] (toolchain): every result the linked body produces is one its text means.
+313:  /-- P_rt (implementation): the runtime entry decodes. A launch whose body returns `w` has the
+317:      the admitted-launch fd-2 condition, which belongs to P_launch, not here. -/
+320:  /-- P_launch (environment, resources): an admitted launch of an image built from a WF BIR
+325:  /-- P_live (environment): an admitted launch happens and has a behaviour (maximal: a run that
+339:**The open premises for slice 0:**
+343:| P_lex | implementation | `lex_correct` |
+344:| P_parse | implementation | the generic table-parser theorem |
+345:| P_print | implementation | an LLVM-IR semantics; not planned for slice 0 |
+346:| P_adapter | implementation | `adapter_correct`, the first backend proof target |
+347:| P_toolchain[llvm] | toolchain | not planned |
+348:| P_toolchain[lcb] | toolchain | LCB's own proofs (C01–C03 and beyond) |
+349:| P_rt | implementation | a proof of the decoding entry against a libc model; not planned for slice 0 |
+350:| P_trap_site | implementation | the same runtime-entry proof (owner, 2026-11-06: a premise now) |
+351:| P_launch | environment | not planned |
+352:| P_live | environment | not planned |
+354:The fd-2 condition is part of the admitted launch, so it is inside P_launch (environment).
+356:**The trap site the executable reports is covered by premise `P_trap_site`** (owner, 2026-11-06). `trap_site_correct` proves the site at IR level. The executable's report is assumed: `Native` gains `ReportsSite : TargetProfile → Image → SiteId → Prop`, and a field states that a launch whose body returns `256 + i` writes exactly `Runtime.trapLine tbl[i]` and a newline on fd 2 (the kind, the `Loc` and the site id of entry `i`). Gates 4 and 6 test it. A proof of the runtime entry retires it, together with `P_rt`.
+358:P_lex and P_parse are also discharged for each compilation by the certificate.
+363:- LCB's own native execution: it lowers the `Source.Function` value to assembly in the compiler's process, as Lean-compiled code. This is inside `P_toolchain[lcb]`.
+365:## The end-to-end theorem (`Concrete/Theorem.lean`)
+374:/-- One theorem for both backends: `B` is `llvm _` or `lcb`. -/
+375:theorem compile_correct (F : FrontendPremises) {B N T} (P : NativePremises B N T)
+383:**Composition, each step a stated theorem:**
+397:**Supporting theorems:**
+407:theorem answer_correct (F : FrontendPremises) (P : NativePremises B N T₀)
+442:theorem e_lex   : Lex.lex srcBytes = .ok expected.toks := by decide
+443:theorem e_parse : Parse.parse expected.toks = .ok expected.ast := by decide
+445:theorem cert_compile : compile T₀ srcBytes = .ok expected :=
+451:theorem cert_denotes : Surface0.lexesB srcBytes expected.toks && Surface0.derivesB expected.toks expected.ast &&
+464:**Budget, and the per-pass design.** The time and size of each certificate are measured and gated. The LL(1) table is a precomputed constant.
+466:The certificate format is a **list of per-edge entries**, composed by the proved `compile_of_edges` (above). In slice 0, each edge is still checked by `decide` running that stage in the kernel, so in total the kernel does run the whole compiler. That is accepted for **slice 0 only**. Later, each edge carries a witness that is small and linear in program size: a name-binding map, an ANF map, an SSA dominance witness, or a register assignment. A proved validator checks the witness, and the universal pass theorem composes with it. From then on, the kernel never re-runs the whole compiler (R-0552/R-0521).
+482:  | frontend (h : FrontendPremises → C)                      -- P_lex, P_parse
+491:The contract is an index, not a field, and it is applied to `run`. So `Contract := True` is impossible unless the golden table says so, and an unrelated theorem doesn't typecheck. The contract table's definitions are covered by the digest gate. The backend emits are stages too. Each has `native` evidence for its own backend family, as the golden table fixes. For the adapter it is `ι := Unit`, `B _ := lcb`. For the printer it is `ι := (String → BodyResult → Prop)`, `B M := llvm M`, so the contract is `∀ M, …`, with `M` in scope. `adapter_correct` turns LCB's evidence into `proof`. The glue between stages is stated as theorems:
+496:The gate:
+533:| Termination (artifact) | `conditional`, on the backend's own premises: LLVM `P_print, P_toolchain[llvm], P_rt, P_launch, P_live`; LCB `P_adapter` (until `adapter_correct`), `P_toolchain[lcb], P_rt, P_launch, P_live`. |
+552:   - only the three axioms;
+555:   - an external-checker replay (con-leche/nanoda, R-0553) of the compiler's theorems.
+570:   Accepted examples `return 125;` and `return 134;` are in the corpus and must classify as exits. Slice 0 can't produce a real startup refusal, because it has no grants. The refusal and trap classifications are also exercised by comparator self-tests: stub images, and the trap via gate 6.
+578:6a. **AArch64:** a GitHub-hosted AArch64 macOS job (`macos-15`) builds the LCB output for `aarch64-macos`, runs gates 4 and 6 there natively, and compares against Lean. LLVM-native also runs there, as a third cross-check. Gates 4 and 6 for x86-64 run on concrete-ci-2.
+581:9. **Trusted base** (owner, 2026-11-07): a golden test that `concrete facts` prints exactly the spec's premise list, so a premise added, removed or reworded anywhere fails until the golden is updated with it. Implemented provisionally in `scripts/checks/slice0_trusted_base.sh`: until `concrete facts` exists, `scripts/checks/slice0_trusted_base.lean` prints the premise registry `Concrete/Premises.lean` (`Premises.all`: id, trust class, what retires it, statement) and the sorted axioms of each headline theorem (`Premises.theorems`), the gate appends the Lean toolchain and the LCB pin, and the result must equal `tests/golden/slice0_trusted_base.txt`; the registry's ids must also equal the open-premise table above, in order. The statements are text until `FrontendPremises` and `NativePremises` land as Lean structures; each entry then names its field.
+582:10. **Sanitizers** (owner, 2026-11-07; ASan implemented in `scripts/checks/slice0_artifacts.sh`, UBSan **open**): every LLVM example also runs built with ASan and UBSan in CI, and must give the same observation with no sanitizer report. ASan instruments only functions marked `sanitize_address`, which clang's C front end adds and the printed IR lacks, so the sanitizer build adds it to every definition (`slice0_native.sh sanitize`); a control body with an out-of-bounds load must be reported. UBSan's checks are inserted by clang's C front end, so on IR input it links only its runtime and checks nothing: the UBSan half of this gate is not yet met. No runtime C is compiled in slice 0, and the LLVM-level undefined behaviour of the printed IR (poison, `unreachable`) stays P_print's; how to cover it (a UBSan-equivalent check of the IR, or a scope change) is an owner decision.
+586:With the front end (owner, 2026-11-07): gate 5's random-program fuzzer compares the native executables with the Lean evaluator, and a JSON schema generated from the Lean types of the `facts` output has goldens. Each gate joins `required-checks.txt` when the compiler lands.
+588:**Negative controls**, each a mutation the matching gate must refuse:
+589:- a deleted pass theorem;
+590:- an unrelated theorem substituted as a stage's evidence;
+597:- a printer that drops the overflow check (gate 6);
+598:- an adapter that drops the overflow check (gate 6, LCB leg);
+599:- an LCB output whose exit status disagrees with LLVM's (gate 4);
+612:4. The trap site that the executable reports is a named premise now, `P_trap_site`, which a proof retires later.
+617:8. The trap line is `concrete: trap: <kind> at <path>:<line>:<col> (site <id>)`: the path relative to the project root with forward slashes, line and column 1-based (owner, 2026-11-06). The compiler implements it in `Backend/Runtime.lean` (`trapLine`), from the site table's `Loc`; `P_trap_site` covers the executable writing it.
+625:  - `lex_correct` (P_lex);
+626:  - the generic table-parser theorem (P_parse);
+627:  - `adapter_correct` (P_adapter, a slice-0 milestone);
+628:  - a proof of the decoding entry against a libc model (P_rt).
+629:- **P_toolchain[lcb]** is retired by LCB's own C01–C03 work. LCB's verified profile names Apple AArch64 as its intended target. The `x86_64-linux` executable goes through LCB's compatibility pipeline, inside P_toolchain[lcb], until LCB certifies that target.
+634:  - a link-map and symbol inventory, for trusted/FFI/opaque code;
+642:- **Generated views:** the stage, premise and fact tables here become views of the Lean registries, gated against drift.
+668:**For the trusted base (now):**
+682:- The LP0 proven path: LCB's own theorems composed with `adapter_correct`, replacing `P_toolchain[lcb]`. It comes right after the functions-and-calls slice (slice 4 in the earlier numbering, slice 5 now). In slice 0 LCB already runs, unverified, with the adapter proof first.
+683:- An LLVM-IR semantics. The LLVM meaning `M` stays a premise parameter until one exists, and then `P_print` becomes a theorem.
+705:this gate starts at the hand-written BIR contract.
+707:Both native gates use `slice0_native.sh`: the Nix-pinned clang 21 (`CONCRETE_SLICE0_CLANG`; the
+718:Every slice-0 gate runs under `scripts/checks/lib/limits.sh` (per-process address space 64 GiB on
+     1	-- The Concrete compiler (provisional, slice 0). Start with Concrete/README.md.
+     2	import Concrete.LL1
+     3	import Concrete.BIR
+     4	import Concrete.BIR.Progress
+     5	import Concrete.Backend.Runtime
+     6	import Concrete.Backend.LLVM
+     7	import Concrete.Backend.LCB
+     8	import Concrete.Premises
+Concrete/Backend/Runtime.lean:50:theorem getElem?_indexedFrom {α : Type} (l : List α) (n k : Nat) :
+Concrete/Backend/Runtime.lean:61:theorem getElem?_indexed {α : Type} (l : List α) (k : Nat) :
+Concrete/Backend/Runtime.lean:65:theorem mem_indexedFrom {α : Type} {l : List α} {n k : Nat} {x : α} (h : l[k]? = some x) :
+Concrete/Backend/Runtime.lean:78:theorem mem_indexed {α : Type} {l : List α} {k : Nat} {x : α} (h : l[k]? = some x) :
+Concrete/Backend/LCB.lean:248:theorem ofInt_sub (x y : Int) :
+Concrete/Backend/LCB.lean:254:theorem binaryBits_exact (op : BinOp) (x y : Int) :
+Concrete/Backend/LCB.lean:261:theorem inProfile_cases {t : IntTy} (ht : inProfile t = true) :
+Concrete/Backend/LCB.lean:266:theorem mask_lit (b : Nat) (hb : b = 8 ∨ b = 16) (z : Int) :
+Concrete/Backend/LCB.lean:276:theorem mask_ofInt {t : IntTy} (ht : inProfile t = true) (z : Int) :
+Concrete/Backend/LCB.lean:282:theorem wrap_word {t : IntTy} (ht : inProfile t = true) (z : Int) :
+Concrete/Backend/LCB.lean:288:theorem natAbs_le_of_inRange {t : IntTy} (ht : inProfile t = true) {x : Int}
+Concrete/Backend/LCB.lean:295:theorem exact_natAbs_le {t : IntTy} (ht : inProfile t = true) (op : BinOp) {x y : Int}
+Concrete/Backend/LCB.lean:310:theorem flag_word {t : IntTy} (ht : inProfile t = true) (op : BinOp) {x y : Int}
+Concrete/Backend/LCB.lean:324:theorem mapM_ok {α β ε : Type} {g : α → Except ε β} :
+Concrete/Backend/LCB.lean:347:theorem inst_length {p : Program} {n : Nat} {ins : Inst} {xs : List Source.Instruction}
+Concrete/Backend/LCB.lean:365:theorem lookup_of_mem {l : List (Reg × Nat)} (hn : (l.map Prod.fst).Nodup) {r : Reg} {n : Nat}
+Concrete/Backend/LCB.lean:382:theorem regId_param {p : Program} (hn : ((ids p).map Prod.fst).Nodup) {j k : Nat} {b : Block}
+Concrete/Backend/LCB.lean:390:theorem regId_inst {p : Program} (hn : ((ids p).map Prod.fst).Nodup) {j i : Nat} {b : Block}
+Concrete/Backend/LCB.lean:401:theorem enc_width (v : Val) : (enc v).width = .word := by cases v <;> rfl
+Concrete/Backend/LCB.lean:403:theorem word_bne : (Width.word != Width.word) = false := by decide
+Concrete/Backend/LCB.lean:405:theorem mem_of_lookup {l : List (Reg × Nat)} {r : Reg} {n : Nat} (h : l.lookup r = some n) :
+Concrete/Backend/LCB.lean:410:theorem eq_of_snd {l : List (Reg × Nat)} (hn : (l.map Prod.snd).Nodup) {a b : Reg} {n : Nat}
+Concrete/Backend/LCB.lean:427:theorem regId_injective {p : Program} (hok : numberingOk p = true) {a b : Reg} {n : Nat}
+Concrete/Backend/LCB.lean:433:theorem read_operand {p : Program} {benv : Env} {lenv : Source.Environment}
+Concrete/Backend/LCB.lean:452:theorem write_ok {f : Source.Function} {env : Source.Environment} {n : Nat} {val : Source.Value}
+Concrete/Backend/LCB.lean:459:theorem agrees_set_other {p : Program} {benv : Env} {lenv : Source.Environment} {m : Nat}
+Concrete/Backend/LCB.lean:469:theorem agrees_define {p : Program} (hok : numberingOk p = true) {benv : Env}
+Concrete/Backend/LCB.lean:492:theorem step_body {f : Source.Function} {s : Source.State} {lb : Source.Block}
+Concrete/Backend/LCB.lean:507:theorem inst_bin {p : Program} {n : Nat} {op : BinOp} {t : IntTy} {d : Reg} {a b : Operand}
+Concrete/Backend/LCB.lean:519:theorem inst_binOvf {p : Program} {n : Nat} {op : BinOp} {t : IntTy} {d fl : Reg} {a b : Operand}
+Concrete/Backend/LCB.lean:533:theorem inst_trunc {p : Program} {n : Nat} {fr to : IntTy} {d : Reg} {a : Operand}
+Concrete/Backend/LCB.lean:544:theorem read_set_self {env : Source.Environment} {n : Nat} {v : Source.Value} (hs : n < env.size)
+Concrete/Backend/LCB.lean:549:theorem read_literal (env : Source.Environment) (z : Int) : Source.read env .word (.literal (word z)) = .ok (word z) := by
+Concrete/Backend/LCB.lean:553:theorem eval_bin {env : Source.Environment} {d : Nat} {op : Source.Binary} {a b : Source.Operand}
+Concrete/Backend/LCB.lean:563:theorem size_set! (e : Source.Environment) (m : Nat) (u : Option Source.Value) :
+Concrete/Backend/LCB.lean:575:theorem steps_append {f : Source.Function} {m k : Nat} {s t u : Source.State} :
+Concrete/Backend/LCB.lean:581:theorem bin_steps {f : Source.Function} {s : Source.State} {lb : Source.Block} {n : Nat}
+Concrete/Backend/LCB.lean:635:theorem read_set_other {env : Source.Environment} {m k : Nat} {u : Option Source.Value} {w : Width}
+Concrete/Backend/LCB.lean:640:theorem eval_cmp {env : Source.Environment} {d : Nat} {op : Source.Comparison}
+Concrete/Backend/LCB.lean:651:theorem cmp_ult (p q : BitVec 32) : Source.evaluateComparison .unsignedLT (.word p) (.word q) =
+Concrete/Backend/LCB.lean:657:theorem cmp_eq (p q : BitVec 32) : Source.evaluateComparison .eq (.word p) (.word q) =
+Concrete/Backend/LCB.lean:663:theorem pow_bits_toNat {t : IntTy} (ht : inProfile t = true) :
+Concrete/Backend/LCB.lean:668:theorem flag_value {t : IntTy} (ht : inProfile t = true) (op : BinOp) {x y : Int}
+Concrete/Backend/LCB.lean:687:theorem flag_steps {f : Source.Function} {lb : Source.Block} {blk : Source.BlockId} {pos n : Nat}
+Concrete/Backend/LCB.lean:712:theorem binOvf_steps {f : Source.Function} {s : Source.State} {lb : Source.Block} {n : Nat}
+Concrete/Backend/LCB.lean:755:theorem trunc_steps {f : Source.Function} {s : Source.State} {lb : Source.Block} {n : Nat}
+Concrete/Backend/LCB.lean:803:theorem inRange_cons {benv : Env} {d : Reg} {v : Val} (hr : InRange benv)
+Concrete/Backend/LCB.lean:811:theorem evalOp_inRange {benv : Env} {a : Operand} {t : IntTy} {x : Int} (hr : InRange benv)
+Concrete/Backend/LCB.lean:821:theorem intArgs_ok {benv : Env} {t : IntTy} {a b : Operand} {x y : Int}
+Concrete/Backend/LCB.lean:836:theorem regId_lt {p : Program} (hok : numberingOk p = true) {r : Reg} {n : Nat}
+Concrete/Backend/LCB.lean:841:theorem ids_nodup {p : Program} (hok : numberingOk p = true) : ((ids p).map Prod.fst).Nodup := by
+Concrete/Backend/LCB.lean:845:theorem inter_mem {p : Program} {j i off : Nat} {b : Block} {ins : Inst}
+Concrete/Backend/LCB.lean:852:theorem inter_not_reg {p : Program} (hok : numberingOk p = true) {m : Nat}
+Concrete/Backend/LCB.lean:861:theorem size_set4 (e : Source.Environment) (n : Nat) (u₀ u₁ u₂ v : Option Source.Value) :
+Concrete/Backend/LCB.lean:867:theorem bin_sim {p : Program} (hok : numberingOk p = true) {f : Source.Function}
+Concrete/Backend/LCB.lean:903:theorem binOvf_sim {p : Program} (hok : numberingOk p = true) {f : Source.Function}
+Concrete/Backend/LCB.lean:947:theorem trunc_sim {p : Program} (hok : numberingOk p = true) {f : Source.Function}
+Concrete/Backend/LCB.lean:980:theorem inst_sim {p : Program} (hok : numberingOk p = true) {f : Source.Function}
+Concrete/Backend/LCB.lean:1003:theorem getElem?_flatten_at {α : Type} : ∀ (xss : List (List α)) (i k : Nat) (xs : List α),
+Concrete/Backend/LCB.lean:1019:theorem mapM_ok_ok {α β ε : Type} {g : α → Except ε β} {l : List α} {l' : List β}
+Concrete/Backend/LCB.lean:1023:theorem length_indexedFrom {α : Type} : ∀ (n : Nat) (l : List α), (Runtime.indexedFrom n l).length = l.length
+Concrete/Backend/LCB.lean:1027:theorem length_indexed {α : Type} (l : List α) : (indexed l).length = l.length :=
+Concrete/Backend/LCB.lean:1031:theorem adapt_ok {p : Program} {f : Source.Function} (h : adapt p = .ok f) :
+Concrete/Backend/LCB.lean:1040:theorem adaptBlock_ok {p : Program} {j : Nat} {b : Block} {lb : Source.Block}
+Concrete/Backend/LCB.lean:1051:theorem insts_lengths {p : Program} {j : Nat} {b : Block} {xss : List (List Source.Instruction)}
+Concrete/Backend/LCB.lean:1070:theorem block_size {p : Program} {j : Nat} {b : Block} {lb : Source.Block}
+Concrete/Backend/LCB.lean:1076:theorem adapt_block {p : Program} {f : Source.Function} (h : adapt p = .ok f) {j : Nat} {b : Block}
+Concrete/Backend/LCB.lean:1083:theorem adapt_widths {p : Program} {f : Source.Function} (h : adapt p = .ok f) :
+Concrete/Backend/LCB.lean:1090:theorem block_insts {p : Program} {j : Nat} {b : Block} {lb : Source.Block}
+Concrete/Backend/LCB.lean:1103:theorem instPos_succ {b : Block} {i : Nat} {ins : Inst} (hi : b.insts[i]? = some ins) :
+Concrete/Backend/LCB.lean:1111:theorem body_sim {p : Program} (hok : numberingOk p = true) {f : Source.Function}
+Concrete/Backend/LCB.lean:1150:theorem step_ret {f : Source.Function} {s : Source.State} {lb : Source.Block}
+Concrete/Backend/LCB.lean:1157:theorem step_jump {f : Source.Function} {s : Source.State} {lb : Source.Block}
+Concrete/Backend/LCB.lean:1164:theorem step_branch {f : Source.Function} {s : Source.State} {lb : Source.Block}
+Concrete/Backend/LCB.lean:1174:theorem adapt_result {p : Program} {f : Source.Function} (h : adapt p = .ok f) :
+Concrete/Backend/LCB.lean:1179:theorem block_term {p : Program} {j : Nat} {b : Block} {lb : Source.Block}
+Concrete/Backend/LCB.lean:1185:theorem ret_sim {p : Program} {f : Source.Function} (hf : adapt p = .ok f) {j : Nat} {b : Block}
+Concrete/Backend/LCB.lean:1202:theorem trap_sim {p : Program} {f : Source.Function} (hf : adapt p = .ok f) {j : Nat} {b : Block}
+Concrete/Backend/LCB.lean:1217:theorem forIn_yields {ε σ α : Type} (F : α → σ → Except ε (ForInStep σ)) (g : α → σ → σ) :
+Concrete/Backend/LCB.lean:1232:theorem size_foldl_set {α : Type} (g : α → Nat) (v : α → Option Source.Value) :
+Concrete/Backend/LCB.lean:1237:theorem foldl_push_toList {α β : Type} (h : α → β) :
+Concrete/Backend/LCB.lean:1243:theorem not_mem_take_of_nodup {α β : Type} (f : α → β) {l : List α} (hn : (l.map f).Nodup)
+Concrete/Backend/LCB.lean:1252:theorem transfer_ok {f : Source.Function} {pred target : Nat} {env : Source.Environment}
+Concrete/Backend/LCB.lean:1312:theorem edgesTo_fst {j k : Nat} {term : Term} : ∀ x ∈ edgesTo j k term, x.1 = k := by
+Concrete/Backend/LCB.lean:1318:theorem flatMap_indexedFrom_pick {α β : Type} (F : Nat → α → List β) (j : Nat) :
+Concrete/Backend/LCB.lean:1339:theorem incoming_filter {p : Program} {j t : Nat} {bj : Block} (hbj : p.blocks[j]? = some bj) :
+Concrete/Backend/LCB.lean:1363:theorem mapM_filter_fst {α β γ ε : Type} [BEq α] {G : α × β → Except ε (α × γ)}
+Concrete/Backend/LCB.lean:1386:theorem adaptPhi_ok {p : Program} {t k : Nat} {phi : Source.Phi} (h : adaptPhi p t k = .ok phi) :
+Concrete/Backend/LCB.lean:1403:theorem phi_arm {p : Program} {t k j : Nat} {phi : Source.Phi} (h : adaptPhi p t k = .ok phi)
+Concrete/Backend/LCB.lean:1432:theorem getElem?_foldl_set_other {α : Type} (g : α → Nat) (v : α → Option Source.Value) {m : Nat} :
+Concrete/Backend/LCB.lean:1441:theorem getElem?_foldl_set_mem {α : Type} (g : α → Nat) (v : α → Option Source.Value) :
+Concrete/Backend/LCB.lean:1453:theorem lookup_append {l₁ l₂ : Env} {r : Reg} :
+Concrete/Backend/LCB.lean:1462:theorem lookup_zip {r : Reg} : ∀ {ps : List Reg} {vs : List Val}, ps.length = vs.length →
+Concrete/Backend/LCB.lean:1484:theorem optionMapM_ok {α β : Type} {g : α → Option β} :
+Concrete/Backend/LCB.lean:1508:theorem edge_sim {p : Program} (hok : numberingOk p = true) {f : Source.Function}
+Concrete/Backend/LCB.lean:1630:theorem block_wf {p : Program} (hwf : WF p) {j : Nat} {b : Block} (hb : p.blocks[j]? = some b) :
+Concrete/Backend/LCB.lean:1636:theorem term_wf {p : Program} (hwf : WF p) {j : Nat} {b : Block} (hb : p.blocks[j]? = some b) :
+Concrete/Backend/LCB.lean:1645:theorem condbr_ne {p : Program} (hwf : WF p) {j : Nat} {b : Block} (hb : p.blocks[j]? = some b)
+Concrete/Backend/LCB.lean:1654:theorem runBlock_sim {p : Program} (hwf : WF p) (hok : numberingOk p = true) {f : Source.Function}
+Concrete/Backend/LCB.lean:1789:theorem steps_prefix {f : Source.Function} :
+Concrete/Backend/LCB.lean:1797:theorem entry_params {p : Program} (hwf : WF p) {b : Block} (hb : p.blocks[0]? = some b) :
+Concrete/Backend/LCB.lean:1804:theorem initial_ok {p : Program} (hwf : WF p) {f : Source.Function} (hf : adapt p = .ok f)
+Concrete/Backend/LCB.lean:1820:theorem adapter_correct_run {p : Program} (hwf : WF p) {f : Source.Function}
+Concrete/Backend/LCB.lean:1863:theorem steps_split {f : Source.Function} :
+Concrete/Backend/LCB.lean:1874:theorem returned_not_step {f : Source.Function} {t u : Source.State} {v : Source.Value}
+Concrete/Backend/LCB.lean:1880:theorem returns_le {f : Source.Function} {s t₁ t₂ : Source.State} {v₁ v₂ : Source.Value}
+Concrete/Backend/LCB.lean:1895:theorem returns_unique {f : Source.Function} {s : Source.State} {v₁ v₂ : Source.Value}
+Concrete/Backend/LCB.lean:1905:theorem returns_not_diverges {f : Source.Function} {s : Source.State} {v : Source.Value}
+Concrete/Backend/LCB.lean:1913:theorem hasBehavior_unique {f : Source.Function} {args : Array Source.Value}
+Concrete/Backend/LCB.lean:1932:theorem word_nat (n : Nat) : word (n : Int) = .word (BitVec.ofNat 32 n) := by
+Concrete/Backend/LCB.lean:1937:theorem adapter_correct_behaviour {p : Program} (hwf : WF p) {f : Source.Function}
+Concrete/Backend/LCB.lean:1979:theorem adapter_correct {p : Program} (hwf : WF p) {f : Source.Function}
+Concrete/BIR.lean:248:theorem runBlock_mono (p : Program) :
+Concrete/BIR.lean:294:theorem run_mono {p : Program} {n m : Nat} (h : (run p n).final = true) (hm : n ≤ m) :
+Concrete/BIR.lean:303:theorem run_final_unique {p : Program} {n m : Nat}
+Concrete/BIR.lean:334:theorem behaviour_of_run {p : Program} {n : Nat} (h : (run p n).final = true) :
+Concrete/BIR.lean:374:theorem decode_encode (tbl : SiteTable) (o : Outcome) (n : Nat) (he : encode o = some n)
+Concrete/BIR.lean:410:theorem binOvf_spec (env : Env) (op : BinOp) (t : IntTy) (d f : Reg) (a b : Operand) (x y : Int)
+Concrete/BIR.lean:417:theorem wrap_of_inRange (t : IntTy) (n : Int) (h : t.inRange n = true) : wrap t n = n := by
+Concrete/BIR.lean:423:theorem wrap_inRange (t : IntTy) (n : Int) : t.inRange (wrap t n) = true := by
+Concrete/README.md:375:theorem compile_correct (F : FrontendPremises) {B N T} (P : NativePremises B N T)
+Concrete/README.md:407:theorem answer_correct (F : FrontendPremises) (P : NativePremises B N T₀)
+Concrete/README.md:442:theorem e_lex   : Lex.lex srcBytes = .ok expected.toks := by decide
+Concrete/README.md:443:theorem e_parse : Parse.parse expected.toks = .ok expected.ast := by decide
+Concrete/README.md:445:theorem cert_compile : compile T₀ srcBytes = .ok expected :=
+Concrete/README.md:451:theorem cert_denotes : Surface0.lexesB srcBytes expected.toks && Surface0.derivesB expected.toks expected.ast &&
+Concrete/README.md:553:   - no `sorry` and no `native_decide`/`ofReduceBool`;
+Concrete/LL1.lean:171:theorem nullSeqB_map (xs : List N) :
+Concrete/LL1.lean:180:theorem nullable_sound (h : nuClosed g nu = true) {x : N} (hx : Nullable g x) : x ∈ nu := by
+Concrete/LL1.lean:190:theorem nullSeq_sound (h : nuClosed g nu = true) {α : List (Sym T N)} (hα : NullableSeq g α) :
+Concrete/LL1.lean:197:theorem firstSeqB_append (pre rest : List (Sym T N)) (hpre : nullSeqB nu pre = true) {a : T}
+Concrete/LL1.lean:210:theorem mem_firstOf {x : N} {a : T} (h : (x, a) ∈ fi) : a ∈ firstOf fi x := by
+Concrete/LL1.lean:214:theorem first_sound (hnu : nuClosed g nu = true) (hfi : fiClosed g nu fi = true) {x : N} {a : T}
+Concrete/LL1.lean:229:theorem firstSeq_sound (hnu : nuClosed g nu = true) (hfi : fiClosed g nu fi = true)
+Concrete/LL1.lean:238:theorem mem_splits (pre post : List (Sym T N)) (s : Sym T N) :
+Concrete/LL1.lean:247:theorem mem_followOf {x : N} {b : Option T} (h : (x, b) ∈ fo) : b ∈ followOf fo x := by
+Concrete/LL1.lean:251:theorem follow_sound (hnu : nuClosed g nu = true) (hfi : fiClosed g nu fi = true)
+Concrete/LL1.lean:266:theorem predicts_sound (hnu : nuClosed g nu = true) (hfi : fiClosed g nu fi = true)
+Concrete/LL1.lean:279:theorem check_sound (h : check g nu fi fo = true) {i j : Nat} {x : N} {b : Option T}
+Concrete/LL1.lean:318:theorem ll1_sound (h : ll1 g = true) {i j : Nat} {x : N} {b : Option T}
+Concrete/BIR/Progress.lean:34:theorem typed_nil (env : Env) : Typed [] env := by
+Concrete/BIR/Progress.lean:38:theorem typed_cons {scope : List (Reg × Ty)} {env : Env} (h : Typed scope env) (r : Reg) {v : Val}
+Concrete/BIR/Progress.lean:50:theorem int_of_hasTy {v : Val} {t : IntTy} (h : v.HasTy (.int t)) :
+Concrete/BIR/Progress.lean:59:theorem bool_of_hasTy {v : Val} (h : v.HasTy .bool) : ∃ b, v = .bool b := by
+Concrete/BIR/Progress.lean:65:theorem evalOp_typed {scope : List (Reg × Ty)} {env : Env} (h : Typed scope env) {ty : Ty}
+Concrete/BIR/Progress.lean:77:theorem evalOp_int {scope : List (Reg × Ty)} {env : Env} (h : Typed scope env) {t : IntTy}
+Concrete/BIR/Progress.lean:84:theorem intArgs_typed {scope : List (Reg × Ty)} {env : Env} (h : Typed scope env) {t : IntTy}
+Concrete/BIR/Progress.lean:93:theorem execInst_typed {scope : List (Reg × Ty)} {env : Env} (h : Typed scope env) {i : Inst}
+Concrete/BIR/Progress.lean:119:theorem foldl_wfStep_false (l : List Inst) (s : List (Reg × Ty)) :
+Concrete/BIR/Progress.lean:125:theorem execInsts_typed :
+Concrete/BIR/Progress.lean:148:theorem block_typed {p : Program} {b : Block} (hb : Block.wf p b = true) {env : Env}
+Concrete/BIR/Progress.lean:166:theorem args_fit {scope : List (Reg × Ty)} {env : Env} (h : Typed scope env) :
+Concrete/BIR/Progress.lean:179:theorem lookupTy_mem {l : List (Reg × Ty)} {r : Reg} {ty : Ty} (h : lookupTy l r = some ty) :
+Concrete/BIR/Progress.lean:190:theorem lookupTy_append_none {l₁ l₂ : List (Reg × Ty)} {r : Reg} (h : lookupTy l₁ r = none) :
+Concrete/BIR/Progress.lean:202:theorem lookupTy_append_some {l₁ l₂ : List (Reg × Ty)} {r : Reg} {ty : Ty}
+Concrete/BIR/Progress.lean:216:theorem entry_typed :
+Concrete/BIR/Progress.lean:243:theorem sublist_flatMap {α β : Type} (f : α → List β) {a : α} :
+Concrete/BIR/Progress.lean:251:theorem nodup_of_eraseDups : ∀ (n : Nat) (l : List Reg), l.length ≤ n →
+Concrete/BIR/Progress.lean:269:theorem wf_facts {p : Program} (hwf : WF p) :
+Concrete/BIR/Progress.lean:280:theorem params_nodup {p : Program} (hn : (p.defs.map Prod.fst).Nodup) {b : Block}
+Concrete/BIR/Progress.lean:286:theorem edge_typed {p : Program} (hn : (p.defs.map Prod.fst).Nodup) {scope : List (Reg × Ty)}
+Concrete/BIR/Progress.lean:302:theorem u8_lt {x : Int} (h : IntTy.u8.inRange x = true) : x.toNat < 256 := by
+Concrete/BIR/Progress.lean:310:theorem runBlock_progress {p : Program} (hwf : WF p) :
+Concrete/BIR/Progress.lean:353:theorem run_progress {p : Program} (hwf : WF p) (fuel : Nat) :
+Concrete/BIR/Progress.lean:359:theorem run_ne_stuck {p : Program} (hwf : WF p) (fuel : Nat) : run p fuel ≠ .stuck := by
+Concrete/BIR/Progress.lean:366:theorem behaviour_diverges_iff (p : Program) :
+     1	#!/usr/bin/env bash
+     2	# Resource limits for a gate and everything it starts (sourced; the limits are inherited).
+     3	#
+     4	#   gate_limits MEM_GB NPROC
+     5	#     Caps the address space of each process at MEM_GB GiB (Linux; Darwin does not enforce
+     6	#     RLIMIT_AS, so there the CI job's memory is the bound) and the number of processes of this
+     7	#     user at NPROC, so a runaway fork loop stops at the cap instead of taking the machine. Lowering
+     8	#     a limit is always allowed; a limit already below the requested one is kept. Lake reserves
+     9	#     far more address space than it uses (a cold `lake build` fails to create threads under
+    10	#     32 GiB), so gates pass 64 here and bound the executables under test tightly, through
+    11	#     lib/limited_exec.sh. MEM_GB 0 sets no address-space cap for the gate itself: only for a gate
+    12	#     whose executables under test need an unbounded reservation (a sanitizer build's shadow
+    13	#     memory; slice0_artifacts.sh), which then caps every other command it starts through
+    14	#     lib/limited_exec.sh. The caps are hard limits: no descendant can raise them.
+    15	#
+    16	# Per-command time bounds are separate: bounded_run (lib/bounded.sh) for executables under test,
+    17	# `timeout -k` for builds.
+    18	gate_limits() {
+    19	  local mem_kb=$(($1 * 1024 * 1024)) nproc=$2 cur
+    20	  if [ "$(uname -s)" = Linux ] && [ "$mem_kb" -gt 0 ]; then
+    21	    cur=$(ulimit -v)
+    22	    if [ "$cur" = unlimited ] || [ "$cur" -gt "$mem_kb" ]; then ulimit -v "$mem_kb"; fi
+    23	  fi
+    24	  cur=$(ulimit -u)
+    25	  if [ "$cur" = unlimited ] || [ "$cur" -gt "$nproc" ]; then ulimit -u "$nproc"; fi
+    26	}
+name = "concrete"
+version = "0.2.0"
+defaultTargets = ["ConcreteSpec"]
+
+# The Lean Compiler Backend (LCB), pinned: slice 0's second backend. Its verified source semantics
+# (LeanCompilerBackend.Verified.Source) is imported, never restated; core Lean only, no Mathlib.
+[[require]]
+name = "lean-compiler-backend"
+git = "https://github.com/unbalancedparentheses/lean-compiler-backend"
+rev = "4bea4b3ffd8a43a73a0016012d865044067b3275"
+
+[leanOptions]
+warningAsError = true
+
+# The specification (ROADMAP A2, B): readable Lean with doc comments and conformance examples.
+# Core Lean only; root ConcreteSpec.lean.
+[[lean_lib]]
+name = "ConcreteSpec"
+leanOptions = { autoImplicit = false }
+
+# The compiler (ROADMAP B0, slice 0; provisional): Lean code importing ConcreteSpec. Root Concrete.lean;
+# design in Concrete/README.md.
+[[lean_lib]]
+name = "Concrete"
+leanOptions = { autoImplicit = false }
+
+exec
+/bin/bash -lc "sed -n '235,360p' Concrete/README.md | nl -ba -v235; sed -n '530,580p' Concrete/README.md | nl -ba -v530; nl -ba Concrete.lean; rg -n 'trap_site_correct|theorem' Concrete/Backend/Runtime.lean; rg -n 'trust|kernel|axiom' Concrete/README.md" in /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/tb-review1
+ succeeded in 0ms:
+   235	Preservation is stated over behaviours, so a lowering may take a different number of steps from its source. `refused` (a startup refusal, status 125) and `killed` are never the behaviour of a slice-0 model program; they exist only for native runs. `Behaviour.observe` maps behaviours to the spec's `Observation`, sharing `Observation.status`.
+   236	
+   237	## Premises and target profile (`Concrete/Premises.lean`: the one file)
+   238	
+   239	The premises fall into two separate structures, because they are different kinds of claims.
+   240	
+   241	```lean
+   242	/-- Claims about fixed frontend implementations, used only by the universal theorem.
+   243	    Per compilation, the certificate discharges both by kernel `decide` (below). -/
+   244	structure FrontendPremises : Prop where
+   245	  /-- P_lex (implementation), until `lex_correct` lands. -/
+   246	  lex   : ∀ src toks, Lex.lex src = .ok toks → Surface0.Lexes src toks
+   247	  /-- P_parse (implementation), until the generic table-parser theorem lands. -/
+   248	  parse : ∀ toks ast, Parse.parse toks = .ok ast → Surface0.Derives toks ast
+   249	
+   250	/-- The target profile: the pinned triple, the toolchain store paths, the stack budget, and
+   251	    `maxSlots`, the largest BIR frame the profile vouches for under that budget. `compile` refuses
+   252	    a program whose frame exceeds `maxSlots` ("unsupported: exceeds the profile's frame bound").
+   253	    `compile` also refuses a body that LCB's admission profile would reject (at most 64 blocks, 480
+   254	    definitions and a 4080-byte frame), so every accepted program has an admitted LCB form. -/
+   255	structure TargetProfile where
+   256	  triple : String; toolchain : String; stackBytes : Nat; maxSlots : Nat
+   257	
+   258	/-- What the body function produces: a 32-bit result word, or divergence. -/
+   259	inductive BodyResult | returns (w : BitVec 32) | diverges | stuck
+   260	
+   261	/-- The encoding, parameterized by the program's trap-site table `tbl` (one definition, shared by
+   262	    both backends and the runtime). `exited c` (c < 256) ↦ c; a trap at site index i ↦ 256 + i.
+   263	    `tbl` is emitted by Runtime.lean and maps i to (kind, `SiteId`, span); i < tbl.size < 2^31 − 256.
+   264	    `decode tbl` maps a word below 256 to `exited`, a word 256 + i with i < tbl.size to
+   265	    `trapped (tbl.kind i)`, and every other word to `stuck` (invalid). Proved: `decode_encode` for
+   266	    every encodable behaviour, and `emit_encodes`: the body of a WF BIR returns only valid words. -/
+   267	def encode (tbl : SiteTable) : BIR.Outcome → Option (BitVec 32) := ...
+   268	def decode (tbl : SiteTable) : BitVec 32 → Behaviour := ...
+   269	def BodyResult.behaviour (tbl : SiteTable) : BodyResult → Behaviour
+   270	  | .returns w => decode tbl w | .diverges => .diverges | .stuck => .stuck
+   271	-- Everywhere below, `r.behaviour` abbreviates `r.behaviour b.sites` for the BIR `b` concerned.
+   272	
+   273	/-- A backend: the total Lean function from BIR to the body text a native toolchain consumes, and
+   274	    what that text means as a `BodyResult`. For LCB, `Means` is DEFINED from LCB's imported
+   275	    semantics, so the emit obligation is a theorem target. For LLVM it is a parameter (a premise). -/
+   276	structure Backend where
+   277	  Text : Type
+   278	  emit : BIR.Program → Text
+   279	  Means : Text → BodyResult → Prop
+   280	
+   281	def llvm (M : String → BodyResult → Prop) : Backend := ⟨String, LLVM.print, M⟩
+   282	/-- The emitted LCB text is the adapted body PAIRED with its site table, so the table that
+   283	    decodes the result is part of the emitted artifact. (The LLVM text already contains its
+   284	    table, and printer injectivity covers it.) -/
+   285	def lcb : Backend := ⟨LCB.Source.Function × SiteTable, fun b => (LCB.adapt b, b.sites),
+   286	  fun (f, _) r => LCB.bodyResult f r⟩
+   287	/-- From LCB's own source semantics (`LeanCompilerBackend.Verified.Source`, imported, never
+   288	    restated), with no arguments: `returns w` iff `Source.HasBehavior f #[] (.returned (.word w))`,
+   289	    `diverges` iff `Source.HasBehavior f #[] .diverges`, and `stuck` otherwise. "Otherwise" covers
+   290	    an `initial` fault, a `.long` return and a stuck fault. It is covered by the digest gate. -/
+   291	def LCB.bodyResult (f : LCB.Source.Function) (r : BodyResult) : Prop := ...
+   292	
+   293	/-- The native world for one backend, a parameter so its consistency is witnessable. -/
+   294	structure Native (B : Backend) where
+   295	  Image : Type
+   296	  Built : TargetProfile → B.Text → Image → Prop        -- image: body + runtime entry, pinned toolchain
+   297	  BodyRuns : TargetProfile → Image → BodyResult → Prop -- what the linked body returns in a launch
+   298	  Runs : TargetProfile → Image → Behaviour → Prop      -- the whole launch's behaviour
+   299	
+   300	/-- `Behaviour` gains the native-only `refused` (startup refusal, status 125) and `killed`.
+   301	    No model program has either: slice 0 has no grants. An ADMITTED launch (`T`) excludes
+   302	    signals, ptrace and rlimits below `stackBytes`, and requires fd 2 to be open, writable and
+   303	    not to block forever. -/
+   304	structure NativePremises (B : Backend) (N : Native B) (T : TargetProfile) : Prop where
+   305	  /-- emit (implementation): the body text means at most the BIR behaviour, encoded.
+   306	      LLVM: premise P_print. LCB: premise P_adapter until `adapter_correct` is proved, after
+   307	      which this field is filled by the theorem and the premise is deleted. -/
+   308	  emit : ∀ b, b.WF → ∀ r, B.Means (B.emit b) r → r.behaviour = BIR.behaviour b
+   309	  /-- P_toolchain[B] (toolchain): every result the linked body produces is one its text means.
+   310	      LCB: LCB's own importer, lowering, assembler and linker, i.e. its named trust boundaries
+   311	      (`docs/SEMANTICS.md`, "Target and environment assumptions"). -/
+   312	  toolchain : ∀ b img r, b.WF → N.Built T (B.emit b) img → N.BodyRuns T img r → B.Means (B.emit b) r
+   313	  /-- P_rt (implementation): the runtime entry decodes. A launch whose body returns `w` has the
+   314	      behaviour `decode w`: it exits with w below 256; otherwise it writes the whole trap line to
+   315	      fd 2 (looping on partial writes, ignoring write errors) and then exits 134 unconditionally.
+   316	      A body that diverges gives a launch that diverges. The trap line's presence also relies on
+   317	      the admitted-launch fd-2 condition, which belongs to P_launch, not here. -/
+   318	  rt : ∀ b img β, b.WF → N.Built T (B.emit b) img → N.Runs T img β → β ≠ .killed →
+   319	    ∃ r, N.BodyRuns T img r ∧ β = r.behaviour
+   320	  /-- P_launch (environment, resources): an admitted launch of an image built from a WF BIR
+   321	      within the profile's frame bound is never killed (stack, signals), and fd 2 accepts the
+   322	      trap line. -/
+   323	  launch : ∀ b img β, b.WF → b.frameSlots ≤ T.maxSlots →
+   324	    N.Built T (B.emit b) img → N.Runs T img β → β ≠ .killed
+   325	  /-- P_live (environment): an admitted launch happens and has a behaviour (maximal: a run that
+   326	      never ends has behaviour `diverges`). -/
+   327	  live : ∀ b img, b.WF → N.Built T (B.emit b) img → ∃ β, N.Runs T img β
+   328	```
+   329	
+   330	Every premise is used in the composition:
+   331	- `launch` excludes `killed`;
+   332	- `rt` reduces the launch to the body's result;
+   333	- `toolchain` takes that result to the text's meaning;
+   334	- `emit` takes the meaning to the BIR behaviour;
+   335	- `live` makes all of this non-vacuous for the image.
+   336	
+   337	There are two target profiles: `x86_64-linux` and `aarch64-macos` (LCB's first native proof profile). The LLVM backend runs on `x86_64-linux` (on concrete-ci-2) and as a cross-check on `aarch64-macos`. The LCB backend runs on both.
+   338	
+   339	**The open premises for slice 0:**
+   340	
+   341	| Premise | Trust class | Retired by |
+   342	|---|---|---|
+   343	| P_lex | implementation | `lex_correct` |
+   344	| P_parse | implementation | the generic table-parser theorem |
+   345	| P_print | implementation | an LLVM-IR semantics; not planned for slice 0 |
+   346	| P_adapter | implementation | `adapter_correct`, the first backend proof target |
+   347	| P_toolchain[llvm] | toolchain | not planned |
+   348	| P_toolchain[lcb] | toolchain | LCB's own proofs (C01–C03 and beyond) |
+   349	| P_rt | implementation | a proof of the decoding entry against a libc model; not planned for slice 0 |
+   350	| P_trap_site | implementation | the same runtime-entry proof (owner, 2026-11-06: a premise now) |
+   351	| P_launch | environment | not planned |
+   352	| P_live | environment | not planned |
+   353	
+   354	The fd-2 condition is part of the admitted launch, so it is inside P_launch (environment).
+   355	
+   356	**The trap site the executable reports is covered by premise `P_trap_site`** (owner, 2026-11-06). `trap_site_correct` proves the site at IR level. The executable's report is assumed: `Native` gains `ReportsSite : TargetProfile → Image → SiteId → Prop`, and a field states that a launch whose body returns `256 + i` writes exactly `Runtime.trapLine tbl[i]` and a newline on fd 2 (the kind, the `Loc` and the site id of entry `i`). Gates 4 and 6 test it. A proof of the runtime entry retires it, together with `P_rt`.
+   357	
+   358	P_lex and P_parse are also discharged for each compilation by the certificate.
+   359	
+   360	The **execution-trust inventory** is in the same file, as documented non-Prop entries:
+   530	| Trusted / FFI / opaque (source) | `established`: none. |
+   531	| Trusted / FFI / opaque (artifact) | `notEstablished`: no link-map or symbol-inventory evidence yet. Behavioural premises can't establish this, because an observationally equal image may still contain foreign code. |
+   532	| Termination (source) | `established` (`slice0_exits`). |
+   533	| Termination (artifact) | `conditional`, on the backend's own premises: LLVM `P_print, P_toolchain[llvm], P_rt, P_launch, P_live`; LCB `P_adapter` (until `adapter_correct`), `P_toolchain[lcb], P_rt, P_launch, P_live`. |
+   534	| Recursion depth bound | `established`: 0, since there are no calls. |
+   535	| May block | `established`: no. |
+   536	| BIR frame slots (IR) | `established`: *n*. Reported as slots, never as bytes. |
+   537	| Stack bytes, stack exhaustion (artifact) | `notEstablished`: no final-artifact/target stack evidence. |
+   538	| Bounded (derived: terminates ∧ stack bound ∧ no blocking) | `notEstablished`, blocked on the stack bytes. |
+   539	
+   540	**Identity and replay.** Every report carries:
+   541	- typed function and site identities;
+   542	- the schema version `concrete-facts/0` and the semantics version;
+   543	- the digests of the compiler, spec, target, backend (LLVM or LCB, with the pinned LCB rev) and artifact. Artifact facts are per backend artifact, and their premise identities are per backend;
+   544	- the replay command.
+   545	
+   546	The CLI is `concrete facts FILE [FN]` and `concrete build FILE -o OUT` (owner, 2026-11-06).
+   547	
+   548	## Gates (CI jobs, added to `required-checks.txt`)
+   549	
+   550	1. **Compiler build:** `lake build Concrete`, with warnings as errors and `autoImplicit` off.
+   551	2. **Axioms and trust:** extended to `Concrete/`:
+   552	   - only the three axioms;
+   553	   - no `sorry` and no `native_decide`/`ofReduceBool`;
+   554	   - a **totality ban**: no `partial`, `unsafe`, `@[implemented_by]`, `@[extern]` or `opaque` in `Concrete/` outside `Premises.lean`;
+   555	   - an external-checker replay (con-leche/nanoda, R-0553) of the compiler's theorems.
+   556	3. **Premise registry and stage coverage:** the checks described in the stage registry section above.
+   557	4. **Conformance, both backends:** each `tests/slice0/*.con` example runs through:
+   558	   - the Lean `run`;
+   559	   - the LLVM-native executable;
+   560	   - the LCB-native executable.
+   561	
+   562	   All three must give the same observation, and each must match the `.expect`.
+   563	
+   564	   **Classification uses the status and the runtime evidence, never the status alone.** `Observation.status` is many-to-one.
+   565	   - Status 134 **with** the runtime's trap line on fd 2 is `trapped k`.
+   566	   - Status 134 **without** it is `exited 134`.
+   567	   - Status 125 **with** the launcher's refusal line is `startupRefused`.
+   568	   - Status 125 **without** it is `exited 125`.
+   569	
+   570	   Accepted examples `return 125;` and `return 134;` are in the corpus and must classify as exits. Slice 0 can't produce a real startup refusal, because it has no grants. The refusal and trap classifications are also exercised by comparator self-tests: stub images, and the trap via gate 6.
+   571	
+   572	   **Refused examples have their own leg.** The Lean `check` result, the compiler's refusal (with its rule) and the refusal certificate must agree with `.expect`. No executable exists for a refused example. A separate supported-subset coverage report lists every grammar production and Core form that the corpus exercises. A reject-all compiler fails, because every accepted example must exit with its status.
+   573	5. **Differential at the source:** generated accepted programs, with replayable seeds; native exit = Lean `run`.
+   574	6. **Differential through the token-free lowering, both backends.** This covers overflow. Generated **well-scoped, unchecked** slice-0 programs over **arbitrary** `u8` operands, including `200 + 56`, take `lower q ∅ → memory → ssa`, so they have no tokens and no checker. Their Core `run` is compared with the LLVM path and the LCB path. Overflow must give exit 134 and the right site's trap line on fd 2, for both backends. This exercises token-aware lowering, Memory CFG and SSA, not only the backends.
+   575	   A second leg compares generated BIR directly with both backends, to cover BIR shapes that lowering does not produce.
+   576	
+   577	   An in-process leg also compares `BIR.behaviour b` with LCB's own evaluator on `adapt b`. That is the executable shadow of `adapter_correct` until it is proved.
+   578	6a. **AArch64:** a GitHub-hosted AArch64 macOS job (`macos-15`) builds the LCB output for `aarch64-macos`, runs gates 4 and 6 there natively, and compares against Lean. LLVM-native also runs there, as a third cross-check. Gates 4 and 6 for x86-64 run on concrete-ci-2.
+   579	7. **Certificates:** the kernel checks every acceptance and refusal certificate, with measured budgets.
+   580	8. **Reproducibility** (implemented, `scripts/checks/slice0_repro.sh`): two independent builds give byte-identical outputs at every stage, on each target, and two independent Linux runners give identical manifests. See [Reproducible builds](#reproducible-builds-owner-2026-11-07).
+     1	-- The Concrete compiler (provisional, slice 0). Start with Concrete/README.md.
+     2	import Concrete.LL1
+     3	import Concrete.BIR
+     4	import Concrete.BIR.Progress
+     5	import Concrete.Backend.Runtime
+     6	import Concrete.Backend.LLVM
+     7	import Concrete.Backend.LCB
+     8	import Concrete.Premises
+50:theorem getElem?_indexedFrom {α : Type} (l : List α) (n k : Nat) :
+61:theorem getElem?_indexed {α : Type} (l : List α) (k : Nat) :
+65:theorem mem_indexedFrom {α : Type} {l : List α} {n k : Nat} {x : α} (h : l[k]? = some x) :
+78:theorem mem_indexed {α : Type} {l : List α} {k : Nat} {x : α} (h : l[k]? = some x) :
+17:Each arrow is a total Lean function of the compiler. **Proved** means a kernel-checked theorem. **Premise** means a field of one of the two premise structures (frontend, native) in the one file `Concrete/Premises.lean`.
+53:  ▼                                            ▼ (premise P_toolchain[lcb]: LCB's named trust boundaries)
+109:The **BIR → LCB-IR adapter** is the first backend proof target. `adapter_correct` states that the adapter's output, under **LCB's own semantics** (`LeanCompilerBackend.Verified.Source`, the `ssa-int-v2` profile, imported and never restated), has the BIR behaviour. It is proved (`Proof.adapter_correct`) for every WF program the adapter accepts (`adapt p = .ok f`; the adapter refuses the rest, so no artifact exists for them). It supplies semantic preservation for successful adaptation; `P_adapter` stays in the premise list until the backend contract is resolved: `lcb`'s `emit` must represent adaptation failure (`adapt` returns `Except String Source.Function`) or the contract must be restricted to accepted programs, and the theorem composed into `NativePremises lcb`. The trusted-base golden (gate 9) then records the retirement.
+126:LCB's own lowering, assembler and linker are LCB's named trust boundaries, carried as `P_toolchain[lcb]` until LCB's preservation theorem covers the slice-0 domain.
+187:  Premises.lean        THE one file of premises, plus the execution-trust inventory
+243:    Per compilation, the certificate discharges both by kernel `decide` (below). -/
+310:      LCB: LCB's own importer, lowering, assembler and linker, i.e. its named trust boundaries
+360:The **execution-trust inventory** is in the same file, as documented non-Prop entries:
+412:1. **Acceptance:** `answer_accepts`, by kernel `decide`.
+436:The driver emits `Cert_<digest>.lean`, which the kernel checks (`lake env lean`, no `native_decide`):
+460:- The kernel proves the proposition: the exact source maps to the exact output, including both backend inputs (the `.ll` text and the LCB `Source.Function` value).
+462:- The association between the source, the text, the toolchain and the image, and therefore `Built`, is **attested** by the driver plus the nix store, and listed in the trust inventory. A digest is identity, not correspondence.
+466:The certificate format is a **list of per-edge entries**, composed by the proved `compile_of_edges` (above). In slice 0, each edge is still checked by `decide` running that stage in the kernel, so in total the kernel does run the whole compiler. That is accepted for **slice 0 only**. Later, each edge carries a witness that is small and linear in program size: a name-binding map, an ANF map, an SSA dominance witness, or a register assignment. A proved validator checks the witness, and the universal pass theorem composes with it. From then on, the kernel never re-runs the whole compiler (R-0552/R-0521).
+551:2. **Axioms and trust:** extended to `Concrete/`:
+552:   - only the three axioms;
+579:7. **Certificates:** the kernel checks every acceptance and refusal certificate, with measured budgets.
+581:9. **Trusted base** (owner, 2026-11-07): a golden test that `concrete facts` prints exactly the spec's premise list, so a premise added, removed or reworded anywhere fails until the golden is updated with it. Implemented provisionally in `scripts/checks/slice0_trusted_base.sh`: until `concrete facts` exists, `scripts/checks/slice0_trusted_base.lean` prints the premise registry `Concrete/Premises.lean` (`Premises.all`: id, trust class, what retires it, statement) and the sorted axioms of each headline theorem (`Premises.theorems`), the gate appends the Lean toolchain and the LCB pin, and the result must equal `tests/golden/slice0_trusted_base.txt`; the registry's ids must also equal the open-premise table above, in order. The statements are text until `FrontendPremises` and `NativePremises` land as Lean structures; each entry then names its field.
+634:  - a link-map and symbol inventory, for trusted/FFI/opaque code;
+668:**For the trusted base (now):**
+
+codex
+Two gaps stand out: `current` is called in an `||` list, which disables `errexit` inside the function, and the README comparison checks only premise IDs. I’ll verify the shell failure behavior and check whether the registry’s prose matches the README’s formal statements.
+exec
+/bin/bash -lc "bash -c 'set -euo pipefail; current() { (printf \"printer output\\n\"; exit 7) | cat; printf \"toolchain\\n\"; python3 -I -c \"print(\\\"pin\\\")\"; }; current || { echo FAILED; exit 1; }; echo ACCEPTED'; sed -n '360,365p' Concrete/README.md | nl -ba -v360; sed -n '665,685p' Concrete/README.md | nl -ba -v665; rg -n 'trap_site_correct' Concrete; rg -n 'axiom|sorry|ofReduceBool' scripts/checks/*slice* Concrete/Premises.lean; nl -ba Concrete/Backend/LCB.lean | tail -35" in /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/tb-review1
+ succeeded in 0ms:
+printer output
+toolchain
+pin
+ACCEPTED
+   360	The **execution-trust inventory** is in the same file, as documented non-Prop entries:
+   361	- the Lean compiler and runtime executing `compile`. The certificate closes this for each output.
+   362	- the driver's IO: the byte-for-byte comparison of the emitted `.ll` file, the in-process hand-off of the LCB `Source.Function` value, and the toolchain invocation and its provenance record. These are attested, not proved (see the certificate section).
+   363	- LCB's own native execution: it lowers the `Source.Function` value to assembly in the compiler's process, as Lean-compiled code. This is inside `P_toolchain[lcb]`.
+   364	
+   365	## The end-to-end theorem (`Concrete/Theorem.lean`)
+   665	
+   666	LCB is our own project; these are tasks for it, not premises to keep. Checked against the pinned rev `4bea4b3` (LCB main after PR #1: wire packets at header v2 with semantics `ssa-int-v2` / `a64-leaf-v2`; packets with the old header or old semantics identifiers are refused; `CodeInput.version` stays 1).
+   667	
+   668	**For the trusted base (now):**
+   669	1. A public entry `compileSource : Target → Symbol → Source.Function → Except Error Artifact`. Today the compiler builds LCB's `FunctionJob` itself (`Concrete/Backend/LCB.lean`, `assemble`).
+   670	2. The verified first path for `x86_64-linux`. It exists only for `aarch64-apple-darwin` leaf functions; x86-64 goes through the compatibility backend, a larger unverified base.
+   671	3. Larger resource limits on the first path: 64 blocks, 488 values and 480 definitions per function (`Verified/Canonical.lean`). Slice programs will exceed them.
+   672	4. Object emission (LCB V04), so assembly text and the system assembler leave the path.
+   673	
+   674	**For slice 2, integers complete (all widths u8–u64, i8–i64): provided on LCB's verified path (Apple AArch64).** LCB's verified profile now has `word` (32-bit) and `long` (64-bit) values, `add sub mul and or xor`, the shifts `shiftLeft logicalRight arithmeticRight` (count modulo the width), `mulHighUnsigned mulHighSigned` (accepted only at `long`), division and remainder (`unsignedDiv unsignedRem signedDiv signedRem`; a zero divisor or signed minimum by −1 is stuck, so the adapter must branch to a trap before them), and the comparisons `eq unsignedLT unsignedLE signedLT signedLE` (word result). The adapter will carry every integer as a `long`: exact for types up to 32 bits; 64-bit overflow uses the high multiply and, for add/sub, `xor`/`and`/compare. Still absent and optional while every integer is a `long`: width conversion (`word`↔`long` extension and truncation).
+   675	
+   676	**Still needed for the Linux targets:** the compatibility path is reached with `Verified.reify`, which maps both high multiplies to an ordinary `mul` (LCB `Verified/Canonical.lean`), because the compatibility IR has no high multiply. Slice 2's 64-bit multiply overflow would compute the wrong flag there. LCB must add high multiply to its compatibility IR and backends (or the x86-64 verified path) before slice 2; until then the adapter must refuse high multiply on Linux targets. Slice 0 emits none.
+   677	
+   678	## Not in slice 0
+   679	
+   680	- Mono Core.
+   681	- Grants, the launcher's startup refusal (125) and events.
+   682	- The LP0 proven path: LCB's own theorems composed with `adapter_correct`, replacing `P_toolchain[lcb]`. It comes right after the functions-and-calls slice (slice 4 in the earlier numbering, slice 5 now). In slice 0 LCB already runs, unverified, with the adapter proof first.
+   683	- An LLVM-IR semantics. The LLVM meaning `M` stays a premise parameter until one exists, and then `P_print` becomes a theorem.
+   684	- The information-flow and constant-time analysis. The surface and the observer are decided; slice 0 has only the fact fields.
+   685	
+Concrete/README.md:228:-- the `SiteId` of the trapping instruction, and `trap_site_correct` relates it to the
+Concrete/README.md:356:**The trap site the executable reports is covered by premise `P_trap_site`** (owner, 2026-11-06). `trap_site_correct` proves the site at IR level. The executable's report is assumed: `Native` gains `ReportsSite : TargetProfile → Image → SiteId → Prop`, and a field states that a launch whose body returns `256 + i` writes exactly `Runtime.trapLine tbl[i]` and a newline on fd 2 (the kind, the `Loc` and the site id of entry `i`). Gates 4 and 6 test it. A proof of the runtime entry retires it, together with `P_rt`.
+Concrete/Premises.lean:2:The slice-0 trusted base (PROVISIONAL): the open premises and the headline theorems whose axiom
+Concrete/Premises.lean:9:this registry and the axioms of `theorems` and compares them with `tests/golden/slice0_trusted_base.txt`,
+Concrete/Premises.lean:57:/-- The headline theorems, whose axioms the golden records. -/
+scripts/checks/slice0_trusted_base.lean:10:`Concrete.Premises.theorems`, the axioms it depends on (sorted).
+scripts/checks/slice0_trusted_base.lean:20:    IO.println s!"theorem {n} axioms: {", ".intercalate names.toList}"
+scripts/checks/slice0_trusted_base.sh:5:# premise added, removed or reworded, a headline theorem gaining an axiom (sorryAx included), or a
+scripts/checks/slice0_trusted_base.sh:10:# reworded and with an extra axiom; the table check must reject a table missing a premise.
+scripts/checks/slice0_trusted_base.sh:64:sed '/^theorem /{s/$/, sorryAx/;q}' "$work/current" >"$work/c3"
+scripts/checks/slice0_trusted_base.sh:66:differs "an extra axiom" "$work/c3"
+  2023	    let c := match op with
+  2024	      | .eq => "ceq"
+  2025	      | .unsignedLT => "cult"
+  2026	      | .unsignedLE => "cule"
+  2027	      | .signedLT => "cslt"
+  2028	      | .signedLE => "csle"
+  2029	    s!"{c}{renderWidth w} {renderOperand a}, {renderOperand b}"
+  2030	  | .divide op a b => s!"{renderDivision op} {renderOperand a}, {renderOperand b}"
+  2031	
+  2032	def renderTerminator : Source.Terminator → String
+  2033	  | .ret a => s!"    ret {renderOperand a}\n"
+  2034	  | .jump t => s!"    jmp @b{t}\n"
+  2035	  | .branch c y n => s!"    jnz {renderOperand c}, @b{y}, @b{n}\n"
+  2036	
+  2037	/-- The body as QBE text for `lcb`. -/
+  2038	def render (f : Source.Function) : String :=
+  2039	  let blocks := (indexed f.blocks.toList).map fun (j, b) =>
+  2040	    s!"@b{j}\n" ++
+  2041	    String.join (b.phis.toList.map fun ph =>
+  2042	      let arms := ph.incoming.toList.map fun (pred, a) => s!"@b{pred} {renderOperand a}"
+  2043	      s!"    %v{ph.destination} ={renderWidth ph.width} phi {", ".intercalate arms}\n") ++
+  2044	    String.join (b.instructions.toList.map fun i =>
+  2045	      s!"    %v{i.destination} ={renderWidth i.width} {renderOperation i.operation}\n") ++
+  2046	    renderTerminator b.terminator
+  2047	  "export function w $concrete_body() {\n" ++ String.join blocks ++ "}\n"
+  2048	
+  2049	/-! ## The in-process leg: LCB's own evaluator against BIR -/
+  2050	
+  2051	/-- The result word LCB's semantics gives the adapted body, with `fuel` steps. -/
+  2052	def evalBody (f : Source.Function) (fuel : Nat) : Option Nat :=
+  2053	  match Source.evaluateFunction f #[] fuel with
+  2054	  | .returned (.word w) => some w.toNat
+  2055	  | _ => none
+  2056	
+  2057	end Concrete.Backend.LCB
+
+codex
+**REJECT.** The gate catches ordinary registry-output changes, but does not fail closed or enforce the promised README correspondence.
+
+- **P1 — Printer failures can pass.** `scripts/checks/slice0_trusted_base.sh:31` invokes `current` in an `||` list, disabling Bash’s `errexit` throughout that function. The failed pipeline at line 20 is then masked by the successful Python command at line 23. A printer that emits the expected output and subsequently exits nonzero passes the golden comparison. Output-cap failures are likewise masked at the function boundary. Explicitly propagate each command’s failure. I reproduced this Bash behavior without Lean.
+
+- **P1 — README premise changes are largely unchecked.** `scripts/checks/slice0_trusted_base.sh:28,47–49` compares only IDs. Changing a table’s trust class or retirement condition, or any premise statement in the README’s Lean block, leaves the gate green. This contradicts the “reworded anywhere” contract at `Concrete/README.md:581`. Compare a canonical representation of all promised fields and connect the premise statements to that representation.
+
+- **P2 — The registry already differs from its declared source.** `Concrete/Premises.lean:40–42` gives `P_adapter` a different retirement condition from `Concrete/README.md:346`—although the registry better reflects the explanation at README line 109. More substantively, `Concrete/Premises.lean:47–48` summarizes `P_rt` as a forward guarantee from body return/divergence to launch behavior, whereas `Concrete/README.md:318–319` states a conditional decomposition of an existing, non-killed launch into a body result. Those directions are not equivalent without additional assumptions. All ten IDs and their trust classes match; statement fidelity is incomplete.
+
+- **P2 — Axiom statements can change invisibly.** `scripts/checks/slice0_trusted_base.lean:18–20` records only axiom names. Changing the type of a custom axiom already in a headline theorem’s closure preserves the golden output. New dependency names, including `sorryAx`, should change the output, but this does not detect every “axiom change.” Record axiom types too, or explicitly narrow the guarantee. The controls at shell lines 62–66 only mutate output text; they do not exercise axiom collection or printer-failure handling.
+
+- **P2 — Timeout handling violates the repository’s gate procedure.** `scripts/checks/slice0_trusted_base.sh:20` and its sourced helper, `scripts/checks/lib/slice0_common.sh:30`, use GNU `timeout` instead of the required `bounded_run`. The helper already sources the bounded-run implementation. Use it to preserve portability and the prescribed INCOMPLETE handling.
+
+The awk extractor works for the current table layout, but recognizes only literal `| P_` rows and has no table-schema validation. The Lean stdout cap and diagnostic truncation are useful; manifest output and stderr are not similarly bounded.
+
+Source review only; no Lean execution or file modifications.
+tokens used
+31,235
+**REJECT.** The gate catches ordinary registry-output changes, but does not fail closed or enforce the promised README correspondence.
+
+- **P1 — Printer failures can pass.** `scripts/checks/slice0_trusted_base.sh:31` invokes `current` in an `||` list, disabling Bash’s `errexit` throughout that function. The failed pipeline at line 20 is then masked by the successful Python command at line 23. A printer that emits the expected output and subsequently exits nonzero passes the golden comparison. Output-cap failures are likewise masked at the function boundary. Explicitly propagate each command’s failure. I reproduced this Bash behavior without Lean.
+
+- **P1 — README premise changes are largely unchecked.** `scripts/checks/slice0_trusted_base.sh:28,47–49` compares only IDs. Changing a table’s trust class or retirement condition, or any premise statement in the README’s Lean block, leaves the gate green. This contradicts the “reworded anywhere” contract at `Concrete/README.md:581`. Compare a canonical representation of all promised fields and connect the premise statements to that representation.
+
+- **P2 — The registry already differs from its declared source.** `Concrete/Premises.lean:40–42` gives `P_adapter` a different retirement condition from `Concrete/README.md:346`—although the registry better reflects the explanation at README line 109. More substantively, `Concrete/Premises.lean:47–48` summarizes `P_rt` as a forward guarantee from body return/divergence to launch behavior, whereas `Concrete/README.md:318–319` states a conditional decomposition of an existing, non-killed launch into a body result. Those directions are not equivalent without additional assumptions. All ten IDs and their trust classes match; statement fidelity is incomplete.
+
+- **P2 — Axiom statements can change invisibly.** `scripts/checks/slice0_trusted_base.lean:18–20` records only axiom names. Changing the type of a custom axiom already in a headline theorem’s closure preserves the golden output. New dependency names, including `sorryAx`, should change the output, but this does not detect every “axiom change.” Record axiom types too, or explicitly narrow the guarantee. The controls at shell lines 62–66 only mutate output text; they do not exercise axiom collection or printer-failure handling.
+
+- **P2 — Timeout handling violates the repository’s gate procedure.** `scripts/checks/slice0_trusted_base.sh:20` and its sourced helper, `scripts/checks/lib/slice0_common.sh:30`, use GNU `timeout` instead of the required `bounded_run`. The helper already sources the bounded-run implementation. Use it to preserve portability and the prescribed INCOMPLETE handling.
+
+The awk extractor works for the current table layout, but recognizes only literal `| P_` rows and has no table-schema validation. The Lean stdout cap and diagnostic truncation are useful; manifest output and stderr are not similarly bounded.
+
+Source review only; no Lean execution or file modifications.

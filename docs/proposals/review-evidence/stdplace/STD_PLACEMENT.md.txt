@@ -1,0 +1,371 @@
+# Std placement round (proposal, draft 3, 2026-11-08)
+
+Status: proposal for process item 3 of the 2026-11-08 language decisions ("one review round on
+where each std item lives"). It decides nothing. It refines the approved std-per-slice table in
+`ROADMAP.md` (branch `wip/record-language` at `e4737efa`) and resolves its six flagged gaps with a
+recommendation and a runner-up each. Language questions are listed for the owner in section 6 and
+are not decided here. Draft 2 applied the round-1 findings of Codex, Kimi and agy, and draft 3 the
+round-2 findings; section 7 lists what changed and what was disputed.
+
+Read against: ROADMAP "Vertical slices", "Showcases", "Std per slice"; `docs/PHILOSOPHY.md`;
+`docs/decisions.md` (foundation C1–C10, the 2026-11-08 language row, the authority and filesystem
+rules of 2026-11-02, Core rows Q1–Q9 and the hosted grant table approved as Q7.10, whose text is
+R4 F6 in `legacy/docs/archive/decisions-2026-11-05/R4_RATIONALE.md`); `docs/proposals/EXAMPLES.md`;
+`docs/proposals/FOUNDATION.md`; `legacy/std/src/*.con` (ideas only).
+
+## 1. Placement rules used
+
+These rules restate decided principles; each placement below follows from them.
+
+- **P0. There are no std modules before slice 17.** Modules, `pub`, imports and paths arrive at
+  17. Before 17, library code a stage needs is written inside the consuming program, in the
+  program's own file, and calls primitives by the names the closed builtin table gives them
+  (item 32). At 17 that code moves, unchanged in meaning and with its theorems, into the std module
+  this table names, and consumers switch to qualified use (`bytes::read_u32_be(...)`, item 11(b)).
+  It moves; it is not copied, so each fact keeps one definition (rule 5). Where a row below says a
+  module "arrives" before 17, it means its code first exists at that slice inside its consumer, and
+  its std module exists from 17. How primitives are named before and after 17 is owner question O6.
+- **P1. Code arrives at its first adopted consumer's slice,** not at the slice whose language could
+  first express it. A consumer is an adopted showcase stage (the seven showcases and their slices
+  are adopted; the per-slice examples in `EXAMPLES.md` are still a proposal) or another std module
+  that has one. Consumers that exist only in the proposed examples are marked *(proposed example)*
+  and do not by themselves place a module.
+- **P2. What goes in std.** A std module is a substrate with a contract independent of its
+  consumer (an external standard such as RFC 8439, the Yellow Paper's arithmetic or CRC-32, or a
+  target service from the grant table), consumed by at least one adopted stage. A showcase's own
+  subject, the thing its row names (the regex engine of grep, DEFLATE and the QOI codec of the
+  image decoder, the EVM and Wasm interpreters, the KV store's log), stays in the showcase until a
+  second consumer appears. So the theorem about a substrate is stated once, and the showcase's
+  theorems are about the showcase.
+- **P3. The slice-local API uses only that slice's language** (with P0 for modules). No API at
+  slice N names a construct from a later slice; later surface is a later addition to the same code.
+- **P4. Second-class references shape every API.** No std function returns a view or stores one.
+  Functions take views as downward parameters and return owned values, `Copy` coordinates
+  (offsets, lengths, positions) or `Result`s; callers form subviews with the one decided borrow
+  form. This is the legacy `ByteCursor` idea (R-0483, "a cursor stores coordinates only",
+  `legacy/std/src/numeric.con`), carried as a design, not as code.
+- **P5. No hidden traps in std.** Every operation that can fail returns a typed `Result` or takes
+  evidence through `#[requires]`. Every loop carries termination evidence; where it rests on an
+  environment response (a blocking read or write), the evidence bounds the completed iterations
+  and names the response premise, and never claims that a blocking request completes (C6).
+- **P6. One form per situation.** One owned growable byte container (`vec::Vec<u8, A>`), not a
+  second `Bytes` type; one module per grant family; no std wrapper that restates a language form
+  (`assert`, `#[test]`, `match` on `Option`/`Result`).
+- **P7. Primitive versus std code.** An operation beneath the safe language (argv, file
+  descriptors, sockets, entropy) is a registered primitive with a complete C9 contract. Everything
+  expressible in the safe language at its slice is ordinary Concrete with program theorems. Raw
+  pointers arrive at 24, so no std code before 24 touches raw memory.
+- **P8. Authority is explicit.** Every allocating operation takes the allocator value and
+  `with(Alloc)` (authority rule 2: a resource value plus a permission); a container's stored
+  release context is not authority to allocate. Every grant operation follows the decided grant
+  table, including its narrowing and ending operations.
+- **P9. Spellings are illustrative.** Sketches use the decided shapes (`Type::f(x)`, qualified use
+  after 17, written local types, `-> Unit`, no `as`, no `char`, no `print`). View parameter types are
+  written `&[u8]` / `&mut [u8]` as a placeholder for the open view-type spelling (owner question O1);
+  exact names come in the spelling round.
+
+## 2. Placement table
+
+Columns: code arrives (slice, with P0); the slice-local API (illustrative); spec home in C1–C10;
+laws and proofs due; the adopted stage that consumes it; the design risk it tests.
+
+Design risks: **R-ref** second-class references at scale; **R-lin** linear ownership in
+containers; **R-trap** proof cost of no hidden traps; **R-err** explicit error propagation (no
+`?`); **R-cb** callbacks with contracts; **R-grant** grants and `with(...)`; **R-ct** constant time
+and secrets.
+
+### 2.1 Byte and integer substrate (slices 2–15)
+
+| module | arrives | slice-local API (illustrative) | spec home | laws / proofs due | consumer | design risk |
+|---|---|---|---|---|---|---|
+| fixed arrays, range views, `swap_at`, array `Destroy`, `ct_eq` on arrays and views | 15, **language** (as the slice table lists them; whether `ct_eq` on views could instead be std code is O6) | no std module; legacy `slice.con` is not carried | C4 places and per-element initialization; C5 loans, roots and projections; C1 index-order destruction (Q2.3, OD35) | in the language slice | everything from 15 | R-ref, R-trap |
+| `bytes` | 15 (std module 17) | free functions over public `&[u8]` / `&mut [u8]`: `eq`, `copy(dst, src) -> Result<Unit, LengthMismatch>`, `fill`, `find(v, b, from) -> Option<u64>`; fixed-width codecs `read_u16_be/le`, `read_u32_be/le`, `read_u64_be/le(v, off) -> Result<uN, OutOfRange>` and the matching `write_*`; `Copy` coordinate structs `Cursor { start, end, pos }` (invariant `start ≤ pos ≤ end`, checked against the given buffer on every call) and `Writer`; at 21, unsigned and signed LEB128 (`read_uleb(v, off, bits: u64) -> Result<Leb, LebError>` and `read_sleb`, returning value and length) | C2 scalar and bit representation; C3 byte order as an explicit codec parameter, independent of the target profile's native order; C4 initialization; C5 views; C10 frame law | read/write round trip per width and order; decode of encode is identity; failure iff `off + width > len` (checked, never wrapping); `copy` writes exactly the destination prefix and nothing else (frame law); `find` returns the least index; cursor invariant preserved; LEB128 decoding follows the Wasm integer rules for an explicit bit width N: at most ⌈N/7⌉ bytes, non-minimal encodings within that limit accepted (`0x03` and `0x83 0x00` both decode to 3), unused bits of the last byte zero (unsigned) or sign copies (signed), truncated input refused | EVM 15 (big-endian words, PUSH data); grep 16/18 (newline search); QOI 19/21; PNG 21; Wasm 21 (LEB128); KV store 23; server 27 | R-ref (coordinates instead of returned views), R-trap |
+| `u256` | 15 (std module 17) | `U256` as a `Copy` struct of four `u64` limbs (32 bytes), multiplication through 32-bit half products; `add`, `sub`, `mul` (modulo 2^256, as the EVM specifies), `div`, `rem`, `sdiv`, `smod` (zero divisor gives 0, as the EVM specifies), `addmod`, `mulmod`, `exp`, `lt/gt/slt/sgt/eq`, `and/or/xor/not`, `shl/shr/sar`, `byte`, `signextend`; `from_be_bytes(v: &[u8], off) -> Result<U256, OutOfRange>`, `to_be_bytes(x, out: &mut [u8], off) -> Result<Unit, OutOfRange>` | C2 (value modelled as `Nat` mod 2^256) | each operation equals its Lean model from the Yellow Paper / execution-specs definition; no implicit trap in any limb step (carry bounds proved); byte round trip | EVM 15; later ethlambda after 28 | R-trap (limb carries are the largest no-hidden-traps proof load before the heap) |
+| `chacha20` | 7 (ARX steps), 15 (block), std module 17 | 7: only what slice 7 can write: single-word steps on `Secret<u32>` from the closed constant-time table, e.g. `chacha_step(a: Secret<u32>, b: Secret<u32>, d: Secret<u32>, r: u32) -> Secret<u32>` (the add, xor, rotate of one quarter-round line); the full quarter round, which returns four words, needs structs (9) or arrays (15), see O10. 15: `block(key: &[Secret<u8>], counter: u32, nonce: &[u8], out: &mut [Secret<u8>]) -> Result<Unit, LengthMismatch>`, `xor_stream(...) -> Result<Unit, StreamError>` with `StreamError::CounterExhausted`; secret-preserving little-endian word loads and stores live here (public `bytes` codecs cannot read `Secret<u8>`; O9) | C2; C7 leakage (noninterference, source constant time), wipe events | RFC 8439 functional model and test vectors as Lean examples; counter exhaustion refused before any keystream reuse; on failure the output is unchanged; source constant time; noninterference; secret arrays wiped on destroy (15) | crypto 7 (steps only), 15, 18 file encryptor; tunnel after 28 | R-ct, R-trap |
+| `poly1305` | 15 (std module 17) | `mac(key: &[Secret<u8>], msg: &[u8], tag: &mut [Secret<u8>]) -> Result<Unit, LengthMismatch>`; internal 26-bit limbs in `u64`, products of two limbs below 2^64 | C2; C7 | equals RFC 8439 §2.5: key clamping of `r`, 16-byte block encoding with the extra high bit (and the short final block), accumulation mod 2^130−5, final addition of `s` mod 2^128; limb bounds proved at each step; one-time-key use stated as the caller's obligation; source constant time | crypto 15, 18; tunnel after 28 | R-ct, R-trap |
+| `x25519` | 15 (std module 17) | `scalar_mult(scalar: &[Secret<u8>], point: &[u8], out: &mut [Secret<u8>]) -> Result<Unit, LengthMismatch>`; field elements as ten 25.5-bit limbs (the ref10 radix) so every product fits `u64`; ladder swap with `ct_select` | C2; C7 | equals RFC 7748's Montgomery ladder over GF(2^255−19), including scalar clamping and the masking of the point's top bit (Lean model); limb-bound invariants; source constant time | crypto 15; tunnel after 28 | R-ct, R-trap |
+| `entropy` | 6 grant, 7 secret scalar, 15 fill | primitives only (P7). 6: the grant and its ending (shape decided at 6, foundation question 14), no draw (a draw yields `Secret<T>`, which arrives at 7). 7: a draw yielding `Secret<u64>`; how a slice-7 program passes the grant without references (13) or structs (9) depends on the slice-6 grant shape, owner question O12. 15: `fill(e, out: &mut [Secret<u8>])` | C5 grant; C6 source response; C7 leakage; C9 primitive contract, source a named trusted premise | the source premise named in facts; output always `Secret<T>`; fill writes every byte | crypto 7/15/18 (keys, nonces) | R-grant, R-ct |
+
+### 2.2 Text, console, files and the environment (slices 16–18, zero heap)
+
+| module | arrives | slice-local API (illustrative) | spec home | laws / proofs due | consumer | design risk |
+|---|---|---|---|---|---|---|
+| `console` (the legacy `io` idea, split by grant) | 16 (std module 17) | primitives as in the grant table, for `StdIn`, `StdOut` and `StdErr`, all `with(Console)`: `write(s: &mut StdOut, data: &[u8]) -> Result<u64, IoError>` (partial; the same for `StdErr`), `read(s: &mut StdIn, buf: &mut [u8]) -> Result<u64, IoError>` (0 at end of input), `give_up(s) -> Result<Unit, IoError>` (flushes; consumes in every outcome); slice 16's grant-backed secret source: `read_secret(s: &mut StdIn, buf: &mut [Secret<u8>]) -> Result<u64, IoError>`; std code: `write_all` | C5 grants; C6 request/response events, partial delivery, blocking; C7 for the secret source; C9 primitive contracts | partial-write accounting (delivered bytes are a prefix); `write_all` returns `WriteAllError { written: u64, kind }` with a typed `NoProgress` kind when a completed call delivers 0 bytes for nonempty input, so every completed call either advances or ends the loop and there are at most `len` completed calls; its termination evidence also names the response premise for each blocking call (P5); output before a trap preserved (C6); `give_up` consumes on every outcome | grep 16/18; everything that prints | R-grant, R-err, R-trap (termination rests on a named environment premise) |
+| `text` | 16 (std module 17) | slice 16 makes UTF-8 text views a language form; std adds the operations over them and over `u8` views: `validate_utf8(v: &[u8]) -> Result<Unit, Utf8Error>` (offset of the first invalid byte), `decode_at(t, off) -> Result<CodePoint, Utf8Error>` where `CodePoint` is a `Copy` struct over `u32` (no `char`), `is_boundary(t, off) -> bool`, `next_boundary`; how a validated text view is formed from a byte view is owner question O6 | C2 (UTF-8 as a relation over `u8` sequences); C3 text representation (TYPE-3); C5 views; foundation question 11 (UTF-8 failure classes) is decided at this slice | validation agrees with the Unicode well-formedness table (Lean model: no overlong forms, no surrogates, nothing above U+10FFFF); decode/encode round trip; boundary laws; invalid input never accepted | grep 16/18; server 27 | R-ref, R-trap |
+| `ascii` | 16 (std module 17) | over `u8`: `is_digit(b: u8) -> bool`, `is_alpha`, `is_space`, `to_lower(b: u8) -> u8`, … | C2 | each classification equals its table; `to_lower` idempotent and the identity outside `A`–`Z` | grep 16 (character classes); server 27 (HTTP tokens) | none significant (a control) |
+| `env` (one module for the one `Environment` grant: arguments and variables; legacy `args` and `env` merged) | 18 (std module 17 precedes it, so it is a module from the start) | the decided grant table says "args and allowlisted vars, read with `with(Env)`; scoped views, no allocation". `arg_count(e: &Environment) with(Env) -> u64`; argument `i` as a scoped view of the immutable launch snapshot (Q7.5), opened by the one borrow form over a projection of the grant, never by a call that returns a view (P4); the exact source form is O2 and is a dependency of this stage; variables the same way; `narrow_env(e, names) with(Env) -> Environment` (consumes) and `give_up(e) with(Env) -> Unit` as decided | C5 Environment grant and narrowing; C6 launch/input contract and the launch snapshot (Q7.5); C9 primitive contract | the view covers exactly the bytes the launcher was given; arguments are bytes (validation is the caller's `text::validate_utf8`); no allocation (heap facts 0); an index outside the count takes `else` | `grep PATTERN FILE` at 18 | R-grant, R-ref (a view of grant-owned storage) |
+| `fs` | 18 | primitives as in the grant table, all `with(Fs)`: `open(d: &Directory, path: &[u8], mode) -> Result<File, FsError>`, `read(f: &mut File, buf: &mut [u8]) -> Result<u64, FsError>`, `write`, `close(f) -> Result<Unit, CloseError>` (consumes in every outcome; `CloseError` is `Copy` and holds no handle), `narrow(d, r) -> Directory` (consumes, cannot fail), `open_dir(d: &Directory, path, r) -> Result<Directory, FsError>` (`d` stays), `close_dir(d) -> Unit` (consumes in every outcome); slice 18's grant-backed secret source `read_secret(f: &mut File, buf: &mut [Secret<u8>]) -> Result<u64, FsError>`; std code: `write_all` (with the same `NoProgress` rule as `console`), `read_exact`, `copy_stream` | C5 Directory rights, narrowing and lookup confinement (`openat2`); C6 external responses and blocking; C7 for the secret source; C9 | handle conservation on every path (each `File` reaches exactly one `close`, failure paths included); confinement (no absolute path, no `..`, no symlink, no mount crossing, enforced by the primitive); typed errors; the file-copy theorem (output equals input, or a typed error is reported); helpers' termination as in `console` | grep 18; file encryptor 18 (key file through `read_secret`); KV store 23; server 27; file-copy *(the slice-18 milestone)* | R-lin (handles), R-err, R-grant |
+| `aead` (ChaCha20-Poly1305) | 18 (with the file encryptor) | `seal(key: &[Secret<u8>], nonce: &[u8], aad: &[u8], plain: &[Secret<u8>], out: &mut [Secret<u8>], tag: &mut [Secret<u8>]) -> Result<Unit, AeadError>`; `open(...)` computes the tag, compares it with `ct_eq` giving `Secret<bool>`, and releases plaintext only after one explicit, traced `declassify` of that decision | C2; C7 (release sites, noninterference, constant time) | RFC 8439 §2.8 construction (Poly1305 one-time key from ChaCha20 block 0, padding and length block); verify before release: no plaintext byte reaches the caller's public state when the tag fails; the release sites (ciphertext, tag, the authentication decision) are exactly the declared ones | file encryptor 18; tunnel after 28 | R-ct, R-err |
+
+### 2.3 Heap and containers (slices 19–23)
+
+| module | arrives | slice-local API (illustrative) | spec home | laws / proofs due | consumer | design risk |
+|---|---|---|---|---|---|---|
+| `alloc` (allocators, arenas, `Heap<T, A>`) | 19, **language** types | the slice-19 language surface: `Allocator<A>`, arenas, `reset`, `Heap<T, A>`, fallible `alloc(a: &mut Allocator<A>, x: T) with(Alloc) -> Result<Heap<T, A>, AllocFailure<T>>` (the rejected value comes back), the named move-out (item 12), `give_up(a) with(Alloc) -> Unit` only with no live allocation; no std source module (a std-written allocator needs raw memory, 24) | C4 allocator availability laws (Q1.11), fresh block identity; C5 brands and child-allocator dependencies; C7 byte accounting | failure conservation; reset freshness; release never reduces availability; peak-bytes accounting sound | QOI 19 | R-lin, R-trap |
+| `heap_array` | 21, **language** type plus std helpers | language: `HeapArray<T, A>`, its views, `drain`, `map_into`; std code: `from_fill(a: &mut Allocator<A>, n: u64, x: T) with(Alloc) -> Result<HeapArray<T, A>, AllocFailure<T>>` and `copy_from(dst: &mut [T], src: &[T]) -> Result<Unit, LengthMismatch>`, both only for `T: Copy` | C4 per-element initialization; C5 views; C1 index-order destruction; C7 accounting | length fixed for life; view laws as for arrays; `drain` and `map_into` conserve every element; destruction in index order | QOI 21; PNG 21–22; EVM 21 memory; Wasm 21 linear memory | R-lin, R-cb (`map_into` takes a function value with a contract, slice 20) |
+| `checksum` | 21 (PNG) | `crc32_update(state: u32, data: &[u8]) -> u32`, `crc32_init`, `crc32_final`; table as a compile-time constant array if O8 allows, otherwise bitwise | C2 bit operations | equals CRC-32/ISO-HDLC (reflected polynomial 0xEDB88320, initial value and final xor 0xFFFFFFFF; Lean model over GF(2)); chunking law `update(update(s, a), b) = update(s, a ++ b)`; check value `0xCBF43926` for "123456789" | PNG 21–22 (chunk CRCs); Adler-32 stays in the PNG showcase's zlib code (P2) | none expected (a control) |
+| `keccak` | 21 (the EVM stage that adds memory and KECCAK256) | `f1600(state: &mut [u64; 25]) -> Unit` (fixed-size, so no length failure); `keccak256(data: &[u8], out: &mut [u8]) -> Result<Unit, LengthMismatch>` with Ethereum's original Keccak padding (0x01), not FIPS 202 SHA3-256 (0x06) | C2 | permutation equals the Keccak reference (Lean model of θ, ρ, π, χ, ι over 24 rounds); sponge model with rate 1088 bits; test vectors (Keccak-256 of the empty input is `c5d2460186f7…`); the two paddings distinguished by name and theorem | EVM 21 → 23 | R-trap (rotation and lane-index evidence) |
+| `vec` | 22 | `Vec<T, A>`: `new() -> Vec<T, A>` (no allocation), `push(v: &mut Vec<T, A>, a: &mut Allocator<A>, x: T) with(Alloc) -> Result<Unit, AllocFailure<T>>` (on failure the vector is unchanged and `x` returns), `pop(v) -> Option<T>`, `len`, a view of the initialized prefix, `drain`, `into_heap_array`, destruction with the allocator as the R-0624 follow-up decides; its representation is owner question O3 (a language container using C4's per-slot initialization, or std code over a primitive capacity buffer) | C4 per-element initialization; C5 views; C7 growth accounting; C1 index-order destruction, then backing | contents model (a Lean list); push/pop laws; growth failure conserves the vector and the element; destruction order; amortized-growth step bound | dynamic grep 22; PNG 22 (inflate output); later Wasm/EVM/KV storage | R-lin (linear elements in a container), R-err (allocation failure as a value) |
+| `string` | 22 | `String<A>` as std code: a struct over `vec::Vec<u8, A>` with the struct invariant (slice 17) "the bytes are valid UTF-8"; `from_utf8(v: Vec<u8, A>) -> Result<String<A>, FromUtf8Error<A>>` (the vector returns on failure); `push_text(s: &mut String<A>, a: &mut Allocator<A>, t: <text view>) with(Alloc) -> Result<Unit, AllocFailure<Unit>>` (a validated text view or `StaticStr`, so the invariant needs no re-check, O6); the string's text view | C4/C5 via `vec`; C7 accounting; C1 destruction through `vec`; C9 struct invariant at every exposure | invariant preserved by every operation; failure leaves the string unchanged; destruction releases exactly its vector; append is the allocating operation of item 17 (`with(Alloc)` and the allocator value, not `Console`) | dynamic grep 22 | R-lin, R-err |
+| `ordered_map` | 23 | ordinary std code (item 19: no compiler privilege), a balanced tree of `Heap` nodes; keys ordered by an `Ord` trait with an `Ord::cmp(a: &K, b: &K) -> Ordering` function whose total-order laws (reflexive equality, antisymmetry, transitivity, totality) are an obligation of every impl (O11); `insert(m: &mut OrderedMap<K, V, A>, a: &mut Allocator<A>, k: K, v: V) with(Alloc) -> Result<Inserted<K, V>, AllocFailure<Entry<K, V>>>` where `Inserted::New` or `Inserted::Replaced { key: K, value: V }` returns the rejected new key and the displaced value (the map keeps its existing key), and allocation failure returns the whole entry and leaves the map unchanged; `remove(m, k: &K) -> Option<Entry<K, V>>`; element access shape is O4; ordered traversal with a function value and explicit context (20) | C1/Q2.3 destruction order (ascending key, key then value, then nodes), kept as decided and proved of this implementation; C4 heap nodes; C5; C7 | contents model (a finite map under `Ord`); insert/lookup/remove laws; conservation of every key and value on every path; ascending-key destruction proved of its `Destroy` impl; balance gives the logarithmic step bound | KV store 23 (index); EVM 23 (storage); Wasm 23 (host tables) | R-lin (linear keys and values moved through rotations is the hardest ownership workload in the plan), R-ref, R-cb |
+| `hash_map` with its `hash` | 23 at the earliest, only when the KV store's measurements need it (item 19) | `HashMap<K, V, A>`, a `Hash` trait consistent with equality, one specified keyed hash chosen then; legacy FNV-1a is not carried as a default (flooding) | C2 (hash as a pure function); C4/C5; C7; cleanup through its consuming drain operations, since Q2.2 gives `HashMap` no decided `Destroy` impl and none is invented without an owner revision | lookup/update/remove laws; collision behaviour; allocation-failure conservation of the map and of every rejected key and value; hash/equality consistency; resource bound under adversarial keys stated or "not established" | KV store 23 if measured | R-lin, R-trap |
+
+### 2.4 Network, server and later (slices 24–28)
+
+| module | arrives | slice-local API (illustrative) | spec home | laws / proofs due | consumer | design risk |
+|---|---|---|---|---|---|---|
+| `ptr`, `mem` | 24 | raw operations are language (24); a std module only when a std module needs safe wrappers | C3, C4 provenance, C10 frames | wrapper refinement against the safe model | none yet (P1) | R-trap |
+| `libc`, `process` | 25, premise only | none: libc stays a named premise until the no-libc runtime (R-0621, around 24–25); process spawning is not offered (Q7.4) | C5 authority; C6; C10 ABI and retained handles | foreign premises in facts | RocksDB after 25, subject to R-0604 | R-grant |
+| `net` | 27 | primitives as in the grant table, all `with(Network)`: `connect(g: &ConnectGrant, addr) -> Result<Socket, NetError>` (`g` stays), `narrow_connect(g, scope) -> ConnectGrant` (consumes), `listen(g: ListenGrant) -> Result<Listener, ListenFailed>` (`ListenFailed` returns the grant), `accept(l: &Listener) -> Result<Socket, NetError>`, `read`, `write` (helpers with the `NoProgress` rule), `close_socket(s: Socket) -> Result<Unit, CloseError>` and `close_listener(l: Listener) -> Result<Unit, CloseError>` (each consumes in every outcome; `CloseError` holds no handle), `give_up` for a `ConnectGrant`, an unused `ListenGrant` and a `Resolver`; `resolve(r: &Resolver, name, a: &mut Allocator<A>) with(Network, Alloc) -> Result<Vec<IpAddr, A>, ResolveError>` (scope checked before any query; no system resolver configuration read); slice 27's grant-backed secret source `read_secret` | C5; C6 network events and blocking; C7 for the secret source; C9 | partial read/write accounting; handle conservation; scope checks atomic in the primitive; termination as in `console` | httpget, tcpserve, server 27; tunnel and ethlambda after 28 | R-grant, R-lin, R-err |
+| `path` | 27 | `components(p: &[u8], out: &mut [ComponentRange]) -> Result<u64, PathError>` returning coordinates; refuses empty, `.`, `..` and absolute forms before the lookup primitive refuses them again; earlier consumers pass path bytes straight to `fs::open`, whose primitive enforces confinement, so they need no `path` | C5 confinement (the primitive is authoritative); C2 | a validated path has only normal components; validation never widens what the primitive allows | server 27 (request target to file) | R-ref |
+| `parse` | 27 | `u64_decimal(v: &[u8]) -> Result<u64, ParseError>` (overflow is a typed error), `u64_hex` | C2 | parse of the `fmt` rendering is the identity (both stated against the one Lean rendering, so `fmt`'s law does not wait for `parse`); overflow detected exactly | server 27 (HTTP numbers) | R-trap, R-err |
+| `fmt` | 27 (first adopted consumer; integer formatting before 27 stays in the consuming program, P1) | `u64_decimal(x: u64, out: &mut [u8]) -> Result<u64, OutOfRange>` (length written), `i64_decimal`, `u64_hex`; `decimal_len(x) -> u64` to size the buffer | C2; C6 only when the caller writes the result | output equals a Lean spec rendering (decimal digits `0`–`9`, a leading `-` only for negative `i64`, hexadecimal `0`–`9` `a`–`f`); length exact; refusal iff the buffer is short | server 27 (`Content-Length`) | R-trap (buffer sizing checked, not assumed) |
+| `time` | 27, only if a 27 program uses a clock | primitives as decided: `now(c: &Clock<K>) with(Time) -> u64` (nanoseconds; resolution from the launch manifest), `give_up(c) with(Time) -> Unit`; no deadline or monotonicity law beyond the grant's promise (Wall may go backward) | C5 clock identity, kind and resolution; C6 | only grant-promised laws | server 27 or httpget timeouts, if used | R-grant |
+| `cli` | not placed; pull: the first adopted stage with flags | a declarative parser over `env` views | C2; C5 and C6 launch contract via `env` | parse laws and errors | none: grep needs two positional arguments; the encryptor's and server's command lines are not specified by their rows | — |
+| `hex`, `base64` | not placed | no adopted stage reads hex or base64 text (EVM bytecode reaches 15 as an array in source and later stages as a binary file); base64 is the slice-17 *(proposed example)* and, if that example is adopted, lives in the example with a caller-buffer API (gap 6) | C2 | round trip, invalid input, output size | none adopted | — |
+| `sha256` / BLAKE2s, HKDF, Noise | after 28, with the tunnel and its randomness/nonce audit | — (the proposed `sha256sum` flagship, 2 to 19, would keep its SHA-256 in the example until the tunnel pulls it into std) | C2; C7 | functional models and source constant time | tunnel after 28 | R-ct |
+| `option`, `result` | 12, **language** (builtin) | no std helper module now: `match` is the one form; combinators only when a consumer needs them after 20, with function-type contracts | `Types`, `Primitives`; C1 destruction of the present payload; C2 failure; C5 linear payloads | in the language slice | every typed-error stage | R-err, R-cb |
+| `test` | **language** (`#[test]`, `assert`, slice 8; modules 17) | no std module: the legacy helper API duplicates `assert` | C9 evidence | — | every slice | — |
+| not carried | — | `deque`, `set`, `ordered_set`, `bitset`, `math` and the `BinaryHeap` priority queue in legacy `heap.con` (unrelated to the language's `Heap<T, A>` cell) have no adopted consumer; carried on a pull (rule 17) | — | — | — | — |
+| showcase-local (P2) | — | the regex engine (grep), DEFLATE with Adler-32 and the QOI codec (image decoder), the EVM and Wasm interpreters, the KV store's log format and request handling of the server | — | each showcase's own theorems | their showcases | — |
+
+## 3. The six flagged gaps
+
+### Gap 1: arguments for `grep PATTERN FILE` at 18, without allocation
+
+**Recommendation: one `env` module for the one `Environment` grant, giving each argument as a
+scoped view of the immutable launch snapshot, with no allocation and no copy.** This is the
+contract the approved grant table already states ("args and allowlisted vars, read with
+`with(Env)`; scoped views, no allocation", Q7.10; "scoped immutable launch environment snapshot",
+Q7.5), so the recommendation follows a decided row instead of inventing one. The argument is bytes;
+grep validates it with `text::validate_utf8` if it needs text. No `cli` is needed at 18. The legacy
+`args::get` (an allocating `String`, `""` on invalid UTF-8, which hides a failure) is not carried.
+The language part is owner question O2: how the one borrow form takes a grant-owned argument as its
+source.
+
+**Runner-up: `env::arg_into(e: &Environment, i: u64, out: &mut [u8]) with(Env) ->
+Result<u64, ArgError>`**, copying into a caller buffer, with `ArgError::TooLong` and
+`ArgError::NoSuchArgument`. It needs no new borrow source and is equally zero-heap, but it copies,
+forces a maximum length on the program, and departs from the decided "scoped views" wording, so it
+would need a recorded revision of that row.
+
+Flagged for the owner (not a language question): under the decided filesystem rules FILE is a path
+inside a granted `Directory` (`--dir NAME=PATH:RIGHTS`); an absolute path or `..` is refused. The
+showcase's command line is `grep PATTERN FILE` with FILE relative to the granted directory, and its
+claim wording should say so.
+
+### Gap 2: a non-allocating byte substrate before `Vec` at 22
+
+**Recommendation: `bytes` code arrives at 15 (a std module from 17) as free functions over borrowed
+public `u8` views plus `Copy` coordinate structs, and never owns storage.** Storage is always a
+language form or a container: a fixed array `[u8; N]` (15), a `HeapArray<u8, A>` (21) or a
+`vec::Vec<u8, A>` (22). The same functions serve all three, because each lends the same view type
+(owner question O1). The owned growable byte buffer is `vec::Vec<u8, A>`; there is no separate
+`Bytes` type (P6). Secret bytes are not handled by `bytes`: the crypto modules carry their own
+secret-preserving word loads and stores, because a public codec cannot read `Secret<u8>` and equal
+layout authorizes no release (O9 asks whether one generic codec could serve both). The legacy
+`Bytes` (raw pointer, length, capacity, allocating `slice`) is not carried; its coordinate cursor
+and views (R-0483) are carried as a design.
+
+**Runner-up: an owned `bytes::Bytes<A>` type at 21 over `HeapArray<u8, A>`, plus the view functions.**
+It names a byte owner, but at 22 it is a second owned byte container beside `Vec<u8, A>`, which rule 2
+refuses, and it adds nothing a view function cannot do.
+
+### Gap 3: EVM growable memory at 21 versus a fixed `HeapArray`
+
+**Recommendation: EVM memory at 21 grows by replacement inside the showcase: a `HeapArray<u8, A>`
+holding the current capacity; an expansion beyond it allocates a larger `HeapArray` of capacity
+`min(max(required, 2 × old), B)`, where `B` is the gas-derived maximum (or a smaller configured cap),
+copies the logical prefix, zero-fills the extension and releases the old array. Doubling keeps the
+total copying linear in the final size. Before any replacement the program checks `required ≤ B`;
+when a gas-payable expansion exceeds a configured cap, it reports a distinct typed host-limit
+refusal and leaves memory unchanged, never an EVM out-of-gas.** No `Vec` is needed and resident memory follows the memory the program
+actually touches. Expansion charges the gas
+difference `C_mem(new) − C_mem(old)`, with `C_mem(a) = 3a + ⌊a²/512⌋` for `a` words (execution
+specs). Two different outcomes stay distinct: the EVM's out-of-gas halt (part of the modelled EVM
+behaviour) and host allocation failure (a typed `AllocFailure` reported as a host resource result,
+never as an EVM outcome). The equivalence with the EVM specification is claimed for runs whose
+allocations succeed and that hit no configured host limit. The resource claim becomes: logical memory ≤ the largest size the gas limit
+can pay for (for 30,000,000 gas, 123,169 words = 3,941,408 bytes, about 3.76 MiB), and, since
+every backing array is at most `B`, the peak during a replacement (old and new arrays together) is
+at most `2B` bytes of backing, allocator overhead stated separately; the logical size `msize` and
+the capacity stay distinct quantities. Wasm 21 uses the same structure for
+linear memory: a module's maximum is optional (absent, the Wasm32 limit is 65,536 pages = 4 GiB), so
+a configured cap is required, and `memory.grow` past it, or on allocation failure, returns −1, which
+the Wasm specification allows.
+
+**Runner-up: preallocate once the size `min(gas bound, configured cap)`, zero-filled, with `msize`
+tracked inside it.** Simpler code and no copying, but it charges every transaction the maximum
+memory and the zero-filling work even when it touches none, and it can fail allocation for a run
+that would have succeeded with growth.
+
+### Gap 4: endian codecs, CRC32, Keccak and hash
+
+**Recommendation:**
+- **Public endian codecs in `bytes`** (code at 15, first consumer EVM 15), with the byte order in
+  the function name, never the target's native order. Secret word loads and stores live in the
+  crypto modules (gap 2).
+- **CRC32 in `checksum` at 21**, first consumer PNG. Adler-32 stays inside the PNG showcase's zlib
+  code (P2: DEFLATE is the showcase's subject).
+- **Keccak in `keccak` at 21**, in the EVM stage that adds memory, where KECCAK256 (which hashes a
+  memory range) is implemented; the 23 stage completes gas. It implements Ethereum's original
+  Keccak padding and is distinguished from FIPS 202 SHA3-256 by name and theorem.
+- **`hash` only with `HashMap`**, when the KV store's measurements pull it (item 19), as a `Hash`
+  trait plus one specified keyed function chosen then. `OrderedMap` needs only `Ord`.
+- **SHA-256 / BLAKE2s and HKDF** with the tunnel after 28.
+
+**Runner-up:** a separate `endian` module and one `digest` module holding CRC32, Keccak and later
+SHA-256. Rejected as primary because CRC32 is an integrity code, not a digest, and grouping
+"hash-like" functions mixes public and secret-relevant contracts under one module.
+
+### Gap 5: wide-integer arithmetic for EVM 15 and X25519/Poly1305
+
+**Recommendation: no new integer type.** `u256::U256` at 15 is a `Copy` struct of four `u64` limbs
+(32 bytes) whose multiplication uses 32-bit half products, so every intermediate fits `u64`; the
+field arithmetic stays inside `poly1305` (26-bit limbs) and `x25519` (25.5-bit limbs), where every
+product of two limbs fits `u64`. This needs only slice-2 integers, slice-9 structs and slice-15
+arrays. Its cost is the limb-carry proofs, which are exactly the proof cost the no-hidden-traps rule
+asks std to pay, and the crypto versions use only the closed constant-time operations on
+`Secret<u64>` (O7). The field code is specialized and constant time; it is not a general bignum.
+
+**Runner-up: a `u128` type, or one widening-multiply primitive returning a `Copy` struct of two
+halves, added when measurements show the half-product code is too slow** (rule 17). That is a
+language addition (owner question O5).
+
+### Gap 6: base64 at 17
+
+**Recommendation: no std `base64`.** No adopted stage consumes it; the slice-17 base64 program is a
+proposed example. If that example is adopted, base64 lives in the example's own modules (whose
+purpose is to exercise modules), with a caller-buffer API that needs no allocation:
+`encoded_len(n: u64) -> Result<u64, Overflow>`, `encode(input: &[u8], out: &mut [u8]) ->
+Result<u64, Base64Error>`, `decode(input: &[u8], out: &mut [u8]) -> Result<u64, Base64Error>`, with
+typed errors for short output, invalid byte, bad padding and non-canonical trailing bits. It moves
+to std when an adopted consumer appears.
+
+**Runner-up: std `base64` at 17 with the same API.** It costs a std module, its laws and its
+spelling-round surface with no adopted consumer.
+
+## 4. Std item versus language form
+
+**Language, or stays language (no std module):**
+- fixed arrays, views, `swap_at`, array `Destroy` (15): language (OD35); legacy `slice.con` dropped.
+- UTF-8 text views (16) and `StaticStr`: language, as the slice table says.
+- `Option` and `Result` (12): builtin; no helper module until a consumer needs combinators.
+- `test`: `#[test]` and `assert` are the one form; the legacy helper module is dropped.
+- `Allocator`, arenas, `Heap` (19), `HeapArray` (21): language types with C9 contracts.
+- Grant operations (console, fs, env, net, time, entropy): primitives with C9 contracts.
+
+**Std code, not language:**
+- `String<A>`: std code over `vec::Vec<u8, A>` with a struct invariant.
+- `OrderedMap`, `HashMap`: std code with no privilege (item 19); Q2.3's destruction order stays a
+  binding contract that the std implementation proves.
+- Validation and decoding operations on text (16): std `text` code, provable as program theorems.
+- `ct_eq` on arrays and views (15): could be std code over the scalar constant-time table (a loop
+  whose trip count is the public length), shrinking the trusted primitive table (O6).
+
+**Open (owner question O3):** `Vec<T, A>` (22). Its spare capacity is uninitialized. Safe Concrete
+before 24 can express that only by paying a tag per slot (`HeapArray<Option<T>>`, which with
+today's `i32` enum tags, foundation question 4, is eight times the storage of `Vec<u8>`), so `Vec`
+needs either (a) to be a language container like `HeapArray`, using C4's per-slot initialization,
+or (b) std code over one new primitive, a capacity buffer with explicit per-slot initialized
+state. Recommended: (a), because it adds one container rather than a general uninitialized-memory
+primitive to the safe language.
+
+## 5. Showcase stages each placement unblocks
+
+| showcase stage | code it needs (all placed at or before the stage) |
+|---|---|
+| crypto 7 | the ChaCha20 ARX step functions only (the quarter round as a four-word function needs 9) |
+| EVM 15 | `bytes`, `u256`; the 1024-entry stack is a fixed array of 32-byte `U256` values (32 KiB of operand storage); the program's total stack bound comes from the final artifact's facts against the `Concrete.toml` budget |
+| crypto 15 | `chacha20`, `poly1305`, `x25519`, `entropy` fill |
+| grep 16 | `console`, `text`, `ascii`, `bytes` (pattern in source, fixed buffers) |
+| grep 18 | + `env` (argument views), `fs` |
+| file encryptor 18 | `aead`, `fs` (`read_secret` for the key file), `entropy` (nonces); the nonce scheme should come under the randomness/nonce audit too (flag) |
+| QOI 19 → 21 | `alloc`, `bytes` (big-endian header); at 19 the output is a fixed maximum-size heap buffer (no `HeapArray` yet), at 21 a `HeapArray` sized from the header |
+| PNG 21–22 | `heap_array`, `bytes`, `checksum`; DEFLATE in the showcase; `vec` at 22 |
+| EVM 21 → 23 | `heap_array` (memory grown by replacement), `keccak`; `ordered_map` (storage) at 23 |
+| Wasm 21 → 23 → 26 | `heap_array` (linear memory), `bytes` (LEB128); `ordered_map` (host tables) 23; floats 26 |
+| dynamic grep 22 | `vec`, `string` |
+| KV store 23 | `ordered_map`, `fs`, `bytes`; `hash_map` only if measured |
+| server 27 | `net`, `fs`, `path`, `parse`, `fmt`, `ascii`, `text`; `time` if used |
+
+## 6. Owner questions (language; not decided here)
+
+- **O1. The view type as a parameter.** Every byte module needs one view type, of any length, that
+  fixed arrays (15), `HeapArray` (21) and `Vec` (22) all lend, without const generics. Is the
+  slice-15 range view such a type, usable as a function parameter, and how is it spelled?
+  (Spelling round, item 59, OPEN-21.)
+- **O2. Views of grant-owned storage.** How does the one borrow form take an `Environment` argument
+  (and a variable) as its source, as the grant table's "scoped views" require? Can the launch
+  snapshot be a borrow root?
+- **O3. `Vec`'s representation:** a language container (recommended) or std code over a new
+  capacity-buffer primitive (section 4).
+- **O4. Reading container elements without returned references.** How does a caller read a
+  non-`Copy` value in a map or vector: a scoped borrow of an element (a language form over a
+  container place) or a function-value callback (20)? This shapes every container API.
+- **O5. Wide arithmetic.** Keep 64-bit integers and limb code (recommended now), or add `u128` or a
+  widening-multiply primitive when measurements show the need?
+- **O6. Primitive or std, and where primitives are named.** Are `ct_eq` on views and UTF-8
+  validation primitives or std code (recommended: std code)? How is a validated text view formed
+  from a byte view? Are primitives bare names in the closed builtin table (item 32), and do they
+  stay bare after 17 or move to std module paths used qualified (item 11(b))?
+- **O7. Constant-time table contents.** Does slice 7's closed table include 64-bit multiplication
+  (variable time on some targets, so a named backend premise), which Poly1305 and X25519 need, and
+  rotation by a public constant, which ChaCha20 needs?
+- **O8. Constant arrays.** Are compile-time constants of array type (the CRC32 table, Keccak round
+  constants) in the closed initializer subset (item 26, Q6.4)?
+- **O9. One implementation for public and secret data.** Can one function be generic over public
+  and `Secret<T>` element types (a byte codec, Keccak or SHA-256 used on both), or does each need
+  two versions?
+- **O10. Several results from one function.** A quarter round returns four words and a wide product
+  two halves. With no tuples in the slice table, the one form is a `Copy` struct (from 9). Is that
+  intended, so the slice-7 crypto stage is the ARX steps only?
+- **O11. Trait laws.** `Ord` (and later `Hash`) needs laws that every impl must prove (a total
+  order; hash consistent with equality). How does a trait state an obligation its impls discharge?
+- **O12. The entropy draw at slice 7.** Before references (13) and structs (9), how does a draw
+  use the grant: by value with the grant returned, by a special primitive form, or another shape?
+  This belongs with the slice-6 grant shape (foundation question 14).
+
+Not language questions, flagged for the owner: grep's FILE is relative to a granted directory
+(gap 1); the file encryptor's nonce scheme and the randomness/nonce audit (section 5); QOI's 19
+stage needs a fixed maximum image size until `HeapArray` (section 5).
+
+## 7. Round 1 dispositions
+
+Applied (reviewers named per item): no std modules before 17 (P0, Codex and agy); slice-7
+APIs limited to what 7 can write, with O10 and O12 (Codex, Kimi, agy); allocator values on every
+growth operation (Codex, Kimi); `Vec` representation left to O3 and stated consistently (Codex,
+agy); `OrderedMap` insert conserves linear keys and whole entries, and an `Ord` trait with laws
+(Codex, Kimi, agy); Q2.3 kept as a binding contract rather than moved (Codex); gap 3 rewritten as
+growth by replacement, with out-of-gas and host failure kept distinct and the numbers corrected
+(Codex, agy); secret bytes handled in the crypto modules (Codex); RFC 8439 details, counter
+exhaustion and clamping (Codex); `U256` fixed at four `u64` limbs so the operand stack is 32 KiB
+(Codex, Kimi); fixed-size `f1600` (Codex, agy); grant lifecycle operations, `StdErr`, `Resolver`
+(Codex, Kimi, agy); blocking separated from termination (Codex); proposed examples marked as such
+(Codex); one promotion criterion (P2) and `aead` placed at 18 for its two consumers (Codex, agy);
+grant-backed secret sources at 16, 18 and 27 (agy); text views as the language form (agy); spec
+homes completed (agy, Kimi); `copy_from` and `from_fill` restricted to `Copy` (Kimi); entropy draw
+not at 6 (Kimi); `fmt` alphabet stated per function (Codex, Kimi); CRC32's invented KV consumer
+removed (Kimi); no call-shaped borrow source in the `env` sketch (Kimi); `ct_eq` placed as the language form the slice table lists (Kimi); the proposed `sha256sum` noted (Kimi).
+
+Disputed, with reasons:
+- *`parse` at 16 so `fmt`'s round trip can be proved at 16* (agy): both are stated against one Lean
+  rendering, so `fmt`'s law does not wait for `parse`; no adopted stage parses integers before 27.
+- *`hex` at 15/16 for EVM and crypto inputs* (agy): no adopted stage reads hex text. EVM bytecode is
+  an in-source array at 15 and a binary file later; crypto test vectors are Lean examples.
+- *`path` at 18 with `fs`* (agy): grep, the encryptor and the KV store pass path bytes to
+  `fs::open`, whose primitive enforces confinement; only the server maps request targets to paths.
+
+Round 2 (agy ACCEPT; Codex and Kimi REJECT on the items below), applied in draft 3: the LEB128 law
+now follows Wasm's width-bounded rule and accepts non-minimal encodings within it (Codex, Kimi);
+gap 3 states the growth schedule `min(max(required, 2 × old), B)` and the true peak bound `2B`
+(Codex, Kimi); `write_all` gets a typed `NoProgress` error so its iteration bound holds (Codex);
+`fmt` moves to 27, its first adopted consumer (Codex, Kimi); socket and listener close are listed
+separately (Codex); `HashMap` gets collision and failure-conservation obligations and no invented
+`Destroy` (Kimi); `cli` gets C6 and `time::now` its nanosecond unit (Kimi). All three reviewers
+accepted the three round-1 disputes.
+
+Round 3 (agy ACCEPT, Kimi ACCEPT-WITH-CHANGES, Codex REJECT on one MAJOR), applied after the
+round cap and not re-reviewed: gap 3 checks `required ≤ B` before replacement and reports a
+configured-cap overrun as a distinct host-limit refusal with memory unchanged, and the equivalence
+claim excludes runs that hit a host limit (Codex); legacy `BinaryHeap` listed as not carried (Kimi).

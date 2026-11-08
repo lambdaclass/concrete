@@ -1,0 +1,843 @@
+kimi version 2.4.1
+• I need read BRIEF and ROUND2. Should follow. Should probably multi-step code work. First parallel read.
+
+• I’ll review the original brief and the round-two instructions, then implement and verify the requested changes.
+
+• Should inspect repo status current branch files agy, proposal perhaps AGENTS in ConcreteSpec? Should obey. Read AGENTS nested via glob, status log.## wip/spec-c10
+46211bbd3 axioms.golden: C10 frames and ABI (regenerated on concrete-ci-2)
+72d109b00 docs: name foreign memory retention premises
+c0e77b0db docs: record the C10 frame interface
+969918b9a spec: add frame ABI and foreign retention contracts
+2f0e82905 proofs: restore C1 caller frames exactly
+6d1181df9 spec: add logical frame footprints and laws
+a8eb252af Merge wip/spec-c1-life into wip/spec-c10 (C10 needs C4 and partial lifecycle; README conflict joined)
+d8f89ea75 axioms.golden: partial lifecycle transitions (regenerated on concrete-ci-2)
+Should detailed Memory Hybrid Exec structures/proofs. Read relevant.
+
+• The review exposes two semantic gaps: block lifecycle metadata is not covered by preservation, and foreign result validity is detached from its declaration pairing. I’m checking the underlying Hybrid and Exec relations so the fixes reuse their existing laws.
+
+• Should design careful. Findings all. Should probably change ExternResult.Valid to contextual. Codex A: current standalone accepts any. Should check submission/completion pairing. Options define ExternResult.Valid (pair : KeptPair F H) (role maybe submit/complete) t := t ffi or t receipt pair.handle for submit, owned pair.handle complete. KeptPair.WellFormed should use .Valid rather than exact equalities and distinct. User explicitly asks check pairing. Could redefine `ExternResult.Valid {F H} (pair : KeptPair F H) (f : F) (result : ExternType H) : Prop := (.ffi _) True | .receipt h => f=pair.submit ∧ h=pair.handle ∧ f ≠ pair.complete? | .owned h => f=pair.complete ∧ h=pair.handle ∧ ... | enum false`. This makes direct relation to function. But KeptPair currently after ExternResult.Valid definition, need reorder. Or `ExternResult.Valid (submit complete : F)` with F new param and role. Should have no owner decisions; just interface validation. Best `ExternResult.Valid (submit complete : F) (f : F) : ExternType H → Prop`: ffi true, owned h => f=complete ∧ h = handle? no handle not given. Include `handle : H`. `ExternResult.Valid (submit complete : F) (f : F) (handle : H)`. Verbose but exact. KeptPair defined before. Could move KeptPair before result valid and `ExternResult.Valid (pair) (f)`: owned h iff f=pair.complete ∧ h=pair.handle; receipt h iff f=pair.submit ∧ h=pair.handle. FFI any function; enum false. This directly checks unrelated extern returning receipt/owned. `KeptPair.WellFormed pair submitParam submitResult completeParam completeResult` then `pair.submit ≠ pair.complete ∧ submitParam.Valid ∧ submitParam = ... ∧ submitResult.Valid pair.submit ∧ completeParam = ... ∧ completeResult.Valid pair.complete` perhaps redundant exact type equalities but Valid used. Better `submitParam = ... ∧ ExternResult.Valid pair pair.submit submitResult ∧ completeParam = ... ∧ ExternResult.Valid pair pair.complete completeResult ∧ pair.submit ≠ pair.complete`. Since Valid forces types, no exact needed. Examples adapt. Should prove rejection `submit_cannot_consume_receipt` for any wellformed pair? Current KeptStep alone with pair submit=complete allows. Add distinct to `KeptStep`? Finding B says WellFormed permits; require distinct identities and prove rejection. If only WF has distinct but KeptStep doesn't take WF, rejection theorem requires hWF. Existing example ¬KeptStep pair without WF cannot hold for equal pair. Change example to `¬ KeptStep (⟨0,0,7⟩) ...`? Should show pair wellformed and no step. Could add distinct directly KeptStep completion branch `pair.submit ≠ pair.complete ∧ ...`, making rejected even without WF; and WF distinct. Then existing example decide works. But semantic transition should only valid pairs? Adding distinct makes robust and proves rejection unconditionally. Could alternatively KeptStep accept proof pair.submit ≠ pair.complete parameter. More disruptive. Best add distinct to WF and KeptStep completion. Submission perhaps no distinct needed. Prove theorem `kept_receipt_rejects_submission (pair) ... : ¬ KeptStep pair ... pair.submit`. This now relies on branch distinct. WF also requires distinct. Should update kept_only_paired_completion destructuring extra conjunct. Decidability works.
+
+  Nit H handles: cheap document H tracked identity. Could doc KeptPair explicitly already "one kept handle H" but H type actually handle universe, pair.handle value. Add clear doc. Fine.
+
+  Footprint metadata: define BlockOutside. Preserves adds third conjunction or second? Existing h.1 h.2 heavily used. Could structure 3 components bytes metadata places. Add `Footprint.BlockOutside f b := ∀ r∈f.bytes, r.block ≠ b ∨ r.extent=0`. Decidable. `Block.Metadata` maybe define `Block.SameMetadata` to avoid giant conjunction and compare all nonbytes. Could in Preserves `(after.memory.block b).map (fun y => (y.space,y.base,...)) = ...` but dependent products okay. More readable `Block.SameMetadata (x y) : Prop := x.space = y.space ∧ ...`. Direction after before. Requirement full metadata. Define `Block.SameMetadata` perhaps within Frame namespace. Preserves third conjunct: `(∀ b x, before.memory.block b=some x → f.BlockOutside b → (after.memory.block b).map Block.metadata? = some ...)`. If use equality of record stripping bytes `Block.Metadata` structure. Simpler `SameMetadata y x` inside map? `(after.memory.block b).map (fun y => y.live = x.live ∧ ... )` yields Option Prop, not good. Could require `∀ y, after.memory.block b=some y → SameMetadata y x`. This only if after exists, but does not preserve existence. Byte part map preserves existence for any i, even x.bytes[i]? none; after map = some none ensures block exists. yes. Metadata for outside block with byte component ensures exists anyway. Use `(after.memory.block b).map (fun y => (y.space, y.base, y.size, y.align, y.live, y.exposed)) = some (...)`. Lean nested tuples cumbersome but proof `simp`. Define `Block.Metadata` structure with fields and `Block.metadata`. Then preservation equality `Option.map Block.metadata`. New structure spec. `Block.SameMetadata` def and existential after.
+
+  ```
+  def Block.SameMetadata (after before : Block) : Prop :=
+   after.space=before.space ∧ ... 
+  ```
+
+  Preserves:
+  ```
+  (∀ b x, before... → f.BlockOutside b →
+   ∀ y, after...=some y → y.SameMetadata x) ∧
+  ```
+  With byte clause enough after block some. In proofs free/expose same block use ho to derive c ≠ b if size nonzero. Problem zero size fullBlock extent=0 gives BlockOutside even same block, and free/expose changes metadata, impossible theorem for zero size! Should footprint lifecycle always nonempty range using `max x.size 1` per suggestion. Better add explicit block footprint to model rather than fake byte. Reviewer allows dedicated block-footprint / max. Define `block (b) : Footprint := ⟨[⟨b,0,1⟩],[]⟩`, used free/expose. Then full block x.size not enough zero. Could change `fullBlock b size` to lifecycle `block b` + full? `Footprint.block b` uses nonempty marker range, a slight pun but documented "lifecycle footprint names block with nonempty range even zero-sized". Or extend Footprint with blocks list rather than byte ranges; bigger change. Reviewer concrete fix uses BlockOutside ranges and dedicated block footprint / max. `Footprint.block b := .byte ⟨b,0,1⟩`; free_frame footprint `.block b` not fullBlock. This is semantically okay range denotes permission beyond actual extent? Dedicated def clarifies metadata marker. Could add `Footprint.lifecycle b := .byte (fullBlock b (max size 1))` uses x.size. But no need size param if block. Original requirement footprint set of block byte ranges, no separate metadata set. Dummy byte range may be accepted. `fullBlock b (max x.size 1)` less abstraction. I can define `wholeBlock b size := .byte (fullBlock b (max size 1))`, docs lifecycle. For zero size nonempty. `free_frame` use `Footprint.block b` simplest. Might change theorem expected but fine.
+
+  Make sure store preserves metadata for BlockOutside. store modifies bytes only, easy. alloc preserves old metadata. seq add blockOutside_union. preserves_refl metadata. free/expose same block impossible with ho because `.block` range extent 1 and r.block=b. Derive:
+  ```
+  have hb : b ≠ c := by
+    have := ho ⟨b,0,1⟩ (by simp [Footprint.block,...])
+    rcases this with h | h
+    exact h.symm? 
+    simp at h
+  ```
+  BlockOutside r: r.block ≠ c OR extent=0. For f=.block b and c=b, yields b ≠ b contradiction. Better helper theorem `blockOutside_block {c} (ho : (Footprint.block b).BlockOutside c) : c ≠ b`. Add theorem spec? proofs helper. Then in free/expose for c=b use ho -> contradiction. For other c show metadata unchanged. Byte proof also no longer same-block case needed? ByteOutside .block b c i implies c≠b as any byte contained? range offset 0 extent1: for i=0 only; arbitrary i could outside even same block. byte proof same block valid unchanged bytes. metadata uses blockOutside. Should construct 3 parts.
+
+  Could use fullBlock max to retain bytes footprint all block. `free_frame ... (.byte (fullBlock b (max x.size 1)))`; helper blockOutside_nonempty:
+  ```
+  theorem blockOutside_of_nonempty {f} {b} (h : f.BlockOutside b) ...
+  ```
+  For singleton fullBlock b n with n≠0 -> c≠b. Prove inline.
+
+  Hybrid place operations: add at least `set_frame` generic:
+  ```
+  theorem set_frame (st) (p) (c) : (Footprint.place p).Preserves st (st.set p c) := ...
+  ```
+  Bytes metadata unchanged; places q outside p -> q≠p, simp.
+  rawWrite_frame can leverage store_frame; place unchanged and metadata included. `State.rawWrite` with access relation. write structured frame footprint place p. materialize more complex union byte new block + place p. Finding ideally materialize/storeBytes (storeBytes not exists). At least writePlace / updating st.places p satisfies. User says "add frame laws for C4's Hybrid place operations" plural; should add `set_frame`, `structured_write_frame`, `rawWrite_frame`, maybe materialize_frame logical. Should decide scope. To robustly address, add State.write theorem general footprint depends storage:
+  - structured: place p only
+  - materialized: byte access footprint, places unchanged. Could define `writeFootprint` based on cell? `Footprint` dynamic. Simpler two theorems `write_structured_frame`, `write_materialized_frame` and `rawWrite_frame`, `materialize_frame` perhaps not necessary. Finding specifically place half exercised via set and structured write. Add `materialize` footprint union to fully connect. Could be involved but manageable using materialize_cases and alloc/store frame sequential. Should see Proofs/Hybrid materialize_cases statement full and Memory lemmas.
+
+• I’ll strengthen `Footprint.Preserves` with whole-block metadata preservation and use a nonempty lifecycle footprint for `free`/`expose`, including zero-sized blocks. I’ll also add Hybrid place-update/write laws, generalize C1 return restoration to arbitrary destinations, and make call composition and retention pairing explicit.
+
+• Should have C1Call symmetric. Redefine from call config. Should have arguments evaluation and fn, vs stArgs stEnter. `C1Call O f P entry exit` existential:
+  ```
+  ∃ fn dst caller k args site vs stArgs stEnter tr result,
+   lookup ... ∧
+   evalArgs O caller entry.store args = .ok(vs,stArgs) ∧
+   fn.params.length=vs.length ∧
+   O.life enter stArgs=some stEnter ∧
+   entry.ctrl=.exec(.call dst f args site) ∧
+   entry.locals=caller ∧
+   entry.frames=k ∧
+   exit.ctrl=.done ... ∧
+   Steps P entry tr exit
+  ```
+  Could just entry exact config `entry = ⟨.exec..., caller, st,k⟩` with st existential. Avoid entry.store premise. Include entry.store pre-enter and Steps includes call enter and leave/bind. But final `Steps` return requires bindLife destination; existence ensures. Contract footprint now covers entire call including evalArgs, enter, leave and bind; good.
+
+  C1 call contract theorem unchanged. `step_call_saves_caller` existing helpful. Generalize return lemmas with dst stBind and hb. `step_return_restores_caller` takes dst and stLeave stBind. Could use exact Exec.step_return_caller. return cleanup similarly.
+
+  Finding 4 derive callee saved from WF and clobbers. Change theorem takes `(hw : sig.WellFormed) (h : sig.Call...)`; exact fun r hr => h.clobbers r (hw.2.2.2 r hr). Keep Machine.Preserved still duplicates saved but theorem now real. Add sequential/nested call composition theorem for Preserved/RegisterFrame. Easiest `machine_preserved_trans`, `registerFrame_union`. They request sequential/nested call composition theorem for Signature.Call or Machine... Add both perhaps robust. `RegisterFrame` union outside both; use List.mem_append. `Preserved.trans`: saved same list, stack slots trans, sp. straightforward.
+  Could add `Signature.Call` composition difficult args values intermediate, not needed.
+
+  Spec edits first piece likely footprint+C1+ABI all one? Brief "commit each piece separately" round fixes can commit logical group. I should modify Spec Frame then Proofs and build commit as one or several. Perhaps spec and proofs together necessary build imports proofs via root so can't commit spec alone if proofs broken. Could commit fix all once after build but user says each piece after build. I can do 3 commits: footprint/C1, ABI retention. Should edit spec and proof in one commit each logical piece. I'll first footprint + C1. Use Edit mandatory incremental. I can one Edit whole segments per file then read before next. Multiple edits same file not consecutive without read. I can use one Edit huge entire file? Should have changes several disjoint. Could do one edit per file with broad old_string from top to C1 contract (lines 9-120) replacing. That's manageable. Then build fail proofs; edit proofs top to C1. For ABI later separate.
+
+  Design metadata:
+  ```
+  def Block.SameMetadata (x y : Block) : Prop :=
+   x.space=y.space ∧ x.base=y.base ∧ x.size=y.size ∧ x.align=y.align ∧ x.live=y.live ∧ x.exposed=y.exposed
+  ```
+  order after before documented.
+  `Footprint.block b := .byte ⟨b,0,1⟩`.
+  `BlockOutside`.
+  `Preserves` 3 conjunction.
+  Doc top metadata.
+
+  Proofs:
+  - `preserves_refl`: constructor bytes, constructor metadata, places. metadata:
+  ```
+  intro b x hx ho y hy
+  rw [hx] at hy
+  cases hy
+  exact ⟨rfl,...⟩
+  ```
+  Can `simp only [hx, Option.some.injEq] at hy; subst y; exact ⟨...⟩`. `cases hy` works.
+  - `blockOutside_union`
+  - `preserves_seq`: metadata intermediate y from before and after z. Should block existence from h₁ bytes to get st'.memory.block b some y. I can derive using byte h₁ at i=0 with ByteOutside from BlockOutside. Should helper `byteOutside_of_blockOutside` theorem:
+  ```
+  theorem byteOutside_of_blockOutside {f b} (h:f.BlockOutside b) (i) : f.ByteOutside b i := by
+   intro r hr hc
+   rcases h r hr with hn | he
+   · exact hn hc.1
+   · have : i < r.offset + 0 := hc.2.2
+     omega
+  ```
+  For union metadata can cases hy: st'.memory.block b. If none, h₁ byte with outside at 0 gives after none map = some xbyte => contradiction. If some y then h₂ byte at 0 to get after some. But metadata h₁ directly needs after y; h₂ needs before y and final z. Simpler metadata clause use Option map Same? If define Preserves metadata as `(after.memory.block b).map Block.metadata = some x.metadata` then seq can use byte to establish intermediate but still. Could derive intermediate using h₁ byte. I'll implement helper.
+
+  Perhaps define `Block.Metadata` to ease trans equality:
+  ```
+  structure BlockMetadata ...
+  def Block.metadata ...
+  ```
+  Preserves map equality. Then seq:
+  - h₁ byte yields some intermediate exists as above.
+  - h₁.2.1 b x hx hb gives map metadata = some x.metadata, rewrite hy => y.metadata=x.metadata
+  - h₂.2.1 b y hy hb => final map = some y.metadata; trans congrArg.
+  No additional y final. Easier proofs free/expose with simp.
+  `BlockMetadata` 6 fields deriving DecidableEq Repr maybe no need. `Block.metadata`.
+  But new public structure arguably overkill. Use `Block.SameMetadata` and `∀ y` with seq similar.
+
+  Preserves metadata as Option map of function to tuple is easiest equality and trans. Define:
+  ```
+  def Block.metadata (x : Block) : AddrSpace × Nat × Nat × Nat × Bool × Bool :=
+  (x.space,...)
+  ```
+  There is already `Block.geometry` in Proofs.Memory namespace Mem opened. Defining metadata okay. Then `map Block.metadata`. Exactly all fields excluding bytes. This is concise and compare exact. Doc. Use equality orientation after = some before. `Block.metadata` conflicts perhaps none grep. Good.
+
+  Preserves 3 conjuncts:
+  1 bytes
+  2 metadata
+  3 places.
+
+  `byteOutside_of_blockOutside` useful free metadata same block contradiction not needed if derive c≠b:
+  ```
+  theorem blockOutside_block {b c} (h : (Footprint.block b).BlockOutside c) : c ≠ b := by
+   intro hc; subst c
+   have h' := h ⟨b,0,1⟩ (by simp [Footprint.block, Footprint.byte])
+   simp [Footprint.block, Footprint.byte] at h'? 
+  ```
+  Unfold BlockOutside at h, specialize:
+  ```
+  have h' := h ⟨b,0,1⟩ (by simp [Footprint.block, Footprint.byte])
+  simp at h'
+  ```
+  Since h' : b≠c∨1=0, with c=b simp. `simpa [Footprint.block, Footprint.byte] using h ...` maybe target False after subst. 
+  ```
+    intro hcb
+    subst c
+    have h' := h ⟨b,0,1⟩ (by simp [Footprint.block, Footprint.byte])
+    simp at h'
+  ```
+  Lean h name BlockOutside reducible automatically application? Should have `h _` works since def.
+
+  For store metadata: for access some b, if c=b then BlockOutside for range with bs.length perhaps if length zero. But access some some with length cannot zero? access for n=0 returns some none, so some some implies bs.length>0. Could derive via Memory.access. Easier use store_other_block if c≠b; if c=b, show BlockOutside impossible using successful access and ha. Should prove bs.length≠0 from ha. `Memory.access` if n=0 yields some none contradict. Helper:
+  ```
+  have hn : bs.length ≠ 0 := by
+   intro hn
+   simp [Memory.access, hn] at ha
+  ```
+  Then same c:
+  ```
+  have h' := ho ⟨b,off,bs.length⟩ (by simp [accessFootprint, Footprint.byte])
+  rcases h' with hne | he
+  exact (hne rfl).elim
+  exact (hn he).elim
+  ```
+  Access access cases for none/some none preserve refl (metadata included).
+  other c use store_other_block then rw hy hx and rfl metadata.
+  `store_frame` third metadata.
+
+  Free metadata:
+  ```
+  intro c y hy ho z hz
+  by_cases hc:c=b
+   subst; exact (blockOutside_block ho rfl).elim
+   simp only [block_modify,hc,...] at hz
+   rw [hy] at hz; cases hz; rfl
+  ```
+  Actually metadata equality map:
+  ```
+  intro c y hy ho
+  by_cases hc:c=b
+   subst; exact (blockOutside_block ho).elim? ho target after subst
+   rw [block_modify, if_neg hc, hy]
+  ```
+  No z. `simp only [block_modify, hc, ↓reduceIte, hy, Option.map_some]` should goal `some (metadata y)=some(metadata y)`. For same impossible. Bytes same cases unchanged. Good.
+
+  Expose similar.
+
+  Alloc metadata old c fresh and hm. use same hne; `subst b; rw[hm]; ...` map metadata. Byte already.
+
+  Set frame generic metadata rfl bytes hx.
+  Raw write can `unfold State.rawWrite at h; cases hm; simp...; subst; exact store_frame ... rfl hm` with `ha` uses access variable. Signature:
+  ```
+  theorem rawWrite_frame ... (access) (ha : ...=access) (h...) : Preserves ... := by
+   unfold State.rawWrite at h
+   cases hm : store ... with ...
+   simp [hm] at h; subst st'
+   exact store_frame ... access ha hm
+  ```
+  No additional issues.
+
+  Structured write:
+  ```
+  theorem write_structured_frame (tgt st st' p c v vOld?) hcell h :
+  ...
+  ```
+  hcell `st.places p = some c`, `c.storage = .structured old`, successful write implies st'=st.set p {c with storage := structured v}. Could theorem directly State.set plus no need write. But finding actual operation add:
+  ```
+  theorem write_structured_frame ... (c : Cell) (old v : Value)
+  (hc : st.places p=some c) (hs : c.storage=.structured old)
+  (h : st.write tgt p v=some st') :
+  (Footprint.place p).Preserves st st'
+  ```
+  Unfold State.write; simp [hc,hs] at h; split at h etc. Might simpler derive h equality via cases. 
+  ```
+  unfold State.write at h
+  rw [hc] at h
+  simp only [Option.bind_some] at h? 
+  ```
+  State.write do `let c ←` elaboration. `simp only [hc] at h; dsimp at h; rw[hs] at h; split at h; ...`
+  when condition true `simp only [Option.some.injEq] at h; subst st'; exact set_frame`.
+  false simp at h.
+  Could use `simp [State.write,hc,hs] at h` split perhaps h after simplification includes if. `unfold State.write at h; simp only [hc] at h; dsimp at h; rw[hs] at h; split at h <;> simp_all` then exact set. I'll iterate build.
+
+  Materialized write frame:
+  ```
+  theorem write_materialized_frame ... hc hs hw access ha h :
+   Preserves st st' (accessFootprint access (encode tgt v).length)
+  ```
+  unfold write h, hc, hs, condition split, cases hm store; simp at h; subst; store_frame.
+  Good. This exercises both.
+
+  Materialize perhaps not necessary. Add rawWrite and both write + set sufficient "Hybrid place operations". Could add materialize reuse only trivial, fresh complex not needed. Finding ideally materialize, not must. Keep scope.
+
+  C1Call new definition makes `c1Call_restores_caller` obtain pattern update. Could simplify proof:
+  ```
+  obtain ⟨fn,dst,caller,k,args,site,vs,stArgs,stEnter,tr,result,...⟩ := h
+  ```
+  Count fields. Define ordering concise:
+  ```
+  ∃ fn dst caller k args site vs stArgs stEnter tr result,
+   lookup ∧
+   entry = ⟨.exec..., caller, stArgs? no pre st, ...⟩
+  ```
+  Should pre st separate. Use entry fields as above no st existential:
+  - entry.ctrl
+  - entry.locals
+  - entry.frames
+  - evalArgs uses entry.store.
+  - hlen hl
+  - exit...
+  - Steps.
+  12 conjuncts. Proof destruct annoying but can `rcases h with ⟨fn,dst,caller,k,args,site,vs,stArgs,stEnter,tr,result,hf,hec,hel,hef,hv,hlen,hl,hxc,hxl,hxf,hs⟩`
+  exit locals hxf positions.
+  Could define entry exact:
+  ```
+  ∃ (st : O.Store), entry = ⟨..., caller, st,k⟩
+  ```
+  Then eval uses st. Existentials st before tr result. 4 entry facts becomes one. Fields hf, hentry, hv,hlen,hl, exit ctrl, locals, frames, steps = 9.
+  ```
+  ∃ fn dst caller k args site vs st stArgs stEnter tr result,
+   lookup ∧ entry = ... ∧ eval... ∧ ... 
+  ```
+  c1Call proof manageable.
+
+  Do I need step_call_saves_caller doc unchanged. C1 contract includes enter leave.
+
+  I'll Edit spec top.
+
+• The C1 contract will now start at the `.call` configuration, so its footprint includes argument evaluation, entry lifecycle instrumentation, callee execution, cleanup, leave instrumentation, and result binding—not just the callee body.
+
+• Should cannot consecutive same without read. Read 50-125 then edit big.Update todo and edit parallel? Todo independent.Now proofs top large replace lines 18-153 perhaps. I'll write carefully. Could complete replace file with Write prohibited incremental; Edit big sections. Start first 18-153. Compose.
+
+  Proof preserves_seq metadata: use helper `byteOutside_of_blockOutside`.
+  ```
+  have hb₁ := h₁.1 b 0 x hx (byteOutside_of_blockOutside hf)
+  cases hy ...
+  none simp [hy] at hb₁
+  some y =>
+   simp only [hy, Option.map_some, Option.some.injEq] at hb₁
+   have hm1:=h₁.2.1 b x hx hf
+   have hm2:=h₂.2.1 b y hy hg
+   simp only [hy, Option.map_some, Option.some.injEq] at hm1
+   exact hm2.trans (congrArg some hm1)
+  ```
+  Actually h₂.2.1 returns `(after).map metadata=some y.metadata`; hm1 : y.metadata=x.metadata. congrArg some hm1 : some y.metadata=some x.metadata. yes.
+
+  Byte helper uses:
+  ```
+    intro r hr hc
+    rcases h r hr with hne | he
+    · exact hne hc.1
+    · subst? he extent =0; simp [he] at hc maybe omega
+      have := hc.2.2
+      omega
+  ```
+  `hc.1 : r.block=b`. hne : r.block≠b exact.
+  blockOutside_union straightforward.
+  `blockOutside_block`.
+  `metadata` proofs.
+
+  store metadata for some:
+  ```
+        · intro c x hx ho
+          by_cases hc : c=b
+          · subst c
+            have hn : bs.length ≠ 0 := by
+              intro hn
+              simp [Memory.access, hn] at ha
+            have hout := ho ⟨b,off,bs.length⟩ (by simp [accessFootprint,Footprint.byte])
+            rcases hout with hne | he
+            · exact (hne rfl).elim
+            · exact (hn he).elim
+          · rw [store_other_block ..., hx]
+  ```
+  `ho` BlockOutside directly application. In accessFootprint after cases access it is def with some. `by simp [accessFootprint,Footprint.byte]`.
+  No need x after contradiction.
+
+  free metadata use `blockOutside_block ho`. Byte same case still ho ByteOutside no use but okay.
+  free footprint `.block b`.
+  expose.
+
+  alloc metadata repeat hne. Should avoid `subst b` direction existing uses hne : b≠c; subst b replaces b with c? If b is local and hne b≠c, `subst b` chooses equality? There is no equality, weird original code:
+  ```
+  have hne : b ≠ c := ...
+  subst b
+  ```
+  `subst b` uses hx? hx after maybe candidate b? Actually alloc_result hb : b=⟨next⟩ and `subst b` uses hb, not hne. So b replaced by next, hne then next≠c. Fine.
+
+  Place set after alloc before C1:
+  ```
+  theorem set_frame...
+    refine ⟨?_,?_,?_⟩
+   bytes intros; rfl? after.memory=st.memory; simp [State.set]? Goal map... exact by simp [hx]
+   metadata same
+   places q hq:
+   have hne : p ≠ q := by simpa [Footprint.place,Footprint.PlaceOutside] using hq
+   simp [State.places_set,hne]
+  ```
+  places_set condition p=q. hq q∉[p] gives q≠p. Should have p≠q via Ne.symm.
+  ```
+  have hqp : q ≠ p := by simpa [Footprint.place, Footprint.PlaceOutside] using hq
+  simp [hqp, Ne.symm hqp]? simp [State.places_set, Ne.symm hqp]
+  ```
+  `State.places_set` simp uses p=q, `hqp` q≠p, `Ne.symm hqp` p≠q. `simp [hqp]` simp can use q≠p to prove p≠q? simp uses eq symmetry perhaps not. `have hpq : p ≠ q := Ne.symm hqp; simp [hpq]`.
+  Bytes `simp only [State.memory_set, hx, Option.map_some]` since after `(st.set...).memory`. `rfl` perhaps after memory definitional. exact preserves bytes.
+
+  Write structured as above.
+  Raw/materialized later after basic builds perhaps.
+
+  I'll Edit.
+
+• I’m now updating the proofs to make metadata framing non-vacuous and to exercise both sides of Hybrid footprints with place updates, structured writes, materialized writes, and raw writes.
+
+• Now C1 proof section edit. Read around new lines via Grep line.Edit C1. General arbitrary dst and bind state.
+  ```
+  (dst) caller callee st stLeave stBind k hl hb
+  ...
+  exact Exec.step_return_caller...
+  ```
+  No simpa.
+  return cleanup exact Exec.return_reaches...
+  c1 obtain pattern.
+
+  Also add corollary none? Existing examples enough. The theorem changed meets.Now build to catch. Standard command with timeout. User said commit each piece as soon build passes. Run foreground max300 tool but command timeout1200 and Bash tool max300; foreground gets background at300. Could run background true timeout 1300. But I need result next, foreground 300 might move. Better Bash `nix develop -c timeout 1200 lake build ConcreteSpec` timeout300. Build likely <1m.warning: Git tree '/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c10' is dirty
+✖ [28/45] Building ConcreteSpec.Spec.Frame (387ms)
+trace: .> LEAN_PATH=/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c10/.lake/build/lib/lean /nix/store/94bmilywgajdnqvix1fs35fj94kala0w-lean4-release-4.34.1/bin/lean /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c10/ConcreteSpec/Spec/Frame.lean -o /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c10/.lake/build/lib/lean/ConcreteSpec/Spec/Frame.olean -i /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c10/.lake/build/lib/lean/ConcreteSpec/Spec/Frame.ilean -c /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c10/.lake/build/ir/ConcreteSpec/Spec/Frame.c --setup /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c10/.lake/build/ir/ConcreteSpec/Spec/Frame.setup.json --json
+error: ConcreteSpec/Spec/Frame.lean:113:55: Invalid field `metadata`: The environment does not contain `ConcreteSpec.Core.Mem.Block.metadata`, so it is not possible to project the field `metadata` from an expression
+  x
+of type `Block`
+Some required targets logged failures:
+- ConcreteSpec.Spec.Frame
+error: build failed
+Namespace issue def `Block.metadata` inside ConcreteSpec.Core.Frame, open Mem causes x type Mem.Block projection looks Mem.Block.metadata not Frame.Block.metadata. I defined Block.metadata but namespace resolution declares Frame.Block.metadata? Lean `def Block.metadata` namespace current + Block, not Mem.Block. Can't projection. Use `Frame.Block.metadata`? Better avoid namespaced def and call `blockMetadata`. Define `def blockMetadata`. Replace occurrences. Read spec region then Edit replace_all `Block.metadata` -> `blockMetadata`, `x.metadata` -> `blockMetadata x`. One Edit can replace old big? replace_all only one string. Should sequential read each. Could use one Edit segment around def and Preserves to change both, then proofs replacements separately (multiple patterns). I can define metadata in Mem namespace by `def Mem.Block.metadata`? Current namespace ConcreteSpec.Core.Frame, full `def ConcreteSpec.Core.Mem.Block.metadata` invalid nested current maybe `def _root_.ConcreteSpec.Core.Mem.Block.metadata`. Not desirable modifying other module namespace but possible. Simpler `def BlockMetadata (x : Block)` uppercase function and use `BlockMetadata x`. Replace strings all via one Edit entire spec? Use `old_string:"Block.metadata"` replace_all true new `blockMetadata`; then read and edit `.metadata` occurrences. But spec only `x.metadata` one. Could use exact big small old segment:
+  ```
+  def Block.metadata...
+  ...
+  (after...).map Block.metadata = some x.metadata
+  ```
+  not contiguous huge 30 lines. Could two edits with read between. Fine.Edit whole two spots not contiguous? old from def through preserves huge but can just replace `Block.metadata` all and `x.metadata` remains. One Edit `def Block.metadata ...` to `def blockMetadata`; map still Block.metadata unknown. Could replace_all string `Block.metadata` then next x later. Do it.Should read then x edit.Proofs no metadata identifier used except map inferred. Build.warning: Git tree '/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c10' is dirty
+✔ [28/45] Built ConcreteSpec.Spec.Frame (428ms)
+✔ [29/45] Built ConcreteSpec.Spec (127ms)
+✔ [30/45] Built ConcreteSpec.Proofs.Basics (184ms)
+✔ [31/45] Built ConcreteSpec.Proofs.Cleanup (430ms)
+✔ [32/45] Built ConcreteSpec.Proofs.Authority (366ms)
+✔ [33/45] Built ConcreteSpec.Proofs.Memory (541ms)
+✔ [34/45] Built ConcreteSpec.Proofs.Slice1 (577ms)
+✔ [35/45] Built ConcreteSpec.Proofs.Borrow (743ms)
+✔ [36/45] Built ConcreteSpec.Proofs.Brand (692ms)
+✔ [37/45] Built ConcreteSpec.Proofs.Observe (220ms)
+✖ [38/45] Building ConcreteSpec.Proofs.Frame (279ms)
+trace: .> LEAN_PATH=/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c10/.lake/build/lib/lean /nix/store/94bmilywgajdnqvix1fs35fj94kala0w-lean4-release-4.34.1/bin/lean /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c10/ConcreteSpec/Proofs/Frame.lean -o /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c10/.lake/build/lib/lean/ConcreteSpec/Proofs/Frame.olean -i /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c10/.lake/build/lib/lean/ConcreteSpec/Proofs/Frame.ilean -c /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c10/.lake/build/ir/ConcreteSpec/Proofs/Frame.c --setup /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c10/.lake/build/ir/ConcreteSpec/Proofs/Frame.setup.json --json
+error: ConcreteSpec/Proofs/Frame.lean:35:4: omega could not prove the goal:
+a possible counterexample may satisfy the constraints
+  c ≥ 0
+  a ≥ 0
+  a - c ≥ 1
+where
+ a := ↑r.offset
+ c := ↑i
+error: ConcreteSpec/Proofs/Frame.lean:127:8: unsolved goals
+case neg
+tgt : Target
+st : State
+hw : Memory.WellFormed tgt st.memory
+m' : Memory
+p : Ptr
+bs : List MByte
+a : Nat
+h : Memory.store tgt st.memory p bs a = some m'
+b : MemBlockId
+off : Nat
+ha : Memory.access tgt st.memory p bs.length a = some (some (b, off))
+c : MemBlockId
+x : Block
+hx : st.memory.block c = some x
+ho : (accessFootprint (some (some (b, off))) bs.length).BlockOutside c
+hc : ¬c = b
+⊢ Option.map blockMetadata (some x) = some (blockMetadata x)
+error: ConcreteSpec/Proofs/Frame.lean:265:4: Tactic `subst` failed: did not find equation for eliminating 'st''
+
+case some
+tgt : Target
+st st' : State
+hw : Memory.WellFormed tgt st.memory
+p : Ptr
+bs : List MByte
+align : Nat
+access : Option (Option (MemBlockId × Nat))
+ha : Memory.access tgt st.memory p bs.length align = access
+m : Memory
+hm : Memory.store tgt st.memory p bs align = some m
+h :
+  (do
+      let m ← some m
+      some { cells := st.cells, memory := m }) =
+    some st'
+⊢ Footprint.Preserves st st' (accessFootprint access bs.length)
+error: ConcreteSpec/Proofs/Frame.lean:264:19: This simp argument is unused:
+  Option.bind_some
+
+Hint: Omit it from the simp argument list.
+  [apply] simp only [hm, Option.some.injEq] at h
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+error: ConcreteSpec/Proofs/Frame.lean:264:37: This simp argument is unused:
+  Option.some.injEq
+
+Hint: Omit it from the simp argument list.
+  [apply] simp only [hm, Option.bind_some] at h
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+✔ [39/45] Built ConcreteSpec.Proofs.Checker (302ms)
+✔ [40/45] Built ConcreteSpec.Proofs.Hybrid (358ms)
+✔ [41/45] Built ConcreteSpec.Proofs.Rep (388ms)
+✔ [42/45] Built ConcreteSpec.Proofs.Slice0 (208ms)
+✔ [43/45] Built ConcreteSpec.Proofs.Examples (171ms)
+Some required targets logged failures:
+- ConcreteSpec.Proofs.Frame
+error: build failed
+Fix helper need use he rewrite. `subst he` no. `rw [he] at hi; omega` or simp at hi. hc.2.2 `i<offset+extent`. `rw [he, Nat.add_zero] at hi; exact (Nat.not_lt_zero _ hi).elim` goal False from ¬Contains. I am in `intro r hr hc` goal False. `simp [he] at hi` solves. replace omega with `simp [he] at hi`.
+
+  store metadata other rw leaves map some simplification add `rfl` after rw or `simp`. Original byte branch had rfl. Add rfl.
+
+  rawWrite do not simplified because do let m ← some m needs `Option.bind_some` maybe actual `Option.bind` reduction via simp only [hm] doesn't dsimp. `simp [hm] at h` yields h : {..}=st' maybe subst. Use `simp [hm] at h; subst st'` as materialized perhaps also same issue? No errors materialized means simplification worked? raw h still do because `simp only` doesn't reduce Option.bind some? Option.bind_some unused indicates do is `Option.bind`? Wait `Option.bind_some` theorem name maybe for do? h shows let m ← some m, `simp only [hm]` didn't reduce because `Option.bind_some` unused? perhaps do uses `bind` not Option.bind? `simp [hm] at h` broad.
+
+  Should Read relevant file lines then edit each sequential requiring reread. Could one Edit multiple via old string huge no. Use Read 25-40 and 115-130 and 255-270 parallel (same file multiple reads okay). Then one Edit only one per response same file restriction. Could one edit old string whole file? no. I can use `Edit` replace_all `omega` dangerous other. Use one fix then read then next. Fine.
+
+• The first build found three proof-script issues, not specification issues: an arithmetic side goal, an unsimplified `Option.map`, and a monadic bind that needed broader simplification. I’m correcting those and rebuilding.
+
+• I don't need todo update until complete. Edit.Build.warning: Git tree '/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c10' is dirty
+✖ [43/45] Building ConcreteSpec.Proofs.Frame (258ms)
+trace: .> LEAN_PATH=/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c10/.lake/build/lib/lean /nix/store/94bmilywgajdnqvix1fs35fj94kala0w-lean4-release-4.34.1/bin/lean /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c10/ConcreteSpec/Proofs/Frame.lean -o /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c10/.lake/build/lib/lean/ConcreteSpec/Proofs/Frame.olean -i /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c10/.lake/build/lib/lean/ConcreteSpec/Proofs/Frame.ilean -c /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c10/.lake/build/ir/ConcreteSpec/Proofs/Frame.c --setup /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c10/.lake/build/ir/ConcreteSpec/Proofs/Frame.setup.json --json
+error: ConcreteSpec/Proofs/Frame.lean:34:2: unsolved goals
+case inr
+f : Footprint
+b : MemBlockId
+h : f.BlockOutside b
+i : Nat
+r : ByteRange
+hr : r ∈ f.bytes
+hc : r.Contains b i
+he : r.extent = 0
+hi : i < r.offset
+⊢ False
+Some required targets logged failures:
+- ConcreteSpec.Proofs.Frame
+error: build failed
+Should other bound offset≤i from hc.2.1. exact `(Nat.not_lt_of_ge hc.2.1) hi` after extent. 
+  ```
+  have hi := hc.2.2
+  rw [he, Nat.add_zero] at hi
+  exact (Nat.not_lt_of_ge hc.2.1) hi
+  ```
+  Current simp only transformed only right. Use omega with both after rw:
+  ```
+  have lo:=hc.2.1
+  have hi:=hc.2.2
+  omega
+  ```
+  Earlier omega didn't know he because not included? It was in context but omega doesn't use equality of Nat? should. It counterexample offset>i because ignored he? Omega perhaps doesn't use `he` automatically if not arithmetic? It should. Just explicit.warning: Git tree '/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c10' is dirty
+✔ [43/45] Built ConcreteSpec.Proofs.Frame (429ms)
+✔ [44/45] Built ConcreteSpec (241ms)
+Build completed successfully (45 jobs).
+Now piece footprint+C1 build passes, commit now per instruction. But finding4 not done yet part ABI. First piece commit only current two files. Check git diff/status then commit. Git mutations commit explicitly requested. Run status diff --check perhaps.
+
+• The footprint and C1 changes now build successfully. I’m committing that validated slice before moving to the ABI and foreign-retention fixes. M ConcreteSpec/Proofs/Frame.lean
+ M ConcreteSpec/Spec/Frame.lean
+ ConcreteSpec/Proofs/Frame.lean | 192 ++++++++++++++++++++++++++++++++++-------
+ ConcreteSpec/Spec/Frame.lean   |  50 ++++++++---
+ 2 files changed, 197 insertions(+), 45 deletions(-)
+
+
+• Second bash weird pipe git diff into git diff no-index ignores input, harmless but unnecessary. No issue. Commit.[wip/spec-c10 95ed6c337] spec: strengthen frame footprints and C1 restoration
+ 2 files changed, 197 insertions(+), 45 deletions(-)
+Now ABI finding4+extern. Update todo second done third in progress. Should spec modifications. Plan ExternResult contextual.
+
+  Reorder KeptPair before ExternResult. Currently lines 290 etc. I can replace entire section 290-337 with new. Should read current 270-345.Spec replace 314-356. Define KeptPair before Valid.
+
+  `ExternResult.Valid {F H} (pair) (f)` pattern:
+  ```
+  | .ffi _ => True
+  | .owned h => f=pair.complete ∧ h=pair.handle
+  | .receipt h => f=pair.submit ∧ h=pair.handle
+  | .enum => False
+  ```
+  Does submission return owned invalid, completion receipt invalid, unrelated both invalid. Good.
+  WF:
+  ```
+  pair.submit ≠ pair.complete ∧
+  submitParam = ... ∧
+  ExternResult.Valid pair pair.submit submitResult ∧
+  completeParam=.receipt... ∧
+  ExternResult.Valid pair pair.complete completeResult
+  ```
+  This no explicit result equalities but reducible.
+  Decidable instances needs DecidableEq F and H for equalities. Current no classes. Add `[DecidableEq F] [DecidableEq H]`.
+  KeptStep completion add `pair.submit ≠ pair.complete ∧ f=...` ordering distinct first or after. Choose `f = pair.complete ∧ pair.submit ≠ pair.complete ∧ ...` kept theorem destructure 5. For rejection easier kept_only yields hf then distinct.
+
+  Nit doc `H is handle identity type and pair.handle tracked instance in single-handle trace`.
+  Examples update:
+  enum `ExternResult.Valid ⟨0,1,7⟩ 0 .enum`.
+  WF proof ⟨by decide,rfl,trivial? Valid receipt with pair submit 0 handle7 reduces `0=0∧7=7`, `⟨rfl,rfl⟩`; complete similarly. exact `⟨by decide,rfl,⟨rfl,rfl⟩,rfl,⟨rfl,rfl⟩⟩`.
+  Different receipt h.2.2.1 now submitResult Valid: conjunction 0=0 and 7=8. h.2.2.1.2 : 7=8, cases.
+  Add refused unrelated result:
+  ```
+  example : ¬ ExternResult.Valid pair 2 (.receipt 7) ∧ ¬ ... owned... := by decide
+  ```
+  and equal identities not WF:
+  ```
+  example : ¬ (⟨0,0,7⟩...).WellFormed ... := by intro h; exact h.1 rfl
+  ```
+  Could combine with enum existing.
+  Accepted direct FFI unrelated remains valid perhaps example.
+
+  KeptStep rejection proof theorem independent WF.
+
+  Finding 4 machine composition. No spec change required aside theorem.
+
+  I'll edit spec block.
+
+• For foreign returns, validity will now depend on the actual extern identity and its `KeptPair`: only submission may return the paired receipt, and only completion may return the paired owned handle. Submission and completion must be distinct, and the transition relation will enforce that distinction as well.
+
+• Should have examples edit after read.Replace 422-437 with expanded. Accepted proof can `by decide` for WF since all decidable? WF Prop has equalities of ExternParam/ExternType with H Nat, DecidableEq ExternType not derived! ExternType no DecidableEq. But proof manually.
+  `ExternResult.Valid pair pair.submit (.receipt 7)` reduces pair.handle etc. exact ⟨rfl,rfl⟩.
+  ```
+  exact ⟨by decide, rfl, ⟨rfl,rfl⟩,rfl,⟨rfl,rfl⟩⟩
+  ```
+  Different h.2.2.1 is Valid submitResult = pair submit =0 and h=7; `.2` 7=8. cases.
+  Equal pair refusal h.1 rfl.
+  Unrelated result by decide.Proofs ABI modify callee theorem plus add composition and kept. I can one Edit from namespace ABI through before clobbers to include new theorems. Then kept separate read.
+
+  Composition:
+  ```
+  theorem machine_preserved_trans ... (h₁: Preserved before mid saved)(h₂: Preserved mid after saved): Preserved before after saved := by
+   refine ⟨?_,?_,?_⟩
+   regs exact (h₂.1 r hr).trans(h₁.1...)
+   slots: need mid.sp = before.sp from h₁.2.2, slot < before.sp -> after slots = mid via h₂ with `h₁.2.2 ▸ hs` orientation h₁: mid.sp=before.sp, need slot<mid.sp `by rwa [h₁.2.2]`? `have hs' : slot < mid.stackPointer := by rwa [h₁.2.2]`; then trans.
+   sp h₂.2.2.trans h₁.2.2
+  ```
+  `machine_registerFrame_union`:
+  ```
+  intro r hr
+  have hr' : r∉c₁ ∧ r∉c₂ := by simpa [List.mem_append,not_or] using hr
+  exact (h₂ r hr'.2).trans (h₁ r hr'.1)
+  ```
+  Names `machine_preserved_seq` perhaps composition. Reviewer wants sequential/nested call composition theorem. `machine_preserved_trans`, `registerFrame_union` clear.
+  callee_saved now `(hw : sig.WellFormed) (h : sig.Call...)`; `fun r hr => h.clobbers r (hw.2.2.2 r hr)`.
+  Doc no projection.
+
+  Kept theorem destructure 5 `hf,hne,hh,hh',hh''`; hne unused warning? Lean no unused variables linter? Named and not used may not warn? Lean unused variables linter does warn if theorem binders? Tactic obtain unused perhaps no. But use hne perhaps not needed. Could `obtain ⟨hf, -, hh,...⟩` wildcard syntax `obtain ⟨hf, _, hh,...⟩` inaccessible. Use `_hne` to suppress. `cases hf; cases hh...` hne context irrelevant.
+  Add `kept_receipt_rejects_submission`:
+  ```
+  theorem ... pair h h' after : ¬KeptStep pair (.kept h) (.call pair.submit h') after := by
+   intro hs
+   have he := kept_only... .1
+   cases he
+   have hs' := hs
+   -- after cases he event equality doesn't substitute pair.submit? he : call pair.submit h' = call pair.complete h, cases he likely substitutes submit=complete? Since dependent injection perhaps cases equality turns? Existing other uses exact hf rfl after cases he. For distinct need obtain hs destructure directly:
+   cases after with
+   | kept => cases hs
+   | owned h'' =>
+     exact hs.2.1 rfl
+  ```
+  KeptStep conjunction first f=complete, second submit≠complete. With f=submit, hs.2.1 : submit≠complete and hs.1 : submit=complete. `exact hs.2.1 hs.1`.
+  ```
+    cases after with
+    | kept h'' => cases hs
+    | owned h'' => exact hs.2.1 hs.1
+  ```
+  Simple.
+  Add result validity theorems for A? Examples prove but response wants new theorem perhaps useful:
+  ```
+  theorem extern_receipt_result_only_submission ... (h:ExternResult.Valid pair f (.receipt h)) : f=pair.submit ∧ h=pair.handle := h
+  theorem extern_owned_result_only_completion ... := h
+  ```
+  Trivial projections but interface law okay. More meaningful unrelated:
+  ```
+  theorem unrelated_extern_result_rejects_retention ... (hf:f≠submit)(hf':f≠complete) : ¬Valid pair f (.receipt h) ∧ ¬Valid pair f(.owned h) := ⟨⟨...⟩⟩
+  ```
+  Could add, not required examples suffice but finding fixed by definition. Better theorem `extern_result_rejects_unrelated_retention` demonstrates. Keep concise.
+
+  I'll edit first.
+
+• I’m also replacing the callee-saved field projection with a proof from `Signature.WellFormed` plus the clobber frame, and adding composition laws for preserved machine state and register footprints across sequential calls.
+
+• Now kept section read new offsets.Edit kept whole section including add extern result theorem before kept. `ExternResult.Valid` h directly no reduction needed theorem type matches h. Unrelated proof:
+  ```
+  constructor
+   · intro hr; exact hfs hr.1
+   · intro ho; exact hfc ho.1
+  ```
+  good.
+  kept destructure 5.Build.warning: Git tree '/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c10' is dirty
+✔ [28/45] Built ConcreteSpec.Spec.Frame (535ms)
+✔ [29/45] Built ConcreteSpec.Spec (132ms)
+✔ [30/45] Built ConcreteSpec.Proofs.Basics (207ms)
+✔ [31/45] Built ConcreteSpec.Proofs.Authority (409ms)
+✔ [32/45] Built ConcreteSpec.Proofs.Slice1 (592ms)
+✔ [33/45] Built ConcreteSpec.Proofs.Cleanup (579ms)
+✔ [34/45] Built ConcreteSpec.Proofs.Memory (609ms)
+✔ [35/45] Built ConcreteSpec.Proofs.Borrow (710ms)
+✔ [36/45] Built ConcreteSpec.Proofs.Brand (709ms)
+✔ [37/45] Built ConcreteSpec.Proofs.Observe (218ms)
+✔ [38/45] Built ConcreteSpec.Proofs.Checker (317ms)
+✔ [39/45] Built ConcreteSpec.Proofs.Rep (397ms)
+✔ [40/45] Built ConcreteSpec.Proofs.Hybrid (379ms)
+✔ [41/45] Built ConcreteSpec.Proofs.Frame (334ms)
+✔ [42/45] Built ConcreteSpec.Proofs.Slice0 (218ms)
+✔ [43/45] Built ConcreteSpec.Proofs.Examples (171ms)
+✔ [44/45] Built ConcreteSpec (147ms)
+Build completed successfully (45 jobs).
+Commit second slice. Before perhaps doc header update? Says ABI laws cover okay. Check comments stale `ExternType` doc "logical types" okay. `ExternParam.Valid` docs valid ordinary. Fine. Build success. Commit.
+
+• The ABI and retention changes build successfully, including examples that reject unrelated extern results and identical submit/complete identities. I’m committing this second validated slice, then running the permitted rule and trust checks.[wip/spec-c10 f7fa4533f] spec: pair foreign retention results and compose ABI frames
+ 2 files changed, 85 insertions(+), 25 deletions(-)
+
+
+• Now run permitted rules/trust. Also build in response already after exact deliverable commit no changes. Should have `scripts/spec/rules.sh` and trust_ban can parallel independent (light) though instructions at most heavy no. Run parallel. Todo third done fourth in progress.=== the specification ===
+  ok   1 registered rules in 42 sources, each documented with an existing decision row and an accepted and a refused example; every citation names a registered rule
+  ok   the registry and every rule citation of ConcreteSpec
+=== negative controls ===
+  ok   control: a documented rule with both examples passes
+  ok   control: a rule with no refused example fails
+  ok   control: a rule whose doc cites no decision row fails
+  ok   control: a rule registered twice fails
+  ok   control: a rule naming no declaration fails
+  ok   control: a citation of an unregistered rule fails
+  ok   control: a verdict on a non-example fails
+  ok   control: revision 0 fails
+  ok   control: a truncated listing is an error
+  ok   control: a rule with no accepted example fails
+  ok   control: a rule with no doc comment fails
+  ok   control: a rule citing a row no inventory has fails
+  ok   control: one example claiming both verdicts fails
+  ok   control: a verdict in a nested comment fails
+  ok   control: an unregistered quoted name fails
+  ok   control: examples with an attribute or a modifier count
+  ok   control: an unlexable source is an error
+  ok   control: a verdict in a string literal fails
+  ok   control: an attribute with brackets inside counts
+  ok   control: a row an inventory only mentions does not count
+  ok   control: an attribute string cannot stand in for an example
+  ok   control: an attribute holding a string with a bracket counts
+  ok   control: a quoted name holding a backtick is checked
+  ok   control: a malformed citation fails
+  ok   control: a raw string in an attribute cannot stand in for an example
+  ok   control: a quoted name in an attribute cannot stand in for an example
+  ok   control: a comment in an attribute cannot stand in for an example
+  ok   control: a quoted name holding citation-like text is one citation
+  ok   control: a missing source directory is an error
+  ok   control: a source directory with no .lean file is an error
+  ok   control: a checker that hangs through both attempts is INCOMPLETE
+SPEC-RULES: PASS=32 FAIL=0
+=== E/D: the environment ===
+  ok   all 43 ConcreteSpec source modules are in the environment E and D read
+  ok   none of the 7850 ConcreteSpec constants depends on sorryAx, ofReduceBool/Nat, trustCompiler or a native axiom
+  ok   ConcreteSpec declares no axiom
+=== S: the sources ===
+  ok   none of the 43 source files spells a banned word outside comments
+  ok   lakefile.toml builds the library with warningAsError, and nothing overrides it
+=== X: the examples, in the kernel's terms ===
+  ok   all 272 examples, kept as declarations, depend only on the standard axioms
+=== negative controls ===
+  ok   control: a theorem proved by sorry is refused (ConcreteSpecControl.sorryThm (sorryAx))
+  ok   control: a definition with a sorry body and no theorem about it is refused (ConcreteSpecControl.sorryDef (sorryAx))
+  ok   control: a theorem proved by native_decide is refused (ConcreteSpecControl.nativeThm (ConcreteSpecControl.nativeThm._native.native_decide.ax_1_1))
+  ok   control: a declared axiom is reported
+  ok   control: an axiom whose name holds a tab fails the run (no row can carry it)
+  ok   control: native_decide, and sorry inside an interpolation, after a string, raw string or quoted name holding comment delimiters, after an interpolation holding a string, a direct sorryAx, a syntax extension, an outside import, an option, meta code and decide options (native split across lines, positional) are found; the words in comments are not
+  ok   control: the header import ConcreteSpec.Spec Lean is reported
+  ok   control: the header import ConcreteSpec.Spec   Lean is reported
+  ok   control: the header prelude import ConcreteSpec.Spec is reported
+  ok   control: a library that turns warningAsError off is refused (the library sets options ['warningAsError'])
+  ok   control: a library built from another source directory is refused (the library sets ['srcDir'])
+  ok   control: a source the scan cannot read or lex (missing) fails it (rc=3)
+  ok   control: a source the scan cannot read or lex (Open) fails it (rc=3)
+  ok   control: a source the scan cannot read or lex (Brace) fails it (rc=3)
+  ok   control: a source the scan cannot read or lex (Quote) fails it (rc=3)
+  ok   control: source modules outside a (truncated) import closure are reported
+  ok   control: an example proved by decide +native and one closed by stop are reported, rfl is not, and the word example in a string is no example («⟪example⟫C.lean:1» («⟪example⟫C.lean:1»._native.decide.ax_1) «⟪example⟫C.lean:2» (sorryAx) )
+PROOF-TRUST-BAN: PASS=23 FAIL=0
+Should verify git status new files. Also perhaps inspect final diff from base and theorem statements to summarize. Perhaps all findings addressed including agy 5 doc yes. Should have no axioms golden changed. Check status, log SHAs. Could run `git status --short --branch`, `git log -2`, `git diff --stat 46211bbd..HEAD`, perhaps `git diff --check 46211...`. Also consider `scripts/spec/rules.sh` creates files? status.
+
+• All permitted checks pass: the full Lean build, the specification-rule gate, and the proof trust ban. I’m doing the final repository check and collecting the exact commit and theorem summary.## wip/spec-c10
+f7fa4533f22cb89b69a0f89cf4963356880a7907 spec: pair foreign retention results and compose ABI frames
+95ed6c337e28773bb2c9fe41188cb7163b64054c spec: strengthen frame footprints and C1 restoration
+ ConcreteSpec/Proofs/Frame.lean | 242 +++++++++++++++++++++++++++++++++++------
+ ConcreteSpec/Spec/Frame.lean   | 110 +++++++++++++------
+ 2 files changed, 282 insertions(+), 70 deletions(-)
+
+
+• Perhaps final todo done. Before responding think if need "anything left with reason" no materialize frame? Finding 2 "or even basic place writes; ideally State.storeBytes/materialize" I added basic, satisfies. Response "No materialize-specific combined alloc/store/place law added; requested place side covered by set/write, existing byte laws compose" Is that "anything left" should mention optional item not done. ROUND says agy fix 2 add at least place update and ideally materialize. I did at least and more, no need frame materialize. Could say "No materialization-specific composite theorem; not required by finding, and its components are covered." But could be seen incomplete? Perhaps better add materialize to fully address "ideally" not necessary. Desired all findings fixed. Agy 4 said add sequential/nested theorem done. Agy5 doc done. Codex all. Good.
+
+  Potential concern ExternResult.Valid direct FFI allowed for any f as expected. Pair.WellFormed does not explicitly `submitParam.Valid`, but exact descriptor ensures. Fine.
+
+  Potential concern metadata definition only old blocks; block outside with zero ranges preserves. free `.block b` byte footprint only first byte, not all bytes of freed block. Operation free only metadata, doesn't change bytes at all, so frame law says other bytes outside first byte in same block also preserved. This is true and stronger; footprint block metadata marker range does not mark all bytes touched but bytes unchanged anyway. Fine.
+
+  Alloc footprint fullBlock size zero means BlockOutside new b true, but quantified old blocks only so fresh b not old. old c metadata preserved due fresh inequality. Fine.
+
+  Store frame metadata for access some some proof nonzero. Good.
+
+  C1Call includes stEnter existential only hl and Steps, entry call step could choose stEnter uniquely by deterministic. Symmetric yes.
+
+  No new axioms. Tests pass.
+
+  Should have final response self-contained list commits SHA+one line, each finding fixed and how, new/changed theorem statements, left, QUESTIONS. Could be somewhat detailed. Mention two commits full SHA perhaps short accepted user SHA + one line. Use 9 char or full? "SHA + one line" short valid. Use full perhaps unwieldy. 9 chars okay.
+
+  Sections Commits, Findings, Theorem changes, Verification, Left out, QUESTIONS. Keep concise but explicit.
+
+  Theorem summary:
+  - `Footprint.Preserves`: bytes + metadata + places.
+  - helpers blockOutside etc
+  - `store_frame`,`free_frame`,`expose_frame`,`alloc_frame` updated.
+  - `set_frame`,`write_structured_frame`,`write_materialized_frame`,`rawWrite_frame`.
+  - C1 `C1Call`, return arbitrary dst, c1Call.
+  - ABI machine trans union, callee saved from WF.
+  - extern result unrelated, kept submission.
+  Could avoid listing unchanged all helper theorem statements individually? User asks new/changed theorem statements, describe in words precise. Include all new/changed. `byteOutside_union` unchanged but seq changed. `preserves_refl` changed to include metadata. Mention.
+
+  Findings mapping:
+  Codex A ExternResult Valid pair f, receipts only submission same handle, owned only completion. examples+theorem.
+  B distinct WF and KeptStep, proof.
+  agy1 metadata all 6 fields, lifecycle footprint nonempty zero.
+  agy2 four Hybrid laws.
+  agy3 symmetric C1 and dst.
+  agy4 derived theorem+2 composition.
+  agy5 doc H identity type and handle instance.
+  Everything.
+
+  Left out: no materialize composite theorem (optional); no target ABI etc inherited original brief. No changes axioms golden. Heavy checks not run per brief; mention only permitted checks run, heavy left reviewer. "Nothing requested left unresolved. Optional materialize-specific theorem not added; set/write/rawWrite cover finding." Could phrase.
+
+  QUESTIONS: None.
+
+  Should have Todo done first.
+
+• The working tree is clean, both commits are present, and only the two Frame modules changed. All seven review items are addressed; no owner-language question arose.
+
+• Now respond. Ensure no claim full Lean build after final commit? Build before commit exact content yes. Fine.
+
+  Use citations path lines current. Spec C1 line 124 etc after additions. I know current lines from read shifted perhaps C1 at 124. Can cite modules without line? Instructions say cite code locations path:42. Use accurate from outputs: Spec new external lines around314 etc. Current after examples changes spec definitions lines 314-360. Proofs exact above. `Spec/Frame.lean:109`, C1 perhaps 124. Good.
+
+  Respond detailed but not enormous.
+
+• Implemented all ROUND2 findings in two commits.
+
+  ### Commits
+
+  - `95ed6c337` — spec: strengthen frame footprints and C1 restoration
+  - `f7fa4533f` — spec: pair foreign retention results and compose ABI frames
+
+  ### Findings fixed
+
+  - **Codex A — foreign result pairing:** `ExternResult.Valid` now takes the `KeptPair` and actual extern identity. Only submission returns the paired receipt; only completion returns the paired owned handle. Unrelated externs are rejected by definition and by `extern_result_rejects_unrelated_retention`.
+  - **Codex B — distinct extern identities:** `KeptPair.WellFormed` requires `submit ≠ complete`; `KeptStep` also enforces this for completion. `kept_receipt_rejects_submission` proves submission cannot consume its own receipt.
+  - **agy 1 — metadata framing:** `Footprint.Preserves` now preserves bytes, place cells, and all non-byte block metadata: space, base, size, alignment, liveness, and exposure. `free_frame` and `expose_frame` use a nonempty lifecycle footprint, including for zero-sized blocks.
+  - **agy 2 — Hybrid place operations:** added frame laws for `State.set`, structured typed writes, materialized typed writes, and raw writes.
+  - **agy 3 — C1 lifecycle symmetry:** `C1Call` now starts at `.call` and includes argument evaluation, `.enter`, execution, cleanup, `.leave`, and result binding. Return-restoration theorems now support arbitrary `dst` using `Exec.bindDst` and `Exec.bindLife`.
+  - **agy 4 — ABI laws:** `callee_saved_registers_equal` now derives preservation from `Signature.WellFormed` and the clobber frame. Added sequential composition for preserved machine state and union of clobber sets.
+  - **agy 5 — handle documentation:** documented `H` as the handle-identity type and `pair.handle` as the tracked instance.
+
+  ### New or changed theorem statements
+
+  - `preserves_refl` and `preserves_seq` now compose all three preservation components: bytes, block metadata, and places.
+  - `byteOutside_of_blockOutside`, `blockOutside_union`, and `blockOutside_block` connect block-level and byte-level exclusion.
+  - Updated `store_frame`, `free_frame`, `expose_frame`, and `alloc_frame` prove metadata preservation in addition to the existing byte/place laws.
+  - New `set_frame`, `write_structured_frame`, `write_materialized_frame`, and `rawWrite_frame` give precise Hybrid footprints.
+  - Generalized `step_return_restores_caller` and `return_cleanup_restores_caller` restore `Exec.bindDst dst result caller` for every destination.
+  - New `machine_preserved_trans` composes saved registers, caller stack slots, and stack-pointer restoration.
+  - New `machine_registerFrame_union` preserves registers outside two sequential calls’ combined clobber lists.
+  - New `extern_result_rejects_unrelated_retention` and `kept_receipt_rejects_submission` prove the strengthened foreign-retention rules.
+
+  ### Verification
+
+  Passed:
+
+  - `nix develop -c timeout 1200 lake build ConcreteSpec`
+  - `nix develop -c timeout 600 bash scripts/spec/rules.sh` — 32/32
+  - `nix develop -c timeout 900 bash scripts/proofs/trust_ban.sh` — 23/23
+
+  Working tree is clean. `scripts/proofs/axioms.golden` was not modified, and nothing was pushed.
+
+  ### Left out
+
+  No optional composite `materialize` frame theorem was added; the requested place-level gap is covered directly by the new set/write laws, while allocation and storage components have their own frame laws. Heavy checks remain for the reviewer as instructed.
+
+  ### QUESTIONS
+
+  None.
+
+To resume this session: kimi -r session_eb815661-1960-4591-b2e4-70942d3f5b5b
+kimi rc=0

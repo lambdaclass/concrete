@@ -1,0 +1,15 @@
+• - `scripts/land/acceptance.sh:92` — the source `origin` is never checked before `do_clone` clones and fetches it at lines 190–194. Running acceptance from a stale clone therefore reads `unbalancedparentheses/concrete2` before `train.sh` can refuse it. `ACCEPT_REPO` can likewise select the archived repository at line 304. **Fix:** before cloning, run `land_remote_bad origin "${ACCEPT_REPO:-$LAND_CANONICAL_REPO}"`; local remotes remain usable by fixtures. Add stale-origin and stale-`ACCEPT_REPO` controls with git/gh shims proving no network call occurs.
+
+  - `scripts/land/train.sh:801` — `record` bypasses `require_remote_repo`, so an inherited old `LAND_REPO` makes its API calls at lines 818 and 824 read the archived repository. The CI workflow now supplies the correct value, but the documented command remains unguarded elsewhere. **Fix:** call `require_remote_repo` at the start of `cmd_record`, before any GitHub API use, and add a control asserting that stale `LAND_REPO` is refused without invoking `gh`.
+
+  - `scripts/land/install-bot.sh:60` — the installer fetches before the generated launcher’s guard ever runs. A `url.*.insteadOf` rule can rewrite the newly configured canonical URL to the archived repository; the fresh clone at line 42 has the same effective-URL gap. **Fix:** validate the effective destination before both clone and fetch, using the same URL/alias resolution as `land_remote_bad`. Add a control that redirects the canonical URL through `insteadOf` and proves no fetch or clone occurs.
+
+  - `scripts/land/install-bot.sh:115` — the environment-file migration replaces the existing file with a newly created `$ENVF.new`, potentially changing a mode such as `0600` to the process umask’s default and exposing other credentials stored in that environment file. **Fix:** preserve metadata, portably, for example with `cp -p "$ENVF" "$ENVF.new"` before overwriting that temporary file’s contents and moving it back. Add a permission-preservation assertion.
+
+  - `scripts/checks/landing_script.sh:795` — the rewritten `push-both.sh` fixture has only refusal cases and an intentionally failed network push. It would still pass if the success path never pushed anything. **Fix:** add a positive control against the local bare `origin`, asserting exit 0, `origin/main == HEAD`, an unchanged `fork/main`, and the final `published` message.
+
+  The changed shell files pass `bash -n`; no state-changing tests were run. I found no remaining operational two-repository documentation or new Bash 4-only syntax.
+
+  VERDICT: REJECT
+
+To resume this session: kimi -r session_d4ff66e4-c8b7-4e09-ae1a-a3aafeee506e

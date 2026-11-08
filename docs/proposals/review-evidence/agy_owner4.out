@@ -1,0 +1,9 @@
+Under the premises in the module docstring, the reported stack bound is a valid upper bound for every input the checker accepts:
+
+1. **Mach-O stub identification (`stack_bound.py:66-99`, `598-619`)**: `__stubs` disassembly is never added to `funcs`, Mach-O external calls are matched only by exact target address against `stub ADDR SYMBOL` entries from the indirect symbol table, and ELF `@plt` calls now also require `"+" not in sym` (rejecting mid-stub offsets).
+2. **Single-register `x30`/`x29` save and restore (`stack_bound.py:405-424`, `436-445`)**: Only 8-byte stack accesses with `data in (["x30"], ["x29"])` and `top - lo == 7` create or restore a tagged saved slot; restores require the slot both to hold the matching tag and to have been written by the current function on all paths since its last call (`touch(..., "r", ..., restore=...)`), preventing stale frame/link loads across calls. Non-stack stores of `x29` and non-restoring loads into `x30`/`w30` continue to be refused.
+3. **Link-register join (`stack_bound.py:139-140`, `562-564`)**: `lr` is joined by conjunction (`old.lr and st.lr`) with termination guaranteed by the monotone decrease of `(w, g, lr)`, while `saved` remains in `St.key()` so any subsequent save of `x30` with mismatched `lr` states across paths cannot silently merge.
+
+No concrete accepted inputs bounded too low found.
+
+VERDICT: ACCEPT

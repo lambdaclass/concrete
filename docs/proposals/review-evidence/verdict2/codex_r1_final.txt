@@ -1,0 +1,34 @@
+lternate call syntax. Preserve coherence and explicit borrowing; receiver-declaration syntax and the consuming Destroy protocol require separate disposition.
+- **5 — AGREE.** Explicit field values distinguish destination labels from source expressions and moved locals. They remove a convenience spelling without losing expressiveness.
+- **6 — AGREE.** Mandatory `field: binder` leaves one field-binding form, including renaming. This requires an explicit revision of decided pattern syntax; preserve ignored-field rules and linear consumption.
+- **7 — AGREE.** An explicit arithmetic-domain boundary improves review. Specify its scope and integer embedding precisely; it must preserve OD12’s pure, non-consuming contracts and OD145’s named machine operations.
+- **8 — DISAGREE.** Replacing `as` removes special precedence, generic-target parentheses and borrow-bound delimiter exceptions. It need not add aliases: one canonical named lossless conversion can replace it completely, preserving OD11 and provenance restrictions.
+- **9 — AGREE.** A named operation makes payload transfer and storage release visible. Preserve allocator dependencies, failure behavior and the distinction from destruction; retire consuming heap-star completely.
+- **10 — AGREE.** One delimited assertion grammar removes the grouped-root exception for theorem suffixes. If item 20 passes, retain only `assert(e)` and its optional evidence suffix.
+- **11 — AGREE.** Parenthesized payloads share the existing parameterized-attribute convention. Linkage remains bound to compiler-owned declaration identity rather than symbol spelling.
+- **12 — AGREE.** One module-path separator removes an unnecessary convention. Import requirements, aliases, visibility and list punctuation remain separate questions.
+- **13 — AGREE.** The current byte-valued `char` provides no Unicode-scalar guarantee. Removing it simplifies the scalar inventory; explicitly migrate quoted literals, patterns, comparisons and text APIs.
+- **14 — DISAGREE.** Remove the special builtins, but string append must not require Console authority. Separate ordinary string operations, requiring Alloc when appropriate, from stream output requiring Console and its grant. Preserve linear errors.
+- **15 — AGREE.** Explicit binding types and result arrows improve local reading. Preserve argument-based generic inference; define compatible destructuring and ghost-binding rules rather than introducing repeated, independently authoritative field types.
+
+- **2 — AGREE.** OrderedMap-first is a reasonable explicitly approved scope revision. Measure the KV workload before assuming adequate performance; ordinary map definitions should retain identities without privileged spelling-based behavior.
+- **16 — DISAGREE.** Missing built-in process operations does not establish that Process is unused: foreign declarations can name it. Removing the permission before auditing intended foreign boundaries risks conflating process authority with another capability.
+- **17 — AGREE.** Q9.8 already chooses late reads. Preserve reserved by-value arguments, held loans and cleanup order; “runs as written” must not imply unrestricted intervening moves or mutations.
+- **18 — AGREE.** Refuse handwritten ordinary prototypes. Preserve OD9/OD39’s compiler-generated interfaces containing bodyless declarations; these checked views are not competing source definitions.
+- **19 — AGREE.** Explicit wire decoding avoids alignment exceptions and exposes endianness. Removal needs an owner revision of OD111/OD147; a demonstrated packed foreign ABI is a legitimate reopening trigger.
+- **20 — AGREE.** Named assumptions with propagated evidence identities improve auditability. Relocation must not let assumed trusted contracts discharge safe-operation admission: the closed-evidence restriction still applies.
+- **22 — AGREE.** Explicit indirect calls with contracts support drain and dispatch workloads. Context parameters must preserve second-class references, exact capabilities, ownership and termination obligations; “explicit context” does not authorize stored references.
+- **23 — DISAGREE.** Blanket approval is premature. Define the closed evaluator and admissible value types first, preserve linear ownership and identity, and satisfy the decided comptime reopening conditions. Q6.4 expressly retains per-use evaluation today.
+
+- **Already taken decisions — AGREE.** Keep them unless explicitly revised. Provisional Core approval is not the completed freeze; “for now” layout choices remain binding, and capabilities plus grants retain their distinct roles.
+
+Further owner decisions Claude omitted:
+
+- **Simplification items 3, 4 and 21:** explicitly retain value branches, both proof scopes, and existential brands. Each protects a distinct ownership, evidence or freshness requirement.
+- **Receiver declarations:** independently decide whether to remove shorthand while preserving the single consuming Destroy protocol.
+- **Remaining grammar closure:** OPEN-1–9 cover source bytes, identifiers, reservations, builtin inventory, numeric and quoted tokens, tokenization, precedence and declaration shells.
+- **Remaining syntax and APIs:** OPEN-10–23 still contain unresolved alias/import punctuation, proof/spec grammar, generics, attributes, blocks, patterns, labels, borrow/defer restrictions, constructors, views, brands, function contracts and raw-operation qualification. The recommendations settle only parts.
+- **Concurrency and historical refusals:** OPEN-24’s ownership/runtime model, and OPEN-25’s value `while…else` and postfix member-arrow refusals.
+- **Outstanding project decisions:** SPARK 4(b)’s checked dependency annotations, 4(c)’s dead-store refusal, and the integrated spec acceptance/Core freeze.
+
+ANSWER: DISAGREE=8,14,16,23; MISSING=3/4/21 retention, receiver declarations, remaining grammar/API closure, concurrency model, historical refusals, SPARK 4(b)/4(c), Core freeze

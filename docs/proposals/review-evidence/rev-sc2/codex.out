@@ -1,0 +1,22 @@
+1. **Defect — `scripts/spec/rules.py:27–29`: attribute strings can supply fake example commands.**  
+   The checker accepts both verdicts attached to definitions such as:
+   ```lean
+   /-- Accepted (rule `R.ok`). -/
+   @[deprecated "] example" (since := "2026-11-08")]
+   def a : True := trivial
+   ```
+   Repeat with `Refused` and `def b`: the checker returns 0 without either example. The regex treats the `]` inside the string as the attribute’s end. **Fix:** recognize declaration prefixes using lexical tokens, respecting strings and balanced brackets; require an actual `example` command. Add this negative control.
+
+2. **Defect — `scripts/spec/rules.py:24–25`: quoted-name citations still escape validation.**  
+   A citation containing a backtick inside a quoted component, such as ``(rule `R.«missing`rule»`)``, produces no match. Consequently an unregistered citation—or stray verdict using it—is ignored. **Fix:** parse quoted Lean components before interpreting the closing backtick, and fail closed on malformed citations. Add corresponding controls.
+
+3. **Defect — `scripts/spec/rules.py:32–34`: an inventory mention substitutes for an actual decision row.**  
+   `row_exists` searches unrestricted prose in either inventory. In-memory testing confirmed that “Q9.1 is a nonexistent row” suffices. This only partially resolves both reviewers’ decision-row finding. **Fix:** extract identifiers from authoritative row declarations in their respective files, then check membership; add a mention-only negative control.
+
+The other round-1 findings are resolved or explicitly scoped: distinct verdicts, ordinary quoted names, declaration prefixes, outside-doc verdicts, source-enumeration errors, expanded controls, and the Ident comments. Path normalization is explicitly deferred to elaboration.
+
+`Target.WellFormed` matches its listed profile constraints, and the examples express their stated propositions. Its size bound is a profile capacity constraint; allocation placement still needs the later `base + size` obligation. I found no choice of column unit, trap taxonomy, or `Secret<T>` layout.
+
+Timeouts and unreadable inputs fail closed by inspection. Reproductions used in-memory inputs; no files were modified. Lean and the full shell gate were not run.
+
+VERDICT: REVISE

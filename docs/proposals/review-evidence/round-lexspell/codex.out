@@ -1,0 +1,1329 @@
+The repository was readable. I read `docs/PHILOSOPHY.md`; the requested rows in `docs/decisions.md`; `docs/proposals/GRAMMAR_REVIEW.md`, section 2 and section 10 OPEN-5/OPEN-6; `legacy/docs/spec/syntax.md`, SYN-5/SYN-6; and `OWNER_29_DECISIONS_2026-11-08.md`.
+
+These are advisory recommendations for owner approval, not additional decisions. Philosophy explicitly preserves decided rules until the owner revises them (`docs/PHILOSOPHY.md:186–195`).
+
+**(a) Byte-literal escapes**
+
+**RECOMMENDATION (exact):** Allow exactly these six escapes:
+
+| Escape | Byte |
+|---|---|
+| `\n` | `0x0a` |
+| `\t` | `0x09` |
+| `\r` | `0x0d` |
+| `\0` | `0x00` |
+| `\\` | `0x5c` |
+| `\'` | `0x27` |
+
+Raw content is exactly one scalar in **U+0020–U+007E**, excluding U+0027 and U+005C, which require their escapes. A raw double quote is allowed: `'"'`.
+
+Refuse `\"`, `\xHH`, Unicode escapes, and every other escape. Write bytes without an admitted quoted spelling as integer literals, for example `0x1bu8` where the suffix policy below permits it, or `let escape: u8 = 0x1b;`.
+
+**ALTERNATIVE:** Add exactly `\xHH`, with two lowercase hexadecimal digits, restricted to bytes without another admitted quoted spelling. That provides a quoted notation for every byte while avoiding escape aliases. It nevertheless requires revising item 3’s refusal of non-ASCII content if values above `0x7f` become admissible.
+
+**REASONS:** The six-member list matches SYN-6 and the grammar proposal (`legacy/docs/spec/syntax.md:456`; `docs/proposals/GRAMMAR_REVIEW.md:109–116`). Item 3 establishes a `u8` literal with ASCII content, not a separate character type (`OWNER_29_DECISIONS_2026-11-08.md:12`). `\"` adds an unnecessary spelling for a double quote that needs no escaping within single quotes. General hexadecimal escapes duplicate existing escapes and numeric byte notation. Removing these aliases follows the one-form rule and small-core principle (`docs/PHILOSOPHY.md:54–57`, `135–138`).
+
+**CONFLICT:** None with OD137’s ASCII restriction (`docs/decisions.md:1427`). Quoted ASCII and numeric literals already overlap by item 3’s explicit decision; that approved overlap is not grounds to add further escape aliases.
+
+**(b) Raw controls and invisible formatting**
+
+**RECOMMENDATION (exact):** Define the control-character set as all Unicode Cc:
+
+- **U+0000–U+001F**
+- **U+007F–U+009F**
+
+Refuse every member raw inside strings. **Raw LF U+000A and CR U+000D are refused**, including CRLF; strings have no raw multiline form.
+
+Also refuse these additional scalars raw inside strings:
+
+- **U+061C**
+- **U+200E–U+200F**
+- **U+2028–U+202E**
+- **U+2066–U+2069**
+
+This explicitly covers line/paragraph separators and directional marks, embeddings, overrides and isolates. These additional scalars are not being called Cc. This recommendation adds no further scalar exclusions within otherwise valid UTF-8 string content.
+
+For byte literals, apply the ASCII raw-content rule in (a): **U+0000–U+001F and U+007F are refused raw**; all scalars above U+007F are refused independently as non-ASCII.
+
+For `//` comments:
+
+- Permit raw TAB **U+0009**.
+- **U+000A** or **U+000D** terminates the comment; EOF also terminates it.
+- Refuse **U+0000–U+0008**, **U+000B–U+000C**, **U+000E–U+001F**, **U+007F–U+009F**, and the additional scalar ranges listed above.
+- A backslash sequence in a comment is ordinary text, not an escape.
+
+Do not normalize, silently remove, or silently reinterpret refused characters. Diagnose the code point.
+
+**ALTERNATIVE:** Refuse only **U+0000–U+001F and U+007F** raw in quoted literals, and permit other valid Unicode in strings and comments. This is a smaller policy but leaves C1 controls, apparent Unicode line breaks and directional formatting embedded in reviewed source.
+
+**REASONS:** Item 4 prohibits raw tabs and controls but leaves the exact set unspecified (`OWNER_29_DECISIONS_2026-11-08.md:13`). OPEN-6 already recommends refusing raw line breaks and controls (`docs/proposals/GRAMMAR_REVIEW.md:632`). Explicitly excluding directional formatting addresses source-display surprises in comments as well as executable text, following transparency over brevity (`docs/PHILOSOPHY.md:59–66`, `171–178`). Comment LF/CR termination follows the proposed trivia policy (`docs/proposals/GRAMMAR_REVIEW.md:69`).
+
+**CONFLICT:** Embedded NUL must remain representable through `\0`; banning the *value* would contradict Core Q4.2 (`docs/decisions.md:232`). UTF-8 encoding and byte-based string semantics remain unchanged (Q4.1–Q4.4, `docs/decisions.md:231–234`). The extra formatting-character exclusions are **new proposed restrictions requiring approval**, not consequences already settled by those rows. They also make those characters unavailable directly in literals under SYN-5’s closed escape list; that limitation must be explicit, not hidden behind a generic “Unicode supported” claim (`legacy/docs/spec/syntax.md:428`, `443–444`).
+
+**(c) Number prefix and digit case**
+
+**RECOMMENDATION (exact):**
+
+- Prefixes: **`0x`, `0b`, `0o` only**.
+- Hexadecimal digits: **`0`–`9`, `a`–`f` only**.
+- Refuse `0X`, `0B`, `0O` and hexadecimal `A`–`F`.
+- Keep decimal leading-zero refusal and the prohibition on `_` separators.
+
+Thus `0xff` is valid; `0xFF` and `0Xff` are refused.
+
+**ALTERNATIVE:** Lowercase prefixes with uppercase-only hexadecimal letters: `0xFF`. This equally satisfies the case-related one-form constraint. Accepting both cases does not.
+
+**REASONS:** Item 5 names lowercase prefixes (`OWNER_29_DECISIONS_2026-11-08.md:14–20`); OPEN-5 recommends them (`docs/proposals/GRAMMAR_REVIEW.md:631`). Lowercase hexadecimal letters extend that single convention consistently. The substantive requirement is one accepted case, rather than lowercase having an intrinsic semantic advantage (`docs/PHILOSOPHY.md:54–57`). Leading-zero refusal is already decided (`docs/decisions.md:899–900`).
+
+**CONFLICT:** The grammar sheet currently admits both digit cases (`docs/proposals/GRAMMAR_REVIEW.md:103`), and SYN-6’s example uses `0x1F` (`legacy/docs/spec/syntax.md:473`). These need alignment after approval. The example is evidence of an existing spelling, not an explicit owner decision requiring both cases. Approved multiple bases already allow different representations of a value; they do not justify additional case aliases.
+
+**(d) Suffix grammar and contextual typing**
+
+**RECOMMENDATION (exact):** Adopt this closed integer suffix set:
+
+`i8`, `i16`, `i32`, `i64`, `u8`, `u16`, `u32`, `u64`.
+
+Allow one suffix immediately after an integer’s digits, on **every base**, including `0xffu8`. Admit **no float suffixes**, including no `f32` or `f64` suffix. Keep floating literals context-typed.
+
+Make integer suffixes **one-form-constrained**:
+
+1. Where an OD138 position supplies an expected type, require the **unsuffixed** literal. Refuse even a matching redundant suffix.
+2. Where no such position supplies an expected type, require a suffix to make an integer literal admissible. The suffix supplies its intrinsic integer type.
+3. A suffix never performs conversion or overrides a contextual type. Range-check against the established type; retain the specified handling of unary negation.
+4. Refuse malformed adjacent numeric text as one malformed literal, rather than accepting a valid prefix and splitting off the remainder. This includes `123u9`, `0xffu9`, `200u8foo`, repeated suffixes and invalid base digits.
+
+For example:
+
+- `let x: u8 = 200;` — accepted.
+- `let x: u8 = 200u8;` — refused as redundant.
+- `let x = 200u8;` — accepted.
+- `let x = 200;` — refused as unconstrained.
+- With `x: u8`, `x + 1` — accepted; `x + 1u8` — refused.
+
+This is a proposed **explicit clarification/revision of OD31 and OD138**, not an interpretation to implement silently.
+
+**ALTERNATIVE:** Allow suffixes optionally everywhere, require them to agree with any expected type, and let them establish type when context supplies none. This gives simpler compositional expression typing and preserves item 5, but accepts both `let x: u8 = 200;` and `let x: u8 = 200u8;`. It therefore needs an explicit owner exception to the binding one-form rule.
+
+**REASONS:** A blanket suffix ban contradicts both item 5 and the approved Q6.2 example containing `200u8` (`OWNER_29_DECISIONS_2026-11-08.md:15`; `docs/decisions.md:191`). Mandatory suffixes everywhere contradict OD31’s contextual rule and “suffixes are not required” (`docs/decisions.md:1321`). The proposed division preserves contextual literals while giving approved suffixes a distinct purpose: supplying a type otherwise absent. It avoids writing the same type fact twice (`docs/PHILOSOPHY.md:54–57`, `68–73`).
+
+No float suffix follows from item 5’s integer examples. OD63 explicitly requires expected typing for floats, and the grammar review says that this implies no lexical suffix (`docs/decisions.md:1353`; `docs/proposals/GRAMMAR_REVIEW.md:107`).
+
+**CONFLICT:** OD138 lists declared positions and the other binary operand as type sources, without suffixes (`docs/decisions.md:1428`). OD31 literally refuses unconstrained literals. Item 5 approves suffixes but does not resolve that relationship. The long-term fix is one owner-approved typing judgment covering contextual and intrinsically typed integer literals, with redundant-suffix refusal assigned to typing rather than a context-dependent lexer. Merely accepting suffix tokens and postponing their typing meaning would leave the structural conflict unresolved.
+
+REPOSITORY: readable
+Reading additional input from stdin...
+OpenAI Codex v0.166.0
+--------
+workdir: /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/round-lexspell/src
+model: gpt-6.1-sol
+provider: openai
+approval: never
+sandbox: danger-full-access
+reasoning effort: none
+reasoning summaries: none
+session id: 01a1bbbd-7d35-7320-8287-a70e8618b03f
+--------
+user
+Read-only advisory round. Do not modify, create or delete any file in this directory, do not run git, do not use the network.
+
+The current directory is a plain copy (git archive) of the Concrete repository at 257a03c19 (main f7a973b0 plus docs/proposals/GRAMMAR_REVIEW.md, the grammar review sheet), plus OWNER_29_DECISIONS_2026-11-08.md (the owner's 29 decisions of 2026-11-08, all approved; section B is lexer and syntax). Read docs/PHILOSOPHY.md, docs/decisions.md (OD137, OD31, OD138, the slice-0 surface rows, Core Q4.1-Q4.4, Q6.2), GRAMMAR_REVIEW.md section 2 "Numbers and quoted literals" and section 10 OPEN-5/OPEN-6, and legacy/docs/spec/syntax.md SYN-5/SYN-6.
+
+Owner items 3, 4 and 5 leave four spellings to settle before the lexer implements them. Two owner rules bind the answer: the one-form rule (never two ways to write one thing; every escape list must be listed explicitly, member by member) and the no-hidden-surprises rule (the control-character set must be stated exactly, as code-point ranges).
+
+Recommend, with reasons from the philosophy and the decided rows, and name the strongest alternative for each:
+(a) The byte-literal escape list for `'c'` (item 3, "its own small escape list"): list every member exactly (e.g. whether `\n \t \r \0 \\ \'` as GRAMMAR_REVIEW proposes; whether `\"` is also allowed in a byte literal, given the one-form rule; whether `\xHH` is needed for non-printable bytes or whether those are written as integer literals like 0x1bu8).
+(b) The exact control-character set refused raw inside strings (item 4) and inside byte literals, as code-point ranges (e.g. C0 U+0000-U+001F plus DEL U+007F; or all of Unicode Cc, U+0000-U+001F and U+007F-U+009F; and whether any other scalars such as U+2028/U+2029 or bidi controls U+202A-U+202E, U+2066-U+2069 are refused in strings and in comments, given no hidden surprises). State whether raw LF/CR inside a string are refused too.
+(c) Number prefix and digit case (item 5): `0x`/`0b`/`0o` only, or also `0X`/`0B`/`0O`; hex digits lowercase only, uppercase only, or both — given the one-form rule.
+(d) The suffix grammar (item 5, "suffixes such as 200u8", "refuse malformed suffixes such as 123u9"): exactly which suffixes exist (the integer type names i8 i16 i32 i64 u8 u16 u32 u64 only? any for floats?), whether a suffix is allowed on every base (0xffu8), and whether a suffix is mandatory, optional or one-form-constrained given OD31/OD138 (an integer literal takes its type from context; is `200u8` then a second way to write a typed literal, and how does the one-form rule reconcile with item 5 allowing suffixes?).
+
+OWNER RULE (2026-11-08, verbatim: "ALWAYS tell the reviewrs to do the best long term thing rather than cuitting corners"): judge and fix by the best long-term design. Never cut corners for speed, a smaller diff or fewer rounds. As a reviewer, report any shortcut, containment patch or corner cut as a real finding and say what the long-term fix is. As a writer, implement the structural fix, not a containment patch; if staging is truly unavoidable, record the long-term design and name its roadmap row.
+
+Answer each of (a)-(d) with: RECOMMENDATION (exact), ALTERNATIVE, REASONS (citing file:line), and any conflict you see with a decided row. Start by stating whether you could read the repository and list the files you read. End with exactly one line: REPOSITORY: readable (or REPOSITORY: unreadable).
+codex
+I’ll read the specified files and give exact recommendations, keeping any conflicts with decided rows explicit. I’ll use only read-only local commands, without git or network access.
+exec
+/bin/bash -lc "pwd; rg --files -g '*GRAMMAR_REVIEW*' -g '*OWNER_29*' -g 'PHILOSOPHY.md' -g 'decisions.md' -g 'syntax.md'" in /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/round-lexspell/src
+ succeeded in 0ms:
+/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/round-lexspell/src
+OWNER_29_DECISIONS_2026-11-08.md
+docs/PHILOSOPHY.md
+docs/decisions.md
+docs/proposals/GRAMMAR_REVIEW.md
+legacy/docs/spec/decisions.md
+legacy/docs/spec/syntax.md
+legacy/docs/project/PHILOSOPHY.md
+
+exec
+/bin/bash -lc "nl -ba docs/PHILOSOPHY.md; nl -ba OWNER_29_DECISIONS_2026-11-08.md; rg -n 'OD137|OD31|OD138|Q4\\.[1234]|Q6\\.2|slice.?0|Slice.?0|one.form|escape|suffix' docs/decisions.md; rg -n '"'^##|OPEN-5|OPEN-6|SYN-5|SYN-6'"' docs/proposals/GRAMMAR_REVIEW.md legacy/docs/spec/syntax.md" in /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/round-lexspell/src
+ succeeded in 0ms:
+     1	# Concrete Philosophy
+     2	
+     3	Status: standing policy, the one home of the project's design rules. Every other document links
+     4	here instead of restating them. The language rules themselves are the
+     5	[specification](../legacy/docs/spec/README.md) and the owner's [decision record](decisions.md); where this
+     6	document cites one, those are authoritative, and nothing here overrides a decided entry.
+     7	
+     8	It absorbs, as of 2026-11-04, the principles and design policy of [PROJECT.md](../legacy/docs/project/PROJECT.md), the
+     9	refusal list of `ANTI_FEATURES.md` and the "no" and "not yet" entries of PROJECT.md's language
+    10	decisions. The per-language comparisons that used to sit beside each refusal are in
+    11	[INFLUENCES.md](../legacy/docs/project/INFLUENCES.md#how-other-languages-answer-concretes-refusals).
+    12	
+    13	Contents:
+    14	
+    15	1. [What Concrete is for](#what-concrete-is-for)
+    16	2. [The rules](#the-rules)
+    17	3. [When rules conflict](#when-rules-conflict)
+    18	4. [Admission test](#admission-test)
+    19	5. [What Concrete refuses](#what-concrete-refuses)
+    20	6. [Where the earlier rules went](#where-the-earlier-rules-went)
+    21	
+    22	## What Concrete is for
+    23	
+    24	**Concrete is a fully proven systems programming language with no garbage collector, where you can
+    25	know everything a program does: what it does, what it may touch, whether it can fail or stop, and
+    26	what is proved about it.** "Fully proven" means compiler correctness proved end to end, with every
+    27	unproven step named as an explicit assumption and never silently trusted, and a program's own
+    28	correctness proved by Lean theorems about it. This states the project's goal: each guarantee holds
+    29	only as its evidence lands, and native claims remain conditional on their named assumptions
+    30	([decision](decisions.md#decided-project-core-statement)).
+    31	
+    32	Concrete is a small systems language for code that must be reviewed, audited, bounded and proved:
+    33	no garbage collector and no hidden runtime, linear ownership, second-class references, and
+    34	authority that is visible in every signature. Its aim is that a reader can answer "what does this
+    35	code do, what may it touch, and what is actually proved about it" from the source, the compiler's
+    36	reports and the Lean theorems, without trusting anything that is not named. Lean 4 is the language
+    37	the semantics and proofs are written in and the language the compiler is built in; Concrete itself
+    38	stays a systems language, not a proof assistant.
+    39	
+    40	Most Concrete code is expected to be written by language models, not typed by hand. What matters
+    41	is that everything is checkable and easy to understand: the cost that counts is the cost for a
+    42	reviewer, an auditor or a checker to understand what code does and what it may touch. Rule 4
+    43	draws the consequence for verbosity.
+    44	
+    45	## The rules
+    46	
+    47	Each rule states what holds and why. Its history is in the changelog and the decision record.
+    48	
+    49	1. **Pick the best long-term structural solution.** A design question is answered by the structure
+    50	   that removes the whole class of problem, not by the smallest local patch, and once that answer is
+    51	   known it is chosen rather than offered as one option among several. *Why:* a patch fixes one
+    52	   instance and leaves the class to recur; the language is still small enough to change shape.
+    53	
+    54	2. **One form per situation.** There are never two ways to write one thing. A second spelling, an
+    55	   alias or a convenience form beside an existing one is removed, not added. *Why:* every extra form
+    56	   is one more thing a reader, a checker and a proof must cover, and two forms drift apart. The
+    57	   decided removals are listed in [OD61](decisions.md#od61) and the entries it names.
+    58	
+    59	3. **The most transparent long-term option wins.** Between two designs, prefer the one that leaves
+    60	   nothing for the reader to reconstruct: no hidden control flow, data flow, allocation, dispatch,
+    61	   authority or cleanup. *Why:* Concrete's value is that behaviour can be read off the source.
+    62	
+    63	4. **Verbosity never argues against a clearer or safer design.** Writing more is acceptable when it
+    64	   makes behaviour, authority or failure visible. "It is longer" is not a reason to reject a
+    65	   design; "it hides something" is. *Why:* most code is now written by tools, where writing explicit
+    66	   forms is cheap and reviewing them is the expensive part.
+    67	
+    68	5. **Every fact once.** Every fact that affects behavior or authority has exactly one authoritative
+    69	   definition, at a place the reader can find from the use site. Views checked against that
+    70	   definition (a signature, a compiler report, a derived table or registry) and explanatory
+    71	   examples are not second definitions. A restated fact that nothing checks (a size copied into a
+    72	   constant, a rule copied into a second document, a capability implied rather than declared) is a
+    73	   defect waiting to drift. This document is itself an instance: other documents link here.
+    74	
+    75	6. **Lean is the specification.** The language's syntax, typing, ownership, effects and semantics
+    76	   are defined in Lean. Each rule is a readable definition with a plain-words doc comment and its
+    77	   conformance examples, and the reference interpreter is built from those definitions. No prose is
+    78	   generated from them. Machine views (the rule registry, rule IDs, manifests) are derived from them
+    79	   and checked for staleness. A guide may teach and link the rules but states none of its own. Until
+    80	   a rule lands in Lean, its prose chapter states the decided rule, and the chapter retires once its
+    81	   rules are covered
+    82	   ([Lean-source decision](archive/roadmap-2026-11/ROADMAP_DECISIONS.md#2026-11-01--lean-as-the-only-source),
+    83	   [revised 2026-11-04](archive/roadmap-2026-11/ROADMAP_DECISIONS.md#2026-11-04--lean-is-the-specification)). *Why:* one
+    84	   definition that machines check cannot silently disagree with itself, and a second prose
+    85	   rendering would be a second text to keep in step.
+    86	
+    87	7. **Systems first, not theorem-prover first.** Source code reads as systems programming. Proofs
+    88	   attach to real Concrete functions through the semantics, not to a parallel reimplementation.
+    89	   *Why:* the point is evidence about the code that runs.
+    90	
+    91	8. **No hidden runtime.** No garbage collector, no hidden reference counting, no hidden scheduler or
+    92	   executor, no life before `main`. What the target does at startup, at shutdown and on a trap is a
+    93	   named entry in the target's table. *Why:* memory, time and authority behaviour must be auditable
+    94	   and boundable.
+    95	
+    96	9. **Ownership is linear, not affine.** A non-Copy value is used exactly once; it is never dropped
+    97	   silently at the end of a scope. Copy means "may be duplicated", nothing more. `_` names an unused
+    98	   binding and never discards a linear value, a `Result` or an `Option`
+    99	   ([OD62](decisions.md#od62), [OWN-5](../legacy/docs/spec/ownership.md#OWN-5)). Cleanup is an explicit
+   100	   consuming operation. *Why:* every resource has one visible owner and one visible end.
+   101	
+   102	10. **References are second-class.** A reference may be passed down into a call or held inside a
+   103	    borrow block; no function, trusted or not, returns one and no value stores one
+   104	    ([REF-1](../legacy/docs/spec/references.md#REF-1), [REF-3](../legacy/docs/spec/references.md#REF-3)). Raw pointers, used
+   105	    in `trusted` code or under `with(Unsafe)`, are the only escape, and every use carries stated
+   106	    validity premises; the full raw-memory taxonomy is still
+   107	    [undecided](decisions.md#core-unsafe-premises). *Why:* scoped access
+   108	    needs no lifetime language, and the checker and the proofs stay local.
+   109	
+   110	11. **Authority and trust are visible.** A function's permissions are declared in `with(...)`; a
+   111	    resource is a value it holds; an operation on a resource needs both. Nothing discharges or hides
+   112	    an operational capability, `trusted` and `with(Unsafe)` included, and there are no umbrella
+   113	    capabilities ([authority rules](decisions.md#decided-2026-11-02-authority)). *Why:* a
+   114	    reviewer reads what a function may do from its signature alone.
+   115	
+   116	12. **Trust boundaries are honest.** Every claim says which of these it is: enforced by the compiler,
+   117	    reported by analysis, proved in Lean, or assumed at a named source, backend, toolchain or target
+   118	    boundary. Being listed in the trusted base proves nothing; an unknown is never reported as a
+   119	    reassuring default ([ABSENCE_IS_NOT_A_FACT.md](../legacy/docs/project/ABSENCE_IS_NOT_A_FACT.md)). New kinds of fact
+   120	    (frames, dependencies, ghost state, resource bounds) are reported through the one obligation and
+   121	    evidence ledger, never a parallel system. *Why:* evidence that overstates itself is worse than
+   122	    none.
+   123	
+   124	13. **The compiler owns semantic identity.** A name, a link symbol or a restated constant is a
+   125	    representation of an entity, never the entity. Every pass preserves an entity's identity or
+   126	    creates a checked derivation from it, and identity claims are tested structurally, not by
+   127	    observed values. *Why:* using a representation as identity, and re-interpreting it in a later
+   128	    pass, is the single largest class of past compiler defects. (Older documents and comments
+   129	    call this "principle 12".)
+   130	
+   131	14. **Artifact-first auditability.** The compiler emits facts, evidence and replay commands that
+   132	    people, CI and tools consume directly. Auditing never means reading the compiler's source.
+   133	    *Why:* an audit that depends on the auditor's reading of the implementation is not repeatable.
+   134	
+   135	15. **A small analyzable core over feature growth.** A smaller language with strong boundaries
+   136	    beats a larger one with weaker analysis. Removing a feature is an improvement when what remains
+   137	    is more coherent; each refusal makes the rest easier to check, teach and prove. *Why:* every
+   138	    feature is paid for in grammar, checker, semantics, proofs and review.
+   139	
+   140	16. **Predictable execution and a separable core.** Recursion, loop bounds, allocation, blocking and
+   141	    foreign calls stay visible, so a bounded, analyzable core can be told apart from an effectful
+   142	    shell, and writing code that way is natural. Before a program runs, every function has
+   143	    termination evidence with its premises, or a report naming the explicitly permitted unresolved
+   144	    obligations: every loop, recursive cycle, indirect call and blocking or foreign boundary either has termination
+   145	    evidence or carries a written permission at that source, which every report traces to its
+   146	    callers. Recursion depth, stack use, allocation, blocking, foreign calls and possible aborts are
+   147	    reported per function with their evidence, and a module or project policy may require them;
+   148	    these are reported facts, not function categories
+   149	    ([decision](decisions.md#decided-project-no-hidden-traps), 2026-11-06). *Why:* resource bounds
+   150	    and proofs need a core they can reach, and an unexplained infinite loop is a hidden behaviour.
+   151	
+   152	17. **Real programs test the shape.** A design is validated by serious workloads, not by thought
+   153	    experiments alone, and a refused or deferred feature reopens only on such evidence. *Why:*
+   154	    hypothetical convenience is not a cost; measured pain is.
+   155	
+   156	18. **No hidden traps.** Accepted safe code has no reachable implicit language trap: every operation
+   157	    that could fail at run time carries checked evidence that it cannot, or its failure is handled by
+   158	    a branch written in the source. An explicit `abort()` remains terminal behaviour and is reported
+   159	    transitively; resource exhaustion and foreign behaviour are named target and trust premises.
+   160	    Evidence comes from a small decidable checker proved correct in Lean, contracts whose evidence is
+   161	    closed, and Lean theorems, never from an unpredictable solver
+   162	    ([decision](decisions.md#decided-project-no-hidden-traps), 2026-11-06). *Why:* an inserted trap
+   163	    is an exit the reader of the operation cannot see, which rule 3 refuses for the same reason
+   164	    exceptions are refused.
+   165	
+   166	## When rules conflict
+   167	
+   168	**Decided by the owner on 2026-11-05** (row P2, [record](decisions.md#decided-project-priority)). When two rules pull in different directions, the earlier
+   169	item in this order wins:
+   170	
+   171	1. soundness and provability, which includes honest trust boundaries (rule 12) and compiler-owned
+   172	   semantic identity (rule 13): a claim that overstates its evidence, or an entity known only by
+   173	   its spelling, is unsound;
+   174	2. transparency: nothing hidden, and every claim backed by an artifact a reader can inspect and
+   175	   replay (rules 3, 8, 11, 14);
+   176	3. a single source of truth: one authoritative definition per fact (rule 5);
+   177	4. explicitness at the use site;
+   178	5. brevity.
+   179	
+   180	The third item is read with rule 5's definition: every fact that affects behavior or authority has
+   181	one authoritative definition, at a place the reader can find from the use site. So "write it once"
+   182	and "show it at the use site" agree whenever the use site can reach that definition, directly or
+   183	through a checked view such as a signature or a report; a fact that can be found only by searching
+   184	the whole program fails both.
+   185	
+   186	**This order guides choices that are still open. It never reopens a decided rule.** The owner's
+   187	answers in [decisions.md](decisions.md) stand as recorded, whatever this order would
+   188	suggest; changing one is a new owner decision. When the order argues for changing a decided rule,
+   189	the change goes to the owner as a proposed revision and the decided rule stands meanwhile. For
+   190	example, type arguments are inferred from the checked argument types
+   191	([OD46](decisions.md#od46)), and that stands. Capability arguments were inferred the same
+   192	way ([OD45](decisions.md#od45), [OD87](decisions.md#od87)) until the owner
+   193	approved, on 2026-11-05, the revision that writes them on every capability-polymorphic call,
+   194	checked against the callee, because a call's authority should be read rather than solved for
+   195	([revision](decisions.md#decided-2026-11-05-revisions)).
+   196	
+   197	## Admission test
+   198	
+   199	A proposed language feature, compiler feature or borrowed idea is admitted only if every question
+   200	below has a good answer. Each question is a rule above applied to the proposal; failing one is
+   201	grounds for rejection.
+   202	
+   203	1. **One form?** Does it add a second way to do something already expressible? (rule 2)
+   204	2. **Visible?** Does it expose ownership, effects, dispatch, layout, allocation or control flow, or
+   205	   hide work behind familiar syntax? (rules 3, 8)
+   206	3. **One fact, one place?** Is every fact it introduces written once and findable from the use site?
+   207	   (rule 5)
+   208	4. **A simple invariant?** Can it be stated as one Lean judgment without "except when" clauses, and
+   209	   does it elaborate into simpler Core forms? (rules 6, 15)
+   210	5. **Declaration-level and phase-separated?** Does it keep cross-module dependence on declarations
+   211	   and summaries, never on another module's bodies, and early phases independent of later semantic
+   212	   information? (rule 15)
+   213	6. **Static or explicitly indirect dispatch?** Is every call target known at compile time or visibly
+   214	   indirect at the call site? (rule 3)
+   215	7. **Predictable code?** Can a reader form a rough model of the generated work from the source?
+   216	   (rule 16)
+   217	8. **One owner?** Does exactly one pass or judgment own it, with one diagnostic when it fails? (rules
+   218	   5, 13)
+   219	9. **Authority intact?** Does every effect still appear in `with(...)` and every resource as a
+   220	   value, with no way to hide either? (rule 11)
+   221	10. **Through the contract boundary?** Do its safety, behaviour, effects, failure modes and resource
+   222	    consequences appear in summaries and obligations, rather than disappear at a function boundary?
+   223	    (rules 12, 14)
+   224	11. **Fails visibly?** Does an unsupported use produce a precise diagnostic or a named hole, never
+   225	    silence? (rule 12)
+   226	12. **Identity kept?** Does every entity, claim and piece of evidence it introduces have a typed
+   227	    identity of its own (subject, claim, dependencies, artifacts, checker rule, freshness), never a
+   228	    string, a display name, a first-match lookup or one status standing for several independently
+   229	    degradable claims? Does it keep apart identities that change independently (implementation,
+   230	    model, exported contract, proposition, policy, claim scope) and say which one moves under each
+   231	    change? An exact digest prevents substitution but says nothing about whether a model is
+   232	    faithful; an identity key holds the subject of a fact, never alternative answers, so
+   233	    contradictory rows (trusted and proved, refinement and equivalence) cannot coexist under
+   234	    different keys. (rule 13)
+   235	13. **Honest under hostile input?** For an evidence or tooling feature: does it treat proof
+   236	    modules, generated artifacts, receipts and checker output as adversarial, define limits,
+   237	    malformed, duplicate and surplus input behaviour, negative controls and mutation tests, and say
+   238	    how a revoked checker or assumption degrades only the claims that depend on it? Silence creates
+   239	    a missing obligation, never an assumption. (rule 12)
+   240	14. **A real benefit for audited code?** Is the gain more than writing speed? Convenience alone is
+   241	    not enough, and brevity alone never outweighs a visibility loss. (rules 4, 17)
+   242	
+   243	**In one line.** A feature is promising when it makes the language and the compiler easier to
+   244	explain at the same time: explicit, local, phase-separated, summary-friendly and easy to lower
+   245	away, never implicit, global, inference-heavy, body-dependent or hard to model formally.
+   246	
+   247	**Ordering.** Architecture before ornament; visibility in tooling before convenience syntax;
+   248	layout and ABI credibility before feature expansion; proof-friendly boundaries before richer
+   249	abstractions; replayable evidence alongside each new contract family. The roadmap applies this
+   250	order; it does not restate it.
+   251	
+   252	**Borrowed ideas.** Copy constraints before copying features: Zig, Austral, SPARK and Odin are
+   253	most useful where they say no. [INFLUENCES.md](../legacy/docs/project/INFLUENCES.md) records what is copied, adapted and
+   254	rejected.
+   255	
+   256	**Recording a refusal.** A rejected feature with its reason is worth more than a feature added
+   257	without one. A new refusal gets an entry in the next section, with its research note when there is
+   258	one. A refusal that is a language rule is an owner decision first ([decisions.md](decisions.md)).
+   259	
+   260	## What Concrete refuses
+   261	
+   262	Each refusal is either **Permanent**, with the reason, or **Reopens when** a named condition holds.
+   263	"Under the pull rules" means that a real workload, bug report, pilot or user need runs into the
+   264	refusal and measures its cost; a hypothetical convenience never counts (rule 17). Reopening a
+   265	refusal that is a decided language rule is an owner decision, recorded in
+   266	[decisions.md](decisions.md).
+   267	
+   268	Some former "not yet" entries are planned work, not refusals, and live in the roadmap: freestanding
+   269	targets (the [allocation decision](decisions.md#decided-2026-11-02-allocation) already
+   270	covers their allocators; [R-0323](../legacy/docs/archive/roadmap-2026-11/ROADMAP_BACKLOG.md#task-r-0323) and
+   271	[R-0324](../legacy/docs/archive/roadmap-2026-11/ROADMAP_BACKLOG.md#task-r-0324) split std and its capabilities), package management
+   272	(decided 2026-10-17, in the [task register](archive/roadmap-2026-11/ROADMAP_TASKS.md)), and the richer contract layer
+   273	(dependency-flow contracts, mature loop invariant and variant authoring, the specification
+   274	library, and package and release evidence summaries, phase E of the
+   275	[roadmap](../ROADMAP.md#phases)). That layer's syntax is frozen only after a flagship or external
+   276	workload needs its facts, and its facts are reported through the one evidence ledger (rule 12).
+   277	Within that layer the decided rules hold: no `old`, quantifier or implication in contracts
+   278	([OD117](decisions.md#od117)), specification functions with a required, total body
+   279	([OD115](decisions.md#od115)) and no total-function category
+   280	([OD116](decisions.md#od116)). How frames, entry-state facts and termination are stated
+   281	inside those rules was decided on 2026-11-05 (row P18, [record](decisions.md#decided-project-contracts)): no snapshot construct, frame
+   282	and entry/exit properties as Lean theorems (a source frame clause would be a new owner decision),
+   283	and per-function termination theorems for ordinary functions.
+   284	
+   285	**Hidden runtime and hidden work**
+   286	
+   287	- **Garbage collection and hidden reference counting.** Permanent. They hide when memory is
+   288	  reclaimed and whether a call allocates; linear ownership and explicit cleanup replace them.
+   289	- **A hidden async runtime, executor or scheduler, and function colouring.** Permanent. They hide
+   290	  concurrency and scheduling behind calls that look ordinary.
+   291	- **Explicit structured concurrency.** Reopens when [R-0399](../legacy/docs/archive/roadmap-2026-11/ROADMAP_BACKLOG.md#task-r-0399)'s pull
+   292	  trigger holds: a workload needs concurrency after the new compiler's v1 surface is frozen. Any
+   293	  design keeps authority in `with(...)` and handles as linear values; single-threaded execution
+   294	  until then.
+   295	- **Exceptions and unwinding.** Permanent. They turn every call into a hidden exit. Recoverable
+   296	  failure is a `Result` handled by an exhaustive `match`, running out of memory included
+   297	  ([allocation decision](decisions.md#decided-2026-11-02-allocation)); an abort is terminal
+   298	  and runs no deferred call ([OD10](decisions.md#od10)).
+   299	- **Postfix `?` and any implicit error propagation or conversion.** Permanent. It hides a function
+   300	  exit, a cleanup boundary and a conversion behind one character; the error arm is written.
+   301	- **Mutable global state of any kind.** Permanent ([OD8](decisions.md#od8)). Constants are
+   302	  truly immutable; resources reach code only as values handed to it.
+   303	
+   304	**Implicit conversions and inference**
+   305	
+   306	- **Implicit numeric conversions.** Permanent. They hide data loss. `as` converts only when no
+   307	  value can be lost ([OD11](decisions.md#od11)); every other conversion is a named function
+   308	  ([OD99](decisions.md#od99)), and a checked one reports failure as a `Result`
+   309	  ([OD106](decisions.md#od106)).
+   310	- **Truthiness.** Permanent. A condition is a `bool`; no other value stands in for one.
+   311	- **Implicit string conversion** (`Display`/`ToString`-style hooks). Permanent. It hides
+   312	  allocation and dispatch. The reserved output and append forms ([OD133](decisions.md#od133))
+   313	  accept a closed list of types, expand to typed calls and keep their authority visible.
+   314	- **Global (Hindley–Milner) inference and inference from the expected result type.** Permanent.
+   315	  Signatures are written in full. A generic call's type arguments are inferred only from the checked
+   316	  types of its arguments ([OD46](decisions.md#od46), [OD129](decisions.md#od129));
+   317	  what no argument determines is written explicitly. Capability arguments are not inferred at all: they
+   318	  are written on every capability-polymorphic call and checked (owner revision of
+   319	  [OD45](decisions.md#od45) and [OD87](decisions.md#od87), 2026-11-05,
+   320	  [record](decisions.md#decided-2026-11-05-revisions)).
+   321	
+   322	**Dispatch and abstraction**
+   323	
+   324	- **Closures and anonymous functions with capture.** Permanent. Captured data and control flow are
+   325	  invisible at the call site. Named functions, capture-free function values, monomorphized generics
+   326	  and an explicit context parameter replace them ([detail](../legacy/research/language/no-closures.md)).
+   327	- **Trait objects and hidden dynamic dispatch.** Permanent. An opaque vtable hides the call target
+   328	  from the reader, the analyses and the prover. Enums, monomorphized generics and explicit function
+   329	  values replace them ([detail](../legacy/research/language/no-trait-objects.md)).
+   330	- **Implicit trait resolution beyond monomorphization.** Permanent. Traits are coherent, an
+   331	  ambiguous call is qualified, and resolution is by typed identity ([OD6](decisions.md#od6)),
+   332	  so adding an impl elsewhere cannot change what a call means.
+   333	- **Class inheritance.** Permanent. It makes the call target depend on a hierarchy instead of the
+   334	  source; structs, enums, traits and composition replace it.
+   335	- **User-defined operator overloading.** Permanent. An operator would hide allocation or effects
+   336	  behind arithmetic syntax; operators take primitive operands only
+   337	  ([OD26](decisions.md#od26), [OD42](decisions.md#od42)), and user types use named
+   338	  functions.
+   339	- **Hiding an operational capability**, for example a trusted wrapper that uses `Fs` or `Alloc`
+   340	  without declaring it. Permanent ([authority rule 5](decisions.md#decided-2026-11-02-authority)).
+   341	  A caller must see what authority a call uses. A `trusted fn` absorbs `Unsafe` only, which is a
+   342	  caller safety obligation, not authority ([TRUST-5](../legacy/docs/spec/trusted.md#TRUST-5)).
+   343	- **Umbrella capabilities and capability aliases** (`Std`, user `cap X = ...`). Permanent
+   344	  ([authority rule 6](decisions.md#decided-2026-11-02-authority),
+   345	  [audit decisions](decisions.md#decided-2026-11-02-audit)). A signature lists its real
+   346	  capabilities.
+   347	- **An effect system beyond `with(...)`** (algebraic effects and handlers). Permanent. Permissions
+   348	  are compile-time sets over a fixed, reserved list of capabilities and resources are linear values;
+   349	  that needs no runtime support and keeps signatures readable.
+   350	- **Foreign function values.** Refused ([OD4](decisions.md#od4)). Reopens when the owner
+   351	  admits typed `extern "C" fn` types, which OD4 leaves for later, with the permissions of foreign
+   352	  callbacks decided at that point ([authority rule 4](decisions.md#decided-2026-11-02-authority));
+   353	  [R-0283](../legacy/docs/archive/roadmap-2026-11/ROADMAP_BACKLOG.md#task-r-0283) reviews the C interop requirements when phase C becomes
+   354	  active or next.
+   355	
+   356	**Generation and metaprogramming**
+   357	
+   358	- **Source-generating macros, derive helpers and in-language source generation.** Permanent. They
+   359	  break file-local parsing and phase separation and make audit output describe code nobody wrote.
+   360	  Generics, ordinary functions and external generators whose output is reviewed as ordinary source
+   361	  replace them; attributes classify, never generate.
+   362	- **Derived structural equality.** Permanent as language machinery, for the same reason; equality
+   363	  is written or generated as reviewable source.
+   364	- **General compile-time evaluation** (`comptime`, `constexpr`-style). Reopens when a workload under
+   365	  the pull rules needs compile-time values beyond constant declarations; any design stays
+   366	  constants-only and states its interaction with the semantics.
+   367	- **Broad in-source conditional compilation** (`#[cfg]` throughout files). It hides control flow,
+   368	  authority and target assumptions behind build configuration. Target-specific code is selected by
+   369	  module and file per target profile in `Concrete.toml`, and audit output names what was selected
+   370	  and excluded. Reopens when, with the project model, target profiles and the hosted/freestanding
+   371	  std split ([R-0323](../legacy/docs/archive/roadmap-2026-11/ROADMAP_BACKLOG.md#task-r-0323)) in place, a workload under the pull rules
+   372	  shows that module and file selection is not enough; any form is narrow and appears in audit
+   373	  output.
+   374	
+   375	**Calls and declarations**
+   376	
+   377	- **User-defined and C-style variadic functions.** Permanent. They are unchecked or complicate
+   378	  every signature. The reserved output and append forms are the only multi-argument forms, and they
+   379	  are not a function type and cannot be passed as values.
+   380	- **Default arguments.** Permanent (owner, 2026-11-05, row P17a,
+   381	  [record](decisions.md#decided-project-refusals)), reopened only by a new owner decision. A
+   382	  call shows every argument it passes; defaults conflict with visible arguments and with one form per
+   383	  situation. General compile-time evaluation and broad conditional compilation (above) keep their
+   384	  evidence-based reopening (row P17b).
+   385	- **Lexical shadowing of a visible local, parameter or top-level name.** Permanent
+   386	  ([SCOPE-1](../legacy/docs/spec/scope.md#SCOPE-1), [OD67](decisions.md#od67)). One name, one binding
+   387	  in a scope; the compiler still never recovers identity from spellings (rule 13).
+   388	
+   389	**Contracts and ghost code**
+   390	
+   391	- **Decorative contracts.** Permanent. A contract is a claim that lowers to an obligation and is
+   392	  reported with its evidence; contracts never change what a program does at run time
+   393	  ([OD125](decisions.md#od125)), and a vacuous one is reported as such
+   394	  ([OD120](decisions.md#od120)).
+   395	- **`old`, quantifiers and implication in contracts.** Permanent ([OD117](decisions.md#od117)).
+   396	  Such properties are stated as Lean theorems, keeping the contract language small.
+   397	- **Ghost code that affects execution.** Permanent. Ghost code itself is admitted as decided:
+   398	  `ghost let` with `ghost` reserved ([OD81](decisions.md#od81)) and specification
+   399	  functions whose body is required and total ([OD115](decisions.md#od115)). How ghost state
+   400	  is represented in Core and erased was approved provisionally by the owner on 2026-11-05 (row
+   401	  Q9.10, [decided rows](decisions.md#decided-2026-11-05-core)): ghost ownership
+   402	  instrumentation with proved erasure; Core freezes at stage A2c
+   403	  ([roadmap](../ROADMAP.md#questions-for-the-core-session)).
+   404	
+   405	## Where the earlier rules went
+   406	
+   407	Nothing from the documents this one absorbed was dropped silently. The former principles of
+   408	PROJECT.md (numbered as they were) and its fifteen admission criteria map as follows; "AT" is the
+   409	[admission test](#admission-test).
+   410	
+   411	| former rule | here |
+   412	|---|---|
+   413	| principle 1, systems first | rule 7 |
+   414	| principle 2, no hidden runtime | rule 8 |
+   415	| principle 3, linearity and ownership | rule 9 |
+   416	| principle 4, second-class references | rule 10 |
+   417	| principle 5, visible capabilities and trust | rule 11 |
+   418	| principle 6, predictable execution | rule 16 |
+   419	| principle 7, core/shell separation | rule 16 |
+   420	| principle 8, artifact-first auditability | rule 14; conflict order item 2 |
+   421	| principle 9, proofs attach to real code | rule 7 |
+   422	| principle 10, small analyzable core | rule 15 |
+   423	| principle 11, honest trust boundaries | rule 12; conflict order item 1 |
+   424	| principle 12, compiler-owned identity | rule 13; conflict order item 1 |
+   425	| criterion 1, a simple invariant | AT 4 |
+   426	| criterion 2, more visible | AT 2 |
+   427	| criterion 3, less phase coupling | AT 5 |
+   428	| criterion 4, declaration-level dependencies | AT 5 |
+   429	| criterion 5, static or explicit dispatch | AT 6 |
+   430	| criterion 6, predictable code generation | AT 7 |
+   431	| criterion 7, clear diagnostics | AT 8 |
+   432	| criterion 8, one owning pass | AT 8 |
+   433	| criterion 9, the proof story | AT 4 |
+   434	| criterion 10, real benefit for audited code | AT 14 |
+   435	| criterion 11, crosses a contract boundary | AT 10 |
+   436	| criterion 12, fails visibly | AT 11 |
+   437	| criterion 13, evidence as precise as its claim | AT 12 |
+   438	| criterion 14, honest under hostile input | AT 13 |
+   439	| criterion 15, independent semantic identities | AT 12 |
+   440	| admission principle, quick decision rule, one-line test | AT, "In one line" |
+   441	| main rule for borrowed ideas | AT, "Borrowed ideas" |
+   442	| ordering principle | AT, "Ordering" |
+   443	| shape principles (features earn admission, removals improve, constraints compound, real programs test shape, record refusals) | rules 15, 17; AT, "Recording a refusal" |
+   444	| high-leverage priorities | not a design rule: the [roadmap](../ROADMAP.md) owns priority |
+   445	| ANTI_FEATURES.md entries and PROJECT.md's "no" and "not yet" decisions | [What Concrete refuses](#what-concrete-refuses); comparisons in [INFLUENCES.md](../legacy/docs/project/INFLUENCES.md#how-other-languages-answer-concretes-refusals) |
+     1	# The 29 owner decisions, 2026-11-08
+     2	
+     3	Owner, 15:08 UTC, verbatim: "ok but i said already all yes based on the best long term reviews of each agent and what we said before right?"
+     4	
+     5	Each item is decided with the final pick shown below. Every item went through a Codex/Kimi/agy round. Items 3, 14 and 18 were revised and got a second round. "REVISES" marks the decided row an item changes; a revision gets a dated revision note.
+     6	
+     7	## A. Process
+     8	1. When Codex wrote a branch, the review leg uses Kimi or agy as the reviewer, never Codex. The reviewer model is recorded in the note. REVISES: the AGENTS.md writer/reviewer text and the review.sh Codex-only leg.
+     9	
+    10	## B. Lexer and syntax
+    11	2. The operator and punctuation token list from the grammar sheet is closed. A token added later needs an explicit revision.
+    12	3. `'a'` is an ASCII byte literal of type u8 (equal to 97u8), with its own small escape list. Non-ASCII content is refused. The lexer tells it apart from `'label` by looking for the closing quote. Tests pin down both the literal and the label distinction. REVISES: language item 16, which removed char and migrated quoted ASCII literals explicitly. This item fixes the spelling.
+    13	4. No raw tab or other control character inside a string. Write `\t`.
+    14	5. Numbers allow:
+    15	   - suffixes such as 200u8;
+    16	   - the prefixes 0x, 0b and 0o.
+    17	
+    18	   They refuse:
+    19	   - `_` separators;
+    20	   - malformed suffixes such as 123u9, instead of splitting them into tokens.
+    21	
+    22	## C. Slice 1
+    23	6. Slice 1 admits a stated part of the existing spec, with proofs. The spec is not cut down.
+    24	7. Consuming a linear value is written `move t`.
+    25	8. `abort()` appears only as `return abort();`. It never produces a value and runs no cleanup.
+    26	9. Concrete.toml:
+    27	   - each table has its own version;
+    28	   - the policy is chosen by name, for example `profile = "predictable"`;
+    29	   - trusted assumptions have an explicit setting;
+    30	   - version 1 fixes exactly what each named policy means.
+    31	10. R-0600, the "always aborts" fact, belongs to slice 5, not slice 1. REVISES the R-0600 placement, if it currently says slice 1.
+    32	
+    33	## D. Floats
+    34	11. NaN, following the Codex/Kimi version:
+    35	   - operations that can create NaN need a proof, or a checked form;
+    36	   - arithmetic that does produce NaN gives the one canonical bit pattern;
+    37	   - bit conversions, abs, neg and copysign preserve the exact bits;
+    38	   - `==` follows IEEE, and a separate `bit_eq` compares bits.
+    39	
+    40	   This also answers STD_COVERAGE S5 as option (a).
+    41	
+    42	## E. CLI
+    43	12. Each file is checked separately, and checking within a file stops at its first error.
+    44	13. The exit codes are the same for every command:
+    45	   - 0: OK;
+    46	   - 1: refused;
+    47	   - 2: incomplete;
+    48	   - 3: usage error;
+    49	   - 4: internal error.
+    50	
+    51	   `concrete facts` doubles as the check mode.
+    52	14. `help` exists now. `emit`, `trace` and `interp` each arrive once their data exists. There is no `run` command: build, then execute the binary, is the one way to run a program. `interp` runs the spec's evaluator. REVISES the slice-0 CLI surface decision.
+    53	15. Formatter modes are `--check`, `--write` and `--stdin`, and combining them is refused.
+    54	16. `concrete schema` and `concrete capabilities` exist, for agent discovery.
+    55	17. A `[policy]` key sets the minimum proof strength for the user's own contracts and rejects vacuous proofs.
+    56	
+    57	## F. Foundation
+    58	18. Q1, constant initializers:
+    59	   - an initializer may contain fallible primitive operations, inside a closed initializer grammar with no calls, loops or effects;
+    60	   - every initializer is evaluated at compile time, and the kernel checks that it succeeded;
+    61	   - a failure, or running out of fuel, refuses the constant;
+    62	   - `1 + 2` is admitted;
+    63	   - there is one operation set, shared with runtime code.
+    64	
+    65	   REVISES TYPE-22 / Q6.4, and language item 26's "closed total initializer subset".
+    66	19. Q2: a constant may refer to one declared later. Cycles are refused, and the error shows the chain.
+    67	20. Q3: bytes that are not one whole stored pointer have no pointer meaning. A named bytes-to-address conversion is added only when a workload needs it.
+    68	21. The C1 change is confirmed: a cleanup step can be refused, and a refused step ends the run stuck. REVISES the C1 cleanup semantics.
+    69	
+    70	## G. Std
+    71	22. The std placement plan (STD_PLACEMENT.md) and O1-O12, as recommended.
+    72	23. S1 (a): a safe place-level `replace(p: &mut T, x: T) -> T` at slice 13, and a two-index view `swap` at slice 15.
+    73	24. S2: a view may lend several of its elements at once as shared, read-only borrows. Two mutable borrows at once: never.
+    74	25. S3, the stream interface, staged as recommended in STD_COVERAGE §6 S3:
+    75	   - slice 18: per-family functions for StdOut and File, with one partial-write law stated once in Lean over an abstract writer;
+    76	   - slice 20: one generic function with an explicit capability parameter, taking the write operation as a function value;
+    77	   - the two are compared in probe D4, and the Socket case comes at slice 27;
+    78	   - an associated-capability trait only if both fail.
+    79	26. S4: a borrowing traversal uses the decided function pointer plus explicit context. Probe D3 (slices 20-21) compares it with a coordinate cursor, and that probe has the final say.
+    80	
+    81	## H. Sign-offs and settings
+    82	27. Sign-off of the LEGACY sweep 35b489e4 (wip/legacy-sweep-2), "the legacy sweep" in the original question. It is not the roadmap sweep.
+    83	28. The main protection proposal d6159bf6 is approved. The owner applies it on GitHub personally, and agents never apply GitHub settings.
+    84	
+    85	## I. Planning
+    86	29. The showcase programs are sketched before the C1-C10 freeze, to test the design.
+    87	
+    88	Not covered by this answer:
+    89	- item 30, B's sign-off of e997548d;
+    90	- the three C5 questions (activation targets, direct-owner call loans, the C1 erasure contract).
+41:- Reproducible builds from slice 0 ([row](#decided-project-reproducible-builds)).
+44:- The LCB joins slice 0 ([row](#decided-project-proof-infrastructure)).
+55:- The slice-0 surface: `concrete build`, `concrete facts`, unsupported-form refusals, leading zeros ([row](#decided-slice0-surface-2026-11-06)).
+63:- Stack bounds from slice 0 and randomness from slice 6 ([row](#decided-2026-11-07-stack-randomness)).
+117:| SYN-6 | A char literal is any one character; non-ASCII behavior is left open. | OD137 | Fixed in prose 2026-11-03. |
+141:  allocator-branded strings, undecided on 2026-11-03, are provisionally decided by rows Q4.1–Q4.6 ([rows](#decided-2026-11-05-core)); static text requires no allocation.
+191:- <a id="decided-2026-11-05-q6-2-fields"></a>**Q6.2 and R4 F12, known values through structs** (owner-approved revision, 2026-11-05, made during A2b): known values propagate field by field through immutable struct construction and destructuring. The checker tracks an abstract value for each binding: unknown, a known scalar, or a constructor whose fields carry their own abstract values. Constructing a struct records each field's fact independently; an immutable binding keeps the fact; destructuring hands each field's fact, recursively, to the corresponding immutable binder; an unknown component stays unknown without discarding its known siblings; an ownership transfer keeps the facts for the receiving binding without permitting reuse of the consumed one. Q6.2's exclusions stay (mutable state, branches and paths, user-function calls, calls outside the table, elaborator temporaries). So `let S { a } = S { a: 200u8 }; a + 100` is refused, in trusted and unreachable code too (OD118 as revised by Q6.4). Before this revision a field bound by destructuring was not known and that program was accepted and trapped.
+192:- <a id="decided-2026-11-05-q9-1-reads"></a>**Q9.1, read forms** (owner-confirmed, 2026-11-05): `copy x` is allowed only when `x` has a Copy type and `move x` only when it has a non-Copy (linear) type. Each read has one form; `move` of a Copy value and `copy` of a linear value are both refused.
+200:- **Q1.3** How are packages formed and opened? — Explicit pack; lexical unpack; repackage escapes.
+231:- **Q4.1** What is a literal’s type? — Copy `StaticStr`; explicit fallible dynamic conversion.
+232:- **Q4.2** Which encoding and NUL policy apply? — UTF-8 including embedded NUL.
+233:- **Q4.3** What do length and comparison mean? — Byte length; content equality; lexicographic byte order.
+234:- **Q4.4** Are literal addresses observable and literals mergeable? — Content semantics; pooling allowed; no safe address identity.
+243:- **Q6.2** Is local constant propagation mandatory? — Fixed table of statically known values: literals, immutable lets, module constants, checked ops, six named wrapping/saturating ops, lossless `as`. *Revised 2026-11-05: facts propagate field by field through immutable struct construction and destructuring ([revision](#decided-2026-11-05-q6-2-fields)).* *Revised 2026-11-06 by [no hidden traps](#decided-project-no-hidden-traps): known values remain facts; refusal widens to unproven safety.*
+255:- **Q7.7** What are network scopes? — Connect and listen grants with numeric scopes; a separate Resolver grant with explicit server, transport, suffixes and record types.
+373:  [proof infrastructure](#decided-project-proof-infrastructure): slice 0 gets the first BIR → LLVM
+375:  the Lean Compiler Backend joins slice 0 as a second unverified backend. Std, examples and tests migrate to the
+443:  - *Slice 0.* The first executable compiler slice is slice 0: one source unit, no imports or grants,
+451:    operands at the IR boundary, overflow included. Slice 0 work may start as a provisional skeleton
+453:    Slice 0 is an engineering milestone: it does not replace slice 1's ownership, component/launcher,
+459:    obligation is explicit. The shipped compiler is these Lean definitions. Before slice 0's authoritative
+462:  - *The composed theorem from the first slice.* Slice 0 includes a kernel-checked composed theorem
+489:  - *Backend order* (revised 2026-11-06 by the owner: the LCB joins slice 0; relayed by the orchestrator from the owner session: asked
+490:    whether the LCB should join slice 0, unverified, with its adapter proven early and an ARM CI job,
+493:    in llvm and lean compiler backend where we prove lean compiler backend in the futgure right"). From slice 0, every
+512:  - *What it revises.* It amends the new-compiler row (slice 0, not slice 1, gets the first
+526:    by the owner: the LCB joins slice 0 as a second unverified backend, and its adapter is the first
+528:    slice-0 BIR → LLVM printer in the same way.
+547:  - *Bound the LLVM hole* (revised 2026-11-06 by the owner: the LCB joins slice 0, quoted in the
+549:    unverified beside LLVM from slice 0, and its BIR → LCB-IR adapter is the first backend proof
+564:    strengthens R-0552 and R-0521, required from slice 0's first authoritative claim.
+660:    stage, the per-function facts report and the per-compilation evidence. Slice 0 is unchanged (its
+661:    values are all known; `slice0_never_traps` is the first instance). The spec example `add100`,
+668:    question on refusing a provably out-of-range view index disappears), Q6.1 and Q6.2 (static refusal
+719:- <a id="decided-project-facts-report"></a>**The per-function facts report from slice 0** (owner,
+721:  answers "what may this function do" is a slice-0 deliverable (B0, R-0575), not a phase-F addition.
+730:  people, CI and language models. From slice 0 the compiler also answers queries over the same facts
+734:  report and the query are one fact source, not two implementations. Slice 0's facts are small, but
+740:  command is `concrete facts` ([slice-0 surface](#decided-slice0-surface-2026-11-06)). It continues the legacy compiler's `--report` family (effects, caps, alloc, recursion,
+780:  follows the slice-0 facts report and query and is required from slice 1 (R-0576), not deferred.
+788:- <a id="decided-project-reproducible-builds"></a>**Reproducible builds from slice 0** (owner,
+790:  beginning right?" and "ok add the reproducible asap"). From slice 0, the same source, compiler
+795:  depends on hash-map iteration order. CI builds every slice-0 example twice in different
+799:  R-0149 keeps incremental-build equivalence. The slice-0 worker owns the work on `wip/slice0` when
+800:  Claude capacity returns; work started on `wip/slice0-repro`.
+843:  byte-accounting instrumentation is fixed in A2i (R-0592); slice 0 proves its zero-heap facts
+872:  The slice-0 design (`Concrete/README.md`, on branch `wip/slice0`) becomes the detailed
+886:    validators for Mono, SSA (a direct proof is allowed in slice 0), optimizations, register
+887:    allocation and linking. After slice 0, per-edge certificates replace the whole-compiler
+893:- <a id="decided-slice0-surface-2026-11-06"></a>**The slice-0 surface** (owner, 2026-11-06, relayed by the orchestrator from the owner session:
+964:  per-stage time and memory are tracked from slice 0. Every measurement is recorded by exact SHA,
+974:  - *Stack bounds.* From slice 0, `concrete facts` reports each program's maximum stack use,
+983:  - *Trusted-base statement.* From slice 0, `concrete facts` states what is not proven: the Lean
+986:    the slice-0 front end and growing one feature per slice. It runs on concrete-ci-2.
+987:  - *Sanitizers.* From slice 0, every example's LLVM output is also built and run under
+991:  - *Binary size.* From slice 0, binary size is tracked per example per commit next to speed
+1119:  1. <a id="decided-2026-11-08-ubsan"></a>*UBSan leaves the slice-0 gates; ASan stays.*
+1130:  4. <a id="decided-2026-11-08-quota"></a>*Claude's quota goes to the critical path:* the spec, slice 0
+1321:| OD31 | <a id="od31"></a>ARITH-2: no `Int` fallback for an unconstrained literal (added 2026-10-29, from a Grok review of the spec) | an unconstrained integer literal is `Int` and a float literal `Float64`; bug 327 | exit 2q; exit 2j | decided 2026-10-29 by the owner ("strict across the board"): an integer literal takes its type from its context, as today; the fallback to `Int` where nothing is expected is removed, so an unconstrained literal is refused; suffixes are not required; float literals get an explicit rule under the same principle. Now ARITH-2@2 (partial, bug 327) |
+1338:| OD48 | <a id="od48"></a>The index type of a counted loop over two literals (added 2026-10-29, while recording OD47). Options: (a) refused, as OD31 refuses any literal with no expected type (write `for i from 0 until n` with a typed bound, or annotate); (b) the index is `Int` there. Recommendation: (a), consistent with OD31 Reviewed pick (2026-10-30, a recommendation that supersedes the recommendation above where they differ): (a) refused, as OD31 refuses any literal with no expected type; a typed bound supplies the other bound's type, in either order | the counted loop is not in the current compiler | bug 331's repair (STMT-6) | decided 2026-10-31 by the owner's rule (every reviewer agreed, as strict as Austral or stricter): Refused, as OD31 |
+1353:| OD63 | <a id="od63"></a>Float literals take their expected type (added 2026-10-30, item Q4 of the owner picks of that day). Question: Whether a float literal takes the float type its position expects and is refused where nothing is expected, as ARITH-2@2 states under OD31's note that float literals get an explicit rule under the same principle. Options: (a) yes, as ARITH-2@2 states for integers and floats alike; (b) a float literal defaults to `f64`. Pick (the coordinator's pick after the Kimi, Codex and Grok review of 2026-10-30, a recommendation and not a decision): (a). Austral: not checked | `let x = 1.5;` is accepted as `Float64` (ARITH-2@2 is partial, bug 327) | ARITH-2, ARITH-7 | decided 2026-10-31 by the owner's rule (every reviewer agreed, as strict as Austral or stricter): Expected type, refused where none |
+1354:| OD64 | <a id="od64"></a>Raw pointers derived from a borrow (added 2026-10-30, item G19 of the owner picks of that day). Question: What a raw pointer derived from a borrow may do: whether it is valid only while the borrow lives, may escape the borrow block, may be passed to C, and how extern parameters say so. Options: (a) valid only while the borrow lives and never escaping it; (b) the operational loan rules of REF-14 only. Pick (the coordinator's pick after the Kimi, Codex and Grok review of 2026-10-30, a recommendation and not a decision): (a): no returning, no escaping storage (a local `let` inside the block stays allowed), no converting to an integer and no capturing in an outer `defer`; borrow-derived pointers go only to call-only `extern` parameters; C uses it only during a call (memory C keeps must come from an allocation with its own owner); `extern` parameters say call-only (the default) or kept; field pointers come from the same borrow of the whole owner; deferred calls in the block run before the borrow ends; provenance survives copies, offsets, field pointers, helpers and indirect calls; a shared borrow never yields write access; `ptr::expose` is refused on such a pointer; the annotation's syntax gets an LL(1) check. Austral: not checked | no pass assumes `&mut` exclusivity (OD15); REF-14 bounds aliases by their loan | REF-14, TRUST-1, TRUST-3, FFI-3, OWN-12 | decided 2026-10-31 by the owner's rule (every reviewer agreed, as strict as Austral or stricter): Valid only inside the borrow; call-only extern params |
+1373:| OD83 | <a id="od83"></a>The call-site allocator binding in the grammar (added 2026-10-30, item C6 of the owner picks of that day). Question: Whether the grammar gains the call-site allocator binding `f(...) with(Alloc = e)`. Options: (a) add it to the grammar; (b) remove it from the parser, so the language loses the form; (c) keep the recorded divergence for now. Pick (the coordinator's pick after the Kimi, Codex and Grok review of 2026-10-30, a recommendation and not a decision): individual review required; no pick recorded. Austral: not checked | the parser accepts it | TRUST-4, MEM-5, SYN-1 | decided 2026-11-01 by the owner (final set): No call-site binding `f(...) with(Alloc = e)`. Under the authority decision, one allocator form per target: hosted, `with(Alloc)` and no allocator value; freestanding, an `Arena` parameter plus `with(Alloc)`. Revised 2026-11-02 by the owner's rule: one form on every target, an `Allocator<A>` value plus `with(Alloc)` ([decisions](decisions.md#decided-2026-11-02-allocation)) |
+1427:| OD137 | <a id="od137"></a>Character literals outside ASCII (added 2026-10-30, raised by the spec quality audit of 2026-10-30). Question: Which byte a char literal denotes when its character is not ASCII. Bears on SYN-6, TYPE-20 and SYN-5. The current compiler: the literal silently takes the low byte of the character's code point: `'é'` (U+00E9) is 233, `'ā'` (U+0101) is 1 and `'€'` (U+20AC) is 172 as `u8`, on both consumers, and SYN-6 says only that a char literal is a token. Options: (a) refuse a char literal whose character is not ASCII, so every accepted literal is the one byte of its ASCII character; (b) accept U+0000 to U+00FF as that byte (Latin-1) and refuse anything above; (c) make `char` a Unicode scalar value, which changes TYPE-20's one-byte `char`. Austral: not checked. Pick: none given (raised by the spec quality audit, 2026-10-30). | see OPEN-137 | see OPEN-137 | decided 2026-10-31 by the owner's rule (every reviewer agreed, as strict as Austral or stricter): Refuse non-ASCII |
+1428:| OD138 | <a id="od138"></a>Which positions give a literal its expected type (added 2026-10-30, raised by the spec quality audit of 2026-10-30). Question: Which positions give an integer literal operand its expected type under ARITH-2@3 (and a float literal's, should OPEN-63 give floats the same rule). Bears on ARITH-2, TYPE-4 and TYPE-6. The current compiler: an unconstrained integer literal is typed `Int` and a float literal `Float64` (bug 327); with `x: u8`, a literal beside `x` takes `u8` as the other operand of `+`, `<` and `&` and as the count of `>>`: `x + 300`, `x < 300`, `x & 300` and `x >> 300` are each refused natively with E0227 (`integer literal 300 is out of range for type 'u8'`), and `300 as Int` is accepted, whether through `as` or the `Int` default the probe does not show. ARITH-2@3 refuses an integer literal with no expected type but does not list the positions that supply one. Options: (a) declared positions (an annotated binding, a parameter, a return, a field) and the other operand of a binary operator, as the probe shows the current compiler doing for `+`, `<`, `&` and a shift count (other operators were not probed); (b) declared positions only, so a literal beside a typed operand needs a typed binding; (c) option (a), plus the target type of an `as` for its literal operand. Austral: not checked. Pick: none given (raised by the spec quality audit, 2026-10-30). | see OPEN-138 | see OPEN-138 | decided 2026-11-01 by the owner (final set): Declared positions + other operand of a binary op |
+1702:- <a id="OPEN-137"></a>**OPEN-137** (OD137, Character literals outside ASCII): See [OD137](#od137).
+1768:- <a id="OPEN-138"></a>**OPEN-138** (OD138, Which positions give a literal its expected type): See [OD138](#od138).
+1794:  OWN-7@3 (OD29), MEM-4@3 (OD30), ARITH-2@2 (OD31) and OWN-15@3 (OD32), each pending its bug (319 –
+legacy/docs/spec/syntax.md:18:## Rules
+legacy/docs/spec/syntax.md:21:### SYN-1. Decided syntax governs the derived grammar
+legacy/docs/spec/syntax.md:117:The token forms (SYN-6), the statement `match` (SYN-8), the value `if` (SYN-9) and the separators
+legacy/docs/spec/syntax.md:279:### SYN-2. Operators group by a fixed precedence
+legacy/docs/spec/syntax.md:325:### SYN-3. Compiler spellings are reserved
+legacy/docs/spec/syntax.md:370:### SYN-4. A struct literal in a condition head is parenthesized
+legacy/docs/spec/syntax.md:425:<a id="SYN-5"></a>
+legacy/docs/spec/syntax.md:426:### SYN-5. Source text and string literals are UTF-8
+legacy/docs/spec/syntax.md:428:**SYN-5@3.** A source file is UTF-8 text, a string literal denotes the UTF-8 encoding of its characters, and its only escapes are `\n`, `\t`, `\r`, `\\`, `\"` and `\0`, so a file that is not valid UTF-8 and any other `\` sequence in a literal are not accepted, and every `String<A>` reachable by safe code holds valid UTF-8.
+legacy/docs/spec/syntax.md:453:<a id="SYN-6"></a>
+legacy/docs/spec/syntax.md:454:### SYN-6. Tokens
+legacy/docs/spec/syntax.md:456:**SYN-6@3.** A token is an identifier (a letter or `_`, then letters, digits and `_`), an integer literal in decimal or with a `0x`, `0b` or `0o` prefix, a float literal written as digits, `.` and digits, a string literal, a char literal (one ASCII character, or one of the escapes `\n`, `\t`, `\r`, `\0`, `\\` and `\'`, between single quotes), a label (`'` then an identifier), a keyword, or an operator or punctuation mark, and `//` begins a comment that ends at the end of its line.
+legacy/docs/spec/syntax.md:494:### SYN-7. `>>` closes two type-argument lists
+legacy/docs/spec/syntax.md:533:### SYN-8. A `match` that begins a statement is a statement
+legacy/docs/spec/syntax.md:571:### SYN-9. A value `if` has an `else`
+legacy/docs/spec/syntax.md:603:### SYN-10. The separators `.` and `::`
+legacy/docs/spec/syntax.md:657:## Version history
+legacy/docs/spec/syntax.md:663:- SYN-6@2 (spec audits 6 and 10, 2026-10-30) adds the char-literal escapes to the sentence; the compiler accepted them before.
+legacy/docs/spec/syntax.md:667:- SYN-6@3 (2026-11-03) brings the chapter into line with the recorded owner decisions; SYN-6@2 is superseded by version.
+legacy/docs/spec/syntax.md:669:- SYN-5@2 (2026-11-03) supersedes SYN-5@1 for decided-language conformance.
+docs/proposals/GRAMMAR_REVIEW.md:13:## 1. Reading the grammar and slices
+docs/proposals/GRAMMAR_REVIEW.md:53:## 2. Lexical grammar
+docs/proposals/GRAMMAR_REVIEW.md:55:### Encoding, space, comments, names
+docs/proposals/GRAMMAR_REVIEW.md:57:UTF-8 source and UTF-8 static text are supported by [Core Q4.1–Q4.4](../docs/decisions.md#decided-2026-11-05-core); the explicit legacy source-encoding and escape rule is [SYN-5](../legacy/docs/spec/syntax.md#SYN-5). ASCII char literals are decided by [OD137](../docs/decisions.md#od137). Exact source whitespace, identifier alphabet and source byte edge cases lack a dedicated decision: **OPEN-1**, **OPEN-2**. Recommended lexical core:
+docs/proposals/GRAMMAR_REVIEW.md:69:Slices: identifier/space/source decoding 0; line comments recommended at 0; labels 4. `//` comments have no nesting; `/*…*/` is absent in [SYN-6](../legacy/docs/spec/syntax.md#SYN-6), but its precise status as a current owner spelling choice is **OPEN-1**. LF, CR or EOF ends a comment; CRLF therefore ends it at CR, with LF remaining whitespace (OPEN-1 recommendation). A BOM, shebang, non-ASCII whitespace, Unicode identifiers, embedded source NUL are not silently accepted by this recommendation; see OPEN-1/2.
+docs/proposals/GRAMMAR_REVIEW.md:73:### Reserved list
+docs/proposals/GRAMMAR_REVIEW.md:90:### Numbers and quoted literals
+docs/proposals/GRAMMAR_REVIEW.md:105:Decimal integers arrive at 0; other bases at 2; FLOAT at 26; STRING/CHAR at 16 (a reason STRING in an earlier annotation is metadata, not a runtime StaticStr feature). Leading-zero decimal integers are explicitly refused: [slice-0 surface](../docs/decisions.md#decided-slice0-surface-2026-11-06). The old forms are documented by [SYN-6](../legacy/docs/spec/syntax.md#SYN-6). **OPEN-5**: approve lowercase base prefixes, no separators, float digit/point syntax and a minimal typed-integer suffix policy and boundary handling; the frozen lexer also accepted uppercase prefixes. The [approved Q6.2 field example](../docs/decisions.md#decided-2026-11-05-q6-2-fields) contains `200u8`. A blanket suffix refusal conflicts with that example; OPEN-5 recommends retaining typed integer suffixes, but their complete width/base/boundary grammar needs approval. The displayed INT production is the unsuffixed kernel, not a complete suffix grammar. No exponent notation, `1.`, `.5`, hex floats or special NaN/Inf literals are proposed.
+docs/proposals/GRAMMAR_REVIEW.md:109:Only these escapes are proposed, copied exactly from SYN-5/6; **OPEN-6** requests explicit owner ratification where decisions.md does not enumerate them:
+docs/proposals/GRAMMAR_REVIEW.md:113:| string | `\n`, `\t`, `\r`, `\\`, `\"`, `\0` | UTF-8 characters other than quote/backslash; raw line-break/control policy OPEN-6 |
+docs/proposals/GRAMMAR_REVIEW.md:114:| char | `\n`, `\t`, `\r`, `\0`, `\\`, `\'` | exactly one ASCII character other than quote/backslash; controls OPEN-6 |
+docs/proposals/GRAMMAR_REVIEW.md:116:No `\xHH`, `\u{…}`, interpolation, raw-string delimiter or byte-string prefix is admitted by this proposal. Embedded NUL in static text is explicitly permitted by Core Q4.2, using `\0`; ASCII literal restrictions do not restrict every computed `char` to 0…127 ([TYPE-20](../legacy/docs/spec/types.md#TYPE-20)). A char ending in a closing quote takes priority over LABEL; a bare apostrophe plus a name is LABEL. The exact lexical distinction and malformed-quote refusal is OPEN-6, not a token-level LL(1) claim about individual bytes.
+docs/proposals/GRAMMAR_REVIEW.md:118:### Punctuation and operators
+docs/proposals/GRAMMAR_REVIEW.md:152:## 3. Items, attributes, generics and types
+docs/proposals/GRAMMAR_REVIEW.md:154:### Item grammar
+docs/proposals/GRAMMAR_REVIEW.md:223:### Attributes
+docs/proposals/GRAMMAR_REVIEW.md:258:### Generic lists, bounds, capability sets, types
+docs/proposals/GRAMMAR_REVIEW.md:308:## 4. Patterns, statements, blocks and loops
+docs/proposals/GRAMMAR_REVIEW.md:310:### Patterns
+docs/proposals/GRAMMAR_REVIEW.md:343:### Statements and block positions
+docs/proposals/GRAMMAR_REVIEW.md:404:## 5. Expressions, paths, constructors and contracts
+docs/proposals/GRAMMAR_REVIEW.md:477:### Contract expression restriction
+docs/proposals/GRAMMAR_REVIEW.md:483:## 6. Named operations, secrets, borrows and raw pointers
+docs/proposals/GRAMMAR_REVIEW.md:507:### Scoped borrow and view grammar
+docs/proposals/GRAMMAR_REVIEW.md:522:### Raw pointers and FFI
+docs/proposals/GRAMMAR_REVIEW.md:528:## 7. Required forms whose surface is not yet decided
+docs/proposals/GRAMMAR_REVIEW.md:544:## 8. LL(1) review
+docs/proposals/GRAMMAR_REVIEW.md:578:| char vs apostrophe label | lexical prefix conflict | closed char scan before label token classification; OPEN-6 approves exact malformed-input policy; token-level LL(1) does not imply one-byte lexing |
+docs/proposals/GRAMMAR_REVIEW.md:584:## 9. Explicit refusals and migration diagnostics
+docs/proposals/GRAMMAR_REVIEW.md:623:## 10. Numbered OPEN items for owner approval
+docs/proposals/GRAMMAR_REVIEW.md:627:1. **OPEN-1 — Source trivia/byte policy (slice 0).** Recommend valid UTF-8, space/tab/LF/CR whitespace, `//` to LF, CR or EOF, no block comments/BOM/shebang/raw NUL. Alternative: allow UTF-8 BOM and nested block comments. Reason: a small explicit byte language matches SYN-5/6 without inheriting host lexer behavior. CRLF leaves LF as whitespace.
+docs/proposals/GRAMMAR_REVIEW.md:631:5. **OPEN-5 — Numeric token details (2/26; leading-zero decision already binds 0).** Recommend lowercase base prefixes, no separators; retain typed integer suffixes to preserve the approved Q6.2 example, with exact suffix grammar still for approval, digits-dot-digits floats without exponents; reject malformed adjacent numeric text as one diagnostic. Alternative: retain uppercase prefixes and add explicit separators/exponent forms. Reason: do not silently contradict `200u8` in the approved field example; freeze the accepted token language independently of lexer accidents; do not reopen decided decimal-leading-zero refusal.
+docs/proposals/GRAMMAR_REVIEW.md:632:6. **OPEN-6 — Quoted tokens/escapes (16; metadata strings earlier).** Recommend precisely the two escape lists in section 2, no raw line breaks/control characters, char-first closed-quote recognition before labels, malformed quotes refused. Alternative: add hex/Unicode escapes and multiline text. Reason: SYN-5/6 give a small historical set, but source lexical edge cases need explicit approval; Core Q4.2's embedded NUL remains allowed through \0.
+docs/proposals/GRAMMAR_REVIEW.md:653:### Reviewer choices and v2 disposition
+
+exec
+/bin/bash -lc "nl -ba OWNER_29_DECISIONS_2026-11-08.md; sed -n '890,941p' docs/decisions.md | nl -ba -v890; rg -n 'Q4\\.1|Q4\\.2|Q4\\.3|Q4\\.4|Q6\\.2|f32|f64|i8.*i16' docs/decisions.md; sed -n '90,117p' docs/proposals/GRAMMAR_REVIEW.md | nl -ba -v90; sed -n '425,492p' legacy/docs/spec/syntax.md | nl -ba -v425; sed -n '250,390p' docs/PHILOSOPHY.md | nl -ba -v250" in /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/round-lexspell/src
+ succeeded in 0ms:
+     1	# The 29 owner decisions, 2026-11-08
+     2	
+     3	Owner, 15:08 UTC, verbatim: "ok but i said already all yes based on the best long term reviews of each agent and what we said before right?"
+     4	
+     5	Each item is decided with the final pick shown below. Every item went through a Codex/Kimi/agy round. Items 3, 14 and 18 were revised and got a second round. "REVISES" marks the decided row an item changes; a revision gets a dated revision note.
+     6	
+     7	## A. Process
+     8	1. When Codex wrote a branch, the review leg uses Kimi or agy as the reviewer, never Codex. The reviewer model is recorded in the note. REVISES: the AGENTS.md writer/reviewer text and the review.sh Codex-only leg.
+     9	
+    10	## B. Lexer and syntax
+    11	2. The operator and punctuation token list from the grammar sheet is closed. A token added later needs an explicit revision.
+    12	3. `'a'` is an ASCII byte literal of type u8 (equal to 97u8), with its own small escape list. Non-ASCII content is refused. The lexer tells it apart from `'label` by looking for the closing quote. Tests pin down both the literal and the label distinction. REVISES: language item 16, which removed char and migrated quoted ASCII literals explicitly. This item fixes the spelling.
+    13	4. No raw tab or other control character inside a string. Write `\t`.
+    14	5. Numbers allow:
+    15	   - suffixes such as 200u8;
+    16	   - the prefixes 0x, 0b and 0o.
+    17	
+    18	   They refuse:
+    19	   - `_` separators;
+    20	   - malformed suffixes such as 123u9, instead of splitting them into tokens.
+    21	
+    22	## C. Slice 1
+    23	6. Slice 1 admits a stated part of the existing spec, with proofs. The spec is not cut down.
+    24	7. Consuming a linear value is written `move t`.
+    25	8. `abort()` appears only as `return abort();`. It never produces a value and runs no cleanup.
+    26	9. Concrete.toml:
+    27	   - each table has its own version;
+    28	   - the policy is chosen by name, for example `profile = "predictable"`;
+    29	   - trusted assumptions have an explicit setting;
+    30	   - version 1 fixes exactly what each named policy means.
+    31	10. R-0600, the "always aborts" fact, belongs to slice 5, not slice 1. REVISES the R-0600 placement, if it currently says slice 1.
+    32	
+    33	## D. Floats
+    34	11. NaN, following the Codex/Kimi version:
+    35	   - operations that can create NaN need a proof, or a checked form;
+    36	   - arithmetic that does produce NaN gives the one canonical bit pattern;
+    37	   - bit conversions, abs, neg and copysign preserve the exact bits;
+    38	   - `==` follows IEEE, and a separate `bit_eq` compares bits.
+    39	
+    40	   This also answers STD_COVERAGE S5 as option (a).
+    41	
+    42	## E. CLI
+    43	12. Each file is checked separately, and checking within a file stops at its first error.
+    44	13. The exit codes are the same for every command:
+    45	   - 0: OK;
+    46	   - 1: refused;
+    47	   - 2: incomplete;
+    48	   - 3: usage error;
+    49	   - 4: internal error.
+    50	
+    51	   `concrete facts` doubles as the check mode.
+    52	14. `help` exists now. `emit`, `trace` and `interp` each arrive once their data exists. There is no `run` command: build, then execute the binary, is the one way to run a program. `interp` runs the spec's evaluator. REVISES the slice-0 CLI surface decision.
+    53	15. Formatter modes are `--check`, `--write` and `--stdin`, and combining them is refused.
+    54	16. `concrete schema` and `concrete capabilities` exist, for agent discovery.
+    55	17. A `[policy]` key sets the minimum proof strength for the user's own contracts and rejects vacuous proofs.
+    56	
+    57	## F. Foundation
+    58	18. Q1, constant initializers:
+    59	   - an initializer may contain fallible primitive operations, inside a closed initializer grammar with no calls, loops or effects;
+    60	   - every initializer is evaluated at compile time, and the kernel checks that it succeeded;
+    61	   - a failure, or running out of fuel, refuses the constant;
+    62	   - `1 + 2` is admitted;
+    63	   - there is one operation set, shared with runtime code.
+    64	
+    65	   REVISES TYPE-22 / Q6.4, and language item 26's "closed total initializer subset".
+    66	19. Q2: a constant may refer to one declared later. Cycles are refused, and the error shows the chain.
+    67	20. Q3: bytes that are not one whole stored pointer have no pointer meaning. A named bytes-to-address conversion is added only when a workload needs it.
+    68	21. The C1 change is confirmed: a cleanup step can be refused, and a refused step ends the run stuck. REVISES the C1 cleanup semantics.
+    69	
+    70	## G. Std
+    71	22. The std placement plan (STD_PLACEMENT.md) and O1-O12, as recommended.
+    72	23. S1 (a): a safe place-level `replace(p: &mut T, x: T) -> T` at slice 13, and a two-index view `swap` at slice 15.
+    73	24. S2: a view may lend several of its elements at once as shared, read-only borrows. Two mutable borrows at once: never.
+    74	25. S3, the stream interface, staged as recommended in STD_COVERAGE §6 S3:
+    75	   - slice 18: per-family functions for StdOut and File, with one partial-write law stated once in Lean over an abstract writer;
+    76	   - slice 20: one generic function with an explicit capability parameter, taking the write operation as a function value;
+    77	   - the two are compared in probe D4, and the Socket case comes at slice 27;
+    78	   - an associated-capability trait only if both fail.
+    79	26. S4: a borrowing traversal uses the decided function pointer plus explicit context. Probe D3 (slices 20-21) compares it with a coordinate cursor, and that probe has the final say.
+    80	
+    81	## H. Sign-offs and settings
+    82	27. Sign-off of the LEGACY sweep 35b489e4 (wip/legacy-sweep-2), "the legacy sweep" in the original question. It is not the roadmap sweep.
+    83	28. The main protection proposal d6159bf6 is approved. The owner applies it on GitHub personally, and agents never apply GitHub settings.
+    84	
+    85	## I. Planning
+    86	29. The showcase programs are sketched before the C1-C10 freeze, to test the design.
+    87	
+    88	Not covered by this answer:
+    89	- item 30, B's sign-off of e997548d;
+    90	- the three C5 questions (activation targets, direct-owner call loans, the C1 erasure contract).
+   890	    separate; the holes only shrink.
+   891	  - *One evidence graph.* Facts, diagnostics and source sites come from one evidence graph with
+   892	    typed site identities.
+   893	- <a id="decided-slice0-surface-2026-11-06"></a>**The slice-0 surface** (owner, 2026-11-06, relayed by the orchestrator from the owner session:
+   894	  presented as four questions with option (a) recommended, the owner answered "for the decisions a
+   895	  is okay").
+   896	  The commands are `concrete build` and `concrete facts` (the [facts query](#decided-project-facts-report)).
+   897	  A form the language decides but the current slice does not yet support gets its own refusal,
+   898	  "not supported in this slice", distinct from a refusal of an invalid program, so the two are never
+   899	  confused. An integer literal with a leading zero (such as `007`) is refused, so no literal reads as
+   900	  octal. The trap site an executable reports is a named premise of the theorem until it is proved
+   901	  (spec obligation O4).
+   902	- <a id="decided-project-vertical-slices-2026-11-06"></a>**Thin vertical slices**
+   903	  (owner, 2026-11-06, relayed by the orchestrator from the owner session: "and let's have vertical slices where everything is proven and work
+   904	  first with integers right?", then "reorder based on what you believe is more important" and "have
+   905	  the full slices thought and ranked in order by you, codex, kimi and agy, they should decide it
+   906	  together"; the agreed order was approved with "ok do everything"). The language grows in thin vertical slices, each fully proven end to end
+   907	  (source, every stage, BIR, both backends, facts and diagnostics, conformance examples) before
+   908	  the next starts, so every construct is proven on the whole path as soon as it lands and no stage
+   909	  runs ahead of its proofs. "Fully proven" means proven under the named premises the
+   910	  [backend order](#decided-project-proof-infrastructure) permits: the source-to-BIR stages are
+   911	  proved; the LLVM build stays unverified and qualified by tests; the LCB path carries named premises
+   912	  until its proof lands (the adapter first, then LP0), the two backends' premises kept separate.
+   913	  The order (owner, 2026-11-06: "ok do everything", after Claude, Codex, agy and Kimi chose unanimously) is the agreed slice plan in the [roadmap](../ROADMAP.md#vertical-slices), with
+   914	  the common acceptance shape: slice 1 stays row [Q8.2](#q8-2-revision) and gains the explicit
+   915	  `abort()` (moved from slice 3), LP0 follows slice 1 before any growth, integers are complete at
+   916	  slice 2, authority comes at slice 6 and secrets at slice 7, file-copy and 0.1 at slice 18,
+   917	  RocksDB after slice 25 and ethlambda after slice 27. Slice 7's secret sources include the pure
+   918	  `classify` of a value passed in, with no wrapper duplicating it, and the entropy capability's
+   919	  `Secret<T>` output under the [randomness decision](#decided-2026-11-07-stack-randomness);
+   920	  grant-backed sources come with the console, files and network. Before RocksDB and ethlambda are accepted, their programs are
+   921	  audited, and a real need for concurrency or foreign function values goes to the owner (R-0604).
+   922	  Revised 2026-11-07 by the [final-slice decision](#decided-2026-11-07-final-slices): the approved
+   923	  order gains slice 28 for concurrency, with ethlambda and the encrypted tunnel after it. Slice 27
+   924	  keeps httpget, tcpserve and the sequential web server.
+   925	- <a id="decided-2026-11-07-step-bounds"></a>**Step and time bounds** (owner, 2026-11-07: "ok go
+   926	  ahead all yes then as you said right", approving the recorded recommendation). This answers when
+   927	  quantitative bounds arrive and what they mean. The step-counting cost model is built with loops at
+   928	  slice 4 and extended through calls at slice 5; proofs of step bounds are available at slice 8.
+   929	  Bounds count abstract operations in input and pattern size. A wall-clock claim needs separate
+   930	  backend evidence; a step bound is not a wall-clock deadline.
+   931	- <a id="decided-2026-11-07-showcases"></a>**All seven showcases** (owner, 2026-11-07: "showcase i
+   932	  would like everything right?"). This answers which of the proposed showcases to adopt: all seven,
+   933	  with the Codex/Kimi placements recorded in the [showcase plan](proposals/EXAMPLES.md#showcases):
+   934	  - `grep`: slices 16 → 18 → 22 for dynamic patterns;
+   935	  - image decoding: QOI at slices 19 → 21, PNG with DEFLATE at slices 21–22;
+   936	  - the EVM interpreter: slices 15 → 21 → 23;
+   937	  - the embedded key-value store: slice 23, with durability "not established" and the RocksDB
+   938	    comparison at slice 25;
+   939	  - the WebAssembly sandbox: slices 21 → 23 → 26;
+   940	  - the crypto flagship: slices 7 → 15 → the file encryptor at 18, then the encrypted tunnel after
+   941	    slice 28 and the randomness/nonce audit;
+141:  allocator-branded strings, undecided on 2026-11-03, are provisionally decided by rows Q4.1–Q4.6 ([rows](#decided-2026-11-05-core)); static text requires no allocation.
+191:- <a id="decided-2026-11-05-q6-2-fields"></a>**Q6.2 and R4 F12, known values through structs** (owner-approved revision, 2026-11-05, made during A2b): known values propagate field by field through immutable struct construction and destructuring. The checker tracks an abstract value for each binding: unknown, a known scalar, or a constructor whose fields carry their own abstract values. Constructing a struct records each field's fact independently; an immutable binding keeps the fact; destructuring hands each field's fact, recursively, to the corresponding immutable binder; an unknown component stays unknown without discarding its known siblings; an ownership transfer keeps the facts for the receiving binding without permitting reuse of the consumed one. Q6.2's exclusions stay (mutable state, branches and paths, user-function calls, calls outside the table, elaborator temporaries). So `let S { a } = S { a: 200u8 }; a + 100` is refused, in trusted and unreachable code too (OD118 as revised by Q6.4). Before this revision a field bound by destructuring was not known and that program was accepted and trapped.
+231:- **Q4.1** What is a literal’s type? — Copy `StaticStr`; explicit fallible dynamic conversion.
+232:- **Q4.2** Which encoding and NUL policy apply? — UTF-8 including embedded NUL.
+233:- **Q4.3** What do length and comparison mean? — Byte length; content equality; lexicographic byte order.
+234:- **Q4.4** Are literal addresses observable and literals mergeable? — Content semantics; pooling allowed; no safe address identity.
+243:- **Q6.2** Is local constant propagation mandatory? — Fixed table of statically known values: literals, immutable lets, module constants, checked ops, six named wrapping/saturating ops, lossless `as`. *Revised 2026-11-05: facts propagate field by field through immutable struct construction and destructuring ([revision](#decided-2026-11-05-q6-2-fields)).* *Revised 2026-11-06 by [no hidden traps](#decided-project-no-hidden-traps): known values remain facts; refusal widens to unproven safety.*
+668:    question on refusing a provably out-of-range view index disappears), Q6.1 and Q6.2 (static refusal
+1353:| OD63 | <a id="od63"></a>Float literals take their expected type (added 2026-10-30, item Q4 of the owner picks of that day). Question: Whether a float literal takes the float type its position expects and is refused where nothing is expected, as ARITH-2@2 states under OD31's note that float literals get an explicit rule under the same principle. Options: (a) yes, as ARITH-2@2 states for integers and floats alike; (b) a float literal defaults to `f64`. Pick (the coordinator's pick after the Kimi, Codex and Grok review of 2026-10-30, a recommendation and not a decision): (a). Austral: not checked | `let x = 1.5;` is accepted as `Float64` (ARITH-2@2 is partial, bug 327) | ARITH-2, ARITH-7 | decided 2026-10-31 by the owner's rule (every reviewer agreed, as strict as Austral or stricter): Expected type, refused where none |
+1389:| OD99 | <a id="od99"></a>The names of the named conversions (added 2026-10-30, raised while absorbing ARITHMETIC_POLICY and VALUE_MODEL). Question: The spellings of the named conversions of ARITH-5, ARITH-10 and ARITH-11 (`try_convert`, `truncate`, `reinterpret`, the integer-to-float and `f64`-to-`f32` conversions, and the float roundings `trunc`, `round`, `floor`, `ceil`). Bears on ARITH-5, ARITH-10, ARITH-11. The current compiler: none of them exists (E0101). ARITH-5's sentence names `truncate` and `reinterpret`, while the archived [ARITHMETIC_POLICY.md](../legacy/docs/archive/design-records/ARITHMETIC_POLICY.md) §8.2 calls its spellings indicative, to be fixed by the API's owner; it names the integer-to-float and `f64`-to-`f32` conversions by their rounding only. Options: (a) the spellings above, as builtins; (b) other names, or std functions rather than builtins. Austral: not checked. Raised by the absorption of ARITHMETIC_POLICY.md (2026-10-30). | see OPEN-99 | see OPEN-99 | decided 2026-11-01 by the owner (final set): These spellings, as builtins |
+1392:| OD102 | <a id="od102"></a>`Float32` and `Char` as type spellings (added 2026-10-30, raised while absorbing ARITHMETIC_POLICY and VALUE_MODEL). Question: Whether `Float32` and `Char` are other spellings of `f32` and `char`, as `Float64` and `Bool` are of `f64` and `bool`. Bears on TYPE-19, SYN-3. The current compiler: the parser maps `Float64` and `Bool` to `f64` and `bool` but not `Float32` or `Char`, so `fn g(x: f32) -> Float32 { return x; }` is refused (E0220) while the resolver's `tyFromName` maps all four. The archived [ARITHMETIC_POLICY.md](../legacy/docs/archive/design-records/ARITHMETIC_POLICY.md) §1 names `Float32`/`f32` as two spellings. Options: (a) `Float32` and `Char` become spellings of `f32` and `char`; (b) neither, keeping the current compiler's `Float64` and `Bool`; (c) `Float32` and `Char` decided separately. Whether every capitalized spelling (`Int`, `Uint`, `Float64`, `Bool`) is removed is a separate removal question, not asked here. Austral: not checked. Raised by the absorption of ARITHMETIC_POLICY.md (2026-10-30). | see OPEN-102 | see OPEN-102 | decided 2026-11-01 by the owner (final set): No `Float32` or `Char` aliases. Completed 2026-11-02 by the owner: the aliases `Int`, `Uint`, `Float64` and `Bool` are removed too ([decisions](decisions.md#decided-2026-11-02-aliases)) |
+1478:  `Uint`, `Float64` and `Bool` are removed. A builtin type has one spelling (`i64`, `u64`, `f64`,
+    90	### Numbers and quoted literals
+    91	
+    92	```ebnf
+    93	DECIMAL = "0" | nonzero_digit, {digit} ;
+    94	HEX     = "0x", hex_digit, {hex_digit} ;
+    95	BINARY  = "0b", binary_digit, {binary_digit} ;
+    96	OCTAL   = "0o", octal_digit, {octal_digit} ;
+    97	INT     = DECIMAL | HEX | BINARY | OCTAL ;
+    98	FLOAT   = digit, {digit}, ".", digit, {digit} ;
+    99	STRING  = '"', {string_character | string_escape}, '"' ;
+   100	CHAR    = "'", (ascii_char_character | char_escape), "'" ;
+   101	```
+   102	
+   103	Here `nonzero_digit = 1…9`, `hex_digit = 0…9 | a…f | A…F`, `binary_digit = 0|1`, `octal_digit = 0…7`. These helper classes are lexical expansions, not names available in source.
+   104	
+   105	Decimal integers arrive at 0; other bases at 2; FLOAT at 26; STRING/CHAR at 16 (a reason STRING in an earlier annotation is metadata, not a runtime StaticStr feature). Leading-zero decimal integers are explicitly refused: [slice-0 surface](../docs/decisions.md#decided-slice0-surface-2026-11-06). The old forms are documented by [SYN-6](../legacy/docs/spec/syntax.md#SYN-6). **OPEN-5**: approve lowercase base prefixes, no separators, float digit/point syntax and a minimal typed-integer suffix policy and boundary handling; the frozen lexer also accepted uppercase prefixes. The [approved Q6.2 field example](../docs/decisions.md#decided-2026-11-05-q6-2-fields) contains `200u8`. A blanket suffix refusal conflicts with that example; OPEN-5 recommends retaining typed integer suffixes, but their complete width/base/boundary grammar needs approval. The displayed INT production is the unsuffixed kernel, not a complete suffix grammar. No exponent notation, `1.`, `.5`, hex floats or special NaN/Inf literals are proposed.
+   106	
+   107	Minus is an operator, not part of INT/FLOAT. Literal expected typing and range checking include negation ([OD31](../docs/decisions.md#od31), [OD63](../docs/decisions.md#od63), [OD138](../docs/decisions.md#od138)); an unconstrained literal is refused, not defaulted. Float literals round directly to their expected width; no lexical suffix is implied by that rule.
+   108	
+   109	Only these escapes are proposed, copied exactly from SYN-5/6; **OPEN-6** requests explicit owner ratification where decisions.md does not enumerate them:
+   110	
+   111	| Literal | Allowed escapes | Raw content |
+   112	|---|---|---|
+   113	| string | `\n`, `\t`, `\r`, `\\`, `\"`, `\0` | UTF-8 characters other than quote/backslash; raw line-break/control policy OPEN-6 |
+   114	| char | `\n`, `\t`, `\r`, `\0`, `\\`, `\'` | exactly one ASCII character other than quote/backslash; controls OPEN-6 |
+   115	
+   116	No `\xHH`, `\u{…}`, interpolation, raw-string delimiter or byte-string prefix is admitted by this proposal. Embedded NUL in static text is explicitly permitted by Core Q4.2, using `\0`; ASCII literal restrictions do not restrict every computed `char` to 0…127 ([TYPE-20](../legacy/docs/spec/types.md#TYPE-20)). A char ending in a closing quote takes priority over LABEL; a bare apostrophe plus a name is LABEL. The exact lexical distinction and malformed-quote refusal is OPEN-6, not a token-level LL(1) claim about individual bytes.
+   117	
+   425	<a id="SYN-5"></a>
+   426	### SYN-5. Source text and string literals are UTF-8
+   427	
+   428	**SYN-5@3.** A source file is UTF-8 text, a string literal denotes the UTF-8 encoding of its characters, and its only escapes are `\n`, `\t`, `\r`, `\\`, `\"` and `\0`, so a file that is not valid UTF-8 and any other `\` sequence in a literal are not accepted, and every `String<A>` reachable by safe code holds valid UTF-8.
+   429	
+   430	- Kind: guarantee
+   431	- Uses: none
+   432	- Codes: none
+   433	- Status: pending R-0555
+   434	- Enforced by: Concrete.lexStringLoop
+   435	- Semantics: none
+   436	- Obligation: none
+   437	- Evidence: tested
+   438	
+   439	**Rationale.** One encoding for source and literals means a literal's bytes are known without
+   440	knowing the editor or the platform. Unknown escapes were once read as the character itself; the
+   441	lexer now refuses them, with E0001 tagged SYN-1 (`unknown string escape '\q'`). A file that is not
+   442	valid UTF-8 is refused when it is read, before lexing, but today by an uncaught exception
+   443	(`Tried to read file ... containing non UTF-8 data`) rather than a diagnostic. There is no `\xHH`
+   444	or `\u{...}` escape. OD127 guarantees valid UTF-8 in every `String<A>` reachable by safe code; safe constructors validate, and unchecked construction requires a trusted validity premise.
+   445	
+   446	
+   447	
+   448	
+   449	
+   450	
+   451	Static-text type and borrowing are [undecided: see the target Core proposal](decisions.md#core-static-text); the legacy literal-library examples are retired.
+   452	
+   453	<a id="SYN-6"></a>
+   454	### SYN-6. Tokens
+   455	
+   456	**SYN-6@3.** A token is an identifier (a letter or `_`, then letters, digits and `_`), an integer literal in decimal or with a `0x`, `0b` or `0o` prefix, a float literal written as digits, `.` and digits, a string literal, a char literal (one ASCII character, or one of the escapes `\n`, `\t`, `\r`, `\0`, `\\` and `\'`, between single quotes), a label (`'` then an identifier), a keyword, or an operator or punctuation mark, and `//` begins a comment that ends at the end of its line.
+   457	
+   458	- Kind: guarantee
+   459	- Uses: none
+   460	- Codes: none
+   461	- Status: pending R-0555
+   462	- Enforced by: Concrete.tokenize
+   463	- Semantics: none
+   464	- Obligation: none
+   465	- Evidence: tested
+   466	
+   467	**Rationale.** OD137 limits character literals to ASCII; char values remain bytes (TYPE-20).
+   468	
+   469	```con accept name=token-forms exit=42
+   470	// a line comment
+   471	fn example_value() -> i64 {
+   472	    let a: i64 = 0o17;
+   473	    let b: i64 = 0x1F;
+   474	    let c: i64 = 0b101;
+   475	    let q: char = '\'';
+   476	    let f: f64 = 1.5;
+   477	    let mut n: i64 = 0;
+   478	    'outer: while n < 1 {
+   479	        n = n + 1;
+   480	        break 'outer;
+   481	    }
+   482	    discard(q); discard(f);
+   483	    return a + b + c + n - 10;
+   484	}
+   485	fn main() -> u8 {
+   486	    if example_value() == 42 {
+   487	        return 42;
+   488	    }
+   489	    return 1;
+   490	}
+   491	```
+   492	
+   250	order; it does not restate it.
+   251	
+   252	**Borrowed ideas.** Copy constraints before copying features: Zig, Austral, SPARK and Odin are
+   253	most useful where they say no. [INFLUENCES.md](../legacy/docs/project/INFLUENCES.md) records what is copied, adapted and
+   254	rejected.
+   255	
+   256	**Recording a refusal.** A rejected feature with its reason is worth more than a feature added
+   257	without one. A new refusal gets an entry in the next section, with its research note when there is
+   258	one. A refusal that is a language rule is an owner decision first ([decisions.md](decisions.md)).
+   259	
+   260	## What Concrete refuses
+   261	
+   262	Each refusal is either **Permanent**, with the reason, or **Reopens when** a named condition holds.
+   263	"Under the pull rules" means that a real workload, bug report, pilot or user need runs into the
+   264	refusal and measures its cost; a hypothetical convenience never counts (rule 17). Reopening a
+   265	refusal that is a decided language rule is an owner decision, recorded in
+   266	[decisions.md](decisions.md).
+   267	
+   268	Some former "not yet" entries are planned work, not refusals, and live in the roadmap: freestanding
+   269	targets (the [allocation decision](decisions.md#decided-2026-11-02-allocation) already
+   270	covers their allocators; [R-0323](../legacy/docs/archive/roadmap-2026-11/ROADMAP_BACKLOG.md#task-r-0323) and
+   271	[R-0324](../legacy/docs/archive/roadmap-2026-11/ROADMAP_BACKLOG.md#task-r-0324) split std and its capabilities), package management
+   272	(decided 2026-10-17, in the [task register](archive/roadmap-2026-11/ROADMAP_TASKS.md)), and the richer contract layer
+   273	(dependency-flow contracts, mature loop invariant and variant authoring, the specification
+   274	library, and package and release evidence summaries, phase E of the
+   275	[roadmap](../ROADMAP.md#phases)). That layer's syntax is frozen only after a flagship or external
+   276	workload needs its facts, and its facts are reported through the one evidence ledger (rule 12).
+   277	Within that layer the decided rules hold: no `old`, quantifier or implication in contracts
+   278	([OD117](decisions.md#od117)), specification functions with a required, total body
+   279	([OD115](decisions.md#od115)) and no total-function category
+   280	([OD116](decisions.md#od116)). How frames, entry-state facts and termination are stated
+   281	inside those rules was decided on 2026-11-05 (row P18, [record](decisions.md#decided-project-contracts)): no snapshot construct, frame
+   282	and entry/exit properties as Lean theorems (a source frame clause would be a new owner decision),
+   283	and per-function termination theorems for ordinary functions.
+   284	
+   285	**Hidden runtime and hidden work**
+   286	
+   287	- **Garbage collection and hidden reference counting.** Permanent. They hide when memory is
+   288	  reclaimed and whether a call allocates; linear ownership and explicit cleanup replace them.
+   289	- **A hidden async runtime, executor or scheduler, and function colouring.** Permanent. They hide
+   290	  concurrency and scheduling behind calls that look ordinary.
+   291	- **Explicit structured concurrency.** Reopens when [R-0399](../legacy/docs/archive/roadmap-2026-11/ROADMAP_BACKLOG.md#task-r-0399)'s pull
+   292	  trigger holds: a workload needs concurrency after the new compiler's v1 surface is frozen. Any
+   293	  design keeps authority in `with(...)` and handles as linear values; single-threaded execution
+   294	  until then.
+   295	- **Exceptions and unwinding.** Permanent. They turn every call into a hidden exit. Recoverable
+   296	  failure is a `Result` handled by an exhaustive `match`, running out of memory included
+   297	  ([allocation decision](decisions.md#decided-2026-11-02-allocation)); an abort is terminal
+   298	  and runs no deferred call ([OD10](decisions.md#od10)).
+   299	- **Postfix `?` and any implicit error propagation or conversion.** Permanent. It hides a function
+   300	  exit, a cleanup boundary and a conversion behind one character; the error arm is written.
+   301	- **Mutable global state of any kind.** Permanent ([OD8](decisions.md#od8)). Constants are
+   302	  truly immutable; resources reach code only as values handed to it.
+   303	
+   304	**Implicit conversions and inference**
+   305	
+   306	- **Implicit numeric conversions.** Permanent. They hide data loss. `as` converts only when no
+   307	  value can be lost ([OD11](decisions.md#od11)); every other conversion is a named function
+   308	  ([OD99](decisions.md#od99)), and a checked one reports failure as a `Result`
+   309	  ([OD106](decisions.md#od106)).
+   310	- **Truthiness.** Permanent. A condition is a `bool`; no other value stands in for one.
+   311	- **Implicit string conversion** (`Display`/`ToString`-style hooks). Permanent. It hides
+   312	  allocation and dispatch. The reserved output and append forms ([OD133](decisions.md#od133))
+   313	  accept a closed list of types, expand to typed calls and keep their authority visible.
+   314	- **Global (Hindley–Milner) inference and inference from the expected result type.** Permanent.
+   315	  Signatures are written in full. A generic call's type arguments are inferred only from the checked
+   316	  types of its arguments ([OD46](decisions.md#od46), [OD129](decisions.md#od129));
+   317	  what no argument determines is written explicitly. Capability arguments are not inferred at all: they
+   318	  are written on every capability-polymorphic call and checked (owner revision of
+   319	  [OD45](decisions.md#od45) and [OD87](decisions.md#od87), 2026-11-05,
+   320	  [record](decisions.md#decided-2026-11-05-revisions)).
+   321	
+   322	**Dispatch and abstraction**
+   323	
+   324	- **Closures and anonymous functions with capture.** Permanent. Captured data and control flow are
+   325	  invisible at the call site. Named functions, capture-free function values, monomorphized generics
+   326	  and an explicit context parameter replace them ([detail](../legacy/research/language/no-closures.md)).
+   327	- **Trait objects and hidden dynamic dispatch.** Permanent. An opaque vtable hides the call target
+   328	  from the reader, the analyses and the prover. Enums, monomorphized generics and explicit function
+   329	  values replace them ([detail](../legacy/research/language/no-trait-objects.md)).
+   330	- **Implicit trait resolution beyond monomorphization.** Permanent. Traits are coherent, an
+   331	  ambiguous call is qualified, and resolution is by typed identity ([OD6](decisions.md#od6)),
+   332	  so adding an impl elsewhere cannot change what a call means.
+   333	- **Class inheritance.** Permanent. It makes the call target depend on a hierarchy instead of the
+   334	  source; structs, enums, traits and composition replace it.
+   335	- **User-defined operator overloading.** Permanent. An operator would hide allocation or effects
+   336	  behind arithmetic syntax; operators take primitive operands only
+   337	  ([OD26](decisions.md#od26), [OD42](decisions.md#od42)), and user types use named
+   338	  functions.
+   339	- **Hiding an operational capability**, for example a trusted wrapper that uses `Fs` or `Alloc`
+   340	  without declaring it. Permanent ([authority rule 5](decisions.md#decided-2026-11-02-authority)).
+   341	  A caller must see what authority a call uses. A `trusted fn` absorbs `Unsafe` only, which is a
+   342	  caller safety obligation, not authority ([TRUST-5](../legacy/docs/spec/trusted.md#TRUST-5)).
+   343	- **Umbrella capabilities and capability aliases** (`Std`, user `cap X = ...`). Permanent
+   344	  ([authority rule 6](decisions.md#decided-2026-11-02-authority),
+   345	  [audit decisions](decisions.md#decided-2026-11-02-audit)). A signature lists its real
+   346	  capabilities.
+   347	- **An effect system beyond `with(...)`** (algebraic effects and handlers). Permanent. Permissions
+   348	  are compile-time sets over a fixed, reserved list of capabilities and resources are linear values;
+   349	  that needs no runtime support and keeps signatures readable.
+   350	- **Foreign function values.** Refused ([OD4](decisions.md#od4)). Reopens when the owner
+   351	  admits typed `extern "C" fn` types, which OD4 leaves for later, with the permissions of foreign
+   352	  callbacks decided at that point ([authority rule 4](decisions.md#decided-2026-11-02-authority));
+   353	  [R-0283](../legacy/docs/archive/roadmap-2026-11/ROADMAP_BACKLOG.md#task-r-0283) reviews the C interop requirements when phase C becomes
+   354	  active or next.
+   355	
+   356	**Generation and metaprogramming**
+   357	
+   358	- **Source-generating macros, derive helpers and in-language source generation.** Permanent. They
+   359	  break file-local parsing and phase separation and make audit output describe code nobody wrote.
+   360	  Generics, ordinary functions and external generators whose output is reviewed as ordinary source
+   361	  replace them; attributes classify, never generate.
+   362	- **Derived structural equality.** Permanent as language machinery, for the same reason; equality
+   363	  is written or generated as reviewable source.
+   364	- **General compile-time evaluation** (`comptime`, `constexpr`-style). Reopens when a workload under
+   365	  the pull rules needs compile-time values beyond constant declarations; any design stays
+   366	  constants-only and states its interaction with the semantics.
+   367	- **Broad in-source conditional compilation** (`#[cfg]` throughout files). It hides control flow,
+   368	  authority and target assumptions behind build configuration. Target-specific code is selected by
+   369	  module and file per target profile in `Concrete.toml`, and audit output names what was selected
+   370	  and excluded. Reopens when, with the project model, target profiles and the hosted/freestanding
+   371	  std split ([R-0323](../legacy/docs/archive/roadmap-2026-11/ROADMAP_BACKLOG.md#task-r-0323)) in place, a workload under the pull rules
+   372	  shows that module and file selection is not enough; any form is narrow and appears in audit
+   373	  output.
+   374	
+   375	**Calls and declarations**
+   376	
+   377	- **User-defined and C-style variadic functions.** Permanent. They are unchecked or complicate
+   378	  every signature. The reserved output and append forms are the only multi-argument forms, and they
+   379	  are not a function type and cannot be passed as values.
+   380	- **Default arguments.** Permanent (owner, 2026-11-05, row P17a,
+   381	  [record](decisions.md#decided-project-refusals)), reopened only by a new owner decision. A
+   382	  call shows every argument it passes; defaults conflict with visible arguments and with one form per
+   383	  situation. General compile-time evaluation and broad conditional compilation (above) keep their
+   384	  evidence-based reopening (row P17b).
+   385	- **Lexical shadowing of a visible local, parameter or top-level name.** Permanent
+   386	  ([SCOPE-1](../legacy/docs/spec/scope.md#SCOPE-1), [OD67](decisions.md#od67)). One name, one binding
+   387	  in a scope; the compiler still never recovers identity from spellings (rule 13).
+   388	
+   389	**Contracts and ghost code**
+   390	
+
+codex
+The records leave a real suffix tension: item 5 explicitly admits `200u8`, while OD31 and OD138 require contextual typing and do not list suffixes as a type source. I’ll recommend a precise reconciliation and flag the owner clarification it needs, rather than treat it as already decided.
+codex
+The repository was readable. I read `docs/PHILOSOPHY.md`; the requested rows in `docs/decisions.md`; `docs/proposals/GRAMMAR_REVIEW.md`, section 2 and section 10 OPEN-5/OPEN-6; `legacy/docs/spec/syntax.md`, SYN-5/SYN-6; and `OWNER_29_DECISIONS_2026-11-08.md`.
+
+These are advisory recommendations for owner approval, not additional decisions. Philosophy explicitly preserves decided rules until the owner revises them (`docs/PHILOSOPHY.md:186–195`).
+
+**(a) Byte-literal escapes**
+
+**RECOMMENDATION (exact):** Allow exactly these six escapes:
+
+| Escape | Byte |
+|---|---|
+| `\n` | `0x0a` |
+| `\t` | `0x09` |
+| `\r` | `0x0d` |
+| `\0` | `0x00` |
+| `\\` | `0x5c` |
+| `\'` | `0x27` |
+
+Raw content is exactly one scalar in **U+0020–U+007E**, excluding U+0027 and U+005C, which require their escapes. A raw double quote is allowed: `'"'`.
+
+Refuse `\"`, `\xHH`, Unicode escapes, and every other escape. Write bytes without an admitted quoted spelling as integer literals, for example `0x1bu8` where the suffix policy below permits it, or `let escape: u8 = 0x1b;`.
+
+**ALTERNATIVE:** Add exactly `\xHH`, with two lowercase hexadecimal digits, restricted to bytes without another admitted quoted spelling. That provides a quoted notation for every byte while avoiding escape aliases. It nevertheless requires revising item 3’s refusal of non-ASCII content if values above `0x7f` become admissible.
+
+**REASONS:** The six-member list matches SYN-6 and the grammar proposal (`legacy/docs/spec/syntax.md:456`; `docs/proposals/GRAMMAR_REVIEW.md:109–116`). Item 3 establishes a `u8` literal with ASCII content, not a separate character type (`OWNER_29_DECISIONS_2026-11-08.md:12`). `\"` adds an unnecessary spelling for a double quote that needs no escaping within single quotes. General hexadecimal escapes duplicate existing escapes and numeric byte notation. Removing these aliases follows the one-form rule and small-core principle (`docs/PHILOSOPHY.md:54–57`, `135–138`).
+
+**CONFLICT:** None with OD137’s ASCII restriction (`docs/decisions.md:1427`). Quoted ASCII and numeric literals already overlap by item 3’s explicit decision; that approved overlap is not grounds to add further escape aliases.
+
+**(b) Raw controls and invisible formatting**
+
+**RECOMMENDATION (exact):** Define the control-character set as all Unicode Cc:
+
+- **U+0000–U+001F**
+- **U+007F–U+009F**
+
+Refuse every member raw inside strings. **Raw LF U+000A and CR U+000D are refused**, including CRLF; strings have no raw multiline form.
+
+Also refuse these additional scalars raw inside strings:
+
+- **U+061C**
+- **U+200E–U+200F**
+- **U+2028–U+202E**
+- **U+2066–U+2069**
+
+This explicitly covers line/paragraph separators and directional marks, embeddings, overrides and isolates. These additional scalars are not being called Cc. This recommendation adds no further scalar exclusions within otherwise valid UTF-8 string content.
+
+For byte literals, apply the ASCII raw-content rule in (a): **U+0000–U+001F and U+007F are refused raw**; all scalars above U+007F are refused independently as non-ASCII.
+
+For `//` comments:
+
+- Permit raw TAB **U+0009**.
+- **U+000A** or **U+000D** terminates the comment; EOF also terminates it.
+- Refuse **U+0000–U+0008**, **U+000B–U+000C**, **U+000E–U+001F**, **U+007F–U+009F**, and the additional scalar ranges listed above.
+- A backslash sequence in a comment is ordinary text, not an escape.
+
+Do not normalize, silently remove, or silently reinterpret refused characters. Diagnose the code point.
+
+**ALTERNATIVE:** Refuse only **U+0000–U+001F and U+007F** raw in quoted literals, and permit other valid Unicode in strings and comments. This is a smaller policy but leaves C1 controls, apparent Unicode line breaks and directional formatting embedded in reviewed source.
+
+**REASONS:** Item 4 prohibits raw tabs and controls but leaves the exact set unspecified (`OWNER_29_DECISIONS_2026-11-08.md:13`). OPEN-6 already recommends refusing raw line breaks and controls (`docs/proposals/GRAMMAR_REVIEW.md:632`). Explicitly excluding directional formatting addresses source-display surprises in comments as well as executable text, following transparency over brevity (`docs/PHILOSOPHY.md:59–66`, `171–178`). Comment LF/CR termination follows the proposed trivia policy (`docs/proposals/GRAMMAR_REVIEW.md:69`).
+
+**CONFLICT:** Embedded NUL must remain representable through `\0`; banning the *value* would contradict Core Q4.2 (`docs/decisions.md:232`). UTF-8 encoding and byte-based string semantics remain unchanged (Q4.1–Q4.4, `docs/decisions.md:231–234`). The extra formatting-character exclusions are **new proposed restrictions requiring approval**, not consequences already settled by those rows. They also make those characters unavailable directly in literals under SYN-5’s closed escape list; that limitation must be explicit, not hidden behind a generic “Unicode supported” claim (`legacy/docs/spec/syntax.md:428`, `443–444`).
+
+**(c) Number prefix and digit case**
+
+**RECOMMENDATION (exact):**
+
+- Prefixes: **`0x`, `0b`, `0o` only**.
+- Hexadecimal digits: **`0`–`9`, `a`–`f` only**.
+- Refuse `0X`, `0B`, `0O` and hexadecimal `A`–`F`.
+- Keep decimal leading-zero refusal and the prohibition on `_` separators.
+
+Thus `0xff` is valid; `0xFF` and `0Xff` are refused.
+
+**ALTERNATIVE:** Lowercase prefixes with uppercase-only hexadecimal letters: `0xFF`. This equally satisfies the case-related one-form constraint. Accepting both cases does not.
+
+**REASONS:** Item 5 names lowercase prefixes (`OWNER_29_DECISIONS_2026-11-08.md:14–20`); OPEN-5 recommends them (`docs/proposals/GRAMMAR_REVIEW.md:631`). Lowercase hexadecimal letters extend that single convention consistently. The substantive requirement is one accepted case, rather than lowercase having an intrinsic semantic advantage (`docs/PHILOSOPHY.md:54–57`). Leading-zero refusal is already decided (`docs/decisions.md:899–900`).
+
+**CONFLICT:** The grammar sheet currently admits both digit cases (`docs/proposals/GRAMMAR_REVIEW.md:103`), and SYN-6’s example uses `0x1F` (`legacy/docs/spec/syntax.md:473`). These need alignment after approval. The example is evidence of an existing spelling, not an explicit owner decision requiring both cases. Approved multiple bases already allow different representations of a value; they do not justify additional case aliases.
+
+**(d) Suffix grammar and contextual typing**
+
+**RECOMMENDATION (exact):** Adopt this closed integer suffix set:
+
+`i8`, `i16`, `i32`, `i64`, `u8`, `u16`, `u32`, `u64`.
+
+Allow one suffix immediately after an integer’s digits, on **every base**, including `0xffu8`. Admit **no float suffixes**, including no `f32` or `f64` suffix. Keep floating literals context-typed.
+
+Make integer suffixes **one-form-constrained**:
+
+1. Where an OD138 position supplies an expected type, require the **unsuffixed** literal. Refuse even a matching redundant suffix.
+2. Where no such position supplies an expected type, require a suffix to make an integer literal admissible. The suffix supplies its intrinsic integer type.
+3. A suffix never performs conversion or overrides a contextual type. Range-check against the established type; retain the specified handling of unary negation.
+4. Refuse malformed adjacent numeric text as one malformed literal, rather than accepting a valid prefix and splitting off the remainder. This includes `123u9`, `0xffu9`, `200u8foo`, repeated suffixes and invalid base digits.
+
+For example:
+
+- `let x: u8 = 200;` — accepted.
+- `let x: u8 = 200u8;` — refused as redundant.
+- `let x = 200u8;` — accepted.
+- `let x = 200;` — refused as unconstrained.
+- With `x: u8`, `x + 1` — accepted; `x + 1u8` — refused.
+
+This is a proposed **explicit clarification/revision of OD31 and OD138**, not an interpretation to implement silently.
+
+**ALTERNATIVE:** Allow suffixes optionally everywhere, require them to agree with any expected type, and let them establish type when context supplies none. This gives simpler compositional expression typing and preserves item 5, but accepts both `let x: u8 = 200;` and `let x: u8 = 200u8;`. It therefore needs an explicit owner exception to the binding one-form rule.
+
+**REASONS:** A blanket suffix ban contradicts both item 5 and the approved Q6.2 example containing `200u8` (`OWNER_29_DECISIONS_2026-11-08.md:15`; `docs/decisions.md:191`). Mandatory suffixes everywhere contradict OD31’s contextual rule and “suffixes are not required” (`docs/decisions.md:1321`). The proposed division preserves contextual literals while giving approved suffixes a distinct purpose: supplying a type otherwise absent. It avoids writing the same type fact twice (`docs/PHILOSOPHY.md:54–57`, `68–73`).
+
+No float suffix follows from item 5’s integer examples. OD63 explicitly requires expected typing for floats, and the grammar review says that this implies no lexical suffix (`docs/decisions.md:1353`; `docs/proposals/GRAMMAR_REVIEW.md:107`).
+
+**CONFLICT:** OD138 lists declared positions and the other binary operand as type sources, without suffixes (`docs/decisions.md:1428`). OD31 literally refuses unconstrained literals. Item 5 approves suffixes but does not resolve that relationship. The long-term fix is one owner-approved typing judgment covering contextual and intrinsically typed integer literals, with redundant-suffix refusal assigned to typing rather than a context-dependent lexer. Merely accepting suffix tokens and postponing their typing meaning would leave the structural conflict unresolved.
+
+REPOSITORY: readable
+tokens used
+33,323

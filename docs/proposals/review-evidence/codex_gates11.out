@@ -1,0 +1,2437 @@
+Reading additional input from stdin...
+OpenAI Codex v0.166.0
+--------
+workdir: /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/gates-review11
+model: gpt-6.1-sol
+provider: openai
+approval: never
+sandbox: danger-full-access
+reasoning effort: none
+reasoning summaries: none
+session id: 01a1b89d-75be-7680-aa8e-58561d8e2791
+--------
+user
+Two re-verifications in this copy of the Concrete repository (slice 0). Do not modify files. For each part, give a verdict ACCEPT / ACCEPT-WITH-CHANGES / REJECT with findings (file:line, and for part A a concrete accepted reproducer you ran).
+
+PART A, scripts/checks/lib/stack_bound.py, round 11. Your round-10 finding (REJECT): PC-relative provenance survived repeated immediate adds around a loop, so a register walked toward the stack (adr x8; loop add x8, x8, #8; strb wzr, [x8]: bound 0 vs 3808). Fix: `g` is now (register, level) pairs: adrp/adr whose target lies within PC_REACH (16 MiB) of the instruction gives level 0; one add of an immediate <= 4095 to a level-0 register gives level 1; nothing else keeps a register in g (joins intersect pairs); accesses through g need |offset| <= 32760 and no writeback. x86: rip-relative displacement limited to PC_REACH; an operand with no register is accepted only with an fs:/gs: segment. The new premise (module docstring): the stack lies farther than PC_REACH + 4095 + 32760 bytes from the image's code, and the fs/gs block is not on the stack. Your reproducer, a far adrp and an absolute x86 address are refused controls. ./DELTA_stack.diff is the whole change against the last committed version (rounds 8-11). ci-2: 140 ok, real code accepted, bounds unchanged. Verify, then the overall soundness verdict under the stated premises; only findings that give an understated bound or an unbounded resource.
+
+PART B, the trusted-base gate (README gate 9), re-review after your REJECT (printer failures masked by the `||` call; README correspondence only by id; P_adapter/P_rt statements not faithful; axiom types not recorded; GNU timeout instead of bounded_run). Files: Concrete/Premises.lean (registry, `report` now prints each axiom's type, `tableRow`), scripts/checks/slice0_trusted_base.lean, scripts/checks/slice0_premise_table.lean, scripts/checks/slice0_trusted_base.sh (current() with explicit per-step failure; print_lean uses bounded_run; README table is a generated view compared row for row; controls for a failing printer, axiom collection with a declared axiom and a drifted table), tests/golden/slice0_trusted_base.txt, Concrete/README.md (gate 9 paragraph, the open-premise table). The shared lake build in scripts/checks/lib/slice0_common.sh still uses GNU timeout (shared by the other slice-0 gates, out of this change). ci-2 run: all checks and 6 controls ok. You cannot run Lean; reason from source.
+codex
+I’ll inspect both changes, run concrete stack-bound reproducers, and review the trusted-base gate from source without running Lean.
+exec
+/bin/bash -lc 'git status --short; cat DELTA_stack.diff' in /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/gates-review11
+ succeeded in 0ms:
+fatal: not a git repository (or any of the parent directories): .git
+diff --git a/scripts/checks/lib/stack_bound.py b/scripts/checks/lib/stack_bound.py
+index aac535f5e..92da889e4 100644
+--- a/scripts/checks/lib/stack_bound.py
++++ b/scripts/checks/lib/stack_bound.py
+@@ -7,28 +7,42 @@ ARCH is x86_64 or aarch64; DISASM is `llvm-objdump -d --no-show-raw-insn` output
+ executable (x86-64 in Intel syntax).
+ 
+ The Concrete-owned code is `main` (the runtime entry), `concrete_rt_write_all` and the body
+-(`concrete_body`), with or without the Mach-O underscore. From `main`'s entry, every path through
+-them is followed over the control-flow graph, tracking the stack pointer's depth below its value
+-at `main`'s entry (and the frame pointer's). The bound is the deepest point reached, by the stack
+-pointer or by any byte addressed relative to it or the frame pointer (the red zone below the
+-stack pointer is used without moving it), counting each
+-internal callee's own bound and the depth at which each external function (libc's `write`,
+-`_exit`, `abort`) is entered; the external functions' own use is outside it (a premise, listed),
+-and so is that `_exit` and `abort` do not return (a path ends at a call to one) and that external
+-functions preserve the frame pointer (the ABI's callee-saved rule; every owned function's return
+-is checked to restore it).
++(`concrete_body`), with or without the Mach-O underscore. Each owned function is analysed over its
++control-flow graph, from its entry, as a dataflow fixpoint over an abstract state (St): the stack
++pointer's depth below the entry stack pointer, the frame pointer's value, the saved slots and the
++link register (equal on every path into an instruction), and the stack bytes the function has
++written (the intersection over those paths). A byte at depth n lies n bytes below the entry stack
++pointer.
+ 
+-Stack addresses never leave the stack and frame pointers: taking one as a value, storing or
+-loading a saved frame pointer other than through the modelled frame save and restore, touching
+-bytes at or above the entry stack pointer (the return address, the caller's frame) and returning
+-through a link register that does not hold the return address are all refused (St, x86_inst,
+-a64_inst).
++The bound is the deepest byte the function's stack pointer reaches or any of its instructions
++addresses through the stack or frame pointer (so the red zone, used below the stack pointer without
++moving it, is covered), with each owned callee's own bound added at its call, and each external
++function (libc's `write`, `_exit`, `abort`) counted at its entry depth.
++
++Why addresses cannot escape this accounting: memory is addressed only through the stack or frame
++pointer (accounted), PC-relatively within a fixed reach of the code (x86 `rip` with a displacement
++up to PC_REACH; on AArch64 a register holding an adrp/adr result within PC_REACH, plus at most one
++add immediate, on every path since the last call, with a bounded offset and no writeback) or
++through the x86 thread-pointer segments. Any other register may hold a stack address (main's argv
++and envp, a value an external function left), so no access goes through one. The analysis also refuses taking a stack address as a value (`lea` of one, the stack or frame
++pointer copied, stored or used in arithmetic, except the modelled frame setup), so only the frame
++save (`push rbp`, `stp x29, x30`) puts one in memory. Saved slots may be read only
++by the modelled restore (`pop rbp`, `leave`, `ldp x29, x30` with base sp). Any other stack read
++must be of bytes the function itself wrote, on every path, since its last call: so no stale value
++(a callee's or the caller's saved frame pointer, libc's scratch) is ever loaded. Accesses must lie
++below the entry stack pointer (never the return address or the caller's frame), returns must be at
++depth 0 with the caller's frame pointer restored and, on AArch64, with the link register holding
++the return address.
++
++The premises (outside the bound, listed in the gate's report): the stack lies farther than
++PC_REACH + 4095 + A64_OFF_REACH bytes from the image's code, and the thread-pointer block (fs/gs)
++is not on the stack; the external functions' own stack use; that `_exit` and `abort` do not return (a path ends at a call to one); that external
++functions follow the ABI's callee-saved rule (the frame pointer and stack pointer preserved).
+ 
+ Fail closed: an instruction outside the modelled set (X86_PLAIN, A64_PLAIN and the control
+-transfers), any instruction that writes the stack pointer in a way not modelled here, an indirect
+-branch or call, a branch leaving its function, two different depths at one address, a return at a
+-nonzero depth, recursion, or a call to a function that is neither Concrete-owned nor a PLT/stub
+-symbol is an error (exit 1), never a bound.
++transfers), any of the refusals above, an unmodelled stack-pointer write, an indirect branch, call
++or return, a branch leaving its function, two different states meeting, recursion, or a call to a
++function that is neither Concrete-owned nor a PLT/stub symbol is an error (exit 1), never a bound.
+ """
+ import re
+ import sys
+@@ -36,6 +50,7 @@ import sys
+ OWNED = ("main", "concrete_body", "concrete_rt_write_all")
+ # External functions that do not return (part of the libc premise): a path ends at a call to one.
+ NORETURN = ("exit", "_exit", "_Exit", "abort")
++ENTRY = "entry"
+ 
+ 
+ class Refuse(Exception):
+@@ -76,13 +91,8 @@ def parse(path):
+ 
+ 
+ def target_of(ops):
+-    m = re.search(r"0x([0-9a-f]+)\s*<([^>]+)>", ops)
+-    if not m:
+-        m2 = re.search(r"\b([0-9a-f]+)\s*<([^>]+)>", ops)
+-        if not m2:
+-            return None, None
+-        m = m2
+-    return int(m.group(1), 16), m.group(2)
++    m = re.search(r"0x([0-9a-f]+)\s*<([^>]+)>", ops) or re.search(r"\b([0-9a-f]+)\s*<([^>]+)>", ops)
++    return (int(m.group(1), 16), m.group(2)) if m else (None, None)
+ 
+ 
+ def imm(s):
+@@ -93,6 +103,67 @@ def imm(s):
+         raise Refuse(f"not an immediate: {s}") from None
+ 
+ 
++class St:
++    """`d`: the stack pointer's depth. `fp`: the frame pointer's value: a depth (int), ENTRY (the
++    caller's, which every return must restore) or None (unknown). `saved`: slots holding a saved
++    frame pointer or link register, (lowest, highest, tag) in byte depths, tag ("fp", value) or
++    ("lr", whether it is this function's return address); kept after the stack pointer moves past
++    them and after a restore (memory keeps them) until an exact overwrite. `lr`: whether the
++    AArch64 link register holds this function's return address. `w`: the stack bytes this
++    function has written since its last call, on every path (not part of the equality key). `g`
++    (AArch64): the registers holding a PC-relative address (adrp/adr, plus an immediate), on every
++    path since the last call (not part of the key): the only registers memory may be addressed
++    through besides the stack and frame pointers."""
++
++    __slots__ = ("d", "fp", "saved", "lr", "w", "g")
++
++    def __init__(self, d=0, fp=ENTRY, saved=frozenset(), lr=True, w=frozenset(), g=frozenset()):
++        self.d, self.fp, self.saved, self.lr, self.w, self.g = d, fp, saved, lr, w, g
++
++    def key(self):
++        return (self.d, self.fp, self.saved, self.lr)
++
++    def but(self, **kw):
++        s = St(self.d, self.fp, self.saved, self.lr, self.w, self.g)
++        for k, v in kw.items():
++            setattr(s, k, v)
++        return s
++
++
++def frame_depth(fp, what):
++    """The frame pointer as a depth, for addressing; refused unless it is this frame's."""
++    if not isinstance(fp, int):
++        raise Refuse(f"frame-relative use of a frame pointer that is not this frame's: {what}")
++    return fp
++
++
++def slot_at(saved, lo, hi):
++    return next((x for x in saved if x[:2] == (lo, hi)), None)
++
++
++def touch(st, lo, hi, mode, what, restore=()):
++    """Check an access of the bytes [lo, hi] (depths) in `mode` ("r", "w" or "rw") and return the
++    new written set. The bytes must be the function's own (depth >= 1). A saved slot may be read
++    only by a restore (`restore`: the slots being restored), and written only by an exact
++    overwrite (which clears it; the caller removes it from `saved`). A read needs every byte
++    written by this function on every path since its last call."""
++    if lo < 1:
++        raise Refuse(f"touches the return address or the caller's frame: {what}")
++    for slot in st.saved:
++        if slot[0] <= hi and lo <= slot[1] and slot not in restore:
++            exact = (slot[0], slot[1]) == (lo, hi) or (lo <= slot[0] and slot[1] <= hi and mode == "w")
++            if "r" in mode or not exact:
++                raise Refuse(f"touches a saved frame pointer or link register: {what}")
++    if "r" in mode and not all(b in st.w for b in range(lo, hi + 1)):
++        raise Refuse(f"reads stack bytes this function has not written: {what}")
++    return st.w | frozenset(range(lo, hi + 1)) if "w" in mode else st.w
++
++
++def cleared(saved, lo, hi):
++    """`saved` without the slots a write of [lo, hi] overwrote."""
++    return frozenset(x for x in saved if not (lo <= x[0] and x[1] <= hi))
++
++
+ X86_SP = ("rsp", "esp", "sp", "spl")
+ X86_FP = ("rbp", "ebp", "bp", "bpl")
+ X86_STACK = X86_SP + X86_FP
+@@ -102,72 +173,35 @@ X86_SIZE = {"byte": 1, "word": 2, "dword": 4, "qword": 8, "tbyte": 10, "xmmword"
+ MEM = re.compile(r"\[([^\]]*)\]")
+ 
+ 
+-ENTRY = "entry"
++# PC-relative addressing reaches at most PC_REACH bytes from the instruction (x86 rip
++# displacement; AArch64 adrp/adr target) plus, on AArch64, one add immediate (at most 4095) and
++# the access's own offset (at most A64_OFF_REACH): the premise that the stack lies farther than
++# that from the image's code makes such an access never a stack access.
++PC_REACH = 16 << 20
++A64_OFF_REACH = 32760
+ 
+ 
+-class St:
+-    """The abstract state at an instruction: `d`, the stack pointer's depth below the function's
+-    entry; `fp`, the frame pointer's value: a depth (an int), ENTRY (the caller's frame pointer,
+-    which every return must restore) or None (unknown); `saved`, the stack slots holding a saved
+-    frame pointer or link register, as (lowest, highest) byte depths with a tag (("fp", value) or
+-    ("lr", whether it holds the function's own return address)), kept after the stack pointer
+-    moves past them and after the register is restored from them, since the memory keeps their
+-    contents, until an exact overwrite (`overwrite`); `lr`, whether the AArch64 link
+-    register holds the function's own return address. A byte at depth n lies n bytes below the
+-    entry stack pointer; the function's own bytes have depth >= 1."""
+-
+-    __slots__ = ("d", "fp", "saved", "lr")
+-
+-    def __init__(self, d=0, fp=ENTRY, saved=frozenset(), lr=True):
+-        self.d, self.fp, self.saved, self.lr = d, fp, saved, lr
+-
+-    def key(self):
+-        return (self.d, self.fp, self.saved, self.lr)
+-
+-    def but(self, **kw):
+-        s = St(self.d, self.fp, self.saved, self.lr)
+-        for k, v in kw.items():
+-            setattr(s, k, v)
+-        return s
+-
+-
+-def frame_depth(fp, what):
+-    """The frame pointer as a depth, for addressing; refused unless it is one."""
+-    if not isinstance(fp, int):
+-        raise Refuse(f"frame-relative use of a frame pointer that is not this frame's: {what}")
+-    return fp
+-
+-
+-def slot_at(saved, lo, hi):
+-    return next((x for x in saved if x[:2] == (lo, hi)), None)
+-
+-
+-def check_bytes(st, lo, hi, what, allowed=()):
+-    """The bytes [lo, hi] (depths) are the function's own and overlap no saved slot, except the
+-    slots `allowed` (the frame-record save/restore itself)."""
+-    if lo < 1:
+-        raise Refuse(f"touches the return address or the caller's frame: {what}")
+-    for slot in st.saved:
+-        if slot not in allowed and slot[0] <= hi and lo <= slot[1]:
+-            raise Refuse(f"touches a saved frame pointer or link register: {what}")
+-
+-
+-def x86_inst(mn, ops, st):
+-    """(new state, deepest byte touched or None) after a non-control x86 instruction. Fails closed:
+-    a stack or frame pointer read as a value (other than the modelled frame setup), a stack
+-    address taken (`lea`), an indexed or partial-register stack address, an access of unknown size,
+-    an access at or above the entry stack pointer or into a saved frame pointer, a stack-pointer
+-    write that is not modelled, a push or pop of other than a 64-bit general register."""
++def x86_inst(mn, ops, st, addr=0):
++    """(new state, deepest byte touched or None) after a non-control x86 instruction."""
+     what = f"{mn} {ops}"
+     args = [a.strip() for a in ops.split(",")] if ops else []
+     dst = args[0] if args else ""
+-    deepest = None
++    deepest, w, saved = None, st.w, st.saved
+     for m in MEM.finditer(ops):
+-        inner = m.group(1)
+-        terms = re.findall(r"[+-]?\s*[^+\-\s]+", inner)
++        terms = re.findall(r"[+-]?\s*[^+\-\s]+", m.group(1))
+         regs = [t.strip(" +-") for t in terms if not re.fullmatch(r"[+-]?\s*(0x[0-9a-f]+|\d+)", t)]
+         base = [r for r in regs if r in X86_STACK]
+         if not base:
++            # Any other register may hold a stack address (main's argv and envp, a value an
++            # external function left), so memory is addressed only PC-relative or absolutely
++            # (a segment offset: the thread pointer's block).
++            k = sum(int(t.replace(" ", ""), 0) for t in terms if t.strip(" +-") not in regs)
++            if regs == ["rip"]:
++                if abs(k) > PC_REACH:
++                    raise Refuse(f"PC-relative access beyond the premise's reach: {what}")
++            elif regs or not re.search(r"\b[fg]s:\s*$", ops[:m.start()]):
++                raise Refuse(f"memory addressed through a register that may hold a stack address, "
++                             f"or absolutely: {what}")
+             continue
+         if base[0] not in ("rsp", "rbp"):
+             raise Refuse(f"stack address through a partial register: {what}")
+@@ -179,27 +213,40 @@ def x86_inst(mn, ops, st):
+         if not size or size.group(1) not in X86_SIZE:
+             raise Refuse(f"stack access of unknown size: {what}")
+         k = sum(int(t.replace(" ", ""), 0) for t in terms if t.strip(" +-") not in regs)
+-        if base[0] == "rbp":
+-            top = frame_depth(st.fp, what) - k
++        top = (frame_depth(st.fp, what) if base[0] == "rbp" else st.d) - k
++        lo = top - X86_SIZE[size.group(1)] + 1
++        # The memory operand is the destination when it comes first: written only by mov and
++        # setcc, read and written by the others, read only by cmp and test.
++        first = ops.lstrip().find("[") < ops.find(",") if "," in ops else True
++        if not first or mn in ("cmp", "test"):
++            mode = "r"
++        elif mn in ("mov", "movabs") or mn.startswith("set"):
++            mode = "w"
+         else:
+-            top = st.d - k
+-        check_bytes(st, top - X86_SIZE[size.group(1)] + 1, top, what)
++            mode = "rw"
++        w = touch(st.but(w=w, saved=saved), lo, top, mode, what)
++        if "w" in mode:
++            saved = cleared(saved, lo, top)
+         deepest = top if deepest is None else max(deepest, top)
++    st = st.but(w=w, saved=saved)
+     outside = MEM.sub("", ops)
+     modelled = (mn, ops) in (("push", "rbp"), ("pop", "rbp"), ("mov", "rbp, rsp"),
+                              ("mov", "rsp, rbp"), ("leave", "")) or (
+-        mn in ("sub", "add") and dst == "rsp" and re.fullmatch(r"rsp, (0x[0-9a-f]+|\d+)", ops))
++        mn in ("sub", "add") and re.fullmatch(r"rsp, (0x[0-9a-f]+|\d+)", ops))
+     if not modelled and any(re.search(rf"\b{r}\b", outside) for r in X86_STACK):
+         raise Refuse(f"stack or frame pointer used as a value: {what}")
+-    if mn in ("push", "pop"):
++    if mn == "push":
+         if not X86_GPR64.match(dst):
+-            raise Refuse(f"push/pop of other than a 64-bit general register: {what}")
+-        if mn == "push":
+-            d = st.d + 8
+-            saved = overwrite(st, ((d - 7, d),), what)
+-            if dst == "rbp":
+-                saved = saved | {(d - 7, d, ("fp", st.fp))}
+-            return st.but(d=d, saved=saved), d
++            raise Refuse(f"push of other than a 64-bit general register: {what}")
++        d = st.d + 8
++        w = touch(st, d - 7, d, "w", what)
++        saved = cleared(st.saved, d - 7, d)
++        if dst == "rbp":
++            saved = saved | {(d - 7, d, ("fp", st.fp))}
++        return st.but(d=d, saved=saved, w=w), d
++    if mn == "pop":
++        if not X86_GPR64.match(dst):
++            raise Refuse(f"pop of other than a 64-bit general register: {what}")
+         return x86_pop(st, dst, st.d, what), None
+     if mn == "leave":
+         return x86_pop(st, "rbp", frame_depth(st.fp, what), what), None
+@@ -217,26 +264,16 @@ def x86_inst(mn, ops, st):
+     return st, deepest
+ 
+ 
+-def overwrite(st, spans, what):
+-    """`saved` after a write of exactly the 8-byte spans (lo, hi): a saved slot at exactly one of
+-    them is overwritten (its stack address is gone); a partial overlap is refused."""
+-    for lo, hi in spans:
+-        check_bytes(st, lo, hi, what, allowed=tuple(x for x in st.saved if x[:2] == (lo, hi)))
+-    return frozenset(x for x in st.saved if x[:2] not in spans)
+-
+-
+ def x86_pop(st, dst, at, what):
+     """Pop the 8 bytes whose deepest is at depth `at` into `dst`: a saved frame pointer only into
+-    rbp, which then holds the saved value again (any other pop into rbp makes it unknown). The slot
+-    stays saved: its memory still holds the stack address."""
++    rbp, which then holds the saved value again (any other pop into rbp makes it unknown)."""
+     slot = slot_at(st.saved, at - 7, at)
+     if slot and dst != "rbp":
+         raise Refuse(f"a saved frame pointer popped into {dst}: {what}")
+-    check_bytes(st, at - 7, at, what, allowed=(slot,) if slot else ())
++    touch(st, at - 7, at, "r", what, restore=(slot,) if slot else ())
+     if dst != "rbp":
+         return st.but(d=at - 8)
+-    fp = slot[2][1] if slot and slot[2][0] == "fp" else None
+-    return st.but(d=at - 8, fp=fp)
++    return st.but(d=at - 8, fp=slot[2][1] if slot and slot[2][0] == "fp" else None)
+ 
+ 
+ A64_SP = ("sp", "wsp")
+@@ -245,47 +282,88 @@ A64_LR = ("x30", "w30")
+ A64_REGSIZE = {"x": 8, "w": 4, "q": 16, "d": 8, "s": 4, "h": 2, "b": 1}
+ 
+ 
+-def a64_inst(mn, ops, st):
+-    """(new state, deepest byte touched or None) after a non-control AArch64 instruction. Fails
+-    closed as x86_inst does, and on: writeback on x29; a register offset from sp or x29; sp or
+-    x29 stored or read as a value other than the frame record (`stp x29, x30` / `ldp x29, x30`
+-    with base sp) and the modelled frame setup; a write to x30 other than the frame-record
+-    restore."""
++def a64_size(mn, data, what):
++    if mn in ("ldrb", "strb", "ldrsb", "ldurb", "sturb", "ldursb"):
++        return 1
++    if mn in ("ldrh", "strh", "ldrsh", "ldurh", "sturh", "ldursh"):
++        return 2
++    if mn in ("ldrsw", "ldursw", "ldpsw"):
++        return 4 * len(data)
++    if not data or data[0][0] not in A64_REGSIZE:
++        raise Refuse(f"stack access of unknown size: {what}")
++    return A64_REGSIZE[data[0][0]] * len(data)
++
++
++def a64_reg(r):
++    """The 64-bit name of a general register (w8 -> x8)."""
++    return "x" + r[1:] if re.fullmatch(r"w([0-9]|[12][0-9]|30)", r) else r
++
++
++A64_FLAGS_ONLY = ("cmp", "cmn", "tst", "ccmp", "ccmn", "nop")
++
++
++def a64_inst(mn, ops, st, addr=0):
++    """(new state, deepest byte touched or None) after a non-control AArch64 instruction, with `g`
++    (the PC-relative address registers, as (register, level) pairs) updated: every register the
++    instruction writes leaves it; adrp/adr with a target within PC_REACH of the instruction puts
++    its destination in at level 0, and one add of an immediate up to 4095 to a level-0 register
++    puts its destination in at level 1 (so the address stays within a fixed reach of the code)."""
++    new, deepest = a64_core(mn, ops, st)
++    args = [a.strip() for a in re.split(r",(?![^\[]*\])", ops)] if ops else []
++    first_mem = next((i for i, a in enumerate(args) if a.startswith("[")), len(args))
++    if mn.startswith(("ld", "st")):
++        written = list(args[:first_mem]) if mn.startswith("ld") else []
++        if first_mem < len(args) and (args[first_mem].endswith("!") or first_mem + 1 < len(args)):
++            written.append(re.match(r"\[(\w+)", args[first_mem]).group(1))
++    else:
++        written = [] if mn in A64_FLAGS_ONLY or not args else [args[0]]
++    out = {a64_reg(r) for r in written}
++    g = {x for x in new.g if x[0] not in out}
++    if mn in ("adrp", "adr") and len(args) == 2 and args[0].startswith("x"):
++        t = re.fullmatch(r"(0x[0-9a-f]+)(?:\s*<[^>]*>)?", args[1])
++        if t and abs(int(t.group(1), 16) - addr) <= PC_REACH:
++            g.add((args[0], 0))
++    elif (mn == "add" and len(args) == 3 and args[0].startswith("x") and (args[1], 0) in st.g
++          and re.fullmatch(r"#(0x[0-9a-f]+|\d+)", args[2]) and imm(args[2]) <= 4095):
++        g.add((args[0], 1))
++    return new.but(g=frozenset(g)), deepest
++
++
++def a64_core(mn, ops, st):
++    """(new state, deepest byte touched or None) after a non-control AArch64 instruction."""
+     what = f"{mn} {ops}"
+     args = [a.strip() for a in re.split(r",(?![^\[]*\])", ops)] if ops else []
+     first_mem = next((i for i, a in enumerate(args) if a.startswith("[")), len(args))
+     data = args[:first_mem]
+     is_load, is_store = mn.startswith("ld"), mn.startswith("st")
+-    d, deepest, saved, fp, lr = st.d, None, st.saved, st.fp, st.lr
+-    base, record, restored = None, False, False
++    deepest = None
++    record = restored = False
+     if first_mem < len(args):
+         mem = args[first_mem]
+         post = args[first_mem + 1] if first_mem + 1 < len(args) else None
+         m = re.fullmatch(r"\[(\w+)(?:,\s*(#?-?(?:0x)?[0-9a-f]+))?\](!?)", mem)
+         if not m:
+-            if re.search(r"\b(sp|x29|w29|wsp)\b", mem):
+-                raise Refuse(f"register-offset stack address: {what}")
+-            base = None
++            raise Refuse(f"unmodelled address form: {what}")
+         else:
+             base, off, pre = m.group(1), m.group(2), m.group(3) == "!"
+-        # The frame record: stp/ldp of x29 and x30, with base sp only.
+-        record = mn in ("stp", "ldp") and data == ["x29", "x30"] and base == "sp"
+-        if base in A64_FP and (pre or post is not None):
+-            raise Refuse(f"writeback on the frame pointer: {what}")
++            if base in A64_FP and (pre or post is not None):
++                raise Refuse(f"writeback on the frame pointer: {what}")
++            if base in A64_LR and (pre or post is not None):
++                raise Refuse(f"writeback on the link register: {what}")
++            if base not in ("sp", "x29") + A64_SP + A64_FP:
++                # Any other register may hold a stack address (main's argv, envp and apple
++                # vector, a value an external function left): only a PC-relative one is used.
++                if base not in {x[0] for x in st.g}:
++                    raise Refuse(f"memory addressed through a register that may hold a stack address: {what}")
++                if pre or post is not None or (off and abs(imm(off)) > A64_OFF_REACH):
++                    raise Refuse(f"PC-relative access beyond the premise's reach: {what}")
+         if base in ("sp", "x29"):
+-            if mn in ("ldrb", "strb", "ldrsb", "ldurb", "sturb", "ldursb"):
+-                size = 1
+-            elif mn in ("ldrh", "strh", "ldrsh", "ldurh", "sturh", "ldursh"):
+-                size = 2
+-            elif mn in ("ldrsw", "ldursw", "ldpsw"):
+-                size = 4 * len(data)
+-            else:
+-                if not data or data[0][0] not in A64_REGSIZE:
+-                    raise Refuse(f"stack access of unknown size: {what}")
+-                size = A64_REGSIZE[data[0][0]] * len(data)
++            record = mn in ("stp", "ldp") and data == ["x29", "x30"] and base == "sp"
++            size = a64_size(mn, data, what)
+             k = imm(off) if off else 0
++            d = st.d
+             if base == "x29":
+-                top = frame_depth(fp, what) - k
++                top = frame_depth(st.fp, what) - k
+             elif pre:
+                 d = d - k
+                 top = d
+@@ -297,53 +375,56 @@ def a64_inst(mn, ops, st):
+                 top = st.d
+                 d = d - imm(post)
+             lo = top - size + 1
+-            if record:
+-                # x29 at the lower address (the deeper half), x30 above it.
++            saved, fp, lr = st.saved, st.fp, st.lr
++            if record and is_store:
++                # The frame record: x29 at the lower address (the deeper half), x30 above it.
++                w = touch(st, lo, top, "w", what)
++                saved = cleared(saved, lo, top) | {(lo + 8, lo + 15, ("fp", fp)), (lo, lo + 7, ("lr", lr))}
++            elif record:
++                fp_slot, lr_slot = slot_at(saved, lo + 8, lo + 15), slot_at(saved, lo, lo + 7)
++                w = touch(st, lo, top, "r", what, restore=tuple(x for x in (fp_slot, lr_slot) if x))
++                lr = bool(lr_slot and lr_slot[2] == ("lr", True))
++                fp = fp_slot[2][1] if fp_slot and fp_slot[2][0] == "fp" else None
++                restored = True
++            elif is_load or is_store:
++                w = touch(st, lo, top, "r" if is_load else "w", what)
+                 if is_store:
+-                    saved = overwrite(st, ((lo, lo + 7), (lo + 8, lo + 15)), what)
+-                    saved = saved | {(lo + 8, lo + 15, ("fp", fp)), (lo, lo + 7, ("lr", lr))}
+-                else:
+-                    fp_slot, lr_slot = slot_at(saved, lo + 8, lo + 15), slot_at(saved, lo, lo + 7)
+-                    inside = tuple(x for x in saved if x[0] >= lo and x[1] <= top)
+-                    check_bytes(st, lo, top, what, allowed=inside)
+-                    lr = bool(lr_slot and lr_slot[2] == ("lr", True))
+-                    fp = fp_slot[2][1] if fp_slot and fp_slot[2][0] == "fp" else None
+-                    restored = True  # the slots stay saved: memory still holds the addresses
++                    saved = cleared(saved, lo, top)
+             else:
+-                check_bytes(st, lo, top, what)
++                raise Refuse(f"unmodelled stack memory instruction: {what}")
++            st = st.but(d=d, saved=saved, fp=fp, lr=lr, w=w)
+             deepest = top
+-        elif base is not None and (pre or post is not None) and base in A64_SP:
+-            raise Refuse(f"unmodelled stack writeback: {what}")
+-    if is_store and not record and any(a in A64_SP + A64_FP for a in data):
+-        raise Refuse(f"stack or frame pointer stored as a value: {what}")
++        elif base in A64_SP + A64_FP:
++            raise Refuse(f"unmodelled stack address: {what}")
++    if is_store:
++        if not record and any(a in A64_SP + A64_FP for a in data):
++            raise Refuse(f"stack or frame pointer stored as a value: {what}")
++        return st, deepest
+     if is_load:
+         if any(a in A64_SP for a in data):
+             raise Refuse(f"stack pointer loaded: {what}")
+         if any(a in A64_LR for a in data) and not record:
+             raise Refuse(f"link register overwritten: {what}")
+         if any(a in A64_FP for a in data) and not restored:
+-            fp = None
+-        return st.but(d=d, fp=fp, saved=frozenset(saved), lr=lr), deepest
+-    if is_store:
+-        return st.but(d=d, fp=fp, saved=frozenset(saved), lr=lr), deepest
++            st = st.but(fp=None)
++        return st, deepest
+     # Not a memory instruction.
+     dst, srcs = (args[0] if args else ""), args[1:]
+     if dst in A64_SP:
+         if mn in ("sub", "add") and len(args) == 3 and args[1] == "sp" and args[2].startswith("#"):
+             n = imm(args[2])
+-            return st.but(d=d + n if mn == "sub" else d - n), None
+-        if (mn, args[1:]) == ("mov", ["x29"]):
+-            return st.but(d=frame_depth(fp, what)), None
++            return st.but(d=st.d + n if mn == "sub" else st.d - n), None
++        if (mn, srcs) == ("mov", ["x29"]):
++            return st.but(d=frame_depth(st.fp, what)), None
+         if mn in ("sub", "add") and len(args) == 3 and args[1] == "x29" and args[2].startswith("#"):
+-            n = imm(args[2])
+-            f = frame_depth(fp, what)
++            n, f = imm(args[2]), frame_depth(st.fp, what)
+             return st.but(d=f + n if mn == "sub" else f - n), None
+         raise Refuse(f"unmodelled stack-pointer write: {what}")
+     if dst in A64_FP:
+         if (mn, srcs) == ("mov", ["sp"]):
+-            return st.but(fp=d), None
++            return st.but(fp=st.d), None
+         if mn == "add" and len(args) == 3 and args[1] == "sp" and args[2].startswith("#"):
+-            return st.but(fp=d - imm(args[2])), None
++            return st.but(fp=st.d - imm(args[2])), None
+         if any(a in A64_SP + A64_FP for a in srcs):
+             raise Refuse(f"stack or frame pointer used as a value: {what}")
+         return st.but(fp=None), None
+@@ -384,9 +465,7 @@ def control(mn, ops):
+         if X86_JCC.match(mn):
+             return "jcc", ops
+         if mn == "ret":
+-            if ops:
+-                return "indirect", ops
+-            return "ret", None
++            return ("indirect", ops) if ops else ("ret", None)
+         if mn in ("ud2", "hlt", "int3"):
+             return "stop", None
+         return None, None
+@@ -396,12 +475,10 @@ def control(mn, ops):
+         return "jmp", ops
+     if A64_COND.match(mn) or mn in ("cbz", "cbnz", "tbz", "tbnz"):
+         return "jcc", ops
+-    if mn in ("blr", "br", "braa", "blraa", "braaz", "blraaz"):
+-        return "indirect", ops
+-    if mn == "ret" and not ops:
+-        return "ret", None
+-    if mn in ("ret", "retaa", "retab"):
++    if mn in ("blr", "br", "braa", "blraa", "braaz", "blraaz", "retaa", "retab"):
+         return "indirect", ops
++    if mn == "ret":
++        return ("indirect", ops) if ops else ("ret", None)
+     if mn in ("brk", "udf", "hlt"):
+         return "stop", None
+     return None, None
+@@ -433,78 +510,82 @@ def analyse(funcs, stubs):
+         if not code:
+             raise Refuse(f"{key}: no instructions")
+         index = {a: i for i, (a, _, _) in enumerate(code)}
+-        seen, work, deepest, ext = {}, [(0, St())], 0, {}
++        states, work, deepest, ext = {0: St()}, [0], 0, {}
++
++        def flow(j, st, addr):
++            """Propagate `st` into instruction j: the keys must agree, the written sets meet."""
++            if j >= len(code):
++                raise Refuse(f"{key}: runs off its end")
++            if j not in states:
++                states[j] = st
++                work.append(j)
++                return
++            old = states[j]
++            if old.key() != st.key():
++                raise Refuse(f"{key}+{addr:#x}: states {old.key()} and {st.key()} meet")
++            if not (old.w <= st.w and old.g <= st.g):
++                states[j] = old.but(w=old.w & st.w, g=old.g & st.g)
++                work.append(j)
++
+         while work:
+-            i, st = work.pop()
+-            while True:
+-                if i >= len(code):
+-                    raise Refuse(f"{key}: runs off its end")
+-                addr, mn, ops = code[i]
+-                if addr in seen:
+-                    if seen[addr] != st.key():
+-                        raise Refuse(f"{key}+{addr:#x}: states {seen[addr]} and {st.key()} meet")
+-                    break
+-                seen[addr] = st.key()
+-                kind, arg = control(mn, ops)
+-                if kind is None:
+-                    if not plain.match(mn):
+-                        raise Refuse(f"{key}+{addr:#x}: unmodelled instruction: {mn} {ops}")
+-                    try:
+-                        st, touched = inst(mn, ops, st)
+-                    except Refuse as e:
+-                        raise Refuse(f"{key}+{addr:#x}: {e}") from None
+-                    if st.d < 0:
+-                        raise Refuse(f"{key}+{addr:#x}: stack above the entry")
+-                    deepest = max(deepest, st.d, touched or 0)
+-                    i += 1
+-                    continue
+-                if kind == "indirect":
+-                    raise Refuse(f"{key}+{addr:#x}: indirect branch {mn} {ops}")
+-                if kind == "ret":
+-                    if st.d != 0:
+-                        raise Refuse(f"{key}+{addr:#x}: return at depth {st.d}")
+-                    if not st.lr:
+-                        raise Refuse(f"{key}+{addr:#x}: return through a link register not restored")
+-                    if st.fp != ENTRY:
+-                        raise Refuse(f"{key}+{addr:#x}: return without the caller's frame pointer restored")
+-                    break
+-                if kind == "stop":
+-                    break
+-                tgt, sym = target_of(arg)
+-                if tgt is None:
+-                    raise Refuse(f"{key}+{addr:#x}: indirect {mn} {ops}")
+-                if kind == "call":
+-                    base = sym.split("+")[0]
+-                    callee = owned_name(base)
+-                    d = st.d
+-                    if any(x[0] > d for x in st.saved):
+-                        # The callee's frame lies below d, where a freed saved slot still holds
+-                        # a stack address the callee could read.
+-                        raise Refuse(f"{key}+{addr:#x}: call over a freed saved frame slot")
+-                    if callee and "+" not in sym:
+-                        sub_deep, sub_ext = fn_bound(callee)
+-                        deepest = max(deepest, d + ret_push + sub_deep)
+-                        add_ext(ext, sub_ext, d + ret_push)
+-                    elif base in stubs or base.endswith("@plt"):
+-                        # ELF `write@plt`; Mach-O stubs carry one extra leading underscore.
+-                        name = base.removesuffix("@plt") if base.endswith("@plt") else base[1:]
+-                        add_ext(ext, {name: 0}, d + ret_push)
+-                        deepest = max(deepest, d + ret_push)
+-                        if name in NORETURN:
+-                            break
+-                    else:
+-                        raise Refuse(f"{key}+{addr:#x}: call to {sym}, neither owned nor a stub")
+-                    if ARCH == "aarch64":
+-                        st = st.but(lr=False)  # bl wrote x30: this function's return address is gone
+-                    i += 1
+-                    continue
+-                if tgt not in index:
+-                    raise Refuse(f"{key}+{addr:#x}: branch leaves the function: {mn} {ops}")
+-                if kind == "jmp":
+-                    i = index[tgt]
+-                    continue
+-                work.append((index[tgt], st))
+-                i += 1
++            i = work.pop()
++            st = states[i]
++            addr, mn, ops = code[i]
++            kind, arg = control(mn, ops)
++            if kind is None:
++                if not plain.match(mn):
++                    raise Refuse(f"{key}+{addr:#x}: unmodelled instruction: {mn} {ops}")
++                try:
++                    st, touched = inst(mn, ops, st, addr)
++                except Refuse as e:
++                    raise Refuse(f"{key}+{addr:#x}: {e}") from None
++                if st.d < 0:
++                    raise Refuse(f"{key}+{addr:#x}: stack above the entry")
++                deepest = max(deepest, st.d, touched or 0)
++                flow(i + 1, st, addr)
++                continue
++            if kind == "indirect":
++                raise Refuse(f"{key}+{addr:#x}: indirect control transfer {mn} {ops}")
++            if kind == "ret":
++                if st.d != 0:
++                    raise Refuse(f"{key}+{addr:#x}: return at depth {st.d}")
++                if not st.lr:
++                    raise Refuse(f"{key}+{addr:#x}: return through a link register not restored")
++                if st.fp != ENTRY:
++                    raise Refuse(f"{key}+{addr:#x}: return without the caller's frame pointer restored")
++                continue
++            if kind == "stop":
++                continue
++            tgt, sym = target_of(arg)
++            if tgt is None:
++                raise Refuse(f"{key}+{addr:#x}: indirect {mn} {ops}")
++            if kind == "call":
++                base = sym.split("+")[0]
++                callee, d = owned_name(base), st.d
++                if callee and "+" not in sym:
++                    sub_deep, sub_ext = fn_bound(callee)
++                    deepest = max(deepest, d + ret_push + sub_deep)
++                    add_ext(ext, sub_ext, d + ret_push)
++                elif base in stubs or base.endswith("@plt"):
++                    # ELF `write@plt`; Mach-O stubs carry one extra leading underscore.
++                    name = base.removesuffix("@plt") if base.endswith("@plt") else base[1:]
++                    add_ext(ext, {name: 0}, d + ret_push)
++                    deepest = max(deepest, d + ret_push)
++                    if name in NORETURN:
++                        continue
++                else:
++                    raise Refuse(f"{key}+{addr:#x}: call to {sym}, neither owned nor a stub")
++                # The callee may have written anything below the stack pointer; on AArch64, bl
++                # replaced the link register.
++                st = st.but(w=frozenset(b for b in st.w if b <= d), g=frozenset(),
++                           lr=st.lr if ARCH == "x86_64" else False)
++                flow(i + 1, st, addr)
++                continue
++            if tgt not in index:
++                raise Refuse(f"{key}+{addr:#x}: branch leaves the function: {mn} {ops}")
++            flow(index[tgt], st, addr)
++            if kind == "jcc":
++                flow(i + 1, st, addr)
+         active.discard(key)
+         memo[key] = (deepest, ext)
+         return memo[key]
+diff --git a/scripts/checks/slice0_artifacts.sh b/scripts/checks/slice0_artifacts.sh
+index 1d0ac2dcc..28eb96724 100644
+--- a/scripts/checks/slice0_artifacts.sh
++++ b/scripts/checks/slice0_artifacts.sh
+@@ -21,11 +21,13 @@
+ #     frame-pointer write, an indexed stack address, a saved frame pointer popped into another
+ #     register, a stack address taken, an overwritten return address, an AArch64 frame pointer
+ #     stored, a register-directed return, a return after a call without the link register
+-#     restored, a freed or restored saved slot reread, a callee that does not restore the frame pointer, a
+-#     frame record away from sp, an unmodelled
+-#     instruction (x86 `loop`) and frame-pointer writeback (AArch64), and give the
++#     restored, a freed or restored saved slot reread, a callee's leftover saved slot reread by
++#     its caller (both architectures), a read of bytes written on one path only or never written,
++#     a store through main's argv, a PC-relative base kept across a call, walked by repeated adds or
++#     beyond the reach premise, an absolute address (memory only through sp/fp, PC-relative or fs/gs), a callee that does not restore the frame pointer, a frame record away from sp, an unmodelled
++#     instruction (x86 `loop`) and frame- or link-register writeback (AArch64), and give the
+ #     expected bound on known functions (x86 frame, red-zone store, two AArch64 frame-record
+-#     shapes); the comparison must reject a
++#     shapes, a read of bytes written on both paths, an adrp-based load); the comparison must reject a
+ #     measurement above the bound.
+ #
+ # usage: slice0_artifacts.sh [REPORT_DIR]. Run inside the nix devshell, from the repository root.
+@@ -220,6 +222,24 @@ refuse restored-slot-reread '    1010:\tpush\trbp\n    1011:\tmov\trbp, rsp\n
+ refuse a64-restored-record-reread '    1010:\tstp\tx29, x30, [sp, #-0x10]!\n    1014:\tmov\tx29, sp\n    1018:\tstp\tx29, x30, [sp, #-0x10]!\n    101c:\tldp\tx29, x30, [sp], #0x10\n    1020:\tldr\tx0, [sp, #-0x10]\n    1024:\tstr\tx1, [x0, #-0x1000]\n    1028:\tldp\tx29, x30, [sp], #0x10\n    102c:\tret\n' aarch64 _main
+ refuse a64-w29-writeback-load '    1010:\tsub\tsp, sp, #0x10\n    1014:\tmov\tx29, sp\n    1018:\tldr\tw29, [sp], #0x10\n    101c:\tstr\tx0, [x29, #-0x100]\n    1020:\tret\n' aarch64 _main
+ refuse a64-frame-writeback '    1010:\tmov\tx29, sp\n    1014:\tstr\tx0, [x29], #-0x100\n    1018:\tstr\tx0, [x29]\n    101c:\tadd\tx29, x29, #0x100\n    1020:\tret\n' aarch64 _main
++# A callee's saved frame pointer, left below the caller's stack pointer, reread by the caller.
++refuse callee-residual-reread '    1010:\tpush\trbp\n    1011:\tmov\trbp, rsp\n    1014:\tcall\t0x1040 <concrete_body>\n    1019:\tmov\trax, qword ptr [rsp - 0x10]\n    101e:\tmov\tdword ptr [rax - 0x1000], ecx\n    1024:\tpop\trbp\n    1025:\tret\n\n0000000000001040 <concrete_body>:\n    1040:\tpush\trbp\n    1041:\tpop\trbp\n    1042:\tret\n'
++# Writeback through the link register changes the return address.
++refuse a64-link-register-writeback '    1010:\tstp\tx29, x30, [sp, #-0x10]!\n    1014:\tbl\t0x1040 <_concrete_body>\n    1018:\tldp\tx29, x30, [sp], #0x10\n    101c:\tret\n\n0000000000001040 <_concrete_body>:\n    1040:\tldr\tx0, [x30], #-0x8\n    1044:\tret\n' aarch64 _main
++refuse a64-link-register-store-writeback '    1010:\tstr\tx0, [x30, #0x8]!\n    1014:\tret\n' aarch64 _main
++# main's argv (rsi, x1) points into the stack: memory is not addressed through it.
++refuse argv-store '    1010:\tmov\tbyte ptr [rsi - 0x1000], 0x0\n    1017:\txor\teax, eax\n    1019:\tret\n'
++refuse a64-argv-store '    1010:\tstrb\twzr, [x1, #-0x100]\n    1014:\tret\n' aarch64 _main
++refuse a64-pc-relative-after-call '    1010:\tstp\tx29, x30, [sp, #-0x10]!\n    1014:\tadrp\tx8, 0x2000 <_main+0xff0>\n    1018:\tbl\t0x1040 <_concrete_body>\n    101c:\tldr\tw0, [x8, #0x10]\n    1020:\tldp\tx29, x30, [sp], #0x10\n    1024:\tret\n\n0000000000001040 <_concrete_body>:\n    1040:\tret\n' aarch64 _main
++# PC-relative provenance through repeated adds (a loop walking toward the stack).
++refuse a64-pc-relative-walk '    1010:\tadr\tx8, 0x1010 <_main>\n    1014:\tsub\tx2, x1, #0xfff\n    1018:\tadd\tx8, x8, #0x8\n    101c:\tcmp\tx8, x2\n    1020:\tb.lo\t0x1018 <_main+0x8>\n    1024:\tstrb\twzr, [x8]\n    1028:\tret\n' aarch64 _main
++refuse a64-pc-relative-far '    1010:\tadrp\tx8, 0x7fff0000\n    1014:\tstrb\twzr, [x8]\n    1018:\tret\n' aarch64 _main
++refuse absolute-address '    1010:\tmov\tbyte ptr [0x7fffffd0], 0x0\n    1018:\tret\n'
++refuse a64-callee-residual-reread '    1010:\tstp\tx29, x30, [sp, #-0x10]!\n    1014:\tmov\tx29, sp\n    1018:\tbl\t0x1040 <_concrete_body>\n    101c:\tldr\tx0, [sp, #-0x10]\n    1020:\tstr\tx1, [x0, #-0x100]\n    1024:\tldp\tx29, x30, [sp], #0x10\n    1028:\tret\n\n0000000000001040 <_concrete_body>:\n    1040:\tstp\tx29, x30, [sp, #-0x10]!\n    1044:\tldp\tx29, x30, [sp], #0x10\n    1048:\tret\n' aarch64 _main
++# A read of a byte written on only one path into it.
++refuse one-path-write '    1010:\tpush\trbp\n    1011:\tmov\trbp, rsp\n    1014:\tje\t0x101e <main+0xe>\n    1016:\tmov\tqword ptr [rbp - 0x8], rax\n    101e:\tmov\trax, qword ptr [rbp - 0x8]\n    1022:\tpop\trbp\n    1023:\tret\n'
++# A read never written (stale bytes of whatever ran before).
++refuse unwritten-read '    1010:\tmov\trax, qword ptr [rsp - 0x40]\n    1015:\tret\n'
+ # A leaf's red-zone store, below the stack pointer, is inside the bound: 8 + 0x30.
+ redzone=$(ctl_dis redzone <<'D'
+ 
+@@ -248,6 +268,10 @@ bound_is() {
+ }
+ bound_is a64-framed-main-and-leaf aarch64 'bound 32' '0000000000001000 <_main>:\n    1000:\tstp\tx29, x30, [sp, #-0x10]!\n    1004:\tmov\tx29, sp\n    1008:\tbl\t0x1020 <_concrete_body>\n    100c:\tldp\tx29, x30, [sp], #0x10\n    1010:\tret\n\n0000000000001020 <_concrete_body>:\n    1020:\tsub\tsp, sp, #0x10\n    1024:\tstr\tw0, [sp, #0xc]\n    1028:\tadd\tsp, sp, #0x10\n    102c:\tret\n'
+ bound_is a64-offset-frame-record aarch64 'bound 32' '0000000000001000 <_main>:\n    1000:\tsub\tsp, sp, #0x20\n    1004:\tstp\tx29, x30, [sp, #0x10]\n    1008:\tadd\tx29, sp, #0x10\n    100c:\tstur\twzr, [x29, #-0x4]\n    1010:\tldp\tx29, x30, [sp, #0x10]\n    1014:\tadd\tsp, sp, #0x20\n    1018:\tret\n'
++# A load PC-relative through adrp + add is not a stack access.
++bound_is a64-pc-relative-load aarch64 'bound 0' '0000000000001000 <_main>:\n    1000:\tadrp\tx8, 0x2000 <_main+0x1000>\n    1004:\tadd\tx8, x8, #0x10\n    1008:\tldr\tw0, [x8, #0x4]\n    100c:\tret\n'
++# A read of bytes the function wrote on both paths into it is accepted.
++bound_is both-path-write x86_64 'bound 16' '0000000000001010 <main>:\n    1010:\tpush\trbp\n    1011:\tmov\trbp, rsp\n    1014:\tje\t0x101c <main+0xc>\n    1016:\tmov\tqword ptr [rbp - 0x8], rax\n    101a:\tjmp\t0x1020 <main+0x10>\n    101c:\tmov\tqword ptr [rbp - 0x8], rcx\n    1020:\tmov\trax, qword ptr [rbp - 0x8]\n    1024:\tpop\trbp\n    1025:\tret\n'
+ if [ -n "$gdb" ]; then
+   # A run that does not end as expected gives no measurement.
+   wrong=$(( ($(head -c 16 "$(dirname "$last_exe")/status") + 1) % 256 ))
+
+exec
+/bin/bash -lc 'cat scripts/checks/lib/stack_bound.py' in /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/gates-review11
+ succeeded in 0ms:
+#!/usr/bin/env python3
+"""Stack bound of a slice-0 executable, from its disassembly (README gate 12). PROVISIONAL.
+
+usage: stack_bound.py ARCH DISASM             -> prints `bound N` and one `external SYM DEPTH` per call
+       stack_bound.py ARCH DISASM --ranges    -> also prints `range SYM LO HI` per Concrete function
+ARCH is x86_64 or aarch64; DISASM is `llvm-objdump -d --no-show-raw-insn` output of the LINKED
+executable (x86-64 in Intel syntax).
+
+The Concrete-owned code is `main` (the runtime entry), `concrete_rt_write_all` and the body
+(`concrete_body`), with or without the Mach-O underscore. Each owned function is analysed over its
+control-flow graph, from its entry, as a dataflow fixpoint over an abstract state (St): the stack
+pointer's depth below the entry stack pointer, the frame pointer's value, the saved slots and the
+link register (equal on every path into an instruction), and the stack bytes the function has
+written (the intersection over those paths). A byte at depth n lies n bytes below the entry stack
+pointer.
+
+The bound is the deepest byte the function's stack pointer reaches or any of its instructions
+addresses through the stack or frame pointer (so the red zone, used below the stack pointer without
+moving it, is covered), with each owned callee's own bound added at its call, and each external
+function (libc's `write`, `_exit`, `abort`) counted at its entry depth.
+
+Why addresses cannot escape this accounting: memory is addressed only through the stack or frame
+pointer (accounted), PC-relatively within a fixed reach of the code (x86 `rip` with a displacement
+up to PC_REACH; on AArch64 a register holding an adrp/adr result within PC_REACH, plus at most one
+add immediate, on every path since the last call, with a bounded offset and no writeback) or
+through the x86 thread-pointer segments. Any other register may hold a stack address (main's argv
+and envp, a value an external function left), so no access goes through one. The analysis also refuses taking a stack address as a value (`lea` of one, the stack or frame
+pointer copied, stored or used in arithmetic, except the modelled frame setup), so only the frame
+save (`push rbp`, `stp x29, x30`) puts one in memory. Saved slots may be read only
+by the modelled restore (`pop rbp`, `leave`, `ldp x29, x30` with base sp). Any other stack read
+must be of bytes the function itself wrote, on every path, since its last call: so no stale value
+(a callee's or the caller's saved frame pointer, libc's scratch) is ever loaded. Accesses must lie
+below the entry stack pointer (never the return address or the caller's frame), returns must be at
+depth 0 with the caller's frame pointer restored and, on AArch64, with the link register holding
+the return address.
+
+The premises (outside the bound, listed in the gate's report): the stack lies farther than
+PC_REACH + 4095 + A64_OFF_REACH bytes from the image's code, and the thread-pointer block (fs/gs)
+is not on the stack; the external functions' own stack use; that `_exit` and `abort` do not return (a path ends at a call to one); that external
+functions follow the ABI's callee-saved rule (the frame pointer and stack pointer preserved).
+
+Fail closed: an instruction outside the modelled set (X86_PLAIN, A64_PLAIN and the control
+transfers), any of the refusals above, an unmodelled stack-pointer write, an indirect branch, call
+or return, a branch leaving its function, two different states meeting, recursion, or a call to a
+function that is neither Concrete-owned nor a PLT/stub symbol is an error (exit 1), never a bound.
+"""
+import re
+import sys
+
+OWNED = ("main", "concrete_body", "concrete_rt_write_all")
+# External functions that do not return (part of the libc premise): a path ends at a call to one.
+NORETURN = ("exit", "_exit", "_Exit", "abort")
+ENTRY = "entry"
+
+
+class Refuse(Exception):
+    pass
+
+
+def owned_name(sym):
+    s = sym[1:] if sym.startswith("_") and sym[1:] in OWNED else sym
+    return s if s in OWNED else None
+
+
+def parse(path):
+    """Functions: name -> list of (addr, mnemonic, operands). Also the set of stub symbols."""
+    funcs, cur, stubs, section = {}, None, set(), ""
+    head = re.compile(r"^([0-9a-f]+) <([^>]+)>:$")
+    inst = re.compile(r"^\s*([0-9a-f]+):\s*(\S+)\s*(.*)$")
+    for line in open(path, encoding="utf-8", errors="replace"):
+        line = line.rstrip("\n")
+        if line.startswith("Disassembly of section"):
+            section = line.split()[-1].rstrip(":")
+            cur = None
+            continue
+        m = head.match(line)
+        if m:
+            name = m.group(2)
+            if section in (".plt", ".plt.sec", ".plt.got", "__stubs") or name.endswith("@plt"):
+                stubs.add(name)
+                cur = None
+            else:
+                cur = name
+                funcs.setdefault(name, [])
+            continue
+        m = inst.match(line)
+        if m and cur is not None:
+            ops = m.group(3).split("#", 1)[0] if ARCH == "x86_64" else m.group(3).split("//")[0]
+            funcs[cur].append((int(m.group(1), 16), m.group(2).lower(), ops.strip()))
+    return funcs, stubs
+
+
+def target_of(ops):
+    m = re.search(r"0x([0-9a-f]+)\s*<([^>]+)>", ops) or re.search(r"\b([0-9a-f]+)\s*<([^>]+)>", ops)
+    return (int(m.group(1), 16), m.group(2)) if m else (None, None)
+
+
+def imm(s):
+    t = s.strip().lstrip("#")
+    try:
+        return int(t, 16) if t.lower().startswith(("0x", "-0x")) else int(t)
+    except ValueError:
+        raise Refuse(f"not an immediate: {s}") from None
+
+
+class St:
+    """`d`: the stack pointer's depth. `fp`: the frame pointer's value: a depth (int), ENTRY (the
+    caller's, which every return must restore) or None (unknown). `saved`: slots holding a saved
+    frame pointer or link register, (lowest, highest, tag) in byte depths, tag ("fp", value) or
+    ("lr", whether it is this function's return address); kept after the stack pointer moves past
+    them and after a restore (memory keeps them) until an exact overwrite. `lr`: whether the
+    AArch64 link register holds this function's return address. `w`: the stack bytes this
+    function has written since its last call, on every path (not part of the equality key). `g`
+    (AArch64): the registers holding a PC-relative address (adrp/adr, plus an immediate), on every
+    path since the last call (not part of the key): the only registers memory may be addressed
+    through besides the stack and frame pointers."""
+
+    __slots__ = ("d", "fp", "saved", "lr", "w", "g")
+
+    def __init__(self, d=0, fp=ENTRY, saved=frozenset(), lr=True, w=frozenset(), g=frozenset()):
+        self.d, self.fp, self.saved, self.lr, self.w, self.g = d, fp, saved, lr, w, g
+
+    def key(self):
+        return (self.d, self.fp, self.saved, self.lr)
+
+    def but(self, **kw):
+        s = St(self.d, self.fp, self.saved, self.lr, self.w, self.g)
+        for k, v in kw.items():
+            setattr(s, k, v)
+        return s
+
+
+def frame_depth(fp, what):
+    """The frame pointer as a depth, for addressing; refused unless it is this frame's."""
+    if not isinstance(fp, int):
+        raise Refuse(f"frame-relative use of a frame pointer that is not this frame's: {what}")
+    return fp
+
+
+def slot_at(saved, lo, hi):
+    return next((x for x in saved if x[:2] == (lo, hi)), None)
+
+
+def touch(st, lo, hi, mode, what, restore=()):
+    """Check an access of the bytes [lo, hi] (depths) in `mode` ("r", "w" or "rw") and return the
+    new written set. The bytes must be the function's own (depth >= 1). A saved slot may be read
+    only by a restore (`restore`: the slots being restored), and written only by an exact
+    overwrite (which clears it; the caller removes it from `saved`). A read needs every byte
+    written by this function on every path since its last call."""
+    if lo < 1:
+        raise Refuse(f"touches the return address or the caller's frame: {what}")
+    for slot in st.saved:
+        if slot[0] <= hi and lo <= slot[1] and slot not in restore:
+            exact = (slot[0], slot[1]) == (lo, hi) or (lo <= slot[0] and slot[1] <= hi and mode == "w")
+            if "r" in mode or not exact:
+                raise Refuse(f"touches a saved frame pointer or link register: {what}")
+    if "r" in mode and not all(b in st.w for b in range(lo, hi + 1)):
+        raise Refuse(f"reads stack bytes this function has not written: {what}")
+    return st.w | frozenset(range(lo, hi + 1)) if "w" in mode else st.w
+
+
+def cleared(saved, lo, hi):
+    """`saved` without the slots a write of [lo, hi] overwrote."""
+    return frozenset(x for x in saved if not (lo <= x[0] and x[1] <= hi))
+
+
+X86_SP = ("rsp", "esp", "sp", "spl")
+X86_FP = ("rbp", "ebp", "bp", "bpl")
+X86_STACK = X86_SP + X86_FP
+X86_GPR64 = re.compile(r"^(r[abcd]x|r[sd]i|rbp|r(?:8|9|1[0-5]))$")
+X86_SIZE = {"byte": 1, "word": 2, "dword": 4, "qword": 8, "tbyte": 10, "xmmword": 16,
+            "ymmword": 32, "zmmword": 64}
+MEM = re.compile(r"\[([^\]]*)\]")
+
+
+# PC-relative addressing reaches at most PC_REACH bytes from the instruction (x86 rip
+# displacement; AArch64 adrp/adr target) plus, on AArch64, one add immediate (at most 4095) and
+# the access's own offset (at most A64_OFF_REACH): the premise that the stack lies farther than
+# that from the image's code makes such an access never a stack access.
+PC_REACH = 16 << 20
+A64_OFF_REACH = 32760
+
+
+def x86_inst(mn, ops, st, addr=0):
+    """(new state, deepest byte touched or None) after a non-control x86 instruction."""
+    what = f"{mn} {ops}"
+    args = [a.strip() for a in ops.split(",")] if ops else []
+    dst = args[0] if args else ""
+    deepest, w, saved = None, st.w, st.saved
+    for m in MEM.finditer(ops):
+        terms = re.findall(r"[+-]?\s*[^+\-\s]+", m.group(1))
+        regs = [t.strip(" +-") for t in terms if not re.fullmatch(r"[+-]?\s*(0x[0-9a-f]+|\d+)", t)]
+        base = [r for r in regs if r in X86_STACK]
+        if not base:
+            # Any other register may hold a stack address (main's argv and envp, a value an
+            # external function left), so memory is addressed only PC-relative or absolutely
+            # (a segment offset: the thread pointer's block).
+            k = sum(int(t.replace(" ", ""), 0) for t in terms if t.strip(" +-") not in regs)
+            if regs == ["rip"]:
+                if abs(k) > PC_REACH:
+                    raise Refuse(f"PC-relative access beyond the premise's reach: {what}")
+            elif regs or not re.search(r"\b[fg]s:\s*$", ops[:m.start()]):
+                raise Refuse(f"memory addressed through a register that may hold a stack address, "
+                             f"or absolutely: {what}")
+            continue
+        if base[0] not in ("rsp", "rbp"):
+            raise Refuse(f"stack address through a partial register: {what}")
+        if len(regs) != 1:
+            raise Refuse(f"indexed stack address: {what}")
+        if mn == "lea":
+            raise Refuse(f"stack address taken as a value: {what}")
+        size = re.search(r"(\w+) ptr\s*(?:\w+:)?\s*$", ops[:m.start()])
+        if not size or size.group(1) not in X86_SIZE:
+            raise Refuse(f"stack access of unknown size: {what}")
+        k = sum(int(t.replace(" ", ""), 0) for t in terms if t.strip(" +-") not in regs)
+        top = (frame_depth(st.fp, what) if base[0] == "rbp" else st.d) - k
+        lo = top - X86_SIZE[size.group(1)] + 1
+        # The memory operand is the destination when it comes first: written only by mov and
+        # setcc, read and written by the others, read only by cmp and test.
+        first = ops.lstrip().find("[") < ops.find(",") if "," in ops else True
+        if not first or mn in ("cmp", "test"):
+            mode = "r"
+        elif mn in ("mov", "movabs") or mn.startswith("set"):
+            mode = "w"
+        else:
+            mode = "rw"
+        w = touch(st.but(w=w, saved=saved), lo, top, mode, what)
+        if "w" in mode:
+            saved = cleared(saved, lo, top)
+        deepest = top if deepest is None else max(deepest, top)
+    st = st.but(w=w, saved=saved)
+    outside = MEM.sub("", ops)
+    modelled = (mn, ops) in (("push", "rbp"), ("pop", "rbp"), ("mov", "rbp, rsp"),
+                             ("mov", "rsp, rbp"), ("leave", "")) or (
+        mn in ("sub", "add") and re.fullmatch(r"rsp, (0x[0-9a-f]+|\d+)", ops))
+    if not modelled and any(re.search(rf"\b{r}\b", outside) for r in X86_STACK):
+        raise Refuse(f"stack or frame pointer used as a value: {what}")
+    if mn == "push":
+        if not X86_GPR64.match(dst):
+            raise Refuse(f"push of other than a 64-bit general register: {what}")
+        d = st.d + 8
+        w = touch(st, d - 7, d, "w", what)
+        saved = cleared(st.saved, d - 7, d)
+        if dst == "rbp":
+            saved = saved | {(d - 7, d, ("fp", st.fp))}
+        return st.but(d=d, saved=saved, w=w), d
+    if mn == "pop":
+        if not X86_GPR64.match(dst):
+            raise Refuse(f"pop of other than a 64-bit general register: {what}")
+        return x86_pop(st, dst, st.d, what), None
+    if mn == "leave":
+        return x86_pop(st, "rbp", frame_depth(st.fp, what), what), None
+    if mn in ("sub", "add") and dst == "rsp":
+        n = imm(args[1])
+        return st.but(d=st.d + n if mn == "sub" else st.d - n), deepest
+    if (mn, ops) == ("mov", "rbp, rsp"):
+        return st.but(fp=st.d), deepest
+    if (mn, ops) == ("mov", "rsp, rbp"):
+        return st.but(d=frame_depth(st.fp, what)), deepest
+    if dst in X86_SP:
+        raise Refuse(f"unmodelled stack-pointer write: {what}")
+    if dst in X86_FP:
+        return st.but(fp=None), deepest
+    return st, deepest
+
+
+def x86_pop(st, dst, at, what):
+    """Pop the 8 bytes whose deepest is at depth `at` into `dst`: a saved frame pointer only into
+    rbp, which then holds the saved value again (any other pop into rbp makes it unknown)."""
+    slot = slot_at(st.saved, at - 7, at)
+    if slot and dst != "rbp":
+        raise Refuse(f"a saved frame pointer popped into {dst}: {what}")
+    touch(st, at - 7, at, "r", what, restore=(slot,) if slot else ())
+    if dst != "rbp":
+        return st.but(d=at - 8)
+    return st.but(d=at - 8, fp=slot[2][1] if slot and slot[2][0] == "fp" else None)
+
+
+A64_SP = ("sp", "wsp")
+A64_FP = ("x29", "w29")
+A64_LR = ("x30", "w30")
+A64_REGSIZE = {"x": 8, "w": 4, "q": 16, "d": 8, "s": 4, "h": 2, "b": 1}
+
+
+def a64_size(mn, data, what):
+    if mn in ("ldrb", "strb", "ldrsb", "ldurb", "sturb", "ldursb"):
+        return 1
+    if mn in ("ldrh", "strh", "ldrsh", "ldurh", "sturh", "ldursh"):
+        return 2
+    if mn in ("ldrsw", "ldursw", "ldpsw"):
+        return 4 * len(data)
+    if not data or data[0][0] not in A64_REGSIZE:
+        raise Refuse(f"stack access of unknown size: {what}")
+    return A64_REGSIZE[data[0][0]] * len(data)
+
+
+def a64_reg(r):
+    """The 64-bit name of a general register (w8 -> x8)."""
+    return "x" + r[1:] if re.fullmatch(r"w([0-9]|[12][0-9]|30)", r) else r
+
+
+A64_FLAGS_ONLY = ("cmp", "cmn", "tst", "ccmp", "ccmn", "nop")
+
+
+def a64_inst(mn, ops, st, addr=0):
+    """(new state, deepest byte touched or None) after a non-control AArch64 instruction, with `g`
+    (the PC-relative address registers, as (register, level) pairs) updated: every register the
+    instruction writes leaves it; adrp/adr with a target within PC_REACH of the instruction puts
+    its destination in at level 0, and one add of an immediate up to 4095 to a level-0 register
+    puts its destination in at level 1 (so the address stays within a fixed reach of the code)."""
+    new, deepest = a64_core(mn, ops, st)
+    args = [a.strip() for a in re.split(r",(?![^\[]*\])", ops)] if ops else []
+    first_mem = next((i for i, a in enumerate(args) if a.startswith("[")), len(args))
+    if mn.startswith(("ld", "st")):
+        written = list(args[:first_mem]) if mn.startswith("ld") else []
+        if first_mem < len(args) and (args[first_mem].endswith("!") or first_mem + 1 < len(args)):
+            written.append(re.match(r"\[(\w+)", args[first_mem]).group(1))
+    else:
+        written = [] if mn in A64_FLAGS_ONLY or not args else [args[0]]
+    out = {a64_reg(r) for r in written}
+    g = {x for x in new.g if x[0] not in out}
+    if mn in ("adrp", "adr") and len(args) == 2 and args[0].startswith("x"):
+        t = re.fullmatch(r"(0x[0-9a-f]+)(?:\s*<[^>]*>)?", args[1])
+        if t and abs(int(t.group(1), 16) - addr) <= PC_REACH:
+            g.add((args[0], 0))
+    elif (mn == "add" and len(args) == 3 and args[0].startswith("x") and (args[1], 0) in st.g
+          and re.fullmatch(r"#(0x[0-9a-f]+|\d+)", args[2]) and imm(args[2]) <= 4095):
+        g.add((args[0], 1))
+    return new.but(g=frozenset(g)), deepest
+
+
+def a64_core(mn, ops, st):
+    """(new state, deepest byte touched or None) after a non-control AArch64 instruction."""
+    what = f"{mn} {ops}"
+    args = [a.strip() for a in re.split(r",(?![^\[]*\])", ops)] if ops else []
+    first_mem = next((i for i, a in enumerate(args) if a.startswith("[")), len(args))
+    data = args[:first_mem]
+    is_load, is_store = mn.startswith("ld"), mn.startswith("st")
+    deepest = None
+    record = restored = False
+    if first_mem < len(args):
+        mem = args[first_mem]
+        post = args[first_mem + 1] if first_mem + 1 < len(args) else None
+        m = re.fullmatch(r"\[(\w+)(?:,\s*(#?-?(?:0x)?[0-9a-f]+))?\](!?)", mem)
+        if not m:
+            raise Refuse(f"unmodelled address form: {what}")
+        else:
+            base, off, pre = m.group(1), m.group(2), m.group(3) == "!"
+            if base in A64_FP and (pre or post is not None):
+                raise Refuse(f"writeback on the frame pointer: {what}")
+            if base in A64_LR and (pre or post is not None):
+                raise Refuse(f"writeback on the link register: {what}")
+            if base not in ("sp", "x29") + A64_SP + A64_FP:
+                # Any other register may hold a stack address (main's argv, envp and apple
+                # vector, a value an external function left): only a PC-relative one is used.
+                if base not in {x[0] for x in st.g}:
+                    raise Refuse(f"memory addressed through a register that may hold a stack address: {what}")
+                if pre or post is not None or (off and abs(imm(off)) > A64_OFF_REACH):
+                    raise Refuse(f"PC-relative access beyond the premise's reach: {what}")
+        if base in ("sp", "x29"):
+            record = mn in ("stp", "ldp") and data == ["x29", "x30"] and base == "sp"
+            size = a64_size(mn, data, what)
+            k = imm(off) if off else 0
+            d = st.d
+            if base == "x29":
+                top = frame_depth(st.fp, what) - k
+            elif pre:
+                d = d - k
+                top = d
+            else:
+                top = d - k
+            if post is not None:
+                if base != "sp":
+                    raise Refuse(f"unmodelled writeback: {what}")
+                top = st.d
+                d = d - imm(post)
+            lo = top - size + 1
+            saved, fp, lr = st.saved, st.fp, st.lr
+            if record and is_store:
+                # The frame record: x29 at the lower address (the deeper half), x30 above it.
+                w = touch(st, lo, top, "w", what)
+                saved = cleared(saved, lo, top) | {(lo + 8, lo + 15, ("fp", fp)), (lo, lo + 7, ("lr", lr))}
+            elif record:
+                fp_slot, lr_slot = slot_at(saved, lo + 8, lo + 15), slot_at(saved, lo, lo + 7)
+                w = touch(st, lo, top, "r", what, restore=tuple(x for x in (fp_slot, lr_slot) if x))
+                lr = bool(lr_slot and lr_slot[2] == ("lr", True))
+                fp = fp_slot[2][1] if fp_slot and fp_slot[2][0] == "fp" else None
+                restored = True
+            elif is_load or is_store:
+                w = touch(st, lo, top, "r" if is_load else "w", what)
+                if is_store:
+                    saved = cleared(saved, lo, top)
+            else:
+                raise Refuse(f"unmodelled stack memory instruction: {what}")
+            st = st.but(d=d, saved=saved, fp=fp, lr=lr, w=w)
+            deepest = top
+        elif base in A64_SP + A64_FP:
+            raise Refuse(f"unmodelled stack address: {what}")
+    if is_store:
+        if not record and any(a in A64_SP + A64_FP for a in data):
+            raise Refuse(f"stack or frame pointer stored as a value: {what}")
+        return st, deepest
+    if is_load:
+        if any(a in A64_SP for a in data):
+            raise Refuse(f"stack pointer loaded: {what}")
+        if any(a in A64_LR for a in data) and not record:
+            raise Refuse(f"link register overwritten: {what}")
+        if any(a in A64_FP for a in data) and not restored:
+            st = st.but(fp=None)
+        return st, deepest
+    # Not a memory instruction.
+    dst, srcs = (args[0] if args else ""), args[1:]
+    if dst in A64_SP:
+        if mn in ("sub", "add") and len(args) == 3 and args[1] == "sp" and args[2].startswith("#"):
+            n = imm(args[2])
+            return st.but(d=st.d + n if mn == "sub" else st.d - n), None
+        if (mn, srcs) == ("mov", ["x29"]):
+            return st.but(d=frame_depth(st.fp, what)), None
+        if mn in ("sub", "add") and len(args) == 3 and args[1] == "x29" and args[2].startswith("#"):
+            n, f = imm(args[2]), frame_depth(st.fp, what)
+            return st.but(d=f + n if mn == "sub" else f - n), None
+        raise Refuse(f"unmodelled stack-pointer write: {what}")
+    if dst in A64_FP:
+        if (mn, srcs) == ("mov", ["sp"]):
+            return st.but(fp=st.d), None
+        if mn == "add" and len(args) == 3 and args[1] == "sp" and args[2].startswith("#"):
+            return st.but(fp=st.d - imm(args[2])), None
+        if any(a in A64_SP + A64_FP for a in srcs):
+            raise Refuse(f"stack or frame pointer used as a value: {what}")
+        return st.but(fp=None), None
+    if dst in A64_LR:
+        raise Refuse(f"link register overwritten: {what}")
+    if any(a in A64_SP + A64_FP for a in srcs):
+        raise Refuse(f"stack or frame pointer used as a value: {what}")
+    return st, None
+
+
+X86_JCC = re.compile(r"^j(?!mp$)[a-z]+$")
+A64_COND = re.compile(r"^b\.[a-z]+$")
+
+# The data-processing instructions whose only effect on the stack is what x86_inst and a64_inst
+# model (memory operands, and writes to the stack, frame and link registers). Any other
+# instruction on a reachable path is refused: an unknown one may move the stack pointer or
+# transfer control (x86 `loop`, a `rep` prefix), so the analysis never treats it as a fallthrough.
+X86_PLAIN = re.compile(
+    r"^(mov|movabs|movzx|movsx|movsxd|lea|add|sub|adc|sbb|imul|mul|and|or|xor|not|neg|inc|dec"
+    r"|cmp|test|shl|shr|sar|sal|rol|ror|cdq|cqo|cdqe|cwde|cbw|cwd|nop|endbr64"
+    r"|push|pop|leave|set[a-z]+|cmov[a-z]+)$")
+A64_PLAIN = re.compile(
+    r"^(mov|movz|movk|movn|add|adds|sub|subs|neg|negs|mul|madd|msub|mneg|smull|umull|smulh|umulh"
+    r"|smaddl|umaddl|sdiv|udiv|and|ands|orr|orn|eor|eon|bic|bics|mvn|lsl|lsr|asr|ror|lslv|lsrv"
+    r"|asrv|cmp|cmn|tst|ccmp|ccmn|cset|csetm|csel|csinc|csinv|csneg|cinc|cneg|sxtb|sxth|sxtw"
+    r"|uxtb|uxth|ubfx|sbfx|ubfm|sbfm|bfi|bfxil|extr|adr|adrp|nop"
+    r"|ldr|ldrb|ldrh|ldrsb|ldrsh|ldrsw|ldur|ldurb|ldurh|ldursb|ldursh|ldursw"
+    r"|str|strb|strh|stur|sturb|sturh|ldp|stp|ldpsw)$")
+
+
+def control(mn, ops):
+    """(kind, target) for a control instruction, or (None, None)."""
+    if ARCH == "x86_64":
+        if mn == "call":
+            return "call", ops
+        if mn == "jmp":
+            return "jmp", ops
+        if X86_JCC.match(mn):
+            return "jcc", ops
+        if mn == "ret":
+            return ("indirect", ops) if ops else ("ret", None)
+        if mn in ("ud2", "hlt", "int3"):
+            return "stop", None
+        return None, None
+    if mn == "bl":
+        return "call", ops
+    if mn == "b":
+        return "jmp", ops
+    if A64_COND.match(mn) or mn in ("cbz", "cbnz", "tbz", "tbnz"):
+        return "jcc", ops
+    if mn in ("blr", "br", "braa", "blraa", "braaz", "blraaz", "retaa", "retab"):
+        return "indirect", ops
+    if mn == "ret":
+        return ("indirect", ops) if ops else ("ret", None)
+    if mn in ("brk", "udf", "hlt"):
+        return "stop", None
+    return None, None
+
+
+def analyse(funcs, stubs):
+    """(bound, externals, owned): main's bound, each external's deepest entry depth, both from
+    main's entry, and the owned functions' names."""
+    owned = {owned_name(n): n for n in funcs if owned_name(n)}
+    if "main" not in owned:
+        raise Refuse("no main")
+    memo, active = {}, set()
+    ret_push = 8 if ARCH == "x86_64" else 0
+    inst = x86_inst if ARCH == "x86_64" else a64_inst
+    plain = X86_PLAIN if ARCH == "x86_64" else A64_PLAIN
+
+    def add_ext(ext, sub, base):
+        for name, depth in sub.items():
+            ext[name] = max(ext.get(name, 0), base + depth)
+
+    def fn_bound(key):
+        """(deepest, externals) of owned function `key`, relative to its own entry."""
+        if key in memo:
+            return memo[key]
+        if key in active:
+            raise Refuse(f"recursion through {key}")
+        active.add(key)
+        code = funcs[owned[key]]
+        if not code:
+            raise Refuse(f"{key}: no instructions")
+        index = {a: i for i, (a, _, _) in enumerate(code)}
+        states, work, deepest, ext = {0: St()}, [0], 0, {}
+
+        def flow(j, st, addr):
+            """Propagate `st` into instruction j: the keys must agree, the written sets meet."""
+            if j >= len(code):
+                raise Refuse(f"{key}: runs off its end")
+            if j not in states:
+                states[j] = st
+                work.append(j)
+                return
+            old = states[j]
+            if old.key() != st.key():
+                raise Refuse(f"{key}+{addr:#x}: states {old.key()} and {st.key()} meet")
+            if not (old.w <= st.w and old.g <= st.g):
+                states[j] = old.but(w=old.w & st.w, g=old.g & st.g)
+                work.append(j)
+
+        while work:
+            i = work.pop()
+            st = states[i]
+            addr, mn, ops = code[i]
+            kind, arg = control(mn, ops)
+            if kind is None:
+                if not plain.match(mn):
+                    raise Refuse(f"{key}+{addr:#x}: unmodelled instruction: {mn} {ops}")
+                try:
+                    st, touched = inst(mn, ops, st, addr)
+                except Refuse as e:
+                    raise Refuse(f"{key}+{addr:#x}: {e}") from None
+                if st.d < 0:
+                    raise Refuse(f"{key}+{addr:#x}: stack above the entry")
+                deepest = max(deepest, st.d, touched or 0)
+                flow(i + 1, st, addr)
+                continue
+            if kind == "indirect":
+                raise Refuse(f"{key}+{addr:#x}: indirect control transfer {mn} {ops}")
+            if kind == "ret":
+                if st.d != 0:
+                    raise Refuse(f"{key}+{addr:#x}: return at depth {st.d}")
+                if not st.lr:
+                    raise Refuse(f"{key}+{addr:#x}: return through a link register not restored")
+                if st.fp != ENTRY:
+                    raise Refuse(f"{key}+{addr:#x}: return without the caller's frame pointer restored")
+                continue
+            if kind == "stop":
+                continue
+            tgt, sym = target_of(arg)
+            if tgt is None:
+                raise Refuse(f"{key}+{addr:#x}: indirect {mn} {ops}")
+            if kind == "call":
+                base = sym.split("+")[0]
+                callee, d = owned_name(base), st.d
+                if callee and "+" not in sym:
+                    sub_deep, sub_ext = fn_bound(callee)
+                    deepest = max(deepest, d + ret_push + sub_deep)
+                    add_ext(ext, sub_ext, d + ret_push)
+                elif base in stubs or base.endswith("@plt"):
+                    # ELF `write@plt`; Mach-O stubs carry one extra leading underscore.
+                    name = base.removesuffix("@plt") if base.endswith("@plt") else base[1:]
+                    add_ext(ext, {name: 0}, d + ret_push)
+                    deepest = max(deepest, d + ret_push)
+                    if name in NORETURN:
+                        continue
+                else:
+                    raise Refuse(f"{key}+{addr:#x}: call to {sym}, neither owned nor a stub")
+                # The callee may have written anything below the stack pointer; on AArch64, bl
+                # replaced the link register.
+                st = st.but(w=frozenset(b for b in st.w if b <= d), g=frozenset(),
+                           lr=st.lr if ARCH == "x86_64" else False)
+                flow(i + 1, st, addr)
+                continue
+            if tgt not in index:
+                raise Refuse(f"{key}+{addr:#x}: branch leaves the function: {mn} {ops}")
+            flow(index[tgt], st, addr)
+            if kind == "jcc":
+                flow(i + 1, st, addr)
+        active.discard(key)
+        memo[key] = (deepest, ext)
+        return memo[key]
+
+    total, ext = fn_bound("main")
+    return total, ext, owned
+
+
+if __name__ == "__main__":
+    if len(sys.argv) not in (3, 4) or sys.argv[1] not in ("x86_64", "aarch64"):
+        sys.exit("usage: stack_bound.py x86_64|aarch64 DISASM [--ranges]")
+    ARCH = sys.argv[1]
+    try:
+        funcs, stubs = parse(sys.argv[2])
+        total, ext, owned = analyse(funcs, stubs)
+    except Refuse as e:
+        print(f"refused: {e}")
+        sys.exit(1)
+    print(f"bound {total}")
+    for name, depth in sorted(ext.items()):
+        print(f"external {name} {depth}")
+    if len(sys.argv) == 4 and sys.argv[3] == "--ranges":
+        for key, name in sorted(owned.items()):
+            code = funcs[name]
+            print(f"range {key} {code[0][0]:#x} {code[-1][0]:#x}")
+
+exec
+/bin/bash -lc 'cat Concrete/Premises.lean scripts/checks/slice0_trusted_base.lean scripts/checks/slice0_premise_table.lean scripts/checks/slice0_trusted_base.sh' in /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/gates-review11
+ succeeded in 0ms:
+/-
+The slice-0 trusted base (PROVISIONAL): the open premises and the headline theorems whose axiom
+closure the trusted-base golden records (Concrete/README.md gate 9).
+
+This is the premise REGISTRY, the one list of the open premises: each entry has its trust class,
+what retires it, and its statement. The statements are text until the structures that state them
+as Lean propositions (`FrontendPremises`, `NativePremises`, whose design is in Concrete/README.md)
+land with the front end; each entry then names its field instead. `scripts/checks/slice0_trusted_base.sh` prints
+this registry and the axioms of `theorems` and compares them with `tests/golden/slice0_trusted_base.txt`,
+so a premise added, removed or reworded fails until the golden is updated with it.
+-/
+import Lean.Meta.Basic
+import Lean.PrettyPrinter
+import Lean.Util.CollectAxioms
+import Concrete.BIR.Progress
+import Concrete.Backend.LCB
+
+namespace Concrete.Premises
+
+inductive Trust where
+  | implementation | toolchain | environment
+  deriving Repr, DecidableEq
+
+def Trust.name : Trust → String
+  | .implementation => "implementation"
+  | .toolchain => "toolchain"
+  | .environment => "environment"
+
+structure Premise where
+  id : String
+  trust : Trust
+  retiredBy : String
+  statement : String
+
+/-- The open premises for slice 0, in the README's order. -/
+def all : List Premise := [
+  ⟨"P_lex", .implementation, "`lex_correct`",
+    "every token list the lexer returns for a source is one the source lexes to"⟩,
+  ⟨"P_parse", .implementation, "the generic table-parser theorem",
+    "every tree the parser returns for a token list is one the grammar derives from it"⟩,
+  ⟨"P_print", .implementation, "an LLVM-IR semantics; not planned for slice 0",
+    "the printed LLVM text of a WF BIR means at most the BIR behaviour, encoded"⟩,
+  ⟨"P_adapter", .implementation,
+    "`adapter_correct` (proved for accepted programs), once `emit` represents adaptation failure (or the contract is restricted to accepted programs) and the theorem fills `NativePremises lcb`",
+    "the adapted LCB function of a WF BIR means at most the BIR behaviour, encoded"⟩,
+  ⟨"P_toolchain[llvm]", .toolchain, "not planned",
+    "every result the linked LLVM body produces is one its text means"⟩,
+  ⟨"P_toolchain[lcb]", .toolchain, "LCB's own proofs (C01–C03 and beyond)",
+    "every result the linked LCB body produces is one its function means (LCB's named trust boundaries)"⟩,
+  ⟨"P_rt", .implementation, "a proof of the decoding entry against a libc model; not planned for slice 0",
+    "every launch of an image built from a WF BIR that is not killed has the behaviour of some result its body produces (decode w for a returned word w, diverges for divergence)"⟩,
+  ⟨"P_trap_site", .implementation, "the same runtime-entry proof (owner, 2026-11-06: a premise now)",
+    "a launch whose body returns 256 + i writes exactly trapLine tbl[i] and a newline on fd 2"⟩,
+  ⟨"P_launch", .environment, "not planned",
+    "an admitted launch of a WF image within the frame bound is never killed, and fd 2 accepts the trap line"⟩,
+  ⟨"P_live", .environment, "not planned",
+    "an admitted launch happens and has a behaviour"⟩
+]
+
+/-- The headline theorems, whose axioms the golden records. -/
+def theorems : List Lean.Name := [
+  ``Concrete.BIR.decode_encode,
+  ``Concrete.BIR.run_progress,
+  ``Concrete.BIR.behaviour_diverges_iff,
+  ``Concrete.Backend.LCB.Proof.adapter_correct
+]
+
+/-- The premise's row in Concrete/README.md's open-premise table (a generated view). -/
+def Premise.tableRow (p : Premise) : String :=
+  s!"| {p.id} | {p.trust.name} | {p.retiredBy} |"
+
+def Premise.line (p : Premise) : String :=
+  s!"premise {p.id} [{p.trust.name}] retired-by: {p.retiredBy} :: {p.statement}"
+
+open Lean in
+/-- The trusted-base report: one line per premise, then for each theorem its sorted axioms, then
+    each axiom once with its type (so an axiom restated under the same name changes the report). -/
+def report (thms : List Name) : CoreM (List String) := do
+  let mut lines := all.map Premise.line
+  let mut seen : Array Name := #[]
+  for n in thms do
+    let axs := (← collectAxioms n).qsort Name.lt
+    lines := lines ++ [s!"theorem {n} axioms: {", ".intercalate (axs.map toString).toList}"]
+    for a in axs do
+      unless seen.contains a do seen := seen.push a
+  for a in seen.qsort Name.lt do
+    let ty ← Meta.MetaM.run' (PrettyPrinter.ppExpr (← getConstInfo a).type)
+    lines := lines ++ [s!"axiom {a} : {toString ty}"]
+  return lines
+
+end Concrete.Premises
+import Lean.Elab.Command
+import Concrete
+
+/-!
+Printer for the slice-0 trusted-base golden (`scripts/checks/slice0_trusted_base.sh`, README gate
+9). PROVISIONAL: it stands in for `concrete facts` until the compiler's command line exists.
+
+`lake env lean scripts/checks/slice0_trusted_base.lean` prints `Concrete.Premises.report` of the
+headline theorems: every open premise of the registry, each theorem's axioms, and each axiom's type.
+-/
+
+open Lean Elab Command Concrete.Premises in
+#eval show CommandElabM Unit from do
+  for l in ← liftCoreM (report theorems) do
+    IO.println l
+import Concrete
+
+/-!
+Prints the rows of Concrete/README.md's open-premise table from the registry
+(`Concrete.Premises.all`, `Premise.tableRow`), for `scripts/checks/slice0_trusted_base.sh`. PROVISIONAL.
+-/
+
+#eval do
+  for p in Concrete.Premises.all do
+    IO.println p.tableRow
+#!/usr/bin/env bash
+# Slice-0 trusted-base golden (PROVISIONAL, Concrete/README.md gate 9). The trusted base, printed
+# by scripts/checks/slice0_trusted_base.lean (until `concrete facts` exists): the premise registry
+# Concrete/Premises.lean (the one list of open premises), each headline theorem's axioms and each
+# axiom's type, followed by the Lean toolchain and every Lake pin, must equal
+# tests/golden/slice0_trusted_base.txt byte for byte. A premise added, removed or reworded (id,
+# trust class, what retires it, statement), a headline theorem gaining an axiom (sorryAx
+# included), an axiom restated, or a toolchain or pin change fails until the golden is updated.
+# The README's open-premise table is a generated view: it must equal the registry's rendering
+# (scripts/checks/slice0_premise_table.lean).
+#
+# Controls: the comparison must reject the golden with a premise line removed, reworded, or with an
+# extra axiom; the printer must fail on a Lean file that prints and then errors; the report must
+# list a theorem's own axiom with its type (a control file declaring one); the table check must
+# reject a drifted table.
+#
+# usage: slice0_trusted_base.sh [update]. Run inside the nix devshell, from the repository root;
+# `update` rewrites the golden (review the diff before committing it).
+set -euo pipefail
+# shellcheck source=scripts/checks/lib/slice0_common.sh
+source scripts/checks/lib/slice0_common.sh
+golden=tests/golden/slice0_trusted_base.txt
+
+# print_lean FILE OUT: elaborate FILE (bounded, capped) and write its stdout to OUT; fails (with
+# the bounded diagnostics) when Lean fails, times out, or prints more than 1 MiB.
+print_lean() {
+  local rc=0
+  bounded_run -i /dev/null 600 -- "${capped[@]}" lake env lean "$1" >"$2.raw" 2>"$2.err" || rc=$?
+  if [ "$rc" != 0 ]; then
+    bounded_is_incomplete "$rc" && echo "slice0_trusted_base: $1: INCOMPLETE (timed out)" >&2
+    head -c 20000 "$2.raw" "$2.err" >&2
+    return 1
+  fi
+  cap_out <"$2.raw" >"$2"
+}
+
+# current OUT: the whole trusted base into OUT; fails if any step fails.
+current() {
+  print_lean scripts/checks/slice0_trusted_base.lean "$1.lean" || return 1
+  [ -s "$1.lean" ] || { echo "slice0_trusted_base: the printer printed nothing" >&2; return 1; }
+  { cat "$1.lean"; printf 'lean-toolchain %s\n' "$(head -c 200 lean-toolchain)"; } >"$1" || return 1
+  python3 -I -c 'import json,sys
+for p in json.load(open(sys.argv[1]))["packages"]: print("pin", p["name"], p["rev"])' \
+    lake-manifest.json | cap_out >>"$1" || return 1
+}
+
+if ! current "$work/current"; then
+  echo "FAIL slice0_trusted_base: printing the trusted base failed"
+  exit 1
+fi
+if [ "${1:-}" = update ]; then
+  mkdir -p "$(dirname "$golden")"
+  cp "$work/current" "$golden"
+  echo "slice0_trusted_base: golden updated; review: git diff -- $golden"
+  exit 0
+fi
+
+fail=0
+if cmp -s "$golden" "$work/current"; then
+  echo "ok   trusted base equals $golden"
+else
+  echo "FAIL trusted base differs from $golden (run with update after review):"
+  diff "$golden" "$work/current" | head -c 20000 || true
+  fail=1
+fi
+
+# The README's open-premise table: the rows after its header and separator, up to the first line
+# that is not a row; fails when the table is missing.
+readme_rows() {
+  awk '/^\*\*The open premises for slice 0\*\*/{h=1; next}
+       h==1 && /^\| Premise \| Trust class \| Retired by \|$/{h=2; next}
+       h==2 && /^\|---\|---\|---\|$/{h=3; next}
+       h==3 && /^\|/{print; n++; next}
+       h==3{exit}
+       END{if (n == 0) exit 1}' "$1"
+}
+if ! print_lean scripts/checks/slice0_premise_table.lean "$work/rows"; then
+  echo "FAIL printing the registry's table rows"; fail=1
+elif readme_rows Concrete/README.md >"$work/readme_rows" && cmp -s "$work/rows" "$work/readme_rows"; then
+  echo "ok   README's open-premise table equals the registry"
+else
+  echo "FAIL README's open-premise table differs from the registry (Concrete/Premises.lean):"
+  diff "$work/readme_rows" "$work/rows" | head -c 20000 || true
+  fail=1
+fi
+
+# Controls.
+differs() { # differs NAME FILE: FILE must not equal the current trusted base
+  if cmp -s "$2" "$work/current"; then echo "FAIL control: comparison accepts $1"; fail=1
+  else echo "ok   control: comparison rejects $1"; fi
+}
+sed '1d' "$work/current" >"$work/c1"; differs "a premise removed" "$work/c1"
+sed '1s/$/ (reworded)/' "$work/current" >"$work/c2"; differs "a premise reworded" "$work/c2"
+sed '0,/^theorem /s/^\(theorem .*\)$/\1, sorryAx/' "$work/current" >"$work/c3"
+differs "an extra axiom" "$work/c3"
+mkdir -p "$work/ctl"
+printf '#eval IO.println "premise"\n#eval (throw (IO.userError "control") : IO Unit)\n' >"$work/ctl/fails.lean"
+if print_lean "$work/ctl/fails.lean" "$work/ctl/fails.out" 2>/dev/null; then
+  echo "FAIL control: the printer accepts a Lean file that errors"; fail=1
+else echo "ok   control: the printer fails on a Lean file that errors"; fi
+cat >"$work/ctl/axiom.lean" <<'EOF'
+import Lean.Elab.Command
+import Concrete
+axiom slice0_control_axiom : 1 = 2
+theorem slice0_control : 1 = 2 := slice0_control_axiom
+open Lean Elab Command in
+#eval show CommandElabM Unit from do
+  for l in ← liftCoreM (Concrete.Premises.report [``slice0_control]) do IO.println l
+EOF
+if print_lean "$work/ctl/axiom.lean" "$work/ctl/axiom.out" &&
+   grep -qx 'theorem slice0_control axioms: slice0_control_axiom' "$work/ctl/axiom.out" &&
+   grep -qx 'axiom slice0_control_axiom : 1 = 2' "$work/ctl/axiom.out"; then
+  echo "ok   control: the report lists a theorem's axiom with its type"
+else echo "FAIL control: the report misses a theorem's axiom: $(head -c 2000 "$work/ctl/axiom.out" 2>/dev/null)"; fail=1; fi
+
+sed 's/^| P_rt | implementation | /| P_rt | toolchain | /' Concrete/README.md >"$work/ctl/readme"
+if readme_rows "$work/ctl/readme" >"$work/ctl/rows" && cmp -s "$work/rows" "$work/ctl/rows"; then
+  echo "FAIL control: the table check accepts a drifted table"; fail=1
+else echo "ok   control: the table check rejects a drifted table"; fi
+
+bounded_summary
+[ "$fail" = 0 ] && echo "PASS slice0_trusted_base" || { echo "FAIL slice0_trusted_base"; exit 1; }
+
+exec
+/bin/bash -lc "cat tests/golden/slice0_trusted_base.txt; cat scripts/checks/lib/slice0_common.sh; rg -n 'gate 9|P_adapter|P_rt|premise|trusted' Concrete/README.md; nl -ba scripts/checks/lib/stack_bound.py | head -110" in /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/gates-review11
+ succeeded in 0ms:
+premise P_lex [implementation] retired-by: `lex_correct` :: every token list the lexer returns for a source is one the source lexes to
+premise P_parse [implementation] retired-by: the generic table-parser theorem :: every tree the parser returns for a token list is one the grammar derives from it
+premise P_print [implementation] retired-by: an LLVM-IR semantics; not planned for slice 0 :: the printed LLVM text of a WF BIR means at most the BIR behaviour, encoded
+premise P_adapter [implementation] retired-by: `adapter_correct` (proved for accepted programs), once `emit` represents adaptation failure (or the contract is restricted to accepted programs) and the theorem fills `NativePremises lcb` :: the adapted LCB function of a WF BIR means at most the BIR behaviour, encoded
+premise P_toolchain[llvm] [toolchain] retired-by: not planned :: every result the linked LLVM body produces is one its text means
+premise P_toolchain[lcb] [toolchain] retired-by: LCB's own proofs (C01–C03 and beyond) :: every result the linked LCB body produces is one its function means (LCB's named trust boundaries)
+premise P_rt [implementation] retired-by: a proof of the decoding entry against a libc model; not planned for slice 0 :: every launch of an image built from a WF BIR that is not killed has the behaviour of some result its body produces (decode w for a returned word w, diverges for divergence)
+premise P_trap_site [implementation] retired-by: the same runtime-entry proof (owner, 2026-11-06: a premise now) :: a launch whose body returns 256 + i writes exactly trapLine tbl[i] and a newline on fd 2
+premise P_launch [environment] retired-by: not planned :: an admitted launch of a WF image within the frame bound is never killed, and fd 2 accepts the trap line
+premise P_live [environment] retired-by: not planned :: an admitted launch happens and has a behaviour
+theorem Concrete.BIR.decode_encode axioms: propext, Quot.sound
+theorem Concrete.BIR.run_progress axioms: propext, Classical.choice, Quot.sound
+theorem Concrete.BIR.behaviour_diverges_iff axioms: propext, Classical.choice, Quot.sound
+theorem Concrete.Backend.LCB.Proof.adapter_correct axioms: propext, Classical.choice, Quot.sound
+axiom propext : ∀ {a b : Prop}, (a ↔ b) → a = b
+axiom Classical.choice : {α : Sort u} → Nonempty α → α
+axiom Quot.sound : ∀ {α : Sort u} {r : α → α → Prop} {a b : α}, r a b → Quot.mk r a = Quot.mk r b
+lean-toolchain leanprover/lean4:v4.34.1
+pin «lean-compiler-backend» 4bea4b3ffd8a43a73a0016012d865044067b3275
+# shellcheck shell=bash
+# Shared machinery of the slice-0 example gates (PROVISIONAL): slice0_backends.sh (gates 4, 6, 6a)
+# and slice0_artifacts.sh (gates 10, 11, 12). Source it from the repository root, inside the nix
+# devshell, with `set -euo pipefail`. It builds the compiler and LCB's command line under the
+# gate's limits (lib/limits.sh: an address-space cap of SLICE0_GATE_MEM_GB GiB, default 64; 0 for
+# a gate whose executables under test need no cap, slice0_artifacts.sh) and defines:
+#   capped (a command prefix, an array): run under a 64 GiB address-space cap of its own, so
+#     every build and analysis command is capped whatever the gate's cap;
+#   root, work (removed on exit), lcb, target, emitter (the Lean emitter command, an array);
+#   observe EXE OUT SECS RETRY [MEM_MB [ENV...]]: run EXE under bounded_run (and limited_exec.sh
+#     MEM_MB, default 1024) with ENV assignments; OUT.status (status or "incomplete"),
+#     OUT.stdout, OUT.stderr;
+#   judge EXPECTED_DIR OBS: the observation OBS.* equals the expectation, byte for byte;
+#   build NAME LOG CMD...: run CMD, or print LOG and fail the gate;
+#   emit_examples: the example names, one per line, failing if there are none;
+#   cap_out: copy stdin to stdout, failing above 1 MiB: every command output a gate captures
+#     into a variable goes through it, so no producer can grow the gate's shell (which may run
+#     with no address-space cap, see SLICE0_GATE_MEM_GB) without bound.
+root=$(pwd)
+work=$(mktemp -d)
+trap 'rm -rf "${work:?}"' EXIT
+BOUNDED_PARENT="$work"
+# shellcheck source=scripts/checks/lib/bounded.sh
+source scripts/checks/lib/bounded.sh
+[ "$BOUNDED_HAVE_WATCHDOG" = 1 ] || { echo "slice0: python3 is required for bounded runs" >&2; exit 2; }
+# shellcheck source=scripts/checks/lib/limits.sh
+source scripts/checks/lib/limits.sh
+gate_limits "${SLICE0_GATE_MEM_GB:-64}" 40000
+capped=(bash "$root/scripts/checks/lib/limited_exec.sh" 65536)
+"${capped[@]}" timeout -k 30 1800 lake build Concrete lean-compiler-backend/lcb >/dev/null
+lcb="$root/.lake/packages/lean-compiler-backend/.lake/build/bin/lcb"
+case "$(uname -s)-$(uname -m)" in
+  Linux-x86_64) target=x86_64-linux ;;
+  Linux-aarch64) target=aarch64-linux ;;
+  Darwin-arm64) target=aarch64-macos ;;
+  *) echo "slice0: unsupported host $(uname -s)-$(uname -m)" >&2; exit 2 ;;
+esac
+emitter=("${capped[@]}" timeout -k 10 120 lake env lean --run scripts/checks/slice0_bir.lean)
+
+observe() {
+  local rc=0 mem=${5:-1024}
+  local envs=("${@:6}")
+  bounded_run -i /dev/null -r "$4" "$3" -- env ${envs[@]+"${envs[@]}"} \
+    bash "$root/scripts/checks/lib/limited_exec.sh" "$mem" "$1" \
+    >"$2.stdout" 2>"$2.stderr" || rc=$?
+  if bounded_is_incomplete "$rc"; then echo incomplete >"$2.status"; else echo "$rc" >"$2.status"; fi
+}
+
+judge() {
+  cmp -s "$1/status" "$2.status" && cmp -s "$1/stderr" "$2.stderr" && [ ! -s "$2.stdout" ]
+}
+
+build() {
+  local name=$1 log=$2; shift 2
+  "$@" >"$log" 2>&1 || { cat "$log" >&2; echo "slice0: $name: build failed: $*" >&2; exit 1; }
+}
+
+cap_out() {
+  local LC_ALL=C out
+  out=$(head -c 1048577; echo x)
+  out=${out%x}
+  [ "${#out}" -le 1048576 ] || { echo "slice0: captured output over 1 MiB" >&2; return 1; }
+  printf '%s' "$out"
+}
+
+emit_examples() {
+  local names
+  names=$("${emitter[@]}" list | cap_out) || { echo "slice0: listing the examples failed" >&2; exit 1; }
+  [ -n "$names" ] || { echo "slice0: no examples listed" >&2; exit 1; }
+  printf '%s\n' "$names"
+}
+7:This document describes **the compiler**: its stages, IRs, proof strategy, premises and gates. Language rules are not restated here. They live in `ConcreteSpec`, and this document links to them:
+17:Each arrow is a total Lean function of the compiler. **Proved** means a kernel-checked theorem. **Premise** means a field of one of the two premise structures (frontend, native) in the one file `Concrete/Premises.lean`.
+22:  ▼                                   until done: premise P_lex (implementation)
+25:  ▼                                   premise P_parse (implementation) until the generic theorem lands
+48:  ▼ (unverified: premise P_print)              ▼ (first backend proof target: adapter_correct
+49:.ll text  (`out.ll`)                           │  against LCB's imported semantics; P_adapter until proved)
+51:  │ (premise P_toolchain[llvm])                │ to LCB IN PROCESS (no text on this path);
+53:  ▼                                            ▼ (premise P_toolchain[lcb]: LCB's named trust boundaries)
+55:  │ run: premises P_launch, P_live (environment), under the target profile
+107:The **LLVM printer** is unverified and stays a premise (`P_print`) until an LLVM-IR semantics exists.
+109:The **BIR → LCB-IR adapter** is the first backend proof target. `adapter_correct` states that the adapter's output, under **LCB's own semantics** (`LeanCompilerBackend.Verified.Source`, the `ssa-int-v2` profile, imported and never restated), has the BIR behaviour. It is proved (`Proof.adapter_correct`) for every WF program the adapter accepts (`adapt p = .ok f`; the adapter refuses the rest, so no artifact exists for them). It supplies semantic preservation for successful adaptation; `P_adapter` stays in the premise list until the backend contract is resolved: `lcb`'s `emit` must represent adaptation failure (`adapt` returns `Except String Source.Function`) or the contract must be restricted to accepted programs, and the theorem composed into `NativePremises lcb`. The trusted-base golden (gate 9) then records the retirement.
+140:A fixed runtime entry, `Backend/Runtime.lean`, is emitted per backend as LLVM text and as QBE text for LCB's command line (the runtime is not on the adapter's proof path; it is premise `P_rt`). It calls `concrete_body`, and then:
+144:The decoding lives in this one place for both backends. Its correctness is premise `P_rt` (implementation, over libc `write`/`_exit`): an image whose `concrete_body` returns word `w` has the behaviour `decode w`, and a body that diverges gives a run that diverges.
+161:- The gates and runners (conformance, the two differentials, certificates, the premise registry, negative controls) are files in the existing `scripts/checks/`. No `scripts/compiler/` is added.
+187:  Premises.lean        THE one file of premises, plus the execution-trust inventory
+201:- The stage table, the premise table and the fact-kind table in this README become **generated views** of the Lean registries in `Stages.lean`, `Premises.lean` and `Facts.lean` once the code exists. A gate fails when a view drifts from its registry.
+239:The premises fall into two separate structures, because they are different kinds of claims.
+275:    semantics, so the emit obligation is a theorem target. For LLVM it is a parameter (a premise). -/
+306:      LLVM: premise P_print. LCB: premise P_adapter until `adapter_correct` is proved, after
+307:      which this field is filled by the theorem and the premise is deleted. -/
+313:  /-- P_rt (implementation): the runtime entry decodes. A launch whose body returns `w` has the
+330:Every premise is used in the composition:
+339:**The open premises for slice 0** (a generated view of the registry `Concrete/Premises.lean`, `Premises.all`, which also states each premise; gate 9 fails when this table drifts from it):
+346:| P_adapter | implementation | `adapter_correct` (proved for accepted programs), once `emit` represents adaptation failure (or the contract is restricted to accepted programs) and the theorem fills `NativePremises lcb` |
+349:| P_rt | implementation | a proof of the decoding entry against a libc model; not planned for slice 0 |
+350:| P_trap_site | implementation | the same runtime-entry proof (owner, 2026-11-06: a premise now) |
+356:**The trap site the executable reports is covered by premise `P_trap_site`** (owner, 2026-11-06). `trap_site_correct` proves the site at IR level. The executable's report is assumed: `Native` gains `ReportsSite : TargetProfile → Image → SiteId → Prop`, and a field states that a launch whose body returns `256 + i` writes exactly `Runtime.trapLine tbl[i]` and a newline on fd 2 (the kind, the `Loc` and the site id of entry `i`). Gates 4 and 6 test it. A proof of the runtime entry retires it, together with `P_rt`.
+431:3. **Frontend premises:** these are claims about fixed code, not something a model can satisfy, so no model witness applies. They are discharged per compilation (next section), and universally once `lex_correct` and `parse_correct` land.
+455:`Lexes`, `Derives` and `Elab` each have a Boolean checker over explicit witnesses, with a one-way soundness lemma (`lexesB_sound` and so on, giving `Denotes src p`). So `cert_denotes` discharges the frontend premises **for this compilation**, and `compile_correct_cert` needs only `NativePremises`.
+499:- compares the premise fields with a golden list;
+500:- compares the digests of the definitions those premises mention (`Behaviour`, the `behaviour` functions, `WF`, `frameSlots`, `TargetProfile`, `Native`) with a golden file.
+502:Changing what a premise means therefore fails CI, just like adding one: holes only shrink.
+518:**The scope is explicit.** Each fact is a **source/Core fact** or an **artifact fact**. Artifact facts are about the executable, which includes the C runtime, startup and the linker. They are never unconditional in slice 0: at best they are `conditional` on the native premises, and otherwise `notEstablished`.
+527:| Trapping (artifact, behavioural) | `conditional` on the backend premises: no run traps. |
+528:| Trap code present (artifact, structural) | `notEstablished`: no artifact inspection yet. Behavioural premises allow unreachable trap code in an observationally equivalent image. |
+531:| Trusted / FFI / opaque (artifact) | `notEstablished`: no link-map or symbol-inventory evidence yet. Behavioural premises can't establish this, because an observationally equal image may still contain foreign code. |
+533:| Termination (artifact) | `conditional`, on the backend's own premises: LLVM `P_print, P_toolchain[llvm], P_rt, P_launch, P_live`; LCB `P_adapter` (until `adapter_correct`), `P_toolchain[lcb], P_rt, P_launch, P_live`. |
+543:- the digests of the compiler, spec, target, backend (LLVM or LCB, with the pinned LCB rev) and artifact. Artifact facts are per backend artifact, and their premise identities are per backend;
+581:9. **Trusted base** (owner, 2026-11-07): a golden test that `concrete facts` prints exactly the spec's premise list, so a premise added, removed or reworded anywhere fails until the golden is updated with it. Implemented provisionally in `scripts/checks/slice0_trusted_base.sh`: until `concrete facts` exists, `scripts/checks/slice0_trusted_base.lean` prints `Premises.report`: the premise registry `Concrete/Premises.lean`, the sorted axioms of each headline theorem (`Premises.theorems`) and each axiom's type; the gate appends the Lean toolchain and the Lake pins, and the result must equal `tests/golden/slice0_trusted_base.txt` byte for byte. The README's open-premise table must equal the registry's rendering (`Premises.tableRow`). Controls cover the comparison, a failing printer, the axiom collection and a drifted table. The statements are text until `FrontendPremises` and `NativePremises` land as Lean structures; each entry then names its field.
+584:12. **Stack bound** (owner, 2026-11-07; implemented in the same script and `lib/stack_bound.py`, except the `aarch64-macos` run check, **open**): a stack-bound fact for each example, derived from the final artifact (the linked executable, not the IR) for both backends, and checked against a run. The analysis follows every path of the Concrete-owned code, instruction by instruction from an explicit set of modelled instructions, (`main`, `concrete_rt_write_all`, `concrete_body`) over the disassembly's control-flow graph, tracking the stack and frame pointers' depth below `main`'s entry and every byte addressed relative to them (so the red zone), and fails closed on anything it does not model (an instruction outside the set, another stack-pointer write, frame- or link-register writeback, an indirect branch or call, a stack pointer copied out, an indexed stack address, a stack read of bytes the function has not itself written on every path since its last call (so no stale saved frame pointer is ever loaded), a saved slot read other than by the modelled restore, two depths meeting, recursion, a call to a function neither owned nor a PLT/stub). The external calls (`write`, `_exit`, `abort`) are listed with the depth at their entry; their own use, and that `_exit` and `abort` do not return, are the libc premise. On x86-64 Linux the run check single-steps the owned code under the pinned gdb and requires the measured stack-pointer depth to be within the bound, for a complete run only (stopped first at `main`, back at each external call's return address, no signal, the expected exit status). On `aarch64-macos` the bound is derived but the run check is not yet implemented (no debugger in the pinned shell; LLDB from Xcode is the candidate). `stack.tsv` records bound, measurement and externals.
+592:- an extra or strengthened premise;
+593:- a changed premise-definition digest;
+612:4. The trap site that the executable reports is a named premise now, `P_trap_site`, which a proof retires later.
+624:- **Retire premises:**
+627:  - `adapter_correct` (P_adapter, a slice-0 milestone);
+628:  - a proof of the decoding entry against a libc model (P_rt).
+634:  - a link-map and symbol inventory, for trusted/FFI/opaque code;
+642:- **Generated views:** the stage, premise and fact tables here become views of the Lean registries, gated against drift.
+666:LCB is our own project; these are tasks for it, not premises to keep. Checked against the pinned rev `4bea4b3` (LCB main after PR #1: wire packets at header v2 with semantics `ssa-int-v2` / `a64-leaf-v2`; packets with the old header or old semantics identifiers are refused; `CodeInput.version` stays 1).
+668:**For the trusted base (now):**
+683:- An LLVM-IR semantics. The LLVM meaning `M` stays a premise parameter until one exists, and then `P_print` becomes a theorem.
+     1	#!/usr/bin/env python3
+     2	"""Stack bound of a slice-0 executable, from its disassembly (README gate 12). PROVISIONAL.
+     3	
+     4	usage: stack_bound.py ARCH DISASM             -> prints `bound N` and one `external SYM DEPTH` per call
+     5	       stack_bound.py ARCH DISASM --ranges    -> also prints `range SYM LO HI` per Concrete function
+     6	ARCH is x86_64 or aarch64; DISASM is `llvm-objdump -d --no-show-raw-insn` output of the LINKED
+     7	executable (x86-64 in Intel syntax).
+     8	
+     9	The Concrete-owned code is `main` (the runtime entry), `concrete_rt_write_all` and the body
+    10	(`concrete_body`), with or without the Mach-O underscore. Each owned function is analysed over its
+    11	control-flow graph, from its entry, as a dataflow fixpoint over an abstract state (St): the stack
+    12	pointer's depth below the entry stack pointer, the frame pointer's value, the saved slots and the
+    13	link register (equal on every path into an instruction), and the stack bytes the function has
+    14	written (the intersection over those paths). A byte at depth n lies n bytes below the entry stack
+    15	pointer.
+    16	
+    17	The bound is the deepest byte the function's stack pointer reaches or any of its instructions
+    18	addresses through the stack or frame pointer (so the red zone, used below the stack pointer without
+    19	moving it, is covered), with each owned callee's own bound added at its call, and each external
+    20	function (libc's `write`, `_exit`, `abort`) counted at its entry depth.
+    21	
+    22	Why addresses cannot escape this accounting: memory is addressed only through the stack or frame
+    23	pointer (accounted), PC-relatively within a fixed reach of the code (x86 `rip` with a displacement
+    24	up to PC_REACH; on AArch64 a register holding an adrp/adr result within PC_REACH, plus at most one
+    25	add immediate, on every path since the last call, with a bounded offset and no writeback) or
+    26	through the x86 thread-pointer segments. Any other register may hold a stack address (main's argv
+    27	and envp, a value an external function left), so no access goes through one. The analysis also refuses taking a stack address as a value (`lea` of one, the stack or frame
+    28	pointer copied, stored or used in arithmetic, except the modelled frame setup), so only the frame
+    29	save (`push rbp`, `stp x29, x30`) puts one in memory. Saved slots may be read only
+    30	by the modelled restore (`pop rbp`, `leave`, `ldp x29, x30` with base sp). Any other stack read
+    31	must be of bytes the function itself wrote, on every path, since its last call: so no stale value
+    32	(a callee's or the caller's saved frame pointer, libc's scratch) is ever loaded. Accesses must lie
+    33	below the entry stack pointer (never the return address or the caller's frame), returns must be at
+    34	depth 0 with the caller's frame pointer restored and, on AArch64, with the link register holding
+    35	the return address.
+    36	
+    37	The premises (outside the bound, listed in the gate's report): the stack lies farther than
+    38	PC_REACH + 4095 + A64_OFF_REACH bytes from the image's code, and the thread-pointer block (fs/gs)
+    39	is not on the stack; the external functions' own stack use; that `_exit` and `abort` do not return (a path ends at a call to one); that external
+    40	functions follow the ABI's callee-saved rule (the frame pointer and stack pointer preserved).
+    41	
+    42	Fail closed: an instruction outside the modelled set (X86_PLAIN, A64_PLAIN and the control
+    43	transfers), any of the refusals above, an unmodelled stack-pointer write, an indirect branch, call
+    44	or return, a branch leaving its function, two different states meeting, recursion, or a call to a
+    45	function that is neither Concrete-owned nor a PLT/stub symbol is an error (exit 1), never a bound.
+    46	"""
+    47	import re
+    48	import sys
+    49	
+    50	OWNED = ("main", "concrete_body", "concrete_rt_write_all")
+    51	# External functions that do not return (part of the libc premise): a path ends at a call to one.
+    52	NORETURN = ("exit", "_exit", "_Exit", "abort")
+    53	ENTRY = "entry"
+    54	
+    55	
+    56	class Refuse(Exception):
+    57	    pass
+    58	
+    59	
+    60	def owned_name(sym):
+    61	    s = sym[1:] if sym.startswith("_") and sym[1:] in OWNED else sym
+    62	    return s if s in OWNED else None
+    63	
+    64	
+    65	def parse(path):
+    66	    """Functions: name -> list of (addr, mnemonic, operands). Also the set of stub symbols."""
+    67	    funcs, cur, stubs, section = {}, None, set(), ""
+    68	    head = re.compile(r"^([0-9a-f]+) <([^>]+)>:$")
+    69	    inst = re.compile(r"^\s*([0-9a-f]+):\s*(\S+)\s*(.*)$")
+    70	    for line in open(path, encoding="utf-8", errors="replace"):
+    71	        line = line.rstrip("\n")
+    72	        if line.startswith("Disassembly of section"):
+    73	            section = line.split()[-1].rstrip(":")
+    74	            cur = None
+    75	            continue
+    76	        m = head.match(line)
+    77	        if m:
+    78	            name = m.group(2)
+    79	            if section in (".plt", ".plt.sec", ".plt.got", "__stubs") or name.endswith("@plt"):
+    80	                stubs.add(name)
+    81	                cur = None
+    82	            else:
+    83	                cur = name
+    84	                funcs.setdefault(name, [])
+    85	            continue
+    86	        m = inst.match(line)
+    87	        if m and cur is not None:
+    88	            ops = m.group(3).split("#", 1)[0] if ARCH == "x86_64" else m.group(3).split("//")[0]
+    89	            funcs[cur].append((int(m.group(1), 16), m.group(2).lower(), ops.strip()))
+    90	    return funcs, stubs
+    91	
+    92	
+    93	def target_of(ops):
+    94	    m = re.search(r"0x([0-9a-f]+)\s*<([^>]+)>", ops) or re.search(r"\b([0-9a-f]+)\s*<([^>]+)>", ops)
+    95	    return (int(m.group(1), 16), m.group(2)) if m else (None, None)
+    96	
+    97	
+    98	def imm(s):
+    99	    t = s.strip().lstrip("#")
+   100	    try:
+   101	        return int(t, 16) if t.lower().startswith(("0x", "-0x")) else int(t)
+   102	    except ValueError:
+   103	        raise Refuse(f"not an immediate: {s}") from None
+   104	
+   105	
+   106	class St:
+   107	    """`d`: the stack pointer's depth. `fp`: the frame pointer's value: a depth (int), ENTRY (the
+   108	    caller's, which every return must restore) or None (unknown). `saved`: slots holding a saved
+   109	    frame pointer or link register, (lowest, highest, tag) in byte depths, tag ("fp", value) or
+   110	    ("lr", whether it is this function's return address); kept after the stack pointer moves past
+
+codex
+The new provenance levels appear to close the loop finding: a second add removes provenance, and joins intersect the register-level pairs. In the trusted-base gate, explicit error returns address the masked printer failure, and README rows are now compared in full. I’m checking the remaining instruction cases and premise statements before assigning verdicts.
+exec
+/bin/bash -lc "sed -n '239,338p' Concrete/README.md; cat scripts/checks/lib/bounded.sh; nl -ba Concrete/Premises.lean | tail -65; nl -ba scripts/checks/slice0_trusted_base.sh | head -85" in /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/gates-review11
+ succeeded in 0ms:
+The premises fall into two separate structures, because they are different kinds of claims.
+
+```lean
+/-- Claims about fixed frontend implementations, used only by the universal theorem.
+    Per compilation, the certificate discharges both by kernel `decide` (below). -/
+structure FrontendPremises : Prop where
+  /-- P_lex (implementation), until `lex_correct` lands. -/
+  lex   : ∀ src toks, Lex.lex src = .ok toks → Surface0.Lexes src toks
+  /-- P_parse (implementation), until the generic table-parser theorem lands. -/
+  parse : ∀ toks ast, Parse.parse toks = .ok ast → Surface0.Derives toks ast
+
+/-- The target profile: the pinned triple, the toolchain store paths, the stack budget, and
+    `maxSlots`, the largest BIR frame the profile vouches for under that budget. `compile` refuses
+    a program whose frame exceeds `maxSlots` ("unsupported: exceeds the profile's frame bound").
+    `compile` also refuses a body that LCB's admission profile would reject (at most 64 blocks, 480
+    definitions and a 4080-byte frame), so every accepted program has an admitted LCB form. -/
+structure TargetProfile where
+  triple : String; toolchain : String; stackBytes : Nat; maxSlots : Nat
+
+/-- What the body function produces: a 32-bit result word, or divergence. -/
+inductive BodyResult | returns (w : BitVec 32) | diverges | stuck
+
+/-- The encoding, parameterized by the program's trap-site table `tbl` (one definition, shared by
+    both backends and the runtime). `exited c` (c < 256) ↦ c; a trap at site index i ↦ 256 + i.
+    `tbl` is emitted by Runtime.lean and maps i to (kind, `SiteId`, span); i < tbl.size < 2^31 − 256.
+    `decode tbl` maps a word below 256 to `exited`, a word 256 + i with i < tbl.size to
+    `trapped (tbl.kind i)`, and every other word to `stuck` (invalid). Proved: `decode_encode` for
+    every encodable behaviour, and `emit_encodes`: the body of a WF BIR returns only valid words. -/
+def encode (tbl : SiteTable) : BIR.Outcome → Option (BitVec 32) := ...
+def decode (tbl : SiteTable) : BitVec 32 → Behaviour := ...
+def BodyResult.behaviour (tbl : SiteTable) : BodyResult → Behaviour
+  | .returns w => decode tbl w | .diverges => .diverges | .stuck => .stuck
+-- Everywhere below, `r.behaviour` abbreviates `r.behaviour b.sites` for the BIR `b` concerned.
+
+/-- A backend: the total Lean function from BIR to the body text a native toolchain consumes, and
+    what that text means as a `BodyResult`. For LCB, `Means` is DEFINED from LCB's imported
+    semantics, so the emit obligation is a theorem target. For LLVM it is a parameter (a premise). -/
+structure Backend where
+  Text : Type
+  emit : BIR.Program → Text
+  Means : Text → BodyResult → Prop
+
+def llvm (M : String → BodyResult → Prop) : Backend := ⟨String, LLVM.print, M⟩
+/-- The emitted LCB text is the adapted body PAIRED with its site table, so the table that
+    decodes the result is part of the emitted artifact. (The LLVM text already contains its
+    table, and printer injectivity covers it.) -/
+def lcb : Backend := ⟨LCB.Source.Function × SiteTable, fun b => (LCB.adapt b, b.sites),
+  fun (f, _) r => LCB.bodyResult f r⟩
+/-- From LCB's own source semantics (`LeanCompilerBackend.Verified.Source`, imported, never
+    restated), with no arguments: `returns w` iff `Source.HasBehavior f #[] (.returned (.word w))`,
+    `diverges` iff `Source.HasBehavior f #[] .diverges`, and `stuck` otherwise. "Otherwise" covers
+    an `initial` fault, a `.long` return and a stuck fault. It is covered by the digest gate. -/
+def LCB.bodyResult (f : LCB.Source.Function) (r : BodyResult) : Prop := ...
+
+/-- The native world for one backend, a parameter so its consistency is witnessable. -/
+structure Native (B : Backend) where
+  Image : Type
+  Built : TargetProfile → B.Text → Image → Prop        -- image: body + runtime entry, pinned toolchain
+  BodyRuns : TargetProfile → Image → BodyResult → Prop -- what the linked body returns in a launch
+  Runs : TargetProfile → Image → Behaviour → Prop      -- the whole launch's behaviour
+
+/-- `Behaviour` gains the native-only `refused` (startup refusal, status 125) and `killed`.
+    No model program has either: slice 0 has no grants. An ADMITTED launch (`T`) excludes
+    signals, ptrace and rlimits below `stackBytes`, and requires fd 2 to be open, writable and
+    not to block forever. -/
+structure NativePremises (B : Backend) (N : Native B) (T : TargetProfile) : Prop where
+  /-- emit (implementation): the body text means at most the BIR behaviour, encoded.
+      LLVM: premise P_print. LCB: premise P_adapter until `adapter_correct` is proved, after
+      which this field is filled by the theorem and the premise is deleted. -/
+  emit : ∀ b, b.WF → ∀ r, B.Means (B.emit b) r → r.behaviour = BIR.behaviour b
+  /-- P_toolchain[B] (toolchain): every result the linked body produces is one its text means.
+      LCB: LCB's own importer, lowering, assembler and linker, i.e. its named trust boundaries
+      (`docs/SEMANTICS.md`, "Target and environment assumptions"). -/
+  toolchain : ∀ b img r, b.WF → N.Built T (B.emit b) img → N.BodyRuns T img r → B.Means (B.emit b) r
+  /-- P_rt (implementation): the runtime entry decodes. A launch whose body returns `w` has the
+      behaviour `decode w`: it exits with w below 256; otherwise it writes the whole trap line to
+      fd 2 (looping on partial writes, ignoring write errors) and then exits 134 unconditionally.
+      A body that diverges gives a launch that diverges. The trap line's presence also relies on
+      the admitted-launch fd-2 condition, which belongs to P_launch, not here. -/
+  rt : ∀ b img β, b.WF → N.Built T (B.emit b) img → N.Runs T img β → β ≠ .killed →
+    ∃ r, N.BodyRuns T img r ∧ β = r.behaviour
+  /-- P_launch (environment, resources): an admitted launch of an image built from a WF BIR
+      within the profile's frame bound is never killed (stack, signals), and fd 2 accepts the
+      trap line. -/
+  launch : ∀ b img β, b.WF → b.frameSlots ≤ T.maxSlots →
+    N.Built T (B.emit b) img → N.Runs T img β → β ≠ .killed
+  /-- P_live (environment): an admitted launch happens and has a behaviour (maximal: a run that
+      never ends has behaviour `diverges`). -/
+  live : ∀ b img, b.WF → N.Built T (B.emit b) img → ∃ β, N.Runs T img β
+```
+
+Every premise is used in the composition:
+- `launch` excludes `killed`;
+- `rt` reduces the launch to the body's result;
+- `toolchain` takes that result to the text's meaning;
+- `emit` takes the meaning to the BIR behaviour;
+- `live` makes all of this non-vacuous for the image.
+
+There are two target profiles: `x86_64-linux` and `aarch64-macos` (LCB's first native proof profile). The LLVM backend runs on `x86_64-linux` (on concrete-ci-2) and as a cross-check on `aarch64-macos`. The LCB backend runs on both.
+
+#!/usr/bin/env bash
+# Bounded runs: a timeout is INCOMPLETE, never a failure and never a pass.
+#
+# The rule (docs/project/PROMOTION_PIPELINE.md, result vocabulary): a test that exceeds its time budget
+# has produced no observation. Under machine load a freshly linked binary or a compile can overrun
+# a budget sized for an idle machine (test_ssa.sh once reported hundreds of 5-second alarms as
+# failures), so a timeout is re-run once, alone, with a larger budget:
+#   - the re-run completes      -> its result is judged normally (pass or FAIL), recorded "recovered";
+#   - the re-run times out too  -> INCOMPLETE: not a pass, not a failure. A gate with an incomplete
+#                                  result exits nonzero, and a qualifying run contains none.
+#
+# Each attempt runs under lib/bounded_exec.py, which makes the command the leader of a new process
+# group, reports its outcome through a status file (never through the command's own streams, so
+# nothing the command prints can fake or hide a timeout) and, when the budget expires, sends SIGTERM
+# and then SIGKILL to the whole group, so no descendant outlives the attempt into the retry.
+#
+# Sourcing (`BOUNDED_PARENT="$TMP"; source scripts/checks/lib/bounded.sh`) gives the gate PRIVATE
+# state: a fresh directory (mktemp under BOUNDED_PARENT, else $TMPDIR) with an outcome file and a
+# log. Every sourcing creates its own directory, so nested or parallel gates never share state.
+# With BOUNDED_PARENT under the gate's own scratch directory, its cleanup removes the state too.
+#
+#   bounded_run [-i STDIN_FILE] [-r RETRY_SECS] SECS -- CMD [ARGS...]
+#     Runs CMD (an executable, not a shell function). Its stdout and stderr are buffered per
+#     attempt and only a COMPLETED attempt's output is written: an incomplete run writes nothing,
+#     so output-matching checks never pass on the partial output of a run that hung. Without -i the
+#     command inherits stdin, which a re-run cannot replay: callers that feed input pass -i.
+#     Returns CMD's status, or 124 when it timed out on both attempts or the runner reported no
+#     outcome. SECS and RETRY_SECS are positive decimal seconds. A command may itself exit
+#     124, so test with `bounded_is_incomplete "$rc"`, which also reads the outcome bounded_run
+#     recorded (this works across `( cd dir && bounded_run ... )` subshells; run one bounded_run
+#     at a time per sourcing). RETRY_SECS defaults to BOUNDED_RETRY_FACTOR (2) times SECS.
+#   bounded_summary
+#     Lists this gate's recovered and incomplete runs; gates print it before their final tally.
+#   bounded_watchdog SECS  -> sets the array TO for the watchdog form: "${TO[@]}" CMD [ARGS...]
+#     runs CMD through `bash bounded.sh SECS` in a separate process with the same retry; on a second
+#     timeout it writes no command output, prints "INCOMPLETE: ..." on stderr and exits 124. Its
+#     recovered and incomplete lines go to this gate's log (handed over on its command line).
+#   bounded_gate_status
+#     The end-of-gate verdict for a gate using the watchdog form: lists recovered, incomplete and
+#     runner-failed runs, removes the state directory, and returns 1 when any run was incomplete or
+#     the runner failed, so the gate exits nonzero whatever its own checks concluded from a hung
+#     command's empty output. Last line:
+#       bounded_gate_status && [ "$FAIL" -eq 0 ]
+#
+# If the runner itself fails (no outcome reported), the command's output is discarded and the run
+# is incomplete (status 124, a "runner-failed" log line): never a pass. If the runner is cancelled (the
+# gate is interrupted or terminated), it kills the command's group first.
+#
+# Without python3 commands run directly with no watchdog: one warning when the gate sources this
+# file, never inside a command's output, and the watchdog form then runs commands directly too.
+# Such a run is never incomplete.
+
+BOUNDED_RETRY_FACTOR="${BOUNDED_RETRY_FACTOR:-2}"
+if [[ "$BOUNDED_RETRY_FACTOR" =~ ^[0-9]+(\.[0-9]+)?$ ]] && awk -v f="$BOUNDED_RETRY_FACTOR" 'BEGIN { exit !(f + 0 >= 1) }'; then :
+else echo "bounded.sh: BOUNDED_RETRY_FACTOR must be a number >= 1; using 2" >&2; BOUNDED_RETRY_FACTOR=2; fi
+# _bounded_secs_ok S: S is a positive decimal number of seconds (fractions allowed).
+_bounded_secs_ok() { [[ "$1" =~ ^[0-9]+(\.[0-9]+)?$ ]] && awk -v s="$1" 'BEGIN { exit !(s + 0 > 0) }'; }
+# Fixed-point, trailing zeros trimmed: never scientific notation, which _bounded_secs_ok rejects.
+_bounded_mul() { awk -v s="$1" -v f="$2" 'BEGIN { r = sprintf("%.6f", s * f); sub(/0+$/, "", r); sub(/\.$/, "", r); print r }'; }
+BOUNDED_SH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")"
+BOUNDED_EXEC="$(dirname "$BOUNDED_SH")/bounded_exec.py"
+BOUNDED_DIR="$(mktemp -d "${BOUNDED_PARENT:-${TMPDIR:-/tmp}}/bounded.XXXXXX")"
+BOUNDED_OUTCOME_FILE="$BOUNDED_DIR/outcome"
+BOUNDED_LOG="$BOUNDED_DIR/log"
+# The watchdog form appends to its caller's log, handed over explicitly on its command line.
+if [ "${BASH_SOURCE[0]}" = "$0" ]; then
+  # A standalone watchdog removes its state however it ends.
+  trap 'rm -rf "$BOUNDED_DIR"' EXIT
+  [ -z "${BOUNDED_WATCHDOG_LOG:-}" ] || BOUNDED_LOG="$BOUNDED_WATCHDOG_LOG"
+fi
+: >> "$BOUNDED_LOG"
+BOUNDED_HAVE_WATCHDOG=1
+if ! command -v python3 >/dev/null 2>&1; then
+  BOUNDED_HAVE_WATCHDOG=0
+  [ "${BASH_SOURCE[0]}" = "$0" ] || echo "  warn python3 not found — commands run without a hang watchdog" >&2
+fi
+
+bounded_is_incomplete() {
+  [ "$1" = 124 ] && [ "$(cat "$BOUNDED_OUTCOME_FILE" 2>/dev/null)" = incomplete ]
+}
+
+bounded_run() {
+  local stdin_file="" retry="" secs="" rc tries=0 budget tmp outcome
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      -i) stdin_file="$2"; shift 2 ;;
+      -r) retry="$2"; shift 2 ;;
+      --) shift; break ;;
+      *) if [ -z "$secs" ]; then secs="$1"; shift; else break; fi ;;
+    esac
+  done
+  [ -n "$secs" ] && [ $# -gt 0 ] || { echo "bounded_run: usage: bounded_run [-i FILE] [-r SECS] SECS -- CMD..." >&2; return 2; }
+  [ -n "$retry" ] || retry="$(_bounded_mul "$secs" "$BOUNDED_RETRY_FACTOR")"
+  if ! _bounded_secs_ok "$secs" || ! _bounded_secs_ok "$retry"; then
+    echo "bounded_run: budgets must be positive numbers of seconds (got $secs, retry $retry)" >&2; return 2
+  fi
+  echo done > "$BOUNDED_OUTCOME_FILE"
+  if [ "$BOUNDED_HAVE_WATCHDOG" != 1 ]; then
+    if [ -n "$stdin_file" ]; then "$@" < "$stdin_file"; else "$@"; fi
+    return $?
+  fi
+  tmp="$(mktemp -d "$BOUNDED_DIR/run.XXXXXX")"
+  budget="$secs"
+  while :; do
+    tries=$((tries + 1))
+    rm -f "$tmp/status"
+    if [ -n "$stdin_file" ]; then
+      python3 -I "$BOUNDED_EXEC" --timeout "$budget" --kill-after "${BOUNDED_KILL_AFTER:-10}" --status "$tmp/status" -- "$@" < "$stdin_file" > "$tmp/out" 2> "$tmp/err"
+    else
+      python3 -I "$BOUNDED_EXEC" --timeout "$budget" --kill-after "${BOUNDED_KILL_AFTER:-10}" --status "$tmp/status" -- "$@" > "$tmp/out" 2> "$tmp/err"
+    fi
+    outcome="$(cat "$tmp/status" 2>/dev/null)"
+    case "$outcome" in
+      "exit "*) break ;;
+      timeout) [ "$tries" = 1 ] || break; budget="$retry" ;;
+      *) outcome=runner-failed; break ;;
+    esac
+  done
+  if [ "$outcome" = timeout ]; then
+    echo incomplete > "$BOUNDED_OUTCOME_FILE"
+    echo "incomplete ${secs}s+${retry}s $*" >> "$BOUNDED_LOG"
+    rc=124
+  elif [ "$outcome" = runner-failed ]; then
+    # The runner reported nothing (it failed or was cancelled): no observation, so the run is
+    # incomplete exactly as a double timeout is (status 124, bounded_is_incomplete true).
+    echo "bounded_run: the runner reported no outcome for: $*" >&2
+    echo incomplete > "$BOUNDED_OUTCOME_FILE"
+    echo "runner-failed ${secs}s $*" >> "$BOUNDED_LOG"
+    rc=124
+  else
+    cat "$tmp/out"; cat "$tmp/err" >&2
+    rc="${outcome#exit }"
+    [ "$tries" = 2 ] && echo "recovered ${secs}s $*" >> "$BOUNDED_LOG"
+  fi
+  rm -rf "$tmp"
+  return "$rc"
+}
+
+bounded_summary() {
+  local nrec ninc
+  nrec=$(grep -c '^recovered' "$BOUNDED_LOG" 2>/dev/null || true); nrec=${nrec:-0}
+  ninc=$(grep -c '^incomplete\|^runner-failed' "$BOUNDED_LOG" 2>/dev/null || true); ninc=${ninc:-0}
+  [ "$nrec" -gt 0 ] || [ "$ninc" -gt 0 ] || return 0
+  echo "Bounded runs: $nrec recovered (timed out, then completed alone), $ninc incomplete (timed out twice, or the runner failed):"
+  sed 's/^/  /' "$BOUNDED_LOG"
+}
+
+bounded_watchdog() {
+  if [ "$BOUNDED_HAVE_WATCHDOG" = 1 ]; then
+    TO=(env "BOUNDED_WATCHDOG_LOG=$BOUNDED_LOG" "BOUNDED_PARENT=$BOUNDED_DIR" bash "$BOUNDED_SH" "$1")
+  else
+    TO=(env)  # no python3: run commands directly (the gate warned once when it sourced this file)
+  fi
+}
+
+bounded_gate_status() {
+  local ninc
+  bounded_summary
+  ninc=$(grep -c '^incomplete\|^runner-failed' "$BOUNDED_LOG" 2>/dev/null || true); ninc=${ninc:-0}
+  [ "$ninc" -eq 0 ] || echo "INCOMPLETE: $ninc command(s) timed out twice or lost their runner: this run is incomplete, not passed"
+  rm -rf "$BOUNDED_DIR"
+  [ "$ninc" -eq 0 ]
+}
+
+# Watchdog form: `bash bounded.sh SECS CMD...` (through bounded_watchdog's TO array).
+if [ "${BASH_SOURCE[0]}" = "$0" ]; then
+  [ $# -ge 2 ] || { echo "usage: bash $0 SECS CMD [ARGS...]" >&2; exit 2; }
+  secs="$1"; shift
+  bounded_run "$secs" -- "$@"; rc=$?
+  if bounded_is_incomplete "$rc"; then
+    echo "INCOMPLETE: timed out twice (${secs}s, then $(_bounded_mul "$secs" "$BOUNDED_RETRY_FACTOR")s alone) or lost its runner: $*" >&2
+  fi
+  exit "$rc"
+fi
+    27	  | .environment => "environment"
+    28	
+    29	structure Premise where
+    30	  id : String
+    31	  trust : Trust
+    32	  retiredBy : String
+    33	  statement : String
+    34	
+    35	/-- The open premises for slice 0, in the README's order. -/
+    36	def all : List Premise := [
+    37	  ⟨"P_lex", .implementation, "`lex_correct`",
+    38	    "every token list the lexer returns for a source is one the source lexes to"⟩,
+    39	  ⟨"P_parse", .implementation, "the generic table-parser theorem",
+    40	    "every tree the parser returns for a token list is one the grammar derives from it"⟩,
+    41	  ⟨"P_print", .implementation, "an LLVM-IR semantics; not planned for slice 0",
+    42	    "the printed LLVM text of a WF BIR means at most the BIR behaviour, encoded"⟩,
+    43	  ⟨"P_adapter", .implementation,
+    44	    "`adapter_correct` (proved for accepted programs), once `emit` represents adaptation failure (or the contract is restricted to accepted programs) and the theorem fills `NativePremises lcb`",
+    45	    "the adapted LCB function of a WF BIR means at most the BIR behaviour, encoded"⟩,
+    46	  ⟨"P_toolchain[llvm]", .toolchain, "not planned",
+    47	    "every result the linked LLVM body produces is one its text means"⟩,
+    48	  ⟨"P_toolchain[lcb]", .toolchain, "LCB's own proofs (C01–C03 and beyond)",
+    49	    "every result the linked LCB body produces is one its function means (LCB's named trust boundaries)"⟩,
+    50	  ⟨"P_rt", .implementation, "a proof of the decoding entry against a libc model; not planned for slice 0",
+    51	    "every launch of an image built from a WF BIR that is not killed has the behaviour of some result its body produces (decode w for a returned word w, diverges for divergence)"⟩,
+    52	  ⟨"P_trap_site", .implementation, "the same runtime-entry proof (owner, 2026-11-06: a premise now)",
+    53	    "a launch whose body returns 256 + i writes exactly trapLine tbl[i] and a newline on fd 2"⟩,
+    54	  ⟨"P_launch", .environment, "not planned",
+    55	    "an admitted launch of a WF image within the frame bound is never killed, and fd 2 accepts the trap line"⟩,
+    56	  ⟨"P_live", .environment, "not planned",
+    57	    "an admitted launch happens and has a behaviour"⟩
+    58	]
+    59	
+    60	/-- The headline theorems, whose axioms the golden records. -/
+    61	def theorems : List Lean.Name := [
+    62	  ``Concrete.BIR.decode_encode,
+    63	  ``Concrete.BIR.run_progress,
+    64	  ``Concrete.BIR.behaviour_diverges_iff,
+    65	  ``Concrete.Backend.LCB.Proof.adapter_correct
+    66	]
+    67	
+    68	/-- The premise's row in Concrete/README.md's open-premise table (a generated view). -/
+    69	def Premise.tableRow (p : Premise) : String :=
+    70	  s!"| {p.id} | {p.trust.name} | {p.retiredBy} |"
+    71	
+    72	def Premise.line (p : Premise) : String :=
+    73	  s!"premise {p.id} [{p.trust.name}] retired-by: {p.retiredBy} :: {p.statement}"
+    74	
+    75	open Lean in
+    76	/-- The trusted-base report: one line per premise, then for each theorem its sorted axioms, then
+    77	    each axiom once with its type (so an axiom restated under the same name changes the report). -/
+    78	def report (thms : List Name) : CoreM (List String) := do
+    79	  let mut lines := all.map Premise.line
+    80	  let mut seen : Array Name := #[]
+    81	  for n in thms do
+    82	    let axs := (← collectAxioms n).qsort Name.lt
+    83	    lines := lines ++ [s!"theorem {n} axioms: {", ".intercalate (axs.map toString).toList}"]
+    84	    for a in axs do
+    85	      unless seen.contains a do seen := seen.push a
+    86	  for a in seen.qsort Name.lt do
+    87	    let ty ← Meta.MetaM.run' (PrettyPrinter.ppExpr (← getConstInfo a).type)
+    88	    lines := lines ++ [s!"axiom {a} : {toString ty}"]
+    89	  return lines
+    90	
+    91	end Concrete.Premises
+     1	#!/usr/bin/env bash
+     2	# Slice-0 trusted-base golden (PROVISIONAL, Concrete/README.md gate 9). The trusted base, printed
+     3	# by scripts/checks/slice0_trusted_base.lean (until `concrete facts` exists): the premise registry
+     4	# Concrete/Premises.lean (the one list of open premises), each headline theorem's axioms and each
+     5	# axiom's type, followed by the Lean toolchain and every Lake pin, must equal
+     6	# tests/golden/slice0_trusted_base.txt byte for byte. A premise added, removed or reworded (id,
+     7	# trust class, what retires it, statement), a headline theorem gaining an axiom (sorryAx
+     8	# included), an axiom restated, or a toolchain or pin change fails until the golden is updated.
+     9	# The README's open-premise table is a generated view: it must equal the registry's rendering
+    10	# (scripts/checks/slice0_premise_table.lean).
+    11	#
+    12	# Controls: the comparison must reject the golden with a premise line removed, reworded, or with an
+    13	# extra axiom; the printer must fail on a Lean file that prints and then errors; the report must
+    14	# list a theorem's own axiom with its type (a control file declaring one); the table check must
+    15	# reject a drifted table.
+    16	#
+    17	# usage: slice0_trusted_base.sh [update]. Run inside the nix devshell, from the repository root;
+    18	# `update` rewrites the golden (review the diff before committing it).
+    19	set -euo pipefail
+    20	# shellcheck source=scripts/checks/lib/slice0_common.sh
+    21	source scripts/checks/lib/slice0_common.sh
+    22	golden=tests/golden/slice0_trusted_base.txt
+    23	
+    24	# print_lean FILE OUT: elaborate FILE (bounded, capped) and write its stdout to OUT; fails (with
+    25	# the bounded diagnostics) when Lean fails, times out, or prints more than 1 MiB.
+    26	print_lean() {
+    27	  local rc=0
+    28	  bounded_run -i /dev/null 600 -- "${capped[@]}" lake env lean "$1" >"$2.raw" 2>"$2.err" || rc=$?
+    29	  if [ "$rc" != 0 ]; then
+    30	    bounded_is_incomplete "$rc" && echo "slice0_trusted_base: $1: INCOMPLETE (timed out)" >&2
+    31	    head -c 20000 "$2.raw" "$2.err" >&2
+    32	    return 1
+    33	  fi
+    34	  cap_out <"$2.raw" >"$2"
+    35	}
+    36	
+    37	# current OUT: the whole trusted base into OUT; fails if any step fails.
+    38	current() {
+    39	  print_lean scripts/checks/slice0_trusted_base.lean "$1.lean" || return 1
+    40	  [ -s "$1.lean" ] || { echo "slice0_trusted_base: the printer printed nothing" >&2; return 1; }
+    41	  { cat "$1.lean"; printf 'lean-toolchain %s\n' "$(head -c 200 lean-toolchain)"; } >"$1" || return 1
+    42	  python3 -I -c 'import json,sys
+    43	for p in json.load(open(sys.argv[1]))["packages"]: print("pin", p["name"], p["rev"])' \
+    44	    lake-manifest.json | cap_out >>"$1" || return 1
+    45	}
+    46	
+    47	if ! current "$work/current"; then
+    48	  echo "FAIL slice0_trusted_base: printing the trusted base failed"
+    49	  exit 1
+    50	fi
+    51	if [ "${1:-}" = update ]; then
+    52	  mkdir -p "$(dirname "$golden")"
+    53	  cp "$work/current" "$golden"
+    54	  echo "slice0_trusted_base: golden updated; review: git diff -- $golden"
+    55	  exit 0
+    56	fi
+    57	
+    58	fail=0
+    59	if cmp -s "$golden" "$work/current"; then
+    60	  echo "ok   trusted base equals $golden"
+    61	else
+    62	  echo "FAIL trusted base differs from $golden (run with update after review):"
+    63	  diff "$golden" "$work/current" | head -c 20000 || true
+    64	  fail=1
+    65	fi
+    66	
+    67	# The README's open-premise table: the rows after its header and separator, up to the first line
+    68	# that is not a row; fails when the table is missing.
+    69	readme_rows() {
+    70	  awk '/^\*\*The open premises for slice 0\*\*/{h=1; next}
+    71	       h==1 && /^\| Premise \| Trust class \| Retired by \|$/{h=2; next}
+    72	       h==2 && /^\|---\|---\|---\|$/{h=3; next}
+    73	       h==3 && /^\|/{print; n++; next}
+    74	       h==3{exit}
+    75	       END{if (n == 0) exit 1}' "$1"
+    76	}
+    77	if ! print_lean scripts/checks/slice0_premise_table.lean "$work/rows"; then
+    78	  echo "FAIL printing the registry's table rows"; fail=1
+    79	elif readme_rows Concrete/README.md >"$work/readme_rows" && cmp -s "$work/rows" "$work/readme_rows"; then
+    80	  echo "ok   README's open-premise table equals the registry"
+    81	else
+    82	  echo "FAIL README's open-premise table differs from the registry (Concrete/Premises.lean):"
+    83	  diff "$work/readme_rows" "$work/rows" | head -c 20000 || true
+    84	  fail=1
+    85	fi
+
+exec
+/bin/bash -lc "python3 -B - <<'PY'
+import subprocess
+cases=[('accepted one add','aarch64','''1000 <main>:
+1000: adr x8, 0x2000
+1004: add x8, x8, #8
+1008: strb wzr, [x8]
+100c: sub sp, sp, #32
+1010: str x0, [sp, #8]
+1014: add sp, sp, #32
+1018: ret
+'''),('round10 loop','aarch64','''1000 <main>:
+1000: adr x8, 0x2000
+1004: add x8, x8, #8
+1008: strb wzr, [x8]
+100c: b 0x1004 <main+0x4>
+'''),('far adrp','aarch64','''1000 <main>:
+1000: adrp x8, 0x2000000
+1004: strb wzr, [x8]
+1008: ret
+'''),('absolute x86','x86_64','''1000 <main>:
+1000: mov byte ptr [0x2000000], 0
+1007: ret
+''')]
+for name,arch,src in cases:
+ p=subprocess.run(['python3','-B','scripts/checks/lib/stack_bound.py',arch,'/dev/stdin'],input=src,text=True,capture_output=True)
+ print(name, 'exit',p.returncode, p.stdout.strip(),p.stderr.strip())
+PY" in /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/gates-review11
+ succeeded in 0ms:
+accepted one add exit 0 bound 32 
+round10 loop exit 1 refused: main+0x1008: memory addressed through a register that may hold a stack address: strb wzr, [x8] 
+far adrp exit 1 refused: main+0x1004: memory addressed through a register that may hold a stack address: strb wzr, [x8] 
+absolute x86 exit 1 refused: main+0x1000: memory addressed through a register that may hold a stack address, or absolutely: mov byte ptr [0x2000000], 0 
+
+codex
+**Part A — ACCEPT.** No findings that produce an understated bound or an unbounded resource under the stated premises.
+
+The provenance update at `scripts/checks/lib/stack_bound.py:319` removes a register’s previous provenance before granting level 0 or level 1. Intersecting register-level pairs at joins prevents repeated adds around a loop from retaining provenance.
+
+Concrete accepted reproducer I ran through the CLI using `/dev/stdin`:
+
+```text
+1000 <main>:
+1000: adr x8, 0x2000
+1004: add x8, x8, #8
+1008: strb wzr, [x8]
+100c: sub sp, sp, #32
+1010: str x0, [sp, #8]
+1014: add sp, sp, #32
+1018: ret
+```
+
+Result: exit **0**, `bound 32`, matching its maximum stack depth. The PC-relative store is outside the stack under the separation premise.
+
+I also ran the repeated-add loop, far `adrp`, and absolute x86-address controls. All exited **1**, refusing the memory access. The overall analysis is sound under the stated premises within its modeled instruction set.
+
+**Part B — ACCEPT.** No blocking findings from source review.
+
+- `scripts/checks/slice0_trusted_base.sh:26–44`: printer failure propagates explicitly despite conditional invocation; printing uses `bounded_run`.
+- `scripts/checks/slice0_trusted_base.sh:69–84`: README correspondence compares complete generated rows.
+- `Concrete/Premises.lean:43–51`: `P_adapter` retains the unresolved contract obligation; `P_rt` matches the existential, non-killed-launch formulation.
+- `Concrete/Premises.lean:78–88`: the report collects theorem axioms and prints each collected axiom’s type.
+
+Lean was not run; the reported ci-2 results were not independently reproduced. The shared build’s GNU `timeout` remains the acknowledged issue outside this change. No files were modified.
+tokens used
+42,004
+**Part A — ACCEPT.** No findings that produce an understated bound or an unbounded resource under the stated premises.
+
+The provenance update at `scripts/checks/lib/stack_bound.py:319` removes a register’s previous provenance before granting level 0 or level 1. Intersecting register-level pairs at joins prevents repeated adds around a loop from retaining provenance.
+
+Concrete accepted reproducer I ran through the CLI using `/dev/stdin`:
+
+```text
+1000 <main>:
+1000: adr x8, 0x2000
+1004: add x8, x8, #8
+1008: strb wzr, [x8]
+100c: sub sp, sp, #32
+1010: str x0, [sp, #8]
+1014: add sp, sp, #32
+1018: ret
+```
+
+Result: exit **0**, `bound 32`, matching its maximum stack depth. The PC-relative store is outside the stack under the separation premise.
+
+I also ran the repeated-add loop, far `adrp`, and absolute x86-address controls. All exited **1**, refusing the memory access. The overall analysis is sound under the stated premises within its modeled instruction set.
+
+**Part B — ACCEPT.** No blocking findings from source review.
+
+- `scripts/checks/slice0_trusted_base.sh:26–44`: printer failure propagates explicitly despite conditional invocation; printing uses `bounded_run`.
+- `scripts/checks/slice0_trusted_base.sh:69–84`: README correspondence compares complete generated rows.
+- `Concrete/Premises.lean:43–51`: `P_adapter` retains the unresolved contract obligation; `P_rt` matches the existential, non-killed-launch formulation.
+- `Concrete/Premises.lean:78–88`: the report collects theorem axioms and prints each collected axiom’s type.
+
+Lean was not run; the reported ci-2 results were not independently reproduced. The shared build’s GNU `timeout` remains the acknowledged issue outside this change. No files were modified.

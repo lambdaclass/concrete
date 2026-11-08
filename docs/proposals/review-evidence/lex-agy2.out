@@ -1,0 +1,6 @@
+The Round 1 defect is fixed: `ConcreteSpec.Spec.Surface0` is now imported in `ConcreteSpec/Spec.lean` (and removed from `ConcreteSpec.lean`), and `set_option maxRecDepth 100000` in `Concrete/Lex.lean` is cleanly scoped to `section Conformance`. The delta introduces no issues.
+
+No findings.
+
+VERDICT: ACCEPT
+agy rc=0

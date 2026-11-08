@@ -1,0 +1,11 @@
+Round 6. All three of you rejected (b-fixed) module imports in round 5 (new form; two routes to one item; MOD-2 item manifest). Claude accepts. `as` is removed entirely (owner: "fully gone"), so import renaming cannot exist. Imports stay item lists only (`import a::b::{x, y};`, MOD-2 manifest kept, OD139 kept). The remaining question is how two imported items with the same name are used. Options:
+
+1. Refuse the clash (MOD-3 unchanged). A module cannot use json's parse and csv's parse together; the programmer splits code into separate modules. No new rule.
+2. Situation-determined qualification: `import std::json::{parse}; import std::csv::{parse};` is allowed; when two imported items share a name, every use of that name MUST be qualified by its module's last segment (`json::parse`, `csv::parse`); a unique imported name MUST be used bare. One form per situation, chosen by the compiler, never by the writer. Revises MOD-3. If the last segments also clash, the clash is refused (option 1 behaviour).
+3. Always qualified: every imported item is used as `<last segment>::name` (e.g. `vec::Vec<u8>`, `json::parse`), never bare.
+
+Claude recommends 2: keeps the manifest, keeps one form per situation, works for the rare clash; 3 makes every type in every signature noisier (`vec::Vec<u8>`, `option::Option<T>`) for a rare problem; 1 forces module splits for a naming accident.
+
+TASK: For options 1, 2, 3 say which you recommend and AGREE/DISAGREE with Claude's recommendation (concrete reason at most 50 words: second form, MOD-2/MOD-3/OD139/OD151/OD152, LL(1), resolution ambiguity, or readability for auditors). Do not modify files.
+End with exactly one line:
+ANSWER: PICK=<1|2|3>; DISAGREE=<yes|no>; NOTE=<short or none>

@@ -1,0 +1,87 @@
+1. **[scripts/land/lib.sh:112-122](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/agy/scripts/land/lib.sh#L112-L122) — REAL DEFECT (`ssh -G | awk` exit status and `SIGPIPE` under `pipefail`)**
+   ```bash
+   h="$("$GIT_SSH" -G ${args[@]+"${args[@]}"} "$1" 2>/dev/null | awk '$1 == "hostname" { print $2; exit }')" || h=""
+   ...
+   h="$(sh -c "$cmd -G \"\$@\"" land-ssh-G ${args[@]+"${args[@]}"} "$1" 2>/dev/null | awk '$1 == "hostname" { print $2; exit }')" || h=""
+   ```
+   - When `pipefail` is **not** set (`.githooks/pre-push`, `train.sh`, `bot.sh`, `notes.sh`, `ready.sh`, `review.sh`, `verify.sh`, `push-both.sh`, `gates_transport_ssh.sh`), the pipeline's exit status is `awk`'s (`0`), so `|| h=""` never checks whether `ssh -G` actually exited `0`; if `ssh -G` prints `hostname` before failing on a bad later option/config, it is accepted.
+   - When `pipefail` **is** set (`install-bot.sh` and the generated `concrete-landing-bot` launcher both run under `set -euo pipefail`), `awk` exits as soon as it sees `hostname` near the top of `ssh -G`'s output. If `ssh -G` is still writing its remaining output when the pipe closes, `ssh` receives `SIGPIPE` (exit 141), the pipeline fails under `pipefail`, `|| h=""` clears `h`, and valid SSH remotes are falsely refused.
+   - **Fix:** Capture `ssh -G`'s output first so its exit code is checked directly and the pipe is never closed early:
+     ```bash
+     local out
+     out="$("$GIT_SSH" -G ${args[@]+"${args[@]}"} "$1" 2>/dev/null)" || return 1
+     h="$(printf '%s\n' "$out" | awk '$1 == "hostname" { print $2; exit }')"
+     ```
+     and similarly for the `sh -c "$cmd -G \"\$@\""` call.
+
+2. **[scripts/land/lib.sh:137-148](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/agy/scripts/land/lib.sh#L137-L148) — REAL DEFECT (SSH userinfo stripped at `:` before validation and passed differently than git)**
+   ```bash
+   case "$auth" in *@*) user="${auth%@*}"; user="${user%%:*}" ;; esac
+   ...
+   case "$scheme" in
+     scp|ssh|git+ssh|ssh+git)
+       case "$user" in -*|*[!A-Za-z0-9._-]*) echo "? ?"; return 0 ;; esac
+       h="$(land_ssh_host "$h" "$user" "$port")" || { echo "? ?"; return 0; }
+   ```
+   `$user` is never used for `http(s)` (only for `scp|ssh|git+ssh|ssh+git`), and git's SSH transport (`connect.c:parse_connect_url`) does **not** split SSH userinfo on `:`—it passes the entire string before `@` as the username (`-l <user>`). Because `user="${user%%:*}"` strips everything from the first `:` onward before the character check on line 147:
+   - `ssh://git:-oProxyCommand=x@github.com/lambdaclass/concrete.git` has `:-oProxyCommand=x` stripped, passes validation as `user=git`, and queries `ssh -G -l git`, whereas git passes the unstripped userinfo to `ssh`.
+   - `ssh://:foo@github.com/lambdaclass/concrete.git` and `ssh://@github.com/lambdaclass/concrete.git` yield `user=""`, which passes line 147.
+   - **Fix:** Do not strip `:*` from `$user`, and reject an empty username when `@` is present:
+     ```bash
+     local has_user=0
+     case "$auth" in *@*) has_user=1; user="${auth%@*}" ;; esac
+     ...
+     case "$scheme" in
+       scp|ssh|git+ssh|ssh+git)
+         if [ "$has_user" = 1 ] && [ -z "$user" ]; then echo "? ?"; return 0; fi
+         case "$user" in -*|*[!A-Za-z0-9._-]*) echo "? ?"; return 0 ;; esac
+     ```
+
+3. **[scripts/land/lib.sh:116](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/agy/scripts/land/lib.sh#L116) — REAL DEFECT (fail-open when `ssh` is not on `PATH`, contradicting spec/changelog)**
+   ```bash
+   command -v ssh >/dev/null 2>&1 || { printf '%s\n' "$1"; return 0; }
+   ```
+   When `ssh` is not found on `PATH`, `land_ssh_host` returns `0` with the raw host `"$1"` instead of failing closed. If `PATH` is minimal or misconfigured, `git@github.com:...` passes without running `ssh -G` to check `~/.ssh/config` `Host github.com` redirects, contradicting both the branch spec ("via ssh -G, refusing when that cannot name the host") and [changelog.d/2026-11-08-remote-guard.md:9-10](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/agy/changelog.d/2026-11-08-remote-guard.md#L9-L10).
+   - **Fix:** Fail closed when `ssh` cannot be found:
+     ```bash
+     command -v ssh >/dev/null 2>&1 || return 1
+     ```
+
+4. **[scripts/checks/landing_bot.sh:444-448](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/agy/scripts/checks/landing_bot.sh#L444-L448) — REAL DEFECT (test passes for the wrong reason)**
+   ```bash
+   git -C "$BC" remote set-url --push origin https://github.com/someone/else.git
+   git -C "$BC" remote set-url --push lambdaclass https://github.com/someone/else.git
+   out="$(ib)"; rc=$?
+   [ "$rc" = 0 ] && ! git -C "$BC" config --get remote.origin.pushurl >/dev/null && ! git -C "$BC" config --get remote.lambdaclass.pushurl >/dev/null \
+     && ! has "$out" "SENTINEL" && ok "the installer drops a push URL of origin and lambdaclass"
+   ```
+   Line 448 checks `! has "$out" "SENTINEL"` to verify that [scripts/land/install-bot.sh:62](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/agy/scripts/land/install-bot.sh#L62) (`say "removing $r's push URL(s): $(git config --get-all "remote.$r.pushurl" | redact)"`) redacts credentials when logging removed push URLs, but neither push URL configured on lines 444–445 contains `SENTINEL`. The assertion passes even if push URLs are logged in cleartext.
+   - **Fix:** Set one of the push URLs to `https://x-access-token:pre@SENTINEL-SECRET@github.com/someone/else.git` and assert `has "$out" "https://***@github.com/someone/else.git" && ! has "$out" "SENTINEL"`.
+
+5. **[scripts/checks/landing_script.sh:153,648](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/agy/scripts/checks/landing_script.sh#L153) — REAL DEFECT (test passes for the wrong reason)**
+   ```bash
+   git remote add gh-alias git@github-old:someone/else.git
+   ...
+   refused_offline "land refuses an ssh host alias for another repository" "not one of the project's repositories" env LAND_REMOTE=gh-alias bash "$TRAIN" land t1
+   ```
+   `gh-alias` uses the repo path `someone/else.git` (which is already outside `LAND_REPOSITORIES`) and runs without `$TMP/sshstub` on `PATH` (created later at line 699). Even if SSH host resolution were completely skipped and always returned `github.com`, this test would still pass because `someone/else` is not a known repository. (Same issue in [scripts/checks/landing_bot.sh:474](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/agy/scripts/checks/landing_bot.sh#L474) for `git@github-old:someone/else.git`.)
+   - **Fix:** Set `gh-alias` (and the second bad URL in `landing_bot.sh:474`) to `git@github-old:lambdaclass/concrete.git` so the path is a valid project repository and the refusal actually tests SSH host resolution.
+
+6. **[scripts/checks/landing_script.sh:656-695](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/agy/scripts/checks/landing_script.sh#L656-L695) & [scripts/land/lib.sh:110-115](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/agy/scripts/land/lib.sh#L110-L115) — PREFERENCE (untested `GIT_SSH=ssh` execution branch)**
+   In the `OVR` table, `prog` tests `GIT_SSH=/usr/local/bin/ssh-wrapper` (which returns early at `[ "${GIT_SSH##*/}" = ssh ] || return 1`) and `config-over-prog` sets both `GIT_SSH=ssh` and `core.sshCommand=...` (which takes the earlier `core.sshCommand` branch). Lines 112–114 of `scripts/land/lib.sh` (invoking `"$GIT_SSH" -G ...`) are never executed.
+   - **Fix:** Add `OVR` cases with `GIT_SSH=ssh` (expecting `0`) and `GIT_SSH="$TMP/sshfail/ssh"` (expecting `1`) with neither `GIT_SSH_COMMAND` nor `core.sshCommand` set.
+
+7. **[scripts/push-both.sh:86-90](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/agy/scripts/push-both.sh#L86-L90) — PREFERENCE (comment disagrees with code and test)**
+   ```bash
+   # PRIMARY must be a configured remote (a literal URL would skip the check); a missing mirror is
+   # skipped, as before.
+   ```
+   `push-both.sh` does not skip a missing mirror; it requires both remotes and exits `1` (`both remotes are required`, tested at [scripts/checks/landing_script.sh:857-858](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/agy/scripts/checks/landing_script.sh#L857-L858)).
+   - **Fix:** Update the comment to note that a missing `MIRROR` is refused by the existing check below (or check `git remote get-url` for both remotes before calling `land_remote_bad`).
+
+8. **[scripts/land/lib.sh:9-13,155-156](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/agy/scripts/land/lib.sh#L9-L13) — PREFERENCE (missing `land_url_expand` in header comment; case-sensitive `.git` suffix strip)**
+   - Add `land_url_expand url` to the top-of-file function table in `scripts/land/lib.sh:9-13`.
+   - In `land_url_target` (`scripts/land/lib.sh:155-156`), lowercase `p` before `p="${p%/}"; p="${p%.git}"` so an uppercase `.GIT` suffix is stripped just like mixed-case host/owner/repo names.
+
+VERDICT: REJECT
+rc=0

@@ -1,0 +1,21 @@
+# review of 4d16e26f0025129403ca723327ecb8439230ac80, round 1
+
+reviewer: codex; utc: 2026-11-08T14:04:58Z; base: d3811a74723348181e1a6ea2011955780275d691; diff from: d3811a74723348181e1a6ea2011955780275d691; pieces: 2; diff bytes: 15250
+
+## piece 1 of 2: scripts (12366 bytes): clean
+
+files: ISSUES.tsv,scripts/checks/landing_script.sh,scripts/land/signoff.sh,scripts/land/train.sh
+
+No correctness findings in the supplied diff. Repository reads failed because the sandbox could not start, so I could not verify the change against docs/decisions.md or inspect the surrounding test setup.
+
+VERDICT: clean
+
+## piece 2 of 2: docs (2884 bytes): clean
+
+files: changelog.d/2026-11-08-signoff-reject.md,docs/LANDING.md,docs/REVIEW.md
+
+I found no correctness issues in the supplied diff. Repository reads failed because the sandbox could not start, so I could not verify consistency with the code or check owner-decision provenance.
+
+VERDICT: clean
+
+## verdict: clean (0 piece(s) with findings, 0 blocked)
