@@ -10,7 +10,8 @@ PROPOSED: not normative until the owner freezes Core (ROADMAP A2c). See `Concret
 namespace ConcreteSpec.Core
 namespace Prim
 
-/-- Lookup after renaming an environment and its numeric key is the original lookup. -/
+/-- Law (subject `ConcreteSpec.Core.Prim.lookupId`, `ConcreteSpec.Core.Prim.renameLocals`).
+Lookup after renaming an environment and its numeric key is the original lookup. -/
 theorem lookupId_rename (r : Renaming) : ∀ (L : AList Var Int) (n : Nat),
     lookupId (renameLocals r L) (r.toFun n) = lookupId L n
   | [], _ => rfl
@@ -28,7 +29,8 @@ theorem lookupId_rename (r : Renaming) : ∀ (L : AList Var Int) (n : Nat),
       simp [lookupId, renameLocals, renameVar, h, hr]
       exact lookupId_rename r L n
 
-/-- **Renaming preserves evaluation.** A bijective, binder-aware renaming of a term and its locals
+/-- Law (subject `ConcreteSpec.Core.Prim.Term.eval`, `ConcreteSpec.Core.Prim.renameTerm`, `ConcreteSpec.Core.Prim.renameLocals`).
+**Renaming preserves evaluation.** A bijective, binder-aware renaming of a term and its locals
 changes neither a value, a trap, nor unsafe stuckness. -/
 theorem eval_rename (r : Renaming) (L : AList Var Int) (e : Term) :
     Term.eval (renameLocals r L) (renameTerm r e) = Term.eval L e := by
@@ -52,12 +54,14 @@ theorem eval_rename (r : Renaming) (L : AList Var Int) (e : Term) :
     | trap k => rfl
     | stuck => rfl
 
-/-- The same law through C1's `Operands.eval`. -/
+/-- Law (subject `ConcreteSpec.Core.Prim.operands`, `ConcreteSpec.Core.Prim.renameTerm`, `ConcreteSpec.Core.Prim.renameLocals`).
+The same renaming law through C1's `Exec.Operands.eval`. -/
 theorem eval_operands_rename (r : Renaming) (L : AList Var Int) (st : Unit) (e : Term) :
     operands.eval (renameLocals r L) st (renameTerm r e) = operands.eval L st e := by
   simp [operands, eval_rename, Res.map]
 
-/-- **A bijective renaming is invertible.** Applying its inverse recovers the original term. -/
+/-- Law (subject `ConcreteSpec.Core.Prim.renameTerm`, `ConcreteSpec.Core.Prim.Renaming.symm`).
+**A bijective renaming is invertible.** Applying its inverse recovers the original term. -/
 theorem rename_inverse (r : Renaming) (e : Term) : renameTerm r.symm (renameTerm r e) = e := by
   induction e with
   | lit n => rfl
@@ -68,7 +72,8 @@ theorem rename_inverse (r : Renaming) (e : Term) : renameTerm r.symm (renameTerm
       simp [renameVar, Renaming.symm, r.inv_toFun]
     simp only [renameTerm, hx, ihv, ihb]
 
-/-- **Identity renaming is the identity.** -/
+/-- Law (subject `ConcreteSpec.Core.Prim.renameTerm`, `ConcreteSpec.Core.Prim.Renaming.id`).
+**Identity renaming is the identity.** -/
 theorem rename_id (e : Term) : renameTerm .id e = e := by
   induction e with
   | lit n => rfl
@@ -78,7 +83,8 @@ theorem rename_id (e : Term) : renameTerm .id e = e := by
     have hx : renameVar .id x = x := rfl
     simp only [renameTerm, hx, ihv, ihb]
 
-/-- Lookup is invariant under changing every hint consistently: only the numeric key is read. -/
+/-- Law (subject `ConcreteSpec.Core.Prim.lookupId`, `ConcreteSpec.Core.Prim.rehintLocals`).
+Lookup is invariant under changing every hint consistently: only the numeric key is read. -/
 theorem lookupId_rehint (h : Var → String) : ∀ (L : AList Var Int) (n : Nat),
     lookupId (rehintLocals h L) n = lookupId L n
   | [], _ => rfl
@@ -89,7 +95,8 @@ theorem lookupId_rehint (h : Var → String) : ∀ (L : AList Var Int) (n : Nat)
     · simp only [hx, ↓reduceIte]
       exact lookupId_rehint h L n
 
-/-- **Names are presentation only.** Changing every `Var.hint`, in a term and its locals, without
+/-- Law (subject `ConcreteSpec.Core.Prim.Term.eval`, `ConcreteSpec.Core.Prim.rehintTerm`, `ConcreteSpec.Core.Prim.rehintLocals`).
+**Names are presentation only.** Changing every `Var.hint`, in a term and its locals, without
 changing any numeric identity changes no evaluation result. -/
 theorem eval_rehint (h : Var → String) (L : AList Var Int) (e : Term) :
     Term.eval (rehintLocals h L) (rehintTerm h e) = Term.eval L e := by
@@ -113,80 +120,104 @@ theorem eval_rehint (h : Var → String) (L : AList Var Int) (e : Term) :
     | trap k => rfl
     | stuck => rfl
 
-/-- Rehinting also preserves C1's operand evaluation. -/
+/-- Law (subject `ConcreteSpec.Core.Prim.operands`, `ConcreteSpec.Core.Prim.rehintTerm`, `ConcreteSpec.Core.Prim.rehintLocals`).
+Rehinting also preserves C1's operand evaluation. -/
 theorem eval_operands_rehint (h : Var → String) (L : AList Var Int) (st : Unit) (e : Term) :
     operands.eval (rehintLocals h L) st (rehintTerm h e) = operands.eval L st e := by
   simp [operands, eval_rehint, Res.map]
 
 end Prim
 
-/-- Helper (projection). Lookup returns an obligation with the requested intrinsic identity. -/
-theorem ObligationTable.lookup_id (obligations : ObligationTable) (requested : ObligationId)
-    (found : SafetyObligation) (success : ObligationTable.lookup obligations requested = some found) :
-    found.id = requested := by
-  induction obligations with
-  | nil => simp [ObligationTable.lookup] at success
-  | cons obligation rest ih =>
-    by_cases same : obligation.id = requested
-    · simp [ObligationTable.lookup, same] at success
-      cases success
-      exact same
-    · exact ih (by simpa [ObligationTable.lookup, same] using success)
-
-/-- **Evidence consumption is sound.** Success consumes the evidence's exact context, discharges
-the obligation identity it names, and retrieves that obligation from the authoritative table. The
-returned dependent record contains a proof of the retrieved proposition. -/
-theorem SafetyEvidence.discharge_sound (e : SafetyEvidence) (obligations : ObligationTable)
-    (current : EvidenceContext) (requested : ObligationId) (discharged : DischargedFact)
+/-- Law (subject `ConcreteSpec.Core.SafetyEvidence.discharge`).
+**Evidence consumption is sound.** Success consumes the evidence's exact context (`Usable`),
+discharges the obligation identity it names, and retrieves that obligation from the authoritative
+table. -/
+theorem SafetyEvidence.discharge_sound {claim : ObligationId → Prop} (e : SafetyEvidence claim)
+    (obligations : ObligationTable) (current : EvidenceContext) (requested : ObligationId)
+    (discharged : DischargedFact claim)
     (success : e.discharge obligations current requested = some discharged) :
-    e.context = current ∧ current.obligation = requested ∧
+    e.Usable current ∧ current.obligation = requested ∧
       ObligationTable.lookup obligations requested = some discharged.obligation ∧
       discharged.obligation.id = requested := by
-  by_cases context : e.context = current
+  by_cases usable : e.Usable current
   · by_cases identity : current.obligation = requested
-    · cases lookup : ObligationTable.lookup obligations requested with
-      | none => simp [SafetyEvidence.discharge, context, identity, lookup] at success
-      | some obligation =>
-        by_cases fact : e.fact = obligation.fact
-        · simp [SafetyEvidence.discharge, context, identity, lookup, fact] at success
-          cases success
-          exact ⟨context, identity, rfl, ObligationTable.lookup_id obligations requested obligation lookup⟩
-        · simp [SafetyEvidence.discharge, context, identity, lookup, fact] at success
-    · simp [SafetyEvidence.discharge, context, identity] at success
-  · simp [SafetyEvidence.discharge, context] at success
+    · unfold SafetyEvidence.discharge at success
+      simp only [usable, identity, ↓reduceDIte] at success
+      split at success
+      · cases success
+      · rename_i obligation hlookup
+        simp only [Option.some.injEq] at success
+        subst discharged
+        exact ⟨usable, identity, hlookup,
+          ObligationTable.lookup_id obligations requested obligation hlookup⟩
+    · simp [SafetyEvidence.discharge, usable, identity] at success
+  · simp [SafetyEvidence.discharge, usable] at success
 
-/-- A stale context cannot produce a successful discharge. -/
-theorem SafetyEvidence.discharge_context_mismatch (e : SafetyEvidence)
-    (obligations : ObligationTable) (current : EvidenceContext) (requested : ObligationId)
-    (mismatch : e.context ≠ current) : e.discharge obligations current requested = none := by
+/-- Law (subject `ConcreteSpec.Core.SafetyEvidence.discharge`).
+A stale context cannot produce a successful discharge. -/
+theorem SafetyEvidence.discharge_context_mismatch {claim : ObligationId → Prop}
+    (e : SafetyEvidence claim) (obligations : ObligationTable) (current : EvidenceContext)
+    (requested : ObligationId) (mismatch : ¬ e.Usable current) :
+    e.discharge obligations current requested = none := by
   simp [SafetyEvidence.discharge, mismatch]
 
-/-- Evidence cannot discharge an obligation identity different from the one it names. -/
-theorem SafetyEvidence.discharge_obligation_mismatch (e : SafetyEvidence)
-    (obligations : ObligationTable) (current : EvidenceContext) (requested : ObligationId)
-    (mismatch : current.obligation ≠ requested) : e.discharge obligations current requested = none := by
-  by_cases context : e.context = current
-  · simp [SafetyEvidence.discharge, context, mismatch]
-  · simp [SafetyEvidence.discharge, context]
+/-- Law (subject `ConcreteSpec.Core.SafetyEvidence.discharge`).
+Evidence cannot discharge an obligation identity different from the one its context names. -/
+theorem SafetyEvidence.discharge_obligation_mismatch {claim : ObligationId → Prop}
+    (e : SafetyEvidence claim) (obligations : ObligationTable) (current : EvidenceContext)
+    (requested : ObligationId) (mismatch : current.obligation ≠ requested) :
+    e.discharge obligations current requested = none := by
+  by_cases usable : e.Usable current
+  · simp [SafetyEvidence.discharge, usable, mismatch]
+  · simp [SafetyEvidence.discharge, usable]
 
-/-- A proof of a different proposition cannot discharge the retrieved obligation. -/
-theorem SafetyEvidence.discharge_proposition_mismatch (e : SafetyEvidence)
-    (obligations : ObligationTable) (current : EvidenceContext) (requested : ObligationId)
-    (obligation : SafetyObligation) (lookup : ObligationTable.lookup obligations requested = some obligation)
-    (mismatch : e.fact ≠ obligation.fact) : e.discharge obligations current requested = none := by
-  by_cases context : e.context = current
+/-- Law (subject `ConcreteSpec.Core.SafetyEvidence.discharge`).
+Evidence for one obligation identity cannot discharge a retrieved obligation with a different
+identity, even when both obligations' propositions hold. -/
+theorem SafetyEvidence.discharge_target_mismatch {claim : ObligationId → Prop}
+    (e : SafetyEvidence claim) (obligations : ObligationTable) (current : EvidenceContext)
+    (requested : ObligationId) (obligation : SafetyObligation)
+    (lookup : ObligationTable.lookup obligations requested = some obligation)
+    (mismatch : e.context.obligation ≠ obligation.id) :
+    e.discharge obligations current requested = none := by
+  by_cases usable : e.Usable current
   · by_cases identity : current.obligation = requested
-    · simp [SafetyEvidence.discharge, context, identity, lookup, mismatch]
-    · simp [SafetyEvidence.discharge, context, identity]
-  · simp [SafetyEvidence.discharge, context]
+    · exfalso
+      apply mismatch
+      have found := ObligationTable.lookup_id obligations requested obligation lookup
+      have ctxObl : e.context.obligation = current.obligation :=
+        congrArg EvidenceContext.obligation usable
+      exact (ctxObl.trans identity).trans found.symm
+    · simp [SafetyEvidence.discharge, usable, identity]
+  · simp [SafetyEvidence.discharge, usable]
 
-/-- An unregistered primitive has no allowed answer. -/
+/-- Law (subject `ConcreteSpec.Core.SafetyEvidence.discharge`).
+An obligation absent from the authoritative table cannot be discharged. -/
+theorem SafetyEvidence.discharge_unregistered {claim : ObligationId → Prop}
+    (e : SafetyEvidence claim) (obligations : ObligationTable) (current : EvidenceContext)
+    (requested : ObligationId) (absent : ObligationTable.lookup obligations requested = none) :
+    e.discharge obligations current requested = none := by
+  by_cases usable : e.Usable current
+  · by_cases identity : current.obligation = requested
+    · unfold SafetyEvidence.discharge
+      simp only [usable, identity, ↓reduceDIte]
+      split
+      · rfl
+      · rename_i obligation hlookup
+        rw [absent] at hlookup
+        cases hlookup
+    · simp [SafetyEvidence.discharge, usable, identity]
+  · simp [SafetyEvidence.discharge, usable]
+
+/-- Law (subject `ConcreteSpec.Core.PrimRegistry.allows`).
+An unregistered primitive has no allowed answer. -/
 theorem PrimRegistry.allows_unknown {Val Ty Store Event : Type} (R : PrimRegistry Val Ty Store Event)
     (p : PrimId) (hnone : AList.lookup R.entries p = none) (args : List Val) (st : Store)
     (a : Exec.Answer Val Event Store) : R.allows p args st a = false := by
   simp [PrimRegistry.allows, hnone]
 
-/-- **Unknown primitives are stuck.** A C1 request for a primitive absent from the registry has no
+/-- Law (subject `ConcreteSpec.Core.PrimRegistry.operands`, `ConcreteSpec.Core.Exec.Step`).
+**Unknown primitives are stuck.** A C1 request for a primitive absent from the registry has no
 small-step transition for any answer: the machine never invents a catch-all contract. -/
 theorem PrimRegistry.unknown_primitive_stuck {O : Exec.Operands}
     (R : PrimRegistry O.Val O.Ty O.Store O.Event) (P : Exec.Program (R.operands O))
@@ -203,8 +234,8 @@ theorem PrimRegistry.unknown_primitive_stuck {O : Exec.Operands}
     cases h
     simp [PrimRegistry.operands, PrimRegistry.allows, hnone] at ha
 
-/-- Every answer accepted through a registered primitive satisfies that primitive's complete
-contract, via C1's `allows` check. -/
+/-- Helper (projection). Unpacks the registry's `answerOk_iff` completeness field through
+`PrimRegistry.operands` and `PrimRegistry.allows`. (approved: PENDING). -/
 theorem PrimRegistry.allows_allowed {O : Exec.Operands}
     (R : PrimRegistry O.Val O.Ty O.Store O.Event) (p : PrimId)
     (c : PrimContract O.Val O.Ty O.Store O.Event) (hc : AList.lookup R.entries p = some c)
@@ -214,9 +245,8 @@ theorem PrimRegistry.allows_allowed {O : Exec.Operands}
     simpa [PrimRegistry.operands, PrimRegistry.allows, hc] using ha
   exact (R.answerOk_iff p c hc args st a).1 ha'
 
-/-- **Accepted answers satisfy the postcondition or a declared failure.** Both predicates observe
-only the result and surviving state; neither entry arguments nor an entry-state snapshot is
-available to `ensures`. A failure alternative must have the contract's result type. -/
+/-- Helper (projection). Projects the postcondition or declared-failure disjunction from
+`PrimRegistry.allows_allowed`. (approved: PENDING). -/
 theorem PrimRegistry.allows_postcondition {O : Exec.Operands}
     (R : PrimRegistry O.Val O.Ty O.Store O.Event) (p : PrimId)
     (c : PrimContract O.Val O.Ty O.Store O.Event) (hc : AList.lookup R.entries p = some c)
@@ -233,7 +263,8 @@ theorem PrimRegistry.allows_postcondition {O : Exec.Operands}
     rw [hr] at hm
     exact hm.1
 
-/-- An accepted answer is always an ordinary result value, never an implicit trap. -/
+/-- Helper (projection). Projects the absence of implicit traps from
+`PrimRegistry.allows_postcondition`. (approved: PENDING). -/
 theorem PrimRegistry.allows_no_implicit_trap {O : Exec.Operands}
     (R : PrimRegistry O.Val O.Ty O.Store O.Event) (p : PrimId)
     (c : PrimContract O.Val O.Ty O.Store O.Event) (hc : AList.lookup R.entries p = some c)
@@ -247,8 +278,8 @@ theorem PrimRegistry.allows_no_implicit_trap {O : Exec.Operands}
 namespace Ghost
 variable {O : Exec.Operands}
 
-/-- **Concrete-step soundness.** Every run of `drive` has a C1 `Steps` derivation from its initial
-to its retained final configuration, emitting exactly the events added to the history. -/
+/-- Helper (computation). Inductive fuel-step soundness lemma used by `Ghost.drive_steps_result`.
+(approved: PENDING). -/
 theorem drive_steps (P : Exec.Program O) (ρ : Exec.Oracle O) :
     ∀ (fuel : Nat) (hist : List O.Event) (c : Exec.Config O) (r : SegmentReport O),
       drive P ρ fuel hist c = r → ∃ tr, r.events = hist ++ tr ∧ Exec.Steps P c tr r.config := by
@@ -310,14 +341,17 @@ theorem drive_steps (P : Exec.Program O) (ρ : Exec.Oracle O) :
               cases h
               exact ⟨[], by simp, .refl _⟩
 
-/-- The concrete-step soundness law for the report returned by `drive` itself. -/
+/-- Law (subject `ConcreteSpec.Core.Ghost.drive`).
+**Concrete-step soundness.** Every run of `drive` has a C1 `Exec.Steps` derivation from its initial
+to its retained final configuration, emitting exactly the events added to the history. -/
 theorem drive_steps_result (P : Exec.Program O) (ρ : Exec.Oracle O)
     (fuel : Nat) (hist : List O.Event) (c : Exec.Config O) :
     ∃ tr, (drive P ρ fuel hist c).events = hist ++ tr ∧
       Exec.Steps P c tr (drive P ρ fuel hist c).config :=
   drive_steps P ρ fuel hist c _ rfl
 
-/-- Once a configuration is not ordinarily completed, no later statement restarts it. -/
+/-- Law (subject `ConcreteSpec.Core.Ghost.runStmts`).
+Once a configuration is not ordinarily completed, no later statement restarts it. -/
 theorem runStmts_of_not_normal (P : Exec.Program O) (ρ : Exec.Oracle O)
     (fuel : Nat) (hist : List O.Event) (ss : List (Exec.Stmt O)) (c : Exec.Config O)
     (hf : c.final? ≠ some .normal) : runStmts P ρ fuel hist ss c = drive P ρ fuel hist c := by
@@ -328,7 +362,8 @@ theorem runStmts_of_not_normal (P : Exec.Program O) (ρ : Exec.Oracle O)
     | none => simp [runStmts, h]
     | some f => cases f <;> simp [runStmts, h] at hf ⊢
 
-/-- **A non-normal configuration has no later transition.** Running trailing statements from a
+/-- Law (subject `ConcreteSpec.Core.Ghost.runStmts`).
+**A non-normal configuration has no later transition.** Running trailing statements from a
 returned or trapped configuration emits no event and preserves the exact ending, configuration and
 fuel; no statement body is entered. -/
 theorem runStmts_terminal (P : Exec.Program O) (ρ : Exec.Oracle O)
@@ -339,8 +374,9 @@ theorem runStmts_terminal (P : Exec.Program O) (ρ : Exec.Oracle O)
   | nil => simp [runStmts, drive, hf]
   | cons s ss => cases f <;> simp [runStmts, drive, hf] at hn ⊢
 
-/-- **Ghost erasure preserves concrete execution.** Removing every ghost statement leaves the same
-complete report: identical events, C1 `Ending`, final configuration and remaining fuel. Ghost
+/-- Law (subject `ConcreteSpec.Core.Ghost.runPieces`, `ConcreteSpec.Core.Ghost.erase`).
+**Ghost erasure preserves concrete execution.** Removing every ghost statement leaves the same
+complete report: identical events, C1 `Exec.Ending`, final configuration and remaining fuel. Ghost
 computations may update ghost locals and read the concrete configuration, but cannot change it. -/
 theorem ghost_erasure_run (G : Language O) (P : Exec.Program O) (ρ : Exec.Oracle O) :
     ∀ (fuel : Nat) (hist : List O.Event) (ps : List (Piece G)) (Γ : AList Var G.Val)
@@ -375,7 +411,8 @@ theorem ghost_erasure_run (G : Language O) (P : Exec.Program O) (ρ : Exec.Oracl
           | outOfFuel c' => simp [runPieces, runStmts, erase, erasePiece, List.filterMap, hn, hr]
       · simp [runPieces, erase, erasePiece, List.filterMap, hn, runStmts_of_not_normal]
 
-/-- In particular, ghost erasure preserves public events and the exact C1 ending classification. -/
+/-- Law (subject `ConcreteSpec.Core.Ghost.runPieces`, `ConcreteSpec.Core.Ghost.erase`).
+In particular, ghost erasure preserves public events and the exact C1 ending classification. -/
 theorem ghost_erasure_ending (G : Language O) (P : Exec.Program O) (ρ : Exec.Oracle O)
     (fuel : Nat) (hist : List O.Event) (ps : List (Piece G)) (Γ : AList Var G.Val)
     (c : Exec.Config O) :
@@ -388,9 +425,9 @@ end Ghost
 
 /-! ## Non-vacuity witnesses
 
-Each law above has a concrete instance whose interesting premise or result holds, followed by a
-planted counter-example. The counter-examples mutate the transformation, checker, evidence match or
-execution state; they do not merely negate a definition. -/
+Each law above has a closed instance that applies the theorem directly, paired with a planted
+counter-example that substitutes a mutant of the same type for the law's subject and falsifies the
+conclusion under the law's hypotheses. -/
 
 namespace Vacuity
 open Prim
@@ -416,378 +453,296 @@ def locals : AList Var Int := [(x0, 10), (x1, 3)]
 def source : Term := .bind x0 (.lit 2) (.add (.var x0) (.copy x1))
 def hints (_ : Var) : String := "renamed"
 
-/-- Non-trivial instance for `lookupId_rename`: lookup finds the second renamed entry. -/
-example : lookupId (renameLocals swap locals) (swap.toFun 1) = lookupId locals 1 ∧
-    lookupId locals 1 = some 3 := by decide
+/-- Mutant environment renamer that leaves local keys unrenamed. -/
+def unrenamedLocals (_ : Renaming) (L : AList Var Int) : AList Var Int := L
 
-/-- Planted counter-example: renaming the environment but not the numeric key loses the entry. -/
-example : lookupId (renameLocals swap [(x0, 3)]) 0 ≠ lookupId [(x0, 3)] 0 := by decide
+/-- Mutant inverse that returns the identity renaming instead of `r.symm`. -/
+def idSymm (_ : Renaming) : Renaming := .id
 
-/-- Non-trivial instance for `eval_rename`: both evaluations return the same non-stuck value. -/
-example : Term.eval (renameLocals swap locals) (renameTerm swap source) = Term.eval locals source ∧
-    Term.eval locals source = .ok 5 := by decide
+/-- Mutant local rehinting that also shifts numeric identities. -/
+def corruptIdRehintLocals (h : Var → String) (L : AList Var Int) : AList Var Int :=
+  List.map (fun e => (⟨h e.1, e.1.id + 1⟩, e.2)) L
 
-/-- Planted counter-example: renaming only the term makes its read unbound. -/
-example : Term.eval locals (renameTerm swap (.var x0)) ≠ Term.eval locals (.var x0) := by decide
+/-- Mutant term rehinting that also swaps numeric binder identities. -/
+def corruptIdRehintTerm (h : Var → String) (e : Term) : Term :=
+  renameTerm swap (rehintTerm h e)
 
-/-- Non-trivial instance for `eval_operands_rename`: the C1 adapter also returns `5`. -/
+/-- Instance (law `ConcreteSpec.Core.Prim.lookupId_rename`, case `ConcreteSpec.Core.Vacuity.locals`). -/
+example : lookupId (renameLocals swap locals) (swap.toFun 1) = lookupId locals 1 :=
+  lookupId_rename swap locals 1
+
+/-- Planted (law `ConcreteSpec.Core.Prim.lookupId_rename`, case `ConcreteSpec.Core.Vacuity.locals`, subject `ConcreteSpec.Core.Prim.renameLocals`, mutant `ConcreteSpec.Core.Vacuity.unrenamedLocals`). -/
+example : ¬ (lookupId (unrenamedLocals swap locals) (swap.toFun 1) = lookupId locals 1) := by decide
+
+/-- Instance (law `ConcreteSpec.Core.Prim.eval_rename`, case `ConcreteSpec.Core.Vacuity.source`). -/
+example : Term.eval (renameLocals swap locals) (renameTerm swap source) = Term.eval locals source :=
+  eval_rename swap locals source
+
+/-- Planted (law `ConcreteSpec.Core.Prim.eval_rename`, case `ConcreteSpec.Core.Vacuity.source`, subject `ConcreteSpec.Core.Prim.renameLocals`, mutant `ConcreteSpec.Core.Vacuity.unrenamedLocals`). -/
+example : ¬ (Term.eval (unrenamedLocals swap locals) (renameTerm swap source) = Term.eval locals source) := by
+  decide
+
+/-- Instance (law `ConcreteSpec.Core.Prim.eval_operands_rename`, case `ConcreteSpec.Core.Vacuity.source`). -/
 example : operands.eval (renameLocals swap locals) () (renameTerm swap source) =
-    operands.eval locals () source ∧
-    (operands.eval locals () source : Res (Int × Unit)) = .ok ((5 : Int), ()) := by
-  constructor <;> rfl
+    operands.eval locals () source :=
+  eval_operands_rename swap locals () source
 
-/-- Planted counter-example: the adapter cannot repair an inconsistently renamed occurrence. -/
-example : (operands.eval locals () (renameTerm swap (.var x0)) : Res (Int × Unit)) ≠
-    operands.eval locals () (.var x0) := by
+/-- Planted (law `ConcreteSpec.Core.Prim.eval_operands_rename`, case `ConcreteSpec.Core.Vacuity.source`, subject `ConcreteSpec.Core.Prim.renameLocals`, mutant `ConcreteSpec.Core.Vacuity.unrenamedLocals`). -/
+example : ¬ ((operands.eval (unrenamedLocals swap locals) () (renameTerm swap source) : Res (Int × Unit)) =
+    operands.eval locals () source) := by
   intro h
   cases h
 
-/-- Non-trivial instance for `rename_inverse`: the source changes once and is then recovered. -/
-example : renameTerm swap.symm (renameTerm swap source) = source ∧
-    renameTerm swap source ≠ source := by decide
+/-- Instance (law `ConcreteSpec.Core.Prim.rename_inverse`, case `ConcreteSpec.Core.Vacuity.source`). -/
+example : renameTerm swap.symm (renameTerm swap source) = source :=
+  rename_inverse swap source
 
-/-- Planted counter-example: substituting the identity for the inverse does not recover the term. -/
-example : renameTerm .id (renameTerm swap (.var x0)) ≠ .var x0 := by decide
+/-- Planted (law `ConcreteSpec.Core.Prim.rename_inverse`, case `ConcreteSpec.Core.Vacuity.source`, subject `ConcreteSpec.Core.Prim.Renaming.symm`, mutant `ConcreteSpec.Core.Vacuity.idSymm`). -/
+example : ¬ (renameTerm (idSymm swap) (renameTerm swap source) = source) := by decide
 
-/-- Non-trivial instance for `rename_id`: a compound binder term is unchanged. -/
-example : renameTerm .id source = source := by decide
+/-- Instance (law `ConcreteSpec.Core.Prim.rename_id`, case `ConcreteSpec.Core.Vacuity.source`). -/
+example : renameTerm .id source = source :=
+  rename_id source
 
-/-- Planted counter-example: a non-identity renaming is not the identity law. -/
-example : renameTerm swap (.var x0) ≠ .var x0 := by decide
+/-- Planted (law `ConcreteSpec.Core.Prim.rename_id`, case `ConcreteSpec.Core.Vacuity.source`, subject `ConcreteSpec.Core.Prim.Renaming.id`, mutant `ConcreteSpec.Core.Vacuity.swap`). -/
+example : ¬ (renameTerm swap source = source) := by decide
 
-/-- Non-trivial instance for `lookupId_rehint`: numeric lookup still finds the value. -/
-example : lookupId (rehintLocals hints locals) 1 = lookupId locals 1 ∧
-    lookupId locals 1 = some 3 := by decide
+/-- Instance (law `ConcreteSpec.Core.Prim.lookupId_rehint`, case `ConcreteSpec.Core.Vacuity.locals`). -/
+example : lookupId (rehintLocals hints locals) 1 = lookupId locals 1 :=
+  lookupId_rehint hints locals 1
 
-/-- Planted counter-example: C1's whole-`Var` lookup fails if only the environment is rehinted. -/
-example : AList.lookup (rehintLocals hints [(x0, 3)]) x0 ≠ AList.lookup [(x0, 3)] x0 := by decide
+/-- Planted (law `ConcreteSpec.Core.Prim.lookupId_rehint`, case `ConcreteSpec.Core.Vacuity.locals`, subject `ConcreteSpec.Core.Prim.rehintLocals`, mutant `ConcreteSpec.Core.Vacuity.corruptIdRehintLocals`). -/
+example : ¬ (lookupId (corruptIdRehintLocals hints locals) 1 = lookupId locals 1) := by decide
 
-/-- Non-trivial instance for `eval_rehint`: consistent rehinting preserves a successful result. -/
-example : Term.eval (rehintLocals hints locals) (rehintTerm hints source) =
-    Term.eval locals source ∧ Term.eval locals source = .ok 5 := by decide
+/-- Instance (law `ConcreteSpec.Core.Prim.eval_rehint`, case `ConcreteSpec.Core.Vacuity.source`). -/
+example : Term.eval (rehintLocals hints locals) (rehintTerm hints source) = Term.eval locals source :=
+  eval_rehint hints locals source
 
-/-- Planted counter-example: a mutated rehinting that also changes the numeric identity breaks evaluation. -/
-example : Term.eval [(x0, 10)] (.var ⟨"renamed", 1⟩) ≠ Term.eval [(x0, 10)] (.var x0) := by decide
+/-- Planted (law `ConcreteSpec.Core.Prim.eval_rehint`, case `ConcreteSpec.Core.Vacuity.source`, subject `ConcreteSpec.Core.Prim.rehintTerm`, mutant `ConcreteSpec.Core.Vacuity.corruptIdRehintTerm`). -/
+example : ¬ (Term.eval (rehintLocals hints locals) (corruptIdRehintTerm hints source) =
+    Term.eval locals source) := by decide
 
-/-- Non-trivial instance for `eval_operands_rehint`: the adapter preserves the value `5`. -/
+/-- Instance (law `ConcreteSpec.Core.Prim.eval_operands_rehint`, case `ConcreteSpec.Core.Vacuity.source`). -/
 example : operands.eval (rehintLocals hints locals) () (rehintTerm hints source) =
-    operands.eval locals () source ∧
-    (operands.eval locals () source : Res (Int × Unit)) = .ok ((5 : Int), ()) := by
-  constructor <;> rfl
+    operands.eval locals () source :=
+  eval_operands_rehint hints locals () source
 
-/-- Planted counter-example: the adapter cannot excuse changing an occurrence's numeric identity. -/
-example : (operands.eval [(x0, (10 : Int))] () (.var ⟨"renamed", 1⟩) : Res (Int × Unit)) ≠
-    operands.eval [(x0, (10 : Int))] () (.var x0) := by
+/-- Planted (law `ConcreteSpec.Core.Prim.eval_operands_rehint`, case `ConcreteSpec.Core.Vacuity.source`, subject `ConcreteSpec.Core.Prim.rehintTerm`, mutant `ConcreteSpec.Core.Vacuity.corruptIdRehintTerm`). -/
+example : ¬ ((operands.eval (rehintLocals hints locals) () (corruptIdRehintTerm hints source) : Res (Int × Unit)) =
+    operands.eval locals () source) := by
   intro h
   cases h
 
-/-- Helper (projection). A non-trivial proved fact and its exact evidence context. -/
-def evidence : SafetyEvidence := ⟨1 + 1 = 2, EvidenceDemo.current, by decide⟩
+/-- The persistent key and obligation used by the evidence-consumption witnesses. -/
+def demoOwner : StableOwner :=
+  .function ⟨⟨⟨"demo", ⟨"1"⟩⟩, ["demo"], by decide⟩, "f"⟩
+def obligationKey : StableKey := ⟨demoOwner, ⟨[⟨.primitive, .ordinal 0⟩]⟩⟩
+def otherKey : StableKey := ⟨demoOwner, ⟨[⟨.primitive, .ordinal 1⟩]⟩⟩
 
-/-- Helper (projection). The arithmetic obligation named by the evidence context. -/
-def obligation : SafetyObligation := ⟨EvidenceDemo.current.obligation, 1 + 1 = 2⟩
+/-- Every obligation in `EvidenceDemo.claim` has a true arithmetic proposition (`1 + 1 = 2` for the
+current obligation and `2 + 2 = 4` for every other obligation), so distinguishing obligations by
+identity is tested on genuinely true propositions rather than a false proposition. -/
+def evidence : SafetyEvidence EvidenceDemo.claim := EvidenceDemo.evidence
+def obligation : SafetyObligation := ⟨EvidenceDemo.current.obligation, obligationKey⟩
 def obligations : ObligationTable := [obligation]
-def discharged : DischargedFact := ⟨obligation, by simp [obligation]⟩
+def discharged : DischargedFact EvidenceDemo.claim := ⟨obligation, by decide⟩
 
-/-- Instance (law `ConcreteSpec.Core.SafetyEvidence.discharge_sound`). Real consumption returns the
-authoritative arithmetic obligation under the exact context and identity. -/
-example : evidence.discharge obligations EvidenceDemo.current obligation.id = some discharged ∧
-    ObligationTable.lookup obligations obligation.id = some discharged.obligation := by
-  simp [SafetyEvidence.discharge, obligations, discharged, obligation, evidence, ObligationTable.lookup]
-
-/-- Planted (law `ConcreteSpec.Core.SafetyEvidence.discharge_sound`). A fabricated result for an
-obligation absent from the table is not a successful consumption. -/
-example : ¬ (evidence.discharge [] EvidenceDemo.current obligation.id = some discharged) := by
-  simp [SafetyEvidence.discharge, ObligationTable.lookup]
-
-/-- Helper (projection). The same proposition under a different typed obligation identity. -/
-def mismatchedObligation : SafetyObligation :=
-  { obligation with id := ⟨⟨0⟩, .safety, 1⟩ }
+/-- A second obligation with a distinct `ObligationId` whose proposition `2 + 2 = 4` is also true. -/
+def mismatchedObligation : SafetyObligation := ⟨⟨⟨0⟩, .safety, 1⟩, otherKey⟩
 def mismatchedObligations : ObligationTable := [mismatchedObligation]
 
-/-- Instance (law `ConcreteSpec.Core.SafetyEvidence.discharge_obligation_mismatch`). Even though the
-proposition and the rest of the context match, the differently identified request is refused. -/
-example : evidence.discharge mismatchedObligations EvidenceDemo.current mismatchedObligation.id = none := by
-  apply SafetyEvidence.discharge_obligation_mismatch
-  decide
+/-- Mutant consumer that fabricates an obligation record without checking `ObligationTable.lookup`. -/
+def dischargeWithoutTable {claim : ObligationId → Prop} (e : SafetyEvidence claim)
+    (_obligations : ObligationTable) (_current : EvidenceContext) (_requested : ObligationId) :
+    Option (DischargedFact claim) :=
+  some ⟨⟨e.context.obligation, obligationKey⟩, e.proof⟩
 
-/-- Helper (projection). Mutated implementation used by the following planted example. -/
-noncomputable def dischargeIgnoringObligation (e : SafetyEvidence) (obligations : ObligationTable)
-    (current : EvidenceContext) (requested : ObligationId) : Option SafetyObligation := by
-  classical
-  exact
-    if e.context = current then
-      match ObligationTable.lookup obligations requested with
-      | some found => if e.fact = found.fact then some found else none
-      | none => none
-    else none
+/-- Instance (law `ConcreteSpec.Core.SafetyEvidence.discharge_sound`, case `ConcreteSpec.Core.Vacuity.obligation`). -/
+example : evidence.Usable EvidenceDemo.current ∧
+    EvidenceDemo.current.obligation = obligation.id ∧
+    ObligationTable.lookup obligations obligation.id = some discharged.obligation ∧
+    discharged.obligation.id = obligation.id :=
+  SafetyEvidence.discharge_sound evidence obligations EvidenceDemo.current obligation.id discharged rfl
 
-/-- Planted (law `ConcreteSpec.Core.SafetyEvidence.discharge_obligation_mismatch`). A consumer that
-omits the evidence's obligation identity accepts that exact mismatch. -/
-example : evidence.context.obligation ≠ mismatchedObligation.id ∧
-    dischargeIgnoringObligation evidence mismatchedObligations EvidenceDemo.current
-      mismatchedObligation.id = some mismatchedObligation := by
+/-- Planted (law `ConcreteSpec.Core.SafetyEvidence.discharge_sound`, case `ConcreteSpec.Core.Vacuity.obligation`, subject `ConcreteSpec.Core.SafetyEvidence.discharge`, mutant `ConcreteSpec.Core.Vacuity.dischargeWithoutTable`). -/
+example : dischargeWithoutTable evidence [] EvidenceDemo.current obligation.id = some discharged ∧
+    ¬ (evidence.Usable EvidenceDemo.current ∧
+      EvidenceDemo.current.obligation = obligation.id ∧
+      ObligationTable.lookup [] obligation.id = some discharged.obligation ∧
+      discharged.obligation.id = obligation.id) := by
+  refine ⟨rfl, ?_⟩
+  intro h
+  have hlookup := h.2.2.1
+  simp [ObligationTable.lookup] at hlookup
+
+/-- Instance (law `ConcreteSpec.Core.SafetyEvidence.discharge_obligation_mismatch`, case `ConcreteSpec.Core.Vacuity.mismatchedObligation`). -/
+example : evidence.discharge mismatchedObligations EvidenceDemo.current mismatchedObligation.id = none :=
+  SafetyEvidence.discharge_obligation_mismatch evidence mismatchedObligations
+    EvidenceDemo.current mismatchedObligation.id (by decide)
+
+/-- Mutant consumer that ignores the requested `ObligationId` and discharges `e.context.obligation`. -/
+def dischargeIgnoringObligation {claim : ObligationId → Prop} (e : SafetyEvidence claim)
+    (_obligations : ObligationTable) (current : EvidenceContext) (_requested : ObligationId) :
+    Option (DischargedFact claim) :=
+  if e.Usable current then some ⟨⟨e.context.obligation, obligationKey⟩, e.proof⟩ else none
+
+/-- Planted (law `ConcreteSpec.Core.SafetyEvidence.discharge_obligation_mismatch`, case `ConcreteSpec.Core.Vacuity.mismatchedObligation`, subject `ConcreteSpec.Core.SafetyEvidence.discharge`, mutant `ConcreteSpec.Core.Vacuity.dischargeIgnoringObligation`). -/
+example : EvidenceDemo.current.obligation ≠ mismatchedObligation.id ∧
+    ¬ (dischargeIgnoringObligation evidence mismatchedObligations EvidenceDemo.current
+      mismatchedObligation.id = none) := by
   refine ⟨by decide, ?_⟩
-  simp [dischargeIgnoringObligation, evidence, mismatchedObligations, mismatchedObligation,
-    obligation, ObligationTable.lookup]
+  intro h
+  simp [dischargeIgnoringObligation, SafetyEvidence.Usable, evidence, EvidenceDemo.evidence] at h
 
-/-- Helper (projection). Only the contract revision changes in this stale context. -/
+/-- Only the contract revision changes in this stale context. -/
 def contractChanged : EvidenceContext := { EvidenceDemo.current with contract := ⟨⟨0⟩, 2⟩ }
 
-/-- Instance (law `ConcreteSpec.Core.SafetyEvidence.discharge_context_mismatch`). A changed contract
-revision prevents consumption even for the original obligation and proposition. -/
-example : evidence.discharge obligations contractChanged obligation.id = none := by
-  apply SafetyEvidence.discharge_context_mismatch
-  decide
+/-- Instance (law `ConcreteSpec.Core.SafetyEvidence.discharge_context_mismatch`, case `ConcreteSpec.Core.Vacuity.contractChanged`). -/
+example : evidence.discharge obligations contractChanged obligation.id = none :=
+  SafetyEvidence.discharge_context_mismatch evidence obligations contractChanged obligation.id (by decide)
 
-/-- Instance (law `ConcreteSpec.Core.SafetyEvidence.discharge_context_mismatch`). Target, checker,
-specification and obligation identity changes are each refused by the actual consumer as well. -/
-example :
-    evidence.discharge obligations { EvidenceDemo.current with target := { linuxX8664 with byteOrder := .big } }
-      obligation.id = none ∧
-    evidence.discharge obligations { EvidenceDemo.current with checker := ⟨0, 2, 0⟩ }
-      obligation.id = none ∧
-    evidence.discharge obligations { EvidenceDemo.current with spec := ⟨0, 2⟩ }
-      obligation.id = none ∧
-    evidence.discharge obligations
-      { EvidenceDemo.current with obligation := mismatchedObligation.id } obligation.id = none := by
-  refine ⟨?_, ?_, ?_, ?_⟩ <;>
-    apply SafetyEvidence.discharge_context_mismatch <;> decide
+/-- Mutant consumer that omits the `Usable` context check. -/
+def dischargeIgnoringContext {claim : ObligationId → Prop} (e : SafetyEvidence claim)
+    (obligations : ObligationTable) (_current : EvidenceContext) (requested : ObligationId) :
+    Option (DischargedFact claim) :=
+  match ObligationTable.lookup obligations requested with
+  | none => none
+  | some found =>
+    if same : e.context.obligation = found.id then
+      some ⟨found, same ▸ e.proof⟩
+    else none
 
-/-- Helper (projection). Mutated implementation used by the following planted example. -/
-noncomputable def dischargeIgnoringContext (e : SafetyEvidence) (obligations : ObligationTable)
-    (requested : ObligationId) : Option SafetyObligation := by
-  classical
-  exact
-    match ObligationTable.lookup obligations requested with
-    | some found => if e.context.obligation = requested ∧ e.fact = found.fact then some found else none
-    | none => none
-
-/-- Planted (law `ConcreteSpec.Core.SafetyEvidence.discharge_context_mismatch`). A consumer omitting
-the context check accepts stale contract evidence. -/
-example : evidence.context ≠ contractChanged ∧
-    dischargeIgnoringContext evidence obligations obligation.id = some obligation := by
+/-- Planted (law `ConcreteSpec.Core.SafetyEvidence.discharge_context_mismatch`, case `ConcreteSpec.Core.Vacuity.contractChanged`, subject `ConcreteSpec.Core.SafetyEvidence.discharge`, mutant `ConcreteSpec.Core.Vacuity.dischargeIgnoringContext`). -/
+example : ¬ evidence.Usable contractChanged ∧
+    ¬ (dischargeIgnoringContext evidence obligations contractChanged obligation.id = none) := by
   refine ⟨by decide, ?_⟩
-  simp [dischargeIgnoringContext, evidence, obligations, obligation, ObligationTable.lookup]
+  intro h
+  simp [dischargeIgnoringContext, obligations, obligation, ObligationTable.lookup, evidence,
+    EvidenceDemo.evidence] at h
 
-/-- Helper (projection). A different proposition under the evidence's obligation identity. -/
-def differentObligation : SafetyObligation := ⟨obligation.id, 1 + 1 = 3⟩
-def differentObligations : ObligationTable := [differentObligation]
+/-- Instance (law `ConcreteSpec.Core.SafetyEvidence.discharge_target_mismatch`, case `ConcreteSpec.Core.Vacuity.mismatchedObligation`).
+Both `EvidenceDemo.claim obligation.id` (`1 + 1 = 2`) and `EvidenceDemo.claim mismatchedObligation.id`
+(`2 + 2 = 4`) are true propositions, yet evidence for `obligation.id` cannot discharge
+`mismatchedObligation`. -/
+example : evidence.discharge mismatchedObligations EvidenceDemo.current mismatchedObligation.id = none :=
+  SafetyEvidence.discharge_target_mismatch evidence mismatchedObligations EvidenceDemo.current
+    mismatchedObligation.id mismatchedObligation rfl (by decide)
 
-/-- Instance (law `ConcreteSpec.Core.SafetyEvidence.discharge_proposition_mismatch`). Context and
-identity match, but the arithmetic proof is for a different proposition and cannot be consumed. -/
-example : evidence.discharge differentObligations EvidenceDemo.current obligation.id = none := by
-  apply SafetyEvidence.discharge_proposition_mismatch (obligation := differentObligation)
-  · rfl
-  · intro equal
-    change (1 + 1 = 2) = (1 + 1 = 3) at equal
-    have valid : 1 + 1 = 2 := by decide
-    have invalid : 1 + 1 = 3 := equal ▸ valid
-    omega
+/-- Planted (law `ConcreteSpec.Core.SafetyEvidence.discharge_target_mismatch`, case `ConcreteSpec.Core.Vacuity.mismatchedObligation`, subject `ConcreteSpec.Core.SafetyEvidence.discharge`, mutant `ConcreteSpec.Core.Vacuity.dischargeWithoutTable`). -/
+example : (ObligationTable.lookup mismatchedObligations mismatchedObligation.id =
+      some mismatchedObligation ∧
+    evidence.context.obligation ≠ mismatchedObligation.id) ∧
+    ¬ (dischargeWithoutTable evidence mismatchedObligations EvidenceDemo.current
+      mismatchedObligation.id = none) := by
+  refine ⟨⟨rfl, by decide⟩, ?_⟩
+  intro h
+  simp [dischargeWithoutTable] at h
 
-/-- Helper (projection). Mutated implementation used by the following planted example. -/
-def lookupIgnoringEvidence (obligations : ObligationTable) (requested : ObligationId) :
-    Option SafetyObligation := ObligationTable.lookup obligations requested
+/-- Instance (law `ConcreteSpec.Core.SafetyEvidence.discharge_unregistered`, case `ConcreteSpec.Core.Vacuity.obligation`). -/
+example : evidence.discharge [] EvidenceDemo.current obligation.id = none :=
+  SafetyEvidence.discharge_unregistered evidence [] EvidenceDemo.current obligation.id rfl
 
-/-- Planted (law `ConcreteSpec.Core.SafetyEvidence.discharge_proposition_mismatch`). Looking up the
-obligation while ignoring the evidence proposition returns the mismatched obligation successfully. -/
-example : evidence.fact ≠ differentObligation.fact ∧
-    lookupIgnoringEvidence differentObligations obligation.id = some differentObligation := by
-  refine ⟨?_, rfl⟩
-  intro equal
-  change (1 + 1 = 2) = (1 + 1 = 3) at equal
-  have valid : 1 + 1 = 2 := by decide
-  have invalid : 1 + 1 = 3 := equal ▸ valid
-  omega
+/-- Planted (law `ConcreteSpec.Core.SafetyEvidence.discharge_unregistered`, case `ConcreteSpec.Core.Vacuity.obligation`, subject `ConcreteSpec.Core.SafetyEvidence.discharge`, mutant `ConcreteSpec.Core.Vacuity.dischargeWithoutTable`). -/
+example : ObligationTable.lookup [] obligation.id = none ∧
+    ¬ (dischargeWithoutTable evidence [] EvidenceDemo.current obligation.id = none) := by
+  refine ⟨rfl, ?_⟩
+  intro h
+  simp [dischargeWithoutTable] at h
 
 def successAnswer : Exec.Answer Int Int Int := ⟨none, .ok 0, 7⟩
 def failureAnswer : Exec.Answer Int Int Int := ⟨none, .ok 1, 7⟩
 def undeclaredAnswer : Exec.Answer Int Int Int := ⟨none, .ok 2, 7⟩
 def trapAnswer : Exec.Answer Int Int Int := ⟨none, .error .abort, 7⟩
 
-/-- A two-type contract: `true` is its result type, while its only failure alternative is wrongly
-labeled with the distinct type `false`. -/
-def twoTypeContract : PrimContract Int Bool Int Int where
-  id := ⟨⟨0⟩, 1⟩
-  parameters := []
-  result := true
-  authority := []
-  ownership := fun _ before after => after = before
-  dependencies := fun _ _ _ => True
-  requires := fun _ _ => True
-  ensures := fun v _ => v = 0
-  footprint := fun _ _ => []
-  initialized := fun _ => True
-  valid := fun _ => True
-  failures := [⟨false, fun v => v = 1⟩]
-  events := fun ev => ev = none
-  eventTags := fun _ => []
-  leakageTags := fun _ => []
-  resources := fun _ before after => after = before
-  termination := fun _ _ => True
-  answerOk := fun args st a => match a.result with
-    | .ok v => decide (args = [] ∧ a.event = none ∧ v = 0 ∧ a.store = st)
-    | .error _ => false
+/-- Mutant registry checker with a catch-all branch that accepts unregistered primitives. -/
+def catchAllAllows {Val Ty Store Event : Type} (R : PrimRegistry Val Ty Store Event)
+    (p : PrimId) (args : List Val) (st : Store) (a : Exec.Answer Val Event Store) : Bool :=
+  match AList.lookup R.entries p with
+  | none => true
+  | some c => c.answerOk args st a
 
-/-- Non-trivial two-type instance: the ordinary success remains accepted. -/
-example : twoTypeContract.Allowed [] 7 successAnswer := by
-  simp [twoTypeContract, PrimContract.Allowed, successAnswer]
+/-- Mutant small-step relation that omits the `O.allows` check on primitive requests. -/
+def uncheckedPrimStep {O : Exec.Operands} (P : Exec.Program O) (c : Exec.Config O)
+    (l : Exec.Label O) (c' : Exec.Config O) : Prop :=
+  ∃ p vs site st k a,
+    Exec.step P c = some (.request p vs site st k) ∧
+    l = a.label ∧ k a = some c'
 
-/-- Refused: the failure value `1` has the undeclared error type `false`, not result type `true`. -/
-example : ¬ twoTypeContract.Allowed [] 7 failureAnswer := by
-  simp [twoTypeContract, PrimContract.Allowed, failureAnswer]
+/-- Instance (law `ConcreteSpec.Core.PrimRegistry.allows_unknown`, case `ConcreteSpec.Core.Vacuity.successAnswer`). -/
+example : PrimDemo.registry.allows ⟨1⟩ [] 7 successAnswer = false :=
+  PrimRegistry.allows_unknown PrimDemo.registry ⟨1⟩ rfl [] 7 successAnswer
 
-/-- Planted counter-example: a matcher that removes `f.errorTy = c.result` accepts that same failure. -/
-example : ∃ f ∈ twoTypeContract.failures, f.holds 1 := by
-  exact ⟨⟨false, fun v => v = 1⟩, by simp [twoTypeContract], rfl⟩
-
-/-- Non-trivial instance for `PrimRegistry.answerOk_iff`: the declared failure passes both sides. -/
-example : PrimDemo.unitContract.answerOk [] 7 failureAnswer = true ↔
-    PrimDemo.unitContract.Allowed [] 7 failureAnswer := by
-  simp [PrimDemo.unitContract, PrimContract.Allowed, failureAnswer]
-
-/-- Planted counter-example: a checker that omits the declared failure violates the equivalence. -/
-example : ¬ (false = true ↔ PrimDemo.unitContract.Allowed [] 7 failureAnswer) := by
-  simp [PrimDemo.unitContract, PrimContract.Allowed, failureAnswer]
-
-/-- Non-trivial instance for `PrimRegistry.allows_unknown`: primitive one has no registry entry. -/
-example : PrimDemo.registry.allows ⟨1⟩ [] 7 successAnswer = false := by decide
-
-/-- Planted counter-example: treating the registered primitive zero as unknown rejects a valid answer. -/
-example : ¬ PrimDemo.registry.allows ⟨0⟩ [] 7 successAnswer = false := by decide
+/-- Planted (law `ConcreteSpec.Core.PrimRegistry.allows_unknown`, case `ConcreteSpec.Core.Vacuity.successAnswer`, subject `ConcreteSpec.Core.PrimRegistry.allows`, mutant `ConcreteSpec.Core.Vacuity.catchAllAllows`). -/
+example : AList.lookup PrimDemo.registry.entries ⟨1⟩ = none ∧
+    ¬ (catchAllAllows PrimDemo.registry ⟨1⟩ [] 7 successAnswer = false) :=
+  ⟨rfl, by decide⟩
 
 abbrev requestProgram : Exec.Program PrimDemo.machine := ⟨[]⟩
 abbrev unknownStart : Exec.Config PrimDemo.machine :=
   ⟨.exec (.prim none ⟨1⟩ [] ⟨0⟩), [], (7 : Int), []⟩
 abbrev registeredStart : Exec.Config PrimDemo.machine :=
   ⟨.exec (.prim none ⟨0⟩ [] ⟨0⟩), [], (7 : Int), []⟩
+abbrev finishedConfig : Exec.Config PrimDemo.machine :=
+  ⟨.done, [], (7 : Int), []⟩
 
-/-- Non-trivial instance for `PrimRegistry.unknown_primitive_stuck`: an actual request has no step. -/
-example (l : Exec.Label PrimDemo.machine) (c' : Exec.Config PrimDemo.machine) :
-    ¬ Exec.Step requestProgram unknownStart l c' := by
-  apply PrimRegistry.unknown_primitive_stuck (O := PrimDemo.base)
-    PrimDemo.registry requestProgram
-  · rfl
-  · rfl
+abbrev unknownCont :
+    Exec.Answer PrimDemo.machine.Val PrimDemo.machine.Event PrimDemo.machine.Store →
+      Option (Exec.Config PrimDemo.machine) :=
+  fun a =>
+    match a.result with
+    | .ok _ => some ⟨.done, [], a.store, []⟩
+    | .error kd => some ⟨.trapped kd ⟨0⟩, [], a.store, []⟩
 
-/-- Planted counter-example: the same request to the registered primitive does have a step. -/
-example : ¬ (∀ (l : Exec.Label PrimDemo.machine) (c' : Exec.Config PrimDemo.machine),
-    ¬ Exec.Step requestProgram registeredStart l c') := by
-  intro h
-  apply h .silent ⟨.done, [], (7 : Int), []⟩
-  exact Exec.Step.prim (P := requestProgram) (a := successAnswer) rfl (by decide) rfl
+/-- Instance (law `ConcreteSpec.Core.PrimRegistry.unknown_primitive_stuck`, case `ConcreteSpec.Core.Vacuity.unknownStart`). -/
+example : ¬ Exec.Step requestProgram unknownStart .silent finishedConfig :=
+  PrimRegistry.unknown_primitive_stuck (O := PrimDemo.base)
+    PrimDemo.registry requestProgram rfl rfl .silent finishedConfig
 
-/-- Non-trivial instance for `PrimRegistry.allows_allowed`: a declared failure satisfies `Allowed`. -/
-example : PrimDemo.unitContract.Allowed [] 7 failureAnswer :=
-  PrimRegistry.allows_allowed (O := PrimDemo.base) PrimDemo.registry ⟨0⟩ PrimDemo.unitContract rfl []
-    7 failureAnswer (by decide)
-
-/-- Planted counter-example: the undeclared ordinary result `2` is not allowed. -/
-example : ¬ PrimDemo.unitContract.Allowed [] 7 undeclaredAnswer := by
-  simp [PrimDemo.unitContract, PrimContract.Allowed, undeclaredAnswer]
-
-/-- Non-trivial instance for `PrimRegistry.allows_postcondition`: the declared failure matches its
-alternative even though it does not satisfy the success predicate. -/
-example : PrimDemo.unitContract.ensures 1 failureAnswer.store ∨
-    ∃ f ∈ PrimDemo.unitContract.failures,
-      f.errorTy = PrimDemo.unitContract.result ∧ f.holds 1 := by
-  simp [PrimDemo.unitContract, failureAnswer]
-
-/-- Planted counter-example: the old ensures-only claim rejects this accepted declared failure. -/
-example : ¬ (PrimDemo.registry.allows ⟨0⟩ [] 7 failureAnswer = true →
-    PrimDemo.unitContract.ensures 1 failureAnswer.store) := by
-  simp [PrimDemo.registry, PrimRegistry.allows, AList.lookup, PrimDemo.unitContract, failureAnswer]
-
-/-- Non-trivial instance for `PrimRegistry.allows_no_implicit_trap`: the accepted failure is ordinary. -/
-example : ∃ v, failureAnswer.result = .ok v :=
-  PrimRegistry.allows_no_implicit_trap (O := PrimDemo.base) PrimDemo.registry ⟨0⟩
-    PrimDemo.unitContract rfl [] 7 failureAnswer (by decide)
-
-/-- Planted counter-example: an implicit trap is not an ordinary result value. -/
-example : ¬ ∃ v, trapAnswer.result = .ok v := by
-  rintro ⟨v, hv⟩
-  simp [trapAnswer] at hv
+/-- Planted (law `ConcreteSpec.Core.PrimRegistry.unknown_primitive_stuck`, case `ConcreteSpec.Core.Vacuity.unknownStart`, subject `ConcreteSpec.Core.Exec.Step`, mutant `ConcreteSpec.Core.Vacuity.uncheckedPrimStep`). -/
+example : (Exec.step requestProgram unknownStart =
+      some (.request ⟨1⟩ [] ⟨0⟩ unknownStart.store unknownCont) ∧
+    AList.lookup PrimDemo.registry.entries ⟨1⟩ = none) ∧
+    ¬ ¬ uncheckedPrimStep requestProgram unknownStart .silent finishedConfig := by
+  have hstep : Exec.step requestProgram unknownStart =
+      some (.request ⟨1⟩ [] ⟨0⟩ unknownStart.store unknownCont) := by
+    unfold Exec.step requestProgram unknownStart Exec.onRes Exec.evalArgs unknownCont
+    dsimp
+    congr 1
+    congr 1
+    funext a
+    cases a.result <;> rfl
+  refine ⟨⟨hstep, rfl⟩, ?_⟩
+  intro hnot
+  apply hnot
+  exact ⟨⟨1⟩, [], ⟨0⟩, unknownStart.store, unknownCont, successAnswer, hstep, rfl, rfl⟩
 
 abbrev answerOracle : Exec.Oracle PrimDemo.machine := fun _ _ _ _ _ => some successAnswer
+abbrev initialHist : List PrimDemo.machine.Event := [(99 : Int)]
 
-/-- Non-trivial instance for `Ghost.drive_steps`: a real primitive request has a `Steps` derivation. -/
-example : ∃ tr, (Ghost.drive requestProgram answerOracle 2 [] registeredStart).events = [] ++ tr ∧
+/-- Mutant driver that drops the incoming event history from the returned report. -/
+def dropHistoryDrive {O : Exec.Operands} (P : Exec.Program O) (ρ : Exec.Oracle O)
+    (fuel : Nat) (hist : List O.Event) (c : Exec.Config O) : Ghost.SegmentReport O :=
+  { Ghost.drive P ρ fuel hist c with events := [] }
+
+/-- Instance (law `ConcreteSpec.Core.Ghost.drive_steps_result`, case `ConcreteSpec.Core.Vacuity.registeredStart`). -/
+example : ∃ tr,
+    (Ghost.drive requestProgram answerOracle 2 initialHist registeredStart).events =
+      initialHist ++ tr ∧
     Exec.Steps requestProgram registeredStart tr
-      (Ghost.drive requestProgram answerOracle 2 [] registeredStart).config :=
-  Ghost.drive_steps requestProgram answerOracle 2 [] registeredStart _ rfl
+      (Ghost.drive requestProgram answerOracle 2 initialHist registeredStart).config :=
+  Ghost.drive_steps_result requestProgram answerOracle 2 initialHist registeredStart
 
-/-- A real completed report and two planted fabrications of its observations and retained state. -/
-def completedReport : Ghost.SegmentReport PrimDemo.base :=
-  Ghost.drive GhostDemo.program GhostDemo.oracle 20 [] GhostDemo.start
-
-def fabricatedEventReport : Ghost.SegmentReport PrimDemo.base :=
-  { completedReport with events := [99] }
-
-def fabricatedStoreReport : Ghost.SegmentReport PrimDemo.base :=
-  { completedReport with config := ⟨.done, [], 8, []⟩ }
-
-/-- Planted counter-example for `Ghost.drive_steps`: no trace has the fabricated event and reaches
-the report's configuration, even though the report itself was obtained by mutating a real run. -/
-example : ¬ ∃ tr, fabricatedEventReport.events = [] ++ tr ∧
-    Exec.Steps GhostDemo.program GhostDemo.start tr fabricatedEventReport.config := by
-  have inv : ∀ {tr : List Int} {c' : Exec.Config PrimDemo.base},
-      Exec.Steps GhostDemo.program GhostDemo.start tr c' → tr = [] ∧ c' = GhostDemo.start := by
-    intro tr c' hs
-    cases hs with
-    | refl => exact ⟨rfl, rfl⟩
-    | step h hs =>
-      cases h with
-      | silent hstep => simp [Exec.step] at hstep
-      | prim hstep ha hk => simp [Exec.step] at hstep
-  rintro ⟨tr, he, hs⟩
-  obtain ⟨ht, hc⟩ := inv hs
-  subst tr
-  simp [fabricatedEventReport] at he
-
-/-- Non-trivial instance for `Ghost.drive_steps_result`, with no auxiliary report argument. -/
-example : ∃ tr, (Ghost.drive requestProgram answerOracle 2 [] registeredStart).events = [] ++ tr ∧
+/-- Planted (law `ConcreteSpec.Core.Ghost.drive_steps_result`, case `ConcreteSpec.Core.Vacuity.registeredStart`, subject `ConcreteSpec.Core.Ghost.drive`, mutant `ConcreteSpec.Core.Vacuity.dropHistoryDrive`). -/
+example : ¬ ∃ tr,
+    (dropHistoryDrive requestProgram answerOracle 2 initialHist registeredStart).events =
+      initialHist ++ tr ∧
     Exec.Steps requestProgram registeredStart tr
-      (Ghost.drive requestProgram answerOracle 2 [] registeredStart).config :=
-  Ghost.drive_steps_result requestProgram answerOracle 2 [] registeredStart
-
-/-- Planted counter-example for `Ghost.drive_steps_result`: no trace reaches the fabricated store,
-so changing only `config` is enough to falsify the full soundness property. -/
-example : ¬ ∃ tr, fabricatedStoreReport.events = [] ++ tr ∧
-    Exec.Steps GhostDemo.program GhostDemo.start tr fabricatedStoreReport.config := by
-  have inv : ∀ {tr : List Int} {c' : Exec.Config PrimDemo.base},
-      Exec.Steps GhostDemo.program GhostDemo.start tr c' → tr = [] ∧ c' = GhostDemo.start := by
-    intro tr c' hs
-    cases hs with
-    | refl => exact ⟨rfl, rfl⟩
-    | step h hs =>
-      cases h with
-      | silent hstep => simp [Exec.step] at hstep
-      | prim hstep ha hk => simp [Exec.step] at hstep
-  rintro ⟨tr, he, hs⟩
-  obtain ⟨ht, hc⟩ := inv hs
-  have hstore := congrArg Exec.Config.store hc
-  simp [fabricatedStoreReport] at hstore
+      (dropHistoryDrive requestProgram answerOracle 2 initialHist registeredStart).config := by
+  rintro ⟨tr, he, _⟩
+  cases he
 
 abbrev returnedStart : Exec.Config PrimDemo.base := ⟨.exiting (.ret 1), [], 5, []⟩
 abbrev trappedStart : Exec.Config PrimDemo.base := ⟨.trapped .abort ⟨3⟩, [], 5, []⟩
-
-/-- Non-trivial instance for `Ghost.runStmts_of_not_normal`: a returned configuration is not restarted. -/
-example : Ghost.runStmts GhostDemo.program GhostDemo.oracle 20 [] [.skip] returnedStart =
-    Ghost.drive GhostDemo.program GhostDemo.oracle 20 [] returnedStart := by
-  apply Ghost.runStmts_of_not_normal
-  decide
-
-/-- Non-trivial instances for `Ghost.runStmts_terminal`: returned and trapped runs preserve the
-complete report rather than entering the trailing `abort`. -/
-example : Ghost.runStmts GhostDemo.program GhostDemo.oracle 20 [] [.abort ⟨4⟩] returnedStart =
-    ⟨[], .final (.returned 1), returnedStart, 20⟩ :=
-  Ghost.runStmts_terminal GhostDemo.program GhostDemo.oracle 20 [] [.abort ⟨4⟩] returnedStart
-    (.returned 1) rfl (by decide)
-
-example : Ghost.runStmts GhostDemo.program GhostDemo.oracle 20 [] [.abort ⟨4⟩] trappedStart =
-    ⟨[], .final (.trapped .abort ⟨3⟩), trappedStart, 20⟩ :=
-  Ghost.runStmts_terminal GhostDemo.program GhostDemo.oracle 20 [] [.abort ⟨4⟩] trappedStart
-    (.trapped .abort ⟨3⟩) rfl (by decide)
 
 /-- A planted mutant that resumes a trailing statement even from a returned or trapped state. -/
 def restartingRunStmts {O : Exec.Operands} (P : Exec.Program O) (ρ : Exec.Oracle O)
@@ -799,50 +754,88 @@ def restartingRunStmts {O : Exec.Operands} (P : Exec.Program O) (ρ : Exec.Oracl
     | .final .normal => restartingRunStmts P ρ r.remaining r.events ss r.config
     | _ => r
 
-/-- A returned configuration with a live local that the trailing assignment can change. -/
-abbrev returnedWithLocal : Exec.Config PrimDemo.base := ⟨.exiting (.ret 1), [(x0, 1)], 5, []⟩
+/-- Instance (law `ConcreteSpec.Core.Ghost.runStmts_of_not_normal`, case `ConcreteSpec.Core.Vacuity.returnedStart`). -/
+example : Ghost.runStmts GhostDemo.program GhostDemo.oracle 20 [] [.abort ⟨4⟩] returnedStart =
+    Ghost.drive GhostDemo.program GhostDemo.oracle 20 [] returnedStart :=
+  Ghost.runStmts_of_not_normal GhostDemo.program GhostDemo.oracle 20 [] [.abort ⟨4⟩]
+    returnedStart (by decide)
 
-/-- Planted counter-example for `Ghost.runStmts_terminal`: the restarting runner executes the
-assignment, changing both the local state and the ending after the return. -/
-example : (restartingRunStmts GhostDemo.program GhostDemo.oracle 20 []
-    [.assign x0 () ⟨4⟩] returnedWithLocal).config.locals ≠
-    (Ghost.runStmts GhostDemo.program GhostDemo.oracle 20 []
-      [.assign x0 () ⟨4⟩] returnedWithLocal).config.locals := by decide
-
-example : (restartingRunStmts GhostDemo.program GhostDemo.oracle 20 []
-    [.assign x0 () ⟨4⟩] returnedWithLocal).ending ≠ .final (.returned 1) := by
+/-- Planted (law `ConcreteSpec.Core.Ghost.runStmts_of_not_normal`, case `ConcreteSpec.Core.Vacuity.returnedStart`, subject `ConcreteSpec.Core.Ghost.runStmts`, mutant `ConcreteSpec.Core.Vacuity.restartingRunStmts`). -/
+example : returnedStart.final? ≠ some .normal ∧
+    ¬ (restartingRunStmts GhostDemo.program GhostDemo.oracle 20 [] [.abort ⟨4⟩] returnedStart =
+      Ghost.drive GhostDemo.program GhostDemo.oracle 20 [] returnedStart) := by
+  refine ⟨by decide, ?_⟩
   intro h
   cases h
 
-/-- Non-trivial instance for `Ghost.ghost_erasure_run`: ghost reads and writes surround concrete `skip`. -/
+/-- Instance (law `ConcreteSpec.Core.Ghost.runStmts_terminal`, case `ConcreteSpec.Core.Vacuity.returnedStart`). -/
+example : Ghost.runStmts GhostDemo.program GhostDemo.oracle 20 [] [.abort ⟨4⟩] returnedStart =
+    ⟨[], .final (.returned 1), returnedStart, 20⟩ :=
+  Ghost.runStmts_terminal GhostDemo.program GhostDemo.oracle 20 [] [.abort ⟨4⟩] returnedStart
+    (.returned 1) rfl (by decide)
+
+/-- Instance (law `ConcreteSpec.Core.Ghost.runStmts_terminal`, case `ConcreteSpec.Core.Vacuity.trappedStart`). -/
+example : Ghost.runStmts GhostDemo.program GhostDemo.oracle 20 [] [.abort ⟨4⟩] trappedStart =
+    ⟨[], .final (.trapped .abort ⟨3⟩), trappedStart, 20⟩ :=
+  Ghost.runStmts_terminal GhostDemo.program GhostDemo.oracle 20 [] [.abort ⟨4⟩] trappedStart
+    (.trapped .abort ⟨3⟩) rfl (by decide)
+
+/-- Planted (law `ConcreteSpec.Core.Ghost.runStmts_terminal`, case `ConcreteSpec.Core.Vacuity.returnedStart`, subject `ConcreteSpec.Core.Ghost.runStmts`, mutant `ConcreteSpec.Core.Vacuity.restartingRunStmts`). -/
+example : (returnedStart.final? = some (.returned 1) ∧ Exec.Final.returned (1 : Int) ≠ .normal) ∧
+    ¬ (restartingRunStmts GhostDemo.program GhostDemo.oracle 20 [] [.abort ⟨4⟩] returnedStart =
+      ⟨[], .final (.returned 1), returnedStart, 20⟩) := by
+  refine ⟨⟨rfl, by decide⟩, ?_⟩
+  intro h
+  cases h
+
+/-- Mutant eraser that drops concrete statements as well as ghost statements. -/
+def eraseAllPieces {O : Exec.Operands} {G : Ghost.Language O} (_ : List (Ghost.Piece G)) :
+    List (Exec.Stmt O) := []
+
+def abortPieces : List (Ghost.Piece GhostDemo.language) :=
+  [.ghost (.assert ⟨⟨0⟩, .assertion, 0⟩ True), .concrete (.abort ⟨3⟩)]
+
+/-- Instance (law `ConcreteSpec.Core.Ghost.ghost_erasure_run`, case `ConcreteSpec.Core.GhostDemo.pieces`). -/
 example : Ghost.runPieces GhostDemo.language GhostDemo.program GhostDemo.oracle 20 []
     GhostDemo.pieces [] GhostDemo.start =
-    Ghost.runStmts GhostDemo.program GhostDemo.oracle 20 [] [.skip] GhostDemo.start :=
+    Ghost.runStmts GhostDemo.program GhostDemo.oracle 20 [] (Ghost.erase GhostDemo.pieces)
+      GhostDemo.start :=
   Ghost.ghost_erasure_run GhostDemo.language GhostDemo.program GhostDemo.oracle 20 []
     GhostDemo.pieces [] GhostDemo.start
 
-/-- Planted counter-example: erasing concrete `skip` as well changes the retained fuel. -/
-example : (Ghost.runPieces GhostDemo.language GhostDemo.program GhostDemo.oracle 20 []
-    GhostDemo.pieces [] GhostDemo.start).remaining ≠
-    (Ghost.runStmts GhostDemo.program GhostDemo.oracle 20 [] [] GhostDemo.start).remaining := by decide
-
-/-- Non-trivial instance for `Ghost.ghost_erasure_ending`: both observations are preserved. -/
-example : (Ghost.runPieces GhostDemo.language GhostDemo.program GhostDemo.oracle 20 []
-    GhostDemo.pieces [] GhostDemo.start).events =
-    (Ghost.runStmts GhostDemo.program GhostDemo.oracle 20 [] [.skip] GhostDemo.start).events ∧
-    (Ghost.runPieces GhostDemo.language GhostDemo.program GhostDemo.oracle 20 []
-      GhostDemo.pieces [] GhostDemo.start).ending =
-    (Ghost.runStmts GhostDemo.program GhostDemo.oracle 20 [] [.skip] GhostDemo.start).ending :=
-  Ghost.ghost_erasure_ending GhostDemo.language GhostDemo.program GhostDemo.oracle 20 []
-    GhostDemo.pieces [] GhostDemo.start
-
-/-- Planted counter-example: erasing a concrete `abort` changes the ending, so only ghost code is
-removable. -/
-example : (Ghost.runPieces GhostDemo.language GhostDemo.program GhostDemo.oracle 20 []
-    [.ghost (.assert ⟨⟨0⟩, .assertion, 0⟩ True), .concrete (.abort ⟨3⟩)] [] GhostDemo.start).ending ≠
-    (Ghost.runStmts GhostDemo.program GhostDemo.oracle 20 [] [] GhostDemo.start).ending := by
+/-- Planted (law `ConcreteSpec.Core.Ghost.ghost_erasure_run`, case `ConcreteSpec.Core.GhostDemo.pieces`, subject `ConcreteSpec.Core.Ghost.erase`, mutant `ConcreteSpec.Core.Vacuity.eraseAllPieces`). -/
+example : ¬ (Ghost.runPieces GhostDemo.language GhostDemo.program GhostDemo.oracle 20 []
+    GhostDemo.pieces [] GhostDemo.start =
+    Ghost.runStmts GhostDemo.program GhostDemo.oracle 20 [] (eraseAllPieces GhostDemo.pieces)
+      GhostDemo.start) := by
   intro h
-  cases h
+  have hrem := congrArg Ghost.SegmentReport.remaining h
+  revert hrem
+  decide
+
+/-- Instance (law `ConcreteSpec.Core.Ghost.ghost_erasure_ending`, case `ConcreteSpec.Core.Vacuity.abortPieces`). -/
+example : (Ghost.runPieces GhostDemo.language GhostDemo.program GhostDemo.oracle 20 []
+    abortPieces [] GhostDemo.start).events =
+    (Ghost.runStmts GhostDemo.program GhostDemo.oracle 20 [] (Ghost.erase abortPieces)
+      GhostDemo.start).events ∧
+    (Ghost.runPieces GhostDemo.language GhostDemo.program GhostDemo.oracle 20 []
+      abortPieces [] GhostDemo.start).ending =
+    (Ghost.runStmts GhostDemo.program GhostDemo.oracle 20 [] (Ghost.erase abortPieces)
+      GhostDemo.start).ending :=
+  Ghost.ghost_erasure_ending GhostDemo.language GhostDemo.program GhostDemo.oracle 20 []
+    abortPieces [] GhostDemo.start
+
+/-- Planted (law `ConcreteSpec.Core.Ghost.ghost_erasure_ending`, case `ConcreteSpec.Core.Vacuity.abortPieces`, subject `ConcreteSpec.Core.Ghost.erase`, mutant `ConcreteSpec.Core.Vacuity.eraseAllPieces`). -/
+example : ¬ ((Ghost.runPieces GhostDemo.language GhostDemo.program GhostDemo.oracle 20 []
+    abortPieces [] GhostDemo.start).events =
+    (Ghost.runStmts GhostDemo.program GhostDemo.oracle 20 [] (eraseAllPieces abortPieces)
+      GhostDemo.start).events ∧
+    (Ghost.runPieces GhostDemo.language GhostDemo.program GhostDemo.oracle 20 []
+      abortPieces [] GhostDemo.start).ending =
+    (Ghost.runStmts GhostDemo.program GhostDemo.oracle 20 [] (eraseAllPieces abortPieces)
+      GhostDemo.start).ending) := by
+  rintro ⟨_, hend⟩
+  cases hend
 
 end Vacuity
 end ConcreteSpec.Core

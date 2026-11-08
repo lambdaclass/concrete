@@ -260,20 +260,29 @@ structure EvidenceContext where
   spec : SpecVersion
   deriving DecidableEq, Repr
 
-/-- A safety fact with its proof and the exact context in which that proof is valid. -/
-structure SafetyEvidence where
-  fact : Prop
+/-- A safety fact with its proof and the exact context in which that proof is valid. The proved
+proposition is determined by `context.obligation` under `claim`, so consumption identifies
+obligations by their typed `ObligationId` rather than comparing raw `Prop`s with `propext`. -/
+structure SafetyEvidence (claim : ObligationId → Prop) where
   context : EvidenceContext
-  proof : fact
+  proof : claim context.obligation
 
-/-- A safety obligation binds the proposition to be established to its typed identity. -/
+/-- An authoritative safety obligation binds a typed obligation identity to its persistent evidence
+key. Its proposition is given by `claim : ObligationId → Prop`. -/
 structure SafetyObligation where
   id : ObligationId
-  fact : Prop
+  key : StableKey
+  deriving DecidableEq, Repr
 
 /-- A fact is usable only when every component of its context matches the current one. -/
-def SafetyEvidence.Usable (e : SafetyEvidence) (current : EvidenceContext) : Prop :=
+def SafetyEvidence.Usable {claim : ObligationId → Prop} (e : SafetyEvidence claim)
+    (current : EvidenceContext) : Prop :=
   e.context = current
+
+instance {claim : ObligationId → Prop} (e : SafetyEvidence claim) (current : EvidenceContext) :
+    Decidable (e.Usable current) := by
+  unfold SafetyEvidence.Usable
+  infer_instance
 
 /-- The authoritative obligations available to evidence consumption, by typed obligation identity. -/
 abbrev ObligationTable := List SafetyObligation
@@ -285,32 +294,46 @@ def ObligationTable.lookup : ObligationTable → ObligationId → Option SafetyO
   | obligation :: rest, requested =>
     if obligation.id = requested then some obligation else ObligationTable.lookup rest requested
 
-/-- A successfully discharged authoritative obligation and a proof of its actual proposition. -/
-structure DischargedFact where
+/-- Helper (inversion). Lookup returns an obligation with the requested intrinsic identity.
+(approved: rev-c9r4-agy). -/
+theorem ObligationTable.lookup_id (obligations : ObligationTable) (requested : ObligationId)
+    (found : SafetyObligation) (success : ObligationTable.lookup obligations requested = some found) :
+    found.id = requested := by
+  induction obligations with
+  | nil => simp [ObligationTable.lookup] at success
+  | cons obligation rest ih =>
+    by_cases same : obligation.id = requested
+    · simp [ObligationTable.lookup, same] at success
+      cases success
+      exact same
+    · exact ih (by simpa [ObligationTable.lookup, same] using success)
+
+/-- A successfully discharged authoritative obligation and a proof of its proposition. -/
+structure DischargedFact (claim : ObligationId → Prop) where
   obligation : SafetyObligation
-  proof : obligation.fact
+  proof : claim obligation.id
 
 /-- Consume evidence against the current context and an authoritative obligation table. Every
-component of the evidence context must match, the evidence must name the requested obligation, and
-its proved proposition must be the proposition retrieved for that obligation. -/
-noncomputable def SafetyEvidence.discharge (e : SafetyEvidence) (obligations : ObligationTable)
-    (current : EvidenceContext) (requested : ObligationId) : Option DischargedFact := by
-  classical
-  exact
-    if context : e.context = current then
-      if identity : current.obligation = requested then
-        match ObligationTable.lookup obligations requested with
-        | none => none
-        | some obligation =>
-          if fact : e.fact = obligation.fact then
-            some ⟨obligation, fact ▸ e.proof⟩
-          else none
-      else none
+component of the evidence context must match (`Usable`), the evidence must name the requested
+obligation identity, and that obligation must be retrieved from the authoritative table. No
+classical propositional equality is used. -/
+def SafetyEvidence.discharge {claim : ObligationId → Prop} (e : SafetyEvidence claim)
+    (obligations : ObligationTable) (current : EvidenceContext) (requested : ObligationId) :
+    Option (DischargedFact claim) :=
+  if usable : e.Usable current then
+    if identity : current.obligation = requested then
+      match hlookup : ObligationTable.lookup obligations requested with
+      | none => none
+      | some obligation =>
+        have found : obligation.id = requested :=
+          ObligationTable.lookup_id obligations requested obligation hlookup
+        have same : e.context.obligation = obligation.id := by
+          have ctxObl : e.context.obligation = current.obligation :=
+            congrArg EvidenceContext.obligation usable
+          exact (ctxObl.trans identity).trans found.symm
+        some ⟨obligation, same ▸ e.proof⟩
     else none
-
-instance (e : SafetyEvidence) (current : EvidenceContext) : Decidable (e.Usable current) := by
-  unfold SafetyEvidence.Usable
-  infer_instance
+  else none
 
 namespace EvidenceDemo
 
@@ -318,8 +341,12 @@ namespace EvidenceDemo
 def current : EvidenceContext :=
   ⟨⟨⟨0⟩, .safety, 0⟩, linuxX8664, ⟨⟨0⟩, 1⟩, ⟨0, 1, 0⟩, specVersion⟩
 
-/-- A proof of a trivial safety fact in exactly that context. -/
-def evidence : SafetyEvidence := ⟨True, current, trivial⟩
+/-- The proposition required by each obligation identity in this demo. -/
+abbrev claim (id : ObligationId) : Prop :=
+  if id = current.obligation then 1 + 1 = 2 else 2 + 2 = 4
+
+/-- A proof of the obligation's safety fact in exactly that context. -/
+def evidence : SafetyEvidence claim := ⟨current, by decide⟩
 
 /-- Accepted: every component matches. -/
 example : evidence.Usable current := rfl
