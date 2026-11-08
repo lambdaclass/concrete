@@ -58,6 +58,7 @@ structure Loan where
   ancestors : List LoanId
   activation : Nat
   pendingArgument : Bool := false
+  callRoot : Bool := false
   deriving DecidableEq, Repr
 
 structure Activation where
@@ -106,7 +107,7 @@ def WellFormed (s : State) : Prop :=
   (∀ l ∈ s.loans,
     l.id.id < s.nextLoan ∧ l.activation < s.nextActivation ∧
     (∃ x ∈ s.slots, x.place = l.root ∧ x.status = .owned) ∧
-    ParentValid s l ∧ (l.pendingArgument = true → l.parent.isSome = true)) ∧
+    ParentValid s l ∧ (l.pendingArgument = true → (l.parent.isSome = true ∨ l.callRoot = true))) ∧
   (∀ a ∈ s.loans, ∀ b ∈ s.loans, Compatible a b)
 
 instance (s : State) : Decidable (WellFormed s) := by
@@ -151,7 +152,7 @@ def borrow (s : State) (p : Hybrid.Place) (path : List Projection) (m : Mode) :
   if ownerAccess s p m && decide (f.id < s.nextActivation) then
     some { s with
       nextLoan := s.nextLoan + 1
-      loans := ⟨⟨s.nextLoan⟩, p, path, m, none, [], f.id, false⟩ :: s.loans }
+      loans := ⟨⟨s.nextLoan⟩, p, path, m, none, [], f.id, false, false⟩ :: s.loans }
   else none
 
 /-- Reborrow appends a projection, retains its root and cannot upgrade shared access.
@@ -166,7 +167,7 @@ def reborrowTo (s : State) (i : LoanId) (suffix : List Projection) (m : Mode)
     some { s with
       nextLoan := s.nextLoan + 1
       loans := ⟨⟨s.nextLoan⟩, a.root, a.path ++ suffix, m, some i,
-        i :: a.ancestors, activation, false⟩ :: s.loans }
+        i :: a.ancestors, activation, false, false⟩ :: s.loans }
   else none
 
 def reborrow (s : State) (i : LoanId) (suffix : List Projection) (m : Mode) :
@@ -304,10 +305,22 @@ def passDown (s : CallState) (source : LoanId) (parameter : Var) : Option CallSt
     if l.id.id = s.own.nextLoan then { l with pendingArgument := true } else l }
   pure ⟨own, s.pending ++ [(parameter, ⟨s.own.nextLoan⟩)]⟩
 
-/- PENDING (round-two boundary, Q3.2, OD15, OD23): direct owner-to-callee lending
-is not provided. Borrowing then passing a child retains the caller loan after return.
-Whether to introduce a call-duration root loan or require an explicit caller borrow scope
-needs the owner's answer; no implicit end of the caller loan is added here. -/
+/-- Direct owner argument (owner Q2, 2026-11-08): open a fresh root loan during
+argument evaluation. It has no caller parent. Entry adopts it and return ends it with the
+callee's loans. Existing caller loans retain their identities and activation. A deferred
+call evaluates its operands when it actually runs (Q9.8, OD2); registering a defer never
+ends a loan or evaluates these argument operands. -/
+def passOwner (s : CallState) (root : Hybrid.Place) (path : List Projection)
+    (mode : Mode) (parameter : Var) : Option CallState := do
+  if parameter ∈ s.pending.map Prod.fst then none else do
+  let f ← s.own.frames.head?
+  if ownerAccess s.own root mode && decide (f.id < s.own.nextActivation) then
+    pure ⟨{ s.own with
+      nextLoan := s.own.nextLoan + 1
+      loans := ⟨⟨s.own.nextLoan⟩, root, path, mode, none, [], f.id, true, true⟩ :: s.own.loans },
+      s.pending ++ [(parameter, ⟨s.own.nextLoan⟩)]⟩
+  else none
+
 /-- A C1 lifecycle adapter for mixed owning/view parameters. Owning parameters use descriptors;
 view parameters adopt the loans opened during left-to-right argument evaluation. There is no
 loan-valued result-binding case. Every other lifecycle event uses the same ownership rules. -/
@@ -571,11 +584,15 @@ example : leave { initial with frames := [⟨0, [], []⟩] } = none := by decide
 inductive CE where
   | value (e : E)
   | argument (source : LoanId) (parameter : Var)
+  | ownerArgument (root : Hybrid.Place) (mode : Mode) (parameter : Var)
   | useView (parameter : Var)
 
 def callEval (locals : AList Var Int) (s : CallState) : CE → Res (Int × CallState)
   | .value e => (eval locals s.own e).map fun (v, own) => (v, { s with own := own })
   | .argument i x => match passDown s i x with
+    | some s => .ok (0, s)
+    | none => .stuck
+  | .ownerArgument p m x => match passOwner s p [] m x with
     | some s => .ok (0, s)
     | none => .stuck
   | .useView x => match s.own.frames.head?.bind (fun f => AList.lookup f.views x) with

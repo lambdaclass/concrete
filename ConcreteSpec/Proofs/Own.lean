@@ -85,7 +85,7 @@ private theorem compatible_symm (a b : Loan) (h : Compatible a b) : Compatible b
 private theorem insert_loan (s : State) (a : Loan) (hs : WellFormed s)
     (hid : a.id = ⟨s.nextLoan⟩) (hact : a.activation < s.nextActivation)
     (hroot : ∃ x ∈ s.slots, x.place = a.root ∧ x.status = .owned)
-    (hparent : ParentValid s a) (hpending : a.pendingArgument = true → a.parent.isSome = true)
+    (hparent : ParentValid s a) (hpending : a.pendingArgument = true → (a.parent.isSome = true ∨ a.callRoot = true))
     (hcompat : ∀ b ∈ s.loans, Compatible a b) :
     WellFormed { s with loans := a :: s.loans, nextLoan := s.nextLoan + 1 } := by
   have fresh : a.id ∉ s.loans.map Loan.id := by
@@ -150,7 +150,7 @@ theorem borrow_preserves (s t : State) (p : Hybrid.Place) (path : List Projectio
     cases h
     obtain ⟨hg, hact⟩ := Bool.and_eq_true_iff.mp hg
     obtain ⟨hroot, hconf⟩ := owner_guard s p m hg
-    apply insert_loan s ⟨⟨s.nextLoan⟩, p, path, m, none, [], f.id, false⟩ hs rfl
+    apply insert_loan s ⟨⟨s.nextLoan⟩, p, path, m, none, [], f.id, false, false⟩ hs rfl
       (of_decide_eq_true hact) hroot (by rfl) (by simp)
     intro b hb
     rcases hconf b hb with hn | hm
@@ -180,7 +180,7 @@ theorem reborrowTo_preserves (s t : State) (i : LoanId) (path : List Projection)
       · exact hm
       · simp [he] at hm
     apply insert_loan s ⟨⟨s.nextLoan⟩, a.root, a.path ++ path, m, some i,
-      i :: a.ancestors, activation, false⟩ hs rfl (of_decide_eq_true hact).1
+      i :: a.ancestors, activation, false, false⟩ hs rfl (of_decide_eq_true hact).1
       (hs.2.2.2.1 a hmem).2.2.1 ?_ (by simp) ?_
     · unfold ParentValid
       exact ⟨a, hmem, hi, rfl, by simpa [hi] using (hs.2.2.2.1 a hmem).1,
@@ -590,7 +590,7 @@ theorem life_erasure {σ : Type} (types : Var → Option Descriptor) (e : Exec.L
 private theorem map_metadata_preserves (s : State) (hs : WellFormed s)
     (act : Loan → Nat) (pending : Loan → Bool)
     (issued : ∀ l ∈ s.loans, act l < s.nextActivation)
-    (parents : ∀ l ∈ s.loans, pending l = true → l.parent.isSome = true) :
+    (parents : ∀ l ∈ s.loans, pending l = true → (l.parent.isSome = true ∨ l.callRoot = true)) :
     WellFormed { s with loans := s.loans.map fun l =>
       { l with activation := act l, pendingArgument := pending l } } := by
   let change := fun l : Loan => { l with activation := act l, pendingArgument := pending l }
@@ -1134,6 +1134,213 @@ theorem reborrowTo_current (s t : State) (i : LoanId) (suffix : List Projection)
     exact ⟨f, List.mem_of_head? hf, he, hf⟩
   · contradiction
 
+/-- A direct call argument adds a parentless pending root loan and preserves ownership. -/
+theorem passOwner_preserves (s t : CallState) (p : Hybrid.Place) (path : List Projection)
+    (m : Mode) (x : Var) (hs : WellFormed s.own)
+    (h : passOwner s p path m x = some t) : WellFormed t.own := by
+  unfold passOwner at h
+  split at h
+  · contradiction
+  · obtain ⟨f, _, h⟩ := Option.bind_eq_some_iff.mp h
+    split at h
+    · rename_i guard
+      cases h
+      obtain ⟨access, issued⟩ := Bool.and_eq_true_iff.mp guard
+      obtain ⟨root, compat⟩ := owner_guard s.own p m access
+      apply insert_loan s.own _ hs rfl (of_decide_eq_true issued) root (by rfl) (by simp)
+      intro b hb
+      rcases compat b hb with hn | hm
+      · exact Or.inl (Ne.symm hn)
+      · exact Or.inr (Or.inr (Or.inr (Or.inr hm)))
+    · contradiction
+
+/-- Direct owner argument evaluation preserves synchronized call metadata as well as ownership. -/
+theorem passOwner_call_preserves (s t : CallState) (p : Hybrid.Place)
+    (path : List Projection) (m : Mode) (x : Var) (hs : CallState.WellFormed s)
+    (h : passOwner s p path m x = some t) : CallState.WellFormed t := by
+  have hw := passOwner_preserves s t p path m x hs.1 h
+  unfold passOwner at h
+  split at h
+  · contradiction
+  · rename_i unique
+    obtain ⟨f, _, h⟩ := Option.bind_eq_some_iff.mp h
+    split at h
+    · cases h
+      have fresh : ∀ l ∈ s.own.loans, l.id ≠ LoanId.mk s.own.nextLoan := by
+        intro l hl he
+        have := (hs.1.2.2.2.1 l hl).1
+        rw [he] at this
+        exact Nat.lt_irrefl _ this
+      have pendingFresh : LoanId.mk s.own.nextLoan ∉ s.pending.map Prod.snd := by
+        intro hm
+        obtain ⟨e, he, hid⟩ := List.mem_map.mp hm
+        obtain ⟨l, hl, hh⟩ := hs.2.2.2.1 e he
+        exact fresh l hl (hh.trans hid)
+      refine ⟨hw, ?_, ?_, ?_, ?_⟩
+      · simp only [List.map_append, List.map_cons, List.map_nil, List.nodup_append]
+        refine ⟨hs.2.1, by simp, ?_⟩
+        intro a ha b hb
+        simp only [List.mem_singleton] at hb
+        subst b
+        intro he
+        exact unique (he ▸ ha)
+      · simp only [List.map_append, List.map_cons, List.map_nil, List.nodup_append]
+        refine ⟨hs.2.2.1, by simp, ?_⟩
+        intro a ha b hb
+        simp only [List.mem_singleton] at hb
+        subst b
+        intro he
+        exact pendingFresh (he ▸ ha)
+      · intro e he
+        rcases List.mem_append.mp he with he | he
+        · obtain ⟨l, hl, hid⟩ := hs.2.2.2.1 e he
+          exact ⟨l, List.mem_cons_of_mem _ hl, hid⟩
+        · simp only [List.mem_singleton] at he
+          subst e
+          exact ⟨_, List.mem_cons_self, rfl⟩
+      · intro l hl
+        rcases List.mem_cons.mp hl with rfl | hl
+        · simp
+        · simpa [List.map_append, fresh l hl] using hs.2.2.2.2 l hl
+    · contradiction
+
+/-- Direct owner arguments freeze writes, and mutable arguments also freeze reads,
+from their left-to-right evaluation until their call-duration loan ends. -/
+theorem passOwner_freezes (s t : CallState) (p : Hybrid.Place) (path : List Projection)
+    (m : Mode) (x : Var) (h : passOwner s p path m x = some t) :
+    ownerAccess t.own p .mutable = false ∧
+      (m = .mutable → ownerAccess t.own p .shared = false) := by
+  unfold passOwner at h
+  split at h
+  · contradiction
+  · obtain ⟨f, _, h⟩ := Option.bind_eq_some_iff.mp h
+    split at h
+    · cases h
+      cases m <;> simp [ownerAccess, show (Mode.mutable == Mode.shared) = false from rfl]
+    · contradiction
+
+/-- Direct argument loans have no caller parent; the caller loan table is retained as a tail. -/
+theorem passOwner_birth (s t : CallState) (p : Hybrid.Place) (path : List Projection)
+    (m : Mode) (x : Var) (h : passOwner s p path m x = some t) :
+    ∃ l, t.own.loans = l :: s.own.loans ∧ l.id = LoanId.mk s.own.nextLoan ∧
+      l.root = p ∧ l.path = path ∧ l.mode = m ∧ l.parent = none ∧
+      l.pendingArgument = true ∧ l.callRoot = true := by
+  unfold passOwner at h
+  split at h
+  · contradiction
+  · obtain ⟨f, _, h⟩ := Option.bind_eq_some_iff.mp h
+    split at h
+    · cases h; exact ⟨_, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
+    · contradiction
+
+/-- Helper (inversion). Unique loan identities identify the full loan record. -/
+private theorem loan_unique (xs : List Loan) (hn : (xs.map Loan.id).Nodup)
+    (x y : Loan) (hx : x ∈ xs) (hy : y ∈ xs) (he : x.id = y.id) : x = y := by
+  induction xs with
+  | nil => simp at hx
+  | cons z zs ih =>
+    simp only [List.map_cons, List.nodup_cons] at hn
+    simp only [List.mem_cons] at hx hy
+    rcases hx with rfl | hx
+    · rcases hy with rfl | hy
+      · rfl
+      · exact False.elim (hn.1 (List.mem_map.mpr ⟨y, hy, he.symm⟩))
+    · rcases hy with rfl | hy
+      · exact False.elim (hn.1 (List.mem_map.mpr ⟨x, hx, he⟩))
+      · exact ih hn.2 hx hy
+
+/-- Helper (inversion). Ending a list of other identities retains the entire loan record. -/
+private theorem endLoans_retains (xs : List Loan) (l : Loan)
+    (different : ∀ a ∈ xs, l.id ≠ a.id) (s t : State) (hl : l ∈ s.loans)
+    (h : xs.foldlM (fun s a => endLoan s a.id) s = some t) : l ∈ t.loans := by
+  induction xs generalizing s with
+  | nil => simp at h; subst t; exact hl
+  | cons a xs ih =>
+    simp only [List.foldlM_cons] at h
+    obtain ⟨u, hu, h⟩ := Option.bind_eq_some_iff.mp h
+    apply ih (fun a ha => different a (List.mem_cons_of_mem _ ha)) u ?_ h
+    unfold endLoan at hu
+    obtain ⟨b, _, hu⟩ := Option.bind_eq_some_iff.mp hu
+    split at hu
+    · contradiction
+    · cases hu
+      exact List.mem_filter.mpr ⟨hl, by simpa using different a List.mem_cons_self⟩
+
+/-- Returning from a call leaves every loan of another activation unchanged, including
+pre-existing caller loans. It ends only loans assigned to the departing activation. -/
+theorem leave_retains_caller (s t : State) (f : Activation) (l : Loan)
+    (hs : WellFormed s) (hf : s.frames.head? = some f) (hl : l ∈ s.loans)
+    (caller : l.activation ≠ f.id) (h : leave s = some t) : l ∈ t.loans := by
+  unfold leave at h
+  rw [hf] at h
+  dsimp at h
+  obtain ⟨u, hu, h⟩ := Option.bind_eq_some_iff.mp h
+  have retained : l ∈ u.loans := by
+    apply endLoans_retains _ l ?_ s u hl hu
+    intro a ha he
+    obtain ⟨ha, act⟩ := List.mem_filter.mp ha
+    have eq := loan_unique s.loans hs.2.1 l a hl ha he
+    subst a
+    exact caller (by simpa using act)
+  obtain ⟨v, hv, h⟩ := Option.bind_eq_some_iff.mp h
+  rw [← drop_loans u v _ hv] at retained
+  split at h
+  · contradiction
+  · cases h; exact retained
+
+/-- Helper (inversion). Ending loans removes every scheduled identity and never adds loans. -/
+private theorem endLoans_removed (xs : List Loan) (s t : State)
+    (h : xs.foldlM (fun s a => endLoan s a.id) s = some t) :
+    ∀ l ∈ t.loans, l ∈ s.loans ∧ ∀ a ∈ xs, l.id ≠ a.id := by
+  induction xs generalizing s with
+  | nil => simp at h; subst t; simp
+  | cons a xs ih =>
+    simp only [List.foldlM_cons] at h
+    obtain ⟨u, hu, h⟩ := Option.bind_eq_some_iff.mp h
+    intro l hl
+    obtain ⟨hl, rest⟩ := ih u h l hl
+    unfold endLoan at hu
+    obtain ⟨b, _, hu⟩ := Option.bind_eq_some_iff.mp hu
+    split at hu
+    · contradiction
+    · cases hu
+      obtain ⟨hs, hn⟩ := List.mem_filter.mp hl
+      refine ⟨hs, ?_⟩
+      intro b hb
+      rcases List.mem_cons.mp hb with rfl | hb
+      · simpa using hn
+      · exact rest b hb
+
+/-- Every call-duration loan ends on successful return, including direct owner arguments.
+There is no lingering caller parent for such arguments (owner Q2, 2026-11-08). -/
+theorem leave_no_activation_loan (s t : State) (f : Activation)
+    (hf : s.frames.head? = some f) (h : leave s = some t) :
+    ∀ l ∈ t.loans, l.activation ≠ f.id := by
+  unfold leave at h
+  rw [hf] at h
+  dsimp at h
+  obtain ⟨u, hu, h⟩ := Option.bind_eq_some_iff.mp h
+  obtain ⟨v, hv, h⟩ := Option.bind_eq_some_iff.mp h
+  split at h
+  · contradiction
+  · cases h
+    intro l hl he
+    rw [drop_loans u v _ hv] at hl
+    obtain ⟨hs, removed⟩ := endLoans_removed _ s u hu l hl
+    exact removed l (List.mem_filter.mpr ⟨hs, by simpa using he⟩) rfl
+
+/-- Registering a deferred call preserves the entire store: it neither ends existing loans
+nor evaluates late-read arguments. The ordinary call at execution time opens/adopts its loan. -/
+theorem defer_keeps_store (O : Exec.Operands) (P : Exec.Program O)
+    (f : FnId) (args : List O.Expr) (site : SiteId) (L : AList Var O.Val)
+    (s : O.Store) (k : List (Exec.Frame O)) (c : Exec.Config O)
+    (h : Exec.step P ⟨.exec (.defer f args site), L, s, k⟩ = some (.next c)) :
+    c.store = s := by
+  simp only [Exec.step] at h
+  obtain ⟨k', _, h⟩ := Option.map_eq_some_iff.mp h
+  cases h
+  rfl
+
 namespace RoundThreeWitnesses
 open ConcreteSpec.Core.Own.Examples
 /-- Instance (law `ConcreteSpec.Core.Own.borrow_birth`). A projected owner loan issues identity zero. -/
@@ -1198,5 +1405,71 @@ example : reborrowTo LifecycleWitnesses.called ⟨1⟩ [] .shared 0 = none := by
 example : ¬ (∃ f ∈ LifecycleWitnesses.called.frames, f.id = 0 ∧
     LifecycleWitnesses.called.frames.head? = some f) := by decide
 end RoundThreeWitnesses
+
+namespace DirectArgumentWitnesses
+open ConcreteSpec.Core.Own.Examples
+
+def z : Var := ⟨"z", 2⟩
+def caller : CallState := ⟨{ shared with
+  slots := ⟨⟨1⟩, 0, ⟨.int .i32, false, true⟩, .owned⟩ :: shared.slots
+  frames := [⟨0, [(x, ⟨0⟩), (y, ⟨1⟩)], []⟩]
+  nextPlace := 2 }, []⟩
+def waiting : CallState := (passOwner caller ⟨1⟩ [.index 3] .mutable z).getD caller
+def called : CallState := (callLife types (.enter [z]) waiting).getD caller
+def returned : CallState := (callLife types .leave called).getD caller
+
+/-- Instance (law `ConcreteSpec.Core.Own.passOwner_preserves`, law `ConcreteSpec.Core.Own.passOwner_call_preserves`). A direct mutable argument coexists with an unrelated caller loan. -/
+example : CallState.WellFormed caller ∧ passOwner caller ⟨1⟩ [.index 3] .mutable z = some waiting ∧
+    CallState.WellFormed waiting := by decide
+/-- Planted (law `ConcreteSpec.Core.Own.passOwner_preserves`, law `ConcreteSpec.Core.Own.passOwner_call_preserves`). A mutated direct loan reuses the birth supply. -/
+example : ¬ WellFormed { waiting.own with nextLoan := 1 } := by decide
+/-- Instance (law `ConcreteSpec.Core.Own.passOwner_birth`). Direct lending has no caller-side parent. -/
+example : ∃ l, waiting.own.loans = l :: caller.own.loans ∧ l.id = LoanId.mk caller.own.nextLoan ∧
+    l.root = Hybrid.Place.mk 1 ∧ l.path = [.index 3] ∧ l.mode = .mutable ∧
+    l.parent = none ∧ l.pendingArgument = true ∧ l.callRoot = true := by
+  exact passOwner_birth caller waiting ⟨1⟩ [.index 3] .mutable z (by decide)
+/-- Planted (law `ConcreteSpec.Core.Own.passOwner_birth`). A child of the caller loan cannot be the required parentless root. -/
+example : ¬ (∃ l ∈ child.loans, l.id = LoanId.mk 1 ∧ l.parent = none) := by decide
+/-- Instance (law `ConcreteSpec.Core.Own.passOwner_freezes`). Argument evaluation freezes both reads and writes before entry. -/
+example : ownerAccess waiting.own ⟨1⟩ .mutable = false ∧
+    ownerAccess waiting.own ⟨1⟩ .shared = false := by decide
+/-- Planted (law `ConcreteSpec.Core.Own.passOwner_freezes`). Removing the loan prematurely fails the freeze conclusion. -/
+example : ¬ (ownerAccess { waiting.own with loans := caller.own.loans } ⟨1⟩ .mutable = false) := by decide
+/-- Instance (law `ConcreteSpec.Core.Own.leave_no_activation_loan`). Entry adopts the direct root and return ends it; its owner is immediately writable. -/
+example : callLife types (.enter [z]) waiting = some called ∧
+    callLife types .leave called = some returned ∧
+    (∃ l ∈ called.own.loans, l.callRoot = true ∧ l.activation = 1) ∧
+    (∀ l ∈ returned.own.loans, l.activation ≠ 1) ∧
+    ownerAccess returned.own ⟨1⟩ .mutable = true := by decide
+/-- Planted (law `ConcreteSpec.Core.Own.leave_no_activation_loan`). A return that never ends its direct argument retains a callee loan and freezes the owner. -/
+example : ¬ (∀ l ∈ called.own.loans, l.activation ≠ 1) := by decide
+/-- Instance (law `ConcreteSpec.Core.Own.leave_retains_caller`). The original caller loan is unchanged after return. -/
+example : WellFormed called.own ∧
+    (∀ l ∈ caller.own.loans, l ∈ called.own.loans ∧ l ∈ returned.own.loans) := by decide
+/-- Planted (law `ConcreteSpec.Core.Own.leave_retains_caller`). Ending every loan would destroy the pre-existing caller loan. -/
+example : ¬ (∀ l ∈ caller.own.loans, l ∈ ([] : List Loan)) := by decide
+
+/-- Instance (law `ConcreteSpec.Core.Own.defer_keeps_store`). Registering a deferred call keeps a live direct root loan unchanged. -/
+example : ∃ c : Exec.Config callOps,
+    Exec.step callProgram ⟨.exec (.defer callee [.ownerArgument ⟨1⟩ .mutable z] ⟨0⟩),
+      [], waiting, [.scope ⟨0⟩ [] []]⟩ = some (.next c) ∧ c.store = waiting := by
+  exact ⟨_, rfl, rfl⟩
+/-- Planted (law `ConcreteSpec.Core.Own.defer_keeps_store`). Ending the call loan at registration changes the store and unfreezes the owner prematurely. -/
+example : ¬ ({ waiting with own := { waiting.own with loans := caller.own.loans } } = waiting) := by decide
+
+/-- Accepted: a real C1 direct owner call returns, and the next operand reads the owner. -/
+example : (match (Exec.run callProgram (fun _ p => nomatch p) 100
+    ⟨.exec (.seq (.call none callee [.ownerArgument ⟨0⟩ .mutable y] ⟨0⟩)
+      (.cond (.value (.read x)) .skip .skip ⟨0⟩)), [(x, 7)], ⟨initial, []⟩, []⟩).ending with
+    | .final .normal => true
+    | _ => false) = true := by decide
+/-- Accepted: deferred direct lending uses late-read arguments; its call loan ends only when
+that call returns, and the caller reads its owner after cleanup. -/
+example : (match (Exec.run callProgram (fun _ p => nomatch p) 100
+    ⟨.exec (.seq (.block ⟨0⟩ (.defer callee [.ownerArgument ⟨0⟩ .mutable y] ⟨0⟩))
+      (.cond (.value (.read x)) .skip .skip ⟨0⟩)), [(x, 7)], ⟨initial, []⟩, []⟩).ending with
+    | .final .normal => true
+    | _ => false) = true := by decide
+end DirectArgumentWitnesses
 
 end ConcreteSpec.Core.Own
