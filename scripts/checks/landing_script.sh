@@ -146,6 +146,7 @@ git remote add gh-stale https://github.com/unbalancedparentheses/concrete2.git
 # Fetches from the local origin but would push to the archived repository: the guard reads push URLs.
 git remote add gh-push "$TMP/origin.git"
 git remote set-url --push gh-push https://github.com/unbalancedparentheses/concrete2.git
+git remote add gh-canon https://github.com/lambdaclass/concrete.git
 
 # --- the toy repository: a ledger, a corpus map, a generated block, a generated file ---------------
 mkdir -p scripts/gen scripts/tests docs/project src Concrete
@@ -621,6 +622,13 @@ out="$(LAND_REMOTE=gh-push bash "$TRAIN" land t1 2>&1)"; rc=$?
   && ok "land refuses a remote whose push URL is another GitHub repository" || no "land accepted a stale push URL (exit $rc)"
 out="$(LAND_REMOTE=gh-stale bash "$TRAIN" ci t1 2>&1)"; rc=$?
 [ "$rc" != 0 ] && has "$out" "points at another repository" && ok "ci refuses a remote that is another GitHub repository" || no "ci accepted a stale GitHub remote (exit $rc)"
+out="$(LAND_REMOTE=gh-stale bash "$TRAIN" check t1 2>&1)"; rc=$?
+[ "$rc" != 0 ] && has "$out" "points at another repository" && ok "check refuses a remote that is another GitHub repository (its remote leg pushes)" || no "check accepted a stale GitHub remote (exit $rc)"
+out="$(LAND_REMOTE=gh-stale LAND_REPO=unbalancedparentheses/concrete2 bash "$TRAIN" land t1 2>&1)"; rc=$?
+[ "$rc" != 0 ] && has "$out" "points at another repository" && [ "$(git ls-remote origin refs/heads/main | cut -f1)" = "$BASE" ] \
+  && ok "land refuses an old origin even when LAND_REPO still names the old repository" || no "land accepted an old origin with an old LAND_REPO (exit $rc)"
+out="$(LAND_REMOTE=gh-canon bash "$TRAIN" ci t1 2>&1)"; rc=$?
+[ "$rc" != 0 ] && has "$out" "gh would read another repository" && ok "ci refuses a LAND_REPO that is not the one repository the remote names" || no "ci accepted LAND_REPO=test/repo on the canonical remote (exit $rc)"
 out="$(LAND_REMOTE=gh-stale bash "$TRAIN" --dry-run build tstale --no-fetch b1 2>&1)"; rc=$?
 [ "$rc" != 0 ] && has "$out" "points at another repository" && ok "build refuses a remote that is another GitHub repository" || no "build accepted a stale GitHub remote (exit $rc)"
 [ "$(git ls-remote fork refs/heads/main | cut -f1)" = "$BASE" ] && ok "fork untouched" || no "fork was pushed"

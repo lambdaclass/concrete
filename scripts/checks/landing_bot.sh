@@ -404,6 +404,19 @@ out="$(cd "$A" && LAND_REVIEW_CMD=true bash "$ROOT_DIR/scripts/land/ready.sh" wi
 [ "$rc" = 0 ] && [ "$(cd "$A" && bash "$NOTES" get gates "$(sha_of wip/rv2)" gates)" = pass ] && has "$(bot list)" "wip/rv2" \
   && ok "passing legs publish gates: pass and the head becomes ready" || { no "ready.sh pass: exit $rc"; echo "$out" | sed 's/^/      /'; }
 
+echo "=== the bot refuses a remote that is not the one repository ==="
+( cd "$W" && git remote add gh-stale https://github.com/unbalancedparentheses/concrete2.git )
+heads_before="$(git --git-dir="$ORIGIN_GIT" for-each-ref --format='%(refname) %(objectname)')"
+for sub in tick rebase list; do
+  out="$(LAND_REMOTE=gh-stale bot "$sub")"; rc=$?
+  [ "$rc" != 0 ] && has "$out" "points at another repository" && ok "bot $sub refuses a stale GitHub remote" || { no "bot $sub accepted a stale remote: exit $rc"; echo "$out" | sed 's/^/      /'; }
+done
+out="$(LAND_REPO=unbalancedparentheses/concrete2 LAND_REMOTE=gh-stale bot rebase)"; rc=$?
+[ "$rc" != 0 ] && has "$out" "points at another repository" && ok "bot rebase refuses an old origin even with an old LAND_REPO" || no "bot rebase accepted old origin + old LAND_REPO: exit $rc"
+[ "$(git --git-dir="$ORIGIN_GIT" for-each-ref --format='%(refname) %(objectname)')" = "$heads_before" ] \
+  && ok "no branch or note moved on a refused pass" || no "a refused bot pass moved refs on origin"
+( cd "$W" && git remote remove gh-stale )
+
 echo "=== main is never force-pushed ==="
 bad="$(grep -nE 'git push[^#]*(--force|[[:space:]]-f[[:space:]])[^#]*refs/heads/main' "$ROOT_DIR"/scripts/land/*.sh || true)"
 [ -z "$bad" ] && ok "no forced push of refs/heads/main in scripts/land" || { no "forced push of main:"; echo "$bad" | sed 's/^/      /'; }

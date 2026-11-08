@@ -391,7 +391,7 @@ reconcile_run() { # train
   if [ -n "$id" ]; then echo "$id"; return 0; fi
   head="$(train_get "$name" head)"
   [ -n "$head" ] || return 0
-  out="$("${LAND_GH:-gh}" run list -R "${LAND_REPO:-lambdaclass/concrete}" --workflow CI --branch "ci/$name" \
+  out="$("${LAND_GH:-gh}" run list -R "${LAND_REPO:-$LAND_CANONICAL_REPO}" --workflow CI --branch "ci/$name" \
       --event workflow_dispatch -L 20 --json databaseId,headSha 2>/dev/null)" || return 2
   printf '%s' "$out" | python3 -I -c '
 import json, sys
@@ -507,6 +507,14 @@ cmd_tick() {
   if [ "$DRY" = 0 ]; then git checkout -q --detach "$REMOTE/main"; land_assert_no_op "final checkout"; fi
 }
 
+# Every pass that fetches, rebases, pushes or reads GitHub first checks that the remote is the one
+# repository (land_remote_bad, lib.sh): `rebase` pushes without going through a guarded train command.
+case "$SUB" in
+  tick|rebase|list)
+    if ! why="$(land_remote_bad "$REMOTE" "${LAND_REPO:-$LAND_CANONICAL_REPO}")"; then
+      echo "bot: refusing to run: $why" >&2; exit 1
+    fi ;;
+esac
 case "$SUB" in
   tick) cmd_tick ;;
   rebase)

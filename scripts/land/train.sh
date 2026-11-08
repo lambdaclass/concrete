@@ -97,7 +97,7 @@ where_ok() {
 }
 STATE_ROOT="${LAND_STATE_DIR:-$COMMON/concrete-landing}"
 LOG_DIR="${LAND_LOG_DIR:-$STATE_ROOT/log}"
-REPO="${LAND_REPO:-lambdaclass/concrete}"
+REPO="${LAND_REPO:-$LAND_CANONICAL_REPO}"
 GH="${LAND_GH:-gh}"
 REMOTE="${LAND_REMOTE:-origin}"
 HOOK="${LAND_HOOK:-.githooks/pre-push}"
@@ -131,8 +131,9 @@ refuse_fork() {
   esac
 }
 
-# The remote is the repository gh reads (one repository since 2026-11-06): every fetch and push URL
-# that is GitHub must name $REPO (land_remote_bad, lib.sh).
+# The remote is the one repository and gh reads it (since 2026-11-06): every fetch and push URL that
+# is GitHub names LAND_CANONICAL_REPO, and so does $REPO (land_remote_bad, lib.sh). Every command
+# that can push or read GitHub (build, check, ci, land) checks it before anything else.
 require_remote_repo() {
   local why
   why="$(land_remote_bad "$REMOTE" "$REPO")" || die "$why"
@@ -522,6 +523,7 @@ cmd_check() {
     esac; shift
   done
   valid_name "$name"
+  require_remote_repo
   require_train_checkout "$name"
   stage_start
   local base head; base="$(state_get "$name" base)"; head="$(git rev-parse HEAD)"
