@@ -600,13 +600,26 @@ theorem access_some_inv (tgt : Target) (m : Memory) (p : Ptr) (n a : Nat) (b : M
 /-- Law (subject `ConcreteSpec.Core.Mem.Memory.access`). Nonempty access validity follows from the stored block geometry, rather than a runtime check. -/
 theorem access_valid (tgt : Target) (m : Memory) (hw : m.WellFormed tgt)
     (n a : Nat) (hn : n ≠ 0) :
-    ∀ p b off, m.access tgt p n a = some (some (b, off)) → p.Valid tgt := by
-  intro p b off h
-  have hnpos := Nat.pos_of_ne_zero hn
-  obtain ⟨x, _, hx, _, _, hs, hlo, hhi, _, _⟩ := access_some_inv tgt m p n a b off h
-  have hf := hw.fits b x hx
-  have hpos : 0 < 2 ^ tgt.addrBits := Nat.two_pow_pos tgt.addrBits
-  exact ⟨by omega, hs ▸ hw.spaces b x hx⟩
+    ∀ p, match m.access tgt p n a with
+      | some _ => p.Valid tgt
+      | none => True := by
+  intro p
+  cases h : m.access tgt p n a with
+  | none => trivial
+  | some r =>
+    cases r with
+    | none =>
+      unfold Memory.access at h
+      simp only [hn, ↓reduceIte] at h
+      split at h
+      next => cases h
+      next => split at h <;> (try split at h) <;> cases h
+    | some pair =>
+      obtain ⟨b, off⟩ := pair
+      obtain ⟨x, _, hx, _, _, hs, hlo, hhi, _, _⟩ := access_some_inv tgt m p n a b off h
+      have hf := hw.fits b x hx
+      have hpos : 0 < 2 ^ tgt.addrBits := Nat.two_pow_pos tgt.addrBits
+      exact ⟨by have hnpos := Nat.pos_of_ne_zero hn; omega, hs ▸ hw.spaces b x hx⟩
 
 /-- Helper (inversion). Zero-size access explicitly checks validity; this extracts that guard only (approved: PENDING). -/
 theorem access_zero_valid_inv (tgt : Target) (m : Memory) (p : Ptr) (a : Nat)
@@ -1499,7 +1512,9 @@ example : exposedMemory.WellFormed target ∧
 
 -- 20. access_valid
 /-- Instance (law `ConcreteSpec.Core.Mem.access_valid`, case `nonempty`). The domain contains the successful two-byte access through ptr. -/
-example : ∀ p b off, memory.access target p 2 1 = some (some (b, off)) → p.Valid target :=
+example : ∀ p, match memory.access target p 2 1 with
+    | some _ => p.Valid target
+    | none => True :=
   access_valid target memory memory_wf 2 1 (by decide)
 
 /-- Accepted (rule C4). The nonempty validity instance includes an actual successful access. -/
@@ -1507,10 +1522,12 @@ example : memory.access target ptr 2 1 = some (some (⟨0⟩, 0)) := rfl
 
 /-- Planted (law `ConcreteSpec.Core.Mem.access_valid`, case `nonempty`, subject `ConcreteSpec.Core.Mem.Memory.access`, mutant `ConcreteSpec.Core.Mem.Audit.badAccessPair`). -/
 example : memory.WellFormed target ∧ (2 : Nat) ≠ 0 ∧
-    ¬ (∀ p b off, badAccessPair target memory p 2 1 = some (some (b, off)) → p.Valid target) := by
+    ¬ (∀ p, match badAccessPair target memory p 2 1 with
+      | some _ => p.Valid target
+      | none => True) := by
   refine ⟨memory_wf, by decide, ?_⟩
   intro h
-  have hv := h badPtr ⟨0⟩ 0 rfl
+  have hv := h badPtr
   exact (by decide : ¬ badPtr.Valid target) hv
 
 -- 21. access_success
