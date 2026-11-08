@@ -173,6 +173,53 @@ def EffectResult (before : State) : Option (State × Footprint) → Prop
   | none => True
   | some (after, footprint) => footprint.Preserves before after
 
+/-- Operand implementation for a concrete modifying callee: evaluating its return operand
+executes one authorized C4 byte store. Lifecycle events have no memory effects. -/
+def storingOperands (tgt : Target) (pointer : Ptr) (bytes : List MByte) (alignment : Nat) : Exec.Operands where
+  Val := Nat
+  Expr := Unit
+  Ty := Unit
+  Store := State
+  Prim := Unit
+  Event := Unit
+  unitVal := 0
+  unitTy := ()
+  isCopy := fun _ => true
+  eval := fun _ st _ => match st.memory.store tgt pointer bytes alignment with
+    | none => .stuck
+    | some memory => .ok (7, { st with memory := memory })
+  life := fun _ st => some st
+  test := fun n => some (n != 0)
+  allows := fun _ _ _ _ => false
+
+/-- Identity of the modifying toy function, unrelated to any native ABI convention. -/
+def storingFn : FnId := ⟨⟨[]⟩, "store_then_return"⟩
+
+/-- A C1 function whose return expression performs the store and returns 7. -/
+def storingProgram (tgt : Target) (pointer : Ptr) (bytes : List MByte) (alignment : Nat) :
+    Exec.Program (storingOperands tgt pointer bytes alignment) :=
+  ⟨[(storingFn, ⟨[], (), ⟨0⟩, .ret () ⟨0⟩⟩)]⟩
+
+/-- Advance by actual C1 silent steps. A primitive request or stuck configuration has no result;
+no frame property or ABI invariant is tested. -/
+def silentSteps {O : Exec.Operands} (P : Exec.Program O) : Nat → Exec.Config O → Option (Exec.Config O)
+  | 0, configuration => some configuration
+  | n + 1, configuration =>
+    match Exec.step P configuration with
+    | some (.next next) => silentSteps P n next
+    | _ => none
+
+/-- Execute a complete modifying C1 call: enter, evaluate return, leave scope, pop return frame. -/
+def runStoringCall (tgt : Target) (before : State) (pointer : Ptr) (bytes : List MByte)
+    (alignment : Nat) : Option State :=
+  (silentSteps (storingProgram tgt pointer bytes alignment) 4
+    ⟨.exec (.call none storingFn [] ⟨0⟩), [], before, []⟩).map Exec.Config.store
+
+/-- A successful call must preserve the state outside its advertised footprint. -/
+def CallFrameResult (before : State) (footprint : Footprint) : Option State → Prop
+  | none => True
+  | some after => footprint.Preserves before after
+
 /-- The full caller-restoration contract for complete C1 calls. Keeping the quantification here
 allows an incomplete-call mutant to challenge the actual operational restoration theorem. -/
 def CallerRestoration (O : Exec.Operands) (f : FnId) (P : Exec.Program O) : Prop :=

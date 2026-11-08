@@ -564,6 +564,54 @@ example : metadataStoreBefore.memory.WellFormed linuxX8664 ∧
     metadataStorePtr, blockMetadata, Memory.modify, Memory.block,
     AList.update, AList.lookup] at hm
 
+/-- Helper (computation). The actual four C1 steps implement the successful C4 store, ending
+with `.done` and an empty caller continuation. (approved: PENDING) -/
+theorem runStoringCall_result (tgt : Target) (before : State) (pointer : Ptr)
+    (bytes : List MByte) (alignment : Nat) :
+    runStoringCall tgt before pointer bytes alignment =
+      (before.memory.store tgt pointer bytes alignment).map fun memory => { before with memory := memory } := by
+  cases hs : before.memory.store tgt pointer bytes alignment <;>
+    simp [runStoringCall, silentSteps, storingProgram, storingOperands, storingFn, Exec.step,
+      Exec.stepExit, Exec.onRes, Exec.evalArgs, Exec.dropOut, Exec.bindLife, Exec.dead, Exec.dom,
+      Exec.restrict, Exec.bindDst, AList.lookup, hs]
+
+/-- Law (subject `ConcreteSpec.Core.Frame.runStoringCall`).
+A complete C1 callee really modifies the requested byte range, while its actual entry, return,
+scope cleanup and return-frame pop preserve unrelated state. The proof uses the C4 execution,
+not a frame contract supplied as a premise. -/
+theorem storingCall_frame (tgt : Target) (before : State) (pointer : Ptr) (bytes : List MByte)
+    (alignment : Nat) (wellFormed : before.memory.WellFormed tgt) :
+    CallFrameResult before
+      (accessFootprint (before.memory.access tgt pointer bytes.length alignment) bytes.length)
+      (runStoringCall tgt before pointer bytes alignment) := by
+  rw [runStoringCall_result]
+  cases hs : before.memory.store tgt pointer bytes alignment with
+  | none => trivial
+  | some memory => exact store_frame tgt before wellFormed memory pointer bytes alignment _ rfl hs
+
+/-- Instance (law `ConcreteSpec.Core.Frame.storingCall_frame`, case `modifying_callee`). -/
+example : CallFrameResult metadataStoreBefore (.byte ⟨⟨0⟩, 0, 1⟩)
+    (runStoringCall linuxX8664 metadataStoreBefore metadataStorePtr [.init 7 none] 1) :=
+  storingCall_frame linuxX8664 metadataStoreBefore metadataStorePtr [.init 7 none] 1 metadataStoreWellFormed
+
+/-- A planted C1 execution corrupts unrelated metadata after returning from the real callee. -/
+def corruptStoringCall (tgt : Target) (before : State) (pointer : Ptr) (bytes : List MByte)
+    (alignment : Nat) : Option State :=
+  (runStoringCall tgt before pointer bytes alignment).map fun after =>
+    { after with memory := after.memory.modify ⟨0⟩ fun block => { block with live := false } }
+
+/-- Planted (law `ConcreteSpec.Core.Frame.storingCall_frame`, case `modifying_callee`,
+subject `ConcreteSpec.Core.Frame.runStoringCall`, mutant `ConcreteSpec.Core.Frame.corruptStoringCall`). -/
+example : metadataStoreBefore.memory.WellFormed linuxX8664 ∧
+    ¬ CallFrameResult metadataStoreBefore (.byte ⟨⟨0⟩, 0, 1⟩)
+      (corruptStoringCall linuxX8664 metadataStoreBefore metadataStorePtr [.init 7 none] 1) := by
+  refine ⟨metadataStoreWellFormed, ?_⟩
+  intro h
+  rw [corruptStoringCall, runStoringCall_result] at h
+  have hm := h.2.1 ⟨0⟩ metadataStoreBlock (by decide) (by decide)
+  simp [metadataStoreBefore, metadataStoreBlock, metadataStorePtr, blockMetadata,
+    Memory.modify, Memory.block, AList.update, AList.lookup] at hm
+
 /-- Helper (congruence). Widen static permissions without changing an execution.
 (approved: PENDING) -/
 theorem preserves_covers {before after : State} {outer inner : Footprint}
