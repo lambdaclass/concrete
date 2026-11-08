@@ -202,8 +202,11 @@ def a64_step(mn, ops, d, fp):
     m = SPWB_POST.search(ops)
     if m:
         d = d - imm(m.group(1))
+    # Registers a load writes: every operand before the memory operand. x29 and w29 alias.
+    first_mem = next((i for i, a in enumerate(args) if a.startswith("[")), len(args))
+    loads_fp = mn.startswith("ld") and any(a in ("x29", "w29") for a in args[:first_mem])
     if SPWB_PRE.search(ops) or SPWB_POST.search(ops):
-        return d, (None if "x29" in args[:2] and mn.startswith("ld") else fp)
+        return d, (None if loads_fp else fp)
     if dst in ("sp", "wsp"):
         if mn in ("sub", "add") and len(args) == 3 and args[1] == "sp":
             n = imm(args[2])
@@ -224,7 +227,7 @@ def a64_step(mn, ops, d, fp):
         if mn == "add" and len(args) == 3 and args[1] == "sp":
             return d, d - imm(args[2])
         return d, None
-    if mn.startswith("ldp") and "x29" in args[:2]:
+    if loads_fp:
         return d, None
     return d, fp
 

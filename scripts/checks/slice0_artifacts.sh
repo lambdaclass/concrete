@@ -114,7 +114,7 @@ for name in $names; do
   if judge "$d" "$d/san"; then
     echo "ok   $name [llvm+asan+ubsan]: status $(cat "$d/san.status")"
   else
-    echo "FAIL $name [llvm+asan+ubsan]: status $(cat "$d/san.status") (expected $(cat "$d/status")), stderr" \
+    echo "FAIL $name [llvm+asan+ubsan]: status $(head -c 16 "$d/san.status") (expected $(head -c 16 "$d/status")), stderr" \
       "$(head -c 600 "$d/san.stderr")"
     fail=1
   fi
@@ -187,7 +187,7 @@ refuse() { # refuse NAME BODY [ARCH [MAIN]]: BODY (printf format) follows the ma
   local f
   f=$(ctl_dis "$1" <<<"$(printf "\n0000000000001010 <${4:-main}>:\n$2")")
   if stack_bound "${3:-x86_64}" "$f" >"$f.out"; then
-    echo "FAIL control: stack analysis accepts $1: $(cat "$f.out")"; fail=1
+    echo "FAIL control: stack analysis accepts $1: $(head -c 2000 "$f.out")"; fail=1
   else
     echo "ok   control: stack analysis refuses $1"
   fi
@@ -202,6 +202,7 @@ refuse indexed-stack-address '    1010:\tmov\teax, dword ptr [rsp + 4*rcx - 0x8]
 refuse partial-stack-pointer '    1010:\tpush\trax\n    1011:\tpop\tsp\n    1013:\tret\n'
 refuse partial-frame-pointer '    1010:\tpush\trbp\n    1011:\tmov\trbp, rsp\n    1014:\tmov\tbp, 0x0\n    1018:\tmov\teax, dword ptr [rbp - 0x100]\n    101e:\tpop\trbp\n    101f:\tret\n'
 refuse loop-instruction '    1010:\tmov\tecx, 0x2\n    1015:\tloop\t0x1018 <main+0x8>\n    1017:\tret\n    1018:\tsub\trsp, 0x100\n    101f:\tadd\trsp, 0x100\n    1026:\tret\n'
+refuse a64-w29-writeback-load '    1010:\tsub\tsp, sp, #0x10\n    1014:\tmov\tx29, sp\n    1018:\tldr\tw29, [sp], #0x10\n    101c:\tstr\tx0, [x29, #-0x100]\n    1020:\tret\n' aarch64 _main
 refuse a64-frame-writeback '    1010:\tmov\tx29, sp\n    1014:\tstr\tx0, [x29], #-0x100\n    1018:\tstr\tx0, [x29]\n    101c:\tadd\tx29, x29, #0x100\n    1020:\tret\n' aarch64 _main
 # A leaf's red-zone store, below the stack pointer, is inside the bound: 8 + 0x30.
 redzone=$(ctl_dis redzone <<'D'
