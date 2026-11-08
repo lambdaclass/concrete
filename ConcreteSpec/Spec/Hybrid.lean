@@ -15,6 +15,9 @@ Typed writes touch only the active scalar prefix, preserving padding, initializa
 fragments outside it. Struct field layout, enums, pointers in structs and the C8 padding oracle
 are left out. Pointer decoding stays exactly as in Memory; no new pointer meaning is chosen.
 
+Pointer-typed places await the whole-pointer decoding owner decision; their sizeof will take
+the target.
+
 `State` is an `Exec.Operands.Store` shape: instantiate `Store := State`, use `read`/`write` in
 operand evaluation and `rawWrite` for authorized primitive writes; turn `none` into `Res.stuck`.
 C5 supplies lifecycle ownership and permissions; C6 supplies the request/response interface. No change to
@@ -95,15 +98,24 @@ structure Place where
   id : Nat
   deriving DecidableEq, Repr
 
-/-- The hybrid store. Functions model the finite place map abstractly; all updates below replace
-one entry. Byte memory is the sole authority for materialized places. -/
+/-- The hybrid store uses the common finite association list. Byte memory is the sole
+authority for materialized places. -/
 structure State where
-  places : Place → Option Cell
+  cells : AList Place Cell
   memory : Memory
+
+/-- Lookup in the finite place map. -/
+def State.places (st : State) (p : Place) : Option Cell := AList.lookup st.cells p
 
 /-- Replace a logical place without changing other entries. -/
 def State.set (st : State) (p : Place) (c : Cell) : State :=
-  { st with places := fun q => if q = p then some c else st.places q }
+  { st with cells := (p, c) :: st.cells }
+
+@[simp] theorem State.places_set (st : State) (p q : Place) (c : Cell) :
+    (st.set p c).places q = if p = q then some c else st.places q := rfl
+
+@[simp] theorem State.places_memory (st : State) (m : Memory) (p : Place) :
+    ({ st with memory := m } : State).places p = st.places p := rfl
 
 /-- Safe typed read. Materialized storage is decoded on every read. -/
 def State.read (tgt : Target) (st : State) (p : Place) : Option Value := do
@@ -157,7 +169,7 @@ def State.rawWrite (tgt : Target) (st : State) (p : Ptr) (bs : List MByte) (alig
   some { st with memory := m }
 
 /-- Accepted: a structured bool is read without allocating byte storage. -/
-example : (State.mk (fun _ => some ⟨.bool, .structured (.bool true)⟩) Memory.empty).read
+example : (State.mk [(⟨0⟩, ⟨.bool, .structured (.bool true)⟩)] Memory.empty).read
     linuxX8664 ⟨0⟩ = some (.bool true) := by decide
 
 /-- Refused: invalid bytes at a materialized bool do not fall back to a structured value. -/
@@ -166,7 +178,7 @@ example : decode linuxX8664 .bool [.init 2 none] = none := by decide
 /-- Accepted: materialize once with uninitialized and initialized padding, rewrite the bool,
 then observe exactly the original padding. Refused: a raw write of byte 2 leaves no bool value. -/
 example : (do
-    let st : State := ⟨fun p => if p = ⟨0⟩ then some ⟨.bool, .structured (.bool true)⟩ else none,
+    let st : State := ⟨[(⟨0⟩, ⟨.bool, .structured (.bool true)⟩)],
       Memory.empty⟩
     let (r, st) ← st.materialize linuxX8664 ⟨0⟩ ⟨0⟩ 4096 1 [.uninit, .init 73 none]
     let st ← st.write linuxX8664 ⟨0⟩ (.bool false)
@@ -179,7 +191,7 @@ example : (do
 /-- Accepted: another raw address-taking reuses the first mapping and first padding, even
 when given different proposed storage and padding. -/
 example : (do
-    let st : State := ⟨fun _ => some ⟨.bool, .structured (.bool true)⟩, Memory.empty⟩
+    let st : State := ⟨[(⟨0⟩, ⟨.bool, .structured (.bool true)⟩)], Memory.empty⟩
     let (r, st) ← st.materialize linuxX8664 ⟨0⟩ ⟨0⟩ 4096 1 [.init 73 none]
     let (r', st) ← st.materialize linuxX8664 ⟨0⟩ ⟨0⟩ 8192 8 [.init 99 none]
     pure (r.ptr == r'.ptr, st.memory.load linuxX8664 r'.ptr 2 1)) =

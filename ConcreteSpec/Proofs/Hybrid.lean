@@ -61,7 +61,7 @@ theorem write_read (tgt : Target) (st st' : State) (hw : st.memory.WellFormed tg
       | structured old =>
         simp only [hs, Option.some.injEq] at h
         subst st'
-        simp [State.read, State.set, hv]
+        simp [State.read, hv]
       | materialized r =>
         simp only [hs] at h
         cases hm : st.memory.store tgt r.ptr (encode tgt v) r.align with
@@ -71,7 +71,7 @@ theorem write_read (tgt : Target) (st st' : State) (hw : st.memory.WellFormed tg
           subst st'
           have hl := store_load tgt st.memory m hw r.ptr (encode tgt v) r.align hm
           rw [encode_length, hv.1] at hl
-          simp only [State.read, hc]
+          simp only [State.read, State.places_memory, hc]
           dsimp
           rw [hs]
           dsimp
@@ -123,7 +123,7 @@ theorem materialize_projection (tgt : Target) (st st' : State) (p : Place) (s : 
           | some m' =>
             simp [hm] at h
             obtain ⟨rfl, rfl⟩ := h
-            exact ⟨c.ty, by simp [State.set]⟩
+            exact ⟨c.ty, by simp⟩
       next => simp at h
 
 /-- Materialization is idempotent after the first success, independently of later address,
