@@ -83,6 +83,13 @@ def controls(run, source):
                          ("nomatch-discharge", "by nomatch impossible")]:
         add(label, extra("", "axiom impossible : False\n/-- Instance (law `ConcreteSpecControl.growth`, case `exfalso`). -/\nexample : 2 < S 2 := growth 2 (" + proof + ")"),
             {("FAIL", "instance-false-discharge", "EXAMPLE")})
+    add("final-carrier-positive", extra("/-- Helper (computation). Computes reflexivity. (approved: independent-review:r5). -/", "theorem helper : 1 = 1 := rfl"), set(), status=0)
+    add("literal-self-approval", extra("/-- Helper (computation). Computes reflexivity. (approved: self). -/", "theorem helper : 1 = 1 := rfl"),
+        {("FAIL", "self-approved", "ConcreteSpecControl.helper")})
+    add("proof-definition-obligation", extra("/-- Obligation (discharged at slice 9, R-0219). -/", "def proofDef : True := trivial"),
+        {("FAIL", "obligation-kind", "ConcreteSpecControl.proofDef")})
+    add("law-definition", extra("/-- Law (subject `ConcreteSpecControl.S`). -/", "def falseLaw : 1 = 1 := rfl"),
+        {("FAIL", "law-kind", "ConcreteSpecControl.falseLaw")})
     failed = 0
     for label, fixture, budget, expected, status in cases:
         code, output = run(source, "", fixture, budget)
@@ -92,7 +99,15 @@ def controls(run, source):
             if len(words) >= 3 and words[0] in {"FAIL", "INCOMPLETE"}:
                 name = "EXAMPLE" if "⟪example⟫" in words[2] else words[2]
                 found.add((words[0], words[1], name))
-        if code == status and found == expected:
+        report_ok = True
+        if label == "non-law-positive":
+            report_ok = all(row in output for row in [
+                "REPORT Helper ( _private.ConcreteSpec.0.ConcreteSpecControl.helper ",
+                "REPORT Representation lemma. ConcreteSpecControl.representation ",
+                "REPORT Obligation ConcreteSpecControl.owed ",
+                "REPORT Obligation ConcreteSpecControl.OwedFields.checked ",
+            ])
+        if code == status and found == expected and report_ok:
             print("PASS control " + label)
         else:
             failed += 1

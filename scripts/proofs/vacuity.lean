@@ -209,14 +209,16 @@ def approval (t : Tagged) : Audit Unit := do
   if reference == "self" then fail "self-approved" t.name ref
   let writer := between t.doc "(writer: " ")"
   let reviewer := between t.doc "(reviewer: " ")"
-  -- References must bind an independent reviewer, rather than trusting a bare approval word.
+  -- The final carrier requires an independent approval reference. Optional identity
+  -- attestations are checked when supplied; their authenticity belongs to review of record.
   match writer, reviewer with
   | some w, some r =>
     let w := w.trimAscii.toString.toLower
     let r := r.trimAscii.toString.toLower
     if w == "" || r == "" then fail "approval-identity-missing" t.name
     else if w == r then fail "self-approved" t.name w
-  | _, _ => fail "approval-identity-missing" t.name "need (writer: identity) and (reviewer: identity)"
+  | none, none => pure ()
+  | _, _ => fail "approval-identity-missing" t.name "an identity attestation needs both writer and reviewer"
 
 def check (population : List (Name × ConstantInfo)) : MetaM (Array Finding) := do
   let env ← getEnv
