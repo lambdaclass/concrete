@@ -1,0 +1,163 @@
+### Audit of Round 3 Changes (`61145d7cf..9575ba303`)
+
+All 5 Major findings from Round 2 have been resolved cleanly without shortcuts, weakened statements, or containment patches:
+1. **Nonempty access validity (`access_valid`)**: Scoped to `hn : n ≠ 0`, eliminating the runtime zero-size check branch (`some none` is refuted via `hn`) and deriving `p.Valid tgt` strictly from the block's stored geometry (`hw.fits`, `hw.spaces`) and `Nat.pos_of_ne_zero hn`. The zero-size runtime guard extraction is isolated into `access_zero_valid_inv` (`Helper (inversion)`). The `nonempty` witness (`n = 2`) exercises an actual successful interior access (`memory.access target ptr 2 1 = some (some (⟨0⟩, 0))`) and refutes `badAccessPair` on `badPtr`.
+2. **Framing witnesses (`Hybrid.Audit.Frame` & `Mem.Audit.frameMemory`)**:
+   - In `ConcreteSpec/Proofs/Hybrid.lean`, `Audit.Frame` establishes two distinct live materialized allocations: place `⟨1⟩` at `80..81` decoding to `some (.bool true)` and place `⟨0⟩` at `40..41`. All four framing laws (`write_frame`, `write_frame_disjoint`, `materialize_frame`, `expose_frame`) are instantiated and tested against `badReadDiff` / `badReadEmptyDiff` while `read linuxX8664 ⟨1⟩ = some (.bool true)` before and after each transition.
+   - In `ConcreteSpec/Proofs/Memory.lean`, `frameMemory` / `frameStoredMemory` populate block `⟨1⟩` at `80..82` with initialized bytes `[.init 9 none, .init 10 none]` so `store_other_block` and `store_load_other` observe a live second allocation rather than `none`.
+   - `materialize_idempotent` now includes the `firstAllocation` case starting from structured `structState`, verifying that the first call allocates `matRange` and a second call with different parameters (`60`, `1`, `[]`) reuses `(matRange, matState)`.
+3. **Reclassifications & `eqAddr_separation`**:
+   - `decodeBool_encodeBool` is reclassified to `Representation lemma` (with `decodeBool_valid` covering the semantic law).
+   - `eqAddr_provenance` is reclassified to `Helper (computation)` and replaced as a Law by `eqAddr_separation`, which characterizes `Ptr.eqAddr p q = false ↔ p.space ≠ q.space ∨ p.addr < q.addr ∨ q.addr < p.addr` across three witness cases (`provenance`, `address`, `space`).
+4. **Promoted Laws**: `fromExposed_sound`, `free_retains`, `expose_frame`, `store_geometry`, and `expose_geometry` are promoted to full result-oriented `Law` theorems (backed by `_inv` inversion/congruence helpers), each with closed `Instance` applications and `Planted` counterexamples.
+
+---
+
+### Findings
+
+No blocker, major, minor, or nit defects found.
+
+---
+
+### Full C4 Law Audit (54 Laws)
+
+Every Law below has a single class tag, is non-vacuous (does not hold by runtime invariant re-check, restating its definition, or unsatisfiable premises), has a closed full-application `Instance`, and has a same-typed premise-preserving `Planted` mutant refutation.
+
+#### `ConcreteSpec/Proofs/Memory.lean` (36 Laws)
+
+| # | Law | Subject(s) | Verdict | Witness (`case`: Instance / Planted mutant) |
+|---|---|---|---|---|
+| 1 | `decodeInt_encodeInt` | `decodeInt`, `encodeInt` | PASS (non-vacuous) | `i16Neg`: `decodeInt_encodeInt target .i16 (-300) ...` / `badDecodeInt`, `badEncodeInt` |
+| 2 | `decodeInt_inRange` | `decodeInt` | PASS (non-vacuous) | `i8Neg`: `decodeInt_inRange target .i8 [.init 251 none]` / `badDecodeIntRange` |
+| 3 | `decodeBool_valid` | `decodeBool` | PASS (non-vacuous) | `zero`, `one`, `invalidTwo`, `provenance`: `decodeBool_valid ...` / `badDecodeBool`, `badDecodeBoolTwo`, `badDecodeBoolProv` |
+| 4 | `decodePtr_encodePtr` | `decodePtr`, `encodePtr` | PASS (non-vacuous) | `livePtr`: `decodePtr_encodePtr target ptr ...` / `badDecodePtr`, `badEncodePtr` |
+| 5 | `decodePtr_fragments` | `decodePtr` | PASS (non-vacuous) | `validPtr`: `decodePtr_fragments target (encodePtr target ptr)` / `badDecodePtr` |
+| 6 | `decodePtr_valid` | `decodePtr` | PASS (non-vacuous) | `validPtr`: `decodePtr_valid target (encodePtr target ptr)` / `badDecodePtrInvalid` |
+| 7 | `decodeInt_rejects_uninit` | `decodeInt` | PASS (non-vacuous) | `uninitByte`: `decodeInt_rejects_uninit target .i8 ...` / `badDecodeIntRange` |
+| 8 | `decodeInt_ignores_ptr_frag` | `decodeInt` | PASS (non-vacuous) | `ptrTaggedByte`: `decodeInt_ignores_ptr_frag target .i8 ...` / `badDecodeInt` |
+| 9 | `empty_wellFormed` | `Memory.empty` | PASS (non-vacuous) | `default`: `empty_wellFormed target` / `badEmpty` |
+| 10 | `alloc_wellFormed` | `Memory.alloc` | PASS (non-vacuous) | `firstBlock`: `alloc_wellFormed target Memory.empty ...` / `badAllocWf` |
+| 11 | `free_wellFormed` | `Memory.free` | PASS (non-vacuous) | `liveBlock`: `free_wellFormed target memory memory_wf ⟨0⟩` / `badFreeWf` |
+| 12 | `access_no_provenance` | `Memory.access` | PASS (non-vacuous) | `rawPtr`: `access_no_provenance target memory rawPtr 1 1 ...` / `badAccessSome` |
+| 13 | `access_after_free` | `Memory.access` | PASS (non-vacuous) | `freedBlock`: `access_after_free target memory freedMemory ⟨0⟩ ptr 1 1 ...` / `badAccessSome` |
+| 14 | `eqAddr_separation` | `Ptr.eqAddr` | PASS (non-vacuous) | `provenance`, `address`, `space`: `eqAddr_separation ...` / `badEqAddr`, `alwaysEqual` |
+| 15 | `alloc_ne_existing` | `Memory.alloc` | PASS (non-vacuous) | `existingZero`: `alloc_ne_existing target memory memory_wf ...` / `badAllocSameId` |
+| 16 | `alloc_fresh` | `Memory.alloc` | PASS (non-vacuous) | `fromEmpty`: `alloc_fresh target Memory.empty ...` / `badAllocDup` |
+| 17 | `fromExposed_unexposed` | `Memory.fromExposed` | PASS (non-vacuous) | `unexposedBlock`: `fromExposed_unexposed memory ⟨0⟩ 40 ...` / `badFromExposed` |
+| 18 | `fromExposed_sound` | `Memory.fromExposed` | PASS (non-vacuous) | `interior`: `fromExposed_sound target exposedMemory exposedMemory_wf ⟨0⟩ 42` / `wrongReconstruction` |
+| 19 | `fromExposed_unique` | `Memory.fromExposed` | PASS (non-vacuous) | `interior`: `fromExposed_unique target exposedMemory exposedMemory_wf ...` / `badFromExposedNone` |
+| 20 | `fromExposed_onePast` | `Memory.fromExposed` | PASS (non-vacuous) | `boundary`: `fromExposed_onePast target exposedMemory exposedMemory_wf ...` / `badFromExposedNone` |
+| 21 | `access_valid` | `Memory.access` | PASS (non-vacuous) | `nonempty`: `access_valid target memory memory_wf 2 1 ...` / `badAccessPair` |
+| 22 | `access_success` | `Memory.access` | PASS (non-vacuous) | `interior`: `access_success target memory ptr 2 1 ⟨0⟩ initBlock ...` / `badAccessNone` |
+| 23 | `load_partial_ptr_has_no_prov` | `Memory.load` | PASS (non-vacuous) | `prefixSlice`: `load_partial_ptr_has_no_prov target ptrMemory ptr 4 1 8 ...` / `badDecodePtr` |
+| 24 | `store_other_block` | `Memory.store` | PASS (non-vacuous) | `otherBlock`: `store_other_block target frameMemory ptr ... ⟨1⟩` / `badStoreDup` |
+| 25 | `store_same_block_frame` | `Memory.store` | PASS (non-vacuous) | `afterSlice`: `store_same_block_frame target memory storedMemory ptr ...` / `badStoreWipe` |
+| 26 | `store_wellFormed` | `Memory.store` | PASS (non-vacuous) | `oneByte`: `store_wellFormed target memory memory_wf ptr ...` / `badStoreWf` |
+| 27 | `expose_wellFormed` | `Memory.expose` | PASS (non-vacuous) | `livePtr`: `expose_wellFormed target memory memory_wf ptr` / `badExposeWf` |
+| 28 | `free_retains` | `Memory.free` | PASS (non-vacuous) | `live`: `free_retains memory ⟨0⟩` / `skipFree` |
+| 29 | `expose_frame` | `Memory.expose` | PASS (non-vacuous) | `live`: `expose_frame memory ptr` / `corruptExpose` |
+| 30 | `store_geometry` | `Memory.store` | PASS (non-vacuous) | `live`: `store_geometry target memory ptr [.init 7 none] 1` / `corruptStoreGeometry` |
+| 31 | `expose_geometry` | `Memory.expose` | PASS (non-vacuous) | `live`: `expose_geometry memory ptr` / `corruptExposeGeometry` |
+| 32 | `alloc_load_uninit` | `Memory.load` | PASS (non-vacuous) | `firstByte`: `alloc_load_uninit target Memory.empty memory ...` / `badLoadZero` |
+| 33 | `store_load_same` | `Memory.load` | PASS (non-vacuous) | `oneByte`: `store_load_same target memory storedMemory ptr ...` / `badLoadNone` |
+| 34 | `store_load_other` | `Memory.load` | PASS (non-vacuous) | `disjointProv`: `store_load_other target frameMemory frameStoredMemory ptr frameOther ...` / `badLoadDiff` |
+| 35 | `expose_load` | `Memory.load` | PASS (non-vacuous) | `exposedBlock`: `expose_load target storedMemory exposedStored ptr ptr 1 1 ...` / `badLoadExposedNone` |
+| 36 | `free_alloc_ne_existing` | `Memory.alloc` | PASS (non-vacuous) | `freedThenRealloc`: `free_alloc_ne_existing target memory freedMemory ...` / `badAllocReuseZero` |
+
+#### `ConcreteSpec/Proofs/Hybrid.lean` (18 Laws)
+
+| # | Law | Subject(s) | Verdict | Witness (`case`: Instance / Planted mutant) |
+|---|---|---|---|---|
+| 37 | `rep_roundtrip` | `Rep` | PASS (non-vacuous) | `boolTrue`: `rep_roundtrip linuxX8664 (.bool true)` / `badRep` |
+| 38 | `decode_encode` | `decode`, `encode` | PASS (non-vacuous) | `boolTrue`: `decode_encode linuxX8664 (.bool true)` / `badDecodeUnit`, `badEncode` |
+| 39 | `rep_deterministic` | `Rep` | PASS (non-vacuous) | `boolTrue`: `rep_deterministic linuxX8664 .bool ...` / `badDecodeUnit` |
+| 40 | `read_structured` | `State.read` | PASS (non-vacuous) | `boolFalse`: `read_structured linuxX8664 structState ⟨0⟩ ...` / `badReadNone` |
+| 41 | `write_structured_read` | `State.read` | PASS (non-vacuous) | `boolTrue`: `write_structured_read linuxX8664 structState ...` / `badReadNone` |
+| 42 | `materialize_read` | `State.read` | PASS (non-vacuous) | `firstMat`: `materialize_read linuxX8664 structState matState ...` / `badReadStructOnly` |
+| 43 | `expose_read` | `State.read` | PASS (non-vacuous) | `firstExpose`: `expose_read linuxX8664 structState matExposedState ...` / `badReadStructOnly` |
+| 44 | `materialize_idempotent` | `State.materialize` | PASS (non-vacuous) | `alreadyMaterialized`, `firstAllocation`: `materialize_idempotent ...` / `badMaterializeRealloc` |
+| 45 | `write_wellFormed` | `State.write` | PASS (non-vacuous) | `boolTrue`: `write_wellFormed linuxX8664 before before_wf ...` / `badWriteDropBlock` |
+| 46 | `rawWrite_wellFormed` | `State.rawWrite` | PASS (non-vacuous) | `oneByte`: `rawWrite_wellFormed linuxX8664 before before_wf ...` / `badRawWriteDropBlock` |
+| 47 | `materialize_wellFormed` | `State.materialize` | PASS (non-vacuous) | `boolFalse`: `materialize_wellFormed linuxX8664 structState structState_wf ...` / `badMaterializeRange` |
+| 48 | `expose_wellFormed` | `State.expose` | PASS (non-vacuous) | `boolFalse`: `expose_wellFormed linuxX8664 structState structState_wf ...` / `badExposeRange` |
+| 49 | `write_frame` | `State.read` | PASS (non-vacuous) | `otherPlace` (`Audit.Frame`): `write_frame linuxX8664 before after ⟨0⟩ ⟨1⟩ ...` / `Frame.badReadDiff` |
+| 50 | `write_frame_disjoint` | `State.read` | PASS (non-vacuous) | `otherPlace` (`Audit.Frame`): `write_frame_disjoint linuxX8664 before after before_wf ⟨0⟩ ⟨1⟩ ...` / `Frame.badReadDiff` |
+| 51 | `materialize_frame` | `State.read` | PASS (non-vacuous) | `otherPlace` (`Audit.Frame`): `materialize_frame linuxX8664 structState matState structState_wf ⟨0⟩ ⟨1⟩ ...` / `Frame.badReadEmptyDiff` |
+| 52 | `expose_frame` | `State.read` | PASS (non-vacuous) | `otherPlace` (`Audit.Frame`): `expose_frame linuxX8664 structState matExposedState structState_wf ⟨0⟩ ⟨1⟩ ...` / `Frame.badReadEmptyDiff` |
+| 53 | `write_materialized_read` | `State.read` | PASS (non-vacuous) | `boolTrue`: `write_materialized_read linuxX8664 before after ⟨0⟩ ...` / `badReadStructOnly` |
+| 54 | `rawWrite_read_reconstruct` | `State.read` | PASS (non-vacuous) | `encodedBool`: `rawWrite_read_reconstruct linuxX8664 before after ⟨0⟩ ...` / `badReadStructOnly` |
+
+---
+
+### Exemption Verdicts (`approved: PENDING`)
+
+ No Helper or Representation lemma masks an unstated contract law. Every `approved: PENDING` exemption in C4 (`ConcreteSpec/Proofs/Memory.lean` and `ConcreteSpec/Proofs/Hybrid.lean`) is **APPROVED**:
+
+#### `ConcreteSpec/Proofs/Memory.lean`
+1. `encodeLeBytes_length` (`Helper (computation)`): **APPROVED** — structural list length helper for little-endian byte emission.
+2. `decodeLeBytes_encodeLeBytes` (`Representation lemma`): **APPROVED** — internal `Nat` round-trip backing `decodeInt_encodeInt` and `decodePtr_encodePtr`.
+3. `decodeLeBytes_lt` (`Representation lemma`): **APPROVED** — internal `Nat` bound backing `decodeInt_inRange`.
+4. `decodeInt_encodeInt_of_inRange` (`Helper (inversion)`): **APPROVED** — internal `Option`-unwrapped helper for `decodeInt_encodeInt`.
+5. `decodeBool_encodeBool` (`Representation lemma`): **APPROVED** — closed two-point computation; byte admission is covered by Law `decodeBool_valid`.
+6. `encodePtrFragments_length` (`Helper (computation)`): **APPROVED** — structural list length helper for pointer fragment encoding.
+7. `allIdx_true_iff` (`Helper (congruence)`): **APPROVED** — generic list indexing helper for `encodePtrFragments`.
+8. `encodePtrFragments_valid` (`Representation lemma`): **APPROVED** — internal fragment check computation backing `decodePtr_encodePtr`.
+9. `lookup_modify_eq` (`Helper (computation)`): **APPROVED** — association-list lookup at modified key.
+10. `lookup_modify_ne` (`Helper (computation)`): **APPROVED** — association-list lookup away from modified key.
+11. `mem_modify` (`Helper (inversion)`): **APPROVED** — association-list membership inversion under `modify`.
+12. `alloc_result` (`Helper (inversion)`): **APPROVED** — monadic `Memory.alloc` state-decomposition helper.
+13. `alloc_block` (`Helper (computation)`): **APPROVED** — immediate lookup of newly allocated block.
+14. `alloc_block_other` (`Helper (computation)`): **APPROVED** — lookup preservation for pre-existing blocks across `alloc`.
+15. `free_retains_inv` (`Helper (inversion)`): **APPROVED** — hypothesis-form decomposition backing Law `free_retains` and `access_after_free`.
+16. `eqAddr_provenance` (`Helper (computation)`): **APPROVED** — canonical reflexivity at equal space/address; separation is covered by Law `eqAddr_separation`.
+17. `candidate_contains_unique` (`Helper (inversion)`): **APPROVED** — internal uniqueness lemma for exposed candidate intervals backing `fromExposed_unique` and `fromExposed_onePast`.
+18. `find_some_mem` (`Helper (inversion)`): **APPROVED** — generic `List.find?` membership helper.
+19. `find_some_pred` (`Helper (inversion)`): **APPROVED** — generic `List.find?` predicate helper.
+20. `find_none_forall` (`Helper (inversion)`): **APPROVED** — generic `List.find? = none` universal helper.
+21. `access_some_inv` (`Helper (inversion)`): **APPROVED** — unpacks `m.access tgt p n a = some (some (b, off))` guards.
+22. `access_zero_valid_inv` (`Helper (inversion)`): **APPROVED** — extracts the zero-size explicit validity guard when `n = 0`.
+23. `decodePtr_checks_inv` (`Helper (inversion)`): **APPROVED** — unpacks `decodePtr` boolean guard conjunction.
+24. `allIdx_getElem` (`Helper (inversion)`): **APPROVED** — generic `allIdx` element extraction.
+25. `extract_length` (`Helper (computation)`): **APPROVED** — slice length computation.
+26. `getElem?_take` (`Helper (computation)`): **APPROVED** — generic `List.take` indexing helper.
+27. `getElem?_drop` (`Helper (computation)`): **APPROVED** — generic `List.drop` indexing helper.
+28. `getElem?_append_left` (`Helper (computation)`): **APPROVED** — generic `List.append` left indexing helper.
+29. `getElem?_append_right` (`Helper (computation)`): **APPROVED** — generic `List.append` right indexing helper.
+30. `splice_length` (`Helper (computation)`): **APPROVED** — byte-list `splice` length preservation.
+31. `extract_splice_same` (`Representation lemma`): **APPROVED** — slice-after-splice round-trip on raw lists backing `store_load_same`.
+32. `getElem?_splice_before` (`Helper (computation)`): **APPROVED** — `splice` indexing below offset.
+33. `getElem?_splice_after` (`Helper (computation)`): **APPROVED** — `splice` indexing above `[off, off + bs.length)`.
+34. `expose_result` (`Helper (inversion)`): **APPROVED** — unpacks `m.expose p = some m'`.
+35. `expose_success` (`Helper (computation)`): **APPROVED** — computes `m.expose p` on a live block.
+36. `expose_frame_inv` (`Helper (inversion)`): **APPROVED** — hypothesis-form decomposition backing Law `expose_frame`.
+37. `store_geometry_inv` (`Helper (congruence)`): **APPROVED** — hypothesis-form geometry congruence backing Law `store_geometry` and hybrid invariant transport.
+38. `expose_geometry_inv` (`Helper (congruence)`): **APPROVED** — hypothesis-form geometry congruence backing Law `expose_geometry` and hybrid invariant transport.
+39. `load_congr` (`Helper (congruence)`): **APPROVED** — block-local congruence for `Memory.load`.
+40. `Audit.memory_wf` (`Helper (congruence)`): **APPROVED** — audit fixture well-formedness proof.
+41. `Audit.exposedMemory_wf` (`Helper (congruence)`): **APPROVED** — audit fixture well-formedness proof.
+
+#### `ConcreteSpec/Proofs/Hybrid.lean`
+42. `encodePadding_length` (`Helper (computation)`): **APPROVED** — padding length helper.
+43. `take_append_of_le_length` (`Helper (computation)`): **APPROVED** — generic `List.take` over `append` helper.
+44. `take_encode_append` (`Helper (computation)`): **APPROVED** — prefix extraction for encoded value plus padding.
+45. `places_set_eq` (`Helper (computation)`): **APPROVED** — place lookup at updated key.
+46. `places_set_ne` (`Helper (computation)`): **APPROVED** — place lookup away from updated key.
+47. `projected_transport` (`Helper (congruence)`): **APPROVED** — transports `Cell.Projected` across geometry-preserving memory transitions.
+48. `memory_wellFormed` (`Helper (congruence)`): **APPROVED** — lifts `projected_transport` to `State.WellFormed`.
+49. `set_wellFormed` (`Helper (congruence)`): **APPROVED** — preserves `State.WellFormed` under `State.set`.
+50. `alloc_projected` (`Helper (congruence)`): **APPROVED** — preserves existing `Cell.Projected` across `Memory.alloc`.
+51. `materialize_cases` (`Helper (inversion)`): **APPROVED** — decomposes `State.materialize` into reuse vs. fresh allocation+store.
+52. `separated_symm` (`Helper (congruence)`): **APPROVED** — symmetry of `State.Separated`.
+53. `separated_of_disjoint` (`Helper (inversion)`): **APPROVED** — derives `State.Separated` from `State.RangesDisjoint` under `State.WellFormed`.
+54. `Audit.structState_wf` (`Helper (congruence)`): **APPROVED** — audit fixture well-formedness proof.
+55. `Audit.before_wf` (`Helper (congruence)`): **APPROVED** — audit fixture well-formedness proof.
+56. `Audit.not_badState_wf` (`Helper (inversion)`): **APPROVED** — refutes `WellFormed` on `badState` for audit planted witness.
+57. `Audit.Frame.observedStart_wf` (`Helper (congruence)`): **APPROVED** — frame audit fixture well-formedness proof.
+58. `Audit.Frame.observed_wf` (`Helper (congruence)`): **APPROVED** — frame audit fixture well-formedness proof.
+59. `Audit.Frame.structState_wf` (`Helper (congruence)`): **APPROVED** — frame audit fixture well-formedness proof.
+60. `Audit.Frame.before_wf` (`Helper (congruence)`): **APPROVED** — frame audit fixture well-formedness proof.
+61. `Audit.Frame.before_sep` (`Helper (computation)`): **APPROVED** — frame audit fixture `Separated ⟨0⟩ ⟨1⟩` proof.
+62. `Audit.Frame.before_disjoint` (`Helper (computation)`): **APPROVED** — frame audit fixture `RangesDisjoint ⟨0⟩ ⟨1⟩` proof.
+
+VERDICT: ACCEPT
+rc=0

@@ -1,0 +1,216 @@
+Read-only review completed. I did not modify any files, run git commands that write, connect to a network, or run any builds.
+
+All six findings from `_review/REVIEW2-codex.md` have been resolved with genuine structural fixes:
+1. **`raw_cleanup_runs_plan` ([Exec.lean:1335](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c1a3/tree/ConcreteSpec/Proofs/Exec.lean#L1335-L1346))**: Stated as a genuine implication extracting the `BoundaryRun` segmentation, action plan `planWith pre L`, restored locals `unwindLocals pre L`, and `Performed` execution from raw `FirstSteps` without repeating the raw execution on the RHS or relying on a projection converse. Converse plan execution is proved independently in `boundary_of_performed` ([Exec.lean:788](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c1a3/tree/ConcreteSpec/Proofs/Exec.lean#L788-L844)).
+2. **Input-indexed relational determinism (`step_silent_deterministic`, `step_deterministic` at [Exec.lean:1494](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c1a3/tree/ConcreteSpec/Proofs/Exec.lean#L1494-L1522))**: Stated over `AnswerStep` and `InputDeterministic`, proving uniqueness of both label and destination for internal steps (`none`) and fixed external primitive answers (`some a`), with closed instances and premise-preserving `competingAnswerStep` mutants. Previous constructor/function characterizations are reclassified as `Representation lemma` (`step_silent_representation`, `step_pair_representation`).
+3. **Destruction protocol (`destroyCall_enters` at [Exec.lean:1803](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c1a3/tree/ConcreteSpec/Proofs/Exec.lean#L1803-L1818))**: Connects independent `DestroyProtocol` admission (`D.impl`, `D.sig`, `D.notCopy`) and move-argument evaluation to the actual consuming call transition in `Step`. `destroy_not_copy` and `destroyCall_sig` are reclassified as `Representation lemma`.
+4. **Independent width derivations (`typed_eval_range`, `machine_operands`, `machine_inRange` at [Scalar.lean:390](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c1a3/tree/ConcreteSpec/Proofs/Scalar.lean#L390-L454))**: Defined via the inductive judgment `CTerm.HasWidth` and `WidthEnv`, deriving operand and result width bounds without extracting the evaluator's runtime `operandsOk` guard. Runtime guard extractions (`machine_operands_inv`, `machine_inRange_inv`) are kept as `Helper (inversion)`.
+5. **Scalar surface classification and evidence ([Scalar.lean](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c1a3/tree/ConcreteSpec/Proofs/Scalar.lean))**: All 30 laws and 16 helper/representation lemmas in `Scalar.lean` are classified under `_review/VACUITY_CONVENTION_FINAL.md` with closed full-application `Instance` and premise-preserving `Planted` examples.
+6. **Promoted execution invariants ([Exec.lean:769](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c1a3/tree/ConcreteSpec/Proofs/Exec.lean#L769-L792), [Exec.lean:932](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c1a3/tree/ConcreteSpec/Proofs/Exec.lean#L932-L1244))**: `boundary_scope_calls`, `boundary_of_performed`, `register_protected`, `protected_step`, `FirstStepsN.split_return`, `call_protects`, `FirstStepsN.call_return`, `exit_label`, and `boundary_complete` are now exposed as `Law` declarations with closed `Instance` and `Planted` pairs.
+
+---
+
+### Findings
+
+1. **[Scalar.lean:108](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c1a3/tree/ConcreteSpec/Proofs/Scalar.lean#L108-L109) — nit — PREFERENCE: Stale copy-pasted text in doc-comment of `bitNot_inRange`.**
+   - **Problem:** The doc-comment reads `/-- Law (subject `ConcreteSpec.Core.bitNot`). Extracts the explicit range validator result (approved: PENDING). -/`, which was accidentally pasted from `inRangeOr_inRange` onto a `Law`.
+   - **Concrete fix:** Trim the doc-comment to `/-- Law (subject `ConcreteSpec.Core.bitNot`). -/`.
+
+2. **[Scalar.lean:216](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c1a3/tree/ConcreteSpec/Proofs/Scalar.lean#L216-L217) — nit — PREFERENCE: Stale copy-pasted text in doc-comment of `saturating_of_checked`.**
+   - **Problem:** The doc-comment reads `/-- Law (subject `ConcreteSpec.Core.saturating`). Interval representation of the lossless relation (approved: PENDING). -/`, which was accidentally pasted onto a `Law`.
+   - **Concrete fix:** Trim the doc-comment to `/-- Law (subject `ConcreteSpec.Core.saturating`). -/`.
+
+---
+
+### C1 Law-by-Law Vacuity Audit
+
+#### 1. `ConcreteSpec/Proofs/Exec.lean` (50 Laws)
+
+| # | Law | Line | Verdict | Instance (`case`) | Planted (`subject` → `mutant`) |
+|---|---|---|---|---|---|
+| 1 | [`steps_request`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c1a3/tree/ConcreteSpec/Proofs/Exec.lean#L84-L92) | 84 | **Pass** | `log_ok` (L3201) | `Step` → `Refusal.StuckStep` (L3208) |
+| 2 | [`lookup_restrict`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c1a3/tree/ConcreteSpec/Proofs/Exec.lean#L123-L140) | 123 | **Pass** | `kept` (L3219), `dropped` (L3231) | `restrict` → `dropAllRestrict` (L3225), `keepAllRestrict` (L3237) |
+| 3 | [`restrict_dom_drops`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c1a3/tree/ConcreteSpec/Proofs/Exec.lean#L144-L146) | 144 | **Pass** | `inner_local` (L3243) | `restrict` → `keepAllRestrict` (L3248) |
+| 4 | [`two_defers_register`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c1a3/tree/ConcreteSpec/Proofs/Exec.lean#L161-L167) | 161 | **Pass** | `lifo` (L3257) | `Steps` → `ReflOnlySteps` (L3264) |
+| 5 | [`step_ret`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c1a3/tree/ConcreteSpec/Proofs/Exec.lean#L173-L176) | 173 | **Pass** | `eval_first` (L3272) | `step` → `stuckStep` (L3278) |
+| 6 | [`step_return_caller`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c1a3/tree/ConcreteSpec/Proofs/Exec.lean#L197-L203) | 197 | **Pass** | `restore_and_bind` (L3286) | `step` → `stuckStep` (L3292) |
+| 7 | [`exit_scope_next`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c1a3/tree/ConcreteSpec/Proofs/Exec.lean#L209-L222) | 209 | **Pass** | `dispatch_first` (L3301) | `Step` → `Refusal.StuckStep` (L3311) |
+| 8 | [`done_scope_next`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c1a3/tree/ConcreteSpec/Proofs/Exec.lean#L227-L240) | 227 | **Pass** | `dispatch_first` (L3322) | `Step` → `Refusal.StuckStep` (L3332) |
+| 9 | [`exit_scope_runs_defers`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c1a3/tree/ConcreteSpec/Proofs/Exec.lean#L245-L255) | 245 | **Pass** | `bump_then_log` (L3345) | `Steps` → `ReflOnlySteps` (L3352) |
+| 10 | [`done_scope_runs_defers`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c1a3/tree/ConcreteSpec/Proofs/Exec.lean#L259-L268) | 259 | **Pass** | `bump_then_log` (L3362) | `Steps` → `ReflOnlySteps` (L3369) |
+| 11 | [`unwind_runs_plan`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c1a3/tree/ConcreteSpec/Proofs/Exec.lean#L273-L296) | 273 | **Pass** | `single_scope` (L3388) | `Steps` → `ReflOnlySteps` (L3396) |
+| 12 | [`return_reaches_caller`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c1a3/tree/ConcreteSpec/Proofs/Exec.lean#L307-L318) | 307 | **Pass** | `unwind_and_return` (L3407) | `Steps` → `ReflOnlySteps` (L3417) |
+| 13 | [`break_reaches_loop`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c1a3/tree/ConcreteSpec/Proofs/Exec.lean#L322-L330) | 322 | **Pass** | `unwind_and_break` (L3430) | `Steps` → `ReflOnlySteps` (L3441) |
+| 14 | [`continue_reaches_loop`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c1a3/tree/ConcreteSpec/Proofs/Exec.lean#L334-L342) | 334 | **Pass** | `unwind_and_continue` (L3453) | `Steps` → `ReflOnlySteps` (L3464) |
+| 15 | [`planWith_calls`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c1a3/tree/ConcreteSpec/Proofs/Exec.lean#L372-L388) | 372 | **Pass** | `nested` (L3476) | `planWith` → `reversePlanWith` (L3482); `plan` → `emptyPlan` (L3490) |
+| 16 | [`boundary_scope_calls`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c1a3/tree/ConcreteSpec/Proofs/Exec.lean#L769-L785) | 769 | **Pass** | `call_then_drop` (L2312) | `Step` → `NoDispatchStep` (L2320) |
+| 17 | [`boundary_of_performed`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c1a3/tree/ConcreteSpec/Proofs/Exec.lean#L788-L844) | 788 | **Pass** | `scope_drop` (L2264) | `Step` → `NoPlanStep` (L2271) |
+| 18 | [`cleanup_runs_exact_plan`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c1a3/tree/ConcreteSpec/Proofs/Exec.lean#L850-L867) | 850 | **Pass** | `nested` (L1980), `missing` (L2023), `extra` (L2050), `missing_drop` (L2086), `missing_restrict` (L2122) | `Step` → `ExtraStep` (L1991, L2062), `MissingStep` (L2033), `MissingDropStep` (L2098), `MissingRestrictStep` (L2134) |
+| 19 | [`step_trapped`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c1a3/tree/ConcreteSpec/Proofs/Exec.lean#L888-L897) | 888 | **Pass** | `trapped_terminal` (L3498) | `Config.final?` → `noTrapFinal?` (L3506); `Step` → `RecoverTrapStep` (L3516) |
+| 20 | [`steps_from_trapped`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c1a3/tree/ConcreteSpec/Proofs/Exec.lean#L902-L913) | 902 | **Pass** | `no_unwind` (L3525) | `Steps` → `RecoverTrapSteps` (L3532) |
+| 21 | [`register_protected`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c1a3/tree/ConcreteSpec/Proofs/Exec.lean#L932-L956) | 932 | **Pass** | `saved_caller` (L3647) | `register` → `forgetRegister` (L3652) |
+| 22 | [`protected_step`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c1a3/tree/ConcreteSpec/Proofs/Exec.lean#L959-L1077) | 959 | **Pass** | `saved_caller` (L3661) | `Step` → `arbitraryStep` (L3665) |
+| 23 | [`FirstStepsN.split_return`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c1a3/tree/ConcreteSpec/Proofs/Exec.lean#L1117-L1143) | 1117 | **Pass** | `restore` (L2371) | `Step` → `SkipReturnStep` (L2380) |
+| 24 | [`call_protects`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c1a3/tree/ConcreteSpec/Proofs/Exec.lean#L1152-L1168) | 1152 | **Pass** | `callee_entry` (L3674) | `Step` → `arbitraryStep` (L3678) |
+| 25 | [`FirstStepsN.call_return`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c1a3/tree/ConcreteSpec/Proofs/Exec.lean#L1190-L1210) | 1190 | **Pass** | `deferred_bump` (L2422) | `Step` → `SkipReturnStep` (L2431) |
+| 26 | [`exit_label`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c1a3/tree/ConcreteSpec/Proofs/Exec.lean#L1218-L1224) | 1218 | **Pass** | `dispatch` (L3686) | `Step` → `arbitraryStep` (L3690) |
+| 27 | [`boundary_complete`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c1a3/tree/ConcreteSpec/Proofs/Exec.lean#L1238-L1330) | 1238 | **Pass** | `raw_drop` (L2466) | `Step` → `PaddedEscape` (L2474) |
+| 28 | [`raw_cleanup_runs_plan`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c1a3/tree/ConcreteSpec/Proofs/Exec.lean#L1335-L1346) | 1335 | **Pass** | `single` (L2220) | `Step` → `EscapeEmitStep` (L2227) |
+| 29 | [`abort_runs_no_cleanup`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c1a3/tree/ConcreteSpec/Proofs/Exec.lean#L1352-L1370) | 1352 | **Pass** | `traps_without_cleanup` (L3542) | `Steps` → `ReflOnlySteps` (L3550) |
+| 30 | [`evalArgs_first_trap`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c1a3/tree/ConcreteSpec/Proofs/Exec.lean#L1376-L1401) | 1376 | **Pass** | `first_trap_wins` (L3562) | `evalArgs` → `swallowTrapEvalArgs` (L3570) |
+| 31 | [`step_silent_deterministic`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c1a3/tree/ConcreteSpec/Proofs/Exec.lean#L1494-L1501) | 1494 | **Pass** | `skip` (L3582) | `AnswerStep` → `competingAnswerStep` (L3589) |
+| 32 | [`step_deterministic`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c1a3/tree/ConcreteSpec/Proofs/Exec.lean#L1506-L1522) | 1506 | **Pass** | `log_answer` (L3598) | `AnswerStep` → `competingAnswerStep` (L3607) |
+| 33 | [`bind_refused`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c1a3/tree/ConcreteSpec/Proofs/Exec.lean#L1550-L1554) | 1550 | **Pass** | `refused` (L2571), `accepted` (L2585) | `Step` → `BypassStep` (L2577), `StuckStep` (L2591) |
+| 34 | [`assign_refused`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c1a3/tree/ConcreteSpec/Proofs/Exec.lean#L1558-L1563) | 1558 | **Pass** | `refused` (L2600), `accepted` (L2615) | `Step` → `BypassStep` (L2606), `StuckStep` (L2621) |
+| 35 | [`enter_refused`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c1a3/tree/ConcreteSpec/Proofs/Exec.lean#L1567-L1570) | 1567 | **Pass** | `refused` (L2631), `accepted` (L2646) | `runFn` → `bypassRunFn` (L2637), `stuckRunFn` (L2652) |
+| 36 | [`call_refused`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c1a3/tree/ConcreteSpec/Proofs/Exec.lean#L1575-L1583) | 1575 | **Pass** | `refused` (L2661), `accepted` (L2677) | `Step` → `BypassStep` (L2667), `StuckStep` (L2683) |
+| 37 | [`scope_drop_refused`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c1a3/tree/ConcreteSpec/Proofs/Exec.lean#L1587-L1590) | 1587 | **Pass** | `refused` (L2694), `accepted` (L2707) | `Step` → `BypassStep` (L2700), `StuckStep` (L2713) |
+| 38 | [`exit_drop_refused`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c1a3/tree/ConcreteSpec/Proofs/Exec.lean#L1594-L1597) | 1594 | **Pass** | `refused` (L2721), `accepted` (L2734) | `Step` → `BypassStep` (L2727), `StuckStep` (L2740) |
+| 39 | [`exit_test_drop_refused`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c1a3/tree/ConcreteSpec/Proofs/Exec.lean#L1601-L1605) | 1601 | **Pass** | `refused` (L2748), `accepted` (L2761) | `Step` → `BypassStep` (L2754), `StuckStep` (L2767) |
+| 40 | [`test_drop_refused`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c1a3/tree/ConcreteSpec/Proofs/Exec.lean#L1609-L1617) | 1609 | **Pass** | `refused` (L2775), `accepted` (L2790) | `Step` → `BypassStep` (L2781), `StuckStep` (L2796) |
+| 41 | [`return_refused`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c1a3/tree/ConcreteSpec/Proofs/Exec.lean#L1621-L1631) | 1621 | **Pass** | `explicit_refused` (L2806), `implicit_refused` (L2823), `bind_only_refused` (L2846), `accepted` (L2863) | `Step` → `BypassStep` (L2814, L2831, L2854), `StuckStep` (L2871) |
+| 42 | [`continuation_refused`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c1a3/tree/ConcreteSpec/Proofs/Exec.lean#L1643-L1658) | 1643 | **Pass** | `refused` (L2914), `accepted` (L2939) | `runFrom` → `bypassRunFrom` (L2923), `stuckRunFrom` (L2948) |
+| 43 | [`prim_bind_refused`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c1a3/tree/ConcreteSpec/Proofs/Exec.lean#L1663-L1674) | 1663 | **Pass** | `refused` (L2962), `accepted` (L2985) | `runFrom` → `bypassRunFrom` (L2970), `stuckRunFrom` (L2993) |
+| 44 | [`prim_bind_step`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c1a3/tree/ConcreteSpec/Proofs/Exec.lean#L1679-L1709) | 1679 | **Pass** | `refused` (L3007), `accepted` (L3033) | `Step` → `BypassStep` (L3014), `StuckStep` (L3040) |
+| 45 | [`prim_error_bypasses_bind`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c1a3/tree/ConcreteSpec/Proofs/Exec.lean#L1714-L1726) | 1714 | **Pass** | `error_trap` (L3066) | `Step` → `BindErrorsStep` (L3076) |
+| 46 | [`destroyCall_enters`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c1a3/tree/ConcreteSpec/Proofs/Exec.lean#L1803-L1818) | 1803 | **Pass** | `consume_tok` (L3618) | `Step` → `Refusal.StuckStep` (L3629) |
+| 47 | [`seqDestroyOrder_elem`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c1a3/tree/ConcreteSpec/Proofs/Exec.lean#L1822-L1824) | 1822 | **Pass** | `first_elem` (L3776) | `seqDestroyOrder` → `revSeqDestroyOrder` (L3781) |
+| 48 | [`seqDestroyOrder_storage`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c1a3/tree/ConcreteSpec/Proofs/Exec.lean#L1828-L1830) | 1828 | **Pass** | `storage_last` (L3786) | `seqDestroyOrder` → `storageFirstSeqDestroyOrder` (L3791) |
+| 49 | [`mapDestroyOrder_entry`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c1a3/tree/ConcreteSpec/Proofs/Exec.lean#L1864-L1872) | 1864 | **Pass** | `first_entry` (L3797) | `mapDestroyOrder` → `valFirstMapDestroyOrder` (L3802) |
+| 50 | [`mapDestroyOrder_storage`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c1a3/tree/ConcreteSpec/Proofs/Exec.lean#L1876-L1881) | 1876 | **Pass** | `storage_last` (L3809) | `mapDestroyOrder` → `storageFirstMapDestroyOrder` (L3814) |
+
+#### 2. `ConcreteSpec/Proofs/Scalar.lean` (30 Laws)
+
+| # | Law | Line | Verdict | Instance (`case`) | Planted (`subject` → `mutant`) |
+|---|---|---|---|---|---|
+| 1 | [`TrapKind.name_injective`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c1a3/tree/ConcreteSpec/Proofs/Scalar.lean#L42-L44) | 42 | **Pass** | `concrete` (L654) | `TrapKind.name` → `sameName` (L658) |
+| 2 | [`ArithmeticError.trapKind_injective`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c1a3/tree/ConcreteSpec/Proofs/Scalar.lean#L47-L50) | 47 | **Pass** | `concrete` (L664) | `ArithmeticError.trapKind` → `sameTrap` (L668) |
+| 3 | [`toBits_lt`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c1a3/tree/ConcreteSpec/Proofs/Scalar.lean#L55-L56) | 55 | **Pass** | `concrete` (L674) | `toBits` → `hugeBits` (L678) |
+| 4 | [`ofBits_inRange`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c1a3/tree/ConcreteSpec/Proofs/Scalar.lean#L59-L62) | 59 | **Pass** | `concrete` (L681) | `ofBits` → `wideOfBits` (L685) |
+| 5 | [`ofBits_toBits`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c1a3/tree/ConcreteSpec/Proofs/Scalar.lean#L65-L67) | 65 | **Pass** | `concrete` (L689) | `ofBits` → `zeroOfBits` (L693) |
+| 6 | [`wrap_inRange`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c1a3/tree/ConcreteSpec/Proofs/Scalar.lean#L70-L71) | 70 | **Pass** | `concrete` (L697) | `wrap` → `wideUnary` (L701) |
+| 7 | [`wrap_of_inRange`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c1a3/tree/ConcreteSpec/Proofs/Scalar.lean#L74-L75) | 74 | **Pass** | `concrete` (L704) | `wrap` → `zeroUnary` (L708) |
+| 8 | [`saturate_inRange`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c1a3/tree/ConcreteSpec/Proofs/Scalar.lean#L82-L87) | 82 | **Pass** | `concrete` (L712) | `saturate` → `wideUnary` (L716) |
+| 9 | [`saturate_of_inRange`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c1a3/tree/ConcreteSpec/Proofs/Scalar.lean#L90-L97) | 90 | **Pass** | `concrete` (L719) | `saturate` → `zeroUnary` (L723) |
+| 10 | [`bitwise_inRange`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c1a3/tree/ConcreteSpec/Proofs/Scalar.lean#L100-L106) | 100 | **Pass** | `concrete` (L727) | `bitwise` → `wideBitwise` (L731) |
+| 11 | [`bitNot_inRange`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c1a3/tree/ConcreteSpec/Proofs/Scalar.lean#L109-L112) | 109 | **Pass** | `concrete` (L734) | `bitNot` → `wideUnary` (L738) |
+| 12 | [`wrapping_of_checked`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c1a3/tree/ConcreteSpec/Proofs/Scalar.lean#L208-L214) | 208 | **Pass** | `concrete` (L741) | `wrapping` → `zeroPolicy` (L745) |
+| 13 | [`saturating_of_checked`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c1a3/tree/ConcreteSpec/Proofs/Scalar.lean#L217-L224) | 217 | **Pass** | `concrete` (L749) | `saturating` → `zeroPolicy` (L753) |
+| 14 | [`lossless_iff`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c1a3/tree/ConcreteSpec/Proofs/Scalar.lean#L230-L236) | 230 | **Pass** | `same_width` (L857) | `Lossless` → `noLossless` (L860) |
+| 15 | [`boolToInt_inRange`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c1a3/tree/ConcreteSpec/Proofs/Scalar.lean#L239-L240) | 239 | **Pass** | `concrete` (L757) | `boolToInt` → `wideBool` (L761) |
+| 16 | [`machine_plain_eq_exact`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c1a3/tree/ConcreteSpec/Proofs/Scalar.lean#L260-L278) | 260 | **Pass** | `concrete` (L839) | `CTerm.eval` → `corruptExact` (L843) |
+| 17 | [`eval_toExact`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c1a3/tree/ConcreteSpec/Proofs/Scalar.lean#L327-L354) | 327 | **Pass** | `concrete` (L847) | `CTerm.toExact` → `eraseExact` (L851) |
+| 18 | [`typed_eval_range`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c1a3/tree/ConcreteSpec/Proofs/Scalar.lean#L390-L432) | 390 | **Pass** | `literal` (L467) | `CTerm.eval` → `wideEval` (L471) |
+| 19 | [`machine_operands`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c1a3/tree/ConcreteSpec/Proofs/Scalar.lean#L436-L445) | 436 | **Pass** | `typed_pair` (L480) | `CTerm.eval` → `wideEval` (L487) |
+| 20 | [`machine_inRange`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c1a3/tree/ConcreteSpec/Proofs/Scalar.lean#L449-L454) | 449 | **Pass** | `typed_machine` (L497) | `CTerm.eval` → `wideEval` (L503) |
+| 21 | [`boolOfBits_boolToBits`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c1a3/tree/ConcreteSpec/Proofs/Scalar.lean#L533-L534) | 533 | **Pass** | `concrete` (L764) | `boolOfBits` → `noBool` (L768) |
+| 22 | [`toBits_ofBits`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c1a3/tree/ConcreteSpec/Proofs/Scalar.lean#L553-L555) | 553 | **Pass** | `concrete` (L771) | `ofBits` → `zeroOfBits` (L775) |
+| 23 | [`toBits_wrap`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c1a3/tree/ConcreteSpec/Proofs/Scalar.lean#L558-L559) | 558 | **Pass** | `concrete` (L779) | `wrap` → `increment` (L783) |
+| 24 | [`toBits_wrapping`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c1a3/tree/ConcreteSpec/Proofs/Scalar.lean#L562-L563) | 562 | **Pass** | `concrete` (L786) | `wrapping` → `zeroPolicy` (L790) |
+| 25 | [`toBits_shl`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c1a3/tree/ConcreteSpec/Proofs/Scalar.lean#L566-L571) | 566 | **Pass** | `concrete` (L793) | `toBits` → `unboundedBits` (L797) |
+| 26 | [`toBits_shr_unsigned`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c1a3/tree/ConcreteSpec/Proofs/Scalar.lean#L574-L594) | 574 | **Pass** | `concrete` (L801) | `toBits` → `offsetBits` (L805) |
+| 27 | [`toBits_bitwise`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c1a3/tree/ConcreteSpec/Proofs/Scalar.lean#L597-L607) | 597 | **Pass** | `concrete` (L809) | `bitwise` → `zeroBitwise` (L813) |
+| 28 | [`toBits_bitNot`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c1a3/tree/ConcreteSpec/Proofs/Scalar.lean#L610-L614) | 610 | **Pass** | `concrete` (L816) | `bitNot` → `zeroUnary` (L820) |
+| 29 | [`saturate_below`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c1a3/tree/ConcreteSpec/Proofs/Scalar.lean#L617-L618) | 617 | **Pass** | `concrete` (L823) | `saturate` → `zeroUnary` (L827) |
+| 30 | [`saturate_above`](file:///tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/rev-c1a3/tree/ConcreteSpec/Proofs/Scalar.lean#L621-L624) | 621 | **Pass** | `concrete` (L831) | `saturate` → `zeroUnary` (L835) |
+
+---
+
+### Exemption Verdicts for All `(approved: PENDING)` Declarations
+
+#### 1. `ConcreteSpec/Proofs/Exec.lean` (58 Helper / Representation Lemmas)
+
+| Declaration | Line | Class | Verdict |
+|---|---|---|---|
+| `Steps.single` | 53 | `Representation lemma` | **Approve** — lifts a single `Step` into a 1-step `Steps` trace. |
+| `Steps.trans` | 59 | `Representation lemma` | **Approve** — concatenates `Steps` traces. |
+| `steps_next` | 67 | `Representation lemma` | **Approve** — prepends a silent `step` to `Steps`. |
+| `steps_request_inv` | 73 | `Representation lemma` | **Approve** — prepends a primitive `step` to `Steps`. |
+| `step_seq` | 97 | `Helper (computation)` | **Approve** — definitional unfolding of `step` on `.seq`. |
+| `step_done_seq` | 103 | `Helper (computation)` | **Approve** — definitional unfolding of `step` at `.done` on `.seq`. |
+| `step_exit_seq` | 109 | `Helper (computation)` | **Approve** — definitional unfolding of `step` at `.exiting` on `.seq`. |
+| `step_block` | 114 | `Helper (computation)` | **Approve** — definitional unfolding of `step` on `.block`. |
+| `register_scope` | 151 | `Helper (computation)` | **Approve** — definitional unfolding of `register` at `.scope`. |
+| `register_seq` | 156 | `Helper (computation)` | **Approve** — definitional unfolding of `register` at `.seq`. |
+| `step_break_loop` | 180 | `Helper (computation)` | **Approve** — definitional unfolding of `step` on matching `.brk`; full cleanup/reachability is covered by `break_reaches_loop`. |
+| `step_continue_loop` | 188 | `Helper (computation)` | **Approve** — definitional unfolding of `step` on matching `.cont`; full cleanup/reachability is covered by `continue_reaches_loop`. |
+| `plan_scopes` | 300 | `Helper (computation)` | **Approve** — definitional unfolding of `plan` on nested scopes. |
+| `RunsAll.each` | 402 | `Helper (inversion)` | **Approve** — certificate composition between `RunsAll` and `RunsEach`. |
+| `RunsEach.split_calls` | 412 | `Helper (inversion)` | **Approve** — certificate decomposition of `RunsEach`. |
+| `cleans_iff_runs_plan_inv` | 431 | `Helper (inversion)` | **Approve** — relates abstract certificates `Cleans` and `RunsEach`. |
+| `Passes.passable` | 472 | `Helper (inversion)` | **Approve** — frame-predicate implication. |
+| `FirstSteps.steps_inv` | 496 | `Helper (inversion)` | **Approve** — forgets first-arrival predicate to yield `Steps`. |
+| `performed_append_inv` | 551 | `Helper (inversion)` | **Approve** — certificate composition for `Performed`. |
+| `stepExit_no_request_inv` | 562 | `Helper (inversion)` | **Approve** — internal `stepExit` decomposition supporting the public `exit_label` law. |
+| `exit_step_next_inv` | 594 | `Helper (inversion)` | **Approve** — converts `Step` at `.exiting` to `step` using `stepExit_no_request_inv`. |
+| `exit_pass_plan_inv` | 604 | `Helper (inversion)` | **Approve** — internal single-step pass decomposition supporting `cleanup_runs_exact_plan`. |
+| `exit_call_plan_inv` | 712 | `Helper (inversion)` | **Approve** — internal single-step dispatch decomposition supporting `cleanup_runs_exact_plan`. |
+| `no_step_of_none_inv` | 878 | `Helper (inversion)` | **Approve** — function-to-relation bridge for `Blocked`. |
+| `FirstSteps.sized_inv` | 1086 | `Helper (inversion)` | **Approve** — attaches step-count index `n` for induction. |
+| `FirstStepsN.unsized_inv` | 1094 | `Helper (inversion)` | **Approve** — erases step-count index `n`. |
+| `protected_height_inv` | 1102 | `Helper (inversion)` | **Approve** — list-length arithmetic consequence of `Protected`. |
+| `protected_not_return_inv` | 1109 | `Helper (inversion)` | **Approve** — structural consequence of `protected_height_inv`. |
+| `FirstStepsN.end_stop_inv` | 1171 | `Helper (inversion)` | **Approve** — extracts endpoint predicate from `FirstStepsN`. |
+| `FirstStepsN.trap_impossible_inv` | 1178 | `Helper (inversion)` | **Approve** — corollary of `steps_from_trapped` and `end_stop_inv`. |
+| `resume_step_inv` | 1227 | `Helper (computation)` | **Approve** — computes `.resume` dispatcher step in `boundary_complete`. |
+| `step_silent_deterministic_inv` | 1404 | `Helper (congruence)` | **Approve** — `Option.some` / `Out.next` injectivity on `step`. |
+| `step_silent_representation` | 1410 | `Representation lemma` | **Approve** — function/relation bridge; determinism is now proved independently by `step_silent_deterministic`. |
+| `step_deterministic_inv` | 1423 | `Helper (inversion)` | **Approve** — internal constructor decomposition. |
+| `step_pair_representation` | 1443 | `Representation lemma` | **Approve** — constructor decomposition; determinism is now proved independently by `step_deterministic`. |
+| `AnswerStep.step_inv` | 1477 | `Representation lemma` | **Approve** — erases the input index from `AnswerStep` to `Step`. |
+| `blocked_map_inv` | 1536 | `Helper (inversion)` | **Approve** — option/function/relation bridge used by lifecycle refusal laws. |
+| `runFrom_zero_ne_stuck_inv` | 1634 | `Helper (inversion)` | **Approve** — 0-fuel driver computation helper. |
+| `destroy_not_copy_proj` | 1732 | `Helper (projection)` | **Approve** — projects `D.notCopy` from `DestroyProtocol`. |
+| `destroy_not_copy` | 1739 | `Representation lemma` | **Approve** — characterizes `validDestroyFn`; independent destructor execution is covered by `destroyCall_enters`. |
+| `destroyCall_sig` | 1770 | `Representation lemma` | **Approve** — characterizes `checkedDestroyCall`; independent destructor execution is covered by `destroyCall_enters`. |
+| `entryParts_succ` | 1836 | `Helper (arithmetic)` | **Approve** — list-append helper for `entryParts`. |
+| `entryParts_length` | 1841 | `Helper (arithmetic)` | **Approve** — list-length helper for `entryParts`. |
+| `entryParts_get` | 1847 | `Helper (arithmetic)` | **Approve** — indexing helper supporting `mapDestroyOrder_entry`. |
+| `demo_log_completes` | 1892 | `Representation lemma` | **Approve** — concrete witness certificate for `Demo.logFn`. |
+| `demo_bump_completes` | 1902 | `Representation lemma` | **Approve** — concrete witness certificate for `Demo.bumpFn`. |
+| `logSegment` | 1917 | `Representation lemma` | **Approve** — concrete witness certificate for `CleanupEvidence`. |
+| `logContinue_inv` | 2153 | `Representation lemma` | **Approve** — concrete witness certificate helper. |
+| `inner_raw_run` | 2175 | `Representation lemma` | **Approve** — concrete raw execution witness closing `raw_cleanup_runs_plan`. |
+| `inner_passes` | 2211 | `Helper (computation)` | **Approve** — finite membership witness closing `raw_cleanup_runs_plan`. |
+| `empty_passes` | 2253 | `Helper (inversion)` | **Approve** — finite membership witness closing `boundary_of_performed`. |
+| `drop_performed` | 2260 | `Representation lemma` | **Approve** — concrete `Performed` witness closing `boundary_of_performed`. |
+| `single_performed` | 2284 | `Representation lemma` | **Approve** — concrete `Performed` witness closing `boundary_scope_calls`. |
+| `base_execution` | 2290 | `Representation lemma` | **Approve** — concrete base execution witness closing `boundary_scope_calls`. |
+| `mutant_base_execution` | 2298 | `Representation lemma` | **Approve** — concrete mutant base execution witness for `boundary_scope_calls`. |
+| `skip_no_done` | 2339 | `Helper (inversion)` | **Approve** — shape invariant of planted `SkipReturnStep` relation. |
+| `saved_three` | 2353 | `Representation lemma` | **Approve** — concrete 3-step execution witness closing `FirstStepsN.split_return`. |
+| `skipped_three` | 2363 | `Representation lemma` | **Approve** — concrete 3-step mutant witness for `FirstStepsN.split_return`. |
+| `bump_five` | 2397 | `Representation lemma` | **Approve** — concrete 5-step execution witness closing `FirstStepsN.call_return`. |
+| `skipped_five` | 2412 | `Representation lemma` | **Approve** — concrete 5-step mutant witness for `FirstStepsN.call_return`. |
+| `two_passes` | 2452 | `Helper (inversion)` | **Approve** — finite membership witness closing `boundary_complete`. |
+| `drop_two` | 2459 | `Representation lemma` | **Approve** — concrete 2-step execution witness closing `boundary_complete`. |
+| `passes_single_scope` | 3379 | `Helper (inversion)` | **Approve** — finite membership witness closing unwind laws. |
+
+#### 2. `ConcreteSpec/Proofs/Scalar.lean` (16 Helper / Representation Lemmas)
+
+| Declaration | Line | Class | Verdict |
+|---|---|---|---|
+| `IntTy.min_le_max` | 78 | `Helper (arithmetic)` | **Approve** — finite endpoint ordering used in interval proofs. |
+| `inRangeOr_inRange` | 117 | `Helper (inversion)` | **Approve** — unwraps explicit range validator `inRangeOr`. |
+| `shr_inRange` | 124 | `Helper (arithmetic)` | **Approve** — integer division range bound supporting `checked_inRange`. |
+| `tmod_inRange` | 143 | `Helper (arithmetic)` | **Approve** — integer remainder range bound supporting `checked_inRange`. |
+| `checked_inRange` | 156 | `Helper (inversion)` | **Approve** — combines `inRangeOr_inRange` with `shr_inRange` and `tmod_inRange` to support `typed_eval_range`. |
+| `plain_ok_iff` | 180 | `Representation lemma` | **Approve** — characterizes the `plain`/`checked` success adapter. |
+| `plain_trap_iff` | 186 | `Representation lemma` | **Approve** — characterizes the `plain`/`checked` error adapter. |
+| `plain_not_stuck` | 192 | `Helper (inversion)` | **Approve** — result-shape inversion of `plain`. |
+| `checked_wrapOp` | 203 | `Helper (computation)` | **Approve** — definitional unfolding of `checked` on `WrapOp.arith`. |
+| `tryConvert_ok_iff` | 243 | `Representation lemma` | **Approve** — characterizes explicit range check in `tryConvert`. |
+| `exact_defined` | 253 | `Helper (computation)` | **Approve** — definitional unfolding of `CTerm.eval` on `.exact`. |
+| `machine_operands_inv` | 281 | `Helper (inversion)` | **Approve** — evaluator guard extraction; independent soundness is `machine_operands`. |
+| `machine_inRange_inv` | 302 | `Helper (inversion)` | **Approve** — evaluator guard extraction; independent soundness is `typed_eval_range` / `machine_inRange`. |
+| `exactOf?_some` | 318 | `Helper (inversion)` | **Approve** — decodes `MachineOp.exactOf?`. |
+| `empty_width_env` | 462 | `Helper (inversion)` | **Approve** — vacuous empty valuation witness closing `typed_eval_range`, `machine_operands`, and `machine_inRange` instances. |
+| `plainNeg_ok_iff` | 518 | `Representation lemma` | **Approve** — characterizes the `plainNeg`/`checkedNeg` success adapter. |
+| `plainNeg_trap_iff` | 523 | `Representation lemma` | **Approve** — characterizes the `plainNeg`/`checkedNeg` error adapter. |
+| `checkedNeg_inRange` | 529 | `Representation lemma` | **Approve** — unwraps `inRangeOr` for `checkedNeg`. |
+| `boolOfBits_some_iff` | 537 | `Representation lemma` | **Approve** — finite 2-element decoder characterization. |
+| `lossyConvert_inRange` | 544 | `Helper (computation)` | **Approve** — definitional alias of `wrap_inRange`. |
+| `lossyConvert_of_inRange` | 547 | `Helper (computation)` | **Approve** — definitional alias of `wrap_of_inRange`. |
+
+VERDICT: ACCEPT
+rc=0

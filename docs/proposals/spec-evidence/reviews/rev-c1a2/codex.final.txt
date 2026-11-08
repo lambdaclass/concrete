@@ -1,0 +1,244 @@
+Read-only review completed. I did not modify files, use the network, run writing Git commands, or build. The conclusions below are source-level findings; CI elaboration and gates remain the coordinator’s responsibility.
+
+**The local-restoration and lifecycle evidence improved substantially, but this slice still violates the binding vacuity and classification rules.**
+
+All locations below are repository-relative.
+
+### Findings
+
+1. **`ConcreteSpec/Proofs/Exec.lean:1308` — blocker — REAL DEFECT: the raw-cleanup equivalence has a projection direction.**
+
+   `raw_cleanup_runs_plan` states, structurally:
+
+   ```text
+   (passable ∧ rawRun) ↔ (passable ∧ rawRun ∧ extractedPlan)
+   ```
+
+   Its reverse proof at line 1325 literally returns `⟨hp, h⟩`. Repeating the raw execution on the right makes this direction constructor/projection repackaging, expressly rejected by the final convention. It establishes no converse execution property.
+
+   The extraction direction is substantive, and the added final-locals constraint is useful. That does not make the artificial equivalence acceptable.
+
+   **Long-term fix:** state raw-run extraction as a genuine implication with the raw execution among its hypotheses. Prove any desired converse separately from independently performed actions to an actual first-boundary execution, without assuming that execution again. Update the full Instance and premise-preserving Planted statements accordingly.
+
+2. **`ConcreteSpec/Proofs/Exec.lean:1423` — blocker — REAL DEFECT: `step_deterministic` repackages the constructors of `Step` instead of supplying the requested determinism contract.**
+
+   The right side enumerates precisely the evidence consumed by `Step.silent` and `Step.prim`; the reverse proof constructs those constructors directly. This is the convention’s prohibited constructor repackaging.
+
+   Moreover, the primitive branch permits arbitrary `a₁` and `a₂` and concludes neither equal labels nor equal destinations under equal answers. The `branch` witness and `StuckStep` mutant exercise silent-transition existence, not primitive equal-answer determinism.
+
+   `step_silent_deterministic` at line 1390 also principally characterizes the function-backed representation under the premise that `step` already selected the target.
+
+   **Long-term fix:** retain representation characterizations as explicitly approved helpers. Supply a separate relational determinism contract, with independently stated answer-indexed transition evidence, covering silent uniqueness and equal-answer uniqueness. Include an actual primitive instance and a mutant that introduces competing outcomes while preserving the request and answer premises.
+
+3. **`ConcreteSpec/Proofs/Exec.lean:1660`, `:1690`; `ConcreteSpec/Spec/Exec.lean:519` — blocker — REAL DEFECT: destruction validation has replaced projection vacuity with validator-restatement vacuity.**
+
+   `destroy_not_copy` says `validDestroyFn` accepts exactly the checks implemented inside `validDestroyFn`: non-Copy, lookup, singleton parameter, parameter type and Unit result.
+
+   `destroyCall_sig` similarly expands `checkedDestroyCall`, whose implementation explicitly calls that validator. These are useful validator correctness/representation lemmas, but under the owner’s stated rule they cannot serve as independent destruction soundness laws.
+
+   The positive and negative witnesses are real closed applications, and the mutants expose removed checks. They do not repair the circular source of the claimed invariant.
+
+   **Long-term fix:** classify these as validator/representation lemmas, and connect independently established protocol admission or typing to the destruction operation actually used by the semantics. Prove the consuming/signature property from that independent admission evidence. Do not count a newly introduced wrapper that rechecks the property as its structural proof.
+
+4. **`ConcreteSpec/Proofs/Scalar.lean:255` — blocker — REAL DEFECT: `machine_operands` derives its invariant from the evaluator’s explicit invariant guard.**
+
+   `CTerm.eval` in `ConcreteSpec/Spec/Scalar.lean:291` checks `op.operandsOk` before evaluating a machine operation. `machine_operands` extracts precisely that successful guard. This is the runtime invariant recheck explicitly forbidden as contract soundness evidence.
+
+   **Long-term fix:** establish operand-width validity from an independently defined well-formedness/typing judgment and environment validity. Keep the current theorem, if useful, as an approved evaluator inversion lemma. State the semantic contract using the independent judgment and supply closed positive and premise-preserving negative evidence.
+
+5. **`ConcreteSpec/Proofs/Scalar.lean:227` — major — REAL DEFECT: the requested Scalar contract audit remains unmigrated.**
+
+   In particular, `exact_defined`, `machine_plain_eq_exact`, `machine_operands`, `machine_inRange`, and `eval_toExact` have no final-convention classification, full tagged Instance, or tagged Planted evidence. The remainder of this file is likewise unclassified.
+
+   `exact_defined` is an evaluator computation equation; simply adding a Law tag would not fix it. `machine_plain_eq_exact` and `eval_toExact` have substantive content worth witnessing independently.
+
+   **Long-term fix:** classify every authored theorem in this audited surface; exempt actual computations and inversions explicitly, and add full closed applications and same-typed, premise-preserving mutants for the retained laws. The detailed inventory follows below.
+
+6. **`ConcreteSpec/Proofs/Exec.lean:944`, `:1102`, `:1169`, `:1211` — major — REAL DEFECT: substantive execution invariants are hidden under generic “inversion” exemptions.**
+
+   These prove preservation of a saved caller boundary, mandatory intermediate return with restored caller locals, and completeness of raw-execution segmentation. They are not merely inversion of a certificate constructor. Their proofs establish semantic properties over executions, including induction and machine-specific reasoning.
+
+   Similarly, `boundary_scope_calls_inv` and `boundary_of_performed_inv` construct executions from independent plans; calling them inversion helpers obscures positive execution obligations.
+
+   **Long-term fix:** expose the semantic preservation, return-segmentation, and plan-execution contracts as Laws with their own full Instances and premise-preserving Planted examples. Keep purely structural decomposition lemmas as helpers. Exemption decisions are listed individually below.
+
+### Disposition of the six round-1 findings
+
+| Round-1 finding | Round-2 assessment |
+|---|---|
+| 1. Missing final local restoration | **Substantially fixed.** `leaving` records actual post-step locals; `Performed` threads locals; both cleanup statements include `unwindLocals`. `missing_restrict` is a concrete counterexample. Raw-law formulation still fails finding 1 above. |
+| 2. One-way continuation/primitive refusal | **Fixed at driver level.** Both are now one-step equivalences, with separate accepted/refused cases and bypass/always-stuck mutants. `prim_bind_step` supplies an additional relational characterization. |
+| 3. Demoted determinism/destruction/entry targets | **Partially fixed.** `enter_refused` now concerns `runFn` and has two-sided evidence. Determinism and destruction still have the structural defects described above. |
+| 4. Unused call-arity premise | **Fixed.** `Spec/Exec.lean:380` now actually checks arity, so `hlen` is no longer dead. |
+| 5. One-sided refusal evidence | **Fixed.** Refusal cases use full equivalence applications; accepted cases and `StuckStep`/always-stuck driver mutants exercise the other direction. |
+| 6. Missing evidence across C1 | **Partially fixed.** Every explicitly tagged Exec Law now has dedicated evidence, but several Laws remain representation restatements, and semantic helpers plus Scalar contract laws remain unresolved. |
+
+The closed `rfl` proofs of concrete expression evaluation, lookup, arity, and lifecycle results are legitimate witness arguments. They are not impossible-premise discharge. The defects above concern what the **law itself** establishes.
+
+### Exec law-by-law vacuity audit
+
+“Pass” below means the inspected statement has substantive behavioral content and its named cases supply full closed applications and corresponding planted evidence. It is not a build result. Mutants inspected are separate definitions of the corresponding function/relation shape; no finding here depends on an impossible witness premise.
+
+| Law | Verdict | Instance / planted witness |
+|---|---|---|
+| `steps_request` | Pass | `log_ok` / `StuckStep` |
+| `lookup_restrict` | Pass | `kept`, `dropped` / `dropAllRestrict`, `keepAllRestrict` |
+| `restrict_dom_drops` | Pass | `inner_local` / `keepAllRestrict` |
+| `two_defers_register` | Pass | `lifo` / `ReflOnlySteps` |
+| `step_ret` | Pass | `eval_first` / `stuckStep` |
+| `step_return_caller` | Pass | `restore_and_bind` / `stuckStep` |
+| `exit_scope_next` | Pass | `dispatch_first` / `StuckStep` |
+| `done_scope_next` | Pass | `dispatch_first` / `StuckStep` |
+| `exit_scope_runs_defers` | Pass | `bump_then_log` / `ReflOnlySteps`; explicit call and drop premises retained |
+| `done_scope_runs_defers` | Pass | `bump_then_log` / `ReflOnlySteps`; explicit call and drop premises retained |
+| `unwind_runs_plan` | Pass | `single_scope` / `ReflOnlySteps`; cleanup and passability premises retained |
+| `return_reaches_caller` | Pass | `unwind_and_return` / `ReflOnlySteps`; leave and bind premises retained |
+| `break_reaches_loop` | Pass | `unwind_and_break` / `ReflOnlySteps` |
+| `continue_reaches_loop` | Pass | `unwind_and_continue` / `ReflOnlySteps` |
+| `planWith_calls` | Pass | `nested` / `reversePlanWith`, `emptyPlan` |
+| `cleanup_runs_exact_plan` | Pass for the stated observer | `nested`, `missing`, `extra`, `missing_drop`, `missing_restrict` / corresponding dispatcher mutants |
+| `step_trapped` | Pass | `trapped_terminal` / `noTrapFinal?`, `RecoverTrapStep` |
+| `steps_from_trapped` | Pass | `no_unwind` / `RecoverTrapSteps` |
+| `raw_cleanup_runs_plan` | **Fail: projection direction** | `single`, `escape`, `missing_restrict` / `EscapeEmitStep`, `EscapeStep`, `MissingRestrictStep`; witnesses do not fix the statement |
+| `abort_runs_no_cleanup` | Pass | `traps_without_cleanup` / `ReflOnlySteps` |
+| `evalArgs_first_trap` | Pass | `first_trap_wins` / `swallowTrapEvalArgs`, preserving successful-prefix evaluation |
+| `step_silent_deterministic` | **Fail as independent determinism evidence** | `unique_silent` / `StuckStep`; representation characterization |
+| `step_deterministic` | **Fail: constructor repackaging** | `branch` / `StuckStep`; no primitive equal-answer witness |
+| `bind_refused` | Pass | `refused`, `accepted` / `BypassStep`, `StuckStep` |
+| `assign_refused` | Pass | `refused`, `accepted` / `BypassStep`, `StuckStep` |
+| `enter_refused` | Pass as entry-refusal behavior | `refused`, `accepted` / `bypassRunFn`, `stuckRunFn` |
+| `call_refused` | Pass | `refused`, `accepted` / `BypassStep`, `StuckStep`; actual arity check |
+| `scope_drop_refused` | Pass | `refused`, `accepted` / `BypassStep`, `StuckStep` |
+| `exit_drop_refused` | Pass | `refused`, `accepted` / `BypassStep`, `StuckStep` |
+| `exit_test_drop_refused` | Pass | `refused`, `accepted` / `BypassStep`, `StuckStep` |
+| `test_drop_refused` | Pass | `refused`, `accepted` / `BypassStep`, `StuckStep` |
+| `return_refused` | Pass | Full paired explicit/implicit return applications, including refused leave and refused result binding / bypass and stuck relations |
+| `continuation_refused` | Pass | `refused`, `accepted` / `bypassRunFrom`, `stuckRunFrom` |
+| `prim_bind_refused` | Pass | `refused`, `accepted` / `bypassRunFrom`, `stuckRunFrom` |
+| `prim_bind_step` | Pass for its stated universal-answer contract | `refused`, `accepted` / `BypassStep`, `StuckStep` |
+| `prim_error_bypasses_bind` | Pass | `error_trap` / `BindErrorsStep`; allowed error and evaluation premises retained |
+| `destroy_not_copy` | **Fail as independent destruction soundness** | `linear_tok`, `copy_int_rejected` / `rejectAllDestroyFn`, `allowCopyDestroyFn`; restates validator |
+| `destroyCall_sig` | **Fail as independent destruction soundness** | `valid_tok`, `bad_sig_rejected` / `dropArgDestroyCall`, `uncheckedDestroyCall`; restates checked wrapper |
+| `seqDestroyOrder_elem` | Pass | `first_elem` / `revSeqDestroyOrder`; bound retained |
+| `seqDestroyOrder_storage` | Pass | `storage_last` / `storageFirstSeqDestroyOrder` |
+| `mapDestroyOrder_entry` | Pass | `first_entry` / `valFirstMapDestroyOrder`; bound retained |
+| `mapDestroyOrder_storage` | Pass | `storage_last` / `storageFirstMapDestroyOrder` |
+
+`prim_bind_step` correctly quantifies over **all** allowed answers when characterizing complete blockage. It should not be described as the answer-specific transition-existence theorem requested in round 1; those are different statements.
+
+The successful cleanup laws do not prohibit refusal: their call/drop completion evidence expresses successful executions, while the refusal laws cover blocked executions. That separation respects owner item 21.
+
+### Pending exemption decisions
+
+These are review decisions only; I have not edited approval tags.
+
+For the 31 `Helper (inversion)` declarations:
+
+| Declaration | Exemption decision |
+|---|---|
+| `RunsAll.each` | **Approve** — certificate composition; “inversion” is imprecise, but no independent machine invariant is claimed |
+| `RunsEach.split_calls` | **Approve** — certificate decomposition |
+| `cleans_iff_runs_plan_inv` | **Approve** — certificate representation equivalence; must not count as execution soundness |
+| `Passes.passable` | **Approve** — implication between frame predicates |
+| `FirstSteps.steps_inv` | **Approve** — forgetful certificate conversion |
+| `performed_append_inv` | **Approve** — certificate composition |
+| `stepExit_no_request_inv` | **Do not approve** — semantic restriction on exit behavior; expose as a law or cover it explicitly in a retained law |
+| `exit_step_next_inv` | **Approve only as representation conversion** — derives the function result from the preceding semantic restriction |
+| `exit_pass_plan_inv` | **Approve as an internal decomposition supporting `cleanup_runs_exact_plan`** |
+| `exit_call_plan_inv` | **Approve as an internal decomposition supporting `cleanup_runs_exact_plan`** |
+| `boundary_scope_calls_inv` | **Do not approve** — positive execution construction, not inversion |
+| `boundary_of_performed_inv` | **Do not approve** — independent-plan-to-execution contract |
+| `no_step_of_none_inv` | **Approve** — function/relation representation bridge |
+| `register_protected_inv` | **Do not approve** — registration preserves a saved caller boundary |
+| `protected_step_inv` | **Do not approve** — semantic preservation/restoration invariant |
+| `FirstSteps.sized_inv` | **Approve** — adds a derivation-size index |
+| `FirstStepsN.unsized_inv` | **Approve** — erases that index |
+| `protected_height_inv` | **Approve** — list-length consequence of `Protected` |
+| `protected_not_return_inv` | **Approve** — structural consequence of the preceding length fact |
+| `FirstStepsN.split_return_inv` | **Do not approve** — mandatory intermediate return and restored locals over execution |
+| `call_protects_inv` | **Do not approve** — semantic call-boundary preservation |
+| `FirstStepsN.end_stop_inv` | **Approve** — endpoint property of the first-arrival certificate |
+| `FirstStepsN.trap_impossible_inv` | **Approve** — corollary of the retained trap law and endpoint arithmetic |
+| `FirstStepsN.call_return_inv` | **Do not approve** — substantive first-return segmentation contract |
+| `exit_label_inv` | **Do not approve** — semantic silence property, presently without its own Law evidence |
+| `resume_step_inv` | **Approve as representation computation** — direct dispatcher characterization; relabeling its helper reason would be clearer |
+| `boundary_complete_inv` | **Do not approve** — the substantive raw-execution completeness theorem |
+| `step_deterministic_inv` | **Approve as representation decomposition only** |
+| `blocked_map_inv` | **Approve** — generic option/function/relation bridge used by explicit refusal laws |
+| `runFrom_zero_ne_stuck_inv` | **Approve** — fuel-zero driver computation |
+| `passes_single_scope` | **Approve** — concrete finite membership proof |
+
+For every other pending exemption:
+
+| Declaration(s) | Exemption decision |
+|---|---|
+| `Steps.single`, `Steps.trans`, `steps_next`, `steps_request_inv` | **Approve** — execution-certificate constructors/composition |
+| `step_seq`, `step_done_seq`, `step_exit_seq`, `step_block` | **Approve as computation helpers**, not independent soundness evidence |
+| `register_scope`, `register_seq` | **Approve as computation helpers** |
+| `step_break_loop`, `step_continue_loop` | **Approve as computation helpers**; substantive cleanup/reachability laws exist separately |
+| `plan_scopes` | **Approve as computation helper** |
+| `step_silent_deterministic_inv` | **Approve** — function-result congruence |
+| `destroy_not_copy_proj` | **Approve as projection only**, not destruction soundness evidence |
+| `entryParts_succ`, `entryParts_length`, `entryParts_get` | **Approve** — internal list representation/arithmetic supporting public order laws |
+| `demo_log_completes`, `demo_bump_completes` | **Approve** — concrete execution certificates used to close Instances |
+| `logSegment`, `logContinue_inv`, `inner_raw_run` | **Approve** — concrete witness construction |
+
+### Scalar law inventory
+
+The file identifies itself as C2, but I included the whole file because you expressly requested its contract laws. **Every declaration below lacks final-convention classification and dedicated tagged Instance/Planted evidence in this file.** Thus none passes the requested evidence gate. “Substantive” distinguishes a plausible retained Law from a theorem that should instead receive an exemption.
+
+| Declaration | Vacuity assessment | Required witness |
+|---|---|---|
+| `TrapKind.name_injective` | Substantive finite encoding property | None tagged |
+| `ArithmeticError.trapKind_injective` | Substantive encoding property | None tagged |
+| `toBits_lt` | Substantive numeric bound | None tagged |
+| `ofBits_inRange` | Substantive representation property | None tagged |
+| `ofBits_toBits` | Substantive round trip | None tagged |
+| `wrap_inRange` | Substantive consequence of representation | None tagged |
+| `wrap_of_inRange` | Substantive identity property | None tagged |
+| `IntTy.min_le_max` | Arithmetic helper candidate | None tagged; seek exemption |
+| `saturate_inRange` | Substantive clamp bound | None tagged |
+| `saturate_of_inRange` | Substantive clamp identity | None tagged |
+| `bitwise_inRange` | Substantive bound | None tagged |
+| `bitNot_inRange` | Substantive bound | None tagged |
+| `inRangeOr_inRange` | **Guard inversion**, not independent range soundness | None tagged; seek exemption |
+| `shr_inRange` | Substantive arithmetic theorem | None tagged |
+| `tmod_inRange` | Substantive arithmetic theorem | None tagged |
+| `checked_inRange` | Mixed: guarded branches plus substantive remainder/shift reasoning | None tagged; separate guard inversions from arithmetic preservation |
+| `plain_ok_iff` | Adapter representation characterization | None tagged; seek exemption or independent semantics |
+| `plain_trap_iff` | Adapter representation characterization | None tagged; seek exemption or independent semantics |
+| `plain_not_stuck` | Adapter result-shape inversion | None tagged; seek exemption |
+| `checked_wrapOp` | **Definitional equation**, proved by cases and `rfl` | None tagged; seek exemption |
+| `wrapping_of_checked` | Substantive policy agreement | None tagged |
+| `saturating_of_checked` | Substantive policy agreement | None tagged |
+| `lossless_iff` | Substantive interval/domain equivalence | None tagged |
+| `boolToInt_inRange` | Substantive finite conversion property | None tagged |
+| `tryConvert_ok_iff` | Explicit range-check characterization | None tagged; classify as validator lemma or supply independent conversion semantics |
+| `exact_defined` | Evaluator computation equation | None tagged; seek exemption |
+| `machine_plain_eq_exact` | Substantive machine/exact correspondence | None tagged |
+| `machine_operands` | **Fails: evaluator rechecks the invariant** | None tagged; structural fix in finding 4 |
+| `machine_inRange` | Mixed semantic preservation relying on guarded operand validity | None tagged; use independently typed operands |
+| `exactOf?_some` | Representation inversion | None tagged; seek exemption |
+| `eval_toExact` | Substantive recursive correspondence | None tagged |
+| `plainNeg_ok_iff` | Adapter representation characterization | None tagged; seek exemption |
+| `plainNeg_trap_iff` | Adapter representation characterization | None tagged; seek exemption |
+| `checkedNeg_inRange` | Guard-inversion consequence | None tagged; seek exemption |
+| `boolOfBits_boolToBits` | Finite representation round trip | None tagged |
+| `boolOfBits_some_iff` | Finite representation characterization | None tagged |
+| `lossyConvert_inRange` | Alias consequence of `wrap_inRange` | None tagged; classify consistently with conversion contract |
+| `lossyConvert_of_inRange` | Alias consequence of `wrap_of_inRange` | None tagged |
+| `toBits_ofBits` | Substantive representation round trip | None tagged |
+| `toBits_wrap` | Substantive bit-pattern preservation | None tagged |
+| `toBits_wrapping` | Substantive arithmetic/bit correspondence | None tagged |
+| `toBits_shl` | Substantive bit correspondence | None tagged |
+| `toBits_shr_unsigned` | Substantive arithmetic/logical-shift correspondence | None tagged |
+| `toBits_bitwise` | Substantive bit correspondence | None tagged |
+| `toBits_bitNot` | Substantive bit correspondence | None tagged |
+| `saturate_below` | Clamp computation/behavior property | None tagged |
+| `saturate_above` | Clamp computation/behavior property | None tagged |
+
+Existing numerical examples in `Spec/Scalar.lean` are not substitutes for full applications of these laws with matching planted cases.
+
+The final-convention migration therefore remains incomplete even though the lifecycle refusal repairs and local-restoration counterexamples are real.
+
+VERDICT: CHANGES

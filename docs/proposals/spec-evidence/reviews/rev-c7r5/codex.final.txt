@@ -1,0 +1,135 @@
+Read-only, offline review completed. No files changed, git commands run, builds performed, or gates executed.
+
+Three REAL DEFECTS remain. The timing mutant repair, distinct-secret examples, generalized report certification, and whole-run accounting proofs are substantive improvements. `DelimitedReleaseNI` and `ConstantTime` retain their owner-decided meanings.
+
+1. **ConcreteSpec/Proofs/Leak.lean:1601,1620,1639 — blocker — REAL DEFECT: three Instances remain partial applications.**
+
+   The `secure_ni`, `secure_ct`, and `timing_ni` instances discharge their low-equivalence and existential matching-run premises, but leave `r₁` and `r₂` universally quantified. Their proofs are still functions awaiting run arguments. Moving those arguments into a purported “conclusion” does not satisfy the final convention’s requirement that **every argument** be closed.
+
+   **Fix:** apply each law fully to concrete complete runs, including `secureRun 6 1`, `secureRun 5 2`, and `timingRun 1/2`. Adjust the corresponding Planted examples to negate the conclusion at the exact mutated run arguments. Keep the general security theorems; add genuinely closed applications as their evidence.
+
+2. **ConcreteSpec/Proofs/Leak.lean:808 — major — REAL DEFECT: `Account.enter_wf` is a projection/repackaging Law.**
+
+   Unfolding `Account.enter` and `Account.WF` reduces its conclusion to:
+
+   ```lean
+   a.live ≤ a.peak ∧ a.live ≤ a.live
+   ```
+
+   Its proof therefore repackages `h.1` with reflexivity. The final convention explicitly rejects premise projection and constructor repackaging as Law evidence; the planted mutant does not override that prohibition.
+
+   **Fix:** classify this calculation as a Helper and use it within a substantive function-entry/run accounting law connecting entry initialization, an actual execution, and its independently observed local peak. Give that law closed Instance and premise-preserving Planted evidence.
+
+3. **ConcreteSpec/Proofs/Leak.lean:885 — major — REAL DEFECT: `free_conservation` still restates the update definition.**
+
+   Once `hle` selects the successful branch of `apply`, the requested/live/peak conclusions repeat the fields of `Account.free`, and the frame clause repeats `Memory.set`. The proof explicitly supplies four `rfl`s. This remains the definition-level lemma identified in the earlier Codex review; changing its classification to Law does not resolve that issue.
+
+   **Fix:** retain the calculation as a Helper used by substantive conservation evidence. Express the independent single-step obligation as exact byte balance—such as `after.live + bytes = before.live`—together with history and frame preservation, and prove it from the successful transition. Supply closed and premise-preserving mutant evidence for that obligation.
+
+All locations below refer to `ConcreteSpec/Proofs/Leak.lean` unless otherwise stated. “Pass” means the manual vacuity/evidence audit passed; elaboration was not rerun.
+
+| Law | Vacuity/convention verdict | Instance → Planted witness |
+|---|---|---|
+| `forbidsRelease_not_authorized` :49 | Pass | Empty policy/nonempty trace :1267 → `ignoresPolicyAuthorized` :1271 |
+| `Demo.step_unique` :283 | Pass | Output seven :1559 → permissive oracle admitting outputs seven/eight :1572 |
+| `Demo.secure_ni` :406 | Nonvacuous theorem; **Instance fails full-application rule** | Distinct pairs `(6,1)/(5,2)`, release seven :1601 → `exposingStart` :1607 |
+| `Demo.secure_ct` :429 | Nonvacuous theorem; **Instance fails full-application rule** | Same distinct pairs :1620 → `exposingStart` :1626 |
+| `Demo.timing_ni` :665 | Nonvacuous theorem; **Instance fails full-application rule** | Timing secrets one/two :1639 → `leakyStart` :1645 |
+| `Demo.timing_not_ct` :682 | Pass | Timing secrets one/two :1658 → `ctStart` :1662; all internal CT premises inhabited at :1671 |
+| `Demo.authorized_release_not_ni` :760 | Pass | Authorized leaky runs one/two :1681 → authorized `ctStart` :1686 |
+| `Demo.authorized_release_not_ct` :776 | Pass | Authorized leaky runs one/two :1700 → authorized `ctStart` :1705 |
+| `Account.alloc_zero` :792 | Pass | Nonempty `accountA` :1281 → byte-inventing allocator :1285 |
+| `Memory.set_same` :799 | Pass | Nonconstant `memoryA` :1295 → corrupt setter :1299 |
+| `Account.enter_wf` :808 | **Fails projection/repackaging rule** | `accountA` :1310 → cleared local peak :1314 |
+| `run_wf` :859 | Pass | Successful nonempty sequence :1383 → successful `brokenRun` with invalid account :1387 |
+| `apply_alloc_zero` :877 | Pass | Entire `memoryA` unchanged :1324 → unrelated-lineage corruption :1328 |
+| `free_conservation` :885 | **Definition-restatement defect** | Free three from five live :1336 → corrupt transition :1345 |
+| `reset_conservation` :904 | Pass | Nonzero-live reset :1364 → reset clearing retained peaks :1370 |
+| `run_conservation` :926 | Pass | Nonempty sequence, integer balance :1397 → corrupt requested/live result :1404 |
+| `run_peak_monotone` :1007 | Pass | Nonempty sequence :1416 → lowered peaks :1422 |
+| `run_peak_exact` :1059 | Pass | Independent live trajectory :1433 → incorrect recorded peak :1439 |
+| `report_certified` :1094 | Pass | Established :1464, mixed :1494, absent-footprint :1524 → corresponding successful corrupt executors :1473/:1503/:1532 |
+| `WipeDemo.erasePure_preserves_wipes` :1759 | Pass | Two ordered nonzero wipes :1790 → dropped/changed/reordered wipes :1794/:1797/:1800 |
+
+The secure witnesses now contain distinct shared secrets and distinct hidden secrets while releasing the same sum. Release equality is used to derive equality of those sums. The timing mutant now has equal releases and choices across distinct secrets, rather than obtaining CT through a false release premise. Neither repair changes the NI/CT definitions.
+
+The report law now supports arbitrary report statuses and absent allocator footprints. Its established requested, net, and peak fields receive substantive execution evidence. Unknown fields deliberately assert no numeric bound; they are not counted as evidence for those fields. The mixed and absent-footprint cases still contain established fields that the planted executor violates.
+
+For every remaining `approved: PENDING` Helper, my exemption verdict is **APPROVE**:
+
+| Helper | Location | Reason |
+|---|---:|---|
+| `InstrumentedSteps.toSteps` | 33 | Instrumentation-forgetting projection |
+| `Demo.allowed_unique` | 243 | Fixed oracle representation calculation |
+| `Demo.step_det` | 257 | Step inversion used by run inversion and uniqueness |
+| `Demo.secure_run_unique` | 302 | Exact demo-run inversion |
+| `Demo.leaky_run_releases` | 475 | Exact demo release-trace inversion |
+| `Demo.ct_run_unique` | 532 | Exact mutant-run inversion |
+| `Demo.timing_run_unique` | 573 | Exact timing-run inversion |
+| `Demo.leaky_low` | 738 | Fixture low-equivalence calculation |
+| `Demo.release_authorized` | 742 | Authorization premise for the leaky fixture |
+| `Demo.ct_release_authorized` | 749 | Authorization premise for the mutant fixture |
+| `Account.alloc_wf` | 813 | Arithmetic component of transition WF |
+| `Account.free_wf` | 817 | Arithmetic component of transition WF |
+| `Account.reset_wf` | 821 | By-construction calculation, correctly excluded from Law evidence |
+| `apply_wf` | 827 | Single-step induction support |
+| `resetBytes_cons` | 914 | Definition unfolding for sequence conservation |
+| `apply_peak_monotone` | 978 | Single-step support for sequence monotonicity |
+| `apply_peak_exact` | 1029 | Single-step support for trajectory theorem |
+| `memoryA_wf` | 1151 | Concrete fixture preparation |
+| `Audit.reportEntry_wf` | 1450 | Concrete fixture preparation |
+| `Audit.emptyFunctionEntry_wf` | 1457 | Concrete fixture preparation |
+
+That is **20 Helpers**, rather than the claimed 19.
+
+For each pending Representation exemption, my verdict is also **APPROVE**, strictly as representation/fixture evidence:
+
+| File | Declaration line | Concrete check |
+|---|---:|---|
+| `Proofs/Leak.lean` | 567 | Instrumented run projects to C1 |
+| | 700 | Leakage order matters |
+| | 705 | Final observation is included |
+| | 710 | Intermediate state is nonfinal |
+| | 720 | Secret-local differences accepted |
+| | 724 | Public-local differences rejected |
+| | 734 | Public-store differences rejected |
+| | 1162 | Empty account/memory initialization |
+| | 1166 | Invalid account rejected |
+| | 1169 | Untouched lineage retained |
+| | 1172 | Invalid peak fixture rejected |
+| | 1176 | Over-free sequence rejected |
+| | 1179 | Live bytes can decrease |
+| | 1185 | Per-lineage allocation totals |
+| | 1188 | Per-lineage free totals |
+| | 1191 | Multiple-reset outflow totals |
+| | 1195 | Established upper bound accepted |
+| | 1198 | Established underbound rejected |
+| | 1201 | Defined footprint upper bound accepted |
+| | 1205 | Footprint underbound rejected |
+| | 1209 | Established absent footprint rejected |
+| | 1253 | Mislabelled report rejected |
+| | 1553 | Concrete independent live trajectory |
+| | 1671 | CT mutant’s internal premises inhabited |
+| | 1803 | Ordinary observations insufficient for wipe preservation |
+| `Spec/Leak.lean` | 53 | Catalog length calculation |
+| | 58 | Branch payload distinction |
+| | 61 | Address payload distinction |
+| | 64 | Allocation-size distinction |
+| | 67 | Loop-count distinction |
+| | 70 | Variable-time operand distinction |
+| | 73 | Public-length distinction |
+| | 76 | External-effect distinction |
+| | 117 | Listed release accepted |
+| | 121 | Unlisted release rejected |
+| | 126 | Empty-policy representation |
+| | 133 | Concrete forbidden release rejected |
+| | 142 | Matching release type accepted |
+| | 146 | Mismatched release type rejected |
+| | 150 | Released values distinguished |
+| | 153 | Release ordering distinguished |
+| | 407 | Concrete allocate/free/reset execution |
+| | 411 | Over-free transition rejected |
+
+The classification tags otherwise identify one class per declaration, and the named Law/subject/mutant references inspected resolve consistently. No additional owner decision is required for these repairs.
+
+VERDICT: CHANGES

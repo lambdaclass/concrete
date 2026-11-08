@@ -35,3 +35,15 @@ Goldens: golden-and-gates retired; golden-flow.sh = coordinator runs generator o
 20:15 C5 r5 8e11b786 (codex) done; lane c5g5 + agy rev-c5r5 launched; c1a agy r2 running
 20:26 C5 r5 gates c5g5 7/7 PASS at a8fd5384; rev-c5r5 failed (argv too long), rev.sh fixed for large diffs, relaunched
 20:36 C5 r5 agy CHANGES (3 major: 29 demoted contract laws, frame-local completeness, roundtrip mutant; 2 minor); r6 agy queued after c6a2
+20:45 C10 r5 codex died max_output_tokens at c9424559e (38/63 tagged); continuation r5b codex queued (queue-c10r5b). c4a agy r2 running, c1a agy r2 running
+21:35 4-writer cap live (queue-w.sh, lean-build.sh 2-slot semaphore); quote bug cost one relaunch; running c1a c4a c9 c10b
+21:41 c1a r2 33f388713 + c4a r2 8953368c4 (agy) done; lane-c14 (c1ag2,c4ag2) + codex rev-c1a2/rev-c4a2 launched
+21:58 c1ag2 PASS 414d8d85f, codex CHANGES (4 blocker 2 major); c4ag2 PASS 61145d7cf, codex CHANGES (5 major); r3 codex queued for both
+21:59 C10 r5 complete 4159b7c56 (65 classified); lane c10g5 + agy rev-c10r5 launched; told gates worker
+22:08 c10g5 PASS 487085db1, agy CHANGES (2 blocker 7 major); r6 agy queued after c4a3. C2 r2 4e1e10bbb + C7 r5 f637aae42 (agy) done; lane-c27 + codex rev-c2a2/rev-c7r5 launched
+22:15 C2 r2 codex CHANGES (2 major) -> r3 codex queued; C7 r5 codex CHANGES (1 blocker 2 major) -> r6 codex queued after lane-c27; C9 r5 7bca532d4 done -> lane c9g5 + codex rev-c9r5
+22:26 c2ag2 PASS 78b945b6b; c9g5 PASS f35fb5d86, codex CHANGES (5 major 1 minor) -> r6 codex queued; integ r5 db5cacda1 (agy) -> lane intg5 + codex rev-intg5
+22:28 c7g5 PASS a6a4b6521 (codex CHANGES stands; r6 queued); C4 r3 9575ba303 (codex) -> lane c4ag3 + agy rev-c4a3
+22:37 intg5 PASS 18747a8ef, codex CHANGES (1 blocker 3 major) -> r6 codex queued; C4 r3 agy ACCEPT (all exemptions approved), c4ag3 gates running; C6 carry list written
+22:39 C4 ACCEPTED (agy; pending Kimi) at 78ee5a2db, gates c4ag3 7/7, pushed both remotes. C1 r3 675735149 (codex) -> lane c1ag3 + agy rev-c1a3
+22:42 C1 r3 agy ACCEPT (c1ag3 gates running). C6a r2 ad3f1ba85 (agy) -> codex rev-c6a2; C2 r3 09544ad19 (codex) -> agy rev-c2a3; lane-c62 (c6ag2, c2ag3)

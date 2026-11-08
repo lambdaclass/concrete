@@ -1,0 +1,11 @@
+- Finding 1: done. Reformulated soundness and Copy laws with full closed witnesses and matched mutants: `division` and `mixed_declarations`.
+- Finding 2: done. Added independent primitive semantics, `eval_agrees` with success/failure witnesses, and `semantic_failure_refuses` with an unused-failure witness after a successful prefix.
+- Audited all C2 laws. Helpers retain individual reasons and pending approvals.
+
+Commits:
+- `62a642bed` — semantic agreement, failure propagation, closed evidence.
+- `09544ad19` — failure-correctness documentation.
+
+Required build passed at `09544ad19`. Working tree clean. No pushes, reviewers, or git notes.
+
+QUESTIONS: Checked forms require a Result constant type. Owner decision remains open; `CTy` is unchanged.

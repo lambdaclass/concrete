@@ -1,0 +1,34 @@
+ROUND5 items 0–4 are implemented. Working tree is clean; no reviewers, git notes or pushes.
+
+| Item | Result and Instance/Planted witnesses |
+|---|---|
+| 0 | All 65 theorems classified: 11 Laws, 54 Helpers. Helper approvals remain `PENDING`. |
+| 1 | Operational framing and caller restoration. Witness cases: `caller_restoration/explicit_return`, `runEffect_frame/byte_store`, `c4_effects_frame/byte_store`, `c1_call_frame/complete_calls`, `storingCall_frame/modifying_callee`. |
+| 2 | Independent toy ABI execution. `toyCall_conforms/spill` rejects saved-register, caller-slot, stack-pointer and result corruption. |
+| 3 | Independent layout, stack and launcher execution. Cases: `layout_aligned/two_slots`, `stackSamples_bounded/nested_call`, `toyLaunch_conforms/dependency_chain`. Launcher mutations reject incorrect exits, missing dependencies and extra modules. |
+| 4 | Independent declaration checking and retention transfers. Cases: `checkKeptPair_sound/paired`, `transferKept_sound/completion`; mutations corrupt endpoints and returned ownership. |
+
+Each listed case has both a closed Instance and premise-preserving Planted evidence.
+
+Remaining native obligations are explicitly named:
+
+- `Signature.WellFormed`, `TransitionConforms`: slice 0, R-0580.
+- `ArtifactStackConforms`: slice 0, R-0575.
+- `RetentionConforms`: slice 25, R-0580; Q3.12 foreign-behaviour assumptions remain explicit.
+- `LauncherConforms`: slice 0 integration, R-0505; R-0503 carries the interim premise, R-0584 supplies the native launcher.
+
+All round commits, including the previous session:
+
+- `4d1edfcc9` — retention checking and transfers.
+- `0d94c7710` — independent toy ABI execution.
+- `e3ed6cadf` — complete-call framing from actual steps.
+- `3ad6826b1` — layout, stack-use and launcher execution.
+- `2e76b3a82` — witnesses bound to computed results.
+- `c9424559e` — modifying C1 callee framing.
+- `05c12b167` — complete classification and C1 framing witnesses.
+- `672adf517` — named native obligations and owners.
+- `4159b7c56` — exact launcher closure and missing/extra-module mutations.
+
+Validation for final commit `4159b7c56`: semaphore-wrapped Lean build passed; rules **32 passed, 0 failed**; trust ban **23 passed, 0 failed**; diff checks passed.
+
+QUESTIONS: None.

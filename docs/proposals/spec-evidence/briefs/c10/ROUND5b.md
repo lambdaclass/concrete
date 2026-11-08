@@ -12,3 +12,6 @@ Do not run reviewers (no codex/kimi/agy review invocations of your own). Do not 
 
 ## Final message
 Per ROUND5.md item: done or left (with why), all commit SHAs of the round (both sessions), named obligations left with slice and roadmap row, build/rules/trust_ban results, QUESTIONS.
+
+## Build and commit gating (binding)
+Run every Lean build through the machine-wide build semaphore: `bash /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/tools/lean-build.sh nix develop -c timeout 1200 lake build ConcreteSpec` (at most two heavy builds on this machine). Gate every commit on the check's own exit status with `set -o pipefail`; never write `check | tail && git commit`. Do not run reviewers; do not write git notes.

@@ -1,0 +1,127 @@
+CHANGES. The allocation fix and dead-lemma removal are real; the final vacuity migration remains incomplete. This is a source review only: no files changed, Git commands, network access, builds, or gates.
+
+The seven `alloc_failure` branches each have a closed Instance and a same-typed, premise-preserving mutant that skips precisely that branch. `decodePtr_valid_inv` is absent. Owner item 20 remains respected: pointer decoding checks the complete fragment sequence and numeric octets; it does not fabricate pointers from integer bytes.
+
+**Findings**
+
+1. **major — REAL DEFECT — `ConcreteSpec/Proofs/Memory.lean:1443`: `access_valid` has no non-trivial positive Instance.**  
+   `badPtr` is outside the target, so the real access returns `none` and the Instance proves `True`. The planted example is correctly shaped, but it does not repair the vacuous Instance.  
+   **Fix:** add a full closed application on a successful nonempty access. Pair it with a mutant that returns success for a pointer invalid under the same well-formed-memory premises.
+
+2. **major — REAL DEFECT — `ConcreteSpec/Proofs/Memory.lean:600`: `access_valid` retains a guarded projection case.**  
+   The zero-size branch returns `hv.2.2`, the validity check performed inside `Memory.access`. That part of the claimed validity law is true because the operation rechecks its conclusion. This violates the binding runtime-recheck rule and the final projection rule.  
+   **Fix:** make the independently derived law explicitly nonempty (`n ≠ 0`), and classify the zero-size validity extraction as a Helper. Keep zero-size operational behavior covered separately by substantive load/store laws.
+
+3. **major — REAL DEFECT — `ConcreteSpec/Proofs/Hybrid.lean:815`, `:826`, `:839`, `:852`: all four frame Instances observe an absent place.**  
+   Place `1` exists in neither fixture. Consequently:
+   - `write_frame` and `write_frame_disjoint` observe `none = none`;
+   - `materialize_frame` and `expose_frame` also observe `none = none`;
+   - `before_sep` and `before_disjoint` explicitly discharge separation through absence.
+
+   The planted readers distinguish global memory changes even for an absent place. Their types match the convention, but these witnesses avoid exercising preservation of another stored value.  
+   **Fix:** use two existing materialized places backed by distinct live allocations, with a successful decode at the observed place. For materialization/exposure, retain that second place through the transition. Plant a reader or operation defect that corrupts that actual observation.
+
+4. **major — REAL DEFECT — `ConcreteSpec/Proofs/Memory.lean:111`, `:345`: reflexivity computations remain classified as Laws.**  
+   `decodeBool_encodeBool` is `cases b <;> rfl`. `eqAddr_provenance` unfolds address equality and proves equality of identical address/space components. Planted mutants exist, but the convention separately prohibits reflexivity Laws; mutants do not waive that check.  
+   **Fix:** reclassify these computational lemmas, and provide semantic contract coverage through independently stated boolean-representation and pointer-comparison laws. Pointer comparison coverage should characterize differing addresses/spaces as well as provenance independence.
+
+5. **major — REAL DEFECT — `ConcreteSpec/Proofs/Memory.lean:323`, `:457`, `:821`, `:848`, `:865`: semantic guarantees are hidden behind Helper exemptions.**  
+   Retaining released identities, reconstruction soundness, exposure framing, and preservation of block geometry are externally meaningful C4 guarantees. Existing well-formedness or read-preservation laws do not imply them: a mutant can change geometry while preserving well-formedness, or change exposed reconstruction while retaining completeness on the currently tested cases.  
+   **Fix:** retain implementation decomposition helpers where useful, but expose these guarantees as contract Laws with full closed Instances and premise-preserving Planted examples. I do not approve these exemptions.
+
+**Every currently tagged Law**
+
+“Pass” below means non-vacuous on source inspection, with a full closed application and appropriately shaped same-typed mutant evidence. It does not claim execution of the automated projection checker. Witness references are the source’s `case` names and mutant definitions.
+
+| Memory law | Vacuity verdict and witness |
+|---|---|
+| `decodeInt_encodeInt` | Pass: `i8`, −5; `badDecodeInt`, `badEncodeInt`. |
+| `decodeInt_inRange` | Pass: `i8`, byte 251; `badDecodeIntRange` returns 200. |
+| `decodeBool_encodeBool` | **Fail classification:** `true`; both mutants work, but proof is reflexivity by cases. |
+| `decodeBool_valid` | Pass: encoded `true`; `badDecodeBool`. |
+| `decodePtr_encodePtr` | Pass: `valid`, address 40 with a two-byte representation; `badDecodePtr`, `badEncodePtr`. |
+| `decodePtr_some` | Pass: `valid` and `partial`; `badDecodePtr`, `badEncodePtr`, `firstFragment`. Numeric reconstruction supplies substantive work. |
+| `empty_wellFormed` | Pass: `default`; `badEmpty` violates freshness. |
+| `alloc_fresh` | Pass: `first`; `badAllocId`. |
+| `alloc_block` | Pass: `first`; `badAllocEmpty` omits the installed block. |
+| `alloc_failure` | Pass: `pow2`, `align`, `bound`, `maxObject`, `null`, `overlap`, `space`; corresponding seven `mutatedAlloc…` definitions. |
+| `access_zero` | Pass as load/store behavior: `alignedNonNull`; `badLoadNone`, `badStoreNone`. This does not excuse the validity projection in finding 2. |
+| `access_no_provenance` | Pass: `nonzero`; `badAccessSome`. |
+| `access_after_free` | Pass: `freed`; `badAccessSome`; free premise remains true. |
+| `eqAddr_provenance` | **Fail classification:** `diffProv`; `badEqAddr` distinguishes provenance, but the real proof is a definitional computation. |
+| `alloc_ne_existing` | Pass: `second`; `badAllocReuseZero`. |
+| `alloc_wellFormed` | Pass: `first`; `badAllocId` violates freshness. |
+| `fromExposed_contains` | Pass: `interior`, address 42; `badFromExposedNone`. |
+| `fromExposed_onePast` | Pass: `boundary`, address 48; `badFromExposedNone`; no-containing-candidate premise is closed. |
+| `fromExposed_none` | Pass: `outside`, address 100; `badFromExposedSome`. |
+| `access_valid` | **Fail:** `outOfTarget` takes the `True` failure branch; zero-size proof also projects its runtime guard. |
+| `access_success` | Pass: `interior`, two bytes; `badAccessNone`; independent liveness, provenance and geometry premises remain true. |
+| `store_load` | Pass: `oneByte`, byte 7; `badLoadNone`; successful store premise remains true. |
+| `store_other_block` | Formally pass: `otherBlock`; `badStoreDup`. The observed block is absent, so add an existing-block witness for meaningful framing coverage. |
+| `store_same_block_frame` | Pass: `afterSlice`, existing byte 2; `badStoreNone`. A clobbering successful-store mutant would improve specificity. |
+| `alloc_initialized` | Pass: `first`, eight uninitialized bytes; `badAllocEmpty`. |
+| `store_wellFormed` | Pass: `oneByte`; `badStoreWf`. |
+| `free_wellFormed` | Pass: `live`; `badFreeWf`. |
+| `expose_success` | Pass: `live`; `badExposeNone`. |
+| `expose_wellFormed` | Pass: `live`; `badExposeWf`. |
+| `store_load_other` | Formally pass: `disjointProv`; `badLoadDiff`. Actual `other` provenance names absent block 1, so this observes failed reads rather than preservation of stored bytes. |
+| `expose_load` | Pass: `samePtr`; `badLoadDiff`; real load succeeds with an uninitialized byte. |
+| `load_prefix` | Pass: `twoToOne`; `badLoadPrefix` preserves the two-byte load premise and rejects the one-byte conclusion. |
+| `free_alloc_ne_existing` | Pass: `reuseAddr`; `badAllocReuseZero`; successful free and original-block premises remain true. |
+
+The absent-block witnesses for `store_other_block` and `store_load_other` have the same coverage weakness as finding 3. **minor — REAL DEFECT — `ConcreteSpec/Proofs/Memory.lean:1483`, `:1580`:** add a second existing live block and observe its bytes/lookup through the transition.
+
+| Hybrid law | Vacuity verdict and witness |
+|---|---|
+| `rep_roundtrip` | Pass: `boolTrue`; `badRep`, `badEncode`. Integer case uses substantive numeric round-trip reasoning. |
+| `decode_valid` | Pass: `boolTrue`; `badDecodeUnit` produces the wrong type and an unstorable value. |
+| `read_structured` | Pass: `boolTrue`; `badReadNone`; lookup/type/storability premises are closed. |
+| `materialize_reuse` | Pass: `alreadyMat`; `badMaterializeNone`. |
+| `write_read` | Pass: `boolTrue`, successful materialized write; `badReadNone`. |
+| `typed_store_frame` | Pass: `trailingPad`, existing byte 1; `badWriteClobber` successfully writes while initializing protected padding. |
+| `materialize_projection` | Pass: `firstMat`; `badMaterializeEmpty` returns success without the place. |
+| `materialize_idempotent` | Pass: `secondCall`; `badMaterializeRealloc` preserves the first-call premise and fails the second call. Add first-allocation coverage as a useful extension. |
+| `write_wellFormed` | Pass: `boolTrue`; `badWriteWf`. |
+| `rawWrite_wellFormed` | Pass: `oneByte`; `badRawWriteWf`. |
+| `materialize_wellFormed` | Pass: `firstMat`; `badMaterializeWf`. |
+| `expose_wellFormed` | Pass: `firstExpose`; `badExposeStateWf`. |
+| `write_frame` | **Fail non-trivial witness:** `otherPlace` is absent; `badReadDiff` does not repair that. |
+| `write_frame_disjoint` | **Fail non-trivial witness:** absent `otherPlace`; disjointness is discharged through absence. |
+| `materialize_frame` | **Fail non-trivial witness:** absent `otherPlace`; `badReadEmptyDiff`. |
+| `expose_frame` | **Fail non-trivial witness:** absent `otherPlace`; `badReadEmptyDiff`. |
+| `materialize_read` | Pass: `firstMat`; `badReadStructOnly` preserves the initial-read premise and fails the materialized read. |
+
+**Pending exemptions**
+
+Approval here concerns classification as implementation/representation support, not independent contract evidence. Names below are relative to their indicated file.
+
+| File | Exemptions approved |
+|---|---|
+| `Proofs/Memory.lean` | `ordered_ordered`, `leBytes_length`, `ordered_length`, `octets_init`, `leValue_leBytes`, `leValue_lt`, `intByte_power`, `encodeInt_length`, `octets_length`, `octets_fragments`, `leBytes_leValue`: byte/list arithmetic and representation support. |
+| `Proofs/Memory.lean` | `block_modify`, `keys_update`, `canonical_of_unique`, `overlaps_symm`: association-list and geometric proof infrastructure. |
+| `Proofs/Memory.lean` | `modify_wellFormed`: generic invariant-transport infrastructure with explicit geometry, sizing and liveness premises. |
+| `Proofs/Memory.lean` | `alloc_result`, `access_some_inv`, `decodePtr_checks_inv`, `expose_result`: implementation decomposition; approval does not make their extracted conditions soundness evidence. |
+| `Proofs/Memory.lean` | `candidate_contains_unique`, `candidate_onePast_unique`: consequences of the independent non-overlap invariant. |
+| `Proofs/Memory.lean` | `fromExposed_exists`: internal search-existence helper supporting the explicit completeness Laws. |
+| `Proofs/Memory.lean` | `splice_read`, `splice_frame`: list representation lemmas. |
+| `Proofs/Memory.lean` | `load_congr`: congruence infrastructure under equality of the relevant block. |
+| `Proofs/Memory.lean` | `Audit.not_badEmpty_wf`, `Audit.memory_wf`, `Audit.exposedMemory_wf`: closed fixture facts. |
+| `Proofs/Hybrid.lean` | `encode_length`: scalar representation lemma. |
+| `Proofs/Hybrid.lean` | `projected_transport`, `memory_wellFormed`, `set_wellFormed`: invariant-transport infrastructure. |
+| `Proofs/Hybrid.lean` | `materialize_cases`: implementation decomposition. |
+| `Proofs/Hybrid.lean` | `alloc_projected`: supporting transport of preexisting projections, derived through allocation freshness. |
+| `Proofs/Hybrid.lean` | `rangesDisjoint_separated`: geometric implication in the whole-cell model, not an operational guarantee. |
+| `Proofs/Hybrid.lean` | `Audit.not_badState_wf`, `Audit.before_wf`, `Audit.structState_wf`: closed fixture facts. |
+| `Proofs/Hybrid.lean` | `Audit.before_sep`, `Audit.before_disjoint`: valid facts about absent places; approved **only as helpers**, rejected as substantive frame-law evidence. |
+| `Spec/Hybrid.lean` | `State.places_set`, `State.places_memory`, `State.memory_set`: definitional lookup/record-update computations. |
+
+| File | Exemptions refused |
+|---|---|
+| `Proofs/Memory.lean` | `free_retains`: retained identity and unchanged freshness are contract guarantees. |
+| `Proofs/Memory.lean` | `fromExposed_sound`: reconstruction soundness and priority correctness are contract guarantees. |
+| `Proofs/Memory.lean` | `expose_frame`: preservation of other blocks and freshness is a contract guarantee. |
+| `Proofs/Memory.lean` | `store_geometry`, `expose_geometry`: preservation of allocation geometry is a contract guarantee, stronger than preserving well-formedness. |
+
+The named theorem declarations carry one classification each, and the inspected Instance applications are closed. The Planted declarations use matching arguments, same-typed mutants, preserved hypotheses and negated mutated conclusions. There are no C4 Obligation declarations to validate. These syntactic improvements are real, but do not cure the substantive vacuity and exemption findings above.
+
+VERDICT: CHANGES

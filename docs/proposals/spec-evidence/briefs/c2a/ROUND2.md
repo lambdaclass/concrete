@@ -23,3 +23,6 @@ Commit each piece after `lake build ConcreteSpec` passes (do not push; do not ed
 
 ## Coordinator rules (binding)
 Best long-term design, never cut corners. Do not run reviewers (no codex/kimi/agy review invocations of your own; review is done separately). Do not write git notes.
+
+## Build and commit gating (binding)
+Run every Lean build through the machine-wide build semaphore: `bash /tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/score/tools/lean-build.sh nix develop -c timeout 1200 lake build ConcreteSpec` (at most two heavy builds on this machine). Gate every commit on the check's own exit status with `set -o pipefail`; never write `check | tail && git commit`. Do not run reviewers; do not write git notes.

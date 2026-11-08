@@ -1,0 +1,24 @@
+All six findings addressed; no fixes deferred.
+
+1. `273b561e5` — Raw cleanup now extracts the plan from an actual execution, without a circular converse. Instance/Planted case: `single`.
+2. `3d4207a64` — Answer-indexed determinism proves label and destination uniqueness. Cases: `skip`, `log_answer`.
+3. `45fb574b3` — Validator characterizations are representation lemmas; independent destruction admission now connects to consuming call execution. Case: `consume_tok`.
+4. `eea352637` — Operand widths now follow from independent width derivations and environment validity. Cases: `literal`, `typed_pair`, `typed_machine`.
+5. `eea352637` — Classified Scalar’s theorem surface and added paired evidence. Every other retained Scalar law uses its tagged `concrete` case.
+6. Execution invariants exposed as witnessed laws:
+   - `004b642a7` — Caller preservation and exit silence: `saved_caller`, `callee_entry`, `dispatch`.
+   - `0e466f327` — Independent plan execution: `scope_drop`, `call_then_drop`.
+   - `c29ffac82` — Restored-return segmentation and raw completeness: `restore`, `deferred_bump`, `raw_drop`.
+
+Additional commits:
+
+- `378a01f11` — Named semantic invariant propositions and clarified exemption reasons.
+- `675735149` — Removed trailing whitespace.
+
+Audited all 50 Exec and 30 Scalar laws. Helper/representation exemptions retain individual reasons and `approved: PENDING`.
+
+Validation at `675735149`: build passed; rules **32/32**; trust ban **23/23**; whitespace check passed; worktree clean. An initial trust invocation bypassed the wrapper internally; the corrected rerun routed builds through it and passed.
+
+No pushes, reviewers, git notes, or prohibited-file edits.
+
+QUESTIONS: None.

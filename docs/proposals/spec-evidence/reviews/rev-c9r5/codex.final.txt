@@ -1,0 +1,134 @@
+The fixes are incomplete. I found structural omissions, definitional “laws,” and planted witnesses that still violate the exact-argument convention. Review was read-only; I ran no builds, gates, network operations, or writing git commands.
+
+All findings below are **REAL DEFECTS**, not preferences.
+
+1. **Major — `ConcreteSpec/Spec/Ident.lean:502`: the new function-table assignment omits every nested construct.**
+
+   `collectKeysIn` emits `construct.key scope` and recurses only into `rest`; it never visits `construct.children`. Consequently, `assignFunctionTable` assigns no sites or complete persistent paths to nested operations. For example, collecting `[nestedBody]` yields only the outer block key, omitting its loop and primitive.
+
+   The outside-edit theorem is mathematically meaningful, but proves preservation for an incomplete assignment.
+
+   **Concrete fix:** implement recursive traversal that emits every site-bearing occurrence’s complete path, using the same scope and prefix semantics as `pathAtIn`. Prove correspondence between collection, occurrence lookup, and assigned site tables. Include a nested-body instance and a mutant that drops descendants.
+
+2. **Major — `ConcreteSpec/Proofs/Ident.lean:152`, `:160`, `:343`, `:386`: definitional equations are classified as Laws.**
+
+   These are respectively `key_rename_named`, `key_pin_unnamed`, `descendant_named_ancestor_resets_scope`, and `descendant_rename_named`. Unfolding the named operations reduces their two sides to the same expression. Their proofs merely expose the definitions; adding mutants does not cure the convention’s prohibition on definitional Laws.
+
+   **Concrete fix:** classify these as Representation/computation lemmas, explicitly excluding them from soundness evidence. Establish the required rename, pinning, and named-scope contracts over actual occurrence assignment and edits, with correspondence to complete assigned tables.
+
+3. **Major — planted witnesses still change the Instance’s fixed arguments.**
+
+   | Location | Violation | Concrete fix |
+   |---|---|---|
+   | `ConcreteSpec/Proofs/Ident.lean:1320` | `load_refusal_sound`: Instance uses `collidingTop`; planted uses `collidingOrigin`. | Add a closed Instance at the planted collision and input, or redesign the mutant at the existing arguments. |
+   | `ConcreteSpec/Proofs/Ident.lean:1346` | `load_admitted`: Instance uses `[firstModule, secondModule]`; planted uses `[firstModule, collidingModule]`. | Pair the planted example with an Instance at exactly those colliding arguments, using a suitable law formulation if necessary. |
+   | `ConcreteSpec/Proofs/Prim.lean:567` | `discharge_sound`: Instance uses `obligations`; planted uses `[]`. | Keep the table fixed; use a mutant and result that violate soundness at a matching closed Instance. |
+   | `ConcreteSpec/Proofs/Observe2.lean:396` | `trapLine_injective`: Instance uses `spDifferentRange`; planted uses `spDifferentColumn`. | Supply a matching Instance and premise-preserving mutant, reformulating the law if required. |
+   | `ConcreteSpec/Proofs/Observe2.lean:459` | `trapTerminal_valid_location`: Instance fixes `tabSpan` and its line; planted changes them to `badTabSpan` and its line. | State output correctness over the operation’s returned result, rather than fixing a successful result as an argument, then instantiate both at identical inputs. |
+
+   These examples demonstrate useful failures, but they do **not** satisfy FINAL’s “instance’s exact arguments” requirement. In particular, replacing an output argument is not replacing only the subject.
+
+4. **Major — `ConcreteSpec/Proofs/Prim.lean:283`: `Ghost.drive_steps` is a contract law disguised as a computation helper.**
+
+   It states concrete execution soundness, including an `Exec.Steps` derivation and exact event-history accounting. `drive_steps_result` simply applies it with the computed report and `rfl`. Naming the stronger theorem a helper exempts the theorem that actually establishes the contract.
+
+   **Concrete fix:** classify `drive_steps` as a Law with matching closed Instance/Planted evidence, or perform the induction directly in the public soundness law and remove this exemption.
+
+5. **Major — `ConcreteSpec/Proofs/Observe2.lean:410`: the new location Law repackages the validity premise.**
+
+   After recovering the looked-up span, its proof projects `SiteTable.Valid` and `LocationOk`, repackages those conjuncts, and adds a definitional rendering equality. This fails FINAL’s prohibition on projection Laws. The connection is useful, but its present form is support plumbing rather than independent contract evidence.
+
+   **Concrete fix:** retain this as an inversion/helper lemma; prove a substantive observation contract over the produced terminal/rendered result, with an independently stated source-location specification and a matching mutant at unchanged inputs.
+
+6. **Minor — `ConcreteSpec/Proofs/Observe2.lean:483`, `:492`: C9’s existing byte-column theorems remain unclassified and lack FINAL evidence.**
+
+   `trap_line_uses_byte_columns` merely substitutes the `HasByteColumn` premise into the renderer definition. `byteColumn_tab` is a meaningful byte-count law, but has no Law classification or full Instance/Planted pair.
+
+   **Concrete fix:** classify the rendering substitution as a helper/representation lemma; classify and witness `byteColumn_tab`. Do not grandfather these C9 laws because they predate this delta.
+
+The identity decisions are otherwise represented as requested: structured path segments distinguish named and pinned items; `PackageId` contains name/version without a hash; loading checks same-package/different-origin collisions and retains both sides; premise categories form a closed, versioned enumeration with unknown-category refusal. The forest insertion laws now cover insertions before and after a selected root. The incomplete recursive assignment in finding 1 prevents approving the full persistent-key implementation.
+
+The `propext` repair is real: `SafetyEvidence claim` transports proofs by typed obligation identity, and `discharge` is computable. The unknown-category repair is also real: its premise now describes absence from the closed encoding, rather than assuming decoder failure. Version mismatch refusal has been added.
+
+For the following audit, **NV** means the statement has non-trivial cases and a meaningful mutant; it does not override a witness or classification defect. Witness names are from the local `Vacuity` namespace unless otherwise qualified.
+
+| Law | Vacuity verdict and witness |
+|---|---|
+| `SiteKeyTable.nodup_renumber` | NV: `siteTable`/`successor`; `collapseRenumber` destroys uniqueness. |
+| `SiteKeyTable.lookup_renumber` | NV: lookup of site 1; `collapseRenumber` loses the lookup. |
+| `assignProgramTables_outsideEdit` | NV: changed starting offsets; `assignProgramTablesFromSiteOffset` changes persistent keys. Assignment incomplete: finding 1. |
+| `key_insert_differentKind` | NV: binding versus inserted call; `allKindsOrdinal`. |
+| `key_insert_named` | NV: unnamed binding versus named binding; `countNamedKey`. |
+| `key_rename_other` | NV: named binding renamed; `demoteRename`. |
+| `key_pin_other` | NV: unnamed binding pinned; `labelOnlyOrdinal`. |
+| `key_rename_named` | **Definitional Law rejected**; `noopRename` example does not remove that defect. |
+| `key_pin_unnamed` | **Definitional Law rejected**; `noopPin` example does not remove that defect. |
+| `descendant_insert_differentKind` | NV: `nestedBody`, route `[0,0]`; `allKindsDescendantKey`. Avoidance premise is satisfiable. |
+| `descendant_insert_named` | NV: nested route; `countNamedDescendantKey`. |
+| `pathAt_insert_after` | NV: nested route and trailing block; `wholeForestPathAt`. |
+| `pathAt_insert_named` | NV: shifted root index; `countNamedPathAt`. |
+| `pathAt_insert_differentKind` | NV: shifted root index; `allKindsPathAt`. |
+| `descendant_named_ancestor_resets_scope` | **Definitional Law rejected**; `unresetScopeDescendantKey` exposes an alternative implementation. |
+| `descendant_rename_other` | NV: `namedNested`/`nestedBody`; `demoteRename`. |
+| `descendant_pin_other` | NV: pinned nested sibling; `labelOnlyDescendantKey`. |
+| `descendant_rename_named` | **Definitional Law rejected**; `noopRename` does not cure classification. |
+| `canonicalize_nodup` | NV: repeated specialization requests; `bySite`. |
+| `canonicalize_edge_sound` | NV: `edgeZero`; `oobEntryAt`, with membership retained. |
+| `canonicalize_complete` | NV: `requestZero`; `dropFirstEdges`. |
+| `canonicalize_share` | NV: distinct request sites, equal specialization; `bySite`. |
+| `canonicalize_distinct` | NV: different type and capability arguments; `onlyGeneric`. Both cases supplied. |
+| `load_refusal_sound` | NV statement; **exact-argument witness failure**, finding 3. |
+| `load_refusal_complete` | NV: `collidingOrigin`; `admitAll`. |
+| `load_admitted` | NV statement; **exact-argument witness failure**, finding 3. |
+| `lineAt_append` | NV: newline after `aSource`; `constantLine`. |
+| `lineAt_append_newline` | NV: `aSource`; `constantLine`. |
+| `lineAt_append_other` | NV: tab after `aSource`; `offsetLine`, non-newline premise retained. |
+| `columnAt_append` | NV: UTF-8 continuation byte; `scalarColumn`. |
+| `columnAt_append_tab` | NV: tab after `aSource`; `tabStopFour`. |
+| `columnAt_append_newline` | NV: newline after `aTab`; `noResetColumn`. |
+| `read_encode` | NV: `stackRecord`; `encodeDroppingKind`, current-version premise retained. |
+| `read_unknown` | NV: category 99; `catchAllRead`, closed-schema unknown premise retained. |
+| `read_version_mismatch` | NV: `mismatchedRecord`; `versionIgnoringRead`. Additional future-reader Instance supplied. |
+| `Prim.lookupId_rename` | NV: swapped IDs in `locals`; `unrenamedLocals`. |
+| `Prim.eval_rename` | NV: binder-containing `source`; `unrenamedLocals`. |
+| `Prim.eval_operands_rename` | NV: same term through operands; `unrenamedLocals`. |
+| `Prim.rename_inverse` | NV: swap renaming; `idSymm`. |
+| `Prim.rename_id` | NV: `source`; swap substituted for identity. |
+| `Prim.lookupId_rehint` | NV: `locals`; `corruptIdRehintLocals`. |
+| `Prim.eval_rehint` | NV: `source`; `corruptIdRehintTerm`. |
+| `Prim.eval_operands_rehint` | NV: `source` through operands; `corruptIdRehintTerm`. |
+| `discharge_sound` | Satisfiable success case; **exact-argument witness failure**, finding 3. Proof extracts checked conditions. |
+| `discharge_context_mismatch` | Satisfiable stale-contract case; `dischargeIgnoringContext`. Direct guard-refusal equation, not independent semantic soundness evidence. |
+| `discharge_obligation_mismatch` | Satisfiable distinct IDs; `dischargeIgnoringObligation`. Direct guard-refusal equation. |
+| `discharge_target_mismatch` | Satisfiable distinct true claims; `dischargeWithoutTable`. No longer relies on impossible inequality between true propositions. |
+| `discharge_unregistered` | Satisfiable empty table; `dischargeWithoutTable`. |
+| `PrimRegistry.allows_unknown` | NV: unknown primitive; `catchAllAllows`. |
+| `PrimRegistry.unknown_primitive_stuck` | NV: actual unknown request; `uncheckedPrimStep`, request and absence premises retained. |
+| `Ghost.drive_steps_result` | NV: registered primitive and nonempty history; `dropHistoryDrive`. Underlying helper exemption rejected. |
+| `Ghost.runStmts_of_not_normal` | NV: returned configuration with trailing abort; `restartingRunStmts`. |
+| `Ghost.runStmts_terminal` | NV: returned configuration; `restartingRunStmts`. Trapped Instance also supplied. |
+| `Ghost.ghost_erasure_run` | NV: `GhostDemo.pieces`; `eraseAllPieces`, differing retained fuel. |
+| `Ghost.ghost_erasure_ending` | NV: `abortPieces`; `eraseAllPieces`, differing ending. |
+| `Observe.trapLine_injective` | NV statement; **exact-argument witness failure**, finding 3. |
+| `Observe.trapTerminal_valid_location` | **Projection Law rejected**, plus exact-argument witness failure. |
+| `Observe.trap_line_uses_byte_columns` | Definition substitution; should be exempt support lemma, not soundness evidence. |
+| `Observe.byteColumn_tab` | Meaningful law; missing classification and required witnesses. |
+
+Pending exemption decisions:
+
+| Declaration | Decision |
+|---|---|
+| `KeyConstruct.numberFunctionKeys_snd` | **Approve** — column-projection computation supporting assignment. |
+| `ConstructName.isUnnamed_pin` | **Approve** — representation projection. |
+| `KeyConstruct.segment_replace_same_unnamed` | **Approve** — congruence over precisely the fields read by ordinal calculation. |
+| `KeyConstruct.pathAtIn_replace_same_unnamed` | **Approve** — internal congruence support. |
+| `KeyConstruct.pathAtIn_insert_named` | **Approve** — inherited-scope support for the public forest law. |
+| `KeyConstruct.pathAtIn_insert_differentKind` | **Approve** — inherited-scope support with satisfiable avoidance condition. |
+| `KeyConstruct.pathAt_at_length` | **Approve** — locator decomposition. |
+| `PremiseKind.decode_eq_none_of_forall_encode_ne` | **Approve** — closed-enumeration inversion supporting reader refusal. |
+| `PrimRegistry.allows_allowed` | **Approve** — explicitly projects the supplied `answerOk_iff` contract. |
+| `PrimRegistry.allows_postcondition` | **Approve** — projection of that contract; not independent soundness evidence. |
+| `PrimRegistry.allows_no_implicit_trap` | **Approve** — consequence of the same supplied contract. |
+| `Ghost.drive_steps` | **Reject** — substantive execution soundness contract, finding 4. |
+
+VERDICT: CHANGES

@@ -1,0 +1,21 @@
+All findings are done; none left out. Owner item 20 is preserved.
+
+- **Findings 1–2:** `access_valid` derives validity for every successful nonempty access. Evidence: `nonempty` Instance/Planted pair plus a concrete successful two-byte access. Zero-size guard extraction is a separate helper.
+- **Finding 3:** All four hybrid frame laws now observe a decoded boolean in another live allocation. Evidence: `otherPlace` pairs in `Audit.Frame`.
+- **Finding 4:** Boolean round-trip and provenance-only comparison computations are reclassified. `decodeBool_valid` supplies semantic boolean coverage; new `eqAddr_separation` covers provenance, differing addresses, and differing spaces, with matching mutants.
+- **Finding 5:** Release retention, reconstruction soundness, exposure framing, and store/exposure geometry preservation are Laws. Evidence: `live` pairs for preservation and `interior` for reconstruction.
+- **Minor finding:** Raw-memory frame witnesses observe initialized bytes in a second live block: `otherBlock` and `disjointProv`.
+- Added `firstAllocation` Instance/Planted evidence for materialization idempotence.
+
+Audited all **54 Laws** against the final convention. Remaining helper and representation exemptions retain individual reasons and `(approved: PENDING)`; none were self-approved.
+
+Commits:
+
+- `72ba1a2ac` — Separate nonempty access validity from zero-size guards.
+- `32a39574d` — Expose preservation Laws and exercise live hybrid frames.
+- `1996753a3` — Exercise live byte frames and first-allocation idempotence.
+- `9575ba303` — Cover every successful nonempty access result.
+
+At `9575ba303`: build passed; rules **32/32**; trust-ban **23/23**, including all **426 examples**. Working tree clean. No reviewers, git notes, or pushes.
+
+QUESTIONS: None.

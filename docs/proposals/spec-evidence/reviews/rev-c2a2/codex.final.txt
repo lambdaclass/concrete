@@ -1,0 +1,56 @@
+Changes required. The sorting, cycle exclusion, structural Copy restoration, and admission transfer proofs are substantive. Two defects remain.
+
+Read-only review completed; no files changed, builds run, git writes, or network connections.
+
+1. **ConcreteSpec/Proofs/Const.lean:847 — major — REAL DEFECT: `admitted_copy` has no full closed Instance.**
+
+   The example supplies only `ConstDemo.U` and fuel `20`, leaving `ds`, `Γ`, and the typing hypothesis universally quantified. Its proof, `admitted_copy ConstDemo.U 20`, is precisely the partial application prohibited by the final convention. The Planted example at line 856 negates this open family rather than preserving hypotheses at a full closed instance’s exact arguments.
+
+   **Concrete fix:** instantiate a concrete nonempty declaration list, its resulting type environment, and a closed typing proof. Plant the mutant at those same arguments. A suitable case combines a scalar declaration and the `.text` declaration: the genuine closed instance must have satisfiable typing hypotheses, while the mutant witness must preserve the exact chosen arguments and falsify the conclusion. Separate instances may be needed to demonstrate scalar success and rejection of the mismatched declared type.
+
+2. **ConcreteSpec/Proofs/Const.lean:274,763 — major — REAL DEFECT: the new refusal laws do not require a failing operation to refuse.**
+
+   `eval_wellTyped_progress` permits either any valid value of the expected type or a syntactically located failure. `typed_evalConsts_refusal` similarly permits success unconditionally. Moreover, `ConstFailure.InExpr` at **ConcreteSpec/Spec/Const.lean:131** checks the failure’s location and category, without asserting that the primitive operation actually failed.
+
+   Thus the laws allow a well-typed `1 / 0` initializer to return a valid integer, or a successful division to report an invented arithmetic failure. The existing planted mutants test exhaustion and misclassification as `.invalid`; they do not expose this weakening. The implementation branches correctly, but the requested law that a failing operation refuses the constant remains unproved.
+
+   **Concrete fix:** define an independent evaluation relation grounded in the existing scalar primitive results, including actual failure conditions and left-to-right propagation. Prove evaluator agreement with that relation and lift failure propagation to declaration refusal and non-admission, including unused initializers. Plant both failure-swallowing and fabricated-failure mutants. This also gives `InExpr` a clear role as location evidence rather than failure correctness.
+
+Every C2 Law was audited:
+
+| Law | Vacuity/convention verdict | Instance and planted witness |
+|---|---|---|
+| `eval_wellTyped_progress` | Non-vacuous, but semantically weakened as described above | `div_zero`, lines 539/547; full closed application; exhaustion mutant genuinely falsifies progress |
+| `eval_total` | Pass for its explicitly restricted fragment; the restriction is appropriate alongside full-fragment progress | `wrap`, lines 569/575; valid closed application and `noConstValues` mutant |
+| `evalConsts_sound` | Non-vacuous; evidence needs completion under the strict full-application rule | `division`, lines 695/704; the Instance leaves `env` and successful evaluation universally quantified, applying the theorem only through `ht` |
+| `typed_evalConsts_refusal` | Non-vacuous progress law; insufficient as failure correctness | `unused_div_zero`, lines 780/796; closed application and valid `.invalid` mutant |
+| `admitted_copy` | Structural proof passes; evidence fails the full closed Instance requirement | `demo_universe`, lines 847/856; partial application and open-family Planted example |
+| `cycle_excludes_dependencyOrder` | Pass | `two_constants`, lines 983/997; real closed cycle and premise-preserving weakened-order mutant |
+| `DependencySortingComplete` | Pass | `forward_ref`, lines 1272/1287; resolved acyclic forward reference and source-order-only mutant |
+| `ConstOrderIndependent` | Pass, including admission itself | `admission`, lines 1740/1775; `values`, lines 1821/1856. Admission is transferred rather than assumed on both sides; both mutants falsify the respective conclusion |
+| `checkedNeg_ok_arithmetic` | Pass | `signed`, Scalar.lean lines 404/409; closed arithmetic instance and `identityNeg` mutant |
+| `checkedNeg_error_iff` | Pass | `minimum`, Scalar.lean lines 414/419; closed overflow instance and `uncheckedNeg` mutant |
+
+The `evalConsts_sound` evidence issue belongs with finding 1: fully apply the theorem to a concrete successful environment and its closed evaluation proof, then update the Planted example to include that hypothesis under `boolConstValues`. The underlying soundness proof is substantive.
+
+I found no C2 Law whose semantic proof merely returns an original hypothesis, rechecks its entire conclusion inside the operation, or rests on an impossible premise. The restored `ofC_copy` is an interface field, not a theorem disguised as a law. `cycle_chain_real` is correctly classified as representation evidence.
+
+For every pending exemption, my decisions are:
+
+| Decision | Declarations |
+|---|---|
+| **Approve — basic inversion and environment support** | `agree_nil`, `bind_value_inv`, `sameInt_some_inv`, `twoBools_some_inv`, `CVal.int_of_ty`, `CVal.bool_of_ty`, `sameIntTy_some`, `bothBool_true`, `not_inExpr_of_fallibleFree` |
+| **Approve — internal soundness/refusal induction** | `eval_sound_inv`, `typeConsts_mono_inv`, `typeConsts_decls_inv`, `typed_eval_matches_inv`, `evalConsts_sound_inv`, `typed_evalConsts_refusal_inv` |
+| **Approve — reference reflection and cycle proof support** | `dependsOn_reference_inv`, `referencesEarlier_idPos_inv`, `sourceReference_idPos_lt`, `actualRefChain_idPos_lt`, `acyclic_of_dependencyOrder` |
+| **Approve — representation only** | `cycle_chain_real`; it must not count as independent semantic soundness evidence |
+| **Approve — constructive sorting support** | `readyDecl_iff`, `takeReady_some_inv`, `takeReady_none_inv`, `refChain_snoc`, `refChain_suffix`, `mem_split_at`, `length_filter_ne_lt`, `walk_finds_cycle`, `exists_not_mem_of_not_all`, `sortConstsAux_spec`, `sortConsts_dependencyOrder` |
+| **Approve — order-transfer support** | `ty?_congr_refs`, `eval_congr_refs`, `typeConsts_lookup_not_mem`, `evalConsts_lookup_not_mem`, `typeConsts_fixedPoint_inv`, `typeConsts_from_fixedPoint_inv`, `evalConsts_fixedPoint_inv`, `evalConsts_from_fixedPoint_inv`, `typeConsts_order_transfer`, `evalConsts_order_transfer` |
+| **Approve — scalar proof support** | `plainNeg_not_stuck`, `neg_inRange_iff` |
+
+These helpers support downstream laws; their exemptions do not establish the missing failure-correctness property.
+
+The sorting implementation is constructive: `sortConsts` derives its bound from source length, and the proof establishes readiness and permutation through each extraction. Its certificate is proved, not assumed or discharged by reflexivity. Cycle exclusion uses strictly decreasing positions. Structural Copy no longer depends on a runtime Copy guard. The dead projection lemmas are removed, and the blanket C1 Helper tags are reverted as requested; those pre-existing C1 declarations remain outside this C2 audit’s migration scope.
+
+No Result constant type decision is made here.
+
+VERDICT: CHANGES

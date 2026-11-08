@@ -1,0 +1,208 @@
+Changes are required. The request-resolution repair is real, but the induced-stream design and two law witnesses still use shortcuts prohibited by the owner’s convention.
+
+This was a read-only, offline source review. I modified no files and ran no git commands, builds, or gates. Kernel-level verification remains with the coordinator.
+
+**Findings**
+
+1. **Blocker — REAL DEFECT — `ConcreteSpec/Spec/Adequacy.lean:317`**
+
+   `toObserveSteps` does not preserve the claimed transition mapping. `ExecAdapter.events` can expand one raw event into several C6 events (`Spec/Observe.lean:269`). The new implementation emits only one queued event per machine transition, then emits the remainder during subsequent transitions—even when those transitions are silent or erase their own events.
+
+   For example, adapt the first logging transition of `logThenSpin_infinite` to two output events. Step 0 emits the first output; step 1 emits the second output despite being a silent machine transition. Thus the implementation contradicts its own “silent machine transitions … become `.silent`” contract. Cofinality proves eventual event agreement, but does not establish the missing transition correspondence.
+
+   **Long-term fix:** map each machine transition to a finite C6 step block, then flatten those blocks using an explicit boundary-index embedding. Prove that each block contains exactly that transition’s projected events, with a silent block for silent/erased transitions. Add a multi-event adapter Instance and a premise-preserving mutant that moves events across transition boundaries. Do not restrict adapters to singleton emissions.
+
+2. **Major — REAL DEFECT — `ConcreteSpec/Proofs/Adequacy.lean:1243`, `:1253`, `:2362`**
+
+   `InfiniteExecution.projected_completeTrace` fails the explicit no-projection-Law rule: after rewriting the history, its proof returns
+   `(Observe.runFrom_validTrace …).1`.
+
+   Its Planted witness also changes the expected specification: `emptyOnlyCompleteTrace` rejects every nonempty trace, including valid ones. This demonstrates that a stronger, incorrect definition of completeness rejects the example; it does not detect a faulty execution projection.
+
+   **Long-term fix:** place independent behavioral evidence over the adapter projection or execution-to-trace operation, with fixed `CompleteTrace` semantics and a mutant producing a malformed trace. Classify the derived projection theorem as a Helper, or reformulate it into an independently established Law.
+
+3. **Major — REAL DEFECT — `ConcreteSpec/Proofs/Adequacy.lean:1037`, `:2796`, `:2801`**
+
+   The uniqueness witness tests an added getter-consistency conjunct rather than uniqueness. The law was changed from `X = Y` to
+   `X.states = Y.toFuelLimit.states ∧ X = Y`.
+   The Instance uses the identical execution twice. The mutant shifts only the getter on the first side; the actual uniqueness conclusion remains `spin_infinite = spin_infinite`.
+
+   Consequently, the planted failure comes entirely from the added representation comparison. It supplies no counterexample to uniqueness under a mutant execution semantics.
+
+   **Long-term fix:** separate representation consistency from semantic uniqueness. State uniqueness over a mutable execution relation/operation and give two executions admitted by its mutant whose state sequences differ. Keep getter/representation consistency classified separately.
+
+4. **Major — REAL DEFECT — `ConcreteSpec/Proofs/Observe2.lean:419`, `:643`**
+
+   The C6 behavioral bridge `runFrom_validTrace` remains outside the final convention: no class tag, no full closed Instance, and no premise-preserving Planted application.
+
+   The existing “Non-vacuity” example projects `.1` from its conclusion. The purported planted example substitutes a fresh malformed list `[request 3, response 7]`; it neither mutates the evaluator/adapter operation at the Instance’s arguments nor supplies the theorem’s mutated hypotheses.
+
+   **Long-term fix:** classify the C6 bridge declarations, retain algebraic/constructor facts as approved Helpers, and give `runFrom_validTrace` a full closed application plus a mutant evaluator or projection that preserves its hypotheses and violates the complete conclusion.
+
+**Assessment of the requested repairs**
+
+| Requested repair | Assessment |
+|---|---|
+| Independent `RequestResolution` | **Fixed.** No constructor mentions `runFromQ`; continued resolution uses `Move`, `Moves`, endpoint events, `Conclusion`, and `ReportedQueries`. |
+| Five request Instance/Planted pairs | **Fixed.** Unanswered, invalid, continued, occurrence-sensitive, and refused-bind cases all have matching witnesses. |
+| Execution-induced C6 stream | **Partial.** It depends on actual execution histories, but uses the backlog scheduler described in finding 1. |
+| Observation conclusions tied to projected prefixes | **Fixed.** Both conclusions explicitly constrain the observed events/trace using projected execution histories. |
+| Remove reflexive observation-premise shortcut | **Fixed.** Neither observation theorem obtains its observation premise by reflexivity on a synthetic stream. Canonical streams remain only as C6’s observation comparison targets. |
+| Nine theorems reclassified as Laws | **Eight satisfactory; uniqueness still deficient**, as described above. |
+| Dependency-indexed `Premises` | **Fixed.** Dependencies now determine the required premise family. This does not claim to compute a program’s call graph. |
+| Duplicate/stale/orphan examples | **Fixed.** Reconstruction has a tagged, premise-preserving skipped-step mutant. |
+| `projected_completeTrace` as Law | **Not satisfactory**, finding 2. |
+
+**Every C8 Law: vacuity and witness audit**
+
+Locations below are in `ConcreteSpec/Proofs/Adequacy.lean`. “PASS” denotes the source-level statement and witness audit, not a kernel-gate result.
+
+| Law | Verdict | Instance / Planted witness |
+|---|---|---|
+| `runFromQ_queryHistoryValid` — :84 | PASS | `threeRequestConfig` / `sharedSiteRun`, :2671/:2676 |
+| `runFromQ_interleaved_site` — :143 | PASS | `threeRequestConfig` / `sharedSiteRun`, :2556/:2572; endpoint-query premises preserved |
+| `runFromQ_toReport` — :237 | PASS | `terminalConfig` / `droppedAnswerRun`, :2583/:2588 |
+| `runFromQ_sound` — :489 | PASS | unanswered `terminalConfig` / `fabricatedFinalRun`, :2621/:2638 |
+| `runFromQ_request_correspondence` — :575 | PASS | Five pairs detailed below |
+| `runFromQ_complete` — :641 | PASS | `terminalPath` / `droppedAnswerRun`, :2606/:2613 |
+| `runFrom_mono` — :671 | PASS | budgets 1→2, `terminalConfig` / `extraFuelDropRunFrom`, :2727/:2732 |
+| `runFrom_trace_prefix_le` — :732 | PASS | budgets 1→2, nonempty emitted history / `extraFuelDropRunFrom`, :2745/:2750 |
+| `move_of_fuel_succ` — :878 | PASS | `eventConfig` / `skippedStepRunFromQ`, :2764/:2771; both exhaustion premises survive |
+| `InfiniteExecution.evaluator_prefix` — :940 | PASS | `event_infinite`, fuel 4 / `forgetfulRunQ`, :2655/:2662 |
+| `InfiniteExecution.unique` — :1037 | **FAIL** | Getter mutation leaves uniqueness itself untouched, finding 3 |
+| `InfiniteExecution.toObserveSteps_matches` — :1223 | **Non-vacuous cofinality; insufficient transition contract** | `keepingAdapter` / `silentObserveSteps`, :2371/:2376; finding 1 |
+| `InfiniteExecution.projected_completeTrace` — :1243 | **FAIL convention** | Closed Instance exists; specification-changing mutant and projected proof, finding 2 |
+| `finite_projected_observation` — :1260 | **Non-vacuous; depends on deficient stream mapping** | nonempty `logThenSpin` / `silentObserveSteps`, :2387/:2400 |
+| `infinite_projected_observation` — :1321 | **Non-vacuous; depends on deficient stream mapping** | `keepingAdapter` / `silentObserveSteps`, :2425/:2439 |
+| `silentDivergence_not_infiniteInteraction` — :1411 | PASS | erasing execution / `rawInfiniteInteraction`, :2815/:2819 |
+| `not_infinite_of_final` — :1436 | PASS | `finishingConfig` / `stationaryExecution`, :2831/:2836 |
+| `not_infinite_of_noAnswer` — :1452 | PASS | blocked `terminalConfig` / `stationaryExecution`, :2845/:2850 |
+| `endlesslyBlocked_of_noAnswer` — :1468 | PASS | blocked `terminalConfig` / `resumeBlockedRun`, :2862/:2868 |
+| `TerminationEvidence.all_allowed_runs` — :1483 | PASS | `terminatingEvidence`, budget 11 / `earlyStopRun`, :2692/:2698 |
+| `TerminationEvidence.excludes_infinite` — :1500 | PASS | admitted terminating entry / `stationaryExecution`, :2878/:2883 |
+
+The five request-resolution pairs are:
+
+| Case | Instance / Planted | Mutant |
+|---|---|---|
+| Unanswered | :2163/:2195 | `fabricatedFinalRun` |
+| Invalid answer | :2170/:2206 | `fabricatedFinalRun` |
+| Continued | :2177/:2231 | `droppedAnswerRun` |
+| Occurrence-sensitive | :2463/:2471 | `wrongHistoryRun` |
+| Refused bind | :2510/:2518 | `fabricatedFinalRun` |
+
+Each preserves the issuance premises at the matching Instance’s arguments. The continued case now checks independent path/event semantics.
+
+The empty-dependency `nomatch` inside `terminatingEvidence` constructs an empty dependent product; it does not eliminate a false admitted-call hypothesis.
+
+**C6 bridge audit**
+
+These are the C6 theorem dependencies used by the observation bridge, including their theorem dependencies, in `ConcreteSpec/Proofs/Observe2.lean`:
+
+| Declaration | Vacuity/convention verdict | Witness |
+|---|---|---|
+| `PrefixEventually.trans` — :68 | Relational composition; classify Helper | No tagged pair; exemption appropriate |
+| `SameInfiniteObservation.trans` — :81 | Repackages prefix-composition results; classify Helper | No tagged pair; exemption appropriate |
+| `visiblePrefix_succ` — :86 | Computational list identity; classify Helper | No tagged pair; exemption appropriate |
+| `ValidTrace.outputs` — :388 | Constructor closure; classify Helper | No tagged pair; exemption appropriate |
+| `ValidTrace.answer_projection` — :397 | Repackages validity premises through constructors; classify Helper | No tagged pair; exemption appropriate |
+| `ExecAdapter.project_append` — :412 | `flatMap` append identity; classify Helper | No tagged pair; exemption appropriate |
+| `runFrom_validTrace` — :419 | Substantive, non-vacuous behavioral theorem; **FAIL evidence convention** | Projected positive example and unrelated negative trace, finding 4 |
+
+None currently carries the required classification. These mathematical helper facts should not be presented as independent soundness evidence.
+
+**Verdicts on every `approved: PENDING` exemption**
+
+There are **81 exemptions** and **21 Laws** among the 102 named theorems in `Proofs/Adequacy.lean`. Every named theorem has exactly one class tag.
+
+I **APPROVE each exemption listed below**, strictly in its stated helper/representation role. Approval of scheduler calculations does not approve the transition-mapping claim in finding 1.
+
+| Location | Exemption | Verdict |
+|---|---|---|
+| :30 | `issue_occurrence` | APPROVE |
+| :38 | `issue_next_occurrence` | APPROVE |
+| :47 | `answer_deterministic` | APPROVE |
+| :53 | `answer_toQueryOracle` | APPROVE |
+| :60 | `QueryHistoryValid.append` | APPROVE |
+| :117 | `QueryHistoryValid.nil` | APPROVE |
+| :122 | `runQ_queryHistoryValid` | APPROVE |
+| :128 | `occurrenceAt_take_interval` | APPROVE |
+| :155 | `occurrenceAt_take_no_other` | APPROVE |
+| :183 | `runFromQ_interleaved_other_sites` | APPROVE |
+| :199 | `runFromQ_consecutive_same_site` | APPROVE |
+| :217 | `runFromQ_consecutive_other_site` | APPROVE |
+| :275 | `Move.toQueryOracle_answer` | APPROVE |
+| :305 | `runFromQ_request` | APPROVE |
+| :325 | `runFromQ_queries_from` | APPROVE |
+| :359 | `runFromQ_queries_prefix` | APPROVE |
+| :399 | `runFromQ_queries_prefix_le` | APPROVE |
+| :415 | `runFromQ_query_fuel_independent` | APPROVE |
+| :435 | `Move.toStep` | APPROVE |
+| :447 | `Moves.toSteps` | APPROVE |
+| :462 | `final?_none_of_step` | APPROVE |
+| :608 | `runFrom_sound` | APPROVE |
+| :629 | `runFrom_events_from` | APPROVE |
+| :656 | `runFrom_complete` | APPROVE |
+| :715 | `runFrom_complete_le` | APPROVE |
+| :771 | `runFrom_trace_prefix` | APPROVE |
+| :777 | `runFrom_final_sound` | APPROVE |
+| :794 | `runFromQ_add_of_outOfFuel` | APPROVE |
+| :843 | `eq_of_runFromQ_zero_out` | APPROVE |
+| :858 | `Move.runFromQ_one` | APPROVE |
+| :868 | `Move.not_final` | APPROVE |
+| :930 | `InfiniteExecution.not_final` | APPROVE |
+| :984 | `infinite_iff_fuelLimit` | APPROVE |
+| :990 | `InfiniteExecution.toFuelLimit_toInfiniteExecution` | APPROVE |
+| :996 | `FuelLimit.toInfiniteExecution_toFuelLimit` | APPROVE |
+| :1002 | `fuelLimit_states_unique` | APPROVE |
+| :1022 | `FuelLimit.unique` | APPROVE |
+| :1047 | `Move.events_prefix` | APPROVE |
+| :1056 | `InfiniteExecution.events_prefix` | APPROVE |
+| :1070 | `InfiniteExecution.projected_prefix` | APPROVE |
+| :1079 | `getElem?_eq_of_prefix` | APPROVE |
+| :1087 | `visiblePrefix_finiteDivergenceSteps` | APPROVE |
+| :1101 | `visiblePrefix_emitTrace` | APPROVE |
+| :1110 | `eventually_constant_of_bounded` | APPROVE |
+| :1135 | `MatchesProjectedHistory.sameObservation` | APPROVE |
+| :1154 | `InfiniteExecution.emittedCount_le` | APPROVE |
+| :1172 | `InfiniteExecution.visiblePrefix_toObserveSteps` | APPROVE |
+| :1198 | `InfiniteExecution.emittedCount_reach` | APPROVE |
+| :1384 | `finite_or_infinite_events` | APPROVE |
+| :1400 | `finite_not_infinite_events` | APPROVE |
+| :1420 | `internal_finite_or_infinite_events` | APPROVE |
+| :1567 | `spin_move_01` | APPROVE |
+| :1569 | `spin_move_12` | APPROVE |
+| :1571 | `spin_move_23` | APPROVE |
+| :1573 | `spin_move_34` | APPROVE |
+| :1575 | `spin_move_40` | APPROVE |
+| :1578 | `spin_move` | APPROVE |
+| :1601 | `spin_internal_silent_divergence` | APPROVE |
+| :1641 | `event_move_01` | APPROVE |
+| :1645 | `event_move_12` | APPROVE |
+| :1649 | `event_move_23` | APPROVE |
+| :1653 | `event_move_40` | APPROVE |
+| :1658 | `event_move_34` | APPROVE |
+| :1682 | `event_move` | APPROVE |
+| :1724 | `erasing_project` | APPROVE |
+| :1730 | `keeping_project_rawEvents` | APPROVE |
+| :1740 | `erasingWellFormed` | APPROVE |
+| :1751 | `keepingWellFormed` | APPROVE |
+| :1766 | `erasing_silent_divergence` | APPROVE |
+| :1770 | `erasing_internal_infinite` | APPROVE |
+| :1776 | `keeping_infinite_interaction` | APPROVE |
+| :1899 | `bumpedMove` | APPROVE |
+| :2156 | `terminalRequest` | APPROVE |
+| :2261 | `erasedFinite` | APPROVE |
+| :2264 | `keptInfinite` | APPROVE |
+| :2284 | `logThenSpin_move` | APPROVE |
+| :2323 | `logThenSpinFinite` | APPROVE |
+| :2340 | `visiblePrefix_silentObserveSteps` | APPROVE |
+| :2502 | `refusingBindRequest` | APPROVE |
+| :2599 | `terminalPath` | APPROVE |
+| :2628 | `unanswered_no_move` | APPROVE |
+
+The representation exemptions preserve existing states and proof fields. The remaining exemptions are inversion, algebra, evaluator calculations, derived specializations, or concrete witness construction. None requires treating a definitional fact as independent behavioral evidence.
+
+I found no newly selected owner-decision alternative in this diff.
+
+VERDICT: CHANGES

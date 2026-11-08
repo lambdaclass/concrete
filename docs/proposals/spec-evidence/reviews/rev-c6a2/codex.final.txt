@@ -1,0 +1,125 @@
+CHANGES. The final-store repair is appropriately scoped, but physical-output semantics remain disconnected from C1 execution, the environment repair still contains admission repackaging, and the path law violates the binding vacuity rule.
+
+This was a source-only review. I modified nothing, ran no builds or gates, used no network, and ran no git commands. Proof and tag assessments below are manual, not kernel-checked results.
+
+**Findings**
+
+1. **ConcreteSpec/Proofs/ObserveOutput.lean:37 — major — REAL DEFECT: the physical-output repair remains an algebraic wrapper around the old premise.**
+
+   `project_physical_outputs` still assumes `ExecAdapter.OutputCorrespondence A physical` separately. Its entire proof applies the list lemma to `(Exec.runFrom …).events`; it establishes no relationship between `physical` and the primitive/oracle effects that generated those events. Neither `ExecAdapter.WellFormed` nor C1 operands independently specify those physical outputs.
+
+   Replacing `fun _ => rfl` with a case split in `adapter_correspondence` changes the witness’s proof shape, not this structural problem. An output-erasing implementation can still choose `physical := fun _ => []` and satisfy the generic contract. Consequently, `output_before_trap_kept` at line 62 retains the same limitation.
+
+   **Fix:** define physical-output meaning independently in the operand/oracle interface, require adapter correspondence to that meaning, and derive preservation for actual runs. Keep list distribution as a helper. Use an output-erasing implementation against the unchanged physical semantics as the rejection control.
+
+2. **ConcreteSpec/Proofs/ObserveEnvironment.lean:20 — major — REAL DEFECT: environment correctness is still substantially admission repackaging, and the new environment is disconnected from the C1 oracle.**
+
+   `Environment.Valid.allows` assumes handler-result compliance; `.mayBlock` assumes handler-result blocking permission. `environment_respond_valid` case-splits on that same result and repackages those premises into `Responds`. Routing is supplied by the dependent result type and the definition of `respond`. This is the constructor-repackaging pattern prohibited for Law credit.
+
+   The new `Environment` and `stepHistory` also do not construct or constrain an `Exec.Oracle`; the law does not establish `ExecAdapter.WellFormed` for an oracle used by `Exec.runFrom`. Thus the requested general environment/oracle repair is incomplete, despite replacing demo-only theorem names.
+
+   **Fix:** retain this admission bridge as a helper; implement a typed handler-to-oracle adapter, establish its answer/history/store correspondence and `WellFormed` obligations, and prove operational response/routing laws for its actual runs. Preserve the arithmetic fixtures as closed evidence for those laws.
+
+3. **ConcreteSpec/Proofs/ObserveReport.lean:290 — major — REAL DEFECT: `trapTerminal_eq_some_iff` restates a runtime invariant check.**
+
+   `trapTerminal` looks up the span, tests `decide sp.PathOk`, and constructs precisely the terminal on the right-hand side of this iff. The proof unfolds that operation and inverts its branches. This is exactly the runtime-recheck/definition-restatement case prohibited by the owner’s rule.
+
+   The absolute-path and backslash mutants demonstrate that deleting validation changes the function; they do not make this definition-restatement independent semantic evidence.
+
+   **Fix:** classify the lookup equation as a computation helper. Establish path correctness from an independently defined source/site production pipeline, with valid source paths carried through site resolution into actual reported traps. Test a faulty producer/resolver while keeping the independent path requirement unchanged.
+
+4. **ConcreteSpec/Proofs/ObserveReport.lean:31 — major — REAL DEFECT: blocked `ReportTraceValid` results are not tied to the evaluator ending.**
+
+   The terminal branch requires a corresponding `.final` ending. The blocked branch requires only a valid permitted pending trace and the projected-history equation. It does not require `.noAnswer`, the pending configuration’s request step, or its adapter mapping.
+
+   For example, with a blocking-permitted request `q`, a mutant can turn a zero-fuel run with empty history into `some (.blocked [.request q] q)`. This satisfies the blocked branch even though the report is `.outOfFuel`. The separate fuel law rejects that implementation, but `runFrom_report_trace` does not deliver its advertised ending correspondence.
+
+   **Fix:** add the corresponding `.noAnswer` configuration, request step and typed-request mapping to the blocked specification, and add a planted fabricated-blocking observation for an out-of-fuel report.
+
+5. **ConcreteSpec/Proofs/ObserveOutput.lean:14; ConcreteSpec/Proofs/ObserveReport.lean:122 — minor — REAL DEFECT: invalid Helper classes.**
+
+   Both declarations use `Helper (induction)`. The final convention permits only `inversion|projection|congruence|arithmetic|computation`.
+
+   **Fix:** use `Helper (computation)` with the existing induction explanation, or explicitly obtain a convention change. I approve their helper status, but not the current tags.
+
+**Repair and decided-rule assessment**
+
+| Claimed repair | Assessment |
+|---|---|
+| C1 final store | **Real and minimal.** `Ending.final` retains `O.Store`; `runFrom` records `c.store`. Existing final classification and execution transitions remain intact. |
+| Abstract external-state projection | **Implemented.** `ExecAdapter.state` supplies the projection; the change does not choose which concrete state is externally visible. |
+| Finite observations/equivalence | **Implemented.** Final state reaches `stepsObservation`, `reportObservation`, finite executions, `HasFullObservation`, and `SameObservation`. |
+| Stuttering/delay preservation | **Updated consistently.** The finite delay witness uses state `7`; the reset-state mutant is rejected. |
+| Remove README deferral | **Done.** The final-state omission is no longer deferred. |
+| Reject always-`none` reports | **Real improvement.** `.noAnswer` now rejects `none`, and mapped finals cannot silently disappear. Unmapped finals remain explicitly non-observational. Finding 4 remains. |
+| Physical-output correspondence | **Incomplete:** Finding 1. |
+| General environment laws | **Incomplete:** Finding 2. `stepHistory` does establish meaningful trace sequencing, but does not connect to C1. |
+| General output-before-trap law | **Generalized**, with real history-loss witnesses; physical-output meaning remains conditional on Finding 1. |
+| `trapLine_injective` | **Repaired.** Law classification and distinct-site/distinct-column evidence are present. |
+| Path enforcement | **Enforced** in `sourceSpan`’s argument and `trapTerminal`’s validation; independent Law evidence remains defective under Finding 3. |
+| Exit 125 / 134 | **Implemented**, with missing-grant, wrong-status and trap-versus-normal-exit witnesses. |
+| Trivial legacy lemmas | The named redundant lemmas were removed; the remaining bridge helpers are assessed below. |
+
+The renderer matches the decided text:
+
+`concrete: trap: <kind> at <path>:<line>:<col> (site <id>)`
+
+Line and column positivity are retained; columns use UTF-8 byte length, including one byte per tab. Normal exit remains a distinct terminal constructor even when its numeric status is `134`. Missing grants produce startup refusal with status `125`; traps produce `134`. Fuel exhaustion remains an evaluator report and produces no external observation. No new owner decision is needed for the fixes above.
+
+**Every C6 Law: vacuity and evidence**
+
+“Pass” below means a substantive source-level law with a closed application and a corresponding premise-preserving planted example. It does not assert that an automated projection checker was run.
+
+| Law | Vacuity verdict and witness |
+|---|---|
+| `silent_internal_steps` | **Pass.** `leading_silence`: retained output and state `7`; `firstStepVisible` loses the output after leading silence. |
+| `blocked_silent_internal_steps` | **Pass.** `pending_silence`: retained prefix and pending request; the same first-step mutant loses the prefix. |
+| `infinite_stuttering` | **Pass.** `delayed_emissions`: emitting stream shifted by one step; `firstPrefix` fails eventual-prefix correspondence. The closed `shifted` proof eliminates only an impossible unretained successor index, not the law’s admission premises. |
+| `full_observation_preservation` | **Pass as relational transport.** `stuttered_terminal_state`: terminal output and state `7`; `firstStepHasFullObservation` fails on the delayed execution while satisfying the mutated source-observation premise. |
+| `trapLine_injective` | **Pass.** Distinct sites and distinct columns in a punctuated path; `trapLineWithoutSite` and `trapLineWithoutCol` create collisions. |
+| `byteColumn_tab` | **Pass.** UTF-8 prefix `"é"` followed by tab; `doubleTabColumn` violates the one-byte increment. |
+| `environment_respond_valid` | **Fail for independent Law credit:** Finding 2. Closed doubling/routing applications and `alwaysBlockedRespond` rejection examples exist, but the proof repackages admitted compliance and constructed routing. |
+| `environment_stepHistory_valid` | **Pass for C6 trace sequencing, limited scope.** Doubling and routed exchange instances; `dropRequestStepHistory` and `leavePendingOnAnswerStepHistory` violate sequencing/pending-state results. This does not discharge the missing C1 connection. |
+| `project_physical_outputs` | **Fail as the required physical-output contract:** Finding 1. Ordered-run instances reject `eraseProjection` and `reverseProjection`, but physical meaning remains an unconstrained caller premise. |
+| `output_before_trap_kept` | **Non-vacuous history preservation; incomplete physical-output obligation.** Two-output trap run with prior history; `dropTrapHistoryReport` and `eraseProjection` fail. Finding 1 prevents accepting the full claimed repair. |
+| `runFrom_report_trace` | **Non-vacuous but weakened:** Finding 4. Prior-exchange blocking instances reject `dropBlockedHistory` and `alwaysNoneReport`; fabricated blocking from another ending remains unspecified. |
+| `runFrom_blocked_report` | **Pass.** `preserve_prior_exchange` supplies the actual pending continuation, prior history and all premises; `onlyPendingHistory` drops prior events and fails. |
+| `runFrom_outOfFuel_report_none` | **Pass.** Zero fuel at a request; planted divergence and fabricated successful exit fail. The non-final configuration and trace components come from evaluator induction. |
+| `launch_missing_grant_status_125` | **Pass.** Missing required grant; `ignoreGrantsLaunchObservation` and `wrongStartupStatus` fail the respective closed cases. |
+| `runFrom_trapped_status_134` | **Pass as an operational report/status law.** Actual abort run at a resolved valid span; `exit134OnTrapReport` and `wrongTrapStatus` fail. Its path component is inherited site validity, not independent path-production evidence. |
+| `trapTerminal_eq_some_iff` | **Fail:** Finding 3. Absolute/backslash instances and `uncheckedTrapTerminal` mutants have the expected evidence shape, but the Law restates validation. |
+| `source_trap_column` | **Pass.** `"a\té"` supplies byte column `5`; a positive wrong column `4` and `scalarColumnSpan` expose scalar counting. |
+| `sourcePrefixSpan_second_line` | **Pass for the stated two-line property.** Multiline UTF-8/tab instances; `scalarPrefixSpan` and `singleLinePrefixSpan` fail byte counting and newline reset respectively. |
+
+The tagged Instances inspected are full closed applications. The tagged Planted examples supply the corresponding hypotheses and negate the mutated conclusion; their existence does not override the semantic defects above. I found no additional double-classification among the named C6 declarations. The two `Helper (induction)` tags are invalid classifications.
+
+**Pending exemption decisions**
+
+These approvals concern helper/representation status only; they do not credit those declarations as independent soundness laws.
+
+| File | Declaration(s), individually approved unless qualified | Reason |
+|---|---|---|
+| `Observe2.lean` | `RequestResponse.kind`; `Responds.allows`; `Responds.matches` | Explicit constructor/admission inversions. |
+| `Observe2.lean` | `SilentInsertion.visible` | Inductive trace utility supporting the stuttering laws. |
+| `Observe2.lean` | `PrefixEventually.refl`; `PrefixEventually.trans` | Prefix-relation algebra. |
+| `Observe2.lean` | `SameInfiniteObservation.refl`; `.symm`; `.trans` | Representation algebra, explicitly not independent operational evidence. |
+| `Observe2.lean` | `visiblePrefix_succ`; `visiblePrefix_prefix` | Prefix computation and extension utilities. |
+| `Observe2.lean` | `StepIndexIncreasing.monotone`; `.strict`; `.apply_le` | Arithmetic support. |
+| `Observe2.lean` | `InfiniteStuttering.prefix_indices`; `.visiblePrefix_at` | Index/prefix calculations supporting the general infinite law. |
+| `Observe2.lean` | `SameObservation.refl`; `.symm`; `.trans` | Equivalence representation algebra. |
+| `Observe2.lean` | `infinite_not_termination`; `infinite_silent_not_termination` | Constructor distinction only; operational delay evidence exists separately. |
+| `Observe2.lean` | `stripPrefix_append`; `parseRevNat_digits`; `decodeKind_render`; `trapLineChars_prefix`; `decodeWithKind_render`; `decodeTrapLine_render` | Parser/renderer proof support for injectivity. |
+| `Observe2.lean` | `ValidTrace.outputs`; `ValidTrace.answer_projection`; `ExecAdapter.project_append` | Trace assembly and list computation support. |
+| `Observe2.lean` | `runFrom_validTrace`; `runFrom_noAnswer_pending_valid`; `runFrom_blockingPermitted` | Evaluator induction and derived bridges supporting operational report laws. |
+| `Observe2.lean` | `steps_trap_observation` | Explicit projection equation; not physical-output evidence. |
+| `Observe2.lean` | `AdapterDemo.answeringWellFormed`; `.blockingWellFormed`; `.blockedPermitted` | Concrete fixture admission witnesses. |
+| `ObserveEnvironment.lean` | `Demo.envHandler_valid`; `RoutingDemo.envHandler_valid` | Concrete arithmetic handler proofs; approval does not repair Finding 2. |
+| `ObserveEvidence.lean` | `Evidence.insertion`; `Evidence.shifted` | Closed stuttering witnesses. |
+| `ObserveOutput.lean` | `project_physical_outputs_list` — **helper status approved; current tag rejected** | Legitimate list induction utility; change the invalid class token. |
+| `ObserveOutput.lean` | `OutputDemo.adapter_correspondence`; `.run_writes`; `.permitted` | Fixture correspondence, execution calculation and proof-argument bookkeeping. |
+| `ObserveReport.lean` | `runFrom_outOfFuel_not_final` — **helper status approved; current tag rejected** | Legitimate evaluator induction; change the invalid class token. |
+| `ObserveReport.lean` | `ReportDemo.prior_complete`; `.pending_step`; `.relativePathWellFormed` | Closed operational fixture support. |
+| `ObserveSource.lean` | `scanSourcePrefix_no_newline` | Scanner computation supporting the multiline law. |
+| `Spec/Observe.lean` | `Demo.refusedReportPermitted` | Explicit impossible-branch bookkeeping for a stuck fixture, not blocking correctness evidence. |
+
+VERDICT: CHANGES

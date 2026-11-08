@@ -1,0 +1,50 @@
+### Summary of Round 3 Review (`78b945b6b..09544ad19`)
+
+Round 3 introduces two blocker-level shortcuts that violate the owner’s best-long-term-design and non-vacuity rules:
+
+1. **`ConstEval` is not independent of `CExpr.eval`**: `CExpr.nodeResult` (`ConcreteSpec/Spec/Const.lean:250-314`) is a verbatim copy-paste of the `fuel + 1` branch of `CExpr.eval` with `a.eval env fuel` replaced by `answers a`, and `ConstEval.node` (`ConcreteSpec/Spec/Const.lean:321-325`) wraps `e.nodeResult env answers` with a total function `answers : CExpr → CEvalResult` quantified over *all* expressions `e : CExpr`. Consequently, `eval_node_inv` is literally `cases e <;> rfl`, `eval_agrees` holds by construction against a clone of `CExpr.eval`, and even the closed witness `unusedFailure_run_inv` (`ConcreteSpec/Proofs/Const.lean:1034-1036`) proves `ConstEval` by calling `eval_derivation_inv` (i.e. running `CExpr.eval` in the kernel) rather than applying relational derivation constructors.
+2. **`admitted_copy` was rewritten with `match typeConsts U ds [] with | none => True | some _ => ...` and its `Instance` reduces to `True`**: `copyAuditDecls` (`ConcreteSpec/Proofs/Const.lean:903-905`) contains `⟨ConstDemo.cid "S", .text, .unit⟩`, which is ill-typed (`ConstDemo.U.ofC .unit = .c .unit ≠ .text`), so `typeConsts ConstDemo.U copyAuditDecls [] = none`. The `Instance` at `ConcreteSpec/Proofs/Const.lean:908-914` takes the `| none => True` branch and is completely vacuous. `evalConsts_sound` (`ConcreteSpec/Proofs/Const.lean:718-730`) uses the same `match ... | .error _ => True` anti-pattern.
+
+---
+
+### Findings
+
+1. **`ConcreteSpec/Spec/Const.lean:250-325`, `ConcreteSpec/Proofs/Const.lean:46-77`, `1028-1036` — BLOCKER (REAL DEFECT): `ConstEval` is a clone-wrapper around `CExpr.eval` rather than an independent relational semantics.**
+   - **Problem**:
+     - `CExpr.nodeResult` duplicates the exact functional body of `CExpr.eval` (including `CEvalResult.bind`, `sameInt`, `twoBools`, `Lossless`, `boolToInt`), so `eval_node_inv` holds by `cases e <;> rfl`. Any bug in `CExpr.eval`'s step logic copied into `nodeResult` passes `eval_agrees` trivially.
+     - `ConstEval.node` takes a total function `answers : CExpr → CEvalResult` and requires `children : ∀ e, ConstEval env fuel e (answers e)` for *every* `CExpr` in the grammar, not the immediate subexpressions of `e`. Because of this universal quantification, you cannot build a finite syntax-directed derivation tree for an expression without supplying answers for all `CExpr`—which is why `failurePrefix_run_inv` and `unusedFailure_run_inv` (`ConcreteSpec/Proofs/Const.lean:1028-1036`) resort to calling `eval_derivation_inv` (running `CExpr.eval`!).
+   - **Long-term fix**: Delete `CExpr.nodeResult` and `eval_node_inv`. Define `ConstEval (env : AList ConstId CVal) : Nat → CExpr → CEvalResult → Prop` as a genuine inductive relation with explicit inference rules per syntactic form and outcome (e.g., `exhausted` at fuel `0`; at `fuel + 1`, rules for literals/refs, unary/binary value rules grounded in `Core.wrapping` / `Core.saturating` / `Core.plain` / `Core.plainNeg` / `Core.bitwise` / `Core.bitNot` / `CmpOp.eval` / `Core.tryConvert`, left-failure propagation, right-failure propagation when left is a `.value`, and primitive trap/out-of-range failure rules). Prove `eval_derivation_inv` and `eval_derivation_unique_inv` by induction on `fuel` and cases on `e` / the derivation, and construct `failurePrefix_run_inv` and `unusedFailure_run_inv` directly from `ConstEval` constructors without calling `CExpr.eval`.
+
+2. **`ConcreteSpec/Proofs/Const.lean:889-926` — BLOCKER (REAL DEFECT): `admitted_copy` uses `match typeConsts U ds [] with | none => True | ...` and its `Instance` (`copyAuditDecls`) is vacuous (`typeConsts = none`).**
+   - **Problem**:
+     - In `copyAuditDecls` (`lines 903-905`), the second declaration `⟨ConstDemo.cid "S", .text, .unit⟩` has `d.ty = .text` and `d.init = .unit`. Since `ConstDemo.U.ofC .unit = .c .unit ≠ .text`, `typeConsts ConstDemo.U copyAuditDecls []` evaluates to `none`.
+     - Because `admitted_copy` was rewritten as `match typeConsts U ds [] with | none => True | some _ => ...`, the `Instance` at `lines 908-914` reduces to `True`!
+     - Furthermore, inside the `some _` branch, `∀ env, evalConsts U fuel ds [] = .ok env → ...` remains an uninstantiated implication over `env`, and the `Planted` witness (`lines 918-926`) only refutes `h.1` (`U.isCopy d.ty = true`), never testing the evaluated-value half.
+   - **Long-term fix**: Never encode theorem hypotheses as `match ... with | none => True` or `| .error _ => True` to bypass supplying hypothesis witnesses in `Instance` declarations. State `admitted_copy` with explicit premises `(Γ : AList ConstId CTy) ( env : AList ConstId CVal) (ht : typeConsts U ds [] = some Γ) (he : evalConsts U fuel ds [] = .ok env)` (or state `ht : typeConsts U ds [] = some Γ` and `he : evalConsts U fuel ds [] = .ok env` as explicit arguments of the law), and instantiate it on a well-typed declaration list (e.g., `divisionDecls`) with closed proofs `(by decide)` / `rfl` so Lean checks that `typeConsts` returns `some` and `evalConsts` returns `.ok`.
+
+3. **`ConcreteSpec/Proofs/Const.lean:718-746` — MAJOR (REAL DEFECT): `evalConsts_sound` uses `match evalConsts U fuel ds [] with | .error _ => True | .ok env => ...`.**
+   - **Problem**: Replacing `(env : AList ConstId CVal) (he : evalConsts U fuel ds [] = .ok env)` with `match evalConsts U fuel ds [] with | .error _ => True | .ok env => ...` hides the evaluation-success premise inside the conclusion. While `evalConsts ConstDemo.U 3 divisionDecls []` happens to evaluate to `.ok` in the current `Instance` (`lines 741-746`), the theorem type no longer enforces at the `Instance` call site that evaluation succeeded: passing fuel `0` or a failing declaration list would still typecheck as a closed `Instance` while reducing to `True`.
+   - **Long-term fix**: Parameterize `evalConsts_sound` explicitly by `(env : AList ConstId CVal) (ht : ConstsTyped U ds) (he : evalConsts U fuel ds [] = .ok env) : ∀ d ∈ ds, ∃ v, AList.lookup env d.id = some v ∧ U.ofC v.ty = d.ty ∧ v.Valid`, and supply the concrete output environment and `(by decide)` / `rfl` in the `Instance`.
+
+4. **`ConcreteSpec/Proofs/Const.lean:957-971`, `1045-1054` — MINOR (REAL DEFECT): `semantic_failure_refuses` Planted mutant does not test unused-declaration skipping or mutate `ConstsAdmitted`.**
+   - **Problem**:
+     - `boolConstValues` ignores *all* initializers (used or unused) and returns `.ok`, and the second conjunct of the negated conclusion in the Planted example (`line 1050`) still references the unmutated `ConstsAdmitted`.
+     - A mutant specifically targeting "an unused failing initializer after a successful prefix still refuses" should be a demand-driven / dead-declaration-skipping evaluator (e.g., skipping declarations whose `id` is not referenced by the final declaration) so that a used failure would refuse while an unused failure in the middle (`unusedFailureDecl`) is swallowed.
+   - **Long-term fix**: Define a mutant evaluator that skips unreferenced intermediate declarations (or ignores failures on unused declarations) and use it in the Planted counterexample for `semantic_failure_refuses`.
+
+---
+
+### Full C2 Law Audit under `_review/VACUITY_CONVENTION_FINAL.md`
+
+| Law | Subject | Witness / Tag Status | Vacuity Verdict |
+| :--- | :--- | :--- | :--- |
+| `eval_agrees` (`Proofs/Const.lean:74`) | `CExpr.eval` | One `Law` tag; 2 `Instance` + 2 `Planted` (`division_failure` w/ `swallowFailure`, `division_success` w/ `fabricateFailure`), full closed applications | **DEFECT (holds by construction)**: `ConstEval` wraps `CExpr.nodeResult`, an exact copy of `CExpr.eval`'s step body (`eval_node_inv` is `cases e <;> rfl`). |
+| `eval_wellTyped_progress` (`Proofs/Const.lean`) | `CExpr.eval` | One `Law` tag; closed `Instance` + `Planted` | **NON-VACUOUS** (unchanged in R3; closed witness satisfies `typeOf = some T`, `EnvTyped`, `depth < fuel`). |
+| `eval_total` (`Proofs/Const.lean`) | `CExpr.eval` | One `Law` tag; closed `Instance` + `Planted` | **NON-VACUOUS** (unchanged in R3; closed witness satisfies `FallibleFree`, `typeOf = some T`, `EnvTyped`, `depth < fuel`). |
+| `evalConsts_sound` (`Proofs/Const.lean:718`) | `evalConsts` | One `Law` tag; closed `Instance` + `Planted` (`division` w/ `boolConstValues`) | **DEFECT (weakened encoding)**: `divisionDecls` evaluates to `.ok`, so the witness itself reaches the `.ok` branch, but encoding `he` as `match evalConsts ... with \| .error _ => True` allows `.error` instances to pass as `True`. Make `env` and `he : evalConsts U fuel ds [] = .ok env` explicit parameters. |
+| `typed_evalConsts_refusal` (`Proofs/Const.lean`) | `evalConsts` | One `Law` tag; closed `Instance` + `Planted` | **NON-VACUOUS** (unchanged in R3; closed `ConstsTyped` and `ConstsInOrder` proofs by `decide`). |
+| `admitted_copy` (`Proofs/Const.lean:889`) | `typeConsts` | One `Law` tag; closed `Instance` + `Planted` (`mixed_declarations` w/ `uncheckedTypeConsts`) | **VACUOUS (DEFECT)**: `typeConsts ConstDemo.U copyAuditDecls [] = none`, so the `Instance` (`lines 908-914`) reduces to `True`. Also leaves `evalConsts = .ok env` as an uninstantiated inner implication not tested by `Planted`. |
+| `semantic_failure_refuses` (`Proofs/Const.lean:957`) | `evalConsts` | One `Law` tag; closed `Instance` + `Planted` (`unused_after_prefix` w/ `boolConstValues`) | **DEFECT (parasitic witness)**: `Instance` hypotheses `failurePrefix_run_inv` and `unusedFailure_run_inv` are produced via `eval_derivation_inv` (running `CExpr.eval`) rather than relational constructors; `Planted` uses `boolConstValues` rather than an unused-declaration-skipping mutant. |
+| Cycle & elaboration laws (`findCycle_sound`, `validCycle_no_depOrder`, `elaborateConsts` laws in `Proofs/Const.lean:1056+`) | `findCycle`, `ValidCycle`, `topoSort`, `elaborateConsts` | One `Law` tag each; closed `Instance` + `Planted` witnesses | **NON-VACUOUS** (unchanged in R3; audited in R2). |
+
+---
