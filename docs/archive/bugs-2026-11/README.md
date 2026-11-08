@@ -2,7 +2,7 @@
 
 `bug_disposition.tsv` gives every record of the old compiler's bug ledger (frozen at
 `legacy/docs/bugs/`) one disposition across the restart, as decisions P10 and P11 prescribe
-([decisions](../../decisions.md#decided-project-bugs)):
+([decisions](../../../../docs/decisions.md#decided-project-bugs)):
 
 - **legacy-impl**: a defect of the old implementation. It is *retired with the old implementation*,
   never marked fixed. It keeps its reproducer, ruling and structural class, and its reproducer feeds
