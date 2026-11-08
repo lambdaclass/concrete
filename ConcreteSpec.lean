@@ -14,3 +14,5 @@ import ConcreteSpec.Proofs.Memory
 import ConcreteSpec.Proofs.Hybrid
 
 import ConcreteSpec.Proofs.Own
+
+import ConcreteSpec.Proofs.Grant
