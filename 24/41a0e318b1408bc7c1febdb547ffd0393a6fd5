@@ -1,0 +1,3 @@
+[piece 1 of 2: scripts]
+- scripts/land/train.sh:517: The sign-off fallback never checks that the member reached its review-round cap; even a member with no review history qualifies. This extends the quoted owner approval in `signoff.sh`, which authorizes this exception only after reaching the cap, and therefore implements an exception beyond the recorded decision’s scope.
+- scripts/land/signoff.sh:58: `git hash-object` can apply configured clean filters or end-of-line conversion, while the recorded SHA256 hashes the original file bytes. For example, CRLF reviewer output with `core.autocrlf=true` is stored with LF endings and immediately fails verification. Use `--no-filters` to preserve the promised byte-for-byte outputs.
