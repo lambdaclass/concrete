@@ -55,31 +55,6 @@ of a `Copy` type and every operation is total.
 
 namespace ConcreteSpec.Core
 
-/-- The types the subset computes with. -/
-inductive CTy where
-  | int (t : IntTy)
-  | bool
-  | unit
-  deriving DecidableEq, Repr
-
-/-- A value of the subset. An integer value carries its type. -/
-inductive CVal where
-  | int (t : IntTy) (n : Int)
-  | bool (b : Bool)
-  | unit
-  deriving DecidableEq, Repr
-
-/-- A value's type. -/
-def CVal.ty : CVal → CTy
-  | .int t _ => .int t
-  | .bool _ => .bool
-  | .unit => .unit
-
-/-- A value is valid: an integer is in its type's range. -/
-def CVal.Valid : CVal → Prop
-  | .int t n => t.InRange n
-  | _ => True
-
 /-- An initializer of the closed total subset. -/
 inductive CExpr where
   | int (t : IntTy) (n : Int)

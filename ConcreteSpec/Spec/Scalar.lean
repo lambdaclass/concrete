@@ -390,4 +390,30 @@ to `i8` is `-1`. -/
 example : plainNeg .i8 (-128) = .trap .overflow ∧ plainNeg .i8 5 = .ok (-5) ∧
     lossyConvert .u8 300 = 44 ∧ lossyConvert .i8 255 = -1 := by decide
 
+/-- Shared scalar types, used by constants and typed storage. Hybrid storage currently
+represents only int/bool; unit remains available to the constant subset. -/
+inductive CTy where
+  | int (t : IntTy)
+  | bool
+  | unit
+  deriving DecidableEq, Repr
+
+/-- Shared scalar values. An integer value carries its type. -/
+inductive CVal where
+  | int (t : IntTy) (n : Int)
+  | bool (b : Bool)
+  | unit
+  deriving DecidableEq, Repr
+
+/-- A value's type. -/
+def CVal.ty : CVal → CTy
+  | .int t _ => .int t
+  | .bool _ => .bool
+  | .unit => .unit
+
+/-- A value is valid: an integer is in its type's range. -/
+def CVal.Valid : CVal → Prop
+  | .int t n => t.InRange n
+  | _ => True
+
 end ConcreteSpec.Core

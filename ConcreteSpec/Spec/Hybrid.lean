@@ -27,35 +27,28 @@ must resolve a local's place before using these operations.
 namespace ConcreteSpec.Core.Hybrid
 open ConcreteSpec.Core.Mem
 
-/-- The scalar types represented in this slice. -/
-inductive Ty where
-  | int (t : IntTy)
-  | bool
-  deriving DecidableEq, Repr
+/-- The common scalar type universe; this byte-storage slice admits int/bool only. -/
+abbrev Ty := CTy
 
-/-- Scalar values. Validity is explicit, so an out-of-range integer cannot be safely stored. -/
-inductive Value where
-  | int (t : IntTy) (n : Int)
-  | bool (b : Bool)
-  deriving DecidableEq, Repr
+/-- Values share the constant subset's scalar model, defined once in Scalar. -/
+abbrev Value := CVal
 
-/-- The scalar's type. -/
-def Value.ty : Value → Ty
-  | .int t _ => .int t
-  | .bool _ => .bool
+abbrev Value.ty (v : Value) : Ty := CVal.ty v
+abbrev Value.Valid (v : Value) : Prop := CVal.Valid v
 
-/-- Integer values are in their declared range. -/
-def Value.Valid : Value → Prop
-  | .int t n => t.InRange n
-  | .bool _ => True
+/-- Byte storage in this slice supports integers and bools. Unit has no representation here;
+sharing the common value universe does not add unit layout or materialization rules. -/
+def Value.Storable (v : Value) : Prop := v.Valid ∧ v.ty ≠ .unit
 
-instance (v : Value) : Decidable v.Valid := by
-  cases v <;> dsimp [Value.Valid] <;> infer_instance
+instance (v : Value) : Decidable v.Storable := by
+  cases v <;> dsimp [Value.Storable, Value.Valid, Value.ty, CVal.Valid, CVal.ty] <;> infer_instance
 
-/-- Active byte count, a pure layout query: no state is read or materialized. -/
+/-- Active byte count for supported int/bool types, a pure layout query. The zero for
+unsupported unit is a sentinel, not a unit layout rule; unit storage is refused. -/
 def sizeof : Ty → Nat
   | .int t => intBytes t
   | .bool => 1
+  | .unit => 0
 
 /-- Alignment is a read-only layout input; querying it never materializes a place. -/
 def alignof (layoutAlign : Ty → Nat) (t : Ty) : Nat := layoutAlign t
@@ -64,11 +57,13 @@ def alignof (layoutAlign : Ty → Nat) (t : Ty) : Nat := layoutAlign t
 def encode (tgt : Target) : Value → List MByte
   | .int t n => encodeInt tgt t n
   | .bool b => encodeBool b
+  | .unit => []
 
 /-- Partial decoding of the current active bytes. -/
 def decode (tgt : Target) : Ty → List MByte → Option Value
   | .int t, bs => (decodeInt tgt t bs).map (.int t)
   | .bool, bs => (decodeBool bs).map .bool
+  | .unit, _ => none
 
 /-- The representation relation; padding is outside the active slice passed to decoding. -/
 def Rep (tgt : Target) (t : Ty) (bs : List MByte) (v : Value) : Prop :=
@@ -144,7 +139,7 @@ def State.set (st : State) (p : Place) (c : Cell) : State :=
 def State.read (tgt : Target) (st : State) (p : Place) : Option Value := do
   let c ← st.places p
   match c.storage with
-  | .structured v => if v.ty = c.ty ∧ v.Valid then some v else none
+  | .structured v => if v.ty = c.ty ∧ v.Storable then some v else none
   | .materialized r =>
     let bs ← st.memory.load tgt r.ptr (sizeof c.ty) r.align
     decode tgt c.ty bs
@@ -153,7 +148,7 @@ def State.read (tgt : Target) (st : State) (p : Place) : Option Value := do
 The caller supplies ownership and write permission (C5). -/
 def State.write (tgt : Target) (st : State) (p : Place) (v : Value) : Option State := do
   let c ← st.places p
-  if v.ty = c.ty ∧ v.Valid then
+  if v.ty = c.ty ∧ v.Storable then
     match c.storage with
     | .structured _ => some (st.set p { c with storage := .structured v })
     | .materialized r =>
@@ -170,7 +165,7 @@ def State.materialize (tgt : Target) (st : State) (p : Place) (space : AddrSpace
   match c.storage with
   | .materialized r => some (r, st)
   | .structured v =>
-    if v.ty = c.ty ∧ v.Valid then
+    if v.ty = c.ty ∧ v.Storable then
       let bs := encode tgt v ++ padding
       let (b, m) ← (st.memory.alloc tgt space base bs.length align).toOption
       let r : Range := ⟨⟨space, base, some b⟩, bs.length, align⟩
@@ -201,6 +196,10 @@ example : (do
     let (_, st) ← st.materialize { linuxX8664 with byteOrder := .big } ⟨0⟩ ⟨0⟩ 4096 2 [.uninit]
     pure (st.read { linuxX8664 with byteOrder := .big } ⟨0⟩)) =
       some (some (.int .i16 (-37))) := by decide
+
+/-- Refused: sharing the scalar universe with constants does not admit unit storage. -/
+example : (State.mk [(⟨0⟩, ⟨.unit, .structured .unit⟩)] Memory.empty).read
+    linuxX8664 ⟨0⟩ = none := by decide
 
 /-- Refused: invalid bytes at a materialized bool do not fall back to a structured value. -/
 example : decode linuxX8664 .bool [.init 2 none] = none := by decide

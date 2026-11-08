@@ -86,7 +86,11 @@ Open obligations, by name:
   language) and C2 (`Scalar`, `Const`). C4 (`Memory`, `Hybrid`) now covers byte memory, scalar
   representation and structured/materialized places, with trailing padding preserved by typed
   writes; struct field layouts, enums, pointers in structs and the C8 padding oracle remain out
-  of its scalar slice. C5–C10 remain. C1 leaves to later slices the source-level
+  of its scalar slice. The old slice-1 `Spec/Rep.lean` still has its own `MByte` and integer
+  encoding over the old type universe. The slice-1-to-Core integration slice must port that
+  layer to `Mem.MByte`/`Mem.encodeInt` and retire the old encoders while preserving its proofs;
+  C4 has not completed that port. Core constants and Hybrid share `CTy`/`CVal` from `Scalar`.
+  C5–C10 remain. C1 leaves to later slices the source-level
   evaluation orders (elaboration, O1), counted loops (slice 4), and ownership of moved values
   (C5), the split of a request from its response (C6) and the oracle's query record (C8); its
   storage can use C4's hybrid state; C5 must still supply ownership instrumentation. C2 leaves

@@ -13,16 +13,17 @@ open ConcreteSpec.Core.Mem
 
 @[simp] theorem encode_length (tgt : Target) (v : Value) :
     (encode tgt v).length = sizeof v.ty := by
-  cases v <;> simp [encode, Value.ty, sizeof, encodeBool]
+  cases v <;> simp [encode, Value.ty, CVal.ty, sizeof, encodeBool]
 
-theorem rep_roundtrip (tgt : Target) (v : Value) (hv : v.Valid) :
+theorem rep_roundtrip (tgt : Target) (v : Value) (hv : v.Storable) :
     Rep tgt v.ty (encode tgt v) v := by
   cases v with
-  | int t n => simp [Rep, Value.ty, encode, decode, decodeInt_encodeInt tgt t n hv]
-  | bool b => simp [Rep, Value.ty, encode, decode]
+  | int t n => simp [Rep, Value.ty, CVal.ty, encode, decode, decodeInt_encodeInt tgt t n hv.1]
+  | bool b => simp [Rep, Value.ty, CVal.ty, encode, decode]
+  | unit => exact False.elim (hv.2 rfl)
 
 theorem decode_valid (tgt : Target) (t : Ty) (bs : List MByte) (v : Value)
-    (h : decode tgt t bs = some v) : v.ty = t ∧ v.Valid := by
+    (h : decode tgt t bs = some v) : v.ty = t ∧ v.Storable := by
   cases t with
   | int t =>
     cases hd : decodeInt tgt t bs with
@@ -30,14 +31,15 @@ theorem decode_valid (tgt : Target) (t : Ty) (bs : List MByte) (v : Value)
     | some n =>
       simp [decode, hd] at h
       subst v
-      exact ⟨rfl, decodeInt_inRange tgt t bs n hd⟩
+      exact ⟨rfl, decodeInt_inRange tgt t bs n hd, by simp [Value.ty, CVal.ty]⟩
   | bool =>
     cases hd : decodeBool bs with
     | none => simp [decode, hd] at h
-    | some b => simp [decode, hd] at h; subst v; exact ⟨rfl, trivial⟩
+    | some b => simp [decode, hd] at h; subst v; exact ⟨rfl, trivial, by simp [Value.ty, CVal.ty]⟩
+  | unit => cases h
 
 theorem read_structured (tgt : Target) (st : State) (p : Place) (t : Ty) (v : Value)
-    (hc : st.places p = some ⟨t, .structured v⟩) (ht : v.ty = t) (hv : v.Valid) :
+    (hc : st.places p = some ⟨t, .structured v⟩) (ht : v.ty = t) (hv : v.Storable) :
     st.read tgt p = some v := by simp [State.read, hc, ht, hv]
 
 /-- Once materialized, repeated address-taking returns the same range and the same whole state. -/
@@ -221,7 +223,7 @@ theorem materialize_cases (tgt : Target) (st st' : State) (p : Place) (s : AddrS
     (h : st.materialize tgt p s base align padding = some (r, st')) :
     (∃ c, st.places p = some c ∧ c.storage = .materialized r ∧ st' = st) ∨
     ∃ c v b m m', st.places p = some c ∧ c.storage = .structured v ∧
-      v.ty = c.ty ∧ v.Valid ∧
+      v.ty = c.ty ∧ v.Storable ∧
       st.memory.alloc tgt s base (encode tgt v ++ padding).length align = .ok (b, m) ∧
       m.store tgt ⟨s, base, some b⟩ (encode tgt v ++ padding) align = some m' ∧
       r = ⟨⟨s, base, some b⟩, (encode tgt v ++ padding).length, align⟩ ∧
@@ -419,8 +421,11 @@ theorem materialize_read (tgt : Target) (st st' : State) (hw : st.memory.WellFor
     subst w
     have ham := alloc_wellFormed tgt _ hw space base _ align b m ha
     have hl := store_load tgt m m' ham ⟨space, base, some b⟩ (encode tgt v ++ padding) align hm
-    have hpos : 0 < sizeof v.ty := by cases v <;> simp [Value.ty, sizeof, intBytes] <;>
-      (try cases ‹IntTy› <;> decide)
+    have hpos : 0 < sizeof v.ty := by
+      cases v with
+      | int t n => cases t <;> simp [Value.ty, CVal.ty, sizeof, intBytes, IntTy.bits]
+      | bool b => simp [Value.ty, CVal.ty, sizeof]
+      | unit => exact False.elim (hv.2 rfl)
     have hshort := load_prefix tgt m' ⟨space, base, some b⟩
       (encode tgt v ++ padding).length (sizeof v.ty) align (encode tgt v ++ padding)
       (by simp [encode_length]; omega) (by omega) (by simp) hl
