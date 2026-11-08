@@ -81,6 +81,124 @@ theorem SameInfiniteObservation.trans {xs ys zs : Nat → Step S}
     (hxy : SameInfiniteObservation xs ys) (hyz : SameInfiniteObservation ys zs) :
     SameInfiniteObservation xs zs := ⟨hxy.1.trans hyz.1, hyz.2.trans hxy.2⟩
 
+/-- One more step adds exactly its optional event to the visible prefix. -/
+theorem visiblePrefix_succ (steps : Nat → Step S) (n : Nat) :
+    visiblePrefix steps (n + 1) = visiblePrefix steps n ++ (steps n).event?.toList := by
+  cases step : steps n <;>
+    simp [visiblePrefix, List.range_succ, visible, List.filterMap_append, Step.event?, step]
+
+/-- A shorter step prefix's events are a prefix of a longer step prefix's events. -/
+theorem visiblePrefix_prefix (steps : Nat → Step S) {m n : Nat} (h : m ≤ n) :
+    ∃ rest, visiblePrefix steps n = visiblePrefix steps m ++ rest := by
+  obtain ⟨d, rfl⟩ := Nat.exists_eq_add_of_le h
+  induction d with
+  | zero => exact ⟨[], by simp⟩
+  | succ d ih =>
+    obtain ⟨rest, pref⟩ := ih (by omega)
+    refine ⟨rest ++ (steps (m + d)).event?.toList, ?_⟩
+    rw [show m + (d + 1) = m + d + 1 by omega, visiblePrefix_succ, pref, List.append_assoc]
+
+/-- A strictly increasing step-index map is monotone on every pair of indices. -/
+theorem StepIndexIncreasing.monotone {f : Nat → Nat} (increasing : StepIndexIncreasing f)
+    {m n : Nat} (h : m ≤ n) : f m ≤ f n := by
+  induction n generalizing m with
+  | zero => simp [show m = 0 by omega]
+  | succ n ih =>
+    by_cases atEnd : m = n + 1
+    · subst m; exact Nat.le_refl _
+    · exact Nat.le_trans (ih (by omega)) (Nat.le_of_lt (increasing n))
+
+/-- A strictly increasing step-index map strictly increases on every ordered pair. -/
+theorem StepIndexIncreasing.strict {f : Nat → Nat} (increasing : StepIndexIncreasing f)
+    {m n : Nat} (h : m < n) : f m < f n := by
+  have first := increasing m
+  have rest := increasing.monotone (show m + 1 ≤ n by omega)
+  omega
+
+/-- A strictly increasing map on natural step indices is unbounded. -/
+theorem StepIndexIncreasing.apply_le {f : Nat → Nat} (increasing : StepIndexIncreasing f) (n : Nat) :
+    n ≤ f n := by
+  induction n with
+  | zero => exact Nat.zero_le _
+  | succ n ih => have next := increasing n; omega
+
+/-- At every stuttered index `m`, some old prefix `n` has exactly the same events: all retained
+indices below `m` are below `n`, and `f n` is the next retained index at or after `m`. -/
+theorem InfiniteStuttering.prefix_indices {steps : Nat → Step S} {f : Nat → Nat}
+    {stutter : Nat → Step S} (h : InfiniteStuttering steps f stutter) (m : Nat) :
+    ∃ n, n ≤ m ∧ m ≤ f n ∧ visiblePrefix stutter m = visiblePrefix steps n ∧
+      ∀ i < n, f i < m := by
+  obtain ⟨increasing, kept, silent⟩ := h
+  induction m with
+  | zero => exact ⟨0, Nat.le_refl _, Nat.zero_le _, rfl, by intro i hi; omega⟩
+  | succ m ih =>
+    obtain ⟨n, oldBound, nextBound, pref, before⟩ := ih
+    by_cases atIndex : f n = m
+    · refine ⟨n + 1, by omega, ?_, ?_, ?_⟩
+      · have next := increasing n
+        omega
+      · rw [visiblePrefix_succ, visiblePrefix_succ, pref]
+        have retained : stutter m = steps n := by rw [← atIndex]; exact kept n
+        rw [retained]
+      · intro i hi
+        by_cases same : i = n
+        · subst i; omega
+        · have earlier := before i (by omega)
+          omega
+    · refine ⟨n, by omega, by omega, ?_, ?_⟩
+      · rw [visiblePrefix_succ]
+        have noIndex : ∀ i, f i ≠ m := by
+          intro i
+          by_cases earlier : i < n
+          · have index := before i earlier
+            omega
+          · by_cases same : i = n
+            · subst i; exact atIndex
+            · have later : n < i := by omega
+              have index := increasing.strict later
+              omega
+        rw [silent m noIndex]
+        simpa [Step.event?] using pref
+      · intro i hi
+        have index := before i hi
+        omega
+
+/-- The stuttered prefix through the position just before `f n` is exactly the old prefix before
+`n`; leading and intermediate silent steps contribute nothing. -/
+theorem InfiniteStuttering.visiblePrefix_at {steps : Nat → Step S} {f : Nat → Nat}
+    {stutter : Nat → Step S} (h : InfiniteStuttering steps f stutter) (n : Nat) :
+    visiblePrefix stutter (f n) = visiblePrefix steps n := by
+  obtain ⟨k, oldBound, nextBound, pref, before⟩ := h.prefix_indices (f n)
+  have same : k = n := by
+    apply Nat.le_antisymm
+    · by_cases le : k ≤ n
+      · exact le
+      · have later : n < k := by omega
+        have impossible := before n later
+        omega
+    · by_cases le : n ≤ k
+      · exact le
+      · have earlier : k < n := by omega
+        have index := h.1.strict earlier
+        omega
+  rw [same] at pref
+  exact pref
+
+/-- **Infinite stuttering.** Retaining step `n` at `f n` for a strictly increasing `f`, with every
+other step silent, preserves the complete observation in both eventual-prefix directions. This
+also covers runs that emit only finitely often and then remain silent forever. -/
+theorem infinite_stuttering {steps : Nat → Step S} {f : Nat → Nat} {stutter : Nat → Step S}
+    (h : InfiniteStuttering steps f stutter) :
+    SameObservation (.infinite steps) (.infinite stutter) := by
+  change SameInfiniteObservation steps stutter
+  constructor
+  · intro n
+    exact ⟨f n, [], by simp [h.visiblePrefix_at]⟩
+  · intro m
+    obtain ⟨n, oldBound, nextBound, pref, before⟩ := h.prefix_indices m
+    obtain ⟨rest, extended⟩ := visiblePrefix_prefix steps oldBound
+    exact ⟨m, rest, by rw [extended, pref]⟩
+
 /-- Full-observation equivalence is reflexive. -/
 theorem SameObservation.refl (execution : Execution S) : SameObservation execution execution := by
   cases execution with
