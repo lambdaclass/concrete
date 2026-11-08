@@ -34,7 +34,8 @@
 #     expected bound on known functions (x86 frame, red-zone store, two AArch64 frame-record
 #     shapes, a read of bytes written on both paths, an adrp-based load, LCB's single link-register
 #     save with a Mach-O stub call in a loop); also refuse the link register loaded from another
-#     slot and a stub call with no indirect-symbol entry; the comparison must reject a
+#     slot, a stub call with no indirect-symbol entry, into a stub entry's middle or to the bare stub
+#     section; the comparison must reject a
 #     measurement above the bound.
 #
 # usage: slice0_artifacts.sh [REPORT_DIR]. Run inside the nix devshell, from the repository root.
@@ -283,6 +284,9 @@ refuse absolute-address '    1010:\tmov\tbyte ptr [0x7fffffd0], 0x0\n    1018:\t
 # The link register loaded from a slot that does not hold it, and a stub call with no stub entry.
 refuse a64-lr-from-other-slot '    1010:\tsub\tsp, sp, #0x20\n    1014:\tstr\tx30, [sp, #0x10]\n    1018:\tstr\tx0, [sp, #0x8]\n    101c:\tldr\tx30, [sp, #0x8]\n    1020:\tadd\tsp, sp, #0x20\n    1024:\tret\n' aarch64 _main
 refuse a64-unmapped-stub '    1010:\tstr\tx30, [sp, #-0x10]!\n    1014:\tbl\t0x1040 <_write+0x1040>\n    1018:\tldr\tx30, [sp], #0x10\n    101c:\tret\n' aarch64 _main
+# A call into the middle of a Mach-O stub entry, and to the stub section with no entry mapped.
+refuse a64-mid-stub-call '    1010:\tstr\tx30, [sp, #-0x10]!\n    1014:\tbl\t0x1044 <__stubs+0x4>\n    1018:\tldr\tx30, [sp], #0x10\n    101c:\tret\n\nDisassembly of section __TEXT,__stubs:\n\n0000000000001040 <__stubs>:\n    1040:\tadrp\tx16, 0x2000\n    1044:\tldr\tx16, [x16]\n    1048:\tbr\tx16\nstub 0x0000000000001040 _write\n' aarch64 _main
+refuse a64-unmapped-stub-section '    1010:\tstr\tx30, [sp, #-0x10]!\n    1014:\tbl\t0x1040 <__stubs>\n    1018:\tldr\tx30, [sp], #0x10\n    101c:\tret\n\nDisassembly of section __TEXT,__stubs:\n\n0000000000001040 <__stubs>:\n    1040:\tadrp\tx16, 0x2000\n    1044:\tldr\tx16, [x16]\n    1048:\tbr\tx16\n' aarch64 _main
 refuse a64-callee-residual-reread '    1010:\tstp\tx29, x30, [sp, #-0x10]!\n    1014:\tmov\tx29, sp\n    1018:\tbl\t0x1040 <_concrete_body>\n    101c:\tldr\tx0, [sp, #-0x10]\n    1020:\tstr\tx1, [x0, #-0x100]\n    1024:\tldp\tx29, x30, [sp], #0x10\n    1028:\tret\n\n0000000000001040 <_concrete_body>:\n    1040:\tstp\tx29, x30, [sp, #-0x10]!\n    1044:\tldp\tx29, x30, [sp], #0x10\n    1048:\tret\n' aarch64 _main
 # A read of a byte written on only one path into it.
 refuse one-path-write '    1010:\tpush\trbp\n    1011:\tmov\trbp, rsp\n    1014:\tje\t0x101e <main+0xe>\n    1016:\tmov\tqword ptr [rbp - 0x8], rax\n    101e:\tmov\trax, qword ptr [rbp - 0x8]\n    1022:\tpop\trbp\n    1023:\tret\n'

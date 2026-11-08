@@ -89,7 +89,10 @@ def parse(path):
         if m:
             name = m.group(2)
             if section in (".plt", ".plt.sec", ".plt.got", "__stubs") or name.endswith("@plt"):
-                stubs["names"].add(name)
+                # Stub code is never analysed. Only an ELF PLT entry's name (`write@plt`) makes a
+                # call external; a Mach-O stub needs an exact `stub` address entry.
+                if name.endswith("@plt"):
+                    stubs["names"].add(name)
                 cur = None
             else:
                 cur = name
@@ -607,7 +610,7 @@ def analyse(funcs, stubs):
                     sub_deep, sub_ext = fn_bound(callee)
                     deepest = max(deepest, d + ret_push + sub_deep)
                     add_ext(ext, sub_ext, d + ret_push)
-                elif base in stubs["names"] or base.endswith("@plt"):
+                elif base.endswith("@plt") and "+" not in sym:
                     # An ELF PLT entry, `write@plt`.
                     name = base.removesuffix("@plt")
                     add_ext(ext, {name: 0}, d + ret_push)
