@@ -416,6 +416,289 @@ theorem Passes.passable {e : Exit O.Val} : ∀ {f : Frame O}, Passes e f → f.p
   | .resume _, h => h.elim
   | .ret .., h => h.elim
 
+/-! ### Actual cleanup executions
+
+A boundary is a fixed suffix of the continuation stack. `BoundaryRun` observes actual transitions
+until an exit first reaches that suffix. Ordinary call bodies are first-return segments, so their
+own nested cleanup is not confused with the registrations of the scopes being observed. The
+observer neither consults `planWith` nor prescribes which deferred function a step must select.
+It records the call selected by the transition and drops at the scope/test frame being left.
+Consequently changing the dispatcher to skip or insert a call invalidates `cleanup_runs_exact_plan`.
+-/
+
+/-- An actual execution stopped at its first configuration satisfying `stop`. -/
+inductive FirstSteps (P : Program O) (stop : Config O → Prop) :
+    Config O → List O.Event → Config O → Prop where
+  | stop {c} : stop c → FirstSteps P stop c [] c
+  | step {c l c' tr c''} : ¬ stop c → Step P c l c' → FirstSteps P stop c' tr c'' →
+      FirstSteps P stop c (l.events ++ tr) c''
+
+/-- Helper (inversion). Forgetting first-arrival information preserves the actual execution. -/
+theorem FirstSteps.steps_inv {P : Program O} {stop : Config O → Prop} {c c' : Config O}
+    {tr : List O.Event} (h : FirstSteps P stop c tr c') : Steps P c tr c' := by
+  induction h with
+  | stop => exact .refl _
+  | step _ hs _ ih => exact .step hs ih
+
+/-- The local-lifetime action observed when an exit directly leaves its current frame.
+Calls, including any nested cleanup inside them, are recorded separately. -/
+def leaving : List (Frame O) → AList Var O.Val → List (CleanAct O)
+  | .scope _ dm [] :: _, L => [.drop dm L]
+  | .test _ _ _ _ _ dm :: _, L => [.drop dm L]
+  | _, _ => []
+
+/-- An observer of a successful exit to a fixed boundary, using a supplied outer transition
+relation `R`. Call bodies use actual first-return executions. The parameter permits planted
+mutations of the cleanup dispatcher without mutating any tracked source. The production law
+uses `R = Step P`. A nonempty prefix is required before every observed transition: execution
+stops at the first arrival at the boundary, before the caller/loop below it can run. -/
+inductive BoundaryRun (P : Program O) (R : Config O → Label O → Config O → Prop)
+    (e : Exit O.Val) (k : List (Frame O)) :
+    List (Frame O) → AList Var O.Val → O.Store → List (CleanAct O) → List O.Event →
+      AList Var O.Val → O.Store → Prop where
+  | stop {L st} : BoundaryRun P R e k [] L st [] [] L st
+  | pass {pre pre' L L' st st' acts tr Lend stEnd} : pre ≠ [] →
+      R ⟨.exiting e, L, st, pre ++ k⟩ .silent ⟨.exiting e, L', st', pre' ++ k⟩ →
+      BoundaryRun P R e k pre' L' st' acts tr Lend stEnd →
+      BoundaryRun P R e k pre L st (leaving pre L ++ acts) tr Lend stEnd
+  | call {pre rest L st st' d acts tr₁ tr₂ Lend stEnd} : pre ≠ [] →
+      R ⟨.exiting e, L, st, pre ++ k⟩ .silent
+        ⟨.exec d.stmt, L, st, .resume (.exit e) :: rest ++ k⟩ →
+      FirstSteps P (fun c => c.ctrl = .done ∧ c.frames = .resume (.exit e) :: rest ++ k)
+        ⟨.exec d.stmt, L, st, .resume (.exit e) :: rest ++ k⟩ tr₁
+        ⟨.done, L, st', .resume (.exit e) :: rest ++ k⟩ →
+      R ⟨.done, L, st', .resume (.exit e) :: rest ++ k⟩ .silent
+        ⟨.exiting e, L, st', rest ++ k⟩ →
+      BoundaryRun P R e k rest L st' acts tr₂ Lend stEnd →
+      BoundaryRun P R e k pre L st (.call L d :: acts) (tr₁ ++ tr₂) Lend stEnd
+
+/-- Representation lemma. A boundary observation is an actual execution to the stated suffix;
+its segments do not add any transitions to the machine. -/
+theorem BoundaryRun.steps {P : Program O} {e : Exit O.Val} {k pre : List (Frame O)}
+    {L L' : AList Var O.Val} {st st' : O.Store} {acts : List (CleanAct O)} {tr : List O.Event}
+    (h : BoundaryRun P (Step P) e k pre L st acts tr L' st') :
+    Steps P ⟨.exiting e, L, st, pre ++ k⟩ tr ⟨.exiting e, L', st', k⟩ := by
+  induction h with
+  | stop => exact .refl _
+  | pass _ hs _ ih => simpa [Label.events] using Steps.step hs ih
+  | call _ hs hc hr _ ih =>
+    have tail := Steps.step hr ih
+    have middle := Steps.trans hc.steps_inv tail
+    simpa [Label.events] using Steps.step hs middle
+
+/-- Execute an action list independently of the cleanup dispatcher. Calls must actually return
+on some continuation; drops must actually perform the lifecycle update. This weaker, per-run
+notion replaces `RunsEach`'s universal call-completion premise for observed executions. -/
+inductive Performed (P : Program O) :
+    List (CleanAct O) → O.Store → List O.Event → O.Store → Prop where
+  | nil {st} : Performed P [] st [] st
+  | call {L d rest st tr₁ st₁ tr₂ st₂ k} :
+      Steps P ⟨.exec d.stmt, L, st, k⟩ tr₁ ⟨.done, L, st₁, k⟩ →
+      Performed P rest st₁ tr₂ st₂ →
+      Performed P (.call L d :: rest) st (tr₁ ++ tr₂) st₂
+  | drop {dm L rest st stDrop tr st'} : dropOut O dm L st = some stDrop →
+      Performed P rest stDrop tr st' → Performed P (.drop dm L :: rest) st tr st'
+
+/-- Helper (inversion). Compose independent action executions. -/
+private theorem performed_append_inv {P : Program O} {as bs : List (CleanAct O)}
+    {st st₁ st₂ : O.Store} {tr₁ tr₂ : List O.Event}
+    (ha : Performed P as st tr₁ st₁) (hb : Performed P bs st₁ tr₂ st₂) :
+    Performed P (as ++ bs) st (tr₁ ++ tr₂) st₂ := by
+  induction ha with
+  | nil => simpa using hb
+  | call hc _ ih => simpa [List.append_assoc] using Performed.call hc (ih hb)
+  | drop hd _ ih => exact .drop hd (ih hb)
+
+/-- Helper (inversion). Unwinding a frame never itself makes a primitive request. -/
+private theorem stepExit_no_request_inv (L : AList Var O.Val) (st : O.Store) (e : Exit O.Val)
+    (frames : List (Frame O)) (p : O.Prim) (vs : List O.Val) (site : SiteId) (st' : O.Store)
+    (cont : Answer O.Val O.Event O.Store → Option (Config O)) :
+    stepExit L st e frames ≠ some (.request p vs site st' cont) := by
+  cases frames with
+  | nil => simp [stepExit]
+  | cons f frames =>
+    cases f with
+    | seq t => simp [stepExit]
+    | scope b dm ds =>
+      cases ds with
+      | nil => cases hd : dropOut O dm L st <;> simp [stepExit, hd]
+      | cons d ds => simp [stepExit, startCleanup]
+    | test l cr t body site dm =>
+      cases hd : dropOut O dm L st <;> simp [stepExit, hd]
+    | body l cr t body site =>
+      cases e with
+      | ret v => simp [stepExit]
+      | brk l' => by_cases he : l' = l <;> simp [stepExit, he]
+      | cont l' => by_cases he : l' = l <;> simp [stepExit, he]
+    | resume p => simp [stepExit]
+    | ret dst caller =>
+      cases e with
+      | brk l => simp [stepExit]
+      | cont l => simp [stepExit]
+      | ret v =>
+        cases hl : O.life .leave st with
+        | none => simp [stepExit, hl]
+        | some stLeave =>
+          cases hb : bindLife O dst stLeave <;> simp [stepExit, hl, hb]
+
+/-- Helper (inversion). Every actual exit transition is a machine step. -/
+private theorem exit_step_next_inv {P : Program O} {e : Exit O.Val} {L : AList Var O.Val}
+    {st : O.Store} {frames : List (Frame O)} {label : Label O} {c : Config O}
+    (h : Step P ⟨.exiting e, L, st, frames⟩ label c) :
+    step P ⟨.exiting e, L, st, frames⟩ = some (.next c) := by
+  cases h with
+  | silent h => exact h
+  | prim h _ _ => exact False.elim (stepExit_no_request_inv L st e frames _ _ _ _ _ h)
+
+/-- Helper (inversion). A directly passing exit step removes precisely the top frame and
+performs its local drop, if any. This is a rule-sensitive inversion, not a contract law. -/
+private theorem exit_pass_plan_inv {P : Program O} {e : Exit O.Val} {k pre pre' : List (Frame O)}
+    {L L' : AList Var O.Val} {st st' : O.Store} {label : Label O}
+    (h : Step P ⟨.exiting e, L, st, pre ++ k⟩ label
+      ⟨.exiting e, L', st', pre' ++ k⟩) (hne : pre ≠ []) :
+    planWith pre L = leaving pre L ++ planWith pre' L' ∧
+      Performed P (leaving pre L) st [] st' := by
+  cases pre with
+  | nil => exact False.elim (hne rfl)
+  | cons f pre =>
+    have next : step P ⟨.exiting e, L, st, f :: (pre ++ k)⟩ =
+        some (.next ⟨.exiting e, L', st', pre' ++ k⟩) := exit_step_next_inv h
+    have finish (hL : L = L') (hk : pre ++ k = pre' ++ k) :
+        L = L' ∧ pre = pre' := ⟨hL, List.append_cancel_right hk⟩
+    cases f with
+    | seq t =>
+      simp only [step, stepExit, Option.some.injEq, Out.next.injEq, Config.mk.injEq] at next
+      obtain ⟨_, hL, hst, hk⟩ := next
+      subst st'
+      obtain ⟨rfl, rfl⟩ := finish hL hk
+      exact ⟨rfl, .nil⟩
+    | scope b dm ds =>
+      cases ds with
+      | cons d ds => simp [step, stepExit, startCleanup] at next
+      | nil =>
+        cases hd : dropOut O dm L st with
+        | none => simp [step, stepExit, hd] at next
+        | some stDrop =>
+          simp only [step, stepExit, hd, Option.map_some, Option.some.injEq, Out.next.injEq,
+            Config.mk.injEq] at next
+          obtain ⟨_, hL, hst, hk⟩ := next
+          have hk' := List.append_cancel_right hk
+          subst pre'
+          subst L'
+          subst st'
+          exact ⟨rfl, .drop hd .nil⟩
+    | test l cr t body site dm =>
+      cases hd : dropOut O dm L st with
+      | none => simp [step, stepExit, hd] at next
+      | some stDrop =>
+        simp only [step, stepExit, hd, Option.map_some, Option.some.injEq, Out.next.injEq,
+          Config.mk.injEq] at next
+        obtain ⟨_, hL, hst, hk⟩ := next
+        have hk' := List.append_cancel_right hk
+        subst pre'
+        subst L'
+        subst st'
+        exact ⟨rfl, .drop hd .nil⟩
+    | body l cr t body site =>
+      cases e with
+      | ret v =>
+        simp only [step, stepExit, Option.some.injEq, Out.next.injEq, Config.mk.injEq] at next
+        obtain ⟨_, hL, hst, hk⟩ := next
+        obtain ⟨rfl, rfl⟩ := finish hL hk
+        subst st'
+        exact ⟨rfl, .nil⟩
+      | brk l' =>
+        by_cases he : l' = l
+        · simp [step, stepExit, he] at next
+        · simp only [step, stepExit, he, ↓reduceIte, Option.some.injEq, Out.next.injEq,
+            Config.mk.injEq] at next
+          obtain ⟨_, hL, hst, hk⟩ := next
+          obtain ⟨rfl, rfl⟩ := finish hL hk
+          subst st'
+          exact ⟨rfl, .nil⟩
+      | cont l' =>
+        by_cases he : l' = l
+        · simp [step, stepExit, he] at next
+        · simp only [step, stepExit, he, ↓reduceIte, Option.some.injEq, Out.next.injEq,
+            Config.mk.injEq] at next
+          obtain ⟨_, hL, hst, hk⟩ := next
+          obtain ⟨rfl, rfl⟩ := finish hL hk
+          subst st'
+          exact ⟨rfl, .nil⟩
+    | resume p => simp [step, stepExit] at next
+    | ret dst caller =>
+      cases e <;> simp [step, stepExit] at next
+      case ret v =>
+        cases hl : O.life .leave st <;> simp [hl] at next
+
+
+/-- Helper (inversion). A cleanup dispatch step selects exactly the head registration, preserving
+its scope with the remaining registrations. -/
+private theorem exit_call_plan_inv {P : Program O} {e : Exit O.Val} {k pre rest : List (Frame O)}
+    {L : AList Var O.Val} {st : O.Store} {d : Deferred O} {label : Label O}
+    (h : Step P ⟨.exiting e, L, st, pre ++ k⟩ label
+      ⟨.exec d.stmt, L, st, .resume (.exit e) :: rest ++ k⟩) (hne : pre ≠ []) :
+    planWith pre L = .call L d :: planWith rest L := by
+  cases pre with
+  | nil => exact False.elim (hne rfl)
+  | cons f pre =>
+    have hn : step P ⟨.exiting e, L, st, f :: (pre ++ k)⟩ =
+        some (.next ⟨.exec d.stmt, L, st, .resume (.exit e) :: rest ++ k⟩) :=
+      exit_step_next_inv h
+    clear h
+    have h := hn
+    cases f with
+    | scope b dm ds =>
+      cases ds with
+      | nil =>
+        cases hd : dropOut O dm L st <;> simp [step, stepExit, hd] at h
+      | cons d' ds =>
+        simp only [step, stepExit, startCleanup, Option.some.injEq, Out.next.injEq,
+          Config.mk.injEq, Ctrl.exec.injEq] at h
+        obtain ⟨hd, _, _, hk⟩ := h
+        have hds : d' = d := by
+          have hd' : d'.f = d.f ∧ d'.args = d.args ∧ d'.site = d.site := by
+            simpa [Deferred.stmt, Stmt.call.injEq] using hd
+          cases d' with | mk f args site =>
+            cases d with | mk f' args' site' =>
+              obtain ⟨hf, ha, hs⟩ := hd'
+              simp only at hf ha hs
+              subst f'; subst args'; subst site'
+              rfl
+        subst d'
+        have hr : .scope b dm ds :: pre = rest := by
+          apply List.append_cancel_right (bs := k)
+          exact List.cons.inj hk |>.2
+        subst rest
+        simp [planWith]
+    | seq t => simp [step, stepExit] at h
+    | test l cr t body site dm =>
+      cases hd : dropOut O dm L st <;> simp [step, stepExit, hd] at h
+    | resume p => simp [step, stepExit] at h
+    | ret dst caller =>
+      cases e <;> simp [step, stepExit] at h
+      case ret v => cases hl : O.life .leave st <;> simp [hl] at h
+    | body l cr t body site =>
+      cases e with
+      | ret v => simp [step, stepExit] at h
+      | brk l' => by_cases he : l' = l <;> simp [step, stepExit, he] at h
+      | cont l' => by_cases he : l' = l <;> simp [step, stepExit, he, Deferred.stmt] at h
+
+/-- A successful actual unwind, stopped on first arrival at the selected stack boundary, dispatches
+exactly the planned calls and drops in order. The observed actions are read from actual transitions,
+not required by the execution certificate. No extra or missing cleanup action is possible. -/
+theorem cleanup_runs_exact_plan {P : Program O} {e : Exit O.Val} {k pre : List (Frame O)}
+    {L L' : AList Var O.Val} {st st' : O.Store} {acts : List (CleanAct O)} {tr : List O.Event}
+    (h : BoundaryRun P (Step P) e k pre L st acts tr L' st') :
+    acts = planWith pre L ∧ Performed P acts st tr st' := by
+  induction h with
+  | stop => exact ⟨rfl, .nil⟩
+  | pass hne hs _ ih =>
+    obtain ⟨he, hp⟩ := exit_pass_plan_inv hs hne
+    exact ⟨by rw [ih.1, ← he], by simpa using performed_append_inv hp ih.2⟩
+  | call hne hs hc _ _ ih =>
+    exact ⟨by rw [ih.1, ← exit_call_plan_inv hs hne], .call hc.steps_inv ih.2⟩
+
 /-! ### Traps are terminal -/
 
 theorem step_trapped (P : Program O) (kd : TrapKind) (site : SiteId) (L : AList Var O.Val)
