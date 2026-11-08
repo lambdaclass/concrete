@@ -797,6 +797,13 @@ example :
     isOutOfFuel (run prog env 0 finishingConfig) = true ∧
       brief (run prog env 1 finishingConfig) = ([], some .normal) := by decide
 
+/-- A configuration whose first step aborts. -/
+def failingConfig : Config ops := ⟨.exec (.abort s), [], .init, []⟩
+
+/-- `outOfFuel` also does not exclude failure: one more unit of fuel reveals this trap. -/
+example : isOutOfFuel (run prog env 0 failingConfig) = true ∧
+    brief (run prog env 1 failingConfig) = ([], some (.trapped .abort s)) := by decide
+
 /-- `outOfFuel` is not a program failure either: the silent loop exhausts its simulation budget
 without trapping or becoming stuck. The infinite-execution witness is `spin_infinite` below. -/
 example : isOutOfFuel (run prog env 50 spinConfig) = true := by decide
