@@ -31,7 +31,16 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
+          state=$(mktemp -d)
+          trap 'rm -rf "$state"' EXIT
+          BOUNDED_PARENT="$state"
           source scripts/checks/lib/bounded.sh
           bounded_run 20 -- git config user.name concrete-scheduled
           bounded_run 20 -- git config user.email concrete-scheduled@users.noreply.github.com
-          bounded_run 1100 -- python3 scripts/checks/scheduled/collect.py
+          rc=0
+          bounded_run -r 300 300 -- python3 scripts/checks/scheduled/collect.py || rc=$?
+          if bounded_is_incomplete "$rc"; then
+            echo 'INCOMPLETE scheduled collection: bounded attempts exhausted'
+            exit 1
+          fi
+          exit "$rc"

@@ -102,8 +102,13 @@ rejected manual selections never annotate main. Active execution is never treate
 as an overdue queue. Queued observations use observation time; a recorded overdue
 attempt remains immutable and subsequent collection is idempotent. Completed worker
 executions without an index are INCOMPLETE and partial logs remain uploadable. Collector
-API/inventory errors produce a failing INCOMPLETE collector observation; missing
+API errors produce a failing INCOMPLETE collector observation; absent inventory
+still permits nonqualifying MISSING/dependency-INCOMPLETE publication, while missing
 notes remain visible to the independent observer. HTTP redirects strip credentials.
+The publisher reserves time for setup and cleanup: its two 300-second bounded
+collection attempts fit the 20-minute job, and exhausted attempts explicitly report
+INCOMPLETE. The execution watchdog streams partial logs; a crashed/timed-out worker
+without an index is reconstructed as INCOMPLETE by the trusted collector.
 
 `gate_freshness.yml` runs every four hours, on pushes to main, and on manual dispatch.
 It reports exact-SHA defects across main's first-parent history, with FAIL precedence,
