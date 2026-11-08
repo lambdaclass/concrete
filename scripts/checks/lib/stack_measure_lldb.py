@@ -3,22 +3,30 @@
 #
 # The LLDB counterpart of stack_measure.py (same contract, same environment: STACK_EXE, the
 # executable; STACK_RANGES "LO:HI,..." in link-time addresses, from stack_bound.py --ranges;
-# STACK_MAIN, main's LO; STACK_EXPECT, the expected exit status). It measures the stack depth one
-# complete run reaches, below the stack pointer at `main`'s entry, by single-stepping every
-# instruction of the Concrete-owned functions. An external function (entered by `bl`, so its
+# STACK_MAIN, main's LO; STACK_EXPECT, the expected exit status; STACK_RED_ZONE; STACK_LIB, the
+# directory of stack_access.py). It measures the stack depth one complete run reaches, below the
+# stack pointer at `main`'s entry: the lowest of the stack pointer and every stack byte an
+# instruction addresses (so the red zone), by single-stepping every instruction of the
+# Concrete-owned functions. An external function (entered by `bl`, so its
 # return address is in the link register) runs at full speed to that return address; its own use
 # is outside the bound, as in stack_bound.py, but the depth at its entry is measured. Once main has
 # returned, the rest runs freely.
 #
 # Fail closed: the measurement counts only for a run that stopped first at main's runtime address,
 # stopped after each external call exactly at its return address (or exited inside it), received
-# no signal, and exited normally with status STACK_EXPECT. Prints `measured N` and `steps N`, or
+# no signal, exited normally with status STACK_EXPECT, and addressed no stack byte deeper than the
+# red zone below the stack pointer. Prints `measured N` and `steps N`, or
 # `error ...` (the gate fails on anything but a measurement).
 import os
+import sys
 
 import lldb
 
+sys.path.insert(0, os.environ["STACK_LIB"])
+import stack_access  # noqa: E402 - the path is the gate's lib directory
+
 LIMIT = 2_000_000
+SPAN = 8 << 20  # stack bytes counted below main's entry (stack_access.lowest_stack)
 
 
 def measure(debugger):
@@ -73,7 +81,18 @@ def check_live(process):
     return True
 
 
+def register(frame, name):
+    """A general register's value (`sp`, `x0`..`x30`, `fp`, `lr`); unknown names fail closed."""
+    v = frame.FindRegister(name)
+    if not v.IsValid() and name in ("x29", "x30"):
+        v = frame.FindRegister({"x29": "fp", "x30": "lr"}[name])
+    if not v.IsValid():
+        raise ValueError(f"no register {name}")
+    return v.GetValueAsUnsigned()
+
+
 def run(process, target, bp, ranges, main_lo, main_rt, expect):
+    red_zone = int(os.environ["STACK_RED_ZONE"])
     if not check_live(process):
         raise RuntimeError("exited before main")
     thread = process.GetSelectedThread()
@@ -101,6 +120,16 @@ def run(process, target, bp, ranges, main_lo, main_rt, expect):
             continue
         low = min(low, sp)
         if owned(pc):
+            insn = target.ReadInstructions(lldb.SBAddress(pc, target), 1).GetInstructionAtIndex(0)
+            mn, ops = insn.GetMnemonic(target), insn.GetOperands(target)
+            try:
+                touched = stack_access.lowest_stack(
+                    stack_access.a64_addresses(mn, ops, lambda r: register(frame, r)),
+                    sp, sp0, red_zone, SPAN)
+            except ValueError as e:
+                raise RuntimeError(f"at {pc:#x} ({mn} {ops}): {e}") from None
+            if touched is not None:
+                low = min(low, touched)
             thread.StepInstruction(False)
             steps += 1
             if steps > LIMIT:

@@ -10,9 +10,13 @@ case "$(uname -s)-$(uname -m)" in
   *) echo 'slice0_native: unsupported target' >&2; exit 2 ;;
 esac
 if [ "${1:-}" = target ]; then echo "$target"; exit; fi
+# `control DIRECTORY` links DIRECTORY/control.s alone into control.exe, under the same policy: the run
+# checks' controls (slice0_artifacts.sh) are hand-written assembly built exactly like the examples.
+control=0
+if [ "${1:-}" = control ] && [ "$#" = 2 ]; then control=1; set -- "$2" -; fi
 # `sanitize` builds only llvm.san.exe: the LLVM example with ASan (README gate 10; no UBSan, see there).
 [ "$#" = 2 ] || { [ "$#" = 3 ] && [ "$3" = sanitize ]; } ||
-  { echo 'usage: slice0_native.sh DIRECTORY LCB [sanitize]' >&2; exit 2; }
+  { echo 'usage: slice0_native.sh DIRECTORY LCB [sanitize] | control DIRECTORY | target' >&2; exit 2; }
 lcb=$2
 cd "$1"
 # Fixed epoch rather than wall clock or caller environment. No debug data is requested, and
@@ -33,6 +37,11 @@ if [ "${3:-}" = sanitize ]; then
   san=(-fsanitize=address -fno-sanitize-recover=all)
   "${cc[@]}" "${san[@]}" -c llvm.san.ll -o llvm.san.o
   "${cc[@]}" "${san[@]}" "${link[@]}" llvm.san.o -o llvm.san.exe
+  exit
+fi
+if [ "$control" = 1 ]; then
+  "${cc[@]}" -c control.s -o control.o
+  "${cc[@]}" "${link[@]}" control.o -o control.exe
   exit
 fi
 "${cc[@]}" -c llvm.ll -o llvm.o

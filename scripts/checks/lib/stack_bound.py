@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Stack bound of a slice-0 executable, from its disassembly (README gate 12). PROVISIONAL.
 
-usage: stack_bound.py ARCH DISASM             -> prints `bound N` and one `external SYM DEPTH` per call
-       stack_bound.py ARCH DISASM --ranges    -> also prints `range SYM LO HI` per Concrete function
-ARCH is x86_64 or aarch64; DISASM is `llvm-objdump -d --no-show-raw-insn` output of the LINKED
+usage: stack_bound.py TARGET DISASM           -> prints `bound N` and one `external SYM DEPTH` per call
+       stack_bound.py TARGET DISASM --ranges  -> also prints `redzone N` (the target's) and
+                                                `range SYM LO HI` per Concrete function
+TARGET is a key of TARGETS (x86_64-linux, aarch64-macos, aarch64-linux); DISASM is `llvm-objdump -d --no-show-raw-insn` output of the LINKED
 executable (x86-64 in Intel syntax).
 
 The Concrete-owned code is `main` (the runtime entry), `concrete_rt_write_all` and the body
@@ -30,7 +31,10 @@ save (`push rbp`, `stp x29, x30`) puts one in memory. Saved slots may be read on
 by the modelled restore (`pop rbp`, `leave`, `ldp x29, x30` with base sp). Any other stack read
 must be of bytes the function itself wrote, on every path, since its last call: so no stale value
 (a callee's or the caller's saved frame pointer, libc's scratch) is ever loaded. Accesses must lie
-below the entry stack pointer (never the return address or the caller's frame), returns must be at
+below the entry stack pointer (never the return address or the caller's frame) and at most the
+target's red zone below the current stack pointer (TARGETS: 128 bytes on x86-64 System V and on
+Apple arm64, none under AAPCS64 on Linux; deeper bytes may be overwritten asynchronously, by a
+signal handler, so code using them has no bound), returns must be at
 depth 0 with the caller's frame pointer restored and, on AArch64, with the link register holding
 the return address.
 
@@ -194,6 +198,11 @@ MEM = re.compile(r"\[([^\]]*)\]")
 # the access's own offset (at most A64_OFF_REACH): the premise that the stack lies farther than
 # that from the image's code makes such an access never a stack access.
 PC_REACH = 16 << 20
+# TARGET -> (architecture, red zone in bytes): how far below the stack pointer code may address
+# memory without moving it. x86-64 System V ABI section 3.2.2 (128); Apple, "Writing ARM64 code for
+# Apple platforms" (128); AAPCS64 has none (0).
+TARGETS = {"x86_64-linux": ("x86_64", 128), "aarch64-macos": ("aarch64", 128),
+           "aarch64-linux": ("aarch64", 0)}
 A64_OFF_REACH = 32760
 
 
@@ -571,10 +580,16 @@ def analyse(funcs, stubs):
             if kind is None:
                 if not plain.match(mn):
                     raise Refuse(f"{key}+{addr:#x}: unmodelled instruction: {mn} {ops}")
+                before = st.d
                 try:
                     st, touched = inst(mn, ops, st, addr)
                 except Refuse as e:
                     raise Refuse(f"{key}+{addr:#x}: {e}") from None
+                # The stack pointer either side of the instruction (a pre-indexed or pushing access
+                # is at the new one, a post-indexed one at the old).
+                if touched is not None and touched > max(before, st.d) + RED_ZONE:
+                    raise Refuse(f"{key}+{addr:#x}: an access {touched - max(before, st.d)} bytes below the "
+                                 f"stack pointer, beyond the {RED_ZONE}-byte red zone of {TARGET}: {mn} {ops}")
                 if st.d < 0:
                     raise Refuse(f"{key}+{addr:#x}: stack above the entry")
                 deepest = max(deepest, st.d, touched or 0)
@@ -639,9 +654,10 @@ def analyse(funcs, stubs):
 
 
 if __name__ == "__main__":
-    if len(sys.argv) not in (3, 4) or sys.argv[1] not in ("x86_64", "aarch64"):
-        sys.exit("usage: stack_bound.py x86_64|aarch64 DISASM [--ranges]")
-    ARCH = sys.argv[1]
+    if len(sys.argv) not in (3, 4) or sys.argv[1] not in TARGETS:
+        sys.exit(f"usage: stack_bound.py {'|'.join(TARGETS)} DISASM [--ranges]")
+    TARGET = sys.argv[1]
+    ARCH, RED_ZONE = TARGETS[TARGET]
     try:
         funcs, stubs = parse(sys.argv[2])
         total, ext, owned = analyse(funcs, stubs)
@@ -652,6 +668,7 @@ if __name__ == "__main__":
     for name, depth in sorted(ext.items()):
         print(f"external {name} {depth}")
     if len(sys.argv) == 4 and sys.argv[3] == "--ranges":
+        print(f"redzone {RED_ZONE}")
         for key, name in sorted(owned.items()):
             code = funcs[name]
             print(f"range {key} {code[0][0]:#x} {code[-1][0]:#x}")

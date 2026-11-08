@@ -1,0 +1,113 @@
+# The memory addresses one instruction accesses, for the run checks (stack_measure.py under gdb,
+# stack_measure_lldb.py under LLDB; README gate 12). PROVISIONAL. Plain Python 3.9 (Apple's LLDB
+# runs its own), no imports beyond re.
+#
+# The run check counts the lowest byte each stepped instruction of the Concrete-owned code
+# addresses, not only the stack pointer: code may use the target's red zone, below the stack
+# pointer, without moving it (stack_bound.py counts the same bytes). An access's lowest byte is its
+# effective address, whatever its size, so only the address is computed. Fail closed: an operand
+# this module cannot evaluate is an error, never "no access".
+import re
+
+MASK = (1 << 64) - 1
+NUM = re.compile(r"(?:0x[0-9a-f]+|\d+)$")
+
+
+def _num(text):
+    return int(text, 0)
+
+
+def x86_addresses(asm, reg, next_pc):
+    """Effective addresses of the memory operands of one instruction in gdb's Intel syntax
+    (`mov QWORD PTR [rsp-0x80],0x0`). reg(name) reads a register. lea and nop compute an address
+    without accessing it; fs:/gs: operands address the thread block, not the stack."""
+    asm = asm.split("#", 1)[0].strip().lower()
+    mn = asm.split(None, 1)[0] if asm else ""
+    if mn == "lea" or mn.startswith("nop") or mn.startswith("prefetch"):
+        return []
+    out = []
+    for m in re.finditer(r"(?:(\w\w):)?\[([^\]]*)\]", asm):
+        if m.group(1) in ("fs", "gs"):
+            continue
+        inner = m.group(2).replace(" ", "")
+        if not inner or inner[0] not in "+-":
+            inner = "+" + inner
+        terms = re.findall(r"([+-])([^+-]+)", inner)
+        if "".join(s + t for s, t in terms) != inner:
+            raise ValueError(f"unparsed memory operand [{m.group(2)}] in {asm}")
+        addr = 0
+        for sign, term in terms:
+            if "*" in term:
+                r, scale = term.split("*", 1)
+                v = reg(r) * _num(scale)
+            elif NUM.match(term):
+                v = _num(term)
+            elif term == "rip":
+                v = next_pc
+            else:
+                v = reg(term)
+            addr += v if sign == "+" else -v
+        out.append(addr & MASK)
+    if not out and re.search(r"\b(movs|stos|lods|cmps|scas)", mn):
+        raise ValueError(f"string instruction with implicit memory operands: {asm}")
+    return out
+
+
+def _a64_index(text, reg):
+    """Value of an AArch64 index operand: `x9`, `x9, lsl #3`, `w9, sxtw #2`, `w9, uxtw`."""
+    parts = [p.strip() for p in text.split(",")]
+    r = parts[0]
+    v = reg("x" + r[1:]) if r.startswith("w") else reg(r)
+    if r.startswith("w"):
+        v &= 0xFFFFFFFF
+    shift = 0
+    if len(parts) > 1:
+        m = re.fullmatch(r"(lsl|sxtw|uxtw|sxtx|uxtx)(?:\s+#(\d+))?", parts[1])
+        if not m:
+            raise ValueError(f"unparsed index extension {parts[1]}")
+        if m.group(1) == "sxtw" and v & 0x80000000:
+            v -= 1 << 32
+        shift = int(m.group(2) or 0)
+    if len(parts) > 2:
+        raise ValueError(f"unparsed index {text}")
+    return v << shift
+
+
+def a64_addresses(mnemonic, operands, reg):
+    """Effective addresses of one AArch64 instruction in LLDB's syntax (`stp x29, x30, [sp,
+    #-0x10]!`, `ldr x30, [sp], #0x10`, `ldr w8, [x9, x10, lsl #2]`). A post-indexed access is at the
+    base; a pre-indexed or offset one at base plus offset. prfm/prfum only hint."""
+    mn, ops = mnemonic.lower(), operands.lower().split("//", 1)[0]
+    if mn.startswith("prf"):
+        return []
+    m = re.search(r"\[([^\]]*)\](!?)", ops)
+    if not m:
+        return []
+    parts = [p.strip() for p in m.group(1).split(",", 1)]
+    base = reg(parts[0])
+    post = ops[m.end():].strip()
+    if post:
+        if not re.fullmatch(r",\s*(#-?(0x[0-9a-f]+|\d+)|x\d+)", post) or len(parts) > 1:
+            raise ValueError(f"unparsed post-index in {mn} {operands}")
+        return [base & MASK]
+    if len(parts) == 1:
+        return [base & MASK]
+    off = parts[1]
+    if off.startswith("#"):
+        return [(base + _num(off[1:])) & MASK]
+    return [(base + _a64_index(off, reg)) & MASK]
+
+
+def lowest_stack(addresses, sp, sp0, red_zone, span):
+    """The lowest of `addresses` that lies on the stack below main's entry stack pointer sp0
+    (within `span` bytes of it; the analysis' premise puts the image farther away), or None. An
+    access deeper than the red zone below the current stack pointer is an error: no bound holds
+    for bytes a signal handler may overwrite."""
+    low = None
+    for a in addresses:
+        if sp0 - span <= a < sp0:
+            if a < sp - red_zone:
+                raise ValueError(f"an access {sp - a} bytes below the stack pointer, beyond the "
+                                 f"{red_zone}-byte red zone")
+            low = a if low is None else min(low, a)
+    return low
