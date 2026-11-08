@@ -112,6 +112,8 @@ two live blocks overlapping. -/
 structure Memory.WellFormed (tgt : Target) (m : Memory) : Prop where
   /-- Every stored entry agrees with lookup; shadowed contradictory blocks are forbidden. -/
   canonical : ∀ e ∈ m.blocks, m.block e.1 = some e.2
+  /-- A block identity has exactly one entry, so first-entry updates preserve canonicality. -/
+  unique : (List.map Prod.fst m.blocks).Nodup
   fresh : ∀ b x, m.block b = some x → b.id < m.next
   sized : ∀ b x, m.block b = some x → x.bytes.length = x.size
   fits : ∀ b x, m.block b = some x → x.base + x.size ≤ 2 ^ tgt.addrBits - 1

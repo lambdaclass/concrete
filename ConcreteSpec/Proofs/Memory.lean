@@ -206,6 +206,13 @@ theorem alloc_wellFormed (tgt : Target) (m : Memory) (hw : m.WellFormed tgt)
       have hfresh := hw.fresh e.1 e.2 hh
       have hn : z ≠ e.1 := by intro hz; rw [← hz] at hfresh; simp [z] at hfresh
       simp [hn, hh]
+  · simp only [List.map_cons, List.nodup_cons]
+    refine ⟨?_, hw.unique⟩
+    intro hm
+    obtain ⟨e, he, hz⟩ := List.mem_map.mp hm
+    have hh := hw.fresh e.1 e.2 (hw.canonical e he)
+    rw [hz] at hh
+    exact Nat.lt_irrefl _ hh
   · intro c y hy
     rw [lookup] at hy
     split at hy
