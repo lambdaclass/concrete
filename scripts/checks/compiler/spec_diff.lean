@@ -454,31 +454,6 @@ def writeExpected (dir : System.FilePath) (status : String) (stderr : String) : 
   IO.FS.writeFile (dir / "status") (status ++ "\n")
   IO.FS.writeFile (dir / "stderr") stderr
 
-def writeLcb (dir : System.FilePath) (target : LCB.Target)
-    (emitted : Source.Function × SiteTable) : IO Bool := do
-  let (f, sites) := emitted
-  IO.FS.createDirAll dir
-  IO.FS.writeFile (dir / "lcb_source.txt") (reprStr f ++ "\n")
-  let job : FunctionJob :=
-    { code := { symbol := LCB.bodySymbol, body := f, abi := planAbi f, layout := planFrame f } }
-  IO.FS.writeFile (dir / "lcb_job.txt") (reprStr job ++ "\n")
-  if let .error msg := LCB.assemble .aarch64Macos f then
-    IO.eprintln s!"{dir}: LCB first path: {msg}"; return false
-  match LCB.assemble target f with
-  | .error msg => IO.eprintln s!"{dir}: LCB: {msg}"; return false
-  | .ok asm =>
-    IO.FS.writeFile (dir / "lcb_body.s") asm
-    IO.FS.writeFile (dir / "lcb_rt.ssa") (Runtime.qbe sites)
-    IO.FS.writeFile (dir / "lcb_body.ssa") (LCB.render f)
-    return true
-
-def writeBackends (dir : System.FilePath) (target : LCB.Target) (p : Program)
-    (emitted : Source.Function × SiteTable) : IO Bool := do
-  IO.FS.createDirAll dir
-  IO.FS.writeFile (dir / "bir.txt") (reprStr p ++ "\n")
-  IO.FS.writeFile (dir / "llvm.ll") (LLVM.module p)
-  writeLcb dir target emitted
-
 def unwiredMessage := "no Core→BIR lowering yet (slice 1)"
 
 /-- Whether Core→BIR lowering for the supported slice-0 fragment is available (X3).
@@ -502,6 +477,29 @@ def mutationOfName : String → Option Mutation
   | "drop-overflow-llvm" => some .dropOverflowLLVM
   | "lcb-off-by-one" => some .lcbOffByOne
   | _ => none
+
+inductive PlantedFailure where
+  | none | lowering | emission | assembly | nativeSetup
+  deriving DecidableEq, Repr
+
+def plantedFailureOfName : String → Option PlantedFailure
+  | "lowering" => some .lowering
+  | "emission" => some .emission
+  | "assembly" => some .assembly
+  | "native-setup" => some .nativeSetup
+  | _ => none
+
+def targetName : LCB.Target → String
+  | .x86_64Linux => "x86_64-linux"
+  | .aarch64Linux => "aarch64-linux"
+  | .aarch64Macos => "aarch64-macos"
+
+structure CandidateCtx where
+  leg : String
+  seed : String
+  index : Nat
+  dir : System.FilePath
+  target : LCB.Target
 
 /-- Replace every overflow-flag extraction by constant false. The wrapped value and control-flow
 shape remain, so a trapping generated program exits through its non-trap arm instead. -/
@@ -562,6 +560,64 @@ def safeSeed (seed : String) : String :=
 def regressionName (leg : String) (seed : String) (index : Nat) : String :=
   s!"regression_{leg}_{safeSeed seed}_{index}"
 
+/-- Write the one durable failure record into the candidate scratch directory before returning any
+failure. `collect_available` in `spec_diff.sh` persists every directory carrying `failure-kinds.txt`
+into `SPEC_DIFF_REGRESSIONS` before scratch cleanup. -/
+def recordCandidateFailure (ctx : CandidateCtx) (kind : String) (subject : String)
+    (diagnostic : String) : IO Unit := do
+  IO.FS.createDirAll ctx.dir
+  IO.FS.writeFile (ctx.dir / "leg") (ctx.leg ++ "\n")
+  IO.FS.writeFile (ctx.dir / "seed") (ctx.seed ++ "\n")
+  IO.FS.writeFile (ctx.dir / "safe-seed.txt") (safeSeed ctx.seed ++ "\n")
+  IO.FS.writeFile (ctx.dir / "index") (toString ctx.index ++ "\n")
+  IO.FS.writeFile (ctx.dir / "regression-name.txt") (regressionName ctx.leg ctx.seed ctx.index ++ "\n")
+  let kindsPath := ctx.dir / "failure-kinds.txt"
+  let existingKinds ← if ← kindsPath.pathExists then IO.FS.readFile kindsPath else pure ""
+  unless (existingKinds.splitOn "\n").contains kind do
+    IO.FS.writeFile kindsPath (existingKinds ++ kind ++ "\n")
+  let diagPath := ctx.dir / "diagnostics.txt"
+  let existingDiag ← if ← diagPath.pathExists then IO.FS.readFile diagPath else pure ""
+  unless (existingDiag.splitOn "\n").contains diagnostic do
+    IO.FS.writeFile diagPath (existingDiag ++ diagnostic ++ "\n")
+  let recPath := ctx.dir / "failure-record.tsv"
+  let existingRec ← if ← recPath.pathExists then IO.FS.readFile recPath else pure ""
+  IO.FS.writeFile recPath (existingRec ++ s!"{kind}\t{subject}\t{diagnostic}\n")
+  IO.eprintln diagnostic
+
+def writeLcb (ctx : CandidateCtx) (emitted : Source.Function × SiteTable)
+    (planted : PlantedFailure := .none) : IO Bool := do
+  let (f, sites) := emitted
+  IO.FS.createDirAll ctx.dir
+  IO.FS.writeFile (ctx.dir / "lcb_source.txt") (reprStr f ++ "\n")
+  let job : FunctionJob :=
+    { code := { symbol := LCB.bodySymbol, body := f, abi := planAbi f, layout := planFrame f } }
+  IO.FS.writeFile (ctx.dir / "lcb_job.txt") (reprStr job ++ "\n")
+  IO.FS.writeFile (ctx.dir / "lcb_rt.ssa") (Runtime.qbe sites)
+  IO.FS.writeFile (ctx.dir / "lcb_body.ssa") (LCB.render f)
+  let firstAsm :=
+    if planted == .assembly then Except.error "planted LCB assembly refusal"
+    else LCB.assemble .aarch64Macos f
+  if let .error msg := firstAsm then
+    recordCandidateFailure ctx "assembly" "aarch64-macos"
+      s!"FAIL {ctx.leg} assembly: seed {ctx.seed} index {ctx.index} [aarch64-macos]: {msg}"
+    return false
+  match LCB.assemble ctx.target f with
+  | .error msg =>
+    let tname := targetName ctx.target
+    recordCandidateFailure ctx "assembly" tname
+      s!"FAIL {ctx.leg} assembly: seed {ctx.seed} index {ctx.index} [{tname}]: {msg}"
+    return false
+  | .ok asm =>
+    IO.FS.writeFile (ctx.dir / "lcb_body.s") asm
+    return true
+
+def writeBackends (ctx : CandidateCtx) (p : Program)
+    (emitted : Source.Function × SiteTable) (planted : PlantedFailure := .none) : IO Bool := do
+  IO.FS.createDirAll ctx.dir
+  IO.FS.writeFile (ctx.dir / "bir.txt") (reprStr p ++ "\n")
+  IO.FS.writeFile (ctx.dir / "llvm.ll") (LLVM.module p)
+  writeLcb ctx emitted planted
+
 def renderAtom : ConcreteSpec.Slice0.Atom → String
   | .lit n => toString n
   | .var x => s!"{x.hint}_{x.id}"
@@ -591,13 +647,19 @@ def writeObservation (dir : System.FilePath) (status : String) (stderr : String)
   writeExpected dir status stderr
   IO.FS.writeFile (dir / "stdout") ""
 
-def writeOutcome (dir : System.FilePath) (outcome : Outcome) (sites : SiteTable) : IO Bool := do
+def writeOutcome (ctx : CandidateCtx) (outcome : Outcome) (sites : SiteTable) : IO Bool := do
   match outcome with
-  | .exited c => writeObservation dir (toString c) ""; return true
+  | .exited c => writeObservation ctx.dir (toString c) ""; return true
   | .trapped s => match sites[s]? with
-    | some e => writeObservation dir "134" (Runtime.trapLine e ++ "\n"); return true
-    | none => IO.eprintln s!"{dir}: no trap site {s}"; return false
-  | _ => IO.eprintln s!"{dir}: outcome {repr outcome} has no final observation"; return false
+    | some e => writeObservation ctx.dir "134" (Runtime.trapLine e ++ "\n"); return true
+    | none =>
+      recordCandidateFailure ctx "native_setup" "trap_site"
+        s!"FAIL {ctx.leg} seed {ctx.seed} index {ctx.index} [native_setup]: no trap site {s}"
+      return false
+  | _ =>
+    recordCandidateFailure ctx "native_setup" "bir_oracle"
+      s!"FAIL {ctx.leg} seed {ctx.seed} index {ctx.index} [native_setup]: outcome {repr outcome} has no final observation"
+    return false
 
 def evaluatorObservation (f : Source.Function) (sites : SiteTable) : String × String :=
   match LCB.evalBody f 100000 with
@@ -625,7 +687,10 @@ def writeBirRegressionMetadata (dir : System.FilePath) (seed : String) (index : 
       | some e => pure s!"trap {trapKindName e.kind} site {s}"
       | none => pure "INVALID"
     | _ => pure "INVALID"
+  IO.FS.writeFile (dir / "leg") "bir\n"
+  IO.FS.writeFile (dir / "seed") (seed ++ "\n")
   IO.FS.writeFile (dir / "safe-seed.txt") (safeSeed seed ++ "\n")
+  IO.FS.writeFile (dir / "index") (toString index ++ "\n")
   IO.FS.writeFile (dir / "regression-name.txt") (name ++ "\n")
   IO.FS.writeFile (dir / "manifest-row.txt")
     s!"{name}\tbir:{name}\t{expectation}\tslice0\n"
@@ -633,7 +698,10 @@ def writeBirRegressionMetadata (dir : System.FilePath) (seed : String) (index : 
 def writeSpecRegressionMetadata (dir : System.FilePath) (seed : String) (index : Nat)
     (q : ConcreteSpec.Slice0.Program) (exitCode : Nat) : IO Unit := do
   let name := regressionName "spec" seed index
+  IO.FS.writeFile (dir / "leg") "spec\n"
+  IO.FS.writeFile (dir / "seed") (seed ++ "\n")
   IO.FS.writeFile (dir / "safe-seed.txt") (safeSeed seed ++ "\n")
+  IO.FS.writeFile (dir / "index") (toString index ++ "\n")
   IO.FS.writeFile (dir / "regression-name.txt") (name ++ "\n")
   IO.FS.writeFile (dir / "program.con") (renderSlice0 q)
   IO.FS.writeFile (dir / "manifest-row.txt")
@@ -641,55 +709,81 @@ def writeSpecRegressionMetadata (dir : System.FilePath) (seed : String) (index :
 
 /-- Emit exactly the files consumed by slice0_native.sh, plus the evaluator's observation and the
 same judge inputs as the manifest runner. The expectation is supplied separately for the spec leg. -/
-def emitArtifacts (dir : System.FilePath) (target : LCB.Target) (p : Program) (mutation : Mutation) :
-    IO Bool := do
+def emitArtifacts (ctx : CandidateCtx) (p : Program) (mutation : Mutation)
+    (planted : PlantedFailure := .none) : IO Bool := do
   let lcbProgram := if mutation = .lcbOffByOne then lcbOffByOne p else p
+  IO.FS.createDirAll ctx.dir
+  IO.FS.writeFile (ctx.dir / "bir.txt") (reprStr p ++ "\n")
+  IO.FS.writeFile (ctx.dir / "llvm.ll") (LLVM.module p)
+  let legLabel := if ctx.leg == "bir" then "BIR" else ctx.leg
   unless wf p && wf lcbProgram do
-    IO.eprintln s!"{dir}: generated or control-mutated BIR is not well formed"
+    let msg := "generated or control-mutated BIR is not well formed"
+    recordCandidateFailure ctx "emission" "wf"
+      s!"FAIL {legLabel} emission: seed {ctx.seed} index {ctx.index}: {msg}"
     return false
-  match LCB.emit lcbProgram with
+  let emitted :=
+    if planted == .emission then Except.error "planted selective emission refusal"
+    else LCB.emit lcbProgram
+  match emitted with
   | .error msg =>
-    IO.FS.createDirAll dir
-    IO.FS.writeFile (dir / "emission-error.txt") (msg ++ "\n")
-    IO.eprintln s!"{dir}: adapter: {msg}"
+    recordCandidateFailure ctx "emission" "lcb_emit"
+      s!"FAIL {legLabel} emission: seed {ctx.seed} index {ctx.index}: {msg}"
     return false
   | .ok (f, sites) =>
-    unless ← writeBackends dir target p (f, sites) do return false
+    unless ← writeBackends ctx p (f, sites) planted do return false
     if mutation = .dropOverflowLLVM then
-      let original ← IO.FS.readFile (dir / "llvm.ll")
+      let original ← IO.FS.readFile (ctx.dir / "llvm.ll")
       let changed := dropOverflowLLVM original
-      if changed = original then IO.eprintln s!"{dir}: drop-overflow-llvm changed nothing"; return false
-      IO.FS.writeFile (dir / "llvm.ll") changed
-    writeEvaluator dir f sites
+      if changed = original then
+        recordCandidateFailure ctx "native_setup" "drop-overflow-llvm"
+          s!"FAIL {ctx.leg} seed {ctx.seed} index {ctx.index} [native_setup]: drop-overflow-llvm changed nothing"
+        return false
+      IO.FS.writeFile (ctx.dir / "llvm.ll") changed
+    unless planted == .nativeSetup do
+      writeEvaluator ctx.dir f sites
     return true
 
+def initBirCandidateDir (ctx : CandidateCtx) (g : BirGen.Generated) (outcome : Outcome) : IO Bool := do
+  IO.FS.createDirAll ctx.dir
+  IO.FS.writeFile (ctx.dir / "program.lean.txt") (reprStr g.program ++ "\n")
+  IO.FS.writeFile (ctx.dir / "bir.txt") (reprStr g.program ++ "\n")
+  IO.FS.writeFile (ctx.dir / "constructs.txt") (String.intercalate "," g.constructs ++ "\n")
+  writeBirRegressionMetadata ctx.dir ctx.seed ctx.index outcome g.program.sites
+  unless outcome.final && outcome != .stuck do
+    recordCandidateFailure ctx "native_setup" "bir_oracle"
+      s!"FAIL {ctx.leg} seed {ctx.seed} index {ctx.index} [native_setup]: non-final/stuck outcome {repr outcome}"
+    return false
+  writeOutcome ctx outcome g.program.sites
+
 def emitBirCandidate (seed : String) (index : Nat) (dir : System.FilePath) (target : LCB.Target)
-    (mutation : Mutation) : IO UInt32 := do
+    (mutation : Mutation) (planted : PlantedFailure := .none) : IO UInt32 := do
   let g := BirGen.generate seed index
   unless wf g.program do
     IO.eprintln s!"seed {seed} index {index}: rejected: generated BIR is not well formed"
     return 4
+  let ctx : CandidateCtx := ⟨"bir", seed, index, dir, target⟩
   let outcome := run g.program 1000
-  unless outcome.final && outcome != .stuck do
-    IO.eprintln s!"seed {seed} index {index}: non-final/stuck outcome {repr outcome}"
-    return 1
-  unless ← writeOutcome dir outcome g.program.sites do return 1
+  unless ← initBirCandidateDir ctx g outcome do return 1
   if mutation = .dropOverflowLLVM then
     match run (dropOverflowBir g.program) 1000 with
     | .exited c => writeObservation (dir / "control-llvm") (toString c) ""
     | o =>
-      IO.eprintln s!"{dir}: non-trap control model gives {repr o}"
+      recordCandidateFailure ctx "native_setup" "control-llvm"
+        s!"FAIL {ctx.leg} seed {seed} index {index} [native_setup]: non-trap control model gives {repr o}"
       return 1
   if mutation = .lcbOffByOne then
     match outcome with
     | .exited c =>
-      unless c < 255 do IO.eprintln s!"{dir}: off-by-one control needs an exit below 255"; return 1
+      unless c < 255 do
+        recordCandidateFailure ctx "native_setup" "control-lcb"
+          s!"FAIL {ctx.leg} seed {seed} index {index} [native_setup]: off-by-one control needs an exit below 255"
+        return 1
       writeObservation (dir / "control-lcb") (toString (c + 1)) ""
-    | _ => IO.eprintln s!"{dir}: off-by-one control needs an exit"; return 1
-  IO.FS.writeFile (dir / "program.lean.txt") (reprStr g.program ++ "\n")
-  IO.FS.writeFile (dir / "constructs.txt") (String.intercalate "," g.constructs ++ "\n")
-  writeBirRegressionMetadata dir seed index outcome g.program.sites
-  unless ← emitArtifacts dir target g.program mutation do return 1
+    | _ =>
+      recordCandidateFailure ctx "native_setup" "control-lcb"
+        s!"FAIL {ctx.leg} seed {seed} index {index} [native_setup]: off-by-one control needs an exit"
+      return 1
+  unless ← emitArtifacts ctx g.program mutation planted do return 1
   IO.println s!"seed {seed} index {index}: {outcomeName outcome} {BirGen.Production.name g.production}"
   return 0
 
@@ -708,7 +802,7 @@ def countsLines (kind : String) (counts : Counts) : String :=
 /-- Admission is independent of the backend: the generator constructs the supported fragment,
 and `wf` checks it. Every admitted candidate must emit; refusal is a regression, never rejection. -/
 def genBir (seed : String) (n : Nat) (dir : System.FilePath) (target : LCB.Target)
-    (refuseIndex : Option Nat := none) : IO UInt32 := do
+    (plantIndex : Option Nat := none) (planted : PlantedFailure := .emission) : IO UInt32 := do
   IO.FS.createDirAll dir
   let mut programs := ""
   let mut rejects := ""
@@ -724,23 +818,11 @@ def genBir (seed : String) (n : Nat) (dir : System.FilePath) (target : LCB.Targe
       rejects := rejects ++ s!"reject\t{index}\tnot well formed\n"
     else
       let outcome := run g.program 1000
-      if !outcome.final || outcome == .stuck then
-        IO.eprintln s!"seed {seed} index {index}: generated outcome {repr outcome}"
-        return 1
       let child := dir / s!"p{index}"
-      unless ← writeOutcome child outcome g.program.sites do return 1
-      IO.FS.writeFile (child / "program.lean.txt") (reprStr g.program ++ "\n")
-      IO.FS.writeFile (child / "constructs.txt") (String.intercalate "," g.constructs ++ "\n")
-      writeBirRegressionMetadata child seed index outcome g.program.sites
-      let emission := if refuseIndex == some index then Except.error "planted selective emission refusal"
-        else LCB.emit g.program
-      match emission with
-      | .error msg =>
-        IO.FS.writeFile (child / "emission-error.txt") (msg ++ "\n")
-        IO.eprintln s!"FAIL BIR emission: seed {seed} index {index}: {msg}"
-        return 1
-      | .ok _ => pure ()
-      unless ← emitArtifacts child target g.program .none do return 1
+      let ctx : CandidateCtx := ⟨"bir", seed, index, child, target⟩
+      let candPlanted := if plantIndex == some index then planted else .none
+      unless ← initBirCandidateDir ctx g outcome do return 1
+      unless ← emitArtifacts ctx g.program .none candPlanted do return 1
       accepted := accepted + 1
       constructs := addConstructs constructs g.constructs
       if outcomeName outcome = "exit" then exits := exits + 1 else traps := traps + 1
@@ -759,17 +841,79 @@ def specOutcome (q : ConcreteSpec.Slice0.Program) : ConcreteSpec.Outcome :=
 
 /-- The spec outcome supplies status and kind but no site. Until it carries one, two lowered sites
 of the trapping kind are ambiguous and are a setup error rather than an arbitrary first-site choice. -/
-def writeSpecOutcome (dir : System.FilePath) (p : Program) (o : ConcreteSpec.Outcome) : IO Bool := do
+def writeSpecOutcome (ctx : CandidateCtx) (p : Program) (o : ConcreteSpec.Outcome) : IO Bool := do
   match o with
-  | .exit c => writeObservation dir (toString c) ""; return true
+  | .exit c => writeObservation ctx.dir (toString c) ""; return true
   | .trap k => match p.sites.filter (fun e => e.kind = k) with
-    | [e] => writeObservation dir "134" (Runtime.trapLine e ++ "\n"); return true
-    | [] => IO.eprintln s!"{dir}: spec trap {repr k} has no lowered site"; return false
-    | _ => IO.eprintln s!"{dir}: spec trap {repr k} has multiple lowered sites and no spec site"; return false
-  | _ => IO.eprintln s!"{dir}: spec outcome {repr o} has no observation"; return false
+    | [e] => writeObservation ctx.dir "134" (Runtime.trapLine e ++ "\n"); return true
+    | [] =>
+      recordCandidateFailure ctx "native_setup" "spec_trap_site"
+        s!"FAIL {ctx.leg} seed {ctx.seed} index {ctx.index} [native_setup]: spec trap {repr k} has no lowered site"
+      return false
+    | _ =>
+      recordCandidateFailure ctx "native_setup" "spec_trap_site"
+        s!"FAIL {ctx.leg} seed {ctx.seed} index {ctx.index} [native_setup]: spec trap {repr k} has multiple lowered sites and no spec site"
+      return false
+  | _ =>
+    recordCandidateFailure ctx "native_setup" "spec_outcome"
+      s!"FAIL {ctx.leg} seed {ctx.seed} index {ctx.index} [native_setup]: spec outcome {repr o} has no observation"
+    return false
 
 def specOutcomeName : ConcreteSpec.Outcome → String
   | .exit _ => "exit" | .trap _ => "trap" | .stuck _ => "stuck" | .outOfFuel => "out_of_fuel"
+
+def compileSpecCandidate (ctx : CandidateCtx) (avail : Bool)
+    (compiler : ConcreteSpec.Program → Except String Program)
+    (g : SpecGen.Generated) (core : ConcreteSpec.Program)
+    (planted : PlantedFailure := .none) : IO (Except UInt32 (ConcreteSpec.Outcome × Bool)) := do
+  IO.FS.createDirAll ctx.dir
+  IO.FS.writeFile (ctx.dir / "program.lean.txt") (reprStr g.program ++ "\n")
+  IO.FS.writeFile (ctx.dir / "constructs.txt") (String.intercalate "," g.constructs ++ "\n")
+  writeSpecRegressionMetadata ctx.dir ctx.seed ctx.index g.program 0
+  if g.rejection.isSome then
+    recordCandidateFailure ctx "lowering" "spec_check"
+      s!"FAIL spec seed {ctx.seed} index {ctx.index} [lowering]: checker accepted predicted rejection {repr g.rejection}"
+    return .error 1
+  let outcome := specOutcome g.program
+  match outcome with
+  | .exit c =>
+    unless c < 256 do
+      recordCandidateFailure ctx "lowering" "spec_oracle"
+        s!"FAIL spec seed {ctx.seed} index {ctx.index} [lowering]: invalid spec exit {c}"
+      return .error 1
+    IO.FS.writeFile (ctx.dir / "oracle.txt") s!"exit {c}\n"
+    writeObservation ctx.dir (toString c) ""
+    writeSpecRegressionMetadata ctx.dir ctx.seed ctx.index g.program c
+    match compiler core with
+    | .error msg =>
+      if avail then
+        recordCandidateFailure ctx "lowering" "compileCore"
+          s!"FAIL spec leg capability contract: loweringAvailable = true but compileCore refused supported accepted candidate (seed {ctx.seed} index {ctx.index}): {msg}"
+        return .error 1
+      if msg != unwiredMessage then
+        recordCandidateFailure ctx "lowering" "compileCore"
+          s!"FAIL spec seed {ctx.seed} index {ctx.index} [lowering]: compileCore: {msg}"
+        return .error 1
+      return .ok (outcome, false)
+    | .ok bir =>
+      IO.FS.writeFile (ctx.dir / "bir.txt") (reprStr bir ++ "\n")
+      if !avail then
+        recordCandidateFailure ctx "lowering" "compileCore"
+          s!"FAIL spec leg capability contract: compileCore compiled seed {ctx.seed} index {ctx.index} while loweringAvailable = false"
+        return .error 1
+      unless ← emitArtifacts ctx bir .none planted do return .error 1
+      unless ← writeSpecOutcome ctx bir outcome do return .error 1
+      unless planted == .nativeSetup do
+        IO.FS.writeFile (ctx.dir / "native-ready") ""
+      return .ok (outcome, true)
+  | .trap _ =>
+    recordCandidateFailure ctx "lowering" "spec_oracle"
+      s!"FAIL spec seed {ctx.seed} index {ctx.index} [lowering]: accepted slice-0 program trapped"
+    return .error 1
+  | _ =>
+    recordCandidateFailure ctx "lowering" "spec_oracle"
+      s!"FAIL spec seed {ctx.seed} index {ctx.index} [lowering]: spec oracle gives {repr outcome}"
+    return .error 1
 
 /-- Generate accepted slice-0 Core programs, run the spec oracle, and enforce the lowering
 capability contract (X3):
@@ -779,7 +923,8 @@ capability contract (X3):
   (`compiled = supportedAccepted = accepted`). Partial lowering is a fatal failure. -/
 def genSpecWith (avail : Bool) (compiler : ConcreteSpec.Program → Except String Program)
     (seed : String) (n : Nat) (dir : System.FilePath) (target : LCB.Target)
-    (generate : String → Nat → SpecGen.Generated := SpecGen.generate) : IO UInt32 := do
+    (generate : String → Nat → SpecGen.Generated := SpecGen.generate)
+    (planted : PlantedFailure := .none) : IO UInt32 := do
   IO.FS.createDirAll dir
   let mut programs := ""
   let mut rejects := ""
@@ -800,53 +945,20 @@ def genSpecWith (avail : Bool) (compiler : ConcreteSpec.Program → Except Strin
       rejections := bump reason rejections
       rejects := rejects ++ s!"reject\t{index}\t{reason}\n"
     else
-      if g.rejection.isSome then
-        IO.eprintln s!"seed {seed} index {index}: checker accepted predicted rejection {repr g.rejection}"
-        return 1
-      let outcome := specOutcome g.program
-      match outcome with
-      | .exit c =>
-        unless c < 256 do IO.eprintln s!"seed {seed} index {index}: invalid spec exit {c}"; return 1
+      let child := dir / s!"p{index}"
+      let ctx : CandidateCtx := ⟨"spec", seed, index, child, target⟩
+      match ← compileSpecCandidate ctx avail compiler g core planted with
+      | .error rc => return rc
+      | .ok (_, didCompile) =>
         accepted := accepted + 1
         supportedAccepted := supportedAccepted + 1
         exits := exits + 1
         constructs := addConstructs constructs g.constructs
-        let child := dir / s!"p{index}"
-        IO.FS.createDirAll child
-        IO.FS.writeFile (child / "program.lean.txt") (reprStr g.program ++ "\n")
-        IO.FS.writeFile (child / "constructs.txt") (String.intercalate "," g.constructs ++ "\n")
-        IO.FS.writeFile (child / "oracle.txt") s!"exit {c}\n"
-        writeObservation child (toString c) ""
-        writeSpecRegressionMetadata child seed index g.program c
-        let mut didCompile := false
-        match compiler core with
-        | .error msg =>
-          if avail then
-            IO.eprintln s!"FAIL spec leg capability contract: loweringAvailable = true but compileCore refused supported accepted candidate (seed {seed} index {index}): {msg}"
-            return 1
-          if msg != unwiredMessage then
-            IO.eprintln s!"seed {seed} index {index}: compileCore: {msg}"
-            return 1
-        | .ok bir =>
-          if !avail then
-            IO.eprintln s!"FAIL spec leg capability contract: compileCore compiled seed {seed} index {index} while loweringAvailable = false"
-            return 1
-          unless ← emitArtifacts child target bir .none do return 1
-          unless ← writeSpecOutcome child bir outcome do return 1
-          IO.FS.writeFile (child / "native-ready") ""
+        if didCompile then
           compiled := compiled + 1
-          didCompile := true
           IO.println s!"spec compiled candidate: index {index}, compiled {compiled}"
         programs := programs ++
           s!"program\t{index}\texit\t{if didCompile then "true" else "false"}\n"
-      | .trap _ =>
-        accepted := accepted + 1
-        traps := traps + 1
-        IO.eprintln s!"seed {seed} index {index}: accepted slice-0 program trapped"
-        return 1
-      | _ =>
-        IO.eprintln s!"seed {seed} index {index}: spec oracle gives {repr outcome}"
-        return 1
     IO.FS.writeFile (dir / "summary.tsv")
       (s!"seed\t{seed}\nlowering_available\t{avail}\naccepted\t{accepted}\nsupported_accepted\t{supportedAccepted}\nrejected\t{rejected}\nattempted\t{n}\ncompiled\t{compiled}\n" ++
        s!"outcome\texit\t{exits}\noutcome\ttrap\t{traps}\n" ++
@@ -873,61 +985,55 @@ def genSpecWith (avail : Bool) (compiler : ConcreteSpec.Program → Except Strin
 def genSpec (seed : String) (n : Nat) (dir : System.FilePath) (target : LCB.Target) : IO UInt32 :=
   genSpecWith loweringAvailable compileCore seed n dir target
 
+def partialLoweringCorpus : String → Nat → SpecGen.Generated := fun _ index =>
+  if index < 2 then
+    ⟨{ body := [], ret := .lit 42 }, ["return_literal"], none⟩
+  else
+    ⟨ConcreteSpec.Slice0.answer, ["let_literal", "return_variable"], none⟩
+
+def partialCompiler : ConcreteSpec.Program → Except String Program := fun core =>
+  if core.body.isEmpty then .ok Concrete.BIR.Examples.answer
+  else .error "planted partial-lowering capability refusal"
+
 /-- Fixed X3 corpus: two supported literal returns compile before a supported binding
 program is refused. This exercises the production generation/capability path independently of seed. -/
 def controlPartialLowering (seed : String) (_n : Nat) (dir : System.FilePath) (target : LCB.Target) :
-    IO UInt32 := do
-  let corpus : String → Nat → SpecGen.Generated := fun _ index =>
-    if index < 2 then
-      ⟨{ body := [], ret := .lit 42 }, ["return_literal"], none⟩
-    else
-      ⟨ConcreteSpec.Slice0.answer, ["let_literal", "return_variable"], none⟩
-  let partialCompiler : ConcreteSpec.Program → Except String Program := fun core =>
-    if core.body.isEmpty then .ok Concrete.BIR.Examples.answer
-    else .error "planted partial-lowering capability refusal"
-  genSpecWith true partialCompiler seed 3 dir target corpus
+    IO UInt32 :=
+  genSpecWith true partialCompiler seed 3 dir target partialLoweringCorpus
 
-/-- Replay exactly one accepted spec candidate through compileCore. While the hook is unwired this
-writes the generated oracle inputs and refuses to claim a native comparison. -/
-def replaySpec (seed : String) (index : Nat) (dir : System.FilePath) (target : LCB.Target) :
-    IO UInt32 := do
-  let g := SpecGen.generate seed index
+/-- Replay one accepted spec candidate through the shared spec candidate compiler. While
+`compileCore` is unwired this writes the generated oracle inputs and refuses to claim a native
+comparison. -/
+def replaySpecWith (avail : Bool) (compiler : ConcreteSpec.Program → Except String Program)
+    (seed : String) (index : Nat) (dir : System.FilePath) (target : LCB.Target)
+    (generate : String → Nat → SpecGen.Generated := SpecGen.generate)
+    (planted : PlantedFailure := .none) : IO UInt32 := do
+  let g := generate seed index
   let core := ConcreteSpec.Slice0.toCore g.program
-  if !ConcreteSpec.check core || g.rejection.isSome then
+  if !ConcreteSpec.check core then
     IO.eprintln s!"seed {seed} index {index}: rejected spec candidate"
     return 4
-  match specOutcome g.program with
-  | .exit c =>
-    IO.FS.createDirAll dir
-    IO.FS.writeFile (dir / "program.lean.txt") (reprStr g.program ++ "\n")
-    IO.FS.writeFile (dir / "constructs.txt") (String.intercalate "," g.constructs ++ "\n")
-    IO.FS.writeFile (dir / "oracle.txt") s!"exit {c}\n"
-    writeObservation dir (toString c) ""
-    writeSpecRegressionMetadata dir seed index g.program c
-    match compileCore core with
-    | .error msg =>
-      if loweringAvailable then
-        IO.eprintln s!"FAIL spec leg capability contract: loweringAvailable = true but compileCore refused seed {seed} index {index}: {msg}"
-        return 1
-      IO.eprintln s!"spec leg: 0 programs compiled ({msg})"
-      return 4
-    | .ok bir =>
-      if !loweringAvailable then
-        IO.eprintln s!"FAIL spec leg capability contract: compileCore compiled seed {seed} index {index} while loweringAvailable = false"
-        return 1
-      unless ← emitArtifacts dir target bir .none do return 1
-      unless ← writeSpecOutcome dir bir (.exit c) do return 1
-      IO.FS.writeFile (dir / "native-ready") ""
-      return 0
-  | o => IO.eprintln s!"seed {seed} index {index}: spec oracle gives {repr o}"; return 1
+  let ctx : CandidateCtx := ⟨"spec", seed, index, dir, target⟩
+  match ← compileSpecCandidate ctx avail compiler g core planted with
+  | .error rc => return rc
+  | .ok (_, true) => return 0
+  | .ok (_, false) =>
+    IO.eprintln s!"spec leg: 0 programs compiled ({unwiredMessage})"
+    return 4
+
+def replaySpec (seed : String) (index : Nat) (dir : System.FilePath) (target : LCB.Target) :
+    IO UInt32 :=
+  replaySpecWith loweringAvailable compileCore seed index dir target
 
 /-- Stand-in compiled output for the spec-oracle control: Slice0.answer and BIR answer both exit 42,
 but the judge receives a planted expected 43. -/
 def controlSpecOracle (dir : System.FilePath) (target : LCB.Target) : IO UInt32 := do
   let q := ConcreteSpec.Slice0.answer
   let p := Concrete.BIR.Examples.answer
-  unless ← emitArtifacts dir target p .none do return 1
-  unless ← writeSpecOutcome (dir / "spec-expected") p (specOutcome q) do return 1
+  let ctx : CandidateCtx := ⟨"spec", "control-spec-oracle", 0, dir, target⟩
+  let ctxExpected : CandidateCtx := ⟨"spec", "control-spec-oracle", 0, dir / "spec-expected", target⟩
+  unless ← emitArtifacts ctx p .none do return 1
+  unless ← writeSpecOutcome ctxExpected p (specOutcome q) do return 1
   writeObservation (dir / "wrong-expected") "43" ""
   IO.println "control spec-oracle: spec exits 42; planted expectation exits 43"
   return 0
@@ -955,13 +1061,45 @@ def main (args : List String) : IO UInt32 := do
     | none => return 2
   | ["control-selective-refusal", seed, n, dir, target,
       "--control", "SPEC_DIFF_PLANTED_CONTROL"] => match parseNat n with
-    | some n => withTarget target (fun t => genBir seed n dir t (some (n - 1)))
+    | some n => withTarget target (fun t => genBir seed n dir t (some (n - 1)) .emission)
     | none => return 2
+  | ["control-plant-bir", kind, seed, n, dir, target,
+      "--control", "SPEC_DIFF_PLANTED_CONTROL"] => match plantedFailureOfName kind, parseNat n with
+    | some planted, some n =>
+      withTarget target (fun t => genBir seed n dir t (some (n - 1)) planted)
+    | _, _ => return 2
   | ["replay", seed, index, dir, target] => match parseNat index with
     | some index => withTarget target (fun t => emitBirCandidate seed index dir t .none)
     | none => return 2
+  | ["replay", seed, index, dir, target,
+      "--plant-failure", kind, "--control", "SPEC_DIFF_PLANTED_CONTROL"] =>
+      match plantedFailureOfName kind, parseNat index with
+    | some planted, some index =>
+      withTarget target (fun t => emitBirCandidate seed index dir t .none planted)
+    | _, _ => return 2
+  | ["replay", seed, index, dir, target,
+      "--mutate", mutation, "--control", "SPEC_DIFF_PLANTED_CONTROL"] =>
+      match mutationOfName mutation, parseNat index with
+    | some mutation, some index =>
+      withTarget target (fun t => emitBirCandidate seed index dir t mutation .none)
+    | _, _ => return 2
   | ["replay-spec", seed, index, dir, target] => match parseNat index with
     | some index => withTarget target (replaySpec seed index dir)
+    | none => return 2
+  | ["replay-spec", seed, index, dir, target,
+      "--plant-failure", "lowering", "--control", "SPEC_DIFF_PLANTED_CONTROL"] =>
+      match parseNat index with
+    | some index =>
+      withTarget target (fun t => replaySpecWith true partialCompiler seed index dir t
+        partialLoweringCorpus .lowering)
+    | none => return 2
+  | ["replay-spec", seed, index, dir, target,
+      "--plant-failure", "native-setup", "--control", "SPEC_DIFF_PLANTED_CONTROL"] =>
+      match parseNat index with
+    | some index =>
+      withTarget target (fun t => replaySpecWith true
+        (fun _ => .ok Concrete.BIR.Examples.answer) seed index dir t
+        partialLoweringCorpus .nativeSetup)
     | none => return 2
   | ["control-emit", "--mutate", mutation, seed, index, dir, target,
       "--control", "SPEC_DIFF_PLANTED_CONTROL"] => match mutationOfName mutation, parseNat index with
@@ -975,5 +1113,5 @@ def main (args : List String) : IO UInt32 := do
     | some n => withTarget target (controlPartialLowering seed n dir)
     | none => return 2
   | _ =>
-    IO.eprintln "usage: spec_diff.lean gen-spec SEED N DIR | gen-bir SEED N DIR TARGET | (replay | replay-spec) SEED INDEX DIR TARGET | control-emit --mutate NAME SEED INDEX DIR TARGET --control SPEC_DIFF_PLANTED_CONTROL | control-spec-oracle DIR TARGET --control SPEC_DIFF_PLANTED_CONTROL | control-partial-lowering SEED N DIR TARGET --control SPEC_DIFF_PLANTED_CONTROL"
+    IO.eprintln "usage: spec_diff.lean gen-spec SEED N DIR | gen-bir SEED N DIR TARGET | (replay | replay-spec) SEED INDEX DIR TARGET | control-emit --mutate NAME SEED INDEX DIR TARGET --control SPEC_DIFF_PLANTED_CONTROL | control-plant-bir KIND SEED N DIR TARGET --control SPEC_DIFF_PLANTED_CONTROL | control-spec-oracle DIR TARGET --control SPEC_DIFF_PLANTED_CONTROL | control-partial-lowering SEED N DIR TARGET --control SPEC_DIFF_PLANTED_CONTROL"
     return 2
