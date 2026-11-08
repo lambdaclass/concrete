@@ -1155,6 +1155,10 @@ ConcreteSpec.Core.Exec.restrict.eq_1	propext
 ConcreteSpec.Core.Exec.restrict_dom_drops	propext
 ConcreteSpec.Core.Exec.return_reaches_caller	propext
 ConcreteSpec.Core.Exec.return_refused	propext
+ConcreteSpec.Core.Exec.runFrom.eq_1	propext
+ConcreteSpec.Core.Exec.runFrom.eq_2	propext
+ConcreteSpec.Core.Exec.runFrom.eq_3	propext
+ConcreteSpec.Core.Exec.runFrom.eq_def	propext
 ConcreteSpec.Core.Exec.scope_drop_refused	propext
 ConcreteSpec.Core.Exec.seqDestroyOrder.eq_1	
 ConcreteSpec.Core.Exec.seqDestroyOrder_elem	propext
@@ -1670,6 +1674,171 @@ ConcreteSpec.Core.Mem.store_wellFormed._proof_1_1	Quot.sound propext
 ConcreteSpec.Core.ModuleId.mk.inj	
 ConcreteSpec.Core.ModuleId.mk.injEq	propext
 ConcreteSpec.Core.ModuleId.mk.sizeOf_spec	
+ConcreteSpec.Core.Observe.AdapterDemo.Op.double.sizeOf_spec	
+ConcreteSpec.Core.Observe.AdapterDemo.adapter.eq_1	propext
+ConcreteSpec.Core.Observe.AdapterDemo.answeringOracle.eq_1	propext
+ConcreteSpec.Core.Observe.AdapterDemo.answeringWellFormed	propext
+ConcreteSpec.Core.Observe.AdapterDemo.blockedObservation	Classical.choice Quot.sound propext
+ConcreteSpec.Core.Observe.AdapterDemo.blockedPermitted	Quot.sound propext
+ConcreteSpec.Core.Observe.AdapterDemo.blockingOracle.eq_1	propext
+ConcreteSpec.Core.Observe.AdapterDemo.blockingWellFormed	propext
+ConcreteSpec.Core.Observe.Answer.blocked.sizeOf_spec	
+ConcreteSpec.Core.Observe.Answer.response.inj	
+ConcreteSpec.Core.Observe.Answer.response.injEq	propext
+ConcreteSpec.Core.Observe.Answer.response.sizeOf_spec	
+ConcreteSpec.Core.Observe.CompleteTrace.eq_1	
+ConcreteSpec.Core.Observe.Demo.Op.double.sizeOf_spec	
+ConcreteSpec.Core.Observe.Demo.refusedReportPermitted	propext
+ConcreteSpec.Core.Observe.Demo.sp._proof_1	
+ConcreteSpec.Core.Observe.Demo.sp._proof_2	
+ConcreteSpec.Core.Observe.Event.output.inj	
+ConcreteSpec.Core.Observe.Event.output.injEq	propext
+ConcreteSpec.Core.Observe.Event.output.sizeOf_spec	
+ConcreteSpec.Core.Observe.Event.request.inj	
+ConcreteSpec.Core.Observe.Event.request.injEq	propext
+ConcreteSpec.Core.Observe.Event.request.sizeOf_spec	
+ConcreteSpec.Core.Observe.Event.response.inj	
+ConcreteSpec.Core.Observe.Event.response.injEq	propext
+ConcreteSpec.Core.Observe.Event.response.sizeOf_spec	
+ConcreteSpec.Core.Observe.EventSignature.mk.inj	
+ConcreteSpec.Core.Observe.EventSignature.mk.injEq	propext
+ConcreteSpec.Core.Observe.EventSignature.mk.sizeOf_spec	
+ConcreteSpec.Core.Observe.ExecAdapter.WellFormed.answered	
+ConcreteSpec.Core.Observe.ExecAdapter.WellFormed.blocked	
+ConcreteSpec.Core.Observe.ExecAdapter.WellFormed.internal	
+ConcreteSpec.Core.Observe.ExecAdapter.mk.inj	
+ConcreteSpec.Core.Observe.ExecAdapter.mk.injEq	propext
+ConcreteSpec.Core.Observe.ExecAdapter.mk.sizeOf_spec	
+ConcreteSpec.Core.Observe.ExecAdapter.project.eq_1	
+ConcreteSpec.Core.Observe.ExecAdapter.project_append	propext
+ConcreteSpec.Core.Observe.ExecAdapter.terminal?.eq_1	Classical.choice Quot.sound propext
+ConcreteSpec.Core.Observe.ExecAdapter.terminal?.eq_2	Classical.choice Quot.sound propext
+ConcreteSpec.Core.Observe.ExecAdapter.terminal?.eq_3	Classical.choice Quot.sound propext
+ConcreteSpec.Core.Observe.Execution.blocked.inj	
+ConcreteSpec.Core.Observe.Execution.blocked.injEq	propext
+ConcreteSpec.Core.Observe.Execution.blocked.sizeOf_spec	
+ConcreteSpec.Core.Observe.Execution.finite.inj	
+ConcreteSpec.Core.Observe.Execution.finite.injEq	propext
+ConcreteSpec.Core.Observe.Execution.finite.sizeOf_spec	
+ConcreteSpec.Core.Observe.Execution.infinite.inj	
+ConcreteSpec.Core.Observe.Execution.infinite.injEq	propext
+ConcreteSpec.Core.Observe.Execution.infinite.sizeOf_spec	
+ConcreteSpec.Core.Observe.FullObservation.blocked.inj	
+ConcreteSpec.Core.Observe.FullObservation.blocked.injEq	propext
+ConcreteSpec.Core.Observe.FullObservation.blocked.sizeOf_spec	
+ConcreteSpec.Core.Observe.FullObservation.finiteDivergence.inj	
+ConcreteSpec.Core.Observe.FullObservation.finiteDivergence.injEq	propext
+ConcreteSpec.Core.Observe.FullObservation.finiteDivergence.sizeOf_spec	
+ConcreteSpec.Core.Observe.FullObservation.infiniteDivergence.inj	
+ConcreteSpec.Core.Observe.FullObservation.infiniteDivergence.injEq	propext
+ConcreteSpec.Core.Observe.FullObservation.infiniteDivergence.sizeOf_spec	
+ConcreteSpec.Core.Observe.FullObservation.terminal.inj	
+ConcreteSpec.Core.Observe.FullObservation.terminal.injEq	propext
+ConcreteSpec.Core.Observe.FullObservation.terminal.sizeOf_spec	
+ConcreteSpec.Core.Observe.HasFullObservation._sparseCasesOn_1.else_eq	propext
+ConcreteSpec.Core.Observe.HasFullObservation._sparseCasesOn_2.else_eq	propext
+ConcreteSpec.Core.Observe.HasFullObservation._sparseCasesOn_3.else_eq	propext
+ConcreteSpec.Core.Observe.HasFullObservation.eq_1	propext
+ConcreteSpec.Core.Observe.HasFullObservation.eq_2	propext
+ConcreteSpec.Core.Observe.HasFullObservation.eq_3	propext
+ConcreteSpec.Core.Observe.HasFullObservation.eq_4	propext
+ConcreteSpec.Core.Observe.HasFullObservation.eq_5	propext
+ConcreteSpec.Core.Observe.InfiniteStuttering.prefix_indices	Quot.sound propext
+ConcreteSpec.Core.Observe.InfiniteStuttering.prefix_indices._proof_1_1	Quot.sound propext
+ConcreteSpec.Core.Observe.InfiniteStuttering.prefix_indices._proof_1_10	Quot.sound propext
+ConcreteSpec.Core.Observe.InfiniteStuttering.prefix_indices._proof_1_11	Quot.sound propext
+ConcreteSpec.Core.Observe.InfiniteStuttering.prefix_indices._proof_1_15	Quot.sound propext
+ConcreteSpec.Core.Observe.InfiniteStuttering.prefix_indices._proof_1_2	Quot.sound propext
+ConcreteSpec.Core.Observe.InfiniteStuttering.prefix_indices._proof_1_3	Quot.sound propext
+ConcreteSpec.Core.Observe.InfiniteStuttering.prefix_indices._proof_1_4	Quot.sound propext
+ConcreteSpec.Core.Observe.InfiniteStuttering.prefix_indices._proof_1_5	Quot.sound propext
+ConcreteSpec.Core.Observe.InfiniteStuttering.prefix_indices._proof_1_6	Quot.sound propext
+ConcreteSpec.Core.Observe.InfiniteStuttering.prefix_indices._proof_1_7	Quot.sound propext
+ConcreteSpec.Core.Observe.InfiniteStuttering.prefix_indices._proof_1_8	Quot.sound propext
+ConcreteSpec.Core.Observe.InfiniteStuttering.prefix_indices._proof_1_9	Quot.sound propext
+ConcreteSpec.Core.Observe.InfiniteStuttering.visiblePrefix_at	Quot.sound propext
+ConcreteSpec.Core.Observe.InfiniteStuttering.visiblePrefix_at._proof_1_1	Quot.sound propext
+ConcreteSpec.Core.Observe.InfiniteStuttering.visiblePrefix_at._proof_1_2	Quot.sound propext
+ConcreteSpec.Core.Observe.InfiniteStuttering.visiblePrefix_at._proof_1_3	Quot.sound propext
+ConcreteSpec.Core.Observe.InfiniteStuttering.visiblePrefix_at._proof_1_4	Quot.sound propext
+ConcreteSpec.Core.Observe.Observation.mk.inj	
+ConcreteSpec.Core.Observe.Observation.mk.injEq	propext
+ConcreteSpec.Core.Observe.Observation.mk.sizeOf_spec	
+ConcreteSpec.Core.Observe.OperationContract.mk.inj	
+ConcreteSpec.Core.Observe.OperationContract.mk.injEq	propext
+ConcreteSpec.Core.Observe.OperationContract.mk.sizeOf_spec	
+ConcreteSpec.Core.Observe.PrefixEventually.refl	propext
+ConcreteSpec.Core.Observe.PrefixEventually.trans	propext
+ConcreteSpec.Core.Observe.RequestResponse.kind	
+ConcreteSpec.Core.Observe.Responds.allows	
+ConcreteSpec.Core.Observe.Responds.matches	
+ConcreteSpec.Core.Observe.SameInfiniteObservation.refl	propext
+ConcreteSpec.Core.Observe.SameInfiniteObservation.symm	
+ConcreteSpec.Core.Observe.SameInfiniteObservation.trans	propext
+ConcreteSpec.Core.Observe.SameObservation._sparseCasesOn_1.else_eq	propext
+ConcreteSpec.Core.Observe.SameObservation._sparseCasesOn_2.else_eq	propext
+ConcreteSpec.Core.Observe.SameObservation._sparseCasesOn_3.else_eq	propext
+ConcreteSpec.Core.Observe.SameObservation.eq_1	propext
+ConcreteSpec.Core.Observe.SameObservation.eq_2	propext
+ConcreteSpec.Core.Observe.SameObservation.eq_3	propext
+ConcreteSpec.Core.Observe.SameObservation.eq_4	propext
+ConcreteSpec.Core.Observe.SameObservation.refl	propext
+ConcreteSpec.Core.Observe.SameObservation.symm	propext
+ConcreteSpec.Core.Observe.SameObservation.trans	propext
+ConcreteSpec.Core.Observe.SilentInsertion.brecOn	
+ConcreteSpec.Core.Observe.SilentInsertion.visible	
+ConcreteSpec.Core.Observe.Step.emit.inj	
+ConcreteSpec.Core.Observe.Step.emit.injEq	propext
+ConcreteSpec.Core.Observe.Step.emit.sizeOf_spec	
+ConcreteSpec.Core.Observe.Step.event?.eq_1	
+ConcreteSpec.Core.Observe.Step.event?.eq_2	
+ConcreteSpec.Core.Observe.Step.silent.sizeOf_spec	
+ConcreteSpec.Core.Observe.StepIndexIncreasing.apply_le	Quot.sound propext
+ConcreteSpec.Core.Observe.StepIndexIncreasing.apply_le._proof_1_1	Quot.sound propext
+ConcreteSpec.Core.Observe.StepIndexIncreasing.monotone	Quot.sound propext
+ConcreteSpec.Core.Observe.StepIndexIncreasing.monotone._proof_1_1	Quot.sound propext
+ConcreteSpec.Core.Observe.StepIndexIncreasing.monotone._proof_1_2	Quot.sound propext
+ConcreteSpec.Core.Observe.StepIndexIncreasing.strict	Quot.sound propext
+ConcreteSpec.Core.Observe.StepIndexIncreasing.strict._proof_1_1	Quot.sound propext
+ConcreteSpec.Core.Observe.StepIndexIncreasing.strict._proof_1_2	Quot.sound propext
+ConcreteSpec.Core.Observe.Terminal.exited.inj	
+ConcreteSpec.Core.Observe.Terminal.exited.injEq	propext
+ConcreteSpec.Core.Observe.Terminal.exited.sizeOf_spec	
+ConcreteSpec.Core.Observe.Terminal.startupRefused.sizeOf_spec	
+ConcreteSpec.Core.Observe.Terminal.trapped.inj	
+ConcreteSpec.Core.Observe.Terminal.trapped.injEq	propext
+ConcreteSpec.Core.Observe.Terminal.trapped.sizeOf_spec	
+ConcreteSpec.Core.Observe.ValidTrace.answer_projection	propext
+ConcreteSpec.Core.Observe.ValidTrace.brecOn	
+ConcreteSpec.Core.Observe.ValidTrace.outputs	propext
+ConcreteSpec.Core.Observe.blocked_silent_internal_steps	propext
+ConcreteSpec.Core.Observe.byteColumn.eq_1	
+ConcreteSpec.Core.Observe.byteColumn_tab	Quot.sound propext
+ConcreteSpec.Core.Observe.full_observation_preservation	propext
+ConcreteSpec.Core.Observe.infinite_not_termination	propext
+ConcreteSpec.Core.Observe.infinite_silent_not_termination	propext
+ConcreteSpec.Core.Observe.infinite_stuttering	Quot.sound propext
+ConcreteSpec.Core.Observe.output_before_trap_kept	Classical.choice Quot.sound propext
+ConcreteSpec.Core.Observe.reportObservation.eq_1	Classical.choice Quot.sound propext
+ConcreteSpec.Core.Observe.report_noAnswer_blocked	Classical.choice Quot.sound propext
+ConcreteSpec.Core.Observe.report_noAnswer_mayBlock	propext
+ConcreteSpec.Core.Observe.report_outOfFuel_none	Classical.choice Quot.sound propext
+ConcreteSpec.Core.Observe.runFrom_blockingPermitted	Quot.sound propext
+ConcreteSpec.Core.Observe.runFrom_noAnswer_pending_valid	Quot.sound propext
+ConcreteSpec.Core.Observe.runFrom_validTrace	Quot.sound propext
+ConcreteSpec.Core.Observe.silent_internal_steps	propext
+ConcreteSpec.Core.Observe.stepsObservation.eq_1	Classical.choice Quot.sound propext
+ConcreteSpec.Core.Observe.trapLine.eq_1	Classical.choice Quot.sound propext
+ConcreteSpec.Core.Observe.trapLineChars.eq_1	Classical.choice Quot.sound propext
+ConcreteSpec.Core.Observe.trapLine_injective	Classical.choice Quot.sound propext
+ConcreteSpec.Core.Observe.trapTerminal.eq_1	Classical.choice Quot.sound propext
+ConcreteSpec.Core.Observe.trap_line_uses_byte_columns	Classical.choice Quot.sound propext
+ConcreteSpec.Core.Observe.visible.eq_1	
+ConcreteSpec.Core.Observe.visiblePrefix.eq_1	
+ConcreteSpec.Core.Observe.visiblePrefix_prefix	Quot.sound propext
+ConcreteSpec.Core.Observe.visiblePrefix_prefix._proof_1_1	Quot.sound propext
+ConcreteSpec.Core.Observe.visiblePrefix_prefix._proof_1_2	Quot.sound propext
+ConcreteSpec.Core.Observe.visiblePrefix_succ	Quot.sound propext
 ConcreteSpec.Core.OutOfRange.ofNat_ctorIdx	
 ConcreteSpec.Core.OutOfRange.outOfRange.sizeOf_spec	
 ConcreteSpec.Core.Res.bind.eq_1	
@@ -1694,6 +1863,7 @@ ConcreteSpec.Core.SliceId.mk.injEq	propext
 ConcreteSpec.Core.SliceId.mk.sizeOf_spec	
 ConcreteSpec.Core.Span.col_pos	
 ConcreteSpec.Core.Span.line_pos	
+ConcreteSpec.Core.Span.mk.congr_simp	
 ConcreteSpec.Core.Span.mk.inj	
 ConcreteSpec.Core.Span.mk.injEq	propext
 ConcreteSpec.Core.Span.mk.sizeOf_spec	
@@ -1707,6 +1877,7 @@ ConcreteSpec.Core.TheoremId.mk.inj
 ConcreteSpec.Core.TheoremId.mk.injEq	propext
 ConcreteSpec.Core.TheoremId.mk.sizeOf_spec	
 ConcreteSpec.Core.TrapKind.abort.sizeOf_spec	
+ConcreteSpec.Core.TrapKind.all.eq_1	
 ConcreteSpec.Core.TrapKind.divisionByZero.sizeOf_spec	
 ConcreteSpec.Core.TrapKind.invalidRange.sizeOf_spec	
 ConcreteSpec.Core.TrapKind.invalidShift.sizeOf_spec	
@@ -2927,6 +3098,61 @@ _private.ConcreteSpec.Proofs.Observe.0.ConcreteSpec.retOutcome.match_1.eq_4	prop
 _private.ConcreteSpec.Proofs.Observe.0.ConcreteSpec.runBody.match_1.eq_1	
 _private.ConcreteSpec.Proofs.Observe.0.ConcreteSpec.runBody.match_1.eq_2	
 _private.ConcreteSpec.Proofs.Observe.0.ConcreteSpec.runBody.match_1.eq_3	
+_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.Exec.runFrom.match_1.eq_1	
+_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.Exec.runFrom.match_1.eq_2	
+_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.Exec.runFrom.match_3.eq_1	
+_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.Exec.runFrom.match_3.eq_2	
+_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.Exec.runFrom.match_5.eq_1	
+_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.Exec.runFrom.match_5.eq_2	
+_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.Exec.runFrom.match_5.eq_3	
+_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.Exec.runFrom.match_7.eq_1	
+_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.Exec.runFrom.match_7.eq_2	
+_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.Exec.runFrom.match_7.eq_3	
+_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.Exec.runFrom.match_9.eq_1	
+_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.Observe.ExecAdapter.terminal?.match_1.eq_1	
+_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.Observe.ExecAdapter.terminal?.match_1.eq_2	
+_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.Observe.ExecAdapter.terminal?.match_1.eq_3	
+_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.Observe.HasFullObservation.match_1.eq_1	propext
+_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.Observe.HasFullObservation.match_1.eq_2	propext
+_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.Observe.HasFullObservation.match_1.eq_3	propext
+_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.Observe.HasFullObservation.match_1.eq_4	propext
+_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.Observe.HasFullObservation.match_1.eq_5	propext
+_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.Observe.SameObservation.match_1.eq_1	propext
+_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.Observe.SameObservation.match_1.eq_2	propext
+_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.Observe.SameObservation.match_1.eq_3	propext
+_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.Observe.SameObservation.match_1.eq_4	propext
+_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.Observe.Step.event?.match_1.eq_1	
+_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.Observe.Step.event?.match_1.eq_2	
+_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.Observe.decodeKind.eq_1	Classical.choice Quot.sound propext
+_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.Observe.decodeKind_render	Classical.choice Quot.sound propext
+_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.Observe.decodeKinds.eq_1	Classical.choice Quot.sound propext
+_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.Observe.decodeKinds.eq_2	Classical.choice Quot.sound propext
+_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.Observe.decodeKinds.eq_def	Classical.choice Quot.sound propext
+_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.Observe.decodeKinds.match_1.eq_1	
+_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.Observe.decodeKinds.match_1.eq_2	
+_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.Observe.decodeKinds.match_3.eq_1	
+_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.Observe.decodeKinds.match_3.eq_2	
+_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.Observe.decodeTrapLine.eq_1	Classical.choice Quot.sound propext
+_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.Observe.decodeTrapLine_render	Classical.choice Quot.sound propext
+_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.Observe.decodeWithKind_render	Classical.choice Quot.sound propext
+_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.Observe.linePrefix.eq_1	Classical.choice Quot.sound propext
+_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.Observe.parseRevNat.eq_1	
+_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.Observe.parseRevNat_digits	Classical.choice Quot.sound propext
+_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.Observe.stripPrefix.eq_1	
+_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.Observe.stripPrefix.eq_2	
+_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.Observe.stripPrefix.eq_3	
+_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.Observe.stripPrefix.eq_def	
+_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.Observe.stripPrefix.match_1.eq_1	
+_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.Observe.stripPrefix.match_1.eq_2	
+_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.Observe.stripPrefix.match_1.eq_3	
+_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.Observe.stripPrefix_append	propext
+_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.Observe.trapLineChars_prefix	Classical.choice Quot.sound propext
+_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.instReprTrapKind.repr.match_1.eq_1	
+_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.instReprTrapKind.repr.match_1.eq_2	
+_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.instReprTrapKind.repr.match_1.eq_3	
+_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.instReprTrapKind.repr.match_1.eq_4	
+_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.instReprTrapKind.repr.match_1.eq_5	
+_private.ConcreteSpec.Proofs.Observe2.0.ConcreteSpec.Core.instReprTrapKind.repr.match_1.eq_6	
 _private.ConcreteSpec.Proofs.Rep.0.ConcreteSpec.Rep.Ty.size.match_3.eq_1	
 _private.ConcreteSpec.Proofs.Rep.0.ConcreteSpec.Rep.Ty.size.match_3.eq_2	
 _private.ConcreteSpec.Proofs.Rep.0.ConcreteSpec.Rep.decodeNat.match_1.eq_1	

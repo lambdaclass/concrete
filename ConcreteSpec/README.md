@@ -60,8 +60,9 @@ Open obligations, by name:
 - **O3 Instrumentation erasure** (Q9.10): the ownership instrumentation (`Slot.moved`, the
   `used`, `live`, `known` and `kfields` fields of `Entry`) is stated as intent, with no erasure
   definition or theorem yet. (Brand erasure, part 5, is done.)
-- **O4 Trap diagnostics** (Q7.10, OD101): the bytes of the trap line, including the trap's source
-  location (needs O1's positions), and of the startup refusal.
+- **O4 Trap diagnostics** (Q7.10, OD101): C6 defines the exact trap-line bytes and their
+  injectivity. Producing each operation's source span remains O1; the startup refusal's bytes are
+  not yet defined.
 - **O5 Target observations** (the launcher contract): every result here is about the model's
   outcomes; a claim about an executable needs a transport to the approved launcher contract.
 - **O6 Launch validation** (part 6): `ProgOk` assumes a valid launch: instance limits, the target
@@ -83,7 +84,9 @@ Open obligations, by name:
   `σ k`, and the results hold for every `σ`.
 - **O11 Foundation contracts** (owner decision 2026-11-08, C1–C10): written so far are C3
   (`Target`), C1 (`Exec`: the machine, its step, cleanup order, traps; parametric in the operand
-  language) and C2 (`Scalar`, `Const`). C4 (`Memory`, `Hybrid`) now covers byte memory, scalar
+  language), C2 (`Scalar`, `Const`), C4 (`Memory`, `Hybrid`) and C6 (`Observe`: typed requests,
+  responses and output, finite and infinite observations, environment contracts, terminal
+  observations and the C1 adapter). C4 covers byte memory, scalar
   representation and structured/materialized places, with trailing padding preserved by typed
   writes; struct field layouts, enums, pointers in structs and the C8 padding oracle remain out
   of its scalar slice. The old slice-1 `Spec/Rep.lean` still has its own `MByte` and integer
@@ -92,10 +95,10 @@ Open obligations, by name:
   C4 has not completed that port. Core constants and Hybrid share `CTy`/`CVal` from `Scalar`.
   C10 (`Frame`) now covers logical footprints, C1 caller restoration, target-independent ABI and
   `kept` retention interfaces, and launcher entry/exit relations; concrete ABI implementations,
-  extern syntax, packed access and source frame/snapshot constructs remain out. C5–C9 remain.
+  extern syntax, packed access and source frame/snapshot constructs remain out. C5 and C7–C9 remain.
   C1 leaves to later slices the source-level
   evaluation orders (elaboration, O1), counted loops (slice 4), and ownership of moved values
-  (C5), the split of a request from its response (C6) and the oracle's query record (C8); its
+  (C5) and the oracle's query record (C8); its
   storage can use C4's hybrid state; C5 must still supply ownership instrumentation. Lifecycle
   instrumentation may refuse an event (`Option.none`), making execution stuck, including initial
   activation and primitive result binding; cleanup laws require successful lifecycle events. C2
