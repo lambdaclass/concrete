@@ -4,7 +4,7 @@
 
 - Record "okay with your decisions" (15:31:59 UTC): lexer spellings (a)–(d), the permitted raw TAB in `//` comments, complementary suffixes, C9 Q1–Q3 and the approved Codex device-auth re-login for agent on concrete-ci-2. The owner explicitly approves the new refusal of raw Cc, U+2028–U+2029 and bidi controls in strings and comments.
 - Revise OD31, OD138 and Q6.2, the 29 decisions' lexer items 3–5, and language item 59. R-0625's lexer part is decided; R-0620 is no longer blocked on those questions. R-0615, R-0637 and R-0646 carry the C9 identity and premise-category decisions.
-- Record complementary suffix typing in R-0493 with the coordinator’s slice-5 placement explicitly awaiting the owner because literals arrive earlier: suffixes are required without an expected-type position and refused with one, with accepted and refused conformance examples.
+- Record complementary suffix typing in R-0493 with the coordinator’s slice-5 placement then awaiting the owner because literals arrive earlier (revised 2026-11-08 by [tonight’s answer](docs/decisions.md#decided-2026-11-08-tonight), item 4: apply from each literal form’s introduction, slice 0 for today’s literals and additional forms at slice 2): suffixes are required without an expected-type position and refused with one, with accepted and refused conformance examples.
 - Record "can you use only kimi codex and agy to code and you just review things?": Claude writes no file content at all; Kimi, Codex and agy write; Claude briefs, reviews, runs gates and does git transport. AGENTS.md and the earlier writers row carry the revision.
 
 The new durable records are [lexer spellings, C9 and Codex login](docs/decisions.md#decided-2026-11-08-okay-decisions) and [Claude reviews only](docs/decisions.md#decided-2026-11-08-claude-reviews-only), citing `docs/proposals/owner-2026-11-08/` on `wip/owner-records-2026-11-08`.
@@ -25,15 +25,21 @@ The durable decision records are [the 29 picks](docs/decisions.md#decided-2026-1
 
 - Record the exact fb097fa4 owner sign-off with Codex clean, agy ACCEPT and Kimi’s two outstanding findings, fixed by follow-up b7f30d36. Record unsandboxed Codex authorization with the exact-head git-archive operating restriction. Preserve owner quotes verbatim and coordinator context as context.
 - Mark superseded clauses with dated revision notes, subordinate Claude’s quota text to the no-writing rule, complete roadmap phase/slice, owner, Home and Gate fields, and require the exact named runner inventory and label on each runner for R-0666.
-- Leave the suffix scheduling conflict and K3 allow-list versus R-0630 ban as explicit questions awaiting the owner; this pass chooses neither side.
+- Leave the suffix scheduling conflict and K3 allow-list versus R-0630 ban as explicit questions awaiting the owner; this pass chooses neither side. Revised 2026-11-08 by [tonight’s answer](docs/decisions.md#decided-2026-11-08-tonight), item 4: suffix placement is decided from each literal form’s introduction (slice 0 for today’s literals, additional forms at slice 2); K3 stays open.
 - Record the coordinator-approved PR/daily/weekly table, scheduled exact-SHA runs, independent freshness, four distinct result states and retained replay attempts. Link existing gate rows; the detailed new rows belong to wip/gates-roadmap-rows.
 - Preserve ci-2 results against supplied full SHAs, including A and D failures, C’s expected scaling failure and the resolution-floor failure of the throwaway merge with lcb-numbering (no merge SHA supplied). Passing controls and root checks do not erase those failures. These records describe supplied runs, not new runs on this branch.
 
 ### Record-chain seventh writer pass (2026-11-08)
 
-- Synchronize the open-question indexes with the task rows: gate-tier assignment is superseded by the coordinator-approved decision; K3’s allow-list versus R-0630’s ban and complementary suffix placement remain open for the owner. Qualify the Slice 5 and R-0493 scheduling clauses without choosing a placement.
+- Synchronize the open-question indexes with the task rows: gate-tier assignment is superseded by the coordinator-approved decision; K3’s allow-list versus R-0630’s ban and complementary suffix placement remain open for the owner. Qualify the Slice 5 and R-0493 scheduling clauses without choosing a placement. Revised 2026-11-08 by [tonight’s answer](docs/decisions.md#decided-2026-11-08-tonight), item 4: the suffix-placement question is resolved from each literal form’s introduction, slice 0 for today’s literals and additional forms at slice 2; the proposed slice-5 placement is superseded.
 - Identify R-0558 as Phase T (T2) and correct its owner-clause punctuation.
 
 - Integrate the gate roadmap rows R-0667–R-0688, existing-owner extensions and queue placements with the complete record chain; link them from the gate-tier decision while preserving all open owner questions.
 
 - Complete the gate-tier decision’s links to all 15 extended roadmap owners and add the six missing row anchors.
+
+### Record-chain eighth writer pass (2026-11-08)
+
+- Record "1. b is fine 2. ok 3. what is k3 4. a 5. i don't know what you think 6 ok" and "7 okay" verbatim in [tonight’s answer](docs/decisions.md#decided-2026-11-08-tonight). Temporarily require every non-writer reviewer among Codex and agy to ACCEPT while Kimi is out of quota; restore the three-model / Kimi-seat requirement when Kimi is back. R-0689 tracks Kimi’s back-review of every commit landed under this rule and mandatory fixes for findings filed in ISSUES.tsv.
+- Revised 2026-11-08: complementary suffix typing starts with each literal form, slice 0 for today’s literals and additional forms at slice 2, replacing the proposed slice-5 placement. Update the waiting index, preserved open-question anchor, slice 0/2/5 rows, R-0493 and earlier changelog placement notes.
+- Record four concurrent spec writers and dedicated signer keys with named principals for the signed, append-only writer log. The allowed-signers file and orchestrator@concrete line land on wip/review-access. Item 2 is acknowledged only; K3 and the transition for sign-offs predating READ:/REPOSITORY remain open.

@@ -26,8 +26,9 @@ Links only; each item's text lives where it is linked.
    ([archive move](#decided-2026-11-08-archive-move)).
 4. K3’s allow-list versus R-0630’s ban on `sorry` and `partial def` in `Concrete/`
    ([open question](../ROADMAP.md#open-k3-allow-list)).
-5. The slice at which the complementary suffix rule applies, R-0493
-   ([open question](../ROADMAP.md#open-suffix-slice)).
+5. Transition rule for owner sign-offs whose reviewer outputs predate the READ:/REPOSITORY
+   contract ([still open](#decided-2026-11-08-tonight), item 5). Revised 2026-11-08:
+   the former suffix-placement item is decided by [item 4](#decided-2026-11-08-tonight).
 
 A decided proposal moves to `docs/archive/<topic>-<date>/` until the [archive move](#decided-2026-11-08-archive-move) lands; after that, waiting item 3 decides where it goes.
 
@@ -1431,6 +1432,18 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
 - <a id="decided-2026-11-08-writers"></a>**Codex, Kimi and agy write; Claude reviews** (owner,
   2026-11-08: "can you have kimi, codex and agy implement things and we just review it"). Codex, Kimi
   and agy implement. Claude briefs, reviews, runs gates and does git transport. Revised 2026-11-08 by [Claude reviews only](#decided-2026-11-08-claude-reviews-only).
+- <a id="decided-2026-11-08-tonight"></a>**Temporary review capacity, suffix placement, spec writers and writer-log signing** (owner, 2026-11-08, relayed by the coordinator; time not given): "1. b is fine 2. ok 3. what is k3 4. a 5. i don't know what you think 6 ok". Separate owner answer, verbatim: "7 okay". Source: the final OWNER ANSWER section and item 7 detail in the coordinator’s authoritative `PENDING_RECORDS.md`.
+
+  Meanings below are stated against the coordinator’s questions, not as additional owner quotes:
+
+  1. **How do reviews work while Kimi is out of quota?** Option (b): temporarily, a branch lands when every non-writer reviewer among Codex and agy ACCEPTs. This overrides the three-model / Kimi-seat requirement only while Kimi is out of quota; a writer never reviews its own work. The temporary rule ends when Kimi is back, restoring that requirement. Kimi then reviews every commit landed under this rule; every Kimi finding on a landed commit becomes a tracked issue in `ISSUES.tsv` that must be fixed. [AGENTS.md](../AGENTS.md) carries the operating rule; [R-0689](../ROADMAP.md#r-0689) owns the back-review obligation.
+  2. **concrete-ci-2 SSH refusal?** Acknowledged ("ok"); this is not a decision.
+  3. **K3 versus R-0630?** The owner asked "what is k3". The [K3 allow-list question](../ROADMAP.md#open-k3-allow-list) stays OPEN; no rule changes.
+  4. **When does complementary suffix typing apply?** Option (a): from the slice introducing each literal form, hence slice 0 for today’s literals, extending to the additional literal forms at slice 2. Revised 2026-11-08: this replaces the proposed slice-5 placement in the [slice table and R-0493](../ROADMAP.md#open-suffix-slice). The rule remains: a suffix is required without an expected-type position and refused with one; slice 5 extends expected-type positions through parameters and calls.
+  5. **What transition rule applies to owner sign-offs whose reviewer outputs predate the READ:/REPOSITORY contract?** NOT decided. The owner asked for the coordinator’s view; the question is being re-asked and remains OPEN. No transition rule is selected.
+  6. **Four spec writers at once?** Approved: four spec writers run at once. The two-heavy-runs-per-machine limit remains in force.
+  7. **Do you approve adding the orchestrator’s signing key to the writer-log allowed-signers file?** Approved by "7 okay". One dedicated signing key per signer, each with a named principal, generated only for that purpose; here the principal is `orchestrator@concrete`. The writer log (`refs/notes/concrete-writer`) is signed with git SSH signing, append-only, and verified against an allowed-signers file tracked in the repository. The file and orchestrator’s allowed-signers line are implemented on `wip/review-access`, not on this branch.
+
 - <a id="decided-2026-11-08-okay-decisions"></a>**Lexer spellings, C9 identity and the Codex login** (owner, 2026-11-08, 15:31:59 UTC): "okay with your decisions". This answers three pending asks, with Claude's picks as shown. Source: `docs/proposals/owner-2026-11-08/` on branch `wip/owner-records-2026-11-08`.
 
   **Lexer spellings**
