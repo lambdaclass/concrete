@@ -121,9 +121,9 @@ def accessFootprint : Option (Option (MemBlockId × Nat)) → Nat → Footprint
   | _, _ => .empty
 
 /-- A complete C1 call of `f`, from its `.call` statement to the caller continuation. The `Steps`
-premise reaches the explicit return boundary on this call's own `.ret` frame; the final silent step
-performs `.leave`, result binding and restoration. A matching intermediate configuration therefore
-cannot stand in for the outer return. -/
+premise reaches this call's own `.ret` frame, either at an explicit return or at normal Unit
+fall-through. The final silent step performs `.leave`, result binding and restoration. A matching
+intermediate configuration therefore cannot stand in for the outer return. -/
 def C1Call (O : Exec.Operands) (f : FnId) (P : Exec.Program O)
     (entry exit : Exec.Config O) : Prop :=
   ∃ (fn : Exec.Fn O) (dst : Option Var) (caller : AList Var O.Val)
@@ -135,11 +135,13 @@ def C1Call (O : Exec.Operands) (f : FnId) (P : Exec.Program O)
     Exec.evalArgs O caller st args = .ok (vs, stArgs) ∧
     fn.params.length = vs.length ∧
     O.life (.enter (fn.params.map Prod.fst)) stArgs = some stEnter ∧
-    exit.ctrl = .done ∧ exit.locals = Exec.bindDst dst result caller ∧ exit.frames = k ∧
-    Exec.Steps P entry tr
-      ⟨.exiting (.ret result), callee, stReturn, .ret dst caller :: k⟩ ∧
-    Exec.step P ⟨.exiting (.ret result), callee, stReturn, .ret dst caller :: k⟩ =
-      some (.next exit)
+    ((Exec.Steps P entry tr
+        ⟨.exiting (.ret result), callee, stReturn, .ret dst caller :: k⟩ ∧
+      Exec.step P ⟨.exiting (.ret result), callee, stReturn, .ret dst caller :: k⟩ =
+        some (.next exit)) ∨
+     (result = O.unitVal ∧ Exec.Steps P entry tr
+        ⟨.done, callee, stReturn, .ret dst caller :: k⟩ ∧
+      Exec.step P ⟨.done, callee, stReturn, .ret dst caller :: k⟩ = some (.next exit)))
 
 /-- The footprint contract of one C1 callee. `project` exposes the hybrid part of the operand
 instance's shared state; ownership instrumentation need not have a footprint. Every complete call of

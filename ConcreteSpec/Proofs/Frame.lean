@@ -354,15 +354,44 @@ theorem return_cleanup_restores_caller {O : Exec.Operands} (P : Exec.Program O) 
       ⟨.done, Exec.bindDst dst v caller, stBind, k⟩ :=
   Exec.return_reaches_caller P v dst caller k h hp stLeave stBind hl hb
 
-/-- Every complete `C1Call` ends with the result bound into the saved caller locals at the saved
-continuation. With `dst = none`, this is literal equality with the caller locals. -/
+/-- Every complete `C1Call` ends with its result bound into the caller locals and at the caller
+continuation saved by its entry statement. The conclusion follows from the actual final return or
+Unit fall-through step, including successful leave and destination-bind instrumentation. -/
 theorem c1Call_restores_caller {O : Exec.Operands} {f : FnId} {P : Exec.Program O}
     {entry exit : Exec.Config O} (h : C1Call O f P entry exit) :
-    ∃ (dst : Option Var) (result : O.Val) (caller : AList Var O.Val) (k : List (Exec.Frame O)),
-      exit.locals = Exec.bindDst dst result caller ∧ exit.frames = k := by
+    ∃ (dst : Option Var) (result : O.Val) (caller : AList Var O.Val)
+      (k : List (Exec.Frame O)) (args : List O.Expr) (site : SiteId) (st : O.Store),
+      entry = ⟨.exec (.call dst f args site), caller, st, k⟩ ∧
+      exit.ctrl = .done ∧ exit.locals = Exec.bindDst dst result caller ∧ exit.frames = k := by
   obtain ⟨fn, dst, caller, k, args, site, vs, st, stArgs, stEnter, stReturn, callee, tr, result,
-    hf, he, hv, hlen, hl, hxc, hxl, hxf, hs, hr⟩ := h
-  exact ⟨dst, result, caller, k, hxl, hxf⟩
+    hf, he, hv, hlen, hl, hreturn⟩ := h
+  refine ⟨dst, result, caller, k, args, site, st, he, ?_⟩
+  cases hreturn with
+  | inl hexplicit =>
+    obtain ⟨hs, hr⟩ := hexplicit
+    cases hl' : O.life .leave stReturn with
+    | none => simp [Exec.step, Exec.stepExit, hl'] at hr
+    | some stLeave =>
+      cases hb : Exec.bindLife O dst stLeave with
+      | none => simp [Exec.step, Exec.stepExit, hl', hb] at hr
+      | some stBind =>
+        simp only [Exec.step, Exec.stepExit, hl', Option.bind_some, hb, Option.map_some,
+          Option.some.injEq, Exec.Out.next.injEq] at hr
+        cases hr
+        exact ⟨rfl, rfl, rfl⟩
+  | inr hfall =>
+    obtain ⟨hresult, hs, hr⟩ := hfall
+    subst result
+    cases hl' : O.life .leave stReturn with
+    | none => simp [Exec.step, hl'] at hr
+    | some stLeave =>
+      cases hb : Exec.bindLife O dst stLeave with
+      | none => simp [Exec.step, hl', hb] at hr
+      | some stBind =>
+        simp only [Exec.step, hl', Option.bind_some, hb, Option.map_some,
+          Option.some.injEq, Exec.Out.next.injEq] at hr
+        cases hr
+        exact ⟨rfl, rfl, rfl⟩
 
 private def c1Operands : Exec.Operands where
   Val := Nat
@@ -393,26 +422,75 @@ private def c1Boundary : Exec.Config c1Operands :=
 
 private def c1Exit : Exec.Config c1Operands := ⟨.done, [], (), []⟩
 
-/-- Accepted: a real call reaches its own `.ret` frame after evaluating and cleaning up the callee,
-then takes the final return step. -/
-example : C1Call c1Operands c1FnId c1Program c1Entry c1Exit := by
+private theorem c1ExplicitCall : C1Call c1Operands c1FnId c1Program c1Entry c1Exit := by
   have hs : Exec.Steps c1Program c1Entry [] c1Boundary := by
     apply Exec.steps_next rfl
     apply Exec.steps_next rfl
     apply Exec.steps_next rfl
     exact Exec.Steps.refl _
   exact ⟨c1Fn, none, [], [], [], ⟨0⟩, [], (), (), (), (), [], [], (7 : Nat),
-    rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, hs, rfl⟩
+    rfl, rfl, rfl, rfl, rfl, .inl ⟨hs, rfl⟩⟩
+
+/-- Accepted: an explicit return reaches its own `.ret` frame after evaluating and cleaning up the
+callee, then takes the final return step. -/
+example : C1Call c1Operands c1FnId c1Program c1Entry c1Exit := c1ExplicitCall
+
+/-- Accepted: caller restoration has a non-vacuous explicit-return instance with the caller's empty
+locals and continuation restored. -/
+example : c1Exit.locals = [] ∧ c1Exit.frames = [] := by
+  obtain ⟨dst, result, caller, k, args, site, st, he, hctrl, hlocals, hframes⟩ :=
+    c1Call_restores_caller c1ExplicitCall
+  have hk : k = [] := (congrArg Exec.Config.frames he).symm
+  rw [hk] at hframes
+  refine ⟨?_, hframes⟩
+  cases dst <;> simp [c1Exit, Exec.bindDst] at hlocals ⊢
+
+private def c1UnitFnId : FnId := ⟨⟨[]⟩, "unit"⟩
+
+private def c1UnitFn : Exec.Fn c1Operands := ⟨[], (), ⟨0⟩, .skip⟩
+
+private def c1UnitProgram : Exec.Program c1Operands := ⟨[(c1UnitFnId, c1UnitFn)]⟩
+
+private def c1UnitEntry : Exec.Config c1Operands :=
+  ⟨.exec (.call none c1UnitFnId [] ⟨0⟩), [], (), []⟩
+
+private def c1UnitBoundary : Exec.Config c1Operands :=
+  ⟨.done, [], (), [.ret none []]⟩
+
+/-- Accepted: a Unit body can reach its `.ret` frame by falling through; the actual final step then
+binds `unitVal` and restores the caller. -/
+example : C1Call c1Operands c1UnitFnId c1UnitProgram c1UnitEntry c1Exit := by
+  have hs : Exec.Steps c1UnitProgram c1UnitEntry [] c1UnitBoundary := by
+    apply Exec.steps_next rfl
+    apply Exec.steps_next rfl
+    apply Exec.steps_next rfl
+    exact Exec.Steps.refl _
+  exact ⟨c1UnitFn, none, [], [], [], ⟨0⟩, [], (), (), (), (), [], [], (0 : Nat),
+    rfl, rfl, rfl, rfl, rfl, .inr ⟨rfl, hs, rfl⟩⟩
+
+private def c1BadExit : Exec.Config c1Operands := ⟨.done, [], (), [.ret none []]⟩
 
 /-- Refused: a configuration that still contains the call's return frame is not a completed call. -/
-example : ¬ C1Call c1Operands c1FnId c1Program c1Entry
-    ⟨.done, [], (), [.ret none []]⟩ := by
+example : ¬ C1Call c1Operands c1FnId c1Program c1Entry c1BadExit := by
   intro h
-  obtain ⟨fn, dst, caller, k, args, site, vs, st, stArgs, stEnter, stReturn, callee, tr, result,
-    hf, he, hv, hlen, hl, hxc, hxl, hxf, hs, hr⟩ := h
+  obtain ⟨dst, result, caller, k, args, site, st, he, hctrl, hlocals, hframes⟩ :=
+    c1Call_restores_caller h
   have hk : k = [] := (congrArg Exec.Config.frames he).symm
-  rw [hk] at hxf
-  simp at hxf
+  rw [hk] at hframes
+  simp [c1BadExit] at hframes
+
+/-- Refused: even with `.done` control and empty locals, an exit whose continuation differs from
+the one saved at entry fails the restoration conclusion itself. -/
+example : ¬ ∃ (dst : Option Var) (result : Nat) (caller : AList Var Nat)
+    (k : List (Exec.Frame c1Operands)) (args : List Nat) (site : SiteId) (st : Unit),
+    c1Entry = ⟨.exec (.call dst c1FnId args site), caller, st, k⟩ ∧
+    c1BadExit.ctrl = .done ∧ c1BadExit.locals = Exec.bindDst dst result caller ∧
+    c1BadExit.frames = k := by
+  intro h
+  obtain ⟨dst, result, caller, k, args, site, st, he, hctrl, hlocals, hframes⟩ := h
+  have hk : k = [] := (congrArg Exec.Config.frames he).symm
+  rw [hk] at hframes
+  simp [c1BadExit] at hframes
 
 /-- A complete C1 call has exactly the frame law supplied by its callee contract. -/
 theorem c1_call_frame {O : Exec.Operands} {f : FnId} {P : Exec.Program O}
