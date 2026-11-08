@@ -1442,6 +1442,7 @@ ConcreteSpec.Core.KeyConstruct._sizeOf_2_eq
 ConcreteSpec.Core.KeyConstruct.assignFunctionTable.eq_1	Quot.sound propext
 ConcreteSpec.Core.KeyConstruct.assignFunctionTable_descendant_mem	Quot.sound propext
 ConcreteSpec.Core.KeyConstruct.assignFunctionTable_lookup	Quot.sound propext
+ConcreteSpec.Core.KeyConstruct.assignFunctionTable_named_scope	Quot.sound propext
 ConcreteSpec.Core.KeyConstruct.assignFunctionTable_occurrences	Quot.sound propext
 ConcreteSpec.Core.KeyConstruct.assignFunctionTable_pin	Quot.sound propext
 ConcreteSpec.Core.KeyConstruct.assignFunctionTable_rename_named	Quot.sound propext
@@ -1450,12 +1451,14 @@ ConcreteSpec.Core.KeyConstruct.assignProgramTables_outsideEdit	Quot.sound propex
 ConcreteSpec.Core.KeyConstruct.brecOn.eq	
 ConcreteSpec.Core.KeyConstruct.brecOn_1.eq	
 ConcreteSpec.Core.KeyConstruct.childScope.eq_1	
+ConcreteSpec.Core.KeyConstruct.collectKeys.eq_1	Quot.sound propext
 ConcreteSpec.Core.KeyConstruct.collectKeysIn._unary._proof_1	Quot.sound propext
 ConcreteSpec.Core.KeyConstruct.collectKeysIn._unary._proof_2	Quot.sound propext
 ConcreteSpec.Core.KeyConstruct.collectKeysIn._unary.eq_def	Quot.sound propext
 ConcreteSpec.Core.KeyConstruct.collectKeysIn.eq_1	Quot.sound propext
 ConcreteSpec.Core.KeyConstruct.collectKeysIn.eq_2	Quot.sound propext
 ConcreteSpec.Core.KeyConstruct.collectKeysIn.eq_def	Quot.sound propext
+ConcreteSpec.Core.KeyConstruct.collectKeysIn_append	Quot.sound propext
 ConcreteSpec.Core.KeyConstruct.collectKeysIn_complete	Quot.sound propext
 ConcreteSpec.Core.KeyConstruct.collectKeysIn_complete._simp_1_10	Quot.sound propext
 ConcreteSpec.Core.KeyConstruct.collectKeysIn_complete._simp_1_8	propext
