@@ -59,7 +59,8 @@ Open obligations, by name:
 - **O2 The lexer, model-translation and native-image obligations.**
 - **O3 Instrumentation erasure** (Q9.10): the old slice-1 instrumentation (`Slot.moved` and
   `Entry.used/live/known/kfields`) still needs an erasure theorem. C5 proves single-operation
-  erasure for `Own.instrument`, scalar C4 access and `Generative.instrument`; C1 execution-level
+  erasure for `Own.instrument`, scalar C4 access and `Generative.instrument`, and finite-run
+  erasure for `Generative.run_erasure`; C1 execution-level
   simulation for these wrappers remains outstanding. Slice-1 brand erasure (part 5) is done.
 - **O4 Trap diagnostics** (Q7.10, OD101): C6 defines the exact trap-line bytes and their
   injectivity. Producing each operation's source span remains O1; the startup refusal's bytes are

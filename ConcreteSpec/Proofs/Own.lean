@@ -1118,4 +1118,60 @@ theorem leave_no_activation_slot (s t : State) (f : Activation)
     intro x hx he
     exact guard (List.any_eq_true.mpr ⟨x, hx, by simp [he]⟩)
 
+namespace RoundThreeWitnesses
+open ConcreteSpec.Core.Own.Examples
+/-- Instance (law `ConcreteSpec.Core.Own.borrow_birth`). A projected owner loan issues identity zero. -/
+example : borrow initial ⟨0⟩ [.index 0] .shared = some shared ∧
+    shared.nextLoan = initial.nextLoan + 1 ∧ ∃ l ∈ shared.loans,
+      l.id = LoanId.mk initial.nextLoan ∧ l.root = ⟨0⟩ ∧ l.path = [.index 0] := by decide
+/-- Planted (law `ConcreteSpec.Core.Own.borrow_birth`). Wrong projection falsifies the existential birth conclusion. -/
+example : ¬ (∃ l ∈ shared.loans, l.id = LoanId.mk initial.nextLoan ∧
+    l.root = ⟨0⟩ ∧ l.path = [.index 99]) := by decide
+/-- Instance (law `ConcreteSpec.Core.Own.reborrow_birth`). The child retains its parent's root, extended path and parent identity. -/
+example : reborrowAt exclusive ⟨0⟩ [.index 1] .mutable 0 = some child ∧
+    child.nextLoan = exclusive.nextLoan + 1 ∧ ∃ a l, loan exclusive ⟨0⟩ = some a ∧
+      l ∈ child.loans ∧ l.id = LoanId.mk exclusive.nextLoan ∧ l.root = a.root ∧
+      l.path = a.path ++ [.index 1] ∧ l.parent = some ⟨0⟩ := by
+  simp [Examples.exclusive, Examples.child, Examples.initial, reborrow, reborrowAt, borrow,
+    ownerAccess, loanAccess, slot, loan]
+/-- Planted (law `ConcreteSpec.Core.Own.reborrow_birth`). Removing the child's parent field falsifies the birth conclusion itself. -/
+example : ¬ (∃ a l, loan exclusive ⟨0⟩ = some a ∧
+    l ∈ (child.loans.map fun l => { l with parent := none }) ∧
+    l.id = LoanId.mk exclusive.nextLoan ∧ l.root = a.root ∧
+    l.path = a.path ++ [.index 1] ∧ l.parent = some ⟨0⟩) := by
+  simp [Examples.exclusive, Examples.initial, borrow, ownerAccess, slot, loan]
+/-- Instance (law `ConcreteSpec.Core.Own.endLoan_supply`). Ending a child preserves the nonzero supply. -/
+example : ∃ t, endLoan child ⟨1⟩ = some t ∧ t.nextLoan = child.nextLoan := by decide
+/-- Planted (law `ConcreteSpec.Core.Own.endLoan_supply`). A mutated end decrements the supply. -/
+example : ¬ (({ child with nextLoan := child.nextLoan - 1 } : State).nextLoan =
+    child.nextLoan) := by decide
+
+/-- A callee owns a Copy local and borrows it; an unrelated caller loan survives its exit. -/
+def localFrame : State := (enter (fun _ => some ⟨.int .i32, true, true⟩) [y] shared).getD initial
+def localLoan : State := (borrow localFrame ⟨1⟩ [] .shared).getD initial
+def exited : State := (leave localLoan).getD initial
+/-- Instance (law `ConcreteSpec.Core.Own.leave_no_local_loan`, law `ConcreteSpec.Core.Own.leave_no_activation_slot`). The departing local had a live loan; the caller's loan survives. -/
+example : WellFormed localLoan ∧ leave localLoan = some exited ∧
+    (y, Hybrid.Place.mk 1) ∈ (localLoan.frames.headD ⟨99, [], []⟩).locals ∧
+    (∃ l ∈ localLoan.loans, l.root = ⟨1⟩) ∧
+    (∃ l ∈ exited.loans, l.root = ⟨0⟩) ∧
+    (∀ l ∈ exited.loans, l.root ≠ Hybrid.Place.mk 1) ∧
+    (∀ x ∈ exited.slots, x.activation ≠ 1) := by decide
+/-- Planted (law `ConcreteSpec.Core.Own.leave_no_local_loan`). Exit retaining the local's loan fails the root exclusion conclusion. -/
+example : ¬ (∀ l ∈ localLoan.loans, l.root ≠ Hybrid.Place.mk 1) := by decide
+/-- Planted (law `ConcreteSpec.Core.Own.leave_no_activation_slot`). Exit retaining a departing slot fails activation exclusion. -/
+example : ¬ (∀ x ∈ localLoan.slots, x.activation ≠ 1) := by decide
+/-- Instance (law `ConcreteSpec.Core.Own.adoptDown_only_arguments`). A child marked during argument evaluation can be adopted. -/
+example : (callLife types (.enter [y]) CallWitnesses.waiting).isSome = true ∧
+    ∃ l ∈ CallWitnesses.waiting.own.loans, l.id = LoanId.mk 1 ∧
+      l.pendingArgument = true := by decide
+/-- Planted (law `ConcreteSpec.Core.Own.adoptDown_only_arguments`). Adopting a normal caller loan lacks the required pending witness. -/
+example : ¬ (∃ l ∈ exclusive.loans, l.id = LoanId.mk 0 ∧
+    l.pendingArgument = true) := by decide
+/-- Planted (law `ConcreteSpec.Core.Own.enter_progress`). An untyped parameter refuses entry. -/
+example : ¬ (enter (fun _ => none) [y] shared).isSome = true := by decide
+/-- Instance (law `ConcreteSpec.Core.Own.enter_progress`). A typed fresh parameter enters over a borrowed caller. -/
+example : (enter types [y] shared).isSome = true := by decide
+end RoundThreeWitnesses
+
 end ConcreteSpec.Core.Own

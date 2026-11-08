@@ -271,14 +271,31 @@ example : ¬ WellFormed { released with dependencies := [heap] } := by decide
 /-- Planted scope-exit mutation ignores phantom dependencies. -/
 example : ¬ WellFormed { dependent with binders := [] , dependencies := [phantom] } := by decide
 
-/-- Positive progress instances and negated success for violated operational guards. -/
-example : (fresh initial ⟨1⟩).isSome = true := by decide
-example : (depend initial heap).isSome = true ∧ depend dependent heap = none := by decide
-example : (consume dependent ⟨0⟩).isSome = true ∧ consume initial ⟨0⟩ = none := by decide
-example : (release initial ⟨0⟩).isSome = true ∧ release dependent ⟨0⟩ = none := by decide
-example : (endScope released ⟨0⟩).isSome = true ∧ endScope initial ⟨0⟩ = none := by decide
-/-- A mutated fresh rule that reuses the counter does not provide fresh generation. -/
-example : ¬ (initial.nextBrand = ({} : State).nextBrand) := by decide
+/-- Instance (law `ConcreteSpec.Core.Generative.fresh_progress`). Fresh allocation with an existing binder. -/
+example : ∃ t, fresh initial ⟨1⟩ = some t := ⟨_, rfl⟩
+/-- Planted (law `ConcreteSpec.Core.Generative.fresh_progress`). An allocator that always refuses has no successor. -/
+example : ¬ (∃ t : State, (fun (_ : State) (_ : BlockId) => (none : Option State))
+    initial ⟨1⟩ = some t) := by simp
+/-- Instance (law `ConcreteSpec.Core.Generative.depend_progress`). A live resource satisfies the guards. -/
+example : (depend initial heap).isSome = true := by decide
+/-- Planted (law `ConcreteSpec.Core.Generative.depend_progress`). Violating the operational guard refuses progress. -/
+example : ¬ (depend dependent heap).isSome = true := by decide
+/-- Instance (law `ConcreteSpec.Core.Generative.consume_progress`). A live resource satisfies the guards. -/
+example : (consume dependent ⟨0⟩).isSome = true := by decide
+/-- Planted (law `ConcreteSpec.Core.Generative.consume_progress`). Violating the operational guard refuses progress. -/
+example : ¬ (consume initial ⟨0⟩).isSome = true := by decide
+/-- Instance (law `ConcreteSpec.Core.Generative.release_progress`). A live resource satisfies the guards. -/
+example : (release initial ⟨0⟩).isSome = true := by decide
+/-- Planted (law `ConcreteSpec.Core.Generative.release_progress`). Violating the operational guard refuses progress. -/
+example : ¬ (release dependent ⟨0⟩).isSome = true := by decide
+/-- Instance (law `ConcreteSpec.Core.Generative.endScope_progress`). A live resource satisfies the guards. -/
+example : (endScope released ⟨0⟩).isSome = true := by decide
+/-- Planted (law `ConcreteSpec.Core.Generative.endScope_progress`). Violating the operational guard refuses progress. -/
+example : ¬ (endScope initial ⟨0⟩).isSome = true := by decide
+/-- Instance (law `ConcreteSpec.Core.Generative.reset_progress`). A live resource satisfies the guards. -/
+example : (reset initial ⟨0⟩).isSome = true := by decide
+/-- Planted (law `ConcreteSpec.Core.Generative.reset_progress`). Violating the operational guard refuses progress. -/
+example : ¬ (reset dependent ⟨0⟩).isSome = true := by decide
 /-- A non-escaping dependent survives a different binder's successful scope exit:
 the non-escape law's dependent-membership hypothesis is inhabited. -/
 def outer : State := (fresh initial ⟨1⟩).getD {}
@@ -312,6 +329,22 @@ theorem reset_generation (s t : State) (i : BrandId) (h : reset s i = some t) :
   obtain ⟨u, _, hh⟩ := Option.bind_eq_some_iff.mp hh
   cases hh
   exact ⟨rfl, _, List.mem_cons_self, rfl⟩
+
+namespace GenerationWitnesses
+open ConcreteSpec.Core.Generative.Examples PreservationWitnesses
+/-- Instance (law `ConcreteSpec.Core.Generative.fresh_generation`). A second binder advances the generation. -/
+example : fresh initial ⟨1⟩ = some outer ∧ outer.nextBrand = initial.nextBrand + 1 ∧
+    ∃ b ∈ outer.binders, b.brand = BrandId.mk initial.nextBrand := by decide
+/-- Planted (law `ConcreteSpec.Core.Generative.fresh_generation`). A fresh rule that returns its input reuses the generation. -/
+example : ¬ (initial.nextBrand = initial.nextBrand + 1 ∧
+    ∃ b ∈ initial.binders, b.brand = BrandId.mk initial.nextBrand) := by decide
+/-- Instance (law `ConcreteSpec.Core.Generative.reset_generation`). Reset replaces a live allocator with a fresh generation. -/
+example : reset initial ⟨0⟩ = some resetOnce ∧ resetOnce.nextBrand = initial.nextBrand + 1 ∧
+    ∃ b ∈ resetOnce.binders, b.brand = BrandId.mk initial.nextBrand := by decide
+/-- Planted (law `ConcreteSpec.Core.Generative.reset_generation`). Reset with a frozen supply fails its generation conclusion. -/
+example : ¬ (({ resetOnce with nextBrand := initial.nextBrand } : State).nextBrand =
+    initial.nextBrand + 1 ∧ ∃ b ∈ resetOnce.binders, b.brand = BrandId.mk initial.nextBrand) := by decide
+end GenerationWitnesses
 
 /-- Successful lexical exit leaves no dependent value mentioning any brand bound in that
 scope. This includes phantom dependencies, which need no live allocation. -/
