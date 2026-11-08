@@ -1,0 +1,2 @@
+[piece 1 of 2: scripts]
+- scripts/land/gates_transport_ssh.sh:43: Requiring `$gc/.git` to be a directory rejects valid gate clones created as Git worktrees, where `.git` is a file. These previously worked with `git -C "$gc" fetch`; setting `RUN_AT_REF_REPO` to such a checkout now incorrectly returns INCOMPLETE. Validate the repository with Git instead.
