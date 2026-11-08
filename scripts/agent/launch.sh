@@ -149,8 +149,13 @@ normal_exit() {
 }
 
 unit_result() {
-  local result=""
-  result="$(systemctl --user show "$UNIT" --property=Result --value 2>/dev/null)" || result=""
+  local result="" query_rc=0
+  result="$(systemctl --user show "$UNIT" --property=Result --value 2>&1)" || query_rc=$?
+  if [ "$query_rc" -ne 0 ]; then
+    printf 'launch.sh: cannot query systemd for %s Result (systemctl exit %s): %s\n' \
+      "$UNIT" "$query_rc" "${result:-no output}" >&2
+    return 2
+  fi
   case "$result" in ''|success) result=unknown ;; esac
   printf '%s\n' "$result"
 }
@@ -161,7 +166,7 @@ lost_exit() {
   if [ -f "$JOBDIR/result" ]; then
     IFS= read -r reason < "$JOBDIR/result" || fail "cannot read $JOBDIR/result"
   else
-    reason="$(unit_result)"
+    reason="$(unit_result)" || return 2
     tmp="$JOBDIR/.result.$$"
     if printf '%s\n' "$reason" > "$tmp" && mv "$tmp" "$JOBDIR/result"; then :
     else rm -f "$tmp"; fi
@@ -191,7 +196,7 @@ inspect() {
     inactive|unknown|failed)
       if [ -f "$JOBDIR/status" ]; then normal_exit; return "$?"; fi
       lost_exit
-      return 125 ;;
+      return "$?" ;;
     *)
       fail "cannot query systemd for $UNIT (systemctl exit $query_rc): ${state:-no output}" ;;
   esac

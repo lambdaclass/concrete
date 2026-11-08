@@ -139,6 +139,7 @@ case "$action" in
       exit 1
     fi
     [ ! -f "$state/no-bus-empty" ] || exit 1
+    if [ -f "$state/failed-on-is-active" ]; then echo failed; exit 1; fi
     if [ -f "$state/finish-on-is-active" ]; then
       jobdir="$(cat "$state/jobdir")"
       tmp="$jobdir/.status.systemd"
@@ -148,6 +149,11 @@ case "$action" in
     if [ -f "$state/active" ]; then echo active; exit 0; fi
     echo inactive; exit 1 ;;
   show)
+    if [ -f "$state/show-no-bus" ]; then
+      echo 'Failed to connect to bus: No medium found' >&2
+      exit 1
+    fi
+    [ ! -f "$state/show-no-bus-empty" ] || exit 1
     [ -r "$state/result" ] && cat "$state/result"
     exit 0 ;;
   reset-failed)
@@ -288,6 +294,44 @@ for reason in success empty; do
   expect_rc 125 "an unloaded $reason result returns 125"
   expect_out "JOB $UNIT ENDED without a status (killed, timed out or OOM): unknown" "unloaded Result=$reason is reported as unknown"
   release_job "the unloaded-$reason-result fixture"
+done
+
+for failure in loud silent; do
+  echo "=== a $failure Result query failure is retryable ==="
+  capture 10 bash "$LAUNCH" start "show-$failure" 30 -- bash -c 'while [ ! -e "$STUB_RELEASE_DIR/$STUB_UNIT" ]; do sleep 0.1; done'
+  expect_rc 0 "start of the $failure show-failure job"
+  parse_start
+  rm -f "$STUB_STATE_DIR/$UNIT/active"
+  printf 'killed\n' > "$STUB_STATE_DIR/$UNIT/result"
+  : > "$STUB_STATE_DIR/$UNIT/failed-on-is-active"
+  if [ "$failure" = loud ]; then
+    : > "$STUB_STATE_DIR/$UNIT/show-no-bus"
+  else
+    : > "$STUB_STATE_DIR/$UNIT/show-no-bus-empty"
+  fi
+  capture 10 bash "$LAUNCH" wait "$JOBDIR"
+  expect_rc 2 "a $failure show failure after is-active=failed returns 2"
+  expect_out "" "a $failure show failure has no job result on stdout"
+  has_match -F 'cannot query systemd' <<<"$ERR" \
+    && ok "a $failure show failure has a clear error" || no "$failure show failure is unclear: $ERR"
+  if [ "$failure" = loud ]; then
+    has_match -F 'Failed to connect to bus' <<<"$ERR" \
+      && ok "a loud show failure includes systemctl's bus error" || no "loud show error is missing: $ERR"
+  else
+    has_match -F 'no output' <<<"$ERR" \
+      && ok "a silent show failure is identified" || no "silent show failure is unclear: $ERR"
+  fi
+  [ ! -e "$JOBDIR/result" ] \
+    && ok "a $failure show failure writes no result cache" || no "a $failure show failure cached a result"
+  [ ! -e "$STUB_STATE_DIR/$UNIT/reset-failed" ] \
+    && ok "a $failure show failure does not collect the unit" || no "a $failure show failure collected the unit"
+  rm -f "$STUB_STATE_DIR/$UNIT/show-no-bus" "$STUB_STATE_DIR/$UNIT/show-no-bus-empty"
+  capture 10 bash "$LAUNCH" wait "$JOBDIR"
+  expect_rc 125 "a wait after the $failure show failure returns 125"
+  expect_out "JOB $UNIT ENDED without a status (killed, timed out or OOM): killed" \
+    "the wait after the $failure show failure reads the real Result"
+  file_line "$JOBDIR/result" killed "the recovered $failure show result is cached"
+  release_job "the $failure show-failure fixture"
 done
 
 echo "=== still active past deadline plus grace is 124 ==="

@@ -339,8 +339,9 @@ immediately run the printed `WAIT` command as your own background task so the jo
 you. Never start a detached unit without its watcher. A writer gets one attempt only: a killed or
 timed-out job is investigated, never automatically re-run. Each start exclusively creates a new job
 directory (an existing `--dir` is refused) and preserves argv through a file rather than systemd's
-command expansion. A missing status returns 125 with systemd's retained result when known; a bus or
-`systemctl` query failure is an operational error (2), not a completed job.
+command expansion. A missing status returns 125 with systemd's retained result when known. A failed
+`systemctl is-active` or `show` query is an operational error (2), not a completed job. A failed
+`show` writes no result cache and does not collect the unit, so a later wait can read the real result.
 
 ### Orchestrating a publish: never infer state from process names
 
