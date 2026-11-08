@@ -449,21 +449,23 @@ theorem ExecAdapter.project_append (A : ExecAdapter O S) (xs ys : List O.Event) 
     A.project (xs ++ ys) = A.project xs ++ A.project ys := by
   simp [ExecAdapter.project, List.flatMap_append]
 
-/-- Helper (computation). Evaluator induction supporting the operational report law; its blocking component inherits the environment policy and does not validate that policy independently. (approved: PENDING)
+/-- Helper (computation). Evaluator induction supporting the operational report laws; establishes
+both complete-trace preservation and the existence of a typed permitted pending request whenever
+`runFrom` ends in `noAnswer`. (approved: PENDING)
  Every C1 evaluator report from a well-formed adapter and oracle has a complete valid event
-history. If it ends in `noAnswer`, the pending typed request is also permitted to block in the
-history ending in that request. -/
+history. If it ends in `noAnswer`, that configuration steps to a primitive request with a typed
+C6 request permitted to block in the history ending in that request. -/
 theorem runFrom_validTrace (P : Exec.Program O) (A : ExecAdapter O S) (C : OperationContract S)
     (input : C.Input) (ρ : Exec.Oracle O) (wellFormed : ExecAdapter.WellFormed A C input ρ) :
     ∀ (fuel : Nat) (hist : List O.Event) (c : Exec.Config O),
       CompleteTrace C input (A.project hist) →
       CompleteTrace C input (A.project (Exec.runFrom P ρ fuel hist c).events) ∧
-      ∀ {c' : Exec.Config O} {p : O.Prim} {vs : List O.Val} {site : SiteId} {store : O.Store}
-        {k : Exec.Answer O.Val O.Event O.Store → Option (Exec.Config O)} {q : Request S},
+      ∀ {c' : Exec.Config O},
         (Exec.runFrom P ρ fuel hist c).ending = .noAnswer c' →
-        Exec.step P c' = some (.request p vs site store k) →
-        A.request p vs site store = some q →
-        C.mayBlock input (A.project (Exec.runFrom P ρ fuel hist c).events ++ [.request q]) q := by
+        ∃ p vs site store k q,
+          Exec.step P c' = some (.request p vs site store k) ∧
+          A.request p vs site store = some q ∧
+          C.mayBlock input (A.project (Exec.runFrom P ρ fuel hist c).events ++ [.request q]) q := by
   intro fuel
   induction fuel with
   | zero =>
@@ -486,12 +488,12 @@ theorem runFrom_validTrace (P : Exec.Program O) (A : ExecAdapter O S) (C : Opera
           | none =>
             constructor
             · simpa [Exec.runFrom, final, next, answer] using valid
-            · intro c' p' vs' site' store' k' q ending pending typed
-              simp [Exec.runFrom, final, next, answer] at ending
-              cases ending
-              rw [next] at pending
-              cases pending
-              simpa [Exec.runFrom, final, next, answer] using wellFormed.blocked answer typed
+            · intro c' ending
+              simp only [Exec.runFrom, final, next, answer, Exec.Ending.noAnswer.injEq] at ending
+              subst ending
+              obtain ⟨q, typed, mayBlock⟩ := wellFormed.blocked answer
+              exact ⟨p, vs, site, store, k, q, next, typed,
+                by simpa [Exec.runFrom, final, next, answer] using mayBlock⟩
           | some a =>
             by_cases allowed : O.allows p vs store a = true
             · cases continued : k a with
@@ -513,9 +515,11 @@ theorem runFrom_validTrace (P : Exec.Program O) (A : ExecAdapter O S) (C : Opera
                   ih (hist ++ a.event.toList) c' answerValid
             · simp [Exec.runFrom, final, next, answer, allowed, valid]
 
-/-- Helper (projection). Auxiliary proof supporting the observation constructions and their operational laws; not a standalone contract law. (approved: PENDING)
- A blocked C1 observation has exactly the pending `ValidTrace` state and history that its
-operation contract uses. -/
+/-- Helper (projection). Combines `runFrom_validTrace` with `ValidTrace.request` to package the
+pending-trace and `mayBlock` obligations for `runFrom_blocked_report` and `runFrom_report_trace`.
+(approved: PENDING)
+ A blocked C1 observation has the pending `ValidTrace` state and history that its operation
+contract uses. -/
 theorem runFrom_noAnswer_pending_valid (P : Exec.Program O) (A : ExecAdapter O S)
     (C : OperationContract S) (input : C.Input) (ρ : Exec.Oracle O)
     (wellFormed : ExecAdapter.WellFormed A C input ρ)
@@ -530,9 +534,15 @@ theorem runFrom_noAnswer_pending_valid (P : Exec.Program O) (A : ExecAdapter O S
       (A.project (Exec.runFrom P ρ fuel hist c).events ++ [.request q]) ∧
       C.mayBlock input (A.project (Exec.runFrom P ρ fuel hist c).events ++ [.request q]) q := by
   have laws := runFrom_validTrace P A C input ρ wellFormed fuel hist c valid
-  exact ⟨ValidTrace.request laws.1, laws.2 ending pending typed⟩
+  obtain ⟨p', vs', site', store', k', q', step', typed', mayBlock'⟩ := laws.2 ending
+  rw [pending] at step'
+  cases step'
+  rw [typed] at typed'
+  cases typed'
+  exact ⟨ValidTrace.request laws.1, mayBlock'⟩
 
-/-- Helper (projection). Auxiliary proof supporting the observation constructions and their operational laws; not a standalone contract law. (approved: PENDING)
+/-- Helper (projection). Supplies the `BlockingPermitted` proof argument of `reportObservation`
+from `runFrom_validTrace`. (approved: PENDING)
  A well-formed C1 run supplies the blocking premise required by `reportObservation`. -/
 theorem runFrom_blockingPermitted (P : Exec.Program O) (A : ExecAdapter O S)
     (C : OperationContract S) (input : C.Input) (ρ : Exec.Oracle O)
@@ -541,54 +551,20 @@ theorem runFrom_blockingPermitted (P : Exec.Program O) (A : ExecAdapter O S)
     (valid : CompleteTrace C input (A.project hist)) :
     ExecAdapter.BlockingPermitted P A C input (Exec.runFrom P ρ fuel hist c) := by
   intro c' p vs site store k q ending pending typed
-  exact (runFrom_validTrace P A C input ρ wellFormed fuel hist c valid).2 ending pending typed
+  exact (runFrom_noAnswer_pending_valid P A C input ρ wellFormed valid ending pending typed).2
 
-/-- Helper (computation). Projection of a certified step history. This does not establish independent output correspondence for an arbitrary adapter. (approved: PENDING)
- **Output before a trap is kept.** The terminal C1 observation contains the projection of the
-whole `Steps` history, not merely a suffix or the trap itself, and contains the exact trap line
-and final external state. -/
-theorem output_before_trap_kept (A : ExecAdapter O S) {P : Exec.Program O} {c c' : Exec.Config O}
+/-- Helper (computation). Projects a certified `Exec.Steps` history to its terminal `Observation`;
+feeds the `Steps`-level bridge while `output_before_trap_kept` in `ObserveOutput.lean` proves the
+operational `runFrom`/`reportObservation` law. (approved: PENDING)
+ The terminal `Steps` observation contains the projection of the whole `Steps` history, the exact
+trap line, and the final external state. -/
+theorem steps_trap_observation (A : ExecAdapter O S) {P : Exec.Program O} {c c' : Exec.Config O}
     {events : List O.Event} (steps : Exec.Steps P c events c') {kind : TrapKind} {site : SiteId}
     {sp : Span} (final : c'.final? = some (.trapped kind site))
     (resolved : AList.lookup A.sites site = some sp) (pathOk : sp.PathOk) :
     stepsObservation A steps =
       some ⟨A.project events, .trapped kind site sp (trapLine kind site sp), A.state c'.store⟩ := by
   simp [stepsObservation, final, ExecAdapter.terminal?, trapTerminal, resolved, pathOk]
-
-/-- Helper (projection). Auxiliary proof supporting the observation constructions and their operational laws; not a standalone contract law. (approved: PENDING)
- The premise on `reportObservation` really supplies the operation contract's blocking
-permission, in the history ending in the current request. -/
-theorem report_noAnswer_mayBlock (P : Exec.Program O) (A : ExecAdapter O S)
-    (C : OperationContract S) (input : C.Input) (events : List O.Event) (c : Exec.Config O)
-    (permitted : ExecAdapter.BlockingPermitted P A C input ⟨events, .noAnswer c⟩)
-    {p : O.Prim} {vs : List O.Val} {site : SiteId} {store : O.Store}
-    {k : Exec.Answer O.Val O.Event O.Store → Option (Exec.Config O)} {request : Request S}
-    (pending : Exec.step P c = some (.request p vs site store k))
-    (typed : A.request p vs site store = some request) :
-    C.mayBlock input (A.project events ++ [.request request]) request :=
-  permitted rfl pending typed
-
-/-- Helper (computation). Computes a report branch; independent reachable-run trace evidence is provided by the operational report law. (approved: PENDING)
- A permitted pending C1 request observed through `noAnswer` retains the earlier event history
-and ends in the request itself; it is not mistaken for termination or divergence. -/
-theorem report_noAnswer_blocked (P : Exec.Program O) (A : ExecAdapter O S)
-    (C : OperationContract S) (input : C.Input)
-    (events : List O.Event) (c : Exec.Config O) (p : O.Prim) (vs : List O.Val) (site : SiteId)
-    (store : O.Store) (k : Exec.Answer O.Val O.Event O.Store → Option (Exec.Config O))
-    (request : Request S)
-    (permitted : ExecAdapter.BlockingPermitted P A C input ⟨events, .noAnswer c⟩)
-    (pending : Exec.step P c = some (.request p vs site store k))
-    (typed : A.request p vs site store = some request) :
-    reportObservation P A C input ⟨events, .noAnswer c⟩ permitted =
-      some (.blocked (A.project events ++ [.request request]) request) := by
-  simp [reportObservation, pending, typed]
-
-/-- Helper (computation). Computes the exhausted-fuel branch, not an independent operational classification law. (approved: PENDING)
- Fuel exhaustion produces no fabricated external observation or event. -/
-theorem report_outOfFuel_none (P : Exec.Program O) (A : ExecAdapter O S)
-    (C : OperationContract S) (input : C.Input) (events : List O.Event) (c : Exec.Config O)
-    (permitted : ExecAdapter.BlockingPermitted P A C input ⟨events, .outOfFuel c⟩) :
-    reportObservation P A C input ⟨events, .outOfFuel c⟩ permitted = none := rfl
 
 /-! ### Non-vacuity of the C1 adapter laws
 
@@ -662,7 +638,8 @@ def requesting (n : Int) : Exec.Config ops := ⟨.exec (.prim none n [] ⟨0⟩)
 def answeredReport : Exec.Report ops := Exec.run program answeringOracle 1 (requesting 3)
 def blockedReport : Exec.Report ops := Exec.run program blockingOracle 1 (requesting 3)
 
-/-- Helper (computation). Auxiliary proof supporting the observation constructions and their operational laws; not a standalone contract law. (approved: PENDING)
+/-- Helper (computation). Well-formedness witness for `answeringOracle` in `AdapterDemo`,
+feeding the closed instances in `ObserveReport.lean`. (approved: PENDING)
  The answering oracle satisfies the adapter contract for either blocking policy. -/
 theorem answeringWellFormed (blocking : Unit → List (Event signature) → Request signature → Prop) :
     ExecAdapter.WellFormed adapter (makeContract blocking) () answeringOracle := by
@@ -674,21 +651,22 @@ theorem answeringWellFormed (blocking : Unit → List (Event signature) → Requ
     cases typed
     exact ⟨[], ⟨.double, p * 2⟩, [], rfl, ⟨[], rfl⟩, ⟨[], rfl⟩,
       RequestResponse.matched (S := signature) Op.double p (p * 2), rfl⟩
-  · intro hist p vs site store q answer typed
+  · intro hist p vs site store answer
     simp [answeringOracle] at answer
   · intro site sp resolved
     cases resolved
 
-/-- Helper (computation). Auxiliary proof supporting the observation constructions and their operational laws; not a standalone contract law. (approved: PENDING)
- The blocking oracle is well formed exactly because this contract permits blocking. -/
+/-- Helper (computation). Well-formedness witness for `blockingOracle` in `AdapterDemo`,
+feeding the closed instances in `ObserveReport.lean`. (approved: PENDING)
+ The blocking oracle is well formed because this contract permits blocking. -/
 theorem blockingWellFormed : ExecAdapter.WellFormed adapter permittingContract () blockingOracle := by
   constructor
   · intro hist p vs site store a answer typed
     simp [blockingOracle] at answer
   · intro hist p vs site store a q answer typed
     simp [blockingOracle] at answer
-  · intro hist p vs site store q answer typed
-    trivial
+  · intro hist p vs site store _answer
+    exact ⟨query p, rfl, trivial⟩
   · intro site sp resolved
     cases resolved
 
@@ -739,8 +717,7 @@ example : ¬ (ValidTrace forbiddingContract () (some (query 3)) [request 3] ∧
   intro invalid
   exact invalid.2
 
-/-- Helper (projection). Auxiliary proof supporting the observation constructions and their operational laws; not a standalone contract law. (approved: PENDING)
- Concrete evidence used by the two report-level examples below. -/
+/-- Helper (projection). Closed `BlockingPermitted` witness for `blockedReport` in `AdapterDemo`. (approved: PENDING) -/
 theorem blockedPermitted : ExecAdapter.BlockingPermitted program adapter permittingContract ()
     blockedReport :=
   runFrom_blockingPermitted program adapter permittingContract () blockingOracle
@@ -757,40 +734,6 @@ example : ¬ ExecAdapter.BlockingPermitted program adapter forbiddingContract ()
   intro permitted
   exact permitted (c := requesting 3) (p := 3) (vs := []) (site := ⟨0⟩) (store := ())
     (q := query 3) rfl rfl rfl
-
-/-- Computation example for `report_noAnswer_mayBlock`: the report premise supplies the actual operation
-permission for the pending request. -/
-example : permittingContract.mayBlock ()
-    (adapter.project blockedReport.events ++ [request 3]) (query 3) :=
-  report_noAnswer_mayBlock program adapter permittingContract () [] (requesting 3)
-    blockedPermitted rfl rfl
-
-/-- Blocking refusal example for `report_noAnswer_mayBlock`: changing only `mayBlock` makes the
-claimed permission false. -/
-example : ¬ forbiddingContract.mayBlock () [request 3] (query 3) := by
-  intro forbidden
-  exact forbidden
-
-/-- Helper (computation). Auxiliary proof supporting the observation constructions and their operational laws; not a standalone contract law. (approved: PENDING)
- The permitted report has exactly its pending blocked observation. -/
-theorem blockedObservation :
-    reportObservation program adapter permittingContract () blockedReport blockedPermitted =
-      some (.blocked (adapter.project blockedReport.events ++ [request 3]) (query 3)) :=
-  report_noAnswer_blocked program adapter permittingContract () [] (requesting 3)
-    3 [] ⟨0⟩ () _ (query 3) blockedPermitted rfl rfl
-
-/-- Computation example for `report_noAnswer_blocked`: the pending request and its history are observed. -/
-example : reportObservation program adapter permittingContract () blockedReport blockedPermitted =
-    some (.blocked (adapter.project blockedReport.events ++ [request 3]) (query 3)) :=
-  blockedObservation
-
-/-- Distinct observation example for `report_noAnswer_blocked`: the pending request cannot instead be
-observed as successful termination. -/
-example : reportObservation program adapter permittingContract () blockedReport blockedPermitted ≠
-    some (.terminal ⟨[request 3], .exited 0, ()⟩) := by
-  rw [blockedObservation]
-  intro invalid
-  cases invalid
 
 end AdapterDemo
 

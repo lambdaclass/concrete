@@ -349,7 +349,7 @@ def ExecAdapter.OutputCorrespondence (A : ExecAdapter O S)
 only output. If a C1 request has typed request `q`, its answer projects to any output, then
 `.request q`, then a matching `.response r`, then any output; output cannot intervene while `q` is
 pending. The response satisfies `C.allows` in the history ending in that request. An unanswered
-typed request is blocking, not an evaluator result, only when `C.mayBlock` permits it. -/
+primitive request must have a typed external request `q` that `C.mayBlock` permits to block. -/
 structure ExecAdapter.WellFormed (A : ExecAdapter O S) (C : OperationContract S) (input : C.Input)
     (ρ : Exec.Oracle O) : Prop where
   internal {hist p vs site store a} : ρ hist p vs site store = some a →
@@ -361,9 +361,9 @@ structure ExecAdapter.WellFormed (A : ExecAdapter O S) (C : OperationContract S)
       (∃ outputs : List S.Output, before = outputs.map Event.output) ∧
       (∃ outputs : List S.Output, after = outputs.map Event.output) ∧
       RequestResponse q r ∧ C.allows input (A.project hist ++ before ++ [.request q]) q r
-  blocked {hist p vs site store q} : ρ hist p vs site store = none →
-    A.request p vs site store = some q →
-    C.mayBlock input (A.project hist ++ [.request q]) q
+  blocked {hist p vs site store} : ρ hist p vs site store = none →
+    ∃ q, A.request p vs site store = some q ∧
+      C.mayBlock input (A.project hist ++ [.request q]) q
   sites_valid : SiteTable.Valid A.sites
 
 /-- Turn a C1 final configuration into a logical terminal observation, if it is a valid hosted
@@ -404,6 +404,25 @@ def reportObservation (P : Exec.Program O) (A : ExecAdapter O S) (C : OperationC
         .blocked (A.project r.events ++ [.request request]) request
     | _ => none
   | .stuck _ | .badAnswer _ | .outOfFuel _ => none
+
+/-- Every launch grant required by `main` is present in the launch configuration. -/
+def grantsConfigured {α : Type} [DecidableEq α] (required configured : List α) : Bool :=
+  required.all (fun g => decide (g ∈ configured))
+
+/-- Hosted launcher observation of a C1 evaluator run from initial configuration `c` (Q7.10,
+Q8.5): if any required grant is missing from `configured`, `main` does not run and the parent
+observes empty events, `.startupRefused` (exit status 125, no trap line), and the initial
+external state `A.state c.store`; otherwise `Exec.run P ρ fuel c` runs and is observed
+through `reportObservation`. -/
+def launchObservation {α : Type} [DecidableEq α] (required configured : List α)
+    (P : Exec.Program O) (A : ExecAdapter O S) (C : OperationContract S) (input : C.Input)
+    (ρ : Exec.Oracle O) (fuel : Nat) (c : Exec.Config O)
+    (permitted : ExecAdapter.BlockingPermitted P A C input (Exec.run P ρ fuel c)) :
+    Option (FullObservation S) :=
+  if grantsConfigured required configured then
+    reportObservation P A C input (Exec.run P ρ fuel c) permitted
+  else
+    some (.terminal ⟨[], .startupRefused, A.state c.store⟩)
 
 /-! ## Examples -/
 
