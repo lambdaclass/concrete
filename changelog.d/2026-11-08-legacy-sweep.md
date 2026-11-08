@@ -15,7 +15,9 @@ rewritten or removed, and a `legacy/` file never changes from a version it had t
 replaced sweep row nor a deletion and re-addition can rewrite a file. The lock has one reader,
 `scripts/checks/lib/legacy_lock.py`, which refuses a NUL, a CR, a repeated row, a last line without
 its newline and any line that is not exactly a `base`, `tree` or `sweep` row; `legacy_frozen.sh` and
-`doc_links.py` take its rows from there, and a control refuses any other reader.
+`doc_links.py` take its rows from there, and a control refuses any other reader. The link check fails
+closed when a legacy-tree lookup or the repository's Markdown file listing fails; only an absent lock
+means no recorded sweeps, and only a standalone directory without `.git` uses the direct file walk.
 
 This sweep moved the old bug ledger's disposition, the landing audit, the finished move tooling
 (`legacy_move.sh`, `move_prereqs.py`) and the answered proposals `IDEAS.md` and `MERGED.md`; the site

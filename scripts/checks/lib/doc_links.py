@@ -162,43 +162,71 @@ def folded_changelog(root):
         sys.path.pop(0)
 
 
+class DiscoveryError(Exception):
+    """The checker cannot establish which Markdown files it must check."""
+
+
+def git_output(root, step, *args):
+    try:
+        r = subprocess.run(["git", "-C", str(root), *args], capture_output=True)
+    except OSError as e:
+        raise DiscoveryError(f"{step}: could not execute git: {e}") from e
+    if r.returncode != 0:
+        message = f"{step}: git {args[0]} exited {r.returncode}"
+        detail = r.stderr.decode(errors="replace").strip()
+        if detail:
+            message += f": {detail}"
+        raise DiscoveryError(message)
+    return r.stdout
+
+
 def swept_files(root):
     """legacy/ paths not in the frozen tree the lock records (its `tree` row): the files sweeps moved
     there. The lock is read by its one parser, legacy_lock.py; a malformed lock raises its LockError.
-    Empty without a lock or a git repository."""
+    No lock means no recorded sweeps. A present lock requires both Git tree lookups to succeed."""
     sys.path.insert(0, str(DEFAULT_ROOT / "scripts" / "checks" / "lib"))
     try:
         import legacy_lock
     finally:
         sys.path.pop(0)
     lock = root / legacy_lock.LOCK_PATH
-    if not lock.is_file():
+    try:
+        rows = legacy_lock.read(str(lock))
+    except FileNotFoundError:
         return set()
-    tree = next(r.split()[1] for r in legacy_lock.read(str(lock)) if r.startswith("tree "))
-    def ls(spec):
-        r = subprocess.run(["git", "-C", str(root), "ls-tree", "-r", "-z", "--name-only", spec],
-                           capture_output=True)
-        return {n for n in r.stdout.decode(errors="surrogateescape").split("\0") if n} if r.returncode == 0 else None
-    frozen, now = ls(tree), ls("HEAD:legacy")
-    if frozen is None or now is None:
-        return set()
+    except OSError as e:
+        raise DiscoveryError(f"legacy lock read failed: {e}") from e
+    tree_rows = [r.split()[1] for r in rows if r.startswith("tree ")]
+    if len(tree_rows) != 1:
+        raise DiscoveryError(f"legacy lock tree lookup failed: expected one tree row, found {len(tree_rows)}")
+    def ls(spec, step):
+        out = git_output(root, step, "ls-tree", "-r", "-z", "--name-only", spec)
+        return {n for n in out.decode(errors="surrogateescape").split("\0") if n}
+    frozen = ls(tree_rows[0], "frozen legacy tree lookup failed")
+    now = ls("HEAD:legacy", "HEAD:legacy lookup failed")
     return {"legacy/" + n for n in now - frozen}
 
 
 def markdown_files(root):
-    if (root / ".git").exists():
-        r = subprocess.run(["git", "-C", str(root), "ls-files", "-z", "--cached", "--others",
-                            "--exclude-standard", "--", "*.md"], capture_output=True)
-        if r.returncode == 0:
-            names = [n for n in r.stdout.decode().split("\0") if n]
-            # legacy/ is frozen and was checked at the tag; its root-relative links point at the old root.
-            # A file a sweep moved into legacy/ later (one not in the lock's frozen tree) is read where it
-            # now is, so its links must resolve from there.
-            swept = swept_files(root)
-            return sorted(root / n for n in names if (root / n).is_file()
-                          and (not n.startswith("legacy/") or n in swept))
-    return sorted(p for p in root.rglob("*.md")
-                  if not any(part in SKIP_PARTS for part in p.relative_to(root).parts))
+    if not root.is_dir():
+        raise DiscoveryError(f"Markdown file discovery failed: {root} is not a directory")
+    try:
+        (root / ".git").lstat()
+    except FileNotFoundError:
+        # A standalone directory has no index or frozen-tree metadata; check its Markdown files directly.
+        return sorted(p for p in root.rglob("*.md")
+                      if not any(part in SKIP_PARTS for part in p.relative_to(root).parts))
+    except OSError as e:
+        raise DiscoveryError(f"repository metadata lookup failed: {e}") from e
+    out = git_output(root, "Markdown file listing failed", "ls-files", "-z", "--cached", "--others",
+                     "--exclude-standard", "--", "*.md")
+    names = [n for n in out.decode(errors="surrogateescape").split("\0") if n]
+    # legacy/ is frozen and was checked at the tag; its root-relative links point at the old root.
+    # A file a sweep moved into legacy/ later (one not in the lock's frozen tree) is read where it
+    # now is, so its links must resolve from there.
+    swept = swept_files(root)
+    return sorted(root / n for n in names if (root / n).is_file()
+                  and (not n.startswith("legacy/") or n in swept))
 
 
 def main():
@@ -220,8 +248,16 @@ def main():
     failures, links, frags = [], 0, 0
     try:
         files = markdown_files(root)
+    except DiscoveryError as e:
+        print(f"FAIL {e}")
+        print("DOC-LINKS: FAIL=1 CHECKED=0 ANCHORS=0")
+        return 1
     except ValueError as e:  # legacy_lock.LockError: which legacy/ files to read is unknown
         print(f"FAIL the legacy lock is malformed:\n{e}")
+        print("DOC-LINKS: FAIL=1 CHECKED=0 ANCHORS=0")
+        return 1
+    except OSError as e:
+        print(f"FAIL Markdown file discovery failed: {e}")
         print("DOC-LINKS: FAIL=1 CHECKED=0 ANCHORS=0")
         return 1
     for path in files:

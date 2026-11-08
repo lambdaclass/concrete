@@ -123,6 +123,71 @@ tree fraganchor
 printf '### Entry\n\n[renamed](docs/TARGET.md#gone)\n' > "$TMP/fraganchor/changelog.d/2099-01-01-control.md"
 expect fraganchor 1 'no anchor #gone in docs/TARGET.md' "a fragment's anchor is checked too"
 
+echo "=== controls: swept files and discovery failures ==="
+# These controls need a real index and real legacy trees. Keep every repository variable from the
+# caller out of the throwaway repository, including when this gate runs under a linked-worktree hook.
+source "$ROOT_DIR/scripts/checks/lib/git_sandbox.sh" || exit 2
+: > "$TMP/gitconfig"
+git_sandbox "$TMP/gitconfig" || exit 2
+LOCK_REL="$(python3 -I -c 'import sys; sys.path.insert(0, sys.argv[1]); import legacy_lock; print(legacy_lock.LOCK_PATH)' \
+  "$ROOT_DIR/scripts/checks/lib")" || exit 2
+tree repo
+mkdir -p "$TMP/repo/legacy"
+printf '# Frozen\n' > "$TMP/repo/legacy/FROZEN.md"
+git init -q "$TMP/repo" && git -C "$TMP/repo" add -A \
+  && git -C "$TMP/repo" -c user.name=t -c user.email=t@t commit -qm frozen \
+  || { echo "FATAL: swept-file control repository" >&2; exit 2; }
+BASE="$(git -C "$TMP/repo" rev-parse HEAD)" || exit 2
+FROZEN="$(git -C "$TMP/repo" rev-parse HEAD:legacy)" || exit 2
+mkdir -p "$TMP/repo/$(dirname "$LOCK_REL")"
+printf 'base %s\ntree %s\n' "$BASE" "$FROZEN" > "$TMP/repo/$LOCK_REL"
+printf '[target](/docs/TARGET.md#target)\n' > "$TMP/repo/legacy/SWEPT.md"
+git -C "$TMP/repo" add -A \
+  && git -C "$TMP/repo" -c user.name=t -c user.email=t@t commit -qm sweep \
+  || { echo "FATAL: swept-file control commit" >&2; exit 2; }
+expect repo 0 'DOC-LINKS: PASS CHECKED=1 ANCHORS=1' "a swept document with a valid link passes"
+printf '[gone](/docs/MISSING.md)\n' > "$TMP/repo/legacy/SWEPT.md"
+expect repo 1 'legacy/SWEPT[.]md:1: missing local link /docs/MISSING[.]md' "a swept document with a broken link fails"
+printf '[target](/docs/TARGET.md#target)\n' > "$TMP/repo/legacy/SWEPT.md"
+
+tree missing_tree
+git init -q "$TMP/missing_tree" || { echo "FATAL: missing-tree control repository" >&2; exit 2; }
+mkdir -p "$TMP/missing_tree/$(dirname "$LOCK_REL")"
+printf 'base %040d\n' 0 > "$TMP/missing_tree/$LOCK_REL"
+expect missing_tree 1 'legacy[.]lock:2: missing: line 2 must be .tree <tree>.' "a lock without its tree row is malformed and fails"
+
+# Selectively fail one discovery step while every other Git command runs normally. The exact
+# diagnostic must name that step; neither an empty swept set nor an rglob fallback is acceptable.
+mkdir "$TMP/bin"
+REAL_GIT="$(command -v git)"
+export REAL_GIT DOC_LINKS_CONTROL_TMP="$TMP"
+cat > "$TMP/bin/git" <<'STUB'
+#!/usr/bin/env bash
+cmd="$1"
+[ "$cmd" != -C ] || cmd="$3"
+spec="${!#}"
+if [ "$cmd" = ls-tree ] && [ -e "$DOC_LINKS_CONTROL_TMP/fail-frozen" ] && [ "$spec" != HEAD:legacy ]; then
+  exit 2
+fi
+if [ "$cmd" = ls-tree ] && [ -e "$DOC_LINKS_CONTROL_TMP/fail-head" ] && [ "$spec" = HEAD:legacy ]; then
+  exit 2
+fi
+if [ "$cmd" = ls-files ] && [ -e "$DOC_LINKS_CONTROL_TMP/fail-ls-files" ]; then
+  exit 2
+fi
+exec "$REAL_GIT" "$@"
+STUB
+chmod +x "$TMP/bin/git"
+touch "$TMP/fail-frozen"
+PATH="$TMP/bin:$PATH" expect repo 1 '^FAIL frozen legacy tree lookup failed: git ls-tree exited 2$' "a failing frozen-tree lookup fails with its exact diagnostic"
+rm "$TMP/fail-frozen"
+touch "$TMP/fail-head"
+PATH="$TMP/bin:$PATH" expect repo 1 '^FAIL HEAD:legacy lookup failed: git ls-tree exited 2$' "a failing HEAD:legacy lookup fails with its exact diagnostic"
+rm "$TMP/fail-head"
+touch "$TMP/fail-ls-files"
+PATH="$TMP/bin:$PATH" expect repo 1 '^FAIL Markdown file listing failed: git ls-files exited 2$' "a failing Markdown file listing fails instead of falling back to rglob"
+rm "$TMP/fail-ls-files"
+
 echo "=== the repository ==="
 out="$(bounded_run -i /dev/null 60 -- python3 -I "$CHECK" 2>&1)"; rc=$?
 if bounded_is_incomplete "$rc"; then inc "the repository run timed out twice"
