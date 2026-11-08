@@ -64,33 +64,42 @@ judge() { # FROZEN CUR RETENTION ROOT-TREE [SWEEP-COMMIT...]
   # -z: paths arrive raw, never C-quoted, so the ls-tree lookups below see the real path.
   git diff-tree -z -r --no-renames --name-status "$frozen" "$cur" | python3 -I -c '
 import sys
-ret = sys.argv[1]
-rows = [l.rstrip("\n").split("\t") for l in open(ret) if l.strip() and not l.startswith("#")]
-hdr, rows = rows[0], rows[1:]
-# (path, resolved?) for every path a row names. With no status column, nothing is resolved.
-named = []
-if "path" in hdr:
-    pi = hdr.index("path"); si = hdr.index("status") if "status" in hdr else None
-    for r in rows:
-        res = si is not None and len(r) > si and r[si].strip() == "resolved"
-        named += [(p.rstrip("/"), res) for p in r[pi].split()]
-def ok(p):
-    # Every row covering p (its own path or an ancestor) must be resolved, and at least one must:
-    # a resolved parent does not release a child that has its own unresolved row.
-    cover = [res for n, res in named if p == n or p.startswith(n + "/")]
-    return bool(cover) and all(cover)
-f = sys.stdin.buffer.read().split(b"\0")
-if f and f[-1] == b"": f.pop()
-for st, raw in zip(f[0::2], f[1::2]):
-    st, path = st.decode(), raw.decode("utf-8", "surrogateescape")
-    if "\n" in path or "\t" in path or not path.isprintable():
-        print(f"{st} legacy/{path!r}: legacy/ admits no path with control characters")
-    elif st == "A":
+with open(sys.argv[1]) as manifest:
+    records = [line.rstrip("\n").split("\t") for line in manifest
+               if line.strip() and not line.startswith("#")]
+header, *records = records
+requirements = []
+if "path" in header:
+    path_column = header.index("path")
+    status_column = header.index("status") if "status" in header else None
+    for record in records:
+        resolved = (status_column is not None and len(record) > status_column
+                    and record[status_column].strip() == "resolved")
+        requirements.extend((path.rstrip("/"), resolved)
+                            for path in record[path_column].split())
+
+def deletion_allowed(path):
+    covering = [resolved for prefix, resolved in requirements
+                if path == prefix or path.startswith(prefix + "/")]
+    return bool(covering) and all(covering)
+
+changes = sys.stdin.buffer.read().split(b"\0")
+if changes[-1] == b"":
+    changes.pop()
+if len(changes) % 2:
+    raise ValueError("incomplete diff-tree record")
+for offset in range(0, len(changes), 2):
+    status = changes[offset].decode("ascii")
+    path = changes[offset + 1].decode("utf-8", "surrogateescape")
+    if not path.isprintable() or "\n" in path or "\t" in path:
+        print(f"{status} legacy/{path!r}: legacy/ admits no path with control characters")
+    elif status == "A":
         print(f"ADD\t{path}")
-    elif st != "D":
-        print(f"{st} legacy/{path}: legacy/ admits no modification")
-    elif not ok(path):
-        print(f"D legacy/{path}: no resolved RETENTION.tsv row allows this deletion")
+    elif status == "D":
+        if not deletion_allowed(path):
+            print(f"D legacy/{path}: no resolved RETENTION.tsv row allows this deletion")
+    else:
+        print(f"{status} legacy/{path}: legacy/ admits no modification")
 ' "$ret" | while IFS= read -r line || [ -n "$line" ]; do
     case "$line" in ADD$'\t'*) ;; *) printf '%s\n' "$line"; continue ;; esac
     local path="${line#ADD$'\t'}" want s entry found=""
@@ -109,23 +118,31 @@ for st, raw in zip(f[0::2], f[1::2]):
   done || echo "refused: judge diff/retention pipeline failed"
 }
 
-chain() { # LOCK FROZEN CUR RETENTION HEAD-COMMIT: judges frozen -> each sweep tree -> CUR; prints refusals
-  local lock="$1" prev="$2" cur="$3" ret="$4" head="$5" root rows kind sw st n=0 step
-  rows="$(lock_rows "$lock")" || { printf '%s\n' "$rows"; return 0; }
+chain() { # LOCK FROZEN CUR RETENTION HEAD-COMMIT
+  local lock="$1" previous="$2" current="$3" retention="$4" head="$5"
+  local rows root kind source destination detail index=0
+  if ! rows="$(lock_rows "$lock")"; then
+    printf '%s\n' "$rows"
+    return 0
+  fi
   root="$(git rev-parse "$head^{tree}")" || { echo "refused: chain HEAD tree lookup failed"; return; }
-  while read -r kind sw st || [ -n "$kind" ]; do # rows are the parser's, one per line
-    [ "$kind" = sweep ] || continue
-    n=$((n+1))
-    if ! git rev-parse -q --verify "$sw^{commit}" >/dev/null \
-       || ! git merge-base --is-ancestor "$sw" "$head" || [ "$(git cat-file -t "$st" 2>/dev/null)" != tree ]; then
-      echo "sweep line $n: needs a commit of HEAD's history and a tree: $sw $st"; continue
+  while read -r kind source destination || [ -n "$kind" ]; do
+    case "$kind" in sweep) ;; *) continue ;; esac
+    index=$((index+1))
+    if git rev-parse -q --verify "$source^{commit}" >/dev/null \
+       && git merge-base --is-ancestor "$source" "$head" \
+       && [ "$(git cat-file -t "$destination" 2>/dev/null)" = tree ]; then
+      detail="$(judge "$previous" "$destination" "$retention" "$root" "$source" 2>&1)"
+      if [ -n "$detail" ]; then
+        printf 'sweep %s (%s):\n%s\n' "$index" "${source:0:10}" "$detail"
+      fi
+      previous="$destination"
+    else
+      printf "sweep line %s: needs a commit of HEAD's history and a tree: %s %s\n" "$index" "$source" "$destination"
     fi
-    step="$(judge "$prev" "$st" "$ret" "$root" "$sw" 2>&1)"
-    [ -z "$step" ] || printf 'sweep %s (%s):\n%s\n' "$n" "${sw:0:10}" "$step"
-    prev="$st"
   done <<<"$rows"
-  step="$(judge "$prev" "$cur" "$ret" "$root" 2>&1)"
-  [ -z "$step" ] || printf 'since the last sweep:\n%s\n' "$step"
+  detail="$(judge "$previous" "$current" "$retention" "$root" 2>&1)"
+  if [ -n "$detail" ]; then printf 'since the last sweep:\n%s\n' "$detail"; fi
 }
 
 # trusted_base HEAD-COMMIT: the newest commit whose history is trusted (see 5 above).
@@ -143,11 +160,15 @@ trusted_base() {
 
 # lock_rows LOCK-FILE: the lock's rows, from its one parser (lib/legacy_lock.py); exit 1 with one
 # diagnostic per problem. No code here reads the lock's bytes itself.
-lock_rows() { checked lock_rows python3 -I "$LOCKPY" rows "$1"; }
+lock_rows() {
+  checked lock_rows python3 -I "$LOCKPY" rows "$1"
+}
 # lock_history LOCK-FILE LOCK-PATH TRUSTED: every row of every version of LOCK-PATH in TRUSTED's
 # first-parent history is still a row of LOCK-FILE; a malformed trusted version is refused. Prints
 # one refusal per problem, naming the newest trusted commit that has a missing row.
-lock_history() { checked lock_history python3 -I "$LOCKPY" history "$1" "$2" "$3"; }
+lock_history() {
+  checked lock_history python3 -I "$LOCKPY" history "$1" "$2" "$3"
+}
 
 # history_identity PREFIX HEAD-COMMIT TRUSTED: every version PREFIX/<path> had in TRUSTED's history is
 # the version it has at HEAD-COMMIT, for each path HEAD-COMMIT still has. Prints one refusal per path.
@@ -188,13 +209,18 @@ read_loop_scan() {
   for rc in "${statuses[@]}"; do [ "$rc" -le 1 ] || { echo "refused: read-loop scan failed"; break; }; done
 }
 named_readers() {
-  git ls-files -z -- scripts .githooks .github | xargs -0 -r grep -nIE 'legacy[.]lock' -- 2>/dev/null \
-  | grep -vE '^[^:]+:[0-9]+:[[:space:]]*#' | grep -vE '^scripts/checks/lib/legacy_lock[.]py:' \
-  | grep -vE '^scripts/checks/legacy_frozen[.]sh:[0-9]+:LOCK=scripts/checks/legacy[.]lock$'
-  local statuses=("${PIPESTATUS[@]}") rc
-  [ "${statuses[0]}" = 0 ] || echo "refused: reader file listing failed"
-  for rc in "${statuses[@]:1}"; do [ "$rc" -le 1 ] || { echo "refused: reader scan failed"; break; }; done
+  # Scan tracked active tooling; the single exclusion expression permits only
+  # comments, the parser implementation, and this check declaring its lock path.
+  git ls-files -z -- scripts .githooks .github \
+    | xargs -0 -r grep -nIE 'legacy[.]lock' -- 2>/dev/null \
+    | grep -vE '^[^:]+:[0-9]+:[[:space:]]*#|^scripts/checks/lib/legacy_lock[.]py:|^scripts/checks/legacy_frozen[.]sh:[0-9]+:LOCK=scripts/checks/legacy[.]lock$'
+  local outcomes=("${PIPESTATUS[@]}") index
+  if [ "${outcomes[0]}" -ne 0 ]; then echo "refused: reader file listing failed"; fi
+  for index in 1 2; do
+    if [ "${outcomes[index]}" -gt 1 ]; then echo "refused: reader scan failed"; break; fi
+  done
 }
+
 lock_uses() {
   grep -nE '"\$(LOCK|lock)"' "$SELF" | grep -vE '^[0-9]+:[[:space:]]*#' \
   | grep -vE '(lock_rows|lock_history|chain) "\$(LOCK|lock)"|\[ -f "\$LOCK" \]|echo "=== |no "\$LOCK |local lock="\$1"'
@@ -279,12 +305,19 @@ o="$(chain "$TMP/l_x" "$F" "$SW1" "$TMP/r_ok.tsv" "$H")"
 # The lock's one parser (lib/legacy_lock.py). Each malformed lock is refused by chain() with the
 # parser's exact diagnostic, before any sweep is judged: no byte is a row to one reader and not to another.
 ROW="is not a lock row: line 3 must be 'sweep <commit> <tree>', one space between fields, each oid 40 or 64 lowercase hex digits"
-refused_lock() { # NAME CONTENT-PRINTF-FORMAT EXPECTED [ARGS...]: chain() on that lock prints EXPECTED exactly
-  local name="$1" fmt="$2" want="$3"; shift 3
-  printf "$fmt" "$@" > "$TMP/$name"
-  o="$(chain "$TMP/$name" "$F" "$F" "$TMP/r_popen.tsv" "$H")"
-  [ "$o" = "$want" ] && ok "control: $name is refused by the lock parser, as such" || no "control: $name: '$o'"
+refused_lock() { # NAME PRINTF-FORMAT EXPECTED [PRINTF-ARG...]
+  local fixture="$TMP/$1" format="$2" expected="$3" actual parsed
+  shift 3
+  printf "$format" "$@" > "$fixture"
+  parsed="$(lock_rows "$fixture")"
+  actual="$(chain "$fixture" "$F" "$F" "$TMP/r_popen.tsv" "$H")"
+  if [ "$actual" = "$expected" ] && [ "$parsed" = "$expected" ]; then
+    ok "control: ${fixture##*/} is refused by the lock parser, as such"
+  else
+    no "control: ${fixture##*/}: '$actual'"
+  fi
 }
+
 # A landed sweep row with a NUL in front: GNU grep -x matches the row behind the NUL, sed skips it.
 refused_lock "a NUL-prefixed sweep row" '%s\n\0sweep %s %s\n' "$TMP/a NUL-prefixed sweep row:3: holds a NUL byte: the lock is text" "$HDR" "$S" "$SW1"
 refused_lock "a CR line ending" '%s\nsweep %s %s\r\n' "$TMP/a CR line ending:3: holds a carriage return: a line ends with a newline (LF) alone" "$HDR" "$S" "$SW1"
@@ -296,6 +329,9 @@ refused_lock "a repeated sweep row" '%s\nsweep %s %s\nsweep %s %s\n' "$TMP/a rep
 refused_lock "a last row without its newline" '%s\nsweep %s %s' "$TMP/a last row without its newline:3: has no newline: every line, the last too, ends with one" "$HDR" "$S" "$SW1"
 refused_lock "a lock without its base row" 'tree %s\ntree %s\n' "$TMP/a lock without its base row:1: is not a lock row: line 1 must be 'base <commit>', one space between fields, each oid 40 or 64 lowercase hex digits" "$F" "$F"
 refused_lock "a preview lock" '%s\npreview missing: P2\n' "$TMP/a preview lock:3: the move is a --preview build (preview missing: P2); a lock may only record a move generated with its landing prerequisites met (the generator is legacy/scripts/land/legacy_move.sh since the 2026-11-08 sweep)" "$HDR"
+refused_lock "a non-ASCII row" '%s\nsweep \377\n' "$TMP/a non-ASCII row:3: holds a non-ASCII byte" "$HDR"
+refused_lock "an uppercase oid" '%s\nsweep %s %s\n' "$TMP/an uppercase oid:3: $ROW" "$HDR" "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" "$SW1"
+refused_lock "a tab separator" '%s\nsweep\t%s %s\n' "$TMP/a tab separator:3: $ROW" "$HDR" "$S" "$SW1"
 S2="$(git commit-tree "$(tree_with 'mkdir -p p; echo m2 > p/moved')" -p "$S" -m sweep-2)"
 H2="$(git commit-tree "$R0" -p "$S2" -m head2)"
 [ -n "$S2" ] && [ -n "$H2" ] || { echo "FATAL: second sweep control commits"; exit 2; }

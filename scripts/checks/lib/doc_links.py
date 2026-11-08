@@ -191,18 +191,15 @@ def swept_files(root):
         sys.path.pop(0)
     lock = root / legacy_lock.LOCK_PATH
     try:
-        rows = legacy_lock.read(str(lock))
+        snapshot = legacy_lock.load(str(lock))
     except FileNotFoundError:
         return set()
     except OSError as e:
         raise DiscoveryError(f"legacy lock read failed: {e}") from e
-    tree_rows = [r.split()[1] for r in rows if r.startswith("tree ")]
-    if len(tree_rows) != 1:
-        raise DiscoveryError(f"legacy lock tree lookup failed: expected one tree row, found {len(tree_rows)}")
     def ls(spec, step):
         out = git_output(root, step, "ls-tree", "-r", "-z", "--name-only", spec)
         return {n for n in out.decode(errors="surrogateescape").split("\0") if n}
-    frozen = ls(tree_rows[0], "frozen legacy tree lookup failed")
+    frozen = ls(snapshot.tree, "frozen legacy tree lookup failed")
     now = ls("HEAD:legacy", "HEAD:legacy lookup failed")
     return {"legacy/" + n for n in now - frozen}
 

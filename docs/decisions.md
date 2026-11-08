@@ -285,7 +285,7 @@ The owner answered every row of the 2026-11-05 decision page, in the terminal. T
 - **P2** Priority order when principles conflict — Soundness and provability > transparency (with auditability, honest trust boundaries and compiler-owned identity) > one authoritative definition (checked derived views allowed) > explicitness at the use site > brevity. The philosophy guides open choices and never silently reopens decided rules.
 - **P3** Lean is the spec: confirm the amendment — Lean is the specification: confirmed together with Q9.15 (revision below).
 - **P4** Duplicate enum variants or methods (bug 313) — Refuse duplicate variant names in one enum and duplicate method names in one impl, with a new rule and diagnostic, the same as duplicate fields.
-- **P5** legacy/ is a byte-frozen snapshot, never patched or run — legacy/ is main's tree at the move commit, byte-frozen. A root check compares its tree hash, allowing only deletions a satisfied RETENTION.tsv entry authorizes. No legacy gate ever runs. The oracle is the tag-built artifact (P13), not the legacy/ copy.
+- **P5** legacy/ is a byte-frozen snapshot, never patched or run — legacy/ is main's tree at the move commit, byte-frozen. Revised 2026-11-08: under the [legacy sweep decision](#decided-2026-11-08-legacy-sweep), the root check admits additions only through valid, lock-recorded, byte-for-byte sweeps, refuses every modification, and allows only deletions authorized by satisfied RETENTION.tsv rows. No legacy gate ever runs. The oracle is the tag-built artifact (P13), not the legacy/ copy.
 - **P6** Retention manifest gates deleting legacy/ — RETENTION.tsv at the root gives every legacy asset (corpus, regressions, examples, std, bug ledger, site, docs, research) a destination and deletion criterion. Revised 2026-11-06 ([restart row](#decided-project-restart)): nothing is deleted at B3; legacy/, the old pipeline included, is deleted way later (LD: once the new compiler implements a full real program such as RocksDB, ethrex or similar), when RETENTION.tsv has no live entry, a final ideas sweep has dispositioned every idea and the owner explicitly approves.
 - **P7** Prove the new landing path before moving — T0: land beside the old tree the new root CI, required-checks.txt (enforced by train watch and land), RETENTION.tsv, the task disposition table, ORACLE.lock with the oracle artifact, and ISSUES.tsv. T1: rehearse the move on a throwaway branch: fresh clone, build, hook, exact-SHA CI, train --dry-run land; a broken build, a failing gate and a missing required check must each be refused. T2: the move in one train.
 - **P8** Server services under scripts/ — Keep only landing services: train, review, hook, landing bot. The status page, work queue, fuzz farm, perf tracking and nightly campaign all stop and are recorded as archived in RETENTION.tsv; each returns only with a roadmap task.
@@ -374,8 +374,10 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
 - <a id="decided-project-restart"></a>**The restart and the `legacy/` folder** (owner, 2026-11-04;
   details rows P5–P8, P21, P22, 2026-11-05). Everything old moves under `legacy/` on main in one
   train. `legacy/` is a byte-frozen snapshot of main's tree at the move commit, never patched and
-  never run; one root check refuses any change under it except a deletion its retention row allows,
-  and no legacy gate runs (P5). Every legacy asset has a row in the root `RETENTION.tsv` with a
+  never run. Revised 2026-11-08: under the [legacy sweep decision](#decided-2026-11-08-legacy-sweep),
+  one root check admits additions only through valid, lock-recorded, byte-for-byte sweeps, refuses
+  every modification, and allows deletions only when their retention rows authorize them;
+  no legacy gate runs (P5). Every legacy asset has a row in the root `RETENTION.tsv` with a
   destination and deletion condition (P6). Revised 2026-11-06 by the owner ("i would delete legacy way later, we want to check it to see if
   we fogot any idea right?"): `legacy/` is kept much longer, as the reference for ideas the new
   design may have forgotten, and nothing is deleted after slice 1 (B3 keeps only the totality audit
