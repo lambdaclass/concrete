@@ -1378,9 +1378,9 @@ private theorem step_silent_deterministic_inv {P : Program O} {c c₁ c₂ : Con
     (h₁ : step P c = some (.next c₁)) (h₂ : step P c = some (.next c₂)) : c₁ = c₂ := by
   rw [h₁] at h₂; cases h₂; rfl
 
-/-- Law (subject `ConcreteSpec.Core.Exec.Step`). When the step function returns `.next c₁`, a
+/-- Representation lemma. Function/relation bridge, not determinism evidence (approved: PENDING). When the step function returns `.next c₁`, a
 relational `Step` from `c` occurs if and only if the label is `.silent` and the target is `c₁`. -/
-theorem step_silent_deterministic (P : Program O) (c c₁ c₂ : Config O) (l : Label O)
+theorem step_silent_representation (P : Program O) (c c₁ c₂ : Config O) (l : Label O)
     (h : step P c = some (.next c₁)) :
     Step P c l c₂ ↔ l = .silent ∧ c₂ = c₁ := by
   constructor
@@ -1410,10 +1410,10 @@ private theorem step_deterministic_inv {P : Program O} {c c₁ c₂ : Config O} 
       rw [h] at h'; cases h'
       exact .inr ⟨_, _, _, _, _, _, _, h, ha, ha', rfl, rfl, hk, hk'⟩
 
-/-- Law (subject `ConcreteSpec.Core.Exec.Step`). Two relational transitions from `c` occur if and
+/-- Representation lemma. Constructor decomposition, not determinism evidence (approved: PENDING). Two relational transitions from `c` occur if and
 only if either they come from the same silent `.next` step or both arise from the same `.request`
 by allowed oracle answers whose continuations succeed. -/
-theorem step_deterministic (P : Program O) (c c₁ c₂ : Config O) (l₁ l₂ : Label O) :
+theorem step_pair_representation (P : Program O) (c c₁ c₂ : Config O) (l₁ l₂ : Label O) :
     (Step P c l₁ c₁ ∧ Step P c l₂ c₂) ↔
       (step P c = some (.next c₁) ∧ l₁ = .silent ∧ l₂ = .silent ∧ c₁ = c₂) ∨
       ∃ p vs site st k a₁ a₂, step P c = some (.request p vs site st k) ∧
@@ -1435,6 +1435,56 @@ theorem step_deterministic (P : Program O) (c c₁ c₂ : Config O) (l₁ l₂ :
   · rintro (⟨h, rfl, rfl, rfl⟩ | ⟨p, vs, site, st, k, a₁, a₂, h, ha₁, ha₂, rfl, rfl, hk₁, hk₂⟩)
     · exact ⟨.silent h, .silent h⟩
     · exact ⟨.prim h ha₁ hk₁, .prim h ha₂ hk₂⟩
+
+/-- A transition with its external input retained. `none` denotes an internal machine
+step; `some a` denotes precisely answer `a`, even when that answer emits no event. This
+relation does not identify different answers merely because their observable labels coincide. -/
+inductive AnswerStep (P : Program O) : Config O → Option (Answer O.Val O.Event O.Store) →
+    Label O → Config O → Prop where
+  | silent {c c'} : step P c = some (.next c') → AnswerStep P c none .silent c'
+  | prim {c c' p vs site st k a} : step P c = some (.request p vs site st k) →
+      O.allows p vs st a = true → k a = some c' → AnswerStep P c (some a) a.label c'
+
+/-- Representation lemma. Erases the input index to recover the observable transition
+(approved: PENDING). -/
+theorem AnswerStep.step_inv {P : Program O} {c c' : Config O}
+    {a : Option (Answer O.Val O.Event O.Store)} {l : Label O}
+    (h : AnswerStep P c a l c') : Step P c l c' := by
+  cases h with
+  | silent h => exact .silent h
+  | prim h ha hk => exact .prim h ha hk
+
+/-- Law (subject `ConcreteSpec.Core.Exec.AnswerStep`). Internal transitions have a unique
+label and destination. No function-result premise supplies the destination in advance. -/
+theorem step_silent_deterministic (P : Program O) (c c₁ : Config O) (l₁ : Label O)
+    (h₁ : AnswerStep P c none l₁ c₁) :
+    ∀ l₂ c₂, AnswerStep P c none l₂ c₂ → l₁ = l₂ ∧ c₁ = c₂ := by
+  intro l₂ c₂ h₂
+  cases h₁ with
+  | silent h₁ =>
+    cases h₂ with
+    | silent h₂ => exact ⟨rfl, step_silent_deterministic_inv h₁ h₂⟩
+
+/-- Law (subject `ConcreteSpec.Core.Exec.AnswerStep`). Fixing the external answer determines
+both the observable label and the next configuration. It covers silent steps and primitive
+answers, including answers whose label is silent. -/
+theorem step_deterministic (P : Program O) (c c₁ : Config O)
+    (a : Option (Answer O.Val O.Event O.Store)) (l₁ : Label O)
+    (h₁ : AnswerStep P c a l₁ c₁) :
+    ∀ l₂ c₂, AnswerStep P c a l₂ c₂ → l₁ = l₂ ∧ c₁ = c₂ := by
+  intro l₂ c₂ h₂
+  cases h₁ with
+  | silent h₁ =>
+    cases h₂ with
+    | silent h₂ => exact ⟨rfl, step_silent_deterministic_inv h₁ h₂⟩
+  | prim h₁ _ hk₁ =>
+    cases h₂ with
+    | prim h₂ _ hk₂ =>
+      rw [h₁] at h₂
+      cases h₂
+      rw [hk₁] at hk₂
+      cases hk₂
+      exact ⟨rfl, rfl⟩
 
 /-! ### Lifecycle refusal
 
@@ -3215,56 +3265,45 @@ example : swallowTrapEvalArgs ops [] .init [.lit 1] = .ok ([1], .init) ∧
       ([.lit 1] ++ .fail .overflow :: [.fail .divisionByZero]) = .trap .overflow) := by
   decide
 
-/-- Instance (law `ConcreteSpec.Core.Exec.step_silent_deterministic`, case `unique_silent`). Since
-`step` on `.skip` returns `.next ⟨.done, [], .init, []⟩`, `.silent` to `.done` is the unique
-relational step. -/
-example : Step prog ⟨.exec .skip, [], .init, []⟩ .silent ⟨.done, [], .init, []⟩ ↔
-    (Label.silent : Label ops) = .silent ∧
-      (⟨.done, [], .init, []⟩ : Config ops) = ⟨.done, [], .init, []⟩ :=
+
+/-- Mutant that admits every outcome for the same input. -/
+def competingAnswerStep (_P : Program O) (_c : Config O)
+    (_a : Option (Answer O.Val O.Event O.Store)) (_l : Label O) (_c' : Config O) : Prop := True
+
+/-- Instance (law `ConcreteSpec.Core.Exec.step_silent_deterministic`, case `skip`). -/
+example : ∀ l₂ c₂, AnswerStep prog ⟨.exec .skip, [], .init, []⟩ none l₂ c₂ →
+    (Label.silent : Label ops) = l₂ ∧ (⟨.done, [], .init, []⟩ : Config ops) = c₂ :=
   step_silent_deterministic prog ⟨.exec .skip, [], .init, []⟩ ⟨.done, [], .init, []⟩
-    ⟨.done, [], .init, []⟩ .silent rfl
+    .silent (.silent rfl)
 
-/-- Planted (law `ConcreteSpec.Core.Exec.step_silent_deterministic`, case `unique_silent`, subject `ConcreteSpec.Core.Exec.Step`, mutant `ConcreteSpec.Core.Exec.Refusal.StuckStep`).
-`StuckStep` has no silent transition even though `step` returns `some (.next ...)`. -/
-example : step prog ⟨.exec .skip, [], .init, []⟩ = some (.next ⟨.done, [], .init, []⟩) ∧
-    ¬ (Refusal.StuckStep prog ⟨.exec .skip, [], .init, []⟩ .silent ⟨.done, [], .init, []⟩ ↔
-      (Label.silent : Label ops) = .silent ∧
-        (⟨.done, [], .init, []⟩ : Config ops) = ⟨.done, [], .init, []⟩) := by
-  refine ⟨rfl, fun h => ?_⟩
-  exact nomatch h.mpr ⟨rfl, rfl⟩
+/-- Planted (law `ConcreteSpec.Core.Exec.step_silent_deterministic`, case `skip`, subject `ConcreteSpec.Core.Exec.AnswerStep`, mutant `ConcreteSpec.Core.Exec.CoreEvidence.competingAnswerStep`).
+The selected transition still exists, but a second outcome violates uniqueness. -/
+example : competingAnswerStep prog ⟨.exec .skip, [], .init, []⟩ none .silent ⟨.done, [], .init, []⟩ ∧
+    ¬ (∀ l₂ c₂, competingAnswerStep prog ⟨.exec .skip, [], .init, []⟩ none l₂ c₂ →
+      (Label.silent : Label ops) = l₂ ∧ (⟨.done, [], .init, []⟩ : Config ops) = c₂) := by
+  refine ⟨True.intro, fun h => ?_⟩
+  have hh := (h (.emit 1) ⟨.done, [], .init, []⟩ True.intro).1
+  cases hh
 
-/-- Instance (law `ConcreteSpec.Core.Exec.step_deterministic`, case `branch`). Two transitions from
-`⟨.exec .skip, [], .init, []⟩` to `⟨.done, [], .init, []⟩` are characterized by `step` returning
-`.next ⟨.done, [], .init, []⟩` or a common `.request`. -/
-example : (Step prog ⟨.exec .skip, [], .init, []⟩ .silent ⟨.done, [], .init, []⟩ ∧
-      Step prog ⟨.exec .skip, [], .init, []⟩ .silent ⟨.done, [], .init, []⟩) ↔
-    (step prog ⟨.exec .skip, [], .init, []⟩ = some (.next ⟨.done, [], .init, []⟩) ∧
-      (Label.silent : Label ops) = .silent ∧
-      (Label.silent : Label ops) = .silent ∧
-      (⟨.done, [], .init, []⟩ : Config ops) = ⟨.done, [], .init, []⟩) ∨
-    ∃ p vs site st k a₁ a₂,
-      step prog ⟨.exec .skip, [], .init, []⟩ = some (.request p vs site st k) ∧
-      ops.allows p vs st a₁ = true ∧ ops.allows p vs st a₂ = true ∧
-      (Label.silent : Label ops) = a₁.label ∧ (Label.silent : Label ops) = a₂.label ∧
-      k a₁ = some ⟨.done, [], .init, []⟩ ∧ k a₂ = some ⟨.done, [], .init, []⟩ :=
-  step_deterministic prog ⟨.exec .skip, [], .init, []⟩ ⟨.done, [], .init, []⟩
-    ⟨.done, [], .init, []⟩ .silent .silent
+/-- Instance (law `ConcreteSpec.Core.Exec.step_deterministic`, case `log_answer`). The same
+allowed log answer always emits `1` and reaches the same configuration. -/
+example : ∀ l₂ c₂, AnswerStep prog ⟨.exec (.prim none .log [.lit 1] s), [], .init, []⟩
+      (some ⟨some 1, .ok 0, .init⟩) l₂ c₂ →
+    (Label.emit 1 : Label ops) = l₂ ∧ (⟨.done, [], .init, []⟩ : Config ops) = c₂ :=
+  step_deterministic prog ⟨.exec (.prim none .log [.lit 1] s), [], .init, []⟩
+    ⟨.done, [], .init, []⟩ (some ⟨some 1, .ok 0, .init⟩) (.emit 1)
+    (.prim rfl (by simp [ops]) rfl)
 
-/-- Planted (law `ConcreteSpec.Core.Exec.step_deterministic`, case `branch`, subject `ConcreteSpec.Core.Exec.Step`, mutant `ConcreteSpec.Core.Exec.Refusal.StuckStep`).
-`StuckStep` falsifies the equivalence when `step` returns `some (.next ...)`. -/
-example : ¬ ((Refusal.StuckStep prog ⟨.exec .skip, [], .init, []⟩ .silent ⟨.done, [], .init, []⟩ ∧
-      Refusal.StuckStep prog ⟨.exec .skip, [], .init, []⟩ .silent ⟨.done, [], .init, []⟩) ↔
-    (step prog ⟨.exec .skip, [], .init, []⟩ = some (.next ⟨.done, [], .init, []⟩) ∧
-      (Label.silent : Label ops) = .silent ∧
-      (Label.silent : Label ops) = .silent ∧
-      (⟨.done, [], .init, []⟩ : Config ops) = ⟨.done, [], .init, []⟩) ∨
-    ∃ p vs site st k a₁ a₂,
-      step prog ⟨.exec .skip, [], .init, []⟩ = some (.request p vs site st k) ∧
-      ops.allows p vs st a₁ = true ∧ ops.allows p vs st a₂ = true ∧
-      (Label.silent : Label ops) = a₁.label ∧ (Label.silent : Label ops) = a₂.label ∧
-      k a₁ = some ⟨.done, [], .init, []⟩ ∧ k a₂ = some ⟨.done, [], .init, []⟩) := by
-  intro h
-  exact nomatch (h.mpr (.inl ⟨rfl, rfl, rfl, rfl⟩)).1
+/-- Planted (law `ConcreteSpec.Core.Exec.step_deterministic`, case `log_answer`, subject `ConcreteSpec.Core.Exec.AnswerStep`, mutant `ConcreteSpec.Core.Exec.CoreEvidence.competingAnswerStep`).
+The mutant admits a second outcome for exactly the same request and answer. -/
+example : competingAnswerStep prog ⟨.exec (.prim none .log [.lit 1] s), [], .init, []⟩
+      (some ⟨some 1, .ok 0, .init⟩) (.emit 1) ⟨.done, [], .init, []⟩ ∧
+    ¬ (∀ l₂ c₂, competingAnswerStep prog ⟨.exec (.prim none .log [.lit 1] s), [], .init, []⟩
+      (some ⟨some 1, .ok 0, .init⟩) l₂ c₂ →
+      (Label.emit 1 : Label ops) = l₂ ∧ (⟨.done, [], .init, []⟩ : Config ops) = c₂) := by
+  refine ⟨True.intro, fun h => ?_⟩
+  have hh := (h .silent ⟨.done, [], .init, []⟩ True.intro).1
+  cases hh
 
 def copyEatFn : Fn ops := ⟨[(p, .int)], .unit, ⟨1⟩, .skip⟩
 def copyProg : Program ops := ⟨[(eatF, copyEatFn)]⟩
