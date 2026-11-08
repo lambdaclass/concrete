@@ -30,12 +30,37 @@ one is an interface change.
 
 namespace ConcreteSpec.Core
 
-/-- A local variable: a source-name hint and a number. Both fields are part of the identity.
+/-- A local variable: a source-name hint for presentation and a numeric semantic identity.
 Elaboration gives every local of a function its own number (a local is bound at most once, Q9.1)
-and its source name as the hint, so two locals of one function never share a number; the hint is
-for diagnostics. -/
+and its source name as the hint, so two locals of one function never share a number. The hint never
+determines binding or evaluation; `Prim.eval_rehint` proves that changing every hint consistently
+changes no result. -/
 structure Var where
   hint : String
+  id : Nat
+  deriving DecidableEq, Repr
+
+/-- A place of safe structured storage. C4 and C5 will relate this identity to their root/projection
+and hybrid-state representations; this C9 base deliberately does not edit or choose that mapping. -/
+structure PlaceId where
+  id : Nat
+  deriving DecidableEq, Repr
+
+/-- A primitive operation in a registry (Q9.6, Q9.7). -/
+structure PrimId where
+  id : Nat
+  deriving DecidableEq, Repr
+
+/-- A particular revision of a primitive's complete contract. Evidence binds this identity rather
+than comparing contract predicates or inferring a contract from a primitive's spelling. -/
+structure ContractId where
+  prim : PrimId
+  rev : Nat
+  deriving DecidableEq, Repr
+
+/-- One proof obligation. Facts, discharge evidence and diagnostics name this identity, never a
+source string or a position in a generated list. -/
+structure ObligationId where
   id : Nat
   deriving DecidableEq, Repr
 
@@ -207,9 +232,14 @@ example : ¬ (Span.mk "src\\main.con" 3 5 (by decide) (by decide)).PathOk := by 
 different locals. -/
 example : Var.mk "x" 0 ≠ Var.mk "x" 1 := by decide
 
-/-- The hint is part of the identity too; elaboration never gives two locals of one function one
-number, so this pair never arises within one function. -/
+/-- Hints can distinguish two raw records for diagnostics, but they are not semantic names:
+elaboration never gives two locals of one function one number, and evaluation is invariant under
+consistent rehinting. -/
 example : Var.mk "x" 0 ≠ Var.mk "y" 0 := by decide
+
+/-- Places, primitives, contract revisions and obligations have distinct typed identities. -/
+example : PlaceId.mk 0 ≠ PlaceId.mk 1 ∧ PrimId.mk 0 ≠ PrimId.mk 1 ∧
+    ContractId.mk ⟨0⟩ 1 ≠ ContractId.mk ⟨0⟩ 2 ∧ ObligationId.mk 0 ≠ ObligationId.mk 1 := by decide
 
 /-- A revised rule is a different rule identity. -/
 example : RuleId.mk `ConcreteSpec.Core.example 1 ≠ RuleId.mk `ConcreteSpec.Core.example 2 := by
