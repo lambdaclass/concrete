@@ -35,6 +35,7 @@
 set -uo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh" || exit 2
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+SELF="$ROOT_DIR/scripts/checks/${BASH_SOURCE[0]##*/}"
 cd "$ROOT_DIR"
 LOCK=scripts/checks/legacy.lock
 PASS=0; FAIL=0
@@ -75,7 +76,7 @@ for st, raw in zip(f[0::2], f[1::2]):
         print(f"{st} legacy/{path}: legacy/ admits no modification")
     elif not ok(path):
         print(f"D legacy/{path}: no resolved RETENTION.tsv row allows this deletion")
-' "$ret" | while IFS= read -r line; do
+' "$ret" | while IFS= read -r line || [ -n "$line" ]; do
     case "$line" in ADD$'\t'*) ;; *) printf '%s\n' "$line"; continue ;; esac
     local path="${line#ADD$'\t'}" want s found=""
     local -x GIT_LITERAL_PATHSPECS=1 # a path is a path: ":(literal)p/x" must not resolve to p/x
@@ -94,7 +95,7 @@ for st, raw in zip(f[0::2], f[1::2]):
 chain() { # LOCK FROZEN CUR RETENTION HEAD-COMMIT: judges frozen -> each sweep tree -> CUR; prints refusals
   local lock="$1" prev="$2" cur="$3" ret="$4" head="$5" root sw st extra n=0 step
   root="$(git rev-parse "$head^{tree}")"
-  while read -r sw st extra; do
+  while read -r sw st extra || [ -n "$sw" ]; do # a last row without a newline is a row
     n=$((n+1))
     if [ -n "$extra" ] || [ -z "$st" ] || ! git rev-parse -q --verify "$sw^{commit}" >/dev/null \
        || ! git merge-base --is-ancestor "$sw" "$head" || [ "$(git cat-file -t "$st" 2>/dev/null)" != tree ]; then
@@ -242,6 +243,13 @@ printf 'sweep %s\n' "$S" > "$TMP/l_short"
 o="$(chain "$TMP/l_short" "$F" "$SW1" "$TMP/r_ok.tsv" "$H")"
 case "$o" in "sweep line 1: needs a commit of HEAD's history and a tree: $S "*) ok "control: a sweep line without its tree is refused, as such" ;; *) no "control: tree-less sweep line: '$o'" ;; esac
 [ -n "$(chain "$TMP/l_ok" "$F" "$F" "$TMP/r_popen.tsv" "$H")" ] && ok "control: deleting a swept file after its sweep, under an open row, is refused" || no "control: post-sweep deletion accepted"
+# The same lock with no newline after its last row: the row is still read, so the deletion is still
+# judged against the sweep tree (skipping the row would compare against the frozen tree and pass).
+printf 'sweep %s %s' "$S" "$SW1" > "$TMP/l_nonl"
+[ -z "$(chain "$TMP/l_nonl" "$F" "$SW1" "$TMP/r_ok.tsv" "$H")" ] && ok "control: a valid lock whose last row has no newline passes" || no "control: unterminated valid lock refused: $(chain "$TMP/l_nonl" "$F" "$SW1" "$TMP/r_ok.tsv" "$H")"
+o="$(chain "$TMP/l_nonl" "$F" "$F" "$TMP/r_popen.tsv" "$H")"
+[ "$o" = "since the last sweep:"$'\n'"D legacy/p/moved: no resolved RETENTION.tsv row allows this deletion" ] \
+  && ok "control: a last sweep row without a newline still protects its files" || no "control: unterminated last sweep row: '$o'"
 S2="$(git commit-tree "$(tree_with 'mkdir -p p; echo m2 > p/moved')" -p "$S" -m sweep-2)"
 H2="$(git commit-tree "$R0" -p "$S2" -m head2)"
 [ -n "$S2" ] && [ -n "$H2" ] || { echo "FATAL: second sweep control commits"; exit 2; }
@@ -270,6 +278,9 @@ M1="$(commit_of "" "$F" r "$LK1")"
 M2="$(commit_of "$M1" "$SW1" r "$LK1"$'\n'"sweep $S $SW1")"
 [ -n "$M1" ] && [ -n "$M2" ] || { echo "FATAL: trusted-history control commits"; exit 2; }
 git show "$M2:L" > "$TMP/lock_same"
+# commit_of writes the lock without a final newline, so M2's sweep row is an unterminated last line:
+# the rewritten and removed controls below refuse it only because lock_history reads that line.
+[ -n "$(git show "$M2:L" | tail -c1 | tr -d '\n')" ] || { echo "FATAL: M2's lock must end without a newline"; exit 2; }
 [ -z "$(lock_history "$TMP/lock_same" L "$M2")" ] && ok "control: a lock that keeps every trusted line passes" || no "control: unchanged lock refused: $(lock_history "$TMP/lock_same" L "$M2")"
 printf '%s\nsweep %s %s\n' "$LK1" "$S2" "$SW2" > "$TMP/lock_rewritten"   # the M2 row replaced
 o="$(lock_history "$TMP/lock_rewritten" L "$M2")"
@@ -310,6 +321,11 @@ MM="$(git commit-tree "$(git rev-parse "$B2^{tree}")" -p "$M2" -p "$B2" -m lande
 # trusted_base: the merge base with the trusted ref; HEAD itself when the ref is absent.
 [ "$(LEGACY_TRUSTED_REF="$M2" trusted_base "$C1")" = "$M2" ] && [ "$(LEGACY_TRUSTED_REF=refs/heads/no-such trusted_base "$C1")" = "$C1" ] \
   && ok "control: the trusted base is the merge base with the trusted ref, else HEAD (everything trusted)" || no "control: trusted_base"
+# Every shell read loop here reads a last line that has no newline: `read` fails on it, so a bare
+# `while read` silently drops it. (The loops' behaviour is checked above; this keeps a new one honest.)
+loops="$(grep -nE '^[^#]*while[^#]*[[:space:]]read[[:space:]]' "$SELF")" || { echo "FATAL: cannot read $SELF"; exit 2; }
+bad="$(printf '%s\n' "$loops" | grep -vF '|| [ -n "$' | grep -vF 'grep -nE')"
+[ "$(printf '%s\n' "$loops" | grep -cF '|| [ -n "$')" -ge 3 ] && [ -z "$bad" ] && ok "control: every read loop in this check reads a last line without a newline" || no "control: a read loop drops an unterminated last line: $bad"
 cd "$ROOT_DIR"
 
 echo "=== legacy/ against $LOCK ==="
