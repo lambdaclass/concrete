@@ -10,7 +10,8 @@
 #   - only refs/heads/wip/* updates or deletions: a backup of unfinished work, which can never become
 #     main. Conflict markers are refused; nothing else runs.
 #   - only the review-note refs (refs/notes/concrete-review, refs/notes/concrete-review-findings,
-#     written by scripts/review/review.sh): no source tree, nothing to check.
+#     written by scripts/review/review.sh) and owner sign-off records (refs/owner-signoff/<sha>,
+#     written by scripts/land/signoff.sh): no source tree, nothing to check.
 #   - anything else, including a by-hand run with no stdin: the full root set, and only from a full
 #     clone (a linked worktree is refused; ISS-0015).
 #
@@ -45,7 +46,7 @@ while read -r _localref localsha remoteref _remotesha; do
         *[!0]*) wip_refs=$((wip_refs+1)); wip_shas="$wip_shas $localsha" ;;
         *) wip_dels=$((wip_dels+1)) ;;
       esac ;;
-    refs/notes/concrete-review|refs/notes/concrete-review-findings)
+    refs/notes/concrete-review|refs/notes/concrete-review-findings|refs/owner-signoff/*)
       case "$localsha" in
         *[!0]*) note_refs=$((note_refs+1)) ;;
         *) other_refs=$((other_refs+1)) ;;   # deleting a review note takes the full tier
@@ -70,7 +71,7 @@ if [ "$other_refs" -eq 0 ] && [ $((wip_refs + wip_dels)) -gt 0 ]; then
   exit 0
 fi
 if [ "$other_refs" -eq 0 ] && [ "$note_refs" -gt 0 ]; then
-  echo "pre-push: review-notes push — no source tree, no gates"
+  echo "pre-push: review-notes push (review notes, owner sign-offs) — no source tree, no gates"
   exit 0
 fi
 

@@ -90,7 +90,12 @@ verdict; any failing leg fails the check (see [Pipelining](#pipelining)).
   provenance**: a clean review note at its head or, when the head has no note, a clean note on every
   member at its exact recorded SHA (each member was reviewed at its own head). Each note is judged by
   `scripts/review/verify.sh` on origin's notes; an absent, malformed, blocked or findings note
-  qualifies nothing, and a head note that is not clean is not overridden by the members. Otherwise
+  qualifies nothing, and a head note that is not clean is not overridden by the members. A member
+  without a clean note qualifies instead by an **owner sign-off** at its exact SHA (R-0618: a branch
+  at its review-round cap, approved by the owner after Codex, Kimi and agy all reviewed that commit;
+  `scripts/land/signoff.sh verify`, on origin's `refs/owner-signoff/*`). A sign-off approves that
+  commit only, so a train with a signed-off member must be exactly the clean merge of its members
+  onto its base: one conflict-free merge per member and nothing else. Otherwise
   the leg runs `LAND_REVIEW_CMD`, else `scripts/review/review.sh`, with `--base --head`, and then
   requires provenance: a non-zero exit fails, and so does a zero exit that leaves no clean note at the
   head. With no review command at all, `check` fails; it never disables the leg silently.

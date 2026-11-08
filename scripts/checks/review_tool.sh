@@ -299,6 +299,9 @@ hook_out="$(cd "$W" && printf 'refs/notes/concrete-review %s refs/notes/concrete
   "$NOTES_SHA" "$Z" "$(g rev-parse refs/notes/concrete-review-findings)" "$Z" | bash "$HOOK" 2>&1)"; rc=$?
 check "notes-only push: hook exits 0 (got $rc)" test "$rc" -eq 0
 check "notes-only push: hook takes the review-notes tier" grep -q "review-notes push" <<<"$hook_out"
+hook_out="$(cd "$W" && printf 'refs/owner-signoff/%s %s refs/owner-signoff/%s %s\n' "$(g rev-parse HEAD)" "$NOTES_SHA" "$(g rev-parse HEAD)" "$Z" | bash "$HOOK" 2>&1)"; rc=$?
+check "an owner sign-off push takes the review-notes tier (exit $rc)" \
+  bash -c "[ $rc -eq 0 ] && grep -q 'review-notes push' <<<'$hook_out'"
 hook_out="$(cd "$W" && printf 'refs/heads/mixed %s refs/heads/wip/x %s\nrefs/notes/concrete-review %s refs/notes/concrete-review %s\n' \
   "$(g rev-parse HEAD)" "$Z" "$NOTES_SHA" "$Z" | bash "$HOOK" 2>&1)"; rc=$?
 check "notes alongside a wip push take the wip tier (exit $rc)" \

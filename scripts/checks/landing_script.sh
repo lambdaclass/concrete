@@ -1134,6 +1134,38 @@ inv_leg tin3 binv-legacy 5456
 [ "$rc" = 5 ] && has "$out" "no rehearsal record" \
   && ok "a change under legacy/ (inventory untouched) still needs a rehearsal" || { no "legacy change: dry-run land exit $rc"; echo "$out" | sed 's/^/      /'; }
 
+# An owner sign-off record (scripts/land/signoff.sh), published to origin. put-signoff <sha> <mode>
+# [<other sha>]: valid; none removes it; othersha records <other sha> and files it under <sha>;
+# tampered changes kimi.txt after recording; noagy drops agy's verdict; reject ends agy's output
+# with VERDICT: REJECT; unnamed has a quote that names no commit.
+printf '#!/usr/bin/env bash\nSIGNOFF=%q\n' "$ROOT_DIR/scripts/land/signoff.sh" > "$TMP/put-signoff"
+cat >> "$TMP/put-signoff" <<'SIGNOFF_EOF'
+set -e
+sha="$(git rev-parse "$1")"; mode="$2"; R=refs/owner-signoff
+git update-ref -d "$R/$sha" 2>/dev/null || true
+CONCRETE_SKIP_GATES=1 git push -q origin ":$R/$sha" 2>/dev/null || true
+[ "$mode" = none ] && exit 0
+d="$(mktemp -d)"
+for r in codex kimi agy; do printf 'review by %s\n  VERDICT: ACCEPT\n' "$r" > "$d/$r"; done
+[ "$mode" = reject ] && printf 'withdrawn\nVERDICT: REJECT\n' >> "$d/agy"
+q="sign off ${sha:0:8}, yes"; [ "$mode" = unnamed ] && q="sign off the branch"
+target="$sha"; [ "$mode" = othersha ] && target="$(git rev-parse "$3")"
+bash "$SIGNOFF" record "$target" --date 2026-11-08 --quote "$q" --codex "$d/codex" --kimi "$d/kimi" --agy "$d/agy" >/dev/null 2>&1 || true
+c="$(git rev-parse "$R/$target")"
+tab="$(printf '\t')"
+case "$mode" in
+  othersha) git update-ref "$R/$sha" "$c"; git update-ref -d "$R/$target" ;;
+  tampered) b="$(printf 'review by kimi, edited\nVERDICT: ACCEPT\n' | git hash-object -w --stdin)"
+    t="$(git ls-tree "$c" | sed "s/blob [0-9a-f]*${tab}kimi.txt\$/blob $b${tab}kimi.txt/" | git mktree)"
+    git update-ref "$R/$sha" "$(git commit-tree "$t" -m tampered)" ;;
+  noagy) b="$(git cat-file blob "$c:record.txt" | grep -v '^verdict-agy:' | git hash-object -w --stdin)"
+    t="$(git ls-tree "$c" | grep -v 'agy.txt$' | sed "s/blob [0-9a-f]*${tab}record.txt\$/blob $b${tab}record.txt/" | git mktree)"
+    git update-ref "$R/$sha" "$(git commit-tree "$t" -m noagy)" ;;
+esac
+rm -rf "$d"
+CONCRETE_SKIP_GATES=1 git push -q -f origin "$R/$sha"
+SIGNOFF_EOF
+
 echo "=== review: check fails closed, land requires review provenance ==="
 git checkout -q main && git fetch -q origin && git reset -q --hard origin/main
 MR="$(git rev-parse HEAD)"
@@ -1183,6 +1215,35 @@ bash "$TMP/put-review" "$HR" none; bash "$TMP/put-review" "$R1" clean; bash "$TM
 out="$(bash "$TRAIN" check trv --no-remote 2>&1)"; rc=$?
 [ "$rc" = 0 ] && [ ! -s "$FAKE_GH_DIR/review.log" ] \
   && ok "check over members reviewed clean passes the review leg without running the reviewer" || { no "check over reviewed members: exit $rc, reviewer calls '$(cat "$FAKE_GH_DIR/review.log")'"; echo "$out" | sed 's/^/      /'; }
+
+echo "=== review: an owner sign-off at a member's exact SHA is its review provenance (R-0618) ==="
+# brv1 is reviewed clean; brv2 has no note and is signed off, or carries a record that must not count.
+so_leg(){ # label mode expect(refuse|pass) text
+  bash "$TMP/put-signoff" "$R2" "$2" "$R1"
+  prov_leg "$1" none clean none "$3" "$4"
+}
+so_leg "a member with a valid owner sign-off and a clean merge" valid pass "owner sign-off (1) at its exact SHA, and the head is their clean merge"
+so_leg "a sign-off recorded for another commit" othersha refuse "the record is for $R1, not $R2"
+so_leg "a sign-off whose verdict file was changed after recording" tampered refuse "the sha256 of kimi.txt is"
+so_leg "a sign-off without agy's verdict" noagy refuse "the record has no agy verdict"
+so_leg "a sign-off whose agy output ends in REJECT" reject refuse "the agy output's last verdict is 'VERDICT:REJECT'"
+so_leg "a sign-off whose quote names no commit" unnamed refuse "the quote does not name ${R2:0:10}"
+so_leg "a member with neither a note nor a sign-off" none refuse "$R2 has no owner sign-off"
+# The same valid sign-off, but a head beyond the clean merge of its members. train.sh already refuses
+# a head that is not the built train; pure_merge is the provenance's own check, run here on heads that
+# add a commit, or that change a merge's tree, over the built train.
+bash "$TMP/put-signoff" "$R2" valid
+BR="$MR"   # the train was built on main at MR
+git checkout -q --detach "$HR"; printf 'extra\n' > extra.txt; git add extra.txt; git commit -qm extra; HX="$(git rev-parse HEAD)"
+git checkout -q --detach "$HR"; printf 'extra\n' > extra.txt; git add extra.txt; git commit -q --amend --no-edit; HY="$(git rev-parse HEAD)"
+git checkout -q train/trv
+pm(){ bash -c 'eval "$(sed -n "/^pure_merge() {/,/^}/p" "$1")"; pure_merge "$2" "$3" "$4" "$5"' _ "$TRAIN" "$BR" "$1" "$R1" "$R2"; }
+o="$(pm "$HR")"; [ -z "$o" ] && ok "pure_merge: the built train is the clean merge of its members" || no "pure_merge refused the built train: '$o'"
+o="$(pm "$HX")"; has "$o" "${HX:0:10} is not the clean merge of its members onto ${BR:0:10}: ${HX:0:10} is not the merge of ${R2:0:10}" \
+  && ok "pure_merge refuses a head with an extra commit ($o)" || no "pure_merge on an extra commit: '$o'"
+o="$(pm "$HY")"; has "$o" "${HY:0:10} is not the clean merge of its members onto ${BR:0:10}: ${HY:0:10} differs from the clean merge of ${R2:0:10}" \
+  && ok "pure_merge refuses a merge whose tree carries an extra change ($o)" || no "pure_merge on a changed merge: '$o'"
+bash "$TMP/put-signoff" "$R2" none
 
 echo "=== where a train runs: a full clone with the repository hook (ISS-0015) ==="
 cd "$W" || exit 2
