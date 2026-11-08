@@ -309,6 +309,17 @@ theorem runStmts_of_not_normal (P : Exec.Program O) (ρ : Exec.Oracle O)
     | none => simp [runStmts, h]
     | some f => cases f <;> simp [runStmts, h] at hf ⊢
 
+/-- **A non-normal configuration has no later transition.** Running trailing statements from a
+returned or trapped configuration emits no event and preserves the exact ending, configuration and
+fuel; no statement body is entered. -/
+theorem runStmts_terminal (P : Exec.Program O) (ρ : Exec.Oracle O)
+    (fuel : Nat) (hist : List O.Event) (ss : List (Exec.Stmt O)) (c : Exec.Config O)
+    (f : Exec.Final O.Val) (hf : c.final? = some f) (hn : f ≠ .normal) :
+    runStmts P ρ fuel hist ss c = ⟨hist, .final f, c, fuel⟩ := by
+  cases ss with
+  | nil => simp [runStmts, drive, hf]
+  | cons s ss => cases f <;> simp [runStmts, drive, hf] at hn ⊢
+
 /-- **Ghost erasure preserves concrete execution.** Removing every ghost statement leaves the same
 complete report: identical events, C1 `Ending`, final configuration and remaining fuel. Ghost
 computations may update ghost locals and read the concrete configuration, but cannot change it. -/
@@ -617,6 +628,7 @@ example : (Ghost.drive requestProgram answerOracle 2 [] registeredStart).config.
   cases h
 
 abbrev returnedStart : Exec.Config PrimDemo.base := ⟨.exiting (.ret 1), [], 5, []⟩
+abbrev trappedStart : Exec.Config PrimDemo.base := ⟨.trapped .abort ⟨3⟩, [], 5, []⟩
 
 /-- Non-trivial instance for `Ghost.runStmts_of_not_normal`: a returned configuration is not restarted. -/
 example : Ghost.runStmts GhostDemo.program GhostDemo.oracle 20 [] [.skip] returnedStart =
@@ -624,10 +636,40 @@ example : Ghost.runStmts GhostDemo.program GhostDemo.oracle 20 [] [.skip] return
   apply Ghost.runStmts_of_not_normal
   decide
 
-/-- Planted counter-example: a normal configuration does run the later `abort`, unlike plain `drive`. -/
-example : (Ghost.runStmts GhostDemo.program GhostDemo.oracle 20 [] [.abort ⟨3⟩]
-    GhostDemo.start).ending ≠
-    (Ghost.drive GhostDemo.program GhostDemo.oracle 20 [] GhostDemo.start).ending := by
+/-- Non-trivial instances for `Ghost.runStmts_terminal`: returned and trapped runs preserve the
+complete report rather than entering the trailing `abort`. -/
+example : Ghost.runStmts GhostDemo.program GhostDemo.oracle 20 [] [.abort ⟨4⟩] returnedStart =
+    ⟨[], .final (.returned 1), returnedStart, 20⟩ :=
+  Ghost.runStmts_terminal GhostDemo.program GhostDemo.oracle 20 [] [.abort ⟨4⟩] returnedStart
+    (.returned 1) rfl (by decide)
+
+example : Ghost.runStmts GhostDemo.program GhostDemo.oracle 20 [] [.abort ⟨4⟩] trappedStart =
+    ⟨[], .final (.trapped .abort ⟨3⟩), trappedStart, 20⟩ :=
+  Ghost.runStmts_terminal GhostDemo.program GhostDemo.oracle 20 [] [.abort ⟨4⟩] trappedStart
+    (.trapped .abort ⟨3⟩) rfl (by decide)
+
+/-- A planted mutant that resumes a trailing statement even from a returned or trapped state. -/
+def restartingRunStmts {O : Exec.Operands} (P : Exec.Program O) (ρ : Exec.Oracle O)
+    (fuel : Nat) (hist : List O.Event) : List (Exec.Stmt O) → Exec.Config O → Ghost.SegmentReport O
+  | [], c => Ghost.drive P ρ fuel hist c
+  | s :: ss, c =>
+    let r := Ghost.drive P ρ fuel hist ⟨.exec s, c.locals, c.store, c.frames⟩
+    match r.ending with
+    | .final .normal => restartingRunStmts P ρ r.remaining r.events ss r.config
+    | _ => r
+
+/-- A returned configuration with a live local that the trailing assignment can change. -/
+abbrev returnedWithLocal : Exec.Config PrimDemo.base := ⟨.exiting (.ret 1), [(x0, 1)], 5, []⟩
+
+/-- Planted counter-example for `Ghost.runStmts_terminal`: the restarting runner executes the
+assignment, changing both the local state and the ending after the return. -/
+example : (restartingRunStmts GhostDemo.program GhostDemo.oracle 20 []
+    [.assign x0 () ⟨4⟩] returnedWithLocal).config.locals ≠
+    (Ghost.runStmts GhostDemo.program GhostDemo.oracle 20 []
+      [.assign x0 () ⟨4⟩] returnedWithLocal).config.locals := by decide
+
+example : (restartingRunStmts GhostDemo.program GhostDemo.oracle 20 []
+    [.assign x0 () ⟨4⟩] returnedWithLocal).ending ≠ .final (.returned 1) := by
   intro h
   cases h
 
