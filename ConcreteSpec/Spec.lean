@@ -21,6 +21,7 @@ import ConcreteSpec.Spec.Const
 import ConcreteSpec.Spec.Memory
 import ConcreteSpec.Spec.Hybrid
 import ConcreteSpec.Spec.Own
+import ConcreteSpec.Spec.Grant
 import ConcreteSpec.Spec.Rules
 
 /-!
