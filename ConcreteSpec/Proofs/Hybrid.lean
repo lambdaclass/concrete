@@ -347,6 +347,48 @@ theorem write_frame (tgt : Target) (st st' : State) (p q : Place) (v : Value)
               simp [State.read, hq, hd, hh]
     next => simp at h
 
+/-- In the whole-cell model, disjoint byte ranges cannot share an allocation identity when
+the written cell has a supported (therefore nonempty) scalar representation. -/
+theorem rangesDisjoint_separated (tgt : Target) (st : State) (hw : st.WellFormed tgt)
+    (p q : Place) (hd : st.RangesDisjoint p q)
+    (ht : ∀ c, st.places p = some c → c.ty ≠ .unit) : st.Separated p q := by
+  intro c d r s hc hq hcr hds he
+  have hr := hw.projected p c hc
+  have hs := hw.projected q d hq
+  simp only [Cell.Projected, hcr] at hr
+  simp only [Cell.Projected, hds] at hs
+  obtain ⟨b, x, hpb, hbx, hrspace, hrbase, hrsize, _, hrfit⟩ := hr
+  obtain ⟨b', y, hpb', hby, hsspace, hsbase, hssize, _⟩ := hs
+  have hbb : b = b' := by rw [hpb, hpb'] at he; exact Option.some.inj he
+  subst b'
+  rw [hbx] at hby
+  cases hby
+  have hpos : 0 < sizeof c.ty := by
+    have hct := ht c hc
+    cases hc' : c.ty with
+    | int t => cases t <;> decide
+    | bool => decide
+    | unit => exact False.elim (hct hc')
+  rcases hd c d r s hc hq hcr hds with hspace | hbefore | hafter
+  · exact hspace (hrspace.trans hsspace.symm)
+  · omega
+  · omega
+
+/-- The requested byte-range frame law: a successful typed write leaves every other place's
+read unchanged when its materialized interval is disjoint from the written place's interval. -/
+theorem write_frame_disjoint (tgt : Target) (st st' : State) (hw : st.WellFormed tgt)
+    (p q : Place) (v : Value) (hne : q ≠ p) (hd : st.RangesDisjoint p q)
+    (h : st.write tgt p v = some st') : st'.read tgt q = st.read tgt q := by
+  have ht : ∀ c, st.places p = some c → c.ty ≠ .unit := by
+    intro c hc
+    have hh := h
+    simp only [State.write, hc] at hh
+    dsimp at hh
+    split at hh
+    next hv => rw [← hv.1]; exact hv.2.2
+    next => simp at hh
+  exact write_frame tgt st st' p q v hne (rangesDisjoint_separated tgt st hw p q hd ht) h
+
 /-- First materialization frames all other places; freshness supplies block separation, so no
 additional separation premise is necessary. -/
 theorem materialize_frame (tgt : Target) (st st' : State) (hw : st.WellFormed tgt)

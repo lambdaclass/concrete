@@ -76,6 +76,12 @@ structure Range where
   align : Nat
   deriving Repr
 
+/-- Occupied byte intervals are disjoint when they are in different spaces or one interval
+ends before the other starts. Endpoints are excluded, so adjacent ranges are disjoint. -/
+def Range.Disjoint (r s : Range) : Prop :=
+  r.ptr.space ≠ s.ptr.space ∨ r.ptr.addr + r.extent ≤ s.ptr.addr ∨
+    s.ptr.addr + s.extent ≤ r.ptr.addr
+
 /-- A single authoritative storage form. -/
 inductive Storage where
   | structured (v : Value)
@@ -121,6 +127,11 @@ This is stronger than numeric non-overlap and permits address reuse across dead 
 def State.Separated (st : State) (p q : Place) : Prop :=
   ∀ c d r s, st.places p = some c → st.places q = some d →
     c.storage = .materialized r → d.storage = .materialized s → r.ptr.prov ≠ s.ptr.prov
+
+/-- The precise byte-range frame premise. Structured cells impose no byte-range obligation. -/
+def State.RangesDisjoint (st : State) (p q : Place) : Prop :=
+  ∀ c d r s, st.places p = some c → st.places q = some d →
+    c.storage = .materialized r → d.storage = .materialized s → r.Disjoint s
 
 /-- Replace a logical place without changing other entries. -/
 def State.set (st : State) (p : Place) (c : Cell) : State :=
