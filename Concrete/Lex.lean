@@ -397,6 +397,8 @@ theorem lineComment_complete {cs : List Nat} {out : List Nat × List Nat}
 
 /-! ## Kernel-checked conformance cases -/
 
+section Conformance
+-- The raised limit is for these `decide` cases only.
 set_option maxRecDepth 100000
 
 /-- Equality of decoder results for kernel-evaluated conformance cases. -/
@@ -433,5 +435,7 @@ example : lineComment [47,47,32,120,10,114,101,115,116] =
 example : lineComment [47,47,32,120,13] = some ([47,47,32,120], [13]) := by decide
 example : lineComment [47,47,32,120] = some ([47,47,32,120], []) := by decide
 example : lineComment [47,42,32,120,32,42,47] = none := by decide
+
+end Conformance
 
 end Concrete.Lex
