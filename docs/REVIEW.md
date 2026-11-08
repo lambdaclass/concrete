@@ -83,16 +83,23 @@ well-formed diff. `scripts/review/split_diff.py` does the splitting.
 
 The prompt describes the repository as a compiler and asks for correctness
 findings: wrong behaviour, logic errors, regressions, unhandled cases, tests that
-do not check what they claim, and docs that contradict the code. It runs
-`codex exec --sandbox read-only` from the repository root, with the piece on
-stdin, so the reviewer can open other files for context but cannot change them.
-It runs with `GIT_OPTIONAL_LOCKS=0`: the sandbox does not stop git from taking the
-worktree's `index.lock` for an index refresh, and a reviewer command stopped
-mid-refresh left that lock behind (bug 209).
+do not check what they claim, and docs that contradict the code. The script
+extracts `HEAD` with `git archive` into a temporary directory and runs
+`codex exec --skip-git-repo-check -s danger-full-access` there, never in the
+live clone. The reviewer can read the complete tree at the reviewed commit but
+has no checkout, refs or notes of its own. The diff piece is included in the
+prompt and Codex's stdin is closed. Each attempt is bounded by `REVIEW_TIMEOUT`
+(default 1500 seconds, with one longer retry). `GIT_OPTIONAL_LOCKS=0` remains set
+so a reviewer command cannot leave an `index.lock` behind (bug 209).
 
-The reply must end with a line that is exactly `VERDICT: clean` or
-`VERDICT: findings`. Markdown emphasis around it is tolerated; anything after it
-is not. A reply without that line is treated as no answer, never as clean.
+The reply's penultimate line must be exactly `REPOSITORY: readable` or
+`REPOSITORY: unreadable`, and its last line exactly `VERDICT: clean` or
+`VERDICT: findings`. Markdown emphasis around them is tolerated; anything after
+the verdict is not. `readable` means the reviewer successfully opened repository
+files for context. A verdict without exactly one readable marker is `blocked`,
+never clean. Known repository-access failures (a sandbox that could not start or
+initialize, `bwrap: Operation not permitted`, failed repository reads, or an
+explicit unreadable marker) are `blocked` even when the reply says clean.
 
 **Refusals.** A piece that comes back refused, with no verdict line, or with a
 reviewer error is retried **once**: the piece is halved and each half is sent
@@ -134,23 +141,31 @@ reviewer: codex
 utc: 2026-10-22T14:03:11Z
 base: <40-hex sha>
 pieces: K
+repository: readable             # clean notes only
 ```
 
 **The format is an interface.** `verify.sh` parses it, and the train's review
-leg reads it through `verify.sh`, which rejects any note that lacks one of these
-six keys, repeats a key, or carries any other key. Keys are matched by name, not
-position. Change the format only together with `verify.sh`.
+leg reads it through `verify.sh`, which rejects any note that lacks one of the
+six common keys, repeats a key, or carries any other key. Keys are matched by
+name, not position. A clean note must also carry `repository: readable`; a
+legacy clean note without it is well formed but exits 1, not clean, so old
+diff-only reviews are not landing provenance. Running `review.sh` on such a
+`HEAD` performs a new round rather than short-circuiting. Change the format only
+together with `verify.sh`.
 
 - `rounds` is this round's number, which is also the number of rounds run on the
   branch so far.
 - `base` is the branch base (the merge-base), not the start of the delta.
 - `pieces` counts the pieces before any refusal retry.
+- `repository` records that every piece's reviewer could read the archived tree.
 
 When the verdict is not clean, the findings text goes in a second note under
 `refs/notes/concrete-review-findings`, which is pushed too. It is how the next
 round, possibly run by another agent, gets the previous findings. The full raw
 output of every round is written to `.review/<sha>-<round>.md`, which git
-ignores.
+ignores. Every prompt sent, including its diff piece, is saved byte for byte as
+`.review/<sha>-<round>.prompt.<invocation>.txt`; the corresponding raw-output
+section records that path and the prompt's sha256.
 
 A non-fast-forward rejection (another agent pushed notes in the meantime) is
 handled by fetching the remote notes, merging them (`git notes merge -s ours`: on
@@ -189,18 +204,21 @@ commit's review provenance ([LANDING.md](LANDING.md)); it approves no other comm
 ## verify.sh
 
 ```sh
-scripts/review/verify.sh <commit>          # exit 0 clean, 1 findings/blocked, 2 none or malformed
+scripts/review/verify.sh <commit>          # 0 readable clean; 1 findings/blocked/legacy clean; 2 none/malformed
 scripts/review/verify.sh --fetch <commit>  # fetch the notes ref from origin first
 ```
 
 It judges the exact commit. A clean note on an ancestor says nothing about the
 commits after it, so a branch that gains a commit after its clean round needs
-another round.
+another round. A legacy clean note without `repository: readable` exits 1 with
+a message naming the missing key.
 
 ## Tests
 
 `scripts/checks/review_tool.sh` runs the scripts against throwaway
 repositories, with a bare repository as `origin` and a fake `codex` that answers
-according to markers in the diff. It needs no API key. It covers delta selection,
-splitting, the refusal retry, the cap, note writing and pushing (including the
-non-fast-forward merge), verdict parsing, and `verify.sh`.
+according to markers in the diff. It needs no API key or network. It covers delta
+selection, splitting, the refusal retry, the cap, note writing and pushing
+(including the non-fast-forward merge), verdict parsing, archived-tree access,
+prompt persistence and hashes, blocked repository-access failures, and
+`verify.sh`'s refusal of legacy clean notes.

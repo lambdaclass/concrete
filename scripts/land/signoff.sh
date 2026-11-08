@@ -165,8 +165,9 @@ check() {
   [[ "$at" =~ ^[0-9a-f]{40}$ ]] || bad "rounds-at '$at' is not a full commit SHA"
   { git merge-base --is-ancestor "$at" "$sha" 2>/dev/null && ! git merge-base --is-ancestor "$at" "$base" 2>/dev/null; } \
     || bad "rounds-at ${at:0:10} is not one of ${sha:0:10}'s own commits (an ancestor or itself, not on ${base:0:10})"
-  # verify.sh judges the note as review.sh wrote it: 0 clean, 1 findings or blocked (both well formed,
-  # and both count: the cap is rounds used); 2 is no note or a malformed one.
+  # verify.sh judges the note as review.sh wrote it: 0 clean with repository: readable; 1 findings,
+  # blocked, or a well-formed legacy clean note without that key (all count rounds used); 2 is no note
+  # or a malformed one. Only exit 0 is clean provenance.
   local vout vrc=0
   vout="$(bash "$VERIFY" "$at" 2>&1)" || vrc=$?
   [ "$vrc" = 0 ] || [ "$vrc" = 1 ] || bad "rounds-at ${at:0:10} carries no well-formed review.sh note: ${vout//$'\n'/ }"

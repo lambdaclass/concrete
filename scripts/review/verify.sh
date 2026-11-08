@@ -10,7 +10,8 @@
 #   --fetch  first fetch refs/notes/concrete-review from $REVIEW_REMOTE (default
 #            origin), replacing the local copy (a reader, not a writer).
 #
-# Exit codes: 0 clean; 1 reviewed, not clean (findings or blocked);
+# Exit codes: 0 clean with repository: readable; 1 reviewed but not clean
+#             (findings, blocked, or a legacy clean note without that key);
 #             2 no note, a malformed note, or a usage error.
 
 set -euo pipefail
@@ -32,9 +33,10 @@ NOTE="$(git notes --ref="$NOTES_REF" show "$SHA" 2>/dev/null)" || {
   exit 2
 }
 
-# The note must carry each of the six fields review.sh writes exactly once, each well formed. Any
-# other key, a repeated key, or a line that is not `key: value` makes the note malformed. Keys are
-# matched by name, not position, because notes.sh `put` appends `utc` last.
+# The note must carry each of review.sh's six common fields exactly once, each well formed. A clean
+# note must also carry repository: readable. Any other key, a repeated key, or a line that is not
+# `key: value` makes the note malformed. Keys are matched by name, not position, because notes.sh
+# `put` appends `utc` last.
 malformed() {
   echo "$SHA malformed review note${1:+ ($1)}:"
   printf '%s\n' "$NOTE" | sed 's/^/  /'
@@ -55,6 +57,7 @@ while IFS= read -r line; do
     utc)          [[ "$v" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$ ]] ;;
     base)         [[ "$v" =~ ^[0-9a-f]{40}$ ]] ;;
     pieces)       [[ "$v" =~ ^[0-9]+$ ]] ;;
+    repository)   [ "$v" = readable ] ;;
     *)            false ;;
   esac || malformed "bad $k"
 done <<< "$NOTE"
@@ -64,6 +67,10 @@ done
 
 field() { local n="F_${1//-/_}"; printf '%s' "${!n:-}"; }
 VERDICT="$(field verdict)"
+if [ "$VERDICT" = clean ] && [ "$(field repository)" != readable ]; then
+  echo "$SHA clean review note is not clean provenance: missing repository: readable"
+  exit 1
+fi
 echo "$SHA $VERDICT (round $(field rounds), reviewer $(field reviewer), $(field utc), base $(field base), $(field pieces) piece(s))"
 [ "$VERDICT" = clean ] && exit 0
 exit 1

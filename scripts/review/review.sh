@@ -27,7 +27,7 @@
 #   2  usage or environment error (nothing recorded)
 #   3  round cap reached: split the branch or escalate (open findings are printed)
 #   4  nothing to review (HEAD already reviewed, or empty diff)
-#   5  verdict blocked (a piece could not be reviewed; see .review/)
+#   5  verdict blocked (a piece could not be reviewed or its repository was unreadable; see .review/)
 #   6  result recorded locally but the notes ref could not be pushed
 #
 # Environment (mostly for the test gate, scripts/checks/review_tool.sh):
@@ -36,6 +36,7 @@
 #   REVIEW_MAIN_REF     ref the default base is computed against (default: $REVIEW_REMOTE/main)
 #   REVIEW_PUSH         1 to fetch/push the notes refs (default: 1)
 #   REVIEW_PIECE_BYTES  size limit of one piece in bytes (default: 60000)
+#   REVIEW_TIMEOUT      seconds per reviewer attempt before one longer retry (default: 1500)
 
 set -euo pipefail
 
@@ -49,6 +50,7 @@ REMOTE="${REVIEW_REMOTE:-origin}"
 MAIN_REF="${REVIEW_MAIN_REF:-$REMOTE/main}"
 PUSH="${REVIEW_PUSH:-1}"
 PIECE_BYTES="${REVIEW_PIECE_BYTES:-60000}"
+TIMEOUT="${REVIEW_TIMEOUT:-1500}"
 NOTES_REF="refs/notes/concrete-review"
 FINDINGS_REF="refs/notes/concrete-review-findings"
 REVIEWER="codex"
@@ -79,10 +81,14 @@ if [ -n "${WANT_HEAD:-}" ]; then
   [ "$want" = "$(git rev-parse HEAD)" ] || die "--head $WANT_HEAD is ${want:0:12}, but the checkout is at $(git rev-parse --short=12 HEAD)"
 fi
 [[ "$PIECE_BYTES" =~ ^[1-9][0-9]*$ ]] || die "REVIEW_PIECE_BYTES must be a positive integer"
+{ [[ "$TIMEOUT" =~ ^[0-9]+(\.[0-9]+)?$ ]] && awk -v s="$TIMEOUT" 'BEGIN { exit !(s + 0 > 0) }'; } \
+  || die "REVIEW_TIMEOUT must be a positive number of seconds"
 command -v "$CODEX_BIN" >/dev/null 2>&1 || die "reviewer binary not found: $CODEX_BIN"
 
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
+BOUNDED_PARENT="$WORK" source "$SCRIPT_DIR/../checks/lib/bounded.sh" || exit 2
+sha256_file() { if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1" | cut -d' ' -f1; else shasum -a 256 "$1" | cut -d' ' -f1; fi; }
 
 # ---------------------------------------------------------------- notes sync
 # Fetch the remote notes refs and merge them into the local ones. On a conflict
@@ -162,7 +168,8 @@ fi
 
 # Latest note on the branch (round count), and the latest note whose round
 # actually reviewed its diff (delta start). A `blocked` round reviewed only part
-# of its diff, so it does not advance the delta start.
+# of its diff, so it does not advance the delta start. Neither does a legacy
+# clean note without evidence that the reviewer could read the repository.
 PREV_SHA="" PREV_ROUNDS=0 PREV_VERDICT="" REVIEWED_SHA="" REVIEWED_ROUNDS=0 REVIEWED_VERDICT=""
 while read -r c; do
   [ -n "$c" ] || continue
@@ -170,22 +177,28 @@ while read -r c; do
   v="$(note_field "$n" verdict)"
   r="$(note_field "$n" rounds)"
   [[ "$r" =~ ^[0-9]+$ ]] || continue
+  if [ "$v" = clean ] && [ "$(note_field "$n" repository)" != readable ]; then v=legacy-clean; fi
   if [ -z "$PREV_SHA" ]; then PREV_SHA="$c" PREV_ROUNDS="$r" PREV_VERDICT="$v"; fi
   if [ "$v" = clean ] || [ "$v" = findings ]; then REVIEWED_SHA="$c" REVIEWED_ROUNDS="$r" REVIEWED_VERDICT="$v"; break; fi
 done < <(git rev-list --topo-order HEAD "^$BASE_SHA")
 
-if [ "$PREV_SHA" = "$HEAD_SHA" ] && [ "$PREV_VERDICT" != blocked ]; then
-  if [ "$PREV_VERDICT" = clean ]; then
-    echo "review: HEAD $HEAD_SHA already reviewed clean (round $PREV_ROUNDS)"
-    exit 0
-  fi
-  if [ "$PREV_ROUNDS" -ge "$MAX_ROUNDS" ]; then
-    cap_message "$PREV_ROUNDS" "$(findings_for "$PREV_SHA" "$PREV_ROUNDS")"
-    exit 3
-  fi
-  echo "review: HEAD already reviewed in round $PREV_ROUNDS (verdict $PREV_VERDICT)." >&2
-  echo "review: commit the fixes, then run again." >&2
-  exit 4
+if [ "$PREV_SHA" = "$HEAD_SHA" ]; then
+  case "$PREV_VERDICT" in
+    clean)
+      echo "review: HEAD $HEAD_SHA already reviewed clean (round $PREV_ROUNDS)"
+      exit 0
+      ;;
+    blocked|legacy-clean) ;;
+    *)
+      if [ "$PREV_ROUNDS" -ge "$MAX_ROUNDS" ]; then
+        cap_message "$PREV_ROUNDS" "$(findings_for "$PREV_SHA" "$PREV_ROUNDS")"
+        exit 3
+      fi
+      echo "review: HEAD already reviewed in round $PREV_ROUNDS (verdict $PREV_VERDICT)." >&2
+      echo "review: commit the fixes, then run again." >&2
+      exit 4
+      ;;
+  esac
 fi
 
 ROUND=$((PREV_ROUNDS + 1))
@@ -201,11 +214,15 @@ if [ ! -s "$WORK/full.diff" ]; then
   exit 4
 fi
 
+REVIEW_TREE="$WORK/reviewed-tree"
+mkdir -p "$REVIEW_TREE"
+git archive "$HEAD_SHA" | tar -x -C "$REVIEW_TREE"
+
 # Open findings to carry forward: those of the latest round, and, when that
 # round was blocked, also those of the last fully reviewed round (the blocked
 # round may not have seen the code they are about).
 PREV_FINDINGS=""
-if [ -n "$PREV_SHA" ] && [ "$PREV_VERDICT" != clean ]; then
+if [ -n "$PREV_SHA" ] && { [ "$PREV_VERDICT" = findings ] || [ "$PREV_VERDICT" = blocked ]; }; then
   PREV_FINDINGS="$(findings_for "$PREV_SHA" "$PREV_ROUNDS")"
 fi
 if [ "$REVIEWED_VERDICT" = findings ] && [ "$REVIEWED_SHA" != "$PREV_SHA" ]; then
@@ -234,6 +251,7 @@ fi
 SCOPE_ROUND1="The patch below is the complete change of a branch against its base commit $BASE_SHA."
 SCOPE_DELTA="The patch below is only the change since commit $FROM, which was reviewed in round $REVIEWED_ROUNDS. Earlier rounds covered the rest of the branch."
 VERDICT_RULE='For each finding write one bullet: `- path:line: what is wrong and why`.
+Your penultimate line must be exactly `REPOSITORY: readable` or `REPOSITORY: unreadable`. Use readable only after you have successfully opened repository files for context; if the sandbox or any repository read failed, use unreadable.
 The last line of your reply must be exactly one of these two lines, with nothing after it:
 VERDICT: clean
 VERDICT: findings
@@ -244,7 +262,7 @@ prompt_for() { # prompt_for <standard|neutral> <piece label> <group> <paths>
   [ -n "$REVIEWED_SHA" ] && scope="$SCOPE_DELTA"
   if [ "$1" = standard ]; then
     cat <<EOF
-You are reviewing a patch to Concrete, a compiler for a small systems programming language. The compiler is written in Lean 4; the repository also holds its standard library, test programs, test scripts and documentation. The repository is checked out read-only in the working directory, and you may open any file in it for context.
+You are reviewing a patch to Concrete, a compiler for a small systems programming language. The compiler is written in Lean 4; the repository also holds its standard library, test programs, test scripts and documentation. The working directory is a temporary git-archive copy of the complete repository at reviewed commit $HEAD_SHA. Open any files you need for context; do not change them.
 
 This is review round $ROUND. $scope
 This is $2 (file group: $3; files: $4).
@@ -255,7 +273,7 @@ Also answer one question, as a finding when the answer is yes: does this patch p
 EOF
   else
     cat <<EOF
-Please do a routine code review of the source-code patch below. It belongs to a compiler, a program that translates source code into machine code, and to that compiler's tests and documentation. Treat it as ordinary software engineering: look for logic errors and for behaviour that differs from what the code and its comments say. You may read files in the working directory for context.
+Please do a routine code review of the source-code patch below. It belongs to a compiler, a program that translates source code into machine code, and to that compiler's tests and documentation. Treat it as ordinary software engineering: look for logic errors and for behaviour that differs from what the code and its comments say. The working directory is a temporary archive of the complete repository at commit $HEAD_SHA; open any files you need for context and do not change them.
 
 This is $2 (files: $4). $scope
 Also report as a finding any change that picks a side on an owner decision listed in docs/decisions.md (OD1 - OD157) or an undecided project question without the owner's explicit answer. Writing down a decision the owner explicitly approved is allowed; report it only when it lacks the owner's quoted, dated answer (or the quoted owner rule that decides it under the recording rule in docs/decisions.md), changes that answer's meaning, goes beyond it, or adds something the owner did not approve.
@@ -277,35 +295,55 @@ EOF
 # A refusal is recognized only when there is no verdict line: a real review that
 # merely discusses content filters (as a review of this tool does) still parses.
 REFUSAL_RE="(I can.?t|I cannot|I won.?t|I.?m (not able|unable)|unable to) (help|assist|comply|review|continue|provide)|cyber ?security|content (filter|policy)|usage polic|safety (system|filter|policy)|flagged (as|for)|potentially (harmful|malicious)|invalid_prompt|violat(es|ion of) .*polic"
+REPOSITORY_FAILURE_RE='sandbox (could not|failed to) (start|initialize)|bwrap: operation not permitted|repository reads failed|could not read the repository|repository verification failed'
 
+RAW_DIR="$ROOT/.review"
+mkdir -p "$RAW_DIR"
+RAW="$RAW_DIR/$HEAD_SHA-$ROUND.md"
 LAST_RESULT=""
 LAST_BODY=""
+LAST_PROMPT=""
+LAST_PROMPT_SHA=""
 RUN_N=0
 # run_one <prompt-kind> <piece-file> <label> <group> <paths>; sets LAST_RESULT to
-# clean|findings|refused|noverdict|error and LAST_BODY to the reviewer's message.
+# clean|findings|blocked|refused|noverdict|error and LAST_BODY to the reviewer's message.
 run_one() {
-  local kind="$1" piece="$2" label="$3" group="$4" paths="$5" rc=0 msg last
+  local kind="$1" piece="$2" label="$3" group="$4" paths="$5" rc=0 msg last repository prompt_arg
   RUN_N=$((RUN_N + 1))
-  local out="$WORK/out.$RUN_N.txt" log="$WORK/log.$RUN_N.txt"
+  local out="$WORK/out.$RUN_N.txt" log="$WORK/log.$RUN_N.txt" prompt="$WORK/prompt.$RUN_N.txt"
+  LAST_PROMPT="$RAW_DIR/$HEAD_SHA-$ROUND.prompt.$RUN_N.txt"
+  prompt_for "$kind" "$label" "$group" "$paths" >"$prompt"
+  printf '\n--- supplied diff: %s ---\n' "$label" >>"$prompt"
+  cat "$piece" >>"$prompt"
+  cp "$prompt" "$LAST_PROMPT"
+  LAST_PROMPT_SHA="$(sha256_file "$LAST_PROMPT")"
+  # Command substitution strips trailing newlines; the sentinel preserves the exact saved bytes.
+  prompt_arg="$(cat "$prompt"; printf .)"; prompt_arg="${prompt_arg%.}"
   : >"$out"
-  # GIT_OPTIONAL_LOCKS=0 (bug 209): the reviewer runs git in the caller's worktree, and its sandbox
-  # does not stop `git status` from taking .git's index.lock to refresh the index. A command it
-  # stops mid-refresh left that lock behind, 0 bytes, and the next commit in the worktree failed.
-  # Without optional locks a status reads the index and writes nothing.
-  GIT_OPTIONAL_LOCKS=0 "$CODEX_BIN" exec --sandbox read-only --ephemeral --color never -C "$ROOT" -o "$out" \
-    "$(prompt_for "$kind" "$label" "$group" "$paths")" <"$piece" >"$log" 2>&1 || rc=$?
+  # The archive has no .git and is disposable: full access lets Codex read the whole reviewed tree
+  # without giving it access to the caller's worktree, refs or notes. Keep stdin closed; the diff is
+  # part of the prompt. Optional locks remain off in case a reviewer invokes git elsewhere (bug 209).
+  bounded_run -i /dev/null "$TIMEOUT" -- env GIT_OPTIONAL_LOCKS=0 "$CODEX_BIN" exec \
+    --skip-git-repo-check -s danger-full-access --ephemeral --color never -C "$REVIEW_TREE" -o "$out" \
+    "$prompt_arg" >"$log" 2>&1 || rc=$?
   msg="$(cat "$out")"
   [ -n "$msg" ] || [ "$rc" -ne 0 ] || msg="$(cat "$log")"
   LAST_BODY="$msg"
   last="$(printf '%s\n' "$msg" | sed -e 's/[`*]//g' -e 's/[[:space:]]*$//' | awk 'NF { l = $0 } END { print l }')"
-  if [ "$rc" -eq 0 ] && [ "$last" = "VERDICT: clean" ]; then LAST_RESULT=clean
-  elif [ "$rc" -eq 0 ] && [ "$last" = "VERDICT: findings" ]; then LAST_RESULT=findings
-  elif { printf '%s\n' "$msg"; cat "$log"; } | has_match -iE "$REFUSAL_RE"; then LAST_RESULT=refused
+  repository="$(printf '%s\n' "$msg" | sed -e 's/[`*]//g' -e 's/[[:space:]]*$//' | awk '/^REPOSITORY:/ { print }')"
+  if [ "$repository" = "REPOSITORY: unreadable" ] || { printf '%s\n' "$msg"; cat "$log"; } | has_match -iE "$REPOSITORY_FAILURE_RE"; then
+    LAST_RESULT=blocked
   elif [ "$rc" -ne 0 ]; then
     LAST_RESULT=error
     LAST_BODY="$msg
 (reviewer exited $rc; last lines of its log:)
 $(tail -n 20 "$log")"
+  elif [ "$last" = "VERDICT: clean" ] || [ "$last" = "VERDICT: findings" ]; then
+    if [ "$repository" != "REPOSITORY: readable" ]; then LAST_RESULT=blocked
+    elif [ "$last" = "VERDICT: clean" ]; then LAST_RESULT=clean
+    else LAST_RESULT=findings
+    fi
+  elif { printf '%s\n' "$msg"; cat "$log"; } | has_match -iE "$REFUSAL_RE"; then LAST_RESULT=refused
   else LAST_RESULT=noverdict
   fi
 }
@@ -330,7 +368,8 @@ while IFS=$'\t' read -r name group bytes paths; do
   run_one standard "$WORK/pieces/$name" "$label" "$group" "$paths"
   result="$LAST_RESULT" body="$LAST_BODY"
   {
-    echo; echo "## $label: $group ($bytes bytes): $result"; echo; echo "files: $paths"; echo
+    echo; echo "## $label: $group ($bytes bytes): $result"; echo; echo "files: $paths"
+    echo "prompt: ${LAST_PROMPT#$ROOT/}"; echo "prompt sha256: $LAST_PROMPT_SHA"; echo
     echo "$body"
   } >>"$RAW"
   if [ "$result" = refused ] || [ "$result" = noverdict ] || [ "$result" = error ]; then
@@ -345,7 +384,11 @@ while IFS=$'\t' read -r name group bytes paths; do
       hlabel="part $j of piece $i of $K"
       echo "review: retrying $hlabel with a neutral prompt ($hbytes bytes)" >&2
       run_one neutral "$half_dir/$hname" "$hlabel" "$group" "$hpaths"
-      { echo; echo "### retry, $hlabel ($hbytes bytes): $LAST_RESULT"; echo; echo "$LAST_BODY"; } >>"$RAW"
+      {
+        echo; echo "### retry, $hlabel ($hbytes bytes): $LAST_RESULT"
+        echo "prompt: ${LAST_PROMPT#$ROOT/}"; echo "prompt sha256: $LAST_PROMPT_SHA"; echo
+        echo "$LAST_BODY"
+      } >>"$RAW"
       case "$LAST_RESULT" in
         clean) ;;
         findings) [ "$result" = blocked ] || result=findings; body="$body
@@ -354,7 +397,7 @@ $LAST_BODY" ;;
       esac
     done <"$half_dir/manifest.tsv"
   fi
-  stripped="$(printf '%s\n' "$body" | grep -vE '^[`*[:space:]]*VERDICT:' || true)"
+  stripped="$(printf '%s\n' "$body" | grep -vE '^[`*[:space:]]*(VERDICT|REPOSITORY):' || true)"
   case "$result" in
     findings)
       N_FINDINGS=$((N_FINDINGS + 1))
@@ -365,7 +408,7 @@ $stripped"
     blocked)
       N_BLOCKED=$((N_BLOCKED + 1))
       FINDINGS_TEXT="$FINDINGS_TEXT
-[$label: $group] blocked: the reviewer refused or gave no verdict, also after one neutral retry. Files: $paths
+[$label: $group] blocked: the reviewer could not review this piece or read the repository. Files: $paths
 $stripped"
       ;;
   esac
@@ -392,6 +435,7 @@ utc: $UTC
 base: $BASE_SHA
 pieces: $K
 EOF
+if [ "$VERDICT" = clean ]; then echo "repository: readable" >>"$WORK/note"; fi
 git notes --ref="$NOTES_REF" add -f -F "$WORK/note" "$HEAD_SHA"
 if [ "$VERDICT" = blocked ] && [ -n "$PREV_FINDINGS" ]; then
   # A blocked round cannot resolve the findings it was given: some code went

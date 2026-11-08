@@ -3,8 +3,8 @@
 # commit carries BOTH notes, published on the primary remote:
 #
 #   refs/notes/concrete-review   verdict: clean|findings|blocked   rounds: N   reviewer: codex   utc: ...
-#                                base: <sha>   pieces: N   (format owned by scripts/review/review.sh and
-#                                checked by scripts/review/verify.sh)
+#                                base: <sha>   pieces: N   repository: readable (clean notes only;
+#                                format owned by scripts/review/review.sh and checked by verify.sh)
 #   refs/notes/concrete-gates    gates: pass|fail          selected: N                   utc: ...
 #
 # One `key: value` per line; when a key repeats, the last line wins. A note is attached to a

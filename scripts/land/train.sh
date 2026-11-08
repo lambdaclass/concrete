@@ -468,8 +468,9 @@ review_cmd() {
 # one at its exact recorded SHA (each member was reviewed at its own head: a train
 # built or rebuilt from reviewed branches). Every note is judged by scripts/review/verify.sh, on
 # $REMOTE's notes (fetched first, replacing the local copy, as verify.sh --fetch does): an absent,
-# malformed, blocked or findings note qualifies nothing, and a head note that is not clean is not
-# overridden by its members. Prints what qualified; on failure prints why and returns 1.
+# malformed, blocked or findings note qualifies nothing; nor does a legacy clean note without
+# repository: readable. A head note that is not clean is not overridden by its members. Prints what
+# qualified; on failure prints why and returns 1.
 #
 # OWNER SIGN-OFF (R-0618). A member without a clean note qualifies instead by a valid owner sign-off
 # at its exact SHA (scripts/land/signoff.sh verify --base <the train's base>, on $REMOTE's

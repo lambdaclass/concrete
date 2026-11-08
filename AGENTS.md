@@ -359,5 +359,10 @@ itself via the bracket, but a ref check is still the better answer.
 Every agent reviews the same way: `scripts/review/review.sh`, one round per
 invocation, with the verdict recorded as a git note on the reviewed commit. The
 note is shared through `origin`, so rounds run in another worktree or by another
-agent count toward the same cap, and the next round reviews only the delta. See
+agent count toward the same cap, and the next round reviews only the delta.
+Codex runs with full access only in a temporary `git archive` of the reviewed
+commit, never in the live clone, with its stdin closed and the diff in the
+prompt. Every prompt is saved under `.review/` with its sha256 in the raw output.
+A clean note must carry `repository: readable`; legacy clean notes without it
+are not provenance and `review.sh` re-reviews their commits. See
 [REVIEW.md](docs/REVIEW.md).

@@ -2,17 +2,17 @@
 # R-0544 — the review tool (scripts/review/review.sh, verify.sh, split_diff.py)
 # does what docs/REVIEW.md says it does.
 #
-# No API key is needed: the reviewer is a fake `codex` that answers according to
-# MARK_* markers on the ADDED lines of the diff it receives on stdin, and logs
-# every call (prompt kind, stdin size, files) so the legs can check what was sent.
-# All git work happens in throwaway repositories with a bare repository as
-# `origin`, so the notes push, including the non-fast-forward path, runs for real.
+# No API key or network is needed: the reviewer is a fake `codex` that answers according to
+# MARK_* markers on the ADDED lines of the diff in its prompt, and logs every call (prompt kind,
+# closed stdin, files, archived tree) so the legs can check what was sent. All git work happens in
+# throwaway repositories with a bare repository as `origin`, so the notes push, including the
+# non-fast-forward path, runs for real.
 #
-# Legs: verdict parsing, note writing and its exact format, notes push and the
-# non-fast-forward merge, delta selection (round 2 sees only the delta and the
-# previous findings), splitting (file groups, size limit, hunk split, --pieces N),
-# the content-filter refusal retry (once, neutral, smaller, then `blocked`), the
-# round cap (distinct exit code, no extra round), verify.sh, and the pre-push
+# Legs: verdict and repository-access parsing, exact prompt persistence and hashes, note writing
+# and its format, notes push and the non-fast-forward merge, delta selection (round 2 sees only the
+# delta and previous findings), splitting (file groups, size limit, hunk split, --pieces N), the
+# content-filter refusal retry (once, neutral, smaller, then `blocked`), the round cap (distinct
+# exit code, no extra round), verify.sh including legacy clean-note refusal, and the pre-push
 # hook's review-notes tier (a notes-only push runs no gates).
 
 set -uo pipefail
@@ -57,27 +57,33 @@ export FAKE_LOG
 export GIT_OPTIONAL_LOCKS=1
 cat >"$T/bin/codex" <<'EOF'
 #!/usr/bin/env bash
-# Fake reviewer: `codex exec --sandbox read-only ... -o <file> <prompt>`, diff on stdin.
+# Fake reviewer: `codex exec -s danger-full-access ... -o <file> <prompt>`, diff in the prompt.
 set -uo pipefail
 [ "${1:-}" = exec ] || { echo "fake codex: expected exec" >&2; exit 64; }
 shift
-out="" prompt="" sandbox=""
+out="" prompt="" sandbox="" cd="" skip=0
 while [ $# -gt 0 ]; do
   case "$1" in
     -o|--output-last-message) out="$2"; shift 2 ;;
     -s|--sandbox) sandbox="$2"; shift 2 ;;
-    -C|--cd|--color|-m|--model|-c) shift 2 ;;
-    --ephemeral|--skip-git-repo-check) shift ;;
+    -C|--cd) cd="$2"; shift 2 ;;
+    --color|-m|--model|-c) shift 2 ;;
+    --skip-git-repo-check) skip=1; shift ;;
+    --ephemeral) shift ;;
     *) prompt="$1"; shift ;;
   esac
 done
+[ -z "$cd" ] || cd "$cd" || exit 65
 n=$(( $(ls "$FAKE_LOG" | grep -c '^stdin\.' || true) + 1 ))
-cat >"$FAKE_LOG/stdin.$n"
+cat >"$FAKE_LOG/actual-stdin.$n"
 printf '%s' "$prompt" >"$FAKE_LOG/prompt.$n"
+awk 'found { print } /^--- supplied diff: / { found=1 }' "$FAKE_LOG/prompt.$n" >"$FAKE_LOG/stdin.$n"
 kind=standard
 grep -q "routine code review" "$FAKE_LOG/prompt.$n" && kind=neutral
 files="$(grep '^diff --git ' "$FAKE_LOG/stdin.$n" | sed 's#.* b/##' | sort -u | tr '\n' ',')"
-echo "$n $kind sandbox=$sandbox bytes=$(wc -c <"$FAKE_LOG/stdin.$n" | tr -d ' ') files=$files" >>"$FAKE_LOG/calls"
+archive=no
+[ ! -e .git ] && [ "$(cat README.md 2>/dev/null)" = base ] && archive=yes
+echo "$n $kind sandbox=$sandbox bytes=$(wc -c <"$FAKE_LOG/stdin.$n" | tr -d ' ') archive=$archive skip_git_check=$skip stdin_bytes=$(wc -c <"$FAKE_LOG/actual-stdin.$n" | tr -d ' ') files=$files" >>"$FAKE_LOG/calls"
 echo "$n optional_locks=${GIT_OPTIONAL_LOCKS:-unset}" >>"$FAKE_LOG/locks"
 added="$(grep '^+' "$FAKE_LOG/stdin.$n" || true)"
 has() { grep -q "$1" <<<"$added"; }
@@ -86,22 +92,37 @@ if has MARK_REFUSE_ALWAYS || { has MARK_REFUSE_STANDARD && [ "$kind" = standard 
   reply "I'm sorry, but I can't help with that request because it was flagged by our cybersecurity policy."
 elif has MARK_ERROR; then
   echo "stream error: 500" >&2; exit 1
+elif has MARK_REPOSITORY_UNREADABLE; then
+  reply "REPOSITORY: unreadable
+VERDICT: clean"
+elif has MARK_SANDBOX_FAILURE; then
+  reply "sandbox could not start
+REPOSITORY: readable
+VERDICT: clean"
+elif has MARK_NO_REPOSITORY; then
+  reply "Nothing to report.
+VERDICT: clean"
 elif has MARK_FINDING; then
   reply "- a.txt:1: the counter is never reset
+REPOSITORY: readable
 VERDICT: findings"
 elif has MARK_NOVERDICT; then
   reply "I looked at it and it seems fine."
 elif has MARK_TRAILING; then
-  reply "VERDICT: clean
+  reply "REPOSITORY: readable
+VERDICT: clean
 Also, one more thought."
 elif has MARK_BOLD; then
   reply "Nothing to report.
+**REPOSITORY: readable**
 **VERDICT: clean**"
 elif has MARK_MENTION_FILTER; then
   reply "The content filter detection and the cybersecurity wording look right.
+REPOSITORY: readable
 VERDICT: clean"
 else
   reply "Nothing to report.
+REPOSITORY: readable
 VERDICT: clean"
 fi
 EOF
@@ -128,6 +149,7 @@ g push -q origin main
 review() { (cd "$W" && bash "$REVIEW" "$@"); }
 note() { g notes --ref=refs/notes/concrete-review show "${1:-HEAD}" 2>/dev/null; }
 field() { note "${2:-HEAD}" | sed -n "s/^$1: //p"; }
+sha256_file() { if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1" | cut -d' ' -f1; else shasum -a 256 "$1" | cut -d' ' -f1; fi; }
 
 echo "=== round 1: full diff, findings, note written and pushed ==="
 g checkout -qb feature
@@ -135,12 +157,14 @@ commit_file old.txt "MARK_FINDING in the first change" "first change"
 review >"$T/out1" 2>&1; rc=$?
 check "findings exit 1 (got $rc)" test "$rc" -eq 1
 check "one reviewer call" test "$(calls)" -eq 1
-check "reviewer runs with --sandbox read-only" grep -q "sandbox=read-only" "$FAKE_LOG/calls"
+check "reviewer has full access only to an archived tree, with stdin closed" \
+  grep -q "sandbox=danger-full-access .*archive=yes skip_git_check=1 stdin_bytes=0" "$FAKE_LOG/calls"
 # Bug 209: every reviewer call runs without git's optional locks, so a reviewer command stopped
 # mid-`git status` cannot leave the caller's worktree with a stale index.lock.
 check "reviewer runs with GIT_OPTIONAL_LOCKS=0" grep -q " optional_locks=0$" "$FAKE_LOG/locks"
 check "no reviewer call ran with optional locks" bash -c '! grep -v " optional_locks=0$" "$1" | has_match .' _ "$FAKE_LOG/locks"
 check "round 1 prompt carries the verdict rule" grep -q "^VERDICT: findings$" "$FAKE_LOG/prompt.1"
+check "round 1 prompt requires repository readability evidence" grep -q "REPOSITORY: readable.*REPOSITORY: unreadable" "$FAKE_LOG/prompt.1"
 check "round 1 reviews the full diff from the merge-base" grep -q "files=old.txt,$" "$FAKE_LOG/calls"
 R1="$(g rev-parse HEAD)"
 BASE="$(g merge-base HEAD origin/main)"
@@ -191,6 +215,13 @@ check "round 2 diff does not resend the round-1 hunk" bash -c "! grep -q '^+MARK
 check "round 2 prompt names the delta start" grep -q "change since commit $R1" "$FAKE_LOG/prompt.2"
 check "round 2 prompt carries the previous findings" grep -q "counter is never reset" "$FAKE_LOG/prompt.2"
 check "note: rounds 2, verdict clean" test "$(field rounds)/$(field verdict)" = "2/clean"
+check "clean note records repository: readable" test "$(field repository)" = readable
+R2="$(g rev-parse HEAD)"
+P2="$W/.review/$R2-2.prompt.1.txt"
+check "the exact prompt is saved next to the raw output" cmp -s "$P2" "$FAKE_LOG/prompt.2"
+P2_SHA="$(sha256_file "$P2")"
+check "the raw output records the saved prompt's sha256" \
+  bash -c "sed -n 's/^prompt sha256: //p' '$W/.review/$R2-2.md' | has_match -x '$P2_SHA'"
 (cd "$W" && bash "$VERIFY" HEAD >"$T/v" 2>&1); rc=$?
 check "verify.sh: clean exit 0 (got $rc)" test "$rc" -eq 0
 check "verify.sh prints the verdict" grep -q "clean (round 2" "$T/v"
@@ -207,10 +238,20 @@ g notes --ref=refs/notes/concrete-review add -f -m "verdict: clean" HEAD
 (cd "$W" && bash "$VERIFY" HEAD >/dev/null 2>&1); rc=$?
 check "malformed note (verdict line alone): exit 2 (got $rc)" test "$rc" -eq 2
 B40="$(printf '%040d' 0 | tr 0 a)"
-# A note notes.sh put wrote (keys in its own order, utc last) is well formed.
-g notes --ref=refs/notes/concrete-review add -f -m "$(printf 'verdict: clean\nrounds: 2\nreviewer: codex\nbase: %s\npieces: 1\nutc: 2026-10-22T00:00:00Z' "$B40")" HEAD
+LEGACY_NOTE="$(printf 'verdict: clean\nrounds: 2\nreviewer: codex\nbase: %s\npieces: 1\nutc: 2026-10-22T00:00:00Z' "$B40")"
+g notes --ref=refs/notes/concrete-review add -f -m "$LEGACY_NOTE" HEAD
+out="$(cd "$W" && bash "$VERIFY" HEAD 2>&1)"; rc=$?
+check "a legacy clean note without repository: readable is not clean (exit 1, got $rc)" test "$rc" -eq 1
+check "the legacy-note refusal names the missing key" grep -q "missing repository: readable" <<<"$out"
+# A note notes.sh put wrote (keys in its own order, repository after utc) is well formed.
+g notes --ref=refs/notes/concrete-review add -f -m "$LEGACY_NOTE
+repository: readable" HEAD
 (cd "$W" && bash "$VERIFY" HEAD >"$T/vc" 2>&1); rc=$?
-check "a note with utc last verifies clean (exit 0, got $rc)" test "$rc" -eq 0
+check "a readable clean note with utc last verifies clean (exit 0, got $rc)" test "$rc" -eq 0
+g notes --ref=refs/notes/concrete-review add -f -m "$LEGACY_NOTE" HEAD
+review >"$T/legacy-rerun" 2>&1; rc=$?
+check "review.sh re-reviews a legacy clean HEAD instead of short-circuiting (exit $rc)" \
+  test "$rc" -eq 0 -a "$(field repository)" = readable -a "$(field rounds)" = 3
 # The landing bot's keys went with it: a verdict carried across a rebase, or a landing order, is no
 # longer a key a review note may hold.
 for extra in "carried-from: $B40" "order: 1"; do
@@ -239,6 +280,9 @@ parse_case MARK_BOLD 0 clean "markdown-emphasised verdict line is accepted"
 parse_case MARK_TRAILING 5 blocked "text after the verdict line is not a verdict"
 parse_case MARK_NOVERDICT 5 blocked "a reply with no verdict line is blocked, not clean"
 parse_case MARK_ERROR 5 blocked "a reviewer that exits nonzero is blocked"
+parse_case MARK_REPOSITORY_UNREADABLE 5 blocked "an unreadable repository is blocked, never clean"
+parse_case MARK_SANDBOX_FAILURE 5 blocked "a sandbox failure text overrides VERDICT: clean"
+parse_case MARK_NO_REPOSITORY 5 blocked "a clean verdict without a REPOSITORY line is blocked"
 parse_case MARK_MENTION_FILTER 0 clean "a real review that mentions content filters is not a refusal"
 
 echo "=== content-filter refusal: one neutral retry on smaller pieces ==="
@@ -439,7 +483,8 @@ rounds: 1
 reviewer: codex
 utc: 2026-10-22T00:00:00Z
 base: $OTHER_SHA
-pieces: 1" "$OTHER_SHA"
+pieces: 1
+repository: readable" "$OTHER_SHA"
 git -C "$T/other" push -q origin refs/notes/concrete-review
 reset_fake
 g checkout -q main && g checkout -qb nonff

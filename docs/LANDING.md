@@ -90,7 +90,8 @@ verdict; any failing leg fails the check (see [Pipelining](#pipelining)).
   provenance**: a clean review note at its head or, when the head has no note, a clean note on every
   member at its exact recorded SHA (each member was reviewed at its own head). Each note is judged by
   `scripts/review/verify.sh` on origin's notes; an absent, malformed, blocked or findings note
-  qualifies nothing, and a head note that is not clean is not overridden by the members. A member
+  qualifies nothing, and neither does a legacy clean note without `repository: readable`. A head note
+  that is not clean is not overridden by the members. A member
   without a clean note qualifies instead by an **owner sign-off** at its exact SHA (R-0618: a branch
   at the review-round cap of its diff's class, approved by the owner after Codex, Kimi and agy all
   reviewed that commit; `scripts/land/signoff.sh verify --base`, on origin's `refs/owner-signoff/*`). A sign-off approves that
@@ -320,7 +321,7 @@ A branch is **ready** when all of the following hold:
 
 | notes ref | lines | writer |
 |---|---|---|
-| `refs/notes/concrete-review` | `verdict: clean\|findings\|blocked`, `rounds: N`, `reviewer: codex`, `utc: ...`, `base: <sha>`, `pieces: N` | `scripts/review/review.sh` (`scripts/review/verify.sh` reads it) |
+| `refs/notes/concrete-review` | `verdict: clean\|findings\|blocked`, `rounds: N`, `reviewer: codex`, `utc: ...`, `base: <sha>`, `pieces: N`, plus `repository: readable` on clean | `scripts/review/review.sh` (`scripts/review/verify.sh` reads it) |
 | `refs/notes/concrete-gates` | `gates: pass\|fail`, `selected: N`, `utc: ...` | `scripts/land/ready.sh` |
 
 One `key: value` per line; when a key repeats, the last line wins. `scripts/land/notes.sh` reads and
