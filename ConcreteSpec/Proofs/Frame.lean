@@ -1159,7 +1159,8 @@ theorem toySignature_wellFormed : toySignature.WellFormed := by
   omega
 
 /-- Helper (computation). Running `toyBodyAt` preserves callee-saved register 0, caller stack slots,
-and the stack pointer while modifying at most `resultReg`. (approved: PENDING) -/
+and the stack pointer while modifying at most the result register.
+(approved: _review/REVIEW6-codex.md, _review/REVIEW7-agy.md) -/
 theorem toyBodyAt_preserved (before : Machine Nat Nat) (resultReg result : Nat)
     (_hnc : 0 ≠ resultReg) :
     Machine.Preserved before (runToy (toyBodyAt resultReg result) before) [0] ∧
@@ -1168,79 +1169,193 @@ theorem toyBodyAt_preserved (before : Machine Nat Nat) (resultReg result : Nat)
   · intro r hr
     simp only [List.mem_cons, List.not_mem_nil, or_false] at hr
     subst r
-    simp [toyBodyAt, runToy]
+    simp [toyBodyAt, toyStackCode, StackCode.compile, toyFrameOps, runToy]
   · intro slot hs
     have hn1 : slot ≠ before.stackPointer := by omega
     have hn2 : slot ≠ before.stackPointer + 1 := by omega
-    simp [toyBodyAt, runToy, hn1, hn2]
-  · simp [toyBodyAt, runToy]
+    simp [toyBodyAt, toyStackCode, StackCode.compile, toyFrameOps, runToy, hn1, hn2]
+  · simp [toyBodyAt, toyStackCode, StackCode.compile, toyFrameOps, runToy]
   · intro r hr
     have hnr : r ≠ resultReg := by
       simpa only [List.mem_cons, List.not_mem_nil, or_false] using hr
     by_cases hr0 : r = 0
     · subst r
-      simp [toyBodyAt, runToy]
-    · simp [toyBodyAt, runToy, hr0, hnr]
+      simp [toyBodyAt, toyStackCode, StackCode.compile, toyFrameOps, runToy]
+    · simp [toyBodyAt, toyStackCode, StackCode.compile, toyFrameOps, runToy, hr0, hnr]
 
-/-- Helper (inversion). Establishes the relation form of toy-call conformance from its
-independent execution witnesses. (approved: PENDING) -/
-theorem toyTransition_conforms : TransitionConforms toySignature toyTransition := by
-  intro before after args result h
-  obtain ⟨base, arg, rfl, rfl, rfl⟩ := h
-  have hp := toyBodyAt_preserved (toyInput base arg) 1 result (by decide)
-  refine ⟨?_, ?_, hp.1, hp.2⟩
-  · simp [toySignature, ArgumentsHold, Binding.Holds, Location.read, toyInput, runToy]
-  · simp [toySignature, Binding.Holds, Location.read, toyBody, toyBodyAt, toyInput, runToy]
-
-/-- Law (subject `ConcreteSpec.Core.Frame.ABI.stackSamples`).
-The structured eight-slot frame models each depth sampled from actual instruction execution. -/
-theorem toyBody_stack_model (before : Machine Nat Nat) (resultReg result : Nat)
-    (sample : Nat × Option Nat) (hs : sample ∈ toyTrace (toyBodyAt resultReg result) before) :
-    sample.1 ∈ stackSamples (.frame 8 .done) before.stackPointer := by
-  simp [toyTrace, toyBodyAt, runToy] at hs
-  rcases hs with rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl <;>
-    simp [stackSamples]
+/-- Law (subject `ConcreteSpec.Core.Frame.ABI.StackCode.compile`, `ConcreteSpec.Core.Frame.ABI.stackSamples`).
+Compiling any structured stack code around stack-neutral leaf instructions restores the caller's
+stack pointer upon return and ensures every operational depth sampled by `toyTrace` belongs to
+the structured `stackSamples` model. -/
+theorem toyBody_stack_model (code : StackCode) (leaf : List ToyInstruction)
+    (before : Machine Nat Nat)
+    (neutral : leaf.all ToyInstruction.StackNeutral = true) :
+    (runToy (code.compile leaf) before).stackPointer = before.stackPointer ∧
+      ∀ sample ∈ toyTrace (code.compile leaf) before,
+        sample.1 ∈ stackSamples code before.stackPointer := by
+  have hRunAppend : ∀ (xs ys : List ToyInstruction) (st : Machine Nat Nat),
+      runToy (xs ++ ys) st = runToy ys (runToy xs st) := by
+    intro xs
+    induction xs with
+    | nil => intro ys st; rfl
+    | cons i xs ih => intro ys st; exact ih ys (runToy [i] st)
+  have hTraceAppend : ∀ (xs ys : List ToyInstruction) (st : Machine Nat Nat) sample,
+      sample ∈ toyTrace (xs ++ ys) st →
+        sample ∈ toyTrace xs st ∨ sample ∈ toyTrace ys (runToy xs st) := by
+    intro xs
+    induction xs with
+    | nil =>
+      intro ys st sample hs
+      exact .inr hs
+    | cons i xs ih =>
+      intro ys st sample hs
+      simp only [List.cons_append, toyTrace, List.mem_cons] at hs
+      rcases hs with rfl | hs
+      · exact .inl (by simp [toyTrace])
+      · rcases ih ys (runToy [i] st) sample hs with hxs | hys
+        · exact .inl (by simp [toyTrace, hxs])
+        · exact .inr hys
+  have hSamplesBase : ∀ (c : StackCode) (b : Nat), b ∈ stackSamples c b := by
+    intro c
+    induction c with
+    | done => intro b; simp [stackSamples]
+    | seq c₁ c₂ ih₁ _ => intro b; simp [stackSamples, ih₁ b]
+    | frame bytes body _ => intro b; simp [stackSamples]
+  have hLeaf : ∀ (xs : List ToyInstruction) (st : Machine Nat Nat),
+      xs.all ToyInstruction.StackNeutral = true →
+        (runToy xs st).stackPointer = st.stackPointer ∧
+          ∀ sample ∈ toyTrace xs st, sample.1 = st.stackPointer := by
+    intro xs
+    induction xs with
+    | nil =>
+      intro st _
+      refine ⟨rfl, ?_⟩
+      intro sample hs
+      simp only [toyTrace, List.mem_cons, List.not_mem_nil, or_false] at hs
+      subst sample
+      rfl
+    | cons i xs ih =>
+      intro st hAll
+      simp only [List.all_cons, Bool.and_eq_true] at hAll
+      obtain ⟨hi, hxs⟩ := hAll
+      have hStepSp : (runToy [i] st).stackPointer = st.stackPointer := by
+        cases i <;> simp [ToyInstruction.StackNeutral, runToy] at hi ⊢
+      obtain ⟨hRestSp, hRestTrace⟩ := ih (runToy [i] st) hxs
+      refine ⟨hRestSp.trans hStepSp, ?_⟩
+      intro sample hs
+      simp only [toyTrace, List.mem_cons] at hs
+      rcases hs with rfl | hs
+      · rfl
+      · exact (hRestTrace sample hs).trans hStepSp
+  induction code generalizing before with
+  | done =>
+    obtain ⟨hSp, hTr⟩ := hLeaf leaf before neutral
+    refine ⟨hSp, ?_⟩
+    intro sample hs
+    simp only [stackSamples, List.mem_cons, List.not_mem_nil, or_false]
+    exact hTr sample hs
+  | seq first second ih₁ ih₂ =>
+    obtain ⟨hSp₁, hTr₁⟩ := ih₁ before
+    obtain ⟨hSp₂, hTr₂⟩ := ih₂ (runToy (first.compile leaf) before)
+    refine ⟨by rw [StackCode.compile, hRunAppend, hSp₂, hSp₁], ?_⟩
+    intro sample hs
+    simp only [StackCode.compile] at hs
+    simp only [stackSamples, List.mem_append]
+    rcases hTraceAppend (first.compile leaf) (second.compile leaf) before sample hs with hs₁ | hs₂
+    · exact .inl (hTr₁ sample hs₁)
+    · rw [hSp₁] at hTr₂
+      exact .inr (hTr₂ sample hs₂)
+  | frame bytes body ih =>
+    let entered := runToy [.reserve bytes] before
+    have hEnteredSp : entered.stackPointer = before.stackPointer + bytes := rfl
+    obtain ⟨hBodySp, hBodyTr⟩ := ih entered
+    have hAfterBodySp : (runToy (body.compile leaf) entered).stackPointer =
+        before.stackPointer + bytes := hBodySp.trans hEnteredSp
+    refine ⟨?_, ?_⟩
+    · simp only [StackCode.compile, List.cons_append]
+      change (runToy (body.compile leaf ++ [.release bytes]) entered).stackPointer =
+        before.stackPointer
+      rw [hRunAppend]
+      simp [runToy, hAfterBodySp]
+    · intro sample hs
+      simp only [StackCode.compile, List.cons_append, toyTrace, List.mem_cons] at hs
+      simp only [stackSamples, List.mem_cons, List.mem_append, List.not_mem_nil, or_false]
+      rcases hs with rfl | hs
+      · exact .inl rfl
+      · rcases hTraceAppend (body.compile leaf) [.release bytes] entered sample hs with hBody | hRel
+        · have hm := hBodyTr sample hBody
+          rw [hEnteredSp] at hm
+          exact .inr (.inl hm)
+        · simp only [toyTrace, runToy, List.mem_cons, List.not_mem_nil, or_false] at hRel
+          rcases hRel with rfl | rfl
+          · rw [hAfterBodySp]
+            exact .inr (.inl (hSamplesBase body (before.stackPointer + bytes)))
+          · simp [hAfterBodySp]
 
 /-- Law (subject `ConcreteSpec.Core.Frame.ABI.toyBodyAt`).
-The actual instruction trace stays within the signature budget and all spill reads and writes
-stay inside the active allocation, for any initial pointer and return register. -/
+The actual instruction trace stays within the signature budget and all spill reads, writes, and
+frame releases stay inside the active allocation, for any initial pointer and return register. -/
 theorem toyBody_stack_safe (before : Machine Nat Nat) (resultReg result : Nat) :
     ToyTraceSafe before.stackPointer toySignature.stackBound
       (toyTrace (toyBodyAt resultReg result) before) := by
-  intro sample hs
-  have modeled := toyBody_stack_model before resultReg result sample hs
-  have bound := stackSamples_bounded (.frame 8 .done) before.stackPointer sample.1 modeled
-  simp only [computedStackBound, Nat.add_zero] at bound
-  simp [toyTrace, toyBodyAt, runToy] at hs
+  refine ⟨fun sample hs => ?_⟩
+  have hModel := (toyBody_stack_model toyStackCode (toyFrameOps resultReg result)
+    before rfl).2 sample hs
+  have hUpper : sample.1 ≤ before.stackPointer + toySignature.stackBound :=
+    stackSamples_bounded toyStackCode before.stackPointer sample.1 hModel
+  have hLower : before.stackPointer ≤ sample.1 := by
+    simp only [toyStackCode, stackSamples, List.mem_cons, List.mem_append,
+      List.not_mem_nil, or_false] at hModel
+    rcases hModel with hModel | hModel | hModel <;> omega
+  refine ⟨hLower, hUpper, ?_⟩
+  simp [toyBodyAt, toyStackCode, StackCode.compile, toyFrameOps, toyTrace, runToy] at hs
   rcases hs with rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl <;>
-    simp [toySignature] <;> omega
+    simp [StackEvent.Safe] <;> omega
+
+/-- Helper (inversion). Establishes the relation form of toy-call conformance from its
+independent execution witnesses. (approved: _review/REVIEW5-agy.md, _review/REVIEW6-codex.md) -/
+theorem toyTransition_conforms : TransitionConforms toySignature toyTransition := by
+  intro before after samples args result h
+  obtain ⟨base, arg, rfl, rfl, rfl, rfl⟩ := h
+  have hp := toyBodyAt_preserved (toyInput base arg) 1 result (by decide)
+  refine ⟨?_, ?_, hp.1, hp.2, toyBody_stack_safe (toyInput base arg) 1 result⟩
+  · simp [toySignature, ArgumentsHold, Binding.Holds, Location.read, toyInput, runToy]
+  · simp [toySignature, Binding.Holds, Location.read, toyCall, executeToy, toyBody,
+      toyBodyAt, toyStackCode, StackCode.compile, toyFrameOps, toyInput, runToy]
 
 /-- A populated base machine, including a caller-owned stack slot. -/
 def toyBase : Machine Nat Nat := ⟨fun r => 10 + r, fun slot => 20 + slot, 1⟩
 
+/-- A populated base machine starting at stack origin zero, exercising lower-bound checks
+where untruncated arithmetic is required. -/
+def toyZeroBase : Machine Nat Nat := ⟨fun r => 10 + r, fun slot => 20 + slot, 0⟩
+
 /-- Law (subject `ConcreteSpec.Core.Frame.ABI.toyCall`).
 Executing input packing and the independent toy body establishes a well-formed signature and the
-complete ABI contract, including in-frame spilling and restoration of callee-saved register 0. -/
+complete ABI call contract, including in-frame spilling, stack-bound safety, and restoration of
+callee-saved register 0. -/
 theorem toyCall_conforms (base : Machine Nat Nat) (arg result : Nat) :
     toySignature.WellFormed ∧
-      toySignature.Call (toyInput base arg) (toyCall base arg result).machine [arg] result ∧
-      ToyTraceSafe base.stackPointer toySignature.stackBound
-        (toyCall base arg result).samples := by
-  exact ⟨toySignature_wellFormed,
-    toyTransition_conforms _ _ _ _ ⟨base, arg, rfl, rfl, rfl⟩,
-    toyBody_stack_safe (toyInput base arg) 1 result⟩
+      toySignature.Call (toyInput base arg) (toyCall base arg result).machine
+        (toyCall base arg result).samples [arg] result :=
+  ⟨toySignature_wellFormed,
+    toyTransition_conforms _ _ _ _ _ ⟨base, arg, rfl, rfl, rfl, rfl⟩⟩
 
 /-- Instance (law `ConcreteSpec.Core.Frame.ABI.toyCall_conforms`, case `spill`). -/
 example : toySignature.WellFormed ∧
-    toySignature.Call (toyInput toyBase 11) (toyCall toyBase 11 7).machine [11] 7 ∧
-      ToyTraceSafe toyBase.stackPointer toySignature.stackBound
-        (toyCall toyBase 11 7).samples :=
+    toySignature.Call (toyInput toyBase 11) (toyCall toyBase 11 7).machine
+      (toyCall toyBase 11 7).samples [11] 7 :=
   toyCall_conforms toyBase 11 7
 
 /-- Instance (law `ConcreteSpec.Core.Frame.ABI.toyBody_stack_safe`, case `spill`). -/
 example : ToyTraceSafe (toyInput toyBase 11).stackPointer toySignature.stackBound
     (toyTrace (toyBodyAt 1 7) (toyInput toyBase 11)) :=
   toyBody_stack_safe (toyInput toyBase 11) 1 7
+
+/-- Instance (law `ConcreteSpec.Core.Frame.ABI.toyBody_stack_safe`, case `zero_origin`). -/
+example : ToyTraceSafe (toyInput toyZeroBase 11).stackPointer toySignature.stackBound
+    (toyTrace (toyBodyAt 1 7) (toyInput toyZeroBase 11)) :=
+  toyBody_stack_safe (toyInput toyZeroBase 11) 1 7
 
 /-- A planted body writes exactly one slot above its allocation. -/
 def outsideToyBodyAt (resultReg result : Nat) : List ToyInstruction :=
@@ -1250,41 +1365,97 @@ def outsideToyBodyAt (resultReg result : Nat) : List ToyInstruction :=
 def overBudgetToyBodyAt (resultReg result : Nat) : List ToyInstruction :=
   [.reserve 16, .register resultReg result, .release 16]
 
+/-- A planted body accesses one slot below its reserved eight-slot frame. -/
+def underflowToyBodyAt (resultReg result : Nat) : List ToyInstruction :=
+  [.reserve 8, .slot 9 99, .register resultReg result, .release 8]
+
+/-- A planted body accesses a deep offset below an eight-slot frame starting at origin zero. -/
+def deepUnderflowToyBodyAt (resultReg result : Nat) : List ToyInstruction :=
+  [.reserve 8, .slot 100 99, .register resultReg result, .release 8]
+
+/-- A planted body releases more stack bytes than were reserved. -/
+def underflowReleaseToyBodyAt (resultReg result : Nat) : List ToyInstruction :=
+  [.release 100, .register resultReg result]
+
 /-- Planted (law `ConcreteSpec.Core.Frame.ABI.toyBody_stack_safe`, case `spill`,
 subject `ConcreteSpec.Core.Frame.ABI.toyBodyAt`, mutant `ConcreteSpec.Core.Frame.ABI.outsideToyBodyAt`). -/
 example : ¬ ToyTraceSafe (toyInput toyBase 11).stackPointer toySignature.stackBound
     (toyTrace (outsideToyBodyAt 1 7) (toyInput toyBase 11)) := by
-  intro h
-  have bad := (h (9, some 9) (by decide)).2.2 9 rfl
-  omega
+  decide
 
 /-- Planted (law `ConcreteSpec.Core.Frame.ABI.toyBody_stack_safe`, case `spill`,
 subject `ConcreteSpec.Core.Frame.ABI.toyBodyAt`, mutant `ConcreteSpec.Core.Frame.ABI.overBudgetToyBodyAt`). -/
 example : ¬ ToyTraceSafe (toyInput toyBase 11).stackPointer toySignature.stackBound
     (toyTrace (overBudgetToyBodyAt 1 7) (toyInput toyBase 11)) := by
-  intro h
-  have bad : 17 ≤ 9 := (h (17, none) (by decide)).2.1
-  omega
+  decide
+
+/-- Planted (law `ConcreteSpec.Core.Frame.ABI.toyBody_stack_safe`, case `spill`,
+subject `ConcreteSpec.Core.Frame.ABI.toyBodyAt`, mutant `ConcreteSpec.Core.Frame.ABI.underflowToyBodyAt`). -/
+example : ¬ ToyTraceSafe (toyInput toyBase 11).stackPointer toySignature.stackBound
+    (toyTrace (underflowToyBodyAt 1 7) (toyInput toyBase 11)) := by
+  decide
+
+/-- Planted (law `ConcreteSpec.Core.Frame.ABI.toyBody_stack_safe`, case `zero_origin`,
+subject `ConcreteSpec.Core.Frame.ABI.toyBodyAt`, mutant `ConcreteSpec.Core.Frame.ABI.underflowToyBodyAt`). -/
+example : ¬ ToyTraceSafe (toyInput toyZeroBase 11).stackPointer toySignature.stackBound
+    (toyTrace (underflowToyBodyAt 1 7) (toyInput toyZeroBase 11)) := by
+  decide
+
+/-- Planted (law `ConcreteSpec.Core.Frame.ABI.toyBody_stack_safe`, case `zero_origin`,
+subject `ConcreteSpec.Core.Frame.ABI.toyBodyAt`, mutant `ConcreteSpec.Core.Frame.ABI.deepUnderflowToyBodyAt`). -/
+example : ¬ ToyTraceSafe (toyInput toyZeroBase 11).stackPointer toySignature.stackBound
+    (toyTrace (deepUnderflowToyBodyAt 1 7) (toyInput toyZeroBase 11)) := by
+  decide
+
+/-- Planted (law `ConcreteSpec.Core.Frame.ABI.toyBody_stack_safe`, case `zero_origin`,
+subject `ConcreteSpec.Core.Frame.ABI.toyBodyAt`, mutant `ConcreteSpec.Core.Frame.ABI.underflowReleaseToyBodyAt`). -/
+example : ¬ ToyTraceSafe (toyInput toyZeroBase 11).stackPointer toySignature.stackBound
+    (toyTrace (underflowReleaseToyBodyAt 1 7) (toyInput toyZeroBase 11)) := by
+  decide
 
 /-- Instance (law `ConcreteSpec.Core.Frame.ABI.toyBody_stack_model`, case `spill`). -/
-example : ((9, some 1) : Nat × Option Nat).1 ∈
-    stackSamples (.frame 8 .done) (toyInput toyBase 11).stackPointer :=
-  toyBody_stack_model (toyInput toyBase 11) 1 7 (9, some 1) (by decide)
+example :
+    (runToy (toyStackCode.compile (toyFrameOps 1 7)) (toyInput toyBase 11)).stackPointer =
+      (toyInput toyBase 11).stackPointer ∧
+    ∀ sample ∈ toyTrace (toyStackCode.compile (toyFrameOps 1 7)) (toyInput toyBase 11),
+      sample.1 ∈ stackSamples toyStackCode (toyInput toyBase 11).stackPointer :=
+  toyBody_stack_model toyStackCode (toyFrameOps 1 7) (toyInput toyBase 11) (by decide)
 
 /-- A planted structured model omits every allocated depth. -/
 def ignoringStackSamples (_code : StackCode) (base : Nat) : List Nat := [base]
 
+/-- A planted compiler reserves extra stack space without releasing it. -/
+def overReservingCompile (leaf : List ToyInstruction) : StackCode → List ToyInstruction
+  | .done => leaf
+  | .seq first second => overReservingCompile leaf first ++ overReservingCompile leaf second
+  | .frame bytes body =>
+    (.reserve (bytes + 8) :: overReservingCompile leaf body) ++ [.release bytes]
+
 /-- Planted (law `ConcreteSpec.Core.Frame.ABI.toyBody_stack_model`, case `spill`,
 subject `ConcreteSpec.Core.Frame.ABI.stackSamples`, mutant `ConcreteSpec.Core.Frame.ABI.ignoringStackSamples`). -/
-example : (9, some 1) ∈ toyTrace (toyBodyAt 1 7) (toyInput toyBase 11) ∧
-    ¬ (((9, some 1) : Nat × Option Nat).1 ∈
-      ignoringStackSamples (.frame 8 .done) (toyInput toyBase 11).stackPointer) := by
+example :
+    (toyFrameOps 1 7).all ToyInstruction.StackNeutral = true ∧
+    ¬ ((runToy (toyStackCode.compile (toyFrameOps 1 7)) (toyInput toyBase 11)).stackPointer =
+        (toyInput toyBase 11).stackPointer ∧
+      ∀ sample ∈ toyTrace (toyStackCode.compile (toyFrameOps 1 7)) (toyInput toyBase 11),
+        sample.1 ∈ ignoringStackSamples toyStackCode (toyInput toyBase 11).stackPointer) := by
+  decide
+
+/-- Planted (law `ConcreteSpec.Core.Frame.ABI.toyBody_stack_model`, case `spill`,
+subject `ConcreteSpec.Core.Frame.ABI.StackCode.compile`,
+mutant `ConcreteSpec.Core.Frame.ABI.overReservingCompile`). -/
+example :
+    (toyFrameOps 1 7).all ToyInstruction.StackNeutral = true ∧
+    ¬ ((runToy (overReservingCompile (toyFrameOps 1 7) toyStackCode) (toyInput toyBase 11)).stackPointer =
+        (toyInput toyBase 11).stackPointer ∧
+      ∀ sample ∈ toyTrace (overReservingCompile (toyFrameOps 1 7) toyStackCode) (toyInput toyBase 11),
+        sample.1 ∈ stackSamples toyStackCode (toyInput toyBase 11).stackPointer) := by
   decide
 
 /-- A planted call clobbers a callee-saved register without restoring it. -/
 def wrongToySaved (base : Machine Nat Nat) (arg result : Nat) : ToyRun :=
   executeToy (toyBody result ++ [.register 0 99]) (toyInput base arg)
-/-- A planted call overwrites a caller-owned stack slot below `base.stackPointer`. -/
+/-- A planted call overwrites a caller-owned stack slot below the initial stack pointer. -/
 def wrongToySlot (base : Machine Nat Nat) (arg result : Nat) : ToyRun :=
   executeToy (toyBody result ++ [.slot 1 99]) (toyInput base arg)
 /-- A planted call leaks its frame. -/
@@ -1297,43 +1468,43 @@ def wrongToyResult (base : Machine Nat Nat) (arg result : Nat) : ToyRun :=
 /-- Planted (law `ConcreteSpec.Core.Frame.ABI.toyCall_conforms`, case `spill`,
 subject `ConcreteSpec.Core.Frame.ABI.toyCall`, mutant `ConcreteSpec.Core.Frame.ABI.wrongToySaved`). -/
 example : ¬ (toySignature.WellFormed ∧
-    toySignature.Call (toyInput toyBase 11) (wrongToySaved toyBase 11 7).machine [11] 7 ∧
-      ToyTraceSafe toyBase.stackPointer toySignature.stackBound
-        (wrongToySaved toyBase 11 7).samples) := by
-  intro ⟨_, h, _⟩
+    toySignature.Call (toyInput toyBase 11) (wrongToySaved toyBase 11 7).machine
+      (wrongToySaved toyBase 11 7).samples [11] 7) := by
+  intro ⟨_, h⟩
   have bad := h.preserved.1 0 (by simp [toySignature])
-  simp [wrongToySaved, executeToy, toyInput, toyBody, toyBodyAt, toyBase, runToy] at bad
+  simp [wrongToySaved, executeToy, toyInput, toyBody, toyBodyAt, toyStackCode,
+    StackCode.compile, toyFrameOps, toyBase, runToy] at bad
 
 /-- Planted (law `ConcreteSpec.Core.Frame.ABI.toyCall_conforms`, case `spill`,
 subject `ConcreteSpec.Core.Frame.ABI.toyCall`, mutant `ConcreteSpec.Core.Frame.ABI.wrongToySlot`). -/
 example : ¬ (toySignature.WellFormed ∧
-    toySignature.Call (toyInput toyBase 11) (wrongToySlot toyBase 11 7).machine [11] 7 ∧
-      ToyTraceSafe toyBase.stackPointer toySignature.stackBound
-        (wrongToySlot toyBase 11 7).samples) := by
-  intro ⟨_, h, _⟩
+    toySignature.Call (toyInput toyBase 11) (wrongToySlot toyBase 11 7).machine
+      (wrongToySlot toyBase 11 7).samples [11] 7) := by
+  intro ⟨_, h⟩
   have bad := h.preserved.2.1 0 (by decide)
-  simp [wrongToySlot, executeToy, toyInput, toyBody, toyBodyAt, toyBase, runToy] at bad
+  simp [wrongToySlot, executeToy, toyInput, toyBody, toyBodyAt, toyStackCode,
+    StackCode.compile, toyFrameOps, toyBase, runToy] at bad
 
 /-- Planted (law `ConcreteSpec.Core.Frame.ABI.toyCall_conforms`, case `spill`,
 subject `ConcreteSpec.Core.Frame.ABI.toyCall`, mutant `ConcreteSpec.Core.Frame.ABI.wrongToyPointer`). -/
 example : ¬ (toySignature.WellFormed ∧
-    toySignature.Call (toyInput toyBase 11) (wrongToyPointer toyBase 11 7).machine [11] 7 ∧
-      ToyTraceSafe toyBase.stackPointer toySignature.stackBound
-        (wrongToyPointer toyBase 11 7).samples) := by
-  intro ⟨_, h, _⟩
+    toySignature.Call (toyInput toyBase 11) (wrongToyPointer toyBase 11 7).machine
+      (wrongToyPointer toyBase 11 7).samples [11] 7) := by
+  intro ⟨_, h⟩
   have bad := h.preserved.2.2
-  simp [wrongToyPointer, executeToy, toyInput, toyBody, toyBodyAt, toyBase, runToy] at bad
+  simp [wrongToyPointer, executeToy, toyInput, toyBody, toyBodyAt, toyStackCode,
+    StackCode.compile, toyFrameOps, toyBase, runToy] at bad
 
 /-- Planted (law `ConcreteSpec.Core.Frame.ABI.toyCall_conforms`, case `spill`,
 subject `ConcreteSpec.Core.Frame.ABI.toyCall`, mutant `ConcreteSpec.Core.Frame.ABI.wrongToyResult`). -/
 example : ¬ (toySignature.WellFormed ∧
-    toySignature.Call (toyInput toyBase 11) (wrongToyResult toyBase 11 7).machine [11] 7 ∧
-      ToyTraceSafe toyBase.stackPointer toySignature.stackBound
-        (wrongToyResult toyBase 11 7).samples) := by
-  intro ⟨_, h, _⟩
+    toySignature.Call (toyInput toyBase 11) (wrongToyResult toyBase 11 7).machine
+      (wrongToyResult toyBase 11 7).samples [11] 7) := by
+  intro ⟨_, h⟩
   have bad := h.result
   simp [toySignature, Binding.Holds, Location.read, wrongToyResult, executeToy,
-    toyInput, toyBody, toyBodyAt, toyBase, runToy] at bad
+    toyInput, toyBody, toyBodyAt, toyStackCode, StackCode.compile, toyFrameOps,
+    toyBase, runToy] at bad
 
 /-- A planted call executes an out-of-frame spill while returning with a restored pointer. -/
 def outsideToyCall (base : Machine Nat Nat) (arg result : Nat) : ToyRun :=
@@ -1343,26 +1514,43 @@ def outsideToyCall (base : Machine Nat Nat) (arg result : Nat) : ToyRun :=
 def overBudgetToyCall (base : Machine Nat Nat) (arg result : Nat) : ToyRun :=
   executeToy (overBudgetToyBodyAt 1 result) (toyInput base arg)
 
+/-- A planted call accesses a slot below its reserved frame while restoring the final pointer. -/
+def underflowToyCall (base : Machine Nat Nat) (arg result : Nat) : ToyRun :=
+  executeToy (underflowToyBodyAt 1 result) (toyInput base arg)
+
 /-- Planted (law `ConcreteSpec.Core.Frame.ABI.toyCall_conforms`, case `spill`,
 subject `ConcreteSpec.Core.Frame.ABI.toyCall`, mutant `ConcreteSpec.Core.Frame.ABI.outsideToyCall`). -/
 example : ¬ (toySignature.WellFormed ∧
-    toySignature.Call (toyInput toyBase 11) (outsideToyCall toyBase 11 7).machine [11] 7 ∧
-    ToyTraceSafe toyBase.stackPointer toySignature.stackBound (outsideToyCall toyBase 11 7).samples) := by
-  intro h
-  have bad := (h.2.2 (9, some 9) (by decide)).2.2 9 rfl
-  omega
+    toySignature.Call (toyInput toyBase 11) (outsideToyCall toyBase 11 7).machine
+      (outsideToyCall toyBase 11 7).samples [11] 7) := by
+  intro ⟨_, h⟩
+  have bad : ¬ ToyTraceSafe toyBase.stackPointer toySignature.stackBound
+      (outsideToyCall toyBase 11 7).samples := by decide
+  exact bad h.traceSafe
 
 /-- Planted (law `ConcreteSpec.Core.Frame.ABI.toyCall_conforms`, case `spill`,
 subject `ConcreteSpec.Core.Frame.ABI.toyCall`, mutant `ConcreteSpec.Core.Frame.ABI.overBudgetToyCall`). -/
 example : ¬ (toySignature.WellFormed ∧
-    toySignature.Call (toyInput toyBase 11) (overBudgetToyCall toyBase 11 7).machine [11] 7 ∧
-    ToyTraceSafe toyBase.stackPointer toySignature.stackBound (overBudgetToyCall toyBase 11 7).samples) := by
-  intro h
-  have bad : 17 ≤ 9 := (h.2.2 (17, none) (by decide)).2.1
-  omega
+    toySignature.Call (toyInput toyBase 11) (overBudgetToyCall toyBase 11 7).machine
+      (overBudgetToyCall toyBase 11 7).samples [11] 7) := by
+  intro ⟨_, h⟩
+  have bad : ¬ ToyTraceSafe toyBase.stackPointer toySignature.stackBound
+      (overBudgetToyCall toyBase 11 7).samples := by decide
+  exact bad h.traceSafe
 
-/-- Helper (congruence). Transitivity of protected machine observations across calls. (approved: PENDING)
- Preserved machine state composes across sequential calls with the same saved-register set. -/
+/-- Planted (law `ConcreteSpec.Core.Frame.ABI.toyCall_conforms`, case `spill`,
+subject `ConcreteSpec.Core.Frame.ABI.toyCall`, mutant `ConcreteSpec.Core.Frame.ABI.underflowToyCall`). -/
+example : ¬ (toySignature.WellFormed ∧
+    toySignature.Call (toyInput toyBase 11) (underflowToyCall toyBase 11 7).machine
+      (underflowToyCall toyBase 11 7).samples [11] 7) := by
+  intro ⟨_, h⟩
+  have bad : ¬ ToyTraceSafe toyBase.stackPointer toySignature.stackBound
+      (underflowToyCall toyBase 11 7).samples := by decide
+  exact bad h.traceSafe
+
+/-- Helper (congruence). Transitivity of protected machine observations across calls.
+(approved: _review/REVIEW6-codex.md, _review/REVIEW7-agy.md)
+Preserved machine state composes across sequential calls with the same saved-register set. -/
 theorem machine_preserved_trans {Reg Word : Type} {before middle after : Machine Reg Word}
     {saved : List Reg} (h₁ : Machine.Preserved before middle saved)
     (h₂ : Machine.Preserved middle after saved) : Machine.Preserved before after saved := by
@@ -1374,8 +1562,9 @@ theorem machine_preserved_trans {Reg Word : Type} {before middle after : Machine
     exact (h₂.2.1 slot hs').trans (h₁.2.1 slot hs)
   · exact h₂.2.2.trans h₁.2.2
 
-/-- Helper (congruence). Transitivity of register observations outside combined clobber sets. (approved: PENDING)
- Sequential calls preserve every register outside the union of their clobber sets. -/
+/-- Helper (congruence). Transitivity of register observations outside combined clobber sets.
+(approved: _review/REVIEW6-codex.md, _review/REVIEW7-agy.md)
+Sequential calls preserve every register outside the union of their clobber sets. -/
 theorem machine_registerFrame_union {Reg Word : Type} {before middle after : Machine Reg Word}
     {clobbers₁ clobbers₂ : List Reg} (h₁ : Machine.RegisterFrame before middle clobbers₁)
     (h₂ : Machine.RegisterFrame middle after clobbers₂) :
@@ -1387,45 +1576,125 @@ theorem machine_registerFrame_union {Reg Word : Type} {before middle after : Mac
 
 /-- Law (subject `ConcreteSpec.Core.Frame.ABI.toyCallSeq`).
 Two sequential toy calls preserve the caller's saved register, stack slots, and stack pointer
-across both calls while confining register modifications to the union of their clobber sets. -/
+across both calls, confine register modifications to the union of their clobber sets, and keep
+the combined operational stack and access trace within the signature stack bound. -/
 theorem toyCallSeq_conforms (base : Machine Nat Nat) (arg result₁ result₂ : Nat) :
-    Machine.Preserved (toyInput base arg) (toyCallSeq base arg result₁ result₂) [0] ∧
-      Machine.RegisterFrame (toyInput base arg) (toyCallSeq base arg result₁ result₂) ([1] ++ [2]) := by
-  have h₁ := (toyCall_conforms base arg result₁).2.1
+    Machine.Preserved (toyInput base arg) (toyCallSeq base arg result₁ result₂).machine [0] ∧
+      Machine.RegisterFrame (toyInput base arg) (toyCallSeq base arg result₁ result₂).machine ([1] ++ [2]) ∧
+      ToyTraceSafe base.stackPointer toySignature.stackBound
+        (toyCallSeq base arg result₁ result₂).samples := by
+  have hRunAppend : ∀ (xs ys : List ToyInstruction) (st : Machine Nat Nat),
+      runToy (xs ++ ys) st = runToy ys (runToy xs st) := by
+    intro xs
+    induction xs with
+    | nil => intro ys st; rfl
+    | cons i xs ih => intro ys st; exact ih ys (runToy [i] st)
+  have hTraceAppend : ∀ (xs ys : List ToyInstruction) (st : Machine Nat Nat) sample,
+      sample ∈ toyTrace (xs ++ ys) st →
+        sample ∈ toyTrace xs st ∨ sample ∈ toyTrace ys (runToy xs st) := by
+    intro xs
+    induction xs with
+    | nil =>
+      intro ys st sample hs
+      exact .inr hs
+    | cons i xs ih =>
+      intro ys st sample hs
+      simp only [List.cons_append, toyTrace, List.mem_cons] at hs
+      rcases hs with rfl | hs
+      · exact .inl (by simp [toyTrace])
+      · rcases ih ys (runToy [i] st) sample hs with hxs | hys
+        · exact .inl (by simp [toyTrace, hxs])
+        · exact .inr hys
+  have hMach : (toyCallSeq base arg result₁ result₂).machine =
+      runToy (toyBodyAt 2 result₂) (toyCall base arg result₁).machine := by
+    dsimp [toyCallSeq, toyCall, executeToy]
+    exact hRunAppend (toyBody result₁) (toyBodyAt 2 result₂) (toyInput base arg)
+  have h₁ := (toyCall_conforms base arg result₁).2
   have h₂ := toyBodyAt_preserved (toyCall base arg result₁).machine 2 result₂ (by decide)
-  exact ⟨machine_preserved_trans h₁.preserved h₂.1, machine_registerFrame_union h₁.clobbers h₂.2⟩
+  rw [hMach]
+  refine ⟨machine_preserved_trans h₁.preserved h₂.1,
+    machine_registerFrame_union h₁.clobbers h₂.2, ⟨?_⟩⟩
+  intro sample hs
+  dsimp [toyCallSeq, executeToy] at hs
+  rcases hTraceAppend (toyBody result₁) (toyBodyAt 2 result₂) (toyInput base arg) sample hs with hs₁ | hs₂
+  · exact h₁.traceSafe.stepsSafe sample hs₁
+  · have hSafe₂ := (toyBody_stack_safe (runToy (toyBody result₁) (toyInput base arg)) 2 result₂).stepsSafe
+      sample hs₂
+    have hSp : (runToy (toyBody result₁) (toyInput base arg)).stackPointer = base.stackPointer :=
+      h₁.preserved.2.2
+    rwa [hSp] at hSafe₂
 
 /-- Instance (law `ConcreteSpec.Core.Frame.ABI.toyCallSeq_conforms`, case `two_calls`). -/
 example :
-    Machine.Preserved (toyInput toyBase 11) (toyCallSeq toyBase 11 7 9) [0] ∧
-      Machine.RegisterFrame (toyInput toyBase 11) (toyCallSeq toyBase 11 7 9) ([1] ++ [2]) :=
+    Machine.Preserved (toyInput toyBase 11) (toyCallSeq toyBase 11 7 9).machine [0] ∧
+      Machine.RegisterFrame (toyInput toyBase 11) (toyCallSeq toyBase 11 7 9).machine ([1] ++ [2]) ∧
+      ToyTraceSafe toyBase.stackPointer toySignature.stackBound
+        (toyCallSeq toyBase 11 7 9).samples :=
   toyCallSeq_conforms toyBase 11 7 9
 
 /-- A planted sequential call fails to restore callee-saved register 0 on the second call. -/
-def clobberingSavedToyCallSeq (base : Machine Nat Nat) (arg result₁ result₂ : Nat) : Machine Nat Nat :=
-  runToy [.register 0 88] (toyCallSeq base arg result₁ result₂)
+def clobberingSavedToyCallSeq (base : Machine Nat Nat) (arg result₁ result₂ : Nat) : ToyRun :=
+  executeToy (toyBody result₁ ++ toyBodyAt 2 result₂ ++ [.register 0 88]) (toyInput base arg)
 
 /-- Planted (law `ConcreteSpec.Core.Frame.ABI.toyCallSeq_conforms`, case `two_calls`,
 subject `ConcreteSpec.Core.Frame.ABI.toyCallSeq`,
 mutant `ConcreteSpec.Core.Frame.ABI.clobberingSavedToyCallSeq`). -/
-example : ¬ (Machine.Preserved (toyInput toyBase 11) (clobberingSavedToyCallSeq toyBase 11 7 9) [0] ∧
-    Machine.RegisterFrame (toyInput toyBase 11) (clobberingSavedToyCallSeq toyBase 11 7 9) ([1] ++ [2])) := by
-  intro ⟨hp, _⟩
+example : ¬ (Machine.Preserved (toyInput toyBase 11) (clobberingSavedToyCallSeq toyBase 11 7 9).machine [0] ∧
+    Machine.RegisterFrame (toyInput toyBase 11) (clobberingSavedToyCallSeq toyBase 11 7 9).machine ([1] ++ [2]) ∧
+    ToyTraceSafe toyBase.stackPointer toySignature.stackBound
+      (clobberingSavedToyCallSeq toyBase 11 7 9).samples) := by
+  intro ⟨hp, _, _⟩
   have bad := hp.1 0 (by decide)
-  simp [clobberingSavedToyCallSeq, toyCallSeq, toyCall, executeToy, toyInput, toyBody, toyBodyAt, toyBase, runToy] at bad
+  simp [clobberingSavedToyCallSeq, executeToy, toyInput, toyBody, toyBodyAt, toyStackCode,
+    StackCode.compile, toyFrameOps, toyBase, runToy] at bad
 
-/-- A planted sequential call clobbers register 3 outside the combined clobber set `[1] ++ [2]`. -/
-def undeclaredClobberToyCallSeq (base : Machine Nat Nat) (arg result₁ result₂ : Nat) : Machine Nat Nat :=
-  runToy [.register 3 77] (toyCallSeq base arg result₁ result₂)
+/-- A planted sequential call clobbers register 3 outside the combined clobber set. -/
+def undeclaredClobberToyCallSeq (base : Machine Nat Nat) (arg result₁ result₂ : Nat) : ToyRun :=
+  executeToy (toyBody result₁ ++ toyBodyAt 2 result₂ ++ [.register 3 77]) (toyInput base arg)
 
 /-- Planted (law `ConcreteSpec.Core.Frame.ABI.toyCallSeq_conforms`, case `two_calls`,
 subject `ConcreteSpec.Core.Frame.ABI.toyCallSeq`,
 mutant `ConcreteSpec.Core.Frame.ABI.undeclaredClobberToyCallSeq`). -/
-example : ¬ (Machine.Preserved (toyInput toyBase 11) (undeclaredClobberToyCallSeq toyBase 11 7 9) [0] ∧
-    Machine.RegisterFrame (toyInput toyBase 11) (undeclaredClobberToyCallSeq toyBase 11 7 9) ([1] ++ [2])) := by
-  intro ⟨_, hf⟩
+example : ¬ (Machine.Preserved (toyInput toyBase 11) (undeclaredClobberToyCallSeq toyBase 11 7 9).machine [0] ∧
+    Machine.RegisterFrame (toyInput toyBase 11) (undeclaredClobberToyCallSeq toyBase 11 7 9).machine ([1] ++ [2]) ∧
+    ToyTraceSafe toyBase.stackPointer toySignature.stackBound
+      (undeclaredClobberToyCallSeq toyBase 11 7 9).samples) := by
+  intro ⟨_, hf, _⟩
   have bad := hf 3 (by decide)
-  simp [undeclaredClobberToyCallSeq, toyCallSeq, toyCall, executeToy, toyInput, toyBody, toyBodyAt, toyBase, runToy] at bad
+  simp [undeclaredClobberToyCallSeq, executeToy, toyInput, toyBody, toyBodyAt, toyStackCode,
+    StackCode.compile, toyFrameOps, toyBase, runToy] at bad
+
+/-- A planted sequential call performs an out-of-frame spill during the second call. -/
+def outsideToyCallSeq (base : Machine Nat Nat) (arg result₁ result₂ : Nat) : ToyRun :=
+  executeToy (toyBody result₁ ++ outsideToyBodyAt 2 result₂) (toyInput base arg)
+
+/-- Planted (law `ConcreteSpec.Core.Frame.ABI.toyCallSeq_conforms`, case `two_calls`,
+subject `ConcreteSpec.Core.Frame.ABI.toyCallSeq`,
+mutant `ConcreteSpec.Core.Frame.ABI.outsideToyCallSeq`). -/
+example : ¬ (Machine.Preserved (toyInput toyBase 11) (outsideToyCallSeq toyBase 11 7 9).machine [0] ∧
+    Machine.RegisterFrame (toyInput toyBase 11) (outsideToyCallSeq toyBase 11 7 9).machine ([1] ++ [2]) ∧
+    ToyTraceSafe toyBase.stackPointer toySignature.stackBound
+      (outsideToyCallSeq toyBase 11 7 9).samples) := by
+  intro ⟨_, _, htr⟩
+  have bad : ¬ ToyTraceSafe toyBase.stackPointer toySignature.stackBound
+      (outsideToyCallSeq toyBase 11 7 9).samples := by decide
+  exact bad htr
+
+/-- A planted sequential call temporarily exceeds the stack bound during the second call. -/
+def overBudgetToyCallSeq (base : Machine Nat Nat) (arg result₁ result₂ : Nat) : ToyRun :=
+  executeToy (toyBody result₁ ++ overBudgetToyBodyAt 2 result₂) (toyInput base arg)
+
+/-- Planted (law `ConcreteSpec.Core.Frame.ABI.toyCallSeq_conforms`, case `two_calls`,
+subject `ConcreteSpec.Core.Frame.ABI.toyCallSeq`,
+mutant `ConcreteSpec.Core.Frame.ABI.overBudgetToyCallSeq`). -/
+example : ¬ (Machine.Preserved (toyInput toyBase 11) (overBudgetToyCallSeq toyBase 11 7 9).machine [0] ∧
+    Machine.RegisterFrame (toyInput toyBase 11) (overBudgetToyCallSeq toyBase 11 7 9).machine ([1] ++ [2]) ∧
+    ToyTraceSafe toyBase.stackPointer toySignature.stackBound
+      (overBudgetToyCallSeq toyBase 11 7 9).samples) := by
+  intro ⟨_, _, htr⟩
+  have bad : ¬ ToyTraceSafe toyBase.stackPointer toySignature.stackBound
+      (overBudgetToyCallSeq toyBase 11 7 9).samples := by decide
+  exact bad htr
 
 /-- Helper (computation). Characterizes the retention specification; execution evidence is
 `ConcreteSpec.Core.Frame.ABI.transferKept_sound`. (approved: PENDING)

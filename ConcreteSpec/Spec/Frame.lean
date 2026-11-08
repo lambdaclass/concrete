@@ -430,28 +430,73 @@ def Signature.WellFormed {Ty Val Reg Word : Type} (sig : Signature Ty Val Reg Wo
   IsPow2 sig.frameAlign ∧ sig.frameSize % sig.frameAlign = 0 ∧
     sig.frameSize ≤ sig.stackBound ∧ ∀ r, r ∈ sig.calleeSaved → r ∉ sig.clobbers
 
+/-- A stack-relative operation observed at a trace step: a slot access at `backOffset` below
+the current stack pointer, or a frame release of `bytes` from the current stack pointer.
+Recording raw instruction offsets avoids truncating `Nat` subtraction before bounds checks. -/
+inductive StackEvent where
+  | none
+  | slotAccess (backOffset : Nat)
+  | release (bytes : Nat)
+  deriving DecidableEq, Repr
+
+/-- An observed stack event stays within the active callee frame `[origin, sp)`: slot accesses
+cannot underflow `sp` or address below `origin` or at/above `sp`, and frame releases cannot
+underflow `sp` or release below `origin`. -/
+def StackEvent.Safe (origin sp : Nat) : StackEvent → Prop
+  | .none => True
+  | .slotAccess offset =>
+    offset ≤ sp ∧ origin ≤ sp - offset ∧ sp - offset < sp
+  | .release bytes =>
+    bytes ≤ sp ∧ origin ≤ sp - bytes
+
+instance (origin sp : Nat) (ev : StackEvent) : Decidable (ev.Safe origin sp) := by
+  cases ev <;> unfold StackEvent.Safe <;> infer_instance
+
+/-- Every operational sample stays within the caller origin and callee stack budget, and each
+slot access or frame release stays within the active callee allocation `[origin, sample.1)`.
+Caller slots and slots at or above the active allocation are excluded throughout execution,
+including at `origin = 0`. -/
+structure ToyTraceSafe (origin bound : Nat) (samples : List (Nat × StackEvent)) : Prop where
+  stepsSafe : ∀ sample ∈ samples,
+    origin ≤ sample.1 ∧ sample.1 ≤ origin + bound ∧ sample.2.Safe origin sample.1
+
+instance (origin bound : Nat) (samples : List (Nat × StackEvent)) :
+    Decidable (ToyTraceSafe origin bound samples) :=
+  if h : ∀ sample ∈ samples,
+      origin ≤ sample.1 ∧ sample.1 ≤ origin + bound ∧ sample.2.Safe origin sample.1 then
+    isTrue ⟨h⟩
+  else
+    isFalse fun ⟨h'⟩ => h h'
+
 /-- A returning ABI call: typed arguments occupy their entry locations, the typed result occupies
-its return locations, preserved machine state is restored exactly, and only clobbers may change
-registers. -/
+its return locations, preserved machine state is restored exactly, only clobbers may change
+registers, and the operational stack/access trace stays within the active callee frame and
+`stackBound`. -/
 structure Signature.Call {Ty Val Reg Word : Type} (sig : Signature Ty Val Reg Word)
-    (before after : Machine Reg Word) (args : List Val) (result : Val) : Prop where
+    (before after : Machine Reg Word) (samples : List (Nat × StackEvent))
+    (args : List Val) (result : Val) : Prop where
   arguments : ArgumentsHold sig.encode sig.arguments args before
   result : sig.result.Holds sig.encode result after
   preserved : Machine.Preserved before after sig.calleeSaved
   clobbers : Machine.RegisterFrame before after sig.clobbers
+  traceSafe : ToyTraceSafe before.stackPointer sig.stackBound samples
 
-/-- An abstract call-transition interface, independent of the ABI contract. -/
+/-- An abstract call-transition interface carrying the operational stack/access trace,
+independent of the ABI contract. -/
 abbrev CallTransition (_Ty Val Reg Word : Type) :=
-  Machine Reg Word → Machine Reg Word → List Val → Val → Prop
+  Machine Reg Word → Machine Reg Word → List (Nat × StackEvent) → List Val → Val → Prop
 
 /-- Obligation (discharged at slice 0, R-0580).
-Obligation on the code generator: prove conformance of its actual target call transition.
-This binds typed input/output locations and protected machine state to native execution;
+Obligation on the code generator: prove conformance of its actual target call transition,
+including operational stack-bound and active-frame access safety. This binds typed input/output
+locations, protected machine state, and intermediate stack traces to native execution;
 the toy transition below discharges only its own instance.
 Conformance is a specification to prove about a transition, never execution evidence. -/
 def TransitionConforms {Ty Val Reg Word : Type} (sig : Signature Ty Val Reg Word)
     (transition : CallTransition Ty Val Reg Word) : Prop :=
-  ∀ before after args result, transition before after args result → sig.Call before after args result
+  ∀ before after samples args result,
+    transition before after samples args result →
+      sig.Call before after samples args result
 
 /-- Small machine instructions for an executable, target-independent example. Frame entry and
 exit are explicit operations; writes carry their destinations rather than frame-law proofs. -/
@@ -462,6 +507,11 @@ inductive ToyInstruction where
   | slot (backOffset word : Nat)
   | reserve (bytes : Nat)
   | release (bytes : Nat)
+
+/-- Whether a toy instruction leaves the stack pointer unchanged. -/
+def ToyInstruction.StackNeutral : ToyInstruction → Bool
+  | .reserve _ | .release _ => false
+  | _ => true
 
 /-- Execute instructions without checking any ABI contract. Stack writes address the current
 stack pointer minus their back-offset, so after reserving `bytes`, offsets `1 .. bytes` address
@@ -481,92 +531,17 @@ def runToy : List ToyInstruction → Machine Nat Nat → Machine Nat Nat
       | .release bytes => { st with stackPointer := st.stackPointer - bytes }
     runToy rest next
 
-/-- Each sample records the current stack pointer and the address accessed by the next
+/-- Each sample records the current stack pointer and the raw stack-relative event of the next
 instruction, if any. Transitions execute the very same `runToy` instruction semantics, including
 reserves and releases; the terminal sample records the final pointer. -/
-def toyTrace : List ToyInstruction → Machine Nat Nat → List (Nat × Option Nat)
-  | [], st => [(st.stackPointer, none)]
+def toyTrace : List ToyInstruction → Machine Nat Nat → List (Nat × StackEvent)
+  | [], st => [(st.stackPointer, .none)]
   | instruction :: rest, st =>
-    let address := match instruction with
-      | .save _ offset | .restore _ offset | .slot offset _ => some (st.stackPointer - offset)
-      | _ => none
-    (st.stackPointer, address) :: toyTrace rest (runToy [instruction] st)
-
-/-- Every operational sample stays within the budget, and each read or write addresses a slot
-inside the currently allocated callee frame. Caller slots and the first slot above the active
-allocation are excluded, including during intermediate execution. -/
-def ToyTraceSafe (origin bound : Nat) (samples : List (Nat × Option Nat)) : Prop :=
-  ∀ sample ∈ samples, origin ≤ sample.1 ∧ sample.1 ≤ origin + bound ∧
-    ∀ address, sample.2 = some address → origin ≤ address ∧ address < sample.1
-
-/-- This toy convention passes one natural word in register 0 and returns one in register 1.
-It is an example implementation, not the linux-x86_64 ABI table. -/
-def toySignature : Signature Unit Nat Nat Nat :=
-  ⟨fun _ v => [v], [⟨(), [.register 0]⟩], ⟨(), [.register 1]⟩,
-    8, 8, [0], [1], 8⟩
-
-/-- Pack the toy input by executing a register write. -/
-def toyInput (base : Machine Nat Nat) (arg : Nat) : Machine Nat Nat :=
-  runToy [.register 0 arg] base
-
-/-- A real toy callee reserves an 8-slot frame, spills and clobbers callee-saved register 0 inside
-that frame, writes a private spill slot inside the frame and its return register, then restores
-register 0 and releases the frame. -/
-def toyBodyAt (resultReg result : Nat) : List ToyInstruction :=
-  [.reserve 8, .save 0 8, .register 0 55, .slot 7 99, .register resultReg result, .restore 0 8, .release 8]
-
-/-- Standard single-call body returning in register 1. -/
-def toyBody (result : Nat) : List ToyInstruction :=
-  toyBodyAt 1 result
-
-/-- An observed execution carries its final machine and operational stack/access trace. -/
-structure ToyRun where
-  machine : Machine Nat Nat
-  samples : List (Nat × Option Nat)
-
-/-- Run the selected instruction stream and observe its intermediate stack accesses. Both
-components execute the same instructions from the same initial machine. -/
-def executeToy (code : List ToyInstruction) (before : Machine Nat Nat) : ToyRun :=
-  ⟨runToy code before, toyTrace code before⟩
-
-/-- Execute a full toy call, including input packing and its body execution trace. -/
-def toyCall (base : Machine Nat Nat) (arg result : Nat) : ToyRun :=
-  executeToy (toyBody result) (toyInput base arg)
-
-/-- Execute two sequential toy calls writing their results to registers 1 and 2 while both save,
-clobber, and restore callee-saved register 0 in their private stack frames. -/
-def toyCallSeq (base : Machine Nat Nat) (arg result₁ result₂ : Nat) : Machine Nat Nat :=
-  runToy (toyBodyAt 2 result₂) (toyCall base arg result₁).machine
-
-/-- Independent execution relation for the toy convention. The witnesses describe input
-packing and actual instructions; they contain none of the ABI equalities being proved. -/
-def toyTransition : CallTransition Unit Nat Nat Nat := fun before after args result =>
-  ∃ base arg, before = toyInput base arg ∧ args = [arg] ∧
-    after = runToy (toyBody result) before
-
-/-- The stack-accounting handoff of one call: the caller's frame plus the callee's final-artifact
-bound. Heap accounting is separate. -/
-def callStack {Ty Val Reg Word : Type} (callerFrame : Nat) (sig : Signature Ty Val Reg Word) : Nat :=
-  callerFrame + sig.stackBound
-
-/-- Whole-artifact stack accounting adds the launcher/runtime contribution to the call handoff. -/
-def artifactStack {Ty Val Reg Word : Type} (launcherRuntime callerFrame : Nat)
-    (sig : Signature Ty Val Reg Word) : Nat :=
-  launcherRuntime + callStack callerFrame sig
-
-/-- A layout plan gives the raw byte size of each slot together with the required frame alignment. -/
-structure LayoutPlan where
-  alignment : Nat
-  slotBytes : List Nat
-
-/-- Total unrounded byte count required by the slots in a layout plan. -/
-def rawSlotBytes (plan : LayoutPlan) : Nat :=
-  plan.slotBytes.foldl (· + ·) 0
-
-/-- Lay out slots by accumulating their byte sizes and rounding up to the next multiple of the
-required alignment. -/
-def layoutBytes (plan : LayoutPlan) : Nat :=
-  ((rawSlotBytes plan + plan.alignment - 1) / plan.alignment) * plan.alignment
+    let event := match instruction with
+      | .save _ offset | .restore _ offset | .slot offset _ => .slotAccess offset
+      | .release bytes => .release bytes
+      | _ => .none
+    (st.stackPointer, event) :: toyTrace rest (runToy [instruction] st)
 
 /-- Structured stack instructions. A frame allocates before running its body and releases on
 return; sequencing reuses the released stack. -/
@@ -574,6 +549,14 @@ inductive StackCode where
   | done
   | seq (first second : StackCode)
   | frame (bytes : Nat) (body : StackCode)
+
+/-- Compile structured stack frames into a flat instruction stream by placing `leaf`
+instructions at `.done`, concatenating `.seq`, and bracketing `.frame bytes` with
+`.reserve bytes` and `.release bytes`. -/
+def StackCode.compile (leaf : List ToyInstruction) : StackCode → List ToyInstruction
+  | .done => leaf
+  | .seq first second => first.compile leaf ++ second.compile leaf
+  | .frame bytes body => (.reserve bytes :: body.compile leaf) ++ [.release bytes]
 
 /-- Operational samples of stack consumption, including entry and return at each frame. -/
 def stackSamples : StackCode → Nat → List Nat
@@ -599,6 +582,86 @@ def ArtifactStackConforms (reportedBound : Nat) (samples : Nat → List Nat) : P
 /-- The stack-bound specification for `StackCode` is an instance of `ArtifactStackConforms`. -/
 def StackSafe (code : StackCode) : Prop :=
   ArtifactStackConforms (computedStackBound code) (stackSamples code)
+
+/-- This toy convention passes one natural word in register 0 and returns one in register 1.
+It is an example implementation, not the linux-x86_64 ABI table. -/
+def toySignature : Signature Unit Nat Nat Nat :=
+  ⟨fun _ v => [v], [⟨(), [.register 0]⟩], ⟨(), [.register 1]⟩,
+    8, 8, [0], [1], 8⟩
+
+/-- Pack the toy input by executing a register write. -/
+def toyInput (base : Machine Nat Nat) (arg : Nat) : Machine Nat Nat :=
+  runToy [.register 0 arg] base
+
+/-- The structured single-frame shape of `toyBodyAt`. -/
+def toyStackCode : StackCode := .frame 8 .done
+
+/-- Stack-neutral in-frame operations of a toy callee: spill and clobber callee-saved
+register 0 inside the 8-slot frame, write a private spill slot and the return register,
+and restore register 0. -/
+def toyFrameOps (resultReg result : Nat) : List ToyInstruction :=
+  [.save 0 8, .register 0 55, .slot 7 99, .register resultReg result, .restore 0 8]
+
+/-- A real toy callee compiled from `toyStackCode` and `toyFrameOps`: it reserves an 8-slot
+frame, spills and clobbers callee-saved register 0 inside that frame, writes a private spill slot
+inside the frame and its return register, then restores register 0 and releases the frame. -/
+def toyBodyAt (resultReg result : Nat) : List ToyInstruction :=
+  toyStackCode.compile (toyFrameOps resultReg result)
+
+/-- Standard single-call body returning in register 1. -/
+def toyBody (result : Nat) : List ToyInstruction :=
+  toyBodyAt 1 result
+
+/-- An observed execution carries its final machine and operational stack/access trace. -/
+structure ToyRun where
+  machine : Machine Nat Nat
+  samples : List (Nat × StackEvent)
+
+/-- Run the selected instruction stream and observe its intermediate stack accesses. Both
+components execute the same instructions from the same initial machine. -/
+def executeToy (code : List ToyInstruction) (before : Machine Nat Nat) : ToyRun :=
+  ⟨runToy code before, toyTrace code before⟩
+
+/-- Execute a full toy call, including input packing and its body execution trace. -/
+def toyCall (base : Machine Nat Nat) (arg result : Nat) : ToyRun :=
+  executeToy (toyBody result) (toyInput base arg)
+
+/-- Execute two sequential toy calls writing their results to registers 1 and 2 while both save,
+clobber, and restore callee-saved register 0 in their private stack frames, recording the full
+sequential machine and stack/access trace. -/
+def toyCallSeq (base : Machine Nat Nat) (arg result₁ result₂ : Nat) : ToyRun :=
+  executeToy (toyBody result₁ ++ toyBodyAt 2 result₂) (toyInput base arg)
+
+/-- Independent execution relation for the toy convention. The witnesses describe input
+packing and actual instructions; they contain none of the ABI equalities being proved. -/
+def toyTransition : CallTransition Unit Nat Nat Nat := fun before after samples args result =>
+  ∃ base arg, before = toyInput base arg ∧ args = [arg] ∧
+    after = (toyCall base arg result).machine ∧
+    samples = (toyCall base arg result).samples
+
+/-- The stack-accounting handoff of one call: the caller's frame plus the callee's final-artifact
+bound. Heap accounting is separate. -/
+def callStack {Ty Val Reg Word : Type} (callerFrame : Nat) (sig : Signature Ty Val Reg Word) : Nat :=
+  callerFrame + sig.stackBound
+
+/-- Whole-artifact stack accounting adds the launcher/runtime contribution to the call handoff. -/
+def artifactStack {Ty Val Reg Word : Type} (launcherRuntime callerFrame : Nat)
+    (sig : Signature Ty Val Reg Word) : Nat :=
+  launcherRuntime + callStack callerFrame sig
+
+/-- A layout plan gives the raw byte size of each slot together with the required frame alignment. -/
+structure LayoutPlan where
+  alignment : Nat
+  slotBytes : List Nat
+
+/-- Total unrounded byte count required by the slots in a layout plan. -/
+def rawSlotBytes (plan : LayoutPlan) : Nat :=
+  plan.slotBytes.foldl (· + ·) 0
+
+/-- Lay out slots by accumulating their byte sizes and rounding up to the next multiple of the
+required alignment. -/
+def layoutBytes (plan : LayoutPlan) : Nat :=
+  ((rawSlotBytes plan + plan.alignment - 1) / plan.alignment) * plan.alignment
 
 /-! ### Foreign validity and retention (Q3.12) -/
 
