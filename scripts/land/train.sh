@@ -474,7 +474,7 @@ review_cmd() {
 # OWNER SIGN-OFF (R-0618). A member without a clean note qualifies instead by a valid owner sign-off
 # at its exact SHA (scripts/land/signoff.sh verify --base <the train's base>, on $REMOTE's
 # refs/owner-signoff/*, fetched first): the member reached the review cap of its diff's class and all
-# three reviewers accepted that commit.
+# three reviewers completed a review of that commit, with each ACCEPT or REJECT recorded and reported.
 # A sign-off approves that commit only, never what the train did with it, so a train with a signed-off
 # member must be exactly the clean merge of its members onto its base: one --no-ff merge per member,
 # in order, each merge's tree the conflict-free `git merge-tree --write-tree` of its two parents, and
