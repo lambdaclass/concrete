@@ -1548,7 +1548,7 @@ example : ¬ CheckedPairCorrect (0 : Nat) 1 ⟨.owned (7 : Nat), .kept⟩ (.rece
   exact h.2.2.1.1 rfl
 
 /-- A planted declaration extractor unconditionally rejects even valid paired declarations. -/
-def rejectingKeptChecker {F H : Type}
+def rejectingKeptChecker {F H : Type} [DecidableEq F] [DecidableEq H]
     (_submit _complete : F) (_sp : ExternParam H) (_sr _cp _cr : ExternType H) :
     Option (KeptPair F H) :=
   none
@@ -1605,7 +1605,7 @@ example : (0 : Nat) ≠ 1 ∧
   exact h.2.1
 
 /-- A planted transfer skips the handle-identity check and transfers an untracked handle. -/
-def untrackedKeptTransfer {F H : Type} (pair : KeptPair F H) :
+def untrackedKeptTransfer {F H : Type} [DecidableEq H] (pair : KeptPair F H) :
     RetentionInstruction → RetentionState H → Option (ForeignEvent F H × RetentionState H)
   | .submit, .owned h => some (.call pair.submit h, .kept h)
   | .complete, .kept h => some (.call pair.complete h, .owned h)
@@ -1623,7 +1623,7 @@ example : (0 : Nat) ≠ 1 ∧
   cases bad
 
 /-- A planted transfer always returns `none`, refusing even valid tracked transfers. -/
-def droppingKeptTransfer {F H : Type} (_pair : KeptPair F H)
+def droppingKeptTransfer {F H : Type} [DecidableEq H] (_pair : KeptPair F H)
     (_instruction : RetentionInstruction) (_before : RetentionState H) :
     Option (ForeignEvent F H × RetentionState H) :=
   none
@@ -1680,7 +1680,7 @@ theorem toyLaunchExecution_conforms : LauncherConforms toyLauncher toyLaunchExec
 Independent loading and launch execution establish both the status-125 refusal contract below the
 8-byte bound and the closure, entry/exit correspondence, and stack-admission contract when admitted. -/
 theorem toyLaunch_conforms (root reserved result : Nat) :
-    ToyLaunchCorrect reserved (toyLaunch root reserved result) := by
+    ToyLaunchCorrect root reserved result (toyLaunch root reserved result) := by
   by_cases hlt : reserved < 8
   · have href : stackAdmission 8 reserved () = .refused125 :=
       stack_under_reservation 8 reserved () hlt
@@ -1692,13 +1692,16 @@ theorem toyLaunch_conforms (root reserved result : Nat) :
         (retainChain root).length result (encodeToyExit root result) := by
       apply toyLaunchExecution_conforms
       simp [toyLaunchExecution, toyLaunch, hadm]
-    simpa [toyLaunch, hadm, ToyLaunchCorrect] using hrun
+    simpa [toyLaunch, hadm, ToyLaunchCorrect] using
+      (⟨rfl, rfl, hrun⟩ : root = root ∧ result = result ∧
+        toyLauncher.Run (root, retainChain root) reserved
+          (retainChain root).length result (encodeToyExit root result))
 
 /-- Instance (law `ConcreteSpec.Core.Frame.ABI.toyLaunch_conforms`, case `dependency_chain`). -/
-example : ToyLaunchCorrect 8 (toyLaunch 2 8 7) := toyLaunch_conforms 2 8 7
+example : ToyLaunchCorrect 2 8 7 (toyLaunch 2 8 7) := toyLaunch_conforms 2 8 7
 
 /-- Instance (law `ConcreteSpec.Core.Frame.ABI.toyLaunch_conforms`, case `under_reserved`). -/
-example : ToyLaunchCorrect 4 (toyLaunch 2 4 7) := toyLaunch_conforms 2 4 7
+example : ToyLaunchCorrect 2 4 7 (toyLaunch 2 4 7) := toyLaunch_conforms 2 4 7
 
 /-- A planted launcher appends one spurious byte to the exit encoding. -/
 def wrongToyLaunch (root reserved result : Nat) : Startup ((Nat × List Nat) × Nat × Nat × Nat) :=
@@ -1709,10 +1712,32 @@ def wrongToyLaunch (root reserved result : Nat) : Startup ((Nat × List Nat) × 
 
 /-- Planted (law `ConcreteSpec.Core.Frame.ABI.toyLaunch_conforms`, case `dependency_chain`,
 subject `ConcreteSpec.Core.Frame.ABI.toyLaunch`, mutant `ConcreteSpec.Core.Frame.ABI.wrongToyLaunch`). -/
-example : ¬ ToyLaunchCorrect 8 (wrongToyLaunch 2 8 7) := by
+example : ¬ ToyLaunchCorrect 2 8 7 (wrongToyLaunch 2 8 7) := by
   intro h
-  have bad := h.exit
+  have bad := h.2.2.exit
   change 10 = 9 at bad
+  contradiction
+
+/-- A planted launcher executes a different root's dependency closure. -/
+def wrongRootToyLaunch (root reserved result : Nat) : Startup ((Nat × List Nat) × Nat × Nat × Nat) :=
+  toyLaunch (root + 1) reserved result
+
+/-- A planted launcher returns a different requested result. -/
+def wrongResultToyLaunch (root reserved result : Nat) : Startup ((Nat × List Nat) × Nat × Nat × Nat) :=
+  toyLaunch root reserved (result + 1)
+
+/-- Planted (law `ConcreteSpec.Core.Frame.ABI.toyLaunch_conforms`, case `dependency_chain`,
+subject `ConcreteSpec.Core.Frame.ABI.toyLaunch`, mutant `ConcreteSpec.Core.Frame.ABI.wrongRootToyLaunch`). -/
+example : ¬ ToyLaunchCorrect 2 8 7 (wrongRootToyLaunch 2 8 7) := by
+  intro h
+  have bad : 3 = 2 := h.1
+  contradiction
+
+/-- Planted (law `ConcreteSpec.Core.Frame.ABI.toyLaunch_conforms`, case `dependency_chain`,
+subject `ConcreteSpec.Core.Frame.ABI.toyLaunch`, mutant `ConcreteSpec.Core.Frame.ABI.wrongResultToyLaunch`). -/
+example : ¬ ToyLaunchCorrect 2 8 7 (wrongResultToyLaunch 2 8 7) := by
+  intro h
+  have bad : 8 = 7 := h.2.1
   contradiction
 
 /-- A planted loader retains an unrelated module while leaving entry and exit unchanged. -/
@@ -1726,9 +1751,9 @@ def overRetainingToyLaunch (root reserved result : Nat) :
 /-- Planted (law `ConcreteSpec.Core.Frame.ABI.toyLaunch_conforms`, case `dependency_chain`,
 subject `ConcreteSpec.Core.Frame.ABI.toyLaunch`,
 mutant `ConcreteSpec.Core.Frame.ABI.overRetainingToyLaunch`). -/
-example : ¬ ToyLaunchCorrect 8 (overRetainingToyLaunch 2 8 7) := by
+example : ¬ ToyLaunchCorrect 2 8 7 (overRetainingToyLaunch 2 8 7) := by
   intro h
-  have bad : 3 ≤ 2 := (h.closure 3).mp (by decide)
+  have bad : 3 ≤ 2 := (h.2.2.closure 3).mp (by decide)
   omega
 
 /-- A planted loader keeps only the root, omitting its transitive dependencies. -/
@@ -1742,9 +1767,9 @@ def underRetainingToyLaunch (root reserved result : Nat) :
 /-- Planted (law `ConcreteSpec.Core.Frame.ABI.toyLaunch_conforms`, case `dependency_chain`,
 subject `ConcreteSpec.Core.Frame.ABI.toyLaunch`,
 mutant `ConcreteSpec.Core.Frame.ABI.underRetainingToyLaunch`). -/
-example : ¬ ToyLaunchCorrect 8 (underRetainingToyLaunch 2 8 7) := by
+example : ¬ ToyLaunchCorrect 2 8 7 (underRetainingToyLaunch 2 8 7) := by
   intro h
-  have bad : 0 ∈ ([2] : List Nat) := (h.closure 0).mpr (by decide)
+  have bad : 0 ∈ ([2] : List Nat) := (h.2.2.closure 0).mpr (by decide)
   contradiction
 
 /-- A planted launcher unconditionally refuses with status 125 even when stack reservation is adequate. -/
@@ -1755,7 +1780,7 @@ def alwaysRefusingToyLaunch (_root _reserved _result : Nat) :
 /-- Planted (law `ConcreteSpec.Core.Frame.ABI.toyLaunch_conforms`, case `dependency_chain`,
 subject `ConcreteSpec.Core.Frame.ABI.toyLaunch`,
 mutant `ConcreteSpec.Core.Frame.ABI.alwaysRefusingToyLaunch`). -/
-example : ¬ ToyLaunchCorrect 8 (alwaysRefusingToyLaunch 2 8 7) := by
+example : ¬ ToyLaunchCorrect 2 8 7 (alwaysRefusingToyLaunch 2 8 7) := by
   intro h
   change 8 < 8 at h
   omega
@@ -1769,9 +1794,9 @@ def unboundedToyLaunch (root _reserved result : Nat) :
 /-- Planted (law `ConcreteSpec.Core.Frame.ABI.toyLaunch_conforms`, case `under_reserved`,
 subject `ConcreteSpec.Core.Frame.ABI.toyLaunch`,
 mutant `ConcreteSpec.Core.Frame.ABI.unboundedToyLaunch`). -/
-example : ¬ ToyLaunchCorrect 4 (unboundedToyLaunch 2 4 7) := by
+example : ¬ ToyLaunchCorrect 2 4 7 (unboundedToyLaunch 2 4 7) := by
   intro h
-  have bad : 8 ≤ 4 := h.adequateStack
+  have bad : 8 ≤ 4 := h.2.2.adequateStack
   omega
 
 

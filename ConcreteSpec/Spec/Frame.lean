@@ -820,11 +820,12 @@ def toyLaunchExecution (artifact : Nat × List Nat) (reserved input result obser
 
 /-- Conformance of `toyLaunch` across both startup outcomes: `.refused125` occurs only when the
 reservation is below the required 8-byte bound, and `.entered` establishes `toyLauncher.Run`. -/
-def ToyLaunchCorrect (reserved : Nat) :
+def ToyLaunchCorrect (root reserved requestedResult : Nat) :
     Startup ((Nat × List Nat) × Nat × Nat × Nat) → Prop
   | .refused125 => reserved < 8
   | .entered (artifact, input, result, observation) =>
-    toyLauncher.Run artifact reserved input result observation
+    artifact.1 = root ∧ result = requestedResult ∧
+      toyLauncher.Run artifact reserved input result observation
 
 /-! ### ABI examples -/
 
