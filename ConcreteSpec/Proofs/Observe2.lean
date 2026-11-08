@@ -260,10 +260,17 @@ theorem full_observation_preservation {x y : Execution S} {observation : FullObs
     | finite ys terminal => exact h.elim
     | blocked ys request => exact h.elim
 
+/-- No infinite execution, including one that eventually becomes silent forever, is equivalent to
+any finite successful or trapped termination. -/
+theorem infinite_not_termination (steps : Nat → Step S) (finiteSteps : List (Step S))
+    (terminal : Terminal) :
+    ¬ SameObservation (.infinite steps) (.finite finiteSteps terminal) := by
+  simp [SameObservation]
+
 /-- In particular, an infinite silent run never acquires a terminal observation. -/
 theorem infinite_silent_not_termination (terminal : Terminal) :
-    ¬ SameObservation (.infinite (fun _ => Step.silent)) (.finite (S := S) [] terminal) := by
-  simp [SameObservation]
+    ¬ SameObservation (.infinite (fun _ => Step.silent)) (.finite (S := S) [] terminal) :=
+  infinite_not_termination _ [] terminal
 
 /-! ## Decoding the exact trap line -/
 
