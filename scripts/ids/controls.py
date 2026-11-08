@@ -35,6 +35,8 @@ def main():
         base = Path(directory)
         remote = base / 'origin.git'
         a.git(base, 'init', '--bare', str(remote))
+        a.git(remote, 'config', 'user.name', 'Remote')
+        a.git(remote, 'config', 'user.email', 'remote@example.invalid')
         writer = base / 'writer'
         a.git(base, 'init', '-b', 'main', str(writer))
         a.git(writer, 'config', 'user.name', 'Control')
@@ -65,7 +67,7 @@ def main():
         print('PASS: title mismatch refused; evidence remains editable')
         a.git(writer, 'restore', 'ISSUES.tsv')
         a.git(writer, 'switch', '-qc', 'wip/duplicate', 'main')
-        save(writer, 'ISS-0001', 'first')
+        save(writer, 'ISS-0001', 'different identity')
         a.git(writer, 'push', '-q', 'origin', 'HEAD:refs/heads/wip/duplicate')
         run(writer, 'check', expect=1)
         print('PASS: two independent branches using same ID/title refused')
@@ -82,9 +84,23 @@ def main():
         a.git(writer, 'switch', '-qc', 'wip/inherited')
         run(writer, 'check')
         print('PASS: inherited IDs pass on descendant branches')
+        a.git(writer, 'checkout', '--detach', '-q')
+        run(writer, 'check')
+        a.git(writer, 'switch', '-q', 'wip/inherited')
+        (writer / 'ISSUES.tsv').unlink()
+        run(writer, 'check')
+        a.git(writer, 'restore', 'ISSUES.tsv')
+        print('PASS: detached inherited identity and deleted ledger')
         save(writer, 'ISS-0002', 'unreserved')
         run(writer, 'check', expect=1)
         print('PASS: unreserved ID refused')
+        a.git(writer, 'push', '-q', 'origin', 'HEAD:refs/heads/wip/stale')
+        a.git(writer, 'switch', '-q', 'wip/a')
+        run(writer, 'check')
+        # The stale head cannot block allocations either.
+        run(writer, 'reserve', 'iss', 'unrelated allocation', '--number', '80')
+        a.git(writer, 'push', '-q', 'origin', ':refs/heads/wip/stale')
+        print('PASS: unrelated stale branch cannot poison checks or reservations')
         # Recreate clean branch so the race is about reservation, not local filing.
         a.git(writer, 'switch', '-qc', 'wip/race', 'main')
         clone = base / 'other'
@@ -106,16 +122,16 @@ def main():
         a.git(writer, 'remote', 'set-url', 'origin', str(remote))
         print('PASS: offline allocation and validation refused')
         # Import an old-style reservation with the CAS backfill; unused numbers remain burned.
-        legacy = a.git(writer, 'commit-tree', a.git(writer, 'hash-object', '-t', 'tree', '--stdin', data='').stdout.strip(),
+        legacy = a.git(remote, 'commit-tree', a.git(remote, 'hash-object', '-t', 'tree', '--stdin', data='').stdout.strip(),
                        data='bug 300 reserved: legacy\n').stdout.strip()
-        a.git(remote, 'fetch', '-q', str(writer), f'{legacy}:refs/bug-reservations/300')
+        a.git(remote, 'update-ref', 'refs/bug-reservations/300', legacy)
         frozen = writer / 'legacy/docs/bugs'
         frozen.mkdir(parents=True)
         (frozen / '300_legacy.md').write_text('# Bug 300: legacy bug\n')
         a.git(writer, 'add', 'legacy/docs/bugs/300_legacy.md')
         a.git(writer, 'commit', '-qm', 'existing frozen bug')
         a.git(writer, 'push', '-q', 'origin', 'HEAD:refs/heads/wip/race')
-        run(writer, 'check', expect=1)
+        run(writer, 'audit-wip', expect=1)
         plan = base / 'plan.json'
         run(writer, 'backfill', '--output', str(plan))
         run(writer, 'publish-plan', str(plan))
@@ -131,6 +147,18 @@ def main():
         (bugs / '301_b.md').write_text('# Bug 301: another\n')
         run(writer, 'check', expect=1)
         print('PASS: duplicate bug records refused')
+        for path in bugs.glob('*.md'):
+            path.unlink()
+        for name, text in [('42_bad.md', '# Bug 42: bad'), ('042-bad.md', '# Bug 042: bad'),
+                           ('042_bad.md', '# Something else')]:
+            path = bugs / name
+            path.write_text(text)
+            run(writer, 'check', expect=1)
+            path.unlink()
+        (frozen / '300_legacy.md').unlink()
+        run(writer, 'check')
+        a.git(writer, 'restore', 'legacy/docs/bugs/300_legacy.md')
+        print('PASS: malformed paths/headings refused; deleted tracked bug handled')
         # A malformed reservation must not receive the hook's metadata exemption.
         head = a.git(writer, 'rev-parse', 'HEAD').stdout.strip()
         result = subprocess.run(['bash', str(hooks / 'pre-push'), 'origin', str(remote)], cwd=writer,

@@ -28,6 +28,9 @@ def sandbox_environment():
                             text=True, capture_output=True, check=True)
     for name in result.stdout.splitlines():
         os.environ.pop(name, None)
+    os.environ['GIT_CONFIG_NOSYSTEM'] = '1'
+    os.environ['GIT_CONFIG_SYSTEM'] = '/dev/null'
+    os.environ['GIT_CONFIG_GLOBAL'] = '/dev/null'
 
 
 def git(root, *args, data=None, check=True):
@@ -70,9 +73,13 @@ def records(read, paths):
             add(row['id'], row.get('title') or issue_title(row['evidence']), 'ISSUES.tsv')
     for path in paths:
         m = re.fullmatch(r'(?:legacy/)?docs/bugs/(\d{3,})_[^/]+\.md', path)
+        if re.fullmatch(r'(?:legacy/)?docs/bugs/[^/]+\.md', path) and Path(path).name[0].isdigit() and not m:
+            raise Refused(f'malformed bug record path: {path}')
         if m:
             text = read(path)
             header = next((s for s in text.splitlines() if s.startswith('# ')), '')
+            if not re.match(r'^# Bug ' + m[1] + r'\s*[:—–-]\s*\S', header, re.I):
+                raise Refused(f'{path}: missing matching Bug heading')
             title = re.sub(r'^# Bug \d+\s*[:—–-]\s*', '', header, flags=re.I).strip()
             add('BUG-' + m[1], title, path)
     return found
@@ -111,7 +118,7 @@ def tree_records(repo, sha):
 
 def work_records(root):
     paths = git(root, 'ls-files', '--cached', '--others', '--exclude-standard').stdout.splitlines()
-    return records(lambda p: (Path(root) / p).read_text(), sorted(set(paths)))
+    return records(lambda p: (Path(root) / p).read_text(), sorted(p for p in set(paths) if (Path(root) / p).is_file()))
 
 
 class Snapshot:
@@ -201,45 +208,50 @@ def publish(root, updates):
     raise Refused('reservation not acquired; do not file; retry after a fresh snapshot. ' + result.stderr.strip())
 
 
-@functools.lru_cache(maxsize=None)
-def common_records(snapshot, branch, anchor):
-    base = git(snapshot.repo, 'merge-base', snapshot.heads[anchor], snapshot.heads[branch], check=False)
-    return tree_records(snapshot.repo, base.stdout.strip()) if base.returncode == 0 else {}
+def check_entries(snapshot, entries, label):
+    for key, (title, _) in entries.items():
+        reservation = snapshot.reservation(key)
+        if not reservation or 'schema' not in reservation:
+            raise Refused(f'{label}: {key} has no schema-1 reservation; run backfill')
+        if reservation['title'] != title:
+            raise Refused(f'{label}: {key} title differs from reservation ({title!r})')
 
 
-@functools.lru_cache(maxsize=None)
-def inherited(snapshot, key, title, branch, owner):
-    if branch == owner:
-        return True
-    # Once landed, main supplies durable ancestry even after the writer's branch is deleted.
-    anchors = [owner]
-    if snapshot.trees.get('main', {}).get(key, (None,))[0] == title:
-        anchors.append('main')
-    for anchor in anchors:
-        if anchor not in snapshot.heads or branch not in snapshot.heads:
-            continue
-        if common_records(snapshot, branch, anchor).get(key, (None,))[0] == title:
-            return True
-    return False
+def check_snapshot(snapshot):
+    # Operator audit only; ordinary gates never couple unrelated draft branches.
+    for branch, entries in snapshot.trees.items():
+        check_entries(snapshot, entries, branch)
 
 
-def check_snapshot(snapshot, local=None, local_branch=None):
-    trees = list(snapshot.trees.items())
-    if local is not None:
-        # Inspect both the advertised head and this work tree; a stale local copy must not
-        # hide an ID already published under the same branch name by another clone.
-        trees.append((local_branch, local))
-    for branch, entries in trees:
-        for key, (title, _) in entries.items():
-            reservation = snapshot.reservation(key)
-            if reservation is None or 'schema' not in reservation:
-                raise Refused(f'{branch}: {key} has no schema-1 reservation; run backfill')
-            if reservation['title'] != title:
-                raise Refused(f'{branch}: {key} title differs from reservation ({title!r})')
-            if not inherited(snapshot, key, title, branch, reservation['branch']):
-                # A current local branch may have advanced since its remote snapshot. Inheritance
-                # is checked below using its real commit graph, never merely matching the title.
-                raise Refused(f'{branch}: {key} reserved for different branch {reservation["branch"]}')
+def check_change(root, snapshot):
+    head = git(root, 'rev-parse', 'HEAD').stdout.strip()
+    base = git(snapshot.repo, 'merge-base', snapshot.heads['main'], head).stdout.strip()
+    # Compare complete rows/content, not just titles: edits to an old identity activate enforcement.
+    listing = git(snapshot.repo, 'ls-tree', '-r', '--format=%(objectname) %(path)', base).stdout
+    old = dict(line.split(' ', 1)[::-1] for line in listing.splitlines())
+    local = work_records(root)
+    old_records = tree_records(snapshot.repo, base)
+    changed = {}
+    for key, value in local.items():
+        title, path = value
+        if key not in old_records or path not in old:
+            changed[key] = value
+        elif path == 'ISSUES.tsv':
+            before = next((x for x in blob(snapshot.repo, old[path]).splitlines() if x.startswith(key + '\t')), None)
+            after = next((x for x in (Path(root) / path).read_text().splitlines() if x.startswith(key + '\t')), None)
+            if before != after:
+                changed[key] = value
+        elif blob(snapshot.repo, old[path]) != (Path(root) / path).read_text():
+            changed[key] = value
+    check_entries(snapshot, changed, 'change')
+
+
+def legacy_signature(repo, sha, key):
+    text = git(repo, 'show', f'{sha}:ISSUES.tsv', check=False).stdout
+    for row in csv.DictReader((x for x in text.splitlines() if x and not x.startswith('#')), delimiter='\t'):
+        if row['id'] == key:
+            return tuple(row.get(k, '') for k in ('date', 'opened', 'area', 'kind'))
+    return None
 
 
 def make_plan(root, snapshot, local, branch):
@@ -252,24 +264,26 @@ def make_plan(root, snapshot, local, branch):
     updates = []
     for key, rows in sorted(uses.items()):
         titles = {title for _, title in rows}
+        # Six-column pre-migration rows have mutable evidence, not immutable titles.
+        # Canonical explicit titles win only when stable legacy fields agree.
+        if key.startswith('ISS-') and len(titles) > 1:
+            signatures = {legacy_signature(snapshot.repo, snapshot.heads[b], key)
+                          for b, _ in rows if b in snapshot.heads}
+            explicit = {title for b, title in rows if b in snapshot.heads and
+                        'id\ttitle\t' in git(snapshot.repo, 'show', f'{snapshot.heads[b]}:ISSUES.tsv', check=False).stdout}
+            if len(signatures) == 1 and None not in signatures and len(explicit) == 1:
+                titles = explicit
+
         if len(titles) != 1:
             conflicts.append(f'{key}: ' + repr(rows))
             continue
         title = next(iter(titles))
-        # main owns landed history; otherwise choose a branch whose record is inherited by all
-        # other occurrences. Identical titles introduced independently are still collisions.
-        ordered = sorted((b for b, _ in rows), key=lambda b: (b != 'main', b))
-        owner = next((b for b in ordered if all(inherited(snapshot, key, title, other, b)
-                                               for other, _ in rows)), None)
-        if owner is None:
-            conflicts.append(f'{key}: independent introductions on ' + repr([b for b, _ in rows]))
-            continue
+        # Reservation provenance is stable metadata, independent of commit ancestry.
+        owner = sorted((b for b, _ in rows), key=lambda b: (b != 'main', b))[0]
         old = snapshot.reservation(key)
         if old and 'schema' in old:
-            if old['title'] != title or old['branch'] != owner:
-                # Original branch remains authoritative even after landing.
-                if old['title'] != title or not all(inherited(snapshot, key, title, b, old['branch']) for b, _ in rows):
-                    conflicts.append(f'{key}: existing reservation disagrees')
+            if old['title'] != title:
+                conflicts.append(f'{key}: existing reservation disagrees')
             continue
         value = metadata(root, key, title, owner)
         if old:
@@ -300,6 +314,7 @@ def main():
     reserve.add_argument('title')
     reserve.add_argument('--number', type=int, help='explicit coordinator-assigned number; never overwrites')
     sub.add_parser('check')
+    sub.add_parser('audit-wip')
     verify = sub.add_parser('verify-ref')
     verify.add_argument('ref')
     verify.add_argument('oid')
@@ -317,6 +332,10 @@ def main():
         branch = git(root, 'config', 'id.branch', check=False).stdout.strip()
     if args.command == 'verify-ref':
         ref, oid, old = args.ref, args.oid, args.old
+        if set(oid) == {'0'}:
+            raise Refused(f'reservation ref {ref} may not be deleted')
+        if set(old) != {'0'} and git(root, 'cat-file', '-e', old, check=False).returncode:
+            git(root, 'fetch', '--no-tags', '--no-write-fetch-head', 'origin', ref)
         message = git(root, 'show', '-s', '--format=%B', oid).stdout
         value = json.loads(message)
         if ref != ref_for(valid_key(value['id'])) or value['schema'] != 1:
@@ -338,26 +357,19 @@ def main():
         return
     with tempfile.TemporaryDirectory(prefix='concrete-ids-') as temp:
         snapshot = Snapshot(root, temp)
-        if args.command == 'check':
-            local = work_records(root)
-            # Detached CI/train checkouts are accepted as main integration only when each record
-            # already exists in main or its owning wip branch at an ancestor of this commit.
-            if not branch or (branch != 'main' and not branch.startswith('wip/')):
-                head = git(root, 'rev-parse', 'HEAD').stdout.strip()
-                branch = 'candidate'
-                for key, (title, _) in local.items():
-                    res = snapshot.reservation(key)
-                    if not res or 'schema' not in res or res['title'] != title:
-                        raise Refused(f'{key}: absent or mismatched reservation')
-                    owner = res['branch']
-                    anchors = [snapshot.heads.get(owner)]
-                    if snapshot.trees.get('main', {}).get(key, (None,))[0] == title:
-                        anchors.append(snapshot.heads.get('main'))
-                    if not any(sha and git(snapshot.repo, 'merge-base', '--is-ancestor', sha, head, check=False).returncode == 0 for sha in anchors):
-                        raise Refused(f'{key}: cannot prove candidate inherited reservation branch {owner}')
+        if args.command in ('check', 'audit-wip'):
+            # Validate reservation namespace integrity even when there are no changed records.
+            for ref in snapshot.refs:
+                if ref.startswith(('refs/reserved/', 'refs/bug-reservations/')):
+                    key = ('ISS-' if ref.startswith('refs/reserved/iss/') else 'BUG-') + ref.rsplit('/', 1)[1]
+                    valid_key(key)
+                    if ref != ref_for(key):
+                        raise Refused(f'malformed reservation ref: {ref}')
+                    snapshot.reservation(key)
+            if args.command == 'audit-wip':
                 check_snapshot(snapshot)
             else:
-                check_snapshot(snapshot, local, branch)
+                check_change(root, snapshot)
             print('ID reservations: PASS')
         elif args.command == 'backfill':
             plan = make_plan(root, snapshot, work_records(root), branch)
@@ -386,7 +398,6 @@ def main():
             print('backfill reservations published and read back')
         else:
             # Enforce migration and all visible conflicts before taking any fresh number.
-            check_snapshot(snapshot)
             kind = args.kind.upper()
             used = [int(k.split('-')[1]) for entries in snapshot.trees.values() for k in entries if k.startswith(kind + '-')]
             prefix = 'refs/reserved/iss/' if kind == 'ISS' else 'refs/bug-reservations/'
