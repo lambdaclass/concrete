@@ -1754,9 +1754,8 @@ theorem eval_trap_erasure (L : AList Var O.Val) (s : Store O.Store) (e : O.Expr)
     | trap _ => rw [he] at h; cases h; exact he
     | stuck => rw [he] at h; cases h
 
-/-- Law (subject `ConcreteSpec.Core.Own.instrumentEval`). Left-to-right argument evaluation forward simulation: a successful instrumented
-argument list evaluates to the same values and concrete store in the erased instance. -/
-theorem evalArgs_ok_erasure (L : AList Var O.Val) :
+/-- Helper (inversion). Structural induction for the argument-result law. (approved: PENDING). -/
+theorem evalArgs_ok_erasure_result (L : AList Var O.Val) :
     ∀ (args : List O.Expr) (s t : Store O.Store) (vs : List O.Val),
       Exec.evalArgs (instrumentOperands O types permit) L s args = .ok (vs, t) →
       Exec.evalArgs O L (erase s) args = .ok (vs, erase t)
@@ -1774,7 +1773,7 @@ theorem evalArgs_ok_erasure (L : AList Var O.Val) :
       cases hes : Exec.evalArgs (instrumentOperands O types permit) L s₁ es with
       | ok r' =>
         rcases r' with ⟨vs', s₂⟩
-        have ih := evalArgs_ok_erasure L es s₁ s₂ vs' hes
+        have ih := evalArgs_ok_erasure_result L es s₁ s₂ vs' hes
         simp only [instrumentOperands] at hes
         rw [hes] at h
         rw [ih]
@@ -1789,9 +1788,8 @@ theorem evalArgs_ok_erasure (L : AList Var O.Val) :
     | trap _ => rw [he] at h; cases h
     | stuck => rw [he] at h; cases h
 
-/-- Law (subject `ConcreteSpec.Core.Own.instrumentEval`). Argument trap forward simulation: an instrumented argument list that traps traps
-with the same kind in the erased instance. -/
-theorem evalArgs_trap_erasure (L : AList Var O.Val) :
+/-- Helper (inversion). Structural induction for the argument-result law. (approved: PENDING). -/
+theorem evalArgs_trap_erasure_result (L : AList Var O.Val) :
     ∀ (args : List O.Expr) (s : Store O.Store) (kd : TrapKind),
       Exec.evalArgs (instrumentOperands O types permit) L s args = .trap kd →
       Exec.evalArgs O L (erase s) args = .trap kd
@@ -1810,7 +1808,7 @@ theorem evalArgs_trap_erasure (L : AList Var O.Val) :
         simp only [instrumentOperands] at hes
         rw [hes] at h; cases h
       | trap _ =>
-        have ih := evalArgs_trap_erasure L es s₁ _ hes
+        have ih := evalArgs_trap_erasure_result L es s₁ _ hes
         simp only [instrumentOperands] at hes
         rw [hes] at h
         cases h
@@ -2082,7 +2080,7 @@ theorem step_next_erasure (P : Exec.Program (instrumentOperands O types permit))
         · simp only [hlen, ↓reduceIte, Option.map_eq_some_iff] at h
           obtain ⟨st'', hst'', hnext⟩ := h
           cases hnext
-          rw [evalArgs_ok_erasure (O := O) L args st st' vs he]
+          rw [evalArgs_ok_erasure_result (O := O) L args st st' vs he]
           dsimp [Exec.onRes, eraseProgram]
           rw [lookup_eraseProgram_proj P.fns f, hfn]
           dsimp [Option.bind, eraseFn]
@@ -2095,7 +2093,7 @@ theorem step_next_erasure (P : Exec.Program (instrumentOperands O types permit))
       | trap kd =>
         rw [he] at h
         cases h
-        rw [evalArgs_trap_erasure (O := O) L args st kd he]
+        rw [evalArgs_trap_erasure_result (O := O) L args st kd he]
         rfl
       | stuck => rw [he] at h; cases h
     | prim x p args site =>
@@ -2108,7 +2106,7 @@ theorem step_next_erasure (P : Exec.Program (instrumentOperands O types permit))
       | trap kd =>
         rw [he] at h
         cases h
-        rw [evalArgs_trap_erasure (O := O) L args st kd he]
+        rw [evalArgs_trap_erasure_result (O := O) L args st kd he]
         rfl
       | stuck => rw [he] at h; cases h
     | abort site =>
@@ -2263,7 +2261,7 @@ theorem step_request_erasure (P : Exec.Program (instrumentOperands O types permi
         injection h with h
         injection h with hp hvs hsite hst hk_eq
         subst hp; subst hvs; subst hsite; subst hst; subst hk_eq
-        refine ⟨_, by rw [evalArgs_ok_erasure (O := O) L args s st' vs' he]; rfl, ?_⟩
+        refine ⟨_, by rw [evalArgs_ok_erasure_result (O := O) L args s st' vs' he]; rfl, ?_⟩
         intro a c' hk
         dsimp at hk
         cases ha : a.result with
@@ -2706,7 +2704,7 @@ private theorem step_none_of_permitted_inv
       | ok r =>
         rcases r with ⟨vs, st'⟩
         rw [he] at hs
-        rw [evalArgs_ok_erasure (O := O) L args st st' vs he]
+        rw [evalArgs_ok_erasure_result (O := O) L args st st' vs he]
         dsimp [Exec.onRes, eraseProgram] at hs ⊢
         rw [lookup_eraseProgram_proj P.fns f]
         cases hfn : AList.lookup P.fns f with
@@ -2879,7 +2877,7 @@ private theorem request_none_of_permitted_inv
         injection hs with hs
         injection hs with hp_eq hvs hsite hst hk_eq
         subst hp_eq; subst hvs; subst hsite; subst hst; subst hk_eq
-        refine ⟨_, by rw [evalArgs_ok_erasure (O := O) L args s st' vs' he]; rfl, ?_⟩
+        refine ⟨_, by rw [evalArgs_ok_erasure_result (O := O) L args s st' vs' he]; rfl, ?_⟩
         dsimp at hk ⊢
         cases ha : a.result with
         | ok v =>
@@ -3181,7 +3179,7 @@ example : ∃ s' : Store Int,
     Exec.evalArgs erasedOps [(x, 7)] (erase (⟨0, initial⟩ : Store Int)) [.read x, .move x] =
       .ok ([7, 7], erase s') := by
   refine ⟨⟨0, (move initial ⟨0⟩).getD initial⟩, by decide, ?_⟩
-  exact evalArgs_ok_erasure (O := erasedOps) (types := types) (permit := permitE)
+  exact evalArgs_ok_erasure_result (O := erasedOps) (types := types) (permit := permitE)
     [(x, 7)] [.read x, .move x] ⟨0, initial⟩ _ [7, 7] (by decide)
 
 /-- Rejection observation. Reversing or corrupting the argument list violates erased argument evaluation. -/
@@ -3193,7 +3191,7 @@ example : ¬ (Exec.evalArgs erasedOps [(x, 7)] (erase (⟨0, initial⟩ : Store 
 example : Exec.evalArgs instrumentedOps [(x, 7)] ⟨0, initial⟩ [.move x, .fail .overflow] = .trap .overflow ∧
     Exec.evalArgs erasedOps [(x, 7)] (erase (⟨0, initial⟩ : Store Int)) [.move x, .fail .overflow] =
       .trap .overflow :=
-  ⟨by decide, evalArgs_trap_erasure (O := erasedOps) (types := types) (permit := permitE)
+  ⟨by decide, evalArgs_trap_erasure_result (O := erasedOps) (types := types) (permit := permitE)
     [(x, 7)] [.move x, .fail .overflow] ⟨0, initial⟩ .overflow (by decide)⟩
 
 /-- Rejection observation. A trapping argument list cannot erase to a different trap kind. -/
@@ -4136,5 +4134,121 @@ example : ResultSatisfies (fun t : State => LiveDestinations t) (leave (RoundThr
 example : (LiveDestinations (RoundThreeWitnesses.localLoan)) ∧ ((RoundThreeWitnesses.localLoan).frames.head? = some (⟨1, [(y, ⟨1⟩)], []⟩ : Activation)) ∧ ¬ ResultSatisfies (fun t : State => LiveDestinations t) (leaveStranded (RoundThreeWitnesses.localLoan)) := by decide
 
 end LifetimeEvidence
+
+namespace FinalEvidence
+open Examples
+
+/-- Mutant: typed entry spuriously refuses every call. -/
+def enterRefuse (_ : Var → Option Descriptor) (_ : List Var) (_ : State) : Option State := none
+
+/-- Instance (law `ConcreteSpec.Core.Own.enter_progress`, case `ConcreteSpec.Core.Own.Examples.shared`). -/
+example : ∃ t, enter types [y] shared = some t :=
+  @enter_progress types shared [y] (by decide) (fun _ _ => ⟨_, rfl⟩)
+
+/-- Planted (law `ConcreteSpec.Core.Own.enter_progress`, case `ConcreteSpec.Core.Own.Examples.shared`, subject `ConcreteSpec.Core.Own.enter`, mutant `ConcreteSpec.Core.Own.FinalEvidence.enterRefuse`). -/
+example : [y].Nodup ∧ (∀ x ∈ [y], ∃ d, types x = some d) ∧
+    ¬ (∃ t, enterRefuse types [y] shared = some t) :=
+  ⟨by decide, (fun _ _ => ⟨_, rfl⟩), by simp [enterRefuse]⟩
+
+/-- Mutant: direct lending spuriously refuses an otherwise permitted owner. -/
+def passOwnerRefuse (_ : CallState) (_ : Hybrid.Place) (_ : List Projection)
+    (_ : Mode) (_ : Var) : Option CallState := none
+
+def callerFrame : Activation := ⟨0, [(x, ⟨0⟩), (y, ⟨1⟩)], []⟩
+
+/-- Instance (law `ConcreteSpec.Core.Own.directOwner_roundtrip`, case `ConcreteSpec.Core.Own.DirectArgumentWitnesses.caller`). -/
+example : (do
+    let waiting ← passOwner DirectArgumentWitnesses.caller ⟨1⟩ [.index 3] .mutable DirectArgumentWitnesses.z
+    let called ← callLife types (.enter [DirectArgumentWitnesses.z]) waiting
+    callLife types .leave called) =
+    some ⟨{ DirectArgumentWitnesses.caller.own with
+      nextLoan := DirectArgumentWitnesses.caller.own.nextLoan + 1
+      nextActivation := DirectArgumentWitnesses.caller.own.nextActivation + 1 }, []⟩ :=
+  @directOwner_roundtrip DirectArgumentWitnesses.caller.own ⟨1⟩ [.index 3] .mutable
+    DirectArgumentWitnesses.z types callerFrame (by decide) rfl (by decide) (by decide)
+
+/-- Planted (law `ConcreteSpec.Core.Own.directOwner_roundtrip`, case `ConcreteSpec.Core.Own.DirectArgumentWitnesses.caller`, subject `ConcreteSpec.Core.Own.passOwner`, mutant `ConcreteSpec.Core.Own.FinalEvidence.passOwnerRefuse`). -/
+example : WellFormed DirectArgumentWitnesses.caller.own ∧
+    DirectArgumentWitnesses.caller.own.frames.head? = some callerFrame ∧
+    callerFrame.id < DirectArgumentWitnesses.caller.own.nextActivation ∧
+    ownerAccess DirectArgumentWitnesses.caller.own ⟨1⟩ .mutable = true ∧
+    ¬ ((do
+      let waiting ← passOwnerRefuse DirectArgumentWitnesses.caller ⟨1⟩ [.index 3] .mutable DirectArgumentWitnesses.z
+      let called ← callLife types (.enter [DirectArgumentWitnesses.z]) waiting
+      callLife types .leave called) =
+      some ⟨{ DirectArgumentWitnesses.caller.own with
+        nextLoan := DirectArgumentWitnesses.caller.own.nextLoan + 1
+        nextActivation := DirectArgumentWitnesses.caller.own.nextActivation + 1 }, []⟩) := by decide
+
+end FinalEvidence
+
+/-- Law (subject `ConcreteSpec.Core.Own.instrumentOperands`). Successful argument evaluation
+preserves values and concrete storage. The result remains inside the conclusion so a mutant
+cannot hide a wrong value behind an output fixed as a theorem argument. -/
+theorem evalArgs_ok_erasure {O : Exec.Operands} {types : Var → Option Descriptor}
+    {permit : AList Var O.Val → O.Expr → State → Option State}
+    (L : AList Var O.Val) (args : List O.Expr) (s : Store O.Store) :
+    match Exec.evalArgs (instrumentOperands O types permit) L s args with
+    | .ok (vs, t) => Exec.evalArgs O L (erase s) args = .ok (vs, erase t)
+    | _ => True := by
+  cases h : Exec.evalArgs (instrumentOperands O types permit) L s args with
+  | ok pair => exact evalArgs_ok_erasure_result L args s pair.2 pair.1 h
+  | trap _ => trivial
+  | stuck => trivial
+
+/-- Law (subject `ConcreteSpec.Core.Own.instrumentOperands`). A trapping argument evaluation
+preserves the actual trap kind, without fixing that kind in a success premise. -/
+theorem evalArgs_trap_erasure {O : Exec.Operands} {types : Var → Option Descriptor}
+    {permit : AList Var O.Val → O.Expr → State → Option State}
+    (L : AList Var O.Val) (args : List O.Expr) (s : Store O.Store) :
+    match Exec.evalArgs (instrumentOperands O types permit) L s args with
+    | .trap kd => Exec.evalArgs O L (erase s) args = .trap kd
+    | _ => True := by
+  cases h : Exec.evalArgs (instrumentOperands O types permit) L s args with
+  | ok _ => trivial
+  | trap kd => exact evalArgs_trap_erasure_result L args s kd h
+  | stuck => trivial
+
+namespace ArgumentEvidence
+open Examples
+
+/-- Mutant: instrumentation replaces every argument value by unit. The erased evaluator
+and all expected values are unchanged. -/
+abbrev zeroOperands (O : Exec.Operands) (types : Var → Option Descriptor)
+    (permit : AList Var O.Val → O.Expr → State → Option State) : Exec.Operands :=
+  { instrumentOperands O types permit with eval := fun _ s _ => .ok (O.unitVal, s) }
+
+/-- Mutant: instrumentation replaces every outcome by abort. -/
+abbrev abortOperands (O : Exec.Operands) (types : Var → Option Descriptor)
+    (permit : AList Var O.Val → O.Expr → State → Option State) : Exec.Operands :=
+  { instrumentOperands O types permit with eval := fun _ _ _ => .trap .abort }
+
+/-- Instance (law `ConcreteSpec.Core.Own.evalArgs_ok_erasure`, case `ConcreteSpec.Core.Own.Examples.initial`). -/
+example : (match Exec.evalArgs (instrumentOperands erasedOps types permitE) [(x, 7)] ⟨0, initial⟩ [.read x, .move x] with
+    | .ok (vs, t) => Exec.evalArgs erasedOps [(x, 7)] (erase (⟨0, initial⟩ : Store Int)) [.read x, .move x] = .ok (vs, erase t)
+    | _ => True) :=
+  @evalArgs_ok_erasure erasedOps types permitE [(x, 7)] [.read x, .move x] ⟨0, initial⟩
+
+/-- Planted (law `ConcreteSpec.Core.Own.evalArgs_ok_erasure`, case `ConcreteSpec.Core.Own.Examples.initial`, subject `ConcreteSpec.Core.Own.instrumentOperands`, mutant `ConcreteSpec.Core.Own.ArgumentEvidence.zeroOperands`). -/
+example : ¬ (match Exec.evalArgs (zeroOperands erasedOps types permitE) [(x, 7)] ⟨0, initial⟩ [.read x, .move x] with
+    | .ok (vs, t) => Exec.evalArgs erasedOps [(x, 7)] (erase (⟨0, initial⟩ : Store Int)) [.read x, .move x] = .ok (vs, erase t)
+    | _ => True) := by
+  change ¬ ((Res.ok ([7, 7], 0) : Res (List Int × Int)) = .ok ([0, 0], 0))
+  decide
+
+/-- Instance (law `ConcreteSpec.Core.Own.evalArgs_trap_erasure`, case `ConcreteSpec.Core.Own.Examples.initial`). -/
+example : (match Exec.evalArgs (instrumentOperands erasedOps types permitE) [(x, 7)] ⟨0, initial⟩ [.move x, .fail .overflow] with
+    | .trap kd => Exec.evalArgs erasedOps [(x, 7)] (erase (⟨0, initial⟩ : Store Int)) [.move x, .fail .overflow] = .trap kd
+    | _ => True) :=
+  @evalArgs_trap_erasure erasedOps types permitE [(x, 7)] [.move x, .fail .overflow] ⟨0, initial⟩
+
+/-- Planted (law `ConcreteSpec.Core.Own.evalArgs_trap_erasure`, case `ConcreteSpec.Core.Own.Examples.initial`, subject `ConcreteSpec.Core.Own.instrumentOperands`, mutant `ConcreteSpec.Core.Own.ArgumentEvidence.abortOperands`). -/
+example : ¬ (match Exec.evalArgs (abortOperands erasedOps types permitE) [(x, 7)] ⟨0, initial⟩ [.move x, .fail .overflow] with
+    | .trap kd => Exec.evalArgs erasedOps [(x, 7)] (erase (⟨0, initial⟩ : Store Int)) [.move x, .fail .overflow] = .trap kd
+    | _ => True) := by
+  change ¬ ((Res.trap .overflow : Res (List Int × Int)) = .trap .abort)
+  decide
+
+end ArgumentEvidence
 
 end ConcreteSpec.Core.Own
