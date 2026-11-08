@@ -1157,28 +1157,28 @@ theorem endlesslyBlocked_of_noAnswer {ρ₀ : Oracle O} {fuel : Nat} {c blocked 
 
 /-- Every admitted call has a successful lookup and entry and reaches a final outcome. The same
 outcome is reported at every fuel budget above the certificate's witness budget. -/
-theorem TerminationEvidence.all_allowed_runs (E : TerminationEvidence O P)
-    (premises : E.Premises) (ρ : Oracle O) (args : List O.Val) (st : O.Store)
-    (ha : E.admits premises ρ args st) (m : Nat) (hm : E.fuel premises ρ args st ≤ m) :
-    ∃ fn c f, AList.lookup P.fns E.function = some fn ∧ enter fn args st = some c ∧
+theorem TerminationEvidence.all_allowed_runs {domain : CallDomain O} (E : TerminationEvidence O P domain)
+     (ρ : Oracle O) (args : List O.Val) (st : O.Store)
+    (ha : domain.calls ρ args st) (m : Nat) (hm : E.conditional.fuel E.premises ρ args st ≤ m) :
+    ∃ fn c f, AList.lookup P.fns domain.function = some fn ∧ enter fn args st = some c ∧
       (run P ρ m c).ending = .final f := by
-  obtain ⟨fn, c, f, hf, he, hfinal⟩ := E.terminates premises ρ args st ha
+  obtain ⟨fn, c, f, hf, he, hfinal⟩ := E.conditional.terminates E.premises ρ args st ha
   refine ⟨fn, c, f, hf, he, ?_⟩
-  have hnot : ∀ c', (run P ρ (E.fuel premises ρ args st) c).ending ≠ .outOfFuel c' := by
+  have hnot : ∀ c', (run P ρ (E.conditional.fuel E.premises ρ args st) c).ending ≠ .outOfFuel c' := by
     rw [hfinal]
     simp
-  have hmono : run P ρ m c = run P ρ (E.fuel premises ρ args st) c := by
-    apply runFrom_mono (P := P) (ρ₀ := ρ) (E.fuel premises ρ args st) m hm [] c hnot
+  have hmono : run P ρ m c = run P ρ (E.conditional.fuel E.premises ρ args st) c := by
+    apply runFrom_mono (P := P) (ρ₀ := ρ) (E.conditional.fuel E.premises ρ args st) m hm [] c hnot
   exact (congrArg Report.ending hmono).trans hfinal
 
 /-- Per-function termination evidence excludes divergence from every successful admitted entry
 configuration. -/
-theorem TerminationEvidence.excludes_infinite (E : TerminationEvidence O P)
-    (premises : E.Premises) (ρ : Oracle O) (args : List O.Val) (st : O.Store)
-    (fn : Fn O) (c : Config O) (hf : AList.lookup P.fns E.function = some fn)
-    (ha : E.admits premises ρ args st) (he : enter fn args st = some c)
+theorem TerminationEvidence.excludes_infinite {domain : CallDomain O} (E : TerminationEvidence O P domain)
+     (ρ : Oracle O) (args : List O.Val) (st : O.Store)
+    (fn : Fn O) (c : Config O) (hf : AList.lookup P.fns domain.function = some fn)
+    (ha : domain.calls ρ args st) (he : enter fn args st = some c)
     (X : InfiniteExecution P ρ.toQueryOracle c) : False := by
-  obtain ⟨fn', c', f, hf', he', hfinal⟩ := E.terminates premises ρ args st ha
+  obtain ⟨fn', c', f, hf', he', hfinal⟩ := E.conditional.terminates E.premises ρ args st ha
   rw [hf] at hf'
   cases hf'
   rw [he] at he'

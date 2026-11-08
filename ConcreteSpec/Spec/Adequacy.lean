@@ -246,22 +246,30 @@ This is C8's blocking classification over C1; it is not divergence and has no in
 def EndlesslyBlocked (P : Program O) (ρ : Oracle O) (fuel : Nat) (c blocked : Config O) : Prop :=
   ∀ n, fuel ≤ n → (run P ρ n c).ending = .noAnswer blocked
 
-/-- Per-function termination evidence. `Premises` names the trusted premises, including any
-termination assumptions on callees; `admits` selects the allowed oracles, arguments, and stores.
-The final field is a theorem over every admitted call: function lookup and entry succeed, and the
-fixed fuel budget reports a final outcome. Concrete variants and cost models are deliberately not
-part of this interface. -/
-structure TerminationEvidence (O : Operands) (P : Program O) where
+/-- A declared call domain, fixed independently of any proof or certificate. Empty domains are
+allowed for conditional theorems, but cannot support usable termination evidence. -/
+structure CallDomain (O : Operands) where
   function : FnId
+  calls : Oracle O → List O.Val → O.Store → Prop
+
+/-- A conditional termination theorem covers the entire declared domain. Trusted premises may be
+uninhabited; such a theorem alone is deliberately not usable termination evidence. -/
+structure ConditionalTermination (O : Operands) (P : Program O) (domain : CallDomain O) where
   Premises : Type
-  /-- Callee identities used by this certificate. This is syntactic composition metadata at this
-  stage, not an extra semantic restriction: their evidence is represented in `Premises`, and a
-  composition layer must check those certificates against this list. -/
+  /-- Syntactic callee metadata; semantic assumptions belong to `Premises`. -/
   dependencies : List FnId
-  admits : Premises → Oracle O → List O.Val → O.Store → Prop
   fuel : Premises → Oracle O → List O.Val → O.Store → Nat
-  terminates : ∀ premises ρ args st, admits premises ρ args st →
-    ∃ fn c f, AList.lookup P.fns function = some fn ∧ enter fn args st = some c ∧
+  terminates : ∀ premises ρ args st, domain.calls ρ args st →
+    ∃ fn c f, AList.lookup P.fns domain.function = some fn ∧ enter fn args st = some c ∧
       (run P ρ (fuel premises ρ args st) c).ending = .final f
+
+/-- Usable evidence discharges the conditional theorem's trusted premises and supplies an actual
+call in its independently declared domain. There is no certificate-local admission filter: every
+declared call is covered, so neither an empty premise type nor a false filter can disable coverage.
+Lookup and entry success remain consequences, rather than restrictions on the call domain. -/
+structure TerminationEvidence (O : Operands) (P : Program O) (domain : CallDomain O) where
+  conditional : ConditionalTermination O P domain
+  premises : conditional.Premises
+  admitted : ∃ ρ args st, domain.calls ρ args st
 
 end ConcreteSpec.Core.Exec
