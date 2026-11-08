@@ -271,8 +271,23 @@ def positionalValue (radix : Radix) (digits : List Nat) : Nat :=
 
 /-- The canonical suffix spelling of each decided integer type (TYPE-19). -/
 def intTySpelling : ConcreteSpec.IntTy → List Nat
-  | .i8 => [105, 56] | .i16 => [105, 49, 54] | .i32 => [105, 50, 51] | .i64 => [105, 54, 52]
-  | .u8 => [117, 56] | .u16 => [117, 49, 54] | .u32 => [117, 50, 51] | .u64 => [117, 54, 52]
+  | .i8 => [105, 56] | .i16 => [105, 49, 54] | .i32 => [105, 51, 50] | .i64 => [105, 54, 52]
+  | .u8 => [117, 56] | .u16 => [117, 49, 54] | .u32 => [117, 51, 50] | .u64 => [117, 54, 52]
+
+example : intTySpelling .i8 = "i8".toList.map Char.toNat := by decide
+example : intTySpelling .i16 = "i16".toList.map Char.toNat := by decide
+example : intTySpelling .i32 = "i32".toList.map Char.toNat := by decide
+example : intTySpelling .i64 = "i64".toList.map Char.toNat := by decide
+example : intTySpelling .u8 = "u8".toList.map Char.toNat := by decide
+example : intTySpelling .u16 = "u16".toList.map Char.toNat := by decide
+example : intTySpelling .u32 = "u32".toList.map Char.toNat := by decide
+example : intTySpelling .u64 = "u64".toList.map Char.toNat := by decide
+example : Radix.basePrefix .decimal = "".toList.map Char.toNat := by decide
+example : Radix.basePrefix .binary = "0b".toList.map Char.toNat := by decide
+example : Radix.basePrefix .octal = "0o".toList.map Char.toNat := by decide
+example : Radix.basePrefix .hexadecimal = "0x".toList.map Char.toNat := by decide
+example (e d : Nat) : ByteEscape e d ↔ (e = 'n'.toNat ∧ d = '\n'.toNat) ∨ (e = 't'.toNat ∧ d = '\t'.toNat) ∨ (e = 'r'.toNat ∧ d = '\r'.toNat) ∨ (e = '\\'.toNat ∧ d = '\\'.toNat) ∨ (e = '\''.toNat ∧ d = '\''.toNat) ∨ (e = '0'.toNat ∧ d = '\x00'.toNat) := by rfl
+example (e d : Nat) : StringEscape e d ↔ (e = 'n'.toNat ∧ d = '\n'.toNat) ∨ (e = 't'.toNat ∧ d = '\t'.toNat) ∨ (e = 'r'.toNat ∧ d = '\r'.toNat) ∨ (e = '\\'.toNat ∧ d = '\\'.toNat) ∨ (e = '"'.toNat ∧ d = '"'.toNat) ∨ (e = '0'.toNat ∧ d = '\x00'.toNat) := by rfl
 
 /-- The empty suffix or exactly one of the eight decided integer-type names. -/
 def SuffixAccepted (suffix : List Nat) (typeSuffix : Option ConcreteSpec.IntTy) : Prop :=

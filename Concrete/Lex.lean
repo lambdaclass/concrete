@@ -1292,29 +1292,29 @@ theorem scanDigits_complete {radix : Radix} {cs digits rest : List Nat}
   | cons hc _ ih => simp [scanDigits, hc, ih]
 
 /-- Decode the empty suffix or exactly one of the eight integer-type suffixes. -/
-def decodeSuffix : List Nat → Option (Option ConcreteSpec.IntTy)
-  | [] => some none
-  | [105, 56] => some (some .i8)
-  | [105, 49, 54] => some (some .i16)
-  | [105, 50, 51] => some (some .i32)
-  | [105, 54, 52] => some (some .i64)
-  | [117, 56] => some (some .u8)
-  | [117, 49, 54] => some (some .u16)
-  | [117, 50, 51] => some (some .u32)
-  | [117, 54, 52] => some (some .u64)
-  | _ => none
+def decodeSuffix (suffix : List Nat) : Option (Option ConcreteSpec.IntTy) :=
+  if suffix = [] then some none
+  else if suffix = intTySpelling .i8 then some (some .i8)
+  else if suffix = intTySpelling .i16 then some (some .i16)
+  else if suffix = intTySpelling .i32 then some (some .i32)
+  else if suffix = intTySpelling .i64 then some (some .i64)
+  else if suffix = intTySpelling .u8 then some (some .u8)
+  else if suffix = intTySpelling .u16 then some (some .u16)
+  else if suffix = intTySpelling .u32 then some (some .u32)
+  else if suffix = intTySpelling .u64 then some (some .u64)
+  else none
 
 /-- Every scanner-approved suffix is in the declarative suffix relation. -/
 theorem decodeSuffix_sound {suffix : List Nat} {typeSuffix : Option ConcreteSpec.IntTy}
     (h : decodeSuffix suffix = some typeSuffix) : SuffixAccepted suffix typeSuffix := by
   unfold decodeSuffix at h
-  split at h <;> simp_all [SuffixAccepted, intTySpelling]
+  repeat first | split at h | (solve | simp_all [SuffixAccepted])
 
 /-- Every declarative suffix is decoded to its specified optional type. -/
 theorem decodeSuffix_complete {suffix : List Nat} {typeSuffix : Option ConcreteSpec.IntTy}
     (h : SuffixAccepted suffix typeSuffix) : decodeSuffix suffix = some typeSuffix := by
   rcases h with (⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ |
-    ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩) <;> rfl
+    ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩) <;> decide
 
 /-- Internal integer-literal refusals; constructor names are not user-visible diagnostics. -/
 inductive IntegerError where
@@ -1645,6 +1645,12 @@ example : longestMatch [[1,2], [1,2]] [1,2,3] = some ([1,2], [3]) := by decide
 example : longestMatch [[], [1,2], [3]] [1,9] = none := by decide
 example : longestMatch [[1], []] [] = none := by decide
 
+example : integerLiteral ("1i23".toList.map Char.toNat) =
+    .error (.invalidSuffix ("i23".toList.map Char.toNat)) := by decide
+example : integerLiteral ("1u23".toList.map Char.toNat) =
+    .error (.invalidSuffix ("u23".toList.map Char.toNat)) := by decide
+example : decodeSuffix ("i32".toList.map Char.toNat) = some (some .i32) := by decide
+example : decodeSuffix ("u32".toList.map Char.toNat) = some (some .u32) := by decide
 example : integerLiteral [48,32] = .ok (some ⟨[48], 0, none, [32]⟩) := by decide
 example : integerLiteral [48,65] = .error (.invalidSuffix [65]) := by decide
 example : integerLiteral [55] = .ok (some ⟨[55], 7, none, []⟩) := by decide
@@ -1662,14 +1668,14 @@ example : integerLiteral [48,120,48,102] = .ok (some ⟨[48,120,48,102], 15, non
 
 example : integerLiteral [48,98,49,48,49,105,49,54] =
     .ok (some ⟨[48,98,49,48,49,105,49,54], 5, some .i16, []⟩) := by decide
-example : integerLiteral [48,111,49,55,105,50,51] =
-    .ok (some ⟨[48,111,49,55,105,50,51], 15, some .i32, []⟩) := by decide
+example : integerLiteral [48,111,49,55,105,51,50] =
+    .ok (some ⟨[48,111,49,55,105,51,50], 15, some .i32, []⟩) := by decide
 example : integerLiteral [48,120,102,102,105,54,52] =
     .ok (some ⟨[48,120,102,102,105,54,52], 255, some .i64, []⟩) := by decide
 example : integerLiteral [48,98,49,117,49,54] =
     .ok (some ⟨[48,98,49,117,49,54], 1, some .u16, []⟩) := by decide
-example : integerLiteral [48,111,55,117,50,51] =
-    .ok (some ⟨[48,111,55,117,50,51], 7, some .u32, []⟩) := by decide
+example : integerLiteral [48,111,55,117,51,50] =
+    .ok (some ⟨[48,111,55,117,51,50], 7, some .u32, []⟩) := by decide
 example : integerLiteral [48,120,102,117,54,52] =
     .ok (some ⟨[48,120,102,117,54,52], 15, some .u64, []⟩) := by decide
 example : integerLiteral [48,120,102,102,117,56] =
