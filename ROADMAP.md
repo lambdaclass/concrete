@@ -284,7 +284,6 @@ proof items (functional models, frames, the verified parser, LCB native closure,
 launcher) are tasks beside these slices, not language slices. Lexicographic measures for
 `#[variant]` come when a workload needs them (R-0605).
 
-<a id="questions-for-the-core-session"></a>
 ### Std per slice
 
 The owner approved this std-per-slice table on 2026-11-08 ("ok let's do 2", [decision](docs/decisions.md#decided-2026-11-08-std-table)); placements below follow the existing slice and decision rows. Every new-root std module is **not started**: each needs a spec contract, kernel-checked laws, accepted/refused conformance examples, and the program theorems named below. Source paths are planned destinations, not existing implementations; a language substrate arriving does not by itself schedule every legacy API built on it.
@@ -329,6 +328,7 @@ The owner approved this std-per-slice table on 2026-11-08 ("ok let's do 2", [dec
 - **Proposed base64 at 17: legacy implementation conflicts.** This is not an adopted placement (the [showcase plan](docs/proposals/EXAMPLES.md#showcases), the [showcase plan](docs/proposals/EXAMPLES.md#showcases)). Legacy encode/decode allocate Bytes (`legacy/std/src/base64.con` line 40, `legacy/std/src/base64.con` line 62), before allocation at 19 and growable containers at 22; a fixed-buffer version has no decided API.
 - No other definite stage-before-module conflict follows from the adopted rows: maps arrive with store/EVM/Wasm stage 23; network/time arrive with the sequential server at 27. RocksDB acceptance is **after 25**, and ethlambda **after 28**, both subject to the R-0604 dependency audit (R-0604, R-0285, R-0490); their complete module requirements must not be inferred as already audited. No concurrency model is chosen here.
 
+<a id="questions-for-the-core-session"></a>
 ### Questions for the Core session
 
 The owner answered these provisionally on 2026-11-05 (A2a; [the decided rows](docs/decisions.md#decided-2026-11-05-core)) and freezes them at A2c. The [Core proposal](legacy/docs/compiler/CORE_PROPOSAL.md) is the background; where it and a decided row differ, the row governs:
