@@ -258,6 +258,123 @@ theorem byteColumn_tab (before : String) : byteColumn (before ++ "\t") = byteCol
 
 variable {O : Exec.Operands}
 
+/-- Output-only extensions preserve a complete valid trace. -/
+theorem ValidTrace.outputs {C : OperationContract S} {input : C.Input} {hist : List (Event S)}
+    (h : ValidTrace C input none hist) (outputs : List S.Output) :
+    ValidTrace C input none (hist ++ outputs.map Event.output) := by
+  induction outputs generalizing hist with
+  | nil => simpa
+  | cons output outputs ih =>
+    simpa [List.append_assoc] using ih (ValidTrace.output h)
+
+/-- The adapter's output/request/response/output answer shape extends a complete valid trace. -/
+theorem ValidTrace.answer_projection {C : OperationContract S} {input : C.Input}
+    {hist before after : List (Event S)} {q : Request S} {r : Response S}
+    (h : CompleteTrace C input hist)
+    (beforeOutputs : ∃ outputs : List S.Output, before = outputs.map Event.output)
+    (afterOutputs : ∃ outputs : List S.Output, after = outputs.map Event.output)
+    (matching : RequestResponse q r)
+    (allows : C.allows input (hist ++ before ++ [.request q]) q r) :
+    CompleteTrace C input (hist ++ (before ++ [.request q, .response r] ++ after)) := by
+  obtain ⟨beforeOutputs, rfl⟩ := beforeOutputs
+  obtain ⟨afterOutputs, rfl⟩ := afterOutputs
+  have pending := ValidTrace.request (q := q) (h.outputs beforeOutputs)
+  have answered := ValidTrace.response pending matching allows
+  simpa [CompleteTrace, List.append_assoc] using answered.outputs afterOutputs
+
+/-- Projection distributes over the C1 event-history append performed by `runFrom`. -/
+theorem ExecAdapter.project_append (A : ExecAdapter O S) (xs ys : List O.Event) :
+    A.project (xs ++ ys) = A.project xs ++ A.project ys := by
+  simp [ExecAdapter.project, List.flatMap_append]
+
+/-- Every C1 evaluator report from a well-formed adapter and oracle has a complete valid event
+history. If it ends in `noAnswer`, the pending typed request is also permitted to block in the
+history ending in that request. -/
+theorem runFrom_validTrace (P : Exec.Program O) (A : ExecAdapter O S) (C : OperationContract S)
+    (input : C.Input) (ρ : Exec.Oracle O) (wellFormed : ExecAdapter.WellFormed A C input ρ) :
+    ∀ (fuel : Nat) (hist : List O.Event) (c : Exec.Config O),
+      CompleteTrace C input (A.project hist) →
+      CompleteTrace C input (A.project (Exec.runFrom P ρ fuel hist c).events) ∧
+      ∀ {c' : Exec.Config O} {p : O.Prim} {vs : List O.Val} {site : SiteId} {store : O.Store}
+        {k : Exec.Answer O.Val O.Event O.Store → Exec.Config O} {q : Request S},
+        (Exec.runFrom P ρ fuel hist c).ending = .noAnswer c' →
+        Exec.step P c' = some (.request p vs site store k) →
+        A.request p vs site store = some q →
+        C.mayBlock input (A.project (Exec.runFrom P ρ fuel hist c).events ++ [.request q]) q := by
+  intro fuel
+  induction fuel with
+  | zero =>
+    intro hist c valid
+    cases final : c.final? with
+    | none => simp [Exec.runFrom, final, valid]
+    | some value => simp [Exec.runFrom, final, valid]
+  | succ fuel ih =>
+    intro hist c valid
+    cases final : c.final? with
+    | some value => simp [Exec.runFrom, final, valid]
+    | none =>
+      cases next : Exec.step P c with
+      | none => simp [Exec.runFrom, final, next, valid]
+      | some out =>
+        cases out with
+        | next c' => simpa [Exec.runFrom, final, next] using ih hist c' valid
+        | request p vs site store k =>
+          cases answer : ρ hist p vs site store with
+          | none =>
+            constructor
+            · simpa [Exec.runFrom, final, next, answer] using valid
+            · intro c' p' vs' site' store' k' q ending pending typed
+              simp [Exec.runFrom, final, next, answer] at ending
+              cases ending
+              rw [next] at pending
+              cases pending
+              simpa [Exec.runFrom, final, next, answer] using wellFormed.blocked answer typed
+          | some a =>
+            by_cases allowed : O.allows p vs store a = true
+            · have answerValid : CompleteTrace C input (A.project (hist ++ a.event.toList)) := by
+                rw [ExecAdapter.project_append]
+                cases typed : A.request p vs site store with
+                | none =>
+                  obtain ⟨outputs, projection⟩ := wellFormed.internal answer typed
+                  rw [projection]
+                  exact valid.outputs outputs
+                | some q =>
+                  obtain ⟨before, r, after, projection, beforeOutputs, afterOutputs, matching,
+                    allows⟩ := wellFormed.answered answer typed
+                  rw [projection]
+                  exact ValidTrace.answer_projection valid beforeOutputs afterOutputs matching allows
+              simpa [Exec.runFrom, final, next, answer, allowed] using
+                ih (hist ++ a.event.toList) (k a) answerValid
+            · simp [Exec.runFrom, final, next, answer, allowed, valid]
+
+/-- A blocked C1 observation has exactly the pending `ValidTrace` state and history that its
+operation contract uses. -/
+theorem runFrom_noAnswer_pending_valid (P : Exec.Program O) (A : ExecAdapter O S)
+    (C : OperationContract S) (input : C.Input) (ρ : Exec.Oracle O)
+    (wellFormed : ExecAdapter.WellFormed A C input ρ)
+    {fuel : Nat} {hist : List O.Event} {c c' : Exec.Config O}
+    (valid : CompleteTrace C input (A.project hist))
+    {p : O.Prim} {vs : List O.Val} {site : SiteId} {store : O.Store}
+    {k : Exec.Answer O.Val O.Event O.Store → Exec.Config O} {q : Request S}
+    (ending : (Exec.runFrom P ρ fuel hist c).ending = .noAnswer c')
+    (pending : Exec.step P c' = some (.request p vs site store k))
+    (typed : A.request p vs site store = some q) :
+    ValidTrace C input (some q)
+      (A.project (Exec.runFrom P ρ fuel hist c).events ++ [.request q]) ∧
+      C.mayBlock input (A.project (Exec.runFrom P ρ fuel hist c).events ++ [.request q]) q := by
+  have laws := runFrom_validTrace P A C input ρ wellFormed fuel hist c valid
+  exact ⟨ValidTrace.request laws.1, laws.2 ending pending typed⟩
+
+/-- A well-formed C1 run supplies the blocking premise required by `reportObservation`. -/
+theorem runFrom_blockingPermitted (P : Exec.Program O) (A : ExecAdapter O S)
+    (C : OperationContract S) (input : C.Input) (ρ : Exec.Oracle O)
+    (wellFormed : ExecAdapter.WellFormed A C input ρ)
+    {fuel : Nat} {hist : List O.Event} {c : Exec.Config O}
+    (valid : CompleteTrace C input (A.project hist)) :
+    ExecAdapter.BlockingPermitted P A C input (Exec.runFrom P ρ fuel hist c) := by
+  intro c' p vs site store k q ending pending typed
+  exact (runFrom_validTrace P A C input ρ wellFormed fuel hist c valid).2 ending pending typed
+
 /-- **Output before a trap is kept.** The terminal C1 observation contains the projection of the
 whole `Steps` history, not merely a suffix or the trap itself, and contains the exact trap line. -/
 theorem output_before_trap_kept (A : ExecAdapter O S) {P : Exec.Program O} {c c' : Exec.Config O}
