@@ -507,10 +507,11 @@ pure_merge() {
 }
 review_provenance() { # name head
   local name="$1" head="$2" out m n=0 bad=""
+  local base; base="$(state_get_soft "$name" base)"
   [ -f "$VERIFY" ] || { echo "no review verifier ($VERIFY is missing)"; return 1; }
   git fetch -q "$REMOTE" "+refs/notes/concrete-review:refs/notes/concrete-review" 2>/dev/null \
     || { echo "could not fetch refs/notes/concrete-review from $REMOTE"; return 1; }
-  if out="$(bash "$VERIFY" "$head" 2>&1)"; then echo "the head ${head:0:10} carries a clean review note"; return 0; fi
+  if out="$(bash "$VERIFY" --required-base "$base" "$head" 2>&1)"; then echo "the head ${head:0:10} carries a clean review note covering ${base:0:10}"; return 0; fi
   if git notes --ref=refs/notes/concrete-review show "$head" >/dev/null 2>&1; then
     echo "the head's review note does not qualify: ${out//$'\n'/ }"; return 1
   fi
@@ -519,19 +520,19 @@ review_provenance() { # name head
     || { echo "could not fetch refs/owner-signoff/* from $REMOTE"; return 1; }
   for m in $(state_get_soft "$name" members | tr ',' ' '); do
     n=$((n + 1)); shas+=("${m##*@}")
-    out="$(bash "$VERIFY" "${m##*@}" 2>&1)" && continue
-    if so="$(bash "$SIGNOFF" verify "${m##*@}" --base "$(state_get_soft "$name" base)" 2>&1)"; then signed=$((signed + 1)); continue; fi
+    out="$(bash "$VERIFY" --required-base "$base" "${m##*@}" 2>&1)" && continue
+    if so="$(bash "$SIGNOFF" verify "${m##*@}" --base "$base" 2>&1)"; then signed=$((signed + 1)); continue; fi
     bad="$bad; member ${m%@*}: ${out//$'\n'/ }; ${so//$'\n'/ }"
   done
   [ "$n" -gt 0 ] || { echo "the head ${head:0:10} has no review note and the train records no members"; return 1; }
   [ -z "$bad" ] || { echo "the head ${head:0:10} has no review note, and not every member has a clean one or an owner sign-off$bad"; return 1; }
   if [ "$signed" -gt 0 ]; then
-    impure="$(pure_merge "$(state_get_soft "$name" base)" "$head" "${shas[@]}")"
+    impure="$(pure_merge "$base" "$head" "${shas[@]}")"
     [ -z "$impure" ] || { echo "$signed member(s) signed off by the owner, but $impure"; return 1; }
     echo "the head has no review note; every member ($n) carries a clean one or an owner sign-off ($signed) at its exact SHA, and the head is their clean merge"
     return 0
   fi
-  echo "the head has no review note; every member ($n) carries a clean one at its exact SHA"
+  echo "the head has no review note; every member ($n) carries a clean one covering ${base:0:10} at its exact SHA"
 }
 
 # Codex review leg. It passes without running the reviewer when the train already has review

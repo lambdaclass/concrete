@@ -129,6 +129,36 @@ EOF
 chmod +x "$T/bin/codex"
 export REVIEW_CODEX_BIN="$T/bin/codex"
 
+# Kimi and agy have one-argument prompt interfaces and answer on stdout. Their fakes pin the exact
+# permission flags, archived cwd and closed stdin; the production result parser is the Codex one.
+for reviewer in kimi agy; do
+  cat >"$T/bin/$reviewer" <<'EOF'
+#!/usr/bin/env bash
+set -uo pipefail
+reviewer="$(basename "$0")"
+if [ "$reviewer" = agy ]; then
+  [ "${1:-}" = --dangerously-skip-permissions ] || { echo "fake agy: missing permission flag" >&2; exit 64; }
+  shift
+fi
+[ "${1:-}" = -p ] && [ $# -eq 2 ] || { echo "fake $reviewer: expected -p PROMPT" >&2; exit 64; }
+prompt="$2"
+n=$(( $(ls "$FAKE_LOG" | grep -c '^stdin\.' || true) + 1 ))
+cat >"$FAKE_LOG/actual-stdin.$n"
+printf '%s' "$prompt" >"$FAKE_LOG/prompt.$n"
+archive=no
+[ ! -e .git ] && [ "$(cat README.md 2>/dev/null)" = base ] && archive=yes
+echo "$n $reviewer archive=$archive stdin_bytes=$(wc -c <"$FAKE_LOG/actual-stdin.$n" | tr -d ' ')" >>"$FAKE_LOG/calls"
+echo "$n optional_locks=${GIT_OPTIONAL_LOCKS:-unset}" >>"$FAKE_LOG/locks"
+case "$prompt" in
+  *MARK_REPOSITORY_UNREADABLE*) printf 'REPOSITORY: unreadable\nVERDICT: clean\n' ;;
+  *MARK_NO_REPOSITORY*) printf 'Nothing to report.\nVERDICT: clean\n' ;;
+  *) printf 'Nothing to report.\nREPOSITORY: readable\nVERDICT: clean\n' ;;
+esac
+EOF
+  chmod +x "$T/bin/$reviewer"
+done
+export REVIEW_KIMI_BIN="$T/bin/kimi" REVIEW_AGY_BIN="$T/bin/agy"
+
 calls() { [ -f "$FAKE_LOG/calls" ] && wc -l <"$FAKE_LOG/calls" | tr -d ' ' || echo 0; }
 reset_fake() { rm -f "$FAKE_LOG"/*; }
 
@@ -146,7 +176,7 @@ commit_file README.md "base" "base"
 printf '.review/\n' >"$W/.gitignore"
 g add .gitignore && g commit -qm "ignore .review"
 g push -q origin main
-review() { (cd "$W" && bash "$REVIEW" "$@"); }
+review() { (cd "$W" && bash "$REVIEW" --writer "${REVIEW_TEST_WRITER:-claude}" "$@"); }
 note() { g notes --ref=refs/notes/concrete-review show "${1:-HEAD}" 2>/dev/null; }
 field() { note "${2:-HEAD}" | sed -n "s/^$1: //p"; }
 sha256_file() { if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1" | cut -d' ' -f1; else shasum -a 256 "$1" | cut -d' ' -f1; fi; }
@@ -165,17 +195,20 @@ check "reviewer runs with GIT_OPTIONAL_LOCKS=0" grep -q " optional_locks=0$" "$F
 check "no reviewer call ran with optional locks" bash -c '! grep -v " optional_locks=0$" "$1" | has_match .' _ "$FAKE_LOG/locks"
 check "round 1 prompt carries the verdict rule" grep -q "^VERDICT: findings$" "$FAKE_LOG/prompt.1"
 check "round 1 prompt requires repository readability evidence" grep -q "REPOSITORY: readable.*REPOSITORY: unreadable" "$FAKE_LOG/prompt.1"
+check "the standard prompt carries the permanent owner rule" \
+  grep -Fq 'OWNER RULE (2026-11-08, verbatim: "ALWAYS tell the reviewrs to do the best long term thing rather than cuitting corners"): judge and fix by the best long-term design. Never cut corners for speed, a smaller diff or fewer rounds. As a reviewer, report any shortcut, containment patch or corner cut as a real finding and say what the long-term fix is. As a writer, implement the structural fix, not a containment patch; if staging is truly unavoidable, record the long-term design and name its roadmap row.' "$FAKE_LOG/prompt.1"
 check "round 1 reviews the full diff from the merge-base" grep -q "files=old.txt,$" "$FAKE_LOG/calls"
 R1="$(g rev-parse HEAD)"
 BASE="$(g merge-base HEAD origin/main)"
 FORMAT_RE='^verdict: (clean|findings|blocked)
 rounds: [0-9]+
 reviewer: codex
+writer: claude
 utc: [0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z
 base: [0-9a-f]{40}
 pieces: [0-9]+$'
 n1="$(note "$R1")"
-if [[ "$n1" =~ $FORMAT_RE ]]; then ok "note has exactly the six fields, in order"; else no "note format: $n1"; fi
+if [[ "$n1" =~ $FORMAT_RE ]]; then ok "note has exactly the seven common fields, in order"; else no "note format: $n1"; fi
 check "note: verdict findings" test "$(field verdict)" = findings
 check "note: rounds 1" test "$(field rounds)" = 1
 check "note: base is the merge-base" test "$(field base)" = "$BASE"
@@ -243,15 +276,22 @@ g notes --ref=refs/notes/concrete-review add -f -m "$LEGACY_NOTE" HEAD
 out="$(cd "$W" && bash "$VERIFY" HEAD 2>&1)"; rc=$?
 check "a legacy clean note without repository: readable is not clean (exit 1, got $rc)" test "$rc" -eq 1
 check "the legacy-note refusal names the missing key" grep -q "missing repository: readable" <<<"$out"
-# A note notes.sh put wrote (keys in its own order, repository after utc) is well formed.
+# Even with repository evidence, a note without writer is legacy, never clean provenance.
 g notes --ref=refs/notes/concrete-review add -f -m "$LEGACY_NOTE
 repository: readable" HEAD
+out="$(cd "$W" && bash "$VERIFY" HEAD 2>&1)"; rc=$?
+check "a readable clean note without writer is legacy, not clean (exit 1, got $rc)" test "$rc" -eq 1
+check "the legacy-writer refusal names the missing key" grep -q "missing writer (legacy note)" <<<"$out"
+# A current note notes.sh put wrote (keys in its own order, writer and repository after utc) verifies.
+g notes --ref=refs/notes/concrete-review add -f -m "$LEGACY_NOTE
+writer: claude
+repository: readable" HEAD
 (cd "$W" && bash "$VERIFY" HEAD >"$T/vc" 2>&1); rc=$?
-check "a readable clean note with utc last verifies clean (exit 0, got $rc)" test "$rc" -eq 0
+check "a readable independent clean note with utc before writer verifies (exit 0, got $rc)" test "$rc" -eq 0
 g notes --ref=refs/notes/concrete-review add -f -m "$LEGACY_NOTE" HEAD
 review >"$T/legacy-rerun" 2>&1; rc=$?
 check "review.sh re-reviews a legacy clean HEAD instead of short-circuiting (exit $rc)" \
-  test "$rc" -eq 0 -a "$(field repository)" = readable -a "$(field rounds)" = 3
+  test "$rc" -eq 0 -a "$(field repository)" = readable -a "$(field writer)" = claude -a "$(field rounds)" = 3
 # The landing bot's keys went with it: a verdict carried across a rebase, or a landing order, is no
 # longer a key a review note may hold.
 for extra in "carried-from: $B40" "order: 1"; do
