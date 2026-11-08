@@ -17,10 +17,13 @@ def observe_main(lineage, histories, tier, now, runners):
         try:
             message = observe(history, sha, tier, now, runners)
             fresh.append(message)
-        except EvidenceError as error:
+        except ERRORS as error:
             # Old non-failing occurrences age into tier staleness, while FAIL never ages out.
             if not str(error).startswith("STALE "):
-                problems.append(str(error))
+                text = str(error)
+                if not text.startswith(("FAIL ", "INCOMPLETE ", "MISSING ")):
+                    text = f"INCOMPLETE {tier} {sha}: {error}"
+                problems.append(text)
     if problems:
         # All exact-SHA defects are surfaced, with failures first.
         return sorted(problems, key=lambda s: not s.startswith("FAIL "))
@@ -40,10 +43,16 @@ def main():
                 refs = git("for-each-ref", "--format=%(refname)", ref).splitlines()
                 listing = git("notes", "--ref=" + ref, "list") if ref in refs else ""
                 shas = {line.split()[-1] for line in listing.splitlines()}
-                histories = {sha: read_note(sha, tier) for sha in lineage if sha in shas}
+                histories = {}; malformed = []
+                for sha in lineage:
+                    if sha in shas:
+                        try:
+                            histories[sha] = read_note(sha, tier, listed=True)
+                        except ERRORS as error:
+                            malformed.append(f"INCOMPLETE {tier} {sha}: {error}")
                 messages = observe_main(lineage, histories, tier,
-                                        dt.datetime.now(dt.timezone.utc).timestamp(), inventory() if histories else {})
-                for message in messages:
+                                        dt.datetime.now(dt.timezone.utc).timestamp(), inventory() if histories else {}) + malformed
+                for message in sorted(messages, key=lambda s: not s.startswith("FAIL ")):
                     print(message)
                     failed |= not message.startswith("PASS ")
             except ERRORS as error:

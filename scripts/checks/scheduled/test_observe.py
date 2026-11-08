@@ -25,6 +25,12 @@ class History(unittest.TestCase):
         self.assertEqual(observe.observe_main([TIP, SHA], {}, "daily", NOW, {}),
                          [f"MISSING daily {TIP}: absent run"])
 
+    def test_corrupt_ancestor_does_not_hide_failure(self):
+        r = record(); r.update(status="FAIL", conclusion="failure"); r["gates"][0]["status"] = "FAIL"
+        corrupt = record(); corrupt.pop("completed"); corrupt["sha"] = TIP
+        messages = observe.observe_main([TIP, SHA], {SHA: [r], TIP: [corrupt]}, "daily", NOW, RUNNERS)
+        self.assertEqual(messages, [f"FAIL daily {SHA}: recorded attempt", f"INCOMPLETE daily {TIP}: 'completed'"])
+
     def test_git_timeout_explicit(self):
         with patch.object(observe, "git", side_effect=subprocess.TimeoutExpired("git", 60)), patch("builtins.print") as output:
             self.assertEqual(observe.main(), 1)

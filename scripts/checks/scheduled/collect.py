@@ -93,7 +93,7 @@ def collect(run, repository, runners):
     job = campaigns[0] if campaigns else None
     artifacts = pages(base + f'/runs/{run["id"]}/artifacts', "artifacts") if job and job["status"] == "completed" else []
     for selection in selected(base, jobs, run):
-        name = f'scheduled-{selection[1]}-{run["id"]}-{run["run_attempt"]}'
+        name = f'scheduled-index-{selection[1]}-{run["id"]}-{run["run_attempt"]}'
         found = [a for a in artifacts if a["name"] == name and not a["expired"]]
         require(len(found) <= 1, "ambiguous result artifact")
         payload = None; url = None
@@ -103,16 +103,36 @@ def collect(run, repository, runners):
                 info = archive.getinfo("index.json")
                 require(info.file_size <= 1024 * 1024, "index too large")
                 payload = json.loads(archive.read(info))
-            url = f'https://github.com/{repository}/actions/runs/{run["id"]}/artifacts/{found[0]["id"]}'
+            logs = [a for a in artifacts if a["name"] == name.replace("scheduled-index-", "scheduled-", 1) and not a["expired"]]
+            require(len(logs) <= 1, "ambiguous logs artifact")
+            if not logs:
+                payload["gates"].append(dict(id="artifact-upload", status="INCOMPLETE", command=[], tools={},
+                                            seed=None, resources={}, controls=[], log="Actions upload metadata"))
+                if payload["status"] != "FAIL":
+                    payload.update(status="INCOMPLETE", conclusion="incomplete")
+            artifact = logs[0] if logs else found[0]
+            url = f'https://github.com/{repository}/actions/runs/{run["id"]}/artifacts/{artifact["id"]}'
         publish(record_for(run, job, selection, payload, url, repository, runners), runners)
 
-def main():
+def collect_event():
     repository = os.environ["GITHUB_REPOSITORY"]
     event = json.load(open(os.environ["GITHUB_EVENT_PATH"]))
-    runs = ([event["workflow_run"]] if "workflow_run" in event else
-            pages(f"/repos/{repository}/actions/workflows/gate_schedule.yml/runs?branch=main", "workflow_runs"))
+    if "workflow_run" in event:
+        runs = [event["workflow_run"]]
+    else:
+        path = f"/repos/{repository}/actions/workflows/gate_schedule.yml/runs?branch=main"
+        cutoff = (dt.datetime.now(dt.timezone.utc) - dt.timedelta(seconds=2 * MAX_AGE)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        candidates = pages(path + "&created=" + urllib.parse.quote(">=" + cutoff), "workflow_runs")
+        # Old live runs must remain observable even when the hosted sweep was absent.
+        for status in ("queued", "in_progress", "waiting", "pending", "requested"):
+            candidates.extend(pages(path + "&status=" + status, "workflow_runs"))
+        runs = list({run["id"]: run for run in candidates}.values())
     failed = False
-    runners = inventory()
+    try:
+        runners = inventory()
+    except (EvidenceError, OSError, ValueError, subprocess.SubprocessError) as error:
+        print(f"INCOMPLETE collector inventory: {error}")
+        return 1
     for run in runs:
         try:
             age = (dt.datetime.now(dt.timezone.utc) - dt.datetime.fromisoformat(run["created_at"].replace("Z", "+00:00"))).total_seconds()
@@ -122,9 +142,16 @@ def main():
             if "workflow_run" not in event and run["status"] == "completed" and age > 2 * MAX_AGE:
                 continue
             collect(run, repository, runners)
-        except (EvidenceError, OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError) as error:
+        except (EvidenceError, OSError, ValueError, KeyError, TypeError, zipfile.BadZipFile, subprocess.SubprocessError) as error:
             print(f'INCOMPLETE collection {run["id"]}: {error}'); failed = True
     return int(failed)
+
+def main():
+    try:
+        return collect_event()
+    except (EvidenceError, OSError, ValueError, KeyError, TypeError, zipfile.BadZipFile, subprocess.SubprocessError) as error:
+        print(f"INCOMPLETE collector: {error}")
+        return 1
 
 if __name__ == "__main__":
     sys.exit(main())

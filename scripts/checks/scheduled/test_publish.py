@@ -19,6 +19,12 @@ class Publication(unittest.TestCase):
             with self.assertRaisesRegex(EvidenceError, "^replay would overwrite attempt$"):
                 publish.publish(r, RUNNERS)
 
+    def test_lost_response_retries_identical_attempt(self):
+        r = record()
+        with patch.object(publish, "git", side_effect=["old ref", "", "old", "new", "old ref", "new ref", "", "new"]), patch.object(publish, "read_note", side_effect=[[], [r]]), patch.object(publish.subprocess, "run", side_effect=[subprocess.CompletedProcess([], 0), subprocess.CompletedProcess([], 1)]) as execute:
+            publish.publish(r, RUNNERS)
+            self.assertEqual(execute.call_count, 2)
+
     def test_dropped_response_readback_and_lease(self):
         ref = "refs/notes/concrete-gates-daily"
         with patch.object(publish, "git", side_effect=["old ref", "", "old", "new", "new ref"]), patch.object(publish, "read_note", return_value=[]), patch.object(publish.subprocess, "run", side_effect=[subprocess.CompletedProcess([], 0), subprocess.TimeoutExpired("git push", 120)]) as execute:

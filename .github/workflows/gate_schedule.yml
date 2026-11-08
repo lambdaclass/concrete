@@ -89,6 +89,14 @@ jobs:
           python3 scripts/checks/lib/bounded_exec.py --timeout 80000 --kill-after 10 --status "$state/outcome" -- nix develop --command python3 scripts/checks/scheduled/run.py "$SELECTED_SHA" "$SELECTED_TIER" result-index
           outcome=$(cat "$state/outcome")
           [ "$outcome" = 'exit 0' ]
+      - name: Upload bounded metadata for trusted collection
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: scheduled-index-${{ needs.select.outputs.tier }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: result-index/index.json
+          if-no-files-found: error
+          retention-days: 90
       - id: result
         uses: actions/upload-artifact@v4
         if: always()

@@ -42,6 +42,19 @@ class Execution(unittest.TestCase):
             self.assertEqual(result["status"], "INCOMPLETE")
             self.assertEqual((Path(work) / "incomplete.log").read_text(), "INCOMPLETE dependency: ISS-0029 runner binding unavailable\n")
 
+    def test_wrong_checkout_revision_never_executes(self):
+        def fake_call(argv, **kwargs):
+            if argv[:2] == ["git", "clone"]:
+                Path(argv[-1]).mkdir()
+        with tempfile.TemporaryDirectory() as work, patch.dict(os.environ, self.environment()), patch.object(run, "inventory", return_value=RUNNERS), patch.object(run, "git", side_effect=[SHA, SHA, "b" * 40]), patch.object(run, "call", side_effect=fake_call) as execute:
+            self.assertEqual(run.run(SHA, "daily", work), 1)
+            result = json.loads((Path(work) / "index.json").read_text())
+            self.assertEqual(result["status"], "INCOMPLETE")
+            self.assertIsNone(result["gate_revision"])
+            self.assertEqual(result["checkout_revision"], "b" * 40)
+            self.assertEqual((Path(work) / "incomplete.log").read_text(), "wrong checked-out revision\n")
+            self.assertEqual(execute.call_count, 2)
+
     def test_failure_survives_later_timeout_and_loop_continues(self):
         import subprocess
         rows = [dict(id=str(i), tier="daily", command=["gate"], budget_seconds=1,

@@ -105,9 +105,10 @@ def observe(history, sha, tier, now, runners):
     require(any(r["status"] == "PASS" for r in recent), f"MISSING {tier} {sha}: no PASS")
     return f"PASS {tier} {sha}"
 
-def read_note(sha, tier):
+def read_note(sha, tier, listed=False):
     ref = "refs/notes/concrete-gates-" + tier
-    listing = git("notes", "--ref=" + ref, "list")
-    if not any(line.split()[-1] == sha for line in listing.splitlines()):
-        return []
+    if not listed:
+        listing = git("notes", "--ref=" + ref, "list")
+        if not any(line.split()[-1] == sha for line in listing.splitlines()):
+            return []
     return [json.loads(line) for line in git("notes", "--ref=" + ref, "show", sha).splitlines()]

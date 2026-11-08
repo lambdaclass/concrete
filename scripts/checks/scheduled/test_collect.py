@@ -10,7 +10,7 @@ class Collector(unittest.TestCase):
     def setUp(self):
         self.payload = record()
         self.run = dict(id=1, run_attempt=1, event="schedule", head_sha=SHA,
-                        created_at=self.payload["started"], updated_at=self.payload["completed"])
+                        created_at=self.payload["started"], updated_at=self.payload["completed"], head_branch="main")
         self.job = dict(name="campaign", status="completed", conclusion="success", runner_name="ci2-heavy",
                         started_at=self.payload["started"], completed_at=self.payload["completed"])
 
@@ -42,6 +42,25 @@ class Collector(unittest.TestCase):
         r = collect.record_for(self.run, self.job, (SHA, "daily"), self.payload, "artifact", "example/repo", RUNNERS)
         self.assertEqual((r["status"], r["conclusion"]), ("INCOMPLETE", "incomplete"))
         self.assertEqual(r["gates"][-1]["id"], "actions-job")
+
+    def test_unstarted_workflow_publishes_real_missing_notes(self):
+        with patch.object(collect, "pages", return_value=[]), patch.object(collect, "publish") as publish:
+            collect.collect(self.run, "example/repo", RUNNERS)
+            self.assertEqual(publish.call_count, 2)
+            for call in publish.call_args_list:
+                r = call.args[0]
+                self.assertEqual((r["sha"], r["status"], r["conclusion"], r["gates"], r["artifact"], r["runner_name"]),
+                                 (SHA, "MISSING", "absent", [], None, None))
+
+    def test_queued_job_collection_needs_no_worker_artifact(self):
+        self.job.update(status="queued", conclusion=None, runner_name=None, completed_at=None)
+        jobs = [dict(name="select", conclusion="success", id=42), self.job]
+        with patch.object(collect, "pages", return_value=jobs) as pages, patch.object(collect, "request", return_value=("SCHEDULE_SELECTION " + SHA + " daily\n").encode()), patch.object(collect, "publish") as publish:
+            collect.collect(self.run, "example/repo", RUNNERS)
+            self.assertEqual(pages.call_count, 1)
+            r = publish.call_args.args[0]
+            self.assertEqual((r["status"], r["conclusion"], r["gates"], r["artifact"]),
+                             ("MISSING", "queued-too-long", [], None))
 
     def test_authoritative_selection(self):
         jobs = [dict(name="select", conclusion="success", id=42)]
