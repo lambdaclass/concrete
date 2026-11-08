@@ -34,7 +34,7 @@ non-timed stack-depth check on `sparse` and `deepBlocks`) run in
 recorded in `Concrete/README.md` for Gate C (`scripts/checks/compiler/scaling.lean`).
 
 Landing dependency: this branch lands **together with Gate C**, through Gate C's merge of this
-branch (`wip/gate-scaling-determinism`), never alone. [R-0550](../ROADMAP.md) owns backend scaling.
+branch (`wip/gate-scaling-determinism`), never alone. [R-0550](ROADMAP.md) owns backend scaling.
 Gate C must provide meaningful cheap PR coverage plus full scheduled scaling assertions and
 100000-entry depth probes on `concrete-ci-2`, as recorded in `Concrete/README.md`. ISS-0030
 remains open until Gate C's families pass there against the integrated candidate's exact SHA.
