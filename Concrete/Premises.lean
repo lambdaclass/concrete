@@ -281,7 +281,19 @@ def isGeneratedPartialTwin (env : Environment) (n : Name) : Bool :=
       (env.find? n).any (·.isPartial)
   | none => false
 
-def trustedDeclarationKinds (env : Environment) (n : Name) (ci : ConstantInfo) : List String := Id.run do
+def exprHasPartialLoop (e : Expr) : Bool :=
+  (e.find? fun sub =>
+    sub.isConstOf ``Lean.Loop.forIn || sub.isConstOf ``Lean.Loop || sub.isConstOf ``Lean.Loop.mk).isSome
+
+def appendUnique (xs : List String) (ys : List String) : List String :=
+  ys.foldl (fun acc y => if acc.contains y then acc else acc ++ [y]) xs
+
+def isAuxOf (n c : Name) : Bool :=
+  let uN := (privateToUserName? n).getD n
+  let uC := (privateToUserName? c).getD c
+  c != n && uN != uC && uN.isPrefixOf uC
+
+def directTrustedDeclarationKinds (env : Environment) (n : Name) (ci : ConstantInfo) : List String := Id.run do
   let mut kinds := []
   if isExtern env n then kinds := kinds ++ ["extern"]
   if (Compiler.implementedByAttr.getParam? env n).isSome then kinds := kinds ++ ["implemented_by"]
@@ -292,9 +304,37 @@ def trustedDeclarationKinds (env : Environment) (n : Name) (ci : ConstantInfo) :
     if ci matches .opaqueInfo _ then
       kinds := kinds ++ [if (env.find? (Compiler.mkUnsafeRecName n)).any (·.isPartial)
         then "partial" else "opaque"]
-  if ci.value?.any (fun v => (v.find? (fun e =>
-      e.isConstOf ``Lean.Loop.forIn || e.isConstOf ``Lean.Loop)).isSome) then
+  if ci.value?.any exprHasPartialLoop then
     kinds := kinds ++ ["partial-loop"]
+  return kinds
+
+def trustedDeclarationKinds (env : Environment) (n : Name) (ci : ConstantInfo) : List String := Id.run do
+  let mut kinds := directTrustedDeclarationKinds env n ci
+  let modIdx := env.getModuleIdxFor? n
+  let mut queue : Array (Name × ConstantInfo) := #[]
+  let mut seen : NameSet := NameSet.empty.insert n
+  if let some v := ci.value? then
+    for c in v.getUsedConstants do
+      if !seen.contains c && env.getModuleIdxFor? c == modIdx then
+        seen := seen.insert c
+        if let some cCi := env.find? c then
+          queue := queue.push (c, cCi)
+  let mut idx := 0
+  for _ in [:1024] do
+    if h : idx < queue.size then
+      let (c, cCi) := queue[idx]
+      idx := idx + 1
+      let cKinds := directTrustedDeclarationKinds env c cCi
+      if cKinds.contains "partial-loop" then
+        kinds := appendUnique kinds ["partial-loop"]
+      if isAuxOf n c || c.isInternalDetail || isPrivateName c then
+        kinds := appendUnique kinds cKinds
+      if let some v := cCi.value? then
+        for next in v.getUsedConstants do
+          if !seen.contains next && env.getModuleIdxFor? next == modIdx then
+            seen := seen.insert next
+            if let some nextCi := env.find? next then
+              queue := queue.push (next, nextCi)
   return kinds
 
 def trustedDeclarations (env : Environment) (localPrefix : Option Name := none) :

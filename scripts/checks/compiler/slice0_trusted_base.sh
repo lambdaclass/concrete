@@ -103,8 +103,8 @@ trace_emit() { # trace_emit NAME DIR EXPECT...
   local name=$1 d=$2
   shift 2
   mkdir -p "$d"
-  bounded "$emit_secs" strace -f -qq -s 4096 -e trace=execve,execveat -o "$d/emit.execve" \
-    lake env lean --run scripts/checks/compiler/slice0_bir.lean emit "$name" "$d" "$target" "$@"
+  bounded "$emit_secs" lake env strace -f -qq -s 4096 -e trace=execve,execveat -o "$d/emit.execve" \
+    lean --run scripts/checks/compiler/slice0_bir.lean emit "$name" "$d" "$target" "$@"
 }
 
 trace_native() { # trace_native DIR HELPER
@@ -413,6 +413,59 @@ else
   fail=1
 fi
 
+mkdir -p "$work/ctl/loop-no-kw/Concrete"
+cat >"$work/ctl/loop-no-kw/Concrete/LoopCtl.lean" <<'EOF'
+import Lean
+def whileLoopDef : IO Unit := do
+  while true do
+    pure ()
+EOF
+if grep -Eq 'example|partial' "$work/ctl/loop-no-kw/Concrete/LoopCtl.lean"; then
+  echo "FAIL control: loop-no-kw fixture contains forbidden token"; fail=1
+elif check_examples "$work/ctl/loop-no-kw" "$work/ctl/loop-no-kw-out" Concrete/LoopCtl.lean \
+     >"$work/ctl/loop-no-kw.log" 2>&1; then
+  echo "FAIL control: example/declaration driver accepts a non-partial while def without example/partial keywords"; fail=1
+elif grep -qxF 'FAIL unlisted example trusted declaration whileLoopDef [partial-loop]' "$work/ctl/loop-no-kw.log"; then
+  echo "ok   control: a non-partial while def in a file without example/partial is rejected"
+else
+  echo "FAIL control: non-partial while def did not fail for the planted reason"
+  cat "$work/ctl/loop-no-kw.log" >&2
+  fail=1
+fi
+
+cat >"$work/ctl/loop-audit.lean" <<'EOF'
+import Lean.Elab.Command
+import Concrete
+private def hiddenWhile : IO Unit := do
+  while true do
+    pure ()
+def Concrete.Control.whileDef : IO Unit := do
+  while true do
+    pure ()
+def Concrete.Control.repeatDef : IO Unit := do
+  repeat
+    break
+def Concrete.Control.nestedWhileDef : IO Unit := hiddenWhile
+open Lean Elab Command in
+#eval show CommandElabM Unit from do
+  let errors := Concrete.Premises.trustedDeclarationErrors (← getEnv) (some `Concrete.Control)
+  for error in errors do IO.println s!"FAIL {error}"
+  unless errors.isEmpty do throwError "trusted-base control failed"
+EOF
+if grep -Eq 'example|partial' "$work/ctl/loop-audit.lean"; then
+  echo "FAIL control: loop-audit fixture contains forbidden token"; fail=1
+elif print_lean "$work/ctl/loop-audit.lean" "$work/ctl/loop-audit.out"; then
+  echo "FAIL control: trusted-declaration audit accepts non-partial while/repeat defs"; fail=1
+elif grep -qxF 'FAIL unlisted trusted declaration Concrete.Control.whileDef [partial-loop]' "$work/ctl/loop-audit.out" &&
+     grep -qxF 'FAIL unlisted trusted declaration Concrete.Control.repeatDef [partial-loop]' "$work/ctl/loop-audit.out" &&
+     grep -qxF 'FAIL unlisted trusted declaration Concrete.Control.nestedWhileDef [partial-loop]' "$work/ctl/loop-audit.out"; then
+  echo "ok   control: non-partial while/repeat defs and nested loop helpers are rejected"
+else
+  echo "FAIL control: loop-audit check did not fail for the planted reason"
+  cat "$work/ctl/loop-audit.out" "$work/ctl/loop-audit.out.err" >&2
+  fail=1
+fi
+
 cat >"$work/ctl/duplicate-id.lean" <<'EOF'
 import Lean.Elab.Command
 import Concrete
@@ -522,6 +575,43 @@ EOF
     else
       echo "FAIL control: symlink-path clang did not fail for the planted identity reason"
       cat "$work/ctl/symlink-path.out" >&2
+      fail=1
+    fi
+
+    lean_root=$(python3 -I -c 'import json,sys; print(json.load(open(sys.argv[1]))["lean"])' "$work/identity.json")
+    bounded 30 strace -f -qq -s 4096 -e trace=execve,execveat \
+      -o "$work/ctl/lean-clang.execve" "$lean_root/bin/clang" --version >/dev/null
+    if check_tools "$work/pipeline-tools" native "$work/ctl/lean-clang.execve" >"$work/ctl/lean-clang.out" 2>&1; then
+      echo "FAIL control: native role accepts leanRelease/bin/clang"; fail=1
+    elif grep -qxF "FAIL tools: identity-mismatch role 'native' program 'clang': $(realpath "$lean_root/bin/clang")" "$work/ctl/lean-clang.out"; then
+      echo "ok   control: native role rejects leanRelease/bin/clang"
+    else
+      echo "FAIL control: leanRelease/bin/clang in native role did not fail for the planted identity reason"
+      cat "$work/ctl/lean-clang.out" >&2
+      fail=1
+    fi
+
+    bounded 30 strace -f -qq -s 4096 -e trace=execve,execveat \
+      -o "$work/ctl/lean-lld.execve" "$lean_root/bin/ld.lld" --version >/dev/null
+    if check_tools "$work/pipeline-tools" native "$work/ctl/lean-lld.execve" >"$work/ctl/lean-lld.out" 2>&1; then
+      echo "FAIL control: native role accepts leanRelease/bin/ld.lld"; fail=1
+    elif grep -qxF "FAIL tools: identity-mismatch role 'native' program 'ld.lld': $(realpath "$lean_root/bin/ld.lld")" "$work/ctl/lean-lld.out"; then
+      echo "ok   control: native role rejects leanRelease/bin/ld.lld"
+    else
+      echo "FAIL control: leanRelease/bin/ld.lld in native role did not fail for the planted identity reason"
+      cat "$work/ctl/lean-lld.out" >&2
+      fail=1
+    fi
+
+    bounded 30 strace -f -qq -s 4096 -e trace=execve,execveat \
+      -o "$work/ctl/lean-leanc.execve" "$lean_root/bin/leanc" --print-cflags >/dev/null
+    if check_tools "$work/pipeline-tools" lean-emit "$work/ctl/lean-leanc.execve" >"$work/ctl/lean-leanc.out" 2>&1; then
+      echo "FAIL control: lean-emit role accepts leanRelease/bin/leanc"; fail=1
+    elif grep -qxF "FAIL tools: identity-mismatch role 'lean-emit' program 'leanc': $(realpath "$lean_root/bin/leanc")" "$work/ctl/lean-leanc.out"; then
+      echo "ok   control: lean-emit role rejects leanRelease/bin/leanc"
+    else
+      echo "FAIL control: leanRelease/bin/leanc in lean-emit role did not fail for the planted identity reason"
+      cat "$work/ctl/lean-leanc.out" >&2
       fail=1
     fi
 

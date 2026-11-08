@@ -24,6 +24,12 @@ def hasIdentifierWord (text word : String) : Bool :=
       if prevOk && nextOk then return true
     return false
 
+def candidateTokens : List String :=
+  ["example", "partial", "while", "repeat", "Loop", "unsafe", "extern", "implemented_by", "csimp", "opaque"]
+
+def hasCandidateToken (text : String) : Bool :=
+  candidateTokens.any (hasIdentifierWord text)
+
 def makeExampleDef (exStx : Syntax) (file : String) (map : FileMap) :
     Command.CommandElabM (Syntax × Name) := do
   let pos := map.toPosition (exStx.getPos?.getD 0)
@@ -92,12 +98,14 @@ partial def commands (file : String) (csList : List Concrete.Premises.Component)
   setMessages msgs
   let (retained, names) ← runCommandElabM <| retainExamples cmd file input.fileMap
   elabCommandAtFrontend retained
-  if !names.isEmpty || hasPartialModifier cmd then
-    runCommandElabM do
-      let env ← getEnv
-      let allowed := Concrete.Premises.allowedAxioms csList
-      for (n, ci) in env.constants.toList do
-        unless cs.env.contains n || n.isAnonymous do
+  runCommandElabM do
+    let env ← getEnv
+    let allowed := Concrete.Premises.allowedAxioms csList
+    let isExOrPartial := !names.isEmpty || hasPartialModifier cmd
+    for (n, ci) in env.constants.map₂.toList do
+      unless cs.env.contains n || n.isAnonymous do
+        let kinds := Concrete.Premises.trustedDeclarationKinds env n ci
+        if isExOrPartial || !kinds.isEmpty then
           let axs ← liftCoreM (collectAxioms n)
           IO.println <| "example-json " ++ (Json.mkObj [
             ("name", toJson n.toString), ("axioms", toJson (axs.map toString))]).compress
@@ -105,16 +113,15 @@ partial def commands (file : String) (csList : List Concrete.Premises.Component)
             unless allowed.contains ax do
               IO.println s!"FAIL unlisted example axiom {ax} in {file}:{(input.fileMap.toPosition (cmd.getPos?.getD 0)).line}"
               throwError "example axiom audit failed"
-          let owners := effectiveOwners env n csList
-          if hasPartialModifier cmd && !n.isInternalDetail && (Compiler.isUnsafeRecName? n).isNone then
-            unless (← checkOwnerKind n owners) do
-              IO.println s!"FAIL unlisted partial declaration {n} in {file}"
-              throwError "partial modifier audit failed"
-          let kinds := Concrete.Premises.trustedDeclarationKinds env n ci
-          unless kinds.isEmpty do
-            unless (← checkOwnerKind n owners) do
-              IO.println s!"FAIL unlisted example trusted declaration {n} [{", ".intercalate kinds}]"
-              throwError "example trusted declaration audit failed"
+        let owners := effectiveOwners env n csList
+        if hasPartialModifier cmd && !n.isInternalDetail && (Compiler.isUnsafeRecName? n).isNone then
+          unless (← checkOwnerKind n owners) do
+            IO.println s!"FAIL unlisted partial declaration {n} in {file}"
+            throwError "partial modifier audit failed"
+        unless kinds.isEmpty do
+          unless (← checkOwnerKind n owners) do
+            IO.println s!"FAIL unlisted example trusted declaration {n} [{", ".intercalate kinds}]"
+            throwError "example trusted declaration audit failed"
   unless Parser.isTerminalCommand cmd do commands file csList
 
 def configuredComponents : IO (List Concrete.Premises.Component) := do
@@ -137,7 +144,7 @@ unsafe def main (files : List String) : IO UInt32 := do
     let text ← IO.FS.readFile file
     -- Token-bounded candidate selection: comments and strings can only add work,
     -- while substrings like "examples" in proof modules do not trigger re-elaboration.
-    unless hasIdentifierWord text "example" || hasIdentifierWord text "partial" do continue
+    unless files.length == 1 || hasCandidateToken text do continue
     let input := Parser.mkInputContext text file
     let (header, ps, msgs) ← Parser.parseHeader input
     let (env, msgs) ← processHeader header {} msgs input

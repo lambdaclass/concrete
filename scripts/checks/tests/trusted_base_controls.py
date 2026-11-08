@@ -31,6 +31,24 @@ with tempfile.TemporaryDirectory() as d:
     require(lean(p, True), False, f'._native.decide.ax_1 in {p}:4')
     p.write_text('import Lean\nexample : IO Unit := do while true do pure ()\n')
     require(lean(p, True), False, 'FAIL unlisted example trusted declaration ')
+    no_kw = d / "loop_no_kw.lean"
+    benign = d / "benign.lean"
+    benign.write_text('import Lean\ndef benignVal : Nat := 1\n')
+    for loop_src, expected_decl in [
+        ('import Lean\ndef whileOnly : IO Unit := do\n  while true do\n    pure ()\n',
+         'FAIL unlisted example trusted declaration whileOnly [partial-loop]'),
+        ('import Lean\ndef repeatOnly : IO Unit := do\n  repeat\n    break\n',
+         'FAIL unlisted example trusted declaration repeatOnly [partial-loop]'),
+    ]:
+        assert "example" not in loop_src and "partial" not in loop_src
+        no_kw.write_text(loop_src)
+        require(lean(no_kw, True), False, expected_decl)
+        r_multi = subprocess.run(
+            ["lake", "env", "lean", "--run", DRIVER, str(benign), str(no_kw)],
+            env={**os.environ, "LEAN_NUM_THREADS": "2"},
+            text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=60,
+        )
+        require(r_multi, False, expected_decl)
     p.write_text('import Lean\npartial def loops : IO Unit := do while true do pure ()\npartial def nonrec : Nat := 0\n')
     require(lean(p, True), False, 'FAIL unlisted partial declaration loops')
     require(lean(p, True, {"CONCRETE_TRUSTED_DECLARATIONS": "lexer:loops,nonrec"}), True, '"name":"loops"')
@@ -39,6 +57,10 @@ with tempfile.TemporaryDirectory() as d:
     p = d / "declarations.lean"
     p.write_text('''import Concrete.Premises
 import Lean.Elab.Command
+private def hiddenLoop : IO Unit := do
+  while true do
+    pure ()
+@[extern "c_hidden"] private opaque hiddenExtern : Nat → Nat
 namespace Concrete.Control
  def wf (n : Nat) : Nat := if h : n = 0 then 0 else wf (n - 1) + 1
  termination_by n
@@ -51,6 +73,14 @@ namespace Concrete.Control
  def original (n : Nat) := n + 0
  def replacement (n : Nat) := n
  @[csimp] theorem replace : original = replacement := by funext n; simp [original, replacement]
+ def whileDef : IO Unit := do
+   while true do
+     pure ()
+ def repeatDef : IO Unit := do
+   repeat
+     break
+ def nestedLoop : IO Unit := hiddenLoop
+ def nestedExtern (n : Nat) : Nat := hiddenExtern n
 end Concrete.Control
 open Lean Elab Command in
 #eval show CommandElabM Unit from do
@@ -69,6 +99,14 @@ open Lean Elab Command in
    throwError "unsafe inductive escaped"
  unless errors.contains "unlisted trusted declaration Concrete.Control.replace [csimp]" do
    throwError "csimp escaped"
+ unless errors.contains "unlisted trusted declaration Concrete.Control.whileDef [partial-loop]" do
+   throwError "whileDef escaped"
+ unless errors.contains "unlisted trusted declaration Concrete.Control.repeatDef [partial-loop]" do
+   throwError "repeatDef escaped"
+ unless errors.contains "unlisted trusted declaration Concrete.Control.nestedLoop [partial-loop]" do
+   throwError "nestedLoop escaped"
+ unless errors.contains "unlisted trusted declaration Concrete.Control.nestedExtern [extern, opaque]" do
+   throwError "nestedExtern escaped"
  IO.println "ok safe recursion and unsafe controls"
 ''')
     require(lean(p), True, "ok safe recursion and unsafe controls")

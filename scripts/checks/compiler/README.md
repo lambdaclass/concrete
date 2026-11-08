@@ -60,18 +60,23 @@ NAR hashes on the closure, checks the consumed `lean`, `lake`, `git` and
 `CONCRETE_SLICE0_CLANG` realpaths and the Lean toolchain version, and requires
 every Lake package checkout clean at its `lake-manifest.json` revision.
 Each trace is checked under an explicit role: `native` (native compilation and
-linking, both using the selected LLVM 21 compiler/bintools), `lean-build`
-(initial and fresh Lake builds), or `lean-emit` (interpreter-only emission, no
-compiler/linker permitted). Role assignments are made by the tracing caller,
-never inferred from an executable's name or its own claimed identity. Every
-execution must satisfy its role's per-tool invoked AND resolved root sets;
-missing tool policies admit nothing. Native compiler execution additionally
-requires the exact resolved wrapper or underlying compiler identity of
-`llvmPackages_21.clang`, rejecting both the shell's other clang package and
-Lean's bundled clang with `FAIL tools: identity-mismatch role 'native' program
-'clang': ...`. Native linker/assembler/archive tools are bound to that selected
-compiler's bintools closure AND exact resolved bin endpoints from its wrapper
-and underlying bintools packages, independently of Lean's toolchain.
+linking, both using the selected LLVM 21 compiler/bintools; `lean`, `leanc`,
+`lake` and `git` are forbidden, and `compilerTools` includes both `cc.bintools`
+and `cc.bintools.bintools`), `lean-build` (initial and fresh Lake builds), or
+`lean-emit` (interpreter-only emission under `lake env`, permitting only `lean`
+and forbidding `leanc`, `lake`, `git`, compilers/linkers and local `lcb`). Role
+assignments are made by the tracing caller, never inferred from an executable's
+name or its own claimed identity. `flake.nix` enumerates the exact allowed tools
+and roots per role in `roleToolRoots` and `roleLocalTools` rather than inheriting
+the union `tool_closures`. Every execution must satisfy its role's per-tool
+invoked AND resolved root sets; missing tool policies admit nothing. Native
+compiler execution additionally requires the exact resolved wrapper or underlying
+compiler identity of `llvmPackages_21.clang`, rejecting both the shell's other
+clang package and Lean's bundled clang with `FAIL tools: identity-mismatch role
+'native' program 'clang': ...`. Native linker/assembler/archive tools are bound
+to that selected compiler's bintools closure AND exact resolved bin endpoints
+from its wrapper and underlying bintools packages, independently of Lean's
+toolchain.
 
 Lean builds have a separate justification: `leanc` compiles Lean-generated C and
 links Lean executables; the shell's `pkgs.clang` supplies C headers/libc that the
@@ -82,12 +87,14 @@ does not extend to native manifest builds. With today's lock, `pkgs.clang` and
 identical bytes/paths are one identity, not a detectable substitution. The
 other-package control uses distinct store identities so a future divergence
 cannot silently widen native permissions. Compiler wrapper and underlying
-binary realpaths are both pinned. Other tools retain their component policies;
-local `lcb` requires its exact path and pinned SHA-256. The focused controls
-reject Lean/other-clang substitution in the native role, accept them only in
-`lean-build`, and model a cross-component symlink with BOTH paths inside
-`/nix/store`: its invoked root passes, but its resolved component fails. These
-synthetic immutable-store paths avoid mutating the shared Nix store.
+binary realpaths are both pinned. Local `lcb` is permitted only in the `native`
+role and requires its exact path and pinned SHA-256. Both `slice0_trusted_base.sh`
+and `trusted_policy_controls.py` run live role-boundary controls against the
+evaluated `flake.nix` `trustedIdentity` (`$work/identity.json`), verifying that
+`leanRelease/bin/clang` and `leanRelease/bin/ld.lld` are rejected in `native` and
+`leanRelease/bin/leanc` (plus `lake`, `git` and local `lcb`) are rejected in
+`lean-emit`, alongside synthetic controls for distinct store roots and
+cross-component symlinks inside `/nix/store`.
 
 The scheduled scripts `scripts/checks/compiler/slice0_trusted_fresh.sh` (daily)
 and `scripts/checks/compiler/slice0_trusted_store.sh` (weekly) are standalone
@@ -116,19 +123,25 @@ package `[assumptions]` interface by `R-0589`.
 `matches` names executable tools, axioms, and explanatory source/proof boundaries.
 `declarations` exclusively names actual trusted Lean escape hatches. Each such
 entry must resolve back to a discovered trusted declaration, with exactly one
-owner of kind `implementation`, `backend` or `runtime`. All `ConstantInfo`
-variants are checked for unsafe/partial/extern/implemented_by/csimp status and
-`Lean.Loop` (`while`/`repeat`) partial-loop use. Lean's recorded recursion tag
-(`Meta.recExt`) licenses total recursive runtime twins; partial runtime twins
-inherit their parent declaration's owner when registered.
+owner of kind `implementation`, `backend` or `runtime`. Without any textual
+prefilter, `Concrete.Premises.trustedDeclarationKinds` inspects every `ConstantInfo`
+in the `Concrete` import closure plus nested auxiliary declarations and
+same-module constants transitively reached from `ci.value?` for
+unsafe/partial/extern/implemented_by/csimp/opaque status and `Lean.Loop`
+(`while`/`repeat`) partial-loop use. Lean's recorded recursion tag (`Meta.recExt`)
+licenses total recursive runtime twins; partial runtime twins inherit their
+parent declaration's owner when registered.
 
-`slice0_examples.lean` selects candidate files by identifier token (`example` or
-`partial`, so substrings like `examples` in `Concrete/Backend/LCB.lean` do not
-trigger redundant re-elaboration), retains `example` AST commands as named
-declarations with `line:column` identities, checks both `hasPartialModifier` and
-`trustedDeclarationKinds` against `effectiveOwners` (so registered `partial def`s
-owned by a code component pass while unlisted or non-code-owned ones print
-`FAIL ...` to stdout and fail), and `example_rows.py` fails closed if zero
+`slice0_examples.lean` retains `example` AST commands as named declarations with
+`line:column` identities, checks every newly elaborated declaration in the module
+against both `hasPartialModifier` and `trustedDeclarationKinds` via
+`effectiveOwners` (so registered `partial def`s owned by a code component pass
+while unlisted or non-code-owned declarations, including non-`partial` `def`s
+using `while`/`repeat` in files without `example` or `partial`, print `FAIL ...`
+to stdout and fail), selects multi-file candidates across all trusted/loop/example
+identifier tokens (`example`, `partial`, `while`, `repeat`, `Loop`, `unsafe`,
+`extern`, `implemented_by`, `csimp`, `opaque`, while always elaborating
+single-file invocations), and `example_rows.py` fails closed if zero
 `example-json` rows are observed.
 
 Focused controls live in `scripts/checks/tests/test_execve_names.py`,
