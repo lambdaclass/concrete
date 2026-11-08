@@ -1,0 +1,64 @@
+C5 (ownership, brands/generative lineage, grants) round 2, written by Codex. Base b15f99e3 (C5 round 1 b5fff070 merged with the integrated spec core 07c16bb5) -> head efddc1c5 (golden regenerated). Round-1 findings (Kimi + agy): (1, major) validate re-check made preservation trivial -> validate removed, structural preservation proofs; (2) erasure only per wrapper -> Generative.run_erasure + a C1 counterexample to unconditional stuck equivalence; (3) upward reborrow / activation targets -> left pending as owner QUESTION; (4) CallState.pending invariant -> CallState.WellFormed; (5) owner-to-callee passing -> left pending as owner QUESTION; (6) zero-size sentinel removed; (7) dependency-place Nodup; (8) nits. Boundary: the writer may implement only decided rows (refs second-class/never returned, Q3.x borrow rows, Q9.8 defer/held loans, OD15/OD23); anything undecided must be a QUESTION, not encoded -- check nothing undecided was encoded. Writer's open QUESTIONS: activation targets (restrict to current activation + new callee?), direct owner arguments (call-duration root loan vs explicit caller borrow scope), C1 erasure form (successful-step simulation with stuck equivalence conditional on checker safety). Give your assessment of each question.
+Also review the merge commit b15f99e3's conflict resolution (remerge diff below; the writer said 'mechanically combine conflicts'):
+diff --git a/ConcreteSpec/README.md b/ConcreteSpec/README.md
+remerge CONFLICT (content): Merge conflict in ConcreteSpec/README.md
+index 86e7e951..ddbd02c3 100644
+--- a/ConcreteSpec/README.md
++++ b/ConcreteSpec/README.md
+@@ -93,26 +93,14 @@ Open obligations, by name:
+   encoding over the old type universe. The slice-1-to-Core integration slice must port that
+   layer to `Mem.MByte`/`Mem.encodeInt` and retire the old encoders while preserving its proofs;
+   C4 has not completed that port. Core constants and Hybrid share `CTy`/`CVal` from `Scalar`.
+-<<<<<<< b5fff070 (axioms.golden: C5 ownership, brands and grants (regenerated on concrete-ci-2))
+   C5 (`Own`, `Grant`) now supplies ownership/loan transitions, finite preservation checks,
+   C1 lifecycle and downward-call adapters, scalar C4 access erasure, generative brand lifetimes,
+   and grant attenuation/consumption laws. Nonempty projection resolution, semantic type/Copy
+   admission, existential package elaboration and concrete grant instances remain integration
+-  duties; these modules do not claim their checker correspondence. C6–C10 remain.
++  duties; these modules do not claim their checker correspondence. C7–C10 remain.
+   C1 leaves to later slices the source-level evaluation orders (elaboration, O1), counted loops
+-  (slice 4), the split of a request from its response (C6) and the oracle's query record (C8).
++  (slice 4), the oracle's query record (C8).
+   Its storage can use C4's hybrid state and C5's ownership adapters. Lifecycle
+-||||||| a8eb252a
+-  C5–C10 remain. C1 leaves to later slices the source-level
+-  evaluation orders (elaboration, O1), counted loops (slice 4), and ownership of moved values
+-  (C5), the split of a request from its response (C6) and the oracle's query record (C8); its
+-  storage can use C4's hybrid state; C5 must still supply ownership instrumentation. Lifecycle
+-=======
+-  C5 and C7–C10 remain. C1 leaves to later slices the source-level
+-  evaluation orders (elaboration, O1), counted loops (slice 4), and ownership of moved values
+-  (C5) and the oracle's query record (C8); its
+-  storage can use C4's hybrid state; C5 must still supply ownership instrumentation. Lifecycle
+->>>>>>> 07c16bb5 (axioms.golden: A2i integration of C1 partial lifecycle, C4 and C6 (regenerated on concrete-ci-2))
+   instrumentation may refuse an event (`Option.none`), making execution stuck, including initial
+   activation and primitive result binding; cleanup laws require successful lifecycle events. C2
+   leaves floats (slice 26), and two owner questions: whether a failing operation may appear in a constant
+diff --git a/ConcreteSpec/Spec.lean b/ConcreteSpec/Spec.lean
+remerge CONFLICT (content): Merge conflict in ConcreteSpec/Spec.lean
+index 32a5682a..8f585bbc 100644
+--- a/ConcreteSpec/Spec.lean
++++ b/ConcreteSpec/Spec.lean
+@@ -58,21 +58,10 @@ The foundation (owner decision 2026-11-08, "ok all recommended": the shared inte
+ laws, written, proved and tested before the freeze) is in the namespace `ConcreteSpec.Core`, from
+ `Target` on: `Target` (C3, target profiles), `Outcome` (trap kinds and the ways a run stops),
+ `Exec` (C1, execution, calls and cleanup), `Scalar` (C2, scalars and arithmetic), `Const` (C2,
+-<<<<<<< b5fff070 (axioms.golden: C5 ownership, brands and grants (regenerated on concrete-ci-2))
+ the constant initializer subset), `Memory` (C4, byte memory and scalar representation), and
+ `Hybrid` (C4, structured places and stable materialized ranges), `Own` (C5, ownership and loans),
+-and `Grant` (C5, brand lifetimes and grant attenuation). Each module's header says which contract it states and what it
++`Observe` (C6, observations and the environment), and `Grant` (C5, brand lifetimes and grant attenuation). Each module's header says which contract it states and what it
+ leaves to a later slice.
+-||||||| a8eb252a
+-the constant initializer subset), `Memory` (C4, byte memory and scalar representation), and
+-`Hybrid` (C4, structured places and stable materialized ranges). Each module's header says which contract it states and what it
+-leaves to a later slice.
+-=======
+-the constant initializer subset), `Memory` (C4, byte memory and scalar representation),
+-`Hybrid` (C4, structured places and stable materialized ranges) and `Observe` (C6, observations
+-and the environment). Each module's header says which contract it states and what it leaves to a
+-later slice.
+->>>>>>> 07c16bb5 (axioms.golden: A2i integration of C1 partial lifecycle, C4 and C6 (regenerated on concrete-ci-2))
+ 
+ Only Lean core is imported (Q9.16). No proof uses `native_decide` or `sorry` (Q9.17).
+ 

@@ -1,0 +1,22 @@
+Implemented both parts. The [result report](/tmp/claude-30035/-home-unbalancedparen-projects-concrete2/e2c54e65-31b5-4145-8101-c2d7b071b97e/scratchpad/writers/c5/_review/C5_RESULT.md) catalogs every theorem and its statement: operation/call preservation, loan lifetime and freshness, concrete erasure, brand non-escape, rights attenuation, and persistent consumption.
+
+Commits:
+
+- `824ab4ef` — Ownership state, transitions, invariant and erasure.
+- `d32e21e1` — Whole-root conflict examples and Exec runs.
+- `5a8b0315` — Loan births and callee-local non-escape proofs.
+- `15fd13c4` — Brand lifetimes and linear grant operations.
+- `009828ef` — Brand non-escape and grant sequence proofs.
+- `8f1904b4` — Grant rule registration, intersection and brand erasure.
+- `6b56eecf` — C4 owner/loan access and erasure proofs.
+- `ad406ce2` — Downward argument lending in C1 calls.
+- `9e3f6430` — Call-adapter preservation and erasure.
+- `87c67b88` — Representation versus Copy-evidence clarification.
+- `e84ed251` — Fix argument adoption and activation-exit accounting.
+- `f8e45c37` — Prove both review fixes; update reading guide.
+
+At `f8e45c37`, the build, rule gate (32 checks), and trust-ban gate (23 checks) pass. Review round two is clean; reviewer sandbox failures limited review to supplied diffs.
+
+Nonempty projection resolution, C9 admission/package integration, and concrete OS grant instances remain deferred to their respective slices. Protected files are unchanged; the working tree is clean. Nothing was pushed.
+
+QUESTIONS: None requiring an owner decision.

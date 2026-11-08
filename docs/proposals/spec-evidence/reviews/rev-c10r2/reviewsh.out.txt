@@ -1,0 +1,6 @@
+review: round 2, piece 1 of 1 (scripts, 38734 bytes)
+review: round 2 verdict findings (1 piece(s)); raw output: .review/b67ce071615d1e3400356b358cdfcd08206a7064-2.md
+[piece 1 of 1: scripts]
+- ConcreteSpec/Spec/Frame.lean:340: `KeptPair.WellFormed` now checks results with `ExternResult.Valid`, which accepts every `.ffi _` result. Thus a pair whose submission and completion both return ordinary FFI values passes validation, despite the pairing law requiring submission to return `.receipt pair.handle` and completion to return `.owned pair.handle`. Keep those exact result constraints alongside the new identity checks.
+pre-push: review-notes push — no source tree, no gates
+rc=1

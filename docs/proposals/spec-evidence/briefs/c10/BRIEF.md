@@ -1,0 +1,19 @@
+# Task: foundation contract C10 (frames and ABI), part 1
+
+Read first: AGENTS.md, ConcreteSpec/README.md, _review/FOUNDATION_PROPOSAL.md section "C10", ConcreteSpec/Spec/Memory.lean and Proofs/Memory.lean (C4: blocks, access, store frame laws), Spec/Hybrid.lean (projection of places to ranges), Spec/Target.lean (C3), Spec/Exec.lean (C1 call/return frames). Decided: Core Q3.12, Q8.5–Q8.6, pipeline (decided-project-pipeline-2026-11-06), contracts/P18 (decided-project-contracts), stack bounds (decided-2026-11-07-stack-randomness); `kept`/`Kept<H>` foreign retention; FFI-safe types, no enums across FFI.
+
+Write ConcreteSpec/Spec/Frame.lean (+ Proofs/Frame.lean); commit each piece separately:
+1. Logical footprints: a footprint is a set of (block, byte range) plus places; the frame law: an operation with footprint F preserves every byte and place disjoint from F. Prove it for C4's store, free, expose, alloc (fresh block disjoint from everything) and for sequential composition (footprints union), and for C1 calls whose callee footprint is given by its contract.
+2. Call-frame ownership/restoration: entering and leaving a frame restores the caller's locals and preserved state exactly (relate to C1's ret frame).
+3. ABI signature interface: typed arguments/results related to registers, stack slots and preserved machine state; frame size/alignment, return convention, clobber set, stack-accounting handoff; extern validity/retention (kept). Only the interface plus laws (e.g. callee-saved registers are equal after return; clobbers are the only changed registers; stack accounting of a call = caller frame + callee bound). No concrete target ABI implementation (the linux-x86_64 table is later), no packed access semantics beyond the interface, no extern syntax, no source frame clause or snapshot construct.
+
+Base note: this branch merges wip/spec-c4 (C4 accepted in review round 2) and wip/spec-c1-life (Operands.life returns Option Store; under review, the owner sees it before landing). Its merged axioms golden may be stale; the reviewer regenerates it.
+
+## Hard rules (all apply)
+- Lean 4.34.1, core only (no Mathlib); warningAsError and autoImplicit off; namespace ConcreteSpec.Core (sub-namespace allowed). Lean IS the spec: readable Lean, doc comments, examples ("Accepted"/"Refused" examples where a rule is registered), no generated prose.
+- No `sorry`, no new axioms, no `decide +native`, no `native_decide`; every theorem must use only propext / Quot.sound / Classical.choice (scripts/proofs/axioms.sh checks this).
+- Do NOT edit docs/decisions.md or ROADMAP.md. Do NOT decide any language question the decided rows do not answer: if you hit one, stop that part, leave it out (or leave the existing draft behaviour, documented as pending), and list it under "QUESTIONS" in your final message with the options you see.
+- Do not edit ConcreteSpec/Spec/Exec.lean, Scalar.lean, Const.lean, Outcome.lean except where the brief says; they are reviewed and accepted.
+- Only work in this clone (the current directory), on branch shown by `git branch --show-current`. Commit each piece as soon as `nix develop -c lake build ConcreteSpec` passes (run it with `timeout 1200`). Do NOT push; do NOT run git commands that rewrite history; never --no-verify.
+- Light local checks you may run: `nix develop -c timeout 1200 lake build ConcreteSpec`, `nix develop -c timeout 600 bash scripts/spec/rules.sh`, `nix develop -c timeout 900 bash scripts/proofs/trust_ban.sh`. Do NOT run axioms.sh, kernel_replay.sh, external.sh or checks/run.sh (heavy; the reviewer runs them on a CI server). Every new module must be imported from ConcreteSpec/Spec.lean (spec) or ConcreteSpec.lean (proofs), or trust_ban fails.
+- Final message: list of commits (SHA + one line), what each theorem states, what is left out and why, QUESTIONS.

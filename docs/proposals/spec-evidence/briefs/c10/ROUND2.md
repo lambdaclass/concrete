@@ -1,0 +1,7 @@
+# C10 review round 1 (Codex via review.sh: CHANGES; agy: CHANGES). Fix them on this branch.
+HEAD is 46211bbd (axioms golden regenerated). Do not edit scripts/proofs/axioms.golden. All rules of _review/BRIEF.md still apply (commit each piece after `nix develop -c timeout 1200 lake build ConcreteSpec` passes; do not push).
+Codex:
+A. Spec/Frame.lean:285: `ExternResult.Valid` accepts every owned handle and receipt without checking the submission/completion pairing, so an unrelated extern can return `.receipt h` or `.owned h` and pass. Check the pairing.
+B. Spec/Frame.lean:306: `KeptPair.WellFormed` permits `submit = complete`, so the submitting extern could consume its own receipt through `KeptStep`, contradicting the stated rejection. Require distinct extern identities (or the incompatible declaration signatures) and prove the rejection.
+agy (full text in _review/agy-r1.md, numbered 1-5): fix 1 (Footprint.Preserves ignores block metadata, so free/expose frame laws are vacuous in their footprint), 2 (place half of footprints never exercised: add frame laws for C4's Hybrid place operations), 3 (C1Call asymmetric around the enter/leave lifecycle events; state caller restoration for any `dst` via `bindDst`, reusing the Proofs/Exec.lean lemmas), 4 (see the file); 5 is a nit: do it if cheap.
+Final message: commits (SHA + one line), each finding fixed and how, new/changed theorem statements, anything left with a reason, QUESTIONS.

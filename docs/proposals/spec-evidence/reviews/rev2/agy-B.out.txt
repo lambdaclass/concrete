@@ -1,0 +1,17 @@
+1. **minor** — `ConcreteSpec/Spec/Const.lean:231-232`, `ConcreteSpec/Proofs/Const.lean:262-265`
+   - **Problem:** `ConstsAdmitted U ds` is defined as `(evalConsts U ds []).isSome = true`, while the module documentation (`Spec/Const.lean:38-40`) states that the compiler admits declarations statically by running `typeConsts` without evaluating. `Proofs/Const.lean` proves soundness of static typing (`typed_admitted`: `typeConsts U ds [] = some Γ → ConstsAdmitted U ds`), but does not prove completeness (`ConstsAdmitted U ds → (typeConsts U ds []).isSome = true`). Without the converse, the spec does not establish that `typeConsts` never rejects a declaration list that `ConstsAdmitted` admits.
+   - **Fix:** Add the converse lemma in `ConcreteSpec/Proofs/Const.lean` (via `eval_ty? : e.eval env = some v → e.ty? Γ = some v.ty` when `Matches env Γ`) showing `ConstsAdmitted U ds ↔ (typeConsts U ds []).isSome = true`.
+
+2. **minor** — `ConcreteSpec/Spec/Const.lean:80-93`
+   - **Problem:** `CmpOp` and `CmpOp.eval` (integer comparison operators) are defined in `Spec/Const.lean` rather than `Spec/Scalar.lean`. Runtime scalar evaluation and contract propositions in later slices (C4/C5) also need integer comparisons and should not have to depend on `Spec/Const.lean` to get them.
+   - **Fix:** Move `CmpOp` and `CmpOp.eval` to `ConcreteSpec/Spec/Scalar.lean` (which `Spec/Const.lean` already imports).
+
+3. **nit** — `ConcreteSpec/Proofs/Scalar.lean:346-356`
+   - **Problem:** The bit-level correspondence section proves `toBits_wrap`, `toBits_wrapping`, `toBits_shl`, and `toBits_shr_unsigned`, but omits the direct bit-pattern lemmas for `bitwise` and `bitNot` (which follow immediately from `toBits_ofBits`).
+   - **Fix:** Add `toBits_bitwise` (for `.and`, `.or`, `.xor`) and `toBits_bitNot : toBits t (bitNot t a) = 2 ^ t.bits - 1 - toBits t a` in `ConcreteSpec/Proofs/Scalar.lean`.
+
+4. **nit** — `ConcreteSpec/Proofs/Scalar.lean:59-60`, `183-197`, `390-396`
+   - **Problem:** `wrap_of_inRange` is provided as a standalone lemma (`t.InRange n → wrap t n = n`), whereas the symmetric property `saturate_of_inRange (t : IntTy) (n : Int) (h : t.InRange n) : saturate t n = n` is proved inline inside `saturating_of_checked` and omitted from the `saturate_below`/`saturate_above` group.
+   - **Fix:** Extract `theorem saturate_of_inRange (t : IntTy) (n : Int) (h : t.InRange n) : saturate t n = n` and use it in `saturating_of_checked`.
+
+VERDICT: ACCEPT

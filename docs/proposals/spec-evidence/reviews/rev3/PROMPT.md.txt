@@ -1,0 +1,17 @@
+You are reviewing round 3 of one slice of the Concrete specification, written in Lean 4 (core only, no Mathlib). READ-ONLY: do not edit, create or delete any file, and do not run git commands that write. Reading is enough; if a .lake exists you may run `lake build`.
+
+Context:
+- The repository is a copy at the current directory. The spec is ConcreteSpec/ (read ConcreteSpec/README.md first). The slice implements foundation contracts C1 (ConcreteSpec/Spec/Exec.lean, Outcome.lean; proofs ConcreteSpec/Proofs/Exec.lean) and C2 (Spec/Scalar.lean, Spec/Const.lean; Proofs/Scalar.lean, Proofs/Const.lean) of the owner-approved proposal _review/FOUNDATION_PROPOSAL.md, plus today's owner decisions _review/LANGUAGE_DECISIONS_2026-11-08.md (items 4, 7, 10, 26, 11(a)). Decided rows: docs/decisions.md; philosophy docs/PHILOSOPHY.md.
+- _review/DELTA.patch is the change since round 2; _review/FULL.patch is the whole slice. Review the DELTA, reading full files as needed.
+- Round 2 findings and how they were handled:
+  * Operand evaluation now returns the state after the operand (eval : Locals → Store → Expr → Res (Val × Store)); evalArgs threads it left to right; every operand-taking step continues in that state; a trap stops in the state before the operand. Doc: an operand has no run-time effect; the returned state differs only in instrumentation (C5), which C9's erasure removes. Demo has a toy instrumentation (moved locals) with examples: a local moved into a call is not readable afterwards; `move a + move a` is stuck at the second operand. The erasure law itself is C9's, not here.
+  * Stmt.prim's destination is Option Var (bindDst). Loop regions: doc says elaboration wraps a region that binds locals in a block.
+  * planWith/RunsEach/cleans_runs_plan/planWith_calls: a cleanup runs exactly the calls of plan, in order, each with its scope's locals. continue_reaches_loop added. step_deterministic includes allows and labels.
+  * Operands doc: an answer outside the contract has no Step transition; runFrom reports noAnswer (oracle gave none) apart from badAnswer (refused answer). Whether a contract has any allowed answer (blocking vs unsafe stuckness) is C8's refinement.
+  * Scalar: CmpOp moved from Const; wrapping negation REMOVED (ARITH-4 has wrapping add/sub/mul only); toBits_bitwise, toBits_bitNot, saturate_of_inRange.
+  * Const: eval_ty, evaluates_typed, admitted_iff_typed (admission is exactly typing).
+  * Still deferred (say if you disagree): request/response split (C6); oracle query record with occurrence numbers (C8); one scalar model with Rep (C4 ports Rep onto Core.IntTy); exact counterparts of div/rem/shift in CTerm (surface of the boundary owner-pending).
+
+Review for: (1) correctness against decided rules and the C1/C2 text; (2) anything that decides a language question the decisions do NOT answer; (3) whether theorems are meaningful; (4) Lean quality/readability and accurate doc comments; (5) anything that makes C4/C5/C6/C8 hard to build on this interface. Do not repeat earlier findings that were fixed unless the fix is wrong.
+
+Output: a numbered list of findings, each with severity (blocker / major / minor / nit), file:line, the problem and a concrete fix. Then one final line exactly `VERDICT: ACCEPT` or `VERDICT: CHANGES`.

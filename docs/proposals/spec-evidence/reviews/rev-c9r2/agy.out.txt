@@ -1,0 +1,54 @@
+### Round-1 Fixes Verification
+
+1. **`PrimContract.Allowed` failure-alternative and `ensures` check (`ConcreteSpec/Spec/Prim.lean:196-204`, `ConcreteSpec/Proofs/Prim.lean:193-204`)**:
+   - **Verified real**: For ordinary `.ok v` results, `PrimContract.Allowed` now requires `(c.ensures v a.store ∨ ∃ f ∈ c.failures, f.errorTy = c.result ∧ f.holds v)` alongside the common `initialized`, `valid`, `ownership`, `dependencies`, and `resources` clauses. Success consults `c.ensures v a.store`, and declared failures consult both the failure alternative's type (`f.errorTy = c.result`) and predicate (`f.holds v`).
+   - `PrimRegistry.allows_postcondition` (`ConcreteSpec/Proofs/Prim.lean:193-204`) extracts this exact disjunction from `R.allows_allowed` (`h.2.2.2.2.1`) without recomputing or weakening the check.
+   - `PrimDemo.unitContract` (`ConcreteSpec/Spec/Prim.lean:432-452`) exercises both branches: `0` via `ensures` and `1` via `failures = [⟨(), fun v => v = 1⟩]`, while rejecting undeclared `2`.
+
+2. **`answerOk_iff` non-restatement**:
+   - **Verified non-restatement**: `PrimRegistry.answerOk_iff` relates the executable boolean checker `c.answerOk args st a = true` to the multi-clause propositional specification `c.Allowed args st a` (which independently references `c.parameters`, `c.requires`, `c.termination`, `c.events`, `c.ensures`, `c.failures`, `c.result`, `c.initialized`, `c.valid`, `c.ownership`, `c.dependencies`, and `c.resources`). In `PrimDemo.unitContract`, `answerOk` is an independent `decide` check over `(args = [] ∧ a.event = none ∧ (v = 0 ∨ v = 1) ∧ a.store = st)`, not a syntactic unfolding of `Allowed`.
+
+3. **Round-1 nits (`ConcreteSpec/Spec/Ident.lean:37-38`, `ConcreteSpec/Proofs/Prim.lean:287-291`)**:
+   - `Var` docstring explains why rehinting must be applied consistently to binders and occurrences (`AList.lookup` compares the whole `Var`).
+   - `Ghost.drive_steps_result` provides the direct corollary on `drive P ρ fuel hist c` without an auxiliary `r` parameter.
+
+---
+
+### Vacuity Audit of Every C9 Law
+
+| Law | Verdict | Non-Trivial Witness (`ConcreteSpec/Proofs/Prim.lean`) | Planted Counter-Example (`ConcreteSpec/Proofs/Prim.lean`) |
+| :--- | :--- | :--- | :--- |
+| `Prim.lookupId_rename` | **NON-VACUOUS** | `L382-383`: `lookupId (renameLocals swap locals) (swap.toFun 1) = lookupId locals 1 ∧ lookupId locals 1 = some 3` | `L386`: `lookupId (renameLocals swap [(x0, 3)]) 0 ≠ lookupId [(x0, 3)] 0` (renaming environment without key) |
+| `Prim.eval_rename` | **NON-VACUOUS** | `L389-390`: `Term.eval (renameLocals swap locals) (renameTerm swap source) = Term.eval locals source ∧ Term.eval locals source = .ok 5` | `L393`: `Term.eval locals (renameTerm swap (.var x0)) ≠ Term.eval locals (.var x0)` (renaming term only) |
+| `Prim.eval_operands_rename` | **NON-VACUOUS** | `L396-399`: `operands.eval` under `swap` on both locals and `source` equals `.ok (5, ())` | `L402-405`: `operands.eval locals () (renameTerm swap (.var x0)) ≠ operands.eval locals () (.var x0)` |
+| `Prim.rename_inverse` | **NON-VACUOUS** | `L408-409`: `renameTerm swap.symm (renameTerm swap source) = source ∧ renameTerm swap source ≠ source` | `L412`: `renameTerm .id (renameTerm swap (.var x0)) ≠ .var x0` (using `.id` instead of inverse) |
+| `Prim.rename_id` | **NON-VACUOUS** | `L415`: `renameTerm .id source = source` | `L418`: `renameTerm swap (.var x0) ≠ .var x0` (non-identity renaming mutates term) |
+| `Prim.lookupId_rehint` | **NON-VACUOUS** | `L421-422`: `lookupId (rehintLocals hints locals) 1 = lookupId locals 1 ∧ lookupId locals 1 = some 3` | `L425`: `AList.lookup (rehintLocals hints [(x0, 3)]) x0 ≠ AList.lookup [(x0, 3)] x0` (whole-`Var` lookup fails if unaligned) |
+| `Prim.eval_rehint` | **NON-VACUOUS** | `L428-429`: `Term.eval (rehintLocals hints locals) (rehintTerm hints source) = Term.eval locals source ∧ Term.eval locals source = .ok 5` | `L432`: `Term.eval [(x0, 10)] (.var ⟨"renamed", 1⟩) ≠ Term.eval [(x0, 10)] (.var x0)` (mutating numeric id breaks eval) |
+| `Prim.eval_operands_rehint` | **NON-VACUOUS** | `L435-438`: `operands.eval` under `rehintLocals`/`rehintTerm` preserves `.ok (5, ())` | `L441-444`: `operands.eval [(x0, 10)] () (.var ⟨"renamed", 1⟩) ≠ operands.eval [(x0, 10)] () (.var x0)` |
+| `SafetyEvidence.usable_current` | **NON-VACUOUS** | `L457`: `evidence.Usable evidence.context` (`1 + 1 = 2` in `EvidenceDemo.current`) | `L460`: `¬ evidence.Usable contractChanged` |
+| `SafetyEvidence.obligation_mismatch` | **NON-VACUOUS** | `L463`: `¬ evidence.Usable obligationChanged` | `L466-467`: `¬ (evidence.context.obligation = targetChanged.obligation → evidence.Usable targetChanged)` |
+| `SafetyEvidence.target_mismatch` | **NON-VACUOUS** | `L470`: `¬ evidence.Usable targetChanged` | `L473-474`: `¬ (evidence.context.target = obligationChanged.target → evidence.Usable obligationChanged)` |
+| `SafetyEvidence.contract_mismatch` | **NON-VACUOUS** | `L477`: `¬ evidence.Usable contractChanged` | `L480-481`: `¬ (evidence.context.contract = checkerChanged.contract → evidence.Usable checkerChanged)` |
+| `SafetyEvidence.checker_mismatch` | **NON-VACUOUS** | `L484`: `¬ evidence.Usable checkerChanged` | `L487`: `¬ (evidence.context.checker = specChanged.checker → evidence.Usable specChanged)` |
+| `SafetyEvidence.spec_mismatch` | **NON-VACUOUS** | `L490`: `¬ evidence.Usable specChanged` | `L493`: `¬ (evidence.context.spec = contractChanged.spec → evidence.Usable contractChanged)` |
+| `PrimRegistry.answerOk_iff` | **NON-VACUOUS** | `L501-503`: `PrimDemo.unitContract.answerOk [] 7 failureAnswer = true ↔ PrimDemo.unitContract.Allowed [] 7 failureAnswer` | `L506-507`: `¬ (false = true ↔ PrimDemo.unitContract.Allowed [] 7 failureAnswer)` (omitting declared failure breaks iff) |
+| `PrimRegistry.allows_unknown` | **NON-VACUOUS** | `L510`: `PrimDemo.registry.allows ⟨1⟩ [] 7 successAnswer = false` | `L513`: `¬ PrimDemo.registry.allows ⟨0⟩ [] 7 successAnswer = false` |
+| `PrimRegistry.unknown_primitive_stuck` | **NON-VACUOUS** | `L522-527`: `¬ Exec.Step requestProgram unknownStart l c'` | `L530-534`: `registeredStart` steps to `⟨.done, [], 7, []⟩` via `Exec.Step.prim` |
+| `PrimRegistry.allows_allowed` | **NON-VACUOUS** | `L537-539`: `PrimDemo.unitContract.Allowed [] 7 failureAnswer` via `PrimRegistry.allows_allowed` | `L542-543`: `¬ PrimDemo.unitContract.Allowed [] 7 undeclaredAnswer` |
+| `PrimRegistry.allows_postcondition` | **NON-VACUOUS** | `L547-550`: `ensures 1 ... ∨ ∃ f ∈ failures, f.errorTy = result ∧ f.holds 1` holds via the failure disjunct | `L553-555`: `¬ (PrimDemo.registry.allows ⟨0⟩ [] 7 failureAnswer = true → PrimDemo.unitContract.ensures 1 failureAnswer.store)` |
+| `PrimRegistry.allows_no_implicit_trap` | **NON-VACUOUS** | `L558-560`: `∃ v, failureAnswer.result = .ok v` via `allows_no_implicit_trap` | `L563-565`: `¬ ∃ v, trapAnswer.result = .ok v` |
+| `Ghost.drive_steps` | **NON-VACUOUS** | `L570-573`: `Ghost.drive_steps` on `registeredStart` produces a `Steps` trace | `L576-578`: `(Ghost.drive requestProgram answerOracle 2 [] registeredStart).events ≠ [99]` |
+| `Ghost.drive_steps_result` | **NON-VACUOUS** | `L581-584`: `Ghost.drive_steps_result` on `registeredStart` without auxiliary report | `L587-589`: `(Ghost.drive requestProgram answerOracle 2 [] registeredStart).config.store ≠ 8` |
+| `Ghost.runStmts_of_not_normal` | **NON-VACUOUS** | `L594-597`: `runStmts` on `returnedStart` (`exiting (.ret 1)`) equals `drive` | `L600-604`: on normal `GhostDemo.start`, `runStmts ... [.abort ⟨3⟩]` changes `.ending` vs `drive` |
+| `Ghost.ghost_erasure_run` | **NON-VACUOUS** | `L607-611`: `runPieces` with surrounding ghost statements equals `runStmts` on `[.skip]` | `L614-616`: erasing concrete `.skip` changes `.remaining` fuel |
+| `Ghost.ghost_erasure_ending` | **NON-VACUOUS** | `L619-626`: `runPieces` preserves both `.events` and `.ending` of `runStmts ... [.skip]` | `L630-634`: erasing concrete `.abort ⟨3⟩` changes `.ending` |
+
+---
+
+### Findings
+
+None.
+
+VERDICT: ACCEPT
+rc=0

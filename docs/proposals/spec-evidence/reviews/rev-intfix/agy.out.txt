@@ -1,0 +1,32 @@
+### Review Summary
+
+1. **C6 meaning preserved**: `Spec/Observe.lean` and `Proofs/Observe2.lean` preserve C6's observation types, environment/adapter projection relations, trap line, and silent-step preservation intact. No definitions in C6 were altered by this fix.
+2. **Refused continuations handled per C1**:
+   - In [`runFrom_validTrace`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Observe2.lean#L460-L476), when `O.allows p vs store a = true` and `k a = none`, the evaluator stops in `.stuck c` with `events = hist` (not appending `a.event.toList`), preserving `CompleteTrace C input (A.project hist)` directly from `valid`.
+   - In [`Spec/Observe.lean`](file:///home/unbalancedparen/ConcreteSpec/Spec/Observe.lean#L425-L457), `refusingBindOps` refuses `.bind Exec.Demo.x` in the request continuation after an allowed primitive answer; `refusedReport` ends in `.stuck refusedRequest`, emits `events = []` (even though `refusingAdapter` would project the event to a C6 `response`), and yields `reportObservation ... = none`.
+3. **No law weakened**: None of the four updated laws in `Proofs/Observe2.lean` added any extra hypotheses or weakened their conclusions; only the type of the request continuation `k` in `Exec.Out.request` was updated from `Exec.Answer O.Val O.Event O.Store → Exec.Config O` to `Exec.Answer O.Val O.Event O.Store → Option (Exec.Config O)`.
+4. **Lean quality and documentation**: Proofs are clean, explicit, and well-documented without `sorry` or brittle automation.
+
+---
+
+### Vacuity Check (All Laws in the Diff)
+
+| Law | Location | Vacuity Verdict | Non-trivial Witness | Planted Counter-example |
+| :--- | :--- | :--- | :--- | :--- |
+| [`runFrom_validTrace`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Observe2.lean#L422-L478) | `ConcreteSpec/Proofs/Observe2.lean:422` | **NON-VACUOUS** | [`Observe2.lean:643-645`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Observe2.lean#L643-L645): `answeredReport` runs 1 step through `answeringOracle`, takes the `some c'` continuation branch, and produces `CompleteTrace forbiddingContract () [request 3, response 6]`; the `k a = none` branch is exercised by [`refusedReport`](file:///home/unbalancedparen/ConcreteSpec/Spec/Observe.lean#L435-L436) in `Spec/Observe.lean:435`. | [`Observe2.lean:648-668`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Observe2.lean#L648-L668): `¬ CompleteTrace forbiddingContract () [request 3, response 7]` (mutated response `7 ≠ 3 * 2` fails the contract). |
+| [`runFrom_noAnswer_pending_valid`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Observe2.lean#L481-L491) | `ConcreteSpec/Proofs/Observe2.lean:481` | **NON-VACUOUS** | [`Observe2.lean:672-679`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Observe2.lean#L672-L679): `blockedReport` under `blockingOracle` ends in `.noAnswer (requesting 3)` and establishes both `ValidTrace permittingContract () (some (query 3)) [request 3]` and `permittingContract.mayBlock () [request 3] (query 3)`. | [`Observe2.lean:683-686`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Observe2.lean#L683-L686): `¬ (ValidTrace forbiddingContract () (some (query 3)) [request 3] ∧ forbiddingContract.mayBlock () [request 3] (query 3))` (replacing `permittingContract` with `forbiddingContract` falsifies the conclusion). |
+| [`runFrom_blockingPermitted`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Observe2.lean#L689-L692) | `ConcreteSpec/Proofs/Observe2.lean:689` (exercised with partial `k`) | **NON-VACUOUS** | [`Observe2.lean:689-697`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Observe2.lean#L689-L697): `blockedPermitted` proves `ExecAdapter.BlockingPermitted program adapter permittingContract () blockedReport` on a genuine `.noAnswer` report. | [`Observe2.lean:701-704`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Observe2.lean#L701-L704): `¬ ExecAdapter.BlockingPermitted program adapter forbiddingContract () blockedReport`. |
+| [`report_noAnswer_mayBlock`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Observe2.lean#L516-L525) | `ConcreteSpec/Proofs/Observe2.lean:516` | **NON-VACUOUS** | [`Observe2.lean:708-711`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Observe2.lean#L708-L711): extracts `permittingContract.mayBlock () (adapter.project blockedReport.events ++ [request 3]) (query 3)` from `blockedPermitted`. | [`Observe2.lean:715-717`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Observe2.lean#L715-L717): `¬ forbiddingContract.mayBlock () [request 3] (query 3)`. |
+| [`report_noAnswer_blocked`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Observe2.lean#L527-L537) | `ConcreteSpec/Proofs/Observe2.lean:527` | **NON-VACUOUS** | [`Observe2.lean:720-729`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Observe2.lean#L720-L729): `blockedObservation` proves `reportObservation ... blockedReport blockedPermitted = some (.blocked [request 3] (query 3))`. | [`Observe2.lean:733-737`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Observe2.lean#L733-L737): `reportObservation ... blockedReport blockedPermitted ≠ some (.terminal ⟨[request 3], .exited 0⟩)`. |
+
+*(Note: [`answeringWellFormed`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Observe2.lean#L598-L609), [`blockingWellFormed`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Observe2.lean#L612-L619), and [`refusedReportPermitted`](file:///home/unbalancedparen/ConcreteSpec/Spec/Observe.lean#L446-L450) are concrete instance witnesses supplying premises to the laws and demo examples above, not standalone specification laws.)*
+
+---
+
+### Findings
+
+- `ConcreteSpec/Spec/Observe.lean:455` — **nit** (PREFERENCE): The second conjunct `(match refusedReport.ending with | .stuck _ => true | _ => false) = true` only checks the constructor tag, whereas the docstring says "The run keeps the requesting configuration as its stuck ending" and line 449 already establishes `refusedReport.ending = .stuck refusedRequest` by `rfl`.
+  - **Concrete fix**: Replace `(match refusedReport.ending with | .stuck _ => true | _ => false) = true` with `refusedReport.ending = .stuck refusedRequest` and prove the conjunction with `⟨rfl, rfl, rfl⟩`.
+
+VERDICT: ACCEPT
+rc=0

@@ -1,0 +1,388 @@
+kimi version 2.4.1
+• I need perform read-only thorough review. Should inspect files, proposal perhaps _review not listed root? REVIEW.diff and sources decisions. No network no writes no git writes. I can read, glob/grep, bash read-only perhaps lake build? User says read-only review no file modification, don't run build because writes .lake potentially existing? Better static. Should review round 1 max5 no codex network. Should examine diff and files. Could use TodoList? This writes state not file okay but unnecessary? Long task multi-step could track, but user wants no file mods. Todo okay tool not files. Should probably large diff. Start read REVIEW.diff perhaps max100k and relevant files parallel. Should locate proposal path _review absent listing perhaps legacy? Use Glob for FOUNDATION_PROPOSAL.md and relevant AGENTS in subdirs. Also read current Memory proofs/hybrid. Parallel calls.
+
+• I’ll compare the added definitions and proofs against the C4 proposal and decision rows, then check the theorem statements for hidden assumptions, vacuity, and interface problems. I’ll keep the review entirely read-only.
+
+• I have full sources. Proposal no match perhaps outside tree hidden _review? Glob skips? Current listing no _review. Could be REVIEW.diff references proposal not included? Should locate via ls? Glob **/FOUNDATION... no. Could read path _review/FOUNDATION... direct per user concrete path, perhaps missing. Do. Should understand proposal C4 exact. Perhaps docs/proposals? Glob foundation lowercase etc.Proposal likely docs/proposals/FOUNDATION.md. User path _review maybe omitted artifact but source has docs. Read. Also Spec.Rep duplication! Should inspect. Memory preexisting? This slice adds proofs and Hybrid but Memory draft preexists except WF. Should review whole relevant. Spec/Rep older semantics likely duplication (no two ways). Read proposal C4 via grep lines.
+
+• The proposal is not present at `_review/FOUNDATION_PROPOSAL.md`; the repository’s proposal is `docs/proposals/FOUNDATION.md`, so I’m using its C4 section. I also found an older `Spec/Rep.lean` and will check whether the new representation and memory interfaces overlap it.
+
+• Should have actual docs proposals listing. Glob.Proposal missing indeed. User supplied enough summary. I should mention scope review limitation perhaps respond note no need finding. Should deeply analyze defects.
+
+  Potential big issues:
+  - Hybrid Range extent unused. Typed read/write only active prefix; good. Materialization range entire extent. expose on materialized uses r.ptr live.
+  - State lacks WellFormed invariant linking Range to Cell/memory. Arbitrary materialized ranges can point to other cells/blocks, overlap same memory, no uniqueness or ownership. Could be intended C5, but partial place-to-range projection should perhaps wellformed. Theorems assume memory WF only not State WF. Could build C5 with wrapper. Should see proposal text unavailable. Should not overflag design expected.
+
+  - Memory WF strengthening only alloc preserves; free/store/expose do not prove preserve. Canonical + unique under AList.update: does update preserve canonical? yes with unique. Should have lemmas to be useful. Without free_WF, store_WF, expose_WF impossible to carry WF across normal ops. C4 laws claimed well-formedness only alloc maybe okay. But user asks interface C5 etc. Major missing lemmas perhaps PREFERENCE unless theorem claims. Should focus real defects.
+
+  - fromExposed candidate uniqueness: only in-bounds uniqueness theorem, not one-past uniqueness. One-past candidates can overlap? Multiple nonempty exposed live blocks can share same one-past address (adjacent blocks or same base different sizes? Non-overlap permits adjacent). Q3.9 says picks in-bounds then one-past else no provenance, but if several one-past blocks, no unique candidate. Draft uses list order find? to select. Module doc lines 28-29 claims "Live blocks do not overlap, so at most one block qualifies at each priority ... and no tie-break is added." This is false for one-past: two adjacent exposed blocks [0,1), [1,2) at addr1 if no inbounds? Wait at addr1 second block contains addr1, so in-bounds priority chooses second; one-past not considered. For one-past ambiguity with no containing candidate: blocks [0,1), [2,3)? onepast addresses 1 and3 distinct. Adjacent [0,1), [1,2): address1 is inbounds of second, so no onepast. Could multiple blocks have same onepast addr and none contains addr? Nonempty nonoverlap intervals with same endpoint e. If both end at e and nonempty, they overlap near e unless zero, so impossible among live blocks. Right: two nonempty intervals with same end necessarily overlap. So at most one onepast if live disjoint. Good. But fromExposed_sound doesn't prove candidate uniqueness for onepast, candidate_contains_unique only inbounds. Could add onepast unique straightforward. The user explicitly "fromExposed soundness and candidate uniqueness" perhaps candidate uniqueness intended both? The theorem name contains only. Module doc claims both at each priority but proofs only inbounds. Could flag missing theorem not defect? If change promised candidate uniqueness perhaps major incomplete. But could prove by same disjoint. Should check no theorem elsewhere. Grep candidate.
+
+• The core definitions are small enough to inspect directly. Two areas need particular scrutiny: whether the strengthened memory invariant survives every state-changing operation, and whether the hybrid state actually enforces the projection and range facts its operations rely on.
+
+• Technically, proposal read is not done because it was missing, but the user summary/decisions are enough. Fine.
+
+  Potential arithmetic defects:
+  - Address p.addr Nat not constrained <2^addrBits in access. For nonzero, bounds and WF ensure p.addr < base+size ≤ 2^bits-1 if n>0, so valid. Zero access only nonnull/aligned and no address width check. Q3.7 pointer addr u64 and zero only alignment non-null. Since Ptr.addr Nat arbitrary, zero-byte accesses at >=2^addrBits accepted, violating pointer address domain/target. Proposal owner q3 generalized addresses? Should have Ptr WellFormed? Could be real. Nonzero invalid pointers outside cannot provenance bounds. fromExposed accepts arbitrary addr and returns pointer with no provenance. Pointer representation should be u64; owner approved Target addrBits. There is no pointer WF requiring addr<2^addrBits. encodePtr truncates p.addr modulo 2^(8 ptrSize) via leBytes but decodePtr returns original p only because fragments carry p, even if addr doesn't fit pointer width. Roundtrip holds for arbitrary p due to fragment metadata, not actual address bytes. This is a significant defect: encodePtr/decodePtr roundtrip for out-of-range pointer addresses despite truncation. But Target.WellFormed ensures addrBits ≤ 8 ptrSize, not p.addr range. Ptr should carry validity or encodePtr partial/require premise. Q3.7 pointer addr u64; with arbitrary profile addrBits. Could flag major. However preexisting Memory reviewed-but-draft, slice adds proofs not redesign. User asks correctness entire slice, can find existing draft flaws. This proof reveals meaningfulness issue: decodePtr_encodePtr claims roundtrip all p given target WF, but for p.addr=256, ptrSize=1 target addrBits=8, encoded bytes [0] with frag p so decodePtr returns p solely metadata. If raw reconstructed bytes no frag can't decode. That's draft design fragments carry pointer. Stored pointer is metadata and address, so out-of-range pointer should invalid. Might be out of scope? C4 pointer representation included. Strong finding.
+
+  - `ordered_ordered`: for little and big reverse reverse okay.
+  - intByte_power relies IntTy all bits multiples 8.
+  - decodePtr ptrSize=0 no roundtrip unless target WF ptrAlign pow2 and ptrSize%align=0 and addrBits>0 ≤8ptrSize implies >0. good.
+  - alloc Fits scans raw m.blocks including dead duplicate shadow etc. WF canonical ensures coherent. Fits checks non-overlap against every entry live, even dead contradictory non-WF not relevant.
+  - alloc failure leaves memory unchanged via Except no m. theorem doc fine.
+  - `Memory.Fits` maxObject and non-null nonempty. Zero-size base null allowed and alignment. Zero-size alloc fits requires base+0 ≤ 2^bits-1, so base max onepast. Fine.
+  - null check in nonzero access? Access via block base ensured base≠null if allocated and WF only fits doesn't include nonnull! WellFormed has fits but Fits has nonnull separate. WF fits field only base+size ≤... not nonnull/maxObject. A manually constructed WF memory can have live nonempty null block, and access nonzero at null succeeds. Does decided rows zero only nonnull; for nonzero no explicit nonnull if provenance valid perhaps null pointer with prov can access? Usually null with prov perhaps no? Memory.Fits disallows allocation, so operational states okay. WF should perhaps include full Fits? It currently separates maxObject and nonnull only allocation; preserved ops fine. Manual state could break. Not necessarily defect.
+
+  - `Memory.WellFormed.canonical` plus `unique` redundancy? canonical implies unique? If duplicates exact same block allowed canonical and map nodup forbids. User specifically strengthens canonical unique. Fine.
+  - AList.update first only, unique ensures all.
+  - No `Memory.empty_WellFormed` theorem; examples decide not WF. alloc_wellFormed needs base theorem absent. This makes allocation preservation theorem hard to use but can prove trivial. Minor completeness.
+
+  - `store_load` zero branch uses old access `ha` on m' but m'=m from cases h yes okay.
+  - `store_same_block_frame` only some b and valid nonempty. fine.
+  - typed_store_frame statement hi uses sizeof v.ty vs encode length, simp works.
+  - write_read uses hc from original st after subst st' where places unchanged materialized, okay.
+  - `materialize_projection` existential t and "sole projection" vague but exactly cell.
+  - No theorem materialize_read: after materialization, read yields original v. Could prove with WF and alloc/store. They only show projection/idempotence. User summary says Hybrid "materialization ... typed read ...". Proposal likely requires materialization preserves value. This is crucial missing law: rep relation joining structured and bytes. They prove rep_roundtrip and write_read, but not first materialization readback nor raw write typed read behavior (only bool example). The docs claim module header no law list except Proofs header. C4 deliverable likely expects read of materialized after initial materialize = v. Could flag incomplete contract, but review findings should be real defects not just wishlist. User explicitly asks whether theorems meaningful, not necessarily exhaustive. Missing materialize_read means central property unproven but definition obviously works. Could be major if proposal required.
+
+  - No theorem expose records block. Memory expose no proofs at all. User summary says "expose records the block" decided rows check. Definition does, examples fromExposed. Fine.
+
+  - Hybrid `alignof` trivial wrapper no state; okay.
+  - `sizeof` type-only no state; good.
+
+  - Raw writes `State.rawWrite` takes any Ptr not necessarily tied to a materialized Place. It just updates memory. That's expected authorized primitive writes.
+
+  - C1 integration doc says use read/write in operand evaluation, but `Exec.Operands.eval` returns `Res (Val × Store)` and `State.read` only reads, `write` updates. Hybrid.Value lacks unit and pointer values; C1 needs unitVal/unitTy. This slice scalar only and unit missing means cannot instantiate Operands directly without extension. Doc says shape not actual instance. fine.
+
+  - Hybrid.Value duplicates Core.Scalar? Should inspect Scalar.
+
+• I’m checking the arithmetic and representation edge cases now, especially target-width validity and pointer round trips. I’m also tracing the older slice-1 representation code to distinguish intentional legacy fragmentation from duplication within the new Core interface.
+
+• Duplication with C2 `CTy/CVal` more direct: Hybrid Ty Value exactly CTy/CVal minus unit. User says no two ways to do one thing. New Hybrid defines scalar Ty/Value/Valid duplicate Const. But Const is closed initializer subset and distinct interface, could reuse? C4 proposal perhaps recommended own scalar values? Existing Core Scalar only IntTy no scalar Value. Const CVal could be general moved to Scalar. New Hybrid duplication likely finding minor/major interface C1/C5 because values differ between constants and runtime. C1 expects unified Val eventually. C2's CVal was specifically constants but scalar values same. "no two ways to do one thing" likely expects flag. Also older Rep allowed separate fragments explicitly and README says unification A2i; not necessarily defect. But within new foundation, duplicate `Ty`, `Value`, `Value.ty`, `Value.Valid` with CTy/CVal is obvious. Could recommend factor shared scalar value into Scalar or reuse CVal/CTy. Severity minor/major? C1 instantiation and C5 ownership need runtime values; having parallel types forces conversions and undermines C2/C4 join. Major interface concern perhaps.
+
+  Should understand intended proposal perhaps owner-approved text omitted but could exist in git object not accessible via file? User forbids git commands that write, read git allowed. Could use `git show` read-only? User explicitly tree commit and REVIEW.diff change; proposal path _review perhaps outside tree not included. Could `git status` read-only allowed but not needed. I must not network. Could `git ls-tree -r HEAD | grep` via Bash but Grep should not shell. Glob enough. Proposal not in commit. Don't chase.
+
+  Should examine changed line docs decisions Q1.8-Q1.12. C4 Memory claims Allocation Q1.8-Q1.11 but Q1.8 allocator construction, Q1.11 availability laws progress etc out of scope allocator algorithms. It only covers ordinary alloc failure, not rejected T payload. Header says memory side, okay. But theorem `alloc_failure` "no replacement memory" does not prove "unchanged state on failure" because no memory in error. fine.
+  - Q1.12 callbacks irrelevant.
+
+  Potential defect: `fromExposed_sound` only one direction, no completeness/priority theorem for no provenance. User summary "fromExposed soundness and candidate uniqueness" not completeness. fine.
+
+  Potential defect: `candidate_contains_unique` hypotheses satisfiable yes adjacent etc.
+  - `alloc_ne_existing` only existing looked-up blocks. Unique/canonical all entries looked up so all.
+  - free_alloc_ne_existing h: new ≠ c for all existing before free, includes b. good.
+  - free retains only block b and next, doesn't show other blocks unchanged. Not necessary identity never reused proof uses next. okay.
+  - `alloc_wellFormed` proof perhaps bug at disjoint new allocation uses hf scans all raw entries and existing live via lookup. Works.
+
+  But no WF preservation for `free`, `store`, `expose` is real gap: `write_read` needs `st.memory.WellFormed`. After first write, to apply write_read again, need WF st'. Not proved, but actually store preserves sized due to access and WF, canonical unique via modify. expose/free preserve all straightforward. Without lemmas clients can't compose the provided laws. Could classify major REAL DEFECT in proof interface (not language semantics). Concrete fix add generic `modify_wellFormed` under block properties plus `store_wellFormed`, `free_wellFormed`, `expose_wellFormed`, `empty_wellFormed`; then State materialize preservation. This is more completeness than correctness but C4 asks wellformedness. User specifically "allocation freshness and well-formedness" only allocation perhaps no requirement others. Still building C5 hard without. Include major perhaps.
+
+  More severe: `Memory.store` does not check `x.live` after modify? access does. good.
+  - zero-length store returns m even p prov dead etc as required only align non-null.
+  - zero-length load returns [] no decode value except perhaps empty structs future. good.
+  - zero-sized materialization: Scalar sizeof positive so not here.
+
+  Alignment `a=0`: nonzero access p.addr % 0 = p.addr in Lean, so only p.addr=0 aligned. But Memory.Fits requires block align pow2, Range from materialize valid. Arbitrary operations align 0 should fail except null? zero access p.addr %0 = p.addr, nonnull means cannot both except target null not 0 maybe p.addr=0 and null other => accepted aligned mod0=0. Is alignment 0 invalid by explicit validity premises? `IsPow2` expected for alignments. Access doesn't require IsPow2 a. C3 layout alignments powers of 2, all allocated block align pow2. But raw caller can supply weird a. For a=0 and target null nonzero, zero access addr0 accepted; with null0 no zero accepted. Nonzero access with a=0 and p.addr=0 could be accepted if block at null manually WF; allocation disallows nonempty base null. So operationally no nonzero. For non-power-of-two a e.g.3, allows alignment 3, contrary target layout law? Q3.7 says alignment explicit but not necessarily pow2? Target C3 says stored ptr alignment power2, block Fits power2. Usually access alignment should also pow2 as premise. But not decided perhaps no issue.
+
+  Address space validity: Target.spaces not checked in alloc or access. Can allocate in arbitrary AddrSpace not listed. C3 says spaces target has, dataSpace one. "A target profile ... which address spaces exist" implies operations should require space∈tgt.spaces. Memory.Fits doesn't. This allows allocation in nonexistent address spaces and materialization there. Real defect against C3 and interface. User review C4 decided rows Q3 etc and C3 foundation interface. Could flag major. But Memory preexisting draft perhaps accepted review earlier? Still C4 review. Should not overdo beyond requested. Concrete fix add x.space∈tgt.spaces to Fits and WF; access via WF ensures. `fromExposed` arbitrary space yields no candidates unless invalid alloc currently allows. Pointer Valid also space membership. This is definite semantic gap.
+
+  Pointer addr valid range as above similarly.
+
+  Block WF `fits` does not require maxObject/nonnull/space target. Fits allocation does maxObject nonnull but not spaces. WellFormed only address fitting/aligned/sized etc, doc matches. Target validity should likely in Fits.
+
+  Hybrid `materialize` uses padding arbitrary length; allocation enforces maxObject and address. It sets extent = active+padding. Good. It does not ensure `align` equals alignof c.ty, but explicit input oracle chooses address alignment. The C4 approved hybrid may want layoutAlign input, because `alignof` accepts function but materialize doesn't use it. Callers can materialize bool with align 8 or 1 etc; allocation base align. Typed access uses r.align so internally consistent. Language layout question: scalar alignment should target layout not arbitrary per materialization. C8 padding oracle perhaps supplies align and address; layout align should be read-only input. They define alignof but never connect to materialize, so any alignment (including valid pow2 not type alignment) accepted. Owner-approved proposal perhaps says address/alignment explicit inputs at materialization. User summary "sizeof/alignof never materialize" implies alignof exists pure; likely materialization accepts align as environment choice. Fine.
+
+  Bigger issue: `Range.extent` is completely unused by read/write/expose. Typed writes active prefix as desired. But raw range projection should extent useful for raw address-taking and pointer operations. No theorem `extent = encode length + padding` or range matches block size. Arbitrary state ranges can have extent inconsistent. A `State.WellFormed` is absent. C5 can't know memory mapping. This can cause two materialized cells alias same bytes and typed writes affect each other. In actual operations starting from structured distinct cells materialize allocates nonoverlap, so alias only via manually constructed states or `State.set` public can create. Specs often allow arbitrary states with WF premise. There is no State WF so theorems must accept arbitrary. C5 could define. But C4 owner-approved "partial place-to-range projection" implies function only, not necessarily invariant. C5 ownership can ensure alias rules. Yet materialized places may safely share? Different local variables cannot share storage unless same place projections? Place is whole cell scalar no fields. Operations preserve nonalias from initial state if state finite and unique? No initial state definition. Could still define WF later. Flag as major interface if proposal expects.
+
+  Potential theorem vacuity:
+  - `typed_store_frame` does not assume v.Valid or type matches range, but theorem still true low-level. Doc claims typed write but hypotheses only store, no State.write. It's basically duplicate alias of store_same_block_frame, no link to typed write. Still meaningful, hypotheses satisfiable.
+  - `write_read` structured case does not need hw; materialized valid. Hyp satisfiable examples.
+  - `materialize_reuse` can use any st including invalid memory, but definitional reuse still.
+  - `materialize_projection` "sole projection" existential type, okay.
+  - `decodePtr_encodePtr` as noted overly strong due metadata but satisfiable.
+  - `fromExposed_sound` needs tgt only for WF; fine.
+  - `alloc_failure` no memory output trivial but doc exact.
+  - `decodeBool_valid` says v.val=boolToBits b and fragments arbitrary, good.
+  - no `encodePtr_length` theorem but simple.
+  - `access_zero` exact.
+  - `store_load` frame requires WF. Good.
+
+  Could there be actual proof false due theorem inconsistency? Lean proves so no.
+  Should check Lean quality no compile allowed. I can run `lake env lean`? It writes .olean? Running lean on file without -o usually no file writes? Lean may write nothing, but user says read-only review and no modify any file. Could run `lake env lean ConcreteSpec/...` reads and elaborates no output file unless -o. Lake may build? `lake env lean` just env perhaps no writes, but could Lake update? Better avoid. Existing tree perhaps `.lake` not listed hidden? Could use `lean` direct with LEAN_PATH but no need. I should state static review only not build. User likely expects review findings only. No tests necessary read-only.
+
+  Should inspect `REVIEW.diff` says regenerated axioms omitted. No code compile concerns.
+
+  I'll reason semantic details deeper.
+
+  Pointer fragment index and byte order:
+  encodePtr uses `zipIdx` after ordering, indices 0.. in stored order. decodePtr exact list equality. Good.
+  Address p.addr Nat potentially > pointer width as above. `Target.WellFormed` addrBits≤8ptrSize, but p not valid. Memory blocks base+size ≤2^addrBits-1 ensures block onepast within addr range; pointers derived from live valid accesses have p.addr≤onepast and for n>0 within. onepast fromExposed addr=base+size≤2^addrBits-1. So all operational pointers valid except arbitrary initial pointers, encodePtr can be called on any. Should add Ptr.Valid and roundtrip premise. Q3.7 pointer addr u64 (or target address) means type should perhaps Fin, but current model abstract invalid pointers not necessarily bad if all valid ops premise. However encodePtr docs "bytes of a stored pointer" and theorem all p says invalid accepted. A partial operation could fail invalid. This is a legitimate theorem meaningfulness issue. Could severity major not blocker.
+
+  Zero-byte access on arbitrary out-of-range p.addr also definite contradiction with pointer domain. Example target 8-bit, p.addr=256, align1, null0 -> some[] despite no u8 address. Since Ptr can represent invalid values, access validity should reject. Q3.7 says zero only align nonnull; if pointer itself has implicit valid addr type then impossible. But type allows, so need explicit valid premise. Add target address bound to Ptr validity/access or use Fin. Major.
+
+  Block fits `base+size ≤2^addrBits-1`: for zero size base at max onepast =2^bits-1. Addresses range 0..2^bits-1, onepast ≤max. good.
+  `Target.maxObject <2^addrBits` and maxObject perhaps 2^bits-1. Fits size≤maxObject and base+size≤max addr. nonempty base nonnull. good.
+
+  Allocation fresh id Nat overflow mathematical unbounded okay language abstract fresh never reused.
+
+  fromExposed priorities: It filters live exposed nonempty same space. In-bounds condition base≤addr < base+size. onepast equality. good. It chooses first onepast, unique due nonoverlap WF. Without WF function deterministic list order but semantic only under WF. fine.
+  No theorem fromExposed prov none if no candidate, definition direct.
+
+  `expose` records block but doesn't check p.space or p.addr within block. A pointer with prov b but different space or arbitrary addr can expose b. Q3.9 "expose records the block" provenance authority only; C5 borrow checks. Exposure usually exposing pointer to block doesn't require deref validity, pointer provenance enough even one-past. Space should match provenance by pointer wellformed, but arbitrary Ptr mismatch still exposes. Could add valid provenance premise. Not necessarily defect.
+
+  Hybrid State.read structured checks Valid every read; State.write prevents invalid structured but arbitrary initial invalid returns none. good.
+  Materialize structured invalid returns none no allocation. good.
+  Materialize first allocation then store cannot fail if valid allocation and bs length? I'll check allocated block align, base, size; ptr prov fresh; access n=bs.length. If bs.length=0? scalar sizeof≥1 so nonzero. Fits base nonnull etc. store succeeds. The do includes store but always success. Could prove. fine.
+  Range extent active+padding. typed read loads active with r.align; r.ptr base aligned. good.
+  Raw writes update bytes; read decode current. good.
+  Expose reuse: If materialized r stale after free, expose fails; okay.
+  sizeof/alignof pure functions no State argument. good.
+
+  Padding: typed write encodes active bytes but `Memory.store` replaces fragments of active bytes with none for scalar; preserves padding exactly. good.
+  Raw writes could overwrite padding allowed. fine.
+
+  Potential active bytes initialization after raw write: decode accepts initialized pointer fragments for int/bool ignoring frag. Decided integers carry no provenance, bool perhaps pointer fragment 0/1 accepted as bool? Byte representation says initialized byte may frag; bool decode ignores frag. Is that allowed? Q3.11 Rep perhaps valid bool from any initialized 0/1 including pointer fragment. Could be open pointer bytes question only pointer reads, not bool. likely okay.
+
+  State.write materialized typed value encodes no padding and writes prefix. It doesn't ensure r.extent≥sizeof; memory access ensures block bounds but could write beyond extent into adjacent padding/other object within same block if malformed Range. Again WF needed. In operational materialize r correct. If C5 adds place projections fields later, ranges may be subranges within containing block and active prefix okay.
+
+  C1 integration challenge: `State.read` returns Option Value, but operand eval cannot write local via State.write without resolving Place. Doc states resolution. Fine.
+  C6 request/response: materialize takes allocator choices as inputs (base padding) instead of oracle request. C6 can supply. good.
+  C8 padding oracle: initial padding supplied as List MByte explicit; no reselection. good.
+  C5 ownership: no lifecycle instrumentation in State, but can extend State? Exec Store := State fixed structure places/memory no ownership field. Doc "C5 supplies lifecycle ownership and permissions" but cannot add fields to State without changing C4 definition. Could wrap `State` in C5 instrumented store with extra field, but then C1 docs "instantiate Store := State" not final. C5 can define `State := { hybrid : Hybrid.State, ownership... }` and adapt. Not hard.
+  However memory has no permissions, authority premises external. intended.
+
+  No two ways:
+  - `Hybrid.Ty/Value` vs `Const.CTy/CVal` within Core definitely duplicate scalar types and validity.
+  - `Memory.intBytes` duplicates `IntTy.bits/8` and `Hybrid.sizeof` duplicates scalarSize old fragment. New `intBytes` is single in Core for stored ints, fine.
+  - `Memory.ofBits` uses Core, good. Old Rep has own ofBits but legacy fragment.
+  - `Hybrid.Rep` vs old ConcreteSpec.Rep namespace relation `RepVal` different purpose (typing) and module, explicit fragmentation. Not necessarily finding unless requested duplication.
+  - `Place` vs Ident BlockId etc separate.
+  - `Memory.Range` no other.
+
+  Perhaps `Ptr.eqAddr` duplicates DecidableEq pointer but intentionally ignores provenance. fine.
+
+  Doc comments inaccurate:
+  - Memory header line 28-29 claims at most one block each priority and no tie-break, true as argued. No onepast proof though.
+  - Proof module header line 10 "exposed reconstruction soundness and uniqueness" but only candidate_contains_unique not fromExposed result uniqueness and no onepast uniqueness. Could flag doc overclaim minor/major. Candidate uniqueness theorem for inbounds is enough to prove selection independent list order inbounds; onepast uniqueness not formalized. They claim general uniqueness. Concrete fix add `candidate_onePast_unique` and `fromExposed_unique` or narrow header. REAL DEFECT doc mismatch, minor.
+  - `alloc_failure` comment "failure constructor contains only an error: no replacement memory." theorem exactly.
+  - `materialize_projection` "sole projection" okay.
+  - typed_store_frame comment "every padding byte" only bytes outside active in same accessed block. Padding in other blocks covered by `store_other_block`, not this theorem alone. Since containing storage one block, all padding same block. fine.
+  - `Range.extent` includes padding but no active size field; cell type yields active. okay.
+  - README says C4 now covers structured/materialized places, true.
+  - Spec.lean line 59 long style nit not needed.
+
+  Potential axioms golden omitted not review.
+
+  Should find proposal perhaps `_review` deliberately external inaccessible. I can mention not available only if needed. Final response should stand alone, not dwell.
+
+  I should systematically decide findings with severity. Should avoid too many speculative preferences. User asks mark REAL DEFECT or PREFERENCE. I can list 4-7 robust findings. Verdict changes if any major. I'll identify strongest undeniable:
+  1. Missing State/materialization value preservation theorem? Not a semantic bug. Could be PREFERENCE major? PREFERENCE with major odd. Better not verdict based on missing nice theorem.
+  2. Pointer validity address range is real semantic defect.
+  3. Address space target membership missing real defect.
+  4. WF not preserved by free/store/expose is missing important proof interface real defect (composition). This is clear but could be considered incomplete rather than bug.
+  5. `Memory.WellFormed` strengthening canonical unique not preserved by Memory.modify in arbitrary but ops preserve. No lemmas.
+  6. Hybrid State has no WF connecting materialized ranges to memory, so central typed read/write theorem works for arbitrary but no invariant. Is it necessary? I can demonstrate materialize preserves Memory WF only if store WF, but theorem absent. State materialize can be used starting WF, output WF true. C5 could prove later. Proposal C4 asks "allocation freshness and well-formedness" not State WF. Avoid marking major unless explicit.
+  7. Duplication CVal and Value is real duplication against explicit review criterion. Mark minor REAL DEFECT or PREFERENCE? User specifically "no two ways to do one thing" so real defect. Concrete fix share scalar `Value/Ty` between Const and Hybrid (move CTy/CVal generic into Scalar, alias in Const) or conversion. Severity major because C1/C5 interface? Could be minor architecture. Use minor.
+  8. fromExposed uniqueness incomplete doc overclaim minor real.
+  9. Pointer theorem `decodePtr_encodePtr` does not ensure address bytes roundtrip independently of frag; open owner question says decodePtr stay drafted, cannot change decodePtr. Fix not decodePtr but add `Ptr.Valid` premise to encode/roundtrip/access, leave decodePtr exactly. Good respects open question.
+  10. Alignment pure but no theorem sizeof/alignof don't materialize is by type obvious. fine.
+
+  Potential blocker: new WF `canonical` makes `Memory.empty` etc but `alloc_wellFormed` uses hf disjoint against all entries, okay.
+  Could `alloc_wellFormed` actually not preserve canonical due new entry shadow existing with same id? fresh ensures no old id m.next via hw.fresh. fine.
+  Could `fromExposed_sound` onepast branch universal no containing over raw entries and candidate lookup canonical. good.
+  Could `candidate_contains_unique` only uses hxc/hyc and not exposed? Candidate includes live/exposed/nonempty. fine.
+  No actual logical false theorem.
+
+  Check pointer target width theorem counterexample: `decodePtr tgt (encodePtr tgt p)=some p` remains true even invalid due metadata, so theorem is not false. But encoded integer bytes decode as truncated addr. Example p=256 target 8bit ptrSize1; `decodeInt u8 (encodePtr p)=some0`, while decodePtr p=256. This violates scalar representation doc "pointer bytes its address in pointer width" could be modulo semantics? leBytes doc low octets, so intentionally truncates any Nat; but pointers should valid. Should add validity. Strong.
+
+  Zero access target membership: p.addr=256 accepted. Same root finding combine pointer validity missing in Ptr/access/encode. Fix `Ptr.Valid tgt p := p.space∈tgt.spaces ∧ p.addr<2^tgt.addrBits` and require for zero and exposure/fromexposed etc; nonzero follows block but no harm. For `fromExposed`, invalid addr returns no prov but Ptr invalid; should perhaps still no provenance. Access needs check. encodePtr should be partial or take valid proof. I can mention separate address-space allocation issue in same finding? Better separate because fixes Fits vs Ptr.
+
+  Do decided rows allow zero-byte accesses at any Nat nonnull aligned? "pointer=(prov Option BlockId, addr:u64)" with target profile generalized. Out-of-range Nat isn't a pointer, so invalid model state. Should ensure valid pointers only. Yes.
+
+  Address space allocation: `Target.spaces` says spaces target has. Memory.Fits lacking membership means target semantics accepts unknown spaces. Strong major.
+
+  WF composition: I can phrase `ConcreteSpec/Proofs/Memory.lean:190` (only alloc) plus Spec Memory free/store/expose lines. "The new invariant has no preservation laws for three of four mutators. Consequently after `State.write`/`expose`/`free`, caller cannot establish premise of `write_read`, `store_load`, etc., so C4 laws don't compose over ordinary sequences. Add modify lemmas + each operation, and materialize/expose State preservation." This is real interface defect major. Technically caller can prove manually but provided interface hard. User asks C5 hard to build. Good.
+
+  Hybrid initial materialization read law missing could be grouped with WF composition? Perhaps separate minor: central materialization theorem only says projection, not that value is preserved or WF. This means no end-to-end theorem from structured place through address-taking to read. Definition example shows bool reuse but no general theorem. Since proposal likely requires Rep join, central. Could mark major REAL DEFECT "proof contract incomplete". Concrete fix theorem:
+  ```
+  materialize_read ... (hw : st.memory.WellFormed tgt)
+   (hc : st.places p = some ⟨t,.structured v⟩) ... h :
+   st'.read tgt p = some v
+  ```
+  and `materialize_wellFormed`.
+  Would this be redundant with write_read? Materialize writes initial bytes via Memory.store then sets cell. Could prove. Important. But user didn't explicitly list materialization value law in added proofs? User says Proofs Hybrid includes materialization reuse etc, typed read. User might expect. I should include if no more than 6 findings.
+
+  State WF absence perhaps use materialize value theorem to avoid broad invariant demand. C5 can carry Memory WF if preservation added. Hybrid arbitrary ranges still operations partial. Fine.
+
+  Duplication CVal: Could recommend not reuse Const CVal directly because constants have unit and runtime scalar Value no unit. Move common scalar types to Scalar and have Const extend with unit. This is concrete.
+
+  Doc uniqueness: Add onepast uniqueness theorem. Is module header "exposed reconstruction soundness and uniqueness" can refer candidate_contains_unique only; at most one inbounds and onepast true. But only inbounds theorem means incomplete claim. Minor.
+
+  Could there be no way to prove `fromExposed` candidate uniqueness for onepast due onepast address and no containing condition? Suppose two nonempty disjoint intervals same endpoint impossible as above. yes proof. `candidate_onePast_unique` doesn't need no containing. Good.
+
+  Other minor doc mismatch: Memory header says every block satisfies maxObject? It says every block fits, align etc no maxObject claim. WellFormed fresh. good.
+
+  `Memory.alloc` Q1.9 returns rejected T? It returns only AllocError, not rejected request. Doc says "allocator's typed failure returns rejected request; this is memory's side". acceptable.
+
+  Allocation ordinary failure leaves memory unchanged; Except error has no memory but caller may choose anything. theorem trivial but spec operation pure no state output. okay.
+
+  `Memory.WellFormed` doesn't include `unique` doc top "What every memory satisfies" updated field comments enough.
+
+  `Range` lacks DecidableEq unlike Place/Cell etc. Examples use r.ptr equality only. C6 allows perhaps needs decidable equality for `allows` but can decide manually. C1 Store no DE required. no.
+
+  `State` Function place map not finite despite doc "Functions model finite place map abstractly". A function `Place→Option Cell` can be infinite (e.g. fun _=>some cell), and examples themselves use infinite maps at lines160 and182! Doc explicitly says finite place map abstractly, but representation does not enforce finiteness. Is that a defect? It says functions model finite map abstractly; actually all functions, not necessarily finite. If intended finite places, no finiteness invariant. Examples `fun _ => some` infinite contradict doc. Could flag minor doc/semantic. C5 ownership may need finite map for lifecycle, erasure, allocation freshness. Place identities fresh but no next or finite enumeration. No operation creates places so okay. But explicit doc inaccurate. Concrete fix either use AList Place Cell (project standard finite maps) or state possibly-infinite total function and add finite-domain invariant. This also addresses duplication AList guidance "Every finite map spec association list" Basics lines7-8. Hybrid uses function map while docs call finite. Strong minor/major Lean quality/no two ways. The user asks C5 hard: infinite function places complicates finite lifecycle/instrumentation and freshness. Could include as minor REAL DEFECT. But too many findings perhaps 7 okay.
+
+  Also `State.set` for function update at q=p uses if q=p; correct.
+
+  The examples with infinite place map demonstrate non-finite, so definitely doc false. Use file:98. Mark minor real.
+
+  Could `Place` "Fresh logical place identities" but no allocation fresh operation, just id structure. Doc means identity type, okay.
+
+  Potential issue `alignof` function has arbitrary layoutAlign and is tautological wrapper; no sizeof/alignof materialization theorem needed. okay.
+
+  Should review proposal unavailable means cannot compare exact C4 text beyond user summary. In response note "I reviewed against supplied C4 summary and decision rows; _review proposal not present" perhaps important transparency. But user expects proposal available perhaps hidden outside cwd? I should not respond claiming full against text if unavailable. State brief at end before verdict. However response desired findings only, can add "Scope note". This could be seen as failure to review. But no alternative.
+
+  Could use read-only `git show 80b23d59:_review/FOUNDATION_PROPOSAL.md` perhaps file not in worktree but in commit? Glob current tree commit so no. Could be parent outside working directory `_review` at scratchpad/score? User path relative perhaps tree's parent `_review`. They said owner-approved proposal `_review/FOUNDATION_PROPOSAL.md` perhaps review harness file outside tree, at `/tmp/.../score/_review` or rev-c4/_review. I'm instructed avoid `..` paths outside working directory unless explicitly instructed. User explicitly gave `_review/...` likely relative root but missing. Could search only current per tools. No need.
+
+  Perhaps REVIEW.diff itself based change excludes `_review` untracked harness. Can't access outside.
+
+  I'll update todos and perhaps additional reads for line references not needed already exact. I can do deeper manual checks perhaps no tools needed. I should ensure all findings file:line and labels.
+
+  I'll evaluate severity definitions:
+  - blocker = decides open owner question, unsound theorem, build failure. None.
+  - major = target validity, space membership, invariant composition, missing central theorem perhaps.
+  - minor = duplicate scalar types, finite map doc, uniqueness missing.
+  - nit = formatting no.
+
+  Would verdict CHANGES with 3 major 3 minor. Good.
+
+  But don't overstate address space membership if proposal may allow arbitrary AddrSpace and Target.spaces informational? Target doc "spaces: the address spaces the target has" and raw pointers name space, no silent conversion. Definitely should check. Memory.Fits alignment etc includes no space. `Target.WellFormed` only dataSpace∈spaces, not every block. Fix add `x.space ∈ tgt.spaces` to Fits and WellFormed (the latter to preserve arbitrary state validity), plus access and fromExposed valid pointers. Good.
+
+  Pointer valid target range fix: For zero access only align nonnull decided row; adding `addr < 2^addrBits` is not additional language premise if Ptr valid by construction. Better recommend make `addr` a bounded target address or define `Ptr.Valid` and thread as intrinsic state invariant rather than add access condition, to avoid violating "zero-byte only alignment nonnull". Explicitly say represent pointers so invalid addresses unconstructable, or treat validity as prerequisite not extra zero-access check. `encodePtr` partial on invalid. This respects decided rows.
+
+  Memory WF composition fix details:
+  - `modify` can change size/base etc arbitrary so generic preserve only if resulting block satisfies relevant properties and disjoint. Store modifies bytes same length under valid access; free live false; expose exposed only. Add lemmas individually.
+  - `store_wellFormed` requires WF and h.
+  - `free_wellFormed` no tgt? yes tgt param.
+  - `expose_wellFormed`.
+  - `empty_wellFormed`.
+  - Hybrid materialize output memory WF from alloc+store.
+  This makes write_read composable.
+  - Also `State.write` preserves places and memory WF. Expose etc.
+
+  Materialization read theorem needs original cell hc and valid, h. On reuse materialized old there is no structured v original. Statement specifically first materialization with hc structured. Could add:
+  ```
+  theorem materialize_read_structured ... hw hc h :
+   st'.read tgt p = some v
+  ```
+  Range returns etc.
+  This is central "structured values and raw store joined by Rep". `rep_roundtrip` connects encoding, but no theorem that State.materialize uses it successfully. Examples only bool. Strong.
+
+  Is theorem `materialize_projection` existential `t` not preserving same `c.ty`? It uses c.ty internally but existential allows caller only know some type. For idempotence enough. For clients need type unchanged and other places/memory. Could strengthen to `st'.places p = some ⟨t, ...⟩` with original t. Not a defect.
+
+  Candidate uniqueness doc: Proofs header "exposed reconstruction soundness and uniqueness" candidate_contains_unique counts uniqueness. It doesn't claim onepast specifically in proof header, Spec Memory claims at most one each priority but says `(Proofs/Memory.lean)` collectively. Missing onepast formal proof perhaps PREFERENCE rather than real. Could skip to keep findings robust.
+
+  Finite map doc real but low priority. Could include as minor.
+
+  Duplication with old Rep: I should mention old `ConcreteSpec.Rep` is explicitly old fragment and README unification A2i, so don't flag as defect. But CVal duplicate new foundation perhaps same fragment rationale? Const CVal and Hybrid Value each defined as far as theorems need, unification A2i. Yet README says foundation shared interfaces to avoid duplication. User explicitly asks no two ways. New slice should reuse CVal? C2 CVal is constants closed subset but values are general. The duplication means C1 cannot use same value type across constant eval and runtime without bridge. Real interface finding. Use minor not major.
+
+  Could propose moving `CTy/CVal` from Const to Scalar and naming `ScalarTy/ScalarVal`, then Hybrid uses them. But CTy includes unit while Hybrid materialize unit zero bytes not in slice. If Hybrid Ty includes unit, encode/decode unit not defined. Better factor common `ScalarVal` without unit and Const CVal extends `.scalar` plus unit. That's larger refactor. Alternatively Hybrid use `CTy/CVal` but restrict materialize/read/write to nonunit? Current functions pattern would need unit case fail; sizeof unit could 0 but out of scope zero-sized values? Q3.8 zero-sized slots perhaps C4 scalar slice excludes unit? Better define shared scalar in Scalar with only int/bool and Const maps CTy.int/bool to shared. Concrete enough.
+
+  Check user says no tests new etc irrelevant no modifications.
+
+  Should perhaps not run any build, so response note "Static review only; no build run under read-only constraint." Good transparency but user didn't ask tests. Lean code already commit presumably compiles. I can say no compile issues assessed.
+
+  I'll perhaps use tools to read proposal alternate in docs archive? Search "owner-approved proposal" or "C4 (" across all including changelog no. Already no. Done.
+
+  Could check line numbers final sources stable. yes.
+
+  I'll formulate each:
+
+  1. **major — REAL DEFECT** `ConcreteSpec/Spec/Memory.lean:63` (Ptr.addr) / `:169` zero access / `:278` encode. Pointer address not bounded by tgt. On 8-bit wellformed target, `Ptr addr=256` zero load returns [] at align1 null0; encodePtr stores 0 but decodePtr returns 256 via fragment. So model accepts non-address and pointer byte roundtrip doesn't reflect numeric bytes. Fix bounded pointer validity and premises; keep decodePtr unchanged. This is excellent concrete counterexample. Should check target 8bit ptrSize1 ptrAlign1 lenBits8 maxObject e.g.127, null0 WF. yes. zero load p prov none n0 a1 -> access if 256%1=0 and256≠0 -> some[], load some[]. Good.
+  2. **major — REAL DEFECT** `Memory.Fits:140` lacks `x.space∈tgt.spaces`. Alloc allows arbitrary `space=⟨99⟩` on linuxX8664. Example empty.alloc linuxX8664 ⟨99⟩ 4096 1 1 returns ok. `Target.spaces=[0]`; contradicts profile. Fix Fits and WF and materialize inherits. Good.
+  3. **major — REAL DEFECT** `Proofs/Memory.lean:190` and mutators lines159,192,204. WF preservation only alloc, no store/free/expose. C4 proofs require WF so after one state transition can't use next without re-proving. Fix add.
+  4. **major? — REAL DEFECT** `Proofs/Hybrid.lean:95` materialize_projection only; no first materialization read theorem. Is absence a "defect" or preference? Could mark **minor REAL DEFECT** "contract's central law not actually proved" because docs module claim only representation roundtrip etc not explicit. But C4 proposal expected structured/raw joined. `write_read` + rep_roundtrip does not prove initial materialization value. A regression in `State.materialize` encoding wrong value could still all current theorems? Let's see if materialize encoded wrong v but type valid, materialize_projection and idempotent unaffected, write_read after subsequent writes unaffected, examples would catch bool perhaps if wrong bool? examples materialize then write false before typed read, so initial true never read. Reuse example loads bytes expected catches bool initial true only. For int wrong encoding no example. So central property untested for generic. Good finding. Severity major due missing semantic law. Concrete fix theorem plus example integer. Mark REAL DEFECT because theorem suite doesn't establish claimed Rep join for materialization.
+  5. **minor — REAL DEFECT** `Hybrid.State` finite map doc false, infinite examples. Fix AList or doc/invariant. C5 lifecycle finite.
+  6. **minor — REAL DEFECT** `Hybrid.Ty/Value` duplicates `Const.CTy/CVal`. Fix factor. Could call PREFERENCE because architectural sharing is preference, but explicit no two ways makes real. Use REAL DEFECT.
+  7. **minor — REAL DEFECT** onepast uniqueness missing. Do I need? Could overwhelm. Perhaps include 6 enough. Also no doc inaccurate fromExposed uniqueness. If I include 7, okay.
+
+  What about State WF range consistency? This is more important than finite map. I could add finding:
+  - `Hybrid.State` no invariant ensures `Range.extent` corresponds to block or active prefix within extent. Arbitrary materialized cell can point into another place, but operations from valid structured state preserve. C5 ownership can't rely on place projection. Should `State.WellFormed tgt` with memory WF, each materialized range valid (`r.ptr.prov=some b`, block live? live might change C5), `r.extent≤block.size`, `r.ptr.addr+extent≤base+size`, align, cell range. And uniqueness/nonoverlap for distinct places unless shared intentionally. However ownership C5 may decide aliases, so requiring distinct ranges now could decide language question. Avoid. A weaker range validity is obviously needed but can be deferred. Not in proposal summary explicit WellFormed hybrid. Don't flag.
+
+  Could `State.expose` on already materialized storage with different input reuses good.
+  - C8 padding oracle supplied once. good.
+
+  One-past uniqueness proof absence is not severe and likely intentional "candidate uniqueness" singular contains. Skip.
+
+  No findings on open owner question decodePtr. My pointer fix must explicitly leave decodePtr drafted. Good.
+
+  No design questions decided by code besides arbitrary align etc. Address space checks align decided target. No side on pointer read bytes. Good.
+
+  I should say no blocker found, no open owner question decided. Verdict changes due majors. Last line exact.
+
+  Perhaps note proposal missing in response. This is material limitation. Could say "Scope note: `_review/FOUNDATION_PROPOSAL.md` is absent from this tree; I used the supplied C4 requirements, decision rows, and module documentation. Review was static/read-only." This could reduce confidence but honest. Last line after.
+
+  Before response, update todos done. I have enough. But should I inspect git status? User forbids write git only, read allowed, but no modifications and no builds so no need. Instructions say after tests builds check new files; none run. Fine.
+
+  I need ensure todo "Read C4 proposal" marked done though missing; response scope note clarifies. I can now update all done.
+
+• The main issues are semantic rather than proof-kernel issues: invalid target addresses and unknown address spaces are representable as valid operations, and the new well-formedness invariant is not carried through the ordinary memory mutators. The hybrid proofs also omit the general law that first materialization preserves the structured value.
+
+• Now respond concise but detailed 6 findings. Should file:line severity problem concrete fix labels. Use numbered list with bold. Mention no blockers. Ensure exact response line VERDICT: CHANGES. No markdown table heavy. Could include 6. Let's scrutinize finding 4 whether classify major. I can say major REAL DEFECT "C4's materialization law is missing" but a missing theorem not implementation error; review asks theorems meaningful, deliverable laws. Valid.
+
+  Finding 6 duplication perhaps older `CTy/CVal` has unit so "same int/bool types, typing validity duplicated" exact.
+  Finding 5 finite map docs: examples at160/182 infinite; state map not finite. Good.
+
+  Could include fromExposed uniqueness as seventh minor perhaps user explicitly candidate uniqueness. Let's decide. The implementation has candidate_contains_unique inbounds only. Spec doc at27-29 claims at most one each priority. It is mathematically true but proof suite only establishes inbounds. The review criterion "theorems meaningful" not all docs proved. Module header says exposed reconstruction soundness and uniqueness, could be satisfied partially? "candidate uniqueness" user specifically singular perhaps expects theorem exactly candidate_contains_unique. No need.
+
+  Any issue with no network etc satisfied.
+
+  Response structure:
+  "Found no blocker and no attempt to settle open pointer-decode question. Changes needed:"
+  1 ...
+  Use `ConcreteSpec/Spec/Memory.lean:63`, etc.
+
+  Finding 1 combine two line refs perhaps file:line required singular first then additional. Counterexample exact. Fix don't alter decodePtr.
+  Finding 2 allocation unknown space.
+  Finding 3 preservation.
+  Finding 4 materialization law.
+  Finding 5 finite map.
+  Finding 6 duplicate.
+
+  Scope note and verdict. Could severity for 5/6 minor REAL DEFECT.
+  No PREFERENCE findings okay user says marking each either. All real.
+
+  Should state no build run due read-only. Static review no compile. Proposal missing perhaps user may see as excuse. Phrase at end "Verification note: ...". User requested review not build; okay.
+
+  Perhaps don't claim "no attempt to settle open question" because adding pointer validity finding not code. Implementation decodePtr unchanged indeed. "I found no blocker and no new pointer-decode rule." Fine.
+
+  I'll produce.
+
+• No blockers found, and `decodePtr` remains unchanged. The following issues need changes.
+
+  1. **Major — REAL DEFECT — `ConcreteSpec/Spec/Memory.lean:63`, `ConcreteSpec/Spec/Memory.lean:169`, `ConcreteSpec/Spec/Memory.lean:278`**  
+     `Ptr.addr` is an unrestricted `Nat`, so operations accept addresses outside the target’s address width. On a well-formed 8-bit target, address `256` passes a zero-byte load with alignment 1 and null 0. Similarly, `encodePtr` truncates `256` to byte `0`, while `decodePtr` reconstructs `256` from the fragment metadata. Thus the pointer round trip does not establish that the encoded address denotes the pointer’s address.  
+     **Fix:** introduce target-relative pointer validity (`addr < 2 ^ tgt.addrBits`, together with address-space validity), or make valid pointers intrinsic to the representation. Thread it through zero-byte accesses and pointer encoding/round-trip premises without changing `decodePtr`.
+
+  2. **Major — REAL DEFECT — `ConcreteSpec/Spec/Memory.lean:140`**  
+     `Memory.Fits` never checks `x.space ∈ tgt.spaces`. Consequently, `linuxX8664` permits allocation in arbitrary undeclared spaces such as `⟨99⟩`, despite `Target.spaces` defining the spaces the target has. Hybrid materialization inherits this behavior.  
+     **Fix:** require the candidate block’s space to belong to `tgt.spaces` in `Fits`, and include the corresponding condition in `Memory.WellFormed` so manually constructed memories cannot bypass it.
+
+  3. **Major — REAL DEFECT — `ConcreteSpec/Proofs/Memory.lean:190`**  
+     Well-formedness preservation is proved only for allocation. There are no corresponding laws for `free` (`Spec/Memory.lean:159`), `store` (`Spec/Memory.lean:192`), or `expose` (`Spec/Memory.lean:204`). Since central theorems such as `store_load` and `Hybrid.write_read` require well-formedness, clients cannot compose the supplied laws across ordinary operation sequences without rebuilding these proofs themselves.  
+     **Fix:** add `empty_wellFormed`, `store_wellFormed`, `free_wellFormed`, and `expose_wellFormed`, then derive preservation for hybrid writes, materialization, and exposure.
+
+  4. **Major — REAL DEFECT — `ConcreteSpec/Proofs/Hybrid.lean:95`**  
+     The general first-materialization law is missing. `materialize_projection` proves only that the cell becomes materialized; neither it nor `rep_roundtrip` proves that reading immediately after materializing a structured value returns that same value. The examples do not cover this generically: the main example overwrites the initial boolean before reading it. A defect in initial integer encoding could therefore escape the principal hybrid laws.  
+     **Fix:** prove, under initial memory well-formedness and a structured-cell hypothesis, that successful first materialization gives `st'.read tgt p = some v`; add a direct integer materialize/read example.
+
+  5. **Minor — REAL DEFECT — `ConcreteSpec/Spec/Hybrid.lean:98`**  
+     The documentation calls `places` a finite map, but `Place → Option Cell` also represents infinite maps. The examples at lines 160 and 182 use `fun _ => some …`, which are explicitly infinite. This weakens the interface for C5 lifecycle operations that may need finite domains or iteration.  
+     **Fix:** use the repository’s `AList Place Cell`, or document the map as potentially infinite and state any finite-domain invariant separately.
+
+  6. **Minor — REAL DEFECT — `ConcreteSpec/Spec/Hybrid.lean:28`**  
+     `Hybrid.Ty`, `Value`, `Value.ty`, and `Value.Valid` duplicate the integer/bool portion of `Const.CTy`, `CVal`, `CVal.ty`, and `CVal.Valid` at `ConcreteSpec/Spec/Const.lean:59-81`. This creates two scalar-value interfaces that C1, constant evaluation, and ownership instrumentation must bridge.  
+     **Fix:** factor the shared scalar type/value definitions into `Scalar.lean`; let the constant-only universe extend them with `unit`, and have Hybrid use the shared definitions.
+
+  Verification note: this was a static, read-only review. `_review/FOUNDATION_PROPOSAL.md` is absent from the supplied tree, so the comparison used the supplied C4 requirements, decision rows, and repository documentation.
+
+  VERDICT: CHANGES
+
+To resume this session: kimi -r session_ce4c7275-d960-40db-b65d-a8f9738e2015
+rc=0

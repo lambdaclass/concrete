@@ -1,0 +1,29 @@
+### Round-2 Fix Verification
+
+The Round-2 defect is genuinely fixed:
+1. **`ReportedQueries` (`ConcreteSpec/Spec/Adequacy.lean:147-177`)** is now parameterized by `(P : Program O) (ρ : QueryOracle O)` and indexed over `Conclusion P ρ ending pos`.
+2. **Authenticated terminal queries**: The request-stopping constructors (`stuckContinuation`, `noAnswer`, `badAnswer`) require `hs : step P c = some (.request p vs site st k)` together with the corresponding oracle/allowance/continuation equations (`ha`, `hallow`, `hk`), and append `Query.issue events p vs site st issued` rather than an unconstrained `{q}`. Because `step P c` is deterministic, `p`, `vs`, `site`, and `st`—and therefore the appended `Query.issue`—are uniquely determined by `c`, `events`, and `issued`.
+3. **Disjoint stuck histories**: `ReportedQueries.stuck` requires `hs : step P c = none` (appending nothing), whereas `ReportedQueries.stuckContinuation` requires `hs : step P c = some (.request ...)` (appending the issued query). Because `step P c` cannot be both `none` and `some (.request ...)`, machine-stuck and continuation-refused `.stuck c` endings cannot swap query histories even if `Conclusion` is proof-irrelevant.
+4. **`runFromQ_sound` (`ConcreteSpec/Proofs/Adequacy.lean:242-322`)** now returns `∃ n pos, Moves P ρ n ⟨c, events, issued⟩ pos ∧ (runFromQ P ρ fuel events issued c).events = pos.events ∧ ∃ hc : Conclusion P ρ (runFromQ P ρ fuel events issued c).ending pos, ReportedQueries P ρ hc (runFromQ P ρ fuel events issued c).queries`.
+
+---
+
+### Vacuity Audit of Laws in the Delta
+
+| Law / Specification | Location | Verdict | Non-trivial Instance (Witness) | Planted Counter-Example |
+| :--- | :--- | :--- | :--- | :--- |
+| `ReportedQueries` (`.noAnswer` branch) | `ConcreteSpec/Spec/Adequacy.lean:163-167` | **NON-VACUOUS** | `ConcreteSpec/Proofs/Adequacy.lean:901-905`: `terminalConfig` under `noAnswerOracle` steps to a `log 1` request and satisfies `ReportedQueries ... [terminalQuery]`. | `ConcreteSpec/Proofs/Adequacy.lean:908-913`: replacing `terminalQuery` with `fabricatedTerminalQuery` (`occurrence := 1` instead of `0`) is refuted (`¬ ∃ hc, ReportedQueries ... [fabricatedTerminalQuery]`). |
+| `ReportedQueries` (`.badAnswer` branch) | `ConcreteSpec/Spec/Adequacy.lean:168-173` | **NON-VACUOUS** | `ConcreteSpec/Proofs/Adequacy.lean:919-923`: `terminalConfig` under `badAnswerOracle` (wrong event `some 5` for `log 1`) satisfies `ReportedQueries ... [terminalQuery]`. | `ConcreteSpec/Proofs/Adequacy.lean:926-931`: `[fabricatedTerminalQuery]` is refuted for `.badAnswer terminalConfig`. |
+| `ReportedQueries` (`.stuck` machine-stuck branch) | `ConcreteSpec/Spec/Adequacy.lean:152-155` | **NON-VACUOUS** | `ConcreteSpec/Proofs/Adequacy.lean:937-941`: `terminalStuckConfig` (`trapped .abort s`, where `step = none`) satisfies `ReportedQueries ... []`. | `ConcreteSpec/Proofs/Adequacy.lean:944-947`: attaching `[terminalQuery]` to `terminalStuckConfig` is refuted (`¬ ∃ hc, ReportedQueries ... [terminalQuery]`). |
+| `ReportedQueries` (`.stuckContinuation` branch) | `ConcreteSpec/Spec/Adequacy.lean:156-162` | **NON-VACUOUS** | `ConcreteSpec/Proofs/Adequacy.lean:969-975`: `refusingBindConfig` under `refusingBindOps` and `refusingBindOracle` issues `refusingBindQuery`, fails continuation binding (`k a = none`), and satisfies `ReportedQueries ... [refusingBindQuery]`. | `ConcreteSpec/Proofs/Adequacy.lean:979-984`: omitting the query (`[]`) for `refusingBindConfig` is refuted (`¬ ∃ hc, ReportedQueries ... []`). |
+| `ReportedQueries` (`.final` and `.outOfFuel` branches) | `ConcreteSpec/Spec/Adequacy.lean:150-151, 174-177` | **NON-VACUOUS** | Instantiated in `runFromQ_sound` (`ConcreteSpec/Proofs/Adequacy.lean:252-263, 267-272`) on `c.final? = some f` and `c.final? = none` with `pos.queries = issued`. | Any list `qs ≠ issued` fails unification with `pos.queries` / `issued` when `hc` is inverted. |
+| `runFromQ_sound` | `ConcreteSpec/Proofs/Adequacy.lean:242-322` | **NON-VACUOUS** | `ConcreteSpec/Proofs/Adequacy.lean:897-898` + `901-905`: concrete execution `runFromQ prog noAnswerOracle 1 [] [] terminalConfig = ⟨[], [terminalQuery], .noAnswer terminalConfig⟩` paired with the conclusion-indexed `ReportedQueries` witness; inductive step (`316-322`) chains `Move.stepRequest` / `Move.stepNext` over multi-step runs. | `ConcreteSpec/Proofs/Adequacy.lean:908-913, 926-931, 944-947, 979-984`: a report whose `.queries` field is mutated to `fabricatedTerminalQuery`, or that drops/adds a query on `.stuck`, cannot satisfy the conclusion of `runFromQ_sound`. |
+
+---
+
+### Findings
+
+None.
+
+VERDICT: ACCEPT
+rc=0

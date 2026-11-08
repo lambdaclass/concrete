@@ -1,0 +1,36 @@
+1. **`ConcreteSpec/Spec/Adequacy.lean:40-43` — [major] [REAL DEFECT]**
+   - **Problem:** `Query` records `occurrence : Nat`, but `answer (ρ : Oracle O) (q : Query O)` immediately projects `q` back to `ρ q.events q.prim q.args q.site q.store`, discarding `q.occurrence`. Because `runFromQ`, `Move`, `Moves`, `Conclusion`, `InfiniteExecution`, and `FuelLimit` are parameterized only by C1's `Oracle O`, no oracle in this module can ever inspect `q.occurrence`. This breaks the C4 integration story when a repeatable request emits no external event (`a.event = none`) and does not alter `events` (e.g., silent padding/representation queries at the same site across loop iterations), and leaves the C8 requirement that oracle answers be a pure function of the full `Query` (including per-site occurrence number) unfulfilled in the formal definitions.
+   - **Concrete fix:** Without editing `Exec.lean`, define `def QueryOracle (O : Operands) : Type := Query O → Option (Answer O.Val O.Event O.Store)` and a coercion `def Oracle.toQueryOracle (ρ : Oracle O) : QueryOracle O := fun q => ρ q.events q.prim q.args q.site q.store`. Parameterize `runFromQ`, `Move`, `Moves`, `Conclusion`, `InfiniteExecution`, and `FuelLimit` by `QueryOracle O` (so query-level oracles for C4/C6 can depend on `q.occurrence`), and specialize to `ρ.toQueryOracle` in `runFromQ_toReport`, `runFrom_sound`, and `runFrom_complete`.
+
+2. **`ConcreteSpec/Spec/Adequacy.lean:169-182` and `ConcreteSpec/Proofs/Adequacy.lean:644-658` — [major] [REAL DEFECT]**
+   - **Problem:**
+     1. The doc comment on `TerminationEvidence` (lines 170–171) states that *"entry succeeds and the fixed fuel budget reports a final outcome"*, whereas `terminates` takes `AList.lookup P.fns function = some fn` and `enter fn args st = some c` as *hypotheses*. If `function` is absent from `P.fns` or `enter fn args st = none` (e.g., arity mismatch or refused `.enter` lifecycle transition), `terminates` holds vacuously.
+     2. `dependencies : List FnId` is an unconstrained dead field disconnected from `Premises` and `terminates`.
+     3. `TerminationEvidence.all_allowed_runs` (`Proofs/Adequacy.lean:644-649`) is a verbatim restatement of the structure projection `E.terminates`.
+   - **Concrete fix:** Have `TerminationEvidence` either bundle/prove `∃ fn, AList.lookup P.fns function = some fn` and make entry part of the conclusion (`∀ premises ρ args st, admits premises ρ args st → ∃ c f, enter fn args st = some c ∧ (run P ρ (fuel premises ρ args st) c).ending = .final f`), or explicitly align the doc comment if valid entry is intended as a precondition (`admits` implies `enter` succeeds). Tie `dependencies` to callee lookup/evidence (or document why it is syntactic metadata at this stage), and strengthen `all_allowed_runs` so it proves fuel-monotonicity above the witness budget (`∀ m, E.fuel premises ρ args st ≤ m → ...`) rather than duplicating `E.terminates`.
+
+3. **`ConcreteSpec/Proofs/Adequacy.lean:320-343` — [minor] [REAL DEFECT]**
+   - **Problem:** `runFromQ_complete` and `runFrom_complete` prove completeness only for the *exact* step count `n` of `Moves P ρ n pos pos'`, whereas C8 specifies completeness for *"enough fuel"* (any budget `m ≥ n`). In addition, `runFrom_complete` leaves `pos.queries` as a free implicit input inside `pos` even though `runFrom` always starts from `issued = []`.
+   - **Concrete fix:** Add (or generalize `runFrom_complete` to) the `n ≤ m` statement combining `runFrom_complete` and `runFrom_mono`:
+     ```lean
+     theorem runFrom_complete_le {n m : Nat} (hle : n ≤ m) {pos pos' : Position O}
+         (h : Moves P ρ n pos pos') {f : Final O.Val} (hf : pos'.config.final? = some f) :
+         runFrom P ρ m pos.events pos.config = ⟨pos'.events, .final f⟩
+     ```
+
+4. **`ConcreteSpec/Proofs/Adequacy.lean:232-236` — [minor] [REAL DEFECT]**
+   - **Problem:** In `runFromQ_sound`, the query-history clause `(∃ later, (runFromQ P ρ fuel events issued c).queries = pos.queries ++ later)` does not bind `pos.queries` to the actual queries issued by the path—even `pos = ⟨c, events, issued⟩` with `n = 0` satisfies that clause by `runFromQ_queries_from`. This happens because `Conclusion.noAnswer`, `Conclusion.badAnswer`, and `Conclusion.stuckContinuation` stop before appending the final query `q` that `runFromQ` records.
+   - **Concrete fix:** Either record the terminal query in `Conclusion` (e.g., `Conclusion` relates the pre-step `pos` to the exact reported `queries`), or strengthen `runFromQ_sound` so `later` is `[]` for `final`/`stuck`/`outOfFuel` and `[Query.issue pos.events p vs site st pos.queries]` for request-stopping endings.
+
+5. **`ConcreteSpec/Proofs/Adequacy.lean:571-595` and `611-641` — [minor] [REAL DEFECT]**
+   - **Problem:**
+     1. `infinite_iff_fuelLimit` only proves `Nonempty (InfiniteExecution P ρ c) ↔ Nonempty (FuelLimit P ρ c)`, even though `toFuelLimit` and `toInfiniteExecution` are strict mutual inverses (`X.toFuelLimit.toInfiniteExecution = X` and `L.toInfiniteExecution.toFuelLimit = L` hold by `rfl`).
+     2. `finite_not_infinite_events` proves `FiniteEvents X → InfiniteEvents X → False` for a single `X`, but there is no theorem that `SilentDivergence P ρ c` and `InfiniteInteraction P ρ c` are mutually exclusive for a configuration `c` (which follows from determinism/uniqueness of `InfiniteExecution P ρ c`).
+     3. `not_infinite_of_final` is proved for `.final f`, but the companion theorem `not_infinite_of_noAnswer` showing that an `EndlesslyBlocked` (`noAnswer`) run cannot have an `InfiniteExecution` is omitted.
+   - **Concrete fix:** Add the two round-trip lemmas `toFuelLimit_toInfiniteExecution` and `toInfiniteExecution_toFuelLimit`, prove uniqueness of `InfiniteExecution P ρ c` (via `FuelLimit`), deduce `SilentDivergence P ρ c → InfiniteInteraction P ρ c → False`, and add `not_infinite_of_noAnswer` (or `not_infinite_of_not_outOfFuel`).
+
+6. **`ConcreteSpec/Proofs/Adequacy.lean:670-677` — [nit] [PREFERENCE]**
+   - **Problem:** The `Demo` section gives an `outOfFuel` run that succeeds with more fuel (`finishingConfig`) and an `outOfFuel` run that silently diverges (`spinConfig`), but does not include an `outOfFuel` run that fails/traps with one more unit of fuel to illustrate both sides of "neither divergence nor failure (examples both ways)".
+   - **Concrete fix:** Add a 1-line `example` configuration that reports `outOfFuel` at budget `0` and traps/fails at budget `1`.
+
+VERDICT: CHANGES

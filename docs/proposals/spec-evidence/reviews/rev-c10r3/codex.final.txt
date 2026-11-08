@@ -1,0 +1,30 @@
+The kept-result and metadata fixes are real. The C1 boundary fix needs revision. This was a static review only; I did not modify files, build, run gates, or access the network.
+
+Findings:
+
+- **ConcreteSpec/Spec/Frame.lean:143 — major — REAL DEFECT.** `C1Call` now requires an explicit `.exiting (.ret result)` boundary, excluding valid Unit functions that fall through. `Exec.step` explicitly supports `.done` on a `.ret` frame, returning `O.unitVal` (Exec.lean:403). Such calls consequently escape contracts quantified over `C1Call`. **Fix:** admit both explicit-return and Unit-fallthrough boundaries, each followed by its actual final pop. Add an accepted fallthrough example and a rejected incomplete-call example.
+
+- **ConcreteSpec/Proofs/Frame.lean:360 — major — REAL DEFECT.** `c1Call_restores_caller` remains vacuous under the binding rule: its proof merely extracts `exit.locals` and `exit.frames` equalities already required by `C1Call`. Furthermore, its conclusion does not connect the existential caller or continuation to `entry`; any exit satisfies it by choosing `dst = none`, `caller = exit.locals`, and `k = exit.frames`. The planted leftover-frame example tests `C1Call`, not this theorem. **Fix:** tie the conclusion to the entry’s saved caller and continuation, remove the restoration equalities from `C1Call`, and derive them from the final `Exec.step` witness.
+
+Vacuity audit follows. Witnesses below are source examples or concrete static counterchecks; I did not execute them.
+
+| Law affected by the delta | Verdict and witness / planted counterexample |
+|---|---|
+| `blockOutside_union` | **Non-vacuous structural implication.** Block 0 is outside `byte(0) ∪ block(1)`. Planting block 0 in either metadata component makes the outside premise false; membership cannot disappear in the union. |
+| `blockOutside_block` | **Non-vacuous exclusion lemma.** Block 1 is outside `block(0)`; block 0 is not. The distinct-block case supplies a satisfiable premise. |
+| `preserves_seq` | **Non-vacuous.** The actual nonempty store composed with identity preserves the unwritten byte and written-block metadata. The planted liveness mutation fails the union’s preservation relation. Metadata composition now uses metadata preservation directly. |
+| `store_frame` | **Non-vacuous; fixed.** The two-byte allocated block accepts a one-byte store. Changing that same block’s liveness fails preservation; the written-block metadata case no longer disappears by contradiction. |
+| `rawWrite_frame` | **Non-vacuous; fixed through `store_frame`.** The same concrete store succeeds through `rawWrite`; the planted liveness mutation fails. |
+| `free_frame` | **Non-vacuous under the revised footprint.** Free a live block containing bytes: its metadata may change, but its bytes remain framed. Planting a byte change violates preservation. |
+| `expose_frame` | **Non-vacuous under the revised footprint.** Expose a live, unexposed block: its metadata permission allows exposure, while every byte remains framed. Planting a byte change fails. |
+| `alloc_frame` | **Non-vacuous under the revised footprint.** Allocate alongside an existing block. The existing block’s bytes and metadata remain obligations; planting an old-block liveness change fails. |
+| `set_frame` | **Non-vacuous under the revised footprint.** Change structured place `p` while retaining another place `q` and a memory block. Changing `q` or block metadata violates the frame. |
+| `write_structured_frame` | **Non-vacuous under the revised footprint.** A successful structured write changes its selected cell; a planted change to another cell fails preservation. |
+| `write_materialized_frame` | **Non-vacuous under the revised footprint.** A successful materialized write uses the underlying store footprint; planting written-block metadata damage fails preservation. |
+| `C1Call` completion condition | **Satisfiable but incomplete.** The explicit return of 7 is accepted and a leftover return frame is rejected. Valid Unit fallthrough is also rejected: finding above. |
+| `c1Call_restores_caller` | **Vacuous.** Its conclusion holds for arbitrary exits, including the planted leftover-frame exit: finding above. |
+| `KeptPair.WellFormed` | **Non-vacuous; fixed.** Pair `(0,1,7)` accepts owned/receipt/receipt/owned descriptors. Either `.ffi .int` result is rejected, as are receipt 8 and identical extern identities. |
+
+The new examples establish meaningful positive and negative cases for the metadata and kept-result changes. They do not repair the restoration theorem’s vacuity.
+
+VERDICT: CHANGES

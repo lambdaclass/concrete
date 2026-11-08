@@ -1,0 +1,114 @@
+### 1. Review of Merge Commit `b15f99e3` (Conflict Resolution)
+
+The conflict resolution in `b15f99e3` between C5 round 1 (`b5fff070`) and the integrated spec core (`07c16bb5`, which brought in C1 partial lifecycle, C4, and C6) is **clean and accurate**:
+- **`ConcreteSpec/README.md`**: Properly combines C5's summary (`Own`, `Grant`) with `07c16bb5`'s completion of C6 (`C6–C10 remain` $\to$ `C7–C10 remain`, and removes `the split of a request from its response (C6)` from the remaining C1 obligations). Retains `07c16bb5`'s note on partial lifecycle instrumentation refusing events (`Option.none`).
+- **`ConcreteSpec/Spec.lean`**: Properly merges the module list in `ConcreteSpec.Core` to include `Own` (C5), `Observe` (C6), and `Grant` (C5).
+
+---
+
+### 2. Boundary & Round-1 Findings Verification
+
+All round-1 findings have been properly addressed and **no undecided design choices were encoded**:
+1. **`validate` removal**: `Generative.validate` and `Own.validate` (and `validate_iff` / `validate_wf`) are completely removed. All preservation theorems now take `hs : WellFormed s` (or `CallState.WellFormed s`) and prove preservation structurally from the transition's operational guards, paired with corresponding `*_progress` theorems.
+2. **Trace erasure & C1 counterexample**: `Generative.Command`, `Generative.run`, `Generative.runErased`, and `Generative.run_erasure` provide multi-step trace erasure for generative allocator streams. In `ConcreteSpec/Spec/Own.lean`, `erasedMoveRun` provides a machine-checked counterexample demonstrating that an instrumented C1 run gets `.stuck` on a use-after-move while the erased run returns `.final (.returned 7)`.
+3. **Upward reborrow / activation targets**: Left unencoded with an explicit `PENDING (round-two boundary)` comment on `reborrowAt` (only the `activation < s.nextActivation` issued-supply bound is checked).
+4. **`CallState.pending` invariant**: `CallState.WellFormed` is defined and proven preserved across `passDown` (`passDown_call_preserves`) and `callLife` (`callLife_call_preserves`), with `passDown` rejecting duplicate parameter names and `callLife` rejecting non-`enter` events while `pending` is non-empty.
+5. **Owner-to-callee passing**: Left unencoded with an explicit `PENDING (round-two boundary)` comment above `callLife`.
+6. **Zero-size sentinel**: `Hybrid.sizeof .unit = 0` removed from the linear token example in `ConcreteSpec/Spec/Own.lean:445`.
+7. **Dependency-place `Nodup`**: `(s.dependencies.map Dependency.place).Nodup` added to `Generative.WellFormed`.
+
+---
+
+### 3. Assessment of Writer's Open Questions
+
+1. **Activation targets (`reborrowAt`: restrict to current activation + new callee?)**
+   - **Assessment**: **Restrict `reborrow` to the current activation (`s.frames.head?`), and remove arbitrary activation targeting from the public primitive API.**
+   - **Reasoning**: Under `passDown` + `adoptDown` (OD23), downward call arguments are reborrowed in the *caller's* activation during left-to-right argument evaluation (`reborrow` at `f.id` with `pendingArgument := true`) and then *adopted* into the new callee activation on `enter` (`adoptDown` rewrites `activation := f.id`). Nothing in the C1/OD23 call protocol needs to specify a target `activation : Nat` at reborrow time except the standalone legacy helper `enterDown`. Therefore, `reborrowAt` should either be made `private` (an internal helper for `reborrow` and `enterDown`) or restricted so that loans can only be created in `s.frames.head?` and moved to a newly pushed callee frame by `adoptDown`. Allowing arbitrary `activation < s.nextActivation` permits targeting already-popped (historical) frame IDs or outer caller frames (upward reborrowing, violating Q3.2).
+
+2. **Direct owner arguments (call-duration root loan vs. explicit caller borrow scope)**
+   - **Assessment**: **Introduce a call-duration root loan (`passOwnerDown` or allowing `pendingArgument := true` on root loans created for call arguments).**
+   - **Reasoning**: In surface Concrete, passing `&x` or `&mut x` directly to a function `f(&mut x)` is the most common way to lend an owner across a call, and the freeze of `x` must last only for the call (starting when the argument is evaluated left-to-right per OD23, and ending when `f` returns). If the caller had to open a normal lexical `borrow` first and then `passDown` a child loan, the caller's root loan would outlive the call until an explicit `endLoan` in the caller. Allowing a call-argument root borrow (which sets `pendingArgument := true` with `parent := none`, is adopted into `f.id` by `adoptDown`, and is automatically ended by `endLocals f.id` inside `leave`) cleanly models `f(&x)` / `f(&mut x)` using the exact same `adoptDown` + `leave` machinery without requiring synthetic post-call cleanup statements in C1. (Note: if root loans can be pending arguments, `WellFormed`'s clause `l.pendingArgument = true → l.parent.isSome = true` simply drops or becomes `l.parent = none ∨ l.parent.isSome`).
+
+3. **C1 erasure form (successful-step simulation with stuck equivalence conditional on checker safety)**
+   - **Assessment**: **Endorse the two-part formulation: (a) unconditional forward simulation for non-stuck instrumented runs, and (b) full outcome equivalence conditional on checker safety (or no-permission-refusal).**
+   - **Reasoning**: As `erasedMoveRun` in `ConcreteSpec/Spec/Own.lean:534-547` proves, ownership and brand instrumentation acts as a dynamic permission monitor that turns unsafe operations (use-after-move, conflicting borrows, escaping brands) into `.stuck`. Erased execution does not track permissions and continues executing. Therefore:
+     - **Part A (Soundness of Erasure / Forward Simulation)**: For any C1 execution where the instrumented run terminates in `.final o` (returned, trapped, etc.) or takes a valid step, the erased run takes the exact same step and produces the exact same `.final o` and observable trace. This can and should be proved in C1/C5 integration without waiting for C9.
+     - **Part B (Completeness / Stuck Equivalence)**: If a program is accepted by the C9 type/borrow checker (which guarantees the instrumentation never refuses a step on reachable states), then the instrumented run never gets `.stuck` on permission checks, so instrumented and erased runs have identical outcomes (including `.stuck` if and only if the underlying concrete semantics gets stuck).
+
+---
+
+### 4. Vacuity Audit of Every Law in the Diff
+
+Every law modified or added in `b15f99e3..efddc1c5` is audited below. None use a post-hoc `validate` check, none restate their definitions, and every law has both a non-trivial positive witness and a planted counterexample in the diff.
+
+#### `ConcreteSpec/Proofs/Grant.lean` (`ConcreteSpec.Core.Generative`)
+
+| Law | Verdict | Positive Witness & Planted Counterexample |
+| :--- | :--- | :--- |
+| `fresh_preserves` (L35) | **Non-vacuous** | *Positive*: `PreservationWitnesses` L250 (`fresh {} ⟨0⟩ = some initial ∧ WellFormed initial`). *Counterexample*: L262 (`¬ WellFormed { initial with nextBrand := 0 }`). |
+| `fresh_progress` (L40) | **Non-vacuous** | *Positive*: L274 (`(fresh initial ⟨1⟩).isSome = true`). *Counterexample*: L280 (`¬ (initial.nextBrand = ({} : State).nextBrand)`). |
+| `depend_preserves` (L43) | **Non-vacuous** | *Positive*: L251 (`depend { initial with dependencies := [phantom] } heap = some dependent ∧ WellFormed dependent`). *Counterexample*: L265 (`¬ WellFormed { dependent with dependencies := heap :: dependent.dependencies }`). |
+| `consume_preserves` (L63) | **Non-vacuous** | *Positive*: L253 (`WellFormed dependent ∧ (consume dependent ⟨0⟩).isSome = true`). *Counterexample*: L267 (`¬ WellFormed { dependent with binders := [] }`). |
+| `release_preserves` (L74) | **Non-vacuous** | *Positive*: L255 (`release initial ⟨0⟩ = some released ∧ WellFormed released`). *Counterexample*: L269 (`¬ WellFormed { released with dependencies := [heap] }`). |
+| `reset_preserves` (L107) | **Non-vacuous** | *Positive*: L257 (`reset initial ⟨0⟩ = some resetOnce ∧ WellFormed resetOnce`). *Counterexample*: L263 (`¬ WellFormed { resetOnce with nextBrand := 1 }`). |
+| `endScope_preserves` (L144) | **Non-vacuous** | *Positive*: L259 (`WellFormed released ∧ (endScope released ⟨0⟩).isSome = true`). *Counterexample*: L271 (`¬ WellFormed { dependent with binders := [], dependencies := [phantom] }`). |
+| `depend_progress` (L172) | **Non-vacuous** | *Positive*: L275 (`(depend initial heap).isSome = true`). *Counterexample*: L275 (`depend dependent heap = none`). |
+| `consume_progress` (L186) | **Non-vacuous** | *Positive*: L276 (`(consume dependent ⟨0⟩).isSome = true`). *Counterexample*: L276 (`consume initial ⟨0⟩ = none`). |
+| `release_progress` (L193) | **Non-vacuous** | *Positive*: L277 (`(release initial ⟨0⟩).isSome = true`). *Counterexample*: L277 (`release dependent ⟨0⟩ = none`). |
+| `reset_progress` (L208) | **Non-vacuous** | *Positive*: L257 (`reset initial ⟨0⟩ = some resetOnce`). *Counterexample*: `RunWitnesses` L380 (`run [resetCommand ⟨0⟩] (7, dependent) = none`). |
+| `endScope_progress` (L220) | **Non-vacuous** | *Positive*: L278 (`(endScope released ⟨0⟩).isSome = true`). *Counterexample*: L278 (`endScope initial ⟨0⟩ = none`). |
+| `fresh_generation` (L303) | **Non-vacuous** | *Positive*: L250 (`fresh {} ⟨0⟩ = some initial`). *Counterexample*: L280 (`¬ (initial.nextBrand = ({} : State).nextBrand)`). |
+| `reset_generation` (L309) | **Non-vacuous** | *Positive*: L257 (`reset initial ⟨0⟩ = some resetOnce`). *Counterexample*: L263 (`¬ WellFormed { resetOnce with nextBrand := 1 }`). |
+| `endScope_non_escape` (L319) | **Non-vacuous** | *Positive*: L287 (`endScope departing ⟨0⟩ = some departed ∧ outside ∈ departed.dependencies ∧ ⟨0⟩ ∉ outside.brands`). *Counterexample*: L290 (`¬ (⟨0⟩ ∉ ({ outside with brands := [⟨0⟩] }).brands)`). |
+| `run_erasure` (L353) | **Non-vacuous** | *Positive*: `RunWitnesses` L375 (`run commands (7, initial) = some ([7, 8], (9, finalState)) ∧ runErased commands 7 = some ([7, 8], 9)`). *Counterexamples*: L378 (dropping first command fails `runErased`), L380 (one-way refusal witness). |
+
+#### `ConcreteSpec/Proofs/Own.lean` (`ConcreteSpec.Core.Own`)
+
+| Law | Verdict | Positive Witness & Planted Counterexample |
+| :--- | :--- | :--- |
+| `move_preserves` (L22) | **Non-vacuous** | *Positive*: `PrimitiveWitnesses` L291 (`(move initial ⟨0⟩).isSome = true ∧ WellFormed ...`). *Counterexample*: L300 (`¬ WellFormed` when moving root under live shared loan). |
+| `reinitialize_preserves` (L51) | **Non-vacuous** | *Positive*: `LifecycleWitnesses` L550 (`WellFormed moved ∧ reinitialize moved ⟨0⟩ = some initial`). *Counterexample*: L565 (`¬ WellFormed { shared with slots := [] }`). |
+| `borrow_preserves` (L145) | **Non-vacuous** | *Positive*: `PrimitiveWitnesses` L293 (`(borrow shared ⟨0⟩ [] .shared).isSome = true ∧ WellFormed ...`). *Counterexample*: L304 (`¬ WellFormed { shared with nextLoan := 0 }`). |
+| `reborrowAt_preserves` (L163) | **Non-vacuous** | *Positive*: L295 (`(reborrowAt exclusive ⟨0⟩ [] .mutable 0).isSome = true ∧ WellFormed child`). *Counterexample*: L305 (`¬ WellFormed` when parent loan `⟨0⟩` is removed). |
+| `reborrow_preserves` (L201) | **Non-vacuous** | *Positive*: `Spec/Own.lean` L428 (`reborrow s ⟨0⟩ [.field 0] .mutable`). *Counterexample*: L310 (`¬ (reborrow shared ⟨0⟩ [] .mutable).isSome = true`). |
+| `endLoan_preserves` (L207) | **Non-vacuous** | *Positive*: `LifecycleWitnesses` L551 (`(endLoan child ⟨1⟩).isSome = true ∧ WellFormed ...`). *Counterexample*: L571 (`¬ WellFormed` if parent `⟨0⟩` is ended before child `⟨1⟩`). |
+| `accessOwner_preserves` (L234) | **Non-vacuous** | *Positive*: `PrimitiveWitnesses` L297 (`accessOwner shared ⟨0⟩ .shared = some shared ∧ WellFormed shared`). *Counterexample*: L300 (`¬ WellFormed` on mutated slot status). |
+| `accessLoan_preserves` (L241) | **Non-vacuous** | *Positive*: L298 (`accessLoan child ⟨1⟩ .mutable = some child ∧ WellFormed child`). *Counterexample*: L302 (`¬ WellFormed { child with slots := [] }`). |
+| `move_progress` (L250) | **Non-vacuous** | *Positive*: L291 (`(move initial ⟨0⟩).isSome = true`). *Counterexample*: L307 (`¬ (move shared ⟨0⟩).isSome = true`). |
+| `borrow_progress` (L261) | **Non-vacuous** | *Positive*: L293 (`(borrow shared ⟨0⟩ [] .shared).isSome = true`). *Counterexample*: L308 (`¬ (borrow exclusive ⟨0⟩ [] .shared).isSome = true`). |
+| `reborrowAt_progress` (L267) | **Non-vacuous** | *Positive*: L295 (`(reborrowAt exclusive ⟨0⟩ [] .mutable 0).isSome = true`). *Counterexample*: L309 (`¬ (reborrowAt shared ⟨0⟩ [] .mutable 0).isSome = true`). |
+| `reborrow_progress` (L273) | **Non-vacuous** | *Positive*: `CallWitnesses` L908 (`passDown` uses `reborrow`). *Counterexample*: L310 (`¬ (reborrow shared ⟨0⟩ [] .mutable).isSome = true`). |
+| `accessOwner_progress` (L280) | **Non-vacuous** | *Positive*: L297 (`accessOwner shared ⟨0⟩ .shared = some shared`). *Counterexample*: L311 (`¬ (accessOwner shared ⟨0⟩ .mutable).isSome = true`). |
+| `accessLoan_progress` (L284) | **Non-vacuous** | *Positive*: L298 (`accessLoan child ⟨1⟩ .mutable = some child`). *Counterexample*: L312 (`¬ (accessLoan child ⟨0⟩ .mutable).isSome = true`). |
+| `bind_preserves` (L315) | **Non-vacuous** | *Positive*: `LifecycleWitnesses` L553 (`(bind types y shared).isSome = true ∧ WellFormed ...`). *Counterexample*: L567 (`¬ WellFormed` with duplicate slot places). |
+| `drop_preserves` (L343) | **Non-vacuous** | *Positive*: L555 (`(drop [x] moved).isSome = true ∧ WellFormed ...`). *Counterexample*: L565 (`¬ WellFormed { shared with slots := [] }`). |
+| `enter_preserves` (L361) | **Non-vacuous** | *Positive*: L557 (`WellFormed entered ∧ (enter types [y] shared).isSome = true`). *Counterexample*: L568 (`¬ WellFormed` with unissued activation). |
+| `endLocals_preserves` (L374) | **Non-vacuous** | *Positive*: L558 (`WellFormed called ∧ (endLocals 1 called).isSome = true ∧ WellFormed ...`). *Counterexample*: L571 (`¬ WellFormed` removing parent before child). |
+| `leave_preserves` (L378) | **Non-vacuous** | *Positive*: L560 (`(leave called).isSome = true ∧ WellFormed ...`). *Counterexample*: L565 (`¬ WellFormed` when borrowed root is dropped). |
+| `enterDown_preserves` (L389) | **Non-vacuous** | *Positive*: L548/L558 (`called := (enterDown exclusive [(y, ⟨0⟩)]).getD initial`, `WellFormed called`). *Counterexample*: L568 (`¬ WellFormed` with unissued loan activation). |
+| `life_preserves` (L401) | **Non-vacuous** | *Positive*: L561 (`life types (.bind y) shared = bind types y shared`) + all 4 constructors above. *Counterexample*: L565–L571. |
+| `reinitialize_progress` (L409) | **Non-vacuous** | *Positive*: L550 (`reinitialize moved ⟨0⟩ = some initial`). *Counterexample*: L573 (`¬ (reinitialize initial ⟨0⟩).isSome = true`). |
+| `endLoan_progress` (L425) | **Non-vacuous** | *Positive*: L551 (`(endLoan child ⟨1⟩).isSome = true`). *Counterexample*: L574 (`¬ (endLoan child ⟨0⟩).isSome = true`). |
+| `bind_fresh_progress` (L435) | **Non-vacuous** | *Positive*: L553 (`(bind types y shared).isSome = true`). *Counterexample*: L575 (`¬ (bind (fun _ => none) y shared).isSome = true`). |
+| `enter_progress` (L466) | **Non-vacuous** | *Positive*: L557 (`(enter types [y] shared).isSome = true`). *Counterexample*: L575 (untyped parameter refuses `bind`). |
+| `drop_progress` (L475) | **Non-vacuous** | *Positive*: L555 (`(drop [x] moved).isSome = true`). *Counterexample*: L576 (`¬ (drop [x] initial).isSome = true`). |
+| `adoptDown_preserves` (L613) | **Non-vacuous** | *Positive*: `CallWitnesses` L911–912 (`callLife types (.enter [y]) waiting`). *Counterexample*: L568 (`¬ WellFormed` with unissued activation). |
+| `passDown_preserves` (L636) | **Non-vacuous** | *Positive*: L908 (`WellFormed waiting.own`). *Counterexample*: L305 (`¬ WellFormed` if parent loan missing). |
+| `passDown_call_preserves` (L677) | **Non-vacuous** | *Positive*: L908 (`CallState.WellFormed ⟨exclusive, []⟩ ∧ CallState.WellFormed waiting`). *Counterexamples*: L909 (`passDown waiting ⟨0⟩ y = none`), L914–915 (`¬ CallState.WellFormed` on duplicate pending or missing loan). |
+| `callLife_preserves` (L739) | **Non-vacuous** | *Positive*: L911–912 (`(callLife types (.enter [y]) waiting).isSome = true`). *Counterexample*: L910 (`callLife types .leave waiting = none`). |
+| `callLife_call_preserves` (L859) | **Non-vacuous** | *Positive*: L912 (`CallState.WellFormed ((callLife types (.enter [y]) waiting).getD waiting)`). *Counterexamples*: L910 (`callLife types .leave waiting = none`), L917 (`¬ CallState.WellFormed { waiting with own := initial }`). |
+| `borrow_birth` (L1002) | **Non-vacuous** | *Positive*: L293 (`borrow shared ⟨0⟩ [] .shared`). *Counterexample*: L304 (`nextLoan := 0` fails freshness). |
+| `reborrow_birth` (L1014) | **Non-vacuous** | *Positive*: L295 (`reborrowAt exclusive ⟨0⟩ [] .mutable 0`). *Counterexample*: L305 (missing parent loan). |
+| `endLoan_supply` (L1034) | **Non-vacuous** | *Positive*: `Spec/Own.lean` L437 (`endLoan` followed by `borrow` yields `[⟨1⟩]`, not `⟨0⟩`). *Counterexample*: `⟨1⟩ ≠ ⟨0⟩`. |
+| `leave_no_local_loan` (L1067) | **Non-vacuous** | *Positive*: L560 (`leave called` succeeds and retains caller's root loan `⟨0⟩` while ending callee loan `⟨1⟩`). *Counterexample*: `Spec/Own.lean` L419 (`drop [x] shared = none` when local `x` still has a live loan). |
+| `adoptDown_only_arguments` (L1096) | **Non-vacuous** | *Positive*: L911 (`callLife types (.enter [y]) waiting`). *Counterexample*: `Spec/Own.lean` L472 (`adoptDown` refuses non-pending loan `⟨0⟩`). |
+| `leave_no_activation_slot` (L1110) | **Non-vacuous** | *Positive*: L560 (`leave called`). *Counterexample*: `Spec/Own.lean` L416 (`drop [x] initial = none` refuses unconsumed local slot). |
+
+---
+
+### 5. Findings
+
+No blocker, major, minor, or nit defects found.
+
+VERDICT: ACCEPT
+rc=0

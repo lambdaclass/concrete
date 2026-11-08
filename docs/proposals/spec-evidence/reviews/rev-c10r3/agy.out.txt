@@ -1,0 +1,65 @@
+### Verification of Round-2 Fixes
+
+1. **`KeptPair.WellFormed` result types (`ConcreteSpec/Spec/Frame.lean:356-361`) — REAL FIX**:
+   `KeptPair.WellFormed` now explicitly requires `submitResult = .receipt pair.handle` and `completeResult = .owned pair.handle` alongside the `ExternResult.Valid` predicates. Ordinary `.ffi` return types (e.g., `.ffi .int`) are now rejected for both submission and completion, with positive and negative examples added at `ConcreteSpec/Spec/Frame.lean:450-465`.
+
+2. **Separate byte and block-metadata footprints (`ConcreteSpec/Spec/Frame.lean:65-93`, `ConcreteSpec/Proofs/Frame.lean:83-161`) — REAL FIX**:
+   `Footprint` now separates `bytes : List ByteRange` and `blocks : List MemBlockId`. `Footprint.byte` leaves `blocks := []`, and `Footprint.BlockOutside` checks `b ∉ f.blocks`. The old `byteOutside_of_blockOutside` helper is removed. In `store_frame`, the `c = b` branch of block metadata preservation is no longer discharged by contradiction on `BlockOutside`; instead, it proves `simp [blockMetadata, block_modify, hx]` directly on the written block. Positive and negative examples (`metadataStoreBefore` / `metadataStoreAfter` / `metadataStoreBadAfter`) verify that nonempty byte stores preserve the written block's metadata and reject a liveness mutation on the written block.
+
+3. **`C1Call` explicit return boundary (`ConcreteSpec/Spec/Frame.lean:127-142`, `ConcreteSpec/Proofs/Frame.lean:360-415`) — REAL FIX**:
+   `C1Call` now witnesses `stReturn` and `callee` at the explicit boundary configuration `⟨.exiting (.ret result), callee, stReturn, .ret dst caller :: k⟩` via `Exec.Steps`, followed by the final single step `Exec.step P ⟨.exiting (.ret result), callee, stReturn, .ret dst caller :: k⟩ = some (.next exit)`. Wait/intermediate configurations with matching `ctrl = .done` cannot spoof completion without popping this call's `.ret` frame.
+
+---
+
+### Law-by-Law Vacuity Audit
+
+1. **`blockOutside_union`** (`ConcreteSpec/Proofs/Frame.lean:34-38`)
+   - **Verdict**: Non-vacuous.
+   - **Non-trivial instance**: `Footprint.union (.byte ⟨⟨0⟩, 4, 4⟩) (.block ⟨1⟩)` has `BlockOutside ⟨0⟩` (`ConcreteSpec/Spec/Frame.lean:172-174`), so `⟨0⟩` is outside both components.
+   - **Planted counter-example**: `Footprint.union (.block ⟨0⟩) .empty` fails `BlockOutside ⟨0⟩` (`ConcreteSpec/Spec/Frame.lean:178-179`).
+
+2. **`blockOutside_block`** (`ConcreteSpec/Proofs/Frame.lean:49-52`)
+   - **Verdict**: Non-vacuous.
+   - **Non-trivial instance**: `(Footprint.block ⟨0⟩).BlockOutside ⟨1⟩` holds (`ConcreteSpec/Spec/Frame.lean:173`), yielding `⟨1⟩ ≠ ⟨0⟩`.
+   - **Planted counter-example**: `(Footprint.block ⟨0⟩).BlockOutside ⟨0⟩` is refuted (`ConcreteSpec/Spec/Frame.lean:178`).
+
+3. **`preserves_seq`** (`ConcreteSpec/Proofs/Frame.lean:55-80`)
+   - **Verdict**: Non-vacuous. (Note: block existence across the intermediate state `st'` is now derived directly from `hm₁ := h₁.2.1 b x hx hf` without requiring byte 0 to be outside `f`.)
+   - **Non-trivial instance**: `preserves_seq (preserves_refl _) hs` on `metadataStoreBefore` -> `metadataStoreAfter` (`ConcreteSpec/Proofs/Frame.lean:142-149`).
+   - **Planted counter-example**: `metadataStoreBefore` -> `metadataStoreBadAfter` under `Footprint.union .empty (.byte ⟨⟨0⟩, 0, 1⟩)` fails because block `⟨0⟩`'s `live` metadata flips (`ConcreteSpec/Proofs/Frame.lean:153-161`).
+
+4. **`store_frame`** (`ConcreteSpec/Proofs/Frame.lean:83-118`)
+   - **Verdict**: Non-vacuous. Both `c = b` (written block metadata) and `c ≠ b` (other block metadata) are constructively proved without vacuous contradiction.
+   - **Non-trivial instance**: 1-byte store to `metadataStorePtr` in `metadataStoreBefore` producing `metadataStoreAfter` with footprint `.byte ⟨⟨0⟩, 0, 1⟩` (`ConcreteSpec/Proofs/Frame.lean:142-149`).
+   - **Planted counter-example**: `metadataStoreBadAfter` (which mutates `live := false` on block `⟨0⟩` during the byte store) is rejected (`ConcreteSpec/Proofs/Frame.lean:153-161`).
+
+5. **`rawWrite_frame`** (`ConcreteSpec/Proofs/Frame.lean:295-311`)
+   - **Verdict**: Non-vacuous.
+   - **Non-trivial instance**: `rawWrite_frame` on `metadataStoreBefore` -> `metadataStoreAfter` with `.byte ⟨⟨0⟩, 0, 1⟩` (`ConcreteSpec/Proofs/Frame.lean:302-304`).
+   - **Planted counter-example**: `metadataStoreBefore` -> `metadataStoreBadAfter` is rejected (`ConcreteSpec/Proofs/Frame.lean:307-311`).
+
+6. **`c1Call_restores_caller`** (`ConcreteSpec/Proofs/Frame.lean:359-365`) and **`C1Call`** (`ConcreteSpec/Spec/Frame.lean:127-142`)
+   - **Verdict**: **VACUOUS / REDUNDANT HYPOTHESIS (REAL DEFECT — Minor)** on `exit.ctrl = .done ∧ exit.locals = Exec.bindDst dst result caller ∧ exit.frames = k`.
+   - **Analysis**: `C1Call` now includes the explicit final step hypothesis `hr : Exec.step P ⟨.exiting (.ret result), callee, stReturn, .ret dst caller :: k⟩ = some (.next exit)`. By the definition of `Exec.step` on `.exiting (.ret result)` with frame `.ret dst caller :: k`, `exit` is uniquely determined (once `O.life (.leave callee) stReturn` succeeds) to have `exit.ctrl = .done`, `exit.locals = Exec.bindDst dst result caller`, and `exit.frames = k`. However, `C1Call` still keeps `hxc : exit.ctrl = .done`, `hxl : exit.locals = Exec.bindDst dst result caller`, and `hxf : exit.frames = k` as explicit conjuncts in the definition of `C1Call`, and `c1Call_restores_caller` simply projects `⟨dst, result, caller, k, hxl, hxf⟩` without ever using `hr`! Under the owner's binding vacuity rule ("a theorem that restates its definition"), `c1Call_restores_caller` is currently a direct projection of the conjuncts `hxl` and `hxf` baked into `C1Call`, rather than deriving them from the final `Exec.step` transition `hr`.
+   - **Non-trivial instance**: `c1Entry` calling `c1FnId` ("seven") stepping to `c1Boundary` and then `c1Exit` (`ConcreteSpec/Proofs/Frame.lean:398-405`).
+   - **Planted counter-example**: `⟨.done, [], (), [.ret none []]⟩` (unpopped `.ret` frame) is rejected (`ConcreteSpec/Proofs/Frame.lean:408-415`).
+
+7. **`KeptPair.WellFormed`** (`ConcreteSpec/Spec/Frame.lean:356-361`)
+   - **Verdict**: Non-vacuous (though `ExternResult.Valid pair pair.submit submitResult` and `ExternResult.Valid pair pair.complete completeResult` are now implied by `submitResult = .receipt pair.handle` and `completeResult = .owned pair.handle`).
+   - **Non-trivial instance**: `(⟨0, 1, 7⟩ : KeptPair Nat Nat).WellFormed ⟨.owned 7, .kept⟩ (.receipt 7) (.receipt 7) (.owned 7)` (`ConcreteSpec/Spec/Frame.lean:451-453`).
+   - **Planted counter-example**: `.ffi .int` for `submitResult` or `completeResult` (`ConcreteSpec/Spec/Frame.lean:457-465`), mismatched receipt handle `8` (`ConcreteSpec/Spec/Frame.lean:468-473`).
+
+---
+
+### Findings
+
+1. **`ConcreteSpec/Spec/Frame.lean:138-142` and `ConcreteSpec/Proofs/Frame.lean:359-365` — [major] [REAL DEFECT]**
+   - **Problem**: `C1Call` retains the redundant conjuncts `exit.ctrl = .done ∧ exit.locals = Exec.bindDst dst result caller ∧ exit.frames = k` alongside `Exec.step P ⟨.exiting (.ret result), callee, stReturn, .ret dst caller :: k⟩ = some (.next exit)`, and `c1Call_restores_caller` merely projects `hxl` and `hxf` directly out of `C1Call` without inspecting the final step `hr`. This violates the vacuity rule ("a theorem that restates its definition").
+   - **Concrete fix**: Remove `exit.ctrl = .done ∧ exit.locals = Exec.bindDst dst result caller ∧ exit.frames = k` from `C1Call` in `ConcreteSpec/Spec/Frame.lean:138`, so the final configuration `exit` is constrained solely by `Exec.step P ⟨.exiting (.ret result), callee, stReturn, .ret dst caller :: k⟩ = some (.next exit)`. Then in `c1Call_restores_caller` (`ConcreteSpec/Proofs/Frame.lean:359-365`), unfold `Exec.step` in `hr` (case-splitting on `O.life (.leave callee) stReturn`) to genuinely derive `exit.ctrl = .done`, `exit.locals = Exec.bindDst dst result caller`, and `exit.frames = k` from the operational semantics of the return step.
+
+2. **`ConcreteSpec/Spec/Frame.lean:359-361` — [nit] [PREFERENCE]**
+   - **Problem**: In `KeptPair.WellFormed`, once `submitResult = .receipt pair.handle` and `completeResult = .owned pair.handle` are asserted, the conjuncts `ExternResult.Valid pair pair.submit submitResult` and `ExternResult.Valid pair pair.complete completeResult` hold by `⟨rfl, rfl⟩` after substitution.
+   - **Concrete fix**: Either drop the two redundant `ExternResult.Valid` conjuncts from `KeptPair.WellFormed` and prove a small lemma that `KeptPair.WellFormed` implies `ExternResult.Valid` for both endpoints, or keep as-is if intentional for self-documenting structure.
+
+VERDICT: CHANGES
+rc=0

@@ -1,0 +1,8 @@
+review: round 1, piece 1 of 1 (scripts, 55396 bytes)
+review: round 1 verdict findings (1 piece(s)); raw output: .review/e02e177fceaed889021bf6b8895870960f79f367-1.md
+[piece 1 of 1: scripts]
+- ConcreteSpec/Spec/Leak.lean:286: `LineageReport.Sound` checks a function’s requested-byte bound against `exit.requested`, which includes allocations before function entry. For example, a function allocating nothing after an entry account with 100 requested bytes cannot establish a zero-byte bound. Compare against `exit.requested - entry.requested` to measure the function’s requests.
+pre-push: review-notes push — no source tree, no gates
+review: notes push attempt 1 rejected; fetching and merging
+pre-push: review-notes push — no source tree, no gates
+rc=1

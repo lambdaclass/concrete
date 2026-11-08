@@ -1,0 +1,9 @@
+No defects found.
+
+- **Call-site propagation & stuck outcome (`ConcreteSpec/Spec/Exec.lean`):** Every `O.life` call site (`bind`, `assign`, `call`, `enter`, normal/exiting `scope` and `test` frame drops via `dropOut`, explicit/falling-off `ret` via `.leave` and `bindLife`, and `prim` result binding) returns `Option` and propagates `none` without repair or silent fallback. Refusal produces `step P c = none` (or `k a = none` in `Out.request`), which `Step` and `runFrom` treat as the existing `.stuck c` outcome rather than a trap or a new ending.
+- **Primitive-result binding (`ConcreteSpec/Spec/Exec.lean:309-312, 385-387, 432-433, 611-614`):** Making the request continuation `Answer O.Val O.Event O.Store → Option (Config O)` exposes binding refusal on `.ok v` while leaving `.error kd` traps and the `Answer` type unchanged.
+- **Proofs & premises (`ConcreteSpec/Proofs/Exec.lean`):** Existing laws add only the local `O.life` / `bindLife` / `dropOut` / continuation-success hypotheses needed for the steps they take (`steps_request`, `step_return_caller`, `exit_scope_runs_defers`, `done_scope_runs_defers`, `return_reaches_caller`, `Cleans`, `RunsEach`, `step_deterministic`). None assume totality of `O.life` or become vacuous, and the new refusal theorems cover all call-site families (`bind_refused`, `assign_refused`, `enter_refused`, `call_refused`, `scope_drop_refused`, `exit_drop_refused`, `test_drop_refused`, `return_refused`, `prim_bind_refused`, `continuation_refused`, `no_step_of_none`).
+- **Examples, docs & scope (`ConcreteSpec/Spec/Exec.lean:754-783`, `ConcreteSpec/README.md:89-91`):** Existing `Demo` examples are preserved via `start` (proven equal to `enter`), `refusingOps` demonstrates stuckness on a refused drop without deciding any C5 ownership rules, and the README and docstrings match the implementation.
+
+VERDICT: ACCEPT
+rc=0

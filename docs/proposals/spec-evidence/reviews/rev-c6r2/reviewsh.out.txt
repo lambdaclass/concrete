@@ -1,0 +1,6 @@
+review: round 2, piece 1 of 1 (scripts, 45378 bytes)
+review: round 2 verdict findings (1 piece(s)); raw output: .review/58b705c77e25b470df49788abf3e41ec22adf625-2.md
+[piece 1 of 1: scripts]
+- ConcreteSpec/Spec/Observe.lean:195: `SilentInsertion` has no constructor that consumes a silent step from `before`. Consequently, even `SilentInsertion [.silent] [.silent]` is impossible, and the replacement `silent_internal_steps` theorem cannot cover executions that already contain silent steps. Add a constructor retaining existing silent steps so the relation supports the arbitrary finite insertion its documentation promises.
+pre-push: review-notes push — no source tree, no gates
+rc=1

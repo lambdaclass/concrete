@@ -1,0 +1,30 @@
+The continuation fix matches C1: `k a = none` leaves the history unchanged and reports stuckness; only `some c'` extends the history. No operational law gains an extra restriction. However, the binding vacuity rule is not fully satisfied.
+
+Findings:
+
+- **ConcreteSpec/Proofs/Observe2.lean:518 — major, REAL DEFECT (vacuity).** `report_noAnswer_mayBlock` merely specializes the definition of its `BlockingPermitted` hypothesis: the proof is `permitted rfl pending typed`. The new positive example at line 708 reduces its conclusion to `True`; the negative example changes that definition to `False`. These examples do not establish an independent behavioral property. **Concrete fix:** retain the required statement, but add a substantive companion law deriving permission from a reachable evaluator run and independently specified environment policy, with a planted oracle that blocks a forbidden request and fails well-formedness. Identify this existing theorem as a projection lemma rather than independent validation.
+
+- **ConcreteSpec/Spec/Observe.lean:446 — major, REAL DEFECT (vacuity).** `refusedReportPermitted` holds exclusively because its `noAnswer` antecedent cannot hold. The proof explicitly eliminates that impossible antecedent. This is legitimate bookkeeping for calling `reportObservation`, but it fails the owner’s stated criterion if counted as a law. **Concrete fix:** make the substantive refusal law expose the actual request, allowed answer, failed continuation, exact `.stuck refusedRequest` ending, and unchanged history together. Keep the vacuous permission evidence as local bookkeeping, and add a paired successful-continuation example that records the event.
+
+- **ConcreteSpec/Proofs/Observe2.lean:530 — major, REAL DEFECT under the binding definition-restatement rule.** `report_noAnswer_blocked` unfolds exactly the corresponding branch of `reportObservation`; `blockedObservation` at line 720 and its repeated example inherit that limitation. Comparing the result with an unrelated terminal constructor demonstrates constructor discrimination, not independent correctness of the adapter projection. **Concrete fix:** preserve this required computation lemma and supplement it with a reachable-run observation law using a nonempty prior history. Plant a dropped/reordered-history or wrong-pending-request result and prove it fails.
+
+Vacuity audit of the changed and newly introduced named laws:
+
+| Law | Verdict and witness |
+|---|---|
+| `runFrom_validTrace` | **Non-vacuous.** Successful doubling produces request `3`, response `6`; `[request 3, response 7]` is rejected. The new refusal branch preserves the existing valid prefix without recording the answer. |
+| `runFrom_noAnswer_pending_valid` | **Non-vacuous overall.** A reachable blocked request supplies a pending trace. Forbidding blocking falsifies its conjunction. Its permission component inherits the contract assumption. |
+| `runFrom_blockingPermitted` | **Non-vacuous.** `blockedReport` actually reaches `noAnswer`; the same report fails `BlockingPermitted` under `forbiddingContract`. |
+| `report_noAnswer_mayBlock` | **Vacuous by definition restatement.** See first finding; the supplied positive instance additionally reduces to `True`. |
+| `report_noAnswer_blocked` | **Definition-restatement failure under the binding rule.** See third finding. |
+| `answeringWellFormed` | **Non-vacuous overall.** Its answered branch constructs matching, contract-valid events for every primitive. Changing the projected response to `2*p+1` falsifies that obligation. Internal and blocked branches are intentionally unreachable. |
+| `blockingWellFormed` | **Degenerate policy witness.** Answer branches are unreachable; the remaining permission is `True`. A forbidding policy makes the same oracle fail. This supports the reachable blocking examples, but supplies no independent policy validation. |
+| `blockedPermitted` | **Non-vacuous concrete instance.** Reachable pending request; changing to the forbidding contract falsifies the conclusion, as demonstrated. |
+| `blockedObservation` | **Inherits the definition-restatement issue** of `report_noAnswer_blocked`. |
+| `refusedReportPermitted` | **Vacuous through an impossible antecedent.** See second finding. |
+
+The new unnamed refusal example is substantive for its empty history and stuck classification. Its “no observation” component follows the defined stuck branch. A successful counterpart would distinguish lifecycle refusal from an adapter that suppresses observations. The remaining unnamed examples repeat the positive and negative witnesses summarized above; the bare `mayBlock` examples are respectively definitionally `True` and negations of `False`.
+
+C6’s observation types, environment relation, trap rendering, and silent-step preservation are untouched by `REVIEW.diff`. I could not independently compare against commit `738500fb`: this snapshot has no Git repository metadata. No build, gate, network access, or file modification was performed; Lean elaboration remains for coordinator CI.
+
+VERDICT: CHANGES

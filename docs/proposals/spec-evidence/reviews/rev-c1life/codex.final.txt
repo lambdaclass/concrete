@@ -1,0 +1,9 @@
+No findings.
+
+All lifecycle call sites propagate refusal through `Option`; none is silently ignored or repaired. Primitive binding refusal blocks the response transition and reports the existing `.stuck` outcome without adding an answer kind or recording the refused response’s event.
+
+The added premises require only the lifecycle successes needed by each law. Cleanup relations retain their meaning, with concrete examples demonstrating successful cleanup and refused execution. I found no newly decided language question.
+
+Review was static and read-only; no builds, gates, network access, or writes were performed. Lean elaboration remains for coordinator CI.
+
+VERDICT: ACCEPT

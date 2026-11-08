@@ -1,0 +1,37 @@
+A2i integration merge of accepted C8 (adequacy, 6c24007e; accepted round 3 by Codex + agy, all seven gates) into the integrated spec core 07c16bb5 (C1/C2, C4, C1 partial lifecycle, C6). Merge a8f7a2995 (written by Kimi), golden regenerated at e115d8be. REVIEW.diff is 07c16bb5..e115d8be, i.e. all of C8 as it lands. C8's content is already accepted: review the INTEGRATION: (1) the conflict resolution below (remerge diff: import lists only); (2) that C8's definitions and laws mean the same over the integrated core as on its own branch (Exec.lean is byte-identical between the two; check C8 against C6's observation layer and C4 for duplicated or contradictory notions, e.g. two report/trace notions that should be one); (3) vacuity of any law whose meaning could change through integration. Remerge diff:
+diff --git a/ConcreteSpec.lean b/ConcreteSpec.lean
+remerge CONFLICT (content): Merge conflict in ConcreteSpec.lean
+index 6a25321fc..5148e7540 100644
+--- a/ConcreteSpec.lean
++++ b/ConcreteSpec.lean
+@@ -6,12 +6,8 @@ import ConcreteSpec.Proofs.Authority
+ import ConcreteSpec.Proofs.Observe
+ import ConcreteSpec.Proofs.Slice0
+ import ConcreteSpec.Proofs.Exec
+-<<<<<<< 07c16bb5f (axioms.golden: A2i integration of C1 partial lifecycle, C4 and C6 (regenerated on concrete-ci-2))
+ import ConcreteSpec.Proofs.Observe2
+-||||||| d8f89ea75
+-=======
+ import ConcreteSpec.Proofs.Adequacy
+->>>>>>> 6c24007ef (axioms.golden: C8 round 3 (regenerated on concrete-ci-2))
+ import ConcreteSpec.Proofs.Scalar
+ import ConcreteSpec.Proofs.Const
+ 
+diff --git a/ConcreteSpec/Spec.lean b/ConcreteSpec/Spec.lean
+remerge CONFLICT (content): Merge conflict in ConcreteSpec/Spec.lean
+index aa9991c7e..0e26da582 100644
+--- a/ConcreteSpec/Spec.lean
++++ b/ConcreteSpec/Spec.lean
+@@ -16,12 +16,8 @@ import ConcreteSpec.Spec.Observation
+ import ConcreteSpec.Spec.Target
+ import ConcreteSpec.Spec.Outcome
+ import ConcreteSpec.Spec.Exec
+-<<<<<<< 07c16bb5f (axioms.golden: A2i integration of C1 partial lifecycle, C4 and C6 (regenerated on concrete-ci-2))
+ import ConcreteSpec.Spec.Observe
+-||||||| d8f89ea75
+-=======
+ import ConcreteSpec.Spec.Adequacy
+->>>>>>> 6c24007ef (axioms.golden: C8 round 3 (regenerated on concrete-ci-2))
+ import ConcreteSpec.Spec.Scalar
+ import ConcreteSpec.Spec.Const
+ import ConcreteSpec.Spec.Memory

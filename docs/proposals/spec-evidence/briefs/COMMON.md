@@ -1,0 +1,17 @@
+## Hard rules (all apply)
+- Lean 4.34.1, core only (no Mathlib); warningAsError and autoImplicit off; namespace ConcreteSpec.Core (sub-namespace allowed). Lean IS the spec: readable Lean, doc comments, examples ("Accepted"/"Refused" examples where a rule is registered), no generated prose.
+- No `sorry`, no new axioms, no `decide +native`, no `native_decide`; every theorem must use only propext / Quot.sound / Classical.choice (scripts/proofs/axioms.sh checks this).
+- Do NOT edit docs/decisions.md or ROADMAP.md. Do NOT decide any language question the decided rows do not answer: if you hit one, stop that part, leave it out (or leave the existing draft behaviour, documented as pending), and list it under "QUESTIONS" in your final message with the options you see.
+- Do not edit ConcreteSpec/Spec/Exec.lean, Scalar.lean, Const.lean, Outcome.lean except where the brief says; they are reviewed and accepted.
+- Only work in this clone (the current directory), on branch shown by `git branch --show-current`. Commit each piece as soon as `nix develop -c lake build ConcreteSpec` passes (run it with `timeout 1200`). Do NOT push; do NOT run git commands that rewrite history; never --no-verify.
+- Light local checks you may run: `nix develop -c timeout 1200 lake build ConcreteSpec`, `nix develop -c timeout 600 bash scripts/spec/rules.sh`, `nix develop -c timeout 900 bash scripts/proofs/trust_ban.sh`. Do NOT run axioms.sh, kernel_replay.sh, external.sh or checks/run.sh (heavy; the reviewer runs them on a CI server). Every new module must be imported from ConcreteSpec/Spec.lean (spec) or ConcreteSpec.lean (proofs), or trust_ban fails.
+- Final message: list of commits (SHA + one line), what each theorem states, what is left out and why, QUESTIONS.
+
+## Vacuity rule (owner, binding)
+No law may hold because a guard or a definition makes it trivially true (for example a run-time re-check of the invariant inside the operation, a theorem that restates its definition, or a hypothesis that can never hold). For every law you add or change, give (a) a non-trivial instance: an example where its hypotheses hold, and (b) a planted counter-example: a mutated rule or a bad state that fails it, written as an `example` with a negation. Say in your final message, per law, which examples witness (a) and (b).
+
+## Best long-term design (owner rule, binding)
+Judge and fix everything by the best long-term design. Never cut corners for speed, a smaller diff or fewer rounds. Implement the structural fix, not a containment patch: no law that holds by construction or restates its definition, no weakened statement, no premise that switches off an obligation. If staging is truly unavoidable, say so in your final message and record the long-term design and the roadmap row it belongs to (text for the coordinator; do not edit ROADMAP.md).
+
+## Evidence tags (for the coming vacuity gate)
+Tag every instance and planted counter-example in its doc comment: `/-- Instance (law `Fully.Qualified.name`). ... -/` and `/-- Planted (law `Fully.Qualified.name`). ... -/` (always the fully-qualified Lean name, never a short name; one example may list several laws). Mark helpers `/-- Helper (inversion|projection|congruence|arithmetic). ... -/` (and make them `private` or suffix `_inv` / `_proj`), representation lemmas `/-- Representation lemma. ... -/`, and named obligations on later components `/-- Obligation (discharged at slice N, R-xxxx). ... -/`. Keep the existing `Accepted (rule ...)` / `Refused (rule ...)` tags.

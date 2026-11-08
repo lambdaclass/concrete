@@ -1,0 +1,147 @@
+VERDICT: CHANGES is warranted. The stuttering and trap-line injectivity proofs are substantive, but C6 still has contract gaps and vacuous laws under the owner’s binding rule.
+
+I reviewed the full `REVIEW.diff` and surrounding definitions, C1 execution machinery, cited decision rows, and `_review/FOUNDATION_PROPOSAL.md` §C6. The requested `docs/proposals/FOUNDATION.md` is absent from this checkout. No files were modified; no network, builds, gates, or writing Git commands were used. Witnesses and planted faults below were checked by source reasoning, not executed.
+
+**Findings**
+
+1. **ConcreteSpec/Spec/Observe.lean:161 — major — REAL DEFECT: final external state is omitted.**
+
+   C6 explicitly requires preservation of “externally visible final state.” `Observation` contains only events and a terminal action. `Execution`, `SameObservation`, and the C1 adapter likewise have no final external-state projection or preservation obligation.
+
+   Concrete counterexample: two executions perform the same recorded operation and exit with the same status, but leave different externally visible file contents. An operation contract can currently allow both responses without constraining the resulting external state. C6 observations identify those executions.
+
+   **Fix:** add an abstract external-state observation and its relationship to operation effects and terminal execution state. Preserve it in observation equivalence and adapter laws. Alternatively, formally require that the event history determines every externally visible final-state component, and prove that requirement for adapters; the current arbitrary `events` mapping supplies no such guarantee.
+
+2. **ConcreteSpec/Proofs/Observe2.lean:370 — major — REAL DEFECT: byte-column correctness is assumed.**
+
+   Confirmed known finding. `Span.HasByteColumn sp before` is exactly `sp.col = byteColumn before`. The theorem substitutes that assumed equality into a renderer that already prints `sp.col`.
+
+   An elaborator producing scalar column `4` for `"a\té"` escapes this law: the hypothesis becomes false. The existing numeric example establishes that `byteColumn` returns `5`; it does not establish that a produced span uses it.
+
+   **Fix:** define source-position construction from the relevant source prefix and prove its rendered column independently. Include `"a\té"` as a positive witness and a planted scalar-counting implementation as a rejection control. Keep source-to-span correctness explicitly open until that connection exists.
+
+3. **ConcreteSpec/Proofs/Observe2.lean:29 — major — REAL DEFECT: environment laws extract their conclusions from admission premises.**
+
+   Confirmed for both `Responds.allows` and `Responds.matches`. The `Responds.response` constructor requires precisely `C.allows` and `RequestResponse`; these theorems only recover those constructor arguments.
+
+   A bad answer cannot challenge either law because it cannot satisfy the admission hypothesis. The doubling examples demonstrate admission and rejection by the definition, but do not make these two laws independent correctness evidence.
+
+   The same definition-only issue affects `RequestResponse.kind` at line 23: the constructor has already required a common kind.
+
+   **Fix:** distinguish admission facts from correctness laws. Establish matching and contract compliance for a separately defined response producer or concrete adapter, with accepted responses and planted mismatched/disallowed responses. Constructor projections may remain useful helpers, but cannot count as the required non-vacuous laws.
+
+4. **ConcreteSpec/Proofs/Observe2.lean:506 — major — REAL DEFECT: output preservation is built into the observation definition.**
+
+   `stepsObservation` ignores its execution proof and directly installs `A.project events` in the result. `output_before_trap_kept` unfolds that definition. It establishes neither that the adapter preserves a C1 output nor that an independently defined execution observation retains it. In particular, `A.events := fun _ => []` erases every output and still satisfies this theorem.
+
+   **Fix:** give externally relevant C1 output an independent correspondence requirement, provide a realizable output-then-trap adapter instance, and prove its operational observation retains the expected output. A planted adapter that drops that output must fail the obligation.
+
+5. **ConcreteSpec/Proofs/Observe2.lean:515 — major — REAL DEFECT: the report laws do not independently establish their claims.**
+
+   Confirmed known findings:
+
+   - `report_noAnswer_mayBlock` directly applies `BlockingPermitted`, whose definition already states the conclusion.
+   - `report_noAnswer_blocked` unfolds the `.noAnswer` projection.
+   - `report_outOfFuel_none` is the literal `.outOfFuel` branch of `reportObservation`.
+
+   `BlockingPermitted` is realizable for contracts allowing blocking; therefore these are not *universally impossible-hypothesis* defects. Nevertheless, for a concrete nonblocking request, permission cannot be supplied, so that case cannot challenge `report_noAnswer_mayBlock`.
+
+   **Fix:** prove end-to-end results for reports actually produced by `runFrom`, starting with independently specified environment behavior. Supply a blocking instance, a nonblocking missing-answer rejection case, and a fuel-exhaustion case. Treat the current equations as projection helpers rather than contract evidence.
+
+   `refusedReportPermitted` is absent from this head; that named finding cannot be reproduced as a declaration here.
+
+6. **ConcreteSpec/Proofs/Observe2.lean:266 — major — REAL DEFECT under the binding vacuity rule: divergence exclusion is definition-only.**
+
+   `infinite_not_termination` and its silent specialization unfold the mixed-constructor branch of `SameObservation`, which is literally `False`. The demo at `Spec/Observe.lean:395` repeats this.
+
+   This is a useful representation distinction, but the theorem cannot detect an adapter or transformation that incorrectly classifies an infinite computation as finite: it assumes the classifications as its inputs.
+
+   **Fix:** retain the constructor distinction, but establish classification preservation for an independently defined execution transformation, including a silently divergent witness and a planted transformation that replaces it with successful termination. C8 adequacy can remain separate; this theorem should not count as operational classification evidence.
+
+7. **ConcreteSpec/Spec/Observe.lean:286 — major — REAL DEFECT: adapter well-formedness does not require valid trap paths.**
+
+   `SiteTable.Valid` is defined but never required by `ExecAdapter.WellFormed`, `terminal?`, or either observation function. A well-formed adapter can resolve a trap to `"/tmp/main.con"` or `"src\\main.con"` and produce a terminal observation violating C6’s project-relative, forward-slash requirement.
+
+   **Fix:** include site-table validity in the adapter’s semantic premises and establish path validity for reachable trap observations. Keep the stronger source-position/elaboration obligation under O1.
+
+**Known finding reassessment**
+
+`runFrom_validTrace` at `Observe2.lean:419` is **not wholly vacuous**. Its trace component follows the actual evaluator recursively, appends projected answers, and constructs valid request/response traces. Dropping its recursive history extension or reversing request/response order would break that argument. Its blocking component propagates the permission already required by `WellFormed.blocked`; it does not independently validate that premise.
+
+**Every-law vacuity audit**
+
+`P` means substantive; `V` means vacuous under the supplied rule. Witnesses describe nontrivial instances. “Fault” identifies a planted change that should fail the property. For `V`, the stated guard or definition prevents an independent counterexample; that is the defect. All lines below are in `ConcreteSpec/Proofs/Observe2.lean`.
+
+| Line / law | Verdict | Witness and planted fault |
+|---|---|---|
+| 23 `RequestResponse.kind` | V | Same-kind doubling response is inhabited; a cross-kind response is excluded by the constructor. Finding 3. |
+| 29 `Responds.allows` | V | `3 → 6` admitted; `3 → 7` cannot satisfy admission. Finding 3. |
+| 36 `Responds.matches` | V | Matching response admitted; cross-kind response cannot satisfy admission. Finding 3. |
+| 43 `SilentInsertion.visible` | P | Insert silence between two distinct outputs. Fault: insert an output instead. |
+| 52 `silent_internal_steps` | P | Insert leading, middle and trailing silence around two events. Fault: reorder the events. |
+| 57 `blocked_silent_internal_steps` | P | Stutter an output prefix before pending request `q`. Fault: add visible output or change `q`. |
+| 63 `PrefixEventually.refl` | P | An execution with both silent and emitting steps, including repeated events. Fault: discard a visible prefix in the compared stream. |
+| 68 `PrefixEventually.trans` | P | Compose two streams with successively delayed matching emissions. Fault: lose or reorder a required prefix in the final stream. |
+| 75 `SameInfiniteObservation.refl` | P | Alternating silence and output; relies on prefix reflexivity. Fault: corrupt visible-prefix extraction. |
+| 78 `SameInfiniteObservation.symm` | V | The definition is explicitly the conjunction of both directions; this only swaps its fields. Retain as a packaging helper, not contract evidence. |
+| 81 `SameInfiniteObservation.trans` | P | Compose two distinct stutterings. Fault: replace a required event in the third stream. |
+| 86 `visiblePrefix_succ` | P | Extend an emitting prefix, then a silent prefix. Fault: omit or duplicate the last event. |
+| 92 `visiblePrefix_prefix` | P | Compare prefixes crossing multiple silent/emitting steps. Fault: reverse the accumulated event order. |
+| 103 `StepIndexIncreasing.monotone` | P | `f n = 2*n+3`, separated indices. Fault: replace the derived monotonicity bound with a strict bound at equal indices. |
+| 113 `StepIndexIncreasing.strict` | P | Same map, nonadjacent indices. Fault: reverse the claimed inequality. |
+| 120 `StepIndexIncreasing.apply_le` | P | Offset and stretched increasing maps. Fault: strengthen the conclusion to `n < f n`; identity rejects it. |
+| 128 `InfiniteStuttering.prefix_indices` | P | Retain old indices at `2*n+1`. Fault: emit at an unretained index or introduce an off-by-one prefix boundary. |
+| 169 `InfiniteStuttering.visiblePrefix_at` | P | Leading silence plus separated retained emissions. Fault: use `f n + 1`, including the next emitted event. |
+| 191 `infinite_stuttering` | P | Infinitely emitting and eventually silent streams under `2*n+1`. Fault: insert an extra visible event. |
+| 204 `SameObservation.refl` | P | Nonempty finite, blocked and infinite executions. Fault: make the infinite relation require a strict unmatched extension. |
+| 211 `SameObservation.symm` | V for independent-law credit | Finite equalities reverse; the infinite branch uses the definitionally symmetric conjunction. It adds no independent semantic obligation beyond those component definitions. |
+| 216 `SameObservation.trans` | P | Three differently stuttered executions with the same ending. Fault: break eventual-prefix composition. |
+| 226 `full_observation_preservation` | P, limited | Transport a two-event finite divergence through delayed emissions; also blocked and finite observations. Fault: truncate the projected history or change the pending request. It proves relational transport, not final-state preservation or execution adequacy. |
+| 266 `infinite_not_termination` | V | Mixed constructors reduce to `False`. Finding 6. |
+| 272 `infinite_silent_not_termination` | V | Specialization of the same definitional exclusion. Finding 6. |
+| 283 private `stripPrefix_append` | P | Nonempty prefix and suffix containing repeated delimiters. Fault: consume an extra character. |
+| 295 private `parseRevNat_digits` | P | Multi-digit number, nondigit delimiter and remaining suffix. Fault: omit digit reversal or consume the delimiter. |
+| 314 private `decodeKind_render` | P | Every trap kind with a nonempty path. Fault: collide or alter a kind spelling. |
+| 340 private `trapLineChars_prefix` | V | Reassociates the renderer’s literal definition. Keep as an unfolding helper; it is not independent rendering evidence. |
+| 346 private `decodeWithKind_render` | P | Multi-digit site/positions and path containing colons/parentheses. Fault: parse the wrong delimiter or numeric field. |
+| 354 private `decodeTrapLine_render` | P | Kind plus punctuated path and numeric fields. Fault: mismatch renderer and decoder kind/site fields. |
+| 361 `trapLine_injective` | P | Distinct sites or spans, including punctuated paths. Fault: omit site or column from rendering; distinct inputs then collide. |
+| 370 `trap_line_uses_byte_columns` | V | Assumes the desired column equality. Finding 2. |
+| 379 `byteColumn_tab` | P | Prefix containing multibyte UTF-8 followed by a tab. Fault: tab-stop expansion instead of one byte. |
+| 388 `ValidTrace.outputs` | P | Append two outputs after a completed exchange. Fault: change the pending state or insert a request. |
+| 397 `ValidTrace.answer_projection` | P | Outputs before and after `3 → 6`, with history-sensitive allowance. Fault: reverse request/response or put output between them. |
+| 412 `ExecAdapter.project_append` | P | Two C1 events, each projecting to multiple C6 events. Fault: reverse or truncate one side of concatenation. |
+| 419 `runFrom_validTrace` | P, qualified | A two-answer run with nonempty projections and history-sensitive contracts. Fault: lose the accumulated history or append response before request. Blocking permission is inherited. |
+| 478 `runFrom_noAnswer_pending_valid` | P, qualified | Valid completed exchange followed by permitted pending request. Fault: omit or duplicate the appended pending request. Permission component is inherited. |
+| 495 `runFrom_blockingPermitted` | P as a derived bridge | Same blocked run; derives the report premise from evaluator induction. Fault: use the wrong report history. It adds no new blocking justification. |
+| 506 `output_before_trap_kept` | V | Observation directly installs the projected history; an output-erasing adapter still passes. Finding 4. |
+| 515 `report_noAnswer_mayBlock` | V | Direct application of the permission assumption. Finding 5. |
+| 527 `report_noAnswer_blocked` | V | Literal report-projection equation. Finding 5. |
+| 539 `report_outOfFuel_none` | V | Literal `none` branch. Finding 5. |
+
+The additional definition-only laws identified in this table are **REAL DEFECTS when credited as non-vacuous contract laws**. Their concrete repair is to retain them as implementation helpers and supply independent semantic obligations with realizable witnesses and rejection controls.
+
+**Changed conformance examples**
+
+These are all in `ConcreteSpec/Spec/Observe.lean`:
+
+| Line | Audit |
+|---|---|
+| 362 complete doubling trace | Inhabited positive witness; response `7` is the negative control. |
+| 366 rejected response `7` | Meaningful admission rejection; response `6` is the positive control. Does not repair `Responds.allows` vacuity. |
+| 372 rejected blocking | Meaningful rejection for the nonblocking instance; an otherwise identical blocking-permitted contract supplies the opposite case. |
+| 378 accepted response `6` | Positive admission witness; response `7` is rejected. |
+| 382 infinite trace | Type inhabitant only, not a preservation law or rejection control. |
+| 385 finite stuttering | Meaningful concrete observation equality; replacing/reordering the event rejects it. |
+| 390 retained silent steps | Meaningful `SilentInsertion` witness; inserting a visible event rejects it. |
+| 395 infinite versus finite | Vacuous definitional exclusion; Finding 6. |
+| 404 exact trap text | Meaningful literal conformance witness; altered delimiter, field or spelling rejects it. |
+| 407 trap status | Concrete mapping check; planted status `125` rejects it. |
+| 408 refused launch | Definition-only branch equation; does not establish grant checking or startup execution ordering. |
+| 410 normal exit 134 versus trap | Concrete constructor distinction; useful representation check, not operational classification evidence. |
+| 419 UTF-8 byte column | Meaningful independent numeric expectation; scalar counting or tab expansion rejects it. |
+| 421 `HasByteColumn` | Definition-only equality witness; does not connect source positions to produced spans. |
+
+No new owner decision is needed to address the substantive contract gaps: preserving final external state, valid trap paths, and byte columns are already specified. Concrete grant instances and C8 adequacy remain later work, but cannot be replaced by crediting the vacuous laws above.
+
+VERDICT: CHANGES

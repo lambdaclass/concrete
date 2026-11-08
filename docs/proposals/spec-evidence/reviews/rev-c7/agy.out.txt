@@ -1,0 +1,16 @@
+### Findings
+
+1. **`ConcreteSpec/Spec/Leak.lean:285-290`** — **minor** (PREFERENCE)
+   - **Problem:** [`LineageReport.Sound`](file:///home/unbalancedparen/ConcreteSpec/Spec/Leak.lean#L285-L290) takes both `entry` and `exit : Account` for a function report, computes `netChange` relative to `entry` (`exit.live - entry.live`), and documents why `peak` uses `exit.peak`, but checks `requested` against `exit.requested` rather than `exit.requested - entry.requested` without noting whether `requested` is cumulative from program start or relative to `entry`.
+   - **Concrete fix:** Either check `Bound.Sound (exit.requested - entry.requested) r.requested` if per-function requested bytes are relative to `entry`, or state in the docstring of [`LineageReport.Sound`](file:///home/unbalancedparen/ConcreteSpec/Spec/Leak.lean#L283-L285) that `entry` is expected to be `Account.empty` (or that `requested`, like `peak`, is checked against cumulative execution totals).
+
+2. **`ConcreteSpec/Proofs/Leak.lean:82-92`** — **nit** (PREFERENCE)
+   - **Problem:** [`secureProgram`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Leak.lean#L83) and [`leakyProgram`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Leak.lean#L86) are both defined as the empty function table `⟨[]⟩`, while the secure vs. leaky statement bodies live in [`start`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Leak.lean#L89) and [`leakyStart`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Leak.lean#L92). The docstrings on `secureProgram` and `leakyProgram` describe differences that are actually in the initial configurations.
+   - **Concrete fix:** Either collapse `secureProgram` and `leakyProgram` into a single `program : Program ops := ⟨[]⟩` and move the docstrings to `start` / `leakyStart`, or place the statements into a function entry in `Program.fns`.
+
+3. **`ConcreteSpec/Proofs/Leak.lean:195-212`** — **nit** (PREFERENCE)
+   - **Problem:** [`step_none_of_final`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Leak.lean#L195-L212) is unused in `ConcreteSpec/Proofs/Leak.lean` ([`secure_run_unique`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Leak.lean#L245) calls `no_step_of_none ... rfl` directly). Similarly, the `a.alloc 0 = a` `example` at [`ConcreteSpec/Spec/Leak.lean:292-294`](file:///home/unbalancedparen/ConcreteSpec/Spec/Leak.lean#L292-L294) duplicates [`Account.alloc_zero`](file:///home/unbalancedparen/ConcreteSpec/Proofs/Leak.lean#L348-L350).
+   - **Concrete fix:** Remove `Demo.step_none_of_final` (or move it to `ConcreteSpec/Proofs/Exec.lean` if intended as a general C1 lemma) and drop the duplicate `example` in `Spec/Leak.lean`.
+
+VERDICT: ACCEPT
+rc=0

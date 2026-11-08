@@ -1,0 +1,97 @@
+### Round 2 Verification Summary
+
+1. **R1.1 (Query-level oracle with occurrence number):** Mostly resolved. `QueryOracle O` is introduced without touching `Exec.lean`, and `runFromQ`, `Move`, `Moves`, `Conclusion`, `InfiniteExecution`, and `FuelLimit` now parameterize over `QueryOracle O` with `Oracle.toQueryOracle` bridging C1's `Oracle O`. (See Finding 2 below for remaining theorems still restricted to `ρ₀.toQueryOracle`.)
+2. **R1.2 (TerminationEvidence vacuity on failed lookup/entry, `dependencies` doc, `all_allowed_runs`):** Resolved. `TerminationEvidence.terminates` now existentially produces `fn`, `c`, and `f` under `admits` alone; `dependencies` is documented as syntactic composition metadata; and `all_allowed_runs` now proves fuel monotonicity for all `m ≥ E.fuel ...`.
+3. **R1.3 (Completeness for all sufficient budgets):** Resolved for `runFrom` via `runFrom_complete_le` (see Finding 2 for `runFromQ`).
+4. **R1.4 (Soundness query clause):** **Incomplete / defective.** `ReportedQueries` still leaves the terminal query `q` unconstrained and does not link `.stuck` vs `.stuckContinuation` to `Conclusion` (see Finding 1).
+5. **R1.5 (Infinite adequacy round-trip, uniqueness, mutual exclusion, `noAnswer` excluding infinity):** Resolved via `toFuelLimit_toInfiniteExecution`, `toInfiniteExecution_toFuelLimit`, `FuelLimit.unique`, `InfiniteExecution.unique`, `silentDivergence_not_infiniteInteraction`, and `not_infinite_of_noAnswer`.
+6. **R1.6 (`outOfFuel`-then-trap example):** Resolved via `failingConfig` (`ConcreteSpec/Proofs/Adequacy.lean:801-805`).
+
+---
+
+### Findings
+
+1. **`ConcreteSpec/Spec/Adequacy.lean:145-154` & `ConcreteSpec/Proofs/Adequacy.lean:241-246` — [major] [REAL DEFECT] `ReportedQueries` leaves the terminal query unconstrained and decouples `.stuck` cases from `Conclusion`**
+   - **Problem:** In `ReportedQueries`, the constructors `stuckContinuation`, `noAnswer`, and `badAnswer` quantify over an arbitrary free `{q : Query O}` with no connection to `step P c` or `Conclusion`:
+     ```lean
+     | stuckContinuation {c events issued q} :
+         ReportedQueries (.stuck c) ⟨c, events, issued⟩ (issued ++ [q])
+     | noAnswer {c events issued q} :
+         ReportedQueries (.noAnswer c) ⟨c, events, issued⟩ (issued ++ [q])
+     | badAnswer {c events issued q} :
+         ReportedQueries (.badAnswer c) ⟨c, events, issued⟩ (issued ++ [q])
+     ```
+     Because `runFromQ_sound` states `Conclusion P ρ ... pos ∧ ReportedQueries ... pos (runFromQ ...).queries` as separate conjuncts:
+     1. For `noAnswer`, `badAnswer`, and `stuckContinuation`, `ReportedQueries` only asserts `∃ q, queries = pos.queries ++ [q]`—it does **not** assert that `q = Query.issue pos.events p vs site st pos.queries` for the request at `pos.config`.
+     2. For `.stuck c`, both `ReportedQueries.stuck` (`queries = issued`) and `ReportedQueries.stuckContinuation` (`queries = issued ++ [q]`) match the same `Ending.stuck c`, independent of which `Conclusion` constructor (`stuck` vs `stuckContinuation`) held. A broken `runFromQ` that fabricated a dummy query on `step P c = none` would still satisfy `runFromQ_sound`.
+   - **Concrete fix:** Fold the reported queries directly into `Conclusion` (or index `Conclusion P ρ : Ending O → Position O → List (Query O) → Prop`) so each ending constructor pins down the exact query list using the request's `Query.issue events p vs site st issued`:
+     ```lean
+     inductive Conclusion (P : Program O) (ρ : QueryOracle O) :
+         Ending O → Position O → List (Query O) → Prop where
+       | final {f pos} :
+           pos.config.final? = some f →
+           Conclusion P ρ (.final f) pos pos.queries
+       | stuck {c events issued} :
+           step P c = none →
+           Conclusion P ρ (.stuck c) ⟨c, events, issued⟩ issued
+       | stuckContinuation {c events issued p vs site st k a} :
+           let q := Query.issue events p vs site st issued
+           step P c = some (.request p vs site st k) →
+           answer ρ q = some a →
+           O.allows p vs st a = true →
+           k a = none →
+           Conclusion P ρ (.stuck c) ⟨c, events, issued⟩ (issued ++ [q])
+       | noAnswer {c events issued p vs site st k} :
+           let q := Query.issue events p vs site st issued
+           step P c = some (.request p vs site st k) →
+           answer ρ q = none →
+           Conclusion P ρ (.noAnswer c) ⟨c, events, issued⟩ (issued ++ [q])
+       | badAnswer {c events issued p vs site st k a} :
+           let q := Query.issue events p vs site st issued
+           step P c = some (.request p vs site st k) →
+           answer ρ q = some a →
+           O.allows p vs st a = false →
+           Conclusion P ρ (.badAnswer c) ⟨c, events, issued⟩ (issued ++ [q])
+       | outOfFuel {c events issued} :
+           c.final? = none →
+           Conclusion P ρ (.outOfFuel c) ⟨c, events, issued⟩ issued
+     ```
+     Then in `runFromQ_sound`, `Conclusion P ρ (runFromQ P ρ fuel events issued c).ending pos (runFromQ P ρ fuel events issued c).queries` replaces both `Conclusion` and `ReportedQueries` and uniquely determines the terminal query in every branch.
+
+2. **`ConcreteSpec/Proofs/Adequacy.lean:369, 415, 715, 729, 743` — [minor] [PREFERENCE] Monotonicity, `complete_le`, and blocking/finite exclusion of `InfiniteExecution` are only stated for lifted C1 `Oracle`, not general `QueryOracle`**
+   - **Problem:** `InfiniteExecution` is now defined over `ρ : QueryOracle O`, but `not_infinite_of_final`, `not_infinite_of_noAnswer`, `endlesslyBlocked_of_noAnswer`, `runFrom_mono`, and `runFrom_complete_le` only quantify over `ρ₀ : Oracle O` (via `ρ₀.toQueryOracle`). If an oracle actually depends on `q.occurrence`, these theorems cannot be applied directly to `runQ P ρ` / `runFromQ P ρ`.
+   - **Concrete fix:** Prove `runFromQ_mono` and `runFromQ_complete_le` for general `ρ : QueryOracle O`, prove `not_infinite_of_finalQ` / `not_infinite_of_noAnswerQ` for `runQ P ρ`, and derive the `runFrom` / `run` versions via `runFromQ_toReport`.
+
+---
+
+### Vacuity Audit of Every Law in the Diff
+
+| Law (`file:line`) | Verdict | Non-trivial Instance | Planted Counter-example |
+|---|---|---|---|
+| `answer_deterministic` (`Proofs/Adequacy.lean:41`) | **Non-vacuous** | Equal `Query` records issued at `fuel = 1` vs `fuel = 2` under `Demo.env.toQueryOracle`. | An oracle taking `fuel : Nat` that answers `some` at `fuel = 1` and `none` at `fuel = 2` on the same `Query`. |
+| `answer_toQueryOracle` (`Proofs/Adequacy.lean:45`) | **Non-vacuous** (bridge lemma) | `Demo.env.toQueryOracle` applied to the request query of `Demo.blockedConfig`. | A `QueryOracle` that inspects `q.occurrence` and returns `none` when `q.occurrence > 0` while `ρ₀` returns `some`. |
+| `runFromQ_toReport` (`Proofs/Adequacy.lean:50`) | **Non-vacuous** | `Demo.finishingConfig` and `Demo.blockedConfig` at `fuel = 1` under `Demo.env`. | Mutating `runFromQ` to consume fuel on `c.final? = some f` fails at `fuel = 0` on `finishingConfig`. |
+| `runFromQ_sound` (`Proofs/Adequacy.lean:241`) | **Partially vacuous (`ReportedQueries`) — REAL DEFECT** | `Demo.finishingConfig` at `fuel = 1` (1-step `Moves` to normal final state). | Mutating `runFromQ` on `.noAnswer` to append a bogus query `q_fake ≠ Query.issue ...` or appending `[q_fake]` when `step P c = none` **still satisfies** `ReportedQueries` (Finding 1). |
+| `runFrom_sound` (`Proofs/Adequacy.lean:315`) | **Non-vacuous** | `Demo.finishingConfig` and `Demo.blockedConfig` at `fuel = 1`. | Mutating `runFrom` to report `.final .normal` when `step P c = none` fails `Conclusion.final`. |
+| `runFrom_events_from` (`Proofs/Adequacy.lean:333`) | **Non-vacuous** | `Demo.finishingConfig` started with non-empty initial `events`. | Mutating `runFrom` to return `[]` on `.stuck` drops the initial `events` prefix. |
+| `runFrom_complete` (`Proofs/Adequacy.lean:359`) | **Non-vacuous** | 1-step `Moves` from `Demo.finishingConfig` to final state with `fuel = 1`. | Supplying `fuel = n - 1` (`0` on `finishingConfig`) returns `.outOfFuel` instead of `.final`. |
+| `runFrom_mono` (`Proofs/Adequacy.lean:369`) | **Non-vacuous** | `Demo.finishingConfig` at `n = 1 ≤ m = 3`. | Dropping the `≠ .outOfFuel` hypothesis fails on `Demo.finishingConfig` at `n = 0, m = 1`. |
+| `runFrom_complete_le` (`Proofs/Adequacy.lean:415`) | **Non-vacuous** | 1-step `Moves` from `Demo.finishingConfig` with `n = 1 ≤ m = 5`. | Replacing `n ≤ m` with `m ≤ n` fails at `m = 0, n = 1` on `Demo.finishingConfig`. |
+| `runFrom_trace_prefix_le` (`Proofs/Adequacy.lean:429`) | **Non-vacuous** | Multi-step execution emitting events compared at `n = 1 ≤ m = 2`. | Prepending instead of appending `a.event.toList` in `runFrom` violates `<+:`. |
+| `runFrom_trace_prefix` (`Proofs/Adequacy.lean:469`) | **Non-vacuous** | `n = 0` vs `n + 1 = 1` on an event-emitting request step. | Flipping the prefix relation to `(n + 1) <+: n` fails when step `n + 1` emits an event. |
+| `runFrom_final_sound` (`Proofs/Adequacy.lean:475`) | **Non-vacuous** | `Demo.finishingConfig` at `fuel = 1` produces a 1-step `Steps` witness to `.normal`. | Mutating `runFrom` to return `.final .normal` on `failingConfig` violates `c'.final? = some .normal`. |
+| `InfiniteExecution.toFuelLimit_toInfiniteExecution` (`Proofs/Adequacy.lean:638`) | **Non-vacuous** | `Demo.spin_infinite`. | Defining `toFuelLimit` with shifted states `fun n => X.states (n + 1)` breaks the round-trip equality. |
+| `FuelLimit.toInfiniteExecution_toFuelLimit` (`Proofs/Adequacy.lean:642`) | **Non-vacuous** | `Demo.spin_infinite.toFuelLimit`. | Defining `toInfiniteExecution` with constant states `fun _ => L.states 0` breaks the round-trip equality. |
+| `fuelLimit_states_unique` (`Proofs/Adequacy.lean:646`) | **Non-vacuous** | `L = K = Demo.spin_infinite.toFuelLimit`. | Weakening `FuelLimit.prefixes` to only constrain `ending` (omitting `events`/`queries`) allows distinct `Position` sequences. |
+| `FuelLimit.unique` (`Proofs/Adequacy.lean:666`) | **Non-vacuous** | `Demo.spin_infinite.toFuelLimit`. | Allowing relational (non-functional) `QueryOracle` in `FuelLimit` admits distinct limits from the same `c`. |
+| `InfiniteExecution.unique` (`Proofs/Adequacy.lean:676`) | **Non-vacuous** | `Demo.spin_infinite`. | Omitting `initial : states 0 = ⟨c, [], []⟩` from `InfiniteExecution` allows distinct executions for the same `c`. |
+| `silentDivergence_not_infiniteInteraction` (`Proofs/Adequacy.lean:707`) | **Non-vacuous** | `Demo.spinConfig` (satisfies `SilentDivergence` via `Demo.spin_silent`, hence `¬ InfiniteInteraction`). | Replacing `<` with `≤` and `bound = 0` in `InfiniteEvents` lets an eventless loop satisfy both predicates. |
+| `not_infinite_of_final` (`Proofs/Adequacy.lean:715`) | **Non-vacuous** | `Demo.finishingConfig` at `fuel = 1`. | Replacing `.final f` with `.outOfFuel c'` in the hypothesis fails on `Demo.spinConfig` (`Demo.spin_infinite`). |
+| `not_infinite_of_noAnswer` (`Proofs/Adequacy.lean:729`) | **Non-vacuous** | `Demo.blockedConfig` at `fuel = 1`. | Replacing `.noAnswer blocked` with `.outOfFuel blocked` at `fuel = 0` fails to exclude infinite executions on `Demo.spinConfig`. |
+| `endlesslyBlocked_of_noAnswer` (`Proofs/Adequacy.lean:743`) | **Non-vacuous** | `Demo.blockedConfig` at `fuel = 1` for all `n ≥ 1`. | Dropping `fuel ≤ n` fails at `n = 0 < fuel = 1` on `Demo.blockedConfig` (`ending` is `.outOfFuel`). |
+| `TerminationEvidence.all_allowed_runs` (`Proofs/Adequacy.lean:756`) | **Non-vacuous** | `Demo.idEvidence` for any budget `m ≥ 1`. | Replacing `E.fuel ... ≤ m` with `m < E.fuel ...` fails on `Demo.idEvidence` at `m = 0`. |
+| `TerminationEvidence.excludes_infinite` (`Proofs/Adequacy.lean:772`) | **Non-vacuous** | `Demo.idEvidence` at entry config of `idFn`. | Dropping `ha : E.admits ...` when `admits` restricts inputs to terminating arguments allows divergent calls to violate the theorem. |
+| `failingConfig` example (`Proofs/Adequacy.lean:804`) | **Non-vacuous** | Concrete execution of `failingConfig` at `fuel = 0` (`outOfFuel`) and `fuel = 1` (`trapped .abort s`). | Claiming `brief (run prog env 1 failingConfig) = ([], some .normal)` fails `decide`. |
+
+VERDICT: CHANGES
+rc=0

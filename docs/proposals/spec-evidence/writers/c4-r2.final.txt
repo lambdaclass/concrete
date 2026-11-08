@@ -1,0 +1,64 @@
+Completed ROUND2. Findings 1–7 are addressed; item 8 remains deferred as instructed. Working tree is clean. Nothing pushed; `axioms.golden` unchanged.
+
+Validation at `ccaa0c9e37d7da18d79ccac8feeaf397473d2b4f`:
+
+- `lake build ConcreteSpec`: passed.
+- `scripts/spec/rules.sh`: 32 passed, 0 failed.
+- `scripts/proofs/trust_ban.sh`: 23 passed, 0 failed.
+- Independent read-only review: no remaining required findings; no new owner-decision choices.
+
+Commits:
+
+- `33f558cf` — Replace hybrid’s function map with finite association lists.
+- `1c622847` — Validate pointer addresses and block spaces against the target.
+- `8a247804` — Prove memory well-formedness preservation.
+- `4ee88973` — Complete exposed-provenance reconstruction and exposure frame laws.
+- `65ebf5c3` — Define hybrid projection invariants and byte-store observation laws.
+- `f6b91f11` — Prove preservation through every hybrid state operation.
+- `e4508a53` — Preserve first-materialized reads and frame other places.
+- `a386b6cd` — Share scalar types, values, typing and validity with constants.
+- `f331d641` — State typed-write frames using disjoint byte intervals.
+- `7b1a7c35` — Prove every successful access uses a target-valid pointer.
+- `ccaa0c9e` — Require validity evidence for pointer encoding; handle empty disjoint intervals.
+
+The new memory laws state:
+
+- `empty_wellFormed`: empty memory satisfies the invariant.
+- `modify_wellFormed`: geometry-preserving updates that preserve byte counts and never revive blocks preserve well-formedness.
+- `store_wellFormed`, `free_wellFormed`, `expose_wellFormed`: each successful operation preserves well-formedness.
+- `expose_result`, `expose_success`: characterize exposure exactly as marking a live provenance block exposed.
+- `expose_frame`: every other block and the freshness counter remain unchanged.
+- `fromExposed_exists`: an eligible containing or one-past candidate supplies provenance.
+- `fromExposed_contains`: a containing candidate is recovered exactly.
+- `candidate_onePast_unique`: eligible one-past candidates cannot tie under well-formedness.
+- `fromExposed_onePast`: without a containing candidate, the one-past candidate is recovered exactly.
+- `fromExposed_none`: neither kind of candidate means no provenance.
+- `access_valid`: every successful access—including zero-byte access—uses a target-valid pointer.
+- `decodePtr_valid`: every decoded pointer is target-valid. The existing round-trip theorem now requires pointer validity.
+- `store_geometry`, `expose_geometry`: both operations preserve projection geometry.
+- `load_congr`: reads depend only on their provenance block.
+- `store_load_other`: stores preserve reads through a different allocation identity.
+- `expose_load`: exposure preserves every byte read.
+- `load_prefix`: successful nonempty reads can be shortened to nonempty prefixes.
+- Private helpers `keys_update` and `canonical_of_unique`: updates preserve keys, and unique keys make entries agree with lookup.
+
+The new hybrid laws state:
+
+- `projected_transport`: equal block geometry preserves cell projections.
+- `memory_wellFormed`: replacing memory with well-formed memory of equal geometry preserves the state invariant.
+- `set_wellFormed`: installing a cell with a valid projection preserves the invariant.
+- `write_wellFormed`, `rawWrite_wellFormed`, `materialize_wellFormed`, `expose_wellFormed`: every state operation preserves memory and projection invariants.
+- `materialize_cases`: successful materialization either reuses storage or allocates and fills a fresh block.
+- `alloc_projected`: allocation preserves existing projections.
+- `materialize_read`: first materialization preserves the previously readable value.
+- `write_frame`: distinct allocation identities suffice to frame another place’s read.
+- `rangesDisjoint_separated`: disjoint whole-cell intervals imply allocation separation for supported scalar writes.
+- `write_frame_disjoint`: typed writes preserve reads of other places with disjoint materialized intervals.
+- `materialize_frame`, `expose_frame`: both preserve every other place’s read without an additional separation premise.
+- `State.places_set`, `State.places_memory`, `State.memory_set`: finite-map updates affect only the selected lookup; memory replacement preserves lookups; place updates preserve memory.
+
+An integer materialize-then-read example now covers big-endian storage. Invalid-pointer regressions use a well-formed 8-bit target.
+
+The old `Spec/Rep.lean` byte layer remains duplicated, as explicitly permitted by finding 7. The README again assigns its migration to the slice-1-to-Core integration slice. Struct layouts, enums, pointer-typed places and the C8 padding oracle remain outside this scalar slice.
+
+QUESTIONS: None introduced. Pointer reads from non-whole-pointer bytes remain an existing owner question; this change continues to give those bytes no pointer meaning.

@@ -1,0 +1,11 @@
+Both conflict resolutions accurately combine the C4 + partial-lifecycle side (`a8eb252af`) with the C6 side (`738500fb8`):
+
+- **ConcreteSpec/README.md**: Lists C3, C1, C2, C4 (`Memory`, `Hybrid`), and C6 (`Observe`) as written; retains the full C4 status note (including the pending `Spec/Rep.lean` port and shared `CTy`/`CVal`), C4's hybrid-state instantiation and C1's fallible lifecycle instrumentation (`Option.none`); removes C6 ("the split of a request from its response") and C4 ("representation of scalars in bytes") from the remaining/deferred lists; and updates the remaining contracts to `C5 and C7–C10`.
+- **ConcreteSpec/Spec.lean**: Includes `Memory` (C4), `Hybrid` (C4), and `Observe` (C6) in the module guide paragraph without dropping or altering any module descriptions.
+
+### Findings
+
+- `ConcreteSpec/README.md:98` — **nit** (PREFERENCE): Removing the C6 item from the list left two `and` conjunctions in the same clause (`counted loops (slice 4), and ownership of moved values (C5) and the oracle's query record (C8)`). Fix: drop the first `and` (`counted loops (slice 4), ownership of moved values (C5) and the oracle's query record (C8)`).
+
+VERDICT: ACCEPT
+rc=0

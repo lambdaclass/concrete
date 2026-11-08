@@ -1,0 +1,71 @@
+The import conflict resolution preserves both C6 and C8 imports correctly. `QueryReport` is intentional instrumentation of C1’s report, with an erasure theorem; I found no competing C4 report notion.
+
+Two findings remain:
+
+- **ConcreteSpec/Spec/Adequacy.lean:199 — major — REAL DEFECT.** `InfiniteInteraction` counts raw `O.Event`s, but C6 observes their projection through `ExecAdapter.events`, which may erase events. A loop producing one raw event per iteration satisfies C8’s infinite-interaction classification even when an adapter maps every event to `[]` and every primitive request to `none`. That adapter can satisfy `WellFormed.internal` using empty outputs, while its external behavior is silent divergence. **Fix:** define external divergence classifications over projected histories and prove their connection to C6’s observations. Keep raw-event classifications explicitly internal if needed.
+
+- **ConcreteSpec/Proofs/Adequacy.lean:28, :41, :45 — major — REAL DEFECT under the binding vacuity rule.** `issue_occurrence` unfolds the constructor, `answer_deterministic` is congruence under the hypothesis `q₁ = q₂`, and `answer_toQueryOracle` unfolds the adapter. These statements cannot meet the required non-trivial-instance criterion: they restate definitions or equality substitution. Integration preserves that vacuity. **Fix:** replace their use as substantive laws with execution-level obligations covering repeated silent requests, interleaved sites, and oracle lifting across actual runs; include mutations that violate those obligations.
+
+The following is the law-by-law vacuity audit. Witnesses and planted mutations below are **static review constructions, not executed tests**. “Pass” concerns the law’s structural substance; it does not certify that the repository contains the required witness pair.
+
+Notation: **F** is `Demo.finishingConfig`; **S** is `Demo.spin_infinite`; **B** is `terminalConfig` with `noAnswerOracle`; **R** is a successful logging request; **I** is a loop repeatedly executing R. A mutation describes the incorrect behavior the obligation must reject.
+
+| Law | Verdict; witness / planted mutation |
+|---|---|
+| `issue_occurrence` | **Vacuous**; constructor projection / no independent obligation |
+| `issue_next_occurrence` | Pass; append same-site versus other-site query / increment both sites |
+| `answer_deterministic` | **Vacuous**; equality substitution / no independent obligation |
+| `answer_toQueryOracle` | **Vacuous**; adapter unfolding / no independent obligation |
+| `runFromQ_toReport` | Pass; R / drop its event during erasure |
+| `runFromQ_queries_from` | Pass; R with prior history / discard prior queries |
+| `runFromQ_queries_prefix` | Pass; B at fuel 0 and 1 / replace an earlier query |
+| `runFromQ_queries_prefix_le` | Pass; I across several budgets / reset history on recursion |
+| `runFromQ_query_fuel_independent` | Pass; I’s first query at two budgets / number queries using fuel |
+| `Move.toStep` | Pass; successful R move / change its emitted label |
+| `Moves.toSteps` | Pass; two successful requests / reverse their event order |
+| `final?_none_of_step` | Pass; F’s transition / permit a transition from a final configuration |
+| `runFromQ_sound` | Pass; B, including its terminal query / fabricate occurrence 1 |
+| `runFrom_sound` | Pass; successful R / report a different ending |
+| `runFrom_events_from` | Pass; R after an existing event / discard the initial history |
+| `runFromQ_complete` | Pass; F’s one-step path / consume fuel without taking its step |
+| `runFrom_complete` | Pass; F / report exhaustion after its final step |
+| `runFrom_mono` | Pass; completed R at increasing budgets / append an event after completion |
+| `runFrom_complete_le` | Pass; F with surplus fuel / restart execution after completion |
+| `runFrom_trace_prefix_le` | Pass; I / replace an already emitted event |
+| `runFrom_trace_prefix` | Pass; R at consecutive budgets / retract its event |
+| `runFrom_final_sound` | Pass; F / fabricate a final outcome without a path |
+| `runFromQ_add_of_outOfFuel` | Pass; split a prefix of S / restart from the original configuration |
+| `eq_of_runFromQ_zero_out` | Pass; nonfinal F with supplied histories / change a report history |
+| `Move.runFromQ_one` | Pass; a cycle edge of S / return the source position |
+| `Move.not_final` | Pass; F’s move / permit moves from final states |
+| `move_of_fuel_succ` | Pass; adjacent prefixes of S / skip a machine transition |
+| `InfiniteExecution.not_final` | Pass; S / insert a final state into its cycle |
+| `infinite_iff_fuelLimit` | Pass; S and its prefixes / omit a required transition |
+| `InfiniteExecution.toFuelLimit_toInfiniteExecution` | Pass as a conversion round trip; S / shift reconstructed states |
+| `FuelLimit.toInfiniteExecution_toFuelLimit` | Pass as a conversion round trip; S’s limit / shift reconstructed states |
+| `fuelLimit_states_unique` | Pass; S’s limit through both conversions / change one position |
+| `FuelLimit.unique` | Pass; the same two presentations / change one position |
+| `InfiniteExecution.unique` | Pass; S through the conversion / change one cycle edge |
+| `finite_or_infinite_events` | Pass as an exhaustive classification; S and I / leave one class uncovered |
+| `finite_not_infinite_events` | Pass as disjointness; S versus I / classify bounded history as unbounded |
+| `silentDivergence_not_infiniteInteraction` | Pass internally; S versus I / admit both classifications for one run; external interpretation has finding above |
+| `not_infinite_of_final` | Pass as exclusion; F terminates, S diverges / classify S as final |
+| `not_infinite_of_noAnswer` | Pass as exclusion; B blocks, S diverges / let B take a successful request move |
+| `endlesslyBlocked_of_noAnswer` | Pass; B at all positive budgets / answer only when fuel increases |
+| `TerminationEvidence.all_allowed_runs` | Pass with inhabited premises and admission; certificate for a terminating zero-argument function / extend admission to a spinning function |
+| `TerminationEvidence.excludes_infinite` | Pass with that same inhabited certificate / admit the spinning function |
+| `spin_move_01` | Pass; displayed cycle edge / replace destination with source |
+| `spin_move_12` | Pass; displayed cycle edge / replace destination with source |
+| `spin_move_23` | Pass; displayed cycle edge / replace destination with source |
+| `spin_move_34` | Pass; displayed cycle edge / replace destination with source |
+| `spin_move_40` | Pass; displayed cycle edge / replace destination with source |
+| `spin_move` | Pass; all five residues / break the wraparound edge |
+| `spin_silent_divergence` | Pass; S / insert an externally visible event every cycle |
+
+The anonymous examples additionally distinguish finishing, trapping, and spinning after fuel exhaustion; authenticate unanswered and rejected terminal queries; and distinguish machine stuckness from continuation refusal. Their planted fabricated queries and omitted histories are substantive negative witnesses.
+
+The exclusion laws have incompatible *combined* hypotheses intentionally; their individual antecedents have terminating, blocked, and infinite instances. I did not classify that intended disjointness as vacuity.
+
+No files were modified, builds run, or network connections made. The checkout lacks usable Git history for the attempted read-only comparison, so I could not independently verify byte identity against C8’s original commit. No new owner-decision choice was identified.
+
+VERDICT: CHANGES

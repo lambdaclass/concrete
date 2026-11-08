@@ -1,0 +1,17 @@
+You are reviewing round 2 of one slice of the Concrete specification, written in Lean 4 (core only, no Mathlib). READ-ONLY: do not edit, create or delete any file, and do not run git commands that write. Reading is enough; if a .lake exists you may run `lake build`.
+
+Context:
+- The repository is a copy at the current directory. The spec is ConcreteSpec/ (read ConcreteSpec/README.md first). The slice implements foundation contracts C1 (ConcreteSpec/Spec/Exec.lean, Outcome.lean; proofs ConcreteSpec/Proofs/Exec.lean) and C2 (Spec/Scalar.lean, Spec/Const.lean; Proofs/Scalar.lean, Proofs/Const.lean) of the owner-approved proposal _review/FOUNDATION_PROPOSAL.md, plus today's owner decisions _review/LANGUAGE_DECISIONS_2026-11-08.md (items 4, 7, 10, 26, 11(a)). Decided rows: docs/decisions.md; philosophy docs/PHILOSOPHY.md.
+- _review/DELTA.patch is the change since round 1; _review/FULL.patch is the whole slice. Review the DELTA, reading the full files as needed.
+- Round 1 findings and how they were handled:
+  * Shared state: the operand language now has a Store that evaluation reads, primitives change (answers carry a store) and calls/returns do not restore; cleanup laws thread it (Completes/RunsAll/Cleans). Places/byte memory and ownership instrumentation are deliberately abstract until C4/C5 instantiate the Store.
+  * Cleanup laws: every-run first-step theorems (exit_scope_next, done_scope_next) plus successful-run composition (exit/done_scope_runs_defers, unwind_runs_plan, return_reaches_caller, break_reaches_loop); "exactly" wording corrected; two_defers_register; step_deterministic.
+  * Destruction orders Q2.3/Q3.8: seqDestroyOrder/mapDestroyOrder etc. with position laws.
+  * runFrom reports final before fuel; noAnswer (oracle gave none) is split from badAnswer (outside contract). Request/response event split is C6, oracle query record with occurrence numbers is C8 (recorded in README O11, not done here).
+  * C2: machine contract terms undefined on off-width operands (shift count by its own rule); bool bit patterns; plainNeg/wrappingNeg; lossyConvert; bool-to-integer lossless conversion (ARITH-5); eval_toExact; bit-level laws toBits_wrap/_wrapping/_shl/_shr_unsigned; saturation clamps; tmod doc.
+  * Const: the declaration list is a dependency order supplied by elaboration; whether source may name a later constant is left as an owner question; typeConsts + typed_admitted (static admission) + evalConsts_sound; and/or evaluating both operands documented; widening the subset is an owner decision.
+  * Deferred, not fixed here (say if you disagree): duplicate old IntTy/Rep (ported at C4 so one scalar model remains); exact counterparts of div/rem/shift and unary neg in CTerm (eval_toExact covers add/sub/mul; the surface of the boundary is still owner-pending); eq/ne on bool in constants (subset kept minimal).
+
+Review for: (1) correctness against decided rules and the C1/C2 text; (2) anything that decides a language question the decisions do NOT answer; (3) whether theorems are meaningful (not vacuous, hypotheses satisfiable, statements express the claimed law); (4) Lean quality/readability and accurate doc comments; (5) anything that makes C4/C5/C6/C8 hard to build on this interface. Do not repeat round-1 findings that were fixed unless the fix is wrong.
+
+Output: a numbered list of findings, each with severity (blocker / major / minor / nit), file:line, the problem and a concrete fix. Then one final line exactly `VERDICT: ACCEPT` or `VERDICT: CHANGES`.

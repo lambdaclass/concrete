@@ -1,0 +1,53 @@
+C10 (frames and ABI) round 4, written by Kimi. Base f5f46bef (C10 round 3 fa284eb9 merged with the integrated spec core 07c16bb5) -> head 2dfce586 (golden regenerated). Round-3 findings it fixes: (1, Codex+agy, major) C1Call carried the restoration conjuncts and c1Call_restores_caller only projected them, unconnected to the entry; now the conjuncts are removed and restoration is derived from the final return step and tied to the entry's saved caller/continuation; (2, Codex, major) C1Call excluded Unit fall-through; now explicit return or Unit `.done`, each followed by its pop; (3, agy nit) KeptPair.WellFormed redundant Valid conjuncts dropped, keptPair_results_valid derives them. Check each fix is real, every law's vacuity (including laws not changed this round), and the merge resolution (remerge diff below).
+diff --git a/ConcreteSpec/README.md b/ConcreteSpec/README.md
+remerge CONFLICT (content): Merge conflict in ConcreteSpec/README.md
+index a215feb1d..2c9b52cce 100644
+--- a/ConcreteSpec/README.md
++++ b/ConcreteSpec/README.md
+@@ -93,16 +93,10 @@ Open obligations, by name:
+   encoding over the old type universe. The slice-1-to-Core integration slice must port that
+   layer to `Mem.MByte`/`Mem.encodeInt` and retire the old encoders while preserving its proofs;
+   C4 has not completed that port. Core constants and Hybrid share `CTy`/`CVal` from `Scalar`.
+-<<<<<<< fa284eb9a (axioms.golden: C10 round 3 (regenerated on concrete-ci-2))
+   C10 (`Frame`) now covers logical footprints, C1 caller restoration, target-independent ABI and
+   `kept` retention interfaces, and launcher entry/exit relations; concrete ABI implementations,
+-  extern syntax, packed access and source frame/snapshot constructs remain out. C5–C9 remain.
++  extern syntax, packed access and source frame/snapshot constructs remain out. C5 and C7–C9 remain.
+   C1 leaves to later slices the source-level
+-||||||| a8eb252af
+-  C5–C10 remain. C1 leaves to later slices the source-level
+-=======
+-  C5 and C7–C10 remain. C1 leaves to later slices the source-level
+->>>>>>> 07c16bb5f (axioms.golden: A2i integration of C1 partial lifecycle, C4 and C6 (regenerated on concrete-ci-2))
+   evaluation orders (elaboration, O1), counted loops (slice 4), and ownership of moved values
+   (C5) and the oracle's query record (C8); its
+   storage can use C4's hybrid state; C5 must still supply ownership instrumentation. Lifecycle
+diff --git a/ConcreteSpec/Spec.lean b/ConcreteSpec/Spec.lean
+remerge CONFLICT (content): Merge conflict in ConcreteSpec/Spec.lean
+index 577a516bb..44c5131a9 100644
+--- a/ConcreteSpec/Spec.lean
++++ b/ConcreteSpec/Spec.lean
+@@ -58,19 +58,10 @@ laws, written, proved and tested before the freeze) is in the namespace `Concret
+ `Target` on: `Target` (C3, target profiles), `Outcome` (trap kinds and the ways a run stops),
+ `Exec` (C1, execution, calls and cleanup), `Scalar` (C2, scalars and arithmetic), `Const` (C2,
+ the constant initializer subset), `Memory` (C4, byte memory and scalar representation),
+-<<<<<<< fa284eb9a (axioms.golden: C10 round 3 (regenerated on concrete-ci-2))
+-`Hybrid` (C4, structured places and stable materialized ranges), and `Frame` (C10, logical
+-footprints, call restoration and target-independent ABI contracts). Each module's header says which
+-contract it states and what it leaves to a later slice.
+-||||||| a8eb252af
+-the constant initializer subset), `Memory` (C4, byte memory and scalar representation), and
+-`Hybrid` (C4, structured places and stable materialized ranges). Each module's header says which contract it states and what it
+-leaves to a later slice.
+-=======
+-`Hybrid` (C4, structured places and stable materialized ranges) and `Observe` (C6, observations
+-and the environment). Each module's header says which contract it states and what it leaves to a
+-later slice.
+->>>>>>> 07c16bb5f (axioms.golden: A2i integration of C1 partial lifecycle, C4 and C6 (regenerated on concrete-ci-2))
++`Hybrid` (C4, structured places and stable materialized ranges), `Observe` (C6, observations
++and the environment), and `Frame` (C10, logical footprints, call restoration and target-independent
++ABI contracts). Each module's header says which contract it states and what it leaves to a later
++slice.
+ 
+ Only Lean core is imported (Q9.16). No proof uses `native_decide` or `sorry` (Q9.17).
+ 

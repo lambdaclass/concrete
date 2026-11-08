@@ -1,0 +1,47 @@
+The `Allowed` repair is real: the failure branch requires membership in `failures`, matching `errorTy`, and `holds v`; the success branch requires `ensures`. Common conditions remain outside that disjunction. `answerOk_iff` relates an independently written Boolean checker to the semantic predicate; it is not a restated definition.
+
+The binding vacuity requirement is not fully satisfied.
+
+- **ConcreteSpec/Proofs/Prim.lean:457 — major, REAL DEFECT.** The claimed non-trivial instance of `usable_current` still unfolds to `e.context = e.context`. Changing `True` to arithmetic evidence makes no difference: neither the fact nor its proof participates in `Usable`. The changed-context example at line 460 does not falsify a mutated self-context law. **Fix:** retain reflexivity as a helper, but supply a substantive evidence-consumption law connecting accepted evidence to the obligation actually consumed, with a mismatched-obligation counterexample.
+
+- **ConcreteSpec/Proofs/Prim.lean:594 — major, REAL DEFECT.** `runStmts_of_not_normal` holds directly because `runStmts` checks precisely its hypothesis and returns `drive` in that branch (`Spec/Prim.lean:373–379`). The new witness exercises that fallback; the normal-state example removes the hypothesis. Neither resolves the explicitly prohibited guard-based vacuity. **Fix:** supplement the helper with a transition-level non-restart property for returned/trapped executions and a mutant that resumes the trailing statement and violates that property.
+
+- **ConcreteSpec/Proofs/Prim.lean:466 — major, REAL DEFECT.** The planted evidence counterexamples do not test the corresponding mismatch laws. For example, the obligation example keeps the obligation equal and changes the target. A checker comparing only obligations would still satisfy `obligation_mismatch`. The target, contract, checker, and spec examples repeat this problem. **Fix:** for each field, plant a matcher that omits that field, change only that field, and demonstrate acceptance despite the mismatch.
+
+- **ConcreteSpec/Proofs/Prim.lean:576 — minor, REAL DEFECT.** The two drive counterexamples establish particular output inequalities, not failure of the soundness law for a planted implementation. **Fix:** construct reports with fabricated events/store and prove that no trace satisfies the required event equality and `Exec.Steps` relation.
+
+Each law’s audit follows. Witness locations refer to `ConcreteSpec/Proofs/Prim.lean`.
+
+| Law | Vacuity verdict and witness |
+|---|---|
+| `lookupId_rename` | Non-vacuous: second-entry lookup; inconsistent key renaming fails, lines 381–385. |
+| `eval_rename` | Non-vacuous: binder computation returns `5`; term-only renaming changes the result, lines 388–393. |
+| `eval_operands_rename` | Non-vacuous: adapter returns `5`; inconsistent occurrence fails, lines 396–406. |
+| `rename_inverse` | Non-vacuous: swap changes the source and inverse restores it; wrong inverse fails, lines 409–414. |
+| `rename_id` | Non-vacuous structural law: compound source; swap fails identity, lines 417–418 and preceding example. |
+| `lookupId_rehint` | Non-vacuous: second-entry numeric lookup; whole-`Var` mutant fails, lines 421–425. |
+| `eval_rehint` | Non-vacuous: successful binder computation; changed numeric identity fails, lines 428–432. |
+| `eval_operands_rehint` | Non-vacuous: successful adapter computation; numeric mutation fails, lines 435–444. |
+| `usable_current` | **Vacuous:** equality reflexivity; lines 457–460 do not repair it. |
+| `obligation_mismatch` | Satisfiable mismatch premise, line 463; planted counterexample tests the wrong field. |
+| `target_mismatch` | Satisfiable mismatch premise, line 470; planted counterexample tests the wrong field. |
+| `contract_mismatch` | Satisfiable mismatch premise, line 477; planted counterexample tests the wrong field. |
+| `checker_mismatch` | Satisfiable mismatch premise, line 484; planted counterexample tests the wrong field. |
+| `spec_mismatch` | Satisfiable mismatch premise, line 490; planted counterexample tests the wrong field. |
+| `answerOk_iff` | Non-vacuous: independent checker accepts declared failure; false checker fails equivalence, lines 501–507. |
+| `allows_unknown` | Definition-only registry fallback; unknown/registered instances at lines 510–513 exercise that distinction. Under the binding definition-restatement rule, this remains a helper rather than substantive validation. |
+| `unknown_primitive_stuck` | Non-vacuous: actual unknown request has no step; registered request has a step, lines 522–534. |
+| `allows_allowed` | Non-vacuous: accepted declared failure; undeclared `2` fails `Allowed`, lines 537–543. |
+| `allows_postcondition` | Non-vacuous: accepted failure satisfies alternative despite failing `ensures`; old claim fails, lines 547–555. |
+| `allows_no_implicit_trap` | Non-vacuous: accepted ordinary failure versus trap, lines 558–565. |
+| `drive_steps` | Non-vacuous primitive execution, lines 570–573; planted counterexample incomplete. |
+| `drive_steps_result` | Non-vacuous direct corollary, lines 581–584; planted counterexample incomplete. |
+| `runStmts_of_not_normal` | **Guard-vacuous**, lines 594–604. |
+| `ghost_erasure_run` | Non-vacuous: independently recursive runners, ghost updates and concrete `skip`; over-erasure changes fuel, lines 607–616. |
+| `ghost_erasure_ending` | Non-vacuous observational corollary; erasing concrete abort changes ending, lines 619–634. |
+
+Additionally, the demo uses `Ty := Unit`, so its witnesses cannot detect removal of the failure-type equality check. A two-type rejection witness would directly cover that repaired condition.
+
+Read-only inspection only; no builds, gates, writes, or network access.
+
+VERDICT: CHANGES

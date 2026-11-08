@@ -1,0 +1,116 @@
+Pure helper lemmas (`Steps.single`, `Steps.trans`, `steps_next`, `steps_request`, `RunsAll.each`, `RunsEach.split_calls`, `Passes.passable`, `entryParts_succ`, `entryParts_length`, `entryParts_get`) are skipped below as structural glue for `Steps`, `RunsEach`, and `mapDestroyOrder`.
+
+### Theorem & Example Audit (Contract C1)
+
+- `Outcome.lean` examples (`TrapKind.all.map TrapKind.name`, `(Res.trap .overflow).bind ...`) — **NON-VACUOUS** — Witness: `TrapKind.all` and `Res.trap .overflow`; mutating `TrapKind.name .divisionByZero` to `"div_by_zero"` or `Res.bind` to invoke `f` on `.trap` falsifies them.
+- `Spec/Exec.lean` `Demo` examples (normal defer order, `return` through defers, `abort` skipping defers, trapping defer stopping cleanup, `break` running loop-body defers, late read in defer, left-to-right arg trap, block local restriction, shared state persistence across cleanup, `i32` overflow/div, `0`-fuel final check, `noAnswer` vs `badAnswer`, `move` instrumentation & re-init, loop condition temporaries, `outOfFuel`) — **NON-VACUOUS** — Witness: concrete `Demo.prog` executions decided by `rfl`/`decide`; mutating `register` to append (`ds ++ [d]`), `stepExit` to restore `st`, or `evalArgs` to evaluate right-to-left falsifies them.
+- `Spec/Exec.lean` `refusingOps` Accepted/Refused examples — **WEAK** — Witness: exercises only `.drop` refusal at block exit on a manually constructed configuration (`DState.init` without `enter`); does not exercise primitive request continuation refusal (`k a = none` yielding `.stuck c` rather than `.badAnswer c` or emitting `a.event` in `runFrom`), which was the main C1 partial-continuation change.
+- `step_seq` — **NON-VACUOUS** — Witness: `Demo.prog` on `.seq (dlog 1) (dlog 2)`; mutating `step` to execute `t` first or drop `.seq t` from `frames` falsifies the equality.
+- `step_done_seq` — **NON-VACUOUS** — Witness: `⟨.done, [], .init, [.seq (callLog 4)]⟩`; mutating `step` to leave `.ctrl = .done` falsifies it.
+- `step_exit_seq` — **NON-VACUOUS** — Witness: `⟨.exiting (.ret 7), [], .init, [.seq (callLog 4)]⟩`; mutating `stepExit` on `.seq t` to run `t` instead of popping `.seq t` falsifies it.
+- `step_block` — **NON-VACUOUS** — Witness: `⟨.exec (.block ⟨1⟩ .skip), [(x, 1)], .init, []⟩`; mutating `step` to record `[]` instead of `dom L` in `.scope` falsifies it.
+- `lookup_restrict` — **NON-VACUOUS** — Witness: `dm = [x]`, `L = [(y, 5), (x, 2)]`; mutating `restrict` to `L.filter (·.1 ∉ dm)` or returning `L` unchanged falsifies it for `x` or `y`.
+- `restrict_dom_drops` — **NON-VACUOUS** — Witness: `L₀ = [(x, 1)]`, `L = [(y, 5), (x, 2)]`, `y ∉ dom L₀`; mutating `restrict` to keep newly bound keys falsifies it.
+- `register_scope` — **NON-VACUOUS** — Witness: `k = [.scope ⟨1⟩ [] [d₁]]`; mutating `register` to append `ds ++ [d]` falsifies it.
+- `register_seq` — **NON-VACUOUS** — Witness: `k = [.seq .skip, .scope ⟨1⟩ [] []]`; mutating `register` to fail (`none`) on `.seq` frames falsifies it.
+- `two_defers_register` — **NON-VACUOUS** — Witness: `Demo.prog` with `d₁ = ⟨logF, [.lit 1], s⟩`, `d₂ = ⟨logF, [.lit 2], s⟩`, `s = .skip`; mutating `register` to append at the end of `ds` yields `[d₁, d₂]` instead of `[d₂, d₁]`.
+- `step_ret` — **NON-VACUOUS** — Witness: `e = .lit 7` in `Demo.ops` where `eval [] .init (.lit 7) = .ok (7, .init)`; mutating `step` to unwind a frame before evaluating `e` falsifies it.
+- `step_break_loop` — **NON-VACUOUS** — Witness: `l = ⟨0⟩` with frame `.body ⟨0⟩ .skip (.lit 1) .skip s`; mutating `stepExit` to transition to `.exec (.loop ...)` on `.brk` falsifies it.
+- `step_continue_loop` — **NON-VACUOUS** — Witness: `l = ⟨0⟩` with frame `.body ⟨0⟩ .skip (.lit 1) .skip s`; mutating `stepExit` to transition to `.done` on `.cont` falsifies it.
+- `step_return_caller` — **NON-VACUOUS** — Witness: `Demo.ops` with `v = 7`, `dst = some x`, `st = ⟨0, [[]]⟩`, `stLeave = .init`, `stBind = .init`; mutating `stepExit` to restore the caller's store instead of keeping `stBind` falsifies it.
+- `exit_scope_next` — **NON-VACUOUS** — Witness: `⟨.exiting (.ret 7), [], .init, [.scope ⟨1⟩ [] [d]]⟩` stepping to `d.stmt`; mutating `stepExit` to drop the scope without running `d` falsifies it.
+- `done_scope_next` — **NON-VACUOUS** — Witness: `⟨.done, [], .init, [.scope ⟨1⟩ [] [d]]⟩` stepping to `d.stmt`; mutating `step` to skip `d` on normal scope completion falsifies it.
+- `exit_scope_runs_defers` — **NON-VACUOUS** — Witness: `ds = [⟨bumpF, [], s⟩, ⟨logF, [.lit 1], s⟩]` via `demo_bump_completes` and `demo_log_completes`; mutating `stepExit` to pass `.resume .fall` instead of `.resume (.exit e)` leaves `.done` instead of `.exiting e`.
+- `done_scope_runs_defers` — **NON-VACUOUS** — Witness: bottom-of-file example with `ds = [⟨bumpF, [], s⟩, ⟨logF, [.lit 1], s⟩]`; mutating `step` on `.done, .scope b dm [] :: k` not to apply `restrict dm L` falsifies it.
+- `unwind_runs_plan` — **NON-VACUOUS** — Witness: `pre = [.scope ⟨2⟩ [x] [d₂], .scope ⟨1⟩ [] [d₁]]` with `e = .ret 7` and `demo_log_completes`; mutating `stepExit` to halt on `.seq` or `.test` frames falsifies it.
+- `plan_scopes` — **NON-VACUOUS** — Witness: two nested `.scope` frames with `[d₂]` and `[d₁]`; mutating `plan` to put outer scope calls before inner scope calls (`plan k ++ ds`) falsifies it.
+- `return_reaches_caller` — **NON-VACUOUS** — Witness: `pre = [.scope ⟨1⟩ [] [⟨logF, [.lit 1], s⟩]]`, `v = 7`, `dst = some x` in `Demo.ops`; mutating `stepExit` on `.ret` to drop the return value `v` and bind `O.unitVal` falsifies it.
+- `break_reaches_loop` — **NON-VACUOUS** — Witness: `pre = [.scope ⟨1⟩ [] [⟨logF, [.lit 5], s⟩]]`, `l = ⟨0⟩` in `Demo.ops`; mutating `stepExit` on `.brk l` not to consume the matching `.body l` frame falsifies it.
+- `continue_reaches_loop` — **NON-VACUOUS** — Witness: `pre = [.scope ⟨1⟩ [] [⟨logF, [.lit 5], s⟩]]`, `l = ⟨0⟩` in `Demo.ops`; mutating `stepExit` on `.cont l` to exit the loop (`.done`) instead of re-entering `.exec (.loop ...)` falsifies it.
+- `planWith_calls` — **NON-VACUOUS** — Witness: `pre = [.scope ⟨1⟩ [] [d₁], .test ⟨0⟩ .skip (.lit 1) .skip s []]`; mutating `planWith` to omit `ds.map (.call L)` or reorder scopes falsifies it.
+- `cleans_iff_runs_plan` — **NON-VACUOUS** — Witness: `pre = [.scope ⟨1⟩ [] [⟨logF, [.lit 1], s⟩]]` in `Demo.ops`; mutating `Cleans.scope` to omit `dropOut O dm L st₁ = some stDrop` breaks the equivalence with `RunsEach`.
+- `step_trapped` — **NON-VACUOUS** — Witness: `⟨.trapped .abort s, [], .init, []⟩`; mutating `step` to unwind frames when `.trapped` falsifies it.
+- `steps_from_trapped` — **NON-VACUOUS** — Witness: `Steps.refl ⟨.trapped .abort s, [], .init, [.scope ⟨1⟩ [] [d]]⟩`; any transition out of `.trapped` in `step` would allow a non-empty trace or changed config.
+- `abort_runs_no_cleanup` — **NON-VACUOUS** — Witness: `⟨.exec (.abort s), [], .init, [.scope ⟨1⟩ [] [⟨logF, [.lit 1], s⟩]]⟩`; mutating `.abort` to step to `.exiting` (unwinding scopes) would emit `[1]` and falsify `tr = []`.
+- `evalArgs_first_trap` — **NON-VACUOUS** — Witness: `es₁ = [.lit 1]`, `e = .fail .overflow`, `es₂ = [.fail .divisionByZero]` in `Demo.ops`; mutating `evalArgs` to evaluate right-to-left yields `.trap .divisionByZero` instead of `.trap .overflow`.
+- `step_silent_deterministic` — **NON-VACUOUS** — Witness: any silent step such as `.exec .skip`; holds because `step` is a function returning `Option (Out O)`.
+- `step_deterministic` — **NON-VACUOUS** — Witness: silent step on `.exec .skip` (left disjunct) and primitive request `.prim none .log [.lit 1] s` in `Demo.ops` (right disjunct); adding a nondeterministic silent constructor to `Step` would falsify it.
+- `no_step_of_none` — **NON-VACUOUS** — Witness: `c = ⟨.done, [], .init, []⟩` where `step P c = none`; adding a stuttering rule to `Step` would falsify it.
+- `bind_refused` — **NON-VACUOUS** — Witness: `e = .lit 1` with `life (.bind x) _ = none`; mutating `step` on `.bind` to ignore `O.life` and return `some (.next ...)` falsifies it.
+- `assign_refused` — **WEAK** — Witness: does not assume `x` is bound (`AList.lookup L x = some v₀`); when `AList.lookup L x = none`, `step` returns `none` because lookup failed before `O.life (.bind x)` is ever consulted, despite the docstring claiming "even for an existing local".
+- `enter_refused` — **VACUOUS** — Witness: `enter` is defined as `(O.life (.enter ... ) st).map ...`, so `hl : O.life (.enter ...) st = none → enter fn vs st = none` merely unfolds `Option.map` on `none`.
+- `call_refused` — **WEAK** — Witness: omits the arity premise `fn.params.length = vs.length`; when `fn.params.length ≠ vs.length`, `step` returns `none` via the arity guard `else none` without ever reaching `O.life (.enter ...)`.
+- `scope_drop_refused` — **NON-VACUOUS** — Witness: `refusingOps` on `⟨.done, [(x, 1)], .init, [.scope ⟨0⟩ [] []]⟩`; mutating `step` to skip `dropOut` on `.scope _ dm []` falsifies it.
+- `exit_drop_refused` — **NON-VACUOUS** — Witness: `refusingOps` on `⟨.exiting (.ret 1), [(x, 1)], .init, [.scope ⟨0⟩ [] []]⟩`; mutating `stepExit` to skip `dropOut` falsifies it.
+- `test_drop_refused` — **WEAK** — Witness: omits `O.test v = some b`; when `O.test v = none`, `step` returns `none` because condition truth-testing failed before `dropOut` is reached.
+- `return_refused` — **NON-VACUOUS** — Witness: `dst = some x` with `O.life .leave st = none` (or `O.life (.bind x) st' = none`); mutating `step`/`stepExit` on `.ret dst caller` to ignore `O.life` falsifies both conjuncts.
+- `prim_bind_refused` — **WEAK** — Witness: docstring claims three laws ("Refusing a primitive result binding refuses its request continuation. Error answers bypass binding and remain traps. The oracle's answer kind is unchanged."), but the theorem proves only `cont a = none` for `.ok v`; it does not prove that `.error kd` succeeds as `some ⟨.trapped kd site, L, a.store, k⟩` even when `O.life (.bind x) a.store = none`, nor that `runFrom` reports `.stuck c` without emitting `a.event`.
+- `continuation_refused` — **VACUOUS** — Witness: proves `cont a = none → ¬ ∃ c', cont a = some c'` for an arbitrary `Option`-valued function `cont` without mentioning `Step`, `step`, or `runFrom`; it is a pure `Option` tautology (`Option.noConfusion`) rather than a theorem about transitions or driver behavior.
+- `destroyCall_sig` — **NON-VACUOUS** — Witness: any `DestroyProtocol` instance on `Demo.prog` mapping `.tok` to `eatF`; mutating `DestroyProtocol.destroyCall` to pass `[]` instead of `[arg]` falsifies `d.args = [arg]`.
+- `destroy_not_copy` — **VACUOUS** — Witness: its proof is literally `:= D.notCopy T f h`, directly projecting the `notCopy` axiom field of the `DestroyProtocol` structure rather than deriving disjointness from a checker rule or type table.
+- `seqDestroyOrder_elem` — **NON-VACUOUS** — Witness: `n = 3, i = 1`; mutating `seqDestroyOrder` to put `.storage` first or reverse `List.range n` falsifies it.
+- `seqDestroyOrder_storage` — **NON-VACUOUS** — Witness: `n = 3`; mutating `seqDestroyOrder` to omit `.storage` falsifies it.
+- `mapDestroyOrder_entry` — **NON-VACUOUS** — Witness: `n = 2, i = 1`; mutating `mapDestroyOrder` to visit `[.value i, .key i]` falsifies it.
+- `mapDestroyOrder_storage` — **NON-VACUOUS** — Witness: `n = 2`; mutating `mapDestroyOrder` to place `.storage` at the head falsifies it.
+- `demo_log_completes` — **NON-VACUOUS** — Witness: `L = []`, `st = .init`; mutating `logFn` to `abort` or emit `2` falsifies it.
+- `demo_bump_completes` — **NON-VACUOUS** — Witness: `L = []`, `st = .init`; mutating `bumpFn` not to increment `counter` falsifies it.
+
+---
+
+### Findings (VACUOUS and WEAK)
+
+1. **`continuation_refused` (VACUOUS) and `prim_bind_refused` / `refusingOps` examples (WEAK)**
+   - **Location**: `ConcreteSpec/Proofs/Exec.lean:581-598`, `ConcreteSpec/Spec/Exec.lean:483-498`
+   - **Severity**: High
+   - **Problem**: `continuation_refused` claims "A refused continuation admits no successful response transition for that answer", and `Spec/Exec.lean` states "`Step.prim` requires success, and `runFrom` reports the requesting configuration as stuck without accepting the response event when continuation fails." Yet `continuation_refused` only proves `cont a = none → ¬ ∃ c', cont a = some c'` on a bare function `cont` without referencing `Step` or `runFrom`. Furthermore, `prim_bind_refused` states in its docstring that error answers bypass binding and remain traps and that the oracle's answer kind is unchanged, but proves neither; and the `refusingOps` examples in `Spec/Exec.lean` never test primitive result-binding refusal in `runFrom`.
+   - **Concrete fix**:
+     1. Replace `continuation_refused` with a theorem over `Step` and `runFrom`:
+        ```lean
+        theorem step_prim_continuation_refused {P : Program O} {c : Config O}
+            {p : O.Prim} {vs : List O.Val} {site : SiteId} {st : O.Store}
+            {cont : Answer O.Val O.Event O.Store → Option (Config O)}
+            (hreq : step P c = some (.request p vs site st cont)) :
+            (∀ a, O.allows p vs st a = true → cont a = none) →
+            ∀ l c', ¬ Step P c l c' := by
+          intro href l c' hs
+          cases hs with
+          | silent hs => rw [hreq] at hs; cases hs
+          | prim hs hall hk =>
+            rw [hreq] at hs; cases hs
+            rw [href _ hall] at hk; cases hk
+
+        theorem runFrom_continuation_refused (P : Program O) (ρ : Oracle O)
+            (n : Nat) (hist : List O.Event) (c : Config O)
+            (p : O.Prim) (vs : List O.Val) (site : SiteId) (st : O.Store)
+            (cont : Answer O.Val O.Event O.Store → Option (Config O))
+            (a : Answer O.Val O.Event O.Store)
+            (hfin : c.final? = none)
+            (hreq : step P c = some (.request p vs site st cont))
+            (horacle : ρ hist p vs site st = some a)
+            (hallows : O.allows p vs site_or_st ... = true) -- O.allows p vs st a = true
+            (href : cont a = none) :
+            runFrom P ρ (n + 1) hist c = ⟨hist, .stuck c⟩ := by
+          simp [runFrom, hfin, hreq, horacle, hallows, href]
+        ```
+     2. Add the error-bypass conjunct to `prim_bind_refused`:
+        ```lean
+        ∀ kd, a.result = .error kd → cont a = some ⟨.trapped kd site, L, a.store, k⟩
+        ```
+     3. Add a `refusingOps` example in `Spec/Exec.lean` where `.bind x` is refused on `.prim (some x) .log [.lit 1] s` under `env`, verifying `run` returns `⟨[], .stuck _⟩` (not `.badAnswer` and without appending `1` to `events`).
+
+2. **`destroy_not_copy` (VACUOUS)**
+   - **Location**: `ConcreteSpec/Proofs/Exec.lean:614-616`
+   - **Severity**: Medium
+   - **Problem**: `destroy_not_copy` (`:= D.notCopy T f h`) merely projects the `notCopy` proof field out of the `DestroyProtocol` structure, restating its definition. Moreover, no `DestroyProtocol` instance is exhibited in `Demo` to witness that the protocol axioms are jointly satisfiable.
+   - **Concrete fix**: Either define a decidable validity predicate `DestroyProtocol.wf` checked on a concrete function table and prove `destroy_not_copy` from it, or at minimum instantiate `DestroyProtocol Demo.prog` for `.tok` (`impl | .tok => some eatF | _ => none`) in `Demo` and remove or demote the trivial field-projection theorem.
+
+3. **`enter_refused` (VACUOUS) and `assign_refused`, `call_refused`, `test_drop_refused` (WEAK)**
+   - **Location**: `ConcreteSpec/Proofs/Exec.lean:520-568`
+   - **Severity**: Low
+   - **Problem**:
+     - `enter_refused` merely unfolds `Option.map` on `none` in `enter`.
+     - `assign_refused`, `call_refused`, and `test_drop_refused` omit the predecessor guards (`AList.lookup L x = some v₀`, `fn.params.length = vs.length`, and `O.test v = some b`), so they hold even in states where `step` already returns `none` due to an unbound variable, wrong argument count, or non-boolean test value before `O.life` is ever called.
+   - **Concrete fix**: Add the predecessor success hypotheses (`hx : AList.lookup L x = some v₀` in `assign_refused`, `hlen : fn.params.length = vs.length` in `call_refused`, `ht : O.test v = some b` in `test_drop_refused`) and show that with `O.life ... = some st''` the step succeeds (`step P ... = some (.next ...)`), whereas with `O.life ... = none` it returns `none` (an `iff` characterization: `step P c = none ↔ O.life ... = none` under the predecessor premises).
+
+VERDICT: FINDINGS
+rc=0

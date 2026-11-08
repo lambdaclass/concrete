@@ -1,0 +1,68 @@
+### Integration Review: C8 (`6c24007e`) into Integrated Spec Core (`07c16bb5` → `e115d8be`)
+
+#### 1. Conflict Resolution (`ConcreteSpec.lean`, `ConcreteSpec/Spec.lean`)
+- **`ConcreteSpec.lean:9-10`**: Retains `import ConcreteSpec.Proofs.Observe2` (from C6 in `07c16bb5`) and adds `import ConcreteSpec.Proofs.Adequacy` (from C8 in `6c24007e`) before `Scalar` and `Const`.
+- **`ConcreteSpec/Spec.lean:19-20`**: Retains `import ConcreteSpec.Spec.Observe` (from C6 in `07c16bb5`) and adds `import ConcreteSpec.Spec.Adequacy` (from C8 in `6c24007e`) before `Scalar`, `Const`, and `Memory`.
+- Both resolutions are purely additive and preserve module dependency order.
+
+#### 2. Semantic Coherence over the Integrated Core (C1/C2, C1 partial lifecycle, C4, C6)
+- **C1 / C1 partial lifecycle (`Spec/Exec.lean`, `Proofs/Exec.lean`)**: `Exec.lean` is byte-identical between C8's branch base and `07c16bb5`. In particular, C8's `runFromQ`, `Move.prim`, `Conclusion.stuckContinuation`, `ReportedQueries.stuckContinuation`, and `Demo.refusingBindOps` (`Proofs/Adequacy.lean:944-984`) directly consume the partial lifecycle continuation `k a = none` / `life : LifeEvent Val → Store → Option Store` already present in the integrated `Exec.lean`.
+- **C4 (`Spec/Outcome.lean`, `Spec/Observation.lean`) & C6 (`Spec/Observe.lean`, `Proofs/Observe2.lean`)**:
+  - C8 lives in `namespace ConcreteSpec.Core.Exec` and instruments `Exec.runFrom` with query histories (`Query O`, `QueryOracle O`, `QueryReport O`) that project directly back to `Exec.Report O` via `QueryReport.toReport` (`runFromQ_toReport`).
+  - Event traces across C8 (`Position.events`, `QueryReport.events`, `Moves.toSteps`) are the exact same `List O.Event` and `Exec.Steps` used by `Exec.lean` and observed downstream by C4/C6. There are no duplicated or competing `Report`, `Ending`, or `Event` trace types.
+
+#### 3. Vacuity Check of Laws in `ConcreteSpec/Proofs/Adequacy.lean`
+
+None of the laws change meaning under integration (`Adequacy` depends only on `Exec`). Every theorem and law in the diff is non-vacuous:
+
+| Law (`ConcreteSpec/Proofs/Adequacy.lean`) | Verdict | Non-trivial Instance Witness | Planted Counter-example (Fails Law) |
+| :--- | :--- | :--- | :--- |
+| `issue_occurrence` (L28) | Non-vacuous | `Demo.terminalQuery` (`issued = []`, `occurrence = 0`) | Mutating `.occurrence` to `1` (`Demo.fabricatedTerminalQuery`, L894) fails equality (`1 ≠ 0`) |
+| `issue_next_occurrence` (L34) | Non-vacuous | `issued = []`, `q = terminalQuery` at `site = s` gives `0 + 1 = 1` | Dropping the site filter or claiming `+ 0` when `q.site = site` fails (`1 ≠ 0`) |
+| `answer_deterministic` (L41) | Non-vacuous | `ρ = badAnswerOracle`, `q₁ = q₂ = terminalQuery` | Distinct queries `q₁ ≠ q₂` under an occurrence-sensitive `ρ` can return different answers |
+| `answer_toQueryOracle` (L45) | Non-vacuous | `ρ₀ = Demo.env`, `q = terminalQuery` | A `QueryOracle` branching on `q.occurrence` is not equal to `ρ₀.toQueryOracle` |
+| `runFromQ_toReport` (L50) | Non-vacuous | `runFromQ prog env.toQueryOracle 1 [] [] finishingConfig` erases to `runFrom prog env 1 [] finishingConfig` | Using a `QueryOracle` that answers only when `q.occurrence = 1` diverges from `ρ₀` on occurrence `0` |
+| `runFromQ_queries_from` (L89) | Non-vacuous | `terminalConfig` with `fuel = 1`, `issued = [q₀]` produces `[q₀, q₁]` (`later = [q₁]`) | Replacing `issued ++ later` with `[]` fails when `issued` is non-empty |
+| `runFromQ_queries_prefix` (L122) | Non-vacuous | `terminalConfig` from `fuel = 0` (`[]`) to `fuel = 1` (`[terminalQuery]`) | Reversing the prefix direction (`fuel + 1 <+: fuel`) fails on `terminalConfig` (`[terminalQuery] <+: []` is false) |
+| `runFromQ_queries_prefix_le` (L161) | Non-vacuous | `n = 0 ≤ m = 1` on `terminalConfig` | Dropping `n ≤ m` (`n = 1, m = 0` on `terminalConfig`) fails prefix (`[terminalQuery] <+: []`) |
+| `runFromQ_query_fuel_independent` (L177) | Non-vacuous | `n = 1, m = 2, i = 0` on `terminalConfig` both yield `terminalQuery` | Comparing different indices `i ≠ j` (e.g. `0` vs `1` in a two-request run) fails `qn = qm` |
+| `Move.toStep` (L195) | Non-vacuous | `Demo.spin_move_01` maps to `Step.silent` with `l = .silent` | Claiming `l = .event e` for `spin_move_01` fails `Step` and event equality |
+| `Moves.toSteps` (L205) | Non-vacuous | 1-step `Moves` from `finishingConfig` to `.done` maps to `Steps` with `tr = []` | Replacing `pos'.Config` with `finishingConfig` after 1 step fails `Steps` to `.done` |
+| `final?_none_of_step` (L218) | Non-vacuous | `finishingConfig` has `step = some (.next ...)` and `final? = none` | A final config `⟨.done, [], .init, []⟩` has `final? = some .normal` and `step = none` (cannot satisfy hypothesis) |
+| `runFromQ_sound` (L242) | Non-vacuous | `terminalConfig` with `noAnswerOracle`, `fuel = 1` (`Proofs/Adequacy.lean:899-907`) | `fabricatedTerminalQuery` (`occurrence := 1`) fails `ReportedQueries` (`Proofs/Adequacy.lean:910-915`); `terminalQuery` on machine-stuck `terminalStuckConfig` fails (`L940-942`); `[]` on `refusingBindConfig` fails (`L979-984`) |
+| `runFrom_sound` (L325) | Non-vacuous | `finishingConfig` with `fuel = 1` reaches `.final .normal` in `n = 1` move | Claiming `Conclusion (.final .normal)` at `fuel = 0` on `finishingConfig` fails (`final? = none`) |
+| `runFrom_events_from` (L343) | Non-vacuous | `runFrom prog env 2 [e₀] c` preserves prefix `[e₀]` | Claiming `.events = []` when initial `events = [e₀]` fails |
+| `runFromQ_complete` (L352) | Non-vacuous | 1-step move on `finishingConfig` to `.done` completes at `n = 1` with `.final .normal` | Running with `n = 0` on `finishingConfig` yields `.outOfFuel finishingConfig ≠ .final .normal` |
+| `runFrom_complete` (L369) | Non-vacuous | `finishingConfig` (`n = 1`) reports `⟨[], .final .normal⟩` | Supplying `n = 0` for the 1-step execution yields `.outOfFuel` (`L803-805`) |
+| `runFrom_mono` (L379) | Non-vacuous | `finishingConfig` at `n = 1 ≤ m = 2` both return `⟨[], .final .normal⟩` | Dropping the `≠ .outOfFuel` guard at `n = 0, m = 1` on `finishingConfig` fails (`outOfFuel ≠ final`, `L803-805`) |
+| `runFrom_complete_le` (L425) | Non-vacuous | `finishingConfig` (`n = 1`) at budget `m = 5` returns `⟨[], .final .normal⟩` | Taking `m = 0 < n = 1` fails (`outOfFuel`) |
+| `runFrom_trace_prefix_le` (L439) | Non-vacuous | `n = 1 ≤ m = 5` on `prog` under `env` | Reversing `n` and `m` (`n = 5, m = 0` on an event-emitting run) fails prefix |
+| `runFrom_trace_prefix` (L479) | Non-vacuous | `n = 0` to `n = 1` on `refusingBindConfig` under an answering oracle | Reversing `(n + 1) <+: n` fails when step `n + 1` emits an event |
+| `runFrom_final_sound` (L485) | Non-vacuous | `finishingConfig` at `fuel = 1` yields `Steps` to `⟨.done, [], .init, []⟩` | Calling on `failingConfig` at `fuel = 0` (`outOfFuel`) cannot instantiate `.final f` |
+| `runFromQ_add_of_outOfFuel` (L501) | Non-vacuous | `spinConfig` at `n = 1, m = 1` equals 1 step from `spinConfig1` | If `n` reaches `.final` or `.stuck` instead of `.outOfFuel pos.config`, restarting from an unrelated `pos` gives a different report |
+| `eq_of_runFromQ_zero_out` (L548) | Non-vacuous | `spinConfig` at `fuel = 0` forces `pos = ⟨spinConfig, [], []⟩` | Perturbing `pos.queries` to `[terminalQuery]` fails `0`-step equality |
+| `Move.runFromQ_one` (L562) | Non-vacuous | `spin_move_01` (`spinConfig` → `spinConfig1`, both non-final) gives `.outOfFuel spinConfig1` at `fuel = 1` | Dropping `hf' : pos'.config.final? = none` on `finishingConfig` → `.done` fails because `runFromQ 1` returns `.final .normal`, not `.outOfFuel` |
+| `Move.not_final` (L571) | Non-vacuous | `spin_move_01` source `spinConfig` has `final? = none` | Final config `⟨.done, [], .init, []⟩` admits no outgoing `Move` |
+| `move_of_fuel_succ` (L578) | Non-vacuous | `spinConfig` at `n = 0` and `n = 1` yields `Move prog env (spinPosition 0) (spinPosition 1)` | Pairing `n = 0` (`spinConfig`) with `n = 2` (`spinConfig2`) as a single `Move` fails |
+| `InfiniteExecution.not_final` (L616) | Non-vacuous | `Demo.spin_infinite` at any `n` has `final? = none` | A terminating run (`finishingConfig`) reaches `final? = some .normal` at `n = 1` and cannot form an `InfiniteExecution` |
+| `infinite_iff_fuelLimit` (L645) | Non-vacuous | `⟨Demo.spin_infinite⟩ ↔ ⟨Demo.spin_infinite.toFuelLimit⟩` | `finishingConfig` has neither an `InfiniteExecution` nor a `FuelLimit` (fails at `n = 1`) |
+| `InfiniteExecution.toFuelLimit_toInfiniteExecution` (L649) | Non-vacuous | `X = Demo.spin_infinite` round-trips to `X` | Shifting states by `n + 1` breaks `initial` and is not equal to `X` |
+| `FuelLimit.toInfiniteExecution_toFuelLimit` (L653) | Non-vacuous | `L = Demo.spin_infinite.toFuelLimit` round-trips to `L` | Perturbing `L.states 1` breaks `prefixes 1` |
+| `fuelLimit_states_unique` (L657) | Non-vacuous | Any `L, K : FuelLimit prog env spinConfig` satisfy `L.states = K.states` | Fuel limits for distinct initial configs (`spinConfig` vs `spinConfig1`) have distinct `.states 0` |
+| `FuelLimit.unique` (L677) | Non-vacuous | `L = K` for `Demo.spin_infinite.toFuelLimit` | Under a nondeterministic relation (without fixed `QueryOracle`), two limits could differ |
+| `InfiniteExecution.unique` (L687) | Non-vacuous | `X = Y` for `Demo.spin_infinite` | Executions from different starting configs (`spinConfig` vs `spinConfig1`) are distinct |
+| `finite_or_infinite_events` (L697) | Non-vacuous | `Demo.spin_infinite` satisfies `.inl (FiniteEvents)` with `bound = 0` | Claiming only `FiniteEvents X` universally fails on a loop that emits `log 1` every iteration |
+| `finite_not_infinite_events` (L709) | Non-vacuous | `Demo.spin_infinite` has `FiniteEvents` (`bound = 0`), so `InfiniteEvents` (`∃ n, 0 < 0`) is false | N/A (negation/disjointness law; witnessed by `Demo.spin_infinite` satisfying left and failing right) |
+| `silentDivergence_not_infiniteInteraction` (L716) | Non-vacuous | `Demo.spin_silent_divergence` holds on `spinConfig`, excluding `InfiniteInteraction prog env spinConfig` | If `InfiniteExecution.unique` failed (e.g. nondeterministic steps), the same config could both silently diverge and interact infinitely |
+| `not_infinite_of_final` (L724) | Non-vacuous | `finishingConfig` reaches `.final .normal` at `fuel = 1`, excluding `InfiniteExecution` | At `fuel = 0`, `finishingConfig` reports `.outOfFuel`, which does not by itself exclude `InfiniteExecution` (`spinConfig` also reports `.outOfFuel` at `fuel = 0`) |
+| `not_infinite_of_noAnswer` (L738) | Non-vacuous | `terminalConfig` under `noAnswerOracle` reports `.noAnswer` at `fuel = 1`, excluding `InfiniteExecution` | Under an answering oracle inside a loop, `InfiniteExecution` can exist because `.noAnswer` is never reached |
+| `endlesslyBlocked_of_noAnswer` (L752) | Non-vacuous | `terminalConfig` under `noAnswerOracle` at `fuel = 1` stays `.noAnswer terminalConfig` for all `n ≥ 1` | At `fuel = 0`, `terminalConfig` is `.outOfFuel`, which changes to `.noAnswer` at `n = 1` |
+| `TerminationEvidence.all_allowed_runs` (L764) | Non-vacuous | Any `TerminationEvidence` witness for a 1-step function at `m ≥ fuel` returns `.final f` | Supplying `m < E.fuel` (e.g. `m = 0` on a 1-step function) returns `.outOfFuel ≠ .final f` |
+| `TerminationEvidence.excludes_infinite` (L781) | Non-vacuous | Admitted entry `c` with `TerminationEvidence` cannot have `InfiniteExecution` | Unadmitted calls (`¬ E.admits ...`, e.g. `spinConfig`) can have `InfiniteExecution` (`Demo.spin_infinite`) |
+| `Demo.spin_move` (L857) & `Demo.spin_silent_divergence` (L881) | Non-vacuous | Concrete 5-phase periodic execution on `spinConfig` with `bound = 0` events | `finishingConfig` halts after 1 step and cannot step from `.done` |
+
+#### Findings
+No defects or preferences found.
+
+VERDICT: ACCEPT
+rc=0

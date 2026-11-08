@@ -1,0 +1,30 @@
+### Findings
+
+1. **`ConcreteSpec/Spec/Observe.lean:67-98` — `major` — `REAL DEFECT`**
+   - **Problem:** The docstring for `OperationContract` (lines 68–69) and `ValidTrace` (lines 87–88) states that in `allows` and `mayBlock`, "the history includes the current request as its last event" ("in the history ending in that request"). However, `ValidTrace.output` is polymorphic in `pending : Option (Request S)`, allowing `.output o` events to be appended while `pending = some q`. This permits two unintended behaviors in sequential execution: (a) the program can emit output while blocked waiting for the environment's synchronous response to `q`, and (b) when `ValidTrace.response` subsequently fires, the history `hist` passed to `C.allows input hist q r` ends with `.output o` rather than `.request q`.
+   - **Concrete fix:** Restrict `ValidTrace.output` to `pending = none` (when no request is currently blocked in the environment):
+     ```lean
+     | output {hist o} : ValidTrace C input none hist →
+         ValidTrace C input none (hist ++ [.output o])
+     ```
+     Then prove a helper theorem showing that `ValidTrace C input (some q) hist` implies `∃ prefix, hist = prefix ++ [.request q]`.
+
+2. **`ConcreteSpec/Spec/Observe.lean:165-221` and `ConcreteSpec/Proofs/Observe2.lean:103-122` — `major` — `REAL DEFECT`**
+   - **Problem:** `full_observation_preservation` (lines 106–117) and `infinite_silent_not_termination` (lines 120–122) are tautological rephrasings of the definition of `SameObservation` (`SameObservation (.infinite _) (.finite _ _)` is defined as `False`, and the other branches are defined as the exact equalities/relations in the theorem's conclusion). Furthermore, `FullObservation.finiteDivergence` and `FullObservation.infiniteDivergence` (`Spec/Observe.lean:168-169`) are disconnected from `Execution.infinite` and `SameInfiniteObservation`: there is no projection or relational link from `Execution S` to `FullObservation S` showing that `SameInfiniteObservation xs ys` preserves the `FullObservation` (i.e., `xs` diverges after a finite trace `evs` iff `ys` diverges after the same `evs`, and `xs` produces an `InfiniteTrace` `f` iff `ys` produces the same `f`). Similarly, `silent_internal_steps` (`Proofs/Observe2.lean:43-45`) only strips a single leading `.silent` on a `.finite` trace, with no stuttering lemma for `.blocked` or `.infinite` executions.
+   - **Concrete fix:**
+     1. Define the relational or classical observation `Execution.HasFullObservation : Execution S → FullObservation S → Prop` mapping `.finite` to `.terminal`, `.blocked` to `.blocked`, an `.infinite` step stream whose visible events stabilize to `.finiteDivergence`, and an `.infinite` step stream with infinitely many visible events to `.infiniteDivergence`.
+     2. Prove that if `SameObservation x y`, then `x.HasFullObservation obs ↔ y.HasFullObservation obs`. This gives `full_observation_preservation` and `infinite_silent_not_termination` genuine semantic content over `FullObservation` rather than unfolding `SameObservation` to `False`.
+     3. Add a stuttering theorem for `Execution.infinite` (e.g., inserting finitely many `.silent` steps before any step of `steps : Nat → Step S` satisfies `SameInfiniteObservation`).
+
+3. **`ConcreteSpec/Spec/Observe.lean:229-266` — `minor` — `REAL DEFECT`**
+   - **Problem:** `ExecAdapter` provides `events : O.Event → List (Event S)` (used for completed steps) and `request : O.Prim → List O.Val → SiteId → O.Store → Option (Request S)` (used when blocked at `noAnswer`), with no well-formedness predicate tying them together for C7/C8 or connecting `reportObservation`'s `.blocked (A.project r.events) request` to `ValidTrace` / `Responds`. Also note the convention mismatch: `FullObservation.blocked events request` stores `events` *prior* to `request`, whereas `Responds C input hist request .blocked` expects `hist` to equal `events ++ [.request request]`.
+   - **Concrete fix:**
+     1. Define ` BlockedTrace (C : OperationContract S) (input : C.Input) (events : FiniteTrace S) (q : Request S) : Prop := ValidTrace C input (some q) (events ++ [.request q]) ∧ C.mayBlock input (events ++ [.request q]) q` so the convention between `FullObservation.blocked` and `OperationContract.mayBlock` is explicit.
+     2. Add an `ExecAdapter.Valid` structure/predicate (including `SiteTable.Valid A.sites` and coherence between `A.request` on a pending step and the `.request` event emitted in `A.events` when that step is answered) so C7 and C8 have a single contract to assume.
+
+4. **`ConcreteSpec.lean:6-9` and `ConcreteSpec/Spec.lean:16-19` — `minor` — `PREFERENCE`**
+   - **Problem:** Both legacy `ConcreteSpec.Spec.Observation` / `ConcreteSpec.Proofs.Observe` and new `ConcreteSpec.Spec.Observe` / `ConcreteSpec.Proofs.Observe2` remain imported simultaneously without a deprecation pointer in `Spec/Observation.lean` or `README.md` explaining the transition and why the proof module is named `Observe2`.
+   - **Concrete fix:** Either migrate/remove the superseded parts of `Spec/Observation.lean` and `Proofs/Observe.lean` if no legacy slice still depends on them, or document in `Spec/Observation.lean` and `README.md` which legacy slices still require `Spec/Observation.lean` until A2i unification (`R-0571`) and name the proof file `ConcreteSpec/Proofs/CoreObserve.lean` (or match the module path) rather than `Observe2.lean`.
+
+VERDICT: CHANGES
+rc=0

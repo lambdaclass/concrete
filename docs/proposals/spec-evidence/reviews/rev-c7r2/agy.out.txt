@@ -1,0 +1,10 @@
+All Round 1 findings have been cleanly and completely addressed:
+
+1. **Function-local requested and peak bounds (`ConcreteSpec/Spec/Leak.lean`, `ConcreteSpec/Proofs/Leak.lean`):** `Account` now tracks `functionPeak` alongside the whole-execution `peak`, initialized at function entry via `Account.enter`, preserved across `free`/`reset`, and updated by `alloc` and `Account.WF`. `LineageReport.Sound` checks `exit.requested - entry.requested` and `exit.functionPeak`, with `established_report_sound` and `empty_function_report_sound` witnessing non-vacuous function-local bounds.
+2. **Demo program naming and docstrings (`ConcreteSpec/Proofs/Leak.lean`):** `secureProgram` and `leakyProgram` are consolidated into `program`, with comments accurately attributing the difference to `start` vs. `leakyStart`.
+3. **Dead/duplicate theorems (`ConcreteSpec/Proofs/Leak.lean`, `ConcreteSpec/Spec/Leak.lean`):** Unused `Demo.step_none_of_final` and the duplicate `a.alloc 0 = a` example in `Spec/Leak.lean` have been removed.
+
+No new defects found.
+
+VERDICT: ACCEPT
+rc=0

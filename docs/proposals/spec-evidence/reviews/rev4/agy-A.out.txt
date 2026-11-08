@@ -1,0 +1,3 @@
+No defects found in round 4 of this slice (`ConcreteSpec/Spec/Outcome.lean`, `ConcreteSpec/Spec/Exec.lean`, and `ConcreteSpec/Proofs/Exec.lean`). All round 3 findings—per-activation ownership lifecycle hooks (`Life` / `Operands.life`), loop condition-region temporary scoping (`Frame.test` carrying `dom`), and the bidirectional cleanup plan characterization (`cleans_iff_runs_plan` with `planWith_calls`)—are cleanly resolved and proved.
+
+VERDICT: ACCEPT

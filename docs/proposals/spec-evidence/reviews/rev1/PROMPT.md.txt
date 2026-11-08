@@ -1,0 +1,16 @@
+You are reviewing one slice of the Concrete specification, written in Lean 4 (core only, no Mathlib). READ-ONLY: do not edit, create or delete any file, and do not run git commands that write. You may read files and run `lake env lean <file>` / `lake build` only if a .lake exists (it may not; reading is enough).
+
+Context:
+- The repository is a copy at the current directory. The spec is ConcreteSpec/ (read ConcreteSpec/README.md and ConcreteSpec/Spec.lean first). The slice under review is the diff in _review/DIFF.patch: new modules ConcreteSpec/Spec/Outcome.lean, Exec.lean, Scalar.lean, Const.lean and their proofs ConcreteSpec/Proofs/Exec.lean, Scalar.lean, Const.lean, plus small edits (Ident.lean ConstId, Rules.lean registry, Spec.lean, README, axioms golden).
+- It implements foundation contracts C1 (execution, calls and cleanup) and C2 (scalars, failure and arithmetic) of the owner-approved foundation proposal, _review/FOUNDATION_PROPOSAL.md (the owner answered "ok all recommended" to its section-5 questions on 2026-11-08). Contracts are interfaces plus laws; freezing comes later.
+- Also encoded from today's owner-approved language decisions (_review/LANGUAGE_DECISIONS_2026-11-08.md): item 4 trap kind names (overflow, division_by_zero, invalid_shift, out_of_bounds, invalid_range, abort; diagnostic categories distinct from checked-operation error types); item 26 constants computed at compile time, Copy-only values, a closed total initializer subset (defined here; the TYPE-22/Q6.4 revision itself is NOT claimed); item 7 receivers as ordinary typed first parameters with one consuming Destroy protocol; item 10 explicit math/machine arithmetic boundary in contracts (semantics only; the surface spelling is not approved, so a neutral constructor name is used).
+- Decided rows are in docs/decisions.md (Core rows Q1.1–Q9.19; ODnn rows). The project philosophy is docs/PHILOSOPHY.md.
+
+Review for:
+1. Correctness against the decided rules and the proposal's C1/C2 text (evaluation order, cleanup order, abort/trap behaviour, late reads, division/remainder/shift rules, MIN/-1, ArithmeticError vs OutOfRange vs TrapKind, lossless conversion by value domain, constants).
+2. Whether anything decides a language question that the decisions do NOT answer (any side of an undecided OD or owner question, any surface spelling). List each such place.
+3. Whether the theorems are meaningful: not vacuous, hypotheses satisfiable, statements actually express the claimed law (e.g. cleanup order, "abort runs no cleanup", totality of the constant subset). Missing laws the contract text requires that a reader would expect at this stage.
+4. Lean quality and readability for an owner who reads Lean: doc comments accurate, examples correct, naming, anything misleading.
+5. Anything that will make later contracts (C4 memory, C5 borrow, C6 observations, C8 evaluator adequacy) hard to build on this interface.
+
+Output: a numbered list of findings, each with severity (blocker / major / minor / nit), file:line, the problem and a concrete fix. Then one final line exactly `VERDICT: ACCEPT` or `VERDICT: CHANGES`.

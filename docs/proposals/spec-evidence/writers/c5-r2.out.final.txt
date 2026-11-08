@@ -1,0 +1,47 @@
+Committed the follow-up work on `wip/spec-c5`; nothing was pushed. **ROUND2 remains incomplete:** findings 3 and 5 are pending under its binding boundary, and finding 2’s general C1 simulation is still outstanding.
+
+Validation at `49416b5d`: build passed, rules **32/32**, trust-ban **23/23**. Worktree clean. No independent review was run.
+
+Commits:
+
+| SHA | Change |
+|---|---|
+| `b15f99e3` | Merge integrated C6 core; mechanically combine conflicts |
+| `a07820e0` | Fix representation example, dependency uniqueness and README |
+| `8c071126` | Structural generative preservation and progress |
+| `5d60bd6e` | Synchronized call-argument invariant and preservation |
+| `9d7a07d5` | Structural move, access and lending preservation |
+| `7d6eb326` | Finite allocator-run erasure |
+| `2d3fc8ed` | Structural lifecycle and call-adapter preservation |
+| `49416b5d` | Non-escape witness and C1 stuck-erasure counterexample |
+
+Finding dispositions:
+
+| Finding | Result |
+|---|---|
+| **1** | Removed `validate` entirely. All ownership/generative transitions now have structural preservation proofs from well-formed inputs. Added progress laws for primitive guards, fresh binding, typed distinct parameter entry and drop. General compound exit/call progress remains unproved. |
+| **2** | Added `Generative.run_erasure`, preserving ordered results and concrete state across finite runs. Added an erased example operand instance and an actual C1 counterexample to unconditional stuck-classification equivalence. General C1 agreements and step/`Steps`/`run` simulation remain unimplemented. |
+| **3** | Left activation-target behavior unchanged and documented it as pending, as the binding boundary requires. |
+| **4** | Added `CallState.WellFormed`, including uniqueness, existence and exact pending-flag correspondence. Proved `passDown` and `callLife` preserve it. Duplicate parameters and unfinished buffers crossing other lifecycle events are refused. |
+| **5** | Left direct owner lending unimplemented and documented the retained caller-loan behavior pending an owner answer. |
+| **6** | Removed `Hybrid.sizeof .unit` as representation evidence. The example now states the linear obligation independently of representation. |
+| **7** | Added dependency-place `Nodup` and named C9 ownership/brand lifecycle integration as outstanding. |
+| **8** | Clarified README O3 and added grant-state defaults plus `DecidableEq, Repr`. |
+
+The new/changed laws and their positive/planted-negative witnesses are grouped as follows:
+
+| Laws | Statement and witnesses |
+|---|---|
+| Ownership `*_preserves`: move, reinitialize, borrow, reborrow, endLoan and access | Preserve `Own.WellFormed` structurally. `PrimitiveWitnesses` and `LifecycleWitnesses` pair successful live states with moved/missing roots, reused supplies and missing parents. |
+| Binding, entry, drop, exit and lifecycle preservation | Preserve ownership through compound transitions. `LifecycleWitnesses` supplies successful bindings, entry, drop, local-loan ending and return; mutations duplicate places, remove roots or assign unissued activations. |
+| `passDown_call_preserves`, `callLife_call_preserves` | Preserve the full call-state invariant. `CallWitnesses` supplies successful argument preparation/entry and negated duplicate, dangling-ID and stale-leave states. |
+| Ownership progress laws | Operational permission/status/identity guards suffice for success. The same witness namespaces include successful instances and negated success with violated guards. |
+| Generative preservation/progress laws | Fresh, depend, consume, release, reset and scope exit preserve the invariant and succeed under their guards. `PreservationWitnesses` includes successful transitions and duplicate-place, stale-supply, live-allocation and escaping-dependency mutations. |
+| Generation and non-escape laws | Fresh/reset advance nominal generations; scope exit prevents escape. The surviving `outside` dependency inhabits the non-escape hypothesis; its mutation mentions the exited brand. |
+| `Generative.run_erasure` | Successful finite runs preserve concrete results, order and state. `RunWitnesses` uses two resets; dropping the first command is the negated control. |
+
+**QUESTIONS**
+
+- **Activation targets:** permit only the current activation and newly entered callee, or retain the general helper? Recommend the restricted interface under Q3.2 and second-class references.
+- **Direct owner arguments:** introduce a call-duration root loan, or require an explicit caller borrow scope? Recommend the call-duration loan; no answer was encoded.
+- **C1 erasure:** use successful-step simulation, with stuck equivalence conditional on checker safety? Recommend this contract: the checked counterexample shows instrumentation stuck while erased execution returns `7`.

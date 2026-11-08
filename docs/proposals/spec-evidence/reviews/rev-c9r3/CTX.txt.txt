@@ -1,0 +1,37 @@
+C9 (identities, primitive contracts, evidence, ghost erasure) round 3, written by Kimi. Base ffc8f93a3 (C9 round 2 eee412cd merged with the integrated spec core 07c16bb5) -> head 4313e251 (golden regenerated). Two parts. (0) Codex's round-2 vacuity findings: usable_current reflexive (now SafetyEvidence.Discharges + discharge_fact), runStmts_of_not_normal guard-vacuous (now runStmts_terminal + restarting mutant), mismatch counterexamples changed the wrong field, drive counterexamples not law failures, Ty=Unit hid the failure-type check. (1) Identity prerequisites from the CLI question audit, due before the facts schema freezes; the Lean types are the JSON schema source, so field names are interface: U1 obligation identity (site, kind, discriminator); U2 edit-stable key (function identity + function-relative key, stable under injective site renumbering); U3 PackageId in ModuleId, with OD44 (decided: two packages defining the same top-level module are refused at load, naming both, until R-0440; option (b) coexistence must NOT be encoded); U4 specialization identity keyed by generic + type/capability arguments, call-site request edges separate; U12 typed premise identity (kinds limited to decided categories); U7 one span type: path, byte range, 1-based start line/column, columns count bytes and a tab counts one byte (decided, docs/decisions.md#foundation-q10), with a law that source + offset determine line/col. Writer's QUESTIONS (owner): FunctionRelativeKey.token content (rec: syntactic path, per-kind ordinal for generated/unnamed); PackageId.token content (rec: name and version); how future premise categories are added (rec: new constructors only per decided row). Check: each finding fixed for real; each identity law non-vacuous; nothing undecided encoded (the token contents must stay abstract); the identity types are a sound long-term schema (no field that will have to be renamed or split); the merge resolution (remerge diff below). Give your assessment of the three questions.
+diff --git a/ConcreteSpec.lean b/ConcreteSpec.lean
+remerge CONFLICT (content): Merge conflict in ConcreteSpec.lean
+index 1f151de82..8848638be 100644
+--- a/ConcreteSpec.lean
++++ b/ConcreteSpec.lean
+@@ -6,12 +6,8 @@ import ConcreteSpec.Proofs.Authority
+ import ConcreteSpec.Proofs.Observe
+ import ConcreteSpec.Proofs.Slice0
+ import ConcreteSpec.Proofs.Exec
+-<<<<<<< eee412cdd (axioms.golden: C9 round 2 (regenerated on concrete-ci-2))
+ import ConcreteSpec.Proofs.Prim
+-||||||| d8f89ea75
+-=======
+ import ConcreteSpec.Proofs.Observe2
+->>>>>>> 07c16bb5f (axioms.golden: A2i integration of C1 partial lifecycle, C4 and C6 (regenerated on concrete-ci-2))
+ import ConcreteSpec.Proofs.Scalar
+ import ConcreteSpec.Proofs.Const
+ 
+diff --git a/ConcreteSpec/Spec.lean b/ConcreteSpec/Spec.lean
+remerge CONFLICT (content): Merge conflict in ConcreteSpec/Spec.lean
+index 30a6a88c1..d670f1271 100644
+--- a/ConcreteSpec/Spec.lean
++++ b/ConcreteSpec/Spec.lean
+@@ -16,12 +16,8 @@ import ConcreteSpec.Spec.Observation
+ import ConcreteSpec.Spec.Target
+ import ConcreteSpec.Spec.Outcome
+ import ConcreteSpec.Spec.Exec
+-<<<<<<< eee412cdd (axioms.golden: C9 round 2 (regenerated on concrete-ci-2))
+ import ConcreteSpec.Spec.Prim
+-||||||| d8f89ea75
+-=======
+ import ConcreteSpec.Spec.Observe
+->>>>>>> 07c16bb5f (axioms.golden: A2i integration of C1 partial lifecycle, C4 and C6 (regenerated on concrete-ci-2))
+ import ConcreteSpec.Spec.Scalar
+ import ConcreteSpec.Spec.Const
+ import ConcreteSpec.Spec.Memory

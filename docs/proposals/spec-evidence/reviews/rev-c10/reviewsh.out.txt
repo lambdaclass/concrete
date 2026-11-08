@@ -1,0 +1,10 @@
+review: round 1, piece 1 of 2 (scripts, 50982 bytes)
+review: round 1, piece 2 of 2 (docs, 1171 bytes)
+review: round 1 verdict findings (2 piece(s)); raw output: .review/46211bbd38dcdfca6585c6ec99c6fba2da1d8523-1.md
+[piece 1 of 2: scripts]
+- ConcreteSpec/Spec/Frame.lean:285: `ExternResult.Valid` accepts every owned handle and receipt without checking a submission/completion pairing. Consequently, an ordinary unrelated extern can return `.receipt h` or `.owned h` and pass validation, contrary to the documented restriction that these results come from paired submission or completion.
+- ConcreteSpec/Spec/Frame.lean:306: `KeptPair.WellFormed` permits `submit = complete`. Such a well-formed pair allows the submitting extern to consume its own receipt through `KeptStep`, contradicting the stated rejection of that operation. Require distinct extern identities or enforce their incompatible declaration signatures.
+pre-push: review-notes push — no source tree, no gates
+review: notes push attempt 1 rejected; fetching and merging
+pre-push: review-notes push — no source tree, no gates
+rc=1

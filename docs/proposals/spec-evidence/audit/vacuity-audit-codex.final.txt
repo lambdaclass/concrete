@@ -1,0 +1,328 @@
+Found guard-derived laws and one cleanup claim that is weaker than its advertised meaning. The memory and hybrid invariant-preservation proofs do **not** recheck the whole invariant at runtime.
+
+This is a source audit only: no files changed, git writes, network access, or builds. C6 statements were audited despite the acknowledged partial-continuation mismatch.
+
+Here, a concrete computation equation can be NON-VACUOUS even when proved by `rfl`: changing its implementation can falsify its specified result. VACUOUS identifies laws whose claimed property is already an assumed field, a successful guard, or generic functional congruence. Anonymous examples serve as witnesses; the registered rule is inventoried separately.
+
+Notation: **N** = NON-VACUOUS; **V** = VACUOUS; **W** = WEAK. “Mutation” means a hypothetical source change, not an executed test.
+
+**C1 — `Proofs/Exec.lean`**
+
+| Theorem | Verdict and witness |
+|---|---|
+| `Steps.single` | Skipped: pure closure-construction helper. |
+| `Steps.trans` | Skipped: pure closure-composition helper. |
+| `steps_next` | Skipped: transition-lifting helper. |
+| `steps_request` | Skipped: transition-lifting helper; importantly, requires a successful partial continuation. |
+| `step_seq` | **N** — Demo `seq skip abort`; executing the second statement first falsifies the specified successor. |
+| `step_done_seq` | **N** — `done` above a pending `log(1)`; discarding the sequence frame without executing it falsifies the result. |
+| `step_exit_seq` | **N** — `return 7` above pending `log(1)`; executing the pending statement falsifies the successor. |
+| `step_block` | **N** — Enter an empty block with one existing local; omitting its scope frame falsifies the result. |
+| `lookup_restrict` | **N** — Locals `x↦1,y↦2`, domain `[x]`; retaining `y` or discarding `x` falsifies lookup. |
+| `restrict_dom_drops` | **N** — Outer domain `[x]`, inner local `y`; retaining `y` falsifies the conclusion. |
+| `register_scope` | **N** — Existing deferred `log(1)`, register `log(2)`; appending instead of prepending falsifies the result. |
+| `register_seq` | **N** — Sequence frame above a scope; stopping registration at the sequence frame falsifies the equation. |
+| `two_defers_register` | **N** — Distinct `log(1)` and `log(2)`; FIFO registration falsifies the reached stack. |
+| `step_ret` | **N** — Demo literal `7`, with pending cleanup; running cleanup before capturing the value falsifies the successor. |
+| `step_break_loop` | **N** — Matching body frame; restarting the loop instead of completing it falsifies the result. |
+| `step_continue_loop` | **N** — Matching body frame; restarting at the body instead of the condition region falsifies the result. |
+| `step_return_caller` | **N** — Demo returning `7` into caller destination `x`; retaining callee locals or losing lifecycle state falsifies the result. |
+| `exit_scope_next` | **N** — Return through scope `[log(2),log(1)]`; selecting the older call or losing the pending return falsifies the conclusion. |
+| `done_scope_next` | **N** — Normal completion of the same scope; choosing `log(1)` first falsifies the conclusion. |
+| `exit_scope_runs_defers` | **N** — Demo completing deferred calls and accepting drop; reversing calls or changing the return value falsifies the reached configuration. |
+| `done_scope_runs_defers` | **N** — Existing bump/log witness at file end; losing the bump or restoring old shared state falsifies the result. |
+| `unwind_runs_plan` | **N** — Two nested scopes with completing log calls; reversing scope order falsifies the emitted trace. |
+| `plan_scopes` | **N** — Inner `[log(2)]`, outer `[log(1)]`; reversing concatenation falsifies the equation. |
+| `return_reaches_caller` | **N** — Nested completing cleanup, return `7`, accepted leave/bind; binding another value falsifies the endpoint. |
+| `break_reaches_loop` | **N** — Completing cleanup inside the matching loop; retaining the loop or skipping cleanup falsifies the endpoint/trace. |
+| `continue_reaches_loop` | **N** — Same setup with continue; entering the body directly falsifies the endpoint. |
+| `planWith_calls` | Skipped: pure correspondence between the two plan representations. |
+| `RunsAll.each` | Skipped: auxiliary cleanup-relation composition helper. |
+| `RunsEach.split_calls` | Skipped: auxiliary cleanup-relation decomposition helper. |
+| `cleans_iff_runs_plan` | **W** — Equates two abstract descriptions assembled from the same completing-call/drop premises; does not establish that every actual completed unwind follows that plan. |
+| `Passes.passable` | Skipped: frame-predicate helper. |
+| `step_trapped` | **N** — Trapped configuration with pending cleanup; adding an unwind successor falsifies the equation. |
+| `steps_from_trapped` | **N** — Reflexive trapped execution satisfies the premise; allowing a subsequent emitting transition falsifies the conclusion. |
+| `abort_runs_no_cleanup` | **N** — Existing abort-with-defer example; executing the deferred log falsifies the empty trace and allowed endpoints. |
+| `evalArgs_first_trap` | **N** — Successful literal prefix followed by overflow then division-by-zero; right-to-left evaluation falsifies the selected trap. |
+| `step_silent_deterministic` | **V** — Two equalities for the same function application force equal outputs for every possible implementation of `step`. |
+| `step_deterministic` | **V** — Its alternatives follow from `Step` being generated by one functional `step`, with the primitive constructor carrying exactly the exhibited answer premises. |
+| `no_step_of_none` | Skipped: constructor-exclusion helper for `Step`. |
+| `bind_refused` | **N** — Instance whose evaluation succeeds and bind lifecycle returns `none`; ignoring refusal falsifies the equation. |
+| `assign_refused` | **N** — Same instance with an existing destination; ignoring bind refusal falsifies the equation. |
+| `enter_refused` | **N** — Instance refusing `.enter`; fabricating an entry configuration falsifies the equation. |
+| `call_refused` | **N** — Existing function, successful arguments, refused activation entry; entering its body falsifies the equation. |
+| `scope_drop_refused` | **N** — Existing `refusingOps` flagged-local scope; discarding the scope despite refusal falsifies the equation. |
+| `exit_drop_refused` | **N** — Flagged local crossing a scope/test frame; ignoring drop refusal falsifies either conjunct. |
+| `test_drop_refused` | **N** — Successful true or false test with refused temporary drop; continuing either branch falsifies the equation. |
+| `return_refused` | **N** — Instance refusing leave or destination bind; restoring caller execution anyway falsifies the conclusion. |
+| `prim_bind_refused` | **N** — Successful primitive answer with refused destination bind; making its continuation succeed falsifies the conclusion. |
+| `continuation_refused` | Skipped: pure `Option.none ≠ Option.some` helper; independently establishes no machine behavior. |
+| `destroyCall_sig` | **N** — Lawful non-Copy destruction instance with one argument; constructing a deferred call with no argument falsifies the first conjunct; signature guarantees themselves are assumed. |
+| `destroy_not_copy` | **V** — Exactly `DestroyProtocol.notCopy`, applied to the supplied implementation equality. |
+| `seqDestroyOrder_elem` | **N** — `n=2,i=0`; reversing element indices falsifies the lookup. |
+| `seqDestroyOrder_storage` | **N** — `n=2`; placing storage first falsifies the final-position claim. |
+| `entryParts_succ` | Skipped: private list-construction helper. |
+| `entryParts_length` | Skipped: private list-length helper. |
+| `entryParts_get` | Skipped: private list-indexing helper. |
+| `mapDestroyOrder_entry` | **N** — Two entries; visiting value before key falsifies the indexed results. |
+| `mapDestroyOrder_storage` | **N** — Two entries; releasing nodes first falsifies the final-position claim. |
+| `demo_log_completes` | **N** — Actual `log(1)` call from arbitrary locals/state; logging `2` falsifies its trace. No failed-entry antecedent is used. |
+| `demo_bump_completes` | **N** — Actual bump call; restoring the old counter falsifies its final state. No failed-entry antecedent is used. |
+
+`Spec/Outcome.lean` contains no named theorems. Its examples at lines 95 and 100 are concrete, non-vacuous checks of trap-name spelling and trap propagation respectively; changing a spelling or running the continuation breaks them. `Spec/Exec.lean` contains no named theorems.
+
+**C2 — `Proofs/Scalar.lean`**
+
+| Theorem | Verdict and witness |
+|---|---|
+| `TrapKind.name_injective` | **N** — Equal overflow names satisfy the premise; assigning overflow and abort the same name falsifies injectivity. |
+| `ArithmeticError.trapKind_injective` | **N** — Equal overflow errors satisfy the premise; mapping division-by-zero to overflow falsifies injectivity. |
+| `toBits_lt` | **N** — `u8,256`; omitting modular reduction yields `256`, violating the bound. |
+| `ofBits_inRange` | **N** — `i8,255`; omitting signed interpretation yields out-of-range `255`. |
+| `ofBits_toBits` | **N** — `i8,-2`; interpreting its pattern as unsigned falsifies the round trip. |
+| `wrap_inRange` | **N** — `u8,256`; identity wrapping violates the range. |
+| `wrap_of_inRange` | **N** — `u8,7`; adding one during wrapping falsifies identity. |
+| `IntTy.min_le_max` | **N** — `i8`; reversing its bounds falsifies the inequality. |
+| `saturate_inRange` | **N** — `u8,300`; returning the input violates the range. |
+| `saturate_of_inRange` | **N** — `u8,7`; always returning the maximum falsifies identity. |
+| `bitwise_inRange` | **N** — `i8,-1 AND -1`; failing signed interpretation yields `255`, outside range. |
+| `bitNot_inRange` | **N** — `i8,0`; returning unsigned pattern `255` violates range. |
+| `inRangeOr_inRange` | Skipped: pure extraction of `inRangeOr`’s successful range guard. |
+| `shr_inRange` | **N** — `i8,-128,d=1`; replacing division by multiplication produces out-of-range `-256`. |
+| `tmod_inRange` | **N** — `i8,127,2`; replacing remainder by `a+b` violates range. |
+| `checked_inRange` | **N** — Includes successful `i8` remainder/right-shift cases whose output range is derived arithmetically; changing right shift to multiplication can violate it. |
+| `plain_ok_iff` | **N** — `u8,200+55`; changing plain success to a trap falsifies equivalence. |
+| `plain_trap_iff` | **N** — `u8,200+56`; mapping overflow to division-by-zero falsifies equivalence. |
+| `plain_not_stuck` | **N** — Any ordinary addition; returning `.stuck` on overflow falsifies the theorem. |
+| `checked_wrapOp` | **N** — `u8,2+3`; implementing checked addition as subtraction falsifies the equation. |
+| `wrapping_of_checked` | **N** — `u8,2+3=5`; wrapping addition implemented as subtraction falsifies agreement. |
+| `saturating_of_checked` | **N** — Same successful sum; saturating subtraction falsifies agreement. |
+| `lossless_iff` | **N** — `u8→i16`; allowing `i8→u8` supplies counterexample `-1`. |
+| `boolToInt_inRange` | **N** — `true→i8`; mapping true to `256` violates range. |
+| `tryConvert_ok_iff` | **N** — `u8,255`; returning `254` or accepting `256` falsifies the characterization. |
+| `exact_defined` | **N** — Exact `255+1`; adding a machine-width overflow check destroys totality. |
+| `machine_plain_eq_exact` | **N** — Successful machine `2+3`; interpreting exact addition as subtraction falsifies agreement. |
+| `machine_operands` | **V** — Successful machine evaluation has already passed precisely `MachineOp.operandsOk`; the conclusion extracts that guard. |
+| `machine_inRange` | **N** — Successful machine signed right shift; changing its result to an out-of-range integer falsifies the law. |
+| `exactOf?_some` | Skipped: constructor-classification helper. |
+| `eval_toExact` | **N** — Nested successful plain additions; translating an addition into exact multiplication falsifies preservation. |
+| `plainNeg_ok_iff` | **N** — `i8,5`; changing plain negation’s successful value falsifies agreement. |
+| `plainNeg_trap_iff` | **N** — `i8,-128`; mapping its overflow to another trap falsifies agreement. |
+| `checkedNeg_inRange` | **V** — Checked negation delegates to `inRangeOr`; success directly carries the tested output-range property. |
+| `boolOfBits_boolToBits` | **N** — `true`; swapping the decoder’s `0`/`1` meanings breaks round trip. |
+| `boolOfBits_some_iff` | **N** — Pattern `1,true`; accepting pattern `2` as true falsifies the characterization. |
+| `lossyConvert_inRange` | **N** — `u8,300`; identity conversion violates range. |
+| `lossyConvert_of_inRange` | **N** — `u8,7`; changing low-bit conversion to return zero falsifies identity. |
+| `toBits_ofBits` | **N** — `i8,255`; incorrect signed offset breaks the inverse. |
+| `toBits_wrap` | **N** — `u8,300`; saturating instead of wrapping changes the pattern from `44` to `255`. |
+| `toBits_wrapping` | **N** — `u8,200+56`; saturating instead of wrapping falsifies modular equality. |
+| `toBits_shl` | **N** — `u8,0x81<<1`; shifting right instead falsifies the resulting pattern. |
+| `toBits_shr_unsigned` | **N** — `u8,128>>7`; sign-filling falsifies the expected pattern `1`. |
+| `toBits_bitwise` | **N** — `u8,1 AND 2`; implementing AND as OR falsifies equality. |
+| `toBits_bitNot` | **N** — `u8,0`; leaving the pattern unchanged falsifies complement. |
+| `saturate_below` | **N** — `u8,-1`; wrapping yields `255` instead of minimum `0`. |
+| `saturate_above` | **N** — `u8,256`; wrapping yields `0` instead of maximum `255`. |
+
+**C2 — `Proofs/Const.lean` and registered rule**
+
+| Theorem/rule | Verdict and witness |
+|---|---|
+| `CVal.int_of_ty` | Skipped: value-constructor inversion helper. |
+| `CVal.bool_of_ty` | Skipped: value-constructor inversion helper. |
+| `sameIntTy_some` | Skipped: operand-type helper inversion. |
+| `bothBool_true` | Skipped: operand-type helper inversion. |
+| `eval_total` | **N** — Well-typed wrapping `u8,255+1`; making evaluation reject overflow falsifies existence while typing still succeeds. |
+| `eval_valid` | **N** — Wrapping `u8,255+1`; returning mathematical `256` falsifies validity. |
+| `admitted_copy` | **V** — Every successful declaration evaluation has explicitly tested `U.isCopy d.ty=true`; the theorem extracts that test. |
+| `ofC_copy` | **V** — Direct application of the identically named `ConstTypes.ofC_copy` field. |
+| `Matches.cons` | Skipped: environment-correspondence construction helper. |
+| `typed_evaluates` | **N** — Existing MASK/BITS declaration list; making evaluation reject a typed wrapping initializer falsifies the conclusion. |
+| `typed_admitted` | **N** — Same typed list; evaluator rejection falsifies admission despite successful independent typing. |
+| `evalConsts_mono` | **N** — Existing `A↦1`, add fresh `B`; dropping the old environment during evaluation falsifies preservation. |
+| `evalConsts_sound` | **N** — Fresh wrapping `u8` declaration; returning invalid `256` falsifies validity, and dropping an earlier binding falsifies lookup guarantees. |
+| `sameInt_some` | Skipped: operand-value helper inversion. |
+| `twoBools_some` | Skipped: operand-value helper inversion. |
+| `eval_ty` | **N** — Boolean initializer; making its evaluator return an integer falsifies agreement with independent typing. |
+| `Matches.lookup` | Skipped: environment-correspondence projection helper. |
+| `Matches.valid` | Skipped: environment-validity projection helper. |
+| `evaluates_typed` | **N** — Successful boolean declaration; changing typing to reject boolean literals falsifies the conclusion. |
+| `admitted_iff_typed` | **N** — MASK/BITS accepts through both independently recursive procedures; diverging their conversion/type rules falsifies equivalence. |
+| `ConcreteSpec.Core.ConstsAdmitted` | **N** — The registry’s sole rule: MASK/BITS accepts with computed values; non-Copy text, forward/self references, duplicate names, invalid literals and mismatched types refuse. Removing freshness or range checks breaks concrete refused examples. |
+
+`Spec/Scalar.lean` and `Spec/Const.lean` contain no named theorems.
+
+**C4 — `Proofs/Memory.lean`**
+
+Use the existing Linux target examples: allocate four bytes at address `4096`, alignment `4`; call this allocation **A**. Two distinct allocations can be placed at `4096` and `8192`.
+
+| Theorem | Verdict and witness |
+|---|---|
+| `ordered_ordered` | Skipped: byte-order involution helper. |
+| `leBytes_length` | Skipped: encoding-length helper. |
+| `ordered_length` | Skipped: ordering-length helper. |
+| `octets_init` | Skipped: byte-constructor projection helper. |
+| `leValue_leBytes` | **N** — Two bytes encoding `0x1234`; reversing positional weights breaks the round trip. |
+| `leValue_lt` | **N** — Single octet `255`; weighting the first octet by `256` violates the bound. |
+| `intByte_power` | Skipped: finite width-arithmetic helper. |
+| `encodeInt_length` | **N** — `u16,7`; emitting one byte instead of two falsifies length. |
+| `decodeInt_encodeInt` | **N** — Existing `i16,-2`; disagreeing encoder/decoder endianness breaks round trip. |
+| `octets_length` | Skipped: byte-projection length helper. |
+| `decodeInt_inRange` | **N** — `i8` byte `255`; decoding it as unsigned `255` violates range without any result-range guard. |
+| `decodeBool_encodeBool` | **N** — `true`; swapping Boolean decoding breaks round trip. |
+| `decodeBool_valid` | **N** — Initialized byte `1`; admitting byte `2` as true falsifies the representation characterization. |
+| `decodePtr_encodePtr` | **N** — Existing stored-pointer example; wrong fragment indexing prevents successful decoding. |
+| `block_modify` | Skipped: association-list update helper. |
+| `empty_wellFormed` | **N** — Empty memory is an actual base state; a malformed initial block would falsify the invariant. |
+| `keys_update` | Skipped: private association-list helper. |
+| `canonical_of_unique` | Skipped: private association-list helper. |
+| `modify_wellFormed` | **N** — Change A’s bytes without changing geometry/length/liveness; updating an unrelated block incorrectly can violate the output invariant despite those premises. |
+| `alloc_result` | **N** — Allocate A; failing to increment `next` falsifies the stated result. |
+| `alloc_fresh` | **N** — Allocate after A; reusing A’s identity falsifies freshness. |
+| `alloc_block` | **N** — Allocate A; installing a block of the wrong size falsifies lookup. |
+| `alloc_failure` | **N** — Existing overlapping-allocation example; accepting the collision falsifies the result. |
+| `access_zero` | **N** — Valid aligned non-null address without provenance; requiring provenance, or accepting an invalid target address, falsifies the equation. |
+| `access_no_provenance` | **N** — Existing nonempty provenance-free read; allowing numeric-address lookup falsifies refusal. |
+| `free_retains` | **N** — Free A; deleting its identity or changing `next` falsifies the conclusion. |
+| `access_after_free` | **N** — Free A, then access through its old pointer; ignoring liveness falsifies refusal. |
+| `eqAddr_provenance` | **N** — Same address, distinct provenance; comparing provenance falsifies equality. |
+| `alloc_ne_existing` | **N** — Two successful allocations; identity reuse falsifies inequality. |
+| `overlaps_symm` | Skipped: private interval-relation helper. |
+| `alloc_wellFormed` | **N** — Allocate A from empty memory; wrong byte count or unchanged `next` violates the output invariant. `Fits` does not recheck that whole invariant. |
+| `candidate_contains_unique` | **N** — Choose the same exposed live block twice at interior address `4097`; allowing distinct live overlapping allocations falsifies uniqueness. |
+| `fromExposed_sound` | **N** — Existing exposed allocation at `4100`; returning an unexposed block’s identity falsifies the conclusion. |
+| `fromExposed_exists` | **N** — Exposed A containing `4097`; always returning no provenance falsifies existence. |
+| `fromExposed_contains` | **N** — Two adjacent exposed blocks, address at the second block’s start; selecting the first block’s one-past provenance falsifies priority. |
+| `candidate_onePast_unique` | **N** — Same exposed block chosen twice at its endpoint; allowing overlapping live blocks with equal endpoints falsifies uniqueness. |
+| `fromExposed_onePast` | **N** — Exposed A at `4100`, with no containing candidate; removing endpoint fallback falsifies the result. |
+| `fromExposed_none` | **N** — Unexposed A at `4097`; reconstructing its provenance falsifies the conclusion. |
+| `access_some` | **V** — The conclusion enumerates the nonzero access branch’s lookup, guards and computed offset; success already requires exactly these conditions. |
+| `access_valid` | **V** — Both successful access branches explicitly test `p.Valid tgt`. |
+| `decodePtr_valid` | **V** — `decodePtr` explicitly tests the candidate pointer’s validity before returning it. |
+| `splice_read` | Skipped: list-splice helper. |
+| `splice_frame` | Skipped: list-splice helper. |
+| `store_load` | **N** — Store bytes encoding `7` into A; writing at the wrong offset falsifies readback. |
+| `store_other_block` | **N** — Store into A with a second allocation present; modifying the second block falsifies framing. |
+| `store_same_block_frame` | **N** — Eight-byte allocation, one-byte interior store; overwriting an adjacent byte falsifies framing. |
+| `alloc_initialized` | **N** — Allocate A; initializing bytes to zero rather than `.uninit` falsifies the conclusion. |
+| `store_wellFormed` | **N** — Interior store into A; inserting bytes without removing replaced bytes violates sizedness. |
+| `free_wellFormed` | **N** — Free A with another allocation present; corrupting byte length or freshness falsifies preservation. |
+| `expose_result` | **N** — Expose live A; marking a different block falsifies the update description. |
+| `expose_success` | **N** — Live provenance block A; additionally requiring an unrelated address condition falsifies guaranteed success. |
+| `expose_frame` | **N** — Expose A beside a second block; changing the second block or `next` falsifies framing. |
+| `expose_wellFormed` | **N** — Expose A; changing its size without its bytes falsifies preservation. |
+| `store_geometry` | **N** — Store into A; changing its base or alignment falsifies geometry equality. |
+| `expose_geometry` | **N** — Expose A; changing its size falsifies geometry equality. |
+| `load_congr` | **N** — Memories agree on A but differ on another block; making load inspect that other block falsifies congruence. |
+| `store_load_other` | **N** — Store into A, read the second allocation; cross-block corruption falsifies equality. |
+| `expose_load` | **N** — Load A before/after exposure; making exposure rewrite its bytes falsifies equality. |
+| `load_prefix` | **N** — Four-byte successful read shortened to two; returning a suffix instead falsifies the conclusion. |
+| `free_alloc_ne_existing` | **N** — Existing free/reallocate-at-same-address example; recycling the freed identity falsifies inequality. |
+
+**C4 — `Spec/Hybrid.lean` and `Proofs/Hybrid.lean`**
+
+Use the existing structured Boolean at place `0`, materialized at `4096` with padding `[uninit,73]`; a second place can materialize at `8192`.
+
+| Theorem | Verdict and witness |
+|---|---|
+| `State.places_set` | Skipped: place-map update helper in the specification. |
+| `State.places_memory` | Skipped: record-projection helper in the specification. |
+| `State.memory_set` | Skipped: record-projection helper in the specification. |
+| `encode_length` | **N** — `i16,-37`; emitting one active byte falsifies size agreement. |
+| `rep_roundtrip` | **N** — Existing big-endian `i16,-37`; mismatched byte order falsifies representation. |
+| `decode_valid` | **N** — Decode initialized signed byte `255`; unsigned interpretation violates value validity. |
+| `read_structured` | **N** — Existing structured true Boolean; returning false or requiring materialization falsifies the result. |
+| `materialize_reuse` | **N** — Existing second-address-taking example with changed address/padding; reallocating falsifies whole-state identity. |
+| `write_read` | **N** — Materialized true rewritten to false; leaving old bytes falsifies readback. |
+| `typed_store_frame` | **N** — Boolean prefix followed by padding; overwriting padding falsifies the framed byte. |
+| `materialize_projection` | **N** — First successful Boolean materialization; retaining structured storage falsifies the conclusion. |
+| `materialize_idempotent` | **N** — Materialize at `4096`, repeat with `8192`; allocating again falsifies idempotence. |
+| `projected_transport` | Skipped: geometry-transport helper. |
+| `memory_wellFormed` | Skipped: invariant-composition helper; assumes the replacement memory invariant explicitly. |
+| `set_wellFormed` | Skipped: invariant-composition helper for a supplied valid projection. |
+| `write_wellFormed` | **N** — Successful materialized Boolean write; altering block size violates memory/projection invariants. |
+| `rawWrite_wellFormed` | **N** — Raw byte `2` may invalidate Boolean decoding while preserving geometry; inserting an extra byte falsifies well-formedness. |
+| `materialize_cases` | Skipped: operation-decomposition helper. |
+| `alloc_projected` | **N** — Existing projected first allocation, allocate a second; overwriting the first identity falsifies its projection. |
+| `materialize_wellFormed` | **N** — First Boolean materialization with padding; recording an incorrect extent falsifies projection validity. |
+| `expose_wellFormed` | **N** — Materialize and expose the Boolean; changing block geometry without its projection falsifies preservation. |
+| `write_frame` | **N** — Two distinct materialized allocation identities; writing the second block while updating the first falsifies framing. |
+| `rangesDisjoint_separated` | Skipped: whole-block geometry/separation helper. |
+| `write_frame_disjoint` | **N** — Two materialized places at disjoint addresses; corrupting the other allocation falsifies read preservation. |
+| `materialize_frame` | **N** — Materialize a structured place beside an existing materialized place; overwriting the existing allocation falsifies framing. |
+| `expose_frame` | **N** — Expose one place beside another; modifying the other’s bytes falsifies read equality. |
+| `materialize_read` | **N** — Existing first-materialization `i16,-37` example; storing the wrong encoding falsifies value preservation. |
+
+**C6 — `Proofs/Observe2.lean`**
+
+| Theorem | Verdict and witness |
+|---|---|
+| `RequestResponse.kind` | Skipped: dependent-constructor inversion helper. |
+| `Responds.allows` | **V** — `Responds.response` already requires exactly the concluded `C.allows` proposition. |
+| `Responds.matches` | **V** — `Responds.response` already requires exactly the concluded matching proposition. |
+| `SilentInsertion.visible` | **N** — Existing insertion around an emitted request; making silent steps emit an event falsifies equality. |
+| `silent_internal_steps` | **N** — Same insertion with exit `0`; retaining silent markers in observation falsifies equivalence. |
+| `blocked_silent_internal_steps` | **N** — Same insertion with pending request `3`; observing silent markers falsifies equivalence. |
+| `PrefixEventually.refl` | Skipped: relation-reflexivity helper. |
+| `PrefixEventually.trans` | Skipped: relation-composition helper. |
+| `SameInfiniteObservation.refl` | Skipped: equivalence helper. |
+| `SameInfiniteObservation.symm` | Skipped: equivalence helper. |
+| `SameInfiniteObservation.trans` | Skipped: equivalence helper. |
+| `visiblePrefix_succ` | Skipped: prefix-decomposition helper. |
+| `visiblePrefix_prefix` | Skipped: prefix-order helper. |
+| `StepIndexIncreasing.monotone` | Skipped: index-arithmetic helper. |
+| `StepIndexIncreasing.strict` | Skipped: index-arithmetic helper. |
+| `StepIndexIncreasing.apply_le` | Skipped: index-arithmetic helper. |
+| `InfiniteStuttering.prefix_indices` | Skipped: technical prefix-correspondence helper. |
+| `InfiniteStuttering.visiblePrefix_at` | Skipped: technical prefix-correspondence helper. |
+| `infinite_stuttering` | **N** — Emit output every old step, retain at even indices and insert silence at odd indices; emitting an extra output at inserted positions falsifies equivalence. |
+| `SameObservation.refl` | Skipped: equivalence helper. |
+| `SameObservation.symm` | Skipped: equivalence helper. |
+| `SameObservation.trans` | Skipped: equivalence helper. |
+| `full_observation_preservation` | **N** — Distinct executions differing by inserted silence share an observation; making observation projection count silent steps falsifies transport. This is a congruence law, not evidence of a compiler transformation’s correctness. |
+| `infinite_not_termination` | **N** — Infinite silent steps versus finite exit `0`; changing mixed-case equivalence from false to true falsifies the theorem. It checks the observation model’s distinction, not program termination. |
+| `infinite_silent_not_termination` | **N** — Its explicit silent infinite execution is inhabited; equating it with empty finite exit falsifies the theorem. |
+| `stripPrefix_append` | Skipped: private parser helper. |
+| `parseRevNat_digits` | Skipped: private parser helper. |
+| `decodeKind_render` | Skipped: private parser/renderer helper. |
+| `trapLineChars_prefix` | Skipped: private rendering-decomposition helper. |
+| `decodeWithKind_render` | Skipped: private parser/renderer helper. |
+| `decodeTrapLine_render` | Skipped: private parser/renderer helper. |
+| `trapLine_injective` | **N** — Identical triples satisfy equality; omitting the site ID makes distinct sites render identically and falsifies injectivity. |
+| `trap_line_uses_byte_columns` | **N** — Existing `"a\té"` span with column `5`; rendering a different column falsifies the equation. Correct source-to-span construction remains its explicit premise. |
+| `byteColumn_tab` | **N** — Empty prefix; expanding a tab to multiple columns falsifies the increment of one. |
+| `ValidTrace.outputs` | **N** — Empty valid trace followed by two outputs; altering trace rules to forbid the second output falsifies closure. |
+| `ValidTrace.answer_projection` | **N** — Demo request `3`, response `6`, surrounding outputs; assembling response before request falsifies trace validity. |
+| `ExecAdapter.project_append` | Skipped: list-projection distribution helper. |
+| `runFrom_validTrace` | **N** — Adapter maps successive answers to matching request/response pairs; changing the driver to reverse answer-event order falsifies trace validity. Statement audited; current proof has the acknowledged continuation mismatch. |
+| `runFrom_noAnswer_pending_valid` | **N** — Block-permitting contract, missing oracle answer after earlier output; losing that history or using the wrong pending request falsifies the conclusion. |
+| `runFrom_blockingPermitted` | **N** — Same inhabited blocking setup; reporting a different pending configuration/history can falsify the derived permission. |
+| `output_before_trap_kept` | **N** — Demo output followed by abort, adapter resolving its site; dropping preceding projected events falsifies the observation. |
+| `report_noAnswer_mayBlock` | **V** — Applies `BlockingPermitted` to exactly the ending, pending-step and typed-request premises defining it. |
+| `report_noAnswer_blocked` | **N** — Pending typed request with earlier output and permitted blocking; omitting that output/request or reporting termination falsifies the result. |
+| `report_outOfFuel_none` | **N** — Out-of-fuel report, whose permission premise is satisfiable; fabricating a terminal/divergent observation falsifies the equation. |
+
+`Spec/Observe.lean` contains no named theorems. Its concrete doubling accepted/refused examples distinguish response `6`, response `7`, and forbidden blocking; they are meaningful examples of that particular environment contract.
+
+**Findings**
+
+Severity concerns acceptance as an independent foundation law; it does not imply the definitions are logically inconsistent.
+
+| Location | Severity | Finding and concrete fix |
+|---|---|---|
+| `ConcreteSpec/Proofs/Exec.lean:374` — `cleans_iff_runs_plan` | **Medium — WEAK** | The advertised “exactly the plan … and nothing else” characterizes abstract cleanup certificates. Add an inversion theorem over actual completed unwinding executions, with an explicit boundary/first-arrival condition, deriving the planned calls and drops. Retain this equivalence as a helper. |
+| `ConcreteSpec/Proofs/Exec.lean:486` — `step_silent_deterministic` | **Low — VACUOUS** | Generic function congruence survives every mutation of `step`. Reclassify as a helper; validate intended transitions through independent rule specifications or mutation-sensitive operational laws. |
+| `ConcreteSpec/Proofs/Exec.lean:494` — `step_deterministic` | **Medium — VACUOUS** | The determinism envelope follows from the representation of `Step`. Add correspondence with an independently stated declarative transition relation, then establish its determinism up to fixed environment answers. |
+| `ConcreteSpec/Proofs/Exec.lean:635` — `destroy_not_copy` | **Low — VACUOUS** | Restates `D.notCopy`. Treat it as an interface projection; discharge the property for concrete destruction admission/checking without accepting the same proposition as an input field. |
+| `ConcreteSpec/Proofs/Scalar.lean:255` — `machine_operands` | **Low — VACUOUS** | Extracts `operandsOk`’s successful guard. Keep operand refusal checks, but classify this as guard characterization; prove admitted runtime operands have the required ranges from typing/evaluation evidence independently of that guard. |
+| `ConcreteSpec/Proofs/Scalar.lean:340` — `checkedNeg_inRange` | **Low — VACUOUS** | Output range is explicitly checked by `inRangeOr`. Add the arithmetic characterization: for valid input, success occurs exactly when mathematical `-a` is representable, returns `-a`, and otherwise produces overflow. |
+| `ConcreteSpec/Proofs/Const.lean:205` — `admitted_copy` | **Medium — VACUOUS** | Extracts an explicit declaration-evaluation guard. Derive Copy from successful independent static typing and declared/value type agreement; keep this evaluation-guard lemma as a helper. |
+| `ConcreteSpec/Proofs/Const.lean:220` — `ofC_copy` | **Low — VACUOUS** | Directly restates `U.ofC_copy`. Classify as an interface projection and require concrete type-universe instances to establish scalar Copy classification independently. |
+| `ConcreteSpec/Proofs/Memory.lean:460` — `access_some` | **Low — VACUOUS** | Expands the successful access branch’s guards. Retain as an inversion helper; separately prove success from independently established access obligations, including nonempty concrete witnesses and refusal cases. |
+| `ConcreteSpec/Proofs/Memory.lean:483` — `access_valid` | **Low — VACUOUS** | Target validity is explicitly tested in both access branches. Classify as guard extraction; establish validity of pointers produced by admitted pointer operations independently of access’s validation guard. |
+| `ConcreteSpec/Proofs/Memory.lean:502` — `decodePtr_valid` | **Low — VACUOUS** | Decoder tests precisely the returned pointer’s validity. Keep the defensive check; derive validity from independently well-formed stored-pointer fragments, rather than crediting this theorem as that derivation. |
+| `ConcreteSpec/Proofs/Observe2.lean:29` — `Responds.allows` | **Low — VACUOUS** | Constructor premise is the conclusion. Classify as relation inversion; use concrete adapter/oracle validation and `runFrom_validTrace` for behavioral evidence. |
+| `ConcreteSpec/Proofs/Observe2.lean:36` — `Responds.matches` | **Low — VACUOUS** | Constructor premise is the conclusion. Classify as relation inversion; establish matching from concrete response handling or typed adapter construction. |
+| `ConcreteSpec/Proofs/Observe2.lean:515` — `report_noAnswer_mayBlock` | **Low — VACUOUS** | Instantiates the definition of its `BlockingPermitted` assumption. Keep as a helper; obtain permission through the independently justified run/adapter theorem, as `runFrom_blockingPermitted` is intended to do after the merge fix. |
+
+VERDICT: FINDINGS

@@ -1,0 +1,168 @@
+### Round-1 Fix Verification
+
+- **Codex (A) — `ExternResult.Valid` accepted owned handles/receipts without pairing check:** Fixed (`ConcreteSpec/Spec/Frame.lean:324-328`). `ExternResult.Valid pair f` now requires `f = pair.complete ∧ h = pair.handle` for `.owned h` and `f = pair.submit ∧ h = pair.handle` for `.receipt h`, with `extern_result_rejects_unrelated_retention` (`ConcreteSpec/Proofs/Frame.lean:419-426`). However, loosening `KeptPair.WellFormed` to use `ExternResult.Valid` instead of exact equality introduced a new regression (see Finding 1 below).
+- **Codex (B) — `KeptPair.WellFormed` allowed `submit = complete`:** Fixed (`ConcreteSpec/Spec/Frame.lean:340`, `363`, `ConcreteSpec/Proofs/Frame.lean:466-471`). Both `KeptPair.WellFormed` and the completion branch of `KeptStep` now enforce `pair.submit ≠ pair.complete`.
+- **agy (1) — `Footprint.Preserves` ignored block metadata:** Fixed (`ConcreteSpec/Spec/Frame.lean:58-59`, `76`, `89-90`, `112-113`, `ConcreteSpec/Proofs/Frame.lean:135-178`). `blockMetadata` and `Footprint.BlockOutside` are tracked in `Footprint.Preserves`, and `free_frame`/`expose_frame` now use `Footprint.block b` (`⟨b, 0, 1⟩`), which excludes `b` from `BlockOutside` even when `x.size = 0`. (Note a dual behavior on byte-writes in Finding 2.)
+- **agy (2) — Place footprints never exercised:** Fixed (`ConcreteSpec/Proofs/Frame.lean:208-268`). Added `set_frame`, `write_structured_frame`, `write_materialized_frame`, and `rawWrite_frame`.
+- **agy (3) — `C1Call` asymmetric around enter/leave and `dst = none` restriction:** Partially fixed. `step_return_restores_caller` and `return_cleanup_restores_caller` now generalize to arbitrary `dst : Option Var` (`ConcreteSpec/Proofs/Frame.lean:294-312`), and `C1Call` starts at `entry = ⟨.exec (.call dst f args site), caller, st, k⟩` (`ConcreteSpec/Spec/Frame.lean:124-135`). However, `exit.ctrl = .done` still conflates caller resumption with any intermediate `.done` inside the callee if `k` happens to appear on the stack (see Finding 3).
+- **agy (4) — `callee_saved_registers_equal` restating `h.preserved.1`:** Fixed (`ConcreteSpec/Proofs/Frame.lean:357-361`) by deriving `callee_saved_registers_equal` from `hw : sig.WellFormed` (`calleeSaved` disjoint from `clobbers`) and `h.clobbers`, plus adding `machine_preserved_trans` and `machine_registerFrame_union`.
+
+---
+
+### Vacuity Audit of Every Law in the Diff
+
+1. **`preserves_refl`** (`ConcreteSpec/Proofs/Frame.lean:19`)
+   - *Verdict:* **Non-vacuous.**
+   - *Witness:* Any `st : State` with a live block `b` (`size = 1`) and place `p`; `Footprint.empty.Preserves st st` holds.
+   - *Counter-example:* Flip `b.live` or mutate `st.places p` in the second state argument; `Footprint.empty.Preserves st st'` fails because every block and place is outside `Footprint.empty`.
+
+2. **`byteOutside_of_blockOutside`** (`ConcreteSpec/Proofs/Frame.lean:29`)
+   - *Verdict:* **Non-vacuous.**
+   - *Witness:* `f = Footprint.byte ⟨0, 0, 4⟩`, `b = 1`, `i = 2`: `f.BlockOutside 1` holds and `f.ByteOutside 1 2` holds.
+   - *Counter-example:* `f = Footprint.byte ⟨0, 0, 4⟩`, `b = 0`, `i = 2`: `¬ f.ByteOutside 0 2` (and `¬ f.BlockOutside 0`).
+
+3. **`byteOutside_union`** (`ConcreteSpec/Proofs/Frame.lean:39`)
+   - *Verdict:* **Non-vacuous.**
+   - *Witness:* `f = .byte ⟨0, 0, 1⟩`, `g = .byte ⟨1, 0, 1⟩`, `b = 2, i = 0`.
+   - *Counter-example:* `b = 1, i = 0` is outside `f` but inside `g`, so `(f.union g).ByteOutside 1 0` fails.
+
+4. **`blockOutside_union`** (`ConcreteSpec/Proofs/Frame.lean:44`)
+   - *Verdict:* **Non-vacuous.**
+   - *Witness:* `f = .block 0`, `g = .block 1`, `b = 2`: `(f.union g).BlockOutside 2` yields `f.BlockOutside 2 ∧ g.BlockOutside 2`.
+   - *Counter-example:* `b = 1` fails `g.BlockOutside 1` and `(f.union g).BlockOutside 1`.
+
+5. **`placeOutside_union`** (`ConcreteSpec/Proofs/Frame.lean:49`)
+   - *Verdict:* **Non-vacuous.**
+   - *Witness:* `f = .place p₁`, `g = .place p₂`, `p = p₃` (distinct places).
+   - *Counter-example:* `p = p₂` fails `g.PlaceOutside p₂` and `(f.union g).PlaceOutside p₂`.
+
+6. **`blockOutside_block`** (`ConcreteSpec/Proofs/Frame.lean:57`)
+   - *Verdict:* **Non-vacuous.**
+   - *Witness:* `b = 0, c = 1`: `(Footprint.block 0).BlockOutside 1` holds and `1 ≠ 0`.
+   - *Counter-example:* `b = 0, c = 0`: `0 = 0`, and `(Footprint.block 0).BlockOutside 0` is false because range `⟨0, 0, 1⟩` has `block = 0` and `extent = 1 ≠ 0`.
+
+7. **`preserves_seq`** (`ConcreteSpec/Proofs/Frame.lean:64`)
+   - *Verdict:* **Non-vacuous.**
+   - *Witness:* `st` with blocks `0, 1, 2`; `st'` frees block `0` (`f = .block 0`), `st''` frees block `1` (`g = .block 1`). Block `2` is outside `f.union g` and preserved from `st` to `st''`.
+   - *Counter-example:* If `st''` also flips `live` on block `2` without including block `2` in `g`, `(f.union g).Preserves st st''` fails on block `2`'s metadata.
+
+8. **`store_frame`** (`ConcreteSpec/Proofs/Frame.lean:92`)
+   - *Verdict:* **Non-vacuous** (note: `BlockOutside` for the target block `b` is vacuously false when `bs.length > 0`; see Finding 2).
+   - *Witness:* `st` with live block `0` of size 2 (`align = 1`) and block `1` of size 1; storing 1 byte at `(0, 0)` preserves byte `(0, 1)`, all bytes and metadata of block `1`, and all places.
+   - *Counter-example:* Replacing the conclusion's footprint with `Footprint.empty` fails on byte `(0, 0)` when storing a byte different from the old byte at `(0, 0)`.
+
+9. **`free_frame`** (`ConcreteSpec/Proofs/Frame.lean:136`)
+   - *Verdict:* **Non-vacuous.**
+   - *Witness:* `st` with live block `0` (even with `size = 0`) and live block `1`. Freeing block `0` produces `m'` with `(Footprint.block 0).Preserves st { st with memory := m' }`: block `1`'s bytes and metadata are preserved, while block `0` is excluded from `BlockOutside` by `blockOutside_block`.
+   - *Counter-example:* Replacing `.block b` with `Footprint.empty` (or `.byte (fullBlock b 0)` for a 0-sized block) fails the metadata preservation clause for `b` because `x.live` changes from `true` to `false`.
+
+10. **`expose_frame`** (`ConcreteSpec/Proofs/Frame.lean:160`)
+    - *Verdict:* **Non-vacuous.**
+    - *Witness:* `st` with live unexposed block `0` (`p.prov = some 0`) and block `1`. `expose` sets `exposed := true` on block `0` and preserves block `1`'s bytes, metadata, and all places under `.block 0`.
+    - *Counter-example:* Replacing `.block 0` with `Footprint.empty` fails the metadata preservation clause for block `0` when `x.exposed = false`.
+
+11. **`alloc_frame`** (`ConcreteSpec/Proofs/Frame.lean:185`)
+    - *Verdict:* **Non-vacuous.**
+    - *Witness:* `st` with well-formed memory containing block `0`; allocating a fresh block `b` (`size = 4, align = 1`) yields `b ≠ 0`, and block `0`'s bytes, metadata, and all places are preserved.
+    - *Counter-example:* If `m'` additionally modified block `0`'s metadata (`live := false`) or an existing place `p`, `Footprint.Preserves st { st with memory := m' } (.byte (fullBlock b size))` would fail because `0 ≠ b`.
+
+12. **`set_frame`** (`ConcreteSpec/Proofs/Frame.lean:208`)
+    - *Verdict:* **Non-vacuous.**
+    - *Witness:* `st` with places `p₁ ≠ p₂`; `st.set p₁ c` satisfies `(Footprint.place p₁).Preserves st (st.set p₁ c)` and preserves `st.places p₂` and all memory blocks.
+    - *Counter-example:* Replacing `Footprint.place p₁` with `Footprint.empty` fails when `st.places p₁ ≠ some c`.
+
+13. **`write_structured_frame`** (`ConcreteSpec/Proofs/Frame.lean:221`)
+    - *Verdict:* **Non-vacuous.**
+    - *Witness:* `st` where `st.places p₁ = some ⟨ty, .structured old, align⟩` and `v` has type `ty`; `st.write tgt p₁ v = some st'` preserves all `p₂ ≠ p₁` and all memory blocks under `Footprint.place p₁`.
+    - *Counter-example:* Replacing `Footprint.place p₁` with `Footprint.place p₂` (`p₂ ≠ p₁`) fails when `v ≠ old`.
+
+14. **`write_materialized_frame`** (`ConcreteSpec/Proofs/Frame.lean:235`)
+    - *Verdict:* **Non-vacuous.**
+    - *Witness:* `st` where `st.places p = some ⟨ty, .materialized ⟨ptr, sz, align⟩, align⟩` pointing into live block `0` at offset `0`, with another block `1` and place `q`. `st.write tgt p v = some st'` preserves bytes outside `[0, (encode tgt v).length)`, block `1`'s metadata, and all places (including `p`'s cell descriptor).
+    - *Counter-example:* Replacing `accessFootprint access (encode tgt v).length` with `Footprint.place p` fails when `encode tgt v` changes bytes at `ptr`.
+
+15. **`rawWrite_frame`** (`ConcreteSpec/Proofs/Frame.lean:256`)
+    - *Verdict:* **Non-vacuous.**
+    - *Witness:* `st` with live block `0` of size 2; `st.rawWrite tgt ptr [b₀] 1 = some st'` preserves byte `1` of block `0`, other blocks' metadata, and all places.
+    - *Counter-example:* Replacing `accessFootprint access bs.length` with `Footprint.empty` fails when `b₀` differs from the prior byte `0` of block `0`.
+
+16. **`step_return_restores_caller`** (`ConcreteSpec/Proofs/Frame.lean:294`)
+    - *Verdict:* **Non-vacuous.**
+    - *Witness:* `O` with `O.life _ st = some st`, `dst = some x`, `caller = []`, `v`; stepping from `⟨.exiting (.ret v), callee, st, .ret (some x) caller :: k⟩` produces `⟨.done, [(x, v)], st, k⟩`.
+    - *Counter-example:* Expecting `caller` unchanged when `dst = some x` and `caller.lookup x ≠ some v` fails because `Exec.bindDst (some x) v caller` updates `x`.
+
+17. **`return_cleanup_restores_caller`** (`ConcreteSpec/Proofs/Frame.lean:304`)
+    - *Verdict:* **Non-vacuous.**
+    - *Witness:* `pre = [.scope b vars []]` (an exited scope with no pending defers) above `.ret (some x) caller :: k`; `Exec.Steps` pops the scope frame and binds `x ↦ v` in `caller`.
+    - *Counter-example:* If `pre` contains a `.loop` frame (which does not satisfy `Exec.Passes (.ret v)` unless handled), or if the target state omits `Exec.bindDst dst v caller`, the theorem does not hold.
+
+18. **`c1Call_restores_caller`** (`ConcreteSpec/Proofs/Frame.lean:316`)
+    - *Verdict:* **Non-vacuous** (though `C1Call` has a framing precision defect if `k` recurs inside the callee; see Finding 3).
+    - *Witness:* A 0-arg function `fn` with body `.ret e` called via `.call (some x) f [] site` steps to `exit` with `exit.locals = Exec.bindDst (some x) result caller` and `exit.frames = k`.
+    - *Counter-example:* An `exit` config with `exit.frames ≠ k` fails `C1Call`.
+
+19. **`c1_call_frame`** (`ConcreteSpec/Proofs/Frame.lean:326`)
+    - *Verdict:* **Non-vacuous.**
+    - *Witness:* A `CallContract` for a function writing only place `p` (`footprint := .place p`), paired with a `C1Call` execution of that function, preserves all places `q ≠ p` and all blocks.
+    - *Counter-example:* A contract claiming `Footprint.empty` for a function that mutates `p` fails `CallContract` and cannot instantiate `c1_call_frame`.
+
+20. **`machine_preserved_trans`** (`ConcreteSpec/Proofs/Frame.lean:334`)
+    - *Verdict:* **Non-vacuous.**
+    - *Witness:* Three machines `m₁, m₂, m₃` with `stackPointer = 8`, identical values on `saved = [r₀]` and stack slots `< 8`, while differing on unsaved `r₁` and slot `9`.
+    - *Counter-example:* If `m₃` alters `r₀` or changes `stackPointer` to `4`, `Machine.Preserved m₁ m₃ [r₀]` fails.
+
+21. **`machine_registerFrame_union`** (`ConcreteSpec/Proofs/Frame.lean:346`)
+    - *Verdict:* **Non-vacuous.**
+    - *Witness:* `m₁ → m₂` clobbers `[r₀]`, `m₂ → m₃` clobbers `[r₁]`; `r₂` is unchanged from `m₁` to `m₃` outside `[r₀, r₁]`.
+    - *Counter-example:* Checking `r₁` against `clobbers₁` alone between `m₁` and `m₃` fails because `m₂ → m₃` mutates `r₁`.
+
+22. **`callee_saved_registers_equal`** (`ConcreteSpec/Proofs/Frame.lean:357`)
+    - *Verdict:* **Non-vacuous.**
+    - *Witness:* A `sig` with `calleeSaved = [r₀]`, `clobbers = [r₁]` (`r₀ ≠ r₁`, satisfying `sig.WellFormed`), and a valid `sig.Call` that mutates `r₁` and preserves `r₀`.
+    - *Counter-example:* Without `hw : sig.WellFormed`, if `r₀ ∈ sig.calleeSaved` and `r₀ ∈ sig.clobbers` and `h.preserved` were not assumed, `h.clobbers` alone would allow `after.regs r₀ ≠ before.regs r₀`.
+
+23. **`extern_result_rejects_unrelated_retention`** (`ConcreteSpec/Proofs/Frame.lean:419`)
+    - *Verdict:* **Non-vacuous.**
+    - *Witness:* `pair = ⟨0, 1, 7⟩`, `f = 2`, `h = 7`: `2 ≠ 0` and `2 ≠ 1`, so neither `.receipt 7` nor `.owned 7` is valid for extern `2`.
+    - *Counter-example:* For `f = 0` (`f = pair.submit`), `ExternResult.Valid ⟨0, 1, 7⟩ 0 (.receipt 7)` holds.
+
+24. **`kept_only_paired_completion`** (`ConcreteSpec/Proofs/Frame.lean:430`)
+    - *Verdict:* **Non-vacuous.**
+    - *Witness:* `pair = ⟨0, 1, 7⟩`, `KeptStep pair (.kept 7) (.call 1 7) (.owned 7)` holds and forces `ev = .call 1 7` and `after = .owned 7`.
+    - *Counter-example:* `ev = .call 0 7` or `after = .kept 7` fails `KeptStep pair (.kept 7) ev after`.
+
+25. **`kept_receipt_rejects_submission`** (`ConcreteSpec/Proofs/Frame.lean:466`)
+    - *Verdict:* **Non-vacuous.**
+    - *Witness:* `pair = ⟨0, 1, 7⟩`, `h = 7, h' = 7`, `after = .owned 7`: `¬ KeptStep pair (.kept 7) (.call 0 7) (.owned 7)` holds even if `pair = ⟨0, 0, 7⟩` (because `KeptStep` checks `pair.submit ≠ pair.complete`).
+    - *Counter-example:* Replacing `pair.submit` with `pair.complete` when `pair = ⟨0, 1, 7⟩` and `h = h' = 7`, `after = .owned 7` makes `KeptStep` hold.
+
+---
+
+### Findings
+
+1. **`ConcreteSpec/Spec/Frame.lean:338-342` — [major] [REAL DEFECT] `KeptPair.WellFormed` now accepts `.ffi _` as `submitResult` or `completeResult`**
+   - **Problem:** In Round 1, `KeptPair.WellFormed` required `submitResult = .receipt pair.handle` and `completeResult = .owned pair.handle`. In Round 2, those two equalities were replaced with `ExternResult.Valid pair pair.submit submitResult` and `ExternResult.Valid pair pair.complete completeResult`. Because `ExternResult.Valid` defines `.ffi _ => True` (`ConcreteSpec/Spec/Frame.lean:325`), `KeptPair.WellFormed (⟨0, 1, 7⟩ : KeptPair Nat Nat) ⟨.owned 7, .kept⟩ (.ffi .int) (.receipt 7) (.ffi .int)` is now provably `True`! That violates Q3.12 and the docstring directly above `KeptPair.WellFormed` ("only submission returns `Kept<H>` and only completion returns `H`").
+   - **Concrete fix:** Keep both the exact type requirements (`submitResult = .receipt pair.handle` and `completeResult = .owned pair.handle`) and `ExternResult.Valid` (or require exact equality in `WellFormed` while keeping `ExternResult.Valid` for individual extern result checking):
+     ```lean
+     def KeptPair.WellFormed {F H : Type} (pair : KeptPair F H)
+         (submitParam : ExternParam H) (submitResult completeParam completeResult : ExternType H) : Prop :=
+       pair.submit ≠ pair.complete ∧
+         submitParam = ⟨.owned pair.handle, .kept⟩ ∧
+         submitResult = .receipt pair.handle ∧
+         ExternResult.Valid pair pair.submit submitResult ∧
+         completeParam = .receipt pair.handle ∧
+         completeResult = .owned pair.handle ∧
+         ExternResult.Valid pair pair.complete completeResult
+     ```
+     And add a negative example refusing `.ffi .int` as `submitResult` or `completeResult` in `KeptPair.WellFormed`.
+
+2. **`ConcreteSpec/Spec/Frame.lean:89-90` and `ConcreteSpec/Proofs/Frame.lean:119-128` — [minor] [REAL DEFECT] `Footprint.BlockOutside` conflates nonempty byte ranges with block-metadata footprints, making `store_frame`'s metadata preservation vacuous on the written block**
+   - **Problem:** `Footprint.BlockOutside f b` holds only when `∀ r ∈ f.bytes, r.block ≠ b ∨ r.extent = 0`. Consequently, when `store` writes `bs.length > 0` bytes to block `b`, `accessFootprint` is `.byte ⟨b, off, bs.length⟩`, so `(accessFootprint access bs.length).BlockOutside b` is `False`. In `store_frame` (`ConcreteSpec/Proofs/Frame.lean:119-128`), the `c = b` branch of metadata preservation is proved by contradiction (`exact (hne rfl).elim` / `exact (hn he).elim`) rather than showing that `store` preserves `blockMetadata` of the written block `b`! Thus, `store_frame` does not actually guarantee that a nonempty `store` preserves `space`, `base`, `size`, `align`, `live`, and `exposed` of the block being written to.
+   - **Concrete fix:** Either track metadata footprints explicitly as a `blocks : List MemBlockId` field on `Footprint` (so `.byte r` has `blocks = []` and `BlockOutside` is `b ∉ f.blocks`, allowing `store_frame`, `write_materialized_frame`, and `rawWrite_frame` to preserve metadata of *all* blocks including `b`), or prove a dedicated lemma in `Proofs/Frame.lean` that `Memory.store` preserves `blockMetadata` for every block (including the target block `b`).
+
+3. **`ConcreteSpec/Spec/Frame.lean:124-135` — [minor] [PREFERENCE] `C1Call` characterizes return solely by `exit.ctrl = .done ∧ exit.frames = k`**
+   - **Problem:** Although `C1Call` now starts at `.call dst f args site`, the multi-step transition `Exec.Steps P entry tr exit` is still only constrained at the end by `exit.ctrl = .done ∧ exit.locals = Exec.bindDst dst result caller ∧ exit.frames = k`. If a recursive call inside `f` temporarily produces a configuration whose frame stack happens to equal `k` and locals equal `Exec.bindDst dst result caller` at a statement completion (`.done`), `C1Call` would match before the outer `.ret dst caller` frame is popped. Decomposing `C1Call` as stepping from `entry` to the `.ret dst caller :: k` boundary followed by `step_return_restores_caller` (with `Passes` holding on intermediate frames) makes the call-return matching airtight even for recursive calls.
+   - **Concrete fix:** Witness the return step explicitly in `C1Call` (e.g., `Steps` from the post-`enter` state through `callee` body/cleanup to `⟨.exiting (.ret result), calleeLocals, stClean, .ret dst caller :: k⟩` followed by the `.ret` step to `exit`), or require intermediate steps not to pop `k`.
+
+VERDICT: CHANGES
+rc=0

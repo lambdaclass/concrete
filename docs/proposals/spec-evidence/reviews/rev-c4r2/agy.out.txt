@@ -1,0 +1,17 @@
+All eight Round 1 findings are cleanly and completely resolved in this delta:
+
+1. **Invariant preservation (`Memory.WellFormed` and `State.WellFormed`)**: Covered across all memory and hybrid operations (`empty_wellFormed`, `modify_wellFormed`, `store_wellFormed`, `free_wellFormed`, `Mem.expose_wellFormed`, `memory_wellFormed`, `set_wellFormed`, `write_wellFormed`, `rawWrite_wellFormed`, `materialize_wellFormed`, `Hybrid.expose_wellFormed`).
+2. **First-materialization read-back and place frame laws**: Covered by `materialize_read` (using `load_prefix` and `rep_roundtrip`), `write_frame`, `rangesDisjoint_separated`, `write_frame_disjoint`, `materialize_frame`, and `expose_frame`.
+3. **Exposure laws and `fromExposed` completeness**: Covered by `expose_result`, `expose_success`, `expose_frame`, `expose_load`, `fromExposed_exists`, `fromExposed_contains`, `candidate_onePast_unique`, `fromExposed_onePast`, and `fromExposed_none`.
+4. **Target-relative pointer validity**: `Ptr.Valid` (`p.addr < 2 ^ tgt.addrBits ∧ p.space ∈ tgt.spaces`) is enforced in `Memory.access` (including zero-byte accesses), `encodePtr`, and `decodePtr`, with `access_valid` and `decodePtr_valid` proven.
+5. **Target address-space check in `Fits` and `Memory.WellFormed`**: Added `x.space ∈ tgt.spaces` to `Memory.Fits` and `spaces` to `Memory.WellFormed`.
+6. **Finite hybrid place map**: `State` now stores `cells : AList Place Cell` queried via `State.places`.
+7. **Shared `CTy`/`CVal` and `Rep.lean` migration note**: `CTy` and `CVal` are factored into `Spec/Scalar.lean` (`Hybrid` restricts byte storage via `Value.Storable`), and `ConcreteSpec/README.md` records the slice-1 `Spec/Rep.lean` migration obligation.
+8. **Deferred pointer-typed places**: Documented in `Spec/Hybrid.lean`.
+
+### Findings
+
+- `ConcreteSpec/Spec/Hybrid.lean:138` — **nit (PREFERENCE)**: `State.set` prepends `(p, c) :: st.cells` rather than updating an existing key in place with `AList.update` (unlike `Memory.modify`). While lookup semantics (`State.places_set`) are identical and `rfl`-convenient, repeated writes/materializations accumulate shadowed entries in `st.cells`. If canonical/duplicate-free `cells` are ever needed by later slices, consider `AList.update` (or an insert-or-update helper) paired with a `Nodup` field on `State.WellFormed`.
+
+VERDICT: ACCEPT
+rc=0

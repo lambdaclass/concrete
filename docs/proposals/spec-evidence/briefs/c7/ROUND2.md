@@ -1,0 +1,9 @@
+# C7 review round 1 findings (Codex via review.sh: CHANGES; agy: ACCEPT with notes). Fix them on this branch.
+
+HEAD is e02e177f (axioms golden regenerated; all seven gates pass on concrete-ci-2). Do not edit scripts/proofs/axioms.golden; the reviewer regenerates it. All rules of _review/BRIEF.md still apply (commit each piece once `nix develop -c timeout 1200 lake build ConcreteSpec` passes; do not push).
+
+1. (Codex, real defect; agy the same point) Spec/Leak.lean:286: `LineageReport.Sound` checks a function's requested-byte bound against `exit.requested`, which includes allocations made before the function was entered. A function that allocates nothing, entered with 100 requested bytes, cannot establish a zero bound. Measure the function's own requests (`exit.requested - entry.requested`). Apply the same reasoning to `peak`: a function's peak bound must be about the logical bytes the function reaches during its own execution, not the historical maximum of the whole program before entry. Define what the per-function peak is, e.g. the maximum live bytes observed between entry and exit, which may need the account to record a peak since entry. Prove the report-soundness theorem for the corrected definitions and update the doc comments.
+2. (agy, nit) Proofs/Leak.lean:82-92: `secureProgram` and `leakyProgram` are the same empty function table, but their doc comments describe differences that live in `start`/`leakyStart`. Collapse them into one program and move the doc comments to the start configurations.
+3. (agy, nit) Proofs/Leak.lean:195-212: `Demo.step_none_of_final` is unused; remove it (or move it to Proofs/Exec.lean if it is a general C1 lemma). The `a.alloc 0 = a` example in Spec/Leak.lean duplicates `Account.alloc_zero`; keep one.
+
+Final message: commits (SHA + one line), what changed in each theorem statement, which findings are fixed and how, anything left with a reason, QUESTIONS.

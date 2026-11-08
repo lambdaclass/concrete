@@ -1,0 +1,686 @@
+kimi version 2.4.1
+• I need perform read-only review no modifications no git writes no network no build. Should inspect REVIEW.diff and files, questions, decisions boundary, merge conflict. I'll respond detailed each law vacuity verdict witness, planted counterexample requirement. Should list findings file line severity real defect/preference, assessments of open questions, merge. Last exact verdict. Should carefully examine diff. I have tools read grep no git commands necessary perhaps git read-only allowed but no need. Should use TodoList multi-step. I should announce short. Should understand code Lean spec C5. Start read review diff perhaps large, files and brief C5 questions etc. Use TodoList then Read REVIEW.diff and relevant docs in parallel.
+
+• I’ll inspect the C5 diff and governing decisions, then audit each law for non-vacuity and check the merge resolution without running builds or modifying the tree.
+
+• Should read rest diff lines 1200+. Also Own/Grant spec full and proofs current for precise lines. Decisions targeted narrower via Read around rows. Find line numbers with Grep specific anchors. I need analyze all laws added changed. REVIEW.diff 1917 lines not huge. Read 1200-1917. Also Own Spec likely ~600 lines Grant ~500. Should inspect all to understand vacuity and correctness. Use parallel.I have full files. Should audit carefully for actual defects, likely vacuity witnesses inadequate per strict rule. I must identify real defects beyond witness formalism. Should examine diff boundary and semantics.
+
+  Key issue in Own passDown / callLife? Direct owner question pending correctly. Activation arbitrary documented pending, but enterDown still named downward and always direct callee. reborrowAt public arbitrary helper still not enforced, but boundary said leave current behavior document question; okay.
+
+  C1 erasure: round1 asked C1 execution level but boundary question open C1 erasure form. Writer only counterexample, no simulation C1, leaves question. User asks assess. Likely acceptable pending not real defect if question. Generative run proof added.
+
+  Vacuity rule: every law added/changed must have nontrivial instance and planted counterexample with negation. They included many witnesses but some laws lack positive/negative specific. I need enumerate each changed/new law. Existing changed only proof signatures preservation. Existing laws fresh_generation etc proofs changed but law statement unchanged; rule says every law in change, includes unchanged lines? User "check EVERY law in the change" and round2 owner every law added or changed. Could include all in diff. Should list each with verdict and witness. I should systematically catalog ~50. Should not overstate vacuous if positive/negative missing. A law itself can be meaningful but evidence missing is defect of compliance. Should identify particularly witness examples not actually instantiate theorem hypotheses or counterexamples not test law.
+
+  Examples:
+  - fresh_preserves positive uses `fresh {} ⟨0⟩ = some initial` and WF initial but doesn't explicitly WF {} (decidable yes implied) and output. okay.
+  - depend positive exact.
+  - consume positive only isSome not output WF; but could infer via theorem; nontrivial instance. Negative state bad not theorem mutation. okay perhaps enough.
+  - endScope positive isSome no output WF but still non-trivial.
+  - fresh_progress positive.
+  - reset_progress has no explicit positive progress example? reset in preservation and run. yes.
+  - depend progress neg success duplicate, but hypothesis violated. good.
+  - endScope_non_escape positive departing and negative only `¬ (0 ∉ mutated.brands)` which is just arithmetic/list membership not a mutated endScope run. Owner allows "mutated rule or bad state that fails it" written example negation. This negative does not show bad state failing theorem, it simply asserts membership. Could be considered planted counterexample but not tied to law. Many witnesses are similarly generic ¬WF bad states which is acceptable "bad state that fails it" if output of mutated rule conceptually. Should assess per user exact vacuity.
+
+  Important potential issue: `instrument_preserves` still accepts hp without WF input, unlike structural preservation laws; unchanged except line? Diff no changes? It appears not changed except context, not new. Not need audit? User every law change maybe entire REVIEW.diff includes context only not changed. Focus added changed.
+
+  CallState preservation:
+  - `callLife_call_preserves` with `.enter` positive, `.leave` negative pending, but no successful non-enter lifecycle from nontrivial CallState WF with pending empty? Initial exclusive qualifies. Existing call examples actual call. positive enough perhaps.
+  - `passDown_call_preserves` positive waiting. duplicate negative.
+  - `callLife_preserves` positive enter. etc.
+  - `adoptDown_preserves` positive callLife enter; no direct adoptDown but okay.
+  - `adoptDown_only_arguments` is existing theorem proof changed only guard index, witness positive via actual call but not in new witness namespace. Counterexample existing Spec Own examples refused adopting nonpending at 560. That's example equality none, not negation. Owner requires negation. Round1 existing perhaps exempt? Changed proof only not statement. Could still note.
+
+  More serious semantics: `passDown` does not prevent passing a pending loan itself again. loanAccess checks `!a.pendingArgument`, so reborrow pending source fails. okay.
+
+  `CallState.WellFormed` requires pending flags exactly IDs, but `passDown` from an arbitrary state with pending nonempty and no WF only own preserves; call version WF good. `callLife .enter params` checks pending parameter names ∈ params but doesn't require all view params? Owning descriptors provided for nonpending. Fine.
+
+  CallState duplicate source IDs prevented via fresh, names guard. good.
+
+  `leave` endLocals uses filter on original s.loans newest first. For same activation parent/child birth order child newest. reborrowAt can arbitrary activation cause parent and child same current etc; newest first handles. Cross activation weird pending but owner pending. Good.
+
+  `enterDown` duplicates vars or loan ids not guarded. It can pass same mutable parent twice? First reborrow child pending false, second reborrow original parent while child active: loanAccess original parent fails because conflicting child, so mutable no. Shared parent twice allowed, IDs unique fresh. Duplicate parameter vars allowed in views AList, perhaps source call checked signature should reject; not C5? Call adoptDown has names Nodup. enterDown standalone no Nodup and no pending flags; could duplicate vars but no invariant on views. Brief entering callee with loans, likely should check duplicates? Not round2 changed except validate removed. Existing issue perhaps not relevant but review can find. No owner decision needed to require duplicate parameter names? call signatures unique likely. Not major.
+
+  `adoptDown` can adopt any pending child regardless parent source or current activation and reassign to any current frame, as long WF. This allows upward reborrow via passDown then `enter`? C1 path direct enter, okay. standalone public helper current. Pending metadata from CallState ties passDown current parent. No question.
+
+  Potential unsound semantic: ownerAccess does not block access to a moved root if slot duplicates? WF ensures unique but operations can run without WF. preservation assumes WF. Fine.
+
+  `reinitialize_preserves` no clear loan guard used in proof because if loan exists, changing moved root to owned would actually help invariant, but operational guard blocks. Fine.
+
+  `drop_preserves` slots filter, loans guard ensures roots removed not loan. good.
+
+  `leave_preserves` after drop and final slot any no activation, WF maintained by drop regardless final guard. good.
+
+  `endLocals` fold over filtered initial list. If child/parent chain has activation weird, ending parent may fail if child other activation remains, so leave can get stuck. That's safe and question.
+
+  Structural progress lemmas don't assume WF, contrary round1 "from well-formed state" but stronger. They mostly restate exact guards, okay. `enter_progress` on ill-formed state still succeeds, showing no invariant recheck, okay. Some operational guards (fresh typed) could be exact.
+
+  Vacuity of `fresh_progress`: definition always some, theorem direct, positive and counterexample weird `initial.nextBrand ≠ {}.nextBrand` doesn't refute progress. Progress is total and cannot have failure negative; planted mutated rule would need e.g. not all s exists if mutated fresh none. Their counterexample does not fail fresh_progress. Similarly accessOwner_progress and accessLoan_progress positive and negated success operational guard; fine. `fresh_progress` negative fresh supply unrelated. Is total progress law vacuous? It's definitional but meaningful no refusal. Should proper mutated rule. Could flag minor compliance not major.
+
+  `run_erasure` positive and planted drop command tail. Good.
+  `fresh_generation` positive examples, negative `¬ initial.nextBrand = {}.nextBrand` not actually law mutation? Shows counter reuse fails freshness. okay.
+  `reset_generation` positive reset, negative resetOnce nextBrand WF not direct generation. A mutated reset reusing counter would violate fresh_generation not WF perhaps. They have ¬WF resetOnce nextBrand=1 (set nextBrand to1 with binder brand1 gives 1<1 false) shows bad state. fine.
+
+  Crucial new `depend` guard has moved all brand witness checks from global WF to operational guard. Round1 says each operation only own operational guard, this is relevant dependency. fine.
+
+  `release` guard checks any live binder but maps all matching brand (WF unique), good.
+  `reset` uses b from find? and release; if state ill-formed duplicate brand b perhaps lineage from first; preservation assumes WF.
+  `reset` leaves old binder allocator false and new binder same scope. EndScope guard requires all binders in scope not live. After reset, to end scope need release new brand too; expected.
+  `fresh` no guard and preservation from WF. good.
+
+  Grant unchanged except State deriving/default. No new grant laws. User says every law in change perhaps all Grant proof file unchanged not in diff after line 397 context only no actual grant changes. So not audit grants laws? REVIEW.diff only Grant proof changes in Generative. C5 round2 all laws in changed files but existing Grant laws untouched. Wording "Vacuity rule ... check EVERY law in the change" likely include laws in diff, not all unchanged. I can state scope explicitly: changed/new laws, plus existing statements whose proof changed. Should include `instrument_preserves`? Not changed in diff except context? Actually lines 927 onward current but REVIEW.diff after callLife_erasure only hunk context perhaps no changes. Not in diff aside from no plus. So exclude unchanged. Could give compact table grouped laws sharing witnesses. Should fulfill "List each law with vacuity verdict and witness." I can enumerate all added/changed. Count Own:
+  move_preserves, reinitialize_preserves, borrow_preserves, reborrowAt_preserves, reborrow_preserves, endLoan_preserves, accessOwner_preserves, accessLoan_preserves, move_progress, borrow_progress, reborrowAt_progress, reborrow_progress, accessOwner_progress, accessLoan_progress, bind_preserves, drop_preserves, enter_preserves, endLocals_preserves, leave_preserves, enterDown_preserves, life_preserves, reinitialize_progress, endLoan_progress, bind_fresh_progress, enter_progress, drop_progress, adoptDown_preserves, passDown_preserves, passDown_call_preserves, callLife_preserves, callLife_call_preserves, borrow_birth, reborrow_birth, endLoan_supply, leave_no_local_loan, adoptDown_only_arguments (proof line changed), leave_no_activation_slot. Private helper laws too? "EVERY law" includes private theorems fold_preserves, compatible_symm, insert_loan, owner_guard, map_metadata_preserves, reinitialize_loans, bind_loans, fold_loans, enter_loans, drop_loans, endLoan_subset, life_subset, endLoan_frames, fold_frames, drop_absent. That's many ~48. Usually "law" means public theorems, private helpers are lemmas also laws? Should probably review requested each law changed, including progress and preservation. Could group helper lemmas in a table as non-vacuous by construction and covered via public witnesses. But requirement each law list names. Can list group with all names and verdict/witness shared. I should not bloat insanely but user explicit.
+
+  Generative: fresh_wf private, fresh_preserves, fresh_progress, depend_preserves, consume_preserves, release_preserves, reset_preserves, endScope_preserves, depend_progress, consume_progress, release_progress, reset_progress, endScope_progress, nextBrand_fresh (unchanged statement/proof? hunk context only perhaps no change), fresh_generation changed proof, reset_generation changed, endScope_non_escape changed, run_erasure. instrument_erasure unchanged context. So ~17.
+
+  Could identify defects requiring CHANGES independent of witness minor. Should scrutinize round1 fix 1: progress laws are restatements of guards, accepted? Owner vacuity says theorem restates definition = vacuous. Many progress lemmas are literally guard-to-success, which is intended and not vacuous if guards operational. They have positive/negative examples. Fine.
+
+  But `accessOwner_preserves`/`accessLoan_preserves` are tautological identity transitions; preservation from WF s is trivially hs. Is this vacuous under rule "a theorem that restates its definition"? They are meaningful but trivial by identity. They have nontrivial state and bad state. Should mark non-vacuous (identity op intended). `life_preserves` example is just `life ... = bind ... := rfl`, not an instance of conclusion WF. But bind witness covers. Could mark insufficient dedicated witness perhaps minor.
+
+  Round1 requested C1 execution erasure and writer leaves as open QUESTION per user. They implemented only counterexample and README accurately says outstanding. No defect because boundary open. Assess recommend one-way successful-step simulation with conditional stuck equivalence. Should analyze exact C1 erasure feasibility: C1 instrumented and erased operands have different `Store`, but same Expr, Val, events etc. To prove successful-step simulation need relation between concrete/instrumented stores and erasure of configurations. Instrumented `eval` returns `Res` not Option; can be `.stuck`, `.trap`? Should inspect Exec definitions to recommend precise. Also question about C1 counterexample perhaps current erasedEval uses `.read` after move still local value; move instrumentation doesn't erase concrete local so okay. They prove unconditional final classification not equal. Should see C1 eval and step event, allows. Read Exec relevant definitions to assess. Also open activation and direct owner rows perhaps decisions clarify. Read decisions core rows and OD2 plus Q9.10.
+
+• The structural preservation proofs no longer rely on a whole-state validator. I’m now checking whether the new guards and witnesses actually exercise the claimed laws, and whether the three pending semantics questions stay unencoded.
+
+• Merge resolution obvious defect: README says C1 leaves split request/response C6 removed correctly because C6 now integrated. C7-C10 remain correct vs C5/C6 done. Spec.lean includes Observe and Own Grant. "mechanically combine" kept both. Punctuation style nit perhaps and before Hybrid erroneous preexisting from branch, not merge conflict? At line 61 "Memory..., and Hybrid..., Own..., Observe..., and Grant" grammatically minor. No finding needed.
+
+  README O3 says C5 proves single-operation Generative.instrument but now also multi-step run; fails to mention new run erasure but not false. Says C1 execution-level simulation for "these wrappers" remains outstanding, correct. Could nit update to mention finite allocator run proved. User wants review merge not doc nit perhaps. Could flag nit as outdated after change. More important "C5 ... C1 lifecycle and downward-call adapters" no execution simulation claimed. good.
+
+  Potential direct owner semantics actually decided by OD2? Boundary says only OD15/OD23 not OD2 (except references general?). User boundary specifically refs second-class, Q3.x, Q9.8, OD15/OD23. OD2 not allowed perhaps direct owner pending correct. Activation Q3.2 downward parameters arguably clearly direct callee? Writer says ambiguous standalone helper. Assessment should recommend restrict public operations to current activation + directly entered callee; keep general helper private. This isn't encoding now. Direct owner arguments recommend call-duration root loan tied to call, since explicit caller borrow scope is consistent existing model but poor ergonomics; however owner must decide. Should discuss tradeoffs and Q9.8 defer held loans: call-duration root loan for immediate calls must extend for deferred calls until execution, not registration. Explicit caller scope naturally supports defer? Should decide recommendation.
+
+  C1 erasure: recommend successful-step simulation as primary; unconditional stuck equivalence false as shown. For checked-safe program, prove bidirectional/stuck equivalence conditional on static safety; don't attempt to say instrumented success iff erased success universally. Should include traps/badAnswer/outOfFuel/final classifications, event order, primitive oracle answers and concrete store. If instrumentation refuses but erased runs, one-way successful simulation holds vacuously for that path. Non-vacuous witnesses include successful stuck-free run and unsafe counterexample. Should not have condition successful simulation on checker safety, only equivalence reverse. Owner question asks assessment each. Good.
+
+  Should deep audit for hidden issue: WellFormed CallState and callLife preserve. Check callLife `.enter` can succeed with pending entries not exactly all view parameters? It checks each pending param in params; adoptDown checks names unique. Own params filtered. It doesn't ensure `params.Nodup` globally if pending includes duplicate params? CallState WF pending names unique but params could duplicate a view name and enter filters all occurrences out, adoptDown locals fresh. CallState WF after enter has no params metadata so no issue. C1 function signature likely params unique checked elsewhere. Not C5 boundary.
+
+  Potential defect in `passDown` and `CallState.WellFormed` regarding pending source parent access: after first mutable passDown, original parent is suspended, further arguments see freeze. Good. After callee entry, child pending false, original parent still suspended until leave. On leave endLocals child removed, parent accessible. direct owner parent root loan persists if borrow+pass (question). Fine.
+
+  `CallState.WellFormed` does not include uniqueness of view AList or locals AList, but adoptDown ensures new args names unique and not locals, existing f.views may contain same names from earlier? A new frame from enter has views empty. passDown pending separate. So C1 path good.
+
+  `callLife` on `.leave` with pending empty uses life leave and preserves pending flags because pending=[] and WF ensures none pendingArgument true. life_subset ensures no new pending. okay.
+
+  `callLife` on `.bind` or `.drop` when pending empty preserves exact. `.enter` resets pending and adoptDown flags selected false, all other flags false from WF. good.
+
+  `passDown_call_preserves`: uses `unique` from split at h. In `passDown`, `if parameter ∈ ... then none else do`; split first branch none contradiction, second unique is condition false perhaps represented as `¬ parameter ∈...`. They use `exact unique (he ▸ ha)` so yes.
+
+  No compile run allowed; trust coordinator builds. Should not verify Lean compile.
+
+  Could there be actual preservation proof hidden use `hs` not t? Looks okay.
+
+  `enterDown_preserves` uses `reborrowAt_preserves s v ... hs hv` and frame update doesn't affect WF (no frames in WF except activation supply). okay.
+
+  `leave_no_local_loan` proof heq from Option.some.inj hh: t = {v with frames tail}? Option.some.inj hh yields t = {..} or reverse; they rw [← heq] at hx; likely okay compile confirmed by writer CI but not my concern.
+
+  `fresh_preserves` total Option unnecessary but okay.
+
+  Vacuity witnesses shortcomings:
+  - `PrimitiveWitnesses` `reborrowAt exclusive ... = some child`? They only isSome and WF child, not equality. Definition child = reborrow (not At) exclusive with same activation 0, so defeq yes. Fine.
+  - no explicit preservation instance for `reborrow_preserves` separate from reborrowAt but child definition uses reborrow and WF child, yes.
+  - no `reborrow_progress` successful exact? child uses reborrow, yes.
+  - `bind_fresh_progress` positive bind types y shared.
+  - `enter_progress` positive entered.
+  - `enterDown_preserves` positive called.
+  - `endLocals_preserves` positive.
+  - `leave_preserves` positive.
+  - `life_preserves` rfl witness not output WF but bind positive covers.
+  - `adoptDown_preserves` positive callLife enter waiting.
+  - `passDown_preserves` waiting.
+  - `callLife_preserves` same.
+  - `callLife_call_preserves` same.
+  - `borrow_birth`: shared/exclusive definitions positive, but no explicit example statement that old ID etc. Existing Spec example identities not reuse and shared. It witnesses operation, but not full conclusion perhaps enough.
+  - `reborrow_birth`: child.
+  - `endLoan_supply`: existing example nextLoan after enterDown leave =2, endLoan shared then borrow IDs [1]. good.
+  - `leave_no_local_loan`: called leave has no locals? enterDown enter [] so f.locals empty. The theorem's `entry ∈ f.locals` hypothesis is uninhabited in called example! This is crucial. There is no non-trivial instance with actual callee local and surviving loan? To instantiate leave_no_local_loan need a local that is moved/Copy to leave, and an outer loan survives. Existing examples leave initial fails; enterDown has no local; call example callee parameter y is view, not locals (own params filtered), so f.locals empty. Round2 vacuity requires every law changed; leave_no_local_loan signature changed hs, no new witness for its entry hypothesis. Round1 existing theorem perhaps previously had same issue but now rule catches. Could be major? Law itself non-vacuous possible construct: initial with frame local x linear moved + outer root? Should have two slots etc. They didn't provide. Owner specifically "hypothesis that can never hold"; hypothesis can hold but no witness. Should flag missing non-trivial witness minor/major per binding. It says vacuous law real defect. Is law vacuous? Not by impossible hypothesis, just unwitnessed. Can't call vacuous; witness coverage defect. Should avoid inflated.
+
+  - `adoptDown_only_arguments` positive waiting enter has e=(y,1), pending true; okay. Negative refused existing not negation. Could be witness requirement.
+  - `leave_no_activation_slot`: `leave called` f has no locals but called has no slots activation 1? enterDown only new child loan no slot; the theorem conclusion universally over t.slots, initial slot activation0. Positive h leave succeeds but no departing slot in input; conclusion not vacuously over output? It does have outer slot x with activation0 ≠1, so nontrivial. Planted bad state with departing slot and leave refuses existing example incomplete locals initial activation0 leave fails. Negative equality none not negation. No `¬` example. Owner requires negation.
+  - `nextBrand_fresh` unchanged no new witness perhaps initial.nextBrand ≠ {}.nextBrand uses counter not binder. Existing positive initial has binder0 and nextBrand1. okay.
+  - `endScope_non_escape` positive outside membership with b? They set departing binders initial brand0 scope0 released, outer brand1 scope1. endScope scope0, outside brands [1], b brand0 scope0. They assert outside remains and 0∉outside.brands. yes direct.
+  - planted negative only ¬ nonmembership if brands mutated, okay this is exact conclusion failure given b/d, though no state. Meets bad state fails it perhaps sufficient.
+
+  `fresh_progress` negative not law. But progress theorem total by definition, to plant mutation need mutated definition impossible within example unless define local mutated function. They instead counter reuse not progress. This is a real noncompliance. Other progress negative examples show operation failure when guard false, good.
+
+  `enter_progress` lacks negative `enter` failure for duplicate/untyped. `bind` missing type negative; enter can fail duplicate. No `example ¬ (enter ...).isSome`. Owner asks each law planted counterexample. Could group missing negatives as one major systematic defect? User explicitly says vacuous law real defect. I need judge severity. If only witness gaps, major because binding acceptance requirement, but not semantic vacuity. Could list major "witness audit incomplete" with concrete fixes, not claim theorem false. Verdict CHANGES anyway.
+
+  Potential more serious: `fresh_progress` is a theorem restating definition and could be considered vacuous per rule. But progress laws necessarily unfold definitions. Owner intended these. The planted counterexample should show if fresh mutated to none, no progress. Should proper.
+
+  - `accessOwner_progress` and `accessLoan_progress` positive and negative operation failure present.
+  - `reinitialize_progress` positive reinitialize moved = initial; negative live linear replacement.
+  - `endLoan_progress` positive child end; negative parent with child.
+  - `bind_fresh_progress` positive, negative missing type. good.
+  - `drop_progress` positive moved, negative live linear. good.
+  - `depend_progress` positive/negative duplicate only, not missing brand but enough one planted mutation.
+  - `consume_progress` positive/negative absent.
+  - `release_progress` positive/negative live allocation.
+  - `reset_progress` positive resets, negative live allocation existing reset depend = none equality not negation. Run? Preservation progress examples no reset negative in `PreservationWitnesses` except existing Spec example `(depend...).bind reset = none`, not negation. Requirement explicit negation, missing.
+  - `endScope_progress` positive/negative initial live.
+  - `fresh_generation` positive initial/reset, negative counters.
+  - `reset_generation` positive reset, negative resetOnce WF.
+  - `run_erasure` good.
+
+  `CallState` laws negative duplicate, stale good.
+
+  `callLife_erasure` unchanged, no need.
+
+  Private helper lemmas no direct witnesses but used in covered public laws. Owner "every law add/change" private helper new requires examples? Could argue internal proof helpers not specification laws. I can classify as helpers covered transitively, no separate examples required? But literal requirement every law perhaps list them with "non-vacuous via downstream witnesses" in table. Should not flag every helper missing dedicated example or review becomes unreasonable. I can say helper lemmas share host operation's witness and bad state. Good.
+
+  What does user expect? Likely wants rigorous review of writer output. Perhaps writer actually included comprehensive witnesses specifically to satisfy. I should avoid nitpicking witness exact negation if intended broad. But explicit rule strict. Should identify real semantic defect perhaps bigger.
+
+  Look at round1 finding 1: add progress from WF whose stated guard holds. `move_progress` no `WellFormed s` but stronger. Fine. `depend_progress` etc. `fresh_progress`. `reset_progress` hypotheses found live clear. good. `endScope_progress`.
+  `callLife` progress not requested? Only operations perhaps no new progress adoptDown/passDown etc. Round1 "Add progress lemmas" could mean each operation. They added for Own primitives and lifecycle except leave, endLocals, enterDown, adoptDown, passDown, callLife. They did not add progress for leave or enterDown etc. The round1 finding said every transition validate removed and add progress lemmas from WF operation guard holds. Is lack of leave progress a defect? Perhaps they intended primitive transitions. Writer added many but not all. User specifically round1 summary "validate removed, structural preservation proofs" not mention progress but diff has. Should assess every operation no invariant recheck now clear by definitions. Progress less critical.
+
+  `reinitialize_preserves` no use clear but operational guard no spurious invariant. good.
+
+  `CallState.WellFormed` "pendingArgument = true exactly for loans in pending" uses membership loan IDs, with loan IDs Nodup. good.
+
+  Boundary undecided encoded? `reborrowAt` still arbitrary destination, documented pending. But added `activation < nextActivation` guard. Is that decided? It's an identity well-formedness operational guard not choosing direction. okay. Added f.id < nextActivation to borrow/adoptDown/bind similarly infrastructure.
+
+  Direct owner no form. pending comment only.
+  C1 no simulation only counterexample. pending question not explicitly in code as QUESTION but README outstanding and doc says necessary. User says writer's open QUESTIONS; perhaps response not in tree. No hidden encoding.
+
+  However README merge resolution C1 sentence removed "(C5)" ownership moved values and C6 split request response, correct. C5 now supplies. C6 integrated. good.
+  Spec.lean order Observe before Grant odd but no semantic.
+
+  Could docs O3 line 62 "C1 execution-level simulation for these wrappers remains outstanding" correctly leaves. yes.
+
+  Question of references never returned/stored: `Activation.views` is an AList stored in instrumentation, explicitly no concrete storage. allowed. `CallState.pending` metadata. no ref-valued result binding. Good.
+
+  Grant State deriving DecidableEq may require H DecidableEq? Lean deriving on param structure creates instance `[DecidableEq H]`, okay.
+
+  Nodup dependencies new invariant depend guard ensures. good.
+
+  Potential `release_preserves` uses hni to prove changed witness remains live. If dependencies duplicate brand etc okay.
+
+  One issue in `depend` guard: uses `if s.dependencies.all ... ∧ (∀...) ∧ ... then` Lean `if` on Prop with classical? Decidable available. fine.
+
+  One issue vacuity of structural preservation proof `fresh_preserves` takes h but fresh always succeeds; still meaningful WF output. witness good.
+
+  Should perhaps read round1 reviewer findings for additional context on exact requested vacuity and possible defects. Read kimi/agy relevant.
+
+• I’ve found no newly encoded answer to the activation, direct-owner, or C1-erasure questions. The remaining concern is witness quality: several changed laws rely on shallow or unrelated counterexamples, so I’m separating actual semantic defects from missing evidence.
+
+• No validate. Good.
+
+  Could run read-only scripts? no build. I can use Python via Bash to analyze text? Dedicated Grep enough. No need.
+
+  Should assess laws with formal semantics. I can perhaps create my own mental counterexample to WellFormed invariant preserved under operations from WF, but proofs kernel check so no semantic false if compiled. The coordinator builds, current head golden regenerated implies compiled. I shouldn't question proof correctness without build.
+
+  Vacuity issue: Some planted bad states do not distinguish changed law from input assumption. For preservation law `move_preserves`, negative `¬WF {shared with slots moved}` is a bad state but is it reachable by mutated move from WF? Yes starting shared has loan so move operation refuses; mutated move ignoring loan yields state map all moved. Good. `borrow_preserves` negative `{shared with nextLoan:=0}` is not output of mutated borrow that reuses supply? Starting shared nextLoan1, loan id0. Mutated borrow reusing counter would create new id0 and nextLoan maybe 0? State with nextLoan0 and existing id0 has id<next false. It's bad, plausible.
+  `reborrow_preserves` negative child without parent is output of mutated reborrow dropping parent. good.
+  `accessOwner_preserves` negative shared slots moved is not output of accessOwner identity mutation (access returns same state); input shared WF, output bad moved would be a planted access mutation. okay.
+  `reinitialize_preserves` negative shared slots=[] from reinitialize? Starting shared has owned root, reinitialize refuses. Mutated reinit dropping root yields bad state. plausible.
+  `drop_preserves` same. `leave_preserves` same.
+  `bind_preserves` duplicate slots output of reuse place. good.
+  `enter_preserves` unissued activation loans bad state, but enter only adds slots, not loans. They say entry/adoption, okay.
+  `endLocals_preserves` parent removed bad. good.
+  `enterDown_preserves` unissued activation plausible.
+  `life_preserves` generic covered by all.
+  `adoptDown_preserves` unissued activation bad state perhaps.
+  `passDown_preserves` CallWitnesses bad states pending WF not Own WF? `waiting with own := exclusive` Own WF exclusive true, so doesn't fail Own preservation but CallState WF. There is no new negative specifically for passDown Own WF except child missing parent etc. Existing reborrow covers. Could use same.
+
+  CallState negative duplicate, stale good.
+  `callLife_preserves` negative `waiting with own initial` Own WF initial true, not Own preservation. But generic lifecycle negatives cover Own. okay.
+
+  `fresh_preserves` negative initial nextBrand0 is output of fresh from {} mutated to not increment; yes.
+  `depend_preserves` duplicate place output mutated depend; good.
+  `consume_preserves` dependent binders[] output mutated consume removing binder instead of dependency; good.
+  `release_preserves` released dependencies heap bad output release ignoring live alloc; yes.
+  `reset_preserves` resetOnce nextBrand1 bad output reset not increment? Starting initial nextBrand1, reset adds brand1 and leaves nextBrand1, exactly bad. good.
+  `endScope_preserves` dependent binders[] deps phantom output endScope removing all binders not just scope? Starting dependent only scope0 brand0 with live allocator, endScope would refuse; mutated removing binder yields phantom bad. good.
+  `fresh_generation` negative `¬ initial.nextBrand = {}.nextBrand` shows fresh increments but not full existential? positive exact initial. okay.
+  `reset_generation` negative WF resetOnce nextBrand1 covers freshness.
+  `leave_no_local_loan` planted shared slots=[] demonstrates WF owned root, not actual nonlocal loan conclusion. To fail conclusion, need leave success with a surviving local-root loan. The bad state `shared slots=[]` does not state t.loans or local root. Not a counterexample to theorem shape. Could flag specifically.
+
+  `adoptDown_only_arguments` negative `waiting with own exclusive` shows pending missing but theorem conclusion requires ∃ pending in input; exactly failure for e y1, good. Though example is ¬CallState.WellFormed not ¬ existential; but WF includes existence plus flags, failure could be flags not existence? `waiting.pending` ID1, exclusive has only ID0, so existence fails. okay.
+  `leave_no_activation_slot` negative incomplete locals `leave ...=none` is refusal not bad output. Should mutated leave output retaining slot and example `∃x∈t.slots, x.activation=f.id` or negation of conclusion. No such. So changed existing laws lack proper counterexamples.
+
+  `endLoan_supply` negative? nextLoan freshness bad shared nextLoan0, but supply unchanged law could mutated endLoan decrement supply; no example `endLoan ... t` with t.nextLoan ≠ s.nextLoan. Existing identities not reused covers nextLoan increases after end then borrow but doesn't directly plant mutation. Again strict.
+
+  `borrow_birth` negative shared nextLoan0 shows freshness but not exact old supply advance path root; positive covers all by definition but negative only one conjunct. Rule "planted counter-example a mutated rule or bad state that fails it" one conjunct enough. okay.
+  `reborrow_birth` negative parent missing is not a conjunct of theorem (theorem says parent ID some i but no requirement parent remains active in t? Actually ∃a loan s and l∈t parent some i; removing parent from t does not falsify theorem). The negative child missing parent does *not* falsify reborrow_birth. It falsifies WF only. Should have a bad output where parent field none or path wrong. So strict witness inadequate.
+  `fresh_generation` negative `initial.nextBrand ≠ {}.nextBrand` actually conclusion for fresh {} initial includes equality `initial.nextBrand = {}.nextBrand+1` and ∃ brand0. The example negates equality without +1, not failure. `¬WF initial nextBrand0` shows bad state but not theorem conclusion exactly? Setting nextBrand0 makes first conjunct `0=0+1` false, so yes bad state initial with nextBrand0 and binder brand0 still; existential holds, first fails. They have `¬WF`, not `¬(nextBrand=...∧...)`, but bad state falsifies WF not generation theorem. Owner allows bad state that fails "it" likely law not invariant. Their general approach uses ¬WF for preservation laws, appropriate; for generation should negate generation property. They added extra weird example `¬ initial.nextBrand = {}.nextBrand` perhaps intended but still wrong (should `¬ initial.nextBrand = {}.nextBrand + 1` is false, can't negate true; mutated state nextBrand0). Could flag.
+
+  Could treat vacuity audit as systematic major real defect. Should enumerate verdict per law perhaps mark "evidence gap" not vacuous. They demand "a vacuous law is real defect" but not every missing counterexample makes law vacuous. Yet hard rule says every law needs witness and planted counterexample. Missing is REAL DEFECT compliance, severity major maybe.
+
+  Could verdict CHANGES based on this alone. Are there any actual vacuous laws? `life_preserves` example `life types (.bind y) shared = bind ...` merely rfl, but theorem itself not vacuous and covered bind. `fresh_progress` total by construction not vacuous; statement always true intentionally. `accessOwner_progress` direct restatement but meaningful operational guard. No theorem has impossible hypothesis. `leave_no_local_loan` hypotheses realizable but no witness. So I can say no law proved vacuous by construction, but mandatory evidence incomplete. Then severity major or minor? Owner binding makes it major. Use one major finding with subcases exact file lines and fixes. Also possibly README nit.
+
+  Should consider current commit has writer final message not accessible with per-law mapping, but User asks reviewer to list. I can base code only.
+
+  Perhaps there is issue with O3 doc: after `run_erasure`, line says only single-operation Generative instrument; not false but incomplete. Nit preference update.
+
+  Question assessments don't count findings. Merge accept.
+
+  I should perhaps not list huge table of all laws with repetitive witnesses if response length high, but explicit requirement. I can create compact table grouped laws sharing exact witness and verdict. Each law name appears. Use labels P1 etc with code lines. Should define witness labels to avoid repeating. Then table rows each or groups. "List each law" can have multiple names per row if verdict same and witness shared. Better each law one row maybe ~50 rows, response ~4000 tokens. User asks thorough. Fine.
+
+  Should decide scope includes unchanged `nextBrand_fresh` and `loan_has_owned_root` etc. They appear context only not modified. I can explicitly say audited new/changed laws; unchanged grant laws and unchanged context theorems not re-audited. But user says every law in change, so okay. Private helpers new/changed included in grouped "proof-only helpers". Could include them in a single row with names and witnesses. `fresh_wf` host fresh.
+  Own private:
+  fold_preserves changed; used enter/endLocals/leave.
+  compatible_symm, insert_loan, owner_guard new; used borrow/reborrow.
+  bind_params_progress new; enter.
+  map_metadata_preserves new; adopt/pass.
+  reinitialize_loans etc new; callLife.
+  endLoan_frames/fold_frames/drop_absent changed proof only; leave_no_local.
+  These are lemmas but could be "laws" strict. Include group.
+
+  Public table Own ~36 rows. Generative ~16. That's long but manageable. Should identify per witness and counterexample codes.
+
+  Define witnesses:
+  Own positive:
+  - OW-M `Proofs/Own.lean:290-291`: initial move success + WF output. Counter `:299-300` bad moved root and `:306` refusal.
+  - OW-B `:292-293`: shared borrow success + WF. Counter `:303-304`, `:307`.
+  - OW-R `:294-295` exclusive reborrow success + child WF. Counter `:304`,`:308-309`.
+  - OW-A `:296-297` access success; `:299-311`.
+  - OW-L `:510-521`: reinit,endLoan,bind,drop,enter,endLocals,leave,life; negatives `:523-535`.
+  - OW-C `:907-916`: pending call. actual calls Spec lines 612 etc.
+  - OW-existing `Spec/Own.lean:428-449` etc for birth supply.
+  Generative:
+  - G-F `:251`,`:263`,`:275`,`:281`
+  - G-D `:252-253`,`:266`,`:276`
+  - G-C `:254-255`,`:268`,`:277`
+  - G-R `:256-259`,`:263-270`,`:278`
+  - G-E `:260`,`:272`,`:279`,`:288-291`
+  - G-run `:375-381`.
+
+  Could table law / verdict / positive / planted negative. For each mark "OK" or "gap". Use "non-vacuous" for law. For gaps "non-vacuous; evidence incomplete". Should classify `fresh_progress` gap negative unrelated. `reset_progress` positive resetOnce; negative not negated perhaps existing `Spec/Grant:151` equality none not negation. Strict requirement example with negation, so gap. `enter_progress` no negative operation, but bad WF entry at 527 perhaps not progress. Could mark gap. `callLife_call_preserves` etc okay.
+
+  `leave_no_local_loan` positive no direct nonempty f.locals; gap. `leave_no_activation_slot` positive leave called but counterexample only refused leave not bad output, gap.
+  `adoptDown_only_arguments` positive actual call, negative CallState WF missing identity can serve? The law conclusion existential input. `¬CallState.WellFormed {waiting with own := exclusive}` is bad state but not directly `adoptDown` success. It fails invariant, not law. Could mark gap strict.
+  `endLoan_supply` no direct counterexample, gap.
+  `reborrow_birth` negative irrelevant, gap.
+  `borrow_birth` negative shared nextLoan0 could be mutated output and conclusion false because nextLoan expected old+1? Starting initial? If mutated borrow shared with nextLoan0 output state same loans? Not exact but enough? Strict perhaps mark covered by supply freshness planted state. To avoid overflagging everything, only clear unrelated ones.
+  `fresh_generation` negative WF state with nextBrand0 could falsify generation. `reset_generation` similarly. okay.
+  `nextBrand_fresh` unchanged no need.
+  `fold_preserves` etc no direct planted but host.
+
+  `passDown_preserves` host reborrow + call witnesses negatives duplicate only CallState, but child missing parent negative own. okay.
+  `adoptDown_preserves` host call enter and unissued activation bad own. okay.
+  `callLife_preserves` same.
+  `callLife_call_preserves` good.
+
+  `life_preserves` positive example rfl not WF but host lifecycle all four positive; okay.
+  `enterDown_preserves` called positive.
+  `endLocals_preserves` called.
+  `leave_preserves` called.
+
+  `reborrow_preserves` positive child def uses reborrow, yes.
+
+  `accessOwner_preserves` etc good.
+
+  `move_progress` negative move shared exactly negation.
+  `borrow_progress` negative.
+  `reborrowAt_progress` negative.
+  `reborrow_progress` negative.
+  `access*_progress` negative.
+  `reinitialize_progress`, `endLoan_progress`, `bind_fresh_progress`, `drop_progress` good.
+  `enter_progress` could use bind failure negative to show planted guard but not enter; no `¬ enter`. mark evidence gap.
+  `fresh_progress` negative reuse counter not progress. mark.
+  `reset_progress` existing example not negation but negative run_erasure reset refused in `RunWitnesses` is positive conjunction `run ...=none`, not `¬ isSome`. Owner exact says written as example with a negation, so mark.
+  `depend_progress` negative is equality `depend dependent heap = none` not negation! In same example positive ∧ depend= none, no `¬`. Owner says planted counterexample written as example with negation. Many progress negative examples in Generative use `= none`, not ¬ except preservation. Own uses ¬ isSome. So strict all depend/consume/release/endScope progress lack negated example. But perhaps `= none` is a planted counterexample to success though not syntactic negation. Owner explicitly "written as an `example` with a negation" means yes missing. Should I enforce syntactic? They did examples with negation elsewhere, likely expected. Could flag systemic but not list each as gap? I can say operation refusals `= none` are valid counterexamples semantically but fail literal negation form; converting is nit. However owner binding could make major. Should reasonable interpretation: `depend dependent heap = none` is logically negation of ∃t success, though not ¬. But says with a negation likely they want ¬. They intentionally used `¬ isSome` in Own. In Grant progress they used `= none`; perhaps reviewer should catch. Could flag minor evidence-format across those, not semantic. Yet "vacuity rule owner binding" severity perhaps major.
+
+  More fundamental: counterexample for a progress theorem isn't `operation=none` when guard fails? Yes that's exactly shows guard meaningful. `= none` suffices mathematically. Requiring syntactic ¬ seems pedantic; but owner explicitly. I can note as minor real defect.
+
+  Question response expects verdict perhaps ACCEPT if all substantive fixes good. I must decide whether these witness gaps warrant CHANGES. They emphasized vacuity in prompt in bold-like: "Vacuity rule (owner, binding): check EVERY law ... List each law ... a vacuous law REAL DEFECT." Likely evaluator expects detection of vacuity not merely formal syntax. There may be planted examples intentionally but some are bogus. Should surface.
+
+  Could there be an actually vacuous new theorem due to hypotheses impossible:
+  - `passDown_call_preserves` hypotheses satisfiable waiting.
+  - `callLife_call_preserves` satisfiable.
+  - `reset_progress` satisfiable.
+  - `leave_no_local_loan` changed existing, satisfiable.
+  - `fresh_wf` etc.
+  No vacuous.
+  - `fold_loans`: hf shape perhaps impossible for f that adds? Used only endLoan. Realizable.
+  - `map_metadata_preserves`: `issued` and parents realizable.
+  - `owner_guard`: ownerAccess true realizable.
+  - `compatible_symm`: realizable.
+  - `insert_loan`: realizable.
+  - `bind_params_progress`: realizable.
+  - `endScope_non_escape` realizable added direct witness.
+  - `run_erasure` realizable two commands.
+  So no actual vacuity. I could ACCEPT with minor evidence gaps? But mandatory each law counterexample missing means CHANGES perhaps.
+
+  Should think of merge conflict issue C6: README base branch b5fff070 said C6–C10 remain and split request response C6. Core branch 07c said C5 and C7-C10 remain, removed C6. Resolution says C7-C10 and removes C6 duty. Correct. Spec.lean adds Observe. Good.
+
+  No actual semantic defects means response can be CHANGES due mandatory witnesses only. User likely values not rubber stamp.
+
+  Potential semantic issue not pending: `CallState.WellFormed` uses `parameter ∈ pending` duplicate guard but `passDown` from an existing pending child fails due loanAccess pending false. Fine.
+
+  Potential new guard in `callLife` all non-enter events require pending empty. Does Q9.8 defer held loans mean pending arguments can survive across lifecycle events for deferred calls? Pending is argument evaluation synchronous before enter; deferred calls could be registered after eval? The boundary says Q9.8 defer/held loans decided. Could `callLife` guard encode that pending cannot cross `.drop`/`.bind` which may be too strong for defer? But pending means unfinished argument evaluation, not deferred held loan. Actual defer semantics uses existing loan not pending after call entry? C1 call to deferred perhaps special. No implementation of defer here. Not encoding direct.
+
+  `passDown` source loan existing explicit parent stays active after ordinary call. For deferred call, decided held until runs. Current enterDown leave ends child immediately, so cannot model deferred held loans. But brief C5 perhaps not require defer adapter, Q9.8 in boundary to prevent wrong implicit end. They didn't implement defer. okay.
+
+  Direct owner question recommendation must account Q9.8.
+
+  One concern: `erasedEval` `.lend`, `.reborrow`, `.endLoan`, `.use` all returns 0 success. For `.move`, erased local lookup leaves value, okay. C1 erasure one-way successful-step simulation could fail even for safe instrumented run because instrumentation state erased Unit but locals same. On successful instrumented eval, erasedEval matches for each. life successful -> some unit. test same. allows Empty. So example instance can prove. General wrapper needs an operand relation. Good.
+
+  Should read Exec Out/Step to accurately mention events/final classification.
+
+• The merge keeps both C5 and C6 and removes only the obligations those slices now discharge; I found no lost text or semantic conflict there. I’m finishing the law-by-law witness matrix and the three design recommendations.
+
+• Perhaps verify no additional diffs beyond files, REVIEW.diff complete. I did. Perhaps current tree line references exact. Good.
+
+  I should prepare response structured:
+  1 Findings first severity.
+  2 Vacuity audit table.
+  3 Open questions recommendations.
+  4 Merge resolution.
+  5 Verification limits.
+  Last VERDICT: CHANGES.
+
+  Findings:
+  - Major REAL DEFECT at `ConcreteSpec/Proofs/Own.lean:517-521`, `:1031-1119`, `ConcreteSpec/Proofs/Grant.lean:274-281`: mandatory non-vacuity evidence does not cover several laws. Be precise:
+    * `leave_no_local_loan` changed at 1067, positive `leave called` at 520 uses `enterDown` whose new callee has no owning locals (`Spec/Own:246-252`), so `entry∈f.locals` uninstantiated. Planted `¬WF shared slots=[]` at 523 tests root invariant not conclusion. Fix define two-slot state, callee with a moved/Copy local plus an outer loan, successful leave and surviving outer loan; example `entry∈f.locals`, `l∈t.loans`, `l.root≠entry.2`; mutated leave retaining local loan and negation of conclusion.
+    * `leave_no_activation_slot` at 1106 positive leave called has no departing activation slot. Existing `leave ...=none` Spec 569 is refusal, not mutated successful output. Fix input with departing Copy/moved slot and outer slot, success; mutated leave retaining slot, negated universal.
+    * `reborrow_birth` at 1011: negative child parent removed at 304/530 falsifies ParentValid/WF but theorem only requires child parent field some i and original parent in input; removing parent from output doesn't falsify it. Fix mutated reborrow parent := none / wrong path/root and negated conclusion. This is clear.
+    * `endLoan_supply` at 1032: no counterexample to supply equality; child missing parent irrelevant. Fix mutated endLoan decrementing nextLoan, `¬(t.nextLoan=s.nextLoan)`.
+    * `fresh_progress` at 40: `¬ initial.nextBrand={}.nextBrand` at 281 doesn't concern ∃t fresh=some. Fix locally defined freshRefused returning none and `¬∃t,...`, or perhaps fresh counter reuse not progress. Since progress theorem total, counterexample must mutated rule.
+    * `enter_progress` at 465 no negated enter with duplicate/untyped param. Fix.
+    * `reset_progress` at 208 has positive reset but no negation counterexample (Spec Grant 151 =none, no ¬). Fix `¬(depend initial heap).bind reset...isSome` or direct with state. Similarly Generative other progress use `=none` not negation; perhaps include in minor.
+  Could group all as one major, not claim laws false/vacuous. "These are evidence defects under binding rule, not counterexamples to the theorems." This nuance important.
+  - Minor REAL DEFECT `ConcreteSpec/Proofs/Grant.lean:274-279`: progress counterexamples equal none not syntactic negation for depend, consume, release, endScope; reset lacks here. Owner demanded negation. Could fold major and avoid extra.
+  - Nit PREFERENCE `ConcreteSpec/README.md:61-63`: now finite Generative.run erasure exists but O3 mentions only single op. Update. Is this required? Good.
+
+  Would major evidence gap warrant CHANGES yes.
+
+  Vacuity table can mark those gaps. Should not duplicate findings too much but required.
+
+  Define "NV" non-vacuous; "NV/GAP" law realizable but mandatory witness/control missing. No "vacuous" confirmed. This fulfills.
+  Table public laws:
+  Own rows:
+  `move_preserves`, `move_progress` NV witness lines 290,299,306.
+  `reinitialize_preserves`, `reinitialize_progress` NV 510,523,532.
+  `borrow_preserves`, `borrow_progress` NV 292,303,307.
+  `reborrowAt_preserves`, `reborrow_preserves`, `reborrowAt_progress`, `reborrow_progress` NV 294-295,304,308-309.
+  `endLoan_preserves`, `endLoan_progress` NV 511-512,530,533.
+  `accessOwner_preserves`, `accessOwner_progress` NV 296,299,310.
+  `accessLoan_preserves`, `accessLoan_progress` NV 297,301,311.
+  `bind_preserves`, `bind_fresh_progress` NV 513-514,525,534.
+  `drop_preserves`, `drop_progress` NV 515-516,523,535.
+  `enter_preserves` NV 517,527-528 (planted unissued activation).
+  `enter_progress` GAP positive 517, no direct negative.
+  `endLocals_preserves` NV 518-519,530.
+  `leave_preserves` NV 520,523.
+  `enterDown_preserves` NV 508,518-520,527.
+  `life_preserves` NV positive all events? `life` only rfl bind, but enter/leave/drop functions positive. Could say lifecycle host witnesses 510-521; counter 523-535. Fine.
+  `adoptDown_preserves` NV 910-911,527-528 perhaps call bad states.
+  `passDown_preserves` NV 907,304.
+  `passDown_call_preserves` NV 907-908,913-914.
+  `callLife_preserves` NV 910-911 + own lifecycle negatives.
+  `callLife_call_preserves` NV 907-916.
+  `borrow_birth` NV shared etc + 303.
+  `reborrow_birth` GAP.
+  `endLoan_supply` GAP.
+  `leave_no_local_loan` GAP.
+  `adoptDown_only_arguments` NV? Positive 910, negative 914 `¬CallState.WellFormed waiting own exclusive`, theorem conclusion pending exists false. But not direct negation of theorem. I can mark GAP strict to be consistent. Could add to finding perhaps.
+  `leave_no_activation_slot` GAP.
+
+  What about `fresh_generation`, `reset_generation` changed proofs:
+  `fresh_generation` NV 251,263,281. Counter weird but bad supply state enough.
+  `reset_generation` NV 258-259,264.
+  `endScope_non_escape` NV 288-291 excellent.
+  `run_erasure` NV 375-381 excellent.
+  Generative preserves/progress:
+  `fresh_preserves` NV 251,263.
+  `fresh_progress` GAP.
+  `depend_preserves` NV 252-253,266.
+  `depend_progress` NV mathematically positive 276 and refusal duplicate 276, but literal negation missing. If table "NV" with note negative `=none` accepted as refusal counterexample. Then why reset GAP? reset has existing refusal `Spec/Grant:151` =none, same. Could mark NV too if semantically. Then only fresh_progress etc. But owner exact "with a negation" I should flag all equality none. Could table verdict "NV; control not negated" for depend/consume/release/reset/endScope progress. This is cumbersome but honest. Use "EVIDENCE" not law vacuity.
+  `consume_preserves` NV.
+  `release_preserves` NV.
+  `reset_preserves` NV.
+  `endScope_preserves` NV.
+  `reset_progress` positive resetOnce, negative at Spec 151 equality none; control not negated.
+  `endScope_progress` 260,279 equality none.
+  `depend_progress` etc.
+  `run_erasure` good.
+
+  `nextBrand_fresh` not changed (context only) no table. `instrument_erasure` unchanged no table. `adoptDown_only_arguments` proof changed due guard conjunct so include. `leave_no_activation_slot` proof changed include. `endLoan_supply` changed proof include. `borrow_birth`, reborrow_birth changed proof include. `leave_no_local_loan` signature/proof changed include.
+  `fold_frames`, etc helpers table group.
+  `fresh_wf` etc.
+
+  What about `fresh_generation` only proof changed due validate removal; yes.
+  `reset_generation`.
+  `endScope_non_escape`.
+  `borrow_preserves` statement hunk context m line but signature hs changed yes.
+  `reinitialize_preserves`.
+  `access...`.
+  `endLocals_preserves` only proof changed.
+  `leave_no_local`.
+  No `nextBrand_fresh` changed not include.
+  No `loan_has_owned_root` changed not include.
+
+  Private helpers group with host witnesses and no independent controls. Does mandatory rule require each separate counterexample? I can say "Proof helpers, not independent semantic laws; covered by host positive/negative examples." User said every law, but this is reasonable. List all names.
+
+  Could also include `CallState.WellFormed` definition not law no.
+
+  Should assess direct owner: I can recommend call-duration root loan (option A) for immediate calls as best source semantics, with explicit borrow scope as fallback/desugaring. Should explain root loan parent none pending true and adopt into callee then endLocals removes, original owner usable after return; no lingering caller parent. For deferred calls, registration captures a held loan and does not end until deferred call runs (OD2/Q9.8) then cleanup reverse. It should not end at scope registration or ordinary callee return of defer registration. Explicit caller borrow scope requires users to write scope to unfreeze, perhaps already source `borrow ... as` Q4.7 for views only arrays, not general references. Still owner choice. Could say if existing surface model intentionally makes `&x` argument explicit borrow scope, choose that; don't mix implicit end of arbitrary caller loan.
+  Activation: restrict exposed reborrow to current activation or new direct callee. `reborrowAt` private and requires destination = current frame or newly entered head with parent caller immediately below. Record theorem destination relation. Should have active frames not just nextActivation. Arbitrary old activations could be inactive; current + new callee prevents upward. Upward refusal example activation1 current target0. This aligns Q3.2 and references second class; doesn't decide more than necessary. Keep arbitrary helper pending until owner. My assessment recommendation not encoded.
+  C1: as above.
+
+  Merge: correct both C5/C6. Note Spec.lean line 61-63 no lost imports; README C7-C10 correct. No finding. O3 nit.
+
+  Boundary: no undecided encoded; arbitrary `reborrowAt` remains public but doc explicitly not enforced downward interface. Is leaving public arbitrary helper itself an encoding of upward semantics? Coordinator said "leave current behaviour, document pending" exactly. So okay.
+  No references returned/stored concrete. instrumentation views okay.
+
+  Verification: Read-only, no build/gates run per instruction. Don't claim compiled. Coordinator does.
+
+  Could response verdict CHANGES with only evidence gaps, not semantic. Good.
+
+  Perhaps severity major for witness gaps is debatable. Owner says binding. I'll label major REAL DEFECT. Nit README PREFERENCE. Perhaps separate minor REAL DEFECT for negative syntax. Could group major all witness failures. Avoid overcount.
+
+  I'll formulate finding major with 6 examples. Should concrete line refs:
+  - `Proofs/Own.lean:1011` reborrow_birth and negative 304.
+  - `:1032` endLoan_supply.
+  - `:1067` leave_no_local and witness 520.
+  - `:1094` adoptDown_only_arguments and negative 914.
+  - `:1106` leave_no_activation_slot.
+  - `Proofs/Grant.lean:40` fresh_progress and counter 281.
+  - `Proofs/Own.lean:465` enter_progress.
+  - `Proofs/Grant.lean:274-279` equality none issue. Could include as minor not major.
+  This is many. Perhaps list all in major bullet with semicolons.
+
+  "Non-trivial instance" for `leave_no_activation_slot`: called enterDown no slot in activation1, but conclusion still nonempty outer slot. However to exercise key departing slot property need input with departing slot. Yes.
+  `adoptDown_only_arguments`: positive waiting enter yes. Negative bad CallState not law; add.
+
+  `enter_progress` can use `enter types [y,y] shared = none` or missing descriptor; no negative. Good.
+  `fresh_progress` no possible bad state from WF since total, must mutated rule. Good.
+
+  `reset_progress` etc counterexamples with `=none` mathematically okay but exact rule syntax. Could minor REAL DEFECT. `fresh_generation` counterexample line 281 not generation? I could add as clear: `¬ initial.nextBrand = {}.nextBrand` is true because1≠0; fresh_generation says1=0+1, so this example doesn't negate either conjunct. However line263 `¬WF {initial with nextBrand:=0}` can be viewed bad state but not generation property. Owner asks bad state that fails law, not WF. Should flag `fresh_generation` too. `reset_generation` negative `¬WF resetOnce nextBrand1` also only WF, not conclusion. A bad state failing WF is relevant to generation freshness but law itself conclusion still perhaps if nextBrand1? For resetOnce, original s=initial nextBrand1, t with nextBrand1: first conjunct t.nextBrand =2 false, so bad state indeed fails generation property though example only proves ¬WF, not ¬property. Owner requires written example negation likely insufficient. Could mention all non-preservation laws need property-specific negations, not generic WF. This is systematic. Similarly borrow_birth/reborrow_birth/endLoan_supply. Better finding generalized: bad-state `¬WellFormed` controls are suitable for preservation but not for equations/nonescape/birth/supply. `endScope_non_escape` has property-specific good; run_erasure good; call state property controls good for CallState preservation. `nextBrand` not changed.
+  - `fresh_generation`, `reset_generation`, `borrow_birth`, `reborrow_birth`, `endLoan_supply`, `leave_no_local_loan`, `adoptDown_only_arguments`, `leave_no_activation_slot` lack property-specific negated controls. `borrow_birth` has perhaps no direct but generic supply bad; mark.
+  This makes table clearer.
+  Positive instances for birth/supply exist in Spec examples. Negative missing.
+  No actual vacuity, but mandatory planted counterexamples not satisfied for non-preservation laws.
+  Could major finding be "The planted-counterexample audit is only valid for preservation/run/call-state laws; eight other changed laws have no counterexample to their own proposition." This is concrete and significant.
+
+  Fresh_progress is progress property, negative unrelated. Enter_progress missing. Generative progress uses refusal equality, which is property-specific though not syntactic negation. Separate nit.
+
+  I'll decide table mark:
+  - fresh_generation / reset_generation / borrow_birth / reborrow_birth / endLoan_supply / leave_no_local / adoptDown_only / leave_no_activation = GAP-C.
+  - fresh_progress / enter_progress = GAP-C.
+  - depend/consume/release/reset/endScope progress = GAP-N (negation syntax).
+  Everything else NV.
+  No need claim theorem vacuity.
+
+  Could this be seen overly harsh because owner allowed "bad state that fails it" and generic WF bad state counts? For birth laws bad state could fail birth property but example doesn't assert it. They specifically want per law mapping in writer response, perhaps prose could connect. But review only tree and user says writer response questions, not mapping. I can require explicit. Good.
+
+  Should have table of witness references concise.
+
+  I'll plan response length ~4500 tokens. I have enough.
+
+  Before responding, update Todo done. No more tools needed? Perhaps current todo assess done, compile in progress then done just before responding. I can call once now all done after mentally compile. But instructions keep exactly one in progress while underway. Use TodoList assess done compile in progress now.
+
+• The substantive round-1 fixes are present. The verdict turns on the binding vacuity rule: several non-preservation laws have no planted counterexample to their own conclusion, and two key exit/adoption laws lack a witness that exercises their essential hypotheses.
+
+• Should have final response now but todo done first. Could do tool then response.Now draft final response with last line exact. Ensure every finding file:line severity problem concrete fix REAL/PREFERENCE. Start findings.
+
+  Finding 1 major real defect evidence. Mention not evidence theorem false. Then finding2 minor real defect negation form. Finding3 nit preference README.
+
+  Vacuity audit table group each law. I need include private helpers names. Use labels:
+  - OK = non-vacuous and adequate +/−.
+  - GAP = non-vacuous proposition but mandatory evidence incomplete.
+  No confirmed vacuous law. Is verdict CHANGES because mandatory evidence not actual vacuity. Explain.
+
+  Witness references table compact. For groups, every law named. I'll list 23 rows Own and 10 Gen. Enough.
+
+  Own:
+  1 move_preserves/move_progress OK `Own.lean:290-291,299-300,306` ambiguous path use Proofs/Own.lean.
+  2 reinit etc.
+  3 borrow.
+  4 reborrow preserve/progress.
+  5 endLoan.
+  6 access owner.
+  7 access loan.
+  8 bind.
+  9 drop.
+  10 enter_preserves OK, enter_progress GAP separate.
+  11 endLocals.
+  12 leave.
+  13 enterDown.
+  14 life.
+  15 adoptDown_preserves.
+  16 passDown_preserves.
+  17 passDown_call.
+  18 callLife_preserves/callLife_call.
+  19 borrow_birth GAP.
+  20 reborrow_birth GAP.
+  21 endLoan_supply GAP.
+  22 leave_no_local GAP.
+  23 adoptDown_only GAP.
+  24 leave_no_activation GAP.
+  Private group.
+
+  Gen:
+  fresh_preserves OK; fresh_progress GAP.
+  depend preserve OK; depend_progress minor negation.
+  consume.
+  release.
+  reset preserve; reset_generation GAP; reset_progress minor.
+  endScope preserve/progress minor.
+  fresh_generation GAP.
+  endScope_non_escape OK.
+  run_erasure OK.
+  fresh_wf helper group.
+  Could combine preserve with progress each.
+
+  `fresh_generation` positive `:251`; counterexamples `:263,280-281` inadequate property-specific. reset generation positive258-259.
+  `borrow_birth` positive `Spec/Own:391-393` definitions don't examples by decide? shared/exclusive defs computed but no example WF? Primitive witnesses WF shared etc prove borrow success but not exact ID path. Existing example `:438-441` shows identity1 after end/borrow and initial path not exact. Enough nontrivial instance of borrow with path index0. Law conclusion root/path visible by definition. Positive witness not direct proposition but operation instance qualifies. Good.
+  `endLoan_supply` positive Spec 438-441. no counter.
+  `leave_no_local` no positive essential.
+  `adoptDown_only` positive call witness, no property negative.
+  `leave_no_activation` positive called no departing slot, gap both.
+  `callLife_preserves` counter CallState WF not own? use own host counters. okay.
+  `passDown_preserves` counter child missing parent.
+  `adoptDown_preserves` unissued activation.
+  `enter_preserves` unissued activation bad loans but entry with params adds slots, negative duplicated slots at525 also relevant bind/enter. fine.
+
+  Private helpers: `fold_preserves`, `compatible_symm`, `insert_loan`, `owner_guard`, `bind_params_progress`, `map_metadata_preserves`, `reinitialize_loans`, `bind_loans`, `fold_loans`, `enter_loans`, `drop_loans`, `endLoan_subset`, `life_subset`, `endLoan_frames`, `fold_frames`, `drop_absent`, `fresh_wf`. I might classify `drop_absent` itself changed law with essential hypothesis and no direct witness; host leave_no_local gap means private group not all OK. Say helpers inherit host status; in particular drop_absent/fold_frames share exit gap. This lists each and verdict via host. Good.
+  `fresh_wf` OK.
+  No `validate` laws removed not audit.
+
+  Open questions and merge after table.
+
+  Last line exactly VERDICT: CHANGES no after.
+
+  I'll compose concise but thorough.
+
+• ## Findings
+
+  1. **`ConcreteSpec/Proofs/Own.lean:999-1119`, `ConcreteSpec/Proofs/Grant.lean:40-41,303-314` — major — REAL DEFECT: several changed laws lack the mandatory counterexample to their own conclusion.**
+     
+     The preservation laws generally have appropriate bad-state controls, and `run_erasure` has a particularly good positive instance and dropped-command mutation. However:
+     
+     - `fresh_progress`’s control at `ConcreteSpec/Proofs/Grant.lean:280-281` concerns counter inequality, not the proposition `∃ t, fresh s scope = some t`.
+     - `fresh_generation` and `reset_generation` have counter-supply bad states, but no negated generation equation/witness property.
+     - `borrow_birth`, `reborrow_birth`, and `endLoan_supply` reuse generic `WellFormed` failures. In particular, removing the parent at `ConcreteSpec/Proofs/Own.lean:304` does **not** falsify `reborrow_birth`: that theorem still permits the parent to be absent from the output loan table.
+     - `leave_no_local_loan` has no positive instance exercising `entry ∈ f.locals`. Its successful `leave called` witness uses `enterDown`, whose new frame has no owning locals. The bad-state example at line 523 tests root well-formedness, not survival of a local-root loan.
+     - `adoptDown_only_arguments` has a successful call witness, but the malformed `CallState` controls do not negate its existential conclusion.
+     - `leave_no_activation_slot` has no successful exit with a departing-activation slot, nor a mutated successful exit retaining such a slot. The existing refusal example at `ConcreteSpec/Spec/Own.lean:568-569` does not fill that role.
+     
+     These are **witness/compliance defects**, not evidence that the theorems are false; I found no impossible hypothesis making one vacuous. The owner’s rule nevertheless requires the missing evidence. Add property-specific negated examples: a mutated fresh rule returning `none`, wrong birth counters/parents/paths, a decremented loan supply, successful mutated exits retaining a local loan or activation slot, and adoption of an unmarked identity.
+
+  2. **`ConcreteSpec/Proofs/Own.lean:465-472`, `ConcreteSpec/Proofs/Grant.lean:274-279` — minor — REAL DEFECT: some progress controls are absent or not written as negations.**
+     
+     `enter_progress` has no refused duplicate/untyped-parameter example. The generative `depend`, `consume`, `release`, and `endScope` controls use `= none` inside affirmative conjunctions, while `reset_progress` relies on the older refusal example at `ConcreteSpec/Spec/Grant.lean:150-151`. These are mathematically useful refusal checks, but the binding rule explicitly requests an `example` with a negation. Add direct `¬ (...).isSome` controls for all five operations and for `enter_progress`.
+
+  3. **`ConcreteSpec/README.md:60-63` — nit — PREFERENCE: O3 omits the newly proved finite allocator-run result.**
+     
+     It now lists only single-operation `Generative.instrument` erasure. Mention `Generative.run_erasure` while retaining the accurate statement that C1 execution-level simulation remains open.
+
+  ## Vacuity audit
+
+  “OK” means the proposition is non-vacuous and has usable positive and planted-negative evidence. “Gap” means the proposition is realizable, but the mandatory evidence is incomplete as described above.
+
+  ### Ownership laws
+
+  | Law | Verdict | Positive witness and planted control |
+  |---|---|---|
+  | `move_preserves`, `move_progress` | OK | `Proofs/Own.lean:290-291,299-300,306` |
+  | `reinitialize_preserves`, `reinitialize_progress` | OK | `Proofs/Own.lean:510,523,532` |
+  | `borrow_preserves`, `borrow_progress` | OK | `Proofs/Own.lean:292-293,303,307` |
+  | `reborrowAt_preserves`, `reborrow_preserves` | OK | `Proofs/Own.lean:294-295,304` |
+  | `reborrowAt_progress`, `reborrow_progress` | OK | `Proofs/Own.lean:294-295,308-309` |
+  | `endLoan_preserves`, `endLoan_progress` | OK | `Proofs/Own.lean:511-512,530,533` |
+  | `accessOwner_preserves`, `accessOwner_progress` | OK | `Proofs/Own.lean:296,299-300,310` |
+  | `accessLoan_preserves`, `accessLoan_progress` | OK | `Proofs/Own.lean:297,301,311` |
+  | `bind_preserves`, `bind_fresh_progress` | OK | `Proofs/Own.lean:513-514,525,534` |
+  | `drop_preserves`, `drop_progress` | OK | `Proofs/Own.lean:515-516,523,535` |
+  | `enter_preserves` | OK | `Proofs/Own.lean:517,525-528` |
+  | `enter_progress` | **Gap** | Positive at line 517; no direct negated entry failure |
+  | `endLocals_preserves` | OK | `Proofs/Own.lean:518-519,530` |
+  | `leave_preserves` | OK | `Proofs/Own.lean:520,523` |
+  | `enterDown_preserves` | OK | `called` at lines 508,518-520; bad activation at 527-528 |
+  | `life_preserves` | OK | Covered by the successful bind/enter/drop/leave witnesses at 510-521 and their controls |
+  | `adoptDown_preserves` | OK | `Proofs/Own.lean:910-911,527-528` |
+  | `passDown_preserves` | OK | `waiting` at 906-907; missing-parent control at 304 |
+  | `passDown_call_preserves` | OK | `Proofs/Own.lean:907-908,913-914` |
+  | `callLife_preserves` | OK | Entry at 910-911; lifecycle and malformed-call controls |
+  | `callLife_call_preserves` | OK | `Proofs/Own.lean:907-916`, including duplicate, dangling, and stale-pending states |
+  | `borrow_birth` | **Gap** | Live borrows exist; no property-specific negated birth control |
+  | `reborrow_birth` | **Gap** | `child` is positive; removing its parent does not falsify this theorem |
+  | `endLoan_supply` | **Gap** | Identity examples exercise ending; no mutated supply decrement |
+  | `leave_no_local_loan` | **Gap** | Essential local-entry hypothesis is not exercised; no conclusion-specific control |
+  | `adoptDown_only_arguments` | **Gap** | Successful adoption exists; no negated existential-witness control |
+  | `leave_no_activation_slot` | **Gap** | No departing-slot success instance or retained-slot mutation |
+
+  The private helpers `fold_preserves`, `compatible_symm`, `insert_loan`, `owner_guard`, `bind_params_progress`, `map_metadata_preserves`, `reinitialize_loans`, `bind_loans`, `fold_loans`, `enter_loans`, `drop_loans`, `endLoan_subset`, `life_subset`, `endLoan_frames`, `fold_frames`, and `drop_absent` inherit their host laws’ witnesses. In particular, the exit helpers share the `leave_no_local_loan`/`leave_no_activation_slot` evidence gap.
+
+  ### Generative laws
+
+  | Law | Verdict | Positive witness and planted control |
+  |---|---|---|
+  | `fresh_wf`, `fresh_preserves` | OK | `Proofs/Grant.lean:251,263` |
+  | `fresh_progress` | **Gap** | Success at line 275; line 281 is unrelated to progress |
+  | `depend_preserves` | OK | `Proofs/Grant.lean:252-253,266` |
+  | `depend_progress` | OK proposition; negation form missing | Success/refusal at line 276 |
+  | `consume_preserves` | OK | `Proofs/Grant.lean:254-255,268` |
+  | `consume_progress` | OK proposition; negation form missing | Success/refusal at line 277 |
+  | `release_preserves` | OK | `Proofs/Grant.lean:256-257,269-270` |
+  | `release_progress` | OK proposition; negation form missing | Success/refusal at line 278 |
+  | `reset_preserves` | OK | `Proofs/Grant.lean:258-259,264` |
+  | `reset_progress` | OK proposition; negation form missing | `resetOnce`; old live-allocation refusal |
+  | `endScope_preserves` | OK | `Proofs/Grant.lean:260,272` |
+  | `endScope_progress` | OK proposition; negation form missing | Success/refusal at line 279 |
+  | `fresh_generation` | **Gap** | Positive fresh state; no negated generation property |
+  | `reset_generation` | **Gap** | Positive reset state; no negated generation property |
+  | `endScope_non_escape` | OK | Strong surviving-dependent witness and property-specific mutation at `Proofs/Grant.lean:282-291` |
+  | `run_erasure` | OK | Two-command success, dropped-command mutation, and refusal asymmetry at `Proofs/Grant.lean:367-381` |
+
+  ## Open questions
+
+  - **Activation targets:** restrict the exposed operations to the **current activation or the newly entered direct callee**. Keep the arbitrary-destination helper private. Require the destination to be an actual active frame, not merely below `nextActivation`, and prove that relationship. Add the upward case—current activation 1, destination 0—as a refused example. This enforces Q3.2’s downward direction without selecting a stacked/tree borrow model.
+
+  - **Direct owner arguments:** I recommend a **call-duration root loan** for an immediate `&x`/`&mut x` argument. It should have no caller-side parent, be marked pending, be adopted into the callee, and end on callee return so the owner is immediately usable again. The explicit caller-borrow-scope alternative is semantically workable but leaves the observed freeze unless source syntax guarantees a surrounding scope. Whichever is chosen, a deferred call must hold that loan until the deferred call actually runs, consistently with Q9.8/OD2; it must not end when deferral is registered. Do not implicitly end an arbitrary pre-existing caller loan.
+
+  - **C1 erasure:** prove **one-way successful-step and multi-step simulation unconditionally**, then prove reverse/stuck equivalence only under checker safety. The supplied moved-owner example correctly refutes unconditional stuck equivalence. The simulation should cover `eval`, `test`, `life`, `allows`, primitive answers, event order, concrete stores, and `final`/`stuck`/`badAnswer`/`outOfFuel` classifications. Keep the unsafe example as the negative control and add a successful multi-step run as the non-vacuous positive control.
+
+  ## Boundary and merge review
+
+  No undecided answer was encoded. Arbitrary `reborrowAt` destinations remain explicitly documented as pending; direct owner lending remains absent with its lingering-parent behavior documented; C1 simulation remains an outstanding obligation. Views and pending arguments exist only as instrumentation metadata, not returned or stored concrete references.
+
+  The `b15f99e3` conflict resolution is correct:
+
+  - `ConcreteSpec/Spec.lean:57-64` retains C5’s `Own`/`Grant` and C6’s `Observe`.
+  - `ConcreteSpec/README.md:97-106` correctly changes the remaining foundation slices to C7–C10 and removes the already discharged C5 ownership and C6 request/response duties.
+  - I found no dropped side of either conflict.
+
+  This was a read-only source review; I did not build or run gates, as instructed.
+
+  VERDICT: CHANGES
+
+To resume this session: kimi -r session_4ec5c8f6-f6f1-4511-9c8f-63265580a1f2
+rc=0

@@ -1,0 +1,30 @@
+The round-2 fix is real. Terminal queries now come from the actual `step P c` request, with occurrence computed from the position’s issued history. `runFromQ_sound` connects that history to an oracle-checked `Moves` path and matching events. Neither stuck constructor can supply the other’s history.
+
+No REAL DEFECT found. No owner decision is selected.
+
+Vacuity audit below is by source inspection; witnesses described as mutations were not executed.
+
+| Changed law/clause | Verdict and witness/counter-example |
+|---|---|
+| `Proofs/Adequacy.lean:242` — `runFromQ_sound` | Non-vacuous. The concrete unanswered `log 1` run supplies a terminal instance; successful requests also require genuine `Move.prim` transitions. Mutating its reported occurrence to `1` leaves no matching authenticated terminal history. There is no invariant re-check inside the driver. |
+| `Spec/Adequacy.lean:150` — `ReportedQueries.final` | Non-vacuous specification clause. A `.done` configuration with empty frames admits its existing history; appending a fabricated query is excluded. |
+| `Spec/Adequacy.lean:152` — `.stuck` | Non-vacuous specification clause. Evaluating an unbound variable gives a non-final configuration with `step = none`; its existing history is accepted, an added query is excluded. |
+| `Spec/Adequacy.lean:156` — `.stuckContinuation` | Non-vacuous. The allowed answer and refused binding at lines 969–975 satisfy all premises. Omitting its terminal query is excluded at line 979. |
+| `Spec/Adequacy.lean:163` — `.noAnswer` | Non-vacuous. Lines 901–905 supply the actual request and unanswered oracle; line 908 rejects the fabricated occurrence. |
+| `Spec/Adequacy.lean:168` — `.badAnswer` | Non-vacuous. Lines 919–923 supply an actual disallowed answer; line 926 rejects the fabricated occurrence. |
+| `Spec/Adequacy.lean:174` — `.outOfFuel` | Non-vacuous specification clause. `terminalConfig` at fuel zero preserves the empty history; appending `terminalQuery` is excluded. |
+| `Proofs/Adequacy.lean:897` — concrete report equality | Non-vacuous computation test. Its expected report constrains the executable driver; replacing the expected query with the fabricated occurrence fails the equality. `rfl` here computes a concrete run rather than restating a general definition. |
+| `Proofs/Adequacy.lean:901` — authenticated unanswered history | Non-vacuous positive instance; its planted failing alternative is line 908. |
+| `Proofs/Adequacy.lean:908` — fabricated unanswered history rejected | Non-vacuous rejection test: line 901 establishes that the conclusion itself is inhabitable. Substituting `terminalQuery` makes the rejection false. |
+| `Proofs/Adequacy.lean:919` — authenticated bad-answer history | Non-vacuous positive instance; its failing alternative is line 926. |
+| `Proofs/Adequacy.lean:926` — fabricated bad-answer history rejected | Non-vacuous rejection test, paired with line 919. Substituting the actual query makes it false. |
+| `Proofs/Adequacy.lean:937` — machine-stuck history | Non-vacuous relation instance; line 944 rejects adding a query. See the coverage preference below. |
+| `Proofs/Adequacy.lean:944` — machine-stuck extra query rejected | Non-vacuous: line 937 inhabits the same conclusion with the correct empty history. Substituting `[]` makes the rejection false. |
+| `Proofs/Adequacy.lean:969` — continuation-refused history | Non-vacuous positive instance; line 979 supplies the failing omitted-query alternative. |
+| `Proofs/Adequacy.lean:979` — omitted continuation query rejected | Non-vacuous: line 969 establishes satisfiable request, answer, allowance, and refusal premises. Substituting `[refusingBindQuery]` makes the rejection false. |
+
+- **ConcreteSpec/Proofs/Adequacy.lean:934 — minor, PREFERENCE:** `terminalStuckConfig` is trapped, so `final?` succeeds and the driver reports `.final`, although the abstract `.stuck` conclusion used here is valid. For stronger driver coverage, use a non-final stuck configuration, such as a primitive argument reading an unbound variable, and assert its concrete `.stuck` report alongside the history checks.
+
+No files were modified, network connections made, builds run, or git writes performed. Elaboration and gates remain with the coordinator.
+
+VERDICT: ACCEPT

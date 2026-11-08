@@ -1,0 +1,15 @@
+1. **minor** — `ConcreteSpec/Proofs/Scalar.lean:255` (`machine_operands`):
+   **Problem:** `machine_operands` proves that when `(CTerm.machine t op a b).eval ρ = some r`, the evaluated operands `x` and `y` are in range (except shift counts), but there is no theorem stating that the result `r` itself satisfies `t.InRange r`. When contracts in C7/C8 nest `CTerm.machine` terms of the same width `t`, proving that an outer `CTerm.machine` satisfies `operandsOk` requires knowing that its inner `CTerm.machine` subterms evaluate to values in `t.InRange`.
+   **Fix:** Add `t.InRange r` to the conclusion of `machine_operands` (or add a companion lemma `machine_inRange (h : (CTerm.machine t op a b).eval ρ = some r) : t.InRange r`), proven by cases on `op` using `checked_inRange`, `wrap_inRange`, and `saturate_inRange`.
+
+2. **nit** — `ConcreteSpec/Spec/Scalar.lean:280` (`CTerm`) and `ConcreteSpec/Spec/Const.lean:82` (`CExpr`):
+   **Problem:** Every other syntax and value inductive in `Scalar.lean` and `Const.lean` derives `DecidableEq, Repr`, but `CTerm` and `CExpr` do not. Downstream slices (C6/C8) that embed `CTerm` or `CExpr` into ASTs or contract records will need those instances.
+   **Fix:** Add `deriving DecidableEq, Repr` to `CTerm` and `CExpr`.
+
+3. **nit** — `ConcreteSpec/Proofs/Const.lean:387-413` (`evaluates_typed`):
+   **Problem:** `evaluates_typed` takes both `hm : Matches env Γ` and `hv : ∀ c v, AList.lookup env c = some v → v.Valid`, and re-proves `hv'` at lines 406–411. However, `Matches env Γ` already implies `hv` (via `hm.lookup` and `hm.1`).
+   **Fix:** Extract a one-line lemma `Matches.valid (hm : Matches env Γ) : ∀ c v, AList.lookup env c = some v → v.Valid` and drop the redundant `hv` parameter and `hv'` step from `evaluates_typed`.
+
+The deferred items noted in the prompt (porting `Rep` onto `Core.IntTy` in C4, and exact counterparts of `div`/`rem`/shift in `CTerm` pending the owner's surface decision) are appropriate to defer.
+
+VERDICT: ACCEPT

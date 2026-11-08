@@ -1,0 +1,16 @@
+You are reviewing round 4 of one slice of the Concrete specification, written in Lean 4 (core only, no Mathlib). READ-ONLY: do not edit, create or delete any file, and do not run git commands that write. Reading is enough; if a .lake exists you may run `lake build`.
+
+Context:
+- The repository is a copy at the current directory. The spec is ConcreteSpec/ (read ConcreteSpec/README.md first). The slice implements foundation contracts C1 (ConcreteSpec/Spec/Exec.lean, Outcome.lean; proofs ConcreteSpec/Proofs/Exec.lean) and C2 (Spec/Scalar.lean, Spec/Const.lean; Proofs/Scalar.lean, Proofs/Const.lean) of the owner-approved proposal _review/FOUNDATION_PROPOSAL.md, plus today's owner decisions _review/LANGUAGE_DECISIONS_2026-11-08.md (items 4, 7, 10, 26, 11(a)). Decided rows: docs/decisions.md; philosophy docs/PHILOSOPHY.md.
+- _review/DELTA.patch is the change since round 3; _review/FULL.patch is the whole slice. Review the DELTA, reading full files as needed.
+- Round 3 findings and how they were handled:
+  * Ownership lifecycle: Operands.life : Life → Store → Store hears bind x (bind, assign, call/prim result), enter params (call entry, and enter for main), leave (return to the call frame), drop xs (locals dropped when a scope or a loop's test frame is left). Demo instrumentation keeps a moved set per activation; examples: reinit after move logs 7, 8; a parameter-consuming fn called twice logs 1, 2. Erased instances ignore life.
+  * Loop condition region: the test frame records the locals the loop started with; the test is evaluated with the region's temporaries visible, then they are dropped (restrict + drop) before the body or after the loop; exits through the test frame restore too. Example: effectful region (bump; let t = counter - 3), test t, body with continue, logs 1,2 then 3; t not readable after the loop.
+  * cleans_iff_runs_plan (with CleanAct call/drop and Frame.passable) replaces the one-way law; planWith_calls is filterMap.
+  * Docs: onRes trap state; fall-off-end only for Unit functions; enter endings; Outcome.Res; evaluation order observable by instrumentation before erasure. Demo moves a non-Copy Tok type.
+  * machine_inRange; CTerm/CExpr derive DecidableEq, Repr; Matches.valid.
+  * Still deferred (say if you disagree): request/response split (C6); oracle query record with occurrence numbers (C8); one scalar model with Rep (C4); exact counterparts of div/rem/shift in CTerm; the erasure law (C9).
+
+Review for: (1) correctness against decided rules and the C1/C2 text; (2) anything that decides a language question the decisions do NOT answer; (3) whether theorems are meaningful; (4) Lean quality/readability and accurate doc comments; (5) anything that makes C4/C5/C6/C8 hard to build on this interface. Do not repeat earlier findings that were fixed unless the fix is wrong. This is round 4 of at most 5: report only real defects.
+
+Output: a numbered list of findings, each with severity (blocker / major / minor / nit), file:line, the problem and a concrete fix. Then one final line exactly `VERDICT: ACCEPT` or `VERDICT: CHANGES`.

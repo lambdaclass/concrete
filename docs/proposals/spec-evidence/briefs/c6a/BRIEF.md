@@ -1,0 +1,26 @@
+# Task: vacuity fix round for an accepted contract (owner rule: no law may hold by construction)
+
+Contract: C6, observations (startup, requests and responses including blocking, output, trap line, terminal actions) (files: ConcreteSpec/Spec/Observe.lean, ConcreteSpec/Proofs/Observe2.lean (and Proofs/Observe.lean if C6 owns it), the C6 lines of ConcreteSpec/README.md). Base: the integrated wip/spec-core (fetch it: `git fetch origin wip/spec-core && git checkout -B wip/spec-c6-audit origin/wip/spec-core`).
+
+The vacuity audit of the accepted contracts (Codex, Kimi, agy; read-only) is in _review/AUDIT_FINDINGS.md. Fix every VACUOUS or WEAK verdict that concerns your contract's files. For each, choose one of two remedies:
+- (a) strengthen it into a real law: a statement about the operation's behaviour, the step relation or runs, which a mutation of the rule would falsify. Examples: replace a bare continuation lemma with a theorem over `Step`/`runFrom`; add the predecessor-success premises and prove an iff; derive Copy from static typing rather than from the evaluation guard.
+- (b) demote it to a clearly named helper (`private`, or a name ending in `_inv` / `_proj`, with a doc comment saying it is an inversion or projection helper and not a contract law), provided a real law covering the same property exists or is added.
+
+Where reviewers disagree on a verdict, decide from the statement itself and say why in your final message. Do not change any rule's meaning. If a fix would need a rule the decided rows do not answer, stop that part and list it under QUESTIONS.
+
+Also fix the WEAK examples (for instance a Refused example refused for a different reason than the one it claims to test).
+
+C6 is REOPENED (not accepted). Fix every C6 item in _review/AUDIT_FINDINGS.md, in particular:
+- the audit rows: `Responds.allows` / `Responds.matches` (constructor inversions), `trap_line_uses_byte_columns`, the `report_*` laws, `runFrom_validTrace` (weak);
+- the three integration-fix findings (section "Added from the review of the integration fix"): `report_noAnswer_mayBlock`, `refusedReportPermitted`, `report_noAnswer_blocked`;
+- the full-access Codex re-review (last section, 7 major findings): final external state omitted from the observation; byte-column correctness assumed (the column unit is decided: bytes, a tab counts one byte, docs/decisions.md#foundation-q10 — prove the trap line's column from the source text); environment laws extracting conclusions from admission premises; output preservation built into the observation definition; report laws not independently established; divergence exclusion definition-only; adapter well-formedness not requiring valid trap paths (`Span.PathOk`).
+Do not edit Exec.lean, Memory.lean, Hybrid.lean, Scalar.lean, Const.lean, Outcome.lean or Adequacy.lean.
+
+## Vacuity rule (owner, binding)
+No law may hold because a guard or a definition makes it trivially true (for example a run-time re-check of the invariant inside the operation, a theorem that restates its definition, or a hypothesis that can never hold). For every law you add or change, give (a) a non-trivial instance: an example where its hypotheses hold, and (b) a planted counter-example: a mutated rule or a bad state that fails it, written as an `example` with a negation. Say in your final message, per law, which examples witness (a) and (b).
+
+## Best long-term design (owner rule, binding)
+Judge and fix everything by the best long-term design. Never cut corners for speed, a smaller diff or fewer rounds. Implement the structural fix, not a containment patch: no law that holds by construction or restates its definition, no weakened statement, no premise that switches off an obligation. If staging is truly unavoidable, say so in your final message and record the long-term design and the roadmap row it belongs to (text for the coordinator; do not edit ROADMAP.md).
+
+## Evidence tags (for the coming vacuity gate)
+Tag every instance and planted counter-example in its doc comment: `/-- Instance (law `Fully.Qualified.name`). ... -/` and `/-- Planted (law `Fully.Qualified.name`). ... -/` (always the fully-qualified Lean name, never a short name; one example may list several laws). Mark helpers `/-- Helper (inversion|projection|congruence|arithmetic). ... -/` (and make them `private` or suffix `_inv` / `_proj`), representation lemmas `/-- Representation lemma. ... -/`, and named obligations on later components `/-- Obligation (discharged at slice N, R-xxxx). ... -/`. Keep the existing `Accepted (rule ...)` / `Refused (rule ...)` tags.

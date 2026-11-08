@@ -1,0 +1,20 @@
+# Task: C1 interface change — partial lifecycle transitions (needed by C5)
+
+Read first: AGENTS.md, ConcreteSpec/README.md, ConcreteSpec/Spec/Exec.lean and ConcreteSpec/Proofs/Exec.lean (C1, accepted in review round 4), _review/C5_QUESTIONS.md (why C5 needs this), _review/FOUNDATION_PROPOSAL.md sections C1 and C5.
+
+Decision (coordinator, spec-structure only, no language rule changes): `Operands.life` becomes `Life → Store → Option Store`. `none` means the instrumentation refuses the lifecycle event (for C5: e.g. dropping a root while a loan of it is active), and the machine step that performs that event is stuck (`step` returns `none`, or the existing stuck outcome the step uses for a refused operation — use whatever C1 already uses for unsafe stuckness, not a trap and not a new outcome). Every lifecycle call site propagates it: binding/assignment (`bindLife`), call entry (`enter`, including the initial entry of main), return (`leave`), scope and test-frame exit (`dropOut`), primitive-result binding (the request continuation: if it is total today, make the refusal visible without inventing a new answer kind; explain the choice in a doc comment), and anywhere else `O.life` is called. Erased instances use `fun _ st => some st`; the demo instrumentation never refuses unless an example needs it.
+
+Requirements:
+1. Change Spec/Exec.lean minimally; keep every existing theorem in Proofs/Exec.lean with the same meaning, adding the natural premise where needed (e.g. "the lifecycle event succeeds", or state the law for instances whose life is total). Prefer stating laws over a hypothesis `hlife : ∀ e st, ∃ st', O.life e st = some st'` only where a law cannot hold otherwise; say which laws gained a premise.
+2. Add one law: if `O.life e st = none` at a step's lifecycle event, that step is stuck (one theorem per call-site family, or one general theorem).
+3. Add one Exec example with a refusing instrumentation (e.g. a demo where dropping a flagged local is refused) whose run ends in the stuck ending, and confirm the existing examples still evaluate to the same results.
+4. Keep the README's C1 text accurate (one or two sentences).
+Out of scope: C5 itself, any other interface change. If something else in C1 would need to change, stop and list it under QUESTIONS.
+## Hard rules (all apply)
+- Lean 4.34.1, core only (no Mathlib); warningAsError and autoImplicit off; namespace ConcreteSpec.Core (sub-namespace allowed). Lean IS the spec: readable Lean, doc comments, examples ("Accepted"/"Refused" examples where a rule is registered), no generated prose.
+- No `sorry`, no new axioms, no `decide +native`, no `native_decide`; every theorem must use only propext / Quot.sound / Classical.choice (scripts/proofs/axioms.sh checks this).
+- Do NOT edit docs/decisions.md or ROADMAP.md. Do NOT decide any language question the decided rows do not answer: if you hit one, stop that part, leave it out (or leave the existing draft behaviour, documented as pending), and list it under "QUESTIONS" in your final message with the options you see.
+- Edit only Spec/Exec.lean, Proofs/Exec.lean and the README as the brief says; Scalar, Const, Outcome, Memory, Hybrid are reviewed or under review elsewhere.
+- Only work in this clone (the current directory), on branch shown by `git branch --show-current`. Commit each piece as soon as `nix develop -c lake build ConcreteSpec` passes (run it with `timeout 1200`). Do NOT push; do NOT run git commands that rewrite history; never --no-verify.
+- Light local checks you may run: `nix develop -c timeout 1200 lake build ConcreteSpec`, `nix develop -c timeout 600 bash scripts/spec/rules.sh`, `nix develop -c timeout 900 bash scripts/proofs/trust_ban.sh`. Do NOT run axioms.sh, kernel_replay.sh, external.sh or checks/run.sh (heavy; the reviewer runs them on a CI server). Every new module must be imported from ConcreteSpec/Spec.lean (spec) or ConcreteSpec.lean (proofs), or trust_ban fails.
+- Final message: list of commits (SHA + one line), what each theorem states, what is left out and why, QUESTIONS.

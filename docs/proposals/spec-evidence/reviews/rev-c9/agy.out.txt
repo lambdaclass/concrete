@@ -1,0 +1,26 @@
+Here is the review of `d8f89ea75..76aa9ab0b` against Foundation Contract C9 and the decided Core requirements.
+
+### Summary of Verification
+1. **Correctness against decided rows & C9:**
+   - **Typed identities (`Spec/Ident.lean`):** Adds the missing C9 identities (`PlaceId`, `PrimId`, `ContractId`, `ObligationId`) without duplicating existing ones (`TypeId`, `FnId`, `Var`, `FieldId`, `VariantId`, `InstanceId`, `SiteId`, `LoanId`, `BrandId`, `BlockId`, `GrantId`, `RuleId`).
+   - **Binder renaming & presentation hints (`Spec/Prim.lean`, `Proofs/Prim.lean`):** Bijective capture-avoiding renaming of numeric binder IDs (`eval_rename`, `eval_operands_rename`, `rename_inverse`, `rename_id`) and pure presentation status of `Var.hint` (`eval_rehint`, `eval_operands_rehint`) are cleanly specified and proved (Q1.5, Q9.1, Q9.2).
+   - **Primitive contract interface & registry (`PrimContract`, `PrimRegistry`):** Covers all required components: parameter/result types, required authority (`List Cap`), ownership/dependency effects, `requires` over entry arguments/store, `ensures` over result and surviving store only (no `old()`/snapshots, evaluated post-cleanup per Q9.11, OD117, OD144), memory `footprint` (`List PlaceId`), `initialized`/`valid`, `failures` as typed error alternatives on ordinary results while rejecting implicit traps (`a.result = .error _ → False`), `events`/`eventTags`/`leakageTags`, `resources`, and `termination` obligation (Q9.6, Q9.7, Q9.13).
+   - **Evidence binding (`EvidenceContext`, `SafetyEvidence`):** Binds safety facts to `(ObligationId, Target, ContractId, CheckerVersion, SpecVersion)` and proves usability requires exact match on all five components (`usable_current` and the five `*_mismatch` theorems; Q6.3, Q9.12).
+   - **Ghost statements & erasure (`Ghost`):** Ghost language is total, reads concrete locals/store, never writes concrete state or requests primitives/authority, branches only into ghost statements, erases `assert` without execution, and proves erasure preserves complete C1 execution reports (`ghost_erasure_run`, `ghost_erasure_ending`) alongside concrete-step soundness (`drive_steps`; Q9.10, Q9.11, OD81, OD125).
+2. **Undecided questions:** Leaves C4/C5 place-projection/hybrid-state mappings and C5 `copy`/`move` ownership distinction untouched.
+3. **Meaningfulness of theorems:** Non-vacuous; `unknown_primitive_stuck` proves `¬ Exec.Step P c l c'` for unregistered primitives; `allows_postcondition` and `allows_no_implicit_trap` connect C1's `Operands.allows` to `c.ensures` and `.ok v`; `ghost_erasure_run` and `drive_steps` operate over real C1 `Exec.step` / `Exec.Steps` and `Exec.Ending`.
+
+---
+
+### Findings
+
+- **`ConcreteSpec/Spec/Ident.lean:33-41` & `ConcreteSpec/Spec/Ident.lean:235-238` — [nit] [PREFERENCE]**
+  - **Problem:** `Var` derives `DecidableEq` over both `hint` and `id`, so `AList.lookup` on `AList Var Val` (used in C1's `Exec.lean`) compares `hint` as well as `id`, whereas `Prim.lookupId` looks up by `x.id` alone. The doc comment explains that elaboration assigns each local a unique number and consistent rehinting (`rehintLocals` + `rehintTerm`) preserves evaluation, which is true, but C1's own `AList.lookup` would still distinguish `Var.mk "x" 0` and `Var.mk "y" 0` if hints were changed inconsistently between binder and occurrence.
+  - **Concrete fix:** Optional—either note in the `Var` docstring that `rehintTerm`/`rehintLocals` rehints binders and occurrences consistently (preserving `AList.lookup` when `h` depends only on `x.id`), or no change needed as `Prim.lookupId` already models numeric-key lookup.
+
+- **`ConcreteSpec/Proofs/Prim.lean:224-226` — [nit] [PREFERENCE]**
+  - **Problem:** `drive_steps` is stated with an explicit equality hypothesis `drive P ρ fuel hist c = r → ∃ tr, r.events = hist ++ tr ∧ Exec.Steps P c tr r.config` rather than substituting `r` directly (`∃ tr, (drive P ρ fuel hist c).events = hist ++ tr ∧ Exec.Steps P c tr (drive P ρ fuel hist c).config`).
+  - **Concrete fix:** Keep as-is if preferred for `rw`/`cases` ergonomics, or add a one-line corollary without the auxiliary `r` parameter.
+
+VERDICT: ACCEPT
+rc=0

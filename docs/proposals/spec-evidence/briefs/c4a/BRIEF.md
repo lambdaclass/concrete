@@ -1,0 +1,26 @@
+# Task: C4 (raw store, representation, hybrid state) round: owner decision 20, plus the vacuity audit fixes
+
+Contract: C4 (files: ConcreteSpec/Spec/Memory.lean, Spec/Hybrid.lean, ConcreteSpec/Proofs/Memory.lean, Proofs/Hybrid.lean, the C4 lines of ConcreteSpec/README.md). This clone is on branch wip/spec-c4-audit, created from the integrated wip/spec-core.
+
+## Part A: owner decision of 2026-11-08 (15:08 UTC, item 20; decided, encode exactly this)
+
+**Bytes that are not one whole stored pointer carry no pointer meaning.** A pointer read from bytes other than exactly one whole stored pointer (partial pointer bytes, fragments of different pointers or out of order, plain integer bytes read at pointer type, uninitialized bytes) has no value: `decodePtr` gives `none` (an unsafe-stuck read, never a fabricated pointer, and no integer-to-pointer reinterpretation; provenance from an integer comes only from `from_exposed`, Q3.9). Integers decoded from pointer-fragment bytes stay the integer the octets spell, without provenance (Q3.7), as now.
+- Make `decodePtr` decode the octets rather than trusting the first fragment (this is also audit finding 1): check the length is the target's pointer size, that fragment `i` is `some (p, i)` of one pointer `p` for every `i`, that the octets are `p`'s encoding, and that `p` is valid for the target; remove the unused validity premise of `encodePtr` if the audit's reasoning holds.
+- Laws: `decodePtr_encodePtr` (round trip for a valid pointer) and its converse `decodePtr_some` (a `some p` result means the bytes are exactly `encodePtr tgt p`), stated so a `decodePtr` that skipped any check would falsify one of them.
+- Examples, each Refused with the reason it claims: partial pointer (one fragment missing), fragments of two different pointers, fragments in the wrong order, the right fragments with a corrupted octet, plain integer bytes spelling a valid address, and uninitialized bytes. One Accepted whole pointer.
+- Doc comment: replace "What a pointer read from bytes other than one whole stored pointer means is not decided (an owner question, recorded in the report)" with the rule, citing "owner decision 2026-11-08, item 20". Update the matching README sentence if there is one.
+
+## Part B: vacuity audit fixes
+
+The audit (Codex, Kimi, agy; read-only) is in _review/AUDIT_FINDINGS.md: fix every VACUOUS or WEAK verdict on C4's files: `decodePtr_valid` / `decodePtr_encodePtr` (Part A), `access_valid` (derive validity from `WellFormed` and the bounds instead of re-checking it in `access`), `access_some`, `alloc_failure` and `access_zero` (replace definition restatements by failure laws in terms of overlap, alignment and the address boundary, each with a planted case), `typed_store_frame` (restate it over `State.write`, the typed write the contract describes), and any other C4 row. For each, either (a) strengthen it into a real law a mutated rule would falsify, or (b) demote it to a named helper (`private`, or a name ending in `_inv` / `_proj`, doc comment saying so) when a real law covering the property exists or is added. Removing a re-check from an operation must not change which operations succeed on well-formed states: prove that (an iff, or the success law) where you remove one. Where reviewers disagree, decide from the statement and say why.
+
+Do not edit Exec.lean, Const.lean, Scalar.lean, Outcome.lean or the C6/C8 files. If a fix needs a rule no decided row answers, stop that part and list it under QUESTIONS with options and a recommendation.
+
+## Vacuity rule (owner, binding)
+No law may hold because a guard or a definition makes it trivially true (for example a run-time re-check of the invariant inside the operation, a theorem that restates its definition, or a hypothesis that can never hold). For every law you add or change, give (a) a non-trivial instance: an example where its hypotheses hold, and (b) a planted counter-example: a mutated rule or a bad state that fails it, written as an `example` with a negation. Say in your final message, per law, which examples witness (a) and (b).
+
+## Best long-term design (owner rule, binding)
+Judge and fix everything by the best long-term design. Never cut corners for speed, a smaller diff or fewer rounds. Implement the structural fix, not a containment patch: no law that holds by construction or restates its definition, no weakened statement, no premise that switches off an obligation. If staging is truly unavoidable, say so in your final message and record the long-term design and the roadmap row it belongs to (text for the coordinator; do not edit ROADMAP.md).
+
+## Evidence tags (for the coming vacuity gate)
+Tag every instance and planted counter-example in its doc comment: `/-- Instance (law `Fully.Qualified.name`). ... -/` and `/-- Planted (law `Fully.Qualified.name`). ... -/` (always the fully-qualified Lean name, never a short name; one example may list several laws). Mark helpers `/-- Helper (inversion|projection|congruence|arithmetic). ... -/` (and make them `private` or suffix `_inv` / `_proj`), representation lemmas `/-- Representation lemma. ... -/`, and named obligations on later components `/-- Obligation (discharged at slice N, R-xxxx). ... -/`. Keep the existing `Accepted (rule ...)` / `Refused (rule ...)` tags.

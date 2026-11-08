@@ -1,0 +1,8 @@
+review: round 1, piece 1 of 2 (scripts, 45626 bytes)
+review: round 1, piece 2 of 2 (docs, 3297 bytes)
+review: round 1 verdict findings (2 piece(s)); raw output: .review/66b2ee018ca2eac3185791a8db634ac852838d5d-1.md
+[piece 1 of 2: scripts]
+- ConcreteSpec/Spec/Observe.lean:102: `ValidTrace.output` permits output while a request is pending, but `ValidTrace.response` passes the entire resulting history to `C.allows`. That history can end in output, contradicting `OperationContract`’s promise that it ends in the current request. Contracts relying on that promise can reject responses after an explicitly permitted output.
+- ConcreteSpec/Spec/Observe.lean:271: `reportObservation` converts every typed pending `noAnswer` into an explicitly blocked observation without checking `OperationContract.mayBlock`. Thus evaluator failure to supply an answer becomes observable blocking even for operations whose contract forbids blocking, such as `Demo.contract`. The adapter needs a blocking-permission premise before making this conversion.
+pre-push: review-notes push — no source tree, no gates
+rc=1

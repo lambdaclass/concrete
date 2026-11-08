@@ -1,0 +1,13 @@
+All six round-1 findings are cleanly and completely resolved:
+
+1. **No output while a request is pending (`Observe.lean:88-100`)**: `ValidTrace.output` now requires pending state `none`, matching the sequential history convention and the updated doc comment.
+2. **Blocking checked against `OperationContract.mayBlock` (`Observe.lean:314-334`, `Observe2.lean:514-535`)**: `ExecAdapter.BlockingPermitted` is required by `reportObservation`, and blocked observations now append `.request request` to the projected event history (`A.project r.events ++ [.request request]`), aligning with `ValidTrace` and `mayBlock`.
+3. **Execution-to-observation projection (`Observe.lean:243-259`, `Observe2.lean:225-261`)**: `HasFullObservation` relates `Execution` to `FullObservation` (including `finiteDivergenceSteps` for eventually-silent infinite runs and `(fun n => .emit (events n))` for infinitely emitting runs), and `full_observation_preservation` transports `HasFullObservation` across `SameObservation`.
+4. **Finite and infinite stuttering (`Observe.lean:193-206`, `Observe2.lean:43-59`, `Observe2.lean:85-201`, `Observe2.lean:265-273`)**: `SilentInsertion` covers finite silent insertions anywhere in terminated and blocked runs (`silent_internal_steps`, `blocked_silent_internal_steps`); `InfiniteStuttering` and `infinite_stuttering` prove equivalence under any strictly increasing step-index map `f : Nat → Nat`; `infinite_not_termination` rules out relating any infinite run to any finite termination.
+5. **C1 adapter well-formedness and `ValidTrace` preservation (`Observe.lean:284-297`, `Observe2.lean:387-501`)**: `ExecAdapter.WellFormed` formalizes the internal/answered/blocked oracle projection rules, and `runFrom_validTrace`, `runFrom_noAnswer_pending_valid`, and `runFrom_blockingPermitted` prove that `Exec.runFrom` preserves `CompleteTrace` and establishes the pending `ValidTrace` and `BlockingPermitted` obligations on `noAnswer`.
+6. **Module replacement note (`Observe.lean:8-10`)**: Documents that `ConcreteSpec.Core.Observe` replaces `ConcreteSpec.Spec.Observation`.
+
+No new defects found.
+
+VERDICT: ACCEPT
+rc=0

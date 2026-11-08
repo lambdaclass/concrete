@@ -1,0 +1,35 @@
+1. **[major] `Spec/Exec.lean:28-30`, `Spec/Exec.lean:87-88`, `Spec/Exec.lean:108`, `Spec/Exec.lean:246-248` — `O.eval` cannot update `Store`, blocking C5 ownership/move instrumentation on operands**
+   - **Problem:** The module documentation (`Spec/Exec.lean:28-30`) states that Core operands include explicit `copy x` and `move x` (Q9.1) and that checking/recording that a moved value is used at most once is part of the C5 ownership instrumentation stored in the `Operands` instance state (`Store`). However, `O.eval : AList Var Val → Store → Expr → Res Val` (`Spec/Exec.lean:108`) is read-only in `Store` (and `locals`): evaluating an operand in `bind`, `assign`, `cond`, `ret`, `call`, `prim`, or `test` cannot update `Store`. Consequently, C5 cannot record in `Store` that `move x` consumed `x` (neither between statements like `let y = move x; let z = move x;` nor across arguments in `f(move x, move x)` via `evalArgs`).
+   - **Fix:** Either change `O.eval` to return a updated store on success (e.g., `eval : AList Var Val → Store → Expr → Res (Val × Store)`, threading `Store` through `evalArgs`, `onRes`, `bind`, `assign`, `cond`, `ret`, `call`, `prim`, and loop `test`), or make `move` a statement/primitive rather than a pure `O.Expr` and update the doc comment at lines 28–30 accordingly.
+
+2. **[minor] `Spec/Exec.lean:143`, `Spec/Exec.lean:328-331`, `Spec/Exec.lean:619, 627` — `Stmt.prim` requires a `Var` destination and always pushes a new local binding**
+   - **Problem:** Unlike `Stmt.call` (`dst : Option Var`), `Stmt.prim` requires `dst : Var` and always pushes `(x, v) :: L`.
+     1. Unit-returning primitives (such as `log`, `bump`, or C4 place-write primitives like writing through a pointer/field/index) must fabricate a dummy `Var` (as `Demo` has to do with `y` at lines 619 and 627) and pollute `locals`.
+     2. In a loop's condition region `c` (`Stmt.loop l c test body site`, line 317), if `c` executes `bind`, `call (some x)`, or `prim x` without an explicit `Stmt.block`, each iteration prepends another `(x, v)` entry to `L` that persists into `body` and across iterations.
+   - **Fix:** Change `Stmt.prim` to take `dst : Option Var` and use `bindDst dst v L` in `step` (line 330), matching `Stmt.call`. Document (or enforce in the loop step) that loop condition regions and bodies that bind locals are wrapped in `Stmt.block` by elaboration.
+
+3. **[minor] `Spec/Exec.lean:403-406`, `Spec/Exec.lean:429-442`, `Proofs/Exec.lean:212-219` — `plan` is never connected by theorem to `Cleans` or `unwind_runs_plan`**
+   - **Problem:** `Spec/Exec.lean:431` and `Proofs/Exec.lean:212-213` state that `Cleans` and `unwind_runs_plan` run the calls of `plan pre` in that order, but `unwind_runs_plan` does not mention `plan` in its type and no theorem in `Proofs/Exec.lean` relates `Cleans` to `plan` (the only theorem mentioning `plan` is the two-frame `rfl` lemma `plan_scopes` at `Proofs/Exec.lean:241`).
+   - **Fix:** Add a theorem relating `Cleans` to `plan` (for example, indexing or projecting the sequence of `Deferred O` calls executed by `Cleans P pre L st tr st'` and proving it equals `plan pre`, or proving that when locals are not mutated, `Cleans P pre L st tr st'` is equivalent to `RunsAll P L (plan pre) st tr st'`).
+
+4. **[minor] `Proofs/Exec.lean:332-346` — `step_deterministic` omits `allows` and label equalities in the `.request` branch**
+   - **Problem:** In `step_deterministic`, the second disjunct:
+     ```lean
+     ∃ p vs site st k a₁ a₂, step P c = some (.request p vs site st k) ∧ c₁ = k a₁ ∧ c₂ = k a₂
+     ```
+     omits `O.allows p vs st a₁ = true`, `O.allows p vs st a₂ = true`, `l₁ = a₁.label`, and `l₂ = a₂.label`. Without those, the statement does not express that `l₁, l₂` and `c₁, c₂` come from valid answers `a₁, a₂` (nor that the step is deterministic given the same answer `a₁ = a₂`).
+   - **Fix:** Include `O.allows p vs st a₁ = true ∧ O.allows p vs st a₂ = true ∧ l₁ = a₁.label ∧ l₂ = a₂.label` in the existential of `step_deterministic`.
+
+5. **[nit] `Proofs/Exec.lean:257-267` — Missing `continue_reaches_loop` companion to `return_reaches_caller` and `break_reaches_loop`**
+   - **Problem:** `Proofs/Exec.lean` proves single-step rules for all three exits (`step_return_caller`, `step_break_loop`, `step_continue_loop`) and multi-frame cleanup composition for `return` (`return_reaches_caller`) and `break` (`break_reaches_loop`), but omits the corresponding `continue_reaches_loop` theorem.
+   - **Fix:** Add `continue_reaches_loop` composing `unwind_runs_plan P (.cont l)` with `step_continue_loop`:
+     ```lean
+     theorem continue_reaches_loop (P : Program O) (l : LoopId) (cr b : Stmt O) (t : O.Expr)
+         (site : SiteId) (k : List (Frame O)) {pre : List (Frame O)} {L : AList Var O.Val}
+         {st st' : O.Store} {tr : List O.Event}
+         (h : Cleans P pre L st tr st') (hp : ∀ f ∈ pre, Passes (.cont l) f) :
+         Steps P ⟨.exiting (.cont l), L, st, pre ++ .body l cr t b site :: k⟩ tr
+           ⟨.exec (.loop l cr t b site), unwindLocals pre L, st', k⟩
+     ```
+
+VERDICT: CHANGES
