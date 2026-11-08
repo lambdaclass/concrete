@@ -60,6 +60,18 @@ with tempfile.TemporaryDirectory() as d:
     no_kw = d / "loop_no_kw.lean"
     benign = d / "benign.lean"
     benign.write_text('import Lean\ndef benignVal : Nat := 1\n')
+    r_benign = lean(benign, True)
+    assert r_benign.returncode == 0 and "example-json" not in r_benign.stdout, (r_benign.returncode, r_benign.stdout)
+    benign_rows = d / "benign.rows"
+    benign_rows.write_text(r_benign.stdout)
+    r_benign_rows = subprocess.run(["python3", "-I", "scripts/checks/lib/example_rows.py", str(benign_rows)],
+        text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=15)
+    require(r_benign_rows, False, "FAIL examples: no example-json rows observed")
+    non_ex_rows = d / "non_example.rows"
+    non_ex_rows.write_text('example-json {"name":"benignVal","axioms":[]}\n')
+    r_non_ex = subprocess.run(["python3", "-I", "scripts/checks/lib/example_rows.py", str(non_ex_rows)],
+        text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=15)
+    require(r_non_ex, False, "FAIL examples: invalid observation schema")
     for loop_src, expected_decl in [
         ('import Lean\ndef whileOnly : IO Unit := do\n  while true do\n    pure ()\n',
          'FAIL unlisted example trusted declaration whileOnly [partial-loop]'),

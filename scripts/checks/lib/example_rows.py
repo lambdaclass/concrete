@@ -7,6 +7,7 @@ for line in open(sys.argv[1], encoding="utf-8"):
     seen += 1
     row = json.loads(line.removeprefix("example-json "))
     if (set(row) != {"name", "axioms"} or not isinstance(row["name"], str)
+            or "⟪example⟫" not in row["name"]
             or not isinstance(row["axioms"], list)
             or not all(isinstance(a, str) for a in row["axioms"])):
         sys.exit("FAIL examples: invalid observation schema")

@@ -37,9 +37,10 @@ def makeExampleDef (stx : Syntax) (file : String) (map : FileMap) :
 
 -- This elaborator participates in recursive command elaboration, including commands
 -- produced by imported macros. Quoted command syntax is never elaborated here.
-def retainExample : CommandElab := fun stx => do
+def retainExample (retained : IO.Ref NameSet) : CommandElab := fun stx => do
   unless stx[1].getKind == ``Parser.Command.example do throwUnsupportedSyntax
-  let (replacement, _) ← makeExampleDef stx (← getFileName) (← getFileMap)
+  let (replacement, userN) ← makeExampleDef stx (← getFileName) (← getFileMap)
+  retained.modify (·.insert userN)
   elabCommand replacement
 
 def checkOwnerKind (n : Name) (owners : List Concrete.Premises.Component) : CommandElabM Bool := do
@@ -54,9 +55,11 @@ def checkOwnerKind (n : Name) (owners : List Concrete.Premises.Component) : Comm
       IO.println s!"FAIL trusted declaration {n} is owned by {owners.length} components, expected exactly one"
       throwError "trusted declaration owner audit failed"
 
-partial def commands (file : String) (csList : List Concrete.Premises.Component) : FrontendM Unit := do
+partial def commands (file : String) (csList : List Concrete.Premises.Component)
+    (retained : IO.Ref NameSet) : FrontendM Unit := do
   updateCmdPos
   let cs ← getCommandState
+  let prevConsts := cs.env.constants.map₂
   let input ← getInputContext
   let scope := cs.scopes.head!
   let (cmd, ps, msgs) := Parser.parseCommand input
@@ -71,15 +74,18 @@ partial def commands (file : String) (csList : List Concrete.Premises.Component)
     throw <| IO.userError "source command elaboration failed"
   runCommandElabM do
     let env ← getEnv
+    let retainedSet ← retained.get
     let allowed := Concrete.Premises.allowedAxioms csList
     let mut added : Array (Name × ConstantInfo) := #[]
-    for (n, ci) in env.constants.toList do
-      unless cs.env.contains n || n.isAnonymous do
+    for (n, ci) in env.constants.map₂.toList do
+      unless prevConsts.contains n || n.isAnonymous do
         added := added.push (n, ci)
     for (n, ci) in sortAdded added do
+      let userN := (privateToUserName? n).getD n
       let axs ← liftCoreM (collectAxioms n)
-      IO.println <| "example-json " ++ (Json.mkObj [
-        ("name", toJson n.toString), ("axioms", toJson (axs.map toString))]).compress
+      if retainedSet.contains userN then
+        IO.println <| "example-json " ++ (Json.mkObj [
+          ("name", toJson n.toString), ("axioms", toJson (axs.map toString))]).compress
       for ax in axs do
         unless allowed.contains ax do
           IO.println s!"FAIL unlisted example axiom {ax} in {file}:{(input.fileMap.toPosition (cmd.getPos?.getD 0)).line}"
@@ -90,7 +96,7 @@ partial def commands (file : String) (csList : List Concrete.Premises.Component)
         unless (← checkOwnerKind n owners) do
           IO.println s!"FAIL unlisted example trusted declaration {n} [{", ".intercalate kinds}]"
           throwError "example trusted declaration audit failed"
-  unless Parser.isTerminalCommand cmd do commands file csList
+  unless Parser.isTerminalCommand cmd do commands file csList retained
 
 def configuredComponents : IO (List Concrete.Premises.Component) := do
   match (← IO.getEnv "CONCRETE_TRUSTED_DECLARATIONS") with
@@ -105,10 +111,12 @@ def configuredComponents : IO (List Concrete.Premises.Component) := do
       return cs
 
 unsafe def main (files : List String) : IO UInt32 := do
-  commandElabAttribute.addBuiltin ``Parser.Command.declaration `retainExample retainExample
+  let retained ← IO.mkRef NameSet.empty
+  commandElabAttribute.addBuiltin ``Parser.Command.declaration `retainExample (retainExample retained)
   initSearchPath (← findSysroot)
   let csList ← configuredComponents
   for file in files do
+    retained.set {}
     let text ← IO.FS.readFile file
     let input := Parser.mkInputContext text file
     let (header, ps, msgs) ← Parser.parseHeader input
@@ -119,7 +127,7 @@ unsafe def main (files : List String) : IO UInt32 := do
       return 1
     let action : FrontendM Unit := do
       runCommandElabM do elabCommand (← `(command| noncomputable section))
-      commands file csList
+      commands file csList retained
     let (_, state) ← StateRefT'.run (action.run { inputCtx := input })
       { commandState := Command.mkState env msgs {}, parserState := ps, cmdPos := ps.pos }
     if state.commandState.messages.hasErrors then

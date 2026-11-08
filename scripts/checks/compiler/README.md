@@ -141,15 +141,25 @@ the actual classifier and requires the exact unlisted-loop diagnostic.
 `slice0_examples.lean` elaborates every source file through Lean's frontend,
 without source-token filtering. Its declaration elaborator retains anonymous
 examples after command macro expansion, including imported macros, as named
-noncomputable declarations with fresh `line:column` identities. Every newly
-elaborated constant has its axiom closure audited and its trusted declaration
-kinds checked through `effectiveOwners`. Quoted command templates remain data
-until invoked. Initializer execution is enabled independently for each file, and
-header and command errors are checked before later commands can reset their logs.
-`example_rows.py` fails closed if zero `example-json` rows are
-observed. The multi-file imported-macro controls in
-`scripts/checks/tests/trusted_frontend_controls.sh` require exact diagnostics for both an
-unlisted example axiom and a generated unsafe declaration.
+declarations with fresh `line:column` identities while preserving full
+declaration modifiers (`unsafe`, `partial`, and attributes) in a
+`noncomputable section`. Newly elaborated constants per command are computed
+incrementally from `env.constants.map₂` (without rescanning imported `map₁`
+constants), sorted deterministically so primary declarations precede their
+auxiliaries, and audited for both axiom closures and trusted declaration kinds
+decided from the elaborated environment (`Concrete.Premises.trustedDeclarationKinds`
+and `Concrete.Premises.declarationOwners`, never from syntax). Quoted command
+templates remain data until invoked. Initializer execution is enabled
+independently for each file, and header and command errors are checked before
+later commands can reset their logs. `slice0_examples.lean` emits `example-json`
+rows only for retained examples, and `example_rows.py` requires `"⟪example⟫"`
+identities and fails closed if zero `example-json` rows are observed. The
+multi-file imported-macro controls in
+`scripts/checks/tests/trusted_frontend_controls.sh` require exact diagnostics
+for unlisted example axioms, `unsafe`/`partial`/attributed examples, and
+macro-introduced `unsafe` and `partial` declarations (including hygienic
+macro-scoped definitions), while verifying that uninvoked quoted command
+templates are not flagged.
 
 Focused controls live in `scripts/checks/tests/test_execve_names.py`,
 `scripts/checks/tests/trusted_base_controls.py` and
