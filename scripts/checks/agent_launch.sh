@@ -191,6 +191,13 @@ release_job() { # release a stub-blocked command and observe its wrapper finishi
   [ -f "$JOBDIR/status" ] && [ ! -f "$STUB_STATE_DIR/$UNIT/active" ] \
     && ok "$1 cleaned up" || no "$1 did not finish after its release"
 }
+unit_exit_line() { # exact-line label, after the stub records the job's own exit
+  local n=0
+  while [ ! -f "$STUB_STATE_DIR/$UNIT/exit" ] && [ "$n" -lt 50 ]; do
+    sleep 0.1; n=$((n+1))
+  done
+  file_line "$STUB_STATE_DIR/$UNIT/exit" "$1" "$2"
+}
 
 echo "=== start: exact output, properties and one job directory ==="
 capture 10 bash -n "$LAUNCH"
@@ -243,11 +250,21 @@ capture 15 bash "$LAUNCH" wait "$JOBDIR"
 expect_rc 3 "wait returns the command's exit 3"
 expect_out "JOB $UNIT ENDED status=3
 failed" "exit-3 output is its state and log"
+unit_exit_line 0 "the exit-3 unit exits 0 after recording status=3"
 [ "$(wc -l < "$AGENT_JOBS_DIR/attempts" | tr -d ' ')" -eq 1 ] \
   && ok "a failed writer has exactly one attempt" || no "the failed writer was retried"
 capture 10 bash "$LAUNCH" status "$JOBDIR"
 expect_rc 3 "status also returns exit 3"
 expect_out "JOB $UNIT ENDED status=3" "status of exit 3 is one line"
+
+echo "=== failure to record status makes the job itself fail ==="
+capture 10 bash "$LAUNCH" start unrecorded 30 -- bash -c 'mkdir "$AGENT_JOB_DIR/.status.$PPID"'
+expect_rc 0 "start of the status-write-failure job"
+parse_start
+capture 15 bash "$LAUNCH" wait "$JOBDIR"
+expect_rc 125 "an unrecorded normal exit is a lost unit"
+expect_out "JOB $UNIT ENDED without a status (killed, timed out or OOM): exit-code" "the unrecorded job reports the unit failure"
+unit_exit_line 2 "a status write failure makes the job exit 2"
 
 echo "=== a unit lost without status is 125 ==="
 capture 10 bash "$LAUNCH" start vanished 30 -- bash -c 'while [ ! -e "$STUB_RELEASE_DIR/$STUB_UNIT" ]; do sleep 0.1; done'
@@ -259,6 +276,19 @@ capture 10 bash "$LAUNCH" wait "$JOBDIR"
 expect_rc 125 "a lost unit returns 125"
 expect_out "JOB $UNIT ENDED without a status (killed, timed out or OOM): killed" "lost-unit output includes systemctl's result"
 release_job "the lost-unit fixture"
+
+for reason in success empty; do
+  echo "=== an unloaded unit's $reason result is unknown ==="
+  capture 10 bash "$LAUNCH" start "unloaded-$reason" 30 -- bash -c 'while [ ! -e "$STUB_RELEASE_DIR/$STUB_UNIT" ]; do sleep 0.1; done'
+  expect_rc 0 "start of the unloaded-$reason-result job"
+  parse_start
+  rm -f "$STUB_STATE_DIR/$UNIT/active"
+  if [ "$reason" = success ]; then printf 'success\n' > "$STUB_STATE_DIR/$UNIT/result"; else rm -f "$STUB_STATE_DIR/$UNIT/result"; fi
+  capture 10 bash "$LAUNCH" wait "$JOBDIR"
+  expect_rc 125 "an unloaded $reason result returns 125"
+  expect_out "JOB $UNIT ENDED without a status (killed, timed out or OOM): unknown" "unloaded Result=$reason is reported as unknown"
+  release_job "the unloaded-$reason-result fixture"
+done
 
 echo "=== still active past deadline plus grace is 124 ==="
 capture 10 bash "$LAUNCH" start overrun 30 -- bash -c 'while [ ! -e "$STUB_RELEASE_DIR/$STUB_UNIT" ]; do sleep 0.1; done'
@@ -293,6 +323,14 @@ expect_rc 125 "a systemd timeout without status returns 125"
 expect_out "JOB $UNIT ENDED without a status (killed, timed out or OOM): timeout" "125 reports the retained timeout result, not unknown"
 [ "$(cat "$JOBDIR/result")" = timeout ] && ok "the result is cached in the job directory" || no "the timeout result was not cached"
 [ -f "$STUB_STATE_DIR/$UNIT/reset-failed" ] && ok "reset-failed collects only after the result was read" || no "the unit was not explicitly collected"
+[ ! -e "$STUB_STATE_DIR/$UNIT/result" ] && ok "collection removes the stub's result" || no "the stub's collected result remains"
+capture 10 bash "$LAUNCH" status "$JOBDIR"
+expect_rc 125 "a second status still returns 125 after collection"
+expect_out "JOB $UNIT ENDED without a status (killed, timed out or OOM): timeout" "a second status reads the cached timeout result"
+capture 10 bash "$LAUNCH" wait "$JOBDIR"
+expect_rc 125 "a second wait still returns 125 after collection"
+expect_out "JOB $UNIT ENDED without a status (killed, timed out or OOM): timeout" "a second wait reads the cached timeout result"
+touch "$STUB_RELEASE_DIR/$UNIT" && ok "the timed-out fixture's waiter is released" || no "cannot release the timed-out fixture's waiter"
 
 echo "=== status appearing at the inactive observation wins the TOCTOU race ==="
 capture 10 bash "$LAUNCH" start race 30 -- bash -c 'while [ ! -e "$STUB_RELEASE_DIR/$STUB_UNIT" ]; do sleep 0.1; done'
@@ -316,6 +354,16 @@ has_match -F 'job directory already exists' <<<"$ERR" && ok "duplicate directory
 after="$(cd "$JOBDIR" && sha256sum unit deadline cmd argv)"
 [ "$after" = "$before" ] && ok "the refused start leaves the first job's files untouched" || no "the refused start changed the first job's files"
 release_job "the exclusive-directory fixture"
+
+echo "=== an explicit job directory may have a trailing slash ==="
+capture 10 bash "$LAUNCH" start --dir "$TMP/new/" trailing 10 -- true
+expect_rc 0 "start in a new explicit directory with a trailing slash"
+parse_start
+expect_out "$EXPECTED" "trailing-slash start prints exactly three lines"
+[ "$JOBDIR" = "$TMP/new" ] && ok "the trailing slash is stripped from the recorded directory" || no "unexpected trailing-slash job directory: $JOBDIR"
+capture 15 bash "$LAUNCH" wait "$JOBDIR"
+expect_rc 0 "wait succeeds in the trailing-slash directory"
+expect_out "JOB $UNIT ENDED status=0" "the trailing-slash job completes normally"
 
 echo "=== the printed WAIT value is safe to eval ==="
 special="$TMP/job ; touch pwned ; #"

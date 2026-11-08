@@ -10,6 +10,8 @@
 # RuntimeMaxSec=SECS, the caller's PATH, HOME and working directory. A fixed
 # wrapper reads the NUL-separated argv file, so systemd cannot expand the command.
 # The directory records cmd, argv, unit, deadline, out.log and an atomic status.
+# The job itself exits 0 only after writing status atomically, or 2 if that write
+# fails, independently of CMD's recorded status; a recorded job never ends failed.
 # The printed UNIT, DIR and shell-quoted absolute WAIT are its only output.
 # Writers are never retried.
 #
@@ -80,7 +82,8 @@ start() {
     base="${AGENT_JOBS_DIR:-$HOME/.cache/concrete-agent-jobs}"
     jobdir="$base/$unit"
   fi
-  case "$jobdir" in */*) parent="${jobdir%/*}" ;; *) parent=. ;; esac
+  while [ "${#jobdir}" -gt 1 ] && [ "${jobdir%/}" != "$jobdir" ]; do jobdir="${jobdir%/}"; done
+  case "$jobdir" in */*) parent="${jobdir%/*}"; parent="${parent:-/}" ;; *) parent=. ;; esac
   mkdir -p -- "$parent" || fail "cannot create job directory parent: $parent"
   mkdir -- "$jobdir" || fail "job directory already exists or cannot be created: $jobdir"
   jobdir="$(CDPATH= cd "$jobdir" && pwd -P)" || fail "cannot resolve job directory"
@@ -110,9 +113,11 @@ run_job() {
   [ "${#argv[@]}" -gt 0 ] || exit 2
   "${argv[@]}" > "$dir/out.log" 2>&1 || rc=$?
   tmp="$dir/.status.$$"
-  if printf '%s\n' "$rc" > "$tmp" && mv "$tmp" "$dir/status"; then :
-  else rm -f "$tmp"; fi
-  exit "$rc"
+  if printf '%s\n' "$rc" > "$tmp" && mv "$tmp" "$dir/status"; then
+    exit 0
+  fi
+  rm -f "$tmp"
+  exit 2
 }
 
 JOBDIR="" UNIT="" DEADLINE="" ACTION=wait DONE=0
@@ -146,7 +151,8 @@ normal_exit() {
 unit_result() {
   local result=""
   result="$(systemctl --user show "$UNIT" --property=Result --value 2>/dev/null)" || result=""
-  printf '%s\n' "${result:-unknown}"
+  case "$result" in ''|success) result=unknown ;; esac
+  printf '%s\n' "$result"
 }
 
 lost_exit() {
