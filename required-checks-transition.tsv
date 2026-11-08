@@ -5,3 +5,5 @@
 # "Root checks" keeps its name and is required on both sides, so it has no row. Delete a row once main
 # no longer requires its job (required_checks.py reports it stale).
 old_job	replacements	reason
+Reproducibility (linux-first)	Reproducibility (linux-github)	ISS-0029 names the GitHub-hosted Linux reproducibility leg explicitly
+Reproducibility (linux-independent)	Reproducibility (linux-ci2)	ISS-0029 makes concrete-ci-2 the mandatory second Linux reproducibility machine

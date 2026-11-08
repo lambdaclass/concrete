@@ -5,9 +5,11 @@ usage: repro_compare.py SIDE_A SIDE_B IDENTITY [MANIFEST]
 
 Each SIDE holds `names` (the example inventory) and `out/NAME/STAGE` for every stage. Every file
 is read on both sides: a missing file, a differing inventory or one differing byte fails. With
-MANIFEST, writes the identity lines followed by one `SHA256  NAME/STAGE` line per artifact.
+MANIFEST, writes runner provenance and the identity lines followed by one `SHA256  NAME/STAGE`
+line per artifact.
 """
 import hashlib
+import os
 import sys
 from pathlib import Path
 
@@ -37,7 +39,12 @@ def main(argv):
             lines.append(f'{hashes[0]}  {name}/{stage}')
         print(f'ok slice0_repro: {name}: all stages byte-identical')
     if len(argv) == 5:
-        Path(argv[4]).write_text('\n'.join(lines) + '\n')
+        provenance = [
+            f"runner_environment={os.environ.get('CONCRETE_REPRO_RUNNER_ENVIRONMENT', 'unknown')}",
+            f"runner_host={os.environ.get('CONCRETE_REPRO_RUNNER_HOST', 'unknown')}",
+            f"runner_name={os.environ.get('CONCRETE_REPRO_RUNNER_NAME', 'unknown')}",
+        ]
+        Path(argv[4]).write_text('\n'.join(provenance + lines) + '\n')
 
 
 if __name__ == '__main__':

@@ -8,8 +8,8 @@
 #
 #   slice0_repro.sh [MANIFEST]   (inside nix develop, from the repository root)
 #
-# MANIFEST gets the build identity and one hash per artifact; CI compares the manifests of two
-# independent runners of the same target.
+# MANIFEST gets runner provenance, the build identity and one hash per artifact; CI compares the
+# GitHub-hosted and concrete-ci-2 manifests of the same target.
 set -euo pipefail
 root=$(cd "$(dirname "$0")/../../.." && pwd)
 cd "$root"

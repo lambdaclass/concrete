@@ -45,6 +45,113 @@ for f in "$WF_DIR"/*.yml "$WF_DIR"/*.yaml; do
   fi
 done
 
+echo "=== cross-machine reproducibility (ISS-0029) ==="
+if python3 -I - "$WF_DIR/lean_action_ci.yml" "$GATE_TMP/compare-linux.sh" <<'PY'
+import sys
+from pathlib import Path
+import yaml
+
+workflow, output = sys.argv[1:]
+jobs = yaml.safe_load(open(workflow))["jobs"]
+repro = jobs["reproducibility"]
+rows = repro["strategy"]["matrix"]["include"]
+by_id = {row["id"]: row for row in rows}
+
+def require(condition, message):
+    if not condition:
+        raise ValueError(message)
+
+require(set(by_id) == {"linux-github", "linux-ci2", "macos"},
+        f"reproducibility legs are {sorted(by_id)}")
+require(by_id["linux-github"]["runner"] == "ubuntu-24.04",
+        "linux-github is not GitHub-hosted ubuntu-24.04")
+ci2_runner = by_id["linux-ci2"]["runner"]
+require(ci2_runner == '${{ fromJSON(\'["self-hosted","linux","x64","concrete"]\') }}',
+        f"linux-ci2 does not select only the concrete-ci-2 labels: {ci2_runner}")
+require("||" not in ci2_runner and "CONCRETE_SELF_HOSTED" not in ci2_runner,
+        "linux-ci2 has a runner fallback")
+require(by_id["linux-ci2"]["machine"] == "concrete-ci-2",
+        "linux-ci2 does not record its machine")
+require(by_id["macos"]["runner"] == "macos-15", "the macOS leg changed")
+require(repro["runs-on"] == "${{ matrix.runner }}", "reproducibility does not use matrix.runner")
+nix = [step for step in repro["steps"] if step.get("uses") == "cachix/install-nix-action@v31"]
+require(len(nix) == 1 and nix[0].get("if") == "runner.environment != 'self-hosted'",
+        "Nix installation is not GitHub-hosted-only")
+build = next(step for step in repro["steps"]
+             if "slice0_repro.sh" in step.get("run", ""))
+require(build["env"]["CONCRETE_REPRO_RUNNER_ENVIRONMENT"] == "${{ runner.environment }}",
+        "runner.environment is not recorded")
+require(build["env"]["CONCRETE_REPRO_RUNNER_HOST"] == "${{ matrix.machine }}",
+        "the matrix machine is not recorded")
+require(build["env"]["CONCRETE_REPRO_RUNNER_NAME"] == "${{ runner.name }}",
+        "runner.name is not recorded")
+compare = jobs["compare-linux"]
+require(compare["needs"] == "reproducibility", "compare-linux does not need both Linux legs")
+download = next(step for step in compare["steps"]
+                if step.get("uses") == "actions/download-artifact@v4")
+require(download["with"]["pattern"] == "reproducibility-linux-*",
+        "compare-linux does not download the Linux manifests")
+run = next(step["run"] for step in compare["steps"]
+           if "repro_manifest_compare.py" in step.get("run", ""))
+for text in ("reproducibility-linux-github/manifest.txt",
+             "reproducibility-linux-ci2/manifest.txt"):
+    require(text in run, f"compare-linux does not read {text}")
+Path(output).write_text(run)
+PY
+then
+  echo "  ok   workflow selects GitHub and concrete-ci-2, with no ci2 fallback"; PASS=$((PASS+1))
+else
+  echo "  FAIL workflow reproducibility structure"; FAIL=$((FAIL+1))
+fi
+
+write_manifest() { # PATH ENVIRONMENT HOST RUNNER_NAME HASH
+  mkdir -p "${1%/*}"
+  {
+    printf 'runner_environment=%s\n' "$2"
+    printf 'runner_host=%s\n' "$3"
+    printf 'runner_name=%s\n' "$4"
+    printf 'compiler_commit=0123456789abcdef\n'
+    printf 'target=x86_64-linux\n'
+    [ "$5" = none ] || printf '%s  example/lcb.exe\n' "$5"
+  } > "$1"
+}
+
+compare_control() { # LABEL SECOND_ENVIRONMENT SECOND_HOST SECOND_HASH SECOND_KIND EXPECTED_ERROR
+  local label=$1 env=$2 host=$3 hash=$4 kind=$5 expected=$6
+  local d="$GATE_TMP/repro-$label" rc=0
+  mkdir -p "$d/scripts/checks/lib"
+  cp scripts/checks/lib/repro_manifest_compare.py "$d/scripts/checks/lib/"
+  write_manifest "$d/manifests/reproducibility-linux-github/manifest.txt" \
+    github-hosted github github-actions aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+  if [ "$kind" != missing ]; then
+    write_manifest "$d/manifests/reproducibility-linux-ci2/manifest.txt" \
+      "$env" "$host" concrete-ci-2-gha1 "$hash"
+  fi
+  (cd "$d" && bash "$GATE_TMP/compare-linux.sh") > "$d/output" 2>&1 || rc=$?
+  if [ -z "$expected" ]; then
+    if [ "$rc" = 0 ]; then
+      echo "  ok   comparison control $label passes"; PASS=$((PASS+1))
+    else
+      echo "  FAIL comparison control $label refused"; sed 's/^/         /' "$d/output"; FAIL=$((FAIL+1))
+    fi
+  elif [ "$rc" != 0 ] && has_match -F "$expected" < "$d/output"; then
+    echo "  ok   comparison control $label is refused"; PASS=$((PASS+1))
+  else
+    echo "  FAIL comparison control $label was not refused as '$expected' (rc=$rc)"
+    sed 's/^/         /' "$d/output"; FAIL=$((FAIL+1))
+  fi
+}
+
+if [ -s "$GATE_TMP/compare-linux.sh" ]; then
+  a=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+  b=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+  compare_control identical self-hosted concrete-ci-2 "$a" normal ""
+  compare_control differing-ci2 self-hosted concrete-ci-2 "$b" normal "manifests differ"
+  compare_control two-github github-hosted github "$a" normal "expected runner_environment=self-hosted"
+  compare_control missing-manifest self-hosted concrete-ci-2 "$a" missing "cannot read manifest"
+  compare_control missing-hashes self-hosted concrete-ci-2 none normal "missing lcb.exe SHA-256"
+fi
+
 echo ""
 echo "WORKFLOW-YAML: PASS=$PASS  FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]
