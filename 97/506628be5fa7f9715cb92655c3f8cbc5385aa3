@@ -1,0 +1,2 @@
+[piece 1 of 3: scripts]
+- scripts/land/lib.sh:93: The URL parser treats an explicit SSH port as part of the repository path. Valid canonical remotes such as `ssh://git@github.com:22/lambdaclass/concrete.git` produce `22/lambdaclass/concrete` and are rejected as another repository, blocking train and bot commands. Parse the host and optional port separately before comparing the repository path.
