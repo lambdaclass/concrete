@@ -1203,6 +1203,9 @@ private inductive Bypass : Config ops → Label ops → Config ops → Prop wher
   | ret : Bypass ⟨.exiting (.ret 7), [], .init, [.ret (some x) [(y, 2)]]⟩ .silent
       ⟨.done, [(x, 7), (y, 2)], .init, []⟩
 
+private inductive BypassImplicit : Config ops → Label ops → Config ops → Prop where
+  | ret : BypassImplicit ⟨.done, [], .init, [.ret none []]⟩ .silent ⟨.done, [], .init, []⟩
+
 /-- Instance (law `ConcreteSpec.Core.Exec.bind_refused`). Only the lifecycle callback refuses. -/
 example : Blocked prog ⟨.exec (.bind x (.lit 1) s), [], .init, []⟩ :=
   (bind_refused prog x (.lit 1) s [] .init .init 1 [] rfl).2 rfl
@@ -1295,21 +1298,35 @@ example : ¬ ((∀ l c', ¬ Bypass ⟨.exiting (.ret 7), [], .init, [.ret (some 
 example : Blocked prog ⟨.done, [], .init, [.ret none []]⟩ :=
   (return_refused prog none 7 [] [] .init []).2.2 rfl
 
-/-- Planted (law `ConcreteSpec.Core.Exec.return_refused`). Ignoring leave refusal permits the
-implicit return. -/
-example : ¬ Blocked Demo.prog ⟨.done, [], .init, [.ret none []]⟩ := by
+/-- Planted (law `ConcreteSpec.Core.Exec.return_refused`). The implicit-return mutation
+ignores refused leave in the same operand language and falsifies the second refusal iff. -/
+example : ¬ ((∀ l c', ¬ BypassImplicit ⟨.done, [], .init, [.ret none []]⟩ l c') ↔
+    (ops.life .leave DState.init).bind (bindLife ops none) = none) := by
   intro h
-  exact h .silent _ (.silent rfl)
+  exact h.mpr rfl .silent _ .ret
 
-/-- Instance (law `ConcreteSpec.Core.Exec.return_refused`). Leave succeeds but result binding
-alone refuses; the second lifecycle callback is independently exercised. -/
-example : let O : Operands := { Demo.ops with life := fun e st => match e with
+/-- Only result initialization refuses; activation leave succeeds independently. -/
+private abbrev bindOnlyOps : Operands := { Demo.ops with life := fun e st => match e with
     | .bind _ => none
     | _ => some (DState.life e st) }
-    Blocked (O := O) ⟨[]⟩ ⟨.exiting (.ret 7), [], .init, [.ret (some x) []]⟩ := by
-  dsimp
-  apply no_step_of_none_inv
-  rfl
+
+/-- Instance (law `ConcreteSpec.Core.Exec.return_refused`). The law itself proves blockage
+when leave succeeds and result initialization alone refuses. -/
+example : bindOnlyOps.life .leave DState.init = some DState.init ∧
+    Blocked (O := bindOnlyOps) ⟨[]⟩ ⟨.exiting (.ret 7), [], .init, [.ret (some x) []]⟩ :=
+  ⟨rfl, (return_refused (O := bindOnlyOps) ⟨[]⟩ (some x) 7 [] [] .init []).1.2 rfl⟩
+
+private inductive BypassResultBind : Config bindOnlyOps → Label bindOnlyOps → Config bindOnlyOps → Prop where
+  | ret : BypassResultBind ⟨.exiting (.ret 7), [], .init, [.ret (some x) []]⟩ .silent
+      ⟨.done, [(x, 7)], .init, []⟩
+
+/-- Planted (law `ConcreteSpec.Core.Exec.return_refused`). Successful leave does not permit
+bypassing the separately refused result bind; the mutated return violates the explicit-return iff. -/
+example : ¬ ((∀ l c', ¬ BypassResultBind
+    ⟨.exiting (.ret 7), [], .init, [.ret (some x) []]⟩ l c') ↔
+      (bindOnlyOps.life .leave DState.init).bind (bindLife bindOnlyOps (some x)) = none) := by
+  intro h
+  exact h.mpr rfl .silent _ .ret
 
 /-- Instance (law `ConcreteSpec.Core.Exec.prim_bind_refused`). Instance (law `ConcreteSpec.Core.Exec.continuation_refused`). The allowed log answer would emit `1`, but only
 its result initialization refuses. A pre-existing history must survive unchanged. -/
@@ -1348,12 +1365,27 @@ example : Step (O := errorOps) ⟨[]⟩
   prim_error_bypasses_bind (O := errorOps) ⟨[]⟩ x .log [.lit 1] s [] .init .init [1] []
     ⟨some 1, .error .abort, .init⟩ .abort rfl rfl rfl
 
-/-- Planted (law `ConcreteSpec.Core.Exec.prim_error_bypasses_bind`). A bad rule that also sends
-error answers through binding refuses this error; the required transition is absent. -/
-example : ¬ (ops.life (.bind x) DState.init).map (fun st =>
-    (⟨.trapped .abort s, [], st, []⟩ : Config errorOps)) = some
-      ⟨.trapped .abort s, [], .init, []⟩ := by
-  intro h; cases h
+/-- Planted continuation: it incorrectly requires initialization even for error answers. -/
+private def bindErrorContinuation (a : Answer Int Int DState) : Option (Config errorOps) :=
+  (errorOps.life (.bind x) a.store).map fun st => match a.result with
+    | .ok v => ⟨.done, [(x, v)], st, []⟩
+    | .error kd => ⟨.trapped kd s, [], st, []⟩
+
+/-- The bad response rule retains argument evaluation, the environment contract and the answer
+label, replacing only the continuation. -/
+private inductive BindErrors : Config errorOps → Label errorOps → Config errorOps → Prop where
+  | prim {a c'} : errorOps.allows .log [1] DState.init a = true →
+      bindErrorContinuation a = some c' →
+      BindErrors ⟨.exec (.prim (some x) .log [.lit 1] s), [], .init, []⟩ a.label c'
+
+/-- Planted (law `ConcreteSpec.Core.Exec.prim_error_bypasses_bind`). The same request and
+allowed error answer cannot take the law's required labeled trap transition under the bad rule. -/
+example : ¬ BindErrors ⟨.exec (.prim (some x) .log [.lit 1] s), [], .init, []⟩ (.emit 1)
+    ⟨.trapped .abort s, [], .init, []⟩ := by
+  intro h
+  generalize hl : (Label.emit (O := errorOps) 1) = label at h
+  cases h with
+  | prim _ hk => simp [bindErrorContinuation] at hk
 
 end Refusal
 
