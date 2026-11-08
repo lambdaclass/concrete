@@ -1,21 +1,58 @@
 ### ISS-0030: linear prepared numbering and predecessor tables (2026-11-08)
 
-The LCB adapter and LLVM printer now prepare their register-numbering and incoming-edge tables once
-per program. The closed prefix-sum definitions remain as references. Kernel proofs establish the
-generated ids and offsets, first-definition-wins register lookup, Boolean validation, incoming-edge
-order, `adaptFast p = adapt p`, `emit p = emitSpec p`, and `LLVM.printFast p = LLVM.print p`. The
-headline theorem statements and their axiom sets are unchanged; the trusted-base golden and native
-repro manifests were not edited.
+`LCB.adapt`, `LCB.emit` and `LLVM.print` now prepare their register-numbering and incoming-edge
+tables once per program (`Concrete/Backend/LCB.lean`, `Concrete/Backend/LLVM.lean`,
+`Concrete/Backend/Runtime.lean`). The closed prefix-sum and list-filtering definitions remain as the
+reference specifications `LCB.adaptSpec`, `LCB.emitSpec` and `LLVM.printSpec`, connected to the
+production entry points by the kernel-checked theorems `Proof.adapt_eq_spec : adapt p = adaptSpec p`,
+`Proof.emit_eq_spec : emit p = emitSpec p` and `LLVM.print_eq_spec : LLVM.print p = LLVM.printSpec p`.
+The four headline theorem statements (`Proof.adapter_correct`, `Proof.emit_correct`,
+`Proof.artifact_of_emit_error`, `Proof.artifact_correct`) and their axiom sets (`propext`,
+`Classical.choice`, `Quot.sound`) are unchanged and govern the production entry points directly;
+`tests/golden/slice0_trusted_base.txt` is unchanged.
 
-Measured with the ISS-0030 family (2k+1 blocks, one parameter and four instructions per body block),
-using a linear structural digest and the minimum of three runs. Times are milliseconds; `—` is the
-baseline LCB k=1000 run omitted because its measured cubic growth projects about 15 hours.
+Register lookup/uniqueness (`regTable`, `regCheck`) and predecessor grouping (`incomingBuckets`,
+`LLVM.edgeBuckets`) use `Std.HashMap`, so storage is proportional to definitions and edges rather
+than the maximum numeric register name or branch target; kernel proofs (`regTable_lookup`,
+`uniqueRegs_eq`) preserve first-definition-wins lookup and duplicate detection even on malformed
+inputs. Each incoming edge's argument list is converted to `Array Operand` once and each bucket is
+reversed once at finalization, so `adaptPhiFast` and `LLVM.phisFast` index arrays in $O(1)$ per phi
+arm. Production numbering (`numberingFastFrom`, `instNumberingFast`, `Runtime.positions`,
+`Runtime.indexedFrom`) and table construction are tail-recursive with $O(1)$ stack frames. Operand,
+instruction, terminator, phi and block lowering share single implementations (`idOfWith`,
+`operandWith`, `instWith`, `termWith`, `adaptPhiWith`, `adaptBlockWith`, `LLVM.phiText`)
+parameterized by their queries.
 
-| stage | k=1 before / after | k=10 before / after | k=100 before / after | k=1000 before / after |
-|---|---:|---:|---:|---:|
-| `LCB.emit` | 0.394 / 0.144 | 69.929 / 1.339 | 53944 / 13.528 | — / 141.896 |
-| `LLVM.module` | 0.203 / 0.213 | 0.776 / 0.683 | 18.621 / 5.727 | 1437.992 / 60.883 |
+Deterministic functional regressions (sparse/large register names, first-definition-wins lookup,
+exact refusal diagnostics for duplicate/undefined registers, short phi payloads, short second
+conditional arms and out-of-profile types, conditional-arm order/multiplicity, huge branch targets,
+`adapt = adaptSpec` / `emit = emitSpec` / `LLVM.print = LLVM.printSpec` equivalence, and a
+non-timed stack-depth check on `sparse` and `deepBlocks`) run in
+`scripts/checks/compiler/slice0_bir.lean` (`numbering`, invoked by
+`scripts/checks/compiler/slice0_backends.sh`). The scaling families (`wide_phi`,
+`sparse_registers`, `dense_registers`, `many_blocks`, and the `100000`-entry depth probes) are
+recorded in `Concrete/README.md` for Gate C (`scripts/checks/compiler/scaling.lean`).
 
-The LCB 10→100 exponent fell from 2.887 to 1.004, and its optimized 100→1000 exponent is 1.021.
-LLVM's exponents fell from 1.380 and 1.888 to 0.923 and 1.027. All before/after structural digests
-matched. `lake build Concrete` passed with warnings as errors; native gates remain for the CI server.
+Measured on the ISS-0030 reproducer family ($2k+1$ blocks, one parameter and four instructions per
+body block) with a linear structural digest (milliseconds, minimum of three runs; `—` is the
+baseline `LCB.emit` $k=1000$ run omitted because cubic growth projects ~15 hours):
+
+| stage | k=1 before / after | k=10 before / after | k=100 before / after | k=1000 before / after | 10→100 before / after | 100→1000 after |
+|---|---:|---:|---:|---:|---:|---:|
+| `LCB.emit` | 0.394 / 0.144 | 69.929 / 1.339 | 53944 / 13.528 | — / 141.896 | 2.887 / 1.004 | 1.021 |
+| `LLVM.module` | 0.203 / 0.213 | 0.776 / 0.683 | 18.621 / 5.727 | 1437.992 / 60.883 | 1.380 / 0.923 | 1.027 |
+
+Measured across the four stress families (milliseconds per operation, minimum average of three
+sampling windows $\ge 10\text{ ms}$, including a linear structural output digest; on `concrete-ci-2`
+at `ef3fed56`, all backend exponents are $\le 1.075$):
+
+| Family | Stage | n=10 ms | n=100 ms | n=1000 ms | 100→1000 exponent |
+|---|---|---:|---:|---:|---:|
+| `wide_phi` | `lcb_emit` | 0.197646 | 1.290937 | 11.345203 | 0.944 |
+| `wide_phi` | `llvm_module` | 0.036779 | 0.190733 | 1.749864 | 0.963 |
+| `sparse_registers` | `lcb_emit` | 0.453178 | 4.574019 | 44.876917 | 0.992 |
+| `sparse_registers` | `llvm_module` | 0.020336 | 0.118637 | 1.098416 | 0.967 |
+| `dense_registers` | `lcb_emit` | 0.453059 | 4.615693 | 45.264394 | 0.992 |
+| `dense_registers` | `llvm_module` | 0.020237 | 0.119599 | 1.126592 | 0.974 |
+| `many_blocks` | `lcb_emit` | 0.071261 | 0.635718 | 6.228520 | 0.991 |
+| `many_blocks` | `llvm_module` | 0.027513 | 0.210669 | 2.069792 | 0.992 |
