@@ -203,7 +203,6 @@ unsafe def registryRows : Lean.Meta.MetaM Unit := do
   let mode := (← IO.getEnv "PROOF_MODE").getD "theorems"
   unless ["theorems", "encoded", "constants", "modules", "imported", "decls", "heads", "examples", "vacuity", "rules"].contains mode do
     throwError s!"unknown PROOF_MODE '{mode}'"
-  if mode == "vacuity" then return -- the injected N2 consumer uses populationConstants below
   -- Fail closed, once, before any mode writes a row: every constant and module name of the
   -- environment (the population, the axioms its constants depend on, the inductive heads of
   -- `heads`, the modules) must be writable. One check covers every mode.
@@ -213,6 +212,7 @@ unsafe def registryRows : Lean.Meta.MetaM Unit := do
   for m in env.header.moduleNames do
     unless rowSafe m do
       throwError s!"theorems.lean: a module name holds a control character: {repr (toString m)}"
+  if mode == "vacuity" then return -- the injected N2 consumer uses populationConstants below
   if mode == "decls" then
     let some path ← IO.getEnv "PROOF_NAMES" | throwError "PROOF_MODE=decls needs PROOF_NAMES"
     let some out ← IO.getEnv "PROOF_OUT" | throwError "PROOF_MODE=decls needs PROOF_OUT"
